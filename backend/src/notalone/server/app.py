@@ -136,6 +136,8 @@ from notalone.memory.models import (
 from notalone.memory.versions import MemoryVersionConflict
 from notalone.application.relationship_overview_service import RelationshipOverviewService
 from notalone.memory.overview import OverviewUnavailable
+from notalone.memory.layered import LayeredMemoryConflict
+from notalone.application.layered_memory_service import LayeredMemoryService
 from notalone.server.memory_overview import overview_payload
 from notalone.front_sync.sync_engine import (
     BindingCandidateView,
@@ -211,6 +213,7 @@ class BackendApp:
         "_ledger_service",
         "_memory_service",
         "_overview_service",
+        "_layered_memory",
         "_message_stream",
         "_owner_id",
         "_reply_service",
@@ -250,6 +253,7 @@ class BackendApp:
         source_service: SourceService | None = None,
         memory_service: MemoryService | None = None,
         overview_service: RelationshipOverviewService | None = None,
+        layered_memory: LayeredMemoryService | None = None,
         import_service: ImportService | None = None,
         task_host: TaskHost | None = None,
         task_service: TaskService | None = None,
@@ -274,6 +278,7 @@ class BackendApp:
         self._ledger_service = ledger_service
         self._memory_service = memory_service
         self._overview_service = overview_service
+        self._layered_memory = layered_memory
         self._message_stream = message_stream
         self._reply_service = reply_service
         self._assistant_sessions = assistant_sessions
@@ -350,7 +355,7 @@ class BackendApp:
                 or path_value == "/api/memories/owner"
                 or path_value.startswith("/api/contacts/") and (
                     "/memories" in path_value or "/memory-candidates" in path_value
-                    or "/relationship-overview" in path_value
+                    or "/relationship-overview" in path_value or "/layered-memory" in path_value
                 )):
             return Response(
                 response.status_code,
@@ -488,6 +493,8 @@ class BackendApp:
                 path=path_value,
                 query=urlsplit(path).query,
             )
+        if path_value.startswith("/api/contacts/") and "/layered-memory" in path_value:
+            return self._handle_layered_memory(method=method_upper, path=path_value, body=body)
         if path_value.startswith("/api/contacts/") and "/relationship-overview" in path_value:
             return self._handle_overview(method=method_upper, path=path_value)
         if path_value == "/api/memories/owner/overview":
@@ -1550,6 +1557,37 @@ class BackendApp:
         except AssistantSessionError:
             return _json_response(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "assistant_session_failed"})
 
+    def _handle_layered_memory(self, *, method: str, path: str, body: bytes) -> Response:
+        parts = path.strip("/").split("/")
+        if (len(parts) not in {4, 5} or parts[3] != "layered-memory"
+                or method != ("GET" if len(parts) == 4 else "POST")
+                or len(parts) == 5 and parts[4] not in {"enable", "refresh", "disable", "delete"}):
+            return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+        if self._layered_memory is None:
+            return _json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "layered_memory_unavailable"})
+        try:
+            scope = ContactScope(self._owner_id, UUID(parts[2]))
+            if method == "GET":
+                state = self._layered_memory.read(scope)
+            else:
+                payload = json.loads(body.decode("utf-8"))
+                allowed = {"settings_generation", "purpose_confirmed"} if parts[4] == "enable" else {"settings_generation"}
+                if (not isinstance(payload, dict) or set(payload) != allowed
+                        or type(payload["settings_generation"]) is not int
+                        or payload["settings_generation"] < 0
+                        or parts[4] == "enable" and payload["purpose_confirmed"] is not True):
+                    raise ValueError("整理命令无效。")
+                state = self._layered_memory.command(scope, parts[4], payload["settings_generation"])
+            return _json_response(HTTPStatus.OK, {"layered_memory": state})
+        except LayeredMemoryConflict:
+            return _json_response(HTTPStatus.CONFLICT, {"error": "layered_memory_changed"})
+        except (ValueError, UnicodeError):
+            return _json_response(HTTPStatus.BAD_REQUEST, {"error": "layered_memory_request_invalid"})
+        except (LookupError, PermissionError):
+            return _json_response(HTTPStatus.NOT_FOUND, {"error": "layered_memory_not_found"})
+        except Exception:
+            return _json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "layered_memory_unavailable"})
+
     def _handle_overview(self, *, method: str, path: str) -> Response:
         parts = path.strip("/").split("/")
         owner_scope = path == "/api/memories/owner/overview"
@@ -2521,6 +2559,7 @@ def create_app(
     source_service: SourceService | None = None,
     memory_service: MemoryService | None = None,
     overview_service: RelationshipOverviewService | None = None,
+    layered_memory: LayeredMemoryService | None = None,
     import_service: ImportService | None = None,
     task_host: TaskHost | None = None,
     task_service: TaskService | None = None,
@@ -2544,6 +2583,8 @@ def create_app(
         PostgresSourceProcessingStore,
     )
     from notalone.persistence.memory_overview import PostgresRelationshipOverviewStore
+
+    from notalone.persistence.layered_memory import PostgresLayeredMemoryStore
 
     contacts = ContactDirectory(PostgresContactDirectory(database_url))
     return BackendApp(
@@ -2571,6 +2612,7 @@ def create_app(
         source_service=source_service or SourceService(database_url),
         memory_service=memory_service,
         overview_service=overview_service or RelationshipOverviewService(PostgresRelationshipOverviewStore(database_url)),
+        layered_memory=layered_memory or LayeredMemoryService(PostgresLayeredMemoryStore(database_url)),
         import_service=import_service,
         task_host=task_host,
         task_service=task_service

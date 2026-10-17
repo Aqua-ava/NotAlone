@@ -131,6 +131,7 @@ void app.whenReady().then(async () => {
     await Promise.all([styleChecking, checking, memoryChecking, preferenceChecking]);
   });
   coordinateSkillLearningSourceDeletion(skillLearning, sources);
+  sources.onDeletion((phase) => memory.sourceDeletionChanged(phase));
   observeMemoryUpgradeDeletion(memory, memoryUpgrade, sources);
   installElectronCandidateCopy(windows, new CandidateCopyController(backend, contacts, replies,
     (selection, text) => styleSamples.recordCopied(selection, text)));

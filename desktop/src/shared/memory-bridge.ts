@@ -109,6 +109,44 @@ export interface MemorySection<T> {
   items: T[];
 }
 export type MemorySectionName = 'contact' | 'owner' | 'pending' | 'sources';
+export interface LayeredMemoryReference {
+  memoryId: string;
+  revision: number;
+  provenanceKind: 'manual_entry' | 'source_supported';
+  timing: MemoryTiming;
+}
+export interface LayeredMemoryScenario {
+  scenarioId: string;
+  versionId: string;
+  title: string;
+  hint: string;
+  systemGenerated: true;
+  updatedAt: string;
+  paragraphs: { text: string; references: LayeredMemoryReference[] }[];
+}
+export interface LayeredMemory {
+  schemaVersion: 1;
+  scopeKind: 'contact';
+  contactId: string;
+  settingsGeneration: number;
+  enabled: boolean;
+  qualityStatus: 'unknown' | 'synthetic';
+  status: 'disabled' | 'ready' | 'empty' | 'failed' | 'updating' | 'stale' | 'blocked';
+  eligibleCount: number;
+  coveredCount: number;
+  remainingCount: number;
+  organizationGeneration: number;
+  updatedAt: string | null;
+  errorCode: string | null;
+  purpose: string;
+  budget: { maxMemories: number; maxScenarios: number; maxParagraphs: number; maxCharacters: number; maxModelCalls: number };
+  scenarios: LayeredMemoryScenario[];
+}
+export interface LayeredMemoryManagementRequest extends ContactSelection {
+  action: 'enable' | 'refresh' | 'disable' | 'delete';
+  settingsGeneration: number;
+  purposeConfirmed?: true;
+}
 export interface MemoryReadingState {
   revision: number;
   contactId: string | null;
@@ -121,6 +159,7 @@ export interface MemoryReadingState {
   history: MemoryHistoryState;
   overview: MemoryOverviewState;
   ownerOverview: MemoryOverviewState<OwnerFactsPreferencesOverview>;
+  layeredMemory: MemoryOverviewState<LayeredMemory>;
 }
 export interface MemoryReadRequest extends ContactSelection { section?: MemorySectionName; }
 export interface MemoryAdditionRequest extends ContactSelection {
@@ -142,6 +181,8 @@ export interface MemoryBridge {
   refresh(request: MemoryReadRequest): Promise<void>;
   refreshOverview(request: ContactSelection): Promise<void>;
   refreshOwnerOverview(request: ContactSelection): Promise<void>;
+  readLayeredMemory(request: ContactSelection): Promise<void>;
+  manageLayeredMemory(request: LayeredMemoryManagementRequest): Promise<void>;
   add(request: MemoryAdditionRequest): Promise<void>;
   remove(request: MemoryRemovalRequest): Promise<void>;
   discardCandidate(request: MemoryCandidateRequest): Promise<void>;

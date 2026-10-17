@@ -96,6 +96,7 @@ export class PageHost implements PageCommands {
       await Promise.all([styleChecking, checking, memoryChecking, preferenceChecking]);
     });
     coordinateSkillLearningSourceDeletion(skillLearning, sources);
+    sources.onDeletion((phase) => memory.sourceDeletionChanged(phase));
     observeMemoryUpgradeDeletion(memory, memoryUpgrade, sources);
     const copies = new CandidateCopyController(this.backend, contacts, replies,
       (selection, text) => styleSamples.recordCopied(selection, text));

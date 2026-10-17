@@ -1,5 +1,5 @@
 import { noArguments, type PageCommands } from '../page-commands';
-import type { MemoryAdditionRequest, MemoryCandidateRequest, MemoryCandidateUpdateRequest, MemoryCorrectionRequest, MemoryReadRequest, MemoryRemovalRequest, MemorySectionName } from '../../shared/memory-bridge';
+import type { LayeredMemoryManagementRequest, MemoryAdditionRequest, MemoryCandidateRequest, MemoryCandidateUpdateRequest, MemoryCorrectionRequest, MemoryReadRequest, MemoryRemovalRequest, MemorySectionName } from '../../shared/memory-bridge';
 import type { BackendHost } from '../backend/host';
 import type { ContactSession } from '../contacts/session';
 import { isUuid } from '../uuid';
@@ -43,6 +43,12 @@ export function installMemoryBridge(commands: PageCommands, backend: BackendHost
     if (request.section !== undefined) throw new Error('本人概览读取不可用。');
     return memory.refreshOwnerOverview(request);
   }, 'manager');
+  commands.handle('memory:read-layered-memory', (...args: unknown[]) => {
+    const request = requestArguments(args);
+    if (request.section !== undefined) throw new Error('主题资料读取不可用。');
+    return memory.readLayeredMemory(request);
+  }, 'manager');
+  commands.handle('memory:manage-layered-memory', (...args: unknown[]) => memory.manageLayeredMemory(layeredMemoryArguments(args)), 'manager');
   commands.handle('memory:add', (...args: unknown[]) => memory.add(additionArguments(args)), 'manager');
   commands.handle('memory:remove', (...args: unknown[]) => memory.remove(removalArguments(args)), 'manager');
   commands.handle('memory:discard-candidate', (...args: unknown[]) => memory.discardCandidate(candidateArguments(args)), 'manager');
@@ -121,4 +127,19 @@ function candidateUpdateArguments(args: unknown[]): MemoryCandidateUpdateRequest
     || !Number.isSafeInteger(fields.expectedRevision) || fields.expectedRevision < 1) throw new Error('候选版本更新不可用。');
   const candidate = candidateArguments([{ contactId: fields.contactId, scopeRevision: fields.scopeRevision, candidateId: fields.candidateId }]);
   return { ...candidate, previousMemoryId: fields.previousMemoryId.toLowerCase(), expectedRevision: fields.expectedRevision };
+}
+
+function layeredMemoryArguments(args: unknown[]): LayeredMemoryManagementRequest {
+  const value = args[0];
+  if (args.length !== 1 || !value || typeof value !== 'object' || Array.isArray(value)) throw new Error('主题资料操作不可用。');
+  const fields = value as Record<string, unknown>;
+  const enable = fields.action === 'enable';
+  if (Object.keys(fields).length !== (enable ? 5 : 4)
+    || !Object.keys(fields).every((key) => ['contactId', 'scopeRevision', 'action', 'settingsGeneration', ...(enable ? ['purposeConfirmed'] : [])].includes(key))
+    || !['enable', 'refresh', 'disable', 'delete'].includes(fields.action as string)
+    || typeof fields.settingsGeneration !== 'number' || !Number.isSafeInteger(fields.settingsGeneration) || fields.settingsGeneration < 0
+    || (enable && fields.purposeConfirmed !== true)) throw new Error('主题资料操作不可用。');
+  const selection = requestArguments([{ contactId: fields.contactId, scopeRevision: fields.scopeRevision }]);
+  return { ...selection, action: fields.action as LayeredMemoryManagementRequest['action'], settingsGeneration: fields.settingsGeneration,
+    ...(enable ? { purposeConfirmed: true as const } : {}) };
 }

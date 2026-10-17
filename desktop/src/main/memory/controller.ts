@@ -1,18 +1,20 @@
-import type { MemoryAdditionRequest, MemoryCandidateRequest, MemoryCandidateUpdateRequest, MemoryCorrectionRequest, MemoryReadingState, MemoryReadRequest, MemoryRemovalRequest, MemorySectionName } from '../../shared/memory-bridge';
+import type { LayeredMemoryManagementRequest, MemoryAdditionRequest, MemoryCandidateRequest, MemoryCandidateUpdateRequest, MemoryCorrectionRequest, MemoryReadingState, MemoryReadRequest, MemoryRemovalRequest, MemorySectionName } from '../../shared/memory-bridge';
 import type { BackendHost } from '../backend/host';
 import { BackendRequestFailure } from '../backend/json-client';
 import type { ContactSession } from '../contacts/session';
 import { activeMemories, memorySources, memoryVersions, pendingCandidates } from './read';
 import type { ContactSelection } from '../../shared/contact-session-bridge';
 import { contactRelationshipOverview, ownerFactsPreferencesOverview } from './overview-read';
+import { layeredMemory } from './layered-read';
 
 const sections: MemorySectionName[] = ['contact', 'owner', 'pending', 'sources'];
-const empty = (): Pick<MemoryReadingState, MemorySectionName | 'history' | 'overview' | 'ownerOverview'> => ({
+const empty = (): Pick<MemoryReadingState, MemorySectionName | 'history' | 'overview' | 'ownerOverview' | 'layeredMemory'> => ({
   contact: { phase: 'idle', items: [] }, owner: { phase: 'idle', items: [] },
   pending: { phase: 'idle', items: [] }, sources: { phase: 'idle', items: [] },
   history: { phase: 'idle', items: [], memoryId: null, level: null },
   overview: { phase: 'idle', value: null },
   ownerOverview: { phase: 'idle', value: null },
+  layeredMemory: { phase: 'idle', value: null },
 });
 type Scope = { generation: number; contactId: string; scopeRevision: number };
 type ProtectedReads = { scope: Scope; sections: Set<MemorySectionName> };
@@ -28,6 +30,10 @@ export class MemoryReadingController {
   private overviewRequested = false;
   private ownerOverviewOperation: { abort: AbortController } | undefined;
   private ownerOverviewRequested = false;
+  private layeredOperation: { abort: AbortController } | undefined;
+  private layeredRequested = false;
+  private sourceDeletionDepth = 0;
+  private sourceDeletionRevision = 0;
   private protectedReads: ProtectedReads | undefined;
   private readonly listeners = new Set<(state: MemoryReadingState) => void>();
   private readonly deletionListeners = new Set<(phase: 'started' | 'settled') => void>();
@@ -41,6 +47,17 @@ export class MemoryReadingController {
   onRecordDeletion(listener: (phase: 'started' | 'settled') => void): () => void {
     this.deletionListeners.add(listener);
     return () => this.deletionListeners.delete(listener);
+  }
+  sourceDeletionChanged(phase: 'started' | 'settled'): void {
+    this.synchronizeScope();
+    if (phase === 'started') {
+      this.sourceDeletionDepth++;
+      this.sourceDeletionRevision++;
+      this.clearLayered();
+    } else {
+      this.sourceDeletionDepth = Math.max(0, this.sourceDeletionDepth - 1);
+      if (!this.sourceDeletionDepth && this.layeredRequested && this.scope && !this.mutation) void this.readLayered(this.scope);
+    }
   }
   synchronizeScope(): void {
     const generation = this.backend.getConnectionGeneration();
@@ -61,6 +78,9 @@ export class MemoryReadingController {
     this.ownerOverviewOperation?.abort.abort();
     this.ownerOverviewOperation = undefined;
     this.ownerOverviewRequested = false;
+    this.layeredOperation?.abort.abort();
+    this.layeredOperation = undefined;
+    this.layeredRequested = false;
     this.mutation?.abort.abort();
     this.mutation = undefined;
     this.protectedReads = undefined;
@@ -95,6 +115,79 @@ export class MemoryReadingController {
     if (this.mutation) throw new Error('资料正在处理，请完成核对后再刷新本人概览。');
     this.ownerOverviewRequested = true;
     await this.readOwnerOverview(scope);
+  }
+  async readLayeredMemory(request: ContactSelection): Promise<void> {
+    this.synchronizeScope();
+    const scope = this.scope;
+    if (!scope || request.contactId !== scope.contactId || request.scopeRevision !== scope.scopeRevision) {
+      throw new Error('主题资料范围已失效，请重新确认联系人。');
+    }
+    if (this.sourceDeletionDepth) throw new Error('来源正在删除，请完成核对后再读取主题资料。');
+    if (this.mutation) throw new Error('资料正在处理，请完成核对后再读取主题资料。');
+    this.layeredRequested = true;
+    await this.readLayered(scope);
+  }
+  async manageLayeredMemory(request: LayeredMemoryManagementRequest): Promise<void> {
+    this.synchronizeScope();
+    const scope = this.scope, value = this.state.layeredMemory.value;
+    if (!scope || request.contactId !== scope.contactId || request.scopeRevision !== scope.scopeRevision || this.mutation
+      || this.sourceDeletionDepth || this.state.layeredMemory.phase !== 'ready' || !value || value.settingsGeneration !== request.settingsGeneration
+      || !['enable', 'refresh', 'disable', 'delete'].includes(request.action)
+      || (request.action === 'enable' && request.purposeConfirmed !== true)) {
+      throw new Error('主题资料范围或设置已变化，请重新读取后操作。');
+    }
+    this.clearLayered();
+    const operation = { revision: ++this.operationRevision, abort: new AbortController() };
+    this.mutation = operation;
+    const sourceDeletionRevision = this.sourceDeletionRevision;
+    this.publish({ mutation: { phase: 'working', message: '正在处理并核对主题资料…' } });
+    const current = () => { this.synchronizeScope(); return this.scope === scope && this.mutation === operation && this.sourceDeletionRevision === sourceDeletionRevision; };
+    try {
+      const result = await this.backend.requestJson({ method: 'POST', path: `/api/contacts/${scope.contactId}/layered-memory/${request.action}`,
+        body: { settings_generation: request.settingsGeneration, ...(request.action === 'enable' ? { purpose_confirmed: true } : {}) },
+        signal: operation.abort.signal });
+      if (!current() || result.generation !== scope.generation) return;
+      const value = layeredMemory(result.data, scope.contactId);
+      this.publish({ layeredMemory: { phase: 'ready', value }, mutation: { phase: 'success', message: request.action === 'delete'
+        ? '主题资料整理结果已删除，本范围已关闭。底层记忆可另行管理。' : '主题资料操作已完成并核对。' } });
+    } catch (error) {
+      if (!current()) return;
+      await this.readLayered(scope);
+      if (!current()) return;
+      this.publish({ mutation: { phase: 'error', message: error instanceof BackendRequestFailure && error.status === 409
+        ? '主题资料设置已变化，已撤下旧缓存并重新读取，请核对后重试。' : '主题资料操作未完成，已重新读取当前状态，请核对后重试。' } });
+    } finally {
+      if (this.mutation === operation) {
+        this.mutation = undefined;
+        if (this.scope === scope && this.sourceDeletionRevision !== sourceDeletionRevision) {
+          this.publish({ mutation: { phase: 'idle', message: '' } });
+        }
+        if (this.scope === scope && !this.sourceDeletionDepth && this.layeredRequested
+          && this.sourceDeletionRevision !== sourceDeletionRevision) await this.readLayered(scope);
+      }
+    }
+  }
+  private clearLayered(): void {
+    this.layeredOperation?.abort.abort();
+    this.layeredOperation = undefined;
+    this.publish({ layeredMemory: { phase: this.layeredRequested ? 'loading' : 'idle', value: null } });
+  }
+  private async readLayered(scope: Scope): Promise<boolean> {
+    this.clearLayered();
+    if (this.sourceDeletionDepth) return false;
+    const operation = { abort: new AbortController() };
+    this.layeredOperation = operation;
+    this.publish({ layeredMemory: { phase: 'loading', value: null } });
+    const current = () => { this.synchronizeScope(); return this.scope === scope && this.layeredOperation === operation; };
+    try {
+      const result = await this.backend.requestJson({ method: 'GET', path: `/api/contacts/${scope.contactId}/layered-memory`, signal: operation.abort.signal });
+      if (!current() || result.generation !== scope.generation) return false;
+      this.publish({ layeredMemory: { phase: 'ready', value: layeredMemory(result.data, scope.contactId) } });
+      return true;
+    } catch {
+      if (current()) this.publish({ layeredMemory: { phase: 'error', value: null } });
+      return false;
+    } finally { if (this.layeredOperation === operation) this.layeredOperation = undefined; }
   }
   private async readOwnerOverview(scope: Scope): Promise<boolean> {
     this.ownerOverviewOperation?.abort.abort();
@@ -155,15 +248,19 @@ export class MemoryReadingController {
     this.clearHistory();
     this.clearOverview();
     this.clearOwnerOverview();
+    this.clearLayered();
     this.publish({ ...empty(), overview: { phase: this.overviewRequested ? 'loading' : 'idle', value: null },
       ownerOverview: { phase: this.ownerOverviewRequested ? 'loading' : 'idle', value: null },
+      layeredMemory: { phase: this.layeredRequested ? 'loading' : 'idle', value: null },
       ...(writing || this.state.mutation.phase === 'error' ? {} : { mutation: { phase: 'idle' as const, message: '' } }) });
     const currentSections = sections.filter((section) => !writing?.sections.has(section));
     const results = await Promise.all([...currentSections.map((section) => this.readSection(section, scope)),
       ...(this.overviewRequested && !writing?.sections.has('contact') && !writing?.sections.has('owner')
         ? [this.readOverview(scope)] : []),
       ...(this.ownerOverviewRequested && !writing?.sections.has('contact') && !writing?.sections.has('owner')
-        ? [this.readOwnerOverview(scope)] : [])]);
+        ? [this.readOwnerOverview(scope)] : []),
+      ...(this.layeredRequested && !this.sourceDeletionDepth && !writing?.sections.has('contact') && !writing?.sections.has('owner')
+        ? [this.readLayered(scope)] : [])]);
     if (this.scope === scope && !results.every(Boolean)) throw new Error('来源已变化，资料仍需刷新核对。');
   }
   async openVersions(request: MemoryRemovalRequest): Promise<void> {
@@ -198,6 +295,7 @@ export class MemoryReadingController {
           this.discardUnavailableVersion(request);
           if (this.overviewRequested) await this.readOverview(scope);
           if (this.ownerOverviewRequested) await this.readOwnerOverview(scope);
+          if (this.layeredRequested) await this.readLayered(scope);
           if (!current()) return;
         }
         this.publish({ history: { phase: 'error', items: [], memoryId: active.memoryId, level: request.level } });
@@ -207,6 +305,7 @@ export class MemoryReadingController {
   private discardUnavailableVersion(request: MemoryRemovalRequest): void {
     this.clearOverview();
     this.clearOwnerOverview();
+    this.clearLayered();
     // 只撤下已知失效的原版本，不把历史读取异常当作删除指令。
     for (const section of [request.level, 'pending'] as const) {
       const reading = this.operations.get(section);
@@ -342,14 +441,16 @@ export class MemoryReadingController {
     const changesOverviewDependencies = sections.includes('contact') || sections.includes('owner');
     const overviewAffected = changesOverviewDependencies && this.overviewRequested;
     const ownerOverviewAffected = changesOverviewDependencies && this.ownerOverviewRequested;
-    if (changesOverviewDependencies) { this.clearOverview(); this.clearOwnerOverview(); }
+    const layeredAffected = changesOverviewDependencies && this.layeredRequested;
+    if (changesOverviewDependencies) { this.clearOverview(); this.clearOwnerOverview(); this.clearLayered(); }
     this.clearHistory();
     const operation = { revision: ++this.operationRevision, abort: new AbortController() };
     this.mutation = operation;
     let checked = false;
     const refreshAfterWrite = () => Promise.all([...sections.map((section) => this.readSection(section, scope, true)),
       ...(overviewAffected ? [this.readOverview(scope)] : []),
-      ...(ownerOverviewAffected ? [this.readOwnerOverview(scope)] : [])]);
+      ...(ownerOverviewAffected ? [this.readOwnerOverview(scope)] : []),
+      ...(layeredAffected ? [this.readLayered(scope)] : [])]);
     this.publish({ mutation: { phase: 'working', message: '正在处理并核对资料…' } });
     const current = () => { this.synchronizeScope(); return this.scope === scope && this.mutation === operation; };
     try {
@@ -371,6 +472,9 @@ export class MemoryReadingController {
         }
         if (ownerOverviewAffected && !this.ownerOverviewOperation && this.state.ownerOverview.phase === 'loading') {
           this.publish({ ownerOverview: { phase: 'error', value: null } });
+        }
+        if (layeredAffected && !this.layeredOperation && this.state.layeredMemory.phase === 'loading') {
+          this.publish({ layeredMemory: { phase: 'error', value: null } });
         }
         // 提交冲突、来源失效或响应未知后，旧版本不能作为下次操作的依据。
         if (clearStaleVersions) for (const section of sections) this.publish({ [section]: { phase: 'error', items: [] } });
