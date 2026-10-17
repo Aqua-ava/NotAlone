@@ -257,6 +257,7 @@ class PostgresLayeredMemoryStore(LayeredProfileStore, LayeredCorrectionStore):
             manifest=self._manifest(connection,scope,entries)
             dependencies={entry.memory.memory_id for entry in entries}
             dependencies.update(identifier for entry in entries for identifier in entry.dependency_ids)
+            dependencies.update(self.correction_dependency_ids(connection, scope))
             task_id, execute = enqueue_coverage(connection,scope,state,manifest,dependencies,contract,budget,
                 action=action,revision=revision,profile_required=profile_required)
             self._revoke_previous_profile(connection, scope, state, task_id, execute)
@@ -311,6 +312,7 @@ class PostgresLayeredMemoryStore(LayeredProfileStore, LayeredCorrectionStore):
             manifest = self._manifest(connection, scope, entries)
             dependencies = {entry.memory.memory_id for entry in entries}
             dependencies.update(identifier for entry in entries for identifier in entry.dependency_ids)
+            dependencies.update(self.correction_dependency_ids(connection, scope))
             task_id, execute = enqueue_coverage(connection, scope, state, manifest, dependencies,
                 contract, budget, action='refresh', revision=None, profile_required=profile_required)
             self._revoke_previous_profile(connection, scope, state, task_id, execute)
@@ -429,7 +431,7 @@ class PostgresLayeredMemoryStore(LayeredProfileStore, LayeredCorrectionStore):
             dependencies={entry.memory.memory_id for entry in entries}
             dependencies.update(identifier for entry in entries for identifier in entry.dependency_ids)
             dependencies.update(inherited)
-            dependencies.update(identifier for row in self.feedback_rows(connection, scope) for identifier in row['dependency_ids'])
+            dependencies.update(self.correction_dependency_ids(connection, scope))
             id=uuid4()
             key=_digest({'job':str(claim.task_id),'inputs':manifest})
             connection.execute("INSERT INTO public.layered_memory_batch(id,owner_id,contact_id,settings_generation,work_key,status,"

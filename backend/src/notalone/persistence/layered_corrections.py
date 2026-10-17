@@ -10,6 +10,12 @@ from notalone.persistence.reply_cleanup import delete_source_replies
 
 
 class LayeredCorrectionStore:
+    def correction_dependency_ids(self, connection, scope):
+        # 无正文guard仍是真实输入；其最后合法身份消失时，旧对照副本也必须清除。
+        return {identifier for row in self.feedback_rows(connection, scope)
+            for key in ('dependency_ids', 'protected_memory_ids', 'protected_message_ids')
+            for identifier in row[key]}
+
     def correction_context(self, connection, scope):
         return tuple({'feedback_id': str(row['id']), 'rejected_text': row['rejected_text'],
             'reason': row['reason'], 'rule': 'independent-literal-v1'}

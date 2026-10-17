@@ -224,3 +224,46 @@ class LayeredMemoryCorrectionHttpTest(MemoryOverviewHttpFixture, unittest.TestCa
         restored = self._get(backend, path)['layered_memory']
         self.assertEqual(restored['feedback'], before['feedback'])
         self.assertEqual(restored['scenarios'], [])
+
+    def test_guard_used_in_new_batch_is_erased_with_its_last_legal_source(self):
+        import psycopg
+        from notalone.memory.layered import OrganizationBudget
+        from psycopg.types.json import Jsonb
+
+        contact, source_a, message_a = self.import_contact('合成保护的最后原依据。')
+        self.confirm(contact, '双方共同参加合成课程。', message_a)
+        _, source_b, message_b = self.import_contact('合成保护的先删对照依据。', contact_id=contact,
+            when=datetime(2024, 2, 1, tzinfo=timezone.utc))
+        self.confirm(contact, '双方另有合成比较事实。', message_b)
+        proposer = CorrectionProposal()
+        backend = profile_support.LayeredProfileHttpTest.controlled(self, scenario_proposer=proposer,
+            scenario_verifier=CorrectionVerification(), profile_proposer=CorrectionProfileProposal(),
+            profile_verifier=CorrectionProfileVerification(), budget=OrganizationBudget(max_model_calls=4, max_characters=12000))
+        ready = self.enable(backend, contact)
+        path = f'/api/contacts/{contact}/layered-memory'
+        status, result = backend.request(path + '/summary-error', self.summary_command(ready))
+        self.assertEqual(status, 200, result)
+        feedback = result['layered_memory']['feedback'][0]['id']
+        self.delete_source(contact, source_b)
+        current = self._get(backend, path)['layered_memory']
+        self.assertEqual(current['feedback'][0]['state'], 'erased_guard')
+        self.assertEqual(self.backend.request('/api/memories/manual-contact', {
+            'contact_id': contact, 'text': '双方新增独立的合成事实。', 'category': 'common_fact'})[0], 200)
+        status, result = backend.request(path + '/refresh', {'settings_generation': ready['settings_generation']})
+        self.assertEqual(status, 200, result)
+        self.assertTrue(result['layered_memory']['scenarios'], result)
+        self.assertIsNotNone(result['layered_memory']['profile'], result)
+        self.assertEqual(proposer.corrections[-1][0]['feedback_id'], feedback)
+        self.assertIsNone(proposer.corrections[-1][0]['reason'])
+        self.delete_source(contact, source_a)
+        current = self._get(backend, path)['layered_memory']
+        self.assertEqual(current['feedback'], [])
+        # 隐藏的实际对照没有公开正文接口；在同一自有PG补核不可检索闭包。
+        with psycopg.connect(self.database_url) as connection:
+            for table in ('layered_memory_batch', 'layered_profile_batch'):
+                self.assertFalse(connection.execute(f'SELECT 1 FROM public.{table} WHERE owner_id=%s '
+                    'AND correction_input @> %s', (self.owner_id, Jsonb([{'feedback_id': feedback}]))).fetchone(), table)
+        status, rebuilt = backend.request(path + '/refresh', {'settings_generation': ready['settings_generation']})
+        self.assertEqual(status, 200, rebuilt)
+        self.assertTrue(rebuilt['layered_memory']['scenarios'], '仍合法的独立手录必须能重新整理，不能卡在已清输出的旧完成任务')
+        self.assertIsNotNone(rebuilt['layered_memory']['profile'])

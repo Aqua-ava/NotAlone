@@ -32,7 +32,7 @@ def cancel_jobs(connection, scope, *, erase=False):
 def enqueue_coverage(connection, scope, state, manifest, dependencies, contract, budget, *, action, revision, profile_required=False):
     from notalone.persistence.layered_memory import _digest
     key = _digest({"inputs":manifest,"settings_generation":state['settings_generation'],
-                   "contract":contract,"budget":budget.to_payload()})
+                   "correction_revision": state['correction_revision'], "contract":contract,"budget":budget.to_payload()})
     jobs = current_job(connection,scope)
     job = next((row for row in jobs if row['target_key']==key), None)
     if action in {'pause','continue'}:

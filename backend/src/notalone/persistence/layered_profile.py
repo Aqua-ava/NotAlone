@@ -118,7 +118,7 @@ class LayeredProfileStore:
                     (scope.owner_id,scope.contact_id,now,key)).fetchone():
                 return None
             dependencies = sorted({id for row in input_rows for id in row["dependency_ids"]})
-            dependencies = sorted(set(dependencies) | {id for row in self.feedback_rows(connection, scope) for id in row['dependency_ids']})
+            dependencies = sorted(set(dependencies) | self.correction_dependency_ids(connection, scope))
             token, id = uuid4(), previous["id"] if previous else uuid4()
             if previous:
                 connection.execute("UPDATE public.layered_profile_batch SET work_token=%s,status='running',attempt_count=attempt_count+1,"
