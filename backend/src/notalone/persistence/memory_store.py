@@ -733,25 +733,6 @@ class PostgresMemoryStore:
                     {memory_id, *source_ids, *((memory_row["source_candidate_id"],)
                       if memory_row["source_candidate_id"] else ())})
                 next_revision = memory_row["revision"] + 1
-                invalidated = connection.execute(
-                    """
-                    UPDATE public.confirmed_memory
-                    SET status = 'invalidated',
-                        invalid_at = COALESCE(invalid_at, %s),
-                        revision = %s,
-                        updated_at = now()
-                    WHERE owner_id = %s AND contact_id = %s AND id = %s
-                    """,
-                    (
-                        self._now(),
-                        next_revision,
-                        scope.owner_id,
-                        scope.contact_id,
-                        memory_row["memory_id"],
-                    ),
-                ).rowcount
-                if invalidated != 1:
-                    raise MemoryInvariantError("原关系记忆失效更新失败。")
                 updated = connection.execute(
                     f"""
                     INSERT INTO public.confirmed_memory (
@@ -784,6 +765,26 @@ class PostgresMemoryStore:
                 ).fetchone()
                 if updated is None:
                     raise MemoryInvariantError("关系记忆新版本写入结果为空。")
+                # 同事务先保存合法后继，避免旧叶失效触发器误判整条手录链已删除。
+                invalidated = connection.execute(
+                    """
+                    UPDATE public.confirmed_memory
+                    SET status = 'invalidated',
+                        invalid_at = COALESCE(invalid_at, %s),
+                        revision = %s,
+                        updated_at = now()
+                    WHERE owner_id = %s AND contact_id = %s AND id = %s
+                    """,
+                    (
+                        self._now(),
+                        next_revision,
+                        scope.owner_id,
+                        scope.contact_id,
+                        memory_row["memory_id"],
+                    ),
+                ).rowcount
+                if invalidated != 1:
+                    raise MemoryInvariantError("原关系记忆失效更新失败。")
                 source_candidate = None
                 if memory_row["source_candidate_id"] is not None:
                     candidate_row = self._candidate_for_update(
