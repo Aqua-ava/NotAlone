@@ -36,6 +36,10 @@ class ContactQueries:
             raise AssertionError('联系人清理只能查询原owner/contact。')
         if query.startswith('SELECT 1 FROM public.contact'):
             return Rows([{'present': 1}] if self.present else [])
+        if query.startswith('SELECT source_document_id,message_id FROM public.media_attempt'):
+            return Rows()
+        if query.startswith('SELECT 1 FROM public.media_request_tombstone') or query.startswith('DELETE FROM public.media_request_tombstone'):
+            return Rows()
         if query.startswith('SELECT id FROM public.') or query.startswith('SELECT version.id FROM public.reply_skill_version'):
             if 'text_content' in query or 'content ' in query:
                 raise AssertionError('依赖清理只收集身份。')
@@ -69,6 +73,7 @@ class UpgradeContactErasureTest(unittest.TestCase):
             stack.enter_context(patch(module+'lock_contact_scope'))
             stack.enter_context(patch(module+'lock_owner_scope'))
             stack.enter_context(patch(module+'_erase_preferences'))
+            stack.enter_context(patch(module+'_erase_contact_sources'))
             stack.enter_context(patch('notalone.persistence.memory_upgrade.erase_memory_upgrades',
                 side_effect=lambda _, **request: erase('upgrade_erased', **request)))
             stack.enter_context(patch('notalone.persistence.skill_learning.erase_skill_learning',

@@ -6,7 +6,9 @@ from typing import Any
 from uuid import UUID
 
 import psycopg
-from notalone.persistence.style_sample_store import erase_reply_style_samples, invalidate_reply_keys
+from notalone.persistence.style_sample_store import (
+    collect_reply_style_sample_ids, erase_reply_style_samples, invalidate_reply_keys,
+)
 
 from notalone.persistence.assistant_session_store import (
     erase_assistant_source_turns, select_assistant_source_input_dependents,
@@ -111,6 +113,7 @@ def delete_source_replies(
         carry_edges=carry_edges, captured_uses=captured,
     )
     request_ids = sorted(set(request_ids) | set(selected.reply_request_ids), key=str)
+    sample_ids = collect_reply_style_sample_ids(connection, owner_id=owner_id, request_ids=request_ids)
     from notalone.persistence.memory_upgrade import erase_memory_upgrades
     erase_memory_upgrades(connection, owner_id=owner_id, removed_ids=removed_ids)
     # 先使用仍完整的捕获身份选定并清除助手输入。该入口会清除学习依赖，
@@ -123,30 +126,27 @@ def delete_source_replies(
     from notalone.persistence.skill_learning import erase_skill_learning
     erase_skill_learning(connection, owner_id=owner_id,
                          removed_ids=removed_ids | set(request_ids) | set(selected.turn_ids))
-    if not request_ids:
-        return
-    rows = connection.execute(
-        'SELECT id FROM public.reply_request WHERE owner_id=%s AND id=ANY(%s::uuid[])',
-        (owner_id, request_ids),
-    ).fetchall()
-    request_ids = [row['id'] if isinstance(row, dict) else row[0] for row in rows]
-    if not request_ids:
-        return
-    # 候选身份尚在时清除其样本及样本派生回复，避免长期偏好删除被样本留存豁免。
-    erased_by_samples = erase_reply_style_samples(connection, owner_id=owner_id, request_ids=request_ids)
-    request_ids = [identifier for identifier in request_ids if identifier not in erased_by_samples]
-    if not request_ids:
-        return
-    invalidate_reply_keys(connection, owner_id=owner_id, request_ids=request_ids)
-    deleted = connection.execute(
-        """
-        DELETE FROM public.reply_request
-        WHERE owner_id = %s AND id = ANY(%s::uuid[])
-        """,
-        (owner_id, request_ids),
-    ).rowcount
-    if deleted != len(request_ids):
-        raise ReplyCleanupError("来源删除后仍存在回复副本。")
+    if request_ids:
+        rows = connection.execute(
+            'SELECT id FROM public.reply_request WHERE owner_id=%s AND id=ANY(%s::uuid[])',
+            (owner_id, request_ids),
+        ).fetchall()
+        request_ids = [row['id'] if isinstance(row, dict) else row[0] for row in rows]
+        if request_ids:
+            invalidate_reply_keys(connection, owner_id=owner_id, request_ids=request_ids)
+            deleted = connection.execute(
+                """
+                DELETE FROM public.reply_request
+                WHERE owner_id = %s AND id = ANY(%s::uuid[])
+                """,
+                (owner_id, request_ids),
+            ).rowcount
+            if deleted != len(request_ids):
+                raise ReplyCleanupError("来源删除后仍存在回复副本。")
+    # A已清空后先移除对应C快照，再清预捕获的样本；嵌套删除不复验已清空的身份。
+    if sample_ids:
+        erase_reply_style_samples(connection, owner_id=owner_id, request_ids=[],
+                                  captured_sample_ids=sample_ids)
 
 
 def delete_owner_memory_replies(

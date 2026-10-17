@@ -454,7 +454,9 @@ def erase_preference_style_samples(connection: Any, *, owner_id: UUID, preferenc
           AND sample.contact_id=use.contact_id
         WHERE use.owner_id=%s AND use.preference_id=ANY(%s::uuid[]) AND sample.status='active'
     """, (owner_id, preference_ids)).fetchall()
-    return _erase_samples(connection, owner_id=owner_id, sample_ids=[row["id"] for row in rows])
+    return _erase_samples(connection, owner_id=owner_id, sample_ids=[
+        row["id"] if isinstance(row, dict) else row[0] for row in rows
+    ])
 
 
 def erase_source_style_samples(connection: Any, *, owner_id: UUID, removed_ids: set[UUID]) -> list[UUID]:
@@ -467,8 +469,8 @@ def erase_source_style_samples(connection: Any, *, owner_id: UUID, removed_ids: 
     return _erase_samples(connection, owner_id=owner_id, sample_ids=identifiers)
 
 
-def erase_reply_style_samples(connection: Any, *, owner_id: UUID, request_ids: list[UUID]) -> list[UUID]:
-    """来源失效的候选不能借主动样本独立留存；会话删除仍走原有保留规则。"""
+def collect_reply_style_sample_ids(connection: Any, *, owner_id: UUID, request_ids: list[UUID]) -> list[UUID]:
+    """持有owner锁且候选尚在时捕获实际派生样本；只返回本范围身份。"""
     rows = connection.execute("""
         SELECT sample.id FROM public.style_sample AS sample
         JOIN public.reply_candidate AS candidate ON candidate.id=sample.origin_id
@@ -476,9 +478,19 @@ def erase_reply_style_samples(connection: Any, *, owner_id: UUID, request_ids: l
         WHERE sample.owner_id=%s AND sample.status='active' AND sample.origin_kind='candidate'
           AND candidate.reply_request_id=ANY(%s::uuid[])
     """, (owner_id, request_ids)).fetchall()
-    return _erase_samples(connection, owner_id=owner_id, sample_ids=[
+    return [
         row["id"] if isinstance(row, dict) else row[0] for row in rows
-    ])
+    ]
+
+
+def erase_reply_style_samples(
+    connection: Any, *, owner_id: UUID, request_ids: list[UUID],
+    captured_sample_ids: list[UUID] | None = None,
+) -> list[UUID]:
+    """同owner事务复用候选清空前捕获的样本身份；会话删除仍走原保留规则。"""
+    identifiers = (collect_reply_style_sample_ids(connection, owner_id=owner_id, request_ids=request_ids)
+                   if captured_sample_ids is None else captured_sample_ids)
+    return _erase_samples(connection, owner_id=owner_id, sample_ids=identifiers)
 
 
 class PostgresStyleSampleStore:
