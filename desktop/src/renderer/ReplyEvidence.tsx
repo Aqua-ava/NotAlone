@@ -33,6 +33,7 @@ function RetrievalSummary({ receipt }: { receipt: ReplyRetrievalReceipt | null |
 
 function LayeredSummary({ state }: { state: ReplyEvidenceState }) {
   const context = state.layeredContext;
+  const successfulReads = state.layeredScenarioReads?.filter((receipt) => receipt.status === 'succeeded') ?? [];
   if (!context) {
     const reasons = { not_allowed: '本次未授权加载系统整理资料。', unavailable: '本次系统整理资料不可用，未加入生成。',
       budget_omitted: '本次系统整理资料因预算限制未加入生成。', quality_closed: '本次系统整理资料未获质量资格，未加入生成。',
@@ -54,9 +55,55 @@ function LayeredSummary({ state }: { state: ReplyEvidenceState }) {
         <p>保存时间：{ref.timing.recordedAt ?? '未知'}；来源时间：{ref.timing.sourceStartedAt ?? '未知'} 至 {ref.timing.sourceEndedAt ?? '未知'}{ref.timing.sourceTimeComplete ? '' : '（不完整）'}。</p>
       </div>)}
     </article>)}
-    <p>本次仅加载主题目录，未读取主题正文。</p>
+    <p>{successfulReads.length ? '初始仅加载主题目录；下方正文为本次工具实际读取结果。' : '初始仅加载主题目录，未读取主题正文。'}</p>
     {context.directory.map((entry) => <article key={entry.scenarioId}>
-      <strong>{entry.title}</strong><p>{entry.hint}</p><p>目录版本：{entry.versionId}；正文 {entry.paragraphCount} 段（未读取）。</p>
+      <strong>{entry.title}</strong><p>{entry.hint}</p><p>目录版本：{entry.versionId}；正文共 {entry.paragraphCount} 段。
+        {entry.paragraphRange && <>允许读取范围：[{entry.paragraphRange[0]}, {entry.paragraphRange[1]})。</>}</p>
+      <p>{successfulReads.some((receipt) => receipt.scenarioId === entry.scenarioId)
+        ? '本次已读取的段落见下方正文。' : '本次没有该主题的成功正文读取记录。'}</p>
+    </article>)}
+  </section>;
+}
+
+function paragraphRangeLabel(range: [number, number]) {
+  if (range[0] < 0 || range[1] <= range[0]) return `原范围 [${range[0]}, ${range[1]})（无效范围）`;
+  return `${range[1] - range[0] === 1 ? `第 ${range[0] + 1} 段` : `第 ${range[0] + 1} 至 ${range[1]} 段`}（原范围 [${range[0]}, ${range[1]})）`;
+}
+
+function ScenarioReadSummary({ state }: { state: ReplyEvidenceState }) {
+  const receipts = state.layeredScenarioReads;
+  if (!receipts) return <p>本次快照未记录主题正文读取过程，不补填后来资料。</p>;
+  if (!receipts.length) return <p>本次未调用主题正文读取工具。</p>;
+  const statuses = { succeeded: '读取成功', duplicate: '重复读取，未追加正文', out_of_range: '段落越界，未读取正文',
+    not_in_directory: '主题不在本次目录，未读取正文', invalid_arguments: '读取参数无效，未读取正文',
+    stale: '冻结版本已失效，未读取正文', budget_exceeded: '读取预算已耗尽，未读取正文' };
+  return <section aria-label="本次主题正文读取">
+    <h4>系统整理 · 本次实际读取的主题正文与回执</h4>
+    <p>只展示生成时实际读入的冻结正文；未读取部分仍为未知。</p>
+    {receipts.map((receipt, index) => <article key={index}>
+      <p>主题读取 {index + 1}：{statuses[receipt.status]}。</p>
+      <p>{receipt.reason}</p>
+      <p>主题 ID：{receipt.scenarioId ?? '参数未提供合法主题 ID'}；
+        请求段落：{receipt.paragraphRange ? paragraphRangeLabel(receipt.paragraphRange) : '无合法段落范围'}。</p>
+      <p>本次累计：{receipt.budget.usedCalls}/{receipt.budget.callLimit} 次，
+        {receipt.budget.usedParagraphs}/{receipt.budget.paragraphLimit} 段，
+        {receipt.budget.usedCharacters}/{receipt.budget.characterLimit} 字符。</p>
+      {receipt.status === 'succeeded' && <>
+        <strong>{receipt.document.title}</strong><p>{receipt.document.hint}</p>
+        <p>冻结正文版本：{receipt.document.versionId}；整理版本：{receipt.document.organizationGeneration}；
+          实际读取：{paragraphRangeLabel(receipt.document.paragraphRange)}。</p>
+        {receipt.document.paragraphs.map((paragraph, paragraphIndex) => <div key={paragraphIndex}>
+          <p>第 {receipt.document.paragraphRange[0] + paragraphIndex + 1} 段：{paragraph.text}</p>
+          {paragraph.references.map((ref) => <div key={`${ref.memoryId}:${ref.revision}`}>
+            <p>底层资料：{ref.memoryId}；版本：{ref.revision}；
+              {ref.provenanceKind === 'manual_entry' ? '手动录入' : ref.provenanceKind === 'source_supported' ? '来源支持' : '本次快照未记录来历'}。</p>
+            {ref.timing ? <>
+              <MemoryTemporalStatus timing={ref.timing} snapshot />
+              <p>保存时间：{ref.timing.recordedAt ?? '未知'}；来源时间：{ref.timing.sourceStartedAt ?? '未知'} 至 {ref.timing.sourceEndedAt ?? '未知'}{ref.timing.sourceTimeComplete ? '' : '（不完整）'}。</p>
+            </> : <p>本次快照未记录来源时间与核实状态。</p>}
+          </div>)}
+        </div>)}
+      </>}
     </article>)}
   </section>;
 }
@@ -89,6 +136,7 @@ export function ReplyEvidence({ evidence, selection, candidate, number, waiting 
       {state.phase === 'ready' && <>
         <RetrievalSummary receipt={state.retrieval} />
         <LayeredSummary state={state} />
+        <ScenarioReadSummary state={state} />
         <ReplyBasisChangeNotice changes={state.basisChanges} />
         {candidate.citationIds.some((id) => !state.items.some((item) => item.evidenceId === id)) && <p>部分引用缺失，不补填后来资料。</p>}
         {!state.items.length && <p>本次没有可展示的依据。</p>}

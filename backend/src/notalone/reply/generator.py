@@ -539,6 +539,7 @@ class ReplyGenerator:
             context,
             evidence=context.evidence + tuple(additions),
             tool_calls=context.tool_calls + result.tool_calls,
+            layered_scenario_reads=result.layered_scenario_reads,
             retrieval=append_runtime_receipt(context.retrieval, context.evidence, tuple(additions), result.tool_calls),
         )
 

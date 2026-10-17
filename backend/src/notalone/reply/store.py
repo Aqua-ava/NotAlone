@@ -108,6 +108,7 @@ class StoredReplyRequest:
     retrieval: ReplyRetrievalReceipt | None = None
     layered_context: dict | None = None
     layered_status: str = "quality_closed"
+    layered_scenario_reads: tuple[dict, ...] = ()
 
 
 @dataclass(frozen=True, slots=True, repr=False)

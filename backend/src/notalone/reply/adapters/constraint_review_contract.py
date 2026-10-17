@@ -100,7 +100,7 @@ def accepted_candidate_numbers(output: object, payload: dict[str, Any]) -> froze
         candidate = _candidate_texts(candidates[number - 1])
         statuses = [_validate_check(name, checks[name], candidate,
                     sources if name in {"facts", "explanation"} else
-                    {path: text for path, text in sources.items() if not path.startswith("/layered_context/")})
+                    {path: text for path, text in sources.items() if not path.startswith(("/layered_context/", "/layered_scenario_reads/"))})
                     for name in CHECK_CATEGORIES]
         if (all(status == "supported" for status in statuses) and change != "unknown"
                 and (not requires_expansion or change == "expanded")):
@@ -171,6 +171,11 @@ def _source_texts(payload: dict[str, Any]) -> dict[str, str]:
         texts.update({f"/layered_context/profile_entries/{index}/text": item["text"]
                       for index, item in enumerate(material.get("profile_entries", []))
                       if isinstance(item.get("text"), str) and item["text"].strip()})
+    for read_index, receipt in enumerate(payload.get("layered_scenario_reads", [])):
+        if receipt.get("status") == "succeeded":
+            texts.update({f"/layered_scenario_reads/{read_index}/document/paragraphs/{index}/text": item["text"]
+                          for index, item in enumerate(receipt["document"]["paragraphs"])
+                          if isinstance(item.get("text"), str) and item["text"].strip()})
     return texts
 
 
