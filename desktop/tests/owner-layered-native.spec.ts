@@ -2,8 +2,8 @@ import { test as appTest } from './app-fixture';
 import { withLayeredMemoryFixture } from './layered-memory-fixture';
 import type { RewriteFixture } from './rewrite-backend-fixture';
 import { randomUUID } from 'node:crypto';
-import { watch } from 'node:fs';
-import { readFile, realpath, stat, writeFile } from 'node:fs/promises';
+import { writeFile } from 'node:fs/promises';
+import { cuaReceiptDirectory, waitForCuaReceipt } from './cua-receipt';
 import path from 'node:path';
 
 const project = path.resolve('..');
@@ -19,13 +19,7 @@ const test = appTest.extend<{ layeredBackend: RewriteFixture }>({
 // 有限等待本次 Computer Use 收据；不自动替代用户操作或签发模型资格。
 test('实际 App 的本人独立两层资料 CUA 验收', async ({ runningApp, layeredBackend }) => {
   test.setTimeout(12 * 60_000);
-  const requested = process.env.NOTALONE_LAYERED_CUA_DIR;
-  if (!requested || !path.isAbsolute(requested)) throw new Error('实际验收须指定本轮私有收据目录。');
-  const directory = await realpath(requested);
-  const info = await stat(directory);
-  if (!info.isDirectory() || (info.mode & 0o777) !== 0o700 || directory.startsWith(project)) {
-    throw new Error('实际验收收据目录不可核验。');
-  }
+  const directory = await cuaReceiptDirectory(project);
   const requestId = randomUUID();
   if (layeredBackend.data.contact_ids.length !== 0) throw new Error('本人验收不得预置联系人。');
   const requiredChecks = ['no_contact_owner_entry', 'initial_closed', 'manual_owner_memory_saved',
@@ -39,34 +33,7 @@ test('实际 App 的本人独立两层资料 CUA 验收', async ({ runningApp, l
     project, native_app: true, final_signed_package: false,
     required_checks: requiredChecks,
   }), { mode: 0o600, flag: 'wx' });
-  await new Promise<void>((resolve, reject) => {
-    let checking = false;
-    let settled = false;
-    const watcher = watch(directory, (_event, filename) => { if (filename === 'done.json') void check(); });
-    const timer = setTimeout(() => finish(new Error('本次CUA未在有限期限内完成。')), 11 * 60_000);
-    function finish(error?: Error) {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      watcher.close();
-      if (error) reject(error); else resolve();
-    }
-    async function check() {
-      if (checking || settled) return;
-      checking = true;
-      try {
-        const receipt = JSON.parse(await readFile(path.join(directory, 'done.json'), 'utf8'));
-        if (receipt.request_id !== requestId || receipt.passed !== true) throw new Error('CUA收据未通过或不属于本次实例。');
-        if (!requiredChecks.every((name) => receipt.checks?.[name] === true)) {
-          throw new Error('CUA收据未包含本次本人范围的全部实际操作。');
-        }
-        finish();
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') finish(error as Error);
-      } finally { checking = false; }
-    }
-    void check();
-  });
+  await waitForCuaReceipt(directory, requestId, requiredChecks, 11 * 60_000);
   const response = await layeredBackend.request('/api/memories/owner/layered-memory');
   const state = response.data.layered_memory as { scope_kind: string; contact_id: string | null; enabled: boolean; scenarios: unknown[]; profile: unknown | null };
   if (response.status !== 200 || state.scope_kind !== 'owner' || state.contact_id !== null
