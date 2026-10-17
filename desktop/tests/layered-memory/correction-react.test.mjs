@@ -23,7 +23,7 @@ for (const scope of ['contact', 'owner']) for (const kind of ['scenario', 'profi
             correction_revision: action === 'summary' ? 1 : 0, protected_count: action === 'summary' ? 1 : 0,
             ...(action === 'fact' ? { correction_target: { memory_id: ids.other, revision: 2 } } : { feedback: [{ id: ids.other,
               target_kind: kind, version_id: kind === 'scenario' ? ids.version : ids.profile, item_index: 0,
-              reason: '总结把计划写成事实。', state: 'active' }] }) });
+              reason: '总结把计划写成事实。', state: 'active', target_text: '原合成整理内容。', basis: [{ memory_id: ids.memory, revision: 1 }] }] }) });
         }
         return { generation: 1, data: saved };
       }

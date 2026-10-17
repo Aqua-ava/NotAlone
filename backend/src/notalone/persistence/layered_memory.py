@@ -153,9 +153,7 @@ class PostgresLayeredMemoryStore(LayeredProfileStore, LayeredCorrectionStore):
             if manifest and manifest['profile_version_id'] and state['status'] in {'ready','paused','disabled'}:
                 profile = self.profile_document(self.profile_row(connection,scope,manifest['profile_version_id']))
             state['profile'] = profile
-            state['feedback'] = [{"id": str(row['id']), "target_kind": row['target_kind'],
-                "version_id": str(row['version_id']) if row['version_id'] else None, "item_index": row['item_index'],
-                "reason": row['reason'], "state": row['state']} for row in self.feedback_rows(connection, scope)]
+            state['feedback'] = self.feedback_projection(connection, scope, self.eligible(overview))
             state['protected_count'] = len(self.eligible(overview)) - len(self.unprotected(connection, scope, self.eligible(overview)))
             state['pending_fact_count'] = connection.execute('SELECT count(*) AS count FROM public.layered_memory_fact_correction '
                 'WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s', (scope.owner_id, scope.contact_id)).fetchone()['count']

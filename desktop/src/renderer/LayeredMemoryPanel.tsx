@@ -136,7 +136,14 @@ export function LayeredMemoryPanel({ state, contactName, busy, read, manage, fac
       {value.feedback.length > 0 && <section aria-label="整理纠错反馈"><h3>整理纠错反馈</h3>
         <p>受保护的旧依据 {value.protectedCount} 条。无法核对的新概括不会自动生效。</p>
         {value.feedback.map(feedback => <article key={feedback.id}><p>{feedback.targetKind === 'scenario' ? '主题资料' : '长期背景'}第 {feedback.itemIndex + 1} 项：
-          {feedback.state === 'active' ? feedback.reason : '来源敏感内容已清除，仅保留仍有效旧依据的保护。'}</p></article>)}
+          {feedback.state === 'active' ? feedback.reason : '来源敏感内容已清除，仅保留仍有效旧依据的保护。'}</p>
+          {feedback.targetText !== null ? <p>原整理内容：{feedback.targetText}</p> : <p>原整理内容已清除，不从现有资料恢复旧正文。</p>}
+          <p>当前仍受保护且可核对的底层版本：</p>
+          {feedback.basis.map(basis => <button className="button" key={basis.memoryId} disabled={waiting}
+            onClick={() => facts(basis)}>核对底层记忆 {basis.memoryId} · 版本 {basis.revision}</button>)}
+          {!feedback.basis.length && <p>当前没有可打开的已准入底层版本；仍有效的旧依据仅保留无正文保护。</p>}
+          <p>删除关联来源或底层记忆时，反馈敏感内容随之清理；最后一份有效依据删除后清除保护。</p>
+        </article>)}
       </section>}
     </>}
   </section>;

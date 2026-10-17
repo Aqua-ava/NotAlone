@@ -119,9 +119,16 @@ export function layeredMemory(value: unknown, contactId: string | null): Layered
       const feedback = record(value);
       const state = enumeration(feedback.state, ['active', 'erased_guard']);
       if (state === 'active' ? feedback.reason === null || feedback.version_id === null : feedback.reason !== null || feedback.version_id !== null) throw invalid();
+      if (state === 'erased_guard' && feedback.target_text !== null) throw invalid();
       return { id: identifier(feedback.id), targetKind: enumeration(feedback.target_kind, ['scenario', 'profile']),
         versionId: feedback.version_id === null ? null : identifier(feedback.version_id), itemIndex: integer(feedback.item_index),
-        reason: feedback.reason === null ? null : text(feedback.reason, 500), state };
+        reason: feedback.reason === null ? null : text(feedback.reason, 500), state,
+        targetText: feedback.target_text === null ? null : text(feedback.target_text),
+        basis: list(feedback.basis, value => {
+          const basis = record(value);
+          if (Object.keys(basis).some(key => !['memory_id', 'revision'].includes(key))) throw invalid();
+          return { memoryId: identifier(basis.memory_id), revision: integer(basis.revision, 1) };
+        }) };
     }),
     scenarios, profile: currentProfile };
 }

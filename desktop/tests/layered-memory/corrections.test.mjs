@@ -30,7 +30,7 @@ for (const scope of ['contact', 'owner']) for (const targetKind of ['scenario', 
     finish({ generation: 1, data: profilePayload({ scope_kind: scope, contact_id: scope === 'owner' ? null : ids.contact,
       scenarios: targetKind === 'scenario' ? [] : profilePayload().layered_memory.scenarios, profile: null,
       correction_revision: 1, protected_count: 1,
-      feedback: [{ id: ids.other, target_kind: targetKind, version_id: base.versionId, item_index: 0, reason: base.reason, state: 'active' }] }) });
+      feedback: [{ id: ids.other, target_kind: targetKind, version_id: base.versionId, item_index: 0, reason: base.reason, state: 'active', target_text: '原合成整理内容。', basis: [{ memory_id: ids.memory, revision: 1 }] }] }) });
     await pending;
     assert.equal((await state()).value.feedback[0].reason, base.reason);
     assert.equal((await state()).value.correctionRevision, 1);

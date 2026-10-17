@@ -160,7 +160,8 @@ export interface LayeredMemory {
   correctionRevision: number;
   protectedCount: number;
   pendingFactCount: number;
-  feedback: { id: string; targetKind: 'scenario' | 'profile'; versionId: string | null; itemIndex: number; reason: string | null; state: 'active' | 'erased_guard' }[];
+  feedback: { id: string; targetKind: 'scenario' | 'profile'; versionId: string | null; itemIndex: number; reason: string | null;
+    state: 'active' | 'erased_guard'; targetText: string | null; basis: { memoryId: string; revision: number }[] }[];
   correctionTarget: { memoryId: string; revision: number } | null;
 }
 export interface LayeredMemoryReadRequest extends ContactSelection { mappingCursor?: string | null }

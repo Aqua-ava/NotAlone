@@ -95,6 +95,36 @@ class LayeredCorrectionStore:
             'AND contact_id IS NOT DISTINCT FROM %s ORDER BY created_at,id',
             (scope.owner_id, scope.contact_id)).fetchall()
 
+    @staticmethod
+    def _protection_identity(connection, scope, entry):
+        memory = entry.memory
+        lineage = {memory.memory_id}
+        previous = memory.supersedes_memory_id
+        table = 'owner_memory' if scope.contact_id is None else 'confirmed_memory'
+        contact_filter = '' if scope.contact_id is None else ' AND contact_id=%s'
+        while previous is not None and previous not in lineage:
+            lineage.add(previous)
+            row = connection.execute(f'SELECT supersedes_memory_id FROM public.{table} '
+                f'WHERE owner_id=%s AND id=%s{contact_filter}',
+                (scope.owner_id, previous) + (() if scope.contact_id is None else (scope.contact_id,))).fetchone()
+            previous = row['supersedes_memory_id'] if row else None
+        return lineage, {ref.message_id for ref in entry.references if ref.message_id is not None}
+
+    def feedback_projection(self, connection, scope, entries):
+        # 只投影当前同范围合法叶的核对入口；无正文guard不重建原总结或来源正文。
+        rows = self.feedback_rows(connection, scope)
+        if not rows:
+            return []
+        identities = [(entry, *self._protection_identity(connection, scope, entry)) for entry in entries]
+        return [{"id": str(row['id']), "target_kind": row['target_kind'],
+            "version_id": str(row['version_id']) if row['version_id'] else None, "item_index": row['item_index'],
+            "reason": row['reason'], "state": row['state'],
+            "target_text": row['rejected_text'] if row['state'] == 'active' else None,
+            "basis": [{"memory_id": str(entry.memory.memory_id), "revision": entry.memory.revision}
+                for entry, lineage, messages in identities
+                if lineage & set(row['protected_memory_ids']) or messages & set(row['protected_message_ids'])]}
+            for row in rows]
+
     def unprotected(self, connection, scope, entries):
         feedback = self.feedback_rows(connection, scope)
         pending = {(row['memory_id'], row['memory_revision']) for row in connection.execute(
@@ -108,15 +138,7 @@ class LayeredCorrectionStore:
             if (memory.memory_id, memory.revision) in pending:
                 continue
             # 共享的manual source身份不参与保护；实际版本链与规范消息才是证据身份。
-            lineage = {memory.memory_id}
-            previous = memory.supersedes_memory_id
-            table = 'owner_memory' if scope.contact_id is None else 'confirmed_memory'
-            while previous is not None and previous not in lineage:
-                lineage.add(previous)
-                row = connection.execute(f'SELECT supersedes_memory_id FROM public.{table} '
-                    'WHERE owner_id=%s AND id=%s', (scope.owner_id, previous)).fetchone()
-                previous = row['supersedes_memory_id'] if row else None
-            messages = {ref.message_id for ref in entry.references if ref.message_id is not None}
+            lineage, messages = self._protection_identity(connection, scope, entry)
             if not lineage & memory_ids and not messages & message_ids:
                 result.append(entry)
         return tuple(result)
