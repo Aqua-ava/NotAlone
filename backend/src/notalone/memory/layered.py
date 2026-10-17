@@ -9,7 +9,7 @@ from notalone.memory.organization_deadline import OrganizationAdapterTimeoutCont
 
 
 class OrganizationBudgetExhausted(RuntimeError):
-    """同一逻辑批次的持久调用额度已耗尽；刷新不能重置。"""
+    """同一工作的持久调用额度已耗尽；刷新或重启不能重置。"""
 
 
 class LayeredMemoryConflict(RuntimeError):

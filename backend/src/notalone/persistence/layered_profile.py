@@ -10,6 +10,7 @@ from psycopg.types.json import Jsonb
 
 from notalone.memory.layered import LayeredMemoryConflict
 from notalone.scopes import ContactScope
+from notalone.tasks.models import ClaimedBackgroundTaskStep
 
 
 @dataclass(frozen=True, slots=True, repr=False)
@@ -23,7 +24,8 @@ class ProfileWork:
     memories: tuple
     scenarios: tuple[dict, ...]
     manifest: list
-    call_budget_id: UUID
+    budget_batch_id: UUID
+    claim: ClaimedBackgroundTaskStep
 
 
 class LayeredProfileStore:
@@ -43,8 +45,13 @@ class LayeredProfileStore:
         return {"version_id": str(row["id"]), "system_generated": True,
                 "updated_at": row["created_at"].isoformat(), "entries": row["entries"]}
 
-    def prepare_profile(self, scope, budget, contract, *, lease_seconds):
+    def prepare_profile(self, scope, budget, contract, *, lease_seconds, claim):
         with self.transaction(scope) as (connection,state,overview):
+            self._assert_claim(connection,claim)
+            job = connection.execute("SELECT * FROM public.layered_memory_job WHERE task_id=%s AND owner_id=%s AND contact_id=%s",
+                (claim.task_id,scope.owner_id,scope.contact_id)).fetchone()
+            if not job or job['state']!='active' or job['settings_generation']!=state['settings_generation'] or not job['profile_required']:
+                raise LayeredMemoryConflict("长期背景所属工作已变化。")
             if not state["enabled"] or state["status"] not in {"ready", "failed", "updating", "paused"}:
                 return None
             generation, rows = self.generation_rows(connection,scope,state["organization_generation"])
@@ -65,19 +72,17 @@ class LayeredProfileStore:
                     "WHERE owner_id=%s AND contact_id=%s", (scope.owner_id,scope.contact_id))
                 return None
             key = hashlib.sha256(json.dumps({"versions": sorted(str(id) for id in ids),
-                "settings": state["settings_generation"],"contract": contract,"budget": budget.to_payload()},
+                "settings": state["settings_generation"],"task":str(claim.task_id),"revision":job["revision"],"contract": contract,"budget": budget.to_payload()},
                 sort_keys=True).encode()).hexdigest()
             previous = connection.execute("SELECT * FROM public.layered_profile_batch WHERE owner_id=%s "
                 "AND contact_id=%s AND work_key=%s", (scope.owner_id,scope.contact_id,key)).fetchone()
             now = self._clock()
             if previous and previous["status"] in {"succeeded", "withdrawn"}:
+                connection.execute("UPDATE public.layered_memory_job SET profile_status='succeeded' WHERE task_id=%s",(claim.task_id,))
                 return None
-            # 只承接当前目标最新L2工作的额度，不累加复用的历史主题费用。
+            # 实际L2依赖可跨历史批次；本次调用只扣当前明确授权job的累计额度。
             budget_batch_id = max(rows,key=lambda row: row["organization_generation"])["batch_id"]
-            call_budget = connection.execute("SELECT model_call_limit,model_calls_used FROM public.layered_memory_batch "
-                "WHERE id=%s AND owner_id=%s AND contact_id=%s", (budget_batch_id,scope.owner_id,scope.contact_id)).fetchone()
-            connection.execute("UPDATE public.layered_memory_state SET call_budget_batch_id=%s WHERE owner_id=%s AND contact_id=%s",
-                (budget_batch_id,scope.owner_id,scope.contact_id))
+            call_budget = job
             if call_budget["model_calls_used"] >= call_budget["model_call_limit"]:
                 if previous:
                     connection.execute("UPDATE public.layered_profile_batch SET status='failed',error_code='model_call_budget_exhausted' WHERE id=%s",
@@ -110,15 +115,16 @@ class LayeredProfileStore:
                     Jsonb(manifest),Jsonb(payload),id))
             else:
                 connection.execute("INSERT INTO public.layered_profile_batch(id,owner_id,contact_id,settings_generation,"
-                    "organization_generation,work_key,work_token,budget_batch_id,status,lease_expires_at,scenario_version_ids,input_manifest,"
-                    "input_payload,dependency_ids,created_at) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,'running',%s,%s,%s,%s,%s,%s)",
-                    (id,scope.owner_id,scope.contact_id,state["settings_generation"],state["organization_generation"],key,token,budget_batch_id,
+                    "organization_generation,work_key,work_token,budget_batch_id,task_id,status,lease_expires_at,scenario_version_ids,input_manifest,"
+                    "input_payload,dependency_ids,created_at) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,'running',%s,%s,%s,%s,%s,%s)",
+                    (id,scope.owner_id,scope.contact_id,state["settings_generation"],state["organization_generation"],key,token,budget_batch_id,claim.task_id,
                     now+timedelta(seconds=lease_seconds),list(ids),Jsonb(manifest),Jsonb(payload),dependencies,now))
             connection.execute("UPDATE public.layered_memory_state SET status='updating',error_code=NULL WHERE owner_id=%s AND contact_id=%s",
                 (scope.owner_id,scope.contact_id))
-            return ProfileWork(id,token,scope,state["settings_generation"],state["organization_generation"],ids,memories,scenarios,manifest,budget_batch_id)
+            return ProfileWork(id,token,scope,state["settings_generation"],state["organization_generation"],ids,memories,scenarios,manifest,budget_batch_id,claim)
 
     def _check_profile(self, connection, state, overview, work):
+        self._assert_claim(connection,work.claim)
         batch = connection.execute("SELECT * FROM public.layered_profile_batch WHERE id=%s AND owner_id=%s AND contact_id=%s",
             (work.id,work.scope.owner_id,work.scope.contact_id)).fetchone()
         generation, rows = self.generation_rows(connection,work.scope,state["organization_generation"])
@@ -127,7 +133,7 @@ class LayeredProfileStore:
                 or state["organization_generation"] != work.organization_generation
                 or not generation or {r["id"] for r in rows} != set(work.scenario_version_ids)
                 or not batch or batch["status"] != "running" or batch["work_token"] != work.token
-                or batch["budget_batch_id"] != work.call_budget_id
+                or batch["budget_batch_id"] != work.budget_batch_id or batch["task_id"] != work.claim.task_id
                 or batch["lease_expires_at"] <= self._clock()
                 or any(current.get(item["memory_id"]) != item for item in work.manifest)):
             raise LayeredMemoryConflict("长期背景的范围、完整主题集合或实际输入已变化。")
@@ -150,6 +156,7 @@ class LayeredProfileStore:
             self.publish_generation_in_transaction(connection,work.scope,expected_generation=work.organization_generation,
                 scenario_version_ids=work.scenario_version_ids,profile_version_id=id)
             connection.execute("UPDATE public.layered_profile_batch SET status='succeeded' WHERE id=%s", (work.id,))
+            connection.execute("UPDATE public.layered_memory_job SET profile_status='succeeded' WHERE task_id=%s",(work.claim.task_id,))
             connection.execute("UPDATE public.layered_memory_state SET status='ready',error_code=NULL,updated_at=%s "
                 "WHERE owner_id=%s AND contact_id=%s", (self._clock(),work.scope.owner_id,work.scope.contact_id))
 
@@ -160,6 +167,7 @@ class LayeredProfileStore:
             except LayeredMemoryConflict:
                 return
             connection.execute("UPDATE public.layered_profile_batch SET status='failed',error_code=%s WHERE id=%s", (code,work.id))
+            connection.execute("UPDATE public.layered_memory_job SET profile_status='failed' WHERE task_id=%s",(work.claim.task_id,))
             connection.execute("UPDATE public.layered_memory_state SET status=%s,error_code=%s WHERE owner_id=%s AND contact_id=%s",
                 ("paused" if code == "model_call_budget_exhausted" else "failed",code,work.scope.owner_id,work.scope.contact_id))
 

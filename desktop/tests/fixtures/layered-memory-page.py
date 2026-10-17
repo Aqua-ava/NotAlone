@@ -32,6 +32,7 @@ def main():
     from psycopg import sql
     from notalone.database_migrations import migrate
     from notalone.application.layered_memory_service import LayeredMemoryService
+    from notalone.memory.layered import OrganizationBudget
     from notalone.memory.organization_deadline import SYNTHETIC_ORGANIZATION_TIMEOUT
     from notalone.application.memory_service import MemoryService
     from notalone.application.setup_service import SetupService
@@ -115,8 +116,10 @@ def main():
         Fixture.setUpClass()
         fixture = Fixture(methodName="runTest")
         fixture.setUp()
-        contact, source, message = fixture.import_contact("双方共同参加合成学习课程。")
+        contact, source, message = fixture.import_contact(
+            "双方共同参加合成学习课程。双方后来共同完成合成学习练习。")
         fixture.confirm(contact, "双方共同参加合成学习课程。", message)
+        fixture.confirm(contact, "双方后来共同完成合成学习练习。", message)
         status, created_contact = fixture.backend.request("/api/contacts", {
             "request_id": str(uuid4()), "display_name": "空资料联系人"})
         fixture.assertEqual(status, 201, created_contact)
@@ -127,7 +130,8 @@ def main():
         profile_proposal, profile_verification = ProfileProposal(), ProfileVerification()
         service = LayeredMemoryService(PostgresLayeredMemoryStore(url), proposer=proposal,
                                        verifier=verification, synthetic=True, profile_proposer=profile_proposal,
-                                       profile_verifier=profile_verification)
+                                       profile_verifier=profile_verification,
+                                       budget=OrganizationBudget(max_memories=1, max_model_calls=4))
         backend = HttpBackend(create_app(database_url=url, owner_id=fixture.owner_id,
             token="synthetic-layered-page-token", memory_service=MemoryService(
                 contact_memory=PostgresMemoryStore(url), owner_memory=PostgresOwnerMemoryStore(url)),

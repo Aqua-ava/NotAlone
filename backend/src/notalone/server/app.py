@@ -1561,7 +1561,7 @@ class BackendApp:
         parts = path.strip("/").split("/")
         if (len(parts) not in {4, 5} or parts[3] != "layered-memory"
                 or method != ("GET" if len(parts) == 4 else "POST")
-                or len(parts) == 5 and parts[4] not in {"enable", "refresh", "disable", "delete", "withdraw-profile"}):
+                or len(parts) == 5 and parts[4] not in {"enable", "refresh", "disable", "delete", "withdraw-profile", "pause", "continue"}):
             return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
         if self._layered_memory is None:
             return _json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "layered_memory_unavailable"})
@@ -1573,19 +1573,22 @@ class BackendApp:
                 payload = json.loads(body.decode("utf-8"))
                 allowed = ({"settings_generation", "purpose_confirmed"} if parts[4] == "enable"
                     else {"settings_generation", "organization_generation", "profile_version_id"} if parts[4] == "withdraw-profile"
+                    else {"settings_generation", "work_revision"} if parts[4] in {"pause", "continue"}
                     else {"settings_generation"})
                 if (not isinstance(payload, dict) or set(payload) != allowed
                         or type(payload["settings_generation"]) is not int
                         or payload["settings_generation"] < 0
                         or parts[4] == "enable" and payload["purpose_confirmed"] is not True):
                     raise ValueError("整理命令无效。")
+                if parts[4] in {"pause", "continue"} and (type(payload["work_revision"]) is not int or payload["work_revision"] < 1):
+                    raise ValueError("覆盖工作修订无效。")
                 if parts[4] == "withdraw-profile":
                     if type(payload["organization_generation"]) is not int or payload["organization_generation"] < 0:
                         raise ValueError("整理版本无效。")
                     state = self._layered_memory.withdraw_profile(scope,payload["settings_generation"],
                         payload["organization_generation"],UUID(payload["profile_version_id"]))
                 else:
-                    state = self._layered_memory.command(scope, parts[4], payload["settings_generation"])
+                    state = self._layered_memory.command(scope, parts[4], payload["settings_generation"], payload.get("work_revision"))
             return _json_response(HTTPStatus.OK, {"layered_memory": state})
         except LayeredMemoryConflict:
             return _json_response(HTTPStatus.CONFLICT, {"error": "layered_memory_changed"})
@@ -2595,6 +2598,13 @@ def create_app(
     from notalone.persistence.layered_memory import PostgresLayeredMemoryStore
 
     contacts = ContactDirectory(PostgresContactDirectory(database_url))
+    layered_memory = layered_memory or LayeredMemoryService(PostgresLayeredMemoryStore(database_url))
+    if task_host is not None:
+        layered_memory.attach_task_host(task_host)
+        layered_memory.resume_pending(owner_id)
+    else:
+        from notalone.tasks.organization_dispatch import EmbeddedOrganizationDispatcher
+        layered_memory.attach_dispatcher(EmbeddedOrganizationDispatcher(database_url))
     return BackendApp(
         contact_directory=contacts,
         events=events or EventBus(),
@@ -2620,7 +2630,7 @@ def create_app(
         source_service=source_service or SourceService(database_url),
         memory_service=memory_service,
         overview_service=overview_service or RelationshipOverviewService(PostgresRelationshipOverviewStore(database_url)),
-        layered_memory=layered_memory or LayeredMemoryService(PostgresLayeredMemoryStore(database_url)),
+        layered_memory=layered_memory,
         import_service=import_service,
         task_host=task_host,
         task_service=task_service

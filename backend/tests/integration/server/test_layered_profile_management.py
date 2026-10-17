@@ -12,7 +12,7 @@ from notalone.scopes import ContactScope
 from notalone.server.app import create_app
 from tests.integration.server.core_business_flow_support import HttpBackend
 from tests.integration.server.memory_overview_support import MemoryOverviewHttpFixture
-from tests.integration.server.test_layered_memory_management import ControlledProposal, ControlledVerification
+from tests.integration.server.test_layered_memory_management import ControlledProposal, ControlledVerification, EchoProposal
 
 
 class ProfileProposal:
@@ -172,7 +172,11 @@ class LayeredProfileHttpTest(MemoryOverviewHttpFixture, unittest.TestCase):
                 self.assertEqual(state["status"],"failed")
                 self.assertEqual(state["error_code"],"profile_proposal_invalid" if invalid else "profile_faithfulness_rejected")
                 self.assertIsNone(state["profile"])
-                self.assertIsNone(self.service.capture(ContactScope(self.owner_id,UUID(contact))))
+                snapshot=self.service.capture(ContactScope(self.owner_id,UUID(contact)))
+                self.assertIsNotNone(snapshot,"画像失败仍保留独立合法L2")
+                self.assertIsNone(snapshot.profile_version_id)
+                self.assertEqual(snapshot.profile_entries,())
+                self.assertTrue(self.service.validate(snapshot))
 
     def test_source_or_correction_before_and_after_profile_commit_erases_every_version(self):
         for action in ("source","correction"):
@@ -223,7 +227,7 @@ class LayeredProfileHttpTest(MemoryOverviewHttpFixture, unittest.TestCase):
                 self.assertEqual(status,409,result)
                 self.assertEqual(self.read(backend,contact)["profile"],restored["profile"])
 
-    def test_changed_l2_complete_set_during_profile_cannot_be_overwritten_by_old_result(self):
+    def test_queued_l2_set_change_revokes_profile_before_next_worker_publishes(self):
         contact,_,_ = self.prepare_contact()
         l2_service = LayeredMemoryService(PostgresLayeredMemoryStore(self.database_url),proposer=ControlledProposal(),
             verifier=ControlledVerification(),synthetic=True,budget=OrganizationBudget(max_model_calls=4))
@@ -240,9 +244,12 @@ class LayeredProfileHttpTest(MemoryOverviewHttpFixture, unittest.TestCase):
         backend = self.controlled(profile_proposer=ProfileProposal(change))
         state = self.enable(backend,contact)
         self.assertIsNone(state["profile"],"旧L3不能覆盖模型期间发布的新完整L2集合")
-        self.assertEqual(state["covered_count"],2)
-        current_versions = [item["version_id"] for item in state["scenarios"]]
-        rebuilt = self._get_refresh(backend,contact,state)
+        # 同一正式Worker串行：模型期间的新目标先撤销旧claim，待当前Worker释放后再推进L2。
+        current=self.read(l2_backend,contact)
+        self.assertEqual(current["covered_count"],2,{key:current[key] for key in ("status","error_code","work_id","model_calls_used","current_batch")})
+        self.assertIsNone(current["profile"])
+        current_versions = [item["version_id"] for item in current["scenarios"]]
+        rebuilt = self._get_refresh(backend,contact,current)
         self.assertIsNotNone(rebuilt["profile"])
         self.assertEqual([item["version_id"] for item in rebuilt["scenarios"]],current_versions)
         self.assertEqual(len(self.profile_proposer.inputs[-1][1]),2)
@@ -253,11 +260,12 @@ class LayeredProfileHttpTest(MemoryOverviewHttpFixture, unittest.TestCase):
         contact,_,_ = self.prepare_contact()
         def expire():
             current[0] += timedelta(seconds=20)
-        backend = self.controlled(clock=lambda: current[0],profile_proposer=ProfileProposal(expire),call_timeout_seconds=.2)
+        # 本例用模拟时钟推进租约；真实期限留足数据库预留时间，避免负载改变调用次数。
+        backend = self.controlled(clock=lambda: current[0],profile_proposer=ProfileProposal(expire),call_timeout_seconds=2)
         interrupted = self.enable(backend,contact)
-        self.assertEqual(interrupted["status"],"updating")
+        self.assertEqual((interrupted["status"],interrupted["error_code"]),("failed","profile_attempt_interrupted"))
         self.assertIsNone(interrupted["profile"])
-        restarted = self.controlled(clock=lambda: current[0],call_timeout_seconds=.2)
+        restarted = self.controlled(clock=lambda: current[0],call_timeout_seconds=2)
         recovered = self._get_refresh(restarted,contact,interrupted)
         self.assertEqual((recovered["status"],recovered["error_code"]),("paused","model_call_budget_exhausted"))
         self.assertIsNone(recovered["profile"])
@@ -324,9 +332,10 @@ class LayeredProfileHttpTest(MemoryOverviewHttpFixture, unittest.TestCase):
         contact,_,_ = self.prepare_contact()
         def expire():
             current[0] += timedelta(seconds=20)
-        backend = self.controlled(clock=lambda: current[0],profile_proposer=ProfileProposal(expire),call_timeout_seconds=.2)
+        # 模拟时钟推进20秒使租约过期，真实期限仅为数据库与Adapter保留调度余量。
+        backend = self.controlled(clock=lambda: current[0],profile_proposer=ProfileProposal(expire),call_timeout_seconds=2)
         state = self.enable(backend,contact)
-        self.assertEqual(state["status"],"updating")
+        self.assertEqual((state["status"],state["error_code"]),("failed","profile_attempt_interrupted"))
         for _ in range(2):
             state = self._get_refresh(backend,contact,state)
         self.assertEqual((state["status"],state["error_code"],state["profile"]),("paused","model_call_budget_exhausted",None))
@@ -365,36 +374,30 @@ class LayeredProfileHttpTest(MemoryOverviewHttpFixture, unittest.TestCase):
                         if failure == "error":
                             finished.set()
                             raise RuntimeError("合成已发请求失败。")
-                        return None
+                        finished.set()
+                        raise OrganizationCallTimeout()
                     class OnceProposal(ProfileProposal):
                         def propose(self, *, scenarios, memories, budget, deadline):
                             result = super().propose(scenarios=scenarios,memories=memories,budget=budget,deadline=deadline)
                             if phase == "proposal" and len(self.inputs) == 1:
                                 fail()
-                                try:
-                                    Event().wait(deadline.remaining_seconds())
-                                    raise OrganizationCallTimeout()
-                                finally:
-                                    finished.set()
                             return result
                     class OnceVerification(ProfileVerification):
                         def verify(self, *, scenarios, memories, proposal, deadline):
                             result = super().verify(scenarios=scenarios,memories=memories,proposal=proposal,deadline=deadline)
                             if phase == "verification" and len(self.inputs) == 1:
                                 fail()
-                                try:
-                                    Event().wait(deadline.remaining_seconds())
-                                    raise OrganizationCallTimeout()
-                                finally:
-                                    finished.set()
                             return result
+                    # 本例检查已发失败的计费；在Adapter边界精确注入传输超时，
+                    # 避免数据库预留耗尽极短总期限而使请求根本未发出。
+                    # 真实期限与前台许可释放由独立的transport用例覆盖。
                     proposer,verifier = OnceProposal(),OnceVerification()
-                    backend = self.controlled(profile_proposer=proposer,profile_verifier=verifier,call_timeout_seconds=.2)
+                    backend = self.controlled(profile_proposer=proposer,profile_verifier=verifier,call_timeout_seconds=2)
                     first = self.enable(backend,contact)
                     self.assertTrue(finished.wait(1))
                     self.assertEqual(first["budget"]["model_calls_used"],3 if phase == "proposal" else 4)
                     self.assertEqual(first["error_code"],"model_call_failed" if failure == "error" else "model_call_timeout")
-                    restarted = self.controlled(profile_proposer=proposer,profile_verifier=verifier,call_timeout_seconds=.2)
+                    restarted = self.controlled(profile_proposer=proposer,profile_verifier=verifier,call_timeout_seconds=2)
                     state = self._get_refresh(restarted,contact,first)
                     self.assertEqual((state["status"],state["error_code"],state["profile"]),("paused","model_call_budget_exhausted",None))
                     self.assertEqual((state["budget"]["max_model_calls"],state["budget"]["model_calls_used"],state["budget"]["model_calls_remaining"]),(4,4,0))
@@ -424,4 +427,135 @@ class LayeredProfileHttpTest(MemoryOverviewHttpFixture, unittest.TestCase):
         enabled = self.enable(healthy,contact)
         self.assertEqual(enabled["status"],"ready")
         self.assertGreater(enabled["settings_generation"],rebuilt["settings_generation"])
-        self.assertEqual((enabled["budget"]["model_calls_used"],enabled["budget"]["model_calls_remaining"]),(4,0))
+        self.assertNotEqual(enabled["work_id"],rebuilt["work_id"])
+        self.assertEqual((enabled["budget"]["max_model_calls"],enabled["budget"]["model_calls_used"],enabled["budget"]["model_calls_remaining"]),(4,2,2),"重开复用合法L2，只累计本次L3实际调用")
+
+    def test_two_coverage_batches_and_profile_share_one_cumulative_job_budget(self):
+        contact,_,_=self.prepare_contact()
+        status,result=self.backend.request('/api/memories/manual-contact',{
+            'contact_id':contact,'text':'双方还完成另一项合成练习。','category':'common_fact'})
+        self.assertEqual(status,200,result)
+        backend=self.controlled(scenario_proposer=EchoProposal(),budget=OrganizationBudget(max_memories=1,max_model_calls=4))
+        first=self.enable(backend,contact)
+        self.assertEqual((first['status'],first['covered_count'],first['remaining_count']),('paused',1,1))
+        self.assertIsNotNone(first['profile'])
+        self.assertEqual((first['model_calls_used'],first['model_call_limit'],first['budget']['model_calls_remaining']),(4,4,0))
+        snapshot=self.service.capture(ContactScope(self.owner_id,UUID(contact)))
+        status,result=backend.request(f'/api/contacts/{contact}/layered-memory/continue',{
+            'settings_generation':first['settings_generation'],'work_revision':first['work_revision']})
+        self.assertEqual(status,200,result)
+        done=result['layered_memory']
+        self.assertEqual((done['work_id'],done['current_batch'],done['status'],done['covered_count']),
+            (first['work_id'],2,'ready',2))
+        self.assertEqual((done['model_calls_used'],done['model_call_limit'],done['budget']['model_calls_remaining']),(8,8,0))
+        self.assertIsNotNone(done['profile'])
+        self.assertFalse(self.service.validate(snapshot))
+        self.assertEqual(len(self.profile_proposer.inputs[-1][1]),2)
+        texts={paragraph['text'] for scenario in done['scenarios'] for paragraph in scenario['paragraphs']}
+        self.assertIn('双方共同参加过课程。',texts)
+        self.assertIn('双方还完成另一项合成练习。',texts)
+        self.assertEqual(self._get_refresh(backend,contact,done),done)
+
+    def test_profile_failure_keeps_l2_receipt_until_continue_adds_only_explicit_budget(self):
+        contact,_,_=self.prepare_contact()
+        class FailedVerification(ProfileVerification):
+            def verify(self, *, scenarios, memories, proposal, deadline):
+                super().verify(scenarios=scenarios,memories=memories,proposal=proposal,deadline=deadline)
+                raise RuntimeError('合成第四次调用失败。')
+        backend=self.controlled(profile_verifier=FailedVerification())
+        failed=self.enable(backend,contact)
+        versions=[row['version_id'] for row in failed['scenarios']]
+        self.assertEqual((failed['status'],failed['covered_count'],failed['model_calls_used']),('failed',1,4))
+        self.assertIsNone(failed['profile'])
+        restarted=self.controlled()
+        proposal=self.scenario_proposer
+        paused=self._get_refresh(restarted,contact,failed)
+        self.assertEqual((paused['status'],paused['model_calls_used'],paused['model_call_limit']),('paused',4,4))
+        status,result=restarted.request(f'/api/contacts/{contact}/layered-memory/continue',{
+            'settings_generation':paused['settings_generation'],'work_revision':paused['work_revision']})
+        self.assertEqual(status,200,result)
+        ready=result['layered_memory']
+        self.assertEqual((ready['work_id'],ready['status'],ready['current_batch'],ready['model_calls_used'],ready['model_call_limit']),
+            (failed['work_id'],'ready',1,6,8))
+        self.assertEqual([row['version_id'] for row in ready['scenarios']],versions)
+        self.assertEqual(proposal.inputs,[],'已提交L2回执不能在画像恢复时重算')
+        self.assertIsNotNone(ready['profile'])
+
+    def test_crash_after_l2_commit_recovers_only_profile_from_persisted_receipt(self):
+        import psycopg
+        contact,_,_=self.prepare_contact()
+        with psycopg.connect(self.database_url) as connection:
+            connection.execute('CREATE SEQUENCE synthetic_profile_prepare_fault')
+            connection.execute("""CREATE FUNCTION synthetic_interrupt_profile_prepare() RETURNS trigger LANGUAGE plpgsql AS $$
+                BEGIN
+                    IF nextval('synthetic_profile_prepare_fault')=1 THEN RAISE EXCEPTION 'synthetic process interruption'; END IF;
+                    RETURN NEW;
+                END; $$""")
+            connection.execute('CREATE TRIGGER synthetic_profile_prepare BEFORE INSERT ON public.layered_profile_batch '
+                'FOR EACH ROW EXECUTE FUNCTION synthetic_interrupt_profile_prepare()')
+        backend=self.controlled()
+        failed=self.enable(backend,contact)
+        self.assertEqual((failed['status'],failed['covered_count'],failed['model_calls_used']),('failed',1,2))
+        self.assertIsNone(failed['profile'])
+        versions=[row['version_id'] for row in failed['scenarios']]
+        restarted=self.controlled()
+        ready=self._get_refresh(restarted,contact,failed)
+        self.assertEqual((ready['work_id'],ready['status'],ready['current_batch'],ready['model_calls_used'],ready['model_call_limit']),
+            (failed['work_id'],'ready',1,4,4))
+        self.assertEqual([row['version_id'] for row in ready['scenarios']],versions)
+        self.assertEqual(self.scenario_proposer.inputs,[])
+        self.assertIsNotNone(ready['profile'])
+
+    def test_reserved_call_before_process_loss_is_counted_once_and_never_refunded(self):
+        contact,_,_=self.prepare_contact()
+        backend=self.controlled()
+        original=self.service._store.reserve_model_call
+        def lose_after_reserve(work):
+            original(work)
+            if hasattr(work,'scenario_version_ids'):
+                raise RuntimeError('合成预留提交后进程失联，发送状态未知。')
+        self.service._store.reserve_model_call=lose_after_reserve
+        interrupted=self.enable(backend,contact)
+        self.assertEqual((interrupted['status'],interrupted['covered_count'],interrupted['model_calls_used']),('failed',1,3))
+        self.assertEqual(self.profile_proposer.inputs,[])
+        restarted=self.controlled()
+        exhausted=self._get_refresh(restarted,contact,interrupted)
+        self.assertEqual((exhausted['status'],exhausted['model_calls_used'],exhausted['model_call_limit']),('paused',4,4))
+        self.assertIsNone(exhausted['profile'])
+        self.assertEqual((len(self.scenario_proposer.inputs),len(self.profile_proposer.inputs),len(self.profile_verifier.inputs)),(0,1,0))
+
+    def test_source_erasure_keeps_unaffected_l2_and_clears_recursive_profile(self):
+        class SeparateTopics(EchoProposal):
+            def propose(self, *, memories, budget, deadline):
+                result=super().propose(memories=memories,budget=budget,deadline=deadline)
+                result['scenarios'][0]['topic_key']='practice' if '练习' in memories[0].text else 'course'
+                return result
+        contact,source,_=self.prepare_contact()
+        status,result=self.backend.request('/api/memories/manual-contact',{
+            'contact_id':contact,'text':'双方共同完成合成练习。','category':'common_fact'})
+        self.assertEqual(status,200,result)
+        backend=self.controlled(scenario_proposer=SeparateTopics(),budget=OrganizationBudget(max_memories=1,max_model_calls=4))
+        first=self.enable(backend,contact)
+        status,result=backend.request(f'/api/contacts/{contact}/layered-memory/continue',{
+            'settings_generation':first['settings_generation'],'work_revision':first['work_revision']})
+        self.assertEqual(status,200,result)
+        before=result['layered_memory']
+        self.assertEqual(len(before['scenarios']),2)
+        self.assertIsNotNone(before['profile'])
+        old=self.service.capture(ContactScope(self.owner_id,UUID(contact)))
+        self.delete_source(contact,source)
+        retained=self.read(backend,contact)
+        self.assertEqual((retained['status'],retained['covered_count'],retained['remaining_count']),('stale',1,0))
+        self.assertIsNone(retained['profile'])
+        self.assertEqual([paragraph['text'] for scenario in retained['scenarios'] for paragraph in scenario['paragraphs']],
+            ['双方共同完成合成练习。'])
+        self.assertFalse(self.service.validate(old))
+        snapshot=self.service.capture(ContactScope(self.owner_id,UUID(contact)))
+        self.assertIsNotNone(snapshot)
+        self.assertTrue(self.service.validate(snapshot))
+        self.assertIsNone(snapshot.profile_version_id)
+        self.assertEqual(snapshot.profile_entries,())
+        import psycopg
+        with psycopg.connect(self.database_url) as connection:
+            self.assertEqual(connection.execute('SELECT count(*) FROM public.layered_profile_batch WHERE owner_id=%s AND contact_id=%s',
+                (self.owner_id,contact)).fetchone()[0],0)

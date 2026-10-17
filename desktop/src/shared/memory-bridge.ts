@@ -138,6 +138,11 @@ export interface LayeredMemory {
   enabled: boolean;
   qualityStatus: 'unknown' | 'synthetic';
   status: 'disabled' | 'ready' | 'empty' | 'failed' | 'updating' | 'stale' | 'blocked' | 'paused';
+  workId: string | null;
+  workRevision: number;
+  currentBatch: number;
+  modelCallsUsed: number;
+  modelCallLimit: number;
   eligibleCount: number;
   coveredCount: number;
   remainingCount: number;
@@ -150,11 +155,12 @@ export interface LayeredMemory {
   profile: LayeredMemoryProfile | null;
 }
 export interface LayeredMemoryManagementRequest extends ContactSelection {
-  action: 'enable' | 'refresh' | 'disable' | 'delete' | 'withdraw-profile';
+  action: 'enable' | 'refresh' | 'disable' | 'delete' | 'withdraw-profile' | 'pause' | 'continue';
   settingsGeneration: number;
   organizationGeneration?: number;
   profileVersionId?: string;
   purposeConfirmed?: true;
+  workRevision?: number;
 }
 export interface MemoryReadingState {
   revision: number;

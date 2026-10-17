@@ -130,9 +130,12 @@ export class MemoryReadingController {
   async manageLayeredMemory(request: LayeredMemoryManagementRequest): Promise<void> {
     this.synchronizeScope();
     const scope = this.scope, value = this.state.layeredMemory.value;
+    const workAction = request.action === 'pause' || request.action === 'continue';
     if (!scope || request.contactId !== scope.contactId || request.scopeRevision !== scope.scopeRevision || this.mutation
       || this.sourceDeletionDepth || this.state.layeredMemory.phase !== 'ready' || !value || value.settingsGeneration !== request.settingsGeneration
-      || !['enable', 'refresh', 'disable', 'delete', 'withdraw-profile'].includes(request.action)
+      || !['enable', 'refresh', 'disable', 'delete', 'withdraw-profile', 'pause', 'continue'].includes(request.action)
+      || (workAction && (!value.workId || request.workRevision !== value.workRevision || value.workRevision < 1))
+      || (!workAction && request.workRevision !== undefined)
       || (request.action === 'enable' && request.purposeConfirmed !== true)
       || (request.action === 'withdraw-profile' && (!value.profile || request.organizationGeneration !== value.organizationGeneration
         || request.profileVersionId !== value.profile.versionId))
@@ -147,7 +150,7 @@ export class MemoryReadingController {
     const current = () => { this.synchronizeScope(); return this.scope === scope && this.mutation === operation && this.sourceDeletionRevision === sourceDeletionRevision; };
     try {
       const result = await this.backend.requestJson({ method: 'POST', path: `/api/contacts/${scope.contactId}/layered-memory/${request.action}`,
-        body: { settings_generation: request.settingsGeneration, ...(request.action === 'enable' ? { purpose_confirmed: true } : {}),
+        body: { ...(workAction ? { work_revision: request.workRevision } : {}), settings_generation: request.settingsGeneration, ...(request.action === 'enable' ? { purpose_confirmed: true } : {}),
           ...(request.action === 'withdraw-profile' ? { organization_generation: request.organizationGeneration, profile_version_id: request.profileVersionId } : {}) },
         signal: operation.abort.signal });
       if (!current() || result.generation !== scope.generation) return;

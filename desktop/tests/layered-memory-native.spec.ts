@@ -17,7 +17,7 @@ const test = appTest.extend<{ layeredBackend: RewriteFixture }>({
 });
 
 // 有限等待本次 Computer Use 收据；不自动替代用户操作或签发模型资格。
-test('实际 App 的合成主题资料 CUA 验收', async ({ runningApp, layeredBackend }) => {
+test('实际 App 的合成主题资料多批覆盖 CUA 验收', async ({ runningApp, layeredBackend }) => {
   test.setTimeout(8 * 60_000);
   const requested = process.env.NOTALONE_LAYERED_CUA_DIR;
   if (!requested || !path.isAbsolute(requested)) throw new Error('实际验收须指定本轮私有收据目录。');
@@ -27,11 +27,14 @@ test('实际 App 的合成主题资料 CUA 验收', async ({ runningApp, layered
     throw new Error('实际验收收据目录不可核验。');
   }
   const requestId = randomUUID();
+  const requiredChecks = ['initial_closed', 'partial_coverage_paused', 'continue_progress',
+    'complete_coverage', 'earlier_paragraph_retained', 'contact_isolation', 'delete_then_disable'];
   await runningApp.app.firstWindow();
   await writeFile(path.join(directory, 'ready.json'), JSON.stringify({
     request_id: requestId, pid: runningApp.appProcess.pid, user_data: runningApp.userData,
     contact_ids: layeredBackend.data.contact_ids, external_model_calls: 0,
     project, native_app: true, final_signed_package: false,
+    required_checks: requiredChecks,
   }), { mode: 0o600, flag: 'wx' });
   await new Promise<void>((resolve, reject) => {
     let checking = false;
@@ -51,6 +54,9 @@ test('实际 App 的合成主题资料 CUA 验收', async ({ runningApp, layered
       try {
         const receipt = JSON.parse(await readFile(path.join(directory, 'done.json'), 'utf8'));
         if (receipt.request_id !== requestId || receipt.passed !== true) throw new Error('CUA收据未通过或不属于本次实例。');
+        if (!requiredChecks.every((name) => receipt.checks?.[name] === true)) {
+          throw new Error('CUA收据未包含本次多批覆盖的全部实际操作。');
+        }
         finish();
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== 'ENOENT') finish(error as Error);

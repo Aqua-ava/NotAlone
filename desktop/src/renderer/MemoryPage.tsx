@@ -89,13 +89,12 @@ function useMemoryReading(session: ContactSessionView) {
       }
     }
   }
-  async function manageLayeredMemory(action: LayeredMemoryManagementRequest['action'], settingsGeneration: number, purposeConfirmed?: true,
-    profile?: Pick<LayeredMemoryManagementRequest, 'organizationGeneration' | 'profileVersionId'>) {
+  async function manageLayeredMemory(action: LayeredMemoryManagementRequest['action'], settingsGeneration: number, options?: Pick<LayeredMemoryManagementRequest, 'purposeConfirmed' | 'workRevision' | 'organizationGeneration' | 'profileVersionId'>) {
     const { selectedContactId, scopeRevision } = scope.current;
     if (!selectedContactId) return;
     setError('');
     try { await window.notalone.memory.manageLayeredMemory({ contactId: selectedContactId, scopeRevision, action, settingsGeneration,
-      ...(purposeConfirmed ? { purposeConfirmed } : {}), ...profile }); }
+      ...options }); }
     catch {
       if (active.current && scope.current.selectedContactId === selectedContactId && scope.current.scopeRevision === scopeRevision) {
         setError('主题资料范围或设置已变化，请重新读取后重试。');
