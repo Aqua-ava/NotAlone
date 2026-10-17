@@ -261,3 +261,59 @@ class LayeredReplyHttpTest(OverviewReplyHttpFixture, unittest.TestCase):
             f"/api/contacts/{contact}/memory-candidates/{candidate.candidate_id}/discard", {})
         self.assertEqual(status, 200, rejected)
         self.assertNotEqual(self.backend.request(self.evidence_path(contact, turn))[0], 200)
+
+    def test_failed_profile_omits_affected_background_but_retains_legal_directory_and_l1(self):
+        from notalone.reply.layered_context import LayeredReplyBudget
+        from tests.integration.server.test_layered_profile_management import ProfileVerification
+        contact, _, message = self.import_contact("双方共同参加过合成课程。")
+        self.confirm(contact, "双方共同参加过课程。", message)
+        management = self.controlled(profile_verifier=ProfileVerification(False))
+        failed = self.enable(management, contact)
+        self.assertEqual(failed["status"], "failed")
+        self.assertIsNone(failed["profile"])
+        self.assertTrue(failed["scenarios"])
+        self.layered_reply_options = {"layered_memory": self.service,
+            "layered_reply_budget": LayeredReplyBudget(4, 4, 4000)}
+        self.activate_replies(contact)
+        path = self.reply_path(contact)
+        self.reply_model.plans.append({"text": "聊聊课程。", "basis": "按草稿。"})
+        status, turn = self.backend.request(path + "/replies", self.rewrite_body(contact, "聊聊共同课程。"))
+        self.assertEqual(status, 200, turn)
+        saved = self._get(self.backend, self.evidence_path(contact, turn))
+        self.assertEqual(saved["layered_context"]["profile_entries"], [])
+        self.assertIsNone(saved["layered_context"]["profile_version_id"])
+        self.assertEqual(saved["layered_context"]["directory"][0]["version_id"], failed["scenarios"][0]["version_id"])
+        self.assertTrue(any(item["kind"] == "confirmed_memory" for item in saved["evidence"]))
+
+    def test_explicit_prepare_then_generate_restores_the_exact_layered_input(self):
+        contact, _, _, ready, path = self.prepare_layered_reply()
+        body = self.rewrite_body(contact, "聊聊共同参加的课程。")
+        status, prepared = self.backend.request(path + "/replies/prepare", body)
+        self.assertEqual(status, 200, prepared)
+        self.reply_model.plans.append({"text": "聊聊课程。", "basis": "按草稿。"})
+        status, turn = self.backend.request(path + "/replies", body)
+        self.assertEqual(status, 200, turn)
+        saved = self._get(self.backend, self.evidence_path(contact, turn))
+        self.assertEqual(saved["layered_context"]["profile_version_id"], ready["profile"]["version_id"])
+
+    def test_prepared_material_payload_must_match_its_frozen_snapshot(self):
+        import json
+        import psycopg
+        from psycopg.types.json import Jsonb
+        contact, _, _, _, path = self.prepare_layered_reply()
+        body = self.rewrite_body(contact, "损坏快照不得进入模型。")
+        self.assertEqual(self.backend.request(path + "/replies/prepare", body)[0], 200)
+        with psycopg.connect(self.database_url) as connection:
+            row = connection.execute("SELECT prepared_context FROM public.assistant_session_turn "
+                "WHERE owner_id=%s AND contact_id=%s AND idempotency_key=%s",
+                (self.owner_id, contact, body["idempotency_key"])).fetchone()
+            encoded = row[0]
+            fields = encoded["context"]["layered_context"]["fields"]
+            material = json.loads(fields["payload_json"])
+            material["read_policy"] = "damaged-but-valid-json"
+            fields["payload_json"] = json.dumps(material, ensure_ascii=False)
+            connection.execute("UPDATE public.assistant_session_turn SET prepared_context=%s "
+                "WHERE owner_id=%s AND contact_id=%s AND idempotency_key=%s",
+                (Jsonb(encoded), self.owner_id, contact, body["idempotency_key"]))
+        self.assertNotEqual(self.backend.request(path + "/replies", body)[0], 200)
+        self.assertEqual(len(self.reply_model.seen_calls), 0)

@@ -69,11 +69,19 @@ def registered_navigation_dependencies(connection: Any, scope: ContactScope) -> 
         "CROSS JOIN LATERAL jsonb_path_query(turn.prepared_context, "
         "'$.context.layered_context.fields.snapshot.fields.dependency_ids[*].uuid') AS value "
         "WHERE turn.owner_id=%s AND turn.contact_id=%s AND turn.input_payload IS NOT NULL "
+        "UNION SELECT value #>> '{}' AS id FROM public.assistant_session_turn AS turn "
+        "CROSS JOIN LATERAL jsonb_path_query(turn.prepared_context, "
+        "'$.context.layered_context.fields.snapshot.fields.scenarios[*].fields.version_id.uuid') AS value "
+        "WHERE turn.owner_id=%s AND turn.contact_id=%s AND turn.input_payload IS NOT NULL "
+        "UNION SELECT value #>> '{}' AS id FROM public.assistant_session_turn AS turn "
+        "CROSS JOIN LATERAL jsonb_path_query(turn.prepared_context, "
+        "'$.context.layered_context.fields.snapshot.fields.profile_version_id.uuid') AS value "
+        "WHERE turn.owner_id=%s AND turn.contact_id=%s AND turn.input_payload IS NOT NULL "
         "UNION SELECT value #>> '{}' AS id FROM public.reply_request AS request "
         "CROSS JOIN LATERAL jsonb_path_query(request.context_snapshot, "
         "'$.navigation_dependency_ids[*]') AS value "
         "WHERE request.owner_id=%s AND request.contact_id=%s",
-        (scope.owner_id, scope.contact_id) * 3,
+        (scope.owner_id, scope.contact_id) * 5,
     ).fetchall()
     try:
         return {UUID(row["id"]) for row in rows}
