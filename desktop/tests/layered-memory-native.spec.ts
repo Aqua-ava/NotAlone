@@ -27,7 +27,7 @@ test('实际 App 的合成主题资料多批覆盖 CUA 验收', async ({ running
     throw new Error('实际验收收据目录不可核验。');
   }
   const requestId = randomUUID();
-  const requiredChecks = ['initial_closed', 'partial_coverage_paused', 'continue_same_work',
+  const requiredChecks = ['initial_closed', 'partial_coverage_paused', 'continue_progress',
     'complete_coverage', 'earlier_paragraph_retained', 'contact_isolation', 'delete_then_disable'];
   await runningApp.app.firstWindow();
   await writeFile(path.join(directory, 'ready.json'), JSON.stringify({
