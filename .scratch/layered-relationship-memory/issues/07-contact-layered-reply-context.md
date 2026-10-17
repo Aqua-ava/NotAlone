@@ -57,3 +57,10 @@ Blocked by: 04
 - 真实React／公开HTTP无头闭环通过，typecheck及依据相关30项、无头调度11项通过。父Agent实际Electron/CUA单次1/1通过3.4m，手动验证背景、目录未读正文、保存版本、联系人切换隔离、关闭语境回退；自有进程、用户目录、数据库与租约均核清理。原生证据早于最后复核修复，该新增分支由后续HTTP验证，未宣称最终SHA重跑App。
 - 实际命令包括指定Conda Python的tests.integration.server.test_layered_reply_context、test_reply_current_constraints、test_overview_reply_budgets与相关constraint_review单元，unit discover；desktop npm run typecheck、node --test、npm run test:pages -- --case layered-reply --timeout-seconds 180，以及有限test:app／实际CUA。所有数据库为自有随机_test，已回收；模型均受控合成，无业务库、私人聊天、真实模型调用或外部消息。
 - 只创建本地任务提交，没有push或PR。真实SDK传输、语义质量、微信与最终签名包未验；工程完成不授予生产资格。08等待本票正式集成签收；09继续等待05与08。规划与规格由统筹维护。
+
+### 独立集成签收
+
+- 2026-10-18：独立合并9170069c1b9123ff04cb03ade9101a7ee0a3122d，候选0a4eb4bd，产品审查46ee94d3；树一致、祖先正确、工作树干净。双轴最终剩余0，旧独立复核缺L3的P2已关闭。
+- 集成树先跑旧P2单例1/1（3.052s），再跑完整19项公开HTTP（53.752s），来源路径合同1项含11组检查全部通过；自有随机测试库独立catalog复查0。
+- 复验生成与独立复核获得同一有限冻结资料，来源路径与完整复核预算有界，删除／更正／候选否决清理及每轮发送／最终writer复验有效。独立预算、原L1和用户全文保持。
+- 原生Electron/CUA 1 passed（3.4m）是ac3阶段证据；46ee后端修复通过公开HTTP验证，未称最终SHA整App重跑。真实模型、微信、签名包及语义质量未验，资格仍关闭。公共历史保留12项既有路径问题，与基线一致，无新增。08前置就绪。
