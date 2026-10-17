@@ -140,3 +140,32 @@ def require_scenario_receipts(material, receipts):
                 or any(type(budget[key]) is not int or budget[key] != value for key, value in expected.items())
                 or paragraphs > limits["paragraph_limit"] or characters > limits["character_limit"]):
             reject()
+
+
+class ScopedScenarioToolAccess:
+    """只按本次真实目录中的稳定ID选侧；模型不能声明范围或身份。"""
+
+    def __init__(self, *, contact_material, owner_material, port):
+        self._accesses = tuple((kind, ScenarioToolAccess(material=material, port=port))
+            for kind, material in (("contact", contact_material), ("owner", owner_material))
+            if material is not None and material.to_payload().get("scenario_read_budget") is not None)
+        self.limits = {"call_limit": sum(access.limits["call_limit"] for _, access in self._accesses)}
+
+    def read(self, **arguments):
+        identifier = arguments.get("scenario_id")
+        # 无有效目录身份的拒绝归入首个已准入侧，不借另一侧额度重试。
+        access = next((access for _, access in self._accesses if type(identifier) is str and identifier in access.directory),
+                      self._accesses[0][1])
+        return access.read(**arguments)
+
+    @property
+    def receipts(self):
+        return next((access.receipts for kind, access in self._accesses if kind == "contact"), ())
+
+    @property
+    def owner_receipts(self):
+        return next((access.receipts for kind, access in self._accesses if kind == "owner"), ())
+
+    @property
+    def tool_calls(self):
+        return tuple(call for _, access in self._accesses for call in access.tool_calls)

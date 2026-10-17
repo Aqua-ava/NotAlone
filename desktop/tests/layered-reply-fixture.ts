@@ -5,6 +5,13 @@ import { withRewriteFixture, type RewriteFixture } from './rewrite-backend-fixtu
 
 const project = path.resolve('..');
 const modules = {
+  'notalone.reply.context': 'backend/src/notalone/reply/context.py',
+  'notalone.persistence.assistant_session_store': 'backend/src/notalone/persistence/assistant_session_store.py',
+  'notalone.persistence.assistant_session_inputs': 'backend/src/notalone/persistence/assistant_session_inputs.py',
+  'notalone.persistence.assistant_prepared_context': 'backend/src/notalone/persistence/assistant_prepared_context.py',
+  'notalone.persistence.owner_memory_store': 'backend/src/notalone/persistence/owner_memory_store.py',
+  'notalone.persistence.style_sample_store': 'backend/src/notalone/persistence/style_sample_store.py',
+  'notalone.persistence.reply_overview_navigation': 'backend/src/notalone/persistence/reply_overview_navigation.py',
   'notalone.reply.layered_context': 'backend/src/notalone/reply/layered_context.py',
   'notalone.reply.scenario_tools': 'backend/src/notalone/reply/scenario_tools.py',
   'notalone.reply.adapters.langchain_runtime': 'backend/src/notalone/reply/adapters/langchain_runtime.py',

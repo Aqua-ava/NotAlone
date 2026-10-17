@@ -30,6 +30,9 @@ test('实际 App 的合成分层回复依据 CUA 验收', async ({ runningApp, l
   const requiredChecks = ['layered_background', 'directory_not_body', 'saved_versions', 'contact_isolation', 'disabled_fallback'];
   if (process.env.NOTALONE_LAYERED_SCENARIO_READS === '1') requiredChecks.push(
     'scenario_body', 'scenario_range_references', 'scenario_receipts', 'scenario_frozen_history', 'scenario_source_cleanup');
+  if (process.env.NOTALONE_LAYERED_OWNER_CONTEXT === '1') requiredChecks.push(
+    'owner_background', 'owner_directory_and_body', 'owner_scope_separation',
+    'owner_independent_fallback', 'owner_change_cache_cleanup', 'owner_legal_history');
   const prepared = await layeredBackend.command('prepared');
   await runningApp.app.firstWindow();
   await writeFile(path.join(directory, 'ready.json'), JSON.stringify({

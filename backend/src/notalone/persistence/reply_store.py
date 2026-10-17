@@ -97,6 +97,7 @@ class PostgresReplyStore:
         "_lease_duration",
         "_layered_memory",
         "_layered_budget",
+        "_owner_layered_budget",
     )
 
     def __init__(
@@ -106,7 +107,7 @@ class PostgresReplyStore:
         clock: Callable[[], datetime] = _utc_now,
         id_factory: Callable[[], UUID] = uuid4,
         lease_duration: timedelta = timedelta(seconds=30),
-        layered_memory=None, layered_budget=None,
+        layered_memory=None, layered_budget=None, owner_layered_budget=None,
     ) -> None:
         if not isinstance(database_url, str) or not database_url.strip():
             raise ValueError("database_url 不能为空。")
@@ -119,6 +120,7 @@ class PostgresReplyStore:
             raise ValueError("回复运行租约必须是正时间段。")
         self._database_url = database_url
         self._layered_memory, self._layered_budget = layered_memory, layered_budget
+        self._owner_layered_budget = owner_layered_budget
         self._clock = clock
         self._id_factory = id_factory
         self._lease_duration = lease_duration
@@ -381,7 +383,7 @@ class PostgresReplyStore:
                     raise ReplyStoreInvariantError("回复请求已失效。")
                 self._validate_context(connection, request, context)
                 require_current_overview_navigation(connection, context, PostgresRelationshipOverviewStore(self._database_url))
-                require_material(context, self._layered_memory, connection=connection, budget=self._layered_budget)
+                require_material(context, self._layered_memory, connection=connection, budget=self._layered_budget, owner_budget=self._owner_layered_budget)
                 require_current_reply_memory(connection, request.scope, context.evidence)
                 require_reply_continuation_basis(connection, request, context)
                 capture_reply_expression_preferences(connection, request, context)
@@ -478,7 +480,7 @@ class PostgresReplyStore:
                     capture_declared_reply_sources(connection, request, context)
                     require_reply_sources_current(connection, owner_id=request.scope.owner_id, request_id=request.request_id)
                     require_current_overview_navigation(connection, context, PostgresRelationshipOverviewStore(self._database_url))
-                    require_material(context, self._layered_memory, connection=connection, budget=self._layered_budget)
+                    require_material(context, self._layered_memory, connection=connection, budget=self._layered_budget, owner_budget=self._owner_layered_budget)
                     require_current_reply_memory(connection, request.scope, context.evidence)
                     prepare_assistant_reply_commit(connection, request, context)
                     continuation_metadata = require_reply_continuation_basis(connection, request, context)
@@ -749,6 +751,9 @@ class PostgresReplyStore:
                         else None
                     ),
                     retrieval=self._read_retrieval_snapshot(row["context_snapshot"]),
+                    owner_layered_context=(row["context_snapshot"] or {}).get("owner_layered_context"),
+                    owner_layered_status=(row["context_snapshot"] or {}).get("owner_layered_status", "quality_closed"),
+                    owner_layered_scenario_reads=tuple((row["context_snapshot"] or {}).get("owner_layered_scenario_reads", [])),
                     layered_context=(row["context_snapshot"] or {}).get("layered_context"),
                     layered_status=(row["context_snapshot"] or {}).get("layered_status", "quality_closed"),
                     layered_scenario_reads=tuple((row["context_snapshot"] or {}).get("layered_scenario_reads", [])),
@@ -1116,6 +1121,9 @@ class PostgresReplyStore:
                 "contact_id": str(context.scope.contact_id),
             },
             "current_text": context.current_text,
+            "owner_layered_context": context.owner_layered_context.to_payload() if context.owner_layered_context else None,
+            "owner_layered_status": context.owner_layered_status,
+            "owner_layered_scenario_reads": list(context.owner_layered_scenario_reads),
             "layered_context": context.layered_context.to_payload() if context.layered_context else None,
             "layered_status": context.layered_status,
             "layered_scenario_reads": list(context.layered_scenario_reads),

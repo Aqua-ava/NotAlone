@@ -18,17 +18,17 @@ from notalone.reply.context import ReplyContext, ContextEvidence, ToolCallTrace,
 from notalone.reply.interface import ConfirmedDirection, DirectionSource, SuggestionReference, GenerateReply, ReplyBasisChange
 from notalone.reply.style_reference import StyleReference
 from notalone.reply.assistant_continuation_reference import ContinuationGenerateReply
-from notalone.scopes import ContactScope
+from notalone.scopes import ContactScope, OwnerScope
 
 _TYPES = {cls.__name__: cls for cls in (LayeredMemorySnapshot, ScenarioDirectoryEntry, LayeredReplyMaterial, MemoryTiming, DiscussionContext, DiscussionItem,
     DiscussionSnapshot, DiscussionIdentity, ContextEvidence, ToolCallTrace, ConfirmedDirection,
-    SuggestionReference, StyleReference, ContactScope, ContinuedReplyCandidate, ReplyBasisChange,
+    SuggestionReference, StyleReference, ContactScope, OwnerScope, ContinuedReplyCandidate, ReplyBasisChange,
     ExpressionPreferenceScope, ExpressionPreference, MemoryNavigation, OverviewRevision,
     ReplyRetrievalReceipt, RetrievalQuery, RetrievalBudget, SourceMessageBudget)}
 
 CONTEXT_VERSION = 2
 # 结构字段每次演进必须提升修订；不为旧快照静默补字段。
-CONTEXT_SCHEMA_REVISION = 7
+CONTEXT_SCHEMA_REVISION = 8
 
 
 class PreparedContextFormatError(ValueError):

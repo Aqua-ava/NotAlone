@@ -40,6 +40,7 @@ REVIEW_PROMPT = """你独立复核中文改写候选，不重写候选，不补�
 担忧需要来源；新增行动、可用时间、资源投入、采纳决定或履约义务需要原句/本次要求支持。
 合法引用不证明正文受支持；本次草稿提到话题不证明双方曾聊过。同联系人历史能证明过去
 说过该内容，不能推出现在仍如此；不能混用其他联系人的事实。
+owner_layered_context与layered_context分别是本人和当前联系人范围；两侧都只支持事实/说明，不能授权当前意愿、义务或承诺。owner_layered_scenario_reads同样只含本人实际正文回执。
 layered_context是本次首轮生成实际使用的同一有限冻结资料。profile_entries仅可按其
 时间、来源和不确定性支持过去事实，不能证明当前意愿、赋予义务或覆盖本次要求。
 directory仅为未读正文的主题目录，不能作为事实依据；不得推断未提供的正文或隐藏来源。
@@ -142,6 +143,9 @@ class ReplyConstraintReview:
             "factual_role": factual_role(item.kind), "text": item.text,
             "status": item.status, "timing": item.timing.to_payload(),
         } for item in result.additional_evidence if item.model_visible)
+        if prepared.owner_layered_context is not None:
+            payload["owner_layered_context"] = prepared.owner_layered_context.to_payload()
+        payload["owner_layered_scenario_reads"] = list(result.owner_layered_scenario_reads)
         payload["layered_scenario_reads"] = list(result.layered_scenario_reads)
         payload["candidates"] = [{
             "candidate_number": number, "text": item.text, "messages": list(item.messages),

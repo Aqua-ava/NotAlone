@@ -13,7 +13,8 @@ export class OwnerLayeredMemoryController {
   private factsRequested = false;
   private factsOperation: AbortController | undefined;
   private deleting = 0;
-  constructor(private backend: BackendHost, private publish: (state: OwnerLayeredMemoryState) => void, private factsChanged: (phase: 'started' | 'settled') => void) { this.generation = backend.getConnectionGeneration(); }
+  constructor(private backend: BackendHost, private publish: (state: OwnerLayeredMemoryState) => void, private factsChanged: (phase: 'started' | 'settled') => void | Promise<void>,
+    private contextChanged: (phase: 'started' | 'settled') => void | Promise<void> = () => {}) { this.generation = backend.getConnectionGeneration(); }
   getState() { return structuredClone(this.state); }
   private update(patch: Partial<OwnerLayeredMemoryState>) { this.state = { ...this.state, ...patch, revision: this.state.revision + 1 }; this.publish(this.getState()); }
   synchronize() {
@@ -72,11 +73,11 @@ export class OwnerLayeredMemoryController {
   private async writeFact(path: string, body: unknown) {
     this.synchronize();
     if (this.generation === undefined || this.deleting || this.state.mutation.phase === 'working') throw new Error('本人资料暂不可补充。');
-    this.factsChanged('started');
     this.clear(); this.factsOperation?.abort(); this.factsOperation = undefined;
     const operation = new AbortController(), generation = this.generation; this.operation = operation;
     this.update({ memories: { phase: 'loading', items: [] }, phase: 'loading', value: null, mutation: { phase: 'working', message: '正在保存本人资料…' } });
     try {
+      await this.factsChanged('started');
       const result = await this.backend.requestJson({ method: 'POST', path, body, signal: operation.signal });
       this.synchronize();
       if (this.operation !== operation || result.generation !== generation) throw new Error('本人连接已变化，请核对是否保存。');
@@ -90,12 +91,13 @@ export class OwnerLayeredMemoryController {
         if (this.factsRequested) await this.readFacts();
       }
       throw error;
-    } finally { this.factsChanged('settled'); if (this.operation === operation) this.operation = undefined; }
+    } finally { await this.factsChanged('settled'); if (this.operation === operation) this.operation = undefined; }
   }
   async manage(request: OwnerLayeredMemoryManagementRequest) {
     this.synchronize();
     const value = this.state.value;
     const work = request.action === 'pause' || request.action === 'continue';
+    const affectsReplyContext = !work;
     if (this.generation === undefined || this.deleting || this.state.mutation.phase === 'working' || this.state.phase !== 'ready' || !value
       || request.settingsGeneration !== value.settingsGeneration
       || (work && (!value.workId || request.workRevision !== value.workRevision))
@@ -105,6 +107,7 @@ export class OwnerLayeredMemoryController {
     const operation = new AbortController(), generation = this.generation; this.operation = operation;
     this.update({ phase: 'loading', value: null, mutation: { phase: 'working', message: '正在处理本人资料…' } });
     try {
+      if (affectsReplyContext) await this.contextChanged('started');
       const result = await this.backend.requestJson({ method: 'POST', path: `/api/memories/owner/layered-memory/${request.action}`, signal: operation.signal,
         body: { settings_generation: request.settingsGeneration, ...(work ? { work_revision: request.workRevision } : {}),
           ...(request.action === 'enable' ? { purpose_confirmed: true } : {}),
@@ -117,6 +120,9 @@ export class OwnerLayeredMemoryController {
       if (this.operation !== operation) return;
       this.update({ phase: 'error', value: null, mutation: { phase: 'error', message: '本人资料操作未完成，请核对当前状态后重试。' } });
       await this.read({});
-    } finally { if (this.operation === operation) this.operation = undefined; }
+    } finally {
+      if (this.operation === operation) this.operation = undefined;
+      if (affectsReplyContext) await this.contextChanged('settled');
+    }
   }
 }

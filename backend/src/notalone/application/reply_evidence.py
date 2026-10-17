@@ -33,6 +33,9 @@ class ReplyEvidenceService:
             "reply_request_id": str(request_id),
             "layered_context": stored.layered_context,
             "layered_status": stored.layered_status,
+            "owner_layered_context": stored.owner_layered_context,
+            "owner_layered_status": stored.owner_layered_status,
+            "owner_layered_scenario_reads": list(stored.owner_layered_scenario_reads),
             "layered_scenario_reads": list(stored.layered_scenario_reads),
             **({"retrieval": stored.retrieval.to_payload()} if stored.retrieval else {}),
             **({"basis_changes": [change.to_payload() for change in stored.result.basis_changes]}

@@ -58,6 +58,11 @@ function pageFixtureEnvironment(options, environment) {
     }
     result[key] = directory;
   }
+  if (options.names?.includes('layered-reply')) {
+    for (const key of ['NOTALONE_LAYERED_OWNER_CONTEXT', 'NOTALONE_LAYERED_SCENARIO_READS']) {
+      if (environment[key] === '1') result[key] = '1';
+    }
+  }
   return result;
 }
 async function run(options) {

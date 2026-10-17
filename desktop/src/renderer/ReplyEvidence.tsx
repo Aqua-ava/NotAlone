@@ -1,5 +1,5 @@
 import type { ReplyCandidate, ReplyCandidateSelection } from '../shared/reply-bridge';
-import type { ReplyEvidenceState, ReplyRetrievalReceipt } from '../shared/reply-evidence';
+import type { ReplyEvidenceState, ReplyLayeredContext, ReplyLayeredScenarioRead, ReplyLayeredStatus, ReplyRetrievalReceipt } from '../shared/reply-evidence';
 import { useRevisionedSession } from './use-revisioned-session';
 import { MemoryTemporalStatus } from './MemoryTemporalStatus';
 import { ReplyBasisChangeNotice } from './ReplyBasisChangeNotice';
@@ -31,18 +31,18 @@ function RetrievalSummary({ receipt }: { receipt: ReplyRetrievalReceipt | null |
   </section>;
 }
 
-function LayeredSummary({ state }: { state: ReplyEvidenceState }) {
-  const context = state.layeredContext;
-  const successfulReads = state.layeredScenarioReads?.filter((receipt) => receipt.status === 'succeeded') ?? [];
+function LayeredSummary({ context, status, receipts, owner = false }: { context?: ReplyLayeredContext | null; status?: ReplyLayeredStatus; receipts?: ReplyLayeredScenarioRead[]; owner?: boolean }) {
+  const scope = owner ? '本人' : '联系人';
+  const successfulReads = receipts?.filter((receipt) => receipt.status === 'succeeded') ?? [];
   if (!context) {
     const reasons = { not_allowed: '本次未授权加载系统整理资料。', unavailable: '本次系统整理资料不可用，未加入生成。',
       budget_omitted: '本次系统整理资料因预算限制未加入生成。', quality_closed: '本次系统整理资料未获质量资格，未加入生成。',
       loaded: '本次分层依据缺失，不补填后来资料。' };
-    return <p>{state.layeredStatus ? reasons[state.layeredStatus] : '本次快照未记录分层资料，不补填后来资料。'}</p>;
+    return <p>{owner ? '本人资料：' : ''}{status ? reasons[status] : '本次快照未记录分层资料，不补填后来资料。'}</p>;
   }
   const temporalNames = { stable: '稳定事实或明确偏好', historical: '历史资料', uncertain: '不确定' };
-  return <section aria-label="本次系统整理资料">
-    <h4>系统整理 · 本次实际加入的联系人背景与主题目录</h4>
+  return <section aria-label={`本次${scope}系统整理资料`}>
+    <h4>系统整理 · 本次实际加入的{scope}背景与主题目录</h4>
     <p>生成时设置版本：{context.settingsGeneration}；整理版本：{context.organizationGeneration}。</p>
     <p>背景版本：{context.profileVersionId ?? '本次未加入长期背景'}。</p>
     <p>独立预算上限：背景 {context.budget.profileEntries} 条，目录 {context.budget.directoryEntries} 项，{context.budget.characters} 字符。</p>
@@ -70,15 +70,14 @@ function paragraphRangeLabel(range: [number, number]) {
   return `${range[1] - range[0] === 1 ? `第 ${range[0] + 1} 段` : `第 ${range[0] + 1} 至 ${range[1]} 段`}（原范围 [${range[0]}, ${range[1]})）`;
 }
 
-function ScenarioReadSummary({ state }: { state: ReplyEvidenceState }) {
-  const receipts = state.layeredScenarioReads;
+function ScenarioReadSummary({ receipts, owner = false }: { receipts?: ReplyLayeredScenarioRead[]; owner?: boolean }) {
   if (!receipts) return <p>本次快照未记录主题正文读取过程，不补填后来资料。</p>;
   if (!receipts.length) return <p>本次未调用主题正文读取工具。</p>;
   const statuses = { succeeded: '读取成功', duplicate: '重复读取，未追加正文', out_of_range: '段落越界，未读取正文',
     not_in_directory: '主题不在本次目录，未读取正文', invalid_arguments: '读取参数无效，未读取正文',
     stale: '冻结版本已失效，未读取正文', budget_exceeded: '读取预算已耗尽，未读取正文' };
-  return <section aria-label="本次主题正文读取">
-    <h4>系统整理 · 本次实际读取的主题正文与回执</h4>
+  return <section aria-label={owner ? '本次本人主题正文读取' : '本次联系人主题正文读取'}>
+    <h4>系统整理 · 本次实际读取的{owner ? '本人' : '联系人'}主题正文与回执</h4>
     <p>只展示生成时实际读入的冻结正文；未读取部分仍为未知。</p>
     {receipts.map((receipt, index) => <article key={index}>
       <p>主题读取 {index + 1}：{statuses[receipt.status]}。</p>
@@ -135,8 +134,10 @@ export function ReplyEvidence({ evidence, selection, candidate, number, waiting 
       {state.phase === 'missing' && <p role="status">本次依据不存在或已删除，无法恢复原正文。</p>}
       {state.phase === 'ready' && <>
         <RetrievalSummary receipt={state.retrieval} />
-        <LayeredSummary state={state} />
-        <ScenarioReadSummary state={state} />
+        <LayeredSummary context={state.layeredContext} status={state.layeredStatus} receipts={state.layeredScenarioReads} />
+        <ScenarioReadSummary receipts={state.layeredScenarioReads} />
+        <LayeredSummary context={state.ownerLayeredContext} status={state.ownerLayeredStatus} receipts={state.ownerLayeredScenarioReads} owner />
+        <ScenarioReadSummary receipts={state.ownerLayeredScenarioReads} owner />
         <ReplyBasisChangeNotice changes={state.basisChanges} />
         {candidate.citationIds.some((id) => !state.items.some((item) => item.evidenceId === id)) && <p>部分引用缺失，不补填后来资料。</p>}
         {!state.items.length && <p>本次没有可展示的依据。</p>}

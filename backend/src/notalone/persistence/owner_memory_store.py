@@ -51,7 +51,8 @@ from notalone.persistence.memory_correction import (
     available_correction_memories, candidate_from_row, erase_deleted_memory_bodies, persist_protection, protect_candidate, record_decision,
     require_reviewed_decisions,
 )
-from notalone.scopes import ContactScope
+from notalone.scopes import ContactScope, OwnerScope
+from notalone.persistence.reply_layered_cleanup import erase_layered_reply_dependencies
 
 _OWNER_MEMORY_UNAVAILABLE = "owner 记忆数据库操作失败。"
 
@@ -365,6 +366,8 @@ class PostgresOwnerMemoryStore:
                     _to_row(memory),
                 ).fetchone()
                 if expected_previous is not None:
+                    erase_layered_reply_dependencies(connection, OwnerScope(scope.owner_id),
+                        (expected_previous.memory_id,))
                     invalidated = connection.execute(
                         "UPDATE public.owner_memory SET status='invalidated', "
                         "revision=revision+1, updated_at=now() "
@@ -474,6 +477,7 @@ class PostgresOwnerMemoryStore:
             proof = restored_version_evidence(connection, previous=previous, revision=expected_revision + 1)
             from notalone.persistence.reply_cleanup import delete_owner_memory_replies
             delete_owner_memory_replies(connection, owner_id=owner_id, memory_id=memory_id)
+            erase_layered_reply_dependencies(connection, OwnerScope(owner_id), (memory_id, previous["id"]))
             erase_reverted_version(connection, table="owner_memory", owner_id=owner_id, current=current)
             restored = connection.execute(
                 f"UPDATE public.owner_memory SET status='active', revision=%s, version_evidence=%s, updated_at=now() "
@@ -526,6 +530,7 @@ class PostgresOwnerMemoryStore:
                     confidence=previous["confidence"],
                     risk_flags=tuple(previous["risk_flags"] or ()),
                 )
+                erase_layered_reply_dependencies(connection, OwnerScope(owner_id), (memory_id,))
                 updated = connection.execute(
                     """UPDATE public.owner_memory
                     SET status = 'invalidated', invalid_at = COALESCE(invalid_at, %s),
@@ -647,6 +652,7 @@ class PostgresOwnerMemoryStore:
         try:
             with self._connect() as connection:
                 lock_owner_scope(connection, owner_id=owner_id)
+                erase_layered_reply_dependencies(connection, OwnerScope(owner_id), (memory_id,))
                 row = connection.execute(
                     f"""
                     UPDATE public.owner_memory
