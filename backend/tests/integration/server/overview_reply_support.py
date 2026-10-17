@@ -33,6 +33,16 @@ class OverviewReplyControlledModel(FidelityControlledModel):
 
     def _generate(self, messages, stop=None, run_manager=None, **kwargs):
         payload = next(json.loads(message.content) for message in messages if isinstance(message, HumanMessage))
+        if self.plans and "parallel_scenarios" in self.plans[0]:
+            self.entered.set()
+            self.wait_for_response()
+            calls = self.plans.pop(0)["parallel_scenarios"]
+            self.payloads.append(payload)
+            response = tool_response("read_scenario", calls[0])
+            for args in calls[1:]:
+                response.tool_calls.extend(tool_response("read_scenario", args).tool_calls)
+            self.responses.append(response)
+            return ScriptedCoreModel._generate(self, messages, stop, run_manager, **kwargs)
         if self.plans and "history" in self.plans[0]:
             self.entered.set()
             self.wait_for_response()
@@ -79,10 +89,12 @@ class OverviewReplyHttpFixture(MemoryOverviewHttpFixture):
             return super()._backend(owner_id, overview_service=overview_service, task_host=task_host,
                                     runtime_shutdown=runtime_shutdown)
         priority = ModelPriorityControl()
+        budget_options = synthetic_budget_kwargs(self.reply_model, capacity=getattr(self, "reply_capacity", 100000))
+        self.reply_input_counter = budget_options["input_token_counter"]
         with patch("notalone.server.reply_wiring.build_deepseek_model", return_value=self.reply_model):
             service = build_reply_service(database_url=self.database_url, owner_id=owner_id,
                                           model_priority=priority, **getattr(self, "layered_reply_options", {}),
-                                          **synthetic_budget_kwargs(self.reply_model, capacity=getattr(self, "reply_capacity", 100000)))
+                                          **budget_options)
         self.assertIsNotNone(service)
         backend = HttpBackend(create_app(
             database_url=self.database_url, owner_id=owner_id, token="synthetic-overview-reply-token",

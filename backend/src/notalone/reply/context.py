@@ -274,6 +274,7 @@ class ReplyContext:
             )
             or (not allows_history(self.command) and bool(self.style_references))
             or (not allows_history(self.command) and self.layered_context is not None)
+            or (not allows_history(self.command) and bool(self.layered_scenario_reads))
         )
 
 
