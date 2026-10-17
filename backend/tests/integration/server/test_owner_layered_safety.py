@@ -250,12 +250,38 @@ class OwnerLayeredSafetyHttpTest(MemoryOverviewHttpFixture, unittest.TestCase):
         self.assertEqual(current['scenarios'], ready['scenarios'])
 
     def test_source_erased_during_profile_call_cannot_return_as_late_artifact(self):
+        from notalone.scopes import OwnerScope
         contact, source, _ = self.prepare_self('本人曾完成合成课程。')
-        backend = self.controlled(profile_proposer=profile_support.ProfileProposal(
-            hook=lambda: self.delete_source(contact, source)))
-        self.enable(backend)
+        receipts = []
+
+        def request_deletion():
+            snapshot = self.service.capture(OwnerScope(self.owner_id))
+            status, result = self.backend.request(
+                f'/api/contacts/{contact}/sources/{source}', method='DELETE')
+            visible = self.read(self.backend)
+            receipts.append((status, result, snapshot, self.service.validate(snapshot), visible))
+
+        backend = self.controlled(profile_proposer=profile_support.ProfileProposal(hook=request_deletion))
+        returned = self.enable(backend)
+        self.assertEqual(len(receipts), 1)
+        status, _, snapshot, valid, visible = receipts[0]
+        self.assertEqual(status, 202)
+        self.assertIsNotNone(snapshot)
+        self.assertFalse(valid)
+        self.assertEqual((visible['eligible_count'], visible['scenarios'], visible['profile']), (0, [], None))
+        self.assertEqual((returned['scenarios'], returned['profile']), ([], None))
+        # 同一Worker全局锁仍由模型批次持有时，只确认公开删除门禁，不等待删除Worker抢锁。
+        self.delete_source(contact, source)
         state = self.read(backend)
+        self.assertFalse(self.service.validate(snapshot))
         self.assertEqual((state['eligible_count'], state['scenarios'], state['profile']), (0, [], None))
+        with psycopg.connect(self.database_url) as db:
+            for table in ('layered_memory_batch', 'layered_profile_batch', 'layered_profile_version'):
+                self.assertEqual(db.execute(f'SELECT count(*) FROM public.{table} '
+                    "WHERE owner_id=%s AND scope_kind='owner'", (self.owner_id,)).fetchone()[0], 0, table)
+            self.assertEqual(db.execute("SELECT count(*) FROM public.layered_memory_job "
+                "WHERE owner_id=%s AND scope_kind='owner' AND target_manifest <> '[]'::jsonb",
+                (self.owner_id,)).fetchone()[0], 0)
 
     def test_restart_after_l2_commit_recovers_owner_profile_without_repeating_l2(self):
         self.prepare_self('本人曾完成合成课程。')
