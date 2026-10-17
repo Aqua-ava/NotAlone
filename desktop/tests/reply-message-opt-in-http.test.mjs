@@ -3,6 +3,143 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { eventually, withMessageOptInFixture } from './fixtures/reply-message-opt-in-public.mjs';
 
+test('刷新确认的提醒在重读与切回联系人后不再恢复，也不生成候选', async () => {
+  await withMessageOptInFixture(async (f) => {
+    const scope = await f.connect();
+    await f.fixture.command('append_message');
+    await eventually(() => f.bridge.getState(), (state) => state.messageNotice.changed, '先收到真实提醒。');
+    await f.bridge.loadMessages({ ...scope, older: false });
+    assert.equal((await f.bridge.getState()).messageNotice.changed, false);
+    await f.bridge.readSavedSession(scope);
+    assert.equal((await f.bridge.getState()).messageNotice.changed, false, '完整重读不能恢复已确认提醒。');
+    await f.connect(f.fixture.data.contact_ids[1]);
+    await f.connect(scope.contactId);
+    assert.equal((await f.bridge.getState()).messageNotice.changed, false, '切回不能恢复已确认提醒。');
+    assert.equal((await f.fixture.command('observations')).model_calls, 0);
+  });
+});
+
+test('最新页刷新在途时断流重连，较旧刷新不能确认新的提醒缺口', async () => {
+  await withMessageOptInFixture(async (f) => {
+    const scope = await f.connect();
+    let arrived, release;
+    const observed = new Promise((resolve) => { arrived = resolve; });
+    const held = new Promise((resolve) => { release = resolve; });
+    f.delivery.after = async (request) => {
+      if (request.path.endsWith('/messages?limit=20')) { f.delivery.after = undefined; arrived(); await held; }
+    };
+    const refreshing = f.bridge.loadMessages({ ...scope, older: false });
+    try {
+      await observed; await f.fixture.command('disconnect_stream');
+      await eventually(() => f.bridge.getState(), (state) => state.messageNotice.phase === 'interrupted', '认证SSE须实际断流。');
+      await f.bridge.reconnectMessages(scope);
+      await eventually(() => f.bridge.getState(), (state) => state.messageNotice.phase === 'connected', '须建立新订阅。');
+      release(); await refreshing;
+      assert.equal((await f.bridge.getState()).messageNotice.needsRefresh, true);
+      await f.bridge.loadMessages({ ...scope, older: false });
+      assert.equal((await f.bridge.getState()).messageNotice.needsRefresh, false);
+      assert.equal((await f.fixture.command('observations')).model_calls, 0);
+    } finally { release(); await refreshing; }
+  });
+});
+
+test('结合生成期间后到消息只保留新提醒，原采用的target和CURRENT保持明确', async () => {
+  await withMessageOptInFixture(async (f) => {
+    const scope = await f.connect();
+    await f.bridge.setMode({ ...scope, mode: 'reply_to_message' });
+    await f.bridge.loadMessages({ ...scope, older: false });
+    await f.bridge.selectMessage({ ...scope, messageId: (await f.bridge.getState()).messages.items[0].messageId });
+    await f.bridge.updateDirection({ ...scope, direction: '说明本次立场。' });
+    await f.fixture.plan({ count: 1, text: '原合成候选。' });
+    await f.bridge.generate({ ...scope, newRequest: true }); await f.bridge.readSavedSession(scope);
+    const adopted = await f.fixture.command('append_message');
+    await eventually(() => f.bridge.getState(), (state) => state.messageNotice.changed, '须先核验本次采用的提醒。');
+    await f.fixture.plan({ count: 1, text: '明确结合后的合成候选。' }); await f.fixture.command('hold_generation');
+    const combining = f.bridge.combineNewMessages(scope);
+    try {
+      await eventually(() => f.fixture.command('observations'), (value) => value.generation_entered, '采用须已进入实际模型。');
+      const paths = f.requests.filter((request) => request.path.endsWith('/messages?limit=20')).length;
+      await f.fixture.command('append_message');
+      await eventually(async () => {
+        const state = await f.bridge.getState();
+        return state.messageNotice.changed && f.requests.filter((request) => request.path.endsWith('/messages?limit=20')).length > paths;
+      }, Boolean, '后到事件须实际启动消息核验。');
+      await f.fixture.command('release'); await combining;
+      const after = await f.bridge.getState();
+      assert.equal(after.result.input.target.messageId, adopted.message_id);
+      assert.equal(after.messageNotice.changed, true, '旧采用完成不能确认后到提醒。');
+      const saved = await f.request(`/api/contacts/${scope.contactId}/assistant-sessions/${after.savedSession.sessionId}`);
+      assert.equal(saved.current_input_version_id, after.result.inputVersionId);
+      assert.equal(saved.turns.length, 2);
+      assert.equal((await f.fixture.command('observations')).model_calls, 2);
+    } finally { await f.fixture.command('release'); await combining; }
+  });
+});
+
+for (const recovery of ['direct', 'reread', 'new-message']) {
+  test('明确结合失败后原键重试成功只确认原提醒：' + recovery, async () => {
+    await withMessageOptInFixture(async (f) => {
+      const scope = await f.connect();
+      await f.bridge.setMode({ ...scope, mode: 'initiate_conversation' });
+      await f.bridge.updatePurpose({ ...scope, purpose: '合成近况问候。' });
+      await f.fixture.plan({ count: 1, text: '原合成问候。' });
+      await f.bridge.generate({ ...scope, newRequest: true }); await f.bridge.readSavedSession(scope);
+      await f.fixture.command('append_message');
+      await eventually(() => f.bridge.getState(), (state) => state.messageNotice.changed, '须先核验真实提醒。');
+      await f.fixture.plan({ fault: 'timeout' }); await f.bridge.combineNewMessages(scope);
+      const after = await f.bridge.getState();
+      assert.equal(after.phase, 'failed'); assert.equal(after.messageNotice.changed, true);
+      const endpoint = '/api/contacts/' + scope.contactId + '/assistant-sessions/' + after.savedSession.sessionId;
+      const failed = await f.request(endpoint), turn = failed.turns.at(-1);
+      if (recovery === 'reread') {
+        await f.bridge.readSavedSession(scope);
+        assert.equal((await f.bridge.getState()).messageNotice.changed, true);
+      } else if (recovery === 'new-message') {
+        const paths = f.requests.filter((request) => request.path.endsWith('/messages?limit=20')).length;
+        await f.fixture.command('append_message');
+        await eventually(() => f.bridge.getState(), (state) => state.messageNotice.changed
+          && f.requests.filter((request) => request.path.endsWith('/messages?limit=20')).length > paths, '后到提醒须独立核验。');
+      }
+      await f.fixture.plan({ count: 1, text: '同一次采用重试成功。' });
+      await f.bridge.generate({ ...scope, newRequest: false });
+      const retried = await f.bridge.getState(), saved = await f.request(endpoint);
+      assert.equal(retried.phase, 'ready');
+      assert.equal(retried.messageNotice.changed, recovery === 'new-message');
+      assert.equal(saved.turns.length, 2);
+      assert.equal(saved.turns.at(-1).request_key, turn.request_key);
+      assert.equal(saved.current_input_version_id, turn.input_version_id);
+      assert.equal(retried.result.inputVersionId, turn.input_version_id);
+      assert.equal((await f.fixture.command('observations')).model_calls, 3);
+    });
+  });
+}
+
+test('后到消息核验读取失败时保持SSE连接，撤下无票据的结合按钮且重读可恢复', async () => {
+  await withMessageOptInFixture(async (f) => {
+    const scope = await f.connect();
+    await f.bridge.setMode({ ...scope, mode: 'initiate_conversation' });
+    await f.bridge.updatePurpose({ ...scope, purpose: '合成近况问候。' });
+    await f.fixture.plan({ count: 1, text: '原合成问候。' });
+    await f.bridge.generate({ ...scope, newRequest: true }); await f.bridge.readSavedSession(scope);
+    await f.fixture.command('append_message');
+    await eventually(() => f.bridge.getState(), (state) => state.messageNotice.changed, '先核验第一条提醒。');
+    f.delivery.after = (request) => {
+      if (request.path.endsWith('/messages?limit=20')) {
+        f.delivery.after = undefined; throw new Error('真实消息页返回后的合成传输失败');
+      }
+    };
+    await f.fixture.command('append_message');
+    const uncertain = await eventually(() => f.bridge.getState(), (state) => state.messageNotice.needsRefresh,
+      '后到消息须进入待核对状态。');
+    assert.deepEqual(uncertain.messageNotice, { phase: 'connected', changed: false, needsRefresh: true });
+    assert.doesNotMatch(f.renderCandidates(uncertain), /结合新消息重新生成/);
+    await assert.rejects(f.bridge.combineNewMessages(scope));
+    await f.bridge.readSavedSession(scope);
+    assert.equal((await f.bridge.getState()).messageNotice.changed, true);
+    assert.equal((await f.fixture.command('observations')).model_calls, 1);
+  });
+});
+
 test('A15回应新消息只提醒，明确采用真实新target且保留原组已保存编辑', async () => {
   await withMessageOptInFixture(async (f) => {
     const scope = await f.connect();
@@ -144,6 +281,8 @@ test('A15采用前来源实际删除，拒绝且当前公开投影不保留旧�
     await assert.rejects(f.bridge.combineNewMessages(scope));
     const rejected = await f.bridge.getState();
     assert.equal(rejected.result, null, '实际source失效后公开状态应重新读取无正文投影。');
+    assert.equal(rejected.messageNotice.changed, false, '明确来源失效不能保留旧提醒资格。');
+    assert.equal(rejected.messageNotice.needsRefresh, false, '已确认删除不冒充未知的消息缺口。');
     assert.doesNotMatch(JSON.stringify(rejected), /来源删除后不能留存的合成旧候选/);
     assert.equal((await f.fixture.command('observations')).model_calls, 1);
   });

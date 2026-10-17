@@ -81,7 +81,7 @@ async function streamRecovery(pages: EventPages) {
   await fixture.command('append_message');
   await expect(editor).toHaveValue('用户仍在编辑的措辞。');
   await helper.getByRole('button', { name: '重连消息提醒', exact: true }).click();
-  await expect(helper.getByRole('status').filter({ hasText: '消息提醒已恢复，期间可能有遗漏' })).toBeVisible();
+  await expect(helper.getByRole('status').filter({ hasText: '消息提醒有待核对，请主动刷新消息' })).toBeVisible();
   await expect(helper.getByRole('radio', { name: /甲的新合成消息/ })).toHaveCount(0);
   await helper.getByRole('button', { name: '刷新消息', exact: true }).click();
   await expect(helper.getByRole('radio', { name: /甲的新合成消息/ })).toBeVisible();

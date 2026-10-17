@@ -6,7 +6,7 @@ const record = (value: unknown): value is Record<string, unknown> => Boolean(val
 const optionalText = (value: unknown): value is string | null => value === null || (typeof value === 'string' && value.length <= 65_536);
 
 // 页码只来自后端游标，联系人只来自主进程已确认范围。
-export async function readReplyMessages(backend: BackendHost, contactId: string, before: string | null, signal: AbortSignal) {
+export async function readReplyMessages(backend: Pick<BackendHost, 'requestJson'>, contactId: string, before: string | null, signal: AbortSignal) {
   const response = await backend.requestJson({ method: 'GET',
     path: `/api/contacts/${contactId}/messages?limit=20${before ? `&before=${before}` : ''}`,
     timeoutMs: 10_000, signal });

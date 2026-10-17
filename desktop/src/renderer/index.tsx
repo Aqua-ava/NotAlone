@@ -57,9 +57,11 @@ function App() {
     <ForegroundPanel state={foreground} session={contactSession} permission={permission} manualRelease={startup.mode === 'managed'} />
     {replies.state.mode === 'rewrite_draft' ? <RewriteInput contacts={contactSession} replies={replies} />
       : replies.state.mode === 'initiate_conversation' ? <ProactiveReplyInput replies={replies} /> : <DirectedReplyInput replies={replies} />}
-    {replies.state.messageNotice.phase === 'connected' && <p role="status">{replies.state.messageNotice.needsRefresh
-      ? '消息提醒已恢复，期间可能有遗漏，请主动刷新消息核对。生成依据仍是原快照。' : replies.state.messageNotice.changed
-      ? '当前联系人有新消息，生成依据仍是原快照。由你决定刷新消息或重新生成。' : '新消息提醒已连接。'}</p>}
+    {replies.state.messageNotice.phase === 'connected' && <>
+      {replies.state.messageNotice.needsRefresh && <p role="status">消息提醒有待核对，请主动刷新消息。生成依据仍是原快照。</p>}
+      {replies.state.messageNotice.changed && <p role="status">当前联系人有新消息，生成依据仍是原快照。由你决定刷新消息或重新生成。</p>}
+      {!replies.state.messageNotice.needsRefresh && !replies.state.messageNotice.changed && <p role="status">新消息提醒已连接。</p>}
+    </>}
     {replies.state.messageNotice.phase === 'interrupted' && <p role="status">消息提醒已中断，请主动刷新消息核对当前上下文。</p>}
     {replies.state.messageNotice.phase === 'interrupted' && <button onClick={() => void replies.reconnectMessages()}>重连消息提醒</button>}
     {replies.state.mode === 'rewrite_draft' && (replies.state.messageNotice.changed || replies.state.messageNotice.needsRefresh)

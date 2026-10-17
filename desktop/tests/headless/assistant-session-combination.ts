@@ -56,7 +56,7 @@ export async function assistantSessionCombination(browser: Browser, origin: stri
     expect((await fixture.command('observations')).model_calls).toBe(2);
     await expect(group.getByRole('textbox', { name: '说法1第2条编辑文本', exact: true })).toHaveValue('甲明确不参加。');
     await fixture.plan({ count: 1, message_groups: [['甲新消息后的感谢。', '甲仍不参加。']] });
-    await helper.getByRole('button', { name: '结合新消息继续', exact: true }).click();
+    await helper.getByRole('button', { name: '结合新消息重新生成', exact: true }).click();
     await expect(group.getByRole('textbox', { name: '说法1第2条编辑文本', exact: true })).toHaveValue('甲仍不参加。');
     const adopted = (await fixture.request(pathA)).data;
     const turns = adopted.turns as Array<{ input: { content: { target_message_id: string; direction: string; user_instruction: string } } }>;

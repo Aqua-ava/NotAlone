@@ -28,6 +28,7 @@ import { captureReplyContinuation, continuationInputSnapshot } from './continuat
 import { retainContactContent, validateContactInput, removeDependentContent, revalidateRetainedContent, type RetainedContactContent } from './contact-content';
 import { readReplyScene, sceneSnapshot } from './scene';
 import { AssistantSessionProjection, type AssistantProjectionRead, type AssistantProjectionScope, type AssistantProjectionVerification } from './assistant-session-projection';
+import { AssistantMessageNotices, type MessageNoticeAdoption } from './assistant-message-notices';
 
 const defaults = () => ({ tone: 'original' as const, instruction: '', includeRelationshipContext: false });
 const tones = { original: '', warm: '本次语气自然温和。', concise: '本次表达简洁直接。', polite: '本次语气礼貌克制。' };
@@ -56,6 +57,7 @@ type CandidateSourceCheck = {
   strategyOperation: number;
   strategyWaiting: boolean;
 };
+type MessageAdoptionCommand = Readonly<{ notice: MessageNoticeAdoption; messageId?: string }>;
 
 // 助手讨论和原候选由后端保存；当前编辑稿与窗口状态分别处理。
 export class ReplySession {
@@ -91,17 +93,12 @@ export class ReplySession {
   // 复用原操作已捕获的命令引用供显式重试；不向作业元数据复制正文，也不自动执行。
   private readonly retainedRetries = new Map<string, { contactId: string; sessionId: string; run: () => Promise<void> }>();
   private restoredRetry: string | undefined;
-  private lastAttempt: { input: ReplyInputSnapshot; requestKey: string; expectedInputVersionId?: string; interrupted?: InterruptedReplyOrigin; adoptNewMessageId?: string } | undefined;
+  private lastAttempt: { input: ReplyInputSnapshot; requestKey: string; expectedInputVersionId?: string;
+    interrupted?: InterruptedReplyOrigin; adoptNewMessageId?: string; messageNotice?: MessageNoticeAdoption } | undefined;
   private continuationAttempt: { scope: ContactSelection; generation: number; command: AssistantContinuationCommand } | undefined;
   private messageOperation = 0;
   private messagePending: AbortController | undefined;
-  private noticeStream: AbortController | undefined;
-  private noticeVerification: AbortController | undefined;
-  private noticeRevision = 0;
-  // 只保留消息标识；切回后经认证读取确认，最多保存32个会话提示。
-  private readonly retainedNotices = new Map<string, { contactId: string; sessionId: string; messageId: string }>();
-  private noticedMessage: { generation: number; contactId: string; scopeRevision: number;
-    sessionId: string; messageId: string; revision: number } | undefined;
+  private readonly messageNotices: AssistantMessageNotices;
   private savedRead: AbortController | undefined;
   private readonly sessionProjection = new AssistantSessionProjection();
   private sessionDelete: AbortController | undefined;
@@ -120,6 +117,17 @@ export class ReplySession {
 
   constructor(private readonly contacts: ContactSession, private readonly backend: BackendHost,
     private readonly generationBlock: () => ReplyGenerationBlock = () => null) {
+    this.messageNotices = new AssistantMessageNotices(backend, (contactId, generation) => {
+      const sessions = new Set(this.generationJobs.states(generation)
+        .filter((job) => job.contactId === contactId).map((job) => job.sessionId));
+      const retained = this.retainedContent.get(contactId)?.sessionId;
+      if (retained) sessions.add(retained);
+      return [...sessions];
+    }, (messageNotice, effect) => {
+      this.publish({ messageNotice });
+      if (effect === 'verified') this.queueAutomaticExploration();
+      if (effect === 'uncertain' && this.automaticExploration) this.stopAutomaticExploration(true);
+    });
     this.candidateVersions = new AssistantCandidateVersionSession(backend);
     this.candidateVersions.onStateChanged((state) => {
       if (state.candidateVersions.sessionId === null) this.candidateRestoreOperation += 1;
@@ -131,7 +139,7 @@ export class ReplySession {
       const generation = backend.getConnectionGeneration();
       if (generation !== versionGeneration) {
         versionGeneration = generation;
-        this.retainedContent.clear(); this.retainedNotices.clear(); this.retainedRetries.clear(); this.restoredRetry = undefined; this.pendingContent = undefined; this.retainedSourceValidation = undefined; this.contentGeneration = undefined;
+        this.retainedContent.clear(); this.retainedRetries.clear(); this.restoredRetry = undefined; this.pendingContent = undefined; this.retainedSourceValidation = undefined; this.contentGeneration = undefined;
         this.publish({ inputBudgetNotice: undefined, scene: '', inputClearRevision: (this.state.inputClearRevision ?? 0) + 1 });
         this.generationJobs.cancelAll();
         this.cancelPending();
@@ -402,7 +410,8 @@ export class ReplySession {
     if (restoreResult && (input.scene ?? null) !== (this.state.scene || null)) return;
     if (retry) {
       this.restoredRetry = this.retainedRetries.has(turn.requestKey) ? turn.requestKey : undefined;
-      this.lastAttempt = { input, requestKey: turn.requestKey };
+      // 同键重读继续持有原冻结命令及提醒票据，不丢失采用协议参数。
+      if (this.lastAttempt?.requestKey !== turn.requestKey) this.lastAttempt = { input, requestKey: turn.requestKey };
       this.publish({ phase: 'failed', errorCode: 'generation_failed', canRetry: true });
     } else if (turn.reply) {
       this.publish({ phase: 'ready', canRetry: false, errorCode: undefined, selectedCandidateId: null,
@@ -502,7 +511,10 @@ export class ReplySession {
         const heldVersion = (this.state.result ?? this.heldResult?.result)?.inputVersionId;
         const invalid = heldVersion && saved.turns.some((turn) => turn.inputVersionId === heldVersion
           && ['redacted', 'unavailable'].includes(turn.state));
-        if (invalid) { this.cancelPending(); this.lastAttempt = undefined; }
+        if (invalid) {
+          this.cancelPending(); this.lastAttempt = undefined;
+          this.messageNotices.forget(selection.contactId, saved.sessionId);
+        }
         const budgetNotice = this.state.inputBudgetNotice;
         const inputBudgetNotice = budgetNotice?.sessionId === saved.sessionId
           && budgetNotice.inputVersionId === saved.currentInputVersionId
@@ -548,7 +560,7 @@ export class ReplySession {
         }
         if (current() && inputOperation === this.operation) {
           await this.restoreGenerationView(selection, saved, pending.signal, current);
-          if (current()) await this.restoreMessageNotice(selection, saved.sessionId, pending.signal, current);
+          if (current()) await this.messageNotices.restore();
         }
       }
     } catch (error) {
@@ -702,7 +714,7 @@ export class ReplySession {
       const result = await deleteAssistantSession(this.backend, selection.contactId, selection.sessionId, pending.signal);
       if (!current() || result.generation !== generation) return;
       this.generationJobs.forget({ connectionGeneration: result.generation, contactId: selection.contactId, sessionId: selection.sessionId });
-      this.retainedNotices.delete(`${selection.contactId}:${selection.sessionId}`);
+      this.messageNotices.forget(selection.contactId, selection.sessionId);
       for (const [key, retry] of this.retainedRetries) if (retry.contactId === selection.contactId && retry.sessionId === selection.sessionId) this.retainedRetries.delete(key);
       this.retainedContent.delete(selection.contactId); this.pendingContent = undefined;
       this.contacts.clearDraft(selection);
@@ -762,7 +774,7 @@ export class ReplySession {
     this.sessionProjection.invalidateSource();
     ++this.pendingExpressionPreferenceDeletions;
     this.generationJobs.cancelAll();
-    this.retainedRetries.clear(); this.retainedNotices.clear();
+    this.retainedRetries.clear(); this.messageNotices.forget();
     const held = this.heldResult ?? (this.state.result ? { result: this.state.result,
       selectedCandidateId: this.state.selectedCandidateId } : undefined);
     this.savedRead?.abort(); this.savedRead = undefined;
@@ -784,7 +796,7 @@ export class ReplySession {
   async revalidateDeletedSource(contactId: string, options: { preserveInput?: true } = {}): Promise<void> {
     this.sessionProjection.invalidateSource();
     for (const [key, retry] of this.retainedRetries) if (retry.contactId === contactId) this.retainedRetries.delete(key);
-    for (const [key, notice] of this.retainedNotices) if (notice.contactId === contactId) this.retainedNotices.delete(key);
+    this.messageNotices.forget(contactId);
     const owningGeneration = this.backend.getConnectionGeneration();
     if (owningGeneration !== undefined) this.generationJobs.cancelContact(owningGeneration, contactId);
     const activeContact = this.state.contactId, activeScope = this.state.scopeRevision;
@@ -934,7 +946,7 @@ export class ReplySession {
     const current = () => operation === this.messageOperation && generation === this.backend.getConnectionGeneration()
       && request.scopeRevision === this.state.scopeRevision && request.contactId === this.state.contactId;
     this.publish({ messages: { ...this.state.messages, phase: 'loading' } });
-    const noticeRevision = this.noticeRevision;
+    const noticeRefresh = !before ? this.messageNotices.captureRefresh() : undefined;
     try {
       const page = await readReplyMessages(this.backend, request.contactId, before, pending.signal);
       if (!current() || page.generation !== generation) return;
@@ -944,10 +956,8 @@ export class ReplySession {
         this.invalidateInput();
         this.publish({ targetMessageId: null });
       }
-      this.publish({ messages: { phase: 'ready', items, nextCursor: page.nextCursor },
-        messageNotice: { ...this.state.messageNotice,
-          needsRefresh: before || noticeRevision !== this.noticeRevision ? this.state.messageNotice.needsRefresh : false,
-          changed: before || noticeRevision !== this.noticeRevision ? this.state.messageNotice.changed : false } });
+      this.publish({ messages: { phase: 'ready', items, nextCursor: page.nextCursor } });
+      if (noticeRefresh) this.messageNotices.confirmRefresh(noticeRefresh);
     } catch {
       if (current()) this.publish({ messages: { ...this.state.messages, phase: 'failed' } });
     } finally { if (this.messagePending === pending) this.messagePending = undefined; }
@@ -1418,7 +1428,9 @@ export class ReplySession {
   }
 
   private async generateInput(selection: GenerateReply, input: ReplyInputSnapshot,
-    replaceable?: PendingAssistantGenerationReceipt, expectedInputVersionId?: string, interrupted?: InterruptedReplyOrigin, adoptNewMessageId?: string): Promise<void> {
+    replaceable?: PendingAssistantGenerationReceipt, expectedInputVersionId?: string, interrupted?: InterruptedReplyOrigin,
+    messageAdoption?: MessageAdoptionCommand): Promise<void> {
+    const adoptNewMessageId = messageAdoption?.messageId;
     if (adoptNewMessageId !== undefined && (!isUuid(adoptNewMessageId) || !isUuid(expectedInputVersionId)
       || interrupted !== undefined || input.mode === 'rewrite_draft')) throw new Error('本次新消息采用身份无效。');
     const generation = this.backend.getConnectionGeneration();
@@ -1427,6 +1439,7 @@ export class ReplySession {
     if (selection.newRequest || !this.lastAttempt) this.lastAttempt = { input, requestKey: randomUUID(),
       ...(expectedInputVersionId === undefined ? {} : { expectedInputVersionId }),
       ...(interrupted === undefined ? {} : { interrupted: Object.freeze({ ...interrupted }) }),
+      ...(messageAdoption === undefined ? {} : { messageNotice: messageAdoption.notice }),
       ...(adoptNewMessageId === undefined ? {} : { adoptNewMessageId: adoptNewMessageId.toLowerCase() }) };
     const attempt = this.lastAttempt;
     if (replaceable && selection.newRequest) this.generationJobs.cancelRequest(replaceable);
@@ -1446,6 +1459,10 @@ export class ReplySession {
         contactId: this.state.contactId, sessionId: this.state.savedSession?.sessionId ?? job.identity.sessionId }));
     this.publish({ phase: 'waiting', errorCode: undefined, canRetry: true });
     let failureVerification: AssistantProjectionVerification | undefined;
+    const confirmMessageNotice = (result: OrdinaryGenerationResult) => {
+      if (current() && attempt.messageNotice && result.assistantSessionId === attempt.messageNotice.sessionId
+        && result.inputVersionId !== attempt.expectedInputVersionId) this.messageNotices.confirmAdoption(attempt.messageNotice);
+    };
     const consume = async (sessionId: string, result: OrdinaryGenerationResult) => {
       if (!current() || result.generation !== generation) return;
       // 可靠完成可作为历史读取；只有仍属当前输入且来源有效的结果才可成为当前候选。
@@ -1490,7 +1507,8 @@ export class ReplySession {
       const basisChanges = accepted.turn.basisChanges ?? accepted.turn.reply?.basisChanges;
       // 同键重放恢复原结果，保留该候选在本次运行中的编辑和选择。
       if (this.state.result?.replyRequestId === result.replyRequestId) {
-        this.publish({ phase: 'ready', inputBudgetNotice, result: { ...this.state.result, basisChanges } }); return;
+        this.publish({ phase: 'ready', inputBudgetNotice, result: { ...this.state.result, basisChanges } });
+        confirmMessageNotice(result); return;
       }
       this.publish({ phase: 'ready', savedSession: accepted.retainedDisplay ? accepted.snapshot
         : { phase: 'idle', sessionId: result.assistantSessionId, turns: [], inputs: [], currentInputVersionId: null },
@@ -1508,6 +1526,7 @@ export class ReplySession {
       selectedCandidateId: result.candidates[0].candidateId }, accepted.retainedDisplay ? 'authoritative' : 'local');
       await this.restoreCandidateVersions(selection, result.assistantSessionId,
         result.candidates.map((candidate) => candidate.candidateId));
+      confirmMessageNotice(result);
     };
     const failed = async (error: unknown, observation?: OrdinaryFailureObservation) => {
       const failure = error instanceof BackendRequestFailure ? error : undefined;
@@ -1864,6 +1883,7 @@ export class ReplySession {
     invalidInputs: Set<string> = new Set(), strategyTargetUnavailable = false,
     read?: AssistantProjectionRead): AssistantProjectionRead | undefined {
     const ownedRead = this.sessionProjection.invalidateSource(read);
+    this.messageNotices.forget(scope.contactId, scope.sessionId);
     const affected = candidateIds ? new Set(candidateIds) : null;
     const saved = this.state.savedSession;
     const turns = saved?.turns.filter((turn) => !affected
@@ -1967,7 +1987,7 @@ export class ReplySession {
   private receiveContact(state: ContactSessionState): void {
     if (state.directoryPhase === 'ready') {
       for (const [key, retry] of this.retainedRetries) if (!state.contacts.some((contact) => contact.contactId === retry.contactId)) this.retainedRetries.delete(key);
-      for (const [key, notice] of this.retainedNotices) if (!state.contacts.some((contact) => contact.contactId === notice.contactId)) this.retainedNotices.delete(key);
+      this.messageNotices.retainContacts(state.contacts.map((contact) => contact.contactId));
       const generation = this.backend.getConnectionGeneration();
       if (generation !== undefined) for (const job of this.generationJobs.states(generation)) {
         if (!state.contacts.some((contact) => contact.contactId === job.contactId)) this.generationJobs.forget({
@@ -1994,8 +2014,6 @@ export class ReplySession {
       this.sessionDelete?.abort(); this.sessionDelete = undefined;
       this.catalogPending?.abort(); this.catalogPending = undefined;
       this.savedRead?.abort(); this.savedRead = undefined;
-      this.noticeStream?.abort(); this.noticeVerification?.abort();
-      this.noticeStream = undefined; this.noticeVerification = undefined;
       this.leaveGenerationView();
       this.cancelMessagePage();
       this.invalidateExploration();
@@ -2004,14 +2022,12 @@ export class ReplySession {
       this.draft = state.draft;
       this.publish({ scopeRevision: state.scopeRevision, contactId: state.selectedContactId, candidateDrafts: [], contentRestoreNotice: undefined,
         options: defaults(), mode: 'rewrite_draft', scene: '', messages: { phase: 'idle', items: [], nextCursor: null },
-        messageNotice: { phase: 'idle', changed: false, needsRefresh: false },
         targetMessageId: null, direction: '', purpose: '', correction: '', requirements: '', clarificationAnswer: '', skillChoice: { mode: 'auto', versionId: null }, skillChoices: [], exploration: { phase: 'idle', result: null },
         phase: 'idle', errorCode: undefined, result: null, selectedCandidateId: null, canRetry: false,
         savedSession: { phase: 'idle', sessionId: null, turns: [], inputs: [], currentInputVersionId: null }, sessionDeletion: undefined,
         sessionCatalog: undefined,
         confirmedSessionDeletion: undefined });
       this.candidateSourceCheck = undefined;
-      this.beginMessageNotice();
       // 同连接恢复前先核验原会话；新连接没有输入缓存，不触发生成。
       if (state.selectedContactId && state.directoryPhase === 'ready') {
         void this.readSavedSession({ contactId: state.selectedContactId, scopeRevision: state.scopeRevision });
@@ -2027,27 +2043,23 @@ export class ReplySession {
   }
   async reconnectMessages(selection: ContactSelection): Promise<void> {
     this.assertScope(selection);
-    if (this.state.messageNotice.phase !== 'interrupted') return;
-    this.noticeStream?.abort(); this.noticeVerification?.abort();
-    this.beginMessageNotice(true);
+    this.messageNotices.reconnect();
   }
   async combineNewMessages(selection: ContactSelection): Promise<void> {
     const contacts = this.assertScope(selection); this.assertSessionSelection(); this.refreshGenerationEligibility();
-    const notice = this.noticedMessage;
+    const notice = this.messageNotices.captureAdoption();
     const generation = this.backend.getConnectionGeneration();
     const sessionId = this.state.savedSession?.sessionId;
     const mode = this.state.mode;
     const operation = this.operation;
-    if (!notice || generation === undefined || notice.generation !== generation
-      || notice.contactId !== selection.contactId || notice.scopeRevision !== selection.scopeRevision
-      || notice.sessionId !== sessionId || !this.state.messageNotice.changed
+    if (!notice || generation === undefined || !sessionId || notice.sessionId !== sessionId
       || this.state.generationBlock || mode === 'rewrite_draft') throw new Error('请先核对当前联系人与新消息提醒。');
     const receipt = this.generationJobs.requestReceipt({ connectionGeneration: generation, contactId: selection.contactId, sessionId });
     if (this.state.phase === 'waiting' && !receipt) throw new Error('请等实际生成身份确认后再结合新消息。');
     const expected = receipt?.inputVersionId ?? this.state.savedSession?.currentInputVersionId;
     if (!expected) throw new Error('请先重新读取当前已保存讨论。');
     const pending = new AbortController();
-    const current = () => notice === this.noticedMessage && operation === this.operation
+    const current = () => this.messageNotices.isAdoptionCurrent(notice) && operation === this.operation
       && generation === this.backend.getConnectionGeneration() && selection.contactId === this.state.contactId
       && selection.scopeRevision === this.state.scopeRevision && sessionId === this.state.savedSession?.sessionId
       && mode === this.state.mode && !this.candidateSourceCheck && !this.state.sessionCatalog?.selectionPending;
@@ -2076,102 +2088,11 @@ export class ReplySession {
     const adoptNewMessageId = originalContent?.type === mode
       && (originalContent.user_instruction ?? '') === common.userInstruction
       && (originalInput?.scene ?? null) === (common.scene ?? null) ? notice.messageId : undefined;
-    const previousReplyRequestId = this.state.result?.replyRequestId;
     this.invalidateExploration(); this.notifyInputChanged();
     this.publish({ messages: { phase: 'ready', items: page.messages, nextCursor: page.nextCursor },
       ...(mode === 'reply_to_message' ? { targetMessageId: target.messageId } : {}) });
-    const generating = this.generateInput({ ...selection, newRequest: true }, input, receipt, expected,
-      undefined, adoptNewMessageId);
-    const generationOperation = this.operation;
-    await generating;
-    const result = this.state.result;
-    if (notice === this.noticedMessage && generation === this.backend.getConnectionGeneration()
-      && generationOperation === this.operation && selection.contactId === this.state.contactId
-      && selection.scopeRevision === this.state.scopeRevision && mode === this.state.mode
-      && sessionId === this.state.savedSession?.sessionId && result?.assistantSessionId === sessionId
-      && result.replyRequestId !== previousReplyRequestId && result.inputVersionId !== expected
-      && result.input.mode === mode && result.input.contactId === selection.contactId
-      && (result.input.scene ?? null) === (common.scene ?? null)
-      && result.input.userInstruction === common.userInstruction
-      && (result.input.mode === 'reply_to_message' ? result.input.target.messageId === target.messageId
-        : result.input.mode === 'initiate_conversation' && input.mode === 'initiate_conversation'
-          && result.input.purpose === input.purpose)
-      && this.state.phase === 'ready') {
-      this.noticedMessage = undefined;
-      this.retainedNotices.delete(`${selection.contactId}:${sessionId}`);
-      this.publish({ messageNotice: { ...this.state.messageNotice, changed: false } });
-    }
-  }
-  private retainMessageNotice(contactId: string, sessionId: string, messageId: string): void {
-    const key = `${contactId}:${sessionId}`;
-    this.retainedNotices.delete(key); this.retainedNotices.set(key, { contactId, sessionId, messageId });
-    while (this.retainedNotices.size > 32) this.retainedNotices.delete(this.retainedNotices.keys().next().value!);
-  }
-  private async restoreMessageNotice(selection: ContactSelection, sessionId: string, signal: AbortSignal,
-    current: () => boolean): Promise<void> {
-    const key = `${selection.contactId}:${sessionId}`, notice = this.retainedNotices.get(key);
-    if (!notice) return;
-    const page = await readReplyMessages(this.backend, selection.contactId, null, signal);
-    if (!current() || this.retainedNotices.get(key) !== notice || sessionId !== this.state.savedSession?.sessionId
-      || page.generation !== this.backend.getConnectionGeneration()) return;
-    if (!page.messages.some((message) => message.messageId === notice.messageId)) {
-      this.retainedNotices.delete(key); return;
-    }
-    this.noticedMessage = { ...notice, generation: page.generation, scopeRevision: selection.scopeRevision, revision: ++this.noticeRevision };
-    this.publish({ messageNotice: { ...this.state.messageNotice, changed: true } });
-  }
-  private beginMessageNotice(recovered = false): void {
-    const contactId = this.state.contactId;
-    const scopeRevision = this.state.scopeRevision;
-    const generation = this.backend.getConnectionGeneration();
-    if (!contactId || generation === undefined) return;
-    const pending = new AbortController();
-    this.noticeStream = pending;
-    const current = () => !pending.signal.aborted && contactId === this.state.contactId
-      && scopeRevision === this.state.scopeRevision && generation === this.backend.getConnectionGeneration();
-    this.publish({ messageNotice: { phase: 'connecting', changed: recovered && this.state.messageNotice.changed,
-      needsRefresh: recovered } });
-    this.backend.subscribeMessages({
-      connected: () => { if (current()) this.publish({ messageNotice: { ...this.state.messageNotice, phase: 'connected' } }); },
-      interrupted: () => { if (current()) {
-        this.noticeVerification?.abort();
-        if (this.automaticExploration) this.stopAutomaticExploration(true);
-        this.publish({ messageNotice: { ...this.state.messageNotice, phase: 'interrupted' } });
-      } },
-      message: (event) => {
-        if (!current()) return;
-        if (event.contactId !== contactId) {
-          const sessions = new Set(this.generationJobs.states(generation)
-            .filter((job) => job.contactId === event.contactId).map((job) => job.sessionId));
-          const retained = this.retainedContent.get(event.contactId)?.sessionId;
-          if (retained) sessions.add(retained);
-          for (const session of sessions) this.retainMessageNotice(event.contactId, session, event.messageId);
-          return;
-        }
-        const sessionId = this.state.savedSession?.sessionId;
-        const revision = ++this.noticeRevision;
-        this.noticeVerification?.abort();
-        const verification = new AbortController();
-        this.noticeVerification = verification;
-        // 事件只含标识；用当前认证联系人真实的有界消息投影确认归属，不猜缺失范围。
-        void readReplyMessages(this.backend, contactId, null, verification.signal).then((page) => {
-          if (!current() || verification.signal.aborted || revision !== this.noticeRevision || page.generation !== generation
-            || sessionId !== this.state.savedSession?.sessionId) return;
-          if (page.messages.some((message) => message.messageId === event.messageId)) {
-            if (sessionId) this.retainMessageNotice(contactId, sessionId, event.messageId);
-            this.noticedMessage = sessionId ? { generation, contactId, scopeRevision, sessionId,
-              messageId: event.messageId, revision } : undefined;
-            this.publish({ messageNotice: { ...this.state.messageNotice, phase: 'connected', changed: true } });
-            this.queueAutomaticExploration();
-          }
-        }).catch(() => {
-          if (current() && !verification.signal.aborted) {
-            if (this.automaticExploration) this.stopAutomaticExploration(true);
-            this.publish({ messageNotice: { ...this.state.messageNotice, phase: 'interrupted' } });
-          }
-        }).finally(() => { if (this.noticeVerification === verification) this.noticeVerification = undefined; });
-      },
-    }, pending.signal);
+    await this.generateInput({ ...selection, newRequest: true }, input, receipt, expected,
+      undefined, { notice, messageId: adoptNewMessageId });
   }
   private clearAutomaticExplorationTimer(): void {
     if (this.automaticExplorationTimer) clearTimeout(this.automaticExplorationTimer);
@@ -2259,10 +2180,6 @@ export class ReplySession {
   }
   private publish(update: Partial<ReplySessionState>, savedOrigin: 'authoritative' | 'local' = 'local'): void {
     const state = { ...this.state, ...update, revision: this.state.revision + 1 };
-    if (update.savedSession && update.savedSession.sessionId !== this.state.savedSession?.sessionId) {
-      this.noticedMessage = undefined; this.noticeVerification?.abort(); this.noticeVerification = undefined;
-      state.messageNotice = { ...state.messageNotice, changed: false };
-    }
     if (this.state.inputBudgetNotice && !state.inputBudgetNotice
       && (state.errorCode === 'input_budget_exceeded' || state.errorCode === 'input_budget_unavailable')) {
       this.lastAttempt = undefined;
@@ -2277,6 +2194,7 @@ export class ReplySession {
     this.sessionProjection.registerDisplay({ connectionGeneration: this.backend.getConnectionGeneration(), contactId: state.contactId,
       scopeRevision: state.scopeRevision, sessionId: state.savedSession?.sessionId ?? null }, update.savedSession, savedOrigin);
     this.state = state;
+    state.messageNotice = this.messageNotices.setScope(this.projectionScope());
     for (const listener of this.listeners) listener(this.getState());
   }
 }

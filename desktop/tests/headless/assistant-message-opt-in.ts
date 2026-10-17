@@ -7,7 +7,7 @@ type Saved = { current_input_version_id: string; turns: Array<{ state: string; i
 
 async function adoptWhileGenerating(pages: EventPages, scene: '回应消息' | '主动聊聊') {
   const { manager, helper, fixture } = pages;
-  expect(fixture.data.migration_count).toBe(55); expect(fixture.data.migration_repeat).toBe(0);
+  expect(fixture.data.migration_count).toBe(72); expect(fixture.data.migration_repeat).toBe(0);
   await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
   await confirmHelperContact(helper, fixture.data.contact_ids[0]);
   await helper.getByRole('button', { name: scene, exact: true }).click();
@@ -33,9 +33,9 @@ async function adoptWhileGenerating(pages: EventPages, scene: '回应消息' | '
     expect(before.turns).toHaveLength(1); expect(before.turns[0].state).toBe('running');
     const arrived = await fixture.command('append_message');
     await expect(helper.getByRole('status').filter({ hasText: '当前联系人有新消息' })).toBeVisible();
-    await expect(helper.getByRole('button', { name: '结合新消息继续', exact: true })).toBeEnabled();
+    await expect(helper.getByRole('button', { name: '结合新消息重新生成', exact: true })).toBeEnabled();
     expect((await fixture.command('observations')).model_calls).toBe(0);
-    await helper.getByRole('button', { name: '结合新消息继续', exact: true }).click();
+    await helper.getByRole('button', { name: '结合新消息重新生成', exact: true }).click();
     await expect.poll(async () => {
       const actual = await read();
       return actual.turns.length === 2 && actual.current_input_version_id !== before.current_input_version_id;
