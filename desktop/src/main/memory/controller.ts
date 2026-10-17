@@ -37,7 +37,7 @@ export class MemoryReadingController {
   private sourceDeletionRevision = 0;
   private protectedReads: ProtectedReads | undefined;
   private readonly listeners = new Set<(state: MemoryReadingState) => void>();
-  private readonly deletionListeners = new Set<(phase: 'started' | 'settled') => void>();
+  private readonly deletionListeners = new Set<(phase: 'started' | 'settled', origin?: 'owner-facts') => void>();
 
   constructor(private readonly backend: BackendHost, private readonly contacts: ContactSession) {}
   getState(): MemoryReadingState { return structuredClone(this.state); }
@@ -45,7 +45,7 @@ export class MemoryReadingController {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
   }
-  onRecordDeletion(listener: (phase: 'started' | 'settled') => void): () => void {
+  onRecordDeletion(listener: (phase: 'started' | 'settled', origin?: 'owner-facts') => void): () => void {
     this.deletionListeners.add(listener);
     return () => this.deletionListeners.delete(listener);
   }
@@ -53,6 +53,7 @@ export class MemoryReadingController {
   onOwnerDependenciesChanged(listener: (phase: 'started' | 'settled') => void) { this.ownerDependencyListeners.add(listener); return () => { this.ownerDependencyListeners.delete(listener); }; }
   private ownerFactsWriteDepth = 0;
   ownerFactsChanged(phase: 'started' | 'settled'): void {
+    for (const listener of this.deletionListeners) listener(phase, 'owner-facts');
     this.ownerFactsWriteDepth = phase === 'started' ? this.ownerFactsWriteDepth + 1 : Math.max(0, this.ownerFactsWriteDepth - 1);
     // 另一本人入口写入时也撤下旧页面副本；取消令牌阻止迟到读取复活正文。
     this.operations.get('owner')?.abort.abort();

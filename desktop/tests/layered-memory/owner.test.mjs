@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { fixture, payload, profilePayload, ids } from './support.mjs';
+import { fixture, payload, profilePayload, ids, TraceController } from './support.mjs';
 const owner = () => payload({ scope_kind: 'owner', contact_id: null, scenario_enabled: false, profile_enabled: false });
 test('本人主题资料不依赖联系人，切换联系人保留独立状态和 owner 路由', async () => {
   const calls = [];
@@ -142,5 +142,45 @@ for (const action of ['delete', 'correct', 'uncertain']) test(`新本人${action
   assert.notEqual((await f.bridge.getState()).ownerOverview.phase, 'loading');
   await f.bridge.refreshOwnerOverview(f.selection());
   assert.equal((await f.bridge.getState()).ownerOverview.phase, 'ready');
+  f.disconnect();
+});
+
+for (const action of ['delete', 'correct', 'uncertain']) test(`本人${action}协调旧追踪清理及读栅栏`, async () => {
+  const memory = { memory_id: ids.memory, level: 'owner', text: '本人合成事实', category: 'common_fact', topic: 'other',
+    source_ids: [ids.memory], status: 'active', adoption_method: 'manual', confidence: 1, risk_flags: [], revision: 1,
+    supersedes_memory_id: null, source_candidate_id: null, valid_at: null, invalid_at: null,
+    timing: { recorded_at: null, source_started_at: null, source_ended_at: null, source_time_complete: false } };
+  let trace, finish, delayed = false;
+  const phases = [];
+  const request = { resource: 'memory-traces', batchId: ids.work };
+  const f = await fixture(async r => {
+    if (r.method === 'POST') {
+      assert.equal(trace.getState().detail, null);
+      await assert.rejects(trace.show({ ...f.selection(), ...request }));
+      if (action === 'uncertain') throw new Error('合成保存未确认');
+      return { generation: 1, data: {} };
+    }
+    return { generation: 1, data: r.path === '/api/memories/owner' ? { memories: [memory] } : owner() };
+  });
+  const result = { generation: 1, data: { trace_id: ids.work, contact_id: ids.contact,
+    status: 'succeeded', events: [{ stage: 'model_response', payload: '合成应删追踪正文' }] } };
+  trace = new TraceController({ getConnectionGeneration: () => 1,
+    requestJson: async () => delayed ? new Promise(resolve => { finish = resolve; }) : result }, f.contacts);
+  f.controller.onRecordDeletion(phase => { phases.push(phase); trace.recordDeletionChanged(phase); });
+  await trace.show({ ...f.selection(), ...request });
+  assert.ok(trace.getState().detail);
+  delayed = true;
+  const late = trace.show({ ...f.selection(), ...request });
+  delayed = false;
+  await f.bridge.readOwnerMemories();
+  if (action === 'delete') await f.bridge.deleteOwnerMemory({ memoryId: ids.memory, revision: 1 });
+  else if (action === 'correct') await f.bridge.correctOwnerMemory({ memoryId: ids.memory, revision: 1, text: '修正', category: 'common_fact' });
+  else await assert.rejects(f.bridge.addOwnerMemory({ text: '新增', category: 'common_fact' }));
+  finish(result); await late;
+  assert.deepEqual(phases, ['started', 'settled']);
+  assert.equal(trace.getState().detail, null);
+  delayed = false;
+  await trace.show({ ...f.selection(), ...request });
+  assert.equal(trace.getState().phase, 'ready');
   f.disconnect();
 });

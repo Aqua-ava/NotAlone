@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import { build } from 'esbuild';
 
 const compiled = await build({ stdin: { contents: `
+  export { TraceController } from './src/main/traces/controller';
   export { ContactSession } from './src/main/contacts/session';
   export { installMemoryBridge } from './src/main/memory/bridge';
   export { createMemoryBridge } from './src/preload/memory';
@@ -12,6 +13,7 @@ const compiledModule = { exports: {} };
 new Function('require', 'module', 'exports', compiled.outputFiles[0].text)(createRequire(import.meta.url), compiledModule, compiledModule.exports);
 const ports = compiledModule.exports;
 export const BackendRequestFailure = ports.BackendRequestFailure;
+export const TraceController = ports.TraceController;
 export const ids = { work: '66666666-6666-4666-8666-666666666666', contact: '11111111-1111-4111-8111-111111111111', other: '99999999-9999-4999-8999-999999999999',
   scenario: '22222222-2222-4222-8222-222222222222', version: '33333333-3333-4333-8333-333333333333', memory: '44444444-4444-4444-8444-444444444444', profile: '55555555-5555-4555-8555-555555555555' };
 export function payload(overrides = {}) {
