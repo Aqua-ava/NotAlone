@@ -212,6 +212,8 @@ class OwnerLayeredCorrectionReplyCopiesHttpTest(OverviewReplyHttpFixture, unitte
                 self.assertGreaterEqual(current["protected_count"], 1)
                 self.assertNotIn(self.target["text"], str(current["scenarios"] if kind == "scenario" else current["profile"]))
             self.assertNotIn(self.ready["profile"]["version_id"], str(current["profile"]))
+        current = self.settled_organization()
+        self.assertIn(self.independent["memory_id"], str(current["scenarios"]))
         return current
 
     def settled_organization(self):
@@ -313,6 +315,7 @@ class OwnerLayeredCorrectionReplyCopiesHttpTest(OverviewReplyHttpFixture, unitte
             current = self.settled_organization()
         self.assertEqual(current["pending_fact_count"], 0)
         self.assertIn(corrected["memory_id"], str(current["scenarios"]))
+        self.assertIn(self.independent["memory_id"], str(current["scenarios"]))
         self.assertNotIn(self.target["memory_id"], str(current["scenarios"]))
         self.assertNotIn(self.target["memory_id"], str(current["profile"]))
         self.assertNotIn(self.scenario["version_id"], str(current["scenarios"]))
