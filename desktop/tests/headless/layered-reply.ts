@@ -22,7 +22,7 @@ export async function layeredReply(browser: Browser, origin: string) {
       const ownerBackground = evidence.getByRole('region', { name: '本次本人系统整理资料', exact: true });
       const ownerReads = evidence.getByRole('region', { name: '本次本人主题正文读取', exact: true });
       const hasOwner = Boolean(prepared.owner_profile_version_id);
-      async function generate(contactId: string, context: boolean, text: string, readScenario = false, expectedTimeoutMs = 5_000) {
+      async function generate(contactId: string, context: boolean, text: string, readScenario = false) {
         await helper.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption(contactId);
         await confirmHelperContact(helper, contactId);
         await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('聊聊共同参加的课程。');
@@ -30,9 +30,37 @@ export async function layeredReply(browser: Browser, origin: string) {
         if (readScenario) await fixture.command('plan_scenario_reads', { text });
         else await fixture.command('plan', { plan: { text, basis: '按本次草稿，不扩大未知事实。' } });
         // 后续同输入轮显式重新生成，避免复用上一轮的幂等请求。
+        const previousReplyId = await helper.evaluate(() => window.notalone.replies.getState().then(state => state.result?.replyRequestId ?? null));
         const regenerate = helper.getByRole('button', { name: '重新生成', exact: true });
         await (await regenerate.count() ? regenerate : helper.getByRole('button', { name: '生成候选', exact: true })).click();
-        try { await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveValue(text, { timeout: expectedTimeoutMs }); }
+        try {
+          // 按生产执行请求的25秒合同等待本轮完成，旧候选不能满足新生成判据。
+          await expect.poll(async () => {
+            const state = await helper.evaluate(() => window.notalone.replies.getState());
+            return state.phase === 'ready' && Boolean(state.result?.replyRequestId)
+              && state.result?.replyRequestId !== previousReplyId;
+          }, { timeout: 25_000 }).toBe(true);
+          const current = (await helper.evaluate(() => window.notalone.replies.getState())).result;
+          if (!current?.assistantSessionId || !current.inputVersionId) throw new Error('本轮生成缺少已保存身份。');
+          const saved = await host.backend.requestJson({ method: 'GET',
+            path: `/api/contacts/${contactId}/assistant-sessions/${current.assistantSessionId}` });
+          if (!saved.data || typeof saved.data !== 'object' || Array.isArray(saved.data)
+            || !('turns' in saved.data) || !Array.isArray(saved.data.turns)) throw new Error('本轮保存讨论格式无效。');
+          const last = saved.data.turns.at(-1);
+          expect(last).toMatchObject({ state: 'completed', input_version_id: current.inputVersionId,
+            request_key: expect.any(String), reply: { reply_request_id: current.replyRequestId } });
+          if (!last || typeof last !== 'object' || !last.reply || typeof last.reply !== 'object'
+            || !Array.isArray(last.reply.candidates)) throw new Error('本轮保存候选格式无效。');
+          const candidate = last.reply.candidates[0];
+          expect(candidate).toMatchObject({ candidate_id: current.candidates[0].original.candidateId, text });
+          const previous = saved.data.turns.find(turn => turn && typeof turn === 'object'
+            && turn.reply?.reply_request_id === previousReplyId);
+          if (previous) expect(last.request_key).not.toBe(previous.request_key);
+          const editor = helper.getByRole('textbox', { name: '候选1编辑文本', exact: true });
+          await expect(editor).toHaveValue(text);
+          expect(current.candidates[0].editedText).toBe(candidate.text);
+          expect(await editor.inputValue()).toBe(candidate.text);
+        }
         catch (error) { process.stderr.write((await helper.locator('body').innerText()).slice(-8000)); throw error; }
         await helper.getByRole('button', { name: '展开候选1依据', exact: true }).click();
         await expect.poll(() => helper.evaluate(() => window.notalone.replies.getEvidenceState().then(state => state.phase))).toBe('ready');
@@ -98,8 +126,7 @@ export async function layeredReply(browser: Browser, origin: string) {
       await expect(evidence.getByText('本次未授权加载系统整理资料。', { exact: true })).toBeVisible();
       await expect(contactBackground.getByText(String(prepared.profile_text), { exact: true })).toHaveCount(0);
       expect((await fixture.command('runtime_proof')).external_model_calls).toBe(0);
-      // 累积历史后的双侧四次工具与最终候选，实际HTTP重放完成超过五秒。
-      await generate(String(prepared.contact_id), true, '删除来源前保留本次合法课程依据。', true, 15_000);
+      await generate(String(prepared.contact_id), true, '删除来源前保留本次合法课程依据。', true);
       await expect(contactReads.getByText(`第 1 段：${prepared.scenario_text}`, { exact: true })).toBeVisible();
       await manager.getByRole('button', { name: '记忆', exact: true }).click();
       await selectMemoryCategory(manager, '来源与过程');
