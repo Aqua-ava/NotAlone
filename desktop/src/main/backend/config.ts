@@ -10,6 +10,13 @@ import { managedLayout } from '../startup/managed-manifest';
 
 const startupPathKeys = ['pythonExecutable', 'projectDirectory', 'envFilePath', 'backendInfoPath', 'wechatCliPath', 'syncProbePath'] as const;
 const startupPathKeySet = new Set<string>(startupPathKeys);
+let developmentProject: string | undefined;
+
+// 仅由已核验为源码开发模式的 Main 在装配后台之前设置，不修改磁盘配置。
+export function configureDevelopmentProject(projectDirectory: string): void {
+  if (!validStartupPath(projectDirectory)) throw new Error('开发源码目录无效');
+  developmentProject = projectDirectory;
+}
 
 function validStartupPath(value: unknown, allowEmpty = false): value is string {
   return typeof value === 'string' && value.length <= 1024 && !/[\0\r\n]/.test(value)
@@ -68,13 +75,15 @@ export async function loadBackendConfiguration(userData: string, resourcesDirect
   }
   if (Boolean(value.pythonExecutable) !== Boolean(value.projectDirectory)) throw new BackendFailure('backend_connection_failed');
   const infoPath = value.backendInfoPath as string | undefined || process.env.NOTALONE_BACKEND_INFO || path.join(os.homedir(), '.notalone/backend.info');
-  const envFilePath = value.envFilePath as string | undefined || process.env.NOTALONE_ENV_FILE;
+  const configuredProject = value.projectDirectory as string | undefined;
+  const envFilePath = value.envFilePath as string | undefined || process.env.NOTALONE_ENV_FILE
+    || (developmentProject && configuredProject ? path.join(configuredProject, '.env') : undefined);
   if (!path.isAbsolute(infoPath) || (envFilePath && !path.isAbsolute(envFilePath))) throw new BackendFailure('backend_connection_failed');
   return {
     source: 'external',
     infoPath, envFilePath,
     pythonExecutable: value.pythonExecutable as string | undefined,
-    projectDirectory: value.projectDirectory as string | undefined,
+    projectDirectory: value.pythonExecutable && developmentProject ? developmentProject : configuredProject,
     wechatCliPath: value.wechatCliPath as string | undefined || process.env.NOTALONE_WECHAT_CLI,
     syncProbePath: await resolveSyncProbePath(resourcesDirectory, value.syncProbePath as string | undefined || process.env.NOTALONE_SYNC_PROBE),
   };

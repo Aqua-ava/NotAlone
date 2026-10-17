@@ -18,6 +18,7 @@
 - 最小 CI 的后端白名单测试例外：GitHub 托管 runner 使用独立 Python 3.12，以 `-S` 仅运行标准库和合成夹具测试；具体列表见 `.github/workflows/ci.yml`。本机继续使用上述 Conda 环境；CI 结果不代表完整依赖、数据库、模型或桌面集成已验证。
 - Python 工程位于 `backend/`，包含 `src/notalone/`、`tests/`、`database/` 与 `pyproject.toml`；从仓库根目录安装用 `python -m pip install -e ./backend`。根 `.env` 保持原位置，运行入口见 [后端说明](../../backend/README.md)。
 - `desktop/` 是 Electron + React/TypeScript 桌面端；当前已接入受控后端、联系人、历史导入预览、会话读取授权、草稿改写与只读关系资料。完整业务闭环与最新版 App 验收尚未完成；验证按下方“桌面验收”执行，不沿用历史 App 的业务或权限验收。
+- **日常开发默认使用 `cd desktop && npm run dev`**，并复用正在运行的开发实例。React/CSS 保存后热更新；main、preload、共享 TypeScript 与后端 Python 变化后，经认证退出串行重启 App。一般代码改动完成相关验证即可，不反复构建 `.app`；交付、签名、权限、原生探针或包内运行时验收时才打包。详细操作见[桌面开发模式](../../desktop/README.md#日常开发热更新)。
 - `native/macos/` 是 ScreenCaptureKit 与 Vision 的原生 Swift 探针，只验证前台同步能力，不承载领域、存储或回复生成逻辑。
 - 修改 macOS App/探针的权限、`Info.plist`、签名、打包或用户可见启动错误前，先读取并更新 [macOS App 权限与启动错误记录](../macos-app-permissions-and-errors.md)。
 

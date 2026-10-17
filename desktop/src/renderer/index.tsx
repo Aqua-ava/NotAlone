@@ -27,7 +27,7 @@ import { MemoryUpgradePage } from './MemoryUpgradePage';
 const helper = window.location.hash === '#helper';
 document.title = helper ? 'NotAlone · 输入小窗' : 'NotAlone · 管理后台';
 
-function App() {
+export function App() {
   const backend = useBackendState();
   const startup = useStartupState();
   const permission = useScreenPermission();
@@ -124,4 +124,8 @@ function App() {
   </div>;
 }
 
-createRoot(document.getElementById('root')!).render(<App />);
+if (!import.meta.hot?.data.root) {
+  const root = createRoot(document.getElementById('root')!);
+  if (import.meta.hot) import.meta.hot.data.root = root;
+  root.render(<App />);
+}

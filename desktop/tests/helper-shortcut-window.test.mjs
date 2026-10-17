@@ -90,6 +90,18 @@ test('注册快捷键只显隐同一小窗，观察不返回也不阻塞或聚�
   });
 });
 
+test('开发服务的 HTTP 页面及子 frame 不能继承本地窗口 IPC 权限', async () => {
+  await fixture(async f => {
+    await f.controller.open('manager');
+    const sender = f.manager().webContents;
+    assert.equal(f.controller.validateCaller({ sender, senderFrame: sender.mainFrame }, []), f.manager());
+    sender.mainFrame.url = 'http://127.0.0.1:43123/index.html#manager';
+    assert.throws(() => f.controller.validateCaller({ sender, senderFrame: sender.mainFrame }, []));
+    sender.mainFrame.url = 'notalone://app/index.html#manager';
+    assert.throws(() => f.controller.validateCaller({ sender, senderFrame: { url: sender.mainFrame.url } }, []));
+  });
+});
+
 test('macOS整体隐藏和最小化只恢复小窗，置顶关闭且第二次快捷键可隐藏', { skip: process.platform !== 'darwin' }, async () => {
   await fixture(async f => {
     await f.controller.open('manager'); await f.press();

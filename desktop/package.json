@@ -5,6 +5,7 @@
   "description": "NotAlone 本机桌面端",
   "main": "dist/main/index.cjs",
   "scripts": {
+    "dev": "node scripts/dev.mjs",
     "build": "node scripts/build.mjs",
     "typecheck": "tsc --noEmit",
     "start": "npm run build && electron .",
@@ -31,6 +32,7 @@
     "@types/node": "26.6.4",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.2",
     "electron": "44.7.0",
     "esbuild": "0.28.2",
     "typescript": "7.0.2",

@@ -12,6 +12,7 @@ import { resolveSyncProbePath } from './backend/bundled-helpers';
 import path from 'node:path';
 import { electronPageCommands } from './electron-page-commands';
 import { installResources } from './resources';
+import { readDevelopmentServer } from './development';
 import { AppWindows } from './windows';
 import { BackendHost } from './backend/host';
 import { installBackendBridge } from './backend/bridge';
@@ -36,7 +37,7 @@ import { installSetupBridge } from './setup/bridge';
 import { StartupDiagnostics } from './startup/diagnostics';
 import { installStartupBridge } from './startup/bridge';
 import { LocalDataUpdates } from './startup/data-update';
-import { loadBackendConfiguration } from './backend/config';
+import { configureDevelopmentProject, loadBackendConfiguration } from './backend/config';
 import { ImportController } from './imports/controller';
 import { installImportBridge } from './imports/bridge';
 import { installElectronImportFileSelection } from './imports/electron-file-selection';
@@ -47,6 +48,17 @@ app.setPath('userData', selectedDataPath && path.isAbsolute(selectedDataPath)
   ? selectedDataPath : path.join(app.getPath('appData'), 'NotAloneDesktop'));
 // 后来实例只唤回原窗口，不接受它的 argv、环境或工作目录作为运行配置。
 if (!app.requestSingleInstanceLock()) app.exit(0);
+const development = readDevelopmentServer(app.isPackaged, process.argv, process.env.NOTALONE_DEV_SERVER);
+if (development) {
+  configureDevelopmentProject(development.projectDirectory);
+  // 开发重启与父进程退场仍走正式的认证停读及生成结算流程。
+  process.on('message', message => {
+    if (message && typeof message === 'object' && 'type' in message && message.type === 'notalone-dev-quit') app.quit();
+  });
+  process.on('SIGTERM', () => app.quit());
+  process.on('SIGINT', () => app.quit());
+  process.on('disconnect', () => app.quit());
+}
 let restoreManager: (() => void) | undefined;
 app.on('second-instance', () => restoreManager?.());
 protocol.registerSchemesAsPrivileged([
@@ -58,7 +70,7 @@ app.on('window-all-closed', () => {});
 void app.whenReady().then(async () => {
   // 本次界面会话只在内存中，不跨重启保存草稿或网页存储。
   const appSession = session.fromPartition('notalone-app');
-  installResources(appSession);
+  installResources(appSession, development);
   const windows = new AppWindows(appSession);
   const resourcesDirectory = app.isPackaged ? process.resourcesPath : undefined;
   const diagnostics = new StartupDiagnostics(app.getPath('userData'), resourcesDirectory);
@@ -192,6 +204,7 @@ void app.whenReady().then(async () => {
     ] },
   ]));
   void windows.open('manager').then(async () => {
+    if (development) process.send?.({ type: 'notalone-dev-ready' });
     const config = await loadBackendConfiguration(app.getPath('userData'), resourcesDirectory).catch(() => undefined);
     if (config?.source === 'external') await screenPermission.startup();
   }).catch(() => {

@@ -71,7 +71,7 @@ conda activate NotAlone
 cd desktop
 npm ci
 npx install-electron
-npm start
+npm run dev
 ```
 
 启动后还需配置本机后端路径、初始化本人并配置模型；完整步骤如下。源码启动和默认前端打包不等于已取得包含完整运行时的受管版 App。
@@ -108,10 +108,10 @@ conda activate NotAlone
 cd desktop
 npm ci
 npx install-electron  # 首次显式准备锁定版本的 Electron 运行时
-npm start
+npm run dev
 ```
 
-`npm start` 先构建再启动 Electron。仅构建可在 `desktop/` 执行 `npm run build`，本机打包使用 `npm run package`。默认包只含前端；可用 `--with-probe` 附带 NotAlone 自研探针，微信 CLI / WCDB 始终由用户在本机另行准备，完整步骤见 [本机运行与构建](desktop/README.md#本机运行与构建)。
+日常使用 `npm run dev`：React/CSS 保存后热更新，main、preload、共享代码和 Python 变化后安全重启。`npm start` 保留一次性编译启动；仅构建用 `npm run build`，交付和签名验收再用 `npm run package`，详见[日常开发热更新](desktop/README.md#日常开发热更新)。默认包只含前端；可用 `--with-probe` 附带 NotAlone 自研探针，微信 CLI / WCDB 始终由用户在本机另行准备。
 
 ### 4. 首次连接与使用
 
