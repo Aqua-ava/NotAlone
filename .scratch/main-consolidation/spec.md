@@ -1,7 +1,7 @@
 # 本地 main 集成收敛
 
 Triage: ready-for-agent
-State: claimed
+State: resolved
 
 ## Problem Statement
 
@@ -38,3 +38,8 @@ State: claimed
 ## Out of Scope
 
 远端推送、PR、发布、公证、修改系统权限、真实模型评测、真实业务库迁移、改写私人事实和自动发送。
+
+
+## Answer
+
+已完成独立交付的本地主线整合与迁移统一，修复组合边界并通过独立审查、525 项隔离集成回归及真实 App 首启/联系人/输入/重启验收。详细来源、限制和验证见 `progress.md`、`branch-audit.md` 与 `migration-map.json`。本地 main 快进与自有工作树归档作为本次收尾连续执行；原未提交资料及旧恢复引用保留，无远端发布或业务资料迁移。
