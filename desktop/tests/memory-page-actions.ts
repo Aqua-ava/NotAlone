@@ -1,6 +1,6 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 
-export type MemoryCategory = '联系人记忆' | '本人记忆' | '待确认候选' | '联系人概览' | '本人概览' | '来源与过程';
+export type MemoryCategory = '联系人记忆' | '本人记忆' | '待确认候选' | '主题资料' | '联系人概览' | '本人概览' | '来源与过程';
 
 // 经公开分类控件操作，避免测试依赖多个面板同时挂载。
 export async function selectMemoryCategory(page: Page, category: MemoryCategory) {
