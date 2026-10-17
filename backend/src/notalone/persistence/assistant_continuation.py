@@ -113,12 +113,20 @@ def restore_prepared_reply_request(
     metadata = payload.get("continuation")
     if not isinstance(metadata, dict):
         return request
+    # 普通继续提交当前版本；中断恢复提交原版本，二者均来自已保存的会话身份。
+    try:
+        submission = metadata["submission"]
+        version_field = ("expected_input_version_id" if "expected_input_version_id" in submission
+                         else "original_input_version_id")
+        expected_version = UUID(submission[version_field])
+    except (KeyError, TypeError, ValueError, AttributeError):
+        raise AssistantContinuationInvalid("持续要求输入版本记录无效。") from None
     return AssistantContinuationReplyRequest(
         idempotency_key=key, content=request.content,
         continued_from_candidate_id=request.continued_from_candidate_id,
         skill_version_id=request.skill_version_id, skill_disabled=request.skill_disabled,
         scene=request.scene, suggestion=request.suggestion,
-        expected_input_version_id=UUID(metadata["submission"]["expected_input_version_id"]),
+        expected_input_version_id=expected_version,
         continuation=metadata,
         reference=_reference_from_metadata(connection, scope, session_id, metadata),
     )
