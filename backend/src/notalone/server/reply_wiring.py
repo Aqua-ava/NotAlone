@@ -63,6 +63,7 @@ def build_reply_service(
     input_budget_profile: InputBudgetProfile | None = None,
     input_token_counter: InputTokenCounter | None = None,
     on_input_budget: Callable[[InputBudgetDecision], None] | None = None,
+    layered_memory=None, layered_reply_budget=None,
 ) -> ReplyService | None:
     """有 active 绑定且模型凭据可用时装配回复服务；否则返回 None。
 
@@ -97,6 +98,7 @@ def build_reply_service(
             scope.owner_id,
         ),
         overview=PostgresRelationshipOverviewStore(database_url),
+        layered_memory=layered_memory, layered_budget=layered_reply_budget,
     )
     evidence = ExplorationEvidence(retrieval)
     from notalone.persistence.assistant_prepared_context import PreparedAssistantContext
@@ -104,7 +106,7 @@ def build_reply_service(
         ExploredReplyContext(ExpressionPreferenceContext(context, PostgresExpressionPreferenceStore(database_url)),
                              database_url=database_url, evidence=evidence),
         database_url=database_url,
-    ), database_url)
+    ), database_url, layered_memory=layered_memory, layered_budget=layered_reply_budget)
     from langchain_core.globals import get_llm_cache
     from langchain_deepseek import ChatDeepSeek
     from notalone.reply.adapters.model_call_ledger import ModelCallLedger
@@ -132,7 +134,7 @@ def build_reply_service(
             validate=validate, record_call=lambda identifier: None)
 
     generator = ReplyGenerator(
-        store=PostgresReplyStore(database_url),
+        store=PostgresReplyStore(database_url, layered_memory=layered_memory, layered_budget=layered_reply_budget),
         runtime=LangChainReplyRuntime(
             model=model,
             skill_port=PostgresSkillPort(database_url),

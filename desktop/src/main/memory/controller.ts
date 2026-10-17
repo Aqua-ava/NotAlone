@@ -61,7 +61,9 @@ export class MemoryReadingController {
     this.clearOverview();
     this.clearOwnerOverview();
     this.clearLayered();
-    this.publish({ owner: { phase: 'idle', items: [] } });
+    this.publish({ owner: { phase: 'idle', items: [] },
+      ...(!this.ownerFactsWriteDepth ? { overview: { phase: 'idle' as const, value: null },
+        ownerOverview: { phase: 'idle' as const, value: null }, layeredMemory: { phase: 'idle' as const, value: null } } : {}) });
   }
   sourceDeletionChanged(phase: 'started' | 'settled'): void {
     for (const listener of this.ownerDependencyListeners) listener(phase);

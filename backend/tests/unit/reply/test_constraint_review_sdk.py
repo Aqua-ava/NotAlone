@@ -663,3 +663,38 @@ class RecordingLedger:
     def record(self, entry):
         self.entries.append(entry)
         return entry
+
+
+class LayeredReviewSourceContractTest(unittest.TestCase):
+    def test_only_actual_profile_text_can_support_fact_or_explanation(self):
+        from notalone.reply.adapters.constraint_review_contract import accepted_candidate_numbers, CHECK_CATEGORIES
+        payload = {"draft_text": "你好", "candidates": [{"text": "曾共同学习", "basis": "曾共同学习",
+            "messages": [], "risk_notes": []}], "layered_context": {
+            "profile_entries": [{"text": "过去共同学习", "references": [{"text": "隐藏引用"}]}],
+            "directory": [{"title": "共同学习", "hint": "共同学习", "paragraphs": [{"text": "未读正文"}]}],
+            "dependency_ids": ["隐藏依赖"]}}
+        for category, path, quote, valid in (
+            ("facts", "/layered_context/profile_entries/0/text", "共同学习", True),
+            ("explanation", "/layered_context/profile_entries/0/text", "共同学习", True),
+            ("facts", "/layered_context/profile_entries/1/text", "共同学习", False),
+            ("facts", "/layered_context/profile_entries/0/references/0/text", "隐藏引用", False),
+            ("facts", "/layered_context/directory/0/title", "共同学习", False),
+            ("facts", "/layered_context/directory/0/hint", "共同学习", False),
+            ("facts", "/layered_context/directory/0/paragraphs/0/text", "未读正文", False),
+            ("facts", "/layered_context/dependency_ids/0", "隐藏依赖", False),
+            ("intent", "/layered_context/profile_entries/0/text", "共同学习", False),
+            ("instruction", "/layered_context/profile_entries/0/text", "共同学习", False),
+            ("commitments", "/layered_context/profile_entries/0/text", "共同学习", False),
+        ):
+            with self.subTest(category=category, path=path):
+                report = synthetic_review(payload)
+                check = report["reviews"]["candidate_1"]["checks"][category]
+                check["result"] = {"status": "violation", "violation": {
+                    "category": CHECK_CATEGORIES[category][0],
+                    "candidate_path": "/basis" if category == "explanation" else "/text",
+                    "candidate_quote": "共同学习", "source_path": path, "source_quote": quote}}
+                if valid:
+                    self.assertEqual(accepted_candidate_numbers(report, payload), frozenset())
+                else:
+                    with self.assertRaises(ReplyInvariantError):
+                        accepted_candidate_numbers(report, payload)

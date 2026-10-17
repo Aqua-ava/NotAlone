@@ -402,3 +402,59 @@ test('同范围的新读取与显式重试接管旧请求，收起后不保留�
     assert.equal(closed.retrieval, undefined);
   }
 });
+
+test('实际分层背景和目录随候选快照展示，隐藏依赖不流入界面且收起后清空', async () => {
+  const versionId = randomUUID(), scenarioId = randomUUID();
+  const f = await generatedFixture((f) => {
+    f.records.evidence.layered_status = 'loaded';
+    f.records.evidence.layered_context = { schema_version: 1, scope_kind: 'contact', settings_generation: 2,
+      organization_generation: 3, profile_version_id: versionId,
+      profile_entries: [{ text: '合成已保存长期背景', temporal_status: 'historical', uncertainty: '仅反映过去',
+        references: [{ memory_id: f.memoryId, revision: 1, provenance_kind: 'source_supported', timing: f.records.evidence.evidence[0].timing }] }],
+      directory: [{ scenario_id: scenarioId, version_id: versionId, title: '合成工作主题', hint: '合成目录提示', paragraph_count: 2 }],
+      read_policy: 'synthetic-contact-layered-v1', budget: { profile_entries: 4, directory_entries: 6, characters: 1800 },
+      dependencies: [{ text: '隐藏参与依赖不能展示' }] };
+  });
+  await f.bridge.loadEvidence(f.selection);
+  const state = await f.bridge.getEvidenceState();
+  assert.equal(state.layeredContext?.profileVersionId, versionId);
+  assert.equal(state.layeredStatus, 'loaded');
+  assert.equal(state.layeredContext.dependencies, undefined);
+  const html = await renderEvidence(f);
+  for (const phrase of ['系统整理', '合成已保存长期背景', '合成工作主题', '合成目录提示', '未读取主题正文', '仅反映过去', versionId]) assert(html.includes(phrase), phrase);
+  assert(!html.includes('隐藏参与依赖不能展示'));
+  assert(!f.calls.some((call) => call.path.includes('/layered-context')));
+  await f.bridge.closeEvidence(f.selection);
+  assert.equal((await f.bridge.getEvidenceState()).layeredContext, undefined);
+});
+
+test('分层资料回退状态保留原依据，旧快照不推断最新背景', async () => {
+  const cases = [[undefined, '本次快照未记录分层资料'], ['not_allowed', '未授权'], ['unavailable', '不可用'],
+    ['budget_omitted', '预算限制'], ['quality_closed', '未获质量资格']];
+  for (const [status, phrase] of cases) {
+    const f = await generatedFixture((f) => {
+      if (status) { f.records.evidence.layered_status = status; f.records.evidence.layered_context = null; }
+    });
+    await f.bridge.loadEvidence(f.selection);
+    const state = await f.bridge.getEvidenceState();
+    assert.equal(state.phase, 'ready');
+    assert.equal(state.items.length, 1);
+    const html = await renderEvidence(f);
+    assert(html.includes(phrase), phrase);
+    assert(!html.includes('本次实际加入的联系人背景'));
+  }
+});
+
+test('分层快照状态与正文矛盾时不展示正文，不影响候选编辑', async () => {
+  const f = await generatedFixture((f) => {
+    f.records.evidence.layered_status = 'quality_closed';
+    f.records.evidence.layered_context = { profile_entries: [{ text: '不应泄漏的合成背景' }] };
+  });
+  await f.bridge.editCandidate({ ...f.selection, text: '合成用户编辑保留。' });
+  await f.bridge.loadEvidence(f.selection);
+  const evidence = await f.bridge.getEvidenceState();
+  assert.equal(evidence.phase, 'failed');
+  assert.equal(evidence.layeredContext, undefined);
+  assert(!(await renderEvidence(f)).includes('不应泄漏的合成背景'));
+  assert.equal((await f.bridge.getState()).result.candidates[0].editedText, '合成用户编辑保留。');
+});

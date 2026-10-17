@@ -121,11 +121,14 @@ for (const action of ['delete', 'correct', 'uncertain']) test(`新本人${action
   let deleted = false, defer = false, finish;
   const f = await fixture(async request => {
     if (request.method === 'POST') { deleted = true; if (action === 'uncertain') throw new Error('合成保存结果未确认'); return { generation: 1, data: {} }; }
+    if (request.path === '/api/memories/owner/overview') return { generation: 1, data: { overview: { version: 1, scope_kind: 'owner', contact_id: null, projection_revision: 'a'.repeat(64), memory_revision: 1, built_at: '2026-10-18T00:00:00Z', entries: [] } } };
     if (request.path === '/api/memories/owner') { if (defer) { defer = false; return new Promise(resolve => { finish = resolve; }); } return { generation: 1, data: { memories: deleted ? [] : [memory] } }; }
     return { generation: 1, data: owner() };
   });
   await f.bridge.refresh({ ...f.selection(), section: 'owner' });
   assert.equal((await f.bridge.getState()).owner.items.length, 1);
+  await f.bridge.refreshOwnerOverview(f.selection());
+  assert.equal((await f.bridge.getState()).ownerOverview.phase, 'ready');
   await f.bridge.readOwnerMemories();
   defer = true;
   const oldRead = f.bridge.refresh({ ...f.selection(), section: 'owner' });
@@ -136,5 +139,8 @@ for (const action of ['delete', 'correct', 'uncertain']) test(`新本人${action
   finish({ generation: 1, data: { memories: [memory] } }); await oldRead;
   assert.equal((await f.bridge.getOwnerLayeredMemoryState()).memories.items.length, 0);
   assert.equal((await f.bridge.getState()).owner.items.length, 0);
+  assert.notEqual((await f.bridge.getState()).ownerOverview.phase, 'loading');
+  await f.bridge.refreshOwnerOverview(f.selection());
+  assert.equal((await f.bridge.getState()).ownerOverview.phase, 'ready');
   f.disconnect();
 });

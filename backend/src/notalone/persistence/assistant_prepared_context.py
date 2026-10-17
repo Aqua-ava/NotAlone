@@ -1,5 +1,8 @@
 """助手准备回执的有界材料：固定正文、补查身份和既有删除依赖。"""
+from dataclasses import replace
+from notalone.reply.input_budget import InputBudgetExceededError
 from uuid import UUID, uuid4
+from notalone.reply.layered_context import require_material
 from typing import Any, Callable
 
 import psycopg
@@ -27,8 +30,9 @@ HISTORY_SCOPE_LIMIT = 500
 
 
 class PreparedAssistantContext:
-    def __init__(self, context: ReplyContextPort, database_url: str) -> None:
+    def __init__(self, context: ReplyContextPort, database_url: str, *, layered_memory=None, layered_budget=None) -> None:
         self._context, self._database_url = context, database_url
+        self._layered_memory, self._layered_budget = layered_memory, layered_budget
 
     def _read(self, command: GenerateReply) -> dict[str, Any] | None:
         with psycopg.connect(self._database_url, row_factory=dict_row) as connection:
@@ -67,7 +71,7 @@ class PreparedAssistantContext:
         context = (decode_context(row["prepared_context"], command) if row["prepared_context"] is not None else self._context.build(command=command, verified_scope=verified_scope, reply_request_id=uuid4(),
                              continued_candidate=continued, history_message_ids=message_ids))
         self.validate_current(context)
-        validate(context)
+        context = self.fit_budget(context, validate=validate)
         scope = command.scope
         dependencies = {identifier for item in context.style_references for identifier in (*item.source_ids, item.sample_id)}
         with psycopg.connect(self._database_url, row_factory=dict_row) as connection:
@@ -86,6 +90,7 @@ class PreparedAssistantContext:
                     evidence_id=item.evidence_id, kind=item.kind, source_ids=set(item.source_ids),
                     historical=is_historical))
             require_current_overview_navigation(connection, context, PostgresRelationshipOverviewStore(self._database_url))
+            require_material(context, self._layered_memory, connection=connection, budget=self._layered_budget)
             _require_context_preferences(connection, context)
             dependencies.update(identifier for item in context.expression_preferences
                                 for identifier in (item.preference_id, *item.source_ids,
@@ -118,6 +123,18 @@ class PreparedAssistantContext:
                 "dependency_ids=ARRAY(SELECT DISTINCT unnest(dependency_ids || %s::uuid[])) WHERE id=%s",
                 (Jsonb(encode_context(context)), list(dependencies), row["id"]),
             )
+
+    def fit_budget(self, context: ReplyContext, *, validate) -> ReplyContext:
+        """仅新准备可省略新增层；已持久冻结的输入容量变化必须重新准备。"""
+        try:
+            validate(context)
+        except InputBudgetExceededError:
+            row = self._read(context.command)
+            if context.layered_context is None or row and row["prepared_context"] is not None:
+                raise
+            context = replace(context, layered_context=None, layered_status="budget_omitted")
+            validate(context)
+        return context
 
     def validate_current(self, context: ReplyContext) -> None:
         self._context.validate_current(context)

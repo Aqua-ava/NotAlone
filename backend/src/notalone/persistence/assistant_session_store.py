@@ -280,6 +280,15 @@ def _dependencies_available(
                   AND dependency.id=ANY(%(navigation)s::uuid[])
                   AND decision.evidence->>'kind' IS DISTINCT FROM 'erased_guard'
                 UNION ALL
+                SELECT 1 FROM public.scenario_document_version AS version
+                WHERE version.owner_id=%(owner_id)s AND version.contact_id=%(contact_id)s
+                  AND version.id=dependency.id AND dependency.id=ANY(%(navigation)s::uuid[])
+                UNION ALL
+                SELECT 1 FROM public.layered_profile_version AS version
+                WHERE version.owner_id=%(owner_id)s AND version.contact_id=%(contact_id)s
+                  AND version.id=dependency.id AND NOT version.withdrawn
+                  AND dependency.id=ANY(%(navigation)s::uuid[])
+                UNION ALL
                 SELECT 1 FROM public.owner AS owner
                 WHERE owner.id=%(owner_id)s AND owner.id=dependency.id
                   AND dependency.id=ANY(%(navigation)s::uuid[])

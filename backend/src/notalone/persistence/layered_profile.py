@@ -185,6 +185,9 @@ class LayeredProfileStore:
             if (state["organization_generation"] != expected_generation or not generation
                     or generation["profile_version_id"] != version_id):
                 raise LayeredMemoryConflict("长期背景版本已变化。")
+            from notalone.persistence.reply_cleanup import delete_source_replies
+            delete_source_replies(connection, owner_id=scope.owner_id, contact_id=scope.contact_id,
+                removed_ids={version_id}, revoke_running_scope=False)
             connection.execute("UPDATE public.layered_profile_version SET withdrawn=true WHERE id=%s", (version_id,))
             connection.execute("UPDATE public.layered_profile_batch SET status='withdrawn' WHERE id=%s", (profile["batch_id"],))
             self.publish_generation_in_transaction(connection,scope,expected_generation=expected_generation,

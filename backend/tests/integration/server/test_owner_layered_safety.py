@@ -139,14 +139,37 @@ class OwnerLayeredSafetyHttpTest(MemoryOverviewHttpFixture, unittest.TestCase):
         references = [reference['memory_id'] for entry in ready['profile']['entries']
                       for reference in entry['references']]
         self.assertNotIn(memory['memory_id'], references)
+        from uuid import UUID
+        from notalone.scopes import OwnerScope
+        snapshot = self.service.capture(OwnerScope(self.owner_id))
+        with psycopg.connect(self.database_url) as db:
+            old_batches = [row[0] for row in db.execute(
+                "SELECT id FROM public.layered_profile_batch WHERE owner_id=%s AND scope_kind='owner'",
+                (self.owner_id,)).fetchall()]
         self.delete_source(contact, source)
         current = self.read(backend)
-        self.assertEqual((current['scenarios'], current['profile']), ([], None))
+        self.assertFalse(self.service.validate(snapshot))
+        self.assertTrue({row['version_id'] for row in ready['scenarios']}.isdisjoint(
+            row['version_id'] for row in current['scenarios']))
+        self.assertNotIn(memory['memory_id'], str(current))
+        if current['profile']:
+            self.assertNotEqual(current['profile']['version_id'], ready['profile']['version_id'])
+        # 自动维护可用剩余合法资料生成新版本；被删除输入参与的旧版本必须物理清除。
         with psycopg.connect(self.database_url) as db:
-            for table in ('layered_profile_batch', 'layered_profile_version', 'layered_memory_generation'):
-                count = db.execute(f'SELECT count(*) FROM public.{table} WHERE owner_id=%s AND scope_kind=%s',
-                                   (self.owner_id, 'owner')).fetchone()[0]
-                self.assertEqual(count, 0, table)
+            for table, ids in (
+                ('layered_profile_batch', old_batches),
+                ('layered_profile_version', [UUID(ready['profile']['version_id'])]),
+                ('scenario_document_version', [UUID(row['version_id']) for row in ready['scenarios']]),
+            ):
+                self.assertEqual(db.execute(f'SELECT count(*) FROM public.{table} WHERE id=ANY(%s)',
+                    (ids,)).fetchone()[0], 0, table)
+            self.assertEqual(db.execute("SELECT count(*) FROM public.layered_memory_generation "
+                "WHERE owner_id=%s AND scope_kind='owner' AND organization_generation=%s",
+                (self.owner_id, ready['organization_generation'])).fetchone()[0], 0)
+            for table in ('layered_memory_batch', 'layered_profile_batch'):
+                self.assertEqual(db.execute(f'SELECT count(*) FROM public.{table} '
+                    "WHERE owner_id=%s AND scope_kind='owner' AND dependency_ids && %s::uuid[]",
+                    (self.owner_id, [UUID(memory['memory_id']), UUID(source)])).fetchone()[0], 0, table)
 
     def test_disabled_generation_rejects_late_profile_response(self):
         self.prepare_self('本人曾完成合成课程。')
