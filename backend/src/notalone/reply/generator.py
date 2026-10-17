@@ -23,6 +23,7 @@ from notalone.reply.runtime import (
     ReplyRuntimeResult,
     RuntimeCandidate,
     RuntimeUsage,
+    model_request_scope,
 )
 from notalone.reply.store import (
     ReplyRequestState,
@@ -141,7 +142,8 @@ class ReplyGenerator:
         started_ns = time.perf_counter()
         called_at = datetime.now(timezone.utc)
         try:
-            runtime_result = self._runtime.generate(context)
+            with model_request_scope(lambda: self._store.require_current(request)):
+                runtime_result = self._runtime.generate(context)
         except ReplyRunError:
             self._mark_failed(request, "runtime_failed")
             self._record_failure_ledger(

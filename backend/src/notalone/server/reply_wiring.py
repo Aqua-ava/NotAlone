@@ -111,7 +111,13 @@ def build_reply_service(
     ledger = PostgresOutboundLedger(database_url)
 
     def call_ledger(prepared):
+        from notalone.reply.runtime import current_model_request_validator
+        validate_request = current_model_request_validator()
+
         def validate():
+            if validate_request is None:
+                raise ValueError('实际模型调用缺少确定性外壳的运行租约。')
+            validate_request()
             if (model.rate_limiter is not None or model.cache is not False
                     and (model.cache is not None or get_llm_cache() is not None)):
                 raise ValueError("逐次台账不接受缓存或本地限流模型。")

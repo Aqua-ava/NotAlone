@@ -339,6 +339,30 @@ class PostgresReplyStore:
             ) from None
         return outcome
 
+    def require_current(self, request: ReplyRequest) -> None:
+        """只核对外壳实际领取的范围、attempt及双侧租约；新attempt不能替旧轮放行。"""
+        if not isinstance(request, ReplyRequest):
+            raise ReplyStoreInvariantError('回复请求租约结构无效。')
+        try:
+            with self._connect() as connection:
+                row = connection.execute(
+                    "SELECT request.id, request.owner_id, request.contact_id, request.conversation_binding_id, "
+                    "request.idempotency_key, request.normalized_input, request.state, request.attempt, "
+                    "request.lease_expires_at, request.continued_from_candidate_id, attempt.state AS attempt_state, "
+                    "attempt.lease_expires_at AS attempt_lease_expires_at "
+                    "FROM public.reply_request AS request JOIN public.reply_attempt AS attempt "
+                    "ON attempt.reply_request_id=request.id AND attempt.number=request.attempt "
+                    "WHERE request.id=%s AND request.owner_id=%s AND request.contact_id=%s",
+                    (request.request_id, request.scope.owner_id, request.scope.contact_id),
+                ).fetchone()
+                if (row is None or self._request_from_row(row) != request
+                        or row['state'] != 'running' or row['attempt_state'] != 'running'
+                        or row['attempt_lease_expires_at'] != request.lease_expires_at
+                        or self._now() >= request.lease_expires_at):
+                    raise ReplyStoreInvariantError('回复请求租约已失效。')
+        except psycopg.Error:
+            raise ReplyPersistenceError('回复请求租约未可靠复核。') from None
+
     def prepare_context(self, request: ReplyRequest, context: ReplyContext) -> None:
         """模型调用前在领取租约的范围内固定实际原始来源；不复制正文。"""
         try:

@@ -139,6 +139,8 @@ class ReplyStore(Protocol):
 
     def prepare_context(self, request: ReplyRequest, context: ReplyContext) -> None: ...
 
+    def require_current(self, request: ReplyRequest) -> None: ...
+
     def fail(self, request: ReplyRequest, *, reason: str) -> None: ...
 
     def read(self, request_id: UUID, scope: ContactScope) -> StoredReplyRequest: ...
@@ -312,6 +314,18 @@ class InMemoryReplyStore:
     def prepare_context(self, request: ReplyRequest, context: ReplyContext) -> None:
         """内存适配器只验证结构，不宣称拥有 PostgreSQL 原始来源快照。"""
         self._validate_context(request, context)
+
+    def require_current(self, request: ReplyRequest) -> None:
+        """额外模型轮只能沿同一次仍活动的实际领取继续。"""
+        with self._lock:
+            record = self._record_for_request(request)
+            if (record.state is not ReplyAttemptState.RUNNING
+                    or self._now() >= request.lease_expires_at
+                    or not any(attempt.number == request.attempt
+                               and attempt.state is ReplyAttemptState.RUNNING
+                               and attempt.lease_expires_at == request.lease_expires_at
+                               for attempt in record.attempts)):
+                raise ReplyStoreInvariantError('回复请求租约已失效。')
 
     def save(
         self,

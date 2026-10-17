@@ -107,12 +107,15 @@ class ReplyConstraintReview:
 
     async def review(self, *, model: BaseChatModel, budget: InputBudgetMiddleware,
                      prepared: ReplyContext, result: ReplyRuntimeResult,
-                     request_text: str, callbacks: tuple = ()) -> ReplyRuntimeResult:
+                     request_text: str, callbacks: tuple = (),
+                     validate_request: Callable[[], None] | None = None) -> ReplyRuntimeResult:
         content = prepared.command.content
         if (not isinstance(content, RewriteDraft) or content.input_kind != "draft"
                 or not (content.user_instruction or prepared.expression_preferences)):
             return result
         current = replace(prepared, evidence=prepared.evidence + result.additional_evidence)
+        if validate_request is not None:
+            await asyncio.to_thread(validate_request)
         # 复验在只读线程进行；共享运行协程取消后，不会继续发出新的复核请求。
         await asyncio.to_thread(self._validate_current, current)
         if self._check_running is not None:

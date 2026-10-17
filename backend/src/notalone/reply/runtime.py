@@ -3,12 +3,33 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol
+from contextlib import contextmanager
+from contextvars import ContextVar
+from typing import Callable, Protocol
 from uuid import UUID
 
 from notalone.reply.context import ContextEvidence, ReplyContext, ToolCallTrace
 from notalone.reply.interface import SkillUse
 from notalone.reply.input_budget import InputBudgetDecision
+
+
+_model_request_validator: ContextVar[Callable[[], None] | None] = ContextVar(
+    'reply_model_request_validator', default=None,
+)
+
+
+@contextmanager
+def model_request_scope(validate: Callable[[], None]):
+    """固定外壳实际领取的attempt校验；不从准备快照推导运行租约。"""
+    token = _model_request_validator.set(validate)
+    try:
+        yield
+    finally:
+        _model_request_validator.reset(token)
+
+
+def current_model_request_validator() -> Callable[[], None] | None:
+    return _model_request_validator.get()
 
 
 @dataclass(frozen=True, slots=True, repr=False)

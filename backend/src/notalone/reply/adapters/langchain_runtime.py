@@ -44,6 +44,7 @@ from notalone.reply.runtime import (
     ReplyRuntimeResult,
     RuntimeCandidate,
     RuntimeUsage,
+    current_model_request_validator,
 )
 from notalone.reply.errors import (
     ReplyBudgetError, ReplyError, ReplyInvariantError, ReplyProviderContextLimitError,
@@ -781,6 +782,7 @@ class LangChainReplyRuntime:
                                if prepared.assistant_discussion is not None else BASE_SYSTEM_PROMPT),
             )
             request_text = _request_text(prepared)
+            validate_request = current_model_request_validator()
             callbacks = self._model_callbacks + ((self._model_callback_factory(prepared),)
                 if self._model_callback_factory is not None else ())
 
@@ -803,6 +805,7 @@ class LangChainReplyRuntime:
                     result = await self._constraint_review.review(
                         model=self._model, prepared=prepared, result=result,
                         request_text=request_text, callbacks=callbacks,
+                        validate_request=validate_request,
                         budget=InputBudgetMiddleware(profile=self._input_budget_profile,
                             counter=self._input_token_counter, on_decision=collect_input_budget),
                     )
