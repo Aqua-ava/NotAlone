@@ -5,6 +5,7 @@ from uuid import UUID
 import psycopg
 
 from notalone.persistence.locks import lock_contact_scope, lock_owner_scope
+from notalone.persistence.reply_cleanup import delete_source_replies
 from notalone.persistence.source_deletion import (
     PostgresSourceDeletionRepository, SourceDeletionError, SourceNotFoundError,
 )
@@ -44,6 +45,19 @@ class PostgresSourceTasks:
             (str(row[0]), row[1], row[2], row[3], str(row[4]) if row[4] else None, row[5], row[6], row[7]),
         )) for row in rows]
 
+    def pending_delete_tasks(self, owner_id: UUID, contact_id: UUID) -> tuple[UUID, ...]:
+        """只选择本范围已请求的删除，不认领旧升级或其他业务步骤。"""
+        try:
+            with psycopg.connect(self._database_url) as connection:
+                rows = connection.execute(
+                    "SELECT id FROM public.background_task WHERE owner_id=%s AND contact_id=%s "
+                    "AND task_type='delete' AND status IN ('queued','running','verifying') "
+                    "ORDER BY created_at,id", (owner_id, contact_id),
+                ).fetchall()
+        except psycopg.Error:
+            raise SourceDeletionError("删除任务读取失败。") from None
+        return tuple(row[0] for row in rows)
+
     def request_delete(self, owner_id: UUID, contact_id: UUID, source_id: UUID) -> UUID:
         """范围内先隐藏来源并取消导入，再幂等建立固定删除步骤。"""
         try:
@@ -70,10 +84,16 @@ class PostgresSourceTasks:
                     "WHERE owner_id = %s AND contact_id = %s AND id = %s AND status = 'active'",
                     (owner_id, contact_id, source_id),
                 )
+                # 排队本身即撤回已捕获来源；prepare 尚无 C 时也按完整导航依赖擦除。
+                delete_source_replies(connection, owner_id=owner_id, contact_id=contact_id,
+                                      removed_ids={source_id}, revoke_running_scope=False)
                 PostgresSourceDeletionRepository.cancel_import_tasks(
                     connection, owner_id=owner_id, contact_id=contact_id,
                     source_document_id=source_id,
                 )
+                from notalone.persistence.memory_upgrade import erase_memory_upgrades
+                # 明确删除来源即撤销依赖它的升级；旧租约不再占住本联系人的删除。
+                erase_memory_upgrades(connection, owner_id=owner_id, removed_ids={source_id})
                 row = connection.execute(
                     """
                     INSERT INTO public.background_task

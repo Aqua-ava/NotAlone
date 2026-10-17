@@ -52,8 +52,9 @@ class RetrievalPort(Protocol):
         query: str | None = None,
         limit: int = 20,
         memory_ids: tuple[UUID, ...] | None = None,
+        include_historical: bool = False,
     ) -> tuple[RetrievedOwnerMemory, ...]:
-        """查询某位用户当前有效的本人记忆；``memory_ids`` 只用于复验。"""
+        """本人记忆；历史读取只接受合法概览的有界 ``memory_ids``，仍核验来源。"""
 
     def search_confirmed_memories(
         self,
@@ -62,11 +63,14 @@ class RetrievalPort(Protocol):
         query: str | None = None,
         limit: int = 20,
         memory_ids: tuple[UUID, ...] | None = None,
+        include_historical: bool = False,
     ) -> tuple[RetrievedMemory, ...]:
         """查询指定联系人范围内当前有效的已确认关系记忆。
 
         ``memory_ids`` 只接受来自 L2 目录的导航结果；返回值仍必须重新
         从 L1 权威存储读取并完成状态、来源和范围校验。
+        ``include_historical`` 只用于合法概览导航及其复验，必须同时限定 ID；
+        返回实际旧版本，不能解析成当前叶或把历史内容当作当前事实。
         """
 
     def search_pending_candidates(

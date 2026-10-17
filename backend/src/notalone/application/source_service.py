@@ -55,9 +55,13 @@ class SourceService:
             )
             with psycopg.connect(self._database_url, autocommit=True) as connection:
                 while True:
+                    task_ids = self._sources.pending_delete_tasks(owner_id, contact_id)
+                    if not task_ids:
+                        break
                     result = run_worker(
                         worker=worker, lock_connection=connection,
                         owner_id=owner_id, contact_id=contact_id, worker_id=uuid4(),
+                        task_id=task_ids[0],
                     )
                     if result.status is not WorkerCommandStatus.SUCCEEDED:
                         break

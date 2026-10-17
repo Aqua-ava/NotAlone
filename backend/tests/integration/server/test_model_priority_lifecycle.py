@@ -3,6 +3,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 import threading
+import re
 import time
 import unittest
 from uuid import uuid4
@@ -10,6 +11,7 @@ from uuid import uuid4
 import psycopg
 from psycopg import sql
 from langchain_core.outputs import ChatGeneration, ChatResult
+from notalone.memory_extraction.dimensions import DimensionRelease
 
 from tests.integration.server.core_business_flow_support import (
     CoreBusinessFlowFixture, ScriptedCoreModel, tool_response,
@@ -27,11 +29,13 @@ class ModelGate:
 class ControlledCoreModel(ScriptedCoreModel):
     gates: dict[int, ModelGate] = {}
     errors: dict[int, Exception] = {}
+    requested_tools: list[list[str]] = []
 
     def __init__(self):
         super().__init__()
         self.gates = {}
         self.errors = {}
+        self.requested_tools = []
 
     def block_call(self, index: int) -> ModelGate:
         gate = self.gates[index] = ModelGate()
@@ -42,6 +46,8 @@ class ControlledCoreModel(ScriptedCoreModel):
         self.wait_for_response()
         index = len(self.seen_calls)
         self.seen_calls.append(messages)
+        requested_tools = list(self.bound_tool_names)
+        self.requested_tools.append(requested_tools)
         gate = self.gates.get(index)
         if gate is not None:
             gate.entered.set()
@@ -51,13 +57,27 @@ class ControlledCoreModel(ScriptedCoreModel):
             raise self.errors[index]
         if index >= len(self.responses):
             raise AssertionError("合成模型脚本耗尽。")
-        return ChatResult(generations=[ChatGeneration(message=self.responses[index])])
+        response = self.responses[index]
+        if requested_tools == ['GroundedMemoryLabels']:
+            # 沿实际生产提取协议标注真实合成原句；不以旧自由正文协议冒充裁决。
+            labels = {}
+            for unit, sender, raw in re.findall(
+                r"\[([0-9]+:[0-9]+)\] \[target\] sender=(contact|self) .*? 原文=(.*)",
+                str(messages[-1].content),
+            ):
+                labels[unit] = {'kind': 'preference' if '喜欢' in raw and not any(mark in raw for mark in ('？', '?')) else 'not_memory',
+                    'subject': sender, 'topic': 'other', 'dependency': None,
+                    'unresolved': False, 'confidence': 0.95, 'sensitivity': 'none', 'event': None}
+            response = tool_response('GroundedMemoryLabels', {'units': labels})
+        return ChatResult(generations=[ChatGeneration(message=response)])
 
 
 class ModelPriorityLifecycleHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
     extraction_model_factory = ControlledCoreModel
     reply_model_factory = ControlledCoreModel
     production_model_wiring = True
+    # 本组合只核对已到达裁决边界的调度；生产默认空放行表保持原样。
+    dimension_release = DimensionRelease(gate_enabled=False)
 
     def setUp(self):
         super().setUp()
@@ -73,6 +93,8 @@ class ModelPriorityLifecycleHttpTest(CoreBusinessFlowFixture, unittest.TestCase)
 
     def _import(self, backend, label, tea):
         # 启动与停机案例先布置其模型门闩，再放行导入已经触发的调用。
+        if label == '裁决优先':
+            tea += '。我也喜欢桂花茶'
         return super()._import(backend, label, tea, hold_model_response=True)
 
     def _reply_body(self, imported):
@@ -136,7 +158,13 @@ class ModelPriorityLifecycleHttpTest(CoreBusinessFlowFixture, unittest.TestCase)
         self.assertEqual(status, 200, payload)
         self.assertTrue(following.entered.wait(5))
         following.release.set()
-        self._wait_finished(self.backend, imported["contact_id"])
+        try:
+            self._wait_finished(self.backend, imported["contact_id"])
+        except AssertionError as error:
+            self.fail(f"{error}；实际模型协议：{self.extraction_model.requested_tools}")
+        self.assertEqual(self.extraction_model.requested_tools,
+                         [['GroundedMemoryLabels'], ['SourceVerificationOutput']]
+                         + [['MemoryAdjudicationOutput']] * (next_index - 1))
 
     def test_reply_has_priority_after_source_verification(self):
         imported = self._import(self.backend, "核验优先", "茉莉茶")
@@ -176,7 +204,11 @@ class ModelPriorityLifecycleHttpTest(CoreBusinessFlowFixture, unittest.TestCase)
             self.backend, f"/api/contacts/{imported['contact_id']}/memories",
         )["memories"]
         self.assertEqual({row["text"] for row in memories},
-                         {"联系人很喜欢茉莉茶。", "联系人喜欢茉莉茶。"})
+                         {"联系人很喜欢茉莉茶。", f"联系人原话：“{imported['fact_message']['text']}”"})
+        self.assertEqual(len(self.extraction_model.seen_calls), 3)
+        self.assertIn(' 原文=', str(self.extraction_model.seen_calls[0][-1].content))
+        self.assertEqual(self.extraction_model.requested_tools,
+                         [['GroundedMemoryLabels'], ['SourceVerificationOutput'], ['MemoryAdjudicationOutput']])
 
     def test_foreground_wait_longer_than_runtime_and_request_lease_still_succeeds(self):
         extraction = self.extraction_model.block_call(0)

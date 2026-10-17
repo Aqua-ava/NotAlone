@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from contextlib import contextmanager
+from dataclasses import replace
 from typing import TYPE_CHECKING, Any, Iterator
 from uuid import UUID
 
@@ -12,7 +13,7 @@ import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
-from notalone.application.assistant_generation_lifecycle import AssistantGenerationReceipt
+from notalone.application.assistant_generation_lifecycle import AssistantGenerationReceipt, AssistantPreparationFormatReceipt
 from notalone.application.assistant_session_service import (
     AssistantSessionConflict, AssistantSessionNotFound,
     AssistantSessionPersistenceError, AssistantSessionRejected, AssistantSessionSnapshot, AssistantTurn,
@@ -29,8 +30,10 @@ from notalone.persistence.assistant_reply_identity import (
     prepare_assistant_reply_start as prepare_assistant_reply_start,
 )
 from notalone.persistence.locks import lock_owner_scope
-from notalone.persistence.message_sources import valid_source_ref_exists_sql
-from notalone.persistence.style_sample_store import captured_reply_sources, require_reply_sources_current
+from notalone.persistence.message_sources import active_source_ref_sql, valid_source_ref_exists_sql
+from notalone.persistence.style_sample_store import (
+    captured_reply_sources, reply_evidence_sources, require_reply_sources_current,
+)
 from notalone.reply.assistant_discussion import DiscussionDependencies
 from notalone.reply.context import ReplyContext
 from notalone.reply.errors import ReplyStoreInvariantError
@@ -53,10 +56,11 @@ def _input_payload(normalized: str) -> dict[str, Any]:
     content = json.loads(normalized)
     continued = content.pop("continued_from_candidate_id")
     skill = content.pop("skill")
+    scene = content.pop('scene', None)
     content["type"] = content.pop("mode")
     return {"content": content, "continued_from_candidate_id": continued,
             "skill_version_id": skill.split(":", 1)[1] if skill.startswith("user_choice:") else None,
-            "skill_disabled": skill == "disabled"}
+            "skill_disabled": skill == "disabled", **({'scene': scene} if scene is not None else {})}
 
 
 def _active_binding(connection: Any, scope: ContactScope) -> UUID:
@@ -122,6 +126,7 @@ def _reply_dependencies(connection: Any, scope: ContactScope, request_id: UUID) 
         dependencies.update(_evidence_dependencies(
             connection, owner_id=scope.owner_id, evidence_id=row["evidence_id"],
             kind=row["kind"], source_ids={UUID(value) for value in row["source_ids"]},
+            historical=True,
         ))
     for identifier in {row["request_id"] for row in rows}:
         dependencies.update(captured_reply_sources(connection, owner_id=scope.owner_id, request_id=identifier))
@@ -132,6 +137,7 @@ def _reply_dependencies(connection: Any, scope: ContactScope, request_id: UUID) 
 def captured_generation_dependencies(
     connection: Any, scope: ContactScope, request_key: UUID, binding_id: UUID,
     reply_request_id: UUID | None,
+    *, historical: bool = False,
 ) -> set[UUID]:
     """同事务沿实际C请求键复验模型前捕获；失败输入不以尚未填回的结果ID放行。"""
 
@@ -152,7 +158,7 @@ def captured_generation_dependencies(
             or reply_request_id is not None and request["id"] != reply_request_id):
         raise ReplyStoreInvariantError("助手会话的实际回复请求身份不一致。")
     dependencies = require_reply_sources_current(
-        connection, owner_id=scope.owner_id, request_id=request["id"],
+        connection, owner_id=scope.owner_id, request_id=request["id"], historical=historical,
     )
     dependencies.update(_reply_dependencies(connection, scope, request["id"]))
     discussion = require_reply_discussion_dependencies(connection, scope, request["id"])
@@ -165,15 +171,12 @@ def captured_generation_dependencies(
 def _evidence_dependencies(
     connection: Any, *, owner_id: UUID, evidence_id: UUID, kind: str,
     source_ids: set[UUID],
+    historical: bool = False,
 ) -> set[UUID]:
-    dependencies = set(source_ids)
-    if kind == "owner_memory" and dependencies == {owner_id} and connection.execute(
-        "SELECT 1 FROM public.owner_memory WHERE owner_id = %s AND id = %s "
-        "AND adoption_method = 'manual' AND source_ids = %s::uuid[]",
-        (owner_id, evidence_id, [owner_id]),
-    ).fetchone():
-        # 手工本人记忆沿用 owner 伪引用；依赖具体记忆，不能把任意 UUID 当来源放行。
-        dependencies.clear()
+    dependencies = reply_evidence_sources(
+        connection, owner_id=owner_id, evidence_id=evidence_id,
+        kind=kind, source_ids=tuple(source_ids), historical=historical,
+    )
     if kind not in ("user_draft", "user_purpose", "continued_candidate"):
         dependencies.add(evidence_id)
     return dependencies
@@ -198,11 +201,17 @@ def _partition_assistant_dependencies(
     return DiscussionDependencies(tuple(sorted(dependencies - set(samples))), samples)
 
 
-def _dependencies_available(connection: Any, scope: ContactScope, dependencies: set[UUID]) -> bool:
-    """同一 owner 锁与数据库事务时间内核验来源、证据和记忆有效期。"""
+def _dependencies_available(
+    connection: Any, scope: ContactScope, dependencies: set[UUID], *, historical: bool = False,
+) -> bool:
+    """历史仅复验未删除的原依赖；新资料仍须处于当前有效期。"""
 
+    if not dependencies:
+        return True
     try:
         typed = _partition_assistant_dependencies(connection, scope, dependencies)
+        from notalone.persistence.reply_overview_navigation import registered_navigation_dependencies
+        navigation = registered_navigation_dependencies(connection, scope) & dependencies
     except ReplyStoreInvariantError:
         return False
     row = connection.execute(
@@ -221,29 +230,68 @@ def _dependencies_available(connection: Any, scope: ContactScope, dependencies: 
                 WHERE message.owner_id = %(owner_id)s AND message.id = dependency.id
                   AND {valid_source_ref_exists_sql('message')}
                 UNION ALL
+                SELECT 1 FROM public.expression_preference AS preference
+                WHERE preference.owner_id = %(owner_id)s AND preference.id = dependency.id
+                  AND preference.status = 'active'
+                  AND (%(historical)s OR preference.contact_id IS NULL OR preference.contact_id = %(contact_id)s)
+                UNION ALL
                 SELECT 1 FROM public.confirmed_memory AS memory
                 WHERE memory.owner_id = %(owner_id)s AND memory.id = dependency.id
-                  AND memory.status = 'active'
-                  AND (memory.valid_at IS NULL OR memory.valid_at <= now())
-                  AND (memory.invalid_at IS NULL OR now() < memory.invalid_at)
+                  AND memory.contact_id = %(contact_id)s
+                  AND (memory.status = 'active' OR %(historical)s AND memory.status = 'invalidated')
+                  AND (%(historical)s OR (memory.valid_at IS NULL OR memory.valid_at <= now())
+                    AND (memory.invalid_at IS NULL OR now() < memory.invalid_at))
                 UNION ALL
                 SELECT 1 FROM public.owner_memory AS memory
                 WHERE memory.owner_id = %(owner_id)s AND memory.id = dependency.id
-                  AND memory.status = 'active'
-                  AND (memory.valid_at IS NULL OR memory.valid_at <= now())
-                  AND (memory.invalid_at IS NULL OR now() < memory.invalid_at)
+                  AND (memory.status = 'active' OR %(historical)s AND memory.status = 'invalidated')
+                  AND (%(historical)s OR (memory.valid_at IS NULL OR memory.valid_at <= now())
+                    AND (memory.invalid_at IS NULL OR now() < memory.invalid_at))
                   AND (memory.source_ids <> ARRAY[%(owner_id)s]::uuid[]
                        OR memory.adoption_method = 'manual')
                 UNION ALL
                 SELECT 1 FROM public.memory_candidate AS candidate
                 WHERE candidate.owner_id = %(owner_id)s AND candidate.id = dependency.id
-                  AND candidate.status IN ('pending', 'confirmed')
-                  AND (candidate.valid_at IS NULL OR candidate.valid_at <= now())
-                  AND (candidate.invalid_at IS NULL OR now() < candidate.invalid_at)
+                  AND candidate.contact_id = %(contact_id)s
+                  AND (candidate.status IN ('pending', 'confirmed')
+                    OR %(historical)s AND candidate.status IN ('rejected', 'invalidated'))
+                  AND (%(historical)s OR (candidate.valid_at IS NULL OR candidate.valid_at <= now())
+                    AND (candidate.invalid_at IS NULL OR now() < candidate.invalid_at))
+                UNION ALL
+                SELECT 1 FROM public.message_source_ref AS ref
+                JOIN public.message AS message ON message.id=ref.message_id AND message.owner_id=ref.owner_id
+                WHERE ref.owner_id=%(owner_id)s AND ref.id=dependency.id
+                  AND dependency.id=ANY(%(navigation)s::uuid[])
+                  AND ref.contact_id=message.contact_id AND {active_source_ref_sql('ref')}
+                UNION ALL
+                SELECT 1 FROM public.memory_correction_decision AS decision
+                WHERE decision.owner_id=%(owner_id)s AND decision.id=dependency.id
+                  AND dependency.id=ANY(%(navigation)s::uuid[])
+                  AND decision.evidence->>'kind' IS DISTINCT FROM 'erased_guard'
+                UNION ALL
+                SELECT 1 FROM public.owner AS owner
+                WHERE owner.id=%(owner_id)s AND owner.id=dependency.id
+                  AND dependency.id=ANY(%(navigation)s::uuid[])
+                UNION ALL
+                SELECT 1 FROM public.memory_candidate AS candidate
+                WHERE candidate.owner_id=%(owner_id)s AND candidate.id=dependency.id
+                  AND dependency.id=ANY(%(navigation)s::uuid[])
+                  AND (candidate.status IN ('pending','confirmed')
+                    OR %(historical)s AND candidate.status IN ('rejected','invalidated'))
+                  AND (%(historical)s OR (candidate.valid_at IS NULL OR candidate.valid_at <= now())
+                    AND (candidate.invalid_at IS NULL OR now() < candidate.invalid_at))
+                UNION ALL
+                SELECT 1 FROM public.confirmed_memory AS memory
+                WHERE memory.owner_id=%(owner_id)s AND memory.id=dependency.id
+                  AND dependency.id=ANY(%(navigation)s::uuid[])
+                  AND (memory.status='active' OR %(historical)s AND memory.status='invalidated')
+                  AND (%(historical)s OR (memory.valid_at IS NULL OR memory.valid_at <= now())
+                    AND (memory.invalid_at IS NULL OR now() < memory.invalid_at))
             )
         ) AS available
         """,
-        {"owner_id": scope.owner_id, "dependencies": list(typed.source_ids)},
+        {"owner_id": scope.owner_id, "contact_id": scope.contact_id,
+         "historical": historical, "dependencies": list(typed.source_ids), "navigation": list(navigation)},
     ).fetchone()
     return row["available"]
 
@@ -285,11 +333,26 @@ def prepare_assistant_reply_commit(
                                                request_id=request.request_id))
     from notalone.persistence.reply_discussion_dependencies import reply_style_sample_dependencies
     dependencies.update(reply_style_sample_dependencies(connection, request.scope, request.request_id))
+    from notalone.persistence.reply_basis_changes import require_current_reply_memory
+    require_current_reply_memory(connection, request.scope, context.evidence)
+    current_dependencies: set[UUID] = set()
+    historical_dependencies: set[UUID] = set()
     for evidence in context.evidence:
-        dependencies.update(_evidence_dependencies(
+        actual_dependencies = _evidence_dependencies(
             connection, owner_id=request.scope.owner_id, evidence_id=evidence.evidence_id,
             kind=evidence.kind, source_ids=set(evidence.source_ids),
-        ))
+            historical=evidence.navigation is not None and evidence.timing.current_status == "historical",
+        )
+        if evidence.navigation is not None and evidence.timing.current_status == "historical":
+            historical_dependencies.update(actual_dependencies)
+        else:
+            current_dependencies.update(actual_dependencies)
+    if not _dependencies_available(connection, request.scope, current_dependencies):
+        raise ReplyStoreInvariantError("本次新候选的当前依据已变化。")
+    if not _dependencies_available(connection, request.scope, historical_dependencies, historical=True):
+        raise ReplyStoreInvariantError("本次新候选的历史依据已不可用。")
+    dependencies.update(current_dependencies)
+    dependencies.update(historical_dependencies)
     if request.continued_from_candidate_id is not None:
         previous = connection.execute(
             "SELECT reply_request_id FROM public.reply_candidate "
@@ -299,7 +362,7 @@ def prepare_assistant_reply_commit(
         if previous is None:
             raise ReplyStoreInvariantError("前序候选来源已失效。")
         dependencies.update(_reply_dependencies(connection, request.scope, previous["reply_request_id"]))
-    if not _dependencies_available(connection, request.scope, dependencies):
+    if not _dependencies_available(connection, request.scope, dependencies, historical=True):
         raise ReplyStoreInvariantError("助手会话来源已失效，不能提交旧候选。")
     connection.execute(
         "UPDATE public.assistant_session_turn SET reply_request_id = %s, dependency_ids = %s, "
@@ -356,6 +419,17 @@ def select_assistant_source_input_dependents(
     """同 owner 锁内、C清空捕获身份前选删除闭包；撤租约的独立草稿不作为根。"""
 
     explicit_turn_ids = set(turn_ids or ())
+    # prepare尚未创建C请求时，也已保存用户明确选择的不可变版本。
+    # 沿真实版本/owner身份选中A删除根，不能等下一次GET或模型执行才清正文。
+    selected_skills = connection.execute(
+        "SELECT turn.id FROM public.assistant_session_turn AS turn "
+        "JOIN public.reply_skill_version AS version "
+        "ON turn.input_payload->>'skill_version_id'=version.id::text "
+        "JOIN public.reply_skill AS skill ON skill.id=version.skill_id AND skill.owner_id=turn.owner_id "
+        "WHERE turn.owner_id=%s AND turn.state<>'redacted' AND version.id=ANY(%s::uuid[])",
+        (owner_id, list(removed_ids)),
+    ).fetchall()
+    explicit_turn_ids.update(row['id'] if isinstance(row, dict) else row[0] for row in selected_skills)
     rows = _assistant_source_turn_rows(
         connection, owner_id=owner_id, contact_id=contact_id, removed_ids=removed_ids,
         reply_request_ids=reply_request_ids, turn_ids=explicit_turn_ids,
@@ -391,6 +465,10 @@ def erase_assistant_source_turns(
         carry_edges=carry_edges, captured_uses=captured_uses,
     )
     explicit_turn_ids.update(selected.turn_ids)
+    from notalone.persistence.skill_learning import erase_skill_learning
+    erase_skill_learning(connection, owner_id=owner_id,
+                         removed_ids=set(removed_ids) | set(reply_request_ids)
+                         | explicit_turn_ids | set(selected.input_version_ids))
     rows = _assistant_source_turn_rows(
         connection, owner_id=owner_id, contact_id=contact_id, removed_ids=removed_ids,
         reply_request_ids=reply_request_ids, turn_ids=explicit_turn_ids,
@@ -484,6 +562,36 @@ class PostgresAssistantSessionStore:
                  receipt.input_version_id, receipt.request_key),
             ).fetchone()
             return row is not None and row["fixed"]
+
+    def require_prepared_format(self, scope: ContactScope, session_id: UUID, request_key: UUID) -> None:
+        from notalone.persistence.assistant_prepared_format import check_prepared_format
+        with self._transaction(scope) as connection:
+            reason = check_prepared_format(connection, scope, session_id, request_key,
+                                           complete_saved=self._complete_saved_in_transaction)
+        if reason is not None:
+            raise AssistantSessionRejected(reason)
+
+    def preparation_format(self, scope: ContactScope, session_id: UUID, request_key: UUID,
+                           input_version_id: UUID) -> AssistantPreparationFormatReceipt:
+        from notalone.persistence.assistant_prepared_format import check_prepared_format
+        from notalone.persistence.assistant_generation_lifecycle import require_interruption_input
+        with self._transaction(scope) as connection:
+            self._require_session(connection, scope, session_id)
+            turn = connection.execute(
+                "SELECT id,input_version_id FROM public.assistant_session_turn WHERE owner_id=%s "
+                "AND contact_id=%s AND session_id=%s AND idempotency_key=%s FOR UPDATE",
+                (scope.owner_id, scope.contact_id, session_id, request_key),
+            ).fetchone()
+            if turn is None:
+                raise AssistantSessionNotFound("指定范围内不存在生成准备。")
+            if turn["input_version_id"] != input_version_id:
+                raise AssistantSessionRejected("input_version_stale")
+            require_interruption_input(connection, scope, session_id, turn["id"], request_key, input_version_id)
+            reason = check_prepared_format(connection, scope, session_id, request_key,
+                                           complete_saved=self._complete_saved_in_transaction)
+            receipt = self._prepared_receipt(connection, scope, session_id, turn["id"])
+            return AssistantPreparationFormatReceipt(receipt,
+                reason.removeprefix("prepared_context_") if reason is not None else "compatible")
 
     def prepared_request(self, scope: ContactScope, receipt: AssistantGenerationReceipt) -> ReplyServiceRequest:
         from notalone.persistence.assistant_continuation import _request_from_input
@@ -664,7 +772,7 @@ class PostgresAssistantSessionStore:
                 "SELECT dependency_ids FROM public.assistant_session_turn WHERE id = %s",
                 (existing["id"],),
             ).fetchone()["dependency_ids"]
-            if not _dependencies_available(connection, scope, set(dependencies)):
+            if not _dependencies_available(connection, scope, set(dependencies), historical=True):
                 raise AssistantSessionRejected("source_unavailable")
             completed = connection.execute(
                 "SELECT id, normalized_input FROM public.reply_request WHERE owner_id = %s "
@@ -676,8 +784,12 @@ class PostgresAssistantSessionStore:
             if completed is not None:
                 if completed["normalized_input"] != normalized:
                     raise AssistantSessionConflict("请求键已用于不同输入。")
+                from notalone.persistence.skill_execution_view import saved_skill_policy_change
+                if saved_skill_policy_change(connection, scope, completed['id']) is not None:
+                    raise AssistantSessionRejected('skill_policy_changed')
                 try:
-                    require_reply_sources_current(connection, owner_id=scope.owner_id, request_id=completed["id"])
+                    require_reply_sources_current(connection, owner_id=scope.owner_id,
+                                                  request_id=completed["id"], historical=True)
                 except ReplyStoreInvariantError:
                     raise AssistantSessionRejected("source_unavailable") from None
             if existing["state"] != "completed" and completed is None:
@@ -726,7 +838,7 @@ class PostgresAssistantSessionStore:
             if candidate is None:
                 raise AssistantSessionRejected("continued_candidate_unavailable")
             dependencies.update(_reply_dependencies(connection, scope, candidate["reply_request_id"]))
-        if not _dependencies_available(connection, scope, dependencies):
+        if not _dependencies_available(connection, scope, dependencies, historical=True):
             raise AssistantSessionRejected("source_unavailable")
         if running_request_key is not None:
             old = connection.execute(
@@ -807,14 +919,18 @@ class PostgresAssistantSessionStore:
         ).fetchone()
         if stored is None or stored["conversation_binding_id"] != turn["conversation_binding_id"]:
             raise AssistantSessionPersistenceError("回复结果尚未可靠关联到会话。")
+        from notalone.persistence.skill_execution_view import saved_skill_policy_change
+        if saved_skill_policy_change(connection, scope, reply.reply_request_id) is not None:
+            raise AssistantSessionRejected('skill_policy_changed')
         dependencies = set(turn["dependency_ids"]) | _reply_dependencies(
             connection, scope, reply.reply_request_id,
         )
-        if not _dependencies_available(connection, scope, dependencies):
+        if not _dependencies_available(connection, scope, dependencies, historical=True):
             raise AssistantSessionRejected("source_unavailable")
         from notalone.persistence.reply_store import PostgresReplyStore
         saved_reply = PostgresReplyStore(self._database_url)._read_result(connection, stored)
-        if saved_reply != reply:
+        # 变化提示是当前只读投影；可靠候选正文及原依据仍必须完全一致。
+        if replace(saved_reply, basis_changes=()) != replace(reply, basis_changes=()):
             raise AssistantSessionPersistenceError("回复结果与可靠保存记录不一致。")
         connection.execute(
             "UPDATE public.assistant_session_turn SET state = 'completed', interruption_reason = NULL, "
@@ -870,7 +986,10 @@ class PostgresAssistantSessionStore:
         self, connection: Any, scope: ContactScope, session_id: UUID,
     ) -> tuple[AssistantTurn, ...]:
         rows = connection.execute(
-            "SELECT turn.*, CASE WHEN EXISTS (SELECT 1 FROM public.reply_attempt AS attempt "
+            "SELECT turn.*, (request.id IS NULL AND turn.state='failed' AND EXISTS ("
+            "SELECT 1 FROM public.reply_invalidated_key AS sealed WHERE sealed.owner_id=turn.owner_id "
+            "AND sealed.contact_id=turn.contact_id AND sealed.idempotency_key=turn.idempotency_key)) AS prepared_key_sealed, "
+            "CASE WHEN EXISTS (SELECT 1 FROM public.reply_attempt AS attempt "
             "WHERE attempt.reply_request_id = request.id AND attempt.state = 'running') THEN true "
             "WHEN request.state IN ('failed', 'completed', 'expired') AND EXISTS ("
             "SELECT 1 FROM public.reply_attempt AS attempt WHERE attempt.reply_request_id = request.id "
@@ -891,7 +1010,7 @@ class PostgresAssistantSessionStore:
         for row in rows:
             reply = None
             if row["state"] != "redacted" and not _dependencies_available(
-                connection, scope, set(row["dependency_ids"]),
+                connection, scope, set(row["dependency_ids"]), historical=True,
             ):
                 # 此时只遮挡读取结果；真正来源清除后才写 redacted 占位。
                 row["state"] = "unavailable"
@@ -900,7 +1019,7 @@ class PostgresAssistantSessionStore:
                 try:
                     captured_generation_dependencies(
                         connection, scope, row["idempotency_key"], row["conversation_binding_id"],
-                        row["reply_request_id"],
+                        row["reply_request_id"], historical=True,
                     )
                 except ReplyStoreInvariantError:
                     row["state"] = "unavailable"
@@ -915,22 +1034,31 @@ class PostgresAssistantSessionStore:
                     raise AssistantSessionPersistenceError("会话回复记录不完整。")
                 # 已知来源拒绝只遮挡本轮；数据库与其他记录故障仍明确失败。
                 try:
-                    require_reply_sources_current(connection, owner_id=scope.owner_id, request_id=request["id"])
+                    require_reply_sources_current(connection, owner_id=scope.owner_id,
+                                                  request_id=request["id"], historical=True)
                 except ReplyStoreInvariantError:
                     row["state"] = "unavailable"
                     row["input_payload"] = None
                 else:
                     reply = store._read_result(connection, request)
-            turns.append(self._turn(row, reply))
+            turns.append(self._turn(row, reply, connection=connection))
         return tuple(turns)
 
     @staticmethod
-    def _turn(row: dict[str, Any], reply: ReplyGenerated | None) -> AssistantTurn:
+    def _turn(row: dict[str, Any], reply: ReplyGenerated | None, *, connection: Any | None = None) -> AssistantTurn:
+        from notalone.persistence.assistant_prepared_format import requires_reprepare
+        scope = ContactScope(row["owner_id"], row["contact_id"])
+        reprepare = (requires_reprepare(row, scope, connection=connection)
+                     if row["state"] not in ("redacted", "unavailable", "completed") else False)
+        active = row.get("generation_active")
+        if reprepare and row.get("prepared_key_sealed"):
+            active = False
         return AssistantTurn(
             turn_id=row["id"], session_id=row["session_id"],
             input_version_id=row["input_version_id"], request_key=row["idempotency_key"],
             state=row["state"], input=row["input_payload"], reply=reply,
             interruption_reason=row.get("interruption_reason") if row["state"] == "failed" else None,
-            generation_active=(row.get("generation_active")
+            generation_active=(active
                                if row["state"] not in ("redacted", "unavailable") else None),
+            requires_reprepare=reprepare,
         )

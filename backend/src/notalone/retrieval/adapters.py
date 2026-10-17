@@ -10,6 +10,7 @@ from uuid import UUID
 from notalone.memory import MemoryCandidate, MemoryPort
 from notalone.retrieval.errors import RetrievalInvariantError
 from notalone.retrieval.models import (
+    history_timing, require_history_navigation,
     RetrievedMemory,
     RetrievedMessage,
     RetrievedOwnerMemory,
@@ -207,8 +208,10 @@ class InMemoryRetrieval:
         query: str | None = None,
         limit: int = 20,
         memory_ids: tuple[UUID, ...] | None = None,
+        include_historical: bool = False,
     ) -> tuple[RetrievedOwnerMemory, ...]:
         _validate_limit(limit, 20)
+        require_history_navigation(include_historical, memory_ids)
         if not isinstance(owner_id, UUID):
             raise TypeError("owner 记忆检索必须携带 owner ID。")
         if query is not None and not isinstance(query, str):
@@ -223,11 +226,15 @@ class InMemoryRetrieval:
             memory
             for memory in self.owner_memories
             if memory.owner_id == owner_id
-            and memory.status == "active"
+            and memory.status in (("active", "invalidated") if include_historical else ("active",))
             and (memory.valid_at is None or memory.valid_at <= now)
-            and (memory.invalid_at is None or now < memory.invalid_at)
+            and (include_historical or memory.invalid_at is None or now < memory.invalid_at)
             and (memory_ids is None or memory.memory_id in memory_ids)
         )
+        if include_historical:
+            from dataclasses import replace
+            scoped = tuple(replace(memory, timing=history_timing(memory.timing, memory.status, memory.invalid_at))
+                           for memory in scoped)
         return recall_owner_memories(scoped, query=query, limit=limit)
 
     def search_confirmed_memories(
@@ -237,8 +244,10 @@ class InMemoryRetrieval:
         query: str | None = None,
         limit: int = 20,
         memory_ids: tuple[UUID, ...] | None = None,
+        include_historical: bool = False,
     ) -> tuple[RetrievedMemory, ...]:
         _validate_limit(limit, 20)
+        require_history_navigation(include_historical, memory_ids)
         if not isinstance(scope, ContactScope):
             raise TypeError("关系记忆检索范围无效。")
         if query is not None and not isinstance(query, str):
@@ -250,7 +259,17 @@ class InMemoryRetrieval:
             raise ValueError("关系记忆导航引用结构无效。")
         if self.memory_store is None:
             return ()
-        memories = self.memory_store.list_confirmed(scope)
+        if include_historical:
+            selected = []
+            for identifier in memory_ids:
+                try:
+                    versions = self.memory_store.list_versions(scope=scope, memory_id=identifier)
+                except (LookupError, PermissionError):
+                    continue
+                selected.extend(item for item in versions if item.memory_id == identifier)
+            memories = tuple(selected)
+        else:
+            memories = self.memory_store.list_confirmed(scope)
         if not isinstance(memories, tuple) or any(
             memory.scope != scope for memory in memories
         ):
@@ -270,11 +289,13 @@ class InMemoryRetrieval:
                 status=memory.status.value,
                 valid_at=memory.valid_at,
                 invalid_at=memory.invalid_at,
-                timing=memory.timing,
+                timing=(history_timing(memory.timing, memory.status.value, memory.invalid_at)
+                        if include_historical else memory.timing),
                 confidence=memory.confidence,
             )
             for memory in memories
-            if memory_ids is None or memory.memory_id in memory_ids
+            if (memory_ids is None or memory.memory_id in memory_ids)
+            and memory.status.value in ("active", "invalidated")
         )
         return recall_memories(retrieved, query=query, limit=limit)
 

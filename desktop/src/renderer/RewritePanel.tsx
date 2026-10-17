@@ -8,16 +8,19 @@ import { ReplyEvidence, useReplyEvidence } from './ReplyEvidence';
 import { AssistantSessionBudgetNotice, AssistantSessionPanel } from './AssistantSessionPanel';
 import { hasChangedReplyInput } from './ReplyGenerationGuidance';
 import { StyleSamples } from './StyleSamples';
+import { ExpressionPreferences } from './ExpressionPreferences';
 import { CandidateVersionEditor } from './CandidateVersionEditor';
 import type { ReplyCandidateDraftUpdate, ReplyCandidateVersionRead, ReplyCandidateVersionEdit, ReplyCandidateVersionDisplay, ReplyCandidateVersionSelection } from '../shared/assistant-candidate-versions';
 import type { RequirementChange } from '../shared/assistant-continuation-clarification';
 import { AssistantContinuationControls } from './AssistantContinuationControls';
 import { AssistantMessageNoticeActions } from './AssistantMessageNoticeActions';
+import { ReplyBasisChangeNotice } from './ReplyBasisChangeNotice';
+import { ReplySceneInput } from './ReplySceneInput';
 
 export function useReplySession() {
   const { state, error, setError, latest, active, receive } = useRevisionedSession<ReplySessionState>({ revision: -1, scopeRevision: 0, contactId: null, generationBlock: 'foreground-confirmation-required',
     options: { tone: 'original', instruction: '', includeRelationshipContext: false },
-    mode: 'rewrite_draft', messages: { phase: 'idle', items: [], nextCursor: null }, targetMessageId: null, direction: '', purpose: '',
+    mode: 'rewrite_draft', scene: '', messages: { phase: 'idle', items: [], nextCursor: null }, targetMessageId: null, direction: '', purpose: '',
     correction: '', requirements: '', clarificationAnswer: '', skillChoice: { mode: 'auto', versionId: null }, skillChoices: [], exploration: { phase: 'idle', result: null },
     messageNotice: { phase: 'idle', changed: false, needsRefresh: false },
     phase: 'idle', result: null, selectedCandidateId: null, canRetry: false }, window.notalone.replies);
@@ -71,6 +74,7 @@ export function useReplySession() {
     retryExploration: () => operate(() => window.notalone.replies.retryExploration(selection())),
     updateRequirements: (requirements: string) => operate(() => window.notalone.replies.updateRequirements({ ...selection(), requirements })),
     updateSkill: (skill: import('../shared/reply-bridge').ReplySkillChoice) => operate(() => window.notalone.replies.updateSkill({ ...selection(), skill })),
+    updateScene: (scene: string) => operate(() => window.notalone.replies.updateScene({ ...selection(), scene })),
     selectDirection: (suggestionId: string, inputVersion: string) => operate(() => window.notalone.replies.selectDirection({ ...selection(), suggestionId, inputVersion })),
     updatePurpose: (purpose: string) => operate(() => window.notalone.replies.updatePurpose({ ...selection(), purpose })),
     retryInterruptedGeneration: (sessionId: string, turnId: string, inputVersionId: string) =>
@@ -124,6 +128,7 @@ export function RewriteInput({ contacts, replies }: { contacts: ContactSessionVi
         value={options.instruction} disabled={!enabled} placeholder="可选，如只说明时间，不增加承诺"
         onChange={(event) => update({ instruction: event.target.value })} /></label>
     </div>
+    <ReplySceneInput replies={replies} />
     <p className="rewrite-privacy">{options.includeRelationshipContext ? '本次允许使用这位联系人的近期消息和相关资料。' : '默认只处理草稿，不读取关系历史。'} 语气和要求只作用于本次生成。</p>
     <div className="rewrite-retry">
       {replies.state.canRetry && <button disabled={replies.state.phase === 'waiting' || Boolean(replies.state.generationBlock)} onClick={() => void replies.generate()}>重试同一次生成</button>}
@@ -174,7 +179,7 @@ export function ReplyCandidates({ replies }: { replies: ReplySessionView }) {
   const { state } = replies;
   const evidence = useReplyEvidence();
   const usedSkill = state.result?.usedSkill;
-  const usedVersion = usedSkill && state.skillChoices.find((item) => item.versionId === usedSkill.versionId)?.versionNumber;
+  const usedVersion = usedSkill && (usedSkill.versionNumber ?? state.skillChoices.find((item) => item.versionId === usedSkill.versionId)?.versionNumber);
   const recovered = !state.result && state.savedSession?.phase === 'ready'
     ? state.savedSession.turns.filter((turn) => turn.state === 'completed' && turn.reply).at(-1) : undefined;
   const replyRequestId = state.result?.replyRequestId ?? recovered?.reply?.replyRequestId;
@@ -221,6 +226,7 @@ export function ReplyCandidates({ replies }: { replies: ReplySessionView }) {
       && <p className="reply-generation-guidance" role="status">上一组候选，尚未按当前输入重新生成。</p>}
     {state.contentRestoreNotice && <p role="status">{state.contentRestoreNotice}</p>}
     <AssistantSessionBudgetNotice replies={replies} />
+    <ReplyBasisChangeNotice changes={state.result?.basisChanges ?? recovered?.basisChanges ?? recovered?.reply?.basisChanges} />
     {state.sourceAvailability === 'checking' && <p role="status">正在核对删除后的依据…</p>}
     {state.sourceAvailability === 'failed' && <p role="alert">删除后的依据尚未确认，原候选暂不可用。<button onClick={() => void replies.retrySourceValidation()}>重新核对依据</button></p>}
     {state.phase === 'waiting' && <p className="reply-note" role="status">正在等待本次生成结果…</p>}
@@ -236,13 +242,22 @@ export function ReplyCandidates({ replies }: { replies: ReplySessionView }) {
       : state.errorCode === 'input_budget_exceeded' ? '当前讨论超出模型输入预算，超限调用已停止。请查看已保存讨论或新开助手会话。'
       : state.errorCode === 'input_budget_unavailable' ? '当前模型的完整输入预算暂不可核验，本次生成已停止。已填写内容和已保存讨论仍会保留。'
       : state.errorCode === 'provider_context_limit' ? '模型提示这次内容过长，请新开助手会话。'
+      : state.errorCode === 'prepared_context_reprepare_required' ? '旧准备已停止，已填写内容仍会保留。请明确重新准备后生成。'
+      : state.errorCode === 'prepared_context_running' ? '旧准备的生成仍在运行，请等待完成后重新读取讨论。'
+      : state.errorCode === 'prepared_context_unconfirmed' ? '旧准备的任务终态尚未确认，已填写内容仍会保留，请先核对。'
       : '本次生成失败，请核对本机服务后重试。'}</p>}
+    {state.errorCode?.startsWith('prepared_context_') && <button
+      disabled={state.phase === 'waiting' || Boolean(state.generationBlock)}
+      onClick={() => void replies.generate(true)}>核对旧准备并重新生成</button>}
     {state.phase === 'failed' && state.mode === 'reply_to_message' && <p className="reply-note">可以刷新待回复消息重新选择，或切换到草稿改写。</p>}
     {state.result ? <>
       {usedSkill === null ? <p className="reply-note">这组候选使用通用流程。</p> : usedSkill && <p className="reply-note">
         这组候选实际 Skill：{usedSkill.name} · 版本 {usedVersion ?? usedSkill.versionId}{usedSkill.loadState === 'resource_failed' ? '（部分资源读取失败）' : ''}
+        {usedSkill.scope && ` · 范围：${usedSkill.scope.kind === 'scene' ? `精确场景「${usedSkill.scope.scene}」` : usedSkill.scope.kind === 'contact' ? '当前联系人' : '本人通用'}`}
+        {!!usedSkill.executionView?.policyRevision && ` · 已排除本范围停用方法，允许${usedSkill.executionView.methodIds.length}种做法`}
       </p>}
       <details className="reply-input-snapshot"><summary>这组候选的生成输入 · {state.result.input.contactDisplayName}</summary>
+        <p>精确场景：{state.result.input.scene ?? '未声明'}</p>
         {state.result.input.mode === 'rewrite_draft' ? <><p>{state.result.input.draftText}</p><p>{state.result.input.userInstruction ?? '没有额外要求'}</p>
           <p>关系语境：{state.result.input.includeRelationshipContext ? '已开启' : '关闭'}</p></>
           : state.result.input.mode === 'initiate_conversation' ? <p>主动目的：{state.result.input.purpose}</p>
@@ -289,5 +304,6 @@ export function ReplyCandidates({ replies }: { replies: ReplySessionView }) {
     <AssistantMessageNoticeActions replies={replies} hasUnsavedEdits={hasUnsavedEdits} />
     <AssistantSessionPanel replies={replies} />
     <StyleSamples replies={replies} />
+    <ExpressionPreferences replies={replies} />
   </section>;
 }

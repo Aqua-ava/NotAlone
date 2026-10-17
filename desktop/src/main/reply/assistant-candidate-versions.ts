@@ -4,6 +4,7 @@ import type { BackendHost } from '../backend/host';
 import { BackendRequestFailure } from '../backend/json-client';
 import { isUuid } from '../uuid';
 import { isRecord } from './result-read';
+import { readReplyBasisChanges } from './basis-changes-read';
 
 type VersionScope = ContactSelection & { sessionId: string };
 export interface AssistantCandidateVersionState {
@@ -27,15 +28,15 @@ function sourceUnavailable(error: unknown): boolean {
         && (error.reason === 'source_unavailable' || error.reason === 'request_invalidated'
           || error.reason === 'candidate_unavailable')));
 }
-function exact(value: unknown, keys: string[]): value is Record<string, unknown> {
-  return isRecord(value) && Object.keys(value).length === keys.length
-    && Object.keys(value).every((key) => keys.includes(key));
+function exact(value: unknown, keys: string[], optional: string[] = []): value is Record<string, unknown> {
+  return isRecord(value) && keys.every((key) => Object.hasOwn(value, key))
+    && Object.keys(value).every((key) => keys.includes(key) || optional.includes(key));
 }
 // 与 PostgreSQL length / Python len 的 Unicode 字符契约一致，避免拒绝合法完整正文。
 const characterCount = (value: string): number => Array.from(value).length;
 function history(value: unknown, request: ReplyCandidateVersionRead): AssistantCandidateHistory {
   if (!exact(value, ['session_id', 'turn_id', 'candidate_id', 'candidate_group_id', 'candidate_number',
-    'default_display_version_id', 'selected_version_id', 'versions'])
+    'default_display_version_id', 'selected_version_id', 'versions'], ['basis_changes'])
     || value.session_id !== request.sessionId || value.candidate_id !== request.candidateId
     || !isUuid(value.turn_id) || !isUuid(value.candidate_group_id)
     || !Number.isSafeInteger(value.candidate_number) || (value.candidate_number as number) < 1
@@ -43,6 +44,7 @@ function history(value: unknown, request: ReplyCandidateVersionRead): AssistantC
     || !isUuid(value.default_display_version_id)
     || (value.selected_version_id !== null && !isUuid(value.selected_version_id))) throw invalid();
   const known = new Set<string>();
+  const basisChanges = readReplyBasisChanges(value.basis_changes);
   let messageIds: string[] | undefined;
   const versions: AssistantCandidateVersion[] = value.versions.map((item: unknown, index) => {
     if (!exact(item, ['version_id', 'version_number', 'parent_version_id', 'text', 'messages', 'requirements', 'created_at'])
@@ -76,7 +78,8 @@ function history(value: unknown, request: ReplyCandidateVersionRead): AssistantC
   if (displayId !== versions.at(-1)!.versionId || (selectedId !== null && !known.has(selectedId))) throw invalid();
   return { sessionId: request.sessionId, turnId: value.turn_id.toLowerCase(), candidateId: request.candidateId,
     candidateGroupId: value.candidate_group_id.toLowerCase(), candidateNumber: value.candidate_number as number,
-    defaultDisplayVersionId: displayId, selectedVersionId: selectedId, versions };
+    defaultDisplayVersionId: displayId, selectedVersionId: selectedId, versions,
+    ...(value.basis_changes === undefined ? {} : { basisChanges }) };
 }
 function selection(value: unknown, sessionId: string): AssistantCandidateSelection | null {
   if (!exact(value, ['selection'])) throw invalid();
@@ -332,15 +335,17 @@ export class AssistantCandidateVersionSession {
       if (!current() || response.generation !== generation) return null;
       const page = response.data;
       if (!exact(page, ['session_id', 'turn_id', 'candidate_id', 'candidate_group_id', 'candidate_number',
-        'default_display_version_id', 'versions', 'page_number', 'version_count', 'next_page'])
+        'default_display_version_id', 'versions', 'page_number', 'version_count', 'next_page'], ['basis_changes'])
         || page.session_id !== request.sessionId || page.candidate_id !== request.candidateId
         || page.page_number !== pageNumber || !Number.isSafeInteger(page.version_count)
         || (page.version_count as number) < 1 || pageNumber >= (page.version_count as number)
         || !isUuid(page.default_display_version_id) || !Array.isArray(page.versions) || page.versions.length !== 1
         || !isRecord(page.versions[0]) || page.versions[0].version_number !== pageNumber
         || page.next_page !== (pageNumber + 1 < (page.version_count as number) ? pageNumber + 1 : null)) throw invalid();
+      const basisChanges = readReplyBasisChanges(page.basis_changes);
       if (first && ['session_id', 'turn_id', 'candidate_id', 'candidate_group_id', 'candidate_number',
         'default_display_version_id', 'version_count'].some((key) => page[key] !== first![key])) throw invalid();
+      if (first && JSON.stringify(basisChanges) !== JSON.stringify(readReplyBasisChanges(first.basis_changes))) throw invalid();
       first ??= page;
       versions.push(page.versions[0]);
       if (page.next_page === null) {

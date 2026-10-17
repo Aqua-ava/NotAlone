@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import unittest
 from datetime import datetime, timedelta, timezone
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import psycopg
 
@@ -165,8 +165,27 @@ class WriteAdjudicationTest(unittest.TestCase):
         self.assertEqual(len(confirmed), 1)
         return confirmed[0]
 
-    def test_update_replaces_old_version(self) -> None:
+    def _append_message(self, text: str, *, speaker: str = "contact") -> UUID:
+        message_id = uuid4()
+        with psycopg.connect(TEST_DATABASE_URL) as connection:
+            connection.execute(
+                "INSERT INTO public.message (id, owner_id, contact_id, speaker, "
+                "message_type, text_content, occurred_at) "
+                "VALUES (%s, %s, %s, %s, 'text', %s, now())",
+                (message_id, self.owner_id, self.contact_id, speaker, text),
+            )
+            connection.execute(
+                "INSERT INTO public.message_source_ref (id, message_id, owner_id, "
+                "contact_id, source_kind, source_document_id, source_locator, raw_payload) "
+                "VALUES (%s, %s, %s, %s, 'source_document', %s, %s, '{}'::jsonb)",
+                (uuid4(), message_id, self.owner_id, self.contact_id,
+                 self.source_id, f"synthetic-{message_id}"),
+            )
+        return message_id
+
+    def test_update_without_original_windows_preserves_old_version_and_pending(self) -> None:
         old = self._seed_memory("老王最近在减肥")
+        new_message_id = self._append_message("老王最近开始增肌了")
         adjudicator = ScriptedAdjudicator(
             [
                 AdjudicationDecision(
@@ -178,15 +197,21 @@ class WriteAdjudicationTest(unittest.TestCase):
 
         stats = self._adoption(adjudicator).adopt(
             self.scope,
-            ExtractionOutcome(accepted=(self._fact("老王最近开始增肌了"),)),
+            ExtractionOutcome(accepted=(self._fact(
+                "老王最近开始增肌了", source_message_ids=(new_message_id,),
+            ),)),
         )
 
-        self.assertEqual(stats.updated, 1)
+        self.assertEqual(stats.updated, 0)
+        self.assertEqual(stats.pending, 1)
         current = self.memory_store.list_confirmed(self.scope)
         self.assertEqual(len(current), 1)
-        self.assertEqual(current[0].text, "老王最近开始增肌了")
+        self.assertEqual(current[0].memory_id, old.memory_id)
+        self.assertEqual(current[0].text, "老王最近在减肥")
+        self.assertEqual(set(current[0].source_ids), {self.message_id})
+        self.assertEqual([item.text for item in self.memory_store.list_pending_candidates(self.scope)], ["老王最近开始增肌了"])
 
-    def test_noop_skips_duplicate_semantics(self) -> None:
+    def test_text_only_noop_preserves_the_uncertain_candidate(self) -> None:
         old = self._seed_memory("老王最近在减肥")
         adjudicator = ScriptedAdjudicator(
             [
@@ -202,10 +227,15 @@ class WriteAdjudicationTest(unittest.TestCase):
             ExtractionOutcome(accepted=(self._fact("老王最近在减肥中"),)),
         )
 
-        self.assertEqual(stats.skipped_duplicate, 1)
+        self.assertEqual(stats.skipped_duplicate, 0)
         self.assertEqual(stats.adopted + stats.updated, 0)
+        self.assertEqual(stats.pending, 1)
         current = self.memory_store.list_confirmed(self.scope)
         self.assertEqual(current[0].memory_id, old.memory_id)
+        self.assertEqual(
+            [candidate.text for candidate in self.memory_store.list_pending_candidates(self.scope)],
+            ["老王最近在减肥中"],
+        )
 
     def test_keep_stores_both(self) -> None:
         self._seed_memory("老王最近在减肥")
@@ -275,7 +305,7 @@ class WriteAdjudicationTest(unittest.TestCase):
         self.assertEqual(stats.adopted, 1)
         self.assertEqual(adjudicator.seen_candidates, [])
 
-    def test_owner_level_update_invalidates_old(self) -> None:
+    def test_owner_level_update_without_original_window_keeps_old_active(self) -> None:
         from notalone.memory.models import MemoryCategory, MemoryTopic
         from notalone.memory_extraction.models import FactSubject
 
@@ -293,6 +323,7 @@ class WriteAdjudicationTest(unittest.TestCase):
         )
         owner_memories = self.owner_store.list_active(self.owner_id)
         self.assertEqual(len(owner_memories), 1)
+        new_message_id = self._append_message("我最近开始增肌了", speaker="user")
         adjudicator = ScriptedAdjudicator(
             [
                 AdjudicationDecision(
@@ -310,15 +341,20 @@ class WriteAdjudicationTest(unittest.TestCase):
                         "我最近开始增肌了",
                         subject=FactSubject.SELF,
                         topic=MemoryTopic.HEALTH,
+                        source_message_ids=(new_message_id,),
                     ),
                 )
             ),
         )
 
-        self.assertEqual(stats.updated, 1)
+        self.assertEqual(stats.updated, 0)
+        self.assertEqual(stats.pending, 1)
         current = self.owner_store.list_active(self.owner_id)
         self.assertEqual(len(current), 1)
-        self.assertEqual(current[0].text, "我最近开始增肌了")
+        self.assertEqual(current[0].memory_id, owner_memories[0].memory_id)
+        self.assertEqual(current[0].text, "我最近在减肥")
+        self.assertEqual(set(current[0].source_ids), {self.message_id})
+        self.assertEqual([item.text for item in self.memory_store.list_pending_candidates(self.scope)], ["我最近开始增肌了"])
 
 
 if __name__ == "__main__":

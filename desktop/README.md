@@ -8,6 +8,8 @@ macOS App 图标使用独立的 `assets/app-icon.png` 母版（1024×1024、sRGB
 
 任务 05 已接入应用运行期间的多联系人生成调度：用户显式生成先取得准备回执并固定上下文，再等待一个执行许可；当前连接最多接纳 8 个未结算任务。切换、编辑、隐藏不会改写已准备请求，切回从原会话只读恢复，失败重试复用原操作。原请求被替换的实际回执或连接失效会释放本地执行许可；旧传输可能仍在收尾，实际模型互斥仍由后端保证。
 
+独立记忆集成候选的固定上下文使用 `version=2`、`schema_revision=5`。旧版、未知修订或损坏材料显式要求重新准备，当前编辑继续保留；普通读取和刷新不调用模型。用户点击“核对旧准备并重新生成”时，先用原 `request_key + input_version_id` 调用 `POST /api/contacts/{contact_id}/assistant-sessions/{session_id}/preparation-format`，同事务核对原 generation／attempt。仍运行或终态未知时继续等待，零 C 或可靠失败封旧键后才准备新输入；已可靠保存的完成结果继续重放。不自动释放有效租约或补取新消息冒充原快照。
+
 任务状态只保存身份与状态，终态最多 32 条。旧连接未确认身份保留原退出核对能力，不挤占新连接的 8 项额度；跨代际总未结算身份达到 32 项时停止接纳并显示退出核对提示。同键已结束请求的显式核对可接管旧身份。消息提醒最多保留 32 个会话的消息标识，切回认证读取核验；继续/策略重试最多保留 32 个原冻结命令引用，完成、失效和断线清理。真实退出停止派发并走既有中断协议，重新打开只读恢复，不自动续跑。上述是公开 Main/preload → HTTP/隔离 PG 合成验证，未运行真实 App、页面或微信，组合实机验收仍属任务 06。
 
 Electron + React/TypeScript 的本机 Mac App，当前完成管理后台与横向输入小窗。两个窗口独立打开，关闭时隐藏，可从原生“窗口”菜单恢复；使用“隐藏 NotAlone”整体收起后，窗口菜单只恢复所选窗口。“NotAlone → 退出 NotAlone”明确退出。小窗标题空白区域可拖动，底部图钉按钮可切换置顶；隐藏和恢复保留本次置顶状态，管理后台保持独立。
@@ -164,6 +166,8 @@ npm run test:pages -- --case message-events --timeout-seconds 300
 npm run test:pages -- --status  # 只读租约，不启动浏览器或 Electron
 ```
 
+08 的 `expression-preferences` 页面组验证明确长期保存、当次意图优先、范围切换、同库服务恢复和偏好/来源删除。先指定仓库外700目录 `NOTALONE_PREFERENCE_EVIDENCE_DIR`，执行 `npm run test:pages -- --case expression-preferences --timeout-seconds 180`；runner固定关键模块摘要并核对真实加载来源。本轮页面、Electron与真实模型验证按[08集成任务](../.scratch/memory-skill-integration-preparation/issues/08-expression-preferences.md)分别记录；脚本模型不代表语义质量放行。
+
 时限为 1–300 秒，包含构建；没有默认全量。`memory-reading` 验证实际资料/采纳方式/来源引用/切换/空状态及具名参数与角色限制；`draft-rewrite` 验证真实模型替代边界下的生成、候选编辑与原快照、选择和跨联系人迟到结果。`draft-rewrite-acceptance` 串行验证任务 09 的九个具名普通页面场景，每场景新建随机库和页面上下文；包括关系语境、真实 1–3 候选、等待/风险/编辑、幂等、失败与空候选、联系人及连接迟到成功/失败、同 userData 新生产会话清空及具名参数/角色/来源限制。六类交互与原 App 用例共用公开页面场景；新会话的输入准备/清空断言也与原生重启用例共享，各自保留停读、PageHost 或原生生命周期。`draft-rewrite-session` 固定只运行完整组中的同一个新会话场景，供相关小修复核使用；不能把单场景结果扩张为全部九项重跑。原生隐藏/恢复及真正 App 重启仍保留实际 App 验收。页面组复用生产 React、联系人/资料/回复 handler、参数校验、preload 传输接口及真实 HTTP/PostgreSQL；生产 Electron adapter 仍使用原 `validateCaller` 与角色检查。headless 的角色由 host 登记的 page 对象确定，不接受 renderer 自报；具名函数只接收已注册操作，renderer 不持有后端 token、数据库地址或任意 HTTP/系统调用。回环资源 host 与浏览器控制端仅用于测试，不进入交付 App。
 
 每例创建自己的随机 `_test` 库、合成联系人/本人、配置、握手和 context，仅外部模型及必要传输迟到被替代。窗口切换在测试中创建对应角色的页面，原生隐藏/置顶/快捷键/剪贴板与未接通业务入口明确拒绝，不返回假成功。未改正常 App 的 show/focus。原生窗口、真实 IPC 来源、系统对话框、签名 App、微信权限和完整 App 验收仍待实机，两个最小页面组不能替代功能票全部条件。
@@ -193,6 +197,28 @@ node tests/headless/rewrite-lifecycle-check.mjs          # 实际未知命令故
 官方接口核验：[Playwright BrowserType](https://playwright.dev/docs/api/class-browsertype)、[BrowserServer](https://playwright.dev/docs/api/class-browserserver)、[Apple NSRunningApplication](https://developer.apple.com/documentation/appkit/nsrunningapplication?language=objc)、[窗口信息](https://developer.apple.com/documentation/coregraphics/cgwindowlistcopywindowinfo(_:_:))。Context7 本轮不可用，官方一手资料与已安装 Playwright 1.64.0、macOS SDK 的实际编译/运行均已核对。
 
 追踪隔离核对 [LangSmith 的 LangChain 追踪](https://docs.langchain.com/langsmith/trace-with-langchain)与实际安装 `langchain-core 1.5.5` / `langsmith 0.11.0` / `langchain 1.3.15`：环境开关可自动安装真实回调，检查显式等待 trace flush；本轮只处理合成正文与 owned loopback，不审阅真实追踪密钥，也不据风险推断历史数据已上传。
+
+### 授权经验草稿页面（09）
+
+管理页“Skill 待审核”按当前已确认联系人显示独立草稿。用户明确开启此联系人的经验整理后，才使用该模型用途；页面可核对私人依据、实际候选措辞、方法映射和范围建议，未审核草稿不进入回复。选择与复制不证明已发送。切换联系人、连接代际或发生来源／偏好／记忆／助手会话删除时先隔离旧状态，再从权威目录复验。
+
+有限合成入口要求 `NOTALONE_LEARNING_EVIDENCE_DIR` 指向仓库外700目录，再执行 `npm run test:pages -- --case skill-learning --timeout-seconds 240`。父进程固定关键模块路径与SHA，隔离Python夹具核对实际加载路径、当前连续迁移和重复0；页面保留实际执行artifact与浏览器响应原字节。09本票运行的001–064结果、模型调用数与资源收尾见[09集成任务](../.scratch/memory-skill-integration-preparation/issues/09-learning-drafts.md)。脚本模型验证不证明真实模型质量、Electron或微信验收。
+
+### 版本化旧资料升级页面（10）
+
+管理窗口“旧资料升级”允许明确选择当前联系人或本人范围、消息与调用预算，先查看新旧差异，再勾选批次确认应用。比较卡片展示冻结算法协议和指纹；旧未知身份保持可回看，重新比较后才能应用。进度支持取消、按剩余预算恢复、合法撤销和删除工作副本；未知响应通过刷新重试原动作。原人工资料与旧版未知证明保留，来源或资料删除同步撤下受影响比较。
+
+有限合成入口要求 `NOTALONE_UPGRADE_EVIDENCE_DIR` 指向仓库外700目录，再执行 `npm run test:pages -- --case memory-upgrade --timeout-seconds 240`。该组使用生产Main/preload/React控制器、隔离HTTP/PG和精确001–065迁移，记录实际加载的关键模块及执行资源摘要、数据库归属与退出结果；仅受控模型脚本替换外部调用。实际验证与未验范围见[10集成任务](../.scratch/memory-skill-integration-preparation/issues/10-versioned-memory-upgrade.md)，页面入口不代表Electron或微信验收。
+
+### 同输入审核与范围发布页面（11）
+
+“打开对照审核”支持方法编辑与显式保存、同一来话／当前意图／精确场景的旧新两侧对照，以及拒绝或暂留。用户核对事实、承诺、适用范围和方法替代映射后，双确认批准才发布不可变版本。方法、输入或范围变化会撤下旧对照；轮询保留未保存编辑，审核POST未结算时不取消原任务。未知写入结果保留原动作和 `operation_key`；来源、样本或关联资料删除先撤下审核内容，实际删除结算前不重新读取。
+
+三种回复输入模式均提供可选的“本次精确场景”，空白不使用场景限定方法；场景来自用户声明，不从输入模式或来话推断。准备与执行共用冻结输入，同次重试、连续修改和中断恢复沿各自的权威原场景。A→B→A恢复各自输入和编辑，原任务晚结果仍属原联系人；连接变化清理缓存后重新核验。候选显示后端确认的实际Skill名称、版本号与范围，旧未知元数据不补成当前批准信息。
+
+有限页面入口为 `npm run test:pages -- --case skill-review --timeout-seconds 300`，先激活Conda NotAlone并把 `NOTALONE_LEARNING_EVIDENCE_DIR` 设为仓库外700目录。该组核精确001–066迁移、重复0及真实加载模块SHA；单Chrome、单自有PG库，受控学习模型最多1次、回复模型最多9次、真实外部模型调用0。页面保留实际执行资源、数据库归属、失败原栈和清理证据；工程结果见[11集成任务](../.scratch/memory-skill-integration-preparation/issues/11-review-and-publication.md)。页面与Node验证不代表Electron、微信或真实模型质量已通过。
+
+2026-10-16本集成候选的该页面1/1通过，实际受控调用为学习1次、回复9次，精确001–066、重复0；22个关键模块及276个实际加载模块核验通过。自有库已删除并核不存在、页面租约已解除，浏览器42次采样均未激活且屏上窗口为0；实际执行资源和来源原字节保存在端侧。相关纯Node回归175/175、`npm test`的类型／安全与探针构建搬运组65/65通过；实际App与微信未运行。
 
 ## 桌面验收与自动化测试
 

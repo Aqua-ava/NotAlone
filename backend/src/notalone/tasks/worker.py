@@ -64,6 +64,8 @@ from notalone.persistence.watermark_store import (
     WatermarkPersistenceError,
 )
 from notalone.scopes import ContactScope
+from notalone.skills.learning import SkillLearningInvalid, SkillLearningUnavailable
+from notalone.skills.learning_runtime import SkillLearningRuntimeError
 from notalone.tasks.models import (
     DELETE_TASK_STEPS,
     BackgroundTaskStepName,
@@ -75,6 +77,13 @@ class ExtractionTaskRunner(Protocol):
     """Worker 调用的记忆提取执行 seam。"""
 
     def run(self, *, scope: ContactScope) -> ExtractionRunStats: ...
+
+
+class LearningTaskRunner(Protocol):
+    """现有Worker内的有限学习步骤，不具备发布接口。"""
+
+    def run(self, *, scope: ContactScope, claim: ClaimedBackgroundTaskStep) -> int: ...
+    def verify(self, *, scope: ContactScope) -> None: ...
 
 
 class WorkerRunOutcome(StrEnum):
@@ -312,6 +321,8 @@ class BackgroundTaskWorker:
         "_repository",
         "_rule_version",
         "_model_priority",
+        "_learning_runner",
+        "_upgrade_runner",
     )
 
     def __init__(
@@ -324,9 +335,11 @@ class BackgroundTaskWorker:
         rule_version: str = "memory-extraction-v1",
         index_repository: PostgresContactMemoryIndexRepository | None = None,
         model_priority: ModelPriorityControl | None = None,
+        learning_runner: LearningTaskRunner | None = None,
+        upgrade_runner=None,
     ) -> None:
-        if repository is None or (extraction_runner is None and deletion_repository is None):
-            raise TypeError("Worker 必须注入任务仓储以及提取或删除执行器。")
+        if repository is None or (extraction_runner is None and deletion_repository is None and learning_runner is None and upgrade_runner is None):
+            raise TypeError("Worker 必须注入任务仓储及至少一个有限任务执行器。")
         if lease_duration <= timedelta(0):
             raise ValueError("Worker 租约必须是正时间段。")
         self._repository = repository
@@ -337,6 +350,8 @@ class BackgroundTaskWorker:
         self._model_version = getattr(extraction_runner, "model_version", None)
         self._rule_version = rule_version
         self._model_priority = model_priority
+        self._learning_runner = learning_runner
+        self._upgrade_runner = upgrade_runner
 
     def run_once(
         self,
@@ -360,6 +375,11 @@ class BackgroundTaskWorker:
             )
         if self._deletion_repository is not None:
             supported_steps += tuple(name for _, name in DELETE_TASK_STEPS)
+        if self._learning_runner is not None:
+            supported_steps += (BackgroundTaskStepName.PROPOSE_SKILL, BackgroundTaskStepName.VERIFY_SKILL_DRAFTS)
+        if self._upgrade_runner is not None:
+            supported_steps += (BackgroundTaskStepName.PREVIEW_UPGRADE, BackgroundTaskStepName.VERIFY_UPGRADE_PREVIEW,
+                                BackgroundTaskStepName.APPLY_UPGRADE, BackgroundTaskStepName.VERIFY_UPGRADE_APPLY)
         if self._index_repository is not None:
             supported_steps += (
                 BackgroundTaskStepName.INDEX,
@@ -421,6 +441,69 @@ class BackgroundTaskWorker:
                 processed_count=claim.message_count,
                 attempt_count=claim.attempt_count,
             )
+
+        if claim.name in (BackgroundTaskStepName.PREVIEW_UPGRADE, BackgroundTaskStepName.VERIFY_UPGRADE_PREVIEW,
+                           BackgroundTaskStepName.APPLY_UPGRADE, BackgroundTaskStepName.VERIFY_UPGRADE_APPLY):
+            from notalone.memory.upgrade import UpgradeConflict, UpgradeBudgetExceeded, UpgradeAlgorithmChanged
+            try:
+                guard = self._model_priority.background_scope(
+                    lambda: self._repository.check_step_lease(claim),
+                ) if self._model_priority else nullcontext()
+                with guard, _LeaseHeartbeat(self._repository, claim, self._lease_duration,
+                        self._model_priority.stop_event if self._model_priority else None) as heartbeat:
+                    if claim.name is BackgroundTaskStepName.PREVIEW_UPGRADE:
+                        count = self._upgrade_runner.preview(claim)
+                    elif claim.name is BackgroundTaskStepName.APPLY_UPGRADE:
+                        count = self._upgrade_runner.apply(claim)
+                    else:
+                        self._upgrade_runner.verify(claim)
+                        count = 0
+                    heartbeat.raise_if_failed()
+            except ModelWorkStopped:
+                return self._stopped_result(claim)
+            except Exception as error:
+                code = ('budget_exhausted' if isinstance(error, UpgradeBudgetExceeded)
+                        else 'algorithm_changed' if isinstance(error, UpgradeAlgorithmChanged)
+                        else 'sources_changed' if isinstance(error, UpgradeConflict)
+                        else 'trace_write_failed' if isinstance(error, TraceWriteError) else 'temporary_failure')
+                _, retryable = _failure_info(error)
+                task_code = code if code == 'trace_write_failed' else 'memory_upgrade_' + code
+                result = self._record_failure(claim, task_code,
+                    retryable=retryable and not isinstance(error, UpgradeConflict))
+                if result.outcome is WorkerRunOutcome.FAILED:
+                    self._upgrade_runner.failed(claim, code)
+                return result
+            if not self._complete_step(claim, processed_count=count, total_count=claim.message_count):
+                return self._temporary_failure_result(claim)
+            return WorkerRunResult(outcome=WorkerRunOutcome.SUCCEEDED, task_id=claim.task_id,
+                step_name=claim.name, processed_count=count, attempt_count=claim.attempt_count)
+
+        if claim.name in (BackgroundTaskStepName.PROPOSE_SKILL, BackgroundTaskStepName.VERIFY_SKILL_DRAFTS):
+            try:
+                guard = self._model_priority.background_scope(
+                    lambda: self._repository.check_step_lease(claim),
+                ) if self._model_priority is not None else nullcontext()
+                with guard, _LeaseHeartbeat(self._repository, claim, self._lease_duration,
+                        self._model_priority.stop_event if self._model_priority else None) as heartbeat:
+                    scope = ContactScope(claim.owner_id, claim.contact_id)
+                    if claim.name is BackgroundTaskStepName.PROPOSE_SKILL:
+                        count = self._learning_runner.run(scope=scope, claim=claim)
+                    else:
+                        self._learning_runner.verify(scope=scope)
+                        count = 0
+                    heartbeat.raise_if_failed()
+            except ModelWorkStopped:
+                return self._stopped_result(claim)
+            except (SkillLearningInvalid, SkillLearningUnavailable):
+                return self._record_failure(claim, 'skill_learning_stale_or_disabled', retryable=False)
+            except (SkillLearningRuntimeError, psycopg.Error, TimeoutError, ConnectionError, BackgroundTaskPersistenceError):
+                return self._record_failure(claim, 'skill_learning_temporary_failure', retryable=True)
+            except Exception:
+                return self._record_failure(claim, 'skill_learning_failed', retryable=False)
+            if not self._complete_step(claim, processed_count=count, total_count=claim.message_count):
+                return self._temporary_failure_result(claim)
+            return WorkerRunResult(outcome=WorkerRunOutcome.SUCCEEDED, task_id=claim.task_id,
+                step_name=claim.name, processed_count=count, attempt_count=claim.attempt_count)
 
         if claim.name is BackgroundTaskStepName.INDEX:
             try:

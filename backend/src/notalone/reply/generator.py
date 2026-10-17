@@ -51,6 +51,7 @@ from notalone.reply.interface import (
 )
 from notalone.scopes import ContactScope, VerifiedConversationScope
 from notalone.reply.input_budget_receipt import validate_input_budget_receipt
+from notalone.reply.retrieval_receipt import append_runtime_receipt, require_receipt_evidence
 
 
 logger = logging.getLogger(__name__)
@@ -333,6 +334,10 @@ class ReplyGenerator:
             raise ReplyInvariantError(
                 "回复上下文 adapter 返回了无效结果。"
             )
+        try:
+            require_receipt_evidence(context.retrieval, context.evidence)
+        except ValueError:
+            raise ReplyInvariantError("回复检索回执与实际依据不一致。") from None
         if context.scope != command.scope or context.command != command:
             raise ReplyInvariantError(
                 "回复上下文结果超出本次联系人范围。"
@@ -526,6 +531,7 @@ class ReplyGenerator:
             context,
             evidence=context.evidence + tuple(additions),
             tool_calls=context.tool_calls + result.tool_calls,
+            retrieval=append_runtime_receipt(context.retrieval, context.evidence, tuple(additions), result.tool_calls),
         )
 
     @staticmethod

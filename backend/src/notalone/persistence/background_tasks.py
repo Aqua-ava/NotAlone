@@ -377,7 +377,7 @@ class PostgresBackgroundTaskRepository:
         try:
             with psycopg.connect(self._database_url) as connection:
                 connection.execute(
-                    """
+                    f"""
                     UPDATE public.background_task AS task
                     SET last_error_code = %s, updated_at = now()
                     WHERE task.owner_id = %s AND task.contact_id = %s
@@ -393,7 +393,7 @@ class PostgresBackgroundTaskRepository:
                           WHERE binding.owner_id = task.owner_id
                             AND binding.contact_id = task.contact_id
                             AND binding.status = 'active'
-                      )))
+                      )) OR ({_learning_task_eligible_sql(connection)}) OR ({_upgrade_task_eligible_sql(connection)}))
                     """,
                     (error_code, owner_id, contact_id, task_id),
                 )
@@ -532,7 +532,7 @@ class PostgresBackgroundTaskRepository:
                 self._lock_scope(connection, owner_id, contact_id)
                 self._expire_leases(connection, owner_id, contact_id)
                 active = connection.execute(
-                    """
+                    f"""
                     SELECT 1
                     FROM public.background_task_step AS step
                     JOIN public.background_task AS task
@@ -550,7 +550,8 @@ class PostgresBackgroundTaskRepository:
                        WHERE binding.owner_id = task.owner_id
                          AND binding.contact_id = task.contact_id
                          AND binding.status = 'active'
-                   )))
+                   ))
+                   OR ({_learning_task_eligible_sql(connection)}) OR ({_upgrade_task_eligible_sql(connection)}))
                       AND step.status = 'running'
                       AND step.lease_expires_at > now()
                     LIMIT 1
@@ -560,7 +561,7 @@ class PostgresBackgroundTaskRepository:
                 if active is not None:
                     return None
                 candidate = connection.execute(
-                    """
+                    f"""
                     SELECT
                         step.id,
                         task.id,
@@ -586,7 +587,8 @@ class PostgresBackgroundTaskRepository:
                        WHERE binding.owner_id = task.owner_id
                          AND binding.contact_id = task.contact_id
                          AND binding.status = 'active'
-                   )))
+                   ))
+                   OR ({_learning_task_eligible_sql(connection)}) OR ({_upgrade_task_eligible_sql(connection)}))
                       AND task.status IN ('queued', 'running', 'verifying')
                       AND (%s::uuid IS NULL OR task.id = %s)
                       AND step.status IN ('pending', 'retryable')
@@ -733,7 +735,7 @@ class PostgresBackgroundTaskRepository:
                         )
                     observation_pending = connection.execute(
                         """
-                        SELECT task_type = 'observation' AND observation_pending
+                        SELECT task_type IN ('observation','skill_learning') AND observation_pending, task_type
                         FROM public.background_task
                         WHERE id = %s
                         FOR UPDATE
@@ -762,7 +764,7 @@ class PostgresBackgroundTaskRepository:
                         SET status = CASE WHEN %s THEN 'queued' ELSE 'succeeded' END,
                             last_error_code = NULL,
                             current_step = CASE WHEN %s
-                                THEN 'extract_memory' ELSE %s END,
+                                THEN %s ELSE %s END,
                             observation_pending = false,
                             started_at = CASE WHEN %s THEN NULL ELSE started_at END,
                             finished_at = CASE WHEN %s THEN NULL ELSE now() END,
@@ -772,6 +774,7 @@ class PostgresBackgroundTaskRepository:
                         (
                             requeue_observation,
                             requeue_observation,
+                            'propose_skill' if observation_pending[1] == 'skill_learning' else 'extract_memory',
                             claim.name.value,
                             requeue_observation,
                             requeue_observation,
@@ -1149,7 +1152,7 @@ class PostgresBackgroundTaskRepository:
         claim: ClaimedBackgroundTaskStep,
     ) -> None:
         row = connection.execute(
-            """
+            f"""
             SELECT step.status, step.worker_id, step.lease_expires_at,
                    step.lease_generation
             FROM public.background_task_step AS step
@@ -1170,7 +1173,8 @@ class PostgresBackgroundTaskRepository:
                        WHERE binding.owner_id = task.owner_id
                          AND binding.contact_id = task.contact_id
                          AND binding.status = 'active'
-                   )))
+                   ))
+                   OR ({_learning_task_eligible_sql(connection)}) OR ({_upgrade_task_eligible_sql(connection)}))
             FOR UPDATE OF task, step
             """,
             (
@@ -1244,3 +1248,33 @@ def _validate_error_code(value: str) -> None:
 def _as_postgres_interval(value: timedelta) -> str:
     seconds = value.total_seconds()
     return f"{seconds:g} seconds"
+
+
+def _learning_task_eligible_sql(connection) -> str:
+    """旧迁移阶段保持原任务合同；安装063后才接入学习用途授权。"""
+
+    row = connection.execute("SELECT to_regclass('public.skill_learning_scope')").fetchone()
+    if row is None or row[0] is None:
+        return "false"
+    return """task.task_type = 'skill_learning' AND EXISTS (
+        SELECT 1 FROM public.skill_learning_scope AS setting
+        JOIN public.conversation_binding AS binding
+          ON binding.owner_id=setting.owner_id AND binding.contact_id=setting.contact_id
+        WHERE setting.owner_id=task.owner_id AND setting.contact_id=task.contact_id
+          AND setting.enabled AND binding.status='active'
+    )"""
+
+
+def _upgrade_task_eligible_sql(connection) -> str:
+    """只执行同scope显式工作中的固定步骤，旧迁移基线不引用新表。"""
+    row = connection.execute("SELECT to_regclass('public.memory_upgrade_job')").fetchone()
+    if row is None or row[0] is None:
+        return "false"
+    return """task.task_type='memory_upgrade' AND EXISTS (
+        SELECT 1 FROM public.memory_upgrade_batch b JOIN public.memory_upgrade_job j
+        ON j.id=b.job_id AND j.owner_id=b.owner_id
+        JOIN public.conversation_binding binding ON binding.owner_id=b.owner_id AND binding.contact_id=b.contact_id
+        WHERE b.task_id=task.id AND b.owner_id=task.owner_id AND b.contact_id=task.contact_id
+          AND j.state='active' AND b.state IN ('queued','ready','apply_queued','applied')
+          AND (j.scope_kind='owner' OR j.contact_id=b.contact_id) AND binding.status='active'
+    )"""

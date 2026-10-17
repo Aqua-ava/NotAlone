@@ -6,17 +6,24 @@ from typing import Any
 from collections.abc import Iterable
 from langchain_core.language_models import BaseChatModel
 
+from notalone.memory.events import EventStage
 from notalone.memory_extraction.errors import ExtractionInvalidOutputError, ExtractionRuntimeError
 from notalone.memory_extraction.grounded import (
     AMBIGUITY_CODES, KINDS, OMISSIONS, SENSITIVITY, V4_AMBIGUITY_CODES, V4_KIND_EXTENSIONS,
-    V4_STRUCTURAL_KINDS,
-    compile_labels, compile_labels_v3, compile_labels_v4, source_units, needs_reference, reference_choices,
+    V4_STRUCTURAL_KINDS, GROUNDED_COMPILER_VERSION, GROUNDED_EXTRACTION_PROTOCOL,
+    compile_event_labels, compile_labels, compile_labels_v3, compile_labels_v4,
+    source_units, needs_reference, reference_choices,
 )
 from notalone.memory_extraction.models import ExtractionWindow, MemoryTopic
 from notalone.memory_extraction.runtime import ExtractionPayload
 from notalone.memory_trace import TraceWriteError
 from notalone.memory_trace.context import record
 from notalone.memory_trace.transport import invoke_traced_model
+
+GROUNDED_EVENT_PROMPT = """event为null或受控对象：stage取planned计划、agreed约定、rescheduled改期、cancelled取消、occurred发生、unknown未知。
+stage只是提案，不能从kind或时间到期认证。occurrence只选本事实成员或依赖的原文分句编号，没有明确时段则null。
+不能生成日期、正文、位置或核验位；程序只解析支持的完整日/周时段，不支持的时间保持未知，随后由独立来源核验。
+"""
 
 GROUNDED_PROMPT = """对同一联系人的原文分句进行结构化标注。只返回工具结构，不改写正文。
 units是按工具预设字段填写的对象，每个target字段必填，不再输出unit编号；context 仅供理解，不单独输出。不能删除分句来掩盖不知道或未决定。
@@ -40,6 +47,7 @@ sensitivity只标原文实际的敏感风险：financial=真实金钱风险，he
 confidence是模型对标签的把握，不能代替证据。程序只保证定位、引用、字段组合与时间计算，不认证你的语义判断。
 """
 
+# 已冻结的显式v3/v4保持原合同；默认提取的事件提案不混入旧评测协议。
 GROUNDED_V3_PROMPT = GROUNDED_PROMPT.replace(
     "sensitivity只标原文实际的敏感风险：financial=真实金钱风险，health=健康，commitment=明确承诺，other=其他明确敏感性。",
     "sensitivity按原文涉及的敏感事项标注：financial=借贷、负债、还款等金融敏感事项，"
@@ -177,6 +185,23 @@ def grounded_schema(window: ExtractionWindow) -> dict[str, Any]:
     }
 
 
+def grounded_event_schema(window: ExtractionWindow) -> dict[str, Any]:
+    """默认事件提案使用独立合同，保持旧v2/v3/v4的冻结结构。"""
+    schema = grounded_schema(window)
+    units = source_units(window)
+    for label in schema["properties"]["units"]["properties"].values():
+        label["properties"]["event"] = {"anyOf": [{"type": "null"}, {
+            "type": "object", "additionalProperties": False,
+            "properties": {
+                "stage": _enum(stage.value for stage in EventStage),
+                "occurrence": {"enum": [None, *(unit.id for unit in units)]},
+            },
+            "required": ["stage", "occurrence"],
+        }]}
+        label["required"].append("event")
+    return schema
+
+
 def grounded_schema_v3(window: ExtractionWindow) -> dict[str, Any]:
     """v3复用精确位置与依赖约束，仅增加封闭的歧义类别。"""
     schema = grounded_schema(window)
@@ -237,6 +262,16 @@ class GroundedV3ExtractionRuntime:
         return _extract_grounded(self._model, window, version3=True)
 
 
+class GroundedV2ExtractionRuntime:
+    """已冻结的旧v2协议；供显式历史评测使用，不替代默认事件提取。"""
+
+    def __init__(self, *, model: BaseChatModel) -> None:
+        self._model = model
+
+    def extract(self, window: ExtractionWindow) -> ExtractionPayload:
+        return _extract_grounded(self._model, window, version3=False, events=False)
+
+
 class GroundedV4ExtractionRuntime:
     """显式v4提取；新增提示profile尚未绑定真实评测合同。"""
 
@@ -253,6 +288,7 @@ class GroundedV4ExtractionRuntime:
 def _extract_grounded(
     model: BaseChatModel, window: ExtractionWindow, *, version3: bool, version4: bool = False,
     prompt_profile: str = DEFAULT_PROMPT_PROFILE,
+    events: bool = True,
 ) -> ExtractionPayload:
     if not version4 and prompt_profile != DEFAULT_PROMPT_PROFILE:
         raise ValueError("提取提示profile仅可用于显式v4。")
@@ -263,6 +299,11 @@ def _extract_grounded(
     elif version3:
         protocol, prompt, schema_factory, compiler = (
             "grounded-v3", GROUNDED_V3_PROMPT, grounded_schema_v3, compile_labels_v3,
+        )
+    elif events:
+        protocol, prompt, schema_factory, compiler = (
+            GROUNDED_EXTRACTION_PROTOCOL, GROUNDED_PROMPT + GROUNDED_EVENT_PROMPT,
+            grounded_event_schema, compile_event_labels,
         )
     else:
         protocol, prompt, schema_factory, compiler = (
@@ -283,11 +324,14 @@ def _extract_grounded(
     if not isinstance(calls, list) or len(calls) != 1 or calls[0].get("name") != schema["title"]:
         raise ExtractionInvalidOutputError("原文结构提取必须返回唯一的指定工具。")
     draft = calls[0].get("args")
-    record("grounded_draft", {"protocol": protocol, "units": source_units(window), "draft": draft})
+    identity = {"protocol": protocol}
+    if not version3 and not version4 and events:
+        identity["compiler_version"] = GROUNDED_COMPILER_VERSION
+    record("grounded_draft", {**identity, "units": source_units(window), "draft": draft})
     try:
         payloads = compiler(window, draft)
     except ExtractionInvalidOutputError:
-        record("grounded_compile", {"status": "rejected", "protocol": protocol}, status="rejected")
+        record("grounded_compile", {"status": "rejected", **identity}, status="rejected")
         raise
-    record("grounded_compile", {"protocol": protocol, "status": "compiled", "payloads": payloads})
+    record("grounded_compile", {**identity, "status": "compiled", "payloads": payloads})
     return payloads

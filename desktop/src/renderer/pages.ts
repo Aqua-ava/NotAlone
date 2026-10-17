@@ -1,4 +1,14 @@
 export const managerPages = {
+  memoryUpgrade: {
+    title: '旧资料升级', icon: 'memory',
+    description: '明确范围与预算，先比较差异，再批准仍合法的批次。',
+    emptyTitle: '请先选择联系人', emptyDescription: '升级只处理你明确确认的资料范围。', action: '选择联系人',
+  },
+  skillLearning: {
+    title: 'Skill 待审核', icon: 'memory',
+    description: '集中查看自动整理的方法、真实来源和适用范围建议。',
+    emptyTitle: '请先选择联系人', emptyDescription: '经验草稿只从已授权范围产生。', action: '选择联系人',
+  },
   contacts: {
     title: '联系人与绑定', icon: 'contacts',
     description: '先确认联系人与会话的对应关系，再决定哪些会话可以同步。',

@@ -1,8 +1,8 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { fork, spawn } from 'node:child_process';
-import { access, mkdir } from 'node:fs/promises';
+import { access, mkdir, readFile, realpath, stat } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { build, stop as stopBuild } from 'esbuild';
 import { acquireLease, leaseStatus, ownedGroupGone } from './app-test-lease.mjs';
@@ -30,7 +30,7 @@ function parse(args) {
   const names = []; let timeout;
   while (args.length) {
     const key = args.shift();
-    if (key === '--case' && ['assistant-session-combination', 'reply-strategy-combination', 'assistant-session-full-history', 'assistant-input-budget-hard', 'assistant-candidate-carry', 'authentic-expression-typed', 'assistant-input-budget', 'authentic-expression-groups', 'reply-strategy-confirmed-lifecycle', 'reply-strategy-lifecycle', 'assistant-session-catalog', 'assistant-session-catalog-guards', 'assistant-session-deletion-recovered-copy', 'assistant-session-deletion-faults', 'assistant-session-deletion-lifecycle', 'assistant-session-deletion', 'understanding-direction', 'response-scene-entry', 'reply-strategy-skills', 'reply-strategy-skill-invalidation', 'reply-strategy-confirmed-clarification', 'style-session-editor-erasure', 'reply-strategy-bounded-updates', 'reply-strategy-message-groups', 'reply-strategy-group-boundaries', 'reply-strategy-version-edit-guard', 'reply-strategy-transition', 'reply-strategy-options', 'reply-strategy-dialogue', 'reply-strategy-invalidation', 'authentic-expression-session-retention', 'authentic-expression-recovery', 'assistant-session-recovery', 'assistant-session-recovery-guards', 'style-reference', 'style-copy-limits', 'style-copy-origin', 'style-samples', 'fidelity-intent', 'fidelity-content', 'assistant-session-persistence', 'conversation-strategy-entry', 'memory-traces-record-deletion', 'memory-traces-full', 'memory-traces-lifecycle', 'memory-traces', 'memory-reading', 'memory-reading-full', 'memory-stale-full', 'draft-rewrite', 'draft-rewrite-acceptance', 'draft-rewrite-session', 'candidate-visibility', 'direction-generation-feedback', 'directed-reply', 'candidate-copy', 'message-events', 'foreground-visual-preview', 'foreground-paused', 'foreground-verified', 'foreground-manual', 'foreground-confirmation-safety', 'source-deletion-full', 'source-deletion-stale-request', 'source-deletion-multi-source', 'source-deletion-unrelated', 'source-deletion-evidence-failure', 'source-deletion-cross-contact', 'source-deletion-replies', 'source-deletion-basic', 'source-deletion-verification', 'source-deletion-unknown', 'source-deletion-arguments', 'import-submit-acceptance', 'import-stale-acceptance', 'import-bootstrap', 'import-bootstrap-prepare-failure', 'binding-consent', 'binding-stale', 'sync-switch', 'sync-backfill-retry', 'sync-arguments', 'sync-control-full', 'reply-evidence', 'memory-editing-owner', 'memory-editing-addition', 'memory-editing-contact-correction', 'memory-editing-removal', 'memory-editing-confirm', 'memory-editing-discard', 'memory-editing-failures', 'memory-editing-arguments', 'memory-editing-stale', 'memory-editing-full'].includes(args[0])) names.push(args.shift());
+    if (key === '--case' && ['memory-skill-evolution', 'skill-feedback', 'skill-lifecycle', 'skill-review', 'memory-upgrade', 'skill-learning', 'expression-preferences', 'overview-reply-retrieval', 'owner-facts-overview', 'contact-relationship-overview', 'historical-reply-basis', 'memory-event-updates', 'memory-current-status', 'memory-correction-protection', 'assistant-session-combination', 'reply-strategy-combination', 'assistant-session-full-history', 'assistant-input-budget-hard', 'assistant-candidate-carry', 'authentic-expression-typed', 'assistant-input-budget', 'authentic-expression-groups', 'reply-strategy-confirmed-lifecycle', 'reply-strategy-lifecycle', 'assistant-session-catalog', 'assistant-session-catalog-guards', 'assistant-session-deletion-recovered-copy', 'assistant-session-deletion-faults', 'assistant-session-deletion-lifecycle', 'assistant-session-deletion', 'understanding-direction', 'response-scene-entry', 'reply-strategy-skills', 'reply-strategy-skill-invalidation', 'reply-strategy-confirmed-clarification', 'style-session-editor-erasure', 'reply-strategy-bounded-updates', 'reply-strategy-message-groups', 'reply-strategy-group-boundaries', 'reply-strategy-version-edit-guard', 'reply-strategy-transition', 'reply-strategy-options', 'reply-strategy-dialogue', 'reply-strategy-invalidation', 'authentic-expression-session-retention', 'authentic-expression-recovery', 'assistant-session-recovery', 'assistant-session-recovery-guards', 'style-reference', 'style-copy-limits', 'style-copy-origin', 'style-samples', 'fidelity-intent', 'fidelity-content', 'assistant-session-persistence', 'conversation-strategy-entry', 'memory-traces-record-deletion', 'memory-traces-full', 'memory-traces-lifecycle', 'memory-traces', 'memory-reading', 'memory-reading-full', 'memory-stale-full', 'draft-rewrite', 'draft-rewrite-acceptance', 'draft-rewrite-session', 'candidate-visibility', 'direction-generation-feedback', 'directed-reply', 'candidate-copy', 'message-events', 'foreground-visual-preview', 'foreground-paused', 'foreground-verified', 'foreground-manual', 'foreground-confirmation-safety', 'source-deletion-full', 'source-deletion-stale-request', 'source-deletion-multi-source', 'source-deletion-unrelated', 'source-deletion-evidence-failure', 'source-deletion-cross-contact', 'source-deletion-replies', 'source-deletion-basic', 'source-deletion-verification', 'source-deletion-unknown', 'source-deletion-arguments', 'import-submit-acceptance', 'import-stale-acceptance', 'import-bootstrap', 'import-bootstrap-prepare-failure', 'binding-consent', 'binding-stale', 'sync-switch', 'sync-backfill-retry', 'sync-arguments', 'sync-control-full', 'reply-evidence', 'memory-editing-owner', 'memory-editing-addition', 'memory-editing-contact-correction', 'memory-editing-removal', 'memory-editing-confirm', 'memory-editing-discard', 'memory-editing-failures', 'memory-editing-arguments', 'memory-editing-stale', 'memory-editing-full'].includes(args[0])) names.push(args.shift());
     else if (key === '--timeout-seconds' && /^\d+$/.test(args[0] ?? '')) timeout = Number(args.shift());
     else throw new Error('page_test_arguments: 需要明确页面范围与有限截止时间');
   }
@@ -39,8 +39,76 @@ function parse(args) {
   }
   return { names, timeout };
 }
+function pageFixtureEnvironment(options, environment) {
+  const result = {};
+  for (const [name, key] of [['memory-skill-evolution', 'NOTALONE_EVOLUTION_EVIDENCE_DIR'], ['skill-feedback', 'NOTALONE_LEARNING_EVIDENCE_DIR'], ['skill-lifecycle', 'NOTALONE_LEARNING_EVIDENCE_DIR'], ['memory-upgrade', 'NOTALONE_UPGRADE_EVIDENCE_DIR'], ['skill-learning', 'NOTALONE_LEARNING_EVIDENCE_DIR'], ['skill-review', 'NOTALONE_LEARNING_EVIDENCE_DIR'], ['expression-preferences', 'NOTALONE_PREFERENCE_EVIDENCE_DIR'],
+    ['overview-reply-retrieval', 'NOTALONE_REPLY_OVERVIEW_TEST_EVIDENCE_DIR'],
+    ['contact-relationship-overview', 'NOTALONE_OVERVIEW_TEST_EVIDENCE_DIR'],
+    ['owner-facts-overview', 'NOTALONE_OWNER_OVERVIEW_TEST_EVIDENCE_DIR']]) {
+    if (!options.names?.includes(name)) continue;
+    const directory = environment[key];
+    const project = path.resolve(desktop, '..');
+    if (!directory || !path.isAbsolute(directory) || path.resolve(directory) === project
+      || path.resolve(directory).startsWith(`${project}${path.sep}`)) {
+      throw new Error('page_test_environment: 概览页面须显式使用仓库外的验收证据目录');
+    }
+    result[key] = directory;
+  }
+  return result;
+}
 async function run(options) {
   if (options.mode !== 'probe' && (process.env.CONDA_DEFAULT_ENV !== 'NotAlone' || !process.env.CONDA_PREFIX)) throw new Error('page_test_environment: 请先激活 Conda NotAlone');
+  const fixtureEnvironment = pageFixtureEnvironment(options, process.env);
+  for (const key of Object.keys(fixtureEnvironment)) {
+    const directory = await realpath(fixtureEnvironment[key]);
+    pageFixtureEnvironment(options, { ...fixtureEnvironment, [key]: directory });
+    const evidence = await stat(directory);
+    if (!evidence.isDirectory() || (evidence.mode & 0o777) !== 0o700) {
+      throw new Error('page_test_environment: 页面验收证据目录须使用700权限');
+    }
+    fixtureEnvironment[key] = directory;
+  }
+  if (options.names?.includes('memory-skill-evolution')) {
+    const guardKeys = ['NOTALONE_EVOLUTION_GUARD_ADAPTER_PATH', 'NOTALONE_EVOLUTION_GUARD_ADAPTER_SHA256',
+      'NOTALONE_EVOLUTION_GUARD_DATABASE_GUARD_PATH', 'NOTALONE_EVOLUTION_GUARD_DATABASE_GUARD_SHA256'];
+    if (!guardKeys.every(key => process.env[key])) throw new Error('page_test_environment: 组合页面须固定本轮完整资源守卫');
+    for (const key of guardKeys) fixtureEnvironment[key] = process.env[key];
+    const { memorySkillEvolutionModules } = await import('../tests/fixtures/memory-skill-evolution-modules.mjs');
+    fixtureEnvironment.NOTALONE_EVOLUTION_EXPECTED_MODULES = JSON.stringify(await memorySkillEvolutionModules(path.resolve(desktop, '..')));
+  }
+  if (options.names?.some(name => ['skill-learning', 'skill-review', 'skill-lifecycle', 'skill-feedback'].includes(name))) {
+    const feedback = options.names.includes('skill-feedback');
+    const lifecycle = options.names.includes('skill-lifecycle');
+    const reviewing = feedback || lifecycle || options.names.includes('skill-review');
+    if (feedback) fixtureEnvironment.NOTALONE_SKILL_FEEDBACK_PAGE = '1';
+    if (lifecycle) fixtureEnvironment.NOTALONE_SKILL_LIFECYCLE_PAGE = '1';
+    if (reviewing) fixtureEnvironment.NOTALONE_SKILL_REVIEW_PAGE = '1';
+    const guardKeys = ['NOTALONE_LEARNING_GUARD_ADAPTER_PATH', 'NOTALONE_LEARNING_GUARD_ADAPTER_SHA256',
+      'NOTALONE_LEARNING_GUARD_DATABASE_GUARD_PATH', 'NOTALONE_LEARNING_GUARD_DATABASE_GUARD_SHA256'];
+    if (guardKeys.some(key => process.env[key])) {
+      if (!guardKeys.every(key => process.env[key])) throw new Error('page_test_environment: 审核守卫须完整固定路径与摘要');
+      for (const key of guardKeys) fixtureEnvironment[key] = process.env[key];
+    }
+    const { skillLearningModules } = await import('../tests/fixtures/skill-learning-modules.mjs');
+    fixtureEnvironment.NOTALONE_LEARNING_EXPECTED_MODULES = JSON.stringify(await skillLearningModules(
+      path.resolve(desktop, '..'), 'desktop/tests/fixtures/skill-learning-page.py', { reviewing, lifecycle, feedback }));
+  }
+  if (options.names?.includes('memory-upgrade')) {
+    const guardKeys = ['NOTALONE_UPGRADE_GUARD_ADAPTER_PATH', 'NOTALONE_UPGRADE_GUARD_ADAPTER_SHA256',
+      'NOTALONE_UPGRADE_DATABASE_GUARD_PATH', 'NOTALONE_UPGRADE_DATABASE_GUARD_SHA256'];
+    if (guardKeys.some(key => process.env[key])) {
+      if (!guardKeys.every(key => process.env[key])) throw new Error('page_test_environment: 升级守卫须完整固定路径与摘要');
+      for (const key of guardKeys) fixtureEnvironment[key] = process.env[key];
+    }
+    const { memoryUpgradeModules } = await import('../tests/fixtures/memory-upgrade-modules.mjs');
+    fixtureEnvironment.NOTALONE_UPGRADE_EXPECTED_MODULES = JSON.stringify(await memoryUpgradeModules(
+      path.resolve(desktop, '..'), 'desktop/tests/fixtures/memory-upgrade-page.py'));
+  }
+  if (options.names?.includes('expression-preferences')) {
+    const { expressionPreferenceModules } = await import('../tests/fixtures/expression-preference-modules.mjs');
+    fixtureEnvironment.NOTALONE_PREFERENCE_EXPECTED_MODULES = JSON.stringify(await expressionPreferenceModules(
+      path.resolve(desktop, '..'), 'desktop/tests/fixtures/expression-preferences-page.py'));
+  }
   if (options.mode !== 'probe') await access('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', constants.X_OK)
     .catch(() => { throw new Error('page_test_browser_unavailable: 本机Chrome不可用；不会下载浏览器'); });
   const until = Date.now() + options.timeout * 1000;
@@ -71,7 +139,7 @@ async function run(options) {
     const environment = withoutExternalTracing(Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('NOTALONE_') && !key.startsWith('DEEPSEEK_'))));
     child = fork(path.join(desktop, probe ? 'tests/headless/probe-child.mjs' : 'artifacts/headless-runtime/run.mjs'),
       probe ? [String(options.hold), String(options.uncertain)] : [], { cwd: desktop, detached: true, stdio: ['ignore', 'inherit', 'inherit', 'ipc'],
-        env: { ...environment, NOTALONE_DISABLE_DOTENV: '1', NOTALONE_PAGE_RUN_NONCE: nonce, NOTALONE_PAGE_CASES: JSON.stringify(options.names) } });
+        env: { ...environment, ...fixtureEnvironment, NOTALONE_DISABLE_DOTENV: '1', NOTALONE_PAGE_RUN_NONCE: nonce, NOTALONE_PAGE_CASES: JSON.stringify(options.names) } });
     children.push(child);
     child.on('message', (message) => {
       if (message?.nonce !== nonce) return;

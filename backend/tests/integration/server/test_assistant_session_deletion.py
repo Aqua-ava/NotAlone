@@ -271,7 +271,7 @@ class AssistantSessionDeletionHttpTest(unittest.TestCase):
         self.assertNotEqual(status, 200, rejected)
         self.assertEqual(self.backend.request(replacement)[1]["turns"], [])
         self.assertEqual(self.backend.request(replacement)[1]["inputs"], [])
-        self.assertEqual(self.backend.request("/api/reply/generate", body), (500, {"error": "reply_generation_failed"}))
+        self.assertEqual(self.backend.request("/api/reply/generate", body), (409, {"error": "reply_input_invalidated"}))
         self.assertEqual(len(self.model.seen_calls), 1)
 
     def test_missing_or_false_confirmation_preserves_discussion(self) -> None:
@@ -345,7 +345,7 @@ class AssistantSessionDeletionHttpTest(unittest.TestCase):
         self.assertEqual(self.backend.request(replacement)[1]["turns"], [])
         self.assertNotEqual(self.backend.request(replacement + "/replies", body)[0], 200)
         self.assertEqual(self.backend.request(replacement)[1]["inputs"], [])
-        self.assertEqual(self.backend.request("/api/reply/generate", body), (500, {"error": "reply_generation_failed"}))
+        self.assertEqual(self.backend.request("/api/reply/generate", body), (409, {"error": "reply_input_invalidated"}))
         self.assertEqual(len(self.model.seen_calls), 1)
 
     def test_failed_reply_without_completed_candidate_is_cleared_and_cannot_replay(self) -> None:
@@ -361,7 +361,7 @@ class AssistantSessionDeletionHttpTest(unittest.TestCase):
         replacement = self._path(self._default())
         self.assertNotEqual(self.backend.request(replacement + "/replies", body)[0], 200)
         self.assertEqual(self.backend.request(replacement)[1]["turns"], [])
-        self.assertEqual(self.backend.request("/api/reply/generate", body), (500, {"error": "reply_generation_failed"}))
+        self.assertEqual(self.backend.request("/api/reply/generate", body), (409, {"error": "reply_input_invalidated"}))
         self.assertEqual(len(self.model.seen_calls), 1)
 
     def test_reserved_key_without_reply_request_is_invalidated_before_late_start(self) -> None:
@@ -376,7 +376,7 @@ class AssistantSessionDeletionHttpTest(unittest.TestCase):
         remove_fault()
 
         self.assertEqual(self.backend.request(path, {"confirmed": True}, method="DELETE")[0], 200)
-        self.assertEqual(self.backend.request("/api/reply/generate", body), (500, {"error": "reply_generation_failed"}))
+        self.assertEqual(self.backend.request("/api/reply/generate", body), (409, {"error": "reply_input_invalidated"}))
         replacement = self._path(self._default())
         self.assertNotEqual(self.backend.request(replacement + "/replies", body)[0], 200)
         self.assertEqual(self.backend.request(replacement)[1]["inputs"], [])
@@ -483,7 +483,7 @@ class AssistantSessionDeletionHttpTest(unittest.TestCase):
 
         self.assertEqual(self.backend.request(parent_path, {"confirmed": True}, method="DELETE")[0], 200)
         self.assertEqual(self.backend.request(parent_path), (404, {"error": "not_found"}))
-        self.assertEqual(self.backend.request("/api/reply/generate", parent_body), (500, {"error": "reply_generation_failed"}))
+        self.assertEqual(self.backend.request("/api/reply/generate", parent_body), (409, {"error": "reply_input_invalidated"}))
         status, remaining = self.backend.request(child_path)
         self.assertEqual(status, 200, remaining)
         self.assertEqual([turn["state"] for turn in remaining["turns"]], ["redacted", "completed"])

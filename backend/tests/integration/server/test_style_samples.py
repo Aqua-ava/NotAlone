@@ -13,6 +13,9 @@ import json
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from notalone.persistence.observation_store import PostgresObservationStore
+from notalone.persistence.memory_store import PostgresMemoryStore
+from notalone.memory.models import MemoryCandidate, MemoryCategory
+from notalone.scopes import ContactScope
 from notalone.persistence.locks import try_acquire_global_worker_lock, release_global_worker_lock
 
 from tests.integration.server.core_business_flow_support import CoreBusinessFlowFixture, ScriptedCoreModel, tool_response
@@ -212,9 +215,18 @@ class StyleSampleHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
                         fields.append("contact_id"); values.append(self.contact_id)
                     if kind != "pending_candidate":
                         fields.append("adoption_method"); values.append("manual")
-                    connection.execute(sql.SQL("INSERT INTO public.{} ({}) VALUES ({})").format(
-                        sql.Identifier(table), sql.SQL(",").join(map(sql.Identifier, fields)),
-                        sql.SQL(",").join(sql.Placeholder() for _ in fields)), values)
+                    if kind != "pending_candidate":
+                        connection.execute(sql.SQL("INSERT INTO public.{} ({}) VALUES ({})").format(
+                            sql.Identifier(table), sql.SQL(",").join(map(sql.Identifier, fields)),
+                            sql.SQL(",").join(sql.Placeholder() for _ in fields)), values)
+                if kind == "pending_candidate":
+                    # 首次保存取得实际来源快照；不为旧 NULL 候选补造依据。
+                    candidate = PostgresMemoryStore(self.database_url).create_candidate(MemoryCandidate(
+                        candidate_id=memory_id, scope=ContactScope(self.owner_id, self.contact_id),
+                        text="合成原始消息", category=MemoryCategory.PREFERENCE,
+                        source_ids=(message_id,),
+                    ))
+                    self.assertEqual(candidate.candidate_id, memory_id)
                 if not self.bindings.list_active_bindings(owner_id=self.owner_id):
                     self.bindings.create_binding(owner_id=self.owner_id, contact_id=self.contact_id, channel="wechat",
                                                  account_scope="synthetic-account", conversation_locator="synthetic-conversation")
@@ -395,8 +407,8 @@ class StyleSampleHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         with psycopg.connect(self.database_url) as connection:
             connection.execute("DELETE FROM public.reply_original_source_use WHERE reply_request_id=%s", (parent["reply_request_id"],))
 
-        def assert_unavailable():
-            for reply, body in ((parent, parent_body), (child, child_body)):
+        def assert_unavailable(sample_statuses=(409, 409)):
+            for (reply, body), sample_status in zip(((parent, parent_body), (child, child_body)), sample_statuses):
                 path = f"/api/contacts/{self.contact_id}/replies/{reply['reply_request_id']}/evidence"
                 self.assertEqual(self.backend.request(path)[0], 404)
                 self.assertNotEqual(self.backend.request("/api/reply/generate", body)[0], 200)
@@ -405,15 +417,27 @@ class StyleSampleHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
                 self.assertNotEqual(self.backend.request("/api/reply/generate", continuation)[0], 200)
                 sample = {"idempotency_key": str(uuid4()), "text": "旧候选不能保存的衍生表达",
                           "origin": {"kind": "candidate", "id": reply["candidates"][0]["candidate_id"]}}
-                self.assertEqual(self.backend.request(self.path, sample)[0], 409)
+                self.assertEqual(self.backend.request(self.path, sample)[0], sample_status)
             self.assertEqual(len(self.reply_model.seen_calls), 2)
 
         assert_unavailable()
+        candidate_ids = [parent['candidates'][0]['candidate_id'], child['candidates'][0]['candidate_id']]
+        with psycopg.connect(self.database_url) as connection:
+            self.assertEqual(connection.execute(
+                "SELECT count(*) FROM public.reply_candidate WHERE owner_id=%s AND contact_id=%s AND id=ANY(%s::uuid[])",
+                (self.owner_id, self.contact_id, candidate_ids),
+            ).fetchone()[0], 2)
         with psycopg.connect(self.database_url, autocommit=True) as gate:
             self.assertTrue(try_acquire_global_worker_lock(gate))
             try:
                 self.assertEqual(self.backend.request(f"/api/contacts/{self.contact_id}/sources/{source_id}", method="DELETE")[0], 202)
-                assert_unavailable()
+                # 子候选有真实来源快照，排队即擦除；旧父候选继续被缺快照门拒绝。
+                remaining = {str(row[0]) for row in gate.execute(
+                    "SELECT id FROM public.reply_candidate WHERE owner_id=%s AND contact_id=%s AND id=ANY(%s::uuid[])",
+                    (self.owner_id, self.contact_id, candidate_ids),
+                ).fetchall()}
+                self.assertEqual(remaining, {parent['candidates'][0]['candidate_id']})
+                assert_unavailable(sample_statuses=(409, 404))
             finally:
                 release_global_worker_lock(gate)
         self._delete_source(source_id)

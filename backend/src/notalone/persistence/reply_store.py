@@ -10,13 +10,24 @@ from uuid import UUID, uuid4
 import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
+from notalone.persistence.memory_overview import PostgresRelationshipOverviewStore
+from notalone.persistence.reply_overview_navigation import require_current_overview_navigation, navigation_dependency_ids
+from notalone.reply.retrieval_receipt import MemoryNavigation, ReplyRetrievalReceipt, require_receipt_evidence
 
+from notalone.reply.errors import ReplyInputInvalidatedError
+from notalone.persistence.expression_preferences import (
+    capture_reply_expression_preferences, require_captured_reply_expression_preferences,
+)
 from notalone.persistence.assistant_reply_identity import prepare_assistant_reply_start
 from notalone.persistence.locks import lock_owner_scope
 from notalone.persistence.reply_discussion_dependencies import (
     capture_reply_discussion_dependencies, require_reply_discussion_dependencies, reply_discussion_metadata,
 )
 from notalone.persistence.assistant_session_store import prepare_assistant_reply_commit
+from notalone.persistence.reply_basis_changes import require_current_reply_memory
+from notalone.persistence.reply_continuation_basis import (
+    capture_reply_continuation_basis, read_continuation_basis, require_reply_continuation_basis,
+)
 from notalone.persistence.style_sample_store import (
     capture_reply_original_sources, capture_declared_reply_sources, require_reply_sources_current,
     capture_reply_style_references, require_context_style_references,
@@ -122,7 +133,7 @@ class PostgresReplyStore:
                 prepare_assistant_reply_start(connection, command, verified_scope, normalized_input)
                 if connection.execute("SELECT 1 FROM public.reply_invalidated_key WHERE owner_id=%s AND contact_id=%s AND idempotency_key=%s",
                                       (verified_scope.owner_id, verified_scope.contact_id, command.idempotency_key)).fetchone():
-                    raise ReplyStoreInvariantError("原回复请求已失效，请用新的请求重新生成。")
+                    raise ReplyInputInvalidatedError("原回复请求已失效，请用新的请求重新生成。")
                 request_id = self._new_uuid()
                 lease_expires_at = now + self._lease_duration
                 inserted = connection.execute(
@@ -223,6 +234,8 @@ class PostgresReplyStore:
                     )
                     state = self._state_from_row(existing)
                     if state is ReplyAttemptState.COMPLETED:
+                        from notalone.persistence.skill_execution_view import require_saved_skill_policy
+                        require_saved_skill_policy(connection, request.scope, request.request_id)
                         result = self._read_result(connection, existing)
                         outcome = ReplyStart(
                             state=ReplyRequestState.REPLAYED,
@@ -316,6 +329,8 @@ class PostgresReplyStore:
                             request=self._request_from_row(retried),
                             continued_candidate=continuation,
                         )
+                if outcome.state is ReplyRequestState.STARTED:
+                    capture_reply_continuation_basis(connection, outcome.request, continuation)
         except ReplyPersistenceError:
             raise
         except psycopg.Error:
@@ -334,6 +349,10 @@ class PostgresReplyStore:
                 if row is None or row["attempt"] != request.attempt or row["state"] != 'running':
                     raise ReplyStoreInvariantError("回复请求已失效。")
                 self._validate_context(connection, request, context)
+                require_current_overview_navigation(connection, context, PostgresRelationshipOverviewStore(self._database_url))
+                require_current_reply_memory(connection, request.scope, context.evidence)
+                require_reply_continuation_basis(connection, request, context)
+                capture_reply_expression_preferences(connection, request, context)
                 capture_reply_style_references(connection, request, context)
                 connection.execute("DELETE FROM public.reply_original_source_use WHERE reply_request_id=%s", (request.request_id,))
                 capture_reply_original_sources(connection, request, context)
@@ -341,6 +360,10 @@ class PostgresReplyStore:
                     connection, request, context.assistant_discussion.snapshot if context.assistant_discussion else None,
                 )
                 require_reply_sources_current(connection, owner_id=request.scope.owner_id, request_id=request.request_id)
+                if context.retrieval is not None:
+                    connection.execute("UPDATE public.reply_request SET context_snapshot=coalesce(context_snapshot,'{}'::jsonb) || %s WHERE id=%s",
+                        (Jsonb({"scope": {"owner_id": str(context.scope.owner_id), "contact_id": str(context.scope.contact_id)},
+                                "navigation_dependency_ids": navigation_dependency_ids(context)}), request.request_id))
         except ExplorationExpired:
             self._prune_expired_exploration(request.scope)
             raise ReplyStoreInvariantError("探索任务已过期。") from None
@@ -379,6 +402,11 @@ class PostgresReplyStore:
                     (request.request_id,),
                 ).fetchone()
                 if row is None:
+                    if connection.execute(
+                        "SELECT 1 FROM public.reply_invalidated_key WHERE owner_id=%s AND contact_id=%s AND idempotency_key=%s",
+                        (request.scope.owner_id, request.scope.contact_id, request.idempotency_key),
+                    ).fetchone():
+                        raise ReplyInputInvalidatedError("原回复请求已失效，请用新的请求重新生成。")
                     raise ReplyStoreInvariantError("回复请求租约已失效。")
                 persisted_request = self._request_from_row(row)
                 if persisted_request != request:
@@ -403,6 +431,7 @@ class PostgresReplyStore:
                         request,
                         context,
                     )
+                    require_captured_reply_expression_preferences(connection, request, context)
                     captured_samples = {row["sample_id"] for row in connection.execute(
                         "SELECT sample_id FROM public.reply_style_sample_use WHERE owner_id=%s AND contact_id=%s AND reply_request_id=%s",
                         (request.scope.owner_id, request.scope.contact_id, request.request_id),
@@ -415,8 +444,13 @@ class PostgresReplyStore:
                     )
                     capture_declared_reply_sources(connection, request, context)
                     require_reply_sources_current(connection, owner_id=request.scope.owner_id, request_id=request.request_id)
+                    require_current_overview_navigation(connection, context, PostgresRelationshipOverviewStore(self._database_url))
+                    require_current_reply_memory(connection, request.scope, context.evidence)
                     prepare_assistant_reply_commit(connection, request, context)
+                    continuation_metadata = require_reply_continuation_basis(connection, request, context)
                     self._validate_reply(reply, evidence_ids=evidence)
+                    from notalone.persistence.skill_port import require_reply_skill_current
+                    require_reply_skill_current(connection, context, reply.used_skill)
                     candidates: list[ReplyCandidate] = []
                     candidate_ids: set[UUID] = set()
                     for runtime_candidate in reply.candidates:
@@ -450,12 +484,16 @@ class PostgresReplyStore:
                             for evidence_id in candidate.citation_ids
                         )
                     )
+                    from notalone.reply.expression_preferences import preference_receipts
+
                     result = ReplyGenerated(
                         reply_request_id=request.request_id,
                         candidates=tuple(candidates),
                         context_receipt=ContextReceipt(
                             evidence_ids=evidence_ids,
                             style_sample_ids=tuple(sorted(item.sample_id for item in context.style_references)),
+                            expression_preference_ids=tuple(sorted(item.preference_id for item in context.expression_preferences)),
+                            expression_preferences=preference_receipts(context.expression_preferences),
                         ),
                         used_skill=reply.used_skill,
                         input_budget=reply.input_budget,
@@ -481,6 +519,14 @@ class PostgresReplyStore:
                         """,
                         (
                             Jsonb({**self._context_snapshot(context, input_budget=reply.input_budget),
+                                   **({'skill_runtime_scope': {'kind': reply.used_skill.scope_kind,
+                                      'contact_id': str(reply.used_skill.scope_contact_id) if reply.used_skill.scope_contact_id else None,
+                                      'scene': reply.used_skill.scope_scene},
+                                      'skill_version_number': reply.used_skill.version_number,
+                                      'skill_execution_scene': context.command.scene,
+                                      **({'skill_execution_view': reply.used_skill.execution_view.to_payload()}
+                                         if reply.used_skill.execution_view else {})} if reply.used_skill else {}),
+                                   **continuation_metadata,
                                    **reply_discussion_metadata(connection, request.scope, request.request_id)}),
                             context.skill_library_revision,
                             skill_columns["skill_id"],
@@ -560,6 +606,12 @@ class PostgresReplyStore:
                     (request.request_id,),
                 ).fetchone()
                 if row is None:
+                    if connection.execute(
+                        "SELECT 1 FROM public.reply_invalidated_key "
+                        "WHERE owner_id=%s AND contact_id=%s AND idempotency_key=%s",
+                        (request.scope.owner_id, request.scope.contact_id, request.idempotency_key),
+                    ).fetchone() is not None:
+                        return
                     raise ReplyStoreInvariantError("回复请求租约已失效。")
                 persisted_request = self._request_from_row(row)
                 if persisted_request != request:
@@ -662,6 +714,7 @@ class PostgresReplyStore:
                         is ReplyAttemptState.COMPLETED
                         else None
                     ),
+                    retrieval=self._read_retrieval_snapshot(row["context_snapshot"]),
                 )
         except ReplyPersistenceError:
             raise
@@ -758,37 +811,13 @@ class PostgresReplyStore:
         candidate_id = command.continued_from_candidate_id
         if candidate_id is None:
             return None
-        row = connection.execute(
-            """
-            SELECT id, owner_id, contact_id,
-                   conversation_binding_id, candidate_text, reply_request_id
-            FROM public.reply_candidate
-            WHERE id = %s
-              AND owner_id = %s
-              AND contact_id = %s
-              AND conversation_binding_id = %s
-            """,
-            (
-                candidate_id,
-                verified_scope.owner_id,
-                verified_scope.contact_id,
-                verified_scope.conversation_binding_id,
-            ),
-        ).fetchone()
-        if row is None:
-            raise ReplyContinuationError(
-                "历史候选不属于当前已验证联系人会话。"
-            )
         try:
-            require_reply_sources_current(connection, owner_id=verified_scope.owner_id, request_id=row["reply_request_id"])
+            return read_continuation_basis(
+                connection, ContactScope(verified_scope.owner_id, verified_scope.contact_id),
+                verified_scope.conversation_binding_id, candidate_id,
+            )
         except ReplyStoreInvariantError:
             raise ReplyContinuationError("前序候选使用的原始来源已失效。") from None
-        return ContinuedReplyCandidate(
-            candidate_id=row["id"],
-            scope=ContactScope(row["owner_id"], row["contact_id"]),
-            conversation_binding_id=row["conversation_binding_id"],
-            text=row["candidate_text"],
-        )
 
     @staticmethod
     def _mark_attempt_expired(
@@ -828,6 +857,11 @@ class PostgresReplyStore:
         context: ReplyContext,
     ) -> set[UUID]:
         from notalone.persistence.explored_generation import require_explored_context
+
+        try:
+            require_receipt_evidence(context.retrieval, context.evidence)
+        except (AttributeError, TypeError, ValueError):
+            raise ReplyStoreInvariantError("回复检索回执与实际依据不一致。") from None
 
         if not (
             isinstance(context, ReplyContext)
@@ -1031,6 +1065,8 @@ class PostgresReplyStore:
     def _context_snapshot(
         context: ReplyContext, *, input_budget: InputBudgetDecision | None = None,
     ) -> dict[str, Any]:
+        from notalone.reply.expression_preferences import preference_receipt_payload, preference_receipts
+
         direction: dict[str, str] | None = None
         if context.direction is not None:
             direction = {
@@ -1049,6 +1085,10 @@ class PostgresReplyStore:
             "memory_revision": context.memory_revision,
             "index_revision": context.index_revision,
             "style_sample_ids": [str(item.sample_id) for item in context.style_references],
+            "expression_preferences": [
+                preference_receipt_payload(item) for item in preference_receipts(context.expression_preferences)
+            ],
+            "expression_preference_revision": context.expression_preference_revision,
             "tool_calls": [
                 {
                     "tool_name": trace.tool_name,
@@ -1070,6 +1110,7 @@ class PostgresReplyStore:
                     ],
                     "selection_reason": item.selection_reason,
                     "model_visible": item.model_visible,
+                    **({"navigation": item.navigation.to_snapshot()} if item.navigation else {}),
                     "status": item.status,
                     "valid_at": (
                         item.valid_at.isoformat()
@@ -1090,7 +1131,21 @@ class PostgresReplyStore:
         receipt = input_budget_receipt_payload(input_budget)
         if receipt is not None:
             snapshot["input_budget"] = receipt
+        if context.retrieval is not None:
+            snapshot["retrieval"] = context.retrieval.to_payload()
+            snapshot["navigation_dependency_ids"] = navigation_dependency_ids(context)
         return snapshot
+
+    @staticmethod
+    def _read_retrieval_snapshot(snapshot: object) -> ReplyRetrievalReceipt | None:
+        if snapshot is None:
+            return None
+        if not isinstance(snapshot, dict):
+            raise ReplyStoreInvariantError("回复检索回执快照无效。")
+        try:
+            return ReplyRetrievalReceipt.from_payload(snapshot.get("retrieval"))
+        except (KeyError, AttributeError, TypeError, ValueError):
+            raise ReplyStoreInvariantError("回复检索回执快照无效。") from None
 
     @staticmethod
     def _skill_columns(
@@ -1241,6 +1296,7 @@ class PostgresReplyStore:
         context_snapshot: object,
     ) -> tuple[ContextEvidence, ...]:
         timings = PostgresReplyStore._snapshot_timings(context_snapshot, scope)
+        metadata = {item["evidence_id"]: item for item in context_snapshot.get("evidence", [])} if isinstance(context_snapshot, dict) else {}
         rows = connection.execute(
             """
             SELECT evidence_id, owner_id, contact_id, kind, evidence_text,
@@ -1271,6 +1327,8 @@ class PostgresReplyStore:
                         invalid_at=row["evidence_invalid_at"],
                         revision=row["evidence_revision"],
                         timing=timings.get(row["evidence_id"], MemoryTiming()),
+                        model_visible=metadata.get(str(row["evidence_id"]), {}).get("model_visible", True),
+                        navigation=MemoryNavigation.from_snapshot(metadata.get(str(row["evidence_id"]), {}).get("navigation")),
                     )
                 )
             except (KeyError, TypeError, ValueError):
@@ -1354,10 +1412,24 @@ class PostgresReplyStore:
         connection: Any,
         request_row: dict[str, Any],
     ) -> ReplyGenerated:
-        require_reply_sources_current(connection, owner_id=request_row["owner_id"], request_id=request_row["id"])
+        from notalone.reply.expression_preferences import read_preference_receipts
+
+        require_reply_sources_current(connection, owner_id=request_row["owner_id"],
+                                      request_id=request_row["id"], historical=True)
         snapshot = request_row["context_snapshot"]
         if not isinstance(snapshot, dict):
             raise ReplyStoreInvariantError("已完成回复缺少上下文快照。")
+        try:
+            preferences = read_preference_receipts(snapshot.get("expression_preferences", []), contact_id=request_row["contact_id"])
+        except (ValueError, TypeError, AttributeError):
+            raise ReplyStoreInvariantError("已完成回复的长期偏好回执结构无效。") from None
+        captured_preferences = {(row["preference_id"], row["preference_revision"]) for row in connection.execute(
+            "SELECT preference_id,preference_revision FROM public.reply_expression_preference_use "
+            "WHERE owner_id=%s AND contact_id=%s AND reply_request_id=%s",
+            (request_row["owner_id"], request_row["contact_id"], request_row["id"]),
+        ).fetchall()}
+        if captured_preferences != {(item.preference_id, item.revision) for item in preferences}:
+            raise ReplyStoreInvariantError("完成回复与当时实际偏好使用记录不一致。")
         input_budget = None
         if "input_budget" in snapshot:
             try:
@@ -1425,10 +1497,21 @@ class PostgresReplyStore:
             and isinstance(skill_name, str)
             and skill_name.strip()
         ):
+            from notalone.skills.models import SkillExecutionView
+            try:
+                execution_view = SkillExecutionView.from_payload(snapshot['skill_execution_view']) if 'skill_execution_view' in snapshot else None
+            except (ValueError, TypeError):
+                raise ReplyStoreInvariantError('已完成回复的策略执行凭证无效。') from None
             used_skill = SkillUse(
                 skill_id=skill_id,
                 version_id=skill_version_id,
                 name=skill_name,
+                version_number=snapshot.get('skill_version_number'),
+                scope_kind=snapshot.get('skill_runtime_scope', {}).get('kind', 'owner'),
+                scope_contact_id=UUID(snapshot['skill_runtime_scope']['contact_id'])
+                    if snapshot.get('skill_runtime_scope', {}).get('contact_id') else None,
+                scope_scene=snapshot.get('skill_runtime_scope', {}).get('scene'),
+                execution_view=execution_view,
                 selection_method=(
                     request_row["skill_selection_method"]
                     if request_row.get("skill_selection_method") in ("auto", "user")
@@ -1456,6 +1539,7 @@ class PostgresReplyStore:
             raise ReplyStoreInvariantError("Skill 使用摘要结构无效。")
         if not isinstance(request_row["skill_library_revision"], int):
             raise ReplyStoreInvariantError("已完成回复缺少 Skill 修订号。")
+        from notalone.persistence.reply_basis_changes import read_reply_basis_changes
         return ReplyGenerated(
             reply_request_id=request_row["id"],
             candidates=tuple(candidates),
@@ -1464,9 +1548,12 @@ class PostgresReplyStore:
                     "SELECT sample_id FROM public.reply_style_sample_use WHERE owner_id=%s AND contact_id=%s AND reply_request_id=%s ORDER BY sample_id",
                     (request_row["owner_id"], request_row["contact_id"], request_row["id"]),
                 ).fetchall()
-            )),
+            ), expression_preference_ids=tuple(item.preference_id for item in preferences), expression_preferences=preferences),
             used_skill=used_skill,
             input_budget=input_budget,
+            basis_changes=read_reply_basis_changes(
+                connection, ContactScope(request_row["owner_id"], request_row["contact_id"]), request_row["id"],
+            ),
         )
 
     @staticmethod

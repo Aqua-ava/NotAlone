@@ -19,6 +19,7 @@ from notalone.memory.models import (
     MemoryTopic,
 )
 from notalone.memory.timing import MemoryTiming
+from notalone.memory.events import MemoryEvent
 
 __all__ = [
     "AssertionStatus",
@@ -79,8 +80,11 @@ class ExtractedFact:
     interpretation_reason: str = ""
     timing: MemoryTiming = MemoryTiming()
     dimension_evidence: DimensionEvidence | None = None
+    event: MemoryEvent | None = None
 
     def __post_init__(self) -> None:
+        if self.event is not None and not isinstance(self.event, MemoryEvent):
+            raise ValueError("提取事件结构无效。")
         if self.dimension_evidence is not None and not isinstance(
             self.dimension_evidence, DimensionEvidence
         ):

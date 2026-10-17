@@ -20,7 +20,10 @@ import psycopg
 import httpx
 from openai import BadRequestError
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
-from fixture_cleanup import cleanup_fixture
+from fixture_cleanup import bind_prepared_database, cleanup_fixture, database_ownership_path, verify_full_migrations
+
+# 直接 App 入口在载入测试模块前绑定双 URL；runpy 包装器继续拥有其既有库。
+PREPARED_DATABASE_NAME = bind_prepared_database() if __name__ == "__main__" else None
 
 from notalone.application.model_priority import ModelPriorityControl
 from notalone.application.memory_service import MemoryService
@@ -146,9 +149,15 @@ class DesktopRewriteModel(ScriptedCoreModel):
 
 
 class DesktopRewriteFixture(CoreBusinessFlowFixture, unittest.TestCase):
+    _prepared_database_name = PREPARED_DATABASE_NAME
     production_model_wiring = True
     reply_model_factory = DesktopRewriteModel
     dimension_release = None
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        cls.migration_receipt = verify_full_migrations(cls.database_name, cls.database_url)
 
     def input_budget_configuration(self) -> dict[str, Any]:
         """默认合成协议不变，预算页面夹具仅覆盖显式能力配置。"""
@@ -340,8 +349,11 @@ class DesktopRewriteFixture(CoreBusinessFlowFixture, unittest.TestCase):
 
 def main() -> None:
     fixture = DesktopRewriteFixture()
+    DesktopRewriteFixture._database_ownership_path = database_ownership_path()
     try:
         DesktopRewriteFixture.setUpClass()
+        os.environ.update({"NOTALONE_DATABASE_URL": fixture.database_url,
+                           "NOTALONE_TEST_DATABASE_URL": fixture.database_url})
         fixture.setUp()
         contact_ids = [
             fixture.prepare_contact(fixture.owner_id, "合成联系人甲", "甲的私密合成历史：今晚我会晚一点回复你。"),
@@ -351,6 +363,7 @@ def main() -> None:
             fixture.other_owner_id, "另一用户的联系人", "另一用户的私密合成历史：今晚我会晚一点回复你。",
         )
         empty_contact_id = uuid4()
+        historical_basis = None
         with psycopg.connect(fixture.database_url) as connection:
             connection.execute("INSERT INTO public.contact (owner_id, id, display_name) VALUES (%s,%s,%s)",
                                (fixture.owner_id, empty_contact_id, "无消息的合成联系人"))
@@ -359,6 +372,7 @@ def main() -> None:
             "database_url": fixture.database_url, "owner_id": str(fixture.owner_id),
             "contact_ids": contact_ids, "other_contact_id": other_contact_id,
             "empty_contact_id": str(empty_contact_id),
+            **fixture.migration_receipt,
         }}), flush=True)
         for line in sys.stdin:
             command = json.loads(line)
@@ -403,6 +417,18 @@ def main() -> None:
                 result = {}
             elif operation == "direction_dependency":
                 result = fixture.prepare_direction_dependency(contact_ids[0])
+            elif operation == "memory_current_status":
+                from memory_current_status_fixture import prepare_memory_current_status
+                result = prepare_memory_current_status(fixture, contact_ids[0])
+            elif operation == "historical_basis_prepare":
+                from historical_reply_basis_fixture import prepare_historical_reply_basis
+                historical_basis = prepare_historical_reply_basis(fixture, contact_ids[0], command["kind"])
+                result = historical_basis
+            elif operation == "historical_basis_expire":
+                from historical_reply_basis_fixture import expire_historical_reply_basis
+                if historical_basis is None:
+                    raise ValueError("本轮尚未准备合成历史依据。")
+                result = expire_historical_reply_basis(fixture, historical_basis)
             elif operation == "shift_direction_dependency":
                 fixture.shift_direction_dependency(contact_ids[0], command["target_source"])
                 result = {}

@@ -210,14 +210,7 @@ class TraceSession:
             return None
         failure = None
         for call in self.observations.values():
-            if not call.invoked or call.ledger_entry is not None:
-                continue
-            if (
-                call.request_capture_failed
-                and call.provider_attempts == 1
-                and call.response_status == "unavailable"
-            ):
-                # 首个供应商请求 hook 在发送前失败，不能冒充实际外发。
+            if not self._actually_invoked(call) or call.ledger_entry is not None:
                 continue
             call.disposition = "not_adopted"
             finished = call.finished_at or datetime.now(timezone.utc)
@@ -249,6 +242,18 @@ class TraceSession:
                 self.stage = "call_receipt"
                 failure = TraceWriteError(self.stage, self.trace_id)
         return failure
+
+    @staticmethod
+    def _actually_invoked(call: CallObservation | None) -> bool:
+        # 首个供应商请求hook在发送前失败，不能冒充实际外发。
+        return call is not None and call.invoked and not (
+            call.request_capture_failed and call.provider_attempts == 1
+            and call.response_status == "unavailable"
+        )
+
+    def call_was_invoked(self, purpose: str) -> bool:
+        """供调用预算边界查询实际发送事实，不暴露内部观测字段。"""
+        return self._actually_invoked(self.observations.get(self.calls.get(purpose)))
 
     def reserve_ledger(self, purpose: str, entry: LedgerEntry) -> None:
         """台账 I/O 前保留同一 ID，回执丢失时不另造补账。"""

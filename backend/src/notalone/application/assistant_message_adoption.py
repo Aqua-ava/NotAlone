@@ -28,7 +28,7 @@ def parse_assistant_reply_request(body: bytes) -> tuple[UUID, ReplyServiceReques
     if not isinstance(payload, dict) or "adopt_new_message_id" not in payload:
         return parse_reply_request(body)
     allowed = {"contact_id", "idempotency_key", "content", "expected_input_version_id", "adopt_new_message_id",
-               "skill_version_id", "skill_disabled", "continued_from_candidate_id", "suggestion"}
+               "skill_version_id", "skill_disabled", "continued_from_candidate_id", "suggestion", "scene"}
     content = payload.get("content")
     if (set(payload) - allowed or not isinstance(content, dict)
             or content.get("user_instruction") is not None or content.get("suggestion") is not None
@@ -55,6 +55,7 @@ def parse_assistant_reply_request(body: bytes) -> tuple[UUID, ReplyServiceReques
     return contact_id, AssistantMessageAdoptionRequest(
         idempotency_key=request.idempotency_key, content=request.content,
         skill_version_id=request.skill_version_id, skill_disabled=request.skill_disabled,
+        scene=request.scene,
         expected_input_version_id=request.expected_input_version_id,
         adopt_new_message_id=message_id, submission=payload,
     )

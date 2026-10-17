@@ -11,7 +11,8 @@ import { ContactHttpProxy } from './contact-http-proxy';
 import { readAcceptanceFile, readForegroundAudit, readForegroundCredential, verifyForegroundAuditAppend,
   type ForegroundAuditSnapshot, type ForegroundCredential } from './real-foreground-credential';
 import { resolveSyncProbePath } from '../src/main/backend/bundled-helpers';
-import { prepareObservationMeasurements, readObservationMeasurements } from './observation-measurements-fixture';
+import { prepareObservationMeasurements,
+  readObservationMeasurements } from './observation-measurements-fixture';
 
 const execute = promisify(execFile);
 const project = path.resolve('..');
@@ -38,10 +39,6 @@ export function visualObservationResources(environment: NodeJS.ProcessEnv, scope
 
 export async function prepareVisualObservationMeasurements(fixture: BindingFixture, probe: string): Promise<void> {
   await prepareObservationMeasurements(fixture, probe);
-  // 只适配本轮临时受控启动器；既有测量源和普通 Python 入口保持原样。
-  await writeFile(path.join(fixture.directory, 'sitecustomize.py'),
-    `import sys\nif sys.orig_argv[1:4] == [${JSON.stringify(fixture.pythonExecutable)}, "-m", "notalone.server.command"]:\n` +
-    '    from observation_measurements import install\n    install()\n', { mode: 0o600 });
 }
 
 class RealSyncFixture extends BindingFixture {

@@ -7,6 +7,7 @@ from typing import Any
 from langchain_core.language_models import BaseChatModel
 
 from notalone.memory.models import MemoryCategory
+from notalone.memory.events import EVENT_PROPOSAL_SCHEMA
 from notalone.memory_extraction.errors import (
     ExtractionInvalidOutputError,
     ExtractionRuntimeError,
@@ -184,6 +185,13 @@ interpretation_reason只说明有据的语用与来源，不把否定解释为�
 也不添加原话没有的人物关系或互动。它仍只写一句简短依据，不输出模型内部思考过程。
 """
 
+# 历史协议仅供显式兼容与评测；生产 builder 继续使用 Grounded。
+EXTRACTION_SYSTEM_PROMPT += """
+event是可空事件提案，阶段与发生时段必须分别给出来源位置，不能用当前时间认证发生。
+stage取planned/agreed/rescheduled/cancelled/occurred/unknown；没有依据时留unknown或null。
+stage_evidence与occurrence_evidence使用原消息UUID及Unicode码点半开位置，不输出核验位。
+"""
+
 EXTRACTION_SCHEMA: dict[str, Any] = {
     "title": "MemoryExtractionOutput",
     "description": "从消息窗口提取的关系事实列表；必须以结构化工具调用返回。",
@@ -317,6 +325,7 @@ EXTRACTION_SCHEMA: dict[str, Any] = {
                         ),
                         "type": "string",
                     },
+                    "event": EVENT_PROPOSAL_SCHEMA,
                 },
                 "required": [
                     "text",

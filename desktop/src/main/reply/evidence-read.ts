@@ -1,6 +1,9 @@
 import type { ReplyEvidenceItem } from '../../shared/reply-evidence';
 import type { BackendHost } from '../backend/host';
 import { isUuid } from '../uuid';
+import { readCurrentStatus } from '../memory/current-status';
+import { readReplyBasisChanges } from './basis-changes-read';
+import { readEvidenceNavigation, readReplyRetrieval } from './retrieval-receipt-read';
 
 const record = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 const text = (value: unknown): value is string => typeof value === 'string' && value.length <= 65_536;
@@ -26,8 +29,11 @@ export async function readReplyEvidence(backend: BackendHost, contactId: string,
     known.add(evidenceId);
     return { evidenceId, kind: entry.kind as ReplyEvidenceItem['kind'], text: entry.text, selectionReason: entry.selection_reason,
       snapshotStatus: entry.snapshot_status, cited: entry.cited, validAt: entry.valid_at, invalidAt: entry.invalid_at,
+      navigation: readEvidenceNavigation(entry.navigation, evidenceId, entry.kind as ReplyEvidenceItem['kind']),
       timing: { recordedAt: entry.timing.recorded_at, sourceStartedAt: entry.timing.source_started_at,
-        sourceEndedAt: entry.timing.source_ended_at, sourceTimeComplete: entry.timing.source_time_complete } };
+        sourceEndedAt: entry.timing.source_ended_at, sourceTimeComplete: entry.timing.source_time_complete,
+        ...readCurrentStatus(entry.timing) } };
   });
-  return { generation: response.generation, items };
+  return { generation: response.generation, items, retrieval: readReplyRetrieval(value.retrieval, items),
+    ...(value.basis_changes === undefined ? {} : { basisChanges: readReplyBasisChanges(value.basis_changes) }) };
 }

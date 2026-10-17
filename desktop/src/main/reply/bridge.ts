@@ -228,6 +228,11 @@ export function installReplyBridge(commands: PageCommands, backend: BackendHost,
     if (choice.mode === 'user' ? !isUuid(choice.versionId) : !['auto', 'disabled'].includes(choice.mode as string) || choice.versionId !== null) throw new Error('策略版本不可用。');
     return replies.updateSkill(value as unknown as import('../../shared/reply-bridge').ReplySkillUpdate);
   }, 'helper');
+  commands.handle('reply:update-scene', (...args: unknown[]) => {
+    const value = fields(args, ['contactId', 'scopeRevision', 'scene']);
+    if (typeof value.scene !== 'string' || value.scene.length > 256) throw new Error('精确场景不可用。');
+    return replies.updateScene(value as unknown as import('../../shared/reply-bridge').ReplySceneUpdate);
+  }, 'helper');
   commands.handle('reply:select-direction', (...args: unknown[]) => {
     const value = fields(args, ['contactId', 'scopeRevision', 'suggestionId', 'inputVersion']);
     if (!isUuid(value.suggestionId) || !isUuid(value.inputVersion)) throw new Error('方向建议不可用。');

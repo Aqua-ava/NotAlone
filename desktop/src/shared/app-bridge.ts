@@ -11,15 +11,21 @@ import type { ContactSessionBridge } from './contact-session-bridge';
 import type { ImportBridge } from './import-bridge';
 import type { ReplyBridge } from './reply-bridge';
 import type { StyleSampleBridge } from './style-sample-bridge';
+import type { ExpressionPreferenceBridge } from './expression-preference-bridge';
 import type { MemoryBridge } from './memory-bridge';
 import type { BindingConsentBridge } from './binding-consent-bridge';
 import type { SyncControlBridge } from './sync-control-bridge';
+import type { SkillLearningBridge } from './skill-learning-bridge';
+import type { MemoryUpgradeBridge } from './memory-upgrade-bridge';
 
 export type AppBridge = WindowBridge & DesktopBridge & {
   backend: BackendBridge; setup: SetupBridge; startup: StartupBridge;
   screenPermission: ScreenPermissionBridge;
   contacts: ContactSessionBridge; imports: ImportBridge; bindings: BindingConsentBridge; replies: ReplyBridge;
   styleSamples: StyleSampleBridge;
+  expressionPreferences: ExpressionPreferenceBridge;
+  skillLearning: SkillLearningBridge;
+  memoryUpgrade: MemoryUpgradeBridge;
   memory: MemoryBridge; traces: TraceBridge; candidateCopy: CandidateCopyBridge; sources: SourceDeletionBridge; syncControl: SyncControlBridge; foreground: ForegroundBridge;
 };
 import type { TraceBridge } from './trace-bridge';

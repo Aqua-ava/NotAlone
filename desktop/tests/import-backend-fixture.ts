@@ -1,9 +1,10 @@
 import { spawn, type ChildProcess } from 'node:child_process';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { isolatedAppEnvironment } from './isolated-environment';
 import { FixtureTransport, requestFixtureHttp } from './fixture-transport';
+import { cleanupCoreFixture } from './database-ownership';
 
 const project = path.resolve('..');
 type Prepared = { database_name: string; database_url: string; owner_id: string; contact_ids: string[]; other_contact_id: string; file_path: string };
@@ -22,7 +23,8 @@ export class ImportFixture {
   get envPath(): string { return path.join(this.directory, 'synthetic.env'); }
   environment(): NodeJS.ProcessEnv {
     return { NOTALONE_BACKEND_INFO: this.infoPath, NOTALONE_ENV_FILE: this.envPath,
-      NOTALONE_DATABASE_URL: this.data.database_url, NOTALONE_OWNER_ID: this.data.owner_id,
+      NOTALONE_DATABASE_URL: this.data.database_url, NOTALONE_TEST_DATABASE_URL: this.data.database_url,
+      NOTALONE_OWNER_ID: this.data.owner_id,
       NOTALONE_DEEPSEEK_API_KEY: '', NOTALONE_DEEPSEEK_BASE_URL: 'http://127.0.0.1:1',
       LANGSMITH_TRACING: 'false', LANGCHAIN_TRACING_V2: 'false',
       NOTALONE_WECHAT_CLI: path.join(this.directory, 'unavailable-cli'), NOTALONE_SYNC_PROBE: path.join(this.directory, 'unavailable-probe'),
@@ -70,16 +72,7 @@ export async function withImportFixture(directoryPrefix: string, use: (fixture: 
   const fixture = new ImportFixture(directory, pythonExecutable, child);
   try { await fixture.ready; await use(fixture); }
   finally {
-    try {
-      await fixture.cleanup();
-      await rm(directory, { recursive: true, force: true });
-      cleanupConfirmed?.();
-    } catch {
-      await writeFile(path.join(directory, 'cleanup-unconfirmed.json'), JSON.stringify({
-        childPid: child.pid ?? null, exitCode: child.exitCode, signal: child.signalCode,
-        databaseName: fixture.data?.database_name ?? null,
-      }), { mode: 0o600 });
-      throw new Error(`本轮导入夹具收尾未确认，保留归属记录：${directory}`);
-    }
+    await cleanupCoreFixture(fixture, { label: '导入', cleanupConfirmed,
+      matchesPreparedDatabase: (name) => !fixture.data || fixture.data.database_name === name });
   }
 }

@@ -7,6 +7,12 @@ from dataclasses import dataclass
 from datetime import datetime
 
 
+CURRENT_STATUSES = frozenset({
+    "current_verified", "current_unverified", "historical", "stable",
+})
+UNKNOWN_CURRENT_REASON = "当前未核实；原话和保存时间不能证明状态现在仍成立。"
+
+
 def _aware_time(value: datetime | None) -> None:
     if value is not None and (
         not isinstance(value, datetime)
@@ -24,6 +30,8 @@ class MemoryTiming:
     source_started_at: datetime | None = None
     source_ended_at: datetime | None = None
     source_time_complete: bool = False
+    current_status: str = "current_unverified"
+    current_status_reason: str = UNKNOWN_CURRENT_REASON
 
     def __post_init__(self) -> None:
         for value in (
@@ -42,6 +50,11 @@ class MemoryTiming:
             raise ValueError("来源时间结束不能早于开始。")
         if self.source_time_complete and self.source_started_at is None:
             raise ValueError("完整来源时间必须有可核实范围。")
+        if self.current_status not in CURRENT_STATUSES:
+            raise ValueError("记忆当前核实状态无效。")
+        if (not isinstance(self.current_status_reason, str)
+                or not self.current_status_reason.strip()):
+            raise ValueError("记忆当前核实依据不能为空。")
 
     def to_payload(self) -> dict[str, object]:
         """返回不含来源正文的 JSON 时间元数据。"""
@@ -57,6 +70,8 @@ class MemoryTiming:
                 self.source_ended_at.isoformat() if self.source_ended_at else None
             ),
             "source_time_complete": self.source_time_complete,
+            "current_status": self.current_status,
+            "current_status_reason": self.current_status_reason,
         }
 
     @classmethod
@@ -68,7 +83,8 @@ class MemoryTiming:
             "recorded_at", "source_started_at", "source_ended_at",
             "source_time_complete",
         }
-        if not isinstance(payload, dict) or set(payload) != fields:
+        extended = fields | {"current_status", "current_status_reason"}
+        if not isinstance(payload, dict) or set(payload) not in (fields, extended):
             raise ValueError("记忆时间元数据结构无效。")
 
         def parse(field: str) -> datetime | None:
@@ -84,6 +100,8 @@ class MemoryTiming:
             source_started_at=parse("source_started_at"),
             source_ended_at=parse("source_ended_at"),
             source_time_complete=payload["source_time_complete"],
+            current_status=payload.get("current_status", "current_unverified"),
+            current_status_reason=payload.get("current_status_reason", UNKNOWN_CURRENT_REASON),
         )
 
     @classmethod

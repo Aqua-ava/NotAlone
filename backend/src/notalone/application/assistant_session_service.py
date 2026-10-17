@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol
 from uuid import UUID
 
-from notalone.application.assistant_generation_lifecycle import AssistantGenerationReceipt
+from notalone.application.assistant_generation_lifecycle import AssistantGenerationReceipt, AssistantPreparationFormatReceipt
 from notalone.application.assistant_message_adoption import AssistantMessageAdoptionRequest
 from notalone.application.reply_service import ReplyService, ReplyServiceRequest
 from notalone.reply.errors import ReplyInProgressError
@@ -55,6 +55,7 @@ class AssistantTurn:
     reply: ReplyGenerated | None
     interruption_reason: str | None = None
     generation_active: bool | None = None
+    requires_reprepare: bool = False
 
 
 @dataclass(frozen=True, slots=True, repr=False)
@@ -84,6 +85,9 @@ class AssistantSessionCatalogPort(Protocol):
 
 
 class AssistantSessionStore(Protocol):
+    def preparation_format(self, scope: ContactScope, session_id: UUID, request_key: UUID,
+                           input_version_id: UUID) -> AssistantPreparationFormatReceipt: ...
+    def require_prepared_format(self, scope: ContactScope, session_id: UUID, request_key: UUID) -> None: ...
     def has_prepared_context(self, scope: ContactScope, receipt: AssistantGenerationReceipt) -> bool: ...
 
     def prepared_request(self, scope: ContactScope, receipt: AssistantGenerationReceipt) -> ReplyServiceRequest: ...
@@ -219,6 +223,7 @@ class AssistantSessionService:
         if self._reply is None:
             raise AssistantSessionRejected("reply_unavailable")
         scope = ContactScope(owner_id, contact_id)
+        self._store.require_prepared_format(scope, session_id, request.idempotency_key)
         if isinstance(request, AssistantMessageAdoptionRequest):
             receipt = self._store.prepare_message_adoption(scope, session_id, request)
         else:
@@ -226,6 +231,7 @@ class AssistantSessionService:
         return self._fixed_receipt(scope, receipt)
 
     def _fixed_receipt(self, scope: ContactScope, receipt: AssistantGenerationReceipt) -> AssistantGenerationReceipt:
+        self._store.require_prepared_format(scope, receipt.session_id, receipt.request_key)
         # 已完成或已有固定材料的失败回执只重放身份；预检失败但无材料时仍须补齐准备。
         if receipt.state == "completed" or (receipt.state == "failed"
                 and self._store.has_prepared_context(scope, receipt)):
@@ -246,6 +252,13 @@ class AssistantSessionService:
         request_key: UUID, input_version_id: UUID,
     ) -> AssistantGenerationReceipt:
         return self._store.interrupt(ContactScope(owner_id, contact_id), session_id, request_key, input_version_id)
+
+    def preparation_format(
+        self, *, owner_id: UUID, contact_id: UUID, session_id: UUID,
+        request_key: UUID, input_version_id: UUID,
+    ) -> AssistantPreparationFormatReceipt:
+        return self._store.preparation_format(ContactScope(owner_id, contact_id), session_id,
+                                              request_key, input_version_id)
 
     def generate(
         self, *, owner_id: UUID, contact_id: UUID, session_id: UUID,
@@ -330,6 +343,7 @@ class AssistantSessionService:
         reply = self._reply
         if reply is None:
             raise AssistantSessionRejected("reply_unavailable")
+        self._store.require_prepared_format(scope, session_id, request.idempotency_key)
         try:
             result = reply.generate(
                 owner_id=scope.owner_id, contact_id=scope.contact_id, request=request,

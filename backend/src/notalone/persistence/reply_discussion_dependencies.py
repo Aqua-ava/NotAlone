@@ -15,6 +15,7 @@ from notalone.reply.assistant_discussion import (
 )
 from notalone.reply.errors import ReplyStoreInvariantError
 from notalone.reply.store import ReplyRequest
+from notalone.persistence.style_sample_store import _with_reply_source_validation
 from notalone.scopes import ContactScope
 
 
@@ -124,6 +125,7 @@ def capture_reply_discussion_dependencies(
         return dependencies
 
 
+@_with_reply_source_validation
 def require_reply_discussion_dependencies(
     connection: Any, scope: ContactScope, request_id: UUID, *, current: bool = False,
     expected_snapshot: DiscussionSnapshot | None = None,
@@ -209,6 +211,32 @@ def reply_style_sample_dependencies(
             if row["count"] != len(result):
                 raise ReplyStoreInvariantError("历史样本编号不属于当前联系人。")
         return result
+
+
+def reply_discussion_request_dependencies(
+    connection: Any, scope: ContactScope, request_id: UUID,
+) -> tuple[UUID, ...]:
+    """只返回实际交给模型的历史候选请求，先复验已有A身份协议。"""
+
+    require_reply_discussion_dependencies(connection, scope, request_id)
+    with _connection(connection).cursor(row_factory=dict_row) as cursor:
+        metadata = _metadata(_request_row(cursor, scope, request_id), scope)
+        if metadata is None:
+            return ()
+        candidate_ids = {record.candidate_id for record in metadata[0].records
+                         if record.kind == "candidate_version"}
+        if not candidate_ids:
+            return ()
+        rows = cursor.execute(
+            "SELECT candidate.id,request.id AS request_id FROM public.reply_candidate AS candidate "
+            "JOIN public.reply_request AS request ON request.id=candidate.reply_request_id "
+            "WHERE candidate.owner_id=%s AND candidate.contact_id=%s AND candidate.id=ANY(%s::uuid[]) "
+            "AND request.owner_id=%s AND request.contact_id=%s AND request.state='completed'",
+            (scope.owner_id, scope.contact_id, list(candidate_ids), scope.owner_id, scope.contact_id),
+        ).fetchall()
+        if {row["id"] for row in rows} != candidate_ids:
+            raise ReplyStoreInvariantError("历史候选请求已失效。")
+        return tuple(sorted({row["request_id"] for row in rows}))
 
 
 def reply_discussion_metadata(connection: Any, scope: ContactScope, request_id: UUID) -> dict[str, Any]:

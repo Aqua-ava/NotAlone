@@ -888,5 +888,165 @@ class PostgresSourceDeletionRepositoryTest(unittest.TestCase):
         self.assertEqual(state, ("active", 6))
 
 
+    def test_delete_failure_recovery_waits_for_owner_lock(self) -> None:
+        import threading
+        import time
+        from unittest.mock import patch
+
+        from psycopg import sql
+
+        from notalone.persistence import source_deletion
+        from notalone.persistence.locks import lock_owner_scope
+
+        imported = self.ingest_repository.import_document(
+            owner_id=self.owner_id,
+            document=self.batch,
+            confirmation=ImportConfirmationRequest(
+                selection=ExistingContactSelection(contact_id=self.contact_id)
+            ),
+        )
+        real_connect = psycopg.connect
+        failure_ready = threading.Event()
+        resume_after_reader_lock = threading.Event()
+        recovery_connected = threading.Event()
+        worker_done = threading.Event()
+        worker_errors: list[BaseException] = []
+        recovery_pids: list[int] = []
+        connection_number = 0
+
+        def deletion() -> None:
+            try:
+                self.deletion_repository.delete_source(
+                    owner_id=self.owner_id, contact_id=self.contact_id,
+                    source_document_id=imported.source_document_id,
+                )
+            except BaseException as error:
+                worker_errors.append(error)
+            finally:
+                worker_done.set()
+
+        worker = threading.Thread(target=deletion, name="synthetic-delete-recovery", daemon=True)
+
+        def coordinated_connect(*args, **kwargs):
+            nonlocal connection_number
+            if threading.current_thread() is not worker:
+                return real_connect(*args, **kwargs)
+            if args != (TEST_DATABASE_URL,) or kwargs:
+                raise RuntimeError("合成删除线程使用了未计划的数据库入口。")
+            connection_number += 1
+            if connection_number == 2:
+                # 公开删除的首事务已因真实触发器错误退出并回滚，才会另开恢复连接。
+                failure_ready.set()
+                if not resume_after_reader_lock.wait(5):
+                    raise TimeoutError("合成删除恢复未在限定时间内获得读取方许可。")
+            elif connection_number > 2:
+                raise RuntimeError("合成删除线程超出了两次真实连接的协调范围。")
+            connection = real_connect(*args, **kwargs)
+            if connection_number == 2:
+                recovery_pids.append(connection.info.backend_pid)
+                recovery_connected.set()
+            return connection
+
+        def source_state(connection):
+            return connection.execute(
+                "SELECT status,deletion_error_code,(SELECT count(*) FROM public.message_source_ref "
+                "WHERE owner_id=%s AND contact_id=%s AND source_document_id=%s) "
+                "FROM public.source_document WHERE owner_id=%s AND contact_id=%s AND id=%s",
+                (self.owner_id, self.contact_id, imported.source_document_id,
+                 self.owner_id, self.contact_id, imported.source_document_id),
+            ).fetchone()
+
+        with real_connect(TEST_DATABASE_URL) as connection:
+            connection.execute("""
+                CREATE FUNCTION public.notalone_test_delete_recovery_owner_failure()
+                RETURNS trigger LANGUAGE plpgsql AS $$
+                BEGIN
+                    RAISE EXCEPTION 'synthetic deletion recovery failure';
+                END
+                $$
+            """)
+            connection.execute(sql.SQL("""
+                CREATE TRIGGER notalone_test_delete_recovery_owner_failure
+                BEFORE DELETE ON public.message FOR EACH ROW
+                WHEN (OLD.owner_id = {})
+                EXECUTE FUNCTION public.notalone_test_delete_recovery_owner_failure()
+            """).format(sql.Literal(self.owner_id)))
+
+        reader = None
+        primary = None
+        cleanup_errors: list[BaseException] = []
+        try:
+            with patch.object(source_deletion.psycopg, "connect", coordinated_connect):
+                worker.start()
+                self.assertTrue(failure_ready.wait(5), "公开删除未到达真实失败回滚后的恢复窗口。")
+                reader = real_connect(TEST_DATABASE_URL)
+                lock_owner_scope(reader, owner_id=self.owner_id)
+                reader_pid = reader.info.backend_pid
+                self.assertEqual(source_state(reader), ("active", None, 6))
+                resume_after_reader_lock.set()
+                self.assertTrue(recovery_connected.wait(5), "恢复连接未在限定时间内建立。")
+                self.assertEqual(len(recovery_pids), 1)
+                blocked_by_reader = False
+                contact_lock_available = None
+                until = time.monotonic() + 5
+                with real_connect(TEST_DATABASE_URL) as observer:
+                    for _ in range(100):
+                        blockers = observer.execute(
+                            "SELECT pg_blocking_pids(%s)", (recovery_pids[0],),
+                        ).fetchone()[0]
+                        if reader_pid in blockers:
+                            blocked_by_reader = True
+                            # 读取方只持owner；观察方不等待contact，避免测试制造反锁。
+                            contact_lock_available = observer.execute(
+                                "SELECT pg_try_advisory_xact_lock(hashtextextended(%s,0))",
+                                (f"contact:{self.owner_id}:{self.contact_id}",),
+                            ).fetchone()[0]
+                            break
+                        if worker_done.is_set() or time.monotonic() >= until:
+                            break
+                        worker_done.wait(min(0.05, max(0, until - time.monotonic())))
+                self.assertTrue(blocked_by_reader, "失败状态更新必须真实等待读取方持有的owner锁。")
+                self.assertFalse(contact_lock_available, "恢复事务须先持有contact锁，再等待owner锁。")
+                self.assertFalse(worker_done.is_set())
+                self.assertEqual(source_state(reader), ("active", None, 6))
+        except BaseException as error:
+            primary = error
+            raise
+        finally:
+            # 先许可恢复并释放读取方owner，随后join，保证失败断言也不留下自锁。
+            resume_after_reader_lock.set()
+            if reader is not None:
+                try:
+                    reader.rollback()
+                except BaseException as error:
+                    cleanup_errors.append(error)
+                finally:
+                    try:
+                        reader.close()
+                    except BaseException as error:
+                        cleanup_errors.append(error)
+            if worker.ident is not None:
+                worker.join(timeout=5)
+                if worker.is_alive():
+                    cleanup_errors.append(AssertionError("合成删除线程未在限定时间内退出。"))
+            try:
+                with real_connect(TEST_DATABASE_URL) as connection:
+                    connection.execute("DROP TRIGGER notalone_test_delete_recovery_owner_failure ON public.message")
+                    connection.execute("DROP FUNCTION public.notalone_test_delete_recovery_owner_failure()")
+            except BaseException as error:
+                cleanup_errors.append(error)
+            if cleanup_errors:
+                if primary is None:
+                    raise cleanup_errors[0]
+                for error in cleanup_errors:
+                    primary.add_note(f"合成删除恢复清理失败：{type(error).__name__}: {error}")
+
+        self.assertTrue(worker_done.is_set())
+        self.assertEqual(len(worker_errors), 1)
+        self.assertIsInstance(worker_errors[0], SourceDeletionError)
+        with real_connect(TEST_DATABASE_URL) as connection:
+            self.assertEqual(source_state(connection), ("delete_failed", "storage_delete_failed", 6))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -295,6 +295,7 @@ class PostgresMemoryStoreTest(unittest.TestCase):
         replayed = self.store.confirm(
             scope=self._scope(),
             candidate_id=candidate.candidate_id,
+            adoption_method=AdoptionMethod.MANUAL,
         )
         self.assertEqual(replayed.memory_id, confirmed.memory_id)
 
@@ -339,7 +340,25 @@ class PostgresMemoryStoreTest(unittest.TestCase):
         self.assertEqual(found[0].matched_terms, ())
 
     def test_list_pending_candidates_is_scope_filtered(self) -> None:
-        pending = self.store.create_candidate(self._candidate())
+        # 列表过滤用独立规范证据；同旧证据的否决保护由纠错回归单独验证。
+        fresh_source, fresh_message = uuid4(), uuid4()
+        with psycopg.connect(TEST_DATABASE_URL) as connection:
+            connection.execute(
+                "INSERT INTO public.source_document (id,owner_id,contact_id,source_type,file_name,content_sha256,record_count) "
+                "VALUES (%s,%s,%s,'wechat_jsonl','synthetic-scope.jsonl',%s,1)",
+                (fresh_source, self.owner_id, self.contact_id, uuid4().hex * 2),
+            )
+            connection.execute(
+                "INSERT INTO public.message (id,owner_id,contact_id,speaker,message_type,text_content,occurred_at) "
+                "VALUES (%s,%s,%s,'contact','text','独立范围测试的合成证据。',now())",
+                (fresh_message, self.owner_id, self.contact_id),
+            )
+            connection.execute(
+                "INSERT INTO public.message_source_ref (message_id,owner_id,contact_id,source_kind,source_document_id,source_locator,raw_payload) "
+                "VALUES (%s,%s,%s,'source_document',%s,'synthetic:scope','{}'::jsonb)",
+                (fresh_message, self.owner_id, self.contact_id, fresh_source),
+            )
+        pending = self.store.create_candidate(self._candidate(source_ids=(fresh_message,)))
         self.store.create_candidate(
             self._candidate(
                 candidate_id=self.other_candidate_id,
@@ -450,7 +469,7 @@ class PostgresMemoryStoreTest(unittest.TestCase):
 
         deleted = self.store.delete(
             scope=self._scope(),
-            memory_id=confirmed.memory_id,
+            memory_id=invalidated.memory_id,
         )
         self.assertEqual(deleted.status, ConfirmedMemoryStatus.DELETED)
 

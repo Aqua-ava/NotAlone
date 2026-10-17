@@ -22,8 +22,10 @@ from notalone.persistence.reply_cleanup import (
     delete_source_replies,
 )
 from notalone.persistence.source_memory_erasure import erase_source_memories
+from notalone.persistence.memory_correction import has_correction_dependencies
 from notalone.persistence.source_processing import erase_source_processing
 from notalone.persistence.style_sample_store import erase_source_style_samples
+from notalone.persistence.expression_preferences import erase_source_expression_preferences
 from notalone.scopes import ContactScope
 
 
@@ -165,6 +167,10 @@ class PostgresSourceDeletionRepository:
                     removed_ids={source_document_id, *orphan_message_ids},
                 )
                 erase_source_style_samples(
+                    connection, owner_id=owner_id,
+                    removed_ids={source_document_id, *orphan_message_ids},
+                )
+                erase_source_expression_preferences(
                     connection, owner_id=owner_id,
                     removed_ids={source_document_id, *orphan_message_ids},
                 )
@@ -329,6 +335,7 @@ class PostgresSourceDeletionRepository:
                     or row[4] is None
                     or row[5]
                     or row[6]
+                    or has_correction_dependencies(connection, owner_id=owner_id, source_id=source_document_id)
                 ):
                     raise SourceDeletionVerificationError(
                         "来源删除尚未验证完成。"
@@ -388,6 +395,8 @@ class PostgresSourceDeletionRepository:
     ) -> None:
         try:
             with psycopg.connect(self._database_url) as connection:
+                lock_contact_scope(connection, owner_id=owner_id, contact_id=contact_id)
+                lock_owner_scope(connection, owner_id=owner_id)
                 connection.execute(
                     """
                     UPDATE public.source_document

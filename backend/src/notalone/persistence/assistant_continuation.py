@@ -109,6 +109,20 @@ def _known_intention(instruction: str) -> str | None:
     return match.group(1) if match else None
 
 
+def require_continuation_policy(connection: Any, scope: ContactScope, payload: dict[str, Any]) -> None:
+    """已经准备或中断的无编号继续也保留原候选组的政策边界。"""
+    metadata = payload.get('continuation')
+    group = metadata.get('candidate_group_id') if isinstance(metadata, dict) else None
+    if group is not None:
+        from notalone.persistence.skill_execution_view import saved_skill_policy_change
+        try:
+            identifier = UUID(group)
+        except (ValueError, TypeError, AttributeError):
+            raise AssistantSessionRejected('skill_policy_changed') from None
+        if saved_skill_policy_change(connection, scope, identifier) is not None:
+            raise AssistantSessionRejected('skill_policy_changed')
+
+
 def reserve_continuation_in_transaction(
     connection: Any, store: PostgresAssistantSessionStore, scope: ContactScope, session_id: UUID,
     command: ContinueAssistantSession,
@@ -127,11 +141,13 @@ def reserve_continuation_in_transaction(
         if (existing["session_id"] != session_id or not isinstance(metadata, dict)
                 or metadata.get("submission") != submission):
             raise AssistantSessionConflict("请求键已用于不同的持续要求。")
+        require_continuation_policy(connection, scope, existing['input_payload'])
         original = _request_from_input(scope, command.idempotency_key, existing["input_payload"])
         request = AssistantContinuationReplyRequest(
             idempotency_key=command.idempotency_key, content=original.content,
             continued_from_candidate_id=original.continued_from_candidate_id,
             skill_version_id=original.skill_version_id, skill_disabled=original.skill_disabled,
+            scene=original.scene,
             suggestion=original.suggestion,
             expected_input_version_id=command.expected_input_version_id,
             continuation=metadata,
@@ -150,9 +166,13 @@ def reserve_continuation_in_transaction(
         raise AssistantContinuationClarification("completed_generation_required")
     if current["reply_request_id"] is None:
         raise AssistantContinuationClarification("completed_generation_required")
+    from notalone.persistence.skill_execution_view import saved_skill_policy_change
+    if saved_skill_policy_change(connection, scope, current['reply_request_id']) is not None:
+        raise AssistantSessionRejected('skill_policy_changed')
     # 无编号的下一轮也从当前已完成输入派生，不能把复制的候选正文变为独立用户稿。
     inherited_dependencies = tuple(sorted(set(current_dependencies) | require_reply_sources_current(
         connection, owner_id=scope.owner_id, request_id=current["reply_request_id"],
+        historical=True,
     )))
     histories = _frame_histories(connection, scope, session_id, command)
     number, instruction = continuation_reference(command.instruction)
@@ -213,6 +233,7 @@ def reserve_continuation_in_transaction(
         idempotency_key=command.idempotency_key, content=content,
         continued_from_candidate_id=reference.candidate_id if reference is not None else None,
         skill_version_id=original.skill_version_id, skill_disabled=original.skill_disabled,
+        scene=original.scene,
         suggestion=original.suggestion if intention is None else None,
         expected_input_version_id=command.expected_input_version_id,
         continuation=metadata, reference=reference,

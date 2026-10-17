@@ -21,7 +21,9 @@ export interface JsonRequest {
 // 只携带安全分类；业务模块自行映射已知错误，不把响应原文转给界面。
 export class BackendRequestFailure extends Error {
   constructor(readonly kind: 'connection' | 'response' | 'cancelled', readonly status?: number, readonly code?: string,
-    readonly reason?: 'target_message_unavailable' | 'source_unavailable' | 'request_invalidated' | 'candidate_unavailable',
+    readonly reason?: 'target_message_unavailable' | 'source_unavailable' | 'source_deleted' | 'request_invalidated' | 'candidate_unavailable'
+      | 'skill_policy_changed'
+      | 'prepared_context_reprepare_required' | 'prepared_context_generation_running' | 'prepared_context_generation_unconfirmed',
     readonly inputBudget?: AssistantInputBudget, readonly noGeneration?: AssistantNoGenerationProof) {
     super('本机业务请求未完成');
   }
@@ -109,8 +111,11 @@ export class JsonClient {
                 ? readExplorationNoGenerationProof(data, status, path, options.body) : undefined;
               fail(new BackendRequestFailure('response', status,
                 typeof code === 'string' && /^[a-z][a-z0-9_]{0,79}$/.test(code) ? code : undefined,
-                reason === 'target_message_unavailable' || reason === 'source_unavailable'
-                  || reason === 'request_invalidated' || reason === 'candidate_unavailable' ? reason : undefined,
+                reason === 'target_message_unavailable' || reason === 'source_unavailable' || reason === 'source_deleted'
+                  || reason === 'request_invalidated' || reason === 'candidate_unavailable'
+                  || reason === 'skill_policy_changed'
+                  || reason === 'prepared_context_reprepare_required' || reason === 'prepared_context_generation_running'
+                  || reason === 'prepared_context_generation_unconfirmed' ? reason : undefined,
                 readInputBudgetFailure(data, status), proof));
             } else { settled = true; resolve({ status, data }); }
           } catch { fail(new BackendRequestFailure('response')); }

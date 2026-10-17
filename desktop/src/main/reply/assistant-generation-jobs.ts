@@ -99,6 +99,13 @@ export class AssistantGenerationJobs {
     for (const [job, active] of this.jobs) {
       if (!sameOwner(job.identity, owner) || !active.receipt) continue;
       const turn = turns.find((item) => item.turnId === active.receipt!.turnId);
+      if (active.transportEnded && turn?.requiresReprepare && turn.state === 'failed'
+        && turn.generationActive === false && turn.requestKey === active.receipt.requestKey
+        && turn.inputVersionId === active.receipt.inputVersionId) {
+        active.receipt = { ...active.receipt, state: 'failed' };
+        active.failedResponseReceived = true; active.failedLeaseSettled = true; active.canRetry = false;
+        this.finish(job, true); continue;
+      }
       // 普通读取缺失可能早于准备完成；只有明确失效状态才能取消在途作业。
       if (turn?.state === 'completed' && turn.requestKey === active.receipt.requestKey
         && turn.inputVersionId === active.receipt.inputVersionId) {

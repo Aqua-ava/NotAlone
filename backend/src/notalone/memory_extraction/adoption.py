@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import time
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
-from uuid import UUID, uuid4
+from uuid import UUID, uuid4, uuid5
 
 from notalone.ledger.models import LedgerEntry, LedgerOutcome
 from notalone.ledger.ports import OutboundLedgerPort
@@ -21,7 +22,11 @@ from notalone.memory.models import (
     OwnerMemory,
 )
 from notalone.memory.ports import MemoryPort, OwnerMemoryPort
+from notalone.memory.versions import MemoryVersionConflict
+from notalone.memory.candidates import same_pending_identity
+from notalone.memory.events import same_verified_event_claim, same_verified_occurrence
 from notalone.memory.dimension_evidence import DimensionEvidenceChangedError
+from notalone.memory.correction import MemoryCorrectionConflictError
 from notalone.memory_extraction.adjudication import (
     AdjudicationAction,
     AdjudicationRuntime,
@@ -47,11 +52,13 @@ from notalone.memory_trace.context import (
     current_trace,
     record,
     record_ledger_entry,
+    snapshot,
 )
 from notalone.scopes import ContactScope
 
 DEFAULT_CONFIDENCE_THRESHOLD = 0.7
 DEFAULT_SIMILARITY_THRESHOLD = 0.2
+MAX_SIMILAR_MEMORY_CANDIDATES = 8
 # 只有明确表示没有风险的事实才允许绕过人工确认；未知标签按风险处理。
 AUTO_ADOPTABLE_RISK_FLAGS = frozenset({"", "low", "low_risk", "none", "无", "低风险"})
 
@@ -67,6 +74,7 @@ class AdoptionStats:
     skipped_deleted: int = 0
     rejected_by_contract: int = 0
     skipped_non_memory: int = 0
+    skipped_changed: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,6 +86,7 @@ class _PoolItem:
     source_ids: tuple[UUID, ...] = ()
     version: object = None
     dependency_ids: tuple[UUID, ...] = ()
+    claim_source_ids: tuple[UUID, ...] = ()
 
 
 class MemoryAdoption:
@@ -92,6 +101,7 @@ class MemoryAdoption:
         "_similarity_threshold",
         "_pragmatic_interpreter",
         "_dimension_release",
+        "_candidate_namespace",
     )
 
     def __init__(
@@ -105,6 +115,7 @@ class MemoryAdoption:
         similarity_threshold: float = DEFAULT_SIMILARITY_THRESHOLD,
         pragmatic_interpreter: PragmaticInterpreter | None = None,
         dimension_release: DimensionRelease | None = None,
+        candidate_namespace: UUID | None = None,
     ) -> None:
         if memory_port is None:
             raise TypeError("必须显式注入联系人级记忆 port。")
@@ -122,6 +133,9 @@ class MemoryAdoption:
             pragmatic_interpreter or PragmaticInterpreter()
         )
         self._dimension_release = dimension_release
+        if candidate_namespace is not None and not isinstance(candidate_namespace, UUID):
+            raise TypeError('候选命名空间必须是稳定批次UUID。')
+        self._candidate_namespace = candidate_namespace
 
     def adopt(self, scope: ContactScope, outcome: ExtractionOutcome) -> AdoptionStats:
         """按主体逐条采纳；晚发生故障可保留此前已提交的结果。"""
@@ -131,7 +145,7 @@ class MemoryAdoption:
 
         pool_started_at = datetime.now(timezone.utc)
         contact_pool = self._contact_pool(scope)
-        owner_pool = self._owner_pool(scope.owner_id)
+        owner_pool = self._owner_pool(scope)
         deleted = self._deleted_texts(scope)
         record(
             "memory_pool",
@@ -153,6 +167,7 @@ class MemoryAdoption:
 
         adopted = updated = pending = duplicate = deleted_skip = 0
         skipped_non_memory = 0
+        skipped_changed = 0
         for index, fact in enumerate(outcome.accepted):
             trace = current_trace()
             if trace is not None:
@@ -200,6 +215,24 @@ class MemoryAdoption:
                 {"before": before, "after": fact},
                 started_at=prepare_started_at,
             )
+            assess = getattr(self._memory_port, "assess_correction", None)
+            if callable(assess):
+                protected = assess(_candidate_from_fact(scope, fact, namespace=self._candidate_namespace))
+                if protected.failure_reason == "correction:old_evidence":
+                    deleted_skip += 1
+                    record("candidate_result", {"disposition": "correction_old_evidence",
+                        "not_executed": ["deleted_fingerprint", "duplicate", "adoption_gates", "similarity", "adjudication", "write"]})
+                    continue
+                if protected.correction_review or protected.failure_reason == "version:original_window_unknown":
+                    if self._pending_exists(scope, fact):
+                        duplicate += 1
+                        continue
+                    actual = self._create_pending_candidate(scope, fact)
+                    pending += int(actual.status is MemoryCandidateStatus.PENDING)
+                    deleted_skip += int(actual.status is not MemoryCandidateStatus.PENDING)
+                    record("candidate_result", {"disposition": "pending_correction_review",
+                        "not_executed": ["deleted_fingerprint", "adoption_gates", "similarity", "adjudication", "auto_confirm"]})
+                    continue
             fingerprint_started_at = datetime.now(timezone.utc)
             normalized = _normalize(fact.text)
             record(
@@ -240,12 +273,22 @@ class MemoryAdoption:
             )
             duplicate_started_at = datetime.now(timezone.utc)
             matching = [
-                item for item in pool if normalized == _normalize(item.text)
+                item for item in pool
+                if normalized == _normalize(item.text)
+                and item.category is fact.category
+                and item.topic is fact.topic
+                and (set(item.claim_source_ids or item.source_ids) == set(fact.source_message_ids)
+                     or bool(set(item.claim_source_ids or item.source_ids) & set(fact.source_message_ids))
+                     and same_verified_event_claim(item.version.event, fact.event))
+                and item.version.valid_at == fact.valid_at
+                and item.version.invalid_at == fact.invalid_at
+                and (same_verified_event_claim(item.version.event, fact.event)
+                     or self._is_exact_event_claim_replay(scope, item.version, fact))
             ]
             record(
                 "duplicate",
                 {
-                    "rule": "whitespace_lowercase_exact",
+                    "rule": "same_claim_and_source_set",
                     "compared": pool,
                     "matches": [item.memory_id for item in matching],
                     "kind": "active_memory",
@@ -262,12 +305,7 @@ class MemoryAdoption:
                 )
                 duplicate += 1
                 continue
-            if self._pending_exists(scope, fact):
-                record(
-                    "candidate_result", {"disposition": "duplicate_candidate"}
-                )
-                duplicate += 1
-                continue
+            pending_before = self._pending_exists(scope, fact)
             gates_started_at = datetime.now(timezone.utc)
             passed = self._passes_all_adoption_gates(
                 fact,
@@ -311,6 +349,10 @@ class MemoryAdoption:
                 status="passed" if passed else "pending",
             )
             if not passed:
+                if self._pending_exists(scope, fact):
+                    record("candidate_result", {"disposition": "duplicate_candidate"})
+                    duplicate += 1
+                    continue
                 self._create_pending_candidate(scope, fact)
                 record(
                     "candidate_result",
@@ -323,7 +365,7 @@ class MemoryAdoption:
                 continue
 
             similarity_started_at = datetime.now(timezone.utc)
-            similar = self._similar_memories(fact, pool)
+            similar, shortlist_truncated = self._similar_memories(fact, pool)
             record(
                 "similarity",
                 {
@@ -339,40 +381,89 @@ class MemoryAdoption:
                         for item in pool
                     ],
                     "shortlist": similar,
+                    "limit": MAX_SIMILAR_MEMORY_CANDIDATES,
+                    "shortlist_truncated": shortlist_truncated,
                 },
                 started_at=similarity_started_at,
             )
-            action, replaced_id = self._adjudicate(fact, similar, scope)
+            if shortlist_truncated:
+                record("adjudication", {"status": "not_executed", "reason": "incomplete_shortlist"})
+                action, replaced_id = None, None
+            else:
+                action, replaced_id = self._adjudicate(fact, similar, scope)
             if action is AdjudicationAction.NOOP:
                 record("candidate_result", {"disposition": "noop"})
                 duplicate += 1
                 continue
-            if action is AdjudicationAction.UPDATE and replaced_id is None:
+            if action is None or (action is AdjudicationAction.UPDATE and replaced_id is None):
                 # 裁决要求更新但缺少有效的被取代记忆（结构化输出丢字
                 # 段或指向范围外）：不能静默按 ADD 落库，否则被取代的
                 # 旧记忆保持 active，与新事实并存。降级为待定候选，
                 # 由用户确认。
                 self._create_pending_candidate(scope, fact)
+                if shortlist_truncated:
+                    disposition = "pending_incomplete_shortlist"
+                elif action:
+                    disposition = "pending_invalid_update"
+                else:
+                    disposition = "pending_invalid_adjudication"
                 record(
                     "candidate_result",
-                    {"disposition": "pending_invalid_update"},
+                    {"disposition": disposition},
                 )
                 pending += 1
                 continue
+            previous_item = next(
+                (item for item in pool if item.memory_id == replaced_id), None,
+            ) if action is AdjudicationAction.UPDATE else None
+            previous = previous_item.version if previous_item is not None else None
+            if action is AdjudicationAction.UPDATE and (
+                previous is None or previous.adoption_method is AdoptionMethod.MANUAL
+                or (previous.event is not None or fact.event is not None)
+                and not same_verified_occurrence(previous.event, fact.event)
+            ):
+                self._create_pending_candidate(scope, fact)
+                record("candidate_result", {"disposition": "pending_manual_or_changed_previous"})
+                pending += 1
+                continue
+            if previous is not None:
+                record(
+                    "write_plan",
+                    {"operation": "invalidate", "previous": previous_item,
+                     "atomic_with": "confirm_new_version"},
+                    links=({"record_kind": "owner_memory" if fact.subject is FactSubject.SELF else "contact_memory",
+                            "record_id": previous.memory_id, "operation": "invalidate",
+                            "commit_status": "planned"},),
+                )
             persisted_memory = (
-                self._create_owner_memory(scope, fact)
+                self._create_owner_memory(scope, fact, previous=previous)
                 if fact.subject is FactSubject.SELF
-                else self._confirm_contact_memory(scope, fact)
+                else self._confirm_contact_memory(scope, fact, previous=previous)
             )
             if persisted_memory is None:
-                pending += 1
+                still_pending = self._pending_exists(scope, fact)
+                duplicate += int(still_pending and pending_before)
+                pending += int(still_pending and not pending_before)
+                skipped_changed += int(not still_pending)
                 record(
                     "candidate_result",
-                    {"disposition": "pending_source_changed"},
+                    {"disposition": "pending_source_changed" if still_pending else "source_or_user_decision_changed"},
                 )
                 continue
             if action is AdjudicationAction.UPDATE and replaced_id is not None:
-                self._invalidate_replaced(scope, fact, replaced_id, pool)
+                record(
+                    "write_result",
+                    {"operation": "invalidate", "previous": previous_item,
+                     "actual": {"memory_id": previous.memory_id,
+                                "status": ConfirmedMemoryStatus.INVALIDATED.value,
+                                "revision": previous.revision + 1},
+                     "atomic_with": persisted_memory.memory_id, "commit_status": "committed"},
+                    links=({"record_kind": "owner_memory" if fact.subject is FactSubject.SELF else "contact_memory",
+                            "record_id": replaced_id, "operation": "invalidate",
+                            "commit_status": "committed"},),
+                    status="committed",
+                )
+                pool[:] = [item for item in pool if item.memory_id != replaced_id]
                 updated += 1
             else:
                 adopted += 1
@@ -382,11 +473,12 @@ class MemoryAdoption:
                     text=fact.text,
                     category=fact.category,
                     topic=fact.topic,
-                    source_ids=fact.source_message_ids,
+                    source_ids=persisted_memory.source_ids,
+                    claim_source_ids=fact.source_message_ids,
                     version=persisted_memory,
                     dependency_ids=(
                         persisted_memory.memory_id,
-                        *fact.source_message_ids,
+                        *persisted_memory.source_ids,
                     ),
                 )
             )
@@ -413,6 +505,7 @@ class MemoryAdoption:
             skipped_deleted=deleted_skip,
             rejected_by_contract=outcome.rejected_count,
             skipped_non_memory=skipped_non_memory,
+            skipped_changed=skipped_changed,
         )
 
     def _adjudicate(self, fact, similar, scope: ContactScope):
@@ -462,6 +555,14 @@ class MemoryAdoption:
             self._record_ledger(scope, LedgerOutcome.RUN_FAILED, started_ns)
             raise
         outcome = LedgerOutcome.SUCCEEDED
+        actual_action = decision.action
+        # 现有裁决只比较正文；不能据此吞掉来自另一有效来源的新事件主张。
+        if decision.action is AdjudicationAction.NOOP:
+            actual_action = None
+            outcome = LedgerOutcome.REJECTED_BY_VALIDATION
+        if decision.action is not AdjudicationAction.UPDATE and decision.replaced_memory_id is not None:
+            actual_action = None
+            outcome = LedgerOutcome.REJECTED_BY_VALIDATION
         if (
             decision.action is AdjudicationAction.UPDATE
             and decision.replaced_memory_id
@@ -480,7 +581,7 @@ class MemoryAdoption:
                     if decision.action is AdjudicationAction.UPDATE
                     else None
                 ),
-                "actual_action": decision.action,
+                "actual_action": actual_action,
                 "actual_replaced_memory_id": decision_replaced,
             },
             started_at=adjudication_started_at,
@@ -496,65 +597,23 @@ class MemoryAdoption:
         # 裁决要求更新但缺少有效被取代 id 时返回 (UPDATE, None)：
         # adopt 会把它降级为待定候选，而不是静默按 ADD 落库让被取代
         # 的旧记忆保持 active。
-        return decision.action, decision_replaced
+        return actual_action, decision_replaced
 
-    def _similar_memories(self, fact, pool: list) -> list:
-        return [
+    def _similar_memories(
+        self, fact: ExtractedFact, pool: list[_PoolItem],
+    ) -> tuple[list[_PoolItem], bool]:
+        candidates = [
             item
             for item in pool
             if item.topic == fact.topic
             and item.category == fact.category
             and similarity(fact.text, item.text) >= self._similarity_threshold
         ]
-
-    def _invalidate_replaced(
-        self, scope, fact, replaced_id: UUID, pool: list
-    ) -> None:
-        previous = next(
-            (item for item in pool if item.memory_id == replaced_id), None
-        )
-        link = {
-            "record_kind": (
-                "owner_memory"
-                if fact.subject is FactSubject.SELF
-                else "contact_memory"
-            ),
-            "record_id": replaced_id,
-            "operation": "invalidate",
-        }
-        record(
-            "write_plan",
-            {
-                "operation": "invalidate",
-                "previous": previous,
-                "memory_id": replaced_id,
-            },
-            links=({**link, "commit_status": "planned"},),
-        )
-        write_started_at = datetime.now(timezone.utc)
-        result: object = None
-        if fact.subject is FactSubject.SELF:
-            if self._owner_memory_port is not None:
-                result = self._owner_memory_port.invalidate(
-                    scope.owner_id, replaced_id
-                )
-        else:
-            result = self._memory_port.invalidate(
-                scope=scope, memory_id=replaced_id
-            )
-        record(
-            "write_result",
-            {
-                "operation": "invalidate",
-                "previous": previous,
-                "actual": result,
-                "commit_status": "committed",
-            },
-            started_at=write_started_at,
-            status="committed",
-            links=({**link, "commit_status": "committed"},),
-        )
-        pool[:] = [item for item in pool if item.memory_id != replaced_id]
+        candidates.sort(key=lambda item: (
+            -similarity(fact.text, item.text), str(item.memory_id),
+        ))
+        return (candidates[:MAX_SIMILAR_MEMORY_CANDIDATES],
+                len(candidates) > MAX_SIMILAR_MEMORY_CANDIDATES)
 
     def _record_ledger(
         self,
@@ -598,13 +657,14 @@ class MemoryAdoption:
                 category=memory.category,
                 topic=memory.topic,
                 source_ids=memory.source_ids,
+                claim_source_ids=self._claim_sources(scope, memory),
                 version=memory,
                 dependency_ids=(memory.memory_id, *memory.source_ids),
             )
             for memory in self._memory_port.list_confirmed(scope)
         ]
 
-    def _owner_pool(self, owner_id: UUID) -> list:
+    def _owner_pool(self, scope: ContactScope) -> list:
         if self._owner_memory_port is None:
             return []
         # 手输 source_ids 的 owner_id 表示归属；自身 memory_id 仍是正文删除依赖。
@@ -615,6 +675,7 @@ class MemoryAdoption:
                 category=memory.category,
                 topic=memory.topic,
                 source_ids=memory.source_ids,
+                claim_source_ids=self._claim_sources(scope, memory),
                 version=memory,
                 dependency_ids=(
                     memory.memory_id,
@@ -622,13 +683,52 @@ class MemoryAdoption:
                         ()
                         if memory.adoption_method is AdoptionMethod.MANUAL
                         and memory.source_candidate_id is None
-                        and memory.source_ids == (owner_id,)
+                        and memory.source_ids == (scope.owner_id,)
                         else memory.source_ids
                     ),
                 ),
             )
-            for memory in self._owner_memory_port.list_active(owner_id)
+            for memory in self._owner_memory_port.list_active(scope.owner_id)
         ]
+
+    def _claim_sources(self, scope: ContactScope, memory: ConfirmedMemory | OwnerMemory) -> tuple[UUID, ...]:
+        if memory.source_candidate_id is None:
+            return memory.source_ids
+        try:
+            candidate = self._memory_port.get_candidate(scope=scope, candidate_id=memory.source_candidate_id)
+        except (LookupError, PermissionError):
+            # 本人资料可来自另一联系人；不为快速去重扩大该次联系人的读取。
+            return memory.source_ids
+        if (candidate.text == memory.text and candidate.category is memory.category
+                and candidate.topic is memory.topic and set(candidate.source_ids) <= set(memory.source_ids)):
+            return candidate.source_ids
+        return memory.source_ids
+
+    def _is_exact_event_claim_replay(
+        self, scope: ContactScope, memory: ConfirmedMemory | OwnerMemory, fact: ExtractedFact,
+    ) -> bool:
+        """只识别原主张原证明的重放；未知发生时间不能认证现实事件同一性。"""
+        if (memory.source_candidate_id is None or memory.event is None or fact.event is None
+                or not memory.event.source_current or not fact.event.source_current
+                or memory.event.to_payload() != fact.event.to_payload()
+                or fact.dimension_evidence is None or not fact.dimension_evidence.source_bound):
+            return False
+        try:
+            original = self._memory_port.get_candidate(
+                scope=scope, candidate_id=memory.source_candidate_id,
+            )
+        except (LookupError, PermissionError):
+            return False
+        evidence = original.dimension_evidence
+        return (
+            original.status is MemoryCandidateStatus.CONFIRMED
+            and original.text == memory.text and original.category is memory.category
+            and original.topic is memory.topic and original.subject is fact.subject
+            and original.event == fact.event
+            and set(original.source_ids) == set(fact.source_message_ids)
+            and evidence is not None and evidence.source_bound and evidence.scope == scope
+            and evidence.to_payload() == fact.dimension_evidence.to_payload()
+        )
 
     def _deleted_texts(self, scope: ContactScope) -> set[str]:
         deleted_texts = getattr(self._memory_port, "deleted_texts", None)
@@ -663,7 +763,10 @@ class MemoryAdoption:
         decision = pragmatic_decision or self._pragmatic_interpreter.interpret(fact)
         return can_auto_adopt(
             fact, decision, confidence_threshold=self._threshold
-        ) and self._dimension_release.allows(fact, scope=scope)
+        ) and self._dimension_release.allows(fact, scope=scope) and (
+            fact.event is None
+            or fact.event.source_current and fact.event.stage_verified and fact.event.occurrence_verified
+        )
 
     def _pending_exists(self, scope: ContactScope, fact) -> bool:
         duplicate_started_at = datetime.now(timezone.utc)
@@ -676,19 +779,12 @@ class MemoryAdoption:
                 {"kind": "pending_candidate", "status": "not_available"},
             )
             return False
-        normalized = _normalize(fact.text)
-        source_ids = set(fact.source_message_ids)
+        proposed = _candidate_from_fact(scope, fact, namespace=self._candidate_namespace)
         compared = tuple(list_pending(scope))
         matches = tuple(
             candidate
             for candidate in compared
-            if (
-                candidate.scope == scope
-                and candidate.category is fact.category
-                and candidate.topic is fact.topic
-                and _normalize(candidate.text) == normalized
-                and set(candidate.source_ids) == source_ids
-            )
+            if same_pending_identity(candidate, proposed)
         )
         record(
             "duplicate",
@@ -700,10 +796,13 @@ class MemoryAdoption:
                 ],
                 "fields": [
                     "scope",
+                    "subject",
                     "category",
                     "topic",
                     "normalized_text",
                     "source_ids",
+                    "valid_at",
+                    "invalid_at",
                 ],
             },
             dependency_ids=tuple(
@@ -723,7 +822,12 @@ class MemoryAdoption:
     def _create_pending_candidate(
         self, scope: ContactScope, fact: ExtractedFact
     ) -> MemoryCandidate:
-        candidate = _candidate_from_fact(scope, fact)
+        candidate = _candidate_from_fact(scope, fact, namespace=self._candidate_namespace)
+        for existing in self._memory_port.list_pending_candidates(scope):
+            if same_pending_identity(existing, candidate):
+                record("write_result", {"operation": "reuse_pending", "actual": existing,
+                                        "commit_status": "already_committed"})
+                return existing
         link = {
             "record_kind": "candidate",
             "record_id": candidate.candidate_id,
@@ -743,28 +847,31 @@ class MemoryAdoption:
                 "actual": actual,
                 "commit_status": "committed",
             },
-            links=({**link, "commit_status": "committed"},),
+            links=({**link, "record_id": actual.candidate_id, "commit_status": "committed"},),
             started_at=write_started_at,
             status="committed",
         )
         return actual
 
     def _create_owner_memory(
-        self, scope: ContactScope, fact: ExtractedFact
+        self, scope: ContactScope, fact: ExtractedFact, *, previous: OwnerMemory | None = None,
     ) -> OwnerMemory | None:
         if self._owner_memory_port is None:
             raise TypeError("self 主体事实需要注入 owner 级记忆 port。")
-        if self._dimension_release.gate_enabled:
+        if previous is not None or self._dimension_release.gate_enabled or hasattr(self._memory_port, "assess_correction"):
             candidate = self._create_pending_candidate(scope, fact)
-            current = replace(fact, dimension_evidence=candidate.dimension_evidence)
-            if not self._dimension_release.allows(current, scope=scope):
+            if candidate.status is not MemoryCandidateStatus.PENDING or candidate.correction_review:
+                return None
+            current = _stored_candidate_fact(fact, candidate)
+            if not self._passes_all_adoption_gates(current, scope=scope):
                 return None
             started = datetime.now(timezone.utc)
             try:
                 actual = self._owner_memory_port.confirm_candidate(
-                    candidate=candidate, adoption_method=AdoptionMethod.AUTO
+                    candidate=candidate, adoption_method=AdoptionMethod.AUTO,
+                    **({"expected_previous": previous} if previous is not None else {}),
                 )
-            except DimensionEvidenceChangedError:
+            except (DimensionEvidenceChangedError, MemoryCorrectionConflictError, MemoryVersionConflict):
                 return None
             record(
                 "write_result",
@@ -810,16 +917,16 @@ class MemoryAdoption:
                 "actual": actual,
                 "commit_status": "committed",
             },
-            links=({**link, "commit_status": "committed"},),
+            links=({**link, "record_id": actual.memory_id, "commit_status": "committed"},),
             started_at=write_started_at,
             status="committed",
         )
         return actual
 
     def _confirm_contact_memory(
-        self, scope: ContactScope, fact: ExtractedFact
+        self, scope: ContactScope, fact: ExtractedFact, *, previous: ConfirmedMemory | None = None,
     ) -> ConfirmedMemory | None:
-        planned = _candidate_from_fact(scope, fact)
+        planned = _candidate_from_fact(scope, fact, namespace=self._candidate_namespace)
         link = {
             "record_kind": "candidate",
             "record_id": planned.candidate_id,
@@ -839,14 +946,14 @@ class MemoryAdoption:
                 "actual": candidate,
                 "commit_status": "committed",
             },
-            links=({**link, "commit_status": "committed"},),
+            links=({**link, "record_id": candidate.candidate_id, "commit_status": "committed"},),
             started_at=write_started_at,
             status="committed",
         )
-        current_fact = replace(
-            fact, dimension_evidence=candidate.dimension_evidence
-        )
-        if not self._dimension_release.allows(current_fact, scope=scope):
+        if candidate.status is not MemoryCandidateStatus.PENDING or candidate.correction_review:
+            return None
+        current_fact = _stored_candidate_fact(fact, candidate)
+        if not self._passes_all_adoption_gates(current_fact, scope=scope):
             return None
         record(
             "write_plan",
@@ -864,14 +971,16 @@ class MemoryAdoption:
                     candidate_id=candidate.candidate_id,
                     adoption_method=AdoptionMethod.AUTO,
                     expected_dimension_evidence=candidate.dimension_evidence,
+                    **({"expected_previous": previous} if previous is not None else {}),
                 )
             else:
                 actual = self._memory_port.confirm(
                     scope=scope,
                     candidate_id=candidate.candidate_id,
                     adoption_method=AdoptionMethod.AUTO,
+                    **({"expected_previous": previous} if previous is not None else {}),
                 )
-        except DimensionEvidenceChangedError:
+        except (DimensionEvidenceChangedError, MemoryCorrectionConflictError, MemoryVersionConflict):
             return None
         record(
             "write_result",
@@ -894,10 +1003,14 @@ class MemoryAdoption:
 
 
 def _candidate_from_fact(
-    scope: ContactScope, fact: ExtractedFact,
+    scope: ContactScope, fact: ExtractedFact, *, namespace: UUID | None = None,
 ) -> MemoryCandidate:
+    frozen = snapshot(fact)
+    frozen["dimension_evidence"] = fact.dimension_evidence.to_payload() if fact.dimension_evidence else None
+    identifier = (uuid5(namespace, json.dumps(snapshot((scope, frozen)), sort_keys=True, ensure_ascii=False))
+                  if namespace is not None else uuid4())
     return MemoryCandidate(
-        candidate_id=uuid4(), scope=scope, text=fact.text,
+        candidate_id=identifier, scope=scope, text=fact.text,
         category=fact.category, source_ids=fact.source_message_ids,
         topic=fact.topic, subject=fact.subject,
         status=MemoryCandidateStatus.PENDING,
@@ -905,8 +1018,19 @@ def _candidate_from_fact(
         confidence=fact.confidence, risk_flags=fact.risk_flags,
         alternatives=fact.alternatives,
         interpretation_reason=fact.interpretation_reason,
-        timing=fact.timing, dimension_evidence=fact.dimension_evidence,
+        timing=fact.timing, dimension_evidence=fact.dimension_evidence, event=fact.event,
     )
+
+
+def _stored_candidate_fact(fact: ExtractedFact, candidate: MemoryCandidate) -> ExtractedFact:
+    """复用候选时按其实际旧评分与风险重走全部门，不借新输出补认证。"""
+    return replace(fact, text=candidate.text, subject=candidate.subject,
+                   category=candidate.category, topic=candidate.topic,
+                   source_message_ids=candidate.source_ids,
+                   confidence=candidate.confidence, risk_flags=candidate.risk_flags,
+                   alternatives=candidate.alternatives, interpretation_reason=candidate.interpretation_reason,
+                   valid_at=candidate.valid_at, invalid_at=candidate.invalid_at,
+                   dimension_evidence=candidate.dimension_evidence, event=candidate.event)
 
 
 def _normalize(text: str) -> str:

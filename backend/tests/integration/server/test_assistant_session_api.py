@@ -16,12 +16,16 @@ from langchain_core.messages import AIMessage
 
 from notalone.application.reply_service import ReplyService
 from notalone.application.memory_service import MemoryService
+from notalone.application.assistant_session_service import AssistantSessionService
+from notalone.persistence.assistant_session_catalog import PostgresAssistantSessionCatalog
 from notalone.conversation.models import ConversationObservation
 from notalone.persistence.conversation_repository import (
     PostgresConversationBindingRepository,
     PostgresConversationPort,
 )
 from notalone.persistence.reply_store import PostgresReplyStore
+from notalone.persistence.assistant_discussion_reply_context import PostgresAssistantDiscussionContext
+from notalone.persistence.assistant_prepared_context import PreparedAssistantContext
 from notalone.persistence.memory_store import PostgresMemoryStore
 from notalone.persistence.owner_memory_store import PostgresOwnerMemoryStore
 from notalone.persistence.locks import lock_owner_scope
@@ -53,6 +57,8 @@ class SessionScriptedModel(ScriptedCoreModel):
 
 
 class AssistantSessionHttpTest(unittest.TestCase):
+    production_discussion_context = False
+    reply_store_factory = PostgresReplyStore
     @classmethod
     def setUpClass(cls) -> None:
         if not DATABASE_URL:
@@ -101,12 +107,18 @@ class AssistantSessionHttpTest(unittest.TestCase):
         )]
         retrieval = PostgresRetrieval(DATABASE_URL, memory_store=PostgresMemoryStore(DATABASE_URL),
                                       owner_memory_store=PostgresOwnerMemoryStore(DATABASE_URL))
-        generator = ReplyGenerator(
-            store=PostgresReplyStore(DATABASE_URL),
-            context=RetrievalReplyContext(
+        context = RetrievalReplyContext(
                 retrieval=retrieval, skill_library_revision=0,
                 id_factory=lambda: self.draft_id,
-            ),
+            )
+        if self.production_discussion_context:
+            from notalone.application.expression_preference_context import ExpressionPreferenceContext
+            from notalone.persistence.expression_preferences import PostgresExpressionPreferenceStore
+            context = ExpressionPreferenceContext(context, PostgresExpressionPreferenceStore(DATABASE_URL))
+            context = PostgresAssistantDiscussionContext(context, database_url=DATABASE_URL)
+            context = PreparedAssistantContext(context, DATABASE_URL)
+        generator = ReplyGenerator(
+            store=self.reply_store_factory(DATABASE_URL), context=context,
             runtime=LangChainReplyRuntime(
                 model=self.model, skill_port=PostgresSkillPort(DATABASE_URL),
                 retrieval=retrieval,
@@ -133,13 +145,16 @@ class AssistantSessionHttpTest(unittest.TestCase):
         with psycopg.connect(DATABASE_URL) as connection:
             connection.execute("DELETE FROM public.owner WHERE id = %s", (self.owner_id,))
 
-    def _backend(self, *, owner_id=None) -> HttpBackend:
+    def _backend(self, *, owner_id=None, assistant_store=None) -> HttpBackend:
         owner_id = owner_id or self.owner_id
         return HttpBackend(create_app(
             database_url=DATABASE_URL, owner_id=owner_id,
             memory_service=MemoryService(contact_memory=PostgresMemoryStore(DATABASE_URL),
                                          owner_memory=PostgresOwnerMemoryStore(DATABASE_URL)),
             token="synthetic-assistant-session-token", reply_service=self.reply_service,
+            assistant_sessions=AssistantSessionService(
+                store=assistant_store, reply=self.reply_service, catalog=PostgresAssistantSessionCatalog(DATABASE_URL),
+            ) if assistant_store is not None else None,
         ), owner_id)
 
     def _default(self, *, contact_id=None) -> tuple[int, dict]:

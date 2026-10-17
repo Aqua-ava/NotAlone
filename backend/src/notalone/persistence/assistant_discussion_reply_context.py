@@ -40,11 +40,13 @@ class PostgresAssistantDiscussionContext:
         verified_scope: VerifiedConversationScope,
         reply_request_id: UUID | None = None,
         continued_candidate: ContinuedReplyCandidate | None = None,
+        history_message_ids: tuple[UUID, ...] | None = None,
     ) -> ReplyContext:
         # C 的样本选择及 B 的探索读取会自开 owner 事务，须先完成并释放。
         context = self._context.build(
             command=command, verified_scope=verified_scope,
             reply_request_id=reply_request_id, continued_candidate=continued_candidate,
+            **({"history_message_ids": history_message_ids} if history_message_ids is not None else {}),
         )
         if not isinstance(context, ReplyContext) or context.scope != command.scope or context.command != command:
             raise ReplyContextInvariantError("基底回复上下文与当前请求不一致。")

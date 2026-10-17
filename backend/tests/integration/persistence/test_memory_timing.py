@@ -19,6 +19,7 @@ from notalone.memory import (
     MemoryTopic,
     OwnerMemory,
 )
+from notalone.memory.correction import MemoryCorrectionConflictError
 from notalone.persistence.memory_store import PostgresMemoryStore
 from notalone.persistence.owner_memory_store import PostgresOwnerMemoryStore
 from notalone.scopes import ContactScope
@@ -264,8 +265,12 @@ class PostgresMemoryTimingTest(unittest.TestCase):
         )
         self.assertEqual(legacy.timing.recorded_at, old_saved)
         self.assertEqual(legacy.timing.source_started_at, FIRST_DATE)
+        # 旧 NULL 时间仍可查看，但不能把当前来源回填为旧提取证明后确认。
+        with self.assertRaises(MemoryCorrectionConflictError):
+            self.store.confirm(scope=self.scope, candidate_id=candidate_id)
+        fresh = self.store.create_candidate(self._candidate((self.first,)))
         confirmed = self.store.confirm(
-            scope=self.scope, candidate_id=candidate_id,
+            scope=self.scope, candidate_id=fresh.candidate_id,
         )
         corrected = self.store.correct(
             scope=self.scope, memory_id=confirmed.memory_id,

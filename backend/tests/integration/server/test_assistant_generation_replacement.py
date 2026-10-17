@@ -539,7 +539,7 @@ class AssistantGenerationReplacementHttpTest(unittest.TestCase):
                 self.assertTrue(self.model.response_entered.wait(5))
                 old_lease, old_context = self.reply_store.prepared_contexts[old_key]
                 self.assertEqual(self.backend.request(path + "/replace", replacement_body), (
-                    500, {"error": "internal_error"},
+                    500, {"error": "reply_generation_failed"},
                 ))
                 self.assertEqual(len(self.model.seen_calls), 2)
                 status, failed = self.backend.request(path)

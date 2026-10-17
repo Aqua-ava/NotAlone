@@ -99,6 +99,14 @@ class ReplySkillPreviewEngine:
         result = self._runtime_factory(single).generate(context)
         if not isinstance(result, ReplyRuntimeResult):
             raise ReplyInvariantError("Skill 试用运行结果无效。")
+        # 与正式候选共用确定性校验；试用不能借额外资料绕过冻结输入。
+        from notalone.reply.generator import ReplyGenerator
+        ReplyGenerator._validate_runtime_result(result)
+        if result.additional_evidence or any(
+            not set(candidate.citation_ids) <= {item.evidence_id for item in context.evidence}
+            for candidate in result.candidates
+        ):
+            raise ReplyInvariantError('Skill 试用引用超出冻结输入。')
         return self._to_preview(scope, result)
 
     @staticmethod
@@ -137,4 +145,5 @@ class ReplySkillPreviewEngine:
             resource_paths=skill.resource_paths,
             load_state=skill.load_state,
             fallback_reason="",
+            execution_view=skill.execution_view,
         )

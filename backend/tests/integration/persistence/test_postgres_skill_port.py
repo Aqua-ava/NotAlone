@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import unittest
+from unittest.mock import patch
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
@@ -284,6 +285,62 @@ class PostgresSkillPortTest(unittest.TestCase):
         self.assertEqual(loaded.content, "全局策略正文。")
         self.assertTrue(loaded.enabled)
 
+    def test_catalog_and_resource_permission_project_metadata_and_only_selected_version_loads_body(self):
+        projections = []
+        connect = self.port._connect
+
+        class ObservedCursor:
+            def __init__(self, cursor):
+                self.cursor = cursor
+
+            def __enter__(self):
+                self.cursor.__enter__()
+                return self
+
+            def __exit__(self, *args):
+                return self.cursor.__exit__(*args)
+
+            def execute(self, *args, **kwargs):
+                self.cursor.execute(*args, **kwargs)
+                if self.cursor.description is not None:
+                    projections.append(tuple(column.name for column in self.cursor.description))
+                return self
+
+            def __getattr__(self, name):
+                return getattr(self.cursor, name)
+
+        class ObservedConnection:
+            def __init__(self):
+                self.connection = connect()
+
+            def __enter__(self):
+                self.connection.__enter__()
+                return self
+
+            def __exit__(self, *args):
+                return self.connection.__exit__(*args)
+
+            def cursor(self, **kwargs):
+                return ObservedCursor(self.connection.cursor(**kwargs))
+
+            def execute(self, *args, **kwargs):
+                return self.cursor().execute(*args, **kwargs)
+
+            def __getattr__(self, name):
+                return getattr(self.connection, name)
+
+        # 观察公开port实际送往PG并返回的投影，不断言私有查询常量。
+        with patch.object(self.port, '_connect', side_effect=ObservedConnection):
+            catalog = self.port.catalog(self._scope())
+            self.assertEqual(len(catalog.entries), 2)
+            self.assertTrue(projections)
+            self.assertFalse(any('version_content' in columns or columns == ('content',) for columns in projections))
+            version = self.port.load_version(self._scope(), self.global_version_id)
+            self.assertEqual(version.content, '全局策略正文。')
+            with self.assertRaises(PermissionError):
+                self.port.load_resource(self._scope(), self.global_version_id, 'assets/unknown.txt')
+        self.assertEqual(sum('version_content' in columns or columns == ('content',) for columns in projections), 1)
+
     def test_unknown_disabled_deleted_old_or_foreign_version_fails_identically(self) -> None:
         version_ids = (
             uuid4(),
@@ -339,11 +396,10 @@ class PostgresSkillPortTest(unittest.TestCase):
         self.assertFalse(hasattr(self.port, "delete"))
         self.assertFalse(hasattr(self.port, "send"))
 
-        broken = PostgresSkillPort(
-            "postgresql:///notalone_skill_port_error_test"
-        )
-        with self.assertRaises(SkillPortPersistenceError) as caught:
-            broken.catalog(self._scope())
+        # 故障边界只模拟连接异常，不访问无法证明归属的固定旧库。
+        with patch.object(self.port, '_connect', side_effect=psycopg.OperationalError('合成连接失败')):
+            with self.assertRaises(SkillPortPersistenceError) as caught:
+                self.port.catalog(self._scope())
 
         self.assertEqual(str(caught.exception), "Skill 目录读取失败。")
         self.assertNotIn("postgresql", str(caught.exception))

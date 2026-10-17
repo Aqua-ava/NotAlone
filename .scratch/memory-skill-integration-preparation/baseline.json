@@ -1,0 +1,82 @@
+{
+  "recorded_at_taipei": "2026-10-15 22:22:34",
+  "refs": {
+    "worktree_start": "982cbb354e1406cc7d21009c5dfeb5a378b77b1f",
+    "main": "0eb10b4c7f46e70a585c0269c8e4c42b914d54ec",
+    "signed": "54e482a6ccfa8ca1ccc7e9dc34b0bfaf27fb1616",
+    "review": "c30a4051345cccc698f286489d56489d4b14b49b",
+    "merge_base": "b8938031109edf3305821a0d3419ee8c3d28d5ff"
+  },
+  "observations": {
+    "original_head_at_start": "0eb10b4c7f46e70a585c0269c8e4c42b914d54ec",
+    "source_head_at_start": "41e00d0f408ccb97739c74b87e4906718453fe6d",
+    "main_at_precommit_check": "9d90aa7cb2c9cb8e24c383cfbbbf7a63d3a34fca",
+    "post_main_increment_reviewed": false
+  },
+  "counts": {
+    "main_only_commits": 73,
+    "signed_only_commits": 137,
+    "main_changed_paths": 242,
+    "signed_changed_paths": 439,
+    "shared_paths": 40,
+    "shared_source_paths": 29,
+    "union_paths": 641,
+    "issues": 15,
+    "resolved": 15,
+    "checked_ac": 94,
+    "unchecked_ac": 0
+  },
+  "rules": [
+    {
+      "path": "AGENTS.md",
+      "local_sha256": "5bfe929e1d894904a101acf21986b6182e8a940f31c03049d09118372da79541",
+      "original_sha256": "5bfe929e1d894904a101acf21986b6182e8a940f31c03049d09118372da79541",
+      "identical": true
+    },
+    {
+      "path": "docs/agents/workflow.md",
+      "local_sha256": "457c5639e2da592bd5f02fe66d52d13134fa31a0f15edae28b126dc1cbe2526c",
+      "original_sha256": "457c5639e2da592bd5f02fe66d52d13134fa31a0f15edae28b126dc1cbe2526c",
+      "identical": true
+    },
+    {
+      "path": "docs/agents/engineering.md",
+      "local_sha256": "35d30ed047a12854d8ce923ad09b591755ccdcce1002024d4342c285fe208403",
+      "original_sha256": "35d30ed047a12854d8ce923ad09b591755ccdcce1002024d4342c285fe208403",
+      "identical": true
+    },
+    {
+      "path": "docs/agents/issue-tracker.md",
+      "local_sha256": "751a109c114254c42c5bdc0bd3df115bb70e005e620cbf3a273db70f7221ed57",
+      "original_sha256": "751a109c114254c42c5bdc0bd3df115bb70e005e620cbf3a273db70f7221ed57",
+      "identical": true
+    },
+    {
+      "path": "docs/agents/triage-labels.md",
+      "local_sha256": "e54527f0d10f853f46bf441afaa778d4320da814ce80dd85912b11554bd3b4ef",
+      "original_sha256": "e54527f0d10f853f46bf441afaa778d4320da814ce80dd85912b11554bd3b4ef",
+      "identical": true
+    },
+    {
+      "path": "docs/agents/domain.md",
+      "local_sha256": "23e8c0378c4d24829f1e5d9d4bd64e78a4399ccee7fd7f4d9c259aba2fb22570",
+      "original_sha256": "23e8c0378c4d24829f1e5d9d4bd64e78a4399ccee7fd7f4d9c259aba2fb22570",
+      "identical": true
+    }
+  ],
+  "review_to_signed_paths": [
+    ".scratch/memory-skill-evolution/integration.md",
+    ".scratch/memory-skill-evolution/issues/15-combined-evolution-acceptance.md",
+    ".scratch/memory-skill-evolution/planning.md",
+    ".scratch/memory-skill-evolution/spec.md",
+    ".scratch/memory-skill-evolution/validation/15-combined-evolution-acceptance.md"
+  ],
+  "boundaries": {
+    "product_tests_rerun": false,
+    "database_access": false,
+    "external_model_calls": false,
+    "desktop_use": false,
+    "merge_or_cherry_pick": false,
+    "remote_operations": false
+  }
+}

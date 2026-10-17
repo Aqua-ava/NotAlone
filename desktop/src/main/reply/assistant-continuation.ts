@@ -4,6 +4,7 @@ import { isUuid } from '../uuid';
 import { isRecord, readReplyResult } from './result-read';
 import { readAssistantGenerationReceipt, type AssistantGenerationReceipt } from './assistant-generation-jobs';
 import type { AssistantNoGenerationProof } from '../../shared/assistant-no-generation';
+import { readReplyScene } from './scene';
 import { ASSISTANT_CONTINUATION_RESPONSE_LIMIT, readAssistantContinuationClarification,
   type RequirementChange, type RequirementClarificationOption } from '../../shared/assistant-continuation-clarification';
 export { readAssistantContinuationClarification } from '../../shared/assistant-continuation-clarification';
@@ -157,5 +158,6 @@ export async function continueAssistantSession(backend: BackendHost, contactId: 
   return { phase: 'completed' as const, ...readReplyResult(value), generation: response.generation,
     assistantSessionId: sessionId.toLowerCase(), inputVersionId: value.input_version_id.toLowerCase(),
     resolvedCandidateId: candidateId as string | null, resolvedVersionId: versionId as string | null,
-    effectiveRequirements: [...continuation.effective_requirements] as string[], effectiveInput: value.effective_input };
+    effectiveRequirements: [...continuation.effective_requirements] as string[], effectiveInput: value.effective_input,
+    effectiveScene: readReplyScene(value.effective_scene) };
 }

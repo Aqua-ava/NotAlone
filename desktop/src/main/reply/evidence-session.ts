@@ -17,7 +17,7 @@ export class ReplyEvidenceSession {
   }
   getState(): ReplyEvidenceState { return structuredClone(this.state); }
   onStateChanged(listener: (state: ReplyEvidenceState) => void) { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
-  close(selection: ReplyCandidateSelection): void { this.assertCandidate(selection); this.cancel(); this.publish({ candidateId: null, phase: 'idle', items: [] }); }
+  close(selection: ReplyCandidateSelection): void { this.assertCandidate(selection); this.cancel(); this.publish({ candidateId: null, phase: 'idle', items: [], basisChanges: undefined, retrieval: undefined }); }
   async load(selection: ReplyCandidateSelection): Promise<void> {
     this.assertCandidate(selection);
     this.cancel();
@@ -27,12 +27,12 @@ export class ReplyEvidenceSession {
     const current = () => operation === this.operation && generation === this.backend.getConnectionGeneration()
       && this.state.scopeRevision === selection.scopeRevision && this.state.contactId === selection.contactId
       && this.state.replyRequestId === selection.replyRequestId;
-    this.publish({ candidateId: selection.candidateId, phase: 'loading', items: [] });
+    this.publish({ candidateId: selection.candidateId, phase: 'loading', items: [], basisChanges: undefined, retrieval: undefined });
     try {
       const result = await readReplyEvidence(this.backend, selection.contactId, selection.replyRequestId, pending.signal);
-      if (current() && result.generation === generation) this.publish({ phase: 'ready', items: result.items });
+      if (current() && result.generation === generation) this.publish({ phase: 'ready', items: result.items, basisChanges: result.basisChanges, retrieval: result.retrieval });
     } catch (error) {
-      if (current()) this.publish({ phase: error instanceof BackendRequestFailure && error.status === 404 ? 'missing' : 'failed', items: [] });
+      if (current()) this.publish({ phase: error instanceof BackendRequestFailure && error.status === 404 ? 'missing' : 'failed', items: [], basisChanges: undefined, retrieval: undefined });
     } finally { if (this.pending === pending) this.pending = undefined; }
   }
   private assertCandidate(selection: ReplyCandidateSelection): void {
@@ -48,7 +48,7 @@ export class ReplyEvidenceSession {
     if (generation !== this.generation || state.scopeRevision !== this.state.scopeRevision
       || state.contactId !== this.state.contactId || requestId !== this.state.replyRequestId) {
       this.cancel(); this.generation = generation;
-      this.publish({ scopeRevision: state.scopeRevision, contactId: state.contactId, replyRequestId: requestId, candidateId: null, phase: 'idle', items: [] });
+      this.publish({ scopeRevision: state.scopeRevision, contactId: state.contactId, replyRequestId: requestId, candidateId: null, phase: 'idle', items: [], basisChanges: undefined, retrieval: undefined });
     }
   }
   private cancel() { ++this.operation; this.pending?.abort(); this.pending = undefined; }

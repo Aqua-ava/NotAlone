@@ -3,6 +3,7 @@ import type { ReplyInputSnapshot, ReplySkillChoice } from '../../shared/reply-br
 import type { BackendHost } from '../backend/host';
 import { isUuid } from '../uuid';
 import { readReplyMessages } from './messages';
+import { sceneSnapshot } from './scene';
 
 const text = (value: unknown, limit = 4096): value is string => typeof value === 'string' && Boolean(value.trim()) && Array.from(value).length <= limit;
 const optional = (value: unknown): value is string | null | undefined => value == null || typeof value === 'string' && Array.from(value).length <= 4096;
@@ -11,7 +12,7 @@ const optional = (value: unknown): value is string | null | undefined => value =
 export async function interruptedReplyInput(backend: BackendHost, turn: SavedAssistantTurn,
   contact: { contactId: string; displayName: string }, signal: AbortSignal, current: () => boolean): Promise<ReplyInputSnapshot> {
   const content = turn.input?.content;
-  const common = { contactId: contact.contactId, contactDisplayName: contact.displayName };
+  const common = { contactId: contact.contactId, contactDisplayName: contact.displayName, ...sceneSnapshot(turn.input?.scene) };
   if (!content) throw new Error('中断生成输入暂不可重试。');
   if (content.type === 'rewrite_draft' && text(content.draft_text, Infinity)
     && (content.user_instruction == null || typeof content.user_instruction === 'string')

@@ -4,6 +4,7 @@ from uuid import UUID
 
 from notalone.reply.errors import ReplyStoreInvariantError
 from notalone.reply.store import ReplyAttemptState, ReplyStore
+from notalone.reply.retrieval_receipt import require_receipt_evidence
 from notalone.scopes import ContactScope
 
 
@@ -24,8 +25,15 @@ class ReplyEvidenceService:
         if stored.state != ReplyAttemptState.COMPLETED or stored.result is None:
             raise ReplyEvidenceIncomplete()
         cited_ids = set(stored.result.context_receipt.evidence_ids)
+        try:
+            require_receipt_evidence(stored.retrieval, stored.evidence)
+        except (TypeError, ValueError):
+            raise ReplyStoreInvariantError("回复检索回执与保存依据不一致。") from None
         return {
             "reply_request_id": str(request_id),
+            **({"retrieval": stored.retrieval.to_payload()} if stored.retrieval else {}),
+            **({"basis_changes": [change.to_payload() for change in stored.result.basis_changes]}
+               if stored.result.basis_changes else {}),
             "evidence": [
                 {
                     "evidence_id": str(entry.evidence_id),
@@ -34,10 +42,11 @@ class ReplyEvidenceService:
                     "selection_reason": entry.selection_reason,
                     "snapshot_status": entry.status,
                     "cited": entry.evidence_id in cited_ids,
+                    **({"navigation": entry.navigation.to_payload()} if entry.navigation else {}),
                     "timing": entry.timing.to_payload(),
                     "valid_at": entry.valid_at.isoformat() if entry.valid_at else None,
                     "invalid_at": entry.invalid_at.isoformat() if entry.invalid_at else None,
                 }
-                for entry in stored.evidence
+                for entry in stored.evidence if entry.model_visible
             ],
         }

@@ -13,6 +13,7 @@ from notalone.memory_trace.context import snapshot
 from notalone.persistence.extraction_trace import erase_source_traces
 from notalone.persistence.locks import lock_contact_scope, lock_owner_scope
 from notalone.scopes import ContactScope
+from notalone.persistence.memory_correction import source_documents_available
 from notalone.source_processing.models import ProcessingRecord
 
 
@@ -156,6 +157,10 @@ class PostgresSourceProcessingStore:
                 ).fetchone()
                 if row is None:
                     raise LookupError("指定联系人范围内不存在该处理记录。")
+                if row["status"] != "deleted" and row["source_id"] is not None and not source_documents_available(
+                    connection, owner_id=scope.owner_id, source_ids=[row["source_id"]],
+                ):
+                    raise LookupError("处理记录的参与来源正在删除或已不可用。")
                 records = connection.execute(
                     "SELECT * FROM public.source_processing_record WHERE batch_id=%s AND owner_id=%s AND contact_id=%s ORDER BY position",
                     (batch_id, scope.owner_id, scope.contact_id),

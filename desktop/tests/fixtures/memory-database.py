@@ -33,9 +33,9 @@ contact_database = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(contact_database)
 
 
-def create_database(*, empty_owner_memory: bool = False) -> dict[str, object]:
+def create_database(*, empty_owner_memory: bool = False, ownership_path=None) -> dict[str, object]:
     """复用本轮随机建库与正式迁移，不操作已有库。"""
-    data = contact_database.create_database("ready")
+    data = contact_database.create_database("ready", ownership_path)
     try:
         database_url = data["database_url"]
         owner_id = UUID(data["owner_id"])
@@ -77,8 +77,12 @@ def create_database(*, empty_owner_memory: bool = False) -> dict[str, object]:
 
         automatic = candidate("甲喜欢合成茉莉茶。", (message_ids[0],))
         store.confirm(scope=scope, candidate_id=automatic.candidate_id)
-        old = candidate("旧版关系备注。", (source_id, message_ids[0]))
-        old_memory = store.confirm(scope=scope, candidate_id=old.candidate_id)
+        # 修正示例来自主动录入，和下方独立提取的候选没有旧证据依赖。
+        old = store.create_manual_candidate(MemoryCandidate(
+            candidate_id=uuid4(), scope=scope, text="旧版关系备注。",
+            category=MemoryCategory.RELATIONSHIP_NOTE, source_ids=(a,),
+        ))
+        old_memory = store.confirm(scope=scope, candidate_id=old.candidate_id, adoption_method=AdoptionMethod.MANUAL)
         corrected = store.correct(scope=scope, memory_id=old_memory.memory_id, text="甲的新版本关系备注。")
         for subject, text in (
             (FactSubject.SELF, "本人可能参加合成学习计划。"),
@@ -90,15 +94,22 @@ def create_database(*, empty_owner_memory: bool = False) -> dict[str, object]:
         owner_candidate = None
         if not empty_owner_memory:
             owner_candidate = candidate("本人喜欢合成绿茶。", (message_ids[0],), subject=FactSubject.SELF)
-            service.confirm_candidate(owner_id=owner_id, contact_id=a, candidate_id=owner_candidate.candidate_id)
+            # 夹具明确审核当前人工决定；不借旧测试准备绕过纠错确认合同。
+            service.confirm_candidate(
+                owner_id=owner_id, contact_id=a, candidate_id=owner_candidate.candidate_id,
+                expected_correction_decision_ids=tuple(review.decision_id for review in owner_candidate.correction_review),
+            )
 
-        # 历史与未来状态只属于夹具条件；公开列表不得把它们显示为当前资料。
+        # 过期 active 资料可供管理回看；未来资料不进入当前列表或回复。
         for text, validity in (
             ("甲已过期的合成状态。", {"invalid_at": datetime(2020, 1, 1, tzinfo=timezone.utc)}),
             ("甲尚未生效的合成状态。", {"valid_at": datetime(2099, 1, 1, tzinfo=timezone.utc)}),
         ):
             item = candidate(text, (source_id,), **validity)
-            store.confirm(scope=scope, candidate_id=item.candidate_id)
+            store.confirm(
+                scope=scope, candidate_id=item.candidate_id, adoption_method=AdoptionMethod.MANUAL,
+                expected_correction_decision_ids=tuple(review.decision_id for review in item.correction_review),
+            )
         other_scope = ContactScope(UUID(data["other_owner_id"]), UUID(data["other_contact_id"]))
         for selected_scope, text in (
             (ContactScope(owner_id, b), "乙喜欢合成乌龙茶。"),
@@ -123,6 +134,7 @@ def create_database(*, empty_owner_memory: bool = False) -> dict[str, object]:
                 connection.execute(sql.SQL("UPDATE public.{} SET created_at = '2026-01-02T02:00:00Z'").format(sql.Identifier(table)))
         return {**data, "empty_contact_id": str(empty_contact_id),
                 "direct_message_id": str(message_ids[0]), "source_document_id": str(source_id),
+                "manual_source_id": str(old.source_ids[0]), "manual_source_name": f"manual-{old.candidate_id}.jsonl",
                 "supersedes_memory_id": str(old_memory.memory_id), "corrected_memory_id": str(corrected.memory_id),
                 "owner_candidate_id": str(owner_candidate.candidate_id) if owner_candidate else None}
     except BaseException:
@@ -175,14 +187,15 @@ def check_http() -> None:
                 time.sleep(0.05)
             a, b = data["contact_ids"]
             memories = request(f"/api/contacts/{a}/memories")["memories"]
-            assert {item["text"] for item in memories} == {"甲喜欢合成茉莉茶。", "甲的新版本关系备注。"}
-            automatic = next(item for item in memories if item["adoption_method"] == "auto")
+            assert {item["text"] for item in memories} == {"甲喜欢合成茉莉茶。", "甲的新版本关系备注。", "甲已过期的合成状态。"}
+            automatic = next(item for item in memories if item["text"] == "甲喜欢合成茉莉茶。")
+            assert automatic["adoption_method"] == "auto"
             timing = automatic["timing"]
             assert datetime.fromisoformat(timing["recorded_at"]) == datetime(2026, 1, 2, 2, tzinfo=timezone.utc)
             for field in ("source_started_at", "source_ended_at"):
                 assert datetime.fromisoformat(timing[field]) == datetime(2024, 1, 2, 2, tzinfo=timezone.utc)
             assert timing["source_time_complete"] is True
-            corrected = next(item for item in memories if item["adoption_method"] == "manual")
+            corrected = next(item for item in memories if item["text"] == "甲的新版本关系备注。")
             assert corrected["supersedes_memory_id"] == data["supersedes_memory_id"]
             assert corrected["timing"]["source_time_complete"] is False
             owners = request("/api/memories/owner")["memories"]
@@ -196,7 +209,7 @@ def check_http() -> None:
             assert {item["subject"] for item in pending} == {"self", "contact", "shared"}
             assert all(item["status"] == "pending" and not item["timing"]["source_time_complete"] for item in pending)
             sources = request(f"/api/contacts/{a}/sources")["sources"]
-            assert {item["source_id"] for item in sources} == {data["source_document_id"]}
+            assert {item["source_id"] for item in sources} == {data["source_document_id"], data["manual_source_id"]}
             assert [item["text"] for item in request(f"/api/contacts/{b}/memories")["memories"]] == ["乙喜欢合成乌龙茶。"]
             assert request(f"/api/contacts/{data['other_contact_id']}/memories")["memories"] == []
             assert request(f"/api/contacts/{data['empty_contact_id']}/memories")["memories"] == []
@@ -226,9 +239,10 @@ if __name__ == "__main__":
         raise RuntimeError("资料夹具须使用本轮独立 synthetic.env 与握手路径。")
     if sys.argv[1] == "create":
         arguments = sys.argv[2:]
+        ownership_path = arguments.pop() if arguments and Path(arguments[-1]).is_absolute() else None
         if arguments not in ([], ["empty-owner-memory"]):
             raise ValueError("未知资料夹具模式。")
-        print(json.dumps(create_database(empty_owner_memory=bool(arguments))))
+        print(json.dumps(create_database(empty_owner_memory=bool(arguments), ownership_path=ownership_path)))
     elif sys.argv[1] == "drop":
         contact_database.drop_database(sys.argv[2])
     elif sys.argv[1] == "check-http":

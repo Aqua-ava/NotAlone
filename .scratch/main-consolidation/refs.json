@@ -1,0 +1,699 @@
+{
+  "base": "d174538f6d01028404a6d0532f2c12c269051277",
+  "branchCount": 78,
+  "refs": [
+    {
+      "branch": "codex/assistant-session-07-18",
+      "sha": "5688e5920220fd36824564cf66ba3c8b536c5877",
+      "status": "historical-main-features-present-tail-audit-still-required",
+      "coveredBy": []
+    },
+    {
+      "branch": "codex/assistant-session-07-18-history-20261012",
+      "sha": "504eac9c25517a6116514c660a0616a392e15e79",
+      "status": "historical-main-features-present-tail-audit-still-required",
+      "coveredBy": []
+    },
+    {
+      "branch": "codex/assistant-session-continuity",
+      "sha": "68ddbd861da65b8c821995120bdd2aca95a3b60b",
+      "status": "exact-ancestor-covered",
+      "coveredBy": []
+    },
+    {
+      "branch": "codex/authentic-expression",
+      "sha": "4f5c13353f0bd058f248de47cb5cb15d78feb83b",
+      "status": "historical-main-features-present-tail-audit-still-required",
+      "coveredBy": []
+    },
+    {
+      "branch": "codex/authentic-expression-c",
+      "sha": "213f93ceab4134062451e455e77bfc1ad32ae9fd",
+      "status": "historical-main-features-present-tail-audit-still-required",
+      "coveredBy": []
+    },
+    {
+      "branch": "codex/authentic-expression-completion",
+      "sha": "6d8a04a51fcdb545e0eb0f1f2dd56921b883640f",
+      "status": "historical-main-features-present-tail-audit-still-required",
+      "coveredBy": []
+    },
+    {
+      "branch": "codex/authentic-expression-integration",
+      "sha": "7919f5e301df898da4c8dafea6f806dc5958cc13",
+      "status": "historical-main-features-present-tail-audit-still-required",
+      "coveredBy": []
+    },
+    {
+      "branch": "codex/authentic-expression-page-diagnosis",
+      "sha": "6fed918927ca0af0cc0975178a72026dae86cd36",
+      "status": "exact-ancestor-covered",
+      "coveredBy": []
+    },
+    {
+      "branch": "codex/autonomous-integration-29",
+      "sha": "80bf5b8e6a14b46df33f4eaf237aeb289c45c184",
+      "status": "publication-map-covered-by-main",
+      "coveredBy": [],
+      "mappedMain": "9ef26d014f9f369149f705f05af5870d762f0ca4"
+    },
+    {
+      "branch": "codex/budget-sync-closeout",
+      "sha": "fa75938dfe4710ff12574b3cb68475cdddf3e798",
+      "status": "independent-cli-error-and-generation-button-ui-slices",
+      "coveredBy": []
+    },
+    {
+      "branch": "codex/contact-content-restore",
+      "sha": "b82e6926572541d60e858f9cd7971297d926577a",
+      "status": "exact-ancestor-covered",
+      "coveredBy": [
+        "main",
+        "codex/memory-skill-integration",
+        "codex/standalone-app",
+        "codex/wechat-media-extraction"
+      ]
+    },
+    {
+      "branch": "codex/contact-follow-acceptance",
+      "sha": "df819d906f8e47745fb0202b8adaf15b9f44580b",
+      "status": "exact-ancestor-covered",
+      "coveredBy": [
+        "main",
+        "codex/memory-skill-integration",
+        "codex/standalone-app",
+        "codex/wechat-media-extraction"
+      ]
+    },
+    {
+      "branch": "codex/contact-generation-jobs",
+      "sha": "7b9f947a08893c57cf39f451c1f8e451d3500d49",
+      "status": "exact-ancestor-covered",
+      "coveredBy": [
+        "main",
+        "codex/memory-skill-integration",
+        "codex/standalone-app",
+        "codex/wechat-media-extraction"
+      ]
+    },
+    {
+      "branch": "codex/continuous-contact-follow",
+      "sha": "8b4709e9aa45694bf7407c22bf3fb088870a84a5",
+      "status": "exact-ancestor-covered",
+      "coveredBy": [
+        "main",
+        "codex/memory-skill-integration",
+        "codex/standalone-app",
+        "codex/wechat-media-extraction"
+      ]
+    },
+    {
+      "branch": "codex/conversation-reply-strategy",
+      "sha": "16f85b179e616a1ff9fb1a13035b06d1d255ccb8",
+      "status": "exact-ancestor-covered",
+      "coveredBy": []
+    },
+    {
+      "branch": "codex/conversation-reply-strategy-b",
+      "sha": "50fd205777a5e6e102e6e90867561a824fa44b0b",
+      "status": "four-patches-equivalent-plus-frozen-handoff-document",
+      "coveredBy": []
+    },
+    {
+      "branch": "codex/current-docs-adr-059-060",
+      "sha": "e68d08d2a12bc36698265ae0416047ed7d60b82b",
+      "status": "patch-equivalent-main",
+      "coveredBy": []
+    },
+    {
+      "branch": "codex/current-docs-stale-sweep",
+      "sha": "7f8c013672ee4208836ded53c2b2f16c8f32362c",
+      "status": "patch-equivalent-main",
+      "coveredBy": []
+    },
+    {
+      "branch": "codex/dead-code-and-type-tightening",
+      "sha": "cc0e5c49226e86abbbc1b05555f999a6c8cc79e8",
+      "status": "patch-equivalent-main",
+      "coveredBy": []
+    },
+    {
+      "branch": "codex/ecnu-reply-budget",
+      "sha": "56725d35c75fc6c301e3e3196866a12c3fdc08b3",
+      "status": "publication-map-covered-by-main",
+      "coveredBy": [],
+      "mappedMain": "97d74859166c62788237d8e475625c9bcfa2f1f8"
+    },
+    {
+      "branch": "codex/explicit-generation-context",
+      "sha": "21a1a7503b6cd6029cfb947dc1aae4e1564dc31b",
+      "status": "exact-ancestor-covered",
+      "coveredBy": [
+        "main",
+        "codex/memory-skill-integration",
+        "codex/standalone-app",
+        "codex/wechat-media-extraction"
+      ]
+    },
+    {
+      "branch": "codex/external-wechat-tools",
+      "sha": "b5496d76a01a5b31182a78d2cfed60483076d28e",
+      "status": "exact-ancestor-covered",
+      "coveredBy": [
+        "main",
+        "codex/memory-skill-integration",
+        "codex/standalone-app",
+        "codex/wechat-media-extraction",
+        "codex/memory-skill-takeover"
+      ]
+    },
+    {
+      "branch": "codex/foreground-event-trigger",
+      "sha": "c79bd588e55e94c5fc95ad46e6d72b773eff037f",
+      "status": "old-backend-sse-design-replaced-by-main-native-change-source",
+      "coveredBy": []
+    },
+    {
+      "branch": "codex/helper-window-shortcut",
+      "sha": "1653b7603115bdba966ef9c3c738ab3bab39a6fe",
+      "status": "preserve-independent-inactive-display-policy-conflicts-current-main",
+      "coveredBy": []
+    },
+    {
+      "branch": "codex/integration-01",
+      "sha": "9ef25e059429799fca7e4612ff9c92ac67a784c2",
+      "status": "exact-ancestor-covered",
+      "coveredBy": [
+        "codex/memory-skill-integration"
+      ]
+    },
+    {
+      "branch": "codex/integration-02",
+      "sha": "1873defb624de25aeaff45b802af3fa011565fd9",
+      "status": "exact-ancestor-covered",
+      "coveredBy": [
+        "codex/memory-skill-integration"
+      ]
+    },
+    {
+      "branch": "codex/integration-03",
+      "sha": "b50315a836e4ad9a931d805268a484f316a7c1d9",
+      "status": "exact-ancestor-covered",
+      "coveredBy": [
+        "codex/memory-skill-integration"
+      ]
+    },
+    {
+      "branch": "codex/integration-04",
+      "sha": "df553fcc7c3eb1fd3d65e3fb4c68ceef10985121",
+      "status": "exact-ancestor-covered",
+      "coveredBy": [
+        "codex/memory-skill-integration"
+      ]
+    },
+    {
+      "branch": "codex/integration-05",
+      "sha": "c54019780f4ea3f12e25022d0b00693a5ec91466",
+      "status": "exact-ancestor-covered",
+      "coveredBy": [
+        "codex/memory-skill-integration"
+      ]
+    },
+    {
+      "branch": "codex/integration-06",
+      "sha": "2074fea99a7fc513711306727e7b1e86d1e6d042",
+      "status": "exact-ancestor-covered",
+      "coveredBy": [
+        "codex/memory-skill-integration"
+      ]
+    },
+    {
+      "branch": "codex/integration-07",
+      "sha": "8bf0d3c8f10a51578434eeb47a46b1e8d02e33b1",
+      "status": "exact-ancestor-covered",
+      "coveredBy": [
+        "codex/memory-skill-integration"
+      ]
+    },
+    {
+      "branch": "codex/integration-08",
+      "sha": "ec1e09512390f69c0b4889b5757632d560e42f1c",
+      "status": "exact-ancestor-covered",
+      "coveredBy": [
+        "codex/memory-skill-integration"
+      ]
+    },
+    {
+      "branch": "codex/integration-09",
+      "sha": "6370c06b0801efd268af80de54855138b918526d",
+      "status": "exact-ancestor-covered",
+      "coveredBy": [
+        "codex/memory-skill-integration"
+      ]
+    },
+    {
+      "branch": "codex/integration-10",
+      "sha": "b8fc33f03d7c93b10f9960caa0d650aca2cae355",
+      "status": "exact-ancestor-covered",
+      "coveredBy": [
+        "codex/memory-skill-integration"
+      ]
+    },
+    {
+      "branch": "codex/integration-11",
+      "sha": "bd7d568200e2d8ad289ee9ff6caf5e7e6e620e6b",
+      "status": "exact-ancestor-covered",
+      "coveredBy": [
+        "codex/memory-skill-integration"
+      ]
+    },
+    {
+      "branch": "codex/integration-12",
+      "sha": "b2e4bf42e3e1cf118e55da7f232fe1c355820339",
+      "status": "exact-ancestor-covered",
+      "coveredBy": [
+        "codex/memory-skill-integration"
+      ]
+    },
+    {
+      "branch": "codex/integration-13",
+      "sha": "3a2ff9b2d7bcb93f48748666d855e13f02b6d2f7",
+      "status": "exact-ancestor-covered",
+      "coveredBy": [
+        "codex/memory-skill-integration"
+      ]
+    },
+    {
+      "branch": "codex/integration-14",
+      "sha": "ba1831a1b16cf4bca5a584c1db4924413e912d34",
+      "status": "exact-ancestor-covered",
+      "coveredBy": [
+        "codex/memory-skill-integration"
+      ]
+    },
+    {
+      "branch": "codex/integration-15",
+      "sha": "3cc19da76e3cd6a5d590385b992f977e7d7dc68f",
+      "status": "same-tree-as-memory-skill-integration",
+      "coveredBy": [
+        "codex/memory-skill-integration"
+      ],
+      "sameTreeAs": [
+        "codex/memory-skill-integration"
+      ]
+    },
+    {
+      "branch": "codex/integration-fixture-safety",
+      "sha": "2ad3fd63c858dd02a528f126aa04642187d71c40",
+      "status": "exact-ancestor-covered",
+      "coveredBy": [
+        "codex/memory-skill-integration"
+      ]
+    },
+    {
+      "branch": "codex/integration-test-foundation",
+      "sha": "8a93c40e726f3158e797eaa687fbd17c00c3c832",
+      "status": "exact-ancestor-covered",
+      "coveredBy": [
+        "codex/memory-skill-integration"
+      ]
+    },
+    {
+      "branch": "codex/measurement-harness-restore",
+      "sha": "b03cf97565dec18bac5c728110a836c449b30c4a",
+      "status": "patch-equivalent-main",
+      "coveredBy": []
+    },
+    {
+      "branch": "codex/memory-correction-overview",
+      "sha": "ada604d9500a13103402acf859212e56244bdd7a",
+      "status": "exact-ancestor-covered",
+      "coveredBy": [
+        "codex/memory-skill-takeover"
+      ]
+    },
+    {
+      "branch": "codex/memory-event-update",
+      "sha": "70921f4f8668315eccce4054d05c26ecd29682ca",
+      "status": "earlier-memory-candidate-absorbed-by-curated-integration",
+      "coveredBy": []
+    },
+    {
+      "branch": "codex/memory-evolution-08-09-13",
+      "sha": "74c154968a8ef65f12aa96c0f71ef633d6d96737",
+      "status": "exact-ancestor-covered",
+      "coveredBy": [
+        "codex/memory-skill-takeover"
+      ]
+    },
+    {
+      "branch": "codex/memory-evolution-delivery",
+      "sha": "8c05de1923ac9132c8f99d53f87051eda9d425b0",
+      "status": "earlier-memory-candidate-absorbed-by-curated-integration",
+      "coveredBy": []
+    },
+    {
+      "branch": "codex/memory-learning-delivery",
+      "sha": "cac4fba8eda4bf9b1f50186d49f6c5f3681294ef",
+      "status": "absorbed-and-enhanced-by-memory-skill-integration",
+      "coveredBy": []
+    },
+    {
+      "branch": "codex/memory-semantic-gap",
+      "sha": "8c167aaba9b03020018608486325f867fb3403fe",
+      "status": "research-archive-only-no-semantic-retrieval-enable",
+      "coveredBy": []
+    },
+    {
+      "branch": "codex/memory-skill-evolution",
+      "sha": "7c784e06bdd9f718515ba3872c3931d93e2b79bc",
+      "status": "exact-ancestor-covered",
+      "coveredBy": [
+        "codex/memory-skill-takeover"
+      ]
+    },
+    {
+      "branch": "codex/memory-skill-evolution-08",
+      "sha": "31594b8b99170209b653b485976810953451cfe3",
+      "status": "preliminary-preferences-replaced-by-memory-integration",
+      "coveredBy": []
+    },
+    {
+      "branch": "codex/memory-skill-integration",
+      "sha": "2f1880aed96badd189b3aba4dd1d981462616205",
+      "status": "primary-memory-integration-candidate",
+      "coveredBy": [],
+      "sameTreeAs": [
+        "codex/integration-15"
+      ]
+    },
+    {
+      "branch": "codex/memory-skill-takeover",
+      "sha": "da1da806cf79a65a92406170899d7ad6b48cc9ac",
+      "status": "preserve-distinct-constraint-review-slice-do-not-whole-merge",
+      "coveredBy": []
+    },
+    {
+      "branch": "codex/memory-update-reply",
+      "sha": "69fb5af416e4102eb2b7edf656ce0c0f4399abf1",
+      "status": "source-slice-remapped-into-memory-integration",
+      "coveredBy": []
+    },
+    {
+      "branch": "codex/memory-upgrade-delivery",
+      "sha": "986f067cc31fdfcd21743563a076cde0664c29fd",
+      "status": "absorbed-and-enhanced-by-memory-skill-integration",
+      "coveredBy": []
+    },
+    {
+      "branch": "codex/memory-wait-main",
+      "sha": "89ae044793bdd77303d16f22c137d5c2c2ae8aae",
+      "status": "exact-ancestor-covered",
+      "coveredBy": [
+        "main",
+        "codex/standalone-app"
+      ]
+    },
+    {
+      "branch": "codex/mypy-undefined-names",
+      "sha": "30464804ec152e2acd15887c8e3b5548b689ecba",
+      "status": "patch-equivalent-main",
+      "coveredBy": []
+    },
+    {
+      "branch": "codex/prototype-conversation-paths",
+      "sha": "f18851b2f6c2aed90bf94af11c2ff8f6aea14897",
+      "status": "publication-map-covered-by-main",
+      "coveredBy": [],
+      "mappedMain": "b609c158b8fd7ed13358ef2d0a05d997c0ec2ee3"
+    },
+    {
+      "branch": "codex/reply-intent-reference-contract",
+      "sha": "d89a0f4d5c0bf254f208c9872c2e54b53ab73e77",
+      "status": "explicitly-consumed-by-main-6ecc138b",
+      "coveredBy": []
+    },
+    {
+      "branch": "codex/reply-strategy-completion",
+      "sha": "35b2f112ce065bf5aaa1effa18fda8ea26d328eb",
+      "status": "historical-main-features-present-tail-audit-still-required",
+      "coveredBy": []
+    },
+    {
+      "branch": "codex/round29-a",
+      "sha": "fd3fe2a04257ffc9807de48cbfe445adc2ed8e90",
+      "status": "historical-main-features-present-tail-audit-still-required",
+      "coveredBy": []
+    },
+    {
+      "branch": "codex/round29-b",
+      "sha": "31beb216afce0b21af137e4295130b297a71c365",
+      "status": "historical-main-features-present-tail-audit-still-required",
+      "coveredBy": []
+    },
+    {
+      "branch": "codex/round29-c",
+      "sha": "6fcf65837c3cd7139522bfce8e15d1065086ff19",
+      "status": "historical-main-features-present-tail-audit-still-required",
+      "coveredBy": []
+    },
+    {
+      "branch": "codex/self-grounded-race",
+      "sha": "075deb2ae20a13ddb0b2bbd1915fc0965aa2ad34",
+      "status": "memory-integration-plus-test-and-diagnosis-only",
+      "coveredBy": []
+    },
+    {
+      "branch": "codex/self-service-acceptance",
+      "sha": "3b7533e189c3220337d30742a2e1dfebed3dbe74",
+      "status": "acceptance-harness-and-records-only-no-product-source",
+      "coveredBy": []
+    },
+    {
+      "branch": "codex/single-frame-locator",
+      "sha": "6c6d190b8c6f823fbdfc1cc8ff5c42ab06a2f47d",
+      "status": "exact-ancestor-covered",
+      "coveredBy": [
+        "main",
+        "codex/memory-skill-integration",
+        "codex/standalone-app",
+        "codex/wechat-media-extraction"
+      ]
+    },
+    {
+      "branch": "codex/skill-learning-review",
+      "sha": "7db3406ebc9310c74ff6703247ecb35fd356dec5",
+      "status": "preliminary-learning-ui-replaced-by-memory-integration",
+      "coveredBy": []
+    },
+    {
+      "branch": "codex/standalone-app",
+      "sha": "9ba2523533103c055308dcdbaa3ad8e412194b62",
+      "status": "primary-standalone-integration-candidate",
+      "coveredBy": []
+    },
+    {
+      "branch": "codex/standalone-data-update",
+      "sha": "98dbc8ef2ddf9c093a3f318987c5c7021aba5925",
+      "status": "exact-ancestor-covered",
+      "coveredBy": [
+        "codex/standalone-app"
+      ]
+    },
+    {
+      "branch": "codex/standalone-first-run",
+      "sha": "9cfee4805a8f7c76a957cc27a3bfac3134aaf070",
+      "status": "exact-ancestor-covered",
+      "coveredBy": [
+        "codex/standalone-app"
+      ]
+    },
+    {
+      "branch": "codex/standalone-manual-input",
+      "sha": "0e759e504188060b47b3288215e775c23905490d",
+      "status": "exact-ancestor-covered",
+      "coveredBy": [
+        "codex/standalone-app"
+      ]
+    },
+    {
+      "branch": "codex/standalone-postgres-source",
+      "sha": "ae6118af69f34fa10de2a2637c75e53738256eae",
+      "status": "exact-ancestor-covered",
+      "coveredBy": [
+        "codex/standalone-app"
+      ]
+    },
+    {
+      "branch": "codex/standalone-runtime-build",
+      "sha": "f5eb5d0831298ab37fd7ec160d7ee0f3eae1bde3",
+      "status": "exact-ancestor-covered",
+      "coveredBy": [
+        "codex/standalone-app"
+      ]
+    },
+    {
+      "branch": "codex/standalone-startup-fixes",
+      "sha": "0837556b4fd6587dd521f635dd7fd763546818fc",
+      "status": "exact-ancestor-covered",
+      "coveredBy": [
+        "codex/standalone-app"
+      ]
+    },
+    {
+      "branch": "codex/standalone-wechat-setup",
+      "sha": "52b1141d0333a62756b1011cbe36fc531cab0da5",
+      "status": "exact-ancestor-covered",
+      "coveredBy": [
+        "codex/standalone-app"
+      ]
+    },
+    {
+      "branch": "codex/wechat-media-d1",
+      "sha": "559a995bea6f0b01cd2f6419c3531f05c3105672",
+      "status": "exact-ancestor-covered",
+      "coveredBy": [
+        "codex/wechat-media-extraction"
+      ]
+    },
+    {
+      "branch": "codex/wechat-media-d1-recovery",
+      "sha": "7a9f20f25cd96a156d6802402f6827aa2e83cea1",
+      "status": "exact-ancestor-covered",
+      "coveredBy": [
+        "codex/wechat-media-extraction"
+      ]
+    },
+    {
+      "branch": "codex/wechat-media-extraction",
+      "sha": "c2d5b31730f8ddd56a661d67b32084adcf717253",
+      "status": "independent-partial-media-lifecycle-candidate",
+      "coveredBy": []
+    },
+    {
+      "branch": "main",
+      "sha": "d174538f6d01028404a6d0532f2c12c269051277",
+      "status": "fixed-main-base",
+      "coveredBy": []
+    }
+  ],
+  "detached": [
+    {
+      "sha": "0cc6e30fe693d85610d33aa83ccf0d056c6f8267",
+      "status": "exact-ancestor-covered",
+      "coveredBy": [],
+      "prunable": true
+    },
+    {
+      "sha": "13db1df34fa1cd3f88be06f742cbf6ab7ef93b8f",
+      "status": "source-contained-in-e2-combination-b693236c",
+      "coveredBy": [],
+      "prunable": false
+    },
+    {
+      "sha": "b693236c6f715090fac63d45e4517729df283976",
+      "status": "independent-e2-and-full140-integration-candidate",
+      "coveredBy": [],
+      "prunable": false
+    },
+    {
+      "sha": "5aff314c0eedb4f798ffb719f7fe21722ad16863",
+      "status": "stable-guidance-combined-in-b693236c",
+      "coveredBy": [],
+      "prunable": false
+    },
+    {
+      "sha": "d844cb07272a4fa06a7b46df48c42a2ae489acda",
+      "status": "independent-future-arrangement-prompt-candidate",
+      "coveredBy": [],
+      "prunable": false
+    },
+    {
+      "sha": "9d928a1fa6cc43ae914176757ff133b9c55b5aef",
+      "status": "proof-source-identical-in-runtime-2b3f12f3",
+      "coveredBy": [],
+      "prunable": false
+    },
+    {
+      "sha": "c840b22f83a1070f9ec8af8d90b307f6878b4d22",
+      "status": "e2-semantics-identical-in-b693236c",
+      "coveredBy": [],
+      "prunable": false
+    },
+    {
+      "sha": "2b3f12f37ed79667c448edd7ee465b2103f8f6eb",
+      "status": "independent-bounded-runtime-task-integration-candidate",
+      "coveredBy": [],
+      "prunable": false
+    },
+    {
+      "sha": "096d2eccfbd12b0173f3614e27f31ff7bdadf7b6",
+      "status": "frozen-planning-documents-only-no-product-source",
+      "coveredBy": [],
+      "prunable": false
+    },
+    {
+      "sha": "d553e3340dcfd3620810024834d58829ca4397ba",
+      "status": "dirty-source-already-published-in-main-documents-preserve",
+      "coveredBy": [
+        "main",
+        "codex/standalone-app"
+      ],
+      "prunable": false
+    },
+    {
+      "sha": "fa453cc1282042b256afb1324564375c5d43ec71",
+      "status": "exact-ancestor-covered",
+      "coveredBy": [],
+      "prunable": false
+    },
+    {
+      "sha": "26d7677f849f53f8232ae1cdc93329b9830c970f",
+      "status": "exact-ancestor-covered",
+      "coveredBy": [],
+      "prunable": false
+    },
+    {
+      "sha": "894cfb2abba88e50620a042b727ecad977f16685",
+      "status": "exact-ancestor-covered",
+      "coveredBy": [],
+      "prunable": false
+    },
+    {
+      "sha": "1c8825b317dfb46d93a734b0af101669b321a13a",
+      "status": "exact-ancestor-covered",
+      "coveredBy": [],
+      "prunable": false
+    },
+    {
+      "sha": "f8ddef1508f842cc69c6d6e4fd6c44bdbdca8ea7",
+      "status": "ancestor-covered-only-untracked-node-modules",
+      "coveredBy": [],
+      "prunable": false
+    },
+    {
+      "sha": "87f57a7eb3270d3bb8d6c356814fa27f44250e09",
+      "status": "exact-ancestor-covered",
+      "coveredBy": [],
+      "prunable": false
+    },
+    {
+      "sha": "a3d200f8f47f4649a91a93208861189f5829f338",
+      "status": "exact-ancestor-covered",
+      "coveredBy": [],
+      "prunable": false
+    },
+    {
+      "sha": "480dcef4b627853c995434f0757d52ed710eec00",
+      "status": "exact-ancestor-covered",
+      "coveredBy": [],
+      "prunable": false
+    },
+    {
+      "sha": "110837f8045d4838d84a754328ef8bbbbf3f1546",
+      "status": "exact-ancestor-covered",
+      "coveredBy": [],
+      "prunable": false
+    }
+  ]
+}

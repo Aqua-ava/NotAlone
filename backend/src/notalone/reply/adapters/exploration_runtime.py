@@ -37,6 +37,10 @@ recommended 不代表选定；没有真实依据不能推荐，无依据的方�
 返回一个question，impact只能stance/commitment/ambiguity。用户回答后若已明确意愿可继续，
 仍不明确则继续探索。current_step说明复杂目的这次推进的一步，tradeoffs说明目的与说法
 冲突，保留用户目标，不保证对方反应。skill只辅助当前场景，不确定用户意愿。
+evidence.timing 的来源聊天时间与保存时间不等于事实发生时间。current_status 为
+current_unverified 时只保留历史表述或询问现状，historical 不推定约定完成；
+current_verified 仅说明来源支持当期区间，不认证现实真伪；stable 不因日期未知
+降级。不得以无结束日、active 或保存时间较新认定旧状态当前仍成立。
 禁止外部查询、脚本、业务Tool、发送、提醒、风格样本或长期记忆写入。
 仅调用ExplorationOutput返回understanding、ambiguities、citation_ids、options、question、
 current_step、tradeoffs；每个options含intent、label、reason、citation_ids、recommended、pause。

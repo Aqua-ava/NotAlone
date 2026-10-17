@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
@@ -106,12 +107,16 @@ def invoke_traced_model(
     schema: dict[str, Any],
     messages: list[dict[str, Any]],
     tool_options: dict[str, Any] | None = None,
+    on_invoke: Callable[[], None] | None = None,
 ) -> Any:
     """原提示词与绑定方式保持不变，原始响应在解析之前可靠保存。"""
     options = tool_options or {}
     trace = current_trace()
     if trace is None:
-        return model.bind_tools([schema], **options).invoke(messages)
+        bound_model = model.bind_tools([schema], **options)
+        if on_invoke is not None:
+            on_invoke()
+        return bound_model.invoke(messages)
     previous_call = trace.call_id
     trace.call_id = uuid4()
     trace.calls[purpose] = trace.call_id
@@ -167,8 +172,11 @@ def invoke_traced_model(
         )
         started_at = datetime.now(timezone.utc)
         try:
+            bound_model = model.bind_tools([schema], **options)
+            if on_invoke is not None:
+                on_invoke()
             call.invoked = True
-            message = model.bind_tools([schema], **options).invoke(messages)
+            message = bound_model.invoke(messages)
         except _TraceTransportAbort:
             raise trace.failure or TraceWriteError(
                 "provider_transport", trace.trace_id

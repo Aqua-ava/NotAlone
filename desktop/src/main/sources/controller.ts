@@ -17,6 +17,7 @@ export class SourceDeletionController {
   private readonly tracking: SourceDeletionTracking;
   private readonly verified = new Set<string>();
   private readonly listeners = new Set<(state: SourceDeletionState) => void>();
+  private readonly deletionListeners = new Set<(phase: 'started' | 'settled') => void>();
   constructor(private readonly backend: BackendHost, private readonly contacts: ContactSession,
     private readonly onSourceChanged: (contactId: string) => Promise<void>) {
     this.tracking = new SourceDeletionTracking(backend, onSourceChanged);
@@ -26,6 +27,10 @@ export class SourceDeletionController {
   }
   getState() { return structuredClone(this.state); }
   onStateChanged(listener: (state: SourceDeletionState) => void) { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
+  // 对应一次公开删除请求的起止；凭据及后台原任务复验继续使用 onSourceChanged。
+  onDeletion(listener: (phase: 'started' | 'settled') => void) {
+    this.deletionListeners.add(listener); return () => { this.deletionListeners.delete(listener); };
+  }
   private synchronizeScope() {
     const generation = this.backend.getConnectionGeneration();
     const contacts = this.contacts.getState();
@@ -51,16 +56,20 @@ export class SourceDeletionController {
     const scope = this.assertScope(request);
     if (this.state.busySourceId || this.state.phase !== 'ready' || !this.state.sources.some((source) => source.sourceId === request.sourceId)) throw new Error('来源目录已变化，请刷新后确认。');
     this.cancel(); const revision = this.revision;
-    this.publish({ busySourceId: request.sourceId, error: null });
     const current = () => this.scope === scope && revision === this.revision && scope.generation === this.backend.getConnectionGeneration();
     try {
+      for (const listener of this.deletionListeners) listener('started');
+      this.publish({ busySourceId: request.sourceId, error: null });
       const taskId = await this.tracking.delete(scope.contactId, request.sourceId, scope.generation);
       if (!current()) return;
       this.verified.delete(taskId); this.pollCount = 0;
       await this.read(scope);
     } catch {
       if (current()) this.publish({ error: '删除结果尚未确认，请刷新来源核对原任务；不要将请求失败理解为未执行。' });
-    } finally { if (current()) this.publish({ busySourceId: null }); }
+    } finally {
+      if (current()) this.publish({ busySourceId: null });
+      for (const listener of this.deletionListeners) listener('settled');
+    }
   }
   private async read(scope: Scope) {
     this.cancel(); const revision = this.revision; const pending = new AbortController(); this.pending = pending;

@@ -1,5 +1,7 @@
 import type { ReplyCandidate, ReplyUsedSkill } from './reply-bridge';
 import type { AssistantInputBudget } from './assistant-input-budget';
+import type { ReplyBasisChange } from './reply-basis-change';
+import type { ExpressionPreferenceReceipt } from './expression-preference-bridge';
 
 export interface SavedAssistantTurn {
   turnId: string;
@@ -7,11 +9,14 @@ export interface SavedAssistantTurn {
   requestKey: string;
   state: 'running' | 'completed' | 'failed' | 'redacted' | 'unavailable';
   input: { content: Record<string, unknown>; continued_from_candidate_id?: string | null;
-    skill_version_id?: string | null; skill_disabled?: boolean } | null;
-  reply: { replyRequestId: string; candidates: ReplyCandidate[]; contextEvidenceIds: string[]; usedSkill?: ReplyUsedSkill | null; inputBudget?: AssistantInputBudget } | null;
+    skill_version_id?: string | null; skill_disabled?: boolean; scene?: string | null } | null;
+  reply: { replyRequestId: string; candidates: ReplyCandidate[]; contextEvidenceIds: string[];
+    styleSampleIds?: string[]; expressionPreferenceIds?: string[]; expressionPreferences?: ExpressionPreferenceReceipt[]; usedSkill?: ReplyUsedSkill | null; inputBudget?: AssistantInputBudget; basisChanges?: ReplyBasisChange[] } | null;
   placeholder: string | null;
   interruptionReason: 'app_quit' | null;
+  basisChanges?: ReplyBasisChange[];
   generationActive?: boolean;
+  requiresReprepare?: boolean;
 }
 export interface SavedAssistantSession {
   phase: 'idle' | 'loading' | 'ready' | 'failed';
@@ -24,6 +29,7 @@ export interface SavedAssistantSession {
 export type SavedAssistantDiscussion = {
   correction: string; requirements: string; answer: string; confirmedIntent: string;
   skillMode: 'auto' | 'disabled' | 'user'; skillVersionId: string | null;
+  skillScene?: string | null;
 } & ({ type: 'purpose_exploration'; purposeHint: string }
   | { type: 'response_exploration'; targetMessageId: string });
 export interface SavedAssistantCarry {
@@ -42,6 +48,7 @@ export interface SavedAssistantInput {
   state: 'active' | 'redacted' | 'unavailable';
   content: SavedAssistantDiscussion | SavedAssistantCarry | null;
   placeholder: string | null;
+  basisChanges?: ReplyBasisChange[];
 }
 export interface AssistantSessionCatalog {
   phase: 'idle' | 'loading' | 'ready' | 'failed';

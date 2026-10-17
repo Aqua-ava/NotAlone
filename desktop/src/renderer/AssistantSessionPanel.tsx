@@ -3,18 +3,29 @@ import type { AssistantSessionDeletion } from '../shared/reply-bridge';
 import type { ReplySessionView } from './RewritePanel';
 import type { SavedAssistantInput, SavedAssistantTurn } from '../shared/assistant-session';
 import { AssistantInputBudgetNotice } from './AssistantInputBudgetNotice';
+import { ReplyBasisChangeNotice } from './ReplyBasisChangeNotice';
+import { ExpressionPreferenceBasis } from './ExpressionPreferenceBasis';
 
-function SavedTurn({ turn, index, retry, busy }: { turn: SavedAssistantTurn; index: number; retry?: () => void; busy: boolean }) {
+function SavedTurn({ turn, index, retry, busy, showPreferences }: {
+  turn: SavedAssistantTurn; index: number; retry?: () => void; busy: boolean; showPreferences: boolean;
+}) {
   return <article aria-label={`第${index + 1}轮讨论`}>
     {turn.placeholder ? <p>{turn.placeholder}</p> : <>
+      <ReplyBasisChangeNotice changes={turn.basisChanges} />
       <p>{typeof turn.input?.content.draft_text === 'string' ? turn.input.content.draft_text
         : typeof turn.input?.content.direction === 'string' ? turn.input.content.direction
         : typeof turn.input?.content.purpose === 'string' ? turn.input.content.purpose : '本轮回复输入'}</p>
       {typeof turn.input?.content.user_instruction === 'string' && <p>{turn.input.content.user_instruction}</p>}
+      <p>原精确场景：{turn.input?.scene ?? '未声明'}</p>
+      {turn.reply?.usedSkill && <p>本轮实际 Skill：{turn.reply.usedSkill.name} · 版本 {turn.reply.usedSkill.versionNumber ?? turn.reply.usedSkill.versionId}
+        {turn.reply.usedSkill.scope && ` · 范围：${turn.reply.usedSkill.scope.kind === 'scene' ? `精确场景「${turn.reply.usedSkill.scope.scene}」` : turn.reply.usedSkill.scope.kind === 'contact' ? '当前联系人' : '本人通用'}`}
+        {!!turn.reply.usedSkill.executionView?.policyRevision && ` · 当时已排除本范围停用方法，允许${turn.reply.usedSkill.executionView.methodIds.length}种做法`}</p>}
       {turn.state === 'running' && <p>本轮生成尚未完成。</p>}
       {turn.state === 'failed' && <p>{turn.interruptionReason === 'app_quit' ? '上次生成中断。' : '本轮生成未成功保存。'}</p>}
-      {turn.interruptionReason === 'app_quit' && retry && <button disabled={busy} onClick={retry}>重试上次中断生成</button>}
+      {turn.interruptionReason === 'app_quit' && retry && !turn.requiresReprepare && <button disabled={busy} onClick={retry}>重试上次中断生成</button>}
+      {turn.requiresReprepare && <p>这次准备格式已变化，已保存的输入会保留；请明确重新准备。</p>}
       {turn.reply?.inputBudget && <AssistantInputBudgetNotice budget={turn.reply.inputBudget} historical />}
+      {showPreferences && <ExpressionPreferenceBasis preferences={turn.reply?.expressionPreferences ?? []} />}
       {turn.reply?.candidates.map((candidate) => <p key={candidate.candidateId}
         data-assistant-candidate-id={candidate.candidateId}
         data-assistant-reply-request-id={turn.reply!.replyRequestId}>{candidate.text}</p>)}
@@ -25,6 +36,7 @@ function SavedDiscussion({ input }: { input: SavedAssistantInput }) {
   const content = input.content;
   if (content?.type === 'candidate_carry') return <article aria-label="携入的已选版本">
     <p>携入的已选版本，仅作表达参考。</p>
+    <ReplyBasisChangeNotice changes={input.basisChanges} />
     {content.messages.map((message) => <p key={message.messageId}>{message.text}</p>)}
   </article>;
   return <article aria-label="已保存的方向讨论">
@@ -37,6 +49,7 @@ function SavedDiscussion({ input }: { input: SavedAssistantInput }) {
       {content.confirmedIntent && <><dt>已确认的本次意愿</dt><dd>{content.confirmedIntent}</dd></>}
       <dt>当时的策略选择</dt><dd>{content.skillMode === 'disabled' ? '使用通用流程'
         : content.skillMode === 'auto' ? '按当时场景选择' : `指定版本 ${content.skillVersionId}`}</dd>
+      <dt>当时的精确场景</dt><dd>{content.skillScene ?? '未声明'}</dd>
     </dl>}
   </article>;
 }
@@ -145,6 +158,7 @@ export function AssistantSessionPanel({ replies }: { replies: ReplySessionView }
         if (input.type !== 'generation') return <SavedDiscussion key={input.inputVersionId} input={input} />;
         const index = saved.turns.findIndex((turn) => turn.turnId === input.turnId && turn.inputVersionId === input.inputVersionId);
         return index < 0 ? null : <SavedTurn key={input.inputVersionId} turn={saved.turns[index]} index={index}
+          showPreferences={!replies.state.sourceAvailability}
           busy={busy || replies.state.phase === 'waiting' || Boolean(replies.state.generationBlock)}
           retry={saved.currentInputVersionId === input.inputVersionId ? () => void replies.retryInterruptedGeneration(
             saved.sessionId!, saved.turns[index].turnId, input.inputVersionId) : undefined} />;

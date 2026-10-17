@@ -1,4 +1,5 @@
 import type { ContactSelection } from './contact-session-bridge';
+import type { ReplyBasisChange } from './reply-basis-change';
 
 export interface AssistantCandidateMessage { messageId: string; text: string; }
 export interface AssistantCandidateVersion {
@@ -19,6 +20,7 @@ export interface AssistantCandidateHistory {
   defaultDisplayVersionId: string;
   selectedVersionId: string | null;
   versions: AssistantCandidateVersion[];
+  basisChanges?: ReplyBasisChange[];
 }
 export interface AssistantCandidateSelection {
   selectionId: string;

@@ -93,17 +93,20 @@ def _require_candidate_identity(cursor: Any, scope: ContactScope, row: dict[str,
         "JOIN public.reply_request AS request ON request.id=candidate.reply_request_id "
         "AND request.owner_id=candidate.owner_id AND request.contact_id=candidate.contact_id "
         "AND request.conversation_binding_id=candidate.conversation_binding_id "
-        "JOIN public.assistant_candidate_version AS version ON version.candidate_id=candidate.id "
+        "LEFT JOIN public.assistant_candidate_version AS version ON version.candidate_id=candidate.id "
         "AND version.owner_id=candidate.owner_id AND version.contact_id=candidate.contact_id "
+        "AND version.id=%s AND version.session_id=%s AND version.turn_id=%s "
         "WHERE candidate.owner_id=%s AND candidate.contact_id=%s AND candidate.id=%s "
         "AND candidate.reply_request_id=%s AND candidate.conversation_binding_id=%s "
-        "AND version.id=%s AND version.session_id=%s AND version.turn_id=%s",
-        (row["turn_id"], scope.owner_id, scope.contact_id, identity.candidate_id,
-         row["reply_request_id"], row["conversation_binding_id"], identity.version_id,
-         row["session_id"], row["turn_id"]),
+        "AND (version.id IS NOT NULL OR (candidate.id=%s AND NOT EXISTS ("
+        "SELECT 1 FROM public.assistant_candidate_version AS original WHERE original.id=candidate.id)))",
+        (row["turn_id"], identity.version_id, row["session_id"], row["turn_id"],
+         scope.owner_id, scope.contact_id, identity.candidate_id,
+         row["reply_request_id"], row["conversation_binding_id"], identity.version_id),
     ).fetchone()
     if candidate is None:
         _reject()
+    # 原版可由权威候选直接投影；其他版本仍须真实保存并精确属于该会话和turn。
     # 纯重建已保存版本，不进入CURRENT/来源guard，也不补写原版。
     history = _history(cursor, scope, row["session_id"], candidate)
     version = next((item for item in history.versions if item.version_id == identity.version_id), None)

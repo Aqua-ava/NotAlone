@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createInterface } from 'node:readline';
@@ -21,22 +21,24 @@ export async function budgetPublicFixture(t, { toolHistory = false, continuous =
     export { StrategyControls } from './src/renderer/StrategyControls';
     export { createElement } from 'react';
     export { renderToStaticMarkup } from 'react-dom/server';
+    export { cleanupCoreFixture, FixtureProcessEvidence } from './tests/database-ownership';
   `, resolveDir: process.cwd() }, bundle: true, platform: 'node', format: 'esm', write: false, loader: { '.css': 'empty' },
     banner: { js: `import { createRequire } from 'node:module'; const require = createRequire(${JSON.stringify(path.join(process.cwd(), 'package.json'))});` } });
   const ports = await import(`data:text/javascript;base64,${Buffer.from(output.outputFiles[0].text).toString('base64')}`);
   const project = path.resolve('..'), directory = await mkdtemp(path.join(tmpdir(), 'notalone-budget-public-'));
   const child = spawn(path.join(process.env.CONDA_PREFIX, 'bin/python'), ['tests/fixtures/assistant-budget-backend.py'], {
-    cwd: process.cwd(), stdio: ['pipe', 'pipe', 'ignore'], env: withoutExternalTracing({ ...process.env,
+    cwd: process.cwd(), stdio: ['pipe', 'pipe', 'pipe'], env: withoutExternalTracing({ ...process.env,
       NOTALONE_DISABLE_DOTENV: '1',
       NOTALONE_TEST_BINDING_DIRECTORY: directory,
       NOTALONE_CONTINUOUS_COMBINATION: continuous ? '1' : '',
       NOTALONE_BUDGET_TOOL_HISTORY: toolHistory ? '1' : '',
       NOTALONE_ENV_FILE: path.join(directory, 'synthetic.env'), NOTALONE_BACKEND_INFO: path.join(directory, 'backend.info'),
-      NOTALONE_DATABASE_URL: '', NOTALONE_OWNER_ID: '', NOTALONE_DEEPSEEK_API_KEY: '',
+      NOTALONE_DATABASE_URL: '', NOTALONE_TEST_DATABASE_URL: '', NOTALONE_OWNER_ID: '', NOTALONE_DEEPSEEK_API_KEY: '',
       DEEPSEEK_API_KEY: '', NOTALONE_DEEPSEEK_BASE_URL: 'http://127.0.0.1:1',
       PYTHONPATH: `${path.join(project, 'backend/src')}:${path.join(project, 'backend')}`, PYTHONNOUSERSITE: '1',
     }),
   });
+  const evidence = new ports.FixtureProcessEvidence(child);
   const pending = new Map(); let id = 0, cleanup;
   const ready = new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error('本轮预算HTTP/PG夹具启动超时。')), 70000);
@@ -55,21 +57,29 @@ export async function budgetPublicFixture(t, { toolHistory = false, continuous =
     child.stdin.write(`${JSON.stringify({ id: key, operation, ...extra })}\n`);
   });
   let data, client;
-  t.after(async () => {
-    client?.cancelPending();
-    if (child.exitCode === null) {
-      try { const metrics = await command('metrics');
-        process.stdout.write(`budget_public_models: calls=${metrics.model_calls}\n`);
-        await command('stop'); }
-      finally { child.stdin.end(); }
-    }
-    if (child.exitCode === null) await new Promise((resolve) => child.once('exit', resolve));
-    assert.equal(child.exitCode, 0); assert.deepEqual(cleanup, { instance_ok: true, class_ok: true, database_remaining: false });
-    await rm(directory, { recursive: true, force: true });
-    process.stdout.write('budget_public_cleanup: 001–058 repeat=0 owned_database_remaining=0\n');
-  });
+  t.after(async () => ports.cleanupCoreFixture({ directory, child,
+    pythonExecutable: path.join(process.env.CONDA_PREFIX, 'bin/python'), cleanup: async () => {
+      client?.cancelPending();
+      let failure;
+      if (child.exitCode === null && child.signalCode === null) {
+        try { const metrics = await command('metrics');
+          process.stdout.write(`budget_public_models: calls=${metrics.model_calls}\n`); }
+        catch (error) { failure = error; }
+        try { await command('stop'); } catch (error) { failure ??= error; }
+        finally { child.stdin.end(); }
+      }
+      for (let count = 0; child.exitCode === null && child.signalCode === null && count < 100; count++) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+      assert.equal(child.exitCode, 0);
+      assert.deepEqual(cleanup, { instance_ok: true, class_ok: true, database_remaining: false });
+      if (failure) throw failure;
+    } }, { label: '预算', evidence,
+    matchesPreparedDatabase: (name) => !data || data.database_url === `host=/tmp dbname=${name}`,
+    cleanupConfirmed: () => process.stdout.write('budget_public_cleanup: 001–070 repeat=0 owned_database_remaining=0\n'),
+  }));
   data = await ready;
-  assert.equal(data.migration_count, 58); assert.equal(data.migration_repeat, 0);
+  assert.equal(data.migration_count, 70); assert.equal(data.migration_repeat, 0);
   client = new ports.JsonClient(data);
   const messageObservers = new Set();
   let generation = 7; const backendListeners = new Set(), delivery = {};

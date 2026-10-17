@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import os
 import unittest
+from unittest.mock import patch
+import tempfile
+from pathlib import Path
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
@@ -33,6 +36,9 @@ from notalone.reply.store import (
 )
 from notalone.scopes import ContactScope, VerifiedConversationScope
 from notalone.persistence.reply_store import PostgresReplyStore
+from notalone.persistence.memory_store import PostgresMemoryStore
+from notalone.persistence.skill_library import PostgresSkillLibrary
+from notalone.memory import AdoptionMethod, MemoryCandidate, MemoryCategory
 from notalone.memory.timing import MemoryTiming
 
 
@@ -119,6 +125,12 @@ class PostgresReplyStoreTest(unittest.TestCase):
             clock=self.clock,
             lease_duration=timedelta(seconds=30),
         )
+        with tempfile.TemporaryDirectory() as temporary:
+            package = Path(temporary) / 'warm-reply'
+            (package / 'references').mkdir(parents=True)
+            (package / 'SKILL.md').write_text('---\nname: warm-reply\ndescription: 合成回复存储策略\n---\n\n先核对用户意图，再组织措辞。\n')
+            (package / 'references/examples.md').write_text('仅作为合成存储验收的受控案例。\n')
+            self.skill = PostgresSkillLibrary(TEST_DATABASE_URL).import_package(self.owner_id, package)
 
     def tearDown(self) -> None:
         with psycopg.connect(TEST_DATABASE_URL) as connection:
@@ -200,12 +212,11 @@ class PostgresReplyStoreTest(unittest.TestCase):
             current_text="明天一起吃饭吗？",
             direction=command.content.direction,
             evidence=tuple(evidence),
-            skill_library_revision=7,
+            skill_library_revision=self.skill.revision,
             risk_notes=("请用户核实时间。",),
         )
 
-    @staticmethod
-    def _reply(*, text: str = "可以呀，明天见。") -> ValidatedReply:
+    def _reply(self, *, text: str = "可以呀，明天见。") -> ValidatedReply:
         return ValidatedReply(
             candidates=(
                 RuntimeCandidate(
@@ -216,8 +227,8 @@ class PostgresReplyStoreTest(unittest.TestCase):
                 ),
             ),
             used_skill=SkillUse(
-                skill_id=UUID("aaaaaaaa-1111-1111-1111-aaaaaaaaaaaa"),
-                version_id=UUID("bbbbbbbb-2222-2222-2222-bbbbbbbbbbbb"),
+                skill_id=self.skill.skill_id,
+                version_id=self.skill.version_id,
                 name="warm-reply",
                 selection_method="auto",
                 selection_reason="系统按目录推荐，本次回复实际读取。",
@@ -246,18 +257,33 @@ class PostgresReplyStoreTest(unittest.TestCase):
         self.assertEqual(replay.state, ReplyRequestState.REPLAYED)
         self.assertEqual(replay.result, saved)
 
+    def test_fabricated_skill_version_is_rejected_at_final_commit(self) -> None:
+        command = self._command()
+        started = self.store.start(command, self._verified_scope())
+        context = self._context(command, started.request.request_id)
+        self.store.prepare_context(started.request, context)
+        reply = self._reply()
+        with self.assertRaises(ReplyStoreInvariantError):
+            self.store.save(started.request, context,
+                replace(reply, used_skill=replace(reply.used_skill, version_id=uuid4())))
+
     def test_pending_candidate_evidence_persists_with_unconfirmed_status(self) -> None:
         command = self._command()
         started = self.store.start(command, self._verified_scope())
         context = self._context(command, started.request.request_id)
+        candidate = PostgresMemoryStore(TEST_DATABASE_URL).create_candidate(MemoryCandidate(
+            candidate_id=uuid4(), scope=command.scope, text="对方下个月准备换工作",
+            category=MemoryCategory.RECENT_STATE, source_ids=(SOURCE_ID,),
+        ))
         pending_evidence = ContextEvidence(
-            evidence_id=UUID("55555555-5555-5555-5555-555555555555"),
+            evidence_id=candidate.candidate_id,
             kind="pending_candidate",
             text="对方下个月准备换工作",
             scope=command.scope,
             source_ids=(UUID("99999999-9999-9999-9999-999999999999"),),
             selection_reason="未确认候选、仅供参考、不得当作事实。",
             status="pending",
+            valid_at=candidate.valid_at, invalid_at=candidate.invalid_at, timing=candidate.timing,
         )
         context = replace(context, evidence=context.evidence + (pending_evidence,))
 
@@ -317,17 +343,38 @@ class PostgresReplyStoreTest(unittest.TestCase):
         command = self._command()
         started = self.store.start(command, self._verified_scope())
         context = self._context(command, started.request.request_id)
-        timing = MemoryTiming(
-            recorded_at=datetime(2026, 8, 21, tzinfo=timezone.utc),
-            source_started_at=datetime(2025, 4, 2, tzinfo=timezone.utc),
-            source_ended_at=datetime(2025, 4, 4, tzinfo=timezone.utc),
-            source_time_complete=False,
-        )
-        context = replace(context, evidence=(replace(
-            context.evidence[0], kind="confirmed_memory", timing=timing,
+        source_times = (datetime(2025, 4, 2, tzinfo=timezone.utc), datetime(2025, 4, 4, tzinfo=timezone.utc))
+        identifiers = tuple(uuid4() for _ in source_times)
+        with psycopg.connect(TEST_DATABASE_URL) as connection:
+            for identifier, occurred_at in zip(identifiers, source_times):
+                connection.execute("INSERT INTO public.message(id,owner_id,contact_id,speaker,message_type,text_content,occurred_at) "
+                                   "VALUES (%s,%s,%s,'contact','text','合成已知时间消息',%s)",
+                                   (identifier, self.owner_id, self.contact_id, occurred_at))
+                connection.execute("INSERT INTO public.message_source_ref(message_id,owner_id,contact_id,source_kind,source_document_id,source_locator,raw_payload) "
+                                   "VALUES (%s,%s,%s,'source_document',%s,%s,%s)",
+                                   (identifier, self.owner_id, self.contact_id, SOURCE_ID, str(identifier),
+                                    Jsonb({"time_iso": occurred_at.isoformat()})))
+        memories = PostgresMemoryStore(TEST_DATABASE_URL)
+        candidate = memories.create_candidate(MemoryCandidate(
+            candidate_id=uuid4(), scope=command.scope, text="合成时间资料", category=MemoryCategory.COMMON_FACT,
+            source_ids=(*identifiers, MESSAGE_ID),
+        ))
+        memory = memories.confirm(scope=command.scope, candidate_id=candidate.candidate_id,
+                                  adoption_method=AdoptionMethod.MANUAL)
+        timing = memory.timing
+        self.assertEqual(timing.source_started_at, source_times[0])
+        self.assertEqual(timing.source_ended_at, source_times[1])
+        self.assertFalse(timing.source_time_complete)
+        self.assertNotEqual(timing.recorded_at, timing.source_started_at)
+        context = replace(context, evidence=(ContextEvidence(
+            evidence_id=memory.memory_id, kind="confirmed_memory", text=memory.text, scope=command.scope,
+            source_ids=memory.source_ids, revision=memory.revision,
+            valid_at=memory.valid_at, invalid_at=memory.invalid_at, timing=timing,
         ),))
         self.store.prepare_context(started.request, context)
-        saved = self.store.save(started.request, context, self._reply())
+        reply = self._reply()
+        reply = replace(reply, candidates=(replace(reply.candidates[0], citation_ids=(memory.memory_id,)),))
+        saved = self.store.save(started.request, context, reply)
 
         stored = PostgresReplyStore(TEST_DATABASE_URL).read(
             saved.reply_request_id, command.scope,
@@ -557,13 +604,10 @@ class PostgresReplyStoreTest(unittest.TestCase):
         self.assertFalse(hasattr(self.store, "send"))
 
     def test_database_failure_is_exposed_as_stable_domain_error(self) -> None:
-        broken_store = PostgresReplyStore(
-            "postgresql:///notalone_reply_store_error_test",
-            clock=self.clock,
-        )
-
-        with self.assertRaises(ReplyPersistenceError) as caught:
-            broken_store.start(self._command(), self._verified_scope())
+        # 固定未知库不能作为故障夹具；仅在连接边界模拟同一数据库异常。
+        with patch.object(PostgresReplyStore, '_connect', side_effect=psycopg.OperationalError('合成连接失败')):
+            with self.assertRaises(ReplyPersistenceError) as caught:
+                self.store.start(self._command(), self._verified_scope())
 
         self.assertEqual(str(caught.exception), "回复请求状态持久化失败。")
         self.assertNotIn("postgresql", str(caught.exception))

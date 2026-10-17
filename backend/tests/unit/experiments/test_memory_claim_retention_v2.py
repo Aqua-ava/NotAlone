@@ -1201,7 +1201,7 @@ class SyntheticCredentialBindingTest(RunnerBackedTest):
         )
         # 官方 Flash 思考模式改用默认 auto；本实验的 ECNU 具名绑定保持。
         self.assertIsInstance(options, ast.IfExp)
-        self.assertEqual(ast.unparse(options.test), "is_official_deepseek_flash(self._model)")
+        self.assertEqual(ast.unparse(options.test), "is_official_deepseek_flash(self._model) or not self._force_tool_choice")
         self.assertEqual(ast.literal_eval(options.body), {})
         options = options.orelse
         self.assertEqual(ast.literal_eval(options.keys[0]), "tool_choice")

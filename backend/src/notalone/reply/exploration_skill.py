@@ -30,6 +30,7 @@ def select_exploration_skill(
     *, skills: SkillPort, scope: ContactScope, content: ExplorationInput,
     communication_scene: str | None = None,
 ) -> ExplorationSkillSelection:
+    skills = skills.for_scene(content.skill_scene) if hasattr(skills, 'for_scene') else skills
     catalog = skills.catalog(scope)
     if not isinstance(catalog, SkillCatalog) or catalog.scope != scope:
         raise ExplorationStale("Skill目录不属于当前联系人。")
@@ -38,10 +39,10 @@ def select_exploration_skill(
         selected = next((entry for entry in catalog.entries if entry.version_id == content.skill_version_id), None)
         if selected is None:
             raise ExplorationStale("所选Skill当前不可用。")
-    elif content.skill_mode == "auto" and communication_scene:
+    elif content.skill_mode == "auto" and (communication_scene or content.skill_scene):
         # 入口类型不能证明主要沟通任务；未知任务沿通用流程，不猜描述或立场。
         selected = next((entry for entry in catalog.entries
-                         if communication_scene in entry.applicable_scenes), None)
+                         if (content.skill_scene or communication_scene) in entry.applicable_scenes), None)
     version = None
     if selected:
         try:

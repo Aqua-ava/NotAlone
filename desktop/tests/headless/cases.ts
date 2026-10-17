@@ -13,21 +13,22 @@ export async function memoryReading(browser: Browser, origin: string) {
       await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
       await manager.getByRole('button', { name: '关系资料', exact: true }).click();
       const contact = manager.getByRole('region', { name: '联系人记忆' });
-      await expect(contact.getByText('甲喜欢合成茉莉茶。', { exact: true })).toBeVisible();
-      await expect(contact.getByText('自动采纳（可撤销）', { exact: true })).toBeVisible();
+      const automatic = contact.getByRole('article').filter({ has: manager.getByText('甲喜欢合成茉莉茶。', { exact: true }) });
+      await expect(automatic.getByText('甲喜欢合成茉莉茶。', { exact: true })).toBeVisible();
+      await expect(automatic.getByText('自动采纳（可撤销）', { exact: true })).toBeVisible();
       await expect(contact.getByText('甲的新版本关系备注。', { exact: true })).toBeVisible();
       await expect(contact.getByText('旧版关系备注。', { exact: true })).toHaveCount(0);
       await expect(manager.getByText('另一用户的本人资料。', { exact: true })).toHaveCount(0);
       await expect(manager.getByText('待确认 · 不是已确认事实', { exact: true })).toHaveCount(3);
-      await contact.getByRole('button', { name: '查看来源与版本：甲喜欢合成茉莉茶。' }).click();
-      await expect(contact.getByText(`来源引用：${fixture.data.direct_message_id}`, { exact: true })).toBeVisible();
+      await automatic.getByRole('button', { name: '查看来源与版本：甲喜欢合成茉莉茶。' }).click();
+      await expect(automatic.getByText(`来源引用：${fixture.data.direct_message_id}`, { exact: true })).toBeVisible();
       await manager.screenshot({ path: 'artifacts/headless-pages/memory-reading.png' });
       await manager.getByRole('combobox', { name: '资料联系人' }).selectOption(fixture.data.contact_ids[1]);
       await expect(manager.getByText('乙喜欢合成乌龙茶。', { exact: true })).toBeVisible();
       await expect(manager.getByText('甲喜欢合成茉莉茶。', { exact: true })).toHaveCount(0);
       await expect(manager.getByText('本人喜欢合成绿茶。', { exact: true })).toBeVisible();
       await manager.getByRole('combobox', { name: '资料联系人' }).selectOption(fixture.data.empty_contact_id);
-      await expect(manager.getByText('这位联系人暂无当前有效记忆。', { exact: true })).toBeVisible();
+      await expect(manager.getByText('这位联系人暂无可查看记忆。', { exact: true })).toBeVisible();
       const denied = await manager.evaluate(async (outsideContactId) => {
         const current = await window.notalone.contacts.getState();
         const invalid = [

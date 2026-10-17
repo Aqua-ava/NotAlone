@@ -141,7 +141,18 @@ class DimensionEvidenceV2PersistenceTest(unittest.TestCase):
         self.assertIn("057_memory_candidate_semantic_basis.sql",applied)
         old = PostgresMemoryStore(self.database_url).get_candidate(scope=self.scope,candidate_id=self.old_id)
         self.assertIsNone(old.dimension_evidence)
-        self.assertEqual(old.status.value,"pending")
+        self.assertEqual(old.status.value,"invalidated")
+        client = self._client(PostgresMemoryStore(self.database_url))
+        headers = {"Authorization": "Bearer test-token"}
+        path = f"/api/contacts/{self.scope.contact_id}/memory-candidates"
+        self.assertEqual(client.get(path, headers=headers).json()["candidates"], [])
+        confirmation = client.request("POST", path + f"/{self.old_id}/confirm", headers=headers, body=b"{}")
+        self.assertEqual((confirmation.status_code, confirmation.json()),
+                         (409, {"error": "memory_correction_conflict"}))
+        with psycopg.connect(self.database_url) as connection:
+            self.assertIsNone(connection.execute(
+                "SELECT correction_evidence FROM public.memory_candidate WHERE id=%s", (self.old_id,),
+            ).fetchone()[0])
         self.assertEqual(migrate(self.database_url,MIGRATIONS),())
 
     def test_actual_producer_saves_reads_and_exports_no_body_basis(self) -> None:
@@ -177,7 +188,8 @@ class DimensionEvidenceV2PersistenceTest(unittest.TestCase):
             connection.execute("UPDATE public.message SET text_content='我刚到学校。' WHERE id=%s",(self.message_id,))
         with self.assertRaises(DimensionEvidenceChangedError):
             store.create_candidate(candidate)
-        self.assertEqual(store.list_pending_candidates(self.scope), (store.get_candidate(scope=self.scope,candidate_id=self.old_id),))
+        self.assertEqual(store.list_pending_candidates(self.scope), ())
+        self.assertIsNone(store.get_candidate(scope=self.scope,candidate_id=self.old_id).dimension_evidence)
 
     def test_confirm_reparses_basis_instead_of_trusting_equal_hashes(self) -> None:
         migrate(self.database_url,MIGRATIONS)

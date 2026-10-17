@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { AssistantCandidateMessage, AssistantCandidateVersionView } from '../shared/assistant-candidate-versions';
 import type { ReplySessionView } from './RewritePanel';
 import { CandidateMessageGroup } from './CandidateMessageGroup';
+import { ReplyBasisChangeNotice } from './ReplyBasisChangeNotice';
 
 // 未保存编辑同步到主进程会话内存；保存和采用版本仍由用户明确操作。
 export function CandidateVersionEditor({ replies, view, candidateId, replyRequestId, number, restored, noteCopy, onDirtyChange }: {
@@ -111,6 +112,7 @@ export function CandidateVersionEditor({ replies, view, candidateId, replyReques
     {error && <p role="alert">{error}</p>}
   </>;
   return <>
+    <ReplyBasisChangeNotice changes={history?.basisChanges} />
     <CandidateMessageGroup identity={identity} number={number} messages={messages} requirements={requirements}
       restored={restored} disabled={disabled || sampleSaving} dirty={dirty} canCopy={Boolean(chosen)}
       edit={editMessage} editRequirements={(text) => { beginEdit(); editRevision.current++; setDraft({ ...draft, requirements: text }); setError(''); retainDraft(messages, text); }}

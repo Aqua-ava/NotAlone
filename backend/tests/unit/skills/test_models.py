@@ -28,6 +28,30 @@ def _sha256(data: bytes) -> str:
 
 
 class SkillModelsTest(unittest.TestCase):
+    def test_execution_view_round_trips_and_rejects_unknown_or_ambiguous_receipts(self) -> None:
+        from notalone.skills.models import SkillExecutionView
+
+        payload = {
+            "policy_revision": 3,
+            "method_ids": [str(SKILL_ID)],
+            "sha256": "a" * 64,
+        }
+        view = SkillExecutionView.from_payload(payload)
+        self.assertEqual(view.policy_revision, 3)
+        self.assertEqual(view.method_ids, (SKILL_ID,))
+        self.assertEqual(view.to_payload(), payload)
+        for invalid in (
+            {**payload, "policy_revision": True},
+            {**payload, "policy_revision": -1},
+            {**payload, "method_ids": [str(SKILL_ID), str(SKILL_ID)]},
+            {**payload, "method_ids": ["unknown-method"]},
+            {**payload, "sha256": "A" * 64},
+            {**payload, "unknown": None},
+            {key: value for key, value in payload.items() if key != "sha256"},
+        ):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                SkillExecutionView.from_payload(invalid)
+
     def test_owner_wide_skill_can_be_projected_into_contact_catalog(self) -> None:
         scope = ContactScope(OWNER_ID, CONTACT_ID)
         entry = SkillCatalogEntry(

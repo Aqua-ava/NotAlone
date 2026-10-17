@@ -300,3 +300,15 @@ notalone-task-cleanup
 `047_observation_memory_enqueue_receipt.sql` 在观察来源增加可空的 `memory_enqueued_at`，
 与联系人任务排队在同一事务登记，用于批次去重和运行中新批次的失败恢复。凭证无正文、
 不回填旧批次，随观察来源删除；不会扫描存量观察触发提取。本次仅迁移随机测试库。
+
+独立集成候选追加 `065_memory_upgrade_batches.sql`，承接064的 task 复合父键、固定步骤和
+trace 隔离关系，建立显式升级的工作／批次、世代、比较和撤销记录。它不扫描或重提取旧资料，
+不回填证明，不推进水位。工作与批次的可空 `algorithm` 保存当前协议、规则及非秘密配置；
+旧 NULL 保持未知，应用层拒绝复用其批准。
+
+本文件选择性承接冻结 S 的064升级模块并顺延为canonical065；两处 `algorithm` JSONB、
+其约束与中文注释，以及 `algorithm_changed` 错误分类是本集成新增差异，不能宣称与S原字节一致。
+001–064保持原字节，实际前向／全量／重复与资源清理证据见[正式10](../../.scratch/memory-skill-integration-preparation/issues/10-versioned-memory-upgrade.md)。
+仅验证自有随机合成测试库，未迁移业务库或S分叉库。
+
+独立集成13候选追加`068_skill_scope_policies.sql`，原字节承接冻结S067，依赖canonical067的Skill复合键。`skill_policy_state`保存owner全局单调CAS修订，`skill_scope_policy`保存明确方法或整个Skill及最小范围，`skill_policy_operation`只保存命令指纹和结果修订。同键只重放原操作的当前结果；更新、合并、回滚与旧动作不能撤销后来的决定。旧001–067不修改，业务库迁移与S分叉库转换不在此候选范围。

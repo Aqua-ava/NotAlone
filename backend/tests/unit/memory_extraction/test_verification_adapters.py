@@ -346,6 +346,9 @@ class SourceVerificationAdapterTest(unittest.TestCase):
             model_name = "synthetic-unavailable-model"
 
             def bind_tools(self, tools, **kwargs):
+                return self
+
+            def invoke(self, messages):
                 raise RuntimeError("私人聊天正文可能在供应商异常中回显")
 
         runtime = LangChainSourceVerificationRuntime(model=RaisingModel(), ledger=ledger)

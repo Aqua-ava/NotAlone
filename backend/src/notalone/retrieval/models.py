@@ -2,13 +2,33 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import datetime
+from dataclasses import dataclass, replace
+from datetime import datetime, timezone
 from uuid import UUID
 
 from notalone.memory.models import MemoryCandidateStatus
 from notalone.memory.timing import MemoryTiming
 from notalone.scopes import ContactScope
+
+
+def history_timing(timing: MemoryTiming, status: str, invalid_at: datetime | None) -> MemoryTiming:
+    """保留原时间，只把仍合法的失效版本标为历史，不能证明过去主张真实。"""
+    if status == "invalidated":
+        return replace(timing, current_status="historical", current_status_reason=(
+            "旧版本已失效或被修正；只供追溯，不能证明过去主张真实或当前仍成立。"))
+    if invalid_at is not None and invalid_at <= datetime.now(timezone.utc):
+        return replace(timing, current_status="historical", current_status_reason=(
+            "已离开资料声明的引用区间；当前未核实，不认定事件完成或现实状态结束。"))
+    return timing
+
+
+def require_history_navigation(include_historical: bool, memory_ids: tuple[UUID, ...] | None) -> None:
+    """历史只接受同一轮概览提供的有界身份，不能启用全历史扫描。"""
+    if type(include_historical) is not bool:
+        raise TypeError("历史导航标记必须是 bool。")
+    if include_historical and (not isinstance(memory_ids, tuple) or not 1 <= len(memory_ids) <= 20
+            or len(memory_ids) != len(set(memory_ids)) or any(not isinstance(item, UUID) for item in memory_ids)):
+        raise ValueError("历史导航必须带有界、无重复的底层身份。")
 
 
 def _validate_source_ids(source_ids: tuple[UUID, ...]) -> None:

@@ -52,7 +52,7 @@ def _content(payload: Any) -> ExplorationInput:
     kind = payload.get("type")
     primary = {"target_message_id"} if kind == "response_exploration" else {"purpose_hint"}
     if kind not in ("response_exploration", "purpose_exploration") or not set(payload) <= {
-        "type", "correction", "requirements", "skill_mode", "skill_version_id", *primary,
+        "type", "correction", "requirements", "skill_mode", "skill_version_id", 'skill_scene', *primary,
     }:
         raise ValueError
     return ExplorationInput(
@@ -61,6 +61,7 @@ def _content(payload: Any) -> ExplorationInput:
         purpose_hint=_text(payload, "purpose_hint"), correction=_text(payload, "correction"),
         requirements=_text(payload, "requirements"), skill_mode=payload.get("skill_mode", "auto"),
         skill_version_id=_uuid(payload, "skill_version_id", optional=True),
+        skill_scene=payload.get('skill_scene'),
     )
 
 

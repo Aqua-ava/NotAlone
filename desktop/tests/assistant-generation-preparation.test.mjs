@@ -181,28 +181,29 @@ test('冻结命令实际未领取证明释放已结束未知alias，当前发布
 });
 
 test('命令关联不释放live、legacy、不同task/input/action/suggestion/operation或实际回执', () => {
-  const jobs = new AssistantGenerationJobs();
   const identities = [
     { ...commandIdentity, taskId: receipt.turnId }, { ...commandIdentity, inputVersionId: receipt.inputVersionId },
     { ...commandIdentity, action: 'answer', suggestionId: null }, { ...commandIdentity, suggestionId: receipt.turnId },
     { ...commandIdentity, operationKey: receipt.turnId },
   ];
-  const unmatched = identities.map((command) => {
-    const previous = jobs.beginPreparation(owner, undefined, undefined, command);
-    jobs.finish(previous); return previous;
-  });
-  const foreignOwner = jobs.beginPreparation({ ...owner, connectionGeneration: owner.connectionGeneration + 1 }, undefined, undefined, commandIdentity);
-  jobs.finish(foreignOwner);
-  const legacy = jobs.beginPreparation(owner); jobs.finish(legacy);
-  const live = jobs.beginPreparation(owner, undefined, undefined, commandIdentity);
-  const actual = jobs.beginPreparation(owner, undefined, undefined, commandIdentity);
-  const withReceipt = jobs.receivePrepared(actual, { ...receipt, requestKey: commandIdentity.taskId });
-  jobs.finish(withReceipt);
-  const current = jobs.beginPreparation(owner, undefined, undefined, commandIdentity);
-  jobs.receivePreparationNoGenerationProof(current, noGeneration, owner.connectionGeneration);
-  jobs.finish(current);
-  for (const untouched of [...unmatched, foreignOwner, legacy, live, withReceipt]) assert.equal(jobs.isActive(untouched), true);
-  assert.deepEqual(jobs.pendingReceipts(), [{ ...owner, ...receipt, requestKey: commandIdentity.taskId }]);
+  for (const command of identities) {
+    // 每类关联各用一份真实有界队列，避免夹具先撞上每owner八项的上限。
+    const jobs = new AssistantGenerationJobs();
+    const unmatched = jobs.beginPreparation(owner, undefined, undefined, command);
+    jobs.finish(unmatched);
+    const foreignOwner = jobs.beginPreparation({ ...owner, connectionGeneration: owner.connectionGeneration + 1 }, undefined, undefined, commandIdentity);
+    jobs.finish(foreignOwner);
+    const legacy = jobs.beginPreparation(owner); jobs.finish(legacy);
+    const live = jobs.beginPreparation(owner, undefined, undefined, commandIdentity);
+    const actual = jobs.beginPreparation(owner, undefined, undefined, commandIdentity);
+    const withReceipt = jobs.receivePrepared(actual, { ...receipt, requestKey: commandIdentity.taskId });
+    jobs.finish(withReceipt);
+    const current = jobs.beginPreparation(owner, undefined, undefined, commandIdentity);
+    jobs.receivePreparationNoGenerationProof(current, noGeneration, owner.connectionGeneration);
+    jobs.finish(current);
+    for (const untouched of [unmatched, foreignOwner, legacy, live, withReceipt]) assert.equal(jobs.isActive(untouched), true);
+    assert.deepEqual(jobs.pendingReceipts(), [{ ...owner, ...receipt, requestKey: commandIdentity.taskId }]);
+  }
 });
 
 test('策略准备命令只允许精确五字段UUID关联，拒绝正文或不完整身份', async () => {

@@ -17,6 +17,7 @@ from notalone.reply.context import ContextEvidence, ToolCallStatus, ToolCallTrac
 from notalone.memory.timing import MemoryTiming
 from notalone.reply.errors import ReplyContextError, ReplyContextInvariantError
 from notalone.reply.fidelity import factual_role
+from notalone.reply.retrieval_receipt import SourceMessageBudget
 from notalone.retrieval import RetrievalError, RetrievalPort, RetrievedMessage
 from notalone.scopes import ContactScope
 
@@ -88,10 +89,13 @@ class HistoryToolAccess:
         "_scope",
         "_conversation_binding_id",
         "_known_message_ids",
+        "_provided_evidence_ids",
         "_evidence",
         "_tool_calls",
         "_token_count",
         "_max_calls",
+        "_prior_calls",
+        "_prior_evidence_count",
     )
 
     def __init__(
@@ -102,6 +106,8 @@ class HistoryToolAccess:
         conversation_binding_id: UUID,
         initial_evidence_ids: tuple[UUID, ...] = (),
         max_calls: int = MAX_HISTORY_TOOL_CALLS,
+        prior_budget: SourceMessageBudget | None = None,
+        navigation_message_ids: tuple[UUID, ...] = (),
     ) -> None:
         if retrieval is None:
             raise TypeError("历史 Tool 必须注入 RetrievalPort。")
@@ -118,11 +124,17 @@ class HistoryToolAccess:
         self._retrieval = retrieval
         self._scope = scope
         self._conversation_binding_id = conversation_binding_id
-        self._known_message_ids = set(initial_evidence_ids)
+        if not isinstance(navigation_message_ids, tuple) or any(
+                not isinstance(item, UUID) for item in navigation_message_ids):
+            raise TypeError("原话导航标识结构无效。")
+        self._known_message_ids = set(initial_evidence_ids) | set(navigation_message_ids)
+        self._provided_evidence_ids = set(initial_evidence_ids)
         self._evidence: list[ContextEvidence] = []
         self._tool_calls: list[ToolCallTrace] = []
-        self._token_count = 0
+        self._token_count = prior_budget.used_tokens if prior_budget else 0
         self._max_calls = max_calls
+        self._prior_calls = prior_budget.used_calls if prior_budget else 0
+        self._prior_evidence_count = prior_budget.used_count if prior_budget else 0
 
     @property
     def evidence(self) -> tuple[ContextEvidence, ...]:
@@ -131,6 +143,11 @@ class HistoryToolAccess:
     @property
     def tool_calls(self) -> tuple[ToolCallTrace, ...]:
         return tuple(self._tool_calls)
+
+    @property
+    def token_count(self) -> int:
+        """沿现有估算规则计费，不冒充供应商精确 token。"""
+        return self._token_count
 
     def search(
         self,
@@ -235,7 +252,7 @@ class HistoryToolAccess:
             return self._status_result("failed", "history_query_failed")
 
     def _begin_call(self, tool_name: str) -> bool:
-        if len(self._tool_calls) >= self._max_calls:
+        if self._prior_calls + len(self._tool_calls) >= self._max_calls:
             self._tool_calls.append(
                 ToolCallTrace(
                     tool_name=tool_name,
@@ -266,7 +283,7 @@ class HistoryToolAccess:
             return self._status_result("empty", "no_matching_history")
         estimated = sum(_estimate_tokens(item.text) for item in validated)
         if self._token_count + estimated > MAX_HISTORY_TOKEN_BUDGET or (
-            len(self._evidence) + len(validated) > MAX_HISTORY_EVIDENCE_COUNT
+            self._prior_evidence_count + len(self._evidence) + len(validated) > MAX_HISTORY_EVIDENCE_COUNT
         ):
             self._finish_call(tool_name, "budget_exceeded", (), started)
             return self._status_result("budget_exceeded", "history_token_budget")
@@ -274,8 +291,9 @@ class HistoryToolAccess:
         evidence_ids: list[UUID] = []
         payload_messages: list[dict[str, Any]] = []
         for message in validated:
-            is_new_evidence = message.message_id not in self._known_message_ids
+            is_new_evidence = message.message_id not in self._provided_evidence_ids
             self._known_message_ids.add(message.message_id)
+            self._provided_evidence_ids.add(message.message_id)
             evidence_ids.append(message.message_id)
             payload_messages.append(self._message_payload(message))
             if is_new_evidence:
@@ -349,6 +367,7 @@ class HistoryToolAccess:
             "source_ids": [str(source_id) for source_id in message.source_ids],
             "status": message.status,
             "text": message.text,
+            "timing": MemoryTiming.from_source_times((message.occurred_at,)).to_payload(),
         }
 
     def _finish_call(

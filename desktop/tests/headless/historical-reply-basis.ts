@@ -1,0 +1,139 @@
+import path from 'node:path';
+import { expect, type Browser, type Page } from '@playwright/test';
+import { confirmHelperContact } from '../foreground-confirmation-actions';
+import { withRewritePages } from './rewrite-acceptance';
+import type { ReplySessionState } from '../../src/shared/reply-bridge';
+
+const backendScript = path.resolve('tests/fixtures/historical-reply-basis-backend.py');
+const backendDirectory = path.resolve('../backend');
+const readState = (helper: Page): Promise<ReplySessionState> => helper.evaluate(() => window.notalone.replies.getState());
+
+export async function historicalReplyBasis(browser: Browser, origin: string) {
+  await withRewritePages(browser, origin, async ({ manager, helper, rewriteBackend }) => {
+    const prepared = await rewriteBackend.command('historical_basis_prepare', { kind: 'source_contact' }) as {
+      memoryId: string; sourceId: string; text: string;
+    };
+    await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+    await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
+    await helper.getByRole('button', { name: '主动聊聊', exact: true }).click();
+    await helper.getByRole('textbox', { name: '主动目的', exact: true }).fill(prepared.text);
+    await rewriteBackend.plan({ count: 1, prefix: '历史合成候选', citation_ids: [prepared.memoryId] });
+    await helper.getByRole('button', { name: '生成候选', exact: true }).click();
+    const group = helper.getByRole('group', { name: '说法1消息组', exact: true });
+    const editor = group.getByRole('textbox', { name: '候选1编辑文本', exact: true });
+    await expect(editor).toHaveValue('历史合成候选（说法1）。');
+    await helper.getByRole('button', { name: '查看已保存讨论', exact: true }).click();
+    await expect(group.getByRole('combobox', { name: '说法1版本', exact: true })).toBeEnabled();
+    await editor.fill('用户已保存的合成编辑：愿意聊聊，先不作承诺。');
+    await expect(helper.getByRole('button', { name: '继续修改', exact: true })).toBeDisabled();
+    await group.getByRole('button', { name: '保存本组修改', exact: true }).click();
+    await expect(group.getByRole('combobox', { name: '说法1版本', exact: true })).toContainText('修改版本 1');
+    const original = await readState(helper);
+    const sessionId = original.savedSession!.sessionId!;
+    const editedVersionId = original.candidateVersions!.items[0].displayVersionId!;
+    const intention = '愿意聊聊散步，希望轻松自然，先不作承诺';
+    await helper.getByRole('textbox', { name: '本次改口', exact: true }).fill(intention);
+    await helper.getByRole('textbox', { name: '继续修改要求', exact: true }).fill('第一条简短一点');
+
+    await manager.getByRole('button', { name: '关系资料', exact: true }).click();
+    await manager.getByRole('button', { name: '刷新关系资料', exact: true }).click();
+    const contact = manager.getByRole('region', { name: '联系人记忆', exact: true });
+    await contact.getByRole('button', { name: `修正资料：${prepared.text}`, exact: true }).click();
+    const form = contact.getByRole('form', { name: '修正联系人资料', exact: true });
+    const freshText = '我喜欢慢慢散步，希望表达轻松自然。';
+    await form.getByRole('textbox', { name: '资料正文', exact: true }).fill(freshText);
+    await form.getByRole('button', { name: '保存修正', exact: true }).click();
+    await expect(contact.getByRole('button', { name: `修正资料：${freshText}`, exact: true })).toBeVisible();
+    await expect(contact.getByText(freshText, { exact: true })).toBeVisible();
+    const memories = await rewriteBackend.request(`/api/contacts/${rewriteBackend.data.contact_ids[0]}/memories`);
+    expect(memories.status).toBe(200);
+    const freshMemory = (memories.data.memories as Array<{ text: string; memory_id: string }>)
+      .find((memory) => memory.text === freshText);
+    expect(freshMemory).toBeDefined();
+    const freshMemoryId = freshMemory!.memory_id;
+    const calls = ((await rewriteBackend.command('observations')).payloads as unknown[]).length;
+    await helper.getByRole('button', { name: '查看已保存讨论', exact: true }).click();
+    const discussion = helper.getByRole('region', { name: '已保存的讨论', exact: true });
+    await expect(discussion.getByText('依据已变化', { exact: true })).toBeVisible();
+    await expect(discussion.getByText('关系资料：记忆已修正、否决或替代。', { exact: true })).toBeVisible();
+    await expect(discussion.getByText('历史合成候选（说法1）。', { exact: true })).toBeVisible();
+    await expect(editor).toHaveValue('用户已保存的合成编辑：愿意聊聊，先不作承诺。');
+    await expect(helper.getByRole('textbox', { name: '本次改口', exact: true })).toHaveValue(intention);
+    expect(((await rewriteBackend.command('observations')).payloads as unknown[]).length).toBe(calls);
+    await rewriteBackend.plan({ count: 1, prefix: '新依据合成候选', citation_ids: [freshMemoryId] });
+    await helper.getByRole('button', { name: '继续修改', exact: true }).click();
+    await expect.poll(async () => (await readState(helper)).continuation?.phase).toBe('completed');
+    await expect(group.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveValue('新依据合成候选（说法1）。');
+    const current = await readState(helper);
+    expect(current.result!.contextEvidenceIds).toContain(freshMemoryId);
+    expect(current.result!.contextEvidenceIds).not.toContain(prepared.memoryId);
+    const observations = await rewriteBackend.command('observations');
+    const actual = (observations.payloads as Array<{ continuation_reference: {
+      version_id: string; messages: Array<{ text: string }>;
+    } }>).at(-1)!;
+    expect(actual.continuation_reference.version_id).toBe(editedVersionId);
+    expect(actual.continuation_reference.messages[0].text).toBe('用户已保存的合成编辑：愿意聊聊，先不作承诺。');
+    await helper.getByRole('button', { name: '展开候选1依据', exact: true }).click();
+    const evidence = helper.getByRole('region', { name: '候选1依据', exact: true });
+    await expect(evidence.getByText(freshText, { exact: true })).toBeVisible();
+
+    const source = manager.getByRole('region', { name: '来源删除管理', exact: true }).getByRole('listitem')
+      .filter({ hasText: `来源标识：${prepared.sourceId}` });
+    await source.getByRole('button', { name: '删除来源', exact: true }).click();
+    await manager.getByRole('button', { name: '确认删除来源', exact: true }).click();
+    await expect(source.getByText('已删除，已通过不可检索校验', { exact: true })).toBeVisible({ timeout: 15_000 });
+    await helper.getByRole('button', { name: '查看已保存讨论', exact: true }).click();
+    await expect(discussion.getByText('相关来源已删除', { exact: true })).toHaveCount(2);
+    await expect(discussion.getByText('历史合成候选（说法1）。', { exact: true })).toHaveCount(0);
+    await expect(discussion.getByText('新依据合成候选（说法1）。', { exact: true })).toHaveCount(0);
+    expect((await readState(helper)).savedSession!.sessionId).toBe(sessionId);
+  }, undefined, backendScript, backendDirectory);
+  process.stdout.write('page_test_scenario_passed: historical-contact-basis-explicit-continue-and-source-deletion\n');
+
+  await withRewritePages(browser, origin, async ({ manager, helper, rewriteBackend }) => {
+    const prepared = await rewriteBackend.command('historical_basis_prepare', { kind: 'owner' }) as {
+      memoryId: string; text: string;
+    };
+    await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+    await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
+    await helper.getByRole('button', { name: '主动聊聊', exact: true }).click();
+    await helper.getByRole('textbox', { name: '主动目的', exact: true }).fill(prepared.text);
+    await rewriteBackend.plan({ count: 1, prefix: '本人依据合成候选', citation_ids: [prepared.memoryId] });
+    await helper.getByRole('button', { name: '生成候选', exact: true }).click();
+    const group = helper.getByRole('group', { name: '说法1消息组', exact: true });
+    const editor = group.getByRole('textbox', { name: '候选1编辑文本', exact: true });
+    await expect(editor).toHaveValue('本人依据合成候选（说法1）。');
+    await helper.getByRole('button', { name: '查看已保存讨论', exact: true }).click();
+    await expect(group.getByRole('combobox', { name: '说法1版本', exact: true })).toBeEnabled();
+    await editor.fill('本人依据过期后仍保留的合成编辑。');
+    await rewriteBackend.command('historical_basis_expire');
+    await helper.getByRole('button', { name: '查看已保存讨论', exact: true }).click();
+    const discussion = helper.getByRole('region', { name: '已保存的讨论', exact: true });
+    await expect(discussion.getByText('本人资料：记忆有效期已结束。', { exact: true })).toBeVisible();
+    await expect(editor).toHaveValue('本人依据过期后仍保留的合成编辑。');
+    await expect(helper.getByRole('button', { name: '继续修改', exact: true })).toBeDisabled();
+    await group.getByRole('button', { name: '保存本组修改', exact: true }).click();
+    await expect(group.getByRole('combobox', { name: '说法1版本', exact: true })).toContainText('修改版本 1');
+    const selection = group.getByRole('radio', { name: '选择说法1当前版本', exact: true });
+    await selection.click();
+    await expect(selection).toBeChecked();
+    await expect(helper.getByRole('button', { name: '携已选版本新开', exact: true })).toBeEnabled();
+    const calls = ((await rewriteBackend.command('observations')).payloads as unknown[]).length;
+    await helper.getByRole('button', { name: '携已选版本新开', exact: true }).click();
+    const carried = helper.getByRole('article', { name: '携入的已选版本', exact: true });
+    await expect(carried.getByText('本人依据过期后仍保留的合成编辑。', { exact: true })).toBeVisible();
+    await expect(carried.getByText('本人资料：记忆有效期已结束。', { exact: true })).toBeVisible();
+    expect(((await rewriteBackend.command('observations')).payloads as unknown[]).length).toBe(calls);
+    await manager.getByRole('button', { name: '关系资料', exact: true }).click();
+    await manager.getByRole('button', { name: '刷新关系资料', exact: true }).click();
+    const owner = manager.getByRole('region', { name: '本人记忆', exact: true });
+    await owner.getByRole('button', { name: `删除资料：${prepared.text}`, exact: true }).click();
+    await owner.getByRole('group', { name: '确认删除资料', exact: true }).getByRole('button', { name: '确认删除', exact: true }).click();
+    await expect(owner.getByText(prepared.text, { exact: true })).toHaveCount(0);
+    await helper.getByRole('button', { name: '查看已保存讨论', exact: true }).click();
+    await expect(discussion.getByText('相关来源已删除', { exact: true })).toBeVisible();
+    await expect(carried).toHaveCount(0);
+    await expect(helper.getByText('本人依据过期后仍保留的合成编辑。', { exact: true })).toHaveCount(0);
+  }, undefined, backendScript, backendDirectory);
+  process.stdout.write('page_test_scenario_passed: historical-owner-basis-edit-carry-and-memory-deletion\n');
+}

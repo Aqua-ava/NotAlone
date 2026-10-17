@@ -93,7 +93,7 @@ class PostgresMessageStream:
                             """
                         )
                         parameters.extend((cursor_at, before_message_id))
-                parameters.append(limit + 1)
+                parameters.extend((limit + 1, limit + 1))
                 rows = connection.execute(
                     f"""
                     SELECT m.id AS message_id,
@@ -105,7 +105,13 @@ class PostgresMessageStream:
                            quote_ref.quoted_text,
                            quote_ref.quoted_server_id,
                            target.id AS quoted_target_id
-                    FROM public.message AS m
+                    FROM (
+                        SELECT m.*
+                        FROM public.message AS m
+                        WHERE {' AND '.join(conditions)}
+                        ORDER BY m.occurred_at DESC NULLS LAST, m.id DESC
+                        LIMIT %s
+                    ) AS m
                     LEFT JOIN LATERAL (
                         SELECT payload.raw_payload -> 'quote' ->> 'text'
                                    AS quoted_text,
@@ -134,7 +140,8 @@ class PostgresMessageStream:
                         ON target.id = target_meta.message_id
                        AND target.owner_id = target_meta.owner_id
                        AND target.contact_id = target_meta.contact_id
-                    WHERE {' AND '.join(conditions)}
+                    -- 每条基础消息经 LEFT JOIN 至少保留一行，先限制基础消息
+                    -- 即可覆盖本页；引用目标可能重号，展开后仍须保留外层上限。
                     ORDER BY m.occurred_at DESC NULLS LAST, m.id DESC
                     LIMIT %s
                     """,

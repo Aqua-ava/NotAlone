@@ -77,7 +77,7 @@ class FakeContactMemory:
             if candidate.scope == scope and candidate.candidate_id == candidate_id
         )
 
-    def list_confirmed(self, scope: ContactScope) -> tuple[ConfirmedMemory, ...]:
+    def list_confirmed(self, scope: ContactScope, *, include_expired: bool = False) -> tuple[ConfirmedMemory, ...]:
         return tuple(
             memory
             for memory in self.memories
@@ -191,7 +191,7 @@ class FakeOwnerMemory:
         self.memories.append(memory)
         return memory
 
-    def list_active(self, owner_id: UUID) -> tuple[OwnerMemory, ...]:
+    def list_active(self, owner_id: UUID, *, include_expired: bool = False) -> tuple[OwnerMemory, ...]:
         return tuple(
             memory
             for memory in self.memories

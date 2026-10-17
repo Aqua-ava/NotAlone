@@ -13,7 +13,10 @@ from tests.unit.memory_extraction.test_grounded_extraction import row, window
 
 def labels(*items: dict) -> dict:
     return {"units": {
-        item["unit"]: {key: value for key, value in item.items() if key != "unit"}
+        item["unit"]: {key: value for key, value in item.items()
+                       if key != "unit" and not (
+                           key == "event" and value is None and "ambiguity_codes" in item
+                       )}
         for item in items
     }}
 

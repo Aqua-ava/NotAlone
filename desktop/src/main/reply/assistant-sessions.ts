@@ -5,6 +5,8 @@ import type { BackendHost } from '../backend/host';
 import { BackendRequestFailure } from '../backend/json-client';
 import { isUuid } from '../uuid';
 import { isRecord, readReplyResult } from './result-read';
+import { readReplyBasisChanges } from './basis-changes-read';
+import { readReplyScene } from './scene';
 
 const READ_PART_BYTES = 256 * 1024;
 const invalidRead = () => new Error('已保存讨论暂不可用。');
@@ -59,7 +61,8 @@ async function readAssistantSessionParts(backend: Pick<BackendHost, 'getConnecti
 
 function discussion(value: unknown, type: SavedAssistantDiscussion['type']): SavedAssistantDiscussion {
   const fields = ['type', 'correction', 'requirements', 'answer', 'confirmed_intent', 'skill_mode', 'skill_version_id',
-    type === 'purpose_exploration' ? 'purpose_hint' : 'target_message_id'];
+    type === 'purpose_exploration' ? 'purpose_hint' : 'target_message_id',
+    ...(isRecord(value) && Object.hasOwn(value, 'skill_scene') ? ['skill_scene'] : [])];
   if (!isRecord(value) || value.type !== type || Object.keys(value).length !== fields.length
     || !Object.keys(value).every((key) => fields.includes(key))
     || !['correction', 'requirements', 'answer', 'confirmed_intent'].every((key) => typeof value[key] === 'string')
@@ -70,7 +73,8 @@ function discussion(value: unknown, type: SavedAssistantDiscussion['type']): Sav
   const common = { correction: value.correction as string, requirements: value.requirements as string,
     answer: value.answer as string, confirmedIntent: value.confirmed_intent as string,
     skillMode: value.skill_mode as SavedAssistantDiscussion['skillMode'],
-    skillVersionId: typeof value.skill_version_id === 'string' ? value.skill_version_id.toLowerCase() : null };
+    skillVersionId: typeof value.skill_version_id === 'string' ? value.skill_version_id.toLowerCase() : null,
+    ...(Object.hasOwn(value, 'skill_scene') ? { skillScene: readReplyScene(value.skill_scene) } : {}) };
   if (type === 'purpose_exploration' && typeof value.purpose_hint === 'string') return { ...common, type, purposeHint: value.purpose_hint };
   if (type === 'response_exploration' && isUuid(value.target_message_id)) return { ...common, type, targetMessageId: value.target_message_id.toLowerCase() };
   throw new Error('已保存讨论格式无效。');
@@ -109,21 +113,27 @@ export async function readAssistantSession(backend: Pick<BackendHost, 'getConnec
       || !['running', 'completed', 'failed', 'redacted', 'unavailable'].includes(item.state as string)
       || !(item.interruption_reason === null || item.state === 'failed' && item.interruption_reason === 'app_quit')
       || (item.generation_active !== undefined && typeof item.generation_active !== 'boolean')
+      || (item.requires_reprepare !== undefined && typeof item.requires_reprepare !== 'boolean')
       || (item.input !== null && (!isRecord(item.input) || !isRecord(item.input.content)))
       || (item.placeholder !== null && !['相关来源已删除', '相关来源不可用'].includes(item.placeholder as string))) throw new Error('已保存讨论格式无效。');
     const turnId = item.turn_id.toLowerCase();
     if (known.has(turnId) || (['redacted', 'unavailable'].includes(item.state as string)
       && (item.input !== null || item.reply !== null))) throw new Error('已保存讨论格式无效。');
     known.add(turnId);
+    if (item.input !== null) readReplyScene(item.input.scene);
+    const basisChanges = readReplyBasisChanges(item.basis_changes);
+    if (['redacted', 'unavailable'].includes(item.state as string) && basisChanges.length) throw invalidRead();
     return { turnId, inputVersionId: item.input_version_id.toLowerCase(), requestKey: item.request_key.toLowerCase(),
       state: item.state as SavedAssistantTurn['state'], input: item.input as SavedAssistantTurn['input'],
       reply: item.reply === null ? null : readReplyResult(item.reply), interruptionReason: item.interruption_reason as 'app_quit' | null, placeholder: item.placeholder as string | null,
-      ...(typeof item.generation_active === 'boolean' ? { generationActive: item.generation_active } : {}) };
+      ...(item.basis_changes === undefined ? {} : { basisChanges }),
+      ...(typeof item.generation_active === 'boolean' ? { generationActive: item.generation_active } : {}),
+      ...(item.requires_reprepare === true ? { requiresReprepare: true } : {}) };
   });
   const versions = new Set<string>();
   const inputs: SavedAssistantInput[] = value.inputs.map((item: unknown) => {
-    if (!isRecord(item) || Object.keys(item).length !== 7 || !Object.keys(item).every((key) => [
-      'input_version_id', 'type', 'conversation_binding_id', 'turn_id', 'state', 'content', 'placeholder',
+    if (!isRecord(item) || Object.keys(item).length !== (Object.hasOwn(item, 'basis_changes') ? 8 : 7) || !Object.keys(item).every((key) => [
+      'input_version_id', 'type', 'conversation_binding_id', 'turn_id', 'state', 'content', 'placeholder', 'basis_changes',
     ].includes(key)) || !isUuid(item.input_version_id) || !isUuid(item.conversation_binding_id)
       || !['generation', 'purpose_exploration', 'response_exploration', 'candidate_carry'].includes(item.type as string)
       || !['active', 'redacted', 'unavailable'].includes(item.state as string)) throw new Error('已保存讨论格式无效。');
@@ -132,6 +142,8 @@ export async function readAssistantSession(backend: Pick<BackendHost, 'getConnec
     if (versions.has(version) || item.placeholder !== expectedPlaceholder
       || (item.state !== 'active' && item.content !== null)) throw new Error('已保存讨论格式无效。');
     versions.add(version);
+    const basisChanges = readReplyBasisChanges(item.basis_changes);
+    if (item.state !== 'active' && basisChanges.length) throw invalidRead();
     let content: SavedAssistantInput['content'] = null;
     if (item.type === 'generation') {
       const turnId = isUuid(item.turn_id) ? item.turn_id.toLowerCase() : null;
@@ -149,7 +161,8 @@ export async function readAssistantSession(backend: Pick<BackendHost, 'getConnec
     return { inputVersionId: version, type: item.type as SavedAssistantInput['type'],
       conversationBindingId: item.conversation_binding_id.toLowerCase(),
       turnId: typeof item.turn_id === 'string' ? item.turn_id.toLowerCase() : null,
-      state: item.state as SavedAssistantInput['state'], content, placeholder: expectedPlaceholder };
+      state: item.state as SavedAssistantInput['state'], content, placeholder: expectedPlaceholder,
+      ...(item.basis_changes === undefined ? {} : { basisChanges }) };
   });
   if (turns.some((turn) => !inputs.some((input) => input.type === 'generation' && input.turnId === turn.turnId))
     || (typeof value.current_input_version_id === 'string' && !versions.has(value.current_input_version_id.toLowerCase()))) {

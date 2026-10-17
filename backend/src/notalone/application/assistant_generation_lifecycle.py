@@ -19,7 +19,17 @@ class AssistantGenerationReceipt:
     interruption_reason: str | None = None
 
 
+@dataclass(frozen=True, slots=True, repr=False)
+class AssistantPreparationFormatReceipt:
+    generation: AssistantGenerationReceipt
+    format_status: str
+
+
 class AssistantGenerationLifecyclePort(Protocol):
+    def preparation_format(
+        self, *, owner_id: UUID, contact_id: UUID, session_id: UUID,
+        request_key: UUID, input_version_id: UUID,
+    ) -> AssistantPreparationFormatReceipt: ...
     def prepare(
         self, *, owner_id: UUID, contact_id: UUID, session_id: UUID,
         request: ReplyServiceRequest,

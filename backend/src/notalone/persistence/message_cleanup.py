@@ -78,6 +78,8 @@ def cleanup_derived_data(
     """
 
     source_refs = list(removed_ids)
+    from notalone.persistence.memory_events import erase_event_version_dependencies
+    erase_event_version_dependencies(connection, owner_id=owner_id, removed_ids=set(removed_ids))
     deleted_memory_ids: list[UUID] = []
     candidates = connection.execute(
         """
@@ -116,7 +118,7 @@ def cleanup_derived_data(
 
     memories = connection.execute(
         """
-        SELECT id, source_ids
+        SELECT id, source_ids, supersedes_memory_id
         FROM public.confirmed_memory
         WHERE owner_id = %s
           AND contact_id = %s
@@ -127,12 +129,15 @@ def cleanup_derived_data(
         (owner_id, contact_id, source_refs),
     ).fetchall()
     if memories:
-        for memory_id, source_ids in memories:
+        for memory_id, source_ids, supersedes_memory_id in memories:
             remaining_ids = [
                 source_id
                 for source_id in source_ids
                 if source_id not in removed_ids
             ]
+            # 手动修正仍沿用旧依据；所有派生版本都不能删掉引用后保留正文。
+            if supersedes_memory_id is not None:
+                remaining_ids = []
             if remaining_ids:
                 connection.execute(
                     """
@@ -171,7 +176,7 @@ def cleanup_derived_data(
         )
     owner_memories = connection.execute(
         """
-        SELECT id, source_ids
+        SELECT id, source_ids, supersedes_memory_id
         FROM public.owner_memory
         WHERE owner_id = %s
           AND status = 'active'
@@ -180,10 +185,12 @@ def cleanup_derived_data(
         """,
         (owner_id, source_refs),
     ).fetchall()
-    for memory_id, source_ids in owner_memories:
+    for memory_id, source_ids, supersedes_memory_id in owner_memories:
         remaining_ids = [
             source_id for source_id in source_ids if source_id not in removed_ids
         ]
+        if supersedes_memory_id is not None:
+            remaining_ids = []
         if remaining_ids:
             connection.execute(
                 """

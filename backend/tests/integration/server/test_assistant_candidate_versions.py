@@ -49,7 +49,7 @@ class CandidateVersionHttpFixture(CoreBusinessFlowFixture):
     def _drop_database(cls) -> None:
         super()._drop_database()
         remaining = cls.admin.execute(
-            "SELECT count(*) FROM pg_database WHERE datname=%s", (cls.database_name,),
+            "SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname=%s)", (cls.database_name,),
         ).fetchone()[0]
         print(f"candidate_http_cleanup: owned database remaining={remaining}", flush=True)
         if remaining:
@@ -466,14 +466,28 @@ class AssistantCandidateVersionsHttpTest(CandidateVersionHttpFixture, unittest.T
                 self.assertEqual(self.backend.request(
                     f"/api/contacts/{contact_id}/sources/{source_id}", method="DELETE",
                 )[0], 202)
-                conflict = (409, {"error": "assistant_candidate_version_conflict", "reason": "source_unavailable"})
-                self.assertEqual(self.backend.request(second_path), conflict)
-                self.assertEqual(self.backend.request(second_path, edit), conflict)
-                self.assertEqual(self.backend.request(selection_path), conflict)
-                self.assertEqual(self.backend.request(selection_path, second_choice), conflict)
+                # 排队事务已擦除B版本和当前选择，A的独立版本仍在且不自动重选。
+                self.assertEqual(gate.execute(
+                    "SELECT count(*) FROM public.assistant_candidate_version WHERE owner_id=%s AND contact_id=%s AND candidate_id=%s",
+                    (self.owner_id, contact_id, second_id),
+                ).fetchone()[0], 0)
+                remaining_ids = {str(row[0]) for row in gate.execute(
+                    "SELECT id FROM public.assistant_candidate_version WHERE owner_id=%s AND contact_id=%s AND candidate_id=ANY(%s::uuid[])",
+                    (self.owner_id, contact_id, [first_id, second_id]),
+                ).fetchall()}
+                self.assertEqual(remaining_ids, {first_id})
+                self.assertEqual(gate.execute(
+                    "SELECT candidate_id,version_id FROM public.assistant_candidate_selection WHERE owner_id=%s AND contact_id=%s AND candidate_id=ANY(%s::uuid[]) AND is_current",
+                    (self.owner_id, contact_id, [first_id, second_id]),
+                ).fetchall(), [])
+                not_found = (404, {"error": "not_found"})
+                self.assertEqual(self.backend.request(second_path), not_found)
+                self.assertEqual(self.backend.request(second_path, edit), not_found)
+                self.assertEqual(self.backend.request(selection_path), (200, {"selection": None}))
+                self.assertEqual(self.backend.request(selection_path, second_choice), not_found)
                 self.assertEqual(self.backend.request(selection_path, {
                     **second_choice, "selection_key": str(uuid4()),
-                }), conflict)
+                }), not_found)
             finally:
                 release_global_worker_lock(gate)
         self._finish_source_delete(contact_id, source_id)
@@ -514,8 +528,11 @@ class AssistantCandidateVersionsHttpTest(CandidateVersionHttpFixture, unittest.T
         failure = (503, {"error": "assistant_candidate_version_save_failed"})
         with self._reject_insert("assistant_candidate_version"):
             status, payload, headers = self._raw_request(path)
-            self.assertEqual((status, payload), failure)
+            self.assertEqual((status, payload), (200, original))
             self.assertEqual(headers["Cache-Control"], "no-store")
+        with psycopg.connect(self.database_url) as connection:
+            self.assertEqual(connection.execute("SELECT count(*) FROM public.assistant_candidate_version "
+                "WHERE owner_id=%s AND candidate_id=%s", (self.owner_id, candidate_id)).fetchone()[0], 0)
         self.assertEqual(self._get(self.backend, path), original)
         edit = {
             "edit_key": str(uuid4()), "parent_version_id": candidate_id,

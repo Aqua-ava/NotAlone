@@ -77,6 +77,10 @@ def parse_reply_request(body: bytes) -> tuple[UUID, ReplyServiceRequest]:
         version = _uuid_field(reference, "input_version")
         suggestion = SuggestionReference(_uuid_field(reference, "task_id"), version, _uuid_field(reference, "suggestion_id"))
     skill_disabled = payload.get("skill_disabled", False)
+    scene = payload.get('scene')
+    if scene is not None and (not isinstance(scene, str) or not scene.strip()
+                              or len(scene) > 256 or scene != scene.strip()):
+        raise ReplyRequestInvalid()
     if not isinstance(skill_disabled, bool) or (skill_disabled and skill_id is not None):
         raise ReplyRequestInvalid()
     expected_input_version_id = (
@@ -91,6 +95,7 @@ def parse_reply_request(body: bytes) -> tuple[UUID, ReplyServiceRequest]:
         suggestion=suggestion,
         skill_disabled=skill_disabled,
         expected_input_version_id=expected_input_version_id,
+        scene=scene,
     )
 
 

@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from collections.abc import Callable
 import logging
 from uuid import UUID
 
@@ -23,10 +24,12 @@ class EventBusMessagePublisher:
     def __init__(
         self, events: EventBus, *, owner_id: UUID | None = None,
         task_host: TaskHost | None = None,
+        learning_notify: Callable[[ContactScope], None] | None = None,
     ) -> None:
         self._events = events
         self._owner_id = owner_id
         self._task_host = task_host
+        self._learning_notify = learning_notify
 
     def publish_message_created(
         self,
@@ -51,6 +54,11 @@ class EventBusMessagePublisher:
             except Exception:
                 # 消息与游标已经提交；调度故障不传播回同步读取流程。
                 logging.getLogger(__name__).warning("observation_memory_schedule_failed")
+        if self._learning_notify is not None and scope.owner_id == self._owner_id:
+            try:
+                self._learning_notify(scope)
+            except Exception:
+                logging.getLogger(__name__).warning('skill_learning_schedule_failed')
 
 
 __all__ = ["EventBusMessagePublisher", "MessageEventPublisher"]

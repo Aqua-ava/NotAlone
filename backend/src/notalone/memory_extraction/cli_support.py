@@ -44,10 +44,11 @@ class ExtractionComponents:
     trace_store: PostgresExtractionTraceStore
 
 
-def build_extraction_components(database_url: str) -> ExtractionComponents:
+def build_extraction_components(database_url: str, *, max_retries: int = 2) -> ExtractionComponents:
     model = build_deepseek_model(
         extra_body={"thinking": {"type": "enabled"}},
         http_client=build_trace_http_client(),
+        max_retries=max_retries,
     )
     return ExtractionComponents(
         model=model,
@@ -65,6 +66,7 @@ def load_contact_messages(
     database_url: str,
     *,
     selection_receipts: list[dict[str, Any]] | None = None,
+    message_ids: tuple[UUID, ...] | None = None,
 ) -> tuple[MessageRef, ...]:
     """按时间正序读取联系人范围内 active 来源的消息。"""
 
@@ -104,10 +106,12 @@ def load_contact_messages(
             FROM public.message AS message
             WHERE message.owner_id = %s
               AND message.contact_id = %s
+              AND (%s::uuid[] IS NULL OR message.id=ANY(%s::uuid[]))
               AND {valid_source_ref_exists_sql("message")}
             ORDER BY message.occurred_at NULLS LAST, message.created_at, message.id
             """,
-            (scope.owner_id, scope.contact_id),
+            (scope.owner_id, scope.contact_id, list(message_ids) if message_ids is not None else None,
+             list(message_ids) if message_ids is not None else None),
         ).fetchall()
     messages = []
     rule_version = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()

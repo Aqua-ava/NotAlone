@@ -214,7 +214,20 @@ class MemoryAdoptionTest(unittest.TestCase):
         self.assertEqual(len(owner_memories), 1)
         self.assertEqual(owner_memories[0].text, "我下周出差")
 
-    def test_owner_memory_update_uses_persisted_memory_id(self) -> None:
+    def test_owner_update_without_original_window_keeps_the_new_claim_pending(self) -> None:
+        newer_message = uuid4()
+        with psycopg.connect(TEST_DATABASE_URL) as connection:
+            connection.execute(
+                "INSERT INTO public.message (id, owner_id, contact_id, speaker, message_type, text_content, occurred_at) "
+                "VALUES (%s, %s, %s, 'user', 'text', '我最近去上海出差', now())",
+                (newer_message, self.owner_id, self.contact_id),
+            )
+            connection.execute(
+                "INSERT INTO public.message_source_ref (message_id, owner_id, contact_id, source_kind, "
+                "source_document_id, source_locator, raw_payload) "
+                "VALUES (%s, %s, %s, 'source_document', %s, 'synthetic-new-evidence', '{}'::jsonb)",
+                (newer_message, self.owner_id, self.contact_id, self.source_id),
+            )
         adoption = MemoryAdoption(
             memory_port=self.memory_store,
             owner_memory_port=self.owner_store,
@@ -233,16 +246,20 @@ class MemoryAdoptionTest(unittest.TestCase):
                     self._fact(
                         subject=FactSubject.SELF,
                         text="我最近去上海出差",
+                        source_message_ids=(newer_message,),
                     ),
                 )
             ),
         )
 
         self.assertEqual(stats.adopted, 1)
-        self.assertEqual(stats.updated, 1)
+        self.assertEqual(stats.updated, 0)
+        self.assertEqual(stats.pending, 1)
         owner_memories = self.owner_store.list_active(self.owner_id)
         self.assertEqual(len(owner_memories), 1)
-        self.assertEqual(owner_memories[0].text, "我最近去上海出差")
+        self.assertEqual(owner_memories[0].text, "我下周去上海出差")
+        self.assertEqual(set(owner_memories[0].source_ids), {self.message_id})
+        self.assertEqual([item.text for item in self.memory_store.list_pending_candidates(self.scope)], ["我最近去上海出差"])
 
     def test_low_confidence_stays_pending(self) -> None:
         stats = self.adoption.adopt(
@@ -288,11 +305,12 @@ class MemoryAdoptionTest(unittest.TestCase):
         self.assertEqual(self.memory_store.list_confirmed(self.scope), ())
 
     def test_duplicate_extraction_skips_active_memory(self) -> None:
+        fact = self._fact()
         first = self.adoption.adopt(
-            self.scope, ExtractionOutcome(accepted=(self._fact(),))
+            self.scope, ExtractionOutcome(accepted=(fact,))
         )
         second = self.adoption.adopt(
-            self.scope, ExtractionOutcome(accepted=(self._fact(),))
+            self.scope, ExtractionOutcome(accepted=(fact,))
         )
 
         self.assertEqual(first.adopted, 1)

@@ -6,7 +6,7 @@ from typing import Any
 from uuid import UUID
 
 import psycopg
-from notalone.persistence.style_sample_store import invalidate_reply_keys
+from notalone.persistence.style_sample_store import erase_reply_style_samples, invalidate_reply_keys
 
 from notalone.persistence.assistant_session_store import (
     erase_assistant_source_turns, select_assistant_source_input_dependents,
@@ -77,6 +77,13 @@ def delete_source_replies(
                 WHERE used.reply_request_id=request.id AND used.owner_id=%s
                   AND used.source_id=ANY(%s::uuid[])
               )
+              OR request.skill_version_id=ANY(%s::uuid[])
+              OR EXISTS (
+                SELECT 1 FROM public.reply_expression_preference_use AS used
+                WHERE used.reply_request_id=request.id AND used.owner_id=%s
+                  AND used.preference_id=ANY(%s::uuid[])
+              )
+              OR request.context_snapshot->'navigation_dependency_ids' ?| %s::text[]
               )
             UNION
             SELECT child.id
@@ -92,7 +99,8 @@ def delete_source_replies(
         """,
         (
             owner_id, revoke_running_scope, contact_id, contact_id, list(removed_ids), list(removed_ids), contact_id,
-            list(removed_ids), [str(i) for i in removed_ids], owner_id, list(removed_ids), owner_id,
+            list(removed_ids), [str(i) for i in removed_ids], owner_id, list(removed_ids),
+            list(removed_ids), owner_id, list(removed_ids), [str(i) for i in removed_ids], owner_id,
         ),
     ).fetchall()
     request_ids = [row["id"] if isinstance(row, dict) else row[0] for row in rows]
@@ -102,11 +110,30 @@ def delete_source_replies(
         carry_edges=carry_edges, captured_uses=captured,
     )
     request_ids = sorted(set(request_ids) | set(selected.reply_request_ids), key=str)
+    from notalone.persistence.memory_upgrade import erase_memory_upgrades
+    erase_memory_upgrades(connection, owner_id=owner_id, removed_ids=removed_ids)
+    # 先使用仍完整的捕获身份选定并清除助手输入。该入口会清除学习依赖，
+    # 其中的广范围发布可能递归删除回复；不能先递归再复验旧捕获身份。
     erase_assistant_source_turns(
         connection, owner_id=owner_id, contact_id=None,
         removed_ids=removed_ids, reply_request_ids=request_ids,
         turn_ids=list(selected.turn_ids), carry_edges=carry_edges, captured_uses=captured,
     )
+    from notalone.persistence.skill_learning import erase_skill_learning
+    erase_skill_learning(connection, owner_id=owner_id,
+                         removed_ids=removed_ids | set(request_ids) | set(selected.turn_ids))
+    if not request_ids:
+        return
+    rows = connection.execute(
+        'SELECT id FROM public.reply_request WHERE owner_id=%s AND id=ANY(%s::uuid[])',
+        (owner_id, request_ids),
+    ).fetchall()
+    request_ids = [row['id'] if isinstance(row, dict) else row[0] for row in rows]
+    if not request_ids:
+        return
+    # 候选身份尚在时清除其样本及样本派生回复，避免长期偏好删除被样本留存豁免。
+    erased_by_samples = erase_reply_style_samples(connection, owner_id=owner_id, request_ids=request_ids)
+    request_ids = [identifier for identifier in request_ids if identifier not in erased_by_samples]
     if not request_ids:
         return
     invalidate_reply_keys(connection, owner_id=owner_id, request_ids=request_ids)

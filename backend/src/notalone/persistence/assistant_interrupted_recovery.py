@@ -12,7 +12,7 @@ from notalone.application.assistant_interrupted_recovery import RecoverInterrupt
 from notalone.application.assistant_session_service import (
     AssistantSessionConflict, AssistantSessionNotFound, AssistantSessionRejected,
 )
-from notalone.persistence.assistant_continuation import _reference_from_metadata, _request_from_input
+from notalone.persistence.assistant_continuation import _reference_from_metadata, _request_from_input, require_continuation_policy
 from notalone.persistence.assistant_generation_lifecycle import interrupt_generation_in_transaction, require_interruption_input
 from notalone.persistence.assistant_session_inputs import require_current_input
 from notalone.persistence.assistant_session_store import PostgresAssistantSessionStore, _active_binding, captured_generation_dependencies
@@ -39,6 +39,7 @@ def reserve_interrupted_generation_in_transaction(
         raise AssistantSessionRejected("generation_interrupted")
     if original["input_payload"] is None:
         raise AssistantSessionRejected("source_deleted")
+    require_continuation_policy(connection, scope, original['input_payload'])
     binding_id = require_interruption_input(
         connection, scope, session_id, original["id"], original["idempotency_key"], original["input_version_id"],
     )
@@ -54,6 +55,7 @@ def reserve_interrupted_generation_in_transaction(
     try:
         dependencies = set(original["dependency_ids"]) | captured_generation_dependencies(
             connection, scope, original["idempotency_key"], binding_id, original["reply_request_id"],
+            historical=True,
         )
     except ReplyStoreInvariantError:
         raise AssistantSessionRejected("source_unavailable") from None
@@ -121,6 +123,7 @@ def reserve_interrupted_generation_in_transaction(
         idempotency_key=command.request_key, content=original_request.content,
         continued_from_candidate_id=original_request.continued_from_candidate_id,
         skill_version_id=original_request.skill_version_id, skill_disabled=original_request.skill_disabled,
+        scene=original_request.scene,
         expected_input_version_id=original_request.expected_input_version_id or command.original_input_version_id,
         suggestion=original_request.suggestion, continuation=metadata,
         reference=_reference_from_metadata(connection, scope, session_id, metadata),

@@ -18,6 +18,7 @@ from notalone.memory_extraction.errors import (
     ExtractionRuntimeError,
 )
 from notalone.memory_extraction.models import ExtractedFact, ExtractionWindow
+from notalone.memory.events import EVENT_POSITION_SCHEMA
 from notalone.memory_extraction.verification import (
     MAX_SOURCE_VERIFICATION_CANDIDATES,
     SourceVerificationIssue,
@@ -286,7 +287,7 @@ def source_verification_contract(
 class LangChainSourceVerificationRuntime:
     """同一有界窗口内至多一次核验模型调用，不产生可执行工具能力。"""
 
-    __slots__ = ("_model", "_ledger", "_provider", "_verification_mode", "_prompt_profile")
+    __slots__ = ("_model", "_ledger", "_provider", "_verification_mode", "_prompt_profile", "_force_tool_choice")
 
     def __init__(
         self,
@@ -298,6 +299,7 @@ class LangChainSourceVerificationRuntime:
             SourceVerificationMode.LEGACY_V4
         ),
         prompt_profile: str = DEFAULT_PROMPT_PROFILE,
+        force_tool_choice: bool = True,
     ) -> None:
         if model is None:
             raise TypeError("必须显式注入来源核验模型。")
@@ -309,11 +311,18 @@ class LangChainSourceVerificationRuntime:
         self._verification_mode = SourceVerificationMode(verification_mode)
         source_verification_contract(self._verification_mode, prompt_profile=prompt_profile)
         self._prompt_profile = prompt_profile
+        if type(force_tool_choice) is not bool:
+            raise TypeError("工具选择策略必须明确为布尔值。")
+        self._force_tool_choice = force_tool_choice
 
     @property
     def verification_mode(self) -> SourceVerificationMode:
         """Flow显式接入受控模式，不按响应里是否有proof推断。"""
         return self._verification_mode
+
+    @property
+    def tool_choice_policy(self) -> str:
+        return "named" if self._force_tool_choice and not is_official_deepseek_flash(self._model) else "omitted"
 
     def verify(
         self,
@@ -327,14 +336,36 @@ class LangChainSourceVerificationRuntime:
             return ()
         called_at = datetime.now(timezone.utc)
         started = time.perf_counter()
+        invoked = False
+
+        def mark_invoked() -> None:
+            nonlocal invoked
+            invoked = True
+
         prompt, schema = source_verification_contract(self._verification_mode, prompt_profile=self._prompt_profile)
+        has_events = any(fact.event is not None for fact in facts)
+        if has_events:
+            schema = deepcopy(schema)
+            schema["properties"]["results"]["items"]["properties"]["event_verification"] = {
+                "type": ["object", "null"], "additionalProperties": False,
+                "properties": {
+                    "stage_verdict": {"type": "string", "enum": [item.value for item in SourceVerificationVerdict]},
+                    "occurrence_verdict": {"type": "string", "enum": [item.value for item in SourceVerificationVerdict]},
+                    "stage_evidence": {"type": "array", "maxItems": 8, "items": EVENT_POSITION_SCHEMA},
+                    "occurrence_evidence": {"type": "array", "maxItems": 8, "items": EVENT_POSITION_SCHEMA},
+                }, "required": ["stage_verdict", "occurrence_verdict", "stage_evidence", "occurrence_evidence"],
+            }
+            prompt += ("\n有event提案时另填event_verification：分别独立判断stage与occurrence_start/end，"
+                       "不能沿用正文verdict。每项给supported/uncertain/unsupported及本候选原来源的"
+                       "message_id/char_start/char_end；未知时间用uncertain，不能凭当前时间判发生。"
+                       "位置只定位，不代替含义核验；资料无event则该槽null。")
         try:
             message = invoke_traced_model(
                 self._model,
                 purpose="verification",
                 schema=schema,
                 # 官方 Flash 的思考模式不支持强制工具；保留默认 auto 和原返回校验。
-                tool_options={} if is_official_deepseek_flash(self._model) else {
+                tool_options={} if is_official_deepseek_flash(self._model) or not self._force_tool_choice else {
                     "tool_choice": SOURCE_VERIFICATION_SCHEMA["title"]
                 },
                 messages=[
@@ -347,13 +378,15 @@ class LangChainSourceVerificationRuntime:
                         "content": _verification_text(window, facts),
                     },
                 ],
+                on_invoke=mark_invoked,
             )
         except TraceWriteError:
             raise
         except Exception:
-            self._record_call(
-                window, called_at, started, LedgerOutcome.RUN_FAILED,
-            )
+            if invoked:
+                self._record_call(
+                    window, called_at, started, LedgerOutcome.RUN_FAILED,
+                )
             raise ExtractionRuntimeError("来源核验模型调用失败。") from None
         try:
             payloads = _verification_payloads(message)
@@ -460,5 +493,6 @@ def _verification_text(
             "speech_act": fact.speech_act.value,
             "assertion_status": fact.assertion_status.value,
             "figurative_type": fact.figurative_type.value,
+            **({"event": fact.event.to_payload()} if fact.event is not None else {}),
         } for index, fact in enumerate(facts)],
     }, ensure_ascii=False)

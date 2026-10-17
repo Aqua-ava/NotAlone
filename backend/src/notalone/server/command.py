@@ -221,6 +221,9 @@ def _build_sync_host(
     )
     if account_scope is None:
         return None
+    from notalone.application.skill_learning import SkillLearningService
+    from notalone.persistence.skill_learning import PostgresSkillLearningStore
+    learning = SkillLearningService(PostgresSkillLearningStore(database_url), task_host=task_host)
     engine = build_cli_full_sync_engine(
         database_url=database_url,
         owner_id=owner_id,
@@ -230,6 +233,7 @@ def _build_sync_host(
         # 旧的前台 Follow 兜底流程，不改变正式同步开关。
         message_events=EventBusMessagePublisher(
             events, owner_id=owner_id, task_host=task_host,
+            learning_notify=learning.notify,
         ),
     )
     return SyncHost(engine=engine, interval=interval)
@@ -293,9 +297,19 @@ def _build_task_host(
     from notalone.memory_extraction.adjudication_adapters import LangChainAdjudicationRuntime
     from notalone.memory_extraction.cli_support import build_extraction_components
     from notalone.memory_extraction.verification_adapters import LangChainSourceVerificationRuntime
+    from notalone.application.skill_learning import SkillLearningTaskRunner
+    from notalone.persistence.skill_learning import PostgresSkillLearningStore
+    from notalone.skills.learning_runtime import LangChainSkillProposalRuntime
+    from notalone.application.memory_upgrade import MemoryUpgradeTaskRunner
+    from notalone.application.memory_upgrade_runtime import UpgradeRuntimeBuilder
+    from notalone.persistence.memory_upgrade import PostgresMemoryUpgradeStore
+    from notalone.persistence.extraction_trace import PostgresExtractionTraceStore
+
+    upgrade_runtime = UpgradeRuntimeBuilder(database_url, dimension_release=dimension_release)
 
     def build_worker() -> BackgroundTaskWorker:
         extraction: ExtractionTaskRunner
+        components = None
         if model_priority is None:
             extraction = PostgresMemoryExtractionRunner(
                 database_url, dimension_release=dimension_release,
@@ -325,6 +339,11 @@ def _build_task_host(
                 # 生产 main 沿用 None；合成验收显式注入放行维度。
                 dimension_release=dimension_release,
             ), accounting)
+        def build_learning_runtime():
+            # 学习每次 invoke 只记一笔台账，独立模型禁止 SDK 隐式重发。
+            active = build_extraction_components(database_url, max_retries=0)
+            return LangChainSkillProposalRuntime(model=active.model, ledger=active.ledger)
+
         return BackgroundTaskWorker(
             repository=PostgresBackgroundTaskRepository(database_url),
             extraction_runner=extraction,
@@ -332,6 +351,15 @@ def _build_task_host(
             index_repository=PostgresContactMemoryIndexRepository(database_url),
             deletion_repository=PostgresSourceDeletionRepository(database_url),
             model_priority=model_priority,
+            upgrade_runner=MemoryUpgradeTaskRunner(
+                store=PostgresMemoryUpgradeStore(database_url, algorithm_provider=upgrade_runtime.identity),
+                runtime_builder=upgrade_runtime, trace_store=PostgresExtractionTraceStore(database_url),
+                model_priority=model_priority, dimension_release=dimension_release,
+            ),
+            learning_runner=SkillLearningTaskRunner(
+                store=PostgresSkillLearningStore(database_url), runtime_builder=build_learning_runtime,
+                model_priority=model_priority,
+            ),
         )
 
     def build_lock_connection():

@@ -16,7 +16,7 @@ from notalone.persistence.assistant_session_store import _dependencies_available
 from notalone.persistence.locks import lock_owner_scope
 from notalone.persistence.style_sample_store import require_reply_sources_current
 from notalone.reply.errors import ReplyStoreInvariantError
-from notalone.reply.interface import CandidateMessage
+from notalone.reply.interface import CandidateMessage, ReplyBasisChange
 from notalone.scopes import ContactScope
 
 
@@ -74,6 +74,7 @@ class AssistantCandidateHistory:
     default_display_version_id: UUID
     selected_version_id: UUID | None
     versions: tuple[AssistantCandidateVersion, ...]
+    basis_changes: tuple[ReplyBasisChange, ...] = ()
 
 
 @dataclass(frozen=True, slots=True, repr=False)
@@ -181,10 +182,11 @@ def _require_candidate(
         raise AssistantCandidateVersionConflict("request_invalidated")
     if row["turn_state"] != "completed" or row["request_state"] != "completed" or row["input_payload"] is None:
         raise AssistantCandidateVersionConflict("candidate_unavailable")
-    if not _dependencies_available(connection, scope, set(row["dependency_ids"])):
+    if not _dependencies_available(connection, scope, set(row["dependency_ids"]), historical=True):
         raise AssistantCandidateVersionConflict("source_unavailable")
     try:
-        require_reply_sources_current(connection, owner_id=scope.owner_id, request_id=row["reply_request_id"])
+        require_reply_sources_current(connection, owner_id=scope.owner_id,
+                                      request_id=row["reply_request_id"], historical=True)
     except ReplyStoreInvariantError:
         raise AssistantCandidateVersionConflict("source_unavailable") from None
     return row
@@ -227,28 +229,32 @@ def _history(
         row["requirements"], row["created_at"],
     ) for row in rows)
     if not records or records[0].version_number != 0:
-        raise AssistantCandidateVersionPersistenceError("候选原版引用缺失。")
+        # 原版直接来自权威候选；只读历史不为它补写版本引用。
+        records = (AssistantCandidateVersion(
+            candidate["id"], 0, None, original_group, None, candidate["created_at"],
+        ), *records)
     chosen = connection.execute("""
         SELECT version_id FROM public.assistant_candidate_selection
         WHERE owner_id=%s AND contact_id=%s AND session_id=%s AND candidate_id=%s AND is_current
     """, (scope.owner_id, scope.contact_id, session_id, candidate["id"])).fetchone()
+    from notalone.persistence.reply_basis_changes import read_reply_basis_changes
     return AssistantCandidateHistory(
         session_id, candidate["turn_id"], candidate["id"], candidate["reply_request_id"],
         candidate["ordinal"] + 1, records[-1].version_id,
         chosen["version_id"] if chosen is not None else None, records,
+        read_reply_basis_changes(connection, scope, candidate["reply_request_id"]),
     )
 
 
 def read_candidate_versions(
     connection: Any, scope: ContactScope, session_id: UUID, candidate_id: UUID,
 ) -> AssistantCandidateHistory:
-    """可在调用方既有事务重读；复用同一connection的owner锁及来源守卫。"""
+    """可在调用方只读事务重读；复用同一connection的owner锁及来源守卫。"""
     _validate_scope(scope, session_id, candidate_id)
     lock_owner_scope(connection, owner_id=scope.owner_id)
     with connection.cursor(row_factory=dict_row) as cursor:
         _require_session(cursor, scope, session_id)
         candidate = _require_candidate(cursor, scope, session_id, candidate_id)
-        _ensure_original(cursor, scope, session_id, candidate)
         return _history(cursor, scope, session_id, candidate)
 
 

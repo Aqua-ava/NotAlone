@@ -20,6 +20,7 @@ export class StyleSampleController {
   private scope: Scope | undefined;
   private pending: AbortController | undefined;
   private operation = 0;
+  private pendingExpressionPreferenceDeletions = 0;
   private retry: { signature: string; key: string } | undefined;
   private copied: CopyOrigin | undefined;
   private manualOrigin: CopyOrigin | undefined;
@@ -36,6 +37,7 @@ export class StyleSampleController {
   private readonly deletedCopies = new Set<string>();
   private readonly rejectedCopyDigests = new Set<string>();
   private readonly listeners = new Set<(state: StyleSampleState) => void>();
+  private readonly deletionListeners = new Set<(phase: 'started' | 'settled') => void>();
   constructor(private readonly backend: BackendHost, private readonly contacts: ContactSession,
     private readonly replies: ReplySession) {
     contacts.onStateChanged(() => this.synchronize());
@@ -46,6 +48,7 @@ export class StyleSampleController {
   }
   getState() { return structuredClone(this.state); }
   onStateChanged(listener: (state: StyleSampleState) => void) { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
+  onDeletion(listener: (phase: 'started' | 'settled') => void) { this.deletionListeners.add(listener); return () => { this.deletionListeners.delete(listener); }; }
   private synchronize() {
     const contacts = this.contacts.getState(); const generation = this.backend.getConnectionGeneration();
     const next = generation !== undefined && contacts.selectedContactId !== null && ['ready', 'loading'].includes(contacts.directoryPhase)
@@ -54,7 +57,8 @@ export class StyleSampleController {
     if (next?.contactId === this.scope?.contactId && next?.scopeRevision === this.scope?.scopeRevision && next?.generation === this.scope?.generation) return;
     ++this.operation; this.pending?.abort(); this.pending = undefined; this.scope = next; this.retry = undefined;
     this.resetManualOrigin();
-    this.publish({ contactId: next?.contactId ?? null, scopeRevision: contacts.scopeRevision, samples: [], busy: false, error: null, phase: 'idle' });
+    this.publish({ contactId: next?.contactId ?? null, scopeRevision: contacts.scopeRevision, samples: [],
+      busy: this.pendingExpressionPreferenceDeletions > 0, error: null, phase: 'idle' });
   }
   private assertScope(selection: ContactSelection): Scope {
     this.synchronize();
@@ -62,7 +66,7 @@ export class StyleSampleController {
     return this.scope;
   }
   async refresh(selection: ContactSelection) {
-    const scope = this.assertScope(selection); if (this.state.busy) return;
+    const scope = this.assertScope(selection); if (this.pendingExpressionPreferenceDeletions > 0 || this.state.busy) return;
     const operation = ++this.operation; this.pending?.abort(); const pending = this.pending = new AbortController();
     this.publish({ phase: 'loading', samples: [], error: null });
     try {
@@ -77,8 +81,18 @@ export class StyleSampleController {
     for (const key of this.knownOrigins.keys()) this.blockedCopies.add(key);
     ++this.operation; this.pending?.abort(); this.pending = undefined; this.retry = undefined;
     this.resetManualOrigin();
-    this.publish({ samples: [], busy: false, phase: 'idle', error: null, erasureRevision: this.state.erasureRevision + 1 });
+    this.publish({ samples: [], busy: this.pendingExpressionPreferenceDeletions > 0, phase: 'idle', error: null,
+      erasureRevision: this.state.erasureRevision + 1 });
     if (this.scope) await this.refresh(this.scope);
+  }
+  beginExpressionPreferenceDeletion(): void {
+    ++this.pendingExpressionPreferenceDeletions;
+    // 删除尚未结算时只撤下投影，不能提前重读后端仍可能保留的旧样本。
+    void this.invalidateSource('');
+  }
+  async revalidateExpressionPreferences(): Promise<void> {
+    this.pendingExpressionPreferenceDeletions = Math.max(0, this.pendingExpressionPreferenceDeletions - 1);
+    if (this.pendingExpressionPreferenceDeletions === 0) await this.invalidateSource('');
   }
   private onReplyStateChanged() {
     this.synchronize();
@@ -446,6 +460,7 @@ export class StyleSampleController {
     const operation = ++this.operation; this.pending?.abort(); const pending = this.pending = new AbortController();
     this.resetManualOrigin();
     this.retry = undefined; this.publish({ busy: true, samples: [], error: null, erasureRevision: this.state.erasureRevision + 1 });
+    for (const listener of this.deletionListeners) listener('started');
     try {
       const response = await this.backend.requestJson({ method: 'DELETE', path: `/api/contacts/${scope.contactId}/style-samples/${selection.sampleId}`, signal: pending.signal, timeoutMs: 5000 });
       if (!this.current(scope, operation) || response.generation !== scope.generation) return;
@@ -453,7 +468,10 @@ export class StyleSampleController {
       await this.replies.revalidateDeletedSource(scope.contactId);
       if (this.current(scope, operation)) await this.refresh(selection);
     } catch { if (this.current(scope, operation)) this.publish({ busy: false, phase: 'failed', samples: [], error: '删除结果尚未确认，请刷新目录后重试。' }); }
-    finally { if (this.pending === pending) this.pending = undefined; }
+    finally {
+      if (this.pending === pending) this.pending = undefined;
+      for (const listener of this.deletionListeners) listener('settled');
+    }
   }
   private current(scope: Scope, operation: number) { return this.scope === scope && operation === this.operation && scope.generation === this.backend.getConnectionGeneration(); }
   private publish(update: Partial<StyleSampleState>) { this.state = { ...this.state, ...update, revision: this.state.revision + 1 }; for (const listener of this.listeners) listener(this.getState()); }

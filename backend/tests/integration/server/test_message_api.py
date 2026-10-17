@@ -7,6 +7,7 @@ JSON 结构、active 来源过滤、跨联系人/跨 owner 拒绝与引用消息
 
 from __future__ import annotations
 
+import json
 import os
 import unittest
 from datetime import datetime, timedelta, timezone
@@ -14,6 +15,8 @@ from uuid import UUID, uuid4
 
 import psycopg
 
+from notalone.persistence.message_stream import PostgresMessageStream
+from notalone.scopes import ContactScope
 from notalone.server.app import create_app
 from notalone.server.testing import InProcessClient
 
@@ -579,6 +582,187 @@ class MessageStreamApiTest(unittest.TestCase):
             [str(message_ids[0])],
         )
         self.assertIsNone(third_payload["next_cursor"])
+
+    def test_bounded_page_enrichment_finishes_without_message_statistics(self) -> None:
+        message_ids = self._insert_plain_messages(count=505)
+        with psycopg.connect(TEST_DATABASE_URL) as connection:
+            statistics = connection.execute(
+                "SELECT relname,last_analyze,last_autoanalyze FROM pg_stat_all_tables "
+                "WHERE schemaname='public' AND relname=ANY(%s) ORDER BY relname",
+                (["message", "message_source_ref", "source_document", "wechat_message_metadata",
+                  "local_wechat_observation"],),
+            ).fetchall()
+        self.assertEqual(len(statistics), 5)
+        if any(analyzed is not None or autoanalyzed is not None for _, analyzed, autoanalyzed in statistics):
+            self.fail("无统计回归的前置条件不成立；须用尚未ANALYZE的自有新测试库，不能将此结果算作性能复现。")
+
+        class BoundedStream(PostgresMessageStream):
+            def _connect(inner):
+                connection = super()._connect()
+                try:
+                    # 仅约束此测试读取事务，不修改产品HTTP或数据库永久设置。
+                    connection.execute("SET LOCAL statement_timeout='3s'")
+                    return connection
+                except BaseException:
+                    connection.close()
+                    raise
+
+        page = BoundedStream(TEST_DATABASE_URL).page_messages(
+            scope=ContactScope(self.owner_id, self.contact_id), limit=50,
+        )
+        self.assertEqual([message.message_id for message in page.messages], list(reversed(message_ids[-50:])))
+        self.assertEqual(page.next_cursor, message_ids[-50])
+
+    def _insert_stream_source(self, connection, *, owner_id=None, contact_id=None, status="active") -> UUID:
+        source_id = uuid4()
+        connection.execute(
+            "INSERT INTO public.source_document "
+            "(id,owner_id,contact_id,source_type,file_name,content_sha256,record_count,status) "
+            "VALUES (%s,%s,%s,'wechat_jsonl','synthetic-page.jsonl',%s,10,%s)",
+            (source_id, owner_id or self.owner_id, contact_id or self.contact_id, uuid4().hex * 2, status),
+        )
+        return source_id
+
+    def test_cursor_preserves_same_time_null_and_active_scope(self) -> None:
+        same_time = datetime(2027, 6, 1, tzinfo=timezone.utc)
+        other_contact = uuid4()
+        with psycopg.connect(TEST_DATABASE_URL) as connection:
+            connection.execute("INSERT INTO public.contact(owner_id,id,display_name) VALUES (%s,%s,%s)",
+                               (self.owner_id, other_contact, "另一合成分页联系人"))
+            active = self._insert_stream_source(connection)
+            inactive = self._insert_stream_source(connection, status="delete_requested")
+            other_source = self._insert_stream_source(connection, contact_id=other_contact)
+            foreign_source = self._insert_stream_source(
+                connection, owner_id=self.other_owner_id, contact_id=self.other_contact_id,
+            )
+            cases = (
+                (40, self.owner_id, self.contact_id, active, same_time, True),
+                (30, self.owner_id, self.contact_id, active, same_time, True),
+                (20, self.owner_id, self.contact_id, active, None, True),
+                (10, self.owner_id, self.contact_id, active, None, True),
+                (80, self.owner_id, self.contact_id, inactive, same_time + timedelta(days=1), True),
+                (70, self.owner_id, self.contact_id, active, same_time + timedelta(days=1), False),
+                (90, self.owner_id, other_contact, other_source, same_time + timedelta(days=1), True),
+                (100, self.other_owner_id, self.other_contact_id, foreign_source, same_time + timedelta(days=1), True),
+            )
+            for number, owner, contact, source, occurred_at, has_source in cases:
+                _insert_message(connection=connection, owner_id=owner, contact_id=contact,
+                    message_id=UUID(int=number), source_id=source, speaker="contact", message_type="text",
+                    text_content=f"合成分页消息{number}", media_placeholder=None, occurred_at=occurred_at,
+                    external_server_id=f"synthetic-page-{number}", include_source=has_source)
+        scope = ContactScope(self.owner_id, self.contact_id)
+        stream = PostgresMessageStream(TEST_DATABASE_URL)
+        first = stream.page_messages(scope=scope, limit=2)
+        self.assertEqual([message.message_id for message in first.messages], [UUID(int=40), UUID(int=30)])
+        self.assertEqual(first.next_cursor, UUID(int=30))
+        second = stream.page_messages(scope=scope, limit=1, before_message_id=first.next_cursor)
+        self.assertEqual([message.message_id for message in second.messages], [UUID(int=20)])
+        self.assertEqual(second.next_cursor, UUID(int=20))
+        last = stream.page_messages(scope=scope, limit=1, before_message_id=second.next_cursor)
+        self.assertEqual([message.message_id for message in last.messages], [UUID(int=10)])
+        self.assertIsNone(last.next_cursor)
+        tied = stream.page_messages(scope=scope, limit=3, before_message_id=UUID(int=40))
+        self.assertEqual([message.message_id for message in tied.messages], [UUID(int=30), UUID(int=20), UUID(int=10)])
+        self.assertIsNone(tied.next_cursor)
+        self.assertTrue(all(message.scope == scope for page in (first, second, last, tied) for message in page.messages))
+
+    def test_quote_expansion_keeps_outer_page_bound_with_duplicate_server_ids(self) -> None:
+        when = datetime(2027, 7, 1, tzinfo=timezone.utc)
+        targets = {UUID(int=101), UUID(int=102), UUID(int=103)}
+        other_contact = uuid4()
+        with psycopg.connect(TEST_DATABASE_URL) as connection:
+            connection.execute("INSERT INTO public.contact(owner_id,id,display_name) VALUES (%s,%s,%s)",
+                               (self.owner_id, other_contact, "另一合成引用联系人"))
+            source = self._insert_stream_source(connection)
+            for number, owner, contact in ((101, self.owner_id, self.contact_id),
+                (102, self.owner_id, self.contact_id), (103, self.owner_id, self.contact_id),
+                (104, self.owner_id, other_contact), (105, self.other_owner_id, self.other_contact_id)):
+                target_source = self._insert_stream_source(
+                    connection, owner_id=owner, contact_id=contact,
+                )
+                _insert_message(connection=connection, owner_id=owner, contact_id=contact,
+                    message_id=UUID(int=number), source_id=target_source, speaker="contact", message_type="text",
+                    text_content="合成引用目标", media_placeholder=None, occurred_at=when,
+                    external_server_id="synthetic-shared-server")
+            for number, quoted_id, text in (
+                (204, "synthetic-unresolved-primary", None),
+                (203, "synthetic-shared-server", "合成共同引用"),
+                (202, "synthetic-vanished", "引用目标已缺失。"),
+            ):
+                quote = {"id": {"server_id_str": quoted_id}}
+                if text is not None:
+                    quote["text"] = text
+                _insert_message(connection=connection, owner_id=self.owner_id, contact_id=self.contact_id,
+                    message_id=UUID(int=number), source_id=source, speaker="user", message_type="quote",
+                    text_content=f"合成引用回复{number}", media_placeholder=None,
+                    occurred_at=when + timedelta(minutes=number), external_server_id=f"synthetic-quote-{number}",
+                    raw_payload=json.dumps({"quote": quote}))
+            # 同一消息多来源时仍优先有引用正文的记录，不能因先分页改变引用选择。
+            additional_source = self._insert_stream_source(connection)
+            connection.execute(
+                "INSERT INTO public.message_source_ref "
+                "(message_id,owner_id,contact_id,source_kind,source_document_id,source_locator,raw_payload) "
+                "VALUES (%s,%s,%s,'source_document',%s,'synthetic-extra-quote',%s::jsonb)",
+                (UUID(int=204), self.owner_id, self.contact_id, additional_source, json.dumps({"quote": {
+                    "id": {"server_id_str": "synthetic-shared-server"}, "text": "合成共同引用",
+                }})),
+            )
+
+        row_counts = []
+
+        class ObservedCursor:
+            def __init__(inner, cursor):
+                inner.cursor = cursor
+
+            def fetchone(inner):
+                return inner.cursor.fetchone()
+
+            def fetchall(inner):
+                rows = inner.cursor.fetchall()
+                row_counts.append(len(rows))
+                return rows
+
+        class ObservedConnection:
+            def __init__(inner, connection):
+                inner.connection = connection
+
+            def __enter__(inner):
+                inner.connection.__enter__()
+                return inner
+
+            def __exit__(inner, *args):
+                return inner.connection.__exit__(*args)
+
+            def execute(inner, query, parameters):
+                return ObservedCursor(inner.connection.execute(query, parameters))
+
+        class ObservedStream(PostgresMessageStream):
+            def _connect(inner):
+                return ObservedConnection(super()._connect())
+
+        stream = ObservedStream(TEST_DATABASE_URL)
+        scope = ContactScope(self.owner_id, self.contact_id)
+        first = stream.page_messages(scope=scope, limit=2)
+        self.assertEqual(row_counts[-1], 3, "引用展开后的数据库结果也只能读取limit+1行。")
+        self.assertEqual([message.message_id for message in first.messages], [UUID(int=204)] * 2)
+        self.assertEqual(first.next_cursor, UUID(int=204))
+        self.assertEqual(len({message.quoted.target_message_id for message in first.messages}), 2)
+        self.assertTrue({message.quoted.target_message_id for message in first.messages} <= targets)
+        all_targets = stream.page_messages(scope=scope, limit=3)
+        self.assertEqual(row_counts[-1], 4)
+        self.assertEqual([message.message_id for message in all_targets.messages], [UUID(int=204)] * 3)
+        self.assertEqual({message.quoted.target_message_id for message in all_targets.messages}, targets)
+        self.assertTrue(all(message.quoted.text == "合成共同引用" for message in all_targets.messages))
+        second = stream.page_messages(scope=scope, limit=2, before_message_id=first.next_cursor)
+        self.assertEqual(row_counts[-1], 3)
+        self.assertEqual([message.message_id for message in second.messages], [UUID(int=203)] * 2)
+        self.assertEqual(second.next_cursor, UUID(int=203))
+        missing = stream.page_messages(scope=scope, limit=1, before_message_id=second.next_cursor)
+        self.assertEqual(row_counts[-1], 2)
+        self.assertEqual(missing.messages[0].message_id, UUID(int=202))
+        self.assertEqual(missing.messages[0].quoted.text, "引用目标已缺失。")
+        self.assertIsNone(missing.messages[0].quoted.target_message_id)
+        self.assertEqual(missing.next_cursor, UUID(int=202))
 
 
 if __name__ == "__main__":

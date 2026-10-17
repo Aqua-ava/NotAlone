@@ -57,6 +57,7 @@ def _content(payload: dict[str, Any]) -> ExplorationInput:
             requirements=payload["requirements"], answer=payload["answer"],
             confirmed_intent=payload["confirmed_intent"], skill_mode=payload["skill_mode"],
             skill_version_id=UUID(payload["skill_version_id"]) if payload["skill_version_id"] else None,
+            skill_scene=payload.get('skill_scene'),
         )
     except (KeyError, TypeError, ValueError):
         raise ExplorationStale("探索输入记录无效。") from None

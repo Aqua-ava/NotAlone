@@ -177,7 +177,12 @@ class RewriteHistoryPermissionHttpTest(CoreBusinessFlowFixture, unittest.TestCas
                     "include_relationship_context": True,
                 })
                 self.assertEqual({item["kind"] for item in evidence},
-                                 {"user_draft", "message", "confirmed_memory", "owner_memory"})
+                                 {"user_draft", "message", "confirmed_memory", "owner_memory", "pending_candidate"})
+                pending = [item for item in evidence if item["kind"] == "pending_candidate"]
+                self.assertTrue(pending)
+                self.assertTrue(all(item["snapshot_status"] == "pending" and
+                                    item["selection_reason"].startswith("未确认候选、仅供参考、不得当作事实。")
+                                    for item in pending))
                 self.assertTrue(foreign_ids.isdisjoint(
                     item["evidence_id"] for item in evidence
                 ))

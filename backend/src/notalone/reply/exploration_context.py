@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, dataclass
+from datetime import datetime
 from hashlib import sha256
 from typing import Any, Literal
 from uuid import UUID
@@ -35,11 +36,17 @@ class EvidenceSnapshot:
     source_ids: tuple[UUID, ...]
     fingerprint: str
     manual_contact: bool = False
+    timing: MemoryTiming = MemoryTiming()
+    valid_at: datetime | None = None
+    invalid_at: datetime | None = None
 
     @property
     def model_payload(self) -> dict[str, Any]:
         return {"evidence_id": str(self.evidence_id), "kind": self.kind, "text": self.text,
-                "source_ids": [str(source) for source in self.source_ids]}
+                "source_ids": [str(source) for source in self.source_ids],
+                "timing": self.timing.to_payload(),
+                "valid_at": self.valid_at.isoformat() if self.valid_at else None,
+                "invalid_at": self.invalid_at.isoformat() if self.invalid_at else None}
 
     @property
     def storage_payload(self) -> dict[str, Any]:
@@ -95,6 +102,8 @@ class ExplorationEvidence:
             kind="message" if message else "confirmed_memory", text=item.text[:1500 if message else 300],
             source_ids=item.source_ids, fingerprint=_fingerprint(item),
             manual_contact=not message and item.adoption_method == "manual",
+            timing=MemoryTiming.from_source_times((item.occurred_at,)) if message else item.timing,
+            valid_at=item.valid_at, invalid_at=item.invalid_at,
         )
 
     @staticmethod
@@ -129,7 +138,8 @@ class ExplorationEvidence:
                 raise ValueError()
             snapshots = []
             for item in values:
-                if (set(item) != {"evidence_id", "kind", "text", "source_ids", "fingerprint", "manual_contact"}
+                legacy = {"evidence_id", "kind", "text", "source_ids", "fingerprint", "manual_contact"}
+                if (set(item) not in (legacy, legacy | {"timing", "valid_at", "invalid_at"})
                     or item["kind"] not in ("message", "confirmed_memory")
                     or not isinstance(item["text"], str) or not item["text"].strip()
                     or len(item["text"]) > (1500 if item["kind"] == "message" else 300)
@@ -140,7 +150,10 @@ class ExplorationEvidence:
                     raise ValueError()
                 snapshots.append(EvidenceSnapshot(scope, UUID(item["evidence_id"]), item["kind"], item["text"],
                                                   tuple(UUID(source) for source in item["source_ids"]),
-                                                  item["fingerprint"], item["manual_contact"]))
+                                                  item["fingerprint"], item["manual_contact"],
+                                                  MemoryTiming.from_payload(item.get("timing")),
+                                                  _restore_time(item.get("valid_at")),
+                                                  _restore_time(item.get("invalid_at"))))
             if len({item.evidence_id for item in snapshots}) != len(snapshots):
                 raise ValueError()
             return tuple(snapshots)
@@ -162,3 +175,14 @@ class ExplorationEvidence:
                         if isinstance(item, RetrievedMessage) else item.timing), model_visible=False,
             ))
         return tuple(dependencies)
+
+
+def _restore_time(value: object) -> datetime | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError("探索区间时间无效。")
+    result = datetime.fromisoformat(value)
+    if result.tzinfo is None or result.utcoffset() is None:
+        raise ValueError("探索区间时间缺少时区。")
+    return result

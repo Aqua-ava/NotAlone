@@ -32,5 +32,7 @@ def assistant_discussion_payload(discussion: DiscussionContext) -> dict[str, Any
             "is_default_display": item.is_default_display,
             "is_explicitly_selected": item.is_explicitly_selected,
             "is_sent": False,
+            **({"basis_changes": [change.to_payload() for change in item.basis_changes]}
+               if item.basis_changes else {}),
         } for item in discussion.items],
     }

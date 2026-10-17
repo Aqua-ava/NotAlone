@@ -57,7 +57,7 @@ def require_interruption_input(
             raise AssistantSessionRejected("source_deleted")
         if row["conversation_binding_id"] != row["turn_binding_id"]:
             raise AssistantSessionRejected("binding_changed")
-        if not _dependencies_available(cursor, scope, set(row["dependency_ids"]) | set(row["turn_dependencies"])):
+        if not _dependencies_available(cursor, scope, set(row["dependency_ids"]) | set(row["turn_dependencies"]), historical=True):
             raise AssistantSessionRejected("source_unavailable")
         return row["conversation_binding_id"]
 
@@ -101,7 +101,7 @@ def interrupt_generation_in_transaction(
             if request["conversation_binding_id"] != binding_id:
                 raise AssistantSessionRejected("binding_changed")
             try:
-                require_reply_sources_current(cursor, owner_id=scope.owner_id, request_id=request["id"])
+                require_reply_sources_current(cursor, owner_id=scope.owner_id, request_id=request["id"], historical=True)
             except ReplyStoreInvariantError:
                 raise AssistantSessionRejected("source_unavailable") from None
         if request is not None and request["state"] == "completed":

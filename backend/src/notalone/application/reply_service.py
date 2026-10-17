@@ -70,6 +70,7 @@ class ReplyService:
         "_conversation_factory",
         "_reply",
         "_exploration",
+        "_skill_review",
     )
 
     def __init__(
@@ -79,11 +80,17 @@ class ReplyService:
         conversation_factory: Callable[[ConversationBinding], ConversationPort],
         reply: ReplyPort,
         exploration: ReplyExplorationService | None = None,
+        skill_review=None,
     ) -> None:
         self._binding_lookup = binding_lookup
         self._conversation_factory = conversation_factory
         self._reply = reply
         self._exploration = exploration
+        self._skill_review = skill_review
+
+    @property
+    def skill_review(self):
+        return self._skill_review
 
     @property
     def exploration(self) -> ReplyExplorationService | None:
@@ -167,6 +174,7 @@ class ReplyServiceRequest:
     skill_disabled: bool = False
     expected_input_version_id: UUID | None = None
     suggestion: SuggestionReference | None = None
+    scene: str | None = None
 
     def build_command(
         self,
@@ -207,6 +215,7 @@ class ReplyServiceRequest:
             content=content,
             continued_from_candidate_id=self.continued_from_candidate_id,
             skill=skill,
+            scene=self.scene,
         )
 
 

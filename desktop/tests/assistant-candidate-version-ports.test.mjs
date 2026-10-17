@@ -1761,6 +1761,7 @@ for (const operation of ['read', 'save', 'select']) {
 test('真实JsonClient只保留稳定终态reason白名单，不暴露任意后端字符串', async (t) => {
   const f = await fixture();
   for (const reason of ['request_invalidated', 'candidate_unavailable', 'source_unavailable',
+    'skill_policy_changed',
     'target_message_unavailable', 'edit_key_conflict', 'selection_key_conflict', '原始 SQL 与合成私密正文']) {
     const transport = await conflictTransport(t, f, { error: 'assistant_candidate_version_conflict', reason }, () => true);
     await assert.rejects(transport.client.perform({ method: 'GET', path: '/api/synthetic-version-contract' }), (error) => {
@@ -1768,6 +1769,7 @@ test('真实JsonClient只保留稳定终态reason白名单，不暴露任意后�
       assert.equal(error.kind, 'response');
       assert.equal(error.status, 409);
       assert.equal(error.reason, ['request_invalidated', 'candidate_unavailable', 'source_unavailable',
+        'skill_policy_changed',
         'target_message_unavailable'].includes(reason) ? reason : undefined);
       assert(!JSON.stringify(error).includes('原始 SQL 与合成私密正文'));
       return true;

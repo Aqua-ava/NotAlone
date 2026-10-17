@@ -497,6 +497,8 @@ def _trace_versions() -> dict[str, str | int]:
                 "cli_support",
                 "models",
                 "adapters",
+                "grounded",
+                "grounded_adapter",
                 "adjudication_adapters",
                 "verification_adapters",
             )
@@ -506,6 +508,9 @@ def _trace_versions() -> dict[str, str | int]:
         ).hexdigest(),
         "memory_timing": hashlib.sha256(
             (directory.parent / "memory" / "timing.py").read_bytes()
+        ).hexdigest(),
+        "memory_events": hashlib.sha256(
+            (directory.parent / "memory" / "events.py").read_bytes()
         ).hexdigest(),
     }
 

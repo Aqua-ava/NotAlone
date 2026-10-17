@@ -3,8 +3,13 @@
 from __future__ import annotations
 
 import builtins
+from asyncio import current_task
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
+from functools import wraps
+from threading import get_ident
 from typing import Any
 from uuid import UUID
 
@@ -25,30 +30,50 @@ from notalone.reply.store import ReplyRequest
 from notalone.scopes import ContactScope
 
 
-def manual_owner_evidence_is_current(connection: Any, *, owner_id: UUID, evidence_id: UUID,
-                                     source_ids: tuple[UUID, ...], text: str | None = None) -> bool:
-    """仅对真实手工本人记忆接受已实现的owner哨兵，不豁免任意owner引用。"""
-    if source_ids != (owner_id,):
-        return False
-    row = connection.execute("""
-        SELECT text_content FROM public.owner_memory WHERE owner_id=%s AND id=%s
-          AND adoption_method='manual' AND status='active' AND source_ids=%s::uuid[]
-    """, (owner_id, evidence_id, [owner_id])).fetchone()
-    if row is None:
-        return False
-    return text is None or (row["text_content"] if isinstance(row, dict) else row[0]) == text
+def reply_evidence_sources(
+    connection: Any, *, owner_id: UUID, evidence_id: UUID, kind: str,
+    source_ids: tuple[UUID, ...], text: str | None = None,
+    historical: bool = False,
+) -> set[UUID]:
+    """仅剔除已复验的本人手录归属引用；混合来源逐项保留。"""
+    if kind != "owner_memory" or owner_id not in source_ids:
+        return set(source_ids)
+    from notalone.persistence.owner_memory_store import owner_memory_source_dependencies
+
+    try:
+        return set(owner_memory_source_dependencies(
+            connection, owner_id=owner_id, memory_id=evidence_id,
+            source_ids=source_ids, text=text,
+            historical=historical,
+        ))
+    except PermissionError:
+        raise ReplyStoreInvariantError("本人资料来源已变化。") from None
 
 
 def reply_original_sources(connection: Any, request: ReplyRequest, context: ReplyContext) -> set[UUID]:
     """同一结果提交事务中记录全部实际原始来源，包括各类记忆的消息依赖。"""
-    declared = {source_id for item in context.evidence for source_id in item.source_ids
-                if not (item.kind == 'owner_memory' and manual_owner_evidence_is_current(
-                    connection, owner_id=request.scope.owner_id, evidence_id=item.evidence_id,
-                    source_ids=item.source_ids, text=item.text))}
+    declared: set[UUID] = set()
+    for item in context.evidence:
+        declared.update(reply_evidence_sources(
+            connection, owner_id=request.scope.owner_id, evidence_id=item.evidence_id,
+            kind=item.kind, source_ids=item.source_ids, text=item.text,
+            historical=item.navigation is not None and item.timing.current_status == "historical",
+        ))
     declared.update(item.evidence_id for item in context.evidence if item.kind == "message")
     declared.update(identifier for item in context.style_references for identifier in item.source_ids)
+    declared.update(identifier for item in context.expression_preferences for identifier in item.source_ids)
     if not declared:
         return set()
+    navigation_sources = {identifier for item in context.evidence if item.model_visible and item.navigation
+                          for identifier in item.navigation.dependency_ids}
+    # 导航依赖已在同连接复验为原窗口；仅解析其已登记原始来源身份，
+    # 不拿当前新引用补旧证明。候选/决定等身份由快照删除依赖另行保存。
+    if navigation_sources:
+        rows = connection.execute("""
+            SELECT id FROM public.source_document WHERE owner_id=%s AND id=ANY(%s::uuid[]) AND status='active'
+            UNION SELECT id FROM public.local_wechat_observation WHERE owner_id=%s AND id=ANY(%s::uuid[])
+        """, (request.scope.owner_id, list(navigation_sources), request.scope.owner_id, list(navigation_sources))).fetchall()
+        declared.update(row["id"] if isinstance(row, dict) else row[0] for row in rows)
     raw = connection.execute("""
         SELECT source.id FROM public.source_document AS source
         WHERE source.owner_id=%s AND source.id=ANY(%s::uuid[]) AND source.status='active'
@@ -102,11 +127,14 @@ def _reply_ancestor_ids(connection: Any, *, owner_id: UUID, request_id: UUID) ->
     return [row["id"] if isinstance(row, dict) else row[0] for row in rows]
 
 
-def _request_needs_source_snapshot(connection: Any, *, owner_id: UUID, request_id: UUID) -> bool:
+def _request_needs_source_snapshot(
+    connection: Any, *, owner_id: UUID, request_id: UUID, historical: bool,
+) -> bool:
     rows = connection.execute("""
         SELECT evidence_id,kind,source_ids,evidence_text FROM public.reply_context_evidence
         WHERE owner_id=%s AND reply_request_id=%s
     """, (owner_id, request_id)).fetchall()
+    needs_snapshot = False
     for row in rows:
         identifier, kind, source_ids, text = (tuple(row[key] for key in ('evidence_id', 'kind', 'source_ids', 'evidence_text'))
                                              if isinstance(row, dict) else row)
@@ -114,13 +142,13 @@ def _request_needs_source_snapshot(connection: Any, *, owner_id: UUID, request_i
             sources = tuple(UUID(str(value)) for value in source_ids)
         except (ValueError, TypeError):
             raise ReplyStoreInvariantError("旧回复来源记录无效。") from None
-        if kind == 'owner_memory' and manual_owner_evidence_is_current(
-            connection, owner_id=owner_id, evidence_id=identifier, source_ids=sources, text=text,
-        ):
-            continue
-        if kind == 'message' or sources:
-            return True
-    return False
+        actual_sources = reply_evidence_sources(
+            connection, owner_id=owner_id, evidence_id=identifier, kind=kind,
+            source_ids=sources, text=text, historical=historical,
+        )
+        if kind == 'message' or actual_sources:
+            needs_snapshot = True
+    return needs_snapshot
 
 
 @dataclass(slots=True, repr=False)
@@ -128,42 +156,85 @@ class _ReplySourceValidation:
     """仅一次同步复验内的ID去重；不缓存正文、不跨事务或调用保留结论。"""
 
     connection: Any
-    owner_id: UUID
+    scope: ContactScope
+    execution: tuple[int, Any]
     active: set[UUID] = field(default_factory=set)
-    verified: dict[UUID, frozenset[UUID]] = field(default_factory=dict)
+    verified: dict[tuple[UUID, bool], frozenset[UUID]] = field(default_factory=dict)
 
 
 _SOURCE_VALIDATION: ContextVar[_ReplySourceValidation | None] = ContextVar("reply_source_validation", default=None)
 
 
-def require_reply_sources_current(connection: Any, *, owner_id: UUID, request_id: UUID) -> set[UUID]:
-    """调用方持有owner锁；嵌套历史按真实请求去重，退出后下一读取仍完整复验。"""
+@contextmanager
+def _reply_source_validation_scope(
+    connection: Any, scope: ContactScope,
+) -> Iterator[_ReplySourceValidation]:
+    """仅同连接、同联系人和同一同步调用共享；调用方持有owner事务锁。"""
 
     raw = getattr(connection, "connection", connection)
+    try:
+        task = current_task()
+    except RuntimeError:
+        task = None
+    execution = (get_ident(), task)
     validation = _SOURCE_VALIDATION.get()
     token = None
-    if validation is None or validation.connection is not raw or validation.owner_id != owner_id:
-        validation = _ReplySourceValidation(raw, owner_id)
+    if (validation is None or validation.connection is not raw
+            or validation.scope != scope or validation.execution != execution):
+        validation = _ReplySourceValidation(raw, scope, execution)
         token = _SOURCE_VALIDATION.set(validation)
     try:
-        if request_id in validation.verified:
-            return set(validation.verified[request_id])
-        if request_id in validation.active:
-            raise ReplyStoreInvariantError("回复历史依赖存在循环，不能使用。")
-        validation.active.add(request_id)
-        try:
-            with raw.cursor(row_factory=dict_row) as cursor:
-                sources = _require_reply_sources_current(cursor, owner_id=owner_id, request_id=request_id)
-            validation.verified[request_id] = frozenset(sources)
-            return sources
-        finally:
-            validation.active.remove(request_id)
+        yield validation
     finally:
         if token is not None:
             _SOURCE_VALIDATION.reset(token)
 
 
-def _require_reply_sources_current(connection: Any, *, owner_id: UUID, request_id: UUID) -> set[UUID]:
+def _with_reply_source_validation(operation: Callable[..., Any]) -> Callable[..., Any]:
+    """把一次同步讨论遍历内的兄弟来源核验放入同一作用域。"""
+
+    @wraps(operation)
+    def validate(connection: Any, scope: ContactScope, *args: Any, **kwargs: Any) -> Any:
+        with _reply_source_validation_scope(connection, scope):
+            return operation(connection, scope, *args, **kwargs)
+
+    return validate
+
+
+def require_reply_sources_current(
+    connection: Any, *, owner_id: UUID, request_id: UUID, historical: bool = False,
+) -> set[UUID]:
+    """调用方持有owner锁；嵌套历史按真实请求去重，退出后下一读取仍完整复验。"""
+
+    raw = getattr(connection, "connection", connection)
+    with raw.cursor(row_factory=dict_row) as cursor:
+        row = cursor.execute(
+            "SELECT contact_id FROM public.reply_request WHERE owner_id=%s AND id=%s",
+            (owner_id, request_id),
+        ).fetchone()
+    if row is None:
+        raise ReplyStoreInvariantError("回复请求已失效。")
+    with _reply_source_validation_scope(raw, ContactScope(owner_id, row["contact_id"])) as validation:
+        key = (request_id, historical)
+        if key in validation.verified:
+            return set(validation.verified[key])
+        if request_id in validation.active:
+            raise ReplyStoreInvariantError("回复历史依赖存在循环，不能使用。")
+        validation.active.add(request_id)
+        try:
+            with raw.cursor(row_factory=dict_row) as cursor:
+                sources = _require_reply_sources_current(
+                    cursor, owner_id=owner_id, request_id=request_id, historical=historical,
+                )
+            validation.verified[key] = frozenset(sources)
+            return sources
+        finally:
+            validation.active.remove(request_id)
+
+
+def _require_reply_sources_current(
+    connection: Any, *, owner_id: UUID, request_id: UUID, historical: bool,
+) -> set[UUID]:
     """逐请求核验祖先快照；后继自己的来源不能证明旧候选当时已捕获。"""
     from notalone.persistence.reply_discussion_dependencies import require_reply_discussion_dependencies
 
@@ -175,9 +246,15 @@ def _require_reply_sources_current(connection: Any, *, owner_id: UUID, request_i
         row = connection.execute("SELECT contact_id FROM public.reply_request WHERE owner_id=%s AND id=%s",
                                  (owner_id, identifier)).fetchone()
         contact_id = row["contact_id"] if isinstance(row, dict) else row[0]
-        require_reply_discussion_dependencies(connection, ContactScope(owner_id, contact_id), identifier)
+        history = historical or identifier != request_id
+        require_reply_discussion_dependencies(
+            connection, ContactScope(owner_id, contact_id), identifier,
+        )
         captured = captured_reply_sources(connection, owner_id=owner_id, request_id=identifier)
-        if not captured and _request_needs_source_snapshot(connection, owner_id=owner_id, request_id=identifier):
+        needs_snapshot = _request_needs_source_snapshot(
+            connection, owner_id=owner_id, request_id=identifier, historical=history,
+        )
+        if not captured and needs_snapshot:
             raise ReplyStoreInvariantError("旧候选缺少当时原始来源记录，请重新生成。")
         sources.update(captured)
     sample_rows = connection.execute("""
@@ -211,7 +288,8 @@ def capture_reply_original_sources(connection: Any, request: ReplyRequest, conte
         if previous is None:
             raise ReplyStoreInvariantError("前序候选已失效。")
         request_id = previous["reply_request_id"] if isinstance(previous, dict) else previous[0]
-        identifiers.update(require_reply_sources_current(connection, owner_id=request.scope.owner_id, request_id=request_id))
+        identifiers.update(require_reply_sources_current(connection, owner_id=request.scope.owner_id,
+                                                         request_id=request_id, historical=True))
     for source_id in identifiers:
         connection.execute("""
             INSERT INTO public.reply_original_source_use(reply_request_id,source_id,owner_id,contact_id)
@@ -354,13 +432,29 @@ def _erase_samples(connection: Any, *, owner_id: UUID, sample_ids: list[UUID]) -
         ) SELECT id FROM affected
     """, (owner_id, sample_ids, owner_id)).fetchall()
     affected = [row["id"] if isinstance(row, dict) else row[0] for row in rows]
+    from notalone.persistence.skill_learning import erase_skill_learning
+    erase_skill_learning(connection, owner_id=owner_id, removed_ids=set(affected))
     request_ids = erase_style_sample_replies(connection, owner_id=owner_id, sample_ids=affected)
     connection.execute("""
         UPDATE public.style_sample SET status='deleted', final_text=NULL,
           source_ids='{}', dependency_sample_ids='{}', deleted_at=coalesce(deleted_at,now())
         WHERE owner_id=%s AND id=ANY(%s::uuid[])
     """, (owner_id, affected))
+    if affected:
+        connection.execute("DELETE FROM public.style_sample_expression_preference_use WHERE owner_id=%s AND sample_id=ANY(%s::uuid[])",
+                           (owner_id, affected))
     return request_ids
+
+
+def erase_preference_style_samples(connection: Any, *, owner_id: UUID, preference_ids: list[UUID]) -> list[UUID]:
+    """从独立偏好依赖清理样本，候选和会话已经删除也不影响闭包。"""
+    rows = connection.execute("""
+        SELECT DISTINCT use.sample_id AS id FROM public.style_sample_expression_preference_use AS use
+        JOIN public.style_sample AS sample ON sample.id=use.sample_id AND sample.owner_id=use.owner_id
+          AND sample.contact_id=use.contact_id
+        WHERE use.owner_id=%s AND use.preference_id=ANY(%s::uuid[]) AND sample.status='active'
+    """, (owner_id, preference_ids)).fetchall()
+    return _erase_samples(connection, owner_id=owner_id, sample_ids=[row["id"] for row in rows])
 
 
 def erase_source_style_samples(connection: Any, *, owner_id: UUID, removed_ids: set[UUID]) -> list[UUID]:
@@ -371,6 +465,20 @@ def erase_source_style_samples(connection: Any, *, owner_id: UUID, removed_ids: 
     """, (owner_id, list(removed_ids))).fetchall()
     identifiers = [row["id"] if isinstance(row, dict) else row[0] for row in rows]
     return _erase_samples(connection, owner_id=owner_id, sample_ids=identifiers)
+
+
+def erase_reply_style_samples(connection: Any, *, owner_id: UUID, request_ids: list[UUID]) -> list[UUID]:
+    """来源失效的候选不能借主动样本独立留存；会话删除仍走原有保留规则。"""
+    rows = connection.execute("""
+        SELECT sample.id FROM public.style_sample AS sample
+        JOIN public.reply_candidate AS candidate ON candidate.id=sample.origin_id
+          AND candidate.owner_id=sample.owner_id AND candidate.contact_id=sample.contact_id
+        WHERE sample.owner_id=%s AND sample.status='active' AND sample.origin_kind='candidate'
+          AND candidate.reply_request_id=ANY(%s::uuid[])
+    """, (owner_id, request_ids)).fetchall()
+    return _erase_samples(connection, owner_id=owner_id, sample_ids=[
+        row["id"] if isinstance(row, dict) else row[0] for row in rows
+    ])
 
 
 class PostgresStyleSampleStore:
@@ -473,6 +581,11 @@ class PostgresStyleSampleStore:
                       command.origin_kind, command.origin_id, sources, dependencies)).fetchone()
                 if row is None:
                     raise StyleSampleError("表达样本保存未返回记录。")
+                if command.origin_kind == "candidate":
+                    from notalone.persistence.expression_preferences import capture_sample_expression_preferences
+
+                    capture_sample_expression_preferences(connection, scope=scope, sample_id=row["id"],
+                        candidate_id=command.origin_id, dependency_sample_ids=dependencies)
                 return _as_sample(row)
         except psycopg.Error:
             raise StyleSampleError("表达样本保存失败。") from None
@@ -509,16 +622,19 @@ class PostgresStyleSampleStore:
         if candidate is None:
             raise StyleSampleNotFound("当前范围不存在有效候选。")
         try:
-            require_reply_sources_current(connection, owner_id=scope.owner_id, request_id=candidate["reply_request_id"])
+            require_reply_sources_current(connection, owner_id=scope.owner_id, request_id=candidate["reply_request_id"], historical=True)
         except ReplyStoreInvariantError:
             raise StyleSampleConflict("候选当时原始来源记录缺失或已失效，请重新生成。") from None
         request_ids = _reply_ancestor_ids(connection, owner_id=scope.owner_id, request_id=candidate["reply_request_id"])
-        evidence = connection.execute("SELECT evidence_id,kind,source_ids FROM public.reply_context_evidence WHERE reply_request_id=ANY(%s::uuid[])",
+        evidence = connection.execute("SELECT evidence_id,kind,source_ids,evidence_text FROM public.reply_context_evidence WHERE reply_request_id=ANY(%s::uuid[])",
                                       (request_ids,)).fetchall()
-        sources = {UUID(value) for row in evidence for value in row["source_ids"]
-                   if not (row["kind"] == 'owner_memory' and manual_owner_evidence_is_current(
-                       connection, owner_id=scope.owner_id, evidence_id=row["evidence_id"],
-                       source_ids=tuple(UUID(item) for item in row["source_ids"])))}
+        sources: set[UUID] = set()
+        for row in evidence:
+            sources.update(reply_evidence_sources(
+                connection, owner_id=scope.owner_id, evidence_id=row["evidence_id"],
+                kind=row["kind"], source_ids=tuple(UUID(value) for value in row["source_ids"]),
+                text=row["evidence_text"], historical=True,
+            ))
         sources.update(row["evidence_id"] for row in evidence if row["kind"] == "message")
         raw_sources = connection.execute("SELECT source_id FROM public.reply_original_source_use WHERE reply_request_id=ANY(%s::uuid[])",
                                          (request_ids,)).fetchall()

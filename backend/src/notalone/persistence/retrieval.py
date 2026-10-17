@@ -24,6 +24,7 @@ from notalone.persistence.message_sources import (
 )
 from notalone.retrieval.errors import RetrievalError, RetrievalInvariantError
 from notalone.retrieval.models import (
+    history_timing, require_history_navigation,
     RetrievedMemory,
     RetrievedMessage,
     RetrievedOwnerMemory,
@@ -194,10 +195,12 @@ class PostgresRetrieval:
         query: str | None = None,
         limit: int = 20,
         memory_ids: tuple[UUID, ...] | None = None,
+        include_historical: bool = False,
     ) -> tuple[RetrievedMemory, ...]:
         """返回当前联系人范围内 active 且有效的已确认记忆。"""
 
         self._validate_scope(scope)
+        require_history_navigation(include_historical, memory_ids)
         if query is not None and not isinstance(query, str):
             raise TypeError("关系记忆检索 query 必须是字符串或 None。")
         if not isinstance(limit, int) or not 1 <= limit <= 20:
@@ -208,7 +211,17 @@ class PostgresRetrieval:
         ):
             raise ValueError("关系记忆导航引用结构无效。")
         try:
-            memories = self._memory_store.list_confirmed(scope)
+            if include_historical:
+                selected = []
+                for identifier in memory_ids:
+                    try:
+                        versions = self._memory_store.list_versions(scope=scope, memory_id=identifier)
+                    except (LookupError, PermissionError):
+                        continue
+                    selected.extend(item for item in versions if item.memory_id == identifier)
+                memories = tuple(selected)
+            else:
+                memories = self._memory_store.list_confirmed(scope)
         except MemoryPersistenceError:
             raise RetrievalError("关系记忆检索失败。") from None
         except RetrievalError:
@@ -233,11 +246,13 @@ class PostgresRetrieval:
                 status=memory.status.value,
                 valid_at=memory.valid_at,
                 invalid_at=memory.invalid_at,
-                timing=memory.timing,
+                timing=(history_timing(memory.timing, memory.status.value, memory.invalid_at)
+                        if include_historical else memory.timing),
                 confidence=memory.confidence,
             )
             for memory in memories
-            if memory_ids is None or memory.memory_id in memory_ids
+            if (memory_ids is None or memory.memory_id in memory_ids)
+            and memory.status.value in ("active", "invalidated")
         )
         return recall_memories(retrieved, query=query, limit=limit)
 
@@ -390,9 +405,11 @@ class PostgresRetrieval:
         query: str | None = None,
         limit: int = 20,
         memory_ids: tuple[UUID, ...] | None = None,
+        include_historical: bool = False,
     ) -> tuple[RetrievedOwnerMemory, ...]:
         """返回某位用户当前有效的本人记忆；query 提供时按同一评分器召回。"""
 
+        require_history_navigation(include_historical, memory_ids)
         if not isinstance(owner_id, UUID):
             raise TypeError("owner 记忆检索必须携带 owner ID。")
         if query is not None and not isinstance(query, str):
@@ -407,7 +424,17 @@ class PostgresRetrieval:
         if self._owner_memory_store is None:
             raise RetrievalError("owner 记忆检索失败。")
         try:
-            memories = self._owner_memory_store.list_active(owner_id)
+            if include_historical:
+                selected = []
+                for identifier in memory_ids:
+                    try:
+                        versions = self._owner_memory_store.list_versions(owner_id=owner_id, memory_id=identifier)
+                    except (LookupError, PermissionError):
+                        continue
+                    selected.extend(item for item in versions if item.memory_id == identifier)
+                memories = tuple(selected)
+            else:
+                memories = self._owner_memory_store.list_active(owner_id)
         except Exception:
             raise RetrievalError("owner 记忆检索失败。") from None
         if not isinstance(memories, tuple) or any(
@@ -427,11 +454,13 @@ class PostgresRetrieval:
                 status=memory.status.value,
                 valid_at=memory.valid_at,
                 invalid_at=memory.invalid_at,
-                timing=memory.timing,
+                timing=(history_timing(memory.timing, memory.status.value, memory.invalid_at)
+                        if include_historical else memory.timing),
                 confidence=memory.confidence,
             )
             for memory in memories
-            if memory_ids is None or memory.memory_id in memory_ids
+            if (memory_ids is None or memory.memory_id in memory_ids)
+            and memory.status.value in ("active", "invalidated")
         )
         return recall_owner_memories(retrieved, query=query, limit=limit)
 

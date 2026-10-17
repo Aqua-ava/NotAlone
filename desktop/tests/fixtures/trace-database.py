@@ -40,8 +40,8 @@ class SyntheticRuntime:
         return self.payload
 
 
-def create_database(mode="full"):
-    data = memory_database.create_database()
+def create_database(mode="full", ownership_path=None):
+    data = memory_database.create_database(ownership_path=ownership_path)
     try:
         url = data["database_url"]
         scope = ContactScope(UUID(data["owner_id"]), UUID(data["contact_ids"][0]))
@@ -75,7 +75,13 @@ def create_database(mode="full"):
         confirmed = None
         if mode != "deletion-candidate":
             service = memory_database.MemoryService(contact_memory=memory_store, owner_memory=PostgresOwnerMemoryStore(url))
-            confirmed = service.confirm_candidate(owner_id=scope.owner_id, contact_id=scope.contact_id, candidate_id=candidate.candidate_id)
+            confirmed = service.confirm_candidate(
+                owner_id=scope.owner_id, contact_id=scope.contact_id,
+                candidate_id=candidate.candidate_id,
+                expected_correction_decision_ids=tuple(
+                    review.decision_id for review in candidate.correction_review
+                ),
+            )
         if mode == "full":
             extract(SyntheticRuntime(fail=True))
         with psycopg.connect(url) as connection:
@@ -101,10 +107,12 @@ def create_database(mode="full"):
 if __name__ == "__main__":
     if os.environ.get("CONDA_DEFAULT_ENV") != "NotAlone" or os.environ.get("NOTALONE_DISABLE_DOTENV") != "1":
         raise RuntimeError("追踪夹具须激活 NotAlone 并禁用默认 dotenv。")
-    if sys.argv[1:] == ["create"]:
-        print(json.dumps(create_database()))
-    elif len(sys.argv) == 3 and sys.argv[1] == "create" and sys.argv[2] in ("deletion-contact", "deletion-owner", "deletion-candidate"):
-        print(json.dumps(create_database(sys.argv[2])))
+    if len(sys.argv) >= 2 and sys.argv[1] == "create":
+        arguments = sys.argv[2:]
+        ownership_path = arguments.pop() if arguments and Path(arguments[-1]).is_absolute() else None
+        if arguments not in ([], ["deletion-contact"], ["deletion-owner"], ["deletion-candidate"]):
+            raise ValueError("未知追踪夹具操作。")
+        print(json.dumps(create_database(arguments[0] if arguments else "full", ownership_path)))
     elif len(sys.argv) == 3 and sys.argv[1] == "drop":
         memory_database.contact_database.drop_database(sys.argv[2])
     else:

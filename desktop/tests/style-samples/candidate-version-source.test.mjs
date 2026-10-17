@@ -37,7 +37,7 @@ async function fixture() {
     selection: { selection_id: randomUUID(), selection_number: 1, session_id: sessionId,
       candidate_id: candidateId, version_id: versionId },
     saved: { session_id: sessionId, current_input_version_id: inputVersionId,
-      turns: [{ turn_id: turnId, input_version_id: inputVersionId, request_key: randomUUID(), state: 'completed',
+      turns: [{ turn_id: turnId, input_version_id: inputVersionId, request_key: randomUUID(), state: 'completed', interruption_reason: null,
         input: { content: { type: 'rewrite_draft', draft_text: '这次不参加。' } }, placeholder: null,
         reply: { reply_request_id: requestId,
           candidates: [{ candidate_id: candidateId, text: '这次不参加。\n\n感谢邀请。',

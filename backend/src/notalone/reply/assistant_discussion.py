@@ -7,6 +7,7 @@ from typing import Any, Literal
 from uuid import UUID
 
 from notalone.scopes import ContactScope
+from notalone.reply.interface import ReplyBasisChange
 
 
 DISCUSSION_HISTORY_NOTICE = (
@@ -35,6 +36,7 @@ class DiscussionItem:
     version_number: int | None = None
     is_default_display: bool = False
     is_explicitly_selected: bool = False
+    basis_changes: tuple[ReplyBasisChange, ...] = ()
 
     def __post_init__(self) -> None:
         if (self.kind not in ("discussion_input", "generation_input", "candidate_version", "candidate_carry")
@@ -89,6 +91,7 @@ class DiscussionSnapshot:
     current_turn_id: UUID
     current_payload_sha256: str
     records: tuple[DiscussionIdentity, ...]
+    basis_revision_sha256: str | None = None
 
     def __post_init__(self) -> None:
         if (not isinstance(self.scope, ContactScope)
@@ -97,7 +100,8 @@ class DiscussionSnapshot:
                 ))
                 or not _is_sha256(self.current_payload_sha256)
                 or not isinstance(self.records, tuple)
-                or any(not isinstance(value, DiscussionIdentity) for value in self.records)):
+                or any(not isinstance(value, DiscussionIdentity) for value in self.records)
+                or self.basis_revision_sha256 is not None and not _is_sha256(self.basis_revision_sha256)):
             raise TypeError("助手讨论快照结构无效。")
         identities = {
             (record.kind, record.version_id if record.kind == "candidate_version" else record.input_version_id)
@@ -169,6 +173,8 @@ def discussion_snapshot_to_payload(snapshot: DiscussionSnapshot) -> dict[str, An
             "candidate_id": str(record.candidate_id) if record.candidate_id is not None else None,
             "version_id": str(record.version_id) if record.version_id is not None else None,
         } for record in snapshot.records],
+        **({"basis_revision_sha256": snapshot.basis_revision_sha256}
+           if snapshot.basis_revision_sha256 is not None else {}),
     }
 
 
@@ -185,10 +191,11 @@ def discussion_snapshot_from_payload(payload: object) -> DiscussionSnapshot:
     """纯重建捕获身份；错误只返回固定分类，不回显不可信载荷。"""
 
     try:
-        if not isinstance(payload, dict) or set(payload) != {
+        fields = {
             "version", "scope", "session_id", "request_key", "current_input_version_id",
             "current_turn_id", "current_payload_sha256", "records",
-        }:
+        }
+        if not isinstance(payload, dict) or set(payload) not in (fields, fields | {"basis_revision_sha256"}):
             raise ValueError
         if type(payload.get("version")) is not int or payload["version"] != 1:
             raise ValueError
@@ -211,7 +218,7 @@ def discussion_snapshot_from_payload(payload: object) -> DiscussionSnapshot:
             ContactScope(_payload_uuid(scope["owner_id"]), _payload_uuid(scope["contact_id"])),
             _payload_uuid(payload["session_id"]), _payload_uuid(payload["request_key"]),
             _payload_uuid(payload["current_input_version_id"]), _payload_uuid(payload["current_turn_id"]),
-            payload["current_payload_sha256"], records,
+            payload["current_payload_sha256"], records, payload.get("basis_revision_sha256"),
         )
     except (KeyError, TypeError, ValueError):
         raise ValueError("助手讨论快照载荷结构无效。") from None

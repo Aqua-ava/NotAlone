@@ -22,7 +22,8 @@ from notalone.conversation import (
     VerificationReason,
 )
 from notalone.memory import (
-    InMemoryMemoryStore,
+    AdoptionMethod,
+    FactSubject,
     MemoryCandidate,
     MemoryCategory,
 )
@@ -31,6 +32,8 @@ from notalone.persistence.conversation_repository import (
     PostgresConversationPort,
 )
 from notalone.persistence.reply_store import PostgresReplyStore
+from notalone.persistence.memory_store import PostgresMemoryStore
+from notalone.persistence.owner_memory_store import PostgresOwnerMemoryStore
 from notalone.persistence.skill_port import PostgresSkillPort
 from notalone.reply import (
     ConfirmedDirection,
@@ -235,7 +238,7 @@ class PostgresReplyFlowTest(unittest.TestCase):
             binding_id=self.binding_id,
         )
         self.scope = ContactScope(self.owner_id, self.contact_id)
-        self.memory_store = InMemoryMemoryStore()
+        self.memory_store = PostgresMemoryStore(TEST_DATABASE_URL)
         self.memory_store.create_candidate(
             MemoryCandidate(
                 candidate_id=self.memory_candidate_id,
@@ -248,7 +251,15 @@ class PostgresReplyFlowTest(unittest.TestCase):
         self.memory = self.memory_store.confirm(
             scope=self.scope,
             candidate_id=self.memory_candidate_id,
+            adoption_method=AdoptionMethod.MANUAL,
         )
+        owner_candidate = self.memory_store.create_candidate(MemoryCandidate(
+            candidate_id=uuid4(), scope=self.scope, text="我明天有空。",
+            category=MemoryCategory.RECENT_STATE, subject=FactSubject.SELF,
+            source_ids=(self.source_id,),
+        ))
+        owner_memory = PostgresOwnerMemoryStore(TEST_DATABASE_URL).confirm_candidate(candidate=owner_candidate)
+        self.owner_memory_id = owner_memory.memory_id
         self.retrieval = InMemoryRetrieval(
             owner_memories=(
                 RetrievedOwnerMemory(
@@ -257,9 +268,12 @@ class PostgresReplyFlowTest(unittest.TestCase):
                     text="我明天有空。",
                     category="recent_state",
                     topic="other",
-                    source_ids=(self.source_id,),
+                    source_ids=owner_memory.source_ids,
                     adoption_method="manual",
                     revision=1,
+                    valid_at=owner_memory.valid_at,
+                    invalid_at=owner_memory.invalid_at,
+                    timing=owner_memory.timing,
                 ),
             ),
             messages=(

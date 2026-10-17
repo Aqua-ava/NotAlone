@@ -32,7 +32,7 @@ from notalone.persistence.reply_discussion_dependencies import reply_style_sampl
 from notalone.persistence.style_sample_store import require_reply_sources_current
 from notalone.reply.assistant_discussion import DiscussionDependencies
 from notalone.reply.errors import ReplyStoreInvariantError
-from notalone.reply.interface import CandidateMessage
+from notalone.reply.interface import CandidateMessage, ReplyBasisChange
 from notalone.scopes import ContactScope
 
 if TYPE_CHECKING:
@@ -47,6 +47,7 @@ class ResolvedCandidateCarry:
     version_number: int
     parent_version_id: UUID | None
     dependencies: DiscussionDependencies
+    basis_changes: tuple[ReplyBasisChange, ...] = ()
 
     def content_payload(self) -> dict[str, Any]:
         """仅供当前公开读取；该正文投影不得重新保存成来历记录。"""
@@ -90,6 +91,10 @@ def _origin_dependencies(
 ) -> tuple[DiscussionDependencies, UUID, UUID]:
     """来源与样本仅消费既有 A/C 端口，不另建捕获或删除权威。"""
 
+    from notalone.persistence.skill_execution_view import saved_skill_policy_change
+    if saved_skill_policy_change(connection, scope, history.candidate_group_id) is not None:
+        raise AssistantSessionRejected('skill_policy_changed')
+
     with connection.cursor(row_factory=dict_row) as cursor:
         turn = cursor.execute(
             "SELECT conversation_binding_id, input_version_id, dependency_ids FROM public.assistant_session_turn "
@@ -104,10 +109,11 @@ def _origin_dependencies(
             dependencies = set(turn["dependency_ids"])
             dependencies.update(require_reply_sources_current(
                 cursor, owner_id=scope.owner_id, request_id=history.candidate_group_id,
+                historical=True,
             ))
             dependencies.update(_reply_dependencies(cursor, scope, history.candidate_group_id))
             typed = _partition_assistant_dependencies(cursor, scope, dependencies)
-            sources = verified_discussion_dependencies(cursor, scope, typed.source_ids)
+            sources = verified_discussion_dependencies(cursor, scope, typed.source_ids, historical=True)
             samples = tuple(sorted(set(typed.style_sample_ids) | set(
                 reply_style_sample_dependencies(connection, scope, history.candidate_group_id),
             )))
@@ -156,7 +162,8 @@ def read_candidate_carry_in_transaction(
             or dependencies.style_sample_ids != origin.style_sample_ids):
         raise AssistantSessionRejected("source_unavailable")
     return ResolvedCandidateCarry(origin, version.messages, history.candidate_number,
-                                  version.version_number, version.parent_version_id, dependencies)
+                                  version.version_number, version.parent_version_id, dependencies,
+                                  history.basis_changes)
 
 
 def new_assistant_session_with_candidate(

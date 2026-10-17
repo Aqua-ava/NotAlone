@@ -6,10 +6,11 @@ import json
 import os
 from pathlib import Path
 import runpy
-import subprocess
 import sys
 
-import psycopg
+from fixture_cleanup import bind_prepared_database, database_ownership_path
+
+PREPARED_DATABASE_NAME = bind_prepared_database()
 
 definitions = runpy.run_path(str(Path(__file__).with_name("rewrite-backend.py")))
 DesktopRewriteModel = definitions["DesktopRewriteModel"]
@@ -28,29 +29,12 @@ class OwnershipModel(DesktopRewriteModel):
 
 class OwnershipFixture(DesktopRewriteFixture):
     reply_model_factory = OwnershipModel
-
-    @classmethod
-    def setUpClass(cls) -> None:
-        super().setUpClass()
-        migrations = Path(__file__).resolve().parents[3] / "backend/database/migrations"
-        expected = sorted(path.name for path in migrations.glob("*.sql"))
-        with psycopg.connect(cls.database_url) as connection:
-            recorded = [row[0] for row in connection.execute(
-                "SELECT name FROM public.notalone_schema_migration ORDER BY name",
-            ).fetchall()]
-        assert len(expected) == 58 and expected == recorded
-        env = dict(os.environ, NOTALONE_DISABLE_DOTENV="1", NOTALONE_DATABASE_URL=cls.database_url)
-        repeated = subprocess.run(
-            [sys.executable, "-m", "notalone.database_migrations", "--migrations", str(migrations)],
-            env=env, capture_output=True, text=True, timeout=60,
-        )
-        assert repeated.returncode == 0 and json.loads(repeated.stdout)["applied"] == []
-        print(json.dumps({"migration": {"count": 58, "repeat": 0,
-            "first": recorded[0], "last": recorded[-1]}}), flush=True)
+    _prepared_database_name = PREPARED_DATABASE_NAME
 
 
 def main() -> None:
     fixture = OwnershipFixture()
+    OwnershipFixture._database_ownership_path = database_ownership_path()
     try:
         OwnershipFixture.setUpClass()
         fixture.setUp()
@@ -59,8 +43,8 @@ def main() -> None:
         write_backend_info(address=fixture.backend.base_url.removeprefix("http://"), token=fixture.backend.token)
         print(json.dumps({"ready": {"database_url": fixture.database_url,
             "owner_id": str(fixture.owner_id), "contact_ids": contact_ids,
-            "other_contact_id": "", "empty_contact_id": "", "migration_count": 58,
-            "migration_repeat": 0}}), flush=True)
+            "other_contact_id": "", "empty_contact_id": "",
+            **fixture.migration_receipt}}), flush=True)
         for line in sys.stdin:
             command = json.loads(line)
             operation = command["operation"]

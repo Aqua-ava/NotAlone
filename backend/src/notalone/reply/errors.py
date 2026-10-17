@@ -54,3 +54,11 @@ class ReplyContinuationError(ReplyPersistenceError):
 
 class ReplyStoreInvariantError(ReplyPersistenceError):
     """ReplyStore 收到越界或不一致的持久化数据。"""
+
+
+class ReplyInputInvalidatedError(ReplyStoreInvariantError):
+    """已删除依赖的旧请求键只能以新用户输入重新发起。"""
+
+
+class ReplyExpressionPreferencesChangedError(ReplyContextInvariantError):
+    """模型前后或提交时长期表达要求已变化，旧结果不能生效。"""

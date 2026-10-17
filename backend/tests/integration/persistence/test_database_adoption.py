@@ -20,12 +20,47 @@ from uuid import UUID, uuid4
 import psycopg
 from psycopg import sql
 
-from notalone.database_adoption import adopt_legacy_database, audit_legacy_database
+import notalone.database_adoption as database_adoption
+from notalone.database_adoption import AdoptionResult, adopt_legacy_database, audit_legacy_database
+from notalone.database_audit import business_digest, schema_catalog
 from notalone.database_migrations import MigrationError, migrate
 
 
 ROOT = Path(__file__).resolve().parents[3]
 MIGRATIONS = ROOT / "database/migrations"
+
+
+class _ObservedGuardCount:
+    def __init__(self, row: tuple) -> None:
+        self.row = row
+
+    def fetchone(self) -> tuple:
+        return self.row
+
+
+class _ObservedGuardConnection:
+    """只增加同条 COUNT 的元数据投影，正式守卫仍读取原计数。"""
+
+    def __init__(self, connection: psycopg.Connection, observations: list[tuple]) -> None:
+        self.connection = connection
+        self.observations = observations
+
+    def execute(self, statement: str):
+        original_count = """
+            SELECT count(*) FROM pg_catalog.pg_stat_activity
+            WHERE datname = pg_catalog.current_database() AND pid <> pg_catalog.pg_backend_pid()
+        """
+        if statement.split() != original_count.split():
+            return self.connection.execute(statement)
+        row = self.connection.execute("""
+            SELECT count(*), coalesce(jsonb_agg(jsonb_build_object(
+                'pid', pid, 'backend_type', backend_type, 'state', state
+            )), '[]'::jsonb)
+            FROM pg_catalog.pg_stat_activity
+            WHERE datname = pg_catalog.current_database() AND pid <> pg_catalog.pg_backend_pid()
+        """).fetchone()
+        self.observations.append(row)
+        return _ObservedGuardCount(row)
 
 
 class DatabaseAdoptionTest(unittest.TestCase):
@@ -37,6 +72,8 @@ class DatabaseAdoptionTest(unittest.TestCase):
             sql.Identifier(self.name)
         ))
         self.addCleanup(self._drop_database)
+        with psycopg.connect(self.url) as connection:
+            self.assertEqual(connection.execute("SELECT current_database()").fetchone()[0], self.name)
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.backup = Path(self.temp.name) / "backup"
@@ -54,6 +91,7 @@ class DatabaseAdoptionTest(unittest.TestCase):
                     ADD CONSTRAINT source_document_source_type_check
                     CHECK (source_type = 'wechat_jsonl');
             """)
+        self._settle_fixture_database()
 
     @contextmanager
     def _fixture_connection(self) -> Iterator[psycopg.Connection]:
@@ -78,8 +116,101 @@ class DatabaseAdoptionTest(unittest.TestCase):
             self.admin.execute(sql.SQL("DROP DATABASE {} WITH (FORCE)").format(
                 sql.Identifier(self.name)
             ))
+            self.assertFalse(self.admin.execute("SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname=%s)",
+                                                (self.name,)).fetchone()[0])
         finally:
             self.admin.close()
+
+    def _settle_fixture_database(self) -> None:
+        """完成本例随机库的维护并有界等待，不放宽正式接管守卫。"""
+        # 建库和回滚留下的目录变化可能触发 autovacuum。只维护本库非共享
+        # 关系，不修改实例配置，不终止连接；故意保留的并发客户端另行验收。
+        with psycopg.connect(self.url, autocommit=True) as connection:
+            connection.execute("SET statement_timeout='2s'")
+            relations = connection.execute("""
+                SELECT namespace.nspname, relation.relname
+                FROM pg_class AS relation JOIN pg_namespace AS namespace
+                    ON namespace.oid=relation.relnamespace
+                WHERE relation.relkind='r' AND NOT relation.relisshared
+                  AND namespace.nspname IN ('public', 'pg_catalog')
+            """).fetchall()
+            connection.execute(sql.SQL("VACUUM ANALYZE {}").format(
+                sql.SQL(", ").join(sql.Identifier(*relation) for relation in relations)
+            ))
+        deadline = time.monotonic() + 2
+        while True:
+            self.admin.execute("SELECT pg_stat_clear_snapshot()")
+            backends = self.admin.execute(
+                "SELECT count(*) FROM pg_stat_activity WHERE datname=%s",
+                (self.name,),
+            ).fetchone()[0]
+            if backends == 0:
+                return
+            if time.monotonic() >= deadline:
+                self.fail(f"本测试库仍有 {backends} 个未退出的 backend")
+            time.sleep(0.01)
+
+    def _adopt_normal_fixture(self, backup: Path) -> AdoptionResult:
+        """正常成功夹具最多尝试三次；仅原守卫实测 autovacuum 时可重试。"""
+        self.assertTrue(backup.is_relative_to(Path(self.temp.name)))
+        self.assertTrue(self.name.endswith("_test"))
+        with self._fixture_connection() as connection:
+            schema_before = schema_catalog(connection)
+            tables = tuple(row[0] for row in schema_before["relations"] if row[1] == "r")
+            data_before = business_digest(connection, tables)
+        original_guard = database_adoption._ensure_no_other_connections
+        wait_budget = 4.0
+        for attempt in range(1, 4):
+            observations: list[tuple] = []
+            attempt_backup = backup if attempt == 1 else backup.with_name(
+                f"{backup.name}-attempt-{attempt}-{uuid4().hex}"
+            )
+
+            def observed_guard(connection: psycopg.Connection) -> None:
+                self.assertEqual(connection.info.dbname, self.name)
+                original_guard(_ObservedGuardConnection(connection, observations))
+
+            try:
+                with patch.object(database_adoption, "_ensure_no_other_connections", observed_guard):
+                    result = adopt_legacy_database(self.url, MIGRATIONS, attempt_backup)
+            except MigrationError as error:
+                count, backends = observations[-1] if observations else (0, [])
+                # 空、未知或客户端拒绝都原样失败，不能把故障注入当成维护重试。
+                if (not str(error).startswith("adoption_writers_present")
+                        or count == 0 or count != len(backends)
+                        or any(row["backend_type"] != "autovacuum worker" for row in backends)):
+                    raise
+                with self._fixture_connection() as connection:
+                    self.assertEqual(schema_catalog(connection), schema_before)
+                    self.assertEqual(business_digest(connection, tables), data_before)
+                print("NORMAL_ADOPTION_REJECT", self.id(), {
+                    "attempt": attempt, "guard": len(observations), "count": count,
+                    "backends": backends, "rollback_catalog_and_ids_unchanged": True,
+                }, flush=True)
+                if attempt == 3 or wait_budget <= 0:
+                    raise
+                started = time.monotonic()
+                deadline = started + min(2.0, wait_budget)
+                while True:
+                    self.admin.execute("SELECT pg_stat_clear_snapshot()")
+                    current = self.admin.execute(
+                        "SELECT backend_type FROM pg_stat_activity WHERE datname=%s", (self.name,),
+                    ).fetchall()
+                    if not current:
+                        break
+                    if (any(row[0] != "autovacuum worker" for row in current)
+                            or time.monotonic() >= deadline):
+                        raise error
+                    time.sleep(0.01)
+                wait_budget -= time.monotonic() - started
+            else:
+                if backup == self.backup:
+                    self.backup = attempt_backup
+                print("NORMAL_ADOPTION_SUCCESS", self.id(), {
+                    "attempts": attempt, "wait_seconds": round(4.0 - wait_budget, 3),
+                }, flush=True)
+                return result
+        self.fail("正常接管夹具未在限定尝试次数内完成")
 
     def _seed_scope(self, existing_owner: UUID | None = None) -> tuple:
         owner, contact, binding, document, message = (uuid4() for _ in range(5))
@@ -142,7 +273,8 @@ class DatabaseAdoptionTest(unittest.TestCase):
     def test_audited_baseline_is_separate_from_real_migration_receipts(self) -> None:
         audit = audit_legacy_database(self.url, MIGRATIONS)
         self.assertTrue(audit.repair_required)
-        result = adopt_legacy_database(self.url, MIGRATIONS, self.backup)
+        self._settle_fixture_database()
+        result = self._adopt_normal_fixture(self.backup)
         self.assertTrue(result.adopted)
         archive = self.backup / "database.dump"
         self.assertEqual(result.backup_sha256, hashlib.sha256(archive.read_bytes()).hexdigest())
@@ -180,6 +312,21 @@ class DatabaseAdoptionTest(unittest.TestCase):
             "053_assistant_candidate_versions.sql",
             "054_assistant_generation_interruption.sql",
             "055_assistant_candidate_carry_input.sql",
+            "056_memory_candidate_dimension_evidence.sql",
+            "057_memory_candidate_semantic_basis.sql",
+            "058_assistant_prepared_context.sql",
+            "059_memory_candidate_author_quote_basis.sql",
+            "060_manual_contact_confirmation.sql",
+            "061_memory_correction_protection.sql",
+            "062_memory_events_and_version_evidence.sql",
+            "063_relationship_overview_projection.sql",
+            "064_owner_memory_revision.sql",
+            "065_expression_preferences.sql",
+            "066_skill_learning_drafts.sql",
+            "067_memory_upgrade_batches.sql",
+            "068_skill_review_publication.sql",
+            "069_skill_history_operations.sql",
+            "070_skill_scope_policies.sql",
         ))
         self.assertEqual(migrate(self.url, MIGRATIONS), ())
         self.assertFalse(adopt_legacy_database(self.url, MIGRATIONS, self.backup).adopted)
@@ -207,6 +354,21 @@ class DatabaseAdoptionTest(unittest.TestCase):
                 ("053_assistant_candidate_versions.sql",),
                 ("054_assistant_generation_interruption.sql",),
                 ("055_assistant_candidate_carry_input.sql",),
+                ("056_memory_candidate_dimension_evidence.sql",),
+                ("057_memory_candidate_semantic_basis.sql",),
+                ("058_assistant_prepared_context.sql",),
+                ("059_memory_candidate_author_quote_basis.sql",),
+                ("060_manual_contact_confirmation.sql",),
+                ("061_memory_correction_protection.sql",),
+                ("062_memory_events_and_version_evidence.sql",),
+                ("063_relationship_overview_projection.sql",),
+                ("064_owner_memory_revision.sql",),
+                ("065_expression_preferences.sql",),
+                ("066_skill_learning_drafts.sql",),
+                ("067_memory_upgrade_batches.sql",),
+                ("068_skill_review_publication.sql",),
+                ("069_skill_history_operations.sql",),
+                ("070_skill_scope_policies.sql",),
             ])
 
     def test_full_035_needs_no_repair_and_preserves_ids_pause_and_message_evidence(self) -> None:
@@ -225,7 +387,8 @@ class DatabaseAdoptionTest(unittest.TestCase):
                 VALUES (%s, %s, '合成本人记忆', 'common_fact', %s, 'manual')
             """, (uuid4(), owner, [message]))
         self.assertFalse(audit_legacy_database(self.url, MIGRATIONS).repair_required)
-        self.assertTrue(adopt_legacy_database(self.url, MIGRATIONS, self.backup).adopted)
+        self._settle_fixture_database()
+        self.assertTrue(self._adopt_normal_fixture(self.backup).adopted)
         migrate(self.url, MIGRATIONS)
         with self._fixture_connection() as connection:
             self.assertEqual(connection.execute("SELECT id FROM public.source_document").fetchone()[0], document)
@@ -295,6 +458,8 @@ class DatabaseAdoptionTest(unittest.TestCase):
                     (id, owner_id, text_content, category, source_ids, adoption_method)
                 VALUES (%s, %s, '非法本人证据', 'common_fact', %s, 'manual')
             """, (uuid4(), other_owner, [uuid4()]))
+        # 异常资料核验从本夹具全部连接退出后开始；真实并发守卫由独立用例覆盖。
+        self._settle_fixture_database()
         with self.assertRaisesRegex(MigrationError, "confirmed_memory_sources=1.*owner_memory_sources=1"):
             adopt_legacy_database(self.url, MIGRATIONS, self.backup)
         self._assert_unadopted()
@@ -316,7 +481,8 @@ class DatabaseAdoptionTest(unittest.TestCase):
             adopt_legacy_database(self.url, self.prefix, self.backup)
         self._assert_unadopted()
         changed.write_text(original)
-        adopt_legacy_database(self.url, MIGRATIONS, self.backup)
+        self._settle_fixture_database()
+        self._adopt_normal_fixture(self.backup)
         changed.write_text(original + "\n-- 漂移\n")
         shutil.copy2(MIGRATIONS / "036_source_deletion_tasks.sql", self.prefix)
         with self.assertRaisesRegex(MigrationError, "baseline_files_mismatch"):
@@ -359,11 +525,12 @@ class DatabaseAdoptionTest(unittest.TestCase):
         self._assert_unadopted()
         self.assertTrue((self.backup / "database.dump").is_file())
         self.assertFalse((self.backup / "verification.json").exists())
-        self.assertTrue(adopt_legacy_database(self.url, MIGRATIONS,
-                                            Path(self.temp.name) / "retry").adopted)
+        self._settle_fixture_database()
+        self.assertTrue(self._adopt_normal_fixture(Path(self.temp.name) / "retry").adopted)
 
     def test_interrupted_036_rolls_back_and_resumes_from_audited_035(self) -> None:
-        adopt_legacy_database(self.url, MIGRATIONS, self.backup)
+        self._settle_fixture_database()
+        self._adopt_normal_fixture(self.backup)
         path = self.prefix / "036_source_deletion_tasks.sql"
         original = (MIGRATIONS / path.name).read_text()
         # 在完成约束 SQL、写入凭证之前故意等待；终止自己的测试库连接。
@@ -400,7 +567,7 @@ class DatabaseAdoptionTest(unittest.TestCase):
         self.assertEqual(migrate(self.url, self.prefix), (path.name,))
 
     def test_fake_historical_success_is_rejected_after_audited_baseline(self) -> None:
-        adopt_legacy_database(self.url, MIGRATIONS, self.backup)
+        self._adopt_normal_fixture(self.backup)
         with self._fixture_connection() as connection:
             connection.execute("INSERT INTO public.notalone_schema_migration (name, checksum) "
                                "VALUES ('001_initial_ingest.sql', %s)", ("a" * 64,))
@@ -513,9 +680,16 @@ class DatabaseAdoptionTest(unittest.TestCase):
         self._assert_unadopted()
 
     def test_new_object_committed_during_backup_is_rejected_with_fresh_catalog(self) -> None:
-        tools = self._pg_wrapper("pg_restore", "    import psycopg\n"
+        tools = self._pg_wrapper("pg_restore", "    import psycopg, time\n"
                                  f"    with psycopg.connect({self.url!r}) as c:\n"
-                                 "        c.execute('CREATE TABLE public.concurrent_probe (id int)')")
+                                 "        peer_pid = c.info.backend_pid\n"
+                                 "        c.execute('CREATE TABLE public.concurrent_probe (id int)')\n"
+                                 "    deadline = time.monotonic() + 2\n"
+                                 "    with psycopg.connect('host=/tmp dbname=postgres', autocommit=True) as watcher:\n"
+                                 f"        while watcher.execute('SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE pid=%s AND datname=%s)', (peer_pid, {self.name!r})).fetchone()[0]:\n"
+                                 "            if time.monotonic() >= deadline:\n"
+                                 "                raise RuntimeError('合成DDL连接未退出')\n"
+                                 "            time.sleep(0.01)")
         with patch.dict(os.environ, {"PATH": str(tools) + os.pathsep + os.environ["PATH"]}):
             with self.assertRaisesRegex(MigrationError, "adoption_repair_mismatch"):
                 adopt_legacy_database(self.url, MIGRATIONS, self.backup)
@@ -554,7 +728,17 @@ class DatabaseAdoptionTest(unittest.TestCase):
             # 文件 I/O 接缝故障注入；另一连接真实提交 DDL，不替换数据库核验。
             if evidence.exists() and os.fstat(descriptor).st_ino == evidence.stat().st_ino:
                 with psycopg.connect(self.url) as peer:
+                    peer_pid = peer.info.backend_pid
                     peer.execute("CREATE TABLE public.late_probe (id int)")
+                # 只等待本例DDL连接确切PID退出，仍由正式目录复核判定漂移。
+                deadline = time.monotonic() + 2
+                while self.admin.execute(
+                    "SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE pid=%s AND datname=%s)",
+                    (peer_pid, self.name),
+                ).fetchone()[0]:
+                    if time.monotonic() >= deadline:
+                        self.fail("合成DDL连接未退出")
+                    time.sleep(0.01)
             original_fsync(descriptor)
 
         with patch("os.fsync", side_effect=fsync_with_other_commit):

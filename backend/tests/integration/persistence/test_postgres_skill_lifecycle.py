@@ -241,7 +241,7 @@ class PostgresSkillLifecycleTest(unittest.TestCase):
             self.assertIsNotNone(entry.created_at.tzinfo)
             self.assertTrue(entry.enabled)
 
-    def test_rollback_makes_old_version_current_and_restores_usable(self) -> None:
+    def test_rollback_changes_current_but_preserves_disabled_until_explicit_enable(self) -> None:
         with TemporaryDirectory() as temporary_directory:
             first = self._package(
                 "rollback-skill",
@@ -265,9 +265,12 @@ class PostgresSkillLifecycleTest(unittest.TestCase):
 
         self.assertEqual(rolled_back.version_id, imported.version_id)
         self.assertEqual(rolled_back.version_number, 1)
-        self.assertEqual(rolled_back.status, "active")
+        self.assertEqual(rolled_back.status, "disabled")
         catalog = self.skill_port.catalog(self._scope())
         self.assertEqual(catalog.revision, rolled_back.revision)
+        self.assertEqual(catalog.entries, ())
+        self.library.enable(self.owner_id, updated.skill_id)
+        catalog = self.skill_port.catalog(self._scope())
         self.assertEqual(
             [entry.name for entry in catalog.entries],
             ["rollback-skill"],

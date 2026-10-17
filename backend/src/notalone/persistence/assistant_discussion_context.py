@@ -22,8 +22,11 @@ from notalone.persistence.assistant_session_inputs import (
 from notalone.persistence.assistant_session_store import (
     _dependencies_available, _partition_assistant_dependencies, _reply_dependencies,
 )
-from notalone.persistence.style_sample_store import captured_reply_sources, require_reply_sources_current
+from notalone.persistence.style_sample_store import (
+    _with_reply_source_validation, captured_reply_sources, require_reply_sources_current,
+)
 from notalone.persistence.reply_discussion_dependencies import reply_style_sample_dependencies
+from notalone.persistence.reply_basis_changes import historical_basis_revision_sha256
 from notalone.reply.assistant_discussion import (
     DiscussionContext, DiscussionDependencies, DiscussionIdentity, DiscussionItem,
     DiscussionSnapshot,
@@ -113,22 +116,27 @@ def _discussion_available(connection: Any, scope: ContactScope, row: dict[str, A
     return True
 
 
-def _generation_input_available(connection: Any, scope: ContactScope, row: dict[str, Any]) -> bool:
+def _generation_input_available(connection: Any, scope: ContactScope, row: dict[str, Any], *, policy_current=False) -> bool:
     if (row["state"] != "active" or row["turn_state"] not in ("running", "failed", "completed")
             or row["input_payload"] is None
-            or not _dependencies_available(connection, scope, set(row["turn_dependencies"] or ()))):
+            or not _dependencies_available(connection, scope, set(row["turn_dependencies"] or ()), historical=True)):
         return False
     try:
         dependencies = set(row["turn_dependencies"] or ())
         if row["reply_request_id"] is not None:
+            if policy_current:
+                from notalone.persistence.skill_execution_view import saved_skill_policy_change
+                if saved_skill_policy_change(connection, scope, row['reply_request_id']) is not None:
+                    return False
             dependencies.update(require_reply_sources_current(
                 connection, owner_id=scope.owner_id, request_id=row["reply_request_id"],
+                historical=True,
             ))
             dependencies.update(_reply_dependencies(connection, scope, row["reply_request_id"]))
         elif row["turn_state"] == "completed":
             return False
         typed = _partition_assistant_dependencies(connection, scope, dependencies)
-        verified_discussion_dependencies(connection, scope, typed.source_ids)
+        verified_discussion_dependencies(connection, scope, typed.source_ids, historical=True)
     except (ReplyStoreInvariantError, AssistantSessionRejected):
         return False
     return True
@@ -194,6 +202,7 @@ def _candidate_history(connection: Any, scope: ContactScope, session_id: UUID,
         raise ReplyStoreInvariantError("本次使用的旧候选历史已失效。") from None
 
 
+@_with_reply_source_validation
 def read_assistant_discussion_in_transaction(
     connection: Any, scope: ContactScope, request_key: UUID,
 ) -> DiscussionContext | None:
@@ -205,11 +214,13 @@ def read_assistant_discussion_in_transaction(
             return None
         items: list[DiscussionItem] = []
         records: list[DiscussionIdentity] = []
+        basis_dependencies: set[UUID] = set()
         for row in _input_rows(cursor, scope, current["session_id"]):
             if row["id"] == current["input_version_id"]:
                 continue
             if row["input_type"] != "generation":
                 if _discussion_available(cursor, scope, row):
+                    basis_dependencies.update(row["dependency_ids"])
                     if row["input_type"] == "candidate_carry":
                         from notalone.persistence.assistant_candidate_carry import read_candidate_carry_in_transaction
                         carry = read_candidate_carry_in_transaction(
@@ -219,20 +230,23 @@ def read_assistant_discussion_in_transaction(
                         )
                         messages = [{"message_id": str(message.message_id), "text": message.text}
                                     for message in carry.messages]
+                        basis_dependencies.update(carry.dependencies.source_ids)
                         items.append(DiscussionItem(
                             "candidate_carry", _json_text({"messages": messages}), row["id"],
                             carry.origin.origin_turn_id, carry.origin.origin_reply_request_id,
                             carry.origin.origin_candidate_id, carry.origin.origin_version_id,
                             carry.parent_version_id, carry.candidate_number, carry.version_number,
                             False, True,
+                            carry.basis_changes,
                         ))
                     else:
                         items.append(DiscussionItem("discussion_input", _json_text(row["content"]), row["id"]))
                     records.append(_discussion_identity(row))
                 continue
-            if not _generation_input_available(cursor, scope, row):
+            if not _generation_input_available(cursor, scope, row, policy_current=True):
                 continue
             dependencies = _generation_dependencies(cursor, scope, row)
+            basis_dependencies.update(dependencies.source_ids)
             items.append(DiscussionItem("generation_input", _json_text(row["input_payload"]), row["id"],
                                         row["turn_id"], row["reply_request_id"]))
             records.append(_generation_identity(row, dependencies))
@@ -246,16 +260,19 @@ def read_assistant_discussion_in_transaction(
                         version.parent_version_id, history.candidate_number, version.version_number,
                         version.version_id == history.default_display_version_id,
                         version.version_id == history.selected_version_id,
+                        history.basis_changes,
                     ))
                     records.append(_candidate_identity(row, history, version))
         snapshot = DiscussionSnapshot(
             scope, current["session_id"], request_key, current["input_version_id"],
             current["id"], _current_fingerprint(current), tuple(records),
+            historical_basis_revision_sha256(cursor, scope, tuple(sorted(basis_dependencies))),
         )
         return DiscussionContext(scope, current["session_id"], request_key,
                                  current["input_version_id"], tuple(items), snapshot)
 
 
+@_with_reply_source_validation
 def require_assistant_discussion_current(
     connection: Any, scope: ContactScope, snapshot: DiscussionSnapshot,
 ) -> DiscussionDependencies:
@@ -272,9 +289,17 @@ def require_assistant_discussion_current(
             snapshot.current_payload_sha256,
         ):
             raise ReplyStoreInvariantError("助手讨论当前输入已改变。")
-        return _require_captured_records(cursor, scope, snapshot)
+        dependencies = _require_captured_records(cursor, scope, snapshot, policy_current=True)
+        if (snapshot.basis_revision_sha256 is None and dependencies.source_ids
+                or snapshot.basis_revision_sha256 is not None
+                and snapshot.basis_revision_sha256 != historical_basis_revision_sha256(
+                    cursor, scope, dependencies.source_ids,
+                )):
+            raise ReplyStoreInvariantError("模型读取后的历史依据已变化，请重新生成。")
+        return dependencies
 
 
+@_with_reply_source_validation
 def require_assistant_discussion_available(
     connection: Any, scope: ContactScope, snapshot: DiscussionSnapshot,
 ) -> DiscussionDependencies:
@@ -299,13 +324,15 @@ def require_assistant_discussion_available(
         if (anchor["anchor_input_state"] != "active" or anchor["state"] not in ("running", "failed", "completed")
                 or anchor["input_payload"] is None
                 or anchor["anchor_binding_id"] != anchor["conversation_binding_id"]
-                or not _dependencies_available(cursor, scope, set(anchor["dependency_ids"]))):
+                or not _dependencies_available(cursor, scope, set(anchor["dependency_ids"]),
+                                                historical=True)):
             raise ReplyStoreInvariantError("助手讨论捕获输入来源已失效。")
         return _require_captured_records(cursor, scope, snapshot)
 
 
 def _require_captured_records(
     cursor: Any, scope: ContactScope, snapshot: DiscussionSnapshot,
+    *, policy_current=False,
 ) -> DiscussionDependencies:
     dependencies: set[UUID] = set()
     samples: set[UUID] = set()
@@ -330,7 +357,7 @@ def _require_captured_records(
                 samples.update(carry.dependencies.style_sample_ids)
             continue
         if identity.input_version_id not in captured_by_input:
-            if not _generation_input_available(cursor, scope, row):
+            if not _generation_input_available(cursor, scope, row, policy_current=policy_current):
                 raise ReplyStoreInvariantError("本次使用的旧轮生成已失效。")
             captured_by_input[identity.input_version_id] = _generation_dependencies(cursor, scope, row)
         captured = captured_by_input[identity.input_version_id]

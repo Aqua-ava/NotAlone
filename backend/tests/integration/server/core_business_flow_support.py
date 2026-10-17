@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -178,6 +179,7 @@ class CoreBusinessFlowFixture:
     extraction_model_factory = ScriptedCoreModel
     production_model_wiring = False
     _database_ownership_path: Path | None = None
+    _prepared_database_name: str | None = None
     # 合成模型只覆盖当前可推导维度；门保持开启，生产默认空表另行验证。
     dimension_release: DimensionRelease | None = DimensionRelease(
         allowed=frozenset({"subject", "truth_intent", "time"}),
@@ -185,7 +187,10 @@ class CoreBusinessFlowFixture:
 
     @classmethod
     def setUpClass(cls) -> None:
-        cls.database_name = f"notalone_core_flow_{uuid4().hex}_test"
+        cls.database_name = cls._prepared_database_name or f"notalone_core_flow_{uuid4().hex}_test"
+        if (len(cls.database_name) > 63
+                or not re.fullmatch(r"notalone_core_flow_[0-9a-f]{32}_test", cls.database_name)):
+            raise RuntimeError("核心夹具只允许本轮受控测试库名。")
         if cls._database_ownership_path is not None:
             # 在可能创建测试库之前落盘归属；默认无此副作用，不记录连接凭据。
             descriptor = os.open(cls._database_ownership_path,
@@ -202,10 +207,15 @@ class CoreBusinessFlowFixture:
         ))
         cls.addClassCleanup(cls._drop_database)
         cls.database_url = f"host=/tmp dbname={cls.database_name}"
+        with psycopg.connect(cls.database_url) as connection:
+            if connection.execute("SELECT current_database()").fetchone()[0] != cls.database_name:
+                raise RuntimeError("核心夹具数据库身份不匹配。")
         env = dict(os.environ)
         env.update({
             "NOTALONE_DISABLE_DOTENV": "1",
+            "PYTHON_DOTENV_DISABLED": "1",
             "NOTALONE_DATABASE_URL": cls.database_url,
+            "NOTALONE_TEST_DATABASE_URL": cls.database_url,
         })
         migration = subprocess.run(
             [sys.executable, "-m", "notalone.database_migrations", "--migrations",
@@ -249,6 +259,10 @@ class CoreBusinessFlowFixture:
         for model in (self.extraction_model, self.reply_model):
             for gate in model.response_gates.values():
                 gate.set()
+
+    def build_setup_service(self):
+        """普通页面可装配真实首启状态；默认核心HTTP夹具保持原行为。"""
+        return None
 
     def _close_lock_connections(self) -> None:
         for connection in self.lock_connections:
@@ -344,6 +358,7 @@ class CoreBusinessFlowFixture:
                 reply=PriorityReplyPort(generator, priority),
             ),
             runtime_shutdown=priority.stop,
+            setup_service=self.build_setup_service(),
         ), owner_id)
         self.addCleanup(backend.close)
         return backend
@@ -351,8 +366,11 @@ class CoreBusinessFlowFixture:
     def _production_backend(self, owner_id: UUID) -> HttpBackend:
         """装配实际 server builders，替换模型并注入合成维度配置。"""
 
-        from notalone.server.command import _build_task_host
+        from notalone.server.command import _build_task_host, _build_skill_service
         from notalone.server.reply_wiring import build_reply_service
+        from notalone.application.memory_upgrade import MemoryUpgradeService
+        from notalone.application.memory_upgrade_runtime import UpgradeRuntimeBuilder
+        from notalone.persistence.memory_upgrade import PostgresMemoryUpgradeStore
 
         priority, events = ModelPriorityControl(), EventBus()
         extraction_patch = patch(
@@ -376,12 +394,17 @@ class CoreBusinessFlowFixture:
             token=f"synthetic-core-{owner_id}", events=events,
             import_service=ImportService(repository=PostgresIngestRepository(self.database_url)),
             task_host=task_host, reply_service=reply_service,
+            skill_service=_build_skill_service(self.database_url),
+            memory_upgrades=MemoryUpgradeService(PostgresMemoryUpgradeStore(self.database_url,
+                algorithm_provider=UpgradeRuntimeBuilder(self.database_url,
+                    dimension_release=self.dimension_release).identity), task_host=task_host),
             ledger_service=LedgerService(ledger=PostgresOutboundLedger(self.database_url)),
             memory_service=MemoryService(
                 contact_memory=PostgresMemoryStore(self.database_url),
                 owner_memory=PostgresOwnerMemoryStore(self.database_url),
             ),
             runtime_shutdown=priority.stop,
+            setup_service=self.build_setup_service(),
         ), owner_id)
         self.addCleanup(backend.close)
         return backend

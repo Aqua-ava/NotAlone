@@ -15,6 +15,12 @@ import { installTraceBridge } from '../../src/main/traces/bridge';
 import { installSourceDeletionBridge } from '../../src/main/sources/bridge';
 import { installReplyBridge } from '../../src/main/reply/bridge';
 import { installStyleSampleBridge } from '../../src/main/style-samples/bridge';
+import { installExpressionPreferenceBridge } from '../../src/main/expression-preferences/bridge';
+import { expressionPreferenceDeletion } from '../../src/main/expression-preferences/deletion';
+import { installSkillLearningBridge } from '../../src/main/skill-learning/bridge';
+import { coordinateSkillLearningDeletion, coordinateSkillLearningSampleDeletion, coordinateSkillLearningSourceDeletion } from '../../src/main/skill-learning/deletion';
+import { installMemoryUpgradeBridge } from '../../src/main/memory-upgrade/bridge';
+import { observeMemoryUpgradeDeletion } from '../../src/main/memory-upgrade/deletion';
 import { installBindingConsentBridge } from '../../src/main/bindings/bridge';
 import { installSyncControlBridge } from '../../src/main/sync/bridge';
 import { noArguments, type PageCommands, type PageRole } from '../../src/main/page-commands';
@@ -73,14 +79,24 @@ export class PageHost implements PageCommands {
     memory.onRecordDeletion((phase) => traces.recordDeletionChanged(phase));
     const replies = this.replies = installReplyBridge(this, this.backend, contacts, () => this.foreground.getGenerationBlock());
     const styleSamples = installStyleSampleBridge(this, this.backend, contacts, replies);
+    const skillLearning = installSkillLearningBridge(this, this.backend, contacts);
+    const memoryUpgrade = installMemoryUpgradeBridge(this, this.backend, contacts);
+    coordinateSkillLearningSampleDeletion(skillLearning, styleSamples);
+    const preferences = installExpressionPreferenceBridge(this, this.backend, contacts,
+      coordinateSkillLearningDeletion(skillLearning, memory, replies,
+        expressionPreferenceDeletion(traces, replies, styleSamples)));
     this.foreground.onStateChanged(() => replies.refreshGenerationEligibility());
-    installSourceDeletionBridge(this, this.backend, contacts, async (contactId) => {
+    const sources = installSourceDeletionBridge(this, this.backend, contacts, async (contactId) => {
       traces.invalidateSource();
+      skillLearning.invalidate();
       const styleChecking = styleSamples.invalidateSource(contactId);
       const checking = replies.revalidateDeletedSource(contactId);
       const memoryChecking = memory.revalidateDeletedSource(contactId);
-      await Promise.all([styleChecking, checking, memoryChecking]);
+      const preferenceChecking = preferences.invalidateSource(contactId);
+      await Promise.all([styleChecking, checking, memoryChecking, preferenceChecking]);
     });
+    coordinateSkillLearningSourceDeletion(skillLearning, sources);
+    observeMemoryUpgradeDeletion(memory, memoryUpgrade, sources);
     const copies = new CandidateCopyController(this.backend, contacts, replies,
       (selection, text) => styleSamples.recordCopied(selection, text));
     this.handle('candidate-copy:copy', (...args: unknown[]) => {

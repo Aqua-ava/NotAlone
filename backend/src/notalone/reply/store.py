@@ -38,6 +38,7 @@ from notalone.reply.interface import (
     UserSkillChoice,
 )
 from notalone.reply.runtime import RuntimeCandidate
+from notalone.reply.retrieval_receipt import ReplyRetrievalReceipt, require_receipt_evidence
 from notalone.reply.input_budget import InputBudgetDecision
 from notalone.reply.input_budget_receipt import validate_input_budget_receipt
 from notalone.scopes import ContactScope, VerifiedConversationScope
@@ -104,6 +105,7 @@ class StoredReplyRequest:
     attempts: tuple[ReplyAttempt, ...]
     evidence: tuple[ContextEvidence, ...]
     result: ReplyGenerated | None
+    retrieval: ReplyRetrievalReceipt | None = None
 
 
 @dataclass(frozen=True, slots=True, repr=False)
@@ -149,6 +151,7 @@ class _MutableReplyRecord:
     attempts: list[ReplyAttempt]
     evidence: tuple[ContextEvidence, ...] = ()
     result: ReplyGenerated | None = None
+    retrieval: ReplyRetrievalReceipt | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -291,6 +294,7 @@ class InMemoryReplyStore:
             record.state = ReplyAttemptState.RUNNING
             record.result = None
             record.evidence = ()
+            record.retrieval = None
             record.attempts.append(
                 ReplyAttempt(
                     number=request.attempt,
@@ -353,15 +357,20 @@ class InMemoryReplyStore:
                     for evidence_id in candidate.citation_ids
                 )
             )
+            from notalone.reply.expression_preferences import preference_receipts
+
             result = ReplyGenerated(
                 reply_request_id=request.request_id,
                 candidates=tuple(candidates),
                 context_receipt=ContextReceipt(evidence_ids=evidence_ids,
-                                               style_sample_ids=tuple(sorted(item.sample_id for item in context.style_references))),
+                                               style_sample_ids=tuple(sorted(item.sample_id for item in context.style_references)),
+                                               expression_preference_ids=tuple(sorted(item.preference_id for item in context.expression_preferences)),
+                                               expression_preferences=preference_receipts(context.expression_preferences)),
                 used_skill=reply.used_skill,
                 input_budget=reply.input_budget,
             )
             record.evidence = tuple(context.evidence)
+            record.retrieval = context.retrieval
             record.result = result
             record.state = ReplyAttemptState.COMPLETED
             record.attempts[-1] = replace(
@@ -409,6 +418,7 @@ class InMemoryReplyStore:
                 attempts=tuple(record.attempts),
                 evidence=record.evidence,
                 result=record.result,
+                retrieval=record.retrieval,
             )
 
     def _record_for_request(self, request: ReplyRequest) -> _MutableReplyRecord:
@@ -520,6 +530,11 @@ class InMemoryReplyStore:
         context: ReplyContext,
     ) -> set[UUID]:
         """校验上下文快照并返回证据标识集合；与 PostgreSQL adapter 同契约。"""
+
+        try:
+            require_receipt_evidence(context.retrieval, context.evidence)
+        except (AttributeError, TypeError, ValueError):
+            raise ReplyStoreInvariantError("回复检索回执与实际依据不一致。") from None
 
         if not (
             isinstance(context, ReplyContext)
@@ -742,6 +757,8 @@ def canonical_reply_input(command: GenerateReply) -> str:
         if isinstance(command.skill, UserSkillChoice)
         else "disabled" if isinstance(command.skill, NoSkill) else "auto"
     )
+    if command.scene is not None:
+        payload['scene'] = command.scene
     return json.dumps(
         payload,
         ensure_ascii=False,

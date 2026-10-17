@@ -122,6 +122,76 @@ class PostgresSkillLibrary(SkillLibraryManagementPort):
             for row in rows
         )
 
+    def publish_reviewed(self, connection: Any, *, scope: ContactScope,
+                         draft: dict, confirmed_scope: dict,
+                         dependency_ids: list, source_generation: dict) -> dict:
+        """在审核应用已持有的事务中发布；不向回复或学习模型暴露。"""
+        from notalone.skills.package import RawSkillPackage
+        from notalone.skills.learning import SkillLearningInvalid
+
+        strategy = draft['sanitized_strategy']
+        package = self._validator.validate(RawSkillPackage(
+            strategy['name'], strategy['document'].encode('utf-8'), ()))
+        skill_id = UUID(draft['logical_skill_id'])
+        targets = draft['target_versions']
+        skill = connection.execute(
+            'SELECT id,name,status FROM public.reply_skill WHERE owner_id=%s AND id=%s FOR UPDATE',
+            (scope.owner_id, skill_id)).fetchone()
+        self._ensure_library_row(connection, scope.owner_id)
+        conflict = connection.execute(
+            'SELECT id FROM public.reply_skill WHERE owner_id=%s AND name=%s AND id<>%s',
+            (scope.owner_id, package.name, skill_id)).fetchone()
+        if conflict or skill and (skill['status'] != 'active' or skill['name'] != package.name):
+            raise SkillLearningInvalid()
+        if draft['proposal_kind'] == 'create':
+            if skill is not None or targets:
+                raise SkillLearningInvalid()
+            connection.execute(
+                "INSERT INTO public.reply_skill(id,owner_id,contact_id,name,description,status) VALUES(%s,%s,NULL,%s,%s,'active')",
+                (skill_id, scope.owner_id, package.name, package.description))
+        elif skill is None or not targets or UUID(targets[0]['skill_id']) != skill_id:
+            raise SkillLearningInvalid()
+        for target in targets:
+            current = connection.execute(
+                'SELECT version.id FROM public.reply_skill_version AS version '
+                'JOIN public.reply_skill AS skill ON skill.id=version.skill_id '
+                "WHERE skill.owner_id=%s AND skill.id=%s AND skill.status='active' "
+                "AND version.id=%s AND version.is_current AND version.enabled AND version.status='active' FOR UPDATE OF version,skill",
+                (scope.owner_id, UUID(target['skill_id']), UUID(target['version_id']))).fetchone()
+            if current is None:
+                raise SkillLearningInvalid()
+        number = connection.execute(
+            'SELECT coalesce(max(version_number),0)+1 AS number FROM public.reply_skill_version WHERE skill_id=%s',
+            (skill_id,)).fetchone()['number']
+        connection.execute('UPDATE public.reply_skill_version SET is_current=false WHERE skill_id=%s AND is_current', (skill_id,))
+        version_id = self._insert_version_and_resources(connection, skill_id=skill_id,
+                                                        package=package, version_number=number)
+        connection.execute('UPDATE public.reply_skill_version SET source_locator=%s,review_origin=true WHERE id=%s',
+                           ('reviewed-draft:' + draft['draft_id'], version_id))
+        connection.execute(
+            "UPDATE public.reply_skill SET description=%s,updated_at=now() WHERE id=%s",
+            (package.description, skill_id))
+        # 合并仅停用明确列出的目标；旧版本保留，回滚仍受独立政策和删除约束。
+        for target in targets[1:]:
+            connection.execute("UPDATE public.reply_skill SET status='disabled',updated_at=now() WHERE owner_id=%s AND id=%s",
+                               (scope.owner_id, UUID(target['skill_id'])))
+        connection.execute(
+            'INSERT INTO public.reply_skill_publication(version_id,owner_id,origin_contact_id,draft_id,logical_skill_id,'
+            'scope_kind,scope_contact_id,scene,dependency_ids,source_generation) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)',
+            (version_id, scope.owner_id, scope.contact_id, UUID(draft['draft_id']), skill_id,
+             confirmed_scope['kind'], UUID(confirmed_scope['contact_id']) if confirmed_scope['contact_id'] else None,
+             confirmed_scope['scene'], dependency_ids, Jsonb(source_generation)))
+        for ordinal, method in enumerate(strategy['methods']):
+            connection.execute(
+                'INSERT INTO public.reply_skill_method(version_id,method_id,logical_skill_id,ordinal,title,instruction,'
+                'replaces_method_ids,mapping_state) VALUES(%s,%s,%s,%s,%s,%s,%s,%s)',
+                (version_id, UUID(method['method_id']), UUID(method['logical_skill_id']), ordinal,
+                 method['title'], method['instruction'], [UUID(value) for value in method['replaces_method_ids']],
+                 'confirmed' if targets else 'new'))
+        revision = self._increment_revision(connection, scope.owner_id)
+        return {'skill_id': str(skill_id), 'version_id': str(version_id), 'name': package.name,
+                'version_number': number, 'revision': revision, 'scope': confirmed_scope}
+
     def read_current_version(
         self,
         owner_id: UUID,
@@ -157,6 +227,7 @@ class PostgresSkillLibrary(SkillLibraryManagementPort):
                     raise SkillVersionNotFoundError(
                         "Skill 读取失败：当前版本不可用。"
                     )
+                self._require_version_sources(connection, owner_id, current['id'])
                 resources = connection.execute(
                     """
                     SELECT relative_path
@@ -396,7 +467,7 @@ class PostgresSkillLibrary(SkillLibraryManagementPort):
         skill_id: UUID,
         version_id: UUID,
     ) -> SkillVersionResult:
-        """把已保留的旧版本设为 current 并恢复可用。"""
+        """把仍合法的保留版本设为current，保持用户的启用或停用状态。"""
 
         if not isinstance(owner_id, UUID) or not isinstance(
             skill_id,
@@ -405,94 +476,67 @@ class PostgresSkillLibrary(SkillLibraryManagementPort):
             raise TypeError("Skill 回滚标识必须是 UUID。")
         try:
             with self._connect() as connection:
-                self._ensure_library_row(connection, owner_id)
-                skill = self._lock_skill(
-                    connection,
-                    owner_id=owner_id,
-                    skill_id=skill_id,
-                    operation="回滚",
-                )
-                target = connection.execute(
-                    """
-                    SELECT version_number, description
-                    FROM public.reply_skill_version
-                    WHERE id = %s AND skill_id = %s AND status = 'active'
-                      AND content IS NOT NULL AND length(btrim(content)) > 0
-                    FOR UPDATE
-                    """,
-                    (version_id, skill_id),
-                ).fetchone()
-                if target is None:
-                    raise SkillVersionNotFoundError(
-                        "Skill 回滚失败：目标版本不可用。",
-                    )
-                current = connection.execute(
-                    """
-                    SELECT id, is_current
-                    FROM public.reply_skill_version
-                    WHERE skill_id = %s AND is_current = TRUE
-                    FOR UPDATE
-                    """,
-                    (skill_id,),
-                ).fetchone()
-                if current is not None and current["id"] == version_id:
-                    if skill["status"] == "active":
-                        revision = self._current_revision(connection, owner_id)
-                        return self._result(
-                            connection,
-                            owner_id=owner_id,
-                            skill_id=skill_id,
-                            version_id=version_id,
-                            version_number=target["version_number"],
-                            revision=revision,
-                            status="active",
-                        )
-                connection.execute(
-                    """
-                    UPDATE public.reply_skill_version
-                    SET is_current = FALSE
-                    WHERE skill_id = %s AND is_current = TRUE
-                    """,
-                    (skill_id,),
-                )
-                connection.execute(
-                    """
-                    UPDATE public.reply_skill_version
-                    SET is_current = TRUE, enabled = TRUE, status = 'active'
-                    WHERE id = %s AND skill_id = %s
-                    """,
-                    (version_id, skill_id),
-                )
-                connection.execute(
-                    """
-                    UPDATE public.reply_skill
-                    SET status = 'active',
-                        description = %s,
-                        updated_at = now()
-                    WHERE id = %s
-                    """,
-                    (target["description"], skill_id),
-                )
-                revision = self._increment_revision(connection, owner_id)
-                result = self._result(
-                    connection,
-                    owner_id=owner_id,
-                    skill_id=skill_id,
-                    version_id=version_id,
-                    version_number=target["version_number"],
-                    revision=revision,
-                    status="active",
-                )
-        except (
-            SkillNotFoundError,
-            SkillDeletedError,
-            SkillVersionNotFoundError,
-            SkillLibraryPersistenceError,
-        ):
-            raise
+                from notalone.persistence.locks import lock_owner_scope
+                lock_owner_scope(connection, owner_id=owner_id)
+                return self.rollback_locked(connection, owner_id, skill_id, version_id)
         except psycopg.Error:
             raise SkillLibraryPersistenceError("Skill 回滚失败。") from None
-        return result
+
+    def rollback_locked(self, connection, owner_id, skill_id, version_id, *, scope=None):
+        """调用方持有owner锁；回滚只切版本，绝不撤销用户停用。"""
+        from notalone.persistence.skill_version_lineage import capture_parent_publications
+        from notalone.skills.learning import SkillLearningInvalid
+        self._ensure_library_row(connection, owner_id)
+        skill = self._lock_skill(connection, owner_id=owner_id, skill_id=skill_id, operation="回滚")
+        target = connection.execute(
+            "SELECT id,version_number,description,review_origin FROM public.reply_skill_version "
+            "WHERE id=%s AND skill_id=%s AND status='active' AND enabled AND content IS NOT NULL FOR UPDATE",
+            (version_id, skill_id)).fetchone()
+        if target is None:
+            raise SkillVersionNotFoundError("Skill 回滚失败：目标版本不可用。")
+        if target['review_origin']:
+            origin = connection.execute(
+                'SELECT origin_contact_id FROM public.reply_skill_publication WHERE version_id=%s AND owner_id=%s AND NOT deleted',
+                (version_id, owner_id)).fetchone()
+            if origin is None:
+                raise SkillVersionNotFoundError("Skill 回滚失败：目标来源不可用。")
+            scope = scope or ContactScope(owner_id, origin['origin_contact_id'])
+        if scope is not None:
+            try:
+                proof, _ = capture_parent_publications(connection, scope, {version_id})
+                if len(proof) != 1:
+                    raise SkillLearningInvalid()
+            except SkillLearningInvalid:
+                raise SkillVersionNotFoundError("Skill 回滚失败：目标来源或范围不可用。") from None
+        current_row = connection.execute('SELECT id FROM public.reply_skill_version WHERE skill_id=%s AND is_current', (skill_id,)).fetchone()
+        current = current_row['id'] if current_row else None
+        if current != version_id:
+            connection.execute('UPDATE public.reply_skill_version SET is_current=false WHERE skill_id=%s AND is_current', (skill_id,))
+            connection.execute('UPDATE public.reply_skill_version SET is_current=true WHERE id=%s', (version_id,))
+            connection.execute('UPDATE public.reply_skill SET description=%s,updated_at=now() WHERE id=%s', (target['description'], skill_id))
+            revision = self._increment_revision(connection, owner_id)
+        else:
+            revision = self._current_revision(connection, owner_id)
+        return self._result(connection, owner_id=owner_id, skill_id=skill_id, version_id=version_id,
+                            version_number=target['version_number'], revision=revision, status=skill['status'])
+
+    @staticmethod
+    def _require_version_sources(connection, owner_id, version_id):
+        from notalone.persistence.skill_version_lineage import capture_parent_publications
+        from notalone.skills.learning import SkillLearningInvalid
+        row = connection.execute(
+            'SELECT version.review_origin,publication.origin_contact_id FROM public.reply_skill_version AS version '
+            'LEFT JOIN public.reply_skill_publication AS publication ON publication.version_id=version.id WHERE version.id=%s',
+            (version_id,)).fetchone()
+        if row is None or row['review_origin'] and row['origin_contact_id'] is None:
+            raise SkillVersionNotFoundError('Skill 来源不可用。')
+        if row['review_origin']:
+            try:
+                proof, _ = capture_parent_publications(connection, ContactScope(owner_id, row['origin_contact_id']), {version_id})
+                if len(proof) != 1:
+                    raise SkillLearningInvalid()
+            except SkillLearningInvalid:
+                raise SkillVersionNotFoundError('Skill 来源不可用。') from None
 
     def _set_skill_status(
         self,
@@ -563,6 +607,8 @@ class PostgresSkillLibrary(SkillLibraryManagementPort):
         operation_id = uuid4()
         try:
             with self._connect() as connection:
+                from notalone.persistence.locks import lock_owner_scope
+                lock_owner_scope(connection, owner_id=owner_id)
                 skill = connection.execute(
                     """
                     SELECT id, name, status, deletion_operation_id
@@ -583,6 +629,10 @@ class PostgresSkillLibrary(SkillLibraryManagementPort):
                         revision=revision,
                         deletion_operation_id=skill["deletion_operation_id"],
                     )
+                from notalone.persistence.skill_learning import erase_skill_learning
+                version_rows = connection.execute('SELECT id FROM public.reply_skill_version WHERE skill_id=%s', (skill_id,)).fetchall()
+                erase_skill_learning(connection, owner_id=owner_id,
+                                     removed_ids={skill_id} | {row['id'] for row in version_rows})
                 connection.execute(
                     """
                     UPDATE public.reply_skill_version
@@ -684,6 +734,7 @@ class PostgresSkillLibrary(SkillLibraryManagementPort):
                     raise SkillVersionNotFoundError(
                         "Skill 导出失败：当前版本不可用。",
                     )
+                self._require_version_sources(connection, owner_id, current['id'])
                 resource_rows = connection.execute(
                     """
                     SELECT relative_path, content

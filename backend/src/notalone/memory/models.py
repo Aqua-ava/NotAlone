@@ -8,6 +8,9 @@ from enum import StrEnum
 from uuid import UUID
 
 from notalone.memory.dimension_evidence import DimensionEvidence
+from notalone.memory.correction import CorrectionReview
+from notalone.memory.events import MemoryEvent
+from notalone.memory.version_evidence import VersionEvidence
 
 from notalone.memory.timing import MemoryTiming
 from notalone.scopes import ContactScope
@@ -105,9 +108,13 @@ class MemoryCandidate:
     interpretation_reason: str = ""
     failure_reason: str | None = None
     timing: MemoryTiming = MemoryTiming()
+    event: MemoryEvent | None = None
     dimension_evidence: DimensionEvidence | None = None
+    correction_review: tuple[CorrectionReview, ...] = ()
 
     def __post_init__(self) -> None:
+        if self.event is not None and not isinstance(self.event, MemoryEvent):
+            raise ValueError("记忆事件信息无效。")
         if self.dimension_evidence is not None and (
             not isinstance(self.dimension_evidence, DimensionEvidence)
             or self.dimension_evidence.scope != self.scope
@@ -180,8 +187,13 @@ class ConfirmedMemory:
     risk_flags: tuple[str, ...] = ()
     supersedes_memory_id: UUID | None = None
     timing: MemoryTiming = MemoryTiming()
+    event: MemoryEvent | None = None
+    version_evidence: VersionEvidence | None = None
+    can_revert_auto_update: bool = False
 
     def __post_init__(self) -> None:
+        if self.event is not None and not isinstance(self.event, MemoryEvent):
+            raise ValueError("记忆事件信息无效。")
         if not isinstance(self.memory_id, UUID):
             raise TypeError("confirmed_memory_id 必须是 UUID。")
         if not isinstance(self.scope, ContactScope):
@@ -257,8 +269,13 @@ class OwnerMemory:
     risk_flags: tuple[str, ...] = ()
     supersedes_memory_id: UUID | None = None
     timing: MemoryTiming = MemoryTiming()
+    event: MemoryEvent | None = None
+    version_evidence: VersionEvidence | None = None
+    can_revert_auto_update: bool = False
 
     def __post_init__(self) -> None:
+        if self.event is not None and not isinstance(self.event, MemoryEvent):
+            raise ValueError("记忆事件信息无效。")
         if not isinstance(self.memory_id, UUID) or not isinstance(
             self.owner_id, UUID
         ):

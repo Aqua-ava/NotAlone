@@ -38,6 +38,7 @@ class AssistantExplorationGeneration:
         return ReplyServiceRequest(task.request_key, content, suggestion=reference,
                                    skill_disabled=isinstance(command.skill, NoSkill),
                                    skill_version_id=task.skill_version_id,
+                                   scene=task.content.skill_scene,
                                    expected_input_version_id=task.input_version_id)
 
     def prepare(self, command: ExplorationGeneration) -> AssistantGenerationReceipt:

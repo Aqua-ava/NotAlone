@@ -77,6 +77,7 @@ def reserve_message_adoption_in_transaction(
     request = AssistantContinuationReplyRequest(
         idempotency_key=command.idempotency_key, content=content,
         skill_version_id=command.skill_version_id, skill_disabled=command.skill_disabled,
+        scene=command.scene,
         expected_input_version_id=command.expected_input_version_id, continuation=metadata,
     )
     turn_id = store._reserve_in_transaction(connection, scope, session_id, request,

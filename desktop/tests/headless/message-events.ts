@@ -36,7 +36,8 @@ export async function withEventPages(browser: Browser, origin: string, use: (pag
         }
       }
     }); } finally { await transport.close(); }
-  }, released, path.resolve('tests/fixtures/message-events-backend.py'));
+  }, released, path.resolve('tests/fixtures/message-events-backend.py'), path.resolve('..'),
+  'message-events-database-ownership.json');
 }
 async function prepare({ manager, helper, fixture }: EventPages, contact: '甲' | '乙' = '甲') {
   await manager.getByRole('button', { name: `选择合成联系人${contact}`, exact: true }).click();

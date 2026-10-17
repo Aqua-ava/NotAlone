@@ -21,6 +21,7 @@ from notalone.persistence.assistant_session_store import (
 from notalone.persistence.locks import lock_owner_scope
 from notalone.persistence.message_sources import valid_source_ref_exists_sql
 from notalone.reply.errors import ReplyStoreInvariantError
+from notalone.reply.interface import ReplyBasisChange
 from notalone.scopes import ContactScope
 
 
@@ -33,6 +34,7 @@ class AssistantInput:
     turn_id: UUID | None
     state: str
     content: dict[str, Any] | None
+    basis_changes: tuple[ReplyBasisChange, ...] = ()
 
 
 def require_input_session(connection: Any, scope: ContactScope, session_id: UUID) -> dict[str, Any]:
@@ -61,7 +63,7 @@ def normalize_discussion_content(content: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(content, dict):
         raise AssistantSessionRejected("invalid_discussion_input")
     text_fields = ("correction", "requirements", "answer", "confirmed_intent")
-    common = {"type", "skill_mode", "skill_version_id", *text_fields}
+    common = {"type", "skill_mode", "skill_version_id", 'skill_scene', *text_fields}
     input_type = content.get("type")
     if input_type == "response_exploration":
         allowed = common | {"target_message_id"}
@@ -102,11 +104,17 @@ def normalize_discussion_content(content: dict[str, Any]) -> dict[str, Any]:
         raise AssistantSessionRejected("invalid_discussion_input")
     normalized["skill_mode"] = skill_mode
     normalized["skill_version_id"] = version_id
+    if content.get('skill_scene') is not None:
+        scene = content['skill_scene']
+        if not isinstance(scene, str) or not 0 < len(scene.strip()) <= 256 or scene != scene.strip():
+            raise AssistantSessionRejected('invalid_discussion_input')
+        normalized['skill_scene'] = scene
     return normalized
 
 
 def verified_discussion_dependencies(
     connection: Any, scope: ContactScope, dependencies: tuple[UUID, ...],
+    *, historical: bool = False,
 ) -> set[UUID]:
     """服务端检索元数据仍复核归属，跨联系人来源必须沿实际本人记忆证明。"""
 
@@ -117,7 +125,7 @@ def verified_discussion_dependencies(
     if not declared:
         return set()
     parameters = {"owner_id": scope.owner_id, "contact_id": scope.contact_id,
-                  "dependencies": list(declared)}
+                  "dependencies": list(declared), "historical": historical}
     scoped_rows = connection.execute(
         f"""
         SELECT source.id, 'original' AS kind FROM public.source_document AS source
@@ -134,31 +142,38 @@ def verified_discussion_dependencies(
         UNION
         SELECT memory.id, 'memory' AS kind FROM public.confirmed_memory AS memory
         WHERE memory.owner_id = %(owner_id)s AND memory.contact_id = %(contact_id)s
-          AND memory.status = 'active' AND memory.id = ANY(%(dependencies)s::uuid[])
-          AND (memory.valid_at IS NULL OR memory.valid_at <= now())
-          AND (memory.invalid_at IS NULL OR now() < memory.invalid_at)
+          AND (memory.status = 'active' OR %(historical)s AND memory.status = 'invalidated')
+          AND memory.id = ANY(%(dependencies)s::uuid[])
+          AND (%(historical)s OR (memory.valid_at IS NULL OR memory.valid_at <= now())
+            AND (memory.invalid_at IS NULL OR now() < memory.invalid_at))
         UNION
         SELECT candidate.id, 'memory' AS kind FROM public.memory_candidate AS candidate
         WHERE candidate.owner_id = %(owner_id)s AND candidate.contact_id = %(contact_id)s
-          AND candidate.status IN ('pending', 'confirmed')
+          AND (candidate.status IN ('pending', 'confirmed')
+            OR %(historical)s AND candidate.status IN ('rejected', 'invalidated'))
           AND candidate.id = ANY(%(dependencies)s::uuid[])
-          AND (candidate.valid_at IS NULL OR candidate.valid_at <= now())
-          AND (candidate.invalid_at IS NULL OR now() < candidate.invalid_at)
+          AND (%(historical)s OR (candidate.valid_at IS NULL OR candidate.valid_at <= now())
+            AND (candidate.invalid_at IS NULL OR now() < candidate.invalid_at))
         """, parameters,
     ).fetchall()
     allowed = {row["id"] for row in scoped_rows}
     owner_memories = connection.execute(
         "SELECT id, source_ids, adoption_method FROM public.owner_memory "
-        "WHERE owner_id = %s AND status = 'active' AND id = ANY(%s::uuid[]) "
-        "AND (valid_at IS NULL OR valid_at <= now()) AND (invalid_at IS NULL OR now() < invalid_at)",
-        (scope.owner_id, list(declared)),
+        "WHERE owner_id = %s AND (status='active' OR %s AND status='invalidated') AND id = ANY(%s::uuid[]) "
+        "AND (%s OR (valid_at IS NULL OR valid_at <= now()) AND (invalid_at IS NULL OR now() < invalid_at))",
+        (scope.owner_id, historical, list(declared), historical),
     ).fetchall()
     owner_refs: set[UUID] = set()
     for memory in owner_memories:
         allowed.add(memory["id"])
-        refs = set(memory["source_ids"])
-        if memory["adoption_method"] == "manual":
-            refs.discard(scope.owner_id)
+        from notalone.persistence.owner_memory_store import owner_memory_source_dependencies
+        try:
+            refs = set(owner_memory_source_dependencies(
+                connection, owner_id=scope.owner_id, memory_id=memory["id"],
+                source_ids=tuple(memory["source_ids"]), historical=historical,
+            ))
+        except PermissionError:
+            raise AssistantSessionRejected("source_unavailable") from None
         owner_refs.update(refs)
     owner_sources = _capture_original_dependencies(connection, scope, owner_refs, current_contact=False)
     allowed.update(owner_sources)
@@ -166,13 +181,16 @@ def verified_discussion_dependencies(
         raise AssistantSessionRejected("invalid_discussion_dependencies")
     scoped_memories = connection.execute(
         "SELECT source_ids, adoption_method FROM public.confirmed_memory "
-        "WHERE owner_id = %s AND contact_id = %s AND status = 'active' AND id = ANY(%s::uuid[]) "
-        "AND (valid_at IS NULL OR valid_at <= now()) AND (invalid_at IS NULL OR now() < invalid_at) "
-        "UNION ALL SELECT source_ids, 'auto' AS adoption_method FROM public.memory_candidate "
-        "WHERE owner_id = %s AND contact_id = %s AND status IN ('pending', 'confirmed') "
+        "WHERE owner_id = %s AND contact_id = %s AND (status='active' OR %s AND status='invalidated') "
         "AND id = ANY(%s::uuid[]) "
-        "AND (valid_at IS NULL OR valid_at <= now()) AND (invalid_at IS NULL OR now() < invalid_at)",
-        (scope.owner_id, scope.contact_id, list(declared), scope.owner_id, scope.contact_id, list(declared)),
+        "AND (%s OR (valid_at IS NULL OR valid_at <= now()) AND (invalid_at IS NULL OR now() < invalid_at)) "
+        "UNION ALL SELECT source_ids, 'auto' AS adoption_method FROM public.memory_candidate "
+        "WHERE owner_id = %s AND contact_id = %s AND (status IN ('pending', 'confirmed') "
+        "OR %s AND status IN ('rejected', 'invalidated')) "
+        "AND id = ANY(%s::uuid[]) "
+        "AND (%s OR (valid_at IS NULL OR valid_at <= now()) AND (invalid_at IS NULL OR now() < invalid_at))",
+        (scope.owner_id, scope.contact_id, historical, list(declared), historical,
+         scope.owner_id, scope.contact_id, historical, list(declared), historical),
     ).fetchall()
     contact_refs = {row["id"] for row in scoped_rows if row["kind"] == "original"}
     for memory in scoped_memories:
@@ -182,7 +200,7 @@ def verified_discussion_dependencies(
         contact_refs.update(refs)
     contact_sources = _capture_original_dependencies(connection, scope, contact_refs, current_contact=True)
     captured = declared | owner_sources | contact_sources
-    if not _dependencies_available(connection, scope, captured):
+    if not _dependencies_available(connection, scope, captured, historical=historical):
         raise AssistantSessionRejected("source_unavailable")
     return captured
 
@@ -253,7 +271,8 @@ def _input_state(connection: Any, scope: ContactScope, row: dict[str, Any]) -> s
             return "unavailable"
         return "active"
     dependencies = row["turn_dependencies"] if row["input_type"] == "generation" else row["dependency_ids"]
-    if not _dependencies_available(connection, scope, set(dependencies or ())):
+    generation = row["input_type"] == "generation"
+    if not _dependencies_available(connection, scope, set(dependencies or ()), historical=generation):
         return "unavailable"
     if row["input_type"] == "generation":
         if row["turn_state"] == "completed" and row["turn_reply_request_id"] is None:
@@ -261,7 +280,7 @@ def _input_state(connection: Any, scope: ContactScope, row: dict[str, Any]) -> s
         try:
             captured_generation_dependencies(
                 connection, scope, row["turn_request_key"], row["conversation_binding_id"],
-                row["turn_reply_request_id"],
+                row["turn_reply_request_id"], historical=True,
             )
         except ReplyStoreInvariantError:
             return "unavailable"
@@ -278,18 +297,22 @@ def read_input_records(
     for row in _input_rows(connection, scope, session_id, input_version_id=input_version_id):
         state = _input_state(connection, scope, row)
         content = row["content"] if state == "active" else None
+        basis_changes: tuple[ReplyBasisChange, ...] = ()
         if state == "active" and row["input_type"] == "candidate_carry":
             from notalone.persistence.assistant_candidate_carry import read_candidate_carry_in_transaction
-            content = read_candidate_carry_in_transaction(
+            carry = read_candidate_carry_in_transaction(
                 getattr(connection, "connection", connection), scope, row["content"],
                 dependency_ids=tuple(row["dependency_ids"]),
                 conversation_binding_id=row["conversation_binding_id"],
-            ).content_payload()
+            )
+            content = carry.content_payload()
+            basis_changes = carry.basis_changes
         records.append(AssistantInput(
             input_version_id=row["id"], session_id=row["session_id"],
             type=row["input_type"], conversation_binding_id=row["conversation_binding_id"],
             turn_id=row["turn_id"], state=state,
             content=content,
+            basis_changes=basis_changes,
         ))
     return tuple(records)
 
@@ -331,7 +354,7 @@ def require_current_input(
         if row["input_type"] == "generation":
             captured.update(captured_generation_dependencies(
                 cursor, scope, row["turn_request_key"], row["conversation_binding_id"],
-                row["turn_reply_request_id"],
+                row["turn_reply_request_id"], historical=True,
             ))
         return tuple(sorted(captured))
 

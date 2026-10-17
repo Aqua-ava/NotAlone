@@ -1,10 +1,13 @@
 import type { ContactSelection } from './contact-session-bridge';
+import type { ExpressionPreferenceReceipt } from './expression-preference-bridge';
 import type { ReplyEvidenceCommands } from './reply-evidence';
 import type { AssistantSessionCatalog, SavedAssistantSession } from './assistant-session';
 import type { AssistantInputBudget, AssistantInputBudgetNotice } from './assistant-input-budget';
 import type { ConfirmedAssistantSessionDeletion } from './assistant-session-deletion-events';
 import type { AssistantCandidateDraft, ReplyCandidateDraftUpdate, AssistantCandidateVersionsState, ExplicitAssistantCandidateSelection, ReplyCandidateVersionDisplay, ReplyCandidateVersionEdit, ReplyCandidateVersionRead, ReplyCandidateVersionSelection } from './assistant-candidate-versions';
 import type { AssistantContinuationClarification, RequirementChange } from './assistant-continuation-clarification';
+import type { ReplyBasisChange } from './reply-basis-change';
+import type { SkillPublicationScope } from './skill-learning-bridge';
 
 export type RewriteTone = 'original' | 'warm' | 'concise' | 'polite';
 export interface RewriteOptions {
@@ -46,9 +49,14 @@ export interface ReplyDirectionUpdate extends ContactSelection { direction: stri
 export interface ReplyCorrectionUpdate extends ContactSelection { correction: string; }
 export interface ReplyDirectionChoice extends ContactSelection { suggestionId: string; inputVersion: string; }
 export interface ReplySkillVersion { name: string; versionId: string; versionNumber: number; }
-export interface ReplyUsedSkill { name: string; versionId: string; loadState: 'loaded' | 'resource_failed'; }
+export interface ReplyUsedSkill {
+  name: string; versionId: string; loadState: 'loaded' | 'resource_failed';
+  versionNumber?: number | null; scope?: SkillPublicationScope;
+  executionView?: { policyRevision: number; methodIds: string[]; sha256: string };
+}
 export type ReplySkillChoice = { mode: 'auto' | 'disabled'; versionId: null } | { mode: 'user'; versionId: string };
 export interface ReplySkillUpdate extends ContactSelection { skill: ReplySkillChoice; }
+export interface ReplySceneUpdate extends ContactSelection { scene: string; }
 export interface ReplyRequirementsUpdate extends ContactSelection { requirements: string; }
 export interface ReplyClarificationEdit extends ContactSelection { questionId: string; inputVersion: string; }
 export interface ReplyClarificationAnswer extends ContactSelection { answer: string; questionId: string; inputVersion: string; }
@@ -89,6 +97,7 @@ export interface RewriteSnapshot {
   draftText: string;
   userInstruction: string | null;
   includeRelationshipContext: boolean;
+  scene?: string | null;
 }
 export interface DirectedReplySnapshot {
   mode: 'reply_to_message';
@@ -100,6 +109,7 @@ export interface DirectedReplySnapshot {
   userInstruction?: string;
   clarificationAnswer?: string;
   skillChoice?: ReplySkillChoice;
+  scene?: string | null;
 }
 export interface ProactiveReplySnapshot {
   mode: 'initiate_conversation';
@@ -110,6 +120,7 @@ export interface ProactiveReplySnapshot {
   userInstruction?: string;
   clarificationAnswer?: string;
   skillChoice?: ReplySkillChoice;
+  scene?: string | null;
 }
 export type ReplyInputSnapshot = RewriteSnapshot | DirectedReplySnapshot | ProactiveReplySnapshot;
 export interface ReplyResult {
@@ -119,12 +130,15 @@ export interface ReplyResult {
   input: ReplyInputSnapshot;
   candidates: EditableReplyCandidate[];
   contextEvidenceIds: string[];
+  basisChanges?: ReplyBasisChange[];
   styleSampleIds?: string[];
+  expressionPreferenceIds?: string[];
+  expressionPreferences?: ExpressionPreferenceReceipt[];
   usedSkill?: ReplyUsedSkill | null;
   inputBudget?: AssistantInputBudget;
   continuation?: { candidateId: string | null; versionId: string | null; candidateGroupId: string };
 }
-export type ReplyFailureCode = 'generation_failed' | 'save_failed' | 'timeout' | 'unavailable' | 'rejected' | 'target_unavailable' | 'source_unavailable' | 'connection' | 'input_budget_exceeded' | 'input_budget_unavailable' | 'provider_context_limit';
+export type ReplyFailureCode = 'generation_failed' | 'save_failed' | 'timeout' | 'unavailable' | 'rejected' | 'target_unavailable' | 'source_unavailable' | 'connection' | 'input_budget_exceeded' | 'input_budget_unavailable' | 'provider_context_limit' | 'prepared_context_reprepare_required' | 'prepared_context_running' | 'prepared_context_unconfirmed';
 export type ReplyGenerationBlock = 'foreground-confirmation-required' | null;
 export interface ReplyMessageNotice { phase: 'idle' | 'connecting' | 'connected' | 'interrupted'; changed: boolean; needsRefresh: boolean; }
 export interface ReplyGenerationJobState {
@@ -153,6 +167,7 @@ export interface ReplySessionState {
   requirements: string;
   clarificationAnswer: string;
   skillChoice: ReplySkillChoice;
+  scene?: string;
   skillChoices: ReplySkillVersion[];
   exploration: { phase: 'idle' | 'waiting' | 'ready' | 'failed' | 'paused'; result: DirectionExploration | null; canRetry?: boolean; automaticUpdatesPaused?: boolean };
   purpose: string;
@@ -199,6 +214,7 @@ export interface ReplyBridge extends ReplyEvidenceCommands {
   retryExploration(selection: ContactSelection): Promise<void>;
   updateRequirements(update: ReplyRequirementsUpdate): Promise<ReplySessionState>;
   updateSkill(update: ReplySkillUpdate): Promise<ReplySessionState>;
+  updateScene(update: ReplySceneUpdate): Promise<ReplySessionState>;
   selectDirection(selection: ReplyDirectionChoice): Promise<ReplySessionState>;
   updatePurpose(update: ReplyPurposeUpdate): Promise<ReplySessionState>;
   generate(selection: GenerateReply): Promise<void>;

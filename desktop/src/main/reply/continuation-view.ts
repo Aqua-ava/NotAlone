@@ -1,5 +1,6 @@
 import type { ReplyInputSnapshot, ReplySessionState } from '../../shared/reply-bridge';
 import { captureDisplayedCandidateGroup } from './assistant-continuation';
+import { sceneSnapshot } from './scene';
 
 // 与公开候选区显示同一组；只捕获已复验的版本身份，不从复制或默认选中推断引用。
 export function captureReplyContinuation(state: ReplySessionState, sessionId: string) {
@@ -35,8 +36,8 @@ export function captureReplyContinuation(state: ReplySessionState, sessionId: st
 
 // 展示后端实际生效输入；编号继续的草稿仍保留整组版本编辑能力。
 export function continuationInputSnapshot(value: Record<string, unknown>, state: ReplySessionState,
-  contactDisplayName: string): ReplyInputSnapshot {
-  const common = { contactId: state.contactId!, contactDisplayName };
+  contactDisplayName: string, scene?: string | null): ReplyInputSnapshot {
+  const common = { contactId: state.contactId!, contactDisplayName, ...sceneSnapshot(scene) };
   if (value.type === 'rewrite_draft' && typeof value.draft_text === 'string'
     && (value.user_instruction === null || typeof value.user_instruction === 'string')
     && typeof value.include_relationship_context === 'boolean') return { ...common, mode: 'rewrite_draft',

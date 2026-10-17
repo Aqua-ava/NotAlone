@@ -93,6 +93,8 @@ class ReplyEvidenceApiTest(unittest.TestCase):
             "source_started_at": "2025-12-31T00:00:00+00:00",
             "source_ended_at": "2026-01-01T00:00:00+00:00",
             "source_time_complete": True,
+            "current_status": "current_unverified",
+            "current_status_reason": "当前未核实；原话和保存时间不能证明状态现在仍成立。",
         })
         self.assertEqual(item["valid_at"], "2026-09-01T00:00:00+00:00")
         self.assertEqual(item["invalid_at"], "2026-11-01T00:00:00+00:00")

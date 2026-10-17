@@ -29,6 +29,7 @@ class AssistantContinuationReplyRequest(ReplyServiceRequest):
             idempotency_key=command.idempotency_key, scope=command.scope,
             conversation_binding_id=command.conversation_binding_id, content=command.content,
             continued_from_candidate_id=command.continued_from_candidate_id, skill=command.skill,
+            scene=command.scene,
             continuation=self.continuation,
             continuation_reference=self.reference,
         )

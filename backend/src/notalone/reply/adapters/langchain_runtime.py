@@ -84,24 +84,26 @@ class SecondSkillLoadError(PermissionError):
 class SkillCatalogCache:
     """只缓存绑定到联系人范围和 revision 的 Skill 轻量目录。"""
 
-    __slots__ = ("_scope", "_revision", "_catalog", "_lock")
+    __slots__ = ("_scope", "_revision", "_scene", "_catalog", "_lock")
 
     def __init__(self) -> None:
         self._scope: ContactScope | None = None
         self._revision: int | None = None
+        self._scene: str | None = None
         self._catalog: SkillCatalog | None = None
         self._lock = Lock()
 
-    def get(self, scope: ContactScope, revision: int) -> SkillCatalog | None:
+    def get(self, scope: ContactScope, revision: int, scene: str | None = None) -> SkillCatalog | None:
         with self._lock:
-            if self._scope == scope and self._revision == revision:
+            if self._scope == scope and self._revision == revision and self._scene == scene:
                 return self._catalog
             return None
 
-    def put(self, catalog: SkillCatalog) -> None:
+    def put(self, catalog: SkillCatalog, scene: str | None = None) -> None:
         with self._lock:
             self._scope = catalog.scope
             self._revision = catalog.revision
+            self._scene = scene
             self._catalog = catalog
 
     def invalidate(self, scope: ContactScope | None = None) -> None:
@@ -153,6 +155,8 @@ evidence_id 字符串（UUID 格式），且每条候选至少引用一个。
 当 input_mode 为 rewrite_draft 时，draft_text 是用户的原句：必须保留用户原意，不能
 添加用户没有表达的事实、承诺或情绪；user_instruction 为空时只做基础润色。一次性
 user_instruction 只影响当前请求，不能成为长期偏好或关系记忆。
+expression_preferences 是用户明确保存且本次适用的长期表达要求，只指导说法，
+不是联系人事实。当前原意、方向、目的和本次附加要求优先；冲突时不采用旧偏好。
 回应和主动联系的 understanding_correction、user_instruction、clarification_answer
 都是本次用户说明。纠正只修正理解，回答只说明关键问题，不能据此替换已确认方向或目的；
 这些文字不是已核验的外部事实，也不能写成长期资料。冲突时保持当前已确认意图并说明。
@@ -171,6 +175,12 @@ owner_memory 是关于用户本人的已确认事实，两者不得混用或互�
 timing.source_started_at / source_ended_at 是来源聊天的时间范围，不等于事件发生时间；
 timing.recorded_at 是记忆保存时间，不得冒充聊天时间或事件日期。时间为空或
 source_time_complete 为 false 时，明确保留未知或不完整，不猜日期。
+timing.current_status 是本次读取的时间核实状态，区别于 active 和采纳方式：
+current_unverified 只说明过去有这条资料，当前仍成立没有依据，不能写成现状；
+historical 只能保留历史表述，不推定约定已完成。current_verified 仅说明直接来源
+支持当期区间，不认证现实真伪。stable 继续按既有来源和用户决定处理，不因日期
+未知降级。current_status_reason 给出核实依据，不能用保存时间、导入时间或沉默
+替代。近期原话与本次用户明确输入仍优先，不据历史状态补造事实。
 
 历史 Tool 预算是硬性限制：conversation_search 与 conversation_query 合计最多调用
 3 次。历史检索未命中、失败、超时或预算用尽后，必须停止调用任何工具，立即基于当前
@@ -573,6 +583,7 @@ class LangChainReplyRuntime:
         "_input_budget_profile",
         "_input_token_counter",
         "_on_input_budget",
+        "_model_callbacks",
     )
 
     def __init__(
@@ -586,6 +597,7 @@ class LangChainReplyRuntime:
         input_budget_profile: InputBudgetProfile | None = None,
         input_token_counter: InputTokenCounter | None = None,
         on_input_budget: Callable[[InputBudgetDecision], None] | None = None,
+        model_callbacks: tuple = (),
     ) -> None:
         if (
             isinstance(timeout_seconds, bool)
@@ -620,6 +632,7 @@ class LangChainReplyRuntime:
         )
         self._input_token_counter = input_token_counter
         self._on_input_budget = on_input_budget
+        self._model_callbacks = model_callbacks
 
     def _discover_catalog(self, prepared: ReplyContext) -> SkillCatalog:
         """读取当前目录；读取或结构失败时安全退化为空目录（无 Skill）。"""
@@ -627,12 +640,14 @@ class LangChainReplyRuntime:
         cached = self._catalog_cache.get(
             prepared.scope,
             prepared.skill_library_revision,
+            prepared.command.scene,
         )
         if cached is not None:
             return cached
 
         try:
-            catalog = self._skill_port.catalog(prepared.scope)
+            port = self._skill_port.for_scene(prepared.command.scene) if hasattr(self._skill_port, 'for_scene') else self._skill_port
+            catalog = port.catalog(prepared.scope)
         except (PermissionError, TypeError, ValueError):
             # 范围或结构异常必须中止，不能静默退回并误导运行记录。
             raise ReplyInvariantError("Skill 目录范围验证失败。") from None
@@ -656,7 +671,7 @@ class LangChainReplyRuntime:
         if catalog.scope != prepared.scope:
             raise ReplyInvariantError("Skill 目录结构无效。")
         if catalog.revision == prepared.skill_library_revision:
-            self._catalog_cache.put(catalog)
+            self._catalog_cache.put(catalog, prepared.command.scene)
         return catalog
 
     def validate_prepared(self, prepared: ReplyContext) -> None:
@@ -679,6 +694,7 @@ class LangChainReplyRuntime:
                 entries=(),
             )
         catalog = apply_user_skill_choice(catalog, prepared.command.skill)
+        port = self._skill_port.for_scene(prepared.command.scene) if hasattr(self._skill_port, 'for_scene') else self._skill_port
 
         # 每次调用独立收集，不能在常驻 runtime 上缓存最后预算而串到并发请求。
         decisions: list[InputBudgetDecision] = []
@@ -691,7 +707,7 @@ class LangChainReplyRuntime:
         try:
             entries = {entry.name: entry for entry in catalog.entries}
             backend = ScopedSkillsBackend(
-                skill_port=self._skill_port,
+                skill_port=port,
                 scope=prepared.scope,
                 catalog=catalog,
             )
@@ -699,7 +715,7 @@ class LangChainReplyRuntime:
             history = None
             agent_tools: list[BaseTool] = [
                 _create_read_file_tool(
-                    skill_port=self._skill_port,
+                    skill_port=port,
                     scope=prepared.scope,
                     entries=entries,
                 )
@@ -713,6 +729,7 @@ class LangChainReplyRuntime:
                     initial_evidence_ids=tuple(
                         item.evidence_id for item in prepared.evidence
                     ),
+                    prior_budget=prepared.retrieval.source_messages if prepared.retrieval else None,
                 )
                 agent_tools.extend(_create_history_tools())
             context = ReplyRuntimeContext(
@@ -756,7 +773,7 @@ class LangChainReplyRuntime:
                     # 每个模型轮消耗 2 步（模型 + 工具节点）。历史工具 3 次预算
                     # 加一次 Skill 读取之后，必须仍留出最终结构化输出轮；
                     # 12 步会让预算反馈后的输出轮撞上递归上限（issue 02）。
-                    config={"recursion_limit": 16},
+                    config={"recursion_limit": 16, **({'callbacks': list(self._model_callbacks)} if self._model_callbacks else {})},
                     context=context,
                 ),
                 seconds=self._timeout_seconds,
@@ -847,7 +864,17 @@ def _request_text(prepared: ReplyContext) -> str:
         }
         for item in prepared.evidence if item.model_visible
     ]
+    if prepared.continuation_basis is not None and prepared.continuation_basis.basis_changes:
+        for item in payload["evidence"]:
+            if (item["kind"] == "continued_candidate"
+                    and item["evidence_id"] == str(prepared.continuation_basis.candidate_id)):
+                item["basis_changes"] = [change.to_payload() for change in prepared.continuation_basis.basis_changes]
     payload["fidelity_contract"] = generation_contract(payload)
+    if prepared.expression_preferences:
+        from notalone.reply.expression_preferences import preference_context_payload
+
+        payload["expression_preferences"] = [preference_context_payload(item) for item in prepared.expression_preferences]
+        payload["fidelity_contract"]["priority"].insert(2, "long_term_expression_preference")
     payload["style_references"] = [
         {"sample_id": str(item.sample_id), "text": item.text,
          "factual_role": "expression_reference", "weight": "low"}
@@ -935,6 +962,11 @@ def _validated_result(
             selection_reason=selection_reason,
             resource_paths=tuple(budget.loaded_resources),
             load_state=budget.load_state,
+            version_number=loaded_skill.version_number,
+            scope_kind=loaded_skill.scope_kind,
+            scope_contact_id=loaded_skill.contact_id,
+            scope_scene=loaded_skill.scope_scene,
+            execution_view=loaded_skill.execution_view,
         )
     usage = None
     if isinstance(model_name, str) and model_name.strip():

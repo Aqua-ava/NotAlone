@@ -10,6 +10,8 @@ from uuid import UUID
 
 from notalone.memory_extraction.errors import ExtractionInvalidOutputError
 from notalone.memory_extraction.models import ExtractedFact, ExtractionWindow
+from notalone.memory.events import EventEvidence, EventStage, MemoryEvent
+from dataclasses import replace
 from notalone.memory_trace.context import current_trace, record
 
 MAX_SOURCE_VERIFICATION_CANDIDATES = 60
@@ -70,6 +72,7 @@ class SourceVerificationResult:
     model_verdict: SourceVerificationVerdict | None = None
     model_issues: tuple[SourceVerificationIssue, ...] = ()
     proof_verification: ProofVerification | None = None
+    event: MemoryEvent | None = None
 
 
 class SourceVerificationRuntime(Protocol):
@@ -122,11 +125,11 @@ def validate_source_verification(
                 "issues",
                 "evidence",
             }
-            fields_valid = isinstance(payload, dict) and (
-                set(payload) == required_fields
-                or mode in {SourceVerificationMode.NULLABLE_PROOF_V1, SourceVerificationMode.NULLABLE_PROOF_V2}
-                and set(payload) == required_fields | {"proof"}
-            )
+            optional_fields = {"event_verification"}
+            if mode in {SourceVerificationMode.NULLABLE_PROOF_V1, SourceVerificationMode.NULLABLE_PROOF_V2}:
+                optional_fields.add("proof")
+            fields_valid = (isinstance(payload, dict) and required_fields <= set(payload)
+                            and set(payload) <= required_fields | optional_fields)
             _record_contract(
                 check,
                 fields_valid,
@@ -200,6 +203,7 @@ def validate_source_verification(
             if not issues_valid:
                 raise ValueError
             fact = facts[index]
+            event = _verify_event(payload.get("event_verification"), fact=fact, window=window)
             evidence: list[EvidenceQuote] = []
             for evidence_index, item in enumerate(raw_evidence):
                 check = "evidence_fields"
@@ -306,6 +310,7 @@ def validate_source_verification(
                 proof=proof, verification_mode=mode,
                 model_verdict=model_verdict, model_issues=model_issues,
                 proof_verification=proof_verification,
+                event=event,
             )
     except (TypeError, ValueError, KeyError, AttributeError):
         _record_contract(
@@ -319,6 +324,38 @@ def validate_source_verification(
             "来源核验结果不符合证据契约。"
         ) from None
     return tuple(results[index] for index in range(len(facts)))
+
+
+def _verify_event(raw: object, *, fact: ExtractedFact, window: ExtractionWindow) -> MemoryEvent | None:
+    """独立V阶段／发生槽与实际来源位置合取，通用supported不代签。"""
+    event = fact.event
+    if raw is None:
+        return event
+    if event is None or not isinstance(raw, dict) or set(raw) != {
+        "stage_verdict", "occurrence_verdict", "stage_evidence", "occurrence_evidence",
+    }:
+        raise ValueError("事件核验结构无效。")
+    messages = {message.message_id: message for message in window.messages}
+    def verify(kind: str) -> tuple[bool, tuple[EventEvidence, ...]]:
+        verdict = SourceVerificationVerdict(raw[kind + "_verdict"])
+        positions = raw[kind + "_evidence"]
+        if not isinstance(positions, list) or len(positions) > 8:
+            raise ValueError("事件核验依据超限。")
+        evidence = tuple(EventEvidence.from_payload(item) for item in positions)
+        if any(item.message_id not in fact.source_message_ids or item.message_id not in messages
+               or item.char_end > len(messages[item.message_id].text)
+               or messages[item.message_id].text_representation != "text" for item in evidence):
+            raise ValueError("事件核验超出原候选来源。")
+        supported = verdict is SourceVerificationVerdict.SUPPORTED
+        if supported and not evidence:
+            raise ValueError("事件核验缺少来源位置。")
+        return supported, evidence
+    stage, stage_evidence = verify("stage")
+    occurrence, occurrence_evidence = verify("occurrence")
+    if stage and event.stage is EventStage.UNKNOWN or occurrence and event.occurrence_start is None:
+        raise ValueError("未知事件字段不能核验为支持。")
+    return replace(event, stage_verified=stage, stage_evidence=stage_evidence,
+                   occurrence_verified=occurrence, occurrence_evidence=occurrence_evidence)
 
 
 def _record_contract(

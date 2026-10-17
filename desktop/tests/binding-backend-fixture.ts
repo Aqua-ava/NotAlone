@@ -2,15 +2,15 @@ import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import { mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { promisify } from 'node:util';
 import { ContactFixture, type ContactDatabase } from './contact-backend-fixture';
 import { isolatedAppEnvironment } from './isolated-environment';
+import { archiveFixtureEvidence, confirmDatabaseAbsent, FixtureProcessEvidence, readDatabaseOwnership } from './database-ownership';
 
-const execute = promisify(execFile);
 const project = path.resolve('..');
 const databaseScript = path.join(project, 'backend/tests/integration/server/binding_consent_support.py');
 export type BindingMode = 'ready' | 'no-channel' | 'single-account';
-export type BindingData = ContactDatabase & { foreign_bindings: { contact_id: string; binding_id: string }[] };
+export type BindingData = ContactDatabase & { foreign_bindings: { contact_id: string; binding_id: string }[];
+  migration_count: number; migration_repeat: number };
 export type CliState = { sessions: { username: string; display_name: string; chat_type: string; last_timestamp: number }[];
   messages: Record<string, { local_id: number; text: string; create_time: number }[]> };
 export const initialCliState = (): CliState => ({ sessions: ['wxid_synthetic_a', 'wxid_synthetic_b'].map((username) =>
@@ -22,6 +22,7 @@ export class BindingFixture extends ContactFixture {
   private stopped = false;
   private stopSource: 'page-host' | 'app-http-response' | 'fixture-shutdown' | null = null;
   private readonly unconfirmedResources: string[] = [];
+  private evidence: FixtureProcessEvidence | undefined;
   constructor(directory: string, pythonExecutable: string, readonly bindingData: BindingData) {
     super(directory, pythonExecutable, bindingData);
   }
@@ -48,9 +49,10 @@ export class BindingFixture extends ContactFixture {
   override async startBackend(ownerId = this.data.owner_id): Promise<ChildProcess> {
     if (this.child) throw new Error('本轮绑定夹具不能启动第二个后端。');
     const child = spawn(this.pythonExecutable, ['-m', 'notalone.server.command', '--sync-interval', '60'], {
-      cwd: project, stdio: 'ignore', env: isolatedAppEnvironment(this.directory, this.environment(ownerId)),
+      cwd: project, stdio: ['ignore', 'pipe', 'pipe'], env: isolatedAppEnvironment(this.directory, this.environment(ownerId)),
     });
     this.child = child;
+    this.evidence = new FixtureProcessEvidence(child);
     let spawnFailed = false;
     child.on('error', () => { spawnFailed = true; });
     for (let count = 0; count < 150; count++) {
@@ -98,6 +100,7 @@ export class BindingFixture extends ContactFixture {
       stopSource: this.stopSource, runtimeStartAttempted: Boolean(this.child),
       databaseName: this.bindingData.database_name, unconfirmedResources: [...this.unconfirmedResources] };
   }
+  async archiveProcessEvidence(): Promise<void> { await this.evidence?.archive(this.directory, '绑定后端'); }
   async prepareCli(): Promise<void> {
     const cli = await readFile(path.join(project, 'backend/tests/fixtures/binding_cli.py'), 'utf8');
     await writeFile(path.join(this.directory, 'controlled-cli'), `#!${this.pythonExecutable}\n${cli}`, { mode: 0o700 });
@@ -119,35 +122,58 @@ export async function withBindingFixture(directoryPrefix: string, mode: BindingM
   if (process.env.CONDA_DEFAULT_ENV !== 'NotAlone' || !process.env.CONDA_PREFIX) throw new Error('绑定验收须激活 Conda NotAlone。');
   const directory = await mkdtemp(path.join(tmpdir(), directoryPrefix));
   const python = path.join(process.env.CONDA_PREFIX, 'bin/python');
-  const env = isolatedAppEnvironment(directory, { PYTHONPATH: path.join(project, 'backend/src') });
+  const env = isolatedAppEnvironment(directory, {
+    PYTHONPATH: `${path.join(project, 'backend/src')}:${path.join(project, 'backend')}`, PYTHONNOUSERSITE: '1',
+  });
+  const marker = path.join(directory, 'database-ownership.json');
+  const originals: Record<string, Buffer> = {};
+  const processes: Record<string, unknown>[] = [];
+  let creatorPid: number | undefined;
+  const execute = (label: string, args: string[], timeout: number): Promise<Buffer> => new Promise((resolve, reject) => {
+    const child = execFile(python, args, { env, timeout, encoding: 'buffer', maxBuffer: 4 * 1024 * 1024 }, (error, stdout, stderr) => {
+      originals[`${label}.stdout`] = stdout;
+      originals[`${label}.stderr`] = stderr;
+      processes.push({ label, childPid: child.pid ?? null, exitCode: child.exitCode, signal: child.signalCode });
+      if (error) reject(error); else resolve(stdout);
+    });
+    if (label === 'create') creatorPid = child.pid;
+  });
   let data: BindingData | undefined;
   let fixture: BindingFixture | undefined;
   let failure: unknown;
   let databaseDropped = false;
   try {
-    data = JSON.parse((await execute(python, [databaseScript, 'create', mode], { env, timeout: 70_000 })).stdout) as BindingData;
-    if (!/^notalone_binding_[0-9a-f]{32}_test$/.test(data.database_name)) throw new Error('绑定测试库归属无效。');
+    data = JSON.parse((await execute('create', [databaseScript, 'create', mode, marker], 130_000)).toString('utf8')) as BindingData;
+    const ownedName = await readDatabaseOwnership(directory, 'binding', creatorPid);
+    if (data.database_name !== ownedName || data.database_url !== `host=/tmp dbname=${ownedName}`
+      || data.migration_count !== 70 || data.migration_repeat !== 0) throw new Error('绑定测试库归属或完整迁移无效。');
     fixture = new BindingFixture(directory, python, data);
     await fixture.prepareCli();
     await fixture.setCli(initialCliState());
     await use(fixture);
   } catch (error) { failure = error; }
   try {
-    // 准备失败无法确定创建结果时保留目录和 marker，不把未知收尾包装成成功。
-    if (!data || !fixture) throw new Error('本轮绑定准备归属未确认。');
-    await fixture.cleanup();
-    await execute(python, [databaseScript, 'drop', data.database_name], { env, timeout: 15_000 });
+    // 仅从建库前写入且已确认 created 的精确 marker 恢复清理，不按前缀猜库。
+    const name = await readDatabaseOwnership(directory, 'binding', creatorPid);
+    if (data && data.database_name !== name) throw new Error('本轮绑定准备回执身份不一致。');
+    await fixture?.cleanup();
+    await execute('drop', [databaseScript, 'drop', name, marker], 15_000);
+    await confirmDatabaseAbsent(python, env, name);
     databaseDropped = true;
-    if (fixture.cleanupOwnership().unconfirmedResources.length) throw new Error('本轮绑定页面或传输收尾未确认。');
-    process.stdout.write(`binding_fixture_cleanup: ${JSON.stringify({ ...fixture.cleanupOwnership(), databaseDropped: true })}\n`);
-    await rm(directory, { recursive: true, force: true });
+    if (fixture?.cleanupOwnership().unconfirmedResources.length) throw new Error('本轮绑定页面或传输收尾未确认。');
+    await fixture?.archiveProcessEvidence();
+    await archiveFixtureEvidence(directory, '绑定建库清理', originals, { processes, databaseDropped });
+    process.stdout.write(`binding_fixture_cleanup: ${JSON.stringify({ ...fixture?.cleanupOwnership(), databaseDropped: true })}\n`);
+    if (!failure) await rm(directory, { recursive: true, force: true });
     cleanupConfirmed?.();
-  } catch {
+  } catch (cause) {
     await writeFile(path.join(directory, 'cleanup-unconfirmed.json'), JSON.stringify({
       ...(fixture?.cleanupOwnership() ?? { childPid: null, databaseName: data?.database_name ?? null, authenticatedStopped: false }),
       databaseDropped,
     }), { mode: 0o600 });
-    throw new Error(`本轮绑定收尾未确认，保留归属记录：${directory}`, { cause: failure });
+    await fixture?.archiveProcessEvidence().catch(() => undefined);
+    await archiveFixtureEvidence(directory, '绑定失败', originals, { processes, databaseDropped }).catch(() => undefined);
+    throw new Error(`本轮绑定收尾未确认，保留归属记录：${directory}`, { cause: cause ?? failure });
   }
   if (failure) throw failure;
 }

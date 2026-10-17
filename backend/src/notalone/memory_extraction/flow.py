@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
 from notalone.memory.models import MemoryCategory
+from notalone.memory.events import MemoryEvent
 from notalone.memory.timing import MemoryTiming
 from notalone.memory_extraction.errors import ExtractionRuntimeError
 from notalone.memory_extraction.evidence import build_dimension_evidence
@@ -413,8 +414,10 @@ class ExtractionFlow:
             )
         evidenced = []
         for fact in accepted:
-            changed = replace(fact, dimension_evidence=build_dimension_evidence(
-                window, fact, verified_results.get(id(fact)),
+            event_fact = replace(fact, event=(verified_results[id(fact)].event
+                if id(fact) in verified_results else fact.event))
+            changed = replace(event_fact, dimension_evidence=build_dimension_evidence(
+                window, event_fact, verified_results.get(id(fact)),
             ))
             trace_ids[id(changed)] = trace_ids[id(fact)]
             evidenced.append(changed)
@@ -458,6 +461,7 @@ def _to_fact(payload: dict) -> ExtractedFact:
         figurative_type=FigurativeType(payload["figurative_type"]),
         alternatives=tuple(alternatives),
         interpretation_reason=interpretation_reason,
+        event=MemoryEvent.from_payload(payload.get("event"), proposal=True),
     )
 
 

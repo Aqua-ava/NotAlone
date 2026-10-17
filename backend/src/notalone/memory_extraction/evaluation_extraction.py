@@ -61,5 +61,5 @@ def extraction_runtime(
     if selected is EvaluationExtractionMode.GROUNDED_V3:
         return grounded_adapter.GroundedV3ExtractionRuntime(model=model)
     if selected is EvaluationExtractionMode.GROUNDED_V2:
-        return grounded_adapter.GroundedExtractionRuntime(model=model)
+        return grounded_adapter.GroundedV2ExtractionRuntime(model=model)
     return adapters.LangChainExtractionRuntime(model=model)

@@ -76,10 +76,12 @@ class LangChainAdjudicationRuntime:
         except Exception as error:
             raise ExtractionRuntimeError("裁决模型调用失败。") from None
         tool_calls = getattr(message, "tool_calls", None)
-        if not tool_calls:
+        if (not isinstance(tool_calls, list) or len(tool_calls) != 1
+                or not isinstance(tool_calls[0], dict)
+                or tool_calls[0].get("name") != ADJUDICATION_SCHEMA["title"]):
             raise ExtractionInvalidOutputError("裁决模型未返回结构化结果。")
         args = tool_calls[0].get("args")
-        if not isinstance(args, dict) or "action" not in args:
+        if not isinstance(args, dict) or set(args) != {"action", "replaced_memory_id"}:
             raise ExtractionInvalidOutputError("裁决模型未返回结构化结果。")
         try:
             action = AdjudicationAction(args["action"])

@@ -19,7 +19,12 @@ from notalone.memory.models import (
     MemoryCandidateStatus,
     MemoryCategory,
 )
+from notalone.memory.versions import (
+    MemoryVersionConflict, require_auto_previous, require_auto_update_previous,
+    require_auto_update_receipt, require_version_receipt,
+)
 from notalone.scopes import ContactScope
+from notalone.memory.candidates import same_pending_identity
 
 
 @dataclass(slots=True)
@@ -35,6 +40,9 @@ class InMemoryMemoryStore:
             raise TypeError("关系记忆候选结构无效。")
         if candidate.candidate_id in self._candidates:
             raise ValueError("关系记忆候选标识重复。")
+        for stored in self._candidates.values():
+            if stored.status is MemoryCandidateStatus.PENDING and same_pending_identity(stored, candidate):
+                return stored
         candidate = replace(candidate, timing=replace(
             candidate.timing, recorded_at=datetime.now(timezone.utc),
         ))
@@ -53,27 +61,49 @@ class InMemoryMemoryStore:
         candidate_id: UUID,
         adoption_method: AdoptionMethod = AdoptionMethod.AUTO,
         expected_dimension_evidence: DimensionEvidence | None = None,
+        expected_correction_decision_ids: tuple[UUID, ...] | None = None,
+        expected_previous: ConfirmedMemory | None = None,
     ) -> ConfirmedMemory:
         candidate = self._candidate(scope=scope, candidate_id=candidate_id)
         if candidate.status is MemoryCandidateStatus.CONFIRMED:
             memory_id = self._candidate_memory_ids.get(candidate_id)
             if memory_id is not None:
-                return self._memories[memory_id]
+                actual = self._memories[memory_id]
+                if expected_previous is not None:
+                    if adoption_method is AdoptionMethod.AUTO:
+                        require_auto_update_receipt(actual, expected_previous)
+                    else:
+                        require_version_receipt(actual, expected_previous, adoption_method)
+                    require_auto_update_previous(
+                        self._memory(scope=scope, memory_id=expected_previous.memory_id),
+                        expected_previous, allow_manual=adoption_method is AdoptionMethod.MANUAL,
+                    )
+                return actual
         if candidate.status is not MemoryCandidateStatus.PENDING:
             raise RuntimeError("关系记忆候选当前不可确认。")
         if not isinstance(adoption_method, AdoptionMethod):
             raise TypeError("关系记忆采纳方式无效。")
+        if expected_previous is not None:
+            require_auto_previous(
+                self._memory(scope=scope, memory_id=expected_previous.memory_id),
+                expected_previous, allow_manual=adoption_method is AdoptionMethod.MANUAL,
+            )
         if expected_dimension_evidence is not None:
             require_current_dimension_evidence(
                 candidate.dimension_evidence, expected_dimension_evidence
             )
+        sources = candidate.source_ids
+        if expected_previous is not None:
+            if adoption_method is AdoptionMethod.AUTO and not set(sources) - set(expected_previous.source_ids):
+                raise MemoryVersionConflict("版本更新需要新依据和当前叶子版本。")
+            sources = tuple(dict.fromkeys((*expected_previous.source_ids, *sources)))
         memory = ConfirmedMemory(
             memory_id=uuid4(),
             scope=scope,
             text=candidate.text,
             category=candidate.category,
             topic=candidate.topic,
-            source_ids=candidate.source_ids,
+            source_ids=sources,
             source_candidate_id=candidate.candidate_id,
             adoption_method=adoption_method,
             confidence=candidate.confidence,
@@ -81,7 +111,15 @@ class InMemoryMemoryStore:
             valid_at=candidate.valid_at,
             invalid_at=candidate.invalid_at,
             timing=replace(candidate.timing, recorded_at=datetime.now(timezone.utc)),
+            revision=expected_previous.revision + 1 if expected_previous else 1,
+            supersedes_memory_id=expected_previous.memory_id if expected_previous else None,
+            event=candidate.event,
         )
+        if expected_previous is not None:
+            self._memories[expected_previous.memory_id] = replace(
+                expected_previous, status=ConfirmedMemoryStatus.INVALIDATED,
+                revision=expected_previous.revision + 1,
+            )
         self._candidates[candidate_id] = replace(
             candidate,
             status=MemoryCandidateStatus.CONFIRMED,
@@ -220,14 +258,54 @@ class InMemoryMemoryStore:
         self._memories[memory.memory_id] = deleted
         return deleted
 
-    def list_confirmed(self, scope: ContactScope) -> tuple[ConfirmedMemory, ...]:
+    def list_confirmed(self, scope: ContactScope, *, include_expired: bool = False) -> tuple[ConfirmedMemory, ...]:
         if not isinstance(scope, ContactScope):
             raise TypeError("关系记忆查询范围无效。")
         return tuple(
             memory
             for memory in self._memories.values()
-            if memory.scope == scope and memory.is_retrievable()
+            if memory.scope == scope and memory.status is ConfirmedMemoryStatus.ACTIVE
+            and (memory.valid_at is None or memory.valid_at <= datetime.now(timezone.utc))
+            and (include_expired or memory.is_retrievable())
         )
+
+    def list_versions(self, *, scope: ContactScope, memory_id: UUID) -> tuple[ConfirmedMemory, ...]:
+        versions = []
+        seen: set[UUID] = set()
+        current: UUID | None = memory_id
+        while current is not None:
+            if current in seen or len(versions) >= 100:
+                raise MemoryVersionConflict("版本链超出可核对范围。")
+            memory = self._memory(scope=scope, memory_id=current)
+            if memory.status is ConfirmedMemoryStatus.DELETED:
+                if not versions:
+                    raise LookupError("资料版本不存在或已清除。")
+                break
+            versions.append(memory)
+            seen.add(current)
+            current = memory.supersedes_memory_id
+        return tuple(versions)
+
+    def revert_auto_update(self, *, scope: ContactScope, memory_id: UUID, expected_revision: int) -> ConfirmedMemory:
+        current = self._memory(scope=scope, memory_id=memory_id)
+        if not current.can_revert_auto_update:
+            raise MemoryVersionConflict("原始版本依据未知或已变化，不能恢复。")
+        if (type(expected_revision) is not int or expected_revision < 1
+                or current.status is not ConfirmedMemoryStatus.ACTIVE
+                or current.adoption_method is not AdoptionMethod.AUTO
+                or current.revision != expected_revision or current.supersedes_memory_id is None):
+            raise MemoryVersionConflict("只有仍合法的自动更新可以撤销。")
+        previous = self._memory(scope=scope, memory_id=current.supersedes_memory_id)
+        if (previous.status is not ConfirmedMemoryStatus.INVALIDATED
+                or previous.adoption_method is not AdoptionMethod.AUTO or previous.revision != expected_revision
+                or any(item.scope == scope and item.supersedes_memory_id == current.memory_id
+                       and item.status is ConfirmedMemoryStatus.ACTIVE for item in self._memories.values())):
+            raise MemoryVersionConflict("原版本或人工决定已变化，不能恢复。")
+        restored = replace(previous, status=ConfirmedMemoryStatus.ACTIVE, revision=expected_revision + 1)
+        self._memories[current.memory_id] = replace(current, status=ConfirmedMemoryStatus.DELETED,
+                                                   revision=expected_revision + 1)
+        self._memories[previous.memory_id] = restored
+        return restored
 
     def list_pending_candidates(
         self,

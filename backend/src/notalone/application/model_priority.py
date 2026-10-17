@@ -18,7 +18,7 @@ from notalone.memory_extraction.adjudication import (
 )
 from notalone.memory_extraction.models import ExtractedFact, ExtractionWindow
 from notalone.memory_extraction.runtime import ExtractionPayload, MemoryExtractionRuntime
-from notalone.memory_extraction.verification import SourceVerificationRuntime
+from notalone.memory_extraction.verification import SourceVerificationMode, SourceVerificationRuntime
 from notalone.memory_trace.context import current_trace
 from notalone.persistence.background_tasks import BackgroundTaskPersistenceError
 from notalone.reply.interface import GenerateReply, ReplyOutcome
@@ -222,6 +222,11 @@ class PriorityExtractionRuntime:
 class PriorityVerificationRuntime:
     def __init__(self, runtime: SourceVerificationRuntime, control: ModelPriorityControl) -> None:
         self._runtime, self._control = runtime, control
+
+    @property
+    def verification_mode(self) -> SourceVerificationMode:
+        """保留已显式配置的核验模式；旧运行时继续使用既有协议。"""
+        return getattr(self._runtime, "verification_mode", SourceVerificationMode.LEGACY_V4)
 
     def verify(
         self, *, window: ExtractionWindow, facts: tuple[ExtractedFact, ...],

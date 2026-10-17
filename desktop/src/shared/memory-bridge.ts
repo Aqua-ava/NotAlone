@@ -2,11 +2,26 @@ import type { ContactSelection } from './contact-session-bridge';
 
 export type MemoryCategory = 'common_fact' | 'preference' | 'taboo' | 'recent_state' | 'relationship_note';
 export type MemoryTopic = 'health' | 'work' | 'family' | 'travel' | 'finance' | 'study' | 'emotion' | 'other';
+export type MemoryCurrentStatus = 'current_verified' | 'current_unverified' | 'historical' | 'stable';
+export type MemoryEventStage = 'planned' | 'agreed' | 'rescheduled' | 'cancelled' | 'occurred' | 'unknown';
+export interface MemoryEventEvidence { messageId: string; charStart: number; charEnd: number; }
+export interface MemoryEvent {
+  version: 1;
+  stage: MemoryEventStage;
+  stageVerified: boolean;
+  stageEvidence: MemoryEventEvidence[];
+  occurrenceStart: string | null;
+  occurrenceEnd: string | null;
+  occurrenceVerified: boolean;
+  occurrenceEvidence: MemoryEventEvidence[];
+}
 export interface MemoryTiming {
   recordedAt: string | null;
   sourceStartedAt: string | null;
   sourceEndedAt: string | null;
   sourceTimeComplete: boolean;
+  currentStatus: MemoryCurrentStatus;
+  currentStatusReason: string;
 }
 export interface MemoryContent {
   text: string;
@@ -18,6 +33,7 @@ export interface MemoryContent {
   timing: MemoryTiming;
   validAt: string | null;
   invalidAt: string | null;
+  event?: MemoryEvent | null;
 }
 export interface ActiveMemory extends MemoryContent {
   memoryId: string;
@@ -27,11 +43,60 @@ export interface ActiveMemory extends MemoryContent {
   revision: number;
   supersedesMemoryId: string | null;
   sourceCandidateId: string | null;
+  canRevertAutoUpdate?: boolean;
+  versionEvidenceSourceCurrent?: boolean;
+}
+export interface MemoryVersion extends Omit<ActiveMemory, 'status'> { status: 'active' | 'invalidated'; }
+export interface MemoryHistoryState extends MemorySection<MemoryVersion> {
+  memoryId: string | null;
+  level: 'contact' | 'owner' | null;
+}
+export interface OverviewSourceReference {
+  sourceId: string;
+  sourceKind: 'source_document' | 'local_wechat_observation' | 'manual';
+  messageId: string | null;
+  sourceRefId: string | null;
+  locator: string | null;
+  contactId?: string | null;
+}
+export interface ContactOverviewEntry {
+  memory: MemoryVersion;
+  isLatest: boolean;
+  currentLeaf: { memoryId: string; revision: number } | null;
+  provenance: { kind: 'manual_entry' | 'source_supported' | 'unknown'; references: OverviewSourceReference[] };
+}
+export interface ContactRelationshipOverview {
+  version: 1;
+  scopeKind: 'contact';
+  contactId: string;
+  projectionRevision: string;
+  memoryRevision: number;
+  builtAt: string;
+  entries: ContactOverviewEntry[];
+}
+export interface OwnerFactsPreferencesOverview extends Omit<ContactRelationshipOverview, 'scopeKind' | 'contactId'> {
+  scopeKind: 'owner';
+  contactId: null;
+}
+export interface MemoryOverviewState<T = ContactRelationshipOverview> {
+  phase: 'idle' | 'loading' | 'ready' | 'error';
+  value: T | null;
 }
 export interface PendingMemoryCandidate extends MemoryContent {
   candidateId: string;
   subject: 'self' | 'contact' | 'shared';
   status: 'pending';
+  correctionReview?: MemoryCorrectionReview[];
+}
+export interface MemoryCorrectionReview {
+  decisionId: string;
+  decision: 'corrected' | 'rejected';
+  previousText: string;
+  correctedText: string | null;
+  newMessageIds: string[];
+  newSourceIds: string[];
+  semanticRelation: 'same' | 'uncertain';
+  reason: string;
 }
 export interface MemorySource {
   sourceId: string;
@@ -53,12 +118,19 @@ export interface MemoryReadingState {
   owner: MemorySection<ActiveMemory>;
   pending: MemorySection<PendingMemoryCandidate>;
   sources: MemorySection<MemorySource>;
+  history: MemoryHistoryState;
+  overview: MemoryOverviewState;
+  ownerOverview: MemoryOverviewState<OwnerFactsPreferencesOverview>;
 }
 export interface MemoryReadRequest extends ContactSelection { section?: MemorySectionName; }
 export interface MemoryAdditionRequest extends ContactSelection {
   level: 'owner' | 'contact'; text: string; category: MemoryCategory;
 }
 export interface MemoryCandidateRequest extends ContactSelection { candidateId: string; }
+export interface MemoryCandidateUpdateRequest extends MemoryCandidateRequest {
+  previousMemoryId: string;
+  expectedRevision: number;
+}
 export interface MemoryRemovalRequest extends ContactSelection {
   level: 'owner' | 'contact'; memoryId: string; revision: number;
 }
@@ -68,10 +140,15 @@ export interface MemoryCorrectionRequest extends ContactSelection {
 export interface MemoryBridge {
   getState(): Promise<MemoryReadingState>;
   refresh(request: MemoryReadRequest): Promise<void>;
+  refreshOverview(request: ContactSelection): Promise<void>;
+  refreshOwnerOverview(request: ContactSelection): Promise<void>;
   add(request: MemoryAdditionRequest): Promise<void>;
   remove(request: MemoryRemovalRequest): Promise<void>;
   discardCandidate(request: MemoryCandidateRequest): Promise<void>;
   confirmCandidate(request: MemoryCandidateRequest): Promise<void>;
+  applyCandidateUpdate(request: MemoryCandidateUpdateRequest): Promise<void>;
   correct(request: MemoryCorrectionRequest): Promise<void>;
+  openVersions(request: MemoryRemovalRequest): Promise<void>;
+  revertAutoUpdate(request: MemoryRemovalRequest): Promise<void>;
   onStateChanged(listener: (state: MemoryReadingState) => void): () => void;
 }

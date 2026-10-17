@@ -33,8 +33,12 @@ class ExplorationInput:
     confirmed_intent: str = ""
     skill_mode: Literal["auto", "disabled", "user"] = "auto"
     skill_version_id: UUID | None = None
+    skill_scene: str | None = None
 
     def __post_init__(self) -> None:
+        if self.skill_scene is not None and (not isinstance(self.skill_scene, str)
+                or not 0 < len(self.skill_scene.strip()) <= 256 or self.skill_scene != self.skill_scene.strip()):
+            raise ValueError('显式Skill场景无效。')
         if self.scene not in ("reply_to_message", "initiate_conversation"):
             raise ValueError("探索场景无效。")
         if self.scene == "reply_to_message" and not isinstance(self.target_message_id, UUID):
@@ -60,6 +64,7 @@ class ExplorationInput:
             "requirements": self.requirements, "answer": self.answer,
             "confirmed_intent": self.confirmed_intent, "skill_mode": self.skill_mode,
             "skill_version_id": str(self.skill_version_id) if self.skill_version_id else None,
+            **({'skill_scene': self.skill_scene} if self.skill_scene is not None else {}),
         }
 
 

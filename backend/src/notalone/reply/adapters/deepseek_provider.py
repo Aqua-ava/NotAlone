@@ -39,6 +39,7 @@ def build_deepseek_model(
     extra_body: dict[str, Any] | None = None,
     http_client: httpx.Client | None = None,
     http_async_client: httpx.AsyncClient | None = None,
+    max_retries: int = 2,
 ) -> BaseChatModel:
     """构造 DeepSeek 模型；默认采用官方 Flash 的工具结构化输出。"""
 
@@ -75,12 +76,14 @@ def build_deepseek_model(
 
     if extra_body is not None and not isinstance(extra_body, dict):
         raise ValueError("extra_body 必须是字典或 None。")
+    if type(max_retries) is not int or not 0 <= max_retries <= 2:
+        raise ValueError("DeepSeek 重试次数必须是0至2的整数。")
 
     options: dict[str, Any] = {
         "model": resolved_model,
         "api_key": resolved_key,
         "timeout": float(resolved_timeout),
-        "max_retries": 2,
+        "max_retries": max_retries,
         "temperature": DEFAULT_DEEPSEEK_TEMPERATURE,
     }
     if resolved_base_url is not None:

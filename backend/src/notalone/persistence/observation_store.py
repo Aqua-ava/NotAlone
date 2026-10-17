@@ -28,6 +28,7 @@ from notalone.persistence.reply_cleanup import (
     delete_source_replies,
 )
 from notalone.persistence.style_sample_store import erase_source_style_samples
+from notalone.persistence.expression_preferences import erase_source_expression_preferences
 from notalone.persistence.source_processing import (
     erase_source_processing,
     save_processing_batch,
@@ -921,6 +922,8 @@ class PostgresObservationStore:
                 )
                 erase_source_style_samples(connection, owner_id=owner_id,
                                            removed_ids={observation_id, *orphan_message_ids})
+                erase_source_expression_preferences(connection, owner_id=owner_id,
+                                                    removed_ids={observation_id, *orphan_message_ids})
                 cleanup_derived_data(
                     connection,
                     owner_id=owner_id,

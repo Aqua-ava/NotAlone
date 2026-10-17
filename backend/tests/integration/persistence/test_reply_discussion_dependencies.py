@@ -519,6 +519,54 @@ class ReplyDiscussionDependenciesTest(unittest.TestCase):
                 require_reply_sources_current(connection, owner_id=self.fixture.owner_id,
                                               request_id=result.reply_request_id)
 
+    def test_direct_discussion_roots_bound_queries_and_recheck_missing_capture(self):
+        source = self.fixture._source()
+        _, original_request_id, _ = self.fixture._complete(source=source)
+        first = self._prepare()
+        self._save(first)
+        current = self._prepare()
+        self._save(current)
+        from notalone.persistence import assistant_discussion_context as history
+
+        snapshot = current[3].assistant_discussion.snapshot
+        scope = self.fixture.scope
+        operations = {
+            "read": (600, lambda connection: history.read_assistant_discussion_in_transaction(
+                connection, scope, current[0].idempotency_key)),
+            "available": (200, lambda connection: discussion_uses.require_reply_discussion_dependencies(
+                connection, scope, current[2].request_id)),
+            "current": (600, lambda connection: discussion_uses.require_reply_discussion_dependencies(
+                connection, scope, current[2].request_id, current=True, expected_snapshot=snapshot)),
+        }
+        for name, (query_budget, operation) in operations.items():
+            with self.subTest(root=name), psycopg.connect(support.DATABASE_URL, row_factory=dict_row) as connection:
+                lock_owner_scope(connection, owner_id=scope.owner_id)
+                queries = []
+                execute = psycopg.Cursor.execute
+
+                def count_query(cursor, query, *args, **kwargs):
+                    queries.append(None)
+                    return execute(cursor, query, *args, **kwargs)
+
+                with patch.object(psycopg.Cursor, "execute", new=count_query):
+                    actual = operation(connection)
+                if name == "read":
+                    self.assertEqual(actual.snapshot, snapshot)
+                else:
+                    self.assertIn(source[0], actual.source_ids)
+                # 三代真实捕获相互重叠；查询预算约束整次公开读取，不依赖内部去重实现。
+                self.assertLessEqual(len(queries), query_budget, f"{name}重复展开同一段捕获历史。")
+                removed = connection.execute(
+                    "DELETE FROM public.reply_original_source_use "
+                    "WHERE owner_id=%s AND contact_id=%s AND reply_request_id=%s",
+                    (scope.owner_id, scope.contact_id, original_request_id),
+                )
+                self.assertGreater(removed.rowcount, 0)
+                # 同连接下一次读取必须重新发现旧轮凭证缺失，不能沿用前一次成功结论。
+                with self.assertRaises(ReplyStoreInvariantError):
+                    operation(connection)
+                connection.rollback()
+
 
 if __name__ == "__main__":
     unittest.main()

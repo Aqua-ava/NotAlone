@@ -18,7 +18,9 @@ from uuid import UUID, uuid4
 
 import psycopg
 from langchain_core.messages import HumanMessage
-from fixture_cleanup import cleanup_fixture
+from fixture_cleanup import bind_prepared_database, cleanup_fixture, database_ownership_path
+
+PREPARED_DATABASE_NAME = bind_prepared_database() if __name__ == "__main__" else None
 
 from notalone.application.model_priority import ModelPriorityControl
 from notalone.application.setup_service import SetupService
@@ -61,6 +63,7 @@ class ImportReplyModel(ScriptedCoreModel):
 
 
 class DesktopImportFixture(CoreBusinessFlowFixture, unittest.TestCase):
+    _prepared_database_name = PREPARED_DATABASE_NAME
     extraction_model_factory = AutoMemoryModel
     reply_model_factory = ImportReplyModel
 
@@ -162,8 +165,11 @@ def main() -> None:
     if os.environ.get("NOTALONE_DISABLE_DOTENV") != "1":
         raise RuntimeError("合成导入夹具须禁止默认 dotenv。")
     fixture = DesktopImportFixture()
+    DesktopImportFixture._database_ownership_path = database_ownership_path()
     try:
         DesktopImportFixture.setUpClass()
+        os.environ.update({"NOTALONE_DATABASE_URL": fixture.database_url,
+                           "NOTALONE_TEST_DATABASE_URL": fixture.database_url})
         fixture.setUp()
         write_backend_info(address=fixture.backend.base_url.removeprefix("http://"), token=fixture.backend.token)
         print(json.dumps({"ready": {

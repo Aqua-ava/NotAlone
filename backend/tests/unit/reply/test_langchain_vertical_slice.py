@@ -363,16 +363,24 @@ class LangChainVerticalSliceTest(unittest.TestCase):
         )
         self.assertIsNone(payload["evidence"][0]["invalid_at"])
         self.assertEqual(payload["evidence"][0]["timing"], {
+            "current_status": "current_unverified",
+            "current_status_reason": "当前未核实；原话和保存时间不能证明状态现在仍成立。",
             "recorded_at": "2026-09-05T00:00:00+00:00",
             "source_started_at": "2025-04-02T00:00:00+00:00",
             "source_ended_at": "2025-04-04T00:00:00+00:00",
             "source_time_complete": True,
+            "current_status": "current_unverified",
+            "current_status_reason": "当前未核实；原话和保存时间不能证明状态现在仍成立。",
         })
         self.assertEqual(payload["evidence"][1]["timing"], {
+            "current_status": "current_unverified",
+            "current_status_reason": "当前未核实；原话和保存时间不能证明状态现在仍成立。",
             "recorded_at": None,
             "source_started_at": None,
             "source_ended_at": None,
             "source_time_complete": False,
+            "current_status": "current_unverified",
+            "current_status_reason": "当前未核实；原话和保存时间不能证明状态现在仍成立。",
         })
         self.assertIsNone(payload["evidence"][1]["valid_at"])
         self.assertIsNone(payload["evidence"][1]["invalid_at"])

@@ -343,6 +343,7 @@ class SkillPreview:
     resource_paths: tuple[str, ...]
     load_state: Literal["loaded", "resource_failed", "not_used"]
     fallback_reason: str = ""
+    execution_view: SkillExecutionView | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.scope, ContactScope):
@@ -521,6 +522,34 @@ class SkillCatalog:
             raise ValueError("Skill 目录中存在重复版本。")
 
 
+@dataclass(frozen=True, slots=True)
+class SkillExecutionView:
+    """实际运行投影的无正文凭证；外层版本身份仍指向原不可变发布。"""
+
+    policy_revision: int
+    method_ids: tuple[UUID, ...]
+    sha256: str
+
+    def __post_init__(self):
+        if (type(self.policy_revision) is not int or self.policy_revision < 0
+                or not isinstance(self.method_ids, tuple) or any(not isinstance(value, UUID) for value in self.method_ids)
+                or len(set(self.method_ids)) != len(self.method_ids)
+                or not isinstance(self.sha256, str) or re.fullmatch('[a-f0-9]{64}', self.sha256) is None):
+            raise ValueError('Skill执行视图凭证无效。')
+
+    def to_payload(self):
+        return {'policy_revision': self.policy_revision, 'method_ids': [str(value) for value in self.method_ids],
+                'sha256': self.sha256}
+
+    @classmethod
+    def from_payload(cls, value):
+        if (not isinstance(value, dict) or set(value) != {'policy_revision', 'method_ids', 'sha256'}
+                or not isinstance(value['method_ids'], list)
+                or not all(isinstance(item, str) for item in value['method_ids'])):
+            raise ValueError('Skill执行视图记录无效。')
+        return cls(value['policy_revision'], tuple(UUID(item) for item in value['method_ids']), value['sha256'])
+
+
 @dataclass(frozen=True, slots=True, repr=False)
 class SkillVersion:
     """应用已批准并按 owner/contact 隔离的 Skill 正文。"""
@@ -534,6 +563,10 @@ class SkillVersion:
     content: str
     enabled: bool
     resource_paths: tuple[str, ...] = ()
+    version_number: int | None = None
+    scope_kind: Literal['owner', 'contact', 'scene'] = 'owner'
+    scope_scene: str | None = None
+    execution_view: SkillExecutionView | None = None
 
     def __post_init__(self) -> None:
         if (

@@ -7,6 +7,7 @@ import math
 import re
 from typing import Any
 
+from notalone.memory.events import EventStage
 from notalone.memory_extraction.errors import ExtractionInvalidOutputError
 from notalone.memory_extraction.models import ExtractionWindow, MessageRef, MemoryTopic
 from notalone.memory_extraction.runtime import ExtractionPayload
@@ -58,6 +59,9 @@ _V4_AMBIGUITY_TEMPLATES = {
     "object_ownership": ("所引原句中的物品所有者在本窗口无法唯一确定；不因出借或接收认定所有者，保留原句。",),
     "matter_reference": ("所引原句中的事项指称在本窗口无法唯一识别；保留未知，不补事项内容或类型。",),
 }
+EVENT_LABEL_KEYS = {"stage", "occurrence"}
+GROUNDED_EXTRACTION_PROTOCOL = "grounded-labels-v3"
+GROUNDED_COMPILER_VERSION = "grounded-source-event-v1"
 SENSITIVITY = {"none", "financial", "health", "commitment", "other"}
 _CONDITION = re.compile(r"^(?:如果|假如|要是|倘若|若)")
 # 仅校验显式附属标签：整数紧接计数单位，不解释数量或自动选择角色。
@@ -182,6 +186,32 @@ def _unit_id(raw: object) -> str:
     return match[1] or match[2]
 
 
+def _event_proposal(row: dict[str, Any], members: list[SourceUnit], dependencies: list[SourceUnit]) -> dict | None:
+    """阶段只是模型提案；位置与受支持时段由原文编译，交独立V认证。"""
+    event = row.get("event")
+    if event is None:
+        return None
+    if not isinstance(event, dict) or set(event) != EVENT_LABEL_KEYS:
+        raise ValueError("事件标签只允许阶段及原文时段引用。")
+    if event["stage"] not in {stage.value for stage in EventStage}:
+        raise ValueError("事件阶段不在受控集合。")
+    available = {unit.id: unit for unit in [*members, *dependencies]}
+    reference = event["occurrence"]
+    if reference is not None and (not isinstance(reference, str) or reference not in available):
+        raise ValueError("事件时段必须引用本事实参与的原文。")
+    def position(unit: SourceUnit) -> dict:
+        return {"message_id": str(unit.message.message_id), "char_start": unit.start, "char_end": unit.end}
+    start, end = (None, None) if reference is None else _period(
+        available[reference].text, available[reference].message.occurred_at,
+    )
+    if len(members) > 8:
+        raise ValueError("事件阶段来源超出预算。")
+    return {"version": 1, "stage": event["stage"], "stage_evidence": [position(unit) for unit in members],
+            "occurrence_start": start.isoformat() if start else None,
+            "occurrence_end": end.isoformat() if end else None,
+            "occurrence_evidence": [position(available[reference])] if start else []}
+
+
 def _dependencies(
     members: list[SourceUnit], rows: dict[str, dict[str, Any]],
     by_id: dict[str, SourceUnit],
@@ -264,7 +294,7 @@ def _compile(
         period_kinds.update({"uncertain_plan", "figurative_unknown_plan"})
     rows: dict[str, dict[str, Any]] = {}
     for row in draft["units"]:
-        if not isinstance(row, dict) or set(row) != ROW_KEYS:
+        if not isinstance(row, dict) or set(row) not in (ROW_KEYS, ROW_KEYS | {"event"}):
             raise ValueError("分句字段不完整或包含自由改写字段。")
         row = dict(row)
         key = _unit_id(row["unit"])
@@ -304,6 +334,8 @@ def _compile(
         if kind == "continuation":
             continue
         if kind in {"condition", "prefix"}:
+            if row.get("event") is not None:
+                raise ValueError("前缀事件标签必须附在对应事实。")
             if pending_condition is not None or (kind == "condition" and not _CONDITION.match(unit.text)):
                 raise ValueError("条件分句不能定位。")
             pending_condition = unit
@@ -316,6 +348,8 @@ def _compile(
             raise ValueError("条件必须绑定同一消息的下一计划分句。")
         pending_condition = None
         if kind in OMISSIONS:
+            if row.get("event") is not None:
+                raise ValueError("省略分句不能附带事件。")
             continue
         members = ([condition] if condition else []) + [unit]
         if continuation is not None:
@@ -386,9 +420,11 @@ def _compile(
                 if completed else "按所引原文分句保留内容；类型为模型判断，来源定位和时间由程序校验。"
             ),
         }
+        if ambiguity_codes is None and row.get("event") is not None:
+            fact["event"] = _event_proposal(row, members, dependencies)
         # 同一消息的未知第三人资料保留原文连续关系，不制造新的具体人物身份。
         group = (unit.message.message_id, kind, row["topic"], row["subject"], tuple(str(value) for value in sources))
-        if kind == "third_party_fact" and row["unresolved"] and group in unknown_groups:
+        if kind == "third_party_fact" and row["unresolved"] and fact.get("event") is None and group in unknown_groups:
             previous = unknown_groups[group]
             previous["text"] += f" 同一原消息续句：“{quote}”"
             previous["confidence"] = min(previous["confidence"], fact["confidence"])
@@ -401,7 +437,7 @@ def _compile(
             results.append(fact)
             if ambiguity_codes is not None:
                 compiled_ambiguities[id(fact)] = _CompiledAmbiguity(codes, [fact["text"]])
-            if kind == "third_party_fact" and row["unresolved"]:
+            if kind == "third_party_fact" and row["unresolved"] and fact.get("event") is None:
                 unknown_groups[group] = fact
     if pending_condition is not None:
         raise ValueError("条件分句缺少对应计划。")
@@ -450,6 +486,11 @@ def compile_labels(window: ExtractionWindow, draft: object) -> ExtractionPayload
     return _compile_named_labels(window, draft)
 
 
+def compile_event_labels(window: ExtractionWindow, draft: object) -> ExtractionPayload:
+    """默认事件协议要求显式event槽；旧标签编译入口继续保留。"""
+    return _compile_named_labels(window, draft, required_event=True)
+
+
 def compile_labels_v3(window: ExtractionWindow, draft: object) -> ExtractionPayload:
     """v3只新增受控歧义标签，不接收模型编写的替代解释。"""
     return _compile_typed_labels(window, draft)
@@ -488,6 +529,7 @@ def _compile_named_labels(
     window: ExtractionWindow, draft: object, *,
     ambiguity_codes: dict[str, frozenset[str]] | None = None,
     version4: bool = False,
+    required_event: bool = False,
 ) -> ExtractionPayload:
     if not isinstance(draft, dict) or set(draft) != {"units"} or not isinstance(draft["units"], dict):
         raise ExtractionInvalidOutputError("原文标签必须按指定字段返回。")
@@ -501,7 +543,14 @@ def _compile_named_labels(
         if not unit.target:
             continue
         label = labels[unit.id]
-        if not isinstance(label, dict) or set(label) != ROW_KEYS - {"unit"}:
+        expected_fields = ROW_KEYS - {"unit"}
+        if ambiguity_codes is None:
+            allowed_fields = (expected_fields | {"event"},) if required_event else (
+                expected_fields, expected_fields | {"event"},
+            )
+        else:
+            allowed_fields = (expected_fields,)
+        if not isinstance(label, dict) or set(label) not in allowed_fields:
             raise ExtractionInvalidOutputError("标签字段不完整或含自由编号。")
         rows.append({"unit": unit.id, **label})
     payloads = _checked_compile(window, {"units": rows}, completed_answers=True,

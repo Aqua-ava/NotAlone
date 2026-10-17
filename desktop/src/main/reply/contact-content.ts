@@ -16,17 +16,17 @@ export type RetainedContactContent = {
   inputVersionId: string | null;
   candidateDrafts: NonNullable<ReplySessionState['candidateDrafts']>;
   input: Pick<ReplySessionState, 'options' | 'mode' | 'targetMessageId' | 'direction' | 'purpose'
-    | 'correction' | 'requirements' | 'clarificationAnswer' | 'skillChoice'>;
+    | 'correction' | 'requirements' | 'clarificationAnswer' | 'skillChoice' | 'scene'>;
 };
 
 export function retainContactContent(state: ReplySessionState, directionDerived: boolean, draft: string): RetainedContactContent | undefined {
   if (state.sessionDeletion === 'deleting' || state.sessionDeletion === 'failed'
     || state.sessionCatalog?.selectionPending || state.sourceAvailability) return;
-  const { options, mode, targetMessageId, direction, purpose, correction, requirements, clarificationAnswer, skillChoice } = state;
+  const { options, mode, targetMessageId, direction, purpose, correction, requirements, clarificationAnswer, skillChoice, scene } = state;
   return structuredClone({ sessionId: state.savedSession?.sessionId ?? null, draft, directionDerived, inputVersionId: state.savedSession?.currentInputVersionId ?? state.result?.inputVersionId ?? null, candidateDrafts: state.candidateDrafts ?? [],
     result: state.result ? { continuation: state.result.continuation, replyRequestId: state.result.replyRequestId, selectedCandidateId: state.selectedCandidateId,
       edits: state.result.candidates.map((candidate) => ({ candidateId: candidate.original.candidateId, text: candidate.editedText })) } : undefined,
-    input: { options, mode, targetMessageId, direction, purpose, correction, requirements, clarificationAnswer, skillChoice } });
+    input: { options, mode, targetMessageId, direction, purpose, correction, requirements, clarificationAnswer, skillChoice, scene } });
 }
 
 // 只有权威读取确认后的字段可以回到视图；失效引用只清理相关输入。
@@ -86,7 +86,10 @@ export async function validateContactInput(backend: BackendHost, contactId: stri
       if (!current()) throw new Error('恢复范围已变化。');
       update.result = { replyRequestId: turn.reply.replyRequestId, assistantSessionId: saved.sessionId!,
         inputVersionId: turn.inputVersionId, input, continuation: content.result.continuation, contextEvidenceIds: turn.reply.contextEvidenceIds,
+        styleSampleIds: turn.reply.styleSampleIds, expressionPreferenceIds: turn.reply.expressionPreferenceIds,
+        expressionPreferences: turn.reply.expressionPreferences,
         usedSkill: turn.reply.usedSkill, inputBudget: turn.reply.inputBudget,
+        basisChanges: turn.basisChanges ?? turn.reply.basisChanges,
         candidates: turn.reply.candidates.map((original) => ({ original,
           editedText: content.result!.edits.find((edit) => edit.candidateId === original.candidateId)?.text ?? original.text })) };
       update.selectedCandidateId = turn.reply.candidates.some((candidate) => candidate.candidateId === content.result!.selectedCandidateId)
@@ -112,8 +115,8 @@ export async function revalidateRetainedContent(backend: BackendHost, contactId:
   if (!current() || saved.generation !== backend.getConnectionGeneration()) throw new Error('删除复验范围已变化。');
   const update = await validateContactInput(backend, contactId, content, '', { ...saved, phase: 'ready' }, signal, current);
   const valid = new Set(saved.turns.flatMap((turn) => turn.reply?.candidates.map((candidate) => candidate.candidateId) ?? []));
-  const { options, mode, targetMessageId, direction, purpose, correction, requirements, clarificationAnswer, skillChoice } = { ...content.input, ...update };
+  const { options, mode, targetMessageId, direction, purpose, correction, requirements, clarificationAnswer, skillChoice, scene } = { ...content.input, ...update };
   return { ...content, notice: update.contentRestoreNotice, result: update.result ? content.result : undefined,
     candidateDrafts: content.candidateDrafts.filter((draft) => valid.has(draft.candidateId)),
-    input: { options, mode, targetMessageId, direction, purpose, correction, requirements, clarificationAnswer, skillChoice } };
+    input: { options, mode, targetMessageId, direction, purpose, correction, requirements, clarificationAnswer, skillChoice, scene } };
 }

@@ -348,7 +348,7 @@ class AssistantSessionInputUpgradeTest(unittest.TestCase):
                     initial_factory = connection.row_factory
                     lock_owner_scope(connection, owner_id=self.owner_id)
                     connection.execute("SET LOCAL statement_timeout = '2s'")
-                    self.assertIsNone(require_current_input(connection, self.scope, self.session_id, version))
+                    self.assertEqual(require_current_input(connection, self.scope, self.session_id, version), ())
                     with self.assertRaises(AssistantSessionRejected):
                         require_current_input(connection, self.scope, self.session_id, uuid4())
                     self.assertIs(connection.row_factory, initial_factory)

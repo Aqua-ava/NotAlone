@@ -6,7 +6,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 type RunningApp = { app: ElectronApplication; appProcess: ChildProcess; userData: string };
-type AppOptions = { appEnvironment: NodeJS.ProcessEnv; launchConfiguration: object | undefined; appWorkingDirectory: string | undefined };
+type AppOptions = { appEnvironment: NodeJS.ProcessEnv; launchConfiguration: object | undefined;
+  appWorkingDirectory: string | undefined; retainUserData: boolean };
 
 import { isolatedAppEnvironment } from './isolated-environment';
 export { isolatedAppEnvironment } from './isolated-environment';
@@ -16,7 +17,8 @@ export const test = base.extend<AppOptions & { runningApp: RunningApp; appDirect
   appEnvironment: [{}, { option: true }],
   launchConfiguration: [undefined, { option: true }],
   appWorkingDirectory: [undefined, { option: true }],
-  runningApp: async ({ appDirectory, appEnvironment, launchConfiguration, appWorkingDirectory }, use) => {
+  retainUserData: [false, { option: true }],
+  runningApp: async ({ appDirectory, appEnvironment, launchConfiguration, appWorkingDirectory, retainUserData }, use) => {
     await verifyAppTestLease();
     const userData = await mkdtemp(path.join(tmpdir(), 'notalone-app-'));
     let app: ElectronApplication | undefined;
@@ -41,7 +43,13 @@ export const test = base.extend<AppOptions & { runningApp: RunningApp; appDirect
       try { if (app && appProcess?.exitCode === null && appProcess.signalCode === null) await app.close().catch(() => {}); }
       finally {
         clearTimeout(fallback);
-        await rm(userData, { recursive: true, force: true });
+        if (retainUserData) {
+          // 选中的实际验收先保留现场；证据封存后由协调者只清理本轮精确目录。
+          await writeFile(base.info().outputPath('app-user-data-retained.json'), JSON.stringify({
+            userData, pid: appProcess?.pid ?? null, exitCode: appProcess?.exitCode ?? null,
+            signal: appProcess?.signalCode ?? null, retained: true,
+          }), { mode: 0o600, flag: 'wx' });
+        } else await rm(userData, { recursive: true, force: true });
       }
     }
   },

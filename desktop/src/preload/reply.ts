@@ -37,6 +37,7 @@ export function createReplyBridge(ipcRenderer: PageTransport): ReplyBridge {
     retryExploration: (...args: unknown[]) => ipcRenderer.invoke('reply:retry-exploration', ...args),
     updateRequirements: (...args: unknown[]) => ipcRenderer.invoke('reply:update-requirements', ...args),
     updateSkill: (...args: unknown[]) => ipcRenderer.invoke('reply:update-skill', ...args),
+    updateScene: (...args: unknown[]) => ipcRenderer.invoke('reply:update-scene', ...args),
     selectDirection: (...args: unknown[]) => ipcRenderer.invoke('reply:select-direction', ...args),
     updatePurpose: (...args: unknown[]) => ipcRenderer.invoke('reply:update-purpose', ...args),
     retryInterruptedGeneration: (...args: unknown[]) => ipcRenderer.invoke('reply:retry-interrupted-generation', ...args),

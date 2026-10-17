@@ -16,10 +16,57 @@ def window(text: str, *, at: datetime | None = None) -> ExtractionWindow:
 
 def row(unit: str, kind: str, **kwargs: object) -> dict:
     return {"unit": unit, "kind": kind, "subject": "contact", "topic": "other", "dependency": None,
-            "unresolved": False, "confidence": 0.9, "sensitivity": "none", **kwargs}
+            "unresolved": False, "confidence": 0.9, "sensitivity": "none",
+            **({} if "ambiguity_codes" in kwargs else {"event": None}), **kwargs}
 
 
 class GroundedCompilerTest(unittest.TestCase):
+    def test_event_labels_compile_source_positions_without_free_dates_or_stage_certification(self):
+        source = window("🙂明天去看展。")
+        label = row("0:0", "plan", event={"stage": "planned", "occurrence": "0:0"})
+        fact = compile_labels(source, {"units": {"0:0": {key: value for key, value in label.items() if key != "unit"}}})[0]
+        self.assertIn("🙂明天去看展。", fact["text"])
+        self.assertEqual(fact["event"], {
+            "version": 1, "stage": "planned", "stage_evidence": [{
+                "message_id": str(source.messages[0].message_id), "char_start": 0, "char_end": 7,
+            }], "occurrence_start": "2026-10-15T00:00:00+08:00",
+            "occurrence_end": "2026-10-16T00:00:00+08:00",
+            "occurrence_evidence": [{"message_id": str(source.messages[0].message_id), "char_start": 0, "char_end": 7}],
+        })
+
+    def test_event_labels_preserve_negation_and_unknown_periods_and_reject_unbound_metadata(self):
+        from dataclasses import replace
+        source = window("不是明天去看展。")
+        for stage in ("planned", "agreed", "rescheduled", "cancelled", "occurred", "unknown"):
+            item = row("0:0", "event", event={"stage": stage, "occurrence": "0:0"})
+            draft = {"units": {"0:0": {key: value for key, value in item.items() if key != "unit"}}}
+            with self.subTest(stage=stage):
+                fact = compile_labels(source, draft)[0]
+                self.assertEqual(fact["text"], "联系人原话：“不是明天去看展。”")
+                self.assertEqual(fact["event"]["stage"], stage)
+                self.assertIsNone(fact["event"]["occurrence_start"])
+        source = window("明天去看展。")
+        source = replace(source, messages=(replace(source.messages[0], occurred_at=None),))
+        item = row("0:0", "plan", event={"stage": "planned", "occurrence": "0:0"})
+        draft = {"units": {"0:0": {key: value for key, value in item.items() if key != "unit"}}}
+        self.assertIsNone(compile_labels(source, draft)[0]["event"]["occurrence_start"])
+        for invalid in ({"stage": "planned", "occurrence": "99:0"},
+                        {"stage": "planned", "occurrence": None, "stage_verified": True},
+                        {"stage": "planned", "occurrence": None, "occurrence_start": "2026-12-01"},
+                        {"stage": "automatic", "occurrence": None}):
+            draft["units"]["0:0"]["event"] = invalid
+            with self.subTest(invalid=invalid), self.assertRaises(ExtractionInvalidOutputError):
+                compile_labels(source, draft)
+
+    def test_event_cannot_borrow_an_unrelated_source_period(self):
+        from dataclasses import replace
+        source = window("我已取件。")
+        unrelated = MessageRef(uuid4(), "明天去看展。", MessageSender.SELF, source.messages[0].occurred_at)
+        source = replace(source, messages=(unrelated, *source.messages))
+        item = row("1:0", "event", event={"stage": "occurred", "occurrence": "0:0"})
+        with self.assertRaises(ExtractionInvalidOutputError):
+            compile_labels(source, {"units": {"1:0": {key: value for key, value in item.items() if key != "unit"}}})
+
     def test_conditional_weekend_is_computed_from_source_not_model_date(self):
         source = window("如果周末有空，我只去问场馆是否开放。")
         draft = {"units": [row("0:0", "condition"), row("0:1", "plan")]}

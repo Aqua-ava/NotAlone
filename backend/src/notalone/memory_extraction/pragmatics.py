@@ -99,4 +99,11 @@ class PragmaticInterpreter:
         if decision.disposition is not MemoryDisposition.PENDING:
             return fact
         flags = tuple(dict.fromkeys((*fact.risk_flags, *decision.risk_flags)))
-        return replace(fact, risk_flags=flags)
+        changed = replace(fact, risk_flags=flags)
+        if fact.event is not None and fact.dimension_evidence is not None:
+            # 只绑定本次确定性追加的阻塞标签；不改V、窗口或事件判断。
+            from notalone.memory.evidence_binding import candidate_digest
+            evidence = replace(fact.dimension_evidence, candidate_sha256=candidate_digest(changed))
+            object.__setattr__(evidence, "source_bound", fact.dimension_evidence.source_bound)
+            changed = replace(changed, dimension_evidence=evidence)
+        return changed

@@ -373,7 +373,7 @@ class TraceTransportTest(unittest.TestCase):
             UUID("aaaaaaaa-1111-1111-1111-111111111111"),
             UUID("bbbbbbbb-2222-2222-2222-222222222222"),
         )
-        messages = _messages(1)
+        messages = _messages(2)
         memory = InMemoryMemoryStore()
         old_candidate = memory.create_candidate(
             MemoryCandidate(
@@ -389,7 +389,7 @@ class TraceTransportTest(unittest.TestCase):
         )
         facts = [
             {
-                **_payload(messages[0].message_id),
+                **_payload(messages[1].message_id),
                 "text": "他现在习惯直接打电话沟通",
             }
         ]
@@ -409,8 +409,8 @@ class TraceTransportTest(unittest.TestCase):
                             "issues": [],
                             "evidence": [
                                 {
-                                    "message_id": str(messages[0].message_id),
-                                    "quote": messages[0].text,
+                                    "message_id": str(messages[1].message_id),
+                                    "quote": messages[1].text,
                                 }
                             ],
                         }

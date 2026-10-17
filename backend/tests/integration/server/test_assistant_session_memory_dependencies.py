@@ -181,7 +181,7 @@ class AssistantSessionMemoryDependencyHttpTest(unittest.TestCase):
                 self.assertEqual(records[independent["input_version_id"]]["content"]["purpose_hint"], "无关讨论保持可读")
         self.assertEqual(len(self.fixture.model.seen_calls), 0)
 
-    def test_memory_expiration_masks_generated_body_and_blocks_replay(self) -> None:
+    def test_memory_expiration_keeps_completed_body_with_changed_basis_and_replays_without_generation(self) -> None:
         self.fixture.model.responses = []
         for kind in ("contact", "owner"):
             with self.subTest(kind=kind):
@@ -196,13 +196,19 @@ class AssistantSessionMemoryDependencyHttpTest(unittest.TestCase):
                 self._set_period(kind, memory_id, expired=True)
                 status, saved = self.fixture.backend.request(self.path)
                 self.assertEqual(status, 200, saved)
-                self.assertEqual(saved["turns"][-1]["state"], "unavailable")
-                self.assertIsNone(saved["turns"][-1]["input"])
-                self.assertIsNone(saved["turns"][-1]["reply"])
-                self.assertEqual(saved["inputs"][-1]["state"], "unavailable")
-                self.assertFalse(self.store.is_current_input(self.scope, self.session_id,
-                                                            UUID(generated["input_version_id"])))
-                self.assertEqual(self.fixture.backend.request(self.path + "/replies", body), (
-                    409, {"error": "assistant_session_rejected", "reason": "source_unavailable"},
-                ))
+                turn = saved["turns"][-1]
+                self.assertEqual(turn["state"], "completed")
+                self.assertEqual(turn["reply"]["candidates"], generated["candidates"])
+                self.assertEqual(turn["input"]["content"]["draft_text"], text)
+                self.assertEqual(turn["basis_changes"], [{
+                    "evidence_id": str(memory_id),
+                    "kind": "confirmed_memory" if kind == "contact" else "owner_memory",
+                    "reason": "memory_expired",
+                }])
+                self.assertEqual(saved["inputs"][-1]["state"], "active")
+                self.assertTrue(self.store.is_current_input(self.scope, self.session_id,
+                                                           UUID(generated["input_version_id"])))
+                status, replay = self.fixture.backend.request(self.path + "/replies", body)
+                self.assertEqual(status, 200, replay)
+                self.assertEqual(replay["candidates"], generated["candidates"])
                 self.assertEqual(len(self.fixture.model.seen_calls), calls)

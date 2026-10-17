@@ -251,7 +251,7 @@ class PostgresMemoryExtractionRunnerTest(unittest.TestCase):
         scope = ContactScope(uuid4(), uuid4())
         message = replace(_messages(1)[0], text="我不喝酒")
         payload = {"unit": "0:0", "kind": "preference", "subject": "self", "topic": "other",
-                   "dependency": None, "unresolved": False, "confidence": 0.95, "sensitivity": "none"}
+                   "dependency": None, "unresolved": False, "confidence": 0.95, "sensitivity": "none", "event": None}
         model = ToolCallingFakeModel(responses=[
             AIMessage(content="", tool_calls=[{
                 "name": "GroundedMemoryLabels", "id": "extract-1",
@@ -303,7 +303,7 @@ class PostgresMemoryExtractionRunnerTest(unittest.TestCase):
         scope = ContactScope(uuid4(), uuid4())
         message = replace(_messages(1)[0], text="我平时喜欢喝茶")
         payload = {"unit": "0:0", "kind": "preference", "subject": "contact", "topic": "other",
-                   "dependency": None, "unresolved": False, "confidence": 0.95, "sensitivity": "none"}
+                   "dependency": None, "unresolved": False, "confidence": 0.95, "sensitivity": "none", "event": None}
         model = ToolCallingFakeModel(responses=[
             AIMessage(content="", tool_calls=[{
                 "name": "GroundedMemoryLabels", "id": "extract-default",
@@ -350,7 +350,7 @@ class PostgresMemoryExtractionRunnerTest(unittest.TestCase):
         scope = ContactScope(uuid4(), uuid4())
         message = replace(_messages(1)[0], text="我平时喜欢喝茶")
         payload = {"unit": "0:0", "kind": "preference", "subject": "contact", "topic": "other",
-                   "dependency": None, "unresolved": False, "confidence": 0.95, "sensitivity": "none"}
+                   "dependency": None, "unresolved": False, "confidence": 0.95, "sensitivity": "none", "event": None}
         model = ToolCallingFakeModel(responses=[
             AIMessage(content="", tool_calls=[{
                 "name": "GroundedMemoryLabels", "id": "extract-released",

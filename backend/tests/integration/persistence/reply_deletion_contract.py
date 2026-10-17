@@ -178,6 +178,7 @@ class ReplyDeletionContract(unittest.TestCase):
         owner_evidence = (ContextEvidence(
             evidence_id=memory.memory_id, kind="owner_memory", text=memory.text,
             scope=other_scope, source_ids=memory.source_ids, revision=memory.revision,
+            valid_at=memory.valid_at, invalid_at=memory.invalid_at, timing=memory.timing,
         ),)
         saved = self.store.save(*self._prepare_reply(
             scope=other_scope, evidence=owner_evidence, draft="参考本人资料改写",

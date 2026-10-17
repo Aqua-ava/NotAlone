@@ -32,3 +32,22 @@
 .memory-edit-form label { display: grid; gap: 6px; }
 .memory-edit-form textarea { min-height: 90px; resize: vertical; }
 .memory-edit-form textarea, .memory-edit-form select { font: inherit; padding: 9px; border: 1px solid #b7c6d1; border-radius: 6px; }
+.memory-overview-entries { display: grid; gap: 14px; }
+.memory-overview .memory-card { border-left: 3px solid #aac4c8; }
+.memory-overview details summary { cursor: pointer; color: #426f8a; }
+.memory-overview li { margin-top: 9px; }
+.memory-overview .button { margin-top: 10px; margin-right: 10px; }
+.skill-review { display: grid; gap: 18px; margin-top: 18px; line-height: 1.8; overflow-wrap: anywhere; }
+.skill-review header, .skill-review-form, .skill-method { display: grid; gap: 12px; }
+.skill-review-form, .skill-method { min-width: 0; padding: 16px; border: 1px solid #c5cecb; border-radius: 5px; background: #fffdf7; }
+.skill-review-form label:not(.skill-check) { display: grid; gap: 5px; }
+.skill-review-form input:not([type="checkbox"]), .skill-review-form textarea, .skill-review-form select { width: 100%; min-width: 0; padding: 9px; font: inherit; border: 1px solid #b7c6d1; border-radius: 4px; background: #fffef9; color: inherit; }
+.skill-review-form textarea { min-height: 80px; resize: vertical; }
+.skill-check { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 0; }
+.skill-check small { color: #737e80; font-size: 11px; }
+.skill-comparison-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 12px; }
+.skill-comparison p, .skill-comparison blockquote { white-space: pre-wrap; overflow-wrap: anywhere; }
+.skill-comparison blockquote { margin: 14px 0; padding-left: 12px; border-left: 3px solid #aac4c8; }
+.skill-publication { padding: 18px; border: 1px solid #aac4c8; background: #f2f7ef; border-radius: 5px; }
+.skill-review [role="alert"] { color: #99594e; }
+@media (max-width: 900px) { .skill-comparison-grid { grid-template-columns: 1fr; } }

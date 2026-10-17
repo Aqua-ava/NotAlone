@@ -344,6 +344,7 @@ class PostgresContactMemoryIndexRepository:
                 current = self._index_row(connection, scope)
                 if (
                     current is None
+                    or current["status"] != ContactMemoryIndexStatus.ACTIVE.value
                     or current["built_from_memory_revision"]
                     != state["memory_revision"] - 1
                     or len(_topics_from_json(current["topics"])) >= MAX_INDEX_TOPICS

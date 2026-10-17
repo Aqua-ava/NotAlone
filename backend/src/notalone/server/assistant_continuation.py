@@ -60,7 +60,7 @@ def handle_continuation(
         if turn.reply is None or turn.input is None or "continuation" not in turn.input:
             raise AssistantSessionPersistenceError("持续要求尚未可靠保存。")
         return 200, {**render_turn(turn), "continuation": turn.input["continuation"],
-                     "effective_input": turn.input["content"]}
+                     "effective_input": turn.input["content"], 'effective_scene': turn.input.get('scene')}
     except AssistantPreparationRejected as error:
         return preparation_rejection_payload(error)
     except AssistantContinuationClarification as error:

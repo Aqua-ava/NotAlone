@@ -7,6 +7,7 @@ import { isUuid } from '../uuid';
 import { defaultAssistantSession } from './assistant-sessions';
 import { isRecord, readReplyResult } from './result-read';
 import { readAssistantGenerationReceipt, type AssistantGenerationReceipt } from './assistant-generation-jobs';
+import { sceneSnapshot } from './scene';
 
 export type ReplyRequestOptions = Readonly<{ adoptNewMessageId?: string; expectedInputVersionId?: string }>;
 
@@ -31,6 +32,7 @@ export function replyRequestBody(input: ReplyInputSnapshot, requestKey: string, 
     clarification_answer: input.clarificationAnswer || null,
   };
   return Object.freeze({ contact_id: input.contactId, idempotency_key: requestKey,
+    ...sceneSnapshot(input.scene),
     ...(input.mode !== 'rewrite_draft' && input.skillChoice?.mode === 'disabled' ? { skill_disabled: true } : {}),
     ...(input.mode !== 'rewrite_draft' && input.skillChoice?.mode === 'user' ? { skill_version_id: input.skillChoice.versionId } : {}),
     content: Object.freeze(content),

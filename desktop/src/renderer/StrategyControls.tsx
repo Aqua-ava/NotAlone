@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ReplySessionView } from './RewritePanel';
+import { ReplySceneInput } from './ReplySceneInput';
 
 export function StrategyControls({ replies }: { replies: ReplySessionView }) {
   const { state } = replies, result = state.exploration.result;
@@ -12,6 +13,7 @@ export function StrategyControls({ replies }: { replies: ReplySessionView }) {
   const available = Boolean(state.contactId) && !state.generationBlock && state.phase !== 'waiting'
     && state.exploration.phase !== 'waiting' && (state.mode !== 'reply_to_message' || Boolean(state.targetMessageId));
   return <section aria-label="理解与方向">
+    <ReplySceneInput replies={replies} />
     <button disabled={!available} onClick={() => void replies.explore()}>帮我理清方向</button>
     <label>纠正理解<textarea aria-label="纠正理解" maxLength={4096} value={state.correction}
       disabled={!state.contactId} onChange={(event) => void replies.updateCorrection(event.target.value)} /></label>

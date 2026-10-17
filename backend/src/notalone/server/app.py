@@ -8,6 +8,7 @@ from notalone.reply.errors import (
 from notalone.reply.input_budget import InputBudgetExceededError, InputBudgetUnavailableError
 
 import json
+import logging
 import secrets
 import threading
 from dataclasses import dataclass
@@ -37,6 +38,9 @@ from notalone.application.source_service import SourceService
 from notalone.application.style_sample_service import StyleSampleService
 from notalone.persistence.style_sample_store import PostgresStyleSampleStore
 from notalone.server.style_samples import handle_style_samples
+from notalone.application.expression_preference_service import ExpressionPreferenceService
+from notalone.persistence.expression_preferences import PostgresExpressionPreferenceStore
+from notalone.server.expression_preferences import handle_expression_preferences
 from notalone.server.reply_exploration import handle_exploration
 from notalone.persistence.source_tasks import SourceDeletionHistoryUnverified
 from notalone.persistence.source_deletion import SourceDeletionError, SourceNotFoundError
@@ -73,6 +77,7 @@ from notalone.application.reply_evidence import ReplyEvidenceService, ReplyEvide
 from notalone.reply.errors import (
     ReplyStoreInvariantError, ReplyPersistenceError, ReplyInProgressError,
     ReplyIdempotencyConflictError,
+    ReplyInputInvalidatedError, ReplyContinuationError, ReplyExpressionPreferencesChangedError,
 )
 from notalone.persistence.reply_store import PostgresReplyStore
 from notalone.scopes import ContactScope
@@ -89,6 +94,10 @@ from notalone.application.skill_service import (
     SkillImportRejected,
     SkillService,
 )
+from notalone.application.skill_learning import SkillLearningService
+from notalone.persistence.skill_learning import PostgresSkillLearningStore
+from notalone.server.skill_learning import handle_skill_learning
+from notalone.server.memory_upgrade import handle_memory_upgrade
 from notalone.ingest.errors import ImportContentChangedError, ImportPreviewError
 from notalone.ingest.import_command import ContactConfirmationError
 from notalone.persistence.postgres_repository import (
@@ -114,6 +123,7 @@ from notalone.application.memory_service import (
     ManualMemoryEntry,
     MemoryService,
 )
+from notalone.memory.correction import MemoryCorrectionConflictError
 from notalone.memory.models import (
     ConfirmedMemory,
     MemoryCandidate,
@@ -121,6 +131,10 @@ from notalone.memory.models import (
     MemoryTopic,
     OwnerMemory,
 )
+from notalone.memory.versions import MemoryVersionConflict
+from notalone.application.relationship_overview_service import RelationshipOverviewService
+from notalone.memory.overview import OverviewUnavailable
+from notalone.server.memory_overview import overview_payload
 from notalone.front_sync.sync_engine import (
     BindingCandidateView,
     BindingConfirmationError,
@@ -194,6 +208,7 @@ class BackendApp:
         "_import_service",
         "_ledger_service",
         "_memory_service",
+        "_overview_service",
         "_message_stream",
         "_owner_id",
         "_reply_service",
@@ -205,7 +220,10 @@ class BackendApp:
         "_source_service",
         "_setup_service",
         "_skill_service",
+        "_skill_learning",
+        "_memory_upgrades",
         "_style_samples",
+        "_expression_preferences",
         "_sync_control",
         "_task_host",
         "_task_service",
@@ -229,14 +247,18 @@ class BackendApp:
         reply_evidence: ReplyEvidenceService | None = None,
         source_service: SourceService | None = None,
         memory_service: MemoryService | None = None,
+        overview_service: RelationshipOverviewService | None = None,
         import_service: ImportService | None = None,
         task_host: TaskHost | None = None,
         task_service: TaskService | None = None,
         trace_service: TraceService | None = None,
         skill_service: SkillService | None = None,
+        skill_learning: SkillLearningService | None = None,
+        memory_upgrades=None,
         ledger_service: LedgerService | None = None,
         setup_service: SetupService | None = None,
         style_samples: StyleSampleService | None = None,
+        expression_preferences: ExpressionPreferenceService | None = None,
         runtime_shutdown: Callable[[], None] | None = None,
     ) -> None:
         if owner_id is not None and not isinstance(owner_id, UUID):
@@ -249,12 +271,14 @@ class BackendApp:
         self._import_service = import_service
         self._ledger_service = ledger_service
         self._memory_service = memory_service
+        self._overview_service = overview_service
         self._message_stream = message_stream
         self._reply_service = reply_service
         self._assistant_sessions = assistant_sessions
         self._candidate_versions = candidate_versions
         self._reply_evidence = reply_evidence
         self._style_samples = style_samples
+        self._expression_preferences = expression_preferences
         self._runtime_shutdown = runtime_shutdown
         self._runtime_shutdown_lock = threading.Lock()
         self._runtime_stopping = threading.Event()
@@ -263,6 +287,8 @@ class BackendApp:
         self._owner_id = owner_id
         self._setup_service = setup_service
         self._skill_service = skill_service
+        self._skill_learning = skill_learning
+        self._memory_upgrades = memory_upgrades
         self._sync_control = sync_control
         self._task_host = task_host
         self._task_service = task_service
@@ -305,7 +331,25 @@ class BackendApp:
         response = self._handle_request(
             method=method, path=path, headers=headers, body=body
         )
-        if _is_trace_path(path) or "/assistant-session" in urlsplit(path).path:
+        path_value = urlsplit(path).path
+        if (200 <= response.status_code < 300 and method in {'POST', 'PATCH'}
+                and '/assistant-session' in path_value and self._skill_learning is not None):
+            parts = path_value.strip('/').split('/')
+            if len(parts) >= 4 and parts[:2] == ['api', 'contacts']:
+                try:
+                    self._skill_learning.notify(ContactScope(self._owner_id, UUID(parts[2])))
+                except Exception:
+                    # 已提交的用户操作不因后续整理调度失败而返回失败；权威读取可恢复。
+                    logging.getLogger(__name__).warning('skill_learning_schedule_failed')
+        if (_is_trace_path(path) or "/assistant-session" in path_value
+                or path_value == "/api/expression-preferences"
+                or path_value.startswith("/api/expression-preferences/")
+                or path_value.startswith("/api/memories/")
+                or path_value == "/api/memories/owner"
+                or path_value.startswith("/api/contacts/") and (
+                    "/memories" in path_value or "/memory-candidates" in path_value
+                    or "/relationship-overview" in path_value
+                )):
             return Response(
                 response.status_code,
                 {**response.headers, "Cache-Control": "no-store"},
@@ -409,6 +453,26 @@ class BackendApp:
                 path=path_value,
                 query=urlsplit(path).query,
             )
+        if path_value.startswith("/api/contacts/") and "/relationship-overview" in path_value:
+            return self._handle_overview(method=method_upper, path=path_value)
+        if path_value == "/api/memories/owner/overview":
+            return self._handle_overview(method=method_upper, path=path_value)
+        if path_value == "/api/expression-preferences" or path_value.startswith("/api/expression-preferences/"):
+            if self._expression_preferences is None:
+                return _json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "expression_preference_unavailable"})
+            status, payload = handle_expression_preferences(
+                self._expression_preferences, owner_id=self._owner_id,
+                method=method_upper, path=path_value, body=request_body, query=urlsplit(path).query,
+            )
+            return _json_response(status, payload)
+        if path_value.startswith('/api/contacts/') and '/skill-learning' in path_value:
+            status, payload = handle_skill_learning(self._skill_learning, owner_id=self._owner_id,
+                                                    method=method_upper, path=path_value, body=request_body)
+            return _json_response(status, payload, headers={"Cache-Control": "no-store"})
+        if path_value == '/api/memory-upgrades' or path_value.startswith('/api/memory-upgrades/'):
+            status, payload = handle_memory_upgrade(self._memory_upgrades, owner_id=self._owner_id,
+                method=method_upper, path=path_value, query=urlsplit(path).query, body=request_body)
+            return _json_response(status, payload, headers={'Cache-Control': 'no-store'})
         if path_value.startswith("/api/contacts/") and "/style-samples" in path_value:
             if self._style_samples is None:
                 return _json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "style_sample_unavailable"})
@@ -1163,6 +1227,12 @@ class BackendApp:
                 contact_id=contact_id,
                 request=request,
             )
+        except ReplyInputInvalidatedError:
+            return _json_response(HTTPStatus.CONFLICT, {"error": "reply_input_invalidated"})
+        except ReplyContinuationError:
+            return _json_response(HTTPStatus.CONFLICT, {"error": "reply_continuation_invalid"})
+        except ReplyExpressionPreferencesChangedError:
+            return _json_response(HTTPStatus.CONFLICT, {"error": "expression_preferences_changed"})
         except ReplyIdempotencyConflictError:
             return _json_response(HTTPStatus.CONFLICT, {"error": "reply_input_conflict"})
         except ModelWorkStopped:
@@ -1406,6 +1476,12 @@ class BackendApp:
             return _json_response(HTTPStatus.CONFLICT, {"error": "assistant_session_rejected", "reason": error.reason})
         except ReplyInProgressError:
             return _json_response(HTTPStatus.CONFLICT, {"error": "assistant_session_in_progress"})
+        except ReplyInputInvalidatedError:
+            return _json_response(HTTPStatus.CONFLICT, {"error": "reply_input_invalidated"})
+        except ReplyContinuationError:
+            return _json_response(HTTPStatus.CONFLICT, {"error": "reply_continuation_invalid"})
+        except ReplyExpressionPreferencesChangedError:
+            return _json_response(HTTPStatus.CONFLICT, {"error": "expression_preferences_changed"})
         except ReplyIdempotencyConflictError:
             return _json_response(HTTPStatus.CONFLICT, {"error": "assistant_session_input_conflict"})
         except (AssistantSessionPersistenceError, ReplyPersistenceError):
@@ -1431,6 +1507,31 @@ class BackendApp:
         except AssistantSessionError:
             return _json_response(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "assistant_session_failed"})
 
+    def _handle_overview(self, *, method: str, path: str) -> Response:
+        parts = path.strip("/").split("/")
+        owner_scope = path == "/api/memories/owner/overview"
+        if method != "GET" or not owner_scope and (len(parts) != 4 or parts[3] != "relationship-overview"):
+            return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+        if self._overview_service is None:
+            return _json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "overview_unavailable"})
+        try:
+            if owner_scope:
+                overview = self._overview_service.read_owner(owner_id=self._owner_id)
+            else:
+                scope_id = UUID(parts[2])
+                overview = self._overview_service.read(owner_id=self._owner_id, contact_id=scope_id)
+            return _json_response(HTTPStatus.OK, {"overview": overview_payload(
+                overview, _owner_memory_payload if owner_scope else _memory_payload,
+            )})
+        except ValueError:
+            return _json_response(HTTPStatus.BAD_REQUEST, {"error": "overview_request_invalid"})
+        except (LookupError, PermissionError):
+            return _json_response(HTTPStatus.NOT_FOUND, {"error": "overview_not_found"})
+        except OverviewUnavailable:
+            return _json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "overview_unavailable"})
+        except Exception:
+            return _json_response(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "overview_operation_failed"})
+
     def _handle_memory(self, *, method: str, path: str, body: bytes) -> Response:
         """处理记忆管理端点；失败关闭且不回显正文。"""
 
@@ -1445,6 +1546,15 @@ class BackendApp:
             return _json_response(
                 HTTPStatus.BAD_REQUEST, {"error": "memory_request_invalid"}
             )
+        except MemoryVersionConflict:
+            return _json_response(HTTPStatus.CONFLICT, {"error": "memory_version_changed"},
+                                  headers={"Cache-Control": "no-store"})
+        except MemoryCorrectionConflictError:
+            return _json_response(
+                HTTPStatus.CONFLICT, {"error": "memory_correction_conflict"}
+            )
+        except (LookupError, PermissionError):
+            return _json_response(HTTPStatus.NOT_FOUND, {"error": "memory_not_found"})
         except Exception:
             # 持久化或领域层异常不能让真实 HTTP 连接直接断开；同时不把
             # SQL、连接信息或记忆正文泄露给客户端。
@@ -1508,6 +1618,19 @@ class BackendApp:
             return _json_response(
                 HTTPStatus.OK, {"memory": _owner_memory_payload(memory)}
             )
+        if method == "GET" and path.startswith("/api/memories/owner/") and path.endswith("/versions"):
+            memory_id = _uuid_or_raise(_path_tail(path, "/api/memories/owner/", "/versions"), "memory_id")
+            return _json_response(HTTPStatus.OK, {"versions": [
+                _owner_memory_payload(memory) for memory in service.list_versions(
+                    owner_id=owner_id, memory_id=memory_id,
+                )
+            ]}, headers={"Cache-Control": "no-store"})
+        if method == "POST" and path.startswith("/api/memories/owner/") and path.endswith("/revert-auto-update"):
+            memory_id = _uuid_or_raise(_path_tail(path, "/api/memories/owner/", "/revert-auto-update"), "memory_id")
+            memory = service.revert_auto_update(owner_id=owner_id, memory_id=memory_id,
+                                                expected_revision=_memory_revision_or_raise(body))
+            return _json_response(HTTPStatus.OK, {"memory": _owner_memory_payload(memory)},
+                                  headers={"Cache-Control": "no-store"})
         if method == "POST" and path.startswith("/api/memories/owner/") \
                 and path.endswith("/correct"):
             memory_id = _uuid_or_raise(_path_tail(path, "/api/memories/owner/", "/correct"), "memory_id")
@@ -1553,14 +1676,55 @@ class BackendApp:
                     ]
                 },
             )
+        if method == "GET" and segment == "memories" and len(parts) == 4 and parts[3] == "versions":
+            memory_id = _uuid_or_raise(parts[2], "memory_id")
+            return _json_response(HTTPStatus.OK, {"versions": [
+                _memory_payload(memory) for memory in service.list_versions(
+                    owner_id=owner_id, contact_id=contact_id, memory_id=memory_id,
+                )
+            ]}, headers={"Cache-Control": "no-store"})
         if method == "POST" and segment == "memory-candidates" and len(parts) == 4:
             candidate_id = _uuid_or_raise(parts[2], "candidate_id")
             action = parts[3]
+            if action == "apply-update":
+                payload = _parse_memory_json(body)
+                if not {"previous_memory_id", "expected_revision"} <= set(payload) or set(payload) - {
+                    "previous_memory_id", "expected_revision", "correction_decision_ids",
+                }:
+                    raise MemoryRequestInvalid()
+                previous_id = _uuid_or_raise(payload["previous_memory_id"], "previous_memory_id")
+                revision = payload["expected_revision"]
+                if type(revision) is not int or revision < 1:
+                    raise MemoryRequestInvalid()
+                expected = payload.get("correction_decision_ids")
+                if expected is not None and not isinstance(expected, list):
+                    raise MemoryRequestInvalid()
+                decision_ids = (tuple(_uuid_or_raise(item, "correction_decision_ids") for item in expected)
+                                if expected is not None else None)
+                if decision_ids is not None and len(set(decision_ids)) != len(decision_ids):
+                    raise MemoryRequestInvalid()
+                memory = service.apply_candidate_update(
+                    owner_id=owner_id, contact_id=contact_id, candidate_id=candidate_id,
+                    previous_memory_id=previous_id, expected_revision=revision,
+                    expected_correction_decision_ids=decision_ids,
+                )
+                return _json_response(HTTPStatus.OK, {"memory": _owner_memory_payload(memory)
+                                      if isinstance(memory, OwnerMemory) else _memory_payload(memory)},
+                                      headers={"Cache-Control": "no-store"})
             if action == "confirm":
+                payload = _parse_memory_json(body) if body.strip() else {}
+                expected = payload.get("correction_decision_ids")
+                if expected is not None and not isinstance(expected, list):
+                    raise MemoryRequestInvalid()
+                decision_ids = (tuple(_uuid_or_raise(item, "correction_decision_ids") for item in expected)
+                                if expected is not None else None)
+                if decision_ids is not None and len(set(decision_ids)) != len(decision_ids):
+                    raise MemoryRequestInvalid()
                 memory = service.confirm_candidate(
                     owner_id=owner_id,
                     contact_id=contact_id,
                     candidate_id=candidate_id,
+                    **({"expected_correction_decision_ids": decision_ids} if decision_ids is not None else {}),
                 )
                 return _json_response(
                     HTTPStatus.OK,
@@ -1585,6 +1749,13 @@ class BackendApp:
         if method == "POST" and segment == "memories" and len(parts) == 4:
             memory_id = _uuid_or_raise(parts[2], "memory_id")
             action = parts[3]
+            if action == "revert-auto-update":
+                memory = service.revert_auto_update(
+                    owner_id=owner_id, contact_id=contact_id, memory_id=memory_id,
+                    expected_revision=_memory_revision_or_raise(body),
+                )
+                return _json_response(HTTPStatus.OK, {"memory": _memory_payload(memory)},
+                                      headers={"Cache-Control": "no-store"})
             if action == "delete":
                 memory = service.delete_contact_memory(
                     owner_id=owner_id,
@@ -2252,6 +2423,12 @@ class BackendServer:
         ).start()
 
 
+def _default_memory_upgrades(database_url, task_host):
+    from notalone.application.memory_upgrade import MemoryUpgradeService
+    from notalone.persistence.memory_upgrade import PostgresMemoryUpgradeStore
+    return MemoryUpgradeService(PostgresMemoryUpgradeStore(database_url), task_host=task_host)
+
+
 def create_app(
     *,
     database_url: str,
@@ -2266,14 +2443,18 @@ def create_app(
     reply_evidence: ReplyEvidenceService | None = None,
     source_service: SourceService | None = None,
     memory_service: MemoryService | None = None,
+    overview_service: RelationshipOverviewService | None = None,
     import_service: ImportService | None = None,
     task_host: TaskHost | None = None,
     task_service: TaskService | None = None,
     trace_service: TraceService | None = None,
     skill_service: SkillService | None = None,
+    skill_learning: SkillLearningService | None = None,
+    memory_upgrades=None,
     ledger_service: LedgerService | None = None,
     setup_service: SetupService | None = None,
     style_samples: StyleSampleService | None = None,
+    expression_preferences: ExpressionPreferenceService | None = None,
     follow_smoke: FollowSmokeController | None = None,
     runtime_shutdown: Callable[[], None] | None = None,
 ) -> BackendApp:
@@ -2285,6 +2466,7 @@ def create_app(
     from notalone.persistence.source_processing import (
         PostgresSourceProcessingStore,
     )
+    from notalone.persistence.memory_overview import PostgresRelationshipOverviewStore
 
     contacts = ContactDirectory(PostgresContactDirectory(database_url))
     return BackendApp(
@@ -2306,8 +2488,12 @@ def create_app(
         reply_evidence=reply_evidence
         or ReplyEvidenceService(PostgresReplyStore(database_url)),
         style_samples=style_samples or StyleSampleService(PostgresStyleSampleStore(database_url)),
+        expression_preferences=expression_preferences or ExpressionPreferenceService(
+            PostgresExpressionPreferenceStore(database_url),
+        ),
         source_service=source_service or SourceService(database_url),
         memory_service=memory_service,
+        overview_service=overview_service or RelationshipOverviewService(PostgresRelationshipOverviewStore(database_url)),
         import_service=import_service,
         task_host=task_host,
         task_service=task_service
@@ -2321,6 +2507,9 @@ def create_app(
             processing=PostgresSourceProcessingStore(database_url),
         ),
         skill_service=skill_service,
+        skill_learning=skill_learning or SkillLearningService(PostgresSkillLearningStore(database_url), task_host=task_host,
+            review=reply_service.skill_review if reply_service is not None else None),
+        memory_upgrades=memory_upgrades or _default_memory_upgrades(database_url, task_host),
         ledger_service=ledger_service,
         setup_service=setup_service,
         runtime_shutdown=runtime_shutdown,
@@ -2682,6 +2871,7 @@ def _completed_turn_payload(turn: AssistantTurn) -> dict[str, object]:
 
 def _reply_payload(reply: ReplyGenerated) -> dict[str, object]:
     """把已持久化的候选回复投影为稳定 JSON；不含会话正文以外内容。"""
+    from notalone.reply.expression_preferences import preference_receipt_payload
 
     used_skill = None
     if reply.used_skill is not None:
@@ -2694,6 +2884,11 @@ def _reply_payload(reply: ReplyGenerated) -> dict[str, object]:
             "selection_reason": skill.selection_reason,
             "resource_paths": list(skill.resource_paths),
             "load_state": skill.load_state,
+            'version_number': skill.version_number,
+            'scope': {'kind': skill.scope_kind,
+                      'contact_id': str(skill.scope_contact_id) if skill.scope_contact_id else None,
+                      'scene': skill.scope_scene},
+            **({'execution_view': skill.execution_view.to_payload()} if skill.execution_view else {}),
         }
     return {
         "reply_request_id": str(reply.reply_request_id),
@@ -2714,8 +2909,14 @@ def _reply_payload(reply: ReplyGenerated) -> dict[str, object]:
                 str(evidence) for evidence in reply.context_receipt.evidence_ids
             ],
             "style_sample_ids": [str(identifier) for identifier in reply.context_receipt.style_sample_ids],
+            "expression_preference_ids": [str(identifier) for identifier in reply.context_receipt.expression_preference_ids],
+            "expression_preferences": [
+                preference_receipt_payload(item) for item in reply.context_receipt.expression_preferences
+            ],
         },
         "used_skill": used_skill,
+        **({"basis_changes": [change.to_payload() for change in reply.basis_changes]}
+           if reply.basis_changes else {}),
         **({"input_budget": reply.input_budget.to_payload()} if reply.input_budget is not None else {}),
     }
 
@@ -2726,7 +2927,9 @@ def _assistant_turn_payload(turn: AssistantTurn) -> dict[str, object]:
         "request_key": str(turn.request_key), "state": turn.state, "input": turn.input,
         "interruption_reason": turn.interruption_reason,
         **({"generation_active": turn.generation_active} if turn.generation_active is not None else {}),
+        **({"requires_reprepare": True} if turn.requires_reprepare else {}),
         "reply": _reply_payload(turn.reply) if turn.reply is not None else None,
+        "basis_changes": [change.to_payload() for change in turn.reply.basis_changes] if turn.reply else [],
         "placeholder": (
             "相关来源已删除" if turn.state == "redacted"
             else "相关来源不可用" if turn.state == "unavailable" else None
@@ -2740,6 +2943,8 @@ def _assistant_input_payload(record: Any) -> dict[str, object]:
         "conversation_binding_id": str(record.conversation_binding_id),
         "turn_id": str(record.turn_id) if record.turn_id is not None else None,
         "state": record.state, "content": record.content,
+        **({"basis_changes": [change.to_payload() for change in record.basis_changes]}
+           if record.basis_changes else {}),
         "placeholder": ("相关来源已删除" if record.state == "redacted"
                         else "相关来源不可用" if record.state == "unavailable" else None),
     }
@@ -2869,6 +3074,14 @@ def _parse_memory_json(body: bytes) -> dict[str, object]:
     return payload
 
 
+def _memory_revision_or_raise(body: bytes) -> int:
+    payload = _parse_memory_json(body)
+    revision = payload.get("expected_revision")
+    if set(payload) != {"expected_revision"} or type(revision) is not int or revision < 1:
+        raise MemoryRequestInvalid()
+    return revision
+
+
 def _parse_skill_json(body: bytes) -> dict[str, object]:
 
     try:
@@ -2988,6 +3201,10 @@ def _owner_memory_payload(memory: OwnerMemory) -> dict[str, object]:
         "confidence": memory.confidence,
         "risk_flags": list(memory.risk_flags),
         "timing": memory.timing.to_payload(),
+        "event": memory.event.to_payload(current=True) if memory.event is not None else None,
+        "version_evidence": memory.version_evidence.to_payload() if memory.version_evidence else None,
+        "version_evidence_source_current": bool(memory.version_evidence and memory.version_evidence.source_current),
+        "can_revert_auto_update": memory.can_revert_auto_update,
         "valid_at": _iso_or_none(memory.valid_at),
         "invalid_at": _iso_or_none(memory.invalid_at),
     }
@@ -3013,6 +3230,10 @@ def _memory_payload(memory: ConfirmedMemory) -> dict[str, object]:
             else None
         ),
         "timing": memory.timing.to_payload(),
+        "event": memory.event.to_payload(current=True) if memory.event is not None else None,
+        "version_evidence": memory.version_evidence.to_payload() if memory.version_evidence else None,
+        "version_evidence_source_current": bool(memory.version_evidence and memory.version_evidence.source_current),
+        "can_revert_auto_update": memory.can_revert_auto_update,
         "valid_at": _iso_or_none(memory.valid_at),
         "invalid_at": _iso_or_none(memory.invalid_at),
     }
@@ -3037,11 +3258,14 @@ def _memory_candidate_payload(candidate: MemoryCandidate) -> dict[str, object]:
         "risk_flags": list(candidate.risk_flags),
         "failure_reason": candidate.failure_reason,
         "timing": candidate.timing.to_payload(),
+        "event": candidate.event.to_payload(current=True) if candidate.event is not None else None,
         "valid_at": _iso_or_none(candidate.valid_at),
         "invalid_at": _iso_or_none(candidate.invalid_at),
     }
     if candidate.alternatives:
         payload["alternatives"] = list(candidate.alternatives)
+    if candidate.correction_review:
+        payload["correction_review"] = [review.to_payload() for review in candidate.correction_review]
     if candidate.interpretation_reason.strip():
         payload["interpretation_reason"] = candidate.interpretation_reason
     if candidate.dimension_evidence is not None:

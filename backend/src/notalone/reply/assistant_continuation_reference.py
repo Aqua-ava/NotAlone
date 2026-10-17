@@ -63,5 +63,7 @@ def continuation_reference_payload(prepared: ReplyContext) -> dict[str, object] 
         "is_current_draft": is_current_draft,
         **({} if is_current_draft else {"messages": messages}),
         "factual_role": "previous_assistant_candidate", "weight": "low",
+        **({"basis_changes": [change.to_payload() for change in selected[0].basis_changes]}
+           if selected[0].basis_changes else {}),
         "notice": "这是用户本次明确选择的旧候选版本，只参考说法；本次明确意愿优先，不代表已发送或关系事实。",
     }

@@ -11,6 +11,7 @@ from unittest.mock import patch
 from uuid import UUID, uuid4
 
 import psycopg
+from psycopg import sql
 
 from notalone.memory_extraction.cli_support import load_contact_messages
 from notalone.memory_extraction.command import memory_add_main, run_extraction
@@ -107,13 +108,14 @@ class ExtractionTraceTest(unittest.TestCase):
         self.owner_memory = PostgresOwnerMemoryStore(DATABASE_URL)
         self.watermark = PostgresWatermarkStore(DATABASE_URL)
         self.traces = PostgresExtractionTraceStore(DATABASE_URL)
-        self.addCleanup(self.cleanup)
+        self.addCleanup(self.cleanup, self.scope)
 
-    def cleanup(self):
+    def cleanup(self, scope=None):
+        scope = scope or self.scope
         with psycopg.connect(DATABASE_URL) as connection:
             connection.execute(
                 "DELETE FROM public.owner WHERE id = %s",
-                (self.scope.owner_id,),
+                (scope.owner_id,),
             )
 
     def run_batch(self, payloads, **options):
@@ -682,6 +684,8 @@ class ExtractionTraceTest(unittest.TestCase):
         ):
             with self.subTest(subject=subject):
                 if subject == "self":
+                    # 两个主体各有独立资料，不能改写上个子例已冻结的来源世代。
+                    self.setUp()
                     with psycopg.connect(DATABASE_URL) as connection:
                         connection.execute(
                             "UPDATE public.message SET speaker='user' WHERE owner_id=%s AND contact_id=%s",
@@ -752,6 +756,11 @@ class ExtractionTraceTest(unittest.TestCase):
                 self.assertFalse(
                     receipts[0]["historical_return_reconstructed"]
                 )
+                committed = (self.memory.list_confirmed(self.scope) if subject == "contact"
+                             else self.owner_memory.list_active(self.scope.owner_id))
+                self.assertEqual(len(committed), 1)
+                self.assertEqual(committed[0].supersedes_memory_id, old.memory_id)
+                new_ids = {str(committed[0].memory_id)}
                 run_extraction(
                     messages=(self.messages[1],),
                     watermark_message_id=None,
@@ -771,7 +780,14 @@ class ExtractionTraceTest(unittest.TestCase):
                 self.assertEqual(
                     reconciliation["previous_trace_id"], detail["trace_id"]
                 )
-                self.assertEqual(reconciliation["receipts"], receipts)
+                self.assertEqual(
+                    [
+                        row for row in reconciliation["receipts"]
+                        if row["record_kind"] == kind
+                        and row["record_id"] == str(old.memory_id)
+                    ],
+                    receipts,
+                )
                 stats = run_extraction(
                     messages=(self.messages[1],),
                     watermark_message_id=None,
@@ -787,6 +803,7 @@ class ExtractionTraceTest(unittest.TestCase):
                 )
                 self.assertEqual(len(active), 1)
                 self.assertNotEqual(active[0].memory_id, old.memory_id)
+                self.assertEqual({str(active[0].memory_id)}, new_ids)
 
     def test_invalidation_plan_does_not_claim_commit_just_because_old_row_exists(
         self,
@@ -825,22 +842,38 @@ class ExtractionTraceTest(unittest.TestCase):
                 )
 
         class RejectInvalidation(PostgresMemoryStore):
-            def invalidate(store, *, scope, memory_id):
-                raise RuntimeError("合成失效前业务故障")
+            def confirm(store, **options):
+                # 新旧状态由确认事务一起应用；在其前故障仍只能留下未知计划。
+                raise RuntimeError("合成原子应用前业务故障")
 
         newer = {
             **_payload(self.message_ids[1]),
             "text": "他现在习惯直接打电话沟通",
         }
-        with self.assertRaises(RuntimeError):
-            run_extraction(
-                messages=(self.messages[1],),
-                watermark_message_id=None,
-                runtime=FixedRuntime((newer,)),
-                memory_port=RejectInvalidation(DATABASE_URL),
-                adjudication_runtime=UpdateRuntime(),
-                **options,
-            )
+        fault = f"synthetic_atomic_fault_{uuid4().hex}"
+        with psycopg.connect(DATABASE_URL) as connection:
+            connection.execute(sql.SQL(
+                "CREATE FUNCTION {}() RETURNS trigger LANGUAGE plpgsql AS $$ "
+                "BEGIN RAISE EXCEPTION '合成原子版本故障'; END $$"
+            ).format(sql.Identifier(fault)))
+            connection.execute(sql.SQL(
+                "CREATE TRIGGER {} BEFORE UPDATE ON public.confirmed_memory "
+                "FOR EACH ROW WHEN (OLD.id={}::uuid AND NEW.status='invalidated') EXECUTE FUNCTION {}()"
+            ).format(sql.Identifier(fault), sql.Literal(str(old.memory_id)), sql.Identifier(fault)))
+        try:
+            with self.assertRaises(RuntimeError):
+                run_extraction(
+                    messages=(self.messages[1],),
+                    watermark_message_id=None,
+                    runtime=FixedRuntime((newer,)),
+                    memory_port=self.memory,
+                    adjudication_runtime=UpdateRuntime(),
+                    **options,
+                )
+        finally:
+            with psycopg.connect(DATABASE_URL) as connection:
+                connection.execute(sql.SQL("DROP TRIGGER {} ON public.confirmed_memory").format(sql.Identifier(fault)))
+                connection.execute(sql.SQL("DROP FUNCTION {}()").format(sql.Identifier(fault)))
         detail = self.traces.get_batch(
             self.scope, self.traces.list_batches(self.scope)[0]["trace_id"]
         )
@@ -852,9 +885,17 @@ class ExtractionTraceTest(unittest.TestCase):
         self.assertEqual(receipt["operation"], "invalidate")
         self.assertEqual(receipt["commit_status"], "unknown")
         self.assertEqual(receipt["current_record_status"], "active")
-        self.assertEqual(
-            self.memory.list_confirmed(self.scope)[0].memory_id, old.memory_id
+        self.assertEqual(self.memory.list_confirmed(self.scope), (old,))
+        self.assertEqual([item.text for item in self.memory.list_pending_candidates(self.scope)], [newer["text"]])
+        retry = run_extraction(
+            messages=(self.messages[1],), watermark_message_id=None,
+            runtime=FixedRuntime((newer,)), memory_port=self.memory,
+            adjudication_runtime=UpdateRuntime(), **options,
         )
+        self.assertEqual(retry.updated, 1)
+        active = self.memory.list_confirmed(self.scope)
+        self.assertEqual(len(active), 1)
+        self.assertEqual(active[0].supersedes_memory_id, old.memory_id)
 
     def test_source_of_old_memory_used_by_update_erases_trace_even_outside_new_window(
         self,
@@ -925,7 +966,7 @@ class ExtractionTraceTest(unittest.TestCase):
             and event["payload"]["operation"] == "invalidate"
         )
         self.assertEqual(
-            replaced["previous"]["version"]["memory_id"], str(old.memory_id)
+            replaced["previous"]["memory_id"], str(old.memory_id)
         )
         self.assertEqual(replaced["actual"]["status"], "invalidated")
         PostgresSourceDeletionRepository(DATABASE_URL).delete_source(
@@ -937,9 +978,14 @@ class ExtractionTraceTest(unittest.TestCase):
             self.traces.get_batch(self.scope, detail["trace_id"])["status"],
             "deleted",
         )
+        # 新版本实际依赖旧输入；旧来源删除清掉整份派生结果，保留仍有效新消息。
+        self.assertEqual(self.memory.list_confirmed(self.scope), ())
         self.assertEqual(
-            self.memory.list_confirmed(self.scope)[0].memory_id,
-            current.memory_id,
+            tuple(
+                message.message_id
+                for message in load_contact_messages(self.scope, DATABASE_URL)
+            ),
+            (self.message_ids[1],),
         )
 
     def test_deleting_a_memory_erases_its_trace_and_prevents_later_sensitive_appends(

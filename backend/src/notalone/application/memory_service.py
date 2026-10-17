@@ -6,13 +6,14 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Protocol
 from uuid import UUID
 
 from notalone.memory.models import (
     AdoptionMethod,
     ConfirmedMemory,
+    ConfirmedMemoryStatus,
     FactSubject,
     MemoryCandidate,
     MemoryCategory,
@@ -21,6 +22,7 @@ from notalone.memory.models import (
 )
 from notalone.memory.ports import MemoryPort, OwnerMemoryPort
 from notalone.scopes import ContactScope
+from notalone.memory.versions import MemoryVersionConflict
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,7 +65,7 @@ class MemoryService:
         contact_id: UUID,
     ) -> tuple[ConfirmedMemory, ...]:
         return self._contact_memory.list_confirmed(
-            ContactScope(owner_id=owner_id, contact_id=contact_id)
+            ContactScope(owner_id=owner_id, contact_id=contact_id), include_expired=True,
         )
 
     def list_pending(
@@ -77,7 +79,29 @@ class MemoryService:
         )
 
     def list_owner_memories(self, *, owner_id: UUID) -> tuple[OwnerMemory, ...]:
-        return self._owner_memory.list_active(owner_id)
+        return self._owner_memory.list_active(owner_id, include_expired=True)
+
+    def list_versions(
+        self, *, owner_id: UUID, memory_id: UUID, contact_id: UUID | None = None,
+    ) -> tuple[ConfirmedMemory, ...] | tuple[OwnerMemory, ...]:
+        if contact_id is None:
+            return self._owner_memory.list_versions(owner_id=owner_id, memory_id=memory_id)
+        return self._contact_memory.list_versions(
+            scope=ContactScope(owner_id=owner_id, contact_id=contact_id), memory_id=memory_id,
+        )
+
+    def revert_auto_update(
+        self, *, owner_id: UUID, memory_id: UUID, expected_revision: int,
+        contact_id: UUID | None = None,
+    ) -> ConfirmedMemory | OwnerMemory:
+        if contact_id is None:
+            return self._owner_memory.revert_auto_update(
+                owner_id=owner_id, memory_id=memory_id, expected_revision=expected_revision,
+            )
+        return self._contact_memory.revert_auto_update(
+            scope=ContactScope(owner_id=owner_id, contact_id=contact_id),
+            memory_id=memory_id, expected_revision=expected_revision,
+        )
 
     # -- pending 候选人工处理 ------------------------------------------
 
@@ -87,21 +111,26 @@ class MemoryService:
         owner_id: UUID,
         contact_id: UUID,
         candidate_id: UUID,
+        expected_correction_decision_ids: tuple[UUID, ...] | None = None,
     ) -> ConfirmedMemory | OwnerMemory:
         scope = ContactScope(owner_id=owner_id, contact_id=contact_id)
         candidate = self._contact_memory.get_candidate(
             scope=scope,
             candidate_id=candidate_id,
         )
+        expected = ({"expected_correction_decision_ids": expected_correction_decision_ids}
+                    if expected_correction_decision_ids is not None else {})
         if candidate.subject is FactSubject.SELF:
             return self._owner_memory.confirm_candidate(
                 candidate=candidate,
                 adoption_method=AdoptionMethod.MANUAL,
+                **expected,
             )
         return self._contact_memory.confirm(
             scope=scope,
             candidate_id=candidate_id,
             adoption_method=AdoptionMethod.MANUAL,
+            **expected,
         )
 
     def discard_candidate(
@@ -114,6 +143,36 @@ class MemoryService:
         return self._contact_memory.discard_candidate_with_fingerprint(
             scope=ContactScope(owner_id=owner_id, contact_id=contact_id),
             candidate_id=candidate_id,
+        )
+
+    def apply_candidate_update(
+        self, *, owner_id: UUID, contact_id: UUID, candidate_id: UUID,
+        previous_memory_id: UUID, expected_revision: int,
+        expected_correction_decision_ids: tuple[UUID, ...] | None = None,
+    ) -> ConfirmedMemory | OwnerMemory:
+        scope = ContactScope(owner_id, contact_id)
+        candidate = self._contact_memory.get_candidate(scope=scope, candidate_id=candidate_id)
+        versions = self.list_versions(
+            owner_id=owner_id, memory_id=previous_memory_id,
+            contact_id=None if candidate.subject is FactSubject.SELF else contact_id,
+        )
+        previous = versions[0]
+        if previous.memory_id != previous_memory_id:
+            raise MemoryVersionConflict("所选旧版已变化，请刷新后核对。")
+        if previous.status is ConfirmedMemoryStatus.INVALIDATED and previous.revision == expected_revision + 1:
+            previous = replace(previous, status=ConfirmedMemoryStatus.ACTIVE, revision=expected_revision)
+        elif previous.status is not ConfirmedMemoryStatus.ACTIVE or previous.revision != expected_revision:
+            raise MemoryVersionConflict("所选旧版已变化，请刷新后核对。")
+        if candidate.subject is FactSubject.SELF:
+            return self._owner_memory.confirm_candidate(
+                candidate=candidate, adoption_method=AdoptionMethod.MANUAL,
+                expected_previous=previous,
+                expected_correction_decision_ids=expected_correction_decision_ids,
+            )
+        return self._contact_memory.confirm(
+            scope=scope, candidate_id=candidate_id,
+            adoption_method=AdoptionMethod.MANUAL, expected_previous=previous,
+            expected_correction_decision_ids=expected_correction_decision_ids,
         )
 
     # -- 手动录入 ------------------------------------------------------

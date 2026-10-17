@@ -1064,7 +1064,7 @@ class ExtractMainTest(unittest.TestCase):
     def test_default_cli_verification_rejects_wrong_subject_and_records_both_calls(self) -> None:
         message = replace(_messages(1)[0], text="我不喝酒")
         payload = {"unit": "0:0", "kind": "preference", "subject": "self", "topic": "other",
-                   "dependency": None, "unresolved": False, "confidence": 0.9, "sensitivity": "none"}
+                   "dependency": None, "unresolved": False, "confidence": 0.9, "sensitivity": "none", "event": None}
         model = ToolCallingFakeModel(responses=[
             AIMessage(content="", tool_calls=[{
                 "name": "GroundedMemoryLabels", "id": "extract-1",

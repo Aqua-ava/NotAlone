@@ -52,6 +52,8 @@ def _history_payload(history: AssistantCandidateHistory) -> dict[str, object]:
         "default_display_version_id": str(history.default_display_version_id),
         "selected_version_id": (str(history.selected_version_id)
                                 if history.selected_version_id is not None else None),
+        **({"basis_changes": [change.to_payload() for change in history.basis_changes]}
+           if history.basis_changes else {}),
         "versions": [{
             "version_id": str(version.version_id),
             "version_number": version.version_number,

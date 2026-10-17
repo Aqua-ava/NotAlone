@@ -19,6 +19,8 @@ class MemoryTimingTest(unittest.TestCase):
             "source_started_at": "2026-04-10T00:00:00+00:00",
             "source_ended_at": "2026-04-12T00:00:00+00:00",
             "source_time_complete": False,
+            "current_status": "current_unverified",
+            "current_status_reason": "当前未核实；原话和保存时间不能证明状态现在仍成立。",
         })
         self.assertEqual(MemoryTiming.from_payload(timing.to_payload()), timing)
         self.assertEqual(MemoryTiming.from_payload(None), MemoryTiming())

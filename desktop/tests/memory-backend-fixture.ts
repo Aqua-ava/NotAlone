@@ -4,7 +4,7 @@ import { ContactFixture } from './contact-backend-fixture';
 export type MemoryDatabase = {
   database_name: string; database_url: string; owner_id: string; other_owner_id: string;
   contact_ids: string[]; other_contact_id: string; empty_contact_id: string;
-  direct_message_id: string; source_document_id: string; supersedes_memory_id: string;
+  direct_message_id: string; source_document_id: string; manual_source_id: string; manual_source_name: string; supersedes_memory_id: string;
   corrected_memory_id: string; owner_candidate_id: string | null;
 };
 export class MemoryFixture extends ContactFixture {

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import stat
 import subprocess
 import sys
 from pathlib import Path
@@ -50,20 +51,63 @@ def seed_contact(connection, owner_id, name, message_count):
 
 def create_database(mode, ownership_path=None):
     database_name = f"notalone_contact_session_{uuid4().hex}_test"
+
+    def record_ownership(phase, *, planned=False):
+        target = ownership_path if planned else ownership_path.with_name(
+            f".{ownership_path.name}.{uuid4().hex}.tmp",
+        )
+        temporary_created = False
+        original_error = None
+        try:
+            descriptor = os.open(target, os.O_WRONLY | os.O_NOFOLLOW | os.O_CREAT | os.O_EXCL, 0o600)
+            temporary_created = not planned
+            with os.fdopen(descriptor, "w", encoding="utf-8") as ownership:
+                json.dump({"version": 1, "database_name": database_name,
+                           "pid": os.getpid(), "phase": phase}, ownership)
+                ownership.flush()
+                os.fsync(ownership.fileno())
+            if not planned:
+                # created 完整落盘前不覆盖 planned，失败时仍能恢复精确计划身份。
+                os.replace(target, ownership_path)
+            directory = os.open(ownership_path.parent, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
+        except BaseException as error:
+            original_error = error
+            raise
+        finally:
+            if temporary_created:
+                try:
+                    target.unlink(missing_ok=True)
+                except OSError as cleanup_error:
+                    if original_error is None:
+                        raise
+                    original_error.add_note(f"本轮临时归属文件清理未确认：{target}；{cleanup_error}")
+
     if ownership_path is not None:
         # 建库前持久化精确归属；即使调用方超时也不能丢失本轮库名。
-        descriptor = os.open(ownership_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        with os.fdopen(descriptor, "w", encoding="utf-8") as ownership:
-            json.dump({"version": 1, "database_name": database_name, "pid": os.getpid()}, ownership)
-            ownership.flush()
-            os.fsync(ownership.fileno())
+        ownership_path = Path(ownership_path)
+        directory = ownership_path.parent.lstat()
+        if (not ownership_path.is_absolute() or not stat.S_ISDIR(directory.st_mode)
+                or directory.st_uid != os.getuid() or directory.st_mode & 0o077):
+            raise RuntimeError("本轮联系人库须使用自有私有归属目录。")
+        record_ownership("planned", planned=True)
     with psycopg.connect("host=/tmp dbname=postgres", autocommit=True) as admin:
         admin.execute(sql.SQL("CREATE DATABASE {} TEMPLATE template0").format(
             sql.Identifier(database_name),
         ))
     try:
+        if ownership_path is not None:
+            # CREATE 已明确成功，后续 marker 写入失败也须清理该精确库。
+            record_ownership("created")
         database_url = f"host=/tmp dbname={database_name}"
-        env = dict(os.environ, NOTALONE_DATABASE_URL=database_url)
+        env = dict(os.environ, NOTALONE_DATABASE_URL=database_url,
+                   NOTALONE_TEST_DATABASE_URL=database_url)
+        with psycopg.connect(database_url) as connection:
+            if connection.execute("SELECT current_database()").fetchone()[0] != database_name:
+                raise RuntimeError("本轮联系人库身份不匹配。")
         migration = subprocess.run(
             [sys.executable, "-m", "notalone.database_migrations", "--migrations",
              str(ROOT / "backend/database/migrations")],
@@ -94,8 +138,13 @@ def create_database(mode, ownership_path=None):
             "owner_id": str(owner_id), "other_owner_id": str(other_owner_id),
             "contact_ids": contacts, "other_contact_id": other_contact,
         }
-    except BaseException:
-        drop_database(database_name)
+    except BaseException as original_error:
+        original_error.add_note(f"本轮联系人库已确证创建（CREATE DATABASE 成功）：{database_name}")
+        try:
+            drop_database(database_name)
+        except BaseException as cleanup_error:
+            original_error.add_note("本轮已确证创建的联系人库未完成清理。")
+            raise original_error from cleanup_error
         raise
 
 

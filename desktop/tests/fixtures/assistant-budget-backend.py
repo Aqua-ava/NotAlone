@@ -5,7 +5,6 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
-import subprocess
 import sys
 from dataclasses import replace
 from pathlib import Path
@@ -15,7 +14,11 @@ from uuid import UUID
 import psycopg
 from psycopg import sql
 
-from fixture_cleanup import cleanup_fixture
+from fixture_cleanup import bind_prepared_database, cleanup_fixture, database_ownership_path
+
+# 包装入口也须在任何产品／测试模块前固定本轮双 URL。
+PREPARED_DATABASE_NAME = bind_prepared_database()
+
 from notalone.application.model_priority import ModelPriorityControl
 from notalone.application.skill_service import SkillService
 from notalone.persistence.skill_library import PostgresSkillLibrary
@@ -49,30 +52,11 @@ class AssistantBudgetFixture(rewrite.DesktopRewriteFixture):
     unknown = False
     approximate = False
     safety_margin = 0
+    _prepared_database_name = PREPARED_DATABASE_NAME
 
     def __init__(self) -> None:
         super().__init__()
         self.decisions = []
-
-    @classmethod
-    def setUpClass(cls) -> None:
-        super().setUpClass()
-        with psycopg.connect(cls.database_url) as connection:
-            recorded = [row[0] for row in connection.execute(
-                "SELECT name FROM public.notalone_schema_migration ORDER BY name",
-            ).fetchall()]
-        root = Path(__file__).resolve().parents[3]
-        expected = sorted(path.name for path in (root / "backend/database/migrations").glob("*.sql"))
-        if recorded != expected or len(recorded) != 58 or not recorded[-1].startswith("058_"):
-            raise RuntimeError("本轮预算夹具必须只应用正式001–058迁移。")
-        repeated = subprocess.run(
-            [sys.executable, "-m", "notalone.database_migrations", "--migrations",
-             str(root / "backend/database/migrations")],
-            cwd=root / "backend", capture_output=True, text=True, timeout=60,
-            env=dict(os.environ, NOTALONE_DATABASE_URL=cls.database_url),
-        )
-        if repeated.returncode or json.loads(repeated.stdout)["applied"] != []:
-            raise RuntimeError("本轮预算迁移重复执行必须为0。")
 
     def _backend(self, owner_id):
         priority = ModelPriorityControl()
@@ -112,7 +96,7 @@ class AssistantBudgetFixture(rewrite.DesktopRewriteFixture):
 
 def main() -> None:
     fixture = AssistantBudgetFixture()
-    AssistantBudgetFixture._database_ownership_path = Path(os.environ['NOTALONE_ENV_FILE']).parent / 'database-ownership.json'
+    AssistantBudgetFixture._database_ownership_path = database_ownership_path()
     try:
         fixture.setUpClass()
         fixture.setUp()
@@ -125,9 +109,9 @@ def main() -> None:
             fixture.continuous_support.prepare_inputs(fixture, contacts)
         def connection():
             return {"port": int(fixture.backend.base_url.rsplit(":", 1)[1]), "token": fixture.backend.token}
-        print(json.dumps({"ready": {**connection(), "contact_ids": contacts,
+        print(json.dumps({"ready": {**connection(), "database_url": fixture.database_url, "contact_ids": contacts,
                                     "foreign_contact_id": foreign_contact,
-                                    "migration_count": 58, "migration_repeat": 0}}), flush=True)
+                                    **fixture.migration_receipt}}), flush=True)
         for line in sys.stdin:
             command = json.loads(line)
             operation = command["operation"]
@@ -153,6 +137,21 @@ def main() -> None:
             elif operation == "older_messages":
                 fixture.add_older_messages(command["contact_id"])
                 result = {"added": True}
+            elif operation == "old_prepared_format":
+                contact = str(UUID(command["contact_id"]))
+                if contact not in contacts:
+                    raise ValueError("只允许本夹具已确认联系人。")
+                with psycopg.connect(fixture.database_url) as database:
+                    changed = database.execute(
+                        "UPDATE public.assistant_session_turn SET prepared_context="
+                        "(prepared_context - 'schema_revision') || '{\"version\":1}'::jsonb "
+                        "WHERE owner_id=%s AND contact_id=%s AND idempotency_key=%s "
+                        "AND prepared_context IS NOT NULL",
+                        (fixture.owner_id, UUID(contact), UUID(command["request_key"])),
+                    )
+                    if changed.rowcount != 1:
+                        raise ValueError("合成旧准备身份未确认。")
+                result = {}
             elif operation == "same_names":
                 with psycopg.connect(fixture.database_url) as connection_db:
                     connection_db.execute(

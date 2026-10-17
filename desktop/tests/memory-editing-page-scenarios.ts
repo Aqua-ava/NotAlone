@@ -21,7 +21,7 @@ export async function memoryOwnerCorrection(manager: Page, fixture: MemoryFixtur
   await owner.getByRole('button', { name: '查看来源与版本：本人改为喜欢合成白茶。', exact: true }).click();
   const corrected = owner.getByRole('article').filter({ has: manager.getByText('本人改为喜欢合成白茶。', { exact: true }) });
   await expect(corrected.getByText('手动采纳', { exact: true })).toBeVisible();
-  await expect(corrected.getByText('版本：2 · 当前有效', { exact: true })).toBeVisible();
+  await expect(corrected.getByText('版本：2 · 已采纳', { exact: true })).toBeVisible();
   await expect(corrected.getByText(`替代版本引用：${previous.memory_id}`, { exact: true })).toBeVisible();
   const after = await fixture.readMemorySection(fixture.data.contact_ids[0], 'owner');
   expect(after.status).toBe(200);
@@ -114,12 +114,14 @@ export async function memoryRemoval(manager: Page, fixture: MemoryFixture) {
   const manual = contact.getByRole('article').filter({ has: manager.getByText('甲的新版本关系备注。', { exact: true }) });
   await manual.getByRole('button', { name: '删除资料：甲的新版本关系备注。', exact: true }).click();
   await manual.getByRole('button', { name: '确认删除', exact: true }).click();
-  await expect(contact.getByText('这位联系人暂无当前有效记忆。', { exact: true })).toBeVisible();
+  await expect(contact.getByText('这位联系人暂无可查看记忆。', { exact: true })).toBeVisible();
   const ownManual = owner.getByRole('article').filter({ has: manager.getByText('本人喜欢合成绿茶。', { exact: true }) });
   await ownManual.getByRole('button', { name: '删除资料：本人喜欢合成绿茶。', exact: true }).click();
   await ownManual.getByRole('button', { name: '确认删除', exact: true }).click();
   await expect(owner.getByText('本人喜欢合成绿茶。', { exact: true })).toHaveCount(0);
   await expect(owner.getByText('本人手动录入的合成资料。', { exact: true })).toBeVisible();
+  // 正文先撤下，权威提交以公开完成状态为准，不能用乐观隐藏代替。
+  await expect(manager.getByText('资料操作已完成并重新核对。', { exact: true })).toBeVisible();
   const actual = await fixture.readMemorySection(fixture.data.contact_ids[0], 'contact');
   const actualOwn = await fixture.readMemorySection(fixture.data.contact_ids[0], 'owner');
   expect(actual.status).toBe(200);
@@ -128,7 +130,19 @@ export async function memoryRemoval(manager: Page, fixture: MemoryFixture) {
   expect((actualOwn.data.memories as Array<Record<string, unknown>>).some((item) => item.memory_id === deleted.memory_id)).toBe(false);
   expect(before.data.memories).toHaveLength(2);
   expect(await fixture.readMemorySection(fixture.data.contact_ids[0], 'sources')).toEqual(sources);
-  expect(await fixture.readMemorySection(fixture.data.contact_ids[0], 'pending')).toEqual(pending);
+  const currentPending = await fixture.readMemorySection(fixture.data.contact_ids[0], 'pending');
+  expect(currentPending.status).toBe(200);
+  const withoutReview = (items: Array<Record<string, unknown>>) => items.map(({ correction_review: _review, ...item }) => item);
+  expect(withoutReview(currentPending.data.candidates as Array<Record<string, unknown>>))
+    .toEqual(withoutReview(pending.data.candidates as Array<Record<string, unknown>>));
+  const reviews = (currentPending.data.candidates as Array<Record<string, unknown>>)
+    .flatMap((item) => item.correction_review as Array<Record<string, unknown>>);
+  expect(reviews.length).toBeGreaterThan(0);
+  for (const review of reviews) expect(review).toMatchObject({ decision: 'rejected', corrected_text: null,
+    previous_text: '原资料已删除；旧证据上的人工否决继续有效。' });
+  for (const erased of ['甲喜欢合成茉莉茶。', '甲的新版本关系备注。', '旧版关系备注。', '本人喜欢合成绿茶。']) {
+    expect(JSON.stringify(currentPending.data)).not.toContain(erased);
+  }
   expect(await fixture.readMemorySection(fixture.data.contact_ids[1], 'contact')).toEqual(other);
 }
 
@@ -169,12 +183,13 @@ export async function memoryCandidateDiscard(manager: Page, fixture: MemoryFixtu
   const contacts = await fixture.readMemorySection(fixture.data.contact_ids[0], 'contact');
   const own = await fixture.readMemorySection(fixture.data.contact_ids[0], 'owner');
   const sources = await fixture.readMemorySection(fixture.data.contact_ids[0], 'sources');
-  for (const item of before.data.candidates as Array<Record<string, unknown>>) {
-    await pending.getByRole('button', { name: `丢弃候选：${item.text}`, exact: true }).click();
-    const card = pending.getByRole('article').filter({ has: manager.getByText(item.text as string, { exact: true }) });
-    await card.getByRole('button', { name: '确认丢弃', exact: true }).click();
-    await expect(pending.getByText(item.text as string, { exact: true })).toHaveCount(0);
-  }
+  const candidates = before.data.candidates as Array<Record<string, unknown>>;
+  const item = candidates[0]!;
+  await pending.getByRole('button', { name: `丢弃候选：${item.text}`, exact: true }).click();
+  const card = pending.getByRole('article').filter({ has: manager.getByText(item.text as string, { exact: true }) });
+  await card.getByRole('button', { name: '确认丢弃', exact: true }).click();
+  // 三条候选实际使用相同旧证据；否决后不能靠主体或措辞变化留下另外两条。
+  for (const previous of candidates) await expect(pending.getByText(previous.text as string, { exact: true })).toHaveCount(0);
   await expect(pending.getByText('这位联系人暂无待确认候选。', { exact: true })).toBeVisible();
   expect((await fixture.readMemorySection(fixture.data.contact_ids[0], 'pending')).data.candidates).toEqual([]);
   expect(await fixture.readMemorySection(fixture.data.contact_ids[0], 'contact')).toEqual(contacts);

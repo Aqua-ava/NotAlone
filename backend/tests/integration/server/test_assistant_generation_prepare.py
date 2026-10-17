@@ -7,6 +7,7 @@ import os
 import threading
 import time
 import unittest
+from datetime import datetime, timedelta, timezone
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 from unittest.mock import patch
@@ -19,11 +20,15 @@ from langchain_core.outputs import ChatGeneration, ChatResult
 from pydantic import Field, PrivateAttr
 
 from notalone.application.assistant_session_service import AssistantSessionService
+from notalone.application.memory_service import MemoryService
 from notalone.application.skill_service import LedgerService
 from notalone.persistence.assistant_session_catalog import PostgresAssistantSessionCatalog
 from notalone.persistence.assistant_session_store import PostgresAssistantSessionStore
 from notalone.persistence.conversation_repository import PostgresConversationBindingRepository
 from notalone.persistence.outbound_ledger import PostgresOutboundLedger
+from notalone.persistence.memory_store import PostgresMemoryStore
+from notalone.persistence.owner_memory_store import PostgresOwnerMemoryStore
+from notalone.persistence.reply_store import PostgresReplyStore
 from notalone.server.app import create_app
 from notalone.server.reply_wiring import build_reply_service
 from tests.fidelity_http_support import FidelityControlledModel
@@ -131,6 +136,8 @@ class AssistantGenerationPrepareHttpTest(unittest.TestCase):
         backend = HttpBackend(create_app(
             database_url=DATABASE_URL, owner_id=current_owner,
             token="synthetic-assistant-prepare-token", reply_service=reply_service,
+            memory_service=MemoryService(contact_memory=PostgresMemoryStore(DATABASE_URL),
+                                         owner_memory=PostgresOwnerMemoryStore(DATABASE_URL)),
             ledger_service=LedgerService(ledger=PostgresOutboundLedger(DATABASE_URL)),
             assistant_sessions=(AssistantSessionService(
                 store=completion_barrier, reply=reply_service,
@@ -198,6 +205,208 @@ class AssistantGenerationPrepareHttpTest(unittest.TestCase):
         ledger_status, ledger = reopened.request("/api/ledger/summary")
         self.assertEqual(ledger_status, 200, ledger)
         self.assertEqual(ledger["total_calls"], 0)
+
+    def _old_prepared_format(self, body: dict, *, revision: object = None) -> None:
+        with psycopg.connect(DATABASE_URL, row_factory=dict_row) as connection:
+            from psycopg.types.json import Jsonb
+            row = connection.execute(
+                "SELECT id,prepared_context FROM public.assistant_session_turn "
+                "WHERE owner_id=%s AND contact_id=%s AND idempotency_key=%s",
+                (self.owner_id, self.contact_id, UUID(body["idempotency_key"])),
+            ).fetchone()
+            payload = row["prepared_context"]
+            if revision is None:
+                payload["version"] = 1
+                payload.pop("schema_revision", None)
+            else:
+                payload["schema_revision"] = revision
+            connection.execute("UPDATE public.assistant_session_turn SET prepared_context=%s WHERE id=%s",
+                               (Jsonb(payload), row["id"]))
+
+    def test_v2_prepare_restart_executes_frozen_current_status_without_refetching(self) -> None:
+        status, memory = self.backend.request("/api/memories/manual-contact", {
+            "contact_id": str(self.contact_id), "text": "合成加班：最近在加班。", "category": "recent_state",
+        })
+        self.assertEqual(status, 200, memory)
+        path, body = self._session_path(), self._body(draft="合成加班，最近还忙吗？")
+        body["content"]["include_relationship_context"] = True
+        status, receipt = self.backend.request(path + "/replies/prepare", body)
+        self.assertEqual(status, 200, receipt)
+        self.assertEqual(self.model.seen_calls, [])
+        self.model.plans.append({"text": "最近还忙吗？", "basis": "只询问近况，不把过去当作现在。"})
+
+        status, generated = self._backend().request(path + "/replies", body)
+
+        self.assertEqual(status, 200, generated)
+        self.assertEqual(generated["turn_id"], receipt["turn_id"])
+        memories = [item for item in self.model.payloads[-1]["evidence"] if item["kind"] == "confirmed_memory"]
+        self.assertEqual(len(memories), 1)
+        self.assertEqual(memories[0]["timing"]["current_status"], "current_unverified")
+        self.assertIn("不能证明状态现在仍成立", memories[0]["timing"]["current_status_reason"])
+
+    def test_old_preparation_without_c_is_sealed_and_requires_explicit_reprepare(self) -> None:
+        path, body = self._session_path(), self._body()
+        status, receipt = self.backend.request(path + "/replies/prepare", body)
+        self.assertEqual(status, 200, receipt)
+        self._old_prepared_format(body)
+
+        status, rejected = self._backend().request(path + "/replies/prepare", body)
+
+        self.assertEqual((status, rejected), (409, {"error": "assistant_session_rejected",
+            "reason": "prepared_context_reprepare_required"}))
+        saved = self.backend.request(path)[1]
+        turn = saved["turns"][0]
+        self.assertEqual((turn["turn_id"], turn["input_version_id"], turn["request_key"]),
+                         (receipt["turn_id"], receipt["input_version_id"], receipt["request_key"]))
+        self.assertEqual(turn["input"]["content"]["draft_text"], "合成可恢复草稿")
+        self.assertEqual((turn["state"], turn["generation_active"], turn["requires_reprepare"]),
+                         ("failed", False, True))
+        self.assertEqual(self.backend.request(path + "/replies", body)[0], 409)
+        self.assertEqual(len(self.backend.request(path)[1]["turns"]), 1)
+        self.assertEqual(self.model.seen_calls, [])
+
+    def test_explicit_format_check_returns_original_identity_without_generating(self) -> None:
+        path, body = self._session_path(), self._body()
+        status, receipt = self.backend.request(path + "/replies/prepare", body)
+        self.assertEqual(status, 200, receipt)
+        self._old_prepared_format(body)
+        identity = {"request_key": receipt["request_key"], "input_version_id": receipt["input_version_id"]}
+
+        status, checked = self.backend.request(path + "/preparation-format", identity)
+
+        self.assertEqual((status, checked), (200, {**receipt, "state": "failed",
+                                                 "format_status": "reprepare_required"}))
+        self.assertEqual(self.backend.request(path + "/preparation-format", identity), (status, checked))
+        self.assertEqual(self.model.seen_calls, [])
+        edited = self._body(draft="合成保留用户修改后的草稿")
+        self.assertEqual(self.backend.request(path + "/replies/prepare", edited)[0], 200)
+        self.assertEqual(self.model.seen_calls, [])
+
+    def test_old_format_running_generation_keeps_its_lease_until_original_completion(self) -> None:
+        path, body = self._session_path(), self._body()
+        status, receipt = self.backend.request(path + "/replies/prepare", body)
+        self.assertEqual(status, 200, receipt)
+        self.model.plans.append({"text": "合成原任务候选", "basis": "保留合成草稿原意。"})
+        release = self.model.pause_next_response()
+        self.addCleanup(release.set)
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            running = pool.submit(self.backend.request, path + "/replies", body)
+            try:
+                self.assertTrue(self.model.entered.wait(5))
+                self._old_prepared_format(body)
+                before = self._generation_metadata(body)
+                self.assertEqual(self.backend.request(path + "/replies/prepare", body), (409,
+                    {"error": "assistant_session_rejected", "reason": "prepared_context_generation_running"}))
+                self.assertEqual(self.backend.request(path + "/preparation-format", {
+                    "request_key": receipt["request_key"], "input_version_id": receipt["input_version_id"]}),
+                    (200, {**receipt, "format_status": "generation_running"}))
+                self.assertEqual(self._generation_metadata(body), before)
+                self.assertEqual(self.backend.request(path)[1]["turns"][0]["generation_active"], True)
+            finally:
+                release.set()
+            self.assertEqual(running.result(timeout=10)[0], 200)
+        self.assertEqual(len(self.model.seen_calls), 1)
+        self.assertEqual(self.backend.request(path + "/replies/prepare", body),
+                         (200, {**receipt, "state": "completed"}))
+
+    def test_old_format_failed_c_seals_original_key_without_another_attempt(self) -> None:
+        path, body = self._session_path(), self._body()
+        self.assertEqual(self.backend.request(path + "/replies/prepare", body)[0], 200)
+        limited = self._backend(capacity=1000, output_reserve=100)
+        self.assertEqual(limited.request(path + "/replies", body)[0], 409)
+        self._old_prepared_format(body, revision=0)
+        before = self._generation_metadata(body)
+
+        self.assertEqual(self.backend.request(path + "/replies/prepare", body),
+                         (409, {"error": "assistant_session_rejected", "reason": "prepared_context_reprepare_required"}))
+
+        self.assertEqual(self._generation_metadata(body)[1], before[1])
+        self.assertEqual(self.backend.request(path + "/replies", body)[0], 409)
+        self.assertEqual(self._generation_metadata(body)[1]["attempt"], 1)
+        self.assertEqual(self.model.seen_calls, [])
+
+    def test_old_format_unknown_terminal_is_retained_without_sealing_or_releasing(self) -> None:
+        path, body = self._session_path(), self._body()
+        self.assertEqual(self.backend.request(path + "/replies/prepare", body)[0], 200)
+        limited = self._backend(capacity=1000, output_reserve=100)
+        self.assertEqual(limited.request(path + "/replies", body)[0], 409)
+        self._old_prepared_format(body)
+        before = self._generation_metadata(body)
+        with psycopg.connect(DATABASE_URL) as connection:
+            connection.execute("DELETE FROM public.reply_attempt WHERE reply_request_id=%s", (before[1]["id"],))
+
+        self.assertEqual(self.backend.request(path + "/replies/prepare", body),
+                         (409, {"error": "assistant_session_rejected", "reason": "prepared_context_generation_unconfirmed"}))
+
+        self.assertEqual(self._generation_metadata(body), before)
+        turn = self.backend.request(path)[1]["turns"][0]
+        self.assertNotIn("generation_active", turn)
+        self.assertEqual(turn["requires_reprepare"], True)
+        self.assertEqual(self.model.seen_calls, [])
+
+    def test_old_format_reliably_expired_c_is_sealed_without_retrying_the_attempt(self) -> None:
+        clock = {"now": datetime.now(timezone.utc)}
+        with patch("notalone.server.reply_wiring.PostgresReplyStore", side_effect=lambda url:
+                   PostgresReplyStore(url, clock=lambda: clock["now"])):
+            self.backend = self._backend()
+        path, body = self._session_path(), self._body(draft="合成过期任务原编辑")
+        status, receipt = self.backend.request(path + "/replies/prepare", body)
+        self.assertEqual(status, 200, receipt)
+        self.model.plans.append({"text": "合成过期晚返回", "basis": "保留原输入。"})
+        release = self.model.pause_next_response()
+        self.addCleanup(release.set)
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            late = pool.submit(self.backend.request, path + "/replies", body)
+            try:
+                self.assertTrue(self.model.entered.wait(5))
+                clock["now"] += timedelta(seconds=31)
+            finally:
+                release.set()
+            self.assertNotEqual(late.result(timeout=10)[0], 200)
+        # 状态来自真实生成的过期处理，仅替换时钟；没有直接改写 request/attempt 状态。
+        before = self._generation_metadata(body)
+        self.assertEqual(before[1]["state"], "expired")
+        self._old_prepared_format(body)
+        identity = {"request_key": receipt["request_key"], "input_version_id": receipt["input_version_id"]}
+
+        self.assertEqual(self.backend.request(path + "/preparation-format", identity),
+            (200, {**receipt, "state": "failed", "format_status": "reprepare_required"}))
+
+        self.assertEqual(self._generation_metadata(body)[1], before[1])
+        saved = self.backend.request(path)[1]
+        self.assertEqual(len(saved["turns"]), 1)
+        self.assertEqual(saved["turns"][0]["input"]["content"]["draft_text"], "合成过期任务原编辑")
+        self.assertEqual(saved["turns"][0]["generation_active"], False)
+        self.assertEqual(self.backend.request(path + "/replies", body)[0], 409)
+        self.assertEqual(self._generation_metadata(body)[1]["attempt"], 1)
+        self.assertEqual(len(self.model.seen_calls), 1)
+
+    def test_old_running_format_can_only_reprepare_after_confirmed_interruption(self) -> None:
+        path, body = self._session_path(), self._body()
+        receipt = self.backend.request(path + "/replies/prepare", body)[1]
+        self.model.plans.append({"text": "合成旧任务晚返回", "basis": "保留原输入。"})
+        release = self.model.pause_next_response()
+        self.addCleanup(release.set)
+        identity = {"request_key": receipt["request_key"], "input_version_id": receipt["input_version_id"]}
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            late = pool.submit(self.backend.request, path + "/replies", body)
+            try:
+                self.assertTrue(self.model.entered.wait(5))
+                self._old_prepared_format(body)
+                self.assertEqual(self.backend.request(path + "/interrupt", identity),
+                    (200, {**receipt, "state": "failed", "interruption_reason": "app_quit"}))
+                self.assertEqual(self.backend.request(path + "/preparation-format", identity),
+                    (200, {**receipt, "state": "failed", "format_status": "reprepare_required"}))
+            finally:
+                release.set()
+            self.assertNotEqual(late.result(timeout=10)[0], 200)
+        old = self.backend.request(path)[1]["turns"][0]
+        self.assertIsNone(old["reply"])
+        self.assertEqual(old["generation_active"], False)
+        self.assertEqual(old["input"]["content"]["draft_text"], body["content"]["draft_text"])
+        fresh = self._body(draft="合成明确新准备")
+        self.assertEqual(self.backend.request(path + "/replies/prepare", fresh)[0], 200)
+        self.assertEqual(len(self.model.seen_calls), 1)
 
     def test_same_key_replays_actual_completed_state_and_generates_only_once(self) -> None:
         path = self._session_path()

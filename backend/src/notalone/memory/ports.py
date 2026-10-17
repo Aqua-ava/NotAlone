@@ -45,8 +45,10 @@ class MemoryPort(Protocol):
         candidate_id: UUID,
         adoption_method: AdoptionMethod = AdoptionMethod.AUTO,
         expected_dimension_evidence: DimensionEvidence | None = None,
+        expected_correction_decision_ids: tuple[UUID, ...] | None = None,
+        expected_previous: ConfirmedMemory | None = None,
     ) -> ConfirmedMemory:
-        """确认候选；提供当前依据时须在写入事务复核且不得丢失。"""
+        """确认候选；复验当前依据，自动替代原版本时新旧变化须原子提交。"""
 
     def correct(
         self,
@@ -88,8 +90,14 @@ class MemoryPort(Protocol):
     def delete(self, *, scope: ContactScope, memory_id: UUID) -> ConfirmedMemory:
         """标记记忆删除，使其不再进入检索。"""
 
-    def list_confirmed(self, scope: ContactScope) -> tuple[ConfirmedMemory, ...]:
-        """返回指定联系人范围内当前有效的已确认记忆。"""
+    def list_confirmed(self, scope: ContactScope, *, include_expired: bool = False) -> tuple[ConfirmedMemory, ...]:
+        """读取当前有效记忆；管理回看可包含已过期、仍有活动来源的 active 资料。"""
+
+    def list_versions(self, *, scope: ContactScope, memory_id: UUID) -> tuple[ConfirmedMemory, ...]:
+        """读取指定资料的新旧版本、状态、修订及仍合法的来源。"""
+
+    def revert_auto_update(self, *, scope: ContactScope, memory_id: UUID, expected_revision: int) -> ConfirmedMemory:
+        """原子撤销自动叶子并恢复仍合法的旧版，保留 auto 采纳方式。"""
 
     def deleted_texts(self, scope: ContactScope) -> tuple[str, ...]:
         """返回该联系人范围内已删除记忆的文本，用于阻止自动提取复活。"""
@@ -106,11 +114,19 @@ class OwnerMemoryPort(Protocol):
         *,
         candidate: MemoryCandidate,
         adoption_method: AdoptionMethod = AdoptionMethod.MANUAL,
+        expected_correction_decision_ids: tuple[UUID, ...] | None = None,
+        expected_previous: OwnerMemory | None = None,
     ) -> OwnerMemory:
-        """原子确认 self 候选并写入 owner 级记忆。"""
+        """原子确认 self 候选；自动替代只操作复验通过的原版本。"""
 
-    def list_active(self, owner_id: UUID) -> tuple[OwnerMemory, ...]:
-        """返回某位用户当前有效（active 且在有效期内）的 owner 级记忆。"""
+    def list_active(self, owner_id: UUID, *, include_expired: bool = False) -> tuple[OwnerMemory, ...]:
+        """读取当前有效本人资料；管理回看可包含仍有活动来源的过期资料。"""
+
+    def list_versions(self, *, owner_id: UUID, memory_id: UUID) -> tuple[OwnerMemory, ...]:
+        """读取本人资料的版本链，保留原联系人来源依赖。"""
+
+    def revert_auto_update(self, *, owner_id: UUID, memory_id: UUID, expected_revision: int) -> OwnerMemory:
+        """撤销本人自动更新前复验完整参与来源及旧版。"""
 
     def correct(
         self, *, owner_id: UUID, memory_id: UUID, text: str,

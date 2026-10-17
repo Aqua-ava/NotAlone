@@ -184,17 +184,16 @@ class PostgresOwnerMemoryStoreTest(unittest.TestCase):
 
         self.assertEqual(self.store.list_active(self.owner_id), (saved,))
 
-    def test_delete_is_soft_and_keeps_fingerprint(self) -> None:
+    def test_delete_keeps_only_tombstone_and_erases_private_body(self) -> None:
         memory = _owner_memory(self.owner_id)
         self.store.create(memory)
 
-        self.store.delete(self.owner_id, memory.memory_id)
+        deleted = self.store.delete(self.owner_id, memory.memory_id)
 
         self.assertEqual(self.store.list_active(self.owner_id), ())
-        self.assertIn(
-            "我下周去上海出差",
-            self.store.deleted_texts(self.owner_id),
-        )
+        self.assertEqual(deleted.text, "已删除的资料")
+        self.assertEqual(self.store.deleted_texts(self.owner_id), ("已删除的资料",))
+        self.assertEqual(self.store.delete(self.owner_id, memory.memory_id), deleted)
 
     def test_retrieval_returns_owner_memories_with_validity(self) -> None:
         memory = _owner_memory(self.owner_id)

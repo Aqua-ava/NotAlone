@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from typing import Any
+from collections.abc import Callable
+from contextlib import AbstractContextManager
 from uuid import UUID, uuid4
 
 import psycopg
@@ -18,16 +20,22 @@ from notalone.memory_trace.ports import TraceWriteError
 from notalone.memory_trace.status import failure_status
 from notalone.memory_trace.views import candidate_summaries
 from notalone.persistence.locks import lock_contact_scope, lock_owner_scope
+from notalone.persistence.memory_correction import trace_sources_available
 from notalone.scopes import ContactScope
 
 
 class PostgresExtractionTraceStore:
     """记录正文与非正文运行状态分层；持久化错误不回显驱动详情。"""
 
-    def __init__(self, database_url: str) -> None:
+    def __init__(self, database_url: str, *, connection_factory: Callable[[], AbstractContextManager] | None = None) -> None:
         if not database_url.strip():
             raise ValueError("database_url 不能为空。")
         self.database_url = database_url
+        self._connection_factory = connection_factory
+
+    def _connect(self):
+        """调用方可把追踪写入纳入自己的事务；独立读入口仍用原连接。"""
+        return self._connection_factory() if self._connection_factory else psycopg.connect(self.database_url)
 
     def begin(
         self,
@@ -39,7 +47,7 @@ class PostgresExtractionTraceStore:
     ) -> UUID:
         trace_id = uuid4()
         try:
-            with psycopg.connect(self.database_url) as connection:
+            with self._connect() as connection:
                 lock_contact_scope(
                     connection,
                     owner_id=scope.owner_id,
@@ -197,7 +205,7 @@ class PostgresExtractionTraceStore:
         dependency_ids: tuple[UUID, ...] = (),
     ) -> None:
         try:
-            with psycopg.connect(self.database_url) as connection:
+            with self._connect() as connection:
                 lock_contact_scope(
                     connection,
                     owner_id=scope.owner_id,
@@ -336,7 +344,7 @@ class PostgresExtractionTraceStore:
         skipped_range: Any = None,
     ) -> None:
         try:
-            with psycopg.connect(self.database_url) as connection:
+            with self._connect() as connection:
                 lock_contact_scope(
                     connection,
                     owner_id=scope.owner_id,
@@ -382,7 +390,7 @@ class PostgresExtractionTraceStore:
         stage: str,
         error_code: str,
     ) -> None:
-        with psycopg.connect(self.database_url) as connection:
+        with self._connect() as connection:
             connection.execute(
                 (
                     "UPDATE public.memory_extraction_trace SET "
@@ -412,7 +420,7 @@ class PostgresExtractionTraceStore:
         self, scope: ContactScope, trace_id: UUID, *, receipt: dict[str, Any]
     ) -> None:
         try:
-            with psycopg.connect(self.database_url) as connection:
+            with self._connect() as connection:
                 connection.execute(
                     "INSERT INTO public.memory_extraction_trace_call (call_id,trace_id,owner_id,contact_id,purpose,called_at,finished_at,response_status,provider_attempts,ledger_entry_id,ledger_commit_status,disposition) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (call_id) DO UPDATE SET ledger_commit_status=EXCLUDED.ledger_commit_status,disposition=EXCLUDED.disposition",
                     (
@@ -492,6 +500,10 @@ class PostgresExtractionTraceStore:
                 ).fetchone()
                 if row is None:
                     raise LookupError("指定联系人范围内不存在该追踪。")
+                if row["status"] != "deleted" and not trace_sources_available(
+                    connection, owner_id=scope.owner_id, trace_id=row["trace_id"],
+                ):
+                    raise LookupError("追踪的参与来源正在删除或已不可用。")
                 events = connection.execute(
                     (
                         "SELECT * FROM public.memory_extraction_trace_event WHERE "
@@ -763,7 +775,7 @@ class PostgresExtractionTraceStore:
 
     def delete_batch(self, scope: ContactScope, trace_id: UUID | str) -> None:
         try:
-            with psycopg.connect(self.database_url) as connection:
+            with self._connect() as connection:
                 lock_contact_scope(
                     connection,
                     owner_id=scope.owner_id,
@@ -850,13 +862,15 @@ def erase_source_traces(
             "SELECT DISTINCT trace_id FROM "
             "public.memory_extraction_trace_dependency WHERE owner_id=%s AND "
             "source_id=ANY(%s::uuid[])"
+            " UNION SELECT trace_id FROM public.memory_extraction_trace_link "
+            "WHERE owner_id=%s AND record_id=ANY(%s::uuid[])"
         ),
-        (owner_id, list(removed_ids)),
+        (owner_id, list(removed_ids), owner_id, list(removed_ids)),
     ).fetchall()
     erase_trace_bodies(
         connection,
         owner_id=owner_id,
-        trace_ids=tuple(row[0] for row in rows),
+        trace_ids=tuple(row["trace_id"] if isinstance(row, dict) else row[0] for row in rows),
         reason=reason,
     )
 

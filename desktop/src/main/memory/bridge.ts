@@ -1,5 +1,5 @@
 import { noArguments, type PageCommands } from '../page-commands';
-import type { MemoryAdditionRequest, MemoryCandidateRequest, MemoryCorrectionRequest, MemoryReadRequest, MemoryRemovalRequest, MemorySectionName } from '../../shared/memory-bridge';
+import type { MemoryAdditionRequest, MemoryCandidateRequest, MemoryCandidateUpdateRequest, MemoryCorrectionRequest, MemoryReadRequest, MemoryRemovalRequest, MemorySectionName } from '../../shared/memory-bridge';
 import type { BackendHost } from '../backend/host';
 import type { ContactSession } from '../contacts/session';
 import { isUuid } from '../uuid';
@@ -22,22 +22,35 @@ function requestArguments(args: unknown[]): MemoryReadRequest {
 }
 export function installMemoryBridge(commands: PageCommands, backend: BackendHost, contacts: ContactSession): MemoryReadingController {
   const memory = new MemoryReadingController(backend, contacts);
-  memory.onStateChanged((state) => commands.publish('memory:state-changed', state));
+  memory.onStateChanged((state) => commands.publish('memory:state-changed', state, 'manager'));
   contacts.onStateChanged(() => memory.synchronizeScope());
   backend.onStateChanged(() => memory.synchronizeScope());
   memory.synchronizeScope();
   commands.handle('memory:get-state', (...args: unknown[]) => {
     noArguments(args);
     return memory.getState();
-  });
+  }, 'manager');
   commands.handle('memory:refresh', (...args: unknown[]) => {
     return memory.refresh(requestArguments(args));
-  });
+  }, 'manager');
+  commands.handle('memory:refresh-overview', (...args: unknown[]) => {
+    const request = requestArguments(args);
+    if (request.section !== undefined) throw new Error('概览读取不可用。');
+    return memory.refreshOverview(request);
+  }, 'manager');
+  commands.handle('memory:refresh-owner-overview', (...args: unknown[]) => {
+    const request = requestArguments(args);
+    if (request.section !== undefined) throw new Error('本人概览读取不可用。');
+    return memory.refreshOwnerOverview(request);
+  }, 'manager');
   commands.handle('memory:add', (...args: unknown[]) => memory.add(additionArguments(args)), 'manager');
   commands.handle('memory:remove', (...args: unknown[]) => memory.remove(removalArguments(args)), 'manager');
   commands.handle('memory:discard-candidate', (...args: unknown[]) => memory.discardCandidate(candidateArguments(args)), 'manager');
   commands.handle('memory:confirm-candidate', (...args: unknown[]) => memory.confirmCandidate(candidateArguments(args)), 'manager');
+  commands.handle('memory:apply-candidate-update', (...args: unknown[]) => memory.applyCandidateUpdate(candidateUpdateArguments(args)), 'manager');
   commands.handle('memory:correct', (...args: unknown[]) => memory.correct(correctionArguments(args)), 'manager');
+  commands.handle('memory:open-versions', (...args: unknown[]) => memory.openVersions(removalArguments(args)), 'manager');
+  commands.handle('memory:revert-auto-update', (...args: unknown[]) => memory.revertAutoUpdate(removalArguments(args)), 'manager');
   return memory;
 }
 
@@ -96,4 +109,16 @@ function candidateArguments(args: unknown[]): MemoryCandidateRequest {
     || !isUuid(fields.contactId) || !isUuid(fields.candidateId) || typeof fields.scopeRevision !== 'number'
     || !Number.isSafeInteger(fields.scopeRevision) || fields.scopeRevision < 0) throw new Error('候选操作不可用。');
   return { contactId: fields.contactId.toLowerCase(), scopeRevision: fields.scopeRevision, candidateId: fields.candidateId.toLowerCase() };
+}
+
+function candidateUpdateArguments(args: unknown[]): MemoryCandidateUpdateRequest {
+  const value = args[0];
+  if (args.length !== 1 || !value || typeof value !== 'object' || Array.isArray(value)) throw new Error('候选版本更新不可用。');
+  const fields = value as Record<string, unknown>;
+  if (Object.keys(fields).length !== 5 || !Object.keys(fields).every((key) =>
+    ['contactId', 'scopeRevision', 'candidateId', 'previousMemoryId', 'expectedRevision'].includes(key))
+    || !isUuid(fields.previousMemoryId) || typeof fields.expectedRevision !== 'number'
+    || !Number.isSafeInteger(fields.expectedRevision) || fields.expectedRevision < 1) throw new Error('候选版本更新不可用。');
+  const candidate = candidateArguments([{ contactId: fields.contactId, scopeRevision: fields.scopeRevision, candidateId: fields.candidateId }]);
+  return { ...candidate, previousMemoryId: fields.previousMemoryId.toLowerCase(), expectedRevision: fields.expectedRevision };
 }

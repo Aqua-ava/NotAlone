@@ -17,7 +17,8 @@ export class ContactFixture {
   environment(ownerId = this.data.owner_id): NodeJS.ProcessEnv {
     return {
       NOTALONE_BACKEND_INFO: this.infoPath, NOTALONE_ENV_FILE: this.envPath,
-      NOTALONE_DATABASE_URL: this.data.database_url, NOTALONE_OWNER_ID: ownerId,
+      NOTALONE_DATABASE_URL: this.data.database_url, NOTALONE_TEST_DATABASE_URL: this.data.database_url,
+      NOTALONE_OWNER_ID: ownerId,
       NOTALONE_DEEPSEEK_API_KEY: '', NOTALONE_DEEPSEEK_BASE_URL: 'http://127.0.0.1:1',
       NOTALONE_WECHAT_CLI: path.join(this.directory, 'unavailable-cli'),
       NOTALONE_SYNC_PROBE: path.join(this.directory, 'unavailable-probe'),

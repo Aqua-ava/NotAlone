@@ -107,7 +107,7 @@ class FakeContactMemory:
             if candidate.scope == scope and candidate.candidate_id == candidate_id
         )
 
-    def list_confirmed(self, scope: ContactScope) -> tuple[ConfirmedMemory, ...]:
+    def list_confirmed(self, scope: ContactScope, *, include_expired: bool = False) -> tuple[ConfirmedMemory, ...]:
         return tuple(
             memory
             for memory in self.memories
@@ -185,7 +185,7 @@ class FakeOwnerMemory:
         self.memories.append(memory)
         return memory
 
-    def list_active(self, owner_id: UUID) -> tuple[OwnerMemory, ...]:
+    def list_active(self, owner_id: UUID, *, include_expired: bool = False) -> tuple[OwnerMemory, ...]:
         return tuple(
             memory
             for memory in self.memories
@@ -209,7 +209,7 @@ class FakeOwnerMemory:
 class FailingContactMemory(FakeContactMemory):
     """模拟持久化层故障，验证 HTTP 层不会直接断开连接。"""
 
-    def list_confirmed(self, scope: ContactScope) -> tuple[ConfirmedMemory, ...]:
+    def list_confirmed(self, scope: ContactScope, *, include_expired: bool = False) -> tuple[ConfirmedMemory, ...]:
         raise RuntimeError("synthetic persistence detail")
 
 
@@ -275,6 +275,8 @@ class MemoryApiContractTest(unittest.TestCase):
             "source_started_at": None,
             "source_ended_at": None,
             "source_time_complete": False,
+            "current_status": "current_unverified",
+            "current_status_reason": "当前未核实；原话和保存时间不能证明状态现在仍成立。",
         })
 
     def test_all_memory_levels_expose_source_and_save_times_separately(self) -> None:
@@ -308,6 +310,8 @@ class MemoryApiContractTest(unittest.TestCase):
                     "source_started_at": "2026-09-01T00:00:00+00:00",
                     "source_ended_at": "2026-09-02T00:00:00+00:00",
                     "source_time_complete": False,
+                    "current_status": "current_unverified",
+                    "current_status_reason": "当前未核实；原话和保存时间不能证明状态现在仍成立。",
                 })
                 self.assertIsNone(response.json()[list_key][0]["valid_at"])
                 self.assertIsNone(response.json()[list_key][0]["invalid_at"])

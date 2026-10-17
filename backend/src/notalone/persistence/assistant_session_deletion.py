@@ -41,6 +41,9 @@ def delete_assistant_session(
     ).fetchone():
         raise AssistantSessionNotFound("指定范围内不存在助手会话。")
 
+    from notalone.persistence.skill_learning import erase_skill_learning
+    erase_skill_learning(connection, owner_id=scope.owner_id, removed_ids={session_id})
+
     connection.execute(
         """
         INSERT INTO public.reply_invalidated_key (owner_id, contact_id, idempotency_key)

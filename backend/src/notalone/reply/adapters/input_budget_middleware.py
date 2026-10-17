@@ -20,6 +20,7 @@ from langchain.agents.structured_output import (
 from langchain_core.messages import convert_to_openai_messages
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from langchain_openai.chat_models.base import BaseChatOpenAI
+from langchain_deepseek import ChatDeepSeek
 
 from notalone.reply.errors import ReplyError
 from notalone.reply.input_budget import (
@@ -233,7 +234,8 @@ class InputBudgetMiddleware(AgentMiddleware):
         deepseek 1.1.0 已核对：factory 绑定工具后以原 BaseMessage 序列调用。
         通用消息 converter 会丢 invalid_tool_calls 并合并 system list，
         故复用实际模型的 SDK 序列化；该私有接口升级后须重新核对和验证。
-        SDK transport 的 extra_body 合并与 Responses API 尚未核实，明确拒绝。
+        openai 3.3.1 在 transport 浅合并 extra_body；只允许已核实的
+        DeepSeek thinking disabled，并将它合入计量DTO。其它扩展仍拒绝。
         token 计量或含 framing 的输入估算由绑定实际对象的适配器负责。
         """
 
@@ -261,8 +263,16 @@ class InputBudgetMiddleware(AgentMiddleware):
         if request.system_message is not None:
             messages.insert(0, request.system_message)
         payload = request.model._get_request_payload(messages, **bound_model.kwargs)
-        if not isinstance(payload, Mapping) or payload.get("extra_body"):
+        if not isinstance(payload, Mapping):
             raise ValueError("模型传输正文的最终合并协议尚未核实。")
+        payload = dict(payload)
+        extra = payload.pop("extra_body", None)
+        if extra:
+            if (not isinstance(request.model, ChatDeepSeek)
+                    or extra != {"thinking": {"type": "disabled"}}
+                    or "thinking" in payload):
+                raise ValueError("模型附加正文未通过明确的DeepSeek配置核验。")
+            payload.update(deepcopy(extra))
         encoded = payload.get("messages")
         if (
             not isinstance(encoded, list)

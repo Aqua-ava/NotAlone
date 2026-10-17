@@ -7,6 +7,7 @@ Postgres 技能库、Postgres 存储与出站台账）。
 
 from __future__ import annotations
 
+import os
 from typing import Callable
 from uuid import UUID
 
@@ -36,11 +37,14 @@ from notalone.persistence.reply_exploration import PostgresExplorationStore
 from notalone.persistence.explored_reply_context import ExploredReplyContext
 from notalone.persistence.assistant_discussion_reply_context import PostgresAssistantDiscussionContext
 from notalone.persistence.retrieval import PostgresRetrieval
+from notalone.persistence.memory_overview import PostgresRelationshipOverviewStore
 from notalone.persistence.skill_port import PostgresSkillPort
 from notalone.persistence.style_sample_store import PostgresStyleSampleStore
+from notalone.persistence.expression_preferences import PostgresExpressionPreferenceStore
+from notalone.application.expression_preference_context import ExpressionPreferenceContext
 from notalone.reply.adapters.deepseek_provider import build_deepseek_model
 from notalone.reply.adapters.deepseek_input_budget import build_deepseek_input_budget
-from notalone.reply.adapters.ecnu_input_budget import build_ecnu_input_budget
+from notalone.reply.adapters.ecnu_input_budget import build_ecnu_input_budget, ECNU_BASE_URL, ECNU_MODEL
 from notalone.reply.adapters.langchain_runtime import LangChainReplyRuntime
 from notalone.reply.context import RetrievalReplyContext
 from notalone.reply.generator import ReplyGenerator
@@ -64,7 +68,12 @@ def build_reply_service(
     """
 
     try:
-        model = build_deepseek_model()
+        # Reply/审核的ToolStrategy会强制required；DeepSeek须关闭thinking。
+        # 已批准ECNU配置沿既有协议构造，之后才给实际实例绑定计量器。
+        ecnu = (os.environ.get('NOTALONE_DEEPSEEK_MODEL') == ECNU_MODEL
+                and os.environ.get('NOTALONE_DEEPSEEK_BASE_URL', '').rstrip('/') == ECNU_BASE_URL)
+        model = build_deepseek_model(max_retries=0,
+            extra_body=None if ecnu else {'thinking': {'type': 'disabled'}})
     except (ValueError, OSError):
         return None
     if input_budget_profile is None and input_token_counter is None:
@@ -85,6 +94,7 @@ def build_reply_service(
             database_url,
             scope.owner_id,
         ),
+        overview=PostgresRelationshipOverviewStore(database_url),
     )
     evidence = ExplorationEvidence(retrieval)
     from notalone.persistence.assistant_prepared_context import PreparedAssistantContext
@@ -99,7 +109,8 @@ def build_reply_service(
             on_input_budget=on_input_budget,
         ),
         context=PreparedAssistantContext(PostgresAssistantDiscussionContext(
-            ExploredReplyContext(context, database_url=database_url, evidence=evidence),
+            ExploredReplyContext(ExpressionPreferenceContext(context, PostgresExpressionPreferenceStore(database_url)),
+                                 database_url=database_url, evidence=evidence),
             database_url=database_url,
         ), database_url),
         ledger=PostgresOutboundLedger(database_url),
@@ -125,8 +136,48 @@ def build_reply_service(
         ),
         reply=(PriorityReplyPort(generator, model_priority) if model_priority is not None else generator),
         exploration=exploration,
+        skill_review=build_skill_review_service(database_url=database_url, model=model,
+            context=ExpressionPreferenceContext(context, PostgresExpressionPreferenceStore(database_url)),
+            model_priority=model_priority, input_budget_profile=input_budget_profile,
+            input_token_counter=input_token_counter, on_input_budget=on_input_budget),
     )
     return reply_service
+
+
+def build_skill_review_service(*, database_url, model, context, model_priority,
+                               input_budget_profile, input_token_counter, on_input_budget):
+    from langchain_core.globals import get_llm_cache
+    from langchain_deepseek import ChatDeepSeek
+    from notalone.application.skill_review import SkillReviewService
+    from notalone.persistence.skill_review import PostgresSkillReviewStore
+    from notalone.skills.learning import SkillLearningUnavailable
+
+    def require_uncached_model():
+        # 不突变普通回复共用的模型或破坏预算计量器的实际模型绑定。
+        if (model.rate_limiter is not None or model.cache is not False
+                and (model.cache is not None or get_llm_cache() is not None)):
+            raise SkillLearningUnavailable()
+        if isinstance(model, ChatDeepSeek) and any(value != 0 for value in (
+            model.max_retries, model.root_client.max_retries, model.root_async_client.max_retries)):
+            raise SkillLearningUnavailable()
+
+    try:
+        require_uncached_model()
+    except SkillLearningUnavailable:
+        return None
+
+    def review_runtime(port, accounting):
+        require_uncached_model()
+        accounting.model_guard = require_uncached_model
+        return LangChainReplyRuntime(model=model, skill_port=port,
+            input_budget_profile=input_budget_profile, input_token_counter=input_token_counter,
+            on_input_budget=on_input_budget, model_callbacks=(accounting,))
+
+    return SkillReviewService(store=PostgresSkillReviewStore(database_url), context=context,
+        binding_lookup=_active_binding_lookup(database_url), skills=PostgresSkillPort(database_url),
+        runtime_factory=review_runtime,
+        ledger=PostgresOutboundLedger(database_url), model_name=getattr(model, 'model_name', None) or 'unreported',
+        priority=model_priority)
 
 
 def _active_binding_lookup(database_url: str):

@@ -9,6 +9,7 @@ from uuid import UUID
 
 from notalone.scopes import ContactScope, VerifiedConversationScope
 from notalone.reply.input_budget import InputBudgetDecision
+from notalone.skills.models import SkillExecutionView
 
 
 class AccumulatedReplyRequirements(str):
@@ -168,6 +169,7 @@ class GenerateReply:
     content: ReplyInput
     continued_from_candidate_id: UUID | None = None
     skill: SkillSelection = AutoSkill()
+    scene: str | None = None
 
     def has_valid_content(self) -> bool:
         """判断联合输入是否满足应用层的最小结构约束。"""
@@ -184,7 +186,8 @@ class GenerateReply:
             content_valid = (
                 isinstance(self.content, RewriteDraft) and self.content.is_valid()
             )
-        return content_valid and (
+        return content_valid and (self.scene is None or isinstance(self.scene, str)
+            and 0 < len(self.scene.strip()) <= 256 and self.scene == self.scene.strip()) and (
             self.continued_from_candidate_id is None
             or isinstance(self.continued_from_candidate_id, UUID)
         ) and (
@@ -207,12 +210,32 @@ class GenerateReply:
         )
 
 
+@dataclass(frozen=True, slots=True, repr=False)
+class ExpressionPreferenceReceipt:
+    """实际生成时的表达要求；修改后的目录不能替换这份历史依据。"""
+
+    preference_id: UUID
+    text: str
+    revision: int
+    contact_id: UUID | None
+    reply_mode: Literal["reply_to_message", "rewrite_draft", "initiate_conversation"] | None
+
+    def __post_init__(self) -> None:
+        if (not isinstance(self.preference_id, UUID) or not isinstance(self.text, str)
+                or not 1 <= len(self.text.strip()) <= 512 or type(self.revision) is not int or self.revision < 1
+                or self.contact_id is not None and not isinstance(self.contact_id, UUID)
+                or self.reply_mode not in {None, "reply_to_message", "rewrite_draft", "initiate_conversation"}):
+            raise ValueError("生成时长期表达偏好回执无效。")
+
+
 @dataclass(frozen=True, slots=True)
 class ContextReceipt:
     """本次生成实际使用的依据引用。"""
 
     evidence_ids: tuple[UUID, ...]
     style_sample_ids: tuple[UUID, ...] = ()
+    expression_preference_ids: tuple[UUID, ...] = ()
+    expression_preferences: tuple[ExpressionPreferenceReceipt, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -226,6 +249,11 @@ class SkillUse:
     selection_reason: str = ""
     resource_paths: tuple[str, ...] = ()
     load_state: Literal["loaded", "resource_failed"] = "loaded"
+    version_number: int | None = None
+    scope_kind: Literal['owner', 'contact', 'scene'] = 'owner'
+    scope_contact_id: UUID | None = None
+    scope_scene: str | None = None
+    execution_view: SkillExecutionView | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.skill_id, UUID) or not isinstance(
@@ -284,6 +312,25 @@ class ReplyCandidate:
 
 
 @dataclass(frozen=True, slots=True)
+class ReplyBasisChange:
+    """历史依据的当前变化；不改写生成时快照或恢复已删除正文。"""
+
+    evidence_id: UUID
+    kind: Literal['confirmed_memory', 'owner_memory', 'pending_candidate', 'reply_skill']
+    reason: Literal['memory_revised', 'memory_expired', 'memory_not_yet_valid', 'memory_time_changed', 'skill_policy_changed']
+
+    def __post_init__(self) -> None:
+        if (not isinstance(self.evidence_id, UUID)
+                or self.kind not in ('confirmed_memory', 'owner_memory', 'pending_candidate', 'reply_skill')
+                or self.reason not in ('memory_revised', 'memory_expired', 'memory_not_yet_valid', 'memory_time_changed', 'skill_policy_changed')
+                or (self.kind == 'reply_skill') != (self.reason == 'skill_policy_changed')):
+            raise ValueError("历史依据变化结构无效。")
+
+    def to_payload(self) -> dict[str, str]:
+        return {"evidence_id": str(self.evidence_id), "kind": self.kind, "reason": self.reason}
+
+
+@dataclass(frozen=True, slots=True)
 class ReplyGenerated:
     """已经持久化、可以交给 UI 展示的候选结果。"""
 
@@ -292,6 +339,7 @@ class ReplyGenerated:
     context_receipt: ContextReceipt
     used_skill: SkillUse | None
     input_budget: InputBudgetDecision | None = None
+    basis_changes: tuple[ReplyBasisChange, ...] = ()
 
 
 ReplyOutcome = ReplyGenerated

@@ -20,8 +20,8 @@ from notalone.application.reply_request import ReplyRequestInvalid
 def generation_lifecycle_path(parts: list[str]) -> str | None:
     if len(parts) < 6 or parts[:2] != ["api", "contacts"] or parts[3] != "assistant-sessions":
         return None
-    if len(parts) == 6 and parts[5] == "interrupt":
-        return "interrupt"
+    if len(parts) == 6 and parts[5] in ("interrupt", "preparation-format"):
+        return parts[5]
     return None
 
 
@@ -65,6 +65,12 @@ def handle_generation_lifecycle(
     try:
         contact_id, session_id = _uuid(parts[2]), _uuid(parts[4])
         request_key, input_version_id = parse_interruption_request(body)
+        if action == "preparation-format":
+            checked = service.preparation_format(owner_id=owner_id, contact_id=contact_id, session_id=session_id,
+                                                  request_key=request_key, input_version_id=input_version_id)
+            payload = interruption_receipt_payload(checked.generation)
+            payload.pop("interruption_reason")
+            return HTTPStatus.OK, {**payload, "format_status": checked.format_status}
         receipt = service.interrupt(owner_id=owner_id, contact_id=contact_id, session_id=session_id,
                                     request_key=request_key, input_version_id=input_version_id)
         return HTTPStatus.OK, interruption_receipt_payload(receipt)

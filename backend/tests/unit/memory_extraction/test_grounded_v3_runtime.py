@@ -12,7 +12,7 @@ from notalone.memory_extraction.cases.reference import CASES as REFERENCE_CASES
 from notalone.memory_extraction.command import run_extraction
 from notalone.memory_extraction.evaluation import build_window
 from notalone.memory_extraction.flow import ExtractionFlow
-from notalone.memory_extraction.grounded_adapter import GroundedExtractionRuntime, GroundedV3ExtractionRuntime, grounded_schema
+from notalone.memory_extraction.grounded_adapter import GroundedV2ExtractionRuntime, GroundedV3ExtractionRuntime, grounded_schema
 from notalone.memory_extraction.pragmatics import PragmaticInterpreter
 from notalone.memory_trace import TraceWriteError
 from notalone.memory_trace.adapters import InMemoryTraceStore
@@ -128,7 +128,7 @@ class GroundedV3RuntimeTest(unittest.TestCase):
         with build_trace_http_client(transport=httpx.MockTransport(handler)) as client:
             model = build_deepseek_model(api_key="synthetic-secret", base_url="http://127.0.0.1/v1",
                                          http_client=client)
-            GroundedExtractionRuntime(model=model).extract(source)
+            GroundedV2ExtractionRuntime(model=model).extract(source)
 
         self.assertEqual(len(requests), 1)
         self.assertEqual(requests[0]["tools"][0]["function"]["name"], "GroundedMemoryLabels")
@@ -216,7 +216,7 @@ class GroundedV3RuntimeTest(unittest.TestCase):
                 lambda _: response(draft, name="GroundedMemoryLabels"))) as client:
             model = build_deepseek_model(api_key="synthetic-secret", base_url="http://127.0.0.1/v1",
                                          http_client=client)
-            payload = GroundedExtractionRuntime(model=model).extract(source)
+            payload = GroundedV2ExtractionRuntime(model=model).extract(source)
         # 完整E14摘要来自原A03封存输出；schema摘要来自变更前85ca9ea7。
         for value, expected in (
             (payload, "b4c25153f4aac09f74718d82597f12b39ca6cc352873e293e9a04009bb86d9a3"),

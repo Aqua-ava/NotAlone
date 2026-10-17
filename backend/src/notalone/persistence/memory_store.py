@@ -16,6 +16,13 @@ from notalone.memory.dimension_evidence import (
     DimensionEvidence,
     require_current_dimension_evidence,
 )
+from notalone.memory.correction import MemoryCorrectionConflictError
+from notalone.memory.events import MemoryEvent
+from notalone.persistence.memory_events import bind_memory_event, has_event_schema
+from notalone.memory.versions import (
+    MemoryVersionConflict, require_auto_previous, require_auto_update_previous,
+    require_auto_update_receipt, require_version_receipt,
+)
 from notalone.persistence.dimension_evidence import (
     bind_stored_dimension_evidence, has_dimension_evidence,
     supports_dimension_evidence_version,
@@ -31,10 +38,23 @@ from notalone.memory.models import (
     MemoryCategory,
     MemoryTopic,
 )
+from notalone.memory.candidates import same_pending_identity
 from notalone.persistence.extraction_trace import erase_record_traces
 from notalone.persistence.locks import lock_contact_scope, lock_owner_scope
 from notalone.persistence.memory_timing import timed_memory_rows
+from notalone.persistence.memory_versions import (
+    bind_version_evidence, create_version_evidence, prepare_auto_revert, scoped_version_ids, validate_version_sources,
+    erase_reverted_version,
+    restored_version_evidence,
+)
+from notalone.memory.version_evidence import VersionEvidence
 from notalone.persistence.message_sources import valid_source_ref_exists_sql
+from notalone.persistence.correction_evidence import validate_frozen_snapshot
+from notalone.persistence.memory_correction import (
+    available_correction_memories, capture_evidence, erase_deleted_memory_bodies, has_correction_schema,
+    persist_protection, protect_candidate, record_decision,
+    require_reviewed_decisions,
+)
 from notalone.scopes import ContactScope
 
 def _utc_now() -> datetime:
@@ -67,6 +87,7 @@ _CANDIDATE_COLUMNS = """
     interpretation_reason AS candidate_interpretation_reason,
     failure_reason AS candidate_failure_reason,
     to_jsonb(memory_candidate)->'dimension_evidence' AS candidate_dimension_evidence,
+    to_jsonb(memory_candidate)->'event' AS candidate_event,
     created_at AS recorded_at
 """
 
@@ -87,6 +108,8 @@ _MEMORY_COLUMNS = """
     confidence AS memory_confidence,
     risk_flags AS memory_risk_flags,
     supersedes_memory_id,
+    to_jsonb(confirmed_memory)->'event' AS memory_event,
+    to_jsonb(confirmed_memory)->'version_evidence' AS version_evidence,
     created_at AS recorded_at
 """
 
@@ -94,7 +117,7 @@ _MEMORY_COLUMNS = """
 class PostgresMemoryStore:
     """按联系人范围原子保存关系记忆候选和已确认记忆。"""
 
-    __slots__ = ("_clock", "_database_url", "_id_factory")
+    __slots__ = ("_clock", "_database_url", "_id_factory", "_connection_factory")
 
     def __init__(
         self,
@@ -102,6 +125,7 @@ class PostgresMemoryStore:
         *,
         clock: Callable[[], datetime] = _utc_now,
         id_factory: Callable[[], UUID] = uuid4,
+        connection_factory=None,
     ) -> None:
         if not isinstance(database_url, str) or not database_url.strip():
             raise ValueError("database_url 不能为空。")
@@ -110,11 +134,17 @@ class PostgresMemoryStore:
         self._database_url = database_url
         self._clock = clock
         self._id_factory = id_factory
+        self._connection_factory = connection_factory
 
     @property
     def database_url(self) -> str:
         """供同一数据库内的提取追踪装配使用。"""
         return self._database_url
+
+    def assess_correction(self, candidate: MemoryCandidate) -> MemoryCandidate:
+        """提取可提前查询保护；实际保存和确认仍在写入事务复验。"""
+        with self._connect() as connection:
+            return protect_candidate(connection, candidate)[0]
 
     def create_candidate(self, candidate: MemoryCandidate) -> MemoryCandidate:
         """保存一条带来源和联系人范围的候选。"""
@@ -128,11 +158,27 @@ class PostgresMemoryStore:
                     owner_id=candidate.scope.owner_id,
                     contact_id=candidate.scope.contact_id,
                 )
+                lock_owner_scope(connection, owner_id=candidate.scope.owner_id)
                 self._ensure_active_sources(
                     connection,
                     candidate.scope,
                     candidate.source_ids,
                 )
+                pending_rows = connection.execute(
+                    f"SELECT {_CANDIDATE_COLUMNS} FROM public.memory_candidate "
+                    "WHERE owner_id=%s AND contact_id=%s AND status='pending' "
+                    "AND NOT EXISTS (SELECT 1 FROM public.memory_candidate collision WHERE collision.id=%s) "
+                    "FOR UPDATE",
+                    (candidate.scope.owner_id, candidate.scope.contact_id, candidate.candidate_id),
+                ).fetchall()
+                for row in self._timed_candidates(connection, pending_rows):
+                    existing = self._candidate_from_row(row)
+                    if same_pending_identity(existing, candidate):
+                        protected, snapshot = protect_candidate(connection, existing)
+                        if snapshot is not None:
+                            persist_protection(connection, protected, snapshot)
+                        return protected
+                candidate, correction_evidence = protect_candidate(connection, candidate)
                 evidence_column = ""
                 evidence_value = ""
                 evidence_params: tuple[Any, ...] = ()
@@ -153,6 +199,16 @@ class PostgresMemoryStore:
                     evidence_column = ", dimension_evidence"
                     evidence_value = ", %s"
                     evidence_params = (Jsonb(candidate.dimension_evidence.to_payload()),)
+                if candidate.event is not None:
+                    if not has_event_schema(connection):
+                        raise MemoryPersistenceError("数据库尚未启用事件字段，须先批准并完成迁移。")
+                    evidence_column += ", event"
+                    evidence_value += ", %s"
+                    evidence_params += (Jsonb(candidate.event.to_payload()),)
+                if correction_evidence is not None:
+                    evidence_column += ", correction_evidence"
+                    evidence_value += ", %s"
+                    evidence_params += (Jsonb(correction_evidence),)
                 row = connection.execute(
                     f"""
                     INSERT INTO public.memory_candidate (
@@ -226,6 +282,7 @@ class PostgresMemoryStore:
                     owner_id=candidate.scope.owner_id,
                     contact_id=candidate.scope.contact_id,
                 )
+                lock_owner_scope(connection, owner_id=candidate.scope.owner_id)
                 source_row = connection.execute(
                     """
                     INSERT INTO public.source_document (
@@ -299,6 +356,15 @@ class PostgresMemoryStore:
                     raise MemoryInvariantError(
                         "关系记忆候选写入结果为空。"
                     )
+                if has_correction_schema(connection):
+                    # 只在本次明确主动录入时建立当前依据，不回填历史 NULL 候选。
+                    evidence = capture_evidence(
+                        connection, scope=candidate.scope, source_ids=(source_id,),
+                    )
+                    connection.execute(
+                        "UPDATE public.memory_candidate SET correction_evidence=%s WHERE owner_id=%s AND id=%s",
+                        (Jsonb(evidence), candidate.scope.owner_id, candidate.candidate_id),
+                    )
                 return self._candidate_from_row(
                     self._timed_candidates(connection, [row])[0]
                 )
@@ -361,6 +427,8 @@ class PostgresMemoryStore:
         candidate_id: UUID,
         adoption_method: AdoptionMethod = AdoptionMethod.AUTO,
         expected_dimension_evidence: DimensionEvidence | None = None,
+        expected_correction_decision_ids: tuple[UUID, ...] | None = None,
+        expected_previous: ConfirmedMemory | None = None,
     ) -> ConfirmedMemory:
         """在同一事务中确认候选并创建已确认记忆。"""
 
@@ -368,6 +436,11 @@ class PostgresMemoryStore:
         self._validate_uuid(candidate_id, "candidate_id")
         if not isinstance(adoption_method, AdoptionMethod):
             raise TypeError("关系记忆采纳方式无效。")
+        if expected_previous is not None:
+            if not isinstance(expected_previous, ConfirmedMemory):
+                raise TypeError("自动替代原版本无效。")
+            if expected_previous.scope != scope:
+                raise PermissionError("关系记忆范围校验失败。")
         try:
             with self._connect() as connection:
                 lock_contact_scope(
@@ -375,12 +448,20 @@ class PostgresMemoryStore:
                     owner_id=scope.owner_id,
                     contact_id=scope.contact_id,
                 )
+                lock_owner_scope(connection, owner_id=scope.owner_id)
                 candidate_row = self._candidate_for_update(
                     connection, candidate_id, scope
                 )
                 if candidate_row is None:
                     raise LookupError("关系记忆候选不存在。")
                 self._ensure_scope(candidate_row, scope)
+                current_candidate = self._candidate_from_row(
+                    self._timed_candidates(connection, [candidate_row])[0]
+                )
+                protected, snapshot = protect_candidate(connection, current_candidate)
+                require_reviewed_decisions(
+                    protected, adoption_method, expected_correction_decision_ids,
+                )
                 status = MemoryCandidateStatus(candidate_row["candidate_status"])
                 if status is MemoryCandidateStatus.CONFIRMED:
                     memory_row = connection.execute(
@@ -397,12 +478,50 @@ class PostgresMemoryStore:
                         raise MemoryInvariantError(
                             "已确认候选缺少对应关系记忆。"
                         )
-                    return self._memory_from_row(
+                    actual = self._memory_from_row(
                         self._timed_memories(connection, [memory_row])[0]
                     )
+                    if expected_previous is not None:
+                        if adoption_method is AdoptionMethod.AUTO:
+                            require_auto_update_receipt(actual, expected_previous)
+                        else:
+                            require_version_receipt(actual, expected_previous, adoption_method)
+                        previous_row = self._memory_for_update(
+                            connection, expected_previous.memory_id, follow_current=False,
+                        )
+                        if previous_row is None:
+                            raise MemoryCorrectionConflictError("原资料已删除，自动回执不可复用。")
+                        require_auto_update_previous(
+                            self._memory_from_row(self._timed_memories(connection, [previous_row])[0]),
+                            expected_previous, allow_manual=adoption_method is AdoptionMethod.MANUAL,
+                        )
+                    return actual
                 if status is not MemoryCandidateStatus.PENDING:
                     raise RuntimeError("关系记忆候选当前不可确认。")
+                if expected_previous is not None:
+                    previous_row = self._memory_for_update(
+                        connection, expected_previous.memory_id, follow_current=False,
+                    )
+                    if previous_row is None:
+                        raise MemoryCorrectionConflictError("原资料已删除，自动替代未应用。")
+                    self._ensure_scope(previous_row, scope)
+                    require_auto_previous(
+                        self._memory_from_row(self._timed_memories(connection, [previous_row])[0]),
+                        expected_previous, allow_manual=adoption_method is AdoptionMethod.MANUAL,
+                    )
+                    self._ensure_active_sources(connection, scope, expected_previous.source_ids)
+                if snapshot is not None:
+                    persist_protection(connection, protected, snapshot)
                 source_ids = self._source_ids(candidate_row["candidate_source_ids"])
+                if expected_previous is not None:
+                    if (adoption_method is AdoptionMethod.AUTO and not set(source_ids) - set(expected_previous.source_ids)
+                            or connection.execute(
+                                "SELECT 1 FROM public.confirmed_memory WHERE owner_id=%s "
+                                "AND contact_id=%s AND supersedes_memory_id=%s AND status='active'",
+                                (scope.owner_id, scope.contact_id, expected_previous.memory_id),
+                            ).fetchone() is not None):
+                        raise MemoryVersionConflict("自动更新需要新依据和当前叶子版本。")
+                    source_ids = tuple(dict.fromkeys((*expected_previous.source_ids, *source_ids)))
                 self._ensure_active_sources(connection, scope, source_ids)
 
                 candidate = self._candidate_from_row(self._timed_candidates(
@@ -414,16 +533,36 @@ class PostgresMemoryStore:
                     )
 
                 memory_id = self._new_uuid()
+                event_column = ", event" if candidate.event is not None else ""
+                event_value = ", %s" if candidate.event is not None else ""
+                event_params = (Jsonb(candidate.event.to_payload()),) if candidate.event is not None else ()
+                if expected_previous is not None:
+                    proposed = ConfirmedMemory(
+                        memory_id=memory_id, scope=scope, text=candidate.text,
+                        category=candidate.category, topic=candidate.topic, source_ids=source_ids,
+                        source_candidate_id=candidate_id, adoption_method=adoption_method,
+                        valid_at=candidate.valid_at, invalid_at=candidate.invalid_at,
+                        confidence=candidate.confidence, risk_flags=candidate.risk_flags,
+                        revision=expected_previous.revision + 1,
+                        supersedes_memory_id=expected_previous.memory_id, event=candidate.event,
+                    )
+                    proof = create_version_evidence(connection, previous=expected_previous, current=proposed)
+                    if adoption_method is AdoptionMethod.AUTO:
+                        validate_version_sources(connection, owner_id=scope.owner_id, evidence=proof)
+                    event_column += ", version_evidence"
+                    event_value += ", %s"
+                    event_params += (Jsonb(proof.to_payload()),)
                 memory_row = connection.execute(
                     f"""
                     INSERT INTO public.confirmed_memory (
                         id, owner_id, contact_id, text_content, category,
                         topic, source_ids, source_candidate_id, adoption_method,
-                        valid_at, invalid_at, confidence, risk_flags
+                        valid_at, invalid_at, confidence, risk_flags,
+                        revision, supersedes_memory_id{event_column}
                     )
                     VALUES (
                         %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                        %s, %s
+                        %s, %s, %s, %s{event_value}
                     )
                     RETURNING {_MEMORY_COLUMNS}
                     """,
@@ -434,17 +573,32 @@ class PostgresMemoryStore:
                         candidate_row["candidate_text"],
                         candidate_row["candidate_category"],
                         candidate_row["candidate_topic"],
-                        candidate_row["candidate_source_ids"],
+                        list(source_ids),
                         candidate_id,
                         adoption_method.value,
                         candidate_row["candidate_valid_at"],
                         candidate_row["candidate_invalid_at"],
                         candidate_row["candidate_confidence"],
                         candidate_row["candidate_risk_flags"],
+                        expected_previous.revision + 1 if expected_previous else 1,
+                        expected_previous.memory_id if expected_previous else None,
+                        *event_params,
                     ),
                 ).fetchone()
                 if memory_row is None:
                     raise MemoryInvariantError("关系记忆写入结果为空。")
+                if expected_previous is not None:
+                    invalidated = connection.execute(
+                        "UPDATE public.confirmed_memory SET status='invalidated', "
+                        "revision=revision+1, updated_at=now() "
+                        "WHERE owner_id=%s AND contact_id=%s AND id=%s "
+                        "AND status='active' AND revision=%s AND adoption_method=%s",
+                        (scope.owner_id, scope.contact_id,
+                         expected_previous.memory_id, expected_previous.revision,
+                         expected_previous.adoption_method.value),
+                    ).rowcount
+                    if invalidated != 1:
+                        raise MemoryCorrectionConflictError("原资料已变化，自动替代未应用。")
                 updated = connection.execute(
                     """
                     UPDATE public.memory_candidate
@@ -498,16 +652,36 @@ class PostgresMemoryStore:
                     owner_id=scope.owner_id,
                     contact_id=scope.contact_id,
                 )
-                memory_row = self._memory_for_update(connection, memory_id)
+                lock_owner_scope(connection, owner_id=scope.owner_id)
+                memory_row = self._memory_for_update(connection, memory_id, follow_current=False)
                 if memory_row is None:
                     raise LookupError("关系记忆不存在。")
                 self._ensure_scope(memory_row, scope)
                 if memory_row["memory_status"] != (
                     ConfirmedMemoryStatus.ACTIVE.value
                 ):
-                    raise RuntimeError(
-                        "失效或删除的关系记忆不能直接修正。"
-                    )
+                    replay = connection.execute(
+                        f"SELECT {_MEMORY_COLUMNS} FROM public.confirmed_memory "
+                        "WHERE owner_id=%s AND contact_id=%s AND supersedes_memory_id=%s "
+                        "AND status='active' AND adoption_method='manual' AND text_content=%s "
+                        "AND category=%s",
+                        (scope.owner_id, scope.contact_id, memory_id, text,
+                         category.value if category else memory_row["memory_category"]),
+                    ).fetchone()
+                    if replay is not None:
+                        if not available_correction_memories(
+                            connection, owner_id=scope.owner_id, record_kind="contact_memory", rows=[replay],
+                        ):
+                            raise MemoryCorrectionConflictError("人工修正的参与来源正在删除或已不可用。")
+                        self._ensure_active_sources(connection, scope, self._source_ids(replay["memory_source_ids"]))
+                        for decision in connection.execute(
+                            "SELECT evidence FROM public.memory_correction_decision "
+                            "WHERE owner_id=%s AND contact_id=%s AND replacement_memory_id=%s",
+                            (scope.owner_id, scope.contact_id, replay["memory_id"]),
+                        ).fetchall():
+                            validate_frozen_snapshot(connection, owner_id=scope.owner_id, evidence=decision["evidence"])
+                        return self._memory_from_row(self._timed_memories(connection, [replay])[0])
+                    raise MemoryCorrectionConflictError("资料版本已变化，请重新查看后修正。")
                 next_category = (
                     category.value
                     if category
@@ -567,6 +741,21 @@ class PostgresMemoryStore:
                 ).fetchone()
                 if updated is None:
                     raise MemoryInvariantError("关系记忆新版本写入结果为空。")
+                source_candidate = None
+                if memory_row["source_candidate_id"] is not None:
+                    candidate_row = self._candidate_for_update(
+                        connection, memory_row["source_candidate_id"], scope,
+                    )
+                    if candidate_row is not None:
+                        source_candidate = self._candidate_from_row(
+                            self._timed_candidates(connection, [candidate_row])[0]
+                        )
+                record_decision(
+                    connection, scope=scope, record_kind="contact_memory",
+                    record_id=memory_id, rejected_text=memory_row["memory_text"],
+                    corrected_text=text, replacement_memory_id=updated["memory_id"],
+                    source_ids=source_ids, candidate=source_candidate,
+                )
                 self._bump_memory_revision(connection, scope)
                 return self._memory_from_row(
                     self._timed_memories(connection, [updated])[0]
@@ -635,13 +824,23 @@ class PostgresMemoryStore:
                     owner_id=scope.owner_id,
                     contact_id=scope.contact_id,
                 )
+                lock_owner_scope(connection, owner_id=scope.owner_id)
                 row = self._candidate_for_update(connection, candidate_id, scope)
                 if row is None:
                     raise LookupError("关系记忆候选不存在。")
                 self._ensure_scope(row, scope)
+                if row["candidate_status"] == MemoryCandidateStatus.REJECTED.value:
+                    return self._candidate_from_row(self._timed_candidates(connection, [row])[0])
                 if row["candidate_status"] != MemoryCandidateStatus.PENDING.value:
-                    raise RuntimeError("当前关系记忆候选不能丢弃。")
-                lock_owner_scope(connection, owner_id=scope.owner_id)
+                    raise MemoryCorrectionConflictError("当前关系记忆候选不能丢弃。")
+                record_decision(
+                    connection, scope=scope, record_kind="candidate",
+                    record_id=candidate_id, rejected_text=row["candidate_text"],
+                    source_ids=self._source_ids(row["candidate_source_ids"]),
+                    candidate=self._candidate_from_row(
+                        self._timed_candidates(connection, [row])[0]
+                    ),
+                )
                 erase_record_traces(
                     connection,
                     owner_id=scope.owner_id,
@@ -726,19 +925,23 @@ class PostgresMemoryStore:
             error_message="关系记忆删除失败。",
         )
 
-    def list_confirmed(self, scope: ContactScope) -> tuple[ConfirmedMemory, ...]:
-        """返回当前联系人范围内可检索的 active 记忆。"""
+    def list_confirmed(self, scope: ContactScope, *, include_expired: bool = False) -> tuple[ConfirmedMemory, ...]:
+        """检索默认排除过期；管理回看仍须有活动来源且状态为 active。"""
 
         self._validate_scope(scope)
+        if type(include_expired) is not bool:
+            raise TypeError("历史回看标记必须是 bool。")
         current = self._now()
         try:
             with self._connect() as connection:
-                connection.execute(
-                    "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY"
-                )
+                # 外层提供的共享事务已经开始，隔离与提交由该事务决定。
+                if self._connection_factory is None:
+                    connection.execute(
+                        "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY"
+                    )
                 rows = connection.execute(
                     f"""
-                    SELECT {_MEMORY_COLUMNS}
+                    SELECT {_MEMORY_COLUMNS.replace("to_jsonb(confirmed_memory)", "to_jsonb(memory)")}
                     FROM public.confirmed_memory AS memory
                     WHERE memory.owner_id = %s
                       AND memory.contact_id = %s
@@ -747,7 +950,7 @@ class PostgresMemoryStore:
                           memory.valid_at IS NULL OR memory.valid_at <= %s
                       )
                       AND (
-                          memory.invalid_at IS NULL OR %s < memory.invalid_at
+                          %s OR memory.invalid_at IS NULL OR %s < memory.invalid_at
                       )
                       AND (
                           EXISTS (
@@ -776,8 +979,11 @@ class PostgresMemoryStore:
                       )
                     ORDER BY memory.created_at, memory.id
                     """,
-                    (scope.owner_id, scope.contact_id, current, current),
+                    (scope.owner_id, scope.contact_id, current, include_expired, current),
                 ).fetchall()
+                rows = available_correction_memories(
+                    connection, owner_id=scope.owner_id, record_kind="contact_memory", rows=rows,
+                )
                 return tuple(self._memory_from_row(row)
                              for row in self._timed_memories(connection, rows))
         except MemoryPersistenceError:
@@ -791,15 +997,58 @@ class PostgresMemoryStore:
                 "关系记忆数据库记录结构无效。"
             ) from None
 
+    def list_versions(self, *, scope: ContactScope, memory_id: UUID) -> tuple[ConfirmedMemory, ...]:
+        self._validate_scope(scope)
+        self._validate_uuid(memory_id, "memory_id")
+        with self._connect() as connection:
+            lock_contact_scope(connection, owner_id=scope.owner_id, contact_id=scope.contact_id)
+            ids = scoped_version_ids(connection, table="confirmed_memory", owner_id=scope.owner_id,
+                                     contact_id=scope.contact_id, memory_id=memory_id)
+            rows = connection.execute(
+                f"SELECT {_MEMORY_COLUMNS} FROM public.confirmed_memory "
+                "WHERE owner_id=%s AND contact_id=%s AND id=ANY(%s) ORDER BY array_position(%s::uuid[],id)",
+                (scope.owner_id, scope.contact_id, list(ids), list(ids)),
+            ).fetchall()
+            for row in rows:
+                self._ensure_active_sources(connection, scope, tuple(row["memory_source_ids"]))
+            return tuple(self._memory_from_row(row) for row in self._timed_memories(connection, rows))
+
+    def revert_auto_update(self, *, scope: ContactScope, memory_id: UUID, expected_revision: int) -> ConfirmedMemory:
+        self._validate_scope(scope)
+        self._validate_uuid(memory_id, "memory_id")
+        with self._connect() as connection:
+            lock_contact_scope(connection, owner_id=scope.owner_id, contact_id=scope.contact_id)
+            lock_owner_scope(connection, owner_id=scope.owner_id)
+            current, previous = prepare_auto_revert(
+                connection, table="confirmed_memory", owner_id=scope.owner_id,
+                contact_id=scope.contact_id, memory_id=memory_id, expected_revision=expected_revision,
+            )
+            self._ensure_active_sources(connection, scope, tuple(dict.fromkeys(
+                (*current["source_ids"], *previous["source_ids"])
+            )))
+            proof = restored_version_evidence(connection, previous=previous, revision=expected_revision + 1)
+            from notalone.persistence.reply_cleanup import delete_contact_memory_replies
+            delete_contact_memory_replies(connection, scope=scope, memory_id=memory_id)
+            erase_reverted_version(connection, table="confirmed_memory", owner_id=scope.owner_id, current=current)
+            restored = connection.execute(
+                f"UPDATE public.confirmed_memory SET status='active', revision=%s, version_evidence=%s, updated_at=now() "
+                f"WHERE owner_id=%s AND contact_id=%s AND id=%s RETURNING {_MEMORY_COLUMNS}",
+                (expected_revision + 1, Jsonb(proof.to_payload()) if proof else None,
+                 scope.owner_id, scope.contact_id, previous["id"]),
+            ).fetchone()
+            self._bump_memory_revision(connection, scope)
+            return self._memory_from_row(self._timed_memories(connection, [restored])[0])
+
     def list_pending_candidates(self, scope: ContactScope) -> tuple[MemoryCandidate, ...]:
         """返回联系人范围内所有 pending 候选，供人工处理。"""
 
         self._validate_scope(scope)
         try:
             with self._connect() as connection:
-                connection.execute(
-                    "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY"
-                )
+                if self._connection_factory is None:
+                    connection.execute(
+                        "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY"
+                    )
                 rows = connection.execute(
                     f"""
                     SELECT {_CANDIDATE_COLUMNS}
@@ -811,8 +1060,12 @@ class PostgresMemoryStore:
                     """,
                     (scope.owner_id, scope.contact_id),
                 ).fetchall()
-                return tuple(self._candidate_from_row(row)
-                             for row in self._timed_candidates(connection, rows))
+                candidates = (
+                    self._candidate_from_row(row)
+                    for row in self._timed_candidates(connection, rows)
+                )
+                return tuple(candidate for candidate in candidates
+                             if candidate.status is MemoryCandidateStatus.PENDING)
         except MemoryPersistenceError:
             raise
         except psycopg.Error:
@@ -833,7 +1086,7 @@ class PostgresMemoryStore:
                 rows = connection.execute(
                     """
                     SELECT text_content
-                    FROM public.confirmed_memory
+                    FROM public.confirmed_memory AS memory
                     WHERE owner_id = %s AND contact_id = %s
                       AND status = 'deleted'
                     """,
@@ -862,10 +1115,22 @@ class PostgresMemoryStore:
                     owner_id=scope.owner_id,
                     contact_id=scope.contact_id,
                 )
+                if next_status is MemoryCandidateStatus.REJECTED:
+                    lock_owner_scope(connection, owner_id=scope.owner_id)
                 row = self._candidate_for_update(connection, candidate_id, scope)
                 if row is None:
                     raise LookupError("关系记忆候选不存在。")
                 self._ensure_scope(row, scope)
+                if row["candidate_status"] == next_status.value:
+                    return self._candidate_from_row(self._timed_candidates(connection, [row])[0])
+                if next_status is MemoryCandidateStatus.REJECTED:
+                    if row["candidate_status"] == MemoryCandidateStatus.REJECTED.value:
+                        return self._candidate_from_row(self._timed_candidates(connection, [row])[0])
+                    record_decision(
+                        connection, scope=scope, record_kind="candidate", record_id=candidate_id,
+                        rejected_text=row["candidate_text"], source_ids=self._source_ids(row["candidate_source_ids"]),
+                        candidate=self._candidate_from_row(self._timed_candidates(connection, [row])[0]),
+                    )
                 if row["candidate_status"] != MemoryCandidateStatus.PENDING.value:
                     raise RuntimeError(error_message)
                 clear_evidence = (
@@ -923,12 +1188,34 @@ class PostgresMemoryStore:
                     owner_id=scope.owner_id,
                     contact_id=scope.contact_id,
                 )
-                row = self._memory_for_update(connection, memory_id)
+                if next_status is ConfirmedMemoryStatus.DELETED:
+                    lock_owner_scope(connection, owner_id=scope.owner_id)
+                row = self._memory_for_update(
+                    connection, memory_id,
+                    follow_current=next_status is not ConfirmedMemoryStatus.DELETED,
+                )
                 if row is None:
                     raise LookupError("关系记忆不存在。")
                 self._ensure_scope(row, scope)
                 if next_status is ConfirmedMemoryStatus.DELETED:
-                    lock_owner_scope(connection, owner_id=scope.owner_id)
+                    if row["memory_status"] == ConfirmedMemoryStatus.DELETED.value:
+                        return self._memory_from_row(self._timed_memories(connection, [row])[0])
+                    if connection.execute(
+                        "SELECT EXISTS (SELECT 1 FROM public.confirmed_memory "
+                        "WHERE owner_id=%s AND contact_id=%s AND supersedes_memory_id=%s) AS replaced",
+                        (scope.owner_id, scope.contact_id, memory_id),
+                    ).fetchone()["replaced"]:
+                        raise MemoryCorrectionConflictError("资料版本已变化，请重新查看当前版本后删除。")
+                    source_candidate = None
+                    if row["source_candidate_id"] is not None:
+                        candidate_row = self._candidate_for_update(connection, row["source_candidate_id"], scope)
+                        if candidate_row is not None:
+                            source_candidate = self._candidate_from_row(self._timed_candidates(connection, [candidate_row])[0])
+                    record_decision(
+                        connection, scope=scope, record_kind="contact_memory",
+                        record_id=row["memory_id"], rejected_text=None,
+                        source_ids=self._source_ids(row["memory_source_ids"]), candidate=source_candidate,
+                    )
                     from notalone.persistence.reply_cleanup import delete_contact_memory_replies
                     delete_contact_memory_replies(connection, scope=scope, memory_id=memory_id)
                     erase_record_traces(
@@ -936,6 +1223,10 @@ class PostgresMemoryStore:
                         owner_id=scope.owner_id,
                         record_kind="contact_memory",
                         record_id=memory_id,
+                    )
+                    erase_deleted_memory_bodies(
+                        connection, owner_id=scope.owner_id,
+                        record_kind="contact_memory", memory_id=row["memory_id"],
                     )
                 if reject_deleted and row["memory_status"] == (
                     ConfirmedMemoryStatus.DELETED.value
@@ -1002,6 +1293,7 @@ class PostgresMemoryStore:
         self,
         connection: psycopg.Connection[Any],
         memory_id: UUID,
+        *, follow_current: bool = True,
     ) -> dict[str, Any] | None:
         row = connection.execute(
             f"""
@@ -1012,8 +1304,8 @@ class PostgresMemoryStore:
             """,
             (memory_id,),
         ).fetchone()
-        if row is None:
-            return None
+        if row is None or not follow_current:
+            return row
         visited: set[UUID] = set()
         while row["memory_id"] not in visited:
             visited.add(row["memory_id"])
@@ -1109,7 +1401,8 @@ class PostgresMemoryStore:
         )
 
     def _connect(self) -> Any:
-        return psycopg.connect(self._database_url, row_factory=dict_row)
+        return (self._connection_factory() if self._connection_factory is not None
+                else psycopg.connect(self._database_url, row_factory=dict_row))
 
     def _now(self) -> datetime:
         value = self._clock()
@@ -1165,6 +1458,11 @@ class PostgresMemoryStore:
             failure_reason=row["candidate_failure_reason"],
             timing=row["timing"],
             dimension_evidence=evidence,
+            correction_review=row.get("_correction_review", ()),
+            event=(MemoryEvent.from_payload(row.get("candidate_event")).with_current_sources(
+                evidence is not None and evidence.source_bound
+            ) if row.get("candidate_event") is not None and "_bound_dimension_evidence" in row
+                   else MemoryEvent.from_payload(row.get("candidate_event"))),
         )
 
     @classmethod
@@ -1185,7 +1483,9 @@ class PostgresMemoryStore:
             confidence=row["memory_confidence"],
             risk_flags=tuple(row["memory_risk_flags"] or ()),
             supersedes_memory_id=row["supersedes_memory_id"],
-            timing=row["timing"],
+            timing=row["timing"], event=row.get("_bound_event", MemoryEvent.from_payload(row.get("memory_event"))),
+            version_evidence=row.get("_bound_version_evidence", VersionEvidence.from_payload(row.get("version_evidence"))),
+            can_revert_auto_update=row.get("_can_revert_auto_update", False),
         )
 
     @classmethod
@@ -1198,13 +1498,24 @@ class PostgresMemoryStore:
             row["_bound_dimension_evidence"] = bind_stored_dimension_evidence(
                 connection, cls._candidate_from_row(row), lock_sources=lock_sources,
             )
+            protected, _ = protect_candidate(connection, cls._candidate_from_row(row), validate_generation=lock_sources)
+            row["candidate_status"] = protected.status.value
+            row["candidate_failure_reason"] = protected.failure_reason
+            row["_correction_review"] = protected.correction_review
         return timed
 
-    @staticmethod
+    @classmethod
     def _timed_memories(
-        connection: psycopg.Connection[Any], rows: Sequence[dict[str, Any]],
+        cls, connection: psycopg.Connection[Any], rows: Sequence[dict[str, Any]],
     ) -> list[dict[str, Any]]:
-        return timed_memory_rows(connection, rows, source_ids_key="memory_source_ids")
+        timed = timed_memory_rows(connection, rows, source_ids_key="memory_source_ids")
+        for row in timed:
+            row["_bound_event"] = bind_memory_event(connection, owner_id=row["owner_id"],
+                candidate_id=row["source_candidate_id"], raw=row.get("memory_event"))
+            row["_bound_version_evidence"], row["_can_revert_auto_update"] = bind_version_evidence(
+                connection, memory=cls._memory_from_row(row), raw=row.get("version_evidence"),
+            )
+        return timed
 
     @staticmethod
     def _source_ids(value: Any) -> tuple[UUID, ...]:
