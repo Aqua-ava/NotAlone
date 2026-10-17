@@ -162,3 +162,22 @@ test('旧主题入口展示拆分后的合法终端并导航到当前版本', { 
     assert.equal(await page.getByRole('link', { name: '查看当前主题：合成读书计划', exact: true }).count(), 1);
   }); } finally { f.disconnect(); }
 });
+
+test('旧入口分页只显示当前页，可查看最旧入口并返回首屏', { timeout: 20000 }, async () => {
+  const first = readyPayload({ mapping_cursor: null, mapping_next_cursor: '1:100' });
+  const last = readyPayload({ mapping_cursor: '1:100', mapping_next_cursor: null,
+    scenario_mappings: [{ source_scenario_id: ids.other, source_version_id: ids.work,
+      targets: [{ scenario_id: ids.scenario, version_id: ids.version }] }] });
+  const f = await fixture(async (request) => ({ generation: 1, data: request.path.includes('/layered-memory')
+    ? request.path.includes('mapping_cursor=') ? last : first
+    : request.path.endsWith('/sources') ? { sources: [] } : request.path.endsWith('/memory-candidates') ? { candidates: [] } : { memories: [] } }));
+  await withMemoryPage(f, async (page) => {
+    await page.getByRole('button', { name: '主题资料', exact: true }).click();
+    await page.getByRole('button', { name: '下一页旧入口', exact: true }).click({ timeout: 3000 });
+    await page.getByText('查看旧主题入口的当前去向', { exact: true }).click();
+    await page.getByText(`旧主题：${ids.other} · 旧版本：${ids.work}`, { exact: true }).waitFor();
+    await page.getByRole('button', { name: '返回旧入口首屏', exact: true }).click();
+    await page.getByText(`旧主题：${ids.other} · 旧版本：${ids.work}`, { exact: true }).waitFor({ state: 'hidden' });
+    await page.getByRole('button', { name: '下一页旧入口', exact: true }).waitFor();
+  });
+});

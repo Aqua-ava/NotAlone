@@ -71,12 +71,12 @@ class LayeredMemoryService:
             if task_id is not None:
                 self._dispatch(scope,task_id)
 
-    def read(self, scope):
+    def read(self, scope, *, mapping_cursor=None):
         if self._synthetic:
             task_id=self._store.pending(scope)
             if task_id is not None:
                 self._dispatch(scope,task_id)
-        state, entries, scenarios, job = self._store.read(scope)
+        state, entries, scenarios, job = self._store.read(scope, mapping_cursor=mapping_cursor)
         covered = state["covered_count"]
         return {"schema_version": 1, "scope_kind": "contact", "contact_id": str(scope.contact_id),
                 "settings_generation": state["settings_generation"], "enabled": state["enabled"],
@@ -93,6 +93,8 @@ class LayeredMemoryService:
                 "error_code": state["error_code"], "scenarios": scenarios,
                 "maintenance_pending": state["dirty_revision"] > state["consumed_revision"],
                 "scenario_mappings": state["scenario_mappings"],
+                "mapping_cursor": state["mapping_cursor"],
+                "mapping_next_cursor": state["mapping_next_cursor"],
                 "purpose": "从本联系人已采纳且来历有效的记忆整理主题背景，供查看及后续受控回复使用。",
                 "budget": self._budget.to_payload()}
 

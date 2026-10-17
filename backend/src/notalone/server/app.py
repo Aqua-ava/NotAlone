@@ -496,7 +496,7 @@ class BackendApp:
                 query=urlsplit(path).query,
             )
         if path_value.startswith("/api/contacts/") and "/layered-memory" in path_value:
-            return self._handle_layered_memory(method=method_upper, path=path_value, body=body)
+            return self._handle_layered_memory(method=method_upper, path=path, body=body)
         if path_value.startswith("/api/contacts/") and "/relationship-overview" in path_value:
             return self._handle_overview(method=method_upper, path=path_value)
         if path_value == "/api/memories/owner/overview":
@@ -1560,7 +1560,7 @@ class BackendApp:
             return _json_response(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "assistant_session_failed"})
 
     def _handle_layered_memory(self, *, method: str, path: str, body: bytes) -> Response:
-        parts = path.strip("/").split("/")
+        parts = urlsplit(path).path.strip("/").split("/")
         if (len(parts) not in {4, 5} or parts[3] != "layered-memory"
                 or method != ("GET" if len(parts) == 4 else "POST")
                 or len(parts) == 5 and parts[4] not in {"enable", "refresh", "disable", "delete", "pause", "continue"}):
@@ -1570,7 +1570,10 @@ class BackendApp:
         try:
             scope = ContactScope(self._owner_id, UUID(parts[2]))
             if method == "GET":
-                state = self._layered_memory.read(scope)
+                query = parse_qs(urlsplit(path).query, keep_blank_values=True)
+                if set(query) - {'mapping_cursor'} or any(len(value) != 1 for value in query.values()):
+                    raise ValueError('映射分页参数无效。')
+                state = self._layered_memory.read(scope, mapping_cursor=query.get('mapping_cursor', [None])[0])
             else:
                 payload = json.loads(body.decode("utf-8"))
                 allowed = ({"settings_generation", "purpose_confirmed"} if parts[4] == "enable" else

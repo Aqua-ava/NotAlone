@@ -212,12 +212,13 @@ test('后台读取未返回时切换联系人会取消请求，迟到主题不�
   let reads = 0, releaseLate, signal, notifyStarted;
   const started = new Promise((resolve) => { notifyStarted = resolve; });
   const f = await fixture(async (request) => {
-    if (++reads === 1) return { generation: 1, data: readyPayload() };
+    if (++reads === 1) return { generation: 1, data: readyPayload({ mapping_cursor: '1:100' }) };
+    assert.ok(request.path.includes('mapping_cursor=1%3A100'), '后台更新保持正在查看的分页');
     signal = request.signal;
     return new Promise((resolve) => { releaseLate = () => resolve({ generation: 1, data: readyPayload() }); notifyStarted(); });
   });
   try {
-    await f.bridge.readLayeredMemory(f.selection());
+    await f.bridge.readLayeredMemory({ ...f.selection(), mappingCursor: '1:100' });
     const deadline = setTimeout(() => notifyStarted(), 2500);
     await started;
     clearTimeout(deadline);
@@ -228,5 +229,37 @@ test('后台读取未返回时切换联系人会取消请求，迟到主题不�
     releaseLate();
     await new Promise((resolve) => setImmediate(resolve));
     assert.deepEqual((await f.bridge.getState()).layeredMemory, { phase: 'idle', value: null });
+  } finally { f.disconnect(); }
+});
+
+test('1001个旧入口逐页可达最旧项，页面只保存当前100条以内映射且游标过期撤下缓存', async () => {
+  const uuid = (n) => `77777777-7777-4777-8777-${n.toString().padStart(12, '0')}`;
+  let expired = false;
+  const f = await fixture(async (request) => {
+    const cursor = new URL(request.path, 'http://localhost').searchParams.get('mapping_cursor');
+    if (expired && cursor) throw new BackendRequestFailure('response', 409, 'mapping_cursor_expired');
+    const offset = cursor ? Number(cursor.split(':')[1]) : 0;
+    return { generation: 1, data: readyPayload({ mapping_cursor: cursor,
+      mapping_next_cursor: offset + 100 < 1001 ? `1:${offset + 100}` : null,
+      scenario_mappings: Array.from({ length: Math.min(100, 1001 - offset) }, (_, i) => ({
+        source_scenario_id: uuid(offset + i), source_version_id: uuid(offset + i),
+        targets: [{ scenario_id: ids.scenario, version_id: ids.version }],
+      })) }) };
+  });
+  try {
+    let mappingCursor = null, value;
+    do {
+      await f.bridge.readLayeredMemory({ ...f.selection(), mappingCursor });
+      value = (await f.bridge.getState()).layeredMemory.value;
+      assert.ok(value.scenarioMappings.length <= 100);
+      mappingCursor = value.mappingNextCursor;
+    } while (mappingCursor);
+    assert.equal(value.scenarioMappings[0].sourceVersionId, uuid(1000));
+    assert.equal(value.scenarioMappings.length, 1);
+    expired = true;
+    await f.bridge.readLayeredMemory({ ...f.selection(), mappingCursor: '1:1000' });
+    assert.deepEqual((await f.bridge.getState()).layeredMemory, { phase: 'error', value: null });
+    await f.bridge.readLayeredMemory(f.selection());
+    assert.equal((await f.bridge.getState()).layeredMemory.value.mappingCursor, null);
   } finally { f.disconnect(); }
 });

@@ -210,6 +210,9 @@ class LayeredMemoryManagementHttpTest(MemoryOverviewHttpFixture, unittest.TestCa
                 paragraph = {'text': memory.text, 'references': [{'memory_id': str(memory.memory_id), 'revision': memory.revision}]}
                 if not scenarios or getattr(self, 'reuse_retired', False):
                     return {'scenarios': [{'topic_key': 'course', 'title': '合成课程', 'hint': '合成主题资料', 'paragraphs': [paragraph]}]}
+                if getattr(self, 'append_current', False):
+                    return {'scenarios': [{'topic_key': 'combined-course', 'title': '合成追加资料',
+                        'hint': '同主题新增资料', 'paragraphs': [paragraph]}]}
                 keys = ['course-part-one', 'course-part-two'] if len(scenarios) == 1 else ['combined-course']
                 return {'scenarios': [{'topic_key': key, 'title': '合成拆并主题', 'hint': '合成归组资料',
                     'replaces': [item['version_id'] for item in scenarios], 'paragraphs': [paragraph]} for key in keys]}
@@ -239,6 +242,17 @@ class LayeredMemoryManagementHttpTest(MemoryOverviewHttpFixture, unittest.TestCa
             self.assertEqual({item['version_id'] for item in mapping['targets']},
                              {item['version_id'] for item in current['scenarios']})
             self.assertFalse(self.service.validate(frozen))
+        self.proposal.append_current = True
+        self.backend.request('/api/memories/manual-contact', {
+            'contact_id': contact, 'text': '合成普通增量。', 'category': 'common_fact'})
+        status, response = backend.request(path+'/refresh', {'settings_generation': ready['settings_generation']})
+        self.assertEqual(status, 200, response)
+        current = response['layered_memory']
+        self.assertEqual(current['status'], 'ready')
+        mapping = next(item for item in current['scenario_mappings'] if item['source_version_id'] == old['version_id'])
+        self.assertEqual({item['version_id'] for item in mapping['targets']}, {item['version_id'] for item in current['scenarios']})
+        retired_versions.update(item['version_id'] for item in current['scenarios'])
+        self.proposal.append_current = False
         self.proposal.reuse_retired = True
         self.backend.request('/api/memories/manual-contact', {
             'contact_id': contact, 'text': '合成非法身份复用测试。', 'category': 'common_fact'})
@@ -298,6 +312,42 @@ class LayeredMemoryManagementHttpTest(MemoryOverviewHttpFixture, unittest.TestCa
         self.assertEqual(status, 200, result)
         self.assertFalse(self.service.validate(frozen), '安全撤销不等待合批窗口')
         self.assertTrue(corrected.wait(5), 'stale不能阻止此前已授权的维护')
+
+    def test_long_mapping_history_is_paged_without_losing_old_entries(self):
+        import psycopg
+        from uuid import uuid4
+        contact, _, message = self.import_contact('合成映射分页。')
+        self.confirm(contact, '合成映射依据。', message)
+        backend = self.controlled(proposer=EchoProposal())
+        ready = self.enable(backend, contact)
+        document = ready['scenarios'][0]
+        source_ids = {str(uuid4()) for _ in range(1001)}
+        with psycopg.connect(self.database_url) as connection:
+            # 大历史夹具；源版本及目标均为同范围合法底层资料的合成历史。
+            for source_id in source_ids:
+                scenario_id = uuid4()
+                connection.execute("INSERT INTO public.scenario_document_version(id,owner_id,contact_id,scenario_id,batch_id,"
+                    "organization_generation,schema_version,title,hint,paragraphs,created_at) "
+                    "SELECT %s,owner_id,contact_id,%s,batch_id,0,1,title,hint,paragraphs,created_at "
+                    "FROM public.scenario_document_version WHERE id=%s", (source_id, scenario_id, document['version_id']))
+                connection.execute("INSERT INTO public.scenario_document_mapping(owner_id,contact_id,source_scenario_id,"
+                    "source_version_id,target_scenario_id,target_version_id,batch_id) "
+                    "SELECT owner_id,contact_id,%s,%s,scenario_id,id,batch_id FROM public.scenario_document_version WHERE id=%s",
+                    (scenario_id, source_id, document['version_id']))
+        path = f'/api/contacts/{contact}/layered-memory'
+        cursor, observed = None, set()
+        for page in range(11):
+            response = self._get(backend, path + (f'?mapping_cursor={cursor}' if cursor else ''))['layered_memory']
+            self.assertLessEqual(len(response['scenario_mappings']), 100)
+            observed.update(item['source_version_id'] for item in response['scenario_mappings'])
+            cursor = response['mapping_next_cursor']
+            if page < 10:
+                self.assertIsNotNone(cursor)
+                stale_cursor = cursor
+        self.assertIsNone(cursor)
+        self.assertEqual(observed, source_ids)
+        backend.request(path+'/delete', {'settings_generation': ready['settings_generation']})
+        self.assertEqual(backend.request(path+f'?mapping_cursor={stale_cursor}')[0], 409)
 
     def test_finite_batch_publishes_traceable_system_document_and_reuses_unchanged_work(self):
         contact, _, message = self.import_contact("合成经历：双方共同参加过课程。")

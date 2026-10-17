@@ -140,6 +140,8 @@ export interface LayeredMemory {
   eligibleCount: number;
   coveredCount: number;
   remainingCount: number;
+  mappingCursor: string | null;
+  mappingNextCursor: string | null;
   maintenancePending: boolean;
   scenarioMappings: { sourceScenarioId: string; sourceVersionId: string; targets: { scenarioId: string; versionId: string }[] }[];
   organizationGeneration: number;
@@ -149,6 +151,7 @@ export interface LayeredMemory {
   budget: { maxMemories: number; maxScenarios: number; maxParagraphs: number; maxCharacters: number; maxModelCalls: number };
   scenarios: LayeredMemoryScenario[];
 }
+export interface LayeredMemoryReadRequest extends ContactSelection { mappingCursor?: string | null }
 export interface LayeredMemoryManagementRequest extends ContactSelection {
   action: 'enable' | 'refresh' | 'disable' | 'delete' | 'pause' | 'continue';
   settingsGeneration: number;
@@ -189,7 +192,7 @@ export interface MemoryBridge {
   refresh(request: MemoryReadRequest): Promise<void>;
   refreshOverview(request: ContactSelection): Promise<void>;
   refreshOwnerOverview(request: ContactSelection): Promise<void>;
-  readLayeredMemory(request: ContactSelection): Promise<void>;
+  readLayeredMemory(request: LayeredMemoryReadRequest): Promise<void>;
   manageLayeredMemory(request: LayeredMemoryManagementRequest): Promise<void>;
   add(request: MemoryAdditionRequest): Promise<void>;
   remove(request: MemoryRemovalRequest): Promise<void>;

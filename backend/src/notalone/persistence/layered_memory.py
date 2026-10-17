@@ -123,42 +123,46 @@ class PostgresLayeredMemoryStore:
         return [{**item, "organization_timing_sha256": _digest(by_id[item["memory_id"]].memory.timing.to_payload())}
                 for item in manifest["memories"] if item["memory_id"] in by_id]
 
-    def read(self, scope):
+    def read(self, scope, *, mapping_cursor=None):
         with self.transaction(scope) as (connection, state, overview):
             rows = []
             rows = self.generation_rows(connection,scope,state['organization_generation'])
-            state['scenario_mappings'] = self._mappings(connection, scope, rows)
+            offset = 0
+            if mapping_cursor is not None:
+                import re
+                if not isinstance(mapping_cursor, str) or re.fullmatch(r'[0-9]{1,18}:[0-9]{1,10}', mapping_cursor) is None:
+                    raise ValueError('映射分页游标无效。')
+                generation, offset = map(int, mapping_cursor.split(':'))
+                if generation != state['organization_generation']:
+                    raise LayeredMemoryConflict('主题集合已变化，请重新读取首屏。')
+            mappings, more = self._mappings(connection, scope, rows, offset)
+            state['scenario_mappings'] = mappings
+            state['mapping_cursor'] = mapping_cursor
+            state['mapping_next_cursor'] = f"{state['organization_generation']}:{offset+100}" if more else None
             jobs=current_job(connection,scope)
             job=next((row for row in jobs if row['settings_generation']==state['settings_generation']),None)
             return state, self.eligible(overview), [self._document(row) for row in rows], job
 
     @staticmethod
-    def _mappings(connection, scope, current):
-        edges = connection.execute("SELECT source_scenario_id,source_version_id,target_scenario_id,target_version_id "
-            "FROM public.scenario_document_mapping WHERE owner_id=%s AND contact_id=%s",
-            (scope.owner_id, scope.contact_id)).fetchall()
-        graph, sources = {}, {}
-        for edge in edges:
-            graph.setdefault(edge['source_version_id'], set()).add(edge['target_version_id'])
-            sources[edge['source_version_id']] = edge['source_scenario_id']
-        terminals = {row['id']: row['scenario_id'] for row in current}
-        result = []
-        for version, scenario in sources.items():
-            pending, seen, targets = [version], set(), set()
-            while pending:
-                node = pending.pop()
-                if node in seen:
-                    continue
-                seen.add(node)
-                if node in terminals:
-                    targets.add(node)
-                else:
-                    pending.extend(graph.get(node, ()))
-            if targets:
-                result.append({'source_scenario_id': str(scenario), 'source_version_id': str(version),
-                    'targets': [{'scenario_id': str(terminals[target]), 'version_id': str(target)}
-                                for target in sorted(targets)]})
-        return sorted(result, key=lambda item: item['source_version_id'])
+    def _mappings(connection, scope, current, offset):
+        # 传输边界按完整(source版本→当前target版本)分页；同一拆分的分支不会静默截掉。
+        rows = connection.execute("WITH RECURSIVE lineage AS ("
+            "SELECT source_scenario_id,source_version_id,target_version_id FROM public.scenario_document_mapping "
+            "WHERE owner_id=%s AND contact_id=%s UNION "
+            "SELECT l.source_scenario_id,l.source_version_id,m.target_version_id FROM lineage l "
+            "JOIN public.scenario_document_mapping m ON m.source_version_id=l.target_version_id "
+            "AND m.owner_id=%s AND m.contact_id=%s) "
+            "SELECT DISTINCT l.source_scenario_id,l.source_version_id,v.scenario_id,v.id AS target_version_id "
+            "FROM lineage l JOIN public.scenario_document_version v ON v.id=l.target_version_id "
+            "WHERE v.id=ANY(%s::uuid[]) ORDER BY l.source_version_id,v.id OFFSET %s LIMIT 101",
+            (scope.owner_id,scope.contact_id,scope.owner_id,scope.contact_id,[row['id'] for row in current],offset)).fetchall()
+        grouped = {}
+        for row in rows[:100]:
+            version = str(row['source_version_id'])
+            item = grouped.setdefault(version, {'source_scenario_id': str(row['source_scenario_id']),
+                'source_version_id': version, 'targets': []})
+            item['targets'].append({'scenario_id': str(row['scenario_id']), 'version_id': str(row['target_version_id'])})
+        return list(grouped.values()), len(rows) > 100
 
     @staticmethod
     def _document(row):
@@ -495,7 +499,7 @@ class PostgresLayeredMemoryStore:
                     (version,work.scope.owner_id,work.scope.contact_id,scenario_id,work.id,generation,scenario['title'],scenario['hint'],Jsonb(paragraphs),now))
                 versions[scenario_id]=version
                 for previous in old:
-                    if str(previous['id']) in replaced:
+                    if str(previous['id']) in replaced or previous['scenario_id'] == scenario_id:
                         connection.execute("INSERT INTO public.scenario_document_mapping(owner_id,contact_id,source_scenario_id,"
                             "source_version_id,target_scenario_id,target_version_id,batch_id) VALUES(%s,%s,%s,%s,%s,%s,%s)",
                             (work.scope.owner_id,work.scope.contact_id,previous['scenario_id'],previous['id'],scenario_id,version,work.id))

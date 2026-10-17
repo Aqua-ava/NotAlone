@@ -78,11 +78,11 @@ function useMemoryReading(session: ContactSessionView) {
       }
     }
   }
-  async function readLayeredMemory() {
+  async function readLayeredMemory(mappingCursor: string | null = null) {
     const { selectedContactId, scopeRevision } = scope.current;
     if (!selectedContactId) return;
     setError('');
-    try { await window.notalone.memory.readLayeredMemory({ contactId: selectedContactId, scopeRevision }); }
+    try { await window.notalone.memory.readLayeredMemory({ contactId: selectedContactId, scopeRevision, mappingCursor }); }
     catch {
       if (active.current && scope.current.selectedContactId === selectedContactId && scope.current.scopeRevision === scopeRevision) {
         setError('主题资料范围暂不可用，请重新核对联系人。');

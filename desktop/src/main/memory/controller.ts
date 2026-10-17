@@ -1,4 +1,4 @@
-import type { LayeredMemoryManagementRequest, MemoryAdditionRequest, MemoryCandidateRequest, MemoryCandidateUpdateRequest, MemoryCorrectionRequest, MemoryReadingState, MemoryReadRequest, MemoryRemovalRequest, MemorySectionName } from '../../shared/memory-bridge';
+import type { LayeredMemoryReadRequest, LayeredMemoryManagementRequest, MemoryAdditionRequest, MemoryCandidateRequest, MemoryCandidateUpdateRequest, MemoryCorrectionRequest, MemoryReadingState, MemoryReadRequest, MemoryRemovalRequest, MemorySectionName } from '../../shared/memory-bridge';
 import type { BackendHost } from '../backend/host';
 import { BackendRequestFailure } from '../backend/json-client';
 import type { ContactSession } from '../contacts/session';
@@ -119,7 +119,7 @@ export class MemoryReadingController {
     this.ownerOverviewRequested = true;
     await this.readOwnerOverview(scope);
   }
-  async readLayeredMemory(request: ContactSelection): Promise<void> {
+  async readLayeredMemory(request: LayeredMemoryReadRequest): Promise<void> {
     this.synchronizeScope();
     const scope = this.scope;
     if (!scope || request.contactId !== scope.contactId || request.scopeRevision !== scope.scopeRevision) {
@@ -128,7 +128,7 @@ export class MemoryReadingController {
     if (this.sourceDeletionDepth) throw new Error('来源正在删除，请完成核对后再读取主题资料。');
     if (this.mutation) throw new Error('资料正在处理，请完成核对后再读取主题资料。');
     this.layeredRequested = true;
-    await this.readLayered(scope);
+    await this.readLayered(scope, false, request.mappingCursor ?? null);
   }
   async manageLayeredMemory(request: LayeredMemoryManagementRequest): Promise<void> {
     this.synchronizeScope();
@@ -182,7 +182,7 @@ export class MemoryReadingController {
     this.layeredTimer = setTimeout(() => {
       this.layeredTimer = undefined;
       this.synchronizeScope();
-      if (this.scope === scope && !this.mutation && !this.sourceDeletionDepth) void this.readLayered(scope, true);
+      if (this.scope === scope && !this.mutation && !this.sourceDeletionDepth) void this.readLayered(scope, true, value.mappingCursor);
     }, 1000);
     this.layeredTimer.unref();
   }
@@ -193,7 +193,7 @@ export class MemoryReadingController {
     this.layeredOperation = undefined;
     this.publish({ layeredMemory: { phase: this.layeredRequested ? 'loading' : 'idle', value: null } });
   }
-  private async readLayered(scope: Scope, background = false): Promise<boolean> {
+  private async readLayered(scope: Scope, background = false, mappingCursor: string | null = null): Promise<boolean> {
     if (!background) this.clearLayered();
     if (this.sourceDeletionDepth) return false;
     const operation = { abort: new AbortController() };
@@ -201,7 +201,7 @@ export class MemoryReadingController {
     if (!background) this.publish({ layeredMemory: { phase: 'loading', value: null } });
     const current = () => { this.synchronizeScope(); return this.scope === scope && this.layeredOperation === operation; };
     try {
-      const result = await this.backend.requestJson({ method: 'GET', path: `/api/contacts/${scope.contactId}/layered-memory`, signal: operation.abort.signal });
+      const result = await this.backend.requestJson({ method: 'GET', path: `/api/contacts/${scope.contactId}/layered-memory${mappingCursor ? `?mapping_cursor=${encodeURIComponent(mappingCursor)}` : ''}`, signal: operation.abort.signal });
       if (!current() || result.generation !== scope.generation) return false;
       this.publish({ layeredMemory: { phase: 'ready', value: layeredMemory(result.data, scope.contactId) } });
       this.scheduleLayered(scope);
