@@ -1,4 +1,4 @@
-import type { LayeredMemory, LayeredMemoryReference, LayeredMemoryScenario } from '../../shared/memory-bridge';
+import type { LayeredMemory, LayeredMemoryProfile, LayeredMemoryReference, LayeredMemoryScenario } from '../../shared/memory-bridge';
 import { isUuid } from '../uuid';
 import { readCurrentStatus } from './current-status';
 
@@ -53,24 +53,44 @@ function scenario(value: unknown): LayeredMemoryScenario {
   return { scenarioId: identifier(entry.scenario_id), versionId: identifier(entry.version_id), title: text(entry.title, 200),
     hint: text(entry.hint, 500), systemGenerated: true, updatedAt, paragraphs };
 }
+function profile(value: unknown): LayeredMemoryProfile | null {
+  if (value === null) return null;
+  const entry = record(value), updatedAt = date(entry.updated_at);
+  if (entry.system_generated !== true || updatedAt === null) throw invalid();
+  const entries = list(entry.entries, (value) => {
+    const item = record(value), references = list(item.references, reference);
+    if (!references.length || typeof item.uncertainty !== 'string' || item.uncertainty.length > 240
+      || (item.temporal_status === 'uncertain' && !item.uncertainty.trim())) throw invalid();
+    return { text: text(item.text), temporalStatus: enumeration(item.temporal_status, ['stable', 'historical', 'uncertain']),
+      uncertainty: item.uncertainty, references };
+  }, 100);
+  if (!entries.length) throw invalid();
+  return { versionId: identifier(entry.version_id), systemGenerated: true, updatedAt, entries };
+}
 export function layeredMemory(value: unknown, contactId: string): LayeredMemory {
   const entry = record(record(value).layered_memory), budget = record(entry.budget);
-  if (entry.schema_version !== 1 || entry.scope_kind !== 'contact' || identifier(entry.contact_id) !== contactId
+  if (entry.schema_version !== 2 || entry.scope_kind !== 'contact' || identifier(entry.contact_id) !== contactId
     || typeof entry.enabled !== 'boolean') throw invalid();
+  const maxModelCalls = integer(budget.max_model_calls), modelCallsUsed = integer(budget.model_calls_used),
+    modelCallsRemaining = integer(budget.model_calls_remaining);
+  if (modelCallsUsed > maxModelCalls || modelCallsRemaining !== maxModelCalls - modelCallsUsed) throw invalid();
   const qualityStatus = enumeration(entry.quality_status, ['unknown', 'synthetic']);
-  const scenarios = list(entry.scenarios, scenario, 100);
-  if ((qualityStatus === 'unknown' && scenarios.length > 0) || new Set(scenarios.map((item) => item.scenarioId)).size !== scenarios.length) throw invalid();
+  const scenarios = list(entry.scenarios, scenario, 100), currentProfile = profile(entry.profile);
+  if ((qualityStatus === 'unknown' && (scenarios.length > 0 || currentProfile !== null)) || new Set(scenarios.map((item) => item.scenarioId)).size !== scenarios.length) throw invalid();
   const eligibleCount = integer(entry.eligible_count), coveredCount = integer(entry.covered_count), remainingCount = integer(entry.remaining_count);
   if (coveredCount > eligibleCount || remainingCount > eligibleCount) throw invalid();
-  const workId = entry.work_id === null ? null : identifier(entry.work_id), workRevision = integer(entry.work_revision), currentBatch = integer(entry.current_batch);
-  const modelCallsUsed = integer(entry.model_calls_used), modelCallLimit = integer(entry.model_call_limit);
-  if ((workId === null && (workRevision !== 0 || currentBatch !== 0 || modelCallsUsed !== 0 || modelCallLimit !== 0))
-    || (workId !== null && workRevision === 0) || modelCallsUsed > modelCallLimit) throw invalid();
-  return { schemaVersion: 1, scopeKind: 'contact', contactId, settingsGeneration: integer(entry.settings_generation), enabled: entry.enabled,
-    qualityStatus, status: enumeration(entry.status, ['disabled', 'ready', 'empty', 'failed', 'updating', 'paused', 'stale', 'blocked']),
+  const workId = entry.work_id === null ? null : identifier(entry.work_id), workRevision = integer(entry.work_revision),
+    currentBatch = integer(entry.current_batch), modelCallLimit = integer(entry.model_call_limit);
+  if (integer(entry.model_calls_used) !== modelCallsUsed || modelCallLimit !== maxModelCalls
+    || (workId === null && (workRevision !== 0 || currentBatch !== 0 || modelCallsUsed !== 0))
+    || (workId !== null && workRevision === 0)) throw invalid();
+  return { schemaVersion: 2, scopeKind: 'contact', contactId, settingsGeneration: integer(entry.settings_generation), enabled: entry.enabled,
+    qualityStatus, status: enumeration(entry.status, ['disabled', 'ready', 'empty', 'failed', 'updating', 'stale', 'blocked', 'paused']),
     workId, workRevision, currentBatch, modelCallsUsed, modelCallLimit,
     eligibleCount, coveredCount, remainingCount, organizationGeneration: integer(entry.organization_generation), updatedAt: date(entry.updated_at),
     errorCode: entry.error_code === null ? null : text(entry.error_code, 200), purpose: text(entry.purpose, 2000),
     budget: { maxMemories: integer(budget.max_memories), maxScenarios: integer(budget.max_scenarios), maxParagraphs: integer(budget.max_paragraphs),
-      maxCharacters: integer(budget.max_characters), maxModelCalls: integer(budget.max_model_calls) }, scenarios };
+      maxCharacters: integer(budget.max_characters), maxModelCalls, modelCallsUsed, modelCallsRemaining,
+      ...(budget.max_profile_entries === undefined ? {} : { maxProfileEntries: integer(budget.max_profile_entries) }) },
+    scenarios, profile: currentProfile };
 }

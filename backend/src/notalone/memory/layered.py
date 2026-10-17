@@ -9,7 +9,7 @@ from notalone.memory.organization_deadline import OrganizationAdapterTimeoutCont
 
 
 class OrganizationBudgetExhausted(RuntimeError):
-    """已经消耗的语义额度不会因重试或进程重启归零。"""
+    """同一工作的持久调用额度已耗尽；刷新或重启不能重置。"""
 
 
 class LayeredMemoryConflict(RuntimeError):
@@ -26,12 +26,13 @@ class OrganizationBudget:
     # 单次实际输入 JSON 与生成标题／目录／正文分别受该字符上限约束。
     max_characters: int = 4000
     max_model_calls: int = 2
+    max_profile_entries: int = 4
 
     def __post_init__(self):
         if any(type(value) is not int or value < 1 for value in self.to_payload().values()):
             raise ValueError("整理预算必须是有限正整数。")
-        if self.max_model_calls != 2:
-            raise ValueError("首批只支持一次提案和一次独立核验。")
+        if self.max_model_calls not in {2, 4}:
+            raise ValueError("整理仅支持主题两步或主题与长期背景四步。")
 
     def to_payload(self) -> dict:
         return {name: getattr(self, name) for name in self.__dataclass_fields__}
@@ -94,6 +95,8 @@ class LayeredMemorySnapshot:
     organization_generation: int
     scenarios: tuple[ScenarioDirectoryEntry, ...]
     dependency_ids: tuple[UUID, ...]
+    profile_version_id: UUID | None = None
+    profile_entries: tuple[dict, ...] = ()
 
 
 class LayeredMemoryPort(Protocol):
@@ -104,3 +107,19 @@ class LayeredMemoryPort(Protocol):
         """按冻结版本读取零基、左闭右开的完整段落范围。"""
 
     def validate(self, snapshot: LayeredMemorySnapshot) -> bool: ...
+
+
+class ProfileProposalPort(Protocol):
+    timeout_contract: OrganizationAdapterTimeoutContract
+
+    def propose(self, *, scenarios: tuple[dict, ...], memories: tuple[OrganizationInput, ...],
+                budget: OrganizationBudget, deadline: OrganizationCallDeadline) -> dict:
+        """仅从冻结合法主题及对应底层版本整理entries；每项含时间、不确定性和直接引用。"""
+
+
+class ProfileVerificationPort(Protocol):
+    timeout_contract: OrganizationAdapterTimeoutContract
+
+    def verify(self, *, scenarios: tuple[dict, ...], memories: tuple[OrganizationInput, ...],
+               proposal: dict, deadline: OrganizationCallDeadline) -> bool:
+        """独立核验稳定／临时、主体、否定、时间、条件及范围；实际传输沿deadline。"""

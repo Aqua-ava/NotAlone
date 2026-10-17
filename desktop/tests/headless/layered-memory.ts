@@ -23,32 +23,52 @@ export async function layeredMemory(browser: Browser, origin: string) {
       await expect(panel.getByText('已暂停，剩余资料可继续整理', { exact: true })).toBeVisible();
       await expect(panel.getByText('合格资料 2 条 · 已覆盖 1 条 · 剩余 1 条', { exact: true })).toBeVisible();
       await expect(panel.getByText('当前批次：1', { exact: true })).toBeVisible();
-      await expect(panel.getByText('累计已用 2 / 已授权 2 次模型调用', { exact: true })).toBeVisible();
       const endpoint = `/api/contacts/${fixture.data.contact_ids[0]}/layered-memory`;
       const firstResponse = await fixture.request(endpoint);
       expect(firstResponse.status).toBe(200);
-      const firstWork = firstResponse.data.layered_memory as { work_id: string; current_batch: number; covered_count: number };
+      const firstWork = firstResponse.data.layered_memory as { work_id: string; current_batch: number; covered_count: number; model_calls_used: number; model_call_limit: number };
       expect(firstWork.work_id).toMatch(/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/);
       expect(firstWork).toMatchObject({ current_batch: 1, covered_count: 1 });
-      const firstParagraph = await panel.locator('.memory-text').innerText();
+      expect(firstWork.model_call_limit).toBe(4);
+      expect(firstWork.model_calls_used).toBe(4);
+      await expect(panel.getByText(`累计已用 ${firstWork.model_calls_used} / 已授权 ${firstWork.model_call_limit} 次模型调用`, { exact: true })).toBeVisible();
+      const firstParagraph = await panel.locator('.memory-overview-entries .memory-text').first().innerText();
       expect(['双方共同参加合成学习课程。', '双方后来共同完成合成学习练习。']).toContain(firstParagraph);
+      const profile = panel.getByRole('region', { name: '长期背景', exact: true });
+      await expect(profile.getByText(firstParagraph, { exact: true })).toBeVisible();
       await panel.getByRole('button', { name: '继续整理主题资料', exact: true }).click();
       await expect(panel.getByText('合格资料 2 条 · 已覆盖 2 条 · 剩余 0 条', { exact: true })).toBeVisible();
       await expect(panel.getByText('当前批次：2', { exact: true })).toBeVisible();
-      await expect(panel.getByText('累计已用 4 / 已授权 4 次模型调用', { exact: true })).toBeVisible();
       await expect(panel.getByText('本批主题资料整理成功', { exact: true })).toBeVisible();
       const continuedResponse = await fixture.request(endpoint);
       expect(continuedResponse.status).toBe(200);
+      const continuedWork = continuedResponse.data.layered_memory as typeof firstWork;
+      expect(continuedWork.model_call_limit).toBe(firstWork.model_call_limit + 4);
+      expect(continuedWork.model_calls_used).toBe(8);
+      await expect(panel.getByText(`累计已用 ${continuedWork.model_calls_used} / 已授权 ${continuedWork.model_call_limit} 次模型调用`, { exact: true })).toBeVisible();
       expect(continuedResponse.data.layered_memory).toMatchObject({ work_id: firstWork.work_id,
         current_batch: 2, covered_count: 2, remaining_count: 0, status: 'ready' });
-      await expect(panel.getByText(firstParagraph, { exact: true })).toBeVisible();
+      await expect(panel.getByText(firstParagraph, { exact: true }).first()).toBeVisible();
       await expect(panel.getByRole('heading', { name: '合成学习记录', exact: true })).toHaveCount(1);
-      await expect(panel.getByText('双方共同参加合成学习课程。', { exact: true })).toBeVisible();
-      await expect(panel.getByText('双方后来共同完成合成学习练习。', { exact: true })).toBeVisible();
+      await expect(panel.getByText('双方共同参加合成学习课程。', { exact: true }).first()).toBeVisible();
+      await expect(panel.getByText('双方后来共同完成合成学习练习。', { exact: true }).first()).toBeVisible();
+      await expect(profile.getByText('系统整理', { exact: true })).toBeVisible();
+      await expect(profile.getByText('时间状态：尚不确定', { exact: true }).first()).toBeVisible();
+      await expect(profile.getByText('不确定性：是否持续共同学习尚未核实。', { exact: true }).first()).toBeVisible();
+      await profile.getByText('查看第 1 项依据与时间', { exact: true }).click();
+      await expect(profile.getByText(/底层记忆：.*版本 1.*来源支持/).first()).toBeVisible();
+      await profile.getByText('查看长期背景版本', { exact: true }).click();
+      await expect(profile.getByText(/版本标识：/)).toBeVisible();
       await panel.getByText('查看第 1 段依据与时间', { exact: true }).click();
       await expect(panel.getByText(/底层记忆：.*版本 1.*来源支持/).first()).toBeVisible();
       await panel.getByRole('button', { name: '停用主题资料', exact: true }).click();
       await expect(panel.getByText('已停用', { exact: true })).toBeVisible();
+      await expect(panel.getByText('双方共同参加合成学习课程。', { exact: true }).first()).toBeVisible();
+      await expect(profile.getByText('系统整理', { exact: true })).toBeVisible();
+      await profile.getByRole('button', { name: '撤回本版长期背景', exact: true }).click();
+      await expect(profile.getByText('暂无可展示的长期背景。', { exact: true })).toBeVisible();
+      await panel.getByRole('button', { name: '重新读取主题资料', exact: true }).click();
+      await expect(profile.getByText('系统整理', { exact: true })).toHaveCount(0);
       await expect(panel.getByText('双方共同参加合成学习课程。', { exact: true })).toBeVisible();
       await panel.getByRole('button', { name: '删除整理结果', exact: true }).click();
       await panel.getByRole('button', { name: '确认删除整理结果', exact: true }).click();
@@ -61,7 +81,7 @@ export async function layeredMemory(browser: Browser, origin: string) {
       await panel.getByRole('button', { name: '确认范围并开启', exact: true }).click();
       await expect(panel.getByText('已暂停，剩余资料可继续整理', { exact: true })).toBeVisible();
       await panel.getByRole('button', { name: '继续整理主题资料', exact: true }).click();
-      await expect(panel.getByText('双方共同参加合成学习课程。', { exact: true })).toBeVisible();
+      await expect(panel.getByText('双方共同参加合成学习课程。', { exact: true }).first()).toBeVisible();
       await fixture.command('delete_source');
       await panel.getByRole('button', { name: '重新读取主题资料', exact: true }).click();
       await expect(panel.getByText('双方共同参加合成学习课程。', { exact: true })).toHaveCount(0);
@@ -76,5 +96,5 @@ export async function layeredMemory(browser: Browser, origin: string) {
     } catch (error) { process.stderr.write(`${(error as Error).stack}\n`); throw error; }
     finally { await host.close(); }
   }), released);
-  process.stdout.write('page_test_scenario_passed: layered-memory-multi-batch-continue-scope-disable-delete-and-source-erasure\n');
+  process.stdout.write('page_test_scenario_passed: layered-memory-multi-batch-profile-evidence-withdrawal-continue-scope-disable-delete-and-source-erasure\n');
 }

@@ -6,6 +6,7 @@ import math
 
 from notalone.memory.layered import OrganizationBudget, OrganizationBudgetExhausted, LayeredMemoryConflict
 from notalone.memory.scenario_validation import validate_proposal
+from notalone.memory.profile_validation import validate_profile
 from notalone.application.model_priority import ModelPriorityControl, ModelWorkStopped
 from notalone.application.organization_call import (
     bounded_organization_call, OrganizationCallTimeout, require_adapter_timeout_contract,
@@ -14,7 +15,8 @@ from notalone.application.organization_call import (
 
 class LayeredMemoryService:
     def __init__(self, store, *, proposer=None, verifier=None, synthetic=False,
-                 budget=None, model_priority=None, call_timeout_seconds=30.0, task_host=None, dispatcher=None):
+                 budget=None, model_priority=None, call_timeout_seconds=30.0, task_host=None, dispatcher=None,
+                 profile_proposer=None, profile_verifier=None):
         if (not isinstance(call_timeout_seconds, (int, float)) or isinstance(call_timeout_seconds, bool)
                 or not math.isfinite(call_timeout_seconds) or not 0 < call_timeout_seconds <= 120):
             raise ValueError("整理调用必须有不超过120秒的有限等待。")
@@ -29,8 +31,20 @@ class LayeredMemoryService:
                 raise ValueError("受控整理须分别注入提案和独立核验适配器。")
             require_adapter_timeout_contract(proposer, "propose", synthetic=True)
             require_adapter_timeout_contract(verifier, "verify", synthetic=True)
+        self._profile_proposer, self._profile_verifier = profile_proposer, profile_verifier
+        if (profile_proposer is None) != (profile_verifier is None):
+            raise ValueError("长期背景须同时装配独立提案和核验适配器。")
+        if profile_proposer is not None:
+            if not synthetic or profile_proposer is profile_verifier:
+                raise ValueError("长期背景尚仅开放独立受控合成验证。")
+            require_adapter_timeout_contract(profile_proposer, "propose", synthetic=True)
+            require_adapter_timeout_contract(profile_verifier, "verify", synthetic=True)
         self._synthetic = synthetic
-        self._budget = budget or OrganizationBudget()
+        self._budget = budget or OrganizationBudget(max_model_calls=4 if profile_proposer else 2)
+        if profile_proposer and self._budget.max_model_calls != 4:
+            raise ValueError("长期背景装配要求显式四步有限预算。")
+        if profile_proposer:
+            self._contract += ":profile-v1"
         self._priority = model_priority or ModelPriorityControl()
 
     def attach_task_host(self, task_host):
@@ -44,18 +58,20 @@ class LayeredMemoryService:
         if not self._synthetic or self._task_host is None or owner_id is None:
             return
         for scope in self._store.pending_scopes(owner_id):
-            task_id=self._store.pending(scope)
+            task_id=self._store.pending(scope,self._contract)
             if task_id is not None:
                 self._dispatch(scope,task_id)
 
     def read(self, scope):
         if self._synthetic:
-            task_id=self._store.pending(scope)
+            task_id=self._store.pending(scope,self._contract)
             if task_id is not None:
                 self._dispatch(scope,task_id)
         state, entries, scenarios, job = self._store.read(scope)
         covered = state["covered_count"]
-        return {"schema_version": 1, "scope_kind": "contact", "contact_id": str(scope.contact_id),
+        used = job["model_calls_used"] if job else 0
+        limit = job["model_call_limit"] if job else self._budget.max_model_calls
+        return {"schema_version": 2, "scope_kind": "contact", "contact_id": str(scope.contact_id),
                 "settings_generation": state["settings_generation"], "enabled": state["enabled"],
                 "quality_status": "synthetic" if self._synthetic else "unknown",
                 "status": state["status"], "eligible_count": len(entries), "covered_count": covered,
@@ -63,13 +79,14 @@ class LayeredMemoryService:
                 "work_id": str(job['task_id']) if job else None,
                 "work_revision": job['revision'] if job else 0,
                 "current_batch": job['batch_number'] if job else 0,
-                "model_calls_used": job['model_calls_used'] if job else 0,
-                "model_call_limit": job['model_call_limit'] if job else 0,
+                "model_calls_used": used,
+                "model_call_limit": limit,
                 "organization_generation": state["organization_generation"],
                 "updated_at": state["updated_at"].isoformat() if state["updated_at"] else None,
-                "error_code": state["error_code"], "scenarios": scenarios,
+                "error_code": state["error_code"], "scenarios": scenarios, "profile": state["profile"],
                 "purpose": "从本联系人已采纳且来历有效的记忆整理主题背景，供查看及后续受控回复使用。",
-                "budget": self._budget.to_payload()}
+                "budget": {**self._budget.to_payload(), "max_model_calls": limit,
+                    "model_calls_used": used, "model_calls_remaining": limit-used}}
 
     def command(self, scope, action, expected_generation, expected_work_revision=None):
         if action in {'pause','continue'}:
@@ -81,10 +98,19 @@ class LayeredMemoryService:
         else:
             self._store.command(scope, action, expected_generation, quality_available=self._synthetic)
         if self._synthetic and action in {'enable','refresh','pause','continue'}:
-            task_id, execute = self._store.enqueue(scope,self._budget,self._contract,action=action,revision=expected_work_revision)
+            task_id, execute = self._store.enqueue(scope,self._budget,self._contract,action=action,revision=expected_work_revision,profile_required=self._profile_proposer is not None)
             if execute:
                 self._dispatch(scope,task_id)
         return self.read(scope)
+
+    def organize(self, scope):
+        """统一变化通知入口；同范围L2及L3仍由正式Worker的一次有限批次执行。"""
+        if not self._synthetic:
+            return
+        task_id, execute = self._store.enqueue(scope,self._budget,self._contract,
+            profile_required=self._profile_proposer is not None)
+        if execute:
+            self._dispatch(scope,task_id)
 
     def _dispatch(self, scope, task_id):
         if self._task_host is not None:
@@ -101,6 +127,8 @@ class LayeredMemoryService:
         scope=ContactScope(claim.owner_id,claim.contact_id)
         work = self._store.prepare(scope,self._budget,self._contract,claim)
         if work is None:
+            if self._profile_proposer:
+                self._organize_profile(scope,claim)
             return 0
         try:
             raw = self._call(work, self._proposer, "propose", lambda deadline: self._proposer.propose(
@@ -118,6 +146,8 @@ class LayeredMemoryService:
                 self._store.fail(work, "faithfulness_rejected")
                 return 0
             self._store.publish(work, proposal, self._budget)
+            if self._profile_proposer:
+                self._organize_profile(scope,claim)
             return len(work.memories)
         except OrganizationBudgetExhausted:
             self._store.fail(work,"model_budget_exhausted")
@@ -137,15 +167,19 @@ class LayeredMemoryService:
     def worker_failed(self, claim):
         self._store.worker_failed(claim)
 
-    def _call(self, work, adapter, operation, call):
+    def _call(self, work, adapter, operation, call, *, guard=None):
+        """两层共用许可、期限与持久额度政策；反复guard仅复验，不重复扣费。"""
         require_adapter_timeout_contract(adapter, operation, synthetic=self._synthetic)
-        def charged_call(deadline):
+
+        def invoke(deadline):
             deadline.check()
-            self._store.charge(work)
+            self._store.reserve_model_call(work)
+            # 预留提交后中断或发送状态不明也计入，不能在恢复时退款重发。
             deadline.check()
             return call(deadline)
-        return bounded_organization_call(charged_call, priority=self._priority,
-            guard=lambda: self._store.check(work), timeout_seconds=self._call_timeout_seconds)
+
+        return bounded_organization_call(invoke, priority=self._priority,
+            guard=guard or (lambda: self._store.check(work)), timeout_seconds=self._call_timeout_seconds)
 
     def capture(self, scope):
         return self._store.capture(scope) if self._synthetic else None
@@ -161,3 +195,40 @@ class LayeredMemoryService:
     def validate_in_transaction(self, connection, snapshot):
         """最终 writer 已持有相同范围锁时使用，不开启第二条连接。"""
         return self._synthetic and self._store.validate_in_transaction(connection, snapshot)
+
+    def withdraw_profile(self, scope, settings_generation, organization_generation, profile_version_id):
+        self._store.withdraw_profile(scope,settings_generation,organization_generation,profile_version_id)
+        return self.read(scope)
+
+    def _organize_profile(self, scope, claim):
+        work = self._store.prepare_profile(scope,self._budget,"profile-v1:synthetic-only:deadline-v1",
+            lease_seconds=self._call_timeout_seconds * 2 + 5,claim=claim)
+        if work is None:
+            return
+        try:
+            raw = self._call(work,self._profile_proposer,"propose",lambda deadline: self._profile_proposer.propose(
+                scenarios=deepcopy(work.scenarios),memories=deepcopy(work.memories),budget=self._budget,deadline=deadline),
+                guard=lambda: self._store.check_profile(work))
+            proposal = validate_profile(raw,work.memories,self._budget)
+            self._store.record_profile_proposal(work,raw)
+            payload = {"scenarios": list(work.scenarios),"memories": [item.to_payload() for item in work.memories],"proposal": raw}
+            if len(json.dumps(payload,ensure_ascii=False)) > self._budget.max_characters:
+                self._store.fail_profile(work,"profile_verification_input_budget_exceeded")
+                return
+            supported = self._call(work,self._profile_verifier,"verify",lambda deadline: self._profile_verifier.verify(
+                scenarios=deepcopy(work.scenarios),memories=deepcopy(work.memories),proposal=deepcopy(raw),deadline=deadline),
+                guard=lambda: self._store.check_profile(work))
+            if supported is not True:
+                self._store.fail_profile(work,"profile_faithfulness_rejected")
+                return
+            self._store.publish_profile(work,proposal)
+        except OrganizationBudgetExhausted:
+            self._store.fail_profile(work,"model_call_budget_exhausted")
+        except OrganizationCallTimeout:
+            self._store.fail_profile(work,"model_call_timeout")
+        except (LayeredMemoryConflict,ModelWorkStopped):
+            self._store.fail_profile(work,"input_changed")
+        except ValueError:
+            self._store.fail_profile(work,"profile_proposal_invalid")
+        except Exception:
+            self._store.fail_profile(work,"model_call_failed")

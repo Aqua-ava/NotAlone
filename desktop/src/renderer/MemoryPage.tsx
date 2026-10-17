@@ -89,8 +89,7 @@ function useMemoryReading(session: ContactSessionView) {
       }
     }
   }
-  async function manageLayeredMemory(action: LayeredMemoryManagementRequest['action'], settingsGeneration: number,
-    options?: Pick<LayeredMemoryManagementRequest, 'purposeConfirmed' | 'workRevision'>) {
+  async function manageLayeredMemory(action: LayeredMemoryManagementRequest['action'], settingsGeneration: number, options?: Pick<LayeredMemoryManagementRequest, 'purposeConfirmed' | 'workRevision' | 'organizationGeneration' | 'profileVersionId'>) {
     const { selectedContactId, scopeRevision } = scope.current;
     if (!selectedContactId) return;
     setError('');

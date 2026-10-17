@@ -133,9 +133,13 @@ export class MemoryReadingController {
     const workAction = request.action === 'pause' || request.action === 'continue';
     if (!scope || request.contactId !== scope.contactId || request.scopeRevision !== scope.scopeRevision || this.mutation
       || this.sourceDeletionDepth || this.state.layeredMemory.phase !== 'ready' || !value || value.settingsGeneration !== request.settingsGeneration
-      || !['enable', 'refresh', 'disable', 'delete', 'pause', 'continue'].includes(request.action)
+      || !['enable', 'refresh', 'disable', 'delete', 'withdraw-profile', 'pause', 'continue'].includes(request.action)
       || (workAction && (!value.workId || request.workRevision !== value.workRevision || value.workRevision < 1))
-      || (request.action === 'enable' && request.purposeConfirmed !== true)) {
+      || (!workAction && request.workRevision !== undefined)
+      || (request.action === 'enable' && request.purposeConfirmed !== true)
+      || (request.action === 'withdraw-profile' && (!value.profile || request.organizationGeneration !== value.organizationGeneration
+        || request.profileVersionId !== value.profile.versionId))
+      || (request.action !== 'withdraw-profile' && (request.organizationGeneration !== undefined || request.profileVersionId !== undefined))) {
       throw new Error('主题资料范围或设置已变化，请重新读取后操作。');
     }
     this.clearLayered();
@@ -146,13 +150,14 @@ export class MemoryReadingController {
     const current = () => { this.synchronizeScope(); return this.scope === scope && this.mutation === operation && this.sourceDeletionRevision === sourceDeletionRevision; };
     try {
       const result = await this.backend.requestJson({ method: 'POST', path: `/api/contacts/${scope.contactId}/layered-memory/${request.action}`,
-        body: { settings_generation: request.settingsGeneration, ...(request.action === 'enable' ? { purpose_confirmed: true } : {}),
-          ...(workAction ? { work_revision: request.workRevision } : {}) },
+        body: { ...(workAction ? { work_revision: request.workRevision } : {}), settings_generation: request.settingsGeneration, ...(request.action === 'enable' ? { purpose_confirmed: true } : {}),
+          ...(request.action === 'withdraw-profile' ? { organization_generation: request.organizationGeneration, profile_version_id: request.profileVersionId } : {}) },
         signal: operation.abort.signal });
       if (!current() || result.generation !== scope.generation) return;
       const value = layeredMemory(result.data, scope.contactId);
       this.publish({ layeredMemory: { phase: 'ready', value }, mutation: { phase: 'success', message: request.action === 'delete'
-        ? '主题资料整理结果已删除，本范围已关闭。底层记忆可另行管理。' : '主题资料操作已完成并核对。' } });
+        ? '主题资料整理结果已删除，本范围已关闭。底层记忆可另行管理。' : request.action === 'withdraw-profile'
+          ? '本版长期背景已撤回，未自动恢复旧版。底层记忆可另行管理。' : '主题资料操作已完成并核对。' } });
     } catch (error) {
       if (!current()) return;
       await this.readLayered(scope);

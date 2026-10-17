@@ -20,6 +20,7 @@ from notalone.persistence.layered_coverage import current_job, cancel_jobs, enqu
 from notalone.persistence.memory_overview import PostgresRelationshipOverviewStore
 from notalone.scopes import ContactScope
 from notalone.tasks.models import ClaimedBackgroundTaskStep
+from notalone.persistence.layered_profile import LayeredProfileStore, ProfileWork
 
 
 def _digest(value):
@@ -37,7 +38,7 @@ class OrganizationWork:
     claim: ClaimedBackgroundTaskStep
 
 
-class PostgresLayeredMemoryStore:
+class PostgresLayeredMemoryStore(LayeredProfileStore):
     def __init__(self, database_url: str, *, clock=None):
         self._database_url = database_url
         self._clock = clock or (lambda: datetime.now(timezone.utc))
@@ -113,10 +114,13 @@ class PostgresLayeredMemoryStore:
 
     def read(self, scope):
         with self.transaction(scope) as (connection, state, overview):
-            rows = []
-            rows = self.generation_rows(connection,scope,state['organization_generation'])
-            jobs=current_job(connection,scope)
-            job=next((row for row in jobs if row['settings_generation']==state['settings_generation']),None)
+            manifest, rows = self.generation_rows(connection,scope,state['organization_generation'])
+            profile = None
+            if manifest and manifest['profile_version_id'] and state['status'] in {'ready','paused','disabled'}:
+                profile = self.profile_document(self.profile_row(connection,scope,manifest['profile_version_id']))
+            state['profile'] = profile
+            jobs = current_job(connection,scope)
+            job = next((row for row in jobs if row['settings_generation']==state['settings_generation']),None)
             return state, self.eligible(overview), [self._document(row) for row in rows], job
 
     @staticmethod
@@ -141,6 +145,8 @@ class PostgresLayeredMemoryStore:
                 connection.execute("DELETE FROM public.layered_memory_generation WHERE owner_id=%s AND contact_id=%s",
                                    (scope.owner_id,scope.contact_id))
             enabled = action == "enable"
+            connection.execute("DELETE FROM public.layered_profile_batch WHERE owner_id=%s AND contact_id=%s "
+                "AND (%s OR status='running')", (scope.owner_id,scope.contact_id,action=='delete'))
             if action == "delete":
                 connection.execute("DELETE FROM public.layered_memory_batch WHERE owner_id=%s AND contact_id=%s",
                                    (scope.owner_id, scope.contact_id))
@@ -157,7 +163,7 @@ class PostgresLayeredMemoryStore:
                     else "blocked" if enabled else "disabled", action, action == "delete", action == "delete",
                     action == "delete", scope.owner_id, scope.contact_id))
 
-    def enqueue(self, scope, budget, contract, *, action='refresh', revision=None):
+    def enqueue(self, scope, budget, contract, *, action='refresh', revision=None, profile_required=False):
         with self.transaction(scope) as (connection,state,overview):
             if not state['enabled']:
                 raise LayeredMemoryConflict('本联系人尚未开启整理。')
@@ -165,7 +171,19 @@ class PostgresLayeredMemoryStore:
             manifest=self._manifest(connection,scope,entries)
             dependencies={entry.memory.memory_id for entry in entries}
             dependencies.update(identifier for entry in entries for identifier in entry.dependency_ids)
-            return enqueue_coverage(connection,scope,state,manifest,dependencies,contract,budget,action=action,revision=revision)
+            task_id, execute = enqueue_coverage(connection,scope,state,manifest,dependencies,contract,budget,
+                action=action,revision=revision,profile_required=profile_required)
+            generation, rows = self.generation_rows(connection,scope,state['organization_generation'])
+            job = connection.execute("SELECT pending_receipt FROM public.layered_memory_job WHERE task_id=%s",(task_id,)).fetchone()
+            if execute and generation and generation['profile_version_id']:
+                profile_task = connection.execute("SELECT b.task_id FROM public.layered_profile_version v "
+                    "JOIN public.layered_profile_batch b ON b.id=v.batch_id WHERE v.id=%s",
+                    (generation['profile_version_id'],)).fetchone()
+                # 新目标、重开或下一批开始即撤下受影响画像；仅补成功回执时保持原集合。
+                if not job['pending_receipt'] or not profile_task or profile_task['task_id']!=task_id:
+                    self.publish_generation_in_transaction(connection,scope,
+                        expected_generation=state['organization_generation'],scenario_version_ids=[row['id'] for row in rows])
+            return task_id, execute
 
     def pending_scopes(self, owner_id):
         with psycopg.connect(self._database_url) as connection:
@@ -175,16 +193,21 @@ class PostgresLayeredMemoryStore:
                 (owner_id,)).fetchall()
             return tuple(ContactScope(owner_id,row[0]) for row in rows)
 
-    def pending(self, scope):
+    def pending(self, scope, contract=None):
         with self.transaction(scope) as (connection,state,_):
             if not state['enabled']:
+                return None
+            if contract is not None and not connection.execute(
+                    "SELECT 1 FROM public.layered_memory_job WHERE owner_id=%s AND contact_id=%s "
+                    "AND settings_generation=%s AND state='active' AND contract=%s",
+                    (scope.owner_id,scope.contact_id,state['settings_generation'],contract)).fetchone():
                 return None
             # 到达最后一次租约尝试后，已经独立核验且发布的精确批次只补回执。
             connection.execute("UPDATE public.background_task_step step SET status='pending',attempt_count=0,worker_id=NULL,"
                 "lease_expires_at=NULL,lease_generation=lease_generation+1 FROM public.layered_memory_job j "
-                "JOIN public.layered_memory_batch b ON b.id=j.receipt_batch_id AND b.task_id=j.task_id "
+                "LEFT JOIN public.layered_memory_batch b ON b.id=j.receipt_batch_id AND b.task_id=j.task_id "
                 "WHERE step.task_id=j.task_id AND j.owner_id=%s AND j.contact_id=%s AND j.state='active' "
-                "AND j.pending_receipt AND b.status='succeeded' AND b.settings_generation=j.settings_generation "
+                "AND j.pending_receipt AND ((b.status='succeeded' AND b.settings_generation=j.settings_generation) OR (j.profile_required AND j.receipt_batch_id IS NULL)) "
                 "AND (step.status IN ('failed','retryable') OR step.status='running' AND step.lease_expires_at<=now())",
                 (scope.owner_id,scope.contact_id))
             connection.execute("UPDATE public.background_task t SET status='queued',last_error_code=NULL,finished_at=NULL "
@@ -202,8 +225,8 @@ class PostgresLayeredMemoryStore:
                 "AND j.owner_id=%s AND j.contact_id=%s AND j.state='failed' AND t.status='failed' AND s.enabled",
                 (scope.owner_id,scope.contact_id))
             row=connection.execute("SELECT task_id FROM public.layered_memory_job WHERE owner_id=%s AND contact_id=%s "
-                "AND settings_generation=%s AND state='active' LIMIT 1",
-                (scope.owner_id,scope.contact_id,state['settings_generation'])).fetchone()
+                "AND settings_generation=%s AND state='active' AND (%s::text IS NULL OR contract=%s) LIMIT 1",
+                (scope.owner_id,scope.contact_id,state['settings_generation'],contract,contract)).fetchone()
             return row['task_id'] if row else None
 
     def prepare(self, scope, budget, contract, claim):
@@ -218,7 +241,7 @@ class PostgresLayeredMemoryStore:
             if any(current.get(item['memory_id'])!=item for item in job['target_manifest']):
                 raise LayeredMemoryConflict('覆盖目标的实际资料已变化。')
             if job['pending_receipt']:
-                if job['target_manifest'] and not connection.execute("SELECT 1 FROM public.layered_memory_batch WHERE id=%s "
+                if job['target_manifest'] and not (job['profile_required'] and job['receipt_batch_id'] is None) and not connection.execute("SELECT 1 FROM public.layered_memory_batch WHERE id=%s "
                     "AND task_id=%s AND settings_generation=%s AND status='succeeded'",
                     (job['receipt_batch_id'],claim.task_id,job['settings_generation'])).fetchone():
                     raise LayeredMemoryConflict('缺少实际已发布的批次回执。')
@@ -261,35 +284,54 @@ class PostgresLayeredMemoryStore:
                                (scope.owner_id,scope.contact_id))
             return OrganizationWork(id,scope,state['settings_generation'],memories,manifest,claim)
 
-    @staticmethod
-    def generation_rows(connection,scope,generation):
-        return connection.execute("SELECT v.* FROM public.scenario_document_version v JOIN public.layered_memory_generation g "
-            "ON v.id=ANY(g.scenario_version_ids) AND v.owner_id=g.owner_id AND v.contact_id=g.contact_id "
-            "WHERE g.owner_id=%s AND g.contact_id=%s AND g.organization_generation=%s ORDER BY v.scenario_id",
-            (scope.owner_id,scope.contact_id,generation)).fetchall()
+    def generation_rows(self, connection, scope, generation):
+        manifest = connection.execute("SELECT * FROM public.layered_memory_generation WHERE owner_id=%s "
+            "AND contact_id=%s AND organization_generation=%s", (scope.owner_id,scope.contact_id,generation)).fetchone()
+        if not manifest:
+            return None, []
+        rows = connection.execute("SELECT version.*,batch.input_manifest,batch.dependency_ids FROM "
+            "public.scenario_document_version version JOIN public.layered_memory_batch batch ON batch.id=version.batch_id "
+            "WHERE version.owner_id=%s AND version.contact_id=%s AND version.id=ANY(%s) ORDER BY version.scenario_id",
+            (scope.owner_id,scope.contact_id,manifest["scenario_version_ids"])).fetchall()
+        return manifest, rows
 
     def publish_generation_in_transaction(self, connection, scope, *, expected_generation, scenario_version_ids, profile_version_id=None):
-        ids=list(scenario_version_ids)
-        if len(ids)!=len(set(ids)) or profile_version_id is not None:
-            raise LayeredMemoryConflict('整理集合包含重复版本或尚未支持的画像。')
-        overview=self._overview.read_contact_in_transaction(connection,scope)
-        current={item['memory_id']:item for item in self._manifest(connection,scope,self.eligible(overview))}
-        rows=connection.execute("SELECT v.id,v.scenario_id,b.input_manifest,b.dependency_ids FROM public.scenario_document_version v "
-            "JOIN public.layered_memory_batch b ON b.id=v.batch_id WHERE v.owner_id=%s AND v.contact_id=%s AND v.id=ANY(%s::uuid[])",
+        """caller已持范围锁；从真实版本推导完整依赖并原子推进唯一集合。"""
+        state = connection.execute("SELECT * FROM public.layered_memory_state WHERE owner_id=%s AND contact_id=%s",
+            (scope.owner_id,scope.contact_id)).fetchone()
+        if not state or state["organization_generation"] != expected_generation:
+            raise LayeredMemoryConflict("一致集合世代已变化。")
+        ids = list(scenario_version_ids)
+        rows = connection.execute("SELECT v.*,b.input_manifest,b.dependency_ids FROM public.scenario_document_version v "
+            "JOIN public.layered_memory_batch b ON b.id=v.batch_id WHERE v.owner_id=%s AND v.contact_id=%s AND v.id=ANY(%s)",
             (scope.owner_id,scope.contact_id,ids)).fetchall()
-        if (len(rows)!=len(ids) or len({row['scenario_id'] for row in rows})!=len(rows)
-                or any(current.get(item['memory_id'])!=item for row in rows for item in row['input_manifest'])):
-            raise LayeredMemoryConflict('整理集合包含失效或跨范围版本。')
-        dependencies=sorted({id for row in rows for id in row['dependency_ids']})
-        generation=connection.execute("UPDATE public.layered_memory_state SET organization_generation=organization_generation+1 "
-            "WHERE owner_id=%s AND contact_id=%s AND enabled AND organization_generation=%s RETURNING organization_generation",
-            (scope.owner_id,scope.contact_id,expected_generation)).fetchone()
-        if generation is None:
-            raise LayeredMemoryConflict('整理版本集合已变化。')
-        generation=generation['organization_generation']
-        connection.execute("INSERT INTO public.layered_memory_generation(owner_id,contact_id,organization_generation,schema_version,"
-            "scenario_version_ids,profile_version_id,dependency_ids) VALUES(%s,%s,%s,2,%s,%s,%s)",
-            (scope.owner_id,scope.contact_id,generation,ids,profile_version_id,dependencies))
+        if (not ids or len(set(ids)) != len(ids) or len(rows) != len(ids)
+                or len({r["scenario_id"] for r in rows}) != len(rows)):
+            raise LayeredMemoryConflict("一致集合的主题版本无效。")
+        overview = self._overview.read_contact_in_transaction(connection, scope)
+        current = {item["memory_id"]: item for item in self._manifest(connection,scope,self.eligible(overview))}
+        if any(current.get(item["memory_id"]) != item for row in rows for item in row["input_manifest"]):
+            raise LayeredMemoryConflict("一致集合的底层版本失效。")
+        dependencies = {identifier for row in rows for identifier in row["dependency_ids"]}
+        if profile_version_id is not None:
+            profile = self.profile_row(connection, scope, profile_version_id)
+            if (not profile or profile["withdrawn"] or set(profile["scenario_version_ids"]) != set(ids)
+                    or any(current.get(item["memory_id"]) != item for item in profile["input_manifest"])):
+                raise LayeredMemoryConflict("长期背景不属于当前完整主题集合。")
+            dependencies.update(profile["dependency_ids"])
+        generation = state["organization_generation"] + 1
+        if profile_version_id is None:
+            # L2集合推进后，旧集合上的未完成画像不得阻塞新工作或保留可迟到输出。
+            connection.execute("DELETE FROM public.layered_profile_batch WHERE owner_id=%s AND contact_id=%s AND status='running'",
+                (scope.owner_id,scope.contact_id))
+        connection.execute("INSERT INTO public.layered_memory_generation(owner_id,contact_id,organization_generation,"
+            "schema_version,scenario_version_ids,profile_version_id,dependency_ids,created_at) VALUES(%s,%s,%s,2,%s,%s,%s,%s)",
+            (scope.owner_id,scope.contact_id,generation,ids,profile_version_id,sorted(dependencies),self._clock()))
+        changed = connection.execute("UPDATE public.layered_memory_state SET organization_generation=%s "
+            "WHERE owner_id=%s AND contact_id=%s AND organization_generation=%s AND enabled=%s",
+            (generation,scope.owner_id,scope.contact_id,expected_generation,state["enabled"]))
+        if changed.rowcount != 1:
+            raise LayeredMemoryConflict("一致集合在发布前已变化。")
         return generation
 
     @staticmethod
@@ -300,17 +342,21 @@ class PostgresLayeredMemoryStore:
             memory.category.value,memory.valid_at.isoformat() if memory.valid_at else None,
             memory.invalid_at.isoformat() if memory.invalid_at else None)
 
-    def _check(self, connection, state, overview, work):
-        if work.claim is not None:
+    @staticmethod
+    def _assert_claim(connection, claim):
+        if claim is not None:
             from notalone.persistence.background_tasks import PostgresBackgroundTaskRepository
             try:
                 with connection.cursor(row_factory=tuple_row) as cursor:
-                    PostgresBackgroundTaskRepository._assert_valid_claim(cursor,work.claim)
+                    PostgresBackgroundTaskRepository._assert_valid_claim(cursor,claim)
             except Exception as error:
                 from notalone.persistence.background_tasks import BackgroundTaskPersistenceError
                 if isinstance(error,BackgroundTaskPersistenceError):
                     raise LayeredMemoryConflict('整理任务租约已变化。') from None
                 raise
+
+    def _check(self, connection, state, overview, work):
+        self._assert_claim(connection,work.claim)
         if not state["enabled"] or state["settings_generation"] != work.settings_generation:
             raise LayeredMemoryConflict("整理设置已变化。")
         batch = connection.execute("SELECT 1 FROM public.layered_memory_batch WHERE id=%s AND owner_id=%s "
@@ -324,11 +370,17 @@ class PostgresLayeredMemoryStore:
         with self.transaction(work.scope) as (connection, state, overview):
             self._check(connection, state, overview, work)
 
-    def charge(self, work):
+    def reserve_model_call(self, work):
+        """同一租约下两层共享job累计额度；批次重建与guard复验不产生免费额度。"""
         with self.transaction(work.scope) as (connection,state,overview):
-            self._check(connection,state,overview,work)
-            row=connection.execute("UPDATE public.layered_memory_job SET model_calls_used=model_calls_used+1 "
-                "WHERE task_id=%s AND model_calls_used<model_call_limit RETURNING model_calls_used",(work.claim.task_id,)).fetchone()
+            if isinstance(work, ProfileWork):
+                self._check_profile(connection,state,overview,work)
+            else:
+                self._check(connection,state,overview,work)
+            row = connection.execute("UPDATE public.layered_memory_job SET model_calls_used=model_calls_used+1 "
+                "WHERE task_id=%s AND owner_id=%s AND contact_id=%s AND state='active' "
+                "AND model_calls_used<model_call_limit RETURNING task_id",
+                (work.claim.task_id,work.scope.owner_id,work.scope.contact_id)).fetchone()
             if row is None:
                 raise OrganizationBudgetExhausted()
 
@@ -343,7 +395,7 @@ class PostgresLayeredMemoryStore:
             # 最终 writer 在同一锁和同一连接上复验全部输入；不另开概览连接。
             self._check(connection, state, overview, work)
             generation, now = state['organization_generation']+1,self._clock()
-            old=self.generation_rows(connection,work.scope,state['organization_generation'])
+            _,old=self.generation_rows(connection,work.scope,state['organization_generation'])
             versions={row['scenario_id']:row['id'] for row in old}
             by_id={row['scenario_id']:row for row in old}
             for scenario in proposal['scenarios']:
@@ -375,7 +427,7 @@ class PostgresLayeredMemoryStore:
                 "jsonb_array_elements(b.input_manifest) item WHERE b.id IN (SELECT batch_id FROM public.scenario_document_version "
                 "WHERE owner_id=%s AND contact_id=%s AND id=ANY(%s::uuid[]))",
                 (work.scope.owner_id,work.scope.contact_id,list(versions.values()))).fetchone()['count']
-            connection.execute("UPDATE public.layered_memory_job SET pending_receipt=true,batch_number=batch_number+1,receipt_batch_id=%s,receipt_lease_generation=%s WHERE task_id=%s",(work.id,work.claim.lease_generation,work.claim.task_id,))
+            connection.execute("UPDATE public.layered_memory_job SET pending_receipt=true,profile_status=CASE WHEN profile_required THEN 'pending' ELSE 'not_required' END,batch_number=batch_number+1,receipt_batch_id=%s,receipt_lease_generation=%s WHERE task_id=%s",(work.id,work.claim.lease_generation,work.claim.task_id,))
             connection.execute("UPDATE public.layered_memory_state SET status='ready',covered_count=%s,updated_at=%s,error_code=NULL "
                 "WHERE owner_id=%s AND contact_id=%s",(covered,now,work.scope.owner_id,work.scope.contact_id))
 
@@ -387,8 +439,8 @@ class PostgresLayeredMemoryStore:
                 return
             connection.execute("UPDATE public.layered_memory_batch SET status='failed',error_code=%s WHERE id=%s",
                                (code, work.id))
-            connection.execute("UPDATE public.layered_memory_state SET status='failed',error_code=%s "
-                "WHERE owner_id=%s AND contact_id=%s", (code,work.scope.owner_id,work.scope.contact_id))
+            connection.execute("UPDATE public.layered_memory_state SET status=%s,error_code=%s "
+                "WHERE owner_id=%s AND contact_id=%s", ('paused' if code=='model_budget_exhausted' else 'failed',code,work.scope.owner_id,work.scope.contact_id))
 
     def worker_failed(self, claim):
         scope=ContactScope(claim.owner_id,claim.contact_id)
@@ -408,17 +460,17 @@ class PostgresLayeredMemoryStore:
         with self.transaction(scope) as (connection, state, _):
             if not state["enabled"] or state["status"] not in {"ready","paused","failed","updating","stale"}:
                 return None
-            rows=self.generation_rows(connection,scope,state['organization_generation'])
-            if not rows:
+            manifest, rows = self.generation_rows(connection,scope,state["organization_generation"])
+            if not manifest or not rows:
                 return None
-            dependencies=connection.execute("SELECT DISTINCT unnest(b.dependency_ids) AS id FROM public.layered_memory_batch b "
-                "JOIN public.scenario_document_version v ON v.batch_id=b.id WHERE v.id=ANY(%s::uuid[]) ORDER BY id",([row['id'] for row in rows],)).fetchall()
-            return LayeredMemorySnapshot(2,scope,state['settings_generation'],state['organization_generation'],
-                tuple(ScenarioDirectoryEntry(row['scenario_id'],row['id'],row['title'],row['hint'],len(row['paragraphs'])) for row in rows),
-                tuple(row['id'] for row in dependencies))
+            profile = self.profile_row(connection,scope,manifest["profile_version_id"]) if manifest["profile_version_id"] else None
+            return LayeredMemorySnapshot(2,scope,state["settings_generation"],state["organization_generation"],
+                tuple(ScenarioDirectoryEntry(row["scenario_id"],row["id"],row["title"],row["hint"],
+                      len(row["paragraphs"])) for row in rows), tuple(manifest["dependency_ids"]),
+                manifest["profile_version_id"], tuple(profile["entries"]) if profile else ())
 
     def validate_in_transaction(self, connection, snapshot):
-        """调用方须已持 contact→owner 锁；最终 writer 复用该连接，不再申请范围锁。"""
+        """最终writer复用已持范围锁的连接；拒绝旧schema，不给旧快照补签。"""
         if not isinstance(snapshot, LayeredMemorySnapshot) or snapshot.schema_version != 2:
             return False
         scope = snapshot.scope
@@ -429,16 +481,23 @@ class PostgresLayeredMemoryStore:
                 or state["settings_generation"] != snapshot.settings_generation
                 or state["organization_generation"] != snapshot.organization_generation):
             return False
-        rows = connection.execute("SELECT version.id,version.scenario_id,batch.input_manifest,batch.dependency_ids "
-            "FROM public.scenario_document_version version JOIN public.layered_memory_batch batch ON batch.id=version.batch_id "
-            "JOIN public.layered_memory_generation g ON version.id=ANY(g.scenario_version_ids) AND version.owner_id=g.owner_id AND version.contact_id=g.contact_id "
-            "WHERE g.owner_id=%s AND g.contact_id=%s AND g.organization_generation=%s",
-            (scope.owner_id,scope.contact_id,snapshot.organization_generation)).fetchall()
-        expected = {(item.scenario_id,item.version_id) for item in snapshot.scenarios}
-        actual = {(row["scenario_id"],row["id"]) for row in rows}
+        manifest, rows = self.generation_rows(connection,scope,snapshot.organization_generation)
+        if not manifest:
+            return False
+        expected = {(item.scenario_id,item.version_id,item.title,item.hint,item.paragraph_count) for item in snapshot.scenarios}
+        actual = {(row["scenario_id"],row["id"],row["title"],row["hint"],len(row["paragraphs"])) for row in rows}
         current = {item["memory_id"]: item for item in self._manifest(connection,scope,self.eligible(overview))}
+        profile = self.profile_row(connection,scope,manifest["profile_version_id"]) if manifest["profile_version_id"] else None
+        dependencies = {identifier for row in rows for identifier in row["dependency_ids"]}
+        if profile:
+            if (profile["withdrawn"] or set(profile["scenario_version_ids"]) != {r["id"] for r in rows}
+                    or any(current.get(item["memory_id"]) != item for item in profile["input_manifest"])):
+                return False
+            dependencies.update(profile["dependency_ids"])
         return (expected == actual and bool(actual)
-                and set(snapshot.dependency_ids) == {id for row in rows for id in row["dependency_ids"]}
+                and manifest["profile_version_id"] == snapshot.profile_version_id
+                and snapshot.profile_entries == (tuple(profile["entries"]) if profile else ())
+                and set(snapshot.dependency_ids) == set(manifest["dependency_ids"]) == dependencies
                 and all(current.get(item["memory_id"]) == item for row in rows for item in row["input_manifest"]))
 
     def validate(self, snapshot):

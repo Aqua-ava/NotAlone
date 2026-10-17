@@ -12,16 +12,15 @@ const compiledModule = { exports: {} };
 new Function('require', 'module', 'exports', compiled.outputFiles[0].text)(createRequire(import.meta.url), compiledModule, compiledModule.exports);
 const ports = compiledModule.exports;
 export const BackendRequestFailure = ports.BackendRequestFailure;
-export const ids = { work: '55555555-5555-4555-8555-555555555555', contact: '11111111-1111-4111-8111-111111111111', other: '99999999-9999-4999-8999-999999999999',
-  scenario: '22222222-2222-4222-8222-222222222222', version: '33333333-3333-4333-8333-333333333333', memory: '44444444-4444-4444-8444-444444444444' };
+export const ids = { work: '66666666-6666-4666-8666-666666666666', contact: '11111111-1111-4111-8111-111111111111', other: '99999999-9999-4999-8999-999999999999',
+  scenario: '22222222-2222-4222-8222-222222222222', version: '33333333-3333-4333-8333-333333333333', memory: '44444444-4444-4444-8444-444444444444', profile: '55555555-5555-4555-8555-555555555555' };
 export function payload(overrides = {}) {
-  return { layered_memory: { schema_version: 1, scope_kind: 'contact', contact_id: ids.contact,
+  return { layered_memory: { schema_version: 2, scope_kind: 'contact', contact_id: ids.contact,
     settings_generation: 0, enabled: false, quality_status: 'unknown', status: 'disabled',
     eligible_count: 3, covered_count: 0, remaining_count: 3, organization_generation: 0,
-    work_id: null, work_revision: 0, current_batch: 0,
-    model_calls_used: 0, model_call_limit: 0,
+    work_id: null, work_revision: 0, current_batch: 0, model_calls_used: 0, model_call_limit: 0,
     updated_at: null, error_code: null, purpose: '从本联系人合法已采纳记忆整理主题背景，供核对及后续回复使用。',
-    budget: { max_memories: 0, max_scenarios: 0, max_paragraphs: 0, max_characters: 0, max_model_calls: 0 }, scenarios: [], ...overrides } };
+    budget: { max_memories: 0, max_scenarios: 0, max_paragraphs: 0, max_characters: 0, max_model_calls: 0, model_calls_used: 0, model_calls_remaining: 0 }, scenarios: [], profile: null, ...overrides } };
 }
 export async function fixture(requestJson) {
   let generation = 1;
@@ -47,11 +46,20 @@ export function readyPayload(overrides = {}) {
   return payload({ enabled: true, settings_generation: 1, quality_status: 'synthetic', status: 'ready',
     covered_count: 2, remaining_count: 1, organization_generation: 1, work_id: ids.work, work_revision: 1, current_batch: 1,
     model_calls_used: 2, model_call_limit: 2, updated_at: '2026-10-17T10:00:00+08:00',
-    budget: { max_memories: 2, max_scenarios: 2, max_paragraphs: 3, max_characters: 500, max_model_calls: 2 },
+    budget: { max_memories: 2, max_scenarios: 2, max_paragraphs: 3, max_characters: 500, max_model_calls: 2, model_calls_used: 2, model_calls_remaining: 0 },
     scenarios: [{ scenario_id: ids.scenario, version_id: ids.version, title: '合成读书计划', hint: '讨论中的长期读书安排', system_generated: true,
       updated_at: '2026-10-17T10:00:00+08:00', paragraphs: [{ text: '曾计划参加合成读书会，当前是否成行尚未核实。', references: [{
         memory_id: ids.memory, revision: 1, provenance_kind: 'manual_entry', timing: { recorded_at: '2026-10-16T10:00:00+08:00',
           source_started_at: null, source_ended_at: null, source_time_complete: false,
           current_status: 'current_unverified', current_status_reason: '旧安排没有新的来源核实。' },
       }] }] }], ...overrides });
+}
+
+export function profilePayload(overrides = {}) {
+  const base = readyPayload();
+  return readyPayload({ model_calls_used: 4, model_call_limit: 4, budget: { ...base.layered_memory.budget, max_model_calls: 4, max_profile_entries: 4, model_calls_used: 4, model_calls_remaining: 0 },
+    profile: { version_id: ids.profile, system_generated: true, updated_at: '2026-10-17T10:00:00+08:00', entries: [{
+      text: '曾有共同读书安排，是否持续尚未核实。', temporal_status: 'uncertain', uncertainty: '没有新的来源核实持续状态。',
+      references: base.layered_memory.scenarios[0].paragraphs[0].references,
+    }] }, ...overrides });
 }

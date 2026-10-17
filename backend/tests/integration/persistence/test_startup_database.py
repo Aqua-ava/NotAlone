@@ -69,7 +69,7 @@ class StartupDatabaseTest(unittest.TestCase):
             connection.execute("INSERT INTO public.contact(owner_id,id,display_name) VALUES(%s,%s,'合成保留联系人')", (owner, contact))
         report = self._run()
         self.assertEqual(report["code"], "ready")
-        self.assertEqual(len(report["applied"]), 13)
+        self.assertEqual(len(report["applied"]), 16)
         with psycopg.connect(self.url) as connection:
             self.assertEqual(connection.execute("SELECT oid FROM pg_database WHERE datname=current_database()").fetchone()[0], identity)
             self.assertEqual(connection.execute("SELECT display_name FROM public.contact WHERE owner_id=%s AND id=%s", (owner, contact)).fetchone()[0], "合成保留联系人")
@@ -83,7 +83,7 @@ class StartupDatabaseTest(unittest.TestCase):
     def test_fresh_database_initializes_current_schema(self) -> None:
         report = self._run()
         self.assertEqual(report["code"], "ready")
-        self.assertEqual(len(report["applied"]), 73)
+        self.assertEqual(len(report["applied"]), 75)
         self.assertEqual(self._run(), {"code": "ready", "applied": []})
 
     def test_other_connections_block_schema_change_without_creating_missing_table(self) -> None:

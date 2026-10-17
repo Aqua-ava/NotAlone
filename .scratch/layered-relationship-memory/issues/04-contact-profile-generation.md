@@ -1,7 +1,7 @@
 # 04：可追溯长期背景与一致版本集合
 
 Triage: ready-for-agent
-State: claimed
+State: resolved
 Type: task
 Blocked by: 01
 
@@ -47,3 +47,15 @@ Blocked by: 01
 ## Comments
 
 - 2026-10-17：用户认可11项粒度与依赖后逐张发布；本票为 open，尚未领取、实现或验收。
+
+
+## Answer（工程实现与双轴审查完成，待集成签收）
+
+- 已从合法当前L2集合与底层实际版本生成有界L3，逐项保留时间、不确定性与直接依据；完整实际读取依赖递归继承。schema2 manifest冻结完整L2版本与可空L3，单一publisher在同连接复验后原子切换；支持撤回，失效旧版不复活。
+- 已归并02正式Worker和持久job：074为覆盖迁移，075为画像。L2与L3共用累计调用额度，失败、重启及刷新不续额；用户明确continue且revision匹配才增加额度，重复请求幂等。L2提交后的精确回执保留，恢复只补L3，失败或耗尽不会被回执误写ready。
+- 统一维护入口LayeredMemoryService.organize只enqueue并dispatch；正式Worker调用run_batch顺序完成两层。03尚未集成；按本票约定由后落地者实际接通变化通知，不另建画像流水线，也不能把接线延期到最终组合票。当前底层删除／更正事务已覆盖完整L3依赖闭包。
+- 固定产品候选15d4b512完成Standards与Spec独立审查：Standards硬违规0，另有1条不阻断的P3依据展示重复建议；Spec确定问题0，原P2超额调用漏洞关闭。重复展示目前保留，后续维护该展示时可提取共用组件，不影响本票数据或预算合同。
+- 公开HTTP与迁移组合95例中94通过，模拟租约例出现极短真实期限导致的计数不稳；没有宣称整套重跑。250ms预算预留后延迟探针复现0.2s期限提前耗尽、Adapter未进入。仅修正测试前置余量并精确注入Adapter超时，保留计数、预算、租约及恢复断言，产品期限与独立实际deadline用例不变。最终profile模块19/19通过56.237s，独立审查再跑19/19通过59.242s，另2项continue幂等回归通过4.036s；自有随机库均回收。
+- 归并后unit1880/1880通过51.689s；desktop typecheck及controller/React21/21通过；test:pages的多批覆盖、L3依据、撤回、继续、范围、停用、删除与来源清除通过，cleanupConfirmed=true。命令为指定Conda Python的unittest模块／unit discover、npm run typecheck、node --test tests/layered-memory/{controller,react}.test.mjs及npm run test:pages -- --case layered-memory --timeout-seconds 180；公开HTTP测试使用自有随机PostgreSQL与受控Adapter。
+- 真实Electron/CUA早期1次启动、1/1通过，覆盖用途预算、逐项依据、来源导航、停用重开、撤回与删除；自有进程、用户目录及数据库已清理。该证据早于预算修复和02归并，没有宣称最终SHA重跑App；无头页面不冒充原生验证。
+- 数据影响仅限隔离合成资料，没有业务库、私人聊天、真实模型调用、外部发送或远端Git操作。真实SDK、语义质量、最终回复效果、微信与最终签名包未验，生产资格保持unknown/closed。失败后的夹具清理死锁未独立证明为生产锁问题或声称已修复；期限测试修正后模块及独立复验均通过。
