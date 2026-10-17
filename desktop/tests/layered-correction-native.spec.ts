@@ -17,7 +17,14 @@ const test = appTest.extend<{ layeredBackend: RewriteFixture }>({
 });
 
 test('实际 App 的双范围两层事实及总结纠错 CUA 验收', async ({ runningApp, layeredBackend }) => {
-  test.setTimeout(28 * 60_000);
+  // 所有实际操作共用有限期限，给预约窗口内的退出清理留出余量。
+  test.setTimeout(24 * 60_000);
+  const cuaDeadline = Date.now() + 22 * 60_000;
+  const stageTimeout = () => {
+    const remaining = cuaDeadline - Date.now();
+    if (remaining <= 0) throw new Error('本次CUA整体期限已到。');
+    return Math.min(4 * 60_000, remaining);
+  };
   const directory = await cuaReceiptDirectory(project);
   const requestId = randomUUID();
   await runningApp.app.firstWindow();
@@ -34,7 +41,7 @@ test('实际 App 的双范围两层事实及总结纠错 CUA 验收', async ({ r
       pid: runningApp.appProcess.pid, user_data: runningApp.userData, project, native_app: true,
       external_model_calls: 0, preparation: 'public-http-synthetic', contact_ids: layeredBackend.data.contact_ids,
       required_checks: checks, step }), { mode: 0o600, flag: 'wx' });
-    await waitForCuaReceipt(stageDirectory, requestId, checks, 4 * 60_000);
+    await waitForCuaReceipt(stageDirectory, requestId, checks, stageTimeout());
     const observed = await checkNativeCorrection(layeredBackend, step);
     await writeFile(path.join(stageDirectory, 'public-proof.json'), JSON.stringify(observed), { mode: 0o600, flag: 'wx' });
     steps.push(step.name);
@@ -45,7 +52,7 @@ test('实际 App 的双范围两层事实及总结纠错 CUA 验收', async ({ r
     pid: runningApp.appProcess.pid, user_data: runningApp.userData, native_app: true, steps,
     contact_ids: layeredBackend.data.contact_ids, required_checks: checks,
     supplement: '本人通过原生入口补充独立合成背景。' }), { mode: 0o600, flag: 'wx' });
-  await waitForCuaReceipt(directory, requestId, checks, 4 * 60_000);
+  await waitForCuaReceipt(directory, requestId, checks, stageTimeout());
   const memories = await layeredBackend.request('/api/memories/owner');
   assert.equal(memories.status, 200);
   assert.ok((memories.data.memories as { text: string }[]).some(item => item.text === '本人通过原生入口补充独立合成背景。'));
