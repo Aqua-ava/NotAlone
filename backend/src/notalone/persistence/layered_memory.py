@@ -36,6 +36,8 @@ class OrganizationWork:
     memories: tuple[OrganizationInput, ...]
     manifest: list
     claim: ClaimedBackgroundTaskStep
+    scenarios: tuple[dict, ...] = ()
+    organization_generation: int = 0
 
 
 class PostgresLayeredMemoryStore(LayeredProfileStore):
@@ -86,6 +88,16 @@ class PostgresLayeredMemoryStore(LayeredProfileStore):
                     "WHERE owner_id=%s AND contact_id=%s", (scope.owner_id,scope.contact_id))
                 state = connection.execute("SELECT * FROM public.layered_memory_state WHERE owner_id=%s AND contact_id=%s",
                                            (scope.owner_id,scope.contact_id)).fetchone()
+            boundary = min((value for entry in overview.entries
+                for value in (entry.memory.valid_at, entry.memory.invalid_at)
+                if value is not None and value > self._clock()), default=None)
+            if boundary != state['next_boundary_at']:
+                expired = state['next_boundary_at'] is not None and state['next_boundary_at'] <= self._clock()
+                connection.execute("UPDATE public.layered_memory_state SET next_boundary_at=%s,"
+                    "dirty_revision=dirty_revision+%s,next_due_at=CASE WHEN %s THEN now() ELSE next_due_at END "
+                    "WHERE owner_id=%s AND contact_id=%s", (boundary, int(expired), expired, scope.owner_id, scope.contact_id))
+                state = connection.execute("SELECT * FROM public.layered_memory_state WHERE owner_id=%s AND contact_id=%s",
+                                           (scope.owner_id, scope.contact_id)).fetchone()
             yield connection, state, overview
 
     def eligible(self, overview):
@@ -115,16 +127,49 @@ class PostgresLayeredMemoryStore(LayeredProfileStore):
         return [{**item, "organization_timing_sha256": _digest(by_id[item["memory_id"]].memory.timing.to_payload())}
                 for item in manifest["memories"] if item["memory_id"] in by_id]
 
-    def read(self, scope):
+    def read(self, scope, *, mapping_cursor=None):
         with self.transaction(scope) as (connection, state, overview):
             manifest, rows = self.generation_rows(connection,scope,state['organization_generation'])
+            offset = 0
+            if mapping_cursor is not None:
+                import re
+                if not isinstance(mapping_cursor, str) or re.fullmatch(r'[0-9]{1,18}:[0-9]{1,10}', mapping_cursor) is None:
+                    raise ValueError('映射分页游标无效。')
+                generation, offset = map(int, mapping_cursor.split(':'))
+                if generation != state['organization_generation']:
+                    raise LayeredMemoryConflict('主题集合已变化，请重新读取首屏。')
+            mappings, more = self._mappings(connection, scope, rows, offset)
+            state['scenario_mappings'] = mappings
+            state['mapping_cursor'] = mapping_cursor
+            state['mapping_next_cursor'] = f"{state['organization_generation']}:{offset+100}" if more else None
+            jobs=current_job(connection,scope)
+            job=next((row for row in jobs if row['settings_generation']==state['settings_generation']),None)
             profile = None
             if manifest and manifest['profile_version_id'] and state['status'] in {'ready','paused','disabled'}:
                 profile = self.profile_document(self.profile_row(connection,scope,manifest['profile_version_id']))
             state['profile'] = profile
-            jobs = current_job(connection,scope)
-            job = next((row for row in jobs if row['settings_generation']==state['settings_generation']),None)
             return state, self.eligible(overview), [self._document(row) for row in rows], job
+
+    @staticmethod
+    def _mappings(connection, scope, current, offset):
+        # 传输边界按完整(source版本→当前target版本)分页；同一拆分的分支不会静默截掉。
+        rows = connection.execute("WITH RECURSIVE lineage AS ("
+            "SELECT source_scenario_id,source_version_id,target_version_id FROM public.scenario_document_mapping "
+            "WHERE owner_id=%s AND contact_id=%s UNION "
+            "SELECT l.source_scenario_id,l.source_version_id,m.target_version_id FROM lineage l "
+            "JOIN public.scenario_document_mapping m ON m.source_version_id=l.target_version_id "
+            "AND m.owner_id=%s AND m.contact_id=%s) "
+            "SELECT DISTINCT l.source_scenario_id,l.source_version_id,v.scenario_id,v.id AS target_version_id "
+            "FROM lineage l JOIN public.scenario_document_version v ON v.id=l.target_version_id "
+            "WHERE v.id=ANY(%s::uuid[]) ORDER BY l.source_version_id,v.id OFFSET %s LIMIT 101",
+            (scope.owner_id,scope.contact_id,scope.owner_id,scope.contact_id,[row['id'] for row in current],offset)).fetchall()
+        grouped = {}
+        for row in rows[:100]:
+            version = str(row['source_version_id'])
+            item = grouped.setdefault(version, {'source_scenario_id': str(row['source_scenario_id']),
+                'source_version_id': version, 'targets': []})
+            item['targets'].append({'scenario_id': str(row['scenario_id']), 'version_id': str(row['target_version_id'])})
+        return list(grouped.values()), len(rows) > 100
 
     @staticmethod
     def _document(row):
@@ -185,17 +230,66 @@ class PostgresLayeredMemoryStore(LayeredProfileStore):
             dependencies.update(identifier for entry in entries for identifier in entry.dependency_ids)
             task_id, execute = enqueue_coverage(connection,scope,state,manifest,dependencies,contract,budget,
                 action=action,revision=revision,profile_required=profile_required)
-            generation, rows = self.generation_rows(connection,scope,state['organization_generation'])
-            job = connection.execute("SELECT pending_receipt FROM public.layered_memory_job WHERE task_id=%s",(task_id,)).fetchone()
-            if execute and generation and generation['profile_version_id']:
-                profile_task = connection.execute("SELECT b.task_id FROM public.layered_profile_version v "
-                    "JOIN public.layered_profile_batch b ON b.id=v.batch_id WHERE v.id=%s",
-                    (generation['profile_version_id'],)).fetchone()
-                # 新目标、重开或下一批开始即撤下受影响画像；仅补成功回执时保持原集合。
-                if not job['pending_receipt'] or not profile_task or profile_task['task_id']!=task_id:
-                    self.publish_generation_in_transaction(connection,scope,
-                        expected_generation=state['organization_generation'],scenario_version_ids=[row['id'] for row in rows])
+            self._revoke_previous_profile(connection, scope, state, task_id, execute)
             return task_id, execute
+
+    def start_change_feed(self, owner_id, callback):
+        from notalone.persistence.layered_change_feed import LayeredChangeFeed
+        return LayeredChangeFeed(self._database_url, owner_id, callback)
+
+    def _revoke_previous_profile(self, connection, scope, state, task_id, execute):
+        generation, rows = self.generation_rows(connection,scope,state['organization_generation'])
+        job = connection.execute("SELECT pending_receipt FROM public.layered_memory_job WHERE task_id=%s",(task_id,)).fetchone()
+        if execute and generation and generation['profile_version_id']:
+            profile_task = connection.execute("SELECT b.task_id FROM public.layered_profile_version v "
+                "JOIN public.layered_profile_batch b ON b.id=v.batch_id WHERE v.id=%s",
+                (generation['profile_version_id'],)).fetchone()
+            # 新目标、重开或下一批开始即撤下受影响画像；仅补成功回执时保持原集合。
+            if not job['pending_receipt'] or not profile_task or profile_task['task_id']!=task_id:
+                self.publish_generation_in_transaction(connection,scope,
+                    expected_generation=state['organization_generation'],scenario_version_ids=[row['id'] for row in rows])
+
+    def maintenance_due(self, owner_id):
+        with psycopg.connect(self._database_url, row_factory=dict_row) as connection:
+            rows = connection.execute("SELECT contact_id,next_due_at,next_boundary_at,maintenance_allowed,"
+                "dirty_revision,consumed_revision FROM public.layered_memory_state "
+                "WHERE owner_id=%s AND enabled AND (next_boundary_at IS NOT NULL OR "
+                "maintenance_allowed AND dirty_revision>consumed_revision AND next_due_at IS NOT NULL)",
+                (owner_id,)).fetchall()
+        now, wall_now = self._clock(), datetime.now(timezone.utc)
+        due, delays = [], []
+        for row in rows:
+            deadlines = []
+            if row['next_boundary_at'] is not None:
+                deadlines.append((row['next_boundary_at']-now).total_seconds())
+            if row['maintenance_allowed'] and row['next_due_at'] is not None:
+                deadlines.append((row['next_due_at']-wall_now).total_seconds())
+            if min(deadlines, default=3600) <= 0:
+                due.append(ContactScope(owner_id, row['contact_id']))
+            else:
+                delays.extend(deadlines)
+        return tuple(due), max(0.01, min(delays, default=3600.0))
+
+    def enqueue_maintenance(self, scope, budget, contract, *, profile_required=False):
+        with self.transaction(scope) as (connection, state, overview):
+            if (not state['enabled'] or not state['maintenance_allowed']
+                    or state['dirty_revision'] <= state['consumed_revision']):
+                return None
+            if any(job['state'] == 'active' and job['settings_generation'] == state['settings_generation']
+                   for job in current_job(connection, scope)):
+                return None
+            entries = self.eligible(overview)
+            manifest = self._manifest(connection, scope, entries)
+            dependencies = {entry.memory.memory_id for entry in entries}
+            dependencies.update(identifier for entry in entries for identifier in entry.dependency_ids)
+            task_id, execute = enqueue_coverage(connection, scope, state, manifest, dependencies,
+                contract, budget, action='refresh', revision=None, profile_required=profile_required)
+            self._revoke_previous_profile(connection, scope, state, task_id, execute)
+            connection.execute("UPDATE public.layered_memory_job SET target_dirty_revision=%s WHERE task_id=%s",
+                               (state['dirty_revision'], task_id))
+            connection.execute("UPDATE public.layered_memory_state SET next_due_at=NULL WHERE owner_id=%s AND contact_id=%s",
+                               (scope.owner_id, scope.contact_id))
+            return task_id if execute else None
 
     def pending_scopes(self, owner_id):
         with psycopg.connect(self._database_url) as connection:
@@ -241,7 +335,7 @@ class PostgresLayeredMemoryStore(LayeredProfileStore):
                 (scope.owner_id,scope.contact_id,state['settings_generation'],contract,contract)).fetchone()
             return row['task_id'] if row else None
 
-    def prepare(self, scope, budget, contract, claim):
+    def prepare(self, scope, budget, contract, claim, *, with_scenarios=False):
         from notalone.persistence.background_tasks import PostgresBackgroundTaskRepository
         with self.transaction(scope) as (connection, state, overview):
             with connection.cursor(row_factory=tuple_row) as cursor:
@@ -281,20 +375,41 @@ class PostgresLayeredMemoryStore(LayeredProfileStore):
                 else:
                     connection.execute("UPDATE public.layered_memory_job SET pending_receipt=true WHERE task_id=%s",(claim.task_id,))
                 return None
+            contexts, inherited = [], []
+            if with_scenarios:
+                eligible = self.eligible(overview)
+                for previous in self.generation_rows(connection, scope, state['organization_generation'])[1][:budget.max_scenarios]:
+                    prior = connection.execute("SELECT input_manifest,dependency_ids FROM public.layered_memory_batch WHERE id=%s",
+                                               (previous['batch_id'],)).fetchone()
+                    prior_ids = {item['memory_id'] for item in prior['input_manifest']}
+                    combined_ids = {str(entry.memory.memory_id) for entry in selected} | prior_ids
+                    combined = [entry for entry in eligible if str(entry.memory.memory_id) in combined_ids]
+                    document = self._document(previous)
+                    payload = {'memories': [self._input(item).to_payload() for item in combined],
+                               'scenarios': contexts + [document]}
+                    if len(combined) > budget.max_memories or len(json.dumps(payload, ensure_ascii=False)) > budget.max_characters:
+                        continue
+                    selected = combined
+                    contexts.append(document)
+                    inherited.extend(prior['dependency_ids'])
             entries=tuple(selected)
             manifest=self._manifest(connection,scope,entries)
             memories=tuple(self._input(entry) for entry in entries)
             dependencies={entry.memory.memory_id for entry in entries}
             dependencies.update(identifier for entry in entries for identifier in entry.dependency_ids)
+            dependencies.update(inherited)
             id=uuid4()
             key=_digest({'job':str(claim.task_id),'inputs':manifest})
             connection.execute("INSERT INTO public.layered_memory_batch(id,owner_id,contact_id,settings_generation,work_key,status,"
                 "input_manifest,input_payload,dependency_ids,created_at,task_id) VALUES(%s,%s,%s,%s,%s,'running',%s,%s,%s,%s,%s)",
                 (id,scope.owner_id,scope.contact_id,state['settings_generation'],key,Jsonb(manifest),
                  Jsonb([item.to_payload() for item in memories]),sorted(dependencies),self._clock(),claim.task_id))
+            connection.execute("UPDATE public.layered_memory_batch SET scenario_input=%s,reused_version_ids=%s WHERE id=%s",
+                               (Jsonb(contexts), [UUID(item['version_id']) for item in contexts], id))
             connection.execute("UPDATE public.layered_memory_state SET status='updating',error_code=NULL WHERE owner_id=%s AND contact_id=%s",
                                (scope.owner_id,scope.contact_id))
-            return OrganizationWork(id,scope,state['settings_generation'],memories,manifest,claim)
+            return OrganizationWork(id,scope,state['settings_generation'],memories,manifest,claim,
+                                    tuple(contexts),state['organization_generation'])
 
     def generation_rows(self, connection, scope, generation):
         manifest = connection.execute("SELECT * FROM public.layered_memory_generation WHERE owner_id=%s "
@@ -369,6 +484,8 @@ class PostgresLayeredMemoryStore(LayeredProfileStore):
 
     def _check(self, connection, state, overview, work):
         self._assert_claim(connection,work.claim)
+        if work.scenarios and state['organization_generation'] != work.organization_generation:
+            raise LayeredMemoryConflict('实际读取的旧主题集合已变化。')
         if not state["enabled"] or state["settings_generation"] != work.settings_generation:
             raise LayeredMemoryConflict("整理设置已变化。")
         batch = connection.execute("SELECT 1 FROM public.layered_memory_batch WHERE id=%s AND owner_id=%s "
@@ -410,16 +527,32 @@ class PostgresLayeredMemoryStore(LayeredProfileStore):
             _,old=self.generation_rows(connection,work.scope,state['organization_generation'])
             versions={row['scenario_id']:row['id'] for row in old}
             by_id={row['scenario_id']:row for row in old}
+            replaced_ids = {version for scenario in proposal['scenarios'] for version in scenario.get('replaces', [])}
+            for previous in old:
+                if str(previous['id']) in replaced_ids:
+                    versions.pop(previous['scenario_id'], None)
+            proposed_ids = set()
             for scenario in proposal['scenarios']:
-                scenario_id=uuid5(work.scope.contact_id,str(work.scope.owner_id)+':'+scenario['topic_key'])
+                replaced = scenario.get('replaces', [])
+                scenario_id = UUID(scenario['scenario_id']) if scenario.get('scenario_id') else uuid5(
+                    work.scope.contact_id,str(work.scope.owner_id)+':'+scenario['topic_key'])
+                if scenario_id in proposed_ids:
+                    raise LayeredMemoryConflict('同批主题身份重复。')
+                proposed_ids.add(scenario_id)
+                if replaced and scenario_id in by_id and str(by_id[scenario_id]['id']) not in replaced:
+                    raise LayeredMemoryConflict('主题归组不能覆盖未列为替换目标的旧主题。')
+                if scenario_id not in by_id and connection.execute(
+                    'SELECT 1 FROM public.scenario_document_version WHERE owner_id=%s AND contact_id=%s AND scenario_id=%s',
+                    (work.scope.owner_id, work.scope.contact_id, scenario_id)).fetchone():
+                    raise LayeredMemoryConflict('不能将退休主题身份赋给另一主题。')
                 paragraphs=list(scenario['paragraphs'])
-                if scenario_id in by_id:
+                if scenario_id in by_id and not replaced:
                     combined=by_id[scenario_id]['paragraphs']+paragraphs
                     characters=len(scenario['title'])+len(scenario['hint'])+sum(len(item['text']) for item in combined)
                     if len(combined)>budget.max_paragraphs or characters>budget.max_characters:
                         # 每份主题保持有界；超限后以稳定续篇保留原主题及完整段落。
                         scenario_id=uuid5(scenario_id,'continuation:'+str(work.claim.task_id)+':'+str(work.id))
-                if scenario_id in by_id:
+                if scenario_id in by_id and not replaced:
                     previous=by_id[scenario_id]
                     # 不把旧正文再送模型；合法、已核验的完整段落按原样续接，保留两批完整删除依赖。
                     paragraphs=previous['paragraphs']+paragraphs
@@ -433,6 +566,11 @@ class PostgresLayeredMemoryStore(LayeredProfileStore):
                     "organization_generation,schema_version,title,hint,paragraphs,created_at) VALUES(%s,%s,%s,%s,%s,%s,1,%s,%s,%s,%s)",
                     (version,work.scope.owner_id,work.scope.contact_id,scenario_id,work.id,generation,scenario['title'],scenario['hint'],Jsonb(paragraphs),now))
                 versions[scenario_id]=version
+                for previous in old:
+                    if str(previous['id']) in replaced or previous['scenario_id'] == scenario_id:
+                        connection.execute("INSERT INTO public.scenario_document_mapping(owner_id,contact_id,source_scenario_id,"
+                            "source_version_id,target_scenario_id,target_version_id,batch_id) VALUES(%s,%s,%s,%s,%s,%s,%s)",
+                            (work.scope.owner_id,work.scope.contact_id,previous['scenario_id'],previous['id'],scenario_id,version,work.id))
             self.publish_generation_in_transaction(connection,work.scope,expected_generation=state['organization_generation'],scenario_version_ids=list(versions.values()))
             connection.execute("UPDATE public.layered_memory_batch SET status='succeeded' WHERE id=%s",(work.id,))
             covered=connection.execute("SELECT count(DISTINCT item->>'memory_id') AS count FROM public.layered_memory_batch b,"

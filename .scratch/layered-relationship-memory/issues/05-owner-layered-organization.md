@@ -1,7 +1,7 @@
 # 05：本人独立范围的主题资料与长期背景
 
 Triage: ready-for-agent
-State: open
+State: claimed
 Type: task
 Blocked by: 03, 04
 

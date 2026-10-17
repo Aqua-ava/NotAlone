@@ -59,8 +59,13 @@ export async function layeredMemory(browser: Browser, origin: string) {
       await expect(profile.getByText(/底层记忆：.*版本 1.*来源支持/).first()).toBeVisible();
       await profile.getByText('查看长期背景版本', { exact: true }).click();
       await expect(profile.getByText(/版本标识：/)).toBeVisible();
+      await fixture.command('add_memory');
+      await expect(panel.getByText('双方新近完成合成复习。', { exact: true }).first()).toBeVisible({ timeout: 15000 });
+      await expect(panel.getByText('合格资料 3 条 · 已覆盖 3 条 · 剩余 0 条', { exact: true }).first()).toBeVisible();
+      await expect(profile.getByText('双方新近完成合成复习。', { exact: true })).toBeVisible();
+      await expect(panel.getByText('双方共同参加合成学习课程。', { exact: true }).first()).toBeVisible();
       await panel.getByText('查看第 1 段依据与时间', { exact: true }).click();
-      await expect(panel.getByText(/底层记忆：.*版本 1.*来源支持/).first()).toBeVisible();
+      await expect(panel.locator('.memory-overview-entries').getByText(/底层记忆：.*版本 1.*来源支持/).first()).toBeVisible();
       await panel.getByRole('button', { name: '停用主题资料', exact: true }).click();
       await expect(panel.getByText('已停用', { exact: true })).toBeVisible();
       await expect(panel.getByText('双方共同参加合成学习课程。', { exact: true }).first()).toBeVisible();
@@ -80,6 +85,8 @@ export async function layeredMemory(browser: Browser, origin: string) {
       await panel.getByRole('checkbox').check();
       await panel.getByRole('button', { name: '确认范围并开启', exact: true }).click();
       await expect(panel.getByText('已暂停，剩余资料可继续整理', { exact: true })).toBeVisible();
+      await panel.getByRole('button', { name: '继续整理主题资料', exact: true }).click();
+      await expect(panel.getByText('已暂停，剩余资料可继续整理', { exact: true }).first()).toBeVisible();
       await panel.getByRole('button', { name: '继续整理主题资料', exact: true }).click();
       await expect(panel.getByText('双方共同参加合成学习课程。', { exact: true }).first()).toBeVisible();
       await fixture.command('delete_source');
