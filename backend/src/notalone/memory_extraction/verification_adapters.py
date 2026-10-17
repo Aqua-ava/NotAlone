@@ -29,7 +29,7 @@ from notalone.memory_extraction.verification import (
 from notalone.memory_trace import TraceWriteError
 from notalone.memory_trace.context import record_ledger_entry
 from notalone.memory_trace.transport import invoke_traced_model
-from notalone.reply.adapters.deepseek_provider import is_official_deepseek_flash
+from notalone.reply.adapters.deepseek_provider import deepseek_uses_thinking
 
 SOURCE_VERIFICATION_SYSTEM_PROMPT = """逐条比较记忆候选与同一联系人窗口中的原话，
 只判断候选是否忠实保留原话，不证明现实世界真假；这不是只判断某个子句在逻辑上是否成立。
@@ -42,12 +42,19 @@ SOURCE_VERIFICATION_SYSTEM_PROMPT = """逐条比较记忆候选与同一联系�
 否定归属必须保留被否定的那个人：先依据sender和相连问答固定原话的否定对象，再核对
 候选的对应人物。已说明归第三人所有，也不能把原来被否定的一方换成另一方；替换后的
 子句即使逻辑上也能成立，仍不是忠实保留原否定命题，应unsupported/subject或negation。
+反问式强调须按完整相连语境与字面否定区分；来源明确表达习惯或事实时，不能仅凭
+否定字或问式判unsupported/negation。明确否定仍须保留，真实询问不支持肯定事实；
+语境仍有两种有据读法时用uncertain，不为保留候选一概反转否定或消除歧义。
 先区分已完成历史动作、现在仍持续的状态和未来安排，再核两时间槽。没有明示资料
 期限的已完成普通动作沿common_fact／双null，已发生关系经历沿relationship_note／
 双null；“刚／已经完成”不证明当前状态仍持续，不接受其来源日作为历史动作有效期。
 当前瞬时状态的valid_at取其证据occurred_at观察点，invalid_at可按来源自身时区取
 当日结束的检索边界；它不声称真实状态恰在该点结束，不因为原话没给实际结束时刻
 就拒绝此既定观察边界。原话明确期间仍完整保留，不能任意提前截断或延长。
+原文明示反复日常行为而未限定资料期间时，无期限习惯沿preference或有据的common_fact
+核对双null；“现在”等陈述时点不使习惯变成临时状态，来源观察日不证明真实起始日。
+正文忠实但误用临时类别或观察有效期时，应uncertain并按实际标pragmatics或time，不能
+把字段错误误报为正文否定矛盾；单次行为也不能反推为长期习惯。
 来源支持与直接参与者判断是两项独立判断：某条主张的直接参与者是谁，不决定它是否被
 原话支持。report与reported只说明这是明确转述，本身不构成uncertain理由；当候选正文、
 subject、语用字段与来源证据都被原话支持时，verdict应为supported且issues=[]，不能仅因
@@ -57,10 +64,18 @@ report/reported、第三人转述或候选subject不是直接参与者就判unce
 第三人的事不能归给说话人，转述不能升级为本人事实。计划不能升级为已发生，
 已发生或当前状态也不能改成未来计划；省略回答应沿相连问题恢复物品、人物与事件阶段，
 原话没有打算就不能补打算。撤回或取消已经完成是一件已发生事实，不是计划取消。
+尚未开始而即将执行的即时意向仍是plan；接近说话时刻不等于已经发生或正在进行。
+正文保留意向但speech_act误标assertion时应uncertain/pragmatics；来源明确已在进行
+或已经完成时仍沿当前状态或历史动作核对，不把这些正例一概降为未来安排。
 self表示用户或原文明确保留第三方称呼的用户亲友资料，contact表示联系人或其亲友资料；
 sender只是说话人，不必等于subject。第一人称我/我的回指该消息sender，
 回应中的你/你的回指另一方。亲友的事件在正文中必须保留亲友称呼，纯第三方事件保留
 转述标签；本人参与的已发生接收经历可为assertion/asserted，不因有第三人就一概reported。
+候选保存对话一方直接提出的请求时，subject归请求者，不归受话者、被要求的执行者或
+受益者；联系人提出要求归contact，用户提出要求归self。原样引用只证明文字对齐，
+不能代替请求资料归属核验；明确把请求错归另一方应unsupported/subject，归属未明时
+用uncertain/subject。转述第三方请求仍核原关系资料范围与转述标签；描述另一方事实
+或共同约定仍按其主张归属，不能把所有subject都设成sender。
 否定陈述不证明发生过纠正。候选写“纠正／此前说法”或标correction时，须有本窗明确
 纠正行动或有据先前主张，不能凭“不是”补行动。无据行动正文应unsupported/meaning，
 正文忠实但纠正或第三人转述标签错误应uncertain/pragmatics。
@@ -322,7 +337,7 @@ class LangChainSourceVerificationRuntime:
 
     @property
     def tool_choice_policy(self) -> str:
-        return "named" if self._force_tool_choice and not is_official_deepseek_flash(self._model) else "omitted"
+        return "named" if self._force_tool_choice and not deepseek_uses_thinking(self._model) else "omitted"
 
     def verify(
         self,
@@ -365,9 +380,9 @@ class LangChainSourceVerificationRuntime:
                 purpose="verification",
                 schema=schema,
                 # 官方 Flash 的思考模式不支持强制工具；保留默认 auto 和原返回校验。
-                tool_options={} if is_official_deepseek_flash(self._model) or not self._force_tool_choice else {
+                tool_options=({} if deepseek_uses_thinking(self._model) or not self._force_tool_choice else {
                     "tool_choice": SOURCE_VERIFICATION_SCHEMA["title"]
-                },
+                }),
                 messages=[
                     {
                         "role": "system",

@@ -30,14 +30,19 @@ units是按工具预设字段填写的对象，每个target字段必填，不再
 kind 表示本句所保存的阶段：
 event=已完成普通动作；relationship_event=本人已参与的关系经历（含收到邀请、借用、赠予）；
 reported_event=第三方历史经历；third_party_fact=第三方身份资料；assessment=针对具体事项的一次评价；
-preference=有来源的长期偏好；taboo=长期禁忌；state=当前知情、决策或持续期未知的状态；
+preference=有来源的长期习惯或偏好；taboo=长期禁忌；state=当前知情、决策或持续期未知的状态；
 momentary_state=正在等待、路上等当天瞬时状态；plan=尚未实现的计划；hypothesis=假设；
+尚未开始而即将执行的即时意向仍用plan，不因接近说话时刻就当作正在进行或已经完成；来源明确正在进行才用momentary_state，明确完成才按已完成动作处理。
 request=暂时关系要求；correction=窗内有明确先前主张的更正；unknown=无法判断。
 不能独立成立的时间/话题前缀（例如“前年冬天，”或“他现在的情况，”）用prefix，和紧邻的同消息事实合并。
 纯条件前件用condition，紧邻其后的同消息动作必须用plan或hypothesis，程序会合并并保留条件。
 question/greeting/nonliteral/not_memory是明确不提取的原因；说话者不知道他人情况是state，不是not_memory。
+来源明确描述反复的日常行为且未限定资料期间时用preference；“现在”等陈述时点不把习惯变成state或momentary_state，无期限习惯沿双null，不从单次行为推长期习惯。
+反问式强调按完整相连语境判断主张，不能当作字面否定或仅凭问号省略；真实询问和没有明示主张的质疑仍不提取。若有两种来源支持的读法，保留unresolved，不反转明确否定。
 已完成动作与当前状态分别标注。已收到邀约是relationship_event，不额外产生一条未来参与计划。
 subject为资料归属self/contact/shared，不能把第三人身份改成用户或联系人；其资料依原说话人范围保存。
+候选保存对话一方直接提出的请求时，subject归请求者，不归受话者、被要求的执行者或受益者；联系人提出要求归contact，用户提出要求归self。
+sender只是说话人，不必等于subject：转述第三方请求仍保留第三方称呼、原关系资料范围和转述边界；描述另一方事实仍归该方，共同约定才按共同主张判断。
 topic只用受控主题；亲属历史用family，职业/职业知情用work，课程报名用study，价格判断可用finance。
 dependency只选一条理解本句不可缺少的原文分句编号；可以是context或另一target。
 相连问答已足够时不再引用更早的历史；不需要补全人物/事项时用null。若一条依赖不足以消歧，unresolved=true。
@@ -48,6 +53,18 @@ confidence是模型对标签的把握，不能代替证据。程序只保证定�
 """
 
 # 已冻结的显式v3/v4保持原合同；默认提取的事件提案不混入旧评测协议。
+# v3/v4继续从原基底派生；本次E2指导不重签它们的提示合同。
+GROUNDED_V2_PROMPT = GROUNDED_PROMPT.replace(
+    "event=已完成普通动作；",
+    "event=对话一方的普通可复用事实，包含已完成动作及未限定短期期间的稳定身份、职业、专业；",
+) + """
+仅本E2的event沿既有普通事实映射；模型仍须依据完整原文选择，程序不把state自动改为event。
+“目前／现在”仅表示陈述时点时，不把稳定资料改成临时state；不从此类资料推真实开始日、永久有效、能力或成果。
+明确短期期间、当前知情／决策、身体近况和未来安排继续用原状态或计划类型；第三方身份仍用third_party_fact。
+保留原文的否定、猜测、引语和未知，不把它们改成肯定身份；稳定资料标签也不认证现实真伪或来源可信。
+"""
+
+
 GROUNDED_V3_PROMPT = GROUNDED_PROMPT.replace(
     "sensitivity只标原文实际的敏感风险：financial=真实金钱风险，health=健康，commitment=明确承诺，other=其他明确敏感性。",
     "sensitivity按原文涉及的敏感事项标注：financial=借贷、负债、还款等金融敏感事项，"
@@ -302,12 +319,12 @@ def _extract_grounded(
         )
     elif events:
         protocol, prompt, schema_factory, compiler = (
-            GROUNDED_EXTRACTION_PROTOCOL, GROUNDED_PROMPT + GROUNDED_EVENT_PROMPT,
+            GROUNDED_EXTRACTION_PROTOCOL, GROUNDED_V2_PROMPT + GROUNDED_EVENT_PROMPT,
             grounded_event_schema, compile_event_labels,
         )
     else:
         protocol, prompt, schema_factory, compiler = (
-            "grounded-v2", GROUNDED_PROMPT, grounded_schema, compile_labels,
+            "grounded-v2", GROUNDED_V2_PROMPT, grounded_schema, compile_labels,
         )
     try:
         schema = schema_factory(window)

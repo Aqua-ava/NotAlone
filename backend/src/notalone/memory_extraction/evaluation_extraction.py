@@ -35,7 +35,7 @@ def extraction_contract(
     if selected is EvaluationExtractionMode.GROUNDED_V3:
         return grounded_adapter.GROUNDED_V3_PROMPT, grounded_adapter.grounded_schema_v3(window)
     if selected is EvaluationExtractionMode.GROUNDED_V2:
-        return grounded_adapter.GROUNDED_PROMPT, grounded_adapter.grounded_schema(window)
+        return grounded_adapter.GROUNDED_V2_PROMPT, grounded_adapter.grounded_schema(window)
     return adapters.EXTRACTION_SYSTEM_PROMPT, adapters.EXTRACTION_SCHEMA
 
 

@@ -33,21 +33,23 @@ FIXED = {"execution_plan": "full140-grounded-v4-source-v2", "case_set": "full140
 
 
 def _fixed(plan: str) -> dict:
-    from notalone.memory_extraction.evaluation_provider_contract import MIXED_PLAN, MIXED_REQUEST_VERSION, mixed_phase_policy
-    if type(plan) is not str or plan not in (FIXED["execution_plan"], MIXED_PLAN):
+    from notalone.memory_extraction.evaluation_provider_contract import FULL140_E2_PLAN, MIXED_PLAN, MIXED_REQUEST_VERSION, mixed_phase_policy
+    if type(plan) is not str or plan not in (FIXED["execution_plan"], MIXED_PLAN, FULL140_E2_PLAN):
         raise ValueError("full140_registered_variant_required")
     fixed = json.loads(json.dumps(FIXED))
-    if plan == MIXED_PLAN:
-        fixed.update(execution_plan=MIXED_PLAN, provider_profile="deepseek-phase-split-v1",
+    if plan in (MIXED_PLAN, FULL140_E2_PLAN):
+        fixed.update(execution_plan=plan, provider_profile="deepseek-phase-split-v1",
                      verification_tool_choice="forced", phase_request_version=MIXED_REQUEST_VERSION,
                      phase_request_policy=mixed_phase_policy())
+    if plan == FULL140_E2_PLAN:
+        fixed.update(extraction_mode="grounded-v2", verification_mode="legacy-v4")
     return fixed
 
 
 def _kind(plan: str) -> str:
-    from notalone.memory_extraction.evaluation_provider_contract import MIXED_PLAN, MIXED_KIND
+    from notalone.memory_extraction.evaluation_provider_contract import FULL140_E2_PLAN, FULL140_E2_KIND, MIXED_PLAN, MIXED_KIND
     _fixed(plan)
-    return MIXED_KIND if plan == MIXED_PLAN else "full140-v4"
+    return FULL140_E2_KIND if plan == FULL140_E2_PLAN else MIXED_KIND if plan == MIXED_PLAN else "full140-v4"
 
 
 def helpers():
@@ -67,8 +69,9 @@ def now():
     return datetime.now(timezone.utc)
 
 
-def contracts():
-    """完整公开原输入沿原投影，E合同取当前显式v4物品所有权修订。"""
+def contracts(*, _plan=FIXED["execution_plan"]):
+    """完整公开原输入沿原投影；提取合同只取封闭身份固定版本。"""
+    fixed = _fixed(_plan)
     from notalone.memory_extraction.evaluation import build_window
     from notalone.memory_extraction.evaluation_ecnu import _FULL_CASES
     from notalone.memory_extraction.evaluation_extraction import extraction_contract
@@ -77,7 +80,7 @@ def contracts():
     plan, rows = [], []
     for index, case in enumerate(_FULL_CASES):
         window = build_window(case)
-        prompt, schema = extraction_contract("grounded-v4", window)
+        prompt, schema = extraction_contract(fixed["extraction_mode"], window)
         input_sha = helper.digest(public_window_projection(window))
         plan.append({"case_position": index, "case_name": case.name, "input_sha256": input_sha})
         rows.append({"input_sha256": input_sha, "prompt_sha256": helper.digest(prompt),
@@ -86,9 +89,11 @@ def contracts():
 
 
 def _source_names(plan=FIXED["execution_plan"]):
-    from notalone.memory_extraction.evaluation_ecnu import _FULL140_V4_REQUIRED_SOURCES, _FULL140_MIXED_REQUIRED_SOURCES
+    from notalone.memory_extraction.evaluation_ecnu import _FULL140_V4_REQUIRED_SOURCES, _FULL140_MIXED_REQUIRED_SOURCES, _FULL140_E2_REQUIRED_SOURCES
     _fixed(plan)
-    return _FULL140_MIXED_REQUIRED_SOURCES if _kind(plan) != "full140-v4" else _FULL140_V4_REQUIRED_SOURCES
+    from notalone.memory_extraction.evaluation_provider_contract import FULL140_E2_PLAN
+    return (_FULL140_E2_REQUIRED_SOURCES if plan == FULL140_E2_PLAN else
+            _FULL140_MIXED_REQUIRED_SOURCES if _kind(plan) != "full140-v4" else _FULL140_V4_REQUIRED_SOURCES)
 
 
 def prepare(*, directory: Path, absolute_start: datetime, _plan=FIXED["execution_plan"]) -> dict:
@@ -110,9 +115,9 @@ def prepare(*, directory: Path, absolute_start: datetime, _plan=FIXED["execution
     if validation.get("execution_ready") is not True:
         raise ValueError("full140_v4_reference_not_ready")
     from notalone.memory_extraction.evaluation_reference import full_case_reference_positions
-    original_plan, rows = contracts()
+    original_plan, rows = contracts(_plan=_plan)
     plan = [{**original_plan[position], "case_position": index} for index, position in enumerate(POSITIONS)]
-    prompt, schema = _verification_contract("nullable-proof-v1")
+    prompt, schema = _verification_contract(fixed["verification_mode"])
     frozen = {"state": "prepared_only", "run_id": str(uuid4()), "nonce": str(uuid4()), "fixed": fixed,
         "repo_root": str(ROOT), "directory": str(directory), "absolute_start": absolute_start.isoformat(),
         "work_end": (absolute_start + timedelta(seconds=86380)).isoformat(),
@@ -144,10 +149,10 @@ def validate(frozen: dict, *, _plan=FIXED["execution_plan"]) -> tuple[datetime, 
             raise ValueError("full140_v4_source_drift")
     if frozen["installed_versions"] != {name: version(name) for name in helper.PACKAGES}:
         raise ValueError("full140_v4_version_drift")
-    full_plan, rows = contracts()
+    full_plan, rows = contracts(_plan=_plan)
     expected_plan = [{**full_plan[position], "case_position": index} for index, position in enumerate(POSITIONS)]
     from notalone.memory_extraction.evaluation_offline import _verification_contract
-    prompt, schema = _verification_contract("nullable-proof-v1")
+    prompt, schema = _verification_contract(fixed["verification_mode"])
     if (helper.digest(frozen["plan"]) != helper.digest(expected_plan) or frozen["plan_sha256"] != helper.digest(expected_plan)
             or frozen["extraction_window_contracts"] != [rows[position] for position in POSITIONS]
             or frozen["verification_prompt_sha256"] != helper.digest(prompt)
@@ -213,7 +218,7 @@ def worker(*, freeze_path: Path, expected_sha256: str, approval: dict,
         annotation_sha256=frozen["source_hashes"][ANNOTATION], criteria_sha256=frozen["source_hashes"][REFERENCE],
         raw_reviewer=lambda view: bridge.review("raw", view), full_reviewer=lambda view: bridge.review("full", view),
         case_positions=None, case_set="full140", reference_version="source-fidelity-v2",
-        extraction_mode="grounded-v4", verification_mode="nullable-proof-v1",
+        extraction_mode=fixed["extraction_mode"], verification_mode=fixed["verification_mode"],
         verification_tool_choice=fixed["verification_tool_choice"], extraction_tool_choice="omitted",
         **({"execution_plan": _plan} if _kind(_plan) != "full140-v4" else {}))
     loaded = False
@@ -233,7 +238,7 @@ def worker(*, freeze_path: Path, expected_sha256: str, approval: dict,
         credential_loader=loader, audit_case=audit, synthetic_transport=synthetic_transport,
         provider_profile=fixed["provider_profile"], request_timeout_seconds=300, max_retries=0,
         case_positions=None, case_set="full140", reference_version="source-fidelity-v2", request_limit=280,
-        verification_mode="nullable-proof-v1", verification_tool_choice=fixed["verification_tool_choice"], extraction_mode="grounded-v4",
+        verification_mode=fixed["verification_mode"], verification_tool_choice=fixed["verification_tool_choice"], extraction_mode=fixed["extraction_mode"],
         execution_plan=_plan, full140_v4_deadline=control)
     if _kind(_plan) != "full140-v4":
         result.update(worker_pid=os.getpid(), execution_plan=_plan)
@@ -250,7 +255,9 @@ def launch(*, freeze_path: Path, expected_sha256: str, approval_path: Path, _pla
     approval = helper.read_private(approval_path)
     _check_authorization(approval, frozen, expected_sha256)
     from notalone.memory_extraction.evaluation_owned_process import _launch_owned_public_worker
-    script = ROOT / "desktop/tests/fixtures/full140-mixed-v-off-public.py" if _kind(_plan) != "full140-v4" else Path(__file__).resolve()
+    from notalone.memory_extraction.evaluation_provider_contract import FULL140_E2_PLAN
+    script = (ROOT / "desktop/tests/fixtures/full140-e2-v-off-public.py" if _plan == FULL140_E2_PLAN else
+              ROOT / "desktop/tests/fixtures/full140-mixed-v-off-public.py" if _kind(_plan) != "full140-v4" else Path(__file__).resolve())
     return _launch_owned_public_worker(frozen=frozen, script=script, root=ROOT,
         helper=helper, freeze_path=freeze_path, expected_sha256=expected_sha256, approval_path=approval_path, end=end,
         clock=now, kind=_kind(_plan))

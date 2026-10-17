@@ -55,7 +55,7 @@ from notalone.memory_extraction.verification import (
 )
 from notalone.memory_trace.context import current_trace
 from .evaluation_provider_contract import (
-    MIXED_REQUEST_VERSION, mixed_phase_policy, PHASE_SPLIT_PLANS, REFERENCE21_PLANS,
+    MIXED_REQUEST_VERSION, mixed_phase_policy, FULL140_E2_PLAN, PHASE_SPLIT_PLANS, REFERENCE21_PLANS,
     SEMANTIC4_PROMPT_PROFILE, validate_semantic4_windows,
     PUBLIC_QUALITY_PLANS, validate_extraction_prompt_profile,
 )
@@ -432,11 +432,13 @@ def _run_evaluation_batch(
         raise EvaluationBudgetAbort("evaluation_mixed_fixed_plan_required")
     if store.extraction_mode != extraction_selected.value:
         raise EvaluationBudgetAbort("evaluation_frozen_extraction_mode_mismatch")
-    if extraction_selected is EvaluationExtractionMode.GROUNDED_V4 and (
-        store.reference_version != "source-fidelity-v2"
+    e2 = execution_plan == FULL140_E2_PLAN
+    if (extraction_selected is EvaluationExtractionMode.GROUNDED_V4 or e2) and (
+        extraction_selected is not (EvaluationExtractionMode.GROUNDED_V2 if e2 else EvaluationExtractionMode.GROUNDED_V4)
+        or store.reference_version != "source-fidelity-v2"
         or cases != (_fixed_case_sets()[0] if reference21_v4 else (*CASES, *SEMANTIC_CASES))
         or len(windows) != (21 if reference21_v4 else 140) or len(plan) != (21 if reference21_v4 else 140)
-        or selected is not (SourceVerificationMode.LEGACY_V4 if public_quality else SourceVerificationMode.NULLABLE_PROOF_V1)
+        or selected is not (SourceVerificationMode.LEGACY_V4 if public_quality or e2 else SourceVerificationMode.NULLABLE_PROOF_V1)
         or extraction_tool_choice != "omitted" or verification_tool_choice != ("forced" if mixed else "omitted")
         or type(max_retries) is not int or max_retries != 0 or semantic_audit is None
     ):
@@ -620,6 +622,26 @@ def _run_evaluation_batch(
                for decision in ("safe", "general_error", "safety_error", "unknown")},
             "quality_certified": False,
         }
+    if e2:
+        from .evaluation_reference import full_case_reference_positions
+        mapping = full_case_reference_positions()
+        cohorts = {}
+        for name, source in (("main16", CASES), ("supplement3", SEMANTIC_CASES)):
+            names = {case.name for case in source if case.dimension == "reference"}
+            positions = [index for index, case in enumerate(cases) if case.name in names]
+            reviews = [item for item in audits if item["case_position"] in positions]
+            cohorts[name] = {
+                **_summary([outcomes[index] for index in positions],
+                           [result for result in results if result.name in names]),
+                "case_positions": positions, "gold_positions": [mapping[index] for index in positions],
+                "semantic_audit": {
+                    "audited": len(reviews),
+                    **{decision: sum(item["decision"] == decision for item in reviews)
+                       for decision in ("safe", "general_error", "safety_error", "unknown")},
+                    "quality_certified": False,
+                },
+            }
+        summary["reference_cohorts"] = cohorts
     receipt = None
     receipt_error_code = None
     if cleanup_error_codes:

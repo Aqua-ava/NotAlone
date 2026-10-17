@@ -304,6 +304,19 @@ def validate_source_verification(
                     proof_status=proof_verification.status,
                     program_reason=proof_verification.reason,
                 )
+            if verdict is SourceVerificationVerdict.SUPPORTED:
+                from notalone.memory_extraction.source_proof import unresolved_author_quote_reason
+
+                unresolved_reason = unresolved_author_quote_reason(window, fact)
+                if unresolved_reason is not None:
+                    verdict = SourceVerificationVerdict.UNCERTAIN
+                    issues = (SourceVerificationIssue.PRAGMATICS,)
+                    _record_contract(
+                        "unresolved_author_quote", True, candidate_index=index,
+                        started_at=started_at, model_verdict=model_verdict,
+                        model_issues=model_issues, verdict=verdict, issues=issues,
+                        program_reason=unresolved_reason,
+                    )
             results[index] = SourceVerificationResult(
                 candidate_index=index, verdict=verdict,
                 issues=issues, evidence=tuple(evidence),

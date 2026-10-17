@@ -23,6 +23,18 @@ v4单独支持完整 `下个月`/`下月` 的来源本地日历半开月界，�
 
 该原21场关闭后，[事项指称补全](../../.scratch/grounded-v4-matter-reference/spec.md)只在显式v4增加`matter_reference`：由模型明确选择事项在本窗口无法唯一识别，程序固定说明并完整附带原引句／依赖，不补事项内容或类型，不按词语或Gold自动补码。它与人物、地点／物品归属、方向、时制和阶段码独立；最多八码／九条说明，原单条8400字符和超限失败保持。v4 E指导同时区分出借施事、接收者、物品所有者和代词指称；明确角色不成为所有权或唯一身份的证明，未知须由模型按实际来源选码。旧v2／v3、共享V提示、nullable/proof2、生产默认、采纳门和原Gold保持；该离线增量改变当前v4提示／schema摘要，未来评测须新冻结，不能以本地给定标签控制补签旧场或宣称模型质量改善。发送前proof适用性及V作者包装文案仅有[待决定设计](../../.scratch/grounded-v4-matter-reference/proof-eligibility-design.md)，未在本增量实施或注册新真实合同。
 
+2026-10-17另按[原07的E2普通事实指导](../../.scratch/memory-extraction-accuracy/e2-stable-fact-guidance-spec-20261017.md)局部修订未来E2的标签语义：
+既有event在该模式内涵盖无短期期间的对话方稳定资料，schema及原映射不变，模型仍自行分类。
+本ADR此前“旧E2保持”及“不以event表示稳定身份”描述上述v4各切片的合同，不再冒充未来E2新提示的字节。
+显式v4自身仍沿stable_fact且不把event重新定义；原v3/v4提示保持。旧冻结、旧数据和旧质量成绩不重算，不授typed或自动采纳信用。
+
 后继[原21四槽语义质量合同](../../.scratch/grounded-evaluation/reference21-semantic4-plan-20261016.md)采用新固定身份`reference21-grounded-v4-source-v2-semantic4-v-off-forced`：复用ADR-047明确保留的`legacy-v4`严格四槽，只以封闭`public-author-quote-v1`提示profile追加作者包装与资料归属澄清，旧默认提示／schema及nullable/proof2保持。原21公开窗口无受控来源快照且类型表示unknown，在预算／凭据前严格核此范围，不纳入可信或混合来源；不丢弃返回的proof，四槽收到额外proof包括null仍整批失败。新合同只评当前v4的E14／V4与完整去向，typed未评估且无信用，不补造verification_program。沿原21／28＋1、来源参考v2、同一runner／helper／审核桥、E max／V off具名、42次零重试及4小时上界准备；旧场不重开、不拼成绩，原safety／unknown与技术硬停及生产默认／放行表保持。离线SDK Mock及新真实质量、typed能力分别举证，实施状态见[记录](../../.scratch/grounded-evaluation/reference21-semantic4-implementation-20261016.md)。
 
 该四槽真实场[安全停止并关闭](../../.scratch/grounded-evaluation/reference21-semantic4-result-20261016.md)后，[受控未决理由补全](../../.scratch/grounded-v4-ownership-reason/spec.md)仅将显式v4当前候选已有的歧义固定模板，按原顺序追加至interpretation_reason。理由用中性的“当前未决说明”，保留原来源／完成问答前缀，不重复长引句，也不把标签或既有结构guard称为已证明的现实关系。已有alternatives、正文、来源、置信度、风险及全部采纳门保持；无码A05仍原样auto，已封安全错误不能靠给定码控制或旧matcher改写。旧v2／v3字节及v4提示／schema保持，只有v4编译表达改变；旧89文件freeze属于已关闭历史，不代表当前源码实时匹配，未来真实验证须另行冻结。离线控制只证明标签能被表达，不证明模型正确选码、完整人工语义达标或typed可用。
+
+2026-10-17版本续接：后继E2有限字段语义修复在原07字段语义／只降不升范围内改变当前v2
+编译表达，属于ADR-051的局部续接；本ADR先前“旧v2/v3不变”仍准确描述当时v4增量的隔离
+合同及已封存结果，不把后继E2结果补入旧场。当前v1／v3／v4同输入编译字节继续保持，v4
+显式模型类型／歧义码路线、E2提示／schema及生产版本选择均不变；不将程序负向字段冒称
+模型报码，不继承v4质量或typed信用。后继E2真实验证仍须新冻结及原质量门，离线给定标签
+与SDK接线控制不构成全140或原07达标证据。

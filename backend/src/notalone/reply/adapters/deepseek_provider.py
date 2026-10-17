@@ -12,6 +12,7 @@ from langchain_deepseek import ChatDeepSeek
 DEFAULT_DEEPSEEK_MODEL = "deepseek-flash"
 DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com"
 _OFFICIAL_BASE_URLS = frozenset({DEFAULT_DEEPSEEK_BASE_URL, DEFAULT_DEEPSEEK_BASE_URL + "/v1"})
+_DEEPSEEK_THINKING_EFFORTS = frozenset({"minimal", "low", "medium", "high", "xhigh", "max", "ultra"})
 DEFAULT_DEEPSEEK_TIMEOUT_SECONDS = 60.0
 # 结构化输出场景使用最低温度，降低候选回复格式漂移概率。
 DEFAULT_DEEPSEEK_TEMPERATURE = 0.0
@@ -28,6 +29,30 @@ def is_official_deepseek_flash(model: object) -> bool:
         and model.model_name == "deepseek-flash"
         and str(model.root_client.base_url).rstrip("/") in _OFFICIAL_BASE_URLS
     )
+
+
+def deepseek_uses_thinking(model: object) -> bool:
+    """仅据已知官方Flash的实际配置选择工具绑定，不改模型设置。"""
+
+    if not is_official_deepseek_flash(model) or not isinstance(model, ChatDeepSeek):
+        return False
+    body = model.extra_body or {}
+    thinking = body.get("thinking")
+    if thinking is not None and (
+        not isinstance(thinking, dict) or set(thinking) != {"type"}
+        or thinking["type"] not in {"enabled", "disabled"}
+    ):
+        raise ValueError("官方DeepSeek思考模式配置无效。")
+    mode = thinking["type"] if thinking is not None else None
+    efforts = (model.reasoning_effort, body.get("reasoning_effort"))
+    if any(value is not None and (
+        not isinstance(value, str) or value != "none" and value not in _DEEPSEEK_THINKING_EFFORTS
+    ) for value in efforts):
+        raise ValueError("官方DeepSeek思考强度配置无效。")
+    # 任一启用项都不能被冲突的关闭项误认成已关闭；原配置仍原样发出。
+    if mode == "enabled" or any(value in _DEEPSEEK_THINKING_EFFORTS for value in efforts):
+        return True
+    return mode != "disabled" and "none" not in efforts
 
 
 def build_deepseek_model(

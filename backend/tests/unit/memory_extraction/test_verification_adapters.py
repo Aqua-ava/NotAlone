@@ -42,16 +42,16 @@ def structured_verification(results: tuple[dict, ...]) -> AIMessage:
 
 
 class SourceVerificationAdapterTest(unittest.TestCase):
-    def test_explicit_prompt_profile_keeps_all_existing_contract_bytes(self):
+    def test_current_core_prompt_profiles_keep_existing_schema_bytes(self):
         import hashlib
         import json
         from notalone.memory_extraction.verification_adapters import source_verification_contract
 
-        # 来自新profile实施前的真实提示／schema字节，不从当前实现生成预期。
+        # 请求归属修订后重签共享prompt；原三个协议schema摘要保持，未改已封存运行。
         for mode, prompt_sha, schema_sha in (
-            ("legacy-v4", "d39c48ea4451d6fd63661dfb62986b79dd8b0e1611acdc9b0c2f56c042db4dbb", "ec92479140e3c6945efee42115af25e69686fdfdf851bae2dce994eb393344b2"),
-            ("nullable-proof-v1", "4a86386f8c19f6be5b1c7fb2bb62ae51e87e912b4d5362742fe9afb82415f8ce", "5533c8c33be4047ac20f573f642596d87700309e0ca0e36b93923714981efaed"),
-            ("nullable-proof-v2", "5dad8e9af3e54c51f20596457d848143e1fb23b3bf0e5a0267e8d59a6f6638e7", "898d11f5d9410cd5104bbd67d29580f03041076a0e841d7ad2ee28c388a351d8"),
+            ("legacy-v4", "90a42767e30ca993ca5dcae2681c31f33015e814b1d54ae2f0b8d0da0352ff99", "ec92479140e3c6945efee42115af25e69686fdfdf851bae2dce994eb393344b2"),
+            ("nullable-proof-v1", "4ff520eb538572baaf9f064a7ef20f272f05c1452660355899c803e129c8b2b4", "5533c8c33be4047ac20f573f642596d87700309e0ca0e36b93923714981efaed"),
+            ("nullable-proof-v2", "bd6062c18376b0ad829c747dafedf19beb8156d95a2639d058238205a3b061a6", "898d11f5d9410cd5104bbd67d29580f03041076a0e841d7ad2ee28c388a351d8"),
         ):
             with self.subTest(mode=mode):
                 prompt, schema = source_verification_contract(mode)

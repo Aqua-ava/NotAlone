@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 import math
 import re
 from typing import Any
+from uuid import UUID
 
 from notalone.memory.events import EventStage
 from notalone.memory_extraction.errors import ExtractionInvalidOutputError
@@ -266,10 +267,11 @@ def _checked_compile(
     window: ExtractionWindow, draft: object, *, completed_answers: bool,
     ambiguity_codes: dict[str, frozenset[str]] | None = None,
     version4: bool = False,
+    e2_semantics: bool = False,
 ) -> ExtractionPayload:
     try:
         return _compile(window, draft, completed_answers=completed_answers,
-                        ambiguity_codes=ambiguity_codes, version4=version4)
+                        ambiguity_codes=ambiguity_codes, version4=version4, e2_semantics=e2_semantics)
     except (ValueError, TypeError, KeyError) as error:
         raise ExtractionInvalidOutputError("原文结构提取不符合契约：" + str(error)) from None
 
@@ -278,6 +280,7 @@ def _compile(
     window: ExtractionWindow, draft: object, *, completed_answers: bool = False,
     ambiguity_codes: dict[str, frozenset[str]] | None = None,
     version4: bool = False,
+    e2_semantics: bool = False,
 ) -> ExtractionPayload:
     if not isinstance(draft, dict) or set(draft) != {"units"} or not isinstance(draft["units"], list):
         raise ValueError("必须返回分句结构。")
@@ -322,6 +325,17 @@ def _compile(
         raise ValueError("目标分句未完整交代。")
 
     continuations = _quantity_continuations(units, rows) if version4 else {}
+    e2_conditions = {}
+    if e2_semantics:
+        from notalone.memory_extraction._e2_semantics import _condition, _eligible
+
+        for first, second in zip(units, units[1:]):
+            if (first.target and second.target and first.message.message_id == second.message.message_id
+                    and first.end == second.start and rows[first.id]["kind"] in {"condition", "prefix"}
+                    and rows[second.id]["kind"] == "plan" and _eligible(window, [first, second], [], 0)):
+                frame = _condition(first.text, second.text)
+                if frame is not None:
+                    e2_conditions[first.id] = frame
     results: list[dict[str, Any]] = []
     pending_condition: SourceUnit | None = None
     unknown_groups: dict[tuple, dict[str, Any]] = {}
@@ -336,7 +350,8 @@ def _compile(
         if kind in {"condition", "prefix"}:
             if row.get("event") is not None:
                 raise ValueError("前缀事件标签必须附在对应事实。")
-            if pending_condition is not None or (kind == "condition" and not _CONDITION.match(unit.text)):
+            if pending_condition is not None or (kind == "condition" and not _CONDITION.match(unit.text)
+                                                  and unit.id not in e2_conditions):
                 raise ValueError("条件分句不能定位。")
             pending_condition = unit
             continue
@@ -384,8 +399,13 @@ def _compile(
             if kind == "momentary_state" and anchor is not None:
                 invalid = anchor.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
         if kind in period_kinds:
-            valid, invalid = (_period_v4 if version4 else _period)(quote, anchor)
-            if valid is None:
+            try:
+                valid, invalid = (_period_v4 if version4 else _period)(quote, anchor)
+            except OverflowError:
+                if not e2_semantics:
+                    raise
+                valid = invalid = None
+            if valid is None and not e2_semantics:
                 flags.append("grounded:unresolved_period")
             if (condition is not None and rows[condition.id]["kind"] == "condition") or _CONDITION.match(quote):
                 if version4 and kind in V4_KIND_EXTENSIONS:
@@ -397,6 +417,35 @@ def _compile(
             dep_author = "用户" if dep.message.sender.value == "self" else "联系人"
             contexts.append(f"{dep_author}说“{dep.text}”")
         context = "（相关原文：" + "；".join(contexts) + "）" if contexts else ""
+        text = f"{observed}{author}原话：“{quote}”{context}"
+        if e2_semantics:
+            from notalone.memory_extraction._e2_semantics import (
+                _bare_clock, _dates, _financial_challenge, _uncertain_plan, _uncertain_state,
+            )
+
+            eligible = _eligible(window, members, dependencies, len(text))
+            if (not eligible and condition is not None and rows[condition.id]["kind"] == "condition"
+                    and not _CONDITION.match(condition.text)):
+                raise ValueError("新条件配对超出有限来源语义范围。")
+            if eligible:
+                if len(members) == 1:
+                    if kind in {"state", "momentary_state"} and assertion == "asserted":
+                        if _uncertain_state(unit.text):
+                            assertion = "unknown"
+                        if _bare_clock(unit.text):
+                            speech = assertion = "unknown"
+                            valid = invalid = None
+                    if kind == "plan" and assertion == "asserted" and _uncertain_plan(unit.text):
+                        assertion = "unknown"
+                    if kind != "third_party_fact" and _financial_challenge(window, unit, dependencies):
+                        figurative = "unknown"
+                if condition is not None and condition.id in e2_conditions and assertion == "asserted":
+                    assertion = "conditional"
+                frame = e2_conditions.get(condition.id) if condition is not None else None
+                if speech != "unknown" and (len(members) == 1 or frame is not None):
+                    valid, invalid = _dates(unit, dependencies, kind=kind, valid=valid, invalid=invalid, frame=frame)
+            if kind in period_kinds and valid is None:
+                flags.append("grounded:unresolved_period")
         unresolved = any(rows[member.id]["unresolved"] for member in members)
         codes = (set().union(*(ambiguity_codes[member.id] for member in members))
                  if ambiguity_codes is not None else set())
@@ -408,7 +457,7 @@ def _compile(
         if kind == "unknown" or version4 and kind == "stage_unknown_state":
             flags.append("grounded:unresolved_kind")
         fact = {
-            "text": f"{observed}{author}原话：“{quote}”{context}",
+            "text": text,
             "category": category, "subject": row["subject"], "topic": row["topic"],
             "source_message_ids": [str(value) for value in sources], "confidence": min(rows[member.id]["confidence"] for member in members),
             "risk_flags": flags, "valid_at": valid.isoformat() if valid else None,
@@ -483,12 +532,27 @@ def reference_choices(unit: SourceUnit, units: tuple[SourceUnit, ...]) -> tuple[
 
 def compile_labels(window: ExtractionWindow, draft: object) -> ExtractionPayload:
     """v2按程序给定的对象键绑定原文；禁止按输出顺序猜测编号。"""
-    return _compile_named_labels(window, draft)
+    return _compile_e2_labels(window, draft)
+
+
+def _compile_e2_labels(window: ExtractionWindow, draft: object, *, required_event: bool = False) -> ExtractionPayload:
+    from notalone.memory_extraction.negative_reference import bounded_negative_reference_notes
+
+    facts = _compile_named_labels(window, draft, e2_semantics=True, required_event=required_event)
+    for fact in facts:
+        notes = bounded_negative_reference_notes(
+            window, text=fact["text"],
+            source_message_ids=tuple(UUID(value) for value in fact["source_message_ids"]),
+        )
+        for note in notes:
+            if note not in fact["alternatives"]:
+                fact["alternatives"].append(note)
+    return facts
 
 
 def compile_event_labels(window: ExtractionWindow, draft: object) -> ExtractionPayload:
     """默认事件协议要求显式event槽；旧标签编译入口继续保留。"""
-    return _compile_named_labels(window, draft, required_event=True)
+    return _compile_e2_labels(window, draft, required_event=True)
 
 
 def compile_labels_v3(window: ExtractionWindow, draft: object) -> ExtractionPayload:
@@ -530,6 +594,7 @@ def _compile_named_labels(
     ambiguity_codes: dict[str, frozenset[str]] | None = None,
     version4: bool = False,
     required_event: bool = False,
+    e2_semantics: bool = False,
 ) -> ExtractionPayload:
     if not isinstance(draft, dict) or set(draft) != {"units"} or not isinstance(draft["units"], dict):
         raise ExtractionInvalidOutputError("原文标签必须按指定字段返回。")
@@ -554,7 +619,8 @@ def _compile_named_labels(
             raise ExtractionInvalidOutputError("标签字段不完整或含自由编号。")
         rows.append({"unit": unit.id, **label})
     payloads = _checked_compile(window, {"units": rows}, completed_answers=True,
-                                ambiguity_codes=ambiguity_codes, version4=version4)
+                                ambiguity_codes=ambiguity_codes, version4=version4,
+                                e2_semantics=e2_semantics)
     all_ids = {unit.id for unit in units}
     for unit in units:
         if not unit.target:

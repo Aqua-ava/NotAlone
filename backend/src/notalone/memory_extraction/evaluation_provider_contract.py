@@ -48,7 +48,11 @@ UNIQUENESS_KIND = "reference21-v4-uniqueness"
 UNIQUENESS_E_PROFILE = "reference-uniqueness-v1"
 PUBLIC_QUALITY_PLANS = frozenset({SEMANTIC4_PLAN, UNIQUENESS_PLAN})
 REFERENCE21_PLANS = frozenset({REFERENCE21_V4_PLAN, *PUBLIC_QUALITY_PLANS})
-PHASE_SPLIT_PLANS = frozenset({MIXED_PLAN, *REFERENCE21_PLANS})
+FULL140_E2_PLAN = "full140-grounded-v2-source-v2-v-off-forced"
+FULL140_E2_MODE = "deepseek_bounded_full140_v2_source_v2_v_off_forced"
+FULL140_E2_STAGE = "full140-v2-source-v2-v-off-forced"
+FULL140_E2_KIND = "full140-v2-v-off-forced"
+PHASE_SPLIT_PLANS = frozenset({MIXED_PLAN, FULL140_E2_PLAN, *REFERENCE21_PLANS})
 
 
 def validate_extraction_prompt_profile(execution_plan: str, prompt_profile: str) -> None:
@@ -144,7 +148,9 @@ class ECNUEvaluationContract:
                 (self._profile is EvaluationProviderProfile.DEEPSEEK_PHASE_SPLIT) != (execution_plan in PHASE_SPLIT_PLANS)):
             raise EvaluationBudgetAbort("evaluation_mixed_fixed_plan_required")
         if self._profile is EvaluationProviderProfile.DEEPSEEK_PHASE_SPLIT and (
-                verification_tool_choice != "forced" or self._extraction_mode is not EvaluationExtractionMode.GROUNDED_V4):
+                verification_tool_choice != "forced" or self._extraction_mode is not (
+                    EvaluationExtractionMode.GROUNDED_V2 if execution_plan == FULL140_E2_PLAN
+                    else EvaluationExtractionMode.GROUNDED_V4)):
             raise EvaluationBudgetAbort("evaluation_mixed_fixed_plan_required")
         if (self._profile.is_official
                 and response_identity_policy != STRICT_RESPONSE_IDENTITY_POLICY):

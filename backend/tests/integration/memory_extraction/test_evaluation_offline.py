@@ -265,10 +265,10 @@ class EvaluationOfflineTest(unittest.TestCase):
                  "unresolved": False, "confidence": 0.9, "sensitivity": "none"}
 
         def respond(request):
-            grounded_adapter.GROUNDED_PROMPT += "合成冻结后提示漂移。"
+            grounded_adapter.GROUNDED_V2_PROMPT += "合成冻结后提示漂移。"
             return self.response(request, arguments={"units": {"0:0": dict(label), "0:1": dict(label)}})
 
-        with patch.object(grounded_adapter, "GROUNDED_PROMPT", grounded_adapter.GROUNDED_PROMPT):
+        with patch.object(grounded_adapter, "GROUNDED_V2_PROMPT", grounded_adapter.GROUNDED_V2_PROMPT):
             result = run_offline_evaluation(
                 cases=(self.none_case, later), output_directory=self.output, run_id=self.run_id,
                 request_limit=4, extraction_mode="grounded-v2",

@@ -53,14 +53,14 @@ class GroundedV4CompilerTest(unittest.TestCase):
         self.assertNotIn("我姐", fact["interpretation_reason"])
         self.assertEqual((fact["assertion_status"], fact["figurative_type"]), ("asserted", "literal"))
 
-    def test_unlabelled_a05_keeps_original_auto_and_does_not_gain_unknowns(self):
+    def test_unlabelled_a05_keeps_compiler_fields_and_guard_blocks_auto(self):
         from notalone.memory_extraction.evaluation import build_window, evaluate_case
         from notalone.memory_extraction.evaluation_cases import CASES
         from notalone.memory_extraction.grounded import compile_labels_v4
         from tests.unit.memory_extraction.test_flow import RecordingRuntime
         from tests.unit.memory_extraction.verification_helpers import SyntheticSupportingVerifier
 
-        # 同值于已封公开A05原标签；保留其auto失败，不用旧matcher判分救回。
+        # 已封A05的历史auto失败不改；当前guard只降级V，不替编译器补歧义码。
         case = next(case for case in CASES if case.name == "指代：姐借车")
         source = build_window(case)
         payloads = compile_labels_v4(source, labels(row(
@@ -77,7 +77,9 @@ class GroundedV4CompilerTest(unittest.TestCase):
         })
         result = evaluate_case(case, source, RecordingRuntime(payloads),
                                verification_runtime=SyntheticSupportingVerifier())
-        self.assertEqual(result.actual, "auto")
+        self.assertEqual(result.actual, "pending")
+        self.assertEqual(result.facts[0]["risk_flags"], ("semantic:pragmatics",))
+        self.assertEqual(result.facts[0]["alternatives"], ())
         self.assertTrue(result.verification_enabled)
         self.assertNotIn("semantic_basis", payloads[0])
 
@@ -635,7 +637,7 @@ class GroundedV4CompilerTest(unittest.TestCase):
                     old, = compile_labels_v3(source, draft)
                     self.assertEqual(fact, old)
 
-    def test_old_protocols_reject_v4_labels_and_keep_month_unknown(self):
+    def test_old_protocols_reject_v4_labels_and_e2_alone_gets_source_calendar(self):
         from notalone.memory_extraction.errors import ExtractionInvalidOutputError
         from notalone.memory_extraction.grounded import compile_labels, compile_labels_v3
 
@@ -646,8 +648,9 @@ class GroundedV4CompilerTest(unittest.TestCase):
                     draft = labels(row("0:0", kind, **({"ambiguity_codes": []} if v3 else {})))
                     compiler(source, draft)
             fact, = compiler(source, labels(row("0:0", "plan", **({"ambiguity_codes": []} if v3 else {}))))
-            self.assertEqual((fact["valid_at"], fact["invalid_at"]), (None, None))
-            self.assertIn("grounded:unresolved_period", fact["risk_flags"])
+            expected = (None, None) if v3 else ("2026-11-01T00:00:00+08:00", "2026-12-01T00:00:00+08:00")
+            self.assertEqual((fact["valid_at"], fact["invalid_at"]), expected)
+            self.assertEqual("grounded:unresolved_period" in fact["risk_flags"], v3)
         for code in ("clock_period", "event_stage", "object_ownership"):
             with self.subTest(code=code), self.assertRaises(ExtractionInvalidOutputError):
                 compile_labels_v3(source, labels(row("0:0", "unknown", unresolved=True, ambiguity_codes=[code])))
@@ -659,18 +662,18 @@ class GroundedV4CompilerTest(unittest.TestCase):
         from notalone.memory_extraction.evaluation_records import canonical_sha256
         from notalone.memory_extraction.grounded import compile_labels, compile_labels_v3, source_units
         from notalone.memory_extraction.grounded_adapter import (
-            GROUNDED_PROMPT, GROUNDED_V3_PROMPT, grounded_schema, grounded_schema_v3,
+            GROUNDED_V2_PROMPT, GROUNDED_V3_PROMPT, grounded_schema, grounded_schema_v3,
         )
 
-        # 摘要独立取自变更前56051719；合成给定标签仅核兼容，不提供语义/模型质量信用。
+        # E2只改模式专属指导；schema及同标签输出保持，v3字节不变，非模型质量。
         windows = [build_window(case) for case in (*CASES, *SEMANTIC_CASES)]
         for v3, prompt, schema, compiler, prompt_sha, schemas_sha, output_sha in (
-            (False, GROUNDED_PROMPT, grounded_schema, compile_labels,
-             "8580e630bbc4d600b08beb8a607cfcc05dc3efeb7daacc98a9f95bcb6164a01b",
+            (False, GROUNDED_V2_PROMPT, grounded_schema, compile_labels,
+             "1d39b3792c53329d9f87d4f1ba726532e9779894b21cc5157e6206a527691499",
              "c55322ae1480541222fdb03285b29613e47be0089d1692c57d30d36d27c2d10d",
-             "50838572df12c4219b3b34436a521cbed2293f914d58ee094ab38ce7ad37508b"),
+             "5f80d9acb79830b0d3612f48b007132191112ae64ec3bc03afe10fbc2f778f4b"),
             (True, GROUNDED_V3_PROMPT, grounded_schema_v3, compile_labels_v3,
-             "3a73e81e83b500d4f4293622f23bfaa681b38d33883e25193ddbccb3225fba91",
+             "5e83d4d93425edc4234199a8c2f20ef8bff4923bfc2d1df1961f7b96b10d2d5f",
              "7a76206ef4316e7489a1cc43308da3495685e87e30fe9ccbaf3891e8e60bbb0a",
              "b16033ed4840d5128b5e96d3aa296ef9781e70ba63f1e24da4972f2741815619"),
         ):

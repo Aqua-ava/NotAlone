@@ -116,7 +116,7 @@ class GroundedV3RuntimeTest(unittest.TestCase):
                 self.assertEqual(result[0]["risk_flags"],
                                  ["sensitivity:financial"] if sensitivity == "financial" else [])
 
-    def test_v2_wire_prompt_retains_frozen_bytes(self):
+    def test_v2_wire_prompt_matches_current_core_semantics_contract(self):
         source = window("我已取件。")
         draft = labels(row("0:0", "event"))
         requests = []
@@ -133,9 +133,9 @@ class GroundedV3RuntimeTest(unittest.TestCase):
         self.assertEqual(len(requests), 1)
         self.assertEqual(requests[0]["tools"][0]["function"]["name"], "GroundedMemoryLabels")
         prompt = requests[0]["messages"][0]["content"]
-        # 来自本次变更前8171d7c0的v2提示字节，不从当前实现派生预期值。
+        # 当前E2稳定资料指导单独重签；原schema和给定标签输出保持。
         self.assertEqual(hashlib.sha256(prompt.encode()).hexdigest(),
-                         "8580e630bbc4d600b08beb8a607cfcc05dc3efeb7daacc98a9f95bcb6164a01b")
+                         "1d39b3792c53329d9f87d4f1ba726532e9779894b21cc5157e6206a527691499")
 
     def test_given_kind_labels_keep_participation_report_negation_condition_and_quote_boundaries(self):
         # 每项kind是合成输入标签；这些通过不代表模型能正确分类或增加质量样本数。

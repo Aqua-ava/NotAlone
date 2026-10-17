@@ -33,7 +33,7 @@ class GroundedV4RuntimeTest(unittest.TestCase):
                             (socket, "getaddrinfo")):
             guards.enter_context(patch.object(owner, name, side_effect=AssertionError("禁止真实网络")))
 
-    def test_sdk_reference_uniqueness_profile_keeps_captured_unlabelled_a05_auto(self):
+    def test_sdk_reference_uniqueness_profile_keeps_unlabelled_fields_and_blocks_auto(self):
         import hashlib
         from notalone.memory_extraction.evaluation import build_window, evaluate_case
         from notalone.memory_extraction.evaluation_cases import CASES
@@ -59,7 +59,8 @@ class GroundedV4RuntimeTest(unittest.TestCase):
                     case, source, GroundedV4ExtractionRuntime(model=model, prompt_profile=profile),
                     verification_runtime=SyntheticSupportingVerifier(),
                 )
-                self.assertEqual(result.actual, "auto")
+                self.assertEqual(result.actual, "pending")
+                self.assertEqual(result.facts[0]["risk_flags"], ("semantic:pragmatics",))
                 self.assertEqual(result.facts[0]["alternatives"], ())
                 self.assertEqual(result.facts[0]["confidence"], 0.95)
                 results.append(result)
@@ -67,7 +68,7 @@ class GroundedV4RuntimeTest(unittest.TestCase):
         self.assertEqual(len(requests), 2)
         original = requests[0]["messages"][0]["content"]
         self.assertEqual(hashlib.sha256(original.encode()).hexdigest(),
-                         "253d66bc5687a8e83f5da31e13cc1f63af07e54d6e61c0800d300dacdddb4ca2")
+                         "331ba9d40794e7729395e32424d980444c3901d087e6cced1fb08bfb26788a18")
         guidance = (
             "将第三人代词所称物品的所有权归到某个已知人物前，单独核对来源是否明确支持这条归属关系。"
             "最近出现的先行词、窗口只提及一个候选人、亲属称呼或代词性别本身，不能单独构成归属依据；"
@@ -154,28 +155,28 @@ class GroundedV4RuntimeTest(unittest.TestCase):
                     facts.append(fact)
                 self.assertEqual(facts[0], facts[1])
 
-    def test_default_v2_v3_v4_prompts_and_full140_schemas_keep_prechange_bytes(self):
+    def test_current_core_prompts_and_unchanged_full140_schemas_keep_pinned_bytes(self):
         import hashlib
         from notalone.memory_extraction.evaluation import build_window
         from notalone.memory_extraction.evaluation_cases import CASES
         from notalone.memory_extraction.evaluation_records import canonical_sha256
         from notalone.memory_extraction.semantic_evaluation_cases import SEMANTIC_CASES
         from notalone.memory_extraction.grounded_adapter import (
-            GROUNDED_PROMPT, GROUNDED_V3_PROMPT, GROUNDED_V4_PROMPT,
+            GROUNDED_V2_PROMPT, GROUNDED_V3_PROMPT, GROUNDED_V4_PROMPT,
             grounded_schema, grounded_schema_v3, grounded_schema_v4,
         )
 
-        # 先于本次源码变更取得的摘要；固定默认合同，不代表给定标签的模型质量。
+        # 只重签当前E2指导；v3/v4提示及完整140动态schema摘要保持，不代表模型质量。
         windows = [build_window(case) for case in (*CASES, *SEMANTIC_CASES)]
         for prompt, schema, prompt_sha, schemas_sha in (
-            (GROUNDED_PROMPT, grounded_schema,
-             "8580e630bbc4d600b08beb8a607cfcc05dc3efeb7daacc98a9f95bcb6164a01b",
+            (GROUNDED_V2_PROMPT, grounded_schema,
+             "1d39b3792c53329d9f87d4f1ba726532e9779894b21cc5157e6206a527691499",
              "c55322ae1480541222fdb03285b29613e47be0089d1692c57d30d36d27c2d10d"),
             (GROUNDED_V3_PROMPT, grounded_schema_v3,
-             "3a73e81e83b500d4f4293622f23bfaa681b38d33883e25193ddbccb3225fba91",
+             "5e83d4d93425edc4234199a8c2f20ef8bff4923bfc2d1df1961f7b96b10d2d5f",
              "7a76206ef4316e7489a1cc43308da3495685e87e30fe9ccbaf3891e8e60bbb0a"),
             (GROUNDED_V4_PROMPT, grounded_schema_v4,
-             "253d66bc5687a8e83f5da31e13cc1f63af07e54d6e61c0800d300dacdddb4ca2",
+             "331ba9d40794e7729395e32424d980444c3901d087e6cced1fb08bfb26788a18",
              "3dd4a405494abe201396e9cfde6143337c929186657df55fa569e255ff49b524"),
         ):
             with self.subTest(title=schema(windows[0])["title"]):
@@ -184,7 +185,7 @@ class GroundedV4RuntimeTest(unittest.TestCase):
 
     def test_sdk_matter_reference_guidance_keeps_supported_confident_request_pending(self):
         from notalone.memory_extraction.grounded_adapter import (
-            GroundedV4ExtractionRuntime, GROUNDED_PROMPT, GROUNDED_V3_PROMPT,
+            GroundedV4ExtractionRuntime, GROUNDED_V2_PROMPT, GROUNDED_V3_PROMPT,
             grounded_schema, grounded_schema_v3,
         )
         from tests.unit.memory_extraction.verification_helpers import FixedSourceVerifier, verification_result
@@ -227,7 +228,7 @@ class GroundedV4RuntimeTest(unittest.TestCase):
         self.assertEqual(codes["maxItems"], 8)
         for schema in (grounded_schema(source), grounded_schema_v3(source)):
             self.assertNotIn("matter_reference", json.dumps(schema))
-        for old_prompt in (GROUNDED_PROMPT, GROUNDED_V3_PROMPT):
+        for old_prompt in (GROUNDED_V2_PROMPT, GROUNDED_V3_PROMPT):
             self.assertNotIn("matter_reference", old_prompt)
             self.assertNotIn("出借施事、接收者、物品所有者和代词指称分别核对", old_prompt)
         self.assertEqual((stats.adopted, stats.pending), (0, 1))
@@ -249,7 +250,7 @@ class GroundedV4RuntimeTest(unittest.TestCase):
         from notalone.memory_extraction.evaluation import build_window, evaluate_case
         from notalone.memory_extraction.evaluation_cases import CASES
         from notalone.memory_extraction.grounded_adapter import (
-            GroundedV4ExtractionRuntime, GROUNDED_PROMPT, GROUNDED_V3_PROMPT,
+            GroundedV4ExtractionRuntime, GROUNDED_V2_PROMPT, GROUNDED_V3_PROMPT,
             grounded_schema, grounded_schema_v3,
         )
         from notalone.memory_extraction.verification import SourceVerificationMode
@@ -300,12 +301,12 @@ class GroundedV4RuntimeTest(unittest.TestCase):
         self.assertFalse(slots["1:1"]["additionalProperties"])
         for schema in (grounded_schema(source), grounded_schema_v3(source)):
             self.assertNotIn("continuation", schema["properties"]["units"]["properties"]["1:1"]["properties"]["kind"]["enum"])
-        for old_prompt in (GROUNDED_PROMPT, GROUNDED_V3_PROMPT):
+        for old_prompt in (GROUNDED_V2_PROMPT, GROUNDED_V3_PROMPT):
             self.assertNotIn("continuation", old_prompt)
 
     def test_sdk_stable_fact_uses_v4_guidance_and_closed_schema_without_observation_date(self):
         from notalone.memory_extraction.grounded_adapter import (
-            GroundedV4ExtractionRuntime, GROUNDED_PROMPT, GROUNDED_V3_PROMPT,
+            GroundedV4ExtractionRuntime, GROUNDED_V2_PROMPT, GROUNDED_V3_PROMPT,
             grounded_schema, grounded_schema_v3,
         )
 
@@ -338,7 +339,7 @@ class GroundedV4RuntimeTest(unittest.TestCase):
         self.assertFalse(slot["additionalProperties"])
         for schema in (grounded_schema(source), grounded_schema_v3(source)):
             self.assertNotIn("stable_fact", schema["properties"]["units"]["properties"]["0:0"]["properties"]["kind"]["enum"])
-        for old_prompt in (GROUNDED_PROMPT, GROUNDED_V3_PROMPT):
+        for old_prompt in (GROUNDED_V2_PROMPT, GROUNDED_V3_PROMPT):
             self.assertNotIn("stable_fact", old_prompt)
         self.assertEqual(fact["text"], "联系人原话：“我在市立图书馆担任管理员。”")
         self.assertEqual((fact["category"], fact["valid_at"], fact["invalid_at"]), ("common_fact", None, None))
@@ -403,7 +404,9 @@ class GroundedV4RuntimeTest(unittest.TestCase):
         self.assertNotIn("semantic:unverified", pending.risk_flags)
         detail = traces.get_batch(scope, traces.list_batches(scope)[0]["trace_id"])
         events = {event["stage"]: event["payload"] for event in detail["events"]}
-        self.assertEqual(events["verification"]["result"]["verdict"], "supported")
+        self.assertEqual(events["verification"]["result"]["model_verdict"], "supported")
+        self.assertEqual(events["verification"]["result"]["verdict"], "uncertain")
+        self.assertIn("semantic:pragmatics", pending.risk_flags)
         self.assertEqual(events["grounded_draft"]["draft"], draft)
         self.assertEqual(events["grounded_compile"]["payloads"][0]["speech_act"], "assertion")
         self.assertEqual(events["grounded_compile"]["payloads"][0]["assertion_status"], "asserted")

@@ -797,6 +797,40 @@ def _basis(source: _Parsed, candidate: _Parsed, message: MessageRef, fact: Extra
     return result
 
 
+def unresolved_author_quote_note(
+    window: ExtractionWindow, text: str, source_message_ids: tuple[UUID, ...],
+) -> str | None:
+    """仅说明完整引句中原语法明确缺失的角色，不生成可信来源或正向依据。"""
+
+    if len(window.messages) != 1 or len(window.target_message_id_set) != 1:
+        return None
+    message = window.messages[0]
+    if (
+        message.message_id not in window.target_message_id_set
+        or source_message_ids != (message.message_id,)
+        or len(message.text) > MAX_TEXT_LENGTH or len(text) > MAX_TEXT_LENGTH
+    ):
+        return None
+    author = "用户" if message.sender.value == "self" else "联系人"
+    if text != author + "原话：“" + message.text + "”":
+        return None
+    source = (_lend(message.text, message.sender.value, source=True)
+              or _request(message.text, message.sender.value, source=True))
+    if source is not None:
+        if "property_owner" in source.values and source.values["property_owner"] is None:
+            return "原句中的物品所有者在本窗口无法唯一确定；不因出借或接收认定所有者，保留原句。"
+        if "beneficiary" in source.values and source.values["beneficiary"] is None:
+            return "原句中顶班事项的受益人在本窗口无法唯一确定；不因提出请托认定受益人，不补接受或履行，保留原句。"
+    return None
+
+
+def unresolved_author_quote_reason(window: ExtractionWindow, fact: ExtractedFact) -> str | None:
+    """V沿原接口复用同一负向识别，不改写候选或授予正向信用。"""
+    if unresolved_author_quote_note(window, fact.text, fact.source_message_ids) is not None:
+        return "missing_source_identity"
+    return None
+
+
 def verify_proposal(
     proposal: ProofProposal | None, window: ExtractionWindow, fact: ExtractedFact,
     trusted_sources: Mapping[UUID, str] | None = None,

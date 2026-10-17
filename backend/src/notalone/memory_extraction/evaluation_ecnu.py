@@ -37,6 +37,7 @@ from notalone.memory_extraction.semantic_evaluation_cases import SEMANTIC_CASES
 from notalone.memory_extraction.verification import SourceVerificationMode
 from notalone.memory_trace.context import current_trace
 from .evaluation_provider_contract import (
+    FULL140_E2_PLAN, FULL140_E2_MODE, FULL140_E2_STAGE,
     MIXED_PLAN, MIXED_REQUEST_VERSION, MIXED_MODE, MIXED_STAGE, mixed_phase_policy,
     REFERENCE21_V4_PLAN, REFERENCE21_V4_MODE, REFERENCE21_V4_STAGE, PHASE_SPLIT_PLANS, REFERENCE21_PLANS,
     SEMANTIC4_PLAN, SEMANTIC4_MODE, SEMANTIC4_STAGE, SEMANTIC4_PROMPT_PROFILE, validate_semantic4_windows,
@@ -85,6 +86,15 @@ _FULL140_V4_REQUIRED_SOURCES = _NULLABLE_REQUIRED_SOURCES | frozenset({
     ".scratch/grounded-evaluation/full140-v4-reference-integration-20261016.md",
     ".scratch/grounded-evaluation/reference-source-fidelity-v2-spec-20261016.md",
     ".scratch/grounded-v4-protocol-readiness/spec.md", ".scratch/grounded-v4-object-ownership/spec.md",
+    "desktop/artifacts/grounded-public21-prepare-20261015/grounded_public21.py",
+    "desktop/artifacts/grounded-public21-prepare-20261015/explicit_review_bridge.py",
+})
+_FULL140_E2_REQUIRED_SOURCES = _NULLABLE_REQUIRED_SOURCES | frozenset({
+    FULL_REFERENCE_V2_PATH, FULL_ANNOTATION_V2_PATH, PUBLIC_REFERENCE_V2_PATH, PUBLIC_ANNOTATION_V2_PATH,
+    "backend/src/notalone/runtime_config.py", "desktop/tests/fixtures/full140-v4-public.py",
+    "desktop/tests/fixtures/full140-e2-v-off-public.py",
+    ".scratch/grounded-evaluation/full140-e2-v-off-plan-20261017.md",
+    ".scratch/grounded-evaluation/reference-source-fidelity-v2-spec-20261016.md",
     "desktop/artifacts/grounded-public21-prepare-20261015/grounded_public21.py",
     "desktop/artifacts/grounded-public21-prepare-20261015/explicit_review_bridge.py",
 })
@@ -149,6 +159,7 @@ def _gold_reference(
     required_sources = (_UNIQUENESS_REQUIRED_SOURCES if execution_plan == UNIQUENESS_PLAN else
                         _SEMANTIC4_REQUIRED_SOURCES if execution_plan == SEMANTIC4_PLAN else
                         _REFERENCE21_V4_REQUIRED_SOURCES if execution_plan == REFERENCE21_V4_PLAN else
+                        _FULL140_E2_REQUIRED_SOURCES if execution_plan == FULL140_E2_PLAN else
                         _FULL140_MIXED_REQUIRED_SOURCES if execution_plan == MIXED_PLAN else
                         _FULL140_V4_REQUIRED_SOURCES if reference_version == "source-fidelity-v2" else
                         _NULLABLE_REQUIRED_SOURCES
@@ -252,9 +263,11 @@ def run_ecnu_evaluation(
     prompt_profile = SEMANTIC4_PROMPT_PROFILE if public_quality else "default"
     validate_extraction_prompt_profile(execution_plan, extraction_prompt_profile)
     full140_v4 = execution_plan in ("full140-grounded-v4-source-v2", MIXED_PLAN)
-    fixed_v4 = full140_v4 or reference21_v4
+    full140_e2 = execution_plan == FULL140_E2_PLAN
+    fixed_full140 = full140_v4 or full140_e2
+    fixed_source_v2 = fixed_full140 or reference21_v4
     if (type(reference_version) is not str or reference_version not in {"legacy-v1", "source-fidelity-v2"}
-            or not fixed_v4 and (reference_version != "legacy-v1" or extraction_mode == "grounded-v4")):
+            or not fixed_source_v2 and (reference_version != "legacy-v1" or extraction_mode == "grounded-v4")):
         raise EvaluationBudgetAbort("evaluation_full140_v4_fixed_plan_required")
     try:
         extraction_selected = EvaluationExtractionMode(extraction_mode)
@@ -306,6 +319,13 @@ def run_ecnu_evaluation(
             or type(request_timeout_seconds) is not int or request_timeout_seconds != 300
             or type(max_retries) is not int or max_retries != 0):
         raise EvaluationBudgetAbort("evaluation_full140_v4_fixed_plan_required")
+    if full140_e2 and (not official or type(case_set) is not str or case_set != "full140"
+            or case_positions is not None or type(request_limit) is not int or request_limit != 280
+            or extraction_selected is not EvaluationExtractionMode.GROUNDED_V2 or reference_version != "source-fidelity-v2"
+            or verification_mode != SourceVerificationMode.LEGACY_V4 or verification_tool_choice != "forced"
+            or type(request_timeout_seconds) is not int or request_timeout_seconds != 300
+            or type(max_retries) is not int or max_retries != 0):
+        raise EvaluationBudgetAbort("evaluation_full140_e2_fixed_plan_required")
     if reference21_v4 and (not official or type(case_set) is not str or case_set != "reference21"
             or case_positions is not None or type(request_limit) is not int or request_limit != 42
             or extraction_selected.value != "grounded-v4" or reference_version != "source-fidelity-v2"
@@ -332,8 +352,8 @@ def run_ecnu_evaluation(
             or main16 and synthetic_transport is None and (
                 type(main16_deadline) is not Main16Deadline or not main16_deadline.live_worker)):
         raise EvaluationBudgetAbort("main16_owned_deadline_required")
-    if ((full140_v4_deadline is not None and (not full140_v4 or type(full140_v4_deadline) is not Full140V4Deadline))
-            or full140_v4 and (type(full140_v4_deadline) is not Full140V4Deadline
+    if ((full140_v4_deadline is not None and (not fixed_full140 or type(full140_v4_deadline) is not Full140V4Deadline))
+            or fixed_full140 and (type(full140_v4_deadline) is not Full140V4Deadline
                 or synthetic_transport is None and not full140_v4_deadline.live_worker)):
         raise EvaluationBudgetAbort("full140_v4_owned_deadline_required")
     if ((reference21_v4_deadline is not None and (not reference21_v4 or type(reference21_v4_deadline) is not Reference21V4Deadline))
@@ -407,7 +427,7 @@ def run_ecnu_evaluation(
         raise EvaluationBudgetAbort("ecnu_explicit_protocol_required")
     from .evaluation_phased_audit import PhasedEvaluationAudit
 
-    if fixed_v4 and type(audit_case) is not PhasedEvaluationAudit:
+    if fixed_source_v2 and type(audit_case) is not PhasedEvaluationAudit:
         raise EvaluationBudgetAbort("ecnu_phased_audit_required")
     if type(audit_case) is PhasedEvaluationAudit and audit_case.reference_version != reference_version:
         raise EvaluationBudgetAbort("evaluation_phased_reference_version_mismatch")
@@ -436,9 +456,9 @@ def run_ecnu_evaluation(
         frozen_gold, source_hashes, case_set=case_set, verification_mode=selected,
         reference_version=reference_version, execution_plan=execution_plan,
     )
-    if synthetic_transport is None or fixed_v4:
+    if synthetic_transport is None or fixed_source_v2:
         if (frozen_gold.get("criteria_path") !=
-                (PUBLIC_REFERENCE_V2_PATH if reference21_v4 else FULL_REFERENCE_V2_PATH if full140_v4 else
+                (PUBLIC_REFERENCE_V2_PATH if reference21_v4 else FULL_REFERENCE_V2_PATH if fixed_full140 else
                  FULL_REFERENCE_PATH if case_set == "full140" else PUBLIC_REFERENCE_PATH)
                 or cast(PhasedEvaluationAudit, audit_case).criteria_sha256 !=
                 reference["criteria_sha256"]):
@@ -463,7 +483,7 @@ def run_ecnu_evaluation(
     )
     if case_set == "full140" or reference21_v4:
         validation = _load_fixed_reference(repo_root, source_hashes, reference_version=reference_version, case_set=case_set)
-        if ((synthetic_transport is None or fixed_v4) and
+        if ((synthetic_transport is None or fixed_source_v2) and
                 cast(PhasedEvaluationAudit, audit_case).reference_sha256 !=
                 validation["reference_sha256"]):
             raise EvaluationBudgetAbort("ecnu_phased_reference_mismatch")
@@ -485,7 +505,7 @@ def run_ecnu_evaluation(
                          max_retries=max_retries, verification_mode=selected,
                          extraction_mode=extraction_selected, windows=windows, prompt_profile=prompt_profile,
                          extraction_prompt_profile=extraction_prompt_profile),
-        "mode": (UNIQUENESS_MODE if uniqueness else SEMANTIC4_MODE if public_quality else REFERENCE21_V4_MODE if reference21_v4 else MIXED_MODE if mixed else "deepseek_bounded_full140_v4_source_v2" if full140_v4 else
+        "mode": (FULL140_E2_MODE if full140_e2 else UNIQUENESS_MODE if uniqueness else SEMANTIC4_MODE if public_quality else REFERENCE21_V4_MODE if reference21_v4 else MIXED_MODE if mixed else "deepseek_bounded_full140_v4_source_v2" if full140_v4 else
                  "deepseek_bounded_main16_v3" if main16 else
                  "deepseek_bounded_ambiguity2_v3" if ambiguity2 else
                  "deepseek_bounded_remaining8" if remaining8 else
@@ -494,7 +514,7 @@ def run_ecnu_evaluation(
                  "ecnu_bounded_full140" if case_set == "full140" else
                  "ecnu_bounded_evaluation" if case_positions is None
                  else "ecnu_bounded_diagnostic"),
-        "stage": (UNIQUENESS_STAGE if uniqueness else SEMANTIC4_STAGE if public_quality else REFERENCE21_V4_STAGE if reference21_v4 else MIXED_STAGE if mixed else "full140-v4-source-v2" if full140_v4 else "main16-v3" if main16 else "ambiguity2-v3" if ambiguity2 else "remaining8" if remaining8 else "full140" if case_set == "full140" else
+        "stage": (FULL140_E2_STAGE if full140_e2 else UNIQUENESS_STAGE if uniqueness else SEMANTIC4_STAGE if public_quality else REFERENCE21_V4_STAGE if reference21_v4 else MIXED_STAGE if mixed else "full140-v4-source-v2" if full140_v4 else "main16-v3" if main16 else "ambiguity2-v3" if ambiguity2 else "remaining8" if remaining8 else "full140" if case_set == "full140" else
                   "P1" if case_positions is None else "diagnostic"),
         "base_url": base_url, "endpoint": endpoint, "request_model": request_model,
         **({"reasoning_effort": "max"} if official else {}),
@@ -504,9 +524,9 @@ def run_ecnu_evaluation(
         "public_cases_sha256": canonical_sha256(
             _FULL_CASES if case_set == "full140" else _PLAN_CASES,
         ),
-        **({"selected_case_positions": list(range(140)) if full140_v4 else list(positions)}
+        **({"selected_case_positions": list(range(140)) if fixed_full140 else list(positions)}
            if case_set == "full140" or case_positions is not None or reference21_v4 else {}),
-        **({"execution_plan": execution_plan, "reference_version": reference_version} if fixed_v4 else {}),
+        **({"execution_plan": execution_plan, "reference_version": reference_version} if fixed_source_v2 else {}),
         "response_identity_policy": ({
             "mode": response_identity_policy, "known_labels": sorted(KNOWN_ECNU_RESPONSE_LABELS),
             "endpoint": _ENDPOINT, "request_model": "ecnu-max", "weights_identity_verified": False,

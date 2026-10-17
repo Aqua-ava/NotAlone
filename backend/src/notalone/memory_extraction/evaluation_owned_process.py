@@ -11,6 +11,7 @@ import sys
 import time
 from typing import Any, Callable
 from .evaluation_provider_contract import (
+    FULL140_E2_PLAN, FULL140_E2_MODE, FULL140_E2_STAGE, FULL140_E2_KIND,
     MIXED_PLAN, MIXED_MODE, MIXED_STAGE, MIXED_KIND, MIXED_REQUEST_VERSION, mixed_phase_policy,
     REFERENCE21_V4_PLAN, REFERENCE21_V4_MODE, REFERENCE21_V4_STAGE, REFERENCE21_V4_KIND,
     SEMANTIC4_PLAN, SEMANTIC4_MODE, SEMANTIC4_STAGE, SEMANTIC4_KIND, SEMANTIC4_PROMPT_PROFILE,
@@ -33,6 +34,8 @@ class _FixedPublicControl:
 
 
 _PROFILES = {
+    FULL140_E2_KIND: _FixedPublicControl(280, 86400, 140, 138, FULL140_E2_MODE, FULL140_E2_STAGE,
+                                      tuple(range(140)), 16384, FULL140_E2_PLAN, "source-fidelity-v2"),
     UNIQUENESS_KIND: _FixedPublicControl(42, 14400, 21, 28, UNIQUENESS_MODE, UNIQUENESS_STAGE,
                                        tuple(range(21)), 2048, UNIQUENESS_PLAN, "source-fidelity-v2"),
     SEMANTIC4_KIND: _FixedPublicControl(42, 14400, 21, 28, SEMANTIC4_MODE, SEMANTIC4_STAGE,
@@ -134,7 +137,7 @@ def _launch_owned_public_worker(*, frozen: dict, script: Path, root: Path, helpe
                 and type(value.get("request_limit")) is int and value["request_limit"] == request_limit
                 and type(value.get("reserved_requests")) is int
                 and 0 <= value["reserved_requests"] <= request_limit)
-    closed = (closed_receipt(budget) and (kind not in {MIXED_KIND, REFERENCE21_V4_KIND, SEMANTIC4_KIND, UNIQUENESS_KIND} or (
+    closed = (closed_receipt(budget) and (kind not in {FULL140_E2_KIND, MIXED_KIND, REFERENCE21_V4_KIND, SEMANTIC4_KIND, UNIQUENESS_KIND} or (
         type(result.get("worker_pid")) is int and result["worker_pid"] == child.pid
         and result.get("execution_plan") == profile.execution_plan))) or (type(deadline.get("worker_pid")) is int
                                        and deadline["worker_pid"] == child.pid and closed_receipt(deadline))
@@ -195,15 +198,19 @@ def _verify_owned_public_claim(*, frozen: dict, helper: Any, kind: str) -> None:
             or profile.execution_plan is not None and (
                 config.get("execution_plan") != profile.execution_plan
                 or config.get("reference_version") != profile.reference_version)
-            or kind in {MIXED_KIND, REFERENCE21_V4_KIND, SEMANTIC4_KIND, UNIQUENESS_KIND} and (
+            or kind in {FULL140_E2_KIND, MIXED_KIND, REFERENCE21_V4_KIND, SEMANTIC4_KIND, UNIQUENESS_KIND} and (
                 config.get("phase_request_version") != MIXED_REQUEST_VERSION
                 or config.get("phase_request_policy") != mixed_phase_policy()
                 or config.get("tool_choice") != {
-                    "extraction": {"mode": "omitted", "name": "GroundedMemoryLabelsV4"},
+                    "extraction": {"mode": "omitted", "name": "GroundedMemoryLabels" if kind == FULL140_E2_KIND else "GroundedMemoryLabelsV4"},
                     "verification": {"mode": "forced", "name": "SourceVerificationOutput"}})
             or config.get("source_hashes") != frozen["source_hashes"]
             or kind in {SEMANTIC4_KIND, UNIQUENESS_KIND} and (config.get("verification_mode") != "legacy-v4"
                 or config.get("verification_prompt_profile") != SEMANTIC4_PROMPT_PROFILE)
+            or kind == FULL140_E2_KIND and (config.get("extraction_mode") != "grounded-v2"
+                or config.get("verification_mode") != "legacy-v4" or "verification_prompt_profile" in config
+                or config.get("verification_prompt_sha256") != frozen["verification_prompt_sha256"]
+                or config.get("verification_schema_sha256") != frozen["verification_schema_sha256"])
             or kind == UNIQUENESS_KIND and config.get("extraction_prompt_profile") != UNIQUENESS_E_PROFILE
             or kind != UNIQUENESS_KIND and "extraction_prompt_profile" in config
             or config.get("extraction_window_contracts") != frozen["extraction_window_contracts"]):

@@ -9,7 +9,7 @@ from .evaluation_http_budget import EvaluationBudgetAbort
 from .evaluation_extraction import EvaluationExtractionMode, extraction_tool_name
 from .evaluation_provider_contract import (
     validate_evaluation_policy, MIXED_PLAN, MIXED_REQUEST_VERSION, mixed_phase_policy,
-    PHASE_SPLIT_PLANS, REFERENCE21_PLANS, PUBLIC_QUALITY_PLANS, UNIQUENESS_PLAN,
+    FULL140_E2_PLAN, PHASE_SPLIT_PLANS, REFERENCE21_PLANS, PUBLIC_QUALITY_PLANS, UNIQUENESS_PLAN,
     validate_extraction_prompt_profile,
 )
 from .evaluation_records import canonical_sha256
@@ -207,6 +207,7 @@ class PhasedEvaluationAudit:
         if type(execution_plan) is not str or execution_plan not in {"original", *PHASE_SPLIT_PLANS}:
             raise ValueError("审核执行身份非法。")
         self._execution_plan = execution_plan
+        e2 = execution_plan == FULL140_E2_PLAN
         mixed = execution_plan in PHASE_SPLIT_PLANS
         reference21_v4 = execution_plan in REFERENCE21_PLANS
         public_quality = execution_plan in PUBLIC_QUALITY_PLANS
@@ -234,12 +235,12 @@ class PhasedEvaluationAudit:
         if (reference_version == "source-fidelity-v2"
                 or self._extraction_mode is EvaluationExtractionMode.GROUNDED_V4):
             if (reference_version != "source-fidelity-v2"
-                    or self._extraction_mode is not EvaluationExtractionMode.GROUNDED_V4
+                    or self._extraction_mode is not (EvaluationExtractionMode.GROUNDED_V2 if e2 else EvaluationExtractionMode.GROUNDED_V4)
                     or case_set != ("reference21" if reference21_v4 else "full140") or case_positions is not None
-                    or self._verification_mode is not (SourceVerificationMode.LEGACY_V4 if public_quality else SourceVerificationMode.NULLABLE_PROOF_V1)
+                    or self._verification_mode is not (SourceVerificationMode.LEGACY_V4 if public_quality or e2 else SourceVerificationMode.NULLABLE_PROOF_V1)
                     or extraction_tool_choice != "omitted" or verification_tool_choice != ("forced" if mixed else "omitted")):
                 raise ValueError("来源保真v2审核须匹配已注册的完整140协议。")
-        if mixed and (reference_version != "source-fidelity-v2" or self._extraction_mode.value != "grounded-v4"):
+        if mixed and (reference_version != "source-fidelity-v2" or self._extraction_mode.value != ("grounded-v2" if e2 else "grounded-v4")):
             raise ValueError("混合策略仅用于完整140的来源保真v2。")
         self._reference_version = reference_version
         validation = (validate_full_public_reference if case_set == "full140"
