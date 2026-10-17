@@ -8,4 +8,7 @@
 - 新场仅见quit-ready后实际菜单退出，核PID消失，再写该子目录done；spec核exit0/signalnull，不再HTTP。
 - 原24分钟test/22分钟CUA/每步最多4分钟保持；新场仍须桌面协调，不复用旧nonce或自行第二启动。
 - typecheck、原HTTP预检2/2 17.120秒通过，2库/3PID核清；两原审查者对此固定增量各0。
-- 新时序尚未实际App验证；078/产品/真实质量unknown不变；真人删除语义仍pending，06仍claimed。
+- 新时序在clean `8cf0b711a72f9c4d504ccc5f80f9a79ea29fe5ba` 的native03单App完整1/1通过（4.0分钟）。
+- 8纠错+8公开后验、2basis、本人手录、空contact实际完成；先落最终公开后验及runtime，再quit-ready→真实菜单退出→PIDgone→quitdone，test核exit0/signalnull。
+- 10记录PID/3组/userData/精确测试库/双lease均父独核清，退出前/清理后各21来源模块摘要匹配本树；完整通过与旧失败各自封存。
+- 原生资料管理与06e正式回复组合HTTP矩阵分列；078/产品/真实质量unknown不变，真人删除语义仍pending，06仍claimed。
