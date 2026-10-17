@@ -6,6 +6,7 @@ from uuid import UUID
 
 from notalone.application.layered_memory_service import LayeredMemoryService
 from notalone.memory.layered import OrganizationBudget
+from notalone.memory.organization_deadline import SYNTHETIC_ORGANIZATION_TIMEOUT
 from notalone.persistence.layered_memory import PostgresLayeredMemoryStore
 from notalone.server.app import create_app
 from tests.integration.server.core_business_flow_support import HttpBackend
@@ -34,12 +35,13 @@ class LayeredMemoryManagementHttpTest(MemoryOverviewHttpFixture, unittest.TestCa
         self.assertEqual(enabled["layered_memory"]["scenarios"], [])
         self.assertEqual(self._get(self.backend, path)["layered_memory"]["status"], "blocked")
 
-    def controlled(self, *, proposer=None, verifier=None, budget=None, clock=None, call_timeout_seconds=30):
+    def controlled(self, *, proposer=None, verifier=None, budget=None, clock=None, call_timeout_seconds=30, model_priority=None):
         self.proposal = proposer or ControlledProposal()
         self.verification = verifier or ControlledVerification()
         self.service = LayeredMemoryService(PostgresLayeredMemoryStore(self.database_url, clock=clock),
             proposer=self.proposal, verifier=self.verification, synthetic=True,
-            budget=budget or OrganizationBudget(), call_timeout_seconds=call_timeout_seconds)
+            budget=budget or OrganizationBudget(), call_timeout_seconds=call_timeout_seconds,
+            model_priority=model_priority)
         backend = HttpBackend(create_app(database_url=self.database_url, owner_id=self.owner_id,
             token="synthetic-layered-token", layered_memory=self.service), self.owner_id)
         self.addCleanup(backend.close)
@@ -162,14 +164,14 @@ class LayeredMemoryManagementHttpTest(MemoryOverviewHttpFixture, unittest.TestCa
         status, result = foreign.request(f"/api/contacts/{contact}/layered-memory")
         self.assertEqual(status,404,result)
 
-    def test_non_finite_adapter_is_failed_with_a_bounded_wait_and_late_output_discarded(self):
+    def test_controlled_adapter_transport_deadline_discards_timeout_output(self):
         from threading import Event
         contact, _, message = self.import_contact("合成经历：双方共同参加过课程。")
         self.confirm(contact, "双方共同参加过课程。", message)
         release = Event()
         self.addCleanup(release.set)
         proposer = GatedProposal(release)
-        backend = self.controlled(proposer=proposer, call_timeout_seconds=0.02)
+        backend = self.controlled(proposer=proposer, call_timeout_seconds=0.2)
         state = self.enable(backend, contact)
         self.assertEqual((state["status"],state["error_code"]), ("failed","model_call_timeout"))
         release.set()
@@ -177,6 +179,51 @@ class LayeredMemoryManagementHttpTest(MemoryOverviewHttpFixture, unittest.TestCa
         current = self._get(backend,f"/api/contacts/{contact}/layered-memory")["layered_memory"]
         self.assertEqual(current["scenarios"], [])
         self.assertEqual(current["status"], "failed")
+
+    def test_adapter_transport_deadlines_release_shared_foreground_without_opening_the_gate(self):
+        from concurrent.futures import ThreadPoolExecutor
+        from threading import Event
+        from notalone.application.model_priority import ModelPriorityControl
+        for slow_phase in ("proposal", "verification"):
+            with self.subTest(slow_phase=slow_phase):
+                contact, _, message = self.import_contact("合成经历：双方共同参加过课程。")
+                self.confirm(contact, "双方共同参加过课程。", message)
+                slow = DeadlineTransportAdapter(slow_phase)
+                priority = ModelPriorityControl()
+                backend = self.controlled(proposer=slow if slow_phase == "proposal" else None,
+                    verifier=slow if slow_phase == "verification" else None,
+                    call_timeout_seconds=0.2, model_priority=priority)
+                foreground_entered = Event()
+                def foreground():
+                    with priority.foreground():
+                        foreground_entered.set()
+                with ThreadPoolExecutor(max_workers=2) as workers:
+                    organizing = workers.submit(self.enable, backend, contact)
+                    self.assertTrue(slow.started.wait(2), "必须实际到达受控传输")
+                    replying = workers.submit(foreground)
+                    self.assertTrue(slow.finished.wait(2), "Adapter须按剩余期限自行返回，不人工放门")
+                    self.assertTrue(foreground_entered.wait(1), "实际调用超时返回后前台必须取得共享许可")
+                    replying.result(timeout=1)
+                    state = organizing.result(timeout=2)
+                self.assertFalse(slow.gate.is_set())
+                self.assertEqual((state["status"], state["error_code"]), ("failed", "model_call_timeout"))
+                self.assertEqual(state["scenarios"], [])
+
+    def test_legacy_and_unqualified_sdk_adapters_cannot_open_a_synthetic_scope(self):
+        from notalone.memory.organization_deadline import OrganizationAdapterTimeoutContract
+        contact, _, _ = self.import_contact("合成范围：Adapter期限准入。")
+        class LegacyProposal:
+            def propose(self, *, memories, budget):
+                raise AssertionError("无期限Adapter不得调用")
+        class MissingDeadlineProposal(LegacyProposal):
+            timeout_contract = SYNTHETIC_ORGANIZATION_TIMEOUT
+        class UnqualifiedSdkProposal(ControlledProposal):
+            timeout_contract = OrganizationAdapterTimeoutContract("sdk")
+        for adapter in (LegacyProposal(), MissingDeadlineProposal(), UnqualifiedSdkProposal()):
+            with self.subTest(adapter=type(adapter).__name__), self.assertRaises(ValueError):
+                self.controlled(proposer=adapter)
+        state = self._get(self.backend, f"/api/contacts/{contact}/layered-memory")["layered_memory"]
+        self.assertEqual((state["enabled"], state["settings_generation"], state["scenarios"]), (False, 0, []))
 
     def test_complete_verification_input_over_budget_never_calls_verifier_or_publishes(self):
         contact, _, _ = self.import_contact("合成范围：核验输入也须有界。")
@@ -306,10 +353,13 @@ class LayeredMemoryManagementHttpTest(MemoryOverviewHttpFixture, unittest.TestCa
 
 
 class ControlledProposal:
+    timeout_contract = SYNTHETIC_ORGANIZATION_TIMEOUT
+
     def __init__(self):
         self.inputs = []
 
-    def propose(self, *, memories, budget):
+    def propose(self, *, memories, budget, deadline):
+        deadline.check()
         self.inputs.append(memories)
         return {"scenarios": [{"topic_key": "shared-learning", "title": "共同学习经历",
             "hint": "共同课程与学习经历", "paragraphs": [{"text": "双方共同参加过课程。",
@@ -317,12 +367,18 @@ class ControlledProposal:
 
 
 class ControlledVerification:
-    def verify(self, *, memories, proposal):
+    timeout_contract = SYNTHETIC_ORGANIZATION_TIMEOUT
+
+    def verify(self, *, memories, proposal, deadline):
+        deadline.check()
         return True
 
 
 class RejectVerification:
-    def verify(self, *, memories, proposal):
+    timeout_contract = SYNTHETIC_ORGANIZATION_TIMEOUT
+
+    def verify(self, *, memories, proposal, deadline):
+        deadline.check()
         return False
 
 
@@ -331,19 +387,23 @@ class HookProposal(ControlledProposal):
         super().__init__()
         self.hook = hook
 
-    def propose(self, *, memories, budget):
-        proposal = super().propose(memories=memories, budget=budget)
+    def propose(self, *, memories, budget, deadline):
+        proposal = super().propose(memories=memories, budget=budget, deadline=deadline)
         if self.hook:
             self.hook()
         return proposal
 
 
 class HookVerification:
+    timeout_contract = SYNTHETIC_ORGANIZATION_TIMEOUT
+
     def __init__(self, hook):
         self.hook = hook
 
-    def verify(self, *, memories, proposal):
+    def verify(self, *, memories, proposal, deadline):
+        deadline.check()
         self.hook()
+        deadline.check()
         return True
 
 
@@ -353,25 +413,56 @@ class GatedProposal(ControlledProposal):
         super().__init__()
         self.release, self.finished = release, Event()
 
-    def propose(self, *, memories, budget):
-        self.release.wait(3)
+    def propose(self, *, memories, budget, deadline):
         try:
-            return super().propose(memories=memories,budget=budget)
+            if not self.release.wait(deadline.remaining_seconds()):
+                from notalone.application.organization_call import OrganizationCallTimeout
+                raise OrganizationCallTimeout()
+            return super().propose(memories=memories,budget=budget,deadline=deadline)
         finally:
             self.finished.set()
 
 
 class EchoProposal(ControlledProposal):
-    def propose(self, *, memories, budget):
-        proposal = super().propose(memories=memories, budget=budget)
+    def propose(self, *, memories, budget, deadline):
+        proposal = super().propose(memories=memories, budget=budget, deadline=deadline)
         proposal["scenarios"][0]["paragraphs"][0]["text"] = memories[0].text
         return proposal
 
 
 class RecordingVerification:
+    timeout_contract = SYNTHETIC_ORGANIZATION_TIMEOUT
+
     def __init__(self):
         self.inputs = []
 
-    def verify(self, *, memories, proposal):
+    def verify(self, *, memories, proposal, deadline):
+        deadline.check()
         self.inputs.append((memories, proposal))
+        return True
+
+
+class DeadlineTransportAdapter:
+    timeout_contract = SYNTHETIC_ORGANIZATION_TIMEOUT
+
+    def __init__(self, phase):
+        from threading import Event
+        self.phase = phase
+        self.gate, self.started, self.finished = Event(), Event(), Event()
+
+    def _transport(self, deadline):
+        self.started.set()
+        try:
+            if not self.gate.wait(deadline.remaining_seconds()):
+                from notalone.application.organization_call import OrganizationCallTimeout
+                raise OrganizationCallTimeout()
+        finally:
+            self.finished.set()
+
+    def propose(self, *, memories, budget, deadline):
+        self._transport(deadline)
+        return ControlledProposal().propose(memories=memories, budget=budget, deadline=deadline)
+
+    def verify(self, *, memories, proposal, deadline):
+        self._transport(deadline)
         return True

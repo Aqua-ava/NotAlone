@@ -7,7 +7,9 @@ import math
 from notalone.memory.layered import OrganizationBudget, LayeredMemoryConflict
 from notalone.memory.scenario_validation import validate_proposal
 from notalone.application.model_priority import ModelPriorityControl, ModelWorkStopped
-from notalone.application.organization_call import bounded_organization_call, OrganizationCallTimeout
+from notalone.application.organization_call import (
+    bounded_organization_call, OrganizationCallTimeout, require_adapter_timeout_contract,
+)
 
 
 class LayeredMemoryService:
@@ -22,6 +24,8 @@ class LayeredMemoryService:
             store.require_synthetic_database()
             if proposer is None or verifier is None or proposer is verifier:
                 raise ValueError("受控整理须分别注入提案和独立核验适配器。")
+            require_adapter_timeout_contract(proposer, "propose", synthetic=True)
+            require_adapter_timeout_contract(verifier, "verify", synthetic=True)
         self._synthetic = synthetic
         self._budget = budget or OrganizationBudget()
         self._priority = model_priority or ModelPriorityControl()
@@ -47,12 +51,12 @@ class LayeredMemoryService:
         return self.read(scope)
 
     def _organize(self, scope):
-        work = self._store.prepare(scope, self._budget, "scenario-v1:synthetic-only")
+        work = self._store.prepare(scope, self._budget, "scenario-v2:synthetic-only:deadline-v1")
         if work is None:
             return
         try:
-            raw = self._call(work, lambda: self._proposer.propose(
-                memories=deepcopy(work.memories), budget=self._budget))
+            raw = self._call(work, self._proposer, "propose", lambda deadline: self._proposer.propose(
+                memories=deepcopy(work.memories), budget=self._budget, deadline=deadline))
             proposal = validate_proposal(raw, work.memories, self._budget)
             self._store.record_proposal(work, raw)
             # 核验实际接收全部记忆和完整提案，两者合计仍受单次输入上限约束。
@@ -60,8 +64,8 @@ class LayeredMemoryService:
             if len(json.dumps(verification_input, ensure_ascii=False)) > self._budget.max_characters:
                 self._store.fail(work, "verification_input_budget_exceeded")
                 return
-            supported = self._call(work, lambda: self._verifier.verify(
-                memories=deepcopy(work.memories), proposal=deepcopy(raw)))
+            supported = self._call(work, self._verifier, "verify", lambda deadline: self._verifier.verify(
+                memories=deepcopy(work.memories), proposal=deepcopy(raw), deadline=deadline))
             if supported is not True:
                 self._store.fail(work, "faithfulness_rejected")
                 return
@@ -75,7 +79,8 @@ class LayeredMemoryService:
         except Exception:
             self._store.fail(work, "model_call_failed")
 
-    def _call(self, work, call):
+    def _call(self, work, adapter, operation, call):
+        require_adapter_timeout_contract(adapter, operation, synthetic=self._synthetic)
         return bounded_organization_call(call, priority=self._priority,
             guard=lambda: self._store.check(work), timeout_seconds=self._call_timeout_seconds)
 

@@ -5,6 +5,7 @@ from typing import Protocol
 from uuid import UUID
 
 from notalone.scopes import ContactScope
+from notalone.memory.organization_deadline import OrganizationAdapterTimeoutContract, OrganizationCallDeadline
 
 
 class LayeredMemoryConflict(RuntimeError):
@@ -51,13 +52,25 @@ class OrganizationInput:
 
 
 class ScenarioProposalPort(Protocol):
-    def propose(self, *, memories: tuple[OrganizationInput, ...], budget: OrganizationBudget) -> dict:
-        """返回 scenarios:[{topic_key,title,hint,paragraphs:[{text,references:[{memory_id,revision}]}]}]。"""
+    timeout_contract: OrganizationAdapterTimeoutContract
+
+    def propose(self, *, memories: tuple[OrganizationInput, ...], budget: OrganizationBudget,
+                deadline: OrganizationCallDeadline) -> dict:
+        """返回有界主题；deadline的剩余秒数必须用于实际传输，禁止隐式重试。
+
+        格式：scenarios:[{topic_key,title,hint,paragraphs:[{text,references:[{memory_id,revision}]}]}]。
+        """
 
 
 class ScenarioVerificationPort(Protocol):
-    def verify(self, *, memories: tuple[OrganizationInput, ...], proposal: dict) -> bool:
-        """独立逐次核验主体、否定、时间、条件与范围；明确 True 才能生效。"""
+    timeout_contract: OrganizationAdapterTimeoutContract
+
+    def verify(self, *, memories: tuple[OrganizationInput, ...], proposal: dict,
+               deadline: OrganizationCallDeadline) -> bool:
+        """独立核验主体、否定、时间、条件与范围，明确True才生效。
+
+        全部传输与等待须遵守deadline剩余期限；不以外层等待代替实际超时。
+        """
 
 
 @dataclass(frozen=True, slots=True, repr=False)

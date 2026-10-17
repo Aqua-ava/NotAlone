@@ -32,6 +32,7 @@ def main():
     from psycopg import sql
     from notalone.database_migrations import migrate
     from notalone.application.layered_memory_service import LayeredMemoryService
+    from notalone.memory.organization_deadline import SYNTHETIC_ORGANIZATION_TIMEOUT
     from notalone.application.memory_service import MemoryService
     from notalone.application.setup_service import SetupService
     from notalone.persistence.layered_memory import PostgresLayeredMemoryStore
@@ -47,9 +48,12 @@ def main():
         pass
 
     class Proposal:
+        timeout_contract = SYNTHETIC_ORGANIZATION_TIMEOUT
+
         calls = 0
 
-        def propose(self, *, memories, budget):
+        def propose(self, *, memories, budget, deadline):
+            deadline.check()
             self.calls += 1
             return {"scenarios": [{"topic_key": "synthetic-learning", "title": "合成学习记录",
                 "hint": "双方共同学习的合成记录", "paragraphs": [{"text": item.text,
@@ -57,9 +61,12 @@ def main():
                 for item in memories]}]}
 
     class Verification:
+        timeout_contract = SYNTHETIC_ORGANIZATION_TIMEOUT
+
         calls = 0
 
-        def verify(self, *, memories, proposal):
+        def verify(self, *, memories, proposal, deadline):
+            deadline.check()
             self.calls += 1
             available = {(str(item.memory_id), item.revision): item.text for item in memories}
             return all(len(paragraph["references"]) == 1 and available.get((

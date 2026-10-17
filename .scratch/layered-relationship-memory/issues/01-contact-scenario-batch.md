@@ -62,3 +62,12 @@ Blocked by: None
 - Standards P2：独立核验前按实际完整输入（全部记忆与完整提案）重新计算JSON字符数；超过已声明的单次上限即返回 `failed / verification_input_budget_exceeded`，不调用核验器、不发布正文，也不扩大预算。
 - 公开HTTP／真实隔离PG新增回归先red（旧实现错误发布ready）再green；本票模块现13/13通过，原有正常提案路径保留。只运行最小用例与相关模块，未重跑unit全集或App。
 - 仅合成资料；本次自有库按精确归属创建并回收，无真实模型、业务库或外部消息影响。01保持claimed，等待Spec轴及修复复审。
+
+
+## Spec期限修复（待统一复审）
+
+- 公开提案／核验Adapter新增版本化实际传输期限合同与必需的 `deadline` 参数；服务在装配及每次调用前核对合同，旧无期限接口和未获准SDK Adapter不能进入当前合成门。
+- 排队、来源guard、调用方等待和实际传输共用一个monotonic绝对期限，取得许可后不重置预算；调用前与返回后继续检查期限、来源和设置世代。已发调用仍不能被强行中断，许可仅在实际Adapter返回后释放。
+- 受控提案及核验真实使用剩余期限执行 `Event.wait`；公开HTTP／真实PG测试不人工放门，分别验证实际到期返回及共享foreground有限进入。新用例先red后green，最终相关模块15/15通过，包含Standards预算回归。
+- deadline版公开页面冒烟通过并 `cleanupConfirmed=true`，证据在本轮仓库外私有目录；它运行于最后两项调用前准入／finite值检查补充之前，随后最终HTTP模块复验通过。未重跑App或unit全集。
+- 合同声明是可信Adapter准入边界，不能检测或强制抢占任意谎报合同的Python实现；真实SDK尚未装配，后续真实装配必须验证deadline到实际传输及重试设置，不能把本轮合成证明当SDK资格。真实质量继续unknown，01保持claimed。
