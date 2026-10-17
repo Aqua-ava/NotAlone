@@ -1,0 +1,39 @@
+# 06b 续实现交接（仍 claimed，未完成）
+- 交接前 HEAD `54477aecb3306bdbb5aca74e919bd144a9f12d0a`；后端产品最后 `cd09cccbcd760af14856bf52e70413f8317110fd`，其后仅 root 原生验收文件；本文件单独提交。
+- 树仍为本票独立树、分支 `codex/layered-memory-06`；原 `handoff-06.md` 保留前史，不整份重读长架构文档。
+- 原任务、AGENTS、工作流、工程、领域、tracker、triage、implement/tdd 均已读；下一上下文按入口及本文行号续，不宣称 ready/resolved。
+- 06b 提交：`2aed40e3` 总结 bridge；`3a9ff5f7` 逐项 UI+事实叶定位；`fa6c0ef8` 反馈重放 ABA；`e8d8f0c5` 旧缓存验证。
+- `cf542ec5` 为独立 explore 补的矩阵；`8e5530dd` 共享夹具；`150d8c34` 真实升级；`0994108f` 08 副本；`9ee1c32f` 四 Port；`cd09cccb` guard 完整依赖与重整身份。
+- 公开管理入口仍 summary-error/fact-error；主/preload bridge 两 scope×L2/L3，校验已读实际项、世代和引用，pending 撤正文。
+- React 每段/项可反馈总结；事实错误请求后按 correction_target 的实际 memory_id+revision 展示准确修正表单，跨页也定位；补充仍手录。
+- onRecordDeletion 沿原生产接线同步清 Trace/Upgrade/Skill；新增 4 例核旧状态、三个在途取消、pending 栅栏、迟到不恢复。
+- summary 同 operation 在原 settings_generation 幂等；停用重开后旧请求 409，原保护保留，非用户新批准。
+- 工作 target_key 新纳 correction_revision；job、L2、L3 均继承反馈 dependency_ids 及仍有效 protected_memory_ids/message_ids。
+- 真红闭包：先删 B 将反馈转 erased_guard，再用独立 C 生成，末删 A 曾残留 correction_input；已修，并修旧完成任务卡住合法 C 重整。
+- 078 字段未改；079 仍归 C10。末依据删除决定清除，soft-deleted 行不当活动依据；未选择删除整理结果最终语义。
+- correction-v1 实际对照 tuple[{feedback_id,rejected_text,reason,rule=independent-literal-v1}]；erased_guard 正文为 null；不含源定位/联系人身份。
+- 四语义 Port 有反馈时必须具名支持 corrections；不支持 closed。L2/L3 准备及核验均计完整对照 JSON 预算，不开放真实质量。
+- 保守输出仍为独立合法 L1 逐字正文+唯一引用；固定 L2 标题/hint、L3 uncertain/说明；未知自由概括拒绝，不宣称通用语义证明。
+- Node 验证：原 40 例相关组通过，后新增缓存 4 例单组通过；typecheck 通过。React 新 8+既有12=20 串行通过。
+- React 初红包含 about:blank 缺原生 UUID，helper 改可信 localhost；事实初红是 p/textarea 选择器双命中，均已修正，不冒称产品缺陷。
+- 公开 HTTP 原纠错精确 class 已从6扩至8，最后 cd09 产品实跑 8/8（16.115s）；类在 test_layered_memory_corrections.py。
+- 独立矩阵 LayeredCorrectionMatrixHttpTest 8/8（fa6 产品）；四 Port ContractHttpTest 5/5，追加无反馈同 L1 预算对照单例通过。
+- LayeredCorrectionReplyCopiesHttpTest 3/3：实际 read_scenario→保存/准备/讨论/恢复；联系人 L2/L3 反馈清使用副本，本人未使用新层不得误删联系人副本。
+- 首次 owner 工具例越过08目录边界红 not_in_directory，已据09职责修正测试；未扩产品。08 仅联系人目录，09 才组合本人新层。
+- LayeredCorrectionMigrationTest 1/1：正式077预置 owner/contact/source/task/L2/L3，再升078；旧行/账本保持、repeat0、唯一/范围/级联通过。
+- 实跑命令沿端侧 A-06-run.py，用 env-i+指定 Conda+双禁 dotenv，精确 unittest class/case；最后 guard 修复后其余相关组尚待回归。
+- 06b 自有 runner 16 库 marker 全 catalog_absent；升级嵌套库日志也确认 absent。共享 fixture 另2库 cleanup_confirmed=true，子进程已退出。
+- 无头20例已结束，记录的30个 browser PID 全 absent、profile 全 absent；首轮无DEBUG的8例由 helper finally 关闭；未建 App/原生进程。
+- 全程未读业务库/.env/私聊、无真实模型/微信/外部发送/远端。scanner 每次为既存 engineering 路径12、新增0。
+- 共享 fixture 为 desktop/tests/fixtures/layered-memory-page.py + layered-memory-fixture.ts，普通页面/native 共用，禁止复制第二服务器。
+- API withLayeredMemoryFixture(use,cleanup,{maxMemories:2,separateTopics:true[,ownerOnly:true]})；默认不变；选项下两 scope 各独立两 L1、同batch两主题4calls。
+- fixture runtime_proof 含 correction_receipts/fixture_options，模块 hash 含纠错 store/validator；纯 HTTP/PG 两例2/2（9.2s）已验证默认及新选项。
+- root 独占 desktop/tests/layered-correction-native-flow.ts、layered-correction-native.spec.ts、layered-memory/correction-native-preflight.test.mjs，已提交54477aec。
+- root 正跑共享8步 HTTP 后验预检；第1轮是假定恒2项/排序的脚本错误，已修；第2轮在跑。接替前先向 root 协调 PG/fixture/源码窗口。
+- 未验优先：并发反馈/更正/withdraw/停用 ABA/源 DELETE202/晚结果/恢复；hook 仅记录，断言在外；Embedded worker 全局锁期间不等物理删除。
+- 防绕过待补：同规范消息换 source_ref、旧 L1 链包装 revision、改 topic/拆并/跨层/追加无关资料；旧依据保守，合法独立新依据可重整。
+- 待跑相关05/07/08精确 class 回归，避免 imported TestCase 混分母；当前各局部绿不等于最终全量或真实 App/真人质量通过。
+- 唯一人审未决：删除整理结果后重开清全部保护，或另改保留可管理无正文 guard；D已问真实用户，不能预选/把等待当批准。
+- 主动删反馈属同一语义族，root要求不先实现“只删说明留guard”且不扩写本票操作；来源删除继续已有合同，普通刷新/停用重开/恢复仍保护。
+- 后续完善票 Answer/索引但保持 claimed；root负责新两轴审查、桌面互斥、CUA及D最终审签；06c不要自启 reviewer/App 或给其他 chat 发消息。
+- 外部 A-06-interface 与 A-06b-handoff 保存完整命令、原始失败/绿日志及私有资源指针；本文件不含本机身份或协调路径。
