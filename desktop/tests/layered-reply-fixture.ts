@@ -42,7 +42,8 @@ export async function withLayeredReplyFixture(use: (fixture: RewriteFixture) => 
   process.env.NOTALONE_LAYERED_EXPECTED_MODULES = JSON.stringify(expected);
   try {
     await withRewriteFixture('notalone-layered-reply-', use, cleanupConfirmed,
-      path.join(project, 'desktop/tests/fixtures/layered-reply-page.py'), path.join(project, 'backend'));
+      path.join(project, 'desktop/tests/fixtures/layered-reply-page.py'), path.join(project, 'backend'),
+      'database-ownership.json', 30_000);
   } finally {
     if (previous === undefined) delete process.env.NOTALONE_LAYERED_EXPECTED_MODULES;
     else process.env.NOTALONE_LAYERED_EXPECTED_MODULES = previous;

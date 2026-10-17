@@ -12,6 +12,7 @@ const compiled = await build({ stdin: { contents: `
   export { readContactDirectory } from './src/main/contacts/directory';
   export { readConnection } from './src/main/backend/connection';
   export { withRewriteFixture } from './tests/rewrite-backend-fixture';
+  export { withLayeredReplyFixture } from './tests/layered-reply-fixture';
   export { installReplyBridge } from './src/main/reply/bridge';
   export { createReplyBridge } from './src/preload/reply';
   export { ExpressionPreferenceController } from './src/main/expression-preferences/controller';

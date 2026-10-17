@@ -119,6 +119,12 @@ def main():
                     "scenario_paragraph_count": len(scenario["paragraphs"]), "profile_text": ready["profile"]["entries"][0]["text"]}
             elif operation == "plan_scenario_reads":
                 result = plan_scenario_reads(command.get("text", "想聊聊一起参加课程的经历。"))
+            elif operation == "saved_scenario_evidence":
+                plan_scenario_reads()
+                status, turn = backend.request(reply_path + "/replies",
+                    fixture.rewrite_body(contact, "聊聊共同参加的课程。"), timeout=30)
+                fixture.assertEqual(status, 200, turn)
+                result = fixture._get(backend, fixture.evidence_path(contact, turn))
             elif operation == "plan":
                 fixture.reply_model.plans.insert(0, command["plan"])
                 result = {}

@@ -1,7 +1,45 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { mkdtemp, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { test } from 'node:test';
 import { historicalReplyFixture, ports } from './fixtures/historical-reply-basis.mjs';
+
+test('真实HTTP保存的主题正文依据穿过生产解析与React，历史协议仍按匹配版本展示', { timeout: 90_000 }, async () => {
+  const previous = process.env.NOTALONE_LAYERED_TEST_EVIDENCE_DIR;
+  const directory = await mkdtemp(path.join(tmpdir(), 'notalone-layered-parser-contract-'));
+  process.env.NOTALONE_LAYERED_TEST_EVIDENCE_DIR = directory;
+  try {
+    await ports.withLayeredReplyFixture(async (fixture) => {
+      const prepared = await fixture.command('prepared');
+      const actual = await fixture.command('saved_scenario_evidence');
+      await writeFile(path.join(directory, 'actual-saved-evidence.json'), JSON.stringify(actual), { mode: 0o600 });
+      const f = await generatedFixture((f) => {
+        Object.assign(f.records.evidence, actual, { reply_request_id: f.requestId });
+        f.records.saved.turns[0].reply.candidates[0].citation_ids = actual.evidence.filter((item) => item.cited).map((item) => item.evidence_id);
+      });
+      await f.bridge.loadEvidence(f.selection);
+      const state = await f.bridge.getEvidenceState();
+      assert.equal(state.phase, 'ready', JSON.stringify(state));
+      assert.equal(state.layeredContext.schemaVersion, 2);
+      assert.equal(state.layeredContext.readPolicy, 'synthetic-contact-layered-v2');
+      assert.equal(state.layeredContext.profileVersionId, prepared.profile_version_id);
+      assert.deepEqual(state.layeredScenarioReads.map((item) => item.status), ['succeeded', 'duplicate']);
+      assert.equal(state.layeredScenarioReads[0].document.versionId, prepared.scenario_version_id);
+      assert.deepEqual(state.layeredScenarioReads[0].document.paragraphRange, [0, 1]);
+      const html = await renderEvidence(f);
+      assert.ok(html.includes(prepared.scenario_text));
+      assert.ok(html.includes(prepared.scenario_version_id));
+      assert.ok(html.includes('重复读取'));
+      assert.equal((await fixture.command('runtime_proof')).external_model_calls, 0);
+    });
+    process.stdout.write(`saved_evidence_contract: ${directory}\n`);
+  } finally {
+    if (previous === undefined) delete process.env.NOTALONE_LAYERED_TEST_EVIDENCE_DIR;
+    else process.env.NOTALONE_LAYERED_TEST_EVIDENCE_DIR = previous;
+  }
+});
 
 function retrieval(ids, overrides = {}) {
   return { version: 1, retriever_version: 'lexical-v1', status: 'succeeded',
@@ -463,11 +501,12 @@ function scenarioSnapshot(f) {
   const scenarioId = randomUUID(), versionId = randomUUID();
   const reference = { memory_id: f.memoryId, revision: 1, provenance_kind: 'source_supported',
     timing: f.records.evidence.evidence[0].timing };
-  const context = { schema_version: 1, scope_kind: 'contact', settings_generation: 2,
+  const context = { schema_version: 2, scope_kind: 'contact', settings_generation: 2,
     organization_generation: 3, profile_version_id: null, profile_entries: [],
     directory: [{ scenario_id: scenarioId, version_id: versionId, title: '合成冻结课程', hint: '共同课程的历史资料',
       paragraph_count: 2, paragraph_range: [0, 2] }],
-    read_policy: 'synthetic-contact-layered-v1', budget: { profile_entries: 4, directory_entries: 6, characters: 1800 } };
+    read_policy: 'synthetic-contact-layered-v2',
+    scenario_read_budget: { call_limit: 3, paragraph_limit: 4, character_limit: 1800 }, budget: { profile_entries: 4, directory_entries: 6, characters: 1800 } };
   const receipt = { schema_version: 1, status: 'succeeded', reason: '已读取本次冻结目录中的主题正文。',
     scenario_id: scenarioId, paragraph_range: [0, 1],
     budget: { call_limit: 3, paragraph_limit: 4, character_limit: 1800, used_calls: 1, used_paragraphs: 1, used_characters: 420 },
@@ -478,6 +517,30 @@ function scenarioSnapshot(f) {
   Object.assign(f.records.evidence, { layered_status: 'loaded', layered_context: context, layered_scenario_reads: [receipt] });
   return { scenarioId, versionId, receipt, context };
 }
+
+test('历史分层协议只接受匹配版本，不给旧版补授主题正文读取额度', async () => {
+  const cases = [
+    { schema_version: 1, read_policy: 'synthetic-contact-layered-v2' },
+    { schema_version: 2, read_policy: 'synthetic-contact-layered-v1' },
+    { schema_version: 3, read_policy: 'synthetic-contact-layered-v2' },
+    { schema_version: 1, read_policy: 'synthetic-contact-layered-v1' },
+  ];
+  for (const protocol of cases) {
+    const f = await generatedFixture((f) => {
+      const snapshot = scenarioSnapshot(f);
+      Object.assign(snapshot.context, protocol);
+    });
+    await f.bridge.loadEvidence(f.selection);
+    assert.equal((await f.bridge.getEvidenceState()).phase, 'failed');
+  }
+  const f = await generatedFixture((f) => {
+    const snapshot = scenarioSnapshot(f);
+    Object.assign(snapshot.context, { schema_version: 1, read_policy: 'synthetic-contact-layered-v1' });
+    delete snapshot.context.scenario_read_budget;
+  });
+  await f.bridge.loadEvidence(f.selection);
+  assert.equal((await f.bridge.getEvidenceState()).phase, 'failed');
+});
 
 test('主题工具实际读取的冻结正文、段落范围与直接引用进入候选依据', async () => {
   let snapshot;

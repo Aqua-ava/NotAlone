@@ -15,6 +15,8 @@ const requestedRange = (value: unknown): value is [number, number] => Array.isAr
 function scenarioReads(value: unknown, context: ReplyLayeredContext | null | undefined): ReplyLayeredScenarioRead[] | undefined {
   if (value === undefined) return undefined;
   if (!Array.isArray(value) || value.length > 256) throw invalid();
+  // 旧版历史只保留当时的背景；不能借展示兼容给旧协议补授正文工具权限。
+  if (value.length && (context?.schemaVersion !== 2 || !context.scenarioReadBudget)) throw invalid();
   return value.map((entry: unknown): ReplyLayeredScenarioRead => {
     if (!record(entry) || entry.schema_version !== 1 || !text(entry.reason) || !entry.reason.trim()
       || !['succeeded', 'duplicate', 'out_of_range', 'not_in_directory', 'invalid_arguments', 'stale', 'budget_exceeded'].includes(entry.status as string)
@@ -23,6 +25,11 @@ function scenarioReads(value: unknown, context: ReplyLayeredContext | null | und
     const rawBudget = entry.budget;
     if (![rawBudget.call_limit, rawBudget.paragraph_limit, rawBudget.character_limit,
       rawBudget.used_calls, rawBudget.used_paragraphs, rawBudget.used_characters].every(integer)) throw invalid();
+    const allowedBudget = context?.scenarioReadBudget;
+    if (!allowedBudget || rawBudget.call_limit !== allowedBudget.callLimit
+      || rawBudget.paragraph_limit !== allowedBudget.paragraphLimit || rawBudget.character_limit !== allowedBudget.characterLimit
+      || (rawBudget.used_calls as number) > rawBudget.call_limit || (rawBudget.used_paragraphs as number) > rawBudget.paragraph_limit
+      || (rawBudget.used_characters as number) > rawBudget.character_limit) throw invalid();
     const base = { schemaVersion: 1 as const, reason: entry.reason,
       scenarioId: entry.scenario_id === null ? null : entry.scenario_id.toLowerCase(),
       paragraphRange: entry.paragraph_range === null ? null : [...entry.paragraph_range] as [number, number],
@@ -85,15 +92,27 @@ export function readLayeredEvidence(value: Record<string, unknown>) {
     if (layeredStatus === 'loaded') throw invalid();
     return withReads(value, { layeredStatus, layeredContext: null });
   }
-  if (layeredStatus !== 'loaded' || !record(context) || context.schema_version !== 1 || context.scope_kind !== 'contact'
+  if (layeredStatus !== 'loaded' || !record(context)
+    || !((context.schema_version === 1 && context.read_policy === 'synthetic-contact-layered-v1')
+      || (context.schema_version === 2 && context.read_policy === 'synthetic-contact-layered-v2')) || context.scope_kind !== 'contact'
     || !integer(context.settings_generation) || !integer(context.organization_generation)
     || !(context.profile_version_id === null || isUuid(context.profile_version_id))
-    || context.read_policy !== 'synthetic-contact-layered-v1' || !record(context.budget)
+    || !record(context.budget)
     || !integer(context.budget.profile_entries) || !integer(context.budget.directory_entries) || !integer(context.budget.characters)
     || !Array.isArray(context.profile_entries) || context.profile_entries.length > 256
     || context.profile_entries.length > context.budget.profile_entries
     || !Array.isArray(context.directory) || context.directory.length > 256 || context.directory.length > context.budget.directory_entries
     || (context.profile_entries.length > 0 && context.profile_version_id === null)) throw invalid();
+  let scenarioReadBudget: ReplyLayeredContext['scenarioReadBudget'];
+  if (context.schema_version === 1) {
+    if (context.scenario_read_budget !== undefined) throw invalid();
+  } else if (context.scenario_read_budget === null) scenarioReadBudget = null;
+  else {
+    const limits = context.scenario_read_budget;
+    if (!record(limits) || ![limits.call_limit, limits.paragraph_limit, limits.character_limit].every((part) => integer(part) && part > 0)) throw invalid();
+    scenarioReadBudget = { callLimit: limits.call_limit as number, paragraphLimit: limits.paragraph_limit as number,
+      characterLimit: limits.character_limit as number };
+  }
   const profileEntries: ReplyLayeredContext['profileEntries'] = context.profile_entries.map((entry: unknown) => {
     if (!record(entry) || !text(entry.text) || !text(entry.uncertainty)
       || !['stable', 'historical', 'uncertain'].includes(entry.temporal_status as string)
@@ -114,14 +133,16 @@ export function readLayeredEvidence(value: Record<string, unknown>) {
   const directory: ReplyLayeredContext['directory'] = context.directory.map((entry: unknown) => {
     if (!record(entry) || !isUuid(entry.scenario_id) || !isUuid(entry.version_id) || !text(entry.title) || !text(entry.hint)
       || !integer(entry.paragraph_count)
+      || (context.schema_version === 2 && entry.paragraph_range === undefined)
       || (entry.paragraph_range !== undefined && (!range(entry.paragraph_range)
         || entry.paragraph_range[0] !== 0 || entry.paragraph_range[1] !== entry.paragraph_count))) throw invalid();
     return { scenarioId: entry.scenario_id.toLowerCase(), versionId: entry.version_id.toLowerCase(), title: entry.title,
       hint: entry.hint, paragraphCount: entry.paragraph_count,
       ...(entry.paragraph_range === undefined ? {} : { paragraphRange: [...entry.paragraph_range] as [number, number] }) };
   });
-  return withReads(value, { layeredStatus, layeredContext: { schemaVersion: 1, scopeKind: 'contact', settingsGeneration: context.settings_generation,
+  return withReads(value, { layeredStatus, layeredContext: { schemaVersion: context.schema_version as 1 | 2, scopeKind: 'contact', settingsGeneration: context.settings_generation,
     organizationGeneration: context.organization_generation, profileVersionId: context.profile_version_id,
-    profileEntries, directory, readPolicy: context.read_policy,
+    profileEntries, directory, readPolicy: context.read_policy as ReplyLayeredContext['readPolicy'],
+    ...(scenarioReadBudget === undefined ? {} : { scenarioReadBudget }),
     budget: { profileEntries: context.budget.profile_entries, directoryEntries: context.budget.directory_entries, characters: context.budget.characters } } });
 }
