@@ -1,3 +1,4 @@
+import { selectMemoryCategory } from '../memory-page-actions';
 import { expect, type Browser, type Page } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
@@ -23,7 +24,8 @@ function choice(result: Record<string, unknown>) {
 }
 async function deleteDirectionSource(manager: Page, fixture: RewriteFixture, sourceId: string) {
   const contactId = fixture.data.contact_ids[0];
-  await manager.getByRole('button', { name: '关系资料', exact: true }).click();
+  await manager.getByRole('button', { name: '记忆', exact: true }).click();
+  await selectMemoryCategory(manager, '来源与过程');
   const source = manager.getByRole('region', { name: '来源删除管理', exact: true }).getByRole('listitem')
     .filter({ hasText: `来源标识：${sourceId}` });
   await source.getByRole('button', { name: '删除来源', exact: true }).click();

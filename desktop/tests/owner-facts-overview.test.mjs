@@ -78,7 +78,7 @@ test('本人独立概览沿生产桥查看真实手录偏好、来源与版本�
   assert.match(html, /本人明确偏好合成无糖饮品/);
   assert.match(html, /用户手动录入/);
   assert.match(html, /底层资料版本：1/);
-  assert.match(html, /通过下方本人记忆修正或删除/);
+  assert.match(html, /切换到本人记忆修正或删除/);
   assert.ok(html.includes(ids.source));
   assert.deepEqual(state.overview, { phase: 'idle', value: null });
   assert.deepEqual(state.contact, { phase: 'idle', items: [] });

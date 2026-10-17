@@ -1,3 +1,4 @@
+import { openMemoryTrace, selectMemoryCategory } from '../memory-page-actions';
 import { expect, type Browser, type Page } from '@playwright/test';
 import { PageHost } from './page-host';
 import { withControllerEnvironment, withMemoryBackend, withTraceBackend, type TraceData } from './backend-fixture';
@@ -12,9 +13,9 @@ export async function memoryTraces(browser: Browser, origin: string) {
         await host.backend.connect();
         const page = await host.open('manager');
         await page.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
-        await page.getByRole('button', { name: '关系资料', exact: true }).click();
+        await page.getByRole('button', { name: '记忆', exact: true }).click();
+        await openMemoryTrace(page, '甲喜欢合成茉莉茶。');
         await expect(page.getByRole('region', { name: '提取与来源处理过程', exact: true })).toBeVisible();
-        await page.getByRole('button', { name: '查看提取过程：甲喜欢合成茉莉茶。', exact: true }).click();
         await expect(page.getByText('这条资料没有已保存的过程记录。', { exact: true })).toBeVisible();
       } finally { await host.close(); }
     });
@@ -23,10 +24,10 @@ export async function memoryTraces(browser: Browser, origin: string) {
 
 async function openMemory(page: Page) {
   await page.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
-  await page.getByRole('button', { name: '关系资料', exact: true }).click();
+  await page.getByRole('button', { name: '记忆', exact: true }).click();
 }
 async function showTrace(page: Page, data: TraceData) {
-  await page.getByRole('button', { name: '查看提取过程：甲参加合成追踪活动。', exact: true }).click();
+  await openMemoryTrace(page, '甲参加合成追踪活动。');
   await page.getByRole('button', { name: `查看批次：${data.trace_id}`, exact: true }).click();
   await page.getByText('1. 实际输入窗口', { exact: true }).click();
   await expect(page.getByRole('group', { name: '过程详情', exact: true }).getByText(/桌面验收合成文字/).first()).toBeVisible();
@@ -40,7 +41,7 @@ export async function memoryTracesFull(browser: Browser, origin: string) {
         await host.backend.connect();
         const page = await host.open('manager'); await openMemory(page);
         const panel = page.getByRole('region', { name: '提取与来源处理过程', exact: true });
-        await page.getByRole('button', { name: '查看提取过程：本人手动录入的合成资料。', exact: true }).click();
+        await openMemoryTrace(page, '本人手动录入的合成资料。', '本人记忆');
         await expect(panel.getByText('手动录入资料不适用模型提取过程。', { exact: true })).toBeVisible();
         await panel.getByRole('button', { name: '查看批次列表', exact: true }).click();
         await expect(panel.getByRole('list', { name: '过程批次' }).getByRole('listitem')).toHaveCount(20);
@@ -71,7 +72,7 @@ export async function memoryTracesFull(browser: Browser, origin: string) {
         await expect(panel.getByText('过程记录已删除，权威记忆仍保留。', { exact: true })).toBeVisible();
         const authoritative = await fixture.readMemorySection(data.contact_ids[0], 'contact');
         expect((authoritative.data.memories as Array<{ memory_id: string }>).some((row) => row.memory_id === data.traced_memory_id)).toBe(true);
-        await page.getByRole('button', { name: '查看提取过程：甲参加合成追踪活动。', exact: true }).click();
+        await openMemoryTrace(page, '甲参加合成追踪活动。');
         await expect(panel.getByText('过程正文已删除，仅保留实际存在的状态与标识。', { exact: true })).toBeVisible();
         await panel.getByRole('combobox', { name: '过程类型' }).selectOption('source-processing-traces');
         await panel.getByRole('button', { name: '查看批次列表', exact: true }).click();
@@ -84,6 +85,7 @@ export async function memoryTracesFull(browser: Browser, origin: string) {
         await panel.getByRole('button', { name: '查找记录过程' }).click();
         await expect(panel.getByRole('button', { name: `查看批次：${data.processing_id}`, exact: true })).toBeVisible();
         await page.getByRole('combobox', { name: '资料联系人' }).selectOption(data.empty_contact_id);
+        await selectMemoryCategory(page, '来源与过程');
         await panel.getByRole('button', { name: '查看批次列表', exact: true }).click();
         await expect(panel.getByText('当前联系人没有已保存的批次。', { exact: true })).toBeVisible();
       } finally { await host.close(); }
@@ -130,6 +132,7 @@ export async function memoryTracesLifecycle(browser: Browser, origin: string) {
           await page.getByRole('combobox', { name: '资料联系人' }).selectOption(data.contact_ids[1]);
           proxy.holdPath = null; proxy.release();
           expect(await page.evaluate(async () => (await window.notalone.traces.getState()).detail)).toBeNull();
+          await selectMemoryCategory(page, '来源与过程');
           await expect(panel.getByRole('group', { name: '过程详情', exact: true })).toHaveCount(0);
           await page.getByRole('combobox', { name: '资料联系人' }).selectOption(data.contact_ids[0]);
           await showTrace(page, data);
@@ -173,7 +176,8 @@ export async function memoryTracesRecordDeletion(browser: Browser, origin: strin
           try {
             await host.backend.connect();
             const page = await host.open('manager'); await openMemory(page);
-            await page.getByRole('button', { name: `查看提取过程：${data.trace_text}`, exact: true }).click();
+            const category = mode === 'deletion-owner' ? '本人记忆' : mode === 'deletion-candidate' ? '待确认候选' : '联系人记忆';
+            await openMemoryTrace(page, data.trace_text, category);
             await page.getByRole('button', { name: `查看批次：${data.trace_id}`, exact: true }).click();
             const panel = page.getByRole('region', { name: '提取与来源处理过程', exact: true });
             await panel.getByText('1. 实际输入窗口', { exact: true }).click();
@@ -192,6 +196,7 @@ export async function memoryTracesRecordDeletion(browser: Browser, origin: strin
               proxy.holdMethod = 'POST';
               proxy.holdPath = `/api/contacts/${data.contact_ids[0]}/memories/${data.traced_memory_id}/delete`;
             }
+            await selectMemoryCategory(page, category);
             const card = page.getByRole('article').filter({ has: page.getByText(data.trace_text, { exact: true }) });
             await card.getByRole('button', { name: `${candidate ? '丢弃候选' : '删除资料'}：${data.trace_text}`, exact: true }).click();
             await card.getByRole('button', { name: candidate ? '确认丢弃' : '确认删除', exact: true }).click();
@@ -205,6 +210,7 @@ export async function memoryTracesRecordDeletion(browser: Browser, origin: strin
               proxy.holdPath = null; proxy.release(true);
               await expect(page.getByText('未能完成资料操作与核对，请刷新确认后重试。', { exact: true })).toBeVisible();
             } else await expect(card).toHaveCount(0);
+            await selectMemoryCategory(page, '来源与过程');
             await expect(panel.getByRole('group', { name: '过程详情', exact: true })).toHaveCount(0);
             if (late) { proxy.holdPath = null; proxy.release(); }
             expect(await page.evaluate(async () => (await window.notalone.traces.getState()).detail)).toBeNull();

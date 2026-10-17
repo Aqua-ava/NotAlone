@@ -1,3 +1,4 @@
+import { selectMemoryCategory } from '../memory-page-actions';
 import path from 'node:path';
 import { expect, type Browser, type Page } from '@playwright/test';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
@@ -35,8 +36,8 @@ export async function historicalReplyBasis(browser: Browser, origin: string) {
     await helper.getByRole('textbox', { name: '本次改口', exact: true }).fill(intention);
     await helper.getByRole('textbox', { name: '继续修改要求', exact: true }).fill('第一条简短一点');
 
-    await manager.getByRole('button', { name: '关系资料', exact: true }).click();
-    await manager.getByRole('button', { name: '刷新关系资料', exact: true }).click();
+    await manager.getByRole('button', { name: '记忆', exact: true }).click();
+    await manager.getByRole('button', { name: '刷新记忆', exact: true }).click();
     const contact = manager.getByRole('region', { name: '联系人记忆', exact: true });
     await contact.getByRole('button', { name: `修正资料：${prepared.text}`, exact: true }).click();
     const form = contact.getByRole('form', { name: '修正联系人资料', exact: true });
@@ -77,6 +78,7 @@ export async function historicalReplyBasis(browser: Browser, origin: string) {
     const evidence = helper.getByRole('region', { name: '候选1依据', exact: true });
     await expect(evidence.getByText(freshText, { exact: true })).toBeVisible();
 
+    await selectMemoryCategory(manager, '来源与过程');
     const source = manager.getByRole('region', { name: '来源删除管理', exact: true }).getByRole('listitem')
       .filter({ hasText: `来源标识：${prepared.sourceId}` });
     await source.getByRole('button', { name: '删除来源', exact: true }).click();
@@ -124,8 +126,9 @@ export async function historicalReplyBasis(browser: Browser, origin: string) {
     await expect(carried.getByText('本人依据过期后仍保留的合成编辑。', { exact: true })).toBeVisible();
     await expect(carried.getByText('本人资料：记忆有效期已结束。', { exact: true })).toBeVisible();
     expect(((await rewriteBackend.command('observations')).payloads as unknown[]).length).toBe(calls);
-    await manager.getByRole('button', { name: '关系资料', exact: true }).click();
-    await manager.getByRole('button', { name: '刷新关系资料', exact: true }).click();
+    await manager.getByRole('button', { name: '记忆', exact: true }).click();
+    await manager.getByRole('button', { name: '刷新记忆', exact: true }).click();
+    await selectMemoryCategory(manager, '本人记忆');
     const owner = manager.getByRole('region', { name: '本人记忆', exact: true });
     await owner.getByRole('button', { name: `删除资料：${prepared.text}`, exact: true }).click();
     await owner.getByRole('group', { name: '确认删除资料', exact: true }).getByRole('button', { name: '确认删除', exact: true }).click();

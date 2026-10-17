@@ -1,3 +1,4 @@
+import { selectMemoryCategory } from '../memory-page-actions';
 import { expect, type Browser, type Page } from '@playwright/test';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
 import { PageHost } from './page-host';
@@ -203,7 +204,8 @@ async function deletedSource(pages: RewritePages, host: PageHost, userData: stri
   try {
     await expect.poll(() => replyTransport.heldCount).toBe(heldBefore + 1);
     expect(replyTransport.sessionReads.at(-1)).toEqual({ status: 200, states: ['completed', 'completed'] });
-    await manager.getByRole('button', { name: '关系资料', exact: true }).click();
+    await manager.getByRole('button', { name: '记忆', exact: true }).click();
+    await selectMemoryCategory(manager, '来源与过程');
     const sources = manager.getByRole('region', { name: '来源删除管理', exact: true });
     await sources.getByRole('button', { name: '删除来源', exact: true }).click();
     await manager.getByRole('button', { name: '确认删除来源', exact: true }).click();

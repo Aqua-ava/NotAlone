@@ -4,7 +4,7 @@ import { withControllerEnvironment, withMemoryBackend } from './backend-fixture'
 import { ownResource } from './cleanup';
 import { MemoryHttpProxy } from '../memory-http-proxy';
 import type { MemoryFixture } from '../memory-backend-fixture';
-import { memoryAllEmpty, memoryDetails, memoryIndependentFailures, memoryNamedArguments,
+import { memoryAllEmpty, memoryDetails, memoryIndependentFailures, memoryNamedArguments, memoryPagination,
   memoryNewestRefresh, memoryReconnect, memoryScopeAndEmpty, memoryScopeRoundTrip, memorySectionFailure } from '../memory-page-scenarios';
 
 type Scenario = (page: Page, fixture: MemoryFixture, proxy: MemoryHttpProxy) => Promise<void>;
@@ -29,6 +29,7 @@ async function runScenario(browser: Browser, origin: string, name: string, scena
 
 export async function memoryReadingFull(browser: Browser, origin: string) {
   await runScenario(browser, origin, 'memory-details-and-http-scope', memoryDetails);
+  await runScenario(browser, origin, 'memory-category-pagination-and-scope-reset', memoryPagination);
   await runScenario(browser, origin, 'memory-contact-switch-and-empty', memoryScopeAndEmpty);
   await runScenario(browser, origin, 'memory-named-arguments-and-source-role', memoryNamedArguments);
   await runScenario(browser, origin, 'memory-independent-retries', memoryIndependentFailures);

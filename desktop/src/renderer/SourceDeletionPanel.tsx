@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { MemoryList } from './MemoryList';
 import type { SourceDeletionState, DeletionSource } from '../shared/source-deletion-bridge';
 import type { ContactSessionView } from './contact-session';
 import { UpdateBackupCleanupRecovery } from './UpdateBackupDeletionNotice';
@@ -45,11 +46,11 @@ export function SourceDeletionPanel({ session }: { session: ContactSessionView }
   return <section aria-label="来源删除管理" className="memory-section">
     <h3>来源删除管理</h3><button className="button" disabled={!session.state.selectedContactId || state.phase === 'loading' || !!state.busySourceId} onClick={() => void refresh()}>刷新删除状态</button>
     {visible && state.phase === 'loading' && <p role="status">正在核对来源与删除任务…</p>}
-    {visible && state.phase === 'ready' && <ul className="memory-source-list">{state.sources.map((source) => <li key={source.sourceId}>
+    {visible && state.phase === 'ready' && <MemoryList key={`${state.contactId}:${state.scopeRevision}`} items={state.sources} label="来源删除管理" className="memory-source-list" list>{(source) => <li key={source.sourceId}>
       <b>{source.fileName ?? '文件名已清除'}</b><p>来源标识：{source.sourceId}</p><p>{source.recordCount} 条记录</p><p role="status">{status(source)}</p>
       {source.task?.status !== 'succeeded' && <button className="button" disabled={!!state.busySourceId} onClick={() => setConfirmation(source.sourceId)}>{source.task ? '重试来源删除' : '删除来源'}</button>}
       {source.task?.backupCleanupRequired && <UpdateBackupCleanupRecovery />}
-    </li>)}</ul>}
+    </li>}</MemoryList>}
     {confirmation && visible && <div role="dialog" aria-label="确认来源删除"><p>删除这份来源及失去有效来源支持的资料；其他有效来源支持的内容保留。</p>
       <button className="button" onClick={() => void remove()}>确认删除来源</button><button className="button" onClick={() => setConfirmation(null)}>取消删除</button></div>}
     {visible && state.error && <p role="alert">{state.error}</p>}{error && <p role="alert">{error}</p>}

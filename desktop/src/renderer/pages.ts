@@ -24,9 +24,9 @@ export const managerPages = {
     action: '选择历史文件',
   },
   memory: {
-    title: '关系资料', icon: 'memory',
+    title: '记忆', icon: 'memory',
     description: '查看当前有效的关系记忆、本人记忆和待确认候选，核对资料来源与时间。',
-    emptyTitle: '关系资料暂不可用',
+    emptyTitle: '记忆暂不可用',
     emptyDescription: '连接并选择联系人后，可查看资料、来源和采纳状态。',
     action: '选择联系人',
   },

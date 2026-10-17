@@ -1,3 +1,4 @@
+import { selectMemoryCategory } from '../memory-page-actions';
 import { expect, type Browser } from '@playwright/test';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
 import { withRewritePages } from './rewrite-acceptance';
@@ -82,7 +83,8 @@ export async function replyStrategyDialogue(browser: Browser, origin: string) {
       if (scene === '主动聊聊') {
         const sources = await rewriteBackend.request(`/api/contacts/${contactId}/sources`);
         const sourceId = (sources.data.sources as Array<{ source_id: string }>)[0].source_id;
-        await manager.getByRole('button', { name: '关系资料', exact: true }).click();
+        await manager.getByRole('button', { name: '记忆', exact: true }).click();
+        await selectMemoryCategory(manager, '来源与过程');
         const source = manager.getByRole('region', { name: '来源删除管理', exact: true }).getByRole('listitem')
           .filter({ hasText: `来源标识：${sourceId}` });
         await source.getByRole('button', { name: '删除来源', exact: true }).click();

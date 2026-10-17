@@ -1,3 +1,4 @@
+import { selectMemoryCategory } from '../memory-page-actions';
 import { expect, type Browser } from '@playwright/test';
 import path from 'node:path';
 import { withRewriteFixture } from '../rewrite-backend-fixture';
@@ -55,7 +56,8 @@ export async function skillLifecycle(browser: Browser, origin: string) {
       histories = manager.getByRole('region', { name: 'Skill版本历史', exact: true });
       primary = histories.getByRole('article', { name: '版本历史 careful-response', exact: true });
       await expect(primary.getByRole('heading', { name: '版本 1 · 当前版本', exact: true })).toBeVisible();
-      await manager.getByRole('button', { name: '关系资料', exact: true }).click();
+      await manager.getByRole('button', { name: '记忆', exact: true }).click();
+      await selectMemoryCategory(manager, '来源与过程');
       const source = manager.getByRole('region', { name: '来源删除管理', exact: true }).getByRole('listitem')
         .filter({ hasText: `来源标识：${prepared.source_id}` });
       await source.getByRole('button', { name: '删除来源', exact: true }).click();

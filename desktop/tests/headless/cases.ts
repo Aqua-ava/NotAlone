@@ -1,3 +1,4 @@
+import { selectMemoryCategory } from '../memory-page-actions';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
 import { expect, type Browser } from '@playwright/test';
 import { PageHost } from './page-host';
@@ -11,7 +12,7 @@ export async function memoryReading(browser: Browser, origin: string) {
       await host.backend.connect();
       const manager = await host.open('manager');
       await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
-      await manager.getByRole('button', { name: '关系资料', exact: true }).click();
+      await manager.getByRole('button', { name: '记忆', exact: true }).click();
       const contact = manager.getByRole('region', { name: '联系人记忆' });
       const automatic = contact.getByRole('article').filter({ has: manager.getByText('甲喜欢合成茉莉茶。', { exact: true }) });
       await expect(automatic.getByText('甲喜欢合成茉莉茶。', { exact: true })).toBeVisible();
@@ -19,14 +20,18 @@ export async function memoryReading(browser: Browser, origin: string) {
       await expect(contact.getByText('甲的新版本关系备注。', { exact: true })).toBeVisible();
       await expect(contact.getByText('旧版关系备注。', { exact: true })).toHaveCount(0);
       await expect(manager.getByText('另一用户的本人资料。', { exact: true })).toHaveCount(0);
+      await selectMemoryCategory(manager, '待确认候选');
       await expect(manager.getByText('待确认 · 不是已确认事实', { exact: true })).toHaveCount(3);
+      await selectMemoryCategory(manager, '联系人记忆');
       await automatic.getByRole('button', { name: '查看来源与版本：甲喜欢合成茉莉茶。' }).click();
       await expect(automatic.getByText(`来源引用：${fixture.data.direct_message_id}`, { exact: true })).toBeVisible();
       await manager.screenshot({ path: 'artifacts/headless-pages/memory-reading.png' });
       await manager.getByRole('combobox', { name: '资料联系人' }).selectOption(fixture.data.contact_ids[1]);
       await expect(manager.getByText('乙喜欢合成乌龙茶。', { exact: true })).toBeVisible();
       await expect(manager.getByText('甲喜欢合成茉莉茶。', { exact: true })).toHaveCount(0);
+      await selectMemoryCategory(manager, '本人记忆');
       await expect(manager.getByText('本人喜欢合成绿茶。', { exact: true })).toBeVisible();
+      await selectMemoryCategory(manager, '联系人记忆');
       await manager.getByRole('combobox', { name: '资料联系人' }).selectOption(fixture.data.empty_contact_id);
       await expect(manager.getByText('这位联系人暂无可查看记忆。', { exact: true })).toBeVisible();
       const denied = await manager.evaluate(async (outsideContactId) => {
@@ -42,7 +47,7 @@ export async function memoryReading(browser: Browser, origin: string) {
         }));
       }, fixture.data.other_contact_id);
       expect(denied).toEqual([true, true, true, true]);
-      expect(await manager.evaluate(() => Object.keys(window.notalone.memory).sort())).toEqual(['add', 'confirmCandidate', 'correct', 'discardCandidate', 'getState', 'onStateChanged', 'refresh', 'remove']);
+      expect(await manager.evaluate(() => Object.keys(window.notalone.memory).sort())).toEqual(['add', 'applyCandidateUpdate', 'confirmCandidate', 'correct', 'discardCandidate', 'getState', 'onStateChanged', 'openVersions', 'refresh', 'refreshOverview', 'refreshOwnerOverview', 'remove', 'revertAutoUpdate']);
       expect(await manager.evaluate(async () => {
         const current = await window.notalone.contacts.getState();
         try { await window.notalone.replies.generate({ contactId: current.selectedContactId!, scopeRevision: current.scopeRevision, newRequest: true }); return false; }

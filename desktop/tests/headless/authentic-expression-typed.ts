@@ -1,3 +1,4 @@
+import { selectMemoryCategory } from '../memory-page-actions';
 import { writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { expect, type Browser, type Page } from '@playwright/test';
@@ -224,7 +225,8 @@ export async function authenticExpressionTyped(browser: Browser, origin: string)
         if (removal === 'sample') {
           await helper.getByRole('button', { name: `删除表达样本：${sample.text}`, exact: true }).click();
         } else {
-          await manager.getByRole('button', { name: '关系资料', exact: true }).click();
+          await manager.getByRole('button', { name: '记忆', exact: true }).click();
+          await selectMemoryCategory(manager, '来源与过程');
           const sources = manager.getByRole('region', { name: '来源删除管理', exact: true });
           await sources.getByRole('button', { name: '删除来源', exact: true }).click();
           await manager.getByRole('button', { name: '确认删除来源', exact: true }).click();

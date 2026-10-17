@@ -1,3 +1,4 @@
+import { selectMemoryCategory } from '../memory-page-actions';
 import { expect, type Browser } from '@playwright/test';
 import path from 'node:path';
 import { withRewriteFixture } from '../rewrite-backend-fixture';
@@ -18,9 +19,11 @@ export async function memorySkillEvolution(browser: Browser, origin: string) {
       await host.backend.connect();
       let manager = await host.open('manager');
       await manager.getByRole('button', { name: '选择合成演进甲联系人', exact: true }).click();
-      await manager.getByRole('button', { name: '关系资料', exact: true }).click();
+      await manager.getByRole('button', { name: '记忆', exact: true }).click();
+      await selectMemoryCategory(manager, '联系人概览');
       await expect(manager.getByRole('region', { name: '联系人经历与关系变化', exact: true })
         .getByText(prepared.contact_text, { exact: true })).toBeVisible();
+      await selectMemoryCategory(manager, '本人概览');
       await expect(manager.getByRole('region', { name: '本人事实与偏好概览', exact: true })
         .getByText(prepared.owner_text, { exact: true })).toBeVisible();
       await manager.getByRole('button', { name: 'Skill 待审核', exact: true }).click();
@@ -102,7 +105,8 @@ export async function memorySkillEvolution(browser: Browser, origin: string) {
         .filter({ hasText: '本批没有新增差异' });
       await expect(card.getByText('批次 1 · 已应用', { exact: true })).toBeVisible();
       expect((await fixture.command('feedback_reply')).excluded_text_present).toBe(false);
-      await manager.getByRole('button', { name: '关系资料', exact: true }).click();
+      await manager.getByRole('button', { name: '记忆', exact: true }).click();
+      await selectMemoryCategory(manager, '来源与过程');
       const source = manager.getByRole('region', { name: '来源删除管理', exact: true }).getByRole('listitem')
         .filter({ hasText: `来源标识：${prepared.source_id}` });
       await source.getByRole('button', { name: '删除来源', exact: true }).click();
@@ -121,6 +125,7 @@ export async function memorySkillEvolution(browser: Browser, origin: string) {
       if (queuedTask) expect((await manager.evaluate(() => window.notalone.sources.getState()))
         .sources.find(item => item.sourceId === prepared.source_id)!.task!.taskId).toBe(queuedTask);
       expect((await fixture.command('verify_deleted')).verified).toBe(true);
+      await selectMemoryCategory(manager, '本人概览');
       await expect(manager.getByRole('region', { name: '本人事实与偏好概览', exact: true })
         .getByText(prepared.owner_text, { exact: true })).toHaveCount(0);
       await manager.getByRole('button', { name: '旧资料升级', exact: true }).click();

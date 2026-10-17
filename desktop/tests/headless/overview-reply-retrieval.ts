@@ -1,3 +1,4 @@
+import { selectMemoryCategory } from '../memory-page-actions';
 import { expect, type Browser } from '@playwright/test';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
 import { withReplyOverviewFixture, replyOverviewModules, type ReplyOverviewPrepared } from '../overview-reply-retrieval-fixture';
@@ -69,9 +70,9 @@ export async function overviewReplyRetrieval(browser: Browser, origin: string) {
 
       const edit = '用户已修改：先问安排，暂不承诺。';
       await editor.fill(edit);
-      await manager.getByRole('button', { name: '关系资料', exact: true }).click();
+      await manager.getByRole('button', { name: '记忆', exact: true }).click();
       await manager.getByRole('combobox', { name: '资料联系人', exact: true }).selectOption(prepared.contactId);
-      await manager.getByRole('button', { name: '刷新关系资料', exact: true }).click();
+      await manager.getByRole('button', { name: '刷新记忆', exact: true }).click();
       const contact = manager.getByRole('region', { name: '联系人记忆', exact: true });
       await contact.getByRole('button', { name: `修正资料：${prepared.manualContact.text}`, exact: true }).click();
       const correction = contact.getByRole('form', { name: '修正联系人资料', exact: true });
@@ -99,6 +100,7 @@ export async function overviewReplyRetrieval(browser: Browser, origin: string) {
         .toBe(originalReceipt.retrieval?.overviewRevisions.contact?.projectionRevision);
       expect((await fixture.command('observations')).model_calls).toBe(1);
 
+      await selectMemoryCategory(manager, '来源与过程');
       const source = manager.getByRole('region', { name: '来源删除管理', exact: true }).getByRole('listitem')
         .filter({ hasText: `来源标识：${prepared.sourceToDelete}` });
       await source.getByRole('button', { name: '删除来源', exact: true }).click();

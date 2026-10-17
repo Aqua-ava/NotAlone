@@ -1,3 +1,4 @@
+import { selectMemoryCategory } from '../memory-page-actions';
 import { expect, type Browser } from '@playwright/test';
 import path from 'node:path';
 import type { ChildProcess } from 'node:child_process';
@@ -120,7 +121,8 @@ export async function expressionPreferences(browser: Browser, origin: string) {
       await panel.getByRole('button', { name: '刷新长期偏好', exact: true }).click();
       await expect(directory.getByText('有来源的合成表达要求。', { exact: true })).toBeVisible();
       const manager = await host.open('manager');
-      await manager.getByRole('button', { name: '关系资料', exact: true }).click();
+      await manager.getByRole('button', { name: '记忆', exact: true }).click();
+      await selectMemoryCategory(manager, '来源与过程');
       const source = manager.getByRole('region', { name: '来源删除管理', exact: true }).getByRole('listitem')
         .filter({ hasText: `来源标识：${prepared.source_id}` });
       await source.getByRole('button', { name: '删除来源', exact: true }).click();

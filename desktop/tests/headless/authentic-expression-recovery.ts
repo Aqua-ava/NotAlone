@@ -1,3 +1,4 @@
+import { selectMemoryCategory } from '../memory-page-actions';
 import { randomUUID } from 'node:crypto';
 import { expect, type Browser, type Page } from '@playwright/test';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
@@ -91,7 +92,8 @@ async function deletionRecovery(pages: RewritePages, host: PageHost, userData: s
   if (removal === 'sample') {
     await helper.getByRole('button', { name: `删除表达样本：${sample.text}`, exact: true }).click();
   } else {
-    await manager.getByRole('button', { name: '关系资料', exact: true }).click();
+    await manager.getByRole('button', { name: '记忆', exact: true }).click();
+    await selectMemoryCategory(manager, '来源与过程');
     const sources = manager.getByRole('region', { name: '来源删除管理', exact: true });
     await sources.getByRole('button', { name: '删除来源', exact: true }).click();
     await manager.getByRole('button', { name: '确认删除来源', exact: true }).click();
@@ -198,7 +200,8 @@ export async function authenticExpressionSessionRetention(browser: Browser, orig
       if (removal === 'sample') {
         await helper.getByRole('button', { name: `删除表达样本：${sourceReply}`, exact: true }).click();
       } else {
-        await manager.getByRole('button', { name: '关系资料', exact: true }).click();
+        await manager.getByRole('button', { name: '记忆', exact: true }).click();
+        await selectMemoryCategory(manager, '来源与过程');
         const sources = manager.getByRole('region', { name: '来源删除管理', exact: true });
         await sources.getByRole('button', { name: '删除来源', exact: true }).click();
         await manager.getByRole('button', { name: '确认删除来源', exact: true }).click();

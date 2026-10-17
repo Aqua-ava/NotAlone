@@ -1,3 +1,4 @@
+import { selectMemoryCategory } from '../memory-page-actions';
 import { expect, type Browser, type Page } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
@@ -147,7 +148,8 @@ async function deletedRestoredGroup(browser: Browser, origin: string, scene: Sce
       await groupOn(helper).getByRole('textbox', { name: '说法1修改要求', exact: true }).fill('恢复后尚未保存的来源派生要求。');
       const sources = await pages.rewriteBackend.request(`/api/contacts/${contactId}/sources`);
       const sourceId = (sources.data.sources as Array<{ source_id: string }>)[0].source_id;
-      await manager.getByRole('button', { name: '关系资料', exact: true }).click();
+      await manager.getByRole('button', { name: '记忆', exact: true }).click();
+      await selectMemoryCategory(manager, '来源与过程');
       const source = manager.getByRole('region', { name: '来源删除管理', exact: true }).getByRole('listitem')
         .filter({ hasText: `来源标识：${sourceId}` });
       await source.getByRole('button', { name: '删除来源', exact: true }).click();
