@@ -17,4 +17,4 @@
 
 完整流程、工程方向及整体确认记录见[联合设计方案](../drafts/layered-relationship-memory.md)。本决定不授权运行真实资料整理、执行迁移或外部模型调用，也不证明端到端能力已可用。
 
-后续执行以[正式规格](../../.scratch/layered-relationship-memory/spec.md)为行为和验收入口，任务粒度及依赖按其拆分提案认可后逐张发布。
+后续执行以[正式规格](../../.scratch/layered-relationship-memory/spec.md)为行为和验收入口；[11项粒度及依赖](../../.scratch/layered-relationship-memory/ticket-proposal.md)已获用户认可并逐张发布，真实执行状态见[任务索引](../../.scratch/layered-relationship-memory/planning.md)，本次不启动实现。
