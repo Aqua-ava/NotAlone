@@ -112,6 +112,8 @@ class LayeredMemoryService:
                 "organization_generation": state["organization_generation"],
                 "updated_at": state["updated_at"].isoformat() if state["updated_at"] else None,
                 "error_code": state["error_code"], "scenarios": scenarios, "profile": state["profile"],
+                "correction_revision": state['correction_revision'], "feedback": state['feedback'],
+                "protected_count": state['protected_count'],
                 "maintenance_pending": state["dirty_revision"] > state["consumed_revision"],
                 "scenario_mappings": state["scenario_mappings"],
                 "mapping_cursor": state["mapping_cursor"],
@@ -243,6 +245,12 @@ class LayeredMemoryService:
 
     def withdraw_scenario(self, scope, settings_generation, organization_generation, scenario_version_id):
         self._store.withdraw_scenario(scope, settings_generation, organization_generation, scenario_version_id)
+        return self.read(scope)
+
+    def report_summary_error(self, scope, command):
+        self._store.report_summary_error(scope, command)
+        if self._synthetic:
+            self.organize(scope)
         return self.read(scope)
 
     def withdraw_profile(self, scope, settings_generation, organization_generation, profile_version_id):

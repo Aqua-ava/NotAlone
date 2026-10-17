@@ -1564,7 +1564,7 @@ class BackendApp:
         parts = urlsplit(path).path.strip("/").split("/")
         if (len(parts) not in {4, 5} or parts[3] != "layered-memory"
                 or method != ("GET" if len(parts) == 4 else "POST")
-                or len(parts) == 5 and parts[4] not in {"enable", "refresh", "disable", "delete", "withdraw-profile", "withdraw-scenario", "pause", "continue"}):
+                or len(parts) == 5 and parts[4] not in {"enable", "refresh", "disable", "delete", "withdraw-profile", "withdraw-scenario", "pause", "continue", "summary-error"}):
             return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
         if self._layered_memory is None:
             return _json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "layered_memory_unavailable"})
@@ -1579,6 +1579,7 @@ class BackendApp:
             else:
                 payload = json.loads(body.decode("utf-8"))
                 allowed = ({"settings_generation", "purpose_confirmed"} if parts[4] == "enable"
+                    else {"settings_generation", "organization_generation", "target_kind", "version_id", "item_index", "reason", "operation_id"} if parts[4] == "summary-error"
                     else {"settings_generation", "organization_generation", "profile_version_id"} if parts[4] == "withdraw-profile"
                     else {"settings_generation", "organization_generation", "scenario_version_id"} if parts[4] == "withdraw-scenario"
                     else {"settings_generation", "work_revision"} if parts[4] in {"pause", "continue"}
@@ -1590,7 +1591,16 @@ class BackendApp:
                     raise ValueError("整理命令无效。")
                 if parts[4] in {"pause", "continue"} and (type(payload["work_revision"]) is not int or payload["work_revision"] < 1):
                     raise ValueError("覆盖工作修订无效。")
-                if parts[4] == "withdraw-scenario":
+                if parts[4] == 'summary-error':
+                    if (type(payload['organization_generation']) is not int or payload['organization_generation'] < 0
+                            or payload['target_kind'] not in {'scenario', 'profile'}
+                            or type(payload['item_index']) is not int or not 0 <= payload['item_index'] < 100
+                            or not isinstance(payload['reason'], str) or not 1 <= len(payload['reason'].strip()) <= 500):
+                        raise ValueError('整理反馈无效。')
+                    UUID(payload['version_id'])
+                    UUID(payload['operation_id'])
+                    state = self._layered_memory.report_summary_error(scope, payload)
+                elif parts[4] == "withdraw-scenario":
                     if type(payload["organization_generation"]) is not int or payload["organization_generation"] < 0:
                         raise ValueError("整理版本无效。")
                     state = self._layered_memory.withdraw_scenario(scope,payload["settings_generation"],
