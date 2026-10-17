@@ -1,7 +1,7 @@
 # 04：可追溯长期背景与一致版本集合
 
 Triage: ready-for-agent
-State: open
+State: claimed
 Type: task
 Blocked by: 01
 
