@@ -133,9 +133,9 @@ class GroundedV3RuntimeTest(unittest.TestCase):
         self.assertEqual(len(requests), 1)
         self.assertEqual(requests[0]["tools"][0]["function"]["name"], "GroundedMemoryLabels")
         prompt = requests[0]["messages"][0]["content"]
-        # 当前E2稳定资料指导单独重签；原schema和给定标签输出保持。
+        # 本次当前判断／未来安排提示修订后重签；原schema和给定标签输出保持。
         self.assertEqual(hashlib.sha256(prompt.encode()).hexdigest(),
-                         "1d39b3792c53329d9f87d4f1ba726532e9779894b21cc5157e6206a527691499")
+                         "c1ae0bb24d82e79e2bc3e7ec213704f5ac7138ee93fe9eb92b8dd907dc73d342")
 
     def test_given_kind_labels_keep_participation_report_negation_condition_and_quote_boundaries(self):
         # 每项kind是合成输入标签；这些通过不代表模型能正确分类或增加质量样本数。

@@ -665,15 +665,15 @@ class GroundedV4CompilerTest(unittest.TestCase):
             GROUNDED_V2_PROMPT, GROUNDED_V3_PROMPT, grounded_schema, grounded_schema_v3,
         )
 
-        # E2只改模式专属指导；schema及同标签输出保持，v3字节不变，非模型质量。
+        # 本次集成重签E2稳定事实与未来安排组合提示；schema及给定标签输出沿既有摘要，非历史模型质量。
         windows = [build_window(case) for case in (*CASES, *SEMANTIC_CASES)]
         for v3, prompt, schema, compiler, prompt_sha, schemas_sha, output_sha in (
             (False, GROUNDED_V2_PROMPT, grounded_schema, compile_labels,
-             "1d39b3792c53329d9f87d4f1ba726532e9779894b21cc5157e6206a527691499",
+             "c1ae0bb24d82e79e2bc3e7ec213704f5ac7138ee93fe9eb92b8dd907dc73d342",
              "c55322ae1480541222fdb03285b29613e47be0089d1692c57d30d36d27c2d10d",
              "5f80d9acb79830b0d3612f48b007132191112ae64ec3bc03afe10fbc2f778f4b"),
             (True, GROUNDED_V3_PROMPT, grounded_schema_v3, compile_labels_v3,
-             "5e83d4d93425edc4234199a8c2f20ef8bff4923bfc2d1df1961f7b96b10d2d5f",
+             "e35b256adc84a7e61faade14267a187b7844f8b16abcdb9819371ed70905e7cf",
              "7a76206ef4316e7489a1cc43308da3495685e87e30fe9ccbaf3891e8e60bbb0a",
              "b16033ed4840d5128b5e96d3aa296ef9781e70ba63f1e24da4972f2741815619"),
         ):

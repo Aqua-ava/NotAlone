@@ -327,6 +327,182 @@ class EvaluationWireContractTest(unittest.TestCase):
         self.assertEqual(entries[0].outcome, LedgerOutcome.SUCCEEDED)
         self.assertEqual((entries[0].input_tokens, entries[0].output_tokens), (10, 5))
 
+    def verify_synthetic_time_contract(
+        self, *, source_time: str | None, source: str, candidate: str,
+        valid_at: str | None, invalid_at: str | None,
+        verdict: str = "supported", issues: tuple[str, ...] = (),
+        category: MemoryCategory = MemoryCategory.RECENT_STATE,
+        speech_act: SpeechAct = SpeechAct.PLAN,
+    ) -> str:
+        """真实 SDK 只接 Mock；裁决为预置回包，不模拟或认证模型日期推理。"""
+        from notalone.memory_extraction.verification_adapters import (
+            LangChainSourceVerificationRuntime,
+        )
+
+        self.requests.clear()
+        expected = {
+            "candidate_index": 0, "verdict": verdict, "issues": list(issues),
+            "evidence": [{"message_id": str(TARGET_ID), "quote": source}],
+        }
+        model = self.model(
+            tool_name="SourceVerificationOutput", arguments={"results": [expected]},
+        )
+        window = ExtractionWindow(
+            owner_id=UUID("00000000-0000-4000-8000-000000000003"),
+            contact_id=UUID("00000000-0000-4000-8000-000000000004"),
+            messages=(MessageRef(
+                message_id=TARGET_ID, text=source, sender=MessageSender.CONTACT,
+                occurred_at=datetime.fromisoformat(source_time) if source_time else None,
+            ),),
+            target_message_ids=(TARGET_ID,),
+        )
+        fact = ExtractedFact(
+            text=candidate, category=category, subject=FactSubject.CONTACT,
+            topic=MemoryTopic.OTHER, source_message_ids=(TARGET_ID,), confidence=0.99,
+            valid_at=datetime.fromisoformat(valid_at) if valid_at else None,
+            invalid_at=datetime.fromisoformat(invalid_at) if invalid_at else None,
+            speech_act=speech_act, assertion_status=AssertionStatus.ASSERTED,
+            figurative_type=FigurativeType.LITERAL,
+        )
+        self.assertEqual(
+            LangChainSourceVerificationRuntime(model=model).verify(window=window, facts=(fact,)),
+            (expected,),
+        )
+        payload = self.wire_parameters(tool_name="SourceVerificationOutput")
+        verification_input = json.loads(payload["messages"][1]["content"])
+        self.assertEqual(verification_input, {
+            "messages": [{
+                "message_id": str(TARGET_ID), "role": "target", "sender": "contact",
+                "occurred_at": source_time if source_time else "unknown", "text": source,
+            }],
+            "candidates": [{
+                "candidate_index": 0, "text": candidate, "subject": "contact",
+                "category": category.value, "topic": "other",
+                "source_message_ids": [str(TARGET_ID)],
+                "valid_at": valid_at, "invalid_at": invalid_at,
+                "speech_act": speech_act.value, "assertion_status": "asserted",
+                "figurative_type": "literal",
+            }],
+        })
+        return payload["messages"][0]["content"]
+
+    def test_verification_wire_carries_source_natural_day_contract_after_midnight(self) -> None:
+        """合成零点后计划固定输入保真与提示合同，不能据 Mock 认证模型质量。"""
+        prompt = self.verify_synthetic_time_contract(
+            source_time="2034-04-01T00:07:00+05:45",
+            source="合成测试：刚过零点还没休息，今天打算参观纸雕展。",
+            candidate="联系人计划于2034年4月1日参观纸雕展。",
+            valid_at="2034-04-01T00:00:00+05:45",
+            invalid_at="2034-04-02T00:00:00+05:45",
+        )
+        for clause in (
+            "来源occurred_at以其自身时区的自然日为锚点",
+            "今天／明天／后天分别偏移0／1／2个日历日",
+            "当地当日零点至次日零点的半开区间",
+            "零点后的夜间对话或作息描述不回拨日期",
+            "不得用运行日、机器今天或UTC日期代替来源本地日",
+        ):
+            self.assertIn(clause, prompt)
+
+    def test_verification_wire_preserves_calendar_boundaries_and_local_offsets(self) -> None:
+        """日期期望为公开合成字面量，覆盖午夜、闰日、年界与不同 UTC 日。"""
+        for source_time, relative_day, date_text, valid_at, invalid_at in (
+            ("2034-03-31T23:58:00+05:45", "今天", "2034年3月31日",
+             "2034-03-31T00:00:00+05:45", "2034-04-01T00:00:00+05:45"),
+            ("2034-03-31T23:58:00+05:45", "明天", "2034年4月1日",
+             "2034-04-01T00:00:00+05:45", "2034-04-02T00:00:00+05:45"),
+            ("2032-02-28T23:50:00-09:30", "明天", "2032年2月29日",
+             "2032-02-29T00:00:00-09:30", "2032-03-01T00:00:00-09:30"),
+            ("2032-02-28T23:50:00-09:30", "后天", "2032年3月1日",
+             "2032-03-01T00:00:00-09:30", "2032-03-02T00:00:00-09:30"),
+            ("2033-12-31T23:50:00-09:30", "明天", "2034年1月1日",
+             "2034-01-01T00:00:00-09:30", "2034-01-02T00:00:00-09:30"),
+            ("2033-12-31T23:50:00-09:30", "后天", "2034年1月2日",
+             "2034-01-02T00:00:00-09:30", "2034-01-03T00:00:00-09:30"),
+            ("2033-01-01T00:02:00+13:45", "今天", "2033年1月1日",
+             "2033-01-01T00:00:00+13:45", "2033-01-02T00:00:00+13:45"),
+        ):
+            with self.subTest(source_time=source_time, relative_day=relative_day):
+                prompt = self.verify_synthetic_time_contract(
+                    source_time=source_time,
+                    source=f"合成测试：{relative_day}打算参加地质讲座。",
+                    candidate=f"联系人计划于{date_text}参加地质讲座。",
+                    valid_at=valid_at, invalid_at=invalid_at,
+                )
+                self.assertIn("今天／明天／后天分别偏移0／1／2个日历日", prompt)
+
+    def test_verification_wire_keeps_wrong_or_incomplete_periods_uncertain(self) -> None:
+        """预置反控回包验证合同及原裁决通路，不把 Mock 当作语义判分器。"""
+        for label, source_time, source, candidate, valid_at, invalid_at in (
+            ("零点不回拨", "2034-04-01T00:07:00+05:45", "今天打算参观纸雕展。",
+             "联系人计划于2034年3月31日参观纸雕展。",
+             "2034-03-31T00:00:00+05:45", "2034-04-01T00:00:00+05:45"),
+            ("相对日错移", "2034-03-31T23:58:00+05:45", "明天打算校准望远镜。",
+             "联系人计划于2034年4月2日校准望远镜。",
+             "2034-04-02T00:00:00+05:45", "2034-04-03T00:00:00+05:45"),
+            ("时区偏移改变", "2034-04-01T00:07:00+05:45", "今天打算参观纸雕展。",
+             "联系人计划于2034年4月1日参观纸雕展。",
+             "2034-04-01T00:00:00+05:30", "2034-04-02T00:00:00+05:30"),
+            ("来源时区未知", None, "明天打算校准望远镜。",
+             "联系人计划于2034年4月2日校准望远镜。",
+             "2034-04-02T00:00:00+05:45", "2034-04-03T00:00:00+05:45"),
+            ("两日缩为一日", "2034-04-01T00:07:00+05:45", "明天和后天打算参观纸雕展。",
+             "联系人计划于2034年4月2日至3日参观纸雕展。",
+             "2034-04-02T00:00:00+05:45", "2034-04-03T00:00:00+05:45"),
+            ("可核期间遗漏", "2034-04-01T00:07:00+05:45", "明天打算校准望远镜。",
+             "联系人计划明天校准望远镜。", None, None),
+        ):
+            with self.subTest(case=label):
+                prompt = self.verify_synthetic_time_contract(
+                    source_time=source_time, source=f"合成测试：{source}",
+                    candidate=candidate, valid_at=valid_at, invalid_at=invalid_at,
+                    verdict="uncertain", issues=("time",),
+                )
+                self.assertIn(
+                    "核验候选所填日期时，仅在来源时区、相对日期及完整期间与两时间槽均吻合且其他字段正确时supported",
+                    prompt,
+                )
+                self.assertIn(
+                    "缺时区、锚点未知、日期或时区偏移错误、期间遗漏或缩窄仍按time规则", prompt,
+                )
+                self.assertIn("不改变事件阶段或声称现实执行", prompt)
+
+    def test_verification_wire_keeps_observation_history_and_vague_plan_rules(self) -> None:
+        """相对自然日合同不覆盖瞬时观察点、历史双 null 或模糊计划双 null。"""
+        for label, source, candidate, category, speech_act, valid_at, invalid_at, verdict in (
+            ("瞬时观察点", "我现在还没装好模型。", "联系人目前还没装好模型。",
+             MemoryCategory.RECENT_STATE, SpeechAct.ASSERTION,
+             "2034-04-01T00:07:00+05:45", "2034-04-02T00:00:00+05:45", "supported"),
+            ("瞬时点不能回到午夜", "我现在还没装好模型。", "联系人目前还没装好模型。",
+             MemoryCategory.RECENT_STATE, SpeechAct.ASSERTION,
+             "2034-04-01T00:00:00+05:45", "2034-04-02T00:00:00+05:45", "uncertain"),
+            ("完成历史双空", "我刚刚完成纸雕作品。", "联系人已经完成纸雕作品。",
+             MemoryCategory.COMMON_FACT, SpeechAct.ASSERTION, None, None, "supported"),
+            ("历史不套来源日", "我刚刚完成纸雕作品。", "联系人已经完成纸雕作品。",
+             MemoryCategory.COMMON_FACT, SpeechAct.ASSERTION,
+             "2034-04-01T00:00:00+05:45", "2034-04-02T00:00:00+05:45", "uncertain"),
+            ("模糊计划双空", "空闲以后打算校准望远镜。", "联系人打算空闲以后校准望远镜。",
+             MemoryCategory.RECENT_STATE, SpeechAct.PLAN, None, None, "supported"),
+            ("模糊计划不补日期", "空闲以后打算校准望远镜。", "联系人打算空闲以后校准望远镜。",
+             MemoryCategory.RECENT_STATE, SpeechAct.PLAN,
+             "2034-04-01T00:00:00+05:45", "2034-04-02T00:00:00+05:45", "uncertain"),
+        ):
+            with self.subTest(case=label):
+                prompt = self.verify_synthetic_time_contract(
+                    source_time="2034-04-01T00:07:00+05:45", source=f"合成测试：{source}",
+                    candidate=candidate, category=category, speech_act=speech_act,
+                    valid_at=valid_at, invalid_at=invalid_at, verdict=verdict,
+                    issues=("time",) if verdict == "uncertain" else (),
+                )
+                for clause in (
+                    "核验候选所填日期时",
+                    "当前瞬时状态的valid_at取其证据occurred_at观察点",
+                    "不接受其来源日作为历史动作有效期",
+                    "两时间槽均null且其他字段吻合时应supported",
+                    "计划不能升级为已发生",
+                ):
+                    self.assertIn(clause, prompt)
+
     def test_public_author_quote_profile_uses_existing_four_slots_with_explicit_prompt(self) -> None:
         from notalone.memory_extraction.flow import _to_fact
         from notalone.memory_extraction.verification_adapters import (

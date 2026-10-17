@@ -68,7 +68,7 @@ class GroundedV4RuntimeTest(unittest.TestCase):
         self.assertEqual(len(requests), 2)
         original = requests[0]["messages"][0]["content"]
         self.assertEqual(hashlib.sha256(original.encode()).hexdigest(),
-                         "331ba9d40794e7729395e32424d980444c3901d087e6cced1fb08bfb26788a18")
+                         "2feb96d892198307e082328cf8af092e3ac62587267116cc682649b468ec961c")
         guidance = (
             "将第三人代词所称物品的所有权归到某个已知人物前，单独核对来源是否明确支持这条归属关系。"
             "最近出现的先行词、窗口只提及一个候选人、亲属称呼或代词性别本身，不能单独构成归属依据；"
@@ -166,17 +166,17 @@ class GroundedV4RuntimeTest(unittest.TestCase):
             grounded_schema, grounded_schema_v3, grounded_schema_v4,
         )
 
-        # 只重签当前E2指导；v3/v4提示及完整140动态schema摘要保持，不代表模型质量。
+        # 本次集成重签E2稳定事实与未来安排组合提示；完整140动态schema保持，不代表历史模型质量。
         windows = [build_window(case) for case in (*CASES, *SEMANTIC_CASES)]
         for prompt, schema, prompt_sha, schemas_sha in (
             (GROUNDED_V2_PROMPT, grounded_schema,
-             "1d39b3792c53329d9f87d4f1ba726532e9779894b21cc5157e6206a527691499",
+             "c1ae0bb24d82e79e2bc3e7ec213704f5ac7138ee93fe9eb92b8dd907dc73d342",
              "c55322ae1480541222fdb03285b29613e47be0089d1692c57d30d36d27c2d10d"),
             (GROUNDED_V3_PROMPT, grounded_schema_v3,
-             "5e83d4d93425edc4234199a8c2f20ef8bff4923bfc2d1df1961f7b96b10d2d5f",
+             "e35b256adc84a7e61faade14267a187b7844f8b16abcdb9819371ed70905e7cf",
              "7a76206ef4316e7489a1cc43308da3495685e87e30fe9ccbaf3891e8e60bbb0a"),
             (GROUNDED_V4_PROMPT, grounded_schema_v4,
-             "331ba9d40794e7729395e32424d980444c3901d087e6cced1fb08bfb26788a18",
+             "2feb96d892198307e082328cf8af092e3ac62587267116cc682649b468ec961c",
              "3dd4a405494abe201396e9cfde6143337c929186657df55fa569e255ff49b524"),
         ):
             with self.subTest(title=schema(windows[0])["title"]):
