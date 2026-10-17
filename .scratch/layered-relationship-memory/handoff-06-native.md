@@ -1,0 +1,11 @@
+# 06 原生退出时序交接
+- 联合候选起点 `bddbac2b0d8fb954407bdfb3a52d2657d9fdc452`；产品组成仍为13a，联合测试340。
+- native02单次App整例FAIL：8纠错CUA及8公开后验完成，2basis、本人手录、空contact已观察。
+- 实际公共菜单退出后App消失；原spec56首个最终GET被拒，runtime-proof未写，不能称整例PASS。
+- 生产quit.ts先backend.stop；原夹具exit0/cleanupConfirmed，21模块来源摘要已核对。
+- 原始失败与分项证明完整保留；8记录PID/2组/userData/精确库/双lease均已独核清并释放桌面。
+- `0bcdbfcfd06d307f0d4f2150852e862423901e5a`仅native.spec16行：根manual/empty收据后保持App，先公开后验及runtime，再public-quit/ready。
+- 新场仅见quit-ready后实际菜单退出，核PID消失，再写该子目录done；spec核exit0/signalnull，不再HTTP。
+- 原24分钟test/22分钟CUA/每步最多4分钟保持；新场仍须桌面协调，不复用旧nonce或自行第二启动。
+- typecheck、原HTTP预检2/2 17.120秒通过，2库/3PID核清；两原审查者对此固定增量各0。
+- 新时序尚未实际App验证；078/产品/真实质量unknown不变；真人删除语义仍pending，06仍claimed。
