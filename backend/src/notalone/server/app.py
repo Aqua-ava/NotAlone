@@ -2594,6 +2594,9 @@ def create_app(
     if task_host is not None:
         layered_memory.attach_task_host(task_host)
         layered_memory.resume_pending(owner_id)
+    else:
+        from notalone.tasks.organization_dispatch import EmbeddedOrganizationDispatcher
+        layered_memory.attach_dispatcher(EmbeddedOrganizationDispatcher(database_url))
     return BackendApp(
         contact_directory=contacts,
         events=events or EventBus(),

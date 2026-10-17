@@ -43,10 +43,6 @@ class PostgresLayeredMemoryStore:
         self._clock = clock or (lambda: datetime.now(timezone.utc))
         self._overview = PostgresRelationshipOverviewStore(database_url, clock=self._clock)
 
-    @property
-    def database_url(self):
-        return self._database_url
-
     def require_synthetic_database(self):
         with psycopg.connect(self._database_url) as connection:
             if not connection.info.dbname.endswith("_test"):
@@ -195,6 +191,16 @@ class PostgresLayeredMemoryStore:
                 "FROM public.layered_memory_job j WHERE t.id=j.task_id AND j.owner_id=%s AND j.contact_id=%s "
                 "AND j.state='active' AND j.pending_receipt AND EXISTS(SELECT 1 FROM public.background_task_step s "
                 "WHERE s.task_id=t.id AND s.status='pending')",(scope.owner_id,scope.contact_id))
+            # 领取路径可能已把最后一次失联租约判失败；无发布证明时不能留在updating。
+            connection.execute("UPDATE public.layered_memory_job j SET state='failed' FROM public.background_task t "
+                "WHERE t.id=j.task_id AND j.owner_id=%s AND j.contact_id=%s AND j.settings_generation=%s "
+                "AND j.state='active' AND NOT j.pending_receipt AND t.status='failed'",
+                (scope.owner_id,scope.contact_id,state['settings_generation']))
+            connection.execute("UPDATE public.layered_memory_state s SET status='failed',error_code=COALESCE(t.last_error_code,s.error_code) "
+                "FROM public.layered_memory_job j JOIN public.background_task t ON t.id=j.task_id "
+                "WHERE s.owner_id=j.owner_id AND s.contact_id=j.contact_id AND s.settings_generation=j.settings_generation "
+                "AND j.owner_id=%s AND j.contact_id=%s AND j.state='failed' AND t.status='failed' AND s.enabled",
+                (scope.owner_id,scope.contact_id))
             row=connection.execute("SELECT task_id FROM public.layered_memory_job WHERE owner_id=%s AND contact_id=%s "
                 "AND settings_generation=%s AND state='active' LIMIT 1",
                 (scope.owner_id,scope.contact_id,state['settings_generation'])).fetchone()

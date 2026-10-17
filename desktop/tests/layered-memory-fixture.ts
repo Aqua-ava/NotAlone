@@ -11,6 +11,7 @@ const modules = {
   'notalone.persistence.layered_coverage': 'backend/src/notalone/persistence/layered_coverage.py',
   'notalone.persistence.background_tasks': 'backend/src/notalone/persistence/background_tasks.py',
   'notalone.tasks.worker': 'backend/src/notalone/tasks/worker.py',
+  'notalone.tasks.organization_dispatch': 'backend/src/notalone/tasks/organization_dispatch.py',
   'notalone.persistence.memory_overview': 'backend/src/notalone/persistence/memory_overview.py',
   'notalone.server.app': 'backend/src/notalone/server/app.py',
 };

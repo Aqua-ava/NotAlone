@@ -14,12 +14,13 @@ from notalone.application.organization_call import (
 
 class LayeredMemoryService:
     def __init__(self, store, *, proposer=None, verifier=None, synthetic=False,
-                 budget=None, model_priority=None, call_timeout_seconds=30.0, task_host=None):
+                 budget=None, model_priority=None, call_timeout_seconds=30.0, task_host=None, dispatcher=None):
         if (not isinstance(call_timeout_seconds, (int, float)) or isinstance(call_timeout_seconds, bool)
                 or not math.isfinite(call_timeout_seconds) or not 0 < call_timeout_seconds <= 120):
             raise ValueError("整理调用必须有不超过120秒的有限等待。")
         self._call_timeout_seconds = call_timeout_seconds
         self._task_host = task_host
+        self._dispatcher = dispatcher
         self._contract = "scenario-v3:synthetic-only:deadline-v1:coverage-v1"
         self._store, self._proposer, self._verifier = store, proposer, verifier
         if synthetic:
@@ -34,6 +35,10 @@ class LayeredMemoryService:
 
     def attach_task_host(self, task_host):
         self._task_host=task_host
+
+    def attach_dispatcher(self, dispatcher):
+        if self._dispatcher is None:
+            self._dispatcher=dispatcher
 
     def resume_pending(self, owner_id):
         if not self._synthetic or self._task_host is None or owner_id is None:
@@ -85,18 +90,9 @@ class LayeredMemoryService:
         if self._task_host is not None:
             self._task_host.wake(owner_id=scope.owner_id,contact_id=scope.contact_id,task_id=task_id)
             return
-        # 无宿主的嵌入调用仍使用同一Worker、任务仓储与租约，不另建执行系统。
-        from uuid import uuid4
-        from notalone.tasks.worker import BackgroundTaskWorker
-        from notalone.persistence.background_tasks import PostgresBackgroundTaskRepository
-        import psycopg
-        from notalone.tasks.command import run_worker
-        worker=BackgroundTaskWorker(repository=PostgresBackgroundTaskRepository(self._store.database_url),
-            organization_runner=self,model_priority=self._priority)
-        with psycopg.connect(self._store.database_url,autocommit=True) as connection:
-            run_worker(worker=worker,lock_connection=connection,
-                owner_id=scope.owner_id,contact_id=scope.contact_id,worker_id=uuid4(),task_id=task_id,
-                stop_event=self._priority.stop_event)
+        if self._dispatcher is None:
+            raise RuntimeError('主题整理缺少已装配的任务调度器。')
+        self._dispatcher(scope,task_id,runner=self,model_priority=self._priority)
 
     def run_batch(self, claim):
         from notalone.scopes import ContactScope

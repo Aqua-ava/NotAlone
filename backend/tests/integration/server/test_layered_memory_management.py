@@ -51,10 +51,13 @@ class LayeredMemoryManagementHttpTest(MemoryOverviewHttpFixture, unittest.TestCa
             from notalone.tasks.worker import BackgroundTaskWorker
             self.task_finished=Event()
             self.receipt_failed=Event()
+            self.task_idle=Event()
             service=self.service
             def progress(update):
                 if update.status=='succeeded':
                     self.task_finished.set()
+                if update.status=='idle':
+                    self.task_idle.set()
                 if update.error_code=='temporary_failure':
                     self.receipt_failed.set()
             task_host=TaskHost(worker_builder=lambda: BackgroundTaskWorker(
@@ -387,6 +390,40 @@ class LayeredMemoryManagementHttpTest(MemoryOverviewHttpFixture, unittest.TestCa
         self.assertEqual({p['text'] for doc in done['scenarios'] for p in doc['paragraphs']},
             {'双方共同参加过课程。','双方共同完成合成练习。','双方共同整理合成笔记。'})
         self.assertEqual(done['model_calls_used'],6)
+
+    def test_last_expired_lease_before_publish_is_visible_failed_and_can_continue(self):
+        import psycopg
+        from uuid import uuid4
+        from notalone.persistence.locks import try_acquire_global_worker_lock, release_global_worker_lock
+        contact, _, message=self.import_contact("合成经历：双方共同参加过课程。")
+        self.confirm(contact,"双方共同参加过课程。",message)
+        proposer=EchoProposal()
+        with psycopg.connect(self.database_url,autocommit=True) as blocker:
+            self.assertTrue(try_acquire_global_worker_lock(blocker))
+            first=self.controlled(proposer=proposer,asynchronous=True)
+            queued=self.enable(first,contact)
+            self.task_host.stop()
+            with psycopg.connect(self.database_url) as connection:
+                # 外部崩溃事件：最后一次租约领取后、尚未发布或留下回执即失联。
+                connection.execute("UPDATE public.background_task_step SET status='running',attempt_count=3,worker_id=%s,"
+                    "lease_expires_at=now()-interval '1 second' WHERE task_id=%s",(uuid4(),queued['work_id']))
+                connection.execute("UPDATE public.background_task SET status='running' WHERE id=%s",(queued['work_id'],))
+            release_global_worker_lock(blocker)
+        restarted=self.controlled(proposer=proposer,asynchronous=True)
+        self.assertTrue(self.task_idle.wait(5))
+        path=f'/api/contacts/{contact}/layered-memory'
+        failed=self._get(restarted,path)['layered_memory']
+        self.assertEqual((failed['status'],failed['covered_count'],failed['scenarios']),('failed',0,[]))
+        self.assertEqual(failed['error_code'],'lease_expired')
+        status,result=restarted.request(path+'/continue',{
+            'settings_generation':failed['settings_generation'],'work_revision':failed['work_revision']})
+        self.assertEqual(status,200,result)
+        self.assertTrue(self.task_finished.wait(5))
+        ready=self._get(restarted,path)['layered_memory']
+        self.assertEqual((ready['status'],ready['work_id'],ready['covered_count'],ready['current_batch']),
+                         ('ready',queued['work_id'],1,1))
+        self.assertEqual(len(proposer.inputs),1)
+        self.assertEqual(ready['model_calls_used'],2)
 
     def test_deleting_an_uncited_input_erases_body_history_and_batch_artifacts(self):
         contact, _, message = self.import_contact("合成经历：双方共同参加过课程。")
