@@ -178,6 +178,23 @@ class LayeredMemoryManagementHttpTest(MemoryOverviewHttpFixture, unittest.TestCa
         self.assertEqual(current["scenarios"], [])
         self.assertEqual(current["status"], "failed")
 
+    def test_complete_verification_input_over_budget_never_calls_verifier_or_publishes(self):
+        contact, _, _ = self.import_contact("合成范围：核验输入也须有界。")
+        status, manual = self.backend.request("/api/memories/manual-contact", {
+            "contact_id": contact, "text": "合成" * 1250, "category": "common_fact",
+        })
+        self.assertEqual(status, 200, manual)
+        verifier = RecordingVerification()
+        backend = self.controlled(proposer=EchoProposal(), verifier=verifier)
+        state = self.enable(backend, contact)
+        self.assertEqual((state["status"], state["error_code"]),
+                         ("failed", "verification_input_budget_exceeded"))
+        self.assertEqual(verifier.inputs, [])
+        self.assertEqual((state["scenarios"], state["covered_count"], state["remaining_count"]), ([], 0, 1))
+        self.assertEqual(state["organization_generation"], 0)
+        self.assertEqual(len(self.proposal.inputs), 1, "提案记忆和生成文字各自合法，但完整核验输入超限")
+        self.assertEqual(self._get(backend, f"/api/contacts/{contact}/layered-memory")["layered_memory"], state)
+
     def test_oversized_single_memory_pauses_without_sending_unbounded_model_input(self):
         contact, _, _ = self.import_contact("合成范围：有限输入。")
         status, manual = self.backend.request("/api/memories/manual-contact", {
@@ -342,3 +359,19 @@ class GatedProposal(ControlledProposal):
             return super().propose(memories=memories,budget=budget)
         finally:
             self.finished.set()
+
+
+class EchoProposal(ControlledProposal):
+    def propose(self, *, memories, budget):
+        proposal = super().propose(memories=memories, budget=budget)
+        proposal["scenarios"][0]["paragraphs"][0]["text"] = memories[0].text
+        return proposal
+
+
+class RecordingVerification:
+    def __init__(self):
+        self.inputs = []
+
+    def verify(self, *, memories, proposal):
+        self.inputs.append((memories, proposal))
+        return True

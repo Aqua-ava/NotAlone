@@ -1,6 +1,7 @@
 """有限主题整理的管理入口；未知质量资格不会调用模型。"""
 
 from copy import deepcopy
+import json
 import math
 
 from notalone.memory.layered import OrganizationBudget, LayeredMemoryConflict
@@ -54,6 +55,11 @@ class LayeredMemoryService:
                 memories=deepcopy(work.memories), budget=self._budget))
             proposal = validate_proposal(raw, work.memories, self._budget)
             self._store.record_proposal(work, raw)
+            # 核验实际接收全部记忆和完整提案，两者合计仍受单次输入上限约束。
+            verification_input = {"memories": [item.to_payload() for item in work.memories], "proposal": raw}
+            if len(json.dumps(verification_input, ensure_ascii=False)) > self._budget.max_characters:
+                self._store.fail(work, "verification_input_budget_exceeded")
+                return
             supported = self._call(work, lambda: self._verifier.verify(
                 memories=deepcopy(work.memories), proposal=deepcopy(raw)))
             if supported is not True:

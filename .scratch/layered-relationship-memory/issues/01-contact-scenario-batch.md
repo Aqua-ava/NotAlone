@@ -56,3 +56,9 @@ Blocked by: None
 - Python：`PYTHONPATH=src:.. python -m unittest discover -s tests/unit -t .` 在指定Conda环境通过1880例；首次仅 `PYTHONPATH=src` 导致既有实验模块无法导入，单例6例复现修正后全量重跑通过。单元命令显式清空真实模型凭据，所有验证禁用 `.env` 并仅使用合成边界。
 - Desktop：`npm run typecheck` 与相关7文件64例通过，其中3例真实无头Chrome点击当前React页；公开HTTP／PG页面、真实App及两轴审查由统筹继续，未在此提前签收。真实模型语义质量、真实微信、签名包均未验证。
 - 数据影响：仅处理本票自有隔离库的合成文字；新增迁移073未用于业务库，未调用外部模型或发送消息，未push／PR。停用保留合法查看，删除整理结果物理清正文／历史／批次输入输出且保留底层记忆及最小世代。
+
+## 审查修复（待复审）
+
+- Standards P2：独立核验前按实际完整输入（全部记忆与完整提案）重新计算JSON字符数；超过已声明的单次上限即返回 `failed / verification_input_budget_exceeded`，不调用核验器、不发布正文，也不扩大预算。
+- 公开HTTP／真实隔离PG新增回归先red（旧实现错误发布ready）再green；本票模块现13/13通过，原有正常提案路径保留。只运行最小用例与相关模块，未重跑unit全集或App。
+- 仅合成资料；本次自有库按精确归属创建并回收，无真实模型、业务库或外部消息影响。01保持claimed，等待Spec轴及修复复审。
