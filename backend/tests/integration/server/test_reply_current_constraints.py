@@ -79,6 +79,32 @@ class ReplyCurrentConstraintsHttpTest(CoreBusinessFlowFixture, unittest.TestCase
         self.assertEqual(self.backend.request("/api/reply/generate", body), (200, result))
         self.assertEqual(len(self.reply_model.seen_calls), 2)
 
+    def test_pasted_contact_text_uses_confirmed_direction_without_draft_review(self):
+        self.reply_model.candidate_texts = ["这次不参加，祝你们玩得开心。"]
+        for instruction in ("保留拒绝，不增加下次承诺。", None):
+            with self.subTest(instruction=instruction):
+                body = self.body()
+                body["content"].update(
+                    draft_text="今晚一起参加活动吗？", input_kind="current_chat",
+                    pasted_direction="这次拒绝参加，祝对方活动顺利。", user_instruction=instruction,
+                )
+                calls_before = len(self.reply_model.seen_calls)
+                status, result = self.backend.request("/api/reply/generate", body)
+                self.assertEqual(status, 200, result)
+                self.assertEqual([item["text"] for item in result["candidates"]], self.reply_model.candidate_texts)
+                self.assertEqual(len(self.reply_model.seen_calls) - calls_before, 1)
+                self.assertEqual(self.reply_model.review_calls, 0)
+                payload = next(json.loads(item.content) for item in self.reply_model.seen_calls[-1]
+                               if isinstance(item, HumanMessage))
+                self.assertEqual(payload["input_mode"], "reply_to_pasted_text")
+                self.assertEqual(payload["current_text"], body["content"]["draft_text"])
+                self.assertEqual(payload["confirmed_direction"], body["content"]["pasted_direction"])
+                self.assertNotIn("draft_text", payload)
+                self.assertNotIn("literal_changes", payload)
+                self.assertNotIn("generation_stage", payload)
+                if not instruction:
+                    self.assertEqual(payload["expression_preferences"][0]["text"], self.preference["preference"]["text"])
+
     def test_expansion_check_overrides_a_generic_supported_verdict_and_review_has_no_old_preference(self):
         self.reply_model.review_verdicts = ["supported"] * 3
         self.reply_model.review_requires_expansion = True

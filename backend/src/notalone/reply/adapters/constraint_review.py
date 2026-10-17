@@ -109,7 +109,8 @@ class ReplyConstraintReview:
                      prepared: ReplyContext, result: ReplyRuntimeResult,
                      request_text: str, callbacks: tuple = ()) -> ReplyRuntimeResult:
         content = prepared.command.content
-        if not isinstance(content, RewriteDraft) or not (content.user_instruction or prepared.expression_preferences):
+        if (not isinstance(content, RewriteDraft) or content.input_kind != "draft"
+                or not (content.user_instruction or prepared.expression_preferences)):
             return result
         current = replace(prepared, evidence=prepared.evidence + result.additional_evidence)
         # 复验在只读线程进行；共享运行协程取消后，不会继续发出新的复核请求。
