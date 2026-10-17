@@ -34,10 +34,14 @@ def main():
     from unittest.mock import patch
     from notalone.server.app import create_app
     from notalone.server.connection_info import write_backend_info
+    from notalone.reply.layered_context import LayeredReplyBudget, ScenarioReadBudget
     from tests.integration.server.test_layered_reply_context import LayeredReplyHttpTest
 
     class Fixture(LayeredReplyHttpTest):
         def _backend(self, owner_id, **kwargs):
+            if hasattr(self, "layered_reply_options"):
+                self.layered_reply_options["layered_reply_budget"] = LayeredReplyBudget(
+                    4, 4, 4000, scenario_read=ScenarioReadBudget(3, 4, 4000))
             def combined_app(**options):
                 if hasattr(self, "service"):
                     options["layered_memory"] = self.service
@@ -68,6 +72,19 @@ def main():
         fixture.activate_replies(empty)
         backend = fixture.backend
         fixture.reply_model.plans.extend([{ "text": "想聊聊一起参加课程的经历。", "basis": "尊重本次草稿，尚未核实的情况保持未知。" } for _ in range(12)])
+        scenario = ready["scenarios"][0]
+
+        def plan_scenario_reads(text="想聊聊一起参加课程的经历。"):
+            arguments = {"scenario_id": scenario["scenario_id"], "paragraph_start": 0, "paragraph_end": 1}
+            fixture.reply_model.plans[:0] = [
+                {"history": {"name": "read_scenario", "args": dict(arguments)}},
+                {"history": {"name": "read_scenario", "args": dict(arguments)}},
+                {"text": text, "basis": "使用本次实际读入的历史课程正文，当前情况保持未知。"},
+            ]
+            return {"statuses": ["succeeded", "duplicate"], "paragraph_range": [0, 1]}
+
+        if os.environ.get("NOTALONE_LAYERED_SCENARIO_READS") == "1":
+            plan_scenario_reads()
         (directory / "synthetic.env").write_text(f"NOTALONE_DATABASE_URL={url}\nNOTALONE_OWNER_ID={fixture.owner_id}\n")
         (directory / "synthetic.env").chmod(0o600)
         expected = json.loads(os.environ["NOTALONE_LAYERED_EXPECTED_MODULES"])
@@ -96,8 +113,18 @@ def main():
             elif operation == "runtime_proof":
                 result = {**proof, "reply_model_calls": len(fixture.reply_model.payloads)}
             elif operation == "prepared":
-                result = {"contact_id": contact, "other_contact_id": empty, "profile_version_id": ready["profile"]["version_id"],
-                    "scenario_version_id": ready["scenarios"][0]["version_id"], "profile_text": ready["profile"]["entries"][0]["text"]}
+                result = {"contact_id": contact, "source_id": source, "other_contact_id": empty, "profile_version_id": ready["profile"]["version_id"],
+                    "scenario_id": scenario["scenario_id"], "scenario_version_id": scenario["version_id"],
+                    "scenario_text": scenario["paragraphs"][0]["text"], "scenario_references": scenario["paragraphs"][0]["references"],
+                    "scenario_paragraph_count": len(scenario["paragraphs"]), "profile_text": ready["profile"]["entries"][0]["text"]}
+            elif operation == "plan_scenario_reads":
+                result = plan_scenario_reads(command.get("text", "想聊聊一起参加课程的经历。"))
+            elif operation == "saved_scenario_evidence":
+                plan_scenario_reads()
+                status, turn = backend.request(reply_path + "/replies",
+                    fixture.rewrite_body(contact, "聊聊共同参加的课程。"), timeout=30)
+                fixture.assertEqual(status, 200, turn)
+                result = fixture._get(backend, fixture.evidence_path(contact, turn))
             elif operation == "plan":
                 fixture.reply_model.plans.insert(0, command["plan"])
                 result = {}

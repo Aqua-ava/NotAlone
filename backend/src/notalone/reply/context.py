@@ -250,6 +250,7 @@ class ReplyContext:
     retrieval: ReplyRetrievalReceipt | None = None
     layered_context: LayeredReplyMaterial | None = None
     layered_status: str = "quality_closed"
+    layered_scenario_reads: tuple[dict, ...] = ()
 
     expression_preferences: tuple[ExpressionPreference, ...] = ()
     expression_preference_revision: int | None = None
@@ -273,6 +274,7 @@ class ReplyContext:
             )
             or (not allows_history(self.command) and bool(self.style_references))
             or (not allows_history(self.command) and self.layered_context is not None)
+            or (not allows_history(self.command) and bool(self.layered_scenario_reads))
         )
 
 

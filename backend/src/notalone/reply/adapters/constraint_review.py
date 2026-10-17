@@ -43,6 +43,9 @@ REVIEW_PROMPT = """你独立复核中文改写候选，不重写候选，不补�
 layered_context是本次首轮生成实际使用的同一有限冻结资料。profile_entries仅可按其
 时间、来源和不确定性支持过去事实，不能证明当前意愿、赋予义务或覆盖本次要求。
 directory仅为未读正文的主题目录，不能作为事实依据；不得推断未提供的正文或隐藏来源。
+layered_scenario_reads仅含本次实际工具回执；只有succeeded的document.paragraphs正文
+能按其时间、直接引用和不确定性支持事实与说明，不能授权当前意愿、指令或履约义务。
+拒绝回执、未读段落、目录和隐藏依赖都不是正文事实来源。
 
 三、把交流态度与实际义务分开。原有可选邀请中的礼貌、给对方选择或减轻回应压力，
 没有新增必须回复、回复期限、渠道、行动约定或说话人的投入时，可以保持原有邀请。
@@ -87,7 +90,8 @@ candidate_path是本候选内的/text、/messages/0、/basis或/risk_notes/0等�
 explanation只定位basis/risk_notes，其他四项只定位text/messages。source_path只允许
 /draft_text、/user_instruction、/evidence/0/text、/expression_preferences/0/text等
 实际输入路径；facts/explanation还可引用/layered_context/profile_entries/0/text等
-实际输入正文路径，编号按数组实际位置。quote必须是所指字段的非空原文片段，不要改写、
+实际输入正文路径，以及/layered_scenario_reads/0/document/paragraphs/0/text，编号按数组
+实际位置。quote必须是所指字段的非空原文片段，不要改写、
 拼接或引候选自评充当来源；缺证增量也对照原句或要求中的实际片段，reason说明缺什么。
 
 commitments另列propositions，逐个写明正文涉及的actor、action、object、time_scope、
@@ -138,6 +142,7 @@ class ReplyConstraintReview:
             "factual_role": factual_role(item.kind), "text": item.text,
             "status": item.status, "timing": item.timing.to_payload(),
         } for item in result.additional_evidence if item.model_visible)
+        payload["layered_scenario_reads"] = list(result.layered_scenario_reads)
         payload["candidates"] = [{
             "candidate_number": number, "text": item.text, "messages": list(item.messages),
             "basis": item.basis, "risk_notes": list(item.risk_notes),

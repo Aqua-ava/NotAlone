@@ -751,6 +751,7 @@ class PostgresReplyStore:
                     retrieval=self._read_retrieval_snapshot(row["context_snapshot"]),
                     layered_context=(row["context_snapshot"] or {}).get("layered_context"),
                     layered_status=(row["context_snapshot"] or {}).get("layered_status", "quality_closed"),
+                    layered_scenario_reads=tuple((row["context_snapshot"] or {}).get("layered_scenario_reads", [])),
                 )
         except ReplyPersistenceError:
             raise
@@ -1117,6 +1118,7 @@ class PostgresReplyStore:
             "current_text": context.current_text,
             "layered_context": context.layered_context.to_payload() if context.layered_context else None,
             "layered_status": context.layered_status,
+            "layered_scenario_reads": list(context.layered_scenario_reads),
             "layered_version_ids": material_version_ids(context.layered_context),
             "direction": direction,
             "risk_notes": list(context.risk_notes),

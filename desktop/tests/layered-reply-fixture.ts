@@ -6,6 +6,13 @@ import { withRewriteFixture, type RewriteFixture } from './rewrite-backend-fixtu
 const project = path.resolve('..');
 const modules = {
   'notalone.reply.layered_context': 'backend/src/notalone/reply/layered_context.py',
+  'notalone.reply.scenario_tools': 'backend/src/notalone/reply/scenario_tools.py',
+  'notalone.reply.adapters.langchain_runtime': 'backend/src/notalone/reply/adapters/langchain_runtime.py',
+  'notalone.reply.adapters.constraint_review': 'backend/src/notalone/reply/adapters/constraint_review.py',
+  'notalone.reply.adapters.constraint_review_contract': 'backend/src/notalone/reply/adapters/constraint_review_contract.py',
+  'notalone.reply.prepared_context_codec': 'backend/src/notalone/reply/prepared_context_codec.py',
+  'notalone.persistence.reply_store': 'backend/src/notalone/persistence/reply_store.py',
+  'notalone.application.reply_evidence': 'backend/src/notalone/application/reply_evidence.py',
   'notalone.server.reply_wiring': 'backend/src/notalone/server/reply_wiring.py',
   'notalone.application.layered_memory_service': 'backend/src/notalone/application/layered_memory_service.py',
   'notalone.memory.profile_validation': 'backend/src/notalone/memory/profile_validation.py',
@@ -35,7 +42,8 @@ export async function withLayeredReplyFixture(use: (fixture: RewriteFixture) => 
   process.env.NOTALONE_LAYERED_EXPECTED_MODULES = JSON.stringify(expected);
   try {
     await withRewriteFixture('notalone-layered-reply-', use, cleanupConfirmed,
-      path.join(project, 'desktop/tests/fixtures/layered-reply-page.py'), path.join(project, 'backend'));
+      path.join(project, 'desktop/tests/fixtures/layered-reply-page.py'), path.join(project, 'backend'),
+      'database-ownership.json', 30_000);
   } finally {
     if (previous === undefined) delete process.env.NOTALONE_LAYERED_EXPECTED_MODULES;
     else process.env.NOTALONE_LAYERED_EXPECTED_MODULES = previous;
