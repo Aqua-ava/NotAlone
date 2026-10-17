@@ -2,6 +2,8 @@
 
 > 状态：方案已确认，待形成实现规格与实现。2026-10-17 用户确认 Q1–Q10，并确认本文件的完整方案定稿，本轮 grilling 已结束。加载方向已独立记录为 [ADR-067](../adr/067-layered-scenario-and-profile-context.md) 的已采纳目标；本文不代表 L2/L3 已实现，也不授权执行资料整理、业务迁移或模型调用。
 
+> 后续状态：已整理为[正式规格](../../.scratch/layered-relationship-memory/spec.md)，行为与验收以后者为准；[11项任务拆分](../../.scratch/layered-relationship-memory/ticket-proposal.md)等待粒度与依赖认可，尚未发布实现任务。下方保留本轮决策依据。
+
 ## 用户目标
 
 在已有带来源的记忆之上，自动维护可阅读的主题资料和简短长期背景，并在回复时按明确规则使用。用户无需逐条组织文档，但能查看依据、修正资料和删除内容。
