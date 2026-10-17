@@ -1,2 +1,8 @@
+# Swift 构建产物
 .build/
 build/
+
+# SwiftPM 与 Xcode 本机配置
+.swiftpm/
+xcuserdata/
+*.xcuserstate

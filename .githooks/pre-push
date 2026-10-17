@@ -1,0 +1,15 @@
+#!/bin/sh
+# 只检查 Git 本次实际推送的对象；删除远端引用不上传对象。
+set -eu
+cd "$(git rev-parse --show-toplevel)"
+while read -r local_ref local_oid remote_ref remote_oid; do
+  case "$local_oid" in
+    *[!0]*) ;;
+    *) continue ;;
+  esac
+  if ! command -v node >/dev/null 2>&1; then
+    echo '隐私检查无法运行：请在当前 Git 环境的 PATH 中配置 Node.js。推送已阻止。' >&2
+    exit 1
+  fi
+  node scripts/check_public_history.mjs --ref "$local_oid"
+done

@@ -17,6 +17,9 @@ const git = (argv, options = {}) => execFileSync('git', argv, {
   ...options,
 });
 const repo = git(['rev-parse', '--show-toplevel'], { encoding: 'utf8' }).trim();
+if (git(['rev-parse', '--is-shallow-repository'], { encoding: 'utf8' }).trim() === 'true') {
+  throw new Error('隐私检查需要完整历史；请先补齐浅克隆历史再推送。');
+}
 const oid = git(['rev-parse', '--verify', ref + '^{commit}'], { encoding: 'utf8' }).trim();
 const excluded = (name) => /(?:^|\/)node_modules(?:\/|$)/.test(name)
   || /^\.scratch\/unfinished-work\/coordinator-cross-account-handoff-.*\.md$/.test(name)
@@ -70,6 +73,15 @@ function inspect(buffer, where) {
       index = text.indexOf(value, index + value.length);
     }
   }
+}
+// 附注标签的说明也会上传；先检查标签对象，再检查其指向的完整提交历史。
+let target = git(['rev-parse', '--verify', ref], { encoding: 'utf8' }).trim();
+while (git(['cat-file', '-t', target], { encoding: 'utf8' }).trim() === 'tag') {
+  const tag = git(['cat-file', 'tag', target]);
+  inspect(tag, 'tag @' + target.slice(0, 8));
+  const match = tag.toString('utf8').match(/^object ([a-f0-9]{40})\n/);
+  if (!match) throw new Error('标签缺少目标对象');
+  target = match[1];
 }
 const objects = git(['rev-list', '--objects', oid], { encoding: 'utf8' }).trim().split('\n');
 const names = new Map();

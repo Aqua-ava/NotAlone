@@ -4,3 +4,6 @@ out/
 test-results/
 playwright-report/
 artifacts/
+
+# 一次性真实模型验收脚本只保存在端侧
+/tests/manual-real-ecnu-*.spec.ts
