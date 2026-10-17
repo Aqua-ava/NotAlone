@@ -110,6 +110,16 @@ npm start
 
 ## 开发与文档
 
+首次克隆后启用本地推送前隐私检查（需要 PATH 中可用的 Node.js）：
+
+```bash
+node scripts/install_git_hooks.mjs
+```
+
+该命令将本仓库的 `core.hooksPath` 设为 `.githooks`；已有其他自定义钩子目录时会停止，避免覆盖。Git 默认 `.git/hooks/` 中的旧钩子保留在磁盘上，但启用后不再执行；有自定义钩子时应先合并。每个新克隆都需安装一次。本地检查针对本次推送的每个提交或标签及完整可达历史，发现问题或无法检查时阻止推送；删除远端引用不扫描。它只在端侧读取，输出问题位置，不输出命中的敏感值。浅克隆须补齐历史。
+
+GitHub Actions 的最小 CI 在 push、Pull Request 或手动触发时检查完整历史、Python 3.12 合成单元测试、桌面端类型与纯逻辑测试。不启动微信、Electron、数据库或真实模型，不上传测试附件。CI 不携带本机 `.env` 和私有地址清单，因此不能替代本地检查；本地钩子可被跳过，也不保证识别所有隐私。远端 CI 尚需实际运行验证。
+
 ```text
 NotAlone/
 ├── desktop/          Electron + React/TypeScript 桌面端
