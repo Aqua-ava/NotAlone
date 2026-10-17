@@ -19,7 +19,7 @@ export function payload(overrides = {}) {
     settings_generation: 0, enabled: false, quality_status: 'unknown', status: 'disabled',
     eligible_count: 3, covered_count: 0, remaining_count: 3, organization_generation: 0,
     updated_at: null, error_code: null, purpose: '从本联系人合法已采纳记忆整理主题背景，供核对及后续回复使用。',
-    budget: { max_memories: 0, max_scenarios: 0, max_paragraphs: 0, max_characters: 0, max_model_calls: 0 }, scenarios: [], profile: null, ...overrides } };
+    budget: { max_memories: 0, max_scenarios: 0, max_paragraphs: 0, max_characters: 0, max_model_calls: 0, model_calls_used: 0, model_calls_remaining: 0 }, scenarios: [], profile: null, ...overrides } };
 }
 export async function fixture(requestJson) {
   let generation = 1;
@@ -44,7 +44,7 @@ export async function fixture(requestJson) {
 export function readyPayload(overrides = {}) {
   return payload({ enabled: true, settings_generation: 1, quality_status: 'synthetic', status: 'ready',
     covered_count: 2, remaining_count: 1, organization_generation: 1, updated_at: '2026-10-17T10:00:00+08:00',
-    budget: { max_memories: 2, max_scenarios: 2, max_paragraphs: 3, max_characters: 500, max_model_calls: 2 },
+    budget: { max_memories: 2, max_scenarios: 2, max_paragraphs: 3, max_characters: 500, max_model_calls: 2, model_calls_used: 2, model_calls_remaining: 0 },
     scenarios: [{ scenario_id: ids.scenario, version_id: ids.version, title: '合成读书计划', hint: '讨论中的长期读书安排', system_generated: true,
       updated_at: '2026-10-17T10:00:00+08:00', paragraphs: [{ text: '曾计划参加合成读书会，当前是否成行尚未核实。', references: [{
         memory_id: ids.memory, revision: 1, provenance_kind: 'manual_entry', timing: { recorded_at: '2026-10-16T10:00:00+08:00',
@@ -55,7 +55,7 @@ export function readyPayload(overrides = {}) {
 
 export function profilePayload(overrides = {}) {
   const base = readyPayload();
-  return readyPayload({ budget: { ...base.layered_memory.budget, max_model_calls: 4, max_profile_entries: 4 },
+  return readyPayload({ budget: { ...base.layered_memory.budget, max_model_calls: 4, max_profile_entries: 4, model_calls_used: 4, model_calls_remaining: 0 },
     profile: { version_id: ids.profile, system_generated: true, updated_at: '2026-10-17T10:00:00+08:00', entries: [{
       text: '曾有共同读书安排，是否持续尚未核实。', temporal_status: 'uncertain', uncertainty: '没有新的来源核实持续状态。',
       references: base.layered_memory.scenarios[0].paragraphs[0].references,

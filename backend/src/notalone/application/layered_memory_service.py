@@ -4,7 +4,9 @@ from copy import deepcopy
 import json
 import math
 
-from notalone.memory.layered import OrganizationBudget, LayeredMemoryConflict
+from notalone.memory.layered import (
+    OrganizationBudget, LayeredMemoryConflict, OrganizationBudgetExhausted,
+)
 from notalone.memory.scenario_validation import validate_proposal
 from notalone.memory.profile_validation import validate_profile
 from notalone.application.model_priority import ModelPriorityControl, ModelWorkStopped
@@ -45,6 +47,9 @@ class LayeredMemoryService:
     def read(self, scope):
         state, entries, scenarios, profile = self._store.read(scope)
         covered = state["covered_count"]
+        usage = state["call_budget"]
+        limit = usage["model_call_limit"] if usage else self._budget.max_model_calls
+        used = usage["model_calls_used"] if usage else 0
         return {"schema_version": 2, "scope_kind": "contact", "contact_id": str(scope.contact_id),
                 "settings_generation": state["settings_generation"], "enabled": state["enabled"],
                 "quality_status": "synthetic" if self._synthetic else "unknown",
@@ -54,7 +59,8 @@ class LayeredMemoryService:
                 "updated_at": state["updated_at"].isoformat() if state["updated_at"] else None,
                 "error_code": state["error_code"], "scenarios": scenarios, "profile": profile,
                 "purpose": "从本联系人已采纳且来历有效的记忆整理主题背景，供查看及后续受控回复使用。",
-                "budget": self._budget.to_payload()}
+                "budget": {**self._budget.to_payload(), "max_model_calls": limit,
+                    "model_calls_used": used, "model_calls_remaining": limit-used}}
 
     def command(self, scope, action, expected_generation):
         self._store.command(scope, action, expected_generation, quality_available=self._synthetic)
@@ -74,7 +80,8 @@ class LayeredMemoryService:
             return
         try:
             raw = self._call(work, self._proposer, "propose", lambda deadline: self._proposer.propose(
-                memories=deepcopy(work.memories), budget=self._budget, deadline=deadline))
+                memories=deepcopy(work.memories), budget=self._budget, deadline=deadline),
+                guard=lambda: self._store.check(work))
             proposal = validate_proposal(raw, work.memories, self._budget)
             self._store.record_proposal(work, raw)
             # 核验实际接收全部记忆和完整提案，两者合计仍受单次输入上限约束。
@@ -83,11 +90,14 @@ class LayeredMemoryService:
                 self._store.fail(work, "verification_input_budget_exceeded")
                 return
             supported = self._call(work, self._verifier, "verify", lambda deadline: self._verifier.verify(
-                memories=deepcopy(work.memories), proposal=deepcopy(raw), deadline=deadline))
+                memories=deepcopy(work.memories), proposal=deepcopy(raw), deadline=deadline),
+                guard=lambda: self._store.check(work))
             if supported is not True:
                 self._store.fail(work, "faithfulness_rejected")
                 return
             self._store.publish(work, proposal)
+        except OrganizationBudgetExhausted:
+            self._store.fail(work, "model_call_budget_exhausted")
         except OrganizationCallTimeout:
             self._store.fail(work, "model_call_timeout")
         except (LayeredMemoryConflict, ModelWorkStopped):
@@ -97,10 +107,19 @@ class LayeredMemoryService:
         except Exception:
             self._store.fail(work, "model_call_failed")
 
-    def _call(self, work, adapter, operation, call):
+    def _call(self, work, adapter, operation, call, *, guard):
+        """两层共用许可、期限与持久额度政策；反复guard仅复验，不重复扣费。"""
         require_adapter_timeout_contract(adapter, operation, synthetic=self._synthetic)
-        return bounded_organization_call(call, priority=self._priority,
-            guard=lambda: self._store.check(work), timeout_seconds=self._call_timeout_seconds)
+
+        def invoke(deadline):
+            deadline.check()
+            self._store.reserve_model_call(work)
+            # 预留提交后中断或发送状态不明也计入，不能在恢复时退款重发。
+            deadline.check()
+            return call(deadline)
+
+        return bounded_organization_call(invoke, priority=self._priority,
+            guard=guard, timeout_seconds=self._call_timeout_seconds)
 
     def capture(self, scope):
         return self._store.capture(scope) if self._synthetic else None
@@ -127,20 +146,24 @@ class LayeredMemoryService:
         if work is None:
             return
         try:
-            raw = self._profile_call(work,self._profile_proposer,"propose",lambda deadline: self._profile_proposer.propose(
-                scenarios=deepcopy(work.scenarios),memories=deepcopy(work.memories),budget=self._budget,deadline=deadline))
+            raw = self._call(work,self._profile_proposer,"propose",lambda deadline: self._profile_proposer.propose(
+                scenarios=deepcopy(work.scenarios),memories=deepcopy(work.memories),budget=self._budget,deadline=deadline),
+                guard=lambda: self._store.check_profile(work))
             proposal = validate_profile(raw,work.memories,self._budget)
             self._store.record_profile_proposal(work,raw)
             payload = {"scenarios": list(work.scenarios),"memories": [item.to_payload() for item in work.memories],"proposal": raw}
             if len(json.dumps(payload,ensure_ascii=False)) > self._budget.max_characters:
                 self._store.fail_profile(work,"profile_verification_input_budget_exceeded")
                 return
-            supported = self._profile_call(work,self._profile_verifier,"verify",lambda deadline: self._profile_verifier.verify(
-                scenarios=deepcopy(work.scenarios),memories=deepcopy(work.memories),proposal=deepcopy(raw),deadline=deadline))
+            supported = self._call(work,self._profile_verifier,"verify",lambda deadline: self._profile_verifier.verify(
+                scenarios=deepcopy(work.scenarios),memories=deepcopy(work.memories),proposal=deepcopy(raw),deadline=deadline),
+                guard=lambda: self._store.check_profile(work))
             if supported is not True:
                 self._store.fail_profile(work,"profile_faithfulness_rejected")
                 return
             self._store.publish_profile(work,proposal)
+        except OrganizationBudgetExhausted:
+            self._store.fail_profile(work,"model_call_budget_exhausted")
         except OrganizationCallTimeout:
             self._store.fail_profile(work,"model_call_timeout")
         except (LayeredMemoryConflict,ModelWorkStopped):
@@ -149,8 +172,3 @@ class LayeredMemoryService:
             self._store.fail_profile(work,"profile_proposal_invalid")
         except Exception:
             self._store.fail_profile(work,"model_call_failed")
-
-    def _profile_call(self, work, adapter, operation, call):
-        require_adapter_timeout_contract(adapter,operation,synthetic=self._synthetic)
-        return bounded_organization_call(call,priority=self._priority,guard=lambda: self._store.check_profile(work),
-            timeout_seconds=self._call_timeout_seconds)

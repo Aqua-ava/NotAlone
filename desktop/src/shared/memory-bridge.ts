@@ -137,7 +137,7 @@ export interface LayeredMemory {
   settingsGeneration: number;
   enabled: boolean;
   qualityStatus: 'unknown' | 'synthetic';
-  status: 'disabled' | 'ready' | 'empty' | 'failed' | 'updating' | 'stale' | 'blocked';
+  status: 'disabled' | 'ready' | 'empty' | 'failed' | 'updating' | 'stale' | 'blocked' | 'paused';
   eligibleCount: number;
   coveredCount: number;
   remainingCount: number;
@@ -145,7 +145,7 @@ export interface LayeredMemory {
   updatedAt: string | null;
   errorCode: string | null;
   purpose: string;
-  budget: { maxMemories: number; maxScenarios: number; maxParagraphs: number; maxCharacters: number; maxModelCalls: number; maxProfileEntries?: number };
+  budget: { maxMemories: number; maxScenarios: number; maxParagraphs: number; maxCharacters: number; maxModelCalls: number; maxProfileEntries?: number; modelCallsUsed: number; modelCallsRemaining: number };
   scenarios: LayeredMemoryScenario[];
   profile: LayeredMemoryProfile | null;
 }

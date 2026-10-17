@@ -8,6 +8,10 @@ from notalone.scopes import ContactScope
 from notalone.memory.organization_deadline import OrganizationAdapterTimeoutContract, OrganizationCallDeadline
 
 
+class OrganizationBudgetExhausted(RuntimeError):
+    """同一逻辑批次的持久调用额度已耗尽；刷新不能重置。"""
+
+
 class LayeredMemoryConflict(RuntimeError):
     """范围设置或实际输入已变化，旧操作不能生效。"""
 

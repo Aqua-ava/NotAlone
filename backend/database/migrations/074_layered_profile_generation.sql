@@ -1,3 +1,11 @@
+-- 调用额度属于一次明确的L2目标工作；失败、超时及预留后中断仍累计。
+ALTER TABLE public.layered_memory_batch
+    ADD COLUMN model_call_limit integer NOT NULL DEFAULT 2 CHECK (model_call_limit IN (2,4)),
+    ADD COLUMN model_calls_used integer NOT NULL DEFAULT 2 CHECK (model_calls_used >= 0 AND model_calls_used <= model_call_limit);
+ALTER TABLE public.layered_memory_state
+    DROP CONSTRAINT layered_memory_state_status_check,
+    ADD CONSTRAINT layered_memory_state_status_check CHECK (status IN ('disabled','ready','empty','failed','updating','stale','blocked','paused')),
+    ADD COLUMN call_budget_batch_id uuid REFERENCES public.layered_memory_batch(id) ON DELETE SET NULL;
 -- 一致集合保存完整不可变主题版本；长期背景保留独立直接引用与递归依赖。
 CREATE TABLE public.layered_profile_batch (
     id uuid PRIMARY KEY,
@@ -7,6 +15,7 @@ CREATE TABLE public.layered_profile_batch (
     organization_generation bigint NOT NULL,
     work_key text NOT NULL,
     work_token uuid NOT NULL,
+    budget_batch_id uuid NOT NULL,
     status text NOT NULL CHECK (status IN ('running','succeeded','failed','withdrawn')),
     attempt_count integer NOT NULL DEFAULT 1 CHECK (attempt_count BETWEEN 1 AND 2),
     lease_expires_at timestamptz NOT NULL,
@@ -17,6 +26,7 @@ CREATE TABLE public.layered_profile_batch (
     dependency_ids uuid[] NOT NULL,
     error_code text,
     created_at timestamptz NOT NULL,
+    FOREIGN KEY(budget_batch_id,owner_id,contact_id) REFERENCES public.layered_memory_batch(id,owner_id,contact_id) ON DELETE CASCADE,
     UNIQUE(owner_id,contact_id,work_key),
     UNIQUE(id,owner_id,contact_id),
     FOREIGN KEY(owner_id,contact_id) REFERENCES public.contact(owner_id,id) ON DELETE CASCADE

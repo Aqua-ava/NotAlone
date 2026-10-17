@@ -121,3 +121,62 @@ test('用户逐项查看长期背景与依据，停用仍可回看，并可撤�
     assert.equal(await page.getByText('曾有共同读书安排，是否持续尚未核实。', { exact: true }).count(), 0);
   });
 });
+
+test('模型调用额度耗尽时显示累计与剩余，刷新后仍暂停并解释额度范围', { timeout: 20000 }, async () => {
+  let refreshed = false;
+  const ready = profilePayload();
+  const f = await fixture(async (request) => {
+    if (request.path.includes('/layered-memory')) {
+      if (request.method === 'POST') refreshed = true;
+      return { generation: 1, data: readyPayload({ status: 'paused', error_code: 'model_call_budget_exhausted',
+        scenarios: [], budget: ready.layered_memory.budget }) };
+    }
+    return { generation: 1, data: request.path.endsWith('/sources') ? { sources: [] }
+      : request.path.endsWith('/memory-candidates') ? { candidates: [] } : { memories: [] } };
+  });
+  await withMemoryPage(f, async (page) => {
+    await page.getByRole('button', { name: '主题资料', exact: true }).click();
+    const paused = page.getByText('本批模型调用预算已耗尽，整理已暂停。刷新不会重置预算。', { exact: true });
+    await paused.waitFor({ timeout: 3000 });
+    await page.getByText('本批模型调用：累计已消耗 4 次 · 剩余 0 次 · 上限 4 次。', { exact: true }).waitFor();
+    await page.getByText('额度包含失败、超时及已预留后中断的调用。当前合法的新目标或新启用世代独立计额。', { exact: true }).waitFor();
+    await page.getByRole('button', { name: '刷新主题资料', exact: true }).click();
+    await paused.waitFor();
+    assert.equal(refreshed, true);
+    assert.equal((await f.bridge.getState()).layeredMemory.value.budget.modelCallsUsed, 4);
+    assert.equal((await f.bridge.getState()).layeredMemory.value.budget.modelCallsRemaining, 0);
+    assert.equal(await page.getByRole('heading', { name: '合成读书计划' }).count(), 0);
+  });
+});
+
+test('模型调用计数缺失或不合法时撤下旧正文，不能显示未经核对的额度', { timeout: 20000 }, async () => {
+  const valid = profilePayload(), budget = valid.layered_memory.budget;
+  let saved = valid;
+  const f = await fixture(async (request) => {
+    if (request.path.includes('/layered-memory')) return { generation: 1, data: saved };
+    return { generation: 1, data: request.path.endsWith('/sources') ? { sources: [] }
+      : request.path.endsWith('/memory-candidates') ? { candidates: [] } : { memories: [] } };
+  });
+  await withMemoryPage(f, async (page) => {
+    await page.getByRole('button', { name: '主题资料', exact: true }).click();
+    const wrong = [
+      { model_calls_used: 3, model_calls_remaining: 0 },
+      { model_calls_used: 4, model_calls_remaining: 1 },
+      { model_calls_used: undefined }, { model_calls_remaining: undefined },
+      { model_calls_used: -1, model_calls_remaining: 5 },
+      { model_calls_used: 4.5, model_calls_remaining: 0 },
+      { model_calls_used: '4' }, { model_calls_used: 5, model_calls_remaining: -1 },
+    ];
+    for (const invalid of wrong) {
+      saved = valid;
+      await page.getByRole('button', { name: '重新读取主题资料', exact: true }).click();
+      await page.getByRole('heading', { name: '合成读书计划', exact: true }).waitFor();
+      saved = profilePayload({ budget: { ...budget, ...invalid } });
+      await page.getByRole('button', { name: '重新读取主题资料', exact: true }).click();
+      await page.getByRole('alert').filter({ hasText: '主题资料读取失败，旧内容已撤下。请重新读取。' }).waitFor({ timeout: 3000 });
+      assert.equal(await page.getByRole('heading', { name: '合成读书计划', exact: true }).count(), 0);
+      assert.equal(await page.getByText('曾有共同读书安排，是否持续尚未核实。', { exact: true }).count(), 0);
+      assert.equal(await page.getByText('本批模型调用：', { exact: false }).count(), 0);
+    }
+  });
+});

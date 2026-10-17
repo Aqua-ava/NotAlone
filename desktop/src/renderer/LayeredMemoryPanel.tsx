@@ -4,7 +4,7 @@ import { MemoryTemporalStatus } from './MemoryTemporalStatus';
 
 const statusNames: Record<LayeredMemory['status'], string> = { disabled: '已停用', ready: '本批主题资料整理成功',
   empty: '暂无合格资料可整理', failed: '整理失败，未采用本批结果', updating: '正在整理，尚未完成',
-  stale: '依据已变化，主题资料待刷新', blocked: '已开启范围，质量资格待核验' };
+  stale: '依据已变化，主题资料待刷新', blocked: '已开启范围，质量资格待核验', paused: '整理已暂停' };
 function time(value: string | null): string {
   return value ? `${new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Taipei', dateStyle: 'long', timeStyle: 'medium' }).format(new Date(value))}（UTC+8）` : '未知';
 }
@@ -28,13 +28,16 @@ export function LayeredMemoryPanel({ state, contactName, busy, read, manage, fac
     {value && <>
       <p>整理用途：{value.purpose}</p>
       <p>合格资料 {value.eligibleCount} 条 · 已覆盖 {value.coveredCount} 条 · 剩余 {value.remainingCount} 条</p>
-      <p role={value.status === 'failed' ? 'alert' : 'status'}>{statusNames[value.status]}</p>
+      <p role={value.status === 'failed' || value.status === 'paused' ? 'alert' : 'status'}>{value.errorCode === 'model_call_budget_exhausted'
+        ? '本批模型调用预算已耗尽，整理已暂停。刷新不会重置预算。' : statusNames[value.status]}</p>
       {value.remainingCount > 0 && value.coveredCount > 0 && <p>目前仅覆盖部分资料；剩余资料尚未整理。</p>}
       {value.qualityStatus === 'unknown' ? <div className="memory-section-note"><p>质量资格未知，资料不会发给模型。</p>
         <p>生产调用预算尚未标定；当前不开放真实资料整理或回复加载。</p></div>
         : <div className="memory-section-note"><p>仅用于受控合成验证，不代表真实模型质量已获资格。</p>
           <p>本批上限：{value.budget.maxMemories} 条记忆、{value.budget.maxScenarios} 个主题、{value.budget.maxParagraphs} 段、{value.budget.maxCharacters} 字符、{value.budget.maxModelCalls} 次模型调用。</p>
           {value.budget.maxProfileEntries !== undefined && <p>长期背景最多 {value.budget.maxProfileEntries} 项。</p>}</div>}
+      {value.qualityStatus === 'synthetic' && <><p>本批模型调用：累计已消耗 {value.budget.modelCallsUsed} 次 · 剩余 {value.budget.modelCallsRemaining} 次 · 上限 {value.budget.maxModelCalls} 次。</p>
+        <p className="memory-section-note">额度包含失败、超时及已预留后中断的调用。当前合法的新目标或新启用世代独立计额。</p></>}
       <p>本范围{value.enabled ? '已开启' : '已关闭'} · 更新时间：{time(value.updatedAt)}</p>
       {!value.enabled && <div className="layered-memory-confirm"><label><input type="checkbox" checked={confirmed} disabled={waiting}
         onChange={(event) => setConfirmed(event.target.checked)} />确认仅整理这位联系人的合法已采纳记忆，并同意以上用途与模型接收范围</label>

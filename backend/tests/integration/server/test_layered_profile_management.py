@@ -48,11 +48,14 @@ class ProfileVerification:
 
 
 class LayeredProfileHttpTest(MemoryOverviewHttpFixture, unittest.TestCase):
-    def controlled(self, *, profile_proposer=None, profile_verifier=None, clock=None, **options):
+    def controlled(self, *, profile_proposer=None, profile_verifier=None, clock=None,
+                   scenario_proposer=None, scenario_verifier=None, **options):
         self.profile_proposer = profile_proposer or ProfileProposal()
         self.profile_verifier = profile_verifier or ProfileVerification()
+        self.scenario_proposer = scenario_proposer or ControlledProposal()
+        self.scenario_verifier = scenario_verifier or ControlledVerification()
         self.service = LayeredMemoryService(PostgresLayeredMemoryStore(self.database_url, clock=clock),
-            proposer=ControlledProposal(), verifier=ControlledVerification(), synthetic=True,
+            proposer=self.scenario_proposer, verifier=self.scenario_verifier, synthetic=True,
             profile_proposer=self.profile_proposer, profile_verifier=self.profile_verifier, **options)
         backend = HttpBackend(create_app(database_url=self.database_url, owner_id=self.owner_id,
             token="synthetic-profile-token", layered_memory=self.service), self.owner_id)
@@ -78,6 +81,7 @@ class LayeredProfileHttpTest(MemoryOverviewHttpFixture, unittest.TestCase):
         backend = self.controlled()
         ready = self.enable(backend, contact)
         self.assertEqual((ready["schema_version"], ready["status"]), (2, "ready"))
+        self.assertEqual((ready["budget"]["model_calls_used"],ready["budget"]["model_calls_remaining"]),(4,0))
         profile = ready["profile"]
         self.assertTrue(profile["system_generated"])
         entry = profile["entries"][0]
@@ -99,6 +103,7 @@ class LayeredProfileHttpTest(MemoryOverviewHttpFixture, unittest.TestCase):
         repeated = self._get_refresh(backend, contact, ready)
         self.assertEqual(repeated["profile"], profile)
         self.assertEqual(repeated["organization_generation"], ready["organization_generation"])
+        self.assertEqual(repeated["budget"],ready["budget"])
 
     def _get_refresh(self, backend, contact, state):
         status, result = backend.request(f"/api/contacts/{contact}/layered-memory/refresh", {
@@ -242,7 +247,7 @@ class LayeredProfileHttpTest(MemoryOverviewHttpFixture, unittest.TestCase):
         self.assertEqual([item["version_id"] for item in rebuilt["scenarios"]],current_versions)
         self.assertEqual(len(self.profile_proposer.inputs[-1][1]),2)
 
-    def test_restart_reclaims_expired_profile_attempt_and_repeated_receipt_does_not_duplicate(self):
+    def test_restart_reclaims_expired_profile_attempt_without_refunding_its_reserved_call(self):
         from datetime import timedelta
         current = [datetime(2026,10,17,tzinfo=timezone.utc)]
         contact,_,_ = self.prepare_contact()
@@ -254,8 +259,9 @@ class LayeredProfileHttpTest(MemoryOverviewHttpFixture, unittest.TestCase):
         self.assertIsNone(interrupted["profile"])
         restarted = self.controlled(clock=lambda: current[0],call_timeout_seconds=.2)
         recovered = self._get_refresh(restarted,contact,interrupted)
-        self.assertEqual(recovered["status"],"ready")
-        self.assertIsNotNone(recovered["profile"])
+        self.assertEqual((recovered["status"],recovered["error_code"]),("paused","model_call_budget_exhausted"))
+        self.assertIsNone(recovered["profile"])
+        self.assertEqual((recovered["budget"]["model_calls_used"],recovered["budget"]["model_calls_remaining"]),(4,0))
         again = self._get_refresh(restarted,contact,recovered)
         self.assertEqual(again["profile"],recovered["profile"])
         self.assertEqual(again["organization_generation"],recovered["organization_generation"])
@@ -323,5 +329,99 @@ class LayeredProfileHttpTest(MemoryOverviewHttpFixture, unittest.TestCase):
         self.assertEqual(state["status"],"updating")
         for _ in range(2):
             state = self._get_refresh(backend,contact,state)
-        self.assertEqual((state["status"],state["error_code"],state["profile"]),("failed","profile_retry_exhausted",None))
+        self.assertEqual((state["status"],state["error_code"],state["profile"]),("paused","model_call_budget_exhausted",None))
         self.assertEqual(len(self.profile_proposer.inputs),2)
+
+    def test_failed_fourth_call_and_restart_cannot_refresh_a_free_profile_budget(self):
+        contact,_,_ = self.prepare_contact()
+        class FailFirstVerification(ProfileVerification):
+            def verify(self, *, scenarios, memories, proposal, deadline):
+                result = super().verify(scenarios=scenarios,memories=memories,proposal=proposal,deadline=deadline)
+                if len(self.inputs) == 1:
+                    raise RuntimeError("合成实际传输失败，已发调用仍消耗额度。")
+                return result
+        verifier,proposer = FailFirstVerification(),ProfileProposal()
+        backend = self.controlled(profile_proposer=proposer,profile_verifier=verifier)
+        failed = self.enable(backend,contact)
+        self.assertEqual(failed["error_code"],"model_call_failed")
+        restarted = self.controlled(profile_proposer=proposer,profile_verifier=verifier)
+        for _ in range(2):
+            state = self._get_refresh(restarted,contact,failed)
+            self.assertEqual((state["status"],state["error_code"],state["profile"]),
+                ("paused","model_call_budget_exhausted",None))
+            self.assertEqual((state["budget"]["max_model_calls"],state["budget"]["model_calls_used"],
+                state["budget"]["model_calls_remaining"]),(4,4,0))
+        self.assertEqual((len(proposer.inputs),len(verifier.inputs)),(1,1),"已消耗4次后刷新和重启都不能再发L3调用")
+
+    def test_profile_failed_or_timed_out_dispatches_still_count_across_restart(self):
+        from threading import Event
+        from notalone.memory.organization_deadline import OrganizationCallTimeout
+        for phase in ("proposal","verification"):
+            for failure in ("error","timeout"):
+                with self.subTest(phase=phase,failure=failure):
+                    contact,_,_ = self.prepare_contact()
+                    finished = Event()
+                    def fail():
+                        if failure == "error":
+                            finished.set()
+                            raise RuntimeError("合成已发请求失败。")
+                        return None
+                    class OnceProposal(ProfileProposal):
+                        def propose(self, *, scenarios, memories, budget, deadline):
+                            result = super().propose(scenarios=scenarios,memories=memories,budget=budget,deadline=deadline)
+                            if phase == "proposal" and len(self.inputs) == 1:
+                                fail()
+                                try:
+                                    Event().wait(deadline.remaining_seconds())
+                                    raise OrganizationCallTimeout()
+                                finally:
+                                    finished.set()
+                            return result
+                    class OnceVerification(ProfileVerification):
+                        def verify(self, *, scenarios, memories, proposal, deadline):
+                            result = super().verify(scenarios=scenarios,memories=memories,proposal=proposal,deadline=deadline)
+                            if phase == "verification" and len(self.inputs) == 1:
+                                fail()
+                                try:
+                                    Event().wait(deadline.remaining_seconds())
+                                    raise OrganizationCallTimeout()
+                                finally:
+                                    finished.set()
+                            return result
+                    proposer,verifier = OnceProposal(),OnceVerification()
+                    backend = self.controlled(profile_proposer=proposer,profile_verifier=verifier,call_timeout_seconds=.2)
+                    first = self.enable(backend,contact)
+                    self.assertTrue(finished.wait(1))
+                    self.assertEqual(first["budget"]["model_calls_used"],3 if phase == "proposal" else 4)
+                    self.assertEqual(first["error_code"],"model_call_failed" if failure == "error" else "model_call_timeout")
+                    restarted = self.controlled(profile_proposer=proposer,profile_verifier=verifier,call_timeout_seconds=.2)
+                    state = self._get_refresh(restarted,contact,first)
+                    self.assertEqual((state["status"],state["error_code"],state["profile"]),("paused","model_call_budget_exhausted",None))
+                    self.assertEqual((state["budget"]["max_model_calls"],state["budget"]["model_calls_used"],state["budget"]["model_calls_remaining"]),(4,4,0))
+                    self.assertEqual(len(proposer.inputs)+len(verifier.inputs),2,"L2已花2次；整个目标L3实际调用不能超过余下2次")
+
+    def test_new_legal_target_and_new_enable_epoch_have_independent_finite_budgets(self):
+        contact,_,_ = self.prepare_contact()
+        class FailVerification(ProfileVerification):
+            def verify(self, *, scenarios, memories, proposal, deadline):
+                super().verify(scenarios=scenarios,memories=memories,proposal=proposal,deadline=deadline)
+                raise RuntimeError("合成首次目标核验失败。")
+        backend = self.controlled(profile_verifier=FailVerification())
+        failed = self.enable(backend,contact)
+        paused = self._get_refresh(backend,contact,failed)
+        self.assertEqual(paused["status"],"paused")
+        status,result = self.backend.request("/api/memories/manual-contact",{
+            "contact_id":contact,"text":"双方后来共同完成了另一次合成学习练习。","category":"common_fact"})
+        self.assertEqual(status,200,result)
+        healthy = self.controlled()
+        rebuilt = self._get_refresh(healthy,contact,paused)
+        self.assertEqual((rebuilt["status"],rebuilt["covered_count"]),("ready",2))
+        self.assertIsNotNone(rebuilt["profile"])
+        self.assertEqual((rebuilt["budget"]["model_calls_used"],rebuilt["budget"]["model_calls_remaining"]),(4,0),"不能把旧目标费用加进新目标")
+        status,result = healthy.request(f"/api/contacts/{contact}/layered-memory/disable",{
+            "settings_generation":rebuilt["settings_generation"]})
+        self.assertEqual(status,200,result)
+        enabled = self.enable(healthy,contact)
+        self.assertEqual(enabled["status"],"ready")
+        self.assertGreater(enabled["settings_generation"],rebuilt["settings_generation"])
+        self.assertEqual((enabled["budget"]["model_calls_used"],enabled["budget"]["model_calls_remaining"]),(4,0))

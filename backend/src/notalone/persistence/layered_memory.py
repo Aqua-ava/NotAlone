@@ -12,13 +12,13 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from notalone.memory.layered import (
-    LayeredMemoryConflict, OrganizationInput, LayeredMemorySnapshot, ScenarioDirectoryEntry,
+    LayeredMemoryConflict, OrganizationInput, LayeredMemorySnapshot, ScenarioDirectoryEntry, OrganizationBudgetExhausted,
 )
 from notalone.memory.models import ConfirmedMemoryStatus
 from notalone.persistence.locks import lock_contact_scope, lock_owner_scope
 from notalone.persistence.memory_overview import PostgresRelationshipOverviewStore
 from notalone.scopes import ContactScope
-from notalone.persistence.layered_profile import LayeredProfileStore
+from notalone.persistence.layered_profile import LayeredProfileStore, ProfileWork
 
 
 def _digest(value):
@@ -33,6 +33,10 @@ class OrganizationWork:
     settings_generation: int
     memories: tuple[OrganizationInput, ...]
     manifest: list
+
+    @property
+    def call_budget_id(self) -> UUID:
+        return self.id
 
 
 class PostgresLayeredMemoryStore(LayeredProfileStore):
@@ -158,6 +162,9 @@ class PostgresLayeredMemoryStore(LayeredProfileStore):
                 manifest, rows = self.generation_rows(connection, scope, state["organization_generation"])
                 if manifest and manifest["profile_version_id"]:
                     profile = self.profile_document(self.profile_row(connection,scope,manifest["profile_version_id"]))
+            state["call_budget"] = connection.execute("SELECT model_call_limit,model_calls_used FROM public.layered_memory_batch "
+                "WHERE id=%s AND owner_id=%s AND contact_id=%s",
+                (state["call_budget_batch_id"],scope.owner_id,scope.contact_id)).fetchone()
             return state, self.eligible(overview), [self._document(row) for row in rows], profile
 
     @staticmethod
@@ -236,12 +243,12 @@ class PostgresLayeredMemoryStore(LayeredProfileStore):
             dependencies.update(identifier for entry in entries for identifier in entry.dependency_ids)
             id = uuid4()
             connection.execute("INSERT INTO public.layered_memory_batch(id,owner_id,contact_id,settings_generation,"
-                "work_key,status,input_manifest,input_payload,dependency_ids,created_at) "
-                "VALUES(%s,%s,%s,%s,%s,'running',%s,%s,%s,%s)", (id,scope.owner_id,scope.contact_id,
+                "work_key,status,input_manifest,input_payload,dependency_ids,created_at,model_call_limit,model_calls_used) "
+                "VALUES(%s,%s,%s,%s,%s,'running',%s,%s,%s,%s,%s,0)", (id,scope.owner_id,scope.contact_id,
                 state["settings_generation"],key,Jsonb(manifest),Jsonb([item.to_payload() for item in memories]),
-                sorted(dependencies),self._clock()))
-            connection.execute("UPDATE public.layered_memory_state SET status='updating',error_code=NULL "
-                "WHERE owner_id=%s AND contact_id=%s", (scope.owner_id, scope.contact_id))
+                sorted(dependencies),self._clock(),budget.max_model_calls))
+            connection.execute("UPDATE public.layered_memory_state SET call_budget_batch_id=%s,status='updating',error_code=NULL "
+                "WHERE owner_id=%s AND contact_id=%s", (id,scope.owner_id, scope.contact_id))
             return OrganizationWork(id, scope, state["settings_generation"], memories, manifest)
 
     @staticmethod
@@ -265,6 +272,19 @@ class PostgresLayeredMemoryStore(LayeredProfileStore):
     def check(self, work):
         with self.transaction(work.scope) as (connection, state, overview):
             self._check(connection, state, overview, work)
+
+    def reserve_model_call(self, work):
+        """取得实际调用许可后仅预留一次；提交后中断也不退还，防止恢复免费重发。"""
+        with self.transaction(work.scope) as (connection,state,overview):
+            if isinstance(work, ProfileWork):
+                self._check_profile(connection,state,overview,work)
+            else:
+                self._check(connection,state,overview,work)
+            reserved = connection.execute("UPDATE public.layered_memory_batch SET model_calls_used=model_calls_used+1 "
+                "WHERE id=%s AND owner_id=%s AND contact_id=%s AND model_calls_used<model_call_limit RETURNING id",
+                (work.call_budget_id,work.scope.owner_id,work.scope.contact_id)).fetchone()
+            if reserved is None:
+                raise OrganizationBudgetExhausted("本批模型调用预算已耗尽。")
 
     def record_proposal(self, work, proposal):
         with self.transaction(work.scope) as (connection, state, overview):
@@ -302,8 +322,9 @@ class PostgresLayeredMemoryStore(LayeredProfileStore):
                 return
             connection.execute("UPDATE public.layered_memory_batch SET status='failed',error_code=%s WHERE id=%s",
                                (code, work.id))
-            connection.execute("UPDATE public.layered_memory_state SET status='failed',error_code=%s "
-                "WHERE owner_id=%s AND contact_id=%s", (code,work.scope.owner_id,work.scope.contact_id))
+            connection.execute("UPDATE public.layered_memory_state SET status=%s,error_code=%s "
+                "WHERE owner_id=%s AND contact_id=%s", ("paused" if code == "model_call_budget_exhausted" else "failed",
+                code,work.scope.owner_id,work.scope.contact_id))
 
     def capture(self, scope):
         with self.transaction(scope) as (connection, state, _):
