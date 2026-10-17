@@ -317,3 +317,121 @@ class LayeredReplyHttpTest(OverviewReplyHttpFixture, unittest.TestCase):
                 (Jsonb(encoded), self.owner_id, contact, body["idempotency_key"]))
         self.assertNotEqual(self.backend.request(path + "/replies", body)[0], 200)
         self.assertEqual(len(self.reply_model.seen_calls), 0)
+
+    def test_independent_review_receives_exact_frozen_background_for_past_facts(self):
+        import json
+        from langchain_core.messages import HumanMessage
+        from notalone.reply.layered_context import LayeredReplyBudget
+        contact, _, _ = self.import_contact("今天阳光明媚。")
+        self.manual_contact(contact, "双方共同参加过课程。")
+        management = self.controlled()
+        ready = self.enable(management, contact)
+        self.layered_reply_options = {"layered_memory": self.service,
+            "layered_reply_budget": LayeredReplyBudget(4, 4, 4000)}
+        self.activate_replies(contact)
+        self.reply_model.plans.append({"text": "你好，想起以前一起学习的时光。", "basis": "背景记录共同学习经历。"})
+        body = self.rewrite_body(contact, "你好。")
+        body["content"]["user_instruction"] = "请自然表达，允许联系合法背景。"
+        def faithful_review(payload, report):
+            self.assertNotIn("学习经历", str(payload["evidence"]))
+            material = payload.get("layered_context", {})
+            supported = "双方有共同学习经历" in str(material.get("profile_entries", []))
+            report["reviews"]["candidate_1"]["checks"]["facts"]["result"]["status"] = "supported" if supported else "unknown"
+            return report
+        self.reply_model.review_transform = faithful_review
+        status, turn = self.backend.request(self.reply_path(contact) + "/replies", body)
+        self.assertEqual(status, 200, turn)
+        self.assertEqual(len(self.reply_model.seen_calls), 2)
+        generation, review = self.reply_model.seen_calls
+        system = next(str(item.content) for item in generation if isinstance(item, SystemMessage))
+        sent, _ = json.JSONDecoder().raw_decode(system[system.index("{", system.index("<relationship_background>")):])
+        payload = next(json.loads(item.content) for item in review if isinstance(item, HumanMessage))
+        self.assertEqual(payload["layered_context"], sent)
+        self.assertEqual(sent["profile_version_id"], ready["profile"]["version_id"])
+        self.assertNotIn("dependency_ids", str(sent))
+        self.assertNotIn("paragraphs", str(sent))
+
+    def test_review_accepts_only_actual_profile_text_as_layered_fact_source_path(self):
+        contact, _, _, ready, path = self.prepare_layered_reply()
+        body = self.rewrite_body(contact, "你好。")
+        body["content"]["user_instruction"] = "自然表达。"
+        self.reply_model.plans.append({"text": "我们从来没有共同学习过。", "basis": "合成矛盾事实。"})
+        def contradicting_fact(payload, report):
+            report["reviews"]["candidate_1"]["checks"]["facts"]["result"] = {
+                "status": "violation", "violation": {"category": "unsupported_fact",
+                "candidate_path": "/text", "candidate_quote": "从来没有共同学习过",
+                "source_path": "/layered_context/profile_entries/0/text",
+                "source_quote": ready["profile"]["entries"][0]["text"]}}
+            return report
+        self.reply_model.review_transform = contradicting_fact
+        self.assertEqual(self.backend.request(path + "/replies", body),
+            (409, {"error": "reply_candidates_rejected"}))
+
+    def test_review_budget_failure_preserves_frozen_input_and_stops_before_send(self):
+        contact, _, _, _, path = self.prepare_layered_reply()
+        decisions = []
+        self.layered_reply_options["on_input_budget"] = decisions.append
+        self.backend = self._backend(self.owner_id)
+        body = self.rewrite_body(contact, "你好。")
+        body["content"]["user_instruction"] = "自然表达。"
+        self.reply_model.plans.append({"text": "你好，想起共同学习的时光。", "basis": "按背景。"})
+        status, turn = self.backend.request(path + "/replies", body)
+        self.assertEqual(status, 200, turn)
+        review_total = decisions[-1].total_tokens
+        self.assertGreater(review_total, max(item.total_tokens for item in decisions[:-1]))
+        self.reply_capacity = review_total - 1
+        self.backend = self._backend(self.owner_id)
+        status, session = self.backend.request(f"/api/contacts/{contact}/assistant-sessions", {}, method="POST")
+        self.assertEqual(status, 200, session)
+        path = f"/api/contacts/{contact}/assistant-sessions/{session['session_id']}"
+        next_body = self.rewrite_body(contact, "你好。")
+        next_body["content"]["user_instruction"] = "自然表达。"
+        self.reply_model.plans.append({"text": "你好，想起共同学习的时光。", "basis": "按背景。"})
+        before = len(self.reply_model.seen_calls)
+        status, result = self.backend.request(path + "/replies", next_body)
+        self.assertNotEqual(status, 200, result)
+        self.assertEqual(len(self.reply_model.seen_calls) - before, 1)
+        self.assertIn("双方有共同学习经历", str(self.reply_model.seen_calls[-1]))
+        self.assertGreater(decisions[-1].total_tokens, self.reply_capacity)
+
+    def test_review_rejects_directory_and_background_as_current_intent_sources(self):
+        contact, _, _, ready, path = self.prepare_layered_reply()
+        for category, source_path, quote in (
+            ("facts", "/layered_context/directory/0/title", ready["scenarios"][0]["title"]),
+            ("instruction", "/layered_context/profile_entries/0/text", ready["profile"]["entries"][0]["text"]),
+        ):
+            with self.subTest(category=category):
+                body = self.rewrite_body(contact, "你好。")
+                body["content"]["user_instruction"] = "自然表达。"
+                self.reply_model.plans.append({"text": "你好。", "basis": "合成。"})
+                def invalid_source(payload, report):
+                    report["reviews"]["candidate_1"]["checks"][category]["result"] = {
+                        "status": "violation", "violation": {
+                        "category": "unsupported_fact" if category == "facts" else "unmet_instruction",
+                        "candidate_path": "/text", "candidate_quote": "你好",
+                        "source_path": source_path, "source_quote": quote}}
+                    return report
+                self.reply_model.review_transform = invalid_source
+                self.assertEqual(self.backend.request(path + "/replies", body),
+                    (500, {"error": "reply_generation_failed"}))
+
+    def test_disabling_frozen_background_before_review_prevents_review_send(self):
+        from concurrent.futures import ThreadPoolExecutor
+        contact, _, management, ready, path = self.prepare_layered_reply()
+        body = self.rewrite_body(contact, "你好。")
+        body["content"]["user_instruction"] = "自然表达。"
+        self.reply_model.plans.append({"text": "你好，想起共同学习的时光。", "basis": "按背景。"})
+        gate = self.reply_model.pause_next_response()
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            pending = pool.submit(self.backend.request, path + "/replies", body)
+            try:
+                self.assertTrue(self.reply_model.entered.wait(5))
+                status, result = management.request(f"/api/contacts/{contact}/layered-memory/disable",
+                    {"settings_generation": ready["settings_generation"]})
+                self.assertEqual(status, 200, result)
+                gate.set()
+                self.assertNotEqual(pending.result(timeout=10)[0], 200)
+            finally:
+                gate.set()
+        self.assertEqual(len(self.reply_model.seen_calls), 1)
+        self.assertEqual(self.reply_model.review_calls, 0)

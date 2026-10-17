@@ -71,13 +71,7 @@ class PreparedAssistantContext:
         context = (decode_context(row["prepared_context"], command) if row["prepared_context"] is not None else self._context.build(command=command, verified_scope=verified_scope, reply_request_id=uuid4(),
                              continued_candidate=continued, history_message_ids=message_ids))
         self.validate_current(context)
-        try:
-            validate(context)
-        except InputBudgetExceededError:
-            if context.layered_context is None or row["prepared_context"] is not None:
-                raise
-            context = replace(context, layered_context=None, layered_status="budget_omitted")
-            validate(context)
+        context = self.fit_budget(context, validate=validate)
         scope = command.scope
         dependencies = {identifier for item in context.style_references for identifier in (*item.source_ids, item.sample_id)}
         with psycopg.connect(self._database_url, row_factory=dict_row) as connection:
