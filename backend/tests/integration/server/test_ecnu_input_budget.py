@@ -49,10 +49,9 @@ class EcnuInputBudgetHttpTest(FidelityHttpFixture, unittest.TestCase):
             self.addCleanup(lambda: asyncio.run(async_client.aclose()))
             self.sdk_model = build_deepseek_model(
                 model_name=self.model_name, api_key="synthetic-never-sent-key",
-                base_url=self.base_url,
+                base_url=self.base_url, max_retries=0,
                 http_client=sync_client, http_async_client=async_client,
             )
-            self.sdk_model.max_retries = 0
         # 只替换外部供应商构造边界，生产预算配置与业务存储均实际运行。
         with patch("notalone.server.reply_wiring.build_deepseek_model", return_value=self.sdk_model):
             service = build_reply_service(database_url=self.database_url, owner_id=owner_id)

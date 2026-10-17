@@ -53,7 +53,7 @@ class LegacyModelRecoveryHttpTest(FidelityHttpFixture, unittest.TestCase):
         asynchronous = httpx.AsyncClient(transport=httpx.MockTransport(self._respond))
         self.addCleanup(sync.close)
         self.addCleanup(lambda: asyncio.run(asynchronous.aclose()))
-        model = build_deepseek_model(http_client=sync, http_async_client=asynchronous)
+        model = build_deepseek_model(http_client=sync, http_async_client=asynchronous, max_retries=0)
         with patch("notalone.server.reply_wiring.build_deepseek_model", return_value=model):
             reply = build_reply_service(database_url=self.database_url, owner_id=owner_id)
         backend = HttpBackend(create_app(database_url=self.database_url, owner_id=owner_id,
