@@ -12,12 +12,14 @@ const compiledModule = { exports: {} };
 new Function('require', 'module', 'exports', compiled.outputFiles[0].text)(createRequire(import.meta.url), compiledModule, compiledModule.exports);
 const ports = compiledModule.exports;
 export const BackendRequestFailure = ports.BackendRequestFailure;
-export const ids = { contact: '11111111-1111-4111-8111-111111111111', other: '99999999-9999-4999-8999-999999999999',
+export const ids = { work: '55555555-5555-4555-8555-555555555555', contact: '11111111-1111-4111-8111-111111111111', other: '99999999-9999-4999-8999-999999999999',
   scenario: '22222222-2222-4222-8222-222222222222', version: '33333333-3333-4333-8333-333333333333', memory: '44444444-4444-4444-8444-444444444444' };
 export function payload(overrides = {}) {
   return { layered_memory: { schema_version: 1, scope_kind: 'contact', contact_id: ids.contact,
     settings_generation: 0, enabled: false, quality_status: 'unknown', status: 'disabled',
     eligible_count: 3, covered_count: 0, remaining_count: 3, organization_generation: 0,
+    work_id: null, work_revision: 0, current_batch: 0,
+    model_calls_used: 0, model_call_limit: 0,
     updated_at: null, error_code: null, purpose: '从本联系人合法已采纳记忆整理主题背景，供核对及后续回复使用。',
     budget: { max_memories: 0, max_scenarios: 0, max_paragraphs: 0, max_characters: 0, max_model_calls: 0 }, scenarios: [], ...overrides } };
 }
@@ -43,7 +45,8 @@ export async function fixture(requestJson) {
 
 export function readyPayload(overrides = {}) {
   return payload({ enabled: true, settings_generation: 1, quality_status: 'synthetic', status: 'ready',
-    covered_count: 2, remaining_count: 1, organization_generation: 1, updated_at: '2026-10-17T10:00:00+08:00',
+    covered_count: 2, remaining_count: 1, organization_generation: 1, work_id: ids.work, work_revision: 1, current_batch: 1,
+    model_calls_used: 2, model_call_limit: 2, updated_at: '2026-10-17T10:00:00+08:00',
     budget: { max_memories: 2, max_scenarios: 2, max_paragraphs: 3, max_characters: 500, max_model_calls: 2 },
     scenarios: [{ scenario_id: ids.scenario, version_id: ids.version, title: '合成读书计划', hint: '讨论中的长期读书安排', system_generated: true,
       updated_at: '2026-10-17T10:00:00+08:00', paragraphs: [{ text: '曾计划参加合成读书会，当前是否成行尚未核实。', references: [{

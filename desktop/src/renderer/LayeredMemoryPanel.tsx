@@ -3,14 +3,15 @@ import type { LayeredMemory, LayeredMemoryManagementRequest, MemoryOverviewState
 import { MemoryTemporalStatus } from './MemoryTemporalStatus';
 
 const statusNames: Record<LayeredMemory['status'], string> = { disabled: '已停用', ready: '本批主题资料整理成功',
-  empty: '暂无合格资料可整理', failed: '整理失败，未采用本批结果', updating: '正在整理，尚未完成',
+  empty: '暂无合格资料可整理', failed: '整理失败，未采用本批结果', updating: '正在整理，尚未完成', paused: '已暂停，剩余资料可继续整理',
   stale: '依据已变化，主题资料待刷新', blocked: '已开启范围，质量资格待核验' };
 function time(value: string | null): string {
   return value ? `${new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Taipei', dateStyle: 'long', timeStyle: 'medium' }).format(new Date(value))}（UTC+8）` : '未知';
 }
 export function LayeredMemoryPanel({ state, contactName, busy, read, manage, facts }: {
   state: MemoryOverviewState<LayeredMemory>; contactName: string; busy: boolean;
-  read: () => Promise<void>; manage: (action: LayeredMemoryManagementRequest['action'], settingsGeneration: number, purposeConfirmed?: true) => Promise<void>;
+  read: () => Promise<void>; manage: (action: LayeredMemoryManagementRequest['action'], settingsGeneration: number,
+    options?: Pick<LayeredMemoryManagementRequest, 'purposeConfirmed' | 'workRevision'>) => Promise<void>;
   facts: () => void;
 }) {
   const [confirmed, setConfirmed] = useState(false);
@@ -27,18 +28,26 @@ export function LayeredMemoryPanel({ state, contactName, busy, read, manage, fac
     {value && <>
       <p>整理用途：{value.purpose}</p>
       <p>合格资料 {value.eligibleCount} 条 · 已覆盖 {value.coveredCount} 条 · 剩余 {value.remainingCount} 条</p>
+      {value.workId && <p>当前批次：{value.currentBatch}</p>}
+      {value.workId && <p>累计已用 {value.modelCallsUsed} / 已授权 {value.modelCallLimit} 次模型调用</p>}
       <p role={value.status === 'failed' ? 'alert' : 'status'}>{statusNames[value.status]}</p>
       {value.remainingCount > 0 && value.coveredCount > 0 && <p>目前仅覆盖部分资料；剩余资料尚未整理。</p>}
       {value.qualityStatus === 'unknown' ? <div className="memory-section-note"><p>质量资格未知，资料不会发给模型。</p>
         <p>生产调用预算尚未标定；当前不开放真实资料整理或回复加载。</p></div>
         : <div className="memory-section-note"><p>仅用于受控合成验证，不代表真实模型质量已获资格。</p>
           <p>本批上限：{value.budget.maxMemories} 条记忆、{value.budget.maxScenarios} 个主题、{value.budget.maxParagraphs} 段、{value.budget.maxCharacters} 字符、{value.budget.maxModelCalls} 次模型调用。</p></div>}
+      {value.enabled && value.workId && <p className="memory-section-note">每次继续仅推进一批，追加本批最多 {value.budget.maxModelCalls} 次模型调用；已消耗调用不会因继续或重启清零。</p>}
       <p>本范围{value.enabled ? '已开启' : '已关闭'} · 更新时间：{time(value.updatedAt)}</p>
       {!value.enabled && <div className="layered-memory-confirm"><label><input type="checkbox" checked={confirmed} disabled={waiting}
         onChange={(event) => setConfirmed(event.target.checked)} />确认仅整理这位联系人的合法已采纳记忆，并同意以上用途与模型接收范围</label>
         <p>仅合格的底层记忆及其时间、引用标识可用于整理；待确认候选与来历未知资料不参与。</p>
-        <button className="button" disabled={waiting || !confirmed} onClick={() => void manage('enable', value.settingsGeneration, true)}>确认范围并开启</button></div>}
-      {value.enabled && <><button className="button" disabled={waiting} onClick={() => void manage('refresh', value.settingsGeneration)}>刷新主题资料</button>
+        <button className="button" disabled={waiting || !confirmed} onClick={() => void manage('enable', value.settingsGeneration, { purposeConfirmed: true })}>确认范围并开启</button></div>}
+      {value.enabled && <>{value.workId && value.workRevision > 0 && <>
+        {(value.status === 'paused' || value.status === 'failed') && <button className="button" disabled={waiting}
+          onClick={() => void manage('continue', value.settingsGeneration, { workRevision: value.workRevision })}>继续整理主题资料</button>}
+        {value.status === 'updating' && <button className="button" disabled={waiting}
+          onClick={() => void manage('pause', value.settingsGeneration, { workRevision: value.workRevision })}>暂停整理主题资料</button>}</>}
+        <button className="button" disabled={waiting} onClick={() => void manage('refresh', value.settingsGeneration)}>刷新主题资料</button>
         <button className="button" disabled={waiting} onClick={() => void manage('disable', value.settingsGeneration)}>停用主题资料</button></>}
       <button className="button" disabled={waiting} onClick={() => setDeleting(true)}>删除整理结果</button>
       {deleting && <div className="memory-section-note" role="group" aria-label="确认删除主题资料">

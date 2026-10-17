@@ -397,12 +397,19 @@ class PostgresBackgroundTaskRepository:
                           WHERE binding.owner_id = task.owner_id
                             AND binding.contact_id = task.contact_id
                             AND binding.status = 'active'
-                      )) OR ({_learning_task_eligible_sql(connection)}) OR ({_upgrade_task_eligible_sql(connection)}))
+                      )) OR ({_learning_task_eligible_sql(connection)}) OR ({_upgrade_task_eligible_sql(connection)}) OR ({_layered_task_eligible_sql(connection)}))
                     """,
                     (error_code, owner_id, contact_id, task_id),
                 )
         except psycopg.Error:
             raise BackgroundTaskPersistenceError("排队原因记录失败。") from None
+
+    def has_active_layered_work(self, *, owner_id, contact_id, task_id):
+        with psycopg.connect(self._database_url) as connection:
+            return bool(connection.execute("SELECT 1 FROM public.layered_memory_job j JOIN public.layered_memory_state s "
+                "ON s.owner_id=j.owner_id AND s.contact_id=j.contact_id WHERE j.task_id=%s AND j.owner_id=%s "
+                "AND j.contact_id=%s AND j.state='active' AND s.enabled AND j.settings_generation=s.settings_generation",
+                (task_id,owner_id,contact_id)).fetchone())
 
     def get_task(
         self,
@@ -611,7 +618,7 @@ class PostgresBackgroundTaskRepository:
                          AND binding.contact_id = task.contact_id
                          AND binding.status = 'active'
                    ))
-                   OR ({_learning_task_eligible_sql(connection)}) OR ({_upgrade_task_eligible_sql(connection)}))
+                   OR ({_learning_task_eligible_sql(connection)}) OR ({_upgrade_task_eligible_sql(connection)}) OR ({_layered_task_eligible_sql(connection)}))
                       AND step.status = 'running'
                       AND step.lease_expires_at > now()
                     LIMIT 1
@@ -649,7 +656,7 @@ class PostgresBackgroundTaskRepository:
                          AND binding.contact_id = task.contact_id
                          AND binding.status = 'active'
                    ))
-                   OR ({_learning_task_eligible_sql(connection)}) OR ({_upgrade_task_eligible_sql(connection)}))
+                   OR ({_learning_task_eligible_sql(connection)}) OR ({_upgrade_task_eligible_sql(connection)}) OR ({_layered_task_eligible_sql(connection)}))
                       AND task.status IN ('queued', 'running', 'verifying')
                       AND (%s::uuid IS NULL OR task.id = %s)
                       AND step.status IN ('pending', 'retryable')
@@ -788,6 +795,10 @@ class PostgresBackgroundTaskRepository:
                     raise BackgroundTaskPersistenceError(
                         "后台步骤完成状态写入失败。"
                     )
+                if claim.name is BackgroundTaskStepName.ORGANIZE_MEMORY:
+                    from notalone.persistence.layered_coverage import finish_coverage_receipt
+                    finish_coverage_receipt(connection, claim)
+                    return
                 next_step = connection.execute(
                     """
                     SELECT step_name
@@ -1244,7 +1255,7 @@ class PostgresBackgroundTaskRepository:
                          AND binding.contact_id = task.contact_id
                          AND binding.status = 'active'
                    ))
-                   OR ({_learning_task_eligible_sql(connection)}) OR ({_upgrade_task_eligible_sql(connection)}))
+                   OR ({_learning_task_eligible_sql(connection)}) OR ({_upgrade_task_eligible_sql(connection)}) OR ({_layered_task_eligible_sql(connection)}))
             FOR UPDATE OF task, step
             """,
             (
@@ -1385,3 +1396,13 @@ def _upgrade_task_eligible_sql(connection) -> str:
           AND j.state='active' AND b.state IN ('queued','ready','apply_queued','applied')
           AND (j.scope_kind='owner' OR j.contact_id=b.contact_id) AND binding.status='active'
     )"""
+
+
+def _layered_task_eligible_sql(connection) -> str:
+    if connection.execute("SELECT to_regclass('public.layered_memory_job')").fetchone()[0] is None:
+        return "false"
+    return """task.task_type='layered_memory' AND EXISTS (
+        SELECT 1 FROM public.layered_memory_job j JOIN public.layered_memory_state s
+        ON s.owner_id=j.owner_id AND s.contact_id=j.contact_id
+        WHERE j.task_id=task.id AND j.owner_id=task.owner_id AND j.contact_id=task.contact_id
+        AND s.enabled AND s.settings_generation=j.settings_generation AND j.state='active')"""

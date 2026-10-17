@@ -64,6 +64,7 @@ class BackgroundTaskType(StrEnum):
     OBSERVATION = "observation"
     SKILL_LEARNING = "skill_learning"
     MEMORY_UPGRADE = "memory_upgrade"
+    LAYERED_MEMORY = "layered_memory"
 
 
 class BackgroundTaskStatus(StrEnum):
@@ -96,6 +97,7 @@ class BackgroundTaskStepName(StrEnum):
     VERIFY_UPGRADE_PREVIEW = "verify_upgrade_preview"
     APPLY_UPGRADE = "apply_upgrade"
     VERIFY_UPGRADE_APPLY = "verify_upgrade_apply"
+    ORGANIZE_MEMORY = "organize_memory"
 
 
 class BackgroundTaskStepStatus(StrEnum):
@@ -142,7 +144,7 @@ SKILL_LEARNING_STEPS = ((BackgroundTaskStepName.PROPOSE_SKILL, 1),
                        (BackgroundTaskStepName.VERIFY_SKILL_DRAFTS, 2))
 VERIFY_STEPS = (BackgroundTaskStepName.VERIFY, BackgroundTaskStepName.VERIFY_NOT_RETRIEVABLE,
                 BackgroundTaskStepName.VERIFY_SKILL_DRAFTS, BackgroundTaskStepName.VERIFY_UPGRADE_PREVIEW,
-                BackgroundTaskStepName.VERIFY_UPGRADE_APPLY)
+                BackgroundTaskStepName.VERIFY_UPGRADE_APPLY, BackgroundTaskStepName.ORGANIZE_MEMORY)
 
 
 @dataclass(frozen=True, slots=True)
@@ -205,7 +207,7 @@ class BackgroundTask:
             raise TypeError("后台任务范围必须使用内部 UUID。")
         if not isinstance(self.task_type, BackgroundTaskType):
             raise TypeError("后台任务类型无效。")
-        if self.task_type in (BackgroundTaskType.OBSERVATION, BackgroundTaskType.SKILL_LEARNING, BackgroundTaskType.MEMORY_UPGRADE):
+        if self.task_type in (BackgroundTaskType.OBSERVATION, BackgroundTaskType.SKILL_LEARNING, BackgroundTaskType.MEMORY_UPGRADE, BackgroundTaskType.LAYERED_MEMORY):
             if self.source_document_id is not None:
                 raise ValueError("观察任务不能绑定 source_document_id。")
         elif not isinstance(self.source_document_id, UUID):

@@ -131,7 +131,12 @@ export interface LayeredMemory {
   settingsGeneration: number;
   enabled: boolean;
   qualityStatus: 'unknown' | 'synthetic';
-  status: 'disabled' | 'ready' | 'empty' | 'failed' | 'updating' | 'stale' | 'blocked';
+  status: 'disabled' | 'ready' | 'empty' | 'failed' | 'updating' | 'paused' | 'stale' | 'blocked';
+  workId: string | null;
+  workRevision: number;
+  currentBatch: number;
+  modelCallsUsed: number;
+  modelCallLimit: number;
   eligibleCount: number;
   coveredCount: number;
   remainingCount: number;
@@ -143,9 +148,10 @@ export interface LayeredMemory {
   scenarios: LayeredMemoryScenario[];
 }
 export interface LayeredMemoryManagementRequest extends ContactSelection {
-  action: 'enable' | 'refresh' | 'disable' | 'delete';
+  action: 'enable' | 'refresh' | 'disable' | 'delete' | 'pause' | 'continue';
   settingsGeneration: number;
   purposeConfirmed?: true;
+  workRevision?: number;
 }
 export interface MemoryReadingState {
   revision: number;
