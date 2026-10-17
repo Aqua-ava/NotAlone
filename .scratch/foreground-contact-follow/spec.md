@@ -1,9 +1,9 @@
 # 持续前台定位与按联系人保留助手内容
 
-State: open
+State: resolved
 Triage: ready-for-agent
 
-> 日期：2026-10-14。产品范围依据已确认的 Q1–Q6；规格与架构修订已发布。现有单次入口的单帧链路已按[任务01](issues/01-single-frame-locator.md)完成代码及合成验证；02–05 已完成代码及合成验证，06 仍待正式组合及实机验收，不能据此宣称完整目标或真实 App 已可用。
+> 日期：2026-10-14。产品范围依据已确认的 Q1–Q6；规格与架构修订已发布。01–06 均已完成代码与合成组合验证，06 另按单联系人实机范围 resolved（见[06 验收](acceptance-06-final-20261015.md)）；2026-10-17 按交付事实将本规格标为 resolved。跨两真实联系人、真实来信、真实 CLI 正文、TCC 身份、全局快捷键及自动定位性能仍分别在原票或[自动定位规格](../automatic-foreground-locator/spec.md)验收，本规格收口不代表 Mac 整体交付完成。
 
 ## Problem Statement（用户问题）
 
