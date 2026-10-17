@@ -1,7 +1,7 @@
 # 02：首次完整覆盖的有界批次与恢复
 
 Triage: ready-for-agent
-State: open
+State: claimed
 Type: task
 Blocked by: 01
 
