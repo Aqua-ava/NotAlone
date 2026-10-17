@@ -80,6 +80,7 @@ def summarize_native(raw):
 def install():
     """仅在受限后端中旁路计时既有调用，不另起进程或发出请求。"""
     from notalone.server.app import BackendApp
+    global register_cli_read_causes
 
     destination = Path(os.environ["NOTALONE_OBSERVATION_MEASUREMENT_FILE"])
     probe = os.environ["NOTALONE_SYNC_PROBE"]
@@ -99,6 +100,10 @@ def install():
                          "backend_child_max_rss_bytes": children.ru_maxrss}
             with destination.open("a", encoding="utf-8") as stream:
                 stream.write(json.dumps(value, allow_nan=False) + "\n")
+
+    def register_cli_read_causes(cli, processes):
+        from sync_read_causes import attach
+        attach(cli, processes, record)
 
     def measured_run(command, *args, **kwargs):
         if not isinstance(command, (tuple, list)) or not command or command[0] != probe:

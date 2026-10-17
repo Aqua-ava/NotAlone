@@ -388,6 +388,7 @@ class AuditedProcesses:
         self._children: list[ManagedProcess] = []
         self._stop = threading.Event()
         self._fatal = False
+        self.tail_started: Callable[[int], None] | None = None
         self._watcher = threading.Thread(target=self._deadline_loop, daemon=True)
         self._watcher.start()
         atexit.register(self.close)
@@ -448,6 +449,11 @@ class AuditedProcesses:
                 managed = ManagedProcess(child, kind, self)
                 self._children.append(managed)
                 self.record("started", kind, managed.pid, status="running")
+                if kind == "tail" and self.tail_started is not None:
+                    try:
+                        self.tail_started(managed.pid)
+                    except Exception:
+                        pass  # 旁路测量失败不参与原有范围审计或进程生命周期。
                 return managed
             except OSError:
                 raise _fail("acceptance_cli_start_failed") from None
@@ -560,10 +566,18 @@ def build_scoped_cli(scope: AcceptanceScope, *, runner: Any = None,
                 group_count=sum(item.chat_type == "group" for item in candidates),
                 other_type_count=sum(item.chat_type not in {"private", "group"} for item in candidates),
                 exact_name_count=sum(normalize_display_text(item.display_name) == scope.metadata_name for item in candidates))
-    return ScopedCli(actual, guard, real.close if real is not None else lambda: None,
+    cli = ScopedCli(actual, guard, real.close if real is not None else lambda: None,
                      real.reject if real is not None else lambda kind, code: None,
                      (lambda: real.record("accepted", "tail", None, status="validated"))
                      if real is not None else lambda: None, metadata)
+    measurements = sys.modules.get("observation_measurements")
+    register = getattr(measurements, "register_cli_read_causes", None)
+    if real is not None and register is not None:
+        try:
+            register(cli, real)
+        except Exception:
+            pass  # 未安装或缺证不能扩大读取权限，也不改变原有返回。
+    return cli
 
 
 def main() -> int:

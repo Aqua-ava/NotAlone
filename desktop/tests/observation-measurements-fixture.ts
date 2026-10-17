@@ -7,6 +7,8 @@ export async function prepareObservationMeasurements(fixture: BindingFixture, pr
   await writeFile(measurementFile, '', { mode: 0o600, flag: 'wx' });
   await writeFile(path.join(fixture.directory, 'observation_measurements.py'),
     await readFile(path.resolve('tests/fixtures/observation_measurements.py')), { mode: 0o600 });
+  await writeFile(path.join(fixture.directory, 'sync_read_causes.py'),
+    await readFile(path.resolve('tests/fixtures/sync_read_causes.py')), { mode: 0o600 });
   await writeFile(path.join(fixture.directory, 'sitecustomize.py'),
     // shebang 启动的受控 Python 会在 -m 前保留脚本路径，只认可本夹具启动器。
     'import sys\nif sys.orig_argv[1:3] == ["-m", "notalone.server.command"] or '
