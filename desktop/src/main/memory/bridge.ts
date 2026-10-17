@@ -137,16 +137,20 @@ function layeredMemoryArguments(args: unknown[]): LayeredMemoryManagementRequest
   const value = args[0];
   if (args.length !== 1 || !value || typeof value !== 'object' || Array.isArray(value)) throw new Error('主题资料操作不可用。');
   const fields = value as Record<string, unknown>;
-  const enable = fields.action === 'enable';
+  const enable = fields.action === 'enable', withdraw = fields.action === 'withdraw-profile';
   const workAction = fields.action === 'pause' || fields.action === 'continue';
-  if (Object.keys(fields).length !== (enable || workAction ? 5 : 4)
+  if (Object.keys(fields).length !== (withdraw ? 6 : enable || workAction ? 5 : 4)
     || !Object.keys(fields).every((key) => ['contactId', 'scopeRevision', 'action', 'settingsGeneration',
-      ...(enable ? ['purposeConfirmed'] : []), ...(workAction ? ['workRevision'] : [])].includes(key))
-    || !['enable', 'refresh', 'disable', 'delete', 'pause', 'continue'].includes(fields.action as string)
+      ...(enable ? ['purposeConfirmed'] : []), ...(workAction ? ['workRevision'] : []),
+      ...(withdraw ? ['organizationGeneration', 'profileVersionId'] : [])].includes(key))
+    || !['enable', 'refresh', 'disable', 'delete', 'withdraw-profile', 'pause', 'continue'].includes(fields.action as string)
     || typeof fields.settingsGeneration !== 'number' || !Number.isSafeInteger(fields.settingsGeneration) || fields.settingsGeneration < 0
+    || (enable && fields.purposeConfirmed !== true)
     || (workAction && (typeof fields.workRevision !== 'number' || !Number.isSafeInteger(fields.workRevision) || fields.workRevision < 1))
-    || (enable && fields.purposeConfirmed !== true)) throw new Error('主题资料操作不可用。');
+    || (withdraw && (typeof fields.organizationGeneration !== 'number' || !Number.isSafeInteger(fields.organizationGeneration)
+      || fields.organizationGeneration < 0 || !isUuid(fields.profileVersionId)))) throw new Error('主题资料操作不可用。');
   const selection = requestArguments([{ contactId: fields.contactId, scopeRevision: fields.scopeRevision }]);
   return { ...selection, action: fields.action as LayeredMemoryManagementRequest['action'], settingsGeneration: fields.settingsGeneration,
-    ...(enable ? { purposeConfirmed: true as const } : {}), ...(workAction ? { workRevision: fields.workRevision as number } : {}) };
+    ...(enable ? { purposeConfirmed: true as const } : {}), ...(workAction ? { workRevision: fields.workRevision as number } : {}),
+    ...(withdraw ? { organizationGeneration: fields.organizationGeneration as number, profileVersionId: (fields.profileVersionId as string).toLowerCase() } : {}) };
 }

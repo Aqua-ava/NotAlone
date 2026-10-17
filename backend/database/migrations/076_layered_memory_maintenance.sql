@@ -5,6 +5,7 @@ ALTER TABLE public.layered_memory_state
     ADD COLUMN next_due_at timestamptz,
     ADD COLUMN next_boundary_at timestamptz,
     ADD COLUMN maintenance_allowed boolean NOT NULL DEFAULT false;
+UPDATE public.layered_memory_state SET maintenance_allowed=true WHERE status IN ('ready','empty');
 ALTER TABLE public.layered_memory_job ADD COLUMN target_dirty_revision bigint NOT NULL DEFAULT 0;
 CREATE FUNCTION public.mark_layered_memory_dirty() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE row_data jsonb;
@@ -58,6 +59,8 @@ BEGIN
     UPDATE public.layered_memory_state SET status=CASE WHEN enabled THEN 'stale' ELSE 'disabled' END,
         error_code=NULL
     WHERE owner_id=affected_owner AND contact_id IN (SELECT contact_id FROM erased);
+    DELETE FROM public.layered_profile_batch WHERE owner_id=affected_owner AND dependency_ids && identifiers;
+    DELETE FROM public.layered_memory_generation WHERE owner_id=affected_owner AND dependency_ids && identifiers;
 END; $$;
 ALTER TABLE public.layered_memory_batch ADD COLUMN scenario_input jsonb NOT NULL DEFAULT '[]';
 CREATE TABLE public.scenario_document_mapping (

@@ -74,6 +74,33 @@ def main():
                 paragraph["references"][0]["memory_id"], paragraph["references"][0]["revision"])) == paragraph["text"]
                 for scenario in proposal["scenarios"] for paragraph in scenario["paragraphs"])
 
+    class ProfileProposal:
+        timeout_contract = SYNTHETIC_ORGANIZATION_TIMEOUT
+
+        calls = 0
+
+        def propose(self, *, scenarios, memories, budget, deadline):
+            deadline.check()
+            self.calls += 1
+            return {"entries": [{"text": item.text, "temporal_status": "uncertain",
+                "uncertainty": "是否持续共同学习尚未核实。",
+                "references": [{"memory_id": str(item.memory_id), "revision": item.revision}]}
+                for item in memories]}
+
+    class ProfileVerification:
+        timeout_contract = SYNTHETIC_ORGANIZATION_TIMEOUT
+
+        calls = 0
+
+        def verify(self, *, scenarios, memories, proposal, deadline):
+            deadline.check()
+            self.calls += 1
+            available = {(str(item.memory_id), item.revision): item.text for item in memories}
+            return bool(scenarios) and all(len(entry["references"]) == 1 and available.get((
+                entry["references"][0]["memory_id"], entry["references"][0]["revision"])) == entry["text"]
+                and entry["temporal_status"] == "uncertain"
+                and entry["uncertainty"] == "是否持续共同学习尚未核实。" for entry in proposal["entries"])
+
     fixture = None
     created = False
     proof = {"database_name": name, "child_pid": os.getpid()}
@@ -100,9 +127,11 @@ def main():
         (directory / "synthetic.env").write_text(f"NOTALONE_DATABASE_URL={url}\nNOTALONE_OWNER_ID={fixture.owner_id}\n")
         (directory / "synthetic.env").chmod(0o600)
         proposal, verification = Proposal(), Verification()
+        profile_proposal, profile_verification = ProfileProposal(), ProfileVerification()
         service = LayeredMemoryService(PostgresLayeredMemoryStore(url), proposer=proposal,
-                                       verifier=verification, synthetic=True,
-                                       budget=OrganizationBudget(max_memories=1))
+                                       verifier=verification, synthetic=True, profile_proposer=profile_proposal,
+                                       profile_verifier=profile_verification,
+                                       budget=OrganizationBudget(max_memories=1, max_model_calls=4))
         backend = HttpBackend(create_app(database_url=url, owner_id=fixture.owner_id,
             token="synthetic-layered-page-token", memory_service=MemoryService(
                 contact_memory=PostgresMemoryStore(url), owner_memory=PostgresOwnerMemoryStore(url)),
@@ -135,7 +164,8 @@ def main():
                     "contact_id": contact, "text": "双方新近完成合成复习。", "category": "common_fact"})
                 fixture.assertEqual(status, 200, result)
             elif operation == "runtime_proof":
-                result = {**proof, "proposal_calls": proposal.calls, "verification_calls": verification.calls}
+                result = {**proof, "proposal_calls": proposal.calls, "verification_calls": verification.calls,
+                    "profile_proposal_calls": profile_proposal.calls, "profile_verification_calls": profile_verification.calls}
             elif operation == "stop":
                 print(json.dumps({"id": command["id"], "result": {}}), flush=True)
                 break

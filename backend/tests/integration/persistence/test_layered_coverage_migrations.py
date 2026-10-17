@@ -46,15 +46,21 @@ class LayeredCoverageMigrationTest(unittest.TestCase):
                 path=root/'074_layered_memory_coverage.sql';shutil.copyfile(path,prefix/path.name)
                 self.assertEqual(migrate(database,prefix),(path.name,))
                 self.assertEqual(migrate(database,prefix),())
-                maintenance=root/'075_layered_memory_maintenance.sql'
-                shutil.copyfile(maintenance,prefix/maintenance.name)
-                self.assertEqual(migrate(database,prefix),(maintenance.name,))
-                self.assertEqual(migrate(database,prefix),())
                 with psycopg.connect(database) as connection:
                     row=connection.execute("SELECT schema_version,scenario_version_ids,profile_version_id,dependency_ids FROM public.layered_memory_generation "
                         "WHERE owner_id=%s AND contact_id=%s AND organization_generation=1",(owner,contact)).fetchone()
                     self.assertEqual(row[:3],(2,[version],None))
                     self.assertEqual(set(row[3]),{a,b})
+                profile_path=root/'075_layered_profile_generation.sql';shutil.copyfile(profile_path,prefix/profile_path.name)
+                self.assertEqual(migrate(database,prefix),(profile_path.name,))
+                self.assertEqual(migrate(database,prefix),())
+                maintenance=root/'076_layered_memory_maintenance.sql'
+                shutil.copyfile(maintenance,prefix/maintenance.name)
+                self.assertEqual(migrate(database,prefix),(maintenance.name,))
+                self.assertEqual(migrate(database,prefix),())
+                with psycopg.connect(database) as connection:
+                    self.assertEqual(connection.execute('SELECT scenario_version_ids,dependency_ids FROM public.layered_memory_generation').fetchone(),([version],row[3]))
+                    self.assertIsNotNone(connection.execute("SELECT to_regclass('public.layered_profile_version')").fetchone()[0])
                     connection.execute("SELECT public.erase_layered_memory_dependencies(%s,%s)",(owner,[b]))
                     self.assertEqual(connection.execute('SELECT count(*) FROM public.scenario_document_version').fetchone()[0],0)
                     self.assertFalse(connection.execute('SELECT 1 FROM public.layered_memory_generation WHERE dependency_ids && %s::uuid[]',([b],)).fetchone())

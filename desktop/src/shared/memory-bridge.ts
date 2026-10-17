@@ -124,14 +124,20 @@ export interface LayeredMemoryScenario {
   updatedAt: string;
   paragraphs: { text: string; references: LayeredMemoryReference[] }[];
 }
+export interface LayeredMemoryProfile {
+  versionId: string;
+  systemGenerated: true;
+  updatedAt: string;
+  entries: { text: string; temporalStatus: 'stable' | 'historical' | 'uncertain'; uncertainty: string; references: LayeredMemoryReference[] }[];
+}
 export interface LayeredMemory {
-  schemaVersion: 1;
+  schemaVersion: 2;
   scopeKind: 'contact';
   contactId: string;
   settingsGeneration: number;
   enabled: boolean;
   qualityStatus: 'unknown' | 'synthetic';
-  status: 'disabled' | 'ready' | 'empty' | 'failed' | 'updating' | 'paused' | 'stale' | 'blocked';
+  status: 'disabled' | 'ready' | 'empty' | 'failed' | 'updating' | 'stale' | 'blocked' | 'paused';
   workId: string | null;
   workRevision: number;
   currentBatch: number;
@@ -148,13 +154,16 @@ export interface LayeredMemory {
   updatedAt: string | null;
   errorCode: string | null;
   purpose: string;
-  budget: { maxMemories: number; maxScenarios: number; maxParagraphs: number; maxCharacters: number; maxModelCalls: number };
+  budget: { maxMemories: number; maxScenarios: number; maxParagraphs: number; maxCharacters: number; maxModelCalls: number; maxProfileEntries?: number; modelCallsUsed: number; modelCallsRemaining: number };
   scenarios: LayeredMemoryScenario[];
+  profile: LayeredMemoryProfile | null;
 }
 export interface LayeredMemoryReadRequest extends ContactSelection { mappingCursor?: string | null }
 export interface LayeredMemoryManagementRequest extends ContactSelection {
-  action: 'enable' | 'refresh' | 'disable' | 'delete' | 'pause' | 'continue';
+  action: 'enable' | 'refresh' | 'disable' | 'delete' | 'withdraw-profile' | 'pause' | 'continue';
   settingsGeneration: number;
+  organizationGeneration?: number;
+  profileVersionId?: string;
   purposeConfirmed?: true;
   workRevision?: number;
 }

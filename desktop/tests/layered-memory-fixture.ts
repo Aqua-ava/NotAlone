@@ -6,6 +6,8 @@ import { withRewriteFixture, type RewriteFixture } from './rewrite-backend-fixtu
 const project = path.resolve('..');
 const modules = {
   'notalone.application.layered_memory_service': 'backend/src/notalone/application/layered_memory_service.py',
+  'notalone.memory.profile_validation': 'backend/src/notalone/memory/profile_validation.py',
+  'notalone.persistence.layered_profile': 'backend/src/notalone/persistence/layered_profile.py',
   'notalone.memory.layered': 'backend/src/notalone/memory/layered.py',
   'notalone.persistence.layered_memory': 'backend/src/notalone/persistence/layered_memory.py',
   'notalone.persistence.layered_coverage': 'backend/src/notalone/persistence/layered_coverage.py',

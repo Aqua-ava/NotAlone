@@ -38,6 +38,8 @@ INTEGRATION_MIGRATIONS = EVOLUTION_MIGRATIONS + (
     "072_scoped_media_lifecycle.sql",
     "073_layered_scenario_documents.sql",
     "074_layered_memory_coverage.sql",
+    "075_layered_profile_generation.sql",
+    "076_layered_memory_maintenance.sql",
 )
 
 
@@ -205,8 +207,8 @@ class DatabaseMigrationCommandTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         applied = json.loads(result.stdout)["applied"]
         expected = sorted(path.name for path in (ROOT / "database/migrations").glob("*.sql"))
-        self.assertEqual(len(expected), 74)
-        self.assertEqual(expected[-1], '074_layered_memory_coverage.sql')
+        self.assertEqual(len(expected), 76)
+        self.assertEqual(expected[-1], '076_layered_memory_maintenance.sql')
         self.assertEqual(applied, expected)
         repeated = self._run(directory=ROOT / "database/migrations")
         self.assertEqual(repeated.returncode, 0, repeated.stderr)
@@ -325,7 +327,7 @@ COMMIT;
                 "SELECT name,checksum,applied_at FROM public.notalone_schema_migration ORDER BY name"
             ).fetchall()
             self.assertEqual(completed[:last_version], history)
-            self.assertEqual((len(completed), completed[-1][0]), (74, "074_layered_memory_coverage.sql"))
+            self.assertEqual((len(completed), completed[-1][0]), (76, "076_layered_memory_maintenance.sql"))
         repeated = self._run(directory=ROOT / "database/migrations")
         self.assertEqual(repeated.returncode, 0, repeated.stderr)
         self.assertEqual(json.loads(repeated.stdout)["applied"], [])
