@@ -67,8 +67,8 @@ export interface ContactOverviewEntry {
 }
 export interface ContactRelationshipOverview {
   version: 1;
-  scopeKind: 'contact';
-  contactId: string;
+  scopeKind: 'contact' | 'owner';
+  contactId: string | null;
   projectionRevision: string;
   memoryRevision: number;
   builtAt: string;
@@ -132,8 +132,8 @@ export interface LayeredMemoryProfile {
 }
 export interface LayeredMemory {
   schemaVersion: 2;
-  scopeKind: 'contact';
-  contactId: string;
+  scopeKind: 'contact' | 'owner';
+  contactId: string | null;
   settingsGeneration: number;
   enabled: boolean;
   qualityStatus: 'unknown' | 'synthetic';
@@ -160,10 +160,11 @@ export interface LayeredMemory {
 }
 export interface LayeredMemoryReadRequest extends ContactSelection { mappingCursor?: string | null }
 export interface LayeredMemoryManagementRequest extends ContactSelection {
-  action: 'enable' | 'refresh' | 'disable' | 'delete' | 'withdraw-profile' | 'pause' | 'continue';
+  action: 'enable' | 'refresh' | 'disable' | 'delete' | 'withdraw-profile' | 'withdraw-scenario' | 'pause' | 'continue';
   settingsGeneration: number;
   organizationGeneration?: number;
   profileVersionId?: string;
+  scenarioVersionId?: string;
   purposeConfirmed?: true;
   workRevision?: number;
 }
@@ -196,7 +197,21 @@ export interface MemoryRemovalRequest extends ContactSelection {
 export interface MemoryCorrectionRequest extends ContactSelection {
   level: 'owner' | 'contact'; memoryId: string; revision: number; text: string; category: MemoryCategory;
 }
+export type OwnerLayeredMemoryManagementRequest = Omit<LayeredMemoryManagementRequest, 'contactId' | 'scopeRevision'>;
+export interface OwnerLayeredMemoryState extends MemoryOverviewState<LayeredMemory> {
+  memories?: MemorySection<ActiveMemory>;
+  revision: number;
+  mutation: MemoryReadingState['mutation'];
+}
 export interface MemoryBridge {
+  readOwnerMemories(): Promise<void>;
+  correctOwnerMemory(request: Pick<MemoryCorrectionRequest, 'memoryId' | 'revision' | 'text' | 'category'>): Promise<void>;
+  deleteOwnerMemory(request: Pick<MemoryRemovalRequest, 'memoryId' | 'revision'>): Promise<void>;
+  addOwnerMemory(request: Pick<MemoryAdditionRequest, 'text' | 'category'>): Promise<void>;
+  getOwnerLayeredMemoryState(): Promise<OwnerLayeredMemoryState>;
+  readOwnerLayeredMemory(request: { mappingCursor?: string | null }): Promise<void>;
+  manageOwnerLayeredMemory(request: OwnerLayeredMemoryManagementRequest): Promise<void>;
+  onOwnerLayeredMemoryChanged(listener: (state: OwnerLayeredMemoryState) => void): () => void;
   getState(): Promise<MemoryReadingState>;
   refresh(request: MemoryReadRequest): Promise<void>;
   refreshOverview(request: ContactSelection): Promise<void>;

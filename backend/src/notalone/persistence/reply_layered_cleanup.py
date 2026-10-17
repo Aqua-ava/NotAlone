@@ -8,10 +8,10 @@ def erase_layered_reply_dependencies(connection, scope, identifiers):
     rows = connection.execute(
         "SELECT v.id FROM public.scenario_document_version v "
         "JOIN public.layered_memory_batch b ON b.id=v.batch_id "
-        "WHERE b.owner_id=%s AND b.contact_id=%s AND b.dependency_ids && %s::uuid[] "
+        "WHERE b.owner_id=%s AND b.contact_id IS NOT DISTINCT FROM %s AND b.dependency_ids && %s::uuid[] "
         "UNION SELECT v.id FROM public.layered_profile_version v "
         "JOIN public.layered_profile_batch b ON b.id=v.batch_id "
-        "WHERE b.owner_id=%s AND b.contact_id=%s AND b.dependency_ids && %s::uuid[]",
+        "WHERE b.owner_id=%s AND b.contact_id IS NOT DISTINCT FROM %s AND b.dependency_ids && %s::uuid[]",
         (scope.owner_id, scope.contact_id, list(identifiers)) * 2,
     ).fetchall()
     if rows:

@@ -95,7 +95,7 @@ function distinct<T>(items: T[], id: (item: T) => string): T[] {
 }
 
 // 当前列表与主动打开的历史分别读取；来源 UUID 不解释为文件路径。
-export function activeMemories(value: unknown, level: 'contact' | 'owner', contactId: string): ActiveMemory[] {
+export function activeMemories(value: unknown, level: 'contact' | 'owner', contactId: string | null): ActiveMemory[] {
   return distinct(entries(value, 'memories').map((entry) => {
     if (entry.level !== level || entry.status !== 'active'
       || (level === 'contact' && identifier(entry.contact_id) !== contactId)) throw invalid();

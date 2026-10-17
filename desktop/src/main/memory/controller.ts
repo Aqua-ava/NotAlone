@@ -37,7 +37,7 @@ export class MemoryReadingController {
   private sourceDeletionRevision = 0;
   private protectedReads: ProtectedReads | undefined;
   private readonly listeners = new Set<(state: MemoryReadingState) => void>();
-  private readonly deletionListeners = new Set<(phase: 'started' | 'settled') => void>();
+  private readonly deletionListeners = new Set<(phase: 'started' | 'settled', origin?: 'owner-facts') => void>();
 
   constructor(private readonly backend: BackendHost, private readonly contacts: ContactSession) {}
   getState(): MemoryReadingState { return structuredClone(this.state); }
@@ -45,11 +45,29 @@ export class MemoryReadingController {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
   }
-  onRecordDeletion(listener: (phase: 'started' | 'settled') => void): () => void {
+  onRecordDeletion(listener: (phase: 'started' | 'settled', origin?: 'owner-facts') => void): () => void {
     this.deletionListeners.add(listener);
     return () => this.deletionListeners.delete(listener);
   }
+  private readonly ownerDependencyListeners = new Set<(phase: 'started' | 'settled') => void>();
+  onOwnerDependenciesChanged(listener: (phase: 'started' | 'settled') => void) { this.ownerDependencyListeners.add(listener); return () => { this.ownerDependencyListeners.delete(listener); }; }
+  private ownerFactsWriteDepth = 0;
+  ownerFactsChanged(phase: 'started' | 'settled'): void {
+    for (const listener of this.deletionListeners) listener(phase, 'owner-facts');
+    this.ownerFactsWriteDepth = phase === 'started' ? this.ownerFactsWriteDepth + 1 : Math.max(0, this.ownerFactsWriteDepth - 1);
+    // 另一本人入口写入时也撤下旧页面副本；取消令牌阻止迟到读取复活正文。
+    this.operations.get('owner')?.abort.abort();
+    this.operations.delete('owner');
+    this.clearHistory();
+    this.clearOverview();
+    this.clearOwnerOverview();
+    this.clearLayered();
+    this.publish({ owner: { phase: 'idle', items: [] },
+      ...(!this.ownerFactsWriteDepth ? { overview: { phase: 'idle' as const, value: null },
+        ownerOverview: { phase: 'idle' as const, value: null }, layeredMemory: { phase: 'idle' as const, value: null } } : {}) });
+  }
   sourceDeletionChanged(phase: 'started' | 'settled'): void {
+    for (const listener of this.ownerDependencyListeners) listener(phase);
     this.synchronizeScope();
     if (phase === 'started') {
       this.sourceDeletionDepth++;
@@ -217,6 +235,7 @@ export class MemoryReadingController {
     } finally { if (this.layeredOperation === operation) this.layeredOperation = undefined; }
   }
   private async readOwnerOverview(scope: Scope): Promise<boolean> {
+    if (this.ownerFactsWriteDepth) return false;
     this.ownerOverviewOperation?.abort.abort();
     const operation = { abort: new AbortController() };
     this.ownerOverviewOperation = operation;
@@ -261,6 +280,8 @@ export class MemoryReadingController {
   }
   // 来源事件立即撤下旧快照；同范围未决写入仍须等待原提交复验，不能用客户端取消代替。
   async revalidateDeletedSource(_contactId: string): Promise<void> {
+    for (const listener of this.ownerDependencyListeners) listener('started');
+    for (const listener of this.ownerDependencyListeners) listener('settled');
     this.synchronizeScope();
     const scope = this.scope;
     if (!scope) return;
@@ -330,6 +351,8 @@ export class MemoryReadingController {
     } finally { if (this.historyOperation === operation) this.historyOperation = undefined; }
   }
   private discardUnavailableVersion(request: MemoryRemovalRequest): void {
+    for (const listener of this.ownerDependencyListeners) listener('started');
+    for (const listener of this.ownerDependencyListeners) listener('settled');
     this.clearOverview();
     this.clearOwnerOverview();
     this.clearLayered();
@@ -466,6 +489,7 @@ export class MemoryReadingController {
   private async writeAndRefresh(scope: Scope, path: string, body: unknown, sections: MemorySectionName[], clearStaleVersions = false): Promise<void> {
     const reading = this.protectedReads?.scope === scope ? this.protectedReads : this.protectReads(scope, sections);
     const changesOverviewDependencies = sections.includes('contact') || sections.includes('owner');
+    if (changesOverviewDependencies) for (const listener of this.ownerDependencyListeners) listener('started');
     const overviewAffected = changesOverviewDependencies && this.overviewRequested;
     const ownerOverviewAffected = changesOverviewDependencies && this.ownerOverviewRequested;
     const layeredAffected = changesOverviewDependencies && this.layeredRequested;
@@ -511,9 +535,11 @@ export class MemoryReadingController {
     } finally {
       if (this.mutation === operation) this.mutation = undefined;
       this.settleProtectedReads(reading);
+      if (changesOverviewDependencies) for (const listener of this.ownerDependencyListeners) listener('settled');
     }
   }
   private async readSection(section: MemorySectionName, scope: Scope, afterWrite = false): Promise<boolean> {
+    if (section === 'owner' && this.ownerFactsWriteDepth) return false;
     if (!afterWrite && this.protectedReads?.scope === scope && this.protectedReads.sections.has(section)) return false;
     this.operations.get(section)?.abort.abort();
     const operation = { revision: ++this.operationRevision, abort: new AbortController() };

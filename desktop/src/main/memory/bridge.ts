@@ -1,5 +1,6 @@
+import { OwnerLayeredMemoryController } from './owner-layered';
 import { noArguments, type PageCommands } from '../page-commands';
-import type { LayeredMemoryManagementRequest, MemoryAdditionRequest, MemoryCandidateRequest, MemoryCandidateUpdateRequest, MemoryCorrectionRequest, MemoryReadRequest, MemoryRemovalRequest, MemorySectionName } from '../../shared/memory-bridge';
+import type { LayeredMemoryManagementRequest, OwnerLayeredMemoryManagementRequest, MemoryAdditionRequest, MemoryCandidateRequest, MemoryCandidateUpdateRequest, MemoryCorrectionRequest, MemoryReadRequest, MemoryRemovalRequest, MemorySectionName } from '../../shared/memory-bridge';
 import type { BackendHost } from '../backend/host';
 import type { ContactSession } from '../contacts/session';
 import { isUuid } from '../uuid';
@@ -22,6 +23,46 @@ function requestArguments(args: unknown[]): MemoryReadRequest {
 }
 export function installMemoryBridge(commands: PageCommands, backend: BackendHost, contacts: ContactSession): MemoryReadingController {
   const memory = new MemoryReadingController(backend, contacts);
+  const owner = new OwnerLayeredMemoryController(backend, state => commands.publish('memory:owner-layered-changed', state, 'manager'), phase => memory.ownerFactsChanged(phase));
+  backend.onStateChanged(() => owner.synchronize());
+  memory.onRecordDeletion((phase, origin) => {
+    if (origin !== 'owner-facts') owner.sourceDeletionChanged(phase);
+  });
+  memory.onOwnerDependenciesChanged(phase => owner.sourceDeletionChanged(phase));
+  commands.handle('memory:read-owner-facts', (...args: unknown[]) => { noArguments(args); return owner.readFacts(); }, 'manager');
+  for (const action of ['correct', 'delete'] as const) commands.handle(`memory:${action}-owner-fact`, (...args: unknown[]) => {
+    const fields = args[0] as Record<string, unknown> | undefined;
+    const keys = action === 'correct' ? ['memoryId', 'revision', 'text', 'category'] : ['memoryId', 'revision'];
+    if (args.length !== 1 || !fields || typeof fields !== 'object' || Array.isArray(fields)
+      || Object.keys(fields).length !== keys.length || !Object.keys(fields).every(key => keys.includes(key))
+      || !isUuid(fields.memoryId) || typeof fields.revision !== 'number' || !Number.isSafeInteger(fields.revision) || fields.revision < 1
+      || (action === 'correct' && (typeof fields.text !== 'string' || !fields.text.trim() || fields.text.length > 4000
+        || !['common_fact', 'preference', 'taboo', 'recent_state', 'relationship_note'].includes(fields.category as string)))) throw new Error('本人底层资料操作不可用。');
+    return owner.changeFact(action, { memoryId: fields.memoryId, revision: fields.revision,
+      ...(action === 'correct' ? { text: fields.text as string, category: fields.category as MemoryAdditionRequest['category'] } : {}) });
+  }, 'manager');
+  commands.handle('memory:add-owner', (...args: unknown[]) => {
+    const fields = args[0] as Record<string, unknown> | undefined;
+    if (args.length !== 1 || !fields || typeof fields !== 'object' || Array.isArray(fields)
+      || Object.keys(fields).length !== 2 || !Object.keys(fields).every(key => ['text', 'category'].includes(key))
+      || typeof fields.text !== 'string' || !fields.text.trim() || fields.text.length > 4000
+      || !['common_fact', 'preference', 'taboo', 'recent_state', 'relationship_note'].includes(fields.category as string)) throw new Error('本人资料补充不可用。');
+    return owner.add({ text: fields.text, category: fields.category as MemoryAdditionRequest['category'] });
+  }, 'manager');
+  commands.handle('memory:owner-layered-state', (...args: unknown[]) => { noArguments(args); return owner.getState(); }, 'manager');
+  commands.handle('memory:read-owner-layered', (...args: unknown[]) => {
+    const fields = args[0] as Record<string, unknown> | undefined;
+    if (args.length !== 1 || !fields || typeof fields !== 'object' || Array.isArray(fields)
+      || !Object.keys(fields).every(key => key === 'mappingCursor')
+      || (fields.mappingCursor !== undefined && fields.mappingCursor !== null && (typeof fields.mappingCursor !== 'string' || !/^[0-9]{1,18}:[0-9]{1,10}$/.test(fields.mappingCursor)))) throw new Error('本人资料读取不可用。');
+    return owner.read(fields as { mappingCursor?: string | null });
+  }, 'manager');
+  commands.handle('memory:manage-owner-layered', (...args: unknown[]) => {
+    const fields = args[0];
+    if (args.length !== 1 || !fields || typeof fields !== 'object' || Array.isArray(fields) || 'contactId' in fields || 'scopeRevision' in fields) throw new Error('本人资料操作不可用。');
+    const request = layeredMemoryArguments(args, true);
+    return owner.manage(request);
+  }, 'manager');
   memory.onStateChanged((state) => commands.publish('memory:state-changed', state, 'manager'));
   contacts.onStateChanged(() => memory.synchronizeScope());
   backend.onStateChanged(() => memory.synchronizeScope());
@@ -133,24 +174,27 @@ function candidateUpdateArguments(args: unknown[]): MemoryCandidateUpdateRequest
   return { ...candidate, previousMemoryId: fields.previousMemoryId.toLowerCase(), expectedRevision: fields.expectedRevision };
 }
 
-function layeredMemoryArguments(args: unknown[]): LayeredMemoryManagementRequest {
+function layeredMemoryArguments(args: unknown[], owner: true): OwnerLayeredMemoryManagementRequest;
+function layeredMemoryArguments(args: unknown[]): LayeredMemoryManagementRequest;
+function layeredMemoryArguments(args: unknown[], owner = false): OwnerLayeredMemoryManagementRequest | LayeredMemoryManagementRequest {
   const value = args[0];
   if (args.length !== 1 || !value || typeof value !== 'object' || Array.isArray(value)) throw new Error('主题资料操作不可用。');
   const fields = value as Record<string, unknown>;
-  const enable = fields.action === 'enable', withdraw = fields.action === 'withdraw-profile';
+  const enable = fields.action === 'enable', scenario = owner && fields.action === 'withdraw-scenario';
+  const withdraw = fields.action === 'withdraw-profile' || scenario;
   const workAction = fields.action === 'pause' || fields.action === 'continue';
-  if (Object.keys(fields).length !== (withdraw ? 6 : enable || workAction ? 5 : 4)
-    || !Object.keys(fields).every((key) => ['contactId', 'scopeRevision', 'action', 'settingsGeneration',
+  if (Object.keys(fields).length !== ((withdraw ? 6 : enable || workAction ? 5 : 4) - (owner ? 2 : 0))
+    || !Object.keys(fields).every((key) => [...(owner ? [] : ['contactId', 'scopeRevision']), 'action', 'settingsGeneration',
       ...(enable ? ['purposeConfirmed'] : []), ...(workAction ? ['workRevision'] : []),
-      ...(withdraw ? ['organizationGeneration', 'profileVersionId'] : [])].includes(key))
-    || !['enable', 'refresh', 'disable', 'delete', 'withdraw-profile', 'pause', 'continue'].includes(fields.action as string)
+      ...(withdraw ? ['organizationGeneration', scenario ? 'scenarioVersionId' : 'profileVersionId'] : [])].includes(key))
+    || !['enable', 'refresh', 'disable', 'delete', 'withdraw-profile', 'pause', 'continue', ...(owner ? ['withdraw-scenario'] : [])].includes(fields.action as string)
     || typeof fields.settingsGeneration !== 'number' || !Number.isSafeInteger(fields.settingsGeneration) || fields.settingsGeneration < 0
     || (enable && fields.purposeConfirmed !== true)
     || (workAction && (typeof fields.workRevision !== 'number' || !Number.isSafeInteger(fields.workRevision) || fields.workRevision < 1))
     || (withdraw && (typeof fields.organizationGeneration !== 'number' || !Number.isSafeInteger(fields.organizationGeneration)
-      || fields.organizationGeneration < 0 || !isUuid(fields.profileVersionId)))) throw new Error('主题资料操作不可用。');
-  const selection = requestArguments([{ contactId: fields.contactId, scopeRevision: fields.scopeRevision }]);
+      || fields.organizationGeneration < 0 || !isUuid(scenario ? fields.scenarioVersionId : fields.profileVersionId)))) throw new Error('主题资料操作不可用。');
+  const selection = owner ? {} : requestArguments([{ contactId: fields.contactId, scopeRevision: fields.scopeRevision }]);
   return { ...selection, action: fields.action as LayeredMemoryManagementRequest['action'], settingsGeneration: fields.settingsGeneration,
     ...(enable ? { purposeConfirmed: true as const } : {}), ...(workAction ? { workRevision: fields.workRevision as number } : {}),
-    ...(withdraw ? { organizationGeneration: fields.organizationGeneration as number, profileVersionId: (fields.profileVersionId as string).toLowerCase() } : {}) };
+    ...(withdraw ? { organizationGeneration: fields.organizationGeneration as number, ...(scenario ? { scenarioVersionId: (fields.scenarioVersionId as string).toLowerCase() } : { profileVersionId: (fields.profileVersionId as string).toLowerCase() }) } : {}) };
 }

@@ -9,7 +9,7 @@ from uuid import UUID, uuid4
 from psycopg.types.json import Jsonb
 
 from notalone.memory.layered import LayeredMemoryConflict
-from notalone.scopes import ContactScope
+from notalone.scopes import ContactScope, OwnerScope, organization_scope
 from notalone.tasks.models import ClaimedBackgroundTaskStep
 
 
@@ -17,7 +17,7 @@ from notalone.tasks.models import ClaimedBackgroundTaskStep
 class ProfileWork:
     id: UUID
     token: UUID
-    scope: ContactScope
+    scope: ContactScope | OwnerScope
     settings_generation: int
     organization_generation: int
     scenario_version_ids: tuple[UUID, ...]
@@ -35,7 +35,7 @@ class LayeredProfileStore:
     def profile_row(connection, scope, version_id):
         return connection.execute("SELECT v.*,b.scenario_version_ids,b.input_manifest,b.dependency_ids FROM "
             "public.layered_profile_version v JOIN public.layered_profile_batch b ON b.id=v.batch_id "
-            "WHERE v.id=%s AND v.owner_id=%s AND v.contact_id=%s",
+            "WHERE v.id=%s AND v.owner_id=%s AND v.contact_id IS NOT DISTINCT FROM %s",
             (version_id,scope.owner_id,scope.contact_id)).fetchone()
 
     @staticmethod
@@ -48,7 +48,7 @@ class LayeredProfileStore:
     def prepare_profile(self, scope, budget, contract, *, lease_seconds, claim):
         with self.transaction(scope) as (connection,state,overview):
             self._assert_claim(connection,claim)
-            job = connection.execute("SELECT * FROM public.layered_memory_job WHERE task_id=%s AND owner_id=%s AND contact_id=%s",
+            job = connection.execute("SELECT * FROM public.layered_memory_job WHERE task_id=%s AND owner_id=%s AND contact_id IS NOT DISTINCT FROM %s",
                 (claim.task_id,scope.owner_id,scope.contact_id)).fetchone()
             if not job or job['state']!='active' or job['settings_generation']!=state['settings_generation'] or not job['profile_required']:
                 raise LayeredMemoryConflict("长期背景所属工作已变化。")
@@ -69,13 +69,13 @@ class LayeredProfileStore:
             payload = {"scenarios": list(scenarios), "memories": [item.to_payload() for item in memories]}
             if len(json.dumps(payload,ensure_ascii=False)) > budget.max_characters:
                 connection.execute("UPDATE public.layered_memory_state SET status='failed',error_code='profile_input_budget_exceeded' "
-                    "WHERE owner_id=%s AND contact_id=%s", (scope.owner_id,scope.contact_id))
+                    "WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s", (scope.owner_id,scope.contact_id))
                 return None
             key = hashlib.sha256(json.dumps({"versions": sorted(str(id) for id in ids),
                 "settings": state["settings_generation"],"task":str(claim.task_id),"revision":job["revision"],"contract": contract,"budget": budget.to_payload()},
                 sort_keys=True).encode()).hexdigest()
             previous = connection.execute("SELECT * FROM public.layered_profile_batch WHERE owner_id=%s "
-                "AND contact_id=%s AND work_key=%s", (scope.owner_id,scope.contact_id,key)).fetchone()
+                "AND contact_id IS NOT DISTINCT FROM %s AND work_key=%s", (scope.owner_id,scope.contact_id,key)).fetchone()
             now = self._clock()
             if previous and previous["status"] in {"succeeded", "withdrawn"}:
                 connection.execute("UPDATE public.layered_memory_job SET profile_status='succeeded' WHERE task_id=%s",(claim.task_id,))
@@ -88,21 +88,21 @@ class LayeredProfileStore:
                     connection.execute("UPDATE public.layered_profile_batch SET status='failed',error_code='model_call_budget_exhausted' WHERE id=%s",
                         (previous["id"],))
                 connection.execute("UPDATE public.layered_memory_state SET status='paused',error_code='model_call_budget_exhausted' "
-                    "WHERE owner_id=%s AND contact_id=%s", (scope.owner_id,scope.contact_id))
+                    "WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s", (scope.owner_id,scope.contact_id))
                 return None
             if (previous and previous["status"] == "running" and previous["attempt_count"] >= 2
                     and previous["lease_expires_at"] <= now):
                 connection.execute("UPDATE public.layered_profile_batch SET status='failed',error_code='profile_retry_exhausted' WHERE id=%s",
                     (previous["id"],))
                 connection.execute("UPDATE public.layered_memory_state SET status='failed',error_code='profile_retry_exhausted' "
-                    "WHERE owner_id=%s AND contact_id=%s", (scope.owner_id,scope.contact_id))
+                    "WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s", (scope.owner_id,scope.contact_id))
                 return None
             if previous:
                 if (previous["status"] in {"succeeded", "withdrawn"} or previous["attempt_count"] >= 2
                         or previous["status"] == "running" and previous["lease_expires_at"] > now
                         or previous["status"] == "failed" and previous["error_code"] not in {"model_call_timeout", "model_call_failed"}):
                     return None
-            if connection.execute("SELECT 1 FROM public.layered_profile_batch WHERE owner_id=%s AND contact_id=%s "
+            if connection.execute("SELECT 1 FROM public.layered_profile_batch WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s "
                     "AND status='running' AND lease_expires_at>%s AND work_key<>%s",
                     (scope.owner_id,scope.contact_id,now,key)).fetchone():
                 return None
@@ -119,13 +119,13 @@ class LayeredProfileStore:
                     "input_payload,dependency_ids,created_at) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,'running',%s,%s,%s,%s,%s,%s)",
                     (id,scope.owner_id,scope.contact_id,state["settings_generation"],state["organization_generation"],key,token,budget_batch_id,claim.task_id,
                     now+timedelta(seconds=lease_seconds),list(ids),Jsonb(manifest),Jsonb(payload),dependencies,now))
-            connection.execute("UPDATE public.layered_memory_state SET status='updating',error_code=NULL WHERE owner_id=%s AND contact_id=%s",
+            connection.execute("UPDATE public.layered_memory_state SET status='updating',error_code=NULL WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s",
                 (scope.owner_id,scope.contact_id))
             return ProfileWork(id,token,scope,state["settings_generation"],state["organization_generation"],ids,memories,scenarios,manifest,budget_batch_id,claim)
 
     def _check_profile(self, connection, state, overview, work):
         self._assert_claim(connection,work.claim)
-        batch = connection.execute("SELECT * FROM public.layered_profile_batch WHERE id=%s AND owner_id=%s AND contact_id=%s",
+        batch = connection.execute("SELECT * FROM public.layered_profile_batch WHERE id=%s AND owner_id=%s AND contact_id IS NOT DISTINCT FROM %s",
             (work.id,work.scope.owner_id,work.scope.contact_id)).fetchone()
         generation, rows = self.generation_rows(connection,work.scope,state["organization_generation"])
         current = {item["memory_id"]: item for item in self._manifest(connection,work.scope,self.eligible(overview))}
@@ -158,7 +158,7 @@ class LayeredProfileStore:
             connection.execute("UPDATE public.layered_profile_batch SET status='succeeded' WHERE id=%s", (work.id,))
             connection.execute("UPDATE public.layered_memory_job SET profile_status='succeeded' WHERE task_id=%s",(work.claim.task_id,))
             connection.execute("UPDATE public.layered_memory_state SET status='ready',error_code=NULL,updated_at=%s "
-                "WHERE owner_id=%s AND contact_id=%s", (self._clock(),work.scope.owner_id,work.scope.contact_id))
+                "WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s", (self._clock(),work.scope.owner_id,work.scope.contact_id))
 
     def fail_profile(self, work, code):
         with self.transaction(work.scope) as (connection,state,overview):
@@ -168,7 +168,7 @@ class LayeredProfileStore:
                 return
             connection.execute("UPDATE public.layered_profile_batch SET status='failed',error_code=%s WHERE id=%s", (code,work.id))
             connection.execute("UPDATE public.layered_memory_job SET profile_status='failed' WHERE task_id=%s",(work.claim.task_id,))
-            connection.execute("UPDATE public.layered_memory_state SET status=%s,error_code=%s WHERE owner_id=%s AND contact_id=%s",
+            connection.execute("UPDATE public.layered_memory_state SET status=%s,error_code=%s WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s",
                 ("paused" if code == "model_call_budget_exhausted" else "failed",code,work.scope.owner_id,work.scope.contact_id))
 
     def withdraw_profile(self, scope, expected_settings, expected_generation, version_id):
