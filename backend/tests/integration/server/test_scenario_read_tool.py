@@ -200,6 +200,12 @@ class ScenarioReadHttpTest(OverviewReplyHttpFixture, unittest.TestCase):
                     status, changed = management.request(f"/api/contacts/{contact}/layered-memory/disable",
                         {"settings_generation": ready["settings_generation"]})
                     self.assertEqual(status, 200, changed)
+                elif action == "withdraw":
+                    status, changed = management.request(f"/api/contacts/{contact}/layered-memory/withdraw-scenario",
+                        {"settings_generation": ready["settings_generation"],
+                         "organization_generation": ready["organization_generation"],
+                         "scenario_version_id": ready["scenarios"][0]["version_id"]})
+                    self.assertEqual(status, 200, changed)
                 else:
                     self.delete_source(contact, source)
                 release.set()
@@ -214,6 +220,9 @@ class ScenarioReadHttpTest(OverviewReplyHttpFixture, unittest.TestCase):
 
     def test_source_deletion_after_body_read_blocks_the_next_actual_model_send(self):
         self.invalidate_after_read("source")
+
+    def test_withdrawing_after_body_read_blocks_the_next_actual_model_send(self):
+        self.invalidate_after_read("withdraw")
 
     def test_stale_body_read_returns_no_document_and_cannot_send_the_receipt(self):
         from concurrent.futures import ThreadPoolExecutor
@@ -295,6 +304,22 @@ class ScenarioReadHttpTest(OverviewReplyHttpFixture, unittest.TestCase):
             {"settings_generation": ready["settings_generation"]})[0], 200)
         restarted = self._backend(self.owner_id)
         self.assertEqual(self._get(restarted, f"/api/contacts/{contact}/replies/{saved['reply_request_id']}/evidence"), saved)
+
+    def test_withdrawing_scenario_erases_saved_tool_body_and_blocks_replay(self):
+        contact, _, management, ready, path = self.prepare_layered_reply()
+        self.use_tools()
+        saved, _ = self.complete(contact, path, [self.tool_plan(ready["scenarios"][0]["scenario_id"])])
+        calls = len(self.reply_model.seen_calls)
+        status, changed = management.request(f"/api/contacts/{contact}/layered-memory/withdraw-scenario",
+            {"settings_generation": ready["settings_generation"],
+             "organization_generation": ready["organization_generation"],
+             "scenario_version_id": ready["scenarios"][0]["version_id"]})
+        self.assertEqual(status, 200, changed)
+        restarted = self._backend(self.owner_id)
+        self.assertNotEqual(restarted.request(f"/api/contacts/{contact}/replies/{saved['reply_request_id']}/evidence")[0], 200)
+        self.assertNotIn("按实际提供的资料", str(self._get(restarted, path)))
+        self.assertNotEqual(restarted.request(path + "/replies", self.last_complete_body)[0], 200)
+        self.assertEqual(len(self.reply_model.seen_calls), calls)
 
     def test_hidden_generation_source_erases_saved_body_and_blocks_replay(self):
         from datetime import datetime, timezone
