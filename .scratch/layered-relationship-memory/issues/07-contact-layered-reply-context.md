@@ -1,7 +1,7 @@
 # 07：联系人背景和主题目录进入回复
 
 Triage: ready-for-agent
-State: open
+State: claimed
 Type: task
 Blocked by: 04
 
