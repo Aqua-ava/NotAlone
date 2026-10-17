@@ -62,6 +62,8 @@ class ScenarioProposalPort(Protocol):
                 deadline: OrganizationCallDeadline) -> dict:
         """返回有界主题；deadline的剩余秒数必须用于实际传输，禁止隐式重试。
 
+        显式接收scenarios时，旧正文和底层输入一起受预算、来源及世代复验。
+        可用scenario_id保留身份、replaces列实际旧version_id；多个输出共享旧版本表示拆分。
         格式：scenarios:[{topic_key,title,hint,paragraphs:[{text,references:[{memory_id,revision}]}]}]。
         """
 
@@ -70,7 +72,7 @@ class ScenarioVerificationPort(Protocol):
     timeout_contract: OrganizationAdapterTimeoutContract
 
     def verify(self, *, memories: tuple[OrganizationInput, ...], proposal: dict,
-               deadline: OrganizationCallDeadline) -> bool:
+               deadline: OrganizationCallDeadline, scenarios: tuple[dict, ...] = ()) -> bool:
         """独立核验主体、否定、时间、条件与范围，明确True才生效。
 
         全部传输与等待须遵守deadline剩余期限；不以外层等待代替实际超时。

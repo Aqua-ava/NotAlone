@@ -67,6 +67,9 @@ def enqueue_coverage(connection, scope, state, manifest, dependencies, contract,
                            "WHERE owner_id=%s AND contact_id=%s", (scope.owner_id,scope.contact_id))
         return job['task_id'],True
     if job:
+        if job['state'] == 'complete':
+            connection.execute("UPDATE public.layered_memory_state SET consumed_revision=dirty_revision,next_due_at=NULL "
+                "WHERE owner_id=%s AND contact_id=%s", (scope.owner_id, scope.contact_id))
         return job['task_id'],job['state']=='active'
     cancel_jobs(connection,scope)
     task_id=uuid4()
@@ -76,6 +79,10 @@ def enqueue_coverage(connection, scope, state, manifest, dependencies, contract,
     connection.execute("INSERT INTO public.layered_memory_job(task_id,owner_id,contact_id,settings_generation,target_key,"
         "contract,target_manifest,dependency_ids,state,run_remaining,model_call_limit) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,'active',1,%s)",
         (task_id,scope.owner_id,scope.contact_id,state['settings_generation'],key,contract,Jsonb(manifest),sorted(dependencies),budget.max_model_calls))
+    connection.execute("UPDATE public.layered_memory_job SET target_dirty_revision=%s WHERE task_id=%s",
+                       (state['dirty_revision'], task_id))
+    connection.execute("UPDATE public.layered_memory_state SET next_due_at=NULL WHERE owner_id=%s AND contact_id=%s",
+                       (scope.owner_id,scope.contact_id))
     covered={item['memory_id'] for row in connection.execute(
         "SELECT b.input_manifest FROM public.layered_memory_generation g JOIN public.scenario_document_version v "
         "ON v.id=ANY(g.scenario_version_ids) AND v.owner_id=g.owner_id AND v.contact_id=g.contact_id "
@@ -88,6 +95,8 @@ def enqueue_coverage(connection, scope, state, manifest, dependencies, contract,
         connection.execute("UPDATE public.background_task_step SET status='succeeded',finished_at=now() WHERE task_id=%s",(task_id,))
         connection.execute("UPDATE public.layered_memory_state SET status=%s,covered_count=%s,error_code=NULL WHERE owner_id=%s AND contact_id=%s",
             ('ready' if manifest else 'empty',len(manifest),scope.owner_id,scope.contact_id))
+        connection.execute("UPDATE public.layered_memory_state SET consumed_revision=dirty_revision WHERE owner_id=%s AND contact_id=%s",
+                           (scope.owner_id,scope.contact_id))
         return task_id,False
     connection.execute("UPDATE public.layered_memory_state SET status='updating',error_code=NULL WHERE owner_id=%s AND contact_id=%s",
                        (scope.owner_id,scope.contact_id))
@@ -119,6 +128,10 @@ def finish_coverage_receipt(connection, claim):
     failed = not receipt and not exhausted
     remaining=max(0,len(row[0])-row[2])
     job_state='failed' if failed else 'paused' if exhausted or remaining and row[1]==0 else 'active' if remaining else 'complete'
+    if job_state == 'complete':
+        connection.execute("UPDATE public.layered_memory_state s SET consumed_revision=GREATEST(s.consumed_revision,j.target_dirty_revision) "
+            "FROM public.layered_memory_job j WHERE j.task_id=%s AND s.owner_id=j.owner_id AND s.contact_id=j.contact_id",
+            (claim.task_id,))
     connection.execute("UPDATE public.layered_memory_job SET state=%s WHERE task_id=%s", (job_state,claim.task_id))
     connection.execute("UPDATE public.background_task SET status=%s,finished_at=CASE WHEN %s THEN now() ELSE NULL END "
         "WHERE id=%s", ('failed' if failed else 'queued' if remaining else 'succeeded',not remaining,claim.task_id))

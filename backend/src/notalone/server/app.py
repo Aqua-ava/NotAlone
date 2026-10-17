@@ -323,6 +323,8 @@ class BackendApp:
                 return
             if self._runtime_shutdown is not None:
                 self._runtime_shutdown()
+            if self._layered_memory is not None:
+                self._layered_memory.stop()
             if self._task_host is not None:
                 self._task_host.stop()
             self._runtime_stopped.set()
@@ -2597,6 +2599,7 @@ def create_app(
     else:
         from notalone.tasks.organization_dispatch import EmbeddedOrganizationDispatcher
         layered_memory.attach_dispatcher(EmbeddedOrganizationDispatcher(database_url))
+    layered_memory.start_maintenance(owner_id)
     return BackendApp(
         contact_directory=contacts,
         events=events or EventBus(),

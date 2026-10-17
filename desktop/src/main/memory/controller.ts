@@ -32,6 +32,7 @@ export class MemoryReadingController {
   private ownerOverviewRequested = false;
   private layeredOperation: { abort: AbortController } | undefined;
   private layeredRequested = false;
+  private layeredTimer: ReturnType<typeof setTimeout> | undefined;
   private sourceDeletionDepth = 0;
   private sourceDeletionRevision = 0;
   private protectedReads: ProtectedReads | undefined;
@@ -81,6 +82,8 @@ export class MemoryReadingController {
     this.layeredOperation?.abort.abort();
     this.layeredOperation = undefined;
     this.layeredRequested = false;
+    clearTimeout(this.layeredTimer);
+    this.layeredTimer = undefined;
     this.mutation?.abort.abort();
     this.mutation = undefined;
     this.protectedReads = undefined;
@@ -162,6 +165,7 @@ export class MemoryReadingController {
     } finally {
       if (this.mutation === operation) {
         this.mutation = undefined;
+        this.scheduleLayered(scope);
         if (this.scope === scope && this.sourceDeletionRevision !== sourceDeletionRevision) {
           this.publish({ mutation: { phase: 'idle', message: '' } });
         }
@@ -170,22 +174,37 @@ export class MemoryReadingController {
       }
     }
   }
+  private scheduleLayered(scope: Scope): void {
+    clearTimeout(this.layeredTimer);
+    this.layeredTimer = undefined;
+    const value = this.state.layeredMemory.value;
+    if (!this.layeredRequested || this.scope !== scope || !value?.enabled || value.qualityStatus !== 'synthetic') return;
+    this.layeredTimer = setTimeout(() => {
+      this.layeredTimer = undefined;
+      this.synchronizeScope();
+      if (this.scope === scope && !this.mutation && !this.sourceDeletionDepth) void this.readLayered(scope, true);
+    }, 1000);
+    this.layeredTimer.unref();
+  }
   private clearLayered(): void {
+    clearTimeout(this.layeredTimer);
+    this.layeredTimer = undefined;
     this.layeredOperation?.abort.abort();
     this.layeredOperation = undefined;
     this.publish({ layeredMemory: { phase: this.layeredRequested ? 'loading' : 'idle', value: null } });
   }
-  private async readLayered(scope: Scope): Promise<boolean> {
-    this.clearLayered();
+  private async readLayered(scope: Scope, background = false): Promise<boolean> {
+    if (!background) this.clearLayered();
     if (this.sourceDeletionDepth) return false;
     const operation = { abort: new AbortController() };
     this.layeredOperation = operation;
-    this.publish({ layeredMemory: { phase: 'loading', value: null } });
+    if (!background) this.publish({ layeredMemory: { phase: 'loading', value: null } });
     const current = () => { this.synchronizeScope(); return this.scope === scope && this.layeredOperation === operation; };
     try {
       const result = await this.backend.requestJson({ method: 'GET', path: `/api/contacts/${scope.contactId}/layered-memory`, signal: operation.abort.signal });
       if (!current() || result.generation !== scope.generation) return false;
       this.publish({ layeredMemory: { phase: 'ready', value: layeredMemory(result.data, scope.contactId) } });
+      this.scheduleLayered(scope);
       return true;
     } catch {
       if (current()) this.publish({ layeredMemory: { phase: 'error', value: null } });

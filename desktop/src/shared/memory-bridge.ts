@@ -140,6 +140,8 @@ export interface LayeredMemory {
   eligibleCount: number;
   coveredCount: number;
   remainingCount: number;
+  maintenancePending: boolean;
+  scenarioMappings: { sourceScenarioId: string; sourceVersionId: string; targets: { scenarioId: string; versionId: string }[] }[];
   organizationGeneration: number;
   updatedAt: string | null;
   errorCode: string | null;

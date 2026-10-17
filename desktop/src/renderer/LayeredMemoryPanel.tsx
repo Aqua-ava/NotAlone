@@ -31,6 +31,7 @@ export function LayeredMemoryPanel({ state, contactName, busy, read, manage, fac
       {value.workId && <p>当前批次：{value.currentBatch}</p>}
       {value.workId && <p>累计已用 {value.modelCallsUsed} / 已授权 {value.modelCallLimit} 次模型调用</p>}
       <p role={value.status === 'failed' ? 'alert' : 'status'}>{statusNames[value.status]}</p>
+      {value.maintenancePending && <p role="status">资料已变化，等待后台更新。</p>}
       {value.remainingCount > 0 && value.coveredCount > 0 && <p>目前仅覆盖部分资料；剩余资料尚未整理。</p>}
       {value.qualityStatus === 'unknown' ? <div className="memory-section-note"><p>质量资格未知，资料不会发给模型。</p>
         <p>生产调用预算尚未标定；当前不开放真实资料整理或回复加载。</p></div>
@@ -56,7 +57,16 @@ export function LayeredMemoryPanel({ state, contactName, busy, read, manage, fac
         <button className="button" disabled={waiting} onClick={() => setDeleting(false)}>取消删除</button></div>}
       {!value.enabled && value.scenarios.length > 0 && <p>已停止整理及回复加载；下方仅供回看来源仍有效的现有文档。</p>}
       {value.scenarios.length === 0 && value.status === 'ready' && <p>本批没有可展示的主题资料。</p>}
-      <div className="memory-overview-entries">{value.scenarios.map((scenario) => <article className="memory-card" key={scenario.versionId}>
+      {value.scenarioMappings.length > 0 && <details className="memory-details"><summary>查看旧主题入口的当前去向</summary>
+        <p>旧入口仅用于查找当前合法主题；此处不展示旧版正文。</p>
+        {value.scenarioMappings.map((mapping) => <div key={`${mapping.sourceScenarioId}:${mapping.sourceVersionId}`}>
+          <p>旧主题：{mapping.sourceScenarioId} · 旧版本：{mapping.sourceVersionId}</p>
+          {mapping.targets.map((target) => <p key={target.versionId}><a href={`#layered-scenario-${target.versionId}`}>
+            查看当前主题：{value.scenarios.find((scenario) => scenario.versionId === target.versionId)?.title}
+          </a></p>)}
+        </div>)}
+      </details>}
+      <div className="memory-overview-entries">{value.scenarios.map((scenario) => <article className="memory-card" id={`layered-scenario-${scenario.versionId}`} key={scenario.versionId}>
         <div className="memory-card-labels"><h3>{scenario.title}</h3><b>系统整理</b></div>
         <p>{scenario.hint}</p><p className="memory-times">更新时间：{time(scenario.updatedAt)}</p>
         {scenario.paragraphs.map((paragraph, index) => <div key={index}><p className="memory-text">{paragraph.text}</p>

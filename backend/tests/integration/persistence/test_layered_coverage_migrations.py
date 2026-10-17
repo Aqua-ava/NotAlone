@@ -46,6 +46,10 @@ class LayeredCoverageMigrationTest(unittest.TestCase):
                 path=root/'074_layered_memory_coverage.sql';shutil.copyfile(path,prefix/path.name)
                 self.assertEqual(migrate(database,prefix),(path.name,))
                 self.assertEqual(migrate(database,prefix),())
+                maintenance=root/'075_layered_memory_maintenance.sql'
+                shutil.copyfile(maintenance,prefix/maintenance.name)
+                self.assertEqual(migrate(database,prefix),(maintenance.name,))
+                self.assertEqual(migrate(database,prefix),())
                 with psycopg.connect(database) as connection:
                     row=connection.execute("SELECT schema_version,scenario_version_ids,profile_version_id,dependency_ids FROM public.layered_memory_generation "
                         "WHERE owner_id=%s AND contact_id=%s AND organization_generation=1",(owner,contact)).fetchone()

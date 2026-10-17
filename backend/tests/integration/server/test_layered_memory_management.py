@@ -81,6 +81,216 @@ class LayeredMemoryManagementHttpTest(MemoryOverviewHttpFixture, unittest.TestCa
         self.assertEqual(status, 200, result)
         return result["layered_memory"]
 
+    def test_new_memories_are_coalesced_without_manual_refresh(self):
+        from threading import Event
+        contact, _, message = self.import_contact("合成课程。")
+        self.confirm(contact, "双方共同参加合成课程。", message)
+        completed = Event()
+        class MaintenanceProposal(EchoProposal):
+            def propose(self, *, memories, budget, deadline):
+                result = super().propose(memories=memories, budget=budget, deadline=deadline)
+                if len(self.inputs) > 1:
+                    completed.set()
+                return result
+        proposer = MaintenanceProposal()
+        backend = self.controlled(proposer=proposer, asynchronous=True)
+        self.enable(backend, contact)
+        self.assertTrue(self.task_finished.wait(5))
+        self.task_finished.clear()
+        for text in ("双方共同完成合成练习。", "双方共同整理合成笔记。"):
+            status, result = self.backend.request("/api/memories/manual-contact", {
+                "contact_id": contact, "text": text, "category": "common_fact"})
+            self.assertEqual(status, 200, result)
+        self.assertTrue(completed.wait(5), "新增记忆应自动进入已开启范围的同一整理机制")
+        self.assertTrue(self.task_finished.wait(5))
+        for _ in range(50):
+            state = self._get(backend, f"/api/contacts/{contact}/layered-memory")["layered_memory"]
+            if state["status"] != "updating":
+                break
+            Event().wait(0.05)
+        self.assertEqual((state["status"], state["covered_count"], state["remaining_count"]),
+                         ("ready", 3, 0))
+        self.assertEqual(len(proposer.inputs), 2)
+
+    def test_natural_expiration_automatically_rebuilds_as_history(self):
+        from datetime import timedelta
+        from threading import Event
+        contact, _, message = self.import_contact("合成限时安排。")
+        self.confirm(contact, "双方安排合成课程。", message,
+                     invalid_at=datetime.now(timezone.utc) + timedelta(seconds=3))
+        changed = Event()
+        class ExpiringProposal(EchoProposal):
+            def propose(self, *, memories, budget, deadline):
+                result = super().propose(memories=memories, budget=budget, deadline=deadline)
+                if memories[0].timing['current_status'] == 'historical':
+                    changed.set()
+                return result
+        backend = self.controlled(proposer=ExpiringProposal(), asynchronous=True)
+        self.enable(backend, contact)
+        self.assertTrue(self.task_finished.wait(5))
+        self.assertTrue(changed.wait(5), "自然失效须按已保存边界唤醒，不依赖页面轮询")
+
+    def test_restart_recovers_committed_changes_but_not_a_budget_pause(self):
+        from threading import Event
+        contact, _, message = self.import_contact("合成课程。")
+        self.confirm(contact, "双方共同参加合成课程。", message)
+        backend = self.controlled(proposer=EchoProposal(), asynchronous=True)
+        self.enable(backend, contact)
+        self.assertTrue(self.task_finished.wait(5))
+        backend.close()
+        self.backend.request("/api/memories/manual-contact", {
+            "contact_id": contact, "text": "合成后续练习。", "category": "common_fact"})
+        self.backend.request("/api/memories/manual-contact", {
+            "contact_id": contact, "text": "合成后续笔记。", "category": "common_fact"})
+        restarted = self.controlled(proposer=EchoProposal(), budget=OrganizationBudget(max_memories=1), asynchronous=True)
+        self.assertTrue(self.task_finished.wait(5))
+        path = f"/api/contacts/{contact}/layered-memory"
+        for _ in range(50):
+            paused = self._get(restarted, path)["layered_memory"]
+            if paused['status'] == 'paused':
+                break
+            Event().wait(0.05)
+        self.assertEqual((paused['status'], paused['remaining_count']), ('paused', 1))
+        restarted.close()
+        self.backend.request("/api/memories/manual-contact", {
+            "contact_id": contact, "text": "合成第三份练习。", "category": "common_fact"})
+        proposer = EchoProposal()
+        third = self.controlled(proposer=proposer, asynchronous=True)
+        state = self._get(third, path)['layered_memory']
+        self.assertEqual((state['status'], state['work_id'], state['model_calls_used']),
+                         ('paused', paused['work_id'], paused['model_calls_used']))
+        self.assertEqual(proposer.inputs, [])
+
+    def test_incremental_rename_keeps_identity_and_revokes_frozen_old_version(self):
+        from notalone.scopes import ContactScope
+        class RenamingProposal(EchoProposal):
+            def propose(self, *, memories, scenarios, budget, deadline):
+                result = super().propose(memories=memories, budget=budget, deadline=deadline)
+                if scenarios:
+                    result['scenarios'][0]['paragraphs'] = [
+                        {'text': memory.text, 'references': [{'memory_id': str(memory.memory_id), 'revision': memory.revision}]}
+                        for memory in memories]
+                    result['scenarios'][0].update(title='共同课程与练习',
+                        scenario_id=scenarios[0]['scenario_id'], replaces=[scenarios[0]['version_id']])
+                return result
+        class ContextVerification(ControlledVerification):
+            def verify(self, *, memories, scenarios, proposal, deadline):
+                deadline.check()
+                return True
+        contact, _, message = self.import_contact("合成课程。")
+        self.confirm(contact, "双方共同参加合成课程。", message)
+        backend = self.controlled(proposer=RenamingProposal(), verifier=ContextVerification())
+        ready = self.enable(backend, contact)
+        self.assertEqual(ready['status'], 'ready')
+        scope = ContactScope(self.owner_id, UUID(contact))
+        snapshot = self.service.capture(scope)
+        self.backend.request('/api/memories/manual-contact', {
+            'contact_id': contact, 'text': '双方共同完成合成练习。', 'category': 'common_fact'})
+        status, response = backend.request(f'/api/contacts/{contact}/layered-memory/refresh', {
+            'settings_generation': ready['settings_generation']})
+        self.assertEqual(status, 200, response)
+        renamed = response['layered_memory']
+        self.assertEqual(renamed['status'], 'ready')
+        self.assertEqual(renamed['scenarios'][0]['title'], '共同课程与练习')
+        self.assertEqual(renamed['scenarios'][0]['scenario_id'], ready['scenarios'][0]['scenario_id'])
+        self.assertNotEqual(renamed['scenarios'][0]['version_id'], ready['scenarios'][0]['version_id'])
+        self.assertFalse(self.service.validate(snapshot))
+        self.assertEqual(len(renamed['scenarios'][0]['paragraphs']), 2)
+
+    def test_split_merge_mapping_keeps_all_legal_terminals_and_recursive_erasure(self):
+        from notalone.scopes import ContactScope
+        contact, _, message = self.import_contact("合成课程依据。")
+        original = self.confirm(contact, "合成课程事实。", message)
+        _, source_y, message_y = self.import_contact("合成背景依据。", contact_id=contact, when=datetime(2024, 2, 1, tzinfo=timezone.utc))
+        self.confirm(contact, "合成背景事实。", message_y)
+        class MappingProposal(ControlledProposal):
+            def propose(self, *, memories, scenarios, budget, deadline):
+                deadline.check()
+                memory = next(item for item in memories if str(item.memory_id) == original['memory_id'])
+                paragraph = {'text': memory.text, 'references': [{'memory_id': str(memory.memory_id), 'revision': memory.revision}]}
+                if not scenarios:
+                    return {'scenarios': [{'topic_key': 'course', 'title': '合成课程', 'hint': '合成主题资料', 'paragraphs': [paragraph]}]}
+                keys = ['course-part-one', 'course-part-two'] if len(scenarios) == 1 else ['combined-course']
+                return {'scenarios': [{'topic_key': key, 'title': '合成拆并主题', 'hint': '合成归组资料',
+                    'replaces': [item['version_id'] for item in scenarios], 'paragraphs': [paragraph]} for key in keys]}
+        class MappingVerification(ControlledVerification):
+            def verify(self, *, memories, scenarios, proposal, deadline):
+                deadline.check()
+                return True
+        backend = self.controlled(proposer=MappingProposal(), verifier=MappingVerification(),
+                                  budget=OrganizationBudget(max_characters=20000))
+        ready = self.enable(backend, contact)
+        self.assertEqual(ready['status'], 'ready')
+        old = ready['scenarios'][0]
+        retired_versions = {old['version_id']}
+        scope = ContactScope(self.owner_id, UUID(contact))
+        frozen = self.service.capture(scope)
+        path = f'/api/contacts/{contact}/layered-memory'
+        for index, expected in ((1, 2), (2, 1)):
+            self.backend.request('/api/memories/manual-contact', {
+                'contact_id': contact, 'text': f'合成新增资料{index}。', 'category': 'common_fact'})
+            status, response = backend.request(path+'/refresh', {'settings_generation': ready['settings_generation']})
+            self.assertEqual(status, 200, response)
+            current = response['layered_memory']
+            self.assertEqual(current['status'], 'ready')
+            self.assertEqual(len(current['scenarios']), expected)
+            retired_versions.update(item['version_id'] for item in current['scenarios'])
+            mapping = next(item for item in current['scenario_mappings'] if item['source_version_id'] == old['version_id'])
+            self.assertEqual({item['version_id'] for item in mapping['targets']},
+                             {item['version_id'] for item in current['scenarios']})
+            self.assertFalse(self.service.validate(frozen))
+        self.delete_source(contact, source_y)
+        erased = self._get(backend, path)['layered_memory']
+        self.assertTrue(retired_versions.isdisjoint(item['version_id'] for item in erased['scenarios']))
+        self.assertEqual(erased['scenario_mappings'], [])
+        self.assertFalse(self.service.validate(frozen))
+
+    def test_notification_disconnect_recovers_persistent_new_target(self):
+        import psycopg
+        from threading import Event
+        contact, _, message = self.import_contact('合成通知恢复。')
+        self.confirm(contact, '合成旧课程。', message)
+        rebuilt = Event()
+        class ReconnectedProposal(EchoProposal):
+            def propose(self, *, memories, budget, deadline):
+                result = super().propose(memories=memories, budget=budget, deadline=deadline)
+                if any(item.text == '合成重连练习。' for item in memories):
+                    rebuilt.set()
+                return result
+        backend = self.controlled(proposer=ReconnectedProposal(), asynchronous=True)
+        self.enable(backend, contact)
+        self.assertTrue(self.task_finished.wait(5))
+        with psycopg.connect(self.database_url) as connection:
+            # 基础设施故障注入只终止当前独占合成库中的通知连接。
+            terminated = connection.execute("SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+                "WHERE datname=current_database() AND application_name='notalone-layered-change-feed'").fetchall()
+        self.assertTrue(terminated)
+        self.backend.request('/api/memories/manual-contact', {
+            'contact_id': contact, 'text': '合成重连练习。', 'category': 'common_fact'})
+        self.assertTrue(rebuilt.wait(5), '连接恢复后应补扫持久修订，而非依赖丢失的通知')
+
+    def test_correction_revokes_immediately_then_automatically_rebuilds_stale_scope(self):
+        from threading import Event
+        from notalone.scopes import ContactScope
+        contact, _, message = self.import_contact('合成纠正课程。')
+        memory = self.confirm(contact, '双方共同参加合成课程。', message)
+        corrected = Event()
+        class CorrectedProposal(EchoProposal):
+            def propose(self, *, memories, budget, deadline):
+                result = super().propose(memories=memories, budget=budget, deadline=deadline)
+                if any(item.text == '双方分别上过合成课程。' for item in memories):
+                    corrected.set()
+                return result
+        backend = self.controlled(proposer=CorrectedProposal(), asynchronous=True)
+        self.enable(backend, contact)
+        self.assertTrue(self.task_finished.wait(5))
+        frozen = self.service.capture(ContactScope(self.owner_id, UUID(contact)))
+        status, result = self.backend.request(f"/api/contacts/{contact}/memories/{memory['memory_id']}/correct",
+                                             {'text': '双方分别上过合成课程。'})
+        self.assertEqual(status, 200, result)
+        self.assertFalse(self.service.validate(frozen), '安全撤销不等待合批窗口')
+        self.assertTrue(corrected.wait(5), 'stale不能阻止此前已授权的维护')
+
     def test_finite_batch_publishes_traceable_system_document_and_reuses_unchanged_work(self):
         contact, _, message = self.import_contact("合成经历：双方共同参加过课程。")
         original = self.confirm(contact, "双方共同参加过课程。", message)
@@ -630,7 +840,14 @@ class LayeredMemoryManagementHttpTest(MemoryOverviewHttpFixture, unittest.TestCa
         now[0] = datetime(2099, 1, 3, tzinfo=timezone.utc)
         self.assertFalse(self.service.validate(snapshot))
         path = f"/api/contacts/{contact}/layered-memory"
-        self.assertEqual(self._get(backend,path)["layered_memory"]["status"], "stale")
+        from threading import Event
+        for _ in range(50):
+            current = self._get(backend,path)["layered_memory"]
+            if current['status'] == 'ready':
+                break
+            self.assertIn(current['status'], {'stale', 'updating'})
+            Event().wait(0.05)
+        self.assertEqual(current['status'], 'ready')
         status, refreshed = backend.request(path+"/refresh", {"settings_generation": ready["settings_generation"]})
         self.assertEqual(status, 200, refreshed)
         reference = refreshed["layered_memory"]["scenarios"][0]["paragraphs"][0]["references"][0]

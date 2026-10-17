@@ -56,10 +56,20 @@ function scenario(value: unknown): LayeredMemoryScenario {
 export function layeredMemory(value: unknown, contactId: string): LayeredMemory {
   const entry = record(record(value).layered_memory), budget = record(entry.budget);
   if (entry.schema_version !== 1 || entry.scope_kind !== 'contact' || identifier(entry.contact_id) !== contactId
-    || typeof entry.enabled !== 'boolean') throw invalid();
+    || typeof entry.enabled !== 'boolean' || typeof entry.maintenance_pending !== 'boolean') throw invalid();
   const qualityStatus = enumeration(entry.quality_status, ['unknown', 'synthetic']);
   const scenarios = list(entry.scenarios, scenario, 100);
   if ((qualityStatus === 'unknown' && scenarios.length > 0) || new Set(scenarios.map((item) => item.scenarioId)).size !== scenarios.length) throw invalid();
+  const scenarioMappings = list(entry.scenario_mappings, (value) => {
+    const mapping = record(value);
+    const targets = list(mapping.targets, (value) => {
+      const target = record(value), scenarioId = identifier(target.scenario_id), versionId = identifier(target.version_id);
+      if (!scenarios.some((item) => item.scenarioId === scenarioId && item.versionId === versionId)) throw invalid();
+      return { scenarioId, versionId };
+    }, 100);
+    if (!targets.length || new Set(targets.map((item) => item.versionId)).size !== targets.length) throw invalid();
+    return { sourceScenarioId: identifier(mapping.source_scenario_id), sourceVersionId: identifier(mapping.source_version_id), targets };
+  });
   const eligibleCount = integer(entry.eligible_count), coveredCount = integer(entry.covered_count), remainingCount = integer(entry.remaining_count);
   if (coveredCount > eligibleCount || remainingCount > eligibleCount) throw invalid();
   const workId = entry.work_id === null ? null : identifier(entry.work_id), workRevision = integer(entry.work_revision), currentBatch = integer(entry.current_batch);
@@ -68,6 +78,7 @@ export function layeredMemory(value: unknown, contactId: string): LayeredMemory 
     || (workId !== null && workRevision === 0) || modelCallsUsed > modelCallLimit) throw invalid();
   return { schemaVersion: 1, scopeKind: 'contact', contactId, settingsGeneration: integer(entry.settings_generation), enabled: entry.enabled,
     qualityStatus, status: enumeration(entry.status, ['disabled', 'ready', 'empty', 'failed', 'updating', 'paused', 'stale', 'blocked']),
+    maintenancePending: entry.maintenance_pending, scenarioMappings,
     workId, workRevision, currentBatch, modelCallsUsed, modelCallLimit,
     eligibleCount, coveredCount, remainingCount, organizationGeneration: integer(entry.organization_generation), updatedAt: date(entry.updated_at),
     errorCode: entry.error_code === null ? null : text(entry.error_code, 200), purpose: text(entry.purpose, 2000),

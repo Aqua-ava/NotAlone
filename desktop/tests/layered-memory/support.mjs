@@ -19,7 +19,7 @@ export function payload(overrides = {}) {
     settings_generation: 0, enabled: false, quality_status: 'unknown', status: 'disabled',
     eligible_count: 3, covered_count: 0, remaining_count: 3, organization_generation: 0,
     work_id: null, work_revision: 0, current_batch: 0,
-    model_calls_used: 0, model_call_limit: 0,
+    model_calls_used: 0, model_call_limit: 0, maintenance_pending: false, scenario_mappings: [],
     updated_at: null, error_code: null, purpose: '从本联系人合法已采纳记忆整理主题背景，供核对及后续回复使用。',
     budget: { max_memories: 0, max_scenarios: 0, max_paragraphs: 0, max_characters: 0, max_model_calls: 0 }, scenarios: [], ...overrides } };
 }

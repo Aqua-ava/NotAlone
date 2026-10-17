@@ -21,5 +21,5 @@ export async function withMemoryPage(f, run) {
     await page.addScriptTag({ content: compiled.outputFiles[0].text });
     const unsubscribe = f.bridge.onStateChanged((state) => { void page.evaluate((next) => window.deliverMemory(next), state).catch(() => {}); });
     try { await run(page); } finally { unsubscribe(); }
-  } finally { await browser.close(); }
+  } finally { f.disconnect(); await browser.close(); }
 }
