@@ -218,7 +218,8 @@ def saved_skill_policy_change(connection, scope, request_id):
             if row is None:
                 continue
             candidates = {row['continued_from_candidate_id']} - {None}
-            payload = row['context_snapshot']
+            # 尚未保存上下文的用户输入没有新增 Skill 依据；已选 Skill 仍由上方复验。
+            payload = row['context_snapshot'] if row['context_snapshot'] is not None else {}
             if not isinstance(payload, dict):
                 return request_id
             if 'assistant_discussion_snapshot' in payload:
