@@ -369,6 +369,11 @@ class PostgresSourceDeletionRepository:
                     or row[5]
                     or row[6]
                     or has_correction_dependencies(connection, owner_id=owner_id, source_id=source_document_id)
+                    or connection.execute(
+                        "SELECT EXISTS(SELECT 1 FROM public.layered_memory_batch "
+                        "WHERE owner_id=%s AND dependency_ids @> ARRAY[%s]::uuid[])",
+                        (owner_id, source_document_id),
+                    ).fetchone()[0]
                 ):
                     raise SourceDeletionVerificationError(
                         "来源删除尚未验证完成。"

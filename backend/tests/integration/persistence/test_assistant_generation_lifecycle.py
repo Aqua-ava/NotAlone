@@ -43,6 +43,7 @@ CURRENT_MIGRATION_TAIL = (
     "070_skill_scope_policies.sql",
     "071_bounded_runtime_evidence.sql",
     "072_scoped_media_lifecycle.sql",
+    "073_layered_scenario_documents.sql",
 )
 
 
@@ -119,7 +120,7 @@ class AssistantGenerationInterruptionMigrationTest(unittest.TestCase):
         with psycopg.connect(self.database_url) as connection:
             self.assertEqual(connection.execute(
                 "SELECT count(*), max(name) FROM public.notalone_schema_migration",
-            ).fetchone(), (72, CURRENT_MIGRATION_TAIL[-1]))
+            ).fetchone(), (73, CURRENT_MIGRATION_TAIL[-1]))
         _, _, _, turn_id = self._reserved_turn()
         with psycopg.connect(self.database_url) as connection:
             self.assertIsNone(connection.execute(

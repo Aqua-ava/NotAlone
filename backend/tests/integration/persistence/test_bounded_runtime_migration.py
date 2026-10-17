@@ -200,7 +200,8 @@ class BoundedRuntimeMigrationTest(unittest.TestCase):
 
     def test_forward_columns_old_defaults_and_repeat(self) -> None:
         self.assertEqual(len(self.old_applied), 70)
-        self.assertEqual(self.applied, ("071_bounded_runtime_evidence.sql", "072_scoped_media_lifecycle.sql"))
+        self.assertEqual(self.applied, ("071_bounded_runtime_evidence.sql", "072_scoped_media_lifecycle.sql",
+                                        "073_layered_scenario_documents.sql"))
         self.assertEqual(migrate(self.url, MIGRATIONS), ())
         result = self.connection.execute("SELECT extraction_runtime_config FROM public.background_task "
                                         "WHERE id=%s", (self.task,)).fetchone()

@@ -83,7 +83,7 @@ class StartupDatabaseTest(unittest.TestCase):
     def test_fresh_database_initializes_current_schema(self) -> None:
         report = self._run()
         self.assertEqual(report["code"], "ready")
-        self.assertEqual(len(report["applied"]), 72)
+        self.assertEqual(len(report["applied"]), 73)
         self.assertEqual(self._run(), {"code": "ready", "applied": []})
 
     def test_other_connections_block_schema_change_without_creating_missing_table(self) -> None:
