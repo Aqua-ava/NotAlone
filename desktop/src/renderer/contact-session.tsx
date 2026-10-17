@@ -71,10 +71,11 @@ export function CurrentContactLabel({ state }: { state: ContactSessionState }) {
   return <span className="current-contact">本次联系人：{selected?.displayName ?? '未确认'}</span>;
 }
 
-export function HelperContactPicker({ session, foreground, manualRelease = false }: { session: ContactSessionView; foreground?: ForegroundState; manualRelease?: boolean }) {
+export function HelperContactPicker({ session, foreground, manualRelease = false, manualInput = false }: { session: ContactSessionView; foreground?: ForegroundState; manualRelease?: boolean; manualInput?: boolean }) {
+  const manual = manualRelease || manualInput || foreground?.manualInput;
   return <select className="contact-picker" aria-label="本次联系人"
-    value={session.state.selectedContactId ?? ''} disabled={session.state.contacts.length === 0 || !foreground || !manualRelease && !foreground.manualInput && foreground.unsupportedConversation}
-    onChange={(event) => foreground && void (manualRelease || foreground.manualInput ? session.confirmManualContact(event.target.value) : session.confirmContact(event.target.value, foreground.foregroundRevision))}>
+    value={session.state.selectedContactId ?? ''} disabled={session.state.contacts.length === 0 || !foreground || !manual && foreground.unsupportedConversation}
+    onChange={(event) => foreground && void (manual ? session.confirmManualContact(event.target.value) : session.confirmContact(event.target.value, foreground.foregroundRevision))}>
     <option value="" disabled>联系人未确认</option>
     {session.state.contacts.map((contact) => <option key={contact.contactId} value={contact.contactId}>{contact.displayName}</option>)}
   </select>;

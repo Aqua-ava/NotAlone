@@ -33,6 +33,7 @@ export function App() {
   const contactSession = useContactSession();
   const replies = useReplySession();
   const foreground = useForegroundState(window.notalone.foreground, helper);
+  const manualReplyInput = replies.state.mode === 'rewrite_draft';
   const [error, setError] = useState('');
   const [page, setPage] = useState<ManagerPage>('contacts');
   async function operate(operation: () => Promise<void>) {
@@ -43,7 +44,7 @@ export function App() {
   return helper ? <main className="ime-pane">
     <header className="ime-header">
       <img className="ime-logo" src={logo} alt="NotAlone" />
-      <HelperContactPicker session={contactSession} foreground={foreground} manualRelease={startup.mode === 'managed'} />
+      <HelperContactPicker session={contactSession} foreground={foreground} manualRelease={startup.mode === 'managed'} manualInput={manualReplyInput} />
       <ReplyModePicker replies={replies} enabled={Boolean(contactSession.state.selectedContactId)} />
       <button className="icon-button" aria-label="打开管理后台" title="打开管理后台"
         onClick={() => void operate(window.notalone.openManager)}><Icon name="contacts" size={16} /></button>
@@ -51,7 +52,7 @@ export function App() {
         onClick={() => void operate(window.notalone.hideWindow)}><Icon name="close" size={16} /></button>
     </header>
     <div className="ime-workspace">
-    <ForegroundPanel state={foreground} session={contactSession} permission={permission} manualRelease={startup.mode === 'managed'} />
+    <ForegroundPanel state={foreground} session={contactSession} permission={permission} manualRelease={startup.mode === 'managed'} manualInput={manualReplyInput} />
     {replies.state.mode === 'rewrite_draft' ? <RewriteInput contacts={contactSession} replies={replies} />
       : replies.state.mode === 'initiate_conversation' ? <ProactiveReplyInput replies={replies} /> : <DirectedReplyInput replies={replies} />}
     {replies.state.messageNotice.phase === 'connected' && <>

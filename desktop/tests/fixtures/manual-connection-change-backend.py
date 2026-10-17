@@ -18,9 +18,10 @@ from tests.integration.server.core_business_flow_support import HttpBackend
 class Fixture(FidelityHttpFixture, unittest.TestCase):
     def _backend(self, owner_id):
         configuration = synthetic_budget_kwargs(self.reply_model)
-        configuration['input_budget_profile'] = replace(configuration['input_budget_profile'],
-            context_window_tokens=None, output_reserve_tokens=None, measurement_kind=None, measurement_id=None)
-        configuration['input_token_counter'] = None
+        if '--reply-ready' not in sys.argv:
+            configuration['input_budget_profile'] = replace(configuration['input_budget_profile'],
+                context_window_tokens=None, output_reserve_tokens=None, measurement_kind=None, measurement_id=None)
+            configuration['input_token_counter'] = None
         with patch('notalone.server.reply_wiring.build_deepseek_model', return_value=self.reply_model):
             reply = build_reply_service(database_url=self.database_url, owner_id=owner_id, **configuration)
         backend = HttpBackend(create_app(database_url=self.database_url, owner_id=owner_id,
@@ -35,6 +36,8 @@ fixture = Fixture()
 try:
     Fixture.setUpClass()
     fixture.setUp()
+    if '--reply-ready' in sys.argv:
+        fixture.reply_model.plans.append({'text': '今天先不去了，下次再约。', 'basis': '沿用本次明确的婉拒方向。'})
     print(json.dumps({'ready': {'port': int(fixture.backend.base_url.rsplit(':', 1)[1]),
         'token': fixture.backend.token, 'pid': os.getpid()}}), flush=True)
     for line in sys.stdin:
