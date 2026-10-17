@@ -523,6 +523,24 @@ class AuditedProcesses:
         self._stop_owned(record_end=not self._fatal)
 
 
+def adapt_binding_session_listing(cli: ScopedCli) -> None:
+    """显式将管理页列表输入限定到已声明关键词；不认证完整会话目录。"""
+    if cli.guard.scope.metadata_name is None:
+        raise _fail("acceptance_session_listing_blocked")
+    original_sessions = cli.sessions
+
+    def sessions(*args: Any, **kwargs: Any) -> Any:
+        if (not args and type(kwargs.get("limit")) is int
+                and kwargs == {"type_filter": "private", "limit": 5000}):
+            # 不按正文 locator 过滤、不去重或消歧；仍由公开预览/确认处理稳定身份。
+            candidates = original_sessions(keyword=cli.guard.scope.metadata_name,
+                                           type_filter="all", limit=51)
+            return tuple(item for item in candidates if item.chat_type == "private")
+        return original_sessions(*args, **kwargs)
+
+    cli.sessions = sessions
+
+
 def build_scoped_cli(scope: AcceptanceScope, *, runner: Any = None,
                      follow_runner: Any = None,
                      process_factory: Callable[..., Any] = subprocess.Popen,
