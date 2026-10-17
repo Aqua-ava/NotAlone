@@ -1,6 +1,6 @@
 import type { PageTransport } from './transport';
 import type { ContactSelection } from '../shared/contact-session-bridge';
-import type { LayeredMemoryManagementRequest, MemoryAdditionRequest, MemoryCandidateRequest, MemoryCandidateUpdateRequest, MemoryBridge, MemoryCorrectionRequest, MemoryReadRequest, MemoryReadingState, MemoryRemovalRequest } from '../shared/memory-bridge';
+import type { LayeredMemoryReadRequest, LayeredMemoryManagementRequest, MemoryAdditionRequest, MemoryCandidateRequest, MemoryCandidateUpdateRequest, MemoryBridge, MemoryCorrectionRequest, MemoryReadRequest, MemoryReadingState, MemoryRemovalRequest } from '../shared/memory-bridge';
 
 export function createMemoryBridge(ipcRenderer: PageTransport): MemoryBridge {
   return Object.freeze({
@@ -12,7 +12,7 @@ export function createMemoryBridge(ipcRenderer: PageTransport): MemoryBridge {
       : Promise.reject(new Error('概览读取不可用。')),
     refreshOwnerOverview: (...args: [ContactSelection]) => args.length === 1 ? ipcRenderer.invoke('memory:refresh-owner-overview', args[0])
       : Promise.reject(new Error('本人概览读取不可用。')),
-    readLayeredMemory: (...args: [ContactSelection]) => args.length === 1 ? ipcRenderer.invoke('memory:read-layered-memory', args[0])
+    readLayeredMemory: (...args: [LayeredMemoryReadRequest]) => args.length === 1 ? ipcRenderer.invoke('memory:read-layered-memory', args[0])
       : Promise.reject(new Error('主题资料读取不可用。')),
     manageLayeredMemory: (...args: [LayeredMemoryManagementRequest]) => args.length === 1 ? ipcRenderer.invoke('memory:manage-layered-memory', args[0])
       : Promise.reject(new Error('主题资料操作不可用。')),

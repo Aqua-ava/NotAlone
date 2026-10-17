@@ -7,9 +7,10 @@ from notalone.memory.layered import OrganizationBudget, OrganizationInput
 
 
 def validate_proposal(proposal: object, memories: tuple[OrganizationInput, ...],
-                      budget: OrganizationBudget) -> dict:
+                      budget: OrganizationBudget, *, scenarios=()) -> dict:
     if not isinstance(proposal, dict) or set(proposal) != {"scenarios"}:
         raise ValueError("主题提案结构无效。")
+    previous_versions = {item["version_id"]: item for item in scenarios}
     scenarios = proposal["scenarios"]
     if not isinstance(scenarios, list) or not 1 <= len(scenarios) <= budget.max_scenarios:
         raise ValueError("主题数量越界。")
@@ -17,12 +18,20 @@ def validate_proposal(proposal: object, memories: tuple[OrganizationInput, ...],
     characters, paragraphs, topics = 0, 0, set()
     result = []
     for item in scenarios:
-        if (not isinstance(item, dict) or set(item) != {"topic_key", "title", "hint", "paragraphs"}
+        if (not isinstance(item, dict) or (set(item) - {"scenario_id", "replaces"}) != {"topic_key", "title", "hint", "paragraphs"}
                 or not isinstance(item["topic_key"], str)
                 or re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,63}", item["topic_key"]) is None
                 or item["topic_key"] in topics):
             raise ValueError("主题身份无效。")
         topics.add(item["topic_key"])
+        replaced = item.get('replaces', [])
+        if (not isinstance(replaced, list) or len(replaced) != len(set(replaced))
+                or any(version not in previous_versions for version in replaced)):
+            raise ValueError('主题映射必须引用实际读取的同范围版本。')
+        if 'scenario_id' in item and (not replaced or item['scenario_id'] not in
+                {previous_versions[version]['scenario_id'] for version in replaced}):
+            raise ValueError('主题身份只能继承当前明确替换的主题。')
+
         for name, limit in (("title", 60), ("hint", 160)):
             if (not isinstance(item[name], str) or not item[name].strip()
                     or len(item[name]) > limit or not re.search(r"[\u3400-\u9fff]", item[name])):

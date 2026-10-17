@@ -1,6 +1,7 @@
 """长期背景从公开管理 HTTP 到真实隔离 PG 的合成合同。"""
 
 import unittest
+import json
 from datetime import datetime, timezone
 from uuid import UUID
 
@@ -75,6 +76,68 @@ class LayeredProfileHttpTest(MemoryOverviewHttpFixture, unittest.TestCase):
             "settings_generation": self.read(backend, contact)["settings_generation"], "purpose_confirmed": True})
         self.assertEqual(status, 200, result)
         return result["layered_memory"]
+
+    def test_dirty_does_not_resume_failed_profile_or_refill_paused_budget(self):
+        from threading import Event
+        for paused in (False, True):
+            with self.subTest(paused=paused):
+                contact, _, _ = self.prepare_contact()
+                class FailOnce(ProfileVerification):
+                    def verify(self, *, scenarios, memories, proposal, deadline):
+                        value = super().verify(scenarios=scenarios, memories=memories, proposal=proposal, deadline=deadline)
+                        if len(self.inputs) == 1:
+                            raise RuntimeError('合成画像核验失败')
+                        return value
+                verifier = FailOnce()
+                backend = self.controlled(profile_verifier=verifier)
+                initial = self.enable(backend, contact)
+                if paused:
+                    initial = self._get_refresh(backend, contact, initial)
+                self.assertEqual(initial['status'], 'paused' if paused else 'failed')
+                status, result = self.backend.request('/api/memories/manual-contact', {
+                    'contact_id': contact, 'text': '另一次合成学习事实。', 'category': 'common_fact'})
+                self.assertEqual(status, 200, result)
+                for _ in range(12):
+                    state = self.read(backend, contact)
+                    self.assertEqual((state['work_id'], state['model_calls_used'], state['model_call_limit']),
+                        (initial['work_id'], 4, 4))
+                    self.assertEqual(state['status'], initial['status'])
+                    Event().wait(.05)
+                self.assertEqual(len(verifier.inputs), 1)
+                self.assertTrue(state['maintenance_pending'])
+                status, _ = backend.request(f'/api/contacts/{contact}/layered-memory/continue', {
+                    'settings_generation': state['settings_generation'], 'work_revision': state['work_revision']})
+                self.assertEqual(status, 409)
+                resumed = self._get_refresh(backend, contact, state)
+                self.assertEqual(resumed['status'], 'ready')
+                self.assertNotEqual(resumed['work_id'], initial['work_id'])
+                self.assertEqual((resumed['covered_count'], resumed['model_calls_used'], resumed['model_call_limit']), (2,4,4))
+                backend.close()
+
+    def test_committed_change_automatically_updates_both_layers_in_one_budget(self):
+        from threading import Event
+        from time import monotonic
+        contact, _, _ = self.prepare_contact()
+        backend = self.controlled(scenario_proposer=EchoProposal())
+        ready = self.enable(backend, contact)
+        snapshot = self.service.capture(ContactScope(self.owner_id, UUID(contact)))
+        status, result = self.backend.request('/api/memories/manual-contact', {
+            'contact_id': contact, 'text': '双方还一起参加合成练习。', 'category': 'common_fact'})
+        self.assertEqual(status, 200, result)
+        deadline = monotonic() + 5
+        while monotonic() < deadline:
+            updated = self.read(backend, contact)
+            if (updated['status'] == 'ready' and updated['covered_count'] == 2
+                    and updated['profile'] is not None):
+                break
+            Event().wait(.05)
+        self.assertEqual(updated['status'], 'ready', updated)
+        self.assertEqual(updated['covered_count'], 2)
+        self.assertNotEqual(updated['profile']['version_id'], ready['profile']['version_id'])
+        self.assertEqual(updated['budget']['model_calls_used'], 4)
+        self.assertEqual(updated['budget']['model_calls_remaining'], 0)
+        self.assertEqual(len(self.profile_proposer.inputs[-1][1]), 2)
+        self.assertFalse(self.service.validate(snapshot))
 
     def test_profile_has_direct_bottom_versions_and_frozen_consistent_directory(self):
         contact, _, memory = self.prepare_contact()
@@ -183,7 +246,17 @@ class LayeredProfileHttpTest(MemoryOverviewHttpFixture, unittest.TestCase):
             for before in (True,False):
                 with self.subTest(action=action,before=before):
                     contact,source,memory = self.prepare_contact()
+                    retired = {}
                     def mutate():
+                        if retired:
+                            return
+                        import psycopg
+                        with psycopg.connect(self.database_url) as db:
+                            for table in ('layered_profile_batch','layered_profile_version','layered_memory_generation'):
+                                key = 'organization_generation' if table == 'layered_memory_generation' else 'id'
+                                retired[table] = (key, [row[0] for row in db.execute(
+                                    f'SELECT {key} FROM public.{table} WHERE owner_id=%s AND contact_id=%s',
+                                    (self.owner_id,contact)).fetchall()])
                         if action == "source":
                             self.delete_source(contact,source)
                         else:
@@ -197,12 +270,19 @@ class LayeredProfileHttpTest(MemoryOverviewHttpFixture, unittest.TestCase):
                         self.assertIsNotNone(ready["profile"])
                         mutate()
                     current = self.read(backend,contact)
-                    self.assertEqual((current["status"],current["profile"],current["scenarios"]),("stale",None,[]))
+                    if action == 'source':
+                        self.assertIsNone(current['profile'])
+                        self.assertEqual(current['scenarios'], [])
+                    # 自动维护可发布修正后的合法版本；被撤销的实际输入及旧版本必须物理消失。
                     import psycopg
                     with psycopg.connect(self.database_url) as db:
-                        for table in ("layered_profile_batch","layered_profile_version","layered_memory_generation"):
-                            self.assertEqual(db.execute(f"SELECT count(*) FROM public.{table} WHERE owner_id=%s AND contact_id=%s",
-                                (self.owner_id,contact)).fetchone()[0],0,table)
+                        for table, (key, ids) in retired.items():
+                            self.assertFalse(db.execute(f'SELECT 1 FROM public.{table} WHERE owner_id=%s AND contact_id=%s AND {key}=ANY(%s)',
+                                (self.owner_id,contact,ids)).fetchone(), table)
+                        for table in ('layered_memory_batch', 'layered_profile_batch'):
+                            self.assertFalse(db.execute(f"SELECT 1 FROM public.{table} WHERE owner_id=%s AND contact_id=%s "
+                                "AND input_manifest @> %s::jsonb", (self.owner_id,contact,
+                                json.dumps([{'memory_id':memory['memory_id'],'revision':memory['revision']}]))).fetchone(), table)
 
     def test_late_profile_after_disable_or_delete_cannot_cross_reenable_aba(self):
         for action in ("disable","delete"):

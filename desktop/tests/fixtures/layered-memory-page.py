@@ -159,6 +159,10 @@ def main():
             operation = command["operation"]
             if operation == "delete_source":
                 result = fixture.delete_source(contact, source)
+            elif operation == "add_memory":
+                status, result = fixture.backend.request("/api/memories/manual-contact", {
+                    "contact_id": contact, "text": "双方新近完成合成复习。", "category": "common_fact"})
+                fixture.assertEqual(status, 200, result)
             elif operation == "runtime_proof":
                 result = {**proof, "proposal_calls": proposal.calls, "verification_calls": verification.calls,
                     "profile_proposal_calls": profile_proposal.calls, "profile_verification_calls": profile_verification.calls}

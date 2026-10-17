@@ -10,7 +10,7 @@ function time(value: string | null): string {
 }
 export function LayeredMemoryPanel({ state, contactName, busy, read, manage, facts }: {
   state: MemoryOverviewState<LayeredMemory>; contactName: string; busy: boolean;
-  read: () => Promise<void>; manage: (action: LayeredMemoryManagementRequest['action'], settingsGeneration: number, options?: Pick<LayeredMemoryManagementRequest, 'purposeConfirmed' | 'workRevision' | 'organizationGeneration' | 'profileVersionId'>) => Promise<void>;
+  read: (mappingCursor?: string | null) => Promise<void>; manage: (action: LayeredMemoryManagementRequest['action'], settingsGeneration: number, options?: Pick<LayeredMemoryManagementRequest, 'purposeConfirmed' | 'workRevision' | 'organizationGeneration' | 'profileVersionId'>) => Promise<void>;
   facts: () => void;
 }) {
   const [confirmed, setConfirmed] = useState(false);
@@ -22,7 +22,7 @@ export function LayeredMemoryPanel({ state, contactName, busy, read, manage, fac
     <header><div><h2>主题资料</h2><p>范围：仅当前联系人 {contactName}；不包含本人或其他联系人的资料。</p></div>
       <button className="button" disabled={waiting} onClick={() => void read()}>重新读取主题资料</button></header>
     {state.phase === 'loading' && <p role="status">正在核对当前范围的主题资料…</p>}
-    {state.phase === 'error' && <p role="alert">主题资料读取失败，旧内容已撤下。请重新读取。</p>}
+    {state.phase === 'error' && <p role="alert">主题资料读取失败或旧入口分页已过期，旧内容已撤下。请重新读取首屏。</p>}
     {state.phase === 'idle' && <p>尚未读取主题资料。首次不会自动开启。</p>}
     {value && <>
       <p>整理用途：{value.purpose}</p>
@@ -31,6 +31,7 @@ export function LayeredMemoryPanel({ state, contactName, busy, read, manage, fac
       {value.workId && <p>累计已用 {value.modelCallsUsed} / 已授权 {value.modelCallLimit} 次模型调用</p>}
       <p role={value.status === 'failed' || value.status === 'paused' ? 'alert' : 'status'}>{value.errorCode === 'model_call_budget_exhausted'
         ? '当前工作模型调用预算已耗尽，整理已暂停。刷新不会重置预算。' : statusNames[value.status]}</p>
+      {value.maintenancePending && <p role="status">资料已变化，等待后台更新。</p>}
       {value.remainingCount > 0 && value.coveredCount > 0 && <p>目前仅覆盖部分资料；剩余资料尚未整理。</p>}
       {value.qualityStatus === 'unknown' ? <div className="memory-section-note"><p>质量资格未知，资料不会发给模型。</p>
         <p>生产调用预算尚未标定；当前不开放真实资料整理或回复加载。</p></div>
@@ -86,7 +87,21 @@ export function LayeredMemoryPanel({ state, contactName, busy, read, manage, fac
         </> : <p>暂无可展示的长期背景。</p>}
       </section>
       {value.scenarios.length === 0 && value.status === 'ready' && <p>本批没有可展示的主题资料。</p>}
-      <div className="memory-overview-entries">{value.scenarios.map((scenario) => <article className="memory-card" key={scenario.versionId}>
+      {(value.mappingCursor || value.mappingNextCursor || value.scenarioMappings.length > 0) && <div>
+        <p>旧入口映射按页展示，更多目标请翻页。</p>
+        {value.mappingCursor && <button className="button" disabled={waiting} onClick={() => void read(null)}>返回旧入口首屏</button>}
+        {value.mappingNextCursor && <button className="button" disabled={waiting} onClick={() => void read(value.mappingNextCursor)}>下一页旧入口</button>}
+      </div>}
+      {value.scenarioMappings.length > 0 && <details className="memory-details"><summary>查看旧主题入口的当前去向</summary>
+        <p>旧入口仅用于查找当前合法主题；此处不展示旧版正文。</p>
+        {value.scenarioMappings.map((mapping) => <div key={`${mapping.sourceScenarioId}:${mapping.sourceVersionId}`}>
+          <p>旧主题：{mapping.sourceScenarioId} · 旧版本：{mapping.sourceVersionId}</p>
+          {mapping.targets.map((target) => <p key={target.versionId}><a href={`#layered-scenario-${target.versionId}`}>
+            查看当前主题：{value.scenarios.find((scenario) => scenario.versionId === target.versionId)?.title}
+          </a></p>)}
+        </div>)}
+      </details>}
+      <div className="memory-overview-entries">{value.scenarios.map((scenario) => <article className="memory-card" id={`layered-scenario-${scenario.versionId}`} key={scenario.versionId}>
         <div className="memory-card-labels"><h3>{scenario.title}</h3><b>系统整理</b></div>
         <p>{scenario.hint}</p><p className="memory-times">更新时间：{time(scenario.updatedAt)}</p>
         {scenario.paragraphs.map((paragraph, index) => <div key={index}><p className="memory-text">{paragraph.text}</p>

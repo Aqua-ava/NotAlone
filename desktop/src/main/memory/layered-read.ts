@@ -70,13 +70,30 @@ function profile(value: unknown): LayeredMemoryProfile | null {
 export function layeredMemory(value: unknown, contactId: string): LayeredMemory {
   const entry = record(record(value).layered_memory), budget = record(entry.budget);
   if (entry.schema_version !== 2 || entry.scope_kind !== 'contact' || identifier(entry.contact_id) !== contactId
-    || typeof entry.enabled !== 'boolean') throw invalid();
+    || typeof entry.enabled !== 'boolean' || typeof entry.maintenance_pending !== 'boolean') throw invalid();
   const maxModelCalls = integer(budget.max_model_calls), modelCallsUsed = integer(budget.model_calls_used),
     modelCallsRemaining = integer(budget.model_calls_remaining);
   if (modelCallsUsed > maxModelCalls || modelCallsRemaining !== maxModelCalls - modelCallsUsed) throw invalid();
   const qualityStatus = enumeration(entry.quality_status, ['unknown', 'synthetic']);
   const scenarios = list(entry.scenarios, scenario, 100), currentProfile = profile(entry.profile);
   if ((qualityStatus === 'unknown' && (scenarios.length > 0 || currentProfile !== null)) || new Set(scenarios.map((item) => item.scenarioId)).size !== scenarios.length) throw invalid();
+  const cursor = (value: unknown): string | null => {
+    if (value === null) return null;
+    if (typeof value !== 'string' || !/^[0-9]{1,18}:[0-9]{1,10}$/.test(value)) throw invalid();
+    return value;
+  };
+  const mappingCursor = cursor(entry.mapping_cursor), mappingNextCursor = cursor(entry.mapping_next_cursor);
+  const scenarioMappings = list(entry.scenario_mappings, (value) => {
+    const mapping = record(value);
+    const targets = list(mapping.targets, (value) => {
+      const target = record(value), scenarioId = identifier(target.scenario_id), versionId = identifier(target.version_id);
+      if (!scenarios.some((item) => item.scenarioId === scenarioId && item.versionId === versionId)) throw invalid();
+      return { scenarioId, versionId };
+    }, 100);
+    if (!targets.length || new Set(targets.map((item) => item.versionId)).size !== targets.length) throw invalid();
+    return { sourceScenarioId: identifier(mapping.source_scenario_id), sourceVersionId: identifier(mapping.source_version_id), targets };
+  }, 100);
+  if (scenarioMappings.reduce((count, item) => count + item.targets.length, 0) > 100) throw invalid();
   const eligibleCount = integer(entry.eligible_count), coveredCount = integer(entry.covered_count), remainingCount = integer(entry.remaining_count);
   if (coveredCount > eligibleCount || remainingCount > eligibleCount) throw invalid();
   const workId = entry.work_id === null ? null : identifier(entry.work_id), workRevision = integer(entry.work_revision),
@@ -85,6 +102,7 @@ export function layeredMemory(value: unknown, contactId: string): LayeredMemory 
     || (workId === null && (workRevision !== 0 || currentBatch !== 0 || modelCallsUsed !== 0))
     || (workId !== null && workRevision === 0)) throw invalid();
   return { schemaVersion: 2, scopeKind: 'contact', contactId, settingsGeneration: integer(entry.settings_generation), enabled: entry.enabled,
+    mappingCursor, mappingNextCursor, maintenancePending: entry.maintenance_pending, scenarioMappings,
     qualityStatus, status: enumeration(entry.status, ['disabled', 'ready', 'empty', 'failed', 'updating', 'stale', 'blocked', 'paused']),
     workId, workRevision, currentBatch, modelCallsUsed, modelCallLimit,
     eligibleCount, coveredCount, remainingCount, organizationGeneration: integer(entry.organization_generation), updatedAt: date(entry.updated_at),

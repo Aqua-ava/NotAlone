@@ -3,6 +3,7 @@
 from copy import deepcopy
 import json
 import math
+import inspect
 
 from notalone.memory.layered import OrganizationBudget, OrganizationBudgetExhausted, LayeredMemoryConflict
 from notalone.memory.scenario_validation import validate_proposal
@@ -22,6 +23,7 @@ class LayeredMemoryService:
             raise ValueError("整理调用必须有不超过120秒的有限等待。")
         self._call_timeout_seconds = call_timeout_seconds
         self._task_host = task_host
+        self._change_feed = None
         self._dispatcher = dispatcher
         self._contract = "scenario-v3:synthetic-only:deadline-v1:coverage-v1"
         self._store, self._proposer, self._verifier = store, proposer, verifier
@@ -31,6 +33,11 @@ class LayeredMemoryService:
                 raise ValueError("受控整理须分别注入提案和独立核验适配器。")
             require_adapter_timeout_contract(proposer, "propose", synthetic=True)
             require_adapter_timeout_contract(verifier, "verify", synthetic=True)
+        self._scenario_context = bool(synthetic and
+            'scenarios' in inspect.signature(proposer.propose).parameters and
+            'scenarios' in inspect.signature(verifier.verify).parameters)
+        if self._scenario_context:
+            self._contract += ':scenario-context-v1'
         self._profile_proposer, self._profile_verifier = profile_proposer, profile_verifier
         if (profile_proposer is None) != (profile_verifier is None):
             raise ValueError("长期背景须同时装配独立提案和核验适配器。")
@@ -54,6 +61,23 @@ class LayeredMemoryService:
         if self._dispatcher is None:
             self._dispatcher=dispatcher
 
+    def start_maintenance(self, owner_id):
+        if self._synthetic and (self._task_host is not None or self._dispatcher is not None) and owner_id is not None and self._change_feed is None:
+            def dispatch_due():
+                scopes, delay = self._store.maintenance_due(owner_id)
+                for scope in scopes:
+                    task_id = self._store.enqueue_maintenance(scope, self._budget, self._contract,
+                        profile_required=self._profile_proposer is not None)
+                    if task_id is not None:
+                        self._dispatch(scope, task_id)
+                return delay
+            self._change_feed = self._store.start_change_feed(owner_id, dispatch_due)
+
+    def stop(self):
+        self._priority.stop()
+        if self._change_feed is not None:
+            self._change_feed.stop()
+
     def resume_pending(self, owner_id):
         if not self._synthetic or self._task_host is None or owner_id is None:
             return
@@ -62,12 +86,12 @@ class LayeredMemoryService:
             if task_id is not None:
                 self._dispatch(scope,task_id)
 
-    def read(self, scope):
+    def read(self, scope, *, mapping_cursor=None):
         if self._synthetic:
             task_id=self._store.pending(scope,self._contract)
             if task_id is not None:
                 self._dispatch(scope,task_id)
-        state, entries, scenarios, job = self._store.read(scope)
+        state, entries, scenarios, job = self._store.read(scope, mapping_cursor=mapping_cursor)
         covered = state["covered_count"]
         used = job["model_calls_used"] if job else 0
         limit = job["model_call_limit"] if job else self._budget.max_model_calls
@@ -84,6 +108,10 @@ class LayeredMemoryService:
                 "organization_generation": state["organization_generation"],
                 "updated_at": state["updated_at"].isoformat() if state["updated_at"] else None,
                 "error_code": state["error_code"], "scenarios": scenarios, "profile": state["profile"],
+                "maintenance_pending": state["dirty_revision"] > state["consumed_revision"],
+                "scenario_mappings": state["scenario_mappings"],
+                "mapping_cursor": state["mapping_cursor"],
+                "mapping_next_cursor": state["mapping_next_cursor"],
                 "purpose": "从本联系人已采纳且来历有效的记忆整理主题背景，供查看及后续受控回复使用。",
                 "budget": {**self._budget.to_payload(), "max_model_calls": limit,
                     "model_calls_used": used, "model_calls_remaining": limit-used}}
@@ -125,23 +153,27 @@ class LayeredMemoryService:
         if not self._synthetic:
             raise PermissionError('整理质量资格尚未获准。')
         scope=ContactScope(claim.owner_id,claim.contact_id)
-        work = self._store.prepare(scope,self._budget,self._contract,claim)
+        work = self._store.prepare(scope,self._budget,self._contract,claim, with_scenarios=self._scenario_context)
         if work is None:
             if self._profile_proposer:
                 self._organize_profile(scope,claim)
             return 0
         try:
             raw = self._call(work, self._proposer, "propose", lambda deadline: self._proposer.propose(
-                memories=deepcopy(work.memories), budget=self._budget, deadline=deadline))
-            proposal = validate_proposal(raw, work.memories, self._budget)
+                memories=deepcopy(work.memories), budget=self._budget, deadline=deadline,
+                **({"scenarios": deepcopy(work.scenarios)} if self._scenario_context else {})))
+            proposal = validate_proposal(raw, work.memories, self._budget, scenarios=work.scenarios)
             self._store.record_proposal(work, raw)
             # 核验实际接收全部记忆和完整提案，两者合计仍受单次输入上限约束。
             verification_input = {"memories": [item.to_payload() for item in work.memories], "proposal": raw}
+            if self._scenario_context:
+                verification_input["scenarios"] = work.scenarios
             if len(json.dumps(verification_input, ensure_ascii=False)) > self._budget.max_characters:
                 self._store.fail(work, "verification_input_budget_exceeded")
                 return 0
             supported = self._call(work, self._verifier, "verify", lambda deadline: self._verifier.verify(
-                memories=deepcopy(work.memories), proposal=deepcopy(raw), deadline=deadline))
+                memories=deepcopy(work.memories), proposal=deepcopy(raw), deadline=deadline,
+                **({"scenarios": deepcopy(work.scenarios)} if self._scenario_context else {})))
             if supported is not True:
                 self._store.fail(work, "faithfulness_rejected")
                 return 0

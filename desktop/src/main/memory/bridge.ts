@@ -44,9 +44,13 @@ export function installMemoryBridge(commands: PageCommands, backend: BackendHost
     return memory.refreshOwnerOverview(request);
   }, 'manager');
   commands.handle('memory:read-layered-memory', (...args: unknown[]) => {
-    const request = requestArguments(args);
-    if (request.section !== undefined) throw new Error('主题资料读取不可用。');
-    return memory.readLayeredMemory(request);
+    const fields = args[0] as Record<string, unknown> | undefined;
+    if (args.length !== 1 || !fields || typeof fields !== 'object' || Array.isArray(fields)
+      || !Object.keys(fields).every((key) => ['contactId', 'scopeRevision', 'mappingCursor'].includes(key))
+      || (fields.mappingCursor !== undefined && fields.mappingCursor !== null
+        && (typeof fields.mappingCursor !== 'string' || !/^[0-9]{1,18}:[0-9]{1,10}$/.test(fields.mappingCursor)))) throw new Error('主题资料读取不可用。');
+    const request = requestArguments([{ contactId: fields.contactId, scopeRevision: fields.scopeRevision }]);
+    return memory.readLayeredMemory({ ...request, mappingCursor: fields.mappingCursor as string | null | undefined });
   }, 'manager');
   commands.handle('memory:manage-layered-memory', (...args: unknown[]) => memory.manageLayeredMemory(layeredMemoryArguments(args)), 'manager');
   commands.handle('memory:add', (...args: unknown[]) => memory.add(additionArguments(args)), 'manager');
