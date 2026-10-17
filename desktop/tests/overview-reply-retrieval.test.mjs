@@ -15,6 +15,12 @@ test('真实HTTP保存的主题正文依据穿过生产解析与React，历史�
       const prepared = await fixture.command('prepared');
       const actual = await fixture.command('saved_scenario_evidence');
       await writeFile(path.join(directory, 'actual-saved-evidence.json'), JSON.stringify(actual), { mode: 0o600 });
+      // 完整GET结果先原样进入生产解析器，不改任何请求身份或正文。
+      const parsed = await ports.readReplyEvidence({ requestJson: async () => ({ data: actual, generation: 1 }) },
+        prepared.contact_id, actual.reply_request_id, new AbortController().signal);
+      assert.equal(parsed.layeredContext.schemaVersion, 2);
+      assert.equal(parsed.layeredScenarioReads[0].document.versionId, prepared.scenario_version_id);
+      assert.deepEqual(parsed.layeredScenarioReads[0].document.paragraphRange, [0, 1]);
       const f = await generatedFixture((f) => {
         Object.assign(f.records.evidence, actual, { reply_request_id: f.requestId });
         f.records.saved.turns[0].reply.candidates[0].citation_ids = actual.evidence.filter((item) => item.cited).map((item) => item.evidence_id);
