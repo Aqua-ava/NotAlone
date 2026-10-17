@@ -40,6 +40,7 @@ class OrganizationWork:
     scenarios: tuple[dict, ...] = ()
     organization_generation: int = 0
     correction_revision: int = 0
+    corrections: tuple[dict, ...] = ()
 
 
 class PostgresLayeredMemoryStore(LayeredProfileStore, LayeredCorrectionStore):
@@ -306,7 +307,7 @@ class PostgresLayeredMemoryStore(LayeredProfileStore, LayeredCorrectionStore):
             if any(job['state'] == 'active' and job['settings_generation'] == state['settings_generation']
                    for job in current_job(connection, scope)):
                 return None
-            entries = self.eligible(overview)
+            entries = self.unprotected(connection, scope, self.eligible(overview))
             manifest = self._manifest(connection, scope, entries)
             dependencies = {entry.memory.memory_id for entry in entries}
             dependencies.update(identifier for entry in entries for identifier in entry.dependency_ids)
@@ -391,8 +392,10 @@ class PostgresLayeredMemoryStore(LayeredProfileStore, LayeredCorrectionStore):
             target={item['memory_id'] for item in job['target_manifest']}
             entries=tuple(entry for entry in self.unprotected(connection, scope, self.eligible(overview)) if str(entry.memory.memory_id) in target-covered)
             selected=[]
+            corrections = self.correction_context(connection, scope)
             for entry in entries[:budget.max_memories]:
-                payload=[self._input(item).to_payload() for item in selected]+[self._input(entry).to_payload()]
+                payload={'memories': [self._input(item).to_payload() for item in selected]+[self._input(entry).to_payload()],
+                         'corrections': corrections}
                 if len(json.dumps(payload,ensure_ascii=False))>budget.max_characters:
                     break
                 selected.append(entry)
@@ -414,7 +417,7 @@ class PostgresLayeredMemoryStore(LayeredProfileStore, LayeredCorrectionStore):
                     combined = [entry for entry in eligible if str(entry.memory.memory_id) in combined_ids]
                     document = self._document(previous)
                     payload = {'memories': [self._input(item).to_payload() for item in combined],
-                               'scenarios': contexts + [document]}
+                               'scenarios': contexts + [document], 'corrections': corrections}
                     if len(combined) > budget.max_memories or len(json.dumps(payload, ensure_ascii=False)) > budget.max_characters:
                         continue
                     selected = combined
@@ -426,6 +429,7 @@ class PostgresLayeredMemoryStore(LayeredProfileStore, LayeredCorrectionStore):
             dependencies={entry.memory.memory_id for entry in entries}
             dependencies.update(identifier for entry in entries for identifier in entry.dependency_ids)
             dependencies.update(inherited)
+            dependencies.update(identifier for row in self.feedback_rows(connection, scope) for identifier in row['dependency_ids'])
             id=uuid4()
             key=_digest({'job':str(claim.task_id),'inputs':manifest})
             connection.execute("INSERT INTO public.layered_memory_batch(id,owner_id,contact_id,settings_generation,work_key,status,"
@@ -434,10 +438,11 @@ class PostgresLayeredMemoryStore(LayeredProfileStore, LayeredCorrectionStore):
                  Jsonb([item.to_payload() for item in memories]),sorted(dependencies),self._clock(),claim.task_id))
             connection.execute("UPDATE public.layered_memory_batch SET scenario_input=%s,reused_version_ids=%s WHERE id=%s",
                                (Jsonb(contexts), [UUID(item['version_id']) for item in contexts], id))
+            connection.execute('UPDATE public.layered_memory_batch SET correction_input=%s WHERE id=%s', (Jsonb(corrections), id))
             connection.execute("UPDATE public.layered_memory_state SET status='updating',error_code=NULL WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s",
                                (scope.owner_id,scope.contact_id))
             return OrganizationWork(id,scope,state['settings_generation'],memories,manifest,claim,
-                                    tuple(contexts),state['organization_generation'],state['correction_revision'])
+                                    tuple(contexts),state['organization_generation'],state['correction_revision'],corrections)
 
     def generation_rows(self, connection, scope, generation):
         manifest = connection.execute("SELECT * FROM public.layered_memory_generation WHERE owner_id=%s "

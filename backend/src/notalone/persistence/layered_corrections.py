@@ -10,6 +10,37 @@ from notalone.persistence.reply_cleanup import delete_source_replies
 
 
 class LayeredCorrectionStore:
+    def correction_context(self, connection, scope):
+        return tuple({'feedback_id': str(row['id']), 'rejected_text': row['rejected_text'],
+            'reason': row['reason'], 'rule': 'independent-literal-v1'}
+            for row in self.feedback_rows(connection, scope))
+
+    def report_fact_error(self, scope, command):
+        with self.transaction(scope) as (connection, state, overview):
+            if (state['settings_generation'] != command['settings_generation']
+                    or state['organization_generation'] != command['organization_generation']):
+                raise LayeredMemoryConflict('整理版本或设置已变化。')
+            generation, rows = self.generation_rows(connection, scope, state['organization_generation'])
+            version = UUID(command['version_id'])
+            if command['target_kind'] == 'scenario':
+                target = next((row for row in rows if row['id'] == version), None)
+                items = target['paragraphs'] if target else []
+            else:
+                target = self.profile_row(connection, scope, version) if generation and generation['profile_version_id'] == version else None
+                items = target['entries'] if target and not target['withdrawn'] else []
+            index = command['item_index']
+            if index >= len(items):
+                raise LayeredMemoryConflict('事实目标已失效。')
+            selected = UUID(command['memory_id'])
+            if selected not in {UUID(ref['memory_id']) for ref in items[index]['references']}:
+                raise LayeredMemoryConflict('只能修正该项实际引用的底层记忆。')
+            entry = next((entry for entry in overview.entries if entry.memory.memory_id == selected), None)
+            if not entry or not entry.current_leaf:
+                raise LayeredMemoryConflict('实际底层叶版本不可核对。')
+            self._retract_correction_target(connection, scope, command['target_kind'], version)
+            cancel_jobs(connection, scope)
+            return {'memory_id': str(entry.current_leaf.memory_id), 'revision': entry.current_leaf.revision}
+
     def feedback_rows(self, connection, scope):
         return connection.execute('SELECT * FROM public.layered_memory_feedback WHERE owner_id=%s '
             'AND contact_id IS NOT DISTINCT FROM %s ORDER BY created_at,id',
@@ -62,7 +93,8 @@ class LayeredCorrectionStore:
             if index >= len(items):
                 raise LayeredMemoryConflict('反馈目标已失效。')
             item = items[index]
-            ids = {UUID(ref['memory_id']) for ref in item['references']}
+            # 模型实际看过但未引用的输入也可能影响错误含义，未知时保护完整旧窗口。
+            ids = {UUID(ref['memory_id']) for ref in target['input_manifest']}
             entries = [entry for entry in overview.entries if entry.memory.memory_id in ids]
             if len(entries) != len(ids) or not entries:
                 raise LayeredMemoryConflict('目标的实际底层版本不可核对。')
@@ -73,23 +105,26 @@ class LayeredCorrectionStore:
                 (uuid4(), scope.owner_id, scope.contact_id, operation, digest, state['settings_generation'],
                  command['target_kind'], version, index, command['reason'], item['text'], Jsonb(target['input_manifest']),
                  target['dependency_ids'], sorted(ids), sorted(messages)))
-            self._retract_correction_inputs(connection, scope, ids)
+            self._retract_correction_target(connection, scope, command['target_kind'], version)
             cancel_jobs(connection, scope)
             connection.execute('UPDATE public.layered_memory_state SET correction_revision=correction_revision+1,'
                 "dirty_revision=dirty_revision+1,next_due_at=clock_timestamp(),error_code='correction_protected' "
                 'WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s', (scope.owner_id, scope.contact_id))
 
-    def _retract_correction_inputs(self, connection, scope, ids):
-        # 先收集所有实际看过该输入的版本，再擦回复、准备、讨论与恢复副本。
-        rows = connection.execute('SELECT v.id FROM public.scenario_document_version v JOIN public.layered_memory_batch b '
-            'ON b.id=v.batch_id WHERE b.owner_id=%s AND b.contact_id IS NOT DISTINCT FROM %s AND b.dependency_ids && %s::uuid[] '
-            'UNION SELECT v.id FROM public.layered_profile_version v JOIN public.layered_profile_batch b '
-            'ON b.id=v.batch_id WHERE b.owner_id=%s AND b.contact_id IS NOT DISTINCT FROM %s AND b.dependency_ids && %s::uuid[]',
-            (scope.owner_id, scope.contact_id, list(ids)) * 2).fetchall()
-        if rows:
-            delete_source_replies(connection, owner_id=scope.owner_id, contact_id=scope.contact_id,
-                removed_ids={row['id'] for row in rows}, revoke_running_scope=False)
-        connection.execute('DELETE FROM public.layered_memory_batch WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s '
-            'AND dependency_ids && %s::uuid[]', (scope.owner_id, scope.contact_id, list(ids)))
-        connection.execute('DELETE FROM public.layered_profile_batch WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s '
-            'AND dependency_ids && %s::uuid[]', (scope.owner_id, scope.contact_id, list(ids)))
+    def _retract_correction_target(self, connection, scope, kind, version):
+        # 反馈不是来源删除：同批次里已准入、未被反馈的独立主题保留。
+        profiles = connection.execute('SELECT v.id FROM public.layered_profile_version v '
+            'JOIN public.layered_profile_batch b ON b.id=v.batch_id WHERE b.owner_id=%s '
+            'AND b.contact_id IS NOT DISTINCT FROM %s AND %s=ANY(b.scenario_version_ids)',
+            (scope.owner_id, scope.contact_id, version)).fetchall() if kind == 'scenario' else []
+        delete_source_replies(connection, owner_id=scope.owner_id, contact_id=scope.contact_id,
+            removed_ids={version, *(row['id'] for row in profiles)}, revoke_running_scope=False)
+        if kind == 'scenario':
+            connection.execute('DELETE FROM public.scenario_document_version WHERE id=%s', (version,))
+        else:
+            state = connection.execute('SELECT organization_generation FROM public.layered_memory_state '
+                'WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s', (scope.owner_id, scope.contact_id)).fetchone()
+            _, rows = self.generation_rows(connection, scope, state['organization_generation'])
+            connection.execute('UPDATE public.layered_profile_version SET withdrawn=true WHERE id=%s', (version,))
+            self.publish_generation_in_transaction(connection, scope, expected_generation=state['organization_generation'],
+                scenario_version_ids=[row['id'] for row in rows])

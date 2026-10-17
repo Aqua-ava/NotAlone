@@ -110,7 +110,7 @@ def enqueue_coverage(connection, scope, state, manifest, dependencies, contract,
         connection.execute("UPDATE public.background_task SET status='succeeded',finished_at=now() WHERE id=%s",(task_id,))
         connection.execute("UPDATE public.background_task_step SET status='succeeded',finished_at=now() WHERE task_id=%s",(task_id,))
         connection.execute("UPDATE public.layered_memory_state SET status=%s,covered_count=%s,error_code=NULL WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s",
-            ('ready' if manifest else 'empty',len(manifest),scope.owner_id,scope.contact_id))
+            ('ready' if manifest or covered else 'empty',len(covered | {item['memory_id'] for item in manifest}),scope.owner_id,scope.contact_id))
         connection.execute("UPDATE public.layered_memory_state SET consumed_revision=dirty_revision WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s",
                            (scope.owner_id,scope.contact_id))
         return task_id,False

@@ -26,6 +26,8 @@ class ProfileWork:
     manifest: list
     budget_batch_id: UUID
     claim: ClaimedBackgroundTaskStep
+    correction_revision: int = 0
+    corrections: tuple[dict, ...] = ()
 
 
 class LayeredProfileStore:
@@ -60,13 +62,14 @@ class LayeredProfileStore:
             ids = tuple(row["id"] for row in rows)
             # 全部实际读入L2批次的底层版本和隐藏依赖都继承，不能从直接引用反推。
             by_id = {item["memory_id"]: item for row in rows for item in row["input_manifest"]}
-            entries = tuple(entry for entry in self.eligible(overview) if str(entry.memory.memory_id) in by_id)
+            entries = tuple(entry for entry in self.unprotected(connection, scope, self.eligible(overview)) if str(entry.memory.memory_id) in by_id)
             manifest = self._manifest(connection,scope,entries)
             if {item["memory_id"]: item for item in manifest} != by_id:
                 raise LayeredMemoryConflict("主题的底层实际版本已失效。")
             memories = tuple(self._input(entry) for entry in entries)
             scenarios = tuple(self._document(row) for row in rows)
-            payload = {"scenarios": list(scenarios), "memories": [item.to_payload() for item in memories]}
+            corrections = self.correction_context(connection, scope)
+            payload = {"scenarios": list(scenarios), "memories": [item.to_payload() for item in memories], 'corrections': corrections}
             if len(json.dumps(payload,ensure_ascii=False)) > budget.max_characters:
                 connection.execute("UPDATE public.layered_memory_state SET status='failed',error_code='profile_input_budget_exceeded' "
                     "WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s", (scope.owner_id,scope.contact_id))
@@ -107,6 +110,7 @@ class LayeredProfileStore:
                     (scope.owner_id,scope.contact_id,now,key)).fetchone():
                 return None
             dependencies = sorted({id for row in rows for id in row["dependency_ids"]})
+            dependencies = sorted(set(dependencies) | {id for row in self.feedback_rows(connection, scope) for id in row['dependency_ids']})
             token, id = uuid4(), previous["id"] if previous else uuid4()
             if previous:
                 connection.execute("UPDATE public.layered_profile_batch SET work_token=%s,status='running',attempt_count=attempt_count+1,"
@@ -121,7 +125,8 @@ class LayeredProfileStore:
                     now+timedelta(seconds=lease_seconds),list(ids),Jsonb(manifest),Jsonb(payload),dependencies,now))
             connection.execute("UPDATE public.layered_memory_state SET status='updating',error_code=NULL WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s",
                 (scope.owner_id,scope.contact_id))
-            return ProfileWork(id,token,scope,state["settings_generation"],state["organization_generation"],ids,memories,scenarios,manifest,budget_batch_id,claim)
+            connection.execute('UPDATE public.layered_profile_batch SET correction_input=%s WHERE id=%s', (Jsonb(corrections), id))
+            return ProfileWork(id,token,scope,state["settings_generation"],state["organization_generation"],ids,memories,scenarios,manifest,budget_batch_id,claim,state['correction_revision'],corrections)
 
     def _check_profile(self, connection, state, overview, work):
         self._assert_claim(connection,work.claim)
@@ -130,6 +135,7 @@ class LayeredProfileStore:
         generation, rows = self.generation_rows(connection,work.scope,state["organization_generation"])
         current = {item["memory_id"]: item for item in self._manifest(connection,work.scope,self.eligible(overview))}
         if (not state["enabled"] or state["settings_generation"] != work.settings_generation
+                or state['correction_revision'] != work.correction_revision
                 or state["organization_generation"] != work.organization_generation
                 or not generation or {r["id"] for r in rows} != set(work.scenario_version_ids)
                 or not batch or batch["status"] != "running" or batch["work_token"] != work.token

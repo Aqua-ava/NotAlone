@@ -9,6 +9,7 @@ from notalone.memory.layered import OrganizationBudget, OrganizationBudgetExhaus
 from notalone.memory.scenario_validation import validate_proposal
 from notalone.memory.owner_organization_input import owner_model_memories, owner_model_scenarios
 from notalone.memory.profile_validation import validate_profile
+from notalone.memory.layered_correction_validation import validate_correction_proposal
 from notalone.application.model_priority import ModelPriorityControl, ModelWorkStopped
 from notalone.application.organization_call import (
     bounded_organization_call, OrganizationCallTimeout, require_adapter_timeout_contract,
@@ -26,7 +27,7 @@ class LayeredMemoryService:
         self._task_host = task_host
         self._change_feed = None
         self._dispatcher = dispatcher
-        self._contract = "scenario-v3:synthetic-only:deadline-v1:coverage-v1"
+        self._contract = "scenario-v3:synthetic-only:deadline-v1:coverage-v1:correction-v1"
         self._store, self._proposer, self._verifier = store, proposer, verifier
         if synthetic:
             store.require_synthetic_database()
@@ -168,11 +169,15 @@ class LayeredMemoryService:
         try:
             raw = self._call(work, self._proposer, "propose", lambda deadline: self._proposer.propose(
                 memories=self._model_memories(work), budget=self._budget, deadline=deadline,
+                **self._correction_arguments(self._proposer, 'propose', work),
                 **({"scenarios": self._model_scenarios(work)} if self._scenario_context else {})))
             proposal = validate_proposal(raw, work.memories, self._budget, scenarios=work.scenarios)
+            validate_correction_proposal(work, proposal)
             self._store.record_proposal(work, raw)
             # 核验实际接收全部记忆和完整提案，两者合计仍受单次输入上限约束。
             verification_input = {"memories": [item.to_payload() for item in self._model_memories(work)], "proposal": raw}
+            if work.corrections:
+                verification_input['corrections'] = work.corrections
             if self._scenario_context:
                 verification_input["scenarios"] = self._model_scenarios(work)
             if len(json.dumps(verification_input, ensure_ascii=False)) > self._budget.max_characters:
@@ -180,6 +185,7 @@ class LayeredMemoryService:
                 return 0
             supported = self._call(work, self._verifier, "verify", lambda deadline: self._verifier.verify(
                 memories=self._model_memories(work), proposal=deepcopy(raw), deadline=deadline,
+                **self._correction_arguments(self._verifier, 'verify', work),
                 **({"scenarios": self._model_scenarios(work)} if self._scenario_context else {})))
             if supported is not True:
                 self._store.fail(work, "faithfulness_rejected")
@@ -202,6 +208,14 @@ class LayeredMemoryService:
         except Exception:
             self._store.fail(work, "model_call_failed")
         return 0
+
+    @staticmethod
+    def _correction_arguments(adapter, operation, work):
+        if not work.corrections:
+            return {}
+        if 'corrections' not in inspect.signature(getattr(adapter, operation)).parameters:
+            raise ValueError('适配器尚未实现整理纠错对照合同。')
+        return {'corrections': deepcopy(work.corrections)}
 
     @staticmethod
     def _model_memories(work):
@@ -253,28 +267,37 @@ class LayeredMemoryService:
             self.organize(scope)
         return self.read(scope)
 
+    def report_fact_error(self, scope, command):
+        target = self._store.report_fact_error(scope, command)
+        return {**self.read(scope), 'correction_target': target}
+
     def withdraw_profile(self, scope, settings_generation, organization_generation, profile_version_id):
         self._store.withdraw_profile(scope,settings_generation,organization_generation,profile_version_id)
         return self.read(scope)
 
     def _organize_profile(self, scope, claim):
-        work = self._store.prepare_profile(scope,self._budget,"profile-v1:synthetic-only:deadline-v1" +
+        work = self._store.prepare_profile(scope,self._budget,"profile-v1:synthetic-only:deadline-v1:correction-v1" +
             (":owner-input-v1" if scope.contact_id is None else ""),
             lease_seconds=self._call_timeout_seconds * 2 + 5,claim=claim)
         if work is None:
             return
         try:
             raw = self._call(work,self._profile_proposer,"propose",lambda deadline: self._profile_proposer.propose(
-                scenarios=self._model_scenarios(work),memories=self._model_memories(work),budget=self._budget,deadline=deadline),
+                scenarios=self._model_scenarios(work),memories=self._model_memories(work),budget=self._budget,deadline=deadline,
+                **self._correction_arguments(self._profile_proposer, 'propose', work)),
                 guard=lambda: self._store.check_profile(work))
             proposal = validate_profile(raw,work.memories,self._budget)
+            validate_correction_proposal(work, proposal, profile=True)
             self._store.record_profile_proposal(work,raw)
             payload = {"scenarios": list(self._model_scenarios(work)),"memories": [item.to_payload() for item in self._model_memories(work)],"proposal": raw}
+            if work.corrections:
+                payload['corrections'] = work.corrections
             if len(json.dumps(payload,ensure_ascii=False)) > self._budget.max_characters:
                 self._store.fail_profile(work,"profile_verification_input_budget_exceeded")
                 return
             supported = self._call(work,self._profile_verifier,"verify",lambda deadline: self._profile_verifier.verify(
-                scenarios=self._model_scenarios(work),memories=self._model_memories(work),proposal=deepcopy(raw),deadline=deadline),
+                scenarios=self._model_scenarios(work),memories=self._model_memories(work),proposal=deepcopy(raw),deadline=deadline,
+                **self._correction_arguments(self._profile_verifier, 'verify', work)),
                 guard=lambda: self._store.check_profile(work))
             if supported is not True:
                 self._store.fail_profile(work,"profile_faithfulness_rejected")

@@ -1,5 +1,7 @@
 -- 整理反馈独立于正确事实；无正文保护只在旧合法依据仍存在时保留。
 ALTER TABLE public.layered_memory_state ADD COLUMN correction_revision bigint NOT NULL DEFAULT 0;
+ALTER TABLE public.layered_memory_batch ADD COLUMN correction_input jsonb NOT NULL DEFAULT '[]' CHECK(jsonb_typeof(correction_input)='array');
+ALTER TABLE public.layered_profile_batch ADD COLUMN correction_input jsonb NOT NULL DEFAULT '[]' CHECK(jsonb_typeof(correction_input)='array');
 CREATE TABLE public.layered_memory_feedback (
     id uuid PRIMARY KEY,
     owner_id uuid NOT NULL REFERENCES public.owner(id) ON DELETE CASCADE,
