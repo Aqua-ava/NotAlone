@@ -1,8 +1,8 @@
 # 05：独立分发的完整两路验收与交付检查
 
 Type: task
-State: claimed
-Triage: ready-for-agent
+State: open
+Triage: needs-info
 Blocked by: 06, 04
 Spec: ../manual-first-release.md
 
@@ -29,3 +29,5 @@ Spec: ../manual-first-release.md
 - 2026-10-17：v2材料294来源／667通知已实际带入新普通包，严格签名、ZIP CRC和功能文件完全同版核对通过；精确解析图／上游provenance保留为边界，不据此要求所有wheel重建。已确认剩余一个可工程收口的交接差距：可脱离私有仓库运行的改库kit及安装新副本步骤；账号／新机器和真实模型资源仍未取得，不宣称正式可交付。
 - 2026-10-17：新增v2 Computer Use首启／重复打开／正常退出分项通过，第二实例exit0、原后台与PG未重建，本轮自有资源清理完成。仅补齐重复启动分项，不据此勾选含更新中断／失败的完整组合项。手动路径不请求新增微信或系统权限，相关权限拒绝场保留给后续真实渠道验收。
 - 2026-10-17：已补实际缺少的独立离线改库kit和原App新副本安装工具。接收者无需私有repo／dist／npm／共享cache／Conda，可提交外部补丁、核对完整来源和安装后字节，在副本本地ad-hoc签名；标准builder自动加入licenses。实际仓库外重建与副本内60迁移／dump-restore通过，294来源／667通知基础库存保留，开发工具通知另索引。此项关闭具体交接材料缺口，不新增全部上游flags／PG18字节复现门槛，也不认证干净Mac、真实模型、正式签名或新副本完整GUI路径，见[本轮验证](../../../desktop/scripts/runtime/PSYCOPG-VALIDATION.md)。
+
+- 2026-10-17：本机内部交付完成，真实模型、目标Mac、正式签名公证及余下同版组合尚未完成。当前没有活跃执行，从claimed退回open／needs-info，待验收资源明确后续接；04、06已关闭，不因本任务尚未完成而重复认领。

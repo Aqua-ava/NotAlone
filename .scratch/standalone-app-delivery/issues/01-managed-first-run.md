@@ -1,8 +1,8 @@
 # 01：独立安装包完成本机首次设置
 
 Type: task
-State: claimed
-Triage: ready-for-agent
+State: open
+Triage: needs-info
 Blocked by: None
 Spec: ../spec.md
 
@@ -40,3 +40,5 @@ Spec: ../spec.md
 - 2026-10-17：后续材料提交`5b3a7375`已独立两轴0发现并集成`400bc0de`，实际294来源／667通知；v2仅刷新licenses，8311功能文件及组件完全同v1，再通过60迁移／真实恢复和严格签名／ZIP核对。tiktoken已知材料缺口已闭合，精确上游构建图不作为新增门槛；当前具体缺交付物是脱离私有仓库的开源改库重建kit及装入App新副本的说明，另有真实模型、干净Mac与正式签名公证待验，保持claimed。
 - 2026-10-17：主Agent以v2普通包独立空资料做Computer Use首启／重复打开／原生命令退出。第二Main正常退出，原Main／后台／PG PID不变且原窗口仍已连接；本轮自有进程、握手及临时目录全部收尾，未操作现有用户实例。结合既有取消、缺损与崩溃恢复回归，勾选对应行为项；未扩称真正干净Mac或完整v2组合验收。
 - 2026-10-17：脱离私有仓库的组件修改kit及App新副本安装入口已实现，标准builder自动携带固定开发Python／三个wheel和原始通知。仓库外真实应用接收者补丁、编译两个扩展，修改副本通过库存／62原生审核／严格签名、60迁移和真实备份恢复；原App9,601项库存前后同，ASAR不变。新入口未以旧v4界面结果冒充通过，公开App由主Agent另验；干净Mac、真实模型和正式签名仍保留，见[修改库验证](../../../desktop/scripts/runtime/PSYCOPG-VALIDATION.md)。
+
+- 2026-10-17：收尾核对确认本机实现及内部试用已归档，真正无开发环境目标Mac仍未验。当前没有活跃执行，从claimed退回open／needs-info，等待目标环境条件；保留未勾选项，不伪装为resolved。

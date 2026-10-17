@@ -2,7 +2,7 @@
 
 Type: task
 State: open
-Triage: ready-for-agent
+Triage: needs-info
 Blocked by: 02
 Spec: ../spec.md
 
@@ -21,3 +21,5 @@ Spec: ../spec.md
 ## Comments
 
 - 2026-10-16：按用户批准拆分发布，依赖任务02。
+
+- 2026-10-17：按用户接受手动首版的决定，与02一起延期。Triage改为needs-info，避免作为当前可执行任务；待新的安全可行接入方案明确后再评估，不重复被中止的初始化路线。
