@@ -22,7 +22,7 @@ export async function layeredReply(browser: Browser, origin: string) {
       const ownerBackground = evidence.getByRole('region', { name: '本次本人系统整理资料', exact: true });
       const ownerReads = evidence.getByRole('region', { name: '本次本人主题正文读取', exact: true });
       const hasOwner = Boolean(prepared.owner_profile_version_id);
-      async function generate(contactId: string, context: boolean, text: string, readScenario = false) {
+      async function generate(contactId: string, context: boolean, text: string, readScenario = false, expectedTimeoutMs = 5_000) {
         await helper.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption(contactId);
         await confirmHelperContact(helper, contactId);
         await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('聊聊共同参加的课程。');
@@ -32,7 +32,7 @@ export async function layeredReply(browser: Browser, origin: string) {
         // 后续同输入轮显式重新生成，避免复用上一轮的幂等请求。
         const regenerate = helper.getByRole('button', { name: '重新生成', exact: true });
         await (await regenerate.count() ? regenerate : helper.getByRole('button', { name: '生成候选', exact: true })).click();
-        try { await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveValue(text); }
+        try { await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveValue(text, { timeout: expectedTimeoutMs }); }
         catch (error) { process.stderr.write((await helper.locator('body').innerText()).slice(-8000)); throw error; }
         await helper.getByRole('button', { name: '展开候选1依据', exact: true }).click();
         await expect.poll(() => helper.evaluate(() => window.notalone.replies.getEvidenceState().then(state => state.phase))).toBe('ready');
@@ -98,7 +98,8 @@ export async function layeredReply(browser: Browser, origin: string) {
       await expect(evidence.getByText('本次未授权加载系统整理资料。', { exact: true })).toBeVisible();
       await expect(contactBackground.getByText(String(prepared.profile_text), { exact: true })).toHaveCount(0);
       expect((await fixture.command('runtime_proof')).external_model_calls).toBe(0);
-      await generate(String(prepared.contact_id), true, '删除来源前保留本次合法课程依据。', true);
+      // 累积历史后的双侧四次工具与最终候选，实际HTTP重放完成超过五秒。
+      await generate(String(prepared.contact_id), true, '删除来源前保留本次合法课程依据。', true, 15_000);
       await expect(contactReads.getByText(`第 1 段：${prepared.scenario_text}`, { exact: true })).toBeVisible();
       await manager.getByRole('button', { name: '记忆', exact: true }).click();
       await selectMemoryCategory(manager, '来源与过程');
