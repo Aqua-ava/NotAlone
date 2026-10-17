@@ -27,6 +27,8 @@ CURRENT_MIGRATION_TAIL = (
     "068_skill_review_publication.sql",
     "069_skill_history_operations.sql",
     "070_skill_scope_policies.sql",
+    "071_bounded_runtime_evidence.sql",
+    "072_scoped_media_lifecycle.sql",
 )
 
 
@@ -99,8 +101,11 @@ class OwnerOverviewForwardUpgradeHttpTest(MemoryOverviewHttpFixture, unittest.Te
         self.assertEqual(migrate(self.database_url, self.migrations), ())
         with psycopg.connect(self.database_url) as connection:
             for table in tables:
+                # 071 只为旧记忆追加 any 默认值，原字段与证明仍须逐字保持。
+                expected = ([({**record, "source_dependency_mode": "any"},) for record, in before[table]]
+                            if table in {"owner_memory", "memory_candidate"} else before[table])
                 self.assertEqual(connection.execute(sql.SQL("SELECT to_jsonb(record) FROM public.{} record ORDER BY id")
-                    .format(sql.Identifier(table))).fetchall(), before[table])
+                    .format(sql.Identifier(table))).fetchall(), expected)
             self.assertEqual(connection.execute("SELECT name,checksum FROM public.notalone_schema_migration "
                 "WHERE left(name,3)::int<=63 ORDER BY name").fetchall(), history)
         snapshot = self.owner_overview()

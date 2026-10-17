@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import unittest
 from uuid import uuid4
@@ -9,8 +10,9 @@ from uuid import uuid4
 import httpx
 from openai import BadRequestError
 
+from notalone.reply.adapters.deepseek_provider import build_deepseek_model
 from tests.fidelity_http_support import FidelityControlledModel, FidelityHttpFixture
-from tests.integration.server import test_ecnu_input_budget as ecnu_fixture
+from tests.integration.server import test_deepseek_input_budget as flash_fixture
 
 
 class ProviderErrorModel(FidelityControlledModel):
@@ -98,7 +100,7 @@ class ProviderContextLimitHttpTest(FidelityHttpFixture, unittest.TestCase):
             path + "/replies", self._body(contact_id, "合成短请求。"),
         )
 
-        self.assertEqual((status, rejected), (500, {"error": "internal_error"}))
+        self.assertEqual((status, rejected), (500, {"error": "reply_generation_failed"}))
         self.assertEqual(len(self.reply_model.seen_calls), 1)
 
     def test_exploration_context_limit_keeps_discussion_without_extra_generation(self):
@@ -127,14 +129,32 @@ class ProviderContextLimitHttpTest(FidelityHttpFixture, unittest.TestCase):
         self.assertEqual(saved["turns"], [])
 
 
-class EcnuSdkContextLimitHttpTest(FidelityHttpFixture, unittest.TestCase):
-    """真实 ChatDeepSeek/SDK 收到离线合成 400；不代表 ECNU 实际错误契约。"""
+class OfficialFlashSdkContextLimitHttpTest(FidelityHttpFixture, unittest.TestCase):
+    """官方 Flash 的真实 SDK 收到离线合成 400，不代表供应商现场错误证据。"""
+
+    model_name = flash_fixture.DeepSeekInputBudgetHttpTest.model_name
+    base_url = flash_fixture.DeepSeekInputBudgetHttpTest.base_url
 
     def _backend(self, owner_id):
-        return ecnu_fixture.EcnuInputBudgetHttpTest._backend(self, owner_id)
+        if not hasattr(self, "sdk_model"):
+            self.sdk_payloads = []
+            sync_client = httpx.Client(transport=httpx.MockTransport(self._respond))
+            async_client = httpx.AsyncClient(transport=httpx.MockTransport(self._respond))
+            self.addCleanup(sync_client.close)
+            self.addCleanup(lambda: asyncio.run(async_client.aclose()))
+            # 从构造时关闭真实SDK重试，不能仅修改LangChain字段伪装逐次调用。
+            self.sdk_model = build_deepseek_model(
+                model_name=self.model_name, base_url=self.base_url,
+                api_key="synthetic-never-sent-key", max_retries=0,
+                http_client=sync_client, http_async_client=async_client,
+            )
+        return flash_fixture.DeepSeekInputBudgetHttpTest._backend(self, owner_id)
 
     def _respond(self, request: httpx.Request) -> httpx.Response:
-        self.sdk_payloads.append(json.loads(request.content))
+        payload = json.loads(request.content)
+        self.assertEqual(request.url.host, "api.deepseek.com")
+        self.assertEqual(payload["model"], "deepseek-flash")
+        self.sdk_payloads.append(payload)
         return httpx.Response(400, json={"error": {
             "code": "context_length_exceeded", "type": "invalid_request_error",
             "message": "synthetic-private-sdk-body-must-not-leak",
