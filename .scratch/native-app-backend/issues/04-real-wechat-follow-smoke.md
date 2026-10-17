@@ -2,7 +2,7 @@
 
 Type: task
 
-**Triage:** ready-for-human
+**Triage:** ready-for-agent
 **State:** claimed
 
 **What to build:** 在真实微信环境中确认 `tail --follow` 长进程稳定：消息到达近实时、不丢不重，切换与切回时水位正确推进，流进程异常后能恢复。这是一次只读验证冒烟；通过之前，一次性轮询仍是同步主路径，事件驱动不替换轮询。
@@ -93,3 +93,7 @@ Type: task
 [同v9 Tab30场](../../foreground-contact-follow/real-cli-visual-v9-tab30-result-20261016.md)原判微信25秒正向未达，helper/自然tail时窗/Tab/Finder全未执行，不能新增本包视觉与CLI组合通过信用；失败fixture鉴权停止、自有9PID/准确随机库/租约及恢复依赖已清。既有v5/v7已验证分项及本票后三条AC保留，持续新到达与联系人切换前两条仍未验证，没有制造来信、发送消息或扩至第二联系人。
 
 用户明确选择“稍后再做桌面验收”，本票State仍claimed、下一角色改ready-for-human，待其恢复现场后由Agent继续；不要求重授既有单联系人范围，不因工具缺口写成授权缺失，不自动恢复或更改旧失败。
+
+### 2026-10-18 恢复后的当前版本阶段结果
+
+本轮用户恢复单联系人验收授权，准备的 8 条固定消息仍为 0 条发送。当前 CLI 严格只读元数据调用超时，既有配置备份的私有副本对目标会话正文明确报新分片缺读取密钥，未启动初始化路线。真实来信、正向缺口和当前 follow 归因均未验证，原 AC 与历史 Answer 保持，见[本轮阶段结果](../../real-chat-app-e2e/result-20261018.md)。

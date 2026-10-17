@@ -2,7 +2,7 @@
 
 Type: task
 State: claimed
-Triage: ready-for-human
+Triage: ready-for-agent
 Blocked by: 09, 16
 Spec: ../spec.md
 
@@ -150,3 +150,7 @@ Spec: ../spec.md
 [同v9 Tab30场](../../foreground-contact-follow/real-cli-visual-v9-tab30-result-20261016.md)在微信25秒门原判失败：窗口内12次完整paused，采集/帧/OCR均0，无recognized或manual_required；未到helper、新自然tail、Tab或Finder，不能评价持焦或倒推名称不匹配。9个归属PID、准确随机库/fixture/userData/租约及恢复pair2文件6目录已清，默认目录只核metadata前后相等，ASAR/签名未变。既有Finder权限责任与源停止分项保留，AC3未勾，State claimed。
 
 [后继置前计划](../real-cli-visual-v9-physical-front-plan-20261016.md)两轴0后，执行前坐标接口实际不支持，键盘路径未可靠选中原验收目标；没有新场资源。用户明确选择“稍后再做桌面验收”，因此下一处理角色改ready-for-human，等待其恢复现场后由Agent继续；原范围授权保持，不将工具缺口解释成缺少授权，不自动启动。
+
+### 2026-10-18 恢复后的当前版本阶段结果
+
+本轮已恢复真实桌面验收授权，当前稳定产品基线 0702940 新包已构建并核严格签名。新包实际提示缺少屏幕录制权限，选择稍后，未授予新权限；本轮未安装视觉测量器、未完成当前正式识别/助手停采/CLI 独立组合或权限责任验收。既有历史分项及原 AC 保持，见[本轮阶段结果](../../real-chat-app-e2e/result-20261018.md)。
