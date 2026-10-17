@@ -134,12 +134,15 @@ function layeredMemoryArguments(args: unknown[]): LayeredMemoryManagementRequest
   if (args.length !== 1 || !value || typeof value !== 'object' || Array.isArray(value)) throw new Error('主题资料操作不可用。');
   const fields = value as Record<string, unknown>;
   const enable = fields.action === 'enable';
-  if (Object.keys(fields).length !== (enable ? 5 : 4)
-    || !Object.keys(fields).every((key) => ['contactId', 'scopeRevision', 'action', 'settingsGeneration', ...(enable ? ['purposeConfirmed'] : [])].includes(key))
-    || !['enable', 'refresh', 'disable', 'delete'].includes(fields.action as string)
+  const workAction = fields.action === 'pause' || fields.action === 'continue';
+  if (Object.keys(fields).length !== (enable || workAction ? 5 : 4)
+    || !Object.keys(fields).every((key) => ['contactId', 'scopeRevision', 'action', 'settingsGeneration',
+      ...(enable ? ['purposeConfirmed'] : []), ...(workAction ? ['workRevision'] : [])].includes(key))
+    || !['enable', 'refresh', 'disable', 'delete', 'pause', 'continue'].includes(fields.action as string)
     || typeof fields.settingsGeneration !== 'number' || !Number.isSafeInteger(fields.settingsGeneration) || fields.settingsGeneration < 0
+    || (workAction && (typeof fields.workRevision !== 'number' || !Number.isSafeInteger(fields.workRevision) || fields.workRevision < 1))
     || (enable && fields.purposeConfirmed !== true)) throw new Error('主题资料操作不可用。');
   const selection = requestArguments([{ contactId: fields.contactId, scopeRevision: fields.scopeRevision }]);
   return { ...selection, action: fields.action as LayeredMemoryManagementRequest['action'], settingsGeneration: fields.settingsGeneration,
-    ...(enable ? { purposeConfirmed: true as const } : {}) };
+    ...(enable ? { purposeConfirmed: true as const } : {}), ...(workAction ? { workRevision: fields.workRevision as number } : {}) };
 }

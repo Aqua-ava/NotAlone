@@ -374,6 +374,9 @@ class TaskHost:
             BackgroundTaskStatus.CANCELLED,
         }:
             return False
+        if task.task_type is BackgroundTaskType.LAYERED_MEMORY:
+            return self._task_repository.has_active_layered_work(
+                owner_id=scope[0],contact_id=scope[1],task_id=task_id)
         if task.task_type is BackgroundTaskType.OBSERVATION:
             return self._task_repository.has_authorized_observation(
                 owner_id=scope[0], contact_id=scope[1],

@@ -62,8 +62,13 @@ export function layeredMemory(value: unknown, contactId: string): LayeredMemory 
   if ((qualityStatus === 'unknown' && scenarios.length > 0) || new Set(scenarios.map((item) => item.scenarioId)).size !== scenarios.length) throw invalid();
   const eligibleCount = integer(entry.eligible_count), coveredCount = integer(entry.covered_count), remainingCount = integer(entry.remaining_count);
   if (coveredCount > eligibleCount || remainingCount > eligibleCount) throw invalid();
+  const workId = entry.work_id === null ? null : identifier(entry.work_id), workRevision = integer(entry.work_revision), currentBatch = integer(entry.current_batch);
+  const modelCallsUsed = integer(entry.model_calls_used), modelCallLimit = integer(entry.model_call_limit);
+  if ((workId === null && (workRevision !== 0 || currentBatch !== 0 || modelCallsUsed !== 0 || modelCallLimit !== 0))
+    || (workId !== null && workRevision === 0) || modelCallsUsed > modelCallLimit) throw invalid();
   return { schemaVersion: 1, scopeKind: 'contact', contactId, settingsGeneration: integer(entry.settings_generation), enabled: entry.enabled,
-    qualityStatus, status: enumeration(entry.status, ['disabled', 'ready', 'empty', 'failed', 'updating', 'stale', 'blocked']),
+    qualityStatus, status: enumeration(entry.status, ['disabled', 'ready', 'empty', 'failed', 'updating', 'paused', 'stale', 'blocked']),
+    workId, workRevision, currentBatch, modelCallsUsed, modelCallLimit,
     eligibleCount, coveredCount, remainingCount, organizationGeneration: integer(entry.organization_generation), updatedAt: date(entry.updated_at),
     errorCode: entry.error_code === null ? null : text(entry.error_code, 200), purpose: text(entry.purpose, 2000),
     budget: { maxMemories: integer(budget.max_memories), maxScenarios: integer(budget.max_scenarios), maxParagraphs: integer(budget.max_paragraphs),

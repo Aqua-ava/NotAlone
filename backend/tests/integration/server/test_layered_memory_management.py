@@ -35,15 +35,37 @@ class LayeredMemoryManagementHttpTest(MemoryOverviewHttpFixture, unittest.TestCa
         self.assertEqual(enabled["layered_memory"]["scenarios"], [])
         self.assertEqual(self._get(self.backend, path)["layered_memory"]["status"], "blocked")
 
-    def controlled(self, *, proposer=None, verifier=None, budget=None, clock=None, call_timeout_seconds=30, model_priority=None):
+    def controlled(self, *, proposer=None, verifier=None, budget=None, clock=None, call_timeout_seconds=30, model_priority=None, asynchronous=False):
         self.proposal = proposer or ControlledProposal()
         self.verification = verifier or ControlledVerification()
         self.service = LayeredMemoryService(PostgresLayeredMemoryStore(self.database_url, clock=clock),
             proposer=self.proposal, verifier=self.verification, synthetic=True,
             budget=budget or OrganizationBudget(), call_timeout_seconds=call_timeout_seconds,
             model_priority=model_priority)
+        task_host=None
+        if asynchronous:
+            import psycopg
+            from threading import Event
+            from notalone.application.import_service import TaskHost
+            from notalone.persistence.background_tasks import PostgresBackgroundTaskRepository
+            from notalone.tasks.worker import BackgroundTaskWorker
+            self.task_finished=Event()
+            self.receipt_failed=Event()
+            service=self.service
+            def progress(update):
+                if update.status=='succeeded':
+                    self.task_finished.set()
+                if update.error_code=='temporary_failure':
+                    self.receipt_failed.set()
+            task_host=TaskHost(worker_builder=lambda: BackgroundTaskWorker(
+                repository=PostgresBackgroundTaskRepository(self.database_url),organization_runner=service),
+                lock_connection_builder=lambda: psycopg.connect(self.database_url,autocommit=True),
+                task_repository=PostgresBackgroundTaskRepository(self.database_url),event_publisher=progress)
+            self.task_host=task_host
+            self.service.attach_task_host(task_host)
+            self.addCleanup(task_host.stop)
         backend = HttpBackend(create_app(database_url=self.database_url, owner_id=self.owner_id,
-            token="synthetic-layered-token", layered_memory=self.service), self.owner_id)
+            token="synthetic-layered-token", layered_memory=self.service,task_host=task_host), self.owner_id)
         self.addCleanup(backend.close)
         return backend
 
@@ -65,7 +87,7 @@ class LayeredMemoryManagementHttpTest(MemoryOverviewHttpFixture, unittest.TestCa
         self.assertEqual(status, 200, manual)
         backend = self.controlled(budget=OrganizationBudget(max_memories=1))
         state = self.enable(backend, contact)
-        self.assertEqual((state["status"], state["covered_count"], state["remaining_count"]), ("ready", 1, 1))
+        self.assertEqual((state["status"], state["covered_count"], state["remaining_count"]), ("paused", 1, 1))
         document = state["scenarios"][0]
         self.assertEqual(document["title"], "共同学习经历")
         self.assertTrue(document["system_generated"])
@@ -82,6 +104,289 @@ class LayeredMemoryManagementHttpTest(MemoryOverviewHttpFixture, unittest.TestCa
         self.assertEqual(repeated["layered_memory"]["scenarios"], state["scenarios"])
         self.assertEqual(len(self.proposal.inputs), 1)
 
+
+    def test_multiple_batches_continue_same_work_without_losing_first_batch(self):
+        contact, _, message = self.import_contact("合成经历：双方共同参加过课程。")
+        self.confirm(contact, "双方共同参加过课程。", message)
+        self.backend.request("/api/memories/manual-contact", {
+            "contact_id": contact, "text": "双方共同完成合成练习。", "category": "common_fact",
+        })
+        backend = self.controlled(proposer=EchoProposal(),budget=OrganizationBudget(max_memories=1))
+        state = self.enable(backend, contact)
+        self.assertEqual((state["status"], state["covered_count"], state["remaining_count"]), ("paused", 1, 1))
+        self.assertEqual(state["current_batch"], 1)
+        work = state["work_id"]
+        command = {"settings_generation": state["settings_generation"], "work_revision": state["work_revision"]}
+        status, continued = backend.request(f"/api/contacts/{contact}/layered-memory/continue", command)
+        self.assertEqual(status, 200, continued)
+        done = continued["layered_memory"]
+        self.assertEqual((done["status"],done["covered_count"],done["remaining_count"]), ("ready",2,0))
+        self.assertEqual(done["work_id"], work)
+        self.assertEqual(done["current_batch"],2)
+        texts = [paragraph["text"] for scenario in done["scenarios"] for paragraph in scenario["paragraphs"]]
+        self.assertIn("双方共同参加过课程。",texts)
+        self.assertIn("双方共同完成合成练习。",texts)
+        status, repeated = backend.request(f"/api/contacts/{contact}/layered-memory/continue", command)
+        self.assertEqual(status,200,repeated)
+        self.assertEqual(repeated["layered_memory"],done)
+        self.assertEqual(len(self.proposal.inputs),2)
+
+    def test_task_host_restart_resumes_authorized_queued_work_and_keeps_budget_pause(self):
+        import psycopg
+        from notalone.persistence.locks import try_acquire_global_worker_lock, release_global_worker_lock
+        contact, _, message=self.import_contact("合成经历：双方共同参加过课程。")
+        self.confirm(contact,"双方共同参加过课程。",message)
+        self.backend.request("/api/memories/manual-contact",{
+            "contact_id":contact,"text":"双方共同完成合成练习。","category":"common_fact"})
+        proposer=EchoProposal()
+        with psycopg.connect(self.database_url,autocommit=True) as blocker:
+            self.assertTrue(try_acquire_global_worker_lock(blocker))
+            first=self.controlled(proposer=proposer,budget=OrganizationBudget(max_memories=1),asynchronous=True)
+            queued=self.enable(first,contact)
+            self.assertEqual((queued['covered_count'],queued['current_batch']),(0,0))
+            self.task_host.stop()
+            release_global_worker_lock(blocker)
+        restarted=self.controlled(proposer=proposer,budget=OrganizationBudget(max_memories=1),asynchronous=True)
+        path=f"/api/contacts/{contact}/layered-memory"
+        self._get(restarted,path)
+        self.assertTrue(self.task_finished.wait(5))
+        paused=self._get(restarted,path)['layered_memory']
+        self.assertEqual((paused['work_id'],paused['status'],paused['covered_count'],paused['model_calls_used']),
+                         (queued['work_id'],'paused',1,2))
+        self.task_host.stop()
+        third=self.controlled(proposer=proposer,budget=OrganizationBudget(max_memories=1),asynchronous=True)
+        still_paused=self._get(third,path)['layered_memory']
+        self.assertEqual(still_paused,paused)
+        self.assertEqual(len(proposer.inputs),1)
+
+    def test_committed_batch_without_last_attempt_receipt_recovers_without_repeating_model(self):
+        import psycopg
+        contact, _, message=self.import_contact("合成经历：双方共同参加过课程。")
+        self.confirm(contact,"双方共同参加过课程。",message)
+        with psycopg.connect(self.database_url) as connection:
+            connection.execute("CREATE SEQUENCE synthetic_receipt_fault")
+            connection.execute("""CREATE FUNCTION synthetic_reject_receipt() RETURNS trigger LANGUAGE plpgsql AS $$
+                BEGIN
+                    IF NEW.step_name='organize_memory' AND NEW.status='succeeded' AND OLD.status='running'
+                       AND nextval('synthetic_receipt_fault')=1 THEN RAISE EXCEPTION 'synthetic receipt loss'; END IF;
+                    RETURN NEW;
+                END; $$""")
+            connection.execute("CREATE TRIGGER synthetic_receipt BEFORE UPDATE ON public.background_task_step "
+                               "FOR EACH ROW EXECUTE FUNCTION synthetic_reject_receipt()")
+        proposer=EchoProposal()
+        first=self.controlled(proposer=proposer,asynchronous=True)
+        state=self.enable(first,contact)
+        self.assertTrue(self.receipt_failed.wait(5))
+        self.task_host.stop()
+        with psycopg.connect(self.database_url) as connection:
+            # 故障夹具：模拟最后一次领取在提交后失联并过期，恢复仍从公开HTTP触发。
+            connection.execute("UPDATE public.background_task_step SET attempt_count=3,lease_expires_at=now()-interval '1 second' WHERE task_id=%s",
+                               (state['work_id'],))
+        restarted=self.controlled(proposer=proposer,asynchronous=True)
+        path=f"/api/contacts/{contact}/layered-memory"
+        self._get(restarted,path)
+        self.assertTrue(self.task_finished.wait(5))
+        ready=self._get(restarted,path)['layered_memory']
+        self.assertEqual((ready['work_id'],ready['status'],ready['current_batch'],ready['covered_count']),
+                         (state['work_id'],'ready',1,1))
+        self.assertEqual(len(proposer.inputs),1)
+        self.assertEqual(ready['model_calls_used'],2)
+
+    def test_deleting_future_batch_input_revokes_the_work_before_continue(self):
+        contact, _, message=self.import_contact("合成经历：双方共同参加过课程。")
+        self.confirm(contact,"双方共同参加过课程。",message)
+        _, future_source, future_message=self.import_contact("双方共同完成合成练习。",contact_id=contact,
+            when=datetime(2024,2,1,tzinfo=timezone.utc))
+        self.confirm(contact,"双方共同完成合成练习。",future_message)
+        backend=self.controlled(proposer=EchoProposal(),budget=OrganizationBudget(max_memories=1))
+        paused=self.enable(backend,contact)
+        self.delete_source(contact,future_source)
+        path=f"/api/contacts/{contact}/layered-memory"
+        status,result=backend.request(path+'/continue',{
+            'settings_generation':paused['settings_generation'],'work_revision':paused['work_revision']})
+        self.assertEqual(status,409,result)
+        current=self._get(backend,path)['layered_memory']
+        self.assertEqual(current['status'],'stale')
+        self.assertEqual(len(self.proposal.inputs),1)
+        self.assertEqual(current['covered_count'],1)
+        self.assertEqual(current['remaining_count'],0)
+
+    def test_same_topic_later_batch_inherits_first_batch_full_erasure_dependencies(self):
+        contact, first_source, message=self.import_contact("合成经历：双方共同参加过课程。")
+        self.confirm(contact,"双方共同参加过课程。",message)
+        self.backend.request('/api/memories/manual-contact',{
+            'contact_id':contact,'text':'双方共同完成合成练习。','category':'common_fact'})
+        backend=self.controlled(proposer=EchoProposal(),budget=OrganizationBudget(max_memories=1))
+        paused=self.enable(backend,contact)
+        path=f'/api/contacts/{contact}/layered-memory'
+        status,result=backend.request(path+'/continue',{
+            'settings_generation':paused['settings_generation'],'work_revision':paused['work_revision']})
+        self.assertEqual(status,200,result)
+        self.assertEqual(len(result['layered_memory']['scenarios'][0]['paragraphs']),2)
+        self.delete_source(contact,first_source)
+        current=self._get(backend,path)['layered_memory']
+        self.assertEqual(current['scenarios'],[])
+        self.assertEqual(current['status'],'stale')
+        self.assertEqual(len(self.proposal.inputs),2)
+        import psycopg
+        with psycopg.connect(self.database_url) as connection:
+            self.assertEqual(connection.execute('SELECT count(*) FROM public.layered_memory_batch WHERE contact_id=%s',
+                                               (contact,)).fetchone()[0],0)
+            self.assertEqual(connection.execute("SELECT target_manifest,dependency_ids FROM public.layered_memory_job WHERE task_id=%s",
+                                               (paused['work_id'],)).fetchone(),([],[]))
+
+    def test_pause_revokes_inflight_result_and_continue_uses_a_fresh_lease(self):
+        from threading import Event
+        contact, _, message=self.import_contact("合成经历：双方共同参加过课程。")
+        self.confirm(contact,"双方共同参加过课程。",message)
+        started,release,finished=Event(),Event(),Event()
+        self.addCleanup(release.set)
+        class FirstGated(EchoProposal):
+            first=True
+            def propose(self, *, memories,budget,deadline):
+                if self.first:
+                    self.first=False
+                    started.set()
+                    try:
+                        if not release.wait(deadline.remaining_seconds()):
+                            raise TimeoutError('合成暂停门等待超时')
+                    finally:
+                        finished.set()
+                return super().propose(memories=memories,budget=budget,deadline=deadline)
+        proposer=FirstGated()
+        backend=self.controlled(proposer=proposer,asynchronous=True)
+        updating=self.enable(backend,contact)
+        self.assertTrue(started.wait(3))
+        path=f'/api/contacts/{contact}/layered-memory'
+        status,result=backend.request(path+'/pause',{
+            'settings_generation':updating['settings_generation'],'work_revision':updating['work_revision']})
+        self.assertEqual(status,200,result)
+        paused=result['layered_memory']
+        self.assertEqual((paused['status'],paused['covered_count'],paused['scenarios']),('paused',0,[]))
+        release.set()
+        self.assertTrue(finished.wait(3))
+        self.task_host.stop()
+        restarted=self.controlled(proposer=proposer,asynchronous=True)
+        still_paused=self._get(restarted,path)['layered_memory']
+        self.assertEqual(still_paused['status'],'paused')
+        status,result=restarted.request(path+'/continue',{
+            'settings_generation':paused['settings_generation'],'work_revision':paused['work_revision']})
+        self.assertEqual(status,200,result)
+        self.assertTrue(self.task_finished.wait(5))
+        ready=self._get(restarted,path)['layered_memory']
+        self.assertEqual((ready['status'],ready['covered_count'],ready['current_batch']),('ready',1,1))
+        self.assertEqual(ready['model_calls_used'],3)
+        self.assertEqual(len(ready['scenarios'][0]['paragraphs']),1)
+
+    def test_transport_retry_cannot_reset_consumed_budget_on_restart_or_continue(self):
+        contact, _, message=self.import_contact("合成经历：双方共同参加过课程。")
+        self.confirm(contact,"双方共同参加过课程。",message)
+        class TransientProposal(EchoProposal):
+            attempts=0
+            def propose(self, *, memories,budget,deadline):
+                self.attempts+=1
+                if self.attempts==1:
+                    raise ConnectionError('合成传输故障')
+                return super().propose(memories=memories,budget=budget,deadline=deadline)
+        proposer=TransientProposal()
+        backend=self.controlled(proposer=proposer)
+        paused=self.enable(backend,contact)
+        self.assertEqual((paused['status'],paused['model_calls_used'],paused['model_call_limit']),('paused',2,2))
+        self.assertEqual(paused['error_code'],'model_budget_exhausted')
+        restarted=self.controlled(proposer=proposer)
+        path=f'/api/contacts/{contact}/layered-memory'
+        self.assertEqual(self._get(restarted,path)['layered_memory'],paused)
+        status,result=restarted.request(path+'/continue',{
+            'settings_generation':paused['settings_generation'],'work_revision':paused['work_revision']})
+        self.assertEqual(status,200,result)
+        ready=result['layered_memory']
+        self.assertEqual((ready['status'],ready['model_calls_used'],ready['model_call_limit']),('ready',4,4))
+        self.assertEqual(ready['current_batch'],1)
+
+    def test_unaffected_topic_remains_readable_after_another_batch_source_is_deleted(self):
+        from notalone.scopes import ContactScope
+        class SeparateTopics(EchoProposal):
+            def propose(self, *, memories,budget,deadline):
+                result=super().propose(memories=memories,budget=budget,deadline=deadline)
+                result['scenarios'][0]['topic_key']='practice' if '练习' in memories[0].text else 'course'
+                return result
+        contact, source, message=self.import_contact("合成经历：双方共同参加过课程。")
+        self.confirm(contact,"双方共同参加过课程。",message)
+        self.backend.request('/api/memories/manual-contact',{
+            'contact_id':contact,'text':'双方共同完成合成练习。','category':'common_fact'})
+        backend=self.controlled(proposer=SeparateTopics(),budget=OrganizationBudget(max_memories=1))
+        paused=self.enable(backend,contact)
+        path=f'/api/contacts/{contact}/layered-memory'
+        status,result=backend.request(path+'/continue',{
+            'settings_generation':paused['settings_generation'],'work_revision':paused['work_revision']})
+        self.assertEqual(status,200,result)
+        self.delete_source(contact,source)
+        remaining=self._get(backend,path)['layered_memory']
+        self.assertEqual((remaining['covered_count'],remaining['remaining_count']),(1,0))
+        self.assertEqual([p['text'] for doc in remaining['scenarios'] for p in doc['paragraphs']],['双方共同完成合成练习。'])
+        snapshot=self.service.capture(ContactScope(self.owner_id,UUID(contact)))
+        self.assertIsNotNone(snapshot)
+        self.assertTrue(self.service.validate(snapshot))
+        self.assertEqual(self.service.read_scenario(snapshot,snapshot.scenarios[0].scenario_id,(0,1))['paragraphs'][0]['text'],
+                         '双方共同完成合成练习。')
+
+    def test_lease_takeover_rejects_old_result_and_resumes_without_duplicate_body(self):
+        import psycopg
+        contact, _, message=self.import_contact("合成经历：双方共同参加过课程。")
+        self.confirm(contact,"双方共同参加过课程。",message)
+        class TakeoverProposal(EchoProposal):
+            first=True
+            def propose(adapter, *, memories,budget,deadline):
+                result=super(TakeoverProposal,adapter).propose(memories=memories,budget=budget,deadline=deadline)
+                if adapter.first:
+                    adapter.first=False
+                    with psycopg.connect(self.database_url) as connection:
+                        # 外部故障事件：旧worker租约已失效，迟到响应仍必须被writer拒绝。
+                        connection.execute("UPDATE public.background_task_step s SET lease_generation=lease_generation+1,"
+                            "lease_expires_at=now()-interval '1 second' FROM public.background_task t "
+                            "WHERE t.id=s.task_id AND t.owner_id=%s AND t.contact_id=%s AND s.step_name='organize_memory'",
+                            (self.owner_id,contact))
+                return result
+        proposer=TakeoverProposal()
+        backend=self.controlled(proposer=proposer)
+        paused=self.enable(backend,contact)
+        self.assertEqual((paused['status'],paused['covered_count'],paused['scenarios']),('paused',0,[]))
+        self.assertEqual(paused['model_calls_used'],2)
+        status,result=backend.request(f'/api/contacts/{contact}/layered-memory/continue',{
+            'settings_generation':paused['settings_generation'],'work_revision':paused['work_revision']})
+        self.assertEqual(status,200,result)
+        ready=result['layered_memory']
+        self.assertEqual((ready['status'],ready['covered_count'],ready['current_batch']),('ready',1,1))
+        self.assertEqual(len(ready['scenarios'][0]['paragraphs']),1)
+        self.assertEqual(ready['model_calls_used'],4)
+
+    def test_three_batches_keep_documents_bounded_and_duplicate_continue_does_not_advance(self):
+        contact, _, message=self.import_contact("合成经历：双方共同参加过课程。")
+        self.confirm(contact,"双方共同参加过课程。",message)
+        for text in ('双方共同完成合成练习。','双方共同整理合成笔记。'):
+            self.backend.request('/api/memories/manual-contact',{
+                'contact_id':contact,'text':text,'category':'common_fact'})
+        backend=self.controlled(proposer=EchoProposal(),budget=OrganizationBudget(max_memories=1,max_paragraphs=1))
+        first=self.enable(backend,contact)
+        path=f'/api/contacts/{contact}/layered-memory/continue'
+        command={'settings_generation':first['settings_generation'],'work_revision':first['work_revision']}
+        status,second=backend.request(path,command)
+        self.assertEqual(status,200,second)
+        second=second['layered_memory']
+        self.assertEqual((second['status'],second['covered_count'],second['remaining_count']),('paused',2,1))
+        status,duplicate=backend.request(path,command)
+        self.assertEqual(status,200,duplicate)
+        self.assertEqual(duplicate['layered_memory'],second)
+        status,third=backend.request(path,{
+            'settings_generation':second['settings_generation'],'work_revision':second['work_revision']})
+        self.assertEqual(status,200,third)
+        done=third['layered_memory']
+        self.assertEqual((done['work_id'],done['status'],done['covered_count'],done['remaining_count'],done['current_batch']),
+            (first['work_id'],'ready',3,0,3))
+        self.assertEqual([len(doc['paragraphs']) for doc in done['scenarios']],[1,1,1])
+        self.assertEqual({p['text'] for doc in done['scenarios'] for p in doc['paragraphs']},
+            {'双方共同参加过课程。','双方共同完成合成练习。','双方共同整理合成笔记。'})
+        self.assertEqual(done['model_calls_used'],6)
 
     def test_deleting_an_uncited_input_erases_body_history_and_batch_artifacts(self):
         contact, _, message = self.import_contact("合成经历：双方共同参加过课程。")

@@ -130,6 +130,9 @@ test('底层记忆修正或删除先撤主题缓存，响应未知后仍权威�
 test('跨联系人、未知来历、无依据或非法时间响应不能替换已验证的主题资料', async () => {
   const base = readyPayload();
   const wrong = [readyPayload({ contact_id: ids.other }), readyPayload({ quality_status: 'unknown' }),
+    readyPayload({ work_id: '其他工作' }), readyPayload({ work_revision: -1 }), readyPayload({ current_batch: 0.5 }),
+    readyPayload({ work_id: null }), readyPayload({ work_revision: 0 }),
+    readyPayload({ model_calls_used: -1 }), readyPayload({ model_calls_used: 3, model_call_limit: 2 }),
     readyPayload({ scenarios: [{ ...base.layered_memory.scenarios[0], paragraphs: [{ text: '无依据的合成正文。', references: [] }] }] }),
     readyPayload({ scenarios: [{ ...base.layered_memory.scenarios[0], paragraphs: [{ text: '错误来历的合成正文。', references: [{
       ...base.layered_memory.scenarios[0].paragraphs[0].references[0], provenance_kind: 'unknown' }] }] }] }),
@@ -142,6 +145,25 @@ test('跨联系人、未知来历、无依据或非法时间响应不能替换�
     await f.bridge.readLayeredMemory(f.selection());
     assert.deepEqual((await f.bridge.getState()).layeredMemory, { phase: 'error', value: null });
   }
+});
+
+test('暂停或继续必须使用已读取的工作版本，缺少或过期版本不发出请求', async () => {
+  const posted = [];
+  const f = await fixture(async (request) => {
+    if (request.method === 'POST') posted.push(request);
+    return { generation: 1, data: readyPayload({ status: 'paused', work_revision: 4 }) };
+  });
+  await f.bridge.readLayeredMemory(f.selection());
+  for (const action of ['pause', 'continue']) {
+    for (const revision of [undefined, 0, -1, 3, 4.5]) {
+      await assert.rejects(f.bridge.manageLayeredMemory({ ...f.selection(), action, settingsGeneration: 1,
+        ...(revision === undefined ? {} : { workRevision: revision }) }));
+    }
+  }
+  assert.equal(posted.length, 0);
+  await f.bridge.manageLayeredMemory({ ...f.selection(), action: 'continue', settingsGeneration: 1, workRevision: 4 });
+  assert.equal(posted.length, 1);
+  assert.deepEqual(posted[0].body, { settings_generation: 1, work_revision: 4 });
 });
 
 test('查看底层版本确认资料已失效时撤下主题并重新核对，不沿旧正文继续回看', async () => {

@@ -130,9 +130,11 @@ export class MemoryReadingController {
   async manageLayeredMemory(request: LayeredMemoryManagementRequest): Promise<void> {
     this.synchronizeScope();
     const scope = this.scope, value = this.state.layeredMemory.value;
+    const workAction = request.action === 'pause' || request.action === 'continue';
     if (!scope || request.contactId !== scope.contactId || request.scopeRevision !== scope.scopeRevision || this.mutation
       || this.sourceDeletionDepth || this.state.layeredMemory.phase !== 'ready' || !value || value.settingsGeneration !== request.settingsGeneration
-      || !['enable', 'refresh', 'disable', 'delete'].includes(request.action)
+      || !['enable', 'refresh', 'disable', 'delete', 'pause', 'continue'].includes(request.action)
+      || (workAction && (!value.workId || request.workRevision !== value.workRevision || value.workRevision < 1))
       || (request.action === 'enable' && request.purposeConfirmed !== true)) {
       throw new Error('主题资料范围或设置已变化，请重新读取后操作。');
     }
@@ -144,7 +146,8 @@ export class MemoryReadingController {
     const current = () => { this.synchronizeScope(); return this.scope === scope && this.mutation === operation && this.sourceDeletionRevision === sourceDeletionRevision; };
     try {
       const result = await this.backend.requestJson({ method: 'POST', path: `/api/contacts/${scope.contactId}/layered-memory/${request.action}`,
-        body: { settings_generation: request.settingsGeneration, ...(request.action === 'enable' ? { purpose_confirmed: true } : {}) },
+        body: { settings_generation: request.settingsGeneration, ...(request.action === 'enable' ? { purpose_confirmed: true } : {}),
+          ...(workAction ? { work_revision: request.workRevision } : {}) },
         signal: operation.abort.signal });
       if (!current() || result.generation !== scope.generation) return;
       const value = layeredMemory(result.data, scope.contactId);
