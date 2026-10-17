@@ -284,6 +284,10 @@ test('受控启动器在真实server argv下安装原测量器，诊断模块不
       assert.equal((await invoke('notalone.server.startup_diagnostics')).stdout.trim(), 'synthetic_only');
       const { readFile } = await import('node:fs/promises');
       assert.equal(await readFile(record, 'utf8'), '');
+      const unrelated = path.join(directory, 'unrelated-python');
+      await writeFile(unrelated, `#!${python}\nprint("synthetic_only")\n`, { mode: 0o700 });
+      await execute(unrelated, ['-m', 'notalone.server.command'], { env: fixture.environment(), timeout: 15_000 });
+      assert.equal(await readFile(record, 'utf8'), '', '无关脚本的同名参数不能安装测量器');
       const result = await invoke('notalone.server.command');
       assert.equal(result.stdout.trim(), 'synthetic_only');
       assert.equal(result.stderr, '');

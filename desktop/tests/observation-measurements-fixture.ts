@@ -8,7 +8,10 @@ export async function prepareObservationMeasurements(fixture: BindingFixture, pr
   await writeFile(path.join(fixture.directory, 'observation_measurements.py'),
     await readFile(path.resolve('tests/fixtures/observation_measurements.py')), { mode: 0o600 });
   await writeFile(path.join(fixture.directory, 'sitecustomize.py'),
-    'import sys\nif sys.orig_argv[1:3] == ["-m", "notalone.server.command"]:\n    from observation_measurements import install\n    install()\n',
+    // shebang 启动的受控 Python 会在 -m 前保留脚本路径，只认可本夹具启动器。
+    'import sys\nif sys.orig_argv[1:3] == ["-m", "notalone.server.command"] or '
+      + `sys.orig_argv[1:4] == [${JSON.stringify(fixture.pythonExecutable)}, "-m", "notalone.server.command"]:\n`
+      + '    from observation_measurements import install\n    install()\n',
     { mode: 0o600 });
   const environment = fixture.environment.bind(fixture);
   fixture.environment = owner => ({ ...environment(owner), NOTALONE_SYNC_PROBE: probe,
