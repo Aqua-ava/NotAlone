@@ -42,7 +42,7 @@ from notalone.retrieval import (
 )
 from notalone.retrieval.lexical import RELEVANCE_THRESHOLD
 from notalone.retrieval.ranking import recall_memories, recall_owner_memories
-from notalone.scopes import ContactScope, VerifiedConversationScope
+from notalone.scopes import ContactScope, OwnerScope, VerifiedConversationScope
 
 
 CONTACT_MEMORY_LIMIT = 5
@@ -251,6 +251,9 @@ class ReplyContext:
     layered_context: LayeredReplyMaterial | None = None
     layered_status: str = "quality_closed"
     layered_scenario_reads: tuple[dict, ...] = ()
+    owner_layered_context: LayeredReplyMaterial | None = None
+    owner_layered_status: str = "quality_closed"
+    owner_layered_scenario_reads: tuple[dict, ...] = ()
 
     expression_preferences: tuple[ExpressionPreference, ...] = ()
     expression_preference_revision: int | None = None
@@ -273,8 +276,8 @@ class ReplyContext:
                 for item in self.evidence
             )
             or (not allows_history(self.command) and bool(self.style_references))
-            or (not allows_history(self.command) and self.layered_context is not None)
-            or (not allows_history(self.command) and bool(self.layered_scenario_reads))
+            or (not allows_history(self.command) and (self.layered_context is not None or self.owner_layered_context is not None))
+            or (not allows_history(self.command) and bool(self.layered_scenario_reads or self.owner_layered_scenario_reads))
         )
 
 
@@ -331,6 +334,7 @@ class RetrievalReplyContext:
         "_overview",
         "_layered_memory",
         "_layered_budget",
+        "_owner_layered_budget",
     )
 
     def __init__(
@@ -353,6 +357,7 @@ class RetrievalReplyContext:
         overview: RelationshipOverviewPort | None = None,
         layered_memory: LayeredMemoryPort | None = None,
         layered_budget: LayeredReplyBudget | None = None,
+        owner_layered_budget: LayeredReplyBudget | None = None,
     ) -> None:
         if not isinstance(skill_library_revision, int) or skill_library_revision < 0:
             raise ValueError("Skill 库修订号无效。")
@@ -400,6 +405,7 @@ class RetrievalReplyContext:
         self._style_references = style_references
         self._overview = overview
         self._layered_memory, self._layered_budget = layered_memory, layered_budget
+        self._owner_layered_budget = owner_layered_budget
 
     def build(
         self,
@@ -537,17 +543,18 @@ class RetrievalReplyContext:
 
     def _with_source_windows(self, context: ReplyContext) -> ReplyContext:
         """仅补当前联系人的未核实或历史依据；沿现有原话窗口和运行预算。"""
-        if not allows_history(context.command):
-            context = replace(context, layered_status="not_allowed")
-        elif self._layered_memory is not None and self._layered_budget is not None:
-            try:
-                snapshot = self._layered_memory.capture(context.scope)
-            except Exception:
-                # 新准备不可用时省略；已冻结上下文的复验仍严格拒绝迟到。
-                snapshot = None
-            material = select_material(snapshot, self._layered_budget) if snapshot is not None else None
-            context = replace(context, layered_context=material,
-                              layered_status="loaded" if material else "unavailable")
+        for prefix, scope, budget in (("", context.scope, self._layered_budget),
+                ("owner_", OwnerScope(context.scope.owner_id), self._owner_layered_budget)):
+            if not allows_history(context.command):
+                context = replace(context, **{prefix + "layered_status": "not_allowed"})
+            elif self._layered_memory is not None and budget is not None:
+                try:
+                    snapshot = self._layered_memory.capture(scope)
+                except Exception:
+                    snapshot = None
+                material = select_material(snapshot, budget) if snapshot is not None else None
+                context = replace(context, **{prefix + "layered_context": material,
+                    prefix + "layered_status": "loaded" if material else "unavailable"})
         if context.history_message_ids is not None:
             context = replace(context, history_message_ids=tuple(sorted(set(context.history_message_ids)
                 | {item.evidence_id for item in context.evidence if item.kind == "message"})))
@@ -737,7 +744,7 @@ class RetrievalReplyContext:
         return references
 
     def validate_current(self, context: ReplyContext) -> None:
-        require_material(context, self._layered_memory, budget=self._layered_budget)
+        require_material(context, self._layered_memory, budget=self._layered_budget, owner_budget=self._owner_layered_budget)
         """在生成前后重新读取依据，阻止删除或 revision 变化后的旧快照继续生效。"""
 
         if not isinstance(context, ReplyContext):

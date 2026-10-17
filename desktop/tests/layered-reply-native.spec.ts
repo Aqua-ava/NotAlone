@@ -18,7 +18,8 @@ const test = appTest.extend<{ layeredBackend: RewriteFixture }>({
 
 // 有限等待本次 Computer Use 收据；不自动替代用户操作或签发模型资格。
 test('实际 App 的合成分层回复依据 CUA 验收', async ({ runningApp, layeredBackend }) => {
-  test.setTimeout(12 * 60_000);
+  // 双范围模式需实际核对16项，按授权的20分钟窗口覆盖操作与收尾。
+  test.setTimeout(20 * 60_000);
   const requested = process.env.NOTALONE_LAYERED_CUA_DIR;
   if (!requested || !path.isAbsolute(requested)) throw new Error('实际验收须指定本轮私有收据目录。');
   const directory = await realpath(requested);
@@ -30,6 +31,9 @@ test('实际 App 的合成分层回复依据 CUA 验收', async ({ runningApp, l
   const requiredChecks = ['layered_background', 'directory_not_body', 'saved_versions', 'contact_isolation', 'disabled_fallback'];
   if (process.env.NOTALONE_LAYERED_SCENARIO_READS === '1') requiredChecks.push(
     'scenario_body', 'scenario_range_references', 'scenario_receipts', 'scenario_frozen_history', 'scenario_source_cleanup');
+  if (process.env.NOTALONE_LAYERED_OWNER_CONTEXT === '1') requiredChecks.push(
+    'owner_background', 'owner_directory_and_body', 'owner_scope_separation',
+    'owner_independent_fallback', 'owner_change_cache_cleanup', 'owner_legal_history');
   const prepared = await layeredBackend.command('prepared');
   await runningApp.app.firstWindow();
   await writeFile(path.join(directory, 'ready.json'), JSON.stringify({
@@ -42,7 +46,8 @@ test('实际 App 的合成分层回复依据 CUA 验收', async ({ runningApp, l
     let checking = false;
     let settled = false;
     const watcher = watch(directory, (_event, filename) => { if (filename === 'done.json') void check(); });
-    const timer = setTimeout(() => finish(new Error('本次CUA未在有限期限内完成。')), 11 * 60_000);
+    // 收据仍有18分钟硬期限，为同一窗口内的证明落盘与精确清理留出余量。
+    const timer = setTimeout(() => finish(new Error('本次CUA未在有限期限内完成。')), 18 * 60_000);
     function finish(error?: Error) {
       if (settled) return;
       settled = true;

@@ -1,4 +1,4 @@
-import type { ReplyEvidenceState, ReplyLayeredContext, ReplyLayeredScenarioDocument, ReplyLayeredScenarioRead, ReplyLayeredStatus } from '../../shared/reply-evidence';
+import type { ReplyLayeredContext, ReplyLayeredScenarioDocument, ReplyLayeredScenarioRead, ReplyLayeredStatus } from '../../shared/reply-evidence';
 import { isUuid } from '../uuid';
 import { readCurrentStatus } from '../memory/current-status';
 
@@ -16,7 +16,7 @@ function scenarioReads(value: unknown, context: ReplyLayeredContext | null | und
   if (value === undefined) return undefined;
   if (!Array.isArray(value) || value.length > 256) throw invalid();
   // 旧版历史只保留当时的背景；不能借展示兼容给旧协议补授正文工具权限。
-  if (value.length && (context?.schemaVersion !== 2 || !context.scenarioReadBudget)) throw invalid();
+  if (value.length && (!context || context.schemaVersion < 2 || !context.scenarioReadBudget)) throw invalid();
   return value.map((entry: unknown): ReplyLayeredScenarioRead => {
     if (!record(entry) || entry.schema_version !== 1 || !text(entry.reason) || !entry.reason.trim()
       || !['succeeded', 'duplicate', 'out_of_range', 'not_in_directory', 'invalid_arguments', 'stale', 'budget_exceeded'].includes(entry.status as string)
@@ -77,24 +77,25 @@ function scenarioReads(value: unknown, context: ReplyLayeredContext | null | und
   });
 }
 
-function withReads(value: Record<string, unknown>, result: Pick<ReplyEvidenceState, 'layeredContext' | 'layeredStatus'>) {
-  const reads = scenarioReads(value.layered_scenario_reads, result.layeredContext);
+type ScopedEvidence = { layeredContext?: ReplyLayeredContext | null; layeredStatus?: ReplyLayeredStatus; layeredScenarioReads?: ReplyLayeredScenarioRead[] };
+function withReads(value: unknown, result: ScopedEvidence): ScopedEvidence {
+  const reads = scenarioReads(value, result.layeredContext);
   return { ...result, ...(reads === undefined ? {} : { layeredScenarioReads: reads }) };
 }
 
 // 白名单投影仅保留本次模型可见资料，完整参与依赖不得穿过展示边界。
-export function readLayeredEvidence(value: Record<string, unknown>) {
-  if (value.layered_status === undefined && value.layered_context === undefined) return withReads(value, {});
-  if (!['loaded', 'not_allowed', 'unavailable', 'budget_omitted', 'quality_closed'].includes(value.layered_status as string)) throw invalid();
-  const layeredStatus = value.layered_status as ReplyLayeredStatus;
-  const context = value.layered_context;
+function readScope(status: unknown, context: unknown, reads: unknown, scopeKind: 'contact' | 'owner'): ScopedEvidence {
+  if (status === undefined && context === undefined) return withReads(reads, {});
+  if (!['loaded', 'not_allowed', 'unavailable', 'budget_omitted', 'quality_closed'].includes(status as string)) throw invalid();
+  const layeredStatus = status as ReplyLayeredStatus;
   if (context === null || context === undefined) {
     if (layeredStatus === 'loaded') throw invalid();
-    return withReads(value, { layeredStatus, layeredContext: null });
+    return withReads(reads, { layeredStatus, layeredContext: null });
   }
   if (layeredStatus !== 'loaded' || !record(context)
-    || !((context.schema_version === 1 && context.read_policy === 'synthetic-contact-layered-v1')
-      || (context.schema_version === 2 && context.read_policy === 'synthetic-contact-layered-v2')) || context.scope_kind !== 'contact'
+    || !((scopeKind === 'contact' && context.schema_version === 1 && context.read_policy === 'synthetic-contact-layered-v1')
+      || (scopeKind === 'contact' && context.schema_version === 2 && context.read_policy === 'synthetic-contact-layered-v2')
+      || (context.schema_version === 3 && context.read_policy === 'synthetic-scoped-layered-v3')) || context.scope_kind !== scopeKind
     || !integer(context.settings_generation) || !integer(context.organization_generation)
     || !(context.profile_version_id === null || isUuid(context.profile_version_id))
     || !record(context.budget)
@@ -133,16 +134,26 @@ export function readLayeredEvidence(value: Record<string, unknown>) {
   const directory: ReplyLayeredContext['directory'] = context.directory.map((entry: unknown) => {
     if (!record(entry) || !isUuid(entry.scenario_id) || !isUuid(entry.version_id) || !text(entry.title) || !text(entry.hint)
       || !integer(entry.paragraph_count)
-      || (context.schema_version === 2 && entry.paragraph_range === undefined)
+      || ((context.schema_version === 2 || context.schema_version === 3) && entry.paragraph_range === undefined)
       || (entry.paragraph_range !== undefined && (!range(entry.paragraph_range)
         || entry.paragraph_range[0] !== 0 || entry.paragraph_range[1] !== entry.paragraph_count))) throw invalid();
     return { scenarioId: entry.scenario_id.toLowerCase(), versionId: entry.version_id.toLowerCase(), title: entry.title,
       hint: entry.hint, paragraphCount: entry.paragraph_count,
       ...(entry.paragraph_range === undefined ? {} : { paragraphRange: [...entry.paragraph_range] as [number, number] }) };
   });
-  return withReads(value, { layeredStatus, layeredContext: { schemaVersion: context.schema_version as 1 | 2, scopeKind: 'contact', settingsGeneration: context.settings_generation,
+  return withReads(reads, { layeredStatus, layeredContext: { schemaVersion: context.schema_version as 1 | 2 | 3, scopeKind, settingsGeneration: context.settings_generation,
     organizationGeneration: context.organization_generation, profileVersionId: context.profile_version_id,
     profileEntries, directory, readPolicy: context.read_policy as ReplyLayeredContext['readPolicy'],
     ...(scenarioReadBudget === undefined ? {} : { scenarioReadBudget }),
     budget: { profileEntries: context.budget.profile_entries, directoryEntries: context.budget.directory_entries, characters: context.budget.characters } } });
+}
+
+
+export function readLayeredEvidence(value: Record<string, unknown>) {
+  const contact = readScope(value.layered_status, value.layered_context, value.layered_scenario_reads, 'contact');
+  const owner = readScope(value.owner_layered_status, value.owner_layered_context, value.owner_layered_scenario_reads, 'owner');
+  return { ...contact,
+    ...(owner.layeredContext === undefined ? {} : { ownerLayeredContext: owner.layeredContext }),
+    ...(owner.layeredStatus === undefined ? {} : { ownerLayeredStatus: owner.layeredStatus }),
+    ...(owner.layeredScenarioReads === undefined ? {} : { ownerLayeredScenarioReads: owner.layeredScenarioReads }) };
 }

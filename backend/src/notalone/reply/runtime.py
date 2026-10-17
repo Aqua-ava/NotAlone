@@ -78,6 +78,7 @@ class ReplyRuntimeResult:
     tool_calls: tuple[ToolCallTrace, ...] = ()
     input_budget: InputBudgetDecision | None = None
     layered_scenario_reads: tuple[dict, ...] = ()
+    owner_layered_scenario_reads: tuple[dict, ...] = ()
 
 
 class ReplyRuntime(Protocol):

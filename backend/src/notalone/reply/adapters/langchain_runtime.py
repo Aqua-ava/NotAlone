@@ -43,7 +43,7 @@ from notalone.reply.assistant_continuation_reference import continuation_referen
 from notalone.reply.assistant_discussion import DISCUSSION_HISTORY_NOTICE
 from notalone.reply.assistant_discussion_payload import assistant_discussion_payload
 from notalone.reply.layered_context import system_material
-from notalone.reply.scenario_tools import ScenarioToolAccess
+from notalone.reply.scenario_tools import ScenarioToolAccess, ScopedScenarioToolAccess
 from notalone.reply.runtime import (
     ReplyRuntimeResult,
     RuntimeCandidate,
@@ -800,9 +800,11 @@ class LangChainReplyRuntime:
                 )
                 agent_tools.extend(_create_history_tools())
             scenarios = None
-            if (self._layered_memory is not None and prepared.layered_context is not None
-                    and prepared.layered_context.to_payload().get("scenario_read_budget") is not None):
-                scenarios = ScenarioToolAccess(material=prepared.layered_context, port=self._layered_memory)
+            if self._layered_memory is not None and any(material is not None
+                    and material.to_payload().get("scenario_read_budget") is not None
+                    for material in (prepared.layered_context, prepared.owner_layered_context)):
+                scenarios = ScopedScenarioToolAccess(contact_material=prepared.layered_context,
+                    owner_material=prepared.owner_layered_context, port=self._layered_memory)
                 agent_tools.append(_create_scenario_tool())
             context = ReplyRuntimeContext(
                 scope=prepared.scope,
@@ -836,7 +838,7 @@ class LangChainReplyRuntime:
                 context_schema=ReplyRuntimeContext,
                 system_prompt=(BASE_SYSTEM_PROMPT + "\n" + DISCUSSION_HISTORY_NOTICE
                                if prepared.assistant_discussion is not None else BASE_SYSTEM_PROMPT)
-                              + system_material(prepared.layered_context),
+                              + system_material(prepared.layered_context) + system_material(prepared.owner_layered_context),
             )
             request_text = _request_text(prepared)
             validate_request = current_model_request_validator()
@@ -859,7 +861,7 @@ class LangChainReplyRuntime:
                 result = _validated_result(state, budget, self._model_name,
                                            history=history, selection=prepared.command.skill)
                 if scenarios is not None:
-                    result = replace(result, layered_scenario_reads=scenarios.receipts,
+                    result = replace(result, layered_scenario_reads=scenarios.receipts, owner_layered_scenario_reads=scenarios.owner_receipts,
                                      tool_calls=result.tool_calls + scenarios.tool_calls)
                 if self._constraint_review is not None:
                     result = await self._constraint_review.review(

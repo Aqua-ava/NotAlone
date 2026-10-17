@@ -37,11 +37,16 @@ def main():
     from notalone.reply.layered_context import LayeredReplyBudget, ScenarioReadBudget
     from tests.integration.server.test_layered_reply_context import LayeredReplyHttpTest
 
+    owner_mode = os.environ.get("NOTALONE_LAYERED_OWNER_CONTEXT") == "1"
+
     class Fixture(LayeredReplyHttpTest):
         def _backend(self, owner_id, **kwargs):
             if hasattr(self, "layered_reply_options"):
                 self.layered_reply_options["layered_reply_budget"] = LayeredReplyBudget(
                     4, 4, 4000, scenario_read=ScenarioReadBudget(3, 4, 4000))
+                if owner_mode:
+                    self.layered_reply_options["owner_layered_reply_budget"] = LayeredReplyBudget(
+                        2, 2, 3500, scenario_read=ScenarioReadBudget(3, 4, 4000))
             def combined_app(**options):
                 if hasattr(self, "service"):
                     options["layered_memory"] = self.service
@@ -65,6 +70,13 @@ def main():
         fixture = Fixture(methodName="runTest")
         fixture.setUp()
         contact, source, management, ready, reply_path = fixture.prepare_layered_reply()
+        owner_ready = owner_memory = None
+        if owner_mode:
+            owner_memory = fixture.manual_owner("本人长期参加合成学习课程，目前是否继续未核实。")
+            status, organized = management.request("/api/memories/owner/layered-memory/enable",
+                {"settings_generation": 0, "purpose_confirmed": True})
+            fixture.assertEqual(status, 200, organized)
+            owner_ready = organized["layered_memory"]
         status, other = fixture.backend.request("/api/contacts", {"request_id": str(uuid4()), "display_name": "合成隔离联系人"})
         fixture.assertEqual(status, 201, other)
         empty, _, other_message = fixture.import_contact("另一联系人独有的合成旅行资料。", contact_id=other["contact"]["contact_id"])
@@ -75,13 +87,14 @@ def main():
         scenario = ready["scenarios"][0]
 
         def plan_scenario_reads(text="想聊聊一起参加课程的经历。"):
-            arguments = {"scenario_id": scenario["scenario_id"], "paragraph_start": 0, "paragraph_end": 1}
-            fixture.reply_model.plans[:0] = [
-                {"history": {"name": "read_scenario", "args": dict(arguments)}},
-                {"history": {"name": "read_scenario", "args": dict(arguments)}},
-                {"text": text, "basis": "使用本次实际读入的历史课程正文，当前情况保持未知。"},
-            ]
-            return {"statuses": ["succeeded", "duplicate"], "paragraph_range": [0, 1]}
+            selected = [scenario] + ([owner_ready["scenarios"][0]] if owner_mode else [])
+            plans = [{"history": {"name": "read_scenario", "args": {
+                "scenario_id": item["scenario_id"], "paragraph_start": 0, "paragraph_end": 1}}}
+                for item in selected * 2]
+            fixture.reply_model.plans[:0] = [*plans,
+                {"text": text, "basis": "使用本次实际读入的历史课程正文，当前情况保持未知。"}]
+            return {"statuses": ["succeeded", "duplicate"], "paragraph_range": [0, 1],
+                    "owner_context": owner_mode}
 
         if os.environ.get("NOTALONE_LAYERED_SCENARIO_READS") == "1":
             plan_scenario_reads()
@@ -97,7 +110,7 @@ def main():
                 raise RuntimeError("主题资料夹具加载了其它工作树模块。")
             observed[module_name] = {"path": str(actual), "sha256": digest}
         proof.update(migrations=expected_migrations, migration_repeat=0, modules=observed,
-                     external_model_calls=0, quality="synthetic")
+                     external_model_calls=0, quality="synthetic", owner_context=owner_mode)
         write_backend_info(address=backend.base_url.removeprefix("http://"), token=backend.token)
         print(json.dumps({"ready": {"database_url": url, "owner_id": str(fixture.owner_id),
             "contact_ids": [contact, empty], "other_contact_id": empty, "empty_contact_id": empty}}), flush=True)
@@ -116,7 +129,27 @@ def main():
                 result = {"contact_id": contact, "source_id": source, "other_contact_id": empty, "profile_version_id": ready["profile"]["version_id"],
                     "scenario_id": scenario["scenario_id"], "scenario_version_id": scenario["version_id"],
                     "scenario_text": scenario["paragraphs"][0]["text"], "scenario_references": scenario["paragraphs"][0]["references"],
-                    "scenario_paragraph_count": len(scenario["paragraphs"]), "profile_text": ready["profile"]["entries"][0]["text"]}
+                    "scenario_paragraph_count": len(scenario["paragraphs"]), "profile_text": ready["profile"]["entries"][0]["text"],
+                    "owner_memory_id": owner_memory["memory_id"] if owner_memory else None,
+                    "owner_profile_version_id": owner_ready["profile"]["version_id"] if owner_ready else None,
+                    "owner_profile_text": owner_ready["profile"]["entries"][0]["text"] if owner_ready else None,
+                    "owner_scenario": owner_ready["scenarios"][0] if owner_ready else None}
+            elif operation == "manage_owner" and owner_mode:
+                action = command["action"]
+                owner_path = "/api/memories/owner/layered-memory"
+                state = fixture._get(management, owner_path)["layered_memory"]
+                if action in {"enable", "disable", "delete"}:
+                    payload = {"settings_generation": state["settings_generation"]}
+                    if action == "enable":
+                        payload["purpose_confirmed"] = True
+                    status, result = management.request(owner_path + "/" + action, payload)
+                elif action in {"correct", "delete_memory"}:
+                    status, result = backend.request("/api/memories/owner/" + owner_memory["memory_id"]
+                        + ("/correct" if action == "correct" else "/delete"),
+                        {"text": "本人已结束合成课程。"} if action == "correct" else {})
+                else:
+                    raise ValueError("本人合成验收动作无效。")
+                fixture.assertEqual(status, 200, result)
             elif operation == "plan_scenario_reads":
                 result = plan_scenario_reads(command.get("text", "想聊聊一起参加课程的经历。"))
             elif operation == "saved_scenario_evidence":

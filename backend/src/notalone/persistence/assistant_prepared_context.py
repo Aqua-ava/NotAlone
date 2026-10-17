@@ -30,9 +30,10 @@ HISTORY_SCOPE_LIMIT = 500
 
 
 class PreparedAssistantContext:
-    def __init__(self, context: ReplyContextPort, database_url: str, *, layered_memory=None, layered_budget=None) -> None:
+    def __init__(self, context: ReplyContextPort, database_url: str, *, layered_memory=None, layered_budget=None, owner_layered_budget=None) -> None:
         self._context, self._database_url = context, database_url
         self._layered_memory, self._layered_budget = layered_memory, layered_budget
+        self._owner_layered_budget = owner_layered_budget
 
     def _read(self, command: GenerateReply) -> dict[str, Any] | None:
         with psycopg.connect(self._database_url, row_factory=dict_row) as connection:
@@ -90,7 +91,7 @@ class PreparedAssistantContext:
                     evidence_id=item.evidence_id, kind=item.kind, source_ids=set(item.source_ids),
                     historical=is_historical))
             require_current_overview_navigation(connection, context, PostgresRelationshipOverviewStore(self._database_url))
-            require_material(context, self._layered_memory, connection=connection, budget=self._layered_budget)
+            require_material(context, self._layered_memory, connection=connection, budget=self._layered_budget, owner_budget=self._owner_layered_budget)
             _require_context_preferences(connection, context)
             dependencies.update(identifier for item in context.expression_preferences
                                 for identifier in (item.preference_id, *item.source_ids,
@@ -128,12 +129,25 @@ class PreparedAssistantContext:
         """仅新准备可省略新增层；已持久冻结的输入容量变化必须重新准备。"""
         try:
             validate(context)
-        except InputBudgetExceededError:
+        except InputBudgetExceededError as original_error:
             row = self._read(context.command)
-            if context.layered_context is None or row and row["prepared_context"] is not None:
+            last_error = original_error
+            if (context.layered_context is None and context.owner_layered_context is None
+                    or row and row["prepared_context"] is not None):
                 raise
-            context = replace(context, layered_context=None, layered_status="budget_omitted")
-            validate(context)
+            # 完整请求仍优先保留用户全文与原L1；每侧有独立的省略状态。
+            for prefix in ("owner_", ""):
+                if getattr(context, prefix + "layered_context") is None:
+                    continue
+                context = replace(context, **{prefix + "layered_context": None,
+                    prefix + "layered_status": "budget_omitted"})
+                try:
+                    validate(context)
+                except InputBudgetExceededError as omitted_error:
+                    last_error = omitted_error
+                    continue
+                return context
+            raise last_error
         return context
 
     def validate_current(self, context: ReplyContext) -> None:

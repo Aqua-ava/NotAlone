@@ -52,8 +52,15 @@ export class MemoryReadingController {
   }
   private readonly ownerDependencyListeners = new Set<(phase: 'started' | 'settled') => void>();
   onOwnerDependenciesChanged(listener: (phase: 'started' | 'settled') => void) { this.ownerDependencyListeners.add(listener); return () => { this.ownerDependencyListeners.delete(listener); }; }
+  private readonly ownerContextListeners = new Set<(phase: 'started' | 'settled') => void | Promise<void>>();
+  onOwnerContextChanged(listener: (phase: 'started' | 'settled') => void | Promise<void>) {
+    this.ownerContextListeners.add(listener); return () => { this.ownerContextListeners.delete(listener); };
+  }
+  async ownerLayeredContextChanged(phase: 'started' | 'settled'): Promise<void> {
+    await Promise.all([...this.ownerContextListeners].map(listener => listener(phase)));
+  }
   private ownerFactsWriteDepth = 0;
-  ownerFactsChanged(phase: 'started' | 'settled'): void {
+  async ownerFactsChanged(phase: 'started' | 'settled'): Promise<void> {
     for (const listener of this.deletionListeners) listener(phase, 'owner-facts');
     this.ownerFactsWriteDepth = phase === 'started' ? this.ownerFactsWriteDepth + 1 : Math.max(0, this.ownerFactsWriteDepth - 1);
     // 另一本人入口写入时也撤下旧页面副本；取消令牌阻止迟到读取复活正文。
@@ -66,6 +73,7 @@ export class MemoryReadingController {
     this.publish({ owner: { phase: 'idle', items: [] },
       ...(!this.ownerFactsWriteDepth ? { overview: { phase: 'idle' as const, value: null },
         ownerOverview: { phase: 'idle' as const, value: null }, layeredMemory: { phase: 'idle' as const, value: null } } : {}) });
+    await this.ownerLayeredContextChanged(phase);
   }
   sourceDeletionChanged(phase: 'started' | 'settled'): void {
     for (const listener of this.ownerDependencyListeners) listener(phase);
@@ -512,6 +520,7 @@ export class MemoryReadingController {
     this.publish({ mutation: { phase: 'working', message: '正在处理并核对资料…' } });
     const current = () => { this.synchronizeScope(); return this.scope === scope && this.mutation === operation; };
     try {
+      if (sections.includes('owner')) await this.ownerLayeredContextChanged('started');
       const result = await this.backend.requestJson({ method: 'POST', path, body, signal: operation.abort.signal });
       if (!current() || result.generation !== scope.generation) return;
       checked = true;
@@ -543,6 +552,7 @@ export class MemoryReadingController {
       if (this.mutation === operation) this.mutation = undefined;
       this.settleProtectedReads(reading);
       if (changesOverviewDependencies) for (const listener of this.ownerDependencyListeners) listener('settled');
+      if (sections.includes('owner')) await this.ownerLayeredContextChanged('settled');
     }
   }
   private async readSection(section: MemorySectionName, scope: Scope, afterWrite = false): Promise<boolean> {

@@ -114,6 +114,7 @@ export class ReplySession {
   private pendingContent: RetainedContactContent | undefined;
   private retainedSourceValidation: { checking: boolean } | undefined;
   private pendingExpressionPreferenceDeletions = 0;
+  private pendingOwnerContextChanges = 0;
 
   constructor(private readonly contacts: ContactSession, private readonly backend: BackendHost,
     private readonly generationBlock: () => ReplyGenerationBlock = () => null) {
@@ -162,7 +163,7 @@ export class ReplySession {
       || notice.sessionId !== state.savedSession?.sessionId || notice.operation !== this.operation
       || notice.connectionGeneration !== this.backend.getConnectionGeneration())) state.inputBudgetNotice = undefined;
     if (!this.candidateSourceCheck && !this.pendingContent && !this.retainedSourceValidation?.checking
-      && this.pendingExpressionPreferenceDeletions === 0) return state;
+      && this.pendingExpressionPreferenceDeletions === 0 && this.pendingOwnerContextChanges === 0) return state;
     // 完整来源复验期间只隔离现有视图，不另存可恢复正文。
     return { ...state, candidateDrafts: [], inputBudgetNotice: undefined, continuation: undefined, result: null, selectedCandidateId: null, canRetry: false,
       messages: { phase: 'loading', items: [], nextCursor: null }, targetMessageId: null,
@@ -479,7 +480,7 @@ export class ReplySession {
 
   async readSavedSession(selection: ContactSelection): Promise<void> {
     this.assertScope(selection);
-    if (this.pendingExpressionPreferenceDeletions > 0 || this.state.sessionDeletion === 'deleting'
+    if (this.pendingExpressionPreferenceDeletions > 0 || this.pendingOwnerContextChanges > 0 || this.state.sessionDeletion === 'deleting'
       || this.catalogPending || this.state.sessionCatalog?.selectionPending) return;
     this.candidateRestoreOperation += 1;
     this.savedRead?.abort();
@@ -768,6 +769,31 @@ export class ReplySession {
         }
       }
     }));
+  }
+
+  // 本人依赖可跨联系人且含不对界面公开的参与资料；由原会话和依据 GET 决定精确撤下范围。
+  beginOwnerContextChange(): void {
+    const content = this.pendingContent ?? retainContactContent(this.state, this.directionDerived, this.draft);
+    if (this.state.contactId && content) this.retainedContent.set(this.state.contactId, content);
+    const held = this.heldResult ?? (this.state.result ? { result: this.state.result,
+      selectedCandidateId: this.state.selectedCandidateId } : undefined);
+    ++this.pendingOwnerContextChanges;
+    this.sessionProjection.invalidateSource();
+    this.generationJobs.cancelAll();
+    this.savedRead?.abort(); this.savedRead = undefined;
+    this.cancelPending(); this.lastAttempt = undefined;
+    this.invalidateExploration();
+    this.pendingContent = content;
+    this.heldResult = held;
+    this.candidateVersions.setScope(null);
+    this.publish({ result: null, selectedCandidateId: null, phase: 'idle', canRetry: false,
+      candidateDrafts: [], sourceAvailability: held ? 'checking' : undefined,
+      ...(this.state.savedSession ? { savedSession: { ...this.state.savedSession, phase: 'idle' as const,
+        turns: [], inputs: [], currentInputVersionId: null } } : {}) });
+  }
+  async revalidateOwnerContextChange(): Promise<void> {
+    this.pendingOwnerContextChanges = Math.max(0, this.pendingOwnerContextChanges - 1);
+    if (this.pendingOwnerContextChanges === 0) await this.revalidateDeletedSource('', { preserveInput: true });
   }
 
   beginExpressionPreferenceDeletion(): void {
@@ -1953,7 +1979,7 @@ export class ReplySession {
     }
   }
   private assertCandidate(selection: ReplyCandidateSelection) {
-    if (this.pendingExpressionPreferenceDeletions > 0 || this.retainedSourceValidation?.checking) {
+    if (this.pendingExpressionPreferenceDeletions > 0 || this.pendingOwnerContextChanges > 0 || this.retainedSourceValidation?.checking) {
       throw new Error('请等待删除后的来源核验完成。');
     }
     this.assertScope(selection);
@@ -1972,7 +1998,7 @@ export class ReplySession {
     return state;
   }
   private assertSessionSelection(): void {
-    if (this.pendingExpressionPreferenceDeletions > 0 || this.retainedSourceValidation?.checking) {
+    if (this.pendingExpressionPreferenceDeletions > 0 || this.pendingOwnerContextChanges > 0 || this.retainedSourceValidation?.checking) {
       throw new Error('请等待删除后的来源核验完成。');
     }
     if (this.pendingContent) throw new Error('请等待联系人内容恢复完成，失败时请重新读取讨论。');
