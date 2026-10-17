@@ -2,6 +2,9 @@
 
 from dataclasses import replace
 import json
+from pathlib import Path
+import subprocess
+import tempfile
 import unittest
 from uuid import UUID
 from unittest.mock import patch
@@ -125,6 +128,105 @@ class AcceptanceBindingListingTest(unittest.TestCase):
             cli.sessions(type_filter="private", limit=5000)
         self.assertEqual(expired.exception.code, "acceptance_window_expired")
         self.assertEqual(self.runner.calls, [])
+
+    def budgeted_cli(self, minimum_seconds=0.4, completed=None, remaining=None):
+        output = self.runner.result.stdout
+
+        class BudgetedProcess(scope_fixture.SyntheticProcess):
+            def __init__(self):
+                super().__init__()
+                self.timeouts = []
+
+            def communicate(self, timeout=None):
+                self.timeouts.append(timeout)
+                if self.returncode is not None:
+                    return "", ""
+                if timeout is not None and timeout < minimum_seconds:
+                    raise subprocess.TimeoutExpired("synthetic-metadata", timeout)
+                if completed is not None:
+                    completed()
+                self.returncode = 0
+                return output, ""
+
+        directory = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        scope = replace(self.scope, audit_path=directory / "audit.jsonl",
+                        pid_audit_path=directory / "pids.jsonl")
+        owned = BudgetedProcess()
+        clock = lambda: 1791782460.0 if remaining is None else scope.until - remaining
+        cli = fixture.build_scoped_cli(scope, process_factory=lambda *args, **kwargs: owned, clock=clock)
+        self.addCleanup(cli.close)
+        return cli, owned, scope
+
+    def test_management_metadata_has_separate_bounded_budget(self):
+        cli, owned, scope = self.budgeted_cli()
+        fixture.adapt_binding_session_listing(cli)
+        candidates = cli.sessions(type_filter="private", limit=5000)
+        self.assertEqual(len(candidates), 3)
+        self.assertGreater(owned.timeouts[0], 0.4)
+        self.assertLessEqual(owned.timeouts[0], 2.0)
+        self.assertEqual(owned.returncode, 0)
+        audit = [json.loads(line) for line in scope.audit_path.read_text().splitlines()]
+        self.assertTrue(all(row["kind"] == "binding_metadata" for row in audit))
+        self.assertEqual(audit[-1]["event"], "metadata")
+
+    def test_adapted_cli_foreground_metadata_still_has_250ms_budget(self):
+        cli, owned, scope = self.budgeted_cli()
+        fixture.adapt_binding_session_listing(cli)
+        with self.assertRaises(fixture.CliCommandError) as raised:
+            cli.sessions(keyword=self.scope.metadata_name, type_filter="all", limit=51)
+        self.assertEqual(raised.exception.code, "acceptance_cli_timeout")
+        self.assertLessEqual(owned.timeouts[0], 0.25)
+        self.assertEqual(owned.returncode, -9)
+        audit = [json.loads(line) for line in scope.audit_path.read_text().splitlines()]
+        self.assertTrue(all(row["kind"] == "foreground_metadata" for row in audit))
+
+    def test_management_budget_is_bounded_and_context_resets_after_timeout(self):
+        cli, owned, scope = self.budgeted_cli(minimum_seconds=2.1)
+        fixture.adapt_binding_session_listing(cli)
+        with self.assertRaises(fixture.CliCommandError) as raised:
+            cli.sessions(type_filter="private", limit=5000)
+        self.assertEqual(raised.exception.code, "acceptance_cli_timeout")
+        self.assertLessEqual(owned.timeouts[0], 2.0)
+        self.assertEqual(owned.returncode, -9)
+        self.assertIsNone(fixture._binding_listing_guard.get())
+        audit = [json.loads(line) for line in scope.audit_path.read_text().splitlines()]
+        self.assertEqual(audit[-1]["kind"], "binding_metadata")
+        self.assertEqual(audit[-1]["returncode"], -9)
+
+    def test_management_result_after_its_deadline_is_rejected(self):
+        now = [0.0]
+        cli, owned, _ = self.budgeted_cli(completed=lambda: now.__setitem__(0, 2.01))
+        fixture.adapt_binding_session_listing(cli)
+        with patch.object(fixture.time, "monotonic", side_effect=lambda: now[0]):
+            with self.assertRaises(fixture.CliCommandError) as raised:
+                cli.sessions(type_filter="private", limit=5000)
+        self.assertEqual(owned.returncode, 0)
+        self.assertEqual(raised.exception.code, "acceptance_cli_timeout")
+        self.assertIsNone(fixture._binding_listing_guard.get())
+
+    def test_management_timeout_cannot_outlive_the_scope(self):
+        cli, owned, _ = self.budgeted_cli(remaining=0.1)
+        fixture.adapt_binding_session_listing(cli)
+        with self.assertRaises(fixture.CliCommandError) as raised:
+            cli.sessions(type_filter="private", limit=5000)
+        self.assertEqual(raised.exception.code, "acceptance_cli_timeout")
+        self.assertLessEqual(owned.timeouts[0], 0.101)
+        self.assertEqual(owned.returncode, -9)
+
+    def test_management_context_is_only_for_same_guard_session_command(self):
+        other = fixture.build_scoped_cli(self.scope, runner=self.runner,
+                                         clock=lambda: 1791782460.0)
+        command = (str(self.scope.real_cli), "sessions", "--keyword", self.scope.metadata_name,
+                   "--type-filter", "all", "--limit", "51", "--strict-read-only")
+        token = fixture._binding_listing_guard.set(self.cli.guard)
+        try:
+            self.assertEqual(self.cli.guard.command_kind(command), "binding_metadata")
+            self.assertEqual(other.guard.command_kind(command), "foreground_metadata")
+            self.assertEqual(self.cli.guard.command_kind((str(self.scope.real_cli), "resolve-chat",
+                self.scope.metadata_name, "--strict-read-only")), "foreground_metadata")
+        finally:
+            fixture._binding_listing_guard.reset(token)
+        self.assertEqual(self.cli.guard.command_kind(command), "foreground_metadata")
 
 
 if __name__ == "__main__":

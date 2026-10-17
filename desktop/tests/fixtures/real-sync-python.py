@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import atexit
 from collections.abc import Callable
+from contextvars import ContextVar
 from dataclasses import dataclass, replace
 from datetime import datetime
 import hashlib
@@ -23,6 +24,9 @@ from zoneinfo import ZoneInfo
 
 from notalone.wechat_cli import CliCommandError, CliOutputError, LocalWechatCli
 from notalone.wechat_cli.normalizer import normalize_cli_events
+
+
+_binding_listing_guard: ContextVar[Any] = ContextVar("acceptance_binding_listing_guard", default=None)
 
 
 @dataclass(frozen=True, slots=True)
@@ -190,7 +194,8 @@ class ScopeGuard:
                     ("resolve-chat", self.scope.metadata_name, "--strict-read-only"),
                     ("resolve-chat", self.scope.metadata_name, "--type-filter", "all", "--strict-read-only"),
                 }):
-            return "foreground_metadata"
+            return ("binding_metadata" if _binding_listing_guard.get() is self
+                    and command[1:2] == ("sessions",) else "foreground_metadata")
         if follow:
             remainder = command[2:]
             if command[1:2] != ("tail",):
@@ -459,11 +464,13 @@ class AuditedProcesses:
                 raise _fail("acceptance_cli_start_failed") from None
 
     def command(self, command: tuple[str, ...], kind: str) -> Any:
-        metadata_deadline = time.monotonic() + 0.25 if kind == "foreground_metadata" else None
+        metadata_budget = {"foreground_metadata": 0.25, "binding_metadata": 2.0}.get(kind)
+        metadata_deadline = (time.monotonic() + metadata_budget
+                             if metadata_budget is not None else None)
         managed = self._spawn(command, kind, deadline=metadata_deadline)
         try:
-            # 自定义 runner 不接收适配器的 timeout；在实际自有进程边界兑现定位预算。
-            limit = 0.25 if kind == "foreground_metadata" else 30.0
+            # 管理页限定列表与前台定位分开计时，定位仍保持原250ms预算。
+            limit = metadata_budget if metadata_budget is not None else 30.0
             if metadata_deadline is not None:
                 limit = max(0.000001, metadata_deadline - time.monotonic())
             timeout = min(limit, max(0.001, self.scope.until - self.clock()))
@@ -533,8 +540,12 @@ def adapt_binding_session_listing(cli: ScopedCli) -> None:
         if (not args and type(kwargs.get("limit")) is int
                 and kwargs == {"type_filter": "private", "limit": 5000}):
             # 不按正文 locator 过滤、不去重或消歧；仍由公开预览/确认处理稳定身份。
-            candidates = original_sessions(keyword=cli.guard.scope.metadata_name,
-                                           type_filter="all", limit=51)
+            token = _binding_listing_guard.set(cli.guard)
+            try:
+                candidates = original_sessions(keyword=cli.guard.scope.metadata_name,
+                                               type_filter="all", limit=51)
+            finally:
+                _binding_listing_guard.reset(token)
             return tuple(item for item in candidates if item.chat_type == "private")
         return original_sessions(*args, **kwargs)
 
@@ -579,7 +590,8 @@ def build_scoped_cli(scope: AcceptanceScope, *, runner: Any = None,
     def metadata(candidates: tuple[Any, ...]) -> None:
         if real is not None:
             from notalone.conversation.matcher import normalize_display_text
-            real.record("metadata", "foreground_metadata", None, status="validated",
+            kind = "binding_metadata" if _binding_listing_guard.get() is guard else "foreground_metadata"
+            real.record("metadata", kind, None, status="validated",
                 candidate_count=len(candidates), private_count=sum(item.chat_type == "private" for item in candidates),
                 group_count=sum(item.chat_type == "group" for item in candidates),
                 other_type_count=sum(item.chat_type not in {"private", "group"} for item in candidates),
