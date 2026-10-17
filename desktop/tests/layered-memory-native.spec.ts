@@ -17,8 +17,8 @@ const test = appTest.extend<{ layeredBackend: RewriteFixture }>({
 });
 
 // 有限等待本次 Computer Use 收据；不自动替代用户操作或签发模型资格。
-test('实际 App 的合成主题资料增量维护 CUA 验收', async ({ runningApp, layeredBackend }) => {
-  test.setTimeout(8 * 60_000);
+test('实际 App 的合成主题资料与长期背景联合增量 CUA 验收', async ({ runningApp, layeredBackend }) => {
+  test.setTimeout(12 * 60_000);
   const requested = process.env.NOTALONE_LAYERED_CUA_DIR;
   if (!requested || !path.isAbsolute(requested)) throw new Error('实际验收须指定本轮私有收据目录。');
   const directory = await realpath(requested);
@@ -30,6 +30,7 @@ test('实际 App 的合成主题资料增量维护 CUA 验收', async ({ running
   const requiredChecks = ['initial_closed', 'partial_coverage_paused', 'continue_progress',
     'complete_coverage', 'earlier_paragraph_retained', 'manual_memory_added',
     'automatic_incremental_coverage', 'new_and_previous_paragraphs_visible',
+    'paused_budget_unchanged_after_reread', 'profile_updated_automatically', 'profile_evidence_visible',
     'contact_isolation', 'delete_then_disable'];
   await runningApp.app.firstWindow();
   await writeFile(path.join(directory, 'ready.json'), JSON.stringify({
@@ -42,7 +43,7 @@ test('实际 App 的合成主题资料增量维护 CUA 验收', async ({ running
     let checking = false;
     let settled = false;
     const watcher = watch(directory, (_event, filename) => { if (filename === 'done.json') void check(); });
-    const timer = setTimeout(() => finish(new Error('本次CUA未在有限期限内完成。')), 7 * 60_000);
+    const timer = setTimeout(() => finish(new Error('本次CUA未在有限期限内完成。')), 11 * 60_000);
     function finish(error?: Error) {
       if (settled) return;
       settled = true;
@@ -67,8 +68,10 @@ test('实际 App 的合成主题资料增量维护 CUA 验收', async ({ running
     void check();
   });
   const response = await layeredBackend.request(`/api/contacts/${layeredBackend.data.contact_ids[0]}/layered-memory`);
-  const state = response.data.layered_memory as { enabled: boolean; scenarios: unknown[] };
-  if (response.status !== 200 || state.enabled || state.scenarios.length) throw new Error('实际删除后的公开状态未收口。');
+  const state = response.data.layered_memory as { enabled: boolean; scenarios: unknown[]; profile: unknown | null };
+  if (response.status !== 200 || state.enabled || state.scenarios.length || state.profile !== null) {
+    throw new Error('实际删除后的主题资料与长期背景未同时收口。');
+  }
   await writeFile(path.join(directory, 'runtime-proof.json'), JSON.stringify(await layeredBackend.command('runtime_proof')),
     { mode: 0o600, flag: 'wx' });
 });
