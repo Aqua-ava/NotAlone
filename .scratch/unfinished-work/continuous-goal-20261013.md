@@ -329,3 +329,11 @@ Root已让worker只在E adapters.py做通用源忠实性提示澄清，原提示
 Root已另立[新A01 cap2固定计划](goal-memory-A01-source-fidelity-plan-20261014.md)：run8ce45991-7386-4180-a1f4-25ecd93c51aa，台北10-14 01:50–03:00，last02:29:15；仅原位置0两HTTP，原全21／28＋1Gold保留，raw／full各600秒，无重试和自动后继。新入口准备与两轴尚待收口，尚未实际登记／读key／HTTP；过期未运行不顺延。累计66、14closed／223永久关闭＋56退役＋280未激活保持，新2工程分配627、目标实际最多68，不借旧40或其他余款。
 
 私有新入口／Root只读15目录实际账核对与新场意图位于忽略的`desktop/artifacts/goal-nullable-A01-source-fidelity-prepare-20261014/`，Root实际账SHA1a4d9dba1c145bda4314d6c40c0dcb563190e572e3fc266cfe01c4182ced0a78。正式激活前须重新冻结本计划、全部来源／安装版本、HEAD并核字节。现场按用户选择暂缓，App612／G新启动0、发送8/12下一条9、来信0；六项原验收未全达。
+
+## 2026-10-14：A01真实局部回归收口与typed证明入口恢复点
+
+[新A01结果](goal-memory-A01-source-fidelity-result-20261014.md)实际01:53:49.626480–01:59:33.556909台北／343.930431209秒；E/V两200v4-flash，E14通过／局部2必需full2／安全0，正式raw133.443087583秒、full155.735122292秒，不称盲标；proofnull／UNKNOWN／source_boundfalse、pending0auto，全21／140／旧私有六窗口及逐维度≥15未认证，六票未全达。原失败ade9与修复7154、预登记25035不改；Rootfull答复发布前一次形状校验失败按现有契约修正，0模型补跑、不称模型red。
+
+新8ce已CLOSED2/2／unused0、PID46199gone，Root独立terminal SHA149124d2e13cf9c4b474903888f99d23be9af59c333afcb77458cf32ae2e4cd9；运行前后74来源／66blob／8版本／HEAD25035保持、全部16实际目录含外账锁free、12events／capture／客户端及记录清理错误空，已明确解除本场源码／Git冻结。累计15目标closed68＝62确认200＋2确认500＋4旧ReadTimeout远端未知、223永久关闭＋56退役＋280未激活＝627，恢复模型loader4次。私有actual与prepare目录见结果，0700／0600，不重开或借223。
+
+下一项private typed入口候选正在新忽略目录`desktop/artifacts/goal-typed-proof-entry-prepare-20261014/`准备，只有现有公开合成“我刚到家。”，通过真实文件导入自有隔离PG、loader typed来源、正式E／nullable V／Flow及v2保存重读；不用旧reference projection／Gold偷补输入，不改产品API、业务库／旧数据／默认legacy／空放行表。当前新typed UUID／固定窗／登记／key／HTTP仍0，Root后独立限cap2和严格来源／语义预登记，源由真实导入得到，模型proof不可canned。原完整21还缺独立有限全量回归，不自动后继。现场暂缓；App612／G0／8/12下条9／来信0与第二联系人缺项保留。

@@ -30,7 +30,6 @@ Blocked by: none
 
 用户选择“同意采用新固定集和新留出验收（推荐）”，具体合同见[替代验收](../replacement-acceptance-decision-20261016.md)。原资料无法恢复，旧6/12、2/6及全部关闭预算不改；新六窗按当前生产版本与候选同配置比较，候选须必需raw/接受/完整均6/6、正确额外候选不丢、错误或歧义auto为0，再通过独立新四窗留出。新留出仅私有保存，调用前独立来源审查；不把公开部分或单元测试代签真实质量。原State及剩余AC保持，验收通过后直接关票。
 
-
 ### 2026-10-16 剩余公开8窗有界退场
 
 [独立本场结果](../../grounded-evaluation/remaining-public8-result-20261016.md)：closed4／16、三200与一个V远端未知、零重试，余12永久关闭。B01 raw/full封存且safe／supported、单窗必需raw3／接受3／完整3；因无完整batch result，外层仍保守将B01及B02列unknown，此单窗证据不覆盖原收据。B02无正式审核，其余六窗unrun；本场13必需、核心5必需分母保留，不签核心整体、原21完整、≥15用例门或逐类放行。proof仍null／UNKNOWN、默认空表不变。当前持续授权已足够推进离线修复与必要有界官方合成验证，Triage改ready-for-agent，历史等待新预算说明仅作历史；State／AC及旧失败保持，真实聊天、业务与ECNU均未处理。
@@ -215,6 +214,10 @@ Blocked by: none
 ## Comments（新原21首窗正式安全停止 2026-10-14）
 
 - [真实结果](../../unfinished-work/goal-memory-nullable-reference21-result-20261014.md)：独立582d73f8实际447.437282875秒、E/V均200（reported v4-flash）、CLOSED2/42，余40永久关闭。A01正式raw/full1窗，正文两命题保留，14字段12pass2fail，理由无来源补“此前被认作仓库管理员”严格记raw false_fact1，safety_error后剩20unrun；子集raw2／接受2／完整0，不把matcher passed或V4支持签全部字段。proofnull/programUNKNOWN／source_boundfalse／semantic_basisnull，自动0。累计14closed66HTTP／223永闭未用／56退役／full280未启，分配625；旧原Gold21/28+1和所有AC/State保持。当前仅通用E提示修复准备，未有新场登记或真实调用；现场暂缓、App612／消息8/12／来信0保持。
+
+## Comments（A01来源最小修复实际局部回归2026-10-14）
+
+[新A01独立cap2结果](../../unfinished-work/goal-memory-A01-source-fidelity-result-20261014.md)实际343.930431209秒／两200v4-flash，E14通过、raw133.443秒／full155.735秒、局部2必需raw2／接受2／完整2、安全0，技术1/1完成；原全21／28＋1、140、私有六窗口／留出及逐维度≥15未认证。原Gold／答案／分母／AC／State不改，旧虚构失败保留。proofnull／UNKNOWN、version2 source_boundfalse／semantic_basisnull、pending／0auto；AND／空放行表及业务迁移0保持。Root独立CLOSED2/2／unused0、旧账全16目录锁free／PIDgone／清理空，累计15场closed68＝62确认200＋2确认500＋4旧timeout未知，223永久关闭、56退役／280未激活／分配627；不借额度或自动后继。现场继续暂缓。
 
 
 ### 2026-10-16 受控歧义v3两窗正式小试

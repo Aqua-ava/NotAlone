@@ -87,6 +87,10 @@
 
 - [真实结果](../../unfinished-work/goal-memory-nullable-reference21-result-20261014.md)：独立582d73f8实际447.437282875秒、E/V均200（reported v4-flash）、CLOSED2/42，余40永久关闭。A01正式raw/full1窗，正文两命题保留，14字段12pass2fail，理由无来源补“此前被认作仓库管理员”严格记raw false_fact1，safety_error后剩20unrun；子集raw2／接受2／完整0，不把matcher passed或V4支持签全部字段。proofnull/programUNKNOWN／source_boundfalse／semantic_basisnull，自动0。累计14closed66HTTP／223永闭未用／56退役／full280未启，分配625；旧原Gold21/28+1和所有AC/State保持。当前仅通用E提示修复准备，未有新场登记或真实调用；现场暂缓、App612／消息8/12／来信0保持。
 
+## Comments（A01来源最小修复实际局部回归2026-10-14）
+
+[新A01独立cap2结果](../../unfinished-work/goal-memory-A01-source-fidelity-result-20261014.md)实际343.930431209秒／两200v4-flash，E14通过、raw133.443秒／full155.735秒、局部2必需raw2／接受2／完整2、安全0，技术1/1完成；原全21／28＋1、140、私有六窗口／留出及逐维度≥15未认证。原Gold／答案／分母／AC／State不改，旧虚构失败保留。proofnull／UNKNOWN、version2 source_boundfalse／semantic_basisnull、pending／0auto；AND／空放行表及业务迁移0保持。Root独立CLOSED2/2／unused0、旧账全16目录锁free／PIDgone／清理空，累计15场closed68＝62确认200＋2确认500＋4旧timeout未知，223永久关闭、56退役／280未激活／分配627；不借额度或自动后继。现场继续暂缓。
+
 
 ### 2026-10-16 受控歧义v3两窗正式小试
 
