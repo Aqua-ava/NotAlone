@@ -1,13 +1,13 @@
 # 分层记忆：任务索引与工作流状态
 
-> 更新：2026-10-17。已启动四会话目标模式执行。集成分支为 `codex/layered-memory-integration`，基线 `main@0702940`；主仓 main 保持不变。01 正在独立工作树实现，其余任务依真实前置等待。
+> 更新：2026-10-17。已启动四会话目标模式执行。集成分支为 `codex/layered-memory-integration`，基线 `main@0702940`；主仓 main 保持不变。01 已通过独立审查和合并验证；02、04现已就绪，其余任务依真实前置等待。
 > [正式规格](spec.md)、[已确认拆分](ticket-proposal.md)、[联合方案](../../architecture/drafts/layered-relationship-memory.md)、[ADR-067](../../architecture/adr/067-layered-scenario-and-profile-context.md)。
 
 ## 正式任务
 
 | 编号 | 任务 | State | Blocked by |
 | --- | --- | --- | --- |
-| 01 | [单联系人有限批次主题资料与最小管理](issues/01-contact-scenario-batch.md) | claimed | None |
+| 01 | [单联系人有限批次主题资料与最小管理](issues/01-contact-scenario-batch.md) | resolved | None |
 | 02 | [首次完整覆盖的有界批次与恢复](issues/02-initial-coverage-recovery.md) | open | 01 |
 | 03 | [记忆变化驱动主题持续更新](issues/03-incremental-scenario-maintenance.md) | open | 02 |
 | 04 | [可追溯长期背景与一致版本集合](issues/04-contact-profile-generation.md) | open | 01 |
@@ -21,9 +21,9 @@
 
 ## 当前可领取前沿
 
-[01：单联系人有限批次主题资料与最小管理](issues/01-contact-scenario-batch.md) 已由资料主线在独立工作树领取。其余票保持 open，须等待真实前置完成，不按编号或 triage 标签推断已就绪。候选提交须经审查并实际集成后才释放前沿。
+01 已以 `74cb9ea1` 集成并签收。当前可领取 [02：首次完整覆盖的有界批次与恢复](issues/02-initial-coverage-recovery.md) 和 [04：可追溯长期背景与一致版本集合](issues/04-contact-profile-generation.md)；其余票仍须等待真实前置，不按编号或 triage 标签推断就绪。
 
-01 完成后，02 和 04 可并行。07／08 的联系人回复路径不等待本人整理；09 汇合两种范围。10 的真实质量验证不阻塞受控工程实现，最终真实使用在11汇合工程与质量要求。
+01 已完成，02 和 04 现在可并行。07／08 的联系人回复路径不等待本人整理；09 汇合两种范围。10 的真实质量验证不阻塞受控工程实现，最终真实使用在11汇合工程与质量要求。
 
 ## 依赖图
 
@@ -67,4 +67,4 @@ flowchart TD
 
 ## 发布结果
 
-已发布11个独立任务文件。当前开始工程实现；未处理真实业务资料、运行真实业务库迁移或调用外部模型。工程、模型质量和真实 App 证据分别签收；当前无已完成任务。
+已发布11个独立任务文件。当前开始工程实现；未处理真实业务资料、运行真实业务库迁移或调用外部模型。工程、模型质量和真实 App 证据分别签收；当前仅01完成受控工程签收，真实模型资格仍未知／关闭。
