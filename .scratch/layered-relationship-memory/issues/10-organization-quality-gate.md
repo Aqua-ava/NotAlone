@@ -1,7 +1,7 @@
 # 10：整理模型质量验证与可用状态
 
 Triage: ready-for-agent
-State: open
+State: claimed
 Type: task
 Blocked by: 05
 
@@ -49,3 +49,5 @@ Blocked by: 05
 ## Comments
 
 - 2026-10-17：用户认可11项粒度与依赖后逐张发布；本票为 open，尚未领取、实现或验收。
+
+- 2026-10-18：任务10已领取，基线 `c7f64af7aba5426aebdd5932832dd080423516df`；承接05正式签收，按已确认规格、ADR-067及合成准备v3推进。人工冻结、实际模型质量及真实App分别记录，未验不授予资格；planning由统筹维护。
