@@ -61,10 +61,10 @@ class MemorySkillEvolutionHttpTest(EvolutionHttpSupport, CoreBusinessFlowFixture
         reply = self.evolution_reply(state, published["version_id"])
         self.assertEqual(len(reply["used_skill"]["execution_view"]["method_ids"]), 1)
         self.assertEqual(reply["used_skill"]["execution_view"]["policy_revision"], policy["revision"])
-        self.assertNotIn("合成排除方法甲", str(self.reply_model.seen_calls[-1]))
+        self.assertNotIn("合成排除方法甲", str(self._last_evolution_generation_messages()))
         for extra in ({"scene": "其他场景"}, {"other": True}):
             self.evolution_reply(state, published["version_id"], **extra)
-            self.assertIn("合成排除方法甲", str(self.reply_model.seen_calls[-1]))
+            self.assertIn("合成排除方法甲", str(self._last_evolution_generation_messages()))
 
         authority_before_upgrade = self._evolution_authority()
         prepared, prepare_command = self._prepare(limit=20, size=20, calls=12)
@@ -87,7 +87,7 @@ class MemorySkillEvolutionHttpTest(EvolutionHttpSupport, CoreBusinessFlowFixture
         self.backend = self._production_backend(self.owner_id)
         self.assertEqual(self._wait(job, states=("applied",))["batches"], applied["batches"])
         self.evolution_reply(state, published["version_id"])
-        self.assertNotIn("合成排除方法甲", str(self.reply_model.seen_calls[-1]))
+        self.assertNotIn("合成排除方法甲", str(self._last_evolution_generation_messages()))
         self._delete_source(state["source_id"])
         self.assert_evolution_deleted(state, applied)
         self._delete_source(state["source_id"])
@@ -136,7 +136,7 @@ class MemorySkillEvolutionHttpTest(EvolutionHttpSupport, CoreBusinessFlowFixture
         second = self.publish_evolution(state)
         self.assertEqual((second["skill_id"], second["version_number"]), (first["skill_id"], 2))
         self.evolution_reply(state, second["version_id"])
-        self.assertNotIn("合成排除方法甲", str(self.reply_model.seen_calls[-1]))
+        self.assertNotIn("合成排除方法甲", str(self._last_evolution_generation_messages()))
         history = self._get(self.backend, history_path)
         rollback = {"version_id": first["version_id"], "expected_revision": history["revision"],
                     "expected_current_version_id": second["version_id"], "operation_key": str(uuid4())}
@@ -146,7 +146,7 @@ class MemorySkillEvolutionHttpTest(EvolutionHttpSupport, CoreBusinessFlowFixture
         self.backend.close()
         self.backend = self._production_backend(self.owner_id)
         self.evolution_reply(state, first["version_id"])
-        self.assertNotIn("合成排除方法甲", str(self.reply_model.seen_calls[-1]))
+        self.assertNotIn("合成排除方法甲", str(self._last_evolution_generation_messages()))
         self._delete_source(state["source_id"])
         self.assert_evolution_deleted(state)
         self.assertIn(self.backend.request(history_path + "/rollback", rollback)[0], (404, 409))
@@ -167,7 +167,7 @@ class MemorySkillEvolutionHttpTest(EvolutionHttpSupport, CoreBusinessFlowFixture
         self.backend = self._production_backend(self.owner_id)
         self.assertEqual(self.backend.request(job_path)[0], 410)
         self.evolution_reply(state, published["version_id"])
-        self.assertNotIn("合成排除方法甲", str(self.reply_model.seen_calls[-1]))
+        self.assertNotIn("合成排除方法甲", str(self._last_evolution_generation_messages()))
         self._delete_source(state["source_id"])
         self.assert_evolution_deleted(state, job)
 
@@ -317,7 +317,7 @@ class MemorySkillEvolutionHttpTest(EvolutionHttpSupport, CoreBusinessFlowFixture
             ).fetchone()[0], 0)
         retried = self._ok(state["session_path"] + "/replies", body)
         self.assertEqual(len(retried["used_skill"]["execution_view"]["method_ids"]), 1)
-        self.assertNotIn("合成排除方法甲", str(self.reply_model.seen_calls[-1]))
+        self.assertNotIn("合成排除方法甲", str(self._last_evolution_generation_messages()))
         state.setdefault("dependent_replies", []).append({"reply": retried, "body": body,
             "path": state["session_path"], "evidence_path":
                 f"/api/contacts/{self.contact_id}/replies/{retried['reply_request_id']}/evidence"})

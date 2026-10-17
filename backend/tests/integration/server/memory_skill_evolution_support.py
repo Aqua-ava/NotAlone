@@ -8,6 +8,7 @@ from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from uuid import UUID, uuid4
+from langchain_core.messages import HumanMessage
 
 import psycopg
 
@@ -111,7 +112,7 @@ class EvolutionHttpSupport:
             "contact_id": str(contact or self.contact_id), "idempotency_key": str(uuid4()),
             "scene": scene,
             "content": {"type": "rewrite_draft", "draft_text": "想聊合成温茶和合成热茶，先核对再回应。",
-                        "user_instruction": "这次保留说明，不作额外承诺。",
+                        # 此组合验证长期偏好的实际使用与删除依赖，不设置覆盖偏好的本次要求。
                         "include_relationship_context": True},
         }
         if version_id is not None:
@@ -340,6 +341,14 @@ class EvolutionHttpSupport:
         self.assertEqual(evidence["retrieval"]["retriever_version"], "lexical-v1")
         self.assertIn(state["preference"]["preference_id"], reply["context_receipt"]["expression_preference_ids"])
         self.assertNotIn(state["historical_memory"]["memory_id"], by_id)
+
+    def _last_evolution_generation_messages(self):
+        """实际Skill内容在生成轮核对；复核轮有独立协议与提示。"""
+        for messages in reversed(self.reply_model.seen_calls):
+            payload = next(json.loads(item.content) for item in messages if isinstance(item, HumanMessage))
+            if payload.get('generation_stage') != 'candidate_fidelity_review':
+                return messages
+        self.fail('没有实际生成轮可以核对Skill执行视图。')
 
     def evolution_reply(self, state, version_id, scene="核对安排", other=False):
         contact = self.second_contact_id if other else self.contact_id
