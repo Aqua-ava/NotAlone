@@ -131,7 +131,7 @@ class Reference21V4PublicTest(unittest.TestCase):
                             synthetic_transport=httpx.MockTransport(lambda _: self.fail("不得发送")),
                             credential_loader=lambda: self.fail("不得读key"), bridge=original.SyntheticBridge())
 
-    def test_uniqueness_captured_a05_without_codes_still_auto_and_stops_on_sealed_safety(self):
+    def test_uniqueness_captured_a05_without_codes_stays_pending_and_preserves_sealed_safety(self):
         from notalone.memory_extraction.evaluation import build_window
         from notalone.memory_extraction.evaluation_ecnu import _PLAN_CASES
 
@@ -166,15 +166,15 @@ class Reference21V4PublicTest(unittest.TestCase):
 
         result = runner.worker(freeze_path=path, expected_sha256=expected, approval=approval,
             synthetic_transport=httpx.MockTransport(respond), credential_loader=lambda: "synthetic-key", bridge=A05Bridge())
-        self.assertEqual(result["stopped_code"], "case_semantic_audit_safety_error")
-        self.assertEqual(result["outcomes"][4]["result"]["actual"], "auto")
-        self.assertEqual((len(self.requests), self.extraction_positions), (10, list(range(5))))
-        self.assertEqual(result["receipt"]["budget"]["reserved_requests"], 10)
+        self.assertIsNone(result["stopped_code"])
+        self.assertEqual(result["outcomes"][4]["result"]["actual"], "pending")
+        self.assertEqual((len(self.requests), self.extraction_positions), (40, list(range(21))))
+        self.assertEqual(result["receipt"]["budget"]["reserved_requests"], 40)
         self.assertTrue(result["receipt"]["budget"]["closed"])
-        self.assertTrue(all(row["status"] == "unrun" for row in result["outcomes"][5:]))
+        self.assertFalse(result["typed_evaluated"])
         final = next(event["payload"]["report"] for event in result["events"]
             if event["kind"] == "semantic_audit" and event["case_position"] == 4 and event["payload"].get("phase") == "final")
-        self.assertEqual((final["safety"]["ambiguous_auto"], final["safety"]["bad_auto"]), (1, 1))
+        self.assertEqual((final["safety"]["ambiguous_auto"], final["safety"]["bad_auto"]), (0, 0))
 
     def test_uniqueness_extra_proof_is_preserved_and_public_sources_are_required(self):
         from dataclasses import replace

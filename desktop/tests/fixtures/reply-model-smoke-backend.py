@@ -447,7 +447,13 @@ class SmokeBackend:
                 owner_id=self.owner_id, contact_id=self.contact_id, channel="wechat",
                 account_scope=f"synthetic-smoke-{self.owner_id}", conversation_locator=f"synthetic-smoke-{self.contact_id}",
             )
-            with patch("notalone.server.reply_wiring.build_deepseek_model", return_value=bundle.model):
+            def single_call_runtime(**options):
+                # 本场仅验证冻结的一次生成；候选复核由独立SDK/HTTP回归覆盖。
+                # 保留实际运行时、完整输入计量与逐次台账，不扩大已领取调用预算。
+                return LangChainReplyRuntime(**{**options, "constraint_review": None})
+
+            with patch("notalone.server.reply_wiring.build_deepseek_model", return_value=bundle.model), \
+                    patch("notalone.server.reply_wiring.LangChainReplyRuntime", side_effect=single_call_runtime):
                 reply = build_reply_service(database_url=self.database_url, owner_id=self.owner_id,
                                             model_priority=self.priority, input_budget_profile=input_profile(), input_token_counter=bundle.counter)
 

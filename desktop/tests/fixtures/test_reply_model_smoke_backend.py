@@ -399,6 +399,9 @@ class SmokeBudgetTest(unittest.TestCase):
             self.assertEqual(status, 200)
             self.assertEqual(restored["turns"][0]["state"], "completed")
             self.assertEqual(self.budget.snapshot()["reserved_requests"], 1)
+            self.assertEqual(bundle.audit.responses, 1)
+            self.assertEqual({item["function"]["name"] for item in bundle.audit.last_request["tools"]},
+                             {"read_file", "ReplyRuntimeOutput"})
             inspection = backend.inspect()
             self.assertEqual(inspection["counts"]["message"], 0)
             self.assertEqual(inspection["counts"]["source_document"], 0)
