@@ -1,6 +1,6 @@
 # 分层记忆：任务索引与工作流状态
 
-> 更新：2026-10-18。四会话按真实依赖推进；集成分支 `codex/layered-memory-integration`，基线 `main@0702940`，主仓main保持不变。01、02、03、04、07已通过独立审查和合并验证；05由A回修审查问题，08已就绪，其余等待真实前置。
+> 更新：2026-10-18。四会话按真实依赖推进；集成分支 `codex/layered-memory-integration`，基线 `main@0702940`，主仓main保持不变。01、02、03、04、07已通过独立审查和合并验证；05由A回修审查问题，08由B在独立工作树实施，其余等待真实前置。
 > [正式规格](spec.md)、[已确认拆分](ticket-proposal.md)、[联合方案](../../architecture/drafts/layered-relationship-memory.md)、[ADR-067](../../architecture/adr/067-layered-scenario-and-profile-context.md)。
 
 ## 正式任务
@@ -14,14 +14,14 @@
 | 05 | [本人独立范围的主题资料与长期背景](issues/05-owner-layered-organization.md) | claimed | 03, 04 |
 | 06 | [事实纠错与整理纠错分别生效](issues/06-layered-memory-corrections.md) | open | 05 |
 | 07 | [联系人背景和主题目录进入回复](issues/07-contact-layered-reply-context.md) | resolved | 04 |
-| 08 | [按需读取主题正文与实际依据回看](issues/08-scenario-read-tool.md) | open | 07 |
+| 08 | [按需读取主题正文与实际依据回看](issues/08-scenario-read-tool.md) | claimed | 07 |
 | 09 | [本人背景与当前联系人回复组合](issues/09-owner-contact-reply-context.md) | open | 05, 08 |
 | 10 | [整理模型质量验证与可用状态](issues/10-organization-quality-gate.md) | open | 05 |
 | 11 | [完整回复质量对照与受控启用交付](issues/11-combined-quality-release.md) | open | 06, 09, 10 |
 
 ## 当前可领取前沿
 
-01以`74cb9ea1`、02以`592b9916`、04以`64024f55`、03以`8276f707`、07以`9170069c`集成并签收。05由A继续修正独立审查问题；[08：按需读取主题正文与实际依据回看](issues/08-scenario-read-tool.md) 已就绪，交B在新独立上下文领取。
+01以`74cb9ea1`、02以`592b9916`、04以`64024f55`、03以`8276f707`、07以`9170069c`集成并签收。05由A继续修正独立审查问题；[08：按需读取主题正文与实际依据回看](issues/08-scenario-read-tool.md) 已由B在新独立上下文领取。
 
 05与08可并行；06及10等待05签收，09汇合05和08。07仅已接联系人背景与目录，不冒称读取主题正文；08交付后才增加实际正文读取。10的真实质量验证不阻塞受控工程实现，11汇合工程与真实质量要求；未验真实质量保持关闭。
 

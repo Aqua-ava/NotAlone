@@ -1,7 +1,7 @@
 # 08：按需读取主题正文与实际依据回看
 
 Triage: ready-for-agent
-State: open
+State: claimed
 Type: task
 Blocked by: 07
 
