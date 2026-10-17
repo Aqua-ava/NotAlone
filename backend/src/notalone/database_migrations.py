@@ -65,7 +65,7 @@ def migrate_connection(
     connection: psycopg.Connection, directory: Path,
     on_applied: Callable[[str], None] | None = None,
 ) -> tuple[str, ...]:
-    """在调用者持有的连接上迁移；会话锁可连续覆盖更新前的备份与核验。"""
+    """在调用者持有的连接上补齐结构，会话锁覆盖整个逐版本执行过程。"""
 
     if not connection.autocommit or connection.info.transaction_status != psycopg.pq.TransactionStatus.IDLE:
         raise MigrationError("migration_connection_invalid：迁移需要空闲的自动提交连接。")

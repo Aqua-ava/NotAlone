@@ -11,7 +11,6 @@ import './style.css';
 import { BackendBadge, BackendConnectionNote, useBackendState } from './backend-status';
 import { SetupPanel } from './SetupPanel';
 import { StartupReadiness, StartupSettings, useStartupState } from './StartupSettings';
-import { DataUpdatePanel, useDataUpdateState } from './DataUpdatePanel';
 import { CurrentContactLabel, HelperContactPicker, useContactSession } from './contact-session';
 import { ContactsPage } from './ContactsPage';
 import { ImportPage } from './ImportPage';
@@ -31,8 +30,6 @@ export function App() {
   const backend = useBackendState();
   const startup = useStartupState();
   const permission = useScreenPermission();
-  const dataUpdate = useDataUpdateState();
-  const handlesDataUpdate = dataUpdate.phase !== 'idle';
   const contactSession = useContactSession();
   const replies = useReplySession();
   const foreground = useForegroundState(window.notalone.foreground, helper);
@@ -97,10 +94,9 @@ export function App() {
       <ShortcutWarning />
       <main className="manager-content">
         <div className="manager-title"><h1>{currentPage.title}</h1><p>{currentPage.description}</p></div>
-        {(!handlesDataUpdate || backend.phase === 'shutdown-failed') && <BackendConnectionNote state={backend} startup={startup} />}
-        <DataUpdatePanel state={dataUpdate} />
-        {!handlesDataUpdate && (page === 'config' ? <StartupSettings state={startup} backend={backend} />
-          : startup.phase !== 'ready' && <StartupReadiness state={startup} onConfigure={() => setPage('config')} />)}
+        <BackendConnectionNote state={backend} startup={startup} />
+        {page === 'config' ? <StartupSettings state={startup} backend={backend} />
+          : startup.phase !== 'ready' && <StartupReadiness state={startup} onConfigure={() => setPage('config')} />}
         {(page === 'config' || startup.mode === 'managed' && backend.phase === 'connected') && <SetupPanel />}
         {page === 'config' && <><ScreenPermissionPanel view={permission} /><DesktopControls /></>}
         {page === 'contacts' && <ContactsPage session={contactSession} navigate={setPage} manualRelease={startup.mode === 'managed'} />}

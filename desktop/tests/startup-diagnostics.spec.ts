@@ -6,16 +6,17 @@ import path from 'node:path';
 import { selectMenu } from './app-fixture';
 import { prepareDatabase, projectDirectory, pythonExecutable, test } from './startup-fixture';
 
-test('空库阻止启动，显式准备测试库后从 App 重试恢复，无需终端 PATH', async ({ runningApp: { app, appProcess, userData }, startupDatabase }) => {
+test('空库在原连接内正常初始化，不要求备份或切换数据库，无需终端 PATH', async ({ runningApp: { app, appProcess, userData } }) => {
   const manager = await app.firstWindow();
+  const original = await readFile(path.join(userData, 'backend-launch.json'));
   await manager.getByRole('button', { name: '应用配置', exact: true }).click();
-  await expect(manager.getByText('数据库尚有待迁移版本。', { exact: true })).toBeVisible();
-  await expect(manager.getByText('尚未连接', { exact: true })).toBeVisible();
-  await expect.poll(async () => { try { await access(path.join(userData, 'backend.info')); return true; } catch { return false; } }).toBe(false);
-  await prepareDatabase('migrate', startupDatabase.database);
-  await manager.getByRole('button', { name: '重新检查并连接', exact: true }).click();
-  await expect(manager.getByText('机器环境已就绪。', { exact: true })).toBeVisible();
+  await expect(manager.getByText('机器环境已就绪。', { exact: true })).toBeVisible({ timeout: 30_000 });
   await expect(manager.getByText('已连接', { exact: true })).toBeVisible({ timeout: 15_000 });
+  await expect(manager.getByRole('region', { name: '保留资料更新' })).toHaveCount(0);
+  await expect(manager.getByRole('button', { name: '备份并完成更新', exact: true })).toHaveCount(0);
+  expect((await readFile(path.join(userData, 'backend-launch.json'))).equals(original)).toBe(true);
+  expect(await access(path.join(userData, 'updates')).then(() => true, () => false)).toBe(false);
+  expect(await access(path.join(userData, 'update-operation.json')).then(() => true, () => false)).toBe(false);
   await manager.screenshot({ path: test.info().outputPath('startup-ready.png') });
   await selectMenu(app, 'NotAlone', '退出 NotAlone');
   await expect.poll(() => appProcess.exitCode).toBe(0);
@@ -153,11 +154,12 @@ readyTest('已连接时明确停服务后可修改路径，保存不会自动启
   await manager.screenshot({ path: test.info().outputPath('startup-path-correction.png') });
 });
 
-test('保存路径与连接重试并发时，旧路径不得启动后端或覆盖新诊断', async ({ runningApp: { app, userData }, startupDatabase }) => {
+const saveRaceTest = test.extend({ databaseState: 'drift' });
+saveRaceTest('保存路径与连接重试并发时，旧路径不得启动后端或覆盖新诊断', async ({ runningApp: { app, userData }, startupDatabase }) => {
   const manager = await app.firstWindow();
   await manager.getByRole('button', { name: '应用配置', exact: true }).click();
-  await expect(manager.getByText('数据库尚有待迁移版本。', { exact: true })).toBeVisible();
-  await prepareDatabase('migrate', startupDatabase.database);
+  await expect(manager.getByText('数据库迁移账本或基线发生漂移。', { exact: true })).toBeVisible();
+  await prepareDatabase('restore-drift', startupDatabase.database);
   const result = await manager.evaluate(async () => {
     const paths = await window.notalone.startup.getPaths();
     const operations = await Promise.allSettled([

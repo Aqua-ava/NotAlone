@@ -18,7 +18,7 @@ test('独立运行时检查拒绝缺少清单的目录，不能把准备失败�
 test('打包检查逐项拒绝被替换、偷偷加入或链接包外的运行时文件', async () => {
   const owned = await mkdtemp(path.join(tmpdir(), 'notalone-runtime-integrity-'));
   const directory = path.join(owned, 'notalone-runtime'); await mkdir(directory);
-  const paths = ['python/bin/python3.12', 'project/backend/src/notalone/server/command.py', 'project/backend/src/notalone/startup_diagnostics.py',
+  const paths = ['python/bin/python3.12', 'project/backend/src/notalone/server/command.py', 'project/backend/src/notalone/startup_diagnostics.py', 'project/backend/src/notalone/startup_database.py',
     'project/backend/src/notalone/managed_postgres.py', 'project/backend/src/notalone/parent_lifetime.py',
     ...['initdb','postgres','pg_isready','psql','pg_dump','pg_restore'].map((name) => `postgres/bin/${name}`)];
   try {
@@ -48,7 +48,7 @@ test('固定来源摘要不匹配时停止准备并清理自有临时产物', {s
   }finally{await rm(owned,{recursive:true,force:true});}
 });
 
-test('构建和App载入对同一清单一致拒绝缺少来源及备份恢复工具', async () => {
+test('构建和App载入检查来源与运行组件，不要求数据库备份恢复工具', async () => {
   const owned = await mkdtemp(path.join(tmpdir(), 'notalone-runtime-contract-'));
   const directory = path.join(owned, 'notalone-runtime'); await mkdir(directory);
   const { build } = await import('esbuild');
@@ -56,7 +56,7 @@ test('构建和App载入对同一清单一致拒绝缺少来源及备份恢复�
   await writeFile(path.join(owned, 'loader.mjs'), built.outputFiles[0].text);
   const { verifyManagedComponents } = await import(path.join(owned, 'loader.mjs'));
   const { runtimeInventory, inspectManagedRuntime } = await import('../../scripts/managed-runtime.mjs');
-  const paths = ['python/bin/python3.12', 'project/backend/src/notalone/server/command.py', 'project/backend/src/notalone/startup_diagnostics.py',
+  const paths = ['python/bin/python3.12', 'project/backend/src/notalone/server/command.py', 'project/backend/src/notalone/startup_diagnostics.py', 'project/backend/src/notalone/startup_database.py',
     'project/backend/src/notalone/managed_postgres.py', 'project/backend/src/notalone/parent_lifetime.py',
     ...['initdb','postgres','pg_isready','psql','pg_dump','pg_restore'].map(name => `postgres/bin/${name}`)];
   try {
@@ -73,11 +73,16 @@ test('构建和App载入对同一清单一致拒绝缺少来源及备份恢复�
     await assert.rejects(() => inspectManagedRuntime(directory));
     await assert.rejects(() => verifyManagedComponents(owned, () => true));
     manifest.components.push(component);
+    const startupDatabase = path.join(directory, 'project/backend/src/notalone/startup_database.py');
+    await rm(startupDatabase); manifest.files = await runtimeInventory(directory); await save();
+    await assert.rejects(() => inspectManagedRuntime(directory));
+    await assert.rejects(() => verifyManagedComponents(owned, () => true));
+    await writeFile(startupDatabase, 'synthetic'); manifest.files = await runtimeInventory(directory); await save();
     for (const missing of ['pg_dump','pg_restore']) {
       const selected = path.join(directory, 'postgres/bin', missing); await rm(selected);
       manifest.files = await runtimeInventory(directory); await save();
-      await assert.rejects(() => inspectManagedRuntime(directory));
-      await assert.rejects(() => verifyManagedComponents(owned, () => true));
+      await inspectManagedRuntime(directory);
+      await verifyManagedComponents(owned, () => true);
       await writeFile(selected, 'synthetic', { mode: 0o700 });
     }
   } finally { await rm(owned, { recursive: true, force: true }); }

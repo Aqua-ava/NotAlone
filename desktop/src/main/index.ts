@@ -36,7 +36,6 @@ import { SetupController } from './setup/controller';
 import { installSetupBridge } from './setup/bridge';
 import { StartupDiagnostics } from './startup/diagnostics';
 import { installStartupBridge } from './startup/bridge';
-import { LocalDataUpdates } from './startup/data-update';
 import { configureDevelopmentProject, loadBackendConfiguration } from './backend/config';
 import { ImportController } from './imports/controller';
 import { installImportBridge } from './imports/bridge';
@@ -74,11 +73,7 @@ void app.whenReady().then(async () => {
   const windows = new AppWindows(appSession);
   const resourcesDirectory = app.isPackaged ? process.resourcesPath : undefined;
   const diagnostics = new StartupDiagnostics(app.getPath('userData'), resourcesDirectory);
-  let updates: LocalDataUpdates | undefined;
-  const backend = new BackendHost(app.getPath('userData'), (config, canStart) => {
-    if (updates?.isRecoveryBlocked()) return Promise.reject(new Error('资料需要恢复'));
-    return diagnostics.ensureReady(config, canStart);
-  }, resourcesDirectory,
+  const backend = new BackendHost(app.getPath('userData'), (config, canStart) => diagnostics.ensureReady(config, canStart), resourcesDirectory,
     () => diagnostics.stopManagedRuntime());
   const commands = electronPageCommands(windows);
   const contacts = installContactSessionBridge(commands, backend);
@@ -142,20 +137,16 @@ void app.whenReady().then(async () => {
   backend.setConnectionChangePreparation(() => replies.prepareGenerationConnectionChange());
   installSetupBridge(windows, new SetupController(backend));
   installBackendBridge(windows, backend, () => app.quit());
-  updates = new LocalDataUpdates(app.getPath('userData'), resourcesDirectory, diagnostics.getManagedRuntime(), backend);
-  installStartupBridge(windows, diagnostics, backend, updates);
+  installStartupBridge(windows, diagnostics, backend, app.getPath('userData'));
   app.on('before-quit', () => { foreground.stopContinuous(); diagnostics.cancel(); });
   installQuitLifecycle(backend, windows, async () => {
-    await updates?.stop();
     await headerChanges.shutdown();
     await replies.beginGenerationClosing(
       (receipt) => interruptAssistantGeneration(backend, receipt),
       (identity) => recoverAssistantGenerationReceipt(backend, identity));
   });
   foreground.startContinuous();
-  const localUpdates = updates;
-  void localUpdates.recoverInterruptedSwitch().then((ready) => ready ? backend.connect() : undefined)
-    .then(() => localUpdates.refresh()).catch(() => {});
+  void backend.connect().catch(() => {});
   const desktopControls = installDesktopControls(windows);
   app.on('will-quit', () => desktopControls.dispose());
   let quitting = false;

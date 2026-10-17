@@ -1,8 +1,9 @@
-"""本机更新恢复点服从明确来源删除，真实恢复证明不能从App快照找回。"""
+"""历史 App 恢复点服从明确删除；夹具不再经过已移除的启动备份流程。"""
 
 import json
 import os
 from pathlib import Path
+import tempfile
 import unittest
 from unittest.mock import patch
 from uuid import UUID, uuid4
@@ -10,34 +11,92 @@ from uuid import UUID, uuid4
 import psycopg
 from psycopg import sql
 
-from notalone.database_adoption import _owned_database, _run_pg
-from notalone.database_migrations import MigrationError
+from notalone.database_adoption import _owned_database, _run_pg, _verified_backup
+from notalone.database_audit import digest, schema_catalog
+from notalone.database_migrations import MigrationError, migrate
 from notalone.persistence.source_deletion import PostgresSourceDeletionRepository, SourceDeletionError
 from notalone.server.app import create_app
 from notalone.server.testing import InProcessClient
-from tests.integration.persistence import test_database_updates as update_fixtures
+
+
+MIGRATIONS = Path(__file__).resolve().parents[3] / "database/migrations"
 
 
 class ManagedUpdateBackupDeletionTest(unittest.TestCase):
-    _fixture = update_fixtures.DatabaseUpdatesTest._fixture
-    _command = update_fixtures.DatabaseUpdatesTest._command
-    _response_code = staticmethod(update_fixtures.DatabaseUpdatesTest._response_code)
-
     def setUp(self) -> None:
-        update_fixtures.DatabaseUpdatesTest.setUp(self)
+        database_url = self.enterContext(_owned_database(
+            "host=/tmp dbname=postgres", "historical_backup", synthetic=True,
+        ))
+        migrate(database_url, MIGRATIONS)
+        owner, contact, binding, source, message, candidate, memory = [uuid4() for _ in range(7)]
+        self.target = {"database_url": database_url, "owner": str(owner), "contact": str(contact)}
+        with psycopg.connect(database_url) as connection:
+            connection.execute("INSERT INTO public.owner (id,display_name) VALUES (%s,'合成用户')", (owner,))
+            connection.execute("INSERT INTO public.contact (id,owner_id,display_name) VALUES (%s,%s,'合成联系人')",
+                (contact, owner))
+            connection.execute("""INSERT INTO public.conversation_binding
+                (id,owner_id,contact_id,channel,account_scope,conversation_locator)
+                VALUES (%s,%s,%s,'wechat','synthetic_backup','synthetic_confirmed')""", (binding, owner, contact))
+            connection.execute("""INSERT INTO public.source_document
+                (id,owner_id,contact_id,source_type,file_name,content_sha256,record_count)
+                VALUES (%s,%s,%s,'wechat_jsonl','synthetic.jsonl',%s,1)""", (source, owner, contact, "a" * 64))
+            connection.execute("""INSERT INTO public.message
+                (id,owner_id,contact_id,speaker,message_type,text_content)
+                VALUES (%s,%s,%s,'contact','text','仅用于历史副本删除验收的合成消息')""", (message, owner, contact))
+            connection.execute("""INSERT INTO public.message_source_ref
+                (message_id,owner_id,contact_id,source_kind,source_document_id,source_locator,raw_payload)
+                VALUES (%s,%s,%s,'source_document',%s,'line:1','{"synthetic":true}')""", (message, owner, contact, source))
+            connection.execute("""INSERT INTO public.memory_candidate
+                (id,owner_id,contact_id,text_content,category,source_ids)
+                VALUES (%s,%s,%s,'合成候选资料','common_fact',%s)""", (candidate, owner, contact, [message]))
+            connection.execute("""INSERT INTO public.confirmed_memory
+                (id,owner_id,contact_id,text_content,category,source_ids,adoption_method)
+                VALUES (%s,%s,%s,'合成保留关系资料','common_fact',%s,'manual')""", (memory, owner, contact, [message]))
+            connection.execute("""INSERT INTO public.cli_backfill_state
+                (owner_id,contact_id,binding_id,phase,trigger_at) VALUES (%s,%s,%s,'paused',now())""", (owner, contact, binding))
+            connection.execute("INSERT INTO public.front_sync_state (owner_id,enabled) VALUES (%s,false)", (owner,))
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
         self.user_data = Path(self.directory.name) / "app-data"
         (self.user_data / "managed").mkdir(parents=True, mode=0o700)
         (self.user_data / "managed/state.json").write_text(json.dumps({"formatVersion": 1, "password": "synthetic", "bootstrapComplete": True}))
         (self.user_data / "managed/state.json").chmod(0o600)
         (self.user_data / "updates").mkdir(mode=0o700)
         self.backup = self.user_data / "updates" / str(uuid4())
-        plan = json.loads(self._command("--inspect").stdout)
-        result = self._command("--update", "--backup-dir", str(self.backup), "--expected-target", plan["target_fingerprint"])
-        self.assertEqual(result.returncode, 0, self._response_code(result))
-        with psycopg.connect(self.target["database_url"]) as connection:
-            self.source_id = connection.execute("SELECT id FROM public.source_document").fetchone()[0]
+        self._historical_archive(self.backup)
         self.repository = PostgresSourceDeletionRepository(self.target["database_url"])
-        self.scope = {"owner_id": UUID(self.target["owner"]), "contact_id": UUID(self.target["contact"]), "source_document_id": self.source_id}
+        self.scope = {"owner_id": owner, "contact_id": contact, "source_document_id": source}
+
+    @staticmethod
+    def _fingerprint(database_url: str) -> str:
+        with psycopg.connect(database_url) as connection:
+            system, oid, name, owner = connection.execute("""SELECT system_identifier,d.oid,d.datname,d.datdba
+                FROM pg_catalog.pg_control_system(),pg_catalog.pg_database AS d
+                WHERE d.datname=pg_catalog.current_database()""").fetchone()
+        return digest([str(system), oid, name, owner])
+
+    def _historical_archive(self, backup: Path, *, destination_url: str | None = None) -> Path:
+        """仅测试夹具：真实归档和恢复核验，加上旧版本已完成操作的合成凭证。"""
+        database_url = self.target["database_url"]
+        with psycopg.connect(database_url) as connection:
+            connection.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
+            catalog = schema_catalog(connection)
+            tables = tuple(row[0] for row in catalog["relations"] if row[1] == "r")
+            archive_sha, _, verified_at = _verified_backup(connection, database_url, backup, tables, catalog)
+        checkpoint = {
+            "format_version": 1, "target_fingerprint": self._fingerprint(database_url),
+            "phase": "complete", "backup_sha256": archive_sha, "restore_verified": True,
+            "verified_at": verified_at.isoformat(), "connection_gate": False,
+        }
+        archive = backup / "database.dump"
+        if destination_url is not None:
+            _run_pg("pg_restore", destination_url, ["--single-transaction", "--exit-on-error", str(archive)])
+            checkpoint.update(destination_fingerprint=self._fingerprint(destination_url),
+                source_gate=False, activation_complete=True)
+        file = backup / "checkpoint.json"
+        file.write_text(json.dumps(checkpoint))
+        file.chmod(0o600)
+        return archive
 
     def _client(self) -> InProcessClient:
         return InProcessClient(create_app(
@@ -46,10 +105,7 @@ class ManagedUpdateBackupDeletionTest(unittest.TestCase):
 
     def _latest_archive(self) -> Path:
         backup = self.user_data / "updates" / str(uuid4())
-        plan = json.loads(self._command("--inspect").stdout)
-        result = self._command("--update", "--backup-dir", str(backup), "--expected-target", plan["target_fingerprint"])
-        self.assertEqual(result.returncode, 0, self._response_code(result))
-        return backup / "database.dump"
+        return self._historical_archive(backup)
 
     def _preference_and_learning(self) -> tuple[dict, UUID, Path]:
         response = self._client().request("POST", "/api/expression-preferences", headers={"Authorization": "Bearer synthetic"}, body=json.dumps({
@@ -251,11 +307,7 @@ class ManagedUpdateBackupDeletionTest(unittest.TestCase):
                 connection.execute("INSERT INTO public.source_processing_batch (batch_id,owner_id,contact_id,source_kind) VALUES (%s,%s,%s,'manual')", (identifier, owner, contact))
                 connection.execute("INSERT INTO public.source_processing_record (record_id,batch_id,owner_id,contact_id,position,outcome,payload) VALUES (%s,%s,%s,%s,0,'parsed','{\"synthetic_body\":\"仅在本例敏感过程内\"}')", (uuid4(), identifier, owner, contact))
                 table = "source_processing_record"
-        backup = self.user_data / "updates" / str(uuid4())
-        plan = json.loads(self._command("--inspect").stdout)
-        result = self._command("--update", "--backup-dir", str(backup), "--expected-target", plan["target_fingerprint"])
-        self.assertEqual(result.returncode, 0, self._response_code(result))
-        return identifier, backup, table
+        return identifier, self._latest_archive().parent, table
 
     def _delete_trace(self, resource: str) -> None:
         identifier, backup, table = self._trace(resource)
@@ -292,18 +344,10 @@ class ManagedUpdateBackupDeletionTest(unittest.TestCase):
     def test_copied_destination_deletion_erases_app_snapshot_and_preserves_external_original(self) -> None:
         external = Path(self.directory.name) / "user-managed-original"
         self.backup.rename(external)
-        destination = f"notalone_copy_{uuid4().hex}_test"
-        with psycopg.connect("host=/tmp dbname=postgres", autocommit=True) as admin:
-            admin.execute(sql.SQL("CREATE DATABASE {} TEMPLATE template0").format(sql.Identifier(destination)))
-        def cleanup() -> None:
-            with psycopg.connect("host=/tmp dbname=postgres", autocommit=True) as admin:
-                admin.execute(sql.SQL("DROP DATABASE {} WITH (FORCE)").format(sql.Identifier(destination)))
-        self.addCleanup(cleanup)
-        destination_url = f"host=/tmp dbname={destination}"
-        self.environment["NOTALONE_UPDATE_DESTINATION_URL"] = destination_url
-        plan = json.loads(self._command("--inspect").stdout)
-        copied = self._command("--copy-update", "--backup-dir", str(self.backup), "--expected-target", plan["target_fingerprint"])
-        self.assertEqual(copied.returncode, 0, self._response_code(copied))
+        destination_url = self.enterContext(_owned_database(
+            self.target["database_url"], "historical_destination", synthetic=True,
+        ))
+        self._historical_archive(self.backup, destination_url=destination_url)
         with patch.dict(os.environ, {"NOTALONE_MANAGED_USER_DATA": str(self.user_data)}):
             PostgresSourceDeletionRepository(destination_url).delete_source(**self.scope)
         self.assertFalse((self.backup / "database.dump").exists())

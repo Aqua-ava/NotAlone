@@ -55,6 +55,15 @@ def _column_metadata(connection: Any) -> dict[str, dict[str, str]]:
     return tables
 
 
+def _required_schema_present(tables: dict[str, dict[str, str]], *, manual_confirmation: bool = True) -> bool:
+    required = REQUIRED_TABLES if manual_confirmation else REQUIRED_TABLES - {"manual_contact_confirmation"}
+    return required.issubset(tables) and all(
+        tables[table].get(column) == kind
+        for table, columns in REQUIRED_COLUMNS.items() if table in required
+        for column, kind in columns.items()
+    )
+
+
 def database_readiness(database_url: str, migrations_directory: Path) -> str:
     """返回受限状态，不运行迁移、接管、参考库或业务表查询。"""
 
@@ -111,13 +120,12 @@ def database_readiness(database_url: str, migrations_directory: Path) -> str:
                 if completed != expected:
                     return "migration_history_mismatch"
                 if offset + len(completed) < len(migrations):
-                    return "migration_pending"
-                if not REQUIRED_TABLES.issubset(tables):
-                    return "schema_incomplete"
-                for table, columns in REQUIRED_COLUMNS.items():
-                    if any(tables[table].get(column) != kind for column, kind in columns.items()):
+                    # 059之前的版本仍按真实账本前向执行；059起已有运行契约须在写入新版本前成立。
+                    through = offset + len(completed)
+                    if through >= 59 and not _required_schema_present(tables, manual_confirmation=through >= 60):
                         return "schema_incomplete"
-                return "ready"
+                    return "migration_pending"
+                return "ready" if _required_schema_present(tables) else "schema_incomplete"
     except psycopg.OperationalError:
         return "database_unavailable"
     except psycopg.Error:

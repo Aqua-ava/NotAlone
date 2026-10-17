@@ -21,7 +21,8 @@ export function StartupReadiness({ state, onConfigure }: { state: StartupState; 
   if (state.mode === 'managed') return <ManagedSetup state={state} />;
   return <section className="startup-readiness" aria-label="机器环境诊断">
     <h2>机器环境</h2>
-    <p role={state.phase === 'blocked' ? 'alert' : undefined}>{state.phase === 'checking' ? '正在只读检查机器环境…'
+    <p role={state.phase === 'blocked' ? 'alert' : undefined}>{state.phase === 'preparing' && state.step === 'updating-schema' ? '正在补齐本机数据库结构…'
+      : state.phase === 'checking' ? '正在只读检查机器环境…'
       : state.code ? startupMessages[state.code][0] : '正在检查本机服务…'}</p>
     {state.code && <p className="startup-guidance">{startupMessages[state.code][1]}</p>}
     {state.helperWarnings.includes('cli_unavailable') && <p className="startup-guidance">微信 CLI 未就绪。确认绝对路径后，才可使用已确认范围的文字同步。</p>}
@@ -92,7 +93,6 @@ const pathFields: Array<[keyof StartupPaths, string]> = [
   ['wechatCliPath', '微信 CLI（可稍后配置）'], ['syncProbePath', '前台定位探针（可稍后配置）'],
 ];
 const startupMessages: Record<StartupCode, [string, string]> = {
-  runtime_import_incomplete: ['已有资料的接续尚未完成。', '请使用备份更新入口继续；原有资料和配置仍会保留。'],
   local_setup_required: ['准备你的本机空间。', '联系人、聊天和关系资料保存在这台 Mac。点击开始即可准备，无需安装开发工具。'],
   runtime_components_unavailable: ['App 运行组件缺失或校验未通过。', '请重新取得完整的 NotAlone App 后打开；已有本机资料会保留。'],
   runtime_configuration_invalid: ['本机资料环境需要恢复。', '已有目录或配置无法安全核验。请保留本机资料，使用支持恢复的版本继续，勿删除资料目录。'],
@@ -115,10 +115,14 @@ const startupMessages: Record<StartupCode, [string, string]> = {
   baseline_missing: ['既有数据库缺少受管基线或迁移账本。', '先独立核验结构、备份与接管方案。App 不会自动接管或升级业务库。'],
   baseline_invalid: ['数据库审计基线无效。', '核对基线与恢复验证凭证，完成受控恢复后重新检查。'],
   migration_history_mismatch: ['数据库迁移账本或基线发生漂移。', '核对原始迁移文件及实际记录，不通过补写历史成功记录绕过检查。'],
-  migration_pending: ['数据库尚有待迁移版本。', '先核验数据范围与备份，再经明确授权独立执行迁移，完成后重新检查。'],
+  migration_pending: ['数据库结构尚待补齐。', '启动时会在当前数据库补齐已核验的表结构。若未完成，请检查数据库权限后重试。'],
+  database_writers_present: ['还有其他程序正在连接这份数据库。', '请先正常退出使用同一数据库的旧版 App 或开发工具，再重新检查连接。'],
+  database_update_requires_local: ['待更新的数据库不在本机。', '自动补齐结构仅适用于本机数据库。请核对原连接配置后重试。'],
+  migration_busy: ['另一个数据库结构更新仍在进行。', '请等待它完成，再重新检查连接。'],
+  migration_failed: ['本机数据库结构尚未补齐。', '请核对数据库权限与迁移文件后重试。已完成的版本记录会保留。'],
   schema_incomplete: ['数据库必要结构不完整。', '账本不能替代结构就绪。请核验结构与恢复方案，然后重新检查。'],
   migration_files_invalid: ['项目迁移文件不可核验。', '核对所选项目的连续迁移文件，恢复原始文件后重新检查。'],
-  diagnostic_timeout: ['机器环境检查超时。', '检查本机服务和路径后重试；本次没有自动迁移或启动读取进程。'],
+  diagnostic_timeout: ['机器环境检查超时。', '检查本机服务和路径后重试；重新核验结构就绪后才会启动后台读取。'],
   diagnostic_failed: ['机器环境暂时无法核验。', '核对配置文件、数据库权限及必要结构后重新检查。'],
 };
 
@@ -127,9 +131,9 @@ function ManagedSetup({ state }: { state: StartupState }) {
   const [error, setError] = useState('');
   const preparing = state.phase === 'preparing' || state.phase === 'checking';
   const ready = state.phase === 'ready';
-  const updateRequired = ['migration_pending', 'baseline_missing', 'baseline_invalid', 'migration_history_mismatch', 'schema_incomplete'].includes(state.code || '');
   const steps = { 'checking-components': '正在检查 App 内的运行组件…', 'preparing-data': '正在准备仅保存在本机的资料空间…',
-    'starting-database': '正在启动本机资料服务…', 'preparing-database': '正在完成首次资料准备…', 'stopping': '正在停止本次设置与本机服务…' };
+    'starting-database': '正在启动本机资料服务…', 'preparing-database': '正在初始化或补齐当前数据库结构…',
+    'updating-schema': '正在补齐本机数据库结构…', 'stopping': '正在停止本次设置与本机服务…' };
   async function begin() {
     if (busy || preparing) return;
     setBusy(true); setError('');
@@ -143,14 +147,12 @@ function ManagedSetup({ state }: { state: StartupState }) {
     catch { setError('停止尚未获确认，请稍后重试。'); }
   }
   return <section className="startup-settings" aria-label="本机首次设置">
-    <h2>{ready ? '本机环境已就绪' : updateRequired ? '已有资料需要更新' : '欢迎使用 NotAlone'}</h2>
+    <h2>{ready ? '本机环境已就绪' : '欢迎使用 NotAlone'}</h2>
     <p role={state.phase === 'blocked' ? 'alert' : 'status'}>{preparing ? (state.step ? steps[state.step] : '正在检查本机服务…')
       : ready ? '本机服务已通过检查。继续确认本人身份与模型设置。'
-        : updateRequired ? '已有资料需要完成兼容更新。'
-          : state.code ? startupMessages[state.code][0] : '准备你的本机空间。'}</p>
-    {!ready && !preparing && <p>{updateRequired ? '已有资料会保留。通过备份更新入口继续，App 会先在本机验证恢复能力。'
-      : state.code ? startupMessages[state.code][1] : startupMessages.local_setup_required[1]}</p>}
-    {!ready && !updateRequired && <div className="startup-actions">
+        : state.code ? startupMessages[state.code][0] : '准备你的本机空间。'}</p>
+    {!ready && !preparing && <p>{state.code ? startupMessages[state.code][1] : startupMessages.local_setup_required[1]}</p>}
+    {!ready && <div className="startup-actions">
       {preparing ? <button className="button" disabled={state.step === 'stopping'} onClick={() => void cancel()}>取消本次设置</button>
         : <button className="button primary" disabled={busy} onClick={() => void begin()}>{busy ? '正在开始…'
           : state.phase === 'first-run' ? '开始本机设置' : state.phase === 'cancelled' ? '继续本机设置' : '重试本机设置'}</button>}

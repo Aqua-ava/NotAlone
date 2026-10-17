@@ -4,12 +4,14 @@ import { access, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { StartupCode, StartupPaths, StartupState } from '../../shared/startup-bridge';
 import { backendEnvironment, configurationPaths, loadBackendConfiguration, saveBackendConfiguration, type BackendConfiguration } from '../backend/config';
-import { BackendFailure } from '../backend/connection';
+import { BackendFailure, readConnection } from '../backend/connection';
 import { ManagedRuntime, ManagedRuntimeFailure } from './managed-runtime';
+import { historicalUpdateComplete } from './historical-update';
 
 const reportCodes = new Set<StartupCode>(['ready', 'python_version_unsupported', 'backend_package_missing',
   'database_unconfigured', 'database_unavailable', 'baseline_missing', 'baseline_invalid',
-  'migration_history_mismatch', 'migration_pending', 'schema_incomplete', 'migration_files_invalid', 'diagnostic_failed']);
+  'migration_history_mismatch', 'migration_pending', 'schema_incomplete', 'migration_files_invalid', 'diagnostic_failed',
+  'database_writers_present', 'database_update_requires_local', 'migration_busy', 'migration_failed']);
 
 export class StartupDiagnostics {
   private state: StartupState = { phase: 'idle', revision: 0, helperWarnings: [] };
@@ -30,7 +32,10 @@ export class StartupDiagnostics {
     const epoch = this.localSetupEpoch;
     const config = await loadBackendConfiguration(this.userData, this.resourcesDirectory);
     if (config.source !== 'first-run' && config.source !== 'managed') throw new Error('已有资料需要接续');
-    try { await this.managed.prepare(() => epoch === this.localSetupEpoch && !this.closing && canStart()); }
+    try {
+      if (!await historicalUpdateComplete(this.userData, true)) throw new ManagedRuntimeFailure('runtime_configuration_invalid');
+      await this.managed.prepare(() => epoch === this.localSetupEpoch && !this.closing && canStart());
+    }
     catch (error) {
       if (epoch === this.localSetupEpoch && !this.closing) this.publish({ phase: 'blocked', mode: 'managed', step: undefined,
         code: error instanceof ManagedRuntimeFailure ? error.code : 'runtime_configuration_invalid' });
@@ -47,7 +52,6 @@ export class StartupDiagnostics {
       code: confirmed ? 'runtime_cancelled' : 'runtime_stop_unconfirmed' });
   }
   stopManagedRuntime(): Promise<boolean> { return this.managed.stop(); }
-  getManagedRuntime(): ManagedRuntime { return this.managed; }
 
   getState(): StartupState { return { ...this.state, helperWarnings: [...this.state.helperWarnings] }; }
   onStateChanged(listener: (state: StartupState) => void): () => void {
@@ -80,6 +84,11 @@ export class StartupDiagnostics {
     if (!canStart() || this.closing) throw new BackendFailure('backend_connection_failed');
     await this.saving?.catch(() => {});
     if (!canStart() || this.closing) return;
+    if (!await historicalUpdateComplete(this.userData, config.source !== 'external')) {
+      this.publish({ phase: 'blocked', mode: config.source === 'external' ? 'external' : 'managed',
+        step: undefined, code: 'runtime_configuration_invalid' });
+      throw new BackendFailure('backend_connection_failed');
+    }
     if (config.source === 'first-run') {
       this.publish({ phase: 'first-run', mode: 'managed', code: 'local_setup_required', helperWarnings: [], step: undefined });
       throw new BackendFailure('backend_launch_unconfigured');
@@ -114,6 +123,20 @@ export class StartupDiagnostics {
       try {
         code = await this.validatePaths(config);
         if (code === 'ready' && canStart() && !this.closing) code = await this.probe(config, canStart);
+        if (code === 'migration_pending' && canStart() && !this.closing) {
+          const previous = await readConnection(config.infoPath);
+          let previousRunning = false;
+          if (previous) {
+            try { process.kill(previous.pid, 0); previousRunning = true; }
+            catch (error) { previousRunning = (error as NodeJS.ErrnoException).code !== 'ESRCH'; }
+          }
+          if (previousRunning) code = 'database_writers_present';
+          else {
+            this.publish({ phase: 'preparing', step: 'updating-schema', code: undefined });
+            code = await this.probe(config, canStart, true);
+            if (code === 'ready' && canStart() && !this.closing) code = await this.probe(config, canStart);
+          }
+        }
       } catch { code = 'diagnostic_failed'; }
     }
     if (!canStart() || this.closing) return;
@@ -121,7 +144,7 @@ export class StartupDiagnostics {
     if (!await executableExists(config.wechatCliPath)) helperWarnings.push('cli_unavailable');
     if (!await executableExists(config.syncProbePath)) helperWarnings.push('probe_unavailable');
     if (!canStart() || this.closing) return;
-    this.publish({ phase: code === 'ready' ? 'ready' : 'blocked', code, helperWarnings });
+    this.publish({ phase: code === 'ready' ? 'ready' : 'blocked', step: undefined, code, helperWarnings });
     if (code !== 'ready') throw new BackendFailure(code === 'launch_unconfigured' ? 'backend_launch_unconfigured'
       : code === 'info_path_unavailable' ? 'backend_handshake_invalid' : 'backend_connection_failed');
   }
@@ -153,12 +176,12 @@ export class StartupDiagnostics {
     return 'ready';
   }
 
-  private async probe(config: BackendConfiguration, canStart: () => boolean): Promise<StartupCode> {
+  private async probe(config: BackendConfiguration, canStart: () => boolean, prepareSchema = false): Promise<StartupCode> {
     const python = await realpath(config.pythonExecutable!);
     const project = await realpath(config.projectDirectory!);
     if (!canStart() || this.closing) return 'diagnostic_failed';
     return new Promise((resolve) => {
-      const child = spawn(python, [...(config.source === 'managed' ? ['-I', '-B'] : []), '-m', 'notalone.startup_diagnostics', '--migrations', path.join(project, 'backend/database/migrations')], {
+      const child = spawn(python, [...(config.source === 'managed' ? ['-I', '-B'] : []), '-m', prepareSchema ? 'notalone.startup_database' : 'notalone.startup_diagnostics', '--migrations', path.join(project, 'backend/database/migrations')], {
         cwd: project, env: backendEnvironment({ ...config, projectDirectory: project }, this.userData), stdio: ['ignore', 'pipe', 'ignore'],
       });
       let output = '';
@@ -180,7 +203,7 @@ export class StartupDiagnostics {
       // 先回收本次持有的诊断子进程，再完成 gate；否则 App 退出会丢失强制回收计时器。
       const cancel = () => stop('diagnostic_failed');
       this.cancelProbe = cancel;
-      const timer = setTimeout(() => stop('diagnostic_timeout'), 12_000);
+      const timer = setTimeout(() => stop('diagnostic_timeout'), prepareSchema ? 60_000 : 12_000);
       child.stdout.on('data', (chunk: Buffer) => {
         if (settled || interrupted) return;
         output += chunk.toString('utf8');

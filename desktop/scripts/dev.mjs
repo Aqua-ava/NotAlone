@@ -15,7 +15,7 @@ import { superviseDevelopmentApp } from './development-app.mjs';
 const project = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
 if (args.length === 1 && args[0] === '--help') {
-  console.log('npm run dev [-- --user-data-dir /绝对路径]\nReact/CSS 热更新；main、preload、共享代码与 Python 保存后安全重启。\n沿用本机配置，不自动迁移数据库。终端输入 r 回车重启；Ctrl+C 或 App 菜单退出。');
+  console.log('npm run dev [-- --user-data-dir /绝对路径]\nReact/CSS 热更新；main、preload、共享代码与 Python 保存后安全重启。\n沿用本机配置与数据库，缺少的表结构在原库补齐。终端输入 r 回车重启；Ctrl+C 或 App 菜单退出。');
 } else {
   if (args.length && (args.length !== 2 || args[0] !== '--user-data-dir' || !path.isAbsolute(args[1]) || /[\0\r\n]/.test(args[1]))) {
     throw new Error('使用 npm run dev -- --help 查看启动方式');
@@ -77,7 +77,7 @@ async function develop() {
       input.on('line', line => { if (line.trim() === 'r') restart(); });
       input.on('SIGINT', stop);
     }
-    console.log('开发模式：React/CSS 保存即更新；main/preload/Python 变化会安全重启。数据库迁移仍需明确确认。');
+    console.log('开发模式：React/CSS 保存即更新；main/preload/Python 变化会安全重启。沿用现有数据库，仅补齐缺少的结构。');
     process.exitCode = await running.closed;
   } finally {
     stopping = true; clearTimeout(timer); input?.close();

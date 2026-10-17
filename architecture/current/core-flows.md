@@ -6,6 +6,8 @@
 
 > 前台跟随目标：按[ADR-050](../adr/050-continuous-single-frame-contact-follow.md)采用持续单帧识别及按联系人保留内容、任务；[正式规格](../../.scratch/foreground-contact-follow/spec.md)已发布，[任务01](../../.scratch/foreground-contact-follow/issues/01-single-frame-locator.md)已完成现有单次单帧链路的代码及合成验证，[任务02](../../.scratch/foreground-contact-follow/issues/02-contact-content-restore.md)已完成手动切换的输入、候选编辑恢复及 HTTP/PG 合成验证；[任务05](../../.scratch/foreground-contact-follow/issues/05-contact-generation-jobs.md)已接入多联系人有界派发、只读状态恢复与原协议显式重试；持续流程与实机验收仍待完成。下方相关流程描述目标约束，实际现状仍须从代码和测试核对。
 
+启动与结构更新按[ADR-066](../adr/066-in-place-schema-updates-and-database-reuse.md)：已有配置沿用同一本机数据库，先核对真实迁移历史，仅缺少版本时在认证停读、生成结算与连接排空后原地补齐，再复验连接。结构已就绪直接使用；无既有配置的新安装初始化空受管库。普通启动不再备份、复制或切换数据库，异常历史与未完成旧更新保留现场并停止；不因连接失败新建替代库。实现与实测范围见[本次任务](../../.scratch/in-place-database-startup/spec.md)。
+
 ## 1. 导入与关系资料采纳
 
 独立 App 首版也支持不依赖微信的手动路径：完成本人和模型设置，创建联系人，明确选择后进入“回应粘贴文字”或“改写”。粘贴的对方文字须另填本次表达方向；生成前仍检查本次联系人资格，只用本次文字及用户明确开启的同联系人背景。手动确认限定当前 App 连接代际及具名助手请求，前台观察失败不撤销已明确选择的手动输入范围；重开须重新选择。设置重载和资料更新先通过原认证连接排空接纳的生成，失败保留连接；中断来历记为`configuration_reload`，退出App仍为`app_quit`，仅用户明确重试才能恢复。后台任务、续写和重试沿已保存的执行标识、输入版本与来源复验，不靠一次旧确认覆盖新联系人或已失效输入。此项实现和安装验收状态见[任务06](../../.scratch/standalone-app-delivery/issues/06-manual-input-first-release.md)。

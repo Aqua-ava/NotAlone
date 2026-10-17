@@ -61,47 +61,14 @@ export class ManagedRuntime {
     return this.stopping;
   }
 
-  getLifetimeLock(): string | undefined { return this.databaseLifetimeLock; }
-
-  async prepareImportTarget(canStart: () => boolean): Promise<string> {
-    const components = await this.verified(canStart);
-    if (!await exists(path.join(this.userData, 'backend-launch.json'))) throw new ManagedRuntimeFailure('configuration_invalid');
-    const directory = path.join(this.userData, 'managed');
-    await mkdir(directory, { recursive: true, mode: 0o700 });
-    await assertPrivateDirectory(directory);
-    const marker = path.join(directory, 'import-pending.json');
-    if (!await exists(marker)) {
-      if ((await readdir(directory)).length) throw new ManagedRuntimeFailure('runtime_configuration_invalid');
-      await atomicPrivateWrite(marker, JSON.stringify({ formatVersion: 1 }));
-      await this.writeState({ formatVersion: 1, password: randomBytes(32).toString('hex'), bootstrapComplete: false });
-    } else {
-      if (!['{"formatVersion":1}', '{"formatVersion":1,"verified":true}'].includes(await privateText(marker, 128))) throw new ManagedRuntimeFailure('runtime_configuration_invalid');
-      await this.readState();
-    }
-    const config: BackendConfiguration = { source: 'managed', pythonExecutable: components.python, projectDirectory: components.project,
-      infoPath: path.join(directory, 'backend.info'), envFilePath: path.join(directory, 'runtime.env') };
-    await this.startRuntime(config, canStart, true);
-    const environment = await privateText(path.join(directory, 'runtime.env'), 65536);
-    const target = /^NOTALONE_DATABASE_URL=(.+)$/m.exec(environment)?.[1];
-    if (!target || !canStart()) throw new ManagedRuntimeFailure('runtime_configuration_invalid');
-    return target;
-  }
-
-  async completeImport(): Promise<void> {
-    const marker = path.join(this.userData, 'managed/import-pending.json');
-    if (!['{"formatVersion":1}', '{"formatVersion":1,"verified":true}'].includes(await privateText(marker, 128))) throw new ManagedRuntimeFailure('runtime_configuration_invalid');
-    await this.writeState({ ...await this.readState(), bootstrapComplete: true });
-    await atomicPrivateWrite(marker, '{"formatVersion":1,"verified":true}');
-  }
-
-  private async startRuntime(config: BackendConfiguration, allowed: () => boolean, importing = false): Promise<void> {
+  private async startRuntime(config: BackendConfiguration, allowed: () => boolean): Promise<void> {
     const generation = this.generation;
     const canStart = () => generation === this.generation && allowed();
     const components = await this.verified(canStart);
     const state = await this.readState();
     const importMarker = path.join(this.userData, 'managed/import-pending.json');
-    if (!importing && await exists(importMarker)
-      && await privateText(importMarker, 128) !== '{"formatVersion":1,"verified":true}') throw new ManagedRuntimeFailure('runtime_import_incomplete');
+    if (await exists(importMarker)
+      && await privateText(importMarker, 128) !== '{"formatVersion":1,"verified":true}') throw new ManagedRuntimeFailure('runtime_configuration_invalid');
     const cluster = path.join(this.userData, 'managed/postgres');
     const environment = backendEnvironment(config, this.userData);
     if (!canStart()) throw new ManagedRuntimeFailure('runtime_cancelled');
@@ -179,7 +146,7 @@ export class ManagedRuntime {
       this.progress('preparing-database');
       // 只有尚未开放本人/联系人功能的本次新环境可以续接首次迁移。
       const current = await loadBackendConfiguration(this.userData, this.resourcesDirectory);
-      const childEnvironment = backendEnvironment(importing ? config : current, this.userData);
+      const childEnvironment = backendEnvironment(current, this.userData);
       const values = await privateText(path.join(this.userData, 'managed/runtime.env'), 65_536);
       const databaseUrl = /^NOTALONE_DATABASE_URL=(.+)$/m.exec(values)?.[1];
       if (!databaseUrl) throw new ManagedRuntimeFailure('runtime_configuration_invalid');
@@ -189,8 +156,7 @@ export class ManagedRuntime {
         pgEnvironment, canStart, 'database_prepare_failed', 10_000, true);
       if (found.trim() !== '1') await this.run(path.join(components.postgres, 'psql'), ['-X', '--no-password', '-d', 'postgres', '-v', 'ON_ERROR_STOP=1', '-c', 'CREATE DATABASE notalone'],
         pgEnvironment, canStart, 'database_prepare_failed', 10_000);
-      if (importing) return;
-      await this.run(components.python, ['-I', '-B', '-m', 'notalone.database_migrations', '--migrations', path.join(components.project, 'backend/database/migrations')],
+      await this.run(components.python, ['-I', '-B', '-m', 'notalone.startup_database', '--migrations', path.join(components.project, 'backend/database/migrations')],
         { ...childEnvironment, NOTALONE_DATABASE_URL: databaseUrl }, canStart, 'database_prepare_failed', 60_000);
       if (!canStart()) throw new ManagedRuntimeFailure('runtime_cancelled');
       await this.writeState({ ...state, bootstrapComplete: true });

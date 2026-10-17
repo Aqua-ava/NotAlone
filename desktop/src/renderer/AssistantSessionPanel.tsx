@@ -5,7 +5,7 @@ import type { SavedAssistantInput, SavedAssistantTurn } from '../shared/assistan
 import { AssistantInputBudgetNotice } from './AssistantInputBudgetNotice';
 import { ReplyBasisChangeNotice } from './ReplyBasisChangeNotice';
 import { ExpressionPreferenceBasis } from './ExpressionPreferenceBasis';
-import { UpdateBackupDeletionNotice, UpdateBackupCleanupRecovery } from './UpdateBackupDeletionNotice';
+import { UpdateBackupCleanupRecovery } from './UpdateBackupDeletionNotice';
 
 function SavedTurn({ turn, index, retry, busy, showPreferences }: {
   turn: SavedAssistantTurn; index: number; retry?: () => void; busy: boolean; showPreferences: boolean;
@@ -134,7 +134,6 @@ export function AssistantSessionPanel({ replies }: { replies: ReplySessionView }
     {confirmation && <div role="group" aria-label="确认删除助手会话">
       <p>删除这段助手讨论、候选和使用痕迹后无法恢复。独立聊天来源、联系人关系记忆和本人记忆仍会保留。</p>
       <p>已主动保存的表达样本仍会保留，可在表达样本管理中单独删除。</p>
-      <UpdateBackupDeletionNotice />
       <button onClick={manageSamples}>管理表达样本</button>
       <button disabled={catalog?.phase === 'loading' || catalog?.selectionPending} onClick={confirmDelete}>确认删除会话</button>
       <button onClick={() => setConfirmation(null)}>取消删除会话</button>

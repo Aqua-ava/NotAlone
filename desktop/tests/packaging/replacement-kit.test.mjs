@@ -78,7 +78,7 @@ test('仓库外复制安装允许包内框架链接，保留原包和ASAR并严�
     await run('/usr/bin/clang', ['-arch', 'arm64', source, '-o', executable]);
     await run('/usr/bin/codesign', ['--force', '--sign', '-', '--timestamp=none', executable]);
     const paths = ['python/bin/python3.12', ...['initdb', 'postgres', 'pg_isready', 'psql', 'pg_dump', 'pg_restore'].map((name) => `postgres/bin/${name}`),
-      ...['server/command.py', 'startup_diagnostics.py', 'managed_postgres.py', 'parent_lifetime.py'].map((name) => `project/backend/src/notalone/${name}`)];
+      ...['server/command.py', 'startup_diagnostics.py', 'startup_database.py', 'managed_postgres.py', 'parent_lifetime.py'].map((name) => `project/backend/src/notalone/${name}`)];
     for (const name of paths) {
       await mkdir(path.dirname(path.join(runtime, name)), { recursive: true });
       if (name.endsWith('.py')) await writeFile(path.join(runtime, name), '# 合成夹具，不执行\n');

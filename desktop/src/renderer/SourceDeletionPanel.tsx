@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { SourceDeletionState, DeletionSource } from '../shared/source-deletion-bridge';
 import type { ContactSessionView } from './contact-session';
-import { UpdateBackupDeletionNotice, UpdateBackupCleanupRecovery } from './UpdateBackupDeletionNotice';
+import { UpdateBackupCleanupRecovery } from './UpdateBackupDeletionNotice';
 const initial: SourceDeletionState = { revision: -1, contactId: null, scopeRevision: 0, phase: 'idle', sources: [], busySourceId: null, error: null };
 const stepNames = { mark_deleted: '标记删除', delete_derived: '清理派生资料', delete_index: '清理检索索引', clear_cache: '清理缓存', verify_not_retrievable: '不可检索校验' };
 function status(source: DeletionSource) {
@@ -51,7 +51,7 @@ export function SourceDeletionPanel({ session }: { session: ContactSessionView }
       {source.task?.backupCleanupRequired && <UpdateBackupCleanupRecovery />}
     </li>)}</ul>}
     {confirmation && visible && <div role="dialog" aria-label="确认来源删除"><p>删除这份来源及失去有效来源支持的资料；其他有效来源支持的内容保留。</p>
-      <UpdateBackupDeletionNotice /><button className="button" onClick={() => void remove()}>确认删除来源</button><button className="button" onClick={() => setConfirmation(null)}>取消删除</button></div>}
+      <button className="button" onClick={() => void remove()}>确认删除来源</button><button className="button" onClick={() => setConfirmation(null)}>取消删除</button></div>}
     {visible && state.error && <p role="alert">{state.error}</p>}{error && <p role="alert">{error}</p>}
   </section>;
 }
