@@ -6,7 +6,8 @@ import { RewriteHttpProxy } from '../rewrite-http-proxy';
 import { PageHost } from './page-host';
 import { withRewritePages } from './rewrite-acceptance';
 
-const draft = '合成预算讨论：' + '今晚不参加，感谢邀请。'.repeat(60);
+// 长草稿使首阶段硬限与新会话短草稿的完整生成／复核预算分开，容量仍按实际计量校准。
+const draft = '合成预算讨论：' + '今晚不参加，感谢邀请。'.repeat(300);
 const instruction = '只保留当前草稿的事实与承诺。';
 export { draft as budgetDraft, instruction as budgetInstruction };
 
@@ -32,9 +33,11 @@ export async function assistantInputBudget(browser: Browser, origin: string) {
     const calibration = replyTransport.results[0].data.input_budget as { state: string; total_tokens: number };
     expect(calibration.state).toBe('ready');
     expect(calibration.total_tokens).toBeGreaterThan(100);
-    const capacity = calibration.total_tokens + 100;
+    // 每轮可能包含候选生成与保真复核，警戒容量须容纳两阶段。
+    const stages = await rewriteBackend.command('calibration');
+    const capacity = Number(stages.maximum_stage_total) + 100;
     const initial = await rewriteBackend.command('metrics');
-    expect(initial).toEqual({ model_calls: 1, migration_count: 55, migration_repeat: 0 });
+    expect(initial).toEqual({ model_calls: 2, migration_count: 72, migration_repeat: 0 });
     await host.close();
     await rewriteBackend.command('configure', { capacity });
     const transport = await RewriteHttpProxy.attach(rewriteBackend.infoPath);
@@ -60,8 +63,8 @@ export async function assistantInputBudget(browser: Browser, origin: string) {
         expect(generated.status).toBe(200);
         expect(generated.data.input_budget).toMatchObject({ state: 'warning', allowed: true, context_window_tokens: capacity });
         const metrics = await rewriteBackend.command('metrics');
-        expect(metrics).toEqual({ model_calls: 2, migration_count: 55, migration_repeat: 0 });
-        process.stdout.write(`page_test_budget_warning: http=200 state=warning model_calls=2 initial_total=${calibration.total_tokens} capacity=${capacity} migrations=55 repeat=0\n`);
+        expect(metrics).toEqual({ model_calls: 4, migration_count: 72, migration_repeat: 0 });
+        process.stdout.write(`page_test_budget_warning: http=200 state=warning model_calls=4 initial_total=${calibration.total_tokens} capacity=${capacity} migrations=72 repeat=0\n`);
         await expect(current.helper.getByRole('status', { name: '模型输入预算', exact: true }))
           .toContainText('当前讨论已接近模型输入上限');
         await expect(current.helper.getByRole('alert', { name: '模型输入预算', exact: true })).toHaveCount(0);
@@ -80,7 +83,7 @@ export async function assistantInputBudget(browser: Browser, origin: string) {
         expect(saved.status).toBe(200);
         expect((saved.data.turns as Array<{ reply: { input_budget: unknown } }>)[0].reply.input_budget)
           .toEqual(generated.data.input_budget);
-        expect((await rewriteBackend.command('metrics')).model_calls).toBe(2);
+        expect((await rewriteBackend.command('metrics')).model_calls).toBe(4);
       } finally { transport.release(); await next.close(); }
     } finally { await transport.close(); }
   }, undefined, path.resolve('tests/fixtures/assistant-input-budget-page-backend.py'));

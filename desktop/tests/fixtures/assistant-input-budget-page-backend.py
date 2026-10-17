@@ -5,16 +5,15 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
-import subprocess
 import sys
 from pathlib import Path
 from uuid import uuid4
 
 import psycopg
 
-from fixture_cleanup import cleanup_fixture
+from fixture_cleanup import bind_prepared_database, cleanup_fixture
 from notalone.server.connection_info import write_backend_info
-from tests.input_budget_support import synthetic_budget_kwargs
+from tests.input_budget_support import SyntheticModelCounter, synthetic_budget_kwargs
 
 
 spec = importlib.util.spec_from_file_location(
@@ -29,35 +28,27 @@ class AssistantInputBudgetPageFixture(rewrite.DesktopRewriteFixture):
     """只复用原模型协议与预算守卫，不提供产品能力配置写入口。"""
 
     capacity = 100000
-    migration_count = 0
-    migration_repeat = None
-
-    @classmethod
-    def setUpClass(cls) -> None:
-        super().setUpClass()
-        root = Path(__file__).resolve().parents[3]
-        expected = sorted(path.name for path in (root / "backend/database/migrations").glob("*.sql"))
-        with psycopg.connect(cls.database_url) as connection:
-            recorded = [row[0] for row in connection.execute(
-                "SELECT name FROM public.notalone_schema_migration ORDER BY name",
-            ).fetchall()]
-        if recorded != expected or len(recorded) != 55 or not recorded[-1].startswith("055_"):
-            raise RuntimeError("预算页面必须只应用正式001–055迁移。")
-        repeated = subprocess.run(
-            [sys.executable, "-m", "notalone.database_migrations", "--migrations",
-             str(root / "backend/database/migrations")],
-            cwd=root / "backend", capture_output=True, text=True, timeout=60,
-            env=dict(os.environ, NOTALONE_DATABASE_URL=cls.database_url),
-        )
-        if repeated.returncode or json.loads(repeated.stdout)["applied"] != []:
-            raise RuntimeError("预算页面迁移重复执行必须为0。")
-        cls.migration_count, cls.migration_repeat = 55, 0
 
     def input_budget_configuration(self):
-        return synthetic_budget_kwargs(self.reply_model, capacity=self.capacity, output_reserve=100)
+        configuration = synthetic_budget_kwargs(self.reply_model, capacity=self.capacity, output_reserve=100)
+        if not hasattr(self, "measured_totals"):
+            self.measured_totals = []
+        # 只观察真实守卫调用的计量值；不改变测量结果或模型请求。
+        totals = self.measured_totals
+
+        class ObservedCounter(SyntheticModelCounter):
+            def measure(self, request):
+                measurement = super().measure(request)
+                profile = configuration["input_budget_profile"]
+                totals.append(measurement.input_tokens + profile.output_reserve_tokens + profile.safety_margin_tokens)
+                return measurement
+
+        configuration["input_token_counter"] = ObservedCounter(self.reply_model)
+        return configuration
 
 
 def main() -> None:
+    AssistantInputBudgetPageFixture._prepared_database_name = bind_prepared_database()
     fixture = AssistantInputBudgetPageFixture()
     AssistantInputBudgetPageFixture._database_ownership_path = (
         Path(os.environ["NOTALONE_ENV_FILE"]).parent / "database-ownership.json"
@@ -99,9 +90,12 @@ def main() -> None:
                 fixture.backend = fixture._backend(fixture.owner_id)
                 write_backend_info(address=fixture.backend.base_url.removeprefix("http://"), token=fixture.backend.token)
                 result = {}
+            elif operation == "calibration":
+                result = {"first_stage_total": fixture.measured_totals[0],
+                          "maximum_stage_total": max(fixture.measured_totals)}
             elif operation == "metrics":
                 result = {"model_calls": len(fixture.reply_model.seen_model_payloads),
-                          "migration_count": fixture.migration_count, "migration_repeat": fixture.migration_repeat}
+                          **fixture.migration_receipt}
             elif operation == "large_history":
                 contact_id = contacts[0]
                 status, session = fixture.backend.request(f"/api/contacts/{contact_id}/assistant-session/default", {})

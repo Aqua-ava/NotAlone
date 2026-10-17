@@ -60,7 +60,7 @@ async function stopFailedIdentity(f, scope, sessionId, failed, currentInputVersi
   assert.equal(kept.turns.find((turn) => turn.turn_id === failed.turn_id).state, 'failed');
 }
 
-test('B10实际持续修改失败后显式新请求不替换已失败执行，原停止身份仍由实际interrupt收口', async () => {
+test('B10实际持续修改失败后显式新请求不替换已失败执行，已复验停止身份结算', async () => {
   await withMessageOptInFixture(async (f) => {
     const scope = await f.connect();
     await f.bridge.setMode({ ...scope, mode: 'initiate_conversation' });
@@ -75,6 +75,8 @@ test('B10实际持续修改失败后显式新请求不替换已失败执行，�
     assert.equal(failedState.continuation.phase, 'failed');
     const failed = (await f.request(`/api/contacts/${scope.contactId}/assistant-sessions/${sessionId}`)).turns.at(-1);
     assert.equal(failed.state, 'failed');
+    assert.equal(failed.generation_active, false);
+    assert.deepEqual(f.replies.pendingGenerationReceipts(), [], '权威复验已停止后立即结算身份。');
     assert.deepEqual(f.requests.filter((request) => request.path.endsWith('/continue')).map((request) => request.failure),
       [{ kind: 'response', code: 'internal_error', reason: undefined, status: 500 }]);
     const beforeNew = f.requests.length;
@@ -92,7 +94,11 @@ test('B10实际持续修改失败后显式新请求不替换已失败执行，�
     assert.equal(saved.turns[2].state, 'completed');
     assert.notEqual(saved.turns[2].request_key, failed.request_key);
     assert.equal(saved.current_input_version_id, saved.turns[2].input_version_id);
-    await stopFailedIdentity(f, scope, sessionId, failed, saved.current_input_version_id);
+    assert.equal(failed.generation_active, false);
+    assert.deepEqual(f.replies.pendingGenerationReceipts(), []);
+    await f.replies.beginGenerationClosing(async () => {
+      assert.fail("已复验停止的失败任务不得再次 interrupt。");
+    });
     assert.equal((await f.fixture.command('observations')).model_calls, 3);
   });
 });
@@ -109,12 +115,19 @@ test('B09已确认候选实际失败后明确结合新消息创建独立请求�
     await f.fixture.plan({ fault: 'failure' });
     await f.bridge.selectDirection({ ...scope, suggestionId: explored.directions[0].suggestionId,
       inputVersion: explored.inputVersion });
+    const confirmed = await f.bridge.getState();
+    assert.equal(confirmed.exploration.phase, 'ready');
+    assert(confirmed.exploration.result.confirmedIntent);
+    assert.equal((await f.fixture.command('observations')).model_calls, 1, '选择方向不调用候选模型。');
+    await f.bridge.generate({ ...scope, newRequest: true });
     const failedState = await f.bridge.getState();
     assert.equal(failedState.exploration.phase, 'failed');
     assert.notEqual(failedState.phase, 'waiting');
     const sessionId = explored.sessionId;
     const failed = (await f.request(`/api/contacts/${scope.contactId}/assistant-sessions/${sessionId}`)).turns[0];
     assert.equal(failed.state, 'failed');
+    assert.equal(failed.generation_active, false);
+    assert.deepEqual(f.replies.pendingGenerationReceipts(), [], '权威复验已停止后立即结算身份。');
     assert(f.requests.some((request) => request.path.endsWith('/confirm') && request.failure));
     await f.bridge.readSavedSession(scope);
     await f.fixture.command('append_message');
@@ -137,9 +150,49 @@ test('B09已确认候选实际失败后明确结合新消息创建独立请求�
     assert.equal(saved.turns[1].state, 'completed');
     assert.notEqual(saved.turns[1].request_key, failed.request_key);
     assert.equal(saved.current_input_version_id, saved.turns[1].input_version_id);
-    await stopFailedIdentity(f, scope, sessionId, failed, saved.current_input_version_id);
+    assert.equal(failed.generation_active, false);
+    assert.deepEqual(f.replies.pendingGenerationReceipts(), []);
+    await f.replies.beginGenerationClosing(async () => {
+      assert.fail("已复验停止的失败任务不得再次 interrupt。");
+    });
     const observations = await f.fixture.command('observations');
     assert.equal(observations.model_calls, 3);
     assert.match(JSON.stringify(observations.payloads.at(-1)), /甲的新合成消息：时间安排更新。/);
+  });
+});
+
+test('B10失败后的权威读取不可达时保留原身份，退出仍由实际interrupt收口', async () => {
+  await withMessageOptInFixture(async (f) => {
+    const scope = await f.connect();
+    await f.bridge.setMode({ ...scope, mode: 'initiate_conversation' });
+    await f.bridge.updatePurpose({ ...scope, purpose: '只拒绝本次邀约。' });
+    await f.fixture.plan({ count: 1, message_groups: [['本次先不参加。', '没有未来约定。']] });
+    await f.bridge.generate({ ...scope, newRequest: true });
+    await f.bridge.readSavedSession(scope);
+    const sessionId = (await f.bridge.getState()).savedSession.sessionId;
+    const sessionPath = `/api/contacts/${scope.contactId}/assistant-sessions/${sessionId}`;
+    let failedResponse = false;
+    let unreadVerification = 0;
+    // 只丢弃实际 GET 的传输交付，不伪造历史 failed 或 generation_active 证据。
+    f.delivery.after = async (request, observed) => {
+      if (request.path.endsWith('/continue') && observed.failure) failedResponse = true;
+      if (failedResponse && request.method === 'GET' && request.path === sessionPath) {
+        unreadVerification += 1;
+        throw new Error('合成权威复验响应未交付。');
+      }
+    };
+    try {
+      await f.fixture.plan({ fault: 'failure' });
+      await f.bridge.continueSession({ ...scope, sessionId, instruction: '第一条简短一点' });
+      assert.equal((await f.bridge.getState()).continuation.phase, 'failed');
+      assert.equal(failedResponse, true);
+      assert(unreadVerification > 0);
+      const saved = await f.request(sessionPath);
+      const failed = saved.turns.at(-1);
+      assert.equal(failed.state, 'failed');
+      assert.equal(failed.generation_active, false, '服务端已停止不能替代客户端收到权威证据。');
+      await stopFailedIdentity(f, scope, sessionId, failed, saved.current_input_version_id);
+      assert.equal((await f.fixture.command('observations')).model_calls, 2);
+    } finally { f.delivery.after = undefined; }
   });
 });

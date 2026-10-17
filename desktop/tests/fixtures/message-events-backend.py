@@ -8,7 +8,6 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
-import subprocess
 import sys
 import threading
 import traceback
@@ -19,7 +18,7 @@ from unittest.mock import patch
 from uuid import UUID, uuid4
 
 import psycopg
-from fixture_cleanup import cleanup_fixture
+from fixture_cleanup import bind_prepared_database, cleanup_fixture, database_ownership_path
 
 from notalone.scopes import ContactScope
 from notalone.server.connection_info import write_backend_info
@@ -82,26 +81,6 @@ class ControlledEventBus(EventBus):
 class MessageEventsFixture(rewrite.DesktopRewriteFixture):
     reply_model_factory = EventReplyModel
 
-    @classmethod
-    def setUpClass(cls) -> None:
-        super().setUpClass()
-        root = Path(__file__).resolve().parents[3]
-        migrations = root / "backend/database/migrations"
-        with psycopg.connect(cls.database_url) as connection:
-            recorded = [row[0] for row in connection.execute(
-                "SELECT name FROM public.notalone_schema_migration ORDER BY name",
-            ).fetchall()]
-        expected = sorted(path.name for path in migrations.glob("*.sql"))
-        if recorded != expected or len(recorded) != 58 or not recorded[-1].startswith("058_"):
-            raise RuntimeError("本轮新消息夹具必须只应用正式001–058迁移。")
-        repeated = subprocess.run(
-            [sys.executable, "-m", "notalone.database_migrations", "--migrations", str(migrations)],
-            cwd=root / "backend", capture_output=True, text=True, timeout=60,
-            env=dict(os.environ, NOTALONE_DATABASE_URL=cls.database_url),
-        )
-        if repeated.returncode or json.loads(repeated.stdout)["applied"] != []:
-            raise RuntimeError("本轮新消息迁移重复执行必须为0。")
-
     def setUp(self) -> None:
         self.event_buses: dict[UUID, ControlledEventBus] = {}
         super().setUp()
@@ -151,9 +130,8 @@ class MessageEventsFixture(rewrite.DesktopRewriteFixture):
 def main() -> None:
     fixture = MessageEventsFixture()
     try:
-        MessageEventsFixture._database_ownership_path = Path(
-            os.environ["NOTALONE_ENV_FILE"],
-        ).with_name("message-events-database-ownership.json")
+        MessageEventsFixture._prepared_database_name = bind_prepared_database()
+        MessageEventsFixture._database_ownership_path = database_ownership_path()
         MessageEventsFixture.setUpClass()
         fixture.setUp()
         contact_ids = [
@@ -174,7 +152,7 @@ def main() -> None:
             "database_url": fixture.database_url, "owner_id": str(fixture.owner_id),
             "contact_ids": contact_ids, "other_contact_id": other_contact_id,
             "empty_contact_id": str(empty_contact_id),
-            "migration_count": 58, "migration_repeat": 0,
+            **fixture.migration_receipt,
         }}), flush=True)
         for line in sys.stdin:
             command = json.loads(line)

@@ -23,8 +23,10 @@ export async function assistantInputBudgetHard(browser: Browser, origin: string)
     const originalPath = `/api/contacts/${rewriteBackend.data.contact_ids[0]}/assistant-sessions/${originalSessionId}`;
     const before = await rewriteBackend.request(originalPath);
     expect(before.status).toBe(200);
-    expect((await rewriteBackend.command('metrics')).model_calls).toBe(1);
-    const capacity = calibration.total_tokens - 1;
+    expect((await rewriteBackend.command('metrics')).model_calls).toBe(2);
+    // 在 prepare 的首阶段就阻断，不能用最终复核预算代替首次计量。
+    const stages = await rewriteBackend.command('calibration');
+    const capacity = Number(stages.first_stage_total) - 1;
     await host.close();
     await rewriteBackend.command('configure', { capacity });
     const transport = await RewriteHttpProxy.attach(rewriteBackend.infoPath);
@@ -40,12 +42,15 @@ export async function assistantInputBudgetHard(browser: Browser, origin: string)
         await current.helper.getByRole('button', { name: '生成候选', exact: true }).click();
         const notice = current.helper.getByRole('alert', { name: '模型输入预算', exact: true });
         await expect(notice).toContainText('超限调用已停止');
-        expect(transport.results[0].status).toBe(409);
-        expect(transport.results[0].data.input_budget).toMatchObject({
+        expect(transport.replyPreparationBudgets).toHaveLength(1);
+        expect(transport.replyPreparationBudgets[0].status).toBe(409);
+        expect(transport.requests).toEqual([]);
+        expect(transport.results).toEqual([]);
+        expect(transport.replyPreparationBudgets[0].inputBudget).toMatchObject({
           state: 'exceeded', allowed: false, context_window_tokens: capacity,
         });
         expect(await rewriteBackend.command('metrics')).toEqual({
-          model_calls: 1, migration_count: 55, migration_repeat: 0,
+          model_calls: 2, migration_count: 72, migration_repeat: 0,
         });
         await expect(current.helper.getByRole('textbox', { name: '草稿', exact: true })).toHaveValue(budgetDraft);
         await expect(current.helper.getByRole('combobox', { name: '本次语气', exact: true })).toHaveValue('polite');
@@ -65,7 +70,7 @@ export async function assistantInputBudgetHard(browser: Browser, origin: string)
         await expect(current.helper.getByRole('textbox', { name: '草稿', exact: true })).toHaveValue('');
         await expect(current.helper.getByRole('textbox', { name: '本次要求', exact: true })).toHaveValue('');
         await expect(current.helper.getByRole('combobox', { name: '本次语气', exact: true })).toHaveValue('original');
-        expect((await rewriteBackend.command('metrics')).model_calls).toBe(1);
+        expect((await rewriteBackend.command('metrics')).model_calls).toBe(2);
         const fresh = await current.helper.evaluate(async () => window.notalone.replies.getState());
         expect(fresh.savedSession!.sessionId).not.toBe(originalSessionId);
         expect((await rewriteBackend.request(originalPath)).data).toEqual(rejectedSaved.data);
@@ -74,9 +79,10 @@ export async function assistantInputBudgetHard(browser: Browser, origin: string)
         await expect(current.helper.getByRole('textbox', { name: '候选1编辑文本', exact: true }))
           .toHaveValue('硬预算后的新会话合成候选（说法1）。');
         expect(await rewriteBackend.command('metrics')).toEqual({
-          model_calls: 2, migration_count: 55, migration_repeat: 0,
+          // 新会话恢复 original 语气，短草稿走确定性保真检查，仅新增一次生成。
+          model_calls: 3, migration_count: 72, migration_repeat: 0,
         });
-        process.stdout.write(`page_test_budget_hard: rejected_http=409 model_delta=0 capacity=${capacity} old_history_preserved=true blank_model_delta=0 explicit_new_generation=true total_model_calls=2 migrations=55 repeat=0\n`);
+        process.stdout.write(`page_test_budget_hard: rejected_http=409 model_delta=0 capacity=${capacity} old_history_preserved=true blank_model_delta=0 explicit_new_generation=true total_model_calls=3 migrations=72 repeat=0\n`);
       } finally { transport.release(); await next.close(); }
     } finally { await transport.close(); }
   }, undefined, path.resolve('tests/fixtures/assistant-input-budget-page-backend.py'));

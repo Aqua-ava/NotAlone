@@ -7,6 +7,7 @@ export class RewriteHttpProxy {
   readonly requests: Array<Record<string, unknown>> = [];
   readonly results: Array<{ status: number; data: Record<string, unknown> }> = [];
   readonly replyPreparations: Array<{ kind: 'replies' | 'replace'; status: number; error: string | null; reason: string | null }> = [];
+  readonly replyPreparationBudgets: Array<{ status: number; inputBudget: unknown }> = [];
   readonly defaultSessionResults: Array<{ contactId: string; status: number; data: Record<string, unknown> }> = [];
   readonly explorationRequests: Array<Record<string, unknown>> = [];
   readonly explorationResults: Array<{ status: number; data: Record<string, unknown> }> = [];
@@ -107,6 +108,7 @@ export class RewriteHttpProxy {
               status: result.statusCode ?? 500, data: JSON.parse(value.toString('utf8')) as Record<string, unknown> });
             if (preparingReply) {
               const data = JSON.parse(value.toString('utf8')) as Record<string, unknown>;
+              this.replyPreparationBudgets.push({ status: result.statusCode ?? 500, inputBudget: data.input_budget });
               const safeCode = (code: unknown) => typeof code === 'string' && /^[a-z][a-z0-9_]{0,79}$/.test(code) ? code : null;
               this.replyPreparations.push({ kind: incoming.url!.includes('/replace/') ? 'replace' : 'replies',
                 status: result.statusCode ?? 500, error: safeCode(data.error), reason: safeCode(data.reason) });

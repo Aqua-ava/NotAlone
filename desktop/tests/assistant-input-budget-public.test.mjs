@@ -186,22 +186,28 @@ for (const newRequest of [false, true]) {
     const contactId = f.data.contact_ids[0], base = `/api/contacts/${contactId}/assistant-sessions`;
     const text = '工具预算拒绝后继续本次表达的合成草稿。';
     const options = { tone: 'original', instruction: '只保留本次草稿，不增加承诺。', includeRelationshipContext: true };
+    // 多条同联系人合成资料确保工具展开的预算高于无工具成功重试的独立复核。
+    await f.command('older_messages', { contact_id: contactId });
     const calibration = await f.request(base, {});
-    await f.command('plan', { plan: { probe_history: true, text, count: 1 } });
+    await f.command('plan', { plan: { probe_history: true, probe_query: '合成', text, count: 1 } });
     const completed = await f.request(`${base}/${calibration.session_id}/replies`, { contact_id: contactId,
       idempotency_key: randomUUID(), content: { type: 'rewrite_draft', draft_text: text,
         user_instruction: options.instruction, include_relationship_context: true } });
     assert.equal(completed.candidates[0].citation_ids.length, 2);
     const calibrated = await f.command('metrics');
-    assert.equal(calibrated.model_calls, 2); assert.equal(calibrated.decisions.length, 2);
-    const capacity = calibrated.decisions[1].total_tokens - 100;
-    assert(capacity > calibrated.decisions[0].total_tokens);
+    // 检索前、检索后两次候选调用，再加一次独立忠实性复核；预算也覆盖复核。
+    assert.equal(calibrated.payloads.length, 2);
+    assert.equal(calibrated.model_calls, 3); assert.equal(calibrated.decisions.length, 3);
+    const [beforeTool, afterTool, review] = calibrated.decisions;
+    assert.deepEqual([beforeTool.allowed, afterTool.allowed, review.allowed], [true, true, true]);
+    const capacity = afterTool.total_tokens - 100;
+    assert(capacity > beforeTool.total_tokens);
     await f.configure({ capacity });
     const scope = await f.connect(); await f.bridge.newSavedSession(scope);
     f.contacts.setDraft({ ...scope, text }); await f.bridge.updateOptions({ ...scope, options });
     const start = await f.command('metrics');
     // 工具轮被预算守卫拒绝时，现有脚本保留下一轮普通模型失败供公开再生成。
-    await f.command('plan', { plan: { probe_history: true, fault: 'model_failed' } });
+    await f.command('plan', { plan: { probe_history: true, probe_query: '合成', fault: 'model_failed' } });
     await f.bridge.generate({ ...scope, newRequest: true });
     await f.bridge.readSavedSession(scope);
     const budgetFailed = await f.bridge.getState(), toolMetrics = await f.command('metrics');
@@ -252,7 +258,11 @@ for (const newRequest of [false, true]) {
     if (newRequest) assert.deepEqual(retried.savedSession.turns[0], first);
     assert.equal(retried.result.candidates[0].original.text, text);
     assert.equal(f.contacts.getState().draft, text); assert.deepEqual(retried.options, options);
-    assert.equal((await f.command('metrics')).model_calls, failureMetrics.model_calls + 1);
+    const recovered = await f.command('metrics');
+    // 无工具恢复执行一次候选生成和一次独立复核，两阶段均在同一容量内。
+    assert.equal(recovered.payloads.length, failureMetrics.payloads.length + 1);
+    assert.equal(recovered.model_calls, failureMetrics.model_calls + 2);
+    assert.deepEqual(recovered.decisions.slice(failureMetrics.decisions.length).map((decision) => decision.allowed), [true, true]);
   });
 }
 
@@ -271,12 +281,12 @@ test('真实受控配置的累计预算warning经Main/preload公开结果返回�
   assert.deepEqual((await f.bridge.getState()).savedSession.turns[0].reply.inputBudget, state.result.inputBudget);
 });
 
-test('公开预算warning在助手会话显示，并保持已填草稿和独立新开入口', { skip: !enabled }, async (t) => {
+test('公开预算warning在候选区显示，并保持已填草稿和独立新开入口', { skip: !enabled }, async (t) => {
   const f = await limitedFixture(t);
   f.contacts.setDraft({ ...f.scope, text: draft });
   await f.command('plan', { plan: { text: draft, count: 1 } });
   await f.bridge.generate({ ...f.scope, newRequest: true });
-  const html = f.renderSession(await f.bridge.getState());
+  const html = f.renderCandidates(await f.bridge.getState());
   assert.match(html, /当前讨论已接近模型输入上限/);
   assert.match(html, /新开助手会话/);
   assert.equal(f.contacts.getState().draft, draft);
@@ -313,7 +323,7 @@ test('累计硬限在公开状态提示，保留已填草稿与历史并可独�
   assert.equal(rejected.inputBudgetNotice?.sessionId, old.savedSession.sessionId);
   assert.equal(f.contacts.getState().draft, edit);
   assert.equal((await f.command('metrics')).model_calls, before.model_calls);
-  assert.match(f.renderSession(rejected), /超限调用已停止/);
+  assert.match(f.renderCandidates(rejected), /超限调用已停止/);
   await f.bridge.readSavedSession(f.scope);
   const saved = await f.bridge.getState();
   assert.equal(saved.savedSession.turns[0].input.content.draft_text, draft);
@@ -341,8 +351,8 @@ test('计量能力未知保持阻断和无计量值，公开读取与已填写�
   assert.equal(state.inputBudgetNotice?.decision.inputTokens, null);
   assert.equal(state.inputBudgetNotice?.decision.totalTokens, null);
   assert.equal(f.contacts.getState().draft, '未知计量时应保留的合成草稿。');
-  assert.match(f.renderSession(state), /完整输入计量配置不可用/);
-  assert(!f.renderSession(state).includes('/ 0 token'));
+  assert.match(f.renderCandidates(state), /完整输入计量配置不可用/);
+  assert(!f.renderCandidates(state).includes('/ 0 token'));
   await f.bridge.readSavedSession(scope);
   const saved = (await f.bridge.getState()).savedSession;
   assert.equal(saved.phase, 'ready'); assert.equal(saved.turns.length, 1);
@@ -431,7 +441,7 @@ test('删除助手会话清除其预算提示与历史回执，独立消息仍�
 
 for (const failure of [
   { code: 'input_budget_exceeded', configure: { capacity: 101 }, text: /当前讨论超出模型输入预算/ },
-  { code: 'input_budget_unavailable', configure: { unknown: true }, text: /当前模型的完整输入预算暂不可核验/ },
+  { code: 'input_budget_unavailable', configure: { unknown: true }, text: /当前模型或接收地址的完整输入预算暂不可核验/ },
 ]) {
   test(`同会话实际CURRENT更新后清除旧${failure.code}当前错误，历史与草稿不变`, { skip: !enabled }, async (t) => {
     const f = await budgetPublicFixture(t); await f.configure(failure.configure);
@@ -458,7 +468,7 @@ for (const failure of [
     assert.equal(after.inputBudgetNotice, undefined);
     assert.equal(after.errorCode, undefined);
     assert.equal(after.phase, 'idle'); assert.equal(after.canRetry, false);
-    assert.doesNotMatch(html, /当前讨论超出模型输入预算|当前模型的完整输入预算暂不可核验/);
+    assert.doesNotMatch(html, /当前讨论超出模型输入预算|当前模型或接收地址的完整输入预算暂不可核验/);
     assert.match(html, /本轮生成未成功保存/);
     assert.equal(after.savedSession.turns[0].inputVersionId, oldInput);
     assert.equal(after.savedSession.turns[0].state, 'failed');
@@ -515,7 +525,7 @@ test('实际CURRENT重读只清失去归属的预算错误，不清普通模型�
   assert.equal(after.errorCode, 'generation_failed'); assert.equal(after.phase, 'failed');
   assert.equal(after.canRetry, true); assert.equal(after.inputBudgetNotice, undefined);
   assert.match(f.renderCandidates(after), /本次生成失败，请核对本机服务后重试/);
-  assert.doesNotMatch(f.renderCandidates(after), /当前讨论超出模型输入预算|当前模型的完整输入预算暂不可核验/);
+  assert.doesNotMatch(f.renderCandidates(after), /当前讨论超出模型输入预算|当前模型或接收地址的完整输入预算暂不可核验/);
   assert.equal(after.savedSession.turns[0].state, 'failed');
   assert.equal(after.savedSession.turns[0].input.content.draft_text, text);
   assert.equal(f.contacts.getState().draft, text);
@@ -564,7 +574,7 @@ for (const failure of [
       assert.equal(after.savedSession.turns[0].input.content.draft_text, text);
       assert.equal(after.savedSession.inputs.find((input) => input.inputVersionId === next.input_version_id).state, 'active');
       assert.equal(f.contacts.getState().draft, text); assert.deepEqual(after.options, options);
-      assert.doesNotMatch(f.renderCandidates(after), /当前讨论超出模型输入预算|当前模型的完整输入预算暂不可核验/);
+      assert.doesNotMatch(f.renderCandidates(after), /当前讨论超出模型输入预算|当前模型或接收地址的完整输入预算暂不可核验/);
       assert.match(f.renderCandidates(after), /本轮生成未成功保存/);
       assert.equal((await f.command('metrics')).model_calls, 0);
       // 普通生成沿实际新 CURRENT 签发新身份，不重放迟到的旧失败键。
@@ -631,7 +641,7 @@ for (const failure of [
       assert.equal(after.savedSession.turns[0].input.content.draft_text, text);
       assert.equal(after.savedSession.inputs.find((input) => input.inputVersionId === next.input_version_id).state, 'active');
       assert.equal(f.contacts.getState().draft, text); assert.deepEqual(after.options, options);
-      assert.doesNotMatch(f.renderCandidates(after), /当前讨论超出模型输入预算|当前模型的完整输入预算暂不可核验/);
+      assert.doesNotMatch(f.renderCandidates(after), /当前讨论超出模型输入预算|当前模型或接收地址的完整输入预算暂不可核验/);
       assert.equal((await f.command('metrics')).model_calls, 0);
       await f.bridge.generate({ ...scope, newRequest: false });
       await f.bridge.readSavedSession(scope);
@@ -776,7 +786,7 @@ test('成功预算复验GET被公开新CURRENT重读超越后保留新视图且�
     assert.equal(after.savedSession.turns[0].input.content.draft_text, draft);
     assert.equal(after.savedSession.inputs.find((input) => input.inputVersionId === next.input_version_id).state, 'active');
     assert.equal(f.contacts.getState().draft, draft); assert.deepEqual(after.options, observed.options);
-    assert.doesNotMatch(f.renderSession(after), /当前讨论已接近模型输入上限/);
+    assert.doesNotMatch(f.renderCandidates(after), /当前讨论已接近模型输入上限/);
     assert.equal((await f.command('metrics')).model_calls, 2);
   } finally { release(); await pending; f.delivery.after = undefined; }
 });
@@ -846,7 +856,7 @@ test('成功预算复验GET被同CURRENT的较晚公开ready重读超越仍发�
     assert.equal(after.result.replyRequestId, turn.reply.reply_request_id);
     assert.equal(after.result.inputVersionId, turn.input_version_id);
     assert.equal(after.result.candidates[0].original.text, draft);
-    assert.match(f.renderSession(after), /当前讨论已接近模型输入上限/);
+    assert.match(f.renderCandidates(after), /当前讨论已接近模型输入上限/);
     assert.equal(f.contacts.getState().draft, draft); assert.deepEqual(after.options, observed.options);
     assert.equal((await f.command('metrics')).model_calls, 2);
   } finally { f.release(); await f.pending; f.delivery.after = undefined; }

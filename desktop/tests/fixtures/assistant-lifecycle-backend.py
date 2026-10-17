@@ -30,5 +30,6 @@ class LifecycleFixture(rewrite.DesktopRewriteFixture):
 
 
 if __name__ == "__main__":
+    LifecycleFixture._prepared_database_name = rewrite.bind_prepared_database()
     rewrite.DesktopRewriteFixture = LifecycleFixture
     rewrite.main()

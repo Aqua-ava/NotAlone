@@ -38,7 +38,7 @@ export async function eventually(read, accepts, message) {
 export async function withMessageOptInFixture(use) {
   let cleaned = false;
   try { await ports.withRewriteFixture('notalone-message-opt-in-http-', async (fixture) => {
-    assert.equal(fixture.data.migration_count, 58);
+    assert.equal(fixture.data.migration_count, 72);
     assert.equal(fixture.data.migration_repeat, 0);
     const connection = await ports.readConnection(fixture.infoPath);
     assert(connection);
@@ -107,6 +107,6 @@ export async function withMessageOptInFixture(use) {
     }
   }, () => { cleaned = true; }, path.resolve('tests/fixtures/message-events-backend.py')); }
   finally {
-    if (cleaned) process.stdout.write('message_opt_in_cleanup: 001–058 repeat=0 owned_database_remaining=0\n');
+    if (cleaned) process.stdout.write('message_opt_in_cleanup: 001–072 repeat=0 owned_database_remaining=0\n');
   }
 }

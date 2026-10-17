@@ -31,13 +31,14 @@ export async function withEventPages(browser: Browser, origin: string, use: (pag
         const evidence = path.resolve('artifacts/headless-pages/message-events-owned');
         await mkdir(evidence, { recursive: true });
         for (const suffix of ['database-ownership', 'owned']) {
-          await copyFile(path.join(fixture.directory, `message-events-${suffix}.json`),
+          await copyFile(path.join(fixture.directory, suffix === 'database-ownership'
+            ? 'database-ownership.json' : 'message-events-owned.json'),
             path.join(evidence, `${fixture.data.owner_id}-${suffix}.json`));
         }
       }
     }); } finally { await transport.close(); }
   }, released, path.resolve('tests/fixtures/message-events-backend.py'), path.resolve('..'),
-  'message-events-database-ownership.json');
+  'database-ownership.json');
 }
 async function prepare({ manager, helper, fixture }: EventPages, contact: '甲' | '乙' = '甲') {
   await manager.getByRole('button', { name: `选择合成联系人${contact}`, exact: true }).click();
