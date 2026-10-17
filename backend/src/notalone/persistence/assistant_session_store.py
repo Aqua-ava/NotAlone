@@ -605,7 +605,7 @@ class PostgresAssistantSessionStore:
                 reason.removeprefix("prepared_context_") if reason is not None else "compatible")
 
     def prepared_request(self, scope: ContactScope, receipt: AssistantGenerationReceipt) -> ReplyServiceRequest:
-        from notalone.persistence.assistant_continuation import _request_from_input
+        from notalone.persistence.assistant_continuation import restore_prepared_reply_request
         with self._transaction(scope) as connection:
             row = connection.execute(
                 "SELECT input_payload FROM public.assistant_session_turn WHERE owner_id=%s AND contact_id=%s "
@@ -615,7 +615,8 @@ class PostgresAssistantSessionStore:
             ).fetchone()
             if row is None or row["input_payload"] is None:
                 raise AssistantSessionRejected("source_unavailable")
-            return _request_from_input(scope, receipt.request_key, row["input_payload"])
+            return restore_prepared_reply_request(connection, scope, receipt.session_id,
+                                                  receipt.request_key, row["input_payload"])
 
     def reject_unavailable_preparation(self, scope: ContactScope, session_id: UUID, request_key: UUID) -> None:
         """模型缺配置也须先持锁证实未领取，不能留下无法退出的未知作业。"""

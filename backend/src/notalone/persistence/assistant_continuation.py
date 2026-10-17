@@ -14,6 +14,7 @@ from notalone.application.assistant_continuation import (
     continuation_submission, requirement_clauses, resolve_requirements,
 )
 from notalone.application.assistant_session_service import AssistantSessionConflict, AssistantSessionNotFound, AssistantSessionRejected
+from notalone.application.reply_service import ReplyServiceRequest
 from notalone.application.assistant_generation_lifecycle import AssistantGenerationReceipt
 from notalone.application.reply_request import parse_reply_request
 from notalone.persistence.assistant_candidate_versions import (
@@ -102,6 +103,25 @@ def _reference_from_metadata(
     if version is None:
         raise AssistantContinuationClarification("candidate_version_unavailable")
     return AssistantContinuationReference(history.candidate_id, version.version_id, version.messages)
+
+
+def restore_prepared_reply_request(
+    connection: Any, scope: ContactScope, session_id: UUID, key: UUID, payload: dict[str, Any],
+) -> ReplyServiceRequest:
+    """固定准备复原真实继续身份，并在同范围事务内重验所选版本正文。"""
+    request = _request_from_input(scope, key, payload)
+    metadata = payload.get("continuation")
+    if not isinstance(metadata, dict):
+        return request
+    return AssistantContinuationReplyRequest(
+        idempotency_key=key, content=request.content,
+        continued_from_candidate_id=request.continued_from_candidate_id,
+        skill_version_id=request.skill_version_id, skill_disabled=request.skill_disabled,
+        scene=request.scene, suggestion=request.suggestion,
+        expected_input_version_id=UUID(metadata["submission"]["expected_input_version_id"]),
+        continuation=metadata,
+        reference=_reference_from_metadata(connection, scope, session_id, metadata),
+    )
 
 
 def _known_intention(instruction: str) -> str | None:

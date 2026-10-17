@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import os
+import tempfile
 import unittest
 from datetime import datetime, timezone
+from pathlib import Path
+from unittest.mock import patch
 from uuid import UUID
 
 from notalone.conversation.matcher import FrontSessionEvidence
@@ -52,8 +56,14 @@ class RecordingProbe:
 
 class CliVisualIndependenceHttpTest(unittest.TestCase):
     def setUp(self) -> None:
-        fixture = create_database("single-account")
-        self.addCleanup(drop_database, fixture["database_name"])
+        environment = patch.dict(os.environ, {"NOTALONE_DISABLE_DOTENV": "1"})
+        environment.start()
+        self.addCleanup(environment.stop)
+        directory = tempfile.TemporaryDirectory(prefix="notalone-cli-visual-")
+        self.addCleanup(directory.cleanup)
+        ownership = Path(directory.name) / "database-owned.json"
+        fixture = create_database("single-account", ownership)
+        self.addCleanup(drop_database, fixture["database_name"], ownership)
         self.database_url = fixture["database_url"]
         self.owner_id = UUID(fixture["owner_id"])
         self.contact_id = UUID(fixture["contact_ids"][0])

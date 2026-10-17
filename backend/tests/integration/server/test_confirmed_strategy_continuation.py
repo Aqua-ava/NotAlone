@@ -27,7 +27,7 @@ class ConfirmedStrategyContinuationHttpTests(FidelityHttpFixture, unittest.TestC
                     "operation_key": str(uuid4()), "content": {**content, "skill_mode": "disabled", "requirements": "不要承诺"},
                 })
                 self.assertEqual(status, 200, explored)
-                confirmation = {"input_version_id": explored["input_version_id"],
+                confirmation = {"generate": True, "input_version_id": explored["input_version_id"],
                                 "suggestion_id": explored["options"][0]["suggestion_id"]}
                 self.reply_model.plans.append({"text": "最近还好吗？\n\n只了解近况。", "basis": "原合成已确认方向。",
                                               "messages": ["最近还好吗？", "只了解近况。"]})

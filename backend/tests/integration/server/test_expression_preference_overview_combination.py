@@ -13,7 +13,7 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 from notalone.application.source_service import SourceService
 from notalone.memory.models import FactSubject
-from notalone.persistence.assistant_continuation import _request_from_input
+from notalone.persistence.assistant_continuation import restore_prepared_reply_request
 from notalone.reply.prepared_context_codec import decode_context, encode_context
 from notalone.scopes import ContactScope
 
@@ -66,7 +66,9 @@ class ExpressionPreferenceOverviewCombinationHttpTest(OverviewReplyHttpFixture, 
             raise RuntimeError("联合验收加载了其他工作树模块。")
         proof = {"test_method": self._testMethodName, "pid": os.getpid(), "database_name": self.actual_database,
                  "migrations": self.migration_names, "migration_repeat": 0, "observations": self.observations,
-                 "model_calls": len(self.reply_model.payloads) if hasattr(self, "reply_model") else 0,
+                 "model_calls": len(self.reply_model.seen_calls) if hasattr(self, "reply_model") else 0,
+                 "generation_model_calls": len(self.reply_model.payloads) if hasattr(self, "reply_model") else 0,
+                 "review_model_calls": self.reply_model.review_calls if hasattr(self, "reply_model") else 0,
                  "loaded_modules": modules}
         descriptor = os.open(directory / f"{self._testMethodName}.json", os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
         with os.fdopen(descriptor, "w") as output:
@@ -94,15 +96,19 @@ class ExpressionPreferenceOverviewCombinationHttpTest(OverviewReplyHttpFixture, 
         self._assert_dual_snapshot(receipt)
         return contact, other, source, preference, path, body, receipt
 
-    def _assert_dual_snapshot(self, receipt):
+    def _assert_dual_snapshot(self, receipt, *, has_preferences=True):
         row = self.saved_turn(receipt)
         payload = row["prepared_context"]
         self.assertEqual((payload["version"], payload["schema_revision"]), (2, 5))
         scope = ContactScope(self.owner_id, row["contact_id"])
-        request = _request_from_input(scope, row["idempotency_key"], row["input_payload"])
+        with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
+            lock_owner_scope(connection, owner_id=self.owner_id)
+            request = restore_prepared_reply_request(connection, scope, row["session_id"],
+                                                     row["idempotency_key"], row["input_payload"])
         command = request.build_command(owner_id=self.owner_id, contact_id=scope.contact_id, binding_id=row["conversation_binding_id"])
         decoded = decode_context(payload, command)
-        self.assertTrue(decoded.expression_preferences)
+        self.assertEqual(bool(decoded.expression_preferences), has_preferences)
+        self.assertIsNotNone(decoded.expression_preference_revision)
         self.assertIsNotNone(decoded.retrieval)
         navigation = [item.navigation for item in decoded.evidence if item.navigation is not None]
         self.assertTrue(navigation)
@@ -121,6 +127,7 @@ class ExpressionPreferenceOverviewCombinationHttpTest(OverviewReplyHttpFixture, 
         self.assertEqual(first["turn_id"], receipt["turn_id"])
         self.assertEqual(first["context_receipt"]["expression_preference_ids"], [preference["preference_id"]])
         self.assertEqual(restarted.request(path + "/replies", body), (200, first))
+        self.assertEqual((len(self.reply_model.seen_calls), self.reply_model.review_calls), (2, 1))
         history = self._get(restarted, path + f"/candidates/{first['candidates'][0]['candidate_id']}/versions")
         command = {"idempotency_key": str(uuid4()), "expected_input_version_id": first["input_version_id"],
                    "instruction": "自然一点", "requirement_changes": [{"action": "add", "replacement": "保留原意"}],
@@ -129,13 +136,15 @@ class ExpressionPreferenceOverviewCombinationHttpTest(OverviewReplyHttpFixture, 
                    "candidate_id": history["candidate_id"], "version_id": history["default_display_version_id"]}]}}
         status, prepared = restarted.request(path + "/continue/prepare", command)
         self.assertEqual(status, 200, prepared)
-        self._assert_dual_snapshot(prepared)
+        self._assert_dual_snapshot(prepared, has_preferences=False)
         self.reply_model.plans.append({"text": "再自然地聊聊合成热茶。", "basis": "保留用户明确意图。"})
         status, continued = self._backend(self.owner_id).request(path + "/continue", command)
         self.assertEqual(status, 200, continued)
         self.assertEqual(continued["turn_id"], prepared["turn_id"])
-        self.assertEqual(continued["context_receipt"]["expression_preference_ids"], [preference["preference_id"]])
+        self.assertEqual(continued["context_receipt"]["expression_preference_ids"], [])
+        self.assertNotIn("expression_preferences", self.reply_model.payloads[-1])
         self.assertEqual(self._backend(self.owner_id).request(path + "/continue", command), (200, continued))
+        self.assertEqual((len(self.reply_model.seen_calls), self.reply_model.review_calls), (4, 2))
 
         contact, _, _, _, path, body, receipt = self._dual_prepare()
         row = self.saved_turn(receipt); payload = row["prepared_context"]; payload["schema_revision"] = 3
@@ -200,7 +209,6 @@ class ExpressionPreferenceOverviewCombinationHttpTest(OverviewReplyHttpFixture, 
                 preference = saved["preference"]
                 item = f"/api/expression-preferences/{preference['preference_id']}?contact_id={contact}"
                 body = self.rewrite_body(contact, "之前喜欢热茶，现在想再核实。")
-                body["content"]["user_instruction"] = "这次保留详细说明。"
                 self.reply_model.plans.append({
                     "text": "之前喜欢热茶，现在想再核实。", "basis": "历史资料须重新核实。",
                     "cite_kinds": [kind],
@@ -224,7 +232,7 @@ class ExpressionPreferenceOverviewCombinationHttpTest(OverviewReplyHttpFixture, 
                 self.assertTrue(old["cited"])
                 self.assertEqual(evidence["retrieval"]["retriever_version"], "lexical-v1")
                 payload = self.reply_model.payloads[-1]
-                self.assertEqual(payload["user_instruction"], body["content"]["user_instruction"])
+                self.assertIsNone(payload["user_instruction"])
                 self.assertEqual(payload["fidelity_contract"]["priority"][:3], [
                     "current_explicit_intent", "expression_instruction", "long_term_expression_preference",
                 ])
