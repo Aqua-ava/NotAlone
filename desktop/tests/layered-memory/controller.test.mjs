@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { fixture, payload, readyPayload, ids, BackendRequestFailure } from './support.mjs';
+import { fixture, payload, readyPayload, profilePayload, ids, BackendRequestFailure } from './support.mjs';
 
 test('用户明确确认联系人范围与用途后可开启；未知质量只保存范围而不放行整理', async () => {
   const posted = [];
@@ -51,7 +51,7 @@ test('联系人切换与断连立即撤下主题正文，迟到响应不可填�
   for (const change of ['contact', 'disconnect']) {
     let releaseLate, signal;
     const f = await fixture(async (request) => new Promise((resolve) => { signal = request.signal;
-      releaseLate = () => resolve({ generation: 1, data: readyPayload() }); }));
+      releaseLate = () => resolve({ generation: 1, data: profilePayload() }); }));
     const selection = f.selection();
     const reading = f.bridge.readLayeredMemory(selection);
     await new Promise((resolve) => setImmediate(resolve));
@@ -70,9 +70,9 @@ test('来源删除取消旧正文，重新读取失败时保持空缓存并拒�
   const f = await fixture(async (request) => {
     if (!request.path.endsWith('/layered-memory')) return { generation: 1, data: request.path.endsWith('/sources') ? { sources: [] }
       : request.path.endsWith('/memory-candidates') ? { candidates: [] } : { memories: [] } };
-    if (++readCount === 1) return { generation: 1, data: readyPayload() };
+    if (++readCount === 1) return { generation: 1, data: profilePayload() };
     if (readCount === 2) return new Promise((resolve) => { signal = request.signal;
-      releaseLate = () => resolve({ generation: 1, data: readyPayload() }); });
+      releaseLate = () => resolve({ generation: 1, data: profilePayload() }); });
     throw new Error('合成读取失败');
   });
   await f.bridge.readLayeredMemory(f.selection());
@@ -111,7 +111,7 @@ test('底层记忆修正或删除先撤主题缓存，响应未知后仍权威�
       timing: { recorded_at: null, source_started_at: null, source_ended_at: null, source_time_complete: false } };
     const f = await fixture(async (request) => {
       if (request.method === 'POST') return new Promise((_resolve, reject) => { finishWrite = () => { committed = true; reject(new Error('合成响应未知')); }; });
-      if (request.path.endsWith('/layered-memory')) return { generation: 1, data: committed ? readyPayload({ status: 'stale', scenarios: [], covered_count: 0, remaining_count: 3 }) : readyPayload() };
+      if (request.path.endsWith('/layered-memory')) return { generation: 1, data: committed ? readyPayload({ status: 'stale', scenarios: [], covered_count: 0, remaining_count: 3 }) : profilePayload() };
       return { generation: 1, data: request.path.endsWith('/memory-candidates') ? { candidates: [] } : { memories: committed && action === 'remove' ? [] : [memory] } };
     });
     await f.bridge.refresh({ ...f.selection(), section: 'contact' });
@@ -124,6 +124,7 @@ test('底层记忆修正或删除先撤主题缓存，响应未知后仍权威�
     finishWrite(); await writing;
     assert.deepEqual((await f.bridge.getState()).layeredMemory.value.scenarios, []);
     assert.equal((await f.bridge.getState()).layeredMemory.value.status, 'stale');
+    assert.equal((await f.bridge.getState()).layeredMemory.value.profile, null);
   }
 });
 
@@ -180,4 +181,62 @@ test('来源删除请求未决期间禁止回填旧主题；删除结束后只�
   f.controller.sourceDeletionChanged('settled');
   await new Promise((resolve) => setImmediate(resolve));
   assert.deepEqual((await f.bridge.getState()).layeredMemory.value.scenarios, []);
+});
+
+test('当前长期背景保留逐项依据与不确定性，并绑定一致版本撤回本版', async () => {
+  let saved = profilePayload(), posted;
+  const f = await fixture(async (request) => {
+    if (request.method === 'POST') { posted = request; saved = readyPayload({ organization_generation: 2 }); }
+    return { generation: 1, data: saved };
+  });
+  await f.bridge.readLayeredMemory(f.selection());
+  const value = (await f.bridge.getState()).layeredMemory.value;
+  assert.equal(value.schemaVersion, 2);
+  assert.equal(value.profile.versionId, ids.profile);
+  assert.equal(value.profile.entries[0].temporalStatus, 'uncertain');
+  assert.equal(value.profile.entries[0].uncertainty, '没有新的来源核实持续状态。');
+  assert.equal(value.profile.entries[0].references[0].memoryId, ids.memory);
+  await f.bridge.manageLayeredMemory({ ...f.selection(), action: 'withdraw-profile', settingsGeneration: 1,
+    organizationGeneration: 1, profileVersionId: ids.profile });
+  assert.equal(posted.path, `/api/contacts/${ids.contact}/layered-memory/withdraw-profile`);
+  assert.deepEqual(posted.body, { settings_generation: 1, organization_generation: 1, profile_version_id: ids.profile });
+  assert.equal((await f.bridge.getState()).layeredMemory.value.profile, null);
+  assert.equal((await f.bridge.getState()).layeredMemory.value.scenarios[0].title, '合成读书计划');
+});
+
+test('旧协议、无依据或未知质量的长期背景不能填回当前资料', async () => {
+  const base = profilePayload(), profile = base.layered_memory.profile;
+  const wrong = [profilePayload({ schema_version: 1 }), profilePayload({ profile: undefined }),
+    profilePayload({ profile: { ...profile, system_generated: false } }),
+    profilePayload({ profile: { ...profile, entries: [{ ...profile.entries[0], references: [] }] } }),
+    profilePayload({ profile: { ...profile, entries: [{ ...profile.entries[0], temporal_status: 'current' }] } }),
+    profilePayload({ profile: { ...profile, entries: [{ ...profile.entries[0], uncertainty: undefined }] } }),
+    profilePayload({ profile: { ...profile, entries: [{ ...profile.entries[0], uncertainty: '' }] } }),
+    profilePayload({ scenarios: [], quality_status: 'unknown' })];
+  for (const unavailable of wrong) {
+    let saved = base;
+    const f = await fixture(async () => ({ generation: 1, data: saved }));
+    await f.bridge.readLayeredMemory(f.selection());
+    saved = unavailable;
+    await f.bridge.readLayeredMemory(f.selection());
+    assert.deepEqual((await f.bridge.getState()).layeredMemory, { phase: 'error', value: null });
+  }
+});
+
+test('撤回必须携带当前一致集合与画像版本，缺失或冲突时不发写请求', async () => {
+  let writes = 0;
+  const f = await fixture(async (request) => {
+    if (request.method === 'POST') writes++;
+    return { generation: 1, data: profilePayload() };
+  });
+  await f.bridge.readLayeredMemory(f.selection());
+  const request = { ...f.selection(), action: 'withdraw-profile', settingsGeneration: 1,
+    organizationGeneration: 1, profileVersionId: ids.profile };
+  for (const invalid of [{ ...request, organizationGeneration: undefined }, { ...request, profileVersionId: undefined },
+    { ...request, organizationGeneration: -1 }, { ...request, profileVersionId: 'unknown' },
+    { ...request, organizationGeneration: 0 }, { ...request, profileVersionId: ids.version },
+    { ...request, settingsGeneration: 0 }, { ...request, extra: true },
+    { ...request, action: 'refresh' }]) await assert.rejects(f.bridge.manageLayeredMemory(invalid));
+  assert.equal(writes, 0);
+  assert.equal((await f.bridge.getState()).layeredMemory.value.profile.versionId, ids.profile);
 });

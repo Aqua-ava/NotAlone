@@ -18,6 +18,7 @@ from notalone.memory.models import ConfirmedMemoryStatus
 from notalone.persistence.locks import lock_contact_scope, lock_owner_scope
 from notalone.persistence.memory_overview import PostgresRelationshipOverviewStore
 from notalone.scopes import ContactScope
+from notalone.persistence.layered_profile import LayeredProfileStore
 
 
 def _digest(value):
@@ -34,7 +35,7 @@ class OrganizationWork:
     manifest: list
 
 
-class PostgresLayeredMemoryStore:
+class PostgresLayeredMemoryStore(LayeredProfileStore):
     def __init__(self, database_url: str, *, clock=None):
         self._database_url = database_url
         self._clock = clock or (lambda: datetime.now(timezone.utc))
@@ -100,14 +101,64 @@ class PostgresLayeredMemoryStore:
         return [{**item, "organization_timing_sha256": _digest(by_id[item["memory_id"]].memory.timing.to_payload())}
                 for item in manifest["memories"] if item["memory_id"] in by_id]
 
+    def generation_rows(self, connection, scope, generation):
+        manifest = connection.execute("SELECT * FROM public.layered_memory_generation WHERE owner_id=%s "
+            "AND contact_id=%s AND organization_generation=%s", (scope.owner_id,scope.contact_id,generation)).fetchone()
+        if not manifest:
+            return None, []
+        rows = connection.execute("SELECT version.*,batch.input_manifest,batch.dependency_ids FROM "
+            "public.scenario_document_version version JOIN public.layered_memory_batch batch ON batch.id=version.batch_id "
+            "WHERE version.owner_id=%s AND version.contact_id=%s AND version.id=ANY(%s) ORDER BY version.scenario_id",
+            (scope.owner_id,scope.contact_id,manifest["scenario_version_ids"])).fetchall()
+        return manifest, rows
+
+    def publish_generation_in_transaction(self, connection, scope, *, expected_generation, scenario_version_ids, profile_version_id=None):
+        """caller已持范围锁；从真实版本推导完整依赖并原子推进唯一集合。"""
+        state = connection.execute("SELECT * FROM public.layered_memory_state WHERE owner_id=%s AND contact_id=%s",
+            (scope.owner_id,scope.contact_id)).fetchone()
+        if not state or state["organization_generation"] != expected_generation:
+            raise LayeredMemoryConflict("一致集合世代已变化。")
+        ids = list(scenario_version_ids)
+        rows = connection.execute("SELECT v.*,b.input_manifest,b.dependency_ids FROM public.scenario_document_version v "
+            "JOIN public.layered_memory_batch b ON b.id=v.batch_id WHERE v.owner_id=%s AND v.contact_id=%s AND v.id=ANY(%s)",
+            (scope.owner_id,scope.contact_id,ids)).fetchall()
+        if (not ids or len(set(ids)) != len(ids) or len(rows) != len(ids)
+                or len({r["scenario_id"] for r in rows}) != len(rows)):
+            raise LayeredMemoryConflict("一致集合的主题版本无效。")
+        overview = self._overview.read_contact_in_transaction(connection, scope)
+        current = {item["memory_id"]: item for item in self._manifest(connection,scope,self.eligible(overview))}
+        if any(current.get(item["memory_id"]) != item for row in rows for item in row["input_manifest"]):
+            raise LayeredMemoryConflict("一致集合的底层版本失效。")
+        dependencies = {identifier for row in rows for identifier in row["dependency_ids"]}
+        if profile_version_id is not None:
+            profile = self.profile_row(connection, scope, profile_version_id)
+            if (not profile or profile["withdrawn"] or set(profile["scenario_version_ids"]) != set(ids)
+                    or any(current.get(item["memory_id"]) != item for item in profile["input_manifest"])):
+                raise LayeredMemoryConflict("长期背景不属于当前完整主题集合。")
+            dependencies.update(profile["dependency_ids"])
+        generation = state["organization_generation"] + 1
+        if profile_version_id is None:
+            # L2集合推进后，旧集合上的未完成画像不得阻塞新工作或保留可迟到输出。
+            connection.execute("DELETE FROM public.layered_profile_batch WHERE owner_id=%s AND contact_id=%s AND status='running'",
+                (scope.owner_id,scope.contact_id))
+        connection.execute("INSERT INTO public.layered_memory_generation(owner_id,contact_id,organization_generation,"
+            "schema_version,scenario_version_ids,profile_version_id,dependency_ids,created_at) VALUES(%s,%s,%s,2,%s,%s,%s,%s)",
+            (scope.owner_id,scope.contact_id,generation,ids,profile_version_id,sorted(dependencies),self._clock()))
+        changed = connection.execute("UPDATE public.layered_memory_state SET organization_generation=%s "
+            "WHERE owner_id=%s AND contact_id=%s AND organization_generation=%s AND enabled=%s",
+            (generation,scope.owner_id,scope.contact_id,expected_generation,state["enabled"]))
+        if changed.rowcount != 1:
+            raise LayeredMemoryConflict("一致集合在发布前已变化。")
+        return generation
+
     def read(self, scope):
         with self.transaction(scope) as (connection, state, overview):
-            rows = []
+            rows, profile = [], None
             if state["status"] in {"ready", "disabled"}:
-                rows = connection.execute("SELECT * FROM public.scenario_document_version WHERE "
-                    "owner_id=%s AND contact_id=%s AND organization_generation=%s ORDER BY scenario_id",
-                    (scope.owner_id, scope.contact_id, state["organization_generation"])).fetchall()
-            return state, self.eligible(overview), [self._document(row) for row in rows]
+                manifest, rows = self.generation_rows(connection, scope, state["organization_generation"])
+                if manifest and manifest["profile_version_id"]:
+                    profile = self.profile_document(self.profile_row(connection,scope,manifest["profile_version_id"]))
+            return state, self.eligible(overview), [self._document(row) for row in rows], profile
 
     @staticmethod
     def _document(row):
@@ -128,9 +179,15 @@ class PostgresLayeredMemoryStore:
                 return
             enabled = action == "enable"
             if action == "delete":
+                connection.execute("DELETE FROM public.layered_profile_batch WHERE owner_id=%s AND contact_id=%s",
+                                   (scope.owner_id,scope.contact_id))
+                connection.execute("DELETE FROM public.layered_memory_generation WHERE owner_id=%s AND contact_id=%s",
+                                   (scope.owner_id,scope.contact_id))
                 connection.execute("DELETE FROM public.layered_memory_batch WHERE owner_id=%s AND contact_id=%s",
                                    (scope.owner_id, scope.contact_id))
             else:
+                connection.execute("DELETE FROM public.layered_profile_batch WHERE owner_id=%s AND contact_id=%s "
+                                   "AND status='running'", (scope.owner_id,scope.contact_id))
                 # 停用清除未完成工作；合法已发布正文可继续人工查看。
                 connection.execute("DELETE FROM public.layered_memory_batch WHERE owner_id=%s AND contact_id=%s "
                                    "AND status='running'", (scope.owner_id, scope.contact_id))
@@ -220,13 +277,18 @@ class PostgresLayeredMemoryStore:
             # 最终 writer 在同一锁和同一连接上复验全部输入；不另开概览连接。
             self._check(connection, state, overview, work)
             generation, now = state["organization_generation"] + 1, self._clock()
+            version_ids = []
             for scenario in proposal["scenarios"]:
+                version_id = uuid4()
+                version_ids.append(version_id)
                 scenario_id = uuid5(work.scope.contact_id, str(work.scope.owner_id) + ":" + scenario["topic_key"])
                 connection.execute("INSERT INTO public.scenario_document_version(id,owner_id,contact_id,scenario_id,"
                     "batch_id,organization_generation,schema_version,title,hint,paragraphs,created_at) "
-                    "VALUES(%s,%s,%s,%s,%s,%s,1,%s,%s,%s,%s)", (uuid4(),work.scope.owner_id,
+                    "VALUES(%s,%s,%s,%s,%s,%s,1,%s,%s,%s,%s)", (version_id,work.scope.owner_id,
                     work.scope.contact_id,scenario_id,work.id,generation,scenario["title"],scenario["hint"],
                     Jsonb(scenario["paragraphs"]),now))
+            generation = self.publish_generation_in_transaction(connection,work.scope,
+                expected_generation=state["organization_generation"],scenario_version_ids=version_ids)
             connection.execute("UPDATE public.layered_memory_batch SET status='succeeded' WHERE id=%s", (work.id,))
             connection.execute("UPDATE public.layered_memory_state SET status='ready',organization_generation=%s,"
                 "covered_count=%s,updated_at=%s,error_code=NULL WHERE owner_id=%s AND contact_id=%s",
@@ -247,21 +309,18 @@ class PostgresLayeredMemoryStore:
         with self.transaction(scope) as (connection, state, _):
             if not state["enabled"] or state["status"] != "ready":
                 return None
-            rows = connection.execute("SELECT * FROM public.scenario_document_version WHERE owner_id=%s "
-                "AND contact_id=%s AND organization_generation=%s ORDER BY scenario_id",
-                (scope.owner_id,scope.contact_id,state["organization_generation"])).fetchall()
-            dependencies = connection.execute("SELECT DISTINCT unnest(batch.dependency_ids) AS id "
-                "FROM public.layered_memory_batch batch JOIN public.scenario_document_version version "
-                "ON version.batch_id=batch.id WHERE version.owner_id=%s AND version.contact_id=%s "
-                "AND version.organization_generation=%s ORDER BY id",
-                (scope.owner_id,scope.contact_id,state["organization_generation"])).fetchall()
-            return LayeredMemorySnapshot(1,scope,state["settings_generation"],state["organization_generation"],
+            manifest, rows = self.generation_rows(connection,scope,state["organization_generation"])
+            if not manifest or not rows:
+                return None
+            profile = self.profile_row(connection,scope,manifest["profile_version_id"]) if manifest["profile_version_id"] else None
+            return LayeredMemorySnapshot(2,scope,state["settings_generation"],state["organization_generation"],
                 tuple(ScenarioDirectoryEntry(row["scenario_id"],row["id"],row["title"],row["hint"],
-                      len(row["paragraphs"])) for row in rows), tuple(row["id"] for row in dependencies))
+                      len(row["paragraphs"])) for row in rows), tuple(manifest["dependency_ids"]),
+                manifest["profile_version_id"], tuple(profile["entries"]) if profile else ())
 
     def validate_in_transaction(self, connection, snapshot):
-        """调用方须已持 contact→owner 锁；最终 writer 复用该连接，不再申请范围锁。"""
-        if not isinstance(snapshot, LayeredMemorySnapshot) or snapshot.schema_version != 1:
+        """最终writer复用已持范围锁的连接；拒绝旧schema，不给旧快照补签。"""
+        if not isinstance(snapshot, LayeredMemorySnapshot) or snapshot.schema_version != 2:
             return False
         scope = snapshot.scope
         overview = self._overview.read_contact_in_transaction(connection, scope)
@@ -271,15 +330,23 @@ class PostgresLayeredMemoryStore:
                 or state["settings_generation"] != snapshot.settings_generation
                 or state["organization_generation"] != snapshot.organization_generation):
             return False
-        rows = connection.execute("SELECT version.id,version.scenario_id,batch.input_manifest,batch.dependency_ids "
-            "FROM public.scenario_document_version version JOIN public.layered_memory_batch batch ON batch.id=version.batch_id "
-            "WHERE version.owner_id=%s AND version.contact_id=%s AND version.organization_generation=%s",
-            (scope.owner_id,scope.contact_id,snapshot.organization_generation)).fetchall()
-        expected = {(item.scenario_id,item.version_id) for item in snapshot.scenarios}
-        actual = {(row["scenario_id"],row["id"]) for row in rows}
+        manifest, rows = self.generation_rows(connection,scope,snapshot.organization_generation)
+        if not manifest:
+            return False
+        expected = {(item.scenario_id,item.version_id,item.title,item.hint,item.paragraph_count) for item in snapshot.scenarios}
+        actual = {(row["scenario_id"],row["id"],row["title"],row["hint"],len(row["paragraphs"])) for row in rows}
         current = {item["memory_id"]: item for item in self._manifest(connection,scope,self.eligible(overview))}
+        profile = self.profile_row(connection,scope,manifest["profile_version_id"]) if manifest["profile_version_id"] else None
+        dependencies = {identifier for row in rows for identifier in row["dependency_ids"]}
+        if profile:
+            if (profile["withdrawn"] or set(profile["scenario_version_ids"]) != {r["id"] for r in rows}
+                    or any(current.get(item["memory_id"]) != item for item in profile["input_manifest"])):
+                return False
+            dependencies.update(profile["dependency_ids"])
         return (expected == actual and bool(actual)
-                and set(snapshot.dependency_ids) == {id for row in rows for id in row["dependency_ids"]}
+                and manifest["profile_version_id"] == snapshot.profile_version_id
+                and snapshot.profile_entries == (tuple(profile["entries"]) if profile else ())
+                and set(snapshot.dependency_ids) == set(manifest["dependency_ids"]) == dependencies
                 and all(current.get(item["memory_id"]) == item for row in rows for item in row["input_manifest"]))
 
     def validate(self, snapshot):

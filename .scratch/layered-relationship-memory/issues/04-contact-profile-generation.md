@@ -1,7 +1,7 @@
 # 04：可追溯长期背景与一致版本集合
 
 Triage: ready-for-agent
-State: open
+State: claimed
 Type: task
 Blocked by: 01
 
@@ -47,3 +47,15 @@ Blocked by: 01
 ## Comments
 
 - 2026-10-17：用户认可11项粒度与依赖后逐张发布；本票为 open，尚未领取、实现或验收。
+
+
+## Answer（工程候选，待独立审查签收）
+
+- 已从同范围合法当前主题集合及对应底层实际版本生成有界长期背景；逐项显示时间状态、不确定性和直接底层依据。独立提案／核验各自取得前台优先许可与实际传输deadline，四类语义步骤有界；真实质量仍为unknown，只有隔离合成Adapter可以使用。
+- 新增schema2一致generation manifest，完整冻结scenario版本集合及可空profile版本；唯一同连接publisher按预期generation和原启用状态CAS，profile提交另复验模型前完整主题集合。旧schema1快照不补签；L2集合变化清空profile引用，旧L3不能覆盖新L2。
+- 长期背景批次递归继承全部实际读取L2的输入依赖，包含未最终引用内容；来源／底层更正删除在原事务清除新正文、历史、批次输入输出与generation闭包。支持绑定当前版本的幂等撤回，不恢复旧版；停用／删除和重开ABA、迟到结果、过期尝试恢复与有限失败均有公开HTTP证据。
+- 统一维护入口为LayeredMemoryService.organize(scope)，手动enable/refresh已使用同一L2→L3流程。03尚未落地，由后落地者将既有变化通知接入此入口，不能另起画像流水线；当前实际来源／记忆变化已沿原失效事务覆盖L3。
+- 公开HTTP／真实随机PostgreSQL：04十一例、01十五例及迁移新装／升级／采用／启动相关十三例合计39/39通过（53.572s）；首次公开L3、撤回、L2更新后旧工作阻塞重建、连续过期有限失败均保留red→green记录。迁移074仅作用本轮隔离库，重复迁移为0。
+- 指定Conda、禁dotenv且清外部凭据后，backend unit 1880/1880通过（51.494s）；desktop typecheck与controller/React16/16通过。公开HTTP/PG test:pages已通过，清理确认；没有将无头页面当作App验证。
+- 真实Electron Computer Use实际1次启动、1/1通过（4.9m）：确认用途及预算、开启、逐项依据／时间／版本、底层来源跳转、停用回看、重开、撤回后刷新不复活、空联系人隔离、删除后重读不重生。前两次runner在参数／环境预检拒绝，均未启动App。退出后自有进程不存在、userData不存在、测试库catalog0、fixture清理true、桌面租约absent。App验证早于最终CAS加强及连续过期失败补充，后者由最终HTTP回归验证，没有宣称重跑App。
+- 数据影响仅限自有隔离库合成文字；没有读取私人聊天、业务库、真实模型调用、外部消息或远端操作。未验真实SDK传输／重试期限、语义质量、最终回复效果、微信及最终签名包，生产整理／读取资格保持关闭。独立两轴审查及集成签收由统筹接续，当前State保留claimed。

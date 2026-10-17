@@ -10,7 +10,8 @@ function time(value: string | null): string {
 }
 export function LayeredMemoryPanel({ state, contactName, busy, read, manage, facts }: {
   state: MemoryOverviewState<LayeredMemory>; contactName: string; busy: boolean;
-  read: () => Promise<void>; manage: (action: LayeredMemoryManagementRequest['action'], settingsGeneration: number, purposeConfirmed?: true) => Promise<void>;
+  read: () => Promise<void>; manage: (action: LayeredMemoryManagementRequest['action'], settingsGeneration: number, purposeConfirmed?: true,
+    profile?: Pick<LayeredMemoryManagementRequest, 'organizationGeneration' | 'profileVersionId'>) => Promise<void>;
   facts: () => void;
 }) {
   const [confirmed, setConfirmed] = useState(false);
@@ -32,7 +33,8 @@ export function LayeredMemoryPanel({ state, contactName, busy, read, manage, fac
       {value.qualityStatus === 'unknown' ? <div className="memory-section-note"><p>质量资格未知，资料不会发给模型。</p>
         <p>生产调用预算尚未标定；当前不开放真实资料整理或回复加载。</p></div>
         : <div className="memory-section-note"><p>仅用于受控合成验证，不代表真实模型质量已获资格。</p>
-          <p>本批上限：{value.budget.maxMemories} 条记忆、{value.budget.maxScenarios} 个主题、{value.budget.maxParagraphs} 段、{value.budget.maxCharacters} 字符、{value.budget.maxModelCalls} 次模型调用。</p></div>}
+          <p>本批上限：{value.budget.maxMemories} 条记忆、{value.budget.maxScenarios} 个主题、{value.budget.maxParagraphs} 段、{value.budget.maxCharacters} 字符、{value.budget.maxModelCalls} 次模型调用。</p>
+          {value.budget.maxProfileEntries !== undefined && <p>长期背景最多 {value.budget.maxProfileEntries} 项。</p>}</div>}
       <p>本范围{value.enabled ? '已开启' : '已关闭'} · 更新时间：{time(value.updatedAt)}</p>
       {!value.enabled && <div className="layered-memory-confirm"><label><input type="checkbox" checked={confirmed} disabled={waiting}
         onChange={(event) => setConfirmed(event.target.checked)} />确认仅整理这位联系人的合法已采纳记忆，并同意以上用途与模型接收范围</label>
@@ -45,7 +47,33 @@ export function LayeredMemoryPanel({ state, contactName, busy, read, manage, fac
         <p>删除将关闭本范围并清除整理正文、旧版本及相关副本。底层记忆另行管理；只有重新开启后才会再次整理。</p>
         <button className="button" disabled={waiting} onClick={() => void manage('delete', value.settingsGeneration)}>确认删除整理结果</button>
         <button className="button" disabled={waiting} onClick={() => setDeleting(false)}>取消删除</button></div>}
-      {!value.enabled && value.scenarios.length > 0 && <p>已停止整理及回复加载；下方仅供回看来源仍有效的现有文档。</p>}
+      {!value.enabled && (value.scenarios.length > 0 || value.profile !== null) && <p>已停止整理及回复加载；下方仅供回看来源仍有效的现有文档。</p>}
+      <section className="memory-card" aria-label="长期背景">
+        <div className="memory-card-labels"><h3>长期背景</h3>{value.profile && <b>系统整理</b>}</div>
+        {value.profile ? <>
+          <p className="memory-times">更新时间：{time(value.profile.updatedAt)}</p>
+          {value.profile.entries.map((entry, index) => <div key={index}>
+            <p className="memory-text">{entry.text}</p>
+            <p>时间状态：{({ stable: '稳定背景', historical: '历史背景', uncertain: '尚不确定' } as const)[entry.temporalStatus]}</p>
+            {entry.uncertainty && <p>不确定性：{entry.uncertainty}</p>}
+            <details className="memory-details"><summary>查看第 {index + 1} 项依据与时间</summary>
+              {entry.references.map((reference) => <div key={`${reference.memoryId}:${reference.revision}`}>
+                <p>底层记忆：{reference.memoryId} · 版本 {reference.revision} · {reference.provenanceKind === 'manual_entry' ? '用户手动录入' : '来源支持'}</p>
+                <MemoryTemporalStatus timing={reference.timing} snapshot />
+                <p>来源聊天时间：{time(reference.timing.sourceStartedAt)}{reference.timing.sourceEndedAt !== reference.timing.sourceStartedAt ? ` 至 ${time(reference.timing.sourceEndedAt)}` : ''}
+                  {!reference.timing.sourceTimeComplete ? '（来源时间不完整）' : ''}</p>
+                <p>记忆保存时间：{time(reference.timing.recordedAt)}</p>
+                <button className="button" onClick={facts}>查看或修正底层记忆</button>
+              </div>)}
+            </details>
+          </div>)}
+          <details className="memory-details"><summary>查看长期背景版本</summary>
+            <p>版本标识：{value.profile.versionId}</p><p>一致集合世代：{value.organizationGeneration}</p></details>
+          <button className="button" disabled={waiting} onClick={() => void manage('withdraw-profile', value.settingsGeneration, undefined,
+            { organizationGeneration: value.organizationGeneration, profileVersionId: value.profile!.versionId })}>撤回本版长期背景</button>
+          <p>撤回仅移除当前长期背景，不自动恢复旧版。事实有误可查看或修正底层记忆。</p>
+        </> : <p>暂无可展示的长期背景。</p>}
+      </section>
       {value.scenarios.length === 0 && value.status === 'ready' && <p>本批没有可展示的主题资料。</p>}
       <div className="memory-overview-entries">{value.scenarios.map((scenario) => <article className="memory-card" key={scenario.versionId}>
         <div className="memory-card-labels"><h3>{scenario.title}</h3><b>系统整理</b></div>

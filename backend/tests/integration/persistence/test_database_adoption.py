@@ -330,6 +330,7 @@ class DatabaseAdoptionTest(unittest.TestCase):
             "071_bounded_runtime_evidence.sql",
             "072_scoped_media_lifecycle.sql",
             "073_layered_scenario_documents.sql",
+            "074_layered_profile_generation.sql",
         ))
         self.assertEqual(migrate(self.url, MIGRATIONS), ())
         self.assertFalse(adopt_legacy_database(self.url, MIGRATIONS, self.backup).adopted)
@@ -375,6 +376,7 @@ class DatabaseAdoptionTest(unittest.TestCase):
                 ("071_bounded_runtime_evidence.sql",),
                 ("072_scoped_media_lifecycle.sql",),
                 ("073_layered_scenario_documents.sql",),
+                ("074_layered_profile_generation.sql",),
             ])
 
     def test_full_035_needs_no_repair_and_preserves_ids_pause_and_message_evidence(self) -> None:

@@ -13,13 +13,13 @@ new Function('require', 'module', 'exports', compiled.outputFiles[0].text)(creat
 const ports = compiledModule.exports;
 export const BackendRequestFailure = ports.BackendRequestFailure;
 export const ids = { contact: '11111111-1111-4111-8111-111111111111', other: '99999999-9999-4999-8999-999999999999',
-  scenario: '22222222-2222-4222-8222-222222222222', version: '33333333-3333-4333-8333-333333333333', memory: '44444444-4444-4444-8444-444444444444' };
+  scenario: '22222222-2222-4222-8222-222222222222', version: '33333333-3333-4333-8333-333333333333', memory: '44444444-4444-4444-8444-444444444444', profile: '55555555-5555-4555-8555-555555555555' };
 export function payload(overrides = {}) {
-  return { layered_memory: { schema_version: 1, scope_kind: 'contact', contact_id: ids.contact,
+  return { layered_memory: { schema_version: 2, scope_kind: 'contact', contact_id: ids.contact,
     settings_generation: 0, enabled: false, quality_status: 'unknown', status: 'disabled',
     eligible_count: 3, covered_count: 0, remaining_count: 3, organization_generation: 0,
     updated_at: null, error_code: null, purpose: '从本联系人合法已采纳记忆整理主题背景，供核对及后续回复使用。',
-    budget: { max_memories: 0, max_scenarios: 0, max_paragraphs: 0, max_characters: 0, max_model_calls: 0 }, scenarios: [], ...overrides } };
+    budget: { max_memories: 0, max_scenarios: 0, max_paragraphs: 0, max_characters: 0, max_model_calls: 0 }, scenarios: [], profile: null, ...overrides } };
 }
 export async function fixture(requestJson) {
   let generation = 1;
@@ -51,4 +51,13 @@ export function readyPayload(overrides = {}) {
           source_started_at: null, source_ended_at: null, source_time_complete: false,
           current_status: 'current_unverified', current_status_reason: '旧安排没有新的来源核实。' },
       }] }] }], ...overrides });
+}
+
+export function profilePayload(overrides = {}) {
+  const base = readyPayload();
+  return readyPayload({ budget: { ...base.layered_memory.budget, max_model_calls: 4, max_profile_entries: 4 },
+    profile: { version_id: ids.profile, system_generated: true, updated_at: '2026-10-17T10:00:00+08:00', entries: [{
+      text: '曾有共同读书安排，是否持续尚未核实。', temporal_status: 'uncertain', uncertainty: '没有新的来源核实持续状态。',
+      references: base.layered_memory.scenarios[0].paragraphs[0].references,
+    }] }, ...overrides });
 }

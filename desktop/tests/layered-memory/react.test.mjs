@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { fixture, payload, readyPayload, ids } from './support.mjs';
+import { fixture, payload, readyPayload, profilePayload, ids } from './support.mjs';
 import { withMemoryPage } from './react-support.mjs';
 
 test('当前关系资料页面由用户确认用途后开启主题资料，未知质量不会当作成功', { timeout: 20000 }, async () => {
@@ -82,5 +82,42 @@ test('用户刷新可分别观察空资料与整理失败，失败不会保留�
     await page.getByRole('button', { name: '刷新主题资料' }).click();
     await page.getByRole('alert').filter({ hasText: '整理失败，未采用本批结果' }).waitFor();
     assert.equal(await page.getByRole('heading', { name: '合成读书计划' }).count(), 0);
+  });
+});
+
+test('用户逐项查看长期背景与依据，停用仍可回看，并可撤回当前版而不恢复旧版', { timeout: 20000 }, async () => {
+  let saved = profilePayload(), posted;
+  const f = await fixture(async (request) => {
+    if (request.path.includes('/layered-memory')) {
+      if (request.path.endsWith('/disable')) saved = profilePayload({ enabled: false, status: 'disabled', settings_generation: 2 });
+      if (request.path.endsWith('/withdraw-profile')) { posted = request; saved = readyPayload({ enabled: false, status: 'disabled',
+        settings_generation: 2, organization_generation: 2 }); }
+      return { generation: 1, data: saved };
+    }
+    return { generation: 1, data: request.path.endsWith('/sources') ? { sources: [] }
+      : request.path.endsWith('/memory-candidates') ? { candidates: [] } : { memories: [] } };
+  });
+  await withMemoryPage(f, async (page) => {
+    await page.getByRole('button', { name: '主题资料', exact: true }).click();
+    const profile = page.getByRole('region', { name: '长期背景', exact: true });
+    await profile.getByText('系统整理', { exact: true }).waitFor({ timeout: 3000 });
+    await profile.getByText('曾有共同读书安排，是否持续尚未核实。', { exact: true }).waitFor();
+    await profile.getByText('时间状态：尚不确定', { exact: true }).waitFor();
+    await profile.getByText('不确定性：没有新的来源核实持续状态。', { exact: true }).waitFor();
+    await profile.getByText('查看第 1 项依据与时间', { exact: true }).click();
+    await profile.getByText(`底层记忆：${ids.memory} · 版本 1 · 用户手动录入`, { exact: true }).waitFor();
+    await profile.getByText('生成时核实状态：当前未核实', { exact: true }).waitFor();
+    await profile.getByText('查看长期背景版本', { exact: true }).click();
+    await profile.getByText(`版本标识：${ids.profile}`, { exact: true }).waitFor();
+    await page.getByRole('button', { name: '停用主题资料', exact: true }).click();
+    await page.getByText('已停用', { exact: true }).waitFor();
+    await profile.getByText('曾有共同读书安排，是否持续尚未核实。', { exact: true }).waitFor();
+    await profile.getByRole('button', { name: '撤回本版长期背景', exact: true }).click();
+    await page.getByText('本版长期背景已撤回，未自动恢复旧版。底层记忆可另行管理。', { exact: true }).waitFor();
+    assert.deepEqual(posted.body, { settings_generation: 2, organization_generation: 1, profile_version_id: ids.profile });
+    assert.equal(await page.getByText('曾有共同读书安排，是否持续尚未核实。', { exact: true }).count(), 0);
+    await page.getByText('暂无可展示的长期背景。', { exact: true }).waitFor();
+    await page.getByRole('button', { name: '重新读取主题资料', exact: true }).click();
+    assert.equal(await page.getByText('曾有共同读书安排，是否持续尚未核实。', { exact: true }).count(), 0);
   });
 });

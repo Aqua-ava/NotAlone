@@ -133,13 +133,16 @@ function layeredMemoryArguments(args: unknown[]): LayeredMemoryManagementRequest
   const value = args[0];
   if (args.length !== 1 || !value || typeof value !== 'object' || Array.isArray(value)) throw new Error('主题资料操作不可用。');
   const fields = value as Record<string, unknown>;
-  const enable = fields.action === 'enable';
-  if (Object.keys(fields).length !== (enable ? 5 : 4)
-    || !Object.keys(fields).every((key) => ['contactId', 'scopeRevision', 'action', 'settingsGeneration', ...(enable ? ['purposeConfirmed'] : [])].includes(key))
-    || !['enable', 'refresh', 'disable', 'delete'].includes(fields.action as string)
+  const enable = fields.action === 'enable', withdraw = fields.action === 'withdraw-profile';
+  if (Object.keys(fields).length !== (enable ? 5 : withdraw ? 6 : 4)
+    || !Object.keys(fields).every((key) => ['contactId', 'scopeRevision', 'action', 'settingsGeneration', ...(enable ? ['purposeConfirmed'] : []), ...(withdraw ? ['organizationGeneration', 'profileVersionId'] : [])].includes(key))
+    || !['enable', 'refresh', 'disable', 'delete', 'withdraw-profile'].includes(fields.action as string)
     || typeof fields.settingsGeneration !== 'number' || !Number.isSafeInteger(fields.settingsGeneration) || fields.settingsGeneration < 0
-    || (enable && fields.purposeConfirmed !== true)) throw new Error('主题资料操作不可用。');
+    || (enable && fields.purposeConfirmed !== true)
+    || (withdraw && (typeof fields.organizationGeneration !== 'number' || !Number.isSafeInteger(fields.organizationGeneration)
+      || fields.organizationGeneration < 0 || !isUuid(fields.profileVersionId)))) throw new Error('主题资料操作不可用。');
   const selection = requestArguments([{ contactId: fields.contactId, scopeRevision: fields.scopeRevision }]);
   return { ...selection, action: fields.action as LayeredMemoryManagementRequest['action'], settingsGeneration: fields.settingsGeneration,
-    ...(enable ? { purposeConfirmed: true as const } : {}) };
+    ...(enable ? { purposeConfirmed: true as const } : {}),
+    ...(withdraw ? { organizationGeneration: fields.organizationGeneration as number, profileVersionId: (fields.profileVersionId as string).toLowerCase() } : {}) };
 }

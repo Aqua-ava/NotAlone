@@ -124,8 +124,14 @@ export interface LayeredMemoryScenario {
   updatedAt: string;
   paragraphs: { text: string; references: LayeredMemoryReference[] }[];
 }
+export interface LayeredMemoryProfile {
+  versionId: string;
+  systemGenerated: true;
+  updatedAt: string;
+  entries: { text: string; temporalStatus: 'stable' | 'historical' | 'uncertain'; uncertainty: string; references: LayeredMemoryReference[] }[];
+}
 export interface LayeredMemory {
-  schemaVersion: 1;
+  schemaVersion: 2;
   scopeKind: 'contact';
   contactId: string;
   settingsGeneration: number;
@@ -139,12 +145,15 @@ export interface LayeredMemory {
   updatedAt: string | null;
   errorCode: string | null;
   purpose: string;
-  budget: { maxMemories: number; maxScenarios: number; maxParagraphs: number; maxCharacters: number; maxModelCalls: number };
+  budget: { maxMemories: number; maxScenarios: number; maxParagraphs: number; maxCharacters: number; maxModelCalls: number; maxProfileEntries?: number };
   scenarios: LayeredMemoryScenario[];
+  profile: LayeredMemoryProfile | null;
 }
 export interface LayeredMemoryManagementRequest extends ContactSelection {
-  action: 'enable' | 'refresh' | 'disable' | 'delete';
+  action: 'enable' | 'refresh' | 'disable' | 'delete' | 'withdraw-profile';
   settingsGeneration: number;
+  organizationGeneration?: number;
+  profileVersionId?: string;
   purposeConfirmed?: true;
 }
 export interface MemoryReadingState {
