@@ -469,7 +469,7 @@ class PostgresLayeredMemoryStore:
                 proposed_ids.add(scenario_id)
                 if replaced and scenario_id in by_id and str(by_id[scenario_id]['id']) not in replaced:
                     raise LayeredMemoryConflict('主题归组不能覆盖未列为替换目标的旧主题。')
-                if replaced and scenario_id not in by_id and connection.execute(
+                if scenario_id not in by_id and connection.execute(
                     'SELECT 1 FROM public.scenario_document_version WHERE owner_id=%s AND contact_id=%s AND scenario_id=%s',
                     (work.scope.owner_id, work.scope.contact_id, scenario_id)).fetchone():
                     raise LayeredMemoryConflict('不能将退休主题身份赋给另一主题。')

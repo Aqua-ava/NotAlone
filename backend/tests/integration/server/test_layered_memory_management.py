@@ -208,7 +208,7 @@ class LayeredMemoryManagementHttpTest(MemoryOverviewHttpFixture, unittest.TestCa
                 deadline.check()
                 memory = next(item for item in memories if str(item.memory_id) == original['memory_id'])
                 paragraph = {'text': memory.text, 'references': [{'memory_id': str(memory.memory_id), 'revision': memory.revision}]}
-                if not scenarios:
+                if not scenarios or getattr(self, 'reuse_retired', False):
                     return {'scenarios': [{'topic_key': 'course', 'title': '合成课程', 'hint': '合成主题资料', 'paragraphs': [paragraph]}]}
                 keys = ['course-part-one', 'course-part-two'] if len(scenarios) == 1 else ['combined-course']
                 return {'scenarios': [{'topic_key': key, 'title': '合成拆并主题', 'hint': '合成归组资料',
@@ -239,6 +239,14 @@ class LayeredMemoryManagementHttpTest(MemoryOverviewHttpFixture, unittest.TestCa
             self.assertEqual({item['version_id'] for item in mapping['targets']},
                              {item['version_id'] for item in current['scenarios']})
             self.assertFalse(self.service.validate(frozen))
+        self.proposal.reuse_retired = True
+        self.backend.request('/api/memories/manual-contact', {
+            'contact_id': contact, 'text': '合成非法身份复用测试。', 'category': 'common_fact'})
+        status, response = backend.request(path+'/refresh', {'settings_generation': ready['settings_generation']})
+        self.assertEqual(status, 200, response)
+        self.assertEqual(response['layered_memory']['status'], 'failed')
+        self.assertEqual(response['layered_memory']['scenarios'], current['scenarios'])
+        self.proposal.reuse_retired = False
         self.delete_source(contact, source_y)
         erased = self._get(backend, path)['layered_memory']
         self.assertTrue(retired_versions.isdisjoint(item['version_id'] for item in erased['scenarios']))
