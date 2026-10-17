@@ -43,6 +43,19 @@ export interface ReplyEvidenceItem {
   invalidAt: string | null;
   navigation?: ReplyEvidenceNavigation;
 }
+export type ReplyLayeredStatus = 'loaded' | 'not_allowed' | 'unavailable' | 'budget_omitted' | 'quality_closed';
+export interface ReplyLayeredContext {
+  schemaVersion: 1;
+  scopeKind: 'contact';
+  settingsGeneration: number;
+  organizationGeneration: number;
+  profileVersionId: string | null;
+  profileEntries: Array<{ text: string; temporalStatus: 'stable' | 'historical' | 'uncertain'; uncertainty: string;
+    references: Array<{ memoryId: string; revision: number; provenanceKind: 'manual_entry' | 'source_supported'; timing: MemoryTiming }> }>;
+  directory: Array<{ scenarioId: string; versionId: string; title: string; hint: string; paragraphCount: number }>;
+  readPolicy: 'synthetic-contact-layered-v1';
+  budget: { profileEntries: number; directoryEntries: number; characters: number };
+}
 export interface ReplyEvidenceState {
   revision: number;
   scopeRevision: number;
@@ -53,6 +66,8 @@ export interface ReplyEvidenceState {
   items: ReplyEvidenceItem[];
   basisChanges?: ReplyBasisChange[];
   retrieval?: ReplyRetrievalReceipt | null;
+  layeredContext?: ReplyLayeredContext | null;
+  layeredStatus?: ReplyLayeredStatus;
 }
 export interface ReplyEvidenceCommands {
   getEvidenceState(): Promise<ReplyEvidenceState>;

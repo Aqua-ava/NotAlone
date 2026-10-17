@@ -40,6 +40,7 @@ from notalone.reply.input_budget_receipt import validate_input_budget_receipt
 from notalone.reply.assistant_continuation_reference import continuation_reference_payload
 from notalone.reply.assistant_discussion import DISCUSSION_HISTORY_NOTICE
 from notalone.reply.assistant_discussion_payload import assistant_discussion_payload
+from notalone.reply.layered_context import system_material
 from notalone.reply.runtime import (
     ReplyRuntimeResult,
     RuntimeCandidate,
@@ -779,7 +780,8 @@ class LangChainReplyRuntime:
                 response_format=output_strategy,
                 context_schema=ReplyRuntimeContext,
                 system_prompt=(BASE_SYSTEM_PROMPT + "\n" + DISCUSSION_HISTORY_NOTICE
-                               if prepared.assistant_discussion is not None else BASE_SYSTEM_PROMPT),
+                               if prepared.assistant_discussion is not None else BASE_SYSTEM_PROMPT)
+                              + system_material(prepared.layered_context),
             )
             request_text = _request_text(prepared)
             validate_request = current_model_request_validator()

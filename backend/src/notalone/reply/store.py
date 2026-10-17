@@ -106,6 +106,8 @@ class StoredReplyRequest:
     evidence: tuple[ContextEvidence, ...]
     result: ReplyGenerated | None
     retrieval: ReplyRetrievalReceipt | None = None
+    layered_context: dict | None = None
+    layered_status: str = "quality_closed"
 
 
 @dataclass(frozen=True, slots=True, repr=False)

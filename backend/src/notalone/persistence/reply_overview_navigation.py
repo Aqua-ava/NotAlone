@@ -48,7 +48,13 @@ def require_current_overview_navigation(
 
 def navigation_dependency_ids(context: ReplyContext) -> list[str]:
     """只保存实际选中导航的参与身份，不复制概览正文或未用条目。"""
-    return sorted({str(identifier) for item in context.evidence if item.model_visible and item.navigation
+    return sorted({str(identifier) for identifier in
+                   ((*context.layered_context.snapshot.dependency_ids,
+                     *(item.version_id for item in context.layered_context.snapshot.scenarios),
+                     *((context.layered_context.snapshot.profile_version_id,)
+                       if context.layered_context.snapshot.profile_version_id else ()))
+                    if context.layered_context else ())} |
+                  {str(identifier) for item in context.evidence if item.model_visible and item.navigation
                    for identifier in item.navigation.dependency_ids})
 
 
@@ -59,11 +65,15 @@ def registered_navigation_dependencies(connection: Any, scope: ContactScope) -> 
         "CROSS JOIN LATERAL jsonb_path_query(turn.prepared_context, "
         "'$.context.evidence[*].fields.navigation.fields.dependency_ids[*].uuid') AS value "
         "WHERE turn.owner_id=%s AND turn.contact_id=%s AND turn.input_payload IS NOT NULL "
+        "UNION SELECT value #>> '{}' AS id FROM public.assistant_session_turn AS turn "
+        "CROSS JOIN LATERAL jsonb_path_query(turn.prepared_context, "
+        "'$.context.layered_context.fields.snapshot.fields.dependency_ids[*].uuid') AS value "
+        "WHERE turn.owner_id=%s AND turn.contact_id=%s AND turn.input_payload IS NOT NULL "
         "UNION SELECT value #>> '{}' AS id FROM public.reply_request AS request "
         "CROSS JOIN LATERAL jsonb_path_query(request.context_snapshot, "
         "'$.navigation_dependency_ids[*]') AS value "
         "WHERE request.owner_id=%s AND request.contact_id=%s",
-        (scope.owner_id, scope.contact_id, scope.owner_id, scope.contact_id),
+        (scope.owner_id, scope.contact_id) * 3,
     ).fetchall()
     try:
         return {UUID(row["id"]) for row in rows}

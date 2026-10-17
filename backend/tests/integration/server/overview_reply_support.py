@@ -81,7 +81,8 @@ class OverviewReplyHttpFixture(MemoryOverviewHttpFixture):
         priority = ModelPriorityControl()
         with patch("notalone.server.reply_wiring.build_deepseek_model", return_value=self.reply_model):
             service = build_reply_service(database_url=self.database_url, owner_id=owner_id,
-                                          model_priority=priority, **synthetic_budget_kwargs(self.reply_model))
+                                          model_priority=priority, **getattr(self, "layered_reply_options", {}),
+                                          **synthetic_budget_kwargs(self.reply_model, capacity=getattr(self, "reply_capacity", 100000)))
         self.assertIsNotNone(service)
         backend = HttpBackend(create_app(
             database_url=self.database_url, owner_id=owner_id, token="synthetic-overview-reply-token",
