@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from datetime import datetime
 from decimal import Decimal
 import hashlib
 import json
@@ -17,6 +18,7 @@ from notalone.memory_extraction.models import (
 )
 from notalone.memory import MemoryCategory
 from notalone.memory.dimension_evidence import AUTHOR_QUOTE_CAPABILITIES
+from notalone.memory.bounded_evidence import RULE_VARIANTS as BOUNDED_RULE_VARIANTS, rule_set_sha256
 
 RULE_VARIANTS: Mapping[str, tuple[str, ...]] = MappingProxyType({
     "AUTHOR_ARRIVAL_H1": ("direct_h",),
@@ -155,7 +157,8 @@ def _reference(raw: object, rules: Mapping[str, tuple[str, ...]] = RULE_VARIANTS
 def _reported(raw: object, rules: Mapping[str, tuple[str, ...]] = RULE_VARIANTS) -> ReportedLink:
     value = _object(raw, {"rule_id", "frame", "source", "candidate"})
     frame = value["frame"]
-    frames = FRAMES if rules is RULE_VARIANTS else frozenset({"direct"})
+    frames = (FRAMES if rules is RULE_VARIANTS else frozenset({"direct", "reported_request", "received_request"})
+              if rules is BOUNDED_RULE_VARIANTS else frozenset({"direct"}))
     if type(frame) is not str or frame not in frames:
         raise ValueError("证明转述框架不符合契约。")
     return ReportedLink(
@@ -175,22 +178,63 @@ def _links(raw: object, maximum: int, parse: Callable[[object], _T]) -> tuple[_T
     return tuple(parse(item) for item in raw)
 
 
+def bounded_runtime_rule_set_sha256() -> str:
+    """返回版本三有限运行合同的稳定规则摘要，无I/O。"""
+    return rule_set_sha256()
+
+
+def validate_bounded_body_sources(window: ExtractionWindow, fact: ExtractedFact) -> tuple[UUID, ...]:
+    """显式模式置ALL前核实际正文和规范消息依赖；不生成语义信用。"""
+    from .bounded_proof import validate_body_sources
+    return validate_body_sources(window, fact)
+
+
+def bounded_source_occurred_at(message: MessageRef) -> datetime | None:
+    """从活动来源的原ISO时刻独立核原偏移；不读已存依据或外部文件。"""
+    from notalone.memory.evidence_binding import source_state_digest
+    actual = message.occurred_at
+    if actual is None or source_state_digest(message.source_snapshots) is None:
+        return None
+    times = []
+    try:
+        for snapshot in message.source_snapshots:
+            payload = snapshot["raw_payload"]
+            if not isinstance(payload, dict):
+                return None
+            raw = payload["time_iso"]
+            if type(raw) is not str:
+                return None
+            value = datetime.fromisoformat(raw)
+            if value.utcoffset() is None or value != actual:
+                return None
+            times.append(value)
+    except (ValueError, TypeError, KeyError):
+        return None
+    if not times or len({item.utcoffset() for item in times}) != 1:
+        return None
+    return times[0]
+
+
 def parse_proposal(raw: object, *, version: int = 1) -> ProofProposal | None:
     """只接收固定结构；缺失证明保留未知，非法证明不能被静默丢弃。"""
 
-    if type(version) is not int or version not in {1, 2}:
+    if type(version) is not int or version not in {1, 2, 3}:
         raise ValueError("来源证明协议未受支持。")
     if raw is None:
         return None
     value = _object(raw, {"version", "atom_links", "reference", "reported"})
     if type(value["version"]) is not int or value["version"] != version:
         raise ValueError("来源证明版本不符合契约。")
-    rules = RULE_VARIANTS if version == 1 else AUTHOR_QUOTE_RULE_VARIANTS
-    return ProofProposal(
+    rules = RULE_VARIANTS if version == 1 else AUTHOR_QUOTE_RULE_VARIANTS if version == 2 else BOUNDED_RULE_VARIANTS
+    proposal = ProofProposal(
         version, _links(value["atom_links"], 16, lambda raw: _atom(raw, rules)),
         _links(value["reference"], 8, lambda raw: _reference(raw, rules)),
         _links(value["reported"], 8, lambda raw: _reported(raw, rules)),
     )
+    if version == 3:
+        from .bounded_proof import validate_proposal_shape
+        validate_proposal_shape(raw, proposal)
+    return proposal
 
 
 @dataclass(frozen=True, slots=True)
@@ -838,10 +882,16 @@ def verify_proposal(
 ) -> ProofVerification:
     """独立解析完整源与候选，只核有界规则，不增加读取或写入副作用。"""
 
-    if type(proof_version) is not int or proof_version not in {1, 2} or (
+    if type(proof_version) is not int or proof_version not in {1, 2, 3} or (
         proposal is not None and proposal.version != proof_version
     ):
         raise ValueError("来源证明与显式协议版本不一致。")
+    if proof_version == 3:
+        from .bounded_proof import validate_proposal_shape, verify
+        if proposal is not None:
+            validate_proposal_shape(None, proposal)
+        _validate_positions(proposal, window, fact)
+        return verify(proposal, window, fact, trusted_sources)
     _validate_positions(proposal, window, fact)
     message, reason = _trusted_message(window, fact, trusted_sources)
     if message is None:
@@ -881,11 +931,14 @@ def reverify_basis(
 ) -> ProofVerification:
     """保存及确认时重解析当前全文，完整关系和定位均须与已存依据相等。"""
 
+    if type(basis.get("version")) is int and basis.get("version") == 3:
+        from .bounded_proof import reverify
+        return reverify(basis, window, fact, trusted_sources)
     message, reason = _trusted_message(window, fact, trusted_sources)
     if message is None:
         return ProofVerification("UNKNOWN", reason)
     version = basis.get("version")
-    if type(version) is not int or version not in {1, 2}:
+    if type(version) is not int or version not in {1, 2, 3}:
         return ProofVerification("UNKNOWN", "basis_mismatch")
     source = (_arrival(message.text, message.sender.value, source=True) if version == 2
               else _parse_text(message.text, message.sender.value, source=True))

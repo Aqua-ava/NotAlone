@@ -1,4 +1,4 @@
-"""固定合成记忆评测：主用例集加严格语义用例，不访问存储或私人资料。"""
+"""固定合成记忆评测与纯结果匹配、逐维汇总。"""
 from __future__ import annotations
 
 import argparse
@@ -6,14 +6,15 @@ import json
 import os
 import re
 from collections.abc import Sequence
-from dataclasses import asdict, dataclass, field, replace
+from dataclasses import asdict, dataclass, field, fields, replace
 from datetime import datetime, timedelta, timezone
-from uuid import NAMESPACE_URL, uuid5
+from typing import Any
+from uuid import NAMESPACE_URL, UUID, uuid5
 
 from notalone.memory_extraction.adoption import can_auto_adopt
 from notalone.memory_extraction.evaluation_cases import CASES, ClaimExpectation, EvaluationCase
 from notalone.memory_extraction.flow import ExtractionFlow
-from notalone.memory_extraction.models import ExtractionWindow, MessageRef, MessageSender
+from notalone.memory_extraction.models import ExtractedFact, ExtractionWindow, MessageRef, MessageSender
 from notalone.memory_extraction.pragmatics import MemoryDisposition, PragmaticInterpreter
 from notalone.memory_extraction.runtime import ExtractionPayload, MemoryExtractionRuntime
 from notalone.memory_extraction.semantic_evaluation_cases import SEMANTIC_CASES
@@ -135,7 +136,6 @@ def evaluate_case(
     ).run(window)
     interpreter = PragmaticInterpreter()
     facts = []
-    destinations = []
     for fact in outcome.accepted:
         if (baseline_runtime is not None
                 and _candidate_key(asdict(fact)) not in baseline_runtime.originally_unverified):
@@ -149,13 +149,26 @@ def evaluate_case(
         destination = 'none'
         if decision.disposition is not MemoryDisposition.NONE:
             destination = 'auto' if can_auto_adopt(fact, decision) else 'pending'
-        destinations.append(destination)
         facts.append({**asdict(fact), 'destination': destination,
                       'pragmatic_disposition': decision.disposition.value,
                       'reasons': decision.reasons})
-    actual = max(destinations, key=DESTINATION_ORDER.index, default='none')
+    return evaluate_outcome(
+        case, facts, rejected_count=outcome.rejected_count,
+        failure_reason=outcome.failure_reason,
+        verification_enabled=verification_runtime is not None,
+    )
+
+
+def evaluate_outcome(
+    case: EvaluationCase, facts: Sequence[dict[str, Any]], *,
+    rejected_count: int = 0, failure_reason: str | None = None,
+    verification_enabled: bool = False,
+) -> EvaluationResult:
+    """只匹配已执行的完整事实快照，保持旧matcher与理想三门去向口径。"""
+    facts = list(facts)
+    actual = max((fact['destination'] for fact in facts), key=DESTINATION_ORDER.index, default='none')
     subject_ok = case.expect_subject is None or all(
-        fact.subject.value == case.expect_subject for fact in outcome.accepted
+        fact['subject'] == case.expect_subject for fact in facts
     )
     labels_ok = not case.expected_labels or (
         bool(facts) and all(
@@ -224,7 +237,7 @@ def evaluate_case(
         subject_ok = wrong_subject_count == 0
     passed = (destination_ok and subject_ok and labels_ok and text_ok
               and validity_ok and all(claims_recalled)
-              and outcome.failure_reason is None and outcome.rejected_count == 0)
+              and failure_reason is None and rejected_count == 0)
     error_kinds = tuple(kind for kind, present in (
         (ERROR_FALSE_FACT, false_fact_count > 0),
         (ERROR_WRONG_SUBJECT, wrong_subject_count > 0),
@@ -236,16 +249,138 @@ def evaluate_case(
         text_ok=text_ok, validity_ok=validity_ok,
         error_kind=error_kinds[0] if error_kinds else None,
         expected_subject=case.expect_subject, expected_labels=case.expected_labels,
-        facts=tuple(facts), rejected_count=outcome.rejected_count,
-        failure_reason=outcome.failure_reason,
+        facts=tuple(facts), rejected_count=rejected_count,
+        failure_reason=failure_reason,
         semantic_annotated=case.expected_claims is not None,
-        verification_enabled=verification_runtime is not None,
+        verification_enabled=verification_enabled,
         claims_recalled=claims_recalled, unmatched_candidates=unmatched_candidates,
         false_fact_count=false_fact_count, wrong_subject_count=wrong_subject_count,
         error_kinds=error_kinds, destination_ok=destination_ok,
         semantic_case_id=(str(uuid5(NAMESPACE_URL, repr((case.messages, case.targets))))
                           if case.expected_claims is not None else None),
     )
+
+
+def _task_stage(trace: dict[str, Any], stage: str, **selected: str) -> dict[str, Any]:
+    rows = [row["payload"] for row in trace["events"] if row["stage"] == stage
+            and all(row["payload"].get(key) == value for key, value in selected.items())]
+    if len(rows) != 1:
+        raise ValueError("正式任务追踪缺少唯一必需阶段：" + stage)
+    return rows[0]
+
+
+def _task_trace_facts(
+    trace: dict[str, Any], window: ExtractionWindow, task_id: UUID, config: dict[str, object],
+) -> tuple[tuple[dict[str, Any], ...], int]:
+    """只读取同次PG原件；缺字段或重复阶段硬停，不推测丢失结果。"""
+    from notalone.memory_extraction.grounded import source_units
+    from notalone.memory_trace.context import snapshot
+
+    if trace["status"] != "succeeded":
+        raise ValueError("正式任务追踪未成功完成。")
+    recorded = _task_stage(trace, "window")
+    metadata = recorded["task_runtime"]
+    if metadata != {"task_id": str(task_id), "mode": config["mode"],
+                    "config_version": config["version"], "rule_set_sha256": config["rule_set_sha256"]}:
+        raise ValueError("实际追踪与已固定任务配置不符。")
+    if (_task_stage(trace, "extraction_input")["window"] != snapshot(window)
+            or recorded["target_message_ids"] != snapshot(window.target_message_ids)
+            or [{key: value for key, value in row.items() if key != "role"}
+                for row in recorded["messages"]] != snapshot(window.messages)):
+        raise ValueError("实际执行窗口发生变化。")
+    draft, compiled = _task_stage(trace, "grounded_draft"), _task_stage(trace, "grounded_compile")
+    if not isinstance(draft.get("draft"), dict) or set(draft["draft"]) != {"units"}:
+        raise ValueError("正式任务缺少实际E2草稿。")
+    if draft["units"] != snapshot(source_units(window)):
+        raise ValueError("实际E2草稿窗口单元不符。")
+    if draft["protocol"] != "grounded-v2" or compiled["protocol"] != "grounded-v2" or compiled["status"] != "compiled":
+        raise ValueError("正式任务没有使用既有E2编译。")
+    returned = _task_stage(trace, "extraction_return")
+    if compiled["payloads"] != returned["payloads"]:
+        raise ValueError("实际E2编译与Flow返回不一致。")
+    raw_ids = returned["candidate_trace_ids"]
+    if len(set(raw_ids)) != len(raw_ids) or len(raw_ids) != len(compiled["payloads"]):
+        raise ValueError("实际候选身份不唯一。")
+    raw_events = [row for row in trace["events"] if row["stage"] == "candidate_raw"]
+    if (len(raw_events) != len(raw_ids)
+            or any(row["candidate_trace_id"] != raw_ids[index]
+                   or row["payload"]["index"] != index
+                   or row["payload"]["fields"] != compiled["payloads"][index]
+                   for index, row in enumerate(raw_events))):
+        raise ValueError("实际原始候选与编译收据不符。")
+    verification_inputs = [row for row in trace["events"] if row["stage"] == "verification_input"]
+    purposes = ("extraction", "verification") if verification_inputs else ("extraction",)
+    if (len({row["purpose"] for row in trace["calls"]}) != len(trace["calls"])
+            or any(row["purpose"] not in purposes for row in trace["calls"])):
+        raise ValueError("正式任务出现额外持久调用收据。")
+    request_events = [row for row in trace["events"] if row["stage"] == "model_request"]
+    response_events = [row for row in trace["events"] if row["stage"] == "model_response"]
+    if (len(request_events) != len(purposes) or len(response_events) != len(purposes)
+            or len({row["call_id"] for row in request_events}) != len(purposes)):
+        raise ValueError("正式任务模型调用次数与实际可核验候选不符。")
+    for purpose in purposes:
+        _task_stage(trace, "model_request", purpose=purpose)
+        response = _task_stage(trace, "model_response", purpose=purpose)
+        if not isinstance(response["raw"], dict):
+            raise ValueError("正式任务缺少完整SDK返回。")
+        call_ids = {row["call_id"] for row in trace["events"]
+                    if row["stage"] in {"model_request", "model_response"}
+                    and row["payload"].get("purpose") == purpose}
+        if len(call_ids) != 1 or None in call_ids:
+            raise ValueError("正式模型请求与返回不是同次调用。")
+    if verification_inputs:
+        verification = _task_stage(trace, "verification_input")
+        if verification["window"] != snapshot(window):
+            raise ValueError("同次V没有使用实际完整窗口。")
+        if len(_task_stage(trace, "verification_return")["payloads"]) != len(verification["facts"]):
+            raise ValueError("同次V返回数量与实际候选不符。")
+    else:
+        skipped = _task_stage(trace, "verification")
+        if skipped.get("reason") != "no_reviewable_candidates":
+            raise ValueError("缺少正式未核验原因。")
+    facts = []
+    adopted_ids = []
+    for row in trace["events"]:
+        if row["stage"] != "pragmatics" or row["payload"].get("phase") != "adoption":
+            continue
+        identifier, data = row["candidate_trace_id"], row["payload"]["input"]
+        if identifier not in raw_ids or identifier in adopted_ids or set(data) != {item.name for item in fields(ExtractedFact)}:
+            raise ValueError("实际采纳事实快照不完整或重复。")
+        adopted_ids.append(identifier)
+        facts.append(_task_score_fact(data, row["payload"]["decision"]))
+        if row["payload"]["decision"]["disposition"] != "none":
+            prepared = [event["payload"] for event in trace["events"]
+                        if event["stage"] == "prepare_for_adoption" and event["candidate_trace_id"] == identifier]
+            if len(prepared) != 1 or prepared[0]["after"] != data:
+                raise ValueError("实际采纳后事实发生变化，不能用先前快照评分。")
+    if _task_stage(trace, "batch_end")["extracted"] != len(facts):
+        raise ValueError("最终事实数与原批次收据不符。")
+    return tuple(facts), len(raw_ids) - len(adopted_ids)
+
+
+def _task_score_fact(data: dict[str, Any], recorded_decision: dict[str, Any]) -> dict[str, Any]:
+    """三门matcher仅解析其所需字段；原完整依据保持在快照中，不重绑信用。"""
+    from notalone.memory.models import FactSubject, MemoryCategory, MemoryTopic
+    from notalone.memory_extraction.models import AssertionStatus, FigurativeType, SpeechAct
+    from notalone.memory_trace.context import snapshot
+
+    normalized = {**data, **{name: datetime.fromisoformat(data[name]) if data[name] else None
+                            for name in ("valid_at", "invalid_at")}}
+    fact = ExtractedFact(
+        text=data["text"], category=MemoryCategory(data["category"]), subject=FactSubject(data["subject"]),
+        topic=MemoryTopic(data["topic"]), source_message_ids=tuple(UUID(value) for value in data["source_message_ids"]),
+        confidence=data["confidence"], risk_flags=tuple(data["risk_flags"]),
+        valid_at=normalized["valid_at"], invalid_at=normalized["invalid_at"],
+        speech_act=SpeechAct(data["speech_act"]), assertion_status=AssertionStatus(data["assertion_status"]),
+        figurative_type=FigurativeType(data["figurative_type"]), alternatives=tuple(data["alternatives"]),
+        interpretation_reason=data["interpretation_reason"],
+    )
+    decision = PragmaticInterpreter().interpret(fact)
+    if snapshot(decision) != recorded_decision:
+        raise ValueError("实际采纳语用决定与完整事实快照不符。")
+    destination = "none" if decision.disposition is MemoryDisposition.NONE else "auto" if can_auto_adopt(fact, decision) else "pending"
+    return {**normalized, "destination": destination, "pragmatic_disposition": decision.disposition.value,
+            "reasons": decision.reasons}
 
 
 def _claim_labels_match(claim: ClaimExpectation, fact: dict) -> bool:

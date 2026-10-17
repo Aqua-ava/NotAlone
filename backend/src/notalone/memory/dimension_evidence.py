@@ -160,14 +160,14 @@ class EvidenceMessage:
         if len({pair[0] for pair in self.source_refs}) != len(self.source_refs):
             raise ValueError("依据来源引用重复。")
 
-    def to_payload(self) -> dict[str, object]:
+    def to_payload(self, *, version: int = 1) -> dict[str, object]:
         return {
             "message_id": str(self.message_id), "text_sha256": self.text_sha256,
             "text_length": self.text_length, "sender": self.sender,
             "message_type": self.message_type,
             "text_representation": self.text_representation,
             "source_state_sha256": self.source_state_sha256,
-            "occurred_at": evidence_timestamp(self.occurred_at),
+            "occurred_at": (self.occurred_at.isoformat() if self.occurred_at is not None else None) if version == 4 else evidence_timestamp(self.occurred_at),
             "source_refs": [
                 {"ref_id": str(ref), "source_id": str(source)}
                 for ref, source in self.source_refs
@@ -550,6 +550,9 @@ def _semantic_unresolved(
 
 
 def _validate_semantic_basis(value: object) -> dict[str, Any]:
+    if isinstance(value, dict) and type(value.get("version")) is int and value["version"] == 3:
+        from .bounded_evidence import validate_basis
+        return validate_basis(value)
     if isinstance(value, dict) and type(value.get("version")) is int and value["version"] == 2:
         return _validate_author_quote_basis(value)
     data = _fields(value, {
@@ -645,7 +648,17 @@ class SemanticBasis:
     def __post_init__(self) -> None:
         if not isinstance(self._canonical_json, str):
             raise TypeError("语义依据必须是受控版本化对象。")
-        _validate_semantic_basis(json.loads(self._canonical_json))
+        raw = json.loads(self._canonical_json)
+        if isinstance(raw, dict) and raw.get("version") == 3:
+            def unique(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+                result = {}
+                for key, value in pairs:
+                    if key in result:
+                        raise ValueError("有限语义依据不能包含重复JSON键。")
+                    result[key] = value
+                return result
+            raw = json.loads(self._canonical_json, object_pairs_hook=unique)
+        _validate_semantic_basis(raw)
 
     @classmethod
     def from_payload(cls, value: object) -> SemanticBasis:
@@ -666,6 +679,9 @@ class SemanticBasis:
                 rows.append(binding["binding"])
         if data["version"] == 2:
             rows.append(data["representation"]["source"])
+        if data["version"] == 3:
+            rep = data["representation"]
+            rows.extend((*rep["source_full"], *rep["quote_sources"], *(row["source"] for row in rep["contexts"])))
         return tuple(MessageSpan.from_payload(row) for row in rows)
 
     @property
@@ -674,6 +690,13 @@ class SemanticBasis:
         rows = [row["candidate"] for name in ("atoms", "qualifiers") for row in data[name]]
         if data["version"] == 2:
             rows.extend(data["representation"][name] for name in ("candidate", "author", "inner"))
+        if data["version"] == 3:
+            rep = data["representation"]
+            rows.extend(row["candidate"] for row in data["roles"])
+            rows.extend(rep[name] for name in ("whole", "author", "quote"))
+            if rep["observation"] is not None:
+                rows.append(rep["observation"]["candidate"])
+            rows.extend(row[name] for row in rep["contexts"] for name in ("whole", "author", "quote"))
         return tuple(TextSpan.from_payload(row) for row in rows)
 
 
@@ -692,14 +715,15 @@ class DimensionEvidence:
     reported: tuple[ReportedAttribution, ...] | None = None
     version: int = 1
     semantic_basis: SemanticBasis | None = None
+    target_message_ids: tuple[UUID, ...] = ()
     # 仅实际来源校验设置；JSON 往返不带这一运行状态。
     source_bound: bool = field(default=False, init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
-        if type(self.version) is not int or self.version not in {1, 2, 3}:
+        if type(self.version) is not int or self.version not in {1, 2, 3, 4}:
             raise ValueError("维度依据版本未受支持。")
         if self.semantic_basis is not None and (
-            self.version not in {2, 3} or not isinstance(self.semantic_basis, SemanticBasis)
+            self.version not in {2, 3, 4} or not isinstance(self.semantic_basis, SemanticBasis)
             or self.semantic_basis.to_payload()["version"] != self.version - 1
         ):
             raise TypeError("语义依据必须与外层版本精确配对。")
@@ -717,6 +741,28 @@ class DimensionEvidence:
             raise TypeError("维度依据必须包含完整窗口元数据。")
         if len({item.message_id for item in self.messages}) != len(self.messages):
             raise ValueError("维度依据窗口消息重复。")
+        if self.version == 4:
+            identifiers = tuple(item.message_id for item in self.messages)
+            if (len(self.messages) > 4 or any(item.text_length > 4096 or len(item.source_refs) > 64
+                    or item.source_refs != tuple(sorted(item.source_refs, key=lambda row: str(row[0]))) for item in self.messages)
+                    or not isinstance(self.target_message_ids, tuple) or not self.target_message_ids
+                    or any(not isinstance(item, UUID) for item in self.target_message_ids)
+                    or self.target_message_ids != tuple(item for item in identifiers if item in self.target_message_ids)
+                    or self.reference is not None or self.reported is not None
+                    or self.paraphrase is not None and len(self.paraphrase) > 16
+                    or self.media is not None and (len(self.media) > 4
+                        or tuple(item.message_id for item in self.media) != tuple(item for item in identifiers if item in {row.message_id for row in self.media}))):
+                raise ValueError("版本四依据须保留有界完整窗口、原目标和新语义槽。")
+            if self.semantic_basis is not None:
+                rep = self.semantic_basis.to_payload()["representation"]
+                if (self.pragmatics is None or rep["target_message_id"] not in {str(item) for item in self.target_message_ids}
+                        or any(not item.source_refs or item.source_state_sha256 is None or item.message_type != "text"
+                            or item.text_representation != "text" for item in self.messages)
+                        or [(row["message_id"], row["span"]["start"], row["span"]["end"], row["span"]["sha256"]) for row in rep["source_full"]]
+                        != [(str(item.message_id), 0, item.text_length, item.text_sha256) for item in self.messages]):
+                    raise ValueError("版本四语义依据缺少完整窗口或原目标。")
+        elif self.target_message_ids:
+            raise ValueError("旧依据不能带版本四目标集合。")
         for value, expected in (
             (self.paraphrase, TextAlignment), (self.reference, ReferenceAnchor),
             (self.media, MediaOrigin), (self.reported, ReportedAttribution),
@@ -731,6 +777,8 @@ class DimensionEvidence:
             message = messages.get(anchor.message_id)
             if message is None or anchor.span.end > message.text_length:
                 raise ValueError("维度依据定位超出同一窗口。")
+        if self.version == 4 and any(item.candidate.end > 4096 for item in self.paraphrase or ()):
+            raise ValueError("版本四候选对齐超出有界正文。")
         for origin in self.media or ():
             message = messages.get(origin.message_id)
             if message is None or origin.message_type != message.message_type:
@@ -776,11 +824,13 @@ class DimensionEvidence:
                 self.pragmatics.to_payload() if self.pragmatics is not None
                 else None
             ),
-            "messages": [item.to_payload() for item in self.messages],
+            "messages": [item.to_payload(version=self.version) for item in self.messages],
             "paraphrase": rows(self.paraphrase), "reference": rows(self.reference),
             "media": rows(self.media), "reported": rows(self.reported),
         }
-        if self.version in {2, 3}:
+        if self.version == 4:
+            payload["target_message_ids"] = [str(item) for item in self.target_message_ids]
+        if self.version in {2, 3, 4}:
             payload["semantic_basis"] = (
                 self.semantic_basis.to_payload()
                 if self.semantic_basis is not None else None
@@ -793,9 +843,29 @@ class DimensionEvidence:
             "version", "scope", "candidate_sha256", "window_sha256", "messages",
             "pragmatics", "paraphrase", "reference", "media", "reported",
         }
-        if isinstance(value, dict) and type(value.get("version")) is int and value["version"] in {2, 3}:
+        if isinstance(value, dict) and type(value.get("version")) is int and value["version"] in {2, 3, 4}:
             names.add("semantic_basis")
+        if isinstance(value, dict) and type(value.get("version")) is int and value["version"] == 4:
+            names.add("target_message_ids")
         data = _fields(value, names)
+        if data["version"] == 4:
+            def canonical_ids(raw: Any, key: str = "") -> None:
+                if key in {"owner_id", "contact_id", "message_id", "target_message_id", "ref_id", "source_id"}:
+                    if not isinstance(raw, str) or str(_uuid(raw)) != raw:
+                        raise ValueError("版本四UUID必须使用规范表示。")
+                elif key == "target_message_ids":
+                    for item in _array(raw):
+                        canonical_ids(item, "message_id")
+                elif key == "occurred_at" and raw is not None:
+                    if not isinstance(raw, str) or datetime.fromisoformat(raw).isoformat() != raw:
+                        raise ValueError("版本四来源时间必须保留原ISO表示。")
+                elif isinstance(raw, dict):
+                    for name, item in raw.items():
+                        canonical_ids(item, name)
+                elif isinstance(raw, list):
+                    for item in raw:
+                        canonical_ids(item)
+            canonical_ids(data)
         scope = _fields(data["scope"], {"owner_id", "contact_id"})
         kwargs: dict[str, Any] = {}
         for name, kind in (
@@ -807,6 +877,7 @@ class DimensionEvidence:
                 kind.from_payload(item) for item in _array(raw)
             )
         return cls(
+            target_message_ids=tuple(_uuid(item) for item in _array(data["target_message_ids"])) if data["version"] == 4 else (),
             scope=ContactScope(_uuid(scope["owner_id"]), _uuid(scope["contact_id"])),
             candidate_sha256=data["candidate_sha256"],
             window_sha256=data["window_sha256"],

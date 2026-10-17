@@ -541,6 +541,8 @@ def capture_current_decision(
 
 def candidate_from_row(row: dict[str, Any]) -> MemoryCandidate:
     """读取人工操作所需的候选原值，不推导缺失维度依据。"""
+    from notalone.persistence.source_dependency import dependency_mode
+
     raw = row.get("dimension_evidence")
     return MemoryCandidate(
         candidate_id=row["id"], scope=ContactScope(row["owner_id"], row["contact_id"]),
@@ -553,6 +555,7 @@ def candidate_from_row(row: dict[str, Any]) -> MemoryCandidate:
         valid_at=row["valid_at"], invalid_at=row["invalid_at"],
         dimension_evidence=DimensionEvidence.from_payload(raw) if raw is not None else None,
         event=MemoryEvent.from_payload(row.get("event")),
+        source_dependency_mode=dependency_mode(row.get("source_dependency_mode")),
     )
 
 

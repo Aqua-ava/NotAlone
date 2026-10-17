@@ -327,6 +327,8 @@ class DatabaseAdoptionTest(unittest.TestCase):
             "068_skill_review_publication.sql",
             "069_skill_history_operations.sql",
             "070_skill_scope_policies.sql",
+            "071_bounded_runtime_evidence.sql",
+            "072_scoped_media_lifecycle.sql",
         ))
         self.assertEqual(migrate(self.url, MIGRATIONS), ())
         self.assertFalse(adopt_legacy_database(self.url, MIGRATIONS, self.backup).adopted)
@@ -369,6 +371,8 @@ class DatabaseAdoptionTest(unittest.TestCase):
                 ("068_skill_review_publication.sql",),
                 ("069_skill_history_operations.sql",),
                 ("070_skill_scope_policies.sql",),
+                ("071_bounded_runtime_evidence.sql",),
+                ("072_scoped_media_lifecycle.sql",),
             ])
 
     def test_full_035_needs_no_repair_and_preserves_ids_pause_and_message_evidence(self) -> None:

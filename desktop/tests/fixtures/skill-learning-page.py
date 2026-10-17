@@ -161,7 +161,7 @@ def _run(resources):
         fixture.setUpClass()
         os.environ.update(NOTALONE_DATABASE_URL=fixture.database_url, NOTALONE_TEST_DATABASE_URL=fixture.database_url)
         migration_proof = guard_test_migrations(fixture.database_url, fixture.database_name, ROOT,
-            expected_count=70, expected_tail='070_skill_scope_policies.sql')
+            expected_count=72, expected_tail='072_scoped_media_lifecycle.sql')
         fixture.setUp()
         if reviewing:
             import psycopg

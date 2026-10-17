@@ -29,6 +29,9 @@ from notalone.persistence.reply_cleanup import (
 )
 from notalone.persistence.style_sample_store import erase_source_style_samples
 from notalone.persistence.expression_preferences import erase_source_expression_preferences
+from notalone.persistence.source_memory_erasure import (
+    collect_all_source_memory_ids, erase_source_memories,
+)
 from notalone.persistence.source_processing import (
     erase_source_processing,
     save_processing_batch,
@@ -921,22 +924,35 @@ class PostgresObservationStore:
                     contact_id=contact_id,
                     candidate_message_ids=observed_message_ids,
                 )
+                all_memory_ids = collect_all_source_memory_ids(
+                    connection, owner_id=owner_id, contact_id=contact_id,
+                    removed_ids=set(orphan_message_ids),
+                )
                 delete_source_replies(
                     connection,
                     owner_id=owner_id,
                     contact_id=contact_id,
-                    removed_ids={observation_id, *orphan_message_ids},
+                    removed_ids={observation_id, *orphan_message_ids, *all_memory_ids},
                 )
                 erase_source_style_samples(connection, owner_id=owner_id,
-                                           removed_ids={observation_id, *orphan_message_ids})
+                                           removed_ids={observation_id, *orphan_message_ids, *all_memory_ids})
                 erase_source_expression_preferences(connection, owner_id=owner_id,
-                                                    removed_ids={observation_id, *orphan_message_ids})
+                                                    removed_ids={observation_id, *orphan_message_ids, *all_memory_ids})
                 cleanup_derived_data(
                     connection,
                     owner_id=owner_id,
                     contact_id=contact_id,
                     removed_ids={observation_id, *orphan_message_ids},
                 )
+                erase_source_memories(
+                    connection, owner_id=owner_id, contact_id=contact_id,
+                    removed_ids={observation_id, *orphan_message_ids}, all_only=True,
+                )
+                if collect_all_source_memory_ids(
+                    connection, owner_id=owner_id, contact_id=contact_id,
+                    removed_ids=set(orphan_message_ids),
+                ):
+                    raise ObservationPersistenceError("观察删除后仍有必需来源正文。")
                 delete_messages(
                     connection,
                     owner_id=owner_id,

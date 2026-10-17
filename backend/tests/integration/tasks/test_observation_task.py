@@ -451,7 +451,7 @@ class ObservationTaskPersistenceTest(unittest.TestCase):
             def __init__(self) -> None:
                 self.scopes: list[ContactScope] = []
 
-            def run(self, *, scope: ContactScope) -> ExtractionRunStats:
+            def run(self, *, scope: ContactScope, **task_context: object) -> ExtractionRunStats:
                 self.scopes.append(scope)
                 return ExtractionRunStats(batches=1, processed_messages=2)
 
@@ -507,7 +507,7 @@ class ObservationTaskPersistenceTest(unittest.TestCase):
         class ScriptedRunner:
             model_version = "synthetic-observation-model"
 
-            def run(self, *, scope: ContactScope) -> ExtractionRunStats:
+            def run(self, *, scope: ContactScope, **task_context: object) -> ExtractionRunStats:
                 with psycopg.connect(TEST_DATABASE_URL) as connection:
                     repository.create_observation_task(
                         connection, owner_id=scope.owner_id, contact_id=scope.contact_id,

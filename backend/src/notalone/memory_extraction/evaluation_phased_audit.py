@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import asdict
 from typing import Any, Callable
 
 from .evaluation_http_budget import EvaluationBudgetAbort
@@ -14,9 +15,11 @@ from .evaluation_provider_contract import (
 )
 from .evaluation_records import canonical_sha256
 from .evaluation_reference import (
-    public_window_projection, validate_full_public_reference, validate_public_reference,
+    bounded_window_projection, public_window_projection, validate_bounded_public_reference,
+    validate_full_public_reference, validate_public_reference,
 )
-from .evaluation_review import prepare_case_review, score_case_review
+from .evaluation_bounded_cases import BOUNDED_RUNTIME_DIMENSIONS, BOUNDED_RUNTIME_PLAN
+from .evaluation_review import dimension_results_from_review, prepare_case_review, score_case_review
 from .verification import SourceVerificationMode
 from .source_proof import parse_proposal
 
@@ -70,7 +73,8 @@ def _validate_raw(reference: dict, view: dict, review: dict) -> None:
     packet = prepare_case_review(reference, view["case_id"], {
         "run_status": "unknown", "extraction": [item["payload"] for item in view["extraction"]],
         "verification_inputs": [], "verification": [], "final_facts": [], "original_result": {},
-    })
+    }, actual_message_ids_by_index=(tuple(view["actual_message_ids_by_index"])
+                                   if "actual_message_ids_by_index" in view else None))
     completed = _copy(review)
     completed.pop("raw_evidence_sha256")
     completed.update(run_status="unknown", evidence_sha256=packet["evidence_sha256"], v_rows=[])
@@ -177,12 +181,15 @@ def _verification_projection(results: list[dict], mode: SourceVerificationMode) 
     projected = []
     for result in results:
         if (not isinstance(result, dict) or not (
-            set(result) == _V_FIELDS or mode is SourceVerificationMode.NULLABLE_PROOF_V1
+            mode is not SourceVerificationMode.NULLABLE_PROOF_V3 and set(result) == _V_FIELDS
+            or mode in {
+                SourceVerificationMode.NULLABLE_PROOF_V1, SourceVerificationMode.NULLABLE_PROOF_V3,
+            }
             and set(result) == _V_FIELDS | {"proof"}
         )):
             raise EvaluationBudgetAbort("phased_verification_fields_invalid")
         if "proof" in result:
-            parse_proposal(result["proof"])
+            parse_proposal(result["proof"], version=3 if mode is SourceVerificationMode.NULLABLE_PROOF_V3 else 1)
         projected.append(_copy({key: result[key] for key in _V_FIELDS}))
     return projected
 
@@ -204,7 +211,7 @@ class PhasedEvaluationAudit:
         execution_plan: str = "original",
         extraction_prompt_profile: str = "default",
     ):
-        if type(execution_plan) is not str or execution_plan not in {"original", *PHASE_SPLIT_PLANS}:
+        if type(execution_plan) is not str or execution_plan not in {"original", *PHASE_SPLIT_PLANS, BOUNDED_RUNTIME_PLAN}:
             raise ValueError("审核执行身份非法。")
         self._execution_plan = execution_plan
         e2 = execution_plan == FULL140_E2_PLAN
@@ -225,11 +232,18 @@ class PhasedEvaluationAudit:
         if extraction_tool_choice not in {"forced", "omitted"}:
             raise ValueError("提取工具选择策略非法。")
         self._extraction_tool_choice = extraction_tool_choice
-        if (type(case_set) is not str or case_set not in {"reference21", "full140"}
-                or (case_set == "full140" and case_positions is not None)):
-            raise ValueError("审核只接受原21或固定完整140，不允许完整集合缩减。")
+        bounded = execution_plan == BOUNDED_RUNTIME_PLAN
+        if (type(case_set) is not str or case_set not in {"reference21", "full140", "bounded15"}
+                or (case_set in {"full140", "bounded15"} and case_positions is not None)):
+            raise ValueError("审核只接受原21、固定完整140或有界15，不允许完整集合缩减。")
+        if (bounded != (case_set == "bounded15")
+                or bounded != (reference_version == BOUNDED_RUNTIME_PLAN)
+                or bounded and (self._extraction_mode is not EvaluationExtractionMode.GROUNDED_V2
+                    or self._verification_mode is not SourceVerificationMode.NULLABLE_PROOF_V3
+                    or extraction_tool_choice != "omitted" or verification_tool_choice != "forced")):
+            raise ValueError("有界15审核须匹配固定E2/V3和完整集合。")
         if type(reference_version) is not str or reference_version not in {
-            "legacy-v1", "source-fidelity-v2",
+            "legacy-v1", "source-fidelity-v2", BOUNDED_RUNTIME_PLAN,
         }:
             raise ValueError("审核参考版本须为已注册封闭值。")
         if (reference_version == "source-fidelity-v2"
@@ -243,15 +257,21 @@ class PhasedEvaluationAudit:
         if mixed and (reference_version != "source-fidelity-v2" or self._extraction_mode.value != ("grounded-v2" if e2 else "grounded-v4")):
             raise ValueError("混合策略仅用于完整140的来源保真v2。")
         self._reference_version = reference_version
-        validation = (validate_full_public_reference if case_set == "full140"
-                      else validate_public_reference)(
-            reference, expected_reference_sha256=expected_reference_sha256,
-            annotation_sha256=annotation_sha256, reference_version=reference_version,
-        )
+        if bounded:
+            validation = validate_bounded_public_reference(
+                reference, expected_reference_sha256=expected_reference_sha256,
+                annotation_sha256=annotation_sha256,
+            )
+        else:
+            validation = (validate_full_public_reference if case_set == "full140"
+                          else validate_public_reference)(
+                reference, expected_reference_sha256=expected_reference_sha256,
+                annotation_sha256=annotation_sha256, reference_version=reference_version,
+            )
         if reference_version == "source-fidelity-v2" and validation.get("execution_ready") is not True:
             raise ValueError("来源保真v2参考尚未执行就绪。")
         self._reference = _copy(reference)
-        if case_set == "full140":
+        if case_set in {"full140", "bounded15"}:
             positions = validation["case_positions"]
         else:
             positions = (tuple(range(len(self._reference["windows"])))
@@ -294,7 +314,7 @@ class PhasedEvaluationAudit:
 
     @property
     def case_set(self) -> str:
-        """只标识两个固定公开集合，不允许调用方注入cases。"""
+        """只标识固定公开集合，不允许调用方注入cases。"""
         return self._case_set
 
     @property
@@ -366,6 +386,12 @@ class PhasedEvaluationAudit:
         evidence_bundle["extraction_program"] = _copy({
             "items": bundle.get("extraction_program", []),
         })["items"]
+        bounded = self._case_set == "bounded15"
+        if bounded:
+            formal_execution = bundle.get("formal_task_execution")
+            if type(formal_execution) is not dict or not formal_execution:
+                raise EvaluationBudgetAbort("phased_formal_task_execution_missing")
+            evidence_bundle["formal_task_execution"] = _copy(formal_execution)
         bundle = {**evidence_bundle, "persist_audit": bundle["persist_audit"]}
         position = bundle["case_position"]
         if type(position) is not int or not 0 <= position < len(self._case_positions):
@@ -377,11 +403,14 @@ class PhasedEvaluationAudit:
         reference_sha = (canonical_sha256(reference) if reference is not self._reference
                          else self._reference_sha256)
         reference_case = reference["windows"][reference_position]
+        projection = bounded_window_projection if bounded else public_window_projection
         if (bundle["case_name"] != reference_case["case_name"]
-                or canonical_sha256(public_window_projection(bundle["window"])) !=
+                or canonical_sha256(projection(bundle["window"])) !=
                 reference_case["input_sha256"]
                 or bundle["gold_reference"]["criteria_sha256"] != self._criteria_sha256):
             raise EvaluationBudgetAbort("phased_case_binding_changed")
+        actual_sources = (tuple(message["message_id"] for message in bundle["window"]["messages"])
+                          if bounded else None)
         e_tool = extraction_tool_name(self._extraction_mode)
         extraction_protocol = None
         if self._extraction_mode.is_grounded:
@@ -408,6 +437,7 @@ class PhasedEvaluationAudit:
             "case_name": reference_case["case_name"], "window": bundle["window"],
             "reference_case": reference_case, "common_rules": reference["common_rules"],
             "e_fields": reference["e_fields"], "reference_sha256": reference_sha,
+            **({"actual_message_ids_by_index": list(actual_sources)} if actual_sources is not None else {}),
             "extraction": [{"index": index, "payload": fact, "payload_sha256": canonical_sha256(fact)}
                            for index, fact in enumerate(extraction)],
             **({"extraction_protocol": extraction_protocol} if extraction_protocol is not None else {}),
@@ -437,14 +467,15 @@ class PhasedEvaluationAudit:
             "verification": _verification_projection(verification, self._verification_mode),
             "final_facts": bundle["original_result"]["facts"], "original_result": bundle["original_result"],
         }
-        packet = prepare_case_review(reference, reference_case["id"], _copy(evidence))
+        packet = prepare_case_review(reference, reference_case["id"], _copy(evidence),
+                                     actual_message_ids_by_index=actual_sources)
         receipt_ref = {key: receipt[key] for key in (
             "case_position", "case_name", "kind", "purpose", "event_sequence", "payload_sha256",
         )}
         full_view = {"packet": packet, "sealed_raw_review": raw_review,
                      "raw_receipt": receipt_ref, **protocol_fields}
         protocol = None
-        if self._verification_mode is SourceVerificationMode.NULLABLE_PROOF_V1:
+        if self._verification_mode in {SourceVerificationMode.NULLABLE_PROOF_V1, SourceVerificationMode.NULLABLE_PROOF_V3}:
             protocol = {
                 "verification_mode": self.verification_mode,
                 "model_results": verification,
@@ -452,18 +483,49 @@ class PhasedEvaluationAudit:
                 "final_dimension_evidence": [{
                     "final_index": index, "dimension_evidence": fact.get("dimension_evidence"),
                 } for index, fact in enumerate(bundle["original_result"]["facts"])],
+                **({"formal_task_execution": bundle["formal_task_execution"]} if bounded else {}),
             }
             full_view["verification_protocol"] = protocol
         full_review = _copy(self._full_reviewer(_copy(full_view)))
+        axis_reviews = None
+        if bounded:
+            axis_reviews = full_review.pop("axis_reviews", None)
+            _exact(axis_reviews, set(BOUNDED_RUNTIME_DIMENSIONS))
+            for review in axis_reviews.values():
+                _exact(review, {"status", "basis"})
+                if (type(review["status"]) is not str or review["status"] not in {"pass", "fail", "unresolved"}
+                        or type(review["basis"]) is not str or not review["basis"].strip()):
+                    raise EvaluationBudgetAbort("phased_axis_review_invalid")
         _check_sealed_raw(raw_review, full_review)
         report = score_case_review(packet, full_review)
         final_receipt = _save(bundle["persist_audit"], {
             "phase": "final", "review": full_review, "report": report, "raw_receipt": receipt_ref,
             **({"verification_protocol": protocol} if protocol is not None else {}),
             **protocol_fields,
+            **({"axis_reviews": axis_reviews} if bounded else {}),
         }, position, reference_case["case_name"])
         if final_receipt["event_sequence"] <= receipt["event_sequence"]:
             raise EvaluationBudgetAbort("phased_audit_receipt_order_invalid")
         decision, reason = _decision(report, full_review, reference_case)
+        dimensions = None
+        if axis_reviews is not None:
+            unresolved_axis = any(review["status"] == "unresolved" for review in axis_reviews.values())
+            if unresolved_axis and decision != "safety_error":
+                decision, reason = "unknown", "audit_unresolved"
+            dimensions = []
+            if decision != "unknown":
+                from .evaluation import EvaluationResult
+                original = EvaluationResult(**bundle["original_result"])
+                # 仅汇总投影把未决轴记为非通过；封存判据原件不改，已知安全计数优先。
+                summary_axes = _copy(axis_reviews)
+                if decision == "safety_error":
+                    for review in summary_axes.values():
+                        if review["status"] == "unresolved":
+                            review["status"] = "fail"
+                dimensions = [asdict(result) for result in dimension_results_from_review(
+                    original, summary_axes, decision=decision, safety=report["safety"],
+                    semantic_case_id=reference_case["input_sha256"],
+                )]
         return {"case_position": position, "decision": decision, "reason_code": reason,
-                "criteria_sha256": self._criteria_sha256}
+                "criteria_sha256": self._criteria_sha256,
+                **({"dimension_results": dimensions} if bounded else {})}

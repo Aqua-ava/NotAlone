@@ -7,7 +7,7 @@ from uuid import UUID
 
 from notalone.memory.dimension_evidence import DimensionEvidence
 from notalone.memory.events import MemoryEvent
-from notalone.memory.models import MemoryCategory, MemoryTopic
+from notalone.memory.models import MemoryCategory, MemoryTopic, SourceDependencyMode
 from notalone.memory.timing import MemoryTiming
 from notalone.memory_extraction.flow import ExtractionOutcome
 from notalone.memory_extraction.models import ExtractedFact, FactSubject, SpeechAct, AssertionStatus, FigurativeType
@@ -58,6 +58,7 @@ def restore_outcome(value: dict) -> ExtractionOutcome:
             interpretation_reason=row['interpretation_reason'], timing=MemoryTiming.from_payload(row['timing']),
             dimension_evidence=DimensionEvidence.from_payload(row['dimension_evidence']) if row.get('dimension_evidence') else None,
             event=MemoryEvent.from_payload(row.get('event')),
+            source_dependency_mode=SourceDependencyMode(row.get('source_dependency_mode', 'any')),
         ))
     return ExtractionOutcome(accepted=tuple(facts), rejected_count=value['rejected_count'],
                              extraction_completed=value['extraction_completed'],candidate_trace_ids=trace_ids)
@@ -76,6 +77,7 @@ def comparison_payload(compared) -> dict:
             'result_memory_id': str(action.result_memory_id) if action.result_memory_id else None,
             'new': {'text': candidate.text, 'category': candidate.category.value, 'topic': candidate.topic.value,
                     'subject': candidate.subject.value, 'source_ids': [str(item) for item in candidate.source_ids],
+                    'source_dependency_mode': candidate.source_dependency_mode.value,
                     'timing': candidate.timing.to_payload(), 'event': candidate.event.to_payload() if candidate.event else None,
                     'correction_review': [item.to_payload() for item in candidate.correction_review],
                     'has_new_proof': candidate.dimension_evidence is not None},
@@ -95,5 +97,6 @@ def _memory_payload(memory):
             'adoption_method': memory.adoption_method.value, 'status': memory.status.value,
             'category': memory.category.value, 'topic': memory.topic.value,
             'source_ids': [str(item) for item in memory.source_ids],
+            'source_dependency_mode': memory.source_dependency_mode.value,
             'timing': memory.timing.to_payload(), 'event': memory.event.to_payload() if memory.event else None,
             'proof_kind': 'version_receipt' if memory.version_evidence else 'unknown'}

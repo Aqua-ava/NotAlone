@@ -61,8 +61,8 @@ def guard_modules(root: Path, *, expected: dict, evidence_path: Path, phase: str
 
 
 def guard_test_migrations(database_url: str, expected_database: str, root: Path, *,
-                          expected_count: int = 70,
-                          expected_tail: str = "070_skill_scope_policies.sql") -> dict:
+                          expected_count: int = 72,
+                          expected_tail: str = "072_scoped_media_lifecycle.sql") -> dict:
     """只核对本轮事前登记的精确库；当前连续迁移和重复执行均须匹配。"""
     import psycopg
     from notalone.database_migrations import migrate

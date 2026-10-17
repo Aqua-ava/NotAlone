@@ -42,9 +42,9 @@ class ExpressionPreferenceOverviewCombinationHttpTest(OverviewReplyHttpFixture, 
             cls.actual_database = connection.execute("SELECT current_database()").fetchone()[0]
             actual = [row[0] for row in connection.execute("SELECT name FROM public.notalone_schema_migration ORDER BY name")]
         if (cls.actual_database != os.environ["NOTALONE_EXPECTED_TEST_DATABASE"] or actual != official
-                or len(actual) != 70 or actual[-1] != "070_skill_scope_policies.sql"):
-            raise RuntimeError("联合验收仅允许本轮精确001–070自有库。")
-        if [int(item[:3]) for item in actual] != list(range(1, 71)) or migrate(cls.database_url, directory):
+                or len(actual) != 72 or actual[-1] != "072_scoped_media_lifecycle.sql"):
+            raise RuntimeError("联合验收仅允许本轮精确001–072自有库。")
+        if [int(item[:3]) for item in actual] != list(range(1, 73)) or migrate(cls.database_url, directory):
             raise RuntimeError("联合验收迁移须连续且重复0。")
         cls.migration_names = actual
 

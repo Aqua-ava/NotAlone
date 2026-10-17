@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from threading import Condition, Event, local
 from typing import Any, Callable, Iterator, Protocol
 import time
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from notalone.application.reply_service import ReplyPort
 from notalone.ledger.models import LedgerEntry, LedgerOutcome
@@ -23,6 +23,7 @@ from notalone.memory_trace.context import current_trace
 from notalone.persistence.background_tasks import BackgroundTaskPersistenceError
 from notalone.reply.interface import GenerateReply, ReplyOutcome
 from notalone.scopes import ContactScope, VerifiedConversationScope
+from notalone.tasks.models import ExtractionRuntimeConfig
 
 
 class ModelWorkStopped(RuntimeError):
@@ -179,7 +180,10 @@ class ExtractionRunnerPort(Protocol):
     @property
     def model_version(self) -> str: ...
 
-    def run(self, *, scope: ContactScope) -> ExtractionRunStats: ...
+    def run(
+        self, *, scope: ContactScope, task_id: UUID | None = None,
+        extraction_runtime_config: ExtractionRuntimeConfig | None = None,
+    ) -> ExtractionRunStats: ...
 
 
 class AccountedExtractionRunner:
@@ -192,9 +196,16 @@ class AccountedExtractionRunner:
     def model_version(self) -> str:
         return self._runner.model_version
 
-    def run(self, *, scope: ContactScope) -> ExtractionRunStats:
+    def run(
+        self, *, scope: ContactScope, task_id: UUID | None = None,
+        extraction_runtime_config: ExtractionRuntimeConfig | None = None,
+    ) -> ExtractionRunStats:
         with self._accounting.run_scope(scope):
-            return self._runner.run(scope=scope)
+            if task_id is None and extraction_runtime_config is None:
+                return self._runner.run(scope=scope)
+            return self._runner.run(
+                scope=scope, task_id=task_id, extraction_runtime_config=extraction_runtime_config,
+            )
 
 
 class PriorityExtractionRuntime:
@@ -225,8 +236,13 @@ class PriorityVerificationRuntime:
 
     @property
     def verification_mode(self) -> SourceVerificationMode:
-        """保留已显式配置的核验模式；旧运行时继续使用既有协议。"""
-        return getattr(self._runtime, "verification_mode", SourceVerificationMode.LEGACY_V4)
+        return SourceVerificationMode(getattr(self._runtime, "verification_mode", SourceVerificationMode.LEGACY_V4))
+
+    def for_mode(self, mode: SourceVerificationMode | str) -> PriorityVerificationRuntime:
+        select = getattr(self._runtime, "for_mode", None)
+        if not callable(select):
+            raise ValueError("来源核验适配器不支持指定任务模式。")
+        return PriorityVerificationRuntime(select(mode), self._control)
 
     def verify(
         self, *, window: ExtractionWindow, facts: tuple[ExtractedFact, ...],

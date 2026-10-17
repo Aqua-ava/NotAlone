@@ -533,25 +533,28 @@ class DimensionEvidenceV3PersistenceTest(unittest.TestCase):
             self.assertFalse(supports_dimension_evidence_version(connection, 3))
         self.assertEqual(migrate(self.database_url, MIGRATIONS), (
             "059_memory_candidate_author_quote_basis.sql",
+            "060_bounded_runtime_evidence.sql",
         ))
         self.assertEqual(migrate(self.database_url, MIGRATIONS), ())
         with psycopg.connect(self.database_url) as connection:
             self.assertTrue(supports_dimension_evidence_version(connection, 1))
             self.assertTrue(supports_dimension_evidence_version(connection, 2))
             self.assertTrue(supports_dimension_evidence_version(connection, 3))
-            for invalid in (True, 3.0, 4, "3", None):
+            self.assertTrue(supports_dimension_evidence_version(connection, 4))
+            for invalid in (True, 3.0, 5, "3", None):
                 with self.subTest(version=invalid):
                     self.assertFalse(supports_dimension_evidence_version(connection, invalid))
             connection.execute("""
                 ALTER TABLE public.memory_candidate
-                DROP CONSTRAINT memory_candidate_dimension_evidence_version3_check
+                DROP CONSTRAINT memory_candidate_dimension_evidence_version4_check
             """)
             connection.execute("""
                 ALTER TABLE public.memory_candidate
-                ADD CONSTRAINT memory_candidate_dimension_evidence_version3_check
+                ADD CONSTRAINT memory_candidate_dimension_evidence_version4_check
                 CHECK (true) NOT VALID
             """)
             self.assertFalse(supports_dimension_evidence_version(connection, 3))
+            self.assertFalse(supports_dimension_evidence_version(connection, 4))
 
 
 if __name__ == "__main__":

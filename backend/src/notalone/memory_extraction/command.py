@@ -47,6 +47,7 @@ from notalone.memory_trace import (
 from notalone.memory_trace.context import event_payload, record_ledger_entry
 from notalone.runtime_config import load_project_env
 from notalone.scopes import ContactScope
+from notalone.tasks.models import ExtractionRuntimeConfig, ExtractionRuntimeMode
 
 EXTRACTION_BATCH_SIZE = MAX_TARGET_MESSAGES_PER_WINDOW
 MAX_CONTEXT_MESSAGES_PER_SIDE = 20
@@ -116,9 +117,14 @@ def run_extraction(
     dimension_release: DimensionRelease | None = None,
     trace_store: TracePort | None = None,
     selection_receipts: tuple[dict[str, Any], ...] = (),
+    task_id: UUID | None = None,
+    extraction_runtime_config: ExtractionRuntimeConfig | None = None,
 ) -> ExtractionRunStats:
     """按水位分批串行提取并采纳；输出不可用的批次连续失败后跳过。"""
 
+    task_metadata = _task_runtime_metadata(
+        task_id, extraction_runtime_config, verification_runtime,
+    )
     if (
         not isinstance(batch_size, int)
         or not 0 < batch_size <= EXTRACTION_BATCH_SIZE
@@ -199,6 +205,7 @@ def run_extraction(
             ).hexdigest(),
             payload=event_payload(
                 {
+                    **task_metadata,
                     "messages": [],
                     "target_count": 0,
                     "target_message_ids": [],
@@ -245,6 +252,7 @@ def run_extraction(
             target_message_ids=tuple(message.message_id for message in batch),
         )
         window_payload = {
+            **task_metadata,
             "messages": [
                 {
                     **snapshot(message),
@@ -475,6 +483,42 @@ def run_extraction(
         skipped_non_memory=skipped_non_memory,
         skipped_ranges=tuple(skipped_ranges),
     )
+
+
+def _task_runtime_metadata(
+    task_id: UUID | None,
+    config: ExtractionRuntimeConfig | None,
+    verification_runtime: SourceVerificationRuntime | None,
+) -> dict[str, Any]:
+    """记录实际已选合同；不在记录入口重新选V或生成调用。"""
+    if task_id is not None and not isinstance(task_id, UUID):
+        raise ValueError("提取追踪的任务标识无效。")
+    if config is not None:
+        if task_id is None:
+            raise ValueError("显式提取配置必须绑定指定任务。")
+        from notalone.tasks.extraction_runtime import validate_runtime_config
+        from notalone.memory_extraction.verification import SourceVerificationMode
+
+        validate_runtime_config(config)
+        expected = (
+            SourceVerificationMode.LEGACY_V4
+            if config.mode is ExtractionRuntimeMode.LEGACY
+            else SourceVerificationMode.NULLABLE_PROOF_V3
+        )
+        if (verification_runtime is None
+                and config.mode is not ExtractionRuntimeMode.LEGACY):
+            raise ValueError("有限运行配置缺少实际同次V。")
+        if (verification_runtime is not None
+                and getattr(verification_runtime, "verification_mode", SourceVerificationMode.LEGACY_V4) != expected):
+            raise ValueError("任务配置与实际来源核验模式不符。")
+    if task_id is None:
+        return {}
+    return {"task_runtime": {
+        "task_id": task_id,
+        "mode": config.mode.value if config is not None else ExtractionRuntimeMode.LEGACY.value,
+        "config_version": config.version if config is not None else None,
+        "rule_set_sha256": config.rule_set_sha256 if config is not None else None,
+    }}
 
 
 def _trace_versions() -> dict[str, str | int]:

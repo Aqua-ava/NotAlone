@@ -236,8 +236,8 @@ class Full140E2PublicTest(unittest.TestCase):
         changed_names = (
             "desktop/tests/fixtures/full140-e2-v-off-public.py",
             "backend/src/notalone/memory_extraction/evaluation_provider_contract.py",
-            "desktop/artifacts/grounded-public21-prepare-20261015/grounded_public21.py",
-            "desktop/artifacts/grounded-public21-prepare-20261015/explicit_review_bridge.py",
+            "desktop/tests/fixtures/grounded_public21.py",
+            "desktop/tests/fixtures/explicit_review_bridge.py",
         )
         with patch.object(runner.shared, "ROOT", clone), patch.object(runner.shared, "LEGACY", clone / changed_names[2]):
             for index, name in enumerate(changed_names):

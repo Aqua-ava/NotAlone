@@ -37,12 +37,14 @@ def supports_dimension_evidence_version(
 ) -> bool:
     """只核已有已验证约束；列存在不能代替对应版本的前向能力。"""
 
-    if type(version) is not int or version not in {1, 2, 3}:
+    if type(version) is not int or version not in {1, 2, 3, 4}:
         return False
     if not has_dimension_evidence(connection):
         return False
     if version == 1:
         return True
+    if version == 4:
+        return supports_bounded_runtime_evidence(connection)
     row = connection.execute("""
         SELECT EXISTS (
             SELECT 1 FROM pg_constraint
@@ -51,11 +53,50 @@ def supports_dimension_evidence_version(
               AND contype='c' AND convalidated
         ) AS present
     """, ([
+        "memory_candidate_dimension_evidence_version4_check",
         "memory_candidate_dimension_evidence_version3_check",
         *(["memory_candidate_dimension_evidence_version2_check"] if version == 2 else []),
     ],)).fetchone()
     if row is None:
         raise ValueError("无法核对维度依据版本结构。")
+    return bool(row["present"] if isinstance(row, dict) else row[0])
+
+
+def supports_bounded_runtime_evidence(connection: psycopg.Connection[Any]) -> bool:
+    """有限版本须同时具备全部持久依赖列与已验证结构，缺一项即拒绝。"""
+
+    row = connection.execute(
+        """
+        SELECT NOT EXISTS (
+            SELECT 1 FROM (VALUES
+                ('memory_candidate', 'memory_candidate_source_dependency_mode_check'),
+                ('confirmed_memory', 'confirmed_memory_source_dependency_mode_check'),
+                ('owner_memory', 'owner_memory_source_dependency_mode_check')
+            ) AS needed(table_name, constraint_name)
+            WHERE NOT EXISTS (
+                SELECT 1 FROM pg_catalog.pg_attribute AS attribute
+                WHERE attribute.attrelid=to_regclass('public.' || needed.table_name)
+                  AND attribute.attname='source_dependency_mode'
+                  AND NOT attribute.attisdropped AND attribute.attnotnull
+                  AND attribute.atttypid='text'::regtype
+            ) OR NOT EXISTS (
+                SELECT 1 FROM pg_catalog.pg_constraint AS installed
+                WHERE installed.conrelid=to_regclass('public.' || needed.table_name)
+                  AND installed.conname=needed.constraint_name
+                  AND installed.contype='c' AND installed.convalidated
+            )
+        ) AND EXISTS (
+            SELECT 1 FROM pg_catalog.pg_constraint
+            WHERE conrelid='public.memory_candidate'::regclass
+              AND conname='memory_candidate_dimension_evidence_version4_check'
+              AND contype='c' AND convalidated
+        ) AND to_regprocedure('public.notalone_semantic_basis_v3_valid(jsonb)') IS NOT NULL
+          AND to_regprocedure('public.notalone_dimension_evidence_v4_shape(jsonb,integer)') IS NOT NULL
+        AS present
+        """,
+    ).fetchone()
+    if row is None:
+        raise ValueError("无法核对有限运行依据结构。")
     return bool(row["present"] if isinstance(row, dict) else row[0])
 
 
@@ -87,6 +128,7 @@ def residual_source_evidence_sql(source_alias: str) -> str:
 def erase_dimension_evidence(
     connection: psycopg.Connection[Any], *, owner_id: UUID,
     contact_id: UUID, removed_ids: set[UUID],
+    all_only: bool = False,
 ) -> None:
     """上下文来源也进入删除依赖；候选仍有其他直接来源时只清除证明。"""
 
@@ -96,6 +138,7 @@ def erase_dimension_evidence(
         UPDATE public.memory_candidate
         SET dimension_evidence=NULL, updated_at=now()
         WHERE owner_id=%s AND contact_id=%s AND dimension_evidence IS NOT NULL
+          AND (NOT %s OR to_jsonb(memory_candidate)->>'source_dependency_mode'='all')
           AND EXISTS (
               SELECT 1
               FROM jsonb_array_elements(dimension_evidence->'messages') AS message
@@ -108,7 +151,7 @@ def erase_dimension_evidence(
                      WHERE ref->>'source_id'=ANY(%s)
                  )
           )
-    """, (owner_id, contact_id, [str(item) for item in removed_ids],
+    """, (owner_id, contact_id, all_only, [str(item) for item in removed_ids],
              [str(item) for item in removed_ids]))
 
 

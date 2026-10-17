@@ -131,3 +131,23 @@ class _OwnedPublicDeadline:
             self._thread.join(timeout=1)
             if self._thread.is_alive():
                 raise EvaluationBudgetAbort(self.CODE_PREFIX + "_watchdog_shutdown_unknown")
+
+
+class BoundedRuntime15Deadline(_OwnedPublicDeadline):
+    """指定任务15窗共用既有退场机制，独立封顶30次及4小时。"""
+
+    CALL_SECONDS = 600
+    BATCH_SECONDS = 14400
+    REQUEST_LIMIT = 30
+    CODE_PREFIX = "bounded_runtime15"
+
+    def __init__(self, *, receipt: Path, clock: Callable[[], float] | None = None,
+                 exit_worker: Callable[[int], object] | None = None,
+                 remaining_batch_seconds: float = 14400):
+        super().__init__(receipt=receipt, clock=clock, exit_worker=exit_worker,
+                         remaining_batch_seconds=remaining_batch_seconds)
+
+    def _publish(self, value: dict) -> None:
+        from .evaluation_bounded_cases import BOUNDED_RUNTIME_PLAN
+
+        super()._publish({**value, "execution_plan": BOUNDED_RUNTIME_PLAN})

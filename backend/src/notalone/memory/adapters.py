@@ -18,6 +18,7 @@ from notalone.memory.models import (
     MemoryCandidate,
     MemoryCandidateStatus,
     MemoryCategory,
+    SourceDependencyMode,
 )
 from notalone.memory.versions import (
     MemoryVersionConflict, require_auto_previous, require_auto_update_previous,
@@ -52,6 +53,8 @@ class InMemoryMemoryStore:
     def create_manual_candidate(self, candidate: MemoryCandidate) -> MemoryCandidate:
         """保存一条由用户主动录入、随后可走确认流程的候选。"""
 
+        if candidate.source_dependency_mode is not SourceDependencyMode.ANY:
+            raise ValueError("独立手动录入必须使用ANY来源。")
         return self.create_candidate(candidate)
 
     def confirm(
@@ -104,6 +107,9 @@ class InMemoryMemoryStore:
             category=candidate.category,
             topic=candidate.topic,
             source_ids=sources,
+            source_dependency_mode=(SourceDependencyMode.ALL if expected_previous is not None
+                and expected_previous.source_dependency_mode is SourceDependencyMode.ALL
+                else candidate.source_dependency_mode),
             source_candidate_id=candidate.candidate_id,
             adoption_method=adoption_method,
             confidence=candidate.confidence,
@@ -210,6 +216,7 @@ class InMemoryMemoryStore:
             text=candidate.text,
             category=candidate.category,
             source_ids=candidate.source_ids,
+            source_dependency_mode=candidate.source_dependency_mode,
             source_candidate_id=candidate.candidate_id,
             adoption_method=AdoptionMethod.AUTO,
             topic=candidate.topic,

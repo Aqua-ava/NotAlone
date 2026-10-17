@@ -18,6 +18,7 @@ import httpx
 
 from .evaluation_http_budget import EvaluationBudgetAbort
 from .evaluation_extraction import EvaluationExtractionMode, extraction_tool_name
+from .evaluation_bounded_cases import BOUNDED_RUNTIME_PLAN
 
 
 _ENDPOINT = "https://chat.ecnu.edu.cn/open/api/v1/chat/completions"
@@ -53,6 +54,34 @@ FULL140_E2_MODE = "deepseek_bounded_full140_v2_source_v2_v_off_forced"
 FULL140_E2_STAGE = "full140-v2-source-v2-v-off-forced"
 FULL140_E2_KIND = "full140-v2-v-off-forced"
 PHASE_SPLIT_PLANS = frozenset({MIXED_PLAN, FULL140_E2_PLAN, *REFERENCE21_PLANS})
+BOUNDED_RUNTIME_MODE = "deepseek_bounded_runtime15"
+BOUNDED_RUNTIME_STAGE = "bounded-runtime15"
+BOUNDED_RUNTIME_KIND = "bounded-runtime15"
+_BOUNDED_MIGRATION_SOURCES = frozenset(
+    f"backend/database/migrations/{name}" for name in (
+        "001_initial_ingest.sql", "002_reject_overlapping_messages.sql", "003_separate_contact_identity.sql",
+        "004_separate_wechat_message_metadata.sql", "005_source_deletion_state.sql", "006_conversation_binding.sql",
+        "007_reply_store.sql", "008_skill_port.sql", "009_memory_store.sql", "010_outbound_ledger.sql",
+        "011_owner_memory.sql", "012_extraction_topic_watermark.sql", "013_candidate_validity.sql",
+        "014_import_message_identity.sql", "015_owner_channel_identity.sql", "016_background_task.sql",
+        "017_worker_lease_metadata.sql", "018_contact_memory_index.sql", "019_binding_cli_match_metadata.sql",
+        "020_local_wechat_observation.sql", "021_message_source_ref.sql", "022_front_sync_state.sql",
+        "023_skill_library_resources.sql", "024_skill_run_record.sql", "025_manual_memory_source.sql",
+        "026_cli_background_sync.sql", "027_memory_adoption_provenance.sql", "028_reply_context_evidence_metadata.sql",
+        "029_cli_backfill_state.sql", "030_cli_observation_reliability_and_progress.sql", "031_cli_backfill_scheduler.sql",
+        "032_memory_candidate_subject.sql", "033_owner_memory_evidence_kind.sql", "034_extraction_failure_recovery.sql",
+        "035_extraction_watermark_cascade.sql", "036_source_deletion_tasks.sql", "037_pending_candidate_evidence_kind.sql",
+        "038_memory_candidate_interpretation.sql", "039_memory_extraction_trace.sql", "040_source_processing_trace.sql",
+        "041_source_processing_capture_tombstone.sql", "042_extraction_trace_call_receipts.sql",
+        "043_extraction_trace_record_operations.sql", "044_owner_memory_versioning.sql", "045_observation_background_task.sql",
+        "046_background_step_lease_generation.sql", "047_observation_memory_enqueue_receipt.sql",
+        "048_assistant_sessions.sql", "049_style_samples.sql", "050_reply_purpose_evidence.sql",
+        "051_assistant_session_inputs.sql", "052_reply_exploration.sql", "053_assistant_candidate_versions.sql",
+        "054_assistant_generation_interruption.sql", "055_assistant_candidate_carry_input.sql",
+        "056_memory_candidate_dimension_evidence.sql", "057_memory_candidate_semantic_basis.sql",
+        "058_assistant_prepared_context.sql", "059_memory_candidate_author_quote_basis.sql", "060_manual_contact_confirmation.sql", "061_memory_correction_protection.sql", "062_memory_events_and_version_evidence.sql", "063_relationship_overview_projection.sql", "064_owner_memory_revision.sql", "065_expression_preferences.sql", "066_skill_learning_drafts.sql", "067_memory_upgrade_batches.sql", "068_skill_review_publication.sql", "069_skill_history_operations.sql", "070_skill_scope_policies.sql", "071_bounded_runtime_evidence.sql", "072_scoped_media_lifecycle.sql",
+    )
+)
 
 
 def validate_extraction_prompt_profile(execution_plan: str, prompt_profile: str) -> None:
@@ -87,10 +116,11 @@ class EvaluationProviderProfile(StrEnum):
     ECNU = "ecnu"
     DEEPSEEK_FLASH_MAX = "deepseek-flash-max"
     DEEPSEEK_PHASE_SPLIT = "deepseek-phase-split-v1"
+    DEEPSEEK_BOUNDED_TASK = "deepseek-bounded-task-v1"
 
     @property
     def is_official(self) -> bool:
-        return self in {self.DEEPSEEK_FLASH_MAX, self.DEEPSEEK_PHASE_SPLIT}
+        return self in {self.DEEPSEEK_FLASH_MAX, self.DEEPSEEK_PHASE_SPLIT, self.DEEPSEEK_BOUNDED_TASK}
 
     @property
     def base_url(self) -> str:
@@ -152,6 +182,10 @@ class ECNUEvaluationContract:
                     EvaluationExtractionMode.GROUNDED_V2 if execution_plan == FULL140_E2_PLAN
                     else EvaluationExtractionMode.GROUNDED_V4)):
             raise EvaluationBudgetAbort("evaluation_mixed_fixed_plan_required")
+        bounded = self._profile is EvaluationProviderProfile.DEEPSEEK_BOUNDED_TASK
+        if bounded != (execution_plan == BOUNDED_RUNTIME_PLAN) or bounded and (
+                verification_tool_choice != "forced" or self._extraction_mode is not EvaluationExtractionMode.GROUNDED_V2):
+            raise EvaluationBudgetAbort("evaluation_bounded_fixed_plan_required")
         if (self._profile.is_official
                 and response_identity_policy != STRICT_RESPONSE_IDENTITY_POLICY):
             raise EvaluationBudgetAbort("evaluation_official_identity_policy_invalid")
@@ -207,7 +241,9 @@ class ECNUEvaluationContract:
                     if (
                         not isinstance(name, str) or path.is_absolute()
                         or name != path.as_posix() or ".." in path.parts
-                        or path.suffix not in {".py", ".toml", ".md", ".json"}
+                        or (path.suffix not in {".py", ".toml", ".md", ".json"}
+                            and not (self._profile is EvaluationProviderProfile.DEEPSEEK_BOUNDED_TASK
+                                     and name in _BOUNDED_MIGRATION_SOURCES))
                         or any(part.startswith(".") and part != ".scratch"
                                for part in path.parts)
                         or not isinstance(expected, str)
@@ -309,7 +345,8 @@ class ECNUEvaluationContract:
         if (self._profile.is_official
                 and identity != "deepseek-flash"):
             raise EvaluationBudgetAbort("evaluation_official_reported_model_changed")
-        if self._profile is EvaluationProviderProfile.DEEPSEEK_PHASE_SPLIT and (
+        if self._profile in {EvaluationProviderProfile.DEEPSEEK_PHASE_SPLIT,
+                             EvaluationProviderProfile.DEEPSEEK_BOUNDED_TASK} and (
                 len(choices) != 1 or choices[0]["index"] != 0):
             raise EvaluationBudgetAbort("evaluation_completion_invalid")
         if self._response_identity_policy == KNOWN_ECNU_RESPONSE_IDENTITY_POLICY:
@@ -354,7 +391,8 @@ def _validate_payload(value: dict, *, verification_tool_choice: str = "forced",
     try:
         function = value["tools"][0]["function"]
         official = provider_profile.is_official
-        mixed_v = provider_profile is EvaluationProviderProfile.DEEPSEEK_PHASE_SPLIT and function["name"] == "SourceVerificationOutput"
+        mixed_v = provider_profile in {EvaluationProviderProfile.DEEPSEEK_PHASE_SPLIT,
+                                       EvaluationProviderProfile.DEEPSEEK_BOUNDED_TASK} and function["name"] == "SourceVerificationOutput"
         forced = mixed_v or not (official or verification_tool_choice == "omitted"
                       and function["name"] == "SourceVerificationOutput")
         fields = _PAYLOAD_FIELDS if forced else _PAYLOAD_FIELDS - {"tool_choice"}

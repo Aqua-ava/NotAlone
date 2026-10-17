@@ -20,18 +20,21 @@ import httpx
 from .evaluation_http_budget import EvaluationBudget, EvaluationBudgetAbort, _endpoint
 from .evaluation_provider_contract import (
     FULL140_E2_PLAN, FULL140_E2_MODE, FULL140_E2_STAGE,
+    BOUNDED_RUNTIME_PLAN, BOUNDED_RUNTIME_MODE, BOUNDED_RUNTIME_STAGE,
     MIXED_PLAN, MIXED_MODE, MIXED_STAGE, MIXED_REQUEST_VERSION, mixed_phase_policy,
     REFERENCE21_V4_PLAN, REFERENCE21_V4_MODE, REFERENCE21_V4_STAGE, PHASE_SPLIT_PLANS, REFERENCE21_PLANS,
     SEMANTIC4_PLAN, SEMANTIC4_MODE, SEMANTIC4_STAGE, SEMANTIC4_PROMPT_PROFILE,
     UNIQUENESS_PLAN, UNIQUENESS_MODE, UNIQUENESS_STAGE, PUBLIC_QUALITY_PLANS,
     validate_extraction_prompt_profile, STRICT_RESPONSE_IDENTITY_POLICY,
 )
+from .models import ExtractionWindow
 
 
 _EVENT_KINDS = frozenset({
     "case_started", "adapter_output", "case_result", "case_failed",
     "provider_request", "provider_response", "provider_failure",
     "semantic_audit", "verification_program", "extraction_program",
+    "formal_task_execution",
 })
 _PURPOSES = frozenset({"case", "extraction", "verification"})
 _MAX_RECORD_BYTES = 8 * 1024 * 1024
@@ -41,8 +44,10 @@ _PRIVATE_FIELDS = frozenset({
     "authorization", "api_key", "apikey", "secret", "password", "passwd",
     "token", "access_token", "refresh_token", "client_secret", "private_key",
     "credentials", "credential", "database_url", "connection_string",
+    "body_base64",
 })
-_CONFIG_FIELDS = frozenset({
+_BOUNDED_CONFIG_FIELDS = frozenset({"formal_tasks", "bounded_inputs_sha256", "runtime_rule_set_sha256"})
+_CONFIG_FIELDS = _BOUNDED_CONFIG_FIELDS | frozenset({
     "mode", "synthetic_only", "base_url", "endpoint", "request_model",
     "temperature", "timeout", "max_retries", "thinking", "stream", "reasoning_effort",
     "plan_sha256", "public_cases_sha256", "extraction_prompt_sha256",
@@ -97,7 +102,7 @@ def _redact(
             ):
                 removed.append(location)
                 continue
-            if key == "arguments" and isinstance(item, str):
+            if key in {"arguments", "body_text"} and isinstance(item, str):
                 decoded = json.loads(item)
                 if not isinstance(decoded, dict):
                     raise ValueError("unstructured_tool_arguments")
@@ -127,9 +132,11 @@ class EvaluationRecordStore:
     def __init__(
         self, *, budget: EvaluationBudget, frozen_config: dict,
         plan: tuple[dict, ...],
+        actual_windows: tuple[ExtractionWindow, ...] | None = None,
     ):
         self._budget = budget
         self._manifest = budget.snapshot()
+        bounded = frozen_config.get("execution_plan") == BOUNDED_RUNTIME_PLAN
         for key in ("base_url", "endpoint"):
             if key in frozen_config:
                 _endpoint(frozen_config[key])
@@ -147,7 +154,7 @@ class EvaluationRecordStore:
             or ("verification_mode" in frozen_config and (
                 type(frozen_config["verification_mode"]) is not str
                 or frozen_config["verification_mode"] not in {
-                    "legacy-v4", "nullable-proof-v1",
+                    "legacy-v4", "nullable-proof-v1", *(('nullable-proof-v3',) if bounded else ()),
                 }
             ))
             or any(
@@ -162,6 +169,11 @@ class EvaluationRecordStore:
         self._execution_plan = frozen_config.get("execution_plan", "original")
         if type(self._execution_plan) is not str:
             raise EvaluationBudgetAbort("invalid_record_execution_plan")
+        if not bounded and (_BOUNDED_CONFIG_FIELDS & set(frozen_config)
+                or frozen_config.get("mode") == BOUNDED_RUNTIME_MODE
+                or frozen_config.get("stage") == BOUNDED_RUNTIME_STAGE
+                or frozen_config.get("reference_version") == BOUNDED_RUNTIME_PLAN):
+            raise EvaluationBudgetAbort("invalid_record_bounded_registration")
         if ((self._execution_plan in PUBLIC_QUALITY_PLANS) != (frozen_config.get("verification_prompt_profile") == SEMANTIC4_PROMPT_PROFILE)
                 or self._execution_plan not in PUBLIC_QUALITY_PLANS and "verification_prompt_profile" in frozen_config):
             raise EvaluationBudgetAbort("invalid_record_verification_prompt_profile")
@@ -170,11 +182,15 @@ class EvaluationRecordStore:
         if self._execution_plan != UNIQUENESS_PLAN and "extraction_prompt_profile" in frozen_config:
             raise EvaluationBudgetAbort("invalid_record_extraction_prompt_profile")
         self._mixed = type(self._execution_plan) is str and self._execution_plan in PHASE_SPLIT_PLANS
+        self._strict_response = self._mixed or bounded
         if not self._mixed and {"phase_request_version", "phase_request_policy"} & set(frozen_config):
             raise EvaluationBudgetAbort("invalid_record_mixed_registration")
         self._response_sequences: set[int] = set()
         self._reference_version = "legacy-v1"
-        if (self._extraction_mode == "grounded-v4"
+        if bounded:
+            self._validate_bounded_registration(frozen_config, plan, actual_windows)
+            self._reference_version = BOUNDED_RUNTIME_PLAN
+        elif (self._extraction_mode == "grounded-v4"
                 or "execution_plan" in frozen_config or "reference_version" in frozen_config
                 or frozen_config.get("mode") == "deepseek_bounded_full140_v4_source_v2"
                 or frozen_config.get("stage") == "full140-v4-source-v2"):
@@ -198,6 +214,8 @@ class EvaluationRecordStore:
             "schema_sha256": frozen_config.get("extraction_schema_sha256"),
         } for _ in plan]))
         self._plan = json.loads(_canonical(plan))
+        self._formal_tasks = json.loads(_canonical(frozen_config["formal_tasks"])) if bounded else []
+        self._gold_sha256: str | None = frozen_config["gold_sha256"] if bounded else None
         self._output = Path(self._manifest["output_directory"])
         self._failed = False
         self._stop_reason: str | None = None
@@ -210,6 +228,94 @@ class EvaluationRecordStore:
             "budget": self._manifest, "frozen_config": frozen_config,
             "plan": self._plan, "synthetic_quality_certified": False,
         })
+
+    def _validate_bounded_registration(
+        self, config: dict, plan: tuple[dict, ...],
+        actual_windows: tuple[ExtractionWindow, ...] | None,
+    ) -> None:
+        """仅绑定实际15个任务窗口；来源全文与公开内容投影分别核验。"""
+        from notalone.memory.bounded_evidence import rule_set_sha256
+        from notalone.tasks.models import ExtractionRuntimeConfig, ExtractionRuntimeMode
+        from .evaluation_bounded_cases import BOUNDED_RUNTIME_CASES, BOUNDED_RUNTIME_INPUTS
+        from .evaluation_extraction import extraction_contract
+        from .evaluation_reference import bounded_window_projection
+        from .verification_adapters import source_verification_contract
+
+        try:
+            if (type(actual_windows) is not tuple or len(actual_windows) != 15
+                    or any(type(window) is not ExtractionWindow for window in actual_windows)):
+                raise ValueError("actual_windows_required")
+            expected = tuple({"case_position": position, "case_name": case.name,
+                "input_sha256": canonical_sha256(window)} for position, (case, window) in
+                enumerate(zip(BOUNDED_RUNTIME_CASES, actual_windows, strict=True)))
+            content_hash = canonical_sha256(tuple({"messages": item["messages"],
+                "target_indices": item["target_indices"]} for item in BOUNDED_RUNTIME_INPUTS))
+            current_rules = rule_set_sha256()
+            positions = config.get("selected_case_positions")
+            if (self._extraction_mode != "grounded-v2" or config.get("verification_mode") != "nullable-proof-v3"
+                    or config.get("reference_version") != BOUNDED_RUNTIME_PLAN
+                    or config.get("mode") != BOUNDED_RUNTIME_MODE or config.get("stage") != BOUNDED_RUNTIME_STAGE
+                    or config.get("base_url") != "https://api.deepseek.com"
+                    or config.get("endpoint") != "https://api.deepseek.com/chat/completions"
+                    or config.get("request_model") != "deepseek-flash"
+                    or type(config.get("timeout")) is not float or config["timeout"] != 300.0
+                    or type(config.get("max_retries")) is not int or config["max_retries"] != 0
+                    or type(config.get("request_contract_version")) is not int or config["request_contract_version"] != 2
+                    or type(config.get("temperature")) not in (int, float) or config["temperature"] != 0
+                    or config.get("stream") is not False or config.get("fallback") is not False
+                    or config.get("response_identity_policy") != STRICT_RESPONSE_IDENTITY_POLICY
+                    or config.get("tool_choice") != {
+                        "extraction": {"mode": "omitted", "name": "GroundedMemoryLabels"},
+                        "verification": {"mode": "forced", "name": "SourceVerificationOutput"},
+                    }
+                    or {"thinking", "reasoning_effort", "phase_request_version", "phase_request_policy"} & set(config)
+                    or self._manifest["request_limit"] != 30
+                    or self._manifest["allowed_endpoints"] != ["https://api.deepseek.com/chat/completions"]
+                    or not isinstance(positions, (list, tuple))
+                    or any(type(position) is not int for position in positions) or tuple(positions) != tuple(range(15))
+                    or any(type(item["case_position"]) is not int for item in plan) or plan != expected
+                    or config.get("bounded_inputs_sha256") != content_hash
+                    or canonical_sha256(tuple(bounded_window_projection(window) for window in actual_windows)) != content_hash
+                    or config.get("runtime_rule_set_sha256") != current_rules
+                    or type(config.get("gold_sha256")) is not str or len(config["gold_sha256"]) != 64
+                    or any(char not in "0123456789abcdef" for char in config["gold_sha256"])):
+                raise ValueError("fixed_registration_changed")
+            tasks = config.get("formal_tasks")
+            if type(tasks) is not list or len(tasks) != 15:
+                raise ValueError("formal_tasks_required")
+            task_ids: set[UUID] = set()
+            contacts: set[UUID] = set()
+            for task, window, item in zip(tasks, actual_windows, expected, strict=True):
+                if type(task) is not dict or set(task) != {
+                        "owner_id", "contact_id", "task_id", "extraction_runtime_config", "input_sha256"}:
+                    raise ValueError("formal_task_fields_changed")
+                identifiers = {}
+                for key in ("owner_id", "contact_id", "task_id"):
+                    value = task[key]
+                    if type(value) is not str or str(UUID(value)) != value:
+                        raise ValueError("formal_task_identity_invalid")
+                    identifiers[key] = UUID(value)
+                runtime = ExtractionRuntimeConfig.from_payload(task["extraction_runtime_config"])
+                if (identifiers["owner_id"] != window.owner_id or identifiers["contact_id"] != window.contact_id
+                        or identifiers["task_id"] in task_ids or identifiers["contact_id"] in contacts
+                        or task["input_sha256"] != item["input_sha256"]
+                        or runtime.mode is not ExtractionRuntimeMode.BOUNDED_RUNTIME_V1
+                        or runtime.rule_set_sha256 != current_rules):
+                    raise ValueError("formal_task_binding_changed")
+                task_ids.add(identifiers["task_id"])
+                contacts.add(identifiers["contact_id"])
+            contracts = tuple(extraction_contract("grounded-v2", window) for window in actual_windows)
+            prompt, schema = source_verification_contract("nullable-proof-v3")
+            if (config.get("extraction_window_contracts") != [{"input_sha256": item["input_sha256"],
+                    "prompt_sha256": canonical_sha256(e_prompt), "schema_sha256": canonical_sha256(e_schema)}
+                    for item, (e_prompt, e_schema) in zip(expected, contracts, strict=True)]
+                    or config.get("extraction_prompt_sha256") != canonical_sha256(contracts[0][0])
+                    or config.get("extraction_schema_sha256") != canonical_sha256(tuple(value[1] for value in contracts))
+                    or config.get("verification_prompt_sha256") != canonical_sha256(prompt)
+                    or config.get("verification_schema_sha256") != canonical_sha256(schema)):
+                raise ValueError("prompt_contract_changed")
+        except (ValueError, TypeError, KeyError, AttributeError):
+            raise EvaluationBudgetAbort("invalid_record_bounded_registration") from None
 
     def _validate_fixed_v4_registration(self, config: dict, plan: tuple[dict, ...]) -> None:
         """只注册既有v4与独立E2完整身份；不开放任意来源v2运行。"""
@@ -283,6 +389,18 @@ class EvaluationRecordStore:
     @property
     def execution_plan(self) -> str:
         return self._execution_plan
+
+    def formal_task_binding(self, case_position: int) -> dict:
+        """调用者取得冻结行的副本，不能经返回对象改写本场任务配置。"""
+        if (self._execution_plan != BOUNDED_RUNTIME_PLAN or type(case_position) is not int
+                or not 0 <= case_position < len(self._formal_tasks)):
+            raise EvaluationBudgetAbort("invalid_formal_task_position")
+        return json.loads(_canonical(self._formal_tasks[case_position]))
+
+    @property
+    def gold_sha256(self) -> str | None:
+        """仅返回新固定15场注册时复制的摘要，不替调用者认证Gold质量。"""
+        return self._gold_sha256
 
     @property
     def reference_version(self) -> str:
@@ -390,6 +508,23 @@ class EvaluationRecordStore:
         if kind not in _EVENT_KINDS or stage is None:
             self._stop("unattributed_record_forbidden")
         position, purpose = stage
+        if kind == "formal_task_execution":
+            value = _json_value(payload)
+            if (self._execution_plan != BOUNDED_RUNTIME_PLAN or purpose != "case"
+                    or type(value) is not dict or set(value) != {"task", "worker_results", "trace", "memory_api"}
+                    or type(value["task"]) is not dict or type(value["worker_results"]) is not list
+                    or type(value["trace"]) is not dict or type(value["memory_api"]) is not dict
+                    or set(value["memory_api"]) != {"path", "status_code", "body"}):
+                self._stop("invalid_formal_task_execution")
+            binding = self.formal_task_binding(position)
+            if any(canonical_sha256(value["task"].get(key)) != canonical_sha256(binding[key]) for key in (
+                    "owner_id", "contact_id", "task_id", "extraction_runtime_config")):
+                self._stop("formal_task_execution_binding_changed")
+            api = value["memory_api"]
+            if (api["path"] != f"/api/contacts/{binding['contact_id']}/memory-candidates"
+                    or type(api["status_code"]) is not int or not 100 <= api["status_code"] <= 599
+                    or type(api["body"]) not in (dict, list)):
+                self._stop("formal_task_memory_api_binding_changed")
         sanitized, removed = _redact(
             _json_value(payload), request=kind == "provider_request"
         )
@@ -419,7 +554,7 @@ class EvaluationRecordStore:
         return receipt
 
     def _check_response_sequence(self, sequence: int) -> None:
-        if self._mixed and (type(sequence) is not int or not 1 <= sequence <= self._manifest["request_limit"]):
+        if self._strict_response and (type(sequence) is not int or not 1 <= sequence <= self._manifest["request_limit"]):
             self._stop("invalid_mixed_request_sequence")
 
     def _capture(self, body: bytes) -> dict:
@@ -457,7 +592,7 @@ class EvaluationRecordStore:
 
     def capture_response(self, sequence: int, response: httpx.Response) -> dict:
         self._check_response_sequence(sequence)
-        if self._mixed:
+        if self._strict_response:
             self._response_sequences.add(sequence)
             metadata = {
                 "capture_layer": "sdk_http_body", "capture_form": "digest_only", "redaction_version": 1,
@@ -491,7 +626,7 @@ class EvaluationRecordStore:
         self._check_response_sequence(sequence)
         return self.record(
             kind="provider_failure", request_sequence=sequence,
-            payload={"failure_kind": kind, "response_obtained": self._mixed and sequence in self._response_sequences},
+            payload={"failure_kind": kind, "response_obtained": self._strict_response and sequence in self._response_sequences},
         )
 
     def events(self) -> tuple[dict, ...]:

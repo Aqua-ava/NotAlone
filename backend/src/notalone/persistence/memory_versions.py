@@ -13,12 +13,13 @@ from psycopg import sql
 from notalone.memory.versions import MemoryVersionConflict
 from notalone.memory.version_evidence import VersionEvidence
 from notalone.memory.events import MemoryEvent
-from notalone.memory.models import AdoptionMethod, ConfirmedMemory, ConfirmedMemoryStatus, MemoryCategory, MemoryTopic, OwnerMemory
+from notalone.memory.models import AdoptionMethod, ConfirmedMemory, ConfirmedMemoryStatus, MemoryCategory, MemoryTopic, OwnerMemory, SourceDependencyMode
 from notalone.memory.dimension_evidence import DimensionEvidence
 from notalone.memory.correction import MemoryCorrectionConflictError
 from notalone.persistence.correction_evidence import validate_frozen_snapshot
 from notalone.persistence.memory_correction import decision_sources_available
 from notalone.scopes import ContactScope
+from notalone.persistence.source_dependency import dependency_mode
 
 
 def version_record_digest(memory: ConfirmedMemory | OwnerMemory, *, revision: int | None = None,
@@ -39,6 +40,8 @@ def version_record_digest(memory: ConfirmedMemory | OwnerMemory, *, revision: in
             "confidence": memory.confidence, "risk_flags": list(memory.risk_flags),
             "supersedes_memory_id": str(memory.supersedes_memory_id) if memory.supersedes_memory_id else None,
             "event": memory.event.to_payload() if memory.event else None}
+    if memory.source_dependency_mode is SourceDependencyMode.ALL:
+        body["source_dependency_mode"] = "all"
     return hashlib.sha256(json.dumps(body, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
@@ -108,7 +111,8 @@ def raw_memory(row: dict) -> ConfirmedMemory | OwnerMemory:
                   status=ConfirmedMemoryStatus(row["status"]), valid_at=row["valid_at"],
                   invalid_at=row["invalid_at"], revision=row["revision"], confidence=row["confidence"],
                   risk_flags=tuple(row["risk_flags"] or ()), supersedes_memory_id=row["supersedes_memory_id"],
-                  event=MemoryEvent.from_payload(row.get("event")))
+                  event=MemoryEvent.from_payload(row.get("event")),
+                  source_dependency_mode=dependency_mode(row.get("source_dependency_mode")))
     return (ConfirmedMemory(scope=ContactScope(row["owner_id"], row["contact_id"]), **fields)
             if "contact_id" in row else OwnerMemory(owner_id=row["owner_id"], **fields))
 

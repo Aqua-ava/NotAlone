@@ -103,7 +103,11 @@ class Reference21V4PublicTest(unittest.TestCase):
         from notalone.memory_extraction import grounded_adapter
 
         runner, frozen, path, _, _ = self.prepared("uniqueness-drift", profile="uniqueness")
-        self.assertEqual(len(frozen["source_hashes"]), 93)
+        runtime_sources = {str(path.relative_to(runner.ROOT))
+                           for path in (runner.ROOT / "backend/src/notalone/memory_extraction").rglob("*.py")}
+        self.assertTrue(runtime_sources <= set(frozen["source_hashes"]))
+        self.assertIn(".scratch/grounded-evaluation/reference21-uniqueness-plan-20261016.md", frozen["source_hashes"])
+        self.assertNotIn(runner.BOUNDED_REFERENCE, frozen["source_hashes"])
         self.assertEqual(runner.owned_kind(frozen), "reference21-v4-uniqueness")
         for fault in ("missing_profile", "default_profile", "old_plan", "old_contracts", "live_prompt"):
             with self.subTest(fault=fault), patch.object(EvaluationBudget, "create", side_effect=AssertionError("错配不得领预算")):

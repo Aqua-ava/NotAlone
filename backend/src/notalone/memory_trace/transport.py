@@ -6,8 +6,11 @@ import base64
 import hashlib
 import json
 from collections.abc import Callable
+from contextlib import contextmanager
+from contextvars import ContextVar
+from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Iterator
 from uuid import uuid4
 
 import httpx
@@ -22,6 +25,87 @@ from notalone.memory_trace.ports import TraceWriteError
 
 class _TraceTransportAbort(BaseException):
     """仅在 SDK 内穿过宽泛 Exception/重试捕获；在模型边界转回公开错误。"""
+
+
+class Proof3JSONGuardError(BaseException):
+    """仅在同次 proof3 边界越过 SDK 重试，回到适配器转为协议失败。"""
+
+
+@dataclass
+class _Proof3JSONState:
+    requests: int = 0
+    responses: int = 0
+
+
+_proof3_json_state: ContextVar[_Proof3JSONState | None] = ContextVar("proof3_json_state", default=None)
+
+
+@contextmanager
+def proof3_json_guard() -> Iterator[None]:
+    """仅显式同次 V 启用；未经过实际 HTTP hooks 不得认证交付。"""
+    state = _Proof3JSONState()
+    token = _proof3_json_state.set(state)
+    try:
+        yield
+        if state.requests != 1 or state.responses != 1:
+            raise Proof3JSONGuardError("proof3_raw_json_guard_not_delivered")
+    finally:
+        _proof3_json_state.reset(token)
+
+
+def _proof3_json(content: bytes | str) -> Any:
+    def unique(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError("重复JSON键。")
+            result[key] = value
+        return result
+    def invalid_number(_: str) -> None:
+        raise ValueError("非有限JSON数值。")
+    try:
+        value = json.loads(content, object_pairs_hook=unique, parse_constant=invalid_number)
+        json.dumps(value, ensure_ascii=False, allow_nan=False).encode("utf-8")
+        return value
+    except (ValueError, TypeError, UnicodeError):
+        raise Proof3JSONGuardError("proof3_raw_json_invalid") from None
+
+
+def _proof3_request(request: httpx.Request) -> None:
+    state = _proof3_json_state.get()
+    if state is None:
+        return
+    state.requests += 1
+    if state.requests != 1:
+        raise Proof3JSONGuardError("proof3_retry_forbidden")
+    value = _proof3_json(request.read())
+    try:
+        tools = value["tools"]
+        if len(tools) != 1 or tools[0]["function"]["name"] != "SourceVerificationOutput":
+            raise ValueError
+    except (KeyError, TypeError, ValueError, IndexError):
+        raise Proof3JSONGuardError("proof3_single_verification_tool_required") from None
+
+
+def _proof3_response(response: httpx.Response) -> None:
+    state = _proof3_json_state.get()
+    if state is None:
+        return
+    value = _proof3_json(response.read())
+    try:
+        choices = value["choices"]
+        if state.requests != 1 or state.responses or len(choices) != 1 or type(choices[0]["index"]) is not int or choices[0]["index"] != 0:
+            raise ValueError
+        calls = choices[0]["message"]["tool_calls"]
+        if len(calls) != 1 or calls[0]["type"] != "function" or calls[0]["function"]["name"] != "SourceVerificationOutput":
+            raise ValueError
+        arguments = calls[0]["function"]["arguments"]
+        if type(arguments) is not str:
+            raise ValueError
+        _proof3_json(arguments)
+    except (KeyError, TypeError, ValueError, IndexError):
+        raise Proof3JSONGuardError("proof3_single_verification_response_required") from None
+    state.responses += 1
 
 
 def _body_snapshot(content: bytes) -> dict[str, Any]:
@@ -42,6 +126,7 @@ def _body_snapshot(content: bytes) -> dict[str, Any]:
 
 
 def _request_hook(request: httpx.Request) -> None:
+    _proof3_request(request)
     trace = current_trace()
     if trace is None or trace.call_id is None:
         return
@@ -71,6 +156,7 @@ def _request_hook(request: httpx.Request) -> None:
 def _response_hook(response: httpx.Response) -> None:
     trace = current_trace()
     if trace is None or trace.call_id is None:
+        _proof3_response(response)
         return
     try:
         call = trace.observations[trace.call_id]
@@ -88,6 +174,8 @@ def _response_hook(response: httpx.Response) -> None:
         )
     except TraceWriteError:
         raise _TraceTransportAbort() from None
+    # 格式损坏也须先可靠保存实际返回；追踪失败不能被协议错误掩盖。
+    _proof3_response(response)
 
 
 def build_trace_http_client(

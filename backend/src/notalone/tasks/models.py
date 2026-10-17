@@ -8,6 +8,54 @@ from enum import StrEnum
 from uuid import UUID
 
 
+class ExtractionRuntimeMode(StrEnum):
+    """单个提取任务可显式固定的运行合同。"""
+
+    LEGACY = "legacy"
+    BOUNDED_RUNTIME_V1 = "bounded-runtime-v1"
+
+
+@dataclass(frozen=True, slots=True)
+class ExtractionRuntimeConfig:
+    """任务配置的持久化值；规则是否仍可执行由领取路径另行核对。"""
+
+    mode: ExtractionRuntimeMode
+    rule_set_sha256: str | None
+    version: int = 1
+
+    def __post_init__(self) -> None:
+        if type(self.version) is not int or self.version != 1:
+            raise ValueError("提取任务配置版本无效。")
+        if not isinstance(self.mode, ExtractionRuntimeMode):
+            raise ValueError("提取任务运行模式无效。")
+        if self.mode is ExtractionRuntimeMode.LEGACY:
+            if self.rule_set_sha256 is not None:
+                raise ValueError("旧运行模式不能绑定新规则摘要。")
+        elif (type(self.rule_set_sha256) is not str
+              or len(self.rule_set_sha256) != 64
+              or any(char not in "0123456789abcdef" for char in self.rule_set_sha256)):
+            raise ValueError("有限运行模式的规则摘要无效。")
+
+    @classmethod
+    def from_payload(cls, raw: object) -> ExtractionRuntimeConfig:
+        if (type(raw) is not dict
+                or set(raw) != {"version", "mode", "rule_set_sha256"}
+                or type(raw["mode"]) is not str):
+            raise ValueError("提取任务配置格式无效。")
+        return cls(
+            mode=ExtractionRuntimeMode(raw["mode"]),
+            rule_set_sha256=raw["rule_set_sha256"],
+            version=raw["version"],
+        )
+
+    def to_payload(self) -> dict[str, object]:
+        return {
+            "version": self.version,
+            "mode": self.mode.value,
+            "rule_set_sha256": self.rule_set_sha256,
+        }
+
+
 class BackgroundTaskType(StrEnum):
     """后台任务的业务类型。"""
 
@@ -149,6 +197,7 @@ class BackgroundTask:
     last_error_code: str | None = None
     model_version: str | None = None
     rule_version: str | None = None
+    extraction_runtime_config: ExtractionRuntimeConfig | None = None
 
     def __post_init__(self) -> None:
         ids = (self.task_id, self.owner_id, self.contact_id)
@@ -169,6 +218,9 @@ class BackgroundTask:
             raise ValueError("后台任务消息数量无效。")
         if self.retry_count < 0:
             raise ValueError("后台任务重试数量无效。")
+        if (self.extraction_runtime_config is not None
+                and not isinstance(self.extraction_runtime_config, ExtractionRuntimeConfig)):
+            raise ValueError("后台任务提取配置无效。")
 
 
 @dataclass(frozen=True, slots=True)
@@ -186,3 +238,9 @@ class ClaimedBackgroundTaskStep:
     message_count: int
     lease_expires_at: datetime
     lease_generation: int = 0
+    extraction_runtime_config: ExtractionRuntimeConfig | None = None
+
+    def __post_init__(self) -> None:
+        if (self.extraction_runtime_config is not None
+                and not isinstance(self.extraction_runtime_config, ExtractionRuntimeConfig)):
+            raise ValueError("后台步骤提取配置无效。")

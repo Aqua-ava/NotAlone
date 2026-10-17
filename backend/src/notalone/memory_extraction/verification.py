@@ -26,6 +26,7 @@ class SourceVerificationMode(StrEnum):
     LEGACY_V4 = "legacy-v4"
     NULLABLE_PROOF_V1 = "nullable-proof-v1"
     NULLABLE_PROOF_V2 = "nullable-proof-v2"
+    NULLABLE_PROOF_V3 = "nullable-proof-v3"
 
 
 class SourceVerificationVerdict(StrEnum):
@@ -126,7 +127,7 @@ def validate_source_verification(
                 "evidence",
             }
             optional_fields = {"event_verification"}
-            if mode in {SourceVerificationMode.NULLABLE_PROOF_V1, SourceVerificationMode.NULLABLE_PROOF_V2}:
+            if mode in {SourceVerificationMode.NULLABLE_PROOF_V1, SourceVerificationMode.NULLABLE_PROOF_V2, SourceVerificationMode.NULLABLE_PROOF_V3}:
                 optional_fields.add("proof")
             fields_valid = (isinstance(payload, dict) and required_fields <= set(payload)
                             and set(payload) <= required_fields | optional_fields)
@@ -141,11 +142,11 @@ def validate_source_verification(
             check = "proof_structure"
             proof = None
             if (
-                mode in {SourceVerificationMode.NULLABLE_PROOF_V1, SourceVerificationMode.NULLABLE_PROOF_V2}
+                mode in {SourceVerificationMode.NULLABLE_PROOF_V1, SourceVerificationMode.NULLABLE_PROOF_V2, SourceVerificationMode.NULLABLE_PROOF_V3}
                 and payload.get("proof") is not None
             ):
                 from notalone.memory_extraction.source_proof import parse_proposal
-                proof = parse_proposal(payload.get("proof"), version=2 if mode is SourceVerificationMode.NULLABLE_PROOF_V2 else 1)
+                proof = parse_proposal(payload.get("proof"), version=3 if mode is SourceVerificationMode.NULLABLE_PROOF_V3 else 2 if mode is SourceVerificationMode.NULLABLE_PROOF_V2 else 1)
             index = payload["candidate_index"]
             check = "candidate_index"
             started_at = datetime.now(timezone.utc)
@@ -282,7 +283,7 @@ def validate_source_verification(
                 raise ValueError
             model_verdict, model_issues = verdict, issues
             proof_verification = None
-            if mode in {SourceVerificationMode.NULLABLE_PROOF_V1, SourceVerificationMode.NULLABLE_PROOF_V2}:
+            if mode in {SourceVerificationMode.NULLABLE_PROOF_V1, SourceVerificationMode.NULLABLE_PROOF_V2, SourceVerificationMode.NULLABLE_PROOF_V3}:
                 check = "proof_semantics"
                 from notalone.memory_extraction.source_proof import verify_proposal
                 proof_verification = verify_proposal(
@@ -290,7 +291,7 @@ def validate_source_verification(
                     trusted_sources={
                         item.message_id: item.text for item in window.messages
                     },
-                    proof_version=2 if mode is SourceVerificationMode.NULLABLE_PROOF_V2 else 1,
+                    proof_version=3 if mode is SourceVerificationMode.NULLABLE_PROOF_V3 else 2 if mode is SourceVerificationMode.NULLABLE_PROOF_V2 else 1,
                 )
                 if proof_verification.status == "unsupported":
                     verdict = SourceVerificationVerdict.UNSUPPORTED

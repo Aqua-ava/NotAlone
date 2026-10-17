@@ -5,7 +5,7 @@ from uuid import UUID, uuid5
 
 from notalone.memory.candidates import same_pending_identity
 from notalone.memory.models import (
-    AdoptionMethod, ConfirmedMemory, ConfirmedMemoryStatus, MemoryCandidate, MemoryCandidateStatus, OwnerMemory,
+    AdoptionMethod, ConfirmedMemory, ConfirmedMemoryStatus, MemoryCandidate, MemoryCandidateStatus, OwnerMemory, SourceDependencyMode,
 )
 from notalone.memory.ports import MemoryPort, OwnerMemoryPort
 from notalone.memory.versions import MemoryVersionConflict
@@ -116,6 +116,8 @@ def _memory_fields(candidate, previous):
     return dict(memory_id=uuid5(candidate.candidate_id, 'upgrade_memory'), text=candidate.text, category=candidate.category, topic=candidate.topic,
         source_ids=tuple(dict.fromkeys((*(previous.source_ids if previous else ()), *candidate.source_ids))),
         source_candidate_id=candidate.candidate_id, adoption_method=AdoptionMethod.AUTO,
+        source_dependency_mode=(SourceDependencyMode.ALL if previous is not None
+            and previous.source_dependency_mode is SourceDependencyMode.ALL else candidate.source_dependency_mode),
         status=ConfirmedMemoryStatus.ACTIVE,
         valid_at=candidate.valid_at, invalid_at=candidate.invalid_at, confidence=candidate.confidence,
         risk_flags=candidate.risk_flags, timing=candidate.timing, event=candidate.event,

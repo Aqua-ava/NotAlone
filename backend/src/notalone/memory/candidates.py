@@ -1,6 +1,6 @@
 """待确认候选的业务身份；评分或窗口证明变化不产生第二条候选。"""
 
-from notalone.memory.models import MemoryCandidate
+from notalone.memory.models import MemoryCandidate, SourceDependencyMode
 from notalone.memory.events import MemoryEvent, same_verified_event_claim
 
 
@@ -21,6 +21,13 @@ def same_pending_identity(left: MemoryCandidate, right: MemoryCandidate) -> bool
     # 时间边界进一步区分同一消息中的两次事件，不把评分当事件身份。
     return (
         left.scope == right.scope and left.subject is right.subject
+        and left.source_dependency_mode is right.source_dependency_mode
+        and (left.source_dependency_mode is SourceDependencyMode.ANY or (
+            left.dimension_evidence is not None and right.dimension_evidence is not None
+            and left.dimension_evidence.version == right.dimension_evidence.version == 4
+            and left.dimension_evidence.source_bound and right.dimension_evidence.source_bound
+            and left.dimension_evidence.to_payload() == right.dimension_evidence.to_payload()
+        ))
         and left.category is right.category and left.topic is right.topic
         and "".join(left.text.split()).lower() == "".join(right.text.split()).lower()
         and (set(left.source_ids) == set(right.source_ids)

@@ -1,0 +1,2033 @@
+{
+  "format_version": 1,
+  "status": "agent_reviewed_reference",
+  "annotation_path": ".scratch/memory-accuracy-next/bounded-runtime-real15-plan-20261017.md",
+  "annotation_sha256": "db2292cfb1b0e5f56074c76b337172d47b2699fdf1a6c0ab4a71abf8d5ff41d1",
+  "provenance": {
+    "reference_version": "bounded-runtime15-v1",
+    "execution_plan": "bounded-runtime15-v1",
+    "reference_path": ".scratch/memory-accuracy-next/bounded-runtime-real15-reference-20261017.json",
+    "oracle_aware": true,
+    "blind_annotation": false,
+    "quality_certified": false,
+    "annotation_kind": "先验公开纯合成命题与字段技术标注，未读取模型运行结果或私有评测",
+    "input_fixture_path": "backend/src/notalone/memory_extraction/evaluation_bounded_cases.py",
+    "input_fixture_sha256": "7349014a653a9f1e047f52ab748370fe7c1c57b3263f64de5c7b03145ca6d01c",
+    "bounded_inputs_sha256": "c8dba5ec1d1f195a65f822110409df35043144a3c4850813f09ac2c863e9964d",
+    "source_routes": {
+      "P01": "observation",
+      "P02": "observation",
+      "P03": "jsonl",
+      "P04": "observation",
+      "P05": "observation",
+      "P06": "observation",
+      "P07": "observation",
+      "N01": "jsonl",
+      "N02": "observation",
+      "N03": "observation",
+      "N04": "observation",
+      "N05": "observation",
+      "N06": "observation",
+      "N07": "jsonl",
+      "N08": "observation"
+    },
+    "structured_review": {
+      "status": "passed",
+      "reviewer": "独立 Standards 审查",
+      "fixed_commit": "66eaec44",
+      "scope": "15窗结构、105轴判据映射及原说明与夹具摘要均通过；不认证语义或模型质量"
+    },
+    "independent_review": {
+      "status": "passed",
+      "reviewer": "独立 Spec 审查",
+      "fixed_commit": "66eaec44",
+      "scope": "逐15窗原文、20个合法variant与105项独立轴判据无实质问题；没有执行模型"
+    },
+    "human_review": [],
+    "old_results_seen": false,
+    "scope": "仅本独立15个正式来源窗的七轴实际审核；7正控+8UNKNOWN，不能称15正证、普遍质量、业务迁移或生产逐类放行"
+  },
+  "e_fields": [
+    "text",
+    "category",
+    "subject",
+    "topic",
+    "source_message_ids",
+    "confidence",
+    "risk_flags",
+    "valid_at",
+    "invalid_at",
+    "speech_act",
+    "assertion_status",
+    "figurative_type",
+    "alternatives",
+    "interpretation_reason"
+  ],
+  "v_fields": [
+    "candidate_index",
+    "verdict",
+    "issues",
+    "evidence"
+  ],
+  "common_rules": {
+    "scope_time_and_sources": "完整15窗及全部target按fixture固定；正式loader的活动规范消息/来源及处理收据单独绑定。Gold只用内容投影，source_choices按actual UUID表解析；不改历史Gold/失败/余额，不补trust/basis，不裁窗。所有正式实际保存仍pending/all，potential去向不是生产放行。",
+    "raw_field_rules": "原14槽逐字段审核、完整来源MAIN/C、人物/阶段/否定/条件/数量/时间均先封RAW；语义Gold先验编写，不从compiler输出或模型成绩倒推；confidence合法性与实际三门去向分别记录。",
+    "unknown_rules": "后8只期待有界语义basis=null而非所有事实字段未知；完整v4/source_current/all保留。非法proof仍停止。已知范围UNKNOWN不是技术/审核unresolved；无basis时五语义API轴unknown，媒体及truth_intent各依独立规则。",
+    "request_frames": "P05/P06两个合法frame不可按case名强迫；匹配任一来源允许variant不构成假事/错人。首7实际交付须同时观察reported_request与received_request，否则单列coverage缺口停场，不补跑。",
+    "dimension_counting": "每窗七轴分别依独立criterion审核，105个可判机会而非105次调用或15正证；缺完整RAW/FULL不填pass。任何general完整契约缺口保守进入每轴；raw/final false/wrong不被轴pass覆盖；由实际轴结果交原summarize，空表不改。",
+    "axis_review_contract": {
+      "axes": [
+        "subject",
+        "time",
+        "truth_intent",
+        "paraphrase",
+        "reference",
+        "media",
+        "reported"
+      ],
+      "fields": [
+        "status",
+        "basis"
+      ],
+      "statuses": [
+        "pass",
+        "fail",
+        "unresolved"
+      ],
+      "basis": "必须非空，引用本窗该轴实际判据与观察，不能七项复制整体通过",
+      "stage": "仅新固定分支FULL在旧review外另带axis_reviews；先分离后用原score_case_review，RAW不加也不看V/program"
+    },
+    "axis_expectations": {
+      "P01": {
+        "subject": {
+          "applicable": true,
+          "criterion": "我逐字归属实际contact作者，subject=contact；正文不能把到家者换成用户/第三人。",
+          "expected_api_state_by_variant": {
+            "P01-P1-literal": "valid"
+          }
+        },
+        "time": {
+          "applicable": true,
+          "criterion": "刚刚只保留just近时限定，完成事实valid_at/invalid_at双null；不把来源时点当到家绝对时刻。",
+          "expected_api_state_by_variant": {
+            "P01-P1-literal": "valid"
+          }
+        },
+        "truth_intent": {
+          "applicable": true,
+          "criterion": "已到家是literal已完成断言，不是玩笑/计划/仅引用；assertion+asserted且无未决备选时原truth_intent为valid。",
+          "expected_api_state_by_variant": {
+            "P01-P1-literal": "valid"
+          }
+        },
+        "paraphrase": {
+          "applicable": true,
+          "criterion": "MAIN完整复制我刚刚到家。及实际作者包装；保留just、完成和到家谓词，不新增行程/因果。",
+          "expected_api_state_by_variant": {
+            "P01-P1-literal": "valid"
+          }
+        },
+        "reference": {
+          "applicable": true,
+          "criterion": "作者自指只绑定本消息实际作者；无需寻找隐含第三人或最近人物，reference能力来自已独立核完整图。",
+          "expected_api_state_by_variant": {
+            "P01-P1-literal": "valid"
+          }
+        },
+        "media": {
+          "applicable": true,
+          "criterion": "该窗正式观察的actual text/text、复制原文和活动处理收据均相符；只认证文字，不声称音图转写。",
+          "expected_api_state_by_variant": {
+            "P01-P1-literal": "valid"
+          }
+        },
+        "reported": {
+          "applicable": true,
+          "criterion": "direct归属当前联系人及其到家事件，不把它换成用户转述或仅说过这段话。",
+          "expected_api_state_by_variant": {
+            "P01-P1-literal": "valid"
+          }
+        }
+      },
+      "P02": {
+        "subject": {
+          "applicable": true,
+          "criterion": "subject=contact且接收者为实际联系人；姐姐/哥哥均是联系人的关系角色，不能写成用户亲属。",
+          "expected_api_state_by_variant": {
+            "P02-P1-literal": "valid"
+          }
+        },
+        "time": {
+          "applicable": true,
+          "criterion": "前天修饰借出历史，保留在原话；完成经历双null，不编绝对交易时刻或持续产权起点。",
+          "expected_api_state_by_variant": {
+            "P02-P1-literal": "valid"
+          }
+        },
+        "truth_intent": {
+          "applicable": true,
+          "criterion": "借用是已参与关系事件的assertion/asserted/literal，不升级为金钱借贷；无歧义备选时truth_intent可valid。",
+          "expected_api_state_by_variant": {
+            "P02-P1-literal": "valid"
+          }
+        },
+        "paraphrase": {
+          "applicable": true,
+          "criterion": "保留姐姐出借、哥哥拥有雨伞、本人接收、前天及完成；MAIN/C逐字，缺声明/context不是完整本命题。",
+          "expected_api_state_by_variant": {
+            "P02-P1-literal": "valid"
+          }
+        },
+        "reference": {
+          "applicable": true,
+          "criterion": "她必须沿同contact前置完整I绑定哥哥，不能因姐姐出借就绑定姐姐；两条正文必需消息均在sources。",
+          "expected_api_state_by_variant": {
+            "P02-P1-literal": "valid"
+          }
+        },
+        "media": {
+          "applicable": true,
+          "criterion": "两条实际text来源及声明复制均有活动规范消息/处理记录，不能把source_document或虚构trust当message。",
+          "expected_api_state_by_variant": {
+            "P02-P1-literal": "valid"
+          }
+        },
+        "reported": {
+          "applicable": true,
+          "criterion": "联系人直接陈述自己参与的借用，不是姐姐说过或某第三人转述；direct图归属与actual作者一致。",
+          "expected_api_state_by_variant": {
+            "P02-P1-literal": "valid"
+          }
+        }
+      },
+      "P03": {
+        "subject": {
+          "applicable": true,
+          "criterion": "前问actual self，后答actual contact；答复我及到达者为联系人，不把提问者写成到达者。",
+          "expected_api_state_by_variant": {
+            "P03-P1-literal": "valid"
+          }
+        },
+        "time": {
+          "applicable": true,
+          "criterion": "已经到了表达完成；两日期为null，不给到校瞬间加机器日期或把前问的时点当事件时刻。",
+          "expected_api_state_by_variant": {
+            "P03-P1-literal": "valid"
+          }
+        },
+        "truth_intent": {
+          "applicable": true,
+          "criterion": "后答是literal完成断言，问题仍是question且不额外存事实；与仅计划到校、在途或假设区分。",
+          "expected_api_state_by_variant": {
+            "P03-P1-literal": "valid"
+          }
+        },
+        "paraphrase": {
+          "applicable": true,
+          "criterion": "完整复制后答及实际相关前问，保留学校和已完成；不能靠裁问句/删动词或补目的地救图。",
+          "expected_api_state_by_variant": {
+            "P03-P1-literal": "valid"
+          }
+        },
+        "reference": {
+          "applicable": true,
+          "criterion": "相邻异方问答的动词均为到；省略目的地只从该唯一学校问句绑定，不从模型选中目标反推。",
+          "expected_api_state_by_variant": {
+            "P03-P1-literal": "valid"
+          }
+        },
+        "media": {
+          "applicable": true,
+          "criterion": "真实双作者JSONL经原完整校验和loader，两条actual text/text均活动；不弱化单作者导入检查。",
+          "expected_api_state_by_variant": {
+            "P03-P1-literal": "valid"
+          }
+        },
+        "reported": {
+          "applicable": true,
+          "criterion": "后答direct归实际联系人；前问只为语义依赖，不是用户已经到校的转述或另一次事实。",
+          "expected_api_state_by_variant": {
+            "P03-P1-literal": "valid"
+          }
+        }
+      },
+      "P04": {
+        "subject": {
+          "applicable": true,
+          "criterion": "联系人是接收者，姐姐为出借者，同事为所有者；两关系角色均归contact，不把目录主体当shared。",
+          "expected_api_state_by_variant": {
+            "P04-P1-literal": "valid"
+          }
+        },
+        "time": {
+          "applicable": true,
+          "criterion": "昨天修饰借书历史，双null；不把角色介绍时点或来源日期当任职/产权起点。",
+          "expected_api_state_by_variant": {
+            "P04-P1-literal": "valid"
+          }
+        },
+        "truth_intent": {
+          "applicable": true,
+          "criterion": "literal已参与借用断言，不是报告他人传闻；唯一显式声明成立且无未决备选时truth_intent可valid。",
+          "expected_api_state_by_variant": {
+            "P04-P1-literal": "valid"
+          }
+        },
+        "paraphrase": {
+          "applicable": true,
+          "criterion": "姐姐/同事、书、昨天、借出完成及本人接收均保留，完整source window仍含两个目录角色。",
+          "expected_api_state_by_variant": {
+            "P04-P1-literal": "valid"
+          }
+        },
+        "reference": {
+          "applicable": true,
+          "criterion": "竞争目录含姐姐和同事，唯一I明确她=同事；不以只有一个target或只引一条消息掩盖另一角色。",
+          "expected_api_state_by_variant": {
+            "P04-P1-literal": "valid"
+          }
+        },
+        "media": {
+          "applicable": true,
+          "criterion": "三条实际文字来源完整保存；未印入C的R不自动并入正文source_ids，若实际引用R则继承其规范消息。",
+          "expected_api_state_by_variant": {
+            "P04-P1-literal": "valid"
+          }
+        },
+        "reported": {
+          "applicable": true,
+          "criterion": "direct自述关系事件，R/I为背景与指称，不能把角色介绍升级为另两项实际事件。",
+          "expected_api_state_by_variant": {
+            "P04-P1-literal": "valid"
+          }
+        }
+      },
+      "P05": {
+        "subject": {
+          "applicable": true,
+          "criterion": "contact为受托者，姐姐为requester，同事为beneficiary；受益人不可变成姐姐或用户。",
+          "expected_api_state_by_variant": {
+            "P05-P1-reported": "valid",
+            "P05-P1-received": "valid"
+          }
+        },
+        "time": {
+          "applicable": true,
+          "criterion": "昨天为外层请托历史，明天为内层被请求行动；H双null，只在正文保留两层相对限定。",
+          "expected_api_state_by_variant": {
+            "P05-P1-reported": "valid",
+            "P05-P1-received": "valid"
+          }
+        },
+        "truth_intent": {
+          "applicable": true,
+          "criterion": "reported variant必须report/reported而truth_intent unknown；received合法variant可assertion/asserted且无备选而valid，两者都不含接受/履行。",
+          "expected_api_state_by_variant": {
+            "P05-P1-reported": "unknown",
+            "P05-P1-received": "valid"
+          }
+        },
+        "paraphrase": {
+          "applicable": true,
+          "criterion": "完整保留让、帮、顶个班、昨日/明日及I，不用既已答应/完成换弱化请求的主张。",
+          "expected_api_state_by_variant": {
+            "P05-P1-reported": "valid",
+            "P05-P1-received": "valid"
+          }
+        },
+        "reference": {
+          "applicable": true,
+          "criterion": "她沿本contact同消息I指同事，requester/recipient/actor/beneficiary分别核，不以施事猜受益人。",
+          "expected_api_state_by_variant": {
+            "P05-P1-reported": "valid",
+            "P05-P1-received": "valid"
+          }
+        },
+        "media": {
+          "applicable": true,
+          "criterion": "同消息两SourceUnit来自正式actual text，声明和主句均未截断；不因一条消息就省实际source校验。",
+          "expected_api_state_by_variant": {
+            "P05-P1-reported": "valid",
+            "P05-P1-received": "valid"
+          }
+        },
+        "reported": {
+          "applicable": true,
+          "criterion": "report与received两合法frame分别核外层request/receive_request和内层requested；不能把一个frame的通过复制给另一个。",
+          "expected_api_state_by_variant": {
+            "P05-P1-reported": "valid",
+            "P05-P1-received": "valid"
+          }
+        }
+      },
+      "P06": {
+        "subject": {
+          "applicable": true,
+          "criterion": "self作者是用户本人/受托者，哥哥是用户哥哥、同事是用户同事；subject=self而非contact/shared。",
+          "expected_api_state_by_variant": {
+            "P06-P1-reported": "valid",
+            "P06-P1-received": "valid"
+          }
+        },
+        "time": {
+          "applicable": true,
+          "criterion": "前天限外层请托、后天限所请求顶班；双null，不能互换内外时间或造已履行日期。",
+          "expected_api_state_by_variant": {
+            "P06-P1-reported": "valid",
+            "P06-P1-received": "valid"
+          }
+        },
+        "truth_intent": {
+          "applicable": true,
+          "criterion": "received variant只断言收到请托、assertion/asserted/literal可valid；若合法report/reported表示则unknown，均不证明答应/义务/履行。",
+          "expected_api_state_by_variant": {
+            "P06-P1-reported": "unknown",
+            "P06-P1-received": "valid"
+          }
+        },
+        "paraphrase": {
+          "applicable": true,
+          "criterion": "保留哥哥、用户、同事、前天/后天、顶班及他指同事的完整原话；不得补承诺。",
+          "expected_api_state_by_variant": {
+            "P06-P1-reported": "valid",
+            "P06-P1-received": "valid"
+          }
+        },
+        "reference": {
+          "applicable": true,
+          "criterion": "他必须沿同self作者I绑定其同事；受益人不因哥哥发出请托而变成哥哥，来源不得跨scope。",
+          "expected_api_state_by_variant": {
+            "P06-P1-reported": "valid",
+            "P06-P1-received": "valid"
+          }
+        },
+        "media": {
+          "applicable": true,
+          "criterion": "本人单作者观察只经已确认合成binding及真实记录收据加载，不加用户/联系人对话来凑JSONL。",
+          "expected_api_state_by_variant": {
+            "P06-P1-reported": "valid",
+            "P06-P1-received": "valid"
+          }
+        },
+        "reported": {
+          "applicable": true,
+          "criterion": "实际合法received/report frame分别核；目标是收到请托表示，但另一合法frame不记语义假事/错人，交付覆盖另报。",
+          "expected_api_state_by_variant": {
+            "P06-P1-reported": "valid",
+            "P06-P1-received": "valid"
+          }
+        }
+      },
+      "P07": {
+        "subject": {
+          "applicable": true,
+          "criterion": "我为actual contact作者和未来跑步计划actor；天晴不是另一个人物或shared主体。",
+          "expected_api_state_by_variant": {
+            "P07-P1-conditional": "valid"
+          }
+        },
+        "time": {
+          "applicable": true,
+          "criterion": "明天按+08来源日历取2030-01-03至01-04半开自然日；O只为观察前缀，不等同实际跑步发生点。",
+          "expected_api_state_by_variant": {
+            "P07-P1-conditional": "valid"
+          }
+        },
+        "truth_intent": {
+          "applicable": true,
+          "criterion": "plan/conditional/literal，原truth_intent unknown；不得因basis存在写成asserted事实或把条件当已发生。",
+          "expected_api_state_by_variant": {
+            "P07-P1-conditional": "unknown"
+          }
+        },
+        "paraphrase": {
+          "applicable": true,
+          "criterion": "完整拼接条件和计划两相邻单元，保留天晴、只、约、3公里=3000米及计划阶段，不能删除程度。",
+          "expected_api_state_by_variant": {
+            "P07-P1-conditional": "valid"
+          }
+        },
+        "reference": {
+          "applicable": true,
+          "criterion": "计划我绑定同消息contact，条件与行动来自同一完整结构，不借另一条背景指代作者。",
+          "expected_api_state_by_variant": {
+            "P07-P1-conditional": "valid"
+          }
+        },
+        "media": {
+          "applicable": true,
+          "criterion": "单条actual text/text与完整条件/数量文字均来自正式来源，时间/单位不是媒体已处理的证据。",
+          "expected_api_state_by_variant": {
+            "P07-P1-conditional": "valid"
+          }
+        },
+        "reported": {
+          "applicable": true,
+          "criterion": "direct是联系人自己的条件计划，不是亲友请求/他人报告，更不是履行记录。",
+          "expected_api_state_by_variant": {
+            "P07-P1-conditional": "valid"
+          }
+        }
+      },
+      "N01": {
+        "subject": {
+          "applicable": true,
+          "criterion": "声明我哥属于self作者，事件我姐/我仍属contact；字段contact正确也不能掩盖正文把两方哥哥合并。",
+          "expected_api_state_by_variant": {
+            "N01-P1-unresolved": "unknown"
+          }
+        },
+        "time": {
+          "applicable": true,
+          "criterion": "前天只限contact事件且完成双null；不同作者声明时间不能补产权/借用起点。",
+          "expected_api_state_by_variant": {
+            "N01-P1-unresolved": "unknown"
+          }
+        },
+        "truth_intent": {
+          "applicable": true,
+          "criterion": "原句可为literal关系断言但她的角色确实未定，须保守备选并保持pending；不写成所有者已确认或修辞unknown。",
+          "expected_api_state_by_variant": {
+            "N01-P1-unresolved": "unknown"
+          }
+        },
+        "paraphrase": {
+          "applicable": true,
+          "criterion": "按actual作者完整复制两句或仅忠实主句，若引用声明必须明示用户说；不得在reason里补同一哥哥。",
+          "expected_api_state_by_variant": {
+            "N01-P1-unresolved": "unknown"
+          }
+        },
+        "reference": {
+          "applicable": true,
+          "criterion": "跨作者I不授予她/产权唯一绑定，五语义依据保持unknown；不能把对方关系角色借给contact。",
+          "expected_api_state_by_variant": {
+            "N01-P1-unresolved": "unknown"
+          }
+        },
+        "media": {
+          "applicable": true,
+          "criterion": "双作者JSONL原校验、规范消息/处理链均真实，text/text仍可valid，不能把reference未知误作文字来源失效。",
+          "expected_api_state_by_variant": {
+            "N01-P1-unresolved": "valid"
+          }
+        },
+        "reported": {
+          "applicable": true,
+          "criterion": "主句direct归contact；声明若进入C归self，实际两种归属不因一个program UNKNOWN而合成一个说话者。",
+          "expected_api_state_by_variant": {
+            "N01-P1-unresolved": "unknown"
+          }
+        }
+      },
+      "N02": {
+        "subject": {
+          "applicable": true,
+          "criterion": "两条作者均contact，接收者仍contact；后置I的哥哥不能被程序追溯为此前已证所有者。",
+          "expected_api_state_by_variant": {
+            "N02-P1-literal": "unknown",
+            "N02-P1-unresolved": "unknown"
+          }
+        },
+        "time": {
+          "applicable": true,
+          "criterion": "主事件先采集、I后采集的原顺序保持；前天历史仍双null，不重排时间换证明资格。",
+          "expected_api_state_by_variant": {
+            "N02-P1-literal": "unknown",
+            "N02-P1-unresolved": "unknown"
+          }
+        },
+        "truth_intent": {
+          "applicable": true,
+          "criterion": "保留literal关系主张；可有保守未决备选，也可忠实引用后置声明而不宣称已证，truth_intent按实际合法备选分支核。",
+          "expected_api_state_by_variant": {
+            "N02-P1-literal": "valid",
+            "N02-P1-unresolved": "unknown"
+          }
+        },
+        "paraphrase": {
+          "applicable": true,
+          "criterion": "主句及若使用的后置I逐字、按实际来源顺序定位，不隐去后置性、不补已确定产权。",
+          "expected_api_state_by_variant": {
+            "N02-P1-literal": "unknown",
+            "N02-P1-unresolved": "unknown"
+          }
+        },
+        "reference": {
+          "applicable": true,
+          "criterion": "I时间在事件后，本合同必须unknown；完整引用不等于获得回溯指称能力，不能改单target制造唯一性。",
+          "expected_api_state_by_variant": {
+            "N02-P1-literal": "unknown",
+            "N02-P1-unresolved": "unknown"
+          }
+        },
+        "media": {
+          "applicable": true,
+          "criterion": "两条正式文字来源均活动，若C不使用后置I则正文来源不被迫补它；完整v4窗口仍必须保留。",
+          "expected_api_state_by_variant": {
+            "N02-P1-literal": "valid",
+            "N02-P1-unresolved": "valid"
+          }
+        },
+        "reported": {
+          "applicable": true,
+          "criterion": "主句是contact直接自述；I只是后置元语言说明，不能改成第三人已报告或另一次借用。",
+          "expected_api_state_by_variant": {
+            "N02-P1-literal": "unknown",
+            "N02-P1-unresolved": "unknown"
+          }
+        }
+      },
+      "N03": {
+        "subject": {
+          "applicable": true,
+          "criterion": "接收者/出借者归contact，竞争的同事和姐姐仍是两不同关系角色，不能把其中一位写成已定所有者。",
+          "expected_api_state_by_variant": {
+            "N03-P1-unresolved": "unknown"
+          }
+        },
+        "time": {
+          "applicable": true,
+          "criterion": "昨天为原借书历史且双null，两条竞争I的位置与完整顺序不变，不按最近声明选有效期。",
+          "expected_api_state_by_variant": {
+            "N03-P1-unresolved": "unknown"
+          }
+        },
+        "truth_intent": {
+          "applicable": true,
+          "criterion": "确有同代词竞争，保守未决备选必须非空；保持literal关系陈述但truth_intent unknown，不假装毫无歧义。",
+          "expected_api_state_by_variant": {
+            "N03-P1-unresolved": "unknown"
+          }
+        },
+        "paraphrase": {
+          "applicable": true,
+          "criterion": "正文/解释/备选不得只呈现一个已定所有者，完整窗口保留两I与R；不得生成第二次借书。",
+          "expected_api_state_by_variant": {
+            "N03-P1-unresolved": "unknown"
+          }
+        },
+        "reference": {
+          "applicable": true,
+          "criterion": "一个P有两不同target，必须unknown；模型仅提一条reference或只选择一target也不消除竞争。",
+          "expected_api_state_by_variant": {
+            "N03-P1-unresolved": "unknown"
+          }
+        },
+        "media": {
+          "applicable": true,
+          "criterion": "所有实际文字及处理记录保留；C使用哪个SourceUnit均须对应活动规范消息，media不能因语义竞争变成音图能力。",
+          "expected_api_state_by_variant": {
+            "N03-P1-unresolved": "valid"
+          }
+        },
+        "reported": {
+          "applicable": true,
+          "criterion": "direct借书主张与两条I的实际作者归属分开核，不把竞争声明当实际历史转述事件。",
+          "expected_api_state_by_variant": {
+            "N03-P1-unresolved": "unknown"
+          }
+        }
+      },
+      "N04": {
+        "subject": {
+          "applicable": true,
+          "criterion": "主句contact自述，用户/第三人不能冒充接收者；他指我哥不等于她属于该哥哥。",
+          "expected_api_state_by_variant": {
+            "N04-P1-unresolved": "unknown"
+          }
+        },
+        "time": {
+          "applicable": true,
+          "criterion": "前天保持历史限定和双null；声明的近时来源不制造产权起点。",
+          "expected_api_state_by_variant": {
+            "N04-P1-unresolved": "unknown"
+          }
+        },
+        "truth_intent": {
+          "applicable": true,
+          "criterion": "事件她没有匹配I，保守备选非空且literal不变；truth_intent unknown，不能把内容指称未知写成非字面表达。",
+          "expected_api_state_by_variant": {
+            "N04-P1-unresolved": "unknown"
+          }
+        },
+        "paraphrase": {
+          "applicable": true,
+          "criterion": "两个代词原字逐字保留，不在MAIN/C/reason中把他归一成她，不补同一个人物。",
+          "expected_api_state_by_variant": {
+            "N04-P1-unresolved": "unknown"
+          }
+        },
+        "reference": {
+          "applicable": true,
+          "criterion": "I的他与事件她不相同，必须unknown；性别或中文代词近似不授予同指。",
+          "expected_api_state_by_variant": {
+            "N04-P1-unresolved": "unknown"
+          }
+        },
+        "media": {
+          "applicable": true,
+          "criterion": "真实text副本及活动来源仍可valid；不能在源适配器先替换代词以改变正式原文。",
+          "expected_api_state_by_variant": {
+            "N04-P1-unresolved": "valid"
+          }
+        },
+        "reported": {
+          "applicable": true,
+          "criterion": "实际contact直接叙述事件；不同代词的声明仍按原文归属，不成为另一人的借用报告。",
+          "expected_api_state_by_variant": {
+            "N04-P1-unresolved": "unknown"
+          }
+        }
+      },
+      "N05": {
+        "subject": {
+          "applicable": true,
+          "criterion": "到家者仍为actual contact，礼貌谢谢没有新主体、受托者或关系对象。",
+          "expected_api_state_by_variant": {
+            "N05-P1-literal": "unknown"
+          }
+        },
+        "time": {
+          "applicable": true,
+          "criterion": "刚刚保持just和完成双null；尾句不提供新的事件日期或期限。",
+          "expected_api_state_by_variant": {
+            "N05-P1-literal": "unknown"
+          }
+        },
+        "truth_intent": {
+          "applicable": true,
+          "criterion": "到家仍是清楚的literal已完成断言，礼貌语非第二事实；无歧义备选，truth_intent可valid，不能复制semantic UNKNOWN。",
+          "expected_api_state_by_variant": {
+            "N05-P1-literal": "valid"
+          }
+        },
+        "paraphrase": {
+          "applicable": true,
+          "criterion": "到家原句不改，整个message还含谢谢，不可裁尾取得basis；不把礼貌语新增为长期资料。",
+          "expected_api_state_by_variant": {
+            "N05-P1-literal": "unknown"
+          }
+        },
+        "reference": {
+          "applicable": true,
+          "criterion": "完整消息含未列词法，正证应unknown，即使作者自指本身容易理解也不能借子串签整个窗口。",
+          "expected_api_state_by_variant": {
+            "N05-P1-literal": "unknown"
+          }
+        },
+        "media": {
+          "applicable": true,
+          "criterion": "一个完整text消息含两SourceUnit，当前正文复制/原source依旧有效；不把超语法误作媒体内容失真。",
+          "expected_api_state_by_variant": {
+            "N05-P1-literal": "valid"
+          }
+        },
+        "reported": {
+          "applicable": true,
+          "criterion": "direct实际到家陈述与非记忆礼貌语分别保留；不弱化为仅说过到家文本。",
+          "expected_api_state_by_variant": {
+            "N05-P1-literal": "unknown"
+          }
+        }
+      },
+      "N06": {
+        "subject": {
+          "applicable": true,
+          "criterion": "问句与后答实际都为contact，答复我仍contact；不可把前问作者改成self或另造答复者。",
+          "expected_api_state_by_variant": {
+            "N06-P1-literal": "unknown",
+            "N06-P1-unresolved": "unknown"
+          }
+        },
+        "time": {
+          "applicable": true,
+          "criterion": "后答为完成陈述双null；学校问句不提供额外完成时刻，问答顺序保持。",
+          "expected_api_state_by_variant": {
+            "N06-P1-literal": "unknown",
+            "N06-P1-unresolved": "unknown"
+          }
+        },
+        "truth_intent": {
+          "applicable": true,
+          "criterion": "答复原句可为literal已到断言但对象省略不由本合同解析；保守备选与无备选忠实原话两分支分别核，不能写成计划/修辞未知。",
+          "expected_api_state_by_variant": {
+            "N06-P1-literal": "valid",
+            "N06-P1-unresolved": "unknown"
+          }
+        },
+        "paraphrase": {
+          "applicable": true,
+          "criterion": "两句完整引用时都标contact作者，后答主张不被问题替代；没有新增的人、目的地或行程。",
+          "expected_api_state_by_variant": {
+            "N06-P1-literal": "unknown",
+            "N06-P1-unresolved": "unknown"
+          }
+        },
+        "reference": {
+          "applicable": true,
+          "criterion": "同作者不满足反向问答，必须unknown；实际省略不能因两句相邻就取得有界学校绑定。",
+          "expected_api_state_by_variant": {
+            "N06-P1-literal": "unknown",
+            "N06-P1-unresolved": "unknown"
+          }
+        },
+        "media": {
+          "applicable": true,
+          "criterion": "单作者用已确认binding观察，不能关闭JSONL双作者校验；实际text/text仍可valid。",
+          "expected_api_state_by_variant": {
+            "N06-P1-literal": "valid",
+            "N06-P1-unresolved": "valid"
+          }
+        },
+        "reported": {
+          "applicable": true,
+          "criterion": "后答direct归contact，前问不是用户转述；程序未知不准许改写原说话者或frame。",
+          "expected_api_state_by_variant": {
+            "N06-P1-literal": "unknown",
+            "N06-P1-unresolved": "unknown"
+          }
+        }
+      },
+      "N07": {
+        "subject": {
+          "applicable": true,
+          "criterion": "用户为问题作者、contact为答复和抵达者，不能反向绑定；正文若保留问句须保留其用户归属。",
+          "expected_api_state_by_variant": {
+            "N07-P1-literal": "unknown",
+            "N07-P1-unresolved": "unknown"
+          }
+        },
+        "time": {
+          "applicable": true,
+          "criterion": "抵达了仍保完成双null；不因动词不匹配发明新计划期或实际抵达日。",
+          "expected_api_state_by_variant": {
+            "N07-P1-literal": "unknown",
+            "N07-P1-unresolved": "unknown"
+          }
+        },
+        "truth_intent": {
+          "applicable": true,
+          "criterion": "literal完成答复与问题分开；合法保守未决/无备选原话分别核，不能因程序词法未知升成假设或删断言。",
+          "expected_api_state_by_variant": {
+            "N07-P1-literal": "valid",
+            "N07-P1-unresolved": "unknown"
+          }
+        },
+        "paraphrase": {
+          "applicable": true,
+          "criterion": "问题到与答案抵达原字不改，完整保留已完成及相关原文；近义不能替代逐字复制校验。",
+          "expected_api_state_by_variant": {
+            "N07-P1-literal": "unknown",
+            "N07-P1-unresolved": "unknown"
+          }
+        },
+        "reference": {
+          "applicable": true,
+          "criterion": "本合同要求V逐字相同，此处必须unknown；不能按人类近义理解直接签有界学校绑定。",
+          "expected_api_state_by_variant": {
+            "N07-P1-literal": "unknown",
+            "N07-P1-unresolved": "unknown"
+          }
+        },
+        "media": {
+          "applicable": true,
+          "criterion": "实际双作者JSONL与text/text处理链均保留，不在normalize阶段同义改写来制造成功。",
+          "expected_api_state_by_variant": {
+            "N07-P1-literal": "valid",
+            "N07-P1-unresolved": "valid"
+          }
+        },
+        "reported": {
+          "applicable": true,
+          "criterion": "direct后答归contact，用户问题只作依赖，不变成用户已抵达或他人报告。",
+          "expected_api_state_by_variant": {
+            "N07-P1-literal": "unknown",
+            "N07-P1-unresolved": "unknown"
+          }
+        }
+      },
+      "N08": {
+        "subject": {
+          "applicable": true,
+          "criterion": "我为contact的计划actor，与P07同作者；下雨不是换主体或shared关系。",
+          "expected_api_state_by_variant": {
+            "N08-P1-conditional": "unknown"
+          }
+        },
+        "time": {
+          "applicable": true,
+          "criterion": "明天仍为+08日历2030-01-03至01-04完整半开期间；日期语义可准确，但无basis时time依据仍unknown。",
+          "expected_api_state_by_variant": {
+            "N08-P1-conditional": "unknown"
+          }
+        },
+        "truth_intent": {
+          "applicable": true,
+          "criterion": "真实条件plan/conditional/literal仍必须保留且truth_intent unknown；不因正证只支持晴天把本句改为asserted或none。",
+          "expected_api_state_by_variant": {
+            "N08-P1-conditional": "unknown"
+          }
+        },
+        "paraphrase": {
+          "applicable": true,
+          "criterion": "下雨、只、约、3公里及计划阶段原样保留，不能把天气/数量改成支持词法来救basis。",
+          "expected_api_state_by_variant": {
+            "N08-P1-conditional": "unknown"
+          }
+        },
+        "reference": {
+          "applicable": true,
+          "criterion": "我仍可由actual作者理解，但完整条件文法超范围，reference及其他语义正证必须unknown，不能局部套晴天规则。",
+          "expected_api_state_by_variant": {
+            "N08-P1-conditional": "unknown"
+          }
+        },
+        "media": {
+          "applicable": true,
+          "criterion": "实际完整文字来源与数量字符仍活动，media可valid；不因条件文法未知宣称媒体已处理或损坏。",
+          "expected_api_state_by_variant": {
+            "N08-P1-conditional": "valid"
+          }
+        },
+        "reported": {
+          "applicable": true,
+          "criterion": "这是contact自己的条件计划而非亲友请托/报告；direct语义可判断但程序归属能力仍unknown。",
+          "expected_api_state_by_variant": {
+            "N08-P1-conditional": "unknown"
+          }
+        }
+      }
+    }
+  },
+  "windows": [
+    {
+      "id": "P01",
+      "position": 0,
+      "case_name": "原03有限真实15/P01/作者刚刚到家",
+      "input_sha256": "db898490c8bbef8e9dd14fec3eb3ff92e21b1ff5d67dfd2b57f57e46d1df07c5",
+      "target_indices": [
+        0
+      ],
+      "inclusion": "retain",
+      "claims": [
+        {
+          "id": "P01-P1",
+          "required": true,
+          "meaning_requirements": [
+            "实际联系人作者已经到家，保留刚刚/just近时限定；不是只证明说过这段文字。"
+          ],
+          "variants": [
+            {
+              "id": "P01-P1-literal",
+              "body_requirements": [
+                "实际联系人作者已经到家，保留刚刚/just近时限定；不是只证明说过这段文字。"
+              ],
+              "subject": "contact",
+              "category": "common_fact",
+              "allowed_topics": [
+                "other"
+              ],
+              "source_choices": [
+                {
+                  "indices": [
+                    0
+                  ],
+                  "when": "每项实际MAIN/C、reason/alternatives使用的来源全部在集合内；可选背景只有实际引用才加入，不允许丢必需来源或恢复未列来源。"
+                }
+              ],
+              "speech_act": "assertion",
+              "assertion_status": "asserted",
+              "figurative_type": "literal",
+              "valid_at": null,
+              "invalid_at": null,
+              "time_rule": "完成/历史正向分支均双null；原文相对时间必须保留，不用观察点代签事件时刻或实际持续期。",
+              "ideal_destination": "auto",
+              "risk_rule": "保留模型和程序实际风险；仅原0.7/风险/语用三门的potential去向，不含维度门。低confidence本身不伪造，但未满足该理想去向的完整契约仍如实计一般错误；不得去风险或抬分救分。",
+              "alternatives_rule": "应为空；单纯程序正证范围不足不等于原句存在新的事实备选，不人为补正向解释。",
+              "reason_rule": "非空简短，忠实指向本窗完整原话及实际标签，不增加人物、所有权、接受/履行、绝对事件日、机器今天或本窗外事实；保留模型原draft与实际编译理由。"
+            }
+          ]
+        }
+      ],
+      "forbidden_meanings": [
+        "把联系人写成用户或第三人",
+        "编到家绝对时刻、出发地或行程",
+        "删掉刚刚限定"
+      ]
+    },
+    {
+      "id": "P02",
+      "position": 1,
+      "case_name": "原03有限真实15/P02/跨消息明确指称借用",
+      "input_sha256": "62028c3ff70949ced751befe3ac168eb658414bf7d1bf70882bdb75db61e9ab9",
+      "target_indices": [
+        0,
+        1
+      ],
+      "inclusion": "retain",
+      "claims": [
+        {
+          "id": "P02-P1",
+          "required": true,
+          "meaning_requirements": [
+            "实际联系人收到其姐姐前天借出的雨伞。",
+            "这里的她由同作者前条明确指其哥哥；雨伞所有者为哥哥，出借人仍为姐姐。"
+          ],
+          "variants": [
+            {
+              "id": "P02-P1-literal",
+              "body_requirements": [
+                "实际联系人收到其姐姐前天借出的雨伞。",
+                "这里的她由同作者前条明确指其哥哥；雨伞所有者为哥哥，出借人仍为姐姐。"
+              ],
+              "subject": "contact",
+              "category": "relationship_note",
+              "allowed_topics": [
+                "family",
+                "other"
+              ],
+              "source_choices": [
+                {
+                  "indices": [
+                    0,
+                    1
+                  ],
+                  "when": "每项实际MAIN/C、reason/alternatives使用的来源全部在集合内；可选背景只有实际引用才加入，不允许丢必需来源或恢复未列来源。"
+                }
+              ],
+              "speech_act": "assertion",
+              "assertion_status": "asserted",
+              "figurative_type": "literal",
+              "valid_at": null,
+              "invalid_at": null,
+              "time_rule": "完成/历史正向分支均双null；原文相对时间必须保留，不用观察点代签事件时刻或实际持续期。",
+              "ideal_destination": "auto",
+              "risk_rule": "保留模型和程序实际风险；仅原0.7/风险/语用三门的potential去向，不含维度门。低confidence本身不伪造，但未满足该理想去向的完整契约仍如实计一般错误；不得去风险或抬分救分。",
+              "alternatives_rule": "应为空；单纯程序正证范围不足不等于原句存在新的事实备选，不人为补正向解释。",
+              "reason_rule": "非空简短，忠实指向本窗完整原话及实际标签，不增加人物、所有权、接受/履行、绝对事件日、机器今天或本窗外事实；保留模型原draft与实际编译理由。"
+            }
+          ]
+        }
+      ],
+      "forbidden_meanings": [
+        "以姐姐是出借人推定姐姐拥有雨伞",
+        "把哥哥/姐姐换成用户的亲属",
+        "补真实姓名、借贷、交付细节或归还"
+      ]
+    },
+    {
+      "id": "P03",
+      "position": 2,
+      "case_name": "原03有限真实15/P03/异方同动词完成问答",
+      "input_sha256": "2c0466d6b77410355dfcc80bab5c24f3f4bf7f4e0571d3d8d09892c2a1e8e64c",
+      "target_indices": [
+        0,
+        1
+      ],
+      "inclusion": "retain",
+      "claims": [
+        {
+          "id": "P03-P1",
+          "required": true,
+          "meaning_requirements": [
+            "前条用户询问联系人是否已到学校，联系人后答我已经到了；同一动词到，保留学校目的地与完成阶段。"
+          ],
+          "variants": [
+            {
+              "id": "P03-P1-literal",
+              "body_requirements": [
+                "前条用户询问联系人是否已到学校，联系人后答我已经到了；同一动词到，保留学校目的地与完成阶段。"
+              ],
+              "subject": "contact",
+              "category": "common_fact",
+              "allowed_topics": [
+                "travel",
+                "study",
+                "other"
+              ],
+              "source_choices": [
+                {
+                  "indices": [
+                    0,
+                    1
+                  ],
+                  "when": "每项实际MAIN/C、reason/alternatives使用的来源全部在集合内；可选背景只有实际引用才加入，不允许丢必需来源或恢复未列来源。"
+                }
+              ],
+              "speech_act": "assertion",
+              "assertion_status": "asserted",
+              "figurative_type": "literal",
+              "valid_at": null,
+              "invalid_at": null,
+              "time_rule": "完成/历史正向分支均双null；原文相对时间必须保留，不用观察点代签事件时刻或实际持续期。",
+              "ideal_destination": "auto",
+              "risk_rule": "保留模型和程序实际风险；仅原0.7/风险/语用三门的potential去向，不含维度门。低confidence本身不伪造，但未满足该理想去向的完整契约仍如实计一般错误；不得去风险或抬分救分。",
+              "alternatives_rule": "应为空；单纯程序正证范围不足不等于原句存在新的事实备选，不人为补正向解释。",
+              "reason_rule": "非空简短，忠实指向本窗完整原话及实际标签，不增加人物、所有权、接受/履行、绝对事件日、机器今天或本窗外事实；保留模型原draft与实际编译理由。"
+            }
+          ]
+        }
+      ],
+      "forbidden_meanings": [
+        "新增目的地、在途或计划事实",
+        "把提问记成已到事实",
+        "将学校改成其他地点或答复人换成用户"
+      ]
+    },
+    {
+      "id": "P04",
+      "position": 3,
+      "case_name": "原03有限真实15/P04/两角色目录内唯一指称",
+      "input_sha256": "c482905e2243141d3571db95b549d479a54ee533b2af7f027a062957e325c101",
+      "target_indices": [
+        0,
+        1,
+        2
+      ],
+      "inclusion": "retain",
+      "claims": [
+        {
+          "id": "P04-P1",
+          "required": true,
+          "meaning_requirements": [
+            "联系人收到其姐姐昨天借出的书；同代词明确指其同事，所有者不是出借姐姐。",
+            "完整目录仍含姐姐和同事两个角色；未选中的角色不变成另一事件。"
+          ],
+          "variants": [
+            {
+              "id": "P04-P1-literal",
+              "body_requirements": [
+                "联系人收到其姐姐昨天借出的书；同代词明确指其同事，所有者不是出借姐姐。",
+                "完整目录仍含姐姐和同事两个角色；未选中的角色不变成另一事件。"
+              ],
+              "subject": "contact",
+              "category": "relationship_note",
+              "allowed_topics": [
+                "family",
+                "other"
+              ],
+              "source_choices": [
+                {
+                  "indices": [
+                    1,
+                    2
+                  ],
+                  "when": "每项实际MAIN/C、reason/alternatives使用的来源全部在集合内；可选背景只有实际引用才加入，不允许丢必需来源或恢复未列来源。"
+                },
+                {
+                  "indices": [
+                    0,
+                    1,
+                    2
+                  ],
+                  "when": "每项实际MAIN/C、reason/alternatives使用的来源全部在集合内；可选背景只有实际引用才加入，不允许丢必需来源或恢复未列来源。"
+                }
+              ],
+              "speech_act": "assertion",
+              "assertion_status": "asserted",
+              "figurative_type": "literal",
+              "valid_at": null,
+              "invalid_at": null,
+              "time_rule": "完成/历史正向分支均双null；原文相对时间必须保留，不用观察点代签事件时刻或实际持续期。",
+              "ideal_destination": "auto",
+              "risk_rule": "保留模型和程序实际风险；仅原0.7/风险/语用三门的potential去向，不含维度门。低confidence本身不伪造，但未满足该理想去向的完整契约仍如实计一般错误；不得去风险或抬分救分。",
+              "alternatives_rule": "应为空；单纯程序正证范围不足不等于原句存在新的事实备选，不人为补正向解释。",
+              "reason_rule": "非空简短，忠实指向本窗完整原话及实际标签，不增加人物、所有权、接受/履行、绝对事件日、机器今天或本窗外事实；保留模型原draft与实际编译理由。"
+            }
+          ]
+        }
+      ],
+      "forbidden_meanings": [
+        "删除另一个目录角色制造唯一性",
+        "把姐姐当书所有者",
+        "从角色介绍补两个独立已发生事件"
+      ]
+    },
+    {
+      "id": "P05",
+      "position": 4,
+      "case_name": "原03有限真实15/P05/亲友提出请托的转述表示",
+      "input_sha256": "4de9f9646317c014014935d76b351e956ba91a56e1a6e270ffb5f6fb4f6642a5",
+      "target_indices": [
+        0
+      ],
+      "inclusion": "retain",
+      "claims": [
+        {
+          "id": "P05-P1",
+          "required": true,
+          "meaning_requirements": [
+            "联系人姐姐昨天向联系人提出明天帮其同事顶班的请托；她明确指联系人同事。",
+            "只保存请托/收到请托及被请求的事项，未表达答应、义务或实际顶班。"
+          ],
+          "variants": [
+            {
+              "id": "P05-P1-reported",
+              "body_requirements": [
+                "联系人姐姐昨天向联系人提出明天帮其同事顶班的请托；她明确指联系人同事。",
+                "只保存请托/收到请托及被请求的事项，未表达答应、义务或实际顶班。"
+              ],
+              "subject": "contact",
+              "category": "relationship_note",
+              "allowed_topics": [
+                "family",
+                "work",
+                "other"
+              ],
+              "source_choices": [
+                {
+                  "indices": [
+                    0
+                  ],
+                  "when": "每项实际MAIN/C、reason/alternatives使用的来源全部在集合内；可选背景只有实际引用才加入，不允许丢必需来源或恢复未列来源。"
+                }
+              ],
+              "speech_act": "report",
+              "assertion_status": "reported",
+              "figurative_type": "literal",
+              "valid_at": null,
+              "invalid_at": null,
+              "time_rule": "完成/历史正向分支均双null；原文相对时间必须保留，不用观察点代签事件时刻或实际持续期。",
+              "ideal_destination": "pending",
+              "risk_rule": "保留模型和程序实际风险；仅原0.7/风险/语用三门的potential去向，不含维度门。低confidence本身不伪造，但未满足该理想去向的完整契约仍如实计一般错误；不得去风险或抬分救分。",
+              "alternatives_rule": "应为空；单纯程序正证范围不足不等于原句存在新的事实备选，不人为补正向解释。",
+              "reason_rule": "非空简短，忠实指向本窗完整原话及实际标签，不增加人物、所有权、接受/履行、绝对事件日、机器今天或本窗外事实；保留模型原draft与实际编译理由。"
+            },
+            {
+              "id": "P05-P1-received",
+              "body_requirements": [
+                "联系人姐姐昨天向联系人提出明天帮其同事顶班的请托；她明确指联系人同事。",
+                "只保存请托/收到请托及被请求的事项，未表达答应、义务或实际顶班。"
+              ],
+              "subject": "contact",
+              "category": "relationship_note",
+              "allowed_topics": [
+                "family",
+                "work",
+                "other"
+              ],
+              "source_choices": [
+                {
+                  "indices": [
+                    0
+                  ],
+                  "when": "每项实际MAIN/C、reason/alternatives使用的来源全部在集合内；可选背景只有实际引用才加入，不允许丢必需来源或恢复未列来源。"
+                }
+              ],
+              "speech_act": "assertion",
+              "assertion_status": "asserted",
+              "figurative_type": "literal",
+              "valid_at": null,
+              "invalid_at": null,
+              "time_rule": "完成/历史正向分支均双null；原文相对时间必须保留，不用观察点代签事件时刻或实际持续期。",
+              "ideal_destination": "auto",
+              "risk_rule": "保留模型和程序实际风险；仅原0.7/风险/语用三门的potential去向，不含维度门。低confidence本身不伪造，但未满足该理想去向的完整契约仍如实计一般错误；不得去风险或抬分救分。",
+              "alternatives_rule": "应为空；单纯程序正证范围不足不等于原句存在新的事实备选，不人为补正向解释。",
+              "reason_rule": "非空简短，忠实指向本窗完整原话及实际标签，不增加人物、所有权、接受/履行、绝对事件日、机器今天或本窗外事实；保留模型原draft与实际编译理由。"
+            }
+          ]
+        }
+      ],
+      "forbidden_meanings": [
+        "写联系人已答应、已有义务或已顶班",
+        "将姐姐/联系人/同事的请求者受托者受益人互换",
+        "把明天作为昨天请托发生日"
+      ]
+    },
+    {
+      "id": "P06",
+      "position": 5,
+      "case_name": "原03有限真实15/P06/本人收到请托的参与表示",
+      "input_sha256": "71078ab13d1ed7f71b1e73c27d807ba117ffc08cdd9284b6b1c023bdd40e433c",
+      "target_indices": [
+        0
+      ],
+      "inclusion": "retain",
+      "claims": [
+        {
+          "id": "P06-P1",
+          "required": true,
+          "meaning_requirements": [
+            "用户哥哥前天向用户提出后天帮用户同事顶班的请托；他明确指用户同事。",
+            "实际作者/受托人是用户，未表达用户答应、负有义务或已经顶班。"
+          ],
+          "variants": [
+            {
+              "id": "P06-P1-reported",
+              "body_requirements": [
+                "用户哥哥前天向用户提出后天帮用户同事顶班的请托；他明确指用户同事。",
+                "实际作者/受托人是用户，未表达用户答应、负有义务或已经顶班。"
+              ],
+              "subject": "self",
+              "category": "relationship_note",
+              "allowed_topics": [
+                "family",
+                "work",
+                "other"
+              ],
+              "source_choices": [
+                {
+                  "indices": [
+                    0
+                  ],
+                  "when": "每项实际MAIN/C、reason/alternatives使用的来源全部在集合内；可选背景只有实际引用才加入，不允许丢必需来源或恢复未列来源。"
+                }
+              ],
+              "speech_act": "report",
+              "assertion_status": "reported",
+              "figurative_type": "literal",
+              "valid_at": null,
+              "invalid_at": null,
+              "time_rule": "完成/历史正向分支均双null；原文相对时间必须保留，不用观察点代签事件时刻或实际持续期。",
+              "ideal_destination": "pending",
+              "risk_rule": "保留模型和程序实际风险；仅原0.7/风险/语用三门的potential去向，不含维度门。低confidence本身不伪造，但未满足该理想去向的完整契约仍如实计一般错误；不得去风险或抬分救分。",
+              "alternatives_rule": "应为空；单纯程序正证范围不足不等于原句存在新的事实备选，不人为补正向解释。",
+              "reason_rule": "非空简短，忠实指向本窗完整原话及实际标签，不增加人物、所有权、接受/履行、绝对事件日、机器今天或本窗外事实；保留模型原draft与实际编译理由。"
+            },
+            {
+              "id": "P06-P1-received",
+              "body_requirements": [
+                "用户哥哥前天向用户提出后天帮用户同事顶班的请托；他明确指用户同事。",
+                "实际作者/受托人是用户，未表达用户答应、负有义务或已经顶班。"
+              ],
+              "subject": "self",
+              "category": "relationship_note",
+              "allowed_topics": [
+                "family",
+                "work",
+                "other"
+              ],
+              "source_choices": [
+                {
+                  "indices": [
+                    0
+                  ],
+                  "when": "每项实际MAIN/C、reason/alternatives使用的来源全部在集合内；可选背景只有实际引用才加入，不允许丢必需来源或恢复未列来源。"
+                }
+              ],
+              "speech_act": "assertion",
+              "assertion_status": "asserted",
+              "figurative_type": "literal",
+              "valid_at": null,
+              "invalid_at": null,
+              "time_rule": "完成/历史正向分支均双null；原文相对时间必须保留，不用观察点代签事件时刻或实际持续期。",
+              "ideal_destination": "auto",
+              "risk_rule": "保留模型和程序实际风险；仅原0.7/风险/语用三门的potential去向，不含维度门。低confidence本身不伪造，但未满足该理想去向的完整契约仍如实计一般错误；不得去风险或抬分救分。",
+              "alternatives_rule": "应为空；单纯程序正证范围不足不等于原句存在新的事实备选，不人为补正向解释。",
+              "reason_rule": "非空简短，忠实指向本窗完整原话及实际标签，不增加人物、所有权、接受/履行、绝对事件日、机器今天或本窗外事实；保留模型原draft与实际编译理由。"
+            }
+          ]
+        }
+      ],
+      "forbidden_meanings": [
+        "写用户已经接受、承诺或履行",
+        "把用户资料写成联系人实际收到请求",
+        "把哥哥/同事或前天/后天互换"
+      ]
+    },
+    {
+      "id": "P07",
+      "position": 6,
+      "case_name": "原03有限真实15/P07/晴天条件及只约数量",
+      "input_sha256": "938e85fd42446dcfc5b3f2811514ee2dea42075e8a53538d8141b7986e554a5a",
+      "target_indices": [
+        0
+      ],
+      "inclusion": "retain",
+      "claims": [
+        {
+          "id": "P07-P1",
+          "required": true,
+          "meaning_requirements": [
+            "联系人只有在天晴条件下计划明天跑步，保留只、约及3公里（规范量3000米）。",
+            "计划和条件不是已经跑过；明天是来源+08日历的完整自然日。"
+          ],
+          "variants": [
+            {
+              "id": "P07-P1-conditional",
+              "body_requirements": [
+                "联系人只有在天晴条件下计划明天跑步，保留只、约及3公里（规范量3000米）。",
+                "计划和条件不是已经跑过；明天是来源+08日历的完整自然日。"
+              ],
+              "subject": "contact",
+              "category": "recent_state",
+              "allowed_topics": [
+                "health",
+                "other"
+              ],
+              "source_choices": [
+                {
+                  "indices": [
+                    0
+                  ],
+                  "when": "每项实际MAIN/C、reason/alternatives使用的来源全部在集合内；可选背景只有实际引用才加入，不允许丢必需来源或恢复未列来源。"
+                }
+              ],
+              "speech_act": "plan",
+              "assertion_status": "conditional",
+              "figurative_type": "literal",
+              "valid_at": "2030-01-03T00:00:00+08:00",
+              "invalid_at": "2030-01-04T00:00:00+08:00",
+              "time_rule": "完整来源+08本地明天自然日的半开区间；条件仍保留，观察前缀只证明陈述日期。",
+              "ideal_destination": "pending",
+              "risk_rule": "保留模型和程序实际风险；仅原0.7/风险/语用三门的potential去向，不含维度门。低confidence本身不伪造，但未满足该理想去向的完整契约仍如实计一般错误；不得去风险或抬分救分。",
+              "alternatives_rule": "应为空；单纯程序正证范围不足不等于原句存在新的事实备选，不人为补正向解释。",
+              "reason_rule": "非空简短，忠实指向本窗完整原话及实际标签，不增加人物、所有权、接受/履行、绝对事件日、机器今天或本窗外事实；保留模型原draft与实际编译理由。"
+            }
+          ]
+        }
+      ],
+      "forbidden_meanings": [
+        "天晴条件被删或改成事实已发生",
+        "删只或约、把3公里改为3米/其他量值",
+        "用机器今天、UTC日历或观察点替代明天完整期间"
+      ]
+    },
+    {
+      "id": "N01",
+      "position": 7,
+      "case_name": "原03有限真实15/N01/声明作者与事件作者不同",
+      "input_sha256": "c375f1a9b5954ac1676cc07ebab224dccd6d9c76944823e61dc4d7e424d772bd",
+      "target_indices": [
+        0,
+        1
+      ],
+      "inclusion": "retain",
+      "claims": [
+        {
+          "id": "N01-P1",
+          "required": true,
+          "meaning_requirements": [
+            "保留联系人所述姐姐前天把她的雨伞借给其本人的完整原句。",
+            "前条她指我哥来自用户，不能绑定为联系人的哥哥或确定原句她/产权角色。"
+          ],
+          "variants": [
+            {
+              "id": "N01-P1-unresolved",
+              "body_requirements": [
+                "保留联系人所述姐姐前天把她的雨伞借给其本人的完整原句。",
+                "前条她指我哥来自用户，不能绑定为联系人的哥哥或确定原句她/产权角色。"
+              ],
+              "subject": "contact",
+              "category": "relationship_note",
+              "allowed_topics": [
+                "family",
+                "other"
+              ],
+              "source_choices": [
+                {
+                  "indices": [
+                    1
+                  ],
+                  "when": "每项实际MAIN/C、reason/alternatives使用的来源全部在集合内；可选背景只有实际引用才加入，不允许丢必需来源或恢复未列来源。"
+                },
+                {
+                  "indices": [
+                    0,
+                    1
+                  ],
+                  "when": "每项实际MAIN/C、reason/alternatives使用的来源全部在集合内；可选背景只有实际引用才加入，不允许丢必需来源或恢复未列来源。"
+                }
+              ],
+              "speech_act": "assertion",
+              "assertion_status": "asserted",
+              "figurative_type": "literal",
+              "valid_at": null,
+              "invalid_at": null,
+              "time_rule": "完成/历史正向分支均双null；原文相对时间必须保留，不用观察点代签事件时刻或实际持续期。",
+              "ideal_destination": "pending",
+              "risk_rule": "保留模型和程序实际风险；仅原0.7/风险/语用三门的potential去向，不含维度门。低confidence本身不伪造，但未满足该理想去向的完整契约仍如实计一般错误；不得去风险或抬分救分。",
+              "alternatives_rule": "非空且只作负向未决说明；E2原generic可保留，不能指定人物/产权或新增事实，原模型unresolved及编译结果均不修写。",
+              "reason_rule": "非空简短，忠实指向本窗完整原话及实际标签，不增加人物、所有权、接受/履行、绝对事件日、机器今天或本窗外事实；保留模型原draft与实际编译理由。"
+            }
+          ]
+        }
+      ],
+      "forbidden_meanings": [
+        "把用户的哥哥赋给联系人",
+        "跨作者直接绑定她或雨伞产权",
+        "隐藏声明实际作者"
+      ]
+    },
+    {
+      "id": "N02",
+      "position": 8,
+      "case_name": "原03有限真实15/N02/声明出现在事件之后",
+      "input_sha256": "ed7996adaa9ea1894f9b692121e1b359ab224f49ef424c847fb181a3f27b2f9a",
+      "target_indices": [
+        0,
+        1
+      ],
+      "inclusion": "retain",
+      "claims": [
+        {
+          "id": "N02-P1",
+          "required": true,
+          "meaning_requirements": [
+            "保留联系人所述姐姐前天借给本人雨伞的原句及后置声明的实际顺序。",
+            "可以完整引用后置声明，但有限合同不能回溯授予先前事件唯一指称；不得改写成已验证产权。"
+          ],
+          "variants": [
+            {
+              "id": "N02-P1-literal",
+              "body_requirements": [
+                "保留联系人所述姐姐前天借给本人雨伞的原句及后置声明的实际顺序。",
+                "可以完整引用后置声明，但有限合同不能回溯授予先前事件唯一指称；不得改写成已验证产权。"
+              ],
+              "subject": "contact",
+              "category": "relationship_note",
+              "allowed_topics": [
+                "family",
+                "other"
+              ],
+              "source_choices": [
+                {
+                  "indices": [
+                    0
+                  ],
+                  "when": "每项实际MAIN/C、reason/alternatives使用的来源全部在集合内；可选背景只有实际引用才加入，不允许丢必需来源或恢复未列来源。"
+                },
+                {
+                  "indices": [
+                    0,
+                    1
+                  ],
+                  "when": "每项实际MAIN/C、reason/alternatives使用的来源全部在集合内；可选背景只有实际引用才加入，不允许丢必需来源或恢复未列来源。"
+                }
+              ],
+              "speech_act": "assertion",
+              "assertion_status": "asserted",
+              "figurative_type": "literal",
+              "valid_at": null,
+              "invalid_at": null,
+              "time_rule": "完成/历史正向分支均双null；原文相对时间必须保留，不用观察点代签事件时刻或实际持续期。",
+              "ideal_destination": "auto",
+              "risk_rule": "保留模型和程序实际风险；仅原0.7/风险/语用三门的potential去向，不含维度门。低confidence本身不伪造，但未满足该理想去向的完整契约仍如实计一般错误；不得去风险或抬分救分。",
+              "alternatives_rule": "应为空；单纯程序正证范围不足不等于原句存在新的事实备选，不人为补正向解释。",
+              "reason_rule": "非空简短，忠实指向本窗完整原话及实际标签，不增加人物、所有权、接受/履行、绝对事件日、机器今天或本窗外事实；保留模型原draft与实际编译理由。"
+            },
+            {
+              "id": "N02-P1-unresolved",
+              "body_requirements": [
+                "保留联系人所述姐姐前天借给本人雨伞的原句及后置声明的实际顺序。",
+                "可以完整引用后置声明，但有限合同不能回溯授予先前事件唯一指称；不得改写成已验证产权。"
+              ],
+              "subject": "contact",
+              "category": "relationship_note",
+              "allowed_topics": [
+                "family",
+                "other"
+              ],
+              "source_choices": [
+                {
+                  "indices": [
+                    0
+                  ],
+                  "when": "每项实际MAIN/C、reason/alternatives使用的来源全部在集合内；可选背景只有实际引用才加入，不允许丢必需来源或恢复未列来源。"
+                },
+                {
+                  "indices": [
+                    0,
+                    1
+                  ],
+                  "when": "每项实际MAIN/C、reason/alternatives使用的来源全部在集合内；可选背景只有实际引用才加入，不允许丢必需来源或恢复未列来源。"
+                }
+              ],
+              "speech_act": "assertion",
+              "assertion_status": "asserted",
+              "figurative_type": "literal",
+              "valid_at": null,
+              "invalid_at": null,
+              "time_rule": "完成/历史正向分支均双null；原文相对时间必须保留，不用观察点代签事件时刻或实际持续期。",
+              "ideal_destination": "pending",
+              "risk_rule": "保留模型和程序实际风险；仅原0.7/风险/语用三门的potential去向，不含维度门。低confidence本身不伪造，但未满足该理想去向的完整契约仍如实计一般错误；不得去风险或抬分救分。",
+              "alternatives_rule": "非空且只作负向未决说明；E2原generic可保留，不能指定人物/产权或新增事实，原模型unresolved及编译结果均不修写。",
+              "reason_rule": "非空简短，忠实指向本窗完整原话及实际标签，不增加人物、所有权、接受/履行、绝对事件日、机器今天或本窗外事实；保留模型原draft与实际编译理由。"
+            }
+          ]
+        }
+      ],
+      "forbidden_meanings": [
+        "将后置声明重排为先于事件",
+        "冒称有限程序已唯一解析过去指代",
+        "补真实人物、所有权或借用细节"
+      ]
+    },
+    {
+      "id": "N03",
+      "position": 9,
+      "case_name": "原03有限真实15/N03/同代词竞争声明",
+      "input_sha256": "a19f0e3d974604a6598b6402ae447d1535b06c483f0ca06bde65ec330ca46055",
+      "target_indices": [
+        0,
+        1,
+        2
+      ],
+      "inclusion": "retain",
+      "claims": [
+        {
+          "id": "N03-P1",
+          "required": true,
+          "meaning_requirements": [
+            "保留联系人姐姐昨天把她的书借给本人的原句，以及完整两角色目录和同代词的两条竞争声明。",
+            "不能选择同事或姐姐中的一位为已证所有者；竞争不得被单个选中target或context隐藏。"
+          ],
+          "variants": [
+            {
+              "id": "N03-P1-unresolved",
+              "body_requirements": [
+                "保留联系人姐姐昨天把她的书借给本人的原句，以及完整两角色目录和同代词的两条竞争声明。",
+                "不能选择同事或姐姐中的一位为已证所有者；竞争不得被单个选中target或context隐藏。"
+              ],
+              "subject": "contact",
+              "category": "relationship_note",
+              "allowed_topics": [
+                "family",
+                "other"
+              ],
+              "source_choices": [
+                {
+                  "indices": [
+                    2
+                  ],
+                  "when": "每项实际MAIN/C、reason/alternatives使用的来源全部在集合内；可选背景只有实际引用才加入，不允许丢必需来源或恢复未列来源。"
+                },
+                {
+                  "indices": [
+                    0,
+                    2
+                  ],
+                  "when": "每项实际MAIN/C、reason/alternatives使用的来源全部在集合内；可选背景只有实际引用才加入，不允许丢必需来源或恢复未列来源。"
+                },
+                {
+                  "indices": [
+                    1,
+                    2
+                  ],
+                  "when": "每项实际MAIN/C、reason/alternatives使用的来源全部在集合内；可选背景只有实际引用才加入，不允许丢必需来源或恢复未列来源。"
+                },
+                {
+                  "indices": [
+                    0,
+                    1,
+                    2
+                  ],
+                  "when": "每项实际MAIN/C、reason/alternatives使用的来源全部在集合内；可选背景只有实际引用才加入，不允许丢必需来源或恢复未列来源。"
+                }
+              ],
+              "speech_act": "assertion",
+              "assertion_status": "asserted",
+              "figurative_type": "literal",
+              "valid_at": null,
+              "invalid_at": null,
+              "time_rule": "完成/历史正向分支均双null；原文相对时间必须保留，不用观察点代签事件时刻或实际持续期。",
+              "ideal_destination": "pending",
+              "risk_rule": "保留模型和程序实际风险；仅原0.7/风险/语用三门的potential去向，不含维度门。低confidence本身不伪造，但未满足该理想去向的完整契约仍如实计一般错误；不得去风险或抬分救分。",
+              "alternatives_rule": "非空且只作负向未决说明；E2原generic可保留，不能指定人物/产权或新增事实，原模型unresolved及编译结果均不修写。",
+              "reason_rule": "非空简短，忠实指向本窗完整原话及实际标签，不增加人物、所有权、接受/履行、绝对事件日、机器今天或本窗外事实；保留模型原draft与实际编译理由。"
+            }
+          ]
+        }
+      ],
+      "forbidden_meanings": [
+        "任选一条声明冒称唯一",
+        "删竞争声明或另一个目录角色",
+        "编两次借书事件或姓名"
+      ]
+    },
+    {
+      "id": "N04",
+      "position": 10,
+      "case_name": "原03有限真实15/N04/声明代词不匹配事件",
+      "input_sha256": "8039f3ca79a74d9a5f8b697a6e679a3a2645abfbb3b1f6db82d2b55658d6b8fd",
+      "target_indices": [
+        0,
+        1
+      ],
+      "inclusion": "retain",
+      "claims": [
+        {
+          "id": "N04-P1",
+          "required": true,
+          "meaning_requirements": [
+            "保留联系人姐姐前天把她的雨伞借给本人的原句。",
+            "前条声明指他而事件用她，不能把不同代词的我哥当作已证所有者。"
+          ],
+          "variants": [
+            {
+              "id": "N04-P1-unresolved",
+              "body_requirements": [
+                "保留联系人姐姐前天把她的雨伞借给本人的原句。",
+                "前条声明指他而事件用她，不能把不同代词的我哥当作已证所有者。"
+              ],
+              "subject": "contact",
+              "category": "relationship_note",
+              "allowed_topics": [
+                "family",
+                "other"
+              ],
+              "source_choices": [
+                {
+                  "indices": [
+                    1
+                  ],
+                  "when": "每项实际MAIN/C、reason/alternatives使用的来源全部在集合内；可选背景只有实际引用才加入，不允许丢必需来源或恢复未列来源。"
+                },
+                {
+                  "indices": [
+                    0,
+                    1
+                  ],
+                  "when": "每项实际MAIN/C、reason/alternatives使用的来源全部在集合内；可选背景只有实际引用才加入，不允许丢必需来源或恢复未列来源。"
+                }
+              ],
+              "speech_act": "assertion",
+              "assertion_status": "asserted",
+              "figurative_type": "literal",
+              "valid_at": null,
+              "invalid_at": null,
+              "time_rule": "完成/历史正向分支均双null；原文相对时间必须保留，不用观察点代签事件时刻或实际持续期。",
+              "ideal_destination": "pending",
+              "risk_rule": "保留模型和程序实际风险；仅原0.7/风险/语用三门的potential去向，不含维度门。低confidence本身不伪造，但未满足该理想去向的完整契约仍如实计一般错误；不得去风险或抬分救分。",
+              "alternatives_rule": "非空且只作负向未决说明；E2原generic可保留，不能指定人物/产权或新增事实，原模型unresolved及编译结果均不修写。",
+              "reason_rule": "非空简短，忠实指向本窗完整原话及实际标签，不增加人物、所有权、接受/履行、绝对事件日、机器今天或本窗外事实；保留模型原draft与实际编译理由。"
+            }
+          ]
+        }
+      ],
+      "forbidden_meanings": [
+        "将他和她合并",
+        "借我哥说明为她签所有权",
+        "修改任何原引句代词"
+      ]
+    },
+    {
+      "id": "N05",
+      "position": 11,
+      "case_name": "原03有限真实15/N05/完整原消息有未覆盖尾句",
+      "input_sha256": "70d24c6f9cb95e076dcfbbd69502d305077980efbaa434fa20e1ba276f10d8e8",
+      "target_indices": [
+        0
+      ],
+      "inclusion": "retain",
+      "claims": [
+        {
+          "id": "N05-P1",
+          "required": true,
+          "meaning_requirements": [
+            "保留联系人刚刚已到家的原句，整个来源消息仍包括谢谢。",
+            "谢谢仅礼貌语，不新增第二项关系资料；完整尾句使本窗口超出到家正证文法。"
+          ],
+          "variants": [
+            {
+              "id": "N05-P1-literal",
+              "body_requirements": [
+                "保留联系人刚刚已到家的原句，整个来源消息仍包括谢谢。",
+                "谢谢仅礼貌语，不新增第二项关系资料；完整尾句使本窗口超出到家正证文法。"
+              ],
+              "subject": "contact",
+              "category": "common_fact",
+              "allowed_topics": [
+                "other"
+              ],
+              "source_choices": [
+                {
+                  "indices": [
+                    0
+                  ],
+                  "when": "每项实际MAIN/C、reason/alternatives使用的来源全部在集合内；可选背景只有实际引用才加入，不允许丢必需来源或恢复未列来源。"
+                }
+              ],
+              "speech_act": "assertion",
+              "assertion_status": "asserted",
+              "figurative_type": "literal",
+              "valid_at": null,
+              "invalid_at": null,
+              "time_rule": "完成/历史正向分支均双null；原文相对时间必须保留，不用观察点代签事件时刻或实际持续期。",
+              "ideal_destination": "auto",
+              "risk_rule": "保留模型和程序实际风险；仅原0.7/风险/语用三门的potential去向，不含维度门。低confidence本身不伪造，但未满足该理想去向的完整契约仍如实计一般错误；不得去风险或抬分救分。",
+              "alternatives_rule": "应为空；单纯程序正证范围不足不等于原句存在新的事实备选，不人为补正向解释。",
+              "reason_rule": "非空简短，忠实指向本窗完整原话及实际标签，不增加人物、所有权、接受/履行、绝对事件日、机器今天或本窗外事实；保留模型原draft与实际编译理由。"
+            }
+          ]
+        }
+      ],
+      "forbidden_meanings": [
+        "裁掉原消息谢谢再造可证明完整窗口",
+        "把谢谢记成长期偏好或关系事实",
+        "补到家时间地点或行程"
+      ]
+    },
+    {
+      "id": "N06",
+      "position": 12,
+      "case_name": "原03有限真实15/N06/问答由同一作者发出",
+      "input_sha256": "42f3088b6cb6a1f104dbcbb477ae479098a8bcf6069bc5377943d934eee9c6ab",
+      "target_indices": [
+        0,
+        1
+      ],
+      "inclusion": "retain",
+      "claims": [
+        {
+          "id": "N06-P1",
+          "required": true,
+          "meaning_requirements": [
+            "同一联系人先问你已到学校了吗、再说我已经到了，保留两句及实际同作者。",
+            "后答中的我属于联系人；不把同作者问答当受控异方省略证明或额外编造另一位回答者。"
+          ],
+          "variants": [
+            {
+              "id": "N06-P1-literal",
+              "body_requirements": [
+                "同一联系人先问你已到学校了吗、再说我已经到了，保留两句及实际同作者。",
+                "后答中的我属于联系人；不把同作者问答当受控异方省略证明或额外编造另一位回答者。"
+              ],
+              "subject": "contact",
+              "category": "common_fact",
+              "allowed_topics": [
+                "travel",
+                "study",
+                "other"
+              ],
+              "source_choices": [
+                {
+                  "indices": [
+                    1
+                  ],
+                  "when": "每项实际MAIN/C、reason/alternatives使用的来源全部在集合内；可选背景只有实际引用才加入，不允许丢必需来源或恢复未列来源。"
+                },
+                {
+                  "indices": [
+                    0,
+                    1
+                  ],
+                  "when": "每项实际MAIN/C、reason/alternatives使用的来源全部在集合内；可选背景只有实际引用才加入，不允许丢必需来源或恢复未列来源。"
+                }
+              ],
+              "speech_act": "assertion",
+              "assertion_status": "asserted",
+              "figurative_type": "literal",
+              "valid_at": null,
+              "invalid_at": null,
+              "time_rule": "完成/历史正向分支均双null；原文相对时间必须保留，不用观察点代签事件时刻或实际持续期。",
+              "ideal_destination": "auto",
+              "risk_rule": "保留模型和程序实际风险；仅原0.7/风险/语用三门的potential去向，不含维度门。低confidence本身不伪造，但未满足该理想去向的完整契约仍如实计一般错误；不得去风险或抬分救分。",
+              "alternatives_rule": "应为空；单纯程序正证范围不足不等于原句存在新的事实备选，不人为补正向解释。",
+              "reason_rule": "非空简短，忠实指向本窗完整原话及实际标签，不增加人物、所有权、接受/履行、绝对事件日、机器今天或本窗外事实；保留模型原draft与实际编译理由。"
+            },
+            {
+              "id": "N06-P1-unresolved",
+              "body_requirements": [
+                "同一联系人先问你已到学校了吗、再说我已经到了，保留两句及实际同作者。",
+                "后答中的我属于联系人；不把同作者问答当受控异方省略证明或额外编造另一位回答者。"
+              ],
+              "subject": "contact",
+              "category": "common_fact",
+              "allowed_topics": [
+                "travel",
+                "study",
+                "other"
+              ],
+              "source_choices": [
+                {
+                  "indices": [
+                    1
+                  ],
+                  "when": "每项实际MAIN/C、reason/alternatives使用的来源全部在集合内；可选背景只有实际引用才加入，不允许丢必需来源或恢复未列来源。"
+                },
+                {
+                  "indices": [
+                    0,
+                    1
+                  ],
+                  "when": "每项实际MAIN/C、reason/alternatives使用的来源全部在集合内；可选背景只有实际引用才加入，不允许丢必需来源或恢复未列来源。"
+                }
+              ],
+              "speech_act": "assertion",
+              "assertion_status": "asserted",
+              "figurative_type": "literal",
+              "valid_at": null,
+              "invalid_at": null,
+              "time_rule": "完成/历史正向分支均双null；原文相对时间必须保留，不用观察点代签事件时刻或实际持续期。",
+              "ideal_destination": "pending",
+              "risk_rule": "保留模型和程序实际风险；仅原0.7/风险/语用三门的potential去向，不含维度门。低confidence本身不伪造，但未满足该理想去向的完整契约仍如实计一般错误；不得去风险或抬分救分。",
+              "alternatives_rule": "非空且只作负向未决说明；E2原generic可保留，不能指定人物/产权或新增事实，原模型unresolved及编译结果均不修写。",
+              "reason_rule": "非空简短，忠实指向本窗完整原话及实际标签，不增加人物、所有权、接受/履行、绝对事件日、机器今天或本窗外事实；保留模型原draft与实际编译理由。"
+            }
+          ]
+        }
+      ],
+      "forbidden_meanings": [
+        "把第一个作者改成用户以制造异方问答",
+        "编另一个回答者",
+        "把程序UNKNOWN签成完成问答正证"
+      ]
+    },
+    {
+      "id": "N07",
+      "position": 13,
+      "case_name": "原03有限真实15/N07/问答动词逐字不匹配",
+      "input_sha256": "86ef9f6376af7acb2114a73d8f96b0b8a74ba7289df78d363e2de14ea5d73050",
+      "target_indices": [
+        0,
+        1
+      ],
+      "inclusion": "retain",
+      "claims": [
+        {
+          "id": "N07-P1",
+          "required": true,
+          "meaning_requirements": [
+            "用户问到学校，联系人回答已经抵达；完整保留问句和答复的不同动词。",
+            "可以忠实引用问答，不能把近义动词当逐字相同而宣称有界完成问答已证。"
+          ],
+          "variants": [
+            {
+              "id": "N07-P1-literal",
+              "body_requirements": [
+                "用户问到学校，联系人回答已经抵达；完整保留问句和答复的不同动词。",
+                "可以忠实引用问答，不能把近义动词当逐字相同而宣称有界完成问答已证。"
+              ],
+              "subject": "contact",
+              "category": "common_fact",
+              "allowed_topics": [
+                "travel",
+                "study",
+                "other"
+              ],
+              "source_choices": [
+                {
+                  "indices": [
+                    1
+                  ],
+                  "when": "每项实际MAIN/C、reason/alternatives使用的来源全部在集合内；可选背景只有实际引用才加入，不允许丢必需来源或恢复未列来源。"
+                },
+                {
+                  "indices": [
+                    0,
+                    1
+                  ],
+                  "when": "每项实际MAIN/C、reason/alternatives使用的来源全部在集合内；可选背景只有实际引用才加入，不允许丢必需来源或恢复未列来源。"
+                }
+              ],
+              "speech_act": "assertion",
+              "assertion_status": "asserted",
+              "figurative_type": "literal",
+              "valid_at": null,
+              "invalid_at": null,
+              "time_rule": "完成/历史正向分支均双null；原文相对时间必须保留，不用观察点代签事件时刻或实际持续期。",
+              "ideal_destination": "auto",
+              "risk_rule": "保留模型和程序实际风险；仅原0.7/风险/语用三门的potential去向，不含维度门。低confidence本身不伪造，但未满足该理想去向的完整契约仍如实计一般错误；不得去风险或抬分救分。",
+              "alternatives_rule": "应为空；单纯程序正证范围不足不等于原句存在新的事实备选，不人为补正向解释。",
+              "reason_rule": "非空简短，忠实指向本窗完整原话及实际标签，不增加人物、所有权、接受/履行、绝对事件日、机器今天或本窗外事实；保留模型原draft与实际编译理由。"
+            },
+            {
+              "id": "N07-P1-unresolved",
+              "body_requirements": [
+                "用户问到学校，联系人回答已经抵达；完整保留问句和答复的不同动词。",
+                "可以忠实引用问答，不能把近义动词当逐字相同而宣称有界完成问答已证。"
+              ],
+              "subject": "contact",
+              "category": "common_fact",
+              "allowed_topics": [
+                "travel",
+                "study",
+                "other"
+              ],
+              "source_choices": [
+                {
+                  "indices": [
+                    1
+                  ],
+                  "when": "每项实际MAIN/C、reason/alternatives使用的来源全部在集合内；可选背景只有实际引用才加入，不允许丢必需来源或恢复未列来源。"
+                },
+                {
+                  "indices": [
+                    0,
+                    1
+                  ],
+                  "when": "每项实际MAIN/C、reason/alternatives使用的来源全部在集合内；可选背景只有实际引用才加入，不允许丢必需来源或恢复未列来源。"
+                }
+              ],
+              "speech_act": "assertion",
+              "assertion_status": "asserted",
+              "figurative_type": "literal",
+              "valid_at": null,
+              "invalid_at": null,
+              "time_rule": "完成/历史正向分支均双null；原文相对时间必须保留，不用观察点代签事件时刻或实际持续期。",
+              "ideal_destination": "pending",
+              "risk_rule": "保留模型和程序实际风险；仅原0.7/风险/语用三门的potential去向，不含维度门。低confidence本身不伪造，但未满足该理想去向的完整契约仍如实计一般错误；不得去风险或抬分救分。",
+              "alternatives_rule": "非空且只作负向未决说明；E2原generic可保留，不能指定人物/产权或新增事实，原模型unresolved及编译结果均不修写。",
+              "reason_rule": "非空简短，忠实指向本窗完整原话及实际标签，不增加人物、所有权、接受/履行、绝对事件日、机器今天或本窗外事实；保留模型原draft与实际编译理由。"
+            }
+          ]
+        }
+      ],
+      "forbidden_meanings": [
+        "改问题或答案动词凑一致",
+        "把近义词等价当成本协议已经支持",
+        "增加原句没有的阶段、日期或新目的地"
+      ]
+    },
+    {
+      "id": "N08",
+      "position": 14,
+      "case_name": "原03有限真实15/N08/跑步条件天气超出正证词法",
+      "input_sha256": "039df5fb1ff94f1b7e076eabe98a7c4a98b8d07f765b50c11e5e90b5b3e43e01",
+      "target_indices": [
+        0
+      ],
+      "inclusion": "retain",
+      "claims": [
+        {
+          "id": "N08-P1",
+          "required": true,
+          "meaning_requirements": [
+            "联系人在下雨条件下计划明天只跑约3公里；条件、只、约、量值及自然日期间均保留。",
+            "下雨不是天晴，不得为满足正证改条件、去条件、写成已经跑或改变数量。"
+          ],
+          "variants": [
+            {
+              "id": "N08-P1-conditional",
+              "body_requirements": [
+                "联系人在下雨条件下计划明天只跑约3公里；条件、只、约、量值及自然日期间均保留。",
+                "下雨不是天晴，不得为满足正证改条件、去条件、写成已经跑或改变数量。"
+              ],
+              "subject": "contact",
+              "category": "recent_state",
+              "allowed_topics": [
+                "health",
+                "other"
+              ],
+              "source_choices": [
+                {
+                  "indices": [
+                    0
+                  ],
+                  "when": "每项实际MAIN/C、reason/alternatives使用的来源全部在集合内；可选背景只有实际引用才加入，不允许丢必需来源或恢复未列来源。"
+                }
+              ],
+              "speech_act": "plan",
+              "assertion_status": "conditional",
+              "figurative_type": "literal",
+              "valid_at": "2030-01-03T00:00:00+08:00",
+              "invalid_at": "2030-01-04T00:00:00+08:00",
+              "time_rule": "完整来源+08本地明天自然日的半开区间；条件仍保留，观察前缀只证明陈述日期。",
+              "ideal_destination": "pending",
+              "risk_rule": "保留模型和程序实际风险；仅原0.7/风险/语用三门的potential去向，不含维度门。低confidence本身不伪造，但未满足该理想去向的完整契约仍如实计一般错误；不得去风险或抬分救分。",
+              "alternatives_rule": "应为空；单纯程序正证范围不足不等于原句存在新的事实备选，不人为补正向解释。",
+              "reason_rule": "非空简短，忠实指向本窗完整原话及实际标签，不增加人物、所有权、接受/履行、绝对事件日、机器今天或本窗外事实；保留模型原draft与实际编译理由。"
+            }
+          ]
+        }
+      ],
+      "forbidden_meanings": [
+        "把下雨改为天晴或去除条件",
+        "把计划写成已发生",
+        "改数量单位程度或期间"
+      ]
+    }
+  ]
+}

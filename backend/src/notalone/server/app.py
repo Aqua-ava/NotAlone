@@ -86,6 +86,7 @@ from notalone.application.import_service import (
     TaskHost,
 )
 from notalone.application.task_service import TaskService
+from notalone.tasks.models import ExtractionRuntimeMode
 from notalone.application.trace_service import TraceService
 from notalone.managed_update_backups import ManagedUpdateBackupError
 from notalone.application.model_priority import ModelWorkStopped
@@ -2034,7 +2035,12 @@ class BackendApp:
         if path in {"/api/tasks/run", "/api/tasks/retry"}:
             if method != "POST":
                 raise ImportTaskRequestInvalid()
-            payload = _parse_import_json(body)
+            payload = _parse_task_json(body)
+            allowed = {"contact_id", "task_id"}
+            if path == "/api/tasks/run":
+                allowed.add("extraction_runtime_mode")
+            if set(payload) - allowed:
+                raise ImportTaskRequestInvalid()
             contact_value = payload.get("contact_id")
             if not isinstance(contact_value, str):
                 raise ImportTaskRequestInvalid()
@@ -2049,6 +2055,15 @@ class BackendApp:
                     raise ImportTaskRequestInvalid()
                 try:
                     task_id = UUID(task_value)
+                except ValueError:
+                    raise ImportTaskRequestInvalid() from None
+            runtime_mode = None
+            if "extraction_runtime_mode" in payload:
+                value = payload["extraction_runtime_mode"]
+                if task_id is None or type(value) is not str:
+                    raise ImportTaskRequestInvalid()
+                try:
+                    runtime_mode = ExtractionRuntimeMode(value)
                 except ValueError:
                     raise ImportTaskRequestInvalid() from None
             if path == "/api/tasks/retry":
@@ -2066,6 +2081,16 @@ class BackendApp:
                 task_service.status(
                     owner_id=owner_id, contact_id=contact_id, task_id=task_id,
                 )
+                if runtime_mode is not None:
+                    try:
+                        task_service.configure_runtime(
+                            owner_id=owner_id, contact_id=contact_id,
+                            task_id=task_id, mode=runtime_mode,
+                        )
+                    except BackgroundTaskStateError:
+                        return _json_response(
+                            HTTPStatus.CONFLICT, {"error": "task_runtime_config_conflict"},
+                        )
                 start_args["task_id"] = task_id
             return _json_response(
                 HTTPStatus.OK,
@@ -3165,6 +3190,31 @@ def _parse_import_json(body: bytes) -> dict[str, object]:
     return payload
 
 
+def _parse_task_json(body: bytes) -> dict[str, object]:
+    """任务配置拒绝重复键与非有限值，不能静默选择冲突输入的最后一个。"""
+
+    def unique(pairs: list[tuple[str, object]]) -> dict[str, object]:
+        result: dict[str, object] = {}
+        for key, value in pairs:
+            if key in result:
+                raise ImportTaskRequestInvalid()
+            result[key] = value
+        return result
+
+    def nonfinite(_: str) -> object:
+        raise ImportTaskRequestInvalid()
+
+    try:
+        payload = json.loads(
+            body.decode("utf-8"), object_pairs_hook=unique, parse_constant=nonfinite,
+        )
+    except (UnicodeDecodeError, ValueError):
+        raise ImportTaskRequestInvalid() from None
+    if type(payload) is not dict:
+        raise ImportTaskRequestInvalid()
+    return payload
+
+
 def _parse_follow_smoke_json(body: bytes) -> dict[str, object]:
     """解析固定的人工验证请求体，不保留或回显未知内容。"""
 
@@ -3227,7 +3277,10 @@ def _path_tail(path: str, prefix: str, suffix: str) -> str:
 
 
 def _owner_memory_payload(memory: OwnerMemory) -> dict[str, object]:
+    from notalone.application.memory_projection import source_dependency_fields
+
     return {
+        **source_dependency_fields(memory),
         "memory_id": str(memory.memory_id),
         "level": "owner",
         "text": memory.text,
@@ -3259,7 +3312,10 @@ def _owner_memory_payload(memory: OwnerMemory) -> dict[str, object]:
 
 
 def _memory_payload(memory: ConfirmedMemory) -> dict[str, object]:
+    from notalone.application.memory_projection import source_dependency_fields
+
     return {
+        **source_dependency_fields(memory),
         "memory_id": str(memory.memory_id),
         "level": "contact",
         "contact_id": str(memory.scope.contact_id),
@@ -3294,7 +3350,10 @@ def _iso_or_none(value: datetime | None) -> str | None:
 
 
 def _memory_candidate_payload(candidate: MemoryCandidate) -> dict[str, object]:
+    from notalone.application.memory_projection import bounded_dimension_states, source_dependency_fields
+
     payload: dict[str, object] = {
+        **source_dependency_fields(candidate),
         "candidate_id": str(candidate.candidate_id),
         "text": candidate.text,
         "category": candidate.category.value,
@@ -3321,4 +3380,6 @@ def _memory_candidate_payload(candidate: MemoryCandidate) -> dict[str, object]:
         payload["dimension_evidence_source_current"] = (
             candidate.dimension_evidence.source_bound
         )
+    if "source_dependency_mode" in payload:
+        payload["dimension_evidence_dimensions"] = bounded_dimension_states(candidate)
     return payload

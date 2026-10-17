@@ -30,7 +30,7 @@ def _canonical_digest(value: object) -> str:
     ))
 
 
-def candidate_digest(value: MemoryCandidate | ExtractedFact) -> str:
+def candidate_digest(value: MemoryCandidate | ExtractedFact, *, version: int = 1) -> str:
     """只含候选与 Fact 共有的采纳字段；不含保存时间或状态。"""
 
     from notalone.memory.models import MemoryCandidate
@@ -39,7 +39,12 @@ def candidate_digest(value: MemoryCandidate | ExtractedFact) -> str:
         value.source_ids if isinstance(value, MemoryCandidate)
         else value.source_message_ids
     )
+    if version == 4:
+        from .models import SourceDependencyMode
+        if value.source_dependency_mode is not SourceDependencyMode.ALL:
+            raise ValueError("版本四摘要必须绑定实际ALL资料。")
     return _canonical_digest({
+        **({"source_dependency_mode": "all"} if version == 4 else {}),
         "text": value.text, "category": value.category.value,
         "topic": value.topic.value, "subject": value.subject.value,
         "source_ids": sorted(str(item) for item in source_ids),
@@ -98,7 +103,11 @@ def source_state_digest(snapshots: Iterable[Mapping[str, object]]) -> str | None
         return None
 
 
-def window_digest(scope: ContactScope, messages: tuple[EvidenceMessage, ...]) -> str:
+def window_digest(scope: ContactScope, messages: tuple[EvidenceMessage, ...], *, version: int = 1,
+                  target_message_ids: tuple[UUID, ...] = ()) -> str:
+    if version == 4:
+        return _canonical_digest({"version": 4, "scope": {"owner_id": str(scope.owner_id), "contact_id": str(scope.contact_id)},
+            "messages": [item.to_payload(version=4) for item in messages], "target_message_ids": [str(item) for item in target_message_ids]})
     return _canonical_digest({
         "owner_id": str(scope.owner_id), "contact_id": str(scope.contact_id),
         "messages": [item.to_payload() for item in messages],
@@ -119,15 +128,34 @@ def bind_dimension_evidence(
     from notalone.memory.models import MemoryCandidate
 
     result = replace(evidence)
+    from .models import SourceDependencyMode
+    if (evidence.version == 4) != (candidate.source_dependency_mode is SourceDependencyMode.ALL):
+        return result
+    if evidence.version == 4:
+        from notalone.memory_extraction.source_proof import bounded_source_occurred_at
+        from notalone.memory_extraction.models import MessageRef, MessageSender
+        if source_snapshots is None or set(source_snapshots) != set(texts):
+            return result
+        restored = []
+        for item in messages:
+            if item.message_id not in texts or source_state_digest(source_snapshots[item.message_id]) != item.source_state_sha256:
+                return result
+            message = MessageRef(item.message_id, texts[item.message_id], MessageSender(item.sender),
+                item.occurred_at, source_snapshots[item.message_id], message_type=item.message_type,
+                text_representation=item.text_representation)
+            original = bounded_source_occurred_at(message)
+            restored.append(replace(item, occurred_at=original) if original is not None else item)
+        messages = tuple(restored)
     current = (
         evidence.scope == scope
-        and evidence.candidate_sha256 == candidate_digest(candidate)
+        and evidence.candidate_sha256 == candidate_digest(candidate, version=evidence.version)
         and (
             isinstance(candidate, MemoryCandidate)
             or evidence.pragmatics == fact_pragmatics(candidate)
         )
-        and evidence.messages == messages
-        and evidence.window_sha256 == window_digest(scope, messages)
+        and (tuple(item.to_payload(version=4) for item in evidence.messages) == tuple(item.to_payload(version=4) for item in messages)
+            if evidence.version == 4 else evidence.messages == messages)
+        and evidence.window_sha256 == window_digest(scope, messages, version=evidence.version, target_message_ids=evidence.target_message_ids)
         and set(texts) == {item.message_id for item in messages}
         and all(
             item.source_refs and item.source_state_sha256 is not None
@@ -154,7 +182,7 @@ def bind_dimension_evidence(
             or content_digest(candidate.text[span.start:span.end]) != span.sha256
         ):
             return result
-    if evidence.semantic_basis is not None:
+    if evidence.semantic_basis is not None or evidence.version == 4:
         from notalone.memory_extraction.source_proof import reverify_basis
         from notalone.memory_extraction.models import (
             ExtractedFact, ExtractionWindow, MessageRef, MessageSender,
@@ -169,7 +197,7 @@ def bind_dimension_evidence(
             evidence.pragmatics is None
             or source_snapshots is None
             or set(source_snapshots) != set(texts)
-            or any(anchor.message_id not in source_ids for anchor in basis.message_spans)
+            or evidence.version != 4 and basis is not None and any(anchor.message_id not in source_ids for anchor in basis.message_spans)
         ):
             return result
         assert source_snapshots is not None
@@ -178,7 +206,7 @@ def bind_dimension_evidence(
             != item.source_state_sha256 for item in messages
         ):
             return result
-        for span in basis.candidate_spans:
+        for span in basis.candidate_spans if basis is not None else ():
             if (
                 span.end > len(candidate.text)
                 or content_digest(candidate.text[span.start:span.end]) != span.sha256
@@ -192,7 +220,7 @@ def bind_dimension_evidence(
                     message_type=item.message_type,
                     text_representation=item.text_representation,
                 ) for item in messages
-            ))
+            ), target_message_ids=evidence.target_message_ids if evidence.version == 4 else None)
             fact = candidate if isinstance(candidate, ExtractedFact) else ExtractedFact(
                 text=candidate.text, category=candidate.category,
                 subject=candidate.subject, topic=candidate.topic,
@@ -205,11 +233,17 @@ def bind_dimension_evidence(
                 assertion_status=evidence.pragmatics.assertion_status,
                 figurative_type=evidence.pragmatics.figurative_type,
                 event=candidate.event,
+                source_dependency_mode=candidate.source_dependency_mode,
             )
-            checked = reverify_basis(basis.to_payload(), window, fact, texts)
+            if evidence.version == 4:
+                from notalone.memory_extraction.source_proof import validate_bounded_body_sources
+                validate_bounded_body_sources(window, fact)
+                if any(origin.message_id not in source_ids for origin in evidence.media or ()):
+                    return result
+            checked = reverify_basis(basis.to_payload(), window, fact, texts) if basis is not None else None
         except (TypeError, ValueError):
             return result
-        if checked.status != "verified" or checked.semantic_basis != basis.to_payload():
+        if basis is not None and (checked is None or checked.status != "verified" or checked.semantic_basis != basis.to_payload()):
             return result
     object.__setattr__(result, "source_bound", True)
     return result

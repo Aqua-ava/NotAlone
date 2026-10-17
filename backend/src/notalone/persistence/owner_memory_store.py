@@ -35,7 +35,9 @@ from notalone.memory.models import (
     MemoryCategory,
     MemoryTopic,
     OwnerMemory,
+    SourceDependencyMode,
 )
+from notalone.persistence.source_dependency import dependency_mode, ensure_all_sources
 from notalone.persistence.locks import lock_contact_scope, lock_owner_scope
 from notalone.persistence.memory_timing import timed_memory_rows
 from notalone.persistence.memory_versions import (
@@ -71,6 +73,7 @@ _OWNER_MEMORY_COLUMNS = """
     supersedes_memory_id,
     to_jsonb(owner_memory)->'event' AS memory_event,
     to_jsonb(owner_memory)->'version_evidence' AS version_evidence,
+    to_jsonb(owner_memory)->>'source_dependency_mode' AS dependency_mode,
     created_at AS recorded_at
 """
 
@@ -102,25 +105,28 @@ class PostgresOwnerMemoryStore:
                                 and memory.source_candidate_id is None
                                 and memory.supersedes_memory_id is None
                                 and memory.source_ids == (memory.owner_id,))
-                if not manual_entry:
+                if memory.source_dependency_mode is SourceDependencyMode.ALL:
+                    ensure_all_sources(connection, owner_id=memory.owner_id, source_ids=memory.source_ids)
+                elif not manual_entry:
                     _ensure_active_sources(
                         connection,
                         owner_id=memory.owner_id,
                         source_ids=memory.source_ids,
                     )
+                mode_column, mode_value = _insert_mode(memory)
                 row = connection.execute(
                     f"""
                     INSERT INTO public.owner_memory (
                         id, owner_id, text_content, category, topic,
                         source_ids, adoption_method, status,
                         valid_at, invalid_at, revision, confidence, risk_flags,
-                        source_candidate_id, supersedes_memory_id
+                        source_candidate_id, supersedes_memory_id{mode_column}
                     ) VALUES (
                         %(memory_id)s, %(owner_id)s, %(text)s, %(category)s,
                         %(topic)s, %(source_ids)s, %(adoption_method)s,
                         %(status)s, %(valid_at)s, %(invalid_at)s, %(revision)s,
                         %(confidence)s, %(risk_flags)s, %(source_candidate_id)s,
-                        %(supersedes_memory_id)s
+                        %(supersedes_memory_id)s{mode_value}
                     ) RETURNING {_OWNER_MEMORY_COLUMNS}
                     """,
                     _to_row(memory),
@@ -177,7 +183,9 @@ class PostgresOwnerMemoryStore:
                            interpretation_reason,
                            to_jsonb(memory_candidate)->'dimension_evidence'
                                AS dimension_evidence,
-                           to_jsonb(memory_candidate)->'event' AS event
+                           to_jsonb(memory_candidate)->'event' AS event,
+                           to_jsonb(memory_candidate)->>'source_dependency_mode'
+                               AS dependency_mode
                     FROM public.memory_candidate
                     WHERE owner_id = %s AND contact_id = %s AND id = %s
                     FOR UPDATE
@@ -268,7 +276,16 @@ class PostgresOwnerMemoryStore:
                         raise MemoryVersionConflict("自动更新需要新依据和当前叶子版本。")
                     sources = tuple(dict.fromkeys((*expected_previous.source_ids, *sources)))
 
-                if adoption_method is AdoptionMethod.AUTO:
+                candidate_mode = dependency_mode(candidate_row.get("dependency_mode"))
+                mode = (SourceDependencyMode.ALL if expected_previous is not None
+                        and expected_previous.source_dependency_mode is SourceDependencyMode.ALL else candidate_mode)
+                if mode is SourceDependencyMode.ALL:
+                    ensure_all_sources(connection, owner_id=scope.owner_id,
+                                       contact_id=scope.contact_id,
+                                       source_ids=sources)
+                if (adoption_method is AdoptionMethod.AUTO
+                        or mode is SourceDependencyMode.ALL
+                        and candidate_row["dimension_evidence"] is not None):
                     raw = candidate_row["dimension_evidence"]
                     stored = replace(
                         candidate,
@@ -285,6 +302,7 @@ class PostgresOwnerMemoryStore:
                         interpretation_reason=(
                             candidate_row["interpretation_reason"] or ""
                         ),
+                        source_dependency_mode=candidate_mode,
                         dimension_evidence=(
                             DimensionEvidence.from_payload(raw)
                             if raw is not None else None
@@ -294,9 +312,10 @@ class PostgresOwnerMemoryStore:
                     current = bind_stored_dimension_evidence(
                         connection, stored, lock_sources=True
                     )
-                    require_current_dimension_evidence(
-                        current, candidate.dimension_evidence
-                    )
+                    if adoption_method is AdoptionMethod.AUTO:
+                        require_current_dimension_evidence(
+                            current, candidate.dimension_evidence
+                        )
 
                 memory = OwnerMemory(
                     memory_id=self._id_factory(),
@@ -306,6 +325,7 @@ class PostgresOwnerMemoryStore:
                     topic=MemoryTopic(candidate_row["topic"]),
                     source_ids=sources,
                     source_candidate_id=candidate_id,
+                    source_dependency_mode=mode,
                     adoption_method=adoption_method,
                     status=ConfirmedMemoryStatus.ACTIVE,
                     valid_at=candidate_row["valid_at"],
@@ -325,19 +345,20 @@ class PostgresOwnerMemoryStore:
                     memory = replace(memory, version_evidence=proof)
                     event_column += ", version_evidence"
                     event_value += ", %(version_evidence)s"
+                mode_column, mode_value = _insert_mode(memory)
                 row = connection.execute(
                     f"""
                     INSERT INTO public.owner_memory (
                         id, owner_id, text_content, category, topic,
                         source_ids, adoption_method, status, valid_at,
                         invalid_at, revision, confidence, risk_flags,
-                        source_candidate_id, supersedes_memory_id{event_column}
+                        source_candidate_id, supersedes_memory_id{event_column}{mode_column}
                     ) VALUES (
                         %(memory_id)s, %(owner_id)s, %(text)s, %(category)s,
                         %(topic)s, %(source_ids)s, %(adoption_method)s,
                         %(status)s, %(valid_at)s, %(invalid_at)s, %(revision)s,
                         %(confidence)s, %(risk_flags)s, %(source_candidate_id)s,
-                        %(supersedes_memory_id)s{event_value}
+                        %(supersedes_memory_id)s{event_value}{mode_value}
                     )
                     RETURNING {_OWNER_MEMORY_COLUMNS}
                     """,
@@ -490,11 +511,13 @@ class PostgresOwnerMemoryStore:
                         or previous["invalid_at"] is not None and now >= previous["invalid_at"]):
                     raise MemoryCorrectionConflictError("本人资料版本已变化，请重新查看后修正。")
                 sources = tuple(previous["source_ids"])
+                mode = dependency_mode(previous.get("dependency_mode"))
                 _ensure_memory_sources(connection, owner_id=owner_id, row=previous)
                 corrected = OwnerMemory(
                     memory_id=uuid4(), owner_id=owner_id, text=text,
                     category=category or MemoryCategory(previous["category"]),
                     topic=MemoryTopic(previous["topic"]), source_ids=sources,
+                    source_dependency_mode=mode,
                     adoption_method=AdoptionMethod.MANUAL,
                     status=ConfirmedMemoryStatus.ACTIVE,
                     supersedes_memory_id=memory_id,
@@ -512,16 +535,17 @@ class PostgresOwnerMemoryStore:
                 ).rowcount
                 if updated != 1:
                     raise OwnerMemoryPersistenceError("本人旧版本失效更新失败。")
+                mode_column, mode_value = _insert_mode(corrected)
                 row = connection.execute(
                     f"""INSERT INTO public.owner_memory (
                         id, owner_id, text_content, category, topic, source_ids,
                         adoption_method, status, valid_at, invalid_at, revision,
-                        confidence, risk_flags, source_candidate_id, supersedes_memory_id
+                        confidence, risk_flags, source_candidate_id, supersedes_memory_id{mode_column}
                     ) VALUES (
                         %(memory_id)s, %(owner_id)s, %(text)s, %(category)s,
                         %(topic)s, %(source_ids)s, %(adoption_method)s, %(status)s,
                         %(valid_at)s, %(invalid_at)s, %(revision)s, %(confidence)s,
-                        %(risk_flags)s, %(source_candidate_id)s, %(supersedes_memory_id)s
+                        %(risk_flags)s, %(source_candidate_id)s, %(supersedes_memory_id)s{mode_value}
                     ) RETURNING {_OWNER_MEMORY_COLUMNS}""",
                     _to_row(corrected),
                 ).fetchone()
@@ -694,6 +718,9 @@ def _ensure_memory_sources(
 ) -> tuple[UUID, ...]:
     """本人归属引用须来自实际手录根版本；其他引用一律核对聊天来源。"""
     sources = tuple(row["source_ids"])
+    if dependency_mode(row.get("dependency_mode", row.get("source_dependency_mode"))) is SourceDependencyMode.ALL:
+        ensure_all_sources(connection, owner_id=owner_id, source_ids=sources)
+        return sources
     if owner_id in sources:
         current = row
         visited: set[UUID] = set()
@@ -803,6 +830,7 @@ def _to_row(memory: OwnerMemory) -> dict[str, Any]:
         "supersedes_memory_id": memory.supersedes_memory_id,
         "event": Jsonb(memory.event.to_payload()) if memory.event is not None else None,
         "version_evidence": Jsonb(memory.version_evidence.to_payload()) if memory.version_evidence else None,
+        "source_dependency_mode": memory.source_dependency_mode.value,
     }
 
 
@@ -826,6 +854,7 @@ def _from_row(row: dict[str, Any]) -> OwnerMemory:
         timing=row["timing"], event=row.get("_bound_event", MemoryEvent.from_payload(row.get("memory_event"))),
         version_evidence=row.get("_bound_version_evidence", VersionEvidence.from_payload(row.get("version_evidence"))),
         can_revert_auto_update=row.get("_can_revert_auto_update", False),
+        source_dependency_mode=dependency_mode(row.get("dependency_mode")),
     )
 
 
@@ -840,3 +869,9 @@ def _timed_rows(
             connection, memory=_from_row(row), raw=row.get("version_evidence"),
         )
     return timed
+
+
+def _insert_mode(memory: OwnerMemory) -> tuple[str, str]:
+    if memory.source_dependency_mode is SourceDependencyMode.ALL:
+        return ", source_dependency_mode", ", %(source_dependency_mode)s"
+    return "", ""

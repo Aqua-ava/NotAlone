@@ -22,6 +22,7 @@ def require_auto_previous(
         "memory_id", "text", "category", "topic", "source_ids",
         "source_candidate_id", "adoption_method", "revision", "valid_at",
         "invalid_at", "confidence", "risk_flags", "supersedes_memory_id", "event",
+        "source_dependency_mode",
     )
     if (type(actual) is not type(expected)
             or actual.status is not ConfirmedMemoryStatus.ACTIVE

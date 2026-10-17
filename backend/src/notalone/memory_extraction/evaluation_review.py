@@ -5,9 +5,13 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+from dataclasses import replace
 from datetime import datetime
-from typing import Any
-from uuid import NAMESPACE_URL, uuid5
+from typing import Any, TYPE_CHECKING
+from uuid import NAMESPACE_URL, UUID, uuid5
+
+if TYPE_CHECKING:
+    from .evaluation import EvaluationResult
 
 
 _E_FIELDS = (
@@ -278,22 +282,50 @@ def _validate_review(packet: dict, review: dict, window: dict) -> None:
         raise ValueError("review_incomplete_lineage_cannot_pass")
 
 
-def prepare_case_review(reference: dict, case_id: str, evidence: dict) -> dict:
+def _actual_sources(reference: dict, values: tuple[str, ...] | None) -> tuple[str, ...] | None:
+    if values is None:
+        return None
+    if (reference["provenance"].get("reference_version") != "bounded-runtime15-v1"
+            or type(values) is not tuple or not 1 <= len(values) <= 4
+            or any(type(value) is not str for value in values)
+            or len(set(values)) != len(values)):
+        raise ValueError("review_actual_sources_invalid")
+    try:
+        if any(str(UUID(value)) != value for value in values):
+            raise ValueError("noncanonical_uuid")
+    except (ValueError, TypeError):
+        raise ValueError("review_actual_sources_invalid") from None
+    return values
+
+
+def _evidence_digest(evidence: dict, sources: tuple[str, ...] | None) -> str:
+    return _sha(evidence if sources is None else {
+        "evidence": evidence, "actual_message_ids_by_index": list(sources),
+    })
+
+
+def prepare_case_review(
+    reference: dict, case_id: str, evidence: dict,
+    *, actual_message_ids_by_index: tuple[str, ...] | None = None,
+) -> dict:
     """复制允许证据并绑定每层摘要；不证明盲审或先封存 raw 的时序。"""
     reference = _json_copy(reference)
     evidence = _json_copy(evidence)
     _validate_reference(reference, case_id)
     _validate_evidence(evidence)
+    sources = _actual_sources(reference, actual_message_ids_by_index)
     packet = {
         "format_version": 1, "case_id": case_id,
         "reference": reference, "reference_sha256": _sha(reference),
-        "evidence": evidence, "evidence_sha256": _sha(evidence),
+        "evidence": evidence, "evidence_sha256": _evidence_digest(evidence, sources),
         "layers": {
             layer: [{"index": index, "payload": payload, "payload_sha256": _sha(payload)}
                     for index, payload in enumerate(evidence[layer])]
             for layer in _LAYERS
         },
     }
+    if sources is not None:
+        packet["actual_message_ids_by_index"] = list(sources)
     packet["packet_sha256"] = _sha(packet)
     return packet
 
@@ -379,7 +411,10 @@ def _same_time(actual: Any, expected: Any) -> bool:
         return False
 
 
-def _variant_matches(fact: dict, variant: dict, case_name: str) -> bool:
+def _variant_matches(
+    fact: dict, variant: dict, case_name: str,
+    actual_sources: tuple[str, ...] | None = None,
+) -> bool:
     if not {
         "subject", "category", "topic", "source_message_ids", "speech_act",
         "assertion_status", "figurative_type", "valid_at", "invalid_at",
@@ -397,10 +432,18 @@ def _variant_matches(fact: dict, variant: dict, case_name: str) -> bool:
             or len(set(source_ids)) != len(source_ids)):
         return False
     # 来源的正文条件仍由 group.source/coherence 审核，机械层只核有限集合。
-    return any(set(source_ids) == {
-        str(uuid5(NAMESPACE_URL, f"notalone-evaluation/{case_name}/{index}"))
-        for index in choice["indices"]
-    } for choice in variant["source_choices"])
+    for choice in variant["source_choices"]:
+        if actual_sources is not None:
+            if any(type(index) is not int or not 0 <= index < len(actual_sources)
+                   for index in choice["indices"]):
+                raise ValueError("review_actual_source_index_invalid")
+            expected = {actual_sources[index] for index in choice["indices"]}
+        else:
+            expected = {str(uuid5(NAMESPACE_URL, f"notalone-evaluation/{case_name}/{index}"))
+                        for index in choice["indices"]}
+        if set(source_ids) == expected:
+            return True
+    return False
 
 
 def _accepted_group(group: dict, review: dict, evidence: dict) -> bool:
@@ -419,6 +462,7 @@ def _accepted_group(group: dict, review: dict, evidence: dict) -> bool:
 
 def _complete_group(
     group: dict, variant: dict, review: dict, evidence: dict, case_name: str,
+    actual_sources: tuple[str, ...] | None = None,
 ) -> bool:
     if (not all(group[key] == "pass" for key in _GROUP_CHECKS)
             or not all(value == "pass" for value in review["window_checks"].values())):
@@ -429,7 +473,7 @@ def _complete_group(
         if (not all(value == "pass" for value in row["fields"].values())
                 or row["meaning"] != "pass" or row["inclusion"] != "pass"
                 or row["safety"] != "safe" or row["classification"] == "excluded"
-                or not _variant_matches(evidence["extraction"][index], variant, case_name)
+                or not _variant_matches(evidence["extraction"][index], variant, case_name, actual_sources)
                 or not row["lineage"]["v_input_indices"]):
             return False
         v_inputs.update(row["lineage"]["v_input_indices"])
@@ -437,7 +481,7 @@ def _complete_group(
                if value["candidate_index"] in v_inputs]
     if len(related) != len(v_inputs):
         return False
-    if not all(_variant_matches(evidence["verification_inputs"][index], variant, case_name)
+    if not all(_variant_matches(evidence["verification_inputs"][index], variant, case_name, actual_sources)
                for index in v_inputs):
         return False
     for index in related:
@@ -447,7 +491,7 @@ def _complete_group(
             return False
     return all(
         evidence["final_facts"][index]["destination"] == variant["ideal_destination"]
-        and _variant_matches(evidence["final_facts"][index], variant, case_name)
+        and _variant_matches(evidence["final_facts"][index], variant, case_name, actual_sources)
         for index in group["final_indices"]
     )
 
@@ -456,22 +500,31 @@ def score_case_review(packet: dict, review: dict) -> dict:
     """只计显式审核和真实最终层对应；摘要不是签名或质量证明。"""
     packet = _json_copy(packet)
     review = _json_copy(review)
+    source_field = {"actual_message_ids_by_index"} if "actual_message_ids_by_index" in packet else set()
     _keys(packet, {
         "format_version", "case_id", "reference", "reference_sha256",
         "evidence", "evidence_sha256", "layers", "packet_sha256",
-    })
+    } | source_field)
     _keys(review, {
         "reviewer", "case_id", "reference_sha256", "evidence_sha256", "run_status",
         "e_rows", "v_rows", "claims", "window_checks",
     })
-    if packet != prepare_case_review(packet["reference"], packet["case_id"], packet["evidence"]):
+    actual_sources = None
+    if source_field:
+        if type(packet["actual_message_ids_by_index"]) is not list:
+            raise ValueError("review_actual_sources_invalid")
+        actual_sources = tuple(packet["actual_message_ids_by_index"])
+    if packet != prepare_case_review(
+        packet["reference"], packet["case_id"], packet["evidence"],
+        actual_message_ids_by_index=actual_sources,
+    ):
         raise ValueError("review_packet_bindings_changed")
     digest = packet.pop("packet_sha256")
     if digest != _sha(packet):
         raise ValueError("review_packet_changed")
     if (review["case_id"] != packet["case_id"]
             or review["reference_sha256"] != _sha(packet["reference"])
-            or review["evidence_sha256"] != _sha(packet["evidence"])):
+            or review["evidence_sha256"] != _evidence_digest(packet["evidence"], actual_sources)):
         raise ValueError("review_binding_changed")
     evidence = packet["evidence"]
     window = _case(packet["reference"], packet["case_id"])
@@ -518,7 +571,7 @@ def score_case_review(packet: dict, review: dict) -> dict:
             group_accepted = (group_raw and evidence["run_status"] == "completed"
                               and _accepted_group(group, review, evidence))
             group_full = group_accepted and _complete_group(
-                group, variant, review, evidence, window["case_name"],
+                group, variant, review, evidence, window["case_name"], actual_sources,
             )
             raw |= group_raw
             accepted |= group_accepted
@@ -527,3 +580,47 @@ def score_case_review(packet: dict, review: dict) -> dict:
         counts["accepted"] += int(accepted)
         counts["full"] += int(full)
     return report
+
+
+def dimension_results_from_review(
+    original: EvaluationResult, axis_reviews: dict, *, decision: str,
+    safety: dict, semantic_case_id: str,
+) -> tuple[EvaluationResult, ...]:
+    """封存审核逐轴生成原工具结果；原始安全错误和整体缺项不能被覆盖。"""
+    from .evaluation_bounded_cases import BOUNDED_RUNTIME_DIMENSIONS
+    from .evaluation import ERROR_FALSE_FACT, ERROR_GENERAL, ERROR_WRONG_SUBJECT
+
+    _keys(axis_reviews, frozenset(BOUNDED_RUNTIME_DIMENSIONS))
+    if decision not in {"safe", "general_error", "safety_error"}:
+        raise ValueError("review_dimensions_unresolved")
+    if (type(semantic_case_id) is not str or len(semantic_case_id) != 64
+            or any(char not in "0123456789abcdef" for char in semantic_case_id)):
+        raise ValueError("review_dimensions_case_binding_invalid")
+    safety_counts = []
+    for key in ("raw_false_fact", "false_fact", "raw_wrong_person", "wrong_person"):
+        count = safety.get(key)
+        if type(count) is not int or count < 0:
+            raise ValueError("review_dimensions_safety_invalid")
+        safety_counts.append(count)
+    false_facts = max(safety_counts[:2])
+    wrong_subjects = max(safety_counts[2:])
+    results = []
+    for dimension in BOUNDED_RUNTIME_DIMENSIONS:
+        reviewed = axis_reviews[dimension]
+        _keys(reviewed, {"status", "basis"})
+        _enum(reviewed["status"], _STATUSES)
+        _nonempty(reviewed["basis"])
+        if reviewed["status"] == "unresolved":
+            raise ValueError("review_dimensions_unresolved")
+        passed = reviewed["status"] == "pass" and decision == "safe" and not (false_facts or wrong_subjects)
+        errors = tuple(kind for kind, present in (
+            (ERROR_FALSE_FACT, false_facts > 0), (ERROR_WRONG_SUBJECT, wrong_subjects > 0),
+            (ERROR_GENERAL, not passed and not false_facts and not wrong_subjects),
+        ) if present)
+        results.append(replace(
+            original, dimension=dimension, passed=passed,
+            error_kind=errors[0] if errors else None, error_kinds=errors,
+            false_fact_count=false_facts, wrong_subject_count=wrong_subjects,
+            semantic_annotated=True, semantic_case_id=semantic_case_id,
+        ))
+    return tuple(results)

@@ -2,6 +2,7 @@
 
 from notalone.memory.adapters import InMemoryMemoryStore
 from notalone.memory.models import (
+    SourceDependencyMode,
     FactSubject,
     MemoryTopic,
     OwnerMemory,
@@ -16,6 +17,7 @@ from notalone.memory.ports import MemoryPort
 from notalone.memory.timing import MemoryTiming
 
 __all__ = [
+    "SourceDependencyMode",
     "FactSubject",
     "MemoryTopic",
     "OwnerMemory",

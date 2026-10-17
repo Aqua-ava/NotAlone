@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from uuid import UUID
 
 from notalone.memory.dimension_evidence import (
@@ -23,9 +24,29 @@ def build_dimension_evidence(
     window: ExtractionWindow,
     fact: ExtractedFact,
     verification: SourceVerificationResult | None,
-) -> DimensionEvidence:
+    *, verification_mode: SourceVerificationMode | str | None = None,
+) -> DimensionEvidence | None:
     """保存全部窗口依赖；新关系必须复核实际全文，不能仅从supported推断。"""
 
+    selected = SourceVerificationMode(verification_mode) if verification_mode is not None else (
+        verification.verification_mode if verification is not None else SourceVerificationMode.LEGACY_V4)
+    if verification is not None and verification.verification_mode is not selected:
+        raise ValueError("显式依据模式与实际同次V结果不符。")
+    bounded = selected is SourceVerificationMode.NULLABLE_PROOF_V3
+    from notalone.memory.models import SourceDependencyMode
+    if fact.source_dependency_mode is SourceDependencyMode.ALL and not bounded:
+        raise ValueError("ALL资料不能回落旧依据版本。")
+    if bounded:
+        from .source_proof import bounded_source_occurred_at, validate_bounded_body_sources, verify_proposal
+        if fact.source_dependency_mode is not SourceDependencyMode.ALL:
+            raise ValueError("有限运行依据要求已显式绑定ALL的实际候选。")
+        window = replace(window, messages=tuple(replace(message, occurred_at=original)
+            if (original := bounded_source_occurred_at(message)) is not None else message for message in window.messages))
+        # 提案非法必须先失败，不能被超限退化分支吞掉。
+        checked = verify_proposal(verification.proof if verification is not None else None, window, fact, proof_version=3)
+        validate_bounded_body_sources(window, fact)
+        if len(window.messages) > 4 or len(fact.text) > 4096 or any(len(item.text) > 4096 for item in window.messages):
+            return None
     scope = ContactScope(window.owner_id, window.contact_id)
     messages = []
     for message in window.messages:
@@ -69,11 +90,11 @@ def build_dimension_evidence(
         for message in window.messages
         if message.message_id in fact.source_message_ids
     )
-    use_proof = (
+    use_proof = bounded or (
         verification is not None
-        and verification.verification_mode in {SourceVerificationMode.NULLABLE_PROOF_V1, SourceVerificationMode.NULLABLE_PROOF_V2}
+        and verification.verification_mode in {SourceVerificationMode.NULLABLE_PROOF_V1, SourceVerificationMode.NULLABLE_PROOF_V2, SourceVerificationMode.NULLABLE_PROOF_V3}
     )
-    proof_version = 2 if verification is not None and verification.verification_mode is SourceVerificationMode.NULLABLE_PROOF_V2 else 1
+    proof_version = 3 if bounded else 2 if verification is not None and verification.verification_mode is SourceVerificationMode.NULLABLE_PROOF_V2 else 1
     semantic_basis = None
     if (
         use_proof and verification is not None
@@ -88,12 +109,14 @@ def build_dimension_evidence(
         if checked.status == "verified" and checked.semantic_basis is not None:
             semantic_basis = SemanticBasis.from_payload(checked.semantic_basis)
     evidence = DimensionEvidence(
-        scope=scope, candidate_sha256=candidate_digest(fact),
-        window_sha256=window_digest(scope, metadata), messages=metadata,
+        scope=scope, candidate_sha256=candidate_digest(fact, version=4 if bounded else 1),
+        window_sha256=window_digest(scope, metadata, version=4 if bounded else 1,
+            target_message_ids=tuple(item.message_id for item in window.messages if item.message_id in window.target_message_id_set)), messages=metadata,
         pragmatics=fact_pragmatics(fact),
         paraphrase=tuple(alignments) if alignments else None,
         reference=None, media=media, reported=None,
         version=proof_version + 1 if use_proof else 1, semantic_basis=semantic_basis,
+        target_message_ids=tuple(item.message_id for item in window.messages if item.message_id in window.target_message_id_set) if bounded else (),
     )
     return bind_dimension_evidence(
         evidence, scope=scope, candidate=fact, messages=metadata,

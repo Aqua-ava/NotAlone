@@ -6,7 +6,7 @@ from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
-from notalone.memory.models import MemoryCategory
+from notalone.memory.models import MemoryCategory, SourceDependencyMode
 from notalone.memory.events import MemoryEvent
 from notalone.memory.timing import MemoryTiming
 from notalone.memory_extraction.errors import ExtractionRuntimeError
@@ -71,6 +71,10 @@ class ExtractionFlow:
         self._verification_runtime = verification_runtime
 
     def run(self, window: ExtractionWindow) -> ExtractionOutcome:
+        verification_mode = getattr(
+            self._verification_runtime, "verification_mode",
+            SourceVerificationMode.LEGACY_V4,
+        )
         record(
             "extraction_input",
             {"window": window, "capture_layer": "runtime_interface"},
@@ -192,6 +196,21 @@ class ExtractionFlow:
             if not source_valid:
                 rejected += 1
                 continue
+            if verification_mode == SourceVerificationMode.NULLABLE_PROOF_V3:
+                from notalone.memory_extraction.source_proof import validate_bounded_body_sources
+
+                try:
+                    validate_bounded_body_sources(window, fact)
+                except (ValueError, TypeError, KeyError):
+                    record(
+                        "source_contract",
+                        {"body_sources": "rejected", "passed": False,
+                         "not_executed": ["timing", "verification", "adoption", "write"]},
+                        candidate_trace_id=candidate_trace_id, status="rejected",
+                    )
+                    rejected += 1
+                    continue
+                fact = replace(fact, source_dependency_mode=SourceDependencyMode.ALL)
             timing_started_at = datetime.now(timezone.utc)
             source_times = tuple(
                 message.occurred_at
@@ -333,10 +352,7 @@ class ExtractionFlow:
                     payloads,
                     window=window,
                     facts=reviewable,
-                    mode=getattr(
-                        self._verification_runtime, "verification_mode",
-                        SourceVerificationMode.LEGACY_V4,
-                    ),
+                    mode=verification_mode,
                 )
             except ExtractionRuntimeError as error:
                 record(
@@ -416,8 +432,18 @@ class ExtractionFlow:
         for fact in accepted:
             event_fact = replace(fact, event=(verified_results[id(fact)].event
                 if id(fact) in verified_results else fact.event))
-            changed = replace(event_fact, dimension_evidence=build_dimension_evidence(
-                window, event_fact, verified_results.get(id(fact)),
+            prepared = event_fact
+            if verification_mode == SourceVerificationMode.NULLABLE_PROOF_V3:
+                # 后续采纳沿同一幂等规范化，避免追加风险使刚签的摘要失效。
+                prepared = interpreter.prepare_for_adoption(event_fact)
+                record(
+                    "pragmatics", {"input": fact, "after": prepared,
+                                   "phase": "before_dimension_evidence"},
+                    candidate_trace_id=trace_ids[id(fact)],
+                )
+            changed = replace(prepared, dimension_evidence=build_dimension_evidence(
+                window, prepared, verified_results.get(id(fact)),
+                verification_mode=verification_mode,
             ))
             trace_ids[id(changed)] = trace_ids[id(fact)]
             evidenced.append(changed)

@@ -20,6 +20,7 @@ from notalone.memory.models import (
     MemoryCategory,
     MemoryTopic,
     OwnerMemory,
+    SourceDependencyMode,
 )
 from notalone.memory.ports import MemoryPort, OwnerMemoryPort
 from notalone.memory.versions import MemoryVersionConflict
@@ -284,6 +285,7 @@ class MemoryAdoption:
                 and item.version.invalid_at == fact.invalid_at
                 and (same_verified_event_claim(item.version.event, fact.event)
                      or self._is_exact_event_claim_replay(scope, item.version, fact))
+                and self._same_dependencies(scope, fact, item.version)
             ]
             record(
                 "duplicate",
@@ -365,7 +367,7 @@ class MemoryAdoption:
                 continue
 
             similarity_started_at = datetime.now(timezone.utc)
-            similar, shortlist_truncated = self._similar_memories(fact, pool)
+            similar, shortlist_truncated = self._similar_memories(scope, fact, pool)
             record(
                 "similarity",
                 {
@@ -599,13 +601,49 @@ class MemoryAdoption:
         # 的旧记忆保持 active。
         return actual_action, decision_replaced
 
+    def _same_dependencies(
+        self, scope: ContactScope, fact: ExtractedFact,
+        previous: MemoryCandidate | ConfirmedMemory | OwnerMemory,
+    ) -> bool:
+        """ALL只复用同一来源组与完整当前依据，清proof不能借去重恢复信用。"""
+        previous_mode = previous.source_dependency_mode
+        if fact.source_dependency_mode is SourceDependencyMode.ANY:
+            return previous_mode is SourceDependencyMode.ANY
+        if (previous_mode is not SourceDependencyMode.ALL
+                or set(previous.source_ids) != set(fact.source_message_ids)
+                or fact.dimension_evidence is None
+                or fact.dimension_evidence.version != 4):
+            return False
+        candidate = previous
+        if not isinstance(candidate, MemoryCandidate):
+            candidate_id = getattr(previous, "source_candidate_id", None)
+            if candidate_id is None:
+                return False
+            try:
+                candidate = self._memory_port.get_candidate(
+                    scope=scope, candidate_id=candidate_id,
+                )
+            except (LookupError, PermissionError):
+                return False
+        evidence = candidate.dimension_evidence
+        return (candidate.text == previous.text
+                and candidate.category is previous.category
+                and candidate.topic is previous.topic
+                and candidate.source_dependency_mode is SourceDependencyMode.ALL
+                and set(candidate.source_ids) == set(fact.source_message_ids)
+                and evidence is not None and evidence.version == 4
+                and evidence.source_bound
+                and fact.dimension_evidence.source_bound
+                and evidence.to_payload() == fact.dimension_evidence.to_payload())
+
     def _similar_memories(
-        self, fact: ExtractedFact, pool: list[_PoolItem],
+        self, scope: ContactScope, fact: ExtractedFact, pool: list[_PoolItem],
     ) -> tuple[list[_PoolItem], bool]:
         candidates = [
             item
             for item in pool
-            if item.topic == fact.topic
+            if self._same_dependencies(scope, fact, item.version)
+            and item.topic == fact.topic
             and item.category == fact.category
             and similarity(fact.text, item.text) >= self._similarity_threshold
         ]
@@ -784,7 +822,7 @@ class MemoryAdoption:
         matches = tuple(
             candidate
             for candidate in compared
-            if same_pending_identity(candidate, proposed)
+            if same_pending_identity(candidate, proposed) and self._same_dependencies(scope, fact, candidate)
         )
         record(
             "duplicate",
@@ -803,6 +841,8 @@ class MemoryAdoption:
                     "source_ids",
                     "valid_at",
                     "invalid_at",
+                    "source_dependency_mode",
+                    "dimension_evidence",
                 ],
             },
             dependency_ids=tuple(
@@ -890,6 +930,7 @@ class MemoryAdoption:
             category=fact.category,
             topic=fact.topic,
             source_ids=fact.source_message_ids,
+            source_dependency_mode=fact.source_dependency_mode,
             adoption_method=AdoptionMethod.AUTO,
             status=ConfirmedMemoryStatus.ACTIVE,
             valid_at=fact.valid_at,
@@ -1019,6 +1060,7 @@ def _candidate_from_fact(
         alternatives=fact.alternatives,
         interpretation_reason=fact.interpretation_reason,
         timing=fact.timing, dimension_evidence=fact.dimension_evidence, event=fact.event,
+        source_dependency_mode=fact.source_dependency_mode,
     )
 
 

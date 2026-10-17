@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from contextlib import nullcontext
 from datetime import timedelta
 from enum import StrEnum
 from threading import Event, Thread
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 from uuid import UUID
 
 import psycopg
@@ -72,12 +72,18 @@ from notalone.tasks.models import (
     BackgroundTaskStepName,
     BackgroundTaskStepStatus,
     ClaimedBackgroundTaskStep,
+    ExtractionRuntimeConfig,
+    ExtractionRuntimeMode,
 )
+from notalone.tasks.extraction_runtime import verification_runtime_for_config
 
 class ExtractionTaskRunner(Protocol):
     """Worker 调用的记忆提取执行 seam。"""
 
-    def run(self, *, scope: ContactScope) -> ExtractionRunStats: ...
+    def run(
+        self, *, scope: ContactScope, task_id: UUID | None = None,
+        extraction_runtime_config: ExtractionRuntimeConfig | None = None,
+    ) -> ExtractionRunStats: ...
 
 
 class LearningTaskRunner(Protocol):
@@ -150,7 +156,7 @@ class _LeaseHeartbeat:
         self._thread.start()
         return self
 
-    def __exit__(self, exception_type, exception, traceback) -> bool:
+    def __exit__(self, exception_type, exception, traceback) -> Literal[False]:
         self._stop.set()
         if self._thread is not None:
             self._thread.join()
@@ -281,21 +287,35 @@ class PostgresMemoryExtractionRunner:
     def model_version(self) -> str:
         return self._model_name
 
-    def run(self, *, scope: ContactScope) -> ExtractionRunStats:
+    def run(
+        self, *, scope: ContactScope, task_id: UUID | None = None,
+        extraction_runtime_config: ExtractionRuntimeConfig | None = None,
+    ) -> ExtractionRunStats:
         from notalone.memory_extraction.cli_support import (
             load_contact_messages,
         )
 
+        if extraction_runtime_config is not None and not isinstance(task_id, UUID):
+            raise ValueError("指定提取配置必须绑定实际任务。")
+        verification_runtime = verification_runtime_for_config(self._verification_runtime, extraction_runtime_config)
         selection_receipts: list[dict[str, Any]] = []
         messages = load_contact_messages(
             scope, self._database_url, selection_receipts=selection_receipts
         )
+        if (extraction_runtime_config is not None
+                and extraction_runtime_config.mode is ExtractionRuntimeMode.BOUNDED_RUNTIME_V1):
+            from notalone.memory_extraction.source_proof import bounded_source_occurred_at
+
+            messages = tuple(replace(message, occurred_at=bounded_source_occurred_at(message)) for message in messages)
+        task_options: dict[str, Any] = {}
+        if task_id is not None or extraction_runtime_config is not None:
+            task_options = {"task_id": task_id, "extraction_runtime_config": extraction_runtime_config}
         return run_extraction(
             scope=scope,
             messages=messages,
             watermark_message_id=self._watermark_port.get(scope),
             runtime=self._runtime,
-            verification_runtime=self._verification_runtime,
+            verification_runtime=verification_runtime,
             memory_port=self._memory_port,
             owner_memory_port=self._owner_memory_port,
             adjudication_runtime=self._adjudication_runtime,
@@ -307,6 +327,7 @@ class PostgresMemoryExtractionRunner:
             dimension_release=self._dimension_release,
             trace_store=self._trace_store,
             selection_receipts=tuple(selection_receipts),
+            **task_options,
         )
 
 
@@ -367,7 +388,7 @@ class BackgroundTaskWorker:
         if self._stopping():
             return WorkerRunResult(outcome=WorkerRunOutcome.STOPPED)
 
-        supported_steps = ()
+        supported_steps: tuple[BackgroundTaskStepName, ...] = ()
         if self._extraction_runner is not None:
             supported_steps += (
                 BackgroundTaskStepName.PARSE,
@@ -386,6 +407,11 @@ class BackgroundTaskWorker:
                 BackgroundTaskStepName.INDEX,
                 BackgroundTaskStepName.VERIFY,
             )
+        runtime_rule_set_sha256 = None
+        if self._extraction_runner is not None:
+            from notalone.memory_extraction.source_proof import bounded_runtime_rule_set_sha256
+
+            runtime_rule_set_sha256 = bounded_runtime_rule_set_sha256()
         claim = self._repository.claim_next_step(
             owner_id=owner_id,
             contact_id=contact_id,
@@ -395,6 +421,7 @@ class BackgroundTaskWorker:
             model_version=self._model_version,
             rule_version=self._rule_version if self._extraction_runner is not None else None,
             task_id=task_id,
+            runtime_rule_set_sha256=runtime_rule_set_sha256,
         )
         if claim is None:
             return WorkerRunResult(outcome=WorkerRunOutcome.IDLE)
@@ -509,6 +536,7 @@ class BackgroundTaskWorker:
 
         if claim.name is BackgroundTaskStepName.INDEX:
             try:
+                assert self._index_repository is not None
                 result = self._index_repository.rebuild(
                     ContactScope(claim.owner_id, claim.contact_id)
                 )
@@ -552,6 +580,7 @@ class BackgroundTaskWorker:
 
         if claim.name is BackgroundTaskStepName.VERIFY:
             try:
+                assert self._index_repository is not None
                 verification = self._index_repository.verify(
                     ContactScope(claim.owner_id, claim.contact_id)
                 )
@@ -600,6 +629,7 @@ class BackgroundTaskWorker:
             )
 
         try:
+            assert self._extraction_runner is not None
             guard = (
                 self._model_priority.background_scope(
                     lambda: self._repository.check_step_lease(claim),
@@ -612,7 +642,9 @@ class BackgroundTaskWorker:
                 self._model_priority.stop_event if self._model_priority is not None else None,
             ) as heartbeat:
                 stats = self._extraction_runner.run(
-                    scope=ContactScope(claim.owner_id, claim.contact_id)
+                    scope=ContactScope(claim.owner_id, claim.contact_id),
+                    task_id=claim.task_id,
+                    extraction_runtime_config=claim.extraction_runtime_config,
                 )
                 heartbeat.raise_if_failed()
         except ModelWorkStopped:

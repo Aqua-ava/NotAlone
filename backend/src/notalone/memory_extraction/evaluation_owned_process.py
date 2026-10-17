@@ -1,6 +1,7 @@
 """固定公开评测runner共用的领取证据与自有进程组控制，不创建预算或读取凭据。"""
 from dataclasses import dataclass
 from datetime import datetime
+import hashlib
 import os
 import json
 from pathlib import Path
@@ -16,7 +17,9 @@ from .evaluation_provider_contract import (
     REFERENCE21_V4_PLAN, REFERENCE21_V4_MODE, REFERENCE21_V4_STAGE, REFERENCE21_V4_KIND,
     SEMANTIC4_PLAN, SEMANTIC4_MODE, SEMANTIC4_STAGE, SEMANTIC4_KIND, SEMANTIC4_PROMPT_PROFILE,
     UNIQUENESS_PLAN, UNIQUENESS_MODE, UNIQUENESS_STAGE, UNIQUENESS_KIND, UNIQUENESS_E_PROFILE,
+    BOUNDED_RUNTIME_KIND, BOUNDED_RUNTIME_MODE, BOUNDED_RUNTIME_STAGE,
 )
+from .evaluation_bounded_cases import BOUNDED_RUNTIME_PLAN
 
 
 @dataclass(frozen=True)
@@ -36,6 +39,8 @@ class _FixedPublicControl:
 _PROFILES = {
     FULL140_E2_KIND: _FixedPublicControl(280, 86400, 140, 138, FULL140_E2_MODE, FULL140_E2_STAGE,
                                       tuple(range(140)), 16384, FULL140_E2_PLAN, "source-fidelity-v2"),
+    BOUNDED_RUNTIME_KIND: _FixedPublicControl(30, 14400, 15, 15, BOUNDED_RUNTIME_MODE, BOUNDED_RUNTIME_STAGE,
+                                            tuple(range(15)), 2048, BOUNDED_RUNTIME_PLAN, BOUNDED_RUNTIME_PLAN),
     UNIQUENESS_KIND: _FixedPublicControl(42, 14400, 21, 28, UNIQUENESS_MODE, UNIQUENESS_STAGE,
                                        tuple(range(21)), 2048, UNIQUENESS_PLAN, "source-fidelity-v2"),
     SEMANTIC4_KIND: _FixedPublicControl(42, 14400, 21, 28, SEMANTIC4_MODE, SEMANTIC4_STAGE,
@@ -137,10 +142,12 @@ def _launch_owned_public_worker(*, frozen: dict, script: Path, root: Path, helpe
                 and type(value.get("request_limit")) is int and value["request_limit"] == request_limit
                 and type(value.get("reserved_requests")) is int
                 and 0 <= value["reserved_requests"] <= request_limit)
-    closed = (closed_receipt(budget) and (kind not in {FULL140_E2_KIND, MIXED_KIND, REFERENCE21_V4_KIND, SEMANTIC4_KIND, UNIQUENESS_KIND} or (
+    closed = (closed_receipt(budget) and (kind not in {FULL140_E2_KIND, MIXED_KIND, REFERENCE21_V4_KIND, SEMANTIC4_KIND, UNIQUENESS_KIND, BOUNDED_RUNTIME_KIND} or (
         type(result.get("worker_pid")) is int and result["worker_pid"] == child.pid
         and result.get("execution_plan") == profile.execution_plan))) or (type(deadline.get("worker_pid")) is int
-                                       and deadline["worker_pid"] == child.pid and closed_receipt(deadline))
+                                       and deadline["worker_pid"] == child.pid and closed_receipt(deadline)
+                                       and (kind != BOUNDED_RUNTIME_KIND
+                                            or deadline.get("execution_plan") == BOUNDED_RUNTIME_PLAN))
     states = ["unrun"] * planned_windows
     if isinstance(result.get("outcomes"), list) and len(result["outcomes"]) == planned_windows:
         states = [row["status"] if type(row) is dict and row.get("status") in {"unrun", "unknown", "completed", "empty", "failed"}
@@ -169,12 +176,15 @@ def _launch_owned_public_worker(*, frozen: dict, script: Path, root: Path, helpe
                "planned_windows": planned_windows, "required_claims": required_claims,
                "case_statuses": [{**selection, "status": status} for selection, status in zip(frozen["selection"], states)],
                "quality_certified": False, "automatic_successor": False}
+    if kind == BOUNDED_RUNTIME_KIND:
+        receipt["execution_plan"] = BOUNDED_RUNTIME_PLAN
     helper.publish(directory / "finish.json", receipt)
     return receipt
 
 
 
-def _verify_owned_public_claim(*, frozen: dict, helper: Any, kind: str) -> None:
+def _verify_owned_public_claim(*, frozen: dict, helper: Any, kind: str,
+                               actual_windows: tuple | None = None) -> None:
     profile = _PROFILES[kind]
     run = Path.home() / ".notalone-memory-evaluations" / frozen["run_id"]
     helper.private_directory(run)
@@ -215,4 +225,98 @@ def _verify_owned_public_claim(*, frozen: dict, helper: Any, kind: str) -> None:
             or kind != UNIQUENESS_KIND and "extraction_prompt_profile" in config
             or config.get("extraction_window_contracts") != frozen["extraction_window_contracts"]):
         raise ValueError(kind + "_claim_manifest_changed")
+    if kind == BOUNDED_RUNTIME_KIND:
+        try:
+            _verify_bounded_claim(frozen, config, helper, actual_windows)
+        except (ValueError, TypeError, KeyError, AttributeError, OSError):
+            raise ValueError(kind + "_claim_manifest_changed") from None
+
+
+def _verify_bounded_claim(frozen: dict, config: dict, helper: Any, actual_windows: tuple | None) -> None:
+    """只核Root提供的真实完整Window及封存身份，不从公开正文重造来源。"""
+    from uuid import UUID
+    from .evaluation_bounded_cases import BOUNDED_RUNTIME_CASES, BOUNDED_RUNTIME_INPUTS
+    from .evaluation_extraction import extraction_contract
+    from .evaluation_reference import bounded_window_projection
+    from .evaluation_records import canonical_sha256
+    from .models import ExtractionWindow
+    from .source_proof import bounded_runtime_rule_set_sha256
+    from .verification_adapters import source_verification_contract
+    from notalone.memory_trace.context import snapshot
+    from notalone.tasks.models import ExtractionRuntimeConfig, ExtractionRuntimeMode
+
+    if (type(actual_windows) is not tuple or len(actual_windows) != 15
+            or any(type(window) is not ExtractionWindow for window in actual_windows)
+            or snapshot(actual_windows) != frozen["actual_windows"]):
+        raise ValueError("bounded_actual_windows_changed")
+    content = helper.digest(tuple({"messages": row["messages"], "target_indices": row["target_indices"]}
+                                  for row in BOUNDED_RUNTIME_INPUTS))
+    current_rules = bounded_runtime_rule_set_sha256()
+    fixture = "backend/src/notalone/memory_extraction/evaluation_bounded_cases.py"
+    fixture_sha = hashlib.sha256((Path(__file__).resolve().parents[4] / fixture).read_bytes()).hexdigest()
+    plan = [{"case_position": position, "case_name": case.name, "input_sha256": canonical_sha256(window)}
+            for position, (case, window) in enumerate(zip(BOUNDED_RUNTIME_CASES, actual_windows, strict=True))]
+    if (frozen["plan"] != plan or frozen["plan_sha256"] != helper.digest(plan)
+            or config.get("plan_sha256") != helper.digest(plan)
+            or frozen["selection"] != [{"case_id": row["id"], "gold_position": position}
+                                       for position, row in enumerate(BOUNDED_RUNTIME_INPUTS)]
+            or config.get("formal_tasks") != frozen["formal_task_bindings"]
+            or config.get("bounded_inputs_sha256") != content or frozen["bounded_inputs_sha256"] != content
+            or helper.digest(tuple(bounded_window_projection(window) for window in actual_windows)) != content
+            or config.get("runtime_rule_set_sha256") != current_rules or frozen["runtime_rule_set_sha256"] != current_rules
+            or frozen["source_hashes"].get(fixture) != fixture_sha
+            or config.get("gold_sha256") != frozen["reference_canonical_sha256"]
+            or config.get("extraction_mode") != "grounded-v2" or config.get("verification_mode") != "nullable-proof-v3"
+            or config.get("base_url") != "https://api.deepseek.com"
+            or config.get("endpoint") != "https://api.deepseek.com/chat/completions"
+            or config.get("request_model") != "deepseek-flash"
+            or type(config.get("timeout")) is not float or config["timeout"] != 300.0
+            or type(config.get("max_retries")) is not int or config["max_retries"] != 0
+            or type(config.get("request_contract_version")) is not int or config["request_contract_version"] != 2
+            or type(config.get("temperature")) not in (int, float) or config["temperature"] != 0
+            or config.get("stream") is not False or config.get("fallback") is not False
+            or config.get("response_identity_policy") != "first_valid_completion_observation_stop_on_change"
+            or {"thinking", "reasoning_effort", "phase_request_version", "phase_request_policy",
+                "verification_prompt_profile", "extraction_prompt_profile"} & set(config)
+            or config.get("tool_choice") != {
+                "extraction": {"mode": "omitted", "name": "GroundedMemoryLabels"},
+                "verification": {"mode": "forced", "name": "SourceVerificationOutput"}}):
+        raise ValueError("bounded_fixed_registration_changed")
+    tasks = config["formal_tasks"]
+    if type(tasks) is not list or len(tasks) != 15:
+        raise ValueError("bounded_formal_tasks_required")
+    task_ids, contacts = set(), set()
+    for task, window, item in zip(tasks, actual_windows, plan, strict=True):
+        if type(task) is not dict or set(task) != {"owner_id", "contact_id", "task_id", "extraction_runtime_config", "input_sha256"}:
+            raise ValueError("bounded_formal_task_fields_changed")
+        identifiers = {}
+        for key in ("owner_id", "contact_id", "task_id"):
+            if type(task[key]) is not str or str(UUID(task[key])) != task[key]:
+                raise ValueError("bounded_formal_identity_changed")
+            identifiers[key] = UUID(task[key])
+        runtime = ExtractionRuntimeConfig.from_payload(task["extraction_runtime_config"])
+        if (identifiers["owner_id"] != window.owner_id or identifiers["contact_id"] != window.contact_id
+                or identifiers["task_id"] in task_ids or identifiers["contact_id"] in contacts
+                or task["input_sha256"] != item["input_sha256"]
+                or runtime.mode is not ExtractionRuntimeMode.BOUNDED_RUNTIME_V1
+                or runtime.rule_set_sha256 != current_rules):
+            raise ValueError("bounded_formal_binding_changed")
+        task_ids.add(identifiers["task_id"])
+        contacts.add(identifiers["contact_id"])
+    contracts = tuple(extraction_contract("grounded-v2", window) for window in actual_windows)
+    prompt, schema = source_verification_contract("nullable-proof-v3")
+    if (config["extraction_window_contracts"] != [{"input_sha256": item["input_sha256"],
+            "prompt_sha256": helper.digest(e_prompt), "schema_sha256": helper.digest(e_schema)}
+            for item, (e_prompt, e_schema) in zip(plan, contracts, strict=True)]
+            or config.get("extraction_prompt_sha256") != helper.digest(contracts[0][0])
+            or config.get("extraction_schema_sha256") != helper.digest(tuple(value[1] for value in contracts))
+            or config.get("verification_prompt_sha256") != helper.digest(prompt)
+            or config.get("verification_schema_sha256") != helper.digest(schema)):
+        raise ValueError("bounded_prompt_contract_changed")
+    owner = helper.read_private(Path(frozen["directory"]) / "owned-worker.json")
+    if (type(owner) is not dict or set(owner) != {"pid", "process_group", "run_id"}
+            or type(owner["pid"]) is not int or type(owner["process_group"]) is not int
+            or owner["pid"] != os.getpid() or owner["process_group"] != owner["pid"]
+            or os.getpgrp() != owner["pid"] or owner["run_id"] != frozen["run_id"]):
+        raise ValueError("bounded_owned_worker_changed")
 

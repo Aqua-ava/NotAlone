@@ -3,7 +3,8 @@
 from uuid import UUID
 
 from notalone.persistence.background_tasks import PostgresBackgroundTaskRepository
-from notalone.tasks.models import BackgroundTask
+from notalone.tasks.models import BackgroundTask, ExtractionRuntimeMode
+from notalone.tasks.extraction_runtime import runtime_config_for_mode
 
 
 class TaskService:
@@ -26,6 +27,16 @@ class TaskService:
         )
         return {"task_id": str(task.task_id), "status": task.status.value}
 
+    def configure_runtime(
+        self, *, owner_id: UUID, contact_id: UUID, task_id: UUID,
+        mode: ExtractionRuntimeMode,
+    ) -> dict[str, object]:
+        config = runtime_config_for_mode(mode)
+        saved = self._repository.configure_extraction_runtime(
+            owner_id=owner_id, contact_id=contact_id, task_id=task_id, config=config,
+        )
+        return saved.to_payload()
+
     def defer(
         self, *, owner_id: UUID, contact_id: UUID, task_id: UUID,
         error_code: str = "execution_resources_unavailable",
@@ -37,7 +48,7 @@ class TaskService:
 
 
 def _task_payload(task: BackgroundTask) -> dict[str, object]:
-    return {
+    payload: dict[str, object] = {
         "task_id": str(task.task_id),
         "task_type": task.task_type.value,
         "status": task.status.value,
@@ -54,3 +65,6 @@ def _task_payload(task: BackgroundTask) -> dict[str, object]:
             "error_code": step.last_error_code,
         } for step in task.steps],
     }
+    if task.extraction_runtime_config is not None:
+        payload["extraction_runtime_config"] = task.extraction_runtime_config.to_payload()
+    return payload

@@ -32,7 +32,9 @@ _SOURCE_FILES = (
     "persistence/dimension_evidence.py", "persistence/memory_events.py",
     "persistence/memory_timing.py", "persistence/memory_versions.py",
     "persistence/memory_correction.py", "persistence/correction_evidence.py",
-    "persistence/message_sources.py",
+    "persistence/message_sources.py", "persistence/source_dependency.py",
+    "memory/bounded_evidence.py", "memory_extraction/bounded_proof.py",
+    "memory_extraction/bounded_graph.py",
 )
 
 

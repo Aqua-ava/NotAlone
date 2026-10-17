@@ -3,12 +3,21 @@
 from __future__ import annotations
 
 import json
+import os
+import socket
 import unittest
 import traceback
+from contextlib import ExitStack
+from copy import deepcopy
 from dataclasses import fields, replace
+from typing import Any
+from unittest.mock import patch
 from uuid import uuid4
 
+import httpx
 from langchain_core.messages import AIMessage
+from langchain_core.utils.function_calling import convert_to_openai_tool
+from langchain_deepseek import ChatDeepSeek
 
 from notalone.ledger.adapters import InMemoryOutboundLedger
 from notalone.ledger.models import LedgerOutcome
@@ -18,9 +27,11 @@ from notalone.memory_extraction.errors import (
     ExtractionRuntimeError,
 )
 from notalone.memory_extraction.verification_adapters import (
-    LangChainSourceVerificationRuntime,
+    LangChainSourceVerificationRuntime, source_verification_contract,
 )
 from notalone.memory_extraction.verification import SourceVerificationMode
+from notalone.memory_trace.transport import build_trace_http_client
+from notalone.reply.adapters.deepseek_provider import build_deepseek_model
 from tests.unit.memory_extraction.test_adapters import ExplicitToolChoiceModel
 from tests.unit.memory_extraction.test_flow import RecordingRuntime, _payload
 from tests.unit.memory_extraction.test_models import _window
@@ -436,6 +447,144 @@ class SourceVerificationAdapterTest(unittest.TestCase):
                 entries = ledger.list_by_owner(window.owner_id)
                 self.assertEqual(len(entries), 1)
                 self.assertEqual(entries[0].outcome, LedgerOutcome.REJECTED_BY_VALIDATION)
+
+
+class OfficialVerificationToolChoiceTest(unittest.TestCase):
+    """实际SDK仅走合成HTTP边界；不认证真实服务或语义质量。"""
+
+    def setUp(self) -> None:
+        guards = ExitStack()
+        self.addCleanup(guards.close)
+        guards.enter_context(patch.dict(os.environ, {"NOTALONE_DISABLE_DOTENV": "1"}, clear=True))
+        for owner, name in ((socket.socket, "connect"), (socket.socket, "connect_ex"),
+                            (socket, "getaddrinfo")):
+            guards.enter_context(patch.object(owner, name, side_effect=AssertionError("禁止真实网络")))
+
+    def _sdk_request(
+        self, *, options: dict[str, Any], mode: str = "legacy-v4",
+        factory: bool = False, invalid_config: bool = False,
+    ) -> dict[str, Any]:
+        source, payload, _ = _arrival_fixture()
+        source = replace(source, target_message_ids=(source.messages[0].message_id,))
+        facts = ExtractionFlow(runtime=RecordingRuntime((payload,))).run(source).accepted
+        result = verification_result(evidence=((source.messages[0].message_id, source.messages[0].text),))
+        if mode != "legacy-v4":
+            result["proof"] = None
+        requests: list[dict[str, Any]] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            requests.append(json.loads(request.content))
+            return httpx.Response(200, json={
+                "id": "synthetic-verification", "object": "chat.completion", "created": 1,
+                "model": "deepseek-flash", "choices": [{"index": 0, "finish_reason": "tool_calls",
+                    "message": {"role": "assistant", "content": None, "tool_calls": [{
+                        "id": "synthetic-call", "type": "function", "function": {
+                            "name": "SourceVerificationOutput", "arguments": json.dumps({"results": [result]}),
+                        },
+                    }]}}],
+            })
+
+        with build_trace_http_client(transport=httpx.MockTransport(handler)) as client:
+            if factory:
+                model = build_deepseek_model(api_key="synthetic-secret", http_client=client, **options)
+            else:
+                model = ChatDeepSeek(api_key="synthetic-secret", http_client=client, **{
+                    "model": "deepseek-flash", "base_url": "https://api.deepseek.com", **options,
+                })
+            original = deepcopy(model.model_dump())
+            runtime = LangChainSourceVerificationRuntime(model=model, verification_mode=mode)
+            if invalid_config:
+                with self.assertRaises(ExtractionRuntimeError):
+                    runtime.verify(window=source, facts=facts)
+            else:
+                self.assertEqual(runtime.verify(window=source, facts=facts), (result,))
+            self.assertEqual(model.model_dump(), original)
+        if invalid_config:
+            self.assertEqual(requests, [])
+            return {}
+        self.assertEqual(len(requests), 1)
+        prompt, schema = source_verification_contract(mode)
+        self.assertEqual(requests[0]["tools"], [convert_to_openai_tool(schema)])
+        self.assertEqual(requests[0]["messages"][0]["content"], prompt)
+        return requests[0]
+
+    def test_official_disabled_thinking_forces_named_tool_in_proof3(self) -> None:
+        body = self._sdk_request(options={"extra_body": {"thinking": {"type": "disabled"},
+                                                       "reasoning_effort": "none"}},
+                                 mode="nullable-proof-v3")
+        self.assertEqual(body["tool_choice"], {
+            "type": "function", "function": {"name": "SourceVerificationOutput"},
+        })
+        self.assertEqual(body["thinking"], {"type": "disabled"})
+        self.assertEqual(body["reasoning_effort"], "none")
+
+    def test_actual_thinking_policy_preserves_all_modes_endpoints_and_conflicts(self) -> None:
+        controls = (
+            ({}, True),
+            ({"extra_body": {"thinking": {"type": "enabled"}}}, True),
+            ({"extra_body": {"thinking": {"type": "disabled"}}}, False),
+            ({"reasoning_effort": "none"}, False),
+            ({"extra_body": {"reasoning_effort": "none"}}, False),
+            ({"extra_body": {"thinking": {"type": "enabled"}}, "reasoning_effort": "none"}, True),
+            ({"extra_body": {"thinking": {"type": "disabled"}}, "reasoning_effort": "high"}, True),
+            ({"extra_body": {"reasoning_effort": "none"}, "reasoning_effort": "high"}, True),
+            ({"extra_body": {"reasoning_effort": "high"}, "reasoning_effort": "none"}, True),
+        )
+        for mode in ("legacy-v4", "nullable-proof-v1", "nullable-proof-v2", "nullable-proof-v3"):
+            for base_url in ("https://api.deepseek.com", "https://api.deepseek.com/v1"):
+                for options, omitted in controls:
+                    with self.subTest(mode=mode, base_url=base_url, options=options):
+                        body = self._sdk_request(options={**options, "base_url": base_url}, mode=mode)
+                        if omitted:
+                            self.assertNotIn("tool_choice", body)
+                        else:
+                            self.assertEqual(body["tool_choice"], {
+                                "type": "function", "function": {"name": "SourceVerificationOutput"},
+                            })
+                        extras = options.get("extra_body", {})
+                        if "thinking" in extras:
+                            self.assertEqual(body["thinking"], extras["thinking"])
+                        else:
+                            self.assertNotIn("thinking", body)
+                        effort = extras.get("reasoning_effort", options.get("reasoning_effort"))
+                        if effort is None:
+                            self.assertNotIn("reasoning_effort", body)
+                        else:
+                            self.assertEqual(body["reasoning_effort"], effort)
+
+    def test_effort_aliases_keep_exact_wire_value_without_changing_models(self) -> None:
+        for effort in ("minimal", "low", "medium", "high", "xhigh", "max", "ultra"):
+            for extra in (False, True):
+                with self.subTest(effort=effort, extra=extra):
+                    options = {"extra_body": {"reasoning_effort": effort}} if extra else {"reasoning_effort": effort}
+                    body = self._sdk_request(options=options, mode="nullable-proof-v3")
+                    self.assertNotIn("tool_choice", body)
+                    self.assertEqual(body["reasoning_effort"], effort)
+
+    def test_factory_default_and_nonofficial_routes_keep_named_tool(self) -> None:
+        default = self._sdk_request(options={}, factory=True)
+        self.assertEqual(default["reasoning_effort"], "none")
+        self.assertEqual(default["tool_choice"], {
+            "type": "function", "function": {"name": "SourceVerificationOutput"},
+        })
+        for options in (
+            {"model": "deepseek-chat"},
+            {"base_url": "https://proxy.example.test/v1"},
+            {"base_url": "https://api.deepseek.com/v2"},
+        ):
+            with self.subTest(options=options):
+                body = self._sdk_request(options={**options, "extra_body": {"thinking": {"type": "enabled"}}})
+                self.assertEqual(body["tool_choice"], {
+                    "type": "function", "function": {"name": "SourceVerificationOutput"},
+                })
+                self.assertEqual(body["thinking"], {"type": "enabled"})
+
+    def test_invalid_official_configuration_stops_before_http_without_repair(self) -> None:
+        for body in ({"thinking": True}, {"thinking": {"type": "invented"}},
+                     {"thinking": {"type": "enabled", "extra": True}},
+                     {"reasoning_effort": True}, {"reasoning_effort": "invented"}):
+            with self.subTest(body=body):
+                self._sdk_request(options={"extra_body": body}, mode="nullable-proof-v3", invalid_config=True)
 
 
 if __name__ == "__main__":

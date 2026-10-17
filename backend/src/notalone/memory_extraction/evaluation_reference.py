@@ -100,6 +100,44 @@ def public_window_projection(window: object) -> dict[str, Any]:
     return value
 
 
+def bounded_window_projection(window: object) -> dict[str, Any]:
+    """有限正式场的内容参考投影；实际来源与任务另以完整快照冻结。"""
+    from .evaluation_records import _json_value
+
+    value = _json_value(window)
+    if (not isinstance(value, dict) or not isinstance(value.get("messages"), list)
+            or not 1 <= len(value["messages"]) <= 4
+            or not isinstance(value.get("target_message_ids"), list)
+            or not value["target_message_ids"]):
+        raise ValueError("有界参考必须保留完整窗口及显式目标。")
+    messages = value["messages"]
+    identifiers = [message.get("message_id") for message in messages if isinstance(message, dict)]
+    targets = value["target_message_ids"]
+    if (len(identifiers) != len(messages) or any(type(item) is not str for item in identifiers)
+            or len(set(identifiers)) != len(identifiers)
+            or any(type(item) is not str for item in targets)
+            or len(set(targets)) != len(targets) or not set(targets) <= set(identifiers)):
+        raise ValueError("有界参考消息或目标身份非法。")
+    projected = []
+    for message in messages:
+        if (message.get("sender") not in {"self", "contact"}
+                or type(message.get("text")) is not str or not message["text"]
+                or type(message.get("message_type")) is not str or not message["message_type"]
+                or message.get("text_representation") not in {"text", "processed_text", "placeholder", "unknown"}
+                or type(message.get("occurred_at")) is not str):
+            raise ValueError("有界参考须保留实际作者、类型和时间。")
+        try:
+            occurred_at = datetime.fromisoformat(message["occurred_at"])
+        except ValueError:
+            raise ValueError("有界参考时间必须带时区。") from None
+        if occurred_at.utcoffset() is None:
+            raise ValueError("有界参考时间必须带时区。")
+        projected.append({key: message[key] for key in (
+            "sender", "text", "occurred_at", "message_type", "text_representation",
+        )})
+    return {"messages": projected, "target_indices": [identifiers.index(item) for item in targets]}
+
+
 def _sha(reference: dict) -> str:
     return hashlib.sha256(json.dumps(
         reference, ensure_ascii=False, sort_keys=True,
@@ -403,4 +441,90 @@ def validate_full_public_reference(
         "case_positions": positions, "quality_certified": False,
         **({"reference_version": reference_version, "review_pending": False,
             "execution_ready": True} if source_fidelity else {}),
+    }
+
+
+def validate_bounded_public_reference(
+    reference: dict, *, expected_reference_sha256: str, annotation_sha256: str,
+) -> dict:
+    """核固定15窗及已完成复审的外部摘要绑定；不认证语义或实际交付。"""
+    from .evaluation_bounded_cases import (
+        BOUNDED_RUNTIME_ANNOTATION_PATH, BOUNDED_RUNTIME_DIMENSIONS,
+        BOUNDED_RUNTIME_INPUTS, BOUNDED_RUNTIME_PLAN, BOUNDED_RUNTIME_REFERENCE_PATH,
+    )
+    from .evaluation_review import validate_reference_structure
+
+    if (type(reference) is not dict
+            or any(type(value) is not str or re.fullmatch(r"[0-9a-f]{64}", value) is None
+                   for value in (expected_reference_sha256, annotation_sha256))
+            or _sha(reference) != expected_reference_sha256
+            or reference.get("annotation_path") != BOUNDED_RUNTIME_ANNOTATION_PATH
+            or reference.get("annotation_sha256") != annotation_sha256
+            or reference.get("status") != "agent_reviewed_reference"):
+        raise ValueError("有界参考须绑定实际已复审对象和中文判据摘要。")
+    provenance = reference.get("provenance")
+    if (type(provenance) is not dict
+            or provenance.get("reference_version") != BOUNDED_RUNTIME_PLAN
+            or provenance.get("execution_plan") != BOUNDED_RUNTIME_PLAN
+            or provenance.get("reference_path") != BOUNDED_RUNTIME_REFERENCE_PATH
+            or provenance.get("oracle_aware") is not True
+            or provenance.get("blind_annotation") is not False
+            or provenance.get("quality_certified") is not False
+            or provenance.get("human_review") != []
+            or any(type(provenance.get(key)) is not dict
+                   or provenance[key].get("status") != "passed"
+                   for key in ("structured_review", "independent_review"))):
+        raise ValueError("有界参考缺实际结构与独立复审，不能由待审材料执行。")
+    inputs = [{"messages": list(item["messages"]), "target_indices": list(item["target_indices"])}
+              for item in BOUNDED_RUNTIME_INPUTS]
+    if (len(inputs) != 15 or len({_sha(item) for item in inputs}) != 15
+            or provenance.get("bounded_inputs_sha256") != hashlib.sha256(json.dumps(
+                inputs, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False,
+            ).encode("utf-8")).hexdigest()
+            or provenance.get("source_routes") != {
+                item["id"]: item["source_route"] for item in BOUNDED_RUNTIME_INPUTS
+            }):
+        raise ValueError("有界参考的完整输入或正式来源路线不一致。")
+    windows = reference.get("windows")
+    if type(windows) is not list or len(windows) != 15:
+        raise ValueError("有界参考须保留固定15窗且不可缩减。")
+    axes = reference.get("common_rules", {}).get("axis_expectations")
+    if type(axes) is not dict or set(axes) != {item["id"] for item in BOUNDED_RUNTIME_INPUTS}:
+        raise ValueError("有界参考缺逐窗独立七轴判据。")
+    for position, (window, item, projected) in enumerate(zip(windows, BOUNDED_RUNTIME_INPUTS, inputs, strict=True)):
+        validate_reference_structure(reference, item["id"])
+        if (window["id"] != item["id"] or window["position"] != position
+                or window["case_name"] != item["case_name"]
+                or window["input_sha256"] != _sha(projected)
+                or window["target_indices"] != list(item["target_indices"])
+                or any(type(index) is not int for index in window["target_indices"])
+                or window["inclusion"] != "retain" or len(window["claims"]) != 1
+                or window["claims"][0]["required"] is not True
+                or window["claims"][0]["id"] != item["id"] + "-P1"):
+            raise ValueError("有界参考的身份、顺序、正文投影或必需命题不一致。")
+        claim = window["claims"][0]
+        if (type(claim["meaning_requirements"]) is not list or not claim["meaning_requirements"]
+                or any(type(text) is not str or not text.strip() for text in claim["meaning_requirements"])):
+            raise ValueError("有界参考缺独立命题判据。")
+        for variant in claim["variants"]:
+            _full_variant(variant, len(item["messages"]), item["target_indices"])
+        case_axes = axes[item["id"]]
+        if type(case_axes) is not dict or set(case_axes) != set(BOUNDED_RUNTIME_DIMENSIONS):
+            raise ValueError("有界参考每窗须具备全部七轴判据。")
+        variants = {variant["id"] for variant in claim["variants"]}
+        for criterion in case_axes.values():
+            if (type(criterion) is not dict
+                    or set(criterion) != {"applicable", "criterion", "expected_api_state_by_variant"}
+                    or criterion["applicable"] is not True
+                    or type(criterion["criterion"]) is not str or not criterion["criterion"].strip()
+                    or type(criterion["expected_api_state_by_variant"]) is not dict
+                    or set(criterion["expected_api_state_by_variant"]) != variants
+                    or any(type(state) is not str or state not in {"valid", "unknown"}
+                           for state in criterion["expected_api_state_by_variant"].values())):
+                raise ValueError("有界参考的独立轴判据或逐变体API预期不完整。")
+    return {
+        "reference_sha256": expected_reference_sha256, "annotation_sha256": annotation_sha256,
+        "planned_windows": 15, "required_claims": 15, "optional_claims": 0,
+        "case_positions": tuple(range(15)), "reference_version": BOUNDED_RUNTIME_PLAN,
+        "review_pending": False, "execution_ready": True, "quality_certified": False,
     }

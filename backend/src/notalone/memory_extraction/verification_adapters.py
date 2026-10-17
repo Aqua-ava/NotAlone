@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import time
 from copy import deepcopy
+from contextlib import nullcontext
 from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
@@ -28,7 +29,9 @@ from notalone.memory_extraction.verification import (
 )
 from notalone.memory_trace import TraceWriteError
 from notalone.memory_trace.context import record_ledger_entry
-from notalone.memory_trace.transport import invoke_traced_model
+from notalone.memory_trace.transport import (
+    Proof3JSONGuardError, invoke_traced_model, proof3_json_guard,
+)
 from notalone.reply.adapters.deepseek_provider import deepseek_uses_thinking
 
 SOURCE_VERIFICATION_SYSTEM_PROMPT = """逐条比较记忆候选与同一联系人窗口中的原话，
@@ -208,10 +211,32 @@ reported的source/candidate覆盖完整同一事件及包装，frame只能direct
 """
 
 
-def _proof_schema(version: int = 1) -> dict[str, Any]:
-    from notalone.memory_extraction.source_proof import RULE_VARIANTS, AUTHOR_QUOTE_RULE_VARIANTS
+SOURCE_BOUNDED_RUNTIME_PROOF_PROMPT = """
+本次显式协议为nullable-proof-v3。原candidate_index/verdict/issues/evidence四槽仍必填；
+只允许额外可缺或null的proof；非null精确四键version=3、atom_links、reference、reported。
+只提Unicode码点半开整数位置，不提身份、唯一性、可信布尔、摘要、能力或语义图。
+完整实际窗口最多4条、每条和候选最多4096码点；最多两个第三人、一条显式指称链或一组问答。
+atom_links上限16，reference/reported各8；同类重复边非法。只选一个主规则：
+BR_AUTHOR_ARRIVAL_V1/direct_quote：实际作者我刚/刚刚到家完整事件，frame=direct。
+BR_KIN_LEND_V1与BR_TWO_ROLES_V1：completed_inline/negative_inline/completed_cross/negative_cross，
+我姐/我哥[昨天/前天]把她/他的车/书/雨伞借给我了；否定必须有昨天/前天、没/没有且无完成了。
+产权须有同作者完整“这里的“她/他”指我姐/我哥/我同事”声明；跨消息声明必须在前。
+仅有完整“这里提到REL1和REL2。”目录时使用TWO_ROLES，另一角色仍参与完整窗口唯一性。
+BR_COMPLETED_QA_V1/completed_answer：相邻相反作者“你[已/已经]到/到达/抵达家/公司/学校/机场/车站了吗？/?”
+及“[我][已/已经]同动词了[。]”；不补否定、计划、到期、年龄或其它目的地。
+BR_REQUEST_V1：reported_inline/reported_cross或received_inline/received_cross，frame对应reported_request/received_request。
+REL[昨天/前天]让我周末/明天/后天帮她/他顶个班；须明确受益人，保留外层请托与内层requested，不增接受/义务/履行。
+BR_COND_RUN_V1/conditional_plan：如果天晴，我计划明天/后天[只]跑[约]有限正数米/公里；完整保留条件、数量、程度、时间和计划。
+reference定位作者我（无我回答可用完整回答）、来源显式声明三锚或问答三锚；reported定位完整主结构和归属。
+候选仍为实际用户/联系人原话包装及相关原文，不删包装或不利上下文；每个原子必须有atom链接，
+每个需要的自指/第三人/问答关系均有reference，且有一个完整主结构reported链接。不知道时留null，不重试。
+"""
 
-    source = {
+
+def _proof_schema(version: int = 1) -> dict[str, Any]:
+    from notalone.memory_extraction.source_proof import RULE_VARIANTS, AUTHOR_QUOTE_RULE_VARIANTS, BOUNDED_RULE_VARIANTS
+
+    source: dict[str, Any] = {
         "type": "object", "additionalProperties": False,
         "properties": {
             "message_id": {"type": "string", "format": "uuid"},
@@ -219,14 +244,18 @@ def _proof_schema(version: int = 1) -> dict[str, Any]:
             "end": {"type": "integer", "minimum": 1},
         }, "required": ["message_id", "start", "end"],
     }
-    candidate = {
+    candidate: dict[str, Any] = {
         "type": "object", "additionalProperties": False,
         "properties": {
             "start": {"type": "integer", "minimum": 0},
             "end": {"type": "integer", "minimum": 1},
         }, "required": ["start", "end"],
     }
-    registry = RULE_VARIANTS if version == 1 else AUTHOR_QUOTE_RULE_VARIANTS
+    if version == 3:
+        for span in (source, candidate):
+            span["properties"]["start"]["maximum"] = 4095
+            span["properties"]["end"]["maximum"] = 4096
+    registry = RULE_VARIANTS if version == 1 else AUTHOR_QUOTE_RULE_VARIANTS if version == 2 else BOUNDED_RULE_VARIANTS
     rules = {rule: list(variants) for rule, variants in registry.items()}
     atom = {
         "type": "object", "additionalProperties": False,
@@ -252,7 +281,7 @@ def _proof_schema(version: int = 1) -> dict[str, Any]:
         "type": "object", "additionalProperties": False,
         "properties": {
             "rule_id": {"type": "string", "enum": list(rules)},
-            "frame": {"type": "string", "enum": ["direct"] if version == 2 else [
+            "frame": {"type": "string", "enum": ["direct", "reported_request", "received_request"] if version == 3 else ["direct"] if version == 2 else [
                 "direct", "quoted_request_h", "received_request_h",
             ]}, "source": source, "candidate": candidate,
         }, "required": ["rule_id", "frame", "source", "candidate"],
@@ -278,6 +307,8 @@ SOURCE_VERIFICATION_PROOF_SCHEMA["properties"]["results"]["items"][
 ]["proof"] = _proof_schema()
 SOURCE_VERIFICATION_PROOF_V2_SCHEMA = deepcopy(SOURCE_VERIFICATION_SCHEMA)
 SOURCE_VERIFICATION_PROOF_V2_SCHEMA["properties"]["results"]["items"]["properties"]["proof"] = _proof_schema(2)
+SOURCE_VERIFICATION_PROOF_V3_SCHEMA = deepcopy(SOURCE_VERIFICATION_SCHEMA)
+SOURCE_VERIFICATION_PROOF_V3_SCHEMA["properties"]["results"]["items"]["properties"]["proof"] = _proof_schema(3)
 
 DEFAULT_PROMPT_PROFILE = "default"
 PUBLIC_AUTHOR_QUOTE_PROFILE = "public-author-quote-v1"
@@ -299,6 +330,8 @@ def source_verification_contract(
         raise ValueError("来源核验提示profile未受支持。")
     if prompt_profile == PUBLIC_AUTHOR_QUOTE_PROFILE and selected is not SourceVerificationMode.LEGACY_V4:
         raise ValueError("公开作者引句提示仅用于原四槽核验。")
+    if selected is SourceVerificationMode.NULLABLE_PROOF_V3:
+        return SOURCE_VERIFICATION_SYSTEM_PROMPT + SOURCE_BOUNDED_RUNTIME_PROOF_PROMPT, SOURCE_VERIFICATION_PROOF_V3_SCHEMA
     if selected is SourceVerificationMode.NULLABLE_PROOF_V2:
         return SOURCE_VERIFICATION_SYSTEM_PROMPT + SOURCE_AUTHOR_QUOTE_PROOF_PROMPT, SOURCE_VERIFICATION_PROOF_V2_SCHEMA
     if selected is SourceVerificationMode.NULLABLE_PROOF_V1:
@@ -348,6 +381,11 @@ class LangChainSourceVerificationRuntime:
     def tool_choice_policy(self) -> str:
         return "named" if self._force_tool_choice and not deepseek_uses_thinking(self._model) else "omitted"
 
+    def for_mode(self, mode: SourceVerificationMode | str) -> LangChainSourceVerificationRuntime:
+        """只选择同一模型的显式协议；构造不调用模型、不增加核验次数。"""
+        return LangChainSourceVerificationRuntime(model=self._model, ledger=self._ledger, provider=self._provider,
+            verification_mode=mode, prompt_profile=self._prompt_profile, force_tool_choice=self._force_tool_choice)
+
     def verify(
         self,
         *,
@@ -384,26 +422,30 @@ class LangChainSourceVerificationRuntime:
                        "message_id/char_start/char_end；未知时间用uncertain，不能凭当前时间判发生。"
                        "位置只定位，不代替含义核验；资料无event则该槽null。")
         try:
-            message = invoke_traced_model(
-                self._model,
-                purpose="verification",
-                schema=schema,
-                # 官方 Flash 的思考模式不支持强制工具；保留默认 auto 和原返回校验。
-                tool_options=({} if deepseek_uses_thinking(self._model) or not self._force_tool_choice else {
-                    "tool_choice": SOURCE_VERIFICATION_SCHEMA["title"]
-                }),
-                messages=[
-                    {
-                        "role": "system",
-                        "content": prompt,
-                    },
-                    {
-                        "role": "user",
-                        "content": _verification_text(window, facts),
-                    },
-                ],
-                on_invoke=mark_invoked,
-            )
+            with proof3_json_guard() if self._verification_mode is SourceVerificationMode.NULLABLE_PROOF_V3 else nullcontext():
+                message = invoke_traced_model(
+                    self._model,
+                    purpose="verification",
+                    schema=schema,
+                    # 官方 Flash 的思考模式不支持强制工具；保留默认 auto 和原返回校验。
+                    tool_options=({} if deepseek_uses_thinking(self._model) or not self._force_tool_choice else {
+                        "tool_choice": SOURCE_VERIFICATION_SCHEMA["title"]
+                    }),
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": prompt,
+                        },
+                        {
+                            "role": "user",
+                            "content": _verification_text(window, facts),
+                        },
+                    ],
+                    on_invoke=mark_invoked,
+                )
+        except Proof3JSONGuardError:
+            self._record_call(window, called_at, started, LedgerOutcome.REJECTED_BY_VALIDATION)
+            raise ExtractionInvalidOutputError("来源核验原始JSON未通过严格单次协议。") from None
         except TraceWriteError:
             raise
         except Exception:

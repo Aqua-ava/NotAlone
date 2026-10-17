@@ -9,9 +9,11 @@ from uuid import UUID, uuid4
 
 import psycopg
 
+from notalone.media.models import MediaError
 from notalone.persistence.extraction_trace import erase_source_traces
 from notalone.persistence.dimension_evidence import residual_source_evidence_sql
 from notalone.persistence.locks import lock_contact_scope, lock_owner_scope
+from notalone.persistence.media_store import erase_source_media, verify_source_media_deleted
 from notalone.persistence.message_cleanup import (
     cleanup_derived_data,
     collect_orphan_message_ids,
@@ -21,7 +23,9 @@ from notalone.persistence.reply_cleanup import (
     ReplyCleanupError,
     delete_source_replies,
 )
-from notalone.persistence.source_memory_erasure import erase_source_memories
+from notalone.persistence.source_memory_erasure import (
+    collect_all_source_memory_ids, erase_source_memories,
+)
 from notalone.persistence.memory_correction import has_correction_dependencies
 from notalone.persistence.source_processing import erase_source_processing
 from notalone.persistence.style_sample_store import erase_source_style_samples
@@ -100,6 +104,12 @@ class PostgresSourceDeletionRepository:
                 if source is None:
                     raise SourceNotFoundError("指定范围内不存在该来源。")
                 _erase_update_backups(connection)
+                # 清单独立于业务级联，先按已登记归属清文件，失败时保留清单供重试。
+                erase_source_media(
+                    connection,
+                    scope=ContactScope(owner_id, contact_id),
+                    source_document_id=source_document_id,
+                )
                 if source[0] == "deleted":
                     return SourceDeletionResult(
                         source_document_id=source_document_id,
@@ -173,19 +183,23 @@ class PostgresSourceDeletionRepository:
                     contact_id=contact_id,
                     candidate_message_ids=source_message_ids,
                 )
+                all_memory_ids = collect_all_source_memory_ids(
+                    connection, owner_id=owner_id, contact_id=contact_id,
+                    removed_ids=set(orphan_message_ids),
+                )
                 delete_source_replies(
                     connection,
                     owner_id=owner_id,
                     contact_id=contact_id,
-                    removed_ids={source_document_id, *orphan_message_ids},
+                    removed_ids={source_document_id, *orphan_message_ids, *all_memory_ids},
                 )
                 erase_source_style_samples(
                     connection, owner_id=owner_id,
-                    removed_ids={source_document_id, *orphan_message_ids},
+                    removed_ids={source_document_id, *orphan_message_ids, *all_memory_ids},
                 )
                 erase_source_expression_preferences(
                     connection, owner_id=owner_id,
-                    removed_ids={source_document_id, *orphan_message_ids},
+                    removed_ids={source_document_id, *orphan_message_ids, *all_memory_ids},
                 )
                 cleanup_derived_data(
                     connection,
@@ -315,7 +329,7 @@ class PostgresSourceDeletionRepository:
                 source_document_id=source_document_id,
             )
             raise
-        except (psycopg.Error, ReplyCleanupError):
+        except (psycopg.Error, ReplyCleanupError, MediaError, OSError):
             self._record_failure(
                 owner_id=owner_id,
                 contact_id=contact_id,
@@ -329,6 +343,11 @@ class PostgresSourceDeletionRepository:
         """复核原子删除产生的最小凭证和来源引用，不把中间态当成功。"""
         try:
             with psycopg.connect(self._database_url) as connection:
+                verify_source_media_deleted(
+                    connection,
+                    scope=ContactScope(owner_id, contact_id),
+                    source_document_id=source_document_id,
+                )
                 row = connection.execute(
                     f"""
                     SELECT status, file_name, content_sha256, record_count, deleted_at,
@@ -354,7 +373,7 @@ class PostgresSourceDeletionRepository:
                     raise SourceDeletionVerificationError(
                         "来源删除尚未验证完成。"
                     )
-        except psycopg.Error:
+        except (psycopg.Error, MediaError):
             raise SourceDeletionError("删除结果验证失败。") from None
 
     @staticmethod

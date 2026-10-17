@@ -16,6 +16,13 @@ from notalone.memory.timing import MemoryTiming
 from notalone.scopes import ContactScope
 
 
+class SourceDependencyMode(StrEnum):
+    """规范消息的替代来源或共同正文依赖；旧记录默认替代。"""
+
+    ANY = "any"
+    ALL = "all"
+
+
 class MemoryCategory(StrEnum):
     """v1 关系记忆的有限分类。"""
 
@@ -112,7 +119,11 @@ class MemoryCandidate:
     dimension_evidence: DimensionEvidence | None = None
     correction_review: tuple[CorrectionReview, ...] = ()
 
+    source_dependency_mode: SourceDependencyMode = SourceDependencyMode.ANY
+
     def __post_init__(self) -> None:
+        if not isinstance(self.source_dependency_mode, SourceDependencyMode):
+            raise TypeError("来源依赖方式必须是受控枚举。")
         if self.event is not None and not isinstance(self.event, MemoryEvent):
             raise ValueError("记忆事件信息无效。")
         if self.dimension_evidence is not None and (
@@ -191,7 +202,11 @@ class ConfirmedMemory:
     version_evidence: VersionEvidence | None = None
     can_revert_auto_update: bool = False
 
+    source_dependency_mode: SourceDependencyMode = SourceDependencyMode.ANY
+
     def __post_init__(self) -> None:
+        if not isinstance(self.source_dependency_mode, SourceDependencyMode):
+            raise TypeError("来源依赖方式必须是受控枚举。")
         if self.event is not None and not isinstance(self.event, MemoryEvent):
             raise ValueError("记忆事件信息无效。")
         if not isinstance(self.memory_id, UUID):
@@ -273,7 +288,11 @@ class OwnerMemory:
     version_evidence: VersionEvidence | None = None
     can_revert_auto_update: bool = False
 
+    source_dependency_mode: SourceDependencyMode = SourceDependencyMode.ANY
+
     def __post_init__(self) -> None:
+        if not isinstance(self.source_dependency_mode, SourceDependencyMode):
+            raise TypeError("来源依赖方式必须是受控枚举。")
         if self.event is not None and not isinstance(self.event, MemoryEvent):
             raise ValueError("记忆事件信息无效。")
         if not isinstance(self.memory_id, UUID) or not isinstance(

@@ -33,6 +33,11 @@ EVOLUTION_MIGRATIONS = (
     "070_skill_scope_policies.sql",
 )
 
+INTEGRATION_MIGRATIONS = EVOLUTION_MIGRATIONS + (
+    "071_bounded_runtime_evidence.sql",
+    "072_scoped_media_lifecycle.sql",
+)
+
 
 class DatabaseMigrationCommandTest(unittest.TestCase):
     def setUp(self) -> None:
@@ -198,8 +203,8 @@ class DatabaseMigrationCommandTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         applied = json.loads(result.stdout)["applied"]
         expected = sorted(path.name for path in (ROOT / "database/migrations").glob("*.sql"))
-        self.assertEqual(len(expected), 70)
-        self.assertEqual(expected[-1], '070_skill_scope_policies.sql')
+        self.assertEqual(len(expected), 72)
+        self.assertEqual(expected[-1], '072_scoped_media_lifecycle.sql')
         self.assertEqual(applied, expected)
         repeated = self._run(directory=ROOT / "database/migrations")
         self.assertEqual(repeated.returncode, 0, repeated.stderr)
@@ -308,7 +313,7 @@ COMMIT;
             ).fetchall()
         upgraded = self._run(directory=ROOT / "database/migrations")
         self.assertEqual(upgraded.returncode, 0, upgraded.stderr)
-        expected = (["060_manual_contact_confirmation.sql"] if last_version == 59 else []) + list(EVOLUTION_MIGRATIONS)
+        expected = (["060_manual_contact_confirmation.sql"] if last_version == 59 else []) + list(INTEGRATION_MIGRATIONS)
         self.assertEqual(json.loads(upgraded.stdout)["applied"], expected)
         with psycopg.connect(self.database_url) as connection:
             for table, rows in before.items():
@@ -318,7 +323,7 @@ COMMIT;
                 "SELECT name,checksum,applied_at FROM public.notalone_schema_migration ORDER BY name"
             ).fetchall()
             self.assertEqual(completed[:last_version], history)
-            self.assertEqual((len(completed), completed[-1][0]), (70, "070_skill_scope_policies.sql"))
+            self.assertEqual((len(completed), completed[-1][0]), (72, "072_scoped_media_lifecycle.sql"))
         repeated = self._run(directory=ROOT / "database/migrations")
         self.assertEqual(repeated.returncode, 0, repeated.stderr)
         self.assertEqual(json.loads(repeated.stdout)["applied"], [])
@@ -362,7 +367,7 @@ COMMIT;
         self.assertEqual(json.loads(first.stdout)["applied"][-1], "060_manual_contact_confirmation.sql")
         advanced = self._run(directory=ROOT / "database/migrations")
         self.assertEqual(advanced.returncode, 0, advanced.stderr)
-        self.assertEqual(json.loads(advanced.stdout)["applied"], list(EVOLUTION_MIGRATIONS))
+        self.assertEqual(json.loads(advanced.stdout)["applied"], list(INTEGRATION_MIGRATIONS))
         repeated = self._run(directory=ROOT / "database/migrations")
         self.assertEqual(repeated.returncode, 0, repeated.stderr)
         self.assertEqual(json.loads(repeated.stdout)["applied"], [])
@@ -401,7 +406,7 @@ COMMIT;
             connection.execute("DROP TABLE public.memory_correction_decision")
         resumed = self._run(directory=ROOT / "database/migrations")
         self.assertEqual(resumed.returncode, 0, resumed.stderr)
-        self.assertEqual(json.loads(resumed.stdout)["applied"], list(EVOLUTION_MIGRATIONS))
+        self.assertEqual(json.loads(resumed.stdout)["applied"], list(INTEGRATION_MIGRATIONS))
 
     def test_event_062_failure_rolls_back_then_resumes_without_changing_061(self) -> None:
         self._copy_canonical_prefix(61)
@@ -417,7 +422,7 @@ COMMIT;
             connection.execute("DROP FUNCTION public.notalone_version_window_shape(jsonb)")
         resumed = self._run(directory=ROOT / "database/migrations")
         self.assertEqual(resumed.returncode, 0, resumed.stderr)
-        self.assertEqual(json.loads(resumed.stdout)["applied"], list(EVOLUTION_MIGRATIONS[1:]))
+        self.assertEqual(json.loads(resumed.stdout)["applied"], list(INTEGRATION_MIGRATIONS[1:]))
 
 
 if __name__ == "__main__":

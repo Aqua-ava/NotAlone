@@ -56,7 +56,7 @@ class ScriptedExtractionRunner:
         self.outcomes = outcomes
         self.calls: list[ContactScope] = []
 
-    def run(self, *, scope: ContactScope) -> ExtractionRunStats:
+    def run(self, *, scope: ContactScope, **task_context: object) -> ExtractionRunStats:
         self.calls.append(scope)
         if not self.outcomes:
             raise AssertionError("没有预置 Worker 提取结果。")
@@ -139,14 +139,14 @@ class FakeExtractionRuntime:
 class PermanentFailureRunner:
     """模拟不可重试的结构错误。"""
 
-    def run(self, *, scope: ContactScope) -> ExtractionRunStats:  # noqa: ARG002
+    def run(self, *, scope: ContactScope, **task_context: object) -> ExtractionRunStats:  # noqa: ARG002
         raise ValueError("synthetic invalid worker output")
 
 
 class SlowExtractionRunner:
     """模拟超过租约时长的模型提取。"""
 
-    def run(self, *, scope: ContactScope) -> ExtractionRunStats:  # noqa: ARG002
+    def run(self, *, scope: ContactScope, **task_context: object) -> ExtractionRunStats:  # noqa: ARG002
         time.sleep(1.2)
         return ExtractionRunStats(batches=1, processed_messages=6)
 
@@ -389,7 +389,7 @@ class BackgroundTaskWorkerTest(unittest.TestCase):
         task_id = self._import()
 
         class LeaseExpiringRunner:
-            def run(self, *, scope: ContactScope) -> ExtractionRunStats:
+            def run(self, *, scope: ContactScope, **task_context: object) -> ExtractionRunStats:
                 del scope
                 with psycopg.connect(TEST_DATABASE_URL) as connection:
                     connection.execute(

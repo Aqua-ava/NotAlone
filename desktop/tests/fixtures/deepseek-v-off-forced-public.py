@@ -24,7 +24,7 @@ from notalone.memory_extraction.evaluation_records import _json_value, _redact
 
 
 ROOT = Path(__file__).resolve().parents[3]
-LEGACY = ROOT / "desktop/artifacts/grounded-public21-prepare-20261015/grounded_public21.py"
+LEGACY = ROOT / "desktop/tests/fixtures/grounded_public21.py"
 PLAN = ".scratch/grounded-evaluation/deepseek-v-off-forced-v2-plan-20261016.md"
 IMPLEMENTATION = ".scratch/grounded-evaluation/deepseek-v-off-forced-v2-implementation-20261016.md"
 PROTOCOL = "deepseek-v-off-forced-pilot-v2"

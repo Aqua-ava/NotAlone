@@ -40,7 +40,7 @@ from enum import StrEnum
 from datetime import datetime, timezone
 from typing import cast
 
-from notalone.memory.models import FactSubject, MemoryCategory
+from notalone.memory.models import FactSubject, MemoryCategory, SourceDependencyMode
 from notalone.memory.evidence_binding import (
     candidate_digest, content_digest, fact_pragmatics,
 )
@@ -116,7 +116,9 @@ def required_dimensions(fact: ExtractedFact) -> frozenset[str]:
     ):
         required.add("time")
     evidence = fact.dimension_evidence
-    if evidence is not None and evidence.version in {2, 3}:
+    if fact.source_dependency_mode is SourceDependencyMode.ALL and evidence is None:
+        return _ALL_DIMENSION_NAMES
+    if evidence is not None and evidence.version in {2, 3, 4}:
         # proof版本不能因H日期为空或提案未知省掉潜在时间关系；保守集合只增加。
         required.add("time")
     if evidence is None or any(
@@ -136,7 +138,8 @@ def valid_evidence_dimensions(
     evidence = fact.dimension_evidence
     if (
         evidence is None or not evidence.source_bound
-        or evidence.candidate_sha256 != candidate_digest(fact)
+        or (evidence.version == 4) != (fact.source_dependency_mode is SourceDependencyMode.ALL)
+        or evidence.candidate_sha256 != candidate_digest(fact, version=evidence.version)
         or evidence.pragmatics != fact_pragmatics(fact)
     ):
         return frozenset()
@@ -153,7 +156,7 @@ def valid_evidence_dimensions(
         and not fact.alternatives
     ):
         valid.add("truth_intent")
-    if fact.invalid_at is not None and all(
+    if evidence.version != 4 and fact.invalid_at is not None and all(
         item.occurred_at is not None for item in evidence.messages
         if item.message_id in fact.source_message_ids
     ):
@@ -222,12 +225,16 @@ def valid_evidence_dimensions(
         }
         for capability in evidence.semantic_basis.to_payload()["capabilities"]:
             valid.add(capability_dimensions[capability])
+    if evidence.version == 4 and evidence.semantic_basis is not None and not fact.alternatives:
+        from notalone.memory.bounded_evidence import CAPABILITY_DIMENSIONS
+        valid.update(CAPABILITY_DIMENSIONS[item] for item in evidence.semantic_basis.to_payload()["capabilities"])
     media = evidence.media or ()
     if {item.message_id for item in media} == set(fact.source_message_ids) and all(
         item.representation == (
             "text" if item.message_type == "text" else "processed_text"
         )
         and item.representation == messages[item.message_id].text_representation
+        and (evidence.version != 4 or item.message_type == "text" and item.representation == "text")
         for item in media
     ):
         valid.add("media")

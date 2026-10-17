@@ -14,6 +14,7 @@ from notalone.memory.pragmatics import (
 )
 
 from notalone.memory.models import (
+    SourceDependencyMode,
     FactSubject,
     MemoryCategory,
     MemoryTopic,
@@ -82,7 +83,11 @@ class ExtractedFact:
     dimension_evidence: DimensionEvidence | None = None
     event: MemoryEvent | None = None
 
+    source_dependency_mode: SourceDependencyMode = SourceDependencyMode.ANY
+
     def __post_init__(self) -> None:
+        if not isinstance(self.source_dependency_mode, SourceDependencyMode):
+            raise TypeError("来源依赖方式必须是受控枚举。")
         if self.event is not None and not isinstance(self.event, MemoryEvent):
             raise ValueError("提取事件结构无效。")
         if self.dimension_evidence is not None and not isinstance(

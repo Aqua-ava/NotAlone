@@ -37,6 +37,10 @@ from notalone.memory.models import (
     MemoryCandidateStatus,
     MemoryCategory,
     MemoryTopic,
+    SourceDependencyMode,
+)
+from notalone.persistence.source_dependency import (
+    dependency_mode, ensure_all_sources, insert_dependency,
 )
 from notalone.memory.candidates import same_pending_identity
 from notalone.persistence.extraction_trace import erase_record_traces
@@ -88,6 +92,7 @@ _CANDIDATE_COLUMNS = """
     failure_reason AS candidate_failure_reason,
     to_jsonb(memory_candidate)->'dimension_evidence' AS candidate_dimension_evidence,
     to_jsonb(memory_candidate)->'event' AS candidate_event,
+    to_jsonb(memory_candidate)->>'source_dependency_mode' AS candidate_dependency_mode,
     created_at AS recorded_at
 """
 
@@ -110,6 +115,7 @@ _MEMORY_COLUMNS = """
     supersedes_memory_id,
     to_jsonb(confirmed_memory)->'event' AS memory_event,
     to_jsonb(confirmed_memory)->'version_evidence' AS version_evidence,
+    to_jsonb(confirmed_memory)->>'source_dependency_mode' AS memory_dependency_mode,
     created_at AS recorded_at
 """
 
@@ -179,6 +185,19 @@ class PostgresMemoryStore:
                             persist_protection(connection, protected, snapshot)
                         return protected
                 candidate, correction_evidence = protect_candidate(connection, candidate)
+                if candidate.source_dependency_mode is SourceDependencyMode.ALL:
+                    ensure_all_sources(connection, owner_id=candidate.scope.owner_id,
+                                       contact_id=candidate.scope.contact_id,
+                                       source_ids=candidate.source_ids)
+                    if (candidate.dimension_evidence is not None
+                            and candidate.dimension_evidence.version != 4):
+                        raise MemoryInvariantError("ALL候选不能保存旧版依据。")
+                else:
+                    self._ensure_active_sources(connection, candidate.scope, candidate.source_ids)
+                    if (candidate.dimension_evidence is not None
+                            and candidate.dimension_evidence.version == 4):
+                        raise MemoryInvariantError("新版本依据必须使用ALL来源。")
+                mode_column, mode_value, mode_params = insert_dependency(candidate.source_dependency_mode)
                 evidence_column = ""
                 evidence_value = ""
                 evidence_params: tuple[Any, ...] = ()
@@ -189,7 +208,7 @@ class PostgresMemoryStore:
                         raise MemoryPersistenceError(
                             "数据库尚未启用维度依据；须先批准并完成迁移。"
                         )
-                    if candidate.dimension_evidence.version in {2, 3}:
+                    if candidate.dimension_evidence.version in {2, 3, 4}:
                         current = bind_stored_dimension_evidence(
                             connection, candidate, lock_sources=True,
                         )
@@ -215,11 +234,11 @@ class PostgresMemoryStore:
                         id, owner_id, contact_id, text_content, category,
                         topic, subject, source_ids, status, valid_at, invalid_at,
                         confidence, risk_flags, alternatives,
-                        interpretation_reason, failure_reason{evidence_column}
+                        interpretation_reason, failure_reason{evidence_column}{mode_column}
                     )
                     VALUES (
                         %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                        %s, %s, %s, %s, %s, %s{evidence_value}
+                        %s, %s, %s, %s, %s, %s{evidence_value}{mode_value}
                     )
                     RETURNING {_CANDIDATE_COLUMNS}
                     """,
@@ -240,7 +259,7 @@ class PostgresMemoryStore:
                         list(candidate.alternatives),
                         candidate.interpretation_reason or None,
                         candidate.failure_reason,
-                    ) + evidence_params,
+                    ) + evidence_params + mode_params,
                 ).fetchone()
                 if row is None:
                     raise MemoryInvariantError(
@@ -272,6 +291,8 @@ class PostgresMemoryStore:
 
         if not isinstance(candidate, MemoryCandidate):
             raise TypeError("关系记忆候选结构无效。")
+        if candidate.source_dependency_mode is not SourceDependencyMode.ANY:
+            raise ValueError("独立手动录入必须使用ANY来源。")
         try:
             digest = hashlib.sha256(
                 candidate.text.encode("utf-8")
@@ -523,6 +544,15 @@ class PostgresMemoryStore:
                         raise MemoryVersionConflict("自动更新需要新依据和当前叶子版本。")
                     source_ids = tuple(dict.fromkeys((*expected_previous.source_ids, *source_ids)))
                 self._ensure_active_sources(connection, scope, source_ids)
+                mode = dependency_mode(candidate_row.get("candidate_dependency_mode"))
+                if expected_previous is not None and expected_previous.source_dependency_mode is SourceDependencyMode.ALL:
+                    mode = SourceDependencyMode.ALL
+                if mode is SourceDependencyMode.ALL:
+                    ensure_all_sources(connection, owner_id=scope.owner_id,
+                                       contact_id=scope.contact_id, source_ids=source_ids)
+                else:
+                    self._ensure_active_sources(connection, scope, source_ids)
+                mode_column, mode_value, mode_params = insert_dependency(mode)
 
                 candidate = self._candidate_from_row(self._timed_candidates(
                     connection, [candidate_row], lock_sources=True
@@ -558,11 +588,11 @@ class PostgresMemoryStore:
                         id, owner_id, contact_id, text_content, category,
                         topic, source_ids, source_candidate_id, adoption_method,
                         valid_at, invalid_at, confidence, risk_flags,
-                        revision, supersedes_memory_id{event_column}
+                        revision, supersedes_memory_id{event_column}{mode_column}
                     )
                     VALUES (
                         %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                        %s, %s, %s, %s{event_value}
+                        %s, %s, %s, %s{event_value}{mode_value}
                     )
                     RETURNING {_MEMORY_COLUMNS}
                     """,
@@ -583,7 +613,7 @@ class PostgresMemoryStore:
                         expected_previous.revision + 1 if expected_previous else 1,
                         expected_previous.memory_id if expected_previous else None,
                         *event_params,
-                    ),
+                    ) + mode_params,
                 ).fetchone()
                 if memory_row is None:
                     raise MemoryInvariantError("关系记忆写入结果为空。")
@@ -688,7 +718,13 @@ class PostgresMemoryStore:
                     else memory_row["memory_category"]
                 )
                 source_ids = self._source_ids(memory_row["memory_source_ids"])
-                self._ensure_active_sources(connection, scope, source_ids)
+                mode = dependency_mode(memory_row.get("memory_dependency_mode"))
+                if mode is SourceDependencyMode.ALL:
+                    ensure_all_sources(connection, owner_id=scope.owner_id,
+                                       contact_id=scope.contact_id, source_ids=source_ids)
+                else:
+                    self._ensure_active_sources(connection, scope, source_ids)
+                mode_column, mode_value, mode_params = insert_dependency(mode)
                 next_revision = memory_row["revision"] + 1
                 invalidated = connection.execute(
                     """
@@ -715,11 +751,11 @@ class PostgresMemoryStore:
                         id, owner_id, contact_id, text_content, category,
                         topic, source_ids, source_candidate_id, adoption_method,
                         status, valid_at, invalid_at, revision,
-                        confidence, risk_flags, supersedes_memory_id
+                        confidence, risk_flags, supersedes_memory_id{mode_column}
                     )
                     VALUES (
                         %s, %s, %s, %s, %s, %s, %s, NULL, 'manual', 'active',
-                        %s, %s, %s, %s, %s, %s
+                        %s, %s, %s, %s, %s, %s{mode_value}
                     )
                     RETURNING {_MEMORY_COLUMNS}
                     """,
@@ -737,7 +773,7 @@ class PostgresMemoryStore:
                         memory_row["memory_confidence"],
                         memory_row["memory_risk_flags"],
                         memory_row["memory_id"],
-                    ),
+                    ) + mode_params,
                 ).fetchone()
                 if updated is None:
                     raise MemoryInvariantError("关系记忆新版本写入结果为空。")
@@ -843,6 +879,12 @@ class PostgresMemoryStore:
                         self._timed_candidates(connection, [row])[0]
                     ),
                 )
+                mode = dependency_mode(row.get("candidate_dependency_mode"))
+                mode_column, mode_value, mode_params = insert_dependency(mode)
+                if mode is SourceDependencyMode.ALL:
+                    ensure_all_sources(connection, owner_id=scope.owner_id,
+                                       contact_id=scope.contact_id,
+                                       source_ids=self._source_ids(row["candidate_source_ids"]))
                 erase_record_traces(
                     connection,
                     owner_id=scope.owner_id,
@@ -870,14 +912,14 @@ class PostgresMemoryStore:
                 # 删除指纹行：text 用于阻止自动复活，source_ids 指向候选来源，
                 # source_candidate_id 引用被拒候选（UNIQUE 允许）。
                 connection.execute(
-                    """
+                    f"""
                     INSERT INTO public.confirmed_memory (
                         id, owner_id, contact_id, text_content, category,
                         topic, source_ids, source_candidate_id, adoption_method,
-                        status, revision
+                        status, revision{mode_column}
                     )
                     VALUES (
-                        %s, %s, %s, %s, %s, %s, %s, %s, 'auto', 'deleted', 1
+                        %s, %s, %s, %s, %s, %s, %s, %s, 'auto', 'deleted', 1{mode_value}
                     )
                     """,
                     (
@@ -889,7 +931,7 @@ class PostgresMemoryStore:
                         row["candidate_topic"],
                         list(source_ids),
                         candidate_id,
-                    ),
+                    ) + mode_params,
                 )
                 return self._candidate_from_row(
                     self._timed_candidates(connection, [updated])[0]
@@ -1467,6 +1509,7 @@ class PostgresMemoryStore:
                 evidence is not None and evidence.source_bound
             ) if row.get("candidate_event") is not None and "_bound_dimension_evidence" in row
                    else MemoryEvent.from_payload(row.get("candidate_event"))),
+            source_dependency_mode=dependency_mode(row.get("candidate_dependency_mode")),
         )
 
     @classmethod
@@ -1490,6 +1533,7 @@ class PostgresMemoryStore:
             timing=row["timing"], event=row.get("_bound_event", MemoryEvent.from_payload(row.get("memory_event"))),
             version_evidence=row.get("_bound_version_evidence", VersionEvidence.from_payload(row.get("version_evidence"))),
             can_revert_auto_update=row.get("_can_revert_auto_update", False),
+            source_dependency_mode=dependency_mode(row.get("memory_dependency_mode")),
         )
 
     @classmethod

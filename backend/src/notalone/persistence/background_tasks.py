@@ -7,6 +7,7 @@ from typing import Any, Iterable
 from uuid import UUID
 
 import psycopg
+from psycopg.types.json import Jsonb
 
 from notalone.tasks.models import (
     IMPORT_TASK_STEPS,
@@ -19,8 +20,11 @@ from notalone.tasks.models import (
     BackgroundTaskStepStatus,
     BackgroundTaskType,
     ClaimedBackgroundTaskStep,
+    ExtractionRuntimeConfig,
+    ExtractionRuntimeMode,
 )
 from notalone.persistence.locks import lock_contact_scope
+from notalone.persistence.dimension_evidence import supports_bounded_runtime_evidence
 
 
 MAX_AUTOMATIC_ATTEMPTS = 3
@@ -439,7 +443,8 @@ class PostgresBackgroundTaskRepository:
                         step.lease_expires_at,
                         step.last_error_code,
                         step.created_at,
-                        step.updated_at
+                        step.updated_at,
+                        to_jsonb(task)->'extraction_runtime_config'
                     FROM public.background_task AS task
                     LEFT JOIN public.background_task_step AS step
                       ON step.task_id = task.id
@@ -494,7 +499,61 @@ class PostgresBackgroundTaskRepository:
             created_at=first[12],
             updated_at=first[13],
             steps=steps,
+            extraction_runtime_config=_runtime_config(first[26]),
         )
+
+    def configure_extraction_runtime(
+        self, *, owner_id: UUID, contact_id: UUID, task_id: UUID,
+        config: ExtractionRuntimeConfig,
+    ) -> ExtractionRuntimeConfig:
+        """在提取首次领取前固定配置；与领取沿相同的范围、任务、步骤锁序。"""
+
+        for value, name in ((owner_id, "owner_id"), (contact_id, "contact_id"), (task_id, "task_id")):
+            _validate_uuid(value, name)
+        if not isinstance(config, ExtractionRuntimeConfig):
+            raise ValueError("提取任务配置无效。")
+        try:
+            with psycopg.connect(self._database_url) as connection:
+                self._lock_scope(connection, owner_id, contact_id)
+                _require_runtime_config_capability(
+                    connection, bounded=config.mode is ExtractionRuntimeMode.BOUNDED_RUNTIME_V1,
+                )
+                task = connection.execute(
+                    """
+                    SELECT status, to_jsonb(task)->'extraction_runtime_config'
+                    FROM public.background_task AS task
+                    WHERE id=%s AND owner_id=%s AND contact_id=%s
+                    FOR UPDATE
+                    """, (task_id, owner_id, contact_id),
+                ).fetchone()
+                if task is None or task[0] not in {'queued', 'running'}:
+                    raise BackgroundTaskStateError("当前任务不允许选择提取模式。")
+                step = connection.execute(
+                    """
+                    SELECT status, attempt_count, lease_generation, started_at
+                    FROM public.background_task_step
+                    WHERE task_id=%s AND step_name='extract_memory'
+                    FOR UPDATE
+                    """, (task_id,),
+                ).fetchone()
+                if (step is None or step[0] != 'pending' or step[1] != 0
+                        or step[2] != 0 or step[3] is not None):
+                    raise BackgroundTaskStateError("提取步骤已领取或不允许初始化配置。")
+                current = _runtime_config(task[1])
+                if current is not None:
+                    if current != config:
+                        raise BackgroundTaskStateError("提取任务已固定另一运行配置。")
+                    return current
+                connection.execute(
+                    """
+                    UPDATE public.background_task
+                    SET extraction_runtime_config=%s, updated_at=now()
+                    WHERE id=%s
+                    """, (Jsonb(config.to_payload()), task_id),
+                )
+                return config
+        except psycopg.Error:
+            raise BackgroundTaskPersistenceError("提取任务配置保存失败。") from None
 
     def claim_next_step(
         self,
@@ -511,6 +570,7 @@ class PostgresBackgroundTaskRepository:
         ),
         model_version: str | None = None,
         rule_version: str | None = None,
+        runtime_rule_set_sha256: str | None = None,
     ) -> ClaimedBackgroundTaskStep | None:
         """原子领取一个联系人范围内、顺序合法的步骤租约。"""
 
@@ -570,7 +630,8 @@ class PostgresBackgroundTaskRepository:
                         task.source_document_id,
                         step.step_name,
                         step.attempt_count,
-                        task.message_count
+                        task.message_count,
+                        to_jsonb(task)->'extraction_runtime_config'
                     FROM public.background_task_step AS step
                     JOIN public.background_task AS task
                       ON task.id = step.task_id
@@ -613,6 +674,14 @@ class PostgresBackgroundTaskRepository:
                 ).fetchone()
                 if candidate is None:
                     return None
+                runtime_config = _runtime_config(candidate[8])
+                if candidate[5] == BackgroundTaskStepName.EXTRACT_MEMORY.value and runtime_config is not None:
+                    _require_runtime_config_capability(
+                        connection, bounded=runtime_config.mode is ExtractionRuntimeMode.BOUNDED_RUNTIME_V1,
+                    )
+                    if (runtime_config.mode is ExtractionRuntimeMode.BOUNDED_RUNTIME_V1
+                            and runtime_config.rule_set_sha256 != runtime_rule_set_sha256):
+                        raise BackgroundTaskStateError("已固定的提取规则当前不可执行。")
                 next_attempt = candidate[6] + 1
                 lease_expires_at = connection.execute(
                     """
@@ -676,6 +745,7 @@ class PostgresBackgroundTaskRepository:
                     message_count=candidate[7],
                     lease_expires_at=lease_expires_at[0],
                     lease_generation=lease_expires_at[1],
+                    extraction_runtime_config=runtime_config,
                 )
         except BackgroundTaskPersistenceError:
             raise
@@ -1194,6 +1264,43 @@ class PostgresBackgroundTaskRepository:
             or row[3] != claim.lease_generation
         ):
             raise BackgroundTaskLeaseError("后台步骤租约已失效。")
+
+
+def _runtime_config(raw: object) -> ExtractionRuntimeConfig | None:
+    if raw is None:
+        return None
+    try:
+        return ExtractionRuntimeConfig.from_payload(raw)
+    except (TypeError, ValueError):
+        raise BackgroundTaskStateError("已保存的提取任务配置无效。") from None
+
+
+def _require_runtime_config_capability(
+    connection: psycopg.Connection[Any], *, bounded: bool,
+) -> None:
+    """只核已安装且已验证的能力，不在任务路径执行DDL或升级旧库。"""
+
+    available = connection.execute(
+        """
+        SELECT EXISTS (
+            SELECT 1 FROM pg_catalog.pg_attribute
+            WHERE attrelid='public.background_task'::regclass
+              AND attname='extraction_runtime_config' AND NOT attisdropped
+              AND atttypid='jsonb'::regtype
+        ) AND EXISTS (
+            SELECT 1 FROM pg_catalog.pg_constraint
+            WHERE conrelid='public.background_task'::regclass
+              AND conname='background_task_extraction_runtime_config_check'
+              AND contype='c' AND convalidated
+        )
+        """,
+    ).fetchone()
+    if available is None or not available[0]:
+        raise BackgroundTaskStateError("数据库尚不支持指定提取运行模式。")
+    if not bounded:
+        return
+    if not supports_bounded_runtime_evidence(connection):
+        raise BackgroundTaskStateError("数据库尚不支持有限运行依据及来源依赖。")
 
 
 def _validate_uuid(value: UUID, label: str) -> None:

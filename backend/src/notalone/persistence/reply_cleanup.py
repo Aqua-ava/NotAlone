@@ -51,8 +51,9 @@ def delete_source_replies(
                     request.contact_id = %s OR EXISTS (
                         SELECT 1 FROM public.owner_memory AS memory
                         WHERE memory.owner_id = request.owner_id
-                          AND memory.status = 'active'
-                          AND memory.source_ids && %s::uuid[]
+                          AND ((memory.status = 'active' AND memory.source_ids && %s::uuid[])
+                               OR (to_jsonb(memory)->>'source_dependency_mode'='all'
+                                   AND memory.id=ANY(%s::uuid[])))
                     )
                 ))
                 OR EXISTS (
@@ -98,7 +99,7 @@ def delete_source_replies(
         SELECT id FROM affected
         """,
         (
-            owner_id, revoke_running_scope, contact_id, contact_id, list(removed_ids), list(removed_ids), contact_id,
+            owner_id, revoke_running_scope, contact_id, contact_id, list(removed_ids), list(removed_ids), list(removed_ids), contact_id,
             list(removed_ids), [str(i) for i in removed_ids], owner_id, list(removed_ids),
             list(removed_ids), owner_id, list(removed_ids), [str(i) for i in removed_ids], owner_id,
         ),

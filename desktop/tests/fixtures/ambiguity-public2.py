@@ -12,7 +12,7 @@ from uuid import UUID, uuid4
 
 
 ROOT = Path(__file__).resolve().parents[3]
-LEGACY = ROOT / "desktop/artifacts/grounded-public21-prepare-20261015/grounded_public21.py"
+LEGACY = ROOT / "desktop/tests/fixtures/grounded_public21.py"
 REFERENCE = ".scratch/unfinished-work/memory-gold-reference-20261012.json"
 ANNOTATION = ".scratch/unfinished-work/memory-gold-agent-annotations-20261012.md"
 PLAN = ".scratch/grounded-evaluation/v3-label-guidance-public2-plan-20261016.md"

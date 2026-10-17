@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 import hashlib
 from importlib.metadata import version
 import json
+import os
 from math import isfinite
 from pathlib import Path
 import re
@@ -18,6 +19,12 @@ from uuid import UUID
 import httpx
 
 from notalone.memory_extraction.evaluation import build_window
+from notalone.memory_extraction.models import ExtractionWindow
+from notalone.memory_extraction.evaluation_owned_deadline import BoundedRuntime15Deadline
+from notalone.memory_extraction.evaluation_bounded_cases import (
+    BOUNDED_RUNTIME_CASES, BOUNDED_RUNTIME_INPUTS, BOUNDED_RUNTIME_REFERENCE_PATH,
+    BOUNDED_RUNTIME_ANNOTATION_PATH,
+)
 from notalone.memory_extraction.evaluation_extraction import (
     EvaluationExtractionMode, extraction_contract,
 )
@@ -43,6 +50,8 @@ from .evaluation_provider_contract import (
     SEMANTIC4_PLAN, SEMANTIC4_MODE, SEMANTIC4_STAGE, SEMANTIC4_PROMPT_PROFILE, validate_semantic4_windows,
     UNIQUENESS_PLAN, UNIQUENESS_MODE, UNIQUENESS_STAGE, PUBLIC_QUALITY_PLANS,
     validate_extraction_prompt_profile,
+    BOUNDED_RUNTIME_PLAN, BOUNDED_RUNTIME_MODE, BOUNDED_RUNTIME_STAGE,
+    _BOUNDED_MIGRATION_SOURCES,
 )
 
 
@@ -86,8 +95,8 @@ _FULL140_V4_REQUIRED_SOURCES = _NULLABLE_REQUIRED_SOURCES | frozenset({
     ".scratch/grounded-evaluation/full140-v4-reference-integration-20261016.md",
     ".scratch/grounded-evaluation/reference-source-fidelity-v2-spec-20261016.md",
     ".scratch/grounded-v4-protocol-readiness/spec.md", ".scratch/grounded-v4-object-ownership/spec.md",
-    "desktop/artifacts/grounded-public21-prepare-20261015/grounded_public21.py",
-    "desktop/artifacts/grounded-public21-prepare-20261015/explicit_review_bridge.py",
+    "desktop/tests/fixtures/grounded_public21.py",
+    "desktop/tests/fixtures/explicit_review_bridge.py",
 })
 _FULL140_E2_REQUIRED_SOURCES = _NULLABLE_REQUIRED_SOURCES | frozenset({
     FULL_REFERENCE_V2_PATH, FULL_ANNOTATION_V2_PATH, PUBLIC_REFERENCE_V2_PATH, PUBLIC_ANNOTATION_V2_PATH,
@@ -95,8 +104,8 @@ _FULL140_E2_REQUIRED_SOURCES = _NULLABLE_REQUIRED_SOURCES | frozenset({
     "desktop/tests/fixtures/full140-e2-v-off-public.py",
     ".scratch/grounded-evaluation/full140-e2-v-off-plan-20261017.md",
     ".scratch/grounded-evaluation/reference-source-fidelity-v2-spec-20261016.md",
-    "desktop/artifacts/grounded-public21-prepare-20261015/grounded_public21.py",
-    "desktop/artifacts/grounded-public21-prepare-20261015/explicit_review_bridge.py",
+    "desktop/tests/fixtures/grounded_public21.py",
+    "desktop/tests/fixtures/explicit_review_bridge.py",
 })
 _FULL140_MIXED_REQUIRED_SOURCES = _FULL140_V4_REQUIRED_SOURCES | frozenset({
     "desktop/tests/fixtures/full140-mixed-v-off-public.py",
@@ -113,8 +122,8 @@ _REFERENCE21_V4_REQUIRED_SOURCES = _NULLABLE_REQUIRED_SOURCES | frozenset({
     ".scratch/grounded-v4-protocol-readiness/spec.md", ".scratch/grounded-v4-object-ownership/spec.md",
     ".scratch/grounded-v4-stable-facts/spec.md", ".scratch/grounded-v4-quantity-continuation/spec.md",
     "architecture/adr/059-closed-unknown-kinds-and-calendar-month.md",
-    "desktop/artifacts/grounded-public21-prepare-20261015/grounded_public21.py",
-    "desktop/artifacts/grounded-public21-prepare-20261015/explicit_review_bridge.py",
+    "desktop/tests/fixtures/grounded_public21.py",
+    "desktop/tests/fixtures/explicit_review_bridge.py",
 })
 _SEMANTIC4_REQUIRED_SOURCES = _REFERENCE21_V4_REQUIRED_SOURCES | frozenset({
     ".scratch/grounded-evaluation/reference21-semantic4-plan-20261016.md",
@@ -126,6 +135,17 @@ _UNIQUENESS_REQUIRED_SOURCES = _SEMANTIC4_REQUIRED_SOURCES | frozenset({
     ".scratch/grounded-evaluation/reference21-uniqueness-implementation-20261016.md",
     ".scratch/grounded-ambiguity-check-plan/spec.md",
     ".scratch/grounded-ambiguity-check-plan/implementation-result-20261016.md",
+})
+_BACKEND_ROOT = _SOURCE_DIRECTORY.parents[2]
+_BOUNDED_BACKEND_SOURCES = frozenset(
+    f"backend/{path.relative_to(_BACKEND_ROOT).as_posix()}"
+    for path in (_BACKEND_ROOT / "src/notalone").rglob("*.py")
+)
+_BOUNDED_RUNTIME_REQUIRED_SOURCES = _BOUNDED_BACKEND_SOURCES | _BOUNDED_MIGRATION_SOURCES | frozenset({
+    "backend/pyproject.toml", BOUNDED_RUNTIME_REFERENCE_PATH, BOUNDED_RUNTIME_ANNOTATION_PATH,
+    "desktop/tests/fixtures/reference21-v4-public.py",
+    "desktop/tests/fixtures/grounded_public21.py",
+    "desktop/tests/fixtures/explicit_review_bridge.py",
 })
 _AUDIT_REASONS = {
     "safe": {"supported"}, "general_error": {"coverage_miss", "contract_mismatch"},
@@ -230,6 +250,216 @@ def _audit_callback(audit_case: Callable[[dict], dict], reference: dict) -> Call
     return validated
 
 
+def _bounded_source_inventory(repo_root: Path, source_hashes: dict[str, str]) -> None:
+    """完整源码清单在注册时固定；新增、删除也不能逃过逐次复核。"""
+    actual = frozenset(f"backend/{path.relative_to(repo_root / 'backend').as_posix()}"
+                       for path in (repo_root / "backend/src/notalone").rglob("*.py"))
+    migrations = frozenset(f"backend/database/migrations/{path.name}"
+                          for path in (repo_root / "backend/database/migrations").glob("*.sql")
+                          if re.fullmatch(r"(?:00[1-9]|0[1-6][0-9]|07[0-2])_.+\.sql", path.name))
+    if (actual != _BOUNDED_BACKEND_SOURCES or migrations != _BOUNDED_MIGRATION_SOURCES
+            or not _BOUNDED_RUNTIME_REQUIRED_SOURCES <= set(source_hashes)):
+        raise EvaluationBudgetAbort("evaluation_bounded_source_inventory_changed")
+
+
+def _bounded_formal_bindings(
+    windows: tuple[ExtractionWindow, ...], task_ids: tuple[UUID, ...], database_url: str,
+) -> list[dict]:
+    """只读实际任务、来源和默认单批窗口；首次提取留给已登记后的worker。"""
+    from .evaluation_formal_task import _task_window
+    from .evaluation_reference import bounded_window_projection
+    from notalone.persistence.background_tasks import PostgresBackgroundTaskRepository
+    from notalone.persistence.extraction_trace import PostgresExtractionTraceStore
+    from notalone.scopes import ContactScope
+    from notalone.tasks.extraction_runtime import runtime_config_for_mode
+    from notalone.tasks.models import (
+        BackgroundTaskStatus, BackgroundTaskStepName, BackgroundTaskStepStatus,
+        BackgroundTaskType, ExtractionRuntimeMode,
+    )
+
+    repository = PostgresBackgroundTaskRepository(database_url)
+    traces = PostgresExtractionTraceStore(database_url)
+    expected_config = runtime_config_for_mode(ExtractionRuntimeMode.BOUNDED_RUNTIME_V1)
+    bindings = []
+    for window, task_id, case, item in zip(windows, task_ids, BOUNDED_RUNTIME_CASES,
+                                          BOUNDED_RUNTIME_INPUTS, strict=True):
+        task = repository.get_task(owner_id=window.owner_id, contact_id=window.contact_id, task_id=task_id)
+        extraction = [step for step in task.steps if step.name is BackgroundTaskStepName.EXTRACT_MEMORY]
+        if (task.owner_id != window.owner_id or task.contact_id != window.contact_id or task.task_id != task_id
+                or task.extraction_runtime_config != expected_config or task.retry_count != 0
+                or task.task_type is not (BackgroundTaskType.IMPORT if item["source_route"] == "jsonl"
+                                         else BackgroundTaskType.OBSERVATION)
+                or task.status not in {BackgroundTaskStatus.QUEUED, BackgroundTaskStatus.RUNNING}
+                or len(extraction) != 1 or extraction[0].status is not BackgroundTaskStepStatus.PENDING
+                or extraction[0].attempt_count != 0
+                or canonical_sha256(bounded_window_projection(window)) != canonical_sha256({
+                    "messages": item["messages"], "target_indices": item["target_indices"]})
+                or canonical_sha256(_task_window(database_url, window, case)) != canonical_sha256(window)
+                or traces.list_batches(ContactScope(window.owner_id, window.contact_id), limit=1)):
+            raise EvaluationBudgetAbort("evaluation_bounded_formal_source_mismatch")
+        bindings.append({"owner_id": str(window.owner_id), "contact_id": str(window.contact_id),
+            "task_id": str(task_id), "extraction_runtime_config": expected_config.to_payload(),
+            "input_sha256": canonical_sha256(window)})
+    return bindings
+
+
+def _run_bounded_runtime_evaluation(
+    *, output_directory: Path, run_id: UUID, deadline: datetime, repo_root: Path,
+    source_hashes: dict[str, str], frozen_gold: dict, credential_loader: Callable[[], str],
+    audit_case: Callable[[dict], dict], synthetic_transport: httpx.MockTransport | None,
+    windows: tuple[ExtractionWindow, ...], task_ids: tuple[UUID, ...], database_url: str,
+    guard: BoundedRuntime15Deadline,
+) -> dict:
+    """在共享入口登记固定正式任务；沿原预算、SDK、审核与收尾执行。"""
+    from .evaluation_provider_contract import ECNUEvaluationContract, EvaluationProviderProfile
+    from .evaluation_phased_audit import PhasedEvaluationAudit
+    from .evaluation_reference import validate_bounded_public_reference
+    from notalone.memory.bounded_evidence import rule_set_sha256
+    from langchain_core.utils.function_calling import convert_to_openai_tool
+    from langsmith import get_tracing_context
+
+    profile = EvaluationProviderProfile.DEEPSEEK_BOUNDED_TASK
+    if (current_trace() is not None or get_tracing_context().get("enabled") is True
+            or not callable(credential_loader) or type(audit_case) is not PhasedEvaluationAudit
+            or synthetic_transport is not None and type(synthetic_transport) is not httpx.MockTransport
+            or synthetic_transport is None and repo_root.resolve() != Path(__file__).resolve().parents[4]):
+        raise EvaluationBudgetAbort("evaluation_bounded_explicit_protocol_required")
+    _bounded_source_inventory(repo_root, source_hashes)
+    contract = ECNUEvaluationContract(deadline=deadline, repo_root=repo_root, source_hashes=source_hashes,
+        provider_profile=profile, extraction_mode="grounded-v2", execution_plan=BOUNDED_RUNTIME_PLAN)
+
+    def unique_object(pairs: list[tuple[str, object]]) -> dict:
+        result: dict = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError("duplicate_reference_key")
+            result[key] = value
+        return result
+
+    try:
+        content = (repo_root / BOUNDED_RUNTIME_REFERENCE_PATH).read_bytes()
+        reference = json.loads(content, object_pairs_hook=unique_object)
+        validation = validate_bounded_public_reference(reference,
+            expected_reference_sha256=canonical_sha256(reference),
+            annotation_sha256=source_hashes[BOUNDED_RUNTIME_ANNOTATION_PATH])
+        if (hashlib.sha256(content).hexdigest() != source_hashes[BOUNDED_RUNTIME_REFERENCE_PATH]
+                or set(frozen_gold) != _GOLD_FIELDS or frozen_gold["status"] != "frozen_agent_review"
+                or frozen_gold["case_names"] != [case.name for case in BOUNDED_RUNTIME_CASES]
+                or frozen_gold["criteria_path"] != BOUNDED_RUNTIME_REFERENCE_PATH
+                or frozen_gold["criteria_sha256"] != source_hashes[BOUNDED_RUNTIME_REFERENCE_PATH]
+                or audit_case.reference_sha256 != validation["reference_sha256"]
+                or audit_case.criteria_sha256 != frozen_gold["criteria_sha256"]
+                or audit_case.execution_plan != BOUNDED_RUNTIME_PLAN or audit_case.reference_version != BOUNDED_RUNTIME_PLAN
+                or audit_case.case_set != "bounded15" or audit_case.case_positions != tuple(range(15))
+                or audit_case.extraction_mode != "grounded-v2" or audit_case.extraction_prompt_profile != "default"
+                or audit_case.verification_mode != "nullable-proof-v3"
+                or audit_case.extraction_tool_choice != "omitted" or audit_case.verification_tool_choice != "forced"):
+            raise ValueError("changed_bounded_reference_binding")
+    except (OSError, UnicodeError, ValueError, TypeError, KeyError):
+        raise EvaluationBudgetAbort("evaluation_bounded_reference_invalid") from None
+    bindings = _bounded_formal_bindings(windows, task_ids, database_url)
+    plan = tuple({"case_position": index, "case_name": case.name, "input_sha256": canonical_sha256(window)}
+                 for index, (case, window) in enumerate(zip(BOUNDED_RUNTIME_CASES, windows, strict=True)))
+    extraction_contracts = tuple(deepcopy(extraction_contract("grounded-v2", window)) for window in windows)
+    v_contract = deepcopy(_verification_contract(SourceVerificationMode.NULLABLE_PROOF_V3))
+    config = {**_frozen_config(plan, request_timeout_seconds=300.0, max_retries=0,
+        verification_mode="nullable-proof-v3", extraction_mode="grounded-v2", windows=windows),
+        "mode": BOUNDED_RUNTIME_MODE, "stage": BOUNDED_RUNTIME_STAGE,
+        "base_url": profile.base_url, "endpoint": profile.endpoint, "request_model": profile.model,
+        "execution_plan": BOUNDED_RUNTIME_PLAN, "reference_version": BOUNDED_RUNTIME_PLAN,
+        "selected_case_positions": list(range(15)), "deadline_utc": deadline.astimezone(timezone.utc).isoformat(),
+        "source_hashes": dict(source_hashes), "gold_sha256": validation["reference_sha256"],
+        "public_cases_sha256": canonical_sha256(BOUNDED_RUNTIME_CASES), "formal_tasks": bindings,
+        "bounded_inputs_sha256": canonical_sha256(tuple({"messages": item["messages"],
+            "target_indices": item["target_indices"]} for item in BOUNDED_RUNTIME_INPUTS)),
+        "runtime_rule_set_sha256": rule_set_sha256(), "request_contract_version": 2,
+        "response_identity_policy": "first_valid_completion_observation_stop_on_change",
+        "tool_choice": {"extraction": {"mode": "omitted", "name": extraction_contracts[0][1]["title"]},
+                        "verification": {"mode": "forced", "name": v_contract[1]["title"]}},
+        "fallback": False, "versions": {name: version(name) for name in (
+            "openai", "langchain-core", "langchain-deepseek", "langchain-openai", "httpx", "httpx2", "langsmith", "pydantic")},
+    }
+    config.pop("thinking")
+    config["omitted_parameters"].remove("reasoning_effort")
+
+    def check_runtime() -> None:
+        _bounded_source_inventory(repo_root, source_hashes)
+        if {name: version(name) for name in config["versions"]} != config["versions"]:
+            raise EvaluationBudgetAbort("evaluation_bounded_package_versions_changed")
+        contract.check_preflight()
+
+    check_runtime()
+    # 所有只读准入已完成，才创建不可恢复的独立预算。
+    budget = EvaluationBudget.create(run_id=run_id, output_directory=output_directory, request_limit=30,
+        allowed_endpoints=(profile.endpoint,), config_sha256=canonical_sha256(config))
+    try:
+        store = EvaluationRecordStore(budget=budget, frozen_config=config, plan=plan, actual_windows=windows)
+    except BaseException:
+        budget.close()
+        raise
+
+    @contextmanager
+    def invocation_scope(purpose: str, messages: list[dict], window: ExtractionWindow):
+        check_runtime()
+        position = windows.index(window)
+        live = (extraction_contract("grounded-v2", window) if purpose == "extraction"
+                else _verification_contract(SourceVerificationMode.NULLABLE_PROOF_V3))
+        frozen = extraction_contracts[position] if purpose == "extraction" else v_contract
+        if purpose not in {"extraction", "verification"} or canonical_sha256(live) != canonical_sha256(frozen):
+            raise EvaluationBudgetAbort("ecnu_runtime_contract_changed")
+        prompt, schema = frozen
+        if not messages or messages[0] != {"role": "system", "content": prompt}:
+            raise EvaluationBudgetAbort("ecnu_runtime_prompt_changed")
+        verification = purpose == "verification"
+        expected = {"model": profile.model, "temperature": 0.0, "stream": False,
+            "reasoning_effort": "none" if verification else "max",
+            "thinking": {"type": "disabled" if verification else "enabled"}, "messages": messages,
+            "tools": [deepcopy(convert_to_openai_tool(schema))],
+            **({"tool_choice": {"type": "function", "function": {"name": schema["title"]}}} if verification else {})}
+        with guard.invocation(), contract.expect_request(expected):
+            yield
+
+    loaded = False
+
+    def bounded_loader() -> str:
+        nonlocal loaded
+        if loaded:
+            raise EvaluationBudgetAbort("evaluation_bounded_credentials_already_loaded")
+        check_runtime()
+        guard.start(budget, synthetic=synthetic_transport is not None)
+        loaded = True
+        return credential_loader()
+
+    try:
+        result = _run_evaluation_batch(cases=BOUNDED_RUNTIME_CASES, windows=windows, plan=plan,
+            budget=budget, store=store, base_url=profile.base_url, request_model=profile.model, api_key="",
+            synthetic_transport=synthetic_transport, provider="DeepSeek", contract=contract,
+            invocation_scope=invocation_scope, semantic_audit=audit_case,
+            gold_reference={"criteria_sha256": frozen_gold["criteria_sha256"]}, code_prefix="deepseek",
+            credential_loader=bounded_loader, request_timeout_seconds=300.0, max_retries=0,
+            verification_mode="nullable-proof-v3", verification_tool_choice="forced", reasoning_effort="max",
+            extraction_tool_choice="omitted", extraction_mode="grounded-v2", execution_plan=BOUNDED_RUNTIME_PLAN,
+            formal_task_ids=task_ids, database_url=database_url)
+    except BaseException as error:
+        try:
+            budget.close()
+        except BaseException:
+            error.add_note("bounded_runtime15_budget_close_unknown")
+        try:
+            guard.finish()
+        except BaseException:
+            error.add_note("bounded_runtime15_deadline_cleanup_unknown")
+        raise
+    try:
+        guard.finish()
+    except BaseException:
+        result["cleanup_error_codes"] = (*result.get("cleanup_error_codes", ()), "bounded_runtime15_deadline_cleanup_unknown")
+        result["receipt"] = None
+        result["receipt_error_code"] = "bounded_runtime15_completion_receipt_unavailable"
+    result.update(worker_pid=os.getpid(), execution_plan=BOUNDED_RUNTIME_PLAN)
+    return result
+
+
 def run_ecnu_evaluation(
     *, output_directory: Path, run_id: UUID, deadline: datetime, repo_root: Path,
     source_hashes: dict[str, str], frozen_gold: dict,
@@ -252,9 +482,41 @@ def run_ecnu_evaluation(
     full140_v4_deadline: object | None = None,
     reference21_v4_deadline: object | None = None,
     extraction_prompt_profile: str = "default",
+    formal_windows: tuple[ExtractionWindow, ...] | None = None,
+    formal_task_ids: tuple[UUID, ...] = (),
+    database_url: str | None = None,
+    bounded_runtime_deadline: BoundedRuntime15Deadline | None = None,
 ) -> dict:
     """保留原固定计划；剩余8窗须显式选择独立版本，不提供任意子集。"""
     from .evaluation_provider_contract import EvaluationProviderProfile
+
+    bounded15 = execution_plan == BOUNDED_RUNTIME_PLAN
+    if (bounded15 or provider_profile == EvaluationProviderProfile.DEEPSEEK_BOUNDED_TASK
+            or case_set == "bounded15" or formal_windows is not None or formal_task_ids != ()
+            or database_url is not None or bounded_runtime_deadline is not None):
+        if (not bounded15 or provider_profile != EvaluationProviderProfile.DEEPSEEK_BOUNDED_TASK
+                or reference_version != BOUNDED_RUNTIME_PLAN or case_set != "bounded15" or case_positions is not None
+                or extraction_mode != "grounded-v2" or extraction_prompt_profile != "default"
+                or verification_mode != "nullable-proof-v3" or verification_tool_choice != "forced"
+                or response_identity_policy != "first_valid_completion_observation_stop_on_change"
+                or type(request_limit) is not int or request_limit != 30
+                or type(request_timeout_seconds) not in (int, float) or request_timeout_seconds != 300
+                or type(max_retries) is not int or max_retries != 0
+                or type(formal_windows) is not tuple or len(formal_windows) != 15
+                or any(type(window) is not ExtractionWindow for window in formal_windows)
+                or len({window.contact_id for window in formal_windows}) != 15
+                or type(formal_task_ids) is not tuple or len(formal_task_ids) != 15
+                or any(type(task_id) is not UUID for task_id in formal_task_ids) or len(set(formal_task_ids)) != 15
+                or type(database_url) is not str or not database_url
+                or type(bounded_runtime_deadline) is not BoundedRuntime15Deadline
+                or synthetic_transport is None and not bounded_runtime_deadline.live_worker
+                or any(value is not None for value in (remaining8_deadline, ambiguity2_deadline,
+                    main16_deadline, full140_v4_deadline, reference21_v4_deadline))):
+            raise EvaluationBudgetAbort("evaluation_bounded_fixed_tasks_required")
+        return _run_bounded_runtime_evaluation(output_directory=output_directory, run_id=run_id,
+            deadline=deadline, repo_root=repo_root, source_hashes=source_hashes, frozen_gold=frozen_gold,
+            credential_loader=credential_loader, audit_case=audit_case, synthetic_transport=synthetic_transport,
+            windows=formal_windows, task_ids=formal_task_ids, database_url=database_url, guard=bounded_runtime_deadline)
 
     mixed = type(execution_plan) is str and execution_plan in PHASE_SPLIT_PLANS
     reference21_v4 = type(execution_plan) is str and execution_plan in REFERENCE21_PLANS

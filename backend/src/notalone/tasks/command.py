@@ -32,7 +32,8 @@ from notalone.persistence.locks import (
     try_acquire_global_worker_lock,
 )
 from notalone.runtime_config import load_project_env
-from notalone.tasks.models import BackgroundTaskStepName, VERIFY_STEPS
+from notalone.tasks.models import BackgroundTaskStepName, ExtractionRuntimeMode, VERIFY_STEPS
+from notalone.tasks.extraction_runtime import runtime_config_for_mode
 from notalone.tasks.worker import (
     BackgroundTaskWorker,
     PostgresMemoryExtractionRunner,
@@ -79,6 +80,8 @@ def run_worker(
     worker_id: UUID,
     task_id: UUID | None = None,
     retry_repository: PostgresBackgroundTaskRepository | None = None,
+    extraction_runtime_mode: ExtractionRuntimeMode | None = None,
+    configuration_repository: PostgresBackgroundTaskRepository | None = None,
     sleep: Callable[[float], None] = time.sleep,
     progress_callback: Callable[[WorkerRunResult, int], None] | None = None,
     stop_event: Event | None = None,
@@ -94,6 +97,12 @@ def run_worker(
 
     if retry_repository is not None and task_id is None:
         raise ValueError("恢复任务必须明确指定 task_id。")
+    if extraction_runtime_mode is not None:
+        if (not isinstance(extraction_runtime_mode, ExtractionRuntimeMode) or task_id is None
+                or configuration_repository is None or retry_repository is not None):
+            raise ValueError("指定任务模式须绑定配置仓储和任务，且不能用于失败恢复。")
+    elif configuration_repository is not None:
+        raise ValueError("配置仓储必须与显式运行模式一起提供。")
     if stop_event is not None and stop_event.is_set():
         return WorkerCommandResult(status=WorkerCommandStatus.STOPPED, task_id=task_id)
     if not try_acquire_global_worker_lock(lock_connection):
@@ -106,6 +115,12 @@ def run_worker(
     retry_count = 0
     current_task_id = task_id
     try:
+        if extraction_runtime_mode is not None:
+            assert configuration_repository is not None and task_id is not None
+            configuration_repository.configure_extraction_runtime(
+                owner_id=owner_id, contact_id=contact_id, task_id=task_id,
+                config=runtime_config_for_mode(extraction_runtime_mode),
+            )
         if retry_repository is not None:
             # CLI 完成配置预检查且拿到全局锁后，才改变失败原任务状态。
             assert task_id is not None
@@ -214,11 +229,17 @@ def worker_main(argv: list[str] | None = None) -> int:
         description="串行执行指定联系人最早的一个后台任务。",
     )
     parser.add_argument("--contact-id", required=True, type=UUID)
-    parser.add_argument(
+    selection = parser.add_mutually_exclusive_group()
+    selection.add_argument(
         "--retry-task-id", type=UUID,
         help="显式恢复同联系人已失败的原任务并继续执行。",
     )
+    selection.add_argument("--task-id", type=UUID, help="指定尚未领取提取步骤的原任务。")
+    parser.add_argument("--extraction-runtime-mode", choices=[mode.value for mode in ExtractionRuntimeMode],
+                        help="与--task-id成对使用，在领取前固定该任务的提取合同。")
     args = parser.parse_args(argv)
+    if (args.task_id is None) != (args.extraction_runtime_mode is None):
+        parser.error("--task-id与--extraction-runtime-mode必须成对提供，失败恢复不能改模式。")
 
     database_url = os.environ.get("NOTALONE_DATABASE_URL", "").strip()
     owner_value = os.environ.get("NOTALONE_OWNER_ID", "").strip()
@@ -260,15 +281,20 @@ def worker_main(argv: list[str] | None = None) -> int:
                 owner_id=owner_id,
                 contact_id=args.contact_id,
                 worker_id=uuid4(),
-                task_id=args.retry_task_id,
+                task_id=args.retry_task_id or args.task_id,
                 retry_repository=(
                     repository if args.retry_task_id is not None else None
                 ),
+                extraction_runtime_mode=(ExtractionRuntimeMode(args.extraction_runtime_mode)
+                                         if args.extraction_runtime_mode is not None else None),
+                configuration_repository=(repository if args.task_id is not None else None),
             )
     except BackgroundTaskNotFoundError:
-        return _fail("Worker 恢复被拒绝：task_not_found。")
+        return _fail("Worker 恢复被拒绝：task_not_found。" if args.retry_task_id is not None
+                     else "Worker 运行被拒绝：task_not_found。")
     except BackgroundTaskStateError:
-        return _fail("Worker 恢复被拒绝：task_retry_conflict。")
+        return _fail("Worker 恢复被拒绝：task_retry_conflict。" if args.retry_task_id is not None
+                     else "Worker 运行被拒绝：task_runtime_conflict。")
     except Exception:
         return _fail("Worker 执行失败。")
 

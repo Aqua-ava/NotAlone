@@ -28,6 +28,7 @@ from notalone.memory_extraction.evaluation import (
     summarize,
 )
 from notalone.memory_extraction.evaluation_cases import CASES, EvaluationCase
+from notalone.memory_extraction.evaluation_formal_task import evaluate_task
 from notalone.memory_extraction.evaluation_extraction import (
     EvaluationExtractionMode, extraction_contract, extraction_runtime, extraction_tool_name,
 )
@@ -79,19 +80,33 @@ class _RecordedVerificationRuntime:
     """保留真实适配器原输出与程序核验差异，不增加模型调用或改写判定。"""
 
     def __init__(self, runtime: LangChainSourceVerificationRuntime,
-                 store: EvaluationRecordStore, position: int):
+                 store: EvaluationRecordStore, position: int,
+                 invocation_scope: Callable | None = None):
         self._runtime = runtime
         self._store = store
         self._position = position
+        self._invocation_scope = invocation_scope
 
     @property
     def verification_mode(self) -> SourceVerificationMode:
         return self._runtime.verification_mode
 
+    def for_mode(self, mode: SourceVerificationMode | str) -> _RecordedVerificationRuntime:
+        return _RecordedVerificationRuntime(
+            self._runtime.for_mode(mode), self._store, self._position, self._invocation_scope,
+        )
+
     def verify(self, *, window: ExtractionWindow,
                facts: tuple[ExtractedFact, ...]) -> tuple[dict[str, Any], ...]:
-        payloads = self._runtime.verify(window=window, facts=facts)
-        if self.verification_mode is SourceVerificationMode.NULLABLE_PROOF_V1:
+        if self._invocation_scope is None:
+            payloads = self._runtime.verify(window=window, facts=facts)
+        else:
+            prompt, _ = _verification_contract(self.verification_mode)
+            messages = [{"role": "system", "content": prompt}, {"role": "user", "content":
+                        verification_adapters._verification_text(window, facts)}]
+            with self._store.stage(self._position, "verification"), self._invocation_scope("verification", messages, window):
+                payloads = self._runtime.verify(window=window, facts=facts)
+        if self.verification_mode in {SourceVerificationMode.NULLABLE_PROOF_V1, SourceVerificationMode.NULLABLE_PROOF_V3}:
             results = validate_source_verification(
                 payloads, window=window, facts=facts, mode=self.verification_mode,
             )
@@ -114,13 +129,24 @@ class _RecordedExtractionRuntime:
     """模型标签与编译十四槽分开保存；失败不生成替代候选。"""
 
     def __init__(self, runtime: MemoryExtractionRuntime, store: EvaluationRecordStore,
-                 position: int, mode: EvaluationExtractionMode, state: dict):
+                 position: int, mode: EvaluationExtractionMode, state: dict,
+                 invocation_scope: Callable | None = None):
         self._runtime, self._store, self._position = runtime, store, position
         self._mode, self._state = mode, state
+        self._invocation_scope = invocation_scope
 
     def extract(self, window: ExtractionWindow) -> ExtractionPayload:
         try:
-            facts = self._runtime.extract(window)
+            if self._invocation_scope is None:
+                facts = self._runtime.extract(window)
+            else:
+                from .grounded_adapter import grounded_input
+
+                prompt, _ = extraction_contract(self._mode, window)
+                messages = [{"role": "system", "content": prompt},
+                            {"role": "user", "content": grounded_input(window)}]
+                with self._store.stage(self._position, "extraction"), self._invocation_scope("extraction", messages, window):
+                    facts = self._runtime.extract(window)
         except ExtractionInvalidOutputError:
             if self._mode.is_grounded:
                 with self._store.stage(self._position, "extraction"):
@@ -324,6 +350,29 @@ def _summary(outcomes: list[dict], results: list[EvaluationResult]) -> dict:
     }
 
 
+def _known_raw_safety(events: tuple[dict, ...]) -> dict[str, int]:
+    """RAW已封存的安全事实独立累计，不把未完成FULL的窗口加入质量分母。"""
+    raw, final = {}, set()
+    for event in events:
+        if event["kind"] != "semantic_audit":
+            continue
+        payload = event["payload"]
+        position = event["case_position"]
+        if payload.get("phase") == "raw":
+            raw[position] = payload["review"]
+        elif payload.get("phase") == "final":
+            final.add(position)
+    rows = [row for review in raw.values() for row in review["e_rows"]]
+    return {
+        "raw_reviewed_windows": len(raw),
+        "raw_false_fact": sum(row["safety"] == "false_fact" for row in rows),
+        "raw_wrong_person": sum(row["safety"] == "wrong_person" for row in rows),
+        "unsafe_windows": sum(any(row["safety"] in {"false_fact", "wrong_person"}
+                                  for row in review["e_rows"]) for review in raw.values()),
+        "without_final_review": len(set(raw) - final),
+    }
+
+
 def _audit_persist_capability(store: EvaluationRecordStore, case_position: int,
                               state: dict) -> Callable[[dict], dict]:
     """把窗口归属和失效状态固定在闭包中，不作为调用方可覆盖的参数。"""
@@ -334,8 +383,10 @@ def _audit_persist_capability(store: EvaluationRecordStore, case_position: int,
         keys = ({"phase", "review"} if phase == "raw" else
                 {"phase", "review", "report", "raw_receipt"})
         if (phase == "final" and "verification_protocol" in payload
-                and state.get("verification_mode") == "nullable-proof-v1"):
+                and state.get("verification_mode") in {"nullable-proof-v1", "nullable-proof-v3"}):
             keys = keys | {"verification_protocol"}
+        if phase == "final" and state.get("execution_plan") == "bounded-runtime15-v1":
+            keys = keys | {"axis_reviews"}
         if state.get("extraction_mode") in {"grounded-v2", "grounded-v3", "grounded-v4"}:
             keys = keys | {"extraction_protocol"}
         if (phase not in {"raw", "final"} or set(payload) != keys
@@ -400,6 +451,73 @@ def run_offline_evaluation(
     )
 
 
+def _plain_invocation(purpose: str, messages: list[dict], window: ExtractionWindow):
+    """仅合成协议控制省略外部请求合同，实际SDK仍走预算transport。"""
+    return nullcontext()
+
+
+def _formal_execution_payload(evaluated: Any, database_url: str) -> dict:
+    from notalone.application.memory_service import MemoryService
+    from notalone.persistence import PostgresMemoryStore, PostgresOwnerMemoryStore
+    from notalone.server.app import create_app
+    from notalone.server.testing import InProcessClient
+
+    token = "bounded-evaluation-local"
+    client = InProcessClient(create_app(
+        database_url=database_url, owner_id=evaluated.window.owner_id, token=token,
+        memory_service=MemoryService(contact_memory=PostgresMemoryStore(database_url),
+                                     owner_memory=PostgresOwnerMemoryStore(database_url)),
+    ))
+    path = f"/api/contacts/{evaluated.window.contact_id}/memory-candidates"
+    response = client.get(path, headers={"Authorization": "Bearer " + token})
+    if response.status_code != 200:
+        raise EvaluationBudgetAbort("evaluation_formal_memory_api_unavailable")
+    return {"task": asdict(evaluated.task), "worker_results": [asdict(item) for item in evaluated.worker_results],
+            "trace": evaluated.trace, "memory_api": {"path": path, "status_code": response.status_code,
+                                                     "body": response.json()}}
+
+
+def _failed_formal_task_payload(database_url: str, window: ExtractionWindow, task_id: UUID) -> dict:
+    """首失败只读取原任务和实际追踪，不恢复租约或重新执行提取。"""
+    from notalone.persistence.background_tasks import PostgresBackgroundTaskRepository
+    from notalone.persistence.extraction_trace import PostgresExtractionTraceStore
+    from notalone.scopes import ContactScope
+
+    scope = ContactScope(window.owner_id, window.contact_id)
+    task = PostgresBackgroundTaskRepository(database_url).get_task(
+        owner_id=scope.owner_id, contact_id=scope.contact_id, task_id=task_id,
+    )
+    traces = PostgresExtractionTraceStore(database_url)
+    batches = traces.list_batches(scope, limit=2)
+    return {"reason_code": "formal_task_first_execution_failed", "task": asdict(task),
+            "actual_traces": [traces.get_batch(scope, row["trace_id"]) for row in batches]}
+
+
+def _bounded_positive_delivery(execution: dict | None, position: int) -> set[str]:
+    """只核六规则的实际交付；语义正确性由已封存独立审核负责。"""
+    if execution is None:
+        return set()
+    expected_rules = ("BR_AUTHOR_ARRIVAL_V1", "BR_KIN_LEND_V1", "BR_COMPLETED_QA_V1", "BR_TWO_ROLES_V1",
+                      "BR_REQUEST_V1", "BR_REQUEST_V1", "BR_COND_RUN_V1")
+    items = execution["memory_api"]["body"]["candidates"]
+    frames: set[str] = set()
+    for item in items:
+        evidence = item.get("dimension_evidence")
+        basis = evidence.get("semantic_basis") if isinstance(evidence, dict) else None
+        if (item.get("status") != "pending" or item.get("source_dependency_mode") != "all"
+                or item.get("dimension_evidence_source_current") is not True
+                or not isinstance(evidence, dict) or evidence.get("version") != 4
+                or not isinstance(basis, dict) or basis.get("version") != 3
+                or basis.get("rules") != [{"rule_id": expected_rules[position], "rule_version": 1}]):
+            continue
+        states = item.get("dimension_evidence_dimensions", {})
+        if any(states.get(axis, {}).get("state") != "valid"
+               for axis in ("subject", "time", "paraphrase", "reference", "media", "reported")):
+            continue
+        frames.add(basis["frame"])
+    return frames
+
+
 def _run_evaluation_batch(
     *, cases: tuple[EvaluationCase, ...], windows: tuple[ExtractionWindow, ...],
     plan: tuple[dict, ...], budget: EvaluationBudget, store: EvaluationRecordStore,
@@ -417,10 +535,45 @@ def _run_evaluation_batch(
     extraction_mode: EvaluationExtractionMode | str = EvaluationExtractionMode.LEGACY_E14,
     execution_plan: str = "original",
     extraction_prompt_profile: str = "default",
+    formal_task_ids: tuple[UUID, ...] = (),
+    database_url: str | None = None,
 ) -> dict:
     """P0/P1共用记录与收尾；真实配置与独审验证由各入口负责。"""
     selected = SourceVerificationMode(verification_mode)
     extraction_selected = EvaluationExtractionMode(extraction_mode)
+    from .evaluation_bounded_cases import BOUNDED_RUNTIME_CASES, BOUNDED_RUNTIME_PLAN
+
+    bounded = execution_plan == BOUNDED_RUNTIME_PLAN
+    if bounded:
+        from .evaluation_phased_audit import PhasedEvaluationAudit
+
+        if (cases != BOUNDED_RUNTIME_CASES or len(windows) != 15 or len(plan) != 15
+                or type(formal_task_ids) is not tuple or len(formal_task_ids) != 15
+                or any(not isinstance(value, UUID) for value in formal_task_ids)
+                or len(set(formal_task_ids)) != 15 or type(database_url) is not str or not database_url
+                or extraction_selected is not EvaluationExtractionMode.GROUNDED_V2
+                or selected is not SourceVerificationMode.NULLABLE_PROOF_V3
+                or type(max_retries) is not int or max_retries != 0 or request_timeout_seconds != 300
+                or extraction_tool_choice != "omitted" or verification_tool_choice != "forced"
+                or base_url != "https://api.deepseek.com" or request_model != "deepseek-flash"
+                or not isinstance(semantic_audit, PhasedEvaluationAudit)
+                or semantic_audit.execution_plan != execution_plan
+                or semantic_audit.reference_version != execution_plan
+                or store.execution_plan != execution_plan or store.reference_version != execution_plan
+                or semantic_audit.reference_sha256 != store.gold_sha256
+                or not isinstance(gold_reference, dict)
+                or gold_reference.get("criteria_sha256") != semantic_audit.criteria_sha256
+                or reasoning_effort not in {None, "max"}
+                or synthetic_transport is None and (contract is None or invocation_scope is None)):
+            raise EvaluationBudgetAbort("evaluation_bounded_fixed_tasks_required")
+        for position, (window, task_id) in enumerate(zip(windows, formal_task_ids, strict=True)):
+            binding = store.formal_task_binding(position)
+            if (binding["task_id"] != str(task_id) or binding["owner_id"] != str(window.owner_id)
+                    or binding["contact_id"] != str(window.contact_id)
+                    or binding["input_sha256"] != canonical_sha256(window)):
+                raise EvaluationBudgetAbort("evaluation_bounded_task_binding_changed")
+    elif formal_task_ids or database_url is not None:
+        raise EvaluationBudgetAbort("evaluation_formal_tasks_require_bounded_plan")
     mixed = execution_plan in PHASE_SPLIT_PLANS
     reference21_v4 = execution_plan in REFERENCE21_PLANS
     public_quality = execution_plan in PUBLIC_QUALITY_PLANS
@@ -448,6 +601,9 @@ def _run_evaluation_batch(
     outcomes = [{**item, "status": "unrun"} for item in plan]
     results: list[EvaluationResult] = []
     audits: list[dict] = []
+    dimension_results: list[EvaluationResult] = []
+    delivery_frames: set[str] = set()
+    positive_delivered = 0
     current_position: int | None = None
     stopped_code: str | None = None
     sync_client = None
@@ -467,12 +623,17 @@ def _run_evaluation_batch(
                 except BaseException:
                     raise _BatchStopped("ecnu_credential_unavailable") from None
             transport_options = {"contract": contract} if contract is not None else {}
+            event_hooks: dict[str, list[Callable[..., Any]]] | None = None
+            if bounded:
+                from notalone.memory_trace.transport import _request_hook, _response_hook
+
+                event_hooks = {"request": [_request_hook], "response": [_response_hook]}
             sync_client = httpx.Client(
                 transport=EvaluationTransport(
                     budget, synthetic_transport=synthetic_transport, records=store,
                     **transport_options,
                 ), trust_env=False, follow_redirects=False,
-                timeout=request_timeout_seconds,
+                timeout=request_timeout_seconds, event_hooks=event_hooks,
             )
             async_client = httpx.AsyncClient(
                 transport=EvaluationAsyncTransport(
@@ -490,7 +651,8 @@ def _run_evaluation_batch(
                 model=request_model, temperature=0.0,
                 timeout=request_timeout_seconds, max_retries=max_retries,
                 extra_body={"thinking": {"type": "enabled"},
-                            **({"reasoning_effort": reasoning_effort} if reasoning_effort else {})},
+                            **({"reasoning_effort": "max"} if bounded else
+                               {"reasoning_effort": reasoning_effort} if reasoning_effort else {})},
                 http_client=sync_client, http_async_client=async_client,
             )
             verification_model = ChatDeepSeek(
@@ -498,40 +660,65 @@ def _run_evaluation_batch(
                 timeout=request_timeout_seconds, max_retries=max_retries,
                 extra_body={"thinking": {"type": "disabled"}, "reasoning_effort": "none"},
                 http_client=sync_client, http_async_client=async_client,
-            ) if mixed else model
+            ) if mixed or bounded else model
             for position, (case, window) in enumerate(zip(cases, windows)):
                 current_position = position
                 outcomes[position]["status"] = "unknown"
                 with store.stage(position, "case"):
-                    started = store.record(kind="case_started", payload={"window": window})
+                    started = store.record(kind="case_started", payload={"window": window,
+                        **({"formal_task_binding": store.formal_task_binding(position)} if bounded else {})})
                 call_state: dict = {}
-                recorded_model = _RecordedModel(
-                    model, store, position, window, call_state,
-                    invocation_scope=invocation_scope,
-                    verification_tool_choice=verification_tool_choice,
-                    extraction_tool_choice=extraction_tool_choice,
-                    extraction_mode=extraction_selected,
-                )
-                # 原adapter只消费bind_tools/invoke；评测代理不成为产品模型实现。
-                adapter_model = cast(BaseChatModel, recorded_model)
-                verification_adapter_model = cast(BaseChatModel, _RecordedModel(
-                    verification_model, store, position, window, call_state,
-                    invocation_scope=invocation_scope, verification_tool_choice=verification_tool_choice,
-                    extraction_tool_choice=extraction_tool_choice, extraction_mode=extraction_selected,
-                )) if mixed else adapter_model
-                result = evaluate_case(
-                    case, window, _RecordedExtractionRuntime(
-                        extraction_runtime(extraction_selected, adapter_model, prompt_profile=extraction_prompt_profile),
-                        store, position, extraction_selected, call_state,
-                    ),
-                    verification_runtime=_RecordedVerificationRuntime(
-                        LangChainSourceVerificationRuntime(
-                            model=verification_adapter_model, provider=provider,
-                            verification_mode=selected,
-                            prompt_profile=prompt_profile,
-                        ), store, position,
-                    ),
-                )
+                formal_execution = None
+                if bounded:
+                    if database_url is None:
+                        raise EvaluationBudgetAbort("evaluation_bounded_database_required")
+                    # 记录放在runtime和HTTP边界，实际SDK对象直接交给原适配器。
+                    evaluated_task = evaluate_task(
+                        case, window, _RecordedExtractionRuntime(
+                            extraction_runtime(extraction_selected, model), store, position,
+                            extraction_selected, call_state, invocation_scope=invocation_scope or _plain_invocation,
+                        ), database_url=database_url, task_id=formal_task_ids[position],
+                        verification_runtime=_RecordedVerificationRuntime(
+                            LangChainSourceVerificationRuntime(model=verification_model, provider=provider,
+                                verification_mode=selected), store, position,
+                            invocation_scope=invocation_scope or _plain_invocation,
+                        ), provider=provider, model_name=request_model,
+                    )
+                    result = evaluated_task.result
+                    formal_execution = _formal_execution_payload(evaluated_task, database_url)
+                    with store.stage(position, "case"):
+                        formal_execution = store.record(kind="formal_task_execution", payload=formal_execution)["payload"]
+                        for event in evaluated_task.trace["events"]:
+                            if event["stage"] == "model_response":
+                                store.record(kind="adapter_output", payload=event["payload"]["raw"])
+                else:
+                    recorded_model = _RecordedModel(
+                        model, store, position, window, call_state,
+                        invocation_scope=invocation_scope,
+                        verification_tool_choice=verification_tool_choice,
+                        extraction_tool_choice=extraction_tool_choice,
+                        extraction_mode=extraction_selected,
+                    )
+                    # 原adapter只消费bind_tools/invoke；评测代理不成为产品模型实现。
+                    adapter_model = cast(BaseChatModel, recorded_model)
+                    verification_adapter_model = cast(BaseChatModel, _RecordedModel(
+                        verification_model, store, position, window, call_state,
+                        invocation_scope=invocation_scope, verification_tool_choice=verification_tool_choice,
+                        extraction_tool_choice=extraction_tool_choice, extraction_mode=extraction_selected,
+                    )) if mixed else adapter_model
+                    result = evaluate_case(
+                        case, window, _RecordedExtractionRuntime(
+                            extraction_runtime(extraction_selected, adapter_model, prompt_profile=extraction_prompt_profile),
+                            store, position, extraction_selected, call_state,
+                        ),
+                        verification_runtime=_RecordedVerificationRuntime(
+                            LangChainSourceVerificationRuntime(
+                                model=verification_adapter_model, provider=provider,
+                                verification_mode=selected,
+                                prompt_profile=prompt_profile,
+                            ), store, position,
+                        ),
+                    )
                 with store.stage(position, "case"):
                     recorded_result = store.record(kind="case_result", payload=asdict(result))
                 results.append(result)
@@ -547,7 +734,8 @@ def _run_evaluation_batch(
                                            if event["case_position"] == position)
                     audit_state = {"active": True, "phase": None,
                                    "verification_mode": selected.value,
-                                   "extraction_mode": extraction_selected.value}
+                                   "extraction_mode": extraction_selected.value,
+                                   "execution_plan": execution_plan}
                     persist_audit = _audit_persist_capability(store, position, audit_state)
 
                     bundle = {
@@ -569,7 +757,8 @@ def _run_evaluation_batch(
                         **({"execution_plan": execution_plan, "phase_request_version": MIXED_REQUEST_VERSION,
                             "phase_request_policy": mixed_phase_policy()} if mixed else {}),
                         **({"reference_version": store.reference_version}
-                           if store.reference_version == "source-fidelity-v2" else {}),
+                           if store.reference_version == "source-fidelity-v2" or bounded else {}),
+                        **({"execution_plan": execution_plan, "formal_task_execution": formal_execution} if bounded else {}),
                         "extraction_program": tuple(
                             event["payload"] for event in current_events
                             if event["kind"] == "extraction_program"
@@ -587,8 +776,18 @@ def _run_evaluation_batch(
                     with store.stage(position, "case"):
                         store.record(kind="semantic_audit", payload=audited)
                     audits.append(audited)
+                    if bounded:
+                        dimension_results.extend(EvaluationResult(**item) for item in audited["dimension_results"])
                     if audited["decision"] in {"safety_error", "unknown"}:
                         raise _BatchStopped("case_semantic_audit_" + audited["decision"])
+                    if bounded and position < 7:
+                        frames = _bounded_positive_delivery(formal_execution, position)
+                        if not frames:
+                            raise _BatchStopped("bounded_runtime_positive_delivery_missing")
+                        delivery_frames.update(frames)
+                        positive_delivered += 1
+                        if position == 6 and not {"reported_request", "received_request"} <= delivery_frames:
+                            raise _BatchStopped("bounded_runtime_request_frame_delivery_missing")
                 elif (result.false_fact_count or result.wrong_subject_count
                         or result.error_kind in (ERROR_FALSE_FACT, ERROR_WRONG_SUBJECT)):
                     raise _BatchStopped("case_safety_error")
@@ -604,6 +803,18 @@ def _run_evaluation_batch(
         if current_position is not None:
             outcomes[current_position]["status"] = "unknown"
     finally:
+        if bounded and database_url is not None and current_position is not None:
+            try:
+                if not any(event["case_position"] == current_position and event["kind"] == "formal_task_execution"
+                           for event in store.events()):
+                    with store.stage(current_position, "case"):
+                        store.record(kind="case_failed", payload=_failed_formal_task_payload(
+                            database_url, windows[current_position], formal_task_ids[current_position],
+                        ))
+            except Exception:
+                cleanup_error_codes.append("bounded_runtime_failed_task_snapshot_unavailable")
+            except EvaluationBudgetAbort:
+                cleanup_error_codes.append("bounded_runtime_failed_task_snapshot_unavailable")
         if sync_client is not None:
             try:
                 sync_client.close()
@@ -615,6 +826,11 @@ def _run_evaluation_batch(
             except Exception:
                 cleanup_error_codes.append(f"{code_prefix}_async_client_close_failed")
     summary = _summary(outcomes, results)
+    if bounded:
+        summary["matcher_dimensions"] = summary["dimensions"]
+        summary["dimensions"] = [asdict(item) for item in summarize(dimension_results)]
+        summary["proof_delivery"] = {"required_positive_windows": 7, "delivered_positive_windows": positive_delivered,
+                                     "frames": sorted(delivery_frames)}
     if semantic_audit is not None:
         summary["semantic_audit"] = {
             "audited": len(audits),
@@ -662,6 +878,9 @@ def _run_evaluation_batch(
         records_error_code = f"{code_prefix}_records_unavailable"
         receipt = None
         receipt_error_code = f"{code_prefix}_completion_receipt_unavailable"
+    if bounded:
+        # 原件不可核时保留未知，不能用空事件流宣称已知错误为0。
+        summary["known_raw_safety"] = _known_raw_safety(events) if records_error_code is None else None
     return {
         "synthetic_only": True, "quality_certified": False,
         "extraction_mode": extraction_selected.value,
