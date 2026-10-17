@@ -42,7 +42,6 @@ export function useReplySession() {
   }
   return { state, error,
     updateCandidateVersionDraft: (request: ReplyCandidateDraftUpdate) => versionOperation(() => window.notalone.replies.updateCandidateVersionDraft(request)),
-    beginCandidateVersionEdit: (request: ReplyCandidateVersionDisplay) => versionOperation(() => window.notalone.replies.beginCandidateVersionEdit(request)),
     readCandidateVersions: (request: ReplyCandidateVersionRead) => versionOperation(() => window.notalone.replies.readCandidateVersions(request)),
     saveCandidateVersion: (request: ReplyCandidateVersionEdit) => versionOperation(() => window.notalone.replies.saveCandidateVersion(request)),
     showCandidateVersion: (request: ReplyCandidateVersionDisplay) => versionOperation(() => window.notalone.replies.showCandidateVersion(request)),

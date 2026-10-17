@@ -1871,40 +1871,127 @@ for (const reason of ['request_invalidated', 'candidate_unavailable']) {
 }
 
 
-test('开始编辑已核验版本只通知原输入门禁，不写版本或选择', async () => {
+test('提交已核验版本草稿只通知一次输入门禁，不写版本或选择', async () => {
   const f = await fixture();
   let notices = 0;
   const stop = f.replies.onInputChanged(() => { notices++; });
   const before = await f.bridge.getState(), calls = f.calls.length;
   try {
-    const state = await f.bridge.beginCandidateVersionEdit({ ...f.scope, sessionId: f.sessionId,
-      candidateId: f.candidateId, versionId: f.versionId });
+    const state = await f.bridge.updateCandidateVersionDraft({ ...f.scope, sessionId: f.sessionId,
+      candidateId: f.candidateId, versionId: f.versionId,
+      messages: [{ messageId: f.messageId, text: '尚未保存的完整编辑。' }], requirements: '只改本组。' });
     assert.equal(notices, 1);
     assert.equal(f.calls.length, calls);
     assert.deepEqual(state.candidateVersions, before.candidateVersions);
     assert.deepEqual(state.explicitCandidateSelection, before.explicitCandidateSelection);
     assert.deepEqual(state.savedSession, before.savedSession);
-    assert.equal(f.handlers.get('reply:begin-candidate-version-edit').role, 'helper');
+    assert.equal(state.candidateDrafts[0].messages[0].text, '尚未保存的完整编辑。');
+    assert.equal(f.handlers.get('reply:update-candidate-version-draft').role, 'helper');
   } finally { stop(); }
 });
 
-test('开始编辑拒绝不属于当前显示版本的身份和未知正文', async () => {
+test('完整草稿正文与所属当前结果一起更新，只改要求不覆盖正文投影', async () => {
   const f = await fixture();
-  assert.equal(typeof f.bridge.beginCandidateVersionEdit, 'function');
+  f.contacts.setDraft({ ...f.scope, text: '本次合成生成输入。' });
+  await f.bridge.generate({ ...f.scope, newRequest: true });
+  await f.bridge.readSavedSession(f.scope);
+  const identity = { ...f.scope, sessionId: f.sessionId, candidateId: f.candidateId, versionId: f.versionId };
+  const original = (await f.bridge.getState()).result.candidates[0];
+  let notices = 0;
+  const observed = [];
+  const stopInput = f.replies.onInputChanged(() => { notices++; });
+  const stopState = f.bridge.onStateChanged((state) => observed.push(state));
+  try {
+    // 显示保存版本的文字与当前结果投影可以不同；仅要求变化不能将二者强行同步。
+    const requirementsOnly = await f.bridge.updateCandidateVersionDraft({ ...identity,
+      messages: [{ messageId: f.messageId, text: f.text }], requirements: '只修改本组要求。' });
+    assert.equal(requirementsOnly.result.candidates[0].editedText, original.editedText);
+    const edited = await f.bridge.updateCandidateVersionDraft({ ...identity,
+      messages: [{ messageId: f.messageId, text: '已改的完整正文。' }], requirements: '只修改本组要求。' });
+    assert.equal(edited.result.candidates[0].editedText, '已改的完整正文。');
+    assert.equal(edited.candidateDrafts[0].messages[0].text, '已改的完整正文。');
+    assert.deepEqual(edited.result.candidates[0].original, original.original);
+    assert(observed.every((state) => state.candidateDrafts?.[0]?.messages[0]?.text !== '已改的完整正文。'
+      || state.result.candidates[0].editedText === '已改的完整正文。'));
+    const reverted = await f.bridge.updateCandidateVersionDraft({ ...identity,
+      messages: [{ messageId: f.messageId, text: f.text }], requirements: '恢复保存的正文。' });
+    assert.equal(reverted.result.candidates[0].editedText, f.text);
+    assert.equal(notices, 3);
+  } finally { stopInput(); stopState(); }
+});
+
+test('历史候选可保留草稿，但不能改写另一生成轮次的当前结果', async () => {
+  const f = await fixture(), historical = appendCandidate(f);
+  f.contacts.setDraft({ ...f.scope, text: '本次当前生成输入。' });
+  await f.bridge.generate({ ...f.scope, newRequest: true });
+  await f.bridge.readSavedSession(f.scope);
+  const before = await f.bridge.getState();
+  const history = before.candidateVersions.items.find((item) => item.candidateId === historical.candidateId).history;
+  const state = await f.bridge.updateCandidateVersionDraft({ ...f.scope, sessionId: f.sessionId,
+    candidateId: historical.candidateId, versionId: historical.versionId,
+    messages: [{ ...history.versions[1].messages[0], text: '只属于历史候选的修改。' }], requirements: '' });
+  assert.equal(state.candidateDrafts[0].messages[0].text, '只属于历史候选的修改。');
+  assert.deepEqual(state.result, before.result);
+});
+
+for (const checkpoint of ['表达偏好删除中', '保留内容来源复验中', '候选来源复验中']) {
+  test(`完整草稿在${checkpoint}拒绝且没有输入通知`, async () => {
+    const f = await fixture();
+    const identity = { ...f.scope, sessionId: f.sessionId, candidateId: f.candidateId, versionId: f.versionId,
+      messages: [{ messageId: f.messageId, text: '来源待核验时不能保留的编辑。' }], requirements: '' };
+    let release, reached, pending;
+    const blocked = new Promise((resolve) => { reached = resolve; });
+    if (checkpoint === '表达偏好删除中') f.replies.beginExpressionPreferenceDeletion();
+    else {
+      f.records.beforeResponse = (request) => {
+        if (request.path.endsWith(`/assistant-sessions/${f.sessionId}`)) {
+          reached(); return new Promise((resolve) => { release = resolve; });
+        }
+      };
+      if (checkpoint === '保留内容来源复验中') pending = f.replies.revalidateDeletedSource(f.scope.contactId);
+      else {
+        f.records.failRequest = (request) => primaryCandidateOperation(request, f, 'read')
+          ? new f.BackendRequestFailure('response', 404, 'not_found') : null;
+        pending = candidateOperation(f, 'read').catch(() => {});
+      }
+      await blocked;
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    let notices = 0;
+    const stop = f.replies.onInputChanged(() => { notices++; });
+    const before = await f.bridge.getState();
+    try {
+      await assert.rejects(f.bridge.updateCandidateVersionDraft(identity));
+      assert.equal(notices, 0);
+      assert.deepEqual(await f.bridge.getState(), before);
+    } finally {
+      stop(); f.records.beforeResponse = undefined; f.records.failRequest = undefined;
+      release?.(); if (pending) await pending;
+    }
+  });
+}
+
+test('草稿拒绝不属于当前显示版本的身份和无效消息，且不通知输入变化', async () => {
+  const f = await fixture();
   let notices = 0;
   const stop = f.replies.onInputChanged(() => { notices++; });
-  const identity = { ...f.scope, sessionId: f.sessionId, candidateId: f.candidateId, versionId: f.versionId };
+  const identity = { ...f.scope, sessionId: f.sessionId, candidateId: f.candidateId, versionId: f.versionId,
+    messages: [{ messageId: f.messageId, text: '完整草稿。' }], requirements: '' };
+  const before = await f.bridge.getState();
   try {
     for (const request of [
       { ...identity, contactId: randomUUID() }, { ...identity, scopeRevision: identity.scopeRevision + 1 },
       { ...identity, sessionId: randomUUID() }, { ...identity, candidateId: randomUUID() },
       { ...identity, versionId: randomUUID() }, { ...identity, versionId: f.candidateId },
       { ...identity, text: '不能传入的合成正文。' }, { ...identity, versionId: null },
-    ]) await assert.rejects(async () => f.bridge.beginCandidateVersionEdit(request));
+      { ...identity, messages: [{ messageId: randomUUID(), text: '错误消息身份。' }] },
+      { ...identity, messages: [...identity.messages, { messageId: randomUUID(), text: '多余消息。' }] },
+    ]) await assert.rejects(async () => f.bridge.updateCandidateVersionDraft(request));
     assert.equal(notices, 0);
-    await assert.rejects(async () => f.bridge.beginCandidateVersionEdit(identity, identity));
-    await assert.rejects(async () => f.bridge.beginCandidateVersionEdit());
+    await assert.rejects(async () => f.bridge.updateCandidateVersionDraft(identity, identity));
+    await assert.rejects(async () => f.bridge.updateCandidateVersionDraft());
     assert.equal(notices, 0);
+    assert.deepEqual(await f.bridge.getState(), before);
   } finally { stop(); }
 });
 

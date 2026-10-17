@@ -52,24 +52,22 @@ export function CandidateVersionEditor({ replies, view, candidateId, replyReques
   sampleIdentity.current = identity;
   const scope = { contactId: state.contactId!, scopeRevision: state.scopeRevision,
     sessionId: state.savedSession?.sessionId ?? '', candidateId };
-  function beginEdit() {
-    if (!version || draft?.versionId !== version.versionId) return;
-    void replies.beginCandidateVersionEdit({ ...scope, versionId: version.versionId })
-      .catch(() => setError('本组编辑身份尚未确认，请保留文字并重新读取。'));
-  }
   function retainDraft(messages: AssistantCandidateMessage[], requirements: string) {
-    if (!version) return;
+    if (!version || draft?.versionId !== version.versionId) return;
+    const operation = identity, revision = editRevision.current;
     void replies.updateCandidateVersionDraft({ ...scope, versionId: version.versionId, messages, requirements })
-      .catch(() => setError('本组编辑暂未保留，请勿切换并重新读取版本。'));
+      .catch(() => {
+        if (sampleActive.current && sampleIdentity.current === operation && editRevision.current === revision) {
+          setError('本组编辑暂未保留，请勿切换并重新读取版本。');
+        }
+      });
   }
   function editMessage(messageId: string, text: string) {
-    beginEdit();
+    if (!version || draft?.versionId !== version.versionId) return;
     editRevision.current++;
     const next = messages.map((message) => message.messageId === messageId ? { ...message, text } : message);
     setDraft((previous) => previous ? { ...previous, messages: next } : null); setError('');
     retainDraft(next, requirements);
-    if (state.result?.replyRequestId === replyRequestId) void replies.editCandidate(candidateId,
-      next.map((message) => message.text).join('\n\n'));
   }
   async function save() {
     if (!version || draft?.versionId !== version.versionId) throw new Error('本组版本尚未核对。');
@@ -115,7 +113,7 @@ export function CandidateVersionEditor({ replies, view, candidateId, replyReques
     <ReplyBasisChangeNotice changes={history?.basisChanges} />
     <CandidateMessageGroup identity={identity} number={number} messages={messages} requirements={requirements}
       restored={restored} disabled={disabled || sampleSaving} dirty={dirty} canCopy={Boolean(chosen)}
-      edit={editMessage} editRequirements={(text) => { beginEdit(); editRevision.current++; setDraft({ ...draft, requirements: text }); setError(''); retainDraft(messages, text); }}
+      edit={editMessage} editRequirements={(text) => { editRevision.current++; setDraft({ ...draft, requirements: text }); setError(''); retainDraft(messages, text); }}
       save={save} noteTextCopy={noteCopy}
       validatePaste={(text) => window.notalone.styleSamples.validateCandidatePaste({ ...scope, replyRequestId,
         versionId: version.versionId, text })}

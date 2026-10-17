@@ -60,7 +60,8 @@ test('切回联系人复验已保存候选并恢复未保存的分组编辑，�
   const version = view.history.versions[0];
   const identity = { ...scope, sessionId: before.savedSession.sessionId, candidateId: view.candidateId, versionId: version.versionId };
   const messages = version.messages.map((message) => ({ ...message, text: '尚未保存的合成编辑。' }));
-  await f.bridge.updateCandidateVersionDraft({ ...identity, messages, requirements: '本组临时要求' });
+  const edited = await f.bridge.updateCandidateVersionDraft({ ...identity, messages, requirements: '本组临时要求' });
+  assert.equal(edited.result.candidates[0].editedText, '尚未保存的合成编辑。');
   await f.connect(b);
   assert.deepEqual((await f.bridge.getState()).candidateDrafts ?? [], []);
   const displayed = [];
@@ -75,6 +76,8 @@ test('切回联系人复验已保存候选并恢复未保存的分组编辑，�
   }
   const after = await f.bridge.getState();
   assert.deepEqual(after.candidateDrafts, [{ candidateId: view.candidateId, versionId: version.versionId, messages, requirements: '本组临时要求' }]);
+  assert.equal(after.result.candidates[0].editedText, '尚未保存的合成编辑。');
+  assert.deepEqual(after.result.candidates[0].original, before.result.candidates[0].original);
   assert.equal(after.candidateVersions.items[0].history.versions.length, 1);
   assert.equal(after.savedSession.turns.length, 1);
   assert.equal((await f.command('metrics')).model_calls, 1);
@@ -349,15 +352,17 @@ test('编号继续后的草稿分组编辑恢复仍使用分组版本编辑器',
   assert.equal(before.continuation.phase, 'completed');
   const view = before.candidateVersions.items.find((item) => item.candidateId === before.result.candidates[0].original.candidateId);
   const version = view.history.versions.find((item) => item.versionId === view.displayVersionId);
+  const callsBeforeEdit = (await f.command('metrics')).model_calls;
   const messages = version.messages.map((message) => ({ ...message, text: '编号继续的未保存分组编辑。' }));
   await f.bridge.updateCandidateVersionDraft({ ...scope, sessionId, candidateId: view.candidateId,
     versionId: version.versionId, messages, requirements: '继续分组临时要求' });
+  assert.equal((await f.command('metrics')).model_calls, callsBeforeEdit);
   await f.connect(b); await f.connect(a);
   const after = await f.bridge.getState();
   assert.deepEqual(after.result.continuation, before.result.continuation);
   assert.match(f.renderCandidates(after), /编号继续的未保存分组编辑/);
   assert.match(f.renderCandidates(after), /继续分组临时要求/);
-  assert.equal((await f.command('metrics')).model_calls, 2);
+  assert.equal((await f.command('metrics')).model_calls, callsBeforeEdit);
 });
 
 test('删除检查先隔离可见候选，再清洗后台联系人恢复副本', async (t) => {

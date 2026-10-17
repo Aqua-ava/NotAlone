@@ -229,7 +229,6 @@ export interface ReplyBridge extends ReplyEvidenceCommands {
   selectCandidate(selection: ReplyCandidateSelection): Promise<ReplySessionState>;
   editCandidate(edit: ReplyCandidateEdit): Promise<ReplySessionState>;
   updateCandidateVersionDraft(update: ReplyCandidateDraftUpdate): Promise<ReplySessionState>;
-  beginCandidateVersionEdit(selection: ReplyCandidateVersionDisplay): Promise<ReplySessionState>;
   readCandidateVersions(request: ReplyCandidateVersionRead): Promise<ReplySessionState>;
   saveCandidateVersion(edit: ReplyCandidateVersionEdit): Promise<ReplySessionState>;
   selectCandidateVersion(selection: ReplyCandidateVersionSelection): Promise<ReplySessionState>;

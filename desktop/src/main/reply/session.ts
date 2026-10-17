@@ -1760,28 +1760,31 @@ export class ReplySession {
     return this.getState();
   }
   updateCandidateVersionDraft(update: ReplyCandidateDraftUpdate): ReplySessionState {
-    this.beginCandidateVersionEdit(update);
-    const version = this.state.candidateVersions!.items.find((item) => item.candidateId === update.candidateId)!
-      .history!.versions.find((item) => item.versionId === update.versionId)!;
+    this.assertVersionScope(update);
+    const view = this.state.candidateVersions?.items.find((item) => item.candidateId === update.candidateId);
+    const version = view?.history?.versions.find((item) => item.versionId === update.versionId);
+    if (this.state.phase === 'waiting' || this.state.savedSession?.phase !== 'ready'
+      || this.state.candidateVersions?.phase !== 'ready' || view?.phase !== 'ready'
+      || view.displayVersionId !== update.versionId || !version) {
+      throw new Error('本组编辑版本尚未核对，请重新读取。');
+    }
     if (version.messages.length !== update.messages.length
       || version.messages.some((message, index) => message.messageId !== update.messages[index].messageId)) {
       throw new Error('本组消息身份已变化，请重新读取。');
     }
     const { candidateId, versionId, messages, requirements } = update;
-    this.publish({ candidateDrafts: [...(this.state.candidateDrafts ?? []).filter((item) => item.candidateId !== candidateId),
-      structuredClone({ candidateId, versionId, messages, requirements })] });
-    return this.getState();
-  }
-  beginCandidateVersionEdit(selection: ReplyCandidateVersionDisplay): ReplySessionState {
-    this.assertVersionScope(selection);
-    const view = this.state.candidateVersions?.items.find((item) => item.candidateId === selection.candidateId);
-    if (this.state.phase === 'waiting' || this.state.savedSession?.phase !== 'ready'
-      || this.state.candidateVersions?.phase !== 'ready' || view?.phase !== 'ready'
-      || view.displayVersionId !== selection.versionId
-      || !view.history?.versions.some((version) => version.versionId === selection.versionId)) {
-      throw new Error('本组编辑版本尚未核对，请重新读取。');
-    }
+    const previousDraft = this.state.candidateDrafts?.find((item) => item.candidateId === candidateId
+      && item.versionId === versionId);
+    const previousMessages = previousDraft?.messages ?? version.messages;
+    const bodyChanged = previousMessages.some((message, index) => message.text !== messages[index].text);
+    const turn = this.state.savedSession.turns.find((item) => item.turnId === view.history!.turnId);
+    const result = this.state.result;
+    const matchingResult = bodyChanged && result && turn?.reply?.replyRequestId === result.replyRequestId;
     this.notifyInputChanged();
+    this.publish({ candidateDrafts: [...(this.state.candidateDrafts ?? []).filter((item) => item.candidateId !== candidateId),
+      structuredClone({ candidateId, versionId, messages, requirements })],
+      ...(matchingResult ? { result: { ...result, candidates: result.candidates.map((item) =>
+        item.original.candidateId === candidateId ? { ...item, editedText: messages.map((message) => message.text).join('\n\n') } : item) } } : {}) });
     return this.getState();
   }
   async saveCandidateVersion(edit: ReplyCandidateVersionEdit): Promise<ReplySessionState> {
