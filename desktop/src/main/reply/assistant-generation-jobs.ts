@@ -1,3 +1,4 @@
+import type { GenerationExecution, GenerationProtocol } from './assistant-generation-execution';
 import type { AssistantNoGenerationProof } from '../../shared/assistant-no-generation';
 import type { SavedAssistantTurn } from '../../shared/assistant-session';
 import type { ReplyGenerationJobState } from '../../shared/reply-bridge';
@@ -72,6 +73,77 @@ export class AssistantGenerationJobs {
   private readonly finished = new Map<string, ReplyGenerationJobState & { connectionGeneration: number }>();
   constructor(private readonly changed: () => void = () => {}) {}
 
+  async execute<Result, Failure = undefined>(execution: GenerationExecution<Result, Failure>): Promise<void> {
+    const { identity, adapter } = execution;
+    let owned: OwnedAssistantPreparation;
+    try {
+      owned = 'requestKey' in identity
+        ? this.begin(identity, execution.controller, execution.stopping)
+        : this.beginPreparation(identity, execution.controller, execution.stopping, execution.preparationCommand);
+    } catch (error) { if (!execution.failed) throw error; await execution.failed(error, undefined); return; }
+    let job = 'requestKey' in owned.identity ? owned as OwnedAssistantGeneration : undefined;
+    let receipt: AssistantGenerationReceipt | undefined;
+    let settled = false;
+    const jobs = this;
+    const protocol: GenerationProtocol = {
+      get signal() { return owned.signal; }, get job() { return job; }, get receipt() { return receipt; },
+      get active() { return jobs.isActive(owned); },
+      prepared: async (actual) => {
+        if (job) this.receiveReceipt(job, actual);
+        else { job = this.receivePrepared(owned, actual); owned = job; execution.registered?.(job); }
+        receipt = actual;
+        if (execution.replacement) this.confirmReplacement(execution.replacement);
+        execution.prepared?.(job, actual);
+        await this.acquire(job);
+      },
+      preparing: () => { if (job) this.prepareStarted(job); },
+      requested: () => { if (job) this.requestStarted(job); },
+      notReserved: (proof, generation) => {
+        if (job) this.receiveNoGenerationProof(job, proof, generation);
+        else this.receivePreparationNoGenerationProof(owned, proof, generation);
+        settled = true;
+      },
+      observe: (evidence) => {
+        if (!job) return;
+        if (evidence.kind === 'receipt') { this.receiveReceipt(job, evidence.receipt); receipt = evidence.receipt; return; }
+        if (evidence.kind === 'failed') this.failedResponseReceived(job, evidence.canRetry, evidence.generationActive);
+        else { settled = true; if (evidence.kind === 'completed') this.completed(job); }
+      },
+    };
+    try {
+      if (job) execution.registered?.(job);
+      let result: Awaited<ReturnType<typeof adapter.run>>;
+      try {
+        try { result = await adapter.run(protocol); }
+        finally {
+          // 执行许可只覆盖实际协议传输；权威复验与展示仍持有原登记，但不能阻塞下一请求。
+          if (job) this.executing.delete(job);
+          this.drain();
+        }
+      } catch (error) {
+        execution.beforeFailure?.();
+        const observation = await adapter.verifyFailure?.(error, protocol);
+        if (!execution.failed) throw error;
+        await execution.failed(error, observation); return;
+      }
+      try {
+        if (result.outcome === 'completed') {
+          settled = true; if (job) this.completed(job);
+        } else if (result.outcome === 'no_generation') {
+          const active = this.jobs.get(owned);
+          if (!active || active.receipt) throw new Error('本次准备状态尚未确认。');
+          active.settledWithoutGeneration = true; active.settlePreparation(); settled = true;
+        }
+        // 完成证据先于展示；展示或版本恢复错误不能再触发后台失败核验。
+        await execution.consume(result.value);
+      } catch (error) { if (!execution.failed) throw error; await execution.failed(error, undefined); }
+    } finally {
+      const couldPublish = job ? this.canPublish(job, job.identity) : false;
+      this.finish(owned, settled);
+      if (job) await execution.finished?.(job, settled, couldPublish);
+    }
+  }
+
   recoveryPending(generation: number | undefined): number {
     return [...this.jobs.keys()].filter((job) => job.identity.connectionGeneration !== generation).length;
   }
@@ -129,7 +201,7 @@ export class AssistantGenerationJobs {
     }
     this.drain();
   }
-  async acquire(job: OwnedAssistantGeneration): Promise<void> {
+  private async acquire(job: OwnedAssistantGeneration): Promise<void> {
     const active = this.jobs.get(job);
     if (!active?.receipt || !this.isActive(job)) throw new Error('本次任务已停止。');
     if (active.receipt.state === 'completed') return;
@@ -150,18 +222,18 @@ export class AssistantGenerationJobs {
       this.executing.add(job); next.resolve(); break;
     }
   }
-  completed(job: OwnedAssistantGeneration): void {
+  private completed(job: OwnedAssistantGeneration): void {
     const active = this.jobs.get(job);
     if (active?.receipt) active.receipt = { ...active.receipt, state: 'completed' };
   }
 
-  begin(identity: AssistantGenerationIdentity, controller = new AbortController(),
+  private begin(identity: AssistantGenerationIdentity, controller = new AbortController(),
     stopping?: AssistantGenerationStopping): OwnedAssistantGeneration {
     if (!isUuid(identity.requestKey)) throw new Error('本次生成归属无效。');
     return this.register(identity, controller, stopping) as OwnedAssistantGeneration;
   }
   // 准备阶段先登记已核验范围，实际请求键只由后端回执提供。
-  beginPreparation(owner: AssistantGenerationOwner, controller = new AbortController(),
+  private beginPreparation(owner: AssistantGenerationOwner, controller = new AbortController(),
     stopping?: AssistantGenerationStopping, command?: AssistantPreparationCommandIdentity): OwnedAssistantPreparation {
     return this.register({ connectionGeneration: owner.connectionGeneration,
       contactId: owner.contactId, sessionId: owner.sessionId }, controller, stopping,
@@ -186,7 +258,7 @@ export class AssistantGenerationJobs {
       stage: 'requestKey' in identity ? 'created' : 'preparing', preparationSettled, settlePreparation, stopping, preparationCommand });
     return job;
   }
-  receivePrepared(preparation: OwnedAssistantPreparation, receipt: AssistantGenerationReceipt): OwnedAssistantGeneration {
+  private receivePrepared(preparation: OwnedAssistantPreparation, receipt: AssistantGenerationReceipt): OwnedAssistantGeneration {
     const active = this.jobs.get(preparation);
     if (!active || 'requestKey' in preparation.identity || receipt.sessionId !== preparation.identity.sessionId
       || !isUuid(receipt.requestKey) || !isUuid(receipt.turnId) || !isUuid(receipt.inputVersionId)
@@ -198,13 +270,13 @@ export class AssistantGenerationJobs {
     return job;
   }
   // 只有正式准备明确返回澄清等非候选结果时可用，传输结束不能证明未领取。
-  completePreparationWithoutGeneration(preparation: OwnedAssistantPreparation): void {
+  private completePreparationWithoutGeneration(preparation: OwnedAssistantPreparation): void {
     const active = this.jobs.get(preparation);
     if (!active || active.receipt) throw new Error('本次准备状态尚未确认。');
     active.settledWithoutGeneration = true; active.terminal = true; active.settlePreparation(); this.jobs.delete(preparation);
   }
   // 实际准备的同键未领取证明只结算无回执项，当前UI发布等finally再结束。
-  receiveNoGenerationProof(job: OwnedAssistantGeneration, proof: AssistantNoGenerationProof,
+  private receiveNoGenerationProof(job: OwnedAssistantGeneration, proof: AssistantNoGenerationProof,
     connectionGeneration: number | undefined): void {
     const active = this.jobs.get(job);
     if (!active || active.receipt || active.stage !== 'preparing'
@@ -224,7 +296,7 @@ export class AssistantGenerationJobs {
     }
   }
   // 策略薄客户端先核验原命令证明；只有显式声明的同冻结命令可关联已结束未知身份。
-  receivePreparationNoGenerationProof(preparation: OwnedAssistantPreparation, proof: AssistantNoGenerationProof,
+  private receivePreparationNoGenerationProof(preparation: OwnedAssistantPreparation, proof: AssistantNoGenerationProof,
     connectionGeneration: number | undefined): void {
     const active = this.jobs.get(preparation);
     if (!active || 'requestKey' in preparation.identity || active.receipt || active.stage !== 'preparing'
@@ -249,11 +321,11 @@ export class AssistantGenerationJobs {
       }
     }
   }
-  prepareStarted(job: OwnedAssistantGeneration): void {
+  private prepareStarted(job: OwnedAssistantGeneration): void {
     const active = this.jobs.get(job);
     if (active?.stage === 'created') active.stage = 'preparing';
   }
-  receiveReceipt(job: OwnedAssistantGeneration, receipt: AssistantGenerationReceipt): void {
+  private receiveReceipt(job: OwnedAssistantGeneration, receipt: AssistantGenerationReceipt): void {
     const active = this.jobs.get(job);
     if (!active || receipt.sessionId !== job.identity.sessionId || receipt.requestKey !== job.identity.requestKey
       || !isUuid(receipt.turnId) || !isUuid(receipt.inputVersionId)
@@ -273,19 +345,19 @@ export class AssistantGenerationJobs {
     if (this.closing) this.deliverClosingReceipt(job, active);
   }
   // 业务失败可结束本地等待，但历史 failed 不能证明 C 当前没有运行租约。
-  failedResponseReceived(job: OwnedAssistantGeneration, canRetry = false, generationActive?: boolean): void {
+  private failedResponseReceived(job: OwnedAssistantGeneration, canRetry = false, generationActive?: boolean): void {
     const active = this.jobs.get(job);
     if (active) {
       active.failedResponseReceived = true; active.canRetry = canRetry;
       if (generationActive === false) active.failedLeaseSettled = true;
     }
   }
-  requestStarted(job: OwnedAssistantGeneration): void {
+  private requestStarted(job: OwnedAssistantGeneration): void {
     const active = this.jobs.get(job);
     if (this.isActive(job) && active?.receipt) { active.stage = 'requesting'; this.changed(); }
   }
   leaveView(): void { this.viewRevision += 1; }
-  isActive(job: OwnedAssistantPreparation): boolean {
+  private isActive(job: OwnedAssistantPreparation): boolean {
     return !this.closing && !this.changingConnection && this.jobs.has(job) && !this.jobs.get(job)?.terminal && !job.signal.aborted;
   }
   canPublish(job: OwnedAssistantGeneration, view: AssistantGenerationOwner): boolean {
@@ -376,7 +448,7 @@ export class AssistantGenerationJobs {
     for (const [job, active] of this.jobs) if (sameOwner(job.identity, identity)
       && ('requestKey' in job.identity ? job.identity.requestKey : active.receipt?.requestKey) === identity.requestKey) active.controller.abort();
   }
-  confirmReplacement(identity: AssistantGenerationIdentity): void {
+  private confirmReplacement(identity: AssistantGenerationIdentity): void {
     // 新替换的严格实际回执证明原租约已失效；仅取消transport不提供这项证明。
     for (const [job, active] of this.jobs) if (sameOwner(job.identity, identity)
       && ('requestKey' in job.identity ? job.identity.requestKey : active.receipt?.requestKey) === identity.requestKey) {
@@ -397,7 +469,7 @@ export class AssistantGenerationJobs {
     for (const active of this.jobs.values()) active.controller.abort();
     this.executing.clear(); this.finished.clear();
   }
-  finish(job: OwnedAssistantPreparation, terminal = false): void {
+  private finish(job: OwnedAssistantPreparation, terminal = false): void {
     const active = this.jobs.get(job);
     if (active?.receipt && (active.receipt.state === 'completed' || active.failedResponseReceived)) {
       const receipt = active.receipt;
