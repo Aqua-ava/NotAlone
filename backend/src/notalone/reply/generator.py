@@ -130,7 +130,7 @@ class ReplyGenerator:
             self._mark_failed(request, "context_failed")
             raise ReplyContextError("候选回复上下文准备失败。") from None
         try:
-            if context.layered_context is not None:
+            if context.layered_context is not None or context.owner_layered_context is not None:
                 context = self._context.fit_budget(context, validate=self._runtime.validate_prepared)
             self._validate_context(command, context)
             self._validate_current_context(context)
@@ -540,6 +540,7 @@ class ReplyGenerator:
             evidence=context.evidence + tuple(additions),
             tool_calls=context.tool_calls + result.tool_calls,
             layered_scenario_reads=result.layered_scenario_reads,
+            owner_layered_scenario_reads=result.owner_layered_scenario_reads,
             retrieval=append_runtime_receipt(context.retrieval, context.evidence, tuple(additions), result.tool_calls),
         )
 

@@ -281,11 +281,11 @@ def _dependencies_available(
                   AND decision.evidence->>'kind' IS DISTINCT FROM 'erased_guard'
                 UNION ALL
                 SELECT 1 FROM public.scenario_document_version AS version
-                WHERE version.owner_id=%(owner_id)s AND version.contact_id=%(contact_id)s
+                WHERE version.owner_id=%(owner_id)s AND (version.contact_id=%(contact_id)s OR version.contact_id IS NULL)
                   AND version.id=dependency.id AND dependency.id=ANY(%(navigation)s::uuid[])
                 UNION ALL
                 SELECT 1 FROM public.layered_profile_version AS version
-                WHERE version.owner_id=%(owner_id)s AND version.contact_id=%(contact_id)s
+                WHERE version.owner_id=%(owner_id)s AND (version.contact_id=%(contact_id)s OR version.contact_id IS NULL)
                   AND version.id=dependency.id AND NOT version.withdrawn
                   AND dependency.id=ANY(%(navigation)s::uuid[])
                 UNION ALL
@@ -349,6 +349,8 @@ def prepare_assistant_reply_commit(
     except (AssistantSessionRejected, AssistantSessionNotFound):
         raise ReplyStoreInvariantError("助手会话当前输入已改变，不能提交旧候选。") from None
     dependencies = set(turn["dependency_ids"])
+    from notalone.persistence.reply_overview_navigation import navigation_dependency_ids
+    dependencies.update(UUID(identifier) for identifier in navigation_dependency_ids(context))
     dependencies.update(captured_reply_sources(connection, owner_id=request.scope.owner_id,
                                                request_id=request.request_id))
     from notalone.persistence.reply_discussion_dependencies import reply_style_sample_dependencies

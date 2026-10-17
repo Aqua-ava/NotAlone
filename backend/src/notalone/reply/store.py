@@ -109,6 +109,9 @@ class StoredReplyRequest:
     layered_context: dict | None = None
     layered_status: str = "quality_closed"
     layered_scenario_reads: tuple[dict, ...] = ()
+    owner_layered_context: dict | None = None
+    owner_layered_status: str = "quality_closed"
+    owner_layered_scenario_reads: tuple[dict, ...] = ()
 
 
 @dataclass(frozen=True, slots=True, repr=False)

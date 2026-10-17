@@ -118,12 +118,18 @@ def verified_discussion_dependencies(
 ) -> set[UUID]:
     """服务端检索元数据仍复核归属，跨联系人来源必须沿实际本人记忆证明。"""
 
-    if (not isinstance(dependencies, tuple) or any(not isinstance(item, UUID) for item in dependencies)
-            or scope.owner_id in dependencies):
+    if not isinstance(dependencies, tuple) or any(not isinstance(item, UUID) for item in dependencies):
         raise AssistantSessionRejected("invalid_discussion_dependencies")
-    declared = set(dependencies)
+    from notalone.persistence.reply_overview_navigation import registered_navigation_dependencies
+    navigation = registered_navigation_dependencies(connection, scope) & set(dependencies)
+    if navigation and not _dependencies_available(connection, scope, navigation, historical=historical):
+        raise AssistantSessionRejected("source_unavailable")
+    # 仅本次真实保存的整理/导航参与身份可走此后端证明，不授跨联系人正文权限。
+    declared = set(dependencies) - navigation
+    if scope.owner_id in declared:
+        raise AssistantSessionRejected("invalid_discussion_dependencies")
     if not declared:
-        return set()
+        return navigation
     parameters = {"owner_id": scope.owner_id, "contact_id": scope.contact_id,
                   "dependencies": list(declared), "historical": historical}
     scoped_rows = connection.execute(
@@ -199,7 +205,7 @@ def verified_discussion_dependencies(
             refs.discard(scope.contact_id)
         contact_refs.update(refs)
     contact_sources = _capture_original_dependencies(connection, scope, contact_refs, current_contact=True)
-    captured = declared | owner_sources | contact_sources
+    captured = declared | owner_sources | contact_sources | navigation
     if not _dependencies_available(connection, scope, captured, historical=historical):
         raise AssistantSessionRejected("source_unavailable")
     return captured

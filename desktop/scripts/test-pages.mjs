@@ -58,12 +58,17 @@ function pageFixtureEnvironment(options, environment) {
     }
     result[key] = directory;
   }
+  if (options.names?.includes('layered-reply')) {
+    for (const key of ['NOTALONE_LAYERED_OWNER_CONTEXT', 'NOTALONE_LAYERED_SCENARIO_READS']) {
+      if (environment[key] === '1') result[key] = '1';
+    }
+  }
   return result;
 }
 async function run(options) {
   if (options.mode !== 'probe' && (process.env.CONDA_DEFAULT_ENV !== 'NotAlone' || !process.env.CONDA_PREFIX)) throw new Error('page_test_environment: 请先激活 Conda NotAlone');
   const fixtureEnvironment = pageFixtureEnvironment(options, process.env);
-  for (const key of Object.keys(fixtureEnvironment)) {
+  for (const key of Object.keys(fixtureEnvironment).filter(key => key.endsWith('_EVIDENCE_DIR'))) {
     const directory = await realpath(fixtureEnvironment[key]);
     pageFixtureEnvironment(options, { ...fixtureEnvironment, [key]: directory });
     const evidence = await stat(directory);

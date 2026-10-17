@@ -100,7 +100,7 @@ def accepted_candidate_numbers(output: object, payload: dict[str, Any]) -> froze
         candidate = _candidate_texts(candidates[number - 1])
         statuses = [_validate_check(name, checks[name], candidate,
                     sources if name in {"facts", "explanation"} else
-                    {path: text for path, text in sources.items() if not path.startswith(("/layered_context/", "/layered_scenario_reads/"))})
+                    {path: text for path, text in sources.items() if not path.startswith(("/layered_context/", "/layered_scenario_reads/", "/owner_layered_context/", "/owner_layered_scenario_reads/"))})
                     for name in CHECK_CATEGORIES]
         if (all(status == "supported" for status in statuses) and change != "unknown"
                 and (not requires_expansion or change == "expanded")):
@@ -166,16 +166,17 @@ def _source_texts(payload: dict[str, Any]) -> dict[str, str]:
         texts.update({f"/{field}/{index}/text": item["text"]
                       for index, item in enumerate(payload.get(field, [])) if item["text"].strip()})
     # 目录没有正文；仅实际画像条目可以支持事实，版本/引用ID不是事实正文。
-    material = payload.get("layered_context")
-    if isinstance(material, dict):
-        texts.update({f"/layered_context/profile_entries/{index}/text": item["text"]
-                      for index, item in enumerate(material.get("profile_entries", []))
-                      if isinstance(item.get("text"), str) and item["text"].strip()})
-    for read_index, receipt in enumerate(payload.get("layered_scenario_reads", [])):
-        if receipt.get("status") == "succeeded":
-            texts.update({f"/layered_scenario_reads/{read_index}/document/paragraphs/{index}/text": item["text"]
-                          for index, item in enumerate(receipt["document"]["paragraphs"])
+    for prefix in ("", "owner_"):
+        material = payload.get(prefix + "layered_context")
+        if isinstance(material, dict):
+            texts.update({f"/{prefix}layered_context/profile_entries/{index}/text": item["text"]
+                          for index, item in enumerate(material.get("profile_entries", []))
                           if isinstance(item.get("text"), str) and item["text"].strip()})
+        for read_index, receipt in enumerate(payload.get(prefix + "layered_scenario_reads", [])):
+            if receipt.get("status") == "succeeded":
+                texts.update({f"/{prefix}layered_scenario_reads/{read_index}/document/paragraphs/{index}/text": item["text"]
+                              for index, item in enumerate(receipt["document"]["paragraphs"])
+                              if isinstance(item.get("text"), str) and item["text"].strip()})
     return texts
 
 

@@ -45,15 +45,15 @@ export interface ReplyEvidenceItem {
 }
 export type ReplyLayeredStatus = 'loaded' | 'not_allowed' | 'unavailable' | 'budget_omitted' | 'quality_closed';
 export interface ReplyLayeredContext {
-  schemaVersion: 1 | 2;
-  scopeKind: 'contact';
+  schemaVersion: 1 | 2 | 3;
+  scopeKind: 'contact' | 'owner';
   settingsGeneration: number;
   organizationGeneration: number;
   profileVersionId: string | null;
   profileEntries: Array<{ text: string; temporalStatus: 'stable' | 'historical' | 'uncertain'; uncertainty: string;
     references: Array<{ memoryId: string; revision: number; provenanceKind: 'manual_entry' | 'source_supported'; timing: MemoryTiming }> }>;
   directory: Array<{ scenarioId: string; versionId: string; title: string; hint: string; paragraphCount: number; paragraphRange?: [number, number] }>;
-  readPolicy: 'synthetic-contact-layered-v1' | 'synthetic-contact-layered-v2';
+  readPolicy: 'synthetic-contact-layered-v1' | 'synthetic-contact-layered-v2' | 'synthetic-scoped-layered-v3';
   scenarioReadBudget?: { callLimit: number; paragraphLimit: number; characterLimit: number } | null;
   budget: { profileEntries: number; directoryEntries: number; characters: number };
 }
@@ -91,6 +91,9 @@ export interface ReplyEvidenceState {
   layeredContext?: ReplyLayeredContext | null;
   layeredStatus?: ReplyLayeredStatus;
   layeredScenarioReads?: ReplyLayeredScenarioRead[];
+  ownerLayeredContext?: ReplyLayeredContext | null;
+  ownerLayeredStatus?: ReplyLayeredStatus;
+  ownerLayeredScenarioReads?: ReplyLayeredScenarioRead[];
 }
 export interface ReplyEvidenceCommands {
   getEvidenceState(): Promise<ReplyEvidenceState>;
