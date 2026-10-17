@@ -3,6 +3,7 @@ import { withSyntheticBackendFixture } from './synthetic-backend-fixture';
 import { MemoryFixture, type MemoryDatabase } from './memory-backend-fixture';
 import { requestFixtureHttp } from './fixture-transport';
 import { cuaReceiptDirectory, waitForCuaReceipt } from './cua-receipt';
+import { assertOwnerTraceErased } from './owner-trace-proof';
 import { randomUUID } from 'node:crypto';
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -47,11 +48,8 @@ test('实际 App 的新本人删除清理旧提取过程 CUA 验收', async ({ r
   const owner = await traceBackend.readMemorySection(traceBackend.data.contact_ids[0], 'owner');
   const trace = await requestFixtureHttp(traceBackend.infoPath,
     `/api/contacts/${traceBackend.data.contact_ids[0]}/memory-traces/${traceBackend.data.trace_id}`);
-  if (owner.status !== 200 || JSON.stringify(owner.data).includes(traceBackend.data.traced_memory_id)
-      || trace.status !== 200 || trace.data.availability !== 'deleted') {
-    throw new Error('本人记忆删除或提取过程正文清理未收口。');
-  }
+  const proof = assertOwnerTraceErased(owner, trace, traceBackend.data.traced_memory_id);
   await writeFile(path.join(directory, 'runtime-proof.json'), JSON.stringify({
-    owner_memory_deleted: true, trace_availability: trace.data.availability, external_model_calls: 0,
+    ...proof, external_model_calls: 0,
   }), { mode: 0o600, flag: 'wx' });
 });
