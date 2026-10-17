@@ -68,7 +68,7 @@ class AssistantInterruptedAuthorityModesHttpTests(FidelityHttpFixture, unittest.
                 })
                 self.assertEqual(status, 200, explored)
                 action = path + f"/explorations/{explored['exploration_id']}"
-                status, prepared = self.backend.request(action + "/prepare-confirm", {
+                status, prepared = self.backend.request(action + "/prepare-confirm", {"generate": True,
                     "input_version_id": explored["input_version_id"], "suggestion_id": explored["options"][0]["suggestion_id"],
                 })
                 self.assertEqual(status, 200, prepared)

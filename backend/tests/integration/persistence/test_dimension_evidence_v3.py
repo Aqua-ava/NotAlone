@@ -19,7 +19,8 @@ from psycopg.types.json import Jsonb
 
 from notalone.application.memory_service import MemoryService
 from notalone.database_migrations import migrate
-from notalone.memory import MemoryCandidate
+from notalone.memory import AdoptionMethod, MemoryCandidate, SourceDependencyMode
+from notalone.memory.correction import MemoryCorrectionConflictError
 from notalone.memory.dimension_evidence import DimensionEvidence, DimensionEvidenceChangedError
 from notalone.memory.evidence_binding import content_digest
 from notalone.memory_extraction.cli_support import load_contact_messages
@@ -233,7 +234,11 @@ class DimensionEvidenceV3PersistenceTest(unittest.TestCase):
         self._replace_source("我刚到学校。")
         with self.assertRaises(DimensionEvidenceChangedError):
             store.create_candidate(candidate)
-        self.assertEqual([item.candidate_id for item in store.list_pending_candidates(self.scope)], [self.old_id])
+        self.assertEqual(store.list_pending_candidates(self.scope), ())
+        legacy = store.get_candidate(scope=self.scope, candidate_id=self.old_id)
+        self.assertEqual((legacy.status.value, legacy.failure_reason),
+                         ('invalidated', 'correction:generation_unknown'))
+        self.assertEqual((legacy.text, legacy.source_ids), ('旧合成候选', (self.message_id,)))
 
     def test_database_requires_the_only_direct_source_for_nonnull_v3_basis(self) -> None:
         migrate(self.database_url, MIGRATIONS)
@@ -371,7 +376,7 @@ class DimensionEvidenceV3PersistenceTest(unittest.TestCase):
             self.assertFalse(store.get_candidate(
                 scope=self.scope, candidate_id=saved.candidate_id,
             ).dimension_evidence.source_bound)
-            with self.assertRaises(PermissionError):
+            with self.assertRaises(MemoryCorrectionConflictError):
                 store.confirm(scope=self.scope, candidate_id=saved.candidate_id)
             self.assertEqual(store.list_confirmed(self.scope), ())
         finally:
@@ -429,15 +434,32 @@ class DimensionEvidenceV3PersistenceTest(unittest.TestCase):
         for candidate, original in zip(legacy, originals, strict=True):
             read = store.get_candidate(scope=self.scope, candidate_id=candidate.candidate_id)
             self.assertEqual(read.dimension_evidence.to_payload(), original)
-            self.assertEqual(read.status.value, "pending")
+            self.assertIs(read.source_dependency_mode, SourceDependencyMode.ANY)
+            self.assertEqual((read.status.value, read.failure_reason),
+                             ('invalidated', 'correction:generation_unknown'))
+            for method in (AdoptionMethod.AUTO, AdoptionMethod.MANUAL):
+                with self.subTest(method=method), self.assertRaises(MemoryCorrectionConflictError):
+                    store.confirm(scope=self.scope, candidate_id=candidate.candidate_id, adoption_method=method)
+        self.assertEqual(store.list_pending_candidates(self.scope), ())
 
-    def test_rejection_discard_and_source_delete_clear_v3_evidence(self) -> None:
+    def test_rejection_clears_v3_evidence_and_blocks_same_old_source(self) -> None:
         migrate(self.database_url, MIGRATIONS)
         store = PostgresMemoryStore(self.database_url)
         rejected = store.create_candidate(self._producer_candidate())
         self.assertIsNone(store.reject_candidate(
             scope=self.scope, candidate_id=rejected.candidate_id,
         ).dimension_evidence)
+        repeated = store.create_candidate(self._producer_candidate())
+        self.assertEqual((repeated.status.value, repeated.failure_reason),
+                         ('invalidated', 'correction:old_evidence'))
+        self.assertEqual(store.list_pending_candidates(self.scope), ())
+        for method in (AdoptionMethod.AUTO, AdoptionMethod.MANUAL):
+            with self.subTest(method=method), self.assertRaises(MemoryCorrectionConflictError):
+                store.confirm(scope=self.scope, candidate_id=repeated.candidate_id, adoption_method=method)
+
+    def test_discard_clears_v3_evidence(self) -> None:
+        migrate(self.database_url, MIGRATIONS)
+        store = PostgresMemoryStore(self.database_url)
         discarded = store.create_candidate(self._producer_candidate())
         response = self._client(store).request(
             "POST", f"/api/contacts/{self.scope.contact_id}/memory-candidates/{discarded.candidate_id}/discard",
@@ -447,6 +469,10 @@ class DimensionEvidenceV3PersistenceTest(unittest.TestCase):
         self.assertIsNone(store.get_candidate(
             scope=self.scope, candidate_id=discarded.candidate_id,
         ).dimension_evidence)
+
+    def test_source_delete_clears_pending_v3_evidence(self) -> None:
+        migrate(self.database_url, MIGRATIONS)
+        store = PostgresMemoryStore(self.database_url)
         active = store.create_candidate(self._producer_candidate())
         self.assertTrue(active.dimension_evidence.source_bound)
         deletion = PostgresSourceDeletionRepository(self.database_url)
@@ -514,9 +540,12 @@ class DimensionEvidenceV3PersistenceTest(unittest.TestCase):
         )
         current = store.get_candidate(scope=self.scope, candidate_id=saved.candidate_id)
         self.assertEqual(current.text, saved.text)
-        self.assertEqual(current.status.value, "pending")
+        self.assertIs(current.source_dependency_mode, SourceDependencyMode.ANY)
+        self.assertEqual((current.status.value, current.failure_reason),
+                         ('invalidated', 'correction:generation_unknown'))
         self.assertIsNone(current.dimension_evidence)
-        with self.assertRaises(DimensionEvidenceChangedError):
+        self.assertNotIn(saved.candidate_id, {item.candidate_id for item in store.list_pending_candidates(self.scope)})
+        with self.assertRaises(MemoryCorrectionConflictError):
             store.confirm(
                 scope=self.scope, candidate_id=saved.candidate_id,
                 expected_dimension_evidence=saved.dimension_evidence,
@@ -531,10 +560,8 @@ class DimensionEvidenceV3PersistenceTest(unittest.TestCase):
             self.assertTrue(supports_dimension_evidence_version(connection, 1))
             self.assertTrue(supports_dimension_evidence_version(connection, 2))
             self.assertFalse(supports_dimension_evidence_version(connection, 3))
-        self.assertEqual(migrate(self.database_url, MIGRATIONS), (
-            "059_memory_candidate_author_quote_basis.sql",
-            "060_bounded_runtime_evidence.sql",
-        ))
+        self.assertEqual(migrate(self.database_url, MIGRATIONS), tuple(
+            source.name for source in sorted(MIGRATIONS.glob('*.sql')) if source.name[:3] > '058'))
         self.assertEqual(migrate(self.database_url, MIGRATIONS), ())
         with psycopg.connect(self.database_url) as connection:
             self.assertTrue(supports_dimension_evidence_version(connection, 1))

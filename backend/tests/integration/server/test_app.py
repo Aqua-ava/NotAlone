@@ -79,13 +79,13 @@ class BackendServiceAppTest(unittest.TestCase):
         self.assertEqual(response.json(), {"error": "unauthorized"})
 
     def test_unsupported_method_still_requires_token(self) -> None:
-        response = self.client.request("POST", "/api/contacts")
+        response = self.client.request("DELETE", "/api/contacts")
 
         self.assertEqual(response.status_code, 401)
         self.assertEqual(response.json(), {"error": "unauthorized"})
 
         response = self.client.request(
-            "POST",
+            "DELETE",
             "/api/contacts",
             headers={"Authorization": "Bearer test-token"},
         )

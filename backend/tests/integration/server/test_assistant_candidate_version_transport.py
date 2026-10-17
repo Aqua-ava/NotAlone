@@ -129,7 +129,7 @@ class AssistantCandidateVersionTransportTest(candidate_support.CandidateVersionH
     def test_middle_page_404_discards_accumulated_body_and_main_keeps_independent_discussion(self):
         self._source_middle_page("source-deleted")
 
-    def test_middle_page_source409_discards_accumulated_body_and_main_keeps_independent_discussion(self):
+    def test_pending_source_delete_discards_accumulated_body_and_keeps_independent_discussion(self):
         self._source_middle_page("source-pending")
 
     def test_middle_page_unknown_transport_failure_allows_exact_scope_public_retry(self):

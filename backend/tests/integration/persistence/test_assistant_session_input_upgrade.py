@@ -79,7 +79,7 @@ class AssistantSessionInputUpgradeTest(unittest.TestCase):
         finally:
             self.admin.close()
 
-    def _upgrade(self) -> None:
+    def _upgrade(self, *, current_runtime: bool = False) -> None:
         migration_path = ROOT / "database/migrations/051_assistant_session_inputs.sql"
         shutil.copyfile(migration_path, self.migrations / migration_path.name)
         self.assertEqual(migrate(self.database_url, self.migrations), (migration_path.name,))
@@ -92,6 +92,14 @@ class AssistantSessionInputUpgradeTest(unittest.TestCase):
             for path in sorted(self.migrations.glob("*.sql"))
         ])
         self.assertEqual(migrate(self.database_url, self.migrations), ())
+        if current_runtime:
+            # 来源证明覆盖现行闭包，不能让只到051的结构冒充已具备058准备上下文。
+            remaining = tuple(sorted(path.name for path in (ROOT / "database/migrations").glob("*.sql")
+                                     if int(path.name[:3]) > 51))
+            for name in remaining:
+                shutil.copyfile(ROOT / "database/migrations" / name, self.migrations / name)
+            self.assertEqual(migrate(self.database_url, self.migrations), remaining)
+            self.assertEqual(migrate(self.database_url, self.migrations), ())
 
     def test_upgrade_preserves_generation_input_identity_without_copying_its_body(self) -> None:
         turn_id, input_version_id = uuid4(), uuid4()
@@ -198,7 +206,7 @@ class AssistantSessionInputUpgradeTest(unittest.TestCase):
             inputs.read_inputs(self.scope, session_id)
 
     def test_response_discussion_rechecks_target_scope_and_source_status(self) -> None:
-        self._upgrade()
+        self._upgrade(current_runtime=True)
         from notalone.persistence.assistant_session_inputs import PostgresAssistantSessionInputs
         inputs = PostgresAssistantSessionInputs(self.database_url)
         source_id, target_id = uuid4(), uuid4()
@@ -302,7 +310,7 @@ class AssistantSessionInputUpgradeTest(unittest.TestCase):
         self.assertEqual(inputs.read_inputs(self.scope, self.session_id), ())
 
     def test_personal_memory_proves_its_actual_other_contact_raw_source(self) -> None:
-        self._upgrade()
+        self._upgrade(current_runtime=True)
         from notalone.persistence.assistant_session_inputs import PostgresAssistantSessionInputs
         inputs = PostgresAssistantSessionInputs(self.database_url)
         other_contact, source_id, memory_id = uuid4(), uuid4(), uuid4()
@@ -354,7 +362,7 @@ class AssistantSessionInputUpgradeTest(unittest.TestCase):
                     self.assertIs(connection.row_factory, initial_factory)
 
     def test_manual_personal_memory_uses_real_memory_identity_and_rejects_owner_sentinel(self) -> None:
-        self._upgrade()
+        self._upgrade(current_runtime=True)
         from notalone.persistence.assistant_session_inputs import PostgresAssistantSessionInputs
         inputs = PostgresAssistantSessionInputs(self.database_url)
         memory_id = uuid4()
@@ -427,7 +435,7 @@ class AssistantSessionInputUpgradeTest(unittest.TestCase):
         self.assertEqual(inputs.read_inputs(self.scope, self.session_id), ())
 
     def test_discussion_captures_declared_message_originals_before_one_of_two_sources_is_removed(self) -> None:
-        self._upgrade()
+        self._upgrade(current_runtime=True)
         from notalone.persistence.assistant_session_inputs import PostgresAssistantSessionInputs
         inputs = PostgresAssistantSessionInputs(self.database_url)
         message_id = uuid4()

@@ -144,7 +144,7 @@ try {
       assert.equal(state.result, null);
       if (fixture.mode === 'session-deleted') assert(failures.some((item) => item.status === 404 && item.code === 'not_found'));
       else if (fixture.mode === 'current-changed') assert(failures.some((item) => item.status === 409 && item.code === 'assistant_session_read_changed'));
-      else if (fixture.mode.includes('source')) assert(failures.some((item) => item.status === 409 && item.reason === 'source_unavailable'));
+      else if (fixture.mode.includes('source')) assert(failures.some((item) => item.status === 409 && item.reason === 'source_unavailable'), JSON.stringify(failures));
       if (fixture.mode === 'misleading-oversize-code') assert(!calls.some((call) => call.path.startsWith(`${base}?read_part=`)));
       if (fixture.mode === 'oversized-server-error') {
         assert(faultBodyBytes > 1_048_576);

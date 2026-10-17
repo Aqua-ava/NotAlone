@@ -19,6 +19,7 @@ from notalone.application.memory_service import MemoryService
 from notalone.database_migrations import migrate
 from notalone.ingest.import_command import import_file
 from notalone.ingest.models import ExistingContactSelection, ImportConfirmationRequest
+from notalone.memory.correction import MemoryCorrectionConflictError
 from notalone.memory_extraction.adoption import MemoryAdoption
 from notalone.memory_extraction.dimensions import (
     DEFAULT_DIMENSION_RELEASE,
@@ -269,8 +270,15 @@ class AuthorQuoteSourceBridgeTest(unittest.TestCase):
         self.assertFalse(current.dimension_evidence.source_bound)
         exported, = self._export()
         self.assertFalse(exported["dimension_evidence_source_current"])
-        with self.assertRaises(PermissionError):
+        # 冻结来源先拦截已请求删除的世代；人工或自动确认均不能绕过。
+        with self.assertRaises(MemoryCorrectionConflictError):
             self.store.confirm(scope=self.scope, candidate_id=saved.candidate_id)
+        response = self._client().request(
+            "POST", f"/api/contacts/{self.scope.contact_id}/memory-candidates/{saved.candidate_id}/confirm",
+            headers={"Authorization": "Bearer synthetic-bridge-token"},
+        )
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json(), {"error": "memory_correction_conflict"})
         self.assertEqual(self.store.list_confirmed(self.scope), ())
         deletion = PostgresSourceDeletionRepository(self.database_url)
         result = deletion.delete_source(

@@ -9,6 +9,8 @@ from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
 import psycopg
+from psycopg.rows import dict_row
+from psycopg.types.json import Jsonb
 
 from notalone.memory import (
     AdoptionMethod,
@@ -17,6 +19,8 @@ from notalone.memory import (
     MemoryCategory,
 )
 from notalone.persistence import PostgresMemoryStore, PostgresRetrieval
+from notalone.persistence.memory_correction import capture_evidence
+from notalone.memory.correction import MemoryCorrectionConflictError
 from notalone.reply.context import (
     ContextEvidence,
     ReplyContext,
@@ -215,14 +219,22 @@ class PostgresPendingCandidateRetrievalTest(unittest.TestCase):
         source_id: UUID | None = None,
         valid_at: datetime | None = None,
         invalid_at: datetime | None = None,
+        freeze_sources: bool = True,
     ) -> None:
+        frozen = None
+        if freeze_sources:
+            # 新夹具在插入同一事务捕获真实来源；旧NULL快照另有不可回填反例。
+            with connection.cursor(row_factory=dict_row) as cursor:
+                frozen = capture_evidence(cursor, scope=ContactScope(
+                    owner_id or self.owner_id, contact_id or self.contact_id),
+                    source_ids=(source_id or self.source_id,))
         connection.execute(
             """
             INSERT INTO public.memory_candidate (
                 id, owner_id, contact_id, text_content, category, topic,
-                subject, source_ids, status, valid_at, invalid_at
+                subject, source_ids, status, valid_at, invalid_at, correction_evidence
             )
-            VALUES (%s, %s, %s, %s, 'preference', 'work', 'contact', %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, 'preference', 'work', 'contact', %s, %s, %s, %s, %s)
             """,
             (
                 candidate_id,
@@ -233,6 +245,7 @@ class PostgresPendingCandidateRetrievalTest(unittest.TestCase):
                 status,
                 valid_at,
                 invalid_at,
+                Jsonb(frozen) if frozen is not None else None,
             ),
         )
 
@@ -283,6 +296,25 @@ class PostgresPendingCandidateRetrievalTest(unittest.TestCase):
         }
 
         self.assertNotIn(self.source_document_pending_id, pending_ids)
+
+    def test_legacy_null_frozen_generation_is_readable_but_cannot_enter_pending_generation_or_confirm(self) -> None:
+        legacy_id = uuid4()
+        with psycopg.connect(TEST_DATABASE_URL) as connection:
+            self._insert_candidate(connection, legacy_id, '缺原始世代的旧合成候选', freeze_sources=False)
+        store = PostgresMemoryStore(TEST_DATABASE_URL)
+        legacy = store.get_candidate(scope=self._scope(), candidate_id=legacy_id)
+        self.assertEqual((legacy.text, legacy.source_ids, legacy.source_dependency_mode.value),
+                         ('缺原始世代的旧合成候选', (self.source_id,), 'any'))
+        self.assertEqual((legacy.status.value, legacy.failure_reason),
+                         ('invalidated', 'correction:generation_unknown'))
+        self.assertEqual(self.port.search_pending_candidates(scope=self._scope(), candidate_ids=(legacy_id,)), ())
+        for method in (AdoptionMethod.AUTO, AdoptionMethod.MANUAL):
+            with self.subTest(method=method), self.assertRaises(MemoryCorrectionConflictError):
+                store.confirm(scope=self._scope(), candidate_id=legacy_id, adoption_method=method)
+        with psycopg.connect(TEST_DATABASE_URL) as connection:
+            self.assertEqual(connection.execute('SELECT correction_evidence FROM public.memory_candidate WHERE id=%s',
+                (legacy_id,)).fetchone(), (None,))
+        self.assertEqual(store.list_confirmed(self._scope()), ())
 
     def test_candidate_ids_narrow_results_for_revalidation(self) -> None:
         matched = self.port.search_pending_candidates(
@@ -372,25 +404,8 @@ class PostgresPendingCandidateRetrievalTest(unittest.TestCase):
                         invalid_at=invalid_at,
                     )
                 )
-                connection.execute(
-                    """
-                    INSERT INTO public.memory_candidate (
-                        id, owner_id, contact_id, text_content, category,
-                        topic, subject, source_ids, status, valid_at, invalid_at
-                    )
-                    VALUES (%s, %s, %s, %s, 'preference', 'work', 'contact',
-                            %s, 'pending', %s, %s)
-                    """,
-                    (
-                        candidate_id,
-                        owner_id,
-                        contact_id,
-                        text,
-                        [source_id],
-                        valid_at,
-                        invalid_at,
-                    ),
-                )
+                self._insert_candidate(connection, candidate_id, text, owner_id=owner_id,
+                    contact_id=contact_id, source_id=source_id, valid_at=valid_at, invalid_at=invalid_at)
 
         try:
             memory_results = InMemoryRetrieval(

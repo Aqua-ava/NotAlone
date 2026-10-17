@@ -246,6 +246,7 @@ class AssistantSessionReadTransportTest(FidelityHttpFixture, unittest.TestCase):
         self.assertEqual(blocked["error"], "input_budget_exceeded")
         self.assertGreater(blocked["input_budget"]["total_tokens"], 100_000)
         self.assertEqual(self.reply_model.seen_model_payloads, [])
+        self.assertEqual(self.reply_model.review_calls, 0)
         self.assertEqual(len(decisions), 1)
         attempted = json.loads(next(message["content"] for message in counters[0].seen_payloads[0]["messages"]
                                     if message["role"] == "user"))
@@ -261,11 +262,12 @@ class AssistantSessionReadTransportTest(FidelityHttpFixture, unittest.TestCase):
                                     newDraft="合成新开始的简短原句。")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(len(self.reply_model.seen_model_payloads), 1)
+        self.assertEqual(self.reply_model.review_calls, 0)
         new_input = json.loads(next(message["content"] for message in self.reply_model.seen_model_payloads[0]["messages"]
                                    if message["role"] == "user"))
         self.assertEqual(new_input["assistant_discussion"]["items"], [])
         self.assertEqual(new_input["draft_text"], "合成新开始的简短原句。")
-        self.assertEqual(len(decisions), 2)
+        self.assertEqual(len(decisions), 3)
         self.assertEqual(decisions[-1].state.value, "ready")
         self.assertEqual(limited.request(path), (200, saved))
 
@@ -288,7 +290,8 @@ class AssistantSessionReadTransportTest(FidelityHttpFixture, unittest.TestCase):
                 self._guard_read(contact_id, path, ids, "source-pending", sourceId=source_id)
                 status, saved = self.backend.request(path)
                 self.assertEqual(status, 200)
-                self.assertEqual(saved["inputs"][-1]["state"], "unavailable")
+                # 删除请求已同步擦除派生正文，原始资料仍等待后台清理。
+                self.assertEqual(saved["inputs"][-1]["state"], "redacted")
                 self.assertIsNone(saved["inputs"][-1]["content"])
             finally:
                 release_global_worker_lock(gate)

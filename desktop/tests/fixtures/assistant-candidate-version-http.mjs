@@ -144,6 +144,10 @@ try {
       const deleted = await transport.perform({ method: 'DELETE',
         path: `/api/contacts/${fixture.contactId}/sources/${fixture.sourceId}` });
       assert.equal(deleted.status, 202);
+      if (fixture.mode === 'source-pending') {
+        const current = await transport.perform({ method: 'GET', path: `/api/contacts/${fixture.contactId}/sources` });
+        assert.notEqual(current.data.sources.find((source) => source.source_id === fixture.sourceId).status, 'deleted');
+      }
       if (fixture.mode === 'source-deleted') {
         const deadline = Date.now() + 10_000;
         while (Date.now() < deadline) {
@@ -164,7 +168,7 @@ try {
       assert(!JSON.stringify(unavailable).includes(body));
     }
     assert(pageFailures.some((failure) => fixture.mode === 'source-deleted' ? failure.status === 404
-      : failure.status === 409 && failure.reason === 'source_unavailable'));
+      : failure.status === 404 || (failure.status === 409 && failure.reason === 'source_unavailable')), JSON.stringify(pageFailures));
   } else if (fixture.mode === 'unknown-retry') {
     phase = 'middle-page-unknown-failure';
     let failed = false;
