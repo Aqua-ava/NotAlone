@@ -8,7 +8,13 @@ export function currentCorrectionTarget(value: LayeredMemory, request: Pick<Laye
     : profile && profile.versionId === request.versionId ? profile.entries[request.itemIndex] : undefined;
 }
 
-export function summaryErrorBody(request: LayeredMemoryManagementRequest | Omit<LayeredMemoryManagementRequest, 'contactId' | 'scopeRevision'>) {
+export function correctionBody(request: LayeredMemoryManagementRequest | Omit<LayeredMemoryManagementRequest, 'contactId' | 'scopeRevision'>) {
   return { organization_generation: request.organizationGeneration, target_kind: request.targetKind,
-    version_id: request.versionId, item_index: request.itemIndex, reason: request.reason, operation_id: request.operationId };
+    version_id: request.versionId, item_index: request.itemIndex, ...(request.action === 'summary-error'
+      ? { reason: request.reason, operation_id: request.operationId } : { memory_id: request.memoryId }) };
+}
+
+export function validCorrectionTarget(value: LayeredMemory, request: Parameters<typeof currentCorrectionTarget>[1] & { action: string; memoryId?: string }) {
+  const target = currentCorrectionTarget(value, request);
+  return !!target && (request.action !== 'fact-error' || target.references.some(reference => reference.memoryId === request.memoryId));
 }

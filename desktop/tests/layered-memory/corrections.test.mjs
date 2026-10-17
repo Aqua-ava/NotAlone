@@ -37,3 +37,29 @@ for (const scope of ['contact', 'owner']) for (const targetKind of ['scenario', 
     f.disconnect();
   });
 }
+
+for (const scope of ['contact', 'owner']) for (const targetKind of ['scenario', 'profile']) {
+  test(`${scope} 的 ${targetKind} 事实纠错仅接受实际引用并返回权威叶版本`, async () => {
+    let posted;
+    const f = await fixture(async request => {
+      if (request.method === 'POST') posted = request;
+      return { generation: 1, data: profilePayload({ scope_kind: scope, contact_id: scope === 'owner' ? null : ids.contact,
+        ...(posted ? { correction_target: { memory_id: ids.other, revision: 2 }, scenarios: [], profile: null } : {}) }) };
+    });
+    const read = () => scope === 'owner' ? f.bridge.readOwnerLayeredMemory({}) : f.bridge.readLayeredMemory(f.selection());
+    const state = async () => scope === 'owner' ? f.bridge.getOwnerLayeredMemoryState() : (await f.bridge.getState()).layeredMemory;
+    const manage = request => scope === 'owner' ? f.bridge.manageOwnerLayeredMemory(request) : f.bridge.manageLayeredMemory({ ...f.selection(), ...request });
+    await read();
+    const base = { action: 'fact-error', settingsGeneration: 1, organizationGeneration: 1, targetKind,
+      versionId: targetKind === 'scenario' ? ids.version : ids.profile, itemIndex: 0, memoryId: ids.memory };
+    await assert.rejects(manage({ ...base, memoryId: ids.other }));
+    assert.equal(posted, undefined);
+    await manage(base);
+    assert.equal(posted.path.endsWith('/fact-error'), true);
+    assert.deepEqual(posted.body, { settings_generation: 1, organization_generation: 1, target_kind: targetKind,
+      version_id: base.versionId, item_index: 0, memory_id: ids.memory });
+    assert.deepEqual((await state()).value.correctionTarget, { memoryId: ids.other, revision: 2 });
+    await read();
+    f.disconnect();
+  });
+}

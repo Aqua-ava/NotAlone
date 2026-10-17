@@ -8,6 +8,7 @@ export function OwnerLayeredMemoryPanel() {
   const [error, setError] = useState('');
   const [text, setText] = useState('');
   const [showFacts, setShowFacts] = useState(false);
+  const [factTarget, setFactTarget] = useState<{ memoryId: string; revision: number; editing: boolean } | null>(null);
   const revision = useRef(-1);
   useEffect(() => {
     let active = true;
@@ -23,7 +24,11 @@ export function OwnerLayeredMemoryPanel() {
     setError('');
     try { await command(); } catch { setError('本人资料范围或设置已变化，请重新读取后重试。'); }
   }
-  const facts = () => { setShowFacts(true); void run(() => window.notalone.memory.readOwnerMemories()); };
+  const facts = (target?: { memoryId: string; revision: number }, editing = false) => {
+    setFactTarget(target ? { ...target, editing } : null); setShowFacts(true); void run(() => window.notalone.memory.readOwnerMemories());
+  };
+  const correctionTarget = state.value?.correctionTarget;
+  useEffect(() => { if (correctionTarget) facts(correctionTarget, true); }, [correctionTarget?.memoryId, correctionTarget?.revision]);
   return <>
     <form className="memory-section memory-edit-form" aria-label="补充本人资料" onSubmit={event => {
       event.preventDefault(); setError('');
@@ -36,10 +41,16 @@ export function OwnerLayeredMemoryPanel() {
     </form>
     {showFacts && <section className="memory-section" aria-label="本人底层记忆">
       <h2>本人底层记忆</h2><p>仅当前本人的已采纳资料；自动采纳不代表用户确认。</p>
-      <button className="button" disabled={state.mutation.phase === 'working'} onClick={facts}>重新读取本人底层记忆</button>
+      <button className="button" disabled={state.mutation.phase === 'working'} onClick={() => facts()}>重新读取本人底层记忆</button>
       {state.memories?.phase === 'loading' && <p role="status">正在读取本人底层记忆…</p>}
       {state.memories?.phase === 'error' && <p role="alert">本人底层记忆读取失败，旧内容已撤下。</p>}
       {state.memories?.phase === 'ready' && state.memories.items.length === 0 && <p>暂无本人底层记忆。</p>}
+      {factTarget && <section aria-label="本次纠错的本人底层记忆"><h3>本次纠错的本人底层记忆</h3>
+        {state.memories?.phase === 'ready' && state.memories.items.filter(memory => memory.memoryId === factTarget.memoryId && memory.revision === factTarget.revision)
+          .map(memory => <OwnerFactCard key={`${memory.memoryId}:${memory.revision}`} memory={memory} initiallyEditing={factTarget.editing} busy={state.mutation.phase === 'working'} run={run} />)}
+        {state.memories?.phase === 'ready' && !state.memories.items.some(memory => memory.memoryId === factTarget.memoryId && memory.revision === factTarget.revision)
+          && <p role="alert">目标本人底层版本已变化或不可用，请重新核对资料；不会改选其他记忆。</p>}
+      </section>}
       {state.memories?.phase === 'ready' && state.memories.items.map(memory => <OwnerFactCard key={`${memory.memoryId}:${memory.revision}`} memory={memory}
         busy={state.mutation.phase === 'working'} run={run} />)}
     </section>}
@@ -52,8 +63,8 @@ export function OwnerLayeredMemoryPanel() {
 }
 
 
-function OwnerFactCard({ memory, busy, run }: { memory: ActiveMemory; busy: boolean; run: (command: () => Promise<void>) => Promise<void> }) {
-  const [editing, setEditing] = useState(false);
+function OwnerFactCard({ memory, busy, run, initiallyEditing = false }: { memory: ActiveMemory; busy: boolean; run: (command: () => Promise<void>) => Promise<void>; initiallyEditing?: boolean }) {
+  const [editing, setEditing] = useState(initiallyEditing);
   const [deleting, setDeleting] = useState(false);
   const [text, setText] = useState(memory.text);
   return <article className="memory-card">

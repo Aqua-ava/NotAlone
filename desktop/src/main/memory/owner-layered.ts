@@ -2,7 +2,7 @@ import { activeMemories } from './read';
 import type { MemoryAdditionRequest, OwnerLayeredMemoryManagementRequest, OwnerLayeredMemoryState } from '../../shared/memory-bridge';
 import type { BackendHost } from '../backend/host';
 import { layeredMemory } from './layered-read';
-import { currentCorrectionTarget, summaryErrorBody } from './layered-correction';
+import { validCorrectionTarget, correctionBody } from './layered-correction';
 
 // 本人范围仅绑定后端连接；联系人选择不参与本人请求和状态有效性。
 export class OwnerLayeredMemoryController {
@@ -97,10 +97,10 @@ export class OwnerLayeredMemoryController {
     this.synchronize();
     const value = this.state.value;
     const work = request.action === 'pause' || request.action === 'continue';
-    const correction = request.action === 'summary-error';
+    const correction = request.action === 'summary-error' || request.action === 'fact-error';
     if (this.generation === undefined || this.deleting || this.state.mutation.phase === 'working' || this.state.phase !== 'ready' || !value
       || request.settingsGeneration !== value.settingsGeneration
-      || (correction && !currentCorrectionTarget(value, request))
+      || (correction && !validCorrectionTarget(value, request))
       || (work && (!value.workId || request.workRevision !== value.workRevision))
       || (request.action === 'withdraw-scenario' && (request.organizationGeneration !== value.organizationGeneration || !value.scenarios.some(item => item.versionId === request.scenarioVersionId)))
       || (request.action === 'withdraw-profile' && (!value.profile || request.profileVersionId !== value.profile.versionId || request.organizationGeneration !== value.organizationGeneration))) throw new Error('本人资料设置已变化，请重新读取。');
@@ -114,7 +114,7 @@ export class OwnerLayeredMemoryController {
           ...(request.action === 'enable' ? { purpose_confirmed: true } : {}),
           ...(request.action === 'withdraw-scenario' ? { organization_generation: request.organizationGeneration, scenario_version_id: request.scenarioVersionId } : {}),
           ...(request.action === 'withdraw-profile' ? { organization_generation: request.organizationGeneration, profile_version_id: request.profileVersionId } : {}),
-          ...(correction ? summaryErrorBody(request) : {}) } });
+          ...(correction ? correctionBody(request) : {}) } });
       this.synchronize();
       if (this.operation !== operation || result.generation !== generation) return;
       this.update({ phase: 'ready', value: layeredMemory(result.data, null), mutation: { phase: 'success', message: '本人资料操作已完成并核对。' } }); this.schedule();

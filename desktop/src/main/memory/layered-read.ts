@@ -112,6 +112,8 @@ export function layeredMemory(value: unknown, contactId: string | null): Layered
       ...(budget.max_profile_entries === undefined ? {} : { maxProfileEntries: integer(budget.max_profile_entries) }) },
     correctionRevision: entry.correction_revision === undefined ? 0 : integer(entry.correction_revision),
     protectedCount: entry.protected_count === undefined ? 0 : integer(entry.protected_count),
+    correctionTarget: entry.correction_target === undefined ? null : {
+      memoryId: identifier(record(entry.correction_target).memory_id), revision: integer(record(entry.correction_target).revision, 1) },
     feedback: entry.feedback === undefined ? [] : list(entry.feedback, value => {
       const feedback = record(value);
       const state = enumeration(feedback.state, ['active', 'erased_guard']);

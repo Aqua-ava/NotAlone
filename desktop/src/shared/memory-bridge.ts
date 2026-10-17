@@ -160,10 +160,11 @@ export interface LayeredMemory {
   correctionRevision: number;
   protectedCount: number;
   feedback: { id: string; targetKind: 'scenario' | 'profile'; versionId: string | null; itemIndex: number; reason: string | null; state: 'active' | 'erased_guard' }[];
+  correctionTarget: { memoryId: string; revision: number } | null;
 }
 export interface LayeredMemoryReadRequest extends ContactSelection { mappingCursor?: string | null }
 export interface LayeredMemoryManagementRequest extends ContactSelection {
-  action: 'enable' | 'refresh' | 'disable' | 'delete' | 'withdraw-profile' | 'withdraw-scenario' | 'pause' | 'continue' | 'summary-error';
+  action: 'enable' | 'refresh' | 'disable' | 'delete' | 'withdraw-profile' | 'withdraw-scenario' | 'pause' | 'continue' | 'summary-error' | 'fact-error';
   settingsGeneration: number;
   organizationGeneration?: number;
   profileVersionId?: string;
@@ -175,7 +176,9 @@ export interface LayeredMemoryManagementRequest extends ContactSelection {
   itemIndex?: number;
   reason?: string;
   operationId?: string;
+  memoryId?: string;
 }
+export type LayeredMemoryManagementOptions = Omit<LayeredMemoryManagementRequest, 'contactId' | 'scopeRevision' | 'action' | 'settingsGeneration'>;
 export interface MemoryReadingState {
   revision: number;
   contactId: string | null;

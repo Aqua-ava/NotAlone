@@ -6,7 +6,7 @@ import { activeMemories, memorySources, memoryVersions, pendingCandidates } from
 import type { ContactSelection } from '../../shared/contact-session-bridge';
 import { contactRelationshipOverview, ownerFactsPreferencesOverview } from './overview-read';
 import { layeredMemory } from './layered-read';
-import { currentCorrectionTarget, summaryErrorBody } from './layered-correction';
+import { validCorrectionTarget, correctionBody } from './layered-correction';
 
 const sections: MemorySectionName[] = ['contact', 'owner', 'pending', 'sources'];
 const empty = (): Pick<MemoryReadingState, MemorySectionName | 'history' | 'overview' | 'ownerOverview' | 'layeredMemory'> => ({
@@ -153,11 +153,11 @@ export class MemoryReadingController {
     this.synchronizeScope();
     const scope = this.scope, value = this.state.layeredMemory.value;
     const workAction = request.action === 'pause' || request.action === 'continue';
-    const correction = request.action === 'summary-error';
+    const correction = request.action === 'summary-error' || request.action === 'fact-error';
     if (!scope || request.contactId !== scope.contactId || request.scopeRevision !== scope.scopeRevision || this.mutation
       || this.sourceDeletionDepth || this.state.layeredMemory.phase !== 'ready' || !value || value.settingsGeneration !== request.settingsGeneration
-      || !['enable', 'refresh', 'disable', 'delete', 'withdraw-profile', 'pause', 'continue', 'summary-error'].includes(request.action)
-      || (correction && !currentCorrectionTarget(value, request))
+      || !['enable', 'refresh', 'disable', 'delete', 'withdraw-profile', 'pause', 'continue', 'summary-error', 'fact-error'].includes(request.action)
+      || (correction && !validCorrectionTarget(value, request))
       || (workAction && (!value.workId || request.workRevision !== value.workRevision || value.workRevision < 1))
       || (!workAction && request.workRevision !== undefined)
       || (request.action === 'enable' && request.purposeConfirmed !== true)
@@ -177,7 +177,7 @@ export class MemoryReadingController {
       const result = await this.backend.requestJson({ method: 'POST', path: `/api/contacts/${scope.contactId}/layered-memory/${request.action}`,
         body: { ...(workAction ? { work_revision: request.workRevision } : {}), settings_generation: request.settingsGeneration, ...(request.action === 'enable' ? { purpose_confirmed: true } : {}),
           ...(request.action === 'withdraw-profile' ? { organization_generation: request.organizationGeneration, profile_version_id: request.profileVersionId } : {}),
-          ...(correction ? summaryErrorBody(request) : {}) },
+          ...(correction ? correctionBody(request) : {}) },
         signal: operation.abort.signal });
       if (!current() || result.generation !== scope.generation) return;
       const value = layeredMemory(result.data, scope.contactId);
