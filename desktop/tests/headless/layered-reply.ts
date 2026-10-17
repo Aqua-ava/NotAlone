@@ -24,7 +24,9 @@ export async function layeredReply(browser: Browser, origin: string) {
         await helper.getByRole('checkbox', { name: '结合关系语境', exact: true }).setChecked(context);
         if (readScenario) await fixture.command('plan_scenario_reads', { text });
         else await fixture.command('plan', { plan: { text, basis: '按本次草稿，不扩大未知事实。' } });
-        await helper.getByRole('button', { name: '生成候选', exact: true }).click();
+        // 后续同输入轮显式重新生成，避免复用上一轮的幂等请求。
+        const regenerate = helper.getByRole('button', { name: '重新生成', exact: true });
+        await (await regenerate.count() ? regenerate : helper.getByRole('button', { name: '生成候选', exact: true })).click();
         try { await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveValue(text); }
         catch (error) { process.stderr.write((await helper.locator('body').innerText()).slice(-8000)); throw error; }
         await helper.getByRole('button', { name: '展开候选1依据', exact: true }).click();
