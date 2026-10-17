@@ -7,7 +7,7 @@ import math
 from dataclasses import dataclass, field, replace
 from pathlib import PurePosixPath
 from threading import Lock
-from typing import Any, Callable, Mapping
+from typing import Any, Awaitable, Callable, Mapping
 from uuid import UUID
 
 from deepagents.backends.protocol import (
@@ -17,8 +17,10 @@ from deepagents.backends.protocol import (
 )
 from deepagents.middleware.skills import SkillsMiddleware
 from langchain.agents import create_agent
+from langchain.agents.middleware import AgentMiddleware, TracePolicy, omit_payload
 from langchain.agents.structured_output import ToolStrategy
 from langchain.tools import ToolRuntime, tool
+from langchain.tools.tool_node import ToolCallRequest
 from langchain_core.language_models import BaseChatModel
 from langchain_core.tools import BaseTool
 from langgraph.errors import GraphRecursionError
@@ -492,6 +494,23 @@ def _create_read_file_tool(
     return read_file
 
 
+class ScenarioArgumentsMiddleware(AgentMiddleware):
+    """先移开框架保留参数，再由工具核原始请求并生成确定拒绝。"""
+
+    trace_policy = TracePolicy(process_inputs=omit_payload, process_outputs=omit_payload)
+
+    async def awrap_tool_call(self, request: ToolCallRequest,
+                             handler: Callable[[ToolCallRequest], Awaitable[Any]]) -> Any:
+        call = request.tool_call
+        if call["name"] == "read_scenario":
+            allowed = {"scenario_id", "paragraph_start", "paragraph_end"}
+            if set(call["args"]) - allowed:
+                # 不改原始AIMessage；工具仍按tool_call_id读取原参数并拒绝，绝不静默采纳。
+                request = request.override(tool_call={**call, "args": {
+                    key: value for key, value in call["args"].items() if key in allowed}})
+        return await handler(request)
+
+
 def _create_scenario_tool() -> BaseTool:
     # JSON schema保留实际类型及额外参数，让所有拒绝也成为真实ToolMessage。
     @tool("read_scenario", args_schema={"type": "object", "properties": {
@@ -797,6 +816,7 @@ class LangChainReplyRuntime:
                 model=self._model,
                 tools=agent_tools,
                 middleware=[
+                    ScenarioArgumentsMiddleware(),
                     SkillsMiddleware(
                         backend=backend,
                         sources=[(f"{SKILL_SOURCE}/", "NotAlone")],

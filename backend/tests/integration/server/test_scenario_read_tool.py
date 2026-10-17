@@ -23,8 +23,14 @@ class TwoScenarioProposal(ControlledProposal):
 class ScenarioReadHttpTest(OverviewReplyHttpFixture, unittest.TestCase):
     controlled = LayeredReplyHttpTest.controlled
     read = LayeredReplyHttpTest.read
-    enable = LayeredReplyHttpTest.enable
     prepare_layered_reply = LayeredReplyHttpTest.prepare_layered_reply
+
+    def enable(self, backend, contact):
+        status, result = backend.request(f"/api/contacts/{contact}/layered-memory/enable", {
+            "settings_generation": self.read(backend, contact)["settings_generation"],
+            "purpose_confirmed": True}, timeout=40)
+        self.assertEqual(status, 200, result)
+        return result["layered_memory"]
 
     def use_tools(self, *, calls=3, paragraphs=4, characters=4000, directory=4):
         from notalone.reply.layered_context import LayeredReplyBudget, ScenarioReadBudget
@@ -40,7 +46,8 @@ class ScenarioReadHttpTest(OverviewReplyHttpFixture, unittest.TestCase):
     def complete(self, contact, path, plans):
         first_call = len(self.reply_model.seen_calls)
         self.reply_model.plans.extend([*plans, {"text": "聊聊共同课程。", "basis": "按实际提供的资料。"}])
-        status, turn = self.backend.request(path + "/replies", self.rewrite_body(contact, "聊聊共同课程。"), timeout=30)
+        self.last_complete_body = self.rewrite_body(contact, "聊聊共同课程。")
+        status, turn = self.backend.request(path + "/replies", self.last_complete_body, timeout=30)
         self.assertEqual(status, 200, turn)
         evidence = self._get(self.backend, self.evidence_path(contact, turn))
         sent = [json.loads(message.content) for message in self.reply_model.seen_calls[-1]
@@ -313,6 +320,7 @@ class ScenarioReadHttpTest(OverviewReplyHttpFixture, unittest.TestCase):
         restarted = self._backend(self.owner_id)
         self.assertNotEqual(restarted.request(f"/api/contacts/{contact}/replies/{saved['reply_request_id']}/evidence")[0], 200)
         self.assertNotIn("按实际提供的资料", str(self._get(restarted, path)))
+        self.assertNotEqual(restarted.request(path + "/replies", self.last_complete_body)[0], 200)
         self.assertEqual(len(self.reply_model.seen_calls), calls)
 
     def test_final_writer_revalidates_the_tool_body_after_model_validation(self):
@@ -390,8 +398,10 @@ class ScenarioReadHttpTest(OverviewReplyHttpFixture, unittest.TestCase):
     def test_model_cannot_hide_an_extra_argument_behind_framework_runtime_injection(self):
         contact, _, _, ready, path = self.prepare_layered_reply()
         self.use_tools()
-        evidence, _ = self.complete(contact, path, [self.tool_plan(ready["scenarios"][0]["scenario_id"],
-            runtime={"owner_id": "model-supplied"})])
-        receipt = evidence["layered_scenario_reads"][0]
-        self.assertEqual(receipt["status"], "invalid_arguments")
-        self.assertNotIn("document", receipt)
+        identifier = ready["scenarios"][0]["scenario_id"]
+        evidence, _ = self.complete(contact, path, [
+            self.tool_plan(identifier, **{key: {"owner_id": "model-supplied"}})
+            for key in ("runtime", "config", "self")])
+        receipts = evidence["layered_scenario_reads"]
+        self.assertEqual([receipt["status"] for receipt in receipts], ["invalid_arguments"] * 3)
+        self.assertTrue(all("document" not in receipt for receipt in receipts))
