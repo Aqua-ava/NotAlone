@@ -18,7 +18,9 @@
 - core closed接线已集成；私有runner16合成检查与双审通过，细节见/tmp下core-profile-ready.md；等最终snapshot才新API。
 - reference 原Pro16场28/32已闭账：审核14窗 safe8/general6；A15 V无法留正文而unknown，A16 unrun。
 - reference teaching场已closed28/32，14审safe10/general4、完整9/18；A15 capture unknown/A16 unrun。结果59da7a93已集成。
-- reference剩A05程序理由缺口在独立修复；先收提交再统一冻结三线，不启动当前不完整配置。
+- A05严格单消息理由修复1491348a→78241cc8已集成；84相关及2源码mypy通过，独立复核无产品问题。
+- 统一913项全量已通过（35.679秒）；旧omitted断言按批准合同修正，14审核模块和独立增量Spec通过，无产品门/Gold变化。
+- 下一步同提交冻结三线：core fixed6 cap12→原门过再heldout4 cap8；reference retention原16 cap32；bounded双max原15 cap30。
 - 生产放行表为空；task03第一AC未满足，State=claimed，goal=active。
 - 后续仍须原15七正控/七轴及生命周期、core6/4、reference16质量验收；不得降低标准或修改Gold。
 - 所有新场仅授权合成隔离数据；无新真实联系人、聊天发送、业务迁移、push或PR。

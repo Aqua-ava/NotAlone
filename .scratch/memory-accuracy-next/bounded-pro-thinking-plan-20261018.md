@@ -10,7 +10,7 @@ e00279a0在原P01因E类别/期限错误、V supported且无issues触发potentia
 
 - 新增独立闭集provider profile及请求合同版本；旧Flash、Pro Emax/Vnone和reference/core配置保持原合同。
 - 官方deepseek-v4-pro，E与V均thinking enabled/reasoning_effort=max，两个实际HTTP payload均不含tool_choice，max_tokens仍8192。
-- E保持bounded-dependency-teaching-v2，V保持当前nullable-proof-v3原提示/schema；来源守卫、compiler、proof producer和Gold不改。
+- E保持bounded-dependency-teaching-v2，V保持当前nullable-proof-v3原提示/schema；本provider改动自身不改来源守卫、compiler、proof producer或Gold。联合源码另含A05严格单消息出借理由修复，仅追加reason、不改其它13字段；原15的多消息出借不触发此helper，不把联合验证称为单项干预。
 - 正式导入/loader/指定任务/实际worker/recorded SDK/隔离PG/API路径不变；通过既有评测provider注入，不新增runner、迁移、任务字段或生产开关。
 - 三键任务配置仍只保存模式与规则摘要；本配置由评测注册/冻结/实际请求/trace绑定，不宣称普通任务恢复会自动恢复该评测provider。
 - 原15窗、7正控及原Gold，cap30、零重试、300秒请求限时、既有绝对截止；新目录/run/冻结。RAW先封存再FULL，任何安全/未知/非法输出仍硬停，旧场额度不复用。

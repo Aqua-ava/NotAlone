@@ -172,14 +172,17 @@ class BoundedPhasedAuditTest(unittest.TestCase):
         audit = self.audit()
         self.assertEqual(audit.case_positions, tuple(range(15)))
         self.assertEqual(audit.case_set, "bounded15")
+        self.assertEqual(self.audit(verification_tool_choice="omitted").verification_tool_choice, "omitted")
         for key, value in (
             ("case_positions", (0,)), ("extraction_mode", "grounded-v4"),
             ("verification_mode", "nullable-proof-v1"), ("extraction_tool_choice", "forced"),
-            ("verification_tool_choice", "omitted"), ("reference_version", "legacy-v1"),
+            ("reference_version", "legacy-v1"),
             ("execution_plan", "original"), ("case_set", "full140"),
         ):
             with self.subTest(key=key), self.assertRaises(ValueError):
                 self.audit(**{key: value})
+        with self.assertRaisesRegex(EvaluationBudgetAbort, "evaluation_policy_invalid"):
+            self.audit(verification_tool_choice="auto")
         self.assertEqual(self.pending["status"], "agent_reference_pending_review")
 
     def test_actual_sources_raw_seal_full_execution_and_independent_axes_survive(self):
