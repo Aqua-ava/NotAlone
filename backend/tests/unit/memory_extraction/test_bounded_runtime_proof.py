@@ -560,23 +560,35 @@ class BoundedRuntimeSdkTest(unittest.TestCase):
             payload = json.loads(content)
             guide = payload.pop("position_guide")
             self.assertEqual(payload, json.loads(baseline))
-            self.assertEqual((guide["version"], guide["unit"], guide["block_width"]), (1, "unicode_codepoint", 8))
+            self.assertEqual((guide["version"], guide["unit"], guide["block_width"]), (2, "unicode_codepoint", 1))
             self.assertEqual(guide["messages"][0]["message_id"], str(window.messages[0].message_id))
             self.assertEqual(guide["candidates"][0]["candidate_index"], 0)
             for row, original in ((guide["messages"][0], window.messages[0].text), (guide["candidates"][0], fact.text)):
                 self.assertEqual(row["codepoint_length"], len(original))
                 self.assertEqual("".join(block["text"] for block in row["blocks"]), original)
+                self.assertEqual(len(row["blocks"]), len(original))
                 for index, block in enumerate(row["blocks"]):
-                    self.assertEqual(block, {"start": index * 8, "end": min(index * 8 + 8, len(original)),
-                                             "text": original[index * 8:index * 8 + 8]})
+                    self.assertEqual((block["start"], block["end"], len(block["text"])), (index, index + 1, 1))
+            self.assertEqual(guide["messages"][0]["blocks"][:4], [
+                {"start": 0, "end": 1, "text": "😀"},
+                {"start": 1, "end": 2, "text": "e"},
+                {"start": 2, "end": 3, "text": "\u0301"},
+                {"start": 3, "end": 4, "text": "“"},
+            ])
+            self.assertEqual(guide["messages"][0]["blocks"][11], {"start": 11, "end": 12, "text": "\n"})
+            self.assertEqual(guide["candidates"][0]["blocks"][5], {"start": 5, "end": 6, "text": "“"})
         self.assertEqual(len(self.requests), 4)
 
     def test_position_guide_limits_omit_whole_guide_without_truncating_inputs(self):
-        from notalone.memory_extraction.verification_adapters import _verification_text
+        from notalone.memory_extraction.verification_adapters import LangChainSourceVerificationRuntime, _verification_text
         base = window_for("我刚到家。")
         fact = compiled_fact(base)
         cases = [
-            (replace(base, messages=(replace(base.messages[0], text="甲" * 4096),)), (replace(fact, text="乙" * 4096),), True),
+            (base, (fact,), True),
+            (replace(base, messages=(replace(base.messages[0], text="甲" * 512),)), (replace(fact, text="乙" * 512),), True),
+            # 每条和总码点数合法，逐码点标尺仅因128KiB序列化上限整体省略。
+            (replace(base, messages=(replace(base.messages[0], text="甲" * 4096),)), (replace(fact, text="乙" * 4096),), False),
+            (replace(base, messages=(replace(base.messages[0], text="甲" * 4097),)), (fact,), False),
             (base, (replace(fact, text="乙" * 4097),), False),
             (messages_window(["甲"] * 5), (fact,), False),
             (base, tuple(replace(fact, text="乙" * 137) for _ in range(60)), False),
@@ -585,7 +597,12 @@ class BoundedRuntimeSdkTest(unittest.TestCase):
         for window, facts, expected in cases:
             with self.subTest(messages=len(window.messages), candidates=len(facts), length=len(facts[0].text)):
                 baseline = json.loads(_verification_text(window, facts))
-                actual = json.loads(_verification_text(window, facts, include_position_guide=True))
+                raw = [{"candidate_index": index, "verdict": "uncertain", "issues": ["meaning"], "evidence": []}
+                       for index in range(len(facts))]
+                model = self.model(tool_name="SourceVerificationOutput", arguments={"results": raw})
+                runtime = LangChainSourceVerificationRuntime(model=model).for_mode("nullable-proof-v3")
+                runtime.verify(window=window, facts=facts)
+                actual = json.loads(self.requests[-1][2]["messages"][1]["content"])
                 guide = actual.pop("position_guide", None)
                 self.assertEqual(guide is not None, expected)
                 self.assertEqual(actual, baseline)
