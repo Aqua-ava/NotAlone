@@ -33,7 +33,7 @@ def organization_rules_identity():
         'application/organization_runtime.py': {'ConfiguredSuiteSource'},
         'memory/organization_quality.py': {'qualification', 'snapshot', 'validate_qualification', 'publication_guard', 'check_response_identity'},
         'persistence/layered_memory.py': {'transaction', 'eligible', '_manifest', 'prepare', '_input', '_check', 'publish', 'reserve_model_call', 'organization_context_inputs'},
-        'persistence/layered_profile.py': {'prepare_profile', 'profile_input_entries', '_check_profile', 'publish_profile'},
+        'persistence/layered_profile.py': {'prepare_profile', 'profile_input_entries', 'incremental_profile_context', '_check_profile', 'publish_profile'},
         'memory/layered.py': {'OrganizationBudget', 'OrganizationInput', 'ScenarioProposalPort', 'ScenarioVerificationPort', 'ProfileProposalPort', 'ProfileVerificationPort'},
     }
     values = {}
@@ -43,7 +43,7 @@ def organization_rules_identity():
                         if isinstance(node, (ast.FunctionDef, ast.ClassDef)) and node.name in selected]
     for name in ('application/organization_call.py', 'memory/owner_organization_input.py',
                  'memory/scenario_validation.py', 'memory/scenario_publication.py', 'memory/profile_validation.py', 'memory/organization_isolation.py',
-                 'memory/scene_workspace.py',
+                 'memory/scene_workspace.py', 'memory/profile_workspace.py',
                  'persistence/layered_coverage.py', 'persistence/layered_corrections.py',
                  'memory/layered_correction_validation.py'):
         path = root / name
