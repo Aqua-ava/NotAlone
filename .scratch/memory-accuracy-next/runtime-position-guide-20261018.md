@@ -91,3 +91,14 @@ bounded-stage-teaching-v1已在双runtime、真实worker、优先级包装、评
 
 
 阶段教学已提交61c102ba；指代独立Pro16入口542398af已无冲突集成为17a0efe0。合并后两路profile/SDK/登记/owned/审核/fixture共66项检查通过（28.115s），6个共享源码mypy通过。两路保持不同提示与推理配置，不因共享Pro模型而互借Gold、窗口或预算；真实质量仍各场独立验收。
+
+
+## 阶段教学真实场：首个有效正证，第二窗未知退场
+
+源码d69f3e0d；run=f0e64fae-2e73-4c89-b396-0a26af6f6297，freeze=d415566d5a5c440f92478b3ff52a4966c5c481fbcdffcb6370c54b8b1bb834d7。原15/Gold、Pro Emax/Vnone、8192、cap30、零重试不变；15实际任务与447个来源文件冻结。
+
+P01独立RAW十四字段全部通过；FULL确认BR_AUTHOR_ARRIVAL_V1/direct、basis3/evidence4、七轴有效、source current/ALL。实际记录pending，potential auto满足原门；一般错误、假事实、错人和bad_auto均0。此为本场1/15及正证1/7，不把旧场审核合并进本场分母。生产放行表为空，未执行自动放行。
+
+P02 E/V均HTTP200，但实际任务首次执行失败，外层deepseek_result_unknown；未生成该窗RAW/FULL，不能签其语义或安全。P02 unknown、后13窗unrun。四次均200、零重试，closed4/30、余26永久关闭，capture_gaps空、receipt/records/cleanup均无错误。任务retryable及retry_count=1仅表示失败后的持久任务状态，本场没有重新领取或发起网络重试。保留原始响应/trace供最先拒绝原因诊断，不修旧结果。
+
+进程31118/31198均已确认退出，source-finish closed、13类来源及隔离库残留0，临时api-key.json已删除。生命周期门保持unrun/complete_quality_and_delivery_required；清理失败场不等于验证有效候选的确认/修正/拒绝生命周期。六场累计13次HTTP200、167未用额度关闭，累计正式审核2窗（上一场失败、本场通过），不能用累计数签质量门。
