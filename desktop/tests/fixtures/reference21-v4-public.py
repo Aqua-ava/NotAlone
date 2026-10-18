@@ -5,6 +5,7 @@ import importlib.util
 from importlib.metadata import version
 import json
 import os
+import stat
 from pathlib import Path
 import sys
 from uuid import UUID, uuid4
@@ -22,6 +23,7 @@ from notalone.memory_extraction.evaluation_provider_contract import (
     SEMANTIC4_PLAN, SEMANTIC4_MODE, SEMANTIC4_STAGE, SEMANTIC4_KIND, SEMANTIC4_PROMPT_PROFILE,
     UNIQUENESS_PLAN, UNIQUENESS_KIND, UNIQUENESS_E_PROFILE, PUBLIC_QUALITY_PLANS, validate_semantic4_windows,
     BOUNDED_RUNTIME_PLAN, BOUNDED_RUNTIME_MODE, BOUNDED_RUNTIME_STAGE, BOUNDED_RUNTIME_KIND,
+    EvaluationProviderProfile,
 )
 BOUNDED_REFERENCE = ".scratch/memory-accuracy-next/bounded-runtime-real15-reference-20261017.json"
 BOUNDED_ANNOTATION = ".scratch/memory-accuracy-next/bounded-runtime-real15-plan-20261017.md"
@@ -48,6 +50,12 @@ PROFILES: dict[str, dict] = {"baseline": FIXED, "semantic4": {
     "planned_windows": 15, "required_claims": 15, "optional_claims": 0,
     "batch_work_seconds": 14380, "outer_wall_seconds": 14400,
 }}
+
+
+PROFILES["bounded15-pro"] = {**PROFILES["bounded15"],
+    "provider_profile": EvaluationProviderProfile.DEEPSEEK_PRO_BOUNDED_TASK.value,
+    "request_model": "deepseek-v4-pro", "response_model": "deepseek-v4-pro",
+    "request_contract_version": 3, "max_tokens": 8192}
 
 
 def fixed_contract(frozen: dict) -> dict:
@@ -112,15 +120,21 @@ def _source_names(fixed=None):
     return _SEMANTIC4_REQUIRED_SOURCES if fixed is not None and fixed["execution_plan"] == SEMANTIC4_PLAN else _REFERENCE21_V4_REQUIRED_SOURCES
 
 
-def prepare(*, directory: Path, absolute_start: datetime, profile: str = "baseline") -> dict:
+def prepare(*, directory: Path, absolute_start: datetime, profile: str = "baseline",
+            credential_path: Path | None = None) -> dict:
     if os.environ.get("NOTALONE_DISABLE_DOTENV") != "1" or absolute_start.utcoffset() is None:
         raise ValueError("disabled_dotenv_and_aware_start_required")
     from notalone.memory_extraction.evaluation_offline import _verification_contract
     from notalone.memory_extraction.evaluation_reference import validate_public_reference
     if type(profile) is not str or profile not in PROFILES:
         raise ValueError("reference21_v4_fixed_profile_required")
-    if profile == "bounded15":
-        return _prepare_bounded(directory=directory, absolute_start=absolute_start)
+    if profile == "bounded15-pro":
+        _validate_pro_credential_path(credential_path)
+    elif credential_path is not None:
+        raise ValueError("explicit_key_only_for_pro_profile")
+    if profile in {"bounded15", "bounded15-pro"}:
+        return _prepare_bounded(directory=directory, absolute_start=absolute_start,
+                                profile=profile, credential_path=credential_path)
     fixed = PROFILES[profile]
     if fixed["execution_plan"] in PUBLIC_QUALITY_PLANS:
         from notalone.memory_extraction.evaluation import build_window
@@ -312,7 +326,8 @@ def _bounded_contract_fields(data):
             "selection": [{"case_id": item["id"], "gold_position": index} for index, item in enumerate(BOUNDED_RUNTIME_INPUTS)]}
 
 
-def _prepare_bounded(*, directory: Path, absolute_start: datetime) -> dict:
+def _prepare_bounded(*, directory: Path, absolute_start: datetime, profile: str = "bounded15",
+                     credential_path: Path | None = None) -> dict:
     from notalone.memory_extraction.evaluation_bounded_sources import prepare_bounded_sources, load_bounded_sources, cleanup_bounded_sources
     from notalone.memory_extraction.evaluation_reference import validate_bounded_public_reference
 
@@ -324,7 +339,7 @@ def _prepare_bounded(*, directory: Path, absolute_start: datetime) -> dict:
     receipt = prepare_bounded_sources(directory / "sources")
     try:
         data = load_bounded_sources(receipt)
-        fixed = PROFILES["bounded15"]
+        fixed = PROFILES[profile]
         sources = {name: helper.file_digest(ROOT / name) for name in sorted(_source_names(fixed))}
         reference = json.loads((ROOT / BOUNDED_REFERENCE).read_bytes())
         validate_bounded_public_reference(reference, expected_reference_sha256=helper.digest(reference),
@@ -336,6 +351,8 @@ def _prepare_bounded(*, directory: Path, absolute_start: datetime) -> dict:
                   "source_hashes": sources, "installed_versions": {name: version(name) for name in helper.PACKAGES},
                   "reference_canonical_sha256": helper.digest(reference), "formal_sources": receipt,
                   "formal_sources_sha256": helper.digest(receipt), **_bounded_contract_fields(data), "quality_certified": False}
+        if profile == "bounded15-pro":
+            frozen["credential_path"] = str(credential_path)
         helper.publish(directory / "freeze.json", frozen)
         return frozen
     except BaseException:
@@ -351,6 +368,10 @@ def _validate_bounded(frozen: dict) -> tuple[datetime, datetime]:
 
     helper = helpers()
     fixed = fixed_contract(frozen)
+    if fixed["provider_profile"] == EvaluationProviderProfile.DEEPSEEK_PRO_BOUNDED_TASK:
+        _validate_pro_credential_path(frozen.get("credential_path"))
+    elif "credential_path" in frozen:
+        raise ValueError("explicit_key_only_for_pro_profile")
     start, work_end, end = (datetime.fromisoformat(frozen[name]) for name in ("absolute_start", "work_end", "absolute_end"))
     if (frozen["state"] != "prepared_only" or frozen["repo_root"] != str(ROOT) or frozen["quality_certified"] is not False
             or any(item.utcoffset() is None for item in (start, work_end, end))
@@ -370,6 +391,43 @@ def _validate_bounded(frozen: dict) -> tuple[datetime, datetime]:
     validate_bounded_public_reference(reference, expected_reference_sha256=frozen["reference_canonical_sha256"],
                                       annotation_sha256=frozen["source_hashes"][BOUNDED_ANNOTATION])
     return work_end, end
+
+
+def _validate_pro_credential_path(value) -> Path:
+    """仅核显式路径形状；准备及冻结验证不探测或读取密钥文件。"""
+    if not isinstance(value, (str, Path)) or not str(value):
+        raise ValueError("pro_explicit_key_path_required")
+    path = Path(value)
+    if not path.is_absolute() or ".." in path.parts:
+        raise ValueError("pro_absolute_key_path_required")
+    return path
+
+
+def read_pro_credential(value) -> str:
+    """领取后只读显式私有JSON中的单一API key；不读取模型、端点或环境。"""
+    path = _validate_pro_credential_path(value)
+    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    with os.fdopen(descriptor, "r", encoding="utf-8") as stream:
+        info = os.fstat(stream.fileno())
+        if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_nlink != 1
+                or stat.S_IMODE(info.st_mode) != 0o600 or info.st_size > 65536):
+            raise ValueError("pro_private_key_file_required")
+        content = stream.read(65537)
+        if len(content.encode("utf-8")) > 65536:
+            raise ValueError("pro_private_key_file_required")
+    def unique(pairs):
+        result = {}
+        for key, item in pairs:
+            if key in result:
+                raise ValueError("pro_duplicate_key_field")
+            result[key] = item
+        return result
+    data = json.loads(content, object_pairs_hook=unique)
+    if (type(data) is not dict or set(data) != {"api_key"} or type(data["api_key"]) is not str
+            or not data["api_key"] or data["api_key"] != data["api_key"].strip()
+            or any(character.isspace() for character in data["api_key"])):
+        raise ValueError("pro_single_api_key_required")
+    return data["api_key"]
 
 
 def _worker_bounded(*, frozen, freeze_path, synthetic_transport, credential_loader, bridge):
@@ -407,7 +465,11 @@ def _worker_bounded(*, frozen, freeze_path, synthetic_transport, credential_load
             raise ValueError("bounded15_single_loader_required")
         loaded = True
         verify_claim(frozen)
-        return (credential_loader or helper.read_credential)()
+        if credential_loader is not None:
+            return credential_loader()
+        if fixed_contract(frozen)["provider_profile"] == EvaluationProviderProfile.DEEPSEEK_PRO_BOUNDED_TASK:
+            return read_pro_credential(frozen["credential_path"])
+        return helper.read_credential()
 
     helper.publish(directory / "activation.json", {"run_id": frozen["run_id"], "pid": os.getpid(),
         "process_group": os.getpgrp(), "synthetic": synthetic_transport is not None, "started_utc": now().isoformat()})
@@ -416,7 +478,7 @@ def _worker_bounded(*, frozen, freeze_path, synthetic_transport, credential_load
         frozen_gold={"status": "frozen_agent_review", "case_names": [case.name for case in BOUNDED_RUNTIME_CASES],
                      "criteria_path": BOUNDED_REFERENCE, "criteria_sha256": frozen["source_hashes"][BOUNDED_REFERENCE]},
         credential_loader=loader, audit_case=audit, synthetic_transport=synthetic_transport,
-        provider_profile="deepseek-bounded-task-v1", request_timeout_seconds=300, max_retries=0,
+        provider_profile=fixed_contract(frozen)["provider_profile"], request_timeout_seconds=300, max_retries=0,
         case_positions=None, case_set="bounded15", request_limit=30, reference_version=BOUNDED_RUNTIME_PLAN,
         verification_mode="nullable-proof-v3", verification_tool_choice="forced", extraction_mode="grounded-v2",
         execution_plan=BOUNDED_RUNTIME_PLAN, bounded_runtime_deadline=control,
@@ -505,6 +567,10 @@ if __name__ == "__main__":
             freeze = prepare(directory=Path(sys.argv[2]), absolute_start=datetime.fromisoformat(sys.argv[3]),
                              profile={"prepare": "baseline", "prepare-semantic4": "semantic4", "prepare-uniqueness": "uniqueness",
                                       "prepare-bounded15": "bounded15"}[sys.argv[1]])
+            print(json.dumps({"run_id": freeze["run_id"], "freeze_sha256": helpers().file_digest(Path(freeze["directory"]) / "freeze.json")}))
+        elif len(sys.argv) == 5 and sys.argv[1] == "prepare-bounded15-pro":
+            freeze = prepare(directory=Path(sys.argv[2]), absolute_start=datetime.fromisoformat(sys.argv[3]),
+                             profile="bounded15-pro", credential_path=Path(sys.argv[4]))
             print(json.dumps({"run_id": freeze["run_id"], "freeze_sha256": helpers().file_digest(Path(freeze["directory"]) / "freeze.json")}))
         elif len(sys.argv) == 5 and sys.argv[1] in {"launch", "worker"}:
             if sys.argv[1] == "launch":

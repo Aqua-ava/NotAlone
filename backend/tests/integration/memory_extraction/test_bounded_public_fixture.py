@@ -39,6 +39,12 @@ def synthetic_complete_result():
 
 class BoundedPublicFixtureTest(unittest.TestCase):
     def test_prepare_and_validate_use_formal_sources_without_budget_or_credential(self):
+        self.assert_prepare_without_credentials("bounded15")
+
+    def test_pro_prepare_validate_freeze_explicit_profile_without_credentials_or_budget(self):
+        self.assert_prepare_without_credentials("bounded15-pro")
+
+    def assert_prepare_without_credentials(self, profile):
         module = fixture_module()
 
         def forbidden(*args, **kwargs):
@@ -50,7 +56,13 @@ class BoundedPublicFixtureTest(unittest.TestCase):
                 patch.object(module, "helpers", return_value=helper), \
                 patch.object(helper, "read_credential", side_effect=forbidden):
             directory = Path(temporary).resolve() / "formal"
-            frozen = module.prepare(directory=directory, absolute_start=datetime.now(timezone.utc), profile="bounded15")
+            options = {"credential_path": Path(temporary).resolve() / "absent-key.json"} if profile == "bounded15-pro" else {}
+            frozen = module.prepare(directory=directory, absolute_start=datetime.now(timezone.utc), profile=profile, **options)
+            if profile == "bounded15-pro":
+                self.assertEqual(frozen["fixed"]["provider_profile"], "deepseek-pro-bounded-task-v1")
+                self.assertEqual(frozen["fixed"]["request_model"], "deepseek-v4-pro")
+                self.assertEqual(frozen["fixed"]["max_tokens"], 8192)
+                self.assertFalse(Path(frozen["credential_path"]).exists())
             from notalone.memory_extraction.evaluation_bounded_sources import cleanup_bounded_sources, load_bounded_sources
 
             try:
@@ -59,6 +71,13 @@ class BoundedPublicFixtureTest(unittest.TestCase):
                 self.assertEqual(len(set(data.task_ids)), 15)
                 self.assertEqual(frozen["fixed"]["request_limit"], 30)
                 module.validate(frozen)
+                if profile == "bounded15-pro":
+                    for field, value in (("provider_profile", "deepseek-bounded-task-v1"), ("request_model", "deepseek-flash"),
+                                         ("response_model", "deepseek-flash"), ("request_contract_version", 2), ("max_tokens", True)):
+                        changed = deepcopy(frozen)
+                        changed["fixed"][field] = value
+                        with self.subTest(field=field), self.assertRaises(ValueError):
+                            module.validate(changed)
                 for change in ("runtime_rule_set_sha256", "actual_windows", "formal_task_bindings"):
                     broken = deepcopy(frozen)
                     if change == "runtime_rule_set_sha256":
@@ -74,7 +93,52 @@ class BoundedPublicFixtureTest(unittest.TestCase):
                 archive.mkdir(mode=0o700)
                 cleanup_bounded_sources(frozen["formal_sources"], archive_directory=archive)
 
+    def test_pro_key_reader_uses_only_explicit_owned_private_single_link_file(self):
+        module = fixture_module()
+        with tempfile.TemporaryDirectory() as temporary, patch.dict(os.environ, {
+                "NOTALONE_DEEPSEEK_API_KEY": "forbidden-env", "NOTALONE_DEEPSEEK_MODEL": "other",
+                "NOTALONE_DEEPSEEK_BASE_URL": "https://invalid.example"}):
+            path = Path(temporary).resolve() / "key.json"
+            path.write_text('{"api_key":"synthetic-only"}')
+            path.chmod(0o600)
+            self.assertEqual(module.read_pro_credential(path), "synthetic-only")
+            linked = path.with_name("symlink.json")
+            linked.symlink_to(path)
+            with self.assertRaises((ValueError, OSError)):
+                module.read_pro_credential(linked)
+            hard = path.with_name("hard.json")
+            os.link(path, hard)
+            with self.assertRaises(ValueError):
+                module.read_pro_credential(path)
+            hard.unlink()
+            from types import SimpleNamespace
+            real_stat = os.stat(path)
+            with patch.object(module.os, "fstat", return_value=SimpleNamespace(st_mode=real_stat.st_mode,
+                    st_uid=os.getuid() + 1, st_nlink=1, st_size=real_stat.st_size)), self.assertRaises(ValueError):
+                module.read_pro_credential(path)
+            fifo = path.with_name("pipe")
+            os.mkfifo(fifo, 0o600)
+            with self.assertRaises(ValueError):
+                module.read_pro_credential(fifo)
+            path.chmod(0o644)
+            with self.assertRaises(ValueError):
+                module.read_pro_credential(path)
+            path.chmod(0o600)
+            for content in ('{"api_key":"synthetic-only","model":"deepseek-v4-pro"}',
+                            '{"api_key":"x","api_key":"y"}', '{"api_key":""}', '{"api_key":true}'):
+                path.write_text(content)
+                with self.subTest(content=content), self.assertRaises(ValueError):
+                    module.read_pro_credential(path)
+            with self.assertRaises(ValueError):
+                module.read_pro_credential(Path("relative-key.json"))
+
     def test_owned_entry_closes_first_failed_positive_and_erases_formal_sources(self):
+        self.assert_owned_entry_closes("bounded15")
+
+    def test_pro_owned_worker_uses_real_e_v_sdk_and_archives_actual_pro_task_before_cleanup(self):
+        self.assert_owned_entry_closes("bounded15-pro")
+
+    def assert_owned_entry_closes(self, profile):
         from notalone.memory_extraction import evaluation_owned_process as owned
         from notalone.memory_extraction.evaluation_bounded_sources import cleanup_bounded_sources
 
@@ -89,7 +153,9 @@ class BoundedPublicFixtureTest(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temporary, patch.dict(os.environ, {"NOTALONE_DISABLE_DOTENV": "1"}):
             directory = Path(temporary).resolve() / "formal"
-            frozen = module.prepare(directory=directory, absolute_start=datetime.now(timezone.utc), profile="bounded15")
+            pro = profile == "bounded15-pro"
+            options = {"credential_path": Path(temporary).resolve() / "absent-key.json"} if pro else {}
+            frozen = module.prepare(directory=directory, absolute_start=datetime.now(timezone.utc), profile=profile, **options)
             freeze_path = directory / "freeze.json"
             freeze_sha = helper.file_digest(freeze_path)
             approval_path = directory / "synthetic-approval.json"
@@ -103,15 +169,25 @@ class BoundedPublicFixtureTest(unittest.TestCase):
                 self.assertFalse(finish["quality_certified"])
                 self.assertEqual(finish["formal_lifecycle"]["status"], "unrun")
                 details = helper.read_private(directory / "synthetic-claim-failure.json") if (directory / "synthetic-claim-failure.json").exists() else {}
-                self.assertEqual(finish["stopped_code"], "bounded_runtime_positive_delivery_missing", details)
+                self.assertEqual(finish["stopped_code"], "deepseek_result_unknown" if pro else "bounded_runtime_positive_delivery_missing", details)
                 self.assertEqual(finish["formal_source_closure"]["database_residual"], 0)
                 self.assertTrue(all(count == 0 for count in finish["formal_source_closure"]["residual_counts"].values()))
                 result = helper.read_private(directory / "result.json")
-                self.assertEqual(result["receipt"]["budget"]["reserved_requests"], 1)
+                self.assertEqual(result["receipt"]["budget"]["reserved_requests"], 2 if pro else 1)
                 self.assertEqual(result["summary"]["unrun"], 14)
-                self.assertEqual(helper.read_private(directory / "synthetic-control.json"), {"requests": 1, "credentials_loaded": 1})
+                self.assertEqual(helper.read_private(directory / "synthetic-control.json"), {"requests": 2 if pro else 1, "credentials_loaded": 1})
                 archive = helper.read_private(Path(finish["formal_source_closure"]["archive_path"]))
                 self.assertNotIn("synthetic-private-reasoning", json.dumps(archive))
+                model_name = "deepseek-v4-pro" if pro else "deepseek-flash"
+                case = archive["snapshot"]["cases"][0]
+                self.assertEqual(case["task"]["model_version"], model_name)
+                configurations = [event["payload"]["configuration"] for event in case["traces"][0]["events"]
+                                  if "configuration" in event["payload"]]
+                self.assertTrue(configurations)
+                self.assertEqual(configurations[0]["model_name"], model_name)
+                config = helper.read_private(directory / "evaluation/manifest.json")["frozen_config"]
+                self.assertEqual(config["request_model"], model_name)
+                self.assertEqual(config["request_contract_version"], 3 if pro else 2)
                 self.assertTrue((directory / "source-finish.json").is_file())
             finally:
                 if not (directory / "source-finish.json").exists():
@@ -245,6 +321,9 @@ def synthetic_owned_worker(freeze_path: Path, expected_sha256: str, approval_pat
     synthetic_home = directory / "synthetic-home"
     synthetic_home.mkdir(mode=0o700)
     counts = {"requests": 0, "credentials_loaded": 0}
+    frozen = helper.read_private(freeze_path)
+    pro = frozen["fixed"]["provider_profile"] == "deepseek-pro-bounded-task-v1"
+    model_name = "deepseek-v4-pro" if pro else "deepseek-flash"
 
     def forbidden(*args, **kwargs):
         raise AssertionError("合成纵切不得读取真实凭据或发送真实HTTP")
@@ -273,17 +352,27 @@ def synthetic_owned_worker(freeze_path: Path, expected_sha256: str, approval_pat
         counts["requests"] += 1
         body = json.loads(request.content)
         name = body["tools"][0]["function"]["name"]
-        if name != "GroundedMemoryLabels" or counts["requests"] != 1:
-            raise AssertionError("首窗空结果应停止，不得执行V或后继窗")
-        if body["tools"][0]["function"]["parameters"]["properties"]["units"]["required"] != ["0:0"]:
-            raise AssertionError("合成输出必须对应当前schema的全部原文位置")
-        labels = {"kind": "not_memory", "subject": "contact", "topic": "other", "dependency": None,
-                  "unresolved": False, "confidence": 0.95, "sensitivity": "none"}
-        return httpx.Response(200, request=request, json={"id": "synthetic-first-empty", "object": "chat.completion",
-            "created": 1, "model": "deepseek-flash", "choices": [{"index": 0, "finish_reason": "tool_calls",
+        if body["model"] != model_name or (pro and body.get("max_tokens") != 8192):
+            raise AssertionError("生产SDK未使用冻结Pro模型或输出上限")
+        if not pro and "max_tokens" in body:
+            raise AssertionError("旧Flash不得增加输出参数")
+        if counts["requests"] == 1 and name == "GroundedMemoryLabels":
+            if body["tools"][0]["function"]["parameters"]["properties"]["units"]["required"] != ["0:0"]:
+                raise AssertionError("合成输出必须对应当前schema的全部原文位置")
+            labels = {"kind": "event" if pro else "not_memory", "subject": "contact", "topic": "other", "dependency": None,
+                      "unresolved": False, "confidence": 0.95, "sensitivity": "none"}
+            arguments = {"units": {"0:0": labels}}
+        elif pro and counts["requests"] == 2 and name == "SourceVerificationOutput":
+            # 非法版本应在实际同次V严格终止，禁止再领取或调用后继窗。
+            arguments = {"results": [{"candidate_index": 0, "verdict": "supported", "issues": [], "evidence": [],
+                                      "proof": {"version": 4, "atom_links": [], "reference": [], "reported": []}}]}
+        else:
+            raise AssertionError("首窗控制失败后不得执行后继调用")
+        return httpx.Response(200, request=request, json={"id": "synthetic-first-control", "object": "chat.completion",
+            "created": 1, "model": model_name, "choices": [{"index": 0, "finish_reason": "tool_calls",
             "message": {"role": "assistant", "content": "", "reasoning_content": "synthetic-private-reasoning",
-                "tool_calls": [{"id": "synthetic-e", "type": "function", "function": {"name": name,
-                    "arguments": json.dumps({"units": {"0:0": labels}})}}]}}]})
+                "tool_calls": [{"id": "synthetic-call", "type": "function", "function": {"name": name,
+                    "arguments": json.dumps(arguments)}}]}}]})
 
     class EmptyReview:
         def review(self, phase, view):

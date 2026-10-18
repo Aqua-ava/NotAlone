@@ -38,13 +38,16 @@ def json_only_digest(value):
 
 class BoundedOwnedClaimTest(unittest.TestCase):
     @contextmanager
-    def claim(self):
+    def claim(self, *, pro=False):
         with tempfile.TemporaryDirectory() as temporary, patch.object(Path, "home", return_value=Path(temporary).resolve()):
             directory = Path(temporary).resolve() / "output"
             directory.mkdir(mode=0o700)
             evaluation = directory / "evaluation"
             evaluation.mkdir(mode=0o700)
             config, plan, windows = registration.bounded_config()
+            if pro:
+                config.update(request_contract_version=3, provider_profile="deepseek-pro-bounded-task-v1",
+                              request_model="deepseek-v4-pro", max_tokens=8192)
             source_hashes = {FIXTURE: hashlib.sha256((ROOT / FIXTURE).read_bytes()).hexdigest()}
             config["source_hashes"] = source_hashes
             budget = EvaluationBudget.create(run_id=uuid4(), output_directory=evaluation, request_limit=30,
@@ -59,6 +62,9 @@ class BoundedOwnedClaimTest(unittest.TestCase):
                 "reference_canonical_sha256": config["gold_sha256"],
                 "bounded_inputs_sha256": config["bounded_inputs_sha256"],
                 "runtime_rule_set_sha256": config["runtime_rule_set_sha256"]}
+            if pro:
+                frozen["fixed"] = {"provider_profile": "deepseek-pro-bounded-task-v1", "request_model": "deepseek-v4-pro",
+                                   "response_model": "deepseek-v4-pro", "request_contract_version": 3, "max_tokens": 8192}
             frozen = snapshot(frozen)
             helper = SimpleNamespace(private_directory=lambda path: None, digest=json_only_digest,
                                      read_private=lambda path: json.loads(path.read_bytes()))
@@ -73,6 +79,18 @@ class BoundedOwnedClaimTest(unittest.TestCase):
                 helper.digest(windows[0])
             self.assertEqual(helper.digest(snapshot(windows[0])), canonical_sha256(windows[0]))
             owned._verify_owned_public_claim(frozen=frozen, helper=helper, kind=KIND, actual_windows=windows)
+            self.assertEqual(budget.snapshot()["reserved_requests"], 0)
+
+    def test_pro_owned_claim_requires_matching_frozen_profile_and_output_limit(self):
+        with self.claim(pro=True) as (frozen, helper, windows, budget):
+            owned._verify_owned_public_claim(frozen=frozen, helper=helper, kind=KIND, actual_windows=windows)
+            for key, value in (("provider_profile", "deepseek-bounded-task-v1"), ("max_tokens", 4096),
+                               ("request_model", "deepseek-flash"), ("response_model", "deepseek-flash"),
+                               ("request_contract_version", 2)):
+                changed = deepcopy(frozen)
+                changed["fixed"][key] = value
+                with self.subTest(key=key), self.assertRaises(ValueError):
+                    owned._verify_owned_public_claim(frozen=changed, helper=helper, kind=KIND, actual_windows=windows)
             self.assertEqual(budget.snapshot()["reserved_requests"], 0)
 
     def test_actual_full_window_objects_cannot_be_omitted_cropped_reordered_or_rebound(self):

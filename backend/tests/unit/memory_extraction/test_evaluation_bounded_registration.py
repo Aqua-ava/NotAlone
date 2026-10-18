@@ -66,6 +66,77 @@ class BoundedProviderRegistrationTest(unittest.TestCase):
         with self.assertRaises(EvaluationBudgetAbort):
             contract.observe_response(httpx.Response(200, json=_completion("deepseek-v4-flash")))
 
+    def test_pro_profile_has_independent_model_identity_and_exact_output_cap(self):
+        contract = self.bounded_contract(provider_profile="deepseek-pro-bounded-task-v1")
+        for phase in ("extraction", "verification"):
+            body = {**phase_body(phase), "model": "deepseek-v4-pro", "max_tokens": 8192}
+            with contract.expect_request(body):
+                contract.check_request(httpx.Request("POST", ENDPOINT, json=body))
+            for change in ({"model": "deepseek-flash"}, {"max_tokens": 8191}, {"max_tokens": True},
+                           {"max_completion_tokens": 8192}, {"reasoning_effort": "high"},
+                           {"thinking": {"type": "enabled" if phase == "verification" else "disabled"}}):
+                with self.subTest(change=change), self.assertRaises(EvaluationBudgetAbort):
+                    with contract.expect_request({**body, **change}):
+                        self.fail("错误模型或输出上限不得绑定")
+            del body["max_tokens"]
+            with self.assertRaises(EvaluationBudgetAbort), contract.expect_request(body):
+                self.fail("缺输出上限不得绑定")
+        contract.observe_response(httpx.Response(200, json=_completion("deepseek-v4-pro")))
+        for identity in ("deepseek-flash", "deepseek-pro", None):
+            with self.subTest(identity=identity), self.assertRaises(EvaluationBudgetAbort):
+                contract.observe_response(httpx.Response(200, json=_completion(identity)))
+        for changes in ({"execution_plan": "original"}, {"execution_plan": MIXED_PLAN},
+                        {"extraction_mode": "grounded-v4"}, {"verification_tool_choice": "omitted"}):
+            with self.subTest(changes=changes), self.assertRaises(EvaluationBudgetAbort):
+                self.bounded_contract(provider_profile="deepseek-pro-bounded-task-v1", **changes)
+
+    def test_pro_incomplete_finish_stops_even_with_complete_tool_json_but_flash_is_unchanged(self):
+        for reason in ("length", "content_filter"):
+            body = _completion("deepseek-v4-pro")
+            body["choices"][0]["finish_reason"] = reason
+            body["choices"][0]["message"]["tool_calls"] = [{"id": "synthetic-call", "type": "function",
+                "function": {"name": "SourceVerificationOutput", "arguments": '{"results":[]}'}}]
+            with self.subTest(reason=reason), self.assertRaisesRegex(EvaluationBudgetAbort, "pro_completion_incomplete"):
+                self.bounded_contract(provider_profile="deepseek-pro-bounded-task-v1").observe_response(httpx.Response(200, json=body))
+            body["model"] = "deepseek-flash"
+            self.bounded_contract().observe_response(httpx.Response(200, json=body))
+
+    def test_pro_incomplete_response_is_saved_and_budget_closed_before_any_second_request(self):
+        from notalone.memory_extraction.evaluation_http_budget import EvaluationTransport
+        for reason in ("length", "content_filter"):
+            config, plan, windows = bounded_config()
+            config.update(request_contract_version=3, provider_profile="deepseek-pro-bounded-task-v1",
+                          request_model="deepseek-v4-pro", max_tokens=8192)
+            directory = self.root / str(uuid4())
+            directory.mkdir(mode=0o700)
+            budget = EvaluationBudget.create(run_id=uuid4(), output_directory=directory, request_limit=30,
+                allowed_endpoints=(ENDPOINT,), config_sha256=canonical_sha256(config))
+            self.addCleanup(budget.close)
+            records = EvaluationRecordStore(budget=budget, frozen_config=config, plan=plan, actual_windows=windows)
+            contract = self.bounded_contract(provider_profile="deepseek-pro-bounded-task-v1")
+            response = _completion("deepseek-v4-pro")
+            response["choices"][0]["finish_reason"] = reason
+            response["choices"][0]["message"]["tool_calls"] = [{"id": "synthetic-call", "type": "function",
+                "function": {"name": "SourceVerificationOutput", "arguments": '{"results":[]}'}}]
+            sent = []
+            def respond(request):
+                sent.append(request)
+                return httpx.Response(200, json=response)
+            body = {**phase_body("verification"), "model": "deepseek-v4-pro", "max_tokens": 8192}
+            with budget.batch(), records.stage(0, "verification"), contract.expect_request(body), httpx.Client(
+                    transport=EvaluationTransport(budget, contract=contract, records=records,
+                        synthetic_transport=httpx.MockTransport(respond)), trust_env=False) as client:
+                with self.assertRaisesRegex(EvaluationBudgetAbort, "pro_completion_incomplete"):
+                    client.post(ENDPOINT, json=body)
+                with self.assertRaises(EvaluationBudgetAbort):
+                    client.post(ENDPOINT, json=body)
+            saved = [event for event in records.events() if event["kind"] == "provider_response"]
+            self.assertEqual(len(saved), 1)
+            self.assertEqual(saved[0]["payload"]["body"]["choices"][0]["finish_reason"], reason)
+            self.assertEqual(len(sent), 1)
+            self.assertTrue(budget.closed_receipt()["closed"])
+            self.assertEqual(budget.closed_receipt()["reserved_requests"], 1)
+
     def test_new_profile_cannot_borrow_old_plan_modes_or_identity_policy(self):
         for change in ({"execution_plan": "original"}, {"execution_plan": MIXED_PLAN},
                        {"provider_profile": "deepseek-flash-max"}, {"provider_profile": "ecnu"},
@@ -162,6 +233,28 @@ class BoundedRecordsRegistrationTest(unittest.TestCase):
         self.assertEqual(store.gold_sha256, "a" * 64)
         config["gold_sha256"] = "b" * 64
         self.assertEqual(store.gold_sha256, "a" * 64)
+
+    def test_pro_registration_requires_version_profile_model_and_output_cap_together(self):
+        original, plan, windows = bounded_config()
+        pro = {**original, "request_contract_version": 3,
+               "provider_profile": "deepseek-pro-bounded-task-v1", "request_model": "deepseek-v4-pro",
+               "max_tokens": 8192}
+        self.assertEqual(self.register(pro, plan, windows).execution_plan, PLAN)
+        for change in ({"request_contract_version": 2}, {"request_contract_version": True},
+                       {"provider_profile": "deepseek-bounded-task-v1"}, {"provider_profile": "anything"},
+                       {"request_model": "deepseek-flash"}, {"max_tokens": 8191}, {"max_tokens": True},
+                       {"max_completion_tokens": 8192}, {"unknown_profile_field": "x"}):
+            with self.subTest(change=change), self.assertRaises(EvaluationBudgetAbort):
+                self.register({**pro, **change}, plan, windows)
+        for key in ("provider_profile", "max_tokens"):
+            changed = dict(pro)
+            del changed[key]
+            with self.subTest(missing=key), self.assertRaises(EvaluationBudgetAbort):
+                self.register(changed, plan, windows)
+        for change in ({"request_model": "deepseek-v4-pro"},
+                       {"provider_profile": "deepseek-pro-bounded-task-v1"}, {"max_tokens": 8192}):
+            with self.subTest(legacy_change=change), self.assertRaises(EvaluationBudgetAbort):
+                self.register({**original, **change}, plan, windows)
 
     def test_fixed_changes_reject_even_after_budget_config_is_rehashed(self):
         original, plan, windows = bounded_config()

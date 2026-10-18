@@ -25,7 +25,7 @@ from .evaluation_provider_contract import (
     REFERENCE21_V4_PLAN, REFERENCE21_V4_MODE, REFERENCE21_V4_STAGE, PHASE_SPLIT_PLANS, REFERENCE21_PLANS,
     SEMANTIC4_PLAN, SEMANTIC4_MODE, SEMANTIC4_STAGE, SEMANTIC4_PROMPT_PROFILE,
     UNIQUENESS_PLAN, UNIQUENESS_MODE, UNIQUENESS_STAGE, PUBLIC_QUALITY_PLANS,
-    validate_extraction_prompt_profile, STRICT_RESPONSE_IDENTITY_POLICY,
+    validate_extraction_prompt_profile, STRICT_RESPONSE_IDENTITY_POLICY, bounded_profile_for_config, EvaluationProviderProfile,
 )
 from .models import ExtractionWindow
 
@@ -46,7 +46,7 @@ _PRIVATE_FIELDS = frozenset({
     "credentials", "credential", "database_url", "connection_string",
     "body_base64",
 })
-_BOUNDED_CONFIG_FIELDS = frozenset({"formal_tasks", "bounded_inputs_sha256", "runtime_rule_set_sha256"})
+_BOUNDED_CONFIG_FIELDS = frozenset({"formal_tasks", "bounded_inputs_sha256", "runtime_rule_set_sha256", "provider_profile", "max_tokens"})
 _CONFIG_FIELDS = _BOUNDED_CONFIG_FIELDS | frozenset({
     "mode", "synthetic_only", "base_url", "endpoint", "request_model",
     "temperature", "timeout", "max_retries", "thinking", "stream", "reasoning_effort",
@@ -214,6 +214,7 @@ class EvaluationRecordStore:
             "schema_sha256": frozen_config.get("extraction_schema_sha256"),
         } for _ in plan]))
         self._plan = json.loads(_canonical(plan))
+        self._bounded_provider_profile = bounded_profile_for_config(frozen_config) if bounded else None
         self._formal_tasks = json.loads(_canonical(frozen_config["formal_tasks"])) if bounded else []
         self._gold_sha256: str | None = frozen_config["gold_sha256"] if bounded else None
         self._output = Path(self._manifest["output_directory"])
@@ -228,6 +229,10 @@ class EvaluationRecordStore:
             "budget": self._manifest, "frozen_config": frozen_config,
             "plan": self._plan, "synthetic_quality_certified": False,
         })
+
+    @property
+    def bounded_provider_profile(self) -> EvaluationProviderProfile | None:
+        return self._bounded_provider_profile
 
     def _validate_bounded_registration(
         self, config: dict, plan: tuple[dict, ...],
@@ -251,16 +256,16 @@ class EvaluationRecordStore:
             content_hash = canonical_sha256(tuple({"messages": item["messages"],
                 "target_indices": item["target_indices"]} for item in BOUNDED_RUNTIME_INPUTS))
             current_rules = rule_set_sha256()
+            profile = bounded_profile_for_config(config)
             positions = config.get("selected_case_positions")
             if (self._extraction_mode != "grounded-v2" or config.get("verification_mode") != "nullable-proof-v3"
                     or config.get("reference_version") != BOUNDED_RUNTIME_PLAN
                     or config.get("mode") != BOUNDED_RUNTIME_MODE or config.get("stage") != BOUNDED_RUNTIME_STAGE
                     or config.get("base_url") != "https://api.deepseek.com"
                     or config.get("endpoint") != "https://api.deepseek.com/chat/completions"
-                    or config.get("request_model") != "deepseek-flash"
+                    or config.get("request_model") != profile.model
                     or type(config.get("timeout")) is not float or config["timeout"] != 300.0
                     or type(config.get("max_retries")) is not int or config["max_retries"] != 0
-                    or type(config.get("request_contract_version")) is not int or config["request_contract_version"] != 2
                     or type(config.get("temperature")) not in (int, float) or config["temperature"] != 0
                     or config.get("stream") is not False or config.get("fallback") is not False
                     or config.get("response_identity_policy") != STRICT_RESPONSE_IDENTITY_POLICY

@@ -12,7 +12,7 @@ from contextvars import ContextVar
 from datetime import datetime, timezone
 from enum import StrEnum
 from pathlib import Path
-from typing import Callable, Iterator
+from typing import Callable, Iterator, TypedDict
 
 import httpx
 
@@ -110,6 +110,10 @@ def mixed_phase_policy() -> dict:
     }
 
 
+class _OutputParameters(TypedDict, total=False):
+    max_tokens: int
+
+
 class EvaluationProviderProfile(StrEnum):
     """仅已注册的封闭评测配置；不接受任意端点或生产配置覆盖。"""
 
@@ -117,10 +121,19 @@ class EvaluationProviderProfile(StrEnum):
     DEEPSEEK_FLASH_MAX = "deepseek-flash-max"
     DEEPSEEK_PHASE_SPLIT = "deepseek-phase-split-v1"
     DEEPSEEK_BOUNDED_TASK = "deepseek-bounded-task-v1"
+    DEEPSEEK_PRO_BOUNDED_TASK = "deepseek-pro-bounded-task-v1"
 
     @property
     def is_official(self) -> bool:
-        return self in {self.DEEPSEEK_FLASH_MAX, self.DEEPSEEK_PHASE_SPLIT, self.DEEPSEEK_BOUNDED_TASK}
+        return self in {self.DEEPSEEK_FLASH_MAX, self.DEEPSEEK_PHASE_SPLIT, self.DEEPSEEK_BOUNDED_TASK, self.DEEPSEEK_PRO_BOUNDED_TASK}
+
+    @property
+    def is_bounded(self) -> bool:
+        return self in {self.DEEPSEEK_BOUNDED_TASK, self.DEEPSEEK_PRO_BOUNDED_TASK}
+
+    @property
+    def output_parameters(self) -> _OutputParameters:
+        return {"max_tokens": 8192} if self is self.DEEPSEEK_PRO_BOUNDED_TASK else {}
 
     @property
     def base_url(self) -> str:
@@ -133,7 +146,26 @@ class EvaluationProviderProfile(StrEnum):
 
     @property
     def model(self) -> str:
+        if self is self.DEEPSEEK_PRO_BOUNDED_TASK:
+            return "deepseek-v4-pro"
         return "deepseek-flash" if self.is_official else "ecnu-max"
+
+
+def bounded_profile_for_config(config: dict) -> EvaluationProviderProfile:
+    """旧登记保持原字节，新登记必须同时绑定唯一profile、模型和输出上限。"""
+    version = config.get("request_contract_version")
+    if type(version) is int and version == 2 and not {"provider_profile", "max_tokens"} & set(config):
+        profile = EvaluationProviderProfile.DEEPSEEK_BOUNDED_TASK
+    elif (type(version) is int and version == 3
+            and type(config.get("provider_profile")) is str
+            and config["provider_profile"] == EvaluationProviderProfile.DEEPSEEK_PRO_BOUNDED_TASK.value
+            and type(config.get("max_tokens")) is int and config["max_tokens"] == 8192):
+        profile = EvaluationProviderProfile.DEEPSEEK_PRO_BOUNDED_TASK
+    else:
+        raise EvaluationBudgetAbort("evaluation_bounded_profile_registration_invalid")
+    if config.get("request_model") != profile.model:
+        raise EvaluationBudgetAbort("evaluation_bounded_profile_model_mismatch")
+    return profile
 
 
 def validate_evaluation_policy(
@@ -182,7 +214,7 @@ class ECNUEvaluationContract:
                     EvaluationExtractionMode.GROUNDED_V2 if execution_plan == FULL140_E2_PLAN
                     else EvaluationExtractionMode.GROUNDED_V4)):
             raise EvaluationBudgetAbort("evaluation_mixed_fixed_plan_required")
-        bounded = self._profile is EvaluationProviderProfile.DEEPSEEK_BOUNDED_TASK
+        bounded = self._profile.is_bounded
         if bounded != (execution_plan == BOUNDED_RUNTIME_PLAN) or bounded and (
                 verification_tool_choice != "forced" or self._extraction_mode is not EvaluationExtractionMode.GROUNDED_V2):
             raise EvaluationBudgetAbort("evaluation_bounded_fixed_plan_required")
@@ -242,7 +274,7 @@ class ECNUEvaluationContract:
                         not isinstance(name, str) or path.is_absolute()
                         or name != path.as_posix() or ".." in path.parts
                         or (path.suffix not in {".py", ".toml", ".md", ".json"}
-                            and not (self._profile is EvaluationProviderProfile.DEEPSEEK_BOUNDED_TASK
+                            and not (self._profile.is_bounded
                                      and name in _BOUNDED_MIGRATION_SOURCES))
                         or any(part.startswith(".") and part != ".scratch"
                                for part in path.parts)
@@ -343,12 +375,15 @@ class ECNUEvaluationContract:
         except (ValueError, TypeError, KeyError, UnicodeError, AttributeError):
             raise EvaluationBudgetAbort("evaluation_completion_invalid") from None
         if (self._profile.is_official
-                and identity != "deepseek-flash"):
+                and identity != self._profile.model):
             raise EvaluationBudgetAbort("evaluation_official_reported_model_changed")
         if self._profile in {EvaluationProviderProfile.DEEPSEEK_PHASE_SPLIT,
-                             EvaluationProviderProfile.DEEPSEEK_BOUNDED_TASK} and (
+                             EvaluationProviderProfile.DEEPSEEK_BOUNDED_TASK, EvaluationProviderProfile.DEEPSEEK_PRO_BOUNDED_TASK} and (
                 len(choices) != 1 or choices[0]["index"] != 0):
             raise EvaluationBudgetAbort("evaluation_completion_invalid")
+        if (self._profile is EvaluationProviderProfile.DEEPSEEK_PRO_BOUNDED_TASK
+                and any(choice["finish_reason"] in {"length", "content_filter"} for choice in choices)):
+            raise EvaluationBudgetAbort("evaluation_pro_completion_incomplete")
         if self._response_identity_policy == KNOWN_ECNU_RESPONSE_IDENTITY_POLICY:
             # 请求已绑定既有ECNU端点/ecnu-max；已授权标签只作实际观测。
             # 已知集合内变化不能推定相同权重或供应商变化。
@@ -392,15 +427,18 @@ def _validate_payload(value: dict, *, verification_tool_choice: str = "forced",
         function = value["tools"][0]["function"]
         official = provider_profile.is_official
         mixed_v = provider_profile in {EvaluationProviderProfile.DEEPSEEK_PHASE_SPLIT,
-                                       EvaluationProviderProfile.DEEPSEEK_BOUNDED_TASK} and function["name"] == "SourceVerificationOutput"
+                                       EvaluationProviderProfile.DEEPSEEK_BOUNDED_TASK, EvaluationProviderProfile.DEEPSEEK_PRO_BOUNDED_TASK} and function["name"] == "SourceVerificationOutput"
         forced = mixed_v or not (official or verification_tool_choice == "omitted"
                       and function["name"] == "SourceVerificationOutput")
         fields = _PAYLOAD_FIELDS if forced else _PAYLOAD_FIELDS - {"tool_choice"}
         if official:
             fields = fields | {"reasoning_effort"}
+        fields = fields | set(provider_profile.output_parameters)
         if (
             not isinstance(value, dict) or set(value) != fields
             or value["model"] != provider_profile.model
+            or any(type(value.get(key)) is not int or value[key] != expected
+                   for key, expected in provider_profile.output_parameters.items())
             or (official and value.get("reasoning_effort") != ("none" if mixed_v else "max"))
             or type(value["temperature"]) not in (float, int)
             or value["temperature"] != 0

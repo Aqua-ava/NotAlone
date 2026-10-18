@@ -242,6 +242,7 @@ def _verify_bounded_claim(frozen: dict, config: dict, helper: Any, actual_window
     from .models import ExtractionWindow
     from .source_proof import bounded_runtime_rule_set_sha256
     from .verification_adapters import source_verification_contract
+    from .evaluation_provider_contract import bounded_profile_for_config, EvaluationProviderProfile
     from notalone.memory_trace.context import snapshot
     from notalone.tasks.models import ExtractionRuntimeConfig, ExtractionRuntimeMode
 
@@ -252,6 +253,15 @@ def _verify_bounded_claim(frozen: dict, config: dict, helper: Any, actual_window
     content = helper.digest(tuple({"messages": row["messages"], "target_indices": row["target_indices"]}
                                   for row in BOUNDED_RUNTIME_INPUTS))
     current_rules = bounded_runtime_rule_set_sha256()
+    profile = bounded_profile_for_config(config)
+    fixed = frozen.get("fixed", {})
+    if fixed.get("provider_profile", EvaluationProviderProfile.DEEPSEEK_BOUNDED_TASK.value) != profile.value:
+        raise ValueError("bounded_frozen_provider_changed")
+    if profile is EvaluationProviderProfile.DEEPSEEK_PRO_BOUNDED_TASK and (
+            fixed.get("request_model") != profile.model or fixed.get("response_model") != profile.model
+            or type(fixed.get("request_contract_version")) is not int or fixed["request_contract_version"] != 3
+            or type(fixed.get("max_tokens")) is not int or fixed["max_tokens"] != 8192):
+        raise ValueError("bounded_frozen_pro_contract_changed")
     fixture = "backend/src/notalone/memory_extraction/evaluation_bounded_cases.py"
     fixture_sha = hashlib.sha256((Path(__file__).resolve().parents[4] / fixture).read_bytes()).hexdigest()
     plan = [{"case_position": position, "case_name": case.name, "input_sha256": canonical_sha256(window)}
@@ -269,10 +279,9 @@ def _verify_bounded_claim(frozen: dict, config: dict, helper: Any, actual_window
             or config.get("extraction_mode") != "grounded-v2" or config.get("verification_mode") != "nullable-proof-v3"
             or config.get("base_url") != "https://api.deepseek.com"
             or config.get("endpoint") != "https://api.deepseek.com/chat/completions"
-            or config.get("request_model") != "deepseek-flash"
+            or config.get("request_model") != profile.model
             or type(config.get("timeout")) is not float or config["timeout"] != 300.0
             or type(config.get("max_retries")) is not int or config["max_retries"] != 0
-            or type(config.get("request_contract_version")) is not int or config["request_contract_version"] != 2
             or type(config.get("temperature")) not in (int, float) or config["temperature"] != 0
             or config.get("stream") is not False or config.get("fallback") is not False
             or config.get("response_identity_policy") != "first_valid_completion_observation_stop_on_change"

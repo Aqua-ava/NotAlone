@@ -308,7 +308,7 @@ def _run_bounded_runtime_evaluation(
     source_hashes: dict[str, str], frozen_gold: dict, credential_loader: Callable[[], str],
     audit_case: Callable[[dict], dict], synthetic_transport: httpx.MockTransport | None,
     windows: tuple[ExtractionWindow, ...], task_ids: tuple[UUID, ...], database_url: str,
-    guard: BoundedRuntime15Deadline,
+    guard: BoundedRuntime15Deadline, provider_profile: str,
 ) -> dict:
     """在共享入口登记固定正式任务；沿原预算、SDK、审核与收尾执行。"""
     from .evaluation_provider_contract import ECNUEvaluationContract, EvaluationProviderProfile
@@ -318,7 +318,9 @@ def _run_bounded_runtime_evaluation(
     from langchain_core.utils.function_calling import convert_to_openai_tool
     from langsmith import get_tracing_context
 
-    profile = EvaluationProviderProfile.DEEPSEEK_BOUNDED_TASK
+    profile = EvaluationProviderProfile(provider_profile)
+    if not profile.is_bounded:
+        raise EvaluationBudgetAbort("evaluation_bounded_fixed_profile_required")
     if (current_trace() is not None or get_tracing_context().get("enabled") is True
             or not callable(credential_loader) or type(audit_case) is not PhasedEvaluationAudit
             or synthetic_transport is not None and type(synthetic_transport) is not httpx.MockTransport
@@ -379,6 +381,8 @@ def _run_bounded_runtime_evaluation(
         "fallback": False, "versions": {name: version(name) for name in (
             "openai", "langchain-core", "langchain-deepseek", "langchain-openai", "httpx", "httpx2", "langsmith", "pydantic")},
     }
+    if profile is EvaluationProviderProfile.DEEPSEEK_PRO_BOUNDED_TASK:
+        config.update(request_contract_version=3, provider_profile=profile.value, **profile.output_parameters)
     config.pop("thinking")
     config["omitted_parameters"].remove("reasoning_effort")
 
@@ -411,7 +415,7 @@ def _run_bounded_runtime_evaluation(
         if not messages or messages[0] != {"role": "system", "content": prompt}:
             raise EvaluationBudgetAbort("ecnu_runtime_prompt_changed")
         verification = purpose == "verification"
-        expected = {"model": profile.model, "temperature": 0.0, "stream": False,
+        expected = {"model": profile.model, "temperature": 0.0, "stream": False, **profile.output_parameters,
             "reasoning_effort": "none" if verification else "max",
             "thinking": {"type": "disabled" if verification else "enabled"}, "messages": messages,
             "tools": [deepcopy(convert_to_openai_tool(schema))],
@@ -491,10 +495,10 @@ def run_ecnu_evaluation(
     from .evaluation_provider_contract import EvaluationProviderProfile
 
     bounded15 = execution_plan == BOUNDED_RUNTIME_PLAN
-    if (bounded15 or provider_profile == EvaluationProviderProfile.DEEPSEEK_BOUNDED_TASK
+    if (bounded15 or provider_profile in {EvaluationProviderProfile.DEEPSEEK_BOUNDED_TASK, EvaluationProviderProfile.DEEPSEEK_PRO_BOUNDED_TASK}
             or case_set == "bounded15" or formal_windows is not None or formal_task_ids != ()
             or database_url is not None or bounded_runtime_deadline is not None):
-        if (not bounded15 or provider_profile != EvaluationProviderProfile.DEEPSEEK_BOUNDED_TASK
+        if (not bounded15 or provider_profile not in {EvaluationProviderProfile.DEEPSEEK_BOUNDED_TASK, EvaluationProviderProfile.DEEPSEEK_PRO_BOUNDED_TASK}
                 or reference_version != BOUNDED_RUNTIME_PLAN or case_set != "bounded15" or case_positions is not None
                 or extraction_mode != "grounded-v2" or extraction_prompt_profile != "default"
                 or verification_mode != "nullable-proof-v3" or verification_tool_choice != "forced"
@@ -516,7 +520,8 @@ def run_ecnu_evaluation(
         return _run_bounded_runtime_evaluation(output_directory=output_directory, run_id=run_id,
             deadline=deadline, repo_root=repo_root, source_hashes=source_hashes, frozen_gold=frozen_gold,
             credential_loader=credential_loader, audit_case=audit_case, synthetic_transport=synthetic_transport,
-            windows=formal_windows, task_ids=formal_task_ids, database_url=database_url, guard=bounded_runtime_deadline)
+            windows=formal_windows, task_ids=formal_task_ids, database_url=database_url, guard=bounded_runtime_deadline,
+            provider_profile=provider_profile)
 
     mixed = type(execution_plan) is str and execution_plan in PHASE_SPLIT_PLANS
     reference21_v4 = type(execution_plan) is str and execution_plan in REFERENCE21_PLANS

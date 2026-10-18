@@ -546,6 +546,7 @@ def _run_evaluation_batch(
     from .evaluation_bounded_cases import BOUNDED_RUNTIME_CASES, BOUNDED_RUNTIME_PLAN
 
     bounded = execution_plan == BOUNDED_RUNTIME_PLAN
+    bounded_profile = store.bounded_provider_profile if bounded else None
     if bounded:
         from .evaluation_phased_audit import PhasedEvaluationAudit
 
@@ -557,7 +558,8 @@ def _run_evaluation_batch(
                 or selected is not SourceVerificationMode.NULLABLE_PROOF_V3
                 or type(max_retries) is not int or max_retries != 0 or request_timeout_seconds != 300
                 or extraction_tool_choice != "omitted" or verification_tool_choice != "forced"
-                or base_url != "https://api.deepseek.com" or request_model != "deepseek-flash"
+                or bounded_profile is None or not bounded_profile.is_bounded
+                or base_url != bounded_profile.base_url or request_model != bounded_profile.model
                 or not isinstance(semantic_audit, PhasedEvaluationAudit)
                 or semantic_audit.execution_plan != execution_plan
                 or semantic_audit.reference_version != execution_plan
@@ -651,6 +653,7 @@ def _run_evaluation_batch(
             model = ChatDeepSeek(
                 api_key=SecretStr(api_key), base_url=base_url,
                 model=request_model, temperature=0.0,
+                **(bounded_profile.output_parameters if bounded_profile is not None else {}),
                 timeout=request_timeout_seconds, max_retries=max_retries,
                 extra_body={"thinking": {"type": "enabled"},
                             **({"reasoning_effort": "max"} if bounded else
@@ -659,6 +662,7 @@ def _run_evaluation_batch(
             )
             verification_model = ChatDeepSeek(
                 api_key=SecretStr(api_key), base_url=base_url, model=request_model, temperature=0.0,
+                **(bounded_profile.output_parameters if bounded_profile is not None else {}),
                 timeout=request_timeout_seconds, max_retries=max_retries,
                 extra_body={"thinking": {"type": "disabled"}, "reasoning_effort": "none"},
                 http_client=sync_client, http_async_client=async_client,

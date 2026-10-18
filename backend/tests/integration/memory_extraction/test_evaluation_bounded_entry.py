@@ -134,10 +134,18 @@ class BoundedEvaluationEntryTest(unittest.TestCase):
         return fixed
 
     def test_fixed_entry_freezes_all_tasks_then_claims_before_single_loader_and_real_sdk_wire(self):
+        self.assert_fixed_sdk_wire("deepseek-bounded-task-v1", "deepseek-flash")
+
+    def test_pro_entry_freezes_exact_profile_and_output_cap_before_real_sdk_wire(self):
+        self.assert_fixed_sdk_wire("deepseek-pro-bounded-task-v1", "deepseek-v4-pro")
+
+    def assert_fixed_sdk_wire(self, profile, model_name):
         from langchain_deepseek import ChatDeepSeek
         from pydantic import SecretStr
 
         fixed = self.prepared()
+        fixed["provider_profile"] = profile
+        pro = profile == "deepseek-pro-bounded-task-v1"
         wires = []
         original_start = self.control.start
         self.started = False
@@ -167,7 +175,7 @@ class BoundedEvaluationEntryTest(unittest.TestCase):
                 body = json.loads(request.content)
                 wires.append(body)
                 response = old_entry.EvaluationECNUTest.response(self, request,
-                    reported_model="deepseek-flash", arguments={})
+                    reported_model=model_name, arguments={})
                 contract.observe_response(response)
                 return response
 
@@ -183,9 +191,9 @@ class BoundedEvaluationEntryTest(unittest.TestCase):
                     prompt, schema = (entry._verification_contract("nullable-proof-v3") if verification
                         else entry.extraction_contract("grounded-v2", fixed["formal_windows"][0]))
                     messages = [{"role": "system", "content": prompt}, {"role": "user", "content": "合成调用控制"}]
-                    model = ChatDeepSeek(api_key=SecretStr(key), model="deepseek-flash", base_url="https://api.deepseek.com",
+                    model = ChatDeepSeek(api_key=SecretStr(key), model=model_name, base_url="https://api.deepseek.com",
                         temperature=0.0, timeout=300, max_retries=0, http_client=client, http_async_client=async_client,
-                        extra_body={"thinking": {"type": "disabled" if verification else "enabled"},
+                        **({"max_tokens": 8192} if pro else {}), extra_body={"thinking": {"type": "disabled" if verification else "enabled"},
                                     "reasoning_effort": "none" if verification else "max"})
                     with values["invocation_scope"](purpose, messages, fixed["formal_windows"][0]):
                         model.bind_tools([schema], **({"tool_choice": schema["title"]} if verification else {})).invoke(messages)
@@ -196,6 +204,16 @@ class BoundedEvaluationEntryTest(unittest.TestCase):
             result = entry.run_ecnu_evaluation(**{**fixed, "credential_loader": credential})
         self.assertEqual(self.credentials, ["synthetic"])
         self.assertEqual(len(wires), 2)
+        self.assertEqual([wire["model"] for wire in wires], [model_name, model_name])
+        for wire in wires:
+            if pro:
+                self.assertEqual(wire["max_tokens"], 8192)
+            else:
+                self.assertNotIn("max_tokens", wire)
+        config = json.loads((self.output / "manifest.json").read_text())["frozen_config"]
+        self.assertEqual(config["request_contract_version"], 3 if pro else 2)
+        self.assertEqual(config.get("provider_profile"), profile if pro else None)
+        self.assertEqual(config.get("max_tokens"), 8192 if pro else None)
         self.assertNotIn("tool_choice", wires[0])
         self.assertEqual(wires[1]["tool_choice"]["function"]["name"], "SourceVerificationOutput")
         self.assertEqual(wires[0]["reasoning_effort"], "max")

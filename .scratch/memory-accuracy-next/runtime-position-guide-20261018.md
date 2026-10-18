@@ -41,10 +41,16 @@ finish的closed=true、close_unknown=false、worker_gone=true，launch与worker�
 
 只改变通用输入坐标，不定位事件、不产生引用链接、不修补输出；不能解决或认证作者target语义。两项实际SDK/MockTransport测试先红后绿，proof模块30项通过，正式评测与相关模块67项通过，改动及包装器两模块定向mypy通过。Standards/Spec各0实质问题。无新增模型调用；原15窗及其Gold、质量门、旧失败和关闭预算保持。
 
-## 下一项独立交付配置：前置接线（未实现）
+## 独立Pro交付配置：封闭接线与工程验证
 
 依[官方配置查证](../memory-extraction-accuracy/deepseek-config-options-20261018.md)，可准备唯一显式Pro bounded15 profile，请求deepseek-v4-pro、官方endpoint不变；响应预期也须精确冻结，不符立即停止，不接受任意别名或宣称文档保证后端权重。目的仅是原15窗／Gold和六类proof合同的实际交付，不声称Flash/Pro因果优劣，无需为这一目的重跑Flash基线。
 
-Emax/工具省略、Vnone/强制、E2/proof3、cap30、零重试、RAW→FULL、七轴、七正控交付及原停止门保持。逐码点v2属于当前冻结源码；结果不得分别归因模型或索引。生产默认与旧Flash配置不变，不修改资料／Gold，不借旧余额。
+Emax/工具省略、Vnone/强制、E2/proof3、cap30、零重试、RAW→FULL、七轴、七正控交付及原停止门保持。新Pro配置额外固定E/V均max_tokens=8192，避免依赖服务端动态默认；截断仍按原未知门停止，原Flash请求字段不变。30次是调用上限，不称费用上限；输出token最多245760，实际费用还取决于输入、缓存和计费时段。逐码点v2属于当前冻结源码；结果不得分别归因模型或索引。生产默认与旧Flash配置不变，不修改资料／Gold，不借旧余额。
 
-代码准备必须贯通provider闭集、bounded入口、records登记及摘要、offline实际SDK、owned领取、fixture prepare/validate/worker/launch、专用凭据读取；新登记版本显式绑定profile与精确model/phase，旧登记仍按旧合同核对。凭据仅读显式0600普通单链接私有文件中的API key，model/endpoint不继承环境；prepare阶段不读凭据。交叉模型、响应漂移、未知profile/phase及重算摘要绕过均须在外发前拒绝；实际SDK Mock、领取顺序、闭账与来源清理验证后方可独立冻结。当前没有新profile实现、激活或模型调用。
+代码准备必须贯通provider闭集、bounded入口、records登记及摘要、offline实际SDK、owned领取、fixture prepare/validate/worker/launch、专用凭据读取；新登记版本显式绑定profile与精确model/phase，旧登记仍按旧合同核对。凭据仅读显式0600普通单链接私有文件中的API key，model/endpoint不继承环境；prepare阶段不读凭据。交叉模型、响应漂移、未知profile/phase及重算摘要绕过均须在外发前拒绝；实际SDK Mock、领取顺序、闭账与来源清理验证后方可独立冻结。该接线现已实现；尚未激活或调用真实模型。
+
+实现采用deepseek-pro-bounded-task-v1及request_contract_version=3，同时绑定provider_profile、deepseek-v4-pro和整数max_tokens=8192；旧Flash version2不新增字段。新增prepare-bounded15-pro入口，显式私有JSON文件只接受单一api_key。Pro响应型号不符、length或content_filter均立即停止，即使携带完整工具JSON也不例外；原响应继续封存。旧Flash结束标记兼容保持。
+
+新增注册/SDK/领取/fixture先出现预期红灯后转绿，最终6模块90项检查全部通过（33.860秒）；覆盖真正独立owned子进程、SDK MockTransport E/V请求、PG实际task/trace的Pro身份及结束后来源残留0。两轴最终复核均0剩余实质问题；主Agent另核任务07投影机械一致。以上仅证明受控工程链路，不认证供应商接受或真实proof交付，尚无新模型请求。
+
+最终类型检查曾因SDK可变关键字的宽dict注解报40条同源错误；以仅含可选max_tokens的TypedDict修正，不改变实际请求。随后注册模块15项复查通过，五源码mypy在pipefail下明确Success、退出0；不将此前tail退出码当作类型检查成功。
