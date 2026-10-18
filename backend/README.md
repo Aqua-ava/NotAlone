@@ -241,3 +241,10 @@ PYTHONPATH=src python -m notalone.experiments.reply_comparison \
 `organization_dependencies`（`reply_case_id`、原 `case_id`、`input_sha256`、
 `case_evidence_sha256`），来源删除或撤销后关闭。Agent 审阅和四例冒烟只报告
 实际覆盖，正式资格仍为 `unknown`；原整理侧 800 次累计账本保持独立。
+
+
+### 回复评测捕获器的异步收尾
+
+`ReplyComparisonCapture` 默认保留 `async_lifecycle="legacy"` 的同步关闭方式，已有比较入口不自动切换。新异步运行器可显式选择 `same-loop-v1`，并在冻结清单中写入相同的 `capture_async_lifecycle`；所有异步请求及 `await capture.aclose()` 必须在同一事件循环退出前完成。不要先 `asyncio.run(request())` 退出连接所属循环，再从别的循环关闭。同步使用方仍调用 `close()`，运行中的异步循环应使用 `aclose()`。
+
+关闭失败时仍尝试关闭预算、同步客户端并落盘回执；多个失败保留为异常组，不能把预算已关闭等同于连接清理成功。新模式拒绝跨循环调用，不自动重试请求。捕获器源码已包含在回复评测合同的 `evaluation_version` 中，因此本修复改变新冻结合同摘要；旧冻结、失败回执与模型质量结论保持原样，不迁移资格。本次仅合成禁网生命周期与兼容检查，不代表新真实模型验收通过。
