@@ -43,6 +43,7 @@ def organization_rules_identity():
                         if isinstance(node, (ast.FunctionDef, ast.ClassDef)) and node.name in selected]
     for name in ('application/organization_call.py', 'memory/owner_organization_input.py',
                  'memory/scenario_validation.py', 'memory/scenario_publication.py', 'memory/profile_validation.py', 'memory/organization_isolation.py',
+                 'memory/scene_workspace.py',
                  'persistence/layered_coverage.py', 'persistence/layered_corrections.py',
                  'memory/layered_correction_validation.py'):
         path = root / name

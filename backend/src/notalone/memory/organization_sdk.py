@@ -77,8 +77,11 @@ def actual_organization_adapters(ports, *, runtime_policy="qualified_suite"):
 class _DeepSeekOrganizationAdapter:
     timeout_contract = OrganizationAdapterTimeoutContract('sdk')
 
-    def __init__(self, model, *, layer, budget, transport):
+    physical_accounting = True
+
+    def __init__(self, model, *, layer, budget, transport, document_tools=False):
         self.model, self.layer, self.budget, self.transport = model, layer, budget, transport
+        self.document_tools = document_tools
 
     @property
     def actual_candidate(self):
@@ -107,9 +110,12 @@ class _DeepSeekOrganizationAdapter:
 
 class DeepSeekOrganizationProposal(_DeepSeekOrganizationAdapter):
     def propose(self, *, memories, scenarios=(), corrections=(), budget, deadline):
+        if self.document_tools and self.layer == 'l2':
+            from notalone.memory.scene_workspace import maintain_scenes
+            return maintain_scenes(self, memories=memories, scenarios=scenarios, corrections=corrections, deadline=deadline)
         prompt = (CORRECTED_SCENARIO_PROMPT if corrections else SCENARIO_PROMPT) if self.layer == 'l2' else PROFILE_PROMPT
         return self._invoke(prompt,
-            {'memories': [item.to_payload() for item in memories], 'scenarios': list(scenarios), 'corrections': list(corrections), 'budget': budget.to_payload()}, deadline)
+            {'layer': self.layer, 'memories': [item.to_payload() for item in memories], 'scenarios': list(scenarios), 'corrections': list(corrections), 'budget': budget.to_payload()}, deadline)
 
 
 class DeepSeekOrganizationVerification(_DeepSeekOrganizationAdapter):
@@ -122,9 +128,19 @@ class DeepSeekOrganizationVerification(_DeepSeekOrganizationAdapter):
             payload['verification_targets'] = profile_verification_targets(proposal)
             result = self._invoke(PROFILE_VERIFICATION_PROMPT + (CORRECTION_POLICY if corrections else ''), payload, deadline)
             return profile_verification_items(result, proposal, payload['memories'])
+        if self.document_tools and not proposal['scenarios']:
+            target = content_digest(payload)
+            result = self._invoke(POLICY + '\n核验新资料是否确实无需改变当前任何场景；若有应保留的新事实却未整理，必须否决。'
+                + '\n只返回{"sha256":"复制no_change_target","supported":true或false,"reasons":["理由"]}。',
+                {**payload, 'no_change_target': target}, deadline)
+            return (set(result) == {'sha256', 'supported', 'reasons'} and result['sha256'] == target
+                and result['supported'] is True and isinstance(result['reasons'], list)
+                and all(isinstance(reason, str) for reason in result['reasons']))
         payload['verification_targets'] = [{'index': i, 'sha256': content_digest(item)}
                                            for i, item in enumerate(proposal['scenarios'])]
         prompt = SCENARIO_ITEM_VERIFICATION_PROMPT
+        if self.document_tools:
+            prompt += '\n逐项对照被replaces的完整旧场景；仍有效事实若遗漏、合并改变含义或来源不能支持重整后正文，须否决。仅保留引用ID不证明保留原事实。'
         result = self._invoke(prompt, payload, deadline)
         if not isinstance(result, dict) or set(result) != {'items'} or not isinstance(result['items'], list):
             raise ValueError('主题核验顶层结构无效。')
@@ -175,7 +191,8 @@ def build_deepseek_organization_adapters(*, budget, runtime_policy="qualified_su
         client.close()
         raise
     model.cache = False
-    adapters = [cls(model, layer=layer, budget=budget, transport=transport) for cls, layer in (
+    adapters = [cls(model, layer=layer, budget=budget, transport=transport,
+        document_tools=runtime_policy == "verified_items" and layer == "l2") for cls, layer in (
         (DeepSeekOrganizationProposal, 'l2'), (DeepSeekOrganizationVerification, 'l2'),
         (DeepSeekOrganizationProposal, 'l3'), (DeepSeekOrganizationVerification, 'l3'))]
     if not actual_organization_adapters(adapters, runtime_policy=runtime_policy):
