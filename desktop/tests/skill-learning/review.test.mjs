@@ -466,7 +466,11 @@ test('方法编辑经轮询保留，显式保存和批准响应丢失后用同�
     f.records.failAfterCommit = 'approve';
     await f.bridge.approveReview({ ...f.selected(), comparisonId, confirmed: true, replacementsConfirmed: true });
     assert.equal(f.controller.getState().review.comparison, null, '未确认完成的发布不得留下可批准旧对照');
+    const callsBeforeRefresh = f.records.calls.length;
     await f.bridge.refresh(f.scope());
+    assert.equal(f.records.calls.length, callsBeforeRefresh, '刷新不得自动重放未知提交结果的批准');
+    assert.equal(f.controller.getState().review.published, null);
+    await f.bridge.retryReview(f.selected());
     assert.equal(f.controller.getState().review.published.version_number, 1);
     assert.deepEqual(f.controller.getState().review.published.scope, { kind: 'scene', contact_id: null, scene: '核对安排' });
     const approvals = f.records.calls.filter(request => request.path.endsWith('/approve'));
@@ -494,7 +498,11 @@ test('审核POST未结算时轮询保持原对照任务，500未知批准沿原b
     await f.bridge.approveReview({ ...f.selected(), comparisonId, confirmed: true, replacementsConfirmed: true });
     assert.equal(f.controller.getState().review.retry, 'approve');
     const original = f.records.calls.at(-1).body;
+    const callsBeforeRefresh = f.records.calls.length;
     await f.bridge.refresh(f.scope());
+    assert.equal(f.records.calls.length, callsBeforeRefresh, '轮询不得重放500未知批准');
+    assert.equal(f.controller.getState().review.retry, 'approve');
+    await f.bridge.retryReview(f.selected());
     assert.deepEqual(f.records.calls.at(-1).body, original);
     assert.equal(f.records.replies.size, 2, '同一次对照和批准只各保存一份权威结果');
     assert.equal(f.controller.getState().review.published.version_number, 1);

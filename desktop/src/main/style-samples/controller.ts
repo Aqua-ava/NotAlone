@@ -42,7 +42,8 @@ export class StyleSampleController {
     private readonly replies: ReplySession) {
     contacts.onStateChanged(() => this.synchronize());
     backend.onStateChanged(() => this.synchronize());
-    replies.onStateChanged(() => this.onReplyStateChanged());
+    replies.onStateChanged((state) => this.onReplyStateChanged(state),
+      ['contactId', 'scopeRevision', 'result', 'savedSession', 'candidateVersions', 'messages', 'sourceAvailability', 'confirmedSessionDeletion']);
     this.synchronize();
     this.onReplyStateChanged();
   }
@@ -94,12 +95,11 @@ export class StyleSampleController {
     this.pendingExpressionPreferenceDeletions = Math.max(0, this.pendingExpressionPreferenceDeletions - 1);
     if (this.pendingExpressionPreferenceDeletions === 0) await this.invalidateSource('');
   }
-  private onReplyStateChanged() {
+  private onReplyStateChanged(reply = this.replies.getState()) {
     this.synchronize();
-    const reply = this.replies.getState();
     this.acceptSessionDeletion(reply);
     this.acceptUnavailableCandidateTurns(reply);
-    this.rememberReplyOrigins();
+    this.rememberReplyOrigins(reply);
   }
   private resetManualOrigin() {
     this.pendingPaste = undefined;
@@ -209,8 +209,8 @@ export class StyleSampleController {
     }
     return sources;
   }
-  private rememberReplyOrigins() {
-    const reply = this.replies.getState(); const scope = this.scope;
+  private rememberReplyOrigins(reply = this.replies.getState()) {
+    const scope = this.scope;
     if (!scope || reply.contactId !== scope.contactId || reply.scopeRevision !== scope.scopeRevision || reply.sourceAvailability) return;
     for (const { origin, texts } of this.replyCandidateSources(reply)) {
       for (const text of texts) {

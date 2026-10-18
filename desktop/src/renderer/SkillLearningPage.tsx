@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ContactSessionView } from './contact-session';
 import type { SkillComparisonSide, SkillDraft, SkillDraftReview, SkillLearningState, SkillPublicationScope, SkillReviewForm } from '../shared/skill-learning-bridge';
 import { useRevisionedSession } from './use-revisioned-session';
@@ -17,12 +17,36 @@ export function SkillLearningPage({ session }: { session: ContactSessionView }) 
   const { state, error, setError } = useRevisionedSession(initial, bridge);
   const { selectedContactId: contactId, scopeRevision } = session.state;
   const current = contactId !== null && state.contactId === contactId && state.scopeRevision === scopeRevision;
+  const pollingStatus = useRef<string | undefined>(undefined);
+  pollingStatus.current = current ? state.task?.status : undefined;
   useEffect(() => {
     if (!contactId) return;
-    const refresh = () => { void bridge.refresh({ contactId, scopeRevision }).catch(() => {}); };
-    refresh();
-    const timer = setInterval(refresh, 3000);
-    return () => clearInterval(timer);
+    let stopped = false, running = false, refreshAfterSettled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const clearTimer = () => { clearTimeout(timer); timer = undefined; };
+    const visible = () => document.visibilityState !== 'hidden';
+    const refresh = async () => {
+      clearTimer();
+      if (stopped || !visible()) return;
+      if (running) { refreshAfterSettled = true; return; }
+      running = true;
+      try { await bridge.refresh({ contactId, scopeRevision }); } catch { /* 下一轮仍只读取，不重放写入。 */ }
+      finally {
+        running = false;
+        if (!stopped && visible()) {
+          if (refreshAfterSettled) { refreshAfterSettled = false; void refresh(); }
+          else timer = setTimeout(() => { void refresh(); },
+            ['queued', 'running', 'verifying'].includes(pollingStatus.current ?? '') ? 3000 : 15000);
+        }
+      }
+    };
+    const visibilityChanged = () => {
+      clearTimer();
+      if (visible()) void refresh();
+    };
+    document.addEventListener('visibilitychange', visibilityChanged);
+    void refresh();
+    return () => { stopped = true; clearTimer(); document.removeEventListener('visibilitychange', visibilityChanged); };
   }, [bridge, contactId, scopeRevision]);
   if (!contactId) return <section className="empty-panel"><h2>请选择联系人</h2><p>经验整理只处理已确认联系人的授权资料。</p></section>;
   const run = (operation: Promise<void>) => { setError(''); void operation.catch(reason => setError(reason instanceof Error ? reason.message : '审核操作暂不可用。')); };

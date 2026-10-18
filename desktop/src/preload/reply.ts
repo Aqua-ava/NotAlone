@@ -1,8 +1,44 @@
 import type { PageTransport } from './transport';
-import type { GenerateReply, ReplyBridge, ReplyCandidateEdit, ReplyCandidateSelection, ReplySessionState, RewriteOptionsUpdate } from '../shared/reply-bridge';
+import type { GenerateReply, ReplyBridge, ReplyCandidateEdit, ReplyCandidateSelection, ReplySessionState, ReplyStateUpdate, ReplyInputCommand, RewriteOptionsUpdate } from '../shared/reply-bridge';
 import type { ReplyEvidenceState } from '../shared/reply-evidence';
 
 export function createReplyBridge(ipcRenderer: PageTransport): ReplyBridge {
+  let current: ReplySessionState | undefined;
+  let reading: Promise<void> | undefined;
+  let buffered: ReplyStateUpdate[] = [];
+  const listeners = new Set<(state: ReplySessionState) => void>();
+  const accept = (state: ReplySessionState) => {
+    if (current && state.revision <= current.revision) return;
+    current = state;
+    for (const listener of listeners) listener(state);
+  };
+  const apply = (event: ReplyStateUpdate): boolean => {
+    if (event.kind === 'snapshot') { accept(event.state); return true; }
+    if (current && event.revision <= current.revision) return true;
+    if (!current || event.baseRevision !== current.revision || event.contactId !== current.contactId
+      || event.scopeRevision !== current.scopeRevision) return false;
+    accept({ ...current, ...event.changes, revision: event.revision });
+    return true;
+  };
+  const getState = async () => {
+    const state: ReplySessionState = await ipcRenderer.invoke('reply:get-state');
+    if (listeners.size) {
+      accept(state);
+      buffered = buffered.filter(event => !apply(event));
+    }
+    return state;
+  };
+  const synchronize = () => {
+    if (reading) return;
+    let succeeded = false;
+    reading = getState().then(() => { succeeded = true; }).catch(() => {}).finally(() => {
+      reading = undefined;
+      if (succeeded && buffered.length && listeners.size) synchronize();
+    });
+  };
+  const receiveUpdate = (_event: unknown, event: ReplyStateUpdate) => {
+    if (!apply(event)) { buffered.push(event); synchronize(); }
+  };
   return Object.freeze({
     getEvidenceState: (...args: unknown[]) => args.length === 0 ? ipcRenderer.invoke('reply:get-evidence-state') : Promise.reject(new Error('候选依据不可用。')),
     loadEvidence: (...args: unknown[]) => ipcRenderer.invoke('reply:load-evidence', ...args),
@@ -13,7 +49,14 @@ export function createReplyBridge(ipcRenderer: PageTransport): ReplyBridge {
       ipcRenderer.on('reply:evidence-changed', receive);
       return () => ipcRenderer.removeListener('reply:evidence-changed', receive);
     },
-    getState: (...args: unknown[]) => args.length === 0 ? ipcRenderer.invoke('reply:get-state') : Promise.reject(new Error('本次表达操作不可用。')),
+    getState: (...args: unknown[]) => args.length === 0 ? getState() : Promise.reject(new Error('本次表达操作不可用。')),
+    updateInput: (command: ReplyInputCommand) => ipcRenderer.invoke('reply:update-input', command),
+    onStateUpdated: (listener: (update: ReplyStateUpdate) => void) => {
+      if (typeof listener !== 'function') throw new Error('本次表达操作不可用。');
+      const receive = (_event: unknown, event: ReplyStateUpdate) => listener(event);
+      ipcRenderer.on('reply:state-updated', receive);
+      return () => ipcRenderer.removeListener('reply:state-updated', receive);
+    },
     updateOptions: (update: RewriteOptionsUpdate) => ipcRenderer.invoke('reply:update-options', update),
     setMode: (...args: unknown[]) => ipcRenderer.invoke('reply:set-mode', ...args),
     loadMessages: (...args: unknown[]) => ipcRenderer.invoke('reply:load-messages', ...args),
@@ -54,9 +97,17 @@ export function createReplyBridge(ipcRenderer: PageTransport): ReplyBridge {
     showCandidateVersion: (...args: unknown[]) => ipcRenderer.invoke('reply:show-candidate-version', ...args),
     onStateChanged: (listener: (state: ReplySessionState) => void) => {
       if (typeof listener !== 'function') throw new Error('本次表达操作不可用。');
-      const receive = (_event: unknown, state: ReplySessionState) => listener(state);
-      ipcRenderer.on('reply:state-changed', receive);
-      return () => ipcRenderer.removeListener('reply:state-changed', receive);
+      const first = !listeners.size;
+      if (first) {
+        buffered = [];
+        ipcRenderer.on('reply:state-updated', receiveUpdate);
+      }
+      listeners.add(listener);
+      if (first) void ipcRenderer.invoke('reply:subscribe').catch(() => synchronize());
+      return () => {
+        listeners.delete(listener);
+        if (!listeners.size) { ipcRenderer.removeListener('reply:state-updated', receiveUpdate); buffered = []; current = undefined; }
+      };
     },
   });
 }

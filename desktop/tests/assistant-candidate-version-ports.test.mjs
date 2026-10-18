@@ -2100,3 +2100,26 @@ for (const scenario of ['旧空读取', '旧非空读取', '权威current变化'
     }
   });
 }
+
+test('轻量输入命令保留候选编辑、独立版本和范围门禁，不回传完整历史', async () => {
+  const f = await fixture();
+  const identity = { ...f.scope, sessionId: f.sessionId, candidateId: f.candidateId, versionId: f.versionId };
+  const before = await f.bridge.getState(), observed = [];
+  const unsubscribe = f.bridge.onStateChanged(state => observed.push(state));
+  try {
+    const result = await f.bridge.updateInput({ type: 'candidateDraft', update: { ...identity,
+      messages: [{ messageId: f.messageId, text: '轻量路径尚未保存的完整正文。' }], requirements: '只改当前版本。' } });
+    assert.equal(result, undefined);
+    const edited = await f.bridge.getState();
+    assert.equal(edited.candidateDrafts[0].messages[0].text, '轻量路径尚未保存的完整正文。');
+    assert.equal(observed.at(-1).candidateDrafts[0].requirements, '只改当前版本。');
+    assert.deepEqual(edited.savedSession, before.savedSession);
+    assert.deepEqual(edited.candidateVersions, before.candidateVersions);
+    assert.deepEqual(edited.explicitCandidateSelection, before.explicitCandidateSelection);
+    await assert.rejects(f.bridge.updateInput({ type: 'candidateDraft', update: { ...identity, scopeRevision: identity.scopeRevision - 1,
+      messages: [{ messageId: f.messageId, text: '迟到编辑不得覆盖。' }], requirements: '' } }));
+    assert.equal((await f.bridge.getState()).candidateDrafts[0].messages[0].text, '轻量路径尚未保存的完整正文。');
+    assert.equal(f.handlers.get('reply:update-input').role, 'helper');
+    await assert.rejects(f.bridge.updateInput({ type: 'generate', update: f.scope }));
+  } finally { unsubscribe(); }
+});

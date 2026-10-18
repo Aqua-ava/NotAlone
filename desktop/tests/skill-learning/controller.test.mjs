@@ -431,3 +431,27 @@ test('并行的真实删除逐次结算，来源凭据及原任务重复核验�
     await rm(f.owned, { recursive: true, force: true });
   }
 });
+
+test('慢GET在重复刷新期间完整结算且同范围只有一轮读取', async () => {
+  const output = await build({ entryPoints: ['src/main/skill-learning/controller.ts'], bundle: true,
+    platform: 'node', format: 'esm', write: false, logLevel: 'silent' });
+  const { SkillLearningController } = await import(`data:text/javascript;base64,${Buffer.from(output.outputFiles[0].text).toString('base64')}`);
+  const contactId = randomUUID(), calls = [], pending = Promise.withResolvers();
+  const contacts = { onStateChanged: () => () => {}, getState: () => ({ selectedContactId: contactId,
+    scopeRevision: 1, directoryPhase: 'ready', contacts: [{ contactId }] }) };
+  const backend = { getConnectionGeneration: () => 1, onStateChanged: () => () => {}, requestJson: async request => {
+    calls.push(request); return pending.promise;
+  } };
+  const controller = new SkillLearningController(backend, contacts), scope = { contactId, scopeRevision: 1 };
+  const first = controller.refresh(scope), second = controller.refresh(scope);
+  assert.equal(calls.length, 1, '重复刷新复用当前GET，不能abort并重开');
+  assert.equal(calls[0].signal.aborted, false);
+  let secondSettled = false;
+  void second.then(() => { secondSettled = true; });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(secondSettled, false, '调用方必须等待共享GET结算再调度下一轮');
+  pending.resolve({ generation: 1, data: { enabled: true, scope_revision: 4, drafts: [], task: null, recent_outcomes: [] } });
+  await Promise.all([first, second]);
+  assert.equal(controller.getState().phase, 'ready');
+  assert.equal(controller.getState().settingRevision, 4);
+});

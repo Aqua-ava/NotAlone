@@ -191,10 +191,25 @@ export interface ReplySessionState {
   inputBudgetNotice?: AssistantInputBudgetNotice;
   continuation?: ReplyContinuationState;
 }
+// 增量只在同一联系人范围和连续修订内合并；跨范围发布完整投影。
+export type ReplyStateUpdate = { kind: 'snapshot'; state: ReplySessionState }
+  | { kind: 'patch'; baseRevision: number; revision: number; contactId: string | null; scopeRevision: number;
+      changes: Partial<ReplySessionState> };
+export type ReplyInputCommand =
+  | { type: 'options'; update: RewriteOptionsUpdate }
+  | { type: 'direction'; update: ReplyDirectionUpdate }
+  | { type: 'purpose'; update: ReplyPurposeUpdate }
+  | { type: 'correction'; update: ReplyCorrectionUpdate }
+  | { type: 'requirements'; update: ReplyRequirementsUpdate }
+  | { type: 'scene'; update: ReplySceneUpdate }
+  | { type: 'candidate'; update: ReplyCandidateEdit }
+  | { type: 'candidateDraft'; update: ReplyCandidateDraftUpdate };
 export interface ReplyCandidateSelection extends ContactSelection { replyRequestId: string; candidateId: string; }
 export interface ReplyCandidateEdit extends ReplyCandidateSelection { text: string; }
 export interface ReplyBridge extends ReplyEvidenceCommands {
   getState(): Promise<ReplySessionState>;
+  updateInput(command: ReplyInputCommand): Promise<void>;
+  onStateUpdated(listener: (update: ReplyStateUpdate) => void): () => void;
   updateOptions(update: RewriteOptionsUpdate): Promise<ReplySessionState>;
   setMode(update: ReplyModeUpdate): Promise<void>;
   loadMessages(request: ReplyMessagePageRequest): Promise<void>;

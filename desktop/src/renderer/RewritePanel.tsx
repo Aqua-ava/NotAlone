@@ -18,23 +18,23 @@ import { AssistantMessageNoticeActions } from './AssistantMessageNoticeActions';
 import { ReplyBasisChangeNotice } from './ReplyBasisChangeNotice';
 import { ReplySceneInput } from './ReplySceneInput';
 
-export function useReplySession() {
+export function useReplySession(enabled = true) {
   const { state, error, setError, latest, active, receive } = useRevisionedSession<ReplySessionState>({ revision: -1, scopeRevision: 0, contactId: null, generationBlock: 'foreground-confirmation-required',
     options: { tone: 'original', instruction: '', includeRelationshipContext: false },
     mode: 'rewrite_draft', scene: '', messages: { phase: 'idle', items: [], nextCursor: null }, targetMessageId: null, direction: '', purpose: '',
     correction: '', requirements: '', clarificationAnswer: '', skillChoice: { mode: 'auto', versionId: null }, skillChoices: [], exploration: { phase: 'idle', result: null },
     messageNotice: { phase: 'idle', changed: false, needsRefresh: false },
-    phase: 'idle', result: null, selectedCandidateId: null, canRetry: false }, window.notalone.replies);
+    phase: 'idle', result: null, selectedCandidateId: null, canRetry: false }, window.notalone.replies, enabled);
   async function operate(operation: () => Promise<ReplySessionState | void>) {
     const scopeRevision = latest.current.scopeRevision;
     try { const next = await operation(); if (next) receive(next); if (active.current && scopeRevision === latest.current.scopeRevision) setError(''); }
     catch { if (active.current && scopeRevision === latest.current.scopeRevision) setError('本次表达操作暂时不可用，请重新确认联系人。'); }
   }
   const selection = () => ({ contactId: latest.current.contactId!, scopeRevision: latest.current.scopeRevision });
-  async function versionOperation(operation: () => Promise<ReplySessionState>) {
+  async function versionOperation(operation: () => Promise<ReplySessionState | void>) {
     const scopeRevision = latest.current.scopeRevision;
     try {
-      const next = await operation(); receive(next);
+      const next = await operation(); if (next) receive(next);
       if (active.current && scopeRevision === latest.current.scopeRevision) setError('');
     } catch (error) {
       if (active.current && scopeRevision === latest.current.scopeRevision) setError('本组版本操作尚未确认，请保留编辑后重试。');
@@ -42,11 +42,11 @@ export function useReplySession() {
     }
   }
   return { state, error,
-    updateCandidateVersionDraft: (request: ReplyCandidateDraftUpdate) => versionOperation(() => window.notalone.replies.updateCandidateVersionDraft(request)),
+    updateCandidateVersionDraft: (request: ReplyCandidateDraftUpdate) => versionOperation(() => window.notalone.replies.updateInput({ type: 'candidateDraft', update: request })),
     readCandidateVersions: (request: ReplyCandidateVersionRead) => versionOperation(() => window.notalone.replies.readCandidateVersions(request)),
     saveCandidateVersion: (request: ReplyCandidateVersionEdit) => versionOperation(() => window.notalone.replies.saveCandidateVersion(request)),
     showCandidateVersion: (request: ReplyCandidateVersionDisplay) => versionOperation(() => window.notalone.replies.showCandidateVersion(request)),
-    updateOptions: (options: RewriteOptions) => operate(() => window.notalone.replies.updateOptions({ ...selection(), options })),
+    updateOptions: (options: RewriteOptions) => operate(() => window.notalone.replies.updateInput({ type: 'options', update: { ...selection(), options } })),
     setMode: (mode: ReplyMode) => operate(() => window.notalone.replies.setMode({ ...selection(), mode })),
     loadMessages: (older = false) => operate(() => window.notalone.replies.loadMessages({ ...selection(), older })),
     retrySourceValidation: () => operate(() => window.notalone.replies.retrySourceValidation(selection())),
@@ -70,18 +70,18 @@ export function useReplySession() {
     reconnectMessages: () => operate(() => window.notalone.replies.reconnectMessages(selection())),
     combineNewMessages: () => operate(() => window.notalone.replies.combineNewMessages(selection())),
     selectMessage: (messageId: string) => operate(() => window.notalone.replies.selectMessage({ ...selection(), messageId })),
-    updateDirection: (direction: string) => operate(() => window.notalone.replies.updateDirection({ ...selection(), direction })),
-    updateCorrection: (correction: string) => operate(() => window.notalone.replies.updateCorrection({ ...selection(), correction })),
+    updateDirection: (direction: string) => operate(() => window.notalone.replies.updateInput({ type: 'direction', update: { ...selection(), direction } })),
+    updateCorrection: (correction: string) => operate(() => window.notalone.replies.updateInput({ type: 'correction', update: { ...selection(), correction } })),
     explore: (changeGroup = false) => operate(() => changeGroup ? window.notalone.replies.changeDirections(selection()) : window.notalone.replies.explore(selection())),
     beginClarificationEdit: (inputVersion: string, questionId: string) => operate(() => window.notalone.replies.beginClarificationEdit({ ...selection(), inputVersion, questionId })),
     answerClarification: (answer: string, inputVersion: string, questionId: string) => operate(() => window.notalone.replies.answerClarification({ ...selection(), answer, inputVersion, questionId })),
     stopExploration: () => operate(() => window.notalone.replies.stopExploration(selection())),
     retryExploration: () => operate(() => window.notalone.replies.retryExploration(selection())),
-    updateRequirements: (requirements: string) => operate(() => window.notalone.replies.updateRequirements({ ...selection(), requirements })),
+    updateRequirements: (requirements: string) => operate(() => window.notalone.replies.updateInput({ type: 'requirements', update: { ...selection(), requirements } })),
     updateSkill: (skill: import('../shared/reply-bridge').ReplySkillChoice) => operate(() => window.notalone.replies.updateSkill({ ...selection(), skill })),
-    updateScene: (scene: string) => operate(() => window.notalone.replies.updateScene({ ...selection(), scene })),
+    updateScene: (scene: string) => operate(() => window.notalone.replies.updateInput({ type: 'scene', update: { ...selection(), scene } })),
     selectDirection: (suggestionId: string, inputVersion: string) => operate(() => window.notalone.replies.selectDirection({ ...selection(), suggestionId, inputVersion })),
-    updatePurpose: (purpose: string) => operate(() => window.notalone.replies.updatePurpose({ ...selection(), purpose })),
+    updatePurpose: (purpose: string) => operate(() => window.notalone.replies.updateInput({ type: 'purpose', update: { ...selection(), purpose } })),
     retryInterruptedGeneration: (sessionId: string, turnId: string, inputVersionId: string) =>
       operate(() => window.notalone.replies.retryInterruptedGeneration({ ...selection(), sessionId, turnId, inputVersionId })),
     generate: (newRequest = false) => operate(() => window.notalone.replies.generate({ ...selection(), newRequest })),
@@ -93,7 +93,7 @@ export function useReplySession() {
       expectedInputVersionId: latest.current.continuation!.expectedInputVersionId, requirementChanges })),
     retryContinuation: () => operate(() => window.notalone.replies.retryContinuation({ ...selection(),
       sessionId: latest.current.savedSession!.sessionId! })),
-    editCandidate: (candidateId: string, text: string) => operate(() => window.notalone.replies.editCandidate({ ...selection(), replyRequestId: latest.current.result!.replyRequestId, candidateId, text })),
+    editCandidate: (candidateId: string, text: string) => operate(() => window.notalone.replies.updateInput({ type: 'candidate', update: { ...selection(), replyRequestId: latest.current.result!.replyRequestId, candidateId, text } })),
   };
 }
 export type ReplySessionView = ReturnType<typeof useReplySession>;
@@ -123,7 +123,7 @@ export function RewriteInput({ contacts, replies }: { contacts: ContactSessionVi
   };
   return <section className="compose-panel" aria-label={currentChat ? "回应粘贴文字输入" : "改写输入"}>
     <header className="compose-heading"><span className="section-eyebrow">输入</span><h2>{currentChat ? "对方说了什么？你想怎么回应？" : "把你的意思，换一种说法"}</h2><p>{currentChat ? "粘贴对方的话，补充表达方向，再生成回复。" : "写下草稿，选择语气，让表达更自然。"}</p></header>
-    <div className="ime-input"><HelperDraft session={contacts} currentChat={currentChat} />
+    <div className="ime-input"><HelperDraft session={contacts} currentChat={currentChat} restoreRevision={replies.state.inputClearRevision} />
 </div>
     {enabled && replies.state.generationBlock && <p role="status" className="rewrite-privacy">
       生成前，请先在上方确认本次联系人。

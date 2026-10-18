@@ -93,10 +93,10 @@ export function HelperContactPicker({ session, foreground, manualRelease = false
   </select>;
 }
 
-export function HelperDraft({ session, currentChat = false }: { session: ContactSessionView; currentChat?: boolean }) {
+export function HelperDraft({ session, currentChat = false, restoreRevision }: { session: ContactSessionView; currentChat?: boolean; restoreRevision?: number }) {
   const [text, setText] = useState(session.state.draft);
   // 切换范围或收到删除完成通知时清除本地输入；普通在途回显不覆盖新按键。
-  useEffect(() => { setText(session.state.draft); }, [session.state.scopeRevision, session.state.draftClearRevision]);
+  useEffect(() => { setText(session.state.draft); }, [session.state.scopeRevision, session.state.draftClearRevision, restoreRevision]);
   return <textarea aria-label={currentChat ? '当前聊天文字' : '草稿'} rows={3} maxLength={65_536}
     value={text} disabled={!session.state.selectedContactId}
     placeholder={currentChat ? '仅粘贴这位联系人的当前聊天文字，再填写你想表达的方向…' : '先确认联系人，再写下你的意思…'}

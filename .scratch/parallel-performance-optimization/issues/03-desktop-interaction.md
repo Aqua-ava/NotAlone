@@ -1,6 +1,6 @@
 # 03：桌面输入状态减量与非重叠刷新
 Triage: ready-for-agent
-State: open
+State: claimed
 
 ## What to build
 长会话输入减少完整历史状态往返，Skill慢请求能结算且空闲少刷新。
