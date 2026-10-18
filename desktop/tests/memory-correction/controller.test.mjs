@@ -153,9 +153,12 @@ test('修正响应未知期间的新刷新不能回填旧候选对照', async ()
     const candidate = { ...common, candidate_id: memoryId, text: '修正前的旧候选和对照。',
       subject: level === 'owner' ? 'self' : 'contact', status: 'pending' };
     let pendingReads = 0, finishWrite, releaseLate, lateSignal, committed = false;
+    let notifyWriteStarted;
+    const writeStarted = new Promise(resolve => { notifyWriteStarted = resolve; });
     const backend = { getConnectionGeneration: () => 1, requestJson: async (request) => {
       if (request.method === 'POST') return new Promise((_resolve, reject) => {
         finishWrite = () => { committed = true; reject(new Error('合成响应未知')); };
+        notifyWriteStarted();
       });
       if (request.path.endsWith('/memory-candidates')) {
         pendingReads++;
@@ -179,6 +182,7 @@ test('修正响应未知期间的新刷新不能回填旧候选对照', async ()
       revision: 1, text: '当前人工判断。', category: 'preference' });
     const late = controller.refresh({ contactId, scopeRevision: 1, section: 'pending' });
     assert.equal(pendingReads, 1, '提交未决期间不读取旧比较');
+    await writeStarted;
     finishWrite();
     await correction;
     releaseLate?.();
@@ -302,9 +306,12 @@ test('另一联系人来源事件不会绕过正在提交的人工修正读取�
   const candidate = { ...common, candidate_id: memoryId, text: '来源事件捕获的修正前旧候选。',
     subject: 'self', status: 'pending' };
   let finishWrite, releaseLate, committed = false, pendingReads = 0;
+  let notifyWriteStarted;
+  const writeStarted = new Promise(resolve => { notifyWriteStarted = resolve; });
   const backend = { getConnectionGeneration: () => 1, requestJson: async (request) => {
     if (request.method === 'POST') return new Promise((resolve) => {
       finishWrite = () => { committed = true; resolve({ generation: 1, data: {} }); };
+      notifyWriteStarted();
     });
     if (request.path.endsWith('/sources')) return { generation: 1, data: { sources: [] } };
     if (request.path.endsWith('/memory-candidates')) {
@@ -327,6 +334,7 @@ test('另一联系人来源事件不会绕过正在提交的人工修正读取�
   const correction = controller.correct({ contactId, scopeRevision: 1, memoryId, level: 'owner',
     revision: 1, text: '本人新的人工判断。', category: 'preference' });
   const revalidation = controller.revalidateDeletedSource('33333333-3333-4333-8333-333333333333');
+  await writeStarted;
   finishWrite();
   await correction;
   releaseLate?.();
@@ -346,9 +354,12 @@ test('另一联系人来源事件不能在删除提交后回填待删正文', as
       supersedes_memory_id: null, source_candidate_id: null, timing: { recorded_at: null,
         source_started_at: null, source_ended_at: null, source_time_complete: false } };
     let finishWrite, releaseLate, committed = false, memoryReads = 0;
+    let notifyWriteStarted;
+    const writeStarted = new Promise(resolve => { notifyWriteStarted = resolve; });
     const backend = { getConnectionGeneration: () => 1, requestJson: async (request) => {
       if (request.method === 'POST') return new Promise((resolve) => {
         finishWrite = () => { committed = true; resolve({ generation: 1, data: {} }); };
+        notifyWriteStarted();
       });
       if (request.path.endsWith('/sources')) return { generation: 1, data: { sources: [] } };
       if (request.path.endsWith('/memory-candidates')) return { generation: 1, data: { candidates: [] } };
@@ -367,6 +378,7 @@ test('另一联系人来源事件不能在删除提交后回填待删正文', as
     await controller.refresh({ contactId, scopeRevision: 1, section: level });
     const removal = controller.remove({ contactId, scopeRevision: 1, memoryId, level, revision: 1 });
     const revalidation = controller.revalidateDeletedSource('33333333-3333-4333-8333-333333333333');
+    await writeStarted;
     finishWrite();
     await removal;
     releaseLate?.();

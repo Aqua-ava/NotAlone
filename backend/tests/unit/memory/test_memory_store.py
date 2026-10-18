@@ -17,6 +17,7 @@ from notalone.memory import (
 )
 from notalone.retrieval import InMemoryRetrieval
 from notalone.scopes import ContactScope
+from notalone.memory.versions import MemoryVersionConflict
 
 
 OWNER_ID = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
@@ -40,6 +41,35 @@ class MemoryStoreTest(unittest.TestCase):
             category=MemoryCategory.PREFERENCE,
             source_ids=(SOURCE_ID,),
         )
+
+    def test_corrected_error_remains_auditable_but_cannot_be_retrieved_as_history(self):
+        self.store.create_candidate(self._candidate())
+        original = self.store.confirm(scope=self.scope, candidate_id=CANDIDATE_ID,
+                                      adoption_method=AdoptionMethod.MANUAL)
+        current = self.store.correct(scope=self.scope, memory_id=original.memory_id,
+                                     text="对方不喜欢徒步")
+        versions = self.store.list_versions(scope=self.scope, memory_id=current.memory_id)
+        self.assertIn(original.text, [item.text for item in versions])
+        retrieval = InMemoryRetrieval(memory_store=self.store)
+        self.assertEqual(retrieval.search_confirmed_memories(
+            scope=self.scope, memory_ids=(original.memory_id,), include_historical=True), ())
+        self.assertEqual(retrieval.search_confirmed_memories(scope=self.scope)[0].text,
+                         "对方不喜欢徒步")
+
+    def test_deleting_current_version_withdraws_its_historical_chain(self):
+        self.store.create_candidate(self._candidate())
+        original = self.store.confirm(scope=self.scope, candidate_id=CANDIDATE_ID,
+                                      adoption_method=AdoptionMethod.MANUAL)
+        current = self.store.correct(scope=self.scope, memory_id=original.memory_id,
+                                     text="对方后来不喜欢徒步", change_kind="state_changed")
+        retrieval = InMemoryRetrieval(memory_store=self.store)
+        self.assertEqual(len(retrieval.search_confirmed_memories(
+            scope=self.scope, memory_ids=(original.memory_id,), include_historical=True)), 1)
+        with self.assertRaises(MemoryVersionConflict):
+            self.store.delete(scope=self.scope, memory_id=original.memory_id)
+        self.store.delete(scope=self.scope, memory_id=current.memory_id)
+        self.assertEqual(retrieval.search_confirmed_memories(
+            scope=self.scope, memory_ids=(original.memory_id,), include_historical=True), ())
 
     def test_pending_candidate_is_not_retrieved_until_confirmed(self) -> None:
         self.store.create_candidate(self._candidate())
@@ -102,7 +132,7 @@ class MemoryStoreTest(unittest.TestCase):
             (),
         )
 
-        self.store.delete(scope=self.scope, memory_id=confirmed.memory_id)
+        self.store.delete(scope=self.scope, memory_id=corrected.memory_id)
         self.assertEqual(
             retrieval.search_confirmed_memories(scope=self.scope),
             (),

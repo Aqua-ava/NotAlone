@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from notalone.memory.retirement import is_generation_eligible, is_generation_status_eligible
+
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Iterable
@@ -226,7 +228,7 @@ class InMemoryRetrieval:
             memory
             for memory in self.owner_memories
             if memory.owner_id == owner_id
-            and memory.status in (("active", "invalidated") if include_historical else ("active",))
+            and is_generation_status_eligible(memory.status, memory.retirement_reason, include_historical=include_historical)
             and (memory.valid_at is None or memory.valid_at <= now)
             and (include_historical or memory.invalid_at is None or now < memory.invalid_at)
             and (memory_ids is None or memory.memory_id in memory_ids)
@@ -287,6 +289,7 @@ class InMemoryRetrieval:
                 revision=memory.revision,
                 topic=memory.topic.value,
                 status=memory.status.value,
+                retirement_reason=memory.retirement_reason.value,
                 valid_at=memory.valid_at,
                 invalid_at=memory.invalid_at,
                 timing=(history_timing(memory.timing, memory.status.value, memory.invalid_at)
@@ -295,7 +298,7 @@ class InMemoryRetrieval:
             )
             for memory in memories
             if (memory_ids is None or memory.memory_id in memory_ids)
-            and memory.status.value in ("active", "invalidated")
+            and is_generation_eligible(memory, include_historical=include_historical)
         )
         return recall_memories(retrieved, query=query, limit=limit)
 

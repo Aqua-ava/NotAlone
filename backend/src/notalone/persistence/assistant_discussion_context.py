@@ -26,7 +26,8 @@ from notalone.persistence.style_sample_store import (
     _with_reply_source_validation, captured_reply_sources, require_reply_sources_current,
 )
 from notalone.persistence.reply_discussion_dependencies import reply_style_sample_dependencies
-from notalone.persistence.reply_basis_changes import historical_basis_revision_sha256
+from notalone.persistence.reply_basis_changes import (historical_basis_revision_sha256,
+    require_generation_memory_dependencies)
 from notalone.reply.assistant_discussion import (
     DiscussionContext, DiscussionDependencies, DiscussionIdentity, DiscussionItem,
     DiscussionSnapshot,
@@ -135,6 +136,8 @@ def _generation_input_available(connection: Any, scope: ContactScope, row: dict[
             dependencies.update(_reply_dependencies(connection, scope, row["reply_request_id"]))
         elif row["turn_state"] == "completed":
             return False
+        if policy_current:
+            require_generation_memory_dependencies(connection, scope, dependencies)
         typed = _partition_assistant_dependencies(connection, scope, dependencies)
         verified_discussion_dependencies(connection, scope, typed.source_ids, historical=True)
     except (ReplyStoreInvariantError, AssistantSessionRejected):
@@ -290,6 +293,7 @@ def require_assistant_discussion_current(
         ):
             raise ReplyStoreInvariantError("助手讨论当前输入已改变。")
         dependencies = _require_captured_records(cursor, scope, snapshot, policy_current=True)
+        require_generation_memory_dependencies(cursor, scope, dependencies.source_ids)
         if (snapshot.basis_revision_sha256 is None and dependencies.source_ids
                 or snapshot.basis_revision_sha256 is not None
                 and snapshot.basis_revision_sha256 != historical_basis_revision_sha256(

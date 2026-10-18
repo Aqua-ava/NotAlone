@@ -43,6 +43,8 @@ export interface ActiveMemory extends MemoryContent {
   revision: number;
   supersedesMemoryId: string | null;
   sourceCandidateId: string | null;
+  retirementReason?: 'unknown' | 'error_correction' | 'state_changed';
+  retiredAt?: string | null;
   canRevertAutoUpdate?: boolean;
   versionEvidenceSourceCurrent?: boolean;
 }
@@ -220,8 +222,10 @@ export interface MemoryCandidateUpdateRequest extends MemoryCandidateRequest {
 export interface MemoryRemovalRequest extends ContactSelection {
   level: 'owner' | 'contact'; memoryId: string; revision: number;
 }
+export type MemoryChangeKind = 'error_correction' | 'state_changed';
 export interface MemoryCorrectionRequest extends ContactSelection {
   level: 'owner' | 'contact'; memoryId: string; revision: number; text: string; category: MemoryCategory;
+  changeKind?: MemoryChangeKind;
 }
 export type OwnerLayeredMemoryManagementRequest = Omit<LayeredMemoryManagementRequest, 'contactId' | 'scopeRevision'>;
 export interface OwnerLayeredMemoryState extends MemoryOverviewState<LayeredMemory> {
@@ -231,7 +235,7 @@ export interface OwnerLayeredMemoryState extends MemoryOverviewState<LayeredMemo
 }
 export interface MemoryBridge {
   readOwnerMemories(): Promise<void>;
-  correctOwnerMemory(request: Pick<MemoryCorrectionRequest, 'memoryId' | 'revision' | 'text' | 'category'>): Promise<void>;
+  correctOwnerMemory(request: Pick<MemoryCorrectionRequest, 'memoryId' | 'revision' | 'text' | 'category' | 'changeKind'>): Promise<void>;
   deleteOwnerMemory(request: Pick<MemoryRemovalRequest, 'memoryId' | 'revision'>): Promise<void>;
   addOwnerMemory(request: Pick<MemoryAdditionRequest, 'text' | 'category'>): Promise<void>;
   getOwnerLayeredMemoryState(): Promise<OwnerLayeredMemoryState>;

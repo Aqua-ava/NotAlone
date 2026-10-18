@@ -13,7 +13,7 @@ export function readReplyBasisChanges(value: unknown): ReplyBasisChange[] {
     if (!isRecord(entry) || Object.keys(entry).length !== 3
       || !['evidence_id', 'kind', 'reason'].every((key) => Object.hasOwn(entry, key))
       || !isUuid(entry.evidence_id) || !['confirmed_memory', 'owner_memory', 'pending_candidate', 'reply_skill'].includes(entry.kind as string)
-      || !['memory_revised', 'memory_expired', 'memory_not_yet_valid', 'memory_time_changed', 'skill_policy_changed'].includes(entry.reason as string)
+      || !['memory_generation_forbidden', 'memory_revised', 'memory_expired', 'memory_not_yet_valid', 'memory_time_changed', 'skill_policy_changed'].includes(entry.reason as string)
       || (entry.kind === 'reply_skill') !== (entry.reason === 'skill_policy_changed')) {
       throw new Error('依据变化格式无效。');
     }

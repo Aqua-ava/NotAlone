@@ -106,12 +106,12 @@ function useMemoryReading(session: ContactSessionView) {
     setError('');
     if (session.state.selectedContactId) void refresh();
   }, [session.state.selectedContactId, session.state.scopeRevision]);
-  async function correct(entry: ActiveMemory, text: string, category: MemoryCorrectionRequest['category']) {
+  async function correct(entry: ActiveMemory, text: string, category: MemoryCorrectionRequest['category'], changeKind: MemoryCorrectionRequest['changeKind']) {
     const { selectedContactId, scopeRevision } = scope.current;
     if (!selectedContactId) return;
     setError('');
     try { await window.notalone.memory.correct({ contactId: selectedContactId, scopeRevision, level: entry.level,
-      memoryId: entry.memoryId, revision: entry.revision, text, category }); }
+      memoryId: entry.memoryId, revision: entry.revision, text, category, changeKind }); }
     catch {
       if (active.current && scope.current.selectedContactId === selectedContactId && scope.current.scopeRevision === scopeRevision) {
         setError('资料范围或版本已变化，请刷新后再修正。');
@@ -246,7 +246,7 @@ function SourceReference({ id, sources }: { id: string; sources: MemorySection<M
 
 function MemoryCard({ content, memory, candidate, sources, correct, remove, openVersions, confirmCandidate, discardCandidate, updateMemories, applyCandidateUpdate, busy, trace, initiallyEditing = false }: {
   content: MemoryContent; memory?: ActiveMemory; candidate?: PendingMemoryCandidate; sources: MemorySection<MemorySource>;
-  correct?: (entry: ActiveMemory, text: string, category: MemoryCorrectionRequest['category']) => Promise<void>; remove?: (entry: ActiveMemory) => Promise<void>; confirmCandidate?: (entry: PendingMemoryCandidate) => Promise<void>; discardCandidate?: (entry: PendingMemoryCandidate) => Promise<void>; busy?: boolean;
+  correct?: (entry: ActiveMemory, text: string, category: MemoryCorrectionRequest['category'], changeKind: MemoryCorrectionRequest['changeKind']) => Promise<void>; remove?: (entry: ActiveMemory) => Promise<void>; confirmCandidate?: (entry: PendingMemoryCandidate) => Promise<void>; discardCandidate?: (entry: PendingMemoryCandidate) => Promise<void>; busy?: boolean;
   trace: (kind: TraceRecordKind, id: string) => void;
   openVersions?: (entry: ActiveMemory) => Promise<void>;
   updateMemories?: MemorySection<ActiveMemory>;
@@ -259,6 +259,7 @@ function MemoryCard({ content, memory, candidate, sources, correct, remove, open
   const [discarding, setDiscarding] = useState(false);
   const [text, setText] = useState(content.text);
   const [category, setCategory] = useState(content.category);
+  const [changeKind, setChangeKind] = useState<NonNullable<MemoryCorrectionRequest['changeKind']>>('error_correction');
   return <article className={`memory-card ${candidate ? 'memory-pending' : ''}`}>
     <div className="memory-card-labels"><span>{categoryNames[content.category]} · {topicNames[content.topic]}</span>
       <b>{candidate ? '待确认 · 不是已确认事实' : memory?.adoptionMethod === 'auto' ? '自动采纳（可撤销）' : '手动采纳'}</b></div>
@@ -280,12 +281,17 @@ function MemoryCard({ content, memory, candidate, sources, correct, remove, open
     {memory && openVersions && <button className="button" disabled={busy}
       aria-label={`查看版本历史：${content.text}`} onClick={() => void openVersions(memory)}>查看版本历史</button>}
     {editing && memory && correct && <form aria-label={memory.level === 'owner' ? '修正本人资料' : '修正联系人资料'} className="memory-edit-form" onSubmit={(event) => {
-      event.preventDefault(); void correct(memory, text, category);
+      event.preventDefault(); void correct(memory, text, category, changeKind);
     }}><label>资料正文<textarea aria-label="资料正文" value={text} disabled={busy} onChange={(event) => setText(event.target.value)} /></label>
       <label>资料分类<select aria-label="资料分类" value={category} disabled={busy}
         onChange={(event) => setCategory(event.target.value as MemoryCorrectionRequest['category'])}>
         {Object.entries(categoryNames).map(([value, name]) => <option key={value} value={value}>{name}</option>)}</select></label>
-      <p>修正会保存新的手动版本并保留来源，旧版退出当前资料。</p>
+      <label>修改原因<select aria-label="修改原因" value={changeKind} disabled={busy}
+        onChange={event => setChangeKind(event.target.value as NonNullable<MemoryCorrectionRequest['changeKind']>)}>
+        <option value="error_correction">纠正错误</option><option value="state_changed">记录变化</option></select></label>
+      <p>{changeKind === 'error_correction' ? '原来的内容记错了。旧版只保留供查看，不再用于生成。'
+        : '原来的内容曾经成立，后来发生变化。旧版可作为历史参考。'}</p>
+      <p>保存新的手动版本并保留来源；本次保存时间不代表变化发生时间。</p>
       <button className="button" type="submit" disabled={busy || !text.trim()}>保存修正</button>
       <button className="button" type="button" disabled={busy} onClick={() => setEditing(false)}>取消修正</button>
     </form>}
@@ -365,7 +371,7 @@ export function MemoryVersionHistory({ history, revert, busy }: {
   }, [history.memoryId, history.phase]);
   if (history.phase === 'idle') return null;
   return <section className="memory-section memory-history" aria-label="资料版本历史" ref={section}><h2>资料版本历史</h2>
-    <p>旧版记录当时的资料；版本变化不表示旧资料当时有误。</p>
+    <p>旧版保留供查看；只有曾经成立、后来发生变化的资料可作为历史参考。</p>
     {history.phase === 'loading' && <p role="status">正在核对版本和来源…</p>}
     {history.phase === 'error' && <p role="alert">版本或来源已变化，请刷新资料后再查看。</p>}
     {history.phase === 'ready' && current?.status === 'active' && current.adoptionMethod === 'auto'
@@ -378,6 +384,10 @@ export function MemoryVersionHistory({ history, revert, busy }: {
     </>}
     {history.phase === 'ready' && history.items.map((entry) => <article className="memory-card" key={entry.memoryId}>
       <p>{entry.status === 'active' ? '当前版本' : '旧版本'} · 版本 {entry.revision} · {entry.adoptionMethod === 'auto' ? '自动采纳' : '手动采纳'}</p>
+      {entry.status === 'invalidated' && <p>{entry.retirementReason === 'state_changed'
+        ? '后来发生变化，可作为历史参考' : entry.retirementReason === 'error_correction'
+          ? '原记录有误，已禁用于生成' : '原因未知，已禁用于生成'}</p>}
+      {entry.status === 'invalidated' && entry.retiredAt && <p>退出当前资料的记录时间：{timeText(entry.retiredAt)}（不代表变化发生时间）</p>}
       <p>{entry.text}</p><p>来源聊天时间：{sourceTime(entry)}</p><p>保存时间：{timeText(entry.timing.recordedAt)}</p>
       <MemoryTemporalStatus timing={entry.timing} />
       <MemoryEventDetails event={entry.event} />

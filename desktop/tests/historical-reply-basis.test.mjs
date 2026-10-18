@@ -23,6 +23,21 @@ test('回看依据已修正的合法旧候选，保留正文并提示且不自�
   assert(f.calls.every((request) => request.method === 'GET' || request.path.endsWith('/assistant-session/default')));
 });
 
+test('错误或原因不明的旧依据只供回看并提示重新生成', async () => {
+  const f = await historicalReplyFixture();
+  const change = { evidence_id: f.memoryId, kind: 'confirmed_memory', reason: 'memory_generation_forbidden' };
+  f.records.saved.turns[0].basis_changes = [change];
+  f.records.saved.inputs[0].basis_changes = [change];
+  f.records.history.basis_changes = [change];
+  await f.bridge.readSavedSession(f.scope);
+  const state = await f.bridge.getState();
+  assert.equal(state.savedSession.phase, 'ready');
+  const html = renderSession(state);
+  assert.match(html, /合成旧候选：先确认见面时间。/);
+  assert.match(html, /依据已纠错或失效原因不明，仅可回看，请重新生成/);
+  assert.doesNotMatch(html, /明确继续时将重新核验当前依据/);
+});
+
 test('已确认source_deleted的旧生成重试立即清缓存，读取失败也不恢复应删候选', async () => {
   const f = await historicalReplyFixture();
   await f.bridge.readSavedSession(f.scope);

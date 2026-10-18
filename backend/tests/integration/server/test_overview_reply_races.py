@@ -190,7 +190,7 @@ class OverviewReplyRacesHttpTest(OverviewReplyHttpFixture, unittest.TestCase):
         old = next(item for item in evidence["evidence"] if item["evidence_id"] == memory["memory_id"])
         self.assertEqual(old["text"], "对方喜欢热茶。")
         self.assertEqual(old["snapshot_status"], "active")
-        self.assertEqual(evidence["basis_changes"], [{"evidence_id": memory["memory_id"], "kind": "confirmed_memory", "reason": "memory_revised"}])
+        self.assertEqual(evidence["basis_changes"], [{"evidence_id": memory["memory_id"], "kind": "confirmed_memory", "reason": "memory_generation_forbidden"}])
         self.assertEqual(self._get(self.backend, path)["turns"][0]["state"], "completed")
 
     def test_contact_and_owner_revision_changes_after_model_validation_are_rechecked_by_actual_writer(self):

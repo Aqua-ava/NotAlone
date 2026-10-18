@@ -109,6 +109,30 @@ test('用户主动查看变化历史，旧版保留原采纳身份和独立来�
   assert.doesNotMatch(html, /撤销本次自动更新/);
 });
 
+for (const [reason, label] of [[undefined, '原因未知，已禁用于生成'], ['unknown', '原因未知，已禁用于生成'],
+  ['error_correction', '原记录有误，已禁用于生成'], ['state_changed', '后来发生变化，可作为历史参考']]) {
+  test(`公开历史读取与页面区分失效原因 ${reason ?? '旧载荷缺省'}`, async () => {
+    const previous = memoryDto('contact', { status: 'invalidated', ...(reason === undefined ? {} : {
+      retirement_reason: reason, retired_at: '2026-10-18T12:00:00+08:00' }) });
+    const current = memoryDto('contact', { memory_id: ids.current, revision: 3, supersedes_memory_id: ids.previous,
+      retirement_reason: 'unknown', retired_at: null });
+    const { controller, selection } = await controllerFixture(async request => ({ generation: 1,
+      data: request.path.endsWith('/versions') ? { versions: [current, previous] } : { memories: [current] } }));
+    await controller.refresh({ ...selection(), section: 'contact' });
+    assert.equal(controller.getState().contact.phase, 'ready');
+    await controller.openVersions({ ...selection(), level: 'contact', memoryId: ids.current, revision: 3 });
+    const history = controller.getState().history;
+    assert.equal(history.phase, 'ready');
+    assert.equal(history.items[1].retirementReason, reason ?? 'unknown');
+    assert.equal(history.items[1].retiredAt, reason === undefined ? null : '2026-10-18T12:00:00+08:00');
+    const html = ports.renderToStaticMarkup(ports.createElement(ports.MemoryVersionHistory, { history }));
+    assert.match(html, new RegExp(label));
+    assert.match(html, /当前版本/);
+    assert.equal((html.match(/原因未知，已禁用于生成/g) ?? []).length, !reason || reason === 'unknown' ? 1 : 0,
+      '有效版本的unknown不能被显示为禁用');
+  });
+}
+
 test('只有服务端核对仍合法的自动版本可以撤销，未知旧证明不提供恢复', async () => {
   for (const level of ['contact', 'owner']) for (const eligible of [true, false]) {
     const previous = memoryDto(level, { adoption_method: 'auto' });

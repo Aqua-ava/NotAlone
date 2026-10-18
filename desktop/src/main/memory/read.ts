@@ -34,7 +34,10 @@ function versionAvailability(entry: Record<string, unknown>) {
   for (const key of ['can_revert_auto_update', 'version_evidence_source_current']) {
     if (entry[key] !== undefined && typeof entry[key] !== 'boolean') throw invalid();
   }
-  return { canRevertAutoUpdate: entry.can_revert_auto_update === true,
+  return { retirementReason: enumeration(entry.retirement_reason === undefined ? 'unknown' : entry.retirement_reason,
+      ['unknown', 'error_correction', 'state_changed'] as const),
+    retiredAt: date(entry.retired_at === undefined ? null : entry.retired_at),
+    canRevertAutoUpdate: entry.can_revert_auto_update === true,
     versionEvidenceSourceCurrent: entry.version_evidence_source_current === true };
 }
 function eventEvidence(value: unknown): MemoryEventEvidence[] {

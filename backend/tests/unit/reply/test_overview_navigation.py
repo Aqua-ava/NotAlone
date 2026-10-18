@@ -41,6 +41,28 @@ class OverviewFixture:
 
 
 class OverviewNavigationTest(unittest.TestCase):
+    def test_unclassified_retired_overview_memory_is_not_sent_to_retrieval(self):
+        class RejectHistoricalRecall(InMemoryRetrieval):
+            def search_confirmed_memories(self, **kwargs):
+                raise AssertionError("原因不明的旧记忆不能进入召回请求。")
+
+        store = InMemoryMemoryStore()
+        candidate = store.create_candidate(MemoryCandidate(
+            UUID("71000000-0000-0000-0000-000000000099"), SCOPE,
+            "周末徒步", MemoryCategory.PREFERENCE, (SOURCE,),
+        ))
+        memory = store.confirm(scope=SCOPE, candidate_id=candidate.candidate_id,
+                               adoption_method=AdoptionMethod.MANUAL)
+        memory = replace(memory, status=ConfirmedMemoryStatus.INVALIDATED)
+        overview = OverviewFixture((OverviewEntry(memory,
+            OverviewMemoryIdentity(memory.memory_id, 1), "manual_entry", ()),))
+        context = RetrievalReplyContext(retrieval=RejectHistoricalRecall(memory_store=store),
+            skill_library_revision=0, overview=overview).build(command=GenerateReply(
+                UUID("72000000-0000-0000-0000-000000000099"), SCOPE, BINDING,
+                RewriteDraft("周末徒步", include_relationship_context=True)), verified_scope=VERIFIED)
+        self.assertEqual([item.kind for item in context.evidence], ["user_draft"])
+        self.assertEqual(context.retrieval.contact_memory.used_count, 0)
+
     def test_failed_original_window_is_unavailable_and_does_not_inject_or_claim_missing_history(self):
         class FailedOriginalWindow(InMemoryRetrieval):
             def query_messages(self, **kwargs):
@@ -153,7 +175,9 @@ class OverviewNavigationTest(unittest.TestCase):
         ))
         memory = store.confirm(scope=SCOPE, candidate_id=candidate.candidate_id,
                                adoption_method=AdoptionMethod.MANUAL)
-        old = store.invalidate(scope=SCOPE, memory_id=memory.memory_id)
+        new = store.correct(scope=SCOPE, memory_id=memory.memory_id, text="现在已经离职",
+                            change_kind="state_changed")
+        old = store.list_versions(scope=SCOPE, memory_id=new.memory_id)[-1]
         overview = OverviewFixture((OverviewEntry(old, None, "source_supported", ()),))
         builder = RetrievalReplyContext(retrieval=InMemoryRetrieval(memory_store=store),
                                         skill_library_revision=0, overview=overview)
@@ -168,7 +192,7 @@ class OverviewNavigationTest(unittest.TestCase):
         self.assertEqual(history[0].timing.current_status, "historical")
         self.assertIn("不得当作当前事实", history[0].selection_reason)
         builder.validate_current(context)
-        store.delete(scope=SCOPE, memory_id=old.memory_id)
+        store.delete(scope=SCOPE, memory_id=new.memory_id)
         with self.assertRaises(ReplyContextInvariantError):
             builder.validate_current(context)
 

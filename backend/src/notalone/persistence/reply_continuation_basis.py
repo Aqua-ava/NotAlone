@@ -7,6 +7,7 @@ from psycopg.types.json import Jsonb
 
 from notalone.persistence.reply_basis_changes import (
     historical_basis_revision_sha256, read_reply_basis_changes, require_current_reply_memory,
+    require_generation_memory_dependencies,
 )
 from notalone.persistence.style_sample_store import require_reply_sources_current
 from notalone.reply.context import ContinuedReplyCandidate, ReplyContext
@@ -36,6 +37,7 @@ def read_continuation_basis(
     from notalone.persistence.skill_execution_view import require_saved_skill_policy
     require_saved_skill_policy(connection, scope, row['reply_request_id'])
     dependencies = tuple(sorted(_reply_dependencies(connection, scope, row["reply_request_id"])))
+    require_generation_memory_dependencies(connection, scope, dependencies)
     return ContinuedReplyCandidate(
         candidate_id=row["id"], scope=scope, conversation_binding_id=binding_id,
         text=row["candidate_text"],

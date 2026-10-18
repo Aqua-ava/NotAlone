@@ -149,6 +149,8 @@ CLI 可以在用户切回已绑定联系人时补读本地数据库中水位之�
   -> 用户选择、编辑、手动发送
 ```
 
+按 [ADR-071](../adr/071-memory-retirement-and-generation-eligibility.md)，修改资料时区分“纠正错误”和“记录变化”。错误与原因不明的失效旧版只供审计，不能经历史导航、概览、L2/L3、旧候选、助手讨论、恢复或表达样本重新进入模型；明确变化的旧版可带来源和历史标注参考。资格在生成前后及提交时复验，旧候选保留回看并提示重新生成；现有来源删除与纠错防复活继续有效。实现与验证范围见[本轮任务](../../.scratch/memory-history-eligibility/issues/01-history-generation-eligibility.md)。
+
 按 [ADR-068](../adr/068-direct-reply-candidates-with-user-selection.md)，候选生成后不追加模型语义复核；结构、范围、来源与引用检查继续由程序执行，候选的最终表达由用户选择和修改。来源引用有效不等于语义已核验。记忆入库、L2/L3 整理核验及离线质量资格独立保持。
 
 回复运行时固定为确定性外壳 `validate_scope -> assess_request_risk -> assemble_initial_context -> create_agent bounded Tool loop -> validate_agent_output -> persist_trace -> return_result`。内部循环使用 LangChain `create_agent`，并接受 LangGraph 作为底层 runtime；v1 不直接手写自定义 `StateGraph`。若以后出现明确的暂停恢复或复杂固定流程，可以把整个 `create_agent` 作为自定义图中的节点。完整边界见 `../drafts/agent-runtime.md`、ADR-006 与 ADR-009。

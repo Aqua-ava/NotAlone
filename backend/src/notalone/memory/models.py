@@ -23,6 +23,21 @@ class SourceDependencyMode(StrEnum):
     ALL = "all"
 
 
+class MemoryChangeKind(StrEnum):
+    """用户明确选择的修改原因；不能用记录时间推断事实何时改变。"""
+
+    ERROR_CORRECTION = "error_correction"
+    STATE_CHANGED = "state_changed"
+
+
+class MemoryRetirementReason(StrEnum):
+    """旧版退出当前资料的原因；存量和自动失效默认未知。"""
+
+    UNKNOWN = "unknown"
+    ERROR_CORRECTION = "error_correction"
+    STATE_CHANGED = "state_changed"
+
+
 class MemoryCategory(StrEnum):
     """v1 关系记忆的有限分类。"""
 
@@ -204,11 +219,16 @@ class ConfirmedMemory:
     event: MemoryEvent | None = None
     version_evidence: VersionEvidence | None = None
     can_revert_auto_update: bool = False
+    retirement_reason: MemoryRetirementReason = MemoryRetirementReason.UNKNOWN
+    retired_at: datetime | None = None
 
     source_dependency_mode: SourceDependencyMode = SourceDependencyMode.ANY
     requires_all_sources: bool = False
 
     def __post_init__(self) -> None:
+        if not isinstance(self.retirement_reason, MemoryRetirementReason):
+            raise TypeError("旧版本退役原因无效。")
+        _validate_datetime(self.retired_at)
         if type(self.requires_all_sources) is not bool:
             raise TypeError("完整正文的来源依赖标记必须为布尔值。")
         if not isinstance(self.source_dependency_mode, SourceDependencyMode):
@@ -293,11 +313,16 @@ class OwnerMemory:
     event: MemoryEvent | None = None
     version_evidence: VersionEvidence | None = None
     can_revert_auto_update: bool = False
+    retirement_reason: MemoryRetirementReason = MemoryRetirementReason.UNKNOWN
+    retired_at: datetime | None = None
 
     source_dependency_mode: SourceDependencyMode = SourceDependencyMode.ANY
     requires_all_sources: bool = False
 
     def __post_init__(self) -> None:
+        if not isinstance(self.retirement_reason, MemoryRetirementReason):
+            raise TypeError("旧版本退役原因无效。")
+        _validate_datetime(self.retired_at)
         if type(self.requires_all_sources) is not bool:
             raise TypeError("完整正文的来源依赖标记必须为布尔值。")
         if not isinstance(self.source_dependency_mode, SourceDependencyMode):

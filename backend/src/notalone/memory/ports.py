@@ -8,6 +8,7 @@ from uuid import UUID
 from notalone.memory.dimension_evidence import DimensionEvidence
 
 from notalone.memory.models import (
+    MemoryChangeKind, MemoryRetirementReason,
     OwnerMemory,
     AdoptionMethod,
     ConfirmedMemory,
@@ -57,6 +58,7 @@ class MemoryPort(Protocol):
         memory_id: UUID,
         text: str,
         category: MemoryCategory | None = None,
+        change_kind: MemoryChangeKind = MemoryChangeKind.ERROR_CORRECTION,
     ) -> ConfirmedMemory:
         """修正现有记忆并保留其来源链。"""
 
@@ -131,6 +133,7 @@ class OwnerMemoryPort(Protocol):
     def correct(
         self, *, owner_id: UUID, memory_id: UUID, text: str,
         category: MemoryCategory | None = None,
+        change_kind: MemoryChangeKind = MemoryChangeKind.ERROR_CORRECTION,
     ) -> OwnerMemory:
         """在同一事务创建手动新版本并使原本人资料失效。"""
 

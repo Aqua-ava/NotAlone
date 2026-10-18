@@ -362,6 +362,11 @@ def require_current_input(
                 cursor, scope, row["turn_request_key"], row["conversation_binding_id"],
                 row["turn_reply_request_id"], historical=True,
             ))
+        from notalone.persistence.reply_basis_changes import require_generation_memory_dependencies
+        try:
+            require_generation_memory_dependencies(cursor, scope, captured)
+        except ReplyStoreInvariantError:
+            raise AssistantSessionRejected("memory_generation_forbidden") from None
         return tuple(sorted(captured))
 
 

@@ -312,6 +312,34 @@ def capture_declared_reply_sources(connection: Any, request: ReplyRequest, conte
                            (request.request_id, source_id, request.scope.owner_id, request.scope.contact_id))
 
 
+def _require_generation_sample(connection: Any, scope: ContactScope, row: dict[str, Any]) -> None:
+    """样本审计可读；生成沿保存时的候选及样本依赖复验事实资格。"""
+    from notalone.persistence.assistant_session_store import _reply_dependencies
+    from notalone.persistence.reply_basis_changes import require_generation_memory_dependencies
+
+    pending = [row]
+    seen: set[UUID] = set()
+    while pending:
+        item = pending.pop()
+        if item["id"] in seen:
+            continue
+        seen.add(item["id"])
+        if item["origin_kind"] == "candidate":
+            origin = connection.execute(
+                "SELECT reply_request_id FROM public.reply_candidate "
+                "WHERE owner_id=%s AND contact_id=%s AND id=%s",
+                (scope.owner_id, scope.contact_id, item["origin_id"]),
+            ).fetchone()
+            if origin is None:
+                raise ReplyStoreInvariantError("表达样本的候选依据不可用。")
+            require_generation_memory_dependencies(connection, scope,
+                _reply_dependencies(connection, scope, origin["reply_request_id"]))
+        if item["dependency_sample_ids"]:
+            pending.extend(connection.execute("SELECT * FROM public.style_sample "
+                "WHERE owner_id=%s AND contact_id=%s AND id=ANY(%s::uuid[])",
+                (scope.owner_id, scope.contact_id, item["dependency_sample_ids"])).fetchall())
+
+
 def require_context_style_references(connection: Any, scope: ContactScope,
                                     references: tuple[StyleReference, ...]) -> None:
     """同owner事务复验实际参考，不能以当前新样本替换模型曾见的样本。"""
@@ -325,6 +353,7 @@ def require_context_style_references(connection: Any, scope: ContactScope,
             sample = _current_sample(connection, row)
         except StyleSampleError:
             raise ReplyStoreInvariantError("表达参考已失效。") from None
+        _require_generation_sample(connection, scope, row)
         if sample.text != reference.text or sample.source_ids != reference.source_ids:
             raise ReplyStoreInvariantError("表达参考快照已变化。")
 
@@ -514,7 +543,8 @@ class PostgresStyleSampleStore:
                 for row in rows:
                     try:
                         sample = _current_sample(connection, row)
-                    except StyleSampleDeleted:
+                        _require_generation_sample(connection, scope, row)
+                    except (StyleSampleDeleted, ReplyStoreInvariantError):
                         continue
                     if characters + len(sample.text) > STYLE_REFERENCE_CHAR_BUDGET:
                         continue
@@ -635,6 +665,10 @@ class PostgresStyleSampleStore:
             raise StyleSampleNotFound("当前范围不存在有效候选。")
         try:
             require_reply_sources_current(connection, owner_id=scope.owner_id, request_id=candidate["reply_request_id"], historical=True)
+            from notalone.persistence.assistant_session_store import _reply_dependencies
+            from notalone.persistence.reply_basis_changes import require_generation_memory_dependencies
+            require_generation_memory_dependencies(connection, scope,
+                _reply_dependencies(connection, scope, candidate["reply_request_id"]))
         except ReplyStoreInvariantError:
             raise StyleSampleConflict("候选当时原始来源记录缺失或已失效，请重新生成。") from None
         request_ids = _reply_ancestor_ids(connection, owner_id=scope.owner_id, request_id=candidate["reply_request_id"])

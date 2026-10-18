@@ -314,6 +314,7 @@ def record_decision(
     replacement_memory_id: UUID | None = None,
     candidate: MemoryCandidate | None = None,
     owner_id: UUID | None = None,
+    change_kind: str | None = None,
 ) -> None:
     if not has_correction_schema(connection):
         return
@@ -364,6 +365,10 @@ def record_decision(
         for row in ancestors:
             validate_frozen_snapshot(connection, owner_id=owner_id, evidence=row["evidence"])
             merge_frozen_snapshot(evidence, row["evidence"])
+    if change_kind is not None:
+        if change_kind not in {"error_correction", "state_changed"}:
+            raise ValueError("人工修改原因无效。")
+        evidence["change_kind"] = change_kind
     connection.execute(
         """INSERT INTO public.memory_correction_decision
         (id, owner_id, contact_id, scope_kind, record_kind, record_id,

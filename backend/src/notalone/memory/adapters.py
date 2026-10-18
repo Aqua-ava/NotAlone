@@ -12,6 +12,7 @@ from notalone.memory.dimension_evidence import (
 )
 
 from notalone.memory.models import (
+    MemoryChangeKind, MemoryRetirementReason,
     AdoptionMethod,
     ConfirmedMemory,
     ConfirmedMemoryStatus,
@@ -150,7 +151,9 @@ class InMemoryMemoryStore:
         memory_id: UUID,
         text: str,
         category: MemoryCategory | None = None,
+        change_kind: MemoryChangeKind = MemoryChangeKind.ERROR_CORRECTION,
     ) -> ConfirmedMemory:
+        change_kind = MemoryChangeKind(change_kind)
         memory = self._current_memory(scope=scope, memory_id=memory_id)
         if memory.status is not ConfirmedMemoryStatus.ACTIVE:
             raise RuntimeError("失效或删除的关系记忆不能直接修正。")
@@ -161,7 +164,8 @@ class InMemoryMemoryStore:
         invalidated = replace(
             memory,
             status=ConfirmedMemoryStatus.INVALIDATED,
-            invalid_at=memory.invalid_at or datetime.now(timezone.utc),
+            retirement_reason=MemoryRetirementReason(change_kind.value),
+            retired_at=datetime.now(timezone.utc),
             revision=memory.revision + 1,
         )
         corrected = replace(
@@ -257,15 +261,22 @@ class InMemoryMemoryStore:
         return invalidated
 
     def delete(self, *, scope: ContactScope, memory_id: UUID) -> ConfirmedMemory:
-        memory = self._current_memory(scope=scope, memory_id=memory_id)
-        deleted = replace(
-            memory,
-            status=ConfirmedMemoryStatus.DELETED,
-            invalid_at=memory.invalid_at or datetime.now(timezone.utc),
-            revision=memory.revision + 1,
-        )
-        self._memories[memory.memory_id] = deleted
-        return deleted
+        memory = self._memory(scope=scope, memory_id=memory_id)
+        if memory.status is ConfirmedMemoryStatus.DELETED:
+            return memory
+        if any(item.scope == scope and item.supersedes_memory_id == memory_id
+               and item.status is not ConfirmedMemoryStatus.DELETED
+               for item in self._memories.values()):
+            raise MemoryVersionConflict("资料版本已变化，请重新查看当前版本后删除。")
+        # 当前叶删除同时撤下祖先；历史资料不能绕过用户的整条资料删除。
+        versions = self.list_versions(scope=scope, memory_id=memory_id)
+        for version in versions:
+            self._memories[version.memory_id] = replace(
+                version, status=ConfirmedMemoryStatus.DELETED,
+                invalid_at=version.invalid_at or datetime.now(timezone.utc),
+                revision=version.revision + 1,
+            )
+        return self._memories[memory.memory_id]
 
     def list_confirmed(self, scope: ContactScope, *, include_expired: bool = False) -> tuple[ConfirmedMemory, ...]:
         if not isinstance(scope, ContactScope):

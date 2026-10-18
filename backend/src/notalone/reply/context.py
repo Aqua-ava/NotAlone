@@ -13,6 +13,7 @@ from notalone.reply.layered_context import LayeredReplyMaterial, LayeredReplyBud
 from notalone.memory.layered import LayeredMemoryPort
 from notalone.memory.timing import MemoryTiming
 from notalone.memory.models import ConfirmedMemory, OwnerMemory
+from notalone.memory.retirement import is_generation_eligible, is_generation_status_eligible
 from notalone.memory.overview import OverviewEntry, RelationshipOverview, RelationshipOverviewPort
 from notalone.reply.retrieval_receipt import (
     MemoryNavigation, OverviewRevision, ReplyRetrievalReceipt, RetrievalBudget, RetrievalQuery,
@@ -635,7 +636,7 @@ class RetrievalReplyContext:
         now = datetime.now(timezone.utc)
         def navigable(entry: OverviewEntry) -> bool:
             return (entry.provenance_kind in ("manual_entry", "source_supported")
-                    and entry.memory.status.value in ("active", "invalidated")
+                    and is_generation_eligible(entry.memory, include_historical=True)
                     and (entry.memory.valid_at is None or entry.memory.valid_at <= now))
         contact_ranked = recall_memories(tuple(
             RetrievedMemory(entry.memory.memory_id, scope, entry.memory.text, entry.memory.category.value,
@@ -940,7 +941,8 @@ class RetrievalReplyContext:
     @staticmethod
     def _memory_is_usable(memory, evidence: ContextEvidence, now: datetime) -> bool:
         if evidence.navigation is not None and evidence.timing.current_status == "historical":
-            return memory.status in ("active", "invalidated") and (memory.valid_at is None or memory.valid_at <= now)
+            return (is_generation_status_eligible(memory.status, memory.retirement_reason, include_historical=True)
+                    and (memory.valid_at is None or memory.valid_at <= now))
         return RetrievalReplyContext._is_current(memory.status, memory.valid_at, memory.invalid_at, now)
 
     @staticmethod

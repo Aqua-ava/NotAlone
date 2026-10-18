@@ -75,10 +75,8 @@ class PostgresLayeredMemoryStore(LayeredProfileStore, LayeredCorrectionStore):
             erased = False
             for batch in batches:
                 if any(current.get(item["memory_id"]) != item for item in batch["input_manifest"]):
-                    from notalone.persistence.reply_layered_cleanup import erase_layered_reply_dependencies
-                    erase_layered_reply_dependencies(connection, scope,
-                        [UUID(item["memory_id"]) for item in batch["input_manifest"]])
-                    connection.execute("DELETE FROM public.layered_memory_batch WHERE id=%s", (batch["id"],))
+                    # 失效资料退出生成，旧版本仍供只读审计；真实来源删除沿专用清理路径。
+                    # capture 与 validate_in_transaction 会重新核验完整输入清单。
                     erased = True
             for job in current_job(connection,scope):
                 if job['state']!='invalidated' and any(current.get(item['memory_id'])!=item for item in job['target_manifest']):
@@ -653,10 +651,11 @@ class PostgresLayeredMemoryStore(LayeredProfileStore, LayeredCorrectionStore):
             if not manifest or not rows:
                 return None
             profile = self.profile_row(connection,scope,manifest["profile_version_id"]) if manifest["profile_version_id"] else None
-            return LayeredMemorySnapshot(2,scope,state["settings_generation"],state["organization_generation"],
+            snapshot = LayeredMemorySnapshot(2,scope,state["settings_generation"],state["organization_generation"],
                 tuple(ScenarioDirectoryEntry(row["scenario_id"],row["id"],row["title"],row["hint"],
                       len(row["paragraphs"])) for row in rows), tuple(manifest["dependency_ids"]),
                 manifest["profile_version_id"], tuple(profile["entries"]) if profile else ())
+            return snapshot if self.validate_in_transaction(connection, snapshot) else None
 
     def validate_in_transaction(self, connection, snapshot):
         """最终writer复用已持范围锁的连接；拒绝旧schema，不给旧快照补签。"""

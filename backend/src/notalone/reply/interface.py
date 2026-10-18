@@ -325,12 +325,12 @@ class ReplyBasisChange:
 
     evidence_id: UUID
     kind: Literal['confirmed_memory', 'owner_memory', 'pending_candidate', 'reply_skill']
-    reason: Literal['memory_revised', 'memory_expired', 'memory_not_yet_valid', 'memory_time_changed', 'skill_policy_changed']
+    reason: Literal['memory_revised', 'memory_expired', 'memory_not_yet_valid', 'memory_time_changed', 'memory_generation_forbidden', 'skill_policy_changed']
 
     def __post_init__(self) -> None:
         if (not isinstance(self.evidence_id, UUID)
                 or self.kind not in ('confirmed_memory', 'owner_memory', 'pending_candidate', 'reply_skill')
-                or self.reason not in ('memory_revised', 'memory_expired', 'memory_not_yet_valid', 'memory_time_changed', 'skill_policy_changed')
+                or self.reason not in ('memory_revised', 'memory_expired', 'memory_not_yet_valid', 'memory_time_changed', 'memory_generation_forbidden', 'skill_policy_changed')
                 or (self.kind == 'reply_skill') != (self.reason == 'skill_policy_changed')):
             raise ValueError("历史依据变化结构无效。")
 

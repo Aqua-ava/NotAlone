@@ -30,6 +30,7 @@ from notalone.persistence.dimension_evidence import (
 )
 
 from notalone.memory.models import (
+    MemoryChangeKind, MemoryRetirementReason,
     AdoptionMethod,
     ConfirmedMemory,
     ConfirmedMemoryStatus,
@@ -117,6 +118,8 @@ _MEMORY_COLUMNS = """
     supersedes_memory_id,
     to_jsonb(confirmed_memory)->'event' AS memory_event,
     to_jsonb(confirmed_memory)->'version_evidence' AS version_evidence,
+    to_jsonb(confirmed_memory)->>'retirement_reason' AS retirement_reason,
+    (to_jsonb(confirmed_memory)->>'retired_at')::timestamptz AS retired_at,
     to_jsonb(confirmed_memory)->>'source_dependency_mode' AS memory_dependency_mode,
     to_jsonb(confirmed_memory)->'requires_all_sources' AS memory_requires_all_sources,
     created_at AS recorded_at
@@ -680,6 +683,7 @@ class PostgresMemoryStore:
         memory_id: UUID,
         text: str,
         category: MemoryCategory | None = None,
+        change_kind: MemoryChangeKind = MemoryChangeKind.ERROR_CORRECTION,
     ) -> ConfirmedMemory:
         """修正 active 记忆并递增 revision。"""
 
@@ -689,6 +693,7 @@ class PostgresMemoryStore:
             raise ValueError("修正后的关系记忆不能为空。")
         if category is not None and not isinstance(category, MemoryCategory):
             raise TypeError("关系记忆分类无效。")
+        change_kind = MemoryChangeKind(change_kind)
         try:
             with self._connect() as connection:
                 lock_contact_scope(
@@ -712,7 +717,8 @@ class PostgresMemoryStore:
                         (scope.owner_id, scope.contact_id, memory_id, text,
                          category.value if category else memory_row["memory_category"]),
                     ).fetchone()
-                    if replay is not None:
+                    if (replay is not None
+                            and memory_row.get("retirement_reason") == change_kind.value):
                         if not available_correction_memories(
                             connection, owner_id=scope.owner_id, record_kind="contact_memory", rows=[replay],
                         ):
@@ -740,9 +746,6 @@ class PostgresMemoryStore:
                     self._ensure_active_sources(connection, scope, source_ids)
                 requires_all_sources = bool(memory_row.get('memory_requires_all_sources'))
                 mode_column, mode_value, mode_params = insert_dependency(mode, requires_all_sources=requires_all_sources, connection=connection, table='confirmed_memory')
-                erase_layered_reply_dependencies(connection, scope,
-                    {memory_id, *source_ids, *((memory_row["source_candidate_id"],)
-                      if memory_row["source_candidate_id"] else ())})
                 next_revision = memory_row["revision"] + 1
                 updated = connection.execute(
                     f"""
@@ -781,12 +784,13 @@ class PostgresMemoryStore:
                     """
                     UPDATE public.confirmed_memory
                     SET status = 'invalidated',
-                        invalid_at = COALESCE(invalid_at, %s),
+                        retirement_reason = %s, retired_at = %s,
                         revision = %s,
                         updated_at = now()
                     WHERE owner_id = %s AND contact_id = %s AND id = %s
                     """,
                     (
+                        change_kind.value,
                         self._now(),
                         next_revision,
                         scope.owner_id,
@@ -806,7 +810,7 @@ class PostgresMemoryStore:
                             self._timed_candidates(connection, [candidate_row])[0]
                         )
                 record_decision(
-                    connection, scope=scope, record_kind="contact_memory",
+                    connection, change_kind=change_kind.value, scope=scope, record_kind="contact_memory",
                     record_id=memory_id, rejected_text=memory_row["memory_text"],
                     corrected_text=text, replacement_memory_id=updated["memory_id"],
                     source_ids=source_ids, candidate=source_candidate,
@@ -1561,6 +1565,8 @@ class PostgresMemoryStore:
             timing=row["timing"], event=row.get("_bound_event", MemoryEvent.from_payload(row.get("memory_event"))),
             version_evidence=row.get("_bound_version_evidence", VersionEvidence.from_payload(row.get("version_evidence"))),
             can_revert_auto_update=row.get("_can_revert_auto_update", False),
+            retirement_reason=MemoryRetirementReason(row.get("retirement_reason") or "unknown"),
+            retired_at=row.get("retired_at"),
             source_dependency_mode=dependency_mode(row.get("memory_dependency_mode")),
             requires_all_sources=bool(row.get("memory_requires_all_sources")),
         )

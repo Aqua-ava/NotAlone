@@ -421,7 +421,7 @@ export class MemoryReadingController {
       : `/api/contacts/${scope.contactId}/memories/${request.memoryId}/correct`;
     const reading = this.protectReads(scope, [request.level, 'pending']);
     try {
-      await this.writeAndRefresh(scope, path, { text: request.text, category: request.category }, [request.level, 'pending']);
+      await this.writeAndRefresh(scope, path, { text: request.text, category: request.category, change_kind: request.changeKind ?? 'error_correction' }, [request.level, 'pending']);
     } finally { this.settleProtectedReads(reading); }
   }
   async add(request: MemoryAdditionRequest): Promise<void> {

@@ -82,15 +82,27 @@ class LayeredReplyHttpTest(OverviewReplyHttpFixture, unittest.TestCase):
         self.assertNotEqual(self.backend.request(path + "/replies", body)[0], 200)
         self.assertEqual(len(self.reply_model.payloads), 1)
 
-    def test_correcting_uncited_input_erases_prepared_and_completed_layered_copies(self):
+    def test_corrected_layered_input_preserves_audit_and_blocks_reuse(self):
         contact, _, management, ready, path = self.prepare_layered_reply()
         memory = ready["profile"]["entries"][0]["references"][0]["memory_id"]
-        self.reply_model.plans.append({"text": "聊聊课程。", "basis": "按草稿。"})
-        status, turn = self.backend.request(path + "/replies", self.rewrite_body(contact, "聊聊课程。"))
+        self.reply_model.plans.append({"text": "打个招呼。", "basis": "按草稿。"})
+        status, turn = self.backend.request(path + "/replies", self.rewrite_body(contact, "打个招呼。"))
         self.assertEqual(status, 200, turn)
-        status, corrected = self.backend.request(f"/api/contacts/{contact}/memories/{memory}/correct", {"text": "双方没有共同参加课程。"})
+        status, corrected = self.backend.request(f"/api/contacts/{contact}/memories/{memory}/correct",
+            {"text": "双方没有共同参加课程。", "change_kind": "error_correction"})
         self.assertEqual(status, 200, corrected)
-        self.assertNotEqual(self.backend.request(self.evidence_path(contact, turn))[0], 200)
+        evidence = self._get(self.backend, self.evidence_path(contact, turn))
+        self.assertEqual(evidence["layered_context"]["profile_version_id"], ready["profile"]["version_id"])
+        self.assertIn("memory_generation_forbidden", [item["reason"] for item in evidence["basis_changes"]])
+        continued = self.rewrite_body(contact, "继续打个招呼。")
+        continued["continued_from_candidate_id"] = turn["candidates"][0]["candidate_id"]
+        self.assertNotEqual(self.backend.request(path + "/replies", continued)[0], 200)
+        self.reply_model.plans.append({"text": "全新问候。", "basis": "按新草稿。"})
+        status, fresh = self.backend.request(path + "/replies", self.rewrite_body(contact, "全新问候。"))
+        self.assertEqual(status, 200, fresh)
+        fresh_evidence = self._get(self.backend, self.evidence_path(contact, fresh))
+        self.assertIsNone(fresh_evidence["layered_context"])
+        self.assertEqual(len(self.reply_model.payloads), 2)
 
     def test_full_request_capacity_omits_new_layers_without_cutting_user_or_l1(self):
         contact, _, management, ready, path = self.prepare_layered_reply()

@@ -15,7 +15,7 @@ def history_timing(timing: MemoryTiming, status: str, invalid_at: datetime | Non
     """保留原时间，只把仍合法的失效版本标为历史，不能证明过去主张真实。"""
     if status == "invalidated":
         return replace(timing, current_status="historical", current_status_reason=(
-            "旧版本已失效或被修正；只供追溯，不能证明过去主张真实或当前仍成立。"))
+            "用户明确记录后来发生变化；旧版本仅作历史参考，不表示当前仍成立，记录时间不等于变化时间。"))
     if invalid_at is not None and invalid_at <= datetime.now(timezone.utc):
         return replace(timing, current_status="historical", current_status_reason=(
             "已离开资料声明的引用区间；当前未核实，不认定事件完成或现实状态结束。"))
@@ -87,6 +87,7 @@ class RetrievedMemory:
     revision: int
     topic: str = ""
     status: str = "active"
+    retirement_reason: str = "unknown"
     valid_at: datetime | None = None
     invalid_at: datetime | None = None
     confidence: float = 1.0
@@ -220,6 +221,7 @@ class RetrievedOwnerMemory:
     adoption_method: str
     revision: int
     status: str = "active"
+    retirement_reason: str = "unknown"
     valid_at: datetime | None = None
     invalid_at: datetime | None = None
     confidence: float = 1.0

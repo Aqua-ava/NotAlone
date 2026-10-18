@@ -3,12 +3,14 @@
 import hashlib
 import json
 from datetime import datetime
+from collections.abc import Iterable
 from typing import Any
 from uuid import UUID
 
 from psycopg import sql
 
 from notalone.persistence.memory_timing import timed_memory_rows
+from notalone.memory.retirement import is_generation_status_eligible
 from notalone.reply.context import ContextEvidence
 from notalone.retrieval.models import history_timing
 from notalone.reply.errors import ReplyStoreInvariantError
@@ -24,6 +26,7 @@ def read_reply_basis_changes(
         SELECT evidence.evidence_id, evidence.kind, evidence.owner_id, evidence.contact_id,
           evidence.evidence_status AS original_status, evidence.evidence_revision AS original_revision,
           coalesce(memory.status, own.status, candidate.status) AS current_status,
+          coalesce(memory.retirement_reason, own.retirement_reason, 'unknown') AS retirement_reason,
           coalesce(memory.revision, own.revision) AS revision,
           coalesce(memory.category, own.category, candidate.category) AS category,
           coalesce(memory.text_content, own.text_content, candidate.text_content) AS text_content,
@@ -69,7 +72,9 @@ def read_reply_basis_changes(
             row["timing"] = history_timing(row["timing"], row["current_status"], row["invalid_at"])
         time_status_changed = (isinstance(timing, dict) and isinstance(timing.get("current_status"), str)
                                and row["timing"].current_status != timing["current_status"])
-        reason = ("memory_revised" if ((row["current_status"] in ("invalidated", "rejected") and row["original_status"] != row["current_status"])
+        reason = ("memory_generation_forbidden" if (row["current_status"] in ("invalidated", "rejected")
+                  and not is_generation_status_eligible(row["current_status"], row.get("retirement_reason"), include_historical=True))
+                  else "memory_revised" if ((row["current_status"] in ("invalidated", "rejected") and row["original_status"] != row["current_status"])
                   or row["current_status"] != row["original_status"]
                   or (row["original_revision"] is not None and row["revision"] != row["original_revision"]))
                   else "memory_not_yet_valid" if row["future"]
@@ -80,6 +85,12 @@ def read_reply_basis_changes(
         if reason is not None:
             key = row["evidence_id"], row["kind"]
             changes[key] = ReplyBasisChange(*key, reason)
+    # 派生资料和继承讨论即使没有直接引用记忆，也必须给旧结果显示禁用原因。
+    from notalone.persistence.assistant_session_store import _reply_dependencies
+    for identifier, kind in forbidden_generation_memory_dependencies(
+        connection, scope, _reply_dependencies(connection, scope, request_id),
+    ):
+        changes[(identifier, kind)] = ReplyBasisChange(identifier, kind, "memory_generation_forbidden")
     from notalone.persistence.skill_execution_view import saved_skill_policy_change
     version = saved_skill_policy_change(connection, scope, request_id)
     if version is not None:
@@ -116,12 +127,13 @@ def require_current_reply_memory(
             continue
         contact_clause = sql.SQL("") if kind == "owner_memory" else sql.SQL("AND contact_id=%(contact_id)s")
         revision = sql.SQL("NULL::integer") if kind == "pending_candidate" else sql.SQL("revision")
+        retirement = sql.SQL("'unknown'") if kind == "pending_candidate" else sql.SQL("retirement_reason")
         rows = connection.execute(sql.SQL(
             "SELECT id AS evidence_id,%(kind)s AS kind,owner_id,%(contact_id)s::uuid AS contact_id,"
             "status,text_content,source_ids,valid_at,invalid_at,category,created_at AS recorded_at,"
-            "{} AS revision,valid_at>now() AS future,invalid_at<=now() AS expired "
+            "{} AS retirement_reason,{} AS revision,valid_at>now() AS future,invalid_at<=now() AS expired "
             "FROM public.{} WHERE owner_id=%(owner_id)s AND id=ANY(%(ids)s::uuid[]) {}"
-        ).format(revision, sql.Identifier(table), contact_clause),
+        ).format(retirement, revision, sql.Identifier(table), contact_clause),
             {"owner_id": scope.owner_id, "contact_id": scope.contact_id, "kind": kind, "ids": list(expected)},
         ).fetchall()
         if len(rows) != len(expected):
@@ -130,7 +142,9 @@ def require_current_reply_memory(
             item = expected[row["evidence_id"]]
             historical = item.navigation is not None and item.timing.current_status == "historical"
             current_timing = history_timing(row["timing"], row["status"], row["invalid_at"]) if item.navigation else row["timing"]
-            if (row["status"] != item.status or row["future"] or (row["expired"] and not historical)
+            eligible = (row["status"] in ("pending", "confirmed") if kind == "pending_candidate" else
+                        is_generation_status_eligible(row["status"], row.get("retirement_reason"), include_historical=historical))
+            if (not eligible or row["status"] != item.status or row["future"] or (row["expired"] and not historical)
                     or row["text_content"] != item.text or row["revision"] != item.revision
                     or len(row["source_ids"]) != len(item.source_ids) or set(row["source_ids"]) != set(item.source_ids)
                     or row["valid_at"] != item.valid_at or row["invalid_at"] != item.invalid_at
@@ -147,14 +161,14 @@ def historical_basis_revision_sha256(
         """
         WITH RECURSIVE nodes AS (
           SELECT id, 'confirmed_memory' AS kind, supersedes_memory_id AS previous,
-            revision, status, text_content, source_ids, valid_at, invalid_at, category, created_at AS recorded_at, owner_id, contact_id
+            revision, status, retirement_reason, text_content, source_ids, valid_at, invalid_at, category, created_at AS recorded_at, owner_id, contact_id
           FROM public.confirmed_memory WHERE owner_id=%s AND contact_id=%s
           UNION ALL
-          SELECT id, 'owner_memory', supersedes_memory_id, revision, status,
+          SELECT id, 'owner_memory', supersedes_memory_id, revision, status, retirement_reason,
             text_content, source_ids, valid_at, invalid_at, category, created_at, owner_id, NULL::uuid
           FROM public.owner_memory WHERE owner_id=%s
           UNION ALL
-          SELECT id, 'pending_candidate', NULL::uuid, 0, status,
+          SELECT id, 'pending_candidate', NULL::uuid, 0, status, 'unknown',
             text_content, source_ids, valid_at, invalid_at, category, created_at, owner_id, contact_id
           FROM public.memory_candidate WHERE owner_id=%s AND contact_id=%s
         ), used AS (
@@ -173,3 +187,85 @@ def historical_basis_revision_sha256(
         row["timing"] = row["timing"].to_payload()
     payload = json.dumps(rows, sort_keys=True, separators=(",", ":"), default=str)
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def require_generation_memory_dependencies(
+    connection: Any, scope: ContactScope, dependencies: Iterable[UUID],
+) -> None:
+    """生成专用门：审计来源仍可回看，错误和原因不明的旧事实不能携入模型。
+
+    调用方负责已有来源、范围和删除校验；此处沿同一依赖集合补充失效原因，
+    并展开已捕获的整理版本，避免只引用派生文档时绕过底层事实。
+    """
+    if forbidden_generation_memory_dependencies(connection, scope, dependencies, require_sample_origins=True):
+        raise ReplyStoreInvariantError("历史依据已纠错或失效原因不明，只能回看，请重新生成。")
+
+
+def forbidden_generation_memory_dependencies(
+    connection: Any, scope: ContactScope, dependencies: Iterable[UUID], *,
+    require_sample_origins: bool = False,
+) -> tuple[tuple[UUID, str], ...]:
+    dependencies = set(dependencies)
+    if not dependencies:
+        return ()
+    # 样本可能由旧候选加工而来。沿实际保存的来源递归展开；同一编号仅处理一次，
+    # 防止样本互相引用或候选再次使用祖先样本时形成循环。
+    from notalone.persistence.assistant_session_store import _reply_dependencies
+    pending = set(dependencies)
+    visited: set[UUID] = set()
+    while pending:
+        current = pending - visited
+        if not current:
+            break
+        visited.update(current)
+        samples = connection.execute(
+            "SELECT sample.origin_kind, sample.dependency_sample_ids, candidate.reply_request_id "
+            "FROM public.style_sample AS sample LEFT JOIN public.reply_candidate AS candidate "
+            "ON sample.origin_kind='candidate' AND candidate.id=sample.origin_id "
+            "AND candidate.owner_id=sample.owner_id AND candidate.contact_id=sample.contact_id "
+            "WHERE sample.owner_id=%s AND sample.contact_id=%s AND sample.id=ANY(%s::uuid[])",
+            (scope.owner_id, scope.contact_id, list(current)),
+        ).fetchall()
+        pending = set()
+        for sample in samples:
+            if require_sample_origins and sample["origin_kind"] == "candidate" and sample["reply_request_id"] is None:
+                raise ReplyStoreInvariantError("表达样本的候选依据不可用，只能回看，请重新生成。")
+            pending.update(sample["dependency_sample_ids"] or ())
+            if sample["reply_request_id"] is not None:
+                pending.update(_reply_dependencies(connection, scope, sample["reply_request_id"]))
+        dependencies.update(pending)
+    rows = connection.execute("""
+        WITH RECURSIVE used(id) AS (
+          SELECT unnest(%(ids)s::uuid[])
+          UNION
+          SELECT unnest(batch.dependencies) FROM used JOIN (
+            SELECT version.id,batch.dependency_ids AS dependencies
+            FROM public.scenario_document_version AS version
+            JOIN public.layered_memory_batch AS batch ON batch.id=version.batch_id
+            WHERE batch.owner_id=%(owner_id)s
+            UNION ALL
+            SELECT version.id,batch.dependency_ids
+            FROM public.layered_profile_version AS version
+            JOIN public.layered_profile_batch AS batch ON batch.id=version.batch_id
+            WHERE batch.owner_id=%(owner_id)s
+          ) AS batch ON batch.id=used.id
+        )
+        SELECT DISTINCT memory.id,memory.kind FROM used JOIN (
+          SELECT id,id AS match_id,'confirmed_memory' AS kind,status,retirement_reason FROM public.confirmed_memory
+          WHERE owner_id=%(owner_id)s
+          UNION ALL
+          SELECT id,source_candidate_id,'confirmed_memory',status,retirement_reason FROM public.confirmed_memory
+          WHERE owner_id=%(owner_id)s AND source_candidate_id IS NOT NULL
+          UNION ALL
+          SELECT id,id,'owner_memory',status,retirement_reason FROM public.owner_memory WHERE owner_id=%(owner_id)s
+          UNION ALL
+          SELECT id,source_candidate_id,'owner_memory',status,retirement_reason FROM public.owner_memory
+          WHERE owner_id=%(owner_id)s AND source_candidate_id IS NOT NULL
+          UNION ALL
+          SELECT id,id,'pending_candidate',status,'unknown' FROM public.memory_candidate WHERE owner_id=%(owner_id)s
+        ) AS memory ON memory.match_id=used.id
+        WHERE memory.status NOT IN ('active','pending','confirmed')
+          AND NOT (memory.status='invalidated' AND memory.retirement_reason='state_changed')
+        ORDER BY memory.kind,memory.id
+    """, {"ids": list(dependencies), "owner_id": scope.owner_id}).fetchall()
+    return tuple((row["id"], row["kind"]) for row in rows)

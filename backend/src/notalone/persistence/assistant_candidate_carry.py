@@ -112,6 +112,8 @@ def _origin_dependencies(
                 historical=True,
             ))
             dependencies.update(_reply_dependencies(cursor, scope, history.candidate_group_id))
+            from notalone.persistence.reply_basis_changes import require_generation_memory_dependencies
+            require_generation_memory_dependencies(cursor, scope, dependencies)
             typed = _partition_assistant_dependencies(cursor, scope, dependencies)
             sources = verified_discussion_dependencies(cursor, scope, typed.source_ids, historical=True)
             samples = tuple(sorted(set(typed.style_sample_ids) | set(

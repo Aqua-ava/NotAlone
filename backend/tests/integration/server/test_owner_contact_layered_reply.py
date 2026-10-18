@@ -89,7 +89,7 @@ class OwnerContactLayeredReplyHttpTest(OverviewReplyHttpFixture, unittest.TestCa
         self.assertEqual(status, 200, turn)
         return turn
 
-    def test_owner_correction_clears_all_actual_contacts_but_preserves_unrelated_reply(self):
+    def test_owner_correction_keeps_audit_but_disables_all_affected_generation(self):
         contact, management, ready, memory, path = self.dual_scope()
         first = self.generate(contact, path)
         second, _, _ = self.import_contact('另一位合成联系人。')
@@ -106,7 +106,8 @@ class OwnerContactLayeredReplyHttpTest(OverviewReplyHttpFixture, unittest.TestCa
             {'text': '本人已结束合成课程。'})
         self.assertEqual(status, 200, corrected)
         for selected, turn in ((contact, first), (second, other)):
-            self.assertNotEqual(self.backend.request(self.evidence_path(selected, turn))[0], 200)
+            evidence = self._get(self.backend, self.evidence_path(selected, turn))
+            self.assertIn('memory_generation_forbidden', [item['reason'] for item in evidence['basis_changes']])
         self.assertEqual(self.backend.request(self.evidence_path(second, unrelated))[0], 200)
         self.assertNotEqual(self.backend.request(path + '/replies', prepared)[0], 200)
 
@@ -460,7 +461,8 @@ class OwnerContactLayeredReplyHttpTest(OverviewReplyHttpFixture, unittest.TestCa
         status, result = management.request('/api/memories/owner/layered-memory/' + action, payload)
         self.assertEqual(status, 200, result)
         for selected, turn in ((contact, first), (second, other)):
-            self.assertNotEqual(self.backend.request(self.evidence_path(selected, turn))[0], 200)
+            evidence = self._get(self.backend, self.evidence_path(selected, turn))
+            self.assertIn('memory_generation_forbidden', [item['reason'] for item in evidence['basis_changes']])
         self.assertEqual(self.read(management, contact)['profile']['version_id'], contact_before['profile']['version_id'])
         self.assertNotEqual(self.backend.request(path + '/replies', body)[0], 200)
         self.backend = self._backend(self.owner_id)

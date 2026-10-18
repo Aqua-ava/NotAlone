@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from notalone.memory.retirement import is_generation_eligible, is_generation_status_eligible
+
 from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
@@ -244,6 +246,7 @@ class PostgresRetrieval:
                 revision=memory.revision,
                 topic=memory.topic.value,
                 status=memory.status.value,
+                retirement_reason=memory.retirement_reason.value,
                 valid_at=memory.valid_at,
                 invalid_at=memory.invalid_at,
                 timing=(history_timing(memory.timing, memory.status.value, memory.invalid_at)
@@ -252,7 +255,7 @@ class PostgresRetrieval:
             )
             for memory in memories
             if (memory_ids is None or memory.memory_id in memory_ids)
-            and memory.status.value in ("active", "invalidated")
+            and is_generation_eligible(memory, include_historical=include_historical)
         )
         return recall_memories(retrieved, query=query, limit=limit)
 
@@ -452,6 +455,7 @@ class PostgresRetrieval:
                 adoption_method=memory.adoption_method.value,
                 revision=memory.revision,
                 status=memory.status.value,
+                retirement_reason=memory.retirement_reason.value,
                 valid_at=memory.valid_at,
                 invalid_at=memory.invalid_at,
                 timing=(history_timing(memory.timing, memory.status.value, memory.invalid_at)
@@ -460,7 +464,7 @@ class PostgresRetrieval:
             )
             for memory in memories
             if (memory_ids is None or memory.memory_id in memory_ids)
-            and memory.status.value in ("active", "invalidated")
+            and is_generation_eligible(memory, include_historical=include_historical)
         )
         return recall_owner_memories(retrieved, query=query, limit=limit)
 

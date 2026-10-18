@@ -17,6 +17,7 @@ from notalone.memory.models import (
     FactSubject,
     MemoryCandidate,
     MemoryCategory,
+    MemoryChangeKind,
     MemoryTopic,
     OwnerMemory,
 )
@@ -238,12 +239,14 @@ class MemoryService:
         memory_id: UUID,
         text: str,
         category: MemoryCategory | None = None,
+        change_kind: MemoryChangeKind = MemoryChangeKind.ERROR_CORRECTION,
     ) -> ConfirmedMemory:
         return self._contact_memory.correct(
             scope=ContactScope(owner_id=owner_id, contact_id=contact_id),
             memory_id=memory_id,
             text=text,
             category=category,
+            change_kind=change_kind,
         )
 
     def delete_contact_memory(
@@ -264,7 +267,9 @@ class MemoryService:
     def correct_owner_memory(
         self, *, owner_id: UUID, memory_id: UUID, text: str,
         category: MemoryCategory | None = None,
+        change_kind: MemoryChangeKind = MemoryChangeKind.ERROR_CORRECTION,
     ) -> OwnerMemory:
         return self._owner_memory.correct(
             owner_id=owner_id, memory_id=memory_id, text=text, category=category,
+            change_kind=change_kind,
         )

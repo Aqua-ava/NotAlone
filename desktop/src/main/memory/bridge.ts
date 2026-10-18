@@ -32,14 +32,14 @@ export function installMemoryBridge(commands: PageCommands, backend: BackendHost
   commands.handle('memory:read-owner-facts', (...args: unknown[]) => { noArguments(args); return owner.readFacts(); }, 'manager');
   for (const action of ['correct', 'delete'] as const) commands.handle(`memory:${action}-owner-fact`, (...args: unknown[]) => {
     const fields = args[0] as Record<string, unknown> | undefined;
-    const keys = action === 'correct' ? ['memoryId', 'revision', 'text', 'category'] : ['memoryId', 'revision'];
+    const keys = action === 'correct' ? ['memoryId', 'revision', 'text', 'category', 'changeKind'] : ['memoryId', 'revision'];
     if (args.length !== 1 || !fields || typeof fields !== 'object' || Array.isArray(fields)
-      || Object.keys(fields).length !== keys.length || !Object.keys(fields).every(key => keys.includes(key))
+      || Object.keys(fields).length !== keys.length - (action === 'correct' && fields.changeKind === undefined ? 1 : 0) || !Object.keys(fields).every(key => keys.includes(key))
       || !isUuid(fields.memoryId) || typeof fields.revision !== 'number' || !Number.isSafeInteger(fields.revision) || fields.revision < 1
-      || (action === 'correct' && (typeof fields.text !== 'string' || !fields.text.trim() || fields.text.length > 4000
+      || (action === 'correct' && ((fields.changeKind !== undefined && !['error_correction', 'state_changed'].includes(fields.changeKind as string)) || typeof fields.text !== 'string' || !fields.text.trim() || fields.text.length > 4000
         || !['common_fact', 'preference', 'taboo', 'recent_state', 'relationship_note'].includes(fields.category as string)))) throw new Error('本人底层资料操作不可用。');
     return owner.changeFact(action, { memoryId: fields.memoryId, revision: fields.revision,
-      ...(action === 'correct' ? { text: fields.text as string, category: fields.category as MemoryAdditionRequest['category'] } : {}) });
+      ...(action === 'correct' ? { text: fields.text as string, category: fields.category as MemoryAdditionRequest['category'], changeKind: (fields.changeKind ?? 'error_correction') as MemoryCorrectionRequest['changeKind'] } : {}) });
   }, 'manager');
   commands.handle('memory:add-owner', (...args: unknown[]) => {
     const fields = args[0] as Record<string, unknown> | undefined;
@@ -109,9 +109,10 @@ function correctionArguments(args: unknown[]): MemoryCorrectionRequest {
   const value = args[0];
   if (args.length !== 1 || !value || typeof value !== 'object' || Array.isArray(value)) throw new Error('资料修正不可用。');
   const fields = value as Record<string, unknown>;
-  if (Object.keys(fields).length !== 7 || !Object.keys(fields).every((key) =>
-    ['contactId', 'scopeRevision', 'level', 'memoryId', 'revision', 'text', 'category'].includes(key))
+  if (Object.keys(fields).length !== (fields.changeKind === undefined ? 7 : 8) || !Object.keys(fields).every((key) =>
+    ['contactId', 'scopeRevision', 'level', 'memoryId', 'revision', 'text', 'category', 'changeKind'].includes(key))
     || !isUuid(fields.contactId) || !isUuid(fields.memoryId)
+    || (fields.changeKind !== undefined && !['error_correction', 'state_changed'].includes(fields.changeKind as string))
     || typeof fields.scopeRevision !== 'number' || !Number.isSafeInteger(fields.scopeRevision) || fields.scopeRevision < 0
     || !['owner', 'contact'].includes(fields.level as string) || typeof fields.revision !== 'number' || !Number.isSafeInteger(fields.revision) || fields.revision < 1
     || typeof fields.text !== 'string' || !fields.text.trim()
@@ -119,7 +120,7 @@ function correctionArguments(args: unknown[]): MemoryCorrectionRequest {
     throw new Error('资料修正不可用。');
   }
   return { contactId: fields.contactId.toLowerCase(), scopeRevision: fields.scopeRevision, level: fields.level as MemoryCorrectionRequest['level'],
-    memoryId: fields.memoryId.toLowerCase(), revision: fields.revision, text: fields.text, category: fields.category as MemoryCorrectionRequest['category'] };
+    memoryId: fields.memoryId.toLowerCase(), revision: fields.revision, text: fields.text, category: fields.category as MemoryCorrectionRequest['category'], changeKind: (fields.changeKind ?? 'error_correction') as MemoryCorrectionRequest['changeKind'] };
 }
 
 function additionArguments(args: unknown[]): MemoryAdditionRequest {

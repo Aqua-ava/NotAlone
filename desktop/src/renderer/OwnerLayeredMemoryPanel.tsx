@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { ActiveMemory, OwnerLayeredMemoryManagementRequest, OwnerLayeredMemoryState } from '../shared/memory-bridge';
+import type { ActiveMemory, MemoryChangeKind, OwnerLayeredMemoryManagementRequest, OwnerLayeredMemoryState } from '../shared/memory-bridge';
 import { MemoryTemporalStatus } from './MemoryTemporalStatus';
 import { LayeredMemoryPanel } from './LayeredMemoryPanel';
 
@@ -67,6 +67,7 @@ function OwnerFactCard({ memory, busy, run, initiallyEditing = false }: { memory
   const [editing, setEditing] = useState(initiallyEditing);
   const [deleting, setDeleting] = useState(false);
   const [text, setText] = useState(memory.text);
+  const [changeKind, setChangeKind] = useState<MemoryChangeKind>('error_correction');
   return <article className="memory-card">
     <p className="memory-text">{memory.text}</p>
     <p>采纳方式：{memory.adoptionMethod === 'auto' ? '系统自动采纳，非用户确认' : '手动采纳'} · 版本 {memory.revision}</p>
@@ -75,8 +76,14 @@ function OwnerFactCard({ memory, busy, run, initiallyEditing = false }: { memory
       <p>来源标识：{memory.sourceIds.join('、') || '来源标识不可用'}</p></details>
     <button className="button" disabled={busy} onClick={() => setEditing(!editing)}>修正本人记忆</button>
     <button className="button" disabled={busy} onClick={() => setDeleting(true)}>删除本人记忆</button>
-    {editing && <form className="memory-edit-form" onSubmit={event => { event.preventDefault(); void run(() => window.notalone.memory.correctOwnerMemory({ memoryId: memory.memoryId, revision: memory.revision, text: text.trim(), category: memory.category })); }}>
+    {editing && <form className="memory-edit-form" onSubmit={event => { event.preventDefault(); void run(() => window.notalone.memory.correctOwnerMemory({ memoryId: memory.memoryId, revision: memory.revision, text: text.trim(), category: memory.category, changeKind })); }}>
       <label>修正本人记忆内容<textarea value={text} maxLength={4000} onChange={event => setText(event.target.value)} /></label>
+      <label>修改原因<select aria-label="修改原因" value={changeKind} disabled={busy}
+        onChange={event => setChangeKind(event.target.value as MemoryChangeKind)}>
+        <option value="error_correction">纠正错误</option><option value="state_changed">记录变化</option></select></label>
+      <p>{changeKind === 'error_correction' ? '原来的内容记错了。旧版只保留供查看，不再用于生成。'
+        : '原来的内容曾经成立，后来发生变化。旧版可作为历史参考。'}</p>
+      <p>保存新的手动版本并保留来源；本次保存时间不代表变化发生时间。</p>
       <button className="button" disabled={busy || !text.trim()}>保存本人记忆修正</button>
     </form>}
     {deleting && <div role="group" aria-label="确认删除本人记忆"><p>删除该底层记忆，并使依赖它的整理资料失效。</p>

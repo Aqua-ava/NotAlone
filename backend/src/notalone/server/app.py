@@ -130,6 +130,7 @@ from notalone.memory.models import (
     ConfirmedMemory,
     MemoryCandidate,
     MemoryCategory,
+    MemoryChangeKind,
     MemoryTopic,
     OwnerMemory,
 )
@@ -1776,6 +1777,7 @@ class BackendApp:
             memory = service.correct_owner_memory(
                 owner_id=owner_id, memory_id=memory_id, text=text,
                 category=_optional_category(payload.get("category")),
+                change_kind=_memory_change_kind(payload),
             )
             return _json_response(
                 HTTPStatus.OK, {"memory": _owner_memory_payload(memory)}
@@ -1912,6 +1914,7 @@ class BackendApp:
                     memory_id=memory_id,
                     text=text,
                     category=category,
+                    change_kind=_memory_change_kind(payload),
                 )
                 return _json_response(
                     HTTPStatus.OK, {"memory": _memory_payload(memory)}
@@ -3253,6 +3256,17 @@ def _parse_memory_json(body: bytes) -> dict[str, object]:
     return payload
 
 
+def _memory_change_kind(payload: dict[str, object]) -> MemoryChangeKind:
+    """旧修正入口默认纠错；只有明确选择变化才能保留历史生成资格。"""
+    value = payload.get("change_kind", MemoryChangeKind.ERROR_CORRECTION.value)
+    if not isinstance(value, str):
+        raise MemoryRequestInvalid()
+    try:
+        return MemoryChangeKind(value)
+    except ValueError:
+        raise MemoryRequestInvalid() from None
+
+
 def _memory_revision_or_raise(body: bytes) -> int:
     payload = _parse_memory_json(body)
     revision = payload.get("expected_revision")
@@ -3395,6 +3409,8 @@ def _owner_memory_payload(memory: OwnerMemory) -> dict[str, object]:
         "adoption_method": memory.adoption_method.value,
         "status": memory.status.value,
         "revision": memory.revision,
+        "retirement_reason": memory.retirement_reason.value,
+        "retired_at": _iso_or_none(memory.retired_at),
         "supersedes_memory_id": (
             str(memory.supersedes_memory_id)
             if memory.supersedes_memory_id is not None else None
@@ -3431,6 +3447,8 @@ def _memory_payload(memory: ConfirmedMemory) -> dict[str, object]:
         "adoption_method": memory.adoption_method.value,
         "status": memory.status.value,
         "revision": memory.revision,
+        "retirement_reason": memory.retirement_reason.value,
+        "retired_at": _iso_or_none(memory.retired_at),
         "source_ids": [str(source_id) for source_id in memory.source_ids],
         "confidence": memory.confidence,
         "risk_flags": list(memory.risk_flags),

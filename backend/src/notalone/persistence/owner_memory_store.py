@@ -27,6 +27,7 @@ from notalone.memory.versions import (
 from notalone.persistence.dimension_evidence import bind_stored_dimension_evidence
 
 from notalone.memory.models import (
+    MemoryChangeKind, MemoryRetirementReason,
     AdoptionMethod,
     ConfirmedMemoryStatus,
     FactSubject,
@@ -74,6 +75,8 @@ _OWNER_MEMORY_COLUMNS = """
     supersedes_memory_id,
     to_jsonb(owner_memory)->'event' AS memory_event,
     to_jsonb(owner_memory)->'version_evidence' AS version_evidence,
+    to_jsonb(owner_memory)->>'retirement_reason' AS retirement_reason,
+    (to_jsonb(owner_memory)->>'retired_at')::timestamptz AS retired_at,
     to_jsonb(owner_memory)->>'source_dependency_mode' AS dependency_mode,
     to_jsonb(owner_memory)->'requires_all_sources' AS requires_all_sources,
     created_at AS recorded_at
@@ -500,6 +503,7 @@ class PostgresOwnerMemoryStore:
     def correct(
         self, *, owner_id: UUID, memory_id: UUID, text: str,
         category: MemoryCategory | None = None,
+        change_kind: MemoryChangeKind = MemoryChangeKind.ERROR_CORRECTION,
     ) -> OwnerMemory:
         """原子替换当前有效本人资料；旧版与候选链留作审计。"""
         _validate_owner_id(owner_id)
@@ -509,6 +513,7 @@ class PostgresOwnerMemoryStore:
             raise ValueError("修正后的本人记忆不能为空。")
         if category is not None and not isinstance(category, MemoryCategory):
             raise TypeError("本人记忆分类无效。")
+        change_kind = MemoryChangeKind(change_kind)
         try:
             with self._connect() as connection:
                 lock_owner_scope(connection, owner_id=owner_id)
@@ -558,13 +563,12 @@ class PostgresOwnerMemoryStore:
                 if row is None:
                     raise OwnerMemoryPersistenceError("本人新版本写入结果为空。")
                 # 同事务先保存合法后继，避免旧叶失效触发器误判整条手录链已删除。
-                erase_layered_reply_dependencies(connection, OwnerScope(owner_id), (memory_id,))
                 updated = connection.execute(
                     """UPDATE public.owner_memory
-                    SET status = 'invalidated', invalid_at = COALESCE(invalid_at, %s),
+                    SET status = 'invalidated', retirement_reason = %s, retired_at = %s,
                         revision = %s, updated_at = now()
                     WHERE owner_id = %s AND id = %s AND status = 'active'""",
-                    (now, corrected.revision, owner_id, memory_id),
+                    (change_kind.value, now, corrected.revision, owner_id, memory_id),
                 ).rowcount
                 if updated != 1:
                     raise OwnerMemoryPersistenceError("本人旧版本失效更新失败。")
@@ -577,7 +581,7 @@ class PostgresOwnerMemoryStore:
                     if raw_candidate is not None:
                         source_candidate = candidate_from_row(raw_candidate)
                 record_decision(
-                    connection, scope=None, owner_id=owner_id, record_kind="owner_memory",
+                    connection, change_kind=change_kind.value, scope=None, owner_id=owner_id, record_kind="owner_memory",
                     record_id=memory_id, rejected_text=previous["text_content"],
                     source_ids=sources, corrected_text=text,
                     replacement_memory_id=corrected.memory_id, candidate=source_candidate,
@@ -873,6 +877,8 @@ def _from_row(row: dict[str, Any]) -> OwnerMemory:
         timing=row["timing"], event=row.get("_bound_event", MemoryEvent.from_payload(row.get("memory_event"))),
         version_evidence=row.get("_bound_version_evidence", VersionEvidence.from_payload(row.get("version_evidence"))),
         can_revert_auto_update=row.get("_can_revert_auto_update", False),
+        retirement_reason=MemoryRetirementReason(row.get("retirement_reason") or "unknown"),
+        retired_at=row.get("retired_at"),
         source_dependency_mode=dependency_mode(row.get("dependency_mode")),
         requires_all_sources=bool(row.get("requires_all_sources")),
     )

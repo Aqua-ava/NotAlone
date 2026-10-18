@@ -65,10 +65,10 @@ export class OwnerLayeredMemoryController {
     } catch { if (this.factsOperation === operation) this.update({ memories: { phase: 'error', items: [] } }); }
     finally { if (this.factsOperation === operation) this.factsOperation = undefined; }
   }
-  async changeFact(action: 'correct' | 'delete', request: { memoryId: string; revision: number; text?: string; category?: MemoryAdditionRequest['category'] }) {
+  async changeFact(action: 'correct' | 'delete', request: { memoryId: string; revision: number; text?: string; category?: MemoryAdditionRequest['category']; changeKind?: 'error_correction' | 'state_changed' }) {
     this.synchronize();
     if (this.state.memories?.phase !== 'ready' || !this.state.memories.items.some(item => item.memoryId === request.memoryId && item.revision === request.revision)) throw new Error('本人底层资料版本已变化，请重新读取。');
-    await this.writeFact(`/api/memories/owner/${request.memoryId}/${action}`, action === 'correct' ? { text: request.text, category: request.category } : {});
+    await this.writeFact(`/api/memories/owner/${request.memoryId}/${action}`, action === 'correct' ? { text: request.text, category: request.category, change_kind: request.changeKind ?? 'error_correction' } : {});
   }
   async add(request: Pick<MemoryAdditionRequest, 'text' | 'category'>) { await this.writeFact('/api/memories/manual-owner', request); }
   private async writeFact(path: string, body: unknown) {

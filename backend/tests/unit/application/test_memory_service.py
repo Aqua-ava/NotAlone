@@ -16,6 +16,7 @@ from notalone.memory.models import (
     ConfirmedMemoryStatus,
     MemoryCandidate,
     MemoryCategory,
+    MemoryChangeKind,
     MemoryTopic,
     OwnerMemory,
 )
@@ -131,6 +132,7 @@ class FakeContactMemory:
         memory_id: UUID,
         text: str,
         category: MemoryCategory | None = None,
+        change_kind: MemoryChangeKind = MemoryChangeKind.ERROR_CORRECTION,
     ) -> ConfirmedMemory:
         self.correct_calls.append((scope, memory_id, text, category))
         return ConfirmedMemory(

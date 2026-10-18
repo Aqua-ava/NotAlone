@@ -113,17 +113,17 @@ def _reply_dependencies(connection: Any, scope: ContactScope, request_id: UUID) 
     rows = connection.execute(
         """
         WITH RECURSIVE lineage AS (
-            SELECT id, continued_from_candidate_id
+            SELECT id, continued_from_candidate_id, context_snapshot
             FROM public.reply_request WHERE owner_id = %s AND contact_id = %s AND id = %s
             UNION
-            SELECT parent.id, parent.continued_from_candidate_id
+            SELECT parent.id, parent.continued_from_candidate_id, parent.context_snapshot
             FROM lineage
             JOIN public.reply_candidate AS candidate ON candidate.id = lineage.continued_from_candidate_id
             JOIN public.reply_request AS parent ON parent.id = candidate.reply_request_id
             WHERE parent.owner_id = %s AND parent.contact_id = %s
         )
         SELECT evidence.evidence_id, evidence.kind, evidence.source_ids, turn.dependency_ids,
-               lineage.id AS request_id
+               lineage.id AS request_id, lineage.context_snapshot
         FROM lineage JOIN public.reply_context_evidence AS evidence ON evidence.reply_request_id = lineage.id
         LEFT JOIN public.assistant_session_turn AS turn ON turn.reply_request_id = lineage.id
           AND turn.owner_id = %s AND turn.contact_id = %s
@@ -134,6 +134,11 @@ def _reply_dependencies(connection: Any, scope: ContactScope, request_id: UUID) 
     dependencies: set[UUID] = set()
     for row in rows:
         dependencies.update(row["dependency_ids"] or ())
+        snapshot = row["context_snapshot"] or {}
+        try:
+            dependencies.update(UUID(value) for value in snapshot.get("navigation_dependency_ids", ()))
+        except (TypeError, ValueError, AttributeError):
+            raise ReplyStoreInvariantError("旧回复导航依赖结构无效。") from None
         dependencies.update(_evidence_dependencies(
             connection, owner_id=scope.owner_id, evidence_id=row["evidence_id"],
             kind=row["kind"], source_ids={UUID(value) for value in row["source_ids"]},
@@ -141,6 +146,10 @@ def _reply_dependencies(connection: Any, scope: ContactScope, request_id: UUID) 
         ))
     for identifier in {row["request_id"] for row in rows}:
         dependencies.update(captured_reply_sources(connection, owner_id=scope.owner_id, request_id=identifier))
+    from notalone.persistence.reply_discussion_dependencies import reply_style_sample_dependencies
+    dependencies.update(reply_style_sample_dependencies(
+        connection, scope, request_id, require_available=False,
+    ))
     # 继承当时实际捕获的依赖，不把后来挂接的来源补进旧候选的来历。
     return dependencies
 
