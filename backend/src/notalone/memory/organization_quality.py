@@ -44,7 +44,7 @@ def organization_rules_identity():
     for name in ('application/organization_call.py', 'memory/owner_organization_input.py',
                  'memory/scenario_validation.py', 'memory/scenario_publication.py', 'memory/profile_validation.py', 'memory/organization_isolation.py',
                  'persistence/layered_coverage.py', 'persistence/layered_corrections.py',
-                 'memory/layered_correction_validation.py'):
+                 'memory/layered_correction_validation.py', 'memory/personal_background.py', 'memory/personal_organization.py'):
         path = root / name
         values[name] = ast.dump(ast.parse(path.read_text()), include_attributes=False) if path.exists() else 'not_installed'
     return content_digest(values)
@@ -53,13 +53,14 @@ def organization_rules_identity():
 def organization_prompt_identity():
     from notalone.memory.organization_sdk import (POLICY, SCENARIO_PROMPT, CORRECTED_SCENARIO_PROMPT,
         PROFILE_PROMPT, VERIFICATION_PROMPT, PROFILE_VERIFICATION_PROMPT, SCENARIO_ITEM_VERIFICATION_PROMPT)
-    return content_digest([POLICY, SCENARIO_PROMPT, CORRECTED_SCENARIO_PROMPT,
+    from notalone.memory import personal_organization
+    return content_digest([personal_organization.POLICY, personal_organization.SCENARIO_PROMPT, personal_organization.PROFILE_PROMPT, personal_organization.VERIFICATION_PROMPT, POLICY, SCENARIO_PROMPT, CORRECTED_SCENARIO_PROMPT,
         PROFILE_PROMPT, VERIFICATION_PROMPT, PROFILE_VERIFICATION_PROMPT, SCENARIO_ITEM_VERIFICATION_PROMPT])
 
 
 def organization_evaluation_identity():
     return _source_identity(['application/organization_evaluation.py', 'memory/organization_quality_report.py',
-        'memory/organization_quality_review.py', 'memory/organization_quality_transport.py', 'memory/organization_sdk.py', 'memory/organization_verification.py',
+        'memory/organization_quality_review.py', 'memory/organization_quality_transport.py', 'memory/organization_sdk.py', 'memory/organization_verification.py', 'memory/personal_organization.py', 'memory/personal_background.py',
         'memory/organization_quality_suite.py', 'application/organization_quality_suite.py', 'memory/organization_quality_suite_budget.py', 'persistence/organization_quality.py'])
 
 
@@ -71,7 +72,7 @@ class OrganizationQualityContract:
     verifier_model: str = 'unconfigured'
     rules_version: str = field(default_factory=organization_rules_identity)
     prompt_version: str = field(default_factory=organization_prompt_identity)
-    schema_version: str = field(default_factory=lambda: _source_identity(['memory/scenario_validation.py', 'memory/profile_validation.py', 'memory/organization_verification.py']))
+    schema_version: str = field(default_factory=lambda: _source_identity(['memory/scenario_validation.py', 'memory/profile_validation.py', 'memory/organization_verification.py', 'memory/personal_background.py', 'memory/personal_organization.py']))
     purpose_version: str = 'layered-background-v1'
     input_projection_version: str = 'scope-projection-correction-v3'
     evaluation_version: str = field(default_factory=organization_evaluation_identity)

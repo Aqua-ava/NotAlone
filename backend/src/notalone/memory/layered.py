@@ -21,6 +21,8 @@ class OrganizationBudget:
     """显式受控预算；尚未标定为生产默认。"""
 
     max_memories: int = 12
+    # 新增覆盖批大小与已有主题的递归来源输入分别限额。
+    max_batch_memories: int = 12
     max_scenarios: int = 4
     max_paragraphs: int = 8
     # 单次实际输入 JSON 与生成标题／目录／正文分别受该字符上限约束。

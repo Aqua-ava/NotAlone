@@ -30,3 +30,5 @@
 - 真实资料、模型调用、业务库迁移、App 验收、远端发布和部署不由规格或任务发布自动授权。
 
 产品规则、测试接口和交付范围见[正式规格](../../.scratch/memory-skill-evolution/spec.md)，原讨论见[草图](../drafts/memory-skill-evolution.md)。上述目标尚未由运行验证证明；既有实现状态和失败证据继续各自保留。
+
+2026-10-18 修订：个人 L2/L3 的有据推断边界已由 [ADR-072](072-personal-memory-insights-without-action-guidance.md) 局部替代；此前一概禁止性格/动机推断的表述保留为历史，不再约束新个人画像合同。行动指导仍排除。

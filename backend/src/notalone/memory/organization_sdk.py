@@ -83,8 +83,9 @@ def actual_organization_adapters(ports, *, runtime_policy="qualified_suite"):
 class _DeepSeekOrganizationAdapter:
     timeout_contract = OrganizationAdapterTimeoutContract('sdk')
 
-    def __init__(self, model, *, layer, budget, transport):
+    def __init__(self, model, *, layer, budget, transport, personal=False):
         self.model, self.layer, self.budget, self.transport = model, layer, budget, transport
+        self.personal = personal
 
     @property
     def actual_candidate(self):
@@ -100,7 +101,7 @@ class _DeepSeekOrganizationAdapter:
 
     def _invoke(self, prompt, payload, deadline):
         messages = [SystemMessage(content=prompt), HumanMessage(content=json.dumps(payload, ensure_ascii=False))]
-        response = self.model.bind(response_format={'type': 'json_object'}, max_tokens=self.budget.max_characters,
+        response = self.model.bind(response_format={'type': 'json_object'}, max_tokens=min(self.budget.max_characters, 8192) if self.personal else self.budget.max_characters,
                                    timeout=deadline.remaining_seconds()).invoke(messages)
         deadline.check()
         if response.response_metadata.get('finish_reason') != 'stop' or not isinstance(response.content, str):
@@ -114,6 +115,9 @@ class _DeepSeekOrganizationAdapter:
 class DeepSeekOrganizationProposal(_DeepSeekOrganizationAdapter):
     def propose(self, *, memories, scenarios=(), corrections=(), previous_profile=None, changed_scenario_ids=(), budget, deadline):
         prompt = (CORRECTED_SCENARIO_PROMPT if corrections else SCENARIO_PROMPT) if self.layer == 'l2' else PROFILE_PROMPT
+        if self.personal:
+            from notalone.memory.personal_organization import SCENARIO_PROMPT as personal_l2, PROFILE_PROMPT as personal_l3
+            prompt = personal_l2 if self.layer == 'l2' else personal_l3
         return self._invoke(prompt,
             {'memories': [item.to_payload() for item in memories], 'scenarios': list(scenarios), 'corrections': list(corrections),
              'previous_profile': previous_profile, 'changed_scenario_ids': list(changed_scenario_ids), 'budget': budget.to_payload()}, deadline)
@@ -125,6 +129,11 @@ class DeepSeekOrganizationVerification(_DeepSeekOrganizationAdapter):
         from notalone.memory.organization_quality import content_digest
         payload = {'layer': self.layer, 'memories': [item.to_payload() for item in memories],
                    'scenarios': list(scenarios), 'corrections': list(corrections), 'proposal': proposal}
+        if self.personal:
+            from notalone.memory.personal_organization import VERIFICATION_PROMPT as personal_prompt, targets, verify_result
+            payload['verification_targets'] = targets(proposal, self.layer)
+            result = self._invoke(personal_prompt, payload, deadline)
+            return verify_result(result, proposal, payload['memories'], self.layer, corrections)
         if self.layer == 'l3':
             payload['verification_targets'] = profile_verification_targets(proposal)
             result = self._invoke(PROFILE_VERIFICATION_PROMPT + (CORRECTION_POLICY if corrections else ''), payload, deadline)
@@ -182,7 +191,7 @@ def build_deepseek_organization_adapters(*, budget, runtime_policy="qualified_su
         client.close()
         raise
     model.cache = False
-    adapters = [cls(model, layer=layer, budget=budget, transport=transport) for cls, layer in (
+    adapters = [cls(model, layer=layer, budget=budget, transport=transport, personal=runtime_policy == 'verified_items') for cls, layer in (
         (DeepSeekOrganizationProposal, 'l2'), (DeepSeekOrganizationVerification, 'l2'),
         (DeepSeekOrganizationProposal, 'l3'), (DeepSeekOrganizationVerification, 'l3'))]
     if not actual_organization_adapters(adapters, runtime_policy=runtime_policy):

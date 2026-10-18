@@ -46,7 +46,7 @@ def build_layered_memory_service(database_url, *, model_priority=None):
     configured = os.environ.get('NOTALONE_ORGANIZATION_QUALITY_CONFIG')
     if not configured:
         from notalone.memory.organization_sdk import build_deepseek_organization_adapters
-        budget = OrganizationBudget(max_model_calls=4, max_characters=32000)
+        budget = OrganizationBudget(max_memories=120, max_batch_memories=20, max_model_calls=4, max_characters=128000, max_scenarios=15, max_paragraphs=40, max_profile_entries=16)
         contract = OrganizationQualityContract(provider='deepseek', request_model='deepseek-flash',
             verifier_provider='deepseek', verifier_model='deepseek-flash', budget=budget)
         quality = OrganizationQualityService(PostgresOrganizationQualityStore(store), organization_contract=contract)

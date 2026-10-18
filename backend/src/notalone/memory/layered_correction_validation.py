@@ -1,7 +1,21 @@
 """反馈后只放行可以独立核对的新事实原文，未知自由概括不自动通过。"""
 
 
-def validate_correction_proposal(work, proposal, *, profile=False):
+def validate_correction_proposal(work, proposal, *, profile=False, personal=False):
+    if personal:
+        from notalone.memory.personal_background import validate_metadata
+        memories = {(str(item.memory_id), item.revision) for item in work.memories}
+        groups = [proposal['entries']] if profile else [item['paragraphs'] for item in proposal['scenarios']]
+        rejected = {item.get('rejected_text') for item in work.corrections if item.get('rejected_text')}
+        for items in groups:
+            for item in items:
+                if not validate_metadata(item, profile=profile):
+                    raise ValueError('个人合同不能退回无类别的旧格式。')
+                refs = {(ref['memory_id'], ref['revision']) for ref in item['references']}
+                if not refs or not refs <= memories or item['text'] in rejected:
+                    raise ValueError('个人纠错后仅允许当前未受保护来源，不能重现已撤回正文。')
+        # work.memories已在持久层排除纠错保护依据；改写含义仍须独立个人核验明确支持。
+        return
     if not work.corrections:
         return
     memories = {(str(item.memory_id), item.revision): item for item in work.memories}

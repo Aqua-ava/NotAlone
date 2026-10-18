@@ -99,3 +99,46 @@ class OrganizationVerificationContractTest(unittest.TestCase):
     def test_l2_boolean_contract_and_empty_l3_are_preserved(self):
         self.assertTrue(self.verify({'supported': True, 'reasons': []}, layer='l2')[0])
         self.assertTrue(self.verify({'supported': True, 'reasons': [], 'entries': []}, entries=[])[0])
+
+class PersonalBackgroundVerificationTest(unittest.TestCase):
+    def setUp(self):
+        self.memory = OrganizationInput(UUID(int=1), 2, '本人自某年起每周参加绘画课。',
+            'manual_entry', {'current_status': 'current_unverified'}, None, 'common_fact', None, None)
+        self.entry = {'text': '本人可能对绘画有持续兴趣，尚不能确定。', 'kind': 'inference',
+            'section': 'interests', 'basis': '持续上课提供兴趣线索，但不等于明确偏好。',
+            'uncertainty': '未直接表明偏好。', 'temporal_status': 'uncertain',
+            'references': [{'memory_id': str(UUID(int=1)), 'revision': 2}]}
+
+    def verify(self, *, supported=True, guidance=False, quote=None, corrections=(), legacy=False, temporal='current_unverified'):
+        entry = deepcopy(self.entry)
+        if legacy:
+            for key in ('kind', 'section', 'basis'): entry.pop(key)
+        audit = {'index': 0, 'sha256': content_digest(entry), 'supported': supported,
+            'contains_action_guidance': guidance, 'correction_respected': True, 'reasons': [], 'statements': [{
+                'index': 0, 'kind': self.entry['kind'], 'support_type': 'inference' if self.entry['kind'] == 'inference' else 'direct',
+                'supported': supported, 'uncertainty_preserved': True, 'basis': '长期上课支持可能的兴趣，不证明确定偏好。',
+                'temporal_basis': temporal, 'temporal_references': [],
+                'sources': [{'memory_id': str(UUID(int=1)), 'revision': 2, 'quote': quote or '每周参加绘画课'}]}]}
+        model = ResponseModel({'items': [audit]})
+        adapter = DeepSeekOrganizationVerification(model, layer='l3', budget=OrganizationBudget(), transport=None, personal=True)
+        return adapter.verify_items(memories=[self.memory], proposal={'entries': [entry]}, corrections=corrections,
+            deadline=OrganizationCallDeadline(time.monotonic()+10)), model
+
+    def test_grounded_inference_uses_premise_quotes_not_literal_conclusion(self):
+        self.assertEqual(self.verify()[0]['accepted_indices'], [0])
+
+    def test_insufficient_inference_action_guidance_and_fabricated_quote_are_rejected(self):
+        for kwargs in ({'supported': False}, {'guidance': True}, {'quote': '喜欢社交并愿意改变生活'}):
+            with self.subTest(kwargs=kwargs): self.assertEqual(self.verify(**kwargs)[0]['accepted_indices'], [])
+
+    def test_correction_keeps_personal_contract_and_legacy_shape_cannot_bypass(self):
+        result, model = self.verify(corrections=[{'reason': '不要把兴趣写成确定人格'}])
+        self.assertEqual(result['accepted_indices'], [0])
+        self.assertIn('推断不要求结论逐字', str(model.requests[0]))
+        self.assertEqual(self.verify(legacy=True)[0]['accepted_indices'], [])
+
+    def test_unverified_current_fact_cannot_be_stable(self):
+        self.entry.update(kind='fact', temporal_status='stable')
+        self.assertEqual(self.verify()[0]['accepted_indices'], [])
+        self.assertEqual(self.verify(temporal='current_verified')[0]['accepted_indices'], [])
+        self.assertEqual(self.verify(temporal='static_fact')[0]['accepted_indices'], [0])

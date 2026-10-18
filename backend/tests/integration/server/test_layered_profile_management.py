@@ -77,6 +77,67 @@ class LayeredProfileHttpTest(MemoryOverviewHttpFixture, unittest.TestCase):
         self.assertEqual(status, 200, result)
         return result["layered_memory"]
 
+    def test_personal_facts_and_inference_remain_distinct_through_public_read(self):
+        class PersonalScenario(EchoProposal):
+            def propose(inner, *, memories, scenarios=(), budget, deadline):
+                ref = {"memory_id": str(memories[0].memory_id), "revision": memories[0].revision}
+                return {"scenarios": [{"topic_key": "learning", "title": "共同学习", "hint": "共同学习经历与可能的兴趣",
+                    "paragraphs": [{"text": memories[0].text, "references": [ref], "kind": "fact", "section": "narrative", "basis": "来源直接记载共同课程。", "uncertainty": ""},
+                        {"text": "共同学习可能是双方的一项兴趣，单次经历尚不能证明长期偏好。", "references": [ref], "kind": "inference", "section": "implicit_signals", "basis": "双方共同参加过课程。", "uncertainty": "仅一次经历，尚不能确认长期兴趣。"}]}]}
+        class PersonalProfile(ProfileProposal):
+            def propose(inner, *, scenarios, memories, budget, deadline):
+                return {"entries": [{"text": "双方可能有共同学习兴趣，长期性尚不确定。", "references": [{"memory_id": str(memories[0].memory_id), "revision": memories[0].revision}],
+                    "kind": "inference", "section": "insights", "basis": "有共同课程经历。", "temporal_status": "uncertain", "uncertainty": "仅一次经历，不能确认稳定特征。"}]}
+        contact, source, _ = self.prepare_contact()
+        backend = self.controlled(scenario_proposer=PersonalScenario(), profile_proposer=PersonalProfile())
+        state = self.enable(backend, contact)
+        self.assertEqual(state["status"], "ready", state)
+        self.assertEqual([p["kind"] for p in state["scenarios"][0]["paragraphs"]], ["fact", "inference"])
+        entry = state["profile"]["entries"][0]
+        self.assertEqual((entry["kind"], entry["section"]), ("inference", "insights"))
+        self.assertTrue(entry["basis"] and entry["uncertainty"])
+        self.delete_source(contact, source)
+        deleted = self.read(backend, contact)
+        self.assertEqual(deleted["scenarios"], [])
+        self.assertIsNone(deleted["profile"])
+
+    def test_personal_correction_preserves_inference_from_independent_new_sources(self):
+        from tests.integration.server.test_layered_memory_corrections import LayeredMemoryCorrectionHttpTest
+        class PersonalScenario(EchoProposal):
+            personal = True
+            def propose(inner, *, memories, budget, deadline, corrections=()):
+                return {'scenarios': [{'topic_key': 'independent-learning', 'title': '独立经历的可能兴趣', 'hint': '限定的学习兴趣线索',
+                    'paragraphs': [{'text': '可能有学习兴趣，尚不能确定。', 'kind': 'inference', 'section': 'implicit_signals',
+                        'basis': '仅据本次独立学习经历。', 'uncertainty': '不证明长期偏好。',
+                        'references': [{'memory_id': str(memories[0].memory_id), 'revision': memories[0].revision}]}]}]}
+        class PersonalProfile(ProfileProposal):
+            personal = True
+            def propose(inner, *, scenarios, memories, budget, deadline, corrections=()):
+                return {'entries': [{'text': '可能有学习兴趣，长期性尚不确定。', 'kind': 'inference', 'section': 'interests',
+                    'basis': '仅据独立学习经历。', 'uncertainty': '不证明长期偏好。', 'temporal_status': 'uncertain',
+                    'references': [{'memory_id': str(memories[0].memory_id), 'revision': memories[0].revision}]}]}
+        class V(ControlledVerification):
+            def verify(inner, *, memories, proposal, deadline, corrections=()): return True
+        class PV(ProfileVerification):
+            def verify(inner, *, scenarios, memories, proposal, deadline, corrections=()): return True
+        contact, _, _ = self.prepare_contact()
+        original = self.controlled()
+        ready = self.enable(original, contact)
+        path = f'/api/contacts/{contact}/layered-memory'
+        status, result = original.request(path+'/summary-error', LayeredMemoryCorrectionHttpTest.summary_command(self, ready))
+        self.assertEqual(status, 200, result)
+        self.assertEqual(self.backend.request('/api/memories/manual-contact', {
+            'contact_id': contact, 'text': '对方另外参加独立的新学习课程。', 'category': 'common_fact'})[0], 200)
+        backend = self.controlled(scenario_proposer=PersonalScenario(), scenario_verifier=V(),
+            profile_proposer=PersonalProfile(), profile_verifier=PV())
+        status, result = backend.request(path+'/refresh', {'settings_generation': ready['settings_generation']})
+        self.assertEqual(status, 200, result)
+        current = result['layered_memory']
+        self.assertEqual(current['status'], 'ready', current)
+        self.assertEqual(current['scenarios'][0]['paragraphs'][0]['kind'], 'inference')
+        self.assertEqual(current['profile']['entries'][0]['kind'], 'inference')
+        self.assertGreater(current['protected_count'], 0)
+
     def test_incremental_profile_receives_valid_previous_profile(self):
         class Incremental(ProfileProposal):
             def __init__(inner):
@@ -84,7 +145,9 @@ class LayeredProfileHttpTest(MemoryOverviewHttpFixture, unittest.TestCase):
                 inner.previous = []
             def propose(inner, *, scenarios, memories, previous_profile, changed_scenario_ids, budget, deadline):
                 inner.previous.append((previous_profile, changed_scenario_ids))
-                return super().propose(scenarios=scenarios, memories=memories, budget=budget, deadline=deadline)
+                result = super().propose(scenarios=scenarios, memories=memories, budget=budget, deadline=deadline)
+                result['entries'][0].update(kind='inference', section='insights', basis='共同学习是兴趣线索，但不能确认。')
+                return result
         contact, _, _ = self.prepare_contact()
         proposer = Incremental()
         backend = self.controlled(profile_proposer=proposer, scenario_proposer=EchoProposal())
@@ -98,6 +161,8 @@ class LayeredProfileHttpTest(MemoryOverviewHttpFixture, unittest.TestCase):
         self.assertEqual(done['status'], 'ready', done)
         self.assertEqual(proposer.previous[-1][0]['version_id'], ready['profile']['version_id'])
         self.assertTrue(proposer.previous[-1][1])
+        self.assertEqual(proposer.previous[-1][0]['entries'][0]['kind'], 'inference')
+        self.assertEqual(proposer.previous[-1][0]['entries'][0]['basis'], ready['profile']['entries'][0]['basis'])
 
     def test_unchanged_scenarios_reuse_profile_without_model_call(self):
         class StableScenario(ControlledProposal):

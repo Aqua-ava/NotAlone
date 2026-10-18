@@ -400,6 +400,8 @@ class PostgresLayeredMemoryStore(LayeredProfileStore, LayeredCorrectionStore):
             payload = {'memories': [self._input(item).to_payload() for item in combined],
                        'scenarios': contexts + [document], 'corrections': corrections}
             if len(combined) > budget.max_memories or len(json.dumps(payload, ensure_ascii=False)) > budget.max_characters:
+                if budget.max_batch_memories < budget.max_memories:
+                    raise ValueError('organization_context_budget_exceeded')
                 continue
             selected = combined
             contexts.append(document)
@@ -435,7 +437,7 @@ class PostgresLayeredMemoryStore(LayeredProfileStore, LayeredCorrectionStore):
             entries=tuple(entry for entry in self.unprotected(connection, scope, self.eligible(overview)) if str(entry.memory.memory_id) in target-covered)
             selected=[]
             corrections = self.correction_context(connection, scope)
-            for entry in entries[:budget.max_memories]:
+            for entry in entries[:min(budget.max_memories, budget.max_batch_memories)]:
                 payload={'memories': [self._input(item).to_payload() for item in selected]+[self._input(entry).to_payload()],
                          'corrections': corrections}
                 if len(json.dumps(payload,ensure_ascii=False))>budget.max_characters:
@@ -449,7 +451,14 @@ class PostgresLayeredMemoryStore(LayeredProfileStore, LayeredCorrectionStore):
                     connection.execute("UPDATE public.layered_memory_job SET pending_receipt=true WHERE task_id=%s",(claim.task_id,))
                 return None
             if with_scenarios:
-                entries, contexts, inherited = self.organization_context_inputs(connection, scope, state, tuple(selected), budget, overview)
+                try:
+                    entries, contexts, inherited = self.organization_context_inputs(connection, scope, state, tuple(selected), budget, overview)
+                except ValueError as error:
+                    if str(error) != 'organization_context_budget_exceeded':
+                        raise
+                    connection.execute("UPDATE public.layered_memory_state SET status='failed',error_code='input_budget_exceeded' "
+                        "WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s", (scope.owner_id, scope.contact_id))
+                    return None
             else:
                 entries, contexts, inherited = tuple(selected), (), ()
             manifest=self._manifest(connection,scope,entries)

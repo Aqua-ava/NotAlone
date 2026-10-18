@@ -51,6 +51,8 @@ class LayeredMemoryService:
         self._adapter_close = adapter_close
         self._dispatcher = dispatcher
         self._contract = "scenario-v3:deadline-v1:coverage-v1:correction-v1:" + runtime_policy
+        if getattr(proposer, "personal", False):
+            self._contract += ":personal-background-v1:l2-1500:l3-2000"
         self._store, self._proposer, self._verifier = store, proposer, verifier
         if synthetic:
             store.require_synthetic_database()
@@ -248,7 +250,7 @@ class LayeredMemoryService:
                 if self._scenario_context:
                     from notalone.memory.scenario_publication import require_explicit_replacements
                     require_explicit_replacements(work.scope, checked, work.scenarios)
-                validate_correction_proposal(work, checked)
+                validate_correction_proposal(work, checked, personal=getattr(self._proposer, "personal", False))
                 return checked
             raw, proposal, rejected = isolate_proposal(raw, 'scenarios', validate_items, self._budget.max_scenarios)
             self._store.record_proposal(work, {'original': original, 'filtered': raw, 'rejected': rejected})
@@ -442,7 +444,8 @@ class LayeredMemoryService:
         previous = None
         if work.previous_profile is not None:
             previous = {"version_id": work.previous_profile['version_id'], "entries": [
-                {"text": item['text'], "temporal_status": item['temporal_status'],
+                {**{key: item[key] for key in ("kind", "section", "basis") if key in item},
+                 "text": item['text'], "temporal_status": item['temporal_status'],
                  "uncertainty": item['uncertainty'], "references": [
                      {key: ref[key] for key in ('memory_id', 'revision')} for ref in item['references']]}
                 for item in work.previous_profile['entries']]}
@@ -452,7 +455,7 @@ class LayeredMemoryService:
 
     def _organize_profile(self, scope, claim):
         quality_snapshot = self._quality.snapshot(scope.owner_id) if self._quality_required else None
-        work = self._store.prepare_profile(scope,self._budget,"profile-v1:synthetic-only:deadline-v1:correction-v1" +
+        work = self._store.prepare_profile(scope,self._budget,"profile-v1:synthetic-only:deadline-v1:correction-v1:" + self._contract +
             (":owner-input-v1" if scope.contact_id is None else "") + ":" + self._quality.organization_contract.identity,
             lease_seconds=self._call_timeout_seconds * 2 + 5,claim=claim)
         if work is None:
@@ -466,7 +469,7 @@ class LayeredMemoryService:
             original = deepcopy(raw)
             def validate_items(value):
                 checked = validate_profile(value, work.memories, self._budget)
-                validate_correction_proposal(work, checked, profile=True)
+                validate_correction_proposal(work, checked, profile=True, personal=getattr(self._profile_proposer, "personal", False))
                 return checked
             raw, proposal, rejected = isolate_proposal(raw, 'entries', validate_items, self._budget.max_profile_entries)
             self._store.record_profile_proposal(work, {'original': original, 'filtered': raw, 'rejected': rejected})

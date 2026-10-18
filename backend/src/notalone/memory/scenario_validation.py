@@ -4,6 +4,7 @@ import re
 from uuid import UUID
 
 from notalone.memory.layered import OrganizationBudget, OrganizationInput
+from notalone.memory.personal_background import FIELDS, validate_metadata
 
 
 def validate_proposal(proposal: object, memories: tuple[OrganizationInput, ...],
@@ -41,12 +42,13 @@ def validate_proposal(proposal: object, memories: tuple[OrganizationInput, ...],
             raise ValueError("主题必须包含完整段落。")
         normalized = []
         for paragraph in item["paragraphs"]:
-            if (not isinstance(paragraph, dict) or set(paragraph) != {"text", "references"}
+            if (not isinstance(paragraph, dict) or set(paragraph) - (FIELDS | {"uncertainty"}) != {"text", "references"}
                     or not isinstance(paragraph["text"], str) or not paragraph["text"].strip()
                     or not isinstance(paragraph["references"], list) or not paragraph["references"]):
                 raise ValueError("段落结构无效。")
+            metadata = validate_metadata(paragraph)
             paragraphs += 1
-            characters += len(paragraph["text"])
+            characters += len(paragraph["text"]) + sum(len(value) for value in metadata.values())
             references, seen = [], set()
             for ref in paragraph["references"]:
                 if (not isinstance(ref, dict) or set(ref) != {"memory_id", "revision"}
@@ -59,7 +61,9 @@ def validate_proposal(proposal: object, memories: tuple[OrganizationInput, ...],
                 memory = inputs[identity]
                 references.append({"memory_id": identity[0], "revision": identity[1],
                     "provenance_kind": memory.provenance_kind, "timing": memory.timing})
-            normalized.append({"text": paragraph["text"], "references": references})
+            normalized.append({"text": paragraph["text"], "references": references, **metadata})
+        if any("kind" in p for p in normalized) and sum(len(p["text"]) for p in normalized) > 1500:
+            raise ValueError("个人主题正文超过1500字。")
         result.append({**item, "paragraphs": normalized})
     if characters > budget.max_characters or paragraphs > budget.max_paragraphs:
         raise ValueError("主题正文预算已耗尽。")

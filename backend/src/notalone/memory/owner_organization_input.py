@@ -28,7 +28,7 @@ def owner_model_memories(memories):
 def owner_model_scenarios(scenarios):
     # 主题正文及必要版本入口可进入L3；引用只带底层ID/版本，来源定位不外发。
     return tuple({key: item[key] for key in ('scenario_id', 'version_id', 'title', 'hint') if key in item}
-        | {'paragraphs': [{'text': paragraph['text'], 'references': [
+        | {'paragraphs': [{**{key: paragraph[key] for key in ('kind', 'section', 'basis', 'uncertainty') if key in paragraph}, 'text': paragraph['text'], 'references': [
             {key: ref[key] for key in ('memory_id', 'revision')} for ref in paragraph['references']]}
             for paragraph in item['paragraphs']]} for item in scenarios)
 
