@@ -12,7 +12,7 @@ from notalone.reply.adapters.deepseek_input_budget import build_deepseek_input_b
 from notalone.reply.adapters.deepseek_provider import build_deepseek_model
 from notalone.reply.adapters.langchain_runtime import LangChainReplyRuntime
 from notalone.reply.adapters.model_call_ledger import ModelCallLedger
-from notalone.reply.errors import ReplyCandidatesRejectedError, ReplyInvariantError, ReplyTimeoutError
+from notalone.reply.errors import ReplyCandidatesRejectedError, ReplyInvariantError, ReplyReviewInvalidError, ReplyTimeoutError
 from notalone.reply.input_budget import InputBudgetExceededError
 from tests.unit.reply.test_input_budget_runtime import SCOPE, prepared_context, reply_output
 from tests.unit.reply.test_langchain_vertical_slice import EmptySkillPort
@@ -66,6 +66,35 @@ class ConstraintReviewSdkTest(unittest.TestCase):
         self.assertEqual(violation["source_path"], "/confirmed_direction")
         self.assertEqual(violation["source_quote"], direction)
         self.assertEqual(accepted_candidate_numbers(rejected, payload), frozenset())
+
+    def test_captured_review_wire_faults_fail_explicitly_without_retry(self):
+        for fault in ("misplaced_propositions", "invalid_json"):
+            with self.subTest(fault=fault):
+                def respond(request):
+                    response = sdk_response(request)
+                    payload = response.json()
+                    call = payload["choices"][0]["message"]["tool_calls"][0]["function"]
+                    if call["name"] == "ReplyFidelityReview":
+                        review = json.loads(call["arguments"])
+                        # 实际seq2/15多传同级propositions；seq5则返回不完整JSON。
+                        review["reviews"]["candidate_1"]["propositions"] = []
+                        call["arguments"] = (json.dumps(review) if fault == "misplaced_propositions"
+                                             else call["arguments"][:-1])
+                    return httpx.Response(200, json=payload)
+                ledger = RecordingLedger()
+                runtime, requests, decisions = self.runtime(respond, ledger=ledger)
+                with self.assertRaises(ReplyReviewInvalidError):
+                    runtime.generate(self.context())
+                self.assertEqual(len(requests), 2)
+                self.assertEqual(len(decisions), 2)
+                self.assertEqual([row.outcome.value for row in ledger.entries], ["succeeded", "succeeded"])
+
+    def test_internal_review_payload_stays_hard_before_provider_validation(self):
+        from notalone.reply.adapters.constraint_review_contract import accepted_candidate_numbers
+        with self.assertRaises(ReplyInvariantError):
+            accepted_candidate_numbers({}, {"candidates": []})
+        with self.assertRaises(KeyError):
+            accepted_candidate_numbers({}, {"candidates": [{"text": "内部字段缺失。"}]})
 
     def test_pasted_direction_can_support_first_person_and_review_only_filters_once(self):
         context = prepared_context()
@@ -464,7 +493,7 @@ class ConstraintReviewSdkTest(unittest.TestCase):
                     return sdk_response(request, review_arguments=arguments)
                 ledger = RecordingLedger()
                 runtime, requests, _ = self.runtime(respond, ledger=ledger)
-                with self.assertRaises(ReplyInvariantError):
+                with self.assertRaises(ReplyReviewInvalidError):
                     runtime.generate(self.context())
                 self.assertEqual(len(requests), 2)
                 self.assertEqual([row.outcome.value for row in ledger.entries], ["succeeded", "succeeded"])
@@ -508,7 +537,7 @@ class ConstraintReviewSdkTest(unittest.TestCase):
 
                     runtime, requests, _ = self.runtime(respond)
                     if length > limit:
-                        with self.assertRaises(ReplyInvariantError):
+                        with self.assertRaises(ReplyReviewInvalidError):
                             runtime.generate(context)
                     elif field == "reason":
                         self.assertEqual([item.text for item in runtime.generate(context).candidates], [text])
@@ -554,7 +583,7 @@ class ConstraintReviewSdkTest(unittest.TestCase):
                     return sdk_response(request, generation_arguments=generation, review_arguments=arguments)
 
                 runtime, requests, _ = self.runtime(respond)
-                with self.assertRaises(ReplyInvariantError):
+                with self.assertRaises(ReplyReviewInvalidError):
                     runtime.generate(self.context())
                 self.assertEqual(len(requests), 2)
 
@@ -583,7 +612,7 @@ class ConstraintReviewSdkTest(unittest.TestCase):
 
                     ledger = RecordingLedger()
                     runtime, requests, decisions = self.runtime(respond, ledger=ledger)
-                    with self.assertRaises(ReplyInvariantError):
+                    with self.assertRaises(ReplyReviewInvalidError):
                         runtime.generate(self.context())
                     self.assertEqual(len(requests), 2)
                     self.assertEqual(len(decisions), 2)
@@ -769,5 +798,5 @@ class LayeredReviewSourceContractTest(unittest.TestCase):
                 if valid:
                     self.assertEqual(accepted_candidate_numbers(report, payload), frozenset())
                 else:
-                    with self.assertRaises(ReplyInvariantError):
+                    with self.assertRaises(ReplyReviewInvalidError):
                         accepted_candidate_numbers(report, payload)

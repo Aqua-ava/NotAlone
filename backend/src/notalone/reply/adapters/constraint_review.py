@@ -19,7 +19,7 @@ from notalone.reply.adapters.deepseek_input_budget import build_deepseek_input_b
 from notalone.reply.adapters.input_budget_middleware import InputBudgetMiddleware
 from notalone.reply.adapters.rewrite_literal_changes import literal_change_evidence
 from notalone.reply.context import ReplyContext
-from notalone.reply.errors import ReplyCandidatesRejectedError, ReplyInvariantError
+from notalone.reply.errors import ReplyCandidatesRejectedError, ReplyInvariantError, ReplyReviewInvalidError
 from notalone.reply.fidelity import factual_role
 from notalone.reply.interface import RewriteDraft
 from notalone.reply.runtime import ReplyRuntimeResult
@@ -186,7 +186,7 @@ class ReplyConstraintReview:
                                       config={"callbacks": list(callbacks)} if callbacks else None)
         await asyncio.to_thread(budget.check_response, review_model, response)
         if response.invalid_tool_calls or len(response.tool_calls) != 1 or response.tool_calls[0]["name"] != "ReplyFidelityReview":
-            raise ReplyInvariantError("候选复核没有返回唯一有效的结构化结果。")
+            raise ReplyReviewInvalidError("候选复核没有返回唯一有效的结构化结果。")
         accepted = accepted_candidate_numbers(response.tool_calls[0]["args"], payload)
         candidates = tuple(item for number, item in enumerate(result.candidates, 1)
                            if number in accepted)

@@ -16,7 +16,7 @@ from notalone.application.assistant_session_service import (
 from notalone.application.reply_request import ReplyRequestInvalid
 from notalone.reply.errors import (
     ReplyCandidatesRejectedError, ReplyIdempotencyConflictError, ReplyInProgressError, ReplyPersistenceError,
-    ReplyProviderContextLimitError, ReplyTimeoutError,
+    ReplyProviderContextLimitError, ReplyReviewInvalidError, ReplyTimeoutError,
 )
 from notalone.reply.input_budget import InputBudgetExceededError, InputBudgetUnavailableError
 from notalone.server.assistant_preparation_rejection import preparation_rejection_payload
@@ -75,6 +75,8 @@ def handle_interrupted_recovery(
         return 409, {"error": "provider_context_limit", "message": str(error)}
     except ReplyCandidatesRejectedError:
         return 409, {"error": "reply_candidates_rejected"}
+    except ReplyReviewInvalidError:
+        return 502, {"error": "reply_review_invalid"}
     except (AssistantSessionPersistenceError, ReplyPersistenceError):
         return 503, {"error": "assistant_session_save_failed"}
     except ReplyTimeoutError:

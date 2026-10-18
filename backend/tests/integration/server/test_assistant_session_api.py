@@ -280,7 +280,7 @@ class AssistantSessionHttpTest(unittest.TestCase):
     def test_reply_errors_keep_specific_codes_without_leaking_private_details(self) -> None:
         from notalone.reply.errors import (
             ReplyBudgetError, ReplyCandidatesRejectedError, ReplyInvariantError, ReplyPersistenceError,
-            ReplyProviderContextLimitError, ReplyRunError, ReplyTimeoutError,
+            ReplyProviderContextLimitError, ReplyReviewInvalidError, ReplyRunError, ReplyTimeoutError,
         )
 
         status, session = self._default()
@@ -290,6 +290,7 @@ class AssistantSessionHttpTest(unittest.TestCase):
         provider = ReplyProviderContextLimitError()
         for error, expected in (
             (ReplyCandidatesRejectedError(private), (409, {"error": "reply_candidates_rejected"})),
+            (ReplyReviewInvalidError(private), (502, {"error": "reply_review_invalid"})),
             (ReplyTimeoutError(private), (504, {"error": "reply_timeout"})),
             (ReplyBudgetError(private), (502, {"error": "reply_budget_exceeded"})),
             (ReplyRunError(private), (500, {"error": "reply_generation_failed"})),
@@ -302,6 +303,23 @@ class AssistantSessionHttpTest(unittest.TestCase):
                 with patch.object(ReplyService, "generate", side_effect=error):
                     self.assertEqual(self.backend.request(path + "/replies", self._body()), expected)
         self.assertEqual(len(self.model.seen_calls), 0)
+
+        with patch.object(ReplyService, "generate", side_effect=ReplyReviewInvalidError(private)):
+            self.assertEqual(self.backend.request("/api/reply/generate", self._body()),
+                             (502, {"error": "reply_review_invalid"}))
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        from notalone.server.assistant_continuation import handle_continuation
+        from notalone.server.assistant_interrupted_recovery import handle_interrupted_recovery
+        for handler, module, parser, action, suffix in (
+            (handle_continuation, "assistant_continuation", "parse_continuation", "continue_completed", "continue"),
+            (handle_interrupted_recovery, "assistant_interrupted_recovery", "parse_interrupted_recovery", "recover_interrupted", "retry-interrupted"),
+        ):
+            service = SimpleNamespace(**{action: Mock(side_effect=ReplyReviewInvalidError(private))})
+            with patch(f"notalone.server.{module}.{parser}", return_value=object()):
+                self.assertEqual(handler(service, owner_id=self.owner_id, method="POST", path=path + "/" + suffix,
+                                         body=b"{}", render_turn=lambda turn: {}),
+                                 (502, {"error": "reply_review_invalid"}))
 
     def test_explicit_no_skill_survives_saved_input_and_same_key_replay(self) -> None:
         _, session = self._default()
