@@ -145,6 +145,35 @@ class MemoryAdoptionTest(unittest.TestCase):
         self.assertEqual(result.pending, 1)
         self.assertEqual(result.skipped_duplicate, 0)
 
+    def test_recall_finds_same_fact_despite_topic_classifier_change(self):
+        self.adoption.adopt(self.scope, ExtractionOutcome(accepted=(self._fact(text='对方最近开始跑步'),)))
+        class Runtime:
+            seen = ()
+            def adjudicate(inner, *, candidate_text, similar):
+                inner.seen = similar
+                return AdjudicationDecision(AdjudicationAction.KEEP)
+        runtime = Runtime()
+        adoption = MemoryAdoption(memory_port=self.store, dimension_release=RELEASE_ALL_DIMENSIONS,
+                                  adjudication_runtime=runtime)
+        adoption.adopt(self.scope, ExtractionOutcome(accepted=(self._fact(text='对方开始坚持跑步', topic=MemoryTopic.OTHER),)))
+        self.assertEqual(len(runtime.seen), 1)
+        self.assertEqual(runtime.seen[0].text, '对方最近开始跑步')
+
+    def test_common_words_in_large_pool_do_not_block_bounded_recall(self):
+        facts = tuple(self._fact(text='对方喜欢'+hobby) for hobby in ('跑步','游泳','下棋','画画','烹饪','钓鱼','登山','摄影','唱歌'))
+        self.adoption.adopt(self.scope, ExtractionOutcome(accepted=facts))
+        class Runtime:
+            seen = ()
+            def adjudicate(inner, *, candidate_text, similar):
+                inner.seen = similar
+                return AdjudicationDecision(AdjudicationAction.KEEP)
+        runtime = Runtime()
+        adoption = MemoryAdoption(memory_port=self.store, dimension_release=RELEASE_ALL_DIMENSIONS,
+                                  adjudication_runtime=runtime)
+        result = adoption.adopt(self.scope, ExtractionOutcome(accepted=(self._fact(text='对方喜欢书法'),)))
+        self.assertEqual(result.adopted, 1)
+        self.assertEqual(len(runtime.seen), 8)
+
     def test_sensitive_fact_keeps_provenance_in_pending_candidate(self) -> None:
         stats = self.adoption.adopt(
             self.scope,

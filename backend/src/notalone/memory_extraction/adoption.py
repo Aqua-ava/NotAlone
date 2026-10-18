@@ -44,6 +44,7 @@ from notalone.memory_extraction.dimensions import (
 from notalone.memory_extraction.errors import ExtractionInvalidOutputError, ExtractionRuntimeError
 from notalone.memory_extraction.flow import ExtractionOutcome
 from notalone.memory_extraction.models import ExtractedFact, FactSubject
+from notalone.memory_extraction.recall import bm25_scores
 from notalone.memory_extraction.pragmatics import (
     MemoryDisposition,
     PragmaticDecision,
@@ -374,17 +375,19 @@ class MemoryAdoption:
 
             similarity_started_at = datetime.now(timezone.utc)
             similar, shortlist_truncated = self._similar_memories(scope, fact, pool)
+            recall_scores = dict(zip((item.memory_id for item in pool), bm25_scores(fact.text, [item.text for item in pool])))
             record(
                 "similarity",
                 {
-                    "threshold": self._similarity_threshold,
-                    "rule": "character_bigram_jaccard",
+                    "threshold": 0,
+                    "legacy_similarity_threshold": self._similarity_threshold,
+                    "rule": "local_bm25_chinese_bigrams",
                     "compared": [
                         {
                             "memory": item,
                             "topic_matches": item.topic == fact.topic,
                             "category_matches": item.category == fact.category,
-                            "score": similarity(fact.text, item.text),
+                            "score": recall_scores[item.memory_id],
                         }
                         for item in pool
                     ],
@@ -767,6 +770,7 @@ class MemoryAdoption:
         verified_correction = (fact.speech_act.value == 'correction'
             and self._dimension_release.verified_sources and self._dimension_release.gate_enabled
             and self._dimension_release.allows(fact, scope=scope))
+        scores = dict(zip((item.memory_id for item in pool), bm25_scores(fact.text, [item.text for item in pool])))
         candidates = [
             item
             for item in pool
@@ -774,15 +778,15 @@ class MemoryAdoption:
                  and self._dimension_release.allows(fact, scope=scope))
                 and fact.source_dependency_mode is SourceDependencyMode.ANY
                 or self._same_dependencies(scope, fact, item.version))
-            and item.topic == fact.topic
-            and item.category == fact.category
-            and (verified_correction or similarity(fact.text, item.text) >= self._similarity_threshold)
+            and (verified_correction and item.topic == fact.topic and item.category == fact.category
+                 or scores[item.memory_id] > 0
+                 or similarity(fact.text, item.text) >= self._similarity_threshold)
         ]
         candidates.sort(key=lambda item: (
-            -similarity(fact.text, item.text), str(item.memory_id),
+            -scores[item.memory_id], str(item.memory_id),
         ))
         return (candidates[:MAX_SIMILAR_MEMORY_CANDIDATES],
-                len(candidates) > MAX_SIMILAR_MEMORY_CANDIDATES)
+                verified_correction and len(candidates) > MAX_SIMILAR_MEMORY_CANDIDATES)
 
     def _record_ledger(
         self,

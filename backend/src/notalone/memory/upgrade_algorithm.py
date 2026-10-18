@@ -22,7 +22,7 @@ _SOURCE_FILES = (
     "memory_extraction/verification.py", "memory_extraction/verification_adapters.py",
     "memory_extraction/source_proof.py", "memory_extraction/flow.py",
     "memory_extraction/pragmatics.py", "memory_extraction/dimensions.py",
-    "memory_extraction/adoption.py", "memory_extraction/adjudication.py",
+    "memory_extraction/adoption.py", "memory_extraction/adjudication.py", "memory_extraction/recall.py",
     "memory_extraction/adjudication_adapters.py", "memory_extraction/cli_support.py",
     "reply/adapters/deepseek_provider.py", "memory_trace/transport.py",
     "application/memory_upgrade_runtime.py", "application/memory_upgrade.py",

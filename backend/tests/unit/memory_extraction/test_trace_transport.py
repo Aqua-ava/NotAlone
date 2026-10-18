@@ -416,10 +416,11 @@ class TraceTransportTest(unittest.TestCase):
                         }
                     ]
                 },
-                "MemoryAdjudicationOutput": {
-                    "action": "update",
+                "BatchMemoryAdjudicationOutput": {"decisions": [{
+                    "candidate_index": 0, "action": "update",
                     "replaced_memory_id": str(old.memory_id),
-                },
+                    "merged_memory_ids": [], "merged_text": None, "duplicate_memory_id": None,
+                }]},
             }
             return httpx.Response(
                 200,
