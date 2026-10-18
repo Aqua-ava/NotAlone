@@ -21,7 +21,9 @@ from notalone.memory_extraction.grounded import (
 )
 from notalone.memory_extraction.grounded_adapter import GroundedV2ExtractionRuntime
 from notalone.memory_extraction.models import MessageSender
-from notalone.memory_extraction.source_proof import unresolved_author_quote_note
+from notalone.memory_extraction.source_proof import (
+    completed_lending_quote_explanation, unresolved_author_quote_note,
+)
 from notalone.memory_trace.adapters import InMemoryTraceStore
 from notalone.memory_trace.transport import build_trace_http_client
 from notalone.reply.adapters.deepseek_provider import build_deepseek_model
@@ -44,6 +46,28 @@ class GroundedQuoteAlternativesTest(unittest.TestCase):
         for owner, name in ((socket.socket, "connect"), (socket.socket, "connect_ex"),
                             (socket, "getaddrinfo")):
             guards.enter_context(patch.object(owner, name, side_effect=AssertionError("禁止真实网络")))
+
+    def test_completed_lending_actual_labels_append_grounded_reason_only(self) -> None:
+        source = window("我姐把她的车借给我了。")
+        item = row("0:0", "relationship_event", topic="family", unresolved=False, confidence=0.95)
+        item.pop("event")
+        draft = labels(item)
+        original = deepcopy(draft)
+        baseline, = compile_draft(source, {"units": [item]})
+        fact, = compile_labels(source, draft)
+        reason = fact["interpretation_reason"]
+        self.assertTrue(reason.startswith(baseline["interpretation_reason"]))
+        self.assertIn("“我姐”作为出借者", reason)
+        self.assertIn("“我”（联系人）作为接收者", reason)
+        self.assertIn("“了”表达已发生的借用经历", reason)
+        self.assertIn("“她”缺少明确唯一指称", reason)
+        self.assertIn(OWNER_NOTE, reason)
+        self.assertIn("不认证现实发生或产权", reason)
+        expected = {**baseline, "alternatives": [OWNER_NOTE]}
+        self.assertEqual({key: value for key, value in fact.items() if key != "interpretation_reason"},
+                         {key: value for key, value in expected.items() if key != "interpretation_reason"})
+        self.assertEqual(len(fact), 14)
+        self.assertEqual(draft, original)
 
     def test_completed_lending_explains_unknown_owner_without_replacing_model_labels(self) -> None:
         source = window("我姐把她的车借给我了。")
@@ -89,6 +113,7 @@ class GroundedQuoteAlternativesTest(unittest.TestCase):
                 requests: list[dict] = []
                 traces = InMemoryTraceStore()
                 scope = ContactScope(source.owner_id, source.contact_id)
+                memories = InMemoryMemoryStore()
 
                 def handler(request: httpx.Request) -> httpx.Response:
                     requests.append(json.loads(request.content))
@@ -99,7 +124,7 @@ class GroundedQuoteAlternativesTest(unittest.TestCase):
                                                  http_client=client)
                     stats = run_extraction(
                         scope=scope, messages=source.messages, watermark_message_id=None,
-                        runtime=GroundedV2ExtractionRuntime(model=model), memory_port=InMemoryMemoryStore(),
+                        runtime=GroundedV2ExtractionRuntime(model=model), memory_port=memories,
                         owner_memory_port=None, trace_store=traces,
                     )
                 detail = traces.get_batch(scope, traces.list_batches(scope)[0]["trace_id"])
@@ -109,12 +134,25 @@ class GroundedQuoteAlternativesTest(unittest.TestCase):
                 self.assertEqual(events["grounded_draft"]["draft"], original)
                 self.assertEqual(draft, original)
                 self.assertEqual((stats.adopted, stats.pending), (0, 1))
+                saved, = memories.list_pending_candidates(scope)
+                self.assertEqual(saved.interpretation_reason, fact["interpretation_reason"])
+                self.assertEqual(saved.alternatives, (note,))
+                self.assertIsNone(saved.event)
+                self.assertFalse(memories.list_confirmed(scope))
+                if note == OWNER_NOTE:
+                    self.assertIn("“我姐”作为出借者", saved.interpretation_reason)
+                    self.assertIn("“我”（联系人）作为接收者", saved.interpretation_reason)
+                    self.assertIn("“她”缺少明确唯一指称", saved.interpretation_reason)
+                    self.assertIn(OWNER_NOTE, saved.interpretation_reason)
+                else:
+                    self.assertEqual(saved.interpretation_reason,
+                                     "按所引原文分句保留内容；类型为模型判断，来源定位和时间由程序校验。")
                 self.assertEqual(len(requests), 1)
                 slot = requests[0]["tools"][0]["function"]["parameters"]["properties"]["units"]["properties"]["0:0"]
                 self.assertEqual(set(slot["properties"]),
                                  {"kind", "subject", "topic", "dependency", "unresolved", "confidence", "sensitivity"})
 
-    def test_parameter_variants_only_append_the_matching_role_note(self) -> None:
+    def test_parameter_variants_preserve_fields_and_explain_only_completed_lending(self) -> None:
         controls = [
             (sender, f"{relative}{time}把{pronoun}的{item}借给我了。", OWNER_NOTE)
             for sender in (MessageSender.SELF, MessageSender.CONTACT)
@@ -136,7 +174,22 @@ class GroundedQuoteAlternativesTest(unittest.TestCase):
                     baseline, = compile_draft(source, {"units": [item]})
                     self.assertEqual(baseline["alternatives"], [GENERIC_NOTE] if unresolved else [])
                     fact, = compile_labels(source, labels(item))
-                    self.assertEqual(fact, {**baseline, "alternatives": baseline["alternatives"] + [note]})
+                    expected = {**baseline, "alternatives": baseline["alternatives"] + [note]}
+                    self.assertEqual({key: value for key, value in fact.items() if key != "interpretation_reason"},
+                                     {key: value for key, value in expected.items() if key != "interpretation_reason"})
+                    reason = fact["interpretation_reason"]
+                    if note == OWNER_NOTE and "借给我了" in text:
+                        self.assertTrue(reason.startswith(baseline["interpretation_reason"]))
+                        self.assertIn("“" + text.removesuffix("。") + "”", reason)
+                        self.assertIn("“我姐”作为出借者" if "我姐" in text else "“我哥”作为出借者", reason)
+                        self.assertIn("“我”（用户）作为接收者" if sender is MessageSender.SELF
+                                      else "“我”（联系人）作为接收者", reason)
+                        self.assertIn("“她”缺少明确唯一指称" if "她" in text
+                                      else "“他”缺少明确唯一指称", reason)
+                        self.assertIn("“了”表达已发生的借用经历", reason)
+                        self.assertEqual(reason.count(OWNER_NOTE), 1)
+                    else:
+                        self.assertEqual(reason, baseline["interpretation_reason"])
 
     def test_partial_quotes_extra_context_and_observation_prefix_are_outside_compiler_scope(self) -> None:
         for text, kind, sender, extra in (
@@ -160,6 +213,9 @@ class GroundedQuoteAlternativesTest(unittest.TestCase):
                 facts = compile_labels(source, labels(*items))
                 self.assertTrue(facts)
                 self.assertTrue(all(fact["alternatives"] == [GENERIC_NOTE] for fact in facts))
+                self.assertTrue(all(fact["interpretation_reason"] ==
+                                    "按所引原文分句保留内容；类型为模型判断，来源定位和时间由程序校验。"
+                                    for fact in facts))
 
     def test_note_requires_actual_author_full_quote_target_and_unique_source(self) -> None:
         source = window("我姐把她的车借给我了。")
@@ -185,6 +241,35 @@ class GroundedQuoteAlternativesTest(unittest.TestCase):
         for actual, text, sources in controls:
             with self.subTest(text=text, sources=sources):
                 self.assertIsNone(unresolved_author_quote_note(actual, text, sources))
+                self.assertIsNone(completed_lending_quote_explanation(actual, text, sources))
+
+    def test_completed_explanation_rejects_other_phases_polarity_roles_and_unbound_quotes(self) -> None:
+        for text in (
+            "我姐昨天没有把她的书借给我。", "我哥前天没把他的雨伞借给我。",
+            "我姐明天把她的车借给我。", "我姐打算把她的车借给我。",
+            "我姐把她的车借给我。", "我姐把她的车借给我了。这里的“她”指我姐。",
+            "我哥把我姐的雨伞借给我了。", "我同事让我周末帮他顶个班。",
+            "我姐把她的车借给你了。", "我姐把她的车借给我了？", "另一条无关资料。",
+        ):
+            source = window(text)
+            with self.subTest(text=text):
+                self.assertIsNone(completed_lending_quote_explanation(
+                    source, "联系人原话：“" + text + "”", (source.messages[0].message_id,),
+                ))
+
+    def test_completed_explanation_requires_target_and_exact_full_text(self) -> None:
+        source = window("我姐把她的车借给我了。")
+        message = source.messages[0]
+        full = "联系人原话：“" + message.text + "”"
+        with self.assertRaises(ValueError):
+            replace(source, target_message_ids=())
+        for actual, candidate in (
+            (source, "联系人原话：“我姐把她的车借给我了”"),
+            (source, full + " 所以车属于姐姐。"),
+            (source, "联系人原话：“" + message.text * 400 + "”"),
+        ):
+            with self.subTest(candidate=candidate[:60]):
+                self.assertIsNone(completed_lending_quote_explanation(actual, candidate, (message.message_id,)))
 
     def test_v1_v3_v4_keep_their_original_compilation_without_e2_role_notes(self) -> None:
         for text, sender in (("我姐把她的车借给我了。", MessageSender.CONTACT),
@@ -196,8 +281,12 @@ class GroundedQuoteAlternativesTest(unittest.TestCase):
                     item = row("0:0", "relationship_event", subject=sender.value, unresolved=unresolved)
                     legacy, = compile_draft(source, {"units": [item]})
                     self.assertEqual(legacy["alternatives"], [GENERIC_NOTE] if unresolved else [])
+                    self.assertEqual(legacy["interpretation_reason"],
+                                     "按所引原文分句保留内容；类型为模型判断，来源定位和时间由程序校验。")
                     typed = labels({**item, "ambiguity_codes": ["other_unresolved"] if unresolved else []})
                     for compiler in (compile_labels_v3, compile_labels_v4):
                         typed_fact, = compiler(source, typed)
                         self.assertEqual(typed_fact["alternatives"],
                                          ["原句在本窗口仍有其他未决解释，保留原句。"] if unresolved else [])
+                        self.assertNotIn("作为出借者", typed_fact["interpretation_reason"])
+                        self.assertNotIn(OWNER_NOTE, typed_fact["interpretation_reason"])

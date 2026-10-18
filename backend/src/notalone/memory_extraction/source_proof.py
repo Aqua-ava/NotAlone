@@ -875,6 +875,28 @@ def unresolved_author_quote_reason(window: ExtractionWindow, fact: ExtractedFact
     return None
 
 
+def completed_lending_quote_explanation(
+    window: ExtractionWindow, text: str, source_message_ids: tuple[UUID, ...],
+) -> str | None:
+    """解释已有完整借用引句的角色与未明产权，不生成证明或改写标签。"""
+    note = unresolved_author_quote_note(window, text, source_message_ids)
+    if note is None:
+        return None
+    message = window.messages[0]
+    source = _lend(message.text, message.sender.value, source=True)
+    if (source is None or source.values["polarity"] is not True
+            or source.values["phase"] != "completed" or source.values["property_owner"] is not None):
+        return None
+    quoted = {name: message.text[start:end] for name, (start, end) in source.spans.items()}
+    author = "用户" if message.sender.value == "self" else "联系人"
+    return (
+        f'原句“{quoted["action"]}”写明“{quoted["related"]}”作为出借者、'
+        f'“{quoted["author"]}”（{author}）作为接收者，以“{quoted["completion"]}”表达已发生的借用经历；'
+        f'物品“{quoted["object"]}”的所有格指称“{quoted["pronoun"]}”缺少明确唯一指称。'
+        + note + "这里只解释原句，不认证现实发生或产权。"
+    )
+
+
 def verify_proposal(
     proposal: ProofProposal | None, window: ExtractionWindow, fact: ExtractedFact,
     trusted_sources: Mapping[UUID, str] | None = None,

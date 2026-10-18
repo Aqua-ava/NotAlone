@@ -665,13 +665,13 @@ class GroundedV4CompilerTest(unittest.TestCase):
             GROUNDED_V2_PROMPT, GROUNDED_V3_PROMPT, grounded_schema, grounded_schema_v3,
         )
 
-        # 本次集成重签E2成对教学提示；schema及给定标签输出沿既有摘要，非历史模型质量。
+        # E2仅重签有限原文理由补全后的输出；提示/schema与E3输出保持，非历史模型质量。
         windows = [build_window(case) for case in (*CASES, *SEMANTIC_CASES)]
         for v3, prompt, schema, compiler, prompt_sha, schemas_sha, output_sha in (
             (False, GROUNDED_V2_PROMPT, grounded_schema, compile_labels,
              "837344477304319f03f770e2d94571755d5cee8b445c6f3b3c7c1eeb63fa6a52",
              "c55322ae1480541222fdb03285b29613e47be0089d1692c57d30d36d27c2d10d",
-             "5f80d9acb79830b0d3612f48b007132191112ae64ec3bc03afe10fbc2f778f4b"),
+             "a41852dabf386db997f98af44343a64582df7ee117e2c3c3ff4d37a35caaa6ac"),
             (True, GROUNDED_V3_PROMPT, grounded_schema_v3, compile_labels_v3,
              "e35b256adc84a7e61faade14267a187b7844f8b16abcdb9819371ed70905e7cf",
              "7a76206ef4316e7489a1cc43308da3495685e87e30fe9ccbaf3891e8e60bbb0a",

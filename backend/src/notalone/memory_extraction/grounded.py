@@ -210,7 +210,7 @@ def _event_proposal(row: dict[str, Any], members: list[SourceUnit], dependencies
     return {"version": 1, "stage": event["stage"], "stage_evidence": [position(unit) for unit in members],
             "occurrence_start": start.isoformat() if start else None,
             "occurrence_end": end.isoformat() if end else None,
-            "occurrence_evidence": [position(available[reference])] if start else []}
+            "occurrence_evidence": [position(available[reference])] if start and reference is not None else []}
 
 
 def _dependencies(
@@ -555,6 +555,7 @@ def compile_labels(window: ExtractionWindow, draft: object) -> ExtractionPayload
 
 def _compile_e2_labels(window: ExtractionWindow, draft: object, *, required_event: bool = False) -> ExtractionPayload:
     from notalone.memory_extraction.negative_reference import bounded_negative_reference_notes
+    from notalone.memory_extraction.source_proof import completed_lending_quote_explanation
 
     facts = _compile_named_labels(window, draft, e2_semantics=True, required_event=required_event)
     for fact in facts:
@@ -565,6 +566,11 @@ def _compile_e2_labels(window: ExtractionWindow, draft: object, *, required_even
         for note in notes:
             if note not in fact["alternatives"]:
                 fact["alternatives"].append(note)
+        explanation = completed_lending_quote_explanation(
+            window, fact["text"], tuple(UUID(value) for value in fact["source_message_ids"]),
+        )
+        if explanation is not None:
+            fact["interpretation_reason"] += " " + explanation
     return facts
 
 
