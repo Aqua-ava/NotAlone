@@ -10,8 +10,8 @@
 - 诊断6/8已审：raw5/7、完整2/7，一般3、bad_auto1；D07/D08未跑。
 - 本分支七个实验预算均closed，累计134次HTTP200、零重试，无远端未知；各场分开计。
 - 验证：早期全提取827；共享后继44相关；本地最终E2/依赖11。标签控制不当模型质量。
-- 详细结果：[分组结果](../memory-extraction-accuracy/reference-agent-contract-result-20261018.md:1)。
-- 原票：[任务07](../memory-extraction-accuracy/issues/07-reference-resolution.md:1)；唯一主集Gold见同目录上级reference-agent-gold-20261018.md。
+- 详细结果：[分组结果](../memory-extraction-accuracy/reference-agent-contract-result-20261018.md)。
+- 原票：[任务07](../memory-extraction-accuracy/issues/07-reference-resolution.md)；唯一主集Gold见同目录上级reference-agent-gold-20261018.md。
 - 下一步：整合会话先确定分类/纳入核验机制的修复接缝，建立可证伪对照；无新机制不继续重跑。
 - 默认放行表为空，未处理真实聊天/业务库/App/微信/发送；不签核心私有6窗/4窗留出。
 - 不push、不建PR；提交仅本地。公开扫描12项均为既有工程说明，本任务无新增。
