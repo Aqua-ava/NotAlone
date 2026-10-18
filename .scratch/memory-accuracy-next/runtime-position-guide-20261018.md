@@ -102,3 +102,6 @@ P01独立RAW十四字段全部通过；FULL确认BR_AUTHOR_ARRIVAL_V1/direct、b
 P02 E/V均HTTP200，但实际任务首次执行失败，外层deepseek_result_unknown；未生成该窗RAW/FULL，不能签其语义或安全。P02 unknown、后13窗unrun。四次均200、零重试，closed4/30、余26永久关闭，capture_gaps空、receipt/records/cleanup均无错误。任务retryable及retry_count=1仅表示失败后的持久任务状态，本场没有重新领取或发起网络重试。保留原始响应/trace供最先拒绝原因诊断，不修旧结果。
 
 进程31118/31198均已确认退出，source-finish closed、13类来源及隔离库残留0，临时api-key.json已删除。生命周期门保持unrun/complete_quality_and_delivery_required；清理失败场不等于验证有效候选的确认/修正/拒绝生命周期。六场累计13次HTTP200、167未用额度关闭，累计正式审核2窗（上一场失败、本场通过），不能用累计数签质量门。
+
+
+P02只读首拒绝复现：E的事件候选只列第二条消息，dependency=null；V的reference.target/binding引用第一条声明。响应JSON/proof形状及字符跨度合法，但source_proof.py的_validate_positions要求每个证明消息同时属于实际窗口与candidate.source_message_ids，故抛“证明区间不属于实际候选来源”，包装为ExtractionInvalidOutputError后正式任务失败。event21 trace与source-close原件一致，不是记录缺失。实施spec第91行将完整窗口新鲜度与正文必需来源分开，语义图实际依赖须进入source_ids；不能通过放宽为任意窗口消息来绕过ALL删除依赖。后续机制仍需独立设计和验证，本次不修改原响应或补签P02。
