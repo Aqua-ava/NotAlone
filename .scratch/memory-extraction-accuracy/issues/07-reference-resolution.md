@@ -158,3 +158,7 @@
 ### 2026-10-18 独立V推理第六版离线接线
 
 [独立计划](../reference-v-thinking-plan-20261018.md)已实施E Pro disabled／none／forced与V Pro enabled／max／omitted，各8192，分阶段合同第六版独立冻结。923提取单测、6源码mypy、最终16定向用例及双审通过；新增真实owned子进程Mock验证和nested_json_invalid未知硬停覆盖。仅工程信用，没有新API或语义成绩；原16／18＋1／32／零重试、Gold／提示／schema／A05编译器及生产空表保持。交主线集成统一回归后再决定冻结；State、未通过AC、旧D8失败与全部旧场结果不变。
+
+### 2026-10-18 独立V推理场输出上限硬停
+
+[实际结果](../reference-v-thinking-result-20261018.md)：统一source0e6706f5，新场bd7187de closed14/32、14HTTP200。原A01–A06独审safe6／一般0，必需RAW／接受／FULL均8/18；A01本次V正确保留第三人资料，A05新理由保留出借角色／完成阶段及车主未知。A07 V明确length、8192输出全为reasoning且无工具，脱敏JSON留证、gap0，unknown；后9窗unrun。worker已退出、key删除，无自动重试或后继。只给已审部分信用，至少15窗及原质量门仍未达到，原State／未通过AC／D8／生产空表保持。
