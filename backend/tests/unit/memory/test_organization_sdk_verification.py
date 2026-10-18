@@ -36,7 +36,10 @@ class OrganizationVerificationContractTest(unittest.TestCase):
         return {'entry_index': 0, 'entry_sha256': content_digest(entry),
             'references': deepcopy(entry['references']), 'supported': True, 'profile_eligible': True,
             'temporal_basis': 'current_unverified', 'temporal_references': [],
-            'basis': '只支持过去持续的安排，当前是否继续未核实。', **changes}
+            'basis': '只支持过去持续的安排，当前是否继续未核实。',
+            'claims': [{'text': entry['text'], 'sources': [{**entry['references'][0], 'quote': self.memory.text}],
+                'subject_role': 'owner', 'subject_basis': '来源明确记载本人事实。',
+                'supported': True, 'profile_eligible': True, 'eligibility_basis': '仅测试逐条时间门，不替代语义判断。'}], **changes}
 
     def verify(self, response, *, entries=None, memories=None, layer='l3'):
         model = ResponseModel(response)

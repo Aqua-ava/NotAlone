@@ -3,6 +3,9 @@
 from notalone.memory.organization_quality import content_digest
 
 
+MAX_CLAIMS_PER_ENTRY = 8
+SUBJECT_ROLES = frozenset({'owner', 'contact', 'third_party', 'relationship', 'unknown'})
+
 TEMPORAL_BASES = frozenset({
     'static_fact', 'historical', 'current_verified', 'current_unverified', 'unknown',
 })
@@ -29,6 +32,43 @@ def _references(value: object) -> frozenset[tuple[str, int]]:
     return frozenset(result)
 
 
+def _claims_supported(claims: object, entry: dict, references, inputs) -> bool:
+    """只机验覆盖/来源/否决合取，不证明命题原子性或关系重要性。"""
+    if not isinstance(claims, list) or not 1 <= len(claims) <= MAX_CLAIMS_PER_ENTRY:
+        raise ValueError('长期背景命题审计数量无效。')
+    fields = {'text', 'sources', 'subject_role', 'subject_basis', 'supported',
+              'profile_eligible', 'eligibility_basis'}
+    parts, accepted = [], True
+    for claim in claims:
+        if (not isinstance(claim, dict) or set(claim) != fields
+                or not isinstance(claim['text'], str) or not claim['text'].strip()
+                or type(claim['supported']) is not bool or type(claim['profile_eligible']) is not bool
+                or not isinstance(claim['subject_role'], str) or claim['subject_role'] not in SUBJECT_ROLES
+                or any(not isinstance(claim[name], str) or not 1 <= len(claim[name].strip()) <= 1000
+                       for name in ('subject_basis', 'eligibility_basis'))):
+            raise ValueError('长期背景命题审计结构无效。')
+        sources = claim['sources']
+        if (not isinstance(sources, list) or len(sources) > len(references)
+                or claim['supported'] and not sources):
+            raise ValueError('受支持命题须绑定实际来源。')
+        seen = set()
+        for source in sources:
+            if (not isinstance(source, dict) or set(source) != {'memory_id', 'revision', 'quote'}
+                    or not isinstance(source['quote'], str) or not source['quote'].strip()):
+                raise ValueError('命题来源原文结构无效。')
+            reference, = _references([{key: source[key] for key in ('memory_id', 'revision')}])
+            if (reference not in references or reference in seen
+                    or source['quote'] not in inputs[reference]['text']):
+                raise ValueError('命题来源须为条目直接引用的实际版本原文。')
+            seen.add(reference)
+        parts.append(claim['text'])
+        accepted = (accepted and claim['supported'] and claim['profile_eligible']
+                    and claim['subject_role'] != 'unknown')
+    if ''.join(parts) != entry['text']:
+        raise ValueError('命题原文须有序完整覆盖条目，不能遗漏或改写。')
+    return accepted
+
+
 def profile_verification_supported(result: dict, proposal: dict, memories: list[dict]) -> bool:
     """先验证完整覆盖，再合取逐项支持与准入；未知上下文不升级直接引用。"""
     entries, audits = proposal['entries'], result.get('entries')
@@ -39,7 +79,7 @@ def profile_verification_supported(result: dict, proposal: dict, memories: list[
     accepted = result['supported']
     seen = set()
     fields = {'entry_index', 'entry_sha256', 'references', 'supported', 'profile_eligible',
-              'temporal_basis', 'temporal_references', 'basis'}
+              'temporal_basis', 'temporal_references', 'basis', 'claims'}
     for audit in audits:
         if (not isinstance(audit, dict) or set(audit) != fields
                 or type(audit['entry_index']) is not int or not 0 <= audit['entry_index'] < len(entries)
@@ -55,6 +95,7 @@ def profile_verification_supported(result: dict, proposal: dict, memories: list[
         if (audit['entry_sha256'] != content_digest(entry) or _references(audit['references']) != references
                 or not references or not references <= inputs.keys() or not temporal_references <= references):
             raise ValueError('长期背景核验未绑定本次条目及直接版本引用。')
+        claims_supported = _claims_supported(audit['claims'], entry, references, inputs)
         basis = audit['temporal_basis']
         if basis == 'current_verified':
             # 只检查审计明确指向的现状支持；其他上下文未知不抵销有效当前依据。
@@ -67,5 +108,6 @@ def profile_verification_supported(result: dict, proposal: dict, memories: list[
             temporal_supported = (basis == 'static_fact'
                 or basis == 'historical' and entry['temporal_status'] == 'historical'
                 or basis == 'current_unverified' and entry['temporal_status'] == 'uncertain')
-        accepted = accepted and audit['supported'] and audit['profile_eligible'] and temporal_supported
+        accepted = (accepted and audit['supported'] and audit['profile_eligible']
+                    and temporal_supported and claims_supported)
     return accepted

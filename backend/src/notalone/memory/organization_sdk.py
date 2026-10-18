@@ -45,10 +45,20 @@ PROFILE_VERIFICATION_PROMPT = POLICY + PROFILE_POLICY + '''
 {"entry_index":0,"entry_sha256":"原样复制verification_targets对应摘要",
 "references":[{"memory_id":"实际ID","revision":1}],"supported":true或false,
 "profile_eligible":true或false,"temporal_basis":"static_fact或historical或current_verified或current_unverified或unknown",
-"temporal_references":[],"basis":"该条主体、准入、时间及来源依据"}]}。
+"temporal_references":[],"basis":"该条主体、准入、时间及来源依据","claims":[
+{"text":"条目中连续原文片段","sources":[{"memory_id":"实际ID","revision":1,"quote":"该版本来源原文"}],
+"subject_role":"owner或contact或third_party或relationship或unknown","subject_basis":"来源中的主体依据",
+"supported":true或false,"profile_eligible":true或false,"eligibility_basis":"该命题独立的长期准入依据"}]}]}。
 每条恰好一次，索引/摘要对应targets，references等于候选直接引用。supported判断来源支持，profile_eligible判断长期准入，任一不通过则总体否决。
 static_fact仅静态不变事实，不能用于持续活动；historical为明确历史；current_unverified为当前持续性未核实；unknown为不确定。
 current_verified的temporal_references须非空，仅列直接引用中支持现状且timing.current_status=current_verified的版本；其余basis该列表为空，不得自签核实。
+每条claims为1至8项，按条目原文顺序分解可独立判断的命题，包括同一记忆中不同主体的事实。
+各text必须是连续原文片段，按序直接拼接须恰好等于完整entry.text，保留所有字词、标点及限定，不遗漏、不重叠、不改写。
+否定、时间、条件及纠错限定须随命题保留，不将旧错误值或孤立日期当已支持命题；超过8项或无法完整审计就否决，不删句或增调用。
+每个claim分别判supported与profile_eligible；一个合格命题不能替相邻命题取得准入，任一不通过则整条否决。
+sources只引用本entry直接引用的实际memory_id/revision，每版本至多一次，quote必须逐字来自该版本memories.text；supported=true时sources不得为空。
+subject_basis和eligibility_basis分别为1至1000字。重要第三人关系背景可合格，但须在eligibility_basis指出来源支持的关系联系与重要性，不能仅由第三人身份、相邻合格事实或L2主题名推出。
+subject_role=unknown不通过；所有原文覆盖、主体、原子性及重要性仍须你独立核验，字段完整本身不证明语义正确。
 否决也须完整审计；空候选用空entries。'''
 
 
