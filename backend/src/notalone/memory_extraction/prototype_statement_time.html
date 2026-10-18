@@ -1,0 +1,565 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'; img-src 'none'; base-uri 'none'; form-action 'none'">
+<title>说过的时间，能说明什么？ · 可抛弃逻辑原型</title>
+<style>
+:root{color-scheme:light;--ink:#18332f;--muted:#59706a;--line:#d7e1db;--paper:#fffef9;--accent:#186955;--soft:#edf5ef;--warn:#80512a}*{box-sizing:border-box}body{margin:0;background:#f2f4ee;color:var(--ink);font:16px/1.65 system-ui,-apple-system,"PingFang SC",sans-serif}main{max-width:1180px;margin:auto;padding:42px 32px 60px}h1{font-size:35px;line-height:1.25;letter-spacing:-1px;margin:12px 0}h2{font-size:20px;margin:0 0 12px}h3{font-size:16px;margin:0 0 8px}p{margin:8px 0}.eyebrow{font-size:12px;letter-spacing:1px;font-weight:750;color:var(--accent)}.intro{max-width:900px}.notice{border-left:4px solid var(--accent);padding:12px 18px;background:var(--soft);margin:22px 0}.small{font-size:13px;color:var(--muted)}.panel{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:22px;margin-top:18px}.row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.spread{justify-content:space-between}.badge{font-size:12px;border:1px solid var(--line);padding:4px 10px;border-radius:24px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.card{border:1px solid var(--line);border-radius:9px;padding:18px;min-width:0}.active{border-color:var(--accent);box-shadow:inset 0 3px var(--accent)}.quote{white-space:pre-wrap;overflow-wrap:anywhere;min-height:88px;margin-top:12px}.source{padding:13px 0;border-top:1px solid var(--line)}.source:first-child{border-top:0}.time{font:13px/1.5 ui-monospace,SFMono-Regular,monospace;overflow-wrap:anywhere;color:var(--accent)}button{font:inherit;font-size:14px;padding:9px 15px;border:1px solid var(--line);border-radius:7px;background:#fffef9;color:var(--ink);cursor:pointer}button:hover{border-color:var(--accent)}button:focus-visible,summary:focus-visible{outline:3px solid #85b8a7;outline-offset:3px}button.primary,button[aria-selected=true]{background:var(--accent);border-color:var(--accent);color:white}button:disabled{opacity:.45;cursor:default}.actions{margin:13px 0}.warn{color:var(--warn);background:#fbf3e9;border:1px solid #e5d7c3;border-radius:8px;padding:13px 16px}.result{font-size:15px;padding:12px 0 0}.table-wrap{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:13px}th,td{text-align:left;vertical-align:top;border-bottom:1px solid var(--line);padding:9px 10px;overflow-wrap:anywhere}th{color:var(--muted);font-weight:600}th:first-child,td:first-child{width:22%}td{max-width:360px}code{font-size:12px;color:var(--muted)}details{margin-top:16px}summary{cursor:pointer;color:var(--accent);font-size:14px}.tabs{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px}.steps{list-style:none;margin:16px 0 0;padding:0;display:grid;gap:10px}.steps li{display:flex;gap:14px;align-items:baseline}.step-number{color:var(--muted);font-size:13px;width:18px}.step-note{font-size:13px;color:var(--muted);padding-left:46px}.foot{margin-top:24px;font-size:13px;color:var(--muted)}.flow{display:flex;gap:12px;flex-wrap:wrap;color:var(--muted);font-size:13px;margin:20px 0}.flow span{padding:8px 12px;background:#e7ede7;border-radius:6px}pre{font:12px/1.5 monospace;overflow:auto;max-height:280px;white-space:pre-wrap} @media(max-width:760px){main{padding:24px 16px}h1{font-size:28px}.grid{grid-template-columns:1fr}.panel{padding:16px}th,td{padding:8px 5px}.steps li{align-items:flex-start}}
+</style>
+</head>
+<body><main>
+<header><div class="eyebrow">可抛弃；非产品质量证据 · 零模型 / 零数据库 / 纯内存</div><h1>说过的时间，能说明什么？</h1><p class="intro">已有来源时间元数据，再给正文逐条加上“何时陈述”，是否就满足完整时间契约？这里让你比较现有表示与候选方案 B：保留每条来源的原始时区日期，只换正文外层包装，其他字段不动。</p></header>
+<div class="notice"><strong>可确定的边界：B 只表达“这句话出自何时”。</strong><p>它不证明命题在哪段历史期间成立，不保证现在仍成立，也不纠正类别、语用或有效期。完整 timing 与“当前未核实”不能替代正文的历史边界要求；本页不能补签原 H03 或任何旧质量结果。B 仍是待审的表示合同。</p></div>
+<div class="flow"><span>人工固定合成标签</span><span>→ 真实编译与时间元数据快照</span><span>→ 页面仅计算 B 包装</span><span>→ 看哪些信息仍未解决</span></div>
+<section class="panel" aria-labelledby="state-title"><div class="row spread"><h2 id="state-title">当前观察</h2><span class="badge" id="current-label"></span></div><p id="status" aria-live="polite"></p><div id="sources"></div><div class="grid" style="margin-top:16px"><article class="card" id="original-card"><h3>现有编译正文</h3><div class="small">真实 compile_labels 结果，未经模型</div><div class="quote" id="original-text"></div></article><article class="card" id="b-card"><h3>B · 逐消息标注陈述时间</h3><div class="small">可抛弃函数的结果；不是新的编译或证明结果</div><div class="quote" id="b-text"></div></article></div><p class="result" id="conclusion"></p><div id="parser-note" class="warn"></div>
+<details open><summary>查看保存时间、来源范围与当前核实状态</summary><div class="table-wrap"><table><thead><tr><th>时间含义</th><th>现有时间元数据</th><th>B 后</th></tr></thead><tbody id="timing-rows"></tbody></table></div></details>
+<details><summary>查看类别、语用、有效期等全部保留字段</summary><p class="small">除正文外的 13 个字段逐项展示；固定标签是实验输入，不是模型判断。切换“事件 / 短时状态”会载入另一份真实编译快照，B 自身从不改标签。</p><div class="table-wrap"><table><thead><tr><th>字段含义</th><th>原字段值</th><th>B 后</th></tr></thead><tbody id="fact-rows"></tbody></table></div></details></section>
+<section class="panel"><h2>自由比较</h2><p class="small">随时切换，不需要按顺序。这里只切换内存中的合成快照，没有上传、保存或后台请求。</p><div class="row actions"><button id="show-original">查看现有表示</button><button class="primary" id="show-b">加入陈述时间</button><button id="variant"></button><button id="reset">重置本场景</button></div></section>
+<section class="panel" aria-labelledby="guide-title"><h2 id="guide-title">按场景走一遍</h2><div class="tabs" role="tablist" aria-label="时间边界场景" id="tabs"></div><div role="tabpanel" id="guide-panel"><h3 id="scenario-title"></h3><p id="scenario-description"></p><button id="start">从头走此场景</button><ol class="steps" id="steps"></ol></div></section>
+<footer class="foot"><strong>取样范围与验证边界</strong><p>基准源码 28a8b0f9；8 份有效合成快照由真实 compile_labels、MemoryTiming.from_source_times 生成，另有 1 份无时区拒绝结果。输入、标签及固定保存时间均为本原型合成，不来自私人样本、Gold 或模型输出。页面在本机打开后不运行 Python，仅读取内嵌快照与执行纯字符串函数。</p><p>旧包装解析结果来自真实 bounded_proof.representations：仅表示能否重建包装，不代表六规则语义正证成立。B 的新包装在这些合成样例均为 0 解，旧证明不能直接沿用；本页没有生成、迁移或认证任何 proof。未运行模型质量评测，不能替代原 15 窗任务。</p><details><summary>复现快照的独立 Python 脚本（仅供阅读）</summary><p>在上述基准的仓库根目录，使用项目 Python 与 NOTALONE_DISABLE_DOTENV=1、PYTHONPATH=backend/src 执行。脚本只写 /tmp 快照，不连接数据库或模型；不是产品实现，也不是测试套件。</p><pre id="generator-view"></pre></details></footer>
+</main>
+<script type="application/json" id="snapshots">{
+  "assessment": {
+    "id": "assessment",
+    "kind": "assessment",
+    "sources": [
+      {
+        "author": "联系人",
+        "text": "我觉得这套陶杯的釉色柔和。",
+        "time": "2017-05-19T16:24:35.120000+08:00",
+        "aware": true,
+        "id": "00000000-0000-0000-0000-000000000064",
+        "role": "主句"
+      }
+    ],
+    "fact": {
+      "text": "联系人原话：“我觉得这套陶杯的釉色柔和。”",
+      "category": "relationship_note",
+      "subject": "contact",
+      "topic": "other",
+      "source_message_ids": [
+        "00000000-0000-0000-0000-000000000064"
+      ],
+      "confidence": 0.9,
+      "risk_flags": [],
+      "valid_at": null,
+      "invalid_at": null,
+      "speech_act": "assertion",
+      "assertion_status": "asserted",
+      "figurative_type": "literal",
+      "alternatives": [],
+      "interpretation_reason": "按所引原文分句保留内容；类型为模型判断，来源定位和时间由程序校验。"
+    },
+    "timing": {
+      "recorded_at": "2026-10-18T12:00:00+08:00",
+      "source_started_at": "2017-05-19T16:24:35.120000+08:00",
+      "source_ended_at": "2017-05-19T16:24:35.120000+08:00",
+      "source_time_complete": true,
+      "current_status": "current_unverified",
+      "current_status_reason": "当前未核实；原话和保存时间不能证明状态现在仍成立。"
+    },
+    "b": "联系人于2017-05-19T16:24:35.120000+08:00陈述：原话：“我觉得这套陶杯的釉色柔和。”",
+    "parsing": {
+      "original": 1,
+      "b": 0
+    },
+    "error": null
+  },
+  "thirdparty": {
+    "id": "thirdparty",
+    "kind": "third_party_fact",
+    "sources": [
+      {
+        "author": "联系人",
+        "text": "河岸书店的店主是装帧师。",
+        "time": "2016-11-04T09:12:00-03:30",
+        "aware": true,
+        "id": "00000000-0000-0000-0000-000000000064",
+        "role": "主句"
+      }
+    ],
+    "fact": {
+      "text": "联系人原话：“河岸书店的店主是装帧师。”",
+      "category": "relationship_note",
+      "subject": "contact",
+      "topic": "other",
+      "source_message_ids": [
+        "00000000-0000-0000-0000-000000000064"
+      ],
+      "confidence": 0.9,
+      "risk_flags": [],
+      "valid_at": null,
+      "invalid_at": null,
+      "speech_act": "report",
+      "assertion_status": "reported",
+      "figurative_type": "literal",
+      "alternatives": [],
+      "interpretation_reason": "按所引原文分句保留内容；类型为模型判断，来源定位和时间由程序校验。"
+    },
+    "timing": {
+      "recorded_at": "2026-10-18T12:00:00+08:00",
+      "source_started_at": "2016-11-04T09:12:00-03:30",
+      "source_ended_at": "2016-11-04T09:12:00-03:30",
+      "source_time_complete": true,
+      "current_status": "current_unverified",
+      "current_status_reason": "当前未核实；原话和保存时间不能证明状态现在仍成立。"
+    },
+    "b": "联系人于2016-11-04T09:12:00-03:30陈述：原话：“河岸书店的店主是装帧师。”",
+    "parsing": {
+      "original": 1,
+      "b": 0
+    },
+    "error": null
+  },
+  "wrong": {
+    "id": "wrong",
+    "kind": "momentary_state",
+    "sources": [
+      {
+        "author": "联系人",
+        "text": "我把折叠桌收好了。",
+        "time": "2020-07-09T19:15:00+08:00",
+        "aware": true,
+        "id": "00000000-0000-0000-0000-000000000064",
+        "role": "主句"
+      }
+    ],
+    "fact": {
+      "text": "截至2020-07-09，联系人原话：“我把折叠桌收好了。”",
+      "category": "recent_state",
+      "subject": "contact",
+      "topic": "other",
+      "source_message_ids": [
+        "00000000-0000-0000-0000-000000000064"
+      ],
+      "confidence": 0.9,
+      "risk_flags": [],
+      "valid_at": "2020-07-09T19:15:00+08:00",
+      "invalid_at": "2020-07-10T00:00:00+08:00",
+      "speech_act": "assertion",
+      "assertion_status": "asserted",
+      "figurative_type": "literal",
+      "alternatives": [],
+      "interpretation_reason": "按所引原文分句保留内容；类型为模型判断，来源定位和时间由程序校验。"
+    },
+    "timing": {
+      "recorded_at": "2026-10-18T12:00:00+08:00",
+      "source_started_at": "2020-07-09T19:15:00+08:00",
+      "source_ended_at": "2020-07-09T19:15:00+08:00",
+      "source_time_complete": true,
+      "current_status": "current_unverified",
+      "current_status_reason": "当前未核实；原话和保存时间不能证明状态现在仍成立。"
+    },
+    "b": "联系人于2020-07-09T19:15:00+08:00陈述：原话：“我把折叠桌收好了。”",
+    "parsing": {
+      "original": 1,
+      "b": 0
+    },
+    "error": null
+  },
+  "event": {
+    "id": "event",
+    "kind": "event",
+    "sources": [
+      {
+        "author": "联系人",
+        "text": "我把折叠桌收好了。",
+        "time": "2020-07-09T19:15:00+08:00",
+        "aware": true,
+        "id": "00000000-0000-0000-0000-000000000064",
+        "role": "主句"
+      }
+    ],
+    "fact": {
+      "text": "联系人原话：“我把折叠桌收好了。”",
+      "category": "common_fact",
+      "subject": "contact",
+      "topic": "other",
+      "source_message_ids": [
+        "00000000-0000-0000-0000-000000000064"
+      ],
+      "confidence": 0.9,
+      "risk_flags": [],
+      "valid_at": null,
+      "invalid_at": null,
+      "speech_act": "assertion",
+      "assertion_status": "asserted",
+      "figurative_type": "literal",
+      "alternatives": [],
+      "interpretation_reason": "按所引原文分句保留内容；类型为模型判断，来源定位和时间由程序校验。"
+    },
+    "timing": {
+      "recorded_at": "2026-10-18T12:00:00+08:00",
+      "source_started_at": "2020-07-09T19:15:00+08:00",
+      "source_ended_at": "2020-07-09T19:15:00+08:00",
+      "source_time_complete": true,
+      "current_status": "current_unverified",
+      "current_status_reason": "当前未核实；原话和保存时间不能证明状态现在仍成立。"
+    },
+    "b": "联系人于2020-07-09T19:15:00+08:00陈述：原话：“我把折叠桌收好了。”",
+    "parsing": {
+      "original": 1,
+      "b": 0
+    },
+    "error": null
+  },
+  "zones": {
+    "id": "zones",
+    "kind": "assessment",
+    "sources": [
+      {
+        "author": "用户",
+        "text": "我把工具盒叫作松格。",
+        "time": "2019-01-02T23:30:00-05:00",
+        "aware": true,
+        "id": "00000000-0000-0000-0000-000000000064",
+        "role": "必要来源"
+      },
+      {
+        "author": "联系人",
+        "text": "我觉得松格的隔层很实用。",
+        "time": "2019-01-03T13:30:00+09:00",
+        "aware": true,
+        "id": "00000000-0000-0000-0000-000000000065",
+        "role": "主句"
+      }
+    ],
+    "fact": {
+      "text": "联系人原话：“我觉得松格的隔层很实用。”（相关原文：用户说“我把工具盒叫作松格。”）",
+      "category": "relationship_note",
+      "subject": "contact",
+      "topic": "other",
+      "source_message_ids": [
+        "00000000-0000-0000-0000-000000000065",
+        "00000000-0000-0000-0000-000000000064"
+      ],
+      "confidence": 0.9,
+      "risk_flags": [],
+      "valid_at": null,
+      "invalid_at": null,
+      "speech_act": "assertion",
+      "assertion_status": "asserted",
+      "figurative_type": "literal",
+      "alternatives": [],
+      "interpretation_reason": "按所引原文分句保留内容；类型为模型判断，来源定位和时间由程序校验。"
+    },
+    "timing": {
+      "recorded_at": "2026-10-18T12:00:00+08:00",
+      "source_started_at": "2019-01-02T23:30:00-05:00",
+      "source_ended_at": "2019-01-02T23:30:00-05:00",
+      "source_time_complete": true,
+      "current_status": "current_unverified",
+      "current_status_reason": "当前未核实；原话和保存时间不能证明状态现在仍成立。"
+    },
+    "b": "联系人于2019-01-03T13:30:00+09:00陈述：原话：“我觉得松格的隔层很实用。”（相关原文：用户于2019-01-02T23:30:00-05:00陈述：“我把工具盒叫作松格。”）",
+    "parsing": {
+      "original": 1,
+      "b": 0
+    },
+    "error": null
+  },
+  "partial": {
+    "id": "partial",
+    "kind": "assessment",
+    "sources": [
+      {
+        "author": "用户",
+        "text": "我把工具盒叫作松格。",
+        "time": null,
+        "aware": null,
+        "id": "00000000-0000-0000-0000-000000000064",
+        "role": "必要来源"
+      },
+      {
+        "author": "联系人",
+        "text": "我觉得松格的隔层很实用。",
+        "time": "2019-01-03T13:30:00+09:00",
+        "aware": true,
+        "id": "00000000-0000-0000-0000-000000000065",
+        "role": "主句"
+      }
+    ],
+    "fact": {
+      "text": "联系人原话：“我觉得松格的隔层很实用。”（相关原文：用户说“我把工具盒叫作松格。”）",
+      "category": "relationship_note",
+      "subject": "contact",
+      "topic": "other",
+      "source_message_ids": [
+        "00000000-0000-0000-0000-000000000065",
+        "00000000-0000-0000-0000-000000000064"
+      ],
+      "confidence": 0.9,
+      "risk_flags": [],
+      "valid_at": null,
+      "invalid_at": null,
+      "speech_act": "assertion",
+      "assertion_status": "asserted",
+      "figurative_type": "literal",
+      "alternatives": [],
+      "interpretation_reason": "按所引原文分句保留内容；类型为模型判断，来源定位和时间由程序校验。"
+    },
+    "timing": {
+      "recorded_at": "2026-10-18T12:00:00+08:00",
+      "source_started_at": "2019-01-03T13:30:00+09:00",
+      "source_ended_at": "2019-01-03T13:30:00+09:00",
+      "source_time_complete": false,
+      "current_status": "current_unverified",
+      "current_status_reason": "当前未核实；原话和保存时间不能证明状态现在仍成立。"
+    },
+    "b": "联系人于2019-01-03T13:30:00+09:00陈述：原话：“我觉得松格的隔层很实用。”（相关原文：用户陈述（来源时间未知）：“我把工具盒叫作松格。”）",
+    "parsing": {
+      "original": 1,
+      "b": 0
+    },
+    "error": null
+  },
+  "missing": {
+    "id": "missing",
+    "kind": "assessment",
+    "sources": [
+      {
+        "author": "联系人",
+        "text": "我觉得这套陶杯的釉色柔和。",
+        "time": null,
+        "aware": null,
+        "id": "00000000-0000-0000-0000-000000000064",
+        "role": "主句"
+      }
+    ],
+    "fact": {
+      "text": "联系人原话：“我觉得这套陶杯的釉色柔和。”",
+      "category": "relationship_note",
+      "subject": "contact",
+      "topic": "other",
+      "source_message_ids": [
+        "00000000-0000-0000-0000-000000000064"
+      ],
+      "confidence": 0.9,
+      "risk_flags": [],
+      "valid_at": null,
+      "invalid_at": null,
+      "speech_act": "assertion",
+      "assertion_status": "asserted",
+      "figurative_type": "literal",
+      "alternatives": [],
+      "interpretation_reason": "按所引原文分句保留内容；类型为模型判断，来源定位和时间由程序校验。"
+    },
+    "timing": {
+      "recorded_at": "2026-10-18T12:00:00+08:00",
+      "source_started_at": null,
+      "source_ended_at": null,
+      "source_time_complete": false,
+      "current_status": "current_unverified",
+      "current_status_reason": "当前未核实；原话和保存时间不能证明状态现在仍成立。"
+    },
+    "b": "联系人陈述（来源时间未知）：原话：“我觉得这套陶杯的釉色柔和。”",
+    "parsing": {
+      "original": 1,
+      "b": 0
+    },
+    "error": null
+  },
+  "eventday": {
+    "id": "eventday",
+    "kind": "event",
+    "sources": [
+      {
+        "author": "联系人",
+        "text": "我在2013年完成了木刻课程。",
+        "time": "2018-06-14T10:05:09+05:45",
+        "aware": true,
+        "id": "00000000-0000-0000-0000-000000000064",
+        "role": "主句"
+      }
+    ],
+    "fact": {
+      "text": "联系人原话：“我在2013年完成了木刻课程。”",
+      "category": "common_fact",
+      "subject": "contact",
+      "topic": "other",
+      "source_message_ids": [
+        "00000000-0000-0000-0000-000000000064"
+      ],
+      "confidence": 0.9,
+      "risk_flags": [],
+      "valid_at": null,
+      "invalid_at": null,
+      "speech_act": "assertion",
+      "assertion_status": "asserted",
+      "figurative_type": "literal",
+      "alternatives": [],
+      "interpretation_reason": "按所引原文分句保留内容；类型为模型判断，来源定位和时间由程序校验。"
+    },
+    "timing": {
+      "recorded_at": "2026-10-18T12:00:00+08:00",
+      "source_started_at": "2018-06-14T10:05:09+05:45",
+      "source_ended_at": "2018-06-14T10:05:09+05:45",
+      "source_time_complete": true,
+      "current_status": "current_unverified",
+      "current_status_reason": "当前未核实；原话和保存时间不能证明状态现在仍成立。"
+    },
+    "b": "联系人于2018-06-14T10:05:09+05:45陈述：原话：“我在2013年完成了木刻课程。”",
+    "parsing": {
+      "original": 1,
+      "b": 0
+    },
+    "error": null
+  },
+  "naive": {
+    "id": "naive",
+    "kind": "assessment",
+    "sources": [
+      {
+        "author": "联系人",
+        "text": "我觉得这套陶杯的釉色柔和。",
+        "time": "2017-05-19T16:24:35.120000",
+        "aware": false,
+        "id": "00000000-0000-0000-0000-000000000064",
+        "role": "主句"
+      }
+    ],
+    "fact": null,
+    "timing": null,
+    "b": null,
+    "parsing": null,
+    "error": {
+      "message": "消息时间必须是带时区的 datetime。",
+      "timing": "记忆时间必须是带时区的 datetime。"
+    }
+  }
+}
+</script>
+<script type="text/plain" id="generator">from datetime import datetime
+from dataclasses import replace
+from uuid import UUID
+import json
+from pathlib import Path
+from notalone.memory_extraction.models import MessageRef, MessageSender, ExtractionWindow
+from notalone.memory_extraction.grounded import compile_labels, source_units
+from notalone.memory_extraction.flow import _to_fact
+from notalone.memory_extraction.bounded_proof import representations
+from notalone.memory.timing import MemoryTiming
+
+U=lambda n:UUID(int=n)
+def wrap(messages):
+    def prefix(m):
+        return f'{m["author"]}于{m["time"]}陈述' if m['time'] else f'{m["author"]}陈述（来源时间未知）'
+    main=messages[-1]
+    text=prefix(main)+'：原话：“'+main['text']+'”'
+    if len(messages)>1:
+        text+='（相关原文：'+'；'.join(prefix(m)+'：“'+m['text']+'”' for m in messages[:-1])+'）'
+    return text
+
+def snapshot(key,kind,text,at,context=None):
+    items=[]
+    if context: items.append(context)
+    items.append((text,at,'contact'))
+    messages=tuple(MessageRef(U(100+i),t,MessageSender(s),datetime.fromisoformat(a) if a else None) for i,(t,a,s) in enumerate(items))
+    window=ExtractionWindow(U(1),U(2),messages,(messages[-1].message_id,))
+    unit=next(x for x in source_units(window) if x.message.message_id==messages[-1].message_id)
+    draft={'units':{unit.id:dict(kind=kind,subject='contact',topic='other',dependency='0:0' if context else None,unresolved=False,confidence=.9,sensitivity='none')}}
+    raw=compile_labels(window,draft)[0]
+    timing=MemoryTiming.from_source_times([m.occurred_at for m in messages],recorded_at=datetime.fromisoformat('2026-10-18T12:00:00+08:00')).to_payload()
+    sources=[dict(author='联系人' if m.sender.value=='contact' else '用户',text=m.text,time=m.occurred_at.isoformat() if m.occurred_at else None,aware=True if m.occurred_at else None,id=str(m.message_id),role='主句' if i==len(messages)-1 else '必要来源') for i,m in enumerate(messages)]
+    fact=_to_fact(raw)
+    b=wrap(sources)
+    return dict(id=key,kind=kind,sources=sources,fact=raw,timing=timing,b=b,parsing=dict(original=len(representations(window,fact)),b=len(representations(window,replace(fact,text=b)))),error=None)
+
+out={}
+for args in [
+ ('assessment','assessment','我觉得这套陶杯的釉色柔和。','2017-05-19T16:24:35.120000+08:00'),
+ ('thirdparty','third_party_fact','河岸书店的店主是装帧师。','2016-11-04T09:12:00-03:30'),
+ ('wrong','momentary_state','我把折叠桌收好了。','2020-07-09T19:15:00+08:00'),
+ ('event','event','我把折叠桌收好了。','2020-07-09T19:15:00+08:00'),
+ ('zones','assessment','我觉得松格的隔层很实用。','2019-01-03T13:30:00+09:00',('我把工具盒叫作松格。','2019-01-02T23:30:00-05:00','self')),
+ ('partial','assessment','我觉得松格的隔层很实用。','2019-01-03T13:30:00+09:00',('我把工具盒叫作松格。',None,'self')),
+ ('missing','assessment','我觉得这套陶杯的釉色柔和。',None),
+ ('eventday','event','我在2013年完成了木刻课程。','2018-06-14T10:05:09+05:45'),
+]:
+    value=snapshot(*args);out[value['id']]=value
+naive=datetime.fromisoformat('2017-05-19T16:24:35.120000')
+errors={}
+for name,fn in [('message',lambda:MessageRef(U(100),'我觉得这套陶杯的釉色柔和。',MessageSender.CONTACT,naive)),('timing',lambda:MemoryTiming.from_source_times([naive]))]:
+    try: fn(); errors[name]='未拒绝'
+    except ValueError as e: errors[name]=str(e)
+out['naive']=dict(id='naive',kind='assessment',sources=[dict(author='联系人',text='我觉得这套陶杯的釉色柔和。',time=naive.isoformat(),aware=False,id=str(U(100)),role='主句')],fact=None,timing=None,b=None,parsing=None,error=errors)
+Path('/tmp/statement_time_snapshots.json').write_text(json.dumps(out,ensure_ascii=False,indent=2)+'\n')
+print(json.dumps({key:{'category':v['fact']['category'] if v['fact'] else None,'valid_at':v['fact']['valid_at'] if v['fact'] else None,'parsing':v['parsing'],'error':v['error']} for key,v in out.items()},ensure_ascii=False,indent=2))
+</script>
+<script>
+// 可移出的纯逻辑：已校验的 ISO 字符串保持原偏移，不用宿主时区转换。
+const StatementTime = (() => {
+  function build(sources) {
+    if (!sources.length) return {ok:false, text:null, reason:'没有来源，不能构造陈述包装。'};
+    if (sources.some(s => s.time !== null && s.aware !== true))
+      return {ok:false, text:null, reason:'来源时间没有有效时区；拒绝包装，不补本机时区。'};
+    const prefix = s => s.time === null ? `${s.author}陈述（来源时间未知）` : `${s.author}于${s.time}陈述`;
+    const main = sources[sources.length - 1];
+    const context = sources.slice(0,-1).map(s => `${prefix(s)}：“${s.text}”`);
+    return {ok:true, text:`${prefix(main)}：原话：“${main.text}”` + (context.length ? `（相关原文：${context.join('；')}）` : ''), reason:null};
+  }
+  function compare(snapshot) {
+    const proposed = build(snapshot.sources);
+    return {proposed, fact: snapshot.fact && proposed.ok ? {...snapshot.fact, text:proposed.text} : null,
+      timing:snapshot.timing, recordedParsing:proposed.text === snapshot.b ? snapshot.parsing : null};
+  }
+  return Object.freeze({build, compare});
+})();
+</script>
+<script>
+// 可抛弃页面壳：只选快照、调用纯函数、显示字段。
+const snapshots = JSON.parse(document.getElementById('snapshots').textContent);
+const scenarios = [
+ {title:'历史说法', ids:['assessment','thirdparty'], labels:['独立评价','第三方事实'], description:'说话人过去做出评价，或转述第三方事实。现有正文保留原话，来源日期另存在元数据中；B 可以把陈述日期放到正文，但不能证明该命题只在当时成立。', conclusion:'B 增加陈述来源日期；类别和语用不变，命题的历史有效范围仍未被确定。', steps:[['查看历史评价','assessment',false],['给评价加陈述时间','assessment',true],['对照第三方事实','thirdparty',true]]},
+ {title:'错类别', ids:['wrong','event'], labels:['刻意给错的短时状态标签','另一个事件标签输入'], description:'同一条明说完成动作的全新合成句，分别固定两个标签。短时状态标签会编译出近期状态及次日零点失效；加陈述日期不能纠正这条路径。事件按钮只是切换独立实验输入，不是修复输出。', conclusion:'若类别选错，B 仍保留错误路径的类别与有效期。加载事件快照只是人工标签对照，不能记作模型修复。', steps:[['加载短时状态标签','wrong',false],['只加日期，观察有效期','wrong',true],['对照另一个事件标签','event',true]]},
+ {title:'双来源 / 跨时区', ids:['zones','partial'], labels:['双来源时间齐全','必要来源时间缺失'], description:'工具盒别名来自用户，后一句评价来自联系人。两条来源是同一时刻，原始偏移却对应不同日期。汇总起止不能替代每条消息自己的日期，也不是事实成立区间。', conclusion:'B 分别保留两位作者、两条原话与各自偏移；汇总时间仍按原算法计算。缺失哪条时间，就只把那条标为未知。', steps:[['看两条原始来源','zones',false],['逐条加入各自日期','zones',true],['拿掉必要来源时间','partial',true]]},
+ {title:'缺时 / 无时区', ids:['missing','naive'], labels:['来源时间未知','来源时间无时区'], description:'未知时间可以如实保留未知；无时区时间不能按本机时区猜测。后者被真实 MessageRef 与 MemoryTiming 拒绝，没有合法编译快照。', conclusion:'未知不是今天、导入日或保存日。无时区输入不可用，B 也拒绝生成；不把拒绝伪装成成功快照。', steps:[['查看缺失时间','missing',false],['显示来源时间未知','missing',true],['尝试无时区时间','naive',true]]},
+ {title:'事件日 ≠ 说话日', ids:['eventday'], labels:['2013 年事件 / 2018 年陈述'], description:'原文说课程完成于 2013 年，消息实际发生在 2018 年。B 只能标注外层陈述时间，不能用它覆盖原文事件年，更不能据此填写事实生效日。', conclusion:'原文的 2013 年与外层的 2018 年各司其职；有效期仍双空。B 不新增事件日期提取，也不认证事件真实性。', steps:[['分辨原文年与来源时间','eventday',false],['只包装陈述时间','eventday',true]]}
+];
+const fields = {category:'记忆类别',subject:'涉及主体',topic:'主题',source_message_ids:'关联来源',confidence:'固定置信度输入',risk_flags:'风险标记',valid_at:'事实生效时间',invalid_at:'事实失效时间',speech_act:'话语行为',assertion_status:'断言状态',figurative_type:'修辞类型',alternatives:'其他解释',interpretation_reason:'编译解释'};
+const timingFields = {recorded_at:'保存时间',source_started_at:'最早已知来源',source_ended_at:'最晚已知来源',source_time_complete:'来源时间是否齐全',current_status:'当前核实状态',current_status_reason:'当前核实依据'};
+let state = {scenario:0, id:'assessment', b:false, step:-1};
+const el = id => document.getElementById(id);
+const node = (tag, text, cls) => {const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;};
+function value(v) {if(v===null)return '未设定（null）';if(v===true)return '是';if(v===false)return '否';if(Array.isArray(v))return v.length?v.join('；'):'无';return String(v);}
+function rows(target, labels, original, proposed) {
+  target.replaceChildren();
+  if(!original){const tr=node('tr');const td=node('td','输入被拒绝，未生成合法字段。');td.colSpan=3;tr.append(td);target.append(tr);return;}
+  for(const [key,label] of Object.entries(labels)) {
+    const tr=node('tr'), title=node('td');title.append(node('div',label),node('code',key));
+    tr.append(title,node('td',value(original[key])),node('td',proposed ? value(proposed[key])+' · 保持' : '未生成'));
+    target.append(tr);
+  }
+}
+function load(id,b,step=-1){state={...state,id,b,step};render();}
+function reset(){load(scenarios[state.scenario].ids[0],false);}
+function render(){
+  const scene=scenarios[state.scenario], s=snapshots[state.id], comparison=StatementTime.compare(s);
+  el('current-label').textContent=scene.labels[scene.ids.indexOf(state.id)];
+  el('status').textContent=state.b?'已尝试加入陈述时间；原字段与来源时间元数据保持不变。':'正在查看真实编译基准；右侧可预览候选 B，尚未切换。';
+  el('sources').replaceChildren();
+  for(const source of s.sources){const card=node('div',undefined,'source');card.append(node('div',`${source.role} · ${source.author}`,'small'),node('div',source.text),node('div',source.time===null?'来源时间未知':source.time+(source.aware?' · 保留原偏移':' · 无时区，不可用'),'time'));el('sources').append(card);}
+  el('original-card').classList.toggle('active',!state.b);el('b-card').classList.toggle('active',state.b);
+  el('original-text').textContent=s.fact?s.fact.text:'未生成：'+s.error.message;
+  el('b-text').textContent=comparison.proposed.ok?comparison.proposed.text:'未生成：'+comparison.proposed.reason;
+  el('conclusion').textContent=scene.conclusion;
+  el('parser-note').textContent=s.error?`真实拒绝记录：消息入口「${s.error.message}」；时间元数据「${s.error.timing}」。没有原版或 B 的解析结果。`:comparison.recordedParsing?`实际旧表示解析检查：现有包装 ${s.parsing.original} 解；B 包装 ${s.parsing.b} 解。仅核对包装文法，不是语义 proof。B 不能沿用旧证明链。`:'此 B 字符串没有匹配已验证快照；未验证解析兼容性。';
+  rows(el('timing-rows'),timingFields,s.timing,comparison.timing);
+  rows(el('fact-rows'),fields,s.fact,comparison.fact);
+  const next=(scene.ids.indexOf(state.id)+1)%scene.ids.length;
+  el('variant').disabled=scene.ids.length<2;el('variant').textContent=scene.ids.length>1?'切换：'+scene.labels[next]:'此场景只有一个输入';
+  el('scenario-title').textContent=scene.title;el('scenario-description').textContent=scene.description;
+  [...el('tabs').children].forEach((tab,i)=>tab.setAttribute('aria-selected',String(i===state.scenario)));
+  el('guide-panel').setAttribute('aria-labelledby','tab-'+state.scenario);
+  el('steps').replaceChildren();
+  scene.steps.forEach(([title,id,b],i)=>{const li=node('li');const button=node('button',(state.step===i?'当前 · ':'')+title);button.onclick=()=>load(id,b,i);if(state.step===i)button.className='primary';li.append(node('span',String(i+1).padStart(2,'0'),'step-number'),button);el('steps').append(li);});
+}
+scenarios.forEach((scene,i)=>{const b=node('button',scene.title);b.id='tab-'+i;b.setAttribute('role','tab');b.setAttribute('aria-controls','guide-panel');b.onclick=()=>{state.scenario=i;reset();};el('tabs').append(b);});
+el('show-original').onclick=()=>load(state.id,false);el('show-b').onclick=()=>load(state.id,true);
+el('variant').onclick=()=>{const ids=scenarios[state.scenario].ids;load(ids[(ids.indexOf(state.id)+1)%ids.length],state.b);};
+el('reset').onclick=reset;el('start').onclick=reset;
+el('generator-view').textContent=el('generator').textContent;
+render();
+</script>
+</body></html>
