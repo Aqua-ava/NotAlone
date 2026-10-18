@@ -58,3 +58,10 @@ E2独立教学例21fabd17→8ad58155、测试指纹a9a00805→21900a96；指代�
 指代fewshot最终结果566eb3d5→bafab10c、官方配置查证a25b2cef→d1bbff6b已集成。新场41/48关闭，主16一般错误3、安全0，raw18/18、E14完整15/18、含V完整14/18；诊断6/8一般2、bad_auto1，D07/D08未运行。指代八场累计175次HTTP200，与运行时四场7次分账。独立模型配置仅为待实现的对照路径，未新增预算或外发；不将模型名称等同任务准确性。
 
 Pro闭集接线90af01c2已完成90项相关测试、15项最终复查、五源码类型检查和双轴审查。独立18fcc800场closed2/30，首窗首次RAW/FULL封存，但E类别/有效期错误及V漏检，程序UNKNOWN/basis=null，positive_delivery_missing停；后14unrun，正向交付0/7，不签质量。位置提案合法不等于proof依据有效，见位置辅助记录。五场9次请求与141未用额度分列，隔离资源和专用key已清理。指代接口差距c48eda51→d3fad821、机械投影6a1a1a7d→82557532已接入并核等价；D8理由规则缺失，投影仍不可正式执行。
+
+
+## 当前完成性复核（集成94ea9ad9）
+
+独立只读核对决定稿、实施规格、测试源码与既有验证记录，未发现新增工程缺口：有限六类/反例见`test_bounded_runtime_acceptance.py:323`，逐维度AND见`test_dimension_evidence_flow.py:348`及`test_bounded_memory_api.py:66`；任务配置/恢复见`test_runtime_config.py:80`；版本配对、ALL与旧读取见`test_bounded_runtime_migration.py:201`、`test_all_source_persistence.py:71`；全部状态删除、确认前复核与实际SDK产物生命周期见`test_all_source_deletion.py:96`、`test_bounded_evaluation_sources.py:155`。本次复用工程结果14项来源生命周期、5项独占进程及本轮48单元/35隔离集成证据；各组重叠，不累加为新测试数，也未声称当前HEAD重跑全库。
+
+最新合并90相关测试及7源码类型检查通过。真实新场e00279a0仅P01审核完成即触发potential bad_auto1，实际pending，后14unrun，正证0/7；前场f0e64fae的1/7只保留历史信用，不并入当前场。两场均已关闭并清理。完整质量、真实六规则依据及达标后的实际生命周期仍未完成，因此03第一AC未满足。三线集成和后续结果以runtime-integration-handoff及runtime-position-guide为准。
