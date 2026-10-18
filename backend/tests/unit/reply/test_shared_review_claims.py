@@ -4,6 +4,8 @@ import unittest
 
 from notalone.reply.adapters.constraint_review_contract import accepted_candidate_numbers, review_source_roles, review_target
 from notalone.reply.errors import ReplyInvariantError, ReplyReviewInvalidError
+from notalone.memory.timing import MemoryTiming
+from notalone.reply.fidelity import factual_role
 from tests.reply_review_support import synthetic_claim, synthetic_review
 
 
@@ -47,6 +49,31 @@ class SharedReviewClaimsTest(unittest.TestCase):
             with self.subTest(path=path):
                 report = self.certificate(payload, path, quote)
                 report["reviews"]["candidate_1"]["claims"][0]["modality"] = "optional"
+                self.assertEqual(accepted_candidate_numbers(report, payload), frozenset())
+
+    def test_actual_message_source_can_support_past_owner_state_or_commitment(self):
+        for kind, statement in (("state", "当时我还有印象。"), ("commitment", "去年我答应过帮忙。")):
+            with self.subTest(kind=kind):
+                payload = self.payload(statement + "你最近怎么样？")
+                payload["evidence"].append({"kind": "message", "factual_role": factual_role("message"),
+                    "text": statement, "status": "active", "timing": MemoryTiming().to_payload()})
+                path = "/evidence/2/text"
+                self.assertEqual(review_source_roles(payload)[path]["role"], "history_message")
+                report = self.certificate(payload, path, statement, state=statement)
+                report["reviews"]["candidate_1"]["claims"][0].update(kind=kind, time_scope="historical")
+                self.assertEqual(accepted_candidate_numbers(report, payload), frozenset({1}))
+
+    def test_past_message_cannot_authorize_current_state_or_new_owner_commitment(self):
+        for kind, time_scope, statement in (("state", "current", "我现在还记得。"),
+                ("commitment", "current", "我现在答应帮忙。"),
+                ("commitment", "unspecified", "我答应帮忙。")):
+            with self.subTest(kind=kind, time_scope=time_scope):
+                payload = self.payload(statement + "你最近怎么样？")
+                payload["evidence"].append({"kind": "message", "factual_role": factual_role("message"),
+                    "text": "去年我说：我还记得，也答应过帮忙。", "status": "active",
+                    "timing": MemoryTiming().to_payload()})
+                report = self.certificate(payload, "/evidence/2/text", "我还记得，也答应过帮忙", state=statement)
+                report["reviews"]["candidate_1"]["claims"][0].update(kind=kind, time_scope=time_scope)
                 self.assertEqual(accepted_candidate_numbers(report, payload), frozenset())
 
     def test_current_direction_authorizes_legal_paraphrase_without_literal_copy(self):

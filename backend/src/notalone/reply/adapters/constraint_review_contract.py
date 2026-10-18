@@ -257,10 +257,8 @@ def _validate_claims(value: object, candidate: dict[str, Any], target: dict,
                 if time == "current":
                     permitted = permitted and all(roles[path] == {"role": "current_user_input", "time_scope": "current"}
                                                   for path in paths)
-                else:
-                    permitted = permitted and all(roles[path]["role"] in {"current_user_input", "owner_record"}
-                                                  for path in paths)
-            if kind == "commitment" and actor == "owner":
+                # 明确过去的状态沿通用来源与语义复核，不把“过去说过”升级为现状。
+            if kind == "commitment" and actor == "owner" and time != "historical":
                 permitted = permitted and all(roles[path]["role"] == "current_user_input" for path in paths)
         supported = supported and permitted
         validated.append({**claim, "start": start, "end": cursor})
