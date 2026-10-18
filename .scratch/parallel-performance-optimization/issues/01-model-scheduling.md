@@ -43,3 +43,11 @@ HTTP 生产服务回归也复现基线“首轮→次轮→前台”，当前为
 - 命令：在 `backend/` 设置 `PYTHONPATH=src:. NOTALONE_DISABLE_DOTENV=1`，指定 Conda Python 执行 `python -m unittest`；详细模块见 `test_physical_model_scheduling.py`、`test_tencent_scene_tools.py`、`test_tencent_profile_tools.py` 及本地 `/tmp/notalone-scheduling-*.log`。
 - 仅合成正文与随机测试库；没有读取业务 `.env`、真实聊天或业务库，没有外部模型请求、业务库迁移、真实 App／微信、打包或远端操作。新增持久内容仅为原本已实际请求的无正文重试台账及其追踪关联，不扩大数据范围。
 - 既有旧 `model_priority_lifecycle` 协议夹具缺口未冒充通过；实际桌面由主会话验收。
+
+### 后续：降低持久 guard 的退避成本
+- 集成审查确认生产 `check_step_lease` 每次创建 PG 连接并取 scope 锁；原 100ms 复验使每次默认 30 秒退避约查询 300 次。本次将持久复验间隔改为 1 秒，继续直接等待停止 Event；没有新增线程、连接池或通知设施。
+- 公开 `ModelPriorityControl`／正式 `DirectExtractionRuntime`，仅替换时钟与 Event 等待边界：同一 30 秒退避的 guard 数由 301 降到至多 31；一次失败后成功的完整 Direct 路径由 306 降到至多 36，额外 5 次为请求前后及消费边界复验。下一物理外发前仍独立强制 guard。
+- guard 成本断言先红（实际 306，高于 36）后绿。新增默认 30 秒真实 Event 等待回归，确认等待已开始后再触发停止／来源撤销，均只发出 1 次请求；停止后不再查询 guard。另保留短退避、SDK 台账、在途与期限检查。
+- 三次公开 Direct 合成对照：停止结算中位数由 0.057ms 到 0.019ms；来源撤销检测由 103.081ms 到 1005.172ms。这是明确取舍：停止即时唤醒，来源／租约撤销最迟下一次 1 秒周期复验发现，另加 guard 自身执行与线程调度时间；真实 PG 锁等待不具备强行中断保证。
+- 相关 18 个单元模块现共 168 项通过（600 秒上限）；其中模型调度 10 项。短退避来源用例按 400ms 剩余等待给 600ms 时限，新增的默认 30 秒成本与实时时延用例承担低频策略的完整断言。
+- 成本与实测数据保留于本地 `/tmp/notalone-scheduling-guard-cost-evidence.json`，日志 `/tmp/notalone-scheduling-low-frequency-related.log`。本次只改调度器、对应测试和本任务单，无数据范围、持久字段或桌面运行变化。

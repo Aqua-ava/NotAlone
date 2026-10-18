@@ -2,7 +2,9 @@
 
 from concurrent.futures import ThreadPoolExecutor
 from threading import Event
+from time import monotonic
 import unittest
+from unittest.mock import patch
 from uuid import uuid4
 
 from langchain_core.messages import AIMessage
@@ -32,6 +34,92 @@ class RetryModel:
 
 
 class PhysicalModelSchedulingTest(unittest.TestCase):
+    def test_default_backoff_bounds_persistent_guard_cost_before_retry(self):
+        control, model = ModelPriorityControl(), RetryModel()
+        checks, waits = [], []
+        now = 0.0
+
+        def wait(seconds):
+            nonlocal now
+            waits.append(seconds)
+            now += seconds
+            return False
+
+        runtime = PriorityExtractionRuntime(DirectExtractionRuntime(model=model), control)
+        with patch('notalone.application.model_priority.time.monotonic', side_effect=lambda: now), \
+                patch.object(control.stop_event, 'wait', side_effect=wait), \
+                control.background_scope(lambda: checks.append((now, model.requests))):
+            self.assertEqual(runtime.extract(_window((uuid4(),))), ())
+
+        self.assertAlmostEqual(sum(waits), 30)
+        self.assertEqual(model.requests, 2)
+        self.assertLessEqual(len(checks), 36, '30秒退避至多31次复验，另有5次请求／消费边界复验。')
+        self.assertEqual(checks[-3:], [(30, 1), (30, 2), (30, 2)], '下一请求前仍须复验。')
+
+    def test_stop_event_immediately_interrupts_default_backoff_wait(self):
+        control, model, waiting = ModelPriorityControl(), RetryModel(), Event()
+        guards = []
+        original_wait = control.stop_event.wait
+
+        def wait(seconds):
+            waiting.set()
+            return original_wait(seconds)
+
+        runtime = PriorityExtractionRuntime(DirectExtractionRuntime(model=model), control)
+        def extract():
+            with control.background_scope(lambda: guards.append(monotonic())):
+                return runtime.extract(_window((uuid4(),)))
+
+        with patch.object(control.stop_event, 'wait', side_effect=wait), ThreadPoolExecutor(max_workers=1) as executor:
+            extraction = executor.submit(extract)
+            try:
+                self.assertTrue(waiting.wait(1), '必须已进入默认30秒退避的Event等待。')
+                started = monotonic()
+                control.stop()
+                with self.assertRaises(ModelWorkStopped):
+                    extraction.result(timeout=.2)
+                elapsed = monotonic() - started
+            finally:
+                control.stop()
+        self.assertLess(elapsed, .2)
+        self.assertEqual(model.requests, 1)
+        self.assertEqual(len(guards), 3, '即时停止不应再查询持久guard。')
+
+    def test_source_revocation_ends_default_backoff_within_one_guard_interval(self):
+        from notalone.persistence.background_tasks import BackgroundTaskPersistenceError
+        control, model = ModelPriorityControl(), RetryModel()
+        waiting, revoked = Event(), Event()
+        guards = []
+        original_wait = control.stop_event.wait
+
+        def wait(seconds):
+            waiting.set()
+            return original_wait(seconds)
+
+        def guard():
+            guards.append(monotonic())
+            if revoked.is_set():
+                raise BackgroundTaskPersistenceError('合成来源／租约已撤销。')
+
+        runtime = PriorityExtractionRuntime(DirectExtractionRuntime(model=model), control)
+        def extract():
+            with control.background_scope(guard):
+                return runtime.extract(_window((uuid4(),)))
+
+        with patch.object(control.stop_event, 'wait', side_effect=wait), ThreadPoolExecutor(max_workers=1) as executor:
+            extraction = executor.submit(extract)
+            try:
+                self.assertTrue(waiting.wait(1), '须在默认30秒退避已开始后再撤销来源。')
+                started = monotonic()
+                revoked.set()
+                with self.assertRaises(BackgroundTaskPersistenceError):
+                    extraction.result(timeout=1.5)
+                self.assertLess(monotonic() - started, 1.5, '1秒复验间隔另留调度余量。')
+            finally:
+                control.stop()
+        self.assertEqual(model.requests, 1)
+        self.assertEqual(len(guards), 4)
+
     def test_deadline_includes_foreground_handoff_and_prevents_next_round(self):
         from notalone.application.organization_call import bounded_organization_call
         from notalone.memory.layered import OrganizationBudget
@@ -160,7 +248,7 @@ class PhysicalModelSchedulingTest(unittest.TestCase):
             self.assertTrue(model.first_returned.wait(1))
             revoked.set()
             with self.assertRaises(BackgroundTaskPersistenceError):
-                extraction.result(timeout=.25)
+                extraction.result(timeout=.6)
         self.assertEqual(model.requests, 1)
 
     def test_caller_timeout_keeps_inflight_organization_request_exclusive(self):
