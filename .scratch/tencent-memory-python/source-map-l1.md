@@ -28,3 +28,9 @@
 - 第二个公开HTTP红测：单父merge触发原多父数据库CHECK；映射到单父UPDATE事务并重核最终正文后通过。
 - 公开接口回归覆盖多候选更新、多父merge/update、skip、目标越界、人工修正保护、本人隔离和来源删除。外部模型与embedding边界使用合成输出；原始导入、任务、V契约、存储及读取均真实执行。
 - 本机真实离线模型自检：2段合成文字返回2×512维；未调用真实外部生成模型。
+
+## 批量 D 的供应商工具协议适配
+
+2026-10-18 核对 [DeepSeek 官方 Chat Completions 文档](https://api-docs.deepseek.com/api/create-chat-completion/) 的 `tool_choice` 与 `thinking` 字段：提供工具时默认 `auto`，允许普通文本；指定工具可强制调用，但思考模式不支持 `required` 或指定工具，会返回 400。因此只在批量 D 的 `invoke_traced_model` 中设置指定 `BatchMemoryAdjudicationOutput` 及 `thinking.type=disabled`；E/V 与模型供应商保持原配置。这是输出交付协议适配，不是将普通正文 JSON 解析为裁决的降级路径。
+
+真实 SDK 最终 HTTP 请求的离线回归先确认旧请求没有 `tool_choice` 而失败，再验证指定工具、关闭思考及合法 skip 后公开候选无 pending；故意仅返回普通 content JSON 时仍保留 pending。相关 L1 HTTP 模块 16 项通过（31.464 秒），本次未调用真实外部模型。
