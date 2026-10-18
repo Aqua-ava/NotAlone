@@ -51,6 +51,8 @@ class LayeredMemoryService:
         self._adapter_close = adapter_close
         self._dispatcher = dispatcher
         self._contract = "scenario-v3:deadline-v1:coverage-v1:correction-v1:" + runtime_policy
+        if getattr(proposer, "document_tools", False):
+            self._contract += ":document-tools-v1:physical-budget-v1"
         self._store, self._proposer, self._verifier = store, proposer, verifier
         if synthetic:
             store.require_synthetic_database()
@@ -73,7 +75,7 @@ class LayeredMemoryService:
             require_adapter_timeout_contract(profile_verifier, "verify", synthetic=synthetic)
         self.reply_configuration = None
         self._synthetic = synthetic
-        if profile_proposer and self._budget.max_model_calls != 4:
+        if profile_proposer and runtime_policy == "qualified_suite" and self._budget.max_model_calls != 4:
             raise ValueError("长期背景装配要求显式四步有限预算。")
         if profile_proposer:
             self._contract += ":profile-v1"
@@ -246,6 +248,9 @@ class LayeredMemoryService:
             def validate_items(value):
                 checked = validate_proposal(value, work.memories, self._budget, scenarios=work.scenarios)
                 validate_correction_proposal(work, checked)
+                if getattr(self._proposer, 'document_tools', False):
+                    from notalone.memory.scene_workspace import validate_document_replacements
+                    validate_document_replacements(checked, work.scenarios)
                 return checked
             raw, proposal, rejected = isolate_proposal(raw, 'scenarios', validate_items, self._budget.max_scenarios)
             self._store.record_proposal(work, {'original': original, 'filtered': raw, 'rejected': rejected})
@@ -268,7 +273,7 @@ class LayeredMemoryService:
                 **({"scenarios": self._model_scenarios(work)} if self._scenario_context else {})))
             filtered, verification_rejected = select_verified(raw, 'scenarios', supported)
             self._store.record_proposal(work, {'original': original, 'filtered': filtered,
-                'rejected': rejected, 'verification_rejected': verification_rejected})
+                'rejected': rejected, 'verification_rejected': verification_rejected, 'verification_result': supported})
             if raw['scenarios'] and not filtered['scenarios'] or supported is False:
                 self._store.fail(work, "faithfulness_rejected")
                 return 0
@@ -325,11 +330,14 @@ class LayeredMemoryService:
         def invoke(deadline):
             from notalone.memory.organization_quality_transport import organization_request_context
             check()
-            self._store.reserve_model_call(work)
+            physical = getattr(adapter, 'physical_accounting', False)
+            if not physical:
+                self._store.reserve_model_call(work)
+            tail = (7 if self._profile_proposer else 1) if getattr(adapter, 'document_tools', False) and operation == 'propose' else 0
             phase = ('l3' if hasattr(work, 'scenario_version_ids') else 'l2') + ('_proposal' if operation == 'propose' else '_verification')
-            context = (nullcontext() if self._synthetic else organization_request_context(
+            context = (nullcontext() if self._synthetic and not physical else organization_request_context(
                 check, lambda request, response, route: self._check_response_identity(work.scope.owner_id, snapshot, phase, request, response, route),
-                deadline, self._budget))
+                deadline, self._budget, reserve=(lambda: self._store.reserve_model_call(work, reserved_calls=tail)) if physical else None))
             with context:
                 value = call(deadline)
             check()
@@ -469,7 +477,7 @@ class LayeredMemoryService:
                 guard=lambda: self._store.check_profile(work))
             filtered, verification_rejected = select_verified(raw, 'entries', supported)
             self._store.record_profile_proposal(work, {'original': original, 'filtered': filtered,
-                'rejected': rejected, 'verification_rejected': verification_rejected})
+                'rejected': rejected, 'verification_rejected': verification_rejected, 'verification_result': supported})
             if raw['entries'] and not filtered['entries'] or supported is False:
                 self._store.fail_profile(work,"profile_faithfulness_rejected")
                 return

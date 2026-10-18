@@ -63,6 +63,8 @@ class LayeredProfileStore:
                 (claim.task_id,scope.owner_id,scope.contact_id)).fetchone()
             if not job or job['state']!='active' or job['settings_generation']!=state['settings_generation'] or not job['profile_required']:
                 raise LayeredMemoryConflict("长期背景所属工作已变化。")
+            if job['profile_status'] in {'succeeded', 'not_required'}:
+                return None
             if not state["enabled"] or state["status"] not in {"ready", "failed", "updating", "paused"}:
                 return None
             generation, rows = self.generation_rows(connection,scope,state["organization_generation"])

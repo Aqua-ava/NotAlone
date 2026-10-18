@@ -20,8 +20,8 @@ def evaluation_request_context(store, owner_id, run_id, case, phase, deadline, b
 
 
 @contextmanager
-def organization_request_context(guard, response_guard, deadline, budget):
-    token = _CURRENT_ORGANIZATION.set((guard, response_guard, deadline, budget))
+def organization_request_context(guard, response_guard, deadline, budget, *, reserve=None):
+    token = _CURRENT_ORGANIZATION.set((guard, response_guard, deadline, budget, reserve))
     try:
         yield
     finally:
@@ -105,13 +105,15 @@ class OrganizationQualityHTTPTransport(httpx.BaseTransport):
         context = _CURRENT_ORGANIZATION.get()
         if context is None:
             raise PermissionError('模型请求必须属于有界评测或已获实际资格的整理工作。')
-        guard, response_guard, deadline, budget = context
+        guard, response_guard, deadline, budget, reserve = context
         deadline.check()
         guard()
         payload = json.loads(request.read())
         if len(request.content.decode()) > budget.max_characters:
             raise ValueError('完整实际整理请求超过有版本预算。')
         request.extensions['timeout'] = {key: deadline.remaining_seconds() for key in ('connect', 'read', 'write', 'pool')}
+        if reserve is not None:
+            reserve()
         result = self._inner.handle_request(request)
         result.read()
         deadline.check()
