@@ -24,6 +24,7 @@ export class MemoryReadingController {
   private state: MemoryReadingState = { revision: 0, contactId: null, scopeRevision: 0, mutation: { phase: 'idle', message: '' }, ...empty() };
   private scope: Scope | undefined;
   private readonly operations = new Map<MemorySectionName, { revision: number; abort: AbortController }>();
+  private ownerRequested = false;
   private operationRevision = 0;
   private mutation: { revision: number; abort: AbortController } | undefined;
   private historyOperation: { abort: AbortController } | undefined;
@@ -74,6 +75,10 @@ export class MemoryReadingController {
       ...(!this.ownerFactsWriteDepth ? { overview: { phase: 'idle' as const, value: null },
         ownerOverview: { phase: 'idle' as const, value: null }, layeredMemory: { phase: 'idle' as const, value: null } } : {}) });
     await this.ownerLayeredContextChanged(phase);
+    this.synchronizeScope();
+    if (phase === 'settled' && !this.ownerFactsWriteDepth && this.ownerRequested && this.scope) {
+      await this.readSection('owner', this.scope);
+    }
   }
   sourceDeletionChanged(phase: 'started' | 'settled'): void {
     for (const listener of this.ownerDependencyListeners) listener(phase);
@@ -98,6 +103,7 @@ export class MemoryReadingController {
       && next?.scopeRevision === this.scope?.scopeRevision) return;
     for (const operation of this.operations.values()) operation.abort.abort();
     this.operations.clear();
+    this.ownerRequested = false;
     this.historyOperation?.abort.abort();
     this.historyOperation = undefined;
     this.overviewOperation?.abort.abort();
@@ -557,6 +563,7 @@ export class MemoryReadingController {
     }
   }
   private async readSection(section: MemorySectionName, scope: Scope, afterWrite = false): Promise<boolean> {
+    if (section === 'owner') this.ownerRequested = true;
     if (section === 'owner' && this.ownerFactsWriteDepth) return false;
     if (!afterWrite && this.protectedReads?.scope === scope && this.protectedReads.sections.has(section)) return false;
     this.operations.get(section)?.abort.abort();

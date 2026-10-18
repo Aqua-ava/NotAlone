@@ -184,3 +184,46 @@ for (const action of ['delete', 'correct', 'uncertain']) test(`本人${action}�
   assert.equal(trace.getState().phase, 'ready');
   f.disconnect();
 });
+
+test('独立本人入口保存后自动恢复已打开的本人记忆列表，无需切换联系人或手动刷新', async () => {
+  const memory = { memory_id: ids.memory, level: 'owner', text: '合成本人新事实', category: 'common_fact', topic: 'other',
+    source_ids: [ids.memory], status: 'active', adoption_method: 'manual', confidence: 1, risk_flags: [], revision: 1,
+    supersedes_memory_id: null, source_candidate_id: null, valid_at: null, invalid_at: null,
+    timing: { recorded_at: null, source_started_at: null, source_ended_at: null, source_time_complete: false } };
+  let saved = false, reads = 0;
+  const f = await fixture(async request => {
+    if (request.method === 'POST') saved = true;
+    if (request.path === '/api/memories/owner') { reads++; return { generation: 1, data: { memories: saved ? [memory] : [] } }; }
+    return { generation: 1, data: owner() };
+  });
+  await f.bridge.refresh({ ...f.selection(), section: 'owner' });
+  assert.equal((await f.bridge.getState()).owner.phase, 'ready');
+  const scope = f.selection();
+  await f.bridge.addOwnerMemory({ text: memory.text, category: memory.category });
+  assert.deepEqual(f.selection(), scope);
+  const state = await f.bridge.getState();
+  assert.equal(state.owner.phase, 'ready');
+  assert.equal(state.owner.items[0]?.text, memory.text);
+  assert.equal(reads, 2);
+  f.disconnect();
+});
+
+test('独立本人写入不主动打开未请求列表，断连后也不恢复原列表', async () => {
+  let reads = 0, disconnectOnWrite = false, f;
+  f = await fixture(async request => {
+    if (request.method === 'POST' && disconnectOnWrite) f.disconnect();
+    if (request.path === '/api/memories/owner') { reads++; return { generation: 1, data: { memories: [] } }; }
+    return { generation: 1, data: owner() };
+  });
+  await f.bridge.addOwnerMemory({ text: '合成未打开列表的事实', category: 'common_fact' });
+  assert.equal(reads, 0);
+  await f.bridge.refresh({ ...f.selection(), section: 'owner' });
+  assert.equal(reads, 1);
+  disconnectOnWrite = true;
+  await assert.rejects(f.bridge.addOwnerMemory({ text: '合成断连中的事实', category: 'common_fact' }));
+  assert.equal(reads, 1);
+  const state = await f.bridge.getState();
+  assert.equal(state.contactId, null);
+  assert.equal(state.owner.phase, 'idle');
+  assert.deepEqual(state.owner.items, []);
+});
