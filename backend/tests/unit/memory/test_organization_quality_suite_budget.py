@@ -37,6 +37,22 @@ class PersistentSuiteBudgetTest(unittest.TestCase):
         return budget.reserve(source_ref='synthetic-db', owner_id=fixture['owner_id'], run_id=fixture['run_id'],
                               case_id=fixture['case_id'], phase=phase)
 
+    def test_problem_total_blocks_suite_reservation(self):
+        from unittest.mock import patch
+        from notalone.experiments.problem_budget import ProblemBudget, ProblemStopped
+        ledger = self.directory.parent / 'problem.sqlite3'
+        problem = ProblemBudget(ledger)
+        problem.create('synthetic', 1, 30)
+        problem.start('r1', 'one request only')
+        budget = PersistentSuiteBudget.create(self.directory, self.manifest)
+        with patch.dict(os.environ, {'NOTALONE_PROBLEM_BUDGET': str(ledger),
+                                   'NOTALONE_PROBLEM_ROUND': 'r1'}):
+            self.reserve(budget)
+            with self.assertRaises(ProblemStopped):
+                self.reserve(budget)
+        self.assertEqual(budget.snapshot()['used_attempts'], 1)
+        self.assertEqual(problem.snapshot()['used'], 1)
+
     def test_reopen_and_repeated_create_keep_spent_and_unknown_attempts(self):
         budget = PersistentSuiteBudget.create(self.directory, self.manifest)
         first = self.reserve(budget)

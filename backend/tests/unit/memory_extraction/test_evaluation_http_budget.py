@@ -58,6 +58,29 @@ class EvaluationHttpBudgetTest(unittest.TestCase):
                 self.assertEqual(observed_reservations, [1, 2])
                 self.assertEqual(caught_failures, ["ConnectError", "ConnectError"])
 
+    def test_problem_total_stops_before_transport(self):
+        import os
+        from notalone.experiments.problem_budget import ProblemBudget
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            ledger = root / 'problem.sqlite3'
+            problem = ProblemBudget(ledger)
+            problem.create('synthetic', 1, 30)
+            problem.start('r1', 'one request only')
+            with patch.object(Path, 'home', return_value=root), patch.dict(os.environ, {
+                'NOTALONE_PROBLEM_BUDGET': str(ledger), 'NOTALONE_PROBLEM_ROUND': 'r1',
+            }):
+                budget = self._budget(root)
+                sent = []
+                with httpx.Client(transport=EvaluationTransport(budget,
+                    synthetic_transport=httpx.MockTransport(
+                        lambda request: sent.append(1) or httpx.Response(200))), trust_env=False) as client:
+                    client.post('https://synthetic.invalid/v1/chat')
+                    with self.assertRaises(EvaluationBudgetAbort):
+                        client.post('https://synthetic.invalid/v1/chat')
+                self.assertEqual(sent, [1])
+                self.assertEqual(problem.snapshot()['used'], 1)
+
     def test_distinct_handles_cannot_have_two_requests_in_flight(self):
         with tempfile.TemporaryDirectory() as temporary:
             with patch.object(Path, "home", return_value=Path(temporary)):
