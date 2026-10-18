@@ -48,7 +48,7 @@ from notalone.memory_extraction.models import ExtractedFact, ExtractionWindow
 from notalone.memory_extraction.runtime import MemoryExtractionRuntime, ExtractionPayload
 from notalone.memory_extraction.semantic_evaluation_cases import SEMANTIC_CASES
 from notalone.memory_extraction.verification_adapters import (
-    SOURCE_VERIFICATION_SCHEMA,
+    SOURCE_VERIFICATION_SCHEMA, CORE_SOURCE_FIDELITY_PROFILE,
     LangChainSourceVerificationRuntime,
 )
 from notalone.memory_extraction.verification import (
@@ -59,6 +59,7 @@ from .evaluation_provider_contract import (
     MIXED_REQUEST_VERSION, mixed_phase_policy, FULL140_E2_PLAN, PHASE_SPLIT_PLANS, REFERENCE21_PLANS,
     SEMANTIC4_PROMPT_PROFILE, validate_semantic4_windows,
     PUBLIC_QUALITY_PLANS, validate_extraction_prompt_profile, REFERENCE16_PRO_PLANS,
+    CORE_PROFILE_PLAN, ECNUEvaluationContract,
 )
 
 _BASE_URL = "https://evaluation.invalid/v1"
@@ -81,7 +82,8 @@ class _RecordedVerificationRuntime:
 
     def __init__(self, runtime: LangChainSourceVerificationRuntime,
                  store: EvaluationRecordStore, position: int,
-                 invocation_scope: Callable | None = None):
+                 invocation_scope: Callable | None = None, *, prompt_profile: str = "default"):
+        self._prompt_profile = prompt_profile
         self._runtime = runtime
         self._store = store
         self._position = position
@@ -94,6 +96,7 @@ class _RecordedVerificationRuntime:
     def for_mode(self, mode: SourceVerificationMode | str) -> _RecordedVerificationRuntime:
         return _RecordedVerificationRuntime(
             self._runtime.for_mode(mode), self._store, self._position, self._invocation_scope,
+            prompt_profile=self._prompt_profile,
         )
 
     def verify(self, *, window: ExtractionWindow,
@@ -101,7 +104,7 @@ class _RecordedVerificationRuntime:
         if self._invocation_scope is None:
             payloads = self._runtime.verify(window=window, facts=facts)
         else:
-            prompt, _ = _verification_contract(self.verification_mode)
+            prompt, _ = _verification_contract(self.verification_mode, prompt_profile=self._prompt_profile)
             messages = [{"role": "system", "content": prompt}, {"role": "user", "content":
                         verification_adapters._verification_text(window, facts, include_position_guide=(
                             self.verification_mode is SourceVerificationMode.NULLABLE_PROOF_V3
@@ -603,12 +606,31 @@ def _run_evaluation_batch(
     mixed = execution_plan in PHASE_SPLIT_PLANS
     reference21_v4 = execution_plan in REFERENCE21_PLANS
     public_quality = execution_plan in PUBLIC_QUALITY_PLANS
-    prompt_profile = SEMANTIC4_PROMPT_PROFILE if public_quality else "default"
+    core = execution_plan == CORE_PROFILE_PLAN
+    prompt_profile = CORE_SOURCE_FIDELITY_PROFILE if core else SEMANTIC4_PROMPT_PROFILE if public_quality else "default"
     validate_extraction_prompt_profile(execution_plan, extraction_prompt_profile)
     if store.extraction_prompt_profile != extraction_prompt_profile:
         raise EvaluationBudgetAbort("evaluation_frozen_extraction_prompt_profile_mismatch")
     if mixed != (store.execution_plan in PHASE_SPLIT_PLANS) or mixed and execution_plan != store.execution_plan:
         raise EvaluationBudgetAbort("evaluation_mixed_fixed_plan_required")
+    if core or store.execution_plan == CORE_PROFILE_PLAN:
+        if (not core or store.execution_plan != execution_plan or store.reference_version != CORE_PROFILE_PLAN
+                or not store.belongs_to(budget) or len(cases) != len(windows) or len(plan) != len(windows)
+                or any(case.name != item["case_name"] for case, item in zip(cases, plan, strict=True))
+                or extraction_selected is not EvaluationExtractionMode.GROUNDED_V2
+                or selected is not SourceVerificationMode.LEGACY_V4
+                or type(max_retries) is not int or max_retries != 0
+                or type(request_timeout_seconds) is not float or request_timeout_seconds != 300.0
+                or extraction_tool_choice != "omitted" or verification_tool_choice != "omitted"
+                or base_url != "https://api.deepseek.com" or request_model != "deepseek-flash"
+                or reasoning_effort != "max" or not callable(semantic_audit)
+                or not isinstance(gold_reference, dict) or gold_reference.get("gold_sha256") != store.gold_sha256
+                or synthetic_transport is None and (contract is None or invocation_scope is None)):
+            raise EvaluationBudgetAbort("evaluation_core_fixed_plan_required")
+        store.validate_core_execution(windows, plan)
+        if contract is not None and (not isinstance(contract, ECNUEvaluationContract)
+                or contract.registration_binding() != store.core_contract_binding()):
+            raise EvaluationBudgetAbort("evaluation_core_provider_binding_changed")
     if store.extraction_mode != extraction_selected.value:
         raise EvaluationBudgetAbort("evaluation_frozen_extraction_mode_mismatch")
     e2 = execution_plan == FULL140_E2_PLAN
@@ -744,7 +766,7 @@ def _run_evaluation_batch(
                                 model=verification_adapter_model, provider=provider,
                                 verification_mode=selected,
                                 prompt_profile=prompt_profile,
-                            ), store, position,
+                            ), store, position, prompt_profile=prompt_profile,
                         ),
                     )
                 with store.stage(position, "case"):
@@ -785,9 +807,10 @@ def _run_evaluation_batch(
                         **({"execution_plan": execution_plan, "phase_request_version": MIXED_REQUEST_VERSION,
                             "phase_request_policy": mixed_phase_policy()} if mixed else {}),
                         **({"reference_version": store.reference_version}
-                           if store.reference_version == "source-fidelity-v2" or bounded else {}),
+                           if store.reference_version == "source-fidelity-v2" or bounded or core else {}),
                         **({"execution_plan": execution_plan} if pro16 else {}),
                         **({"execution_plan": execution_plan, "formal_task_execution": formal_execution} if bounded else {}),
+                        **({"execution_plan": execution_plan, "verification_prompt_profile": prompt_profile} if core else {}),
                         "extraction_program": tuple(
                             event["payload"] for event in current_events
                             if event["kind"] == "extraction_program"

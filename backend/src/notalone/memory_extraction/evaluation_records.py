@@ -20,6 +20,7 @@ import httpx
 from .evaluation_http_budget import EvaluationBudget, EvaluationBudgetAbort, _endpoint
 from .evaluation_provider_contract import (
     FULL140_E2_PLAN, FULL140_E2_MODE, FULL140_E2_STAGE,
+    CORE_PROFILE_PLAN, CORE_PROFILE_MODE, CORE_PROFILE_STAGES,
     BOUNDED_RUNTIME_PLAN, BOUNDED_RUNTIME_MODE, BOUNDED_RUNTIME_STAGE,
     MIXED_PLAN, MIXED_MODE, MIXED_STAGE, MIXED_REQUEST_VERSION, mixed_phase_policy,
     REFERENCE21_V4_PLAN, REFERENCE21_V4_MODE, REFERENCE21_V4_STAGE, PHASE_SPLIT_PLANS, REFERENCE21_PLANS,
@@ -30,6 +31,7 @@ from .evaluation_provider_contract import (
     REFERENCE16_PRO_TEACHING_PLAN, REFERENCE16_PRO_TEACHING_MODE, REFERENCE16_PRO_TEACHING_STAGE,
 )
 from .models import ExtractionWindow
+from .verification_adapters import CORE_SOURCE_FIDELITY_PROFILE
 
 
 _EVENT_KINDS = frozenset({
@@ -177,20 +179,27 @@ class EvaluationRecordStore:
                 or frozen_config.get("stage") == BOUNDED_RUNTIME_STAGE
                 or frozen_config.get("reference_version") == BOUNDED_RUNTIME_PLAN):
             raise EvaluationBudgetAbort("invalid_record_bounded_registration")
-        if ((self._execution_plan in PUBLIC_QUALITY_PLANS) != (frozen_config.get("verification_prompt_profile") == SEMANTIC4_PROMPT_PROFILE)
+        core = self._execution_plan == CORE_PROFILE_PLAN
+        if core:
+            if frozen_config.get("verification_prompt_profile") != CORE_SOURCE_FIDELITY_PROFILE:
+                raise EvaluationBudgetAbort("invalid_record_verification_prompt_profile")
+        elif ((self._execution_plan in PUBLIC_QUALITY_PLANS) != (frozen_config.get("verification_prompt_profile") == SEMANTIC4_PROMPT_PROFILE)
                 or self._execution_plan not in PUBLIC_QUALITY_PLANS and "verification_prompt_profile" in frozen_config):
             raise EvaluationBudgetAbort("invalid_record_verification_prompt_profile")
         self._extraction_prompt_profile = frozen_config.get("extraction_prompt_profile", "default")
         validate_extraction_prompt_profile(self._execution_plan, self._extraction_prompt_profile)
-        if self._execution_plan not in {UNIQUENESS_PLAN, BOUNDED_RUNTIME_PLAN, REFERENCE16_PRO_TEACHING_PLAN} and "extraction_prompt_profile" in frozen_config:
+        if self._execution_plan not in {UNIQUENESS_PLAN, BOUNDED_RUNTIME_PLAN, CORE_PROFILE_PLAN, REFERENCE16_PRO_TEACHING_PLAN} and "extraction_prompt_profile" in frozen_config:
             raise EvaluationBudgetAbort("invalid_record_extraction_prompt_profile")
         self._mixed = type(self._execution_plan) is str and self._execution_plan in PHASE_SPLIT_PLANS
-        self._strict_response = self._mixed or bounded or reference16
+        self._strict_response = self._mixed or bounded or reference16 or core
         if not self._mixed and {"phase_request_version", "phase_request_policy"} & set(frozen_config):
             raise EvaluationBudgetAbort("invalid_record_mixed_registration")
         self._response_sequences: set[int] = set()
         self._reference_version = "legacy-v1"
-        if bounded:
+        if core:
+            self._validate_core_registration(frozen_config, plan, actual_windows)
+            self._reference_version = CORE_PROFILE_PLAN
+        elif bounded:
             self._validate_bounded_registration(frozen_config, plan, actual_windows)
             self._reference_version = BOUNDED_RUNTIME_PLAN
         elif (self._extraction_mode == "grounded-v4"
@@ -219,7 +228,16 @@ class EvaluationRecordStore:
         self._plan = json.loads(_canonical(plan))
         self._bounded_provider_profile = bounded_profile_for_config(frozen_config) if bounded else None
         self._formal_tasks = json.loads(_canonical(frozen_config["formal_tasks"])) if bounded else []
-        self._gold_sha256: str | None = frozen_config["gold_sha256"] if bounded else None
+        self._core_contract = ({
+            "execution_plan": CORE_PROFILE_PLAN,
+            "provider_profile": EvaluationProviderProfile.DEEPSEEK_FLASH_MAX.value,
+            "extraction_mode": "grounded-v2",
+            "extraction_prompt_profile": self._extraction_prompt_profile,
+            "verification_tool_choice": "omitted",
+            "source_hashes": json.loads(_canonical(frozen_config["source_hashes"])),
+            "deadline_utc": frozen_config["deadline_utc"],
+        } if core else None)
+        self._gold_sha256: str | None = frozen_config["gold_sha256"] if bounded or core else None
         self._output = Path(self._manifest["output_directory"])
         self._failed = False
         self._stop_reason: str | None = None
@@ -236,6 +254,84 @@ class EvaluationRecordStore:
     @property
     def bounded_provider_profile(self) -> EvaluationProviderProfile | None:
         return self._bounded_provider_profile
+
+    def _validate_core_registration(
+        self, config: dict, plan: tuple[dict, ...],
+        actual_windows: tuple[ExtractionWindow, ...] | None,
+    ) -> None:
+        """核心私有入口的数量及请求合同门；来源独审和跨场门仍由入口负责。"""
+        from .evaluation_extraction import extraction_contract
+        from .verification_adapters import source_verification_contract
+
+        try:
+            stage = config.get("stage")
+            if type(stage) is not str or stage not in CORE_PROFILE_STAGES:
+                raise ValueError("core_stage_required")
+            count, cap = CORE_PROFILE_STAGES[stage]
+            if (type(actual_windows) is not tuple or len(actual_windows) != count
+                    or len(plan) != count or any(type(window) is not ExtractionWindow for window in actual_windows)):
+                raise ValueError("actual_windows_required")
+            deadline = datetime.fromisoformat(config["deadline_utc"])
+            if deadline.tzinfo is None or deadline.isoformat() != config["deadline_utc"]:
+                raise ValueError("core_deadline_required")
+            positions = config.get("selected_case_positions")
+            hashes = config.get("source_hashes")
+            def valid_digest(value: Any) -> bool:
+                return type(value) is str and len(value) == 64 and all(char in "0123456789abcdef" for char in value)
+            if (self._extraction_mode != "grounded-v2" or config.get("verification_mode") != "legacy-v4"
+                    or config.get("reference_version") != CORE_PROFILE_PLAN or config.get("mode") != CORE_PROFILE_MODE
+                    or config.get("base_url") != "https://api.deepseek.com"
+                    or config.get("endpoint") != "https://api.deepseek.com/chat/completions"
+                    or config.get("request_model") != "deepseek-flash"
+                    or type(config.get("timeout")) is not float or config["timeout"] != 300.0
+                    or type(config.get("max_retries")) is not int or config["max_retries"] != 0
+                    or type(config.get("temperature")) not in (int, float) or config["temperature"] != 0
+                    or config.get("stream") is not False or config.get("fallback") is not False
+                    or config.get("thinking") != {"type": "enabled"} or config.get("reasoning_effort") != "max"
+                    or type(config.get("request_contract_version")) is not int or config["request_contract_version"] != 2
+                    or config.get("response_identity_policy") != STRICT_RESPONSE_IDENTITY_POLICY
+                    or config.get("tool_choice") != {
+                        "extraction": {"mode": "omitted", "name": "GroundedMemoryLabels"},
+                        "verification": {"mode": "omitted", "name": "SourceVerificationOutput"}}
+                    or self._manifest["request_limit"] != cap
+                    or self._manifest["allowed_endpoints"] != ["https://api.deepseek.com/chat/completions"]
+                    or not isinstance(positions, (list, tuple))
+                    or any(type(position) is not int for position in positions) or tuple(positions) != tuple(range(count))
+                    or any(type(item["case_position"]) is not int
+                           or item["input_sha256"] != canonical_sha256(window)
+                           for item, window in zip(plan, actual_windows, strict=True))
+                    or len({item["case_name"] for item in plan}) != count
+                    or not valid_digest(config.get("gold_sha256"))
+                    or type(hashes) is not dict or not hashes
+                    or any(type(key) is not str or not key or not valid_digest(value) for key, value in hashes.items())):
+                raise ValueError("core_registration_changed")
+            contracts = tuple(extraction_contract("grounded-v2", window,
+                prompt_profile=self._extraction_prompt_profile) for window in actual_windows)
+            prompt, schema = source_verification_contract("legacy-v4", prompt_profile=CORE_SOURCE_FIDELITY_PROFILE)
+            if (config.get("extraction_window_contracts") != [{"input_sha256": item["input_sha256"],
+                    "prompt_sha256": canonical_sha256(e_prompt), "schema_sha256": canonical_sha256(e_schema)}
+                    for item, (e_prompt, e_schema) in zip(plan, contracts, strict=True)]
+                    or config.get("extraction_prompt_sha256") != canonical_sha256(contracts[0][0])
+                    or config.get("extraction_schema_sha256") != canonical_sha256(tuple(value[1] for value in contracts))
+                    or config.get("verification_prompt_sha256") != canonical_sha256(prompt)
+                    or config.get("verification_schema_sha256") != canonical_sha256(schema)):
+                raise ValueError("core_prompt_contract_changed")
+        except (ValueError, TypeError, KeyError, AttributeError):
+            raise EvaluationBudgetAbort("invalid_record_core_registration") from None
+
+    def core_contract_binding(self) -> dict:
+        """不从运行参数重建本场来源及期限；返回注册时冻结的副本。"""
+        if self._core_contract is None:
+            raise EvaluationBudgetAbort("evaluation_core_registration_required")
+        return json.loads(_canonical(self._core_contract))
+
+    def validate_core_execution(self, windows: tuple[ExtractionWindow, ...], plan: tuple[dict, ...]) -> None:
+        """执行时仍必须使用注册的同序窗口，不能仅更换运行参数。"""
+        if (self._execution_plan != CORE_PROFILE_PLAN or type(windows) is not tuple
+                or len(windows) != len(self._plan) or _json_value(plan) != self._plan
+                or any(type(window) is not ExtractionWindow or canonical_sha256(window) != item["input_sha256"]
+                       for item, window in zip(self._plan, windows, strict=True))):
+            raise EvaluationBudgetAbort("evaluation_core_window_binding_changed")
 
     def _validate_bounded_registration(
         self, config: dict, plan: tuple[dict, ...],

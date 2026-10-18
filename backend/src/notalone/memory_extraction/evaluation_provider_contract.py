@@ -19,7 +19,7 @@ import httpx
 from .evaluation_http_budget import EvaluationBudgetAbort
 from .evaluation_extraction import EvaluationExtractionMode, extraction_tool_name
 from .evaluation_bounded_cases import BOUNDED_RUNTIME_PLAN
-from .grounded_adapter import BOUNDED_DEPENDENCY_PROMPT_PROFILE
+from .grounded_adapter import BOUNDED_DEPENDENCY_PROMPT_PROFILE, CORE_CURRENT_STATE_PROFILE
 
 
 _ENDPOINT = "https://chat.ecnu.edu.cn/open/api/v1/chat/completions"
@@ -48,6 +48,9 @@ UNIQUENESS_MODE = "deepseek_bounded_reference21_v4_source_v2_uniqueness"
 UNIQUENESS_STAGE = "reference21-v4-source-v2-uniqueness"
 UNIQUENESS_KIND = "reference21-v4-uniqueness"
 UNIQUENESS_E_PROFILE = "reference-uniqueness-v1"
+CORE_PROFILE_PLAN = "core-current-source-v1"
+CORE_PROFILE_MODE = "deepseek_core_current_source"
+CORE_PROFILE_STAGES = {"fixed6": (6, 12), "heldout4": (4, 8)}
 PUBLIC_QUALITY_PLANS = frozenset({SEMANTIC4_PLAN, UNIQUENESS_PLAN})
 REFERENCE21_PLANS = frozenset({REFERENCE21_V4_PLAN, *PUBLIC_QUALITY_PLANS})
 FULL140_E2_PLAN = "full140-grounded-v2-source-v2-v-off-forced"
@@ -88,6 +91,7 @@ _BOUNDED_MIGRATION_SOURCES = frozenset(
 def validate_extraction_prompt_profile(execution_plan: str, prompt_profile: str) -> None:
     """新提示须与唯一新身份绑定，旧身份只允许原默认。"""
     expected = (BOUNDED_DEPENDENCY_PROMPT_PROFILE if execution_plan == BOUNDED_RUNTIME_PLAN
+                else CORE_CURRENT_STATE_PROFILE if execution_plan == CORE_PROFILE_PLAN
                 else REFERENCE16_TEACHING_E_PROFILE if execution_plan == REFERENCE16_PRO_TEACHING_PLAN
                 else UNIQUENESS_E_PROFILE if execution_plan == UNIQUENESS_PLAN else "default")
     if type(prompt_profile) is not str or prompt_profile != expected:
@@ -218,6 +222,7 @@ class ECNUEvaluationContract:
         validate_evaluation_policy(verification_tool_choice, response_identity_policy)
         validate_extraction_prompt_profile(execution_plan, extraction_prompt_profile)
         self._extraction_prompt_profile = extraction_prompt_profile
+        self._execution_plan = execution_plan
         try:
             self._extraction_mode = EvaluationExtractionMode(extraction_mode)
         except (TypeError, ValueError):
@@ -234,6 +239,11 @@ class ECNUEvaluationContract:
                     EvaluationExtractionMode.GROUNDED_V2 if execution_plan == FULL140_E2_PLAN
                     else EvaluationExtractionMode.GROUNDED_V4)):
             raise EvaluationBudgetAbort("evaluation_mixed_fixed_plan_required")
+        if execution_plan == CORE_PROFILE_PLAN and (
+                self._profile is not EvaluationProviderProfile.DEEPSEEK_FLASH_MAX
+                or self._extraction_mode is not EvaluationExtractionMode.GROUNDED_V2
+                or verification_tool_choice != "omitted"):
+            raise EvaluationBudgetAbort("evaluation_core_fixed_plan_required")
         bounded = self._profile.is_bounded
         reference16 = self._profile is EvaluationProviderProfile.DEEPSEEK_PRO_REFERENCE16
         if reference16 != (execution_plan in REFERENCE16_PRO_PLANS) or reference16 and (
@@ -331,6 +341,18 @@ class ECNUEvaluationContract:
         except (OSError, ValueError, TypeError):
             raise EvaluationBudgetAbort("evaluation_source_freeze_changed") from None
 
+    def registration_binding(self) -> dict:
+        """返回实际构造合同的只读副本，供核心记录器在读取凭据前核对。"""
+        return {
+            "execution_plan": self._execution_plan,
+            "provider_profile": self._profile.value,
+            "extraction_mode": self._extraction_mode.value,
+            "extraction_prompt_profile": self._extraction_prompt_profile,
+            "verification_tool_choice": self._verification_tool_choice,
+            "source_hashes": dict(self._source_hashes),
+            "deadline_utc": self._deadline.isoformat(),
+        }
+
     @contextmanager
     def expect_request(self, expected_payload: dict) -> Iterator[None]:
         """为一次 E/V 调用及其 SDK 重试绑定原定请求正文。"""
@@ -342,11 +364,19 @@ class ECNUEvaluationContract:
             from .grounded_adapter import grounded_v4_prompt
             if expected_payload["messages"][0]["content"] != grounded_v4_prompt(self._extraction_prompt_profile):
                 raise EvaluationBudgetAbort("evaluation_extraction_prompt_changed")
-        if (self._extraction_prompt_profile == BOUNDED_DEPENDENCY_PROMPT_PROFILE
+        if (self._extraction_prompt_profile in {BOUNDED_DEPENDENCY_PROMPT_PROFILE, CORE_CURRENT_STATE_PROFILE}
                 and expected_payload["tools"][0]["function"]["name"] == "GroundedMemoryLabels"):
             from .grounded_adapter import grounded_v2_prompt
             if expected_payload["messages"][0]["content"] != grounded_v2_prompt(self._extraction_prompt_profile):
                 raise EvaluationBudgetAbort("evaluation_extraction_prompt_changed")
+        if (self._execution_plan == CORE_PROFILE_PLAN
+                and expected_payload["tools"][0]["function"]["name"] == "SourceVerificationOutput"):
+            from .verification_adapters import source_verification_contract, CORE_SOURCE_FIDELITY_PROFILE
+            from langchain_core.utils.function_calling import convert_to_openai_tool
+            prompt, schema = source_verification_contract("legacy-v4", prompt_profile=CORE_SOURCE_FIDELITY_PROFILE)
+            if (expected_payload["messages"][0]["content"] != prompt
+                    or expected_payload["tools"] != [convert_to_openai_tool(schema)]):
+                raise EvaluationBudgetAbort("evaluation_core_verification_contract_changed")
         token = self._expected.set(_canonical(expected_payload))
         try:
             yield
