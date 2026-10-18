@@ -56,6 +56,26 @@ sensitivity只标原文实际的敏感风险：financial=真实金钱风险，he
 confidence是模型对标签的把握，不能代替证据。程序只保证定位、引用、字段组合与时间计算，不认证你的语义判断。
 """
 
+# 合成教学仅说明局部标签；不进入当前窗口、来源或工具schema。
+GROUNDED_E2_TEACHING_EXAMPLES = """
+<e2_teaching_examples>
+以下是独立教学微例，均由联系人说出，只展示局部标签，不是当前工具输出，也不是本次来源。
+示例中的context仅为背景，只有target需要输出；当前任务只标注随后user消息里的实际target，完整字段按当前工具schema填写。
+第一对：第三人事实与本人参与。
+例一 target「隔壁摊主的职业是篆刻师。」：kind=third_party_fact，topic=work，unresolved=false。职业属于第三人，不能改成联系人的职业。
+例二 target「隔壁摊主当面向我发出了联展邀请。」：kind=relationship_event，topic=other，unresolved=false。保存已收到邀请，不另造未来参与计划。
+第二对：亲属关系主断言与关系背景下的普通完成。
+例三 target「姨父送给了我一套雕刻工具。」：kind=relationship_event，topic=family，unresolved=false。
+例四 context「这套雕刻工具是姨父送我的。」；唯一target「最后一块木版已经刻完了。」：kind=event，topic=other，unresolved=false。只保存完成主断言；不补具体雕刻者，不推断使用了所赠工具，背景不单独输出，也不作为不必要的dependency。
+第三对：当前消息维护与真实未来计划／安排。
+例五 target「稍等，我把这条消息的错字改一下。」：两分句均为not_memory，topic=other，unresolved=false；仅维护本次消息，没有独立可保存安排。
+例六 target「下个月的古文字课上，我会替你演示拓印步骤。」：首分句kind=prefix、后句kind=plan，均topic=study、unresolved=false；前缀合并至未来计划。不补已完成或具体事件发生日期，其他字段沿原来源及时间规则。
+第四对：事项未明与事项明确但尚未决定。
+例七 target「我对先前说的安排仍拿不定主意。」（无其他context）：kind=state，topic=other，unresolved=true。保留犹豫状态，所指事项未明。
+例八 target「我还没决定下学期是否转去夜校。」：kind=state，topic=study，unresolved=false。事项明确，未知的是决定结果，不能把当前未决定改为未来计划。
+</e2_teaching_examples>
+"""
+
 # 已冻结的显式v3/v4保持原合同；默认提取的事件提案不混入旧评测协议。
 # v3/v4继续从原基底派生；本次E2指导不重签它们的提示合同。
 GROUNDED_V2_PROMPT = GROUNDED_PROMPT.replace(
@@ -99,7 +119,7 @@ unresolved不仅检查人物，也检查理解主张所需的事项、对象及�
 family须有原文亲属或家庭关系依据，不能仅因家里／住处或来访就选family；按实际主张选择已有依据的topic，没有更具体依据时用other。
 先判断是否有值得保存的信息，再选事实或计划类型：仅推进当前对话的一次性消息传递动作（发送地址、文件等），且没有独立事实、明确承诺、关系约束或超出本次消息交换的安排时用not_memory；有信息的地址／文件内容及真实计划、承诺仍分别保留，不按物品词或短期性一概省略。
 不含独立事实的纯礼貌谢语用greeting，不因存在依赖或前句已完成就另标event；同句或相邻句确有关系经历、完成动作或其他事实时，分别保留有信息的分句，不删除整条消息。
-"""
+""" + GROUNDED_E2_TEACHING_EXAMPLES
 
 
 GROUNDED_V3_PROMPT = GROUNDED_PROMPT.replace(

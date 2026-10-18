@@ -170,7 +170,7 @@ class GroundedV4RuntimeTest(unittest.TestCase):
         windows = [build_window(case) for case in (*CASES, *SEMANTIC_CASES)]
         for prompt, schema, prompt_sha, schemas_sha in (
             (GROUNDED_V2_PROMPT, grounded_schema,
-             "10e85aa08c292821cb84279fc2e61a33d71ec3a83cd7a67217a095281687443f",
+             "837344477304319f03f770e2d94571755d5cee8b445c6f3b3c7c1eeb63fa6a52",
              "c55322ae1480541222fdb03285b29613e47be0089d1692c57d30d36d27c2d10d"),
             (GROUNDED_V3_PROMPT, grounded_schema_v3,
              "e35b256adc84a7e61faade14267a187b7844f8b16abcdb9819371ed70905e7cf",

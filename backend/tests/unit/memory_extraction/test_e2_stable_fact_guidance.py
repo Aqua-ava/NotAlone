@@ -153,6 +153,37 @@ class E2StableFactGuidanceTest(unittest.TestCase):
                 self.assertEqual(bool(facts[0]["alternatives"]), unresolved)
                 self.assertIn(text, facts[0]["text"])
 
+    def test_teaching_examples_are_system_only_and_current_source_drives_output(self) -> None:
+        from notalone.memory_extraction.grounded_adapter import grounded_input, grounded_event_schema
+
+        source = window("我整理好了岩石标本盒。")
+        for events in (False, True):
+            request, facts = self.sdk_result(source, labels(row("0:0", "event")), events=events)
+            self.assertEqual([m["role"] for m in request["messages"]], ["system", "user"])
+            system, current = (m["content"] for m in request["messages"])
+            self.assertTrue("<e2_teaching_examples>" in system, "教学区未进入实际E2请求")
+            self.assertEqual(current, grounded_input(source))
+            for teaching_text in ("隔壁摊主的职业是篆刻师", "最后一块木版已经刻完", "古文字课", "转去夜校"):
+                self.assertNotIn(teaching_text, current)
+                self.assertNotIn(teaching_text, str(facts))
+                self.assertNotIn(teaching_text, json.dumps(request["tools"], ensure_ascii=False))
+            schema = (grounded_event_schema if events else grounded_schema)(source)
+            self.assertEqual(request["tools"][0]["function"]["parameters"]["properties"], schema["properties"])
+            self.assertEqual(len(facts), 1)
+            self.assertEqual(facts[0]["text"], "联系人原话：“我整理好了岩石标本盒。”")
+            self.assertEqual(facts[0]["source_message_ids"], [str(source.messages[0].message_id)])
+
+    def test_teaching_example_cannot_become_a_source_or_free_candidate_text(self) -> None:
+        from notalone.memory_extraction.errors import ExtractionInvalidOutputError
+
+        source = window("我整理好了岩石标本盒。")
+        for draft in (labels(row("0:0", "event", dependency="例四")),
+                      labels(row("0:0", "event", text="最后一块木版已经刻完了。"))):
+            for events in (False, True):
+                with self.subTest(events=events, draft=draft):
+                    with self.assertRaises(ExtractionInvalidOutputError):
+                        self.sdk_result(source, draft, events=events)
+
     def test_given_labels_preserve_types_dates_and_existing_kind_enum(self) -> None:
         controls = (
             ("我学的是水文勘测。", "event", "common_fact", "assertion", "asserted", False),
