@@ -9,12 +9,13 @@ export function ProactiveReplyInput({ replies }: { replies: ReplySessionView }) 
   useEffect(() => { setPurpose(state.purpose); }, [state.scopeRevision, state.purpose]);
   const canGenerate = Boolean(state.contactId) && Boolean(purpose.trim()) && state.phase !== 'waiting'
     && state.exploration.phase !== 'waiting' && !state.generationBlock && !needsDirectionClarification(state);
-  return <section aria-label="主动联系输入">
+  return <section className="compose-panel" aria-label="主动联系输入">
+    <header className="compose-heading"><span className="section-eyebrow">输入</span><h2>这次想和对方聊什么？</h2><p>先写下目的，再选择方向，最后生成开场白。</p></header>
     <label>本次主动目的<textarea aria-label="主动目的" maxLength={4096} value={purpose}
       disabled={!state.contactId} placeholder="说明这次想做什么，如问候近况，不安排见面"
       onChange={(event) => { setPurpose(event.target.value); void replies.updatePurpose(event.target.value); }} /></label>
     <StrategyControls replies={replies} />
-    <button aria-label="生成候选" disabled={!canGenerate}
+    <button className="compose-primary" aria-label="生成候选" disabled={!canGenerate}
       onClick={() => void replies.generate()}>目的已明确，生成候选</button>
     <div className="rewrite-retry">
       {state.canRetry && <button disabled={!canGenerate} onClick={() => void replies.generate()}>重试同一次生成</button>}

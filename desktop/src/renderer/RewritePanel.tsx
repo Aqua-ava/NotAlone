@@ -116,11 +116,10 @@ export function RewriteInput({ contacts, replies }: { contacts: ContactSessionVi
   const update = (value: Partial<RewriteOptions>) => {
     const next = { ...options, ...value }; setOptions(next); void replies.updateOptions(next);
   };
-  return <>
+  return <section className="compose-panel" aria-label={currentChat ? "回应粘贴文字输入" : "改写输入"}>
+    <header className="compose-heading"><span className="section-eyebrow">输入</span><h2>{currentChat ? "对方说了什么？你想怎么回应？" : "把你的意思，换一种说法"}</h2><p>{currentChat ? "粘贴对方的话，补充表达方向，再生成回复。" : "写下草稿，选择语气，让表达更自然。"}</p></header>
     <div className="ime-input"><HelperDraft session={contacts} currentChat={currentChat} />
-      <button className="generate-button" aria-label="生成候选" title="生成候选"
-        disabled={!enabled || !contacts.state.draft.trim() || currentChat && !options.pastedDirection?.trim() || replies.state.phase === 'waiting' || Boolean(replies.state.generationBlock)}
-        onClick={() => void replies.generate()}><Icon name="sparkle" size={18} /><span>生成候选</span></button></div>
+</div>
     {enabled && replies.state.generationBlock && <p role="status" className="rewrite-privacy">
       生成前，请先在上方确认本次联系人。
     </p>}
@@ -138,13 +137,16 @@ export function RewriteInput({ contacts, replies }: { contacts: ContactSessionVi
         value={options.instruction} disabled={!enabled} placeholder="可选，如只说明时间，不增加承诺"
         onChange={(event) => update({ instruction: event.target.value })} /></label>
     </div>
-    <ReplySceneInput replies={replies} />
+    <details className="compose-settings"><summary>更多设置 · 精确场景</summary><ReplySceneInput replies={replies} /></details>
+    <div className="compose-submit"><button className="generate-button" aria-label="生成候选" title="生成候选"
+        disabled={!enabled || !contacts.state.draft.trim() || currentChat && !options.pastedDirection?.trim() || replies.state.phase === 'waiting' || Boolean(replies.state.generationBlock)}
+        onClick={() => void replies.generate()}><Icon name="sparkle" size={18} /><span>生成候选</span></button></div>
     <p className="rewrite-privacy">{currentChat ? '本次粘贴的对方文字未经渠道核验。' : ''}{options.includeRelationshipContext ? '本次允许使用这位联系人的相关资料。' : '默认只处理本次文字，不读取关系历史。'} 表达方向、语气和要求只作用于本次生成，不自动保存为长期记忆。</p>
     <div className="rewrite-retry">
       {replies.state.canRetry && <button disabled={replies.state.phase === 'waiting' || Boolean(replies.state.generationBlock)} onClick={() => void replies.generate()}>重试同一次生成</button>}
       {replies.state.result && <button disabled={!contacts.state.draft.trim() || replies.state.phase === 'waiting' || Boolean(replies.state.generationBlock)} onClick={() => void replies.generate(true)}>重新生成</button>}
     </div>
-  </>;
+  </section>;
 }
 
 function CandidateEditor({ text, candidateId, number, edit, copy, validatePaste, disabled }: {

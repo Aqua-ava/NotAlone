@@ -1,3 +1,4 @@
+import { ensureReplySettingsOpen } from '../reply-settings-actions';
 import { selectMemoryCategory } from '../memory-page-actions';
 import { writeFile } from 'node:fs/promises';
 import { expect, type Browser, type Page } from '@playwright/test';
@@ -138,6 +139,7 @@ export async function authenticExpressionGroups(browser: Browser, origin: string
             const target = helper.getByRole('radio', { name: /合成当前邀请/ });
             await target.click(); await expect(target).toBeChecked();
           }
+          await ensureReplySettingsOpen(helper, '策略选择');
           await helper.getByRole('combobox', { name: '策略选择', exact: true }).selectOption('disabled');
           await helper.getByRole('textbox', { name: '纠正理解', exact: true }).fill('这只是合成邀约，不是已确认约定。');
           await helper.getByRole('textbox', { name: mode === 'response' ? '表达方向' : '主动目的', exact: true }).fill(stage.intent);

@@ -11,7 +11,8 @@ export function DirectedReplyInput({ replies }: { replies: ReplySessionView }) {
   const enabled = Boolean(state.contactId);
   const canGenerate = enabled && Boolean(state.targetMessageId) && Boolean(direction.trim()) && state.phase !== 'waiting' && !state.generationBlock
     && state.exploration.phase !== 'waiting' && !needsDirectionClarification(state);
-  return <section className="directed-input" aria-label="本次回复输入">
+  return <section className="directed-input compose-panel" aria-label="本次回复输入">
+    <header className="compose-heading"><span className="section-eyebrow">输入</span><h2>你想回应哪条消息？</h2><p>选择一条消息，说明你的想法，再生成回复。</p></header>
     <div className="message-heading"><b>选择待回复消息</b>
       <button disabled={!enabled || state.messages.phase === 'loading'} onClick={() => void replies.loadMessages()}>刷新消息</button></div>
     {state.messages.phase === 'loading' && <p role="status">正在读取这位联系人的消息…</p>}
@@ -27,12 +28,13 @@ export function DirectedReplyInput({ replies }: { replies: ReplySessionView }) {
       </label>)}
     </div>
     {state.messages.nextCursor && <button disabled={state.messages.phase === 'loading'} onClick={() => void replies.loadMessages(true)}>加载更早消息</button>}
-    <StrategyControls replies={replies} />
     <div className="ime-input"><label>表达方向<textarea aria-label="表达方向" maxLength={4096}
       value={direction} disabled={!enabled} placeholder="明确说明想表达什么，例如解释时间安排，不增加承诺"
       onChange={(event) => { setDirection(event.target.value); void replies.updateDirection(event.target.value); }} /></label>
+    </div>
+    <StrategyControls replies={replies} />
       <button className="generate-button" aria-label="生成候选" title="生成候选" disabled={!canGenerate}
-        onClick={() => void replies.generate()}><Icon name="sparkle" size={18} /></button></div>
+        onClick={() => void replies.generate()}><Icon name="sparkle" size={18} /><span>生成候选</span></button>
     <DirectionGenerationNotice state={state} />
     <p className="rewrite-privacy">本次回复使用选中消息、这位联系人的近期对话和相关资料。表达方向只作用于本次生成。</p>
     <div className="rewrite-retry">

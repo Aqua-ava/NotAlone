@@ -1,13 +1,14 @@
 import { ForegroundPanel, useForegroundState } from './ForegroundPanel';
 import { ScreenPermissionPanel, useScreenPermission } from './ScreenPermissionPanel';
 import { CandidateCopyControls } from './CandidateCopyControls';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Icon } from './icons';
 import { managerPages, type ManagerPage } from './pages';
 import { DesktopControls, HelperPinControl, ShortcutWarning } from './DesktopControls';
 import logo from './assets/logo.png';
 import './style.css';
+import './helper-layout.css';
 import { BackendBadge, BackendConnectionNote, useBackendState } from './backend-status';
 import { SetupPanel } from './SetupPanel';
 import { StartupReadiness, StartupSettings, useStartupState } from './StartupSettings';
@@ -31,6 +32,8 @@ export function App() {
   const permission = useScreenPermission();
   const contactSession = useContactSession();
   const replies = useReplySession();
+  const workspace = useRef<HTMLDivElement>(null);
+  useEffect(() => { workspace.current?.scrollTo({ top: 0 }); }, [replies.state.mode, replies.state.options.inputKind]);
   const foreground = useForegroundState(window.notalone.foreground, helper);
   const manualReplyInput = replies.state.mode === 'rewrite_draft';
   const [error, setError] = useState('');
@@ -50,8 +53,8 @@ export function App() {
       <button className="icon-button" aria-label="隐藏输入小窗" title="隐藏输入小窗"
         onClick={() => void operate(window.notalone.hideWindow)}><Icon name="close" size={16} /></button>
     </header>
-    <div className="ime-workspace">
-    <ForegroundPanel state={foreground} session={contactSession} permission={permission} manualRelease={startup.mode === 'managed'} manualInput={manualReplyInput} />
+    <div className="ime-workspace" ref={workspace}>
+    <div className="helper-context"><ForegroundPanel state={foreground} session={contactSession} permission={permission} manualRelease={startup.mode === 'managed'} manualInput={manualReplyInput} /></div>
     {replies.state.mode === 'rewrite_draft' ? <RewriteInput contacts={contactSession} replies={replies} />
       : replies.state.mode === 'initiate_conversation' ? <ProactiveReplyInput replies={replies} /> : <DirectedReplyInput replies={replies} />}
     {replies.state.messageNotice.phase === 'connected' && <>

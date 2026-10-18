@@ -1,3 +1,4 @@
+import { ensureReplySettingsOpen } from '../reply-settings-actions';
 import { expect, type Browser } from '@playwright/test';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
 import { withRewritePages } from './rewrite-acceptance';
@@ -25,6 +26,7 @@ export async function replyStrategySkills(browser: Browser, origin: string) {
       expect(initial.used_skill, '初次通用探索应没有实际Skill').toBeNull();
       expect((initial.skill_choices as Array<{ version_id: string }>).map((item) => item.version_id).sort())
         .toEqual([first.version_id, second.version_id].sort());
+      await ensureReplySettingsOpen(helper, '策略选择');
       const choice = helper.getByRole('combobox', { name: '策略选择', exact: true });
       await expect(choice.getByRole('option', { name: new RegExp(otherContact.name) })).toHaveCount(0);
       await expect(choice.getByRole('option', { name: new RegExp(otherOwner.name) })).toHaveCount(0);
@@ -134,6 +136,7 @@ export async function replyStrategySkillInvalidation(browser: Browser, origin: s
       else await helper.getByRole('textbox', { name: '主动目的', exact: true }).fill('想了解近况，尚未决定本次意愿。');
       await rewriteBackend.plan({ explore: {} });
       await helper.getByRole('button', { name: '帮我理清方向', exact: true }).click();
+      await ensureReplySettingsOpen(helper, '策略选择');
       const choice = helper.getByRole('combobox', { name: '策略选择', exact: true });
       await expect(choice.getByRole('option', { name: `${first.name} · 版本 1`, exact: true })).toHaveCount(1);
       await choice.selectOption(first.version_id);

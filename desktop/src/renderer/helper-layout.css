@@ -1,0 +1,108 @@
+/* 输入小窗：按任务分区，避免表单、理解结果和候选混排。 */
+.ime-pane { background: #f5f7f8; padding: 0; border: 0; color: #263b49; font-size: 14px; }
+.ime-pane .ime-header { height: auto; min-height: 68px; padding: 12px 20px; gap: 12px; flex-wrap: wrap; border-bottom: 1px solid #dfe6ea; background: #fff; flex-shrink: 0; }
+.ime-pane .ime-logo { width: 46px; }
+.ime-pane .ime-modes { gap: 4px; padding: 4px; border-radius: 10px; background: #f0f4f6; flex-wrap: wrap; }
+.ime-pane .ime-modes button { padding: 9px 12px; font-size: 13px; border-radius: 7px; }
+.ime-pane .ime-modes button.active { background: #fff; color: #245f91; box-shadow: 0 1px 5px #203d4a18; font-weight: 600; }
+.ime-pane .ime-workspace { padding: 20px max(20px, calc((100% - 1160px) / 2)); scroll-padding: 20px; }
+.ime-pane p { line-height: 1.7; overflow-wrap: anywhere; }
+.ime-pane button { transition: background .15s; }
+.ime-pane button:disabled { opacity: .55; }
+.ime-pane textarea, .ime-pane input:not([type=radio]):not([type=checkbox]), .ime-pane select { font: inherit; color: inherit; border: 1px solid #cbd7de; border-radius: 8px; background: #fff; padding: 10px 12px; max-width: 100%; min-width: 0; }
+.ime-pane textarea { width: 100%; min-height: 96px; resize: vertical; line-height: 1.65; }
+.ime-pane textarea:focus, .ime-pane input:focus, .ime-pane select:focus { outline: 2px solid #a6c9e1; outline-offset: 1px; }
+.ime-pane .helper-context { padding: 12px 16px; border: 1px solid #dce6ec; border-radius: 10px; background: #edf3f7; margin-bottom: 18px; font-size: 12px; color: #526c7c; }
+.helper-context p:first-child { font-weight: 600; color: #304f64; }
+.helper-context button { margin-top: 8px; text-decoration: underline; text-underline-offset: 3px; }
+.ime-pane .compose-panel, .ime-pane .reply-candidates { padding: 24px; border: 1px solid #dfe6ea; border-radius: 14px; background: #fff; margin-bottom: 20px; box-shadow: 0 3px 14px #213d4b04; }
+.compose-heading { margin-bottom: 20px; }
+.section-eyebrow { display: block; color: #537d99; font-size: 12px; font-weight: 600; margin-bottom: 6px; }
+.compose-heading h2 { margin: 0 0 6px; font-size: 21px; line-height: 1.4; }
+.compose-heading p { color: #71818c; font-size: 13px; }
+.compose-panel > label, .compose-panel .ime-input > label { display: grid; gap: 8px; font-size: 13px; font-weight: 500; flex: 1; min-width: 0; }
+.ime-pane .ime-input { padding: 0; gap: 12px; align-items: flex-end; margin: 12px 0 16px; }
+.ime-pane .generate-button, .ime-pane .compose-primary, .ime-pane .strategy-actions .primary { width: auto; height: auto; min-height: 42px; padding: 11px 18px; border-radius: 8px; background: #2f688c; color: #fff; display: inline-flex; align-items: center; justify-content: center; gap: 8px; white-space: nowrap; font-size: 13px; }
+.ime-pane .rewrite-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; padding: 0; font-size: 13px; }
+.ime-pane .rewrite-options label { display: grid; gap: 8px; align-items: start; }
+.ime-pane .rewrite-options label:has(textarea), .ime-pane .rewrite-options .rewrite-instruction { grid-column: 1 / -1; }
+.ime-pane .rewrite-options .rewrite-context { display: flex; align-items: center; align-self: center; }
+.ime-pane .rewrite-privacy { font-size: 12px; padding: 12px 0 0; color: #7a8892; }
+.ime-pane .rewrite-retry { min-height: 0; padding: 0; margin-top: 10px; flex-wrap: wrap; }
+.compose-settings, .strategy-settings, .strategy-details { border: 1px solid #e0e7eb; border-radius: 8px; background: #f8fafb; padding: 12px 14px; margin-top: 14px; }
+.ime-pane summary { color: #526e80; cursor: pointer; font-size: 13px; line-height: 1.6; }
+.ime-pane details[open] > summary { margin-bottom: 12px; }
+.ime-pane .reply-scene-input { padding: 10px 0; font-size: 13px; }
+.ime-pane .reply-scene-input p { font-size: 12px; margin-top: 6px; }
+.strategy-controls { margin: 24px 0; padding-top: 24px; border-top: 1px solid #e1e8ec; }
+.strategy-heading { margin-bottom: 16px; }
+.strategy-heading h3 { margin: 0 0 6px; font-size: 17px; }
+.strategy-heading p, .strategy-note, .strategy-meta { font-size: 12px; color: #75858f; }
+.strategy-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.strategy-field { display: grid; gap: 8px; min-width: 0; font-size: 13px; }
+.strategy-field > span { color: #7b8992; font-size: 12px; }
+.strategy-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 14px 0; }
+.ime-pane .strategy-controls button:not(.primary), .ime-pane .message-heading button, .ime-pane .candidate-message-group button, .ime-pane .rewrite-retry button { padding: 9px 13px; border: 1px solid #cbd9e1; border-radius: 8px; font-size: 13px; color: #346781; background: #fff; text-align: left; line-height: 1.5; }
+.ime-pane .strategy-controls button:hover:not(:disabled), .ime-pane .candidate-message-group button:hover:not(:disabled) { background: #edf5fa; }
+.strategy-result { margin-top: 20px; display: grid; gap: 16px; }
+.strategy-summary { padding: 18px; border-radius: 10px; background: #eff6fa; border: 1px solid #d9e8f1; }
+.strategy-summary h4, .strategy-question h4 { margin: 0 0 10px; font-size: 15px; }
+.strategy-summary p { font-size: 14px; }
+.strategy-details { margin-top: 0; }
+.strategy-details p, .strategy-details li, .strategy-evidence { color: #647984; font-size: 13px; white-space: pre-wrap; line-height: 1.8; }
+.strategy-current-step, .strategy-confirmed { padding: 12px 16px; border-left: 3px solid #6d9bb3; background: #f4f8fa; border-radius: 4px; }
+.strategy-current-step strong, .strategy-confirmed strong { display: block; margin-bottom: 5px; }
+.strategy-confirmed { background: #edf7f2; border-color: #60a583; }
+.strategy-direction-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 12px; }
+.strategy-direction-card { padding: 18px; border: 1px solid #dbe4e9; border-radius: 10px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.strategy-direction-card.is-recommended { border-color: #a6c8da; background: #f9fcfe; }
+.strategy-direction-header h4 { margin: 0; font-size: 15px; }
+.strategy-direction-card p { font-size: 13px; }
+.strategy-direction-card button { margin-top: auto; }
+.strategy-question { border: 1px solid #d5e4ec; border-radius: 10px; padding: 18px; background: #f7fafc; display: grid; gap: 12px; }
+.strategy-note { margin-top: 12px; }
+.strategy-status { padding: 12px; background: #f4f7f9; border-radius: 8px; }
+.ime-pane .message-heading { margin: 12px 0; font-size: 14px; }
+.ime-pane .reply-message-list { max-height: 230px; border-radius: 9px; background: #f9fbfc; }
+.ime-pane .reply-message { padding: 12px; font-size: 14px; }
+.ime-pane .reply-message:has(input:checked) { background: #eaf3f9; }
+.ime-pane .reply-message small { font-size: 12px; }
+.ime-pane .ime-status-line { margin: 12px 0; font-size: 12px; }
+.ime-workspace > p[role=status] { font-size: 12px; color: #71838f; }
+.ime-pane .reply-results-heading { margin-bottom: 18px; flex-wrap: wrap; }
+.ime-pane .reply-results-heading h2 { font-size: 19px; }
+.ime-pane .reply-results-heading span { font-size: 12px; }
+.ime-pane .reply-candidate-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 270px), 1fr)); gap: 16px; }
+.ime-pane .reply-candidate { padding: 18px; border: 1px solid #dbe4e9; border-radius: 10px; background: #fbfcfd; }
+.ime-pane .reply-candidate:has(input[type=radio]:checked) { border-color: #7faccc; box-shadow: 0 0 0 1px #7faccc; }
+.reply-candidate h3 { font-size: 16px; margin: 0 0 16px; }
+.ime-pane .candidate-message-group { gap: 12px; }
+.ime-pane .candidate-message-group > label { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; }
+.ime-pane .candidate-message-group > label:has(textarea) { display: grid; }
+.ime-pane .candidate-message-group legend, .ime-pane .candidate-message label { font-size: 12px; }
+.ime-pane .reply-candidate textarea { background: #fff; font-size: 14px; min-height: 120px; }
+.ime-pane .reply-choice { font-size: 15px; font-weight: 600; }
+.ime-pane .reply-generation-guidance { border-radius: 8px; padding: 12px 16px; margin: 12px 0 18px; }
+.ime-pane .ime-footer { min-height: 54px; height: auto; padding: 10px 20px; background: #fff; border-top: 1px solid #dfe6ea; font-size: 12px; flex-wrap: wrap; }
+.ime-pane .ime-footer button { font-size: 12px; padding: 8px 12px; }
+@media (max-width: 700px) {
+  .ime-pane .ime-header { padding: 10px 12px; gap: 8px; }
+  .ime-pane .ime-modes { order: 4; width: 100%; margin: 0; }
+  .ime-pane .ime-modes button { flex: 1; padding: 9px 4px; font-size: 12px; }
+  .ime-pane .ime-workspace { padding: 12px; }
+  .ime-pane .compose-panel, .ime-pane .reply-candidates { padding: 16px; }
+  .strategy-form-grid, .ime-pane .rewrite-options { grid-template-columns: minmax(0, 1fr); }
+  .ime-pane .ime-input { flex-wrap: wrap; }
+  .ime-pane .ime-input > label { flex-basis: 100%; }
+  .ime-pane .ime-input > textarea { flex-basis: 100%; }
+  .compose-heading h2 { font-size: 18px; }
+}
+.strategy-heading { display: flex; justify-content: space-between; align-items: center; gap: 14px; flex-wrap: wrap; }
+.strategy-heading h2 { font-size: 17px; margin: 0 0 6px; }
+.ime-pane .strategy-heading .primary { padding: 10px 16px; border-radius: 8px; color: #fff; background: #2f688c; font-size: 13px; }
+.strategy-summary h3, .strategy-question h3 { font-size: 15px; margin: 0 0 10px; }
+.strategy-current-step, .strategy-confirmed { margin-top: 12px; }
+.strategy-meta { margin-top: 12px; }
+.strategy-direction-header > span { display: inline-block; font-size: 11px; color: #4d7e97; margin-top: 6px; }
+.compose-submit { margin-top: 18px; }
+.ime-pane .ime-workspace { overflow-anchor: none; }

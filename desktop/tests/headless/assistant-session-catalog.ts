@@ -1,3 +1,4 @@
+import { ensureReplySettingsOpen } from '../reply-settings-actions';
 import { randomUUID } from 'node:crypto';
 import { expect, type Browser, type Page } from '@playwright/test';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
@@ -79,6 +80,7 @@ export async function assistantSessionCatalog(browser: Browser, origin: string) 
     await helper.getByRole('textbox', { name: '主动目的', exact: true }).fill('未提交的合成目的。');
     await helper.getByRole('textbox', { name: '纠正理解', exact: true }).fill('未提交的合成纠正。');
     await helper.getByRole('textbox', { name: '本次策略要求', exact: true }).fill('未提交的合成策略要求。');
+    await ensureReplySettingsOpen(helper, '策略选择');
     await helper.getByRole('combobox', { name: '策略选择', exact: true }).selectOption('disabled');
     await helper.getByRole('button', { name: '新开助手会话', exact: true }).click();
     await expect.poll(() => helper.evaluate(async (sid) => { const state = await window.notalone.replies.getState();
