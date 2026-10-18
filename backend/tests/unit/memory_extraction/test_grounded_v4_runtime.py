@@ -103,8 +103,8 @@ class GroundedV4RuntimeTest(unittest.TestCase):
                             "reference-uniqueness-v1 ", ProfileSubclass("reference-uniqueness-v1")):
                 with self.subTest(profile=profile), self.assertRaises(ValueError):
                     GroundedV4ExtractionRuntime(model=model, prompt_profile=profile)
-            for runtime in (GroundedExtractionRuntime, GroundedV3ExtractionRuntime):
-                with self.subTest(runtime=runtime.__name__), self.assertRaises(TypeError):
+            for runtime, error in ((GroundedExtractionRuntime, ValueError), (GroundedV3ExtractionRuntime, TypeError)):
+                with self.subTest(runtime=runtime.__name__), self.assertRaises(error):
                     runtime(model=model, prompt_profile="reference-uniqueness-v1")
         self.assertEqual(requests, [])
 
