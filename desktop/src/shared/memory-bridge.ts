@@ -1,3 +1,4 @@
+import type { PersonalBackground } from './personal-background';
 import type { ContactSelection } from './contact-session-bridge';
 
 export type MemoryCategory = 'common_fact' | 'preference' | 'taboo' | 'recent_state' | 'relationship_note';
@@ -124,13 +125,13 @@ export interface LayeredMemoryScenario {
   hint: string;
   systemGenerated: true;
   updatedAt: string;
-  paragraphs: { text: string; references: LayeredMemoryReference[] }[];
+  paragraphs: (PersonalBackground & { text: string; references: LayeredMemoryReference[] })[];
 }
 export interface LayeredMemoryProfile {
   versionId: string;
   systemGenerated: true;
   updatedAt: string;
-  entries: { text: string; temporalStatus: 'stable' | 'historical' | 'uncertain'; uncertainty: string; references: LayeredMemoryReference[] }[];
+  entries: (PersonalBackground & { text: string; temporalStatus: 'stable' | 'historical' | 'uncertain'; uncertainty: string; references: LayeredMemoryReference[] })[];
 }
 export interface LayeredMemoryQualityStage {
   status: 'unknown' | 'failed' | 'verified';
@@ -170,7 +171,7 @@ export interface LayeredMemory {
   updatedAt: string | null;
   errorCode: string | null;
   purpose: string;
-  budget: { maxMemories: number; maxScenarios: number; maxParagraphs: number; maxCharacters: number; maxModelCalls: number; maxProfileEntries?: number; modelCallsUsed: number; modelCallsRemaining: number };
+  budget: { maxMemories: number; maxBatchMemories?: number; maxScenarios: number; maxParagraphs: number; maxCharacters: number; maxModelCalls: number; maxProfileEntries?: number; modelCallsUsed: number; modelCallsRemaining: number };
   scenarios: LayeredMemoryScenario[];
   profile: LayeredMemoryProfile | null;
   correctionRevision: number;

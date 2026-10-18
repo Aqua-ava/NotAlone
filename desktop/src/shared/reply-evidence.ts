@@ -1,3 +1,4 @@
+import type { PersonalBackground } from './personal-background';
 import type { ReplyCandidateSelection } from './reply-bridge';
 import type { MemoryTiming } from './memory-bridge';
 import type { ReplyBasisChange } from './reply-basis-change';
@@ -50,10 +51,10 @@ export interface ReplyLayeredContext {
   settingsGeneration: number;
   organizationGeneration: number;
   profileVersionId: string | null;
-  profileEntries: Array<{ text: string; temporalStatus: 'stable' | 'historical' | 'uncertain'; uncertainty: string;
+  profileEntries: Array<PersonalBackground & { text: string; temporalStatus: 'stable' | 'historical' | 'uncertain'; uncertainty: string;
     references: Array<{ memoryId: string; revision: number; provenanceKind: 'manual_entry' | 'source_supported'; timing: MemoryTiming }> }>;
   directory: Array<{ scenarioId: string; versionId: string; title: string; hint: string; paragraphCount: number; paragraphRange?: [number, number] }>;
-  readPolicy: 'synthetic-contact-layered-v1' | 'synthetic-contact-layered-v2' | 'synthetic-scoped-layered-v3';
+  readPolicy: 'synthetic-contact-layered-v1' | 'synthetic-contact-layered-v2' | 'synthetic-scoped-layered-v3' | 'verified-items-scoped-layered-v1';
   scenarioReadBudget?: { callLimit: number; paragraphLimit: number; characterLimit: number } | null;
   budget: { profileEntries: number; directoryEntries: number; characters: number };
 }
@@ -65,7 +66,7 @@ export interface ReplyLayeredScenarioDocument {
   scenarioId: string; versionId: string; title: string; hint: string;
   organizationGeneration: number; paragraphRange: [number, number];
   systemGenerated: true; updatedAt: string;
-  paragraphs: Array<{ text: string; references: Array<{ memoryId: string; revision: number;
+  paragraphs: Array<PersonalBackground & { text: string; references: Array<{ memoryId: string; revision: number;
     provenanceKind?: 'manual_entry' | 'source_supported'; timing?: MemoryTiming }> }>;
 }
 interface ReplyLayeredScenarioReadBase {

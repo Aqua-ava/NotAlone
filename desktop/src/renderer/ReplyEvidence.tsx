@@ -1,3 +1,4 @@
+import { PersonalBackgroundDetails } from './PersonalBackgroundDetails';
 import { useState } from 'react';
 import type { ReplyCandidate, ReplyCandidateSelection } from '../shared/reply-bridge';
 import type { ReplyEvidenceState, ReplyLayeredContext, ReplyLayeredScenarioRead, ReplyLayeredStatus, ReplyRetrievalReceipt } from '../shared/reply-evidence';
@@ -48,7 +49,7 @@ function LayeredSummary({ context, status, receipts, owner = false }: { context?
     <p>背景版本：{context.profileVersionId ?? '本次未加入长期背景'}。</p>
     <p>独立预算上限：背景 {context.budget.profileEntries} 条，目录 {context.budget.directoryEntries} 项，{context.budget.characters} 字符。</p>
     {context.profileEntries.map((entry, index) => <article key={index}>
-      <p>{entry.text}</p><p>生成时状态：{temporalNames[entry.temporalStatus]}</p>
+      <PersonalBackgroundDetails item={entry} /><p>{entry.text}</p><p>生成时状态：{temporalNames[entry.temporalStatus]}</p>
       {entry.uncertainty && <p>不确定性：{entry.uncertainty}</p>}
       {entry.references.map((ref) => <div key={`${ref.memoryId}:${ref.revision}`}>
         <p>底层资料：{ref.memoryId}；版本：{ref.revision}；{ref.provenanceKind === 'manual_entry' ? '手动录入' : '来源支持'}。</p>
@@ -93,7 +94,8 @@ function ScenarioReadSummary({ receipts, owner = false }: { receipts?: ReplyLaye
         <p>冻结正文版本：{receipt.document.versionId}；整理版本：{receipt.document.organizationGeneration}；
           实际读取：{paragraphRangeLabel(receipt.document.paragraphRange)}。</p>
         {receipt.document.paragraphs.map((paragraph, paragraphIndex) => <div key={paragraphIndex}>
-          <p>第 {receipt.document.paragraphRange[0] + paragraphIndex + 1} 段：{paragraph.text}</p>
+          <PersonalBackgroundDetails item={paragraph} /><p>第 {receipt.document.paragraphRange[0] + paragraphIndex + 1} 段：{paragraph.text}</p>
+          {paragraph.uncertainty && <p>不确定性：{paragraph.uncertainty}</p>}
           {paragraph.references.map((ref) => <div key={`${ref.memoryId}:${ref.revision}`}>
             <p>底层资料：{ref.memoryId}；版本：{ref.revision}；
               {ref.provenanceKind === 'manual_entry' ? '手动录入' : ref.provenanceKind === 'source_supported' ? '来源支持' : '本次快照未记录来历'}。</p>

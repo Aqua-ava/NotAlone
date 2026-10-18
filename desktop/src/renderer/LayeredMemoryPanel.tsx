@@ -1,3 +1,4 @@
+import { PersonalBackgroundDetails } from './PersonalBackgroundDetails';
 import { useEffect, useState } from 'react';
 import type { LayeredMemory, LayeredMemoryManagementRequest, LayeredMemoryManagementOptions, LayeredMemoryQualityStage, MemoryOverviewState } from '../shared/memory-bridge';
 import { MemoryTemporalStatus } from './MemoryTemporalStatus';
@@ -83,7 +84,8 @@ export function LayeredMemoryPanel({ state, contactName, busy, read, manage, fac
         {!value.quality.synthetic && value.quality.organization.status !== 'verified' && <p>当前不开放真实资料整理；来源仍有效的已有资料可供查看。</p>}
       </section>}
       {(automatic || value.quality.synthetic || value.quality.organization.status === 'verified') && <div className="memory-section-note">
-          <p>本批上限：{value.budget.maxMemories} 条记忆、{value.budget.maxScenarios} 个主题、{value.budget.maxParagraphs} 段、{value.budget.maxCharacters} 字符。</p>
+          <p>本批上限：{value.budget.maxBatchMemories ?? value.budget.maxMemories} 条新记忆、{value.budget.maxScenarios} 个主题、{value.budget.maxParagraphs} 段、{value.budget.maxCharacters} 字符。</p>
+          {value.budget.maxBatchMemories !== undefined && <p>含旧主题依据的上下文最多 {value.budget.maxMemories} 条记忆。</p>}
           <p>当前工作模型调用授权上限：{value.budget.maxModelCalls} 次。</p>
           {value.budget.maxProfileEntries !== undefined && <p>长期背景最多 {value.budget.maxProfileEntries} 项。</p>}</div>}
       {(automatic || value.quality.synthetic || value.quality.organization.status === 'verified') && <><p>当前工作模型调用：累计已消耗 {value.budget.modelCallsUsed} 次 · 剩余 {value.budget.modelCallsRemaining} 次 · 上限 {value.budget.maxModelCalls} 次。</p>
@@ -113,7 +115,7 @@ export function LayeredMemoryPanel({ state, contactName, busy, read, manage, fac
         {value.profile ? <>
           <p className="memory-times">更新时间：{time(value.profile.updatedAt)}</p>
           {value.profile.entries.map((entry, index) => <div key={index}>
-            <p className="memory-text">{entry.text}</p>
+            <PersonalBackgroundDetails item={entry} /><p className="memory-text">{entry.text}</p>
             <p>时间状态：{({ stable: '稳定背景', historical: '历史背景', uncertain: '尚不确定' } as const)[entry.temporalStatus]}</p>
             {entry.uncertainty && <p>不确定性：{entry.uncertainty}</p>}
             <details className="memory-details"><summary>查看第 {index + 1} 项依据与时间</summary>
@@ -156,7 +158,8 @@ export function LayeredMemoryPanel({ state, contactName, busy, read, manage, fac
       <div className="memory-overview-entries">{value.scenarios.map((scenario) => <article className="memory-card" id={`layered-scenario-${scenario.versionId}`} key={scenario.versionId}>
         <div className="memory-card-labels"><h3>{scenario.title}</h3><b>系统整理</b></div>
         <p>{scenario.hint}</p><p className="memory-times">更新时间：{time(scenario.updatedAt)}</p>
-        {scenario.paragraphs.map((paragraph, index) => <div key={index}><p className="memory-text">{paragraph.text}</p>
+        {scenario.paragraphs.map((paragraph, index) => <div key={index}><PersonalBackgroundDetails item={paragraph} /><p className="memory-text">{paragraph.text}</p>
+          {paragraph.uncertainty && <p>不确定性：{paragraph.uncertainty}</p>}
           <details className="memory-details"><summary>查看第 {index + 1} 段依据与时间</summary>
             {paragraph.references.map((reference) => <div key={`${reference.memoryId}:${reference.revision}`}>
               <p>底层记忆：{reference.memoryId} · 版本 {reference.revision} · {reference.provenanceKind === 'manual_entry' ? '用户手动录入' : '来源支持'}</p>

@@ -1,3 +1,4 @@
+import { readPersonalBackground } from '../personal-background';
 import type { ReplyLayeredContext, ReplyLayeredScenarioDocument, ReplyLayeredScenarioRead, ReplyLayeredStatus } from '../../shared/reply-evidence';
 import { isUuid } from '../uuid';
 import { readCurrentStatus } from '../memory/current-status';
@@ -55,7 +56,7 @@ function scenarioReads(value: unknown, context: ReplyLayeredContext | null | und
     const paragraphs: ReplyLayeredScenarioDocument['paragraphs'] = document.paragraphs.map((paragraph: unknown) => {
       if (!record(paragraph) || !text(paragraph.text) || !paragraph.text.trim()
         || !Array.isArray(paragraph.references) || !paragraph.references.length || paragraph.references.length > 256) throw invalid();
-      return { text: paragraph.text, references: paragraph.references.map((ref: unknown) => {
+      return { ...readPersonalBackground(paragraph), text: paragraph.text, references: paragraph.references.map((ref: unknown) => {
         if (!record(ref) || !isUuid(ref.memory_id) || !integer(ref.revision) || ref.revision < 1
           || (ref.provenance_kind !== undefined && !['manual_entry', 'source_supported'].includes(ref.provenance_kind as string))) throw invalid();
         const result: ReplyLayeredScenarioDocument['paragraphs'][number]['references'][number] = {
@@ -95,7 +96,7 @@ function readScope(status: unknown, context: unknown, reads: unknown, scopeKind:
   if (layeredStatus !== 'loaded' || !record(context)
     || !((scopeKind === 'contact' && context.schema_version === 1 && context.read_policy === 'synthetic-contact-layered-v1')
       || (scopeKind === 'contact' && context.schema_version === 2 && context.read_policy === 'synthetic-contact-layered-v2')
-      || (context.schema_version === 3 && context.read_policy === 'synthetic-scoped-layered-v3')) || context.scope_kind !== scopeKind
+      || (context.schema_version === 3 && ['synthetic-scoped-layered-v3', 'verified-items-scoped-layered-v1'].includes(context.read_policy as string))) || context.scope_kind !== scopeKind
     || !integer(context.settings_generation) || !integer(context.organization_generation)
     || !(context.profile_version_id === null || isUuid(context.profile_version_id))
     || !record(context.budget)
@@ -129,7 +130,7 @@ function readScope(status: unknown, context: unknown, reads: unknown, scopeKind:
         timing: { recordedAt: ref.timing.recorded_at, sourceStartedAt: ref.timing.source_started_at,
           sourceEndedAt: ref.timing.source_ended_at, sourceTimeComplete: ref.timing.source_time_complete, ...readCurrentStatus(ref.timing) } };
     });
-    return { text: entry.text, temporalStatus: entry.temporal_status as 'stable' | 'historical' | 'uncertain', uncertainty: entry.uncertainty, references };
+    return { ...readPersonalBackground(entry, true), text: entry.text, temporalStatus: entry.temporal_status as 'stable' | 'historical' | 'uncertain', uncertainty: entry.uncertainty, references };
   });
   const directory: ReplyLayeredContext['directory'] = context.directory.map((entry: unknown) => {
     if (!record(entry) || !isUuid(entry.scenario_id) || !isUuid(entry.version_id) || !text(entry.title) || !text(entry.hint)

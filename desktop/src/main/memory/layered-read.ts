@@ -1,3 +1,4 @@
+import { readPersonalBackground } from '../personal-background';
 import type { LayeredMemory, LayeredMemoryProfile, LayeredMemoryQuality, LayeredMemoryQualityStage, LayeredMemoryReference, LayeredMemoryScenario } from '../../shared/memory-bridge';
 import { isUuid } from '../uuid';
 import { readCurrentStatus } from './current-status';
@@ -47,7 +48,7 @@ function scenario(value: unknown): LayeredMemoryScenario {
   const paragraphs = list(entry.paragraphs, (value) => {
     const paragraph = record(value), references = list(paragraph.references, reference);
     if (!references.length) throw invalid();
-    return { text: text(paragraph.text), references };
+    return { ...readPersonalBackground(paragraph), text: text(paragraph.text), references };
   });
   if (!paragraphs.length) throw invalid();
   return { scenarioId: identifier(entry.scenario_id), versionId: identifier(entry.version_id), title: text(entry.title, 200),
@@ -61,7 +62,7 @@ function profile(value: unknown): LayeredMemoryProfile | null {
     const item = record(value), references = list(item.references, reference);
     if (!references.length || typeof item.uncertainty !== 'string' || item.uncertainty.length > 240
       || (item.temporal_status === 'uncertain' && !item.uncertainty.trim())) throw invalid();
-    return { text: text(item.text), temporalStatus: enumeration(item.temporal_status, ['stable', 'historical', 'uncertain']),
+    return { ...readPersonalBackground(item, true), text: text(item.text), temporalStatus: enumeration(item.temporal_status, ['stable', 'historical', 'uncertain']),
       uncertainty: item.uncertainty, references };
   }, 100);
   if (!entries.length) throw invalid();
@@ -134,7 +135,8 @@ export function layeredMemory(value: unknown, contactId: string | null): Layered
     workId, workRevision, currentBatch, modelCallsUsed, modelCallLimit,
     eligibleCount, coveredCount, remainingCount, organizationGeneration: integer(entry.organization_generation), updatedAt: date(entry.updated_at),
     errorCode: entry.error_code === null ? null : text(entry.error_code, 200), purpose: text(entry.purpose, 2000),
-    budget: { maxMemories: integer(budget.max_memories), maxScenarios: integer(budget.max_scenarios), maxParagraphs: integer(budget.max_paragraphs),
+    budget: { maxMemories: integer(budget.max_memories),
+      ...(budget.max_batch_memories === undefined ? {} : { maxBatchMemories: integer(budget.max_batch_memories) }), maxScenarios: integer(budget.max_scenarios), maxParagraphs: integer(budget.max_paragraphs),
       maxCharacters: integer(budget.max_characters), maxModelCalls, modelCallsUsed, modelCallsRemaining,
       ...(budget.max_profile_entries === undefined ? {} : { maxProfileEntries: integer(budget.max_profile_entries) }) },
     correctionRevision: entry.correction_revision === undefined ? 0 : integer(entry.correction_revision),
