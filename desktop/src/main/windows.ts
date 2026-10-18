@@ -148,6 +148,7 @@ export class AppWindows {
       minHeight: manager ? 580 : 520,
       resizable: manager,
       frame: manager,
+      titleBarStyle: manager && process.platform === 'darwin' ? 'hiddenInset' : 'default',
       // 快捷键仅显示非激活面板；显式打开仍允许用户取得键盘焦点。
       type: !manager && process.platform === 'darwin' ? 'panel' : undefined,
       alwaysOnTop: !manager && this.helperPinned,
