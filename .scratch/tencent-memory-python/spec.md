@@ -1,6 +1,6 @@
 # 参考腾讯源码自行实现自动记忆
 Triage: ready-for-agent
-State: open
+State: resolved
 
 ## Problem Statement
 现有自动记忆链路与腾讯源码实现存在提取、混合召回、批量裁决、场景工具维护和画像触发差异。
@@ -36,3 +36,7 @@ State: open
 
 ## Further Notes
 2026-10-18 用户明确批准四项依赖拆分并要求直接完成，强调“参考源码，在我们这边自己实现”。此前 core-reuse 提案的运行时接入方向不适用本任务。
+
+## Answer
+
+四票已交付；实际行为、源码适配、真实模型和开发桌面证据及限制见 [验收记录](acceptance.md)。
