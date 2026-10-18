@@ -160,7 +160,7 @@ def _candidate_texts(candidate: dict[str, Any]) -> dict[str, str]:
 
 def _source_texts(payload: dict[str, Any]) -> dict[str, str]:
     # 只允许真实输入正文，不让候选自评、策略标签或模型理由充当用户依据。
-    texts = {f"/{key}": payload[key] for key in ("draft_text", "user_instruction")
+    texts = {f"/{key}": payload[key] for key in ("draft_text", "user_instruction", "current_text", "confirmed_direction")
              if isinstance(payload.get(key), str) and payload[key].strip()}
     for field in ("evidence", "expression_preferences"):
         texts.update({f"/{field}/{index}/text": item["text"]

@@ -32,6 +32,7 @@ from notalone.reply.store import (
     ValidatedReply,
 )
 from notalone.reply.errors import (
+    ReplyCandidatesRejectedError,
     ReplyContextError,
     ReplyError,
     ReplyInProgressError,
@@ -223,7 +224,8 @@ class ReplyGenerator:
                 called_at,
                 runtime_latency_ms,
             )
-            raise ReplyInvariantError("候选引用不属于本次上下文快照。")
+            # 不可信模型的错误引用属于受控输出拒绝，不升级为后端不变量故障。
+            raise ReplyCandidatesRejectedError("候选引用不属于本次上下文快照。")
         validated = ValidatedReply(
             candidates=runtime_result.candidates,
             used_skill=runtime_result.used_skill,
