@@ -17,6 +17,7 @@ CHECK_CATEGORIES = {
 EXPRESSION_CHANGES = ["expanded", "same_or_compressed", "not_applicable", "unknown"]
 CLAIM_LIMIT = 12
 CLAIM_SOURCE_LIMIT = 2
+REVIEW_PROTOCOL_VERSION = "reply-fidelity-claims-v2"
 
 
 def _string() -> dict[str, Any]:
@@ -29,7 +30,7 @@ def _record(properties: dict[str, Any]) -> dict[str, Any]:
             "properties": properties, "required": list(properties)}
 
 
-def _check_schema(name: str, categories: list[str]) -> dict[str, Any]:
+def _check_schema(categories: list[str]) -> dict[str, Any]:
     branches = []
     for status in ("supported", "unknown", "violation"):
         properties = {
@@ -43,8 +44,6 @@ def _check_schema(name: str, categories: list[str]) -> dict[str, Any]:
             })
         branches.append(_record(properties))
     common = {}
-    if name in {"facts", "commitments"}:
-        common["claim_ids"] = {"type": "array", "items": {"type": "integer"}}
     common["reason"] = _string()
     common["result"] = {"anyOf": branches}
     return _record(common)
@@ -72,12 +71,13 @@ def build_review_tool(candidate_count: int) -> dict[str, Any]:
         "name": "ReplyFidelityReview", "strict": True,
         "description": "逐候选五项独立比较后返回结果；不实具体说明必须拒绝，正文安全不能豁免。",
         "parameters": _record({
+            "protocol_version": {"type": "string", "enum": [REVIEW_PROTOCOL_VERSION]},
             "instruction_requires_expansion": {"type": "boolean"},
             "reviews": _record({f"candidate_{number}": _record({
                 "candidate_number": {"type": "integer", "enum": [number]},
                 "expression_change": {"type": "string", "enum": EXPRESSION_CHANGES},
                 "claims": {"type": "array", "items": _claim_schema()},
-                "checks": _record({name: _check_schema(name, categories)
+                "checks": _record({name: _check_schema(categories)
                                    for name, categories in CHECK_CATEGORIES.items()}),
             }) for number in range(1, candidate_count + 1)}),
         }),
@@ -99,7 +99,8 @@ def accepted_candidate_numbers(output: object, payload: dict[str, Any]) -> froze
     roles = review_source_roles(payload)
     if payload.get("review_sources", roles) != roles:
         raise ReplyInvariantError("可信复核来源角色发生变化。")
-    report = _object(output, {"instruction_requires_expansion", "reviews"})
+    report = _object(output, {"protocol_version", "instruction_requires_expansion", "reviews"})
+    _choice(report["protocol_version"], [REVIEW_PROTOCOL_VERSION])
     requires_expansion = report["instruction_requires_expansion"]
     if type(requires_expansion) is not bool:
         raise ReplyReviewInvalidError("候选复核展开要求无效。")
@@ -116,11 +117,12 @@ def accepted_candidate_numbers(output: object, payload: dict[str, Any]) -> froze
         change = _choice(row["expression_change"], EXPRESSION_CHANGES)
         checks = _object(row["checks"], set(CHECK_CATEGORIES))
         candidate = candidate_texts[number - 1]
-        claims, supported = _validate_claims(row["claims"], candidates[number - 1], targets[number - 1], roles, sources)
+        supported = _validate_claims(row["claims"], candidates[number - 1], targets[number - 1], roles, sources)
+        # 两项事实/承诺检查固定作用于上述完整命题；不接受供应商自选范围。
+        # 五项均完成结构校验后再合取，前项拒绝也不能隐藏坏后项。
         statuses = [_validate_check(name, checks[name], candidate,
                     sources if name in {"facts", "explanation"} else
-                    {path: text for path, text in sources.items() if not path.startswith(("/layered_context/", "/layered_scenario_reads/", "/owner_layered_context/", "/owner_layered_scenario_reads/"))},
-                    claims) for name in CHECK_CATEGORIES]
+                    {path: text for path, text in sources.items() if not path.startswith(("/layered_context/", "/layered_scenario_reads/", "/owner_layered_context/", "/owner_layered_scenario_reads/"))}) for name in CHECK_CATEGORIES]
         if (supported and all(status == "supported" for status in statuses) and change != "unknown"
                 and (not requires_expansion or change == "expanded")):
             accepted.add(number)
@@ -128,12 +130,10 @@ def accepted_candidate_numbers(output: object, payload: dict[str, Any]) -> froze
 
 
 def _validate_check(name: str, value: object, candidate: dict[str, str],
-                    sources: dict[str, str], claims: list[dict]) -> str:
+                    sources: dict[str, str]) -> str:
     if not isinstance(value, dict):
         raise ReplyReviewInvalidError("候选复核结构无效。")
     fields = {"reason", "result"}
-    if name in {"facts", "commitments"}:
-        fields.add("claim_ids")
     check = _object(value, fields)
     _text(check["reason"], 256)
     result = check["result"]
@@ -149,11 +149,6 @@ def _validate_check(name: str, value: object, candidate: dict[str, str],
         _choice(violation["category"], CHECK_CATEGORIES[name])
         _quote(violation, "candidate", allowed, 64)
         _quote(violation, "source", sources, 96)
-    if name in {"facts", "commitments"}:
-        identifiers = _array(check["claim_ids"], maximum=CLAIM_LIMIT, minimum=1)
-        if (any(type(identifier) is not int for identifier in identifiers)
-                or identifiers != [claim["claim_id"] for claim in claims]):
-            raise ReplyReviewInvalidError("事实与承诺必须核对同一完整命题集合。")
     return status
 
 
@@ -225,16 +220,16 @@ def _record_time(item: dict) -> str:
 
 
 def _validate_claims(value: object, candidate: dict[str, Any], target: dict,
-                     roles: dict[str, dict[str, str]], sources: dict[str, str]) -> tuple[list[dict], bool]:
+                     roles: dict[str, dict[str, str]], sources: dict[str, str]) -> bool:
     claims = _array(value, maximum=CLAIM_LIMIT, minimum=1)
-    cursor, supported, validated = 0, True, []
+    cursor, supported = 0, True
     for number, item in enumerate(claims, 1):
         claim = _object(item, {"claim_id", "text", "actor", "kind", "time_scope", "modality", "support"})
         text = _text(claim["text"], 65536)
         if (type(claim["claim_id"]) is not int or claim["claim_id"] != number
                 or candidate["text"][cursor:cursor + len(text)] != text):
             raise ReplyReviewInvalidError("正文命题必须按序完整覆盖，不得重叠或遗漏。")
-        start, cursor = cursor, cursor + len(text)
+        cursor += len(text)
         actor = _choice(claim["actor"], ["owner", "contact", "other", "unspecified"])
         kind = _choice(claim["kind"], ["state", "fact", "speech_act", "commitment", "unknown"])
         time = _choice(claim["time_scope"], ["current", "historical", "unspecified"])
@@ -261,10 +256,9 @@ def _validate_claims(value: object, candidate: dict[str, Any], target: dict,
             if kind == "commitment" and actor == "owner" and time != "historical":
                 permitted = permitted and all(roles[path]["role"] == "current_user_input" for path in paths)
         supported = supported and permitted
-        validated.append({**claim, "start": start, "end": cursor})
     if cursor != target["characters"]:
         raise ReplyReviewInvalidError("正文命题没有覆盖完整正文与分条消息。")
-    return validated, supported
+    return supported
 
 
 def _candidate_texts(candidate: dict[str, Any]) -> dict[str, str]:

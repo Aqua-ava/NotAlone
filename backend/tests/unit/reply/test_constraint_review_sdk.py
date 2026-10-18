@@ -113,8 +113,6 @@ class ConstraintReviewSdkTest(unittest.TestCase):
                 question = synthetic_claim("你最近怎么样？")
                 question["claim_id"] = 2
                 reviewed["reviews"]["candidate_1"]["claims"] = [state, question]
-                for name in ("facts", "commitments"):
-                    reviewed["reviews"]["candidate_1"]["checks"][name]["claim_ids"] = [1, 2]
                 runtime, requests, decisions = self.runtime(lambda request: sdk_response(request,
                     generation_arguments=generation, review_arguments=reviewed))
                 result = runtime.generate(context)
@@ -207,7 +205,10 @@ class ConstraintReviewSdkTest(unittest.TestCase):
     def test_single_candidate_wire_requires_its_exact_slot_and_places_status_inside_result(self):
         runtime, requests, _ = self.runtime(sdk_response)
         runtime.generate(self.context())
-        reviews = requests[1]["tools"][0]["function"]["parameters"]["properties"]["reviews"]
+        parameters = requests[1]["tools"][0]["function"]["parameters"]
+        self.assertEqual(parameters["properties"]["protocol_version"]["enum"], ["reply-fidelity-claims-v2"])
+        self.assertIn("protocol_version", parameters["required"])
+        reviews = parameters["properties"]["reviews"]
         self.assertEqual(reviews["type"], "object")
         self.assertEqual(set(reviews["required"]), {"candidate_1"})
         self.assertEqual(set(reviews["properties"]), {"candidate_1"})
@@ -216,7 +217,7 @@ class ConstraintReviewSdkTest(unittest.TestCase):
         checks = slot["properties"]["checks"]["properties"]
         for name, check in checks.items():
             self.assertEqual(set(check["properties"]),
-                             {"reason", "result"} | ({"claim_ids"} if name in {"facts", "commitments"} else set()))
+                             {"reason", "result"})
             branches = check["properties"]["result"]["anyOf"]
             self.assertEqual([branch["properties"]["status"]["enum"] for branch in branches],
                              [["supported"], ["unknown"], ["violation"]])
@@ -264,12 +265,12 @@ class ConstraintReviewSdkTest(unittest.TestCase):
         self.assert_dynamic_candidate_slots(["candidate_1", "candidate_2", "candidate_3"])
 
     def test_five_explicit_checks_deliver_the_original_candidate_without_a_global_verdict(self):
-        arguments = {"instruction_requires_expansion": False, "reviews": {"candidate_1": {
+        arguments = {"protocol_version": "reply-fidelity-claims-v2", "instruction_requires_expansion": False, "reviews": {"candidate_1": {
             "candidate_number": 1, "expression_change": "not_applicable", "checks": {
                 "intent": {"result": {"status": "supported"}, "reason": "保留今晚不参加的立场。"},
                 "instruction": {"result": {"status": "supported"}, "reason": "保留拒绝，未增加下次安排。"},
-                "facts": {"result": {"status": "supported"}, "reason": "没有新增经历或现状。", "claim_ids": [1]},
-                "commitments": {"result": {"status": "supported"}, "reason": "没有新增履约安排。", "claim_ids": [1]},
+                "facts": {"result": {"status": "supported"}, "reason": "没有新增经历或现状。"},
+                "commitments": {"result": {"status": "supported"}, "reason": "没有新增履约安排。"},
                 "explanation": {"result": {"status": "supported"}, "reason": "说明与正文中的拒绝一致。"},
             },
         }}}
@@ -305,7 +306,7 @@ class ConstraintReviewSdkTest(unittest.TestCase):
         checks = function["parameters"]["properties"]["reviews"]["properties"]["candidate_1"]["properties"]["checks"]
         for name, schema in checks["properties"].items():
             self.assertEqual(set(schema["properties"]),
-                             {"reason", "result"} | ({"claim_ids"} if name in {"facts", "commitments"} else set()))
+                             {"reason", "result"})
             branches = schema["properties"]["result"]["anyOf"]
             self.assertEqual(len(branches), 3)
             self.assertEqual([branch["properties"]["status"]["enum"] for branch in branches],
@@ -416,7 +417,7 @@ class ConstraintReviewSdkTest(unittest.TestCase):
         for fault in ("missing", "extra_verdict", "supported_with_violation", "unknown_with_violation",
                       "supported_with_null_violation", "unknown_with_null_violation", "legacy_empty_array",
                       "legacy_violation_array", "null_violation", "violation_array", "missing_violation",
-                      "violation_without_quote", "extra_violation_field", "missing_claim_ids",
+                      "violation_without_quote", "extra_violation_field", "legacy_claim_ids",
                       "non_shared_claim_ids", "legacy_flat_check", "legacy_flat_commitments",
                       "reason_in_result", "propositions_in_result", "duplicate_outer_status",
                       "fabricated_candidate", "fabricated_source", "candidate_as_source", "wrong_field",
@@ -471,8 +472,8 @@ class ConstraintReviewSdkTest(unittest.TestCase):
                             violation.pop("candidate_quote")
                         elif fault == "extra_violation_field":
                             violation["reason"] = "合成额外字段。"
-                        elif fault == "missing_claim_ids":
-                            row["checks"]["commitments"].pop("claim_ids")
+                        elif fault == "legacy_claim_ids":
+                            row["checks"]["commitments"]["claim_ids"] = [1]
                         elif fault == "non_shared_claim_ids":
                             row["checks"]["instruction"]["claim_ids"] = []
                         elif fault == "fabricated_candidate":
@@ -491,7 +492,7 @@ class ConstraintReviewSdkTest(unittest.TestCase):
                             if fault == "unrelated_proposition":
                                 row["claims"][0]["text"] = "祝活动顺利"
                             else:
-                                row["checks"]["commitments"]["claim_ids"] = []
+                                row["claims"] = []
                     return sdk_response(request, review_arguments=arguments)
                 ledger = RecordingLedger()
                 runtime, requests, _ = self.runtime(respond, ledger=ledger)
@@ -631,7 +632,6 @@ class ConstraintReviewSdkTest(unittest.TestCase):
                           for index, part in enumerate(parts, 1)]
                 for index, claim in enumerate(claims, 1): claim["claim_id"] = index
                 arguments["reviews"]["candidate_1"]["claims"] = claims
-                for name in ("facts", "commitments"): arguments["reviews"]["candidate_1"]["checks"][name]["claim_ids"] = [1, 2, 3]
             return sdk_response(request, generation_arguments=generation, review_arguments=arguments)
 
         ledger = RecordingLedger()

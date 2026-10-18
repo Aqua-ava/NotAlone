@@ -31,8 +31,6 @@ def synthetic_review(
     for index, (number, verdict) in enumerate(zip(numbers, verdicts)):
         checks = {name: {"reason": "合成脚本核对，仅验证流程。", "result": {"status": "supported"}}
                   for name in ("intent", "instruction", "facts", "commitments", "explanation")}
-        for name in ("facts", "commitments"):
-            checks[name]["claim_ids"] = [1]
         if verdict == "reject":
             checks["instruction"]["result"].update(status="violation", violation={
                 "category": "unmet_instruction", "candidate_path": "/text",
@@ -47,4 +45,5 @@ def synthetic_review(
             "candidate_number": number, "expression_change": changes[index], "checks": checks,
             "claims": [synthetic_claim(payload["candidates"][index]["text"])],
         }
-    return {"instruction_requires_expansion": requires_expansion, "reviews": reviews}
+    return {"protocol_version": "reply-fidelity-claims-v2",
+            "instruction_requires_expansion": requires_expansion, "reviews": reviews}

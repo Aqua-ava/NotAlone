@@ -109,7 +109,8 @@ explanation只定位basis/risk_notes，其他四项只定位text/messages。sour
 每个片段拆成归属与性质一致的命题，不把“本人有部分记忆”和“请你补充”合成一个optional。
 actor为owner/contact/other/unspecified，kind为state/fact/speech_act/commitment/unknown，
 time_scope为current/historical/unspecified，modality为optional/required/stated。
-facts和commitments的claim_ids都必须按序包含同一完整集合，不得遗漏另一项已识别的状态。
+facts和commitments始终分别核对全部claims；范围由程序固定，不输出claim_ids或自选子集。
+任何命题缺证都不能因其余命题安全而放行；五项检查各自独立，不能互相豁免。
 当前记忆/感觉/经历断言即使模糊也属于state，不因未写具体细节或加了可选提问变成speech_act。
 speech_act仅用于正在实施的问候、感谢、可选交流等，不携带缺证状态、经历或义务。
 state/fact/commitment的support须核对实际语义支持，不能只因话题或字词相近就supported；
@@ -117,7 +118,8 @@ state/fact/commitment的support须核对实际语义支持，不能只因话题�
 review_sources中的角色与时态由程序决定，不得自报或升级；联系人来信/历史和旧本人资料
 不能授权本人当前主观状态。当前用户明确声明可支持合法意译，不要求复制原句。
 错误的speech_act分类或错误的语义蕴含仍是复核错误，结构合法并不能证明这些判断正确。
-instruction_requires_expansion仅在顶层返回一次，reviews为按实际候选数量固定的对象，
+顶层protocol_version必须为reply-fidelity-claims-v2，instruction_requires_expansion仅返回一次；
+reviews为按实际候选数量固定的对象，
 candidate_1至candidate_n各含对应candidate_number、expression_change、claims、checks。
 编号与所在字段严格一致且每条恰好一次，不省略拒绝的候选。仅返回这一个工具。
 """

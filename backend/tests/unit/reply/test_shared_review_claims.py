@@ -26,9 +26,66 @@ class SharedReviewClaimsTest(unittest.TestCase):
         second = synthetic_claim(payload["candidates"][0]["text"][len(state):])
         second["claim_id"] = 2
         report["reviews"]["candidate_1"]["claims"] = [first, second]
-        for name in ("facts", "commitments"):
-            report["reviews"]["candidate_1"]["checks"][name]["claim_ids"] = [1, 2]
         return report
+
+    def test_new_version_without_redundant_check_ids_accepts_complete_claims(self):
+        payload = self.payload("那段往事我还有印象。你最近怎么样？", "告诉对方我记得这段往事，继续问他的近况。")
+        report = self.certificate(payload, quote="我记得这段往事", state="那段往事我还有印象。")
+        report["protocol_version"] = "reply-fidelity-claims-v2"
+        for check in report["reviews"]["candidate_1"]["checks"].values():
+            check.pop("claim_ids", None)
+        self.assertEqual(accepted_candidate_numbers(report, payload), frozenset({1}))
+
+    def test_old_protocol_arrays_and_subset_scope_fields_are_rejected(self):
+        payload = self.payload("谢谢你。")
+        for fault in ("missing_version", "old_version", "old_complete_ids", "subset_ids", "subset_scope"):
+            with self.subTest(fault=fault):
+                report = synthetic_review(payload)
+                if fault == "missing_version": report.pop("protocol_version")
+                elif fault == "old_version": report["protocol_version"] = "reply-fidelity-claims-v1"
+                else:
+                    field = "scope" if fault == "subset_scope" else "claim_ids"
+                    report["reviews"]["candidate_1"]["checks"]["facts"][field] = [1] if fault == "old_complete_ids" else []
+                with self.assertRaises(ReplyReviewInvalidError): accepted_candidate_numbers(report, payload)
+
+    def test_complete_claim_support_and_each_independent_check_are_conjoined(self):
+        payload = self.payload("那段往事我还有印象。你最近怎么样？", "告诉对方我记得这段往事，继续问他的近况。")
+        for index in (0, 1):
+            with self.subTest(unknown_claim=index):
+                report = self.certificate(payload, quote="我记得这段往事", state="那段往事我还有印象。")
+                report["reviews"]["candidate_1"]["claims"][index]["support"]["status"] = "unknown"
+                self.assertEqual(accepted_candidate_numbers(report, payload), frozenset())
+        categories = {"intent": "changed_intent", "instruction": "unmet_instruction", "facts": "unsupported_fact",
+                      "commitments": "added_obligation", "explanation": "inaccurate_explanation"}
+        for name, category in categories.items():
+            for status in ("unknown", "violation"):
+                with self.subTest(check=name, status=status):
+                    report = self.certificate(payload, quote="我记得这段往事", state="那段往事我还有印象。")
+                    result = {"status": status}
+                    if status == "violation":
+                        result["violation"] = {"category": category,
+                            "candidate_path": "/basis" if name == "explanation" else "/text",
+                            "candidate_quote": "按本次输入" if name == "explanation" else "那段往事我还有印象",
+                            "source_path": "/confirmed_direction", "source_quote": "我记得这段往事"}
+                    report["reviews"]["candidate_1"]["checks"][name]["result"] = result
+                    self.assertEqual(accepted_candidate_numbers(report, payload), frozenset())
+
+    def test_rejection_does_not_skip_later_claim_check_or_candidate_validation(self):
+        for fault in ("later_claim", "later_check", "later_candidate"):
+            with self.subTest(fault=fault):
+                payload = self.payload()
+                report = self.certificate(payload)
+                row = report["reviews"]["candidate_1"]
+                row["claims"][0]["support"]["status"] = "unknown"
+                if fault == "later_claim": row["claims"][1]["extra"] = True
+                elif fault == "later_check":
+                    row["checks"]["intent"]["result"]["status"] = "unknown"
+                    row["checks"]["explanation"].pop("reason")
+                else:
+                    payload["candidates"].append({**payload["candidates"][0], "candidate_number": 2})
+                    report["reviews"]["candidate_2"] = {**copy.deepcopy(row), "candidate_number": 2}
+                    report["reviews"]["candidate_2"]["claims"][1]["extra"] = True
+                with self.assertRaises(ReplyReviewInvalidError): accepted_candidate_numbers(report, payload)
 
     def test_half_clause_omission_overlap_and_cross_check_bypass_are_invalid(self):
         for fault in ("missing_tail", "missing_head", "duplicate", "facts_skips_state", "commitments_skips_state"):

@@ -25,8 +25,6 @@ class SharedReviewClaimsHttpTest(FidelityHttpFixture, unittest.TestCase):
             question["claim_id"] = 2
             row = report["reviews"]["candidate_1"]
             row["claims"] = [state] if fault == "missing_tail" else [state, question]
-            for name in ("facts", "commitments"):
-                row["checks"][name]["claim_ids"] = list(range(1, len(row["claims"]) + 1))
             return report
 
         self.reply_model.review_transform = certificate
