@@ -496,6 +496,28 @@ def _budget(value):
     return LayeredReplyBudget(**payload)
 
 
+def controlled_layered_memory(database_url):
+    """公开CLI的受控只读装配；适配器满足deadline合同并拒绝任何整理调用。"""
+    from notalone.application.layered_memory_service import LayeredMemoryService
+    from notalone.memory.organization_deadline import SYNTHETIC_ORGANIZATION_TIMEOUT
+    from notalone.persistence.layered_memory import PostgresLayeredMemoryStore
+
+    class DisabledProposal:
+        timeout_contract = SYNTHETIC_ORGANIZATION_TIMEOUT
+
+        def propose(self, *, deadline, **kwargs):
+            raise ReplyComparisonBlocked("organization_not_authorized")
+
+    class DisabledVerification:
+        timeout_contract = SYNTHETIC_ORGANIZATION_TIMEOUT
+
+        def verify(self, *, deadline, **kwargs):
+            raise ReplyComparisonBlocked("organization_not_authorized")
+
+    return LayeredMemoryService(PostgresLayeredMemoryStore(database_url),
+        proposer=DisabledProposal(), verifier=DisabledVerification(), synthetic=True)
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input-package", type=Path, required=True)
@@ -545,24 +567,7 @@ def main(argv=None) -> int:
                 layered = None
                 if args.controlled_layered_installation:
                     _validate_test_database(database_url, args.expected_test_database)
-                    # 两个适配器只满足已有合成接缝；任何整理调用均明确拒绝。
-                    from notalone.application.layered_memory_service import LayeredMemoryService
-                    from notalone.memory.organization_deadline import SYNTHETIC_ORGANIZATION_TIMEOUT
-                    from notalone.persistence.layered_memory import PostgresLayeredMemoryStore
-                    class DisabledProposal:
-                        timeout_contract = SYNTHETIC_ORGANIZATION_TIMEOUT
-
-                        def propose(self, **kwargs):
-                            raise ReplyComparisonBlocked("organization_not_authorized")
-
-                    class DisabledVerification:
-                        timeout_contract = SYNTHETIC_ORGANIZATION_TIMEOUT
-
-                        def verify(self, **kwargs):
-                            raise ReplyComparisonBlocked("organization_not_authorized")
-
-                    layered = LayeredMemoryService(PostgresLayeredMemoryStore(database_url),
-                        proposer=DisabledProposal(), verifier=DisabledVerification(), synthetic=True)
+                    layered = controlled_layered_memory(database_url)
                     capture.bundle["installation_kind"] = "controlled_synthetic"
                     capture.flush()
                 adapter = InstalledReplyHttpAdapter.from_installed_database(database_url=database_url,

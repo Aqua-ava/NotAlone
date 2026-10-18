@@ -21,6 +21,16 @@ from notalone.experiments.reply_comparison import (
 
 
 class ReplyComparisonCaptureTest(unittest.TestCase):
+    def test_public_controlled_constructor_accepts_explicit_deadline_without_connecting(self):
+        from notalone.application.layered_memory_service import LayeredMemoryService
+        from notalone.experiments.reply_comparison import controlled_layered_memory
+        # 此纯回归只隔离已由PG用例验证的_test身份探测，保留真实服务/Adapter合同构造。
+        with patch('notalone.persistence.layered_memory.PostgresLayeredMemoryStore.require_synthetic_database'), \
+                patch('psycopg.connect', side_effect=AssertionError('纯构造回归不得连接数据库')), \
+                patch.object(socket.socket, 'connect', side_effect=AssertionError('构造不得连接模型')):
+            service = controlled_layered_memory('host=/not-used dbname=controlled_regression_test')
+        self.assertIsInstance(service, LayeredMemoryService)
+
     def test_persisted_installation_accepts_skipped_large_entry_and_directory_only(self):
         from notalone.experiments.reply_comparison import validate_persisted_installation
         owner, contact, profile, scenario, version = [str(uuid4()) for _ in range(5)]
