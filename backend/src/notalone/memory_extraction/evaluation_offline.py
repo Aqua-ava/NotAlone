@@ -60,6 +60,7 @@ from .evaluation_provider_contract import (
     SEMANTIC4_PROMPT_PROFILE, validate_semantic4_windows,
     PUBLIC_QUALITY_PLANS, validate_extraction_prompt_profile, REFERENCE16_PRO_PLANS,
     CORE_PROFILE_PLAN, ECNUEvaluationContract,
+    REFERENCE16_PRO_RETENTION_PLAN, REFERENCE16_RETENTION_V_PROFILE,
 )
 
 _BASE_URL = "https://evaluation.invalid/v1"
@@ -608,7 +609,9 @@ def _run_evaluation_batch(
     reference21_v4 = execution_plan in REFERENCE21_PLANS
     public_quality = execution_plan in PUBLIC_QUALITY_PLANS
     core = execution_plan == CORE_PROFILE_PLAN
-    prompt_profile = CORE_SOURCE_FIDELITY_PROFILE if core else SEMANTIC4_PROMPT_PROFILE if public_quality else "default"
+    prompt_profile = (CORE_SOURCE_FIDELITY_PROFILE if core
+                      else REFERENCE16_RETENTION_V_PROFILE if execution_plan == REFERENCE16_PRO_RETENTION_PLAN
+                      else SEMANTIC4_PROMPT_PROFILE if public_quality else "default")
     validate_extraction_prompt_profile(execution_plan, extraction_prompt_profile)
     if store.extraction_prompt_profile != extraction_prompt_profile:
         raise EvaluationBudgetAbort("evaluation_frozen_extraction_prompt_profile_mismatch")
@@ -811,6 +814,7 @@ def _run_evaluation_batch(
                         **({"reference_version": store.reference_version}
                            if store.reference_version == "source-fidelity-v2" or bounded or core else {}),
                         **({"execution_plan": execution_plan} if pro16 else {}),
+                        **({"verification_prompt_profile": prompt_profile} if execution_plan == REFERENCE16_PRO_RETENTION_PLAN else {}),
                         **({"execution_plan": execution_plan, "formal_task_execution": formal_execution} if bounded else {}),
                         **({"execution_plan": execution_plan, "verification_prompt_profile": prompt_profile} if core else {}),
                         "extraction_program": tuple(

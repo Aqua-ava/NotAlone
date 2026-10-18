@@ -21,6 +21,8 @@ from .evaluation_provider_contract import (
     REFERENCE16_PRO_PLAN, REFERENCE16_PRO_MODE, REFERENCE16_PRO_STAGE, REFERENCE16_PRO_KIND,
     REFERENCE16_PRO_TEACHING_PLAN, REFERENCE16_PRO_TEACHING_MODE, REFERENCE16_PRO_TEACHING_STAGE,
     REFERENCE16_PRO_TEACHING_KIND, REFERENCE16_TEACHING_E_PROFILE,
+    REFERENCE16_PRO_RETENTION_PLAN, REFERENCE16_PRO_RETENTION_MODE, REFERENCE16_PRO_RETENTION_STAGE,
+    REFERENCE16_PRO_RETENTION_KIND, REFERENCE16_RETENTION_V_PROFILE,
 )
 from .evaluation_bounded_cases import BOUNDED_RUNTIME_PLAN
 
@@ -40,6 +42,9 @@ class _FixedPublicControl:
 
 
 _PROFILES = {
+    REFERENCE16_PRO_RETENTION_KIND: _FixedPublicControl(32, 14400, 16, 18,
+        REFERENCE16_PRO_RETENTION_MODE, REFERENCE16_PRO_RETENTION_STAGE,
+        tuple(range(16)), 2048, REFERENCE16_PRO_RETENTION_PLAN, "source-fidelity-v2"),
     REFERENCE16_PRO_TEACHING_KIND: _FixedPublicControl(32, 14400, 16, 18,
         REFERENCE16_PRO_TEACHING_MODE, REFERENCE16_PRO_TEACHING_STAGE,
         tuple(range(16)), 2048, REFERENCE16_PRO_TEACHING_PLAN, "source-fidelity-v2"),
@@ -150,7 +155,7 @@ def _launch_owned_public_worker(*, frozen: dict, script: Path, root: Path, helpe
                 and type(value.get("request_limit")) is int and value["request_limit"] == request_limit
                 and type(value.get("reserved_requests")) is int
                 and 0 <= value["reserved_requests"] <= request_limit)
-    closed = (closed_receipt(budget) and (kind not in {FULL140_E2_KIND, MIXED_KIND, REFERENCE21_V4_KIND, SEMANTIC4_KIND, UNIQUENESS_KIND, BOUNDED_RUNTIME_KIND, REFERENCE16_PRO_KIND, REFERENCE16_PRO_TEACHING_KIND} or (
+    closed = (closed_receipt(budget) and (kind not in {FULL140_E2_KIND, MIXED_KIND, REFERENCE21_V4_KIND, SEMANTIC4_KIND, UNIQUENESS_KIND, BOUNDED_RUNTIME_KIND, REFERENCE16_PRO_KIND, REFERENCE16_PRO_TEACHING_KIND, REFERENCE16_PRO_RETENTION_KIND} or (
         type(result.get("worker_pid")) is int and result["worker_pid"] == child.pid
         and result.get("execution_plan") == profile.execution_plan))) or (type(deadline.get("worker_pid")) is int
                                        and deadline["worker_pid"] == child.pid and closed_receipt(deadline)
@@ -184,9 +189,9 @@ def _launch_owned_public_worker(*, frozen: dict, script: Path, root: Path, helpe
                "planned_windows": planned_windows, "required_claims": required_claims,
                "case_statuses": [{**selection, "status": status} for selection, status in zip(frozen["selection"], states)],
                "quality_certified": False, "automatic_successor": False}
-    if kind in {BOUNDED_RUNTIME_KIND, REFERENCE16_PRO_KIND, REFERENCE16_PRO_TEACHING_KIND}:
+    if kind in {BOUNDED_RUNTIME_KIND, REFERENCE16_PRO_KIND, REFERENCE16_PRO_TEACHING_KIND, REFERENCE16_PRO_RETENTION_KIND}:
         receipt["execution_plan"] = profile.execution_plan
-    if kind in {REFERENCE16_PRO_KIND, REFERENCE16_PRO_TEACHING_KIND}:
+    if kind in {REFERENCE16_PRO_KIND, REFERENCE16_PRO_TEACHING_KIND, REFERENCE16_PRO_RETENTION_KIND}:
         receipt["optional_claims"] = 1
     helper.publish(directory / "finish.json", receipt)
     return receipt
@@ -224,13 +229,16 @@ def _verify_owned_public_claim(*, frozen: dict, helper: Any, kind: str,
                 or config.get("tool_choice") != {
                     "extraction": {"mode": "omitted", "name": "GroundedMemoryLabels" if kind == FULL140_E2_KIND else "GroundedMemoryLabelsV4"},
                     "verification": {"mode": "forced", "name": "SourceVerificationOutput"}})
-            or kind in {REFERENCE16_PRO_KIND, REFERENCE16_PRO_TEACHING_KIND} and (
+            or kind in {REFERENCE16_PRO_KIND, REFERENCE16_PRO_TEACHING_KIND, REFERENCE16_PRO_RETENTION_KIND} and (
                 config.get("provider_profile") != "deepseek-pro-reference16-v1"
                 or config.get("request_model") != "deepseek-v4-pro"
                 or type(config.get("request_contract_version")) is not int or config["request_contract_version"] != 4
                 or type(config.get("max_tokens")) is not int or config["max_tokens"] != 8192
                 or config.get("thinking") != {"type": "disabled"} or config.get("reasoning_effort") != "none"
-                or {"phase_request_version", "phase_request_policy", "verification_prompt_profile"} & set(config)
+                or {"phase_request_version", "phase_request_policy"} & set(config)
+                or ((config.get("verification_prompt_profile") != REFERENCE16_RETENTION_V_PROFILE
+                     or frozen.get("fixed", {}).get("prompt_profile") != REFERENCE16_RETENTION_V_PROFILE)
+                    if kind == REFERENCE16_PRO_RETENTION_KIND else "verification_prompt_profile" in config)
                 or config.get("extraction_mode") != "grounded-v2" or config.get("verification_mode") != "legacy-v4"
                 or config.get("base_url") != "https://api.deepseek.com"
                 or config.get("endpoint") != "https://api.deepseek.com/chat/completions"
@@ -252,8 +260,8 @@ def _verify_owned_public_claim(*, frozen: dict, helper: Any, kind: str,
                 or config.get("verification_prompt_sha256") != frozen["verification_prompt_sha256"]
                 or config.get("verification_schema_sha256") != frozen["verification_schema_sha256"])
             or kind == UNIQUENESS_KIND and config.get("extraction_prompt_profile") != UNIQUENESS_E_PROFILE
-            or kind == REFERENCE16_PRO_TEACHING_KIND and config.get("extraction_prompt_profile") != REFERENCE16_TEACHING_E_PROFILE
-            or kind not in {UNIQUENESS_KIND, BOUNDED_RUNTIME_KIND, REFERENCE16_PRO_TEACHING_KIND} and "extraction_prompt_profile" in config
+            or kind in {REFERENCE16_PRO_TEACHING_KIND, REFERENCE16_PRO_RETENTION_KIND} and config.get("extraction_prompt_profile") != REFERENCE16_TEACHING_E_PROFILE
+            or kind not in {UNIQUENESS_KIND, BOUNDED_RUNTIME_KIND, REFERENCE16_PRO_TEACHING_KIND, REFERENCE16_PRO_RETENTION_KIND} and "extraction_prompt_profile" in config
             or config.get("extraction_window_contracts") != frozen["extraction_window_contracts"]):
         raise ValueError(kind + "_claim_manifest_changed")
     if kind == BOUNDED_RUNTIME_KIND:

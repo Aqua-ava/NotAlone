@@ -92,7 +92,7 @@ def validate_extraction_prompt_profile(execution_plan: str, prompt_profile: str)
     """新提示须与唯一新身份绑定，旧身份只允许原默认。"""
     expected = (BOUNDED_DEPENDENCY_PROMPT_PROFILE if execution_plan == BOUNDED_RUNTIME_PLAN
                 else CORE_CURRENT_STATE_PROFILE if execution_plan == CORE_PROFILE_PLAN
-                else REFERENCE16_TEACHING_E_PROFILE if execution_plan == REFERENCE16_PRO_TEACHING_PLAN
+                else REFERENCE16_TEACHING_E_PROFILE if execution_plan in (REFERENCE16_PRO_TEACHING_PLAN, REFERENCE16_PRO_RETENTION_PLAN)
                 else UNIQUENESS_E_PROFILE if execution_plan == UNIQUENESS_PLAN else "default")
     if type(prompt_profile) is not str or prompt_profile != expected:
         raise EvaluationBudgetAbort("evaluation_extraction_prompt_profile_mismatch")
@@ -130,7 +130,19 @@ REFERENCE16_PRO_TEACHING_MODE = "deepseek_bounded_reference16_pro_teaching"
 REFERENCE16_PRO_TEACHING_STAGE = "reference16-pro-teaching"
 REFERENCE16_PRO_TEACHING_KIND = "reference16-pro-teaching"
 REFERENCE16_TEACHING_E_PROFILE = "reference-kind-teaching-v1"
-REFERENCE16_PRO_PLANS = frozenset({REFERENCE16_PRO_PLAN, REFERENCE16_PRO_TEACHING_PLAN})
+REFERENCE16_PRO_RETENTION_PLAN = "reference16-pro-retention-v1"
+REFERENCE16_PRO_RETENTION_MODE = "deepseek_bounded_reference16_pro_retention"
+REFERENCE16_PRO_RETENTION_STAGE = "reference16-pro-retention"
+REFERENCE16_PRO_RETENTION_KIND = "reference16-pro-retention"
+REFERENCE16_RETENTION_V_PROFILE = "reference-retention-v1"
+REFERENCE16_PRO_PLANS = frozenset({REFERENCE16_PRO_PLAN, REFERENCE16_PRO_TEACHING_PLAN, REFERENCE16_PRO_RETENTION_PLAN})
+
+
+def validate_verification_prompt_profile(execution_plan: str, prompt_profile: str) -> None:
+    """新V提示仅与保留计划配对；旧入口继续内部选择原有提示。"""
+    expected = REFERENCE16_RETENTION_V_PROFILE if execution_plan == REFERENCE16_PRO_RETENTION_PLAN else "default"
+    if type(prompt_profile) is not str or prompt_profile != expected:
+        raise EvaluationBudgetAbort("evaluation_verification_prompt_profile_mismatch")
 
 
 class EvaluationProviderProfile(StrEnum):
@@ -228,11 +240,14 @@ class ECNUEvaluationContract:
         extraction_mode: EvaluationExtractionMode | str = EvaluationExtractionMode.LEGACY_E14,
         execution_plan: str = "original",
         extraction_prompt_profile: str = "default",
+        verification_prompt_profile: str = "default",
     ):
         validate_evaluation_policy(verification_tool_choice, response_identity_policy)
         validate_extraction_prompt_profile(execution_plan, extraction_prompt_profile)
         self._extraction_prompt_profile = extraction_prompt_profile
         self._execution_plan = execution_plan
+        validate_verification_prompt_profile(execution_plan, verification_prompt_profile)
+        self._verification_prompt_profile = verification_prompt_profile
         try:
             self._extraction_mode = EvaluationExtractionMode(extraction_mode)
         except (TypeError, ValueError):
@@ -387,6 +402,12 @@ class ECNUEvaluationContract:
             if (expected_payload["messages"][0]["content"] != prompt
                     or expected_payload["tools"] != [convert_to_openai_tool(schema)]):
                 raise EvaluationBudgetAbort("evaluation_core_verification_contract_changed")
+        if (self._verification_prompt_profile == REFERENCE16_RETENTION_V_PROFILE
+                and expected_payload["tools"][0]["function"]["name"] == "SourceVerificationOutput"):
+            from .verification_adapters import source_verification_contract
+            prompt, _ = source_verification_contract("legacy-v4", prompt_profile=self._verification_prompt_profile)
+            if expected_payload["messages"][0]["content"] != prompt:
+                raise EvaluationBudgetAbort("evaluation_verification_prompt_changed")
         token = self._expected.set(_canonical(expected_payload))
         try:
             yield

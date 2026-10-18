@@ -346,19 +346,36 @@ CORE_SOURCE_FIDELITY_PROMPT = """
 """
 
 
+REFERENCE_RETENTION_PROFILE = "reference-retention-v1"
+REFERENCE_RETENTION_PROMPT = PUBLIC_AUTHOR_QUOTE_PROMPT + """
+整周与周末期间沿现有检索约定核验，不把检索边界误读为事件实际开始或结束时刻。
+锚点仍是证据occurred_at自身时区的自然日，周以当地周一零点开始；本周／这周取本周一
+零点至下周一零点，下周取下周一零点至再下一周一零点；周末／本周末／这周末取本周六
+零点至下周一零点，下周末取下周六零点至再下一周一零点，均为半开检索区间。
+仅当来源明确给出对应完整期间、时区与锚点已知且两槽吻合时，不能只因原话未给具体
+钟点而判uncertain/time；它不证明整个期间持续执行，也不改变原有计划或完成阶段。
+缺失时区或锚点、多个未消歧期间、否定／取消／改期、带“之前／之后／左右”等限定时，
+不能删掉限定套用上述规则；错日、时区偏移、期间缩窄或扩大仍按time核验。
+作者引句与检索边界都不能替代完整来源核验；人物角色、所有权、否定、数量、语用标签
+或来源链真实有误时仍拒绝，原有未知必须原样保留，不能把歧义消成确定事实。
+"""
+
+
 def source_verification_contract(
     mode: SourceVerificationMode | str, *, prompt_profile: str = DEFAULT_PROMPT_PROFILE,
 ) -> tuple[str, dict[str, Any]]:
     """冻结和实际适配器共用封闭合同；新提示只配对原严格四槽。"""
     selected = SourceVerificationMode(mode)
     if type(prompt_profile) is not str or prompt_profile not in {
-        DEFAULT_PROMPT_PROFILE, PUBLIC_AUTHOR_QUOTE_PROFILE, CORE_SOURCE_FIDELITY_PROFILE,
+        DEFAULT_PROMPT_PROFILE, PUBLIC_AUTHOR_QUOTE_PROFILE, CORE_SOURCE_FIDELITY_PROFILE, REFERENCE_RETENTION_PROFILE,
     }:
         raise ValueError("来源核验提示profile未受支持。")
     if prompt_profile == PUBLIC_AUTHOR_QUOTE_PROFILE and selected is not SourceVerificationMode.LEGACY_V4:
         raise ValueError("公开作者引句提示仅用于原四槽核验。")
     if prompt_profile == CORE_SOURCE_FIDELITY_PROFILE and selected is not SourceVerificationMode.LEGACY_V4:
         raise ValueError("核心来源保真提示仅用于原四槽核验。")
+    if prompt_profile == REFERENCE_RETENTION_PROFILE and selected is not SourceVerificationMode.LEGACY_V4:
+        raise ValueError("指代保真提示仅用于原四槽核验。")
     if selected is SourceVerificationMode.NULLABLE_PROOF_V3:
         return SOURCE_VERIFICATION_SYSTEM_PROMPT + SOURCE_BOUNDED_RUNTIME_PROOF_PROMPT, SOURCE_VERIFICATION_PROOF_V3_SCHEMA
     if selected is SourceVerificationMode.NULLABLE_PROOF_V2:
@@ -369,7 +386,8 @@ def source_verification_contract(
         return (SOURCE_VERIFICATION_SYSTEM_PROMPT + PUBLIC_AUTHOR_QUOTE_PROMPT + CORE_SOURCE_FIDELITY_PROMPT,
                 SOURCE_VERIFICATION_SCHEMA)
     return (SOURCE_VERIFICATION_SYSTEM_PROMPT + (
-        PUBLIC_AUTHOR_QUOTE_PROMPT if prompt_profile == PUBLIC_AUTHOR_QUOTE_PROFILE else ""
+        REFERENCE_RETENTION_PROMPT if prompt_profile == REFERENCE_RETENTION_PROFILE
+        else PUBLIC_AUTHOR_QUOTE_PROMPT if prompt_profile == PUBLIC_AUTHOR_QUOTE_PROFILE else ""
     ), SOURCE_VERIFICATION_SCHEMA)
 
 

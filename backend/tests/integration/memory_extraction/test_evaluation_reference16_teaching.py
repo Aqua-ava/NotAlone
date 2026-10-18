@@ -28,11 +28,16 @@ class Reference16TeachingSDKTest(unittest.TestCase):
         self.assertTrue(result["receipt"]["budget"]["closed"])
         self.assertEqual(result["receipt"]["budget"]["reserved_requests"], 16)
 
-    def _exercise_sdk(self, *, unknown_at_last=False):
+    def _exercise_sdk(self, *, unknown_at_last=False, execution_plan="reference16-pro-teaching-v1",
+                      verification_profile="default", source_drift=False):
         import hashlib
         import json
         from tests.integration.memory_extraction.test_evaluation_ecnu import EvaluationECNUTest
         from notalone.memory_extraction.evaluation_ecnu import _REFERENCE16_PRO_TEACHING_REQUIRED_SOURCES, _PLAN_CASES
+        sources = _REFERENCE16_PRO_TEACHING_REQUIRED_SOURCES
+        if execution_plan == "reference16-pro-retention-v1":
+            from notalone.memory_extraction.evaluation_ecnu import _REFERENCE16_PRO_RETENTION_REQUIRED_SOURCES
+            sources = _REFERENCE16_PRO_RETENTION_REQUIRED_SOURCES
         from notalone.memory_extraction.evaluation_phased_audit import PhasedEvaluationAudit
         from notalone.memory_extraction.evaluation_records import canonical_sha256
         from notalone.memory_extraction.evaluation_reference import PUBLIC_REFERENCE_V2_PATH, PUBLIC_ANNOTATION_V2_PATH
@@ -41,7 +46,7 @@ class Reference16TeachingSDKTest(unittest.TestCase):
         self.addCleanup(helper.doCleanups)
         actual = Path(__file__).resolve().parents[4]
         hashes = {}
-        for relative in _REFERENCE16_PRO_TEACHING_REQUIRED_SOURCES:
+        for relative in sources:
             content = (actual / relative).read_bytes()
             destination = helper.repo / relative
             destination.parent.mkdir(parents=True, exist_ok=True)
@@ -56,7 +61,7 @@ class Reference16TeachingSDKTest(unittest.TestCase):
             annotation_sha256=hashes[PUBLIC_ANNOTATION_V2_PATH], criteria_sha256=hashes[PUBLIC_REFERENCE_V2_PATH],
             raw_reviewer=raw, full_reviewer=lambda _: self.fail("RAW未封存不得进入FULL"),
             extraction_mode="grounded-v2", verification_mode="legacy-v4", case_set="reference21",
-            case_positions=tuple(range(16)), reference_version="source-fidelity-v2", execution_plan="reference16-pro-teaching-v1", extraction_prompt_profile="reference-kind-teaching-v1")
+            case_positions=tuple(range(16)), reference_version="source-fidelity-v2", execution_plan=execution_plan, extraction_prompt_profile="reference-kind-teaching-v1", verification_prompt_profile=verification_profile)
         def respond(request):
             body = json.loads(request.content)
             function = body["tools"][0]["function"]
@@ -71,6 +76,9 @@ class Reference16TeachingSDKTest(unittest.TestCase):
                 arguments = {"results": [{"candidate_index": index, "verdict": "uncertain",
                     "issues": ["insufficient_evidence"], "evidence": []} for index in range(len(candidates))]}
             self.assertEqual(request.extensions["timeout"], dict.fromkeys(("connect", "read", "write", "pool"), 300.0))
+            if source_drift and function["name"] == "GroundedMemoryLabels":
+                source = helper.repo / "backend/src/notalone/memory_extraction/verification_adapters.py"
+                source.write_bytes(source.read_bytes() + b"\n# synthetic frozen source drift\n")
             return helper.response(request, arguments=arguments, reported_model="deepseek-v4-pro")
         # 只注入审核终态，不把全not_memory合成响应冒充正确语义；测试批次闭账边界。
         injected = patch.object(PhasedEvaluationAudit, "__call__", autospec=True,
@@ -84,10 +92,17 @@ class Reference16TeachingSDKTest(unittest.TestCase):
                 source_hashes=hashes, frozen_gold={"status": "frozen_agent_review", "case_names": [case.name for case in _PLAN_CASES],
                     "criteria_path": PUBLIC_REFERENCE_V2_PATH, "criteria_sha256": hashes[PUBLIC_REFERENCE_V2_PATH]},
                 credential_loader=helper.credential, audit_case=audit, synthetic_transport=httpx.MockTransport(respond),
-                provider_profile="deepseek-pro-reference16-v1", execution_plan="reference16-pro-teaching-v1", extraction_prompt_profile="reference-kind-teaching-v1",
+                provider_profile="deepseek-pro-reference16-v1", execution_plan=execution_plan, extraction_prompt_profile="reference-kind-teaching-v1", verification_prompt_profile=verification_profile,
                 extraction_mode="grounded-v2", verification_mode="legacy-v4", verification_tool_choice="forced",
                 case_set="reference21", case_positions=tuple(range(16)), reference_version="source-fidelity-v2",
                 request_limit=32, request_timeout_seconds=300, max_retries=0)
+        if source_drift:
+            self.assertEqual(len(helper.requests), 1)
+            self.assertEqual(seen, [])
+            self.assertEqual(result["summary"]["unknown"], 1)
+            self.assertEqual(result["summary"]["unrun"], 15)
+            self.assertTrue(result["receipt"]["budget"]["closed"])
+            return result
         if unknown_at_last:
             return result
         self.assertEqual(len(helper.requests), 2, result)
@@ -104,13 +119,19 @@ class Reference16TeachingSDKTest(unittest.TestCase):
         self.assertTrue(result["receipt"]["budget"]["closed"])
         config = json.loads((helper.output / "manifest.json").read_text())["frozen_config"]
         self.assertEqual(config["selected_case_positions"], list(range(16)))
-        self.assertEqual(config["execution_plan"], "reference16-pro-teaching-v1")
+        self.assertEqual(config["execution_plan"], execution_plan)
         self.assertEqual(config["extraction_prompt_profile"], "reference-kind-teaching-v1")
         from notalone.memory_extraction.grounded_adapter import grounded_v2_prompt
         from notalone.memory_extraction.evaluation_offline import _verification_contract
         self.assertEqual(helper.requests[0]["messages"][0]["content"], grounded_v2_prompt("reference-kind-teaching-v1"))
         self.assertNotEqual(helper.requests[0]["messages"][0]["content"], grounded_v2_prompt("default"))
-        self.assertEqual(helper.requests[1]["messages"][0]["content"], _verification_contract("legacy-v4")[0])
+        self.assertEqual(helper.requests[1]["messages"][0]["content"], _verification_contract("legacy-v4", prompt_profile=verification_profile)[0])
+        if verification_profile != "default":
+            self.assertEqual(config["verification_prompt_profile"], verification_profile)
+            self.assertEqual(config["verification_prompt_sha256"], canonical_sha256(helper.requests[1]["messages"][0]["content"]))
+            self.assertNotEqual(helper.requests[1]["messages"][0]["content"], _verification_contract("legacy-v4")[0])
+        else:
+            self.assertNotIn("verification_prompt_profile", config)
         self.assertEqual(config["extraction_prompt_sha256"], canonical_sha256(helper.requests[0]["messages"][0]["content"]))
         self.assertEqual(config["request_contract_version"], 4)
         self.assertEqual(config["provider_profile"], "deepseek-pro-reference16-v1")

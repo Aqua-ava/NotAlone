@@ -11,7 +11,7 @@ from .evaluation_extraction import EvaluationExtractionMode, extraction_tool_nam
 from .evaluation_provider_contract import (
     validate_evaluation_policy, MIXED_PLAN, MIXED_REQUEST_VERSION, mixed_phase_policy,
     FULL140_E2_PLAN, PHASE_SPLIT_PLANS, REFERENCE21_PLANS, PUBLIC_QUALITY_PLANS, UNIQUENESS_PLAN, REFERENCE16_PRO_PLANS, REFERENCE16_PRO_TEACHING_PLAN,
-    validate_extraction_prompt_profile,
+    validate_extraction_prompt_profile, validate_verification_prompt_profile, REFERENCE16_PRO_RETENTION_PLAN,
 )
 from .evaluation_records import canonical_sha256
 from .evaluation_reference import (
@@ -210,6 +210,7 @@ class PhasedEvaluationAudit:
         reference_version: str = "legacy-v1",
         execution_plan: str = "original",
         extraction_prompt_profile: str = "default",
+        verification_prompt_profile: str = "default",
     ):
         if type(execution_plan) is not str or execution_plan not in {"original", *PHASE_SPLIT_PLANS, BOUNDED_RUNTIME_PLAN, *REFERENCE16_PRO_PLANS}:
             raise ValueError("审核执行身份非法。")
@@ -221,9 +222,11 @@ class PhasedEvaluationAudit:
         public_quality = execution_plan in PUBLIC_QUALITY_PLANS
         try:
             validate_extraction_prompt_profile(execution_plan, extraction_prompt_profile)
+            validate_verification_prompt_profile(execution_plan, verification_prompt_profile)
         except EvaluationBudgetAbort:
             raise ValueError("审核提取提示profile与身份不符。") from None
         self._extraction_prompt_profile = extraction_prompt_profile
+        self._verification_prompt_profile = verification_prompt_profile
         self._verification_mode = SourceVerificationMode(verification_mode)
         self._extraction_mode = EvaluationExtractionMode(extraction_mode)
         validate_evaluation_policy(verification_tool_choice)
@@ -356,6 +359,10 @@ class PhasedEvaluationAudit:
     def extraction_prompt_profile(self) -> str:
         return self._extraction_prompt_profile
 
+    @property
+    def verification_prompt_profile(self) -> str:
+        return self._verification_prompt_profile
+
     def __call__(self, bundle: dict) -> dict:
         try:
             return self._run(bundle)
@@ -377,8 +384,11 @@ class PhasedEvaluationAudit:
         if bundle.get("extraction_mode", "legacy-e14") != self.extraction_mode:
             raise EvaluationBudgetAbort("phased_extraction_mode_changed")
         if (bundle.get("extraction_prompt_profile", "default") != self.extraction_prompt_profile
-                or self.execution_plan not in {UNIQUENESS_PLAN, BOUNDED_RUNTIME_PLAN, REFERENCE16_PRO_TEACHING_PLAN} and "extraction_prompt_profile" in bundle):
+                or self.execution_plan not in {UNIQUENESS_PLAN, BOUNDED_RUNTIME_PLAN, REFERENCE16_PRO_TEACHING_PLAN, REFERENCE16_PRO_RETENTION_PLAN} and "extraction_prompt_profile" in bundle):
             raise EvaluationBudgetAbort("phased_extraction_prompt_profile_changed")
+        if (bundle.get("verification_prompt_profile", "default") != self.verification_prompt_profile
+                or self.execution_plan != REFERENCE16_PRO_RETENTION_PLAN and "verification_prompt_profile" in bundle):
+            raise EvaluationBudgetAbort("phased_verification_prompt_profile_changed")
         if bundle.get("verification_mode", "legacy-v4") != self.verification_mode:
             raise EvaluationBudgetAbort("phased_verification_mode_changed")
         if bundle.get("verification_tool_choice", "forced") != self.verification_tool_choice:

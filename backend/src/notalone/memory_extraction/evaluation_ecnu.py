@@ -54,7 +54,8 @@ from .evaluation_provider_contract import (
     _BOUNDED_MIGRATION_SOURCES,
     REFERENCE16_PRO_PLAN, REFERENCE16_PRO_MODE, REFERENCE16_PRO_STAGE, REFERENCE16_PRO_PLANS,
     REFERENCE16_PRO_TEACHING_PLAN, REFERENCE16_PRO_TEACHING_MODE, REFERENCE16_PRO_TEACHING_STAGE,
-    REFERENCE16_TEACHING_E_PROFILE,
+    REFERENCE16_TEACHING_E_PROFILE, REFERENCE16_PRO_RETENTION_PLAN, REFERENCE16_PRO_RETENTION_MODE,
+    REFERENCE16_PRO_RETENTION_STAGE, REFERENCE16_RETENTION_V_PROFILE, validate_verification_prompt_profile,
 )
 
 
@@ -148,6 +149,9 @@ _REFERENCE16_PRO_REQUIRED_SOURCES = _NULLABLE_REQUIRED_SOURCES | frozenset({
 _REFERENCE16_PRO_TEACHING_REQUIRED_SOURCES = _REFERENCE16_PRO_REQUIRED_SOURCES | frozenset({
     ".scratch/memory-extraction-accuracy/reference-kind-teaching-plan-20261018.md",
 })
+_REFERENCE16_PRO_RETENTION_REQUIRED_SOURCES = _REFERENCE16_PRO_TEACHING_REQUIRED_SOURCES | frozenset({
+    ".scratch/memory-extraction-accuracy/reference-verification-retention-plan-20261018.md",
+})
 _BACKEND_ROOT = _SOURCE_DIRECTORY.parents[2]
 _BOUNDED_BACKEND_SOURCES = frozenset(
     f"backend/{path.relative_to(_BACKEND_ROOT).as_posix()}"
@@ -188,7 +192,8 @@ def _gold_reference(
         raise EvaluationBudgetAbort("ecnu_gold_not_frozen")
     criterion = frozen_gold.get("criteria_path", _CRITERIA_PATH)
     digest = frozen_gold.get("criteria_sha256")
-    required_sources = (_REFERENCE16_PRO_TEACHING_REQUIRED_SOURCES if execution_plan == REFERENCE16_PRO_TEACHING_PLAN else
+    required_sources = (_REFERENCE16_PRO_RETENTION_REQUIRED_SOURCES if execution_plan == REFERENCE16_PRO_RETENTION_PLAN else
+                        _REFERENCE16_PRO_TEACHING_REQUIRED_SOURCES if execution_plan == REFERENCE16_PRO_TEACHING_PLAN else
                         _REFERENCE16_PRO_REQUIRED_SOURCES if execution_plan == REFERENCE16_PRO_PLAN else
                         _UNIQUENESS_REQUIRED_SOURCES if execution_plan == UNIQUENESS_PLAN else
                         _SEMANTIC4_REQUIRED_SOURCES if execution_plan == SEMANTIC4_PLAN else
@@ -504,6 +509,7 @@ def run_ecnu_evaluation(
     full140_v4_deadline: object | None = None,
     reference21_v4_deadline: object | None = None,
     extraction_prompt_profile: str = "default",
+    verification_prompt_profile: str = "default",
     formal_windows: tuple[ExtractionWindow, ...] | None = None,
     formal_task_ids: tuple[UUID, ...] = (),
     database_url: str | None = None,
@@ -515,7 +521,9 @@ def run_ecnu_evaluation(
 
     pro16 = type(execution_plan) is str and execution_plan in REFERENCE16_PRO_PLANS
     teaching = execution_plan == REFERENCE16_PRO_TEACHING_PLAN
-    expected_e_profile = REFERENCE16_TEACHING_E_PROFILE if teaching else "default"
+    retention = execution_plan == REFERENCE16_PRO_RETENTION_PLAN
+    validate_verification_prompt_profile(execution_plan, verification_prompt_profile)
+    expected_e_profile = REFERENCE16_TEACHING_E_PROFILE if teaching or retention else "default"
     if pro16 or provider_profile == EvaluationProviderProfile.DEEPSEEK_PRO_REFERENCE16:
         if (not pro16 or provider_profile != EvaluationProviderProfile.DEEPSEEK_PRO_REFERENCE16
                 or case_set != "reference21" or type(case_positions) is not tuple
@@ -565,7 +573,7 @@ def run_ecnu_evaluation(
     reference21_v4 = type(execution_plan) is str and execution_plan in REFERENCE21_PLANS
     uniqueness = execution_plan == UNIQUENESS_PLAN
     public_quality = type(execution_plan) is str and execution_plan in PUBLIC_QUALITY_PLANS
-    prompt_profile = SEMANTIC4_PROMPT_PROFILE if public_quality else "default"
+    prompt_profile = REFERENCE16_RETENTION_V_PROFILE if retention else SEMANTIC4_PROMPT_PROFILE if public_quality else "default"
     validate_extraction_prompt_profile(execution_plan, extraction_prompt_profile)
     full140_v4 = execution_plan in ("full140-grounded-v4-source-v2", MIXED_PLAN)
     full140_e2 = execution_plan == FULL140_E2_PLAN
@@ -745,6 +753,8 @@ def run_ecnu_evaluation(
     if (type(audit_case) is PhasedEvaluationAudit
             and audit_case.extraction_prompt_profile != extraction_prompt_profile):
         raise EvaluationBudgetAbort("evaluation_phased_extraction_prompt_profile_mismatch")
+    if type(audit_case) is PhasedEvaluationAudit and audit_case.verification_prompt_profile != verification_prompt_profile:
+        raise EvaluationBudgetAbort("evaluation_phased_verification_prompt_profile_mismatch")
     if (type(audit_case) is PhasedEvaluationAudit
             and audit_case.verification_mode != selected.value):
         raise EvaluationBudgetAbort("ecnu_phased_verification_mode_mismatch")
@@ -785,6 +795,7 @@ def run_ecnu_evaluation(
         extraction_mode=extraction_selected,
         execution_plan=execution_plan,
         extraction_prompt_profile=extraction_prompt_profile,
+        verification_prompt_profile=verification_prompt_profile,
     )
     if case_set == "full140" or reference21_v4 or pro16:
         validation = _load_fixed_reference(repo_root, source_hashes, reference_version=reference_version, case_set=case_set)
@@ -812,7 +823,7 @@ def run_ecnu_evaluation(
                          max_retries=max_retries, verification_mode=selected,
                          extraction_mode=extraction_selected, windows=windows, prompt_profile=prompt_profile,
                          extraction_prompt_profile=extraction_prompt_profile),
-        "mode": (REFERENCE16_PRO_TEACHING_MODE if teaching else REFERENCE16_PRO_MODE if pro16 else FULL140_E2_MODE if full140_e2 else UNIQUENESS_MODE if uniqueness else SEMANTIC4_MODE if public_quality else REFERENCE21_V4_MODE if reference21_v4 else MIXED_MODE if mixed else "deepseek_bounded_full140_v4_source_v2" if full140_v4 else
+        "mode": (REFERENCE16_PRO_RETENTION_MODE if retention else REFERENCE16_PRO_TEACHING_MODE if teaching else REFERENCE16_PRO_MODE if pro16 else FULL140_E2_MODE if full140_e2 else UNIQUENESS_MODE if uniqueness else SEMANTIC4_MODE if public_quality else REFERENCE21_V4_MODE if reference21_v4 else MIXED_MODE if mixed else "deepseek_bounded_full140_v4_source_v2" if full140_v4 else
                  "deepseek_bounded_main16_v3" if main16 else
                  "deepseek_bounded_ambiguity2_v3" if ambiguity2 else
                  "deepseek_bounded_remaining8" if remaining8 else
@@ -821,7 +832,7 @@ def run_ecnu_evaluation(
                  "ecnu_bounded_full140" if case_set == "full140" else
                  "ecnu_bounded_evaluation" if case_positions is None
                  else "ecnu_bounded_diagnostic"),
-        "stage": (REFERENCE16_PRO_TEACHING_STAGE if teaching else REFERENCE16_PRO_STAGE if pro16 else FULL140_E2_STAGE if full140_e2 else UNIQUENESS_STAGE if uniqueness else SEMANTIC4_STAGE if public_quality else REFERENCE21_V4_STAGE if reference21_v4 else MIXED_STAGE if mixed else "full140-v4-source-v2" if full140_v4 else "main16-v3" if main16 else "ambiguity2-v3" if ambiguity2 else "remaining8" if remaining8 else "full140" if case_set == "full140" else
+        "stage": (REFERENCE16_PRO_RETENTION_STAGE if retention else REFERENCE16_PRO_TEACHING_STAGE if teaching else REFERENCE16_PRO_STAGE if pro16 else FULL140_E2_STAGE if full140_e2 else UNIQUENESS_STAGE if uniqueness else SEMANTIC4_STAGE if public_quality else REFERENCE21_V4_STAGE if reference21_v4 else MIXED_STAGE if mixed else "full140-v4-source-v2" if full140_v4 else "main16-v3" if main16 else "ambiguity2-v3" if ambiguity2 else "remaining8" if remaining8 else "full140" if case_set == "full140" else
                   "P1" if case_positions is None else "diagnostic"),
         "base_url": base_url, "endpoint": endpoint, "request_model": request_model,
         **({"reasoning_effort": "max"} if official else {}),

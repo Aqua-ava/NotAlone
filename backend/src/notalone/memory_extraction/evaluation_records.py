@@ -29,6 +29,8 @@ from .evaluation_provider_contract import (
     validate_extraction_prompt_profile, STRICT_RESPONSE_IDENTITY_POLICY, bounded_profile_for_config, EvaluationProviderProfile,
     REFERENCE16_PRO_PLAN, REFERENCE16_PRO_MODE, REFERENCE16_PRO_STAGE, REFERENCE16_PRO_PLANS,
     REFERENCE16_PRO_TEACHING_PLAN, REFERENCE16_PRO_TEACHING_MODE, REFERENCE16_PRO_TEACHING_STAGE,
+    REFERENCE16_PRO_RETENTION_PLAN, REFERENCE16_PRO_RETENTION_MODE, REFERENCE16_PRO_RETENTION_STAGE,
+    REFERENCE16_RETENTION_V_PROFILE, validate_verification_prompt_profile,
 )
 from .models import ExtractionWindow
 from .verification_adapters import CORE_SOURCE_FIDELITY_PROFILE
@@ -204,12 +206,14 @@ class EvaluationRecordStore:
         if core:
             if frozen_config.get("verification_prompt_profile") != CORE_SOURCE_FIDELITY_PROFILE:
                 raise EvaluationBudgetAbort("invalid_record_verification_prompt_profile")
+        elif self._execution_plan == REFERENCE16_PRO_RETENTION_PLAN:
+            validate_verification_prompt_profile(self._execution_plan, frozen_config.get("verification_prompt_profile", ""))
         elif ((self._execution_plan in PUBLIC_QUALITY_PLANS) != (frozen_config.get("verification_prompt_profile") == SEMANTIC4_PROMPT_PROFILE)
                 or self._execution_plan not in PUBLIC_QUALITY_PLANS and "verification_prompt_profile" in frozen_config):
             raise EvaluationBudgetAbort("invalid_record_verification_prompt_profile")
         self._extraction_prompt_profile = frozen_config.get("extraction_prompt_profile", "default")
         validate_extraction_prompt_profile(self._execution_plan, self._extraction_prompt_profile)
-        if self._execution_plan not in {UNIQUENESS_PLAN, BOUNDED_RUNTIME_PLAN, CORE_PROFILE_PLAN, REFERENCE16_PRO_TEACHING_PLAN} and "extraction_prompt_profile" in frozen_config:
+        if self._execution_plan not in {UNIQUENESS_PLAN, BOUNDED_RUNTIME_PLAN, CORE_PROFILE_PLAN, REFERENCE16_PRO_TEACHING_PLAN, REFERENCE16_PRO_RETENTION_PLAN} and "extraction_prompt_profile" in frozen_config:
             raise EvaluationBudgetAbort("invalid_record_extraction_prompt_profile")
         self._mixed = type(self._execution_plan) is str and self._execution_plan in PHASE_SPLIT_PLANS
         self._strict_response = self._mixed or bounded or reference16 or core
@@ -452,6 +456,7 @@ class EvaluationRecordStore:
 
         reference16 = self._execution_plan in REFERENCE16_PRO_PLANS
         teaching = self._execution_plan == REFERENCE16_PRO_TEACHING_PLAN
+        retention = self._execution_plan == REFERENCE16_PRO_RETENTION_PLAN
         e2 = self._execution_plan == FULL140_E2_PLAN or reference16
         reference21 = self._execution_plan in REFERENCE21_PLANS
         public_quality = self._execution_plan in PUBLIC_QUALITY_PLANS
@@ -485,10 +490,10 @@ class EvaluationRecordStore:
                 or type(config.get("request_contract_version")) is not int or config["request_contract_version"] != 2
                 or self._manifest["allowed_endpoints"] != ["https://api.deepseek.com/chat/completions"]):
             raise EvaluationBudgetAbort("invalid_record_mixed_registration")
-        if (config.get("execution_plan") != (REFERENCE16_PRO_TEACHING_PLAN if teaching else REFERENCE16_PRO_PLAN if reference16 else FULL140_E2_PLAN if e2 else UNIQUENESS_PLAN if uniqueness else SEMANTIC4_PLAN if public_quality else REFERENCE21_V4_PLAN if reference21 else MIXED_PLAN if self._mixed else "full140-grounded-v4-source-v2")
+        if (config.get("execution_plan") != (REFERENCE16_PRO_RETENTION_PLAN if retention else REFERENCE16_PRO_TEACHING_PLAN if teaching else REFERENCE16_PRO_PLAN if reference16 else FULL140_E2_PLAN if e2 else UNIQUENESS_PLAN if uniqueness else SEMANTIC4_PLAN if public_quality else REFERENCE21_V4_PLAN if reference21 else MIXED_PLAN if self._mixed else "full140-grounded-v4-source-v2")
                 or config.get("reference_version") != "source-fidelity-v2"
-                or config.get("mode") != (REFERENCE16_PRO_TEACHING_MODE if teaching else REFERENCE16_PRO_MODE if reference16 else FULL140_E2_MODE if e2 else UNIQUENESS_MODE if uniqueness else SEMANTIC4_MODE if public_quality else REFERENCE21_V4_MODE if reference21 else MIXED_MODE if self._mixed else "deepseek_bounded_full140_v4_source_v2")
-                or config.get("stage") != (REFERENCE16_PRO_TEACHING_STAGE if teaching else REFERENCE16_PRO_STAGE if reference16 else FULL140_E2_STAGE if e2 else UNIQUENESS_STAGE if uniqueness else SEMANTIC4_STAGE if public_quality else REFERENCE21_V4_STAGE if reference21 else MIXED_STAGE if self._mixed else "full140-v4-source-v2")
+                or config.get("mode") != (REFERENCE16_PRO_RETENTION_MODE if retention else REFERENCE16_PRO_TEACHING_MODE if teaching else REFERENCE16_PRO_MODE if reference16 else FULL140_E2_MODE if e2 else UNIQUENESS_MODE if uniqueness else SEMANTIC4_MODE if public_quality else REFERENCE21_V4_MODE if reference21 else MIXED_MODE if self._mixed else "deepseek_bounded_full140_v4_source_v2")
+                or config.get("stage") != (REFERENCE16_PRO_RETENTION_STAGE if retention else REFERENCE16_PRO_TEACHING_STAGE if teaching else REFERENCE16_PRO_STAGE if reference16 else FULL140_E2_STAGE if e2 else UNIQUENESS_STAGE if uniqueness else SEMANTIC4_STAGE if public_quality else REFERENCE21_V4_STAGE if reference21 else MIXED_STAGE if self._mixed else "full140-v4-source-v2")
                 or self._extraction_mode != ("grounded-v2" if e2 else "grounded-v4")
                 or config.get("verification_mode") != ("legacy-v4" if public_quality or e2 else "nullable-proof-v1")
                 or config.get("tool_choice") != {
@@ -505,7 +510,9 @@ class EvaluationRecordStore:
             raise EvaluationBudgetAbort("invalid_record_full140_v4_registration")
         if e2:
             from .evaluation_offline import _verification_contract
-            prompt, schema = _verification_contract("legacy-v4")
+            prompt, schema = _verification_contract(
+                "legacy-v4", prompt_profile=REFERENCE16_RETENTION_V_PROFILE if retention else "default",
+            )
             if (type(config.get("temperature")) not in (int, float) or config["temperature"] != 0
                     or config.get("stream") is not False or config.get("fallback") is not False
                     or type(config.get("timeout")) is not float or config["timeout"] != 300.0
