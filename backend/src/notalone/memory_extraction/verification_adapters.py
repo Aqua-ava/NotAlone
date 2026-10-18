@@ -221,6 +221,9 @@ source相对指定消息全文；candidate相对完整候选text，须计入作�
 但事件片段本身只覆盖原话内文，不能从开引号开始或包含闭引号。先逐字复核两侧切片再提交。
 即使只有实际作者的“我”，正向依据也需要reference的mention与target定位该来源“我”，binding=null；
 reference为null或缺少必要链接只表示关系未获证明，不能代替自指定位。位置不确定时proof留null。
+输入可带position_guide：仅为完整原字符串按8码点机械分块的位置标尺，start/end仍相对全文。
+分块不是事件、角色或证明边界，不代表语义已通过；可跨块定位，不得把标尺当依据或复制成proof。
+标尺可能因辅助预算整体省略；始终以原messages/candidates为准，不删原文，不修补提案。
 完整实际窗口最多4条、每条和候选最多4096码点；最多两个第三人、一条显式指称链或一组问答。
 atom_links上限16，reference/reported各8；同类重复边非法。只选一个主规则：
 BR_AUTHOR_ARRIVAL_V1/direct_quote：实际作者我刚/刚刚到家完整事件，frame=direct。
@@ -444,7 +447,9 @@ class LangChainSourceVerificationRuntime:
                         },
                         {
                             "role": "user",
-                            "content": _verification_text(window, facts),
+                            "content": _verification_text(window, facts, include_position_guide=(
+                                self._verification_mode is SourceVerificationMode.NULLABLE_PROOF_V3
+                            )),
                         },
                     ],
                     on_invoke=mark_invoked,
@@ -543,9 +548,9 @@ def _verification_payloads(message: object) -> tuple[dict[str, Any], ...]:
 
 
 def _verification_text(
-    window: ExtractionWindow, facts: tuple[ExtractedFact, ...]
+    window: ExtractionWindow, facts: tuple[ExtractedFact, ...], *, include_position_guide: bool = False,
 ) -> str:
-    return json.dumps({
+    payload: dict[str, Any] = {
         "messages": [{
             "message_id": str(message.message_id),
             "role": "target" if message.message_id in window.target_message_id_set
@@ -567,4 +572,33 @@ def _verification_text(
             "figurative_type": fact.figurative_type.value,
             **({"event": fact.event.to_payload()} if fact.event is not None else {}),
         } for index, fact in enumerate(facts)],
-    }, ensure_ascii=False)
+    }
+    if include_position_guide:
+        guide = _position_guide(window, facts)
+        if guide is not None:
+            payload["position_guide"] = guide
+    return json.dumps(payload, ensure_ascii=False)
+
+
+def _position_guide(window: ExtractionWindow, facts: tuple[ExtractedFact, ...]) -> dict[str, Any] | None:
+    """只提供原文码点标尺；超预算整份省略，不选择语义片段或更改原请求。"""
+    texts = [message.text for message in window.messages] + [fact.text for fact in facts]
+    if (len(window.messages) > 4 or any(len(text) > 4096 for text in texts)
+            or sum(map(len, texts)) > 8192 or sum((len(text) + 7) // 8 for text in texts) > 1024):
+        return None
+
+    def ruler(text: str) -> dict[str, Any]:
+        return {"codepoint_length": len(text), "blocks": [
+            {"start": start, "end": min(start + 8, len(text)), "text": text[start:start + 8]}
+            for start in range(0, len(text), 8)
+        ]}
+
+    guide = {"version": 1, "unit": "unicode_codepoint", "block_width": 8,
+        "messages": [{"message_id": str(message.message_id), **ruler(message.text)} for message in window.messages],
+        "candidates": [{"candidate_index": index, **ruler(fact.text)} for index, fact in enumerate(facts)]}
+    try:
+        if len(json.dumps(guide, ensure_ascii=False).encode("utf-8")) > 128 * 1024:
+            return None
+    except UnicodeEncodeError:
+        return None
+    return guide

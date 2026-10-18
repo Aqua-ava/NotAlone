@@ -542,6 +542,56 @@ class BoundedRuntimeSdkTest(unittest.TestCase):
         model.root_client._client.event_hooks = {"request": [_request_hook], "response": [_response_hook]}
         return model
 
+    def test_only_v3_sdk_receives_lossless_codepoint_position_guide(self):
+        from notalone.memory_extraction.verification_adapters import LangChainSourceVerificationRuntime, _verification_text
+        window = window_for("😀e\u0301“我刚刚到家。”\n尾句")
+        fact = replace(compiled_fact(window_for("我刚到家。")),
+            text="对方原话：“😀e\u0301我刚刚到家。”", source_message_ids=(window.messages[0].message_id,))
+        baseline = _verification_text(window, (fact,))
+        raw = {"candidate_index": 0, "verdict": "uncertain", "issues": ["meaning"], "evidence": []}
+        for mode in ("legacy-v4", "nullable-proof-v1", "nullable-proof-v2", "nullable-proof-v3"):
+            model = self.model(tool_name="SourceVerificationOutput", arguments={"results": [raw]})
+            runtime = LangChainSourceVerificationRuntime(model=model).for_mode(mode)
+            runtime.verify(window=window, facts=(fact,))
+            content = self.requests[-1][2]["messages"][1]["content"]
+            if mode != "nullable-proof-v3":
+                self.assertEqual(content, baseline)
+                continue
+            payload = json.loads(content)
+            guide = payload.pop("position_guide")
+            self.assertEqual(payload, json.loads(baseline))
+            self.assertEqual((guide["version"], guide["unit"], guide["block_width"]), (1, "unicode_codepoint", 8))
+            self.assertEqual(guide["messages"][0]["message_id"], str(window.messages[0].message_id))
+            self.assertEqual(guide["candidates"][0]["candidate_index"], 0)
+            for row, original in ((guide["messages"][0], window.messages[0].text), (guide["candidates"][0], fact.text)):
+                self.assertEqual(row["codepoint_length"], len(original))
+                self.assertEqual("".join(block["text"] for block in row["blocks"]), original)
+                for index, block in enumerate(row["blocks"]):
+                    self.assertEqual(block, {"start": index * 8, "end": min(index * 8 + 8, len(original)),
+                                             "text": original[index * 8:index * 8 + 8]})
+        self.assertEqual(len(self.requests), 4)
+
+    def test_position_guide_limits_omit_whole_guide_without_truncating_inputs(self):
+        from notalone.memory_extraction.verification_adapters import _verification_text
+        base = window_for("我刚到家。")
+        fact = compiled_fact(base)
+        cases = [
+            (replace(base, messages=(replace(base.messages[0], text="甲" * 4096),)), (replace(fact, text="乙" * 4096),), True),
+            (base, (replace(fact, text="乙" * 4097),), False),
+            (messages_window(["甲"] * 5), (fact,), False),
+            (base, tuple(replace(fact, text="乙" * 137) for _ in range(60)), False),
+            (replace(base, messages=(replace(base.messages[0], text="甲" * 41),)), tuple(replace(fact, text="乙" * 129) for _ in range(60)), False),
+        ]
+        for window, facts, expected in cases:
+            with self.subTest(messages=len(window.messages), candidates=len(facts), length=len(facts[0].text)):
+                baseline = json.loads(_verification_text(window, facts))
+                actual = json.loads(_verification_text(window, facts, include_position_guide=True))
+                guide = actual.pop("position_guide", None)
+                self.assertEqual(guide is not None, expected)
+                self.assertEqual(actual, baseline)
+                if guide is not None:
+                    self.assertLessEqual(len(json.dumps(guide, ensure_ascii=False).encode("utf-8")), 128 * 1024)
+
     def test_invalid_sdk_raw_responses_are_traced_before_strict_proof3_rejection(self):
         import base64
         import httpx
