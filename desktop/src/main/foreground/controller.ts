@@ -254,9 +254,11 @@ export class ForegroundController {
         || (observation.phase === 'manual-required' && observation.reason === 'unmatched_requires_selection');
       const unsupportedConversation = isUnsupportedForegroundConversation(observation.reason)
         || (this.state.unsupportedConversation && !privateVerified);
-      if (observation.phase === 'manual-required' || (observation.phase === 'unavailable'
+      // 未绑定只撤销当轮资格；后续完整绑定可独立恢复，不清除低分或歧义等既有人工门。
+      if ((observation.phase === 'manual-required' && observation.reason !== 'unmatched_requires_selection') || (observation.phase === 'unavailable'
         && !isTransientForegroundContextChange(observation.reason))) this.manualRequired = true;
-      if (unsupportedConversation || this.manualRequired || observation.phase === 'unavailable' || observation.reason === 'sync_disabled') this.qualification = undefined;
+      if (unsupportedConversation || this.manualRequired || observation.phase === 'manual-required'
+        || observation.phase === 'unavailable' || observation.reason === 'sync_disabled') this.qualification = undefined;
       this.state = { ...this.state, unsupportedConversation };
       // 消费前先废弃flight，内部选择不能把已消费的观察当异步旧结果。
       ++this.epoch;

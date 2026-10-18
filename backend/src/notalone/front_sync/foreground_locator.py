@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from dataclasses import dataclass
 import re
 from uuid import UUID
@@ -73,10 +75,12 @@ class ForegroundLocator:
         self._bindings = bindings
 
     def observe_fresh(
-        self, *, enabled: bool, deadline: float,
+        self, *, enabled: bool, deadline: float, check_current: Callable[[], None] | None = None,
     ) -> FreshForegroundObservation:
         """独立一次定位与元数据消歧，不读正文、不消费历史或写绑定。"""
 
+        if check_current is not None:
+            check_current()
         if not enabled:
             return FreshForegroundObservation.create(
                 phase="paused", reason="sync_disabled", probe_available=False,
@@ -95,6 +99,8 @@ class ForegroundLocator:
                 probe_available=False, wechat_in_front=False,
             )
         try:
+            if check_current is not None:
+                check_current()
             observation = observe(timeout_seconds=min(FRESH_PROBE_SECONDS, remaining))
         except ProbeAdapterError as error:
             reason = error.code if error.code in {
@@ -171,6 +177,8 @@ class ForegroundLocator:
         group_name = normalize_display_text(raw_title[:member_suffix.start()]) if member_suffix else name
         try:
             # all包含同名群聊及未绑定会话；达到上限即不能证明唯一。
+            if check_current is not None:
+                check_current()
             candidates = self._cli.sessions(
                 keyword=group_name or name, type_filter="all", limit=51,
                 timeout_seconds=min(0.25, remaining),
@@ -205,6 +213,8 @@ class ForegroundLocator:
                     observed_at=observation.captured_at,
                     **recognized,
                 )
+            if check_current is not None:
+                check_current()
             bindings = self._bindings.list_active_bindings(
                 owner_id=self._owner_id, channel=self._channel,
                 account_scope=self._account_scope, bounded=True,
@@ -231,6 +241,8 @@ class ForegroundLocator:
                 probe_available=False, wechat_in_front=True,
                 observed_at=observation.captured_at,
             )
+        if check_current is not None:
+            check_current()
         matching = tuple(item for item in bindings
                          if item.conversation_locator == exact[0].username)
         if len(matching) == 1:

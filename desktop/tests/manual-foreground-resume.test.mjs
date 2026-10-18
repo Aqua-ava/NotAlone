@@ -178,3 +178,40 @@ test('离开助手的立即复查等待旧传输结算，不与旧观察并发',
  assert.equal(f.foreground.getState().confirmedContactId, null, '迟到结果不得授予资格');
  assert.equal(f.scheduled.values().next().value.delayMs, 0);
 });
+
+function observationResponse(phase, reason, contactId = null) {
+ return { generation: 1, data: { observation_id: id, observed_at: new Date().toISOString(), phase, reason,
+  probe_available: phase !== 'unavailable', wechat_in_front: phase !== 'unavailable', binding_id: contactId, contact_id: contactId } };
+}
+
+test('未绑定只限制当轮并明确提示选择，返回可靠绑定私聊无需清除旧人工门', async t => {
+ const f = fixture(t);
+ f.setObservation(async () => observationResponse('confirmed', 'confirmed_active_binding', id));
+ await f.foreground.observeBeforeShow();assert.equal(f.foreground.getGenerationBlock(), null);
+ f.setObservation(async () => observationResponse('manual-required', 'unmatched_requires_selection'));
+ await f.foreground.observeBeforeShow();
+ assert.notEqual(f.foreground.getGenerationBlock(), null, '未绑定当前帧不能使用旧私聊资格');
+ const panel = ports.ForegroundPanel({ state: f.foreground.getState(), session: { state: f.state } });
+
+ f.setObservation(async () => observationResponse('paused', 'group_chat_unsupported'));
+ await f.foreground.observeBeforeShow();assert.equal(f.foreground.getState().unsupportedConversation, true);
+ assert.match(JSON.stringify(ports.ForegroundPanel({ state: f.foreground.getState(), session: { state: f.state } })), /群聊暂不支持/);
+ f.setObservation(async () => observationResponse('confirmed', 'confirmed_active_binding', id));
+ await f.foreground.observeBeforeShow();
+ assert.equal(f.foreground.getState().unsupportedConversation, false);
+ assert.equal(f.foreground.getGenerationBlock(), null);
+ assert.match(JSON.stringify(panel), /当前会话未匹配到已确认绑定，请在上方选择联系人/);
+});
+
+test('低置信度、歧义或技术失败的人工门不会被随后未绑定和群聊抹除', async t => {
+ for (const [phase, reason] of [['manual-required', 'ambiguous_requires_selection'],
+  ['manual-required', 'quality_unverified'], ['unavailable', 'probe_timeout']]) {
+  const f = fixture(t);
+  f.setObservation(async () => observationResponse(phase, reason));await f.foreground.observeBeforeShow();
+  f.setObservation(async () => observationResponse('manual-required', 'unmatched_requires_selection'));await f.foreground.observeBeforeShow();
+  f.setObservation(async () => observationResponse('paused', 'group_chat_suspected'));await f.foreground.observeBeforeShow();
+  f.setObservation(async () => observationResponse('confirmed', 'confirmed_active_binding', id));await f.foreground.observeBeforeShow();
+  assert.equal(f.foreground.getState().reason, 'manual_confirmation_required');
+  assert.notEqual(f.foreground.getGenerationBlock(), null);
+ }
+});

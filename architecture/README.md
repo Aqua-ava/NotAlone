@@ -105,6 +105,7 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 
 70. [ADR-070：默认自动维护记忆并退役旧资料升级](adr/070-automatic-memory-maintenance.md)
 71. [ADR-071：区分错误纠正与状态变化的历史生成资格](adr/071-memory-retirement-and-generation-eligibility.md)
+73. [ADR-073：前台观察与后台同步独立执行](adr/073-foreground-observation-independent-of-background-sync.md)
 
 ## 当前架构决策
 

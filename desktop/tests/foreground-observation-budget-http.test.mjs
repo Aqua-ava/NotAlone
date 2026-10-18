@@ -19,7 +19,7 @@ await writeFile(path.join(directory, 'production.mjs'), built.outputFiles[0].tex
 const ports = await import(path.join(directory, 'production.mjs'));
 after(() => rm(directory, { recursive: true }));
 
-test('慢单帧及同步繁忙不误开人工门，真正超时仍有限拒绝', async () => {
+test('后台尾读不阻塞前台身份，慢单帧可完成且真正超时仍有限拒绝', async t => {
  await ports.withContinuousForegroundFixture(async fixture => {
   const [a] = fixture.data.contact_ids;
   await fixture.setCli({ sessions: [{ username: 'wxid_synthetic_a', display_name: '合成窗口预算甲',
@@ -75,10 +75,13 @@ test('慢单帧及同步繁忙不误开人工门，真正超时仍有限拒绝',
    assert.equal(foreground.getGenerationBlock(), null);
    assert.equal(contacts.getState().draft, '合成恢复草稿');
    await withBusyCycle(async () => {
+    const began = Date.now();
     await foreground.observeBeforeShow();
-    assert.equal(foreground.getState().reason, 'foreground_observation_busy', '认证HTTP繁忙应保留固定原因');
-    assert.equal(foreground.getGenerationBlock(), 'foreground-confirmation-required');
-    assert.equal(foreground.getState().recognizedName, null);
+    assert.equal(foreground.getState().confirmation, 'verified-binding', '后台CLI尾读阻塞时仍应独立完成正式识别');
+    assert.equal(foreground.getGenerationBlock(), null);
+    const elapsed = Date.now() - began;
+    assert.ok(elapsed < 3000, '前台身份不能等待受控后台尾读释放');
+    t.diagnostic(`后台尾读保持阻塞时，合成前台观察完成耗时${elapsed}ms`);
    });
    await foreground.observeBeforeShow();
    assert.equal(foreground.getState().confirmation, 'verified-binding', '同步锁释放后可靠绑定应自动恢复');

@@ -12,7 +12,7 @@ import threading
 from time import monotonic
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from typing import Protocol
 from uuid import UUID
@@ -54,7 +54,7 @@ class SyncEnginePort(Protocol):
     def disable_sync(self) -> None:
         """手动关闭前台同步。"""
 
-    def observe_foreground(self, *, deadline: float) -> FreshForegroundObservation:
+    def observe_foreground(self, *, deadline: float, check_current: Callable[[], None] | None = None) -> FreshForegroundObservation:
         """取得一次不驱动后台正文读取的新观察。"""
 
     def sync_enabled(self) -> bool:
@@ -195,8 +195,8 @@ class SyncHostBusy(RuntimeError):
 class SyncHost:
     """常驻同步宿主：后台线程按心跳驱动引擎循环，接口层操作受锁保护。
 
-    引擎（FrontSyncEngine）不是线程安全的；所有 engine 调用都在同一把锁
-    内完成。循环策略：启动时播种一轮初始化报告（即使同步关闭也执行一次，
+    后台引擎调用串行；只读前台观察独立单航班，授权变更同时隔离两条路径。
+    循环策略：启动时播种一轮初始化报告（即使同步关闭也执行一次，
     让状态 API 尽快有值）；之后只在同步开启时按心跳执行 cycle，关闭期间
     不循环也不拉起探针子进程。
     """
@@ -206,6 +206,9 @@ class SyncHost:
         "_follow_smoke_active",
         "_interval",
         "_engine_lock",
+        "_foreground_lock",
+        "_observation_generation",
+        "_observation_mutations",
         "_state_lock",
         "_latest",
         "_runtime_status",
@@ -227,6 +230,9 @@ class SyncHost:
         # engine_lock 只保护不可并发的引擎调用；状态快照使用独立锁，
         # 这样 /api/sync/status 不会因为一轮慢同步而超时。
         self._engine_lock = threading.Lock()
+        self._foreground_lock = threading.Lock()
+        self._observation_generation = 0
+        self._observation_mutations = 0
         self._state_lock = threading.Lock()
         self._latest: FrontSyncCycleReport | None = None
         self._runtime_status = FollowRuntimeStatus(
@@ -271,7 +277,7 @@ class SyncHost:
             cancel()
         if thread is not None:
             thread.join(timeout=max(self._interval * 2, 5.0))
-        with self._engine_lock:
+        with self._engine_lock, self._foreground_lock:
             if self._closed:
                 return
             close = getattr(self._engine, "close", None)
@@ -284,25 +290,27 @@ class SyncHost:
     # ------------------------------------------------------------------
 
     def observe_foreground(self) -> FreshForegroundObservation:
-        """锁预算200ms、单轮预算3.2秒，停读后的排队调用失败关闭。"""
+        """前台锁预算200ms、单轮预算3.2秒；后台正文 I/O 不占前台锁。"""
 
         deadline = monotonic() + FOREGROUND_OBSERVATION_SECONDS
-        with self._active_engine(timeout=0.2):
+        with self._active_foreground() as check_current:
             if monotonic() >= deadline:
                 raise SyncHostBusy("本次前台观察预算已过期。")
-            return self._engine.observe_foreground(deadline=deadline)
+            result = self._engine.observe_foreground(deadline=deadline, check_current=check_current)
+            check_current()
+            return result
 
     def status(self) -> FrontSyncCycleReport | None:
         with self._state_lock:
             return self._latest
 
     def enable(self) -> FrontSyncCycleReport:
-        with self._active_engine():
+        with self._authority_change():
             self._engine.enable_sync()
             return self._run_cycle_locked()
 
     def disable(self) -> FrontSyncCycleReport:
-        with self._active_engine():
+        with self._authority_change():
             self._engine.disable_sync()
             return self._run_cycle_locked()
 
@@ -355,7 +363,7 @@ class SyncHost:
     ) -> PersistedConversationBinding:
         if not isinstance(contact_id, UUID) or not isinstance(binding_id, UUID):
             raise TypeError("绑定和联系人必须是 UUID。")
-        with self._active_engine(timeout=4.0):
+        with self._authority_change(timeout=4.0):
             return self._engine.revoke_cli_binding(
                 contact_id=contact_id, binding_id=binding_id,
             )
@@ -364,7 +372,7 @@ class SyncHost:
         self,
         selections: Sequence[CliBindingSelection],
     ) -> FrontSyncCycleReport:
-        with self._active_engine():
+        with self._authority_change():
             report = self._engine.confirm_cli_bindings(selections)
             self._cache_report_locked(report)
             return report
@@ -381,7 +389,7 @@ class SyncHost:
             raise TypeError("contact_id 必须是 UUID。")
         if not isinstance(locator, str) or not locator.strip():
             raise ValueError("locator 不能为空。")
-        with self._active_engine():
+        with self._authority_change():
             report = self._engine.confirm_binding(
                 contact_id=contact_id,
                 locator=locator,
@@ -401,7 +409,7 @@ class SyncHost:
             raise TypeError("contact_id 必须是 UUID。")
         if not isinstance(locator, str) or not locator.strip():
             raise ValueError("locator 不能为空。")
-        with self._active_engine():
+        with self._authority_change():
             report = self._engine.confirm_pending_binding(
                 contact_id=contact_id,
                 locator=locator,
@@ -452,6 +460,43 @@ class SyncHost:
     # ------------------------------------------------------------------
     # 内部
     # ------------------------------------------------------------------
+
+    @contextmanager
+    def _authority_change(self, *, timeout: float | None = None) -> Iterator[None]:
+        # 在排队等待后台 I/O 前撤销旧观察；多个授权操作不能互相提前开门。
+        with self._state_lock:
+            self._observation_generation += 1
+            self._observation_mutations += 1
+        try:
+            with self._active_engine(timeout=timeout), self._foreground_lock:
+                # 等待前台观察收尾期间也可能停机；拿齐锁后再次关闭门禁。
+                if self._stop_event.is_set():
+                    raise SyncHostStopped("同步宿主已停止。")
+                yield
+        finally:
+            with self._state_lock:
+                self._observation_mutations -= 1
+
+    @contextmanager
+    def _active_foreground(self) -> Iterator[Callable[[], None]]:
+        with self._state_lock:
+            generation = self._observation_generation
+
+        def check_current() -> None:
+            with self._state_lock:
+                if self._stop_event.is_set():
+                    raise SyncHostStopped("同步宿主已停止。")
+                if self._observation_mutations or generation != self._observation_generation:
+                    raise SyncHostBusy("观察授权已变化，请重新观察。")
+
+        check_current()
+        if not self._foreground_lock.acquire(timeout=0.2):
+            raise SyncHostBusy("前台观察仍在收尾，请重试。")
+        try:
+            check_current()
+            yield check_current
+        finally:
+            self._foreground_lock.release()
 
     @contextmanager
     def _active_engine(self, *, timeout: float | None = None) -> Iterator[None]:

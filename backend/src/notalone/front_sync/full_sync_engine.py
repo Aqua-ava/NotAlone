@@ -172,9 +172,11 @@ class CliFullSyncEngine:
             raise RuntimeError("后台补齐控制不可用。")
         retry()
 
-    def observe_foreground(self, *, deadline: float) -> FreshForegroundObservation:
+    def observe_foreground(self, *, deadline: float, check_current: Callable[[], None] | None = None) -> FreshForegroundObservation:
         """只读取本次前台投影，既有后台循环与缓存保持独立。"""
 
+        if check_current is not None:
+            check_current()
         if monotonic() >= deadline:
             return FreshForegroundObservation.create(
                 phase="unavailable", reason="observation_timeout",
@@ -194,8 +196,12 @@ class CliFullSyncEngine:
                 phase="unavailable", reason="observation_timeout",
                 probe_available=False, wechat_in_front=False,
             )
+        if check_current is not None:
+            check_current()
+        if check_current is None:
+            return self._foreground.observe_fresh(enabled=bool(state.enabled), deadline=deadline)
         return self._foreground.observe_fresh(
-            enabled=bool(state.enabled), deadline=deadline,
+            enabled=bool(state.enabled), deadline=deadline, check_current=check_current,
         )
 
     def cycle(self) -> FrontSyncCycleReport:
