@@ -23,3 +23,9 @@ Markdown编译回现有画像条目协议。仍有效旧来源不能丢失；未
 - 工作树绝对PYTHONPATH运行 `python -m unittest tests.integration.server.test_tencent_profile_tools tests.unit.application.test_default_organization_runtime tests.unit.memory.test_organization_sdk_verification -v`：14项通过。
 - 临时数据库运行 `test_layered_profile_management.LayeredProfileHttpTest` 的 `test_dirty_does_not_resume_failed_profile_or_refill_paused_budget`、`test_failed_fourth_call_and_restart_cannot_refresh_a_free_profile_budget`：2项通过；临时库已删除。
 - 未调用真实模型、未启动桌面、未打包。03调度由并行任务交付；真实整链和桌面验收由04完成，本文不宣称已完成。
+
+## 工具协议纠错补充
+
+画像工具提示词独立于旧 JSON 提案协议，明确 documents 为完整可读索引，仅允许简单 Markdown 文件名；空场景索引直接创建文档，画像仅写 profile.md。单次工具参数或路径错误以静态错误说明回传 ToolMessage，可在原有五轮内纠正；不读取真实路径、不增加预算，持续越界仍失败且不发布。
+
+公开 HTTP 合成边界先复现 `/memories/preferences.md` 错误导致失败，再验证纠正后正式发布；L2/L3 共16项通过，涵盖未纠正越界、合并来源保留、删除及增量画像。本轮未调用真实模型。

@@ -34,6 +34,15 @@ class SceneToolsHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self.scene_inputs = []
         self.when = datetime(2026, 1, 1, tzinfo=timezone.utc)
 
+    def test_bad_tool_path_can_be_corrected_before_publication(self):
+        text = '长期每周参加合成读书会。'
+        self.extraction_model.facts = {text: ('common_fact', 'other')}
+        self._import_evolution_source([(False, text)], when=self.when)
+        self.scene_mode = 'recover_path'
+        state = self.ready(self.scene_backend())
+        self.assertEqual([p['text'] for s in state['scenarios'] for p in s['paragraphs']], [text])
+        self.assertEqual(state['model_calls_used'], 4)
+
     def test_imported_chat_becomes_scene_through_document_tools(self):
         text = '每周与联系人一起参加合成读书会。'
         self.extraction_model.facts = {text: ('common_fact', 'other')}
@@ -120,7 +129,7 @@ class SceneToolsHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
             self.assertLess(monotonic(), deadline, state)
             Event().wait(.04)
         self.assertEqual(state['scenarios'], before['scenarios'])
-        self.assertEqual(state['model_calls_used'], 5 if mode == 'endless' else 1)
+        self.assertEqual(state['model_calls_used'], 5)
 
     def test_unchanged_documents_acknowledge_new_input_without_new_scene_version(self):
         first, new = '每周一起参加合成读书会。', '这次只是重复确认读书安排。'
@@ -179,6 +188,9 @@ class SceneToolsHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
             payload = json.loads(request.content)
             messages = payload['messages']
             initial = json.loads(messages[1]['content'])
+            if payload.get('tools'):
+                self.assertNotIn('只输出JSON', messages[0]['content'])
+                self.assertNotIn('返回空列表', messages[0]['content'])
             if initial.get('layer') == 'l3' and hasattr(self, 'profile_response'):
                 message = self.profile_response(payload)
             elif payload.get('tools'):
@@ -191,7 +203,13 @@ class SceneToolsHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
                 def document(memories, replaces=()):
                     meta = {'topic_key': 'reading-' + memories[0]['memory_id'], 'title': '共同活动', 'hint': '定期活动', 'replaces': list(replaces)}
                     return '<!-- META ' + json.dumps(meta) + ' -->\n\n' + '\n\n'.join(m['text'] + '\n<!-- SOURCES ' + json.dumps([{'memory_id': m['memory_id'], 'revision': m['revision']}]) + ' -->' for m in memories)
-                if self.scene_mode == 'unchanged':
+                if self.scene_mode == 'recover_path' and not tool_results:
+                    calls = [call('read', {'path': '/memories/preferences.md'}, 0)]
+                elif self.scene_mode == 'recover_path' and len(tool_results) == 1:
+                    self.assertIn('工具错误', tool_results[0]['content'])
+                    self.assertNotIn('/memories/preferences.md', tool_results[0]['content'])
+                    calls = [call('write', {'path': 'reading.md', 'content': document(initial['memories'])}, 1)]
+                elif self.scene_mode == 'unchanged':
                     calls = []
                 elif self.scene_mode == 'escape':
                     calls = [call('read', {'path': '../other-owner.md'}, 0)]
