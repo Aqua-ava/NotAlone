@@ -46,6 +46,7 @@ export function LayeredMemoryPanel({ state, contactName, busy, read, manage, fac
       {!value.enabled && <div className="layered-memory-confirm"><label><input type="checkbox" checked={confirmed} disabled={waiting}
         onChange={(event) => setConfirmed(event.target.checked)} />{owner ? '确认仅整理本人的合法已采纳记忆，并同意以上用途与模型接收范围' : '确认仅整理这位联系人的合法已采纳记忆，并同意以上用途与模型接收范围'}</label>
         <p>仅合格的底层记忆及其时间、引用标识可用于整理；待确认候选与来历未知资料不参与。</p>
+        <p>若此前删除过整理结果，旧纠错与反馈已清除，本次开启会进入新周期，旧总结可能再次出现。普通停用后恢复仍保留纠错保护。</p>
         <button className="button" disabled={waiting || !confirmed} onClick={() => void manage('enable', value.settingsGeneration, { purposeConfirmed: true })}>确认范围并开启</button></div>}
       {value.enabled && <>{value.workId && value.workRevision > 0 && <>
         {(value.status === 'paused' || value.status === 'failed') && <button className="button" disabled={waiting}
@@ -56,7 +57,7 @@ export function LayeredMemoryPanel({ state, contactName, busy, read, manage, fac
         <button className="button" disabled={waiting} onClick={() => void manage('disable', value.settingsGeneration)}>停用主题资料</button></>}
       <button className="button" disabled={waiting} onClick={() => setDeleting(true)}>删除整理结果</button>
       {deleting && <div className="memory-section-note" role="group" aria-label="确认删除主题资料">
-        <p>删除将关闭本范围并清除整理正文、旧版本及相关副本。底层记忆另行管理；只有重新开启后才会再次整理。</p>
+        <p>删除将关闭本范围，清除整理正文、旧版本、相关副本及全部纠错和反馈记录，包括待修正标记。底层记忆保持不变；主动重新开启将进入新周期，旧总结可能再次出现。</p>
         <button className="button" disabled={waiting} onClick={() => void manage('delete', value.settingsGeneration)}>确认删除整理结果</button>
         <button className="button" disabled={waiting} onClick={() => setDeleting(false)}>取消删除</button></div>}
       {!value.enabled && (value.scenarios.length > 0 || value.profile !== null) && <p>已停止整理及回复加载；下方仅供回看来源仍有效的现有文档。</p>}

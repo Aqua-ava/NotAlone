@@ -228,6 +228,11 @@ class PostgresLayeredMemoryStore(LayeredProfileStore, LayeredCorrectionStore):
                     removed_ids={row["id"] for row in version_rows}, revoke_running_scope=False)
             cancel_jobs(connection,scope,erase=action=='delete')
             if action=='delete':
+                # 删除结束整个纠错周期；仅下方递增的无正文世代用于拒绝迟到请求。
+                connection.execute("DELETE FROM public.layered_memory_feedback WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s",
+                                   (scope.owner_id,scope.contact_id))
+                connection.execute("DELETE FROM public.layered_memory_fact_correction WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s",
+                                   (scope.owner_id,scope.contact_id))
                 connection.execute("DELETE FROM public.layered_memory_generation WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s",
                                    (scope.owner_id,scope.contact_id))
             enabled = action == "enable"
