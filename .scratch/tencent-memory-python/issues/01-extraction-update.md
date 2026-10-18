@@ -16,4 +16,4 @@ None
 
 ## Answer
 
-源码对应见 `../source-map-l1.md`。10项生产HTTP合成回归通过，覆盖单父/多父更新合并、批量候选、skip、越界待处理、人工保护、本人隔离及来源删除；离线真实embedding自检2×512维通过。相关79项旧单测中78通过，`test_adjudication_invalid_output_counts_toward_skip`的旧SimilarMemoryPort缺少list_pending_candidates为既存夹具错误（前轮已记录），本任务未改其旧诊断路径。真实生成模型与桌面整体验收由ticket04继续；本票未调用外部模型、未打包。
+源码对应见 `../source-map-l1.md`。14项生产HTTP合成回归通过，覆盖单父/多父更新合并、批量候选、首批去重、不同时间不得skip、越界待处理、人工保护、本人隔离、来源删除和本机embedding缺失诊断。离线真实embedding自检2×512维通过；相关69项旧单测通过，旧裁决夹具及两项追踪断言已随正式行为更新。更广981项L1单测发现3项既有评测worker的deadline变量遮蔽失败，源码与本任务基线相同，记录在04验收。真实模型和桌面由ticket04继续。
