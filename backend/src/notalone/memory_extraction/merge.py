@@ -21,17 +21,16 @@ class MemoryMergeVerifier:
         self._verification = verification_runtime
 
     def verify(self, *, scope, fact, parents, text):
-        if (self._verification is None or not 2 <= len(parents) <= 8
+        if (self._verification is None or not 1 <= len(parents) <= 8
                 or not isinstance(text, str) or not 1 <= len(text.strip()) <= 4096):
             raise ValueError('合并缺少有界正文、旧版本或独立核验。')
         # 不把多个事件阶段、有效期或人工决定压成新候选的一套字段。
         if fact.event is not None or any(
             parent.adoption_method is not AdoptionMethod.AUTO
-            or parent.category != fact.category or parent.topic != fact.topic
             or parent.valid_at != fact.valid_at or parent.invalid_at != fact.invalid_at
             or parent.event is not None for parent in parents
         ):
-            raise ValueError('不同类别、期限、事件或人工记忆不自动合并。')
+            raise ValueError('不同期限、事件或人工记忆不自动合并。')
         sources = tuple(dict.fromkeys((*fact.source_message_ids,
             *(source for parent in parents for source in parent.source_ids))))
         messages = tuple(item for item in self._messages if item.message_id in sources)

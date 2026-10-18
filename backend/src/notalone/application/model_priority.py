@@ -279,6 +279,12 @@ class PriorityAdjudicationRuntime:
         self._runtime, self._control = runtime, control
         self._accounting = accounting
 
+    def adjudicate_batch(self, *, memories, pool):
+        with self._control.background_call():
+            result = self._runtime.adjudicate_batch(memories=memories, pool=pool)
+        self._control.wait_for_foreground()
+        return result
+
     def adjudicate(
         self, *, candidate_text: str, similar: tuple[SimilarMemory, ...],
     ) -> AdjudicationDecision:

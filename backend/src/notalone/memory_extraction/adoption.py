@@ -173,6 +173,7 @@ class MemoryAdoption:
         adopted = updated = pending = duplicate = deleted_skip = 0
         skipped_non_memory = 0
         skipped_changed = 0
+        batch_plan = self._batch_plan(scope, outcome.accepted, contact_pool, owner_pool)
         for index, fact in enumerate(outcome.accepted):
             trace = current_trace()
             if trace is not None:
@@ -372,12 +373,17 @@ class MemoryAdoption:
                 continue
 
             similarity_started_at = datetime.now(timezone.utc)
-            similar, shortlist_truncated = self._similar_memories(scope, fact, pool)
+            planned = batch_plan.get(index)
+            if planned is not None:
+                similar, planned_decision = planned
+                shortlist_truncated = False
+            else:
+                similar, shortlist_truncated = self._similar_memories(scope, fact, pool)
             record(
                 "similarity",
                 {
                     "threshold": self._similarity_threshold,
-                    "rule": "character_bigram_jaccard",
+                    "rule": "bm25_local_embedding_rrf" if planned is not None else "character_bigram_jaccard",
                     "compared": [
                         {
                             "memory": item,
@@ -393,14 +399,16 @@ class MemoryAdoption:
                 },
                 started_at=similarity_started_at,
             )
-            if shortlist_truncated:
+            if planned is not None:
+                decision = planned_decision
+            elif shortlist_truncated:
                 record("adjudication", {"status": "not_executed", "reason": "incomplete_shortlist"})
                 decision = None
             else:
                 decision = self._adjudicate(fact, similar, scope)
             action = decision.action if decision else None
             replaced_id = decision.replaced_memory_id if decision else None
-            if action is AdjudicationAction.MERGE:
+            if action is AdjudicationAction.MERGE or (action is AdjudicationAction.UPDATE and decision.merged_memory_ids):
                 result = self._merge(scope, fact, similar, decision)
                 if result is None:
                     pending += 1
@@ -434,6 +442,16 @@ class MemoryAdoption:
                 )
                 pending += 1
                 continue
+            if action is AdjudicationAction.UPDATE and decision.merged_text is not None and decision.merged_text != fact.text:
+                try:
+                    parents = tuple(item.version for item in similar if item.memory_id == replaced_id)
+                    fact = self._merge_verifier.verify(scope=scope, fact=fact, parents=parents, text=decision.merged_text)
+                    if not self._passes_all_adoption_gates(fact, scope=scope):
+                        raise ValueError('更新正文未通过采纳门。')
+                except (ValueError, ExtractionRuntimeError):
+                    self._create_pending_candidate(scope, fact)
+                    pending += 1
+                    continue
             previous_item = next(
                 (item for item in pool if item.memory_id == replaced_id), None,
             ) if action is AdjudicationAction.UPDATE else None
@@ -528,6 +546,49 @@ class MemoryAdoption:
             skipped_non_memory=skipped_non_memory,
             skipped_changed=skipped_changed,
         )
+
+    def _batch_plan(self, scope, facts, contact_pool, owner_pool):
+        """同次已核验候选共享召回池；批量模型失败保留待处理而不降级新增。"""
+        runtime = getattr(self._adjudication_runtime, 'adjudicate_batch', None)
+        if not callable(runtime) or not self._dimension_release.verified_sources:
+            return {}
+        from notalone.memory_extraction.recall import hybrid_candidates
+        plans = {}
+        for owner, pool in ((False, contact_pool), (True, owner_pool)):
+            eligible = [(index, fact) for index, fact in enumerate(facts)
+                        if (fact.subject is FactSubject.SELF) == owner
+                        and self._passes_all_adoption_gates(fact, scope=scope)]
+            if not eligible:
+                continue
+            if not pool:
+                plans.update((index, ([], AdjudicationDecision(AdjudicationAction.ADD))) for index, _ in eligible)
+                continue
+            called = False
+            try:
+                shortlists = hybrid_candidates([fact.text for _, fact in eligible], pool)
+                unified = {str(item.memory_id): item for rows in shortlists for item in rows}
+                memories = [dict(candidate_id=str(index), text=fact.text, category=fact.category.value,
+                    topic=fact.topic.value, candidate_ids=[str(item.memory_id) for item in rows])
+                    for (index, fact), rows in zip(eligible, shortlists)]
+                started = time.perf_counter()
+                called = True
+                decisions = runtime(memories=memories, pool=[dict(memory_id=key, text=item.text,
+                    category=item.category.value, topic=item.topic.value) for key, item in unified.items()])
+                self._record_ledger(scope, LedgerOutcome.SUCCEEDED, started)
+                for (index, fact), rows in zip(eligible, shortlists):
+                    decision = decisions[str(index)]
+                    # 事件的独立来源不能仅凭正文相似被skip吞掉。
+                    if decision.action is AdjudicationAction.NOOP and fact.event is not None:
+                        decision = None
+                    plans[index] = (rows, decision)
+                record('batch_adjudication', {'memories': memories, 'decisions': decisions,
+                       'recall': 'bm25_local_embedding_rrf', 'scope_kind': 'owner' if owner else 'contact'})
+            except (ValueError, ImportError, OSError, ExtractionRuntimeError):
+                if called:
+                    self._record_ledger(scope, LedgerOutcome.RUN_FAILED, started)
+                plans.update((index, ([], None)) for index, _ in eligible)
+                record('batch_adjudication', {'status': 'pending', 'reason': 'recall_or_model_failed'})
+        return plans
 
     def _adjudicate(self, fact, similar, scope: ContactScope):
         if not similar or self._adjudication_runtime is None:

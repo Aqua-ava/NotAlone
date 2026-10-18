@@ -60,6 +60,10 @@ class LangChainAdjudicationRuntime:
             raise TypeError("必须显式注入模型。")
         self._model = model
 
+    def adjudicate_batch(self, *, memories, pool):
+        from notalone.memory_extraction.batch_adjudication import adjudicate_batch
+        return adjudicate_batch(self._model, memories=memories, pool=pool)
+
     def adjudicate(
         self, *, candidate_text: str, similar: tuple[SimilarMemory, ...]
     ) -> AdjudicationDecision:
