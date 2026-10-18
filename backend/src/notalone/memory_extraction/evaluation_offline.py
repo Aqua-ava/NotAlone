@@ -137,6 +137,17 @@ class _RecordedExtractionRuntime:
         self._mode, self._state = mode, state
         self._invocation_scope = invocation_scope
 
+    @property
+    def prompt_profile(self) -> str:
+        return getattr(self._runtime, "prompt_profile", "default")
+
+    def for_prompt_profile(self, prompt_profile: str) -> _RecordedExtractionRuntime:
+        select = getattr(self._runtime, "for_prompt_profile", None)
+        if not callable(select):
+            raise ValueError("提取适配器不支持指定任务教学profile。")
+        return _RecordedExtractionRuntime(select(prompt_profile), self._store, self._position,
+            self._mode, self._state, invocation_scope=self._invocation_scope)
+
     def extract(self, window: ExtractionWindow) -> ExtractionPayload:
         try:
             if self._invocation_scope is None:
@@ -144,7 +155,7 @@ class _RecordedExtractionRuntime:
             else:
                 from .grounded_adapter import grounded_input
 
-                prompt, _ = extraction_contract(self._mode, window)
+                prompt, _ = extraction_contract(self._mode, window, prompt_profile=self.prompt_profile)
                 messages = [{"role": "system", "content": prompt},
                             {"role": "user", "content": grounded_input(window)}]
                 with self._store.stage(self._position, "extraction"), self._invocation_scope("extraction", messages, window):
@@ -681,7 +692,7 @@ def _run_evaluation_batch(
                     # 记录放在runtime和HTTP边界，实际SDK对象直接交给原适配器。
                     evaluated_task = evaluate_task(
                         case, window, _RecordedExtractionRuntime(
-                            extraction_runtime(extraction_selected, model), store, position,
+                            extraction_runtime(extraction_selected, model, prompt_profile=extraction_prompt_profile), store, position,
                             extraction_selected, call_state, invocation_scope=invocation_scope or _plain_invocation,
                         ), database_url=database_url, task_id=formal_task_ids[position],
                         verification_runtime=_RecordedVerificationRuntime(

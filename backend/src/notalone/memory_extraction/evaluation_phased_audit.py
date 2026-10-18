@@ -367,7 +367,7 @@ class PhasedEvaluationAudit:
         if bundle.get("extraction_mode", "legacy-e14") != self.extraction_mode:
             raise EvaluationBudgetAbort("phased_extraction_mode_changed")
         if (bundle.get("extraction_prompt_profile", "default") != self.extraction_prompt_profile
-                or self.execution_plan != UNIQUENESS_PLAN and "extraction_prompt_profile" in bundle):
+                or self.execution_plan not in {UNIQUENESS_PLAN, BOUNDED_RUNTIME_PLAN} and "extraction_prompt_profile" in bundle):
             raise EvaluationBudgetAbort("phased_extraction_prompt_profile_changed")
         if bundle.get("verification_mode", "legacy-v4") != self.verification_mode:
             raise EvaluationBudgetAbort("phased_verification_mode_changed")

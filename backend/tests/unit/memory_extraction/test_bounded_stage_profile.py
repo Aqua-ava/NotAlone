@@ -1,0 +1,119 @@
+"""有限任务教学增量沿真实SDK与任务选择；不认证模型质量。"""
+from dataclasses import replace
+import hashlib
+import json
+import unittest
+from unittest.mock import patch, Mock
+from uuid import uuid4
+
+from tests.integration.memory_extraction import test_evaluation_wire_contract as wire_tests
+from tests.unit.memory_extraction.test_bounded_runtime_proof import window_for
+
+
+class BoundedStageProfileTest(unittest.TestCase):
+    setUp = wire_tests.EvaluationWireContractTest.setUp
+    model = wire_tests.EvaluationWireContractTest.model
+
+    def test_default_prompt_bytes_and_closed_profile_are_unchanged(self):
+        from notalone.memory_extraction import grounded_adapter as adapter
+        from notalone.memory_extraction.evaluation_extraction import extraction_contract, extraction_runtime
+        # 从本轮修改前HEAD取得；保护core/reference的实际提示字节。
+        for name, digest in (
+            ("GROUNDED_V2_PROMPT", "837344477304319f03f770e2d94571755d5cee8b445c6f3b3c7c1eeb63fa6a52"),
+            ("GROUNDED_V3_PROMPT", "e35b256adc84a7e61faade14267a187b7844f8b16abcdb9819371ed70905e7cf"),
+            ("GROUNDED_V4_PROMPT", "2feb96d892198307e082328cf8af092e3ac62587267116cc682649b468ec961c"),
+        ):
+            self.assertEqual(hashlib.sha256(getattr(adapter, name).encode()).hexdigest(), digest)
+        for profile in (None, True, [], "bounded-stage-teaching-v2", "reference-uniqueness-v1"):
+            with self.subTest(profile=profile), self.assertRaises(ValueError):
+                adapter.GroundedExtractionRuntime(model=Mock()).for_prompt_profile(profile)
+            with self.subTest(profile=profile), self.assertRaises(ValueError):
+                adapter.GroundedV2ExtractionRuntime(model=Mock()).for_prompt_profile(profile)
+        for mode in ("legacy-e14", "grounded-v3", "grounded-v4"):
+            with self.subTest(mode=mode), self.assertRaises(ValueError):
+                extraction_contract(mode, window_for("合成资料。"), prompt_profile=adapter.BOUNDED_STAGE_PROMPT_PROFILE)
+            with self.subTest(mode=mode), self.assertRaises(ValueError):
+                extraction_runtime(mode, Mock(), prompt_profile=adapter.BOUNDED_STAGE_PROMPT_PROFILE)
+
+    def test_actual_sdk_both_protocols_keep_schema_compiler_and_raw_confidence(self):
+        from notalone.memory_extraction import grounded_adapter as adapter
+        from notalone.memory_extraction.grounded import compile_labels, compile_event_labels
+        from notalone.tasks.extraction_runtime import extraction_runtime_for_config, runtime_config_for_mode
+        from notalone.tasks.models import ExtractionRuntimeMode, ExtractionRuntimeConfig
+        window = window_for("我已经晾好衣服了。")
+        config = runtime_config_for_mode(ExtractionRuntimeMode.BOUNDED_RUNTIME_V1)
+        for runtime_type, events in ((adapter.GroundedExtractionRuntime, True), (adapter.GroundedV2ExtractionRuntime, False)):
+            row = {"kind": "event", "subject": "contact", "topic": "other", "dependency": None,
+                   "unresolved": False, "confidence": .6, "sensitivity": "none", **({"event": None} if events else {})}
+            draft = {"units": {"0:0": row}}
+            model = self.model(tool_name="GroundedMemoryLabels", arguments=draft)
+            original = runtime_type(model=model)
+            original.extract(window)
+            baseline = self.requests[-1][2]
+            base_prompt = adapter.GROUNDED_V2_PROMPT + (adapter.GROUNDED_EVENT_PROMPT if events else "")
+            self.assertEqual(baseline["messages"][0]["content"], base_prompt)
+            for saved in (config, ExtractionRuntimeConfig.from_payload(config.to_payload())):
+                selected = extraction_runtime_for_config(original, saved)
+                self.assertIsInstance(selected, runtime_type)
+                self.assertIsNot(selected, original)
+                with patch.object(adapter, "record") as record:
+                    facts = selected.extract(window)
+                expected = (compile_event_labels if events else compile_labels)(window, draft)
+                self.assertEqual(facts, expected)
+                self.assertEqual(facts[0]["confidence"], .6)
+                actual = self.requests[-1][2]
+                self.assertEqual(actual["tools"], baseline["tools"])
+                self.assertEqual(actual["messages"][1:], baseline["messages"][1:])
+                prompt = actual["messages"][0]["content"]
+                self.assertEqual(prompt, base_prompt + adapter.BOUNDED_STAGE_TEACHING_V1)
+                for call in record.call_args_list:
+                    identity = call.args[1]
+                    self.assertEqual(identity["prompt_profile"], adapter.BOUNDED_STAGE_PROMPT_PROFILE)
+                    self.assertEqual(identity["prompt_sha256"], hashlib.sha256(json.dumps(prompt, ensure_ascii=False,
+                        sort_keys=True, separators=(",", ":")).encode()).hexdigest())
+            original.extract(window)
+            self.assertEqual(self.requests[-1][2], baseline)
+
+    def test_worker_selects_through_priority_without_changing_protocol_or_legacy(self):
+        from contextlib import nullcontext
+        from notalone.application.model_priority import PriorityExtractionRuntime
+        from notalone.memory_extraction.grounded_adapter import GroundedExtractionRuntime, BOUNDED_STAGE_PROMPT_PROFILE
+        from notalone.tasks.extraction_runtime import extraction_runtime_for_config, runtime_config_for_mode
+        from notalone.tasks.models import ExtractionRuntimeMode
+        from notalone.tasks.worker import PostgresMemoryExtractionRunner
+        from notalone.scopes import ContactScope
+        runtime = GroundedExtractionRuntime(model=Mock())
+        control = Mock()
+        control.background_call.side_effect = lambda: nullcontext()
+        accounting = Mock()
+        priority = PriorityExtractionRuntime(runtime, control, accounting=accounting)
+        legacy = runtime_config_for_mode(ExtractionRuntimeMode.LEGACY)
+        config = runtime_config_for_mode(ExtractionRuntimeMode.BOUNDED_RUNTIME_V1)
+        self.assertIs(extraction_runtime_for_config(priority, None), priority)
+        self.assertIs(extraction_runtime_for_config(priority, legacy), priority)
+        with self.assertRaises(ValueError):
+            extraction_runtime_for_config(priority, replace(config, rule_set_sha256="0" * 64))
+        with self.assertRaises(ValueError):
+            extraction_runtime_for_config(object(), config)
+        runner = PostgresMemoryExtractionRunner.__new__(PostgresMemoryExtractionRunner)
+        for name in runner.__slots__:
+            setattr(runner, name, Mock())
+        runner._runtime = priority
+        runner._verification_runtime.for_mode.return_value.verification_mode = "nullable-proof-v3"
+        with patch("notalone.memory_extraction.cli_support.load_contact_messages", return_value=()), \
+                patch("notalone.tasks.worker.run_extraction") as run:
+            runner.run(scope=ContactScope(uuid4(), uuid4()), task_id=uuid4(), extraction_runtime_config=config)
+        selected = run.call_args.kwargs["runtime"]
+        self.assertEqual(selected.prompt_profile, BOUNDED_STAGE_PROMPT_PROFILE)
+        self.assertIs(selected._control, control)
+        self.assertIs(selected._accounting, accounting)
+        with patch.object(GroundedExtractionRuntime, "extract", return_value=[]) as extract:
+            selected.extract(window_for("合成资料。"))
+        extract.assert_called_once()
+        accounting.extraction_started.assert_called_once()
+        accounting.extraction_returned.assert_called_once()
+        control.wait_for_foreground.assert_called_once()
+
+
+if __name__ == "__main__":
+    unittest.main()

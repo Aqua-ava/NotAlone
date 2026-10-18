@@ -222,7 +222,7 @@ def _verify_owned_public_claim(*, frozen: dict, helper: Any, kind: str,
                 or config.get("verification_prompt_sha256") != frozen["verification_prompt_sha256"]
                 or config.get("verification_schema_sha256") != frozen["verification_schema_sha256"])
             or kind == UNIQUENESS_KIND and config.get("extraction_prompt_profile") != UNIQUENESS_E_PROFILE
-            or kind != UNIQUENESS_KIND and "extraction_prompt_profile" in config
+            or kind not in {UNIQUENESS_KIND, BOUNDED_RUNTIME_KIND} and "extraction_prompt_profile" in config
             or config.get("extraction_window_contracts") != frozen["extraction_window_contracts"]):
         raise ValueError(kind + "_claim_manifest_changed")
     if kind == BOUNDED_RUNTIME_KIND:
@@ -243,6 +243,7 @@ def _verify_bounded_claim(frozen: dict, config: dict, helper: Any, actual_window
     from .source_proof import bounded_runtime_rule_set_sha256
     from .verification_adapters import source_verification_contract
     from .evaluation_provider_contract import bounded_profile_for_config, EvaluationProviderProfile
+    from .grounded_adapter import BOUNDED_STAGE_PROMPT_PROFILE
     from notalone.memory_trace.context import snapshot
     from notalone.tasks.models import ExtractionRuntimeConfig, ExtractionRuntimeMode
 
@@ -253,6 +254,9 @@ def _verify_bounded_claim(frozen: dict, config: dict, helper: Any, actual_window
     content = helper.digest(tuple({"messages": row["messages"], "target_indices": row["target_indices"]}
                                   for row in BOUNDED_RUNTIME_INPUTS))
     current_rules = bounded_runtime_rule_set_sha256()
+    if (config.get("extraction_prompt_profile") != BOUNDED_STAGE_PROMPT_PROFILE
+            or frozen.get("fixed", {}).get("extraction_prompt_profile") != BOUNDED_STAGE_PROMPT_PROFILE):
+        raise ValueError("bounded_frozen_extraction_prompt_changed")
     profile = bounded_profile_for_config(config)
     fixed = frozen.get("fixed", {})
     if fixed.get("provider_profile", EvaluationProviderProfile.DEEPSEEK_BOUNDED_TASK.value) != profile.value:
@@ -286,7 +290,7 @@ def _verify_bounded_claim(frozen: dict, config: dict, helper: Any, actual_window
             or config.get("stream") is not False or config.get("fallback") is not False
             or config.get("response_identity_policy") != "first_valid_completion_observation_stop_on_change"
             or {"thinking", "reasoning_effort", "phase_request_version", "phase_request_policy",
-                "verification_prompt_profile", "extraction_prompt_profile"} & set(config)
+                "verification_prompt_profile"} & set(config)
             or config.get("tool_choice") != {
                 "extraction": {"mode": "omitted", "name": "GroundedMemoryLabels"},
                 "verification": {"mode": "forced", "name": "SourceVerificationOutput"}}):
@@ -312,7 +316,7 @@ def _verify_bounded_claim(frozen: dict, config: dict, helper: Any, actual_window
             raise ValueError("bounded_formal_binding_changed")
         task_ids.add(identifiers["task_id"])
         contacts.add(identifiers["contact_id"])
-    contracts = tuple(extraction_contract("grounded-v2", window) for window in actual_windows)
+    contracts = tuple(extraction_contract("grounded-v2", window, prompt_profile=BOUNDED_STAGE_PROMPT_PROFILE) for window in actual_windows)
     prompt, schema = source_verification_contract("nullable-proof-v3")
     if (config["extraction_window_contracts"] != [{"input_sha256": item["input_sha256"],
             "prompt_sha256": helper.digest(e_prompt), "schema_sha256": helper.digest(e_schema)}

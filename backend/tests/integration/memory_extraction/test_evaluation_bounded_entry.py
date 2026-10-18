@@ -31,6 +31,9 @@ from tests.integration.memory_extraction import test_evaluation_ecnu as old_entr
 from tests.unit.memory_extraction.test_evaluation_bounded_registration import bounded_config
 
 
+from notalone.memory_extraction.grounded_adapter import BOUNDED_STAGE_PROMPT_PROFILE
+
+
 class BoundedEvaluationEntryTest(unittest.TestCase):
     def setUp(self):
         old_entry.EvaluationECNUTest.setUp(self)
@@ -50,6 +53,7 @@ class BoundedEvaluationEntryTest(unittest.TestCase):
             verification_mode="nullable-proof-v3", verification_tool_choice="forced",
             provider_profile="deepseek-bounded-task-v1", request_limit=30,
             extraction_mode="grounded-v2", execution_plan=BOUNDED_RUNTIME_PLAN,
+            extraction_prompt_profile=BOUNDED_STAGE_PROMPT_PROFILE,
             reference_version=BOUNDED_RUNTIME_PLAN, formal_windows=windows,
             formal_task_ids=self.task_ids, database_url="synthetic-persistence-seam",
             bounded_runtime_deadline=self.control)
@@ -72,7 +76,8 @@ class BoundedEvaluationEntryTest(unittest.TestCase):
         base = dict(deadline=datetime.now(timezone.utc) + timedelta(hours=1), repo_root=self.repo,
                     source_hashes=hashes)
         ECNUEvaluationContract(**base, provider_profile="deepseek-bounded-task-v1",
-            execution_plan=BOUNDED_RUNTIME_PLAN, extraction_mode="grounded-v2")
+            execution_plan=BOUNDED_RUNTIME_PLAN, extraction_mode="grounded-v2",
+            extraction_prompt_profile=BOUNDED_STAGE_PROMPT_PROFILE)
         for profile in ("ecnu", "deepseek-flash-max"):
             with self.subTest(profile=profile), self.assertRaises(EvaluationBudgetAbort):
                 ECNUEvaluationContract(**base, provider_profile=profile)
@@ -105,7 +110,8 @@ class BoundedEvaluationEntryTest(unittest.TestCase):
             raw_reviewer=lambda _: self.fail("本入口接缝控制不认证模型审核"), full_reviewer=lambda _: {},
             case_set="bounded15", verification_mode="nullable-proof-v3", verification_tool_choice="forced",
             extraction_tool_choice="omitted", extraction_mode="grounded-v2",
-            reference_version=BOUNDED_RUNTIME_PLAN, execution_plan=BOUNDED_RUNTIME_PLAN)
+            reference_version=BOUNDED_RUNTIME_PLAN, execution_plan=BOUNDED_RUNTIME_PLAN,
+            extraction_prompt_profile=BOUNDED_STAGE_PROMPT_PROFILE)
         fixed.update(source_hashes=hashes, frozen_gold={"status": "frozen_agent_review",
             "case_names": [case.name for case in BOUNDED_RUNTIME_CASES],
             "criteria_path": BOUNDED_RUNTIME_REFERENCE_PATH, "criteria_sha256": criteria}, audit_case=audit)
@@ -189,7 +195,7 @@ class BoundedEvaluationEntryTest(unittest.TestCase):
                 for purpose in ("extraction", "verification"):
                     verification = purpose == "verification"
                     prompt, schema = (entry._verification_contract("nullable-proof-v3") if verification
-                        else entry.extraction_contract("grounded-v2", fixed["formal_windows"][0]))
+                        else entry.extraction_contract("grounded-v2", fixed["formal_windows"][0], prompt_profile=BOUNDED_STAGE_PROMPT_PROFILE))
                     messages = [{"role": "system", "content": prompt}, {"role": "user", "content": "合成调用控制"}]
                     model = ChatDeepSeek(api_key=SecretStr(key), model=model_name, base_url="https://api.deepseek.com",
                         temperature=0.0, timeout=300, max_retries=0, http_client=client, http_async_client=async_client,
@@ -253,7 +259,7 @@ class BoundedEvaluationEntryTest(unittest.TestCase):
 
         def batch(**values):
             window = fixed["formal_windows"][0]
-            prompt, _ = entry.extraction_contract("grounded-v2", window)
+            prompt, _ = entry.extraction_contract("grounded-v2", window, prompt_profile=BOUNDED_STAGE_PROMPT_PROFILE)
             messages = [{"role": "system", "content": prompt}]
             with values["budget"].batch():
                 values["credential_loader"]()

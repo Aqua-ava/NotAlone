@@ -52,6 +52,11 @@ PROFILES: dict[str, dict] = {"baseline": FIXED, "semantic4": {
 }}
 
 
+from notalone.memory_extraction.grounded_adapter import BOUNDED_STAGE_PROMPT_PROFILE
+
+PROFILES["bounded15"]["extraction_prompt_profile"] = BOUNDED_STAGE_PROMPT_PROFILE
+
+
 PROFILES["bounded15-pro"] = {**PROFILES["bounded15"],
     "provider_profile": EvaluationProviderProfile.DEEPSEEK_PRO_BOUNDED_TASK.value,
     "request_model": "deepseek-v4-pro", "response_model": "deepseek-v4-pro",
@@ -306,7 +311,7 @@ def _bounded_contract_fields(data):
     repository = PostgresBackgroundTaskRepository(data.database_url)
     for index, (case, window, task_id) in enumerate(zip(BOUNDED_RUNTIME_CASES, data.windows, data.task_ids, strict=True)):
         input_sha = canonical_sha256(window)
-        prompt, schema = extraction_contract("grounded-v2", window)
+        prompt, schema = extraction_contract("grounded-v2", window, prompt_profile=BOUNDED_STAGE_PROMPT_PROFILE)
         task = repository.get_task(owner_id=window.owner_id, contact_id=window.contact_id, task_id=task_id)
         if task.extraction_runtime_config is None:
             raise ValueError("bounded15_saved_task_config_required")
@@ -456,7 +461,8 @@ def _worker_bounded(*, frozen, freeze_path, synthetic_transport, credential_load
         raw_reviewer=lambda view: bridge.review("raw", view), full_reviewer=lambda view: bridge.review("full", view),
         case_set="bounded15", reference_version=BOUNDED_RUNTIME_PLAN, execution_plan=BOUNDED_RUNTIME_PLAN,
         extraction_mode="grounded-v2", verification_mode="nullable-proof-v3",
-        verification_tool_choice="forced", extraction_tool_choice="omitted")
+        verification_tool_choice="forced", extraction_tool_choice="omitted",
+        extraction_prompt_profile=BOUNDED_STAGE_PROMPT_PROFILE)
     loaded = False
 
     def loader():
@@ -482,6 +488,7 @@ def _worker_bounded(*, frozen, freeze_path, synthetic_transport, credential_load
         case_positions=None, case_set="bounded15", request_limit=30, reference_version=BOUNDED_RUNTIME_PLAN,
         verification_mode="nullable-proof-v3", verification_tool_choice="forced", extraction_mode="grounded-v2",
         execution_plan=BOUNDED_RUNTIME_PLAN, bounded_runtime_deadline=control,
+        extraction_prompt_profile=BOUNDED_STAGE_PROMPT_PROFILE,
         formal_windows=data.windows, formal_task_ids=data.task_ids, database_url=data.database_url)
     result.update(worker_pid=os.getpid(), execution_plan=BOUNDED_RUNTIME_PLAN)
     helper.publish(directory / "result.json", _json_value(result))

@@ -179,7 +179,7 @@ class EvaluationRecordStore:
             raise EvaluationBudgetAbort("invalid_record_verification_prompt_profile")
         self._extraction_prompt_profile = frozen_config.get("extraction_prompt_profile", "default")
         validate_extraction_prompt_profile(self._execution_plan, self._extraction_prompt_profile)
-        if self._execution_plan != UNIQUENESS_PLAN and "extraction_prompt_profile" in frozen_config:
+        if self._execution_plan not in {UNIQUENESS_PLAN, BOUNDED_RUNTIME_PLAN} and "extraction_prompt_profile" in frozen_config:
             raise EvaluationBudgetAbort("invalid_record_extraction_prompt_profile")
         self._mixed = type(self._execution_plan) is str and self._execution_plan in PHASE_SPLIT_PLANS
         self._strict_response = self._mixed or bounded
@@ -309,7 +309,8 @@ class EvaluationRecordStore:
                     raise ValueError("formal_task_binding_changed")
                 task_ids.add(identifiers["task_id"])
                 contacts.add(identifiers["contact_id"])
-            contracts = tuple(extraction_contract("grounded-v2", window) for window in actual_windows)
+            contracts = tuple(extraction_contract("grounded-v2", window,
+                prompt_profile=self._extraction_prompt_profile) for window in actual_windows)
             prompt, schema = source_verification_contract("nullable-proof-v3")
             if (config.get("extraction_window_contracts") != [{"input_sha256": item["input_sha256"],
                     "prompt_sha256": canonical_sha256(e_prompt), "schema_sha256": canonical_sha256(e_schema)}

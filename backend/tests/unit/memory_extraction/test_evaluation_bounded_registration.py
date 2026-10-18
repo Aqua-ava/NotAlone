@@ -21,6 +21,8 @@ from tests.unit.memory_extraction import test_evaluation_provider_contract as pr
 from tests.unit.memory_extraction.test_evaluation_provider_contract import _payload, _completion
 
 
+from notalone.memory_extraction.grounded_adapter import BOUNDED_STAGE_PROMPT_PROFILE, grounded_v2_prompt
+
 PLAN = "bounded-runtime15-v1"
 PROFILE = "deepseek-bounded-task-v1"
 ENDPOINT = "https://api.deepseek.com/chat/completions"
@@ -34,6 +36,7 @@ def phase_body(phase: str) -> dict:
                 thinking={"type": "enabled" if extraction else "disabled"})
     body["tools"][0]["function"]["name"] = name
     if extraction:
+        body["messages"][0]["content"] = grounded_v2_prompt(BOUNDED_STAGE_PROMPT_PROFILE)
         body.pop("tool_choice")
     else:
         body["tool_choice"]["function"]["name"] = name
@@ -47,7 +50,8 @@ class BoundedProviderRegistrationTest(unittest.TestCase):
     def bounded_contract(self, **changes):
         return self._contract(**{
             "provider_profile": PROFILE, "execution_plan": PLAN,
-            "extraction_mode": "grounded-v2", "verification_tool_choice": "forced", **changes,
+            "extraction_mode": "grounded-v2", "verification_tool_choice": "forced",
+            "extraction_prompt_profile": BOUNDED_STAGE_PROMPT_PROFILE, **changes,
         })
 
     def test_new_profile_binds_e2_and_exact_phase_requests(self):
@@ -193,7 +197,8 @@ def bounded_config(*, windows=None, task_ids=None):
                  for index, (case, window) in enumerate(zip(BOUNDED_RUNTIME_CASES, windows)))
     rule_hash = rule_set_sha256()
     config = _frozen_config(plan, request_timeout_seconds=300.0, max_retries=0,
-        extraction_mode="grounded-v2", verification_mode="nullable-proof-v3", windows=windows)
+        extraction_mode="grounded-v2", verification_mode="nullable-proof-v3", windows=windows,
+        extraction_prompt_profile=BOUNDED_STAGE_PROMPT_PROFILE)
     config.pop("thinking")
     config.update(mode="deepseek_bounded_runtime15", stage="bounded-runtime15", execution_plan=PLAN,
         reference_version=PLAN, request_contract_version=2, base_url="https://api.deepseek.com",
@@ -212,6 +217,24 @@ def bounded_config(*, windows=None, task_ids=None):
 
 
 class BoundedRecordsRegistrationTest(unittest.TestCase):
+    def test_stage_profile_cannot_be_omitted_or_rehashed_to_another_prompt(self):
+        from notalone.memory_extraction.evaluation_extraction import extraction_contract
+        config, plan, windows = bounded_config()
+        for profile in (None, "default", "reference-uniqueness-v1", "bounded-stage-teaching-v2"):
+            changed = deepcopy(config)
+            if profile is None:
+                changed.pop("extraction_prompt_profile")
+            else:
+                changed["extraction_prompt_profile"] = profile
+            # 同时重算旧提示合同及登记摘要也不能换profile。
+            contracts = [extraction_contract("grounded-v2", window) for window in windows]
+            changed["extraction_prompt_sha256"] = canonical_sha256(contracts[0][0])
+            changed["extraction_window_contracts"] = [{"input_sha256": item["input_sha256"],
+                "prompt_sha256": canonical_sha256(prompt), "schema_sha256": canonical_sha256(schema)}
+                for item, (prompt, schema) in zip(plan, contracts)]
+            with self.subTest(profile=profile), self.assertRaises(EvaluationBudgetAbort):
+                self.register(changed, plan, windows)
+
     setUp = provider_tests.EvaluationProviderContractTest.setUp
 
     def register(self, config, plan, windows, *, limit=30):

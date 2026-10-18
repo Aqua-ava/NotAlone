@@ -65,6 +65,7 @@ class BoundedOwnedClaimTest(unittest.TestCase):
             if pro:
                 frozen["fixed"] = {"provider_profile": "deepseek-pro-bounded-task-v1", "request_model": "deepseek-v4-pro",
                                    "response_model": "deepseek-v4-pro", "request_contract_version": 3, "max_tokens": 8192}
+            frozen.setdefault("fixed", {})["extraction_prompt_profile"] = registration.BOUNDED_STAGE_PROMPT_PROFILE
             frozen = snapshot(frozen)
             helper = SimpleNamespace(private_directory=lambda path: None, digest=json_only_digest,
                                      read_private=lambda path: json.loads(path.read_bytes()))

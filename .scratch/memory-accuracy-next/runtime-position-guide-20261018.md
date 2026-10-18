@@ -77,3 +77,14 @@ finish closed=true/close_unknown=false/worker_gone=true；launch与worker句柄�
 任务仍持久化version/mode/rule_set_sha256三个原字段，不增加迁移或把提示摘要冒充证明规则摘要。profile内容版本化、trace记录profile和最终提示摘要；同一冻结源码内的恢复保持选择，评测源清单和调用核验拒绝漂移。三键配置不承诺任意跨代码升级恢复历史E提示，此限制不应隐藏。替换已有profile或承诺跨升级恢复须另行设计。
 
 验收先从实际SDK/worker接缝红灯开始，覆盖两runtime的协议保留、default字节、保存配置恢复、包装记录身份及owned冻结拒错。通过相关测试、类型和双审之后才能新建真实场；当前没有新API调用或新增质量信用，旧场保持关闭。
+
+
+## 阶段教学工程实现与验证
+
+bounded-stage-teaching-v1已在双runtime、真实worker、优先级包装、评测记录及冻结请求中贯通。两协议保留各自schema/compiler，default v2/v3/v4字节hash不变；draft/compile追踪记录profile及提示摘要。没有修改Gold、原15、置信度、证明规则或三键任务配置；尚无本增量真实质量结论。
+
+验证使用backend目录、NOTALONE_DISABLE_DOTENV=1、PYTHONDONTWRITEBYTECODE=1、PYTHONPATH=src、项目Python -B -m unittest：最高接缝先红后2绿；登记/owned/entry 33项绿；public fixture/bounded acceptance/配置恢复35项绿；新增profile、注册、wire、phased审核和两种owned SDK Mock最终60项绿（各组有重叠）。Standards及Spec审查均无实质问题，git diff --check通过。
+
+额外任务/优先级回归40项中31项通过、旧默认测试库中的worker导入9项失败于source_processing。改用现有CoreBusinessFlowFixture创建、完整迁移和清理的本轮独立库，先单失败例1项通过，再worker全模块10项通过；没有修改旧共享库结构，也不把初次失败计为通过。一次直接调用fixture混入类在建库前因缺addClassCleanup失败，后用TestCase子类正确管理清理。所有资料为测试夹具合成，未读真实联系人或业务库。
+
+10个修改源码mypy --follow-imports=silent通过；worker的5项类型错误在HEAD旧文件副本中同类同数量复现，故不能宣称11模块全通过。此轮没有真实API调用。下一步先集成指代Pro16独立入口并回归重叠模块，再冻结新的bounded15场。

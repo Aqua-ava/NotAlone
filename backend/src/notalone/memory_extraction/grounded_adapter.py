@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import hashlib
+import json
 from typing import Any
 from collections.abc import Iterable
 from langchain_core.language_models import BaseChatModel
@@ -120,6 +122,30 @@ family须有原文亲属或家庭关系依据，不能仅因家里／住处或�
 先判断是否有值得保存的信息，再选事实或计划类型：仅推进当前对话的一次性消息传递动作（发送地址、文件等），且没有独立事实、明确承诺、关系约束或超出本次消息交换的安排时用not_memory；有信息的地址／文件内容及真实计划、承诺仍分别保留，不按物品词或短期性一概省略。
 不含独立事实的纯礼貌谢语用greeting，不因存在依赖或前句已完成就另标event；同句或相邻句确有关系经历、完成动作或其他事实时，分别保留有信息的分句，不删除整条消息。
 """ + GROUNDED_E2_TEACHING_EXAMPLES
+
+
+BOUNDED_STAGE_PROMPT_PROFILE = "bounded-stage-teaching-v1"
+BOUNDED_STAGE_TEACHING_V1 = """
+<bounded_stage_teaching_v1>
+以下独立教学对照只说明既有kind的阶段边界，不是本次来源或工具输出。
+完成动作与持续活动：
+「我已经把书架擦干净了。」保存已完成的清洁动作，kind=event；
+「我正在擦书架。」保存仍在进行的活动，kind=momentary_state。
+完成结果与身体状态：
+「我已经量完体温了。」保存已完成的测量动作，kind=event；
+「我现在有点头晕。」保存当前身体近况，kind=state。
+动作发生得近不等于它仍在持续；当前状态也不能因可能短暂而编造已完成动作。
+回到实际target及其必要上下文独立判断；其余槽位仍按原定义填写，不复制教学句或补出未明说的事实。
+</bounded_stage_teaching_v1>
+"""
+
+
+def grounded_v2_prompt(prompt_profile: str = "default", *, events: bool = False) -> str:
+    """两个既有协议共享教学增量；默认提示逐字保留。"""
+    if type(prompt_profile) is not str or prompt_profile not in {"default", BOUNDED_STAGE_PROMPT_PROFILE}:
+        raise ValueError("提取提示profile无效。")
+    base = GROUNDED_V2_PROMPT + (GROUNDED_EVENT_PROMPT if events else "")
+    return base + (BOUNDED_STAGE_TEACHING_V1 if prompt_profile == BOUNDED_STAGE_PROMPT_PROFILE else "")
 
 
 GROUNDED_V3_PROMPT = GROUNDED_PROMPT.replace(
@@ -319,11 +345,20 @@ def grounded_input(window: ExtractionWindow) -> str:
 
 class GroundedExtractionRuntime:
     """生产与测试共用的单次结构提取接缝，保留原14槽下游接口。"""
-    def __init__(self, *, model: BaseChatModel) -> None:
+    def __init__(self, *, model: BaseChatModel, prompt_profile: str = "default") -> None:
+        grounded_v2_prompt(prompt_profile)
         self._model = model
+        self._prompt_profile = prompt_profile
+
+    @property
+    def prompt_profile(self) -> str:
+        return self._prompt_profile
+
+    def for_prompt_profile(self, prompt_profile: str) -> GroundedExtractionRuntime:
+        return type(self)(model=self._model, prompt_profile=prompt_profile)
 
     def extract(self, window: ExtractionWindow) -> ExtractionPayload:
-        return _extract_grounded(self._model, window, version3=False)
+        return _extract_grounded(self._model, window, version3=False, prompt_profile=self._prompt_profile)
 
 
 class GroundedV3ExtractionRuntime:
@@ -336,14 +371,12 @@ class GroundedV3ExtractionRuntime:
         return _extract_grounded(self._model, window, version3=True)
 
 
-class GroundedV2ExtractionRuntime:
+class GroundedV2ExtractionRuntime(GroundedExtractionRuntime):
     """已冻结的旧v2协议；供显式历史评测使用，不替代默认事件提取。"""
 
-    def __init__(self, *, model: BaseChatModel) -> None:
-        self._model = model
-
     def extract(self, window: ExtractionWindow) -> ExtractionPayload:
-        return _extract_grounded(self._model, window, version3=False, events=False)
+        return _extract_grounded(self._model, window, version3=False, events=False,
+                                 prompt_profile=self._prompt_profile)
 
 
 class GroundedV4ExtractionRuntime:
@@ -364,8 +397,8 @@ def _extract_grounded(
     prompt_profile: str = DEFAULT_PROMPT_PROFILE,
     events: bool = True,
 ) -> ExtractionPayload:
-    if not version4 and prompt_profile != DEFAULT_PROMPT_PROFILE:
-        raise ValueError("提取提示profile仅可用于显式v4。")
+    if version3 and prompt_profile != DEFAULT_PROMPT_PROFILE:
+        raise ValueError("v3不接受提取提示profile。")
     if version4:
         protocol, prompt, schema_factory, compiler = (
             "grounded-v4", grounded_v4_prompt(prompt_profile), grounded_schema_v4, compile_labels_v4,
@@ -376,12 +409,12 @@ def _extract_grounded(
         )
     elif events:
         protocol, prompt, schema_factory, compiler = (
-            GROUNDED_EXTRACTION_PROTOCOL, GROUNDED_V2_PROMPT + GROUNDED_EVENT_PROMPT,
+            GROUNDED_EXTRACTION_PROTOCOL, grounded_v2_prompt(prompt_profile, events=True),
             grounded_event_schema, compile_event_labels,
         )
     else:
         protocol, prompt, schema_factory, compiler = (
-            "grounded-v2", GROUNDED_V2_PROMPT, grounded_schema, compile_labels,
+            "grounded-v2", grounded_v2_prompt(prompt_profile), grounded_schema, compile_labels,
         )
     try:
         schema = schema_factory(window)
@@ -399,6 +432,10 @@ def _extract_grounded(
         raise ExtractionInvalidOutputError("原文结构提取必须返回唯一的指定工具。")
     draft = calls[0].get("args")
     identity = {"protocol": protocol}
+    if prompt_profile == BOUNDED_STAGE_PROMPT_PROFILE:
+        identity.update(prompt_profile=prompt_profile, prompt_sha256=hashlib.sha256(json.dumps(
+            prompt, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False,
+        ).encode("utf-8")).hexdigest())
     if not version3 and not version4 and events:
         identity["compiler_version"] = GROUNDED_COMPILER_VERSION
     record("grounded_draft", {**identity, "units": source_units(window), "draft": draft})
