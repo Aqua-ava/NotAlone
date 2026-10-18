@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from notalone.reply.errors import ReplyInvariantError
+from notalone.reply.errors import ReplyInvariantError, ReplyReviewInvalidError
 
 
 CHECK_CATEGORIES = {
@@ -77,15 +77,17 @@ REVIEW_TOOL = build_review_tool(3)
 
 def accepted_candidate_numbers(output: object, payload: dict[str, Any]) -> frozenset[int]:
     """校验完整响应后才筛选；引文存在不等于模型的语义比较正确。"""
-    report = _object(output, {"instruction_requires_expansion", "reviews"})
-    requires_expansion = report["instruction_requires_expansion"]
-    if type(requires_expansion) is not bool:
-        raise ReplyInvariantError("候选复核展开要求无效。")
+    # 可信请求字段先验证，内部构造错误不能归类为供应商输出错误。
     candidates = payload["candidates"]
     if not 1 <= len(candidates) <= 3:
         raise ReplyInvariantError("候选复核没有覆盖全部候选。")
-    rows = _object(report["reviews"], {f"candidate_{number}" for number in range(1, len(candidates) + 1)})
     sources = _source_texts(payload)
+    candidate_texts = [_candidate_texts(candidate) for candidate in candidates]
+    report = _object(output, {"instruction_requires_expansion", "reviews"})
+    requires_expansion = report["instruction_requires_expansion"]
+    if type(requires_expansion) is not bool:
+        raise ReplyReviewInvalidError("候选复核展开要求无效。")
+    rows = _object(report["reviews"], {f"candidate_{number}" for number in range(1, len(candidates) + 1)})
     seen: set[int] = set()
     accepted: set[int] = set()
     for expected in range(1, len(candidates) + 1):
@@ -93,11 +95,11 @@ def accepted_candidate_numbers(output: object, payload: dict[str, Any]) -> froze
         row = _object(value, {"candidate_number", "expression_change", "checks"})
         number = row["candidate_number"]
         if type(number) is not int or number != expected or number in seen:
-            raise ReplyInvariantError("候选复核身份无效。")
+            raise ReplyReviewInvalidError("候选复核身份无效。")
         seen.add(number)
         change = _choice(row["expression_change"], EXPRESSION_CHANGES)
         checks = _object(row["checks"], set(CHECK_CATEGORIES))
-        candidate = _candidate_texts(candidates[number - 1])
+        candidate = candidate_texts[number - 1]
         statuses = [_validate_check(name, checks[name], candidate,
                     sources if name in {"facts", "explanation"} else
                     {path: text for path, text in sources.items() if not path.startswith(("/layered_context/", "/layered_scenario_reads/", "/owner_layered_context/", "/owner_layered_scenario_reads/"))})
@@ -111,7 +113,7 @@ def accepted_candidate_numbers(output: object, payload: dict[str, Any]) -> froze
 def _validate_check(name: str, value: object, candidate: dict[str, str],
                     sources: dict[str, str]) -> str:
     if not isinstance(value, dict):
-        raise ReplyInvariantError("候选复核结构无效。")
+        raise ReplyReviewInvalidError("候选复核结构无效。")
     fields = {"reason", "result"}
     if name == "commitments":
         fields.add("propositions")
@@ -119,7 +121,7 @@ def _validate_check(name: str, value: object, candidate: dict[str, str],
     _text(check["reason"], 256)
     result = check["result"]
     if not isinstance(result, dict):
-        raise ReplyInvariantError("候选复核裁决结构无效。")
+        raise ReplyReviewInvalidError("候选复核裁决结构无效。")
     status = _choice(result.get("status"), ["supported", "violation", "unknown"])
     _object(result, {"status", "violation"} if status == "violation" else {"status"})
     located = None
@@ -138,7 +140,7 @@ def _validate_check(name: str, value: object, candidate: dict[str, str],
         if located is not None and not any(
                 located[0] == path and (located[1] in quote or quote in located[1])
                 for path, quote in actual):
-            raise ReplyInvariantError("承诺违反项没有对应的主体与动作分析。")
+            raise ReplyReviewInvalidError("承诺违反项没有对应的主体与动作分析。")
     return status
 
 
@@ -184,30 +186,30 @@ def _quote(value: dict[str, Any], prefix: str, texts: dict[str, str],
            path_limit: int) -> tuple[str, str]:
     path, quote = _text(value[prefix + "_path"], path_limit), _text(value[prefix + "_quote"], 512)
     if path not in texts or quote not in texts[path]:
-        raise ReplyInvariantError("候选复核的原文定位无效。")
+        raise ReplyReviewInvalidError("候选复核的原文定位无效。")
     return path, quote
 
 
 def _object(value: object, fields: set[str]) -> dict[str, Any]:
     if not isinstance(value, dict) or set(value) != fields:
-        raise ReplyInvariantError("候选复核结构无效。")
+        raise ReplyReviewInvalidError("候选复核结构无效。")
     return value
 
 
 def _array(value: object, *, maximum: int, minimum: int = 0) -> list[Any]:
     if not isinstance(value, list) or not minimum <= len(value) <= maximum:
-        raise ReplyInvariantError("候选复核列表无效。")
+        raise ReplyReviewInvalidError("候选复核列表无效。")
     return value
 
 
 def _text(value: object, maximum: int) -> str:
     if not isinstance(value, str) or not 1 <= len(value.strip()) or len(value) > maximum:
-        raise ReplyInvariantError("候选复核文字无效。")
+        raise ReplyReviewInvalidError("候选复核文字无效。")
     return value
 
 
 def _choice(value: object, choices: list[str]) -> str:
     text = _text(value, 64)
     if text not in choices:
-        raise ReplyInvariantError("候选复核判断无效。")
+        raise ReplyReviewInvalidError("候选复核判断无效。")
     return text

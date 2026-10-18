@@ -40,6 +40,7 @@ from notalone.reply.errors import (
     ReplyInvariantError,
     ReplyPersistenceError,
     ReplyRunError,
+    ReplyReviewInvalidError,
 )
 from notalone.scopes import ContactScope, VerifiedConversationScope
 
@@ -215,6 +216,17 @@ class FreshnessRecordingContext(RecordingReplyContext):
 
 
 class ReplyGeneratorTest(unittest.TestCase):
+    def test_invalid_provider_review_marks_failure_without_saving_candidates(self):
+        class InvalidReviewRuntime:
+            def generate(self, prepared):
+                raise ReplyReviewInvalidError("供应商复核结构无效。")
+        command, prepared = self._valid_case()
+        store = RecordingReplyStore(prepared=prepared)
+        with self.assertRaises(ReplyReviewInvalidError):
+            self._generator(store=store, runtime=InvalidReviewRuntime(), prepared=prepared).generate(
+                command, verified_scope=VERIFIED_SCOPE)
+        self.assertIsNone(store.saved)
+
     def test_captured_layered_reference_is_controlled_rejection_without_promoting_it_to_evidence(self):
         from notalone.reply.interface import RewriteDraft
         scope = ContactScope(OWNER_ID, CONTACT_ID)

@@ -190,6 +190,8 @@ PYTHONPATH=backend/src python \
 不循环改写；复核拒绝表示没有可用候选，不能算作质量改善或正式资格通过。
 模型引用本次 `evidence` 以外的 ID 返回 `reply_candidates_rejected`；历史工具的错误会话参数
 只得到有限失败回执且不执行查询，后端返回越界资料和真正持久化错误仍按原不变量拒绝。
+供应商复核的 JSON／严格结构无效返回 `502 reply_review_invalid`，不保存或重生成候选；
+有效复核没有可用候选仍返回 `409 reply_candidates_rejected`，内部预算、范围与账本错误不归入复核输出错误。
 
 逐组输出审阅须保存 `reply.quality.reply_review_binding(case, arm, calls)` 的 `binding`，
 同时固定实际请求／响应、最终候选、持久依据与两侧资料摘要；更换其中任一项不能沿用旧审阅。

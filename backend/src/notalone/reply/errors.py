@@ -25,6 +25,10 @@ class ReplyRunError(ReplyError):
     """模型或 Tool 运行失败，公开文本不包含供应商响应。"""
 
 
+class ReplyReviewInvalidError(ReplyRunError):
+    """供应商复核结果不符合严格协议；不交付候选，也不自动重试。"""
+
+
 class ReplyProviderContextLimitError(ReplyRunError):
     """供应商稳定错误码确认超长，不伪造本机计量回执。"""
 
