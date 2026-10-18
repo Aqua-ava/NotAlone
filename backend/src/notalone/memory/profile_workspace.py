@@ -4,7 +4,7 @@ import re
 
 from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 from notalone.memory.layered import OrganizationBudgetExhausted
-from notalone.memory.scene_workspace import render_scene, tool_schema
+from notalone.memory.scene_workspace import TOOL_POLICY, render_scene, tool_schema
 
 
 def render_profile(profile):
@@ -97,9 +97,12 @@ TOOLS = [tool_schema('read', '读取profile.md或本次目录中场景，不能�
 
 def maintain_profile(adapter, *, memories, scenarios, corrections, existing_profile, changed_scenarios,
                      removed_scenario_version_ids, base_profile_version_id, deadline):
-    from notalone.memory.organization_sdk import POLICY, PROFILE_POLICY, CORRECTION_POLICY
+    from notalone.memory.organization_sdk import PROFILE_POLICY, CORRECTION_POLICY
     workspace = ProfileWorkspace(existing_profile, scenarios, adapter.budget)
-    prompt = POLICY + PROFILE_POLICY + CORRECTION_POLICY + '''\n增量维护长期背景：已有画像有效时保留未受影响条目，依据变化场景补充、更新或合并，清理已撤回依据。
+    profile_policy = PROFILE_POLICY.replace('无合格长期内容就返回空entries。', '无合格长期内容时profile.md仅保留标题。')
+    prompt = TOOL_POLICY + profile_policy + CORRECTION_POLICY + '''\n增量维护长期背景：已有画像有效时保留未受影响条目，依据变化场景补充、更新或合并，清理已撤回依据。
+documents是全部可读场景索引，另有始终可读写的profile.md；索引空时不得猜测场景路径，可直接write初始化profile.md。
+path仅为索引中的单个xxx.md文件名或profile.md，禁止绝对路径、斜杠和目录。
 只使用read/write/edit操作内存profile.md；当前全部场景只读。不得把场景摘要当事实证明，所有条目引用实际memories版本。
 profile.md格式：# 长期背景，然后每条<!-- ENTRY {"temporal_status":"uncertain","uncertainty":"当前未核实","references":[{"memory_id":"实际ID","revision":1}]} -->换行完整正文。
 仅稳定事实、明确长期偏好或重要历史背景准入，不得从暂态推断人格；没有合格资料时保留标题和空正文。
@@ -127,5 +130,9 @@ profile.md格式：# 长期背景，然后每条<!-- ENTRY {"temporal_status":"u
         if len(response.tool_calls) > 8:
             raise ValueError('画像单轮工具数量超限。')
         for call in response.tool_calls:
-            messages.append(ToolMessage(content=workspace.execute(call['name'], call['args']), tool_call_id=call['id']))
+            try:
+                result = workspace.execute(call['name'], call['args'])
+            except ValueError as error:
+                result = '工具错误：' + str(error) + ' 请按完整documents索引及profile.md规则纠正。'
+            messages.append(ToolMessage(content=result, tool_call_id=call['id']))
     raise OrganizationBudgetExhausted()

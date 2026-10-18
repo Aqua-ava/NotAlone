@@ -36,6 +36,31 @@ class ProfileToolsHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self.profile_inputs = []
         self.profile_mode = 'normal'
 
+    def test_bad_profile_tool_path_can_be_corrected_before_publication(self):
+        text = '长期每周参加合成读书会。'
+        self.extraction_model.facts = {text: ('common_fact', 'other')}
+        self._import_evolution_source([(False, text)], when=self.when)
+        self.profile_mode = 'recover_path'
+        state = self.ready(self.scene_backend(with_profile=True))
+        self.assertEqual([e['text'] for e in state['profile']['entries']], [text])
+        self.assertEqual(state['model_calls_used'], 7)
+
+    def test_uncorrected_profile_path_exhausts_bounded_rounds_without_publication(self):
+        text = '长期每周参加合成读书会。'
+        self.extraction_model.facts = {text: ('common_fact', 'other')}
+        self._import_evolution_source([(False, text)], when=self.when)
+        self.profile_mode = 'escape'
+        backend = self.scene_backend(with_profile=True)
+        deadline = monotonic() + 8
+        while True:
+            state = self._ok(f'/api/contacts/{self.contact_id}/layered-memory', backend=backend)['layered_memory']
+            if state['status'] in {'failed', 'paused'}:
+                break
+            self.assertLess(monotonic(), deadline, state)
+            Event().wait(.04)
+        self.assertIsNone(state['profile'])
+        self.assertEqual(state['model_calls_used'], 8)
+
     def test_new_chat_updates_existing_profile_using_changed_scenes(self):
         first, new = '长期每周参加合成读书会。', '长期每月参加合成写作课。'
         self.extraction_model.facts = {t: ('common_fact', 'other') for t in (first, new)}
@@ -129,7 +154,14 @@ class ProfileToolsHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
                         'value_category': 'enduring_fact_or_preference', 'relationship_impact': None,
                         'eligibility_basis': '合成长期事实，工程合同测试。'}]})
             return {'content': json.dumps({'supported': True, 'reasons': [], 'entries': entries})}
-        if not any(m['role'] == 'tool' for m in payload['messages']):
+        results = [m for m in payload['messages'] if m['role'] == 'tool']
+        if self.profile_mode == 'escape' or self.profile_mode == 'recover_path' and not results:
+            return {'content': '', 'tool_calls': [{'id': 'bad-read', 'type': 'function', 'function': {
+                'name': 'read', 'arguments': json.dumps({'path': '/memories/preferences.md'})}}]}
+        if not results or self.profile_mode == 'recover_path' and len(results) == 1:
+            if results:
+                self.assertIn('工具错误', results[0]['content'])
+                self.assertNotIn('/memories/preferences.md', results[0]['content'])
             self.profile_inputs.append(data)
             memories = data['memories']
             if self.profile_mode == 'drop_old':
