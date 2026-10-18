@@ -1,13 +1,15 @@
 """有限主题整理的管理入口；未知质量资格不会调用模型。"""
 
 from copy import deepcopy
+from contextlib import nullcontext
 import json
 import math
 import inspect
+from threading import Lock
 
 from notalone.memory.layered import OrganizationBudget, OrganizationBudgetExhausted, LayeredMemoryConflict
 from notalone.memory.scenario_validation import validate_proposal
-from notalone.memory.owner_organization_input import owner_model_memories, owner_model_scenarios
+from notalone.memory.owner_organization_input import organization_model_memories, organization_model_scenarios
 from notalone.memory.profile_validation import validate_profile
 from notalone.memory.layered_correction_validation import validate_correction_proposal
 from notalone.application.model_priority import ModelPriorityControl, ModelWorkStopped
@@ -19,13 +21,25 @@ from notalone.application.organization_call import (
 class LayeredMemoryService:
     def __init__(self, store, *, proposer=None, verifier=None, synthetic=False,
                  budget=None, model_priority=None, call_timeout_seconds=30.0, task_host=None, dispatcher=None,
-                 profile_proposer=None, profile_verifier=None):
+                 profile_proposer=None, profile_verifier=None, quality=None, synthetic_quality_required=False, adapter_close=None):
         if (not isinstance(call_timeout_seconds, (int, float)) or isinstance(call_timeout_seconds, bool)
                 or not math.isfinite(call_timeout_seconds) or not 0 < call_timeout_seconds <= 120):
             raise ValueError("整理调用必须有不超过120秒的有限等待。")
+        from notalone.memory.organization_quality import OrganizationQualityService, OrganizationQualityContract
+        from notalone.persistence.organization_quality import PostgresOrganizationQualityStore
+        self._budget = budget or (quality.organization_contract.budget if quality is not None
+            else OrganizationBudget(max_model_calls=4 if profile_proposer else 2))
+        self._quality = quality or OrganizationQualityService(PostgresOrganizationQualityStore(store),
+            organization_contract=OrganizationQualityContract(budget=self._budget))
+        if type(synthetic_quality_required) is not bool or synthetic_quality_required and not synthetic:
+            raise ValueError('受控资格链仅允许显式隔离合成装配。')
+        self._quality_required = not synthetic or synthetic_quality_required
         self._call_timeout_seconds = call_timeout_seconds
         self._task_host = task_host
         self._change_feed = None
+        self._maintenance_lock = Lock()
+        self._maintenance_stopped = False
+        self._adapter_close = adapter_close
         self._dispatcher = dispatcher
         self._contract = "scenario-v3:synthetic-only:deadline-v1:coverage-v1:correction-v1"
         self._store, self._proposer, self._verifier = store, proposer, verifier
@@ -35,7 +49,7 @@ class LayeredMemoryService:
                 raise ValueError("受控整理须分别注入提案和独立核验适配器。")
             require_adapter_timeout_contract(proposer, "propose", synthetic=True)
             require_adapter_timeout_contract(verifier, "verify", synthetic=True)
-        self._scenario_context = bool(synthetic and
+        self._scenario_context = bool(proposer is not None and verifier is not None and
             'scenarios' in inspect.signature(proposer.propose).parameters and
             'scenarios' in inspect.signature(verifier.verify).parameters)
         if self._scenario_context:
@@ -44,20 +58,43 @@ class LayeredMemoryService:
         if (profile_proposer is None) != (profile_verifier is None):
             raise ValueError("长期背景须同时装配独立提案和核验适配器。")
         if profile_proposer is not None:
-            if not synthetic or profile_proposer is profile_verifier:
-                raise ValueError("长期背景尚仅开放独立受控合成验证。")
-            require_adapter_timeout_contract(profile_proposer, "propose", synthetic=True)
-            require_adapter_timeout_contract(profile_verifier, "verify", synthetic=True)
+            if profile_proposer is profile_verifier:
+                raise ValueError("长期背景须分别装配独立提案和核验。")
+            require_adapter_timeout_contract(profile_proposer, "propose", synthetic=synthetic)
+            require_adapter_timeout_contract(profile_verifier, "verify", synthetic=synthetic)
         self._synthetic = synthetic
-        self._budget = budget or OrganizationBudget(max_model_calls=4 if profile_proposer else 2)
         if profile_proposer and self._budget.max_model_calls != 4:
             raise ValueError("长期背景装配要求显式四步有限预算。")
         if profile_proposer:
             self._contract += ":profile-v1"
         self._priority = model_priority or ModelPriorityControl()
+        self._real_adapters = self._actual_adapters_match_contract()
+        if not synthetic and any(adapter is not None for adapter in (proposer, verifier, profile_proposer, profile_verifier)) and not self._real_adapters:
+            raise ValueError('真实整理须装配同合同的实际候选四阶段SDK Adapter。')
 
     def _contract_for(self, scope):
-        return self._contract + (":owner-input-v1" if scope.contact_id is None else "")
+        return self._contract + (":owner-input-v1" if scope.contact_id is None else "") + ":" + self._quality.organization_contract.identity
+
+    def _actual_adapters_match_contract(self):
+        from notalone.memory.organization_sdk import actual_organization_adapters
+        ports = (self._proposer, self._verifier, self._profile_proposer, self._profile_verifier)
+        contract = self._quality.organization_contract
+        if not actual_organization_adapters(ports):
+            return False
+        return (contract.provider == contract.verifier_provider == 'deepseek'
+            and contract.budget == self._budget
+            and all(adapter.model.model_name == (contract.verifier_model if i % 2 else contract.request_model)
+                    for i, adapter in enumerate(ports)))
+
+    def _organization_available(self, owner_id):
+        return (owner_id is not None and (self._synthetic or self._real_adapters)
+            and (not self._quality_required or self._quality.status(owner_id)['organization']['status'] == 'verified'))
+
+    def _publication_guard(self, owner_id, snapshot):
+        return nullcontext(lambda connection: None) if not self._quality_required else self._quality.publication_guard(owner_id, snapshot)
+
+    def _read_available(self, owner_id):
+        return (self._synthetic and not self._quality_required) or self._quality.status(owner_id)['automatic_use_allowed']
 
     def attach_task_host(self, task_host):
         self._task_host=task_host
@@ -67,8 +104,20 @@ class LayeredMemoryService:
             self._dispatcher=dispatcher
 
     def start_maintenance(self, owner_id):
-        if self._synthetic and (self._task_host is not None or self._dispatcher is not None) and owner_id is not None and self._change_feed is None:
+        if owner_id is None or not (self._synthetic or self._real_adapters) or (self._task_host is None and self._dispatcher is None):
+            return
+        with self._maintenance_lock:
+            if self._maintenance_stopped or self._change_feed is not None:
+                return
+            previously_available = False
             def dispatch_due():
+                nonlocal previously_available
+                if not self._organization_available(owner_id):
+                    previously_available = False
+                    return 0.5
+                if not previously_available:
+                    self.resume_pending(owner_id)
+                    previously_available = True
                 scopes, delay = self._store.maintenance_due(owner_id)
                 for scope in scopes:
                     task_id = self._store.enqueue_maintenance(scope, self._budget, self._contract_for(scope),
@@ -80,11 +129,17 @@ class LayeredMemoryService:
 
     def stop(self):
         self._priority.stop()
-        if self._change_feed is not None:
-            self._change_feed.stop()
+        with self._maintenance_lock:
+            self._maintenance_stopped = True
+            feed = self._change_feed
+        if feed is not None:
+            feed.stop()
+        if self._adapter_close is not None:
+            close, self._adapter_close = self._adapter_close, None
+            close()
 
     def resume_pending(self, owner_id):
-        if not self._synthetic or self._task_host is None or owner_id is None:
+        if owner_id is None or not self._organization_available(owner_id) or (self._task_host is None and self._dispatcher is None):
             return
         for scope in self._store.pending_scopes(owner_id):
             task_id=self._store.pending(scope,self._contract_for(scope))
@@ -92,7 +147,7 @@ class LayeredMemoryService:
                 self._dispatch(scope,task_id)
 
     def read(self, scope, *, mapping_cursor=None):
-        if self._synthetic:
+        if self._organization_available(scope.owner_id):
             task_id=self._store.pending(scope,self._contract_for(scope))
             if task_id is not None:
                 self._dispatch(scope,task_id)
@@ -102,7 +157,8 @@ class LayeredMemoryService:
         limit = job["model_call_limit"] if job else self._budget.max_model_calls
         return {"schema_version": 2, "scope_kind": "owner" if scope.contact_id is None else "contact", "contact_id": str(scope.contact_id) if scope.contact_id is not None else None,
                 "settings_generation": state["settings_generation"], "enabled": state["enabled"],
-                "quality_status": "synthetic" if self._synthetic else "unknown",
+                "quality_status": "synthetic" if self._synthetic else self._quality.status(scope.owner_id)["organization"]["status"],
+                "quality": self._quality.status(scope.owner_id, synthetic=self._synthetic),
                 "status": state["status"], "eligible_count": len(entries), "covered_count": covered,
                 "remaining_count": max(0, len(entries)-covered),
                 "work_id": str(job['task_id']) if job else None,
@@ -124,16 +180,19 @@ class LayeredMemoryService:
                 "budget": {**self._budget.to_payload(), "max_model_calls": limit,
                     "model_calls_used": used, "model_calls_remaining": limit-used}}
 
+    def prepare_quality_input(self, scope, versions):
+        return self._quality._store.prepare(scope, versions, self._quality.organization_contract)
+
     def command(self, scope, action, expected_generation, expected_work_revision=None):
         if action in {'pause','continue'}:
-            if not self._synthetic:
+            if not self._organization_available(scope.owner_id):
                 raise LayeredMemoryConflict('当前没有已获资格的覆盖工作。')
             state,_,_,_=self._store.read(scope)
             if state['settings_generation']!=expected_generation:
                 raise LayeredMemoryConflict('范围设置已变化。')
         else:
-            self._store.command(scope, action, expected_generation, quality_available=self._synthetic)
-        if self._synthetic and action in {'enable','refresh','pause','continue'}:
+            self._store.command(scope, action, expected_generation, quality_available=self._organization_available(scope.owner_id))
+        if self._organization_available(scope.owner_id) and action in {'enable','refresh','pause','continue'}:
             task_id, execute = self._store.enqueue(scope,self._budget,self._contract_for(scope),action=action,revision=expected_work_revision,profile_required=self._profile_proposer is not None)
             if execute:
                 self._dispatch(scope,task_id)
@@ -141,7 +200,7 @@ class LayeredMemoryService:
 
     def organize(self, scope):
         """统一变化通知入口；同范围L2及L3仍由正式Worker的一次有限批次执行。"""
-        if not self._synthetic:
+        if not self._organization_available(scope.owner_id):
             return
         task_id, execute = self._store.enqueue(scope,self._budget,self._contract_for(scope),
             profile_required=self._profile_proposer is not None)
@@ -158,9 +217,10 @@ class LayeredMemoryService:
 
     def run_batch(self, claim):
         from notalone.scopes import organization_scope
-        if not self._synthetic:
-            raise PermissionError('整理质量资格尚未获准。')
         scope=organization_scope(claim.owner_id,claim.contact_id)
+        if not self._organization_available(scope.owner_id):
+            raise PermissionError('整理质量资格尚未获准。')
+        quality_snapshot = self._quality.snapshot(scope.owner_id) if self._quality_required else None
         work = self._store.prepare(scope,self._budget,self._contract_for(scope),claim, with_scenarios=self._scenario_context)
         if work is None:
             if self._profile_proposer:
@@ -190,7 +250,8 @@ class LayeredMemoryService:
             if supported is not True:
                 self._store.fail(work, "faithfulness_rejected")
                 return 0
-            self._store.publish(work, proposal, self._budget)
+            with self._publication_guard(scope.owner_id, quality_snapshot) as final_guard:
+                self._store.publish(work, proposal, self._budget, qualification_guard=final_guard)
             if self._profile_proposer:
                 self._organize_profile(scope,claim)
             return len(work.memories)
@@ -219,11 +280,11 @@ class LayeredMemoryService:
 
     @staticmethod
     def _model_memories(work):
-        return deepcopy(owner_model_memories(work.memories) if work.scope.contact_id is None else work.memories)
+        return deepcopy(organization_model_memories(work.scope, work.memories))
 
     @staticmethod
     def _model_scenarios(work):
-        return deepcopy(owner_model_scenarios(work.scenarios) if work.scope.contact_id is None else work.scenarios)
+        return deepcopy(organization_model_scenarios(work.scope, work.scenarios))
 
     def worker_failed(self, claim):
         self._store.worker_failed(claim)
@@ -232,30 +293,40 @@ class LayeredMemoryService:
         """两层共用许可、期限与持久额度政策；反复guard仅复验，不重复扣费。"""
         require_adapter_timeout_contract(adapter, operation, synthetic=self._synthetic)
 
+        snapshot = self._quality.snapshot(work.scope.owner_id) if self._quality_required else None
+        input_guard = guard or (lambda: self._store.check(work))
+        def check():
+            input_guard()
+            if snapshot is not None:
+                self._quality.validate_qualification(work.scope.owner_id, snapshot)
         def invoke(deadline):
-            deadline.check()
+            from notalone.memory.organization_quality_transport import organization_request_context
+            check()
             self._store.reserve_model_call(work)
-            # 预留提交后中断或发送状态不明也计入，不能在恢复时退款重发。
-            deadline.check()
-            return call(deadline)
-
-        return bounded_organization_call(invoke, priority=self._priority,
-            guard=guard or (lambda: self._store.check(work)), timeout_seconds=self._call_timeout_seconds)
+            phase = ('l3' if hasattr(work, 'scenario_version_ids') else 'l2') + ('_proposal' if operation == 'propose' else '_verification')
+            context = (nullcontext() if self._synthetic else organization_request_context(
+                check, lambda request, response, route: self._quality.check_response_identity(work.scope.owner_id, snapshot, phase, request, response, route),
+                deadline, self._budget))
+            with context:
+                value = call(deadline)
+            check()
+            return value
+        return bounded_organization_call(invoke, priority=self._priority, guard=check, timeout_seconds=self._call_timeout_seconds)
 
     def capture(self, scope):
-        return self._store.capture(scope) if self._synthetic else None
+        return self._store.capture(scope) if self._read_available(scope.owner_id) else None
 
     def read_scenario(self, snapshot, id, range):
-        if not self._synthetic:
+        if not self._read_available(snapshot.scope.owner_id):
             raise PermissionError("整理读取质量资格尚未获准。")
         return self._store.read_scenario(snapshot, id, range)
 
     def validate(self, snapshot):
-        return self._synthetic and self._store.validate(snapshot)
+        return self._read_available(snapshot.scope.owner_id) and self._store.validate(snapshot)
 
     def validate_in_transaction(self, connection, snapshot):
         """最终 writer 已持有相同范围锁时使用，不开启第二条连接。"""
-        return self._synthetic and self._store.validate_in_transaction(connection, snapshot)
+        return self._read_available(snapshot.scope.owner_id) and self._store.validate_in_transaction(connection, snapshot)
 
     def withdraw_scenario(self, scope, settings_generation, organization_generation, scenario_version_id):
         self._store.withdraw_scenario(scope, settings_generation, organization_generation, scenario_version_id)
@@ -276,8 +347,9 @@ class LayeredMemoryService:
         return self.read(scope)
 
     def _organize_profile(self, scope, claim):
+        quality_snapshot = self._quality.snapshot(scope.owner_id) if self._quality_required else None
         work = self._store.prepare_profile(scope,self._budget,"profile-v1:synthetic-only:deadline-v1:correction-v1" +
-            (":owner-input-v1" if scope.contact_id is None else ""),
+            (":owner-input-v1" if scope.contact_id is None else "") + ":" + self._quality.organization_contract.identity,
             lease_seconds=self._call_timeout_seconds * 2 + 5,claim=claim)
         if work is None:
             return
@@ -302,7 +374,8 @@ class LayeredMemoryService:
             if supported is not True:
                 self._store.fail_profile(work,"profile_faithfulness_rejected")
                 return
-            self._store.publish_profile(work,proposal)
+            with self._publication_guard(scope.owner_id, quality_snapshot) as final_guard:
+                self._store.publish_profile(work,proposal,qualification_guard=final_guard)
         except OrganizationBudgetExhausted:
             self._store.fail_profile(work,"model_call_budget_exhausted")
         except OrganizationCallTimeout:

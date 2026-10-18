@@ -33,6 +33,15 @@ class ProfileWork:
 class LayeredProfileStore:
     """复用同一Store的事务／输入复验；没有独立连接或范围锁。"""
 
+    def profile_input_entries(self, connection, scope, allowed, input_rows):
+        """正式L3与评测共同继承实际主题批次的完整底层清单。"""
+        by_id = {item['memory_id']: item for row in input_rows for item in row['input_manifest']}
+        entries = tuple(entry for entry in allowed if str(entry.memory.memory_id) in by_id)
+        manifest = self._manifest(connection, scope, entries)
+        if {item['memory_id']: item for item in manifest} != by_id:
+            raise LayeredMemoryConflict('主题的底层实际版本已失效。')
+        return entries, manifest
+
     @staticmethod
     def profile_row(connection, scope, version_id):
         return connection.execute("SELECT v.*,b.scenario_version_ids,b.input_manifest,b.dependency_ids FROM "
@@ -69,11 +78,7 @@ class LayeredProfileStore:
                 connection.execute("UPDATE public.layered_memory_job SET profile_status='not_required' WHERE task_id=%s", (claim.task_id,))
                 return None
             # 全部实际读入L2批次的底层版本和隐藏依赖都继承，不能从直接引用反推。
-            by_id = {item["memory_id"]: item for row in input_rows for item in row["input_manifest"]}
-            entries = tuple(entry for entry in allowed if str(entry.memory.memory_id) in by_id)
-            manifest = self._manifest(connection,scope,entries)
-            if {item["memory_id"]: item for item in manifest} != by_id:
-                raise LayeredMemoryConflict("主题的底层实际版本已失效。")
+            entries, manifest = self.profile_input_entries(connection, scope, allowed, input_rows)
             memories = tuple(self._input(entry) for entry in entries)
             scenarios = tuple(self._document(row) for row in input_rows)
             corrections = self.correction_context(connection, scope)
@@ -161,9 +166,11 @@ class LayeredProfileStore:
             self._check_profile(connection,state,overview,work)
             connection.execute("UPDATE public.layered_profile_batch SET output_payload=%s WHERE id=%s", (Jsonb(proposal),work.id))
 
-    def publish_profile(self, work, proposal):
+    def publish_profile(self, work, proposal, *, qualification_guard=None):
         with self.transaction(work.scope) as (connection,state,overview):
             self._check_profile(connection,state,overview,work)
+            if qualification_guard is not None:
+                qualification_guard(connection)
             id = uuid4()
             connection.execute("INSERT INTO public.layered_profile_version(id,owner_id,contact_id,batch_id,schema_version,entries,created_at) "
                 "VALUES(%s,%s,%s,%s,2,%s,%s)", (id,work.scope.owner_id,work.scope.contact_id,work.id,Jsonb(proposal["entries"]),self._clock()))

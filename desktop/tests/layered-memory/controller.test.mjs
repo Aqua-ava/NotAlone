@@ -2,6 +2,93 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { fixture, payload, readyPayload, profilePayload, ids, BackendRequestFailure } from './support.mjs';
 
+test('已验证整理与回复资格经公开 bridge 保留各自合同和报告，允许真实资料使用', async () => {
+  const f = await fixture(async () => ({ generation: 1, data: readyPayload({ quality_status: 'verified', quality: {
+    organization: { status: 'verified', reasons: [], contract_id: 'organization-contract-v1', report_id: 'organization-report-v1' },
+    reply: { status: 'verified', reasons: [], contract_id: 'reply-contract-v1', report_id: 'reply-report-v1' },
+    automatic_use_allowed: true, synthetic: false,
+  } }) }));
+  try {
+    await f.bridge.readLayeredMemory(f.selection());
+    const state = (await f.bridge.getState()).layeredMemory;
+    assert.equal(state.phase, 'ready');
+    assert.equal(state.value.qualityStatus, 'verified');
+    assert.deepEqual(state.value.quality, {
+      organization: { status: 'verified', reasons: [], contractId: 'organization-contract-v1', reportId: 'organization-report-v1' },
+      reply: { status: 'verified', reasons: [], contractId: 'reply-contract-v1', reportId: 'reply-report-v1' },
+      automaticUseAllowed: true, synthetic: false,
+    });
+  } finally { f.disconnect(); }
+});
+
+test('整理资格变化只关闭自动使用，未知或未通过仍可回看来源有效的已有正文', async () => {
+  for (const status of ['unknown', 'failed']) {
+    const f = await fixture(async () => ({ generation: 1, data: profilePayload({ quality_status: status, status: 'blocked', quality: {
+      organization: { status, reasons: ['整理合同变化，旧报告不能放行当前用途。'], contract_id: 'organization-v2', report_id: 'organization-report-v1' },
+      reply: { status: 'verified', reasons: [], contract_id: 'reply-v1', report_id: 'reply-report-v1' },
+      automatic_use_allowed: false, synthetic: false,
+    } }) }));
+    try {
+      await f.bridge.readLayeredMemory(f.selection());
+      const state = (await f.bridge.getState()).layeredMemory;
+      assert.equal(state.phase, 'ready');
+      assert.equal(state.value.quality.organization.status, status);
+      assert.equal(state.value.quality.automaticUseAllowed, false);
+      assert.equal(state.value.scenarios[0].title, '合成读书计划');
+      assert.equal(state.value.profile.versionId, ids.profile);
+    } finally { f.disconnect(); }
+  }
+});
+
+test('生产质量合同缺失、伪造放行或不完整报告均撤下旧快照，不退回合成资格', async () => {
+  const stage = { status: 'verified', reasons: [], contract_id: 'contract-v1', report_id: 'report-v1' };
+  const valid = { organization: stage, reply: stage, automatic_use_allowed: true, synthetic: false };
+  const wrong = [undefined, null, { ...valid, unexpected: true }, { ...valid, organization: { ...stage, report_id: null } },
+    { ...valid, organization: { ...stage, reasons: ['存在关键错误。'] } }, { ...valid, reply: { ...stage, status: 'unknown' } },
+    { ...valid, reply: { ...stage, status: 'failed', reasons: ['候选模型未通过。'] } },
+    { ...valid, automatic_use_allowed: 'true' }, { ...valid, synthetic: true },
+    { ...valid, organization: { ...stage, contract_id: '' } }, { ...valid, organization: { ...stage, extra: '未声明字段' } },
+    { ...valid, reply: { ...stage, reasons: [17] } }, { ...valid, reply: { ...stage, status: 'synthetic' } }];
+  for (const quality of wrong) {
+    let current = readyPayload({ quality_status: 'verified', quality: valid });
+    const f = await fixture(async () => ({ generation: 1, data: current }));
+    try {
+      await f.bridge.readLayeredMemory(f.selection());
+      assert.equal((await f.bridge.getState()).layeredMemory.phase, 'ready');
+      current = readyPayload({ quality_status: 'verified', quality });
+      await f.bridge.readLayeredMemory(f.selection());
+      assert.deepEqual((await f.bridge.getState()).layeredMemory, { phase: 'error', value: null });
+    } finally { f.disconnect(); }
+  }
+});
+
+for (const scope of ['contact', 'owner']) test(`已开启的已验证${scope === 'owner' ? '本人' : '联系人'}资料自动复核并展示资格失效`, { timeout: 4000 }, async () => {
+  let reads = 0, notifyUpdated;
+  const updated = new Promise((resolve) => { notifyUpdated = resolve; });
+  const stage = { status: 'verified', reasons: [], contract_id: 'contract-v1', report_id: 'report-v1' };
+  const f = await fixture(async () => {
+    const changed = ++reads > 1;
+    const data = readyPayload({ scope_kind: scope, contact_id: scope === 'owner' ? null : ids.contact,
+      quality_status: changed ? 'unknown' : 'verified', quality: {
+        organization: changed ? { ...stage, status: 'unknown', reasons: ['整理合同已变化。'] } : stage,
+        reply: stage, automatic_use_allowed: !changed, synthetic: false,
+      } });
+    if (changed) notifyUpdated();
+    return { generation: 1, data };
+  });
+  const read = () => scope === 'owner' ? f.bridge.readOwnerLayeredMemory({}) : f.bridge.readLayeredMemory(f.selection());
+  const state = async () => scope === 'owner' ? f.bridge.getOwnerLayeredMemoryState() : (await f.bridge.getState()).layeredMemory;
+  const deadline = setTimeout(() => notifyUpdated(), 2000);
+  try {
+    await read();
+    await updated;
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.ok(reads > 1, '已验证资料应继续复核后台状态');
+    assert.equal((await state()).value.quality.organization.status, 'unknown');
+    assert.equal((await state()).value.quality.automaticUseAllowed, false);
+  } finally { clearTimeout(deadline); f.disconnect(); }
+});
+
 test('用户明确确认联系人范围与用途后可开启；未知质量只保存范围而不放行整理', async () => {
   const posted = [];
   const f = await fixture(async (request) => {
@@ -130,7 +217,7 @@ test('底层记忆修正或删除先撤主题缓存，响应未知后仍权威�
 
 test('跨联系人、未知来历、无依据或非法时间响应不能替换已验证的主题资料', async () => {
   const base = readyPayload();
-  const wrong = [readyPayload({ contact_id: ids.other }), readyPayload({ quality_status: 'unknown' }),
+  const wrong = [readyPayload({ contact_id: ids.other }),
     readyPayload({ maintenance_pending: 'true' }),
     readyPayload({ scenario_mappings: [{ source_scenario_id: ids.other, source_version_id: ids.work,
       targets: [{ scenario_id: ids.scenario, version_id: ids.other }] }] }),
@@ -288,15 +375,14 @@ test('当前长期背景保留逐项依据与不确定性，并绑定一致版�
   assert.equal((await f.bridge.getState()).layeredMemory.value.scenarios[0].title, '合成读书计划');
 });
 
-test('旧协议、无依据或未知质量的长期背景不能填回当前资料', async () => {
+test('旧协议、无依据或非法时间状态的长期背景不能填回当前资料', async () => {
   const base = profilePayload(), profile = base.layered_memory.profile;
   const wrong = [profilePayload({ schema_version: 1 }), profilePayload({ profile: undefined }),
     profilePayload({ profile: { ...profile, system_generated: false } }),
     profilePayload({ profile: { ...profile, entries: [{ ...profile.entries[0], references: [] }] } }),
     profilePayload({ profile: { ...profile, entries: [{ ...profile.entries[0], temporal_status: 'current' }] } }),
     profilePayload({ profile: { ...profile, entries: [{ ...profile.entries[0], uncertainty: undefined }] } }),
-    profilePayload({ profile: { ...profile, entries: [{ ...profile.entries[0], uncertainty: '' }] } }),
-    profilePayload({ scenarios: [], quality_status: 'unknown' })];
+    profilePayload({ profile: { ...profile, entries: [{ ...profile.entries[0], uncertainty: '' }] } })];
   for (const unavailable of wrong) {
     let saved = base;
     const f = await fixture(async () => ({ generation: 1, data: saved }));

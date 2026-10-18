@@ -32,7 +32,7 @@ export class OwnerLayeredMemoryController {
   private clear() { clearTimeout(this.timer); this.timer = undefined; this.operation?.abort(); this.operation = undefined; }
   private schedule() {
     clearTimeout(this.timer);
-    if (this.state.value?.enabled && this.state.value.qualityStatus === 'synthetic') {
+    if (this.state.value?.enabled && (this.state.value.qualityStatus === 'synthetic' || this.state.value.qualityStatus === 'verified')) {
       const mappingCursor = this.state.value.mappingCursor;
       this.timer = setTimeout(() => void this.read({ mappingCursor }, true).catch(() => {}), 1000); this.timer.unref();
     }

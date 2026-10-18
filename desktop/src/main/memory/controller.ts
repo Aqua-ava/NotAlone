@@ -216,7 +216,8 @@ export class MemoryReadingController {
     clearTimeout(this.layeredTimer);
     this.layeredTimer = undefined;
     const value = this.state.layeredMemory.value;
-    if (!this.layeredRequested || this.scope !== scope || !value?.enabled || value.qualityStatus !== 'synthetic') return;
+    if (!this.layeredRequested || this.scope !== scope || !value?.enabled
+      || (value.qualityStatus !== 'synthetic' && value.qualityStatus !== 'verified')) return;
     this.layeredTimer = setTimeout(() => {
       this.layeredTimer = undefined;
       this.synchronizeScope();

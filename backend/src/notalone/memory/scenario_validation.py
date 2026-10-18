@@ -12,7 +12,7 @@ def validate_proposal(proposal: object, memories: tuple[OrganizationInput, ...],
         raise ValueError("主题提案结构无效。")
     previous_versions = {item["version_id"]: item for item in scenarios}
     scenarios = proposal["scenarios"]
-    if not isinstance(scenarios, list) or not 1 <= len(scenarios) <= budget.max_scenarios:
+    if not isinstance(scenarios, list) or not 0 <= len(scenarios) <= budget.max_scenarios:
         raise ValueError("主题数量越界。")
     inputs = {(str(item.memory_id), item.revision): item for item in memories}
     characters, paragraphs, topics = 0, 0, set()

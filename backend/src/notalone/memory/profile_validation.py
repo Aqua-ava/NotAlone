@@ -7,7 +7,7 @@ def validate_profile(proposal, memories, budget):
     if not isinstance(proposal, dict) or set(proposal) != {"entries"}:
         raise ValueError("长期背景结构无效。")
     entries = proposal["entries"]
-    if not isinstance(entries, list) or not 1 <= len(entries) <= budget.max_profile_entries:
+    if not isinstance(entries, list) or not 0 <= len(entries) <= budget.max_profile_entries:
         raise ValueError("长期背景条目数量越界。")
     normalized = []
     characters = 0

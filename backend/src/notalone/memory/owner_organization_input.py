@@ -31,3 +31,12 @@ def owner_model_scenarios(scenarios):
         | {'paragraphs': [{'text': paragraph['text'], 'references': [
             {key: ref[key] for key in ('memory_id', 'revision')} for ref in paragraph['references']]}
             for paragraph in item['paragraphs']]} for item in scenarios)
+
+
+def organization_model_memories(scope, memories):
+    """两类scope共享唯一投影入口；联系人保留既有合法来源/事件合同。"""
+    return owner_model_memories(memories) if scope.contact_id is None else memories
+
+
+def organization_model_scenarios(scope, scenarios):
+    return owner_model_scenarios(scenarios) if scope.contact_id is None else scenarios
