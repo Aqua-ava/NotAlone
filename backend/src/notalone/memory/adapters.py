@@ -183,6 +183,12 @@ class InMemoryMemoryStore:
         self._memories[corrected.memory_id] = corrected
         return corrected
 
+    def fail_automatic_candidate(self, *, scope: ContactScope, candidate_id: UUID) -> None:
+        candidate = self._candidate(scope=scope, candidate_id=candidate_id)
+        if candidate.status is MemoryCandidateStatus.PENDING:
+            self._candidates[candidate_id] = replace(candidate, status=MemoryCandidateStatus.REJECTED,
+                failure_reason=candidate.failure_reason or "automatic_write_failed")
+
     def reject_candidate(
         self,
         *,

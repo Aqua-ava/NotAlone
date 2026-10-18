@@ -180,6 +180,7 @@ def run_extraction(
     previous_watermark = watermark_message_id
     from notalone.memory_extraction.merge import MemoryMergeVerifier
     adoption = MemoryAdoption(
+        automatic=True,
         memory_port=memory_port,
         owner_memory_port=owner_memory_port,
         merge_verifier=MemoryMergeVerifier(messages=messages, verification_runtime=verification_runtime),

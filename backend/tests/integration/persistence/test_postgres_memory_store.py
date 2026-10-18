@@ -186,6 +186,21 @@ class PostgresMemoryStoreTest(unittest.TestCase):
             invalid_at=invalid_at,
         )
 
+    def test_automatic_failure_does_not_create_human_correction(self):
+        candidate = self.store.create_candidate(self._candidate())
+        self.store.fail_automatic_candidate(scope=self._scope(), candidate_id=candidate.candidate_id)
+        current = self.store.get_candidate(scope=self._scope(), candidate_id=candidate.candidate_id)
+        self.assertEqual(current.status, MemoryCandidateStatus.REJECTED)
+        self.assertEqual(current.failure_reason, "automatic_write_failed")
+        with psycopg.connect(TEST_DATABASE_URL) as connection:
+            count = connection.execute("SELECT count(*) FROM memory_correction_decision WHERE owner_id=%s",
+                (self.owner_id,)).fetchone()[0]
+        self.assertEqual(count, 0)
+        # 相同来源的新系统候选不应被此前系统失败当成人工否决。
+        next_candidate = self.store.create_candidate(self._candidate(candidate_id=uuid4()))
+        self.assertEqual(next_candidate.status, MemoryCandidateStatus.PENDING)
+        self.assertFalse(next_candidate.correction_review)
+
     def test_candidate_and_confirmed_memory_keep_adoption_provenance(self) -> None:
         valid_at = datetime.now(timezone.utc) - timedelta(minutes=1)
         invalid_at = valid_at + timedelta(days=2)

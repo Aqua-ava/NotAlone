@@ -106,6 +106,9 @@ class MemoryAdoption:
         "_dimension_release",
         "_candidate_namespace",
         "_merge_verifier",
+        "_automatic",
+        "_staged_candidates",
+        "_existing_candidates",
     )
 
     def __init__(
@@ -121,6 +124,7 @@ class MemoryAdoption:
         dimension_release: DimensionRelease | None = None,
         candidate_namespace: UUID | None = None,
         merge_verifier=None,
+        automatic: bool = False,
     ) -> None:
         if memory_port is None:
             raise TypeError("必须显式注入联系人级记忆 port。")
@@ -142,8 +146,32 @@ class MemoryAdoption:
             raise TypeError('候选命名空间必须是稳定批次UUID。')
         self._candidate_namespace = candidate_namespace
         self._merge_verifier = merge_verifier
+        self._automatic = automatic
+        self._staged_candidates = set()
+        self._existing_candidates = set()
 
     def adopt(self, scope: ContactScope, outcome: ExtractionOutcome) -> AdoptionStats:
+        """自动流程只留下成功或失败；临时写入候选不成为人工确认任务。"""
+        self._staged_candidates.clear()
+        self._existing_candidates = {item.candidate_id for item in self._memory_port.list_pending_candidates(scope)} if self._automatic else set()
+        try:
+            stats = self._adopt(scope, outcome)
+        finally:
+            if self._automatic:
+                for candidate in self._memory_port.list_pending_candidates(scope):
+                    if candidate.candidate_id in self._staged_candidates:
+                        self._memory_port.fail_automatic_candidate(scope=scope, candidate_id=candidate.candidate_id)
+                        record("candidate_result", {"disposition": "automatic_write_failed",
+                            "candidate_id": candidate.candidate_id, "reason": "see_preceding_adjudication_or_write_result"})
+        return replace(stats, pending=0, rejected_by_contract=stats.rejected_by_contract + stats.pending) if self._automatic else stats
+
+    def _persist_candidate(self, candidate):
+        actual = self._memory_port.create_candidate(candidate)
+        if actual.candidate_id == candidate.candidate_id and actual.candidate_id not in self._existing_candidates:
+            self._staged_candidates.add(actual.candidate_id)
+        return actual
+
+    def _adopt(self, scope: ContactScope, outcome: ExtractionOutcome) -> AdoptionStats:
         """按主体逐条采纳；晚发生故障可保留此前已提交的结果。"""
 
         if outcome.failure_reason is not None:
@@ -921,6 +949,8 @@ class MemoryAdoption:
         return texts
 
     def _interpret_for_adoption(self, fact, scope):
+        if self._automatic:
+            return PragmaticDecision(disposition=MemoryDisposition.CONFIRMABLE)
         decision = self._pragmatic_interpreter.interpret(fact)
         # 明确更正仍保留correction标签；仅当前逐条核验策略可解除这一项阻塞。
         # 假设、歧义、风险、来源变化和人工修正保护继续走原门禁。
@@ -941,6 +971,10 @@ class MemoryAdoption:
         """语用、置信度、风险及当前来源核验共同决定采纳；显式旧策略保留逐维门。"""
 
         decision = pragmatic_decision or self._interpret_for_adoption(fact, scope)
+        if self._automatic:
+            # 逐条来源核验仍为准入；置信度/语用/风险字段只保留描述，不增设人工门。
+            return self._dimension_release.allows(fact, scope=scope) and (
+                fact.event is None or fact.event.source_current and fact.event.stage_verified and fact.event.occurrence_verified)
         return can_auto_adopt(
             fact, decision, confidence_threshold=self._threshold
         ) and self._dimension_release.allows(fact, scope=scope) and (
@@ -1021,7 +1055,7 @@ class MemoryAdoption:
             links=(link,),
         )
         write_started_at = datetime.now(timezone.utc)
-        actual = self._memory_port.create_candidate(candidate)
+        actual = self._persist_candidate(candidate)
         record(
             "write_result",
             {
@@ -1122,7 +1156,7 @@ class MemoryAdoption:
             links=(link,),
         )
         write_started_at = datetime.now(timezone.utc)
-        candidate = self._memory_port.create_candidate(planned)
+        candidate = self._persist_candidate(planned)
         record(
             "write_result",
             {

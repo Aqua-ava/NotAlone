@@ -607,3 +607,57 @@ class UpdateWithoutReplacedIdRuntime:
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AutomaticMemoryAdoptionTest(unittest.TestCase):
+    def test_verified_policy_does_not_turn_low_confidence_into_manual_work(self):
+        scope = ContactScope(OWNER_ID, CONTACT_ID)
+        store = InMemoryMemoryStore()
+        fact = _fact(confidence=0.3, risk_flags=("uncertain",))
+        stats = MemoryAdoption(memory_port=store, automatic=True,
+            dimension_release=DimensionRelease(gate_enabled=False)).adopt(scope, ExtractionOutcome(accepted=(fact,)))
+        self.assertEqual((stats.adopted, stats.pending), (1, 0))
+        self.assertEqual(store.list_pending_candidates(scope), ())
+        self.assertEqual(store.list_confirmed(scope)[0].adoption_method, AdoptionMethod.AUTO)
+
+    def test_missing_source_verification_is_failure_and_no_pending(self):
+        scope = ContactScope(OWNER_ID, CONTACT_ID)
+        store = InMemoryMemoryStore()
+        stats = MemoryAdoption(memory_port=store, automatic=True).adopt(scope, ExtractionOutcome(accepted=(_fact(),)))
+        self.assertEqual((stats.adopted, stats.pending, stats.rejected_by_contract), (0, 0, 1))
+        self.assertEqual(store.list_pending_candidates(scope), ())
+        self.assertEqual(store.list_confirmed(scope), ())
+
+    def test_invalid_adjudication_records_failure_without_pending(self):
+        scope = ContactScope(OWNER_ID, CONTACT_ID)
+        store = InMemoryMemoryStore()
+        policy = DimensionRelease(gate_enabled=False)
+        MemoryAdoption(memory_port=store, automatic=True, dimension_release=policy).adopt(scope, ExtractionOutcome(accepted=(_fact(),)))
+        class InvalidDecision:
+            def adjudicate(self, **kwargs):
+                return AdjudicationDecision(action=AdjudicationAction.UPDATE, replaced_memory_id=None)
+        stats = MemoryAdoption(memory_port=store, automatic=True, dimension_release=policy,
+            adjudication_runtime=InvalidDecision()).adopt(scope, ExtractionOutcome(accepted=(_fact(text="对方最近开始慢跑"),)))
+        self.assertEqual(stats.pending, 0)
+        self.assertEqual(store.list_pending_candidates(scope), ())
+        self.assertEqual(len(store.list_confirmed(scope)), 1)
+
+    def test_reused_old_pending_is_not_rejected_on_failed_auto_confirmation(self):
+        scope = ContactScope(OWNER_ID, CONTACT_ID)
+        store = InMemoryMemoryStore()
+        MemoryAdoption(memory_port=store).adopt(scope, ExtractionOutcome(accepted=(_fact(),)))
+        old = store.list_pending_candidates(scope)[0]
+        # 存储可以复用同一候选，不能因本轮确认失败而改写旧人工待办。
+        class ReusingStore(InMemoryMemoryStore):
+            def create_candidate(self, candidate):
+                return old
+            def list_pending_candidates(self, scope):
+                return (old,)
+            def confirm(self, **kwargs):
+                from notalone.memory.versions import MemoryVersionConflict
+                raise MemoryVersionConflict("来源版本变化")
+            def reject_candidate(self, **kwargs):
+                raise AssertionError("不得拒绝旧候选")
+        result = MemoryAdoption(memory_port=ReusingStore(), automatic=True,
+            dimension_release=DimensionRelease(gate_enabled=False)).adopt(scope, ExtractionOutcome(accepted=(_fact(),)))
+        self.assertEqual(result.pending, 0)

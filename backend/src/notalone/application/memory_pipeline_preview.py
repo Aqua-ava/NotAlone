@@ -23,10 +23,14 @@ from notalone.tasks.worker import BackgroundTaskWorker
 class MemoryPipelinePreview:
     """仅把生产 Worker 的存储目标换成显式隔离库；水位和恢复仍由生产实现负责。"""
 
-    def __init__(self, database_url, *, expected_database, extraction_runner, layered_service):
+    def __init__(self, database_url, *, expected_database, extraction_runner, layered_service, max_input_records=20, max_total_records=40):
         with psycopg.connect(database_url) as connection:
             if (connection.info.dbname != expected_database or not expected_database.endswith('_test')):
                 raise ValueError('记忆预览只允许明确命名的隔离测试库。')
+        if not isinstance(max_input_records, int) or not isinstance(max_total_records, int) or not 0 < max_input_records <= max_total_records:
+            raise ValueError("预览范围须是明确正整数记录数。")
+        self.max_input_records = max_input_records
+        self.max_total_records = max_total_records
         self.database_url = database_url
         self.layered = layered_service
         self.repository = PostgresBackgroundTaskRepository(database_url)
@@ -37,11 +41,11 @@ class MemoryPipelinePreview:
         self.layered.attach_dispatcher(EmbeddedOrganizationDispatcher(database_url))
 
     def submit(self, *, path, owner_id, selection, initialize_owner=False):
-        """每次最多 20 条；正式来源导入负责身份、幂等与任务生成。"""
+        """正式来源导入负责身份、幂等与任务生成；记录上限在装配时明确。"""
         path = Path(path)
         preview = build_preview(path)
-        if preview.record_count > 20:
-            raise ValueError('本入口仅用于最多 20 条真实资料的小批预览。')
+        if preview.record_count > self.max_input_records:
+            raise ValueError('本次输入超过明确授权的预览记录数。')
         result = import_file(path=path, owner_id=owner_id, initialize_owner=initialize_owner,
             initialize_first_owner_identity=initialize_owner,
             expected_content_sha256=preview.content_sha256,
@@ -54,8 +58,8 @@ class MemoryPipelinePreview:
         with psycopg.connect(self.database_url) as connection:
             count = connection.execute('SELECT count(*) FROM public.message WHERE owner_id=%s AND contact_id=%s',
                                        (scope.owner_id, scope.contact_id)).fetchone()[0]
-        if count > 40:
-            raise ValueError('持续更新预览最多累计 40 条；不能借重开入口启动全量运行。')
+        if count > self.max_total_records:
+            raise ValueError('累计资料超过明确授权的预览记录数。')
         task = self.repository.get_task(owner_id=scope.owner_id, contact_id=scope.contact_id, task_id=task_id)
         with psycopg.connect(self.database_url, autocommit=True) as connection:
             result = run_worker(worker=self.worker, lock_connection=connection,
@@ -84,7 +88,7 @@ class MemoryPipelinePreview:
             'contact': self.layered.read(scope), 'owner': self.layered.read(OwnerScope(scope.owner_id))}
 
 
-def build_memory_pipeline_preview(database_url, *, expected_database):
+def build_memory_pipeline_preview(database_url, *, expected_database, max_input_records=20, max_total_records=40):
     """实际 DeepSeek 预览沿用生产装配；所有 HTTP 请求仍扣已有问题总账。"""
     import os
     from notalone.experiments.problem_budget import ProblemBudget, ProblemStopped
@@ -103,5 +107,6 @@ def build_memory_pipeline_preview(database_url, *, expected_database):
         if connection.info.dbname != expected_database or not expected_database.endswith('_test'):
             raise ValueError('记忆预览只允许明确命名的隔离测试库。')
     return MemoryPipelinePreview(database_url, expected_database=expected_database,
+        max_input_records=max_input_records, max_total_records=max_total_records,
         extraction_runner=PostgresMemoryExtractionRunner(database_url),
         layered_service=build_layered_memory_service(database_url))

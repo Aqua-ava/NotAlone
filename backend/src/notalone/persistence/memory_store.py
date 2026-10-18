@@ -1170,6 +1170,18 @@ class PostgresMemoryStore:
             ) from error
         return tuple(row["text_content"] for row in rows)
 
+    def fail_automatic_candidate(self, *, scope: ContactScope, candidate_id: UUID) -> None:
+        """仅终结自动写入临时候选；不登记用户拒绝，也不清除其他资料依赖。"""
+        self._validate_scope(scope)
+        self._validate_uuid(candidate_id, "candidate_id")
+        with self._connect() as connection:
+            lock_contact_scope(connection, owner_id=scope.owner_id, contact_id=scope.contact_id)
+            lock_owner_scope(connection, owner_id=scope.owner_id)
+            connection.execute("UPDATE public.memory_candidate SET status='rejected', "
+                "failure_reason=COALESCE(failure_reason,'automatic_write_failed') "
+                "WHERE id=%s AND owner_id=%s AND contact_id=%s AND status='pending'",
+                (candidate_id, scope.owner_id, scope.contact_id))
+
     def _transition_candidate(
         self,
         *,

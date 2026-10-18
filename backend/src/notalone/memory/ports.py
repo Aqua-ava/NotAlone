@@ -62,6 +62,10 @@ class MemoryPort(Protocol):
     ) -> ConfirmedMemory:
         """修正现有记忆并保留其来源链。"""
 
+    def fail_automatic_candidate(self, *, scope: ContactScope, candidate_id: UUID) -> None:
+        """终结本轮自动写入失败，不生成用户拒绝决定。"""
+        ...
+
     def reject_candidate(
         self,
         *,
