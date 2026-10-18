@@ -1,3 +1,5 @@
+import { acquireDevelopmentLease } from './development-lease.mjs';
+import { developmentProcesses, requireDevelopmentOnly } from './development-policy.mjs';
 import { context } from 'esbuild';
 import { createHash } from 'node:crypto';
 import { watch } from 'node:fs';
@@ -20,10 +22,21 @@ if (args.length === 1 && args[0] === '--help') {
   if (args.length && (args.length !== 2 || args[0] !== '--user-data-dir' || !path.isAbsolute(args[1]) || /[\0\r\n]/.test(args[1]))) {
     throw new Error('使用 npm run dev -- --help 查看启动方式');
   }
-  await develop();
+  const lease = await acquireDevelopmentLease(project);
+  if (!lease) {
+    requireDevelopmentOnly(await developmentProcesses(project, args[1]));
+    console.log('当前项目的开发监督器已运行或正在启动；复用现有实例，不创建第二套构建器。可运行 npm run dev:status 检查宿主。');
+  }
+  else { try { await develop(); } finally { await lease.close(); } }
 }
 
 async function develop() {
+  const existing = await developmentProcesses(project, args[1]);
+  requireDevelopmentOnly(existing);
+  if (existing.development.length === 1) {
+    console.log('已复用当前开发实例；保存源码即可更新。运行 npm run dev:status 可核验。');
+    return;
+  }
   const appDirectory = path.join(project, '.dev/app');
   await requireBuildSpace([appDirectory, tmpdir()]);
   await mkdir(appDirectory, { recursive: true });

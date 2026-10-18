@@ -18,7 +18,8 @@
 - 最小 CI 的后端白名单测试例外：GitHub 托管 runner 使用独立 Python 3.12，以 `-S` 仅运行标准库和合成夹具测试；具体列表见 `.github/workflows/ci.yml`。本机继续使用上述 Conda 环境；CI 结果不代表完整依赖、数据库、模型或桌面集成已验证。
 - Python 工程位于 `backend/`，包含 `src/notalone/`、`tests/`、`database/` 与 `pyproject.toml`；从仓库根目录安装用 `python -m pip install -e ./backend`。根 `.env` 保持原位置，运行入口见 [后端说明](../../backend/README.md)。
 - `desktop/` 是 Electron + React/TypeScript 桌面端；当前已接入受控后端、联系人、历史导入预览、会话读取授权、草稿改写与只读关系资料。完整业务闭环与最新版 App 验收尚未完成；验证按下方“桌面验收”执行，不沿用历史 App 的业务或权限验收。
-- **日常开发先复用已在跑的开发实例**：`pgrep -f 'scripts/dev.mjs' >/dev/null && echo up`。`npm run dev` 是交互式进程（终端按 `r` 重启、Ctrl+C 退出），优先由人在真实终端保持运行；Agent 只探测和复用，不再启动第二份。React/CSS 保存后热更新；main、preload、共享 TypeScript 与后端 Python 变化后，经认证退出串行重启 App。一般代码改动完成相关验证即可，不反复构建 `.app`；交付、签名、权限、原生探针或包内运行时验收时才打包。详细操作见[桌面开发模式](../../desktop/README.md#日常开发热更新)。
+- **桌面开发只用热更新**：先执行 `cd desktop && npm run dev:status`，已有当前项目开发实例就复用，没有才后台启动 `npm run dev`；`npm start` 也走同一入口。React/CSS 热更新，main、preload、共享代码和 Python 变化由开发监督器经认证退出后串行重启。启动后必须再查 `dev:status`，核对实际 `--notalone-dev` 宿主及其监督器仍存活；服务就绪另查应用界面。发现打包版时通过应用菜单正常退出，不强杀、不继续启动第二份。
+- **发布例外只由用户发起**：当前打包和打包验收入口由 `desktop/scripts/release-policy.mjs` 默认拒绝。权限、签名、原生探针、测试或交付验收等任务名称均不自动授权打包；开发能力缺失应修复开发路径或报告具体限制。只有用户明确要求制作发布包或运行打包版时，才在该发布任务中调整门禁。Agent 不得自行修改门禁、换命令直接调用打包库、运行旧包或用确认口令代替用户授权。此约束传给所有子 Agent，恢复长任务时重新执行开发状态检查。工具执行层未隔离写权限，因此这不是不可绕过的安全沙箱。详细使用见[桌面开发模式](../../desktop/README.md#日常开发热更新)。
 - **必须由 Agent 启动常驻进程时一律丢后台**：`cd desktop && nohup npm run dev > /tmp/notalone-dev.log 2>&1 & disown`，再用一条有界等待确认就绪 `for i in $(seq 1 60); do grep -q '开发模式：React/CSS 保存即更新' /tmp/notalone-dev.log && exit 0; sleep 1; done; exit 1`。开发端口由 `scripts/development-server.mjs` 随机分配，**不要传 `--host`/`--port`**；`scripts/dev.mjs` 只接受 `--user-data-dir`，其他参数直接报错退出。**严禁在前台运行** `npm run dev`、`ssh -N`、`node dist/standalone/server.js`、`tunnel.py` 这类常驻进程；ssh 隧道用 `ssh -f -N ...` 一次建好，不进入 Agent 调用链。
 - `native/macos/` 是 ScreenCaptureKit 与 Vision 的原生 Swift 探针，只验证前台同步能力，不承载领域、存储或回复生成逻辑。
 - 修改 macOS App/探针的权限、`Info.plist`、签名、打包或用户可见启动错误前，先读取并更新 [macOS App 权限与启动错误记录](../macos-app-permissions-and-errors.md)。
@@ -34,7 +35,7 @@
   同一失败先回到第 1 层复现，不重复重跑第 3 层。全量给时间上限：macOS 没有 `timeout`，用 `perl -e 'alarm 600; exec @ARGV' -- <命令>` 包一层。
 - **原生与桌面**：`swift test --package-path native/macos --filter <测试名>` 先跑单例；桌面先 `cd desktop && npm run typecheck`，需要时再 `npm test`。
 - **输出裁剪**：测试、构建、校验命令统一 `2>&1 | tail -60`；`git diff` 先 `--stat` 再按文件 `-- <path>`；校验产物用 `jq` 取字段。单次回传超过约 200 行即视为未裁剪。
-- 桌面端在 `desktop/` 执行 `npm test`，默认仅 TypeScript 与安全测试调度 CLI/合成进程回归，必须报告真实 App 未运行；`npm run package` 只构建打包。
+- 桌面端在 `desktop/` 执行 `npm test`，默认仅 TypeScript 与安全测试调度 CLI/合成进程回归，必须报告真实 App 未运行；`npm run package` 和 `npm run test:package` 当前被发布门禁拒绝。
 - 涉及真实 App、签名包及微信的验收时，执行下方“桌面验收”。
 - 覆盖范围随实现推进，至少包括正常导入、损坏文件、联系人隔离、来源与删除、空或模糊检索、已确认绑定的增量去重、未绑定会话不读取正文、微信非前台时不采集视觉帧、关闭同步时停读，以及候选回复不会发送外部消息。CLI 后台同步与前台定位按 ADR-030 分别验证。
 - 按根 `AGENTS.md` 运行最小相关验证，报告数据处理影响、实际命令和剩余风险；只有实际覆盖的端到端行为才能认证消息渠道集成可用。

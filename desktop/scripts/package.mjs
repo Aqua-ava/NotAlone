@@ -1,3 +1,4 @@
+import { requireReleaseWorkflow } from './release-policy.mjs';
 import { packager } from '@electron/packager';
 import { cp, lstat, mkdtemp, mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
@@ -36,6 +37,7 @@ for (let index = 0; index < packageArguments.length; index++) {
     packagePaths[key] = path.resolve(value);
   } else { throw new Error('helper_check_arguments'); }
 }
+requireReleaseWorkflow();
 signingIdentity ??= '-';
 const electronCache = path.join(homedir(), 'Library/Caches/electron');
 await requireBuildSpace([packagePaths['--output-directory'] || path.resolve('out'), tmpdir(),

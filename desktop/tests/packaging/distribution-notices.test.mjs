@@ -58,14 +58,14 @@ test('离线Electron只接受固定官方归档，原始两份许可复制后继
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
-test('公开打包入口在Packager解包之前拒绝同名但摘要不同的离线归档', { skip: process.platform !== 'darwin' }, async () => {
+test('公开打包入口在归档读取和解包之前被发布门禁拒绝', { skip: process.platform !== 'darwin' }, async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'notalone-package-archive-'));
   try {
     await writeFile(path.join(root, 'package.json'), JSON.stringify({ devDependencies: { electron: '44.7.0' } }));
     await writeFile(path.join(root, `electron-v44.7.0-darwin-${process.arch}.zip`), 'synthetic repacked archive');
     const output = path.join(root, 'output');
     const result = spawnSync(process.execPath, [fileURLToPath(new URL('../../scripts/package.mjs', import.meta.url)), '--output-directory', output, '--electron-zip-directory', root], { cwd: root, encoding: 'utf8', timeout: 10_000 });
-    assert.notEqual(result.status, 0); assert.match(result.stderr, /package_offline_archive_changed/);
+    assert.notEqual(result.status, 0); assert.match(result.stderr, /打包入口已锁定/);
     await assert.rejects(access(output));
   } finally { await rm(root, { recursive: true, force: true }); }
 });

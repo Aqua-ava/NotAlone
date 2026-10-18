@@ -95,7 +95,7 @@ B负责人工作树的 `reply-strategy-dialogue` 和 `reply-strategy-invalidatio
 
 ### 日常开发热更新
 
-日常修改默认使用开发模式，先检查并复用已运行的 `scripts/dev.mjs`；没有实例才启动。不要从 `out/` 打开打包版代替开发实例，也不为普通代码修改重新打包：
+日常修改使用开发模式，先运行 `npm run dev:status` 核验当前项目实例；没有实例才启动。`npm run dev` 在编译前取得项目级监督器互斥，检测到已有开发宿主和监督器时复用；监督器尚在启动时也不创建第二套构建器。发现打包版或孤立宿主时拒绝启动并提示正常退出；未知或遗留互斥记录不会自动删除。不要从 `out/` 打开打包版代替开发实例，也不为普通代码修改重新打包：
 
 ```bash
 cd desktop
@@ -108,7 +108,7 @@ React 界面和 CSS 保存后直接更新；兼容的组件修改会保留当前
 
 终端输入 `r` 再回车可手动重启；`Ctrl+C` 或 App 的“退出 NotAlone”会正常停服并结束开发服务器。编译错误会保留原 App，修正并保存后自动重试；新增依赖后重新运行开发命令。开发启动与安全重启复用上述数据库检查：仅有真实缺少的版本时原地补齐结构，界面或普通源码保存不会另建、备份或搬动数据库，不更改同步授权。构建缓存位于忽略的 `.dev/`；它不包含应用资料。
 
-`npm start` 用于一次性编译后启动磁盘资源；`npm run build` 验证生产前端构建；准备交付或验证签名、权限、原生组件和包内运行时时再运行 `npm run package`。开发模式通过不能代替这些交付检查。
+`npm start` 等同于 `npm run dev`；`npm run build` 只验证生产前端构建。当前 `npm run package`、直接执行 `scripts/package.mjs` 和 `npm run test:package` 都在构建或输出写入前拒绝，没有环境开关或确认口令。只有用户明确发起发布任务，才单独调整发布门禁；权限或原生验收不自动构成例外。下面的打包参数供未来发布任务参考，当前不可直接执行。开发模式通过不能代替分发验收。
 
 打包缺省仍使用本地 ad-hoc 签名。需要固定证书身份时，显式执行 `npm run package -- --with-probe --signing-identity "$NOTALONE_SIGNING_IDENTITY"`；该变量由操作者事先设置为已选身份名称或完整证书摘要，不保存到仓库。App 与自研探针使用同一参数；单独准备探针可用 `node scripts/prepare-probe.mjs --destination <绝对路径> --signing-identity "$NOTALONE_SIGNING_IDENTITY"`。参数无效或签名失败立即停止，不自动选择或回退。输出按实际签名检查区分 ad-hoc 与证书签名，权限延续、正式分发及公证仍须另验，见[权限记录](../docs/macos-app-permissions-and-errors.md)。
 

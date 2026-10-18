@@ -8,16 +8,17 @@
     "dev": "node scripts/dev.mjs",
     "build": "node scripts/build.mjs",
     "typecheck": "tsc --noEmit",
-    "start": "npm run build && electron .",
+    "start": "npm run dev",
     "test": "npm run typecheck && node scripts/test-safe.mjs",
     "test:app": "node scripts/test-app.mjs",
     "test:app:status": "node scripts/test-app.mjs --status",
     "test:pages": "node scripts/test-pages.mjs",
-    "test:package": "node --test tests/packaging/command.test.mjs",
+    "test:package": "node scripts/release-check.mjs",
     "prepare:probe": "node scripts/prepare-probe.mjs",
-    "package": "npm run build && node scripts/package.mjs",
+    "package": "node scripts/package.mjs",
     "prepare:runtime": "node scripts/prepare-runtime.mjs",
-    "verify:runtime": "node scripts/verify-runtime.mjs"
+    "verify:runtime": "node scripts/verify-runtime.mjs",
+    "dev:status": "node scripts/development-status.mjs"
   },
   "engines": {
     "node": ">=22.12.0"

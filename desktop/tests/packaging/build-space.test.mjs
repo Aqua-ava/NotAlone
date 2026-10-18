@@ -86,14 +86,14 @@ test('真实打包和探针准备入口在空间不足时不留下输出或临�
       });
       assert.ifError(result.error);
       assert.notEqual(result.status, 0);
-      assert.match(result.stdout + result.stderr, /build_disk_space_low|15 GiB/);
+      assert.match(result.stdout + result.stderr, script === 'package.mjs' ? /打包入口已锁定/ : /build_disk_space_low|15 GiB/);
       assert.deepEqual(await readdir(owned), ['temporary']);
       assert.deepEqual(await readdir(temporary), []);
     }
   } finally { await rm(owned, { recursive: true, force: true }); }
 });
 
-test('公开 npm 打包入口在空间不足时连前置编译产物也不创建', async () => {
+test('公开 npm 打包入口由发布门禁优先拒绝，连前置编译产物也不创建', async () => {
   const owned = await mkdtemp(path.join(tmpdir(), 'notalone-build-space-npm-'));
   try {
     const manifest = JSON.parse(await readFile(new URL('../../package.json', import.meta.url), 'utf8'));
@@ -108,12 +108,12 @@ test('公开 npm 打包入口在空间不足时连前置编译产物也不创建
     });
     assert.ifError(result.error);
     assert.notEqual(result.status, 0);
-    assert.match(result.stderr, /15 GiB/);
+    assert.match(result.stderr, /打包入口已锁定/);
     assert.deepEqual((await readdir(owned)).sort(), ['package.json', 'scripts', 'src']);
   } finally { await rm(owned, { recursive: true, force: true }); }
 });
 
-test('默认 out 在其他卷或在线缓存卷不足时，真实打包入口在写入前停止', {
+test('发布门禁优先于默认 out 或在线缓存卷检查，打包入口不写入', {
   skip: process.platform !== 'darwin',
 }, async () => {
   const owned = await mkdtemp(path.join(tmpdir(), 'notalone-build-space-volumes-'));
@@ -127,7 +127,7 @@ test('默认 out 在其他卷或在线缓存卷不足时，真实打包入口在
       });
       assert.ifError(result.error);
       assert.notEqual(result.status, 0);
-      assert.match(result.stderr, /15 GiB/);
+      assert.match(result.stderr, /打包入口已锁定/);
       assert.deepEqual(await readdir(owned), []);
     }
   } finally { await rm(owned, { recursive: true, force: true }); }
