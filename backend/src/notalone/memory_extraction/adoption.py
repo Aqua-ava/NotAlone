@@ -182,7 +182,7 @@ class MemoryAdoption:
                     else uuid4()
                 )
             pragmatic_started_at = datetime.now(timezone.utc)
-            pragmatic_decision = self._pragmatic_interpreter.interpret(fact)
+            pragmatic_decision = self._interpret_for_adoption(fact, scope)
             record(
                 "pragmatics",
                 {
@@ -702,6 +702,11 @@ class MemoryAdoption:
     def _similar_memories(
         self, scope: ContactScope, fact: ExtractedFact, pool: list[_PoolItem],
     ) -> tuple[list[_PoolItem], bool]:
+        # 明确更正可能换词或补足上下文，低词面重合不等于与旧事实无关。
+        # 只扩大同类别同主题的有界候选，是否替换仍由裁决及原子写入门决定。
+        verified_correction = (fact.speech_act.value == 'correction'
+            and self._dimension_release.verified_sources and self._dimension_release.gate_enabled
+            and self._dimension_release.allows(fact, scope=scope))
         candidates = [
             item
             for item in pool
@@ -711,7 +716,7 @@ class MemoryAdoption:
                 or self._same_dependencies(scope, fact, item.version))
             and item.topic == fact.topic
             and item.category == fact.category
-            and similarity(fact.text, item.text) >= self._similarity_threshold
+            and (verified_correction or similarity(fact.text, item.text) >= self._similarity_threshold)
         ]
         candidates.sort(key=lambda item: (
             -similarity(fact.text, item.text), str(item.memory_id),
@@ -851,6 +856,17 @@ class MemoryAdoption:
             ) if callable(owner_deleted_texts) else None
         return texts
 
+    def _interpret_for_adoption(self, fact, scope):
+        decision = self._pragmatic_interpreter.interpret(fact)
+        # 明确更正仍保留correction标签；仅当前逐条核验策略可解除这一项阻塞。
+        # 假设、歧义、风险、来源变化和人工修正保护继续走原门禁。
+        if (decision.reasons == ('correction',)
+                and self._dimension_release.verified_sources
+                and self._dimension_release.gate_enabled
+                and self._dimension_release.allows(fact, scope=scope)):
+            return PragmaticDecision(disposition=MemoryDisposition.CONFIRMABLE)
+        return decision
+
     def _passes_all_adoption_gates(
         self,
         fact,
@@ -860,7 +876,7 @@ class MemoryAdoption:
     ) -> bool:
         """语用、置信度、风险及当前来源核验共同决定采纳；显式旧策略保留逐维门。"""
 
-        decision = pragmatic_decision or self._pragmatic_interpreter.interpret(fact)
+        decision = pragmatic_decision or self._interpret_for_adoption(fact, scope)
         return can_auto_adopt(
             fact, decision, confidence_threshold=self._threshold
         ) and self._dimension_release.allows(fact, scope=scope) and (

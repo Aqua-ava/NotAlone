@@ -68,6 +68,34 @@ class AutomaticMemoryTest(unittest.TestCase):
                 self.assertEqual(result.adopted, 0)
                 self.assertEqual(store.list_confirmed(self.scope), ())
 
+    def test_verified_explicit_correction_updates_auto_memory_without_manual_confirmation(self):
+        MemoryAdoption(memory_port=self.store).adopt(self.scope, self.extract('联系人平时最喜欢喝乌龙茶，日常一直选乌龙茶。'))
+        previous, = self.store.list_confirmed(self.scope)
+        class Update:
+            def adjudicate(inner, **kwargs):
+                return AdjudicationDecision(AdjudicationAction.UPDATE, replaced_memory_id=previous.memory_id)
+        result = MemoryAdoption(memory_port=self.store, adjudication_runtime=Update()).adopt(self.scope,
+            self.extract('联系人此前的日常口味是乌龙茶；现更正为已不喝乌龙茶，改为每天喝红茶，以后都选红茶。', speech_act='correction'))
+        self.assertEqual((result.updated, result.pending), (1, 0))
+
+    def test_unverified_or_uncertain_correction_stays_pending(self):
+        for options in ({'sources': False}, {'verdict': 'uncertain'}):
+            with self.subTest(options=options):
+                outcome = self.extract('联系人更正为喜欢红茶。', speech_act='correction', **options)
+                result = MemoryAdoption(memory_port=InMemoryMemoryStore()).adopt(self.scope, outcome)
+                self.assertEqual(result.adopted, 0)
+
+    def test_correction_exception_preserves_explicit_policy_and_receipt_binding(self):
+        from notalone.memory_extraction.dimensions import RELEASE_ALL_DIMENSIONS
+        outcome = self.extract('联系人更正为喜欢红茶。', speech_act='correction')
+        fact, = outcome.accepted
+        for changed in (replace(fact, verified_source_receipt=None),
+                replace(fact, alternatives=('可能是另一位联系人。',))):
+            result = MemoryAdoption(memory_port=InMemoryMemoryStore()).adopt(self.scope, ExtractionOutcome((changed,)))
+            self.assertEqual((result.adopted, result.pending), (0, 1))
+        result = MemoryAdoption(memory_port=InMemoryMemoryStore(), dimension_release=RELEASE_ALL_DIMENSIONS).adopt(self.scope, outcome)
+        self.assertEqual((result.adopted, result.pending), (0, 1))
+
     def test_changed_candidate_or_lost_source_binding_cannot_reuse_verification(self):
         fact, = self.extract('联系人喜欢文字沟通。').accepted
         for changed in (replace(fact, text='联系人讨厌文字沟通。'),
@@ -88,6 +116,10 @@ class AutomaticMemoryTest(unittest.TestCase):
         result = MemoryAdoption(memory_port=self.store, adjudication_runtime=Update(),
             similarity_threshold=0).adopt(self.scope, self.extract('联系人现在喜欢电话沟通。'))
         self.assertEqual(result.updated, 0)
+        self.assertIn(manual, self.store.list_confirmed(self.scope))
+        correction = MemoryAdoption(memory_port=self.store, adjudication_runtime=Update(),
+            similarity_threshold=0).adopt(self.scope, self.extract('联系人更正为喜欢电话沟通。', speech_act='correction'))
+        self.assertEqual(correction.updated, 0)
         self.assertIn(manual, self.store.list_confirmed(self.scope))
 
     def test_source_changes_during_candidate_save_block_automatic_confirmation(self):
