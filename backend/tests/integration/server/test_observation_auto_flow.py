@@ -27,6 +27,7 @@ from notalone.persistence.locks import (
 from notalone.persistence.observation_store import ObservationMode, PostgresObservationStore
 from notalone.scopes import ContactScope
 from notalone.server.app import create_app
+from notalone.server.command import _build_memory_service
 from notalone.server.event_bus import EventBus
 from notalone.server.event_publisher import EventBusMessagePublisher
 from notalone.tasks.worker import BackgroundTaskWorker, PostgresMemoryExtractionRunner
@@ -98,6 +99,7 @@ class ObservationAutoFlowFixture(CoreBusinessFlowFixture):
         self.backend = HttpBackend(create_app(
             database_url=self.database_url, owner_id=self.scope.owner_id,
             events=self.events, task_host=self.host,
+            memory_service=_build_memory_service(self.database_url),
             runtime_shutdown=self.priority.stop,
         ), self.scope.owner_id)
         self.addCleanup(self.backend.close)
@@ -158,6 +160,12 @@ class ObservationAutoFlowFixture(CoreBusinessFlowFixture):
                     message_id=message_id,
                 )
 
+    def record_idle_batch(self, number, *, same_second=False):
+        """输入在调度时钟上已空闲601秒；任务派发仍使用真实当前时间。"""
+        with patch('notalone.persistence.extraction_schedule.utcnow',
+                   return_value=datetime.now(timezone.utc) - timedelta(seconds=601)):
+            return self.record(number, same_second=same_second)
+
     def wait_task(self, status="succeeded"):
         deadline = time.monotonic() + self.task_timeout
         latest = None
@@ -184,7 +192,10 @@ class ObservationAutoFlowTest(ObservationAutoFlowFixture, unittest.TestCase):
         self.assertEqual([step["name"] for step in task["steps"]],
                          ["extract_memory", "index", "verify"])
         self.assertEqual(self.model.calls, [frozenset(batch.message_ids)])
-        self.assertEqual(len(PostgresMemoryStore(self.database_url).list_pending_candidates(self.scope)), 1)
+        status, body = self.backend.request(f"/api/contacts/{self.scope.contact_id}/memories")
+        self.assertEqual(status, 200, body)
+        self.assertEqual([memory["text"] for memory in body["memories"]], ["联系人喜欢科幻小说"])
+        self.assertEqual(body["memories"][0]["adoption_method"], "auto")
 
     def test_replayed_batch_does_not_reset_completed_task(self):
         batch = self.record()
@@ -217,7 +228,7 @@ class ObservationAutoFlowTest(ObservationAutoFlowFixture, unittest.TestCase):
         self.publish(first)
         self.assertTrue(self.model.entered.wait(3))
         with patch("notalone.persistence.observation_store.uuid4", return_value=UUID(int=1)):
-            second = self.record(2, same_second=True)
+            second = self.record_idle_batch(2, same_second=True)
         self.publish(second)
         self.model.release.set()
         self.wait_task()
@@ -265,7 +276,7 @@ class ObservationAutoFlowTest(ObservationAutoFlowFixture, unittest.TestCase):
         self.assertEqual(task["error_code"], "model_configuration_unavailable")
         self.assertEqual(task["steps"][0]["attempt_count"], 0)
         self.model_available = True
-        self.publish(self.record(2))
+        self.publish(self.record_idle_batch(2))
         recovered = self.wait_task()
         self.assertEqual(recovered["task_id"], task["task_id"])
         self.assertEqual(recovered["steps"][0]["processed_count"], 2)
@@ -368,7 +379,7 @@ class ObservationAutoFlowTest(ObservationAutoFlowFixture, unittest.TestCase):
         self.assertEqual(code, 200)
         self.assertEqual(still_failed["status"], "failed")
         self.assertEqual(len(self.model.calls), 3)
-        self.publish(self.record(2))
+        self.publish(self.record_idle_batch(2))
         restored = self.wait_task()
         self.assertEqual(restored["task_id"], failed["task_id"])
         self.assertEqual(restored["steps"][0]["attempt_count"], 1)
@@ -378,7 +389,7 @@ class ObservationAutoFlowTest(ObservationAutoFlowFixture, unittest.TestCase):
         self.model.release.clear()
         self.publish(self.record())
         self.assertTrue(self.model.entered.wait(3))
-        self.publish(self.record(2))
+        self.publish(self.record_idle_batch(2))
         self.model.release.set()
         completed = self.wait_task()
         self.assertEqual(completed["steps"][0]["processed_count"], 2)
@@ -389,7 +400,7 @@ class ObservationAutoFlowTest(ObservationAutoFlowFixture, unittest.TestCase):
         self.model.release.clear()
         self.publish(self.record())
         self.assertTrue(self.model.entered.wait(3))
-        second = self.record(2)
+        second = self.record_idle_batch(2)
         self.publish(second)
         self.store.delete_observation(
             owner_id=self.scope.owner_id, contact_id=self.scope.contact_id,
@@ -413,13 +424,13 @@ class ObservationAutoFlowTest(ObservationAutoFlowFixture, unittest.TestCase):
         self.model.release.clear()
         self.publish(self.record())
         self.assertTrue(self.model.entered.wait(3))
-        self.publish(self.record(2))
+        self.publish(self.record_idle_batch(2))
         self.model.release.set()
         deadline = time.monotonic() + 3
         while len(self.model.calls) < 2 and time.monotonic() < deadline:
             time.sleep(0.01)
         self.assertEqual(len(self.model.calls), 2)
-        third = self.record(3)
+        third = self.record_idle_batch(3)
         self.publish(third)
         self.store.delete_observation(
             owner_id=self.scope.owner_id, contact_id=self.scope.contact_id,

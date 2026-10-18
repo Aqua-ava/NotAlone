@@ -78,8 +78,10 @@ class TaskRuntimeTraceTest(unittest.TestCase):
         )
         self.assertEqual(len(runtime.windows), 3)
         self.assertEqual(len(payloads), 3)
-        expected = {item.message_id: item.text for item in messages}
+        windows = {tuple(str(identifier) for identifier in window.target_message_ids): window for window in runtime.windows}
         for payload in payloads:
+            window = windows[tuple(payload["target_message_ids"])]
+            expected = {item.message_id: item.text for item in window.messages}
             self.assertEqual(payload["task_runtime"]["task_id"], str(task_id))
             self.assertEqual(payload["task_runtime"]["config_version"], 1)
             self.assertEqual(

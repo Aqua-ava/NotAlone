@@ -82,7 +82,7 @@ class VerificationToolChoiceTest(unittest.TestCase):
                 verification_runtime=LangChainSourceVerificationRuntime(model=model),
             )
             self.assertEqual(model.model_dump(), config)
-        self.assertEqual((stats.adopted, stats.pending), (0, 1))
+        self.assertEqual((stats.adopted, stats.pending, stats.rejected_by_contract), (0, 0, 1))
         self.assertEqual(len(requests), 2)
         for body in requests:
             self.assertEqual(body["thinking"], {"type": "enabled"})

@@ -54,3 +54,18 @@ def verification_result(
         "evidence": [{"message_id": str(message_id), "quote": quote}
                      for message_id, quote in evidence],
     }
+
+
+def failed_automatic_candidate(store, traces, scope):
+    """从可删除追踪定位自动失败候选，继续核对已保存字段而不制造人工待办。"""
+    from uuid import UUID
+    detail = traces.get_batch(scope, traces.list_batches(scope)[0]["trace_id"])
+    identifiers = [event["payload"]["candidate_id"] for event in detail["events"]
+                   if event["stage"] == "candidate_result"
+                   and event["payload"].get("disposition") == "automatic_write_failed"]
+    if len(identifiers) != 1 or store.list_pending_candidates(scope):
+        raise AssertionError("预期单条已记录的自动失败，且没有新增人工待办。")
+    candidate = store.get_candidate(scope=scope, candidate_id=UUID(str(identifiers[0])))
+    if candidate.status.value != "rejected":
+        raise AssertionError("自动失败候选必须已经终结。")
+    return candidate

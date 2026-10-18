@@ -90,8 +90,13 @@ class LangChainAdjudicationRuntime:
         return _parse_decision(tool_calls[0].get("args"), similar, message,
                                getattr(self._model, "model_name", None))
 
-    def adjudicate_batch(self, *, candidates):
-        """一个请求裁决同批候选；坏条目不影响其余条目。"""
+    def adjudicate_batch(self, *, candidates=None, memories=None, pool=None):
+        """正式路径使用统一候选池；显式旧维度评测保留逐项协议。"""
+        if memories is not None:
+            from notalone.memory_extraction.batch_adjudication import adjudicate_batch
+            return adjudicate_batch(self._model, memories=memories, pool=pool)
+        if candidates is None:
+            raise TypeError("批量裁决缺少候选。")
         import json
         schema = {"title": "BatchMemoryAdjudicationOutput", "type": "object",
             "additionalProperties": False,

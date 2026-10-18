@@ -1,6 +1,8 @@
 """显式开发v4的真实SDK经精确Mock验收；没有真实供应商或质量认证。"""
 from __future__ import annotations
 
+from tests.unit.memory_extraction.verification_helpers import failed_automatic_candidate
+
 import json
 import os
 import socket
@@ -183,7 +185,7 @@ class GroundedV4RuntimeTest(unittest.TestCase):
                 self.assertEqual(hashlib.sha256(prompt.encode()).hexdigest(), prompt_sha)
                 self.assertEqual(canonical_sha256([schema(source) for source in windows]), schemas_sha)
 
-    def test_sdk_matter_reference_guidance_keeps_supported_confident_request_pending(self):
+    def test_sdk_matter_reference_guidance_preserves_ambiguity_in_failed_candidate(self):
         from notalone.memory_extraction.grounded_adapter import (
             GroundedV4ExtractionRuntime, GROUNDED_V2_PROMPT, GROUNDED_V3_PROMPT,
             grounded_schema, grounded_schema_v3,
@@ -231,12 +233,12 @@ class GroundedV4RuntimeTest(unittest.TestCase):
         for old_prompt in (GROUNDED_V2_PROMPT, GROUNDED_V3_PROMPT):
             self.assertNotIn("matter_reference", old_prompt)
             self.assertNotIn("出借施事、接收者、物品所有者和代词指称分别核对", old_prompt)
-        self.assertEqual((stats.adopted, stats.pending), (0, 1))
+        self.assertEqual((stats.adopted, stats.pending, stats.rejected_by_contract), (0, 0, 1))
         self.assertEqual(store.list_confirmed(scope), ())
-        pending, = store.list_pending_candidates(scope)
+        pending = failed_automatic_candidate(store, traces, scope)
         self.assertEqual(pending.confidence, 1.0)
         self.assertEqual(pending.text, "截至2026-10-14，联系人原话：“那件事情你暂时不要透露。”")
-        self.assertIn("pragmatic:ambiguous", pending.risk_flags)
+        self.assertNotIn("pragmatic:ambiguous", pending.risk_flags)
         self.assertIn("事项指称在本窗口无法唯一识别", pending.alternatives[0])
         self.assertIsNotNone(pending.dimension_evidence)
         assert pending.dimension_evidence is not None
@@ -345,7 +347,7 @@ class GroundedV4RuntimeTest(unittest.TestCase):
         self.assertEqual((fact["category"], fact["valid_at"], fact["invalid_at"]), ("common_fact", None, None))
         self.assertNotIn("semantic_basis", fact)
 
-    def test_sdk_object_ownership_contract_keeps_confidence_one_supported_candidate_pending(self):
+    def test_sdk_object_ownership_contract_preserves_confident_failed_candidate(self):
         from notalone.memory_extraction.grounded_adapter import GroundedV4ExtractionRuntime
         from tests.unit.memory_extraction.verification_helpers import FixedSourceVerifier, verification_result
 
@@ -390,9 +392,9 @@ class GroundedV4RuntimeTest(unittest.TestCase):
         self.assertTrue(codes["uniqueItems"])
         self.assertEqual(len(verifier.calls), 1)
         self.assertEqual(stats.adopted, 0)
-        self.assertEqual(stats.pending, 1)
+        self.assertEqual((stats.pending, stats.rejected_by_contract), (0, 1))
         self.assertEqual(store.list_confirmed(scope), ())
-        pending, = store.list_pending_candidates(scope)
+        pending = failed_automatic_candidate(store, traces, scope)
         self.assertEqual(pending.confidence, 1.0)
         self.assertEqual(pending.text, "联系人原话：“我姐把她的车借给我了。”")
         self.assertEqual(pending.interpretation_reason,
@@ -400,7 +402,7 @@ class GroundedV4RuntimeTest(unittest.TestCase):
                          " 当前未决说明：所引原句中的物品所有者在本窗口无法唯一确定；"
                          "不因出借或接收认定所有者，保留原句。")
         self.assertEqual((pending.valid_at, pending.invalid_at), (None, None))
-        self.assertIn("pragmatic:ambiguous", pending.risk_flags)
+        self.assertNotIn("pragmatic:ambiguous", pending.risk_flags)
         self.assertNotIn("semantic:unverified", pending.risk_flags)
         detail = traces.get_batch(scope, traces.list_batches(scope)[0]["trace_id"])
         events = {event["stage"]: event["payload"] for event in detail["events"]}
@@ -442,7 +444,7 @@ class GroundedV4RuntimeTest(unittest.TestCase):
                                 )
         self.assertFalse(output.exists())
 
-    def test_sdk_unknowns_preserve_quote_and_all_new_kinds_stay_pending(self):
+    def test_sdk_unknowns_preserve_quote_and_record_failures_without_pending(self):
         from notalone.memory_extraction.grounded_adapter import GroundedV4ExtractionRuntime
 
         for text, kind, codes in (
@@ -469,7 +471,7 @@ class GroundedV4RuntimeTest(unittest.TestCase):
                     )
                 self.assertEqual(len(requests), 1)
                 self.assertEqual(stats.adopted, 0)
-                self.assertEqual(stats.pending, 1)
+                self.assertEqual((stats.pending, stats.rejected_by_contract), (0, 1))
 
     def test_v4_rejects_legacy_tool_name_and_corrupt_draft_without_repair_call(self):
         from notalone.memory_extraction.grounded_adapter import GroundedV4ExtractionRuntime
@@ -546,7 +548,7 @@ class GroundedV4RuntimeTest(unittest.TestCase):
         self.assertEqual(compiled["payloads"][0]["valid_at"], "2026-11-01T00:00:00+08:00")
         self.assertEqual(compiled["payloads"][0]["invalid_at"], "2026-12-01T00:00:00+08:00")
         self.assertEqual(stats.adopted, 0)
-        self.assertEqual(stats.pending, 1)
+        self.assertEqual((stats.pending, stats.rejected_by_contract), (0, 1))
 
 
 if __name__ == "__main__":

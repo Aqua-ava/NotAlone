@@ -174,3 +174,59 @@ class BatchAdjudicationTests(unittest.TestCase):
             candidates=(("偏好文字说明", parents), ("喜欢文字", parents)))
         self.assertIsNone(decisions[0])
         self.assertEqual(decisions[1].action, AdjudicationAction.NOOP)
+
+
+class FormalBatchAdjudicationTests(unittest.TestCase):
+    def _adjudicate(self, rows, *, memories=None, extra=None):
+        from langchain_core.messages import AIMessage
+        from notalone.memory_extraction.adjudication_adapters import LangChainAdjudicationRuntime
+        from tests.unit.reply.test_langchain_vertical_slice import ToolCallingFakeModel
+        args = {'decisions': rows} if extra is None else extra
+        model = ToolCallingFakeModel(responses=[AIMessage(content='', tool_calls=[{
+            'name': 'BatchMemoryAdjudicationOutput', 'id': 'formal-batch', 'args': args,
+        }])])
+        inputs = memories if memories is not None else [
+            {'candidate_id': '0', 'text': '合成偏好甲', 'candidate_ids': []},
+            {'candidate_id': '1', 'text': '合成偏好乙', 'candidate_ids': []},
+        ]
+        return LangChainAdjudicationRuntime(model=model).adjudicate_batch(memories=inputs, pool=[])
+
+    def test_identifiable_bad_missing_or_duplicate_row_keeps_other_decision(self):
+        from notalone.memory_extraction.adjudication import AdjudicationAction
+        bad = {'candidate_id': '0', 'action': 'store', 'target_ids': [], 'merged_text': None}
+        good = {**bad, 'candidate_id': '1'}
+        cases = (
+            [{**bad, 'action': 'invalid'}, good],
+            [{**bad, 'action': 'update', 'target_ids': [str(uuid4())], 'merged_text': '越界改写'}, good],
+            [{**bad, 'target_ids': [[str(uuid4())]]}, good],
+            [good],
+            [bad, bad, good],
+            [{**bad, 'candidate_id': 'unknown'}, good],
+            [{'action': 'store'}, good],
+        )
+        for rows in cases:
+            with self.subTest(rows=rows):
+                decisions = self._adjudicate(rows)
+                self.assertIsNone(decisions['0'])
+                self.assertEqual(decisions['1'].action, AdjudicationAction.ADD)
+
+    def test_unreadable_top_level_or_unmappable_ids_reject_batch(self):
+        from notalone.memory_extraction.errors import ExtractionInvalidOutputError
+        good = {'candidate_id': '0', 'action': 'store', 'target_ids': [], 'merged_text': None}
+        for args in ({'decisions': None}, {'decisions': {}}, {'decisions': [], 'extra': []},
+                     {'decisions': [{**good, 'candidate_id': 'unknown'}]}):
+            with self.subTest(args=args), self.assertRaises(ExtractionInvalidOutputError):
+                self._adjudicate(None, extra=args)
+
+    def test_shared_parent_conflict_preserves_independent_candidate(self):
+        from notalone.memory_extraction.adjudication import AdjudicationAction
+        target = str(uuid4())
+        memories = [{'candidate_id': str(index), 'text': '合成偏好', 'candidate_ids': [target]}
+                    for index in range(3)]
+        rows = [{'candidate_id': str(index), 'action': 'update', 'target_ids': [target],
+                 'merged_text': '合成更新'} for index in range(2)]
+        rows.append({'candidate_id': '2', 'action': 'store', 'target_ids': [], 'merged_text': None})
+        decisions = self._adjudicate(rows, memories=memories)
+        self.assertIsNone(decisions['0'])
+        self.assertIsNone(decisions['1'])
+        self.assertEqual(decisions['2'].action, AdjudicationAction.ADD)

@@ -53,6 +53,8 @@ class LayeredMemoryService:
         self._contract = "scenario-v3:deadline-v1:coverage-v1:correction-v1:" + runtime_policy
         if getattr(proposer, "personal", False):
             self._contract += ":personal-background-v1:l2-1500:l3-2000"
+        if getattr(proposer, "document_tools", False):
+            self._contract += ":document-tools-v1:physical-budget-v1"
         self._store, self._proposer, self._verifier = store, proposer, verifier
         if synthetic:
             store.require_synthetic_database()
@@ -75,10 +77,10 @@ class LayeredMemoryService:
             require_adapter_timeout_contract(profile_verifier, "verify", synthetic=synthetic)
         self.reply_configuration = None
         self._synthetic = synthetic
-        if profile_proposer and self._budget.max_model_calls != 4:
+        if profile_proposer and runtime_policy == "qualified_suite" and self._budget.max_model_calls != 4:
             raise ValueError("长期背景装配要求显式四步有限预算。")
         if profile_proposer:
-            self._contract += ":profile-v1"
+            self._contract += ":profile-tools-v1" if getattr(profile_proposer, "document_tools", False) else ":profile-v1"
         self._priority = model_priority or ModelPriorityControl()
         self._real_adapters = self._actual_adapters_match_contract()
         if not synthetic and any(adapter is not None for adapter in (proposer, verifier, profile_proposer, profile_verifier)) and not self._real_adapters:
@@ -251,6 +253,9 @@ class LayeredMemoryService:
                     from notalone.memory.scenario_publication import require_explicit_replacements
                     require_explicit_replacements(work.scope, checked, work.scenarios)
                 validate_correction_proposal(work, checked, personal=getattr(self._proposer, "personal", False))
+                if getattr(self._proposer, 'document_tools', False):
+                    from notalone.memory.scene_workspace import validate_document_replacements
+                    validate_document_replacements(checked, work.scenarios)
                 return checked
             raw, proposal, rejected = isolate_proposal(raw, 'scenarios', validate_items, self._budget.max_scenarios)
             self._store.record_proposal(work, {'original': original, 'filtered': raw, 'rejected': rejected})
@@ -273,7 +278,7 @@ class LayeredMemoryService:
                 **({"scenarios": self._model_scenarios(work)} if self._scenario_context else {})))
             filtered, verification_rejected = select_verified(raw, 'scenarios', supported)
             self._store.record_proposal(work, {'original': original, 'filtered': filtered,
-                'rejected': rejected, 'verification_rejected': verification_rejected})
+                'rejected': rejected, 'verification_rejected': verification_rejected, 'verification_result': supported})
             if raw['scenarios'] and not filtered['scenarios'] or supported is False:
                 self._store.fail(work, "faithfulness_rejected")
                 return 0
@@ -330,11 +335,14 @@ class LayeredMemoryService:
         def invoke(deadline):
             from notalone.memory.organization_quality_transport import organization_request_context
             check()
-            self._store.reserve_model_call(work)
+            physical = getattr(adapter, 'physical_accounting', False)
+            if not physical:
+                self._store.reserve_model_call(work)
+            tail = (1 if getattr(adapter, 'layer', None) == 'l3' else 7 if self._profile_proposer else 1) if getattr(adapter, 'document_tools', False) and operation == 'propose' else 0
             phase = ('l3' if hasattr(work, 'scenario_version_ids') else 'l2') + ('_proposal' if operation == 'propose' else '_verification')
-            context = (nullcontext() if self._synthetic else organization_request_context(
+            context = (nullcontext() if self._synthetic and not physical else organization_request_context(
                 check, lambda request, response, route: self._check_response_identity(work.scope.owner_id, snapshot, phase, request, response, route),
-                deadline, self._budget))
+                deadline, self._budget, reserve=(lambda: self._store.reserve_model_call(work, reserved_calls=tail)) if physical else None))
             with context:
                 value = call(deadline)
             check()
@@ -453,18 +461,34 @@ class LayeredMemoryService:
         # 老的合成适配器仅用来核验既有服务合同；实际 SDK 必须接收完整更新上下文。
         return {key: value for key, value in context.items() if key in parameters}
 
+    def _incremental_profile_arguments(self, work):
+        if not getattr(self._profile_proposer, 'document_tools', False):
+            return {}
+        existing = deepcopy(work.existing_profile)
+        if existing and work.scope.contact_id is None:
+            existing = {'version_id': existing['version_id'], 'entries': [
+                {key: entry[key] for key in ('text', 'temporal_status', 'uncertainty', 'kind', 'section', 'basis') if key in entry} | {'references': [
+                    {key: ref[key] for key in ('memory_id', 'revision')} for ref in entry['references']]}
+                for entry in existing['entries']]}
+        return {'existing_profile': existing,
+            'changed_scenarios': deepcopy(organization_model_scenarios(work.scope, work.changed_scenarios)),
+            'removed_scenario_version_ids': work.removed_scenario_version_ids,
+            'base_profile_version_id': str(work.base_profile_version_id) if work.base_profile_version_id else None}
+
     def _organize_profile(self, scope, claim):
         quality_snapshot = self._quality.snapshot(scope.owner_id) if self._quality_required else None
         work = self._store.prepare_profile(scope,self._budget,"profile-v1:synthetic-only:deadline-v1:correction-v1:" + self._contract +
             (":owner-input-v1" if scope.contact_id is None else "") + ":" + self._quality.organization_contract.identity,
-            lease_seconds=self._call_timeout_seconds * 2 + 5,claim=claim)
+            lease_seconds=self._call_timeout_seconds * 2 + 5,claim=claim,
+            incremental=bool(getattr(self._profile_proposer, "document_tools", False)))
         if work is None:
             return
         try:
             raw = self._call(work,self._profile_proposer,"propose",lambda deadline: self._profile_proposer.propose(
                 scenarios=self._model_scenarios(work),memories=self._model_memories(work),budget=self._budget,deadline=deadline,
                 **self._profile_context_arguments(work),
-                **self._correction_arguments(self._profile_proposer, 'propose', work)),
+                **self._correction_arguments(self._profile_proposer, 'propose', work),
+                **self._incremental_profile_arguments(work)),
                 guard=lambda: self._store.check_profile(work))
             original = deepcopy(raw)
             def validate_items(value):
@@ -485,15 +509,19 @@ class LayeredMemoryService:
             operation = 'verify_items' if callable(getattr(self._profile_verifier, 'verify_items', None)) else 'verify'
             supported = self._call(work,self._profile_verifier,operation,lambda deadline: getattr(self._profile_verifier, operation)(
                 scenarios=self._model_scenarios(work),memories=self._model_memories(work),proposal=deepcopy(raw),deadline=deadline,
-                **self._correction_arguments(self._profile_verifier, operation, work)),
+                **self._correction_arguments(self._profile_verifier, operation, work),
+                **self._incremental_profile_arguments(work)),
                 guard=lambda: self._store.check_profile(work))
             filtered, verification_rejected = select_verified(raw, 'entries', supported)
             self._store.record_profile_proposal(work, {'original': original, 'filtered': filtered,
-                'rejected': rejected, 'verification_rejected': verification_rejected})
+                'rejected': rejected, 'verification_rejected': verification_rejected, 'verification_result': supported})
             if raw['entries'] and not filtered['entries'] or supported is False:
                 self._store.fail_profile(work,"profile_faithfulness_rejected")
                 return
             proposal = validate_items(filtered)
+            if getattr(self._profile_proposer, 'document_tools', False):
+                from notalone.memory.profile_workspace import validate_incremental_profile
+                validate_incremental_profile(proposal, work.existing_profile, work.changed_scenarios)
             with self._publication_guard(scope.owner_id, quality_snapshot) as final_guard:
                 self._store.publish_profile(work,proposal,qualification_guard=final_guard)
         except OrganizationBudgetExhausted:

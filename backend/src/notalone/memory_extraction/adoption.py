@@ -199,10 +199,13 @@ class MemoryAdoption:
             started_at=pool_started_at,
         )
 
-        batch_decisions = self._batch_decisions(scope, outcome, contact_pool, owner_pool, deleted)
+        batch_decisions = (self._batch_decisions(scope, outcome, contact_pool, owner_pool, deleted)
+                           if not self._dimension_release.verified_sources else {})
         adopted = updated = pending = duplicate = deleted_skip = 0
         skipped_non_memory = 0
         skipped_changed = 0
+        original_memory_ids = {item.memory_id for item in (*contact_pool, *owner_pool)}
+        batch_plan = self._batch_plan(scope, outcome.accepted, contact_pool, owner_pool, deleted)
         for index, fact in enumerate(outcome.accepted):
             trace = current_trace()
             if trace is not None:
@@ -402,14 +405,19 @@ class MemoryAdoption:
                 continue
 
             similarity_started_at = datetime.now(timezone.utc)
-            similar, shortlist_truncated = self._similar_memories(scope, fact, pool)
+            planned = batch_plan.get(index)
+            if planned is not None:
+                similar, planned_decision, pending_reason = planned
+                shortlist_truncated = False
+            else:
+                similar, shortlist_truncated = self._similar_memories(scope, fact, pool)
             recall_scores = dict(zip((item.memory_id for item in pool), bm25_scores(fact.text, [item.text for item in pool])))
             record(
                 "similarity",
                 {
                     "threshold": 0,
                     "legacy_similarity_threshold": self._similarity_threshold,
-                    "rule": "local_bm25_chinese_bigrams",
+                    "rule": "bm25_local_embedding_rrf" if planned is not None else "local_bm25_chinese_bigrams",
                     "compared": [
                         {
                             "memory": item,
@@ -425,14 +433,25 @@ class MemoryAdoption:
                 },
                 started_at=similarity_started_at,
             )
-            if shortlist_truncated:
+            if planned is not None:
+                decision = planned_decision
+            elif shortlist_truncated:
                 record("adjudication", {"status": "not_executed", "reason": "incomplete_shortlist"})
                 decision = None
             else:
                 decision = self._adjudicate(fact, similar, scope, batch_decisions)
+            # skip 只能依附已经落库且时间边界一致的事实；首批全部 skip 不能吞掉来源。
+            if planned is not None and decision and decision.action is AdjudicationAction.NOOP and not any(
+                (item.memory_id not in original_memory_ids or item in similar)
+                and item.version.valid_at == fact.valid_at
+                and item.version.invalid_at == fact.invalid_at
+                and item.version.event is None and fact.event is None
+                for item in pool
+            ):
+                decision = None
             action = decision.action if decision else None
             replaced_id = decision.replaced_memory_id if decision else None
-            if action is AdjudicationAction.MERGE:
+            if action is AdjudicationAction.MERGE or (action is AdjudicationAction.UPDATE and decision.merged_memory_ids):
                 result = self._merge(scope, fact, similar, decision)
                 if result is None:
                     pending += 1
@@ -453,7 +472,7 @@ class MemoryAdoption:
                 # 段或指向范围外）：不能静默按 ADD 落库，否则被取代的
                 # 旧记忆保持 active，与新事实并存。降级为待定候选，
                 # 由用户确认。
-                self._create_pending_candidate(scope, fact)
+                self._create_pending_candidate(scope, fact, failure_reason=pending_reason if planned is not None else None)
                 if shortlist_truncated:
                     disposition = "pending_incomplete_shortlist"
                 elif action:
@@ -466,6 +485,16 @@ class MemoryAdoption:
                 )
                 pending += 1
                 continue
+            if action is AdjudicationAction.UPDATE and decision.merged_text is not None and decision.merged_text != fact.text:
+                try:
+                    parents = tuple(item.version for item in similar if item.memory_id == replaced_id)
+                    fact = self._merge_verifier.verify(scope=scope, fact=fact, parents=parents, text=decision.merged_text)
+                    if not self._passes_all_adoption_gates(fact, scope=scope):
+                        raise ValueError('更新正文未通过采纳门。')
+                except (ValueError, ExtractionRuntimeError):
+                    self._create_pending_candidate(scope, fact)
+                    pending += 1
+                    continue
             previous_item = next(
                 (item for item in pool if item.memory_id == replaced_id), None,
             ) if action is AdjudicationAction.UPDATE else None
@@ -615,6 +644,67 @@ class MemoryAdoption:
             input_tokens=usage.input_tokens if usage else None,
             output_tokens=usage.output_tokens if usage else None)
         return dict(zip(keys, decisions))
+
+    def _batch_plan(self, scope, facts, contact_pool, owner_pool, deleted):
+        """同次已核验候选共享召回池；批量模型失败保留待处理而不降级新增。"""
+        runtime = getattr(self._adjudication_runtime, 'adjudicate_batch', None)
+        if not callable(runtime) or not self._dimension_release.verified_sources:
+            return {}
+        from notalone.memory_extraction.recall import hybrid_candidates, EmbeddingUnavailableError, EMBEDDING_UNAVAILABLE
+        plans = {}
+        prepared = []
+        for index, original in enumerate(facts):
+            pragmatic = self._interpret_for_adoption(original, scope)
+            fact = self._pragmatic_interpreter.prepare_for_adoption(original, decision=pragmatic)
+            if (_normalize(fact.text) in deleted or not self._passes_all_adoption_gates(
+                    fact, pragmatic_decision=pragmatic, scope=scope)):
+                continue
+            assess = getattr(self._memory_port, "assess_correction", None)
+            if callable(assess):
+                protected = assess(_candidate_from_fact(scope, fact, namespace=self._candidate_namespace))
+                if protected.correction_review or protected.failure_reason:
+                    continue
+            prepared.append((index, fact))
+        for owner, pool in ((False, contact_pool), (True, owner_pool)):
+            eligible = [(index, fact) for index, fact in prepared
+                        if (fact.subject is FactSubject.SELF) == owner]
+            if not eligible:
+                continue
+            called = False
+            try:
+                shortlists = hybrid_candidates([fact.text for _, fact in eligible], pool)
+                unified = {str(item.memory_id): item for rows in shortlists for item in rows}
+                memories = [dict(candidate_id=str(index), text=fact.text, category=fact.category.value,
+                    topic=fact.topic.value, valid_at=fact.valid_at.isoformat() if fact.valid_at else None,
+                    invalid_at=fact.invalid_at.isoformat() if fact.invalid_at else None,
+                    event=fact.event.to_payload() if fact.event else None,
+                    source_message_ids=[str(value) for value in fact.source_message_ids], candidate_ids=[str(item.memory_id) for item in rows])
+                    for (index, fact), rows in zip(eligible, shortlists)]
+                started = time.perf_counter()
+                called = True
+                decisions = runtime(memories=memories, pool=[dict(memory_id=key, text=item.text,
+                    category=item.category.value, topic=item.topic.value,
+                    valid_at=item.version.valid_at.isoformat() if item.version.valid_at else None,
+                    invalid_at=item.version.invalid_at.isoformat() if item.version.invalid_at else None,
+                    event=item.version.event.to_payload() if item.version.event else None,
+                    source_message_ids=[str(value) for value in (item.claim_source_ids or item.source_ids)])
+                    for key, item in unified.items()])
+                self._record_ledger(scope, LedgerOutcome.SUCCEEDED, started)
+                for (index, fact), rows in zip(eligible, shortlists):
+                    decision = decisions.get(str(index))
+                    # 事件的独立来源不能仅凭正文相似被skip吞掉。
+                    if decision is not None and decision.action is AdjudicationAction.NOOP and fact.event is not None:
+                        decision = None
+                    plans[index] = (rows, decision, None)
+                record('batch_adjudication', {'memories': memories, 'decisions': decisions,
+                       'recall': 'bm25_local_embedding_rrf', 'scope_kind': 'owner' if owner else 'contact'})
+            except (ValueError, ImportError, OSError, ExtractionRuntimeError) as error:
+                if called:
+                    self._record_ledger(scope, LedgerOutcome.RUN_FAILED, started)
+                reason = EMBEDDING_UNAVAILABLE if isinstance(error, EmbeddingUnavailableError) else None
+                plans.update((index, ([], None, reason)) for index, _ in eligible)
+                record('batch_adjudication', {'status': 'pending', 'reason': reason or 'recall_or_model_failed'})
+        return plans
 
     def _adjudicate(self, fact, similar, scope: ContactScope, batch_decisions=None):
         if not similar or self._adjudication_runtime is None:
@@ -1036,9 +1126,11 @@ class MemoryAdoption:
         return bool(matches)
 
     def _create_pending_candidate(
-        self, scope: ContactScope, fact: ExtractedFact
+        self, scope: ContactScope, fact: ExtractedFact, *, failure_reason: str | None = None
     ) -> MemoryCandidate:
         candidate = _candidate_from_fact(scope, fact, namespace=self._candidate_namespace)
+        if failure_reason:
+            candidate = replace(candidate, failure_reason=failure_reason)
         for existing in self._memory_port.list_pending_candidates(scope):
             if same_pending_identity(existing, candidate):
                 record("write_result", {"operation": "reuse_pending", "actual": existing,

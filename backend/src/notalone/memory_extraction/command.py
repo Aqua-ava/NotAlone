@@ -49,10 +49,10 @@ from notalone.runtime_config import load_project_env
 from notalone.scopes import ContactScope
 from notalone.tasks.models import ExtractionRuntimeConfig, ExtractionRuntimeMode
 
-EXTRACTION_BATCH_SIZE = MAX_TARGET_MESSAGES_PER_WINDOW
+EXTRACTION_BATCH_SIZE = 10
 MAX_CONTEXT_MESSAGES_PER_SIDE = 20
-EXTRACTION_CONTEXT_BEFORE = MAX_CONTEXT_MESSAGES_PER_SIDE
-EXTRACTION_CONTEXT_AFTER = MAX_CONTEXT_MESSAGES_PER_SIDE
+EXTRACTION_CONTEXT_BEFORE = 5
+EXTRACTION_CONTEXT_AFTER = 0
 
 
 @dataclass(slots=True)
@@ -127,10 +127,10 @@ def run_extraction(
     )
     if (
         not isinstance(batch_size, int)
-        or not 0 < batch_size <= EXTRACTION_BATCH_SIZE
+        or not 0 < batch_size <= MAX_TARGET_MESSAGES_PER_WINDOW
     ):
         raise ValueError(
-            f"单次模型调用最多处理 {EXTRACTION_BATCH_SIZE} 条目标消息。"
+            f"单次模型调用最多处理 {MAX_TARGET_MESSAGES_PER_WINDOW} 条目标消息。"
         )
     if (
         not isinstance(context_before, int)
@@ -642,9 +642,9 @@ def _extract_main(argv: list[str] | None = None) -> int:
         ),
     )
     args = parser.parse_args(argv)
-    if not 0 < args.batch_size <= EXTRACTION_BATCH_SIZE:
+    if not 0 < args.batch_size <= MAX_TARGET_MESSAGES_PER_WINDOW:
         return _fail(
-            f"--batch-size 必须在 1 到 {EXTRACTION_BATCH_SIZE} 之间。"
+            f"--batch-size 必须在 1 到 {MAX_TARGET_MESSAGES_PER_WINDOW} 之间。"
         )
 
     database_url = os.environ.get("NOTALONE_DATABASE_URL", "").strip()

@@ -1,4 +1,6 @@
 import os
+import io
+import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
@@ -52,6 +54,66 @@ class ProblemBudgetTests(unittest.TestCase):
             with self.assertRaises(ProblemStopped):
                 self.budget.reserve('r1')
         self.budget.finish('r1', 'unknown', 'deadline')
+
+    def test_explicit_continuation_keeps_history_and_limits_new_rounds(self):
+        for number in (1, 2):
+            self.budget.start(f'r{number}', 'hypothesis')
+            if number == 1:
+                self.budget.reserve('r1')
+            self.budget.finish(f'r{number}', 'unchanged', 'review')
+        before = self.budget.snapshot()
+        with self.assertRaises(ProblemStopped):
+            self.budget.start('r3', 'hypothesis')
+        self.budget.authorize_continuation(reason='用户明确同意修复后最多三轮', max_new_rounds=3, minutes=30)
+        reopened = ProblemBudget(self.path)
+        granted = reopened.snapshot()
+        self.assertEqual(granted['used'], before['used'])
+        self.assertEqual(granted['no_improvement_rounds'], 2)
+        self.assertEqual(granted['rounds'], before['rounds'])
+        self.assertEqual(granted['continuations'][0]['existing_rounds'], 2)
+        for number in (3, 4, 5):
+            reopened.start(f'r{number}', 'hypothesis')
+            if number == 5:
+                reopened.reserve(f'r{number}')
+            reopened.finish(f'r{number}', 'improved', 'review')
+        with self.assertRaises(ProblemStopped):
+            reopened.start('r6', 'improved也不能超出授权')
+        self.assertEqual(reopened.snapshot()['used'], 2)
+        self.assertEqual(len(reopened.snapshot()['rounds']), 5)
+
+    def test_continuation_has_own_expiry_and_keeps_original_deadline(self):
+        before = self.budget.snapshot()
+        with patch('notalone.experiments.problem_budget.time.time', return_value=before['deadline'] + 1):
+            self.budget.authorize_continuation(reason='明确继续授权', max_new_rounds=3, minutes=1)
+            self.budget.start('r1', 'hypothesis')
+            self.budget.reserve('r1')
+        self.assertEqual(self.budget.snapshot()['deadline'], before['deadline'])
+        with patch('notalone.experiments.problem_budget.time.time', return_value=before['deadline'] + 62):
+            with self.assertRaises(ProblemStopped):
+                self.budget.reserve('r1')
+            self.budget.finish('r1', 'improved', 'expired')
+            with self.assertRaises(ProblemStopped):
+                self.budget.start('r2', 'hypothesis')
+
+    def test_cli_records_authorization_and_rejects_invalid_grants(self):
+        from notalone.experiments.problem_budget import main
+        with patch('sys.argv', ['problem_budget', '--ledger', str(self.path), 'authorize-continuation',
+                                '--reason', '用户明确授权', '--max-new-rounds', '3', '--minutes', '30']):
+            with patch('sys.stdout', new_callable=io.StringIO) as output:
+                main()
+        grant = json.loads(output.getvalue())['continuations'][0]
+        self.assertEqual(grant['reason'], '用户明确授权')
+        self.assertEqual(grant['existing_rounds'], 0)
+        self.assertEqual(grant['max_new_rounds'], 3)
+        for values in ({'reason': '', 'max_new_rounds': 3, 'minutes': 30},
+                       {'reason': '授权', 'max_new_rounds': 4, 'minutes': 30},
+                       {'reason': '授权', 'max_new_rounds': 3, 'minutes': float('inf')}):
+            with self.assertRaises(ValueError):
+                self.budget.authorize_continuation(**values)
+        self.budget.start('r1', 'hypothesis')
+        with self.assertRaises(ProblemStopped):
+            self.budget.authorize_continuation(reason='不能跳过在途轮', minutes=30)
+        self.assertEqual(len(self.budget.snapshot()['continuations']), 1)
 
     def test_binding_fails_closed_and_reserves(self):
         self.budget.start('r1', 'hypothesis')

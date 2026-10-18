@@ -227,6 +227,13 @@ class LayeredProfileHttpTest(MemoryOverviewHttpFixture, unittest.TestCase):
         self.delete_source(contact, extra_source)
         state = self.read(backend, contact)
         rebuilt = self._get_refresh(backend, contact, state)
+        # 删除通知可能已由自动维护领取；刷新返回排队状态不代表重建完成。
+        from threading import Event
+        from time import monotonic
+        deadline = monotonic() + 5
+        while rebuilt['status'] in {'updating', 'stale'} and monotonic() < deadline:
+            Event().wait(.02)
+            rebuilt = self.read(backend, contact)
         self.assertEqual(rebuilt['status'], 'ready', rebuilt)
         self.assertIsNone(proposer.previous[-1])
         self.assertNotEqual(rebuilt['profile']['version_id'], ready['profile']['version_id'])
@@ -396,11 +403,13 @@ class LayeredProfileHttpTest(MemoryOverviewHttpFixture, unittest.TestCase):
                 self.assertTrue(self.service.validate(snapshot))
 
     def test_source_or_correction_before_and_after_profile_commit_erases_every_version(self):
+        """删除物理清除；更正允许退休审计，但旧版本不得继续使用。"""
         for action in ("source","correction"):
             for before in (True,False):
                 with self.subTest(action=action,before=before):
                     contact,source,memory = self.prepare_contact()
                     retired = {}
+                    frozen = []
                     def mutate():
                         if retired:
                             return
@@ -411,6 +420,7 @@ class LayeredProfileHttpTest(MemoryOverviewHttpFixture, unittest.TestCase):
                                 retired[table] = (key, [row[0] for row in db.execute(
                                     f'SELECT {key} FROM public.{table} WHERE owner_id=%s AND contact_id=%s',
                                     (self.owner_id,contact)).fetchall()])
+                        frozen.append(self.service.capture(ContactScope(self.owner_id, UUID(contact))))
                         if action == "source":
                             self.delete_source(contact,source)
                         else:
@@ -424,10 +434,24 @@ class LayeredProfileHttpTest(MemoryOverviewHttpFixture, unittest.TestCase):
                         self.assertIsNotNone(ready["profile"])
                         mutate()
                     current = self.read(backend,contact)
+                    self.assertIsNotNone(frozen[0])
+                    self.assertFalse(self.service.validate(frozen[0]), '失效旧版本不得继续用于生成。')
+                    # 管理页可展示标成stale的只读审计；正式生成只能读取新有效快照。
+                    active = self.service.capture(ContactScope(self.owner_id, UUID(contact)))
+                    if active is not None:
+                        references = [ref for entry in active.profile_entries for ref in entry['references']]
+                        for scenario in active.scenarios:
+                            document = self.service.read_scenario(active, scenario.scenario_id, (0, scenario.paragraph_count))
+                            references += [ref for paragraph in document['paragraphs'] for ref in paragraph['references']]
+                        self.assertNotIn((memory['memory_id'], memory['revision']),
+                            [(ref['memory_id'], ref['revision']) for ref in references])
                     if action == 'source':
                         self.assertIsNone(current['profile'])
                         self.assertEqual(current['scenarios'], [])
-                    # 自动维护可发布修正后的合法版本；被撤销的实际输入及旧版本必须物理消失。
+                    else:
+                        # ADR退休审计允许更正前正文留存；真实来源删除仍须清除全部历史派生。
+                        self.delete_source(contact, source)
+                    # 删除闭包也覆盖更正前的审计版本及未被正文直接引用的实际输入。
                     import psycopg
                     with psycopg.connect(self.database_url) as db:
                         for table, (key, ids) in retired.items():

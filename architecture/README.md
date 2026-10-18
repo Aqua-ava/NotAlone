@@ -105,7 +105,9 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 
 70. [ADR-070：默认自动维护记忆并退役旧资料升级](adr/070-automatic-memory-maintenance.md)
 71. [ADR-071：区分错误纠正与状态变化的历史生成资格](adr/071-memory-retirement-and-generation-eligibility.md)
+72. [ADR-072：个人主题与画像允许有据推断，排除行动指导](adr/072-personal-memory-insights-without-action-guidance.md)
 73. [ADR-073：前台观察与后台同步独立执行](adr/073-foreground-observation-independent-of-background-sync.md)
+74. [ADR-074：参考腾讯源码自行实现自动记忆](adr/074-tencent-reference-python-memory.md)
 
 ## 当前架构决策
 

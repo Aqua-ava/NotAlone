@@ -135,7 +135,7 @@ def finish_coverage_receipt(connection, claim):
     if receipt and proof[0] and not profile_only and (proof[2]!='succeeded' or proof[3]!=proof[4]
             or proof[1] is None or proof[1]>claim.lease_generation):
         raise LayeredMemoryConflict('精确批次的发布证明已变化。')
-    if receipt and profile_required and profile_status!='succeeded' and proof[0]:
+    if receipt and profile_required and profile_status not in {'succeeded','not_required'} and proof[0]:
         exhausted=proof[7]=='model_call_budget_exhausted'
         error='model_call_budget_exhausted' if exhausted else proof[7] or 'profile_attempt_interrupted'
         state='paused' if exhausted else 'failed'

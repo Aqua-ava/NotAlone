@@ -83,9 +83,11 @@ def actual_organization_adapters(ports, *, runtime_policy="qualified_suite"):
 class _DeepSeekOrganizationAdapter:
     timeout_contract = OrganizationAdapterTimeoutContract('sdk')
 
-    def __init__(self, model, *, layer, budget, transport, personal=False):
+    physical_accounting = True
+
+    def __init__(self, model, *, layer, budget, transport, personal=False, document_tools=False):
         self.model, self.layer, self.budget, self.transport = model, layer, budget, transport
-        self.personal = personal
+        self.personal, self.document_tools = personal, document_tools
 
     @property
     def actual_candidate(self):
@@ -113,34 +115,73 @@ class _DeepSeekOrganizationAdapter:
 
 
 class DeepSeekOrganizationProposal(_DeepSeekOrganizationAdapter):
-    def propose(self, *, memories, scenarios=(), corrections=(), previous_profile=None, changed_scenario_ids=(), budget, deadline):
+    def propose(self, *, memories, scenarios=(), corrections=(), budget, deadline,
+                existing_profile=None, changed_scenarios=(), removed_scenario_version_ids=(), base_profile_version_id=None,
+                previous_profile=None, changed_scenario_ids=()):
+        if self.document_tools and self.layer == 'l3':
+            from notalone.memory.profile_workspace import maintain_profile
+            return maintain_profile(self, memories=memories, scenarios=scenarios, corrections=corrections,
+                existing_profile=existing_profile, changed_scenarios=changed_scenarios,
+                removed_scenario_version_ids=removed_scenario_version_ids, base_profile_version_id=base_profile_version_id,
+                deadline=deadline)
+        if self.document_tools and self.layer == 'l2':
+            from notalone.memory.scene_workspace import maintain_scenes
+            return maintain_scenes(self, memories=memories, scenarios=scenarios, corrections=corrections, deadline=deadline)
         prompt = (CORRECTED_SCENARIO_PROMPT if corrections else SCENARIO_PROMPT) if self.layer == 'l2' else PROFILE_PROMPT
         if self.personal:
             from notalone.memory.personal_organization import SCENARIO_PROMPT as personal_l2, PROFILE_PROMPT as personal_l3
             prompt = personal_l2 if self.layer == 'l2' else personal_l3
         return self._invoke(prompt,
-            {'memories': [item.to_payload() for item in memories], 'scenarios': list(scenarios), 'corrections': list(corrections),
+            {'layer': self.layer, 'memories': [item.to_payload() for item in memories], 'scenarios': list(scenarios), 'corrections': list(corrections),
              'previous_profile': previous_profile, 'changed_scenario_ids': list(changed_scenario_ids), 'budget': budget.to_payload()}, deadline)
 
 
 class DeepSeekOrganizationVerification(_DeepSeekOrganizationAdapter):
-    def verify_items(self, *, memories, scenarios=(), corrections=(), proposal, deadline):
+    def verify_items(self, *, memories, scenarios=(), corrections=(), proposal, deadline,
+                     existing_profile=None, changed_scenarios=(), removed_scenario_version_ids=(), base_profile_version_id=None):
         from notalone.memory.organization_verification import profile_verification_targets, profile_verification_items
         from notalone.memory.organization_quality import content_digest
         payload = {'layer': self.layer, 'memories': [item.to_payload() for item in memories],
                    'scenarios': list(scenarios), 'corrections': list(corrections), 'proposal': proposal}
+        if self.layer == 'l3' and (base_profile_version_id is not None or changed_scenarios):
+            payload.update(existing_profile=existing_profile, previous_profile=existing_profile,
+                changed_scenarios=list(changed_scenarios), removed_scenario_version_ids=list(removed_scenario_version_ids),
+                base_profile_version_id=base_profile_version_id)
+        if self.document_tools and self.layer == 'l2' and not proposal['scenarios']:
+            target = content_digest(payload)
+            policy = POLICY
+            if self.personal:
+                from notalone.memory.personal_organization import POLICY as policy
+            result = self._invoke(policy + '\n核验新资料是否确实无需改变当前任何场景；若有应保留的新事实却未整理，必须否决。'
+                + '\n只返回{"sha256":"复制no_change_target","supported":true或false,"reasons":["理由"]}。',
+                {**payload, 'no_change_target': target}, deadline)
+            return (set(result) == {'sha256', 'supported', 'reasons'} and result['sha256'] == target
+                and result['supported'] is True and isinstance(result['reasons'], list)
+                and all(isinstance(reason, str) for reason in result['reasons']))
         if self.personal:
             from notalone.memory.personal_organization import VERIFICATION_PROMPT as personal_prompt, targets, verify_result
             payload['verification_targets'] = targets(proposal, self.layer)
+            if self.document_tools and self.layer == 'l2':
+                personal_prompt += '\n逐项对照被replaces的完整旧场景；仍有效事实或推断限定若遗漏、合并改变含义，须否决。仅保留引用ID不证明保留原事实。'
+            if existing_profile:
+                personal_prompt += '\n对照existing_profile与changed_scenarios逐项核验增量画像；无变化依据却遗漏或篡改有效旧事实、推断类别或不确定性时否决。'
             result = self._invoke(personal_prompt, payload, deadline)
             return verify_result(result, proposal, payload['memories'], self.layer, corrections)
         if self.layer == 'l3':
+            if base_profile_version_id is not None or changed_scenarios:
+                payload.update(existing_profile=existing_profile, changed_scenarios=list(changed_scenarios),
+                    removed_scenario_version_ids=list(removed_scenario_version_ids), base_profile_version_id=base_profile_version_id)
             payload['verification_targets'] = profile_verification_targets(proposal)
-            result = self._invoke(PROFILE_VERIFICATION_PROMPT + (CORRECTION_POLICY if corrections else ''), payload, deadline)
+            prompt = PROFILE_VERIFICATION_PROMPT + (CORRECTION_POLICY if corrections else '')
+            if existing_profile:
+                prompt += '\n对照existing_profile与changed_scenarios审阅增量更新；仍有效背景被遗漏、篡改或缺少变化依据时否决，引用ID保留不证明旧事实语义保留。'
+            result = self._invoke(prompt, payload, deadline)
             return profile_verification_items(result, proposal, payload['memories'])
         payload['verification_targets'] = [{'index': i, 'sha256': content_digest(item)}
                                            for i, item in enumerate(proposal['scenarios'])]
         prompt = SCENARIO_ITEM_VERIFICATION_PROMPT
+        if self.document_tools:
+            prompt += '\n逐项对照被replaces的完整旧场景；仍有效事实若遗漏、合并改变含义或来源不能支持重整后正文，须否决。仅保留引用ID不证明保留原事实。'
         result = self._invoke(prompt, payload, deadline)
         if not isinstance(result, dict) or set(result) != {'items'} or not isinstance(result['items'], list):
             raise ValueError('主题核验顶层结构无效。')
@@ -159,11 +200,15 @@ class DeepSeekOrganizationVerification(_DeepSeekOrganizationAdapter):
                 rejected.append({'index': index, 'reason': '主题核验未通过、缺失或未绑定实际正文。'})
         return {'accepted_indices': accepted, 'rejected': rejected}
 
-    def verify(self, *, memories, scenarios=(), corrections=(), proposal, deadline):
+    def verify(self, *, memories, scenarios=(), corrections=(), proposal, deadline,
+               existing_profile=None, changed_scenarios=(), removed_scenario_version_ids=(), base_profile_version_id=None):
         from notalone.memory.organization_verification import profile_verification_targets, profile_verification_supported
         payload = {'layer': self.layer, 'memories': [item.to_payload() for item in memories],
                    'scenarios': list(scenarios), 'corrections': list(corrections), 'proposal': proposal}
         if self.layer == 'l3':
+            if base_profile_version_id is not None or changed_scenarios:
+                payload.update(existing_profile=existing_profile, changed_scenarios=list(changed_scenarios),
+                    removed_scenario_version_ids=list(removed_scenario_version_ids), base_profile_version_id=base_profile_version_id)
             payload['verification_targets'] = profile_verification_targets(proposal)
         prompt = (PROFILE_VERIFICATION_PROMPT + (CORRECTION_POLICY if corrections else '')) if self.layer == 'l3' else VERIFICATION_PROMPT
         result = self._invoke(prompt, payload, deadline)
@@ -191,7 +236,8 @@ def build_deepseek_organization_adapters(*, budget, runtime_policy="qualified_su
         client.close()
         raise
     model.cache = False
-    adapters = [cls(model, layer=layer, budget=budget, transport=transport, personal=runtime_policy == 'verified_items') for cls, layer in (
+    adapters = [cls(model, layer=layer, budget=budget, transport=transport,
+        personal=runtime_policy == 'verified_items', document_tools=runtime_policy == 'verified_items') for cls, layer in (
         (DeepSeekOrganizationProposal, 'l2'), (DeepSeekOrganizationVerification, 'l2'),
         (DeepSeekOrganizationProposal, 'l3'), (DeepSeekOrganizationVerification, 'l3'))]
     if not actual_organization_adapters(adapters, runtime_policy=runtime_policy):

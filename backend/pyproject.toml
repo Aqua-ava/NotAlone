@@ -9,6 +9,7 @@ description = "面向具体联系人的关系感知回复助手"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    "fastembed==0.9.0",
     "deepagents==0.7.6",
     "httpx==0.28.1",
     "langchain==1.3.15",

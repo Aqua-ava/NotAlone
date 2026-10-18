@@ -41,6 +41,17 @@ INTEGRATION_MIGRATIONS = EVOLUTION_MIGRATIONS + (
     "075_layered_profile_generation.sql",
     "076_layered_memory_maintenance.sql",
     "077_owner_layered_scope.sql",
+    "078_layered_memory_corrections.sql",
+    "079_organization_quality.sql",
+    "080_memory_merge_parents.sql",
+    "081_memory_retirement_reason.sql",
+    "082_memory_full_source_lifecycle.sql",
+    "083_default_memory_maintenance.sql",
+    "084_memory_retirement_audit.sql",
+    "085_retired_layered_fact_receipts.sql",
+    "086_merge_parent_deletion_cleanup.sql",
+    "087_extraction_trace_merge_operation.sql",
+    "088_persistent_extraction_schedule.sql",
 )
 
 
@@ -208,10 +219,40 @@ class DatabaseMigrationCommandTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         applied = json.loads(result.stdout)["applied"]
         expected = sorted(path.name for path in (ROOT / "database/migrations").glob("*.sql"))
-        self.assertEqual(len(expected), 77)
-        self.assertEqual(expected[-1], '077_owner_layered_scope.sql')
+        self.assertIn("087_extraction_trace_merge_operation.sql", expected)
+        self.assertEqual(expected[-1], "088_persistent_extraction_schedule.sql")
         self.assertEqual(applied, expected)
         repeated = self._run(directory=ROOT / "database/migrations")
+        self.assertEqual(repeated.returncode, 0, repeated.stderr)
+        self.assertEqual(json.loads(repeated.stdout)["applied"], [])
+
+    def test_existing_merge_trace_migration_accepts_schedule_without_rewriting_history(self) -> None:
+        source = ROOT / "database/migrations"
+        for path in sorted(source.glob("*.sql")):
+            if not path.name.startswith("088_"):
+                shutil.copyfile(path, self.migrations / path.name)
+        initial = self._run()
+        self.assertEqual(initial.returncode, 0, initial.stderr)
+        with psycopg.connect(self.database_url) as connection:
+            history = connection.execute(
+                "SELECT name, checksum FROM public.notalone_schema_migration ORDER BY name"
+            ).fetchall()
+        shutil.copyfile(source / "088_persistent_extraction_schedule.sql",
+                        self.migrations / "088_persistent_extraction_schedule.sql")
+        upgraded = self._run()
+        self.assertEqual(upgraded.returncode, 0, upgraded.stderr)
+        self.assertEqual(json.loads(upgraded.stdout)["applied"],
+                         ["088_persistent_extraction_schedule.sql"])
+        with psycopg.connect(self.database_url) as connection:
+            current = connection.execute(
+                "SELECT name, checksum FROM public.notalone_schema_migration ORDER BY name"
+            ).fetchall()
+            self.assertEqual(current[:-1], history)
+            for table in ("memory_extraction_schedule", "memory_extraction_receipt"):
+                self.assertIsNotNone(connection.execute(
+                    "SELECT to_regclass(%s)", ("public." + table,)
+                ).fetchone()[0])
+        repeated = self._run()
         self.assertEqual(repeated.returncode, 0, repeated.stderr)
         self.assertEqual(json.loads(repeated.stdout)["applied"], [])
 
@@ -328,7 +369,8 @@ COMMIT;
                 "SELECT name,checksum,applied_at FROM public.notalone_schema_migration ORDER BY name"
             ).fetchall()
             self.assertEqual(completed[:last_version], history)
-            self.assertEqual((len(completed), completed[-1][0]), (77, "077_owner_layered_scope.sql"))
+            self.assertEqual((len(completed), completed[-1][0]),
+                             (last_version + len(expected), expected[-1]))
         repeated = self._run(directory=ROOT / "database/migrations")
         self.assertEqual(repeated.returncode, 0, repeated.stderr)
         self.assertEqual(json.loads(repeated.stdout)["applied"], [])

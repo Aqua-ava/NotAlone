@@ -55,7 +55,7 @@ class GroundedRuntimeTest(unittest.TestCase):
         self.assertEqual(events["grounded_draft"]["draft"], draft)
         self.assertEqual(events["grounded_compile"]["payloads"][0]["valid_at"], "2026-10-17T00:00:00+08:00")
         self.assertEqual(stats.adopted, 0)
-        self.assertEqual(stats.pending, 1)
+        self.assertEqual((stats.pending, stats.rejected_by_contract), (0, 1))
 
     def test_incomplete_coverage_stops_before_accepting_candidates(self):
         source = window("已经到了，还在等车。")

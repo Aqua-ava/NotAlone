@@ -29,11 +29,11 @@ def organization_rules_identity():
     from pathlib import Path
     root = Path(__file__).resolve().parents[1]
     names = {
-        'application/layered_memory_service.py': {'run_batch', '_organize_profile', '_call', '_model_memories', '_model_scenarios', '_correction_arguments', '_organization_available', '_publication_guard'},
+        'application/layered_memory_service.py': {'run_batch', '_organize_profile', '_call', '_model_memories', '_model_scenarios', '_correction_arguments', '_organization_available', '_publication_guard', '_profile_context_arguments', '_incremental_profile_arguments'},
         'application/organization_runtime.py': {'ConfiguredSuiteSource'},
         'memory/organization_quality.py': {'qualification', 'snapshot', 'validate_qualification', 'publication_guard', 'check_response_identity'},
         'persistence/layered_memory.py': {'transaction', 'eligible', '_manifest', 'prepare', '_input', '_check', 'publish', 'reserve_model_call', 'organization_context_inputs'},
-        'persistence/layered_profile.py': {'prepare_profile', 'profile_input_entries', '_check_profile', 'publish_profile'},
+        'persistence/layered_profile.py': {'prepare_profile', 'profile_input_entries', 'incremental_profile_context', '_check_profile', 'publish_profile'},
         'memory/layered.py': {'OrganizationBudget', 'OrganizationInput', 'ScenarioProposalPort', 'ScenarioVerificationPort', 'ProfileProposalPort', 'ProfileVerificationPort'},
     }
     values = {}
@@ -43,6 +43,7 @@ def organization_rules_identity():
                         if isinstance(node, (ast.FunctionDef, ast.ClassDef)) and node.name in selected]
     for name in ('application/organization_call.py', 'memory/owner_organization_input.py',
                  'memory/scenario_validation.py', 'memory/scenario_publication.py', 'memory/profile_validation.py', 'memory/organization_isolation.py',
+                 'memory/scene_workspace.py', 'memory/profile_workspace.py',
                  'persistence/layered_coverage.py', 'persistence/layered_corrections.py',
                  'memory/layered_correction_validation.py', 'memory/personal_background.py', 'memory/personal_organization.py'):
         path = root / name

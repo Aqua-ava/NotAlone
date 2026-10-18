@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.unit.memory_extraction.verification_helpers import failed_automatic_candidate
+
 from contextlib import ExitStack
 from copy import deepcopy
 from dataclasses import replace
@@ -133,8 +135,8 @@ class GroundedQuoteAlternativesTest(unittest.TestCase):
                 self.assertEqual(fact["alternatives"], [note])
                 self.assertEqual(events["grounded_draft"]["draft"], original)
                 self.assertEqual(draft, original)
-                self.assertEqual((stats.adopted, stats.pending), (0, 1))
-                saved, = memories.list_pending_candidates(scope)
+                self.assertEqual((stats.adopted, stats.pending, stats.rejected_by_contract), (0, 0, 1))
+                saved = failed_automatic_candidate(memories, traces, scope)
                 self.assertEqual(saved.interpretation_reason, fact["interpretation_reason"])
                 self.assertEqual(saved.alternatives, (note,))
                 self.assertIsNone(saved.event)

@@ -18,7 +18,7 @@ class LayeredMemoryConflict(RuntimeError):
 
 @dataclass(frozen=True, slots=True)
 class OrganizationBudget:
-    """显式受控预算；尚未标定为生产默认。"""
+    """有限共享预算；默认工具维护与显式评测分别装配。"""
 
     max_memories: int = 12
     # 新增覆盖批大小与已有主题的递归来源输入分别限额。
@@ -33,8 +33,8 @@ class OrganizationBudget:
     def __post_init__(self):
         if any(type(value) is not int or value < 1 for value in self.to_payload().values()):
             raise ValueError("整理预算必须是有限正整数。")
-        if self.max_model_calls not in {2, 4}:
-            raise ValueError("整理仅支持主题两步或主题与长期背景四步。")
+        if not 2 <= self.max_model_calls <= 16:
+            raise ValueError("整理模型调用预算须在2至16次之间。")
 
     def to_payload(self) -> dict:
         return {name: getattr(self, name) for name in self.__dataclass_fields__}

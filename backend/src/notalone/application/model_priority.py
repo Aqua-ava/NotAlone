@@ -284,8 +284,14 @@ class PriorityAdjudicationRuntime:
     ) -> AdjudicationDecision:
         return self._invoke(lambda: self._runtime.adjudicate(candidate_text=candidate_text, similar=similar))
 
-    def adjudicate_batch(self, *, candidates):
+    def adjudicate_batch(self, *, candidates=None, memories=None, pool=None):
         batch = getattr(self._runtime, "adjudicate_batch", None)
+        if memories is not None:
+            if not callable(batch):
+                raise TypeError("正式记忆裁决需要批量运行时。")
+            return self._invoke(lambda: batch(memories=memories, pool=pool))
+        if candidates is None:
+            raise TypeError("批量裁决缺少候选。")
         if not callable(batch):
             return tuple(self.adjudicate(candidate_text=text, similar=similar) for text, similar in candidates)
         return self._invoke(lambda: batch(candidates=candidates))
