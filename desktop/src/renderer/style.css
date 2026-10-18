@@ -69,7 +69,7 @@ html:has(.admin-layout)::-webkit-scrollbar { display: none; }
 .ime-pane { height: 100vh; padding: 9px 12px 0; border: 1px solid #b3bfbe; border-radius: 4px 7px 4px 6px; background: radial-gradient(ellipse at 2% 4%, #9ec7dc25, transparent 48%), #fff9ed; }
 .ime-header { display: flex; align-items: center; gap: 8px; height: 35px; user-select: none; -webkit-app-region: drag; }
 .ime-header button { -webkit-app-region: no-drag; }
-.ime-input, .horizontal-candidates, .ime-footer { -webkit-app-region: no-drag; }
+/* 拖动排除区仅属于标题栏控件，正文滚动后不得覆盖标题栏的原生拖动区域。 */
 .ime-logo { width: 43px; height: auto; margin-right: 1px; }
 .contact-pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 3px 5px; border-radius: 4px; }
 .ime-modes { margin-left: auto; display: flex; gap: 2px; }
