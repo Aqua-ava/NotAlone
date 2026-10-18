@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import argparse
-from datetime import datetime
+from datetime import datetime, timezone
 import hashlib
 import json
 import os
@@ -11,7 +11,7 @@ import threading
 import time
 import unittest
 from unittest.mock import patch
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import httpx
 import psycopg
@@ -46,9 +46,13 @@ class RealMemoryAcceptance(CoreBusinessFlowFixture, unittest.TestCase):
         self.priority = ModelPriorityControl()
         self.layers = build_layered_memory_service(self.database_url, model_priority=self.priority)
         events = EventBus()
+        from notalone.server.event_publisher import EventBusMessagePublisher
         self.host = _build_task_host(self.database_url, events, model_priority=self.priority, organization_runner=self.layers)
         assert self.host is not None
         self.layers.attach_task_host(self.host)
+        self.publisher = EventBusMessagePublisher(events, owner_id=self.owner_id, task_host=self.host)
+        if getattr(self, "entry", "import") == "observation":
+            self.host.start_scheduling(owner_id=self.owner_id)
         self.backend = HttpBackend(create_app(database_url=self.database_url, owner_id=self.owner_id,
             token='synthetic-real-model-acceptance', events=events, task_host=self.host,
             import_service=_build_import_service(self.database_url), memory_service=_build_memory_service(self.database_url),
@@ -87,6 +91,53 @@ class RealMemoryAcceptance(CoreBusinessFlowFixture, unittest.TestCase):
         self.assertEqual(status, 200, result)
         return result
 
+    def observation_dialog(self, number, texts, contact_id=None):
+        """正式已确认绑定的观察提交；中性消息补齐数量阈值，不替换任何模型。"""
+        from notalone.ingest.models import NormalizedMessage, WechatMessageMetadata
+        from notalone.persistence.contact_directory import PostgresContactDirectory
+        from notalone.persistence.conversation_repository import PostgresConversationBindingRepository
+        from notalone.persistence.observation_store import ObservationMode, PostgresObservationStore
+        from notalone.scopes import ContactScope
+
+        if contact_id is None:
+            contact = PostgresContactDirectory(self.database_url).create_contact(
+                self.owner_id, uuid4(), '合成自动维护验收')
+            contact_id = str(contact.contact_id)
+            self.observation_binding = PostgresConversationBindingRepository(self.database_url).create_binding(
+                owner_id=self.owner_id, contact_id=UUID(contact_id), channel='wechat',
+                account_scope='synthetic-acceptance', conversation_locator=f'synthetic-{contact_id}')
+        binding = self.observation_binding
+        scope = ContactScope(self.owner_id, UUID(contact_id))
+        # 每轮新身份5条，确保达到正式阈值；重复轮仍是新来源，不是入库幂等。
+        contents = list(texts)
+        contents.extend(['收到。', '嗯。', '好的。', '谢谢。', '知道了。'][:5-len(contents)])
+        messages = []
+        evidence = []
+        for index, text in enumerate(contents):
+            local_id = number * 100 + index
+            occurred = datetime(2026, 10, 18, number + 1, index, tzinfo=timezone.utc)
+            speaker = ('user' if self.case['scope'] == 'owner' else 'contact') if index < len(texts) else 'user'
+            messages.append(NormalizedMessage(
+                source_locator=f'cli:{local_id}', speaker=speaker, message_type='text', text_content=text,
+                media_placeholder=None, occurred_at=occurred,
+                wechat_metadata=WechatMessageMetadata(external_local_id=local_id,
+                    external_server_id=f'synthetic-{number}-{index}', external_talker=binding.conversation_locator,
+                    source_create_time=int(occurred.timestamp()), raw_payload_json=json.dumps({'text': text}, ensure_ascii=False))))
+            evidence.append({'local_id': local_id, 'speaker': speaker, 'text': text, 'occurred_at': occurred.isoformat()})
+        atomic_json(self.output / f'observation-input-{number}.json', evidence)
+        batch = PostgresObservationStore(self.database_url).record_batch_with_messages(
+            owner_id=self.owner_id, contact_id=scope.contact_id, binding_id=binding.binding_id,
+            mode=ObservationMode.CLI_BACKGROUND, cli_version='synthetic-real-model-acceptance',
+            conversation_locator=binding.conversation_locator, last_local_id=number*100+4,
+            last_cursor=f'synthetic-cursor-{number}', record_count=len(messages), messages=tuple(messages))
+        for message_id in batch.created_message_ids:
+            if message_id is not None:
+                self.publisher.publish_message_created(scope=scope, occurred_at=datetime.now(timezone.utc), message_id=message_id)
+        status = self.read(f'/api/tasks/status?contact_id={contact_id}')
+        task_id = (status.get('progress') or {}).get('task_id')
+        self.assertIsNotNone(task_id, status)
+        return {'contact_id': contact_id, 'task_id': task_id}
+
     def await_result(self, imported, stage):
         contact = imported['contact_id']
         deadline = time.monotonic() + 300
@@ -119,12 +170,13 @@ class RealMemoryAcceptance(CoreBusinessFlowFixture, unittest.TestCase):
         return last
 
     def test_complete_chain(self):
-        first = self.import_dialog(1, self.case['initial'])
+        submit = self.observation_dialog if getattr(self, 'entry', 'import') == 'observation' else self.import_dialog
+        first = submit(1, self.case['initial'])
         before = self.await_result(first, 'initial')
         self.assertTrue(before['memories']['memories'])
         self.assertTrue(all(m['adoption_method'] == 'auto' for m in before['memories']['memories']))
         self.assertTrue(all('你好' not in m['text'] for m in before['memories']['memories']))
-        second = self.import_dialog(2, self.case['update'], first['contact_id'])
+        second = submit(2, self.case['update'], first['contact_id'])
         after = self.await_result(second, 'updated')
         self.assertNotEqual(before['layers']['organization_generation'], after['layers']['organization_generation'])
         self.assertTrue(any(self.case['expected'] in m['text'] for m in after['memories']['memories']))
@@ -132,14 +184,14 @@ class RealMemoryAcceptance(CoreBusinessFlowFixture, unittest.TestCase):
         self.assertTrue(old_ids.isdisjoint(m['memory_id'] for m in after['memories']['memories']))
         self.assertTrue(all(m['adoption_method'] == 'auto' for m in after['memories']['memories']))
         # 新来源ID的改述重复不是导入幂等：应由记忆裁决跳过。
-        repeated = self.import_dialog(3, self.case['update'], first['contact_id'])
+        repeated = submit(3, self.case['update'], first['contact_id'])
         unchanged = self.await_result(repeated, 'repeated')
         self.assertEqual({m['memory_id'] for m in after['memories']['memories']},
                          {m['memory_id'] for m in unchanged['memories']['memories']})
         self.assertEqual(after['layers']['profile']['version_id'], unchanged['layers']['profile']['version_id'])
         self.assertEqual(after['layers']['organization_generation'], unchanged['layers']['organization_generation'])
         # 机器断言只证明链路；语义和旧记忆是否正确退役由独立Agent核对证据。
-        atomic_json(self.output / 'result.json', {'passed': True, 'contact_id': first['contact_id'],
+        atomic_json(self.output / 'result.json', {'passed': True, 'entry': getattr(self, 'entry', 'import'), 'contact_id': first['contact_id'],
             'initial_generation': before['layers']['organization_generation'],
             'updated_generation': after['layers']['organization_generation']})
 
@@ -149,6 +201,7 @@ def main():
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--ledger', type=Path, required=True)
     parser.add_argument('--round', required=True)
+    parser.add_argument('--entry', choices=('import', 'observation'), default='import')
     parser.add_argument('--case', choices=CASES, default='contact_tea')
     parser.add_argument('--retain-for-desktop', action='store_true', help='仅成功后保留合成测试库用于开发App验收，随后须显式清理')
     args = parser.parse_args()
@@ -164,6 +217,7 @@ def main():
     RealMemoryAcceptance.output = args.output
     test = RealMemoryAcceptance('test_complete_chain')
     test.case = CASES[args.case]
+    test.entry = args.entry
     suite = None
     original = httpx.HTTPTransport.handle_request
     lock = threading.Lock()
