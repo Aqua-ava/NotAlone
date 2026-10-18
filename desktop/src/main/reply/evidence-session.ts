@@ -13,7 +13,7 @@ export class ReplyEvidenceSession {
   private sessionId: string | null | undefined;
   private readonly listeners = new Set<(state: ReplyEvidenceState) => void>();
   constructor(private readonly backend: BackendHost, private readonly replies: ReplySession) {
-    replies.onStateChanged((state) => this.receive(state));
+    replies.onStateChanged((state) => this.receive(state), ['phase', 'result', 'savedSession', 'scopeRevision', 'contactId']);
     this.receive(replies.getState());
   }
   getState(): ReplyEvidenceState { return structuredClone(this.state); }

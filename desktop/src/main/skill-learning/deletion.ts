@@ -27,7 +27,7 @@ export function coordinateSkillLearningDeletion(learning: SkillLearningControlle
       learning.invalidate();
       sessionDeletionRevision = deleted.revision;
     }
-  });
+  }, ['confirmedSessionDeletion']);
   const preferenceDeletions: Array<() => void> = [];
   return {
     started: () => { preferenceDeletions.push(learning.beginDeletion()); preferences.started(); },

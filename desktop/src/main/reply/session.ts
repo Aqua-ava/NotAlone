@@ -1,3 +1,4 @@
+import type { ReplyStateUpdate } from '../../shared/reply-bridge';
 import { continuationGeneration, strategyGeneration, ordinaryGeneration, type OrdinaryFailureObservation, type OrdinaryGenerationResult } from './assistant-generation-adapters';
 import { randomUUID } from 'node:crypto';
 import type { ContactSelection, ContactSessionState } from '../../shared/contact-session-bridge';
@@ -107,7 +108,9 @@ export class ReplySession {
   private candidateRestoreOperation = 0;
   private candidateSourceCheck: CandidateSourceCheck | undefined;
   private readonly candidateVersions: AssistantCandidateVersionSession;
-  private readonly listeners = new Set<(state: ReplySessionState) => void>();
+  private readonly listeners = new Map<(state: ReplySessionState) => void, readonly (keyof ReplySessionState)[] | undefined>();
+  private readonly updateListeners = new Set<(update: ReplyStateUpdate) => void>();
+  private publishedState: ReplySessionState | undefined;
   private readonly sessionDeletionListeners = new Set<(phase: 'started' | 'settled') => void>();
   private readonly inputListeners = new Set<() => void>();
   private readonly retainedContent = new Map<string, RetainedContactContent>();
@@ -154,12 +157,16 @@ export class ReplySession {
     this.receiveContact(contacts.getState());
   }
   getState(): ReplySessionState {
-    const state = structuredClone(this.state);
+    return structuredClone(this.projectState());
+  }
+  private projectState(): ReplySessionState {
+    const state = { ...this.state };
     state.generationJobs = this.generationJobs.states(this.backend.getConnectionGeneration());
     state.generationRecoveryPending = this.generationJobs.recoveryPending(this.backend.getConnectionGeneration());
     state.candidateDrafts = state.sourceAvailability || state.savedSession?.phase !== 'ready' ? []
       : state.candidateDrafts?.filter((draft) => state.candidateVersions?.items.some((view) => view.phase === 'ready'
         && view.candidateId === draft.candidateId && view.history?.versions.some((version) => version.versionId === draft.versionId)));
+    if (state.candidateDrafts?.length === this.state.candidateDrafts?.length) state.candidateDrafts = this.state.candidateDrafts;
     const notice = state.inputBudgetNotice;
     if (notice && (notice.contactId !== state.contactId || notice.scopeRevision !== state.scopeRevision
       || notice.sessionId !== state.savedSession?.sessionId || notice.operation !== this.operation
@@ -191,9 +198,14 @@ export class ReplySession {
       void this.readSavedSession({ contactId: this.state.contactId, scopeRevision: this.state.scopeRevision });
     }
   }
-  onStateChanged(listener: (state: ReplySessionState) => void): () => void {
-    this.listeners.add(listener);
+  onStateChanged(listener: (state: ReplySessionState) => void, fields?: readonly (keyof ReplySessionState)[]): () => void {
+    this.listeners.set(listener, fields);
     return () => this.listeners.delete(listener);
+  }
+  onStateUpdated(listener: (update: ReplyStateUpdate) => void): () => void {
+    this.publishedState ??= this.projectState();
+    this.updateListeners.add(listener);
+    return () => { this.updateListeners.delete(listener); };
   }
   // 删除生命周期独立于展示联系人，等待原请求和同SID权威核对结算。
   onSessionDeletion(listener: (phase: 'started' | 'settled') => void): () => void {
@@ -947,7 +959,7 @@ export class ReplySession {
       this.heldResult?.preserveInput ? { preserveInput: true } : {});
   }
 
-  updateOptions(update: RewriteOptionsUpdate): ReplySessionState {
+  updateOptions(update: RewriteOptionsUpdate, snapshot = true): ReplySessionState | void {
     this.assertScope(update);
     if (JSON.stringify(update.options) !== JSON.stringify(this.state.options)) {
       this.notifyInputChanged();
@@ -955,7 +967,7 @@ export class ReplySession {
       this.lastAttempt = undefined;
       this.publish({ options: { ...update.options }, phase: this.state.result ? 'ready' : 'idle', errorCode: undefined, canRetry: false });
     }
-    return this.getState();
+    return snapshot ? this.getState() : undefined;
   }
 
   async setMode(update: ReplyModeUpdate): Promise<void> {
@@ -1015,32 +1027,32 @@ export class ReplySession {
     }
     return this.getState();
   }
-  updateDirection(update: ReplyDirectionUpdate): ReplySessionState {
+  updateDirection(update: ReplyDirectionUpdate, snapshot = true): ReplySessionState | void {
     this.assertScope(update);
     if (this.state.mode !== 'reply_to_message') throw new Error('请先切换到回复模式。');
     if (update.direction !== this.state.direction) {
       this.directionDerived = false;
       this.invalidateInput(); this.publish({ direction: update.direction });
     }
-    return this.getState();
+    return snapshot ? this.getState() : undefined;
   }
-  updatePurpose(update: import('../../shared/reply-bridge').ReplyPurposeUpdate): ReplySessionState {
+  updatePurpose(update: import('../../shared/reply-bridge').ReplyPurposeUpdate, snapshot = true): ReplySessionState | void {
     this.assertScope(update);
     if (this.state.mode !== 'initiate_conversation') throw new Error('请先选择主动聊聊。');
     if (update.purpose !== this.state.purpose) {
       this.directionDerived = false;
       this.invalidateInput(); this.publish({ purpose: update.purpose });
     }
-    return this.getState();
+    return snapshot ? this.getState() : undefined;
   }
 
-  updateCorrection(update: ReplyCorrectionUpdate): ReplySessionState {
+  updateCorrection(update: ReplyCorrectionUpdate, snapshot = true): ReplySessionState | void {
     this.assertScope(update);
     if (this.state.mode === 'rewrite_draft') throw new Error('请先选择聊天场景。');
     if (update.correction !== this.state.correction) {
       this.invalidateInput(true); this.publish({ correction: update.correction });
     }
-    return this.getState();
+    return snapshot ? this.getState() : undefined;
   }
 
   async explore(selection: ContactSelection, changeGroup = false, automatic = false): Promise<void> {
@@ -1135,10 +1147,10 @@ export class ReplySession {
     if (this.strategyJob?.type === 'open' && this.strategyJob.request.automatic) return;
     if (this.strategyJob && this.state.exploration.phase !== 'waiting') await this.runStrategy(this.strategyJob);
   }
-  updateRequirements(update: ReplyRequirementsUpdate): ReplySessionState {
+  updateRequirements(update: ReplyRequirementsUpdate, snapshot = true): ReplySessionState | void {
     this.assertScope(update);
     if (update.requirements !== this.state.requirements) { this.invalidateInput(true); this.publish({ requirements: update.requirements }); }
-    return this.getState();
+    return snapshot ? this.getState() : undefined;
   }
   updateSkill(update: ReplySkillUpdate): ReplySessionState {
     this.assertScope(update);
@@ -1148,7 +1160,7 @@ export class ReplySession {
     }
     return this.getState();
   }
-  updateScene(update: import('../../shared/reply-bridge').ReplySceneUpdate): ReplySessionState {
+  updateScene(update: import('../../shared/reply-bridge').ReplySceneUpdate, snapshot = true): ReplySessionState | void {
     this.assertScope(update);
     if (typeof update.scene !== 'string' || update.scene.length > 256) throw new Error('精确场景不可用。');
     const scene = update.scene.trim();
@@ -1156,7 +1168,7 @@ export class ReplySession {
       this.invalidateInput();
       this.publish({ scene, skillChoices: [] });
     }
-    return this.getState();
+    return snapshot ? this.getState() : undefined;
   }
   private strategySnapshot(selection: ContactSelection): ReplyInputSnapshot {
     const contact = this.contacts.getState().contacts.find((item) => item.contactId === selection.contactId)!;
@@ -1694,15 +1706,16 @@ export class ReplySession {
     this.publish({ selectedCandidateId: selection.candidateId });
     return this.getState();
   }
-  editCandidate(edit: ReplyCandidateEdit): ReplySessionState {
+  editCandidate(edit: ReplyCandidateEdit, snapshot = true): ReplySessionState | void {
     const candidate = this.assertCandidate(edit);
     const editingDuringGeneration = this.state.phase === 'waiting';
     // 用户后续编辑接管展示；在途生成仍按原作业保存，完成回执不得覆盖这份编辑。
     if (editingDuringGeneration) { this.leaveGenerationView(); this.lastAttempt = undefined; }
     this.notifyInputChanged();
-    candidate.editedText = edit.text;
-    this.publish(editingDuringGeneration ? { phase: 'ready', canRetry: false } : {});
-    return this.getState();
+    this.publish({ result: { ...this.state.result!, candidates: this.state.result!.candidates.map(item =>
+      item === candidate ? { ...item, editedText: edit.text } : item) },
+      ...(editingDuringGeneration ? { phase: 'ready' as const, canRetry: false } : {}) });
+    return snapshot ? this.getState() : undefined;
   }
   async readCandidateVersions(request: ReplyCandidateVersionRead): Promise<ReplySessionState> {
     this.assertVersionScope(request);
@@ -1712,7 +1725,7 @@ export class ReplySession {
     catch (error) { await this.handleCandidateSourceUnavailable(error); throw error; }
     return this.getState();
   }
-  updateCandidateVersionDraft(update: ReplyCandidateDraftUpdate): ReplySessionState {
+  updateCandidateVersionDraft(update: ReplyCandidateDraftUpdate, snapshot = true): ReplySessionState | void {
     this.assertVersionScope(update);
     const view = this.state.candidateVersions?.items.find((item) => item.candidateId === update.candidateId);
     const version = view?.history?.versions.find((item) => item.versionId === update.versionId);
@@ -1738,7 +1751,7 @@ export class ReplySession {
       structuredClone({ candidateId, versionId, messages, requirements })],
       ...(matchingResult ? { result: { ...result, candidates: result.candidates.map((item) =>
         item.original.candidateId === candidateId ? { ...item, editedText: messages.map((message) => message.text).join('\n\n') } : item) } } : {}) });
-    return this.getState();
+    return snapshot ? this.getState() : undefined;
   }
   async saveCandidateVersion(edit: ReplyCandidateVersionEdit): Promise<ReplySessionState> {
     this.assertVersionScope(edit);
@@ -2246,6 +2259,27 @@ export class ReplySession {
       scopeRevision: state.scopeRevision, sessionId: state.savedSession?.sessionId ?? null }, update.savedSession, savedOrigin);
     this.state = state;
     state.messageNotice = this.messageNotices.setScope(this.projectionScope());
-    for (const listener of this.listeners) listener(this.getState());
+    const previous = this.publishedState;
+    const projected = this.projectState();
+    this.publishedState = projected;
+    const changes: Partial<ReplySessionState> = {};
+    for (const key of Object.keys(projected) as (keyof ReplySessionState)[]) {
+      if (Object.is(projected[key], previous?.[key])) continue;
+      if (key === 'generationJobs' && JSON.stringify(projected[key]) === JSON.stringify(previous?.[key])) continue;
+      Object.assign(changes, { [key]: projected[key] });
+    }
+    if (this.updateListeners.size) {
+      const event: ReplyStateUpdate = !previous || previous.contactId !== projected.contactId || previous.scopeRevision !== projected.scopeRevision
+        ? { kind: 'snapshot', state: structuredClone(projected) }
+        : { kind: 'patch', baseRevision: previous.revision, revision: projected.revision,
+          contactId: projected.contactId, scopeRevision: projected.scopeRevision, changes: structuredClone(changes) };
+      for (const listener of this.updateListeners) listener(event);
+    }
+    let snapshot: ReplySessionState | undefined;
+    for (const [listener, fields] of this.listeners) {
+      if (previous && fields && !fields.some(key => Object.hasOwn(changes, key))) continue;
+      snapshot ??= structuredClone(projected);
+      listener(snapshot);
+    }
   }
 }

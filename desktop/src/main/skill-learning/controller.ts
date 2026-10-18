@@ -20,6 +20,7 @@ export class SkillLearningController {
   private operation = 0;
   private pending: AbortController | undefined;
   private mutating = false;
+  private refreshing: { scope: Scope; promise: Promise<void> } | undefined;
   private reviewOperation = 0;
   private reviewPending: AbortController | undefined;
   private reviewBusy = false;
@@ -50,7 +51,7 @@ export class SkillLearningController {
   private clear() {
     this.history.clear();
     this.policies.clear();
-    ++this.operation; this.pending?.abort(); this.pending = undefined; this.mutating = false;
+    ++this.operation; this.pending?.abort(); this.pending = undefined; this.mutating = false; this.refreshing = undefined;
     ++this.reviewOperation; this.reviewPending?.abort(); this.reviewPending = undefined; this.reviewBusy = false; this.reviewKeys.clear(); this.reviewRetry = undefined;
     this.publish({ drafts: [], task: null, recentOutcomes: [], enabled: false, settingRevision: 0, phase: 'idle', error: null, review: null });
   }
@@ -67,9 +68,19 @@ export class SkillLearningController {
     if (!this.scope || selection.contactId !== this.scope.contactId || selection.scopeRevision !== this.scope.scopeRevision) throw new Error('学习联系人已变化，请重新选择。');
     return this.scope;
   }
-  async refresh(selection: ContactSelection) {
+  async refresh(selection: ContactSelection): Promise<void> {
     const scope = this.assertScope(selection);
-    if (this.deletions.size || this.reviewBusy) return;
+    if (this.refreshing?.scope === scope) return this.refreshing.promise;
+    if (this.deletions.size || this.reviewBusy || this.mutating) return Promise.resolve();
+    const refresh = { scope, promise: Promise.resolve() };
+    refresh.promise = this.refreshScope(scope).finally(() => {
+      if (this.refreshing === refresh) this.refreshing = undefined;
+    });
+    this.refreshing = refresh;
+    return refresh.promise;
+  }
+  private async refreshScope(scope: Scope) {
+    if (this.deletions.size || this.reviewBusy || this.mutating) return;
     if (this.state.policies) {
       const policies = this.state.policies;
       await this.history.open(scope);
@@ -77,9 +88,9 @@ export class SkillLearningController {
       return;
     }
     if (this.state.history) { await this.history.open(scope); return; }
-    if (this.reviewRetry && this.state.review) {
-      await this.retryReview({ ...selection, draftId: this.reviewRetry.draftId, expectedRevision: this.state.review.draft.revision });
-    } else if (this.state.review?.published) await this.performReview(scope, this.state.review.draft.draft_id);
+    // 未知提交结果保留给用户显式重试，自动刷新不能重放写操作。
+    if (this.reviewRetry && this.state.review) return;
+    if (this.state.review?.published) await this.performReview(scope, this.state.review.draft.draft_id);
     else await this.perform(scope, 'GET');
   }
   async configure(selection: ContactSelection & { enabled: boolean; confirmed: true }) {

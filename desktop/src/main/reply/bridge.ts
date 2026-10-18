@@ -105,13 +105,32 @@ export function installReplyBridge(commands: PageCommands, backend: BackendHost,
   generationBlock?: () => ReplyGenerationBlock): ReplySession {
   const replies = new ReplySession(contacts, backend, generationBlock);
   const evidence = new ReplyEvidenceSession(backend, replies);
-  evidence.onStateChanged((state) => commands.publish('reply:evidence-changed', state));
+  evidence.onStateChanged((state) => commands.publish('reply:evidence-changed', state, 'helper'));
   commands.handle('reply:get-evidence-state', (...args: unknown[]) => { noArguments(args); return evidence.getState(); }, 'helper');
   commands.handle('reply:load-evidence', (...args: unknown[]) => evidence.load(candidate(args)), 'helper');
   commands.handle('reply:close-evidence', (...args: unknown[]) => evidence.close(candidate(args)), 'helper');
-  replies.onStateChanged((state) => commands.publish('reply:state-changed', state));
+  replies.onStateUpdated((event) => commands.publish('reply:state-updated', event, 'helper'));
+  const inputHandlers = new Map<string, (args: unknown[], snapshot: boolean) => unknown>();
+  const input = (type: string, channel: string, handler: (args: unknown[], snapshot: boolean) => unknown) => {
+    inputHandlers.set(type, handler);
+    commands.handle(channel, (...args: unknown[]) => handler(args, true), 'helper');
+  };
+  commands.handle('reply:update-input', (...args: unknown[]) => {
+    const command = args[0];
+    if (args.length !== 1 || !command || typeof command !== 'object' || Array.isArray(command)
+      || Object.keys(command).length !== 2 || !Object.hasOwn(command, 'type') || !Object.hasOwn(command, 'update')) {
+      throw new Error('本次输入操作不可用。');
+    }
+    const { type, update } = command as { type: string; update: unknown };
+    const handler = inputHandlers.get(type);
+    if (!handler) throw new Error('本次输入操作不可用。');
+    handler([update], false);
+  }, 'helper');
+  commands.handle('reply:subscribe', (...args: unknown[]) => {
+    noArguments(args); commands.publish('reply:state-updated', { kind: 'snapshot', state: replies.getState() }, 'helper');
+  }, 'helper');
   commands.handle('reply:get-state', (...args: unknown[]) => { noArguments(args); return replies.getState(); });
-  commands.handle('reply:update-options', (...args: unknown[]) => { return replies.updateOptions(options(args)); }, 'helper');
+  input('options', 'reply:update-options', (args, snapshot) => { return replies.updateOptions(options(args), snapshot); });
   commands.handle('reply:set-mode', (...args: unknown[]) => {
     const value = fields(args, ['contactId', 'scopeRevision', 'mode']);
     if (!['rewrite_draft', 'reply_to_message', 'initiate_conversation'].includes(value.mode as string)) throw new Error('本次输入方式不可用。');
@@ -157,16 +176,16 @@ export function installReplyBridge(commands: PageCommands, backend: BackendHost,
     if (!isUuid(value.messageId)) throw new Error('待回复消息不可用。');
     return replies.selectMessage({ ...value, messageId: value.messageId.toLowerCase() } as unknown as ReplyMessageSelection);
   }, 'helper');
-  commands.handle('reply:update-direction', (...args: unknown[]) => {
+  input('direction', 'reply:update-direction', (args, snapshot) => {
     const value = fields(args, ['contactId', 'scopeRevision', 'direction']);
     if (typeof value.direction !== 'string' || value.direction.length > 4096) throw new Error('表达方向不可用。');
-    return replies.updateDirection(value as unknown as ReplyDirectionUpdate);
-  }, 'helper');
-  commands.handle('reply:update-purpose', (...args: unknown[]) => {
+    return replies.updateDirection(value as unknown as ReplyDirectionUpdate, snapshot);
+  });
+  input('purpose', 'reply:update-purpose', (args, snapshot) => {
     const value = fields(args, ['contactId', 'scopeRevision', 'purpose']);
     if (typeof value.purpose !== 'string' || value.purpose.length > 4096) throw new Error('主动目的不可用。');
-    return replies.updatePurpose(value as unknown as import('../../shared/reply-bridge').ReplyPurposeUpdate);
-  }, 'helper');
+    return replies.updatePurpose(value as unknown as import('../../shared/reply-bridge').ReplyPurposeUpdate, snapshot);
+  });
   commands.handle('reply:generate', (...args: unknown[]) => {
     const value = fields(args, ['contactId', 'scopeRevision', 'newRequest']);
     if (typeof value.newRequest !== 'boolean') throw new Error('本次生成操作不可用。');
@@ -193,11 +212,11 @@ export function installReplyBridge(commands: PageCommands, backend: BackendHost,
     }
     return replies.retryInterruptedGeneration(value as unknown as AssistantInterruptedRetry);
   }, 'helper');
-  commands.handle('reply:update-correction', (...args: unknown[]) => {
+  input('correction', 'reply:update-correction', (args, snapshot) => {
     const value = fields(args, ['contactId', 'scopeRevision', 'correction']);
     if (typeof value.correction !== 'string' || value.correction.length > 4096) throw new Error('纠正内容不可用。');
-    return replies.updateCorrection(value as unknown as ReplyCorrectionUpdate);
-  }, 'helper');
+    return replies.updateCorrection(value as unknown as ReplyCorrectionUpdate, snapshot);
+  });
   commands.handle('reply:explore', (...args: unknown[]) =>
     replies.explore(fields(args, ['contactId', 'scopeRevision']) as unknown as ContactSelection), 'helper');
   commands.handle('reply:change-directions', (...args: unknown[]) =>
@@ -217,11 +236,11 @@ export function installReplyBridge(commands: PageCommands, backend: BackendHost,
     replies.stopExploration(fields(args, ['contactId', 'scopeRevision']) as unknown as ContactSelection), 'helper');
   commands.handle('reply:retry-exploration', (...args: unknown[]) =>
     replies.retryExploration(fields(args, ['contactId', 'scopeRevision']) as unknown as ContactSelection), 'helper');
-  commands.handle('reply:update-requirements', (...args: unknown[]) => {
+  input('requirements', 'reply:update-requirements', (args, snapshot) => {
     const value = fields(args, ['contactId', 'scopeRevision', 'requirements']);
     if (typeof value.requirements !== 'string' || value.requirements.length > 4096) throw new Error('本次要求不可用。');
-    return replies.updateRequirements(value as unknown as import('../../shared/reply-bridge').ReplyRequirementsUpdate);
-  }, 'helper');
+    return replies.updateRequirements(value as unknown as import('../../shared/reply-bridge').ReplyRequirementsUpdate, snapshot);
+  });
   commands.handle('reply:update-skill', (...args: unknown[]) => {
     const value = fields(args, ['contactId', 'scopeRevision', 'skill']), skill = value.skill;
     if (!skill || typeof skill !== 'object' || Array.isArray(skill) || Object.keys(skill).length !== 2
@@ -230,20 +249,20 @@ export function installReplyBridge(commands: PageCommands, backend: BackendHost,
     if (choice.mode === 'user' ? !isUuid(choice.versionId) : !['auto', 'disabled'].includes(choice.mode as string) || choice.versionId !== null) throw new Error('策略版本不可用。');
     return replies.updateSkill(value as unknown as import('../../shared/reply-bridge').ReplySkillUpdate);
   }, 'helper');
-  commands.handle('reply:update-scene', (...args: unknown[]) => {
+  input('scene', 'reply:update-scene', (args, snapshot) => {
     const value = fields(args, ['contactId', 'scopeRevision', 'scene']);
     if (typeof value.scene !== 'string' || value.scene.length > 256) throw new Error('精确场景不可用。');
-    return replies.updateScene(value as unknown as import('../../shared/reply-bridge').ReplySceneUpdate);
-  }, 'helper');
+    return replies.updateScene(value as unknown as import('../../shared/reply-bridge').ReplySceneUpdate, snapshot);
+  });
   commands.handle('reply:select-direction', (...args: unknown[]) => {
     const value = fields(args, ['contactId', 'scopeRevision', 'suggestionId', 'inputVersion']);
     if (!isUuid(value.suggestionId) || !isUuid(value.inputVersion)) throw new Error('方向建议不可用。');
     return replies.selectDirection(value as unknown as ReplyDirectionChoice);
   }, 'helper');
   commands.handle('reply:select-candidate', (...args: unknown[]) => { return replies.selectCandidate(candidate(args)); }, 'helper');
-  commands.handle('reply:edit-candidate', (...args: unknown[]) => { return replies.editCandidate(candidate(args, true) as ReplyCandidateEdit); }, 'helper');
-  commands.handle('reply:update-candidate-version-draft', (...args: unknown[]) =>
-    replies.updateCandidateVersionDraft(candidateVersion(args, 'draft') as ReplyCandidateDraftUpdate), 'helper');
+  input('candidate', 'reply:edit-candidate', (args, snapshot) => { return replies.editCandidate(candidate(args, true) as ReplyCandidateEdit, snapshot); });
+  input('candidateDraft', 'reply:update-candidate-version-draft', (args, snapshot) =>
+    replies.updateCandidateVersionDraft(candidateVersion(args, 'draft') as ReplyCandidateDraftUpdate, snapshot));
   commands.handle('reply:read-candidate-versions', (...args: unknown[]) =>
     replies.readCandidateVersions(candidateVersion(args, 'read')), 'helper');
   commands.handle('reply:save-candidate-version', (...args: unknown[]) =>

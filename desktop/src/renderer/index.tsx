@@ -30,7 +30,7 @@ export function App() {
   const startup = useStartupState();
   const permission = useScreenPermission();
   const contactSession = useContactSession();
-  const replies = useReplySession();
+  const replies = useReplySession(helper);
   const workspace = useRef<HTMLDivElement>(null);
   useEffect(() => { workspace.current?.scrollTo({ top: 0 }); }, [replies.state.mode, replies.state.options.inputKind]);
   const foreground = useForegroundState(window.notalone.foreground, helper);
