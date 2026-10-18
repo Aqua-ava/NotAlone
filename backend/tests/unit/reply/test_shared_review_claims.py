@@ -11,19 +11,21 @@ from tests.reply_review_support import synthetic_claim, synthetic_review
 
 class SharedReviewClaimsTest(unittest.TestCase):
     def payload(self, text="记得一些。你最近怎么样？", direction="自然接话，不虚构本人经历。"):
-        return {"input_mode": "reply_to_pasted_text", "current_text": "那会儿的事情还记得吗？",
+        value = {"input_mode": "reply_to_pasted_text", "current_text": "那会儿的事情还记得吗？",
                 "confirmed_direction": direction, "user_instruction": None,
                 "evidence": [{"kind": "user_current_chat", "text": "那会儿的事情还记得吗？"},
                              {"kind": "owner_memory", "text": "本人过去表示记得那段往事。"}],
                 "layered_context": {"scope_kind": "contact", "profile_entries": [{"text": "联系人2018年毕业。"}]},
                 "candidates": [{"candidate_number": 1, "text": text, "messages": [], "basis": "按本次输入。",
                                 "risk_notes": [], "citation_ids": []}]}
+        value["candidates"][0]["review_target"] = review_target(value["candidates"][0])
+        return value
 
     def certificate(self, payload, path="/confirmed_direction", quote="自然接话", state="记得一些。"):
         report = synthetic_review(payload)
         first = synthetic_claim(state, kind="state", modality="stated",
                                 sources=[{"source_path": path, "source_quote": quote}])
-        second = synthetic_claim(payload["candidates"][0]["text"][len(state):])
+        second = synthetic_claim(payload["candidates"][0]["text"][len(state):], start=len(state) + 1)
         second["claim_id"] = 2
         report["reviews"]["candidate_1"]["claims"] = [first, second]
         return report
@@ -31,7 +33,7 @@ class SharedReviewClaimsTest(unittest.TestCase):
     def test_new_version_without_redundant_check_ids_accepts_complete_claims(self):
         payload = self.payload("那段往事我还有印象。你最近怎么样？", "告诉对方我记得这段往事，继续问他的近况。")
         report = self.certificate(payload, quote="我记得这段往事", state="那段往事我还有印象。")
-        report["protocol_version"] = "reply-fidelity-claims-v2"
+        report["protocol_version"] = "reply-fidelity-units-v3"
         for check in report["reviews"]["candidate_1"]["checks"].values():
             check.pop("claim_ids", None)
         self.assertEqual(accepted_candidate_numbers(report, payload), frozenset({1}))
@@ -82,8 +84,13 @@ class SharedReviewClaimsTest(unittest.TestCase):
                     row["checks"]["intent"]["result"]["status"] = "unknown"
                     row["checks"]["explanation"].pop("reason")
                 else:
-                    payload["candidates"].append({**payload["candidates"][0], "candidate_number": 2})
+                    second = {**payload["candidates"][0], "candidate_number": 2}
+                    second.pop("review_target")
+                    second["review_target"] = review_target(second)
+                    payload["candidates"].append(second)
                     report["reviews"]["candidate_2"] = {**copy.deepcopy(row), "candidate_number": 2}
+                    for claim in report["reviews"]["candidate_2"]["claims"]:
+                        for key in ("start_unit_id", "end_unit_id"): claim[key] = claim[key].replace("c1u", "c2u")
                     report["reviews"]["candidate_2"]["claims"][1]["extra"] = True
                 with self.assertRaises(ReplyReviewInvalidError): accepted_candidate_numbers(report, payload)
 
@@ -93,8 +100,8 @@ class SharedReviewClaimsTest(unittest.TestCase):
                 payload = self.payload()
                 row = (report := self.certificate(payload))["reviews"]["candidate_1"]
                 if fault == "missing_tail": row["claims"] = row["claims"][:1]
-                elif fault == "missing_head": row["claims"][0]["text"] = ""
-                elif fault == "duplicate": row["claims"][1]["text"] = row["claims"][0]["text"]
+                elif fault == "missing_head": row["claims"][0]["start_unit_id"] = "c1u0"
+                elif fault == "duplicate": row["claims"][1]["start_unit_id"] = "c1u1"
                 else: row["checks"]["facts" if fault.startswith("facts") else "commitments"]["claim_ids"] = [2]
                 with self.assertRaises(ReplyReviewInvalidError): accepted_candidate_numbers(report, payload)
 
@@ -159,6 +166,8 @@ class SharedReviewClaimsTest(unittest.TestCase):
     def test_canonical_messages_are_covered_once_with_unicode_and_newlines(self):
         payload = self.payload("你好🙂。\n\n谢谢你！")
         payload["candidates"][0]["messages"] = ["你好🙂。", "谢谢你！"]
+        payload["candidates"][0].pop("review_target")
+        payload["candidates"][0]["review_target"] = review_target(payload["candidates"][0])
         target = review_target(payload["candidates"][0])
         self.assertEqual(target["characters"], len(payload["candidates"][0]["text"]))
         self.assertEqual(len(target["message_ranges"]), 2)

@@ -104,8 +104,13 @@ explanation只定位basis/risk_notes，其他四项只定位text/messages。sour
 实际位置。quote必须是所指字段的非空原文片段，不要改写、
 拼接或引候选自评充当来源；缺证增量也对照原句或要求中的实际片段，reason说明缺什么。
 
-每候选另列共享claims（1至12项），claim_id从1连续编号。按正文顺序用text片段完整拼回
-候选text，包括标点和分条间双换行；review_target已验证messages与text相同，不重复覆盖。
+每候选另列共享claims（1至12项），claim_id从1连续编号。review_target.units每项为
+[字符ID,原字符]，覆盖原text每个Unicode code point，包括空白、标点、换行和emoji组成字符。
+start_unit_id/end_unit_id只复制本候选表中的显式ID（如c1u1），表示含两端的连续范围；
+按序无缝单次覆盖从首至末全部ID，不自行数中文、不输出text、不借别的候选ID。
+程序从原text派生命题正文；纯空白不能独立成命题，须附于相邻有内容片段。
+每个旧字符串切分点都可选；可跨句把限定与主命题合组，不能拆掉条件或合并独立事实。
+原text/messages保留原样，messages与text的双换行连接已验证，不能省略其分隔字符。
 每个片段拆成归属与性质一致的命题，不把“本人有部分记忆”和“请你补充”合成一个optional。
 actor为owner/contact/other/unspecified，kind为state/fact/speech_act/commitment/unknown，
 time_scope为current/historical/unspecified，modality为optional/required/stated。
@@ -118,7 +123,7 @@ state/fact/commitment的support须核对实际语义支持，不能只因话题�
 review_sources中的角色与时态由程序决定，不得自报或升级；联系人来信/历史和旧本人资料
 不能授权本人当前主观状态。当前用户明确声明可支持合法意译，不要求复制原句。
 错误的speech_act分类或错误的语义蕴含仍是复核错误，结构合法并不能证明这些判断正确。
-顶层protocol_version必须为reply-fidelity-claims-v2，instruction_requires_expansion仅返回一次；
+顶层protocol_version必须为reply-fidelity-units-v3，instruction_requires_expansion仅返回一次；
 reviews为按实际候选数量固定的对象，
 candidate_1至candidate_n各含对应candidate_number、expression_change、claims、checks。
 编号与所在字段严格一致且每条恰好一次，不省略拒绝的候选。仅返回这一个工具。
@@ -190,7 +195,7 @@ class ReplyConstraintReview:
             budget = budget.with_model_counter(original_model=model, counter=capability[1])
         request = budget.require_request(ModelRequest(
             model=review_model, system_message=SystemMessage(REVIEW_PROMPT),
-            messages=[HumanMessage(json.dumps(payload, ensure_ascii=False))],
+            messages=[HumanMessage(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))],
             tools=[build_review_tool(len(payload["candidates"]))], tool_choice="ReplyFidelityReview",
         ))
         bound = request.model.bind_tools(request.tools, tool_choice=request.tool_choice,

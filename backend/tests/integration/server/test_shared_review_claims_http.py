@@ -21,7 +21,7 @@ class SharedReviewClaimsHttpTest(FidelityHttpFixture, unittest.TestCase):
             quote = "还记得吗" if fault == "contact_source" else "我记得这段往事"
             state = synthetic_claim("那段往事我还有印象。", kind="state", modality="stated",
                                     sources=[{"source_path": path, "source_quote": quote}])
-            question = synthetic_claim("你最近怎么样？")
+            question = synthetic_claim("你最近怎么样？", start=len("那段往事我还有印象。") + 1)
             question["claim_id"] = 2
             row = report["reviews"]["candidate_1"]
             row["claims"] = [state] if fault == "missing_tail" else [state, question]

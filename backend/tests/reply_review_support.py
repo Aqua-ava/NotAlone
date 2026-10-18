@@ -6,9 +6,10 @@ from typing import Any
 
 
 def synthetic_claim(text: str, *, actor="owner", kind="speech_act", time_scope="current",
-                    modality="optional", sources=None) -> dict[str, Any]:
+                    modality="optional", sources=None, candidate_number=1, start=1) -> dict[str, Any]:
     """显式脚本标注，不根据正文推断语义或证明模型质量。"""
-    return {"claim_id": 1, "text": text, "actor": actor, "kind": kind,
+    return {"claim_id": 1, "start_unit_id": f"c{candidate_number}u{start}",
+            "end_unit_id": f"c{candidate_number}u{start + len(text) - 1}", "actor": actor, "kind": kind,
             "time_scope": time_scope, "modality": modality,
             "support": {"status": "not_required" if kind == "speech_act" else "supported",
                         "sources": sources or []}}
@@ -43,7 +44,7 @@ def synthetic_review(
             raise ValueError("合成裁决控制无效。")
         reviews[f"candidate_{index + 1}"] = {
             "candidate_number": number, "expression_change": changes[index], "checks": checks,
-            "claims": [synthetic_claim(payload["candidates"][index]["text"])],
+            "claims": [synthetic_claim(payload["candidates"][index]["text"], candidate_number=index + 1)],
         }
-    return {"protocol_version": "reply-fidelity-claims-v2",
+    return {"protocol_version": "reply-fidelity-units-v3",
             "instruction_requires_expansion": requires_expansion, "reviews": reviews}

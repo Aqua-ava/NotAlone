@@ -68,7 +68,7 @@ class ConstraintReviewSdkTest(unittest.TestCase):
         self.assertEqual(accepted_candidate_numbers(rejected, payload), frozenset())
 
     def test_captured_review_wire_faults_fail_explicitly_without_retry(self):
-        for fault in ("misplaced_propositions", "invalid_json"):
+        for fault in ("misplaced_propositions", "invalid_json", "wrong_range_id"):
             with self.subTest(fault=fault):
                 def respond(request):
                     response = sdk_response(request)
@@ -77,9 +77,12 @@ class ConstraintReviewSdkTest(unittest.TestCase):
                     if call["name"] == "ReplyFidelityReview":
                         review = json.loads(call["arguments"])
                         # 实际seq2/15多传同级propositions；seq5则返回不完整JSON。
-                        review["reviews"]["candidate_1"]["propositions"] = []
-                        call["arguments"] = (json.dumps(review) if fault == "misplaced_propositions"
-                                             else call["arguments"][:-1])
+                        if fault == "misplaced_propositions":
+                            review["reviews"]["candidate_1"]["propositions"] = []
+                        elif fault == "wrong_range_id":
+                            review["reviews"]["candidate_1"]["claims"][0]["start_unit_id"] = "c2u1"
+                        call["arguments"] = (call["arguments"][:-1] if fault == "invalid_json"
+                                             else json.dumps(review))
                     return httpx.Response(200, json=payload)
                 ledger = RecordingLedger()
                 runtime, requests, decisions = self.runtime(respond, ledger=ledger)
@@ -110,7 +113,7 @@ class ConstraintReviewSdkTest(unittest.TestCase):
                 reviewed = synthetic_review({"draft_text": direction, "candidates": generation["candidates"]})
                 state = synthetic_claim(statement, kind="state", modality="stated", sources=[{
                     "source_path": "/confirmed_direction", "source_quote": "我记得这段往事"}])
-                question = synthetic_claim("你最近怎么样？")
+                question = synthetic_claim("你最近怎么样？", start=len(statement) + 1)
                 question["claim_id"] = 2
                 reviewed["reviews"]["candidate_1"]["claims"] = [state, question]
                 runtime, requests, decisions = self.runtime(lambda request: sdk_response(request,
@@ -206,7 +209,7 @@ class ConstraintReviewSdkTest(unittest.TestCase):
         runtime, requests, _ = self.runtime(sdk_response)
         runtime.generate(self.context())
         parameters = requests[1]["tools"][0]["function"]["parameters"]
-        self.assertEqual(parameters["properties"]["protocol_version"]["enum"], ["reply-fidelity-claims-v2"])
+        self.assertEqual(parameters["properties"]["protocol_version"]["enum"], ["reply-fidelity-units-v3"])
         self.assertIn("protocol_version", parameters["required"])
         reviews = parameters["properties"]["reviews"]
         self.assertEqual(reviews["type"], "object")
@@ -214,6 +217,10 @@ class ConstraintReviewSdkTest(unittest.TestCase):
         self.assertEqual(set(reviews["properties"]), {"candidate_1"})
         slot = reviews["properties"]["candidate_1"]
         self.assertEqual(slot["properties"]["candidate_number"]["enum"], [1])
+        claim = slot["properties"]["claims"]["items"]
+        self.assertNotIn("text", claim["properties"])
+        self.assertEqual(claim["properties"]["start_unit_id"], {"type": "string"})
+        self.assertEqual(claim["properties"]["end_unit_id"], {"type": "string"})
         checks = slot["properties"]["checks"]["properties"]
         for name, check in checks.items():
             self.assertEqual(set(check["properties"]),
@@ -265,7 +272,7 @@ class ConstraintReviewSdkTest(unittest.TestCase):
         self.assert_dynamic_candidate_slots(["candidate_1", "candidate_2", "candidate_3"])
 
     def test_five_explicit_checks_deliver_the_original_candidate_without_a_global_verdict(self):
-        arguments = {"protocol_version": "reply-fidelity-claims-v2", "instruction_requires_expansion": False, "reviews": {"candidate_1": {
+        arguments = {"protocol_version": "reply-fidelity-units-v3", "instruction_requires_expansion": False, "reviews": {"candidate_1": {
             "candidate_number": 1, "expression_change": "not_applicable", "checks": {
                 "intent": {"result": {"status": "supported"}, "reason": "保留今晚不参加的立场。"},
                 "instruction": {"result": {"status": "supported"}, "reason": "保留拒绝，未增加下次安排。"},
@@ -283,6 +290,22 @@ class ConstraintReviewSdkTest(unittest.TestCase):
         self.assertNotIn("verdict", row_schema["properties"])
         self.assertEqual(set(row_schema["properties"]["checks"]["required"]),
                          {"intent", "instruction", "facts", "commitments", "explanation"})
+
+    def test_review_wire_preserves_canonical_messages_and_all_codepoints(self):
+        messages = ["谢谢🙂e\u0301，", "  回头聊。", "晚安。"]
+        text = "\n\n".join(messages)
+        generation = reply_output().tool_calls[0]["args"]
+        generation["candidates"][0].update(text=text, messages=messages)
+        runtime, requests, decisions = self.runtime(lambda request: sdk_response(request,
+            generation_arguments=generation))
+        result = runtime.generate(self.context())
+        candidate = json.loads(requests[1]["messages"][-1]["content"])["candidates"][0]
+        self.assertEqual((candidate["text"], candidate["messages"]), (text, messages))
+        self.assertEqual(candidate["review_target"]["units"],
+                         [[f"c1u{number}", char] for number, char in enumerate(text, 1)])
+        self.assertEqual(result.candidates[0].text, text)
+        self.assertEqual(list(result.candidates[0].messages), messages)
+        self.assertEqual((len(requests), len(decisions)), (2, 2))
 
     def test_strict_wire_uses_exclusive_checks_without_unsupported_length_keywords(self):
         runtime, requests, _ = self.runtime(sdk_response)
@@ -490,7 +513,7 @@ class ConstraintReviewSdkTest(unittest.TestCase):
                             violation["category"] = "added_obligation"
                             row["checks"]["commitments"]["result"].update(status="violation", violation=violation)
                             if fault == "unrelated_proposition":
-                                row["claims"][0]["text"] = "祝活动顺利"
+                                row["claims"][0]["end_unit_id"] = "c1u2"
                             else:
                                 row["claims"] = []
                     return sdk_response(request, review_arguments=arguments)
@@ -628,7 +651,8 @@ class ConstraintReviewSdkTest(unittest.TestCase):
                         "source_path": "/draft_text", "source_quote": "今晚不参加",
                     })
                 parts = ["最近怎么样？", "想聊的话我今晚可以开车接你，", "再帮你把事情处理好。"]
-                claims = [synthetic_claim(part, kind="speech_act" if index == 1 else "commitment")
+                claims = [synthetic_claim(part, kind="speech_act" if index == 1 else "commitment",
+                                          start=1 + sum(len(value) for value in parts[:index - 1]))
                           for index, part in enumerate(parts, 1)]
                 for index, claim in enumerate(claims, 1): claim["claim_id"] = index
                 arguments["reviews"]["candidate_1"]["claims"] = claims
@@ -736,6 +760,20 @@ class ConstraintReviewSdkTest(unittest.TestCase):
             runtime.generate(self.context())
         self.assertEqual(len(requests), 1)
 
+    def test_maximum_length_character_table_is_rejected_before_review_dispatch(self):
+        generation = reply_output().tool_calls[0]["args"]
+        text = "合" * 65536
+        generation["candidates"][0]["text"] = text
+        generation["candidates"][0].pop("messages", None)
+        runtime, requests, decisions = self.runtime(lambda request: sdk_response(request,
+            generation_arguments=generation))
+        with self.assertRaises(InputBudgetExceededError):
+            runtime.generate(self.context())
+        self.assertEqual(generation["candidates"][0]["text"], text)
+        self.assertEqual(len(requests), 1)
+        self.assertEqual(len(decisions), 2)
+        self.assertFalse(decisions[-1].allowed)
+
     def test_oversized_review_payload_is_rejected_before_second_dispatch(self):
         runtime, requests, decisions = self.runtime(lambda request: sdk_response(request, large=True), capacity=50000)
         with self.assertRaises(InputBudgetExceededError):
@@ -756,11 +794,13 @@ class RecordingLedger:
 class LayeredReviewSourceContractTest(unittest.TestCase):
     def test_only_actual_profile_text_can_support_fact_or_explanation(self):
         from notalone.reply.adapters.constraint_review_contract import accepted_candidate_numbers, CHECK_CATEGORIES
-        payload = {"draft_text": "你好", "candidates": [{"text": "曾共同学习", "basis": "曾共同学习",
+        payload = {"draft_text": "你好", "candidates": [{"candidate_number": 1, "text": "曾共同学习", "basis": "曾共同学习",
             "messages": [], "risk_notes": []}], "layered_context": {
             "profile_entries": [{"text": "过去共同学习", "references": [{"text": "隐藏引用"}]}],
             "directory": [{"title": "共同学习", "hint": "共同学习", "paragraphs": [{"text": "未读正文"}]}],
             "dependency_ids": ["隐藏依赖"]}}
+        from notalone.reply.adapters.constraint_review_contract import review_target
+        payload["candidates"][0]["review_target"] = review_target(payload["candidates"][0])
         for category, path, quote, valid in (
             ("facts", "/layered_context/profile_entries/0/text", "共同学习", True),
             ("explanation", "/layered_context/profile_entries/0/text", "共同学习", True),

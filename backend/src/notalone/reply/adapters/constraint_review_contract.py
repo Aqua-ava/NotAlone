@@ -17,7 +17,7 @@ CHECK_CATEGORIES = {
 EXPRESSION_CHANGES = ["expanded", "same_or_compressed", "not_applicable", "unknown"]
 CLAIM_LIMIT = 12
 CLAIM_SOURCE_LIMIT = 2
-REVIEW_PROTOCOL_VERSION = "reply-fidelity-claims-v2"
+REVIEW_PROTOCOL_VERSION = "reply-fidelity-units-v3"
 
 
 def _string() -> dict[str, Any]:
@@ -51,7 +51,7 @@ def _check_schema(categories: list[str]) -> dict[str, Any]:
 
 def _claim_schema() -> dict[str, Any]:
     return _record({
-        "claim_id": {"type": "integer"}, "text": _string(),
+        "claim_id": {"type": "integer"}, "start_unit_id": _string(), "end_unit_id": _string(),
         "actor": {"type": "string", "enum": ["owner", "contact", "other", "unspecified"]},
         "kind": {"type": "string", "enum": ["state", "fact", "speech_act", "commitment", "unknown"]},
         "time_scope": {"type": "string", "enum": ["current", "historical", "unspecified"]},
@@ -95,7 +95,11 @@ def accepted_candidate_numbers(output: object, payload: dict[str, Any]) -> froze
         raise ReplyInvariantError("候选复核没有覆盖全部候选。")
     sources = _source_texts(payload)
     candidate_texts = [_candidate_texts(candidate) for candidate in candidates]
-    targets = [review_target(candidate) for candidate in candidates]
+    targets = []
+    for number, candidate in enumerate(candidates, 1):
+        if "review_target" not in candidate:
+            raise ReplyInvariantError("可信复核缺少字符编号表。")
+        targets.append(review_target(candidate, candidate_number=number))
     roles = review_source_roles(payload)
     if payload.get("review_sources", roles) != roles:
         raise ReplyInvariantError("可信复核来源角色发生变化。")
@@ -152,8 +156,12 @@ def _validate_check(name: str, value: object, candidate: dict[str, str],
     return status
 
 
-def review_target(candidate: dict[str, Any]) -> dict[str, Any]:
+def review_target(candidate: dict[str, Any], *, candidate_number: int | None = None) -> dict[str, Any]:
     """同一正文只覆盖一次；分条消息由真实正文的区间映射复验。"""
+    number = candidate.get("candidate_number") if candidate_number is None else candidate_number
+    if (type(number) is not int or not 1 <= number <= 3
+            or type(candidate.get("candidate_number")) is not int or candidate["candidate_number"] != number):
+        raise ReplyInvariantError("可信候选序号与字符命名空间不一致。")
     text, messages = candidate["text"], candidate.get("messages", [])
     if (not isinstance(text, str) or not text.strip() or len(text) > 65536
             or not isinstance(messages, list) or len(messages) > 8
@@ -161,10 +169,12 @@ def review_target(candidate: dict[str, Any]) -> dict[str, Any]:
             or messages and "\n\n".join(messages) != text):
         raise ReplyInvariantError("可信候选正文与分条消息不一致。")
     cursor, ranges = 0, []
-    for number, message in enumerate(messages):
-        ranges.append({"path": f"/messages/{number}", "start": cursor, "end": cursor + len(message)})
+    for index, message in enumerate(messages):
+        ranges.append({"path": f"/messages/{index}", "start": cursor, "end": cursor + len(message)})
         cursor += len(message) + 2
-    target = {"path": "/text", "characters": len(text), "message_ranges": ranges}
+    # 使用code point，不归一化、不合并字素；保留原来每一个合法字符串切分点。
+    target = {"path": "/text", "characters": len(text), "message_ranges": ranges,
+              "units": [[f"c{number}u{index}", char] for index, char in enumerate(text, 1)]}
     if candidate.get("review_target", target) != target:
         raise ReplyInvariantError("可信候选覆盖目标发生变化。")
     return target
@@ -222,14 +232,19 @@ def _record_time(item: dict) -> str:
 def _validate_claims(value: object, candidate: dict[str, Any], target: dict,
                      roles: dict[str, dict[str, str]], sources: dict[str, str]) -> bool:
     claims = _array(value, maximum=CLAIM_LIMIT, minimum=1)
+    positions = {unit[0]: index for index, unit in enumerate(target["units"])}
     cursor, supported = 0, True
     for number, item in enumerate(claims, 1):
-        claim = _object(item, {"claim_id", "text", "actor", "kind", "time_scope", "modality", "support"})
-        text = _text(claim["text"], 65536)
+        claim = _object(item, {"claim_id", "start_unit_id", "end_unit_id", "actor", "kind",
+                               "time_scope", "modality", "support"})
+        first, last = (_text(claim[key], 16) for key in ("start_unit_id", "end_unit_id"))
         if (type(claim["claim_id"]) is not int or claim["claim_id"] != number
-                or candidate["text"][cursor:cursor + len(text)] != text):
-            raise ReplyReviewInvalidError("正文命题必须按序完整覆盖，不得重叠或遗漏。")
-        cursor += len(text)
+                or first not in positions or last not in positions
+                or positions[first] != cursor or positions[last] < cursor):
+            raise ReplyReviewInvalidError("命题范围必须引用本候选字符ID并按序无缝覆盖，不得重叠或遗漏。")
+        end = positions[last] + 1
+        _text(candidate["text"][cursor:end], 65536)
+        cursor = end
         actor = _choice(claim["actor"], ["owner", "contact", "other", "unspecified"])
         kind = _choice(claim["kind"], ["state", "fact", "speech_act", "commitment", "unknown"])
         time = _choice(claim["time_scope"], ["current", "historical", "unspecified"])
