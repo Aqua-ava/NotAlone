@@ -5,6 +5,7 @@ import importlib.util
 from importlib.metadata import version
 import json
 import os
+import stat
 from pathlib import Path
 import sys
 from uuid import UUID, uuid4
@@ -22,6 +23,13 @@ from notalone.memory_extraction.evaluation_provider_contract import (
     SEMANTIC4_PLAN, SEMANTIC4_MODE, SEMANTIC4_STAGE, SEMANTIC4_KIND, SEMANTIC4_PROMPT_PROFILE,
     UNIQUENESS_PLAN, UNIQUENESS_KIND, UNIQUENESS_E_PROFILE, PUBLIC_QUALITY_PLANS, validate_semantic4_windows,
     BOUNDED_RUNTIME_PLAN, BOUNDED_RUNTIME_MODE, BOUNDED_RUNTIME_STAGE, BOUNDED_RUNTIME_KIND,
+    EvaluationProviderProfile, REFERENCE16_PRO_PLAN, REFERENCE16_PRO_KIND,
+    REFERENCE16_PRO_TEACHING_PLAN, REFERENCE16_PRO_TEACHING_KIND,
+    REFERENCE16_PRO_RETENTION_PLAN, REFERENCE16_PRO_RETENTION_KIND,
+    REFERENCE16_PRO_RETENTION_V_THINKING_PLAN, REFERENCE16_PRO_RETENTION_V_THINKING_KIND,
+    REFERENCE16_V_THINKING_REQUEST_VERSION, reference16_v_thinking_phase_policy,
+    REFERENCE16_PRO_RETENTION_V_TOKEN32K_PLAN, REFERENCE16_PRO_RETENTION_V_TOKEN32K_KIND,
+    REFERENCE16_V_TOKEN32K_REQUEST_VERSION, reference16_v_token32k_phase_policy,
 )
 BOUNDED_REFERENCE = ".scratch/memory-accuracy-next/bounded-runtime-real15-reference-20261017.json"
 BOUNDED_ANNOTATION = ".scratch/memory-accuracy-next/bounded-runtime-real15-plan-20261017.md"
@@ -50,6 +58,62 @@ PROFILES: dict[str, dict] = {"baseline": FIXED, "semantic4": {
 }}
 
 
+from notalone.memory_extraction.grounded_adapter import BOUNDED_DEPENDENCY_PROMPT_PROFILE
+
+PROFILES["bounded15"]["extraction_prompt_profile"] = BOUNDED_DEPENDENCY_PROMPT_PROFILE
+
+
+PROFILES["bounded15-pro"] = {**PROFILES["bounded15"],
+    "provider_profile": EvaluationProviderProfile.DEEPSEEK_PRO_BOUNDED_TASK.value,
+    "request_model": "deepseek-v4-pro", "response_model": "deepseek-v4-pro",
+    "request_contract_version": 3, "max_tokens": 8192}
+
+PROFILES["bounded15-pro-thinking"] = {**PROFILES["bounded15-pro"],
+    "provider_profile": EvaluationProviderProfile.DEEPSEEK_PRO_BOUNDED_THINKING.value,
+    "request_contract_version": 5, "verification_tool_choice": "omitted",
+    "extraction_prompt_profile": EvaluationProviderProfile.DEEPSEEK_PRO_BOUNDED_THINKING.bounded_extraction_prompt_profile}
+
+PROFILES["reference16-pro"] = {
+    "execution_plan": REFERENCE16_PRO_PLAN, "case_set": "reference21", "case_positions": list(range(16)),
+    "reference_version": "source-fidelity-v2", "request_limit": 32, "request_timeout_seconds": 300,
+    "max_retries": 0, "extraction_mode": "grounded-v2", "verification_mode": "legacy-v4",
+    "verification_tool_choice": "forced", "extraction_tool_choice": "forced",
+    "provider_profile": "deepseek-pro-reference16-v1", "call_wall_seconds": 600, "phase_wall_seconds": 600,
+    "request_model": "deepseek-v4-pro", "response_model": "deepseek-v4-pro",
+    "request_contract_version": 4, "max_tokens": 8192, "thinking_type": "disabled", "reasoning_effort": "none",
+    "planned_windows": 16, "required_claims": 18, "optional_claims": 1,
+    "batch_work_seconds": 14380, "outer_wall_seconds": 14400,
+}
+
+PROFILES["reference16-pro-teaching"] = {
+    **PROFILES["reference16-pro"], "execution_plan": REFERENCE16_PRO_TEACHING_PLAN,
+    "extraction_prompt_profile": "reference-kind-teaching-v1",
+}
+
+PROFILES["reference16-pro-retention"] = {
+    **PROFILES["reference16-pro-teaching"], "execution_plan": REFERENCE16_PRO_RETENTION_PLAN,
+    "prompt_profile": "reference-retention-v1",
+}
+
+PROFILES["reference16-pro-retention-v-thinking"] = {
+    **{key: value for key, value in PROFILES["reference16-pro-retention"].items()
+       if key not in {"thinking_type", "reasoning_effort"}},
+    "execution_plan": REFERENCE16_PRO_RETENTION_V_THINKING_PLAN,
+    "provider_profile": "deepseek-pro-reference16-v-thinking-v1", "request_contract_version": 6,
+    "verification_tool_choice": "omitted", "phase_request_version": REFERENCE16_V_THINKING_REQUEST_VERSION,
+    "phase_request_policy": reference16_v_thinking_phase_policy(),
+}
+
+PROFILES["reference16-pro-retention-v-token32k"] = {
+    **{key: value for key, value in PROFILES["reference16-pro-retention-v-thinking"].items()
+       if key != "max_tokens"},
+    "execution_plan": REFERENCE16_PRO_RETENTION_V_TOKEN32K_PLAN,
+    "provider_profile": "deepseek-pro-reference16-v-token32k-v1", "request_contract_version": 7,
+    "phase_request_version": REFERENCE16_V_TOKEN32K_REQUEST_VERSION,
+    "phase_request_policy": reference16_v_token32k_phase_policy(),
+}
+
+
 def fixed_contract(frozen: dict) -> dict:
     fixed = frozen.get("fixed")
     if type(fixed) is not dict:
@@ -62,7 +126,11 @@ def fixed_contract(frozen: dict) -> dict:
 
 def owned_kind(frozen: dict) -> str:
     return {REFERENCE21_V4_PLAN: REFERENCE21_V4_KIND, SEMANTIC4_PLAN: SEMANTIC4_KIND,
-            UNIQUENESS_PLAN: UNIQUENESS_KIND, BOUNDED_RUNTIME_PLAN: BOUNDED_RUNTIME_KIND}[fixed_contract(frozen)["execution_plan"]]
+            REFERENCE16_PRO_TEACHING_PLAN: REFERENCE16_PRO_TEACHING_KIND,
+            REFERENCE16_PRO_RETENTION_PLAN: REFERENCE16_PRO_RETENTION_KIND,
+            REFERENCE16_PRO_RETENTION_V_THINKING_PLAN: REFERENCE16_PRO_RETENTION_V_THINKING_KIND,
+            REFERENCE16_PRO_RETENTION_V_TOKEN32K_PLAN: REFERENCE16_PRO_RETENTION_V_TOKEN32K_KIND,
+            UNIQUENESS_PLAN: UNIQUENESS_KIND, REFERENCE16_PRO_PLAN: REFERENCE16_PRO_KIND, BOUNDED_RUNTIME_PLAN: BOUNDED_RUNTIME_KIND}[fixed_contract(frozen)["execution_plan"]]
 
 
 def helpers():
@@ -82,8 +150,8 @@ def now():
     return datetime.now(timezone.utc)
 
 
-def contracts(*, prompt_profile="default"):
-    """公开原输入沿原投影，E合同直接取当前显式v4，不沿用旧v2行。"""
+def contracts(*, prompt_profile="default", extraction_mode="grounded-v4"):
+    """公开原输入沿原投影，E合同按本轮冻结的提取版本重新构建。"""
     from notalone.memory_extraction.evaluation import build_window
     from notalone.memory_extraction.evaluation_ecnu import _PLAN_CASES
     from notalone.memory_extraction.evaluation_extraction import extraction_contract
@@ -92,7 +160,7 @@ def contracts(*, prompt_profile="default"):
     plan, rows = [], []
     for index, case in enumerate(_PLAN_CASES):
         window = build_window(case)
-        prompt, schema = extraction_contract("grounded-v4", window, prompt_profile=prompt_profile)
+        prompt, schema = extraction_contract(extraction_mode, window, prompt_profile=prompt_profile)
         input_sha = helper.digest(public_window_projection(window))
         plan.append({"case_position": index, "case_name": case.name, "input_sha256": input_sha})
         rows.append({"input_sha256": input_sha, "prompt_sha256": helper.digest(prompt),
@@ -104,6 +172,21 @@ def _source_names(fixed=None):
     from notalone.memory_extraction.evaluation_ecnu import (
         _REFERENCE21_V4_REQUIRED_SOURCES, _SEMANTIC4_REQUIRED_SOURCES, _UNIQUENESS_REQUIRED_SOURCES,
     )
+    if fixed is not None and fixed["execution_plan"] == REFERENCE16_PRO_RETENTION_V_TOKEN32K_PLAN:
+        from notalone.memory_extraction.evaluation_ecnu import _REFERENCE16_PRO_RETENTION_V_TOKEN32K_REQUIRED_SOURCES
+        return _REFERENCE16_PRO_RETENTION_V_TOKEN32K_REQUIRED_SOURCES
+    if fixed is not None and fixed["execution_plan"] == REFERENCE16_PRO_RETENTION_V_THINKING_PLAN:
+        from notalone.memory_extraction.evaluation_ecnu import _REFERENCE16_PRO_RETENTION_V_THINKING_REQUIRED_SOURCES
+        return _REFERENCE16_PRO_RETENTION_V_THINKING_REQUIRED_SOURCES
+    if fixed is not None and fixed["execution_plan"] == REFERENCE16_PRO_RETENTION_PLAN:
+        from notalone.memory_extraction.evaluation_ecnu import _REFERENCE16_PRO_RETENTION_REQUIRED_SOURCES
+        return _REFERENCE16_PRO_RETENTION_REQUIRED_SOURCES
+    if fixed is not None and fixed["execution_plan"] == REFERENCE16_PRO_TEACHING_PLAN:
+        from notalone.memory_extraction.evaluation_ecnu import _REFERENCE16_PRO_TEACHING_REQUIRED_SOURCES
+        return _REFERENCE16_PRO_TEACHING_REQUIRED_SOURCES
+    if fixed is not None and fixed["execution_plan"] == REFERENCE16_PRO_PLAN:
+        from notalone.memory_extraction.evaluation_ecnu import _REFERENCE16_PRO_REQUIRED_SOURCES
+        return _REFERENCE16_PRO_REQUIRED_SOURCES
     if fixed is not None and fixed["execution_plan"] == BOUNDED_RUNTIME_PLAN:
         from notalone.memory_extraction.evaluation_ecnu import _BOUNDED_RUNTIME_REQUIRED_SOURCES
         return _BOUNDED_RUNTIME_REQUIRED_SOURCES
@@ -112,15 +195,21 @@ def _source_names(fixed=None):
     return _SEMANTIC4_REQUIRED_SOURCES if fixed is not None and fixed["execution_plan"] == SEMANTIC4_PLAN else _REFERENCE21_V4_REQUIRED_SOURCES
 
 
-def prepare(*, directory: Path, absolute_start: datetime, profile: str = "baseline") -> dict:
+def prepare(*, directory: Path, absolute_start: datetime, profile: str = "baseline",
+            credential_path: Path | None = None) -> dict:
     if os.environ.get("NOTALONE_DISABLE_DOTENV") != "1" or absolute_start.utcoffset() is None:
         raise ValueError("disabled_dotenv_and_aware_start_required")
     from notalone.memory_extraction.evaluation_offline import _verification_contract
     from notalone.memory_extraction.evaluation_reference import validate_public_reference
     if type(profile) is not str or profile not in PROFILES:
         raise ValueError("reference21_v4_fixed_profile_required")
-    if profile == "bounded15":
-        return _prepare_bounded(directory=directory, absolute_start=absolute_start)
+    if profile in {"bounded15-pro", "bounded15-pro-thinking", "reference16-pro", "reference16-pro-teaching", "reference16-pro-retention", "reference16-pro-retention-v-thinking", "reference16-pro-retention-v-token32k"}:
+        _validate_pro_credential_path(credential_path)
+    elif credential_path is not None:
+        raise ValueError("explicit_key_only_for_pro_profile")
+    if profile in {"bounded15", "bounded15-pro", "bounded15-pro-thinking"}:
+        return _prepare_bounded(directory=directory, absolute_start=absolute_start,
+                                profile=profile, credential_path=credential_path)
     fixed = PROFILES[profile]
     if fixed["execution_plan"] in PUBLIC_QUALITY_PLANS:
         from notalone.memory_extraction.evaluation import build_window
@@ -138,8 +227,10 @@ def prepare(*, directory: Path, absolute_start: datetime, profile: str = "baseli
                               annotation_sha256=sources[ANNOTATION], reference_version="source-fidelity-v2")
     if validation.get("execution_ready") is not True:
         raise ValueError("reference21_v4_reference_not_ready")
-    original_plan, rows = contracts(prompt_profile=fixed.get("extraction_prompt_profile", "default"))
-    plan = [{**original_plan[position], "case_position": index} for index, position in enumerate(POSITIONS)]
+    original_plan, rows = contracts(prompt_profile=fixed.get("extraction_prompt_profile", "default"),
+                                    extraction_mode=fixed["extraction_mode"])
+    positions = tuple(fixed["case_positions"]) if fixed["case_positions"] is not None else POSITIONS
+    plan = [{**original_plan[position], "case_position": index} for index, position in enumerate(positions)]
     prompt, schema = _verification_contract(fixed["verification_mode"], prompt_profile=fixed.get("prompt_profile", "default"))
     frozen = {"state": "prepared_only", "run_id": str(uuid4()), "nonce": str(uuid4()), "fixed": json.loads(json.dumps(fixed)),
         "repo_root": str(ROOT), "directory": str(directory), "absolute_start": absolute_start.isoformat(),
@@ -148,10 +239,12 @@ def prepare(*, directory: Path, absolute_start: datetime, profile: str = "baseli
         "source_hashes": sources, "installed_versions": {name: version(name) for name in helper.PACKAGES},
         "reference_canonical_sha256": helper.digest(reference), "plan": plan, "plan_sha256": helper.digest(plan),
         "selection": [{"case_id": reference["windows"][position]["id"], "gold_position": position}
-                      for position in POSITIONS],
-        "extraction_window_contracts": [rows[position] for position in POSITIONS],
+                      for position in positions],
+        "extraction_window_contracts": [rows[position] for position in positions],
         "verification_prompt_sha256": helper.digest(prompt), "verification_schema_sha256": helper.digest(schema),
         "quality_certified": False}
+    if profile in {"reference16-pro", "reference16-pro-teaching", "reference16-pro-retention", "reference16-pro-retention-v-thinking", "reference16-pro-retention-v-token32k"}:
+        frozen["credential_path"] = str(_validate_pro_credential_path(credential_path))
     helper.publish(directory / "freeze.json", frozen)
     return frozen
 
@@ -174,12 +267,14 @@ def validate(frozen: dict) -> tuple[datetime, datetime]:
             raise ValueError("reference21_v4_source_drift")
     if frozen["installed_versions"] != {name: version(name) for name in helper.PACKAGES}:
         raise ValueError("reference21_v4_version_drift")
-    full_plan, rows = contracts(prompt_profile=fixed.get("extraction_prompt_profile", "default"))
-    expected_plan = [{**full_plan[position], "case_position": index} for index, position in enumerate(POSITIONS)]
+    full_plan, rows = contracts(prompt_profile=fixed.get("extraction_prompt_profile", "default"),
+                               extraction_mode=fixed["extraction_mode"])
+    positions = tuple(fixed["case_positions"]) if fixed["case_positions"] is not None else POSITIONS
+    expected_plan = [{**full_plan[position], "case_position": index} for index, position in enumerate(positions)]
     from notalone.memory_extraction.evaluation_offline import _verification_contract
     prompt, schema = _verification_contract(fixed["verification_mode"], prompt_profile=fixed.get("prompt_profile", "default"))
     if (helper.digest(frozen["plan"]) != helper.digest(expected_plan) or frozen["plan_sha256"] != helper.digest(expected_plan)
-            or frozen["extraction_window_contracts"] != [rows[position] for position in POSITIONS]
+            or frozen["extraction_window_contracts"] != [rows[position] for position in positions]
             or frozen["verification_prompt_sha256"] != helper.digest(prompt)
             or frozen["verification_schema_sha256"] != helper.digest(schema)):
         raise ValueError("reference21_v4_contract_drift")
@@ -190,10 +285,12 @@ def validate(frozen: dict) -> tuple[datetime, datetime]:
     if validation.get("execution_ready") is not True:
         raise ValueError("reference21_v4_reference_not_ready")
     expected_selection = [{"case_id": reference["windows"][position]["id"], "gold_position": position}
-                          for position in POSITIONS]
+                          for position in positions]
     if (frozen["reference_canonical_sha256"] != helper.digest(reference)
             or helper.digest(frozen["selection"]) != helper.digest(expected_selection)):
         raise ValueError("reference21_v4_reference_drift")
+    if fixed["execution_plan"] in {REFERENCE16_PRO_PLAN, REFERENCE16_PRO_TEACHING_PLAN, REFERENCE16_PRO_RETENTION_PLAN, REFERENCE16_PRO_RETENTION_V_THINKING_PLAN, REFERENCE16_PRO_RETENTION_V_TOKEN32K_PLAN}:
+        _validate_pro_credential_path(frozen.get("credential_path"))
     directory = Path(frozen["directory"])
     helper.private_directory(directory)
     return work_end, end
@@ -231,25 +328,31 @@ def worker(*, freeze_path: Path, expected_sha256: str, approval: dict,
     from notalone.memory_extraction.evaluation_phased_audit import PhasedEvaluationAudit
     from notalone.memory_extraction.evaluation_records import _json_value
     from notalone.memory_extraction.evaluation_reference21_v4_deadline import Reference21V4Deadline
+    from notalone.memory_extraction.evaluation_main16_deadline import Main16Deadline
     from langsmith import get_tracing_context
     if get_tracing_context().get("enabled") is True:
         raise ValueError("reference21_v4_external_tracing_enabled")
     directory = Path(frozen["directory"])
     if freeze_path.resolve() != directory / "freeze.json":
         raise ValueError("reference21_v4_directory_binding_changed")
-    control = Reference21V4Deadline(receipt=directory / "deadline-receipt.json",
+    pro16 = fixed["execution_plan"] in {REFERENCE16_PRO_PLAN, REFERENCE16_PRO_TEACHING_PLAN, REFERENCE16_PRO_RETENTION_PLAN, REFERENCE16_PRO_RETENTION_V_THINKING_PLAN, REFERENCE16_PRO_RETENTION_V_TOKEN32K_PLAN}
+    positions = tuple(fixed["case_positions"]) if fixed["case_positions"] is not None else None
+    deadline_type = Main16Deadline if pro16 else Reference21V4Deadline
+    control = deadline_type(receipt=directory / "deadline-receipt.json",
         remaining_batch_seconds=min(14380, (work_end - now()).total_seconds()))
     if synthetic_transport is None and not control.live_worker:
         raise ValueError("reference21_v4_dedicated_worker_required")
     bridge = bridge or helper.ExplicitReviewBridge(directory=directory / "audit", run_id=frozen["run_id"], deadline=work_end)
     reference = json.loads((ROOT / REFERENCE).read_bytes())
+    verification_options = ({"verification_prompt_profile": fixed["prompt_profile"]}
+                            if fixed["execution_plan"] in {REFERENCE16_PRO_RETENTION_PLAN, REFERENCE16_PRO_RETENTION_V_THINKING_PLAN, REFERENCE16_PRO_RETENTION_V_TOKEN32K_PLAN} else {})
     audit = PhasedEvaluationAudit(reference=reference, expected_reference_sha256=frozen["reference_canonical_sha256"],
         annotation_sha256=frozen["source_hashes"][ANNOTATION], criteria_sha256=frozen["source_hashes"][REFERENCE],
         raw_reviewer=lambda view: bridge.review("raw", view), full_reviewer=lambda view: bridge.review("full", view),
-        case_positions=None, case_set="reference21", reference_version="source-fidelity-v2",
-        execution_plan=fixed["execution_plan"], extraction_mode="grounded-v4", verification_mode=fixed["verification_mode"],
-        verification_tool_choice="forced", extraction_tool_choice="omitted",
-        extraction_prompt_profile=fixed.get("extraction_prompt_profile", "default"))
+        case_positions=positions, case_set="reference21", reference_version="source-fidelity-v2",
+        execution_plan=fixed["execution_plan"], extraction_mode=fixed["extraction_mode"], verification_mode=fixed["verification_mode"],
+        verification_tool_choice=fixed["verification_tool_choice"], extraction_tool_choice=fixed["extraction_tool_choice"],
+        extraction_prompt_profile=fixed.get("extraction_prompt_profile", "default"), **verification_options)
     loaded = False
     def loader():
         nonlocal loaded
@@ -257,7 +360,11 @@ def worker(*, freeze_path: Path, expected_sha256: str, approval: dict,
             raise ValueError("reference21_v4_single_loader_required")
         loaded = True
         verify_claim(frozen)
-        return (credential_loader or helper.read_credential)()
+        if credential_loader is not None:
+            return credential_loader()
+        if pro16:
+            return read_pro_credential(frozen["credential_path"])
+        return helper.read_credential()
     helper.publish(directory / "activation.json", {"run_id": frozen["run_id"], "pid": os.getpid(),
         "process_group": os.getpgrp(), "synthetic": synthetic_transport is not None, "started_utc": now().isoformat()})
     result = run_ecnu_evaluation(output_directory=directory / "evaluation", run_id=UUID(frozen["run_id"]),
@@ -265,11 +372,12 @@ def worker(*, freeze_path: Path, expected_sha256: str, approval: dict,
         frozen_gold={"status": "frozen_agent_review", "case_names": [case.name for case in _PLAN_CASES],
                      "criteria_path": REFERENCE, "criteria_sha256": frozen["source_hashes"][REFERENCE]},
         credential_loader=loader, audit_case=audit, synthetic_transport=synthetic_transport,
-        provider_profile="deepseek-phase-split-v1", request_timeout_seconds=300, max_retries=0,
-        case_positions=None, case_set="reference21", request_limit=42, reference_version="source-fidelity-v2",
-        verification_mode=fixed["verification_mode"], verification_tool_choice="forced", extraction_mode="grounded-v4",
-        execution_plan=fixed["execution_plan"], reference21_v4_deadline=control,
-        extraction_prompt_profile=fixed.get("extraction_prompt_profile", "default"))
+        provider_profile=fixed["provider_profile"], request_timeout_seconds=300, max_retries=0,
+        case_positions=positions, case_set="reference21", request_limit=fixed["request_limit"], reference_version="source-fidelity-v2",
+        verification_mode=fixed["verification_mode"], verification_tool_choice=fixed["verification_tool_choice"], extraction_mode=fixed["extraction_mode"],
+        execution_plan=fixed["execution_plan"],
+        **({"main16_deadline": control} if pro16 else {"reference21_v4_deadline": control}),
+        extraction_prompt_profile=fixed.get("extraction_prompt_profile", "default"), **verification_options)
     result.update(worker_pid=os.getpid(), execution_plan=fixed["execution_plan"])
     if fixed["execution_plan"] in PUBLIC_QUALITY_PLANS:
         result.update(typed_evaluated=False, typed_credit=False)
@@ -277,7 +385,7 @@ def worker(*, freeze_path: Path, expected_sha256: str, approval: dict,
     return result
 
 
-def _bounded_contract_fields(data):
+def _bounded_contract_fields(data, fixed):
     """同一正式来源同时固定内容、实际身份和单次任务配置。"""
     from notalone.memory_extraction.evaluation_bounded_cases import BOUNDED_RUNTIME_CASES, BOUNDED_RUNTIME_INPUTS
     from notalone.memory_extraction.evaluation_extraction import extraction_contract
@@ -292,7 +400,7 @@ def _bounded_contract_fields(data):
     repository = PostgresBackgroundTaskRepository(data.database_url)
     for index, (case, window, task_id) in enumerate(zip(BOUNDED_RUNTIME_CASES, data.windows, data.task_ids, strict=True)):
         input_sha = canonical_sha256(window)
-        prompt, schema = extraction_contract("grounded-v2", window)
+        prompt, schema = extraction_contract("grounded-v2", window, prompt_profile=fixed["extraction_prompt_profile"])
         task = repository.get_task(owner_id=window.owner_id, contact_id=window.contact_id, task_id=task_id)
         if task.extraction_runtime_config is None:
             raise ValueError("bounded15_saved_task_config_required")
@@ -312,7 +420,8 @@ def _bounded_contract_fields(data):
             "selection": [{"case_id": item["id"], "gold_position": index} for index, item in enumerate(BOUNDED_RUNTIME_INPUTS)]}
 
 
-def _prepare_bounded(*, directory: Path, absolute_start: datetime) -> dict:
+def _prepare_bounded(*, directory: Path, absolute_start: datetime, profile: str = "bounded15",
+                     credential_path: Path | None = None) -> dict:
     from notalone.memory_extraction.evaluation_bounded_sources import prepare_bounded_sources, load_bounded_sources, cleanup_bounded_sources
     from notalone.memory_extraction.evaluation_reference import validate_bounded_public_reference
 
@@ -324,7 +433,7 @@ def _prepare_bounded(*, directory: Path, absolute_start: datetime) -> dict:
     receipt = prepare_bounded_sources(directory / "sources")
     try:
         data = load_bounded_sources(receipt)
-        fixed = PROFILES["bounded15"]
+        fixed = PROFILES[profile]
         sources = {name: helper.file_digest(ROOT / name) for name in sorted(_source_names(fixed))}
         reference = json.loads((ROOT / BOUNDED_REFERENCE).read_bytes())
         validate_bounded_public_reference(reference, expected_reference_sha256=helper.digest(reference),
@@ -335,7 +444,9 @@ def _prepare_bounded(*, directory: Path, absolute_start: datetime) -> dict:
                   "absolute_end": (absolute_start + timedelta(seconds=14400)).isoformat(),
                   "source_hashes": sources, "installed_versions": {name: version(name) for name in helper.PACKAGES},
                   "reference_canonical_sha256": helper.digest(reference), "formal_sources": receipt,
-                  "formal_sources_sha256": helper.digest(receipt), **_bounded_contract_fields(data), "quality_certified": False}
+                  "formal_sources_sha256": helper.digest(receipt), **_bounded_contract_fields(data, fixed), "quality_certified": False}
+        if profile in {"bounded15-pro", "bounded15-pro-thinking"}:
+            frozen["credential_path"] = str(credential_path)
         helper.publish(directory / "freeze.json", frozen)
         return frozen
     except BaseException:
@@ -351,6 +462,10 @@ def _validate_bounded(frozen: dict) -> tuple[datetime, datetime]:
 
     helper = helpers()
     fixed = fixed_contract(frozen)
+    if EvaluationProviderProfile(fixed["provider_profile"]).is_pro:
+        _validate_pro_credential_path(frozen.get("credential_path"))
+    elif "credential_path" in frozen:
+        raise ValueError("explicit_key_only_for_pro_profile")
     start, work_end, end = (datetime.fromisoformat(frozen[name]) for name in ("absolute_start", "work_end", "absolute_end"))
     if (frozen["state"] != "prepared_only" or frozen["repo_root"] != str(ROOT) or frozen["quality_certified"] is not False
             or any(item.utcoffset() is None for item in (start, work_end, end))
@@ -363,13 +478,50 @@ def _validate_bounded(frozen: dict) -> tuple[datetime, datetime]:
     if any(helper.file_digest(ROOT / name) != expected for name, expected in frozen["source_hashes"].items()):
         raise ValueError("bounded15_source_drift")
     data = load_bounded_sources(frozen["formal_sources"])
-    fields = _bounded_contract_fields(data)
+    fields = _bounded_contract_fields(data, fixed)
     if any(helper.digest(frozen[key]) != helper.digest(value) for key, value in fields.items()):
         raise ValueError("bounded15_actual_task_or_contract_changed")
     reference = json.loads((ROOT / BOUNDED_REFERENCE).read_bytes())
     validate_bounded_public_reference(reference, expected_reference_sha256=frozen["reference_canonical_sha256"],
                                       annotation_sha256=frozen["source_hashes"][BOUNDED_ANNOTATION])
     return work_end, end
+
+
+def _validate_pro_credential_path(value) -> Path:
+    """仅核显式路径形状；准备及冻结验证不探测或读取密钥文件。"""
+    if not isinstance(value, (str, Path)) or not str(value):
+        raise ValueError("pro_explicit_key_path_required")
+    path = Path(value)
+    if not path.is_absolute() or ".." in path.parts:
+        raise ValueError("pro_absolute_key_path_required")
+    return path
+
+
+def read_pro_credential(value) -> str:
+    """领取后只读显式私有JSON中的单一API key；不读取模型、端点或环境。"""
+    path = _validate_pro_credential_path(value)
+    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    with os.fdopen(descriptor, "r", encoding="utf-8") as stream:
+        info = os.fstat(stream.fileno())
+        if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_nlink != 1
+                or stat.S_IMODE(info.st_mode) != 0o600 or info.st_size > 65536):
+            raise ValueError("pro_private_key_file_required")
+        content = stream.read(65537)
+        if len(content.encode("utf-8")) > 65536:
+            raise ValueError("pro_private_key_file_required")
+    def unique(pairs):
+        result = {}
+        for key, item in pairs:
+            if key in result:
+                raise ValueError("pro_duplicate_key_field")
+            result[key] = item
+        return result
+    data = json.loads(content, object_pairs_hook=unique)
+    if (type(data) is not dict or set(data) != {"api_key"} or type(data["api_key"]) is not str
+            or not data["api_key"] or data["api_key"] != data["api_key"].strip()
+            or any(character.isspace() for character in data["api_key"])):
+        raise ValueError("pro_single_api_key_required")
+    return data["api_key"]
 
 
 def _worker_bounded(*, frozen, freeze_path, synthetic_transport, credential_loader, bridge):
@@ -382,6 +534,7 @@ def _worker_bounded(*, frozen, freeze_path, synthetic_transport, credential_load
     from notalone.memory_extraction.evaluation_records import _json_value
 
     helper = helpers()
+    fixed = fixed_contract(frozen)
     work_end, _ = validate(frozen)
     directory = Path(frozen["directory"])
     if freeze_path.resolve() != directory / "freeze.json" or get_tracing_context().get("enabled") is True:
@@ -398,7 +551,8 @@ def _worker_bounded(*, frozen, freeze_path, synthetic_transport, credential_load
         raw_reviewer=lambda view: bridge.review("raw", view), full_reviewer=lambda view: bridge.review("full", view),
         case_set="bounded15", reference_version=BOUNDED_RUNTIME_PLAN, execution_plan=BOUNDED_RUNTIME_PLAN,
         extraction_mode="grounded-v2", verification_mode="nullable-proof-v3",
-        verification_tool_choice="forced", extraction_tool_choice="omitted")
+        verification_tool_choice=fixed_contract(frozen)["verification_tool_choice"], extraction_tool_choice="omitted",
+        extraction_prompt_profile=fixed["extraction_prompt_profile"], provider_profile=fixed["provider_profile"])
     loaded = False
 
     def loader():
@@ -407,7 +561,11 @@ def _worker_bounded(*, frozen, freeze_path, synthetic_transport, credential_load
             raise ValueError("bounded15_single_loader_required")
         loaded = True
         verify_claim(frozen)
-        return (credential_loader or helper.read_credential)()
+        if credential_loader is not None:
+            return credential_loader()
+        if EvaluationProviderProfile(fixed_contract(frozen)["provider_profile"]).is_pro:
+            return read_pro_credential(frozen["credential_path"])
+        return helper.read_credential()
 
     helper.publish(directory / "activation.json", {"run_id": frozen["run_id"], "pid": os.getpid(),
         "process_group": os.getpgrp(), "synthetic": synthetic_transport is not None, "started_utc": now().isoformat()})
@@ -416,10 +574,11 @@ def _worker_bounded(*, frozen, freeze_path, synthetic_transport, credential_load
         frozen_gold={"status": "frozen_agent_review", "case_names": [case.name for case in BOUNDED_RUNTIME_CASES],
                      "criteria_path": BOUNDED_REFERENCE, "criteria_sha256": frozen["source_hashes"][BOUNDED_REFERENCE]},
         credential_loader=loader, audit_case=audit, synthetic_transport=synthetic_transport,
-        provider_profile="deepseek-bounded-task-v1", request_timeout_seconds=300, max_retries=0,
+        provider_profile=fixed_contract(frozen)["provider_profile"], request_timeout_seconds=300, max_retries=0,
         case_positions=None, case_set="bounded15", request_limit=30, reference_version=BOUNDED_RUNTIME_PLAN,
-        verification_mode="nullable-proof-v3", verification_tool_choice="forced", extraction_mode="grounded-v2",
+        verification_mode="nullable-proof-v3", verification_tool_choice=fixed_contract(frozen)["verification_tool_choice"], extraction_mode="grounded-v2",
         execution_plan=BOUNDED_RUNTIME_PLAN, bounded_runtime_deadline=control,
+        extraction_prompt_profile=fixed["extraction_prompt_profile"],
         formal_windows=data.windows, formal_task_ids=data.task_ids, database_url=data.database_url)
     result.update(worker_pid=os.getpid(), execution_plan=BOUNDED_RUNTIME_PLAN)
     helper.publish(directory / "result.json", _json_value(result))
@@ -505,6 +664,10 @@ if __name__ == "__main__":
             freeze = prepare(directory=Path(sys.argv[2]), absolute_start=datetime.fromisoformat(sys.argv[3]),
                              profile={"prepare": "baseline", "prepare-semantic4": "semantic4", "prepare-uniqueness": "uniqueness",
                                       "prepare-bounded15": "bounded15"}[sys.argv[1]])
+            print(json.dumps({"run_id": freeze["run_id"], "freeze_sha256": helpers().file_digest(Path(freeze["directory"]) / "freeze.json")}))
+        elif len(sys.argv) == 5 and sys.argv[1] in {"prepare-bounded15-pro", "prepare-bounded15-pro-thinking", "prepare-reference16-pro", "prepare-reference16-pro-teaching", "prepare-reference16-pro-retention", "prepare-reference16-pro-retention-v-thinking", "prepare-reference16-pro-retention-v-token32k"}:
+            freeze = prepare(directory=Path(sys.argv[2]), absolute_start=datetime.fromisoformat(sys.argv[3]),
+                             profile=sys.argv[1].removeprefix("prepare-"), credential_path=Path(sys.argv[4]))
             print(json.dumps({"run_id": freeze["run_id"], "freeze_sha256": helpers().file_digest(Path(freeze["directory"]) / "freeze.json")}))
         elif len(sys.argv) == 5 and sys.argv[1] in {"launch", "worker"}:
             if sys.argv[1] == "launch":

@@ -1,0 +1,2850 @@
+{
+  "version": 1,
+  "artifact_kind": "independent_synthetic_expected_field_controls",
+  "semantic_improvement": false,
+  "model_calls": 0,
+  "quality_evidence": false,
+  "scope": "五个独立公开合成窗口，13个候选对照；仅接口与人工预期，未运行模型或独立实验，不是准确率、Gold变更或15窗验收证据。每窗独立，不拼合无关案例省调用。",
+  "source_policy": "全部新编公开合成例，无原A07/A10/A16文字；不访问模型、凭据或业务库。",
+  "fields": [
+    "meaning",
+    "subject",
+    "category",
+    "speech_act",
+    "assertion_status",
+    "figurative_type",
+    "time",
+    "dependency"
+  ],
+  "state_definitions": {
+    "supported": "该字段受候选已声明来源支持且忠实；保留未知不因此失去支持。必须有candidate_source文本证据，不认证现实执行或自动采纳。",
+    "mismatch": "与来源或既有规则不吻合，包括明确文本/字段错配、违反保留未知等来源忠实性规则，或dependency来源完整性合同不满足；必须有合法证据，可引用window_context反证。此状态表示字段或合同未通过，不等于现实内容已证伪，不证明未知身份必然不是某人。",
+    "insufficient": "候选已声明来源不足以支持当前具体主张，且不存在可确认的明确错配证据；允许空证据，不编造身份对应。",
+    "ambiguous": "候选在可用来源下仍有实质性的多种读法，无法唯一确定本字段；与单纯缺少支持材料区分，允许空证据。保留歧义的忠实候选本身不自动判ambiguous。"
+  },
+  "evidence_convention": {
+    "text_offsets": "Unicode码点半开区间[start,end)，quote逐字相等",
+    "seven_keys": [
+      "kind",
+      "message_id",
+      "start",
+      "end",
+      "quote",
+      "value",
+      "scope"
+    ],
+    "text": "kind=text，value=null",
+    "metadata": "kind=occurred_at，仅time辅助；start/end/quote=null，value等于所绑定原消息occurred_at",
+    "scope": "候选已声明来源为candidate_source；其余同窗反证为window_context。supported不可用window_context。"
+  },
+  "axis_convention": {
+    "meaning": "按候选已声明source审正文及必要限定；可独立的标签错误不重复计作正文错误，但必要source缺失确会联动具体事项/归属的缺证。",
+    "dependency": "检查候选声明的来源是否充分绑定必要事项；缺项负控按预冻结联动字段判断，不强行其余全部supported。不得自动补来源。",
+    "subject": "资料归属self/contact/shared；允许仅由context支持，不要求每个字段独自覆盖target。",
+    "category": "按来源主断言分类，不能由其他错误标签自证。",
+    "time": "相对日期依赖有message_id绑定的occurred_at与时区，允许正文只有明天；历史事件双null不使用观察日冒充事件日期。",
+    "aggregation": "任一mismatch汇总unsupported；否则任一insufficient或ambiguous汇总uncertain；八项supported才汇总supported。dependency错配不等于内容证伪，汇总不自动认证语义或生产采纳。",
+    "evidence_scope": "supported只用candidate.source_message_ids内candidate_source文本（可为context）；time元数据仅辅助且不能单独支持。mismatch可用window_context反证但不回填来源。缺证/歧义可空。",
+    "target_coverage": "仅整体supported时要求各字段证据并集至少覆盖一条实际target；不是每个字段都必须引用target。"
+  },
+  "controls": [
+    {
+      "id": "W1-correct",
+      "title": "明确明日计划，保留未知人物",
+      "source": {
+        "messages": [
+          {
+            "message_id": "fe02ffed-7a5c-5376-aed4-b4ddede238f6",
+            "sender": "contact",
+            "role": "target",
+            "occurred_at": "2026-10-18T09:00:00+08:00",
+            "text": "他明天会到展馆布置展台。"
+          }
+        ],
+        "target_message_ids": [
+          "fe02ffed-7a5c-5376-aed4-b4ddede238f6"
+        ]
+      },
+      "expected": {
+        "meaning": {
+          "state": "supported",
+          "reason": "正文保留来源明确表达的主张及全部必要限定。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "fe02ffed-7a5c-5376-aed4-b4ddede238f6",
+              "start": 0,
+              "end": 12,
+              "quote": "他明天会到展馆布置展台。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "subject": {
+          "state": "supported",
+          "reason": "contact是本条联系人资料的保存范围，不能当作所有动作的执行人。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "fe02ffed-7a5c-5376-aed4-b4ddede238f6",
+              "start": 0,
+              "end": 12,
+              "quote": "他明天会到展馆布置展台。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "category": {
+          "state": "supported",
+          "reason": "未来安排保存为recent_state。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "fe02ffed-7a5c-5376-aed4-b4ddede238f6",
+              "start": 0,
+              "end": 12,
+              "quote": "他明天会到展馆布置展台。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "speech_act": {
+          "state": "supported",
+          "reason": "“明天会到”直接表达未来安排，plan有据；未知“他”不改成转述或已完成。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "fe02ffed-7a5c-5376-aed4-b4ddede238f6",
+              "start": 0,
+              "end": 12,
+              "quote": "他明天会到展馆布置展台。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "assertion_status": {
+          "state": "supported",
+          "reason": "按来源明确表达的断言方式保存，不据此认证现实执行或真实性。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "fe02ffed-7a5c-5376-aed4-b4ddede238f6",
+              "start": 0,
+              "end": 12,
+              "quote": "他明天会到展馆布置展台。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "figurative_type": {
+          "state": "supported",
+          "reason": "来源为普通字面表达，无隐喻或反讽依据。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "fe02ffed-7a5c-5376-aed4-b4ddede238f6",
+              "start": 0,
+              "end": 12,
+              "quote": "他明天会到展馆布置展台。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "time": {
+          "state": "supported",
+          "reason": "明天相对该消息occurred_at的+08:00当地2026-10-18解释为10月19日；次日零点为检索边界，不是真实活动结束。正文无需绝对日期。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "fe02ffed-7a5c-5376-aed4-b4ddede238f6",
+              "start": 1,
+              "end": 3,
+              "quote": "明天",
+              "value": null,
+              "scope": "candidate_source"
+            },
+            {
+              "kind": "occurred_at",
+              "message_id": "fe02ffed-7a5c-5376-aed4-b4ddede238f6",
+              "start": null,
+              "end": null,
+              "quote": null,
+              "value": "2026-10-18T09:00:00+08:00",
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "dependency": {
+          "state": "supported",
+          "reason": "候选已声明理解该主张所需的全部可用来源，不要求无关背景。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "fe02ffed-7a5c-5376-aed4-b4ddede238f6",
+              "start": 0,
+              "end": 12,
+              "quote": "他明天会到展馆布置展台。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        }
+      },
+      "expected_aggregate": "supported",
+      "window_id": "W1",
+      "changed_candidate_fields": [],
+      "expected_target_union_covered": true,
+      "allowed_states_by_field": {
+        "meaning": [
+          "supported"
+        ],
+        "subject": [
+          "supported"
+        ],
+        "category": [
+          "supported"
+        ],
+        "speech_act": [
+          "supported"
+        ],
+        "assertion_status": [
+          "supported"
+        ],
+        "figurative_type": [
+          "supported"
+        ],
+        "time": [
+          "supported"
+        ],
+        "dependency": [
+          "supported"
+        ]
+      },
+      "candidate": {
+        "text": "联系人原话：“他明天会到展馆布置展台。”",
+        "category": "recent_state",
+        "subject": "contact",
+        "topic": "other",
+        "source_message_ids": [
+          "fe02ffed-7a5c-5376-aed4-b4ddede238f6"
+        ],
+        "confidence": 0.9,
+        "risk_flags": [],
+        "valid_at": "2026-10-19T00:00:00+08:00",
+        "invalid_at": "2026-10-20T00:00:00+08:00",
+        "speech_act": "plan",
+        "assertion_status": "asserted",
+        "figurative_type": "literal",
+        "alternatives": [
+          "“他”的具体身份在本窗口无法唯一确定。"
+        ],
+        "interpretation_reason": "按所引原文保留主张、阶段与来源限定。"
+      }
+    },
+    {
+      "id": "W1-wrong-date",
+      "title": "只错日期开始日",
+      "source": {
+        "messages": [
+          {
+            "message_id": "fe02ffed-7a5c-5376-aed4-b4ddede238f6",
+            "sender": "contact",
+            "role": "target",
+            "occurred_at": "2026-10-18T09:00:00+08:00",
+            "text": "他明天会到展馆布置展台。"
+          }
+        ],
+        "target_message_ids": [
+          "fe02ffed-7a5c-5376-aed4-b4ddede238f6"
+        ]
+      },
+      "expected": {
+        "meaning": {
+          "state": "supported",
+          "reason": "正文保留来源明确表达的主张及全部必要限定。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "fe02ffed-7a5c-5376-aed4-b4ddede238f6",
+              "start": 0,
+              "end": 12,
+              "quote": "他明天会到展馆布置展台。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "subject": {
+          "state": "supported",
+          "reason": "contact是本条联系人资料的保存范围，不能当作所有动作的执行人。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "fe02ffed-7a5c-5376-aed4-b4ddede238f6",
+              "start": 0,
+              "end": 12,
+              "quote": "他明天会到展馆布置展台。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "category": {
+          "state": "supported",
+          "reason": "未来安排保存为recent_state。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "fe02ffed-7a5c-5376-aed4-b4ddede238f6",
+              "start": 0,
+              "end": 12,
+              "quote": "他明天会到展馆布置展台。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "speech_act": {
+          "state": "supported",
+          "reason": "“明天会到”直接表达未来安排，plan有据；未知“他”不改成转述或已完成。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "fe02ffed-7a5c-5376-aed4-b4ddede238f6",
+              "start": 0,
+              "end": 12,
+              "quote": "他明天会到展馆布置展台。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "assertion_status": {
+          "state": "supported",
+          "reason": "按来源明确表达的断言方式保存，不据此认证现实执行或真实性。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "fe02ffed-7a5c-5376-aed4-b4ddede238f6",
+              "start": 0,
+              "end": 12,
+              "quote": "他明天会到展馆布置展台。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "figurative_type": {
+          "state": "supported",
+          "reason": "来源为普通字面表达，无隐喻或反讽依据。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "fe02ffed-7a5c-5376-aed4-b4ddede238f6",
+              "start": 0,
+              "end": 12,
+              "quote": "他明天会到展馆布置展台。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "time": {
+          "state": "mismatch",
+          "reason": "把明天的开始日写成观察日；消息时刻用于相对日期锚定，不能直接充当计划发生日期。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "fe02ffed-7a5c-5376-aed4-b4ddede238f6",
+              "start": 1,
+              "end": 3,
+              "quote": "明天",
+              "value": null,
+              "scope": "candidate_source"
+            },
+            {
+              "kind": "occurred_at",
+              "message_id": "fe02ffed-7a5c-5376-aed4-b4ddede238f6",
+              "start": null,
+              "end": null,
+              "quote": null,
+              "value": "2026-10-18T09:00:00+08:00",
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "dependency": {
+          "state": "supported",
+          "reason": "候选已声明理解该主张所需的全部可用来源，不要求无关背景。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "fe02ffed-7a5c-5376-aed4-b4ddede238f6",
+              "start": 0,
+              "end": 12,
+              "quote": "他明天会到展馆布置展台。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        }
+      },
+      "expected_aggregate": "unsupported",
+      "window_id": "W1",
+      "changed_candidate_fields": [
+        "valid_at"
+      ],
+      "allowed_states_by_field": {
+        "meaning": [
+          "supported"
+        ],
+        "subject": [
+          "supported"
+        ],
+        "category": [
+          "supported"
+        ],
+        "speech_act": [
+          "supported"
+        ],
+        "assertion_status": [
+          "supported"
+        ],
+        "figurative_type": [
+          "supported"
+        ],
+        "time": [
+          "mismatch"
+        ],
+        "dependency": [
+          "supported"
+        ]
+      },
+      "candidate": {
+        "text": "联系人原话：“他明天会到展馆布置展台。”",
+        "category": "recent_state",
+        "subject": "contact",
+        "topic": "other",
+        "source_message_ids": [
+          "fe02ffed-7a5c-5376-aed4-b4ddede238f6"
+        ],
+        "confidence": 0.9,
+        "risk_flags": [],
+        "valid_at": "2026-10-18T00:00:00+08:00",
+        "invalid_at": "2026-10-20T00:00:00+08:00",
+        "speech_act": "plan",
+        "assertion_status": "asserted",
+        "figurative_type": "literal",
+        "alternatives": [
+          "“他”的具体身份在本窗口无法唯一确定。"
+        ],
+        "interpretation_reason": "按所引原文保留主张、阶段与来源限定。"
+      }
+    },
+    {
+      "id": "W1-invented-person",
+      "title": "只把未知人物落实为姓名",
+      "source": {
+        "messages": [
+          {
+            "message_id": "fe02ffed-7a5c-5376-aed4-b4ddede238f6",
+            "sender": "contact",
+            "role": "target",
+            "occurred_at": "2026-10-18T09:00:00+08:00",
+            "text": "他明天会到展馆布置展台。"
+          }
+        ],
+        "target_message_ids": [
+          "fe02ffed-7a5c-5376-aed4-b4ddede238f6"
+        ]
+      },
+      "expected": {
+        "meaning": {
+          "state": "insufficient",
+          "reason": "代表性预期为insufficient：当前来源没有“他”与唐宁的唯一身份绑定依据，空证据不补造姓名对应。另允许在保留未知合同下用有据mismatch，详见预冻结allow_rules；两者都不得支持该新增姓名，也不证明现实中他不是唐宁。",
+          "evidence": []
+        },
+        "subject": {
+          "state": "supported",
+          "reason": "contact是本条联系人资料的保存范围，不能当作所有动作的执行人。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "fe02ffed-7a5c-5376-aed4-b4ddede238f6",
+              "start": 0,
+              "end": 12,
+              "quote": "他明天会到展馆布置展台。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "category": {
+          "state": "supported",
+          "reason": "未来安排保存为recent_state。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "fe02ffed-7a5c-5376-aed4-b4ddede238f6",
+              "start": 0,
+              "end": 12,
+              "quote": "他明天会到展馆布置展台。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "speech_act": {
+          "state": "supported",
+          "reason": "“明天会到”直接表达未来安排，plan有据；未知“他”不改成转述或已完成。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "fe02ffed-7a5c-5376-aed4-b4ddede238f6",
+              "start": 0,
+              "end": 12,
+              "quote": "他明天会到展馆布置展台。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "assertion_status": {
+          "state": "supported",
+          "reason": "按来源明确表达的断言方式保存，不据此认证现实执行或真实性。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "fe02ffed-7a5c-5376-aed4-b4ddede238f6",
+              "start": 0,
+              "end": 12,
+              "quote": "他明天会到展馆布置展台。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "figurative_type": {
+          "state": "supported",
+          "reason": "来源为普通字面表达，无隐喻或反讽依据。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "fe02ffed-7a5c-5376-aed4-b4ddede238f6",
+              "start": 0,
+              "end": 12,
+              "quote": "他明天会到展馆布置展台。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "time": {
+          "state": "supported",
+          "reason": "明天相对该消息occurred_at的+08:00当地2026-10-18解释为10月19日；次日零点为检索边界，不是真实活动结束。正文无需绝对日期。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "fe02ffed-7a5c-5376-aed4-b4ddede238f6",
+              "start": 1,
+              "end": 3,
+              "quote": "明天",
+              "value": null,
+              "scope": "candidate_source"
+            },
+            {
+              "kind": "occurred_at",
+              "message_id": "fe02ffed-7a5c-5376-aed4-b4ddede238f6",
+              "start": null,
+              "end": null,
+              "quote": null,
+              "value": "2026-10-18T09:00:00+08:00",
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "dependency": {
+          "state": "supported",
+          "reason": "候选已声明理解该主张所需的全部可用来源，不要求无关背景。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "fe02ffed-7a5c-5376-aed4-b4ddede238f6",
+              "start": 0,
+              "end": 12,
+              "quote": "他明天会到展馆布置展台。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        }
+      },
+      "expected_aggregate": "uncertain",
+      "window_id": "W1",
+      "changed_candidate_fields": [
+        "text"
+      ],
+      "allowed_states_by_field": {
+        "meaning": [
+          "insufficient",
+          "mismatch"
+        ],
+        "subject": [
+          "supported"
+        ],
+        "category": [
+          "supported"
+        ],
+        "speech_act": [
+          "supported"
+        ],
+        "assertion_status": [
+          "supported"
+        ],
+        "figurative_type": [
+          "supported"
+        ],
+        "time": [
+          "supported"
+        ],
+        "dependency": [
+          "supported"
+        ]
+      },
+      "candidate": {
+        "text": "唐宁明天会到展馆布置展台。",
+        "category": "recent_state",
+        "subject": "contact",
+        "topic": "other",
+        "source_message_ids": [
+          "fe02ffed-7a5c-5376-aed4-b4ddede238f6"
+        ],
+        "confidence": 0.9,
+        "risk_flags": [],
+        "valid_at": "2026-10-19T00:00:00+08:00",
+        "invalid_at": "2026-10-20T00:00:00+08:00",
+        "speech_act": "plan",
+        "assertion_status": "asserted",
+        "figurative_type": "literal",
+        "alternatives": [
+          "“他”的具体身份在本窗口无法唯一确定。"
+        ],
+        "interpretation_reason": "按所引原文保留主张、阶段与来源限定。"
+      },
+      "allowed_aggregates": [
+        "uncertain",
+        "unsupported"
+      ],
+      "allow_rules": {
+        "meaning": {
+          "insufficient": "没有原文支持“他”与唐宁的唯一对应，保留代表性缺证状态及空证据。",
+          "mismatch": "可依“保留未知、不强行落实人物”合同判失败；必须引用候选原来源中“他”或完整原句的合法candidate_source文本证据。此结论只表示候选不忠实保留未知，不证明现实中的他不是唐宁。",
+          "forbidden": [
+            "supported",
+            "ambiguous"
+          ],
+          "evidence_rule": "mismatch不得沿用空证据，不得伪造反证或来源；insufficient允许空证据。"
+        }
+      },
+      "first_minimal_model_run_eligible": false,
+      "exclusion_reason": "仅保留离线控制；此候选从首轮最小实测排除，不为两种允许状态的措辞差异追加调用。"
+    },
+    {
+      "id": "W2-correct",
+      "title": "条件计划完整保留",
+      "source": {
+        "messages": [
+          {
+            "message_id": "e814aa82-2bc4-57e9-bf3e-701525035095",
+            "sender": "contact",
+            "role": "target",
+            "occurred_at": "2026-10-18T09:00:00+08:00",
+            "text": "如果库房获准开放，我就去整理旧画框。"
+          }
+        ],
+        "target_message_ids": [
+          "e814aa82-2bc4-57e9-bf3e-701525035095"
+        ]
+      },
+      "expected": {
+        "meaning": {
+          "state": "supported",
+          "reason": "正文保留来源明确表达的主张及全部必要限定。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "e814aa82-2bc4-57e9-bf3e-701525035095",
+              "start": 0,
+              "end": 18,
+              "quote": "如果库房获准开放，我就去整理旧画框。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "subject": {
+          "state": "supported",
+          "reason": "contact是本条联系人资料的保存范围，不能当作所有动作的执行人。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "e814aa82-2bc4-57e9-bf3e-701525035095",
+              "start": 0,
+              "end": 18,
+              "quote": "如果库房获准开放，我就去整理旧画框。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "category": {
+          "state": "supported",
+          "reason": "条件未实现的行动仍为计划类recent_state。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "e814aa82-2bc4-57e9-bf3e-701525035095",
+              "start": 0,
+              "end": 18,
+              "quote": "如果库房获准开放，我就去整理旧画框。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "speech_act": {
+          "state": "supported",
+          "reason": "“如果…就去”保存条件性未来计划。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "e814aa82-2bc4-57e9-bf3e-701525035095",
+              "start": 0,
+              "end": 18,
+              "quote": "如果库房获准开放，我就去整理旧画框。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "assertion_status": {
+          "state": "supported",
+          "reason": "明确如果条件，conditional有据，不升级无条件承诺。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "e814aa82-2bc4-57e9-bf3e-701525035095",
+              "start": 0,
+              "end": 18,
+              "quote": "如果库房获准开放，我就去整理旧画框。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "figurative_type": {
+          "state": "supported",
+          "reason": "来源为普通字面表达，无隐喻或反讽依据。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "e814aa82-2bc4-57e9-bf3e-701525035095",
+              "start": 0,
+              "end": 18,
+              "quote": "如果库房获准开放，我就去整理旧画框。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "time": {
+          "state": "supported",
+          "reason": "无可核定日期，双null不虚构具体生效期。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "e814aa82-2bc4-57e9-bf3e-701525035095",
+              "start": 0,
+              "end": 18,
+              "quote": "如果库房获准开放，我就去整理旧画框。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "dependency": {
+          "state": "supported",
+          "reason": "候选已声明理解该主张所需的全部可用来源，不要求无关背景。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "e814aa82-2bc4-57e9-bf3e-701525035095",
+              "start": 0,
+              "end": 18,
+              "quote": "如果库房获准开放，我就去整理旧画框。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        }
+      },
+      "expected_aggregate": "supported",
+      "window_id": "W2",
+      "changed_candidate_fields": [],
+      "expected_target_union_covered": true,
+      "allowed_states_by_field": {
+        "meaning": [
+          "supported"
+        ],
+        "subject": [
+          "supported"
+        ],
+        "category": [
+          "supported"
+        ],
+        "speech_act": [
+          "supported"
+        ],
+        "assertion_status": [
+          "supported"
+        ],
+        "figurative_type": [
+          "supported"
+        ],
+        "time": [
+          "supported"
+        ],
+        "dependency": [
+          "supported"
+        ]
+      },
+      "candidate": {
+        "text": "联系人原话：“如果库房获准开放，我就去整理旧画框。”",
+        "category": "recent_state",
+        "subject": "contact",
+        "topic": "other",
+        "source_message_ids": [
+          "e814aa82-2bc4-57e9-bf3e-701525035095"
+        ],
+        "confidence": 0.9,
+        "risk_flags": [],
+        "valid_at": null,
+        "invalid_at": null,
+        "speech_act": "plan",
+        "assertion_status": "conditional",
+        "figurative_type": "literal",
+        "alternatives": [],
+        "interpretation_reason": "按所引原文保留主张、阶段与来源限定。"
+      }
+    },
+    {
+      "id": "W2-omit-condition",
+      "title": "只删正文条件",
+      "source": {
+        "messages": [
+          {
+            "message_id": "e814aa82-2bc4-57e9-bf3e-701525035095",
+            "sender": "contact",
+            "role": "target",
+            "occurred_at": "2026-10-18T09:00:00+08:00",
+            "text": "如果库房获准开放，我就去整理旧画框。"
+          }
+        ],
+        "target_message_ids": [
+          "e814aa82-2bc4-57e9-bf3e-701525035095"
+        ]
+      },
+      "expected": {
+        "meaning": {
+          "state": "mismatch",
+          "reason": "正文删掉“如果库房获准开放”，把受条件限制的行动改为无条件安排；标签conditional不能补回缺失的具体条件。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "e814aa82-2bc4-57e9-bf3e-701525035095",
+              "start": 0,
+              "end": 18,
+              "quote": "如果库房获准开放，我就去整理旧画框。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "subject": {
+          "state": "supported",
+          "reason": "contact是本条联系人资料的保存范围，不能当作所有动作的执行人。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "e814aa82-2bc4-57e9-bf3e-701525035095",
+              "start": 0,
+              "end": 18,
+              "quote": "如果库房获准开放，我就去整理旧画框。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "category": {
+          "state": "supported",
+          "reason": "条件未实现的行动仍为计划类recent_state。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "e814aa82-2bc4-57e9-bf3e-701525035095",
+              "start": 0,
+              "end": 18,
+              "quote": "如果库房获准开放，我就去整理旧画框。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "speech_act": {
+          "state": "supported",
+          "reason": "“如果…就去”保存条件性未来计划。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "e814aa82-2bc4-57e9-bf3e-701525035095",
+              "start": 0,
+              "end": 18,
+              "quote": "如果库房获准开放，我就去整理旧画框。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "assertion_status": {
+          "state": "supported",
+          "reason": "明确如果条件，conditional有据，不升级无条件承诺。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "e814aa82-2bc4-57e9-bf3e-701525035095",
+              "start": 0,
+              "end": 18,
+              "quote": "如果库房获准开放，我就去整理旧画框。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "figurative_type": {
+          "state": "supported",
+          "reason": "来源为普通字面表达，无隐喻或反讽依据。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "e814aa82-2bc4-57e9-bf3e-701525035095",
+              "start": 0,
+              "end": 18,
+              "quote": "如果库房获准开放，我就去整理旧画框。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "time": {
+          "state": "supported",
+          "reason": "无可核定日期，双null不虚构具体生效期。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "e814aa82-2bc4-57e9-bf3e-701525035095",
+              "start": 0,
+              "end": 18,
+              "quote": "如果库房获准开放，我就去整理旧画框。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "dependency": {
+          "state": "supported",
+          "reason": "候选已声明理解该主张所需的全部可用来源，不要求无关背景。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "e814aa82-2bc4-57e9-bf3e-701525035095",
+              "start": 0,
+              "end": 18,
+              "quote": "如果库房获准开放，我就去整理旧画框。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        }
+      },
+      "expected_aggregate": "unsupported",
+      "window_id": "W2",
+      "changed_candidate_fields": [
+        "text"
+      ],
+      "allowed_states_by_field": {
+        "meaning": [
+          "mismatch"
+        ],
+        "subject": [
+          "supported"
+        ],
+        "category": [
+          "supported"
+        ],
+        "speech_act": [
+          "supported"
+        ],
+        "assertion_status": [
+          "supported"
+        ],
+        "figurative_type": [
+          "supported"
+        ],
+        "time": [
+          "supported"
+        ],
+        "dependency": [
+          "supported"
+        ]
+      },
+      "candidate": {
+        "text": "联系人会去整理旧画框。",
+        "category": "recent_state",
+        "subject": "contact",
+        "topic": "other",
+        "source_message_ids": [
+          "e814aa82-2bc4-57e9-bf3e-701525035095"
+        ],
+        "confidence": 0.9,
+        "risk_flags": [],
+        "valid_at": null,
+        "invalid_at": null,
+        "speech_act": "plan",
+        "assertion_status": "conditional",
+        "figurative_type": "literal",
+        "alternatives": [],
+        "interpretation_reason": "按所引原文保留主张、阶段与来源限定。"
+      }
+    },
+    {
+      "id": "W3-correct",
+      "title": "已收到邀约的关系经历",
+      "source": {
+        "messages": [
+          {
+            "message_id": "c14e6140-d828-5436-a21d-feffdf6355a4",
+            "sender": "contact",
+            "role": "target",
+            "occurred_at": "2026-10-18T09:00:00+08:00",
+            "text": "策展人已当面邀请我参加版画交流会。"
+          }
+        ],
+        "target_message_ids": [
+          "c14e6140-d828-5436-a21d-feffdf6355a4"
+        ]
+      },
+      "expected": {
+        "meaning": {
+          "state": "supported",
+          "reason": "正文保留来源明确表达的主张及全部必要限定。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "c14e6140-d828-5436-a21d-feffdf6355a4",
+              "start": 0,
+              "end": 17,
+              "quote": "策展人已当面邀请我参加版画交流会。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "subject": {
+          "state": "supported",
+          "reason": "contact是本条联系人资料的保存范围，不能当作所有动作的执行人。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "c14e6140-d828-5436-a21d-feffdf6355a4",
+              "start": 0,
+              "end": 17,
+              "quote": "策展人已当面邀请我参加版画交流会。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "category": {
+          "state": "supported",
+          "reason": "主张为本人已收到邀请的互动经历，relationship_note；不是普通完成进度或第三人纯背景。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "c14e6140-d828-5436-a21d-feffdf6355a4",
+              "start": 0,
+              "end": 17,
+              "quote": "策展人已当面邀请我参加版画交流会。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "speech_act": {
+          "state": "supported",
+          "reason": "已收到邀请为历史assertion，不补接受邀请或未来出席。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "c14e6140-d828-5436-a21d-feffdf6355a4",
+              "start": 0,
+              "end": 17,
+              "quote": "策展人已当面邀请我参加版画交流会。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "assertion_status": {
+          "state": "supported",
+          "reason": "按来源明确表达的断言方式保存，不据此认证现实执行或真实性。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "c14e6140-d828-5436-a21d-feffdf6355a4",
+              "start": 0,
+              "end": 17,
+              "quote": "策展人已当面邀请我参加版画交流会。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "figurative_type": {
+          "state": "supported",
+          "reason": "来源为普通字面表达，无隐喻或反讽依据。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "c14e6140-d828-5436-a21d-feffdf6355a4",
+              "start": 0,
+              "end": 17,
+              "quote": "策展人已当面邀请我参加版画交流会。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "time": {
+          "state": "supported",
+          "reason": "已发生邀约且未给资料有效期，双null；不从邀请内容推活动时段。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "c14e6140-d828-5436-a21d-feffdf6355a4",
+              "start": 0,
+              "end": 17,
+              "quote": "策展人已当面邀请我参加版画交流会。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "dependency": {
+          "state": "supported",
+          "reason": "候选已声明理解该主张所需的全部可用来源，不要求无关背景。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "c14e6140-d828-5436-a21d-feffdf6355a4",
+              "start": 0,
+              "end": 17,
+              "quote": "策展人已当面邀请我参加版画交流会。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        }
+      },
+      "expected_aggregate": "supported",
+      "window_id": "W3",
+      "changed_candidate_fields": [],
+      "expected_target_union_covered": true,
+      "allowed_states_by_field": {
+        "meaning": [
+          "supported"
+        ],
+        "subject": [
+          "supported"
+        ],
+        "category": [
+          "supported"
+        ],
+        "speech_act": [
+          "supported"
+        ],
+        "assertion_status": [
+          "supported"
+        ],
+        "figurative_type": [
+          "supported"
+        ],
+        "time": [
+          "supported"
+        ],
+        "dependency": [
+          "supported"
+        ]
+      },
+      "candidate": {
+        "text": "联系人原话：“策展人已当面邀请我参加版画交流会。”",
+        "category": "relationship_note",
+        "subject": "contact",
+        "topic": "other",
+        "source_message_ids": [
+          "c14e6140-d828-5436-a21d-feffdf6355a4"
+        ],
+        "confidence": 0.9,
+        "risk_flags": [],
+        "valid_at": null,
+        "invalid_at": null,
+        "speech_act": "assertion",
+        "assertion_status": "asserted",
+        "figurative_type": "literal",
+        "alternatives": [],
+        "interpretation_reason": "按所引原文保留主张、阶段与来源限定。"
+      }
+    },
+    {
+      "id": "W3-wrong-category",
+      "title": "只错关系类别",
+      "source": {
+        "messages": [
+          {
+            "message_id": "c14e6140-d828-5436-a21d-feffdf6355a4",
+            "sender": "contact",
+            "role": "target",
+            "occurred_at": "2026-10-18T09:00:00+08:00",
+            "text": "策展人已当面邀请我参加版画交流会。"
+          }
+        ],
+        "target_message_ids": [
+          "c14e6140-d828-5436-a21d-feffdf6355a4"
+        ]
+      },
+      "expected": {
+        "meaning": {
+          "state": "supported",
+          "reason": "正文保留来源明确表达的主张及全部必要限定。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "c14e6140-d828-5436-a21d-feffdf6355a4",
+              "start": 0,
+              "end": 17,
+              "quote": "策展人已当面邀请我参加版画交流会。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "subject": {
+          "state": "supported",
+          "reason": "contact是本条联系人资料的保存范围，不能当作所有动作的执行人。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "c14e6140-d828-5436-a21d-feffdf6355a4",
+              "start": 0,
+              "end": 17,
+              "quote": "策展人已当面邀请我参加版画交流会。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "category": {
+          "state": "mismatch",
+          "reason": "common_fact丢失已收到邀请这一关系互动类别；正文准确或最终pending不能抵消类别错配。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "c14e6140-d828-5436-a21d-feffdf6355a4",
+              "start": 0,
+              "end": 17,
+              "quote": "策展人已当面邀请我参加版画交流会。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "speech_act": {
+          "state": "supported",
+          "reason": "已收到邀请为历史assertion，不补接受邀请或未来出席。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "c14e6140-d828-5436-a21d-feffdf6355a4",
+              "start": 0,
+              "end": 17,
+              "quote": "策展人已当面邀请我参加版画交流会。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "assertion_status": {
+          "state": "supported",
+          "reason": "按来源明确表达的断言方式保存，不据此认证现实执行或真实性。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "c14e6140-d828-5436-a21d-feffdf6355a4",
+              "start": 0,
+              "end": 17,
+              "quote": "策展人已当面邀请我参加版画交流会。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "figurative_type": {
+          "state": "supported",
+          "reason": "来源为普通字面表达，无隐喻或反讽依据。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "c14e6140-d828-5436-a21d-feffdf6355a4",
+              "start": 0,
+              "end": 17,
+              "quote": "策展人已当面邀请我参加版画交流会。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "time": {
+          "state": "supported",
+          "reason": "已发生邀约且未给资料有效期，双null；不从邀请内容推活动时段。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "c14e6140-d828-5436-a21d-feffdf6355a4",
+              "start": 0,
+              "end": 17,
+              "quote": "策展人已当面邀请我参加版画交流会。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "dependency": {
+          "state": "supported",
+          "reason": "候选已声明理解该主张所需的全部可用来源，不要求无关背景。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "c14e6140-d828-5436-a21d-feffdf6355a4",
+              "start": 0,
+              "end": 17,
+              "quote": "策展人已当面邀请我参加版画交流会。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        }
+      },
+      "expected_aggregate": "unsupported",
+      "window_id": "W3",
+      "changed_candidate_fields": [
+        "category"
+      ],
+      "allowed_states_by_field": {
+        "meaning": [
+          "supported"
+        ],
+        "subject": [
+          "supported"
+        ],
+        "category": [
+          "mismatch"
+        ],
+        "speech_act": [
+          "supported"
+        ],
+        "assertion_status": [
+          "supported"
+        ],
+        "figurative_type": [
+          "supported"
+        ],
+        "time": [
+          "supported"
+        ],
+        "dependency": [
+          "supported"
+        ]
+      },
+      "candidate": {
+        "text": "联系人原话：“策展人已当面邀请我参加版画交流会。”",
+        "category": "common_fact",
+        "subject": "contact",
+        "topic": "other",
+        "source_message_ids": [
+          "c14e6140-d828-5436-a21d-feffdf6355a4"
+        ],
+        "confidence": 0.9,
+        "risk_flags": [],
+        "valid_at": null,
+        "invalid_at": null,
+        "speech_act": "assertion",
+        "assertion_status": "asserted",
+        "figurative_type": "literal",
+        "alternatives": [],
+        "interpretation_reason": "按所引原文保留主张、阶段与来源限定。"
+      }
+    },
+    {
+      "id": "W3-wrong-stage",
+      "title": "只把已收到邀约改成plan",
+      "source": {
+        "messages": [
+          {
+            "message_id": "c14e6140-d828-5436-a21d-feffdf6355a4",
+            "sender": "contact",
+            "role": "target",
+            "occurred_at": "2026-10-18T09:00:00+08:00",
+            "text": "策展人已当面邀请我参加版画交流会。"
+          }
+        ],
+        "target_message_ids": [
+          "c14e6140-d828-5436-a21d-feffdf6355a4"
+        ]
+      },
+      "expected": {
+        "meaning": {
+          "state": "supported",
+          "reason": "正文保留来源明确表达的主张及全部必要限定。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "c14e6140-d828-5436-a21d-feffdf6355a4",
+              "start": 0,
+              "end": 17,
+              "quote": "策展人已当面邀请我参加版画交流会。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "subject": {
+          "state": "supported",
+          "reason": "contact是本条联系人资料的保存范围，不能当作所有动作的执行人。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "c14e6140-d828-5436-a21d-feffdf6355a4",
+              "start": 0,
+              "end": 17,
+              "quote": "策展人已当面邀请我参加版画交流会。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "category": {
+          "state": "supported",
+          "reason": "主张为本人已收到邀请的互动经历，relationship_note；不是普通完成进度或第三人纯背景。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "c14e6140-d828-5436-a21d-feffdf6355a4",
+              "start": 0,
+              "end": 17,
+              "quote": "策展人已当面邀请我参加版画交流会。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "speech_act": {
+          "state": "mismatch",
+          "reason": "主张是已当面收到邀请；未来活动是邀请内容，不把这次已发生邀约改为未来plan。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "c14e6140-d828-5436-a21d-feffdf6355a4",
+              "start": 3,
+              "end": 9,
+              "quote": "已当面邀请我",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "assertion_status": {
+          "state": "supported",
+          "reason": "按来源明确表达的断言方式保存，不据此认证现实执行或真实性。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "c14e6140-d828-5436-a21d-feffdf6355a4",
+              "start": 0,
+              "end": 17,
+              "quote": "策展人已当面邀请我参加版画交流会。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "figurative_type": {
+          "state": "supported",
+          "reason": "来源为普通字面表达，无隐喻或反讽依据。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "c14e6140-d828-5436-a21d-feffdf6355a4",
+              "start": 0,
+              "end": 17,
+              "quote": "策展人已当面邀请我参加版画交流会。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "time": {
+          "state": "supported",
+          "reason": "已发生邀约且未给资料有效期，双null；不从邀请内容推活动时段。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "c14e6140-d828-5436-a21d-feffdf6355a4",
+              "start": 0,
+              "end": 17,
+              "quote": "策展人已当面邀请我参加版画交流会。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "dependency": {
+          "state": "supported",
+          "reason": "候选已声明理解该主张所需的全部可用来源，不要求无关背景。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "c14e6140-d828-5436-a21d-feffdf6355a4",
+              "start": 0,
+              "end": 17,
+              "quote": "策展人已当面邀请我参加版画交流会。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        }
+      },
+      "expected_aggregate": "unsupported",
+      "window_id": "W3",
+      "changed_candidate_fields": [
+        "speech_act"
+      ],
+      "allowed_states_by_field": {
+        "meaning": [
+          "supported"
+        ],
+        "subject": [
+          "supported"
+        ],
+        "category": [
+          "supported"
+        ],
+        "speech_act": [
+          "mismatch"
+        ],
+        "assertion_status": [
+          "supported"
+        ],
+        "figurative_type": [
+          "supported"
+        ],
+        "time": [
+          "supported"
+        ],
+        "dependency": [
+          "supported"
+        ]
+      },
+      "candidate": {
+        "text": "联系人原话：“策展人已当面邀请我参加版画交流会。”",
+        "category": "relationship_note",
+        "subject": "contact",
+        "topic": "other",
+        "source_message_ids": [
+          "c14e6140-d828-5436-a21d-feffdf6355a4"
+        ],
+        "confidence": 0.9,
+        "risk_flags": [],
+        "valid_at": null,
+        "invalid_at": null,
+        "speech_act": "plan",
+        "assertion_status": "asserted",
+        "figurative_type": "literal",
+        "alternatives": [],
+        "interpretation_reason": "按所引原文保留主张、阶段与来源限定。"
+      }
+    },
+    {
+      "id": "W4-correct",
+      "title": "依赖context恢复事项和用户归属",
+      "source": {
+        "messages": [
+          {
+            "message_id": "40f8acea-abc6-5ed7-a7a7-8d8207bfea33",
+            "sender": "contact",
+            "role": "context",
+            "occurred_at": "2026-10-18T09:00:00+08:00",
+            "text": "我说的是你申请的木工培训补贴。"
+          },
+          {
+            "message_id": "8fd4d3ea-fad8-5372-aa4b-36f76f0f2e30",
+            "sender": "contact",
+            "role": "target",
+            "occurred_at": "2026-10-18T09:01:00+08:00",
+            "text": "已经批下来了。"
+          }
+        ],
+        "target_message_ids": [
+          "8fd4d3ea-fad8-5372-aa4b-36f76f0f2e30"
+        ]
+      },
+      "expected": {
+        "meaning": {
+          "state": "supported",
+          "reason": "context明确用户申请的补贴，target说已批下来；只保存获批结果，不补到账。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "40f8acea-abc6-5ed7-a7a7-8d8207bfea33",
+              "start": 0,
+              "end": 15,
+              "quote": "我说的是你申请的木工培训补贴。",
+              "value": null,
+              "scope": "candidate_source"
+            },
+            {
+              "kind": "text",
+              "message_id": "8fd4d3ea-fad8-5372-aa4b-36f76f0f2e30",
+              "start": 0,
+              "end": 7,
+              "quote": "已经批下来了。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "subject": {
+          "state": "supported",
+          "reason": "context由联系人对用户说“你申请”，明确资料归用户self；target仍由联系人说出，不能按sender自动归contact。这个字段仅context即可提供证据，无须单字段也含target。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "40f8acea-abc6-5ed7-a7a7-8d8207bfea33",
+              "start": 4,
+              "end": 14,
+              "quote": "你申请的木工培训补贴",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "category": {
+          "state": "supported",
+          "reason": "补贴获批是普通已完成结果，common_fact。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "40f8acea-abc6-5ed7-a7a7-8d8207bfea33",
+              "start": 0,
+              "end": 15,
+              "quote": "我说的是你申请的木工培训补贴。",
+              "value": null,
+              "scope": "candidate_source"
+            },
+            {
+              "kind": "text",
+              "message_id": "8fd4d3ea-fad8-5372-aa4b-36f76f0f2e30",
+              "start": 0,
+              "end": 7,
+              "quote": "已经批下来了。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "speech_act": {
+          "state": "supported",
+          "reason": "“已经批下来”明确结果，assertion有据，不补到账。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "40f8acea-abc6-5ed7-a7a7-8d8207bfea33",
+              "start": 0,
+              "end": 15,
+              "quote": "我说的是你申请的木工培训补贴。",
+              "value": null,
+              "scope": "candidate_source"
+            },
+            {
+              "kind": "text",
+              "message_id": "8fd4d3ea-fad8-5372-aa4b-36f76f0f2e30",
+              "start": 0,
+              "end": 7,
+              "quote": "已经批下来了。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "assertion_status": {
+          "state": "supported",
+          "reason": "按来源明确表达的断言方式保存，不据此认证现实执行或真实性。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "40f8acea-abc6-5ed7-a7a7-8d8207bfea33",
+              "start": 0,
+              "end": 15,
+              "quote": "我说的是你申请的木工培训补贴。",
+              "value": null,
+              "scope": "candidate_source"
+            },
+            {
+              "kind": "text",
+              "message_id": "8fd4d3ea-fad8-5372-aa4b-36f76f0f2e30",
+              "start": 0,
+              "end": 7,
+              "quote": "已经批下来了。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "figurative_type": {
+          "state": "supported",
+          "reason": "来源为普通字面表达，无隐喻或反讽依据。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "40f8acea-abc6-5ed7-a7a7-8d8207bfea33",
+              "start": 0,
+              "end": 15,
+              "quote": "我说的是你申请的木工培训补贴。",
+              "value": null,
+              "scope": "candidate_source"
+            },
+            {
+              "kind": "text",
+              "message_id": "8fd4d3ea-fad8-5372-aa4b-36f76f0f2e30",
+              "start": 0,
+              "end": 7,
+              "quote": "已经批下来了。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "time": {
+          "state": "supported",
+          "reason": "历史获批未给具体发生日期或资料有效期，双null；occurred_at只是来源观察时刻，不可当作获批日期。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "40f8acea-abc6-5ed7-a7a7-8d8207bfea33",
+              "start": 0,
+              "end": 15,
+              "quote": "我说的是你申请的木工培训补贴。",
+              "value": null,
+              "scope": "candidate_source"
+            },
+            {
+              "kind": "text",
+              "message_id": "8fd4d3ea-fad8-5372-aa4b-36f76f0f2e30",
+              "start": 0,
+              "end": 7,
+              "quote": "已经批下来了。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "dependency": {
+          "state": "supported",
+          "reason": "target省略事项及归属，context补足用户申请的补贴；两条原消息都需在source_message_ids内。单个字段可由context支持，整体证据并集须含target。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "40f8acea-abc6-5ed7-a7a7-8d8207bfea33",
+              "start": 0,
+              "end": 15,
+              "quote": "我说的是你申请的木工培训补贴。",
+              "value": null,
+              "scope": "candidate_source"
+            },
+            {
+              "kind": "text",
+              "message_id": "8fd4d3ea-fad8-5372-aa4b-36f76f0f2e30",
+              "start": 0,
+              "end": 7,
+              "quote": "已经批下来了。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        }
+      },
+      "expected_aggregate": "supported",
+      "window_id": "W4",
+      "changed_candidate_fields": [],
+      "expected_target_union_covered": true,
+      "allowed_states_by_field": {
+        "meaning": [
+          "supported"
+        ],
+        "subject": [
+          "supported"
+        ],
+        "category": [
+          "supported"
+        ],
+        "speech_act": [
+          "supported"
+        ],
+        "assertion_status": [
+          "supported"
+        ],
+        "figurative_type": [
+          "supported"
+        ],
+        "time": [
+          "supported"
+        ],
+        "dependency": [
+          "supported"
+        ]
+      },
+      "candidate": {
+        "text": "用户申请的木工培训补贴已经获批。",
+        "category": "common_fact",
+        "subject": "self",
+        "topic": "other",
+        "source_message_ids": [
+          "8fd4d3ea-fad8-5372-aa4b-36f76f0f2e30",
+          "40f8acea-abc6-5ed7-a7a7-8d8207bfea33"
+        ],
+        "confidence": 0.9,
+        "risk_flags": [],
+        "valid_at": null,
+        "invalid_at": null,
+        "speech_act": "assertion",
+        "assertion_status": "asserted",
+        "figurative_type": "literal",
+        "alternatives": [],
+        "interpretation_reason": "按所引原文保留主张、阶段与来源限定。"
+      }
+    },
+    {
+      "id": "W4-missing-context",
+      "title": "只删除必要context引用",
+      "source": {
+        "messages": [
+          {
+            "message_id": "40f8acea-abc6-5ed7-a7a7-8d8207bfea33",
+            "sender": "contact",
+            "role": "context",
+            "occurred_at": "2026-10-18T09:00:00+08:00",
+            "text": "我说的是你申请的木工培训补贴。"
+          },
+          {
+            "message_id": "8fd4d3ea-fad8-5372-aa4b-36f76f0f2e30",
+            "sender": "contact",
+            "role": "target",
+            "occurred_at": "2026-10-18T09:01:00+08:00",
+            "text": "已经批下来了。"
+          }
+        ],
+        "target_message_ids": [
+          "8fd4d3ea-fad8-5372-aa4b-36f76f0f2e30"
+        ]
+      },
+      "expected": {
+        "meaning": {
+          "state": "insufficient",
+          "reason": "当前候选仅声明target“已经批下来了”，能支持获批结果，却不能唯一支持正文中的“用户申请的木工培训补贴”。该具体事项及归属只在未声明的context中；不得借窗口可见性替候选补证。",
+          "evidence": []
+        },
+        "subject": {
+          "state": "insufficient",
+          "reason": "联系人说出的省略回答未给获批事项的归属；self只由未声明context的“你申请”确定。既不能默认self，也不能按sender改为contact；缺证为空。",
+          "evidence": []
+        },
+        "category": {
+          "state": "supported",
+          "reason": "target“批下来了”明确普通审批完成结果；common_fact不依赖具体补贴名称才能成立。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "8fd4d3ea-fad8-5372-aa4b-36f76f0f2e30",
+              "start": 0,
+              "end": 7,
+              "quote": "已经批下来了。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "speech_act": {
+          "state": "supported",
+          "reason": "“已经批下来”独立明确完成结果，assertion受当前已声明target支持，不因事项缺证而变为unknown。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "8fd4d3ea-fad8-5372-aa4b-36f76f0f2e30",
+              "start": 0,
+              "end": 7,
+              "quote": "已经批下来了。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "assertion_status": {
+          "state": "supported",
+          "reason": "target直接肯定完成结果，asserted有据；具体事项缺证另由meaning与subject体现。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "8fd4d3ea-fad8-5372-aa4b-36f76f0f2e30",
+              "start": 0,
+              "end": 7,
+              "quote": "已经批下来了。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "figurative_type": {
+          "state": "supported",
+          "reason": "target为常规字面审批完成表达，无非字面迹象。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "8fd4d3ea-fad8-5372-aa4b-36f76f0f2e30",
+              "start": 0,
+              "end": 7,
+              "quote": "已经批下来了。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "time": {
+          "state": "supported",
+          "reason": "target只给已完成结果、无事件日期或资料有效期，历史双null正确；不把消息观察日当审批日。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "8fd4d3ea-fad8-5372-aa4b-36f76f0f2e30",
+              "start": 0,
+              "end": 7,
+              "quote": "已经批下来了。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "dependency": {
+          "state": "mismatch",
+          "reason": "已声明target是省略回答，不能独自支撑候选具体事项和self归属；对照源中唯一补足二者的context未绑定。缺失必须判出，不可自动补引用。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "8fd4d3ea-fad8-5372-aa4b-36f76f0f2e30",
+              "start": 0,
+              "end": 7,
+              "quote": "已经批下来了。",
+              "value": null,
+              "scope": "candidate_source"
+            },
+            {
+              "kind": "text",
+              "message_id": "40f8acea-abc6-5ed7-a7a7-8d8207bfea33",
+              "start": 0,
+              "end": 15,
+              "quote": "我说的是你申请的木工培训补贴。",
+              "value": null,
+              "scope": "window_context"
+            }
+          ]
+        }
+      },
+      "expected_aggregate": "unsupported",
+      "window_id": "W4",
+      "changed_candidate_fields": [
+        "source_message_ids"
+      ],
+      "expected_coupling": {
+        "trigger": "source_message_ids删除唯一必要context",
+        "dependency": "mismatch",
+        "meaning": "insufficient",
+        "subject": "insufficient",
+        "unaffected_supported": [
+          "category",
+          "speech_act",
+          "assertion_status",
+          "figurative_type",
+          "time"
+        ],
+        "omitted_context_message_id": "40f8acea-abc6-5ed7-a7a7-8d8207bfea33",
+        "control_author_basis": "context原文“我说的是你申请的木工培训补贴。”唯一提供事项及用户归属；仅可作dependency的window_context反证，不给meaning/subject的supported补证。target本身没有明示归属，故后二字段为insufficient；其余五字段有独立target依据。",
+        "not_single_field_expected_failure": true
+      },
+      "allowed_states_by_field": {
+        "meaning": [
+          "insufficient"
+        ],
+        "subject": [
+          "insufficient"
+        ],
+        "category": [
+          "supported"
+        ],
+        "speech_act": [
+          "supported"
+        ],
+        "assertion_status": [
+          "supported"
+        ],
+        "figurative_type": [
+          "supported"
+        ],
+        "time": [
+          "supported"
+        ],
+        "dependency": [
+          "mismatch"
+        ]
+      },
+      "candidate": {
+        "text": "用户申请的木工培训补贴已经获批。",
+        "category": "common_fact",
+        "subject": "self",
+        "topic": "other",
+        "source_message_ids": [
+          "8fd4d3ea-fad8-5372-aa4b-36f76f0f2e30"
+        ],
+        "confidence": 0.9,
+        "risk_flags": [],
+        "valid_at": null,
+        "invalid_at": null,
+        "speech_act": "assertion",
+        "assertion_status": "asserted",
+        "figurative_type": "literal",
+        "alternatives": [],
+        "interpretation_reason": "按所引原文保留主张、阶段与来源限定。"
+      }
+    },
+    {
+      "id": "W4-wrong-subject",
+      "title": "只把用户资料归到联系人",
+      "source": {
+        "messages": [
+          {
+            "message_id": "40f8acea-abc6-5ed7-a7a7-8d8207bfea33",
+            "sender": "contact",
+            "role": "context",
+            "occurred_at": "2026-10-18T09:00:00+08:00",
+            "text": "我说的是你申请的木工培训补贴。"
+          },
+          {
+            "message_id": "8fd4d3ea-fad8-5372-aa4b-36f76f0f2e30",
+            "sender": "contact",
+            "role": "target",
+            "occurred_at": "2026-10-18T09:01:00+08:00",
+            "text": "已经批下来了。"
+          }
+        ],
+        "target_message_ids": [
+          "8fd4d3ea-fad8-5372-aa4b-36f76f0f2e30"
+        ]
+      },
+      "expected": {
+        "meaning": {
+          "state": "supported",
+          "reason": "context明确用户申请的补贴，target说已批下来；只保存获批结果，不补到账。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "40f8acea-abc6-5ed7-a7a7-8d8207bfea33",
+              "start": 0,
+              "end": 15,
+              "quote": "我说的是你申请的木工培训补贴。",
+              "value": null,
+              "scope": "candidate_source"
+            },
+            {
+              "kind": "text",
+              "message_id": "8fd4d3ea-fad8-5372-aa4b-36f76f0f2e30",
+              "start": 0,
+              "end": 7,
+              "quote": "已经批下来了。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "subject": {
+          "state": "mismatch",
+          "reason": "“你申请”由联系人对用户说，资料归self；sender不是subject。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "40f8acea-abc6-5ed7-a7a7-8d8207bfea33",
+              "start": 4,
+              "end": 14,
+              "quote": "你申请的木工培训补贴",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "category": {
+          "state": "supported",
+          "reason": "补贴获批是普通已完成结果，common_fact。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "40f8acea-abc6-5ed7-a7a7-8d8207bfea33",
+              "start": 0,
+              "end": 15,
+              "quote": "我说的是你申请的木工培训补贴。",
+              "value": null,
+              "scope": "candidate_source"
+            },
+            {
+              "kind": "text",
+              "message_id": "8fd4d3ea-fad8-5372-aa4b-36f76f0f2e30",
+              "start": 0,
+              "end": 7,
+              "quote": "已经批下来了。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "speech_act": {
+          "state": "supported",
+          "reason": "“已经批下来”明确结果，assertion有据，不补到账。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "40f8acea-abc6-5ed7-a7a7-8d8207bfea33",
+              "start": 0,
+              "end": 15,
+              "quote": "我说的是你申请的木工培训补贴。",
+              "value": null,
+              "scope": "candidate_source"
+            },
+            {
+              "kind": "text",
+              "message_id": "8fd4d3ea-fad8-5372-aa4b-36f76f0f2e30",
+              "start": 0,
+              "end": 7,
+              "quote": "已经批下来了。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "assertion_status": {
+          "state": "supported",
+          "reason": "按来源明确表达的断言方式保存，不据此认证现实执行或真实性。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "40f8acea-abc6-5ed7-a7a7-8d8207bfea33",
+              "start": 0,
+              "end": 15,
+              "quote": "我说的是你申请的木工培训补贴。",
+              "value": null,
+              "scope": "candidate_source"
+            },
+            {
+              "kind": "text",
+              "message_id": "8fd4d3ea-fad8-5372-aa4b-36f76f0f2e30",
+              "start": 0,
+              "end": 7,
+              "quote": "已经批下来了。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "figurative_type": {
+          "state": "supported",
+          "reason": "来源为普通字面表达，无隐喻或反讽依据。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "40f8acea-abc6-5ed7-a7a7-8d8207bfea33",
+              "start": 0,
+              "end": 15,
+              "quote": "我说的是你申请的木工培训补贴。",
+              "value": null,
+              "scope": "candidate_source"
+            },
+            {
+              "kind": "text",
+              "message_id": "8fd4d3ea-fad8-5372-aa4b-36f76f0f2e30",
+              "start": 0,
+              "end": 7,
+              "quote": "已经批下来了。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "time": {
+          "state": "supported",
+          "reason": "历史获批未给具体发生日期或资料有效期，双null；occurred_at只是来源观察时刻，不可当作获批日期。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "40f8acea-abc6-5ed7-a7a7-8d8207bfea33",
+              "start": 0,
+              "end": 15,
+              "quote": "我说的是你申请的木工培训补贴。",
+              "value": null,
+              "scope": "candidate_source"
+            },
+            {
+              "kind": "text",
+              "message_id": "8fd4d3ea-fad8-5372-aa4b-36f76f0f2e30",
+              "start": 0,
+              "end": 7,
+              "quote": "已经批下来了。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "dependency": {
+          "state": "supported",
+          "reason": "target省略事项及归属，context补足用户申请的补贴；两条原消息都需在source_message_ids内。单个字段可由context支持，整体证据并集须含target。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "40f8acea-abc6-5ed7-a7a7-8d8207bfea33",
+              "start": 0,
+              "end": 15,
+              "quote": "我说的是你申请的木工培训补贴。",
+              "value": null,
+              "scope": "candidate_source"
+            },
+            {
+              "kind": "text",
+              "message_id": "8fd4d3ea-fad8-5372-aa4b-36f76f0f2e30",
+              "start": 0,
+              "end": 7,
+              "quote": "已经批下来了。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        }
+      },
+      "expected_aggregate": "unsupported",
+      "window_id": "W4",
+      "changed_candidate_fields": [
+        "subject"
+      ],
+      "allowed_states_by_field": {
+        "meaning": [
+          "supported"
+        ],
+        "subject": [
+          "mismatch"
+        ],
+        "category": [
+          "supported"
+        ],
+        "speech_act": [
+          "supported"
+        ],
+        "assertion_status": [
+          "supported"
+        ],
+        "figurative_type": [
+          "supported"
+        ],
+        "time": [
+          "supported"
+        ],
+        "dependency": [
+          "supported"
+        ]
+      },
+      "candidate": {
+        "text": "用户申请的木工培训补贴已经获批。",
+        "category": "common_fact",
+        "subject": "contact",
+        "topic": "other",
+        "source_message_ids": [
+          "8fd4d3ea-fad8-5372-aa4b-36f76f0f2e30",
+          "40f8acea-abc6-5ed7-a7a7-8d8207bfea33"
+        ],
+        "confidence": 0.9,
+        "risk_flags": [],
+        "valid_at": null,
+        "invalid_at": null,
+        "speech_act": "assertion",
+        "assertion_status": "asserted",
+        "figurative_type": "literal",
+        "alternatives": [],
+        "interpretation_reason": "按所引原文保留主张、阶段与来源限定。"
+      }
+    },
+    {
+      "id": "W5-correct",
+      "title": "独立安排不需无关前文",
+      "source": {
+        "messages": [
+          {
+            "message_id": "af48054f-bfa0-56d2-906f-c29a673793b3",
+            "sender": "self",
+            "role": "context",
+            "occurred_at": "2026-10-18T09:00:00+08:00",
+            "text": "我刚换了书桌上的台灯。"
+          },
+          {
+            "message_id": "cdcb065a-921f-5f73-a2ad-511a4fc2c5de",
+            "sender": "contact",
+            "role": "target",
+            "occurred_at": "2026-10-18T09:01:00+08:00",
+            "text": "我定于2026年11月25日去区文化馆参加摄影课。"
+          }
+        ],
+        "target_message_ids": [
+          "cdcb065a-921f-5f73-a2ad-511a4fc2c5de"
+        ]
+      },
+      "expected": {
+        "meaning": {
+          "state": "supported",
+          "reason": "正文保留来源明确表达的主张及全部必要限定。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "cdcb065a-921f-5f73-a2ad-511a4fc2c5de",
+              "start": 0,
+              "end": 25,
+              "quote": "我定于2026年11月25日去区文化馆参加摄影课。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "subject": {
+          "state": "supported",
+          "reason": "contact是本条联系人资料的保存范围，不能当作所有动作的执行人。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "cdcb065a-921f-5f73-a2ad-511a4fc2c5de",
+              "start": 0,
+              "end": 25,
+              "quote": "我定于2026年11月25日去区文化馆参加摄影课。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "category": {
+          "state": "supported",
+          "reason": "独立未来上课安排保存为recent_state。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "cdcb065a-921f-5f73-a2ad-511a4fc2c5de",
+              "start": 0,
+              "end": 25,
+              "quote": "我定于2026年11月25日去区文化馆参加摄影课。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "speech_act": {
+          "state": "supported",
+          "reason": "直接完整日程沿plan。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "cdcb065a-921f-5f73-a2ad-511a4fc2c5de",
+              "start": 0,
+              "end": 25,
+              "quote": "我定于2026年11月25日去区文化馆参加摄影课。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "assertion_status": {
+          "state": "supported",
+          "reason": "按来源明确表达的断言方式保存，不据此认证现实执行或真实性。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "cdcb065a-921f-5f73-a2ad-511a4fc2c5de",
+              "start": 0,
+              "end": 25,
+              "quote": "我定于2026年11月25日去区文化馆参加摄影课。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "figurative_type": {
+          "state": "supported",
+          "reason": "来源为普通字面表达，无隐喻或反讽依据。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "cdcb065a-921f-5f73-a2ad-511a4fc2c5de",
+              "start": 0,
+              "end": 25,
+              "quote": "我定于2026年11月25日去区文化馆参加摄影课。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "time": {
+          "state": "supported",
+          "reason": "按明确日期及来源时区保留当地11月25日至26日检索边界。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "cdcb065a-921f-5f73-a2ad-511a4fc2c5de",
+              "start": 0,
+              "end": 25,
+              "quote": "我定于2026年11月25日去区文化馆参加摄影课。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "dependency": {
+          "state": "supported",
+          "reason": "target自身包含人物、行动、地点和日期；context台灯信息完全无关，不要求引用。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "cdcb065a-921f-5f73-a2ad-511a4fc2c5de",
+              "start": 0,
+              "end": 25,
+              "quote": "我定于2026年11月25日去区文化馆参加摄影课。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        }
+      },
+      "expected_aggregate": "supported",
+      "window_id": "W5",
+      "changed_candidate_fields": [],
+      "expected_target_union_covered": true,
+      "allowed_states_by_field": {
+        "meaning": [
+          "supported"
+        ],
+        "subject": [
+          "supported"
+        ],
+        "category": [
+          "supported"
+        ],
+        "speech_act": [
+          "supported"
+        ],
+        "assertion_status": [
+          "supported"
+        ],
+        "figurative_type": [
+          "supported"
+        ],
+        "time": [
+          "supported"
+        ],
+        "dependency": [
+          "supported"
+        ]
+      },
+      "candidate": {
+        "text": "联系人原话：“我定于2026年11月25日去区文化馆参加摄影课。”",
+        "category": "recent_state",
+        "subject": "contact",
+        "topic": "other",
+        "source_message_ids": [
+          "cdcb065a-921f-5f73-a2ad-511a4fc2c5de"
+        ],
+        "confidence": 0.9,
+        "risk_flags": [],
+        "valid_at": "2026-11-25T00:00:00+08:00",
+        "invalid_at": "2026-11-26T00:00:00+08:00",
+        "speech_act": "plan",
+        "assertion_status": "asserted",
+        "figurative_type": "literal",
+        "alternatives": [],
+        "interpretation_reason": "按所引原文保留主张、阶段与来源限定。"
+      }
+    },
+    {
+      "id": "W5-wrong-subject",
+      "title": "只把联系人完整安排归给用户",
+      "source": {
+        "messages": [
+          {
+            "message_id": "af48054f-bfa0-56d2-906f-c29a673793b3",
+            "sender": "self",
+            "role": "context",
+            "occurred_at": "2026-10-18T09:00:00+08:00",
+            "text": "我刚换了书桌上的台灯。"
+          },
+          {
+            "message_id": "cdcb065a-921f-5f73-a2ad-511a4fc2c5de",
+            "sender": "contact",
+            "role": "target",
+            "occurred_at": "2026-10-18T09:01:00+08:00",
+            "text": "我定于2026年11月25日去区文化馆参加摄影课。"
+          }
+        ],
+        "target_message_ids": [
+          "cdcb065a-921f-5f73-a2ad-511a4fc2c5de"
+        ]
+      },
+      "expected": {
+        "meaning": {
+          "state": "supported",
+          "reason": "正文保留来源明确表达的主张及全部必要限定。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "cdcb065a-921f-5f73-a2ad-511a4fc2c5de",
+              "start": 0,
+              "end": 25,
+              "quote": "我定于2026年11月25日去区文化馆参加摄影课。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "subject": {
+          "state": "mismatch",
+          "reason": "target由联系人直接说“我”并完整陈述其安排，归contact；用户的无关台灯前文不改变归属。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "cdcb065a-921f-5f73-a2ad-511a4fc2c5de",
+              "start": 0,
+              "end": 1,
+              "quote": "我",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "category": {
+          "state": "supported",
+          "reason": "独立未来上课安排保存为recent_state。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "cdcb065a-921f-5f73-a2ad-511a4fc2c5de",
+              "start": 0,
+              "end": 25,
+              "quote": "我定于2026年11月25日去区文化馆参加摄影课。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "speech_act": {
+          "state": "supported",
+          "reason": "直接完整日程沿plan。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "cdcb065a-921f-5f73-a2ad-511a4fc2c5de",
+              "start": 0,
+              "end": 25,
+              "quote": "我定于2026年11月25日去区文化馆参加摄影课。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "assertion_status": {
+          "state": "supported",
+          "reason": "按来源明确表达的断言方式保存，不据此认证现实执行或真实性。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "cdcb065a-921f-5f73-a2ad-511a4fc2c5de",
+              "start": 0,
+              "end": 25,
+              "quote": "我定于2026年11月25日去区文化馆参加摄影课。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "figurative_type": {
+          "state": "supported",
+          "reason": "来源为普通字面表达，无隐喻或反讽依据。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "cdcb065a-921f-5f73-a2ad-511a4fc2c5de",
+              "start": 0,
+              "end": 25,
+              "quote": "我定于2026年11月25日去区文化馆参加摄影课。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "time": {
+          "state": "supported",
+          "reason": "按明确日期及来源时区保留当地11月25日至26日检索边界。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "cdcb065a-921f-5f73-a2ad-511a4fc2c5de",
+              "start": 0,
+              "end": 25,
+              "quote": "我定于2026年11月25日去区文化馆参加摄影课。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        },
+        "dependency": {
+          "state": "supported",
+          "reason": "target自身包含人物、行动、地点和日期；context台灯信息完全无关，不要求引用。",
+          "evidence": [
+            {
+              "kind": "text",
+              "message_id": "cdcb065a-921f-5f73-a2ad-511a4fc2c5de",
+              "start": 0,
+              "end": 25,
+              "quote": "我定于2026年11月25日去区文化馆参加摄影课。",
+              "value": null,
+              "scope": "candidate_source"
+            }
+          ]
+        }
+      },
+      "expected_aggregate": "unsupported",
+      "window_id": "W5",
+      "changed_candidate_fields": [
+        "subject"
+      ],
+      "allowed_states_by_field": {
+        "meaning": [
+          "supported"
+        ],
+        "subject": [
+          "mismatch"
+        ],
+        "category": [
+          "supported"
+        ],
+        "speech_act": [
+          "supported"
+        ],
+        "assertion_status": [
+          "supported"
+        ],
+        "figurative_type": [
+          "supported"
+        ],
+        "time": [
+          "supported"
+        ],
+        "dependency": [
+          "supported"
+        ]
+      },
+      "candidate": {
+        "text": "联系人原话：“我定于2026年11月25日去区文化馆参加摄影课。”",
+        "category": "recent_state",
+        "subject": "self",
+        "topic": "other",
+        "source_message_ids": [
+          "cdcb065a-921f-5f73-a2ad-511a4fc2c5de"
+        ],
+        "confidence": 0.9,
+        "risk_flags": [],
+        "valid_at": "2026-11-25T00:00:00+08:00",
+        "invalid_at": "2026-11-26T00:00:00+08:00",
+        "speech_act": "plan",
+        "assertion_status": "asserted",
+        "figurative_type": "literal",
+        "alternatives": [],
+        "interpretation_reason": "按所引原文保留主张、阶段与来源限定。"
+      }
+    }
+  ],
+  "windows": [
+    {
+      "id": "W1",
+      "baseline_id": "W1-correct",
+      "source": {
+        "messages": [
+          {
+            "message_id": "fe02ffed-7a5c-5376-aed4-b4ddede238f6",
+            "sender": "contact",
+            "role": "target",
+            "occurred_at": "2026-10-18T09:00:00+08:00",
+            "text": "他明天会到展馆布置展台。"
+          }
+        ],
+        "target_message_ids": [
+          "fe02ffed-7a5c-5376-aed4-b4ddede238f6"
+        ]
+      },
+      "control_ids": [
+        "W1-correct",
+        "W1-wrong-date",
+        "W1-invented-person"
+      ]
+    },
+    {
+      "id": "W2",
+      "baseline_id": "W2-correct",
+      "source": {
+        "messages": [
+          {
+            "message_id": "e814aa82-2bc4-57e9-bf3e-701525035095",
+            "sender": "contact",
+            "role": "target",
+            "occurred_at": "2026-10-18T09:00:00+08:00",
+            "text": "如果库房获准开放，我就去整理旧画框。"
+          }
+        ],
+        "target_message_ids": [
+          "e814aa82-2bc4-57e9-bf3e-701525035095"
+        ]
+      },
+      "control_ids": [
+        "W2-correct",
+        "W2-omit-condition"
+      ]
+    },
+    {
+      "id": "W3",
+      "baseline_id": "W3-correct",
+      "source": {
+        "messages": [
+          {
+            "message_id": "c14e6140-d828-5436-a21d-feffdf6355a4",
+            "sender": "contact",
+            "role": "target",
+            "occurred_at": "2026-10-18T09:00:00+08:00",
+            "text": "策展人已当面邀请我参加版画交流会。"
+          }
+        ],
+        "target_message_ids": [
+          "c14e6140-d828-5436-a21d-feffdf6355a4"
+        ]
+      },
+      "control_ids": [
+        "W3-correct",
+        "W3-wrong-category",
+        "W3-wrong-stage"
+      ]
+    },
+    {
+      "id": "W4",
+      "baseline_id": "W4-correct",
+      "source": {
+        "messages": [
+          {
+            "message_id": "40f8acea-abc6-5ed7-a7a7-8d8207bfea33",
+            "sender": "contact",
+            "role": "context",
+            "occurred_at": "2026-10-18T09:00:00+08:00",
+            "text": "我说的是你申请的木工培训补贴。"
+          },
+          {
+            "message_id": "8fd4d3ea-fad8-5372-aa4b-36f76f0f2e30",
+            "sender": "contact",
+            "role": "target",
+            "occurred_at": "2026-10-18T09:01:00+08:00",
+            "text": "已经批下来了。"
+          }
+        ],
+        "target_message_ids": [
+          "8fd4d3ea-fad8-5372-aa4b-36f76f0f2e30"
+        ]
+      },
+      "control_ids": [
+        "W4-correct",
+        "W4-missing-context",
+        "W4-wrong-subject"
+      ]
+    },
+    {
+      "id": "W5",
+      "baseline_id": "W5-correct",
+      "source": {
+        "messages": [
+          {
+            "message_id": "af48054f-bfa0-56d2-906f-c29a673793b3",
+            "sender": "self",
+            "role": "context",
+            "occurred_at": "2026-10-18T09:00:00+08:00",
+            "text": "我刚换了书桌上的台灯。"
+          },
+          {
+            "message_id": "cdcb065a-921f-5f73-a2ad-511a4fc2c5de",
+            "sender": "contact",
+            "role": "target",
+            "occurred_at": "2026-10-18T09:01:00+08:00",
+            "text": "我定于2026年11月25日去区文化馆参加摄影课。"
+          }
+        ],
+        "target_message_ids": [
+          "cdcb065a-921f-5f73-a2ad-511a4fc2c5de"
+        ]
+      },
+      "control_ids": [
+        "W5-correct",
+        "W5-wrong-subject"
+      ]
+    }
+  ],
+  "design_notes": [
+    "W1覆盖明确计划、未知人物、相对日期错配及强行命名；W2覆盖漏条件；W3覆盖完成动作误plan与关系互动错category；W4覆盖必要事项依赖及context决定subject；W5覆盖独立安排无关前文。",
+    "类别、日期及独立标签变异只对应字段mismatch；必要依赖缺失预先冻结dependency=mismatch、meaning/subject=insufficient，其他五字段supported。缺证与歧义不混为同态，不事后合理化全不支持。",
+    "candidate保留原候选字段用于接口真实性；八字段原型不声称已验收其余字段或自动采纳，未调用任何模型。",
+    "所有expected状态均为模型输出前人工预期，固定单值；没有运行或独立实验验证。此文件未扩大V可用来源范围。",
+    "本有限集合当前没有必须判ambiguous的预期：忠实保留未知人物是supported；强行命名缺对应证据是insufficient。未增加窗口补覆盖，不宣称已覆盖四态所有语义边界。",
+    "预冻结修正：W1-invented-person仅meaning允许insufficient或mismatch；其余字段保持原预期。代表性expected仍为insufficient及空证据，整体允许uncertain或unsupported；此候选排除首轮最小实测，仅保留离线，不为状态措辞调用模型。"
+  ]
+}

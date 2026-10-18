@@ -18,6 +18,17 @@ from .evaluation_provider_contract import (
     SEMANTIC4_PLAN, SEMANTIC4_MODE, SEMANTIC4_STAGE, SEMANTIC4_KIND, SEMANTIC4_PROMPT_PROFILE,
     UNIQUENESS_PLAN, UNIQUENESS_MODE, UNIQUENESS_STAGE, UNIQUENESS_KIND, UNIQUENESS_E_PROFILE,
     BOUNDED_RUNTIME_KIND, BOUNDED_RUNTIME_MODE, BOUNDED_RUNTIME_STAGE,
+    REFERENCE16_PRO_PLAN, REFERENCE16_PRO_MODE, REFERENCE16_PRO_STAGE, REFERENCE16_PRO_KIND,
+    REFERENCE16_PRO_TEACHING_PLAN, REFERENCE16_PRO_TEACHING_MODE, REFERENCE16_PRO_TEACHING_STAGE,
+    REFERENCE16_PRO_TEACHING_KIND, REFERENCE16_TEACHING_E_PROFILE,
+    REFERENCE16_PRO_RETENTION_PLAN, REFERENCE16_PRO_RETENTION_MODE, REFERENCE16_PRO_RETENTION_STAGE,
+    REFERENCE16_PRO_RETENTION_KIND, REFERENCE16_RETENTION_V_PROFILE,
+    REFERENCE16_PRO_RETENTION_V_THINKING_PLAN, REFERENCE16_PRO_RETENTION_V_THINKING_MODE,
+    REFERENCE16_PRO_RETENTION_V_THINKING_STAGE, REFERENCE16_PRO_RETENTION_V_THINKING_KIND,
+    REFERENCE16_V_THINKING_REQUEST_VERSION, reference16_v_thinking_phase_policy,
+    REFERENCE16_PRO_RETENTION_V_TOKEN32K_PLAN, REFERENCE16_PRO_RETENTION_V_TOKEN32K_MODE,
+    REFERENCE16_PRO_RETENTION_V_TOKEN32K_STAGE, REFERENCE16_PRO_RETENTION_V_TOKEN32K_KIND,
+    REFERENCE16_V_TOKEN32K_REQUEST_VERSION, reference16_v_token32k_phase_policy,
 )
 from .evaluation_bounded_cases import BOUNDED_RUNTIME_PLAN
 
@@ -37,6 +48,20 @@ class _FixedPublicControl:
 
 
 _PROFILES = {
+    REFERENCE16_PRO_RETENTION_V_TOKEN32K_KIND: _FixedPublicControl(32, 14400, 16, 18,
+        REFERENCE16_PRO_RETENTION_V_TOKEN32K_MODE, REFERENCE16_PRO_RETENTION_V_TOKEN32K_STAGE,
+        tuple(range(16)), 2048, REFERENCE16_PRO_RETENTION_V_TOKEN32K_PLAN, "source-fidelity-v2"),
+    REFERENCE16_PRO_RETENTION_V_THINKING_KIND: _FixedPublicControl(32, 14400, 16, 18,
+        REFERENCE16_PRO_RETENTION_V_THINKING_MODE, REFERENCE16_PRO_RETENTION_V_THINKING_STAGE,
+        tuple(range(16)), 2048, REFERENCE16_PRO_RETENTION_V_THINKING_PLAN, "source-fidelity-v2"),
+    REFERENCE16_PRO_RETENTION_KIND: _FixedPublicControl(32, 14400, 16, 18,
+        REFERENCE16_PRO_RETENTION_MODE, REFERENCE16_PRO_RETENTION_STAGE,
+        tuple(range(16)), 2048, REFERENCE16_PRO_RETENTION_PLAN, "source-fidelity-v2"),
+    REFERENCE16_PRO_TEACHING_KIND: _FixedPublicControl(32, 14400, 16, 18,
+        REFERENCE16_PRO_TEACHING_MODE, REFERENCE16_PRO_TEACHING_STAGE,
+        tuple(range(16)), 2048, REFERENCE16_PRO_TEACHING_PLAN, "source-fidelity-v2"),
+    REFERENCE16_PRO_KIND: _FixedPublicControl(32, 14400, 16, 18, REFERENCE16_PRO_MODE, REFERENCE16_PRO_STAGE,
+                                             tuple(range(16)), 2048, REFERENCE16_PRO_PLAN, "source-fidelity-v2"),
     FULL140_E2_KIND: _FixedPublicControl(280, 86400, 140, 138, FULL140_E2_MODE, FULL140_E2_STAGE,
                                       tuple(range(140)), 16384, FULL140_E2_PLAN, "source-fidelity-v2"),
     BOUNDED_RUNTIME_KIND: _FixedPublicControl(30, 14400, 15, 15, BOUNDED_RUNTIME_MODE, BOUNDED_RUNTIME_STAGE,
@@ -142,7 +167,7 @@ def _launch_owned_public_worker(*, frozen: dict, script: Path, root: Path, helpe
                 and type(value.get("request_limit")) is int and value["request_limit"] == request_limit
                 and type(value.get("reserved_requests")) is int
                 and 0 <= value["reserved_requests"] <= request_limit)
-    closed = (closed_receipt(budget) and (kind not in {FULL140_E2_KIND, MIXED_KIND, REFERENCE21_V4_KIND, SEMANTIC4_KIND, UNIQUENESS_KIND, BOUNDED_RUNTIME_KIND} or (
+    closed = (closed_receipt(budget) and (kind not in {FULL140_E2_KIND, MIXED_KIND, REFERENCE21_V4_KIND, SEMANTIC4_KIND, UNIQUENESS_KIND, BOUNDED_RUNTIME_KIND, REFERENCE16_PRO_KIND, REFERENCE16_PRO_TEACHING_KIND, REFERENCE16_PRO_RETENTION_KIND, REFERENCE16_PRO_RETENTION_V_THINKING_KIND, REFERENCE16_PRO_RETENTION_V_TOKEN32K_KIND} or (
         type(result.get("worker_pid")) is int and result["worker_pid"] == child.pid
         and result.get("execution_plan") == profile.execution_plan))) or (type(deadline.get("worker_pid")) is int
                                        and deadline["worker_pid"] == child.pid and closed_receipt(deadline)
@@ -176,8 +201,10 @@ def _launch_owned_public_worker(*, frozen: dict, script: Path, root: Path, helpe
                "planned_windows": planned_windows, "required_claims": required_claims,
                "case_statuses": [{**selection, "status": status} for selection, status in zip(frozen["selection"], states)],
                "quality_certified": False, "automatic_successor": False}
-    if kind == BOUNDED_RUNTIME_KIND:
-        receipt["execution_plan"] = BOUNDED_RUNTIME_PLAN
+    if kind in {BOUNDED_RUNTIME_KIND, REFERENCE16_PRO_KIND, REFERENCE16_PRO_TEACHING_KIND, REFERENCE16_PRO_RETENTION_KIND, REFERENCE16_PRO_RETENTION_V_THINKING_KIND, REFERENCE16_PRO_RETENTION_V_TOKEN32K_KIND}:
+        receipt["execution_plan"] = profile.execution_plan
+    if kind in {REFERENCE16_PRO_KIND, REFERENCE16_PRO_TEACHING_KIND, REFERENCE16_PRO_RETENTION_KIND, REFERENCE16_PRO_RETENTION_V_THINKING_KIND, REFERENCE16_PRO_RETENTION_V_TOKEN32K_KIND}:
+        receipt["optional_claims"] = 1
     helper.publish(directory / "finish.json", receipt)
     return receipt
 
@@ -186,6 +213,8 @@ def _launch_owned_public_worker(*, frozen: dict, script: Path, root: Path, helpe
 def _verify_owned_public_claim(*, frozen: dict, helper: Any, kind: str,
                                actual_windows: tuple | None = None) -> None:
     profile = _PROFILES[kind]
+    v_token32k = kind == REFERENCE16_PRO_RETENTION_V_TOKEN32K_KIND
+    v_thinking = kind == REFERENCE16_PRO_RETENTION_V_THINKING_KIND or v_token32k
     run = Path.home() / ".notalone-memory-evaluations" / frozen["run_id"]
     helper.private_directory(run)
     if not (run / "claimed").is_file() or os.path.lexists(run / "closed"):
@@ -214,6 +243,35 @@ def _verify_owned_public_claim(*, frozen: dict, helper: Any, kind: str,
                 or config.get("tool_choice") != {
                     "extraction": {"mode": "omitted", "name": "GroundedMemoryLabels" if kind == FULL140_E2_KIND else "GroundedMemoryLabelsV4"},
                     "verification": {"mode": "forced", "name": "SourceVerificationOutput"}})
+            or kind in {REFERENCE16_PRO_KIND, REFERENCE16_PRO_TEACHING_KIND, REFERENCE16_PRO_RETENTION_KIND, REFERENCE16_PRO_RETENTION_V_THINKING_KIND, REFERENCE16_PRO_RETENTION_V_TOKEN32K_KIND} and (
+                config.get("provider_profile") != ("deepseek-pro-reference16-v-token32k-v1" if v_token32k else "deepseek-pro-reference16-v-thinking-v1" if v_thinking else "deepseek-pro-reference16-v1")
+                or config.get("request_model") != "deepseek-v4-pro"
+                or type(config.get("request_contract_version")) is not int or config["request_contract_version"] != (7 if v_token32k else 6 if v_thinking else 4)
+                or ("max_tokens" in config if v_token32k else type(config.get("max_tokens")) is not int or config["max_tokens"] != 8192)
+                or (bool({"thinking", "reasoning_effort"} & set(config))
+                    or config.get("phase_request_version") != (REFERENCE16_V_TOKEN32K_REQUEST_VERSION if v_token32k else REFERENCE16_V_THINKING_REQUEST_VERSION)
+                    or config.get("phase_request_policy") != (reference16_v_token32k_phase_policy() if v_token32k else reference16_v_thinking_phase_policy())
+                    or v_token32k and any(type(config["phase_request_policy"][phase]["max_tokens"]) is not int
+                                         for phase in ("extraction", "verification"))
+                    if v_thinking else config.get("thinking") != {"type": "disabled"}
+                    or config.get("reasoning_effort") != "none"
+                    or bool({"phase_request_version", "phase_request_policy"} & set(config)))
+                or ((config.get("verification_prompt_profile") != REFERENCE16_RETENTION_V_PROFILE
+                     or frozen.get("fixed", {}).get("prompt_profile") != REFERENCE16_RETENTION_V_PROFILE)
+                    if kind in {REFERENCE16_PRO_RETENTION_KIND, REFERENCE16_PRO_RETENTION_V_THINKING_KIND, REFERENCE16_PRO_RETENTION_V_TOKEN32K_KIND} else "verification_prompt_profile" in config)
+                or config.get("extraction_mode") != "grounded-v2" or config.get("verification_mode") != "legacy-v4"
+                or config.get("base_url") != "https://api.deepseek.com"
+                or config.get("endpoint") != "https://api.deepseek.com/chat/completions"
+                or type(config.get("timeout")) is not float or config["timeout"] != 300.0
+                or type(config.get("max_retries")) is not int or config["max_retries"] != 0
+                or type(config.get("temperature")) not in (int, float) or config["temperature"] != 0
+                or config.get("stream") is not False or config.get("fallback") is not False
+                or config.get("response_identity_policy") != "first_valid_completion_observation_stop_on_change"
+                or config.get("verification_prompt_sha256") != frozen["verification_prompt_sha256"]
+                or config.get("verification_schema_sha256") != frozen["verification_schema_sha256"]
+                or config.get("tool_choice") != {
+                    "extraction": {"mode": "forced", "name": "GroundedMemoryLabels"},
+                    "verification": {"mode": "omitted" if v_thinking else "forced", "name": "SourceVerificationOutput"}})
             or config.get("source_hashes") != frozen["source_hashes"]
             or kind in {SEMANTIC4_KIND, UNIQUENESS_KIND} and (config.get("verification_mode") != "legacy-v4"
                 or config.get("verification_prompt_profile") != SEMANTIC4_PROMPT_PROFILE)
@@ -222,7 +280,8 @@ def _verify_owned_public_claim(*, frozen: dict, helper: Any, kind: str,
                 or config.get("verification_prompt_sha256") != frozen["verification_prompt_sha256"]
                 or config.get("verification_schema_sha256") != frozen["verification_schema_sha256"])
             or kind == UNIQUENESS_KIND and config.get("extraction_prompt_profile") != UNIQUENESS_E_PROFILE
-            or kind != UNIQUENESS_KIND and "extraction_prompt_profile" in config
+            or kind in {REFERENCE16_PRO_TEACHING_KIND, REFERENCE16_PRO_RETENTION_KIND, REFERENCE16_PRO_RETENTION_V_THINKING_KIND, REFERENCE16_PRO_RETENTION_V_TOKEN32K_KIND} and config.get("extraction_prompt_profile") != REFERENCE16_TEACHING_E_PROFILE
+            or kind not in {UNIQUENESS_KIND, BOUNDED_RUNTIME_KIND, REFERENCE16_PRO_TEACHING_KIND, REFERENCE16_PRO_RETENTION_KIND, REFERENCE16_PRO_RETENTION_V_THINKING_KIND, REFERENCE16_PRO_RETENTION_V_TOKEN32K_KIND} and "extraction_prompt_profile" in config
             or config.get("extraction_window_contracts") != frozen["extraction_window_contracts"]):
         raise ValueError(kind + "_claim_manifest_changed")
     if kind == BOUNDED_RUNTIME_KIND:
@@ -242,6 +301,7 @@ def _verify_bounded_claim(frozen: dict, config: dict, helper: Any, actual_window
     from .models import ExtractionWindow
     from .source_proof import bounded_runtime_rule_set_sha256
     from .verification_adapters import source_verification_contract
+    from .evaluation_provider_contract import bounded_profile_for_config, EvaluationProviderProfile
     from notalone.memory_trace.context import snapshot
     from notalone.tasks.models import ExtractionRuntimeConfig, ExtractionRuntimeMode
 
@@ -252,6 +312,18 @@ def _verify_bounded_claim(frozen: dict, config: dict, helper: Any, actual_window
     content = helper.digest(tuple({"messages": row["messages"], "target_indices": row["target_indices"]}
                                   for row in BOUNDED_RUNTIME_INPUTS))
     current_rules = bounded_runtime_rule_set_sha256()
+    profile = bounded_profile_for_config(config)
+    if (config.get("extraction_prompt_profile") != profile.bounded_extraction_prompt_profile
+            or frozen.get("fixed", {}).get("extraction_prompt_profile") != profile.bounded_extraction_prompt_profile):
+        raise ValueError("bounded_frozen_extraction_prompt_changed")
+    fixed = frozen.get("fixed", {})
+    if fixed.get("provider_profile", EvaluationProviderProfile.DEEPSEEK_BOUNDED_TASK.value) != profile.value:
+        raise ValueError("bounded_frozen_provider_changed")
+    if profile.is_pro and (
+            fixed.get("request_model") != profile.model or fixed.get("response_model") != profile.model
+            or type(fixed.get("request_contract_version")) is not int or fixed["request_contract_version"] != profile.bounded_request_version
+            or type(fixed.get("max_tokens")) is not int or fixed["max_tokens"] != 8192):
+        raise ValueError("bounded_frozen_pro_contract_changed")
     fixture = "backend/src/notalone/memory_extraction/evaluation_bounded_cases.py"
     fixture_sha = hashlib.sha256((Path(__file__).resolve().parents[4] / fixture).read_bytes()).hexdigest()
     plan = [{"case_position": position, "case_name": case.name, "input_sha256": canonical_sha256(window)}
@@ -269,18 +341,17 @@ def _verify_bounded_claim(frozen: dict, config: dict, helper: Any, actual_window
             or config.get("extraction_mode") != "grounded-v2" or config.get("verification_mode") != "nullable-proof-v3"
             or config.get("base_url") != "https://api.deepseek.com"
             or config.get("endpoint") != "https://api.deepseek.com/chat/completions"
-            or config.get("request_model") != "deepseek-flash"
+            or config.get("request_model") != profile.model
             or type(config.get("timeout")) is not float or config["timeout"] != 300.0
             or type(config.get("max_retries")) is not int or config["max_retries"] != 0
-            or type(config.get("request_contract_version")) is not int or config["request_contract_version"] != 2
             or type(config.get("temperature")) not in (int, float) or config["temperature"] != 0
             or config.get("stream") is not False or config.get("fallback") is not False
             or config.get("response_identity_policy") != "first_valid_completion_observation_stop_on_change"
             or {"thinking", "reasoning_effort", "phase_request_version", "phase_request_policy",
-                "verification_prompt_profile", "extraction_prompt_profile"} & set(config)
+                "verification_prompt_profile"} & set(config)
             or config.get("tool_choice") != {
                 "extraction": {"mode": "omitted", "name": "GroundedMemoryLabels"},
-                "verification": {"mode": "forced", "name": "SourceVerificationOutput"}}):
+                "verification": {"mode": profile.bounded_verification_tool_choice, "name": "SourceVerificationOutput"}}):
         raise ValueError("bounded_fixed_registration_changed")
     tasks = config["formal_tasks"]
     if type(tasks) is not list or len(tasks) != 15:
@@ -303,7 +374,7 @@ def _verify_bounded_claim(frozen: dict, config: dict, helper: Any, actual_window
             raise ValueError("bounded_formal_binding_changed")
         task_ids.add(identifiers["task_id"])
         contacts.add(identifiers["contact_id"])
-    contracts = tuple(extraction_contract("grounded-v2", window) for window in actual_windows)
+    contracts = tuple(extraction_contract("grounded-v2", window, prompt_profile=profile.bounded_extraction_prompt_profile) for window in actual_windows)
     prompt, schema = source_verification_contract("nullable-proof-v3")
     if (config["extraction_window_contracts"] != [{"input_sha256": item["input_sha256"],
             "prompt_sha256": helper.digest(e_prompt), "schema_sha256": helper.digest(e_schema)}

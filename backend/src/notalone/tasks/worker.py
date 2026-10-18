@@ -75,7 +75,7 @@ from notalone.tasks.models import (
     ExtractionRuntimeConfig,
     ExtractionRuntimeMode,
 )
-from notalone.tasks.extraction_runtime import verification_runtime_for_config
+from notalone.tasks.extraction_runtime import verification_runtime_for_config, extraction_runtime_for_config
 
 class ExtractionTaskRunner(Protocol):
     """Worker 调用的记忆提取执行 seam。"""
@@ -298,6 +298,7 @@ class PostgresMemoryExtractionRunner:
         if extraction_runtime_config is not None and not isinstance(task_id, UUID):
             raise ValueError("指定提取配置必须绑定实际任务。")
         verification_runtime = verification_runtime_for_config(self._verification_runtime, extraction_runtime_config)
+        runtime = extraction_runtime_for_config(self._runtime, extraction_runtime_config)
         selection_receipts: list[dict[str, Any]] = []
         messages = load_contact_messages(
             scope, self._database_url, selection_receipts=selection_receipts
@@ -314,7 +315,7 @@ class PostgresMemoryExtractionRunner:
             scope=scope,
             messages=messages,
             watermark_message_id=self._watermark_port.get(scope),
-            runtime=self._runtime,
+            runtime=runtime,
             verification_runtime=verification_runtime,
             memory_port=self._memory_port,
             owner_memory_port=self._owner_memory_port,

@@ -2,6 +2,7 @@
 
 from notalone.memory_extraction.verification import SourceVerificationMode, SourceVerificationRuntime
 from notalone.tasks.models import ExtractionRuntimeConfig, ExtractionRuntimeMode
+from notalone.memory_extraction.runtime import MemoryExtractionRuntime
 
 
 def validate_runtime_config(config: ExtractionRuntimeConfig | None) -> None:
@@ -15,6 +16,33 @@ def validate_runtime_config(config: ExtractionRuntimeConfig | None) -> None:
 
         if config.rule_set_sha256 != bounded_runtime_rule_set_sha256():
             raise ValueError("已固定的提取规则当前不可执行。")
+
+
+def extraction_runtime_for_config(
+    runtime: MemoryExtractionRuntime, config: ExtractionRuntimeConfig | None,
+) -> MemoryExtractionRuntime:
+    """同源码恢复时由模式选择固定教学；不切换原schema或compiler。
+
+    三键配置不固定跨源码升级的提示；真实评测另冻结源码和提示摘要。
+    """
+    validate_runtime_config(config)
+    if config is None or config.mode is ExtractionRuntimeMode.LEGACY:
+        return runtime
+    from notalone.memory_extraction.grounded_adapter import (
+        BOUNDED_DEPENDENCY_PROMPT_PROFILE, BOUNDED_DEPENDENCY_V3_PROMPT_PROFILE,
+    )
+
+    select = getattr(runtime, "for_prompt_profile", None)
+    if not callable(select):
+        raise ValueError("提取适配器不支持指定任务教学profile。")
+    # 仅保留受控调用方显式注入的v3；普通任务仍选v2，provider绑定由评测冻结链验证。
+    profile = (BOUNDED_DEPENDENCY_V3_PROMPT_PROFILE
+               if getattr(runtime, "prompt_profile", None) == BOUNDED_DEPENDENCY_V3_PROMPT_PROFILE
+               else BOUNDED_DEPENDENCY_PROMPT_PROFILE)
+    selected = select(profile)
+    if getattr(selected, "prompt_profile", None) != profile:
+        raise ValueError("指定任务与提取教学profile不符。")
+    return selected
 
 
 def verification_runtime_for_config(

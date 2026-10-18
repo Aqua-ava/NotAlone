@@ -18,6 +18,7 @@ from notalone.memory_extraction.evaluation_bounded_cases import (
 from notalone.memory_extraction.evaluation_phased_audit import PhasedEvaluationAudit
 from notalone.memory_extraction.evaluation_http_budget import EvaluationBudgetAbort
 from notalone.memory_extraction.evaluation_records import canonical_sha256
+from notalone.memory_extraction.grounded_adapter import BOUNDED_DEPENDENCY_PROMPT_PROFILE
 
 
 class BoundedPhasedAuditTest(unittest.TestCase):
@@ -62,6 +63,7 @@ class BoundedPhasedAuditTest(unittest.TestCase):
             "case_position": 0, "case_name": source["case_name"],
             "execution_plan": BOUNDED_RUNTIME_PLAN, "reference_version": BOUNDED_RUNTIME_PLAN,
             "extraction_mode": "grounded-v2", "verification_mode": "nullable-proof-v3",
+            "extraction_prompt_profile": BOUNDED_DEPENDENCY_PROMPT_PROFILE,
             "extraction_tool_choice": "omitted", "verification_tool_choice": "forced",
             "window": {"messages": [{**source["messages"][0], "message_id": self.source}],
                        "target_message_ids": [self.source]},
@@ -156,6 +158,7 @@ class BoundedPhasedAuditTest(unittest.TestCase):
             "criteria_sha256": self.criteria_sha,
             "case_set": "bounded15", "reference_version": BOUNDED_RUNTIME_PLAN,
             "execution_plan": BOUNDED_RUNTIME_PLAN, "extraction_mode": "grounded-v2",
+            "extraction_prompt_profile": BOUNDED_DEPENDENCY_PROMPT_PROFILE,
             "verification_mode": "nullable-proof-v3", "extraction_tool_choice": "omitted",
             "verification_tool_choice": "forced",
             "raw_reviewer": self.raw_review, "full_reviewer": self.full_review,
@@ -169,14 +172,17 @@ class BoundedPhasedAuditTest(unittest.TestCase):
         audit = self.audit()
         self.assertEqual(audit.case_positions, tuple(range(15)))
         self.assertEqual(audit.case_set, "bounded15")
+        self.assertEqual(self.audit(verification_tool_choice="omitted").verification_tool_choice, "omitted")
         for key, value in (
             ("case_positions", (0,)), ("extraction_mode", "grounded-v4"),
             ("verification_mode", "nullable-proof-v1"), ("extraction_tool_choice", "forced"),
-            ("verification_tool_choice", "omitted"), ("reference_version", "legacy-v1"),
+            ("reference_version", "legacy-v1"),
             ("execution_plan", "original"), ("case_set", "full140"),
         ):
             with self.subTest(key=key), self.assertRaises(ValueError):
                 self.audit(**{key: value})
+        with self.assertRaisesRegex(EvaluationBudgetAbort, "evaluation_policy_invalid"):
+            self.audit(verification_tool_choice="auto")
         self.assertEqual(self.pending["status"], "agent_reference_pending_review")
 
     def test_actual_sources_raw_seal_full_execution_and_independent_axes_survive(self):

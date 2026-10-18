@@ -28,14 +28,14 @@ def extraction_contract(
 ) -> tuple[str, dict]:
     selected = EvaluationExtractionMode(mode)
     if (type(prompt_profile) is not str
-            or selected is not EvaluationExtractionMode.GROUNDED_V4 and prompt_profile != "default"):
+            or selected not in {EvaluationExtractionMode.GROUNDED_V2, EvaluationExtractionMode.GROUNDED_V4} and prompt_profile != "default"):
         raise ValueError("提取提示profile只适用于显式v4。")
     if selected is EvaluationExtractionMode.GROUNDED_V4:
         return grounded_adapter.grounded_v4_prompt(prompt_profile), grounded_adapter.grounded_schema_v4(window)
     if selected is EvaluationExtractionMode.GROUNDED_V3:
         return grounded_adapter.GROUNDED_V3_PROMPT, grounded_adapter.grounded_schema_v3(window)
     if selected is EvaluationExtractionMode.GROUNDED_V2:
-        return grounded_adapter.GROUNDED_V2_PROMPT, grounded_adapter.grounded_schema(window)
+        return grounded_adapter.grounded_v2_prompt(prompt_profile), grounded_adapter.grounded_schema(window)
     return adapters.EXTRACTION_SYSTEM_PROMPT, adapters.EXTRACTION_SCHEMA
 
 
@@ -54,12 +54,12 @@ def extraction_runtime(
 ) -> MemoryExtractionRuntime:
     selected = EvaluationExtractionMode(mode)
     if (type(prompt_profile) is not str
-            or selected is not EvaluationExtractionMode.GROUNDED_V4 and prompt_profile != "default"):
+            or selected not in {EvaluationExtractionMode.GROUNDED_V2, EvaluationExtractionMode.GROUNDED_V4} and prompt_profile != "default"):
         raise ValueError("提取提示profile只适用于显式v4。")
     if selected is EvaluationExtractionMode.GROUNDED_V4:
         return grounded_adapter.GroundedV4ExtractionRuntime(model=model, prompt_profile=prompt_profile)
     if selected is EvaluationExtractionMode.GROUNDED_V3:
         return grounded_adapter.GroundedV3ExtractionRuntime(model=model)
     if selected is EvaluationExtractionMode.GROUNDED_V2:
-        return grounded_adapter.GroundedV2ExtractionRuntime(model=model)
+        return grounded_adapter.GroundedV2ExtractionRuntime(model=model, prompt_profile=prompt_profile)
     return adapters.LangChainExtractionRuntime(model=model)

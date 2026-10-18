@@ -103,8 +103,8 @@ class GroundedV4RuntimeTest(unittest.TestCase):
                             "reference-uniqueness-v1 ", ProfileSubclass("reference-uniqueness-v1")):
                 with self.subTest(profile=profile), self.assertRaises(ValueError):
                     GroundedV4ExtractionRuntime(model=model, prompt_profile=profile)
-            for runtime in (GroundedExtractionRuntime, GroundedV3ExtractionRuntime):
-                with self.subTest(runtime=runtime.__name__), self.assertRaises(TypeError):
+            for runtime, error in ((GroundedExtractionRuntime, ValueError), (GroundedV3ExtractionRuntime, TypeError)):
+                with self.subTest(runtime=runtime.__name__), self.assertRaises(error):
                     runtime(model=model, prompt_profile="reference-uniqueness-v1")
         self.assertEqual(requests, [])
 
@@ -166,11 +166,11 @@ class GroundedV4RuntimeTest(unittest.TestCase):
             grounded_schema, grounded_schema_v3, grounded_schema_v4,
         )
 
-        # 本次集成重签E2稳定事实与未来安排组合提示；完整140动态schema保持，不代表历史模型质量。
+        # 本次只重签E2可复用信息与未知范围指导；完整140动态schema保持，不代表历史模型质量。
         windows = [build_window(case) for case in (*CASES, *SEMANTIC_CASES)]
         for prompt, schema, prompt_sha, schemas_sha in (
             (GROUNDED_V2_PROMPT, grounded_schema,
-             "c1ae0bb24d82e79e2bc3e7ec213704f5ac7138ee93fe9eb92b8dd907dc73d342",
+             "837344477304319f03f770e2d94571755d5cee8b445c6f3b3c7c1eeb63fa6a52",
              "c55322ae1480541222fdb03285b29613e47be0089d1692c57d30d36d27c2d10d"),
             (GROUNDED_V3_PROMPT, grounded_schema_v3,
              "e35b256adc84a7e61faade14267a187b7844f8b16abcdb9819371ed70905e7cf",

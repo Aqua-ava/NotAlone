@@ -13,6 +13,14 @@
 
 ## Comments
 
+### 2026-10-18 三线并行与Agent快速验收
+
+最新增量：三线配置已集成ed6d9d42，90相关测试/7源码mypy通过。依赖教学新场e00279a0首窗E把完成事实误作短期状态，V未识别，按原potential auto门bad_auto=1停止；实际API仍pending。closed2/30、余28关闭，后14窗unrun，正证0/7、来源与库残留0。上场f0e64fae的1/7仅保留为历史证据，不合并分母；生命周期未验。详见[位置辅助记录](../runtime-position-guide-20261018.md)，第一AC保持未勾。
+
+用户明确授权三会话并行、由Agent验收，不等待人工；审核身份`reviewer_kind=agent`，不降低质量阈值。复用071及已完成正式任务／来源／API工程接线，本轮48单元＋35隔离集成通过；共享依赖修复已集成，相关46项及依赖10项通过（各组存在重叠）。详见[集成验收](../agent-acceptance-20261018.md)。
+
+[两场真实结果](../runtime15-agent-result-20261018.md)：各2/30预约、均两次HTTP200、零重试；第一场proof位置越界拒绝，针对通用定位提示澄清后第二场V正文脱敏记录失败。各场正式RAW/FULL为0、七轴0、实际basis交付0，其余14窗均未运行；剩余各28永久关闭，来源及自有隔离库残留0。第二场原完成收据不可用保留，独立只读核关闭标记／注册库closed=1／空闲锁／进程退出，不补签旧收据。工程和提示审查通过不代签真实质量，第一AC仍未满足，State继续claimed；默认空放行表不变，没有业务迁移、回填或自动采纳。
+
 ### 2026-10-16 用户批准有限六类依据与指定任务接线
 
 用户明确选择“同意有限六类合同及指定任务接线（推荐）”，按[决定稿](../runtime-evidence-completion-decision-20261016.md)的有限规则及覆盖矩阵验收原第一条；旧默认和空放行表保留，指定任务显式接线，范围外UNKNOWN并待确认，只在隔离库验证。版本化协议/依据、生命周期与全部相关项AND均须实际完成；当前尚未实现，不据批准勾AC或关票。新业务迁移、生产逐类自动放行及任何任意中文普遍证明不在本次批准内。主Agent按核心事实、指代、此票顺序推进，通过后直接关闭。
@@ -122,3 +130,9 @@
 ### 2026-10-16 唯一性对照不增加运行时维度放行信用
 
 [新场结果](../../grounded-evaluation/reference21-uniqueness-result-20261016.md)closed28/42，A01–A14部分审核、A15未知、其余6窗未跑；没有完整21/140真实回归或至少15窗门槛。15条实际evidence均version=1/source_bound=false/semantic_basis=null，typed_evaluated与typed_credit均false；不能把给定码的确定性正控、有限author quote可信完整到达切片或V supported推广为任意指代/转述/保真/媒体运行时分类。第一条验收仍未勾，原3/4与State claimed保持。默认空表、原0.7/风险语义、有效依据和逐类批准的合取门不变，未做业务迁移、回填或自动放行；所有旧run与本场余14额度永久关闭。
+
+
+2026-10-18：[双max原15窗结果](../runtime-thinking-result-20261018.md) closed4/30，2窗独立审核safe1/safety1；P02必要指代声明来源遗漏，potential bad_auto1但实际pending。正证1/7，13窗及生命周期unrun，清理残留0。第一AC未满足，原claimed/默认空放行表和逐类批准保持；不合并历史质量分母。
+
+
+2026-10-18：[v3原15场](../runtime-dependency-v3-result-20261018.md) closed2/30，P01独立审核safety1/potential bad_auto1、实际pending；正证0/7，后14与生命周期unrun，来源残留0。工程统一926单测不抵消质量失败，第一AC/claimed/生产空表保持。

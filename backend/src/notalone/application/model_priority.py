@@ -216,6 +216,16 @@ class PriorityExtractionRuntime:
         self._runtime, self._control = runtime, control
         self._accounting = accounting
 
+    @property
+    def prompt_profile(self) -> str:
+        return getattr(self._runtime, "prompt_profile", "default")
+
+    def for_prompt_profile(self, prompt_profile: str) -> PriorityExtractionRuntime:
+        select = getattr(self._runtime, "for_prompt_profile", None)
+        if not callable(select):
+            raise ValueError("提取适配器不支持指定任务教学profile。")
+        return PriorityExtractionRuntime(select(prompt_profile), self._control, accounting=self._accounting)
+
     def extract(self, window: ExtractionWindow) -> ExtractionPayload:
         if self._accounting is not None:
             self._accounting.extraction_started()

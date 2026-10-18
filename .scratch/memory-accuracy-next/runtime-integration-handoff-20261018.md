@@ -1,0 +1,28 @@
+# Runtime 集成交接（2026-10-18）
+
+- 分支codex/memory-accuracy-integration-20261018，工作树memory-bounded-runtime/NotAlone；主仓不动。
+- 主最新源码9c7cec88：reference V32K 60c5e088无冲突集成；此前bounded dependency-v3 0a51257d、reference Vmax 241d6cab保持。
+- 第七版E8192/none/forced，V32768/max/omitted；独立provider/plan/phasepolicy，无全局token字段，旧v6及其他profile逐字保持。
+- 主复验46相关/真实SDK/owned/fixture/旧bounded/core测试4.919秒、6源码mypy通过；作者936全量40.996秒已过，主核源码与测试逐字一致，不重复计作主重跑。
+- 作者Standards/Spec0；主预审阶段token及合并无新增问题，git diff检查通过。公开扫描仍12项既有engineering本机路径问题。
+- bounded最新6b75690f closed2/30，两HTTP200；P01类别/期限错及V漏检，potential bad_auto1、actual pending，正证0/7。
+- 后14窗/生命周期unrun，13来源表及库残留0，进程退出/key删除；结果973261cd。
+- bounded独立诊断结论3184a219：未找到程序接线缺陷；相同历史E请求产生不同标签，不能归因V配置。
+- 4源12调用设计纳入不唯一且不能改变修复路径，已决定省去；不重抽、不补输出、不放宽门，原15/七正控质量义务保持。
+- reference Vmax场bd7187de closed14/32、前6safe/full8/18，A07V length/8192全推理/无tool，capture0，后9unrun；结果da4384e6→e6b8669d。
+- V32K run67d9ff59/freeze8b69dfdd@28a8b0f9已closed30/32：16全审safe13/general3、安全0，必需18/18/15，可选0/1；unknown/unrun0，质量失败。
+- reference结果811cf0c2→c8b1aa11：90sources/8版本/32回执/266E字段/76V字段/27引用独审通过；旧matcher8/2/9另列；进程退出/key删/清理空，0后继。
+- core固定候选4e6e2683 closed12/12，mandatory raw/接受/完整6/6/6；同7bef源码留出9ce3731a closed8/8，5/5/3。
+- core留出safe3/general1、positive_loss2，安全/unknown0；原观察边界及评价标签缺口未被V识别，当前无直接编译删字段证据。
+- core结果97b6d8c0→192f3deb，旧收据及更正链保留；不据已揭示H03定向调参后重签独立留出，票claimed。
+- core只读核实：原合同要求text历史边界，已有timing不能替代；B陈述时间不修语用错误、不补签原质量。
+- 零模型原型独立branch codex/statement-time-prototype@40e45dc7：backend/src/notalone/memory_extraction/prototype_statement_time.html；8合成快照/5场景，未并入本分支。
+- 原型编译快照与JS语法通过；file浏览器策略拒绝且禁止绕行，真实UI验收未完成；B新包装旧parser均0解，未批准生产表示变更。
+- 生产放行表空，task03第一AC未满足，goal active；有限六类/按维度AND/任务恢复/隔离及生命周期工程证据见agent-acceptance。
+- 完成仍需原15真实依据/七轴及达标后生命周期、核心独立完整验收、指代原16质量门；不能靠单测或其他票抵扣。
+- 无新真实联系人、聊天发送、业务迁移、push或PR。
+- 用户最新要求已落c6b210df：失败→原因/假设→最小改动→离线定点→通过标准；不改提示重跑整场。负责人见field-gate-targeted-repair-20261018.md，公共文件先协调。
+- 隔离V字段诊断9428709c→14b53c84：仅4新增文件，主13unit1.240s/1source mypy、双审0；两项timestamp冒充正文缺口已修，无生产接入。
+- 字段诊断0713c038→68fd978b：source14b53c84，run78f1064a closed4/4零重试零E；旧5判断不放过3错／2正确无误拒，新40字段37support+3mismatch，仅定位更明确，无准确率收益证明。
+- 主独核20事件摘要／5旧输出／40新字段与证据，PID61467／61480及PG61480消失、key已删；作者最终Gold／文档Spec0。隔离原型不接生产，不追加调用，不抵扣原质量门。
+- 后继实际阻碍：尚无捕获链证实的程序接线缺陷或可验证最小修复；A10 E分类／A16 E依赖／core范围与语用问题仍在。需先有可证伪机制，再原响应离线对照，禁止为凑覆盖重抽。

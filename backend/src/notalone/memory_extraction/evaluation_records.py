@@ -20,14 +20,26 @@ import httpx
 from .evaluation_http_budget import EvaluationBudget, EvaluationBudgetAbort, _endpoint
 from .evaluation_provider_contract import (
     FULL140_E2_PLAN, FULL140_E2_MODE, FULL140_E2_STAGE,
+    CORE_PROFILE_PLAN, CORE_PROFILE_MODE, CORE_PROFILE_STAGES,
     BOUNDED_RUNTIME_PLAN, BOUNDED_RUNTIME_MODE, BOUNDED_RUNTIME_STAGE,
     MIXED_PLAN, MIXED_MODE, MIXED_STAGE, MIXED_REQUEST_VERSION, mixed_phase_policy,
     REFERENCE21_V4_PLAN, REFERENCE21_V4_MODE, REFERENCE21_V4_STAGE, PHASE_SPLIT_PLANS, REFERENCE21_PLANS,
     SEMANTIC4_PLAN, SEMANTIC4_MODE, SEMANTIC4_STAGE, SEMANTIC4_PROMPT_PROFILE,
     UNIQUENESS_PLAN, UNIQUENESS_MODE, UNIQUENESS_STAGE, PUBLIC_QUALITY_PLANS,
-    validate_extraction_prompt_profile, STRICT_RESPONSE_IDENTITY_POLICY,
+    validate_extraction_prompt_profile, STRICT_RESPONSE_IDENTITY_POLICY, bounded_profile_for_config, EvaluationProviderProfile,
+    REFERENCE16_PRO_PLAN, REFERENCE16_PRO_MODE, REFERENCE16_PRO_STAGE, REFERENCE16_PRO_PLANS,
+    REFERENCE16_PRO_TEACHING_PLAN, REFERENCE16_PRO_TEACHING_MODE, REFERENCE16_PRO_TEACHING_STAGE,
+    REFERENCE16_PRO_RETENTION_PLAN, REFERENCE16_PRO_RETENTION_MODE, REFERENCE16_PRO_RETENTION_STAGE,
+    REFERENCE16_RETENTION_V_PROFILE, validate_verification_prompt_profile,
+    REFERENCE16_PRO_RETENTION_V_THINKING_PLAN, REFERENCE16_PRO_RETENTION_V_THINKING_MODE,
+    REFERENCE16_PRO_RETENTION_V_THINKING_STAGE, REFERENCE16_V_THINKING_REQUEST_VERSION,
+    reference16_v_thinking_phase_policy,
+    REFERENCE16_PRO_RETENTION_V_TOKEN32K_PLAN, REFERENCE16_PRO_RETENTION_V_TOKEN32K_MODE,
+    REFERENCE16_PRO_RETENTION_V_TOKEN32K_STAGE, REFERENCE16_V_TOKEN32K_REQUEST_VERSION,
+    reference16_v_token32k_phase_policy,
 )
 from .models import ExtractionWindow
+from .verification_adapters import CORE_SOURCE_FIDELITY_PROFILE
 
 
 _EVENT_KINDS = frozenset({
@@ -46,7 +58,7 @@ _PRIVATE_FIELDS = frozenset({
     "credentials", "credential", "database_url", "connection_string",
     "body_base64",
 })
-_BOUNDED_CONFIG_FIELDS = frozenset({"formal_tasks", "bounded_inputs_sha256", "runtime_rule_set_sha256"})
+_BOUNDED_CONFIG_FIELDS = frozenset({"formal_tasks", "bounded_inputs_sha256", "runtime_rule_set_sha256", "provider_profile", "max_tokens"})
 _CONFIG_FIELDS = _BOUNDED_CONFIG_FIELDS | frozenset({
     "mode", "synthetic_only", "base_url", "endpoint", "request_model",
     "temperature", "timeout", "max_retries", "thinking", "stream", "reasoning_effort",
@@ -59,6 +71,21 @@ _CONFIG_FIELDS = _BOUNDED_CONFIG_FIELDS | frozenset({
     "extraction_mode", "extraction_window_contracts", "execution_plan", "reference_version", "extraction_prompt_profile",
     "phase_request_version", "phase_request_policy",
 })
+
+
+class _CaptureFailureCode(str, Enum):
+    BODY_JSON_INVALID = "body_json_invalid"
+    BODY_ENCODING_INVALID = "body_encoding_invalid"
+    NESTED_JSON_INVALID = "nested_json_invalid"
+    NESTED_JSON_NOT_OBJECT = "nested_json_not_object"
+    SERIALIZATION_FAILED = "serialization_failed"
+    INTERNAL_FAILURE = "internal_failure"
+
+
+class _RedactionFailure(ValueError):
+    def __init__(self, code: _CaptureFailureCode):
+        self.code = code
+        super().__init__(code.value)
 
 
 def _json_value(value: Any) -> Any:
@@ -103,13 +130,19 @@ def _redact(
                 removed.append(location)
                 continue
             if key in {"arguments", "body_text"} and isinstance(item, str):
-                decoded = json.loads(item)
+                try:
+                    decoded = json.loads(item)
+                except json.JSONDecodeError:
+                    raise _RedactionFailure(_CaptureFailureCode.NESTED_JSON_INVALID) from None
                 if not isinstance(decoded, dict):
-                    raise ValueError("unstructured_tool_arguments")
+                    raise _RedactionFailure(_CaptureFailureCode.NESTED_JSON_NOT_OBJECT)
                 sanitized, nested = _redact(
                     decoded, path=location + "::json", request=request
                 )
-                result[key] = _canonical(sanitized).decode("utf-8")
+                try:
+                    result[key] = _canonical(sanitized).decode("utf-8")
+                except (ValueError, UnicodeError):
+                    raise _RedactionFailure(_CaptureFailureCode.SERIALIZATION_FAILED) from None
             else:
                 result[key], nested = _redact(item, path=location, request=request)
             removed.extend(nested)
@@ -137,6 +170,7 @@ class EvaluationRecordStore:
         self._budget = budget
         self._manifest = budget.snapshot()
         bounded = frozen_config.get("execution_plan") == BOUNDED_RUNTIME_PLAN
+        reference16 = type(frozen_config.get("execution_plan")) is str and frozen_config["execution_plan"] in REFERENCE16_PRO_PLANS
         for key in ("base_url", "endpoint"):
             if key in frozen_config:
                 _endpoint(frozen_config[key])
@@ -169,25 +203,35 @@ class EvaluationRecordStore:
         self._execution_plan = frozen_config.get("execution_plan", "original")
         if type(self._execution_plan) is not str:
             raise EvaluationBudgetAbort("invalid_record_execution_plan")
-        if not bounded and (_BOUNDED_CONFIG_FIELDS & set(frozen_config)
+        if not bounded and ((_BOUNDED_CONFIG_FIELDS - ({"provider_profile", "max_tokens"} if reference16 else set())) & set(frozen_config)
                 or frozen_config.get("mode") == BOUNDED_RUNTIME_MODE
                 or frozen_config.get("stage") == BOUNDED_RUNTIME_STAGE
                 or frozen_config.get("reference_version") == BOUNDED_RUNTIME_PLAN):
             raise EvaluationBudgetAbort("invalid_record_bounded_registration")
-        if ((self._execution_plan in PUBLIC_QUALITY_PLANS) != (frozen_config.get("verification_prompt_profile") == SEMANTIC4_PROMPT_PROFILE)
+        core = self._execution_plan == CORE_PROFILE_PLAN
+        if core:
+            if frozen_config.get("verification_prompt_profile") != CORE_SOURCE_FIDELITY_PROFILE:
+                raise EvaluationBudgetAbort("invalid_record_verification_prompt_profile")
+        elif self._execution_plan in {REFERENCE16_PRO_RETENTION_PLAN, REFERENCE16_PRO_RETENTION_V_THINKING_PLAN, REFERENCE16_PRO_RETENTION_V_TOKEN32K_PLAN}:
+            validate_verification_prompt_profile(self._execution_plan, frozen_config.get("verification_prompt_profile", ""))
+        elif ((self._execution_plan in PUBLIC_QUALITY_PLANS) != (frozen_config.get("verification_prompt_profile") == SEMANTIC4_PROMPT_PROFILE)
                 or self._execution_plan not in PUBLIC_QUALITY_PLANS and "verification_prompt_profile" in frozen_config):
             raise EvaluationBudgetAbort("invalid_record_verification_prompt_profile")
         self._extraction_prompt_profile = frozen_config.get("extraction_prompt_profile", "default")
-        validate_extraction_prompt_profile(self._execution_plan, self._extraction_prompt_profile)
-        if self._execution_plan != UNIQUENESS_PLAN and "extraction_prompt_profile" in frozen_config:
+        validate_extraction_prompt_profile(self._execution_plan, self._extraction_prompt_profile,
+                                           provider_profile=frozen_config.get("provider_profile"))
+        if self._execution_plan not in {UNIQUENESS_PLAN, BOUNDED_RUNTIME_PLAN, CORE_PROFILE_PLAN, REFERENCE16_PRO_TEACHING_PLAN, REFERENCE16_PRO_RETENTION_PLAN, REFERENCE16_PRO_RETENTION_V_THINKING_PLAN, REFERENCE16_PRO_RETENTION_V_TOKEN32K_PLAN} and "extraction_prompt_profile" in frozen_config:
             raise EvaluationBudgetAbort("invalid_record_extraction_prompt_profile")
         self._mixed = type(self._execution_plan) is str and self._execution_plan in PHASE_SPLIT_PLANS
-        self._strict_response = self._mixed or bounded
-        if not self._mixed and {"phase_request_version", "phase_request_policy"} & set(frozen_config):
+        self._strict_response = self._mixed or bounded or reference16 or core
+        if not self._mixed and self._execution_plan not in {REFERENCE16_PRO_RETENTION_V_THINKING_PLAN, REFERENCE16_PRO_RETENTION_V_TOKEN32K_PLAN} and {"phase_request_version", "phase_request_policy"} & set(frozen_config):
             raise EvaluationBudgetAbort("invalid_record_mixed_registration")
         self._response_sequences: set[int] = set()
         self._reference_version = "legacy-v1"
-        if bounded:
+        if core:
+            self._validate_core_registration(frozen_config, plan, actual_windows)
+            self._reference_version = CORE_PROFILE_PLAN
+        elif bounded:
             self._validate_bounded_registration(frozen_config, plan, actual_windows)
             self._reference_version = BOUNDED_RUNTIME_PLAN
         elif (self._extraction_mode == "grounded-v4"
@@ -214,8 +258,18 @@ class EvaluationRecordStore:
             "schema_sha256": frozen_config.get("extraction_schema_sha256"),
         } for _ in plan]))
         self._plan = json.loads(_canonical(plan))
+        self._bounded_provider_profile = bounded_profile_for_config(frozen_config) if bounded else None
         self._formal_tasks = json.loads(_canonical(frozen_config["formal_tasks"])) if bounded else []
-        self._gold_sha256: str | None = frozen_config["gold_sha256"] if bounded else None
+        self._core_contract = ({
+            "execution_plan": CORE_PROFILE_PLAN,
+            "provider_profile": EvaluationProviderProfile.DEEPSEEK_FLASH_MAX.value,
+            "extraction_mode": "grounded-v2",
+            "extraction_prompt_profile": self._extraction_prompt_profile,
+            "verification_tool_choice": "omitted",
+            "source_hashes": json.loads(_canonical(frozen_config["source_hashes"])),
+            "deadline_utc": frozen_config["deadline_utc"],
+        } if core else None)
+        self._gold_sha256: str | None = frozen_config["gold_sha256"] if bounded or core else None
         self._output = Path(self._manifest["output_directory"])
         self._failed = False
         self._stop_reason: str | None = None
@@ -228,6 +282,88 @@ class EvaluationRecordStore:
             "budget": self._manifest, "frozen_config": frozen_config,
             "plan": self._plan, "synthetic_quality_certified": False,
         })
+
+    @property
+    def bounded_provider_profile(self) -> EvaluationProviderProfile | None:
+        return self._bounded_provider_profile
+
+    def _validate_core_registration(
+        self, config: dict, plan: tuple[dict, ...],
+        actual_windows: tuple[ExtractionWindow, ...] | None,
+    ) -> None:
+        """核心私有入口的数量及请求合同门；来源独审和跨场门仍由入口负责。"""
+        from .evaluation_extraction import extraction_contract
+        from .verification_adapters import source_verification_contract
+
+        try:
+            stage = config.get("stage")
+            if type(stage) is not str or stage not in CORE_PROFILE_STAGES:
+                raise ValueError("core_stage_required")
+            count, cap = CORE_PROFILE_STAGES[stage]
+            if (type(actual_windows) is not tuple or len(actual_windows) != count
+                    or len(plan) != count or any(type(window) is not ExtractionWindow for window in actual_windows)):
+                raise ValueError("actual_windows_required")
+            deadline = datetime.fromisoformat(config["deadline_utc"])
+            if deadline.tzinfo is None or deadline.isoformat() != config["deadline_utc"]:
+                raise ValueError("core_deadline_required")
+            positions = config.get("selected_case_positions")
+            hashes = config.get("source_hashes")
+            def valid_digest(value: Any) -> bool:
+                return type(value) is str and len(value) == 64 and all(char in "0123456789abcdef" for char in value)
+            if (self._extraction_mode != "grounded-v2" or config.get("verification_mode") != "legacy-v4"
+                    or config.get("reference_version") != CORE_PROFILE_PLAN or config.get("mode") != CORE_PROFILE_MODE
+                    or config.get("base_url") != "https://api.deepseek.com"
+                    or config.get("endpoint") != "https://api.deepseek.com/chat/completions"
+                    or config.get("request_model") != "deepseek-flash"
+                    or type(config.get("timeout")) is not float or config["timeout"] != 300.0
+                    or type(config.get("max_retries")) is not int or config["max_retries"] != 0
+                    or type(config.get("temperature")) not in (int, float) or config["temperature"] != 0
+                    or config.get("stream") is not False or config.get("fallback") is not False
+                    or config.get("thinking") != {"type": "enabled"} or config.get("reasoning_effort") != "max"
+                    or type(config.get("request_contract_version")) is not int or config["request_contract_version"] != 2
+                    or config.get("response_identity_policy") != STRICT_RESPONSE_IDENTITY_POLICY
+                    or config.get("tool_choice") != {
+                        "extraction": {"mode": "omitted", "name": "GroundedMemoryLabels"},
+                        "verification": {"mode": "omitted", "name": "SourceVerificationOutput"}}
+                    or self._manifest["request_limit"] != cap
+                    or self._manifest["allowed_endpoints"] != ["https://api.deepseek.com/chat/completions"]
+                    or not isinstance(positions, (list, tuple))
+                    or any(type(position) is not int for position in positions) or tuple(positions) != tuple(range(count))
+                    or any(type(item["case_position"]) is not int
+                           or item["input_sha256"] != canonical_sha256(window)
+                           for item, window in zip(plan, actual_windows, strict=True))
+                    or len({item["case_name"] for item in plan}) != count
+                    or not valid_digest(config.get("gold_sha256"))
+                    or type(hashes) is not dict or not hashes
+                    or any(type(key) is not str or not key or not valid_digest(value) for key, value in hashes.items())):
+                raise ValueError("core_registration_changed")
+            contracts = tuple(extraction_contract("grounded-v2", window,
+                prompt_profile=self._extraction_prompt_profile) for window in actual_windows)
+            prompt, schema = source_verification_contract("legacy-v4", prompt_profile=CORE_SOURCE_FIDELITY_PROFILE)
+            if (config.get("extraction_window_contracts") != [{"input_sha256": item["input_sha256"],
+                    "prompt_sha256": canonical_sha256(e_prompt), "schema_sha256": canonical_sha256(e_schema)}
+                    for item, (e_prompt, e_schema) in zip(plan, contracts, strict=True)]
+                    or config.get("extraction_prompt_sha256") != canonical_sha256(contracts[0][0])
+                    or config.get("extraction_schema_sha256") != canonical_sha256(tuple(value[1] for value in contracts))
+                    or config.get("verification_prompt_sha256") != canonical_sha256(prompt)
+                    or config.get("verification_schema_sha256") != canonical_sha256(schema)):
+                raise ValueError("core_prompt_contract_changed")
+        except (ValueError, TypeError, KeyError, AttributeError):
+            raise EvaluationBudgetAbort("invalid_record_core_registration") from None
+
+    def core_contract_binding(self) -> dict:
+        """不从运行参数重建本场来源及期限；返回注册时冻结的副本。"""
+        if self._core_contract is None:
+            raise EvaluationBudgetAbort("evaluation_core_registration_required")
+        return json.loads(_canonical(self._core_contract))
+
+    def validate_core_execution(self, windows: tuple[ExtractionWindow, ...], plan: tuple[dict, ...]) -> None:
+        """执行时仍必须使用注册的同序窗口，不能仅更换运行参数。"""
+        if (self._execution_plan != CORE_PROFILE_PLAN or type(windows) is not tuple
+                or len(windows) != len(self._plan) or _json_value(plan) != self._plan
+                or any(type(window) is not ExtractionWindow or canonical_sha256(window) != item["input_sha256"]
+                       for item, window in zip(self._plan, windows, strict=True))):
+            raise EvaluationBudgetAbort("evaluation_core_window_binding_changed")
 
     def _validate_bounded_registration(
         self, config: dict, plan: tuple[dict, ...],
@@ -251,22 +387,22 @@ class EvaluationRecordStore:
             content_hash = canonical_sha256(tuple({"messages": item["messages"],
                 "target_indices": item["target_indices"]} for item in BOUNDED_RUNTIME_INPUTS))
             current_rules = rule_set_sha256()
+            profile = bounded_profile_for_config(config)
             positions = config.get("selected_case_positions")
             if (self._extraction_mode != "grounded-v2" or config.get("verification_mode") != "nullable-proof-v3"
                     or config.get("reference_version") != BOUNDED_RUNTIME_PLAN
                     or config.get("mode") != BOUNDED_RUNTIME_MODE or config.get("stage") != BOUNDED_RUNTIME_STAGE
                     or config.get("base_url") != "https://api.deepseek.com"
                     or config.get("endpoint") != "https://api.deepseek.com/chat/completions"
-                    or config.get("request_model") != "deepseek-flash"
+                    or config.get("request_model") != profile.model
                     or type(config.get("timeout")) is not float or config["timeout"] != 300.0
                     or type(config.get("max_retries")) is not int or config["max_retries"] != 0
-                    or type(config.get("request_contract_version")) is not int or config["request_contract_version"] != 2
                     or type(config.get("temperature")) not in (int, float) or config["temperature"] != 0
                     or config.get("stream") is not False or config.get("fallback") is not False
                     or config.get("response_identity_policy") != STRICT_RESPONSE_IDENTITY_POLICY
                     or config.get("tool_choice") != {
                         "extraction": {"mode": "omitted", "name": "GroundedMemoryLabels"},
-                        "verification": {"mode": "forced", "name": "SourceVerificationOutput"},
+                        "verification": {"mode": profile.bounded_verification_tool_choice, "name": "SourceVerificationOutput"},
                     }
                     or {"thinking", "reasoning_effort", "phase_request_version", "phase_request_policy"} & set(config)
                     or self._manifest["request_limit"] != 30
@@ -304,7 +440,8 @@ class EvaluationRecordStore:
                     raise ValueError("formal_task_binding_changed")
                 task_ids.add(identifiers["task_id"])
                 contacts.add(identifiers["contact_id"])
-            contracts = tuple(extraction_contract("grounded-v2", window) for window in actual_windows)
+            contracts = tuple(extraction_contract("grounded-v2", window,
+                prompt_profile=self._extraction_prompt_profile) for window in actual_windows)
             prompt, schema = source_verification_contract("nullable-proof-v3")
             if (config.get("extraction_window_contracts") != [{"input_sha256": item["input_sha256"],
                     "prompt_sha256": canonical_sha256(e_prompt), "schema_sha256": canonical_sha256(e_schema)}
@@ -324,17 +461,39 @@ class EvaluationRecordStore:
         from .evaluation_reference import public_window_projection, _fixed_case_sets
         from .semantic_evaluation_cases import SEMANTIC_CASES
 
-        e2 = self._execution_plan == FULL140_E2_PLAN
+        reference16 = self._execution_plan in REFERENCE16_PRO_PLANS
+        teaching = self._execution_plan == REFERENCE16_PRO_TEACHING_PLAN
+        v_token32k = self._execution_plan == REFERENCE16_PRO_RETENTION_V_TOKEN32K_PLAN
+        v_thinking = self._execution_plan == REFERENCE16_PRO_RETENTION_V_THINKING_PLAN or v_token32k
+        retention = self._execution_plan == REFERENCE16_PRO_RETENTION_PLAN or v_thinking
+        e2 = self._execution_plan == FULL140_E2_PLAN or reference16
         reference21 = self._execution_plan in REFERENCE21_PLANS
         public_quality = self._execution_plan in PUBLIC_QUALITY_PLANS
         uniqueness = self._execution_plan == UNIQUENESS_PLAN
-        cases = _fixed_case_sets()[0] if reference21 else (*CASES, *SEMANTIC_CASES)
-        count, cap = (21, 42) if reference21 else (140, 280)
+        cases = _fixed_case_sets()[0][:16] if reference16 else _fixed_case_sets()[0] if reference21 else (*CASES, *SEMANTIC_CASES)
+        count, cap = (16, 32) if reference16 else (21, 42) if reference21 else (140, 280)
         expected = tuple({
             "case_position": position, "case_name": case.name,
             "input_sha256": canonical_sha256(public_window_projection(build_window(case))),
         } for position, case in enumerate(cases))
         positions = config.get("selected_case_positions")
+        if reference16:
+            from .evaluation_reference import _PUBLIC_V2
+            if (config.get("provider_profile") != (EvaluationProviderProfile.DEEPSEEK_PRO_REFERENCE16_V_TOKEN32K.value if v_token32k else EvaluationProviderProfile.DEEPSEEK_PRO_REFERENCE16_V_THINKING.value if v_thinking else EvaluationProviderProfile.DEEPSEEK_PRO_REFERENCE16.value)
+                    or type(config.get("request_contract_version")) is not int or config["request_contract_version"] != (7 if v_token32k else 6 if v_thinking else 4)
+                    or config.get("base_url") != "https://api.deepseek.com"
+                    or config.get("endpoint") != "https://api.deepseek.com/chat/completions"
+                    or config.get("request_model") != "deepseek-v4-pro"
+                    or ("max_tokens" in config if v_token32k else type(config.get("max_tokens")) is not int or config["max_tokens"] != 8192)
+                    or (bool({"thinking", "reasoning_effort"} & set(config))
+                        or config.get("phase_request_version") != (REFERENCE16_V_TOKEN32K_REQUEST_VERSION if v_token32k else REFERENCE16_V_THINKING_REQUEST_VERSION)
+                        or config.get("phase_request_policy") != (reference16_v_token32k_phase_policy() if v_token32k else reference16_v_thinking_phase_policy())
+                        or v_token32k and any(type(config["phase_request_policy"][phase]["max_tokens"]) is not int
+                                             for phase in ("extraction", "verification"))
+                        if v_thinking else config.get("thinking") != {"type": "disabled"} or config.get("reasoning_effort") != "none")
+                    or config.get("gold_sha256") != _PUBLIC_V2.reference_sha256
+                    or self._manifest["allowed_endpoints"] != ["https://api.deepseek.com/chat/completions"]):
+                raise EvaluationBudgetAbort("invalid_record_reference16_pro_registration")
         if self._mixed and (config.get("phase_request_version") != MIXED_REQUEST_VERSION
                 or config.get("phase_request_policy") != mixed_phase_policy()
                 or "thinking" in config or "reasoning_effort" in config
@@ -345,15 +504,15 @@ class EvaluationRecordStore:
                 or type(config.get("request_contract_version")) is not int or config["request_contract_version"] != 2
                 or self._manifest["allowed_endpoints"] != ["https://api.deepseek.com/chat/completions"]):
             raise EvaluationBudgetAbort("invalid_record_mixed_registration")
-        if (config.get("execution_plan") != (FULL140_E2_PLAN if e2 else UNIQUENESS_PLAN if uniqueness else SEMANTIC4_PLAN if public_quality else REFERENCE21_V4_PLAN if reference21 else MIXED_PLAN if self._mixed else "full140-grounded-v4-source-v2")
+        if (config.get("execution_plan") != (REFERENCE16_PRO_RETENTION_V_TOKEN32K_PLAN if v_token32k else REFERENCE16_PRO_RETENTION_V_THINKING_PLAN if v_thinking else REFERENCE16_PRO_RETENTION_PLAN if retention else REFERENCE16_PRO_TEACHING_PLAN if teaching else REFERENCE16_PRO_PLAN if reference16 else FULL140_E2_PLAN if e2 else UNIQUENESS_PLAN if uniqueness else SEMANTIC4_PLAN if public_quality else REFERENCE21_V4_PLAN if reference21 else MIXED_PLAN if self._mixed else "full140-grounded-v4-source-v2")
                 or config.get("reference_version") != "source-fidelity-v2"
-                or config.get("mode") != (FULL140_E2_MODE if e2 else UNIQUENESS_MODE if uniqueness else SEMANTIC4_MODE if public_quality else REFERENCE21_V4_MODE if reference21 else MIXED_MODE if self._mixed else "deepseek_bounded_full140_v4_source_v2")
-                or config.get("stage") != (FULL140_E2_STAGE if e2 else UNIQUENESS_STAGE if uniqueness else SEMANTIC4_STAGE if public_quality else REFERENCE21_V4_STAGE if reference21 else MIXED_STAGE if self._mixed else "full140-v4-source-v2")
+                or config.get("mode") != (REFERENCE16_PRO_RETENTION_V_TOKEN32K_MODE if v_token32k else REFERENCE16_PRO_RETENTION_V_THINKING_MODE if v_thinking else REFERENCE16_PRO_RETENTION_MODE if retention else REFERENCE16_PRO_TEACHING_MODE if teaching else REFERENCE16_PRO_MODE if reference16 else FULL140_E2_MODE if e2 else UNIQUENESS_MODE if uniqueness else SEMANTIC4_MODE if public_quality else REFERENCE21_V4_MODE if reference21 else MIXED_MODE if self._mixed else "deepseek_bounded_full140_v4_source_v2")
+                or config.get("stage") != (REFERENCE16_PRO_RETENTION_V_TOKEN32K_STAGE if v_token32k else REFERENCE16_PRO_RETENTION_V_THINKING_STAGE if v_thinking else REFERENCE16_PRO_RETENTION_STAGE if retention else REFERENCE16_PRO_TEACHING_STAGE if teaching else REFERENCE16_PRO_STAGE if reference16 else FULL140_E2_STAGE if e2 else UNIQUENESS_STAGE if uniqueness else SEMANTIC4_STAGE if public_quality else REFERENCE21_V4_STAGE if reference21 else MIXED_STAGE if self._mixed else "full140-v4-source-v2")
                 or self._extraction_mode != ("grounded-v2" if e2 else "grounded-v4")
                 or config.get("verification_mode") != ("legacy-v4" if public_quality or e2 else "nullable-proof-v1")
                 or config.get("tool_choice") != {
-                    "extraction": {"mode": "omitted", "name": "GroundedMemoryLabels" if e2 else "GroundedMemoryLabelsV4"},
-                    "verification": {"mode": "forced" if self._mixed else "omitted", "name": "SourceVerificationOutput"},
+                    "extraction": {"mode": "forced" if reference16 else "omitted", "name": "GroundedMemoryLabels" if e2 else "GroundedMemoryLabelsV4"},
+                    "verification": {"mode": "omitted" if v_thinking else "forced" if self._mixed or reference16 else "omitted", "name": "SourceVerificationOutput"},
                 }
                 or type(config.get("max_retries")) is not int or config["max_retries"] != 0
                 or self._manifest["request_limit"] != cap
@@ -365,7 +524,9 @@ class EvaluationRecordStore:
             raise EvaluationBudgetAbort("invalid_record_full140_v4_registration")
         if e2:
             from .evaluation_offline import _verification_contract
-            prompt, schema = _verification_contract("legacy-v4")
+            prompt, schema = _verification_contract(
+                "legacy-v4", prompt_profile=REFERENCE16_RETENTION_V_PROFILE if retention else "default",
+            )
             if (type(config.get("temperature")) not in (int, float) or config["temperature"] != 0
                     or config.get("stream") is not False or config.get("fallback") is not False
                     or type(config.get("timeout")) is not float or config["timeout"] != 300.0
@@ -564,17 +725,32 @@ class EvaluationRecordStore:
             "original_bytes_sha256": hashlib.sha256(body).hexdigest(),
             "original_bytes_length": len(body),
         }
+        failure = _CaptureFailureCode.INTERNAL_FAILURE
         try:
-            parsed = json.loads(body)
-            _redact(parsed)
+            try:
+                parsed = json.loads(body)
+            except json.JSONDecodeError:
+                raise _RedactionFailure(_CaptureFailureCode.BODY_JSON_INVALID) from None
+            except UnicodeError:
+                raise _RedactionFailure(_CaptureFailureCode.BODY_ENCODING_INVALID) from None
+            sanitized, _ = _redact(parsed)
             if len(body) > _MAX_RECORD_BYTES:
                 raise ValueError("too_large")
+            if self._strict_response:
+                try:
+                    _canonical(sanitized)
+                except (ValueError, UnicodeError):
+                    raise _RedactionFailure(_CaptureFailureCode.SERIALIZATION_FAILED) from None
             return {**metadata, "body": parsed}
-        except (ValueError, UnicodeError, RecursionError):
-            return {
-                **metadata, "capture_form": "digest_only",
-                "body_not_saved": "redaction_unavailable",
-            }
+        except _RedactionFailure as error:
+            failure = error.code
+        except Exception:
+            pass
+        return {
+            **metadata, "capture_form": "digest_only",
+            "body_not_saved": "redaction_unavailable",
+            "redaction_failure_code": failure.value,
+        }
 
     def capture_request(self, sequence: int, request: httpx.Request) -> dict:
         self._check_response_sequence(sequence)
@@ -606,7 +782,10 @@ class EvaluationRecordStore:
                 event = self._event(kind="provider_response", request_sequence=sequence, payload=payload)
                 _canonical(event)
             except Exception:
-                payload = {**metadata, "body_not_saved": "redaction_unavailable"}
+                payload = {
+                    **metadata, "body_not_saved": "redaction_unavailable",
+                    "redaction_failure_code": _CaptureFailureCode.INTERNAL_FAILURE.value,
+                }
                 event = self._event(kind="provider_response", request_sequence=sequence, payload=payload)
             # I/O发布在保护之外；落盘失败不得补写同一终态。
             receipt = self._persist(event)
@@ -748,6 +927,7 @@ class EvaluationRecordStore:
                     **{key: event["payload"][key] for key in (
                         "capture_form", "body_not_saved", "original_bytes_sha256",
                         "original_bytes_length", "status_code", "response_obtained",
+                        "redaction_failure_code",
                     ) if key in event["payload"]},
                 } for event in events
                     if event["kind"] in {"provider_request", "provider_response"}

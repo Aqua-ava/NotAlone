@@ -12,13 +12,14 @@ from contextvars import ContextVar
 from datetime import datetime, timezone
 from enum import StrEnum
 from pathlib import Path
-from typing import Callable, Iterator
+from typing import Callable, Iterator, TypedDict
 
 import httpx
 
 from .evaluation_http_budget import EvaluationBudgetAbort
 from .evaluation_extraction import EvaluationExtractionMode, extraction_tool_name
 from .evaluation_bounded_cases import BOUNDED_RUNTIME_PLAN
+from .grounded_adapter import BOUNDED_DEPENDENCY_PROMPT_PROFILE, BOUNDED_DEPENDENCY_V3_PROMPT_PROFILE, CORE_CURRENT_STATE_PROFILE
 
 
 _ENDPOINT = "https://chat.ecnu.edu.cn/open/api/v1/chat/completions"
@@ -47,6 +48,9 @@ UNIQUENESS_MODE = "deepseek_bounded_reference21_v4_source_v2_uniqueness"
 UNIQUENESS_STAGE = "reference21-v4-source-v2-uniqueness"
 UNIQUENESS_KIND = "reference21-v4-uniqueness"
 UNIQUENESS_E_PROFILE = "reference-uniqueness-v1"
+CORE_PROFILE_PLAN = "core-current-source-v1"
+CORE_PROFILE_MODE = "deepseek_core_current_source"
+CORE_PROFILE_STAGES = {"fixed6": (6, 12), "heldout4": (4, 8)}
 PUBLIC_QUALITY_PLANS = frozenset({SEMANTIC4_PLAN, UNIQUENESS_PLAN})
 REFERENCE21_PLANS = frozenset({REFERENCE21_V4_PLAN, *PUBLIC_QUALITY_PLANS})
 FULL140_E2_PLAN = "full140-grounded-v2-source-v2-v-off-forced"
@@ -84,9 +88,21 @@ _BOUNDED_MIGRATION_SOURCES = frozenset(
 )
 
 
-def validate_extraction_prompt_profile(execution_plan: str, prompt_profile: str) -> None:
+def validate_extraction_prompt_profile(execution_plan: str, prompt_profile: str, *, provider_profile: str | None = None) -> None:
     """新提示须与唯一新身份绑定，旧身份只允许原默认。"""
-    expected = UNIQUENESS_E_PROFILE if execution_plan == UNIQUENESS_PLAN else "default"
+    if execution_plan == BOUNDED_RUNTIME_PLAN and provider_profile is not None:
+        try:
+            provider = EvaluationProviderProfile(provider_profile)
+        except (TypeError, ValueError):
+            raise EvaluationBudgetAbort("evaluation_provider_profile_invalid") from None
+        if not provider.is_bounded:
+            raise EvaluationBudgetAbort("evaluation_bounded_fixed_profile_required")
+        expected = provider.bounded_extraction_prompt_profile
+    else:
+        expected = (BOUNDED_DEPENDENCY_PROMPT_PROFILE if execution_plan == BOUNDED_RUNTIME_PLAN
+                else CORE_CURRENT_STATE_PROFILE if execution_plan == CORE_PROFILE_PLAN
+                else REFERENCE16_TEACHING_E_PROFILE if execution_plan in (REFERENCE16_PRO_TEACHING_PLAN, REFERENCE16_PRO_RETENTION_PLAN, REFERENCE16_PRO_RETENTION_V_THINKING_PLAN, REFERENCE16_PRO_RETENTION_V_TOKEN32K_PLAN)
+                else UNIQUENESS_E_PROFILE if execution_plan == UNIQUENESS_PLAN else "default")
     if type(prompt_profile) is not str or prompt_profile != expected:
         raise EvaluationBudgetAbort("evaluation_extraction_prompt_profile_mismatch")
 
@@ -110,6 +126,60 @@ def mixed_phase_policy() -> dict:
     }
 
 
+class _OutputParameters(TypedDict, total=False):
+    max_tokens: int
+
+
+REFERENCE16_PRO_PLAN = "reference16-pro-v1"
+REFERENCE16_PRO_MODE = "deepseek_bounded_reference16_pro"
+REFERENCE16_PRO_STAGE = "reference16-pro"
+REFERENCE16_PRO_KIND = "reference16-pro"
+REFERENCE16_PRO_TEACHING_PLAN = "reference16-pro-teaching-v1"
+REFERENCE16_PRO_TEACHING_MODE = "deepseek_bounded_reference16_pro_teaching"
+REFERENCE16_PRO_TEACHING_STAGE = "reference16-pro-teaching"
+REFERENCE16_PRO_TEACHING_KIND = "reference16-pro-teaching"
+REFERENCE16_TEACHING_E_PROFILE = "reference-kind-teaching-v1"
+REFERENCE16_PRO_RETENTION_PLAN = "reference16-pro-retention-v1"
+REFERENCE16_PRO_RETENTION_MODE = "deepseek_bounded_reference16_pro_retention"
+REFERENCE16_PRO_RETENTION_STAGE = "reference16-pro-retention"
+REFERENCE16_PRO_RETENTION_KIND = "reference16-pro-retention"
+REFERENCE16_RETENTION_V_PROFILE = "reference-retention-v1"
+REFERENCE16_PRO_RETENTION_V_THINKING_PLAN = "reference16-pro-retention-v-thinking-v1"
+REFERENCE16_PRO_RETENTION_V_THINKING_MODE = "deepseek_bounded_reference16_pro_retention_v_thinking"
+REFERENCE16_PRO_RETENTION_V_THINKING_STAGE = "reference16-pro-retention-v-thinking"
+REFERENCE16_PRO_RETENTION_V_THINKING_KIND = "reference16-pro-retention-v-thinking"
+REFERENCE16_V_THINKING_REQUEST_VERSION = "deepseek-reference16-v-thinking-v1"
+REFERENCE16_PRO_RETENTION_V_TOKEN32K_PLAN = "reference16-pro-retention-v-token32k-v1"
+REFERENCE16_PRO_RETENTION_V_TOKEN32K_MODE = "deepseek_bounded_reference16_pro_retention_v_token32k"
+REFERENCE16_PRO_RETENTION_V_TOKEN32K_STAGE = "reference16-pro-retention-v-token32k"
+REFERENCE16_PRO_RETENTION_V_TOKEN32K_KIND = "reference16-pro-retention-v-token32k"
+REFERENCE16_V_TOKEN32K_REQUEST_VERSION = "deepseek-reference16-v-token32k-v1"
+REFERENCE16_PRO_PLANS = frozenset({REFERENCE16_PRO_PLAN, REFERENCE16_PRO_TEACHING_PLAN, REFERENCE16_PRO_RETENTION_PLAN, REFERENCE16_PRO_RETENTION_V_THINKING_PLAN, REFERENCE16_PRO_RETENTION_V_TOKEN32K_PLAN})
+
+
+def reference16_v_thinking_phase_policy() -> dict:
+    """独立指代合同的固定E/V策略；调用方只能取得副本。"""
+    return {
+        "extraction": {"thinking_mode": "disabled", "reasoning_effort": "none", "tool_choice_mode": "forced"},
+        "verification": {"thinking_mode": "enabled", "reasoning_effort": "max", "tool_choice_mode": "omitted"},
+    }
+
+
+def reference16_v_token32k_phase_policy() -> dict:
+    """固定分阶段输出上限；旧V推理合同保持原形。"""
+    return {
+        "extraction": {"thinking_mode": "disabled", "reasoning_effort": "none", "tool_choice_mode": "forced", "max_tokens": 8192},
+        "verification": {"thinking_mode": "enabled", "reasoning_effort": "max", "tool_choice_mode": "omitted", "max_tokens": 32768},
+    }
+
+
+def validate_verification_prompt_profile(execution_plan: str, prompt_profile: str) -> None:
+    """新V提示仅与保留计划配对；旧入口继续内部选择原有提示。"""
+    expected = REFERENCE16_RETENTION_V_PROFILE if execution_plan in (REFERENCE16_PRO_RETENTION_PLAN, REFERENCE16_PRO_RETENTION_V_THINKING_PLAN, REFERENCE16_PRO_RETENTION_V_TOKEN32K_PLAN) else "default"
+    if type(prompt_profile) is not str or prompt_profile != expected:
+        raise EvaluationBudgetAbort("evaluation_verification_prompt_profile_mismatch")
+
+
 class EvaluationProviderProfile(StrEnum):
     """仅已注册的封闭评测配置；不接受任意端点或生产配置覆盖。"""
 
@@ -117,10 +187,52 @@ class EvaluationProviderProfile(StrEnum):
     DEEPSEEK_FLASH_MAX = "deepseek-flash-max"
     DEEPSEEK_PHASE_SPLIT = "deepseek-phase-split-v1"
     DEEPSEEK_BOUNDED_TASK = "deepseek-bounded-task-v1"
+    DEEPSEEK_PRO_BOUNDED_TASK = "deepseek-pro-bounded-task-v1"
+    DEEPSEEK_PRO_BOUNDED_THINKING = "deepseek-pro-bounded-thinking-v1"
+    DEEPSEEK_PRO_REFERENCE16 = "deepseek-pro-reference16-v1"
+    DEEPSEEK_PRO_REFERENCE16_V_THINKING = "deepseek-pro-reference16-v-thinking-v1"
+    DEEPSEEK_PRO_REFERENCE16_V_TOKEN32K = "deepseek-pro-reference16-v-token32k-v1"
 
     @property
     def is_official(self) -> bool:
-        return self in {self.DEEPSEEK_FLASH_MAX, self.DEEPSEEK_PHASE_SPLIT, self.DEEPSEEK_BOUNDED_TASK}
+        return self in {self.DEEPSEEK_FLASH_MAX, self.DEEPSEEK_PHASE_SPLIT, self.DEEPSEEK_BOUNDED_TASK, self.DEEPSEEK_PRO_BOUNDED_TASK, self.DEEPSEEK_PRO_BOUNDED_THINKING, self.DEEPSEEK_PRO_REFERENCE16, self.DEEPSEEK_PRO_REFERENCE16_V_THINKING, self.DEEPSEEK_PRO_REFERENCE16_V_TOKEN32K}
+
+    @property
+    def is_pro(self) -> bool:
+        return self in {self.DEEPSEEK_PRO_BOUNDED_TASK, self.DEEPSEEK_PRO_BOUNDED_THINKING, self.DEEPSEEK_PRO_REFERENCE16, self.DEEPSEEK_PRO_REFERENCE16_V_THINKING, self.DEEPSEEK_PRO_REFERENCE16_V_TOKEN32K}
+
+    @property
+    def is_reference16(self) -> bool:
+        return self in {self.DEEPSEEK_PRO_REFERENCE16, self.DEEPSEEK_PRO_REFERENCE16_V_THINKING, self.DEEPSEEK_PRO_REFERENCE16_V_TOKEN32K}
+
+    @property
+    def is_bounded(self) -> bool:
+        return self in {self.DEEPSEEK_BOUNDED_TASK, self.DEEPSEEK_PRO_BOUNDED_TASK, self.DEEPSEEK_PRO_BOUNDED_THINKING}
+
+    @property
+    def bounded_extraction_prompt_profile(self) -> str:
+        return (BOUNDED_DEPENDENCY_V3_PROMPT_PROFILE if self is self.DEEPSEEK_PRO_BOUNDED_THINKING
+                else BOUNDED_DEPENDENCY_PROMPT_PROFILE)
+
+    @property
+    def bounded_verification_tool_choice(self) -> str:
+        return "omitted" if self is self.DEEPSEEK_PRO_BOUNDED_THINKING else "forced"
+
+    @property
+    def bounded_request_version(self) -> int:
+        return 5 if self is self.DEEPSEEK_PRO_BOUNDED_THINKING else 3 if self.is_pro else 2
+
+    @property
+    def output_parameters(self) -> _OutputParameters:
+        return {"max_tokens": 8192} if self.is_pro and self is not self.DEEPSEEK_PRO_REFERENCE16_V_TOKEN32K else {}
+
+    def output_parameters_for_phase(self, purpose: str) -> _OutputParameters:
+        """新合同只按明确阶段给出固定上限。"""
+        if purpose not in {"extraction", "verification"}:
+            raise EvaluationBudgetAbort("evaluation_request_phase_invalid")
+        if self is self.DEEPSEEK_PRO_REFERENCE16_V_TOKEN32K:
+            return {"max_tokens": 8192 if purpose == "extraction" else 32768}
+        return self.output_parameters
 
     @property
     def base_url(self) -> str:
@@ -133,7 +245,27 @@ class EvaluationProviderProfile(StrEnum):
 
     @property
     def model(self) -> str:
+        if self.is_pro:
+            return "deepseek-v4-pro"
         return "deepseek-flash" if self.is_official else "ecnu-max"
+
+
+def bounded_profile_for_config(config: dict) -> EvaluationProviderProfile:
+    """旧登记保持原字节，新登记必须同时绑定唯一profile、模型和输出上限。"""
+    version = config.get("request_contract_version")
+    if type(version) is int and version == 2 and not {"provider_profile", "max_tokens"} & set(config):
+        profile = EvaluationProviderProfile.DEEPSEEK_BOUNDED_TASK
+    elif (type(version) is int and version in {3, 5}
+            and type(config.get("provider_profile")) is str
+            and config["provider_profile"] == (EvaluationProviderProfile.DEEPSEEK_PRO_BOUNDED_TASK.value if version == 3
+                else EvaluationProviderProfile.DEEPSEEK_PRO_BOUNDED_THINKING.value)
+            and type(config.get("max_tokens")) is int and config["max_tokens"] == 8192):
+        profile = EvaluationProviderProfile(config["provider_profile"])
+    else:
+        raise EvaluationBudgetAbort("evaluation_bounded_profile_registration_invalid")
+    if config.get("request_model") != profile.model:
+        raise EvaluationBudgetAbort("evaluation_bounded_profile_model_mismatch")
+    return profile
 
 
 def validate_evaluation_policy(
@@ -162,10 +294,14 @@ class ECNUEvaluationContract:
         extraction_mode: EvaluationExtractionMode | str = EvaluationExtractionMode.LEGACY_E14,
         execution_plan: str = "original",
         extraction_prompt_profile: str = "default",
+        verification_prompt_profile: str = "default",
     ):
         validate_evaluation_policy(verification_tool_choice, response_identity_policy)
-        validate_extraction_prompt_profile(execution_plan, extraction_prompt_profile)
+        validate_extraction_prompt_profile(execution_plan, extraction_prompt_profile, provider_profile=provider_profile)
         self._extraction_prompt_profile = extraction_prompt_profile
+        self._execution_plan = execution_plan
+        validate_verification_prompt_profile(execution_plan, verification_prompt_profile)
+        self._verification_prompt_profile = verification_prompt_profile
         try:
             self._extraction_mode = EvaluationExtractionMode(extraction_mode)
         except (TypeError, ValueError):
@@ -182,9 +318,23 @@ class ECNUEvaluationContract:
                     EvaluationExtractionMode.GROUNDED_V2 if execution_plan == FULL140_E2_PLAN
                     else EvaluationExtractionMode.GROUNDED_V4)):
             raise EvaluationBudgetAbort("evaluation_mixed_fixed_plan_required")
-        bounded = self._profile is EvaluationProviderProfile.DEEPSEEK_BOUNDED_TASK
+        if execution_plan == CORE_PROFILE_PLAN and (
+                self._profile is not EvaluationProviderProfile.DEEPSEEK_FLASH_MAX
+                or self._extraction_mode is not EvaluationExtractionMode.GROUNDED_V2
+                or verification_tool_choice != "omitted"):
+            raise EvaluationBudgetAbort("evaluation_core_fixed_plan_required")
+        bounded = self._profile.is_bounded
+        reference16 = self._profile.is_reference16
+        v_token32k = self._profile is EvaluationProviderProfile.DEEPSEEK_PRO_REFERENCE16_V_TOKEN32K
+        v_thinking = self._profile in {EvaluationProviderProfile.DEEPSEEK_PRO_REFERENCE16_V_THINKING, EvaluationProviderProfile.DEEPSEEK_PRO_REFERENCE16_V_TOKEN32K}
+        if reference16 != (execution_plan in REFERENCE16_PRO_PLANS) or reference16 and (
+                v_thinking != (execution_plan in (REFERENCE16_PRO_RETENTION_V_THINKING_PLAN, REFERENCE16_PRO_RETENTION_V_TOKEN32K_PLAN))
+                or v_token32k != (execution_plan == REFERENCE16_PRO_RETENTION_V_TOKEN32K_PLAN)
+                or verification_tool_choice != ("omitted" if v_thinking else "forced")
+                or self._extraction_mode is not EvaluationExtractionMode.GROUNDED_V2):
+            raise EvaluationBudgetAbort("evaluation_reference16_pro_fixed_plan_required")
         if bounded != (execution_plan == BOUNDED_RUNTIME_PLAN) or bounded and (
-                verification_tool_choice != "forced" or self._extraction_mode is not EvaluationExtractionMode.GROUNDED_V2):
+                verification_tool_choice != self._profile.bounded_verification_tool_choice or self._extraction_mode is not EvaluationExtractionMode.GROUNDED_V2):
             raise EvaluationBudgetAbort("evaluation_bounded_fixed_plan_required")
         if (self._profile.is_official
                 and response_identity_policy != STRICT_RESPONSE_IDENTITY_POLICY):
@@ -242,7 +392,7 @@ class ECNUEvaluationContract:
                         not isinstance(name, str) or path.is_absolute()
                         or name != path.as_posix() or ".." in path.parts
                         or (path.suffix not in {".py", ".toml", ".md", ".json"}
-                            and not (self._profile is EvaluationProviderProfile.DEEPSEEK_BOUNDED_TASK
+                            and not (self._profile.is_bounded
                                      and name in _BOUNDED_MIGRATION_SOURCES))
                         or any(part.startswith(".") and part != ".scratch"
                                for part in path.parts)
@@ -275,6 +425,18 @@ class ECNUEvaluationContract:
         except (OSError, ValueError, TypeError):
             raise EvaluationBudgetAbort("evaluation_source_freeze_changed") from None
 
+    def registration_binding(self) -> dict:
+        """返回实际构造合同的只读副本，供核心记录器在读取凭据前核对。"""
+        return {
+            "execution_plan": self._execution_plan,
+            "provider_profile": self._profile.value,
+            "extraction_mode": self._extraction_mode.value,
+            "extraction_prompt_profile": self._extraction_prompt_profile,
+            "verification_tool_choice": self._verification_tool_choice,
+            "source_hashes": dict(self._source_hashes),
+            "deadline_utc": self._deadline.isoformat(),
+        }
+
     @contextmanager
     def expect_request(self, expected_payload: dict) -> Iterator[None]:
         """为一次 E/V 调用及其 SDK 重试绑定原定请求正文。"""
@@ -286,6 +448,25 @@ class ECNUEvaluationContract:
             from .grounded_adapter import grounded_v4_prompt
             if expected_payload["messages"][0]["content"] != grounded_v4_prompt(self._extraction_prompt_profile):
                 raise EvaluationBudgetAbort("evaluation_extraction_prompt_changed")
+        if (self._extraction_prompt_profile in {BOUNDED_DEPENDENCY_PROMPT_PROFILE, BOUNDED_DEPENDENCY_V3_PROMPT_PROFILE, CORE_CURRENT_STATE_PROFILE}
+                and expected_payload["tools"][0]["function"]["name"] == "GroundedMemoryLabels"):
+            from .grounded_adapter import grounded_v2_prompt
+            if expected_payload["messages"][0]["content"] != grounded_v2_prompt(self._extraction_prompt_profile):
+                raise EvaluationBudgetAbort("evaluation_extraction_prompt_changed")
+        if (self._execution_plan == CORE_PROFILE_PLAN
+                and expected_payload["tools"][0]["function"]["name"] == "SourceVerificationOutput"):
+            from .verification_adapters import source_verification_contract, CORE_SOURCE_FIDELITY_PROFILE
+            from langchain_core.utils.function_calling import convert_to_openai_tool
+            prompt, schema = source_verification_contract("legacy-v4", prompt_profile=CORE_SOURCE_FIDELITY_PROFILE)
+            if (expected_payload["messages"][0]["content"] != prompt
+                    or expected_payload["tools"] != [convert_to_openai_tool(schema)]):
+                raise EvaluationBudgetAbort("evaluation_core_verification_contract_changed")
+        if (self._verification_prompt_profile == REFERENCE16_RETENTION_V_PROFILE
+                and expected_payload["tools"][0]["function"]["name"] == "SourceVerificationOutput"):
+            from .verification_adapters import source_verification_contract
+            prompt, _ = source_verification_contract("legacy-v4", prompt_profile=self._verification_prompt_profile)
+            if expected_payload["messages"][0]["content"] != prompt:
+                raise EvaluationBudgetAbort("evaluation_verification_prompt_changed")
         token = self._expected.set(_canonical(expected_payload))
         try:
             yield
@@ -343,12 +524,15 @@ class ECNUEvaluationContract:
         except (ValueError, TypeError, KeyError, UnicodeError, AttributeError):
             raise EvaluationBudgetAbort("evaluation_completion_invalid") from None
         if (self._profile.is_official
-                and identity != "deepseek-flash"):
+                and identity != self._profile.model):
             raise EvaluationBudgetAbort("evaluation_official_reported_model_changed")
         if self._profile in {EvaluationProviderProfile.DEEPSEEK_PHASE_SPLIT,
-                             EvaluationProviderProfile.DEEPSEEK_BOUNDED_TASK} and (
+                             EvaluationProviderProfile.DEEPSEEK_BOUNDED_TASK, EvaluationProviderProfile.DEEPSEEK_PRO_BOUNDED_TASK, EvaluationProviderProfile.DEEPSEEK_PRO_BOUNDED_THINKING, EvaluationProviderProfile.DEEPSEEK_PRO_REFERENCE16, EvaluationProviderProfile.DEEPSEEK_PRO_REFERENCE16_V_THINKING, EvaluationProviderProfile.DEEPSEEK_PRO_REFERENCE16_V_TOKEN32K} and (
                 len(choices) != 1 or choices[0]["index"] != 0):
             raise EvaluationBudgetAbort("evaluation_completion_invalid")
+        if (self._profile.is_pro
+                and any(choice["finish_reason"] in {"length", "content_filter"} for choice in choices)):
+            raise EvaluationBudgetAbort("evaluation_pro_completion_incomplete")
         if self._response_identity_policy == KNOWN_ECNU_RESPONSE_IDENTITY_POLICY:
             # 请求已绑定既有ECNU端点/ecnu-max；已授权标签只作实际观测。
             # 已知集合内变化不能推定相同权重或供应商变化。
@@ -391,21 +575,28 @@ def _validate_payload(value: dict, *, verification_tool_choice: str = "forced",
     try:
         function = value["tools"][0]["function"]
         official = provider_profile.is_official
+        reference16 = provider_profile is EvaluationProviderProfile.DEEPSEEK_PRO_REFERENCE16
         mixed_v = provider_profile in {EvaluationProviderProfile.DEEPSEEK_PHASE_SPLIT,
-                                       EvaluationProviderProfile.DEEPSEEK_BOUNDED_TASK} and function["name"] == "SourceVerificationOutput"
-        forced = mixed_v or not (official or verification_tool_choice == "omitted"
+                                       EvaluationProviderProfile.DEEPSEEK_BOUNDED_TASK, EvaluationProviderProfile.DEEPSEEK_PRO_BOUNDED_TASK} and function["name"] == "SourceVerificationOutput"
+        reference_e = provider_profile in {EvaluationProviderProfile.DEEPSEEK_PRO_REFERENCE16_V_THINKING, EvaluationProviderProfile.DEEPSEEK_PRO_REFERENCE16_V_TOKEN32K} and function["name"] != "SourceVerificationOutput"
+        non_thinking = mixed_v or reference16 or reference_e
+        forced = reference16 or reference_e or mixed_v or not (official or verification_tool_choice == "omitted"
                       and function["name"] == "SourceVerificationOutput")
         fields = _PAYLOAD_FIELDS if forced else _PAYLOAD_FIELDS - {"tool_choice"}
         if official:
             fields = fields | {"reasoning_effort"}
+        output_parameters = provider_profile.output_parameters_for_phase("verification" if function["name"] == "SourceVerificationOutput" else "extraction")
+        fields = fields | set(output_parameters)
         if (
             not isinstance(value, dict) or set(value) != fields
             or value["model"] != provider_profile.model
-            or (official and value.get("reasoning_effort") != ("none" if mixed_v else "max"))
+            or any(type(value.get(key)) is not int or value[key] != expected
+                   for key, expected in output_parameters.items())
+            or (official and value.get("reasoning_effort") != ("none" if non_thinking else "max"))
             or type(value["temperature"]) not in (float, int)
             or value["temperature"] != 0
             or value["stream"] is not False
-            or value["thinking"] != {"type": "disabled" if mixed_v else "enabled"}
+            or value["thinking"] != {"type": "disabled" if non_thinking else "enabled"}
             or not isinstance(value["messages"], list)
             or len(value["messages"]) != 2
             or any(

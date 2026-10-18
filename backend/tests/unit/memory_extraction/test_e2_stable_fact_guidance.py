@@ -89,6 +89,101 @@ class E2StableFactGuidanceTest(unittest.TestCase):
         self.assertEqual(facts[0]["text"], "联系人原话：“我目前是桥梁检测员。”")
         self.assertEqual((facts[0]["valid_at"], facts[0]["invalid_at"]), (None, None))
 
+    def test_reusable_information_boundaries_reach_both_e2_requests(self) -> None:
+        source = window("这件事情请先保密。")
+        for events in (False, True):
+            with self.subTest(events=events):
+                request, facts = self.sdk_result(
+                    source, labels(row("0:0", "request", unresolved=True)), events=events,
+                )
+                prompt = request["messages"][0]["content"]
+                for rule in ("事项、对象及角色", "不能仅因家里／住处或来访就选family",
+                             "一次性消息传递动作", "纯礼貌谢语用greeting", "明确承诺、关系约束"):
+                    self.assertTrue(rule in prompt, f"实际E2请求缺少边界指导：{rule}")
+                self.assertTrue(facts[0]["alternatives"])
+                self.assertEqual(facts[0]["speech_act"], "request")
+
+    def test_e2_replaces_conflicting_rules_and_orders_semantic_decisions(self) -> None:
+        source = window("那项安排先别告诉同事。")
+        for events in (False, True):
+            request, _ = self.sdk_result(source, labels(row("0:0", "request", unresolved=True)), events=events)
+            prompt = request["messages"][0]["content"]
+            self.assertFalse("身份明确则false" in prompt, "E2仍含人物明确即清除其他未知的冲突句")
+            for rule in ("纳入判定优先于后续阶段", "主断言", "对象来历", "亲属间互动优先family"):
+                self.assertTrue(rule in prompt, f"E2缺少判定顺序或主断言规则：{rule}")
+
+    def test_given_omissions_do_not_erase_neighboring_facts_or_real_commitments(self) -> None:
+        controls = (
+            ("我完成了说明书，辛苦你啦。", ("event", "greeting"), 1, "assertion"),
+            ("我稍后把文件发过去。", ("not_memory",), 0, None),
+            ("我保证明天把合同交给你。", ("plan",), 1, "plan"),
+            ("我明天按约定把签好的合同发给你。", ("plan",), 1, "plan"),
+            ("以后别公开我的地址。", ("request",), 1, "request"),
+            ("我弟弟明天来访。", ("plan",), 1, "plan"),
+        )
+        for text, kinds, count, speech in controls:
+            for events in (False, True):
+                with self.subTest(text=text, events=events):
+                    source = window(text)
+                    _, facts = self.sdk_result(source, labels(*(row(f"0:{index}", kind)
+                        for index, kind in enumerate(kinds))), events=events)
+                    self.assertEqual(len(facts), count)
+                    if facts:
+                        self.assertEqual(facts[0]["speech_act"], speech)
+                        self.assertIn(text.split("，")[0], facts[0]["text"])
+                        self.assertEqual(facts[0]["source_message_ids"], [str(source.messages[0].message_id)])
+
+    def test_cross_wording_controls_keep_main_assertion_and_topic_independent(self) -> None:
+        controls = (
+            ("同事送的拼图我拼完了。", "event", "other", False, "common_fact", "assertion"),
+            ("同事把拼图送给我了。", "relationship_event", "other", False, "relationship_note", "assertion"),
+            ("我已经把同事的望远镜还给他了。", "relationship_event", "other", False, "relationship_note", "assertion"),
+            ("姨妈把园艺工具赠给我了。", "relationship_event", "family", False, "relationship_note", "assertion"),
+            ("我姑姑从事测绘工作。", "third_party_fact", "work", False, "relationship_note", "report"),
+            ("那项安排先不要转告合作方。", "request", "other", True, "relationship_note", "request"),
+            ("我的手机号码不要告诉同事。", "request", "other", False, "relationship_note", "request"),
+        )
+        for text, kind, topic, unresolved, category, speech in controls:
+            with self.subTest(text=text):
+                source = window(text)
+                _, facts = self.sdk_result(source, labels(row("0:0", kind, topic=topic, unresolved=unresolved)))
+                self.assertEqual(len(facts), 1)
+                self.assertEqual((facts[0]["category"], facts[0]["speech_act"], facts[0]["topic"]),
+                                 (category, speech, topic))
+                self.assertEqual(bool(facts[0]["alternatives"]), unresolved)
+                self.assertIn(text, facts[0]["text"])
+
+    def test_teaching_examples_are_system_only_and_current_source_drives_output(self) -> None:
+        from notalone.memory_extraction.grounded_adapter import grounded_input, grounded_event_schema
+
+        source = window("我整理好了岩石标本盒。")
+        for events in (False, True):
+            request, facts = self.sdk_result(source, labels(row("0:0", "event")), events=events)
+            self.assertEqual([m["role"] for m in request["messages"]], ["system", "user"])
+            system, current = (m["content"] for m in request["messages"])
+            self.assertTrue("<e2_teaching_examples>" in system, "教学区未进入实际E2请求")
+            self.assertEqual(current, grounded_input(source))
+            for teaching_text in ("隔壁摊主的职业是篆刻师", "最后一块木版已经刻完", "古文字课", "转去夜校"):
+                self.assertNotIn(teaching_text, current)
+                self.assertNotIn(teaching_text, str(facts))
+                self.assertNotIn(teaching_text, json.dumps(request["tools"], ensure_ascii=False))
+            schema = (grounded_event_schema if events else grounded_schema)(source)
+            self.assertEqual(request["tools"][0]["function"]["parameters"]["properties"], schema["properties"])
+            self.assertEqual(len(facts), 1)
+            self.assertEqual(facts[0]["text"], "联系人原话：“我整理好了岩石标本盒。”")
+            self.assertEqual(facts[0]["source_message_ids"], [str(source.messages[0].message_id)])
+
+    def test_teaching_example_cannot_become_a_source_or_free_candidate_text(self) -> None:
+        from notalone.memory_extraction.errors import ExtractionInvalidOutputError
+
+        source = window("我整理好了岩石标本盒。")
+        for draft in (labels(row("0:0", "event", dependency="例四")),
+                      labels(row("0:0", "event", text="最后一块木版已经刻完了。"))):
+            for events in (False, True):
+                with self.subTest(events=events, draft=draft):
+                    with self.assertRaises(ExtractionInvalidOutputError):
+                        self.sdk_result(source, draft, events=events)
+
     def test_given_labels_preserve_types_dates_and_existing_kind_enum(self) -> None:
         controls = (
             ("我学的是水文勘测。", "event", "common_fact", "assertion", "asserted", False),
