@@ -40,3 +40,11 @@ finish的closed=true、close_unknown=false、worker_gone=true，launch与worker�
 当前实现升级为version=2、block_width=1；统一对全部消息及候选逐Unicode码点提供绝对start/end/text，取消块内计数。总8192码点同时意味着最多8192项，保留单条4096、窗口4及128KiB序列化预算；较长输入可能仅因辅助体积整体省略，原输入始终完整。上文v1/8码点及1024块合同属于已封存旧场，未追改其冻结。
 
 只改变通用输入坐标，不定位事件、不产生引用链接、不修补输出；不能解决或认证作者target语义。两项实际SDK/MockTransport测试先红后绿，proof模块30项通过，正式评测与相关模块67项通过，改动及包装器两模块定向mypy通过。Standards/Spec各0实质问题。无新增模型调用；原15窗及其Gold、质量门、旧失败和关闭预算保持。
+
+## 下一项独立交付配置：前置接线（未实现）
+
+依[官方配置查证](../memory-extraction-accuracy/deepseek-config-options-20261018.md)，可准备唯一显式Pro bounded15 profile，请求deepseek-v4-pro、官方endpoint不变；响应预期也须精确冻结，不符立即停止，不接受任意别名或宣称文档保证后端权重。目的仅是原15窗／Gold和六类proof合同的实际交付，不声称Flash/Pro因果优劣，无需为这一目的重跑Flash基线。
+
+Emax/工具省略、Vnone/强制、E2/proof3、cap30、零重试、RAW→FULL、七轴、七正控交付及原停止门保持。逐码点v2属于当前冻结源码；结果不得分别归因模型或索引。生产默认与旧Flash配置不变，不修改资料／Gold，不借旧余额。
+
+代码准备必须贯通provider闭集、bounded入口、records登记及摘要、offline实际SDK、owned领取、fixture prepare/validate/worker/launch、专用凭据读取；新登记版本显式绑定profile与精确model/phase，旧登记仍按旧合同核对。凭据仅读显式0600普通单链接私有文件中的API key，model/endpoint不继承环境；prepare阶段不读凭据。交叉模型、响应漂移、未知profile/phase及重算摘要绕过均须在外发前拒绝；实际SDK Mock、领取顺序、闭账与来源清理验证后方可独立冻结。当前没有新profile实现、激活或模型调用。

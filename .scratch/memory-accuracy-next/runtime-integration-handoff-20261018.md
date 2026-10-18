@@ -1,7 +1,7 @@
 # Runtime 集成交接
 
 - 分支：`codex/memory-accuracy-integration-20261018`；工作树 `memory-bounded-runtime/NotAlone`。
-- 当前产品提交1eb194ea；E2教学例8ad58155、V3位置辅助e3d45d88及包装器修复已接入，67相关检查通过。
+- 当前产品提交9795f327；逐码点标尺v2、E2教学例和包装器修复已接入，67相关检查及两模块mypy通过。
 - 原有bounded-runtime-v1/071接线已实现；本轮未重复建表或迁移业务库。
 - 两次runtime15均首窗unknown：proof位置越界；V响应脱敏仅digest。RAW/FULL及七轴均0。
 - 每场2次HTTP200、余28永久关闭；第二场原finish的closed=false保持，另有独立注册库closed=true核对。
@@ -17,4 +17,9 @@
 
 - 新增第三场9578仅E1次200，V前请求绑定拒绝已修复；第四场1054两次200仍candidate区间错位，严格拒绝。
 - 四场累计7次请求、113余额关闭，正式审核/七轴仍0；详见runtime-position-guide-20261018.md。
-- 指代fewshot80ca闭账41/48，主集general3、安全0；诊断bad_auto1，待最终提交集成，不开重复场。
+- 指代fewshot80ca闭账41/48，主集general3、安全0；诊断bad_auto1，结果已集成bafab10c，不开重复场。
+
+- 核心验收资产盘点8d49fee8→376aac9f：四窗Gold尚未执行冻结，旧第四场用户停止且闭账，不能重启旧冻结。
+- 候选Pro bounded15需新增封闭profile/登记/owned领取/凭据/SDK冻结；只做交付测试，不宣称模型优劣；暂无实现或调用。
+
+- 指代官方模型查证已集成d1bbff6b；Pro仅候选交付配置，精确身份不符即停，不能用文档认证后端权重。
