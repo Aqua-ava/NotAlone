@@ -24,3 +24,11 @@
 本场RAW/FULL、七轴和正向依据交付均0，P01 unknown、其余14 unrun。结束收据closed=true、close_unknown=false、worker_gone=true；来源归档及13类残留0、自有数据库残留0，临时三字段配置已删除。旧两场及余额不变，不重开本场；修复后的任何验证必须另冻独立场。
 
 修复后正式评测／bounded入口与proof、reference、core、grounded、E2相关67项测试全部通过；改动两模块`mypy --follow-imports=silent`通过。Standards／Spec复核均0实质问题。测试使用隔离来源与SDK模拟，不增加真实模型质量信用。
+
+## 包装器修复后的独立真实场
+
+1054af70-93d1-4d3e-bad0-de28cc275c81冻结1eb194ea，freeze SHA256=fe57ab427254b68d118505016bed9c248ac21b994fbbfed8f8ce0a803987f5b9。E/V各1次HTTP200，closed2/30、零模型重试、余28永久关闭；原15窗／Gold不变。
+
+E将首窗标为event并编译common_fact；V实际收到位置标尺，source[0,6)正确，但atom_links及reported的candidate[6,12)仍含开引号且缺末尾句号，正文实际为[7,13)。严格proof_semantics拒绝，未执行adoption/write；不修补输出、不把E标签或HTTP成功算正式审核。该场RAW/FULL、七轴、正向依据交付均0，P01 unknown，其余14 unrun。位置标尺尚未证明有效。
+
+finish的closed=true、close_unknown=false、worker_gone=true，launch与worker进程均已不存在；source-finish记录13类残留0及数据库残留0。临时三字段配置已删除。自有四场已知请求累计7次，未使用113次额度永久关闭，不能当作通过样本数；第二场原关闭未知与独立核对的区别仍保留。

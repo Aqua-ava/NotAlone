@@ -1,7 +1,7 @@
 # Runtime 集成交接
 
 - 分支：`codex/memory-accuracy-integration-20261018`；工作树 `memory-bounded-runtime/NotAlone`。
-- 当前产品提交973ad575；核心3f79fcea与指代59c6c131计划已接入，集成50相关检查通过。
+- 当前产品提交1eb194ea；E2教学例8ad58155、V3位置辅助e3d45d88及包装器修复已接入，67相关检查通过。
 - 原有bounded-runtime-v1/071接线已实现；本轮未重复建表或迁移业务库。
 - 两次runtime15均首窗unknown：proof位置越界；V响应脱敏仅digest。RAW/FULL及七轴均0。
 - 每场2次HTTP200、余28永久关闭；第二场原finish的closed=false保持，另有独立注册库closed=true核对。
@@ -14,3 +14,7 @@
 - 核心私有6窗/4留出未覆盖；原03真实proof及七轴未通过；goal保持active，不签complete。
 - 详细依据：agent-acceptance-20261018.md、runtime15-agent-result-20261018.md、../memory-extraction-accuracy/reference-agent-*-result-20261018.md。
 - 不push/PR、不读新真实联系人、不发送聊天；不依据未知响应修解析器或重放旧预算。
+
+- 新增第三场9578仅E1次200，V前请求绑定拒绝已修复；第四场1054两次200仍candidate区间错位，严格拒绝。
+- 四场累计7次请求、113余额关闭，正式审核/七轴仍0；详见runtime-position-guide-20261018.md。
+- 指代fewshot80ca闭账41/48，主集general3、安全0；诊断bad_auto1，待最终提交集成，不开重复场。
