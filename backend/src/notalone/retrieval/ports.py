@@ -23,13 +23,14 @@ class RetrievalPort(Protocol):
         *,
         scope: ContactScope,
         target_message_id: UUID | None = None,
+        message_ids: tuple[UUID, ...] | None = None,
         query: str | None = None,
         limit: int = 50,
         occurred_after: datetime | None = None,
         occurred_before: datetime | None = None,
         timeout_ms: int | None = None,
     ) -> tuple[RetrievedMessage, ...]:
-        """查询指定联系人范围内的消息。"""
+        """查询指定联系人范围内的消息；复验可用 ``message_ids`` 限定集合。"""
 
     def query_messages(
         self,

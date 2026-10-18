@@ -125,6 +125,7 @@ class PostgresRetrieval:
         *,
         scope: ContactScope,
         target_message_id: UUID | None = None,
+        message_ids: tuple[UUID, ...] | None = None,
         query: str | None = None,
         limit: int = 50,
         occurred_after: datetime | None = None,
@@ -134,6 +135,15 @@ class PostgresRetrieval:
         """返回当前联系人范围内来源有效的消息命中。"""
 
         self._validate_scope(scope)
+        if message_ids is not None:
+            if (not isinstance(message_ids, tuple)
+                    or any(not isinstance(identifier, UUID) for identifier in message_ids)):
+                raise ValueError("消息复验引用结构无效。")
+            allowed = (message_ids if self._message_ids is None else
+                       tuple(identifier for identifier in message_ids if identifier in self._message_ids))
+            return self.restrict_messages(allowed).search_messages(
+                scope=scope, target_message_id=target_message_id, query=query, limit=limit,
+                occurred_after=occurred_after, occurred_before=occurred_before, timeout_ms=timeout_ms)
         if target_message_id is not None and not isinstance(
             target_message_id,
             UUID,
@@ -213,17 +223,12 @@ class PostgresRetrieval:
         ):
             raise ValueError("关系记忆导航引用结构无效。")
         try:
+            arguments = {}
+            if memory_ids is not None:
+                arguments["memory_ids"] = memory_ids
             if include_historical:
-                selected = []
-                for identifier in memory_ids:
-                    try:
-                        versions = self._memory_store.list_versions(scope=scope, memory_id=identifier)
-                    except (LookupError, PermissionError):
-                        continue
-                    selected.extend(item for item in versions if item.memory_id == identifier)
-                memories = tuple(selected)
-            else:
-                memories = self._memory_store.list_confirmed(scope)
+                arguments["include_historical"] = True
+            memories = self._memory_store.list_confirmed(scope, **arguments)
         except MemoryPersistenceError:
             raise RetrievalError("关系记忆检索失败。") from None
         except RetrievalError:
@@ -235,6 +240,9 @@ class PostgresRetrieval:
             for memory in memories
         ):
             raise RetrievalInvariantError("关系记忆检索结果超出联系人范围。")
+        if include_historical:
+            by_id = {memory.memory_id: memory for memory in memories}
+            memories = tuple(by_id[identifier] for identifier in memory_ids if identifier in by_id)
         retrieved = tuple(
             RetrievedMemory(
                 memory_id=memory.memory_id,
@@ -287,7 +295,8 @@ class PostgresRetrieval:
         ):
             raise ValueError("待确认候选复验引用结构无效。")
         try:
-            candidates = self._memory_store.list_pending_candidates(scope)
+            candidates = (self._memory_store.list_pending_candidates(scope, candidate_ids=candidate_ids)
+                          if candidate_ids is not None else self._memory_store.list_pending_candidates(scope))
         except MemoryPersistenceError:
             raise RetrievalError("待确认候选检索失败。") from None
         except RetrievalError:
@@ -427,23 +436,21 @@ class PostgresRetrieval:
         if self._owner_memory_store is None:
             raise RetrievalError("owner 记忆检索失败。")
         try:
+            arguments = {}
+            if memory_ids is not None:
+                arguments["memory_ids"] = memory_ids
             if include_historical:
-                selected = []
-                for identifier in memory_ids:
-                    try:
-                        versions = self._owner_memory_store.list_versions(owner_id=owner_id, memory_id=identifier)
-                    except (LookupError, PermissionError):
-                        continue
-                    selected.extend(item for item in versions if item.memory_id == identifier)
-                memories = tuple(selected)
-            else:
-                memories = self._owner_memory_store.list_active(owner_id)
+                arguments["include_historical"] = True
+            memories = self._owner_memory_store.list_active(owner_id, **arguments)
         except Exception:
             raise RetrievalError("owner 记忆检索失败。") from None
         if not isinstance(memories, tuple) or any(
             memory.owner_id != owner_id for memory in memories
         ):
             raise RetrievalInvariantError("owner 记忆检索结果超出 owner 范围。")
+        if include_historical:
+            by_id = {memory.memory_id: memory for memory in memories}
+            memories = tuple(by_id[identifier] for identifier in memory_ids if identifier in by_id)
         retrieved = tuple(
             RetrievedOwnerMemory(
                 memory_id=memory.memory_id,

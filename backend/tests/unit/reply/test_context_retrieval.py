@@ -78,6 +78,7 @@ class RecordingRetrieval:
         *,
         scope: ContactScope,
         target_message_id: UUID | None = None,
+        message_ids: tuple[UUID, ...] | None = None,
         query: str | None = None,
         limit: int = 50,
         occurred_after: datetime | None = None,

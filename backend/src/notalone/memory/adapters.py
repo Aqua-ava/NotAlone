@@ -284,15 +284,22 @@ class InMemoryMemoryStore:
             )
         return self._memories[memory.memory_id]
 
-    def list_confirmed(self, scope: ContactScope, *, include_expired: bool = False) -> tuple[ConfirmedMemory, ...]:
+    def list_confirmed(self, scope: ContactScope, *, include_expired: bool = False,
+                       memory_ids: tuple[UUID, ...] | None = None,
+                       include_historical: bool = False) -> tuple[ConfirmedMemory, ...]:
         if not isinstance(scope, ContactScope):
             raise TypeError("关系记忆查询范围无效。")
+        if type(include_historical) is not bool or include_historical and memory_ids is None:
+            raise ValueError("历史读取必须限定记忆引用。")
         return tuple(
             memory
             for memory in self._memories.values()
-            if memory.scope == scope and memory.status is ConfirmedMemoryStatus.ACTIVE
-            and (memory.valid_at is None or memory.valid_at <= datetime.now(timezone.utc))
-            and (include_expired or memory.is_retrievable())
+            if memory.scope == scope
+            and (memory.status is ConfirmedMemoryStatus.ACTIVE
+                 or include_historical and memory.status is ConfirmedMemoryStatus.INVALIDATED)
+            and (memory_ids is None or memory.memory_id in memory_ids)
+            and (include_historical or memory.valid_at is None or memory.valid_at <= datetime.now(timezone.utc))
+            and (include_expired or include_historical or memory.is_retrievable())
         )
 
     def list_versions(self, *, scope: ContactScope, memory_id: UUID) -> tuple[ConfirmedMemory, ...]:
@@ -336,6 +343,8 @@ class InMemoryMemoryStore:
     def list_pending_candidates(
         self,
         scope: ContactScope,
+        *,
+        candidate_ids: tuple[UUID, ...] | None = None,
     ) -> tuple[MemoryCandidate, ...]:
         """返回指定联系人范围内仍待处理的候选。"""
 
@@ -346,6 +355,7 @@ class InMemoryMemoryStore:
             for candidate in self._candidates.values()
             if candidate.scope == scope
             and candidate.status is MemoryCandidateStatus.PENDING
+            and (candidate_ids is None or candidate.candidate_id in candidate_ids)
         )
 
     def deleted_texts(self, scope: ContactScope) -> tuple[str, ...]:

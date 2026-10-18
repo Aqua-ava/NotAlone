@@ -800,36 +800,74 @@ class RetrievalReplyContext:
                 raise ReplyContextInvariantError("Skill revision 已变化。")
 
         now = datetime.now(timezone.utc)
+        current = self._read_current_evidence(context)
         for item in context.evidence:
+            rows = current.get((item.kind, item.navigation is not None), ())
             if item.kind == "message":
-                self._validate_current_message(item, now=now)
+                self._validate_current_message(item, rows, now=now)
             elif item.kind == "confirmed_memory":
-                self._validate_current_memory(item, now=now)
+                self._validate_current_memory(item, rows, now=now)
             elif item.kind == "owner_memory":
-                self._validate_current_owner_memory(item, now=now)
+                self._validate_current_owner_memory(item, rows, now=now)
             elif item.kind == "pending_candidate":
-                self._validate_current_pending_candidate(item, now=now)
+                self._validate_current_pending_candidate(item, rows, now=now)
+
+    def _read_current_evidence(self, context: ReplyContext) -> dict[tuple[str, bool], tuple]:
+        """一次复验内按轨与历史权限批读；不跨阶段保存权威资料。"""
+        groups: dict[tuple[str, bool], list[UUID]] = {}
+        for item in context.evidence:
+            if item.kind in {"message", "confirmed_memory", "owner_memory", "pending_candidate"}:
+                groups.setdefault((item.kind, item.navigation is not None), []).append(item.evidence_id)
+        current = {}
+        for (kind, historical), identifiers in groups.items():
+            rows = []
+            for offset in range(0, len(identifiers), 20):
+                selected = tuple(identifiers[offset:offset + 20])
+                try:
+                    if kind == "message":
+                        batch = self._retrieval.search_messages(scope=context.scope, message_ids=selected,
+                            query=None, limit=len(selected), timeout_ms=RETRIEVAL_TIMEOUT_MS)
+                    elif kind == "pending_candidate":
+                        batch = self._search_pending_candidates(scope=context.scope,
+                            candidate_ids=selected, select_budget=False)
+                    else:
+                        arguments = {"query": None, "limit": len(selected), "memory_ids": selected}
+                        if historical:
+                            arguments["include_historical"] = True
+                        if kind == "confirmed_memory":
+                            batch = self._retrieval.search_confirmed_memories(scope=context.scope, **arguments)
+                        else:
+                            batch = self._retrieval.search_owner_memories(owner_id=context.scope.owner_id, **arguments)
+                    if not isinstance(batch, tuple):
+                        raise ReplyContextInvariantError("回复依据批量读取结构无效。")
+                    record_type, identifier_key = {
+                        "message": (RetrievedMessage, "message_id"),
+                        "confirmed_memory": (RetrievedMemory, "memory_id"),
+                        "owner_memory": (RetrievedOwnerMemory, "memory_id"),
+                        "pending_candidate": (RetrievedPendingCandidate, "candidate_id"),
+                    }[kind]
+                    if any(not isinstance(row, record_type) for row in batch):
+                        raise ReplyContextInvariantError("回复依据批量读取结构无效。")
+                    returned_ids = [getattr(row, identifier_key) for row in batch]
+                    if len(set(returned_ids)) != len(returned_ids) or not set(returned_ids) <= set(selected):
+                        raise ReplyContextInvariantError("回复依据批量读取超出指定引用。")
+                    rows.extend(batch)
+                except ReplyContextError:
+                    raise
+                except Exception:
+                    raise ReplyContextError("回复依据重新读取失败。") from None
+            current[(kind, historical)] = tuple(rows)
+        return current
 
     def _validate_current_message(
         self,
         evidence: ContextEvidence,
+        messages: tuple,
         *,
         now: datetime,
     ) -> None:
         if not evidence.source_ids:
             raise ReplyContextInvariantError("回复消息依据缺少来源。")
-        try:
-            messages = self._retrieval.search_messages(
-                scope=evidence.scope,
-                target_message_id=evidence.evidence_id,
-                query=None,
-                limit=1,
-                timeout_ms=RETRIEVAL_TIMEOUT_MS,
-            )
-        except ReplyContextError:
-            raise
-        except Exception:
-            raise ReplyContextError("回复消息依据重新读取失败。") from None
         if not isinstance(messages, tuple) or any(
             not isinstance(message, RetrievedMessage)
             or message.scope != evidence.scope
@@ -859,30 +897,22 @@ class RetrievalReplyContext:
     def _validate_current_memory(
         self,
         evidence: ContextEvidence,
+        memories: tuple,
         *,
         now: datetime,
     ) -> None:
         if not evidence.source_ids or evidence.revision is None:
             raise ReplyContextInvariantError("关系记忆依据缺少来源或 revision。")
-        try:
-            arguments = {"scope": evidence.scope, "query": None, "limit": 1,
-                         "memory_ids": (evidence.evidence_id,)}
-            if evidence.navigation is not None:
-                arguments["include_historical"] = True
-            memories = self._retrieval.search_confirmed_memories(**arguments)
-        except ReplyContextError:
-            raise
-        except Exception:
-            raise ReplyContextError("关系记忆依据重新读取失败。") from None
         if not isinstance(memories, tuple) or any(
             not isinstance(memory, RetrievedMemory)
             or memory.scope != evidence.scope
             for memory in memories
         ):
             raise ReplyContextInvariantError("关系记忆依据超出联系人范围。")
-        if len(memories) != 1:
+        matched = tuple(memory for memory in memories if memory.memory_id == evidence.evidence_id)
+        if len(matched) != 1:
             raise ReplyContextInvariantError("关系记忆依据已删除或不可用。")
-        memory = memories[0]
+        memory = matched[0]
         if (
             not self._memory_is_usable(memory, evidence, now)
             or memory.memory_id != evidence.evidence_id
@@ -900,30 +930,22 @@ class RetrievalReplyContext:
     def _validate_current_owner_memory(
         self,
         evidence: ContextEvidence,
+        memories: tuple,
         *,
         now: datetime,
     ) -> None:
         if not evidence.source_ids or evidence.revision is None:
             raise ReplyContextInvariantError("本人记忆依据缺少来源或 revision。")
-        try:
-            arguments = {"owner_id": evidence.scope.owner_id, "query": None, "limit": 1,
-                         "memory_ids": (evidence.evidence_id,)}
-            if evidence.navigation is not None:
-                arguments["include_historical"] = True
-            memories = self._retrieval.search_owner_memories(**arguments)
-        except ReplyContextError:
-            raise
-        except Exception:
-            raise ReplyContextError("本人记忆依据重新读取失败。") from None
         if not isinstance(memories, tuple) or any(
             not isinstance(memory, RetrievedOwnerMemory)
             or memory.owner_id != evidence.scope.owner_id
             for memory in memories
         ):
             raise ReplyContextInvariantError("本人记忆依据超出 owner 范围。")
-        if len(memories) != 1:
+        matched = tuple(memory for memory in memories if memory.memory_id == evidence.evidence_id)
+        if len(matched) != 1:
             raise ReplyContextInvariantError("本人记忆依据已删除或不可用。")
-        memory = memories[0]
+        memory = matched[0]
         if (
             not self._memory_is_usable(memory, evidence, now)
             or memory.memory_id != evidence.evidence_id
@@ -972,6 +994,7 @@ class RetrievalReplyContext:
     def _validate_current_pending_candidate(
         self,
         evidence: ContextEvidence,
+        candidates: tuple,
         *,
         now: datetime,
     ) -> None:
@@ -984,15 +1007,6 @@ class RetrievalReplyContext:
 
         if not evidence.source_ids or evidence.revision is not None:
             raise ReplyContextInvariantError("待确认候选依据缺少来源或带有版本号。")
-        try:
-            candidates = self._search_pending_candidates(
-                scope=evidence.scope,
-                candidate_ids=(evidence.evidence_id,),
-            )
-        except ReplyContextError:
-            raise
-        except Exception:
-            raise ReplyContextError("待确认候选依据重新读取失败。") from None
         matched = tuple(
             candidate
             for candidate in candidates

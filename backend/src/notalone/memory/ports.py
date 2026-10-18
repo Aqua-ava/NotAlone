@@ -28,8 +28,9 @@ class MemoryPort(Protocol):
     def create_manual_candidate(self, candidate: MemoryCandidate) -> MemoryCandidate:
         """为手动录入创建一条 manual 来源并保存候选（同一事务）。"""
 
-    def list_pending_candidates(self, scope: ContactScope) -> tuple[MemoryCandidate, ...]:
-        """返回联系人范围内所有尚未处理的候选。"""
+    def list_pending_candidates(self, scope: ContactScope, *,
+                                candidate_ids: tuple[UUID, ...] | None = None) -> tuple[MemoryCandidate, ...]:
+        """读取范围内尚未处理的候选；指定 ID 时只读取该集合，空集合返回空。"""
 
     def get_candidate(
         self,
@@ -96,8 +97,10 @@ class MemoryPort(Protocol):
     def delete(self, *, scope: ContactScope, memory_id: UUID) -> ConfirmedMemory:
         """标记记忆删除，使其不再进入检索。"""
 
-    def list_confirmed(self, scope: ContactScope, *, include_expired: bool = False) -> tuple[ConfirmedMemory, ...]:
-        """读取当前有效记忆；管理回看可包含已过期、仍有活动来源的 active 资料。"""
+    def list_confirmed(self, scope: ContactScope, *, include_expired: bool = False,
+                       memory_ids: tuple[UUID, ...] | None = None,
+                       include_historical: bool = False) -> tuple[ConfirmedMemory, ...]:
+        """读取当前有效记忆；指定 ID 时限定集合，历史模式仍核验完整来源。"""
 
     def list_versions(self, *, scope: ContactScope, memory_id: UUID) -> tuple[ConfirmedMemory, ...]:
         """读取指定资料的新旧版本、状态、修订及仍合法的来源。"""
@@ -125,8 +128,10 @@ class OwnerMemoryPort(Protocol):
     ) -> OwnerMemory:
         """原子确认 self 候选；自动替代只操作复验通过的原版本。"""
 
-    def list_active(self, owner_id: UUID, *, include_expired: bool = False) -> tuple[OwnerMemory, ...]:
-        """读取当前有效本人资料；管理回看可包含仍有活动来源的过期资料。"""
+    def list_active(self, owner_id: UUID, *, include_expired: bool = False,
+                    memory_ids: tuple[UUID, ...] | None = None,
+                    include_historical: bool = False) -> tuple[OwnerMemory, ...]:
+        """读取当前有效本人资料；指定 ID 时限定集合，历史模式仍核验完整来源。"""
 
     def list_versions(self, *, owner_id: UUID, memory_id: UUID) -> tuple[OwnerMemory, ...]:
         """读取本人资料的版本链，保留原联系人来源依赖。"""
