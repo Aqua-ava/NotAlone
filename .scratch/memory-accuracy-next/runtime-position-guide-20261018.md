@@ -59,8 +59,10 @@ Emax/工具省略、Vnone/强制、E2/proof3、cap30、零重试、RAW→FULL、
 
 run=18fcc800-361d-4a47-86cd-a0a82021ea39，源码90af01c2，freeze SHA256=aa459fc14226ca1883f6db54481953a649b30e2c5a75cedba6e406726d2430c9。原15/Gold及停止门不变，Emax/Vnone、各8192显式上限。E/V各一次HTTP200，响应精确模型通过；closed2/30、零重试，余28永久关闭。
 
-P01首次完成独立RAW→FULL封存：E仍输出momentary_state，编译recent_state并带一天有效期，与完成事实common_fact/双null的原Gold不符；V supported且issues空，未发现该错误。本次位置及作者自指提案合法，但程序pragmatics_not_supported返回UNKNOWN、basis=null。media和truth_intent各有独立有效依据，其余五轴unknown，未误授信；实际source current/ALL/pending，未发现假事、错人或bad_auto。本窗一般错误1，正向依据交付0/7；按bounded_runtime_positive_delivery_missing停止，后14窗unrun。
+P01首次完成独立RAW→FULL封存：E仍输出momentary_state，编译recent_state并附当日截止有效期（20:00至次日00:00，实际4小时），与完成事实common_fact/双null的原Gold不符；V supported且issues空，未发现该错误。本次位置及作者自指提案合法，但程序pragmatics_not_supported返回UNKNOWN、basis=null。media和truth_intent各有独立有效依据，其余五轴unknown，未误授信；实际source current/ALL/pending，未发现假事、错人或bad_auto。本窗一般错误1，正向依据交付0/7；按bounded_runtime_positive_delivery_missing停止，后14窗unrun。
 
 完成1窗的七轴审查不等于七轴通过；summary按一般错误窗口记七维meets_gate=false，不能将media/truth_intent单项判断或合法位置提案改写为整个合同达标。RAW与FULL原判断保持，不修标签、时间、Gold或旧失败。
 
 finish closed=true/close_unknown=false/worker_gone=true；launch与worker句柄均已不存在，source-finish为closed、13类来源残留0和自有数据库残留0；专用api-key.json已删除。仅私有暂存既有授权官方key，未创建工作树.env；初次暂存脚本因未安装dotenv在任何写入前失败，后用标准库解析单行，不是API失败/重试。自有五场累计9次已知请求、141次未用额度关闭，正式审核现在1窗，质量门仍未满足。
+
+后续代码定位确认拒绝发生在bounded_proof的类别/言语行为/断言组合校验，早于proposal_matches，故仅能称提案形状与位置域合法，不能说整个证明已认证。非空时间为独立矛盾；0.6还会影响理想采纳门，但不与当前最先发生的类别拒绝混为一谈。
