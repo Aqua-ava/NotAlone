@@ -70,3 +70,13 @@ class AdapterIsolationTest(unittest.TestCase):
         result = profile_verification_items(response, {'entries': [fixture.entry, fixture.entry]}, [fixture.memory.to_payload()])
         self.assertEqual(result['accepted_indices'], [0])
         self.assertEqual(result['rejected'][0]['index'], 1)
+
+    def test_challenge_requires_rejecting_every_bad_item(self):
+        from notalone.application.organization_evaluation import verification_passed
+        proposal = {'entries': [{'text': '坏甲'}, {'text': '坏乙'}]}
+        partial = {'accepted_indices': [1], 'rejected': [{'index': 0, 'reason': '无据'}]}
+        rejected = {'accepted_indices': [], 'rejected': [{'index': i, 'reason': '无据'} for i in range(2)]}
+        self.assertFalse(verification_passed(proposal, 'entries', partial, challenge=True))
+        self.assertTrue(verification_passed(proposal, 'entries', rejected, challenge=True))
+        self.assertTrue(verification_passed(proposal, 'entries', partial))
+        self.assertFalse(verification_passed(proposal, 'entries', rejected))

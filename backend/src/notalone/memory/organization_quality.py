@@ -42,7 +42,7 @@ def organization_rules_identity():
         values[name] = [ast.dump(node, include_attributes=False) for node in ast.walk(tree)
                         if isinstance(node, (ast.FunctionDef, ast.ClassDef)) and node.name in selected]
     for name in ('application/organization_call.py', 'memory/owner_organization_input.py',
-                 'memory/scenario_validation.py', 'memory/scenario_publication.py', 'memory/profile_validation.py',
+                 'memory/scenario_validation.py', 'memory/scenario_publication.py', 'memory/profile_validation.py', 'memory/organization_isolation.py',
                  'persistence/layered_coverage.py', 'persistence/layered_corrections.py',
                  'memory/layered_correction_validation.py'):
         path = root / name
@@ -52,9 +52,9 @@ def organization_rules_identity():
 
 def organization_prompt_identity():
     from notalone.memory.organization_sdk import (POLICY, SCENARIO_PROMPT, CORRECTED_SCENARIO_PROMPT,
-        PROFILE_PROMPT, VERIFICATION_PROMPT, PROFILE_VERIFICATION_PROMPT)
+        PROFILE_PROMPT, VERIFICATION_PROMPT, PROFILE_VERIFICATION_PROMPT, SCENARIO_ITEM_VERIFICATION_PROMPT)
     return content_digest([POLICY, SCENARIO_PROMPT, CORRECTED_SCENARIO_PROMPT,
-        PROFILE_PROMPT, VERIFICATION_PROMPT, PROFILE_VERIFICATION_PROMPT])
+        PROFILE_PROMPT, VERIFICATION_PROMPT, PROFILE_VERIFICATION_PROMPT, SCENARIO_ITEM_VERIFICATION_PROMPT])
 
 
 def organization_evaluation_identity():

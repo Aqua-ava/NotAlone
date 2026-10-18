@@ -63,6 +63,9 @@ kind枚举：ongoing_responsibility=持续责任；shared_life_constraint=共同
 '''
 
 
+SCENARIO_ITEM_VERIFICATION_PROMPT = VERIFICATION_PROMPT + '\n改用逐主题返回：{"items":[{"index":0,"sha256":"复制target摘要","supported":true,"reasons":[]}]}。每个主题单独判断；不得以一条失败拒绝其他主题。'
+
+
 def actual_organization_adapters(ports):
     """实际候选四Port的统一准入；不把受控传输声明当供应商证明。"""
     exact = (DeepSeekOrganizationProposal, DeepSeekOrganizationVerification,
@@ -115,7 +118,7 @@ class DeepSeekOrganizationVerification(_DeepSeekOrganizationAdapter):
             return profile_verification_items(result, proposal, payload['memories'])
         payload['verification_targets'] = [{'index': i, 'sha256': content_digest(item)}
                                            for i, item in enumerate(proposal['scenarios'])]
-        prompt = VERIFICATION_PROMPT + '\n改用逐主题返回：{"items":[{"index":0,"sha256":"复制target摘要","supported":true,"reasons":[]}]}。每个主题单独判断；不得以一条失败拒绝其他主题。'
+        prompt = SCENARIO_ITEM_VERIFICATION_PROMPT
         result = self._invoke(prompt, payload, deadline)
         if not isinstance(result, dict) or set(result) != {'items'} or not isinstance(result['items'], list):
             raise ValueError('主题核验顶层结构无效。')
