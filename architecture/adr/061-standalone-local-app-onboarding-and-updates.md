@@ -1,6 +1,6 @@
 # ADR-061：独立本机 App 的首启与兼容更新
 
-> 状态：已采纳的交付与安全约束；尚未实现或完成独立安装验收。
+> 状态：已采纳的交付与安全约束；本机受管后台、PostgreSQL 首启及结构更新已有正式启动接线，见[启动入口](../../desktop/src/main/startup/diagnostics.ts)与[受管运行环境](../../desktop/src/main/startup/managed-runtime.ts)。此实现状态不表示独立机器安装、真实微信或最终交付验收完成；后续范围修订见下。
 > 决策日期：2026-10-16
 > 局部修订：ADR-021、ADR-040 的外置开发环境及暂缓独立分发边界；本机独立版的数据位置优先于旧云端目标描述。其他产品边界继续有效。
 > 后续局部修订：[ADR-065](065-manual-input-standalone-first-release.md)将首版改为手动输入／单联系人导入，微信初始化不再作为首版前提；[ADR-066](066-in-place-schema-updates-and-database-reuse.md)以原库补齐结构替代下文强制备份、恢复校验及搬库流程。下文保留原决定与原因；实现及验收状态按对应任务核验。
