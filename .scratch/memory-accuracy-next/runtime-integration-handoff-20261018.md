@@ -1,7 +1,8 @@
 # Runtime 集成交接
 
 - 分支 `codex/memory-accuracy-integration-20261018`，工作树 `memory-bounded-runtime/NotAlone`；主仓未修改。
-- 最新集成 ac475b00（reference teaching b2c80417）；core E 04f7df1a→a79258df；core V 99bbf798；bounded E/V 修正 a98b317a。
+- 最新集成c1ff17bf（reference V保真5cd178a5），安全记录诊断061d27b4→5ca4cca5；core专用接线7565c327→7fe00b85。
+- bounded双max独立配置688cad6e已完成；E/V均Pro max/omitted/8192、version5，原提示/Gold不变。
 - bounded E 为 dependency-teaching-v2；V proof3 澄清既有三锚点合同，不改 compiler、schema、来源守卫或原15/Gold。
 - 原 stage-v1/default/core/reference 配置保持独立；proof3 提示 SHA 有意变更，不声称旧字节不变。
 - 合并验证：30 profile/注册测试及60共享入口/owned/fixture测试通过；7源码 mypy 通过；独立 Spec 冲突复核0问题。
@@ -14,11 +15,13 @@
 - 新场capture无缺失、进程59079/59157退出、13表及库残留0、key删除。P02依赖/三锚修正仍未真实验证。
 - 只读对照不支持将失败归因v2或立即追加教学；不改Gold/映射、不复开预算。
 - core 固定6场22c25347完整结束：RAW6/6、FULL3/6，安全错误0但一般错误3；留出4尚未启动或读取。
-- core 正独立实现 closed core-current-source-v1 接线（固定6/12或留出4/8），待提交集成和统一冻结后才可新API。
+- core closed接线已集成；私有runner16合成检查与双审通过，细节见/tmp下core-profile-ready.md；等最终snapshot才新API。
 - reference 原Pro16场28/32已闭账：审核14窗 safe8/general6；A15 V无法留正文而unknown，A16 unrun。
-- reference teaching b2c80417 的独立新场正在原分支运行；不得改它的冻结源码或把未完成结果记为通过。
+- reference teaching场已closed28/32，14审safe10/general4、完整9/18；A15 capture unknown/A16 unrun。结果59da7a93已集成。
+- reference剩A05程序理由缺口在独立修复；先收提交再统一冻结三线，不启动当前不完整配置。
 - 生产放行表为空；task03第一AC未满足，State=claimed，goal=active。
 - 后续仍须原15七正控/七轴及生命周期、core6/4、reference16质量验收；不得降低标准或修改Gold。
 - 所有新场仅授权合成隔离数据；无新真实联系人、聊天发送、业务迁移、push或PR。
 - 公开历史扫描仍有12项既有 engineering 本机路径记录；不能称全通过。
 - 细节见 runtime-position-guide-20261018.md、core current-six-four-result 及 reference-pro16-result。
+- 双max59项+兼容14项+6源码mypy通过；reference合并后51+30项、7源码mypy及独立Spec0问题。当前无活动真实API。

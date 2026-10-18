@@ -137,3 +137,10 @@ P01 E选择momentary_state/.85/dependency=null，编译recent_state及观察点�
 独立RAW SHA=30105d3e5c602ec5944468f6482a3868d469c8ba7963b386b15a1dcf3f1b4596，FULL SHA=070a91a7a0698381cdd9791a99fdc388477b482e02d68faffac5a7d39f4a5546；先RAW后FULL，0600 Agent旁件。capture_gaps空，receipt/records/cleanup无错误；finish closed、worker_gone、close_unknown=false。来源13表及隔离库残留0，进程59079/59157退出，专用key删除。生命周期仍unrun，生产放行表空。
 
 只读比较仅证明同句分类不稳定：上场event/.9、此场momentary_state/.85。stage-v1原文保留，v2仅追加依赖例，无离线可证冲突；不能归因v2，也不能确认随机波动。可检验假设是“刚发生的转变”与“当前结果状态”的泛化不足，但已有明确阶段原则，暂不据单窗再加提示或改映射。此场未到P02，来源依赖及三锚修正仍未获得真实正控验证。七场15次已知请求、195未用额度关闭仅为运行统计，不拼质量分母。
+
+
+## 双推理及三线后继配置集成
+
+独立Pro双推理688cad6e按[冻结计划](bounded-pro-thinking-plan-20261018.md)完成59组合、14兼容检查与6源码mypy。实际owned红灯暴露Pro默认强制工具选择，已仅在bounded评测任务显式透传策略修复，生产默认不改。core专用接线7565c327已合并7fe00b85，独立私有runner工程门通过，仍等待最终共享源码冻结。
+
+参考线安全录制诊断061d27b4→5ca4cca5、独立V保真5cd178a5→c1ff17bf已集成；五处冲突保留core、bounded、reference各自闭合身份。合并后51项合同/SDK/诊断检查及30项owned/旧配置检查通过，7源码mypy通过，独立Spec0问题。没有新真实API或新增质量信用；A05程序理由仍须独立修复后联合冻结，不能把参考票原要求缩成V字段正确。
