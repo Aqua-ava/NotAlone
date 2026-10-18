@@ -46,6 +46,27 @@ def sdk_response(request, *, large=False, review_arguments=None, generation_argu
 
 
 class ConstraintReviewSdkTest(unittest.TestCase):
+    def test_pasted_reply_fixture_uses_confirmed_direction_for_review_source(self):
+        from notalone.reply.adapters.constraint_review_contract import accepted_candidate_numbers
+        context = prepared_context()
+        incoming, direction = "今晚一起去吗？", "今天不去，简短婉拒。"
+        context = replace(context, command=replace(context.command, content=replace(context.command.content,
+            draft_text=incoming, input_kind="current_chat", pasted_direction=direction,
+            user_instruction=None)), current_text=incoming,
+            evidence=(replace(context.evidence[0], kind="user_current_chat", text=incoming, status="user_input"),))
+        runtime, requests, _ = self.runtime(sdk_response)
+        result = runtime.generate(context)
+        self.assertEqual(len(requests), 2)
+        self.assertEqual(len(result.candidates), 1)
+        payload = json.loads(requests[1]["messages"][-1]["content"])
+        self.assertNotIn("draft_text", payload)
+        self.assertIsNone(payload["user_instruction"])
+        rejected = synthetic_review(payload, verdicts=["reject"])
+        violation = rejected["reviews"]["candidate_1"]["checks"]["instruction"]["result"]["violation"]
+        self.assertEqual(violation["source_path"], "/confirmed_direction")
+        self.assertEqual(violation["source_quote"], direction)
+        self.assertEqual(accepted_candidate_numbers(rejected, payload), frozenset())
+
     def test_pasted_direction_can_support_first_person_and_review_only_filters_once(self):
         context = prepared_context()
         incoming, direction = "大学那会儿的事情，你还记得吗？", "告诉对方我记得这段往事，继续问他的近况。"
