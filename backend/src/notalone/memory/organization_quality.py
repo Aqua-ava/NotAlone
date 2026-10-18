@@ -51,13 +51,15 @@ def organization_rules_identity():
 
 
 def organization_prompt_identity():
-    from notalone.memory.organization_sdk import POLICY, SCENARIO_PROMPT, PROFILE_PROMPT, VERIFICATION_PROMPT
-    return content_digest([POLICY, SCENARIO_PROMPT, PROFILE_PROMPT, VERIFICATION_PROMPT])
+    from notalone.memory.organization_sdk import (POLICY, SCENARIO_PROMPT, CORRECTED_SCENARIO_PROMPT,
+        PROFILE_PROMPT, VERIFICATION_PROMPT, PROFILE_VERIFICATION_PROMPT)
+    return content_digest([POLICY, SCENARIO_PROMPT, CORRECTED_SCENARIO_PROMPT,
+        PROFILE_PROMPT, VERIFICATION_PROMPT, PROFILE_VERIFICATION_PROMPT])
 
 
 def organization_evaluation_identity():
     return _source_identity(['application/organization_evaluation.py', 'memory/organization_quality_report.py',
-        'memory/organization_quality_review.py', 'memory/organization_quality_transport.py', 'memory/organization_sdk.py',
+        'memory/organization_quality_review.py', 'memory/organization_quality_transport.py', 'memory/organization_sdk.py', 'memory/organization_verification.py',
         'memory/organization_quality_suite.py', 'application/organization_quality_suite.py', 'memory/organization_quality_suite_budget.py', 'persistence/organization_quality.py'])
 
 
@@ -69,7 +71,7 @@ class OrganizationQualityContract:
     verifier_model: str = 'unconfigured'
     rules_version: str = field(default_factory=organization_rules_identity)
     prompt_version: str = field(default_factory=organization_prompt_identity)
-    schema_version: str = field(default_factory=lambda: _source_identity(['memory/scenario_validation.py', 'memory/profile_validation.py']))
+    schema_version: str = field(default_factory=lambda: _source_identity(['memory/scenario_validation.py', 'memory/profile_validation.py', 'memory/organization_verification.py']))
     purpose_version: str = 'layered-background-v1'
     input_projection_version: str = 'scope-projection-correction-v3'
     evaluation_version: str = field(default_factory=organization_evaluation_identity)
