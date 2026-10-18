@@ -227,7 +227,9 @@ class PhasedEvaluationAudit:
         self._verification_mode = SourceVerificationMode(verification_mode)
         self._extraction_mode = EvaluationExtractionMode(extraction_mode)
         validate_evaluation_policy(verification_tool_choice)
-        if verification_tool_choice == "omitted" and self._verification_mode is not SourceVerificationMode.NULLABLE_PROOF_V1:
+        if (verification_tool_choice == "omitted" and self._verification_mode is not SourceVerificationMode.NULLABLE_PROOF_V1
+                and not (execution_plan == BOUNDED_RUNTIME_PLAN
+                         and self._verification_mode is SourceVerificationMode.NULLABLE_PROOF_V3)):
             raise ValueError("省略V工具选择只用于可空证明评测。")
         self._verification_tool_choice = verification_tool_choice
         if extraction_tool_choice not in {"forced", "omitted"}:
@@ -241,7 +243,7 @@ class PhasedEvaluationAudit:
                 or bounded != (reference_version == BOUNDED_RUNTIME_PLAN)
                 or bounded and (self._extraction_mode is not EvaluationExtractionMode.GROUNDED_V2
                     or self._verification_mode is not SourceVerificationMode.NULLABLE_PROOF_V3
-                    or extraction_tool_choice != "omitted" or verification_tool_choice != "forced")):
+                    or extraction_tool_choice != "omitted")):
             raise ValueError("有界15审核须匹配固定E2/V3和完整集合。")
         if type(reference_version) is not str or reference_version not in {
             "legacy-v1", "source-fidelity-v2", BOUNDED_RUNTIME_PLAN,

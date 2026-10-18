@@ -63,6 +63,10 @@ PROFILES["bounded15-pro"] = {**PROFILES["bounded15"],
     "request_model": "deepseek-v4-pro", "response_model": "deepseek-v4-pro",
     "request_contract_version": 3, "max_tokens": 8192}
 
+PROFILES["bounded15-pro-thinking"] = {**PROFILES["bounded15-pro"],
+    "provider_profile": EvaluationProviderProfile.DEEPSEEK_PRO_BOUNDED_THINKING.value,
+    "request_contract_version": 5, "verification_tool_choice": "omitted"}
+
 PROFILES["reference16-pro"] = {
     "execution_plan": REFERENCE16_PRO_PLAN, "case_set": "reference21", "case_positions": list(range(16)),
     "reference_version": "source-fidelity-v2", "request_limit": 32, "request_timeout_seconds": 300,
@@ -158,11 +162,11 @@ def prepare(*, directory: Path, absolute_start: datetime, profile: str = "baseli
     from notalone.memory_extraction.evaluation_reference import validate_public_reference
     if type(profile) is not str or profile not in PROFILES:
         raise ValueError("reference21_v4_fixed_profile_required")
-    if profile in {"bounded15-pro", "reference16-pro", "reference16-pro-teaching"}:
+    if profile in {"bounded15-pro", "bounded15-pro-thinking", "reference16-pro", "reference16-pro-teaching"}:
         _validate_pro_credential_path(credential_path)
     elif credential_path is not None:
         raise ValueError("explicit_key_only_for_pro_profile")
-    if profile in {"bounded15", "bounded15-pro"}:
+    if profile in {"bounded15", "bounded15-pro", "bounded15-pro-thinking"}:
         return _prepare_bounded(directory=directory, absolute_start=absolute_start,
                                 profile=profile, credential_path=credential_path)
     fixed = PROFILES[profile]
@@ -398,7 +402,7 @@ def _prepare_bounded(*, directory: Path, absolute_start: datetime, profile: str 
                   "source_hashes": sources, "installed_versions": {name: version(name) for name in helper.PACKAGES},
                   "reference_canonical_sha256": helper.digest(reference), "formal_sources": receipt,
                   "formal_sources_sha256": helper.digest(receipt), **_bounded_contract_fields(data), "quality_certified": False}
-        if profile == "bounded15-pro":
+        if profile in {"bounded15-pro", "bounded15-pro-thinking"}:
             frozen["credential_path"] = str(credential_path)
         helper.publish(directory / "freeze.json", frozen)
         return frozen
@@ -415,7 +419,7 @@ def _validate_bounded(frozen: dict) -> tuple[datetime, datetime]:
 
     helper = helpers()
     fixed = fixed_contract(frozen)
-    if fixed["provider_profile"] == EvaluationProviderProfile.DEEPSEEK_PRO_BOUNDED_TASK:
+    if EvaluationProviderProfile(fixed["provider_profile"]).is_pro:
         _validate_pro_credential_path(frozen.get("credential_path"))
     elif "credential_path" in frozen:
         raise ValueError("explicit_key_only_for_pro_profile")
@@ -503,7 +507,7 @@ def _worker_bounded(*, frozen, freeze_path, synthetic_transport, credential_load
         raw_reviewer=lambda view: bridge.review("raw", view), full_reviewer=lambda view: bridge.review("full", view),
         case_set="bounded15", reference_version=BOUNDED_RUNTIME_PLAN, execution_plan=BOUNDED_RUNTIME_PLAN,
         extraction_mode="grounded-v2", verification_mode="nullable-proof-v3",
-        verification_tool_choice="forced", extraction_tool_choice="omitted",
+        verification_tool_choice=fixed_contract(frozen)["verification_tool_choice"], extraction_tool_choice="omitted",
         extraction_prompt_profile=BOUNDED_DEPENDENCY_PROMPT_PROFILE)
     loaded = False
 
@@ -515,7 +519,7 @@ def _worker_bounded(*, frozen, freeze_path, synthetic_transport, credential_load
         verify_claim(frozen)
         if credential_loader is not None:
             return credential_loader()
-        if fixed_contract(frozen)["provider_profile"] == EvaluationProviderProfile.DEEPSEEK_PRO_BOUNDED_TASK:
+        if EvaluationProviderProfile(fixed_contract(frozen)["provider_profile"]).is_pro:
             return read_pro_credential(frozen["credential_path"])
         return helper.read_credential()
 
@@ -528,7 +532,7 @@ def _worker_bounded(*, frozen, freeze_path, synthetic_transport, credential_load
         credential_loader=loader, audit_case=audit, synthetic_transport=synthetic_transport,
         provider_profile=fixed_contract(frozen)["provider_profile"], request_timeout_seconds=300, max_retries=0,
         case_positions=None, case_set="bounded15", request_limit=30, reference_version=BOUNDED_RUNTIME_PLAN,
-        verification_mode="nullable-proof-v3", verification_tool_choice="forced", extraction_mode="grounded-v2",
+        verification_mode="nullable-proof-v3", verification_tool_choice=fixed_contract(frozen)["verification_tool_choice"], extraction_mode="grounded-v2",
         execution_plan=BOUNDED_RUNTIME_PLAN, bounded_runtime_deadline=control,
         extraction_prompt_profile=BOUNDED_DEPENDENCY_PROMPT_PROFILE,
         formal_windows=data.windows, formal_task_ids=data.task_ids, database_url=data.database_url)
@@ -617,7 +621,7 @@ if __name__ == "__main__":
                              profile={"prepare": "baseline", "prepare-semantic4": "semantic4", "prepare-uniqueness": "uniqueness",
                                       "prepare-bounded15": "bounded15"}[sys.argv[1]])
             print(json.dumps({"run_id": freeze["run_id"], "freeze_sha256": helpers().file_digest(Path(freeze["directory"]) / "freeze.json")}))
-        elif len(sys.argv) == 5 and sys.argv[1] in {"prepare-bounded15-pro", "prepare-reference16-pro", "prepare-reference16-pro-teaching"}:
+        elif len(sys.argv) == 5 and sys.argv[1] in {"prepare-bounded15-pro", "prepare-bounded15-pro-thinking", "prepare-reference16-pro", "prepare-reference16-pro-teaching"}:
             freeze = prepare(directory=Path(sys.argv[2]), absolute_start=datetime.fromisoformat(sys.argv[3]),
                              profile=sys.argv[1].removeprefix("prepare-"), credential_path=Path(sys.argv[4]))
             print(json.dumps({"run_id": freeze["run_id"], "freeze_sha256": helpers().file_digest(Path(freeze["directory"]) / "freeze.json")}))

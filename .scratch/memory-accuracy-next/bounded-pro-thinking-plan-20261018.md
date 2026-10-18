@@ -24,3 +24,12 @@ e00279a0在原P01因E类别/期限错误、V supported且无issues触发potentia
 最高SDK测试核E/V实际请求及省略字段；真实worker+owned模拟链覆盖来源、freeze、记录和清理；旧Flash/Pro/reference/core控制保留。先最小负控红灯，再实现、相关回归、定向类型检查及独立Standards/Spec，提交后才冻结新真实场。8192可能被推理消耗，发生截断照实失败，不在运行中加预算。
 
 当前仅方案冻结；没有启动新模型请求，未增加任何质量信用。
+
+
+## 工程增量
+
+独立profile为`deepseek-pro-bounded-thinking-v1`、请求合同version5，复用既有审核/任务/owned路径。新SDK和登记负控先因profile不支持转红；27项最小检查通过后，实际owned worker又捕获`evaluation_request_body_changed`：通用推理识别仅认Flash，Pro V默认仍发送named工具选择。修复只在bounded评测任务构造V时显式传冻结`force_tool_choice`，原for_mode保留该值，不修改生产识别函数。
+
+该修复后单owned/登记20项通过，最终5模块组合59项/40.733秒通过，包含三种profile的实际owned路径和旧wire、新Pro length/content_filter原件与闭账、无工具/多工具单HTTP拒绝。Spec与Standards及force增量复核0问题。工程Mock不是模型质量；截至本记录没有新真实调用。
+
+最终兼容检查：core/reference相关14项/3.094秒通过；新profile缺失/Flash/alias响应身份单例通过；6修改源码mypy明确成功，diff检查无空白错误。旧默认与提示/schema未改变。

@@ -141,19 +141,28 @@ class EvaluationProviderProfile(StrEnum):
     DEEPSEEK_PHASE_SPLIT = "deepseek-phase-split-v1"
     DEEPSEEK_BOUNDED_TASK = "deepseek-bounded-task-v1"
     DEEPSEEK_PRO_BOUNDED_TASK = "deepseek-pro-bounded-task-v1"
+    DEEPSEEK_PRO_BOUNDED_THINKING = "deepseek-pro-bounded-thinking-v1"
     DEEPSEEK_PRO_REFERENCE16 = "deepseek-pro-reference16-v1"
 
     @property
     def is_official(self) -> bool:
-        return self in {self.DEEPSEEK_FLASH_MAX, self.DEEPSEEK_PHASE_SPLIT, self.DEEPSEEK_BOUNDED_TASK, self.DEEPSEEK_PRO_BOUNDED_TASK, self.DEEPSEEK_PRO_REFERENCE16}
+        return self in {self.DEEPSEEK_FLASH_MAX, self.DEEPSEEK_PHASE_SPLIT, self.DEEPSEEK_BOUNDED_TASK, self.DEEPSEEK_PRO_BOUNDED_TASK, self.DEEPSEEK_PRO_BOUNDED_THINKING, self.DEEPSEEK_PRO_REFERENCE16}
 
     @property
     def is_pro(self) -> bool:
-        return self in {self.DEEPSEEK_PRO_BOUNDED_TASK, self.DEEPSEEK_PRO_REFERENCE16}
+        return self in {self.DEEPSEEK_PRO_BOUNDED_TASK, self.DEEPSEEK_PRO_BOUNDED_THINKING, self.DEEPSEEK_PRO_REFERENCE16}
 
     @property
     def is_bounded(self) -> bool:
-        return self in {self.DEEPSEEK_BOUNDED_TASK, self.DEEPSEEK_PRO_BOUNDED_TASK}
+        return self in {self.DEEPSEEK_BOUNDED_TASK, self.DEEPSEEK_PRO_BOUNDED_TASK, self.DEEPSEEK_PRO_BOUNDED_THINKING}
+
+    @property
+    def bounded_verification_tool_choice(self) -> str:
+        return "omitted" if self is self.DEEPSEEK_PRO_BOUNDED_THINKING else "forced"
+
+    @property
+    def bounded_request_version(self) -> int:
+        return 5 if self is self.DEEPSEEK_PRO_BOUNDED_THINKING else 3 if self.is_pro else 2
 
     @property
     def output_parameters(self) -> _OutputParameters:
@@ -180,11 +189,12 @@ def bounded_profile_for_config(config: dict) -> EvaluationProviderProfile:
     version = config.get("request_contract_version")
     if type(version) is int and version == 2 and not {"provider_profile", "max_tokens"} & set(config):
         profile = EvaluationProviderProfile.DEEPSEEK_BOUNDED_TASK
-    elif (type(version) is int and version == 3
+    elif (type(version) is int and version in {3, 5}
             and type(config.get("provider_profile")) is str
-            and config["provider_profile"] == EvaluationProviderProfile.DEEPSEEK_PRO_BOUNDED_TASK.value
+            and config["provider_profile"] == (EvaluationProviderProfile.DEEPSEEK_PRO_BOUNDED_TASK.value if version == 3
+                else EvaluationProviderProfile.DEEPSEEK_PRO_BOUNDED_THINKING.value)
             and type(config.get("max_tokens")) is int and config["max_tokens"] == 8192):
-        profile = EvaluationProviderProfile.DEEPSEEK_PRO_BOUNDED_TASK
+        profile = EvaluationProviderProfile(config["provider_profile"])
     else:
         raise EvaluationBudgetAbort("evaluation_bounded_profile_registration_invalid")
     if config.get("request_model") != profile.model:
@@ -250,7 +260,7 @@ class ECNUEvaluationContract:
                 verification_tool_choice != "forced" or self._extraction_mode is not EvaluationExtractionMode.GROUNDED_V2):
             raise EvaluationBudgetAbort("evaluation_reference16_pro_fixed_plan_required")
         if bounded != (execution_plan == BOUNDED_RUNTIME_PLAN) or bounded and (
-                verification_tool_choice != "forced" or self._extraction_mode is not EvaluationExtractionMode.GROUNDED_V2):
+                verification_tool_choice != self._profile.bounded_verification_tool_choice or self._extraction_mode is not EvaluationExtractionMode.GROUNDED_V2):
             raise EvaluationBudgetAbort("evaluation_bounded_fixed_plan_required")
         if (self._profile.is_official
                 and response_identity_policy != STRICT_RESPONSE_IDENTITY_POLICY):
@@ -437,7 +447,7 @@ class ECNUEvaluationContract:
                 and identity != self._profile.model):
             raise EvaluationBudgetAbort("evaluation_official_reported_model_changed")
         if self._profile in {EvaluationProviderProfile.DEEPSEEK_PHASE_SPLIT,
-                             EvaluationProviderProfile.DEEPSEEK_BOUNDED_TASK, EvaluationProviderProfile.DEEPSEEK_PRO_BOUNDED_TASK, EvaluationProviderProfile.DEEPSEEK_PRO_REFERENCE16} and (
+                             EvaluationProviderProfile.DEEPSEEK_BOUNDED_TASK, EvaluationProviderProfile.DEEPSEEK_PRO_BOUNDED_TASK, EvaluationProviderProfile.DEEPSEEK_PRO_BOUNDED_THINKING, EvaluationProviderProfile.DEEPSEEK_PRO_REFERENCE16} and (
                 len(choices) != 1 or choices[0]["index"] != 0):
             raise EvaluationBudgetAbort("evaluation_completion_invalid")
         if (self._profile.is_pro

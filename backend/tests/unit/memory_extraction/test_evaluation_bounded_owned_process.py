@@ -38,7 +38,8 @@ def json_only_digest(value):
 
 class BoundedOwnedClaimTest(unittest.TestCase):
     @contextmanager
-    def claim(self, *, pro=False):
+    def claim(self, *, pro=False, thinking=False):
+        pro = pro or thinking
         with tempfile.TemporaryDirectory() as temporary, patch.object(Path, "home", return_value=Path(temporary).resolve()):
             directory = Path(temporary).resolve() / "output"
             directory.mkdir(mode=0o700)
@@ -46,8 +47,11 @@ class BoundedOwnedClaimTest(unittest.TestCase):
             evaluation.mkdir(mode=0o700)
             config, plan, windows = registration.bounded_config()
             if pro:
-                config.update(request_contract_version=3, provider_profile="deepseek-pro-bounded-task-v1",
+                config.update(request_contract_version=5 if thinking else 3,
+                              provider_profile="deepseek-pro-bounded-thinking-v1" if thinking else "deepseek-pro-bounded-task-v1",
                               request_model="deepseek-v4-pro", max_tokens=8192)
+            if thinking:
+                config["tool_choice"]["verification"]["mode"] = "omitted"
             source_hashes = {FIXTURE: hashlib.sha256((ROOT / FIXTURE).read_bytes()).hexdigest()}
             config["source_hashes"] = source_hashes
             budget = EvaluationBudget.create(run_id=uuid4(), output_directory=evaluation, request_limit=30,
@@ -63,8 +67,8 @@ class BoundedOwnedClaimTest(unittest.TestCase):
                 "bounded_inputs_sha256": config["bounded_inputs_sha256"],
                 "runtime_rule_set_sha256": config["runtime_rule_set_sha256"]}
             if pro:
-                frozen["fixed"] = {"provider_profile": "deepseek-pro-bounded-task-v1", "request_model": "deepseek-v4-pro",
-                                   "response_model": "deepseek-v4-pro", "request_contract_version": 3, "max_tokens": 8192}
+                frozen["fixed"] = {"provider_profile": config["provider_profile"], "request_model": "deepseek-v4-pro",
+                                   "response_model": "deepseek-v4-pro", "request_contract_version": config["request_contract_version"], "max_tokens": 8192}
             frozen.setdefault("fixed", {})["extraction_prompt_profile"] = registration.BOUNDED_DEPENDENCY_PROMPT_PROFILE
             frozen = snapshot(frozen)
             helper = SimpleNamespace(private_directory=lambda path: None, digest=json_only_digest,
@@ -91,6 +95,17 @@ class BoundedOwnedClaimTest(unittest.TestCase):
                 changed = deepcopy(frozen)
                 changed["fixed"][key] = value
                 with self.subTest(key=key), self.assertRaises(ValueError):
+                    owned._verify_owned_public_claim(frozen=changed, helper=helper, kind=KIND, actual_windows=windows)
+            self.assertEqual(budget.snapshot()["reserved_requests"], 0)
+
+    def test_thinking_owned_claim_rejects_old_profile_and_version_even_with_same_model(self):
+        with self.claim(thinking=True) as (frozen, helper, windows, budget):
+            owned._verify_owned_public_claim(frozen=frozen, helper=helper, kind=KIND, actual_windows=windows)
+            for key, value in (("provider_profile", "deepseek-pro-bounded-task-v1"), ("request_contract_version", 3),
+                               ("request_contract_version", 4), ("max_tokens", True), ("response_model", "deepseek-flash")):
+                changed = deepcopy(frozen)
+                changed["fixed"][key] = value
+                with self.subTest(key=key, value=value), self.assertRaises(ValueError):
                     owned._verify_owned_public_claim(frozen=changed, helper=helper, kind=KIND, actual_windows=windows)
             self.assertEqual(budget.snapshot()["reserved_requests"], 0)
 

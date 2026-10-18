@@ -91,7 +91,7 @@ class BoundedEvaluationEntryTest(unittest.TestCase):
                     provider_profile="deepseek-bounded-task-v1", execution_plan=BOUNDED_RUNTIME_PLAN,
                     extraction_mode="grounded-v2")
 
-    def prepared(self):
+    def prepared(self, verification_tool_choice="forced"):
         fixed = self.fixed()
         root = Path(__file__).resolve().parents[4]
         hashes = {}
@@ -108,7 +108,7 @@ class BoundedEvaluationEntryTest(unittest.TestCase):
         audit = PhasedEvaluationAudit(reference=reference, expected_reference_sha256=canonical_sha256(reference),
             annotation_sha256=hashes[BOUNDED_RUNTIME_ANNOTATION_PATH], criteria_sha256=criteria,
             raw_reviewer=lambda _: self.fail("本入口接缝控制不认证模型审核"), full_reviewer=lambda _: {},
-            case_set="bounded15", verification_mode="nullable-proof-v3", verification_tool_choice="forced",
+            case_set="bounded15", verification_mode="nullable-proof-v3", verification_tool_choice=verification_tool_choice,
             extraction_tool_choice="omitted", extraction_mode="grounded-v2",
             reference_version=BOUNDED_RUNTIME_PLAN, execution_plan=BOUNDED_RUNTIME_PLAN,
             extraction_prompt_profile=BOUNDED_DEPENDENCY_PROMPT_PROFILE)
@@ -145,13 +145,19 @@ class BoundedEvaluationEntryTest(unittest.TestCase):
     def test_pro_entry_freezes_exact_profile_and_output_cap_before_real_sdk_wire(self):
         self.assert_fixed_sdk_wire("deepseek-pro-bounded-task-v1", "deepseek-v4-pro")
 
+    def test_pro_thinking_entry_freezes_both_max_and_omits_tool_choice(self):
+        self.assert_fixed_sdk_wire("deepseek-pro-bounded-thinking-v1", "deepseek-v4-pro")
+
     def assert_fixed_sdk_wire(self, profile, model_name):
         from langchain_deepseek import ChatDeepSeek
         from pydantic import SecretStr
 
-        fixed = self.prepared()
+        fixed = self.prepared("omitted" if profile == "deepseek-pro-bounded-thinking-v1" else "forced")
         fixed["provider_profile"] = profile
-        pro = profile == "deepseek-pro-bounded-task-v1"
+        thinking = profile == "deepseek-pro-bounded-thinking-v1"
+        pro = profile in {"deepseek-pro-bounded-task-v1", "deepseek-pro-bounded-thinking-v1"}
+        if thinking:
+            fixed["verification_tool_choice"] = "omitted"
         wires = []
         original_start = self.control.start
         self.started = False
@@ -199,10 +205,10 @@ class BoundedEvaluationEntryTest(unittest.TestCase):
                     messages = [{"role": "system", "content": prompt}, {"role": "user", "content": "合成调用控制"}]
                     model = ChatDeepSeek(api_key=SecretStr(key), model=model_name, base_url="https://api.deepseek.com",
                         temperature=0.0, timeout=300, max_retries=0, http_client=client, http_async_client=async_client,
-                        **({"max_tokens": 8192} if pro else {}), extra_body={"thinking": {"type": "disabled" if verification else "enabled"},
-                                    "reasoning_effort": "none" if verification else "max"})
+                        **({"max_tokens": 8192} if pro else {}), extra_body={"thinking": {"type": "disabled" if verification and not thinking else "enabled"},
+                                    "reasoning_effort": "none" if verification and not thinking else "max"})
                     with values["invocation_scope"](purpose, messages, fixed["formal_windows"][0]):
-                        model.bind_tools([schema], **({"tool_choice": schema["title"]} if verification else {})).invoke(messages)
+                        model.bind_tools([schema], **({"tool_choice": schema["title"]} if verification and not thinking else {})).invoke(messages)
             return {"quality_certified": False, "receipt": {"budget": values["budget"].closed_receipt()}}
 
         with patch.object(self.control, "start", side_effect=start), \
@@ -217,13 +223,16 @@ class BoundedEvaluationEntryTest(unittest.TestCase):
             else:
                 self.assertNotIn("max_tokens", wire)
         config = json.loads((self.output / "manifest.json").read_text())["frozen_config"]
-        self.assertEqual(config["request_contract_version"], 3 if pro else 2)
+        self.assertEqual(config["request_contract_version"], 5 if thinking else 3 if pro else 2)
         self.assertEqual(config.get("provider_profile"), profile if pro else None)
         self.assertEqual(config.get("max_tokens"), 8192 if pro else None)
         self.assertNotIn("tool_choice", wires[0])
-        self.assertEqual(wires[1]["tool_choice"]["function"]["name"], "SourceVerificationOutput")
+        if thinking:
+            self.assertNotIn("tool_choice", wires[1])
+        else:
+            self.assertEqual(wires[1]["tool_choice"]["function"]["name"], "SourceVerificationOutput")
         self.assertEqual(wires[0]["reasoning_effort"], "max")
-        self.assertEqual(wires[1]["reasoning_effort"], "none")
+        self.assertEqual(wires[1]["reasoning_effort"], "max" if thinking else "none")
         self.assertEqual(result["execution_plan"], BOUNDED_RUNTIME_PLAN)
         self.assertFalse(result["quality_certified"])
         self.assertTrue(result["receipt"]["budget"]["closed"])

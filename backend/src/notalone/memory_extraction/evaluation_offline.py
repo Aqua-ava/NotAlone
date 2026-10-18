@@ -572,8 +572,9 @@ def _run_evaluation_batch(
                 or extraction_selected is not EvaluationExtractionMode.GROUNDED_V2
                 or selected is not SourceVerificationMode.NULLABLE_PROOF_V3
                 or type(max_retries) is not int or max_retries != 0 or request_timeout_seconds != 300
-                or extraction_tool_choice != "omitted" or verification_tool_choice != "forced"
+                or extraction_tool_choice != "omitted"
                 or bounded_profile is None or not bounded_profile.is_bounded
+                or verification_tool_choice != bounded_profile.bounded_verification_tool_choice
                 or base_url != bounded_profile.base_url or request_model != bounded_profile.model
                 or not isinstance(semantic_audit, PhasedEvaluationAudit)
                 or semantic_audit.execution_plan != execution_plan
@@ -708,7 +709,8 @@ def _run_evaluation_batch(
                 api_key=SecretStr(api_key), base_url=base_url, model=request_model, temperature=0.0,
                 **({"max_tokens": 8192} if pro16 else bounded_profile.output_parameters if bounded_profile is not None else {}),
                 timeout=request_timeout_seconds, max_retries=max_retries,
-                extra_body={"thinking": {"type": "disabled"}, "reasoning_effort": "none"},
+                extra_body={"thinking": {"type": "enabled" if bounded and verification_tool_choice == "omitted" else "disabled"},
+                            "reasoning_effort": "max" if bounded and verification_tool_choice == "omitted" else "none"},
                 http_client=sync_client, http_async_client=async_client,
             ) if mixed or bounded else model
             for position, (case, window) in enumerate(zip(cases, windows)):
@@ -730,7 +732,7 @@ def _run_evaluation_batch(
                         ), database_url=database_url, task_id=formal_task_ids[position],
                         verification_runtime=_RecordedVerificationRuntime(
                             LangChainSourceVerificationRuntime(model=verification_model, provider=provider,
-                                verification_mode=selected), store, position,
+                                verification_mode=selected, force_tool_choice=verification_tool_choice == "forced"), store, position,
                             invocation_scope=invocation_scope or _plain_invocation,
                         ), provider=provider, model_name=request_model,
                     )

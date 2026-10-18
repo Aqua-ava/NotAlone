@@ -292,9 +292,9 @@ def _verify_bounded_claim(frozen: dict, config: dict, helper: Any, actual_window
     fixed = frozen.get("fixed", {})
     if fixed.get("provider_profile", EvaluationProviderProfile.DEEPSEEK_BOUNDED_TASK.value) != profile.value:
         raise ValueError("bounded_frozen_provider_changed")
-    if profile is EvaluationProviderProfile.DEEPSEEK_PRO_BOUNDED_TASK and (
+    if profile.is_pro and (
             fixed.get("request_model") != profile.model or fixed.get("response_model") != profile.model
-            or type(fixed.get("request_contract_version")) is not int or fixed["request_contract_version"] != 3
+            or type(fixed.get("request_contract_version")) is not int or fixed["request_contract_version"] != profile.bounded_request_version
             or type(fixed.get("max_tokens")) is not int or fixed["max_tokens"] != 8192):
         raise ValueError("bounded_frozen_pro_contract_changed")
     fixture = "backend/src/notalone/memory_extraction/evaluation_bounded_cases.py"
@@ -324,7 +324,7 @@ def _verify_bounded_claim(frozen: dict, config: dict, helper: Any, actual_window
                 "verification_prompt_profile"} & set(config)
             or config.get("tool_choice") != {
                 "extraction": {"mode": "omitted", "name": "GroundedMemoryLabels"},
-                "verification": {"mode": "forced", "name": "SourceVerificationOutput"}}):
+                "verification": {"mode": profile.bounded_verification_tool_choice, "name": "SourceVerificationOutput"}}):
         raise ValueError("bounded_fixed_registration_changed")
     tasks = config["formal_tasks"]
     if type(tasks) is not list or len(tasks) != 15:

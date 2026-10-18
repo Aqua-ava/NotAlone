@@ -44,6 +44,9 @@ class BoundedPublicFixtureTest(unittest.TestCase):
     def test_pro_prepare_validate_freeze_explicit_profile_without_credentials_or_budget(self):
         self.assert_prepare_without_credentials("bounded15-pro")
 
+    def test_thinking_prepare_and_validate_do_not_read_credentials_or_claim_budget(self):
+        self.assert_prepare_without_credentials("bounded15-pro-thinking")
+
     def assert_prepare_without_credentials(self, profile):
         module = fixture_module()
 
@@ -56,10 +59,10 @@ class BoundedPublicFixtureTest(unittest.TestCase):
                 patch.object(module, "helpers", return_value=helper), \
                 patch.object(helper, "read_credential", side_effect=forbidden):
             directory = Path(temporary).resolve() / "formal"
-            options = {"credential_path": Path(temporary).resolve() / "absent-key.json"} if profile == "bounded15-pro" else {}
+            options = {"credential_path": Path(temporary).resolve() / "absent-key.json"} if profile in {"bounded15-pro", "bounded15-pro-thinking"} else {}
             frozen = module.prepare(directory=directory, absolute_start=datetime.now(timezone.utc), profile=profile, **options)
-            if profile == "bounded15-pro":
-                self.assertEqual(frozen["fixed"]["provider_profile"], "deepseek-pro-bounded-task-v1")
+            if profile in {"bounded15-pro", "bounded15-pro-thinking"}:
+                self.assertEqual(frozen["fixed"]["provider_profile"], "deepseek-pro-bounded-thinking-v1" if profile == "bounded15-pro-thinking" else "deepseek-pro-bounded-task-v1")
                 self.assertEqual(frozen["fixed"]["request_model"], "deepseek-v4-pro")
                 self.assertEqual(frozen["fixed"]["max_tokens"], 8192)
                 self.assertFalse(Path(frozen["credential_path"]).exists())
@@ -71,7 +74,7 @@ class BoundedPublicFixtureTest(unittest.TestCase):
                 self.assertEqual(len(set(data.task_ids)), 15)
                 self.assertEqual(frozen["fixed"]["request_limit"], 30)
                 module.validate(frozen)
-                if profile == "bounded15-pro":
+                if profile in {"bounded15-pro", "bounded15-pro-thinking"}:
                     for field, value in (("provider_profile", "deepseek-bounded-task-v1"), ("request_model", "deepseek-flash"),
                                          ("response_model", "deepseek-flash"), ("request_contract_version", 2), ("max_tokens", True)):
                         changed = deepcopy(frozen)
@@ -138,6 +141,9 @@ class BoundedPublicFixtureTest(unittest.TestCase):
     def test_pro_owned_worker_uses_real_e_v_sdk_and_archives_actual_pro_task_before_cleanup(self):
         self.assert_owned_entry_closes("bounded15-pro")
 
+    def test_thinking_owned_worker_uses_both_max_and_stops_without_forced_retry(self):
+        self.assert_owned_entry_closes("bounded15-pro-thinking")
+
     def assert_owned_entry_closes(self, profile):
         from notalone.memory_extraction import evaluation_owned_process as owned
         from notalone.memory_extraction.evaluation_bounded_sources import cleanup_bounded_sources
@@ -153,7 +159,7 @@ class BoundedPublicFixtureTest(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temporary, patch.dict(os.environ, {"NOTALONE_DISABLE_DOTENV": "1"}):
             directory = Path(temporary).resolve() / "formal"
-            pro = profile == "bounded15-pro"
+            pro = profile in {"bounded15-pro", "bounded15-pro-thinking"}
             options = {"credential_path": Path(temporary).resolve() / "absent-key.json"} if pro else {}
             frozen = module.prepare(directory=directory, absolute_start=datetime.now(timezone.utc), profile=profile, **options)
             freeze_path = directory / "freeze.json"
@@ -198,7 +204,7 @@ class BoundedPublicFixtureTest(unittest.TestCase):
                     self.assertEqual(payload["prompt_profile"], BOUNDED_DEPENDENCY_PROMPT_PROFILE)
                     self.assertEqual(payload["prompt_sha256"], canonical_sha256(grounded_v2_prompt(BOUNDED_DEPENDENCY_PROMPT_PROFILE)))
                 self.assertEqual(config["request_model"], model_name)
-                self.assertEqual(config["request_contract_version"], 3 if pro else 2)
+                self.assertEqual(config["request_contract_version"], 5 if profile == "bounded15-pro-thinking" else 3 if pro else 2)
                 self.assertTrue((directory / "source-finish.json").is_file())
             finally:
                 if not (directory / "source-finish.json").exists():
@@ -333,7 +339,8 @@ def synthetic_owned_worker(freeze_path: Path, expected_sha256: str, approval_pat
     synthetic_home.mkdir(mode=0o700)
     counts = {"requests": 0, "credentials_loaded": 0}
     frozen = helper.read_private(freeze_path)
-    pro = frozen["fixed"]["provider_profile"] == "deepseek-pro-bounded-task-v1"
+    thinking = frozen["fixed"]["provider_profile"] == "deepseek-pro-bounded-thinking-v1"
+    pro = frozen["fixed"]["provider_profile"] in {"deepseek-pro-bounded-task-v1", "deepseek-pro-bounded-thinking-v1"}
     model_name = "deepseek-v4-pro" if pro else "deepseek-flash"
 
     def forbidden(*args, **kwargs):
@@ -367,6 +374,11 @@ def synthetic_owned_worker(freeze_path: Path, expected_sha256: str, approval_pat
             raise AssertionError("生产SDK未使用冻结Pro模型或输出上限")
         if not pro and "max_tokens" in body:
             raise AssertionError("旧Flash不得增加输出参数")
+        forced = name == "SourceVerificationOutput" and not thinking
+        if body.get("thinking") != {"type": "disabled" if forced else "enabled"} or body.get("reasoning_effort") != ("none" if forced else "max"):
+            raise AssertionError("实际SDK阶段推理配置漂移")
+        if ("tool_choice" in body) != forced:
+            raise AssertionError("实际SDK工具选择省略策略漂移")
         if counts["requests"] == 1 and name == "GroundedMemoryLabels":
             from notalone.memory_extraction.grounded_adapter import BOUNDED_DEPENDENCY_PROMPT_PROFILE, grounded_v2_prompt
             if (body["messages"][0]["content"] != grounded_v2_prompt(BOUNDED_DEPENDENCY_PROMPT_PROFILE)

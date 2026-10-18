@@ -344,7 +344,8 @@ def _run_bounded_runtime_evaluation(
     _bounded_source_inventory(repo_root, source_hashes)
     contract = ECNUEvaluationContract(deadline=deadline, repo_root=repo_root, source_hashes=source_hashes,
         provider_profile=profile, extraction_mode="grounded-v2", execution_plan=BOUNDED_RUNTIME_PLAN,
-        extraction_prompt_profile=BOUNDED_DEPENDENCY_PROMPT_PROFILE)
+        extraction_prompt_profile=BOUNDED_DEPENDENCY_PROMPT_PROFILE,
+        verification_tool_choice=profile.bounded_verification_tool_choice)
 
     def unique_object(pairs: list[tuple[str, object]]) -> dict:
         result: dict = {}
@@ -371,7 +372,7 @@ def _run_bounded_runtime_evaluation(
                 or audit_case.case_set != "bounded15" or audit_case.case_positions != tuple(range(15))
                 or audit_case.extraction_mode != "grounded-v2" or audit_case.extraction_prompt_profile != BOUNDED_DEPENDENCY_PROMPT_PROFILE
                 or audit_case.verification_mode != "nullable-proof-v3"
-                or audit_case.extraction_tool_choice != "omitted" or audit_case.verification_tool_choice != "forced"):
+                or audit_case.extraction_tool_choice != "omitted" or audit_case.verification_tool_choice != profile.bounded_verification_tool_choice):
             raise ValueError("changed_bounded_reference_binding")
     except (OSError, UnicodeError, ValueError, TypeError, KeyError):
         raise EvaluationBudgetAbort("evaluation_bounded_reference_invalid") from None
@@ -394,12 +395,12 @@ def _run_bounded_runtime_evaluation(
         "runtime_rule_set_sha256": rule_set_sha256(), "request_contract_version": 2,
         "response_identity_policy": "first_valid_completion_observation_stop_on_change",
         "tool_choice": {"extraction": {"mode": "omitted", "name": extraction_contracts[0][1]["title"]},
-                        "verification": {"mode": "forced", "name": v_contract[1]["title"]}},
+                        "verification": {"mode": profile.bounded_verification_tool_choice, "name": v_contract[1]["title"]}},
         "fallback": False, "versions": {name: version(name) for name in (
             "openai", "langchain-core", "langchain-deepseek", "langchain-openai", "httpx", "httpx2", "langsmith", "pydantic")},
     }
-    if profile is EvaluationProviderProfile.DEEPSEEK_PRO_BOUNDED_TASK:
-        config.update(request_contract_version=3, provider_profile=profile.value, **profile.output_parameters)
+    if profile.is_pro:
+        config.update(request_contract_version=profile.bounded_request_version, provider_profile=profile.value, **profile.output_parameters)
     config.pop("thinking")
     config["omitted_parameters"].remove("reasoning_effort")
 
@@ -431,7 +432,7 @@ def _run_bounded_runtime_evaluation(
         prompt, schema = frozen
         if not messages or messages[0] != {"role": "system", "content": prompt}:
             raise EvaluationBudgetAbort("ecnu_runtime_prompt_changed")
-        verification = purpose == "verification"
+        verification = purpose == "verification" and profile.bounded_verification_tool_choice == "forced"
         expected = {"model": profile.model, "temperature": 0.0, "stream": False, **profile.output_parameters,
             "reasoning_effort": "none" if verification else "max",
             "thinking": {"type": "disabled" if verification else "enabled"}, "messages": messages,
@@ -458,7 +459,7 @@ def _run_bounded_runtime_evaluation(
             invocation_scope=invocation_scope, semantic_audit=audit_case,
             gold_reference={"criteria_sha256": frozen_gold["criteria_sha256"]}, code_prefix="deepseek",
             credential_loader=bounded_loader, request_timeout_seconds=300.0, max_retries=0,
-            verification_mode="nullable-proof-v3", verification_tool_choice="forced", reasoning_effort="max",
+            verification_mode="nullable-proof-v3", verification_tool_choice=profile.bounded_verification_tool_choice, reasoning_effort="max",
             extraction_tool_choice="omitted", extraction_mode="grounded-v2", execution_plan=BOUNDED_RUNTIME_PLAN,
             formal_task_ids=task_ids, database_url=database_url, extraction_prompt_profile=BOUNDED_DEPENDENCY_PROMPT_PROFILE)
     except BaseException as error:
@@ -532,13 +533,13 @@ def run_ecnu_evaluation(
             raise EvaluationBudgetAbort("evaluation_reference16_pro_fixed_plan_required")
 
     bounded15 = execution_plan == BOUNDED_RUNTIME_PLAN
-    if (bounded15 or provider_profile in {EvaluationProviderProfile.DEEPSEEK_BOUNDED_TASK, EvaluationProviderProfile.DEEPSEEK_PRO_BOUNDED_TASK}
+    if (bounded15 or provider_profile in {EvaluationProviderProfile.DEEPSEEK_BOUNDED_TASK, EvaluationProviderProfile.DEEPSEEK_PRO_BOUNDED_TASK, EvaluationProviderProfile.DEEPSEEK_PRO_BOUNDED_THINKING}
             or case_set == "bounded15" or formal_windows is not None or formal_task_ids != ()
             or database_url is not None or bounded_runtime_deadline is not None):
-        if (not bounded15 or provider_profile not in {EvaluationProviderProfile.DEEPSEEK_BOUNDED_TASK, EvaluationProviderProfile.DEEPSEEK_PRO_BOUNDED_TASK}
+        if (not bounded15 or provider_profile not in {EvaluationProviderProfile.DEEPSEEK_BOUNDED_TASK, EvaluationProviderProfile.DEEPSEEK_PRO_BOUNDED_TASK, EvaluationProviderProfile.DEEPSEEK_PRO_BOUNDED_THINKING}
                 or reference_version != BOUNDED_RUNTIME_PLAN or case_set != "bounded15" or case_positions is not None
                 or extraction_mode != "grounded-v2" or extraction_prompt_profile != BOUNDED_DEPENDENCY_PROMPT_PROFILE
-                or verification_mode != "nullable-proof-v3" or verification_tool_choice != "forced"
+                or verification_mode != "nullable-proof-v3" or verification_tool_choice != EvaluationProviderProfile(provider_profile).bounded_verification_tool_choice
                 or response_identity_policy != "first_valid_completion_observation_stop_on_change"
                 or type(request_limit) is not int or request_limit != 30
                 or type(request_timeout_seconds) not in (int, float) or request_timeout_seconds != 300

@@ -370,7 +370,7 @@ class EvaluationRecordStore:
                     or config.get("response_identity_policy") != STRICT_RESPONSE_IDENTITY_POLICY
                     or config.get("tool_choice") != {
                         "extraction": {"mode": "omitted", "name": "GroundedMemoryLabels"},
-                        "verification": {"mode": "forced", "name": "SourceVerificationOutput"},
+                        "verification": {"mode": profile.bounded_verification_tool_choice, "name": "SourceVerificationOutput"},
                     }
                     or {"thinking", "reasoning_effort", "phase_request_version", "phase_request_policy"} & set(config)
                     or self._manifest["request_limit"] != 30
