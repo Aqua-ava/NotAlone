@@ -58,7 +58,7 @@ from notalone.memory_trace.context import current_trace
 from .evaluation_provider_contract import (
     MIXED_REQUEST_VERSION, mixed_phase_policy, FULL140_E2_PLAN, PHASE_SPLIT_PLANS, REFERENCE21_PLANS,
     SEMANTIC4_PROMPT_PROFILE, validate_semantic4_windows,
-    PUBLIC_QUALITY_PLANS, validate_extraction_prompt_profile, REFERENCE16_PRO_PLAN,
+    PUBLIC_QUALITY_PLANS, validate_extraction_prompt_profile, REFERENCE16_PRO_PLANS,
 )
 
 _BASE_URL = "https://evaluation.invalid/v1"
@@ -556,7 +556,7 @@ def _run_evaluation_batch(
     extraction_selected = EvaluationExtractionMode(extraction_mode)
     from .evaluation_bounded_cases import BOUNDED_RUNTIME_CASES, BOUNDED_RUNTIME_PLAN
 
-    pro16 = execution_plan == REFERENCE16_PRO_PLAN
+    pro16 = type(execution_plan) is str and execution_plan in REFERENCE16_PRO_PLANS
     bounded = execution_plan == BOUNDED_RUNTIME_PLAN
     bounded_profile = store.bounded_provider_profile if bounded else None
     if bounded:

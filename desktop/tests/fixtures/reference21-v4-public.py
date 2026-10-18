@@ -24,6 +24,7 @@ from notalone.memory_extraction.evaluation_provider_contract import (
     UNIQUENESS_PLAN, UNIQUENESS_KIND, UNIQUENESS_E_PROFILE, PUBLIC_QUALITY_PLANS, validate_semantic4_windows,
     BOUNDED_RUNTIME_PLAN, BOUNDED_RUNTIME_MODE, BOUNDED_RUNTIME_STAGE, BOUNDED_RUNTIME_KIND,
     EvaluationProviderProfile, REFERENCE16_PRO_PLAN, REFERENCE16_PRO_KIND,
+    REFERENCE16_PRO_TEACHING_PLAN, REFERENCE16_PRO_TEACHING_KIND,
 )
 BOUNDED_REFERENCE = ".scratch/memory-accuracy-next/bounded-runtime-real15-reference-20261017.json"
 BOUNDED_ANNOTATION = ".scratch/memory-accuracy-next/bounded-runtime-real15-plan-20261017.md"
@@ -74,6 +75,11 @@ PROFILES["reference16-pro"] = {
     "batch_work_seconds": 14380, "outer_wall_seconds": 14400,
 }
 
+PROFILES["reference16-pro-teaching"] = {
+    **PROFILES["reference16-pro"], "execution_plan": REFERENCE16_PRO_TEACHING_PLAN,
+    "extraction_prompt_profile": "reference-kind-teaching-v1",
+}
+
 
 def fixed_contract(frozen: dict) -> dict:
     fixed = frozen.get("fixed")
@@ -87,6 +93,7 @@ def fixed_contract(frozen: dict) -> dict:
 
 def owned_kind(frozen: dict) -> str:
     return {REFERENCE21_V4_PLAN: REFERENCE21_V4_KIND, SEMANTIC4_PLAN: SEMANTIC4_KIND,
+            REFERENCE16_PRO_TEACHING_PLAN: REFERENCE16_PRO_TEACHING_KIND,
             UNIQUENESS_PLAN: UNIQUENESS_KIND, REFERENCE16_PRO_PLAN: REFERENCE16_PRO_KIND, BOUNDED_RUNTIME_PLAN: BOUNDED_RUNTIME_KIND}[fixed_contract(frozen)["execution_plan"]]
 
 
@@ -129,6 +136,9 @@ def _source_names(fixed=None):
     from notalone.memory_extraction.evaluation_ecnu import (
         _REFERENCE21_V4_REQUIRED_SOURCES, _SEMANTIC4_REQUIRED_SOURCES, _UNIQUENESS_REQUIRED_SOURCES,
     )
+    if fixed is not None and fixed["execution_plan"] == REFERENCE16_PRO_TEACHING_PLAN:
+        from notalone.memory_extraction.evaluation_ecnu import _REFERENCE16_PRO_TEACHING_REQUIRED_SOURCES
+        return _REFERENCE16_PRO_TEACHING_REQUIRED_SOURCES
     if fixed is not None and fixed["execution_plan"] == REFERENCE16_PRO_PLAN:
         from notalone.memory_extraction.evaluation_ecnu import _REFERENCE16_PRO_REQUIRED_SOURCES
         return _REFERENCE16_PRO_REQUIRED_SOURCES
@@ -148,7 +158,7 @@ def prepare(*, directory: Path, absolute_start: datetime, profile: str = "baseli
     from notalone.memory_extraction.evaluation_reference import validate_public_reference
     if type(profile) is not str or profile not in PROFILES:
         raise ValueError("reference21_v4_fixed_profile_required")
-    if profile in {"bounded15-pro", "reference16-pro"}:
+    if profile in {"bounded15-pro", "reference16-pro", "reference16-pro-teaching"}:
         _validate_pro_credential_path(credential_path)
     elif credential_path is not None:
         raise ValueError("explicit_key_only_for_pro_profile")
@@ -188,7 +198,7 @@ def prepare(*, directory: Path, absolute_start: datetime, profile: str = "baseli
         "extraction_window_contracts": [rows[position] for position in positions],
         "verification_prompt_sha256": helper.digest(prompt), "verification_schema_sha256": helper.digest(schema),
         "quality_certified": False}
-    if profile == "reference16-pro":
+    if profile in {"reference16-pro", "reference16-pro-teaching"}:
         frozen["credential_path"] = str(_validate_pro_credential_path(credential_path))
     helper.publish(directory / "freeze.json", frozen)
     return frozen
@@ -234,7 +244,7 @@ def validate(frozen: dict) -> tuple[datetime, datetime]:
     if (frozen["reference_canonical_sha256"] != helper.digest(reference)
             or helper.digest(frozen["selection"]) != helper.digest(expected_selection)):
         raise ValueError("reference21_v4_reference_drift")
-    if fixed["execution_plan"] == REFERENCE16_PRO_PLAN:
+    if fixed["execution_plan"] in {REFERENCE16_PRO_PLAN, REFERENCE16_PRO_TEACHING_PLAN}:
         _validate_pro_credential_path(frozen.get("credential_path"))
     directory = Path(frozen["directory"])
     helper.private_directory(directory)
@@ -280,7 +290,7 @@ def worker(*, freeze_path: Path, expected_sha256: str, approval: dict,
     directory = Path(frozen["directory"])
     if freeze_path.resolve() != directory / "freeze.json":
         raise ValueError("reference21_v4_directory_binding_changed")
-    pro16 = fixed["execution_plan"] == REFERENCE16_PRO_PLAN
+    pro16 = fixed["execution_plan"] in {REFERENCE16_PRO_PLAN, REFERENCE16_PRO_TEACHING_PLAN}
     positions = tuple(fixed["case_positions"]) if fixed["case_positions"] is not None else None
     deadline_type = Main16Deadline if pro16 else Reference21V4Deadline
     control = deadline_type(receipt=directory / "deadline-receipt.json",
@@ -607,7 +617,7 @@ if __name__ == "__main__":
                              profile={"prepare": "baseline", "prepare-semantic4": "semantic4", "prepare-uniqueness": "uniqueness",
                                       "prepare-bounded15": "bounded15"}[sys.argv[1]])
             print(json.dumps({"run_id": freeze["run_id"], "freeze_sha256": helpers().file_digest(Path(freeze["directory"]) / "freeze.json")}))
-        elif len(sys.argv) == 5 and sys.argv[1] in {"prepare-bounded15-pro", "prepare-reference16-pro"}:
+        elif len(sys.argv) == 5 and sys.argv[1] in {"prepare-bounded15-pro", "prepare-reference16-pro", "prepare-reference16-pro-teaching"}:
             freeze = prepare(directory=Path(sys.argv[2]), absolute_start=datetime.fromisoformat(sys.argv[3]),
                              profile=sys.argv[1].removeprefix("prepare-"), credential_path=Path(sys.argv[4]))
             print(json.dumps({"run_id": freeze["run_id"], "freeze_sha256": helpers().file_digest(Path(freeze["directory"]) / "freeze.json")}))

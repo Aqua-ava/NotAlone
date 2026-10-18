@@ -163,14 +163,56 @@ CORE_CURRENT_STATE_GUIDANCE = """
 </core_current_state_v1>
 """
 
+REFERENCE_KIND_PROMPT_PROFILE = "reference-kind-teaching-v1"
+REFERENCE_KIND_TEACHING_V1 = """
+<reference_kind_teaching_v1>
+先按原规则判断纳入，再核所保存的主断言、原文明示的行动角色与阶段，最后选kind。第三人称、出现“我”、亲属称呼或否定词都不能单独决定类型。
+第三人的身份资料（含否定身份）用third_party_fact，第三人历史行动的叙述用reported_event；来源明确本人已收到邀请、实际接收或参与借用等互动时仍可relationship_event。不能因第三人在场或身份未知一律改成转述，也不能因“我”是关系对象便补成已接收、已交付或已参与。
+correction须有本窗明确先前主张及更正依据；单纯否定或同句正反对照不证明先前有人说错。未有更正依据时仍按原主张类型保留否定，不能补一次纠正行动。
+主断言是普通动作的完成进度或结果时用event；关系人物、赠予来历只是背景，不把普通完成改成relationship_event。第三人身份资料与第三人已发生经历也不能混为同一kind。
+只在未知影响当前保留主张必需的指称或行动角色，或当前主张包含所指未决的所有格时标unresolved=true；保留原句，不猜谁借入、借出或拥有物品。未主张所有权时，来源未说明所有者不单独构成未决；背景中另一主张的未知也不抹去当前已有依据的明确动作、数量或完成状态。仅有请求、打算、条件或未证交付时不升级成已完成互动。敏感性按实际来源保留，否定借贷也不消除financial范围；普通物品借用不凭空增加财务风险。
+以下是现有kind的基础编译映射，顺序为category / speech_act / assertion_status；只说明标签的下游含义，不要求模型额外输出三字段，不证明现实真伪或来源可信。条件、未知及其他既有程序规则仍按原合同处理，不能用此表覆盖来源限定：
+event → common_fact / assertion / asserted
+relationship_event → relationship_note / assertion / asserted
+reported_event → relationship_note / report / reported
+third_party_fact → relationship_note / report / reported
+assessment → relationship_note / assertion / asserted
+preference → preference / assertion / asserted
+taboo → taboo / assertion / asserted
+state → recent_state / assertion / asserted
+momentary_state → recent_state / assertion / asserted
+plan → recent_state / plan / asserted
+hypothesis → recent_state / plan / hypothetical
+request → relationship_note / request / asserted
+correction → relationship_note / correction / asserted
+unknown → relationship_note / unknown / unknown
+prefix、condition及省略原因沿原结构规则，不是额外关系事实；模型选择与程序字段合法不替代独立来源核验。
+以下独立合成对照均由联系人说出，只示范局部标签，不是本次来源。context只供理解，实际仅输出user输入的target，不复制示例或虚构角色。
+1. 无前文，target「隔壁住户并非兽医。」：third_party_fact。否定第三人职业，不能因“并非”选correction。
+2. context「我报的场次是周二。」；target「我刚才把已报名的周三场次说成周二了。」：correction，必要dependency指向先前主张。保存有据更正，不从被更正日期推更正动作的有效期。
+3. target「社区剧团已经邀请我参加读剧会。」：relationship_event。已收到邀请有据，不能补已答应或已参加，也不因邀请方是第三人改成纯第三人经历。
+4. target「邻居上个月参加过读剧会。」：reported_event。保存第三人已发生经历，不能补联系人也参加。
+5. target「舅舅已经把备用帐篷交给我了。」：relationship_event。出交者与接收者明确，保留本人接收；不据交付推赠予、产权转移或永久拥有。
+6. 无前文，target「他借了我一套量具。」：reported_event，unresolved=true。只保留第三人借用行动的原述；人物与借入／借出方向未定，不补联系人已经收到或交付，也不能用低风险或完整句式消除歧义。
+7. context「表哥送了我一张书桌。」；唯一target「抽屉已经装好了。」：event。主断言是装配完成，关系来历不是装配者证据，也不作为不必要的dependency。
+8. target「邻居的职业是灯光师。」：third_party_fact。身份资料不因用过去经历类的关系标签更保守就改成reported_event；不把职业归给联系人。
+9. target「邻居把露营炉借给我用了。」：relationship_event。本人借用方向有明确原文，不因“借”或第三人称统一改成reported_event；出借角色仍不证明炉具归属。
+10. target「我打算下周送你一只保温杯。」：plan。保留未来打算，不能沿已发生接收示例补成交付；期间、敏感性及其他字段继续按本次原来源核对。
+</reference_kind_teaching_v1>
+"""
+
+
 def grounded_v2_prompt(prompt_profile: str = "default", *, events: bool = False) -> str:
     """两个既有协议共享教学增量；默认提示逐字保留。"""
     if type(prompt_profile) is not str or prompt_profile not in {
-            "default", BOUNDED_STAGE_PROMPT_PROFILE, BOUNDED_DEPENDENCY_PROMPT_PROFILE, CORE_CURRENT_STATE_PROFILE}:
+            "default", BOUNDED_STAGE_PROMPT_PROFILE, BOUNDED_DEPENDENCY_PROMPT_PROFILE,
+            CORE_CURRENT_STATE_PROFILE, REFERENCE_KIND_PROMPT_PROFILE}:
         raise ValueError("提取提示profile无效。")
     base = GROUNDED_V2_PROMPT + (GROUNDED_EVENT_PROMPT if events else "")
     if prompt_profile == CORE_CURRENT_STATE_PROFILE:
         return base + CORE_CURRENT_STATE_GUIDANCE
+    if prompt_profile == REFERENCE_KIND_PROMPT_PROFILE:
+        return base + REFERENCE_KIND_TEACHING_V1
     if prompt_profile == "default":
         return base
     return base + BOUNDED_STAGE_TEACHING_V1 + (
@@ -461,7 +503,8 @@ def _extract_grounded(
         raise ExtractionInvalidOutputError("原文结构提取必须返回唯一的指定工具。")
     draft = calls[0].get("args")
     identity = {"protocol": protocol}
-    if prompt_profile in {BOUNDED_STAGE_PROMPT_PROFILE, BOUNDED_DEPENDENCY_PROMPT_PROFILE, CORE_CURRENT_STATE_PROFILE}:
+    if prompt_profile in {BOUNDED_STAGE_PROMPT_PROFILE, BOUNDED_DEPENDENCY_PROMPT_PROFILE,
+                          CORE_CURRENT_STATE_PROFILE, REFERENCE_KIND_PROMPT_PROFILE}:
         identity.update(prompt_profile=prompt_profile, prompt_sha256=hashlib.sha256(json.dumps(
             prompt, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False,
         ).encode("utf-8")).hexdigest())

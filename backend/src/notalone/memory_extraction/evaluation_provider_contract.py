@@ -88,6 +88,7 @@ _BOUNDED_MIGRATION_SOURCES = frozenset(
 def validate_extraction_prompt_profile(execution_plan: str, prompt_profile: str) -> None:
     """新提示须与唯一新身份绑定，旧身份只允许原默认。"""
     expected = (BOUNDED_DEPENDENCY_PROMPT_PROFILE if execution_plan == BOUNDED_RUNTIME_PLAN
+                else REFERENCE16_TEACHING_E_PROFILE if execution_plan == REFERENCE16_PRO_TEACHING_PLAN
                 else UNIQUENESS_E_PROFILE if execution_plan == UNIQUENESS_PLAN else "default")
     if type(prompt_profile) is not str or prompt_profile != expected:
         raise EvaluationBudgetAbort("evaluation_extraction_prompt_profile_mismatch")
@@ -120,6 +121,12 @@ REFERENCE16_PRO_PLAN = "reference16-pro-v1"
 REFERENCE16_PRO_MODE = "deepseek_bounded_reference16_pro"
 REFERENCE16_PRO_STAGE = "reference16-pro"
 REFERENCE16_PRO_KIND = "reference16-pro"
+REFERENCE16_PRO_TEACHING_PLAN = "reference16-pro-teaching-v1"
+REFERENCE16_PRO_TEACHING_MODE = "deepseek_bounded_reference16_pro_teaching"
+REFERENCE16_PRO_TEACHING_STAGE = "reference16-pro-teaching"
+REFERENCE16_PRO_TEACHING_KIND = "reference16-pro-teaching"
+REFERENCE16_TEACHING_E_PROFILE = "reference-kind-teaching-v1"
+REFERENCE16_PRO_PLANS = frozenset({REFERENCE16_PRO_PLAN, REFERENCE16_PRO_TEACHING_PLAN})
 
 
 class EvaluationProviderProfile(StrEnum):
@@ -229,7 +236,7 @@ class ECNUEvaluationContract:
             raise EvaluationBudgetAbort("evaluation_mixed_fixed_plan_required")
         bounded = self._profile.is_bounded
         reference16 = self._profile is EvaluationProviderProfile.DEEPSEEK_PRO_REFERENCE16
-        if reference16 != (execution_plan == REFERENCE16_PRO_PLAN) or reference16 and (
+        if reference16 != (execution_plan in REFERENCE16_PRO_PLANS) or reference16 and (
                 verification_tool_choice != "forced" or self._extraction_mode is not EvaluationExtractionMode.GROUNDED_V2):
             raise EvaluationBudgetAbort("evaluation_reference16_pro_fixed_plan_required")
         if bounded != (execution_plan == BOUNDED_RUNTIME_PLAN) or bounded and (

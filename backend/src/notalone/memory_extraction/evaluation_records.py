@@ -26,7 +26,8 @@ from .evaluation_provider_contract import (
     SEMANTIC4_PLAN, SEMANTIC4_MODE, SEMANTIC4_STAGE, SEMANTIC4_PROMPT_PROFILE,
     UNIQUENESS_PLAN, UNIQUENESS_MODE, UNIQUENESS_STAGE, PUBLIC_QUALITY_PLANS,
     validate_extraction_prompt_profile, STRICT_RESPONSE_IDENTITY_POLICY, bounded_profile_for_config, EvaluationProviderProfile,
-    REFERENCE16_PRO_PLAN, REFERENCE16_PRO_MODE, REFERENCE16_PRO_STAGE,
+    REFERENCE16_PRO_PLAN, REFERENCE16_PRO_MODE, REFERENCE16_PRO_STAGE, REFERENCE16_PRO_PLANS,
+    REFERENCE16_PRO_TEACHING_PLAN, REFERENCE16_PRO_TEACHING_MODE, REFERENCE16_PRO_TEACHING_STAGE,
 )
 from .models import ExtractionWindow
 
@@ -138,7 +139,7 @@ class EvaluationRecordStore:
         self._budget = budget
         self._manifest = budget.snapshot()
         bounded = frozen_config.get("execution_plan") == BOUNDED_RUNTIME_PLAN
-        reference16 = frozen_config.get("execution_plan") == REFERENCE16_PRO_PLAN
+        reference16 = type(frozen_config.get("execution_plan")) is str and frozen_config["execution_plan"] in REFERENCE16_PRO_PLANS
         for key in ("base_url", "endpoint"):
             if key in frozen_config:
                 _endpoint(frozen_config[key])
@@ -181,7 +182,7 @@ class EvaluationRecordStore:
             raise EvaluationBudgetAbort("invalid_record_verification_prompt_profile")
         self._extraction_prompt_profile = frozen_config.get("extraction_prompt_profile", "default")
         validate_extraction_prompt_profile(self._execution_plan, self._extraction_prompt_profile)
-        if self._execution_plan not in {UNIQUENESS_PLAN, BOUNDED_RUNTIME_PLAN} and "extraction_prompt_profile" in frozen_config:
+        if self._execution_plan not in {UNIQUENESS_PLAN, BOUNDED_RUNTIME_PLAN, REFERENCE16_PRO_TEACHING_PLAN} and "extraction_prompt_profile" in frozen_config:
             raise EvaluationBudgetAbort("invalid_record_extraction_prompt_profile")
         self._mixed = type(self._execution_plan) is str and self._execution_plan in PHASE_SPLIT_PLANS
         self._strict_response = self._mixed or bounded or reference16
@@ -332,7 +333,8 @@ class EvaluationRecordStore:
         from .evaluation_reference import public_window_projection, _fixed_case_sets
         from .semantic_evaluation_cases import SEMANTIC_CASES
 
-        reference16 = self._execution_plan == REFERENCE16_PRO_PLAN
+        reference16 = self._execution_plan in REFERENCE16_PRO_PLANS
+        teaching = self._execution_plan == REFERENCE16_PRO_TEACHING_PLAN
         e2 = self._execution_plan == FULL140_E2_PLAN or reference16
         reference21 = self._execution_plan in REFERENCE21_PLANS
         public_quality = self._execution_plan in PUBLIC_QUALITY_PLANS
@@ -366,10 +368,10 @@ class EvaluationRecordStore:
                 or type(config.get("request_contract_version")) is not int or config["request_contract_version"] != 2
                 or self._manifest["allowed_endpoints"] != ["https://api.deepseek.com/chat/completions"]):
             raise EvaluationBudgetAbort("invalid_record_mixed_registration")
-        if (config.get("execution_plan") != (REFERENCE16_PRO_PLAN if reference16 else FULL140_E2_PLAN if e2 else UNIQUENESS_PLAN if uniqueness else SEMANTIC4_PLAN if public_quality else REFERENCE21_V4_PLAN if reference21 else MIXED_PLAN if self._mixed else "full140-grounded-v4-source-v2")
+        if (config.get("execution_plan") != (REFERENCE16_PRO_TEACHING_PLAN if teaching else REFERENCE16_PRO_PLAN if reference16 else FULL140_E2_PLAN if e2 else UNIQUENESS_PLAN if uniqueness else SEMANTIC4_PLAN if public_quality else REFERENCE21_V4_PLAN if reference21 else MIXED_PLAN if self._mixed else "full140-grounded-v4-source-v2")
                 or config.get("reference_version") != "source-fidelity-v2"
-                or config.get("mode") != (REFERENCE16_PRO_MODE if reference16 else FULL140_E2_MODE if e2 else UNIQUENESS_MODE if uniqueness else SEMANTIC4_MODE if public_quality else REFERENCE21_V4_MODE if reference21 else MIXED_MODE if self._mixed else "deepseek_bounded_full140_v4_source_v2")
-                or config.get("stage") != (REFERENCE16_PRO_STAGE if reference16 else FULL140_E2_STAGE if e2 else UNIQUENESS_STAGE if uniqueness else SEMANTIC4_STAGE if public_quality else REFERENCE21_V4_STAGE if reference21 else MIXED_STAGE if self._mixed else "full140-v4-source-v2")
+                or config.get("mode") != (REFERENCE16_PRO_TEACHING_MODE if teaching else REFERENCE16_PRO_MODE if reference16 else FULL140_E2_MODE if e2 else UNIQUENESS_MODE if uniqueness else SEMANTIC4_MODE if public_quality else REFERENCE21_V4_MODE if reference21 else MIXED_MODE if self._mixed else "deepseek_bounded_full140_v4_source_v2")
+                or config.get("stage") != (REFERENCE16_PRO_TEACHING_STAGE if teaching else REFERENCE16_PRO_STAGE if reference16 else FULL140_E2_STAGE if e2 else UNIQUENESS_STAGE if uniqueness else SEMANTIC4_STAGE if public_quality else REFERENCE21_V4_STAGE if reference21 else MIXED_STAGE if self._mixed else "full140-v4-source-v2")
                 or self._extraction_mode != ("grounded-v2" if e2 else "grounded-v4")
                 or config.get("verification_mode") != ("legacy-v4" if public_quality or e2 else "nullable-proof-v1")
                 or config.get("tool_choice") != {

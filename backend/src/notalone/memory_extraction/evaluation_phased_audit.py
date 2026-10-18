@@ -10,7 +10,7 @@ from .evaluation_http_budget import EvaluationBudgetAbort
 from .evaluation_extraction import EvaluationExtractionMode, extraction_tool_name
 from .evaluation_provider_contract import (
     validate_evaluation_policy, MIXED_PLAN, MIXED_REQUEST_VERSION, mixed_phase_policy,
-    FULL140_E2_PLAN, PHASE_SPLIT_PLANS, REFERENCE21_PLANS, PUBLIC_QUALITY_PLANS, UNIQUENESS_PLAN, REFERENCE16_PRO_PLAN,
+    FULL140_E2_PLAN, PHASE_SPLIT_PLANS, REFERENCE21_PLANS, PUBLIC_QUALITY_PLANS, UNIQUENESS_PLAN, REFERENCE16_PRO_PLANS, REFERENCE16_PRO_TEACHING_PLAN,
     validate_extraction_prompt_profile,
 )
 from .evaluation_records import canonical_sha256
@@ -211,10 +211,10 @@ class PhasedEvaluationAudit:
         execution_plan: str = "original",
         extraction_prompt_profile: str = "default",
     ):
-        if type(execution_plan) is not str or execution_plan not in {"original", *PHASE_SPLIT_PLANS, BOUNDED_RUNTIME_PLAN, REFERENCE16_PRO_PLAN}:
+        if type(execution_plan) is not str or execution_plan not in {"original", *PHASE_SPLIT_PLANS, BOUNDED_RUNTIME_PLAN, *REFERENCE16_PRO_PLANS}:
             raise ValueError("审核执行身份非法。")
         self._execution_plan = execution_plan
-        reference16 = execution_plan == REFERENCE16_PRO_PLAN
+        reference16 = execution_plan in REFERENCE16_PRO_PLANS
         e2 = execution_plan == FULL140_E2_PLAN or reference16
         mixed = execution_plan in PHASE_SPLIT_PLANS
         reference21_v4 = execution_plan in REFERENCE21_PLANS
@@ -375,7 +375,7 @@ class PhasedEvaluationAudit:
         if bundle.get("extraction_mode", "legacy-e14") != self.extraction_mode:
             raise EvaluationBudgetAbort("phased_extraction_mode_changed")
         if (bundle.get("extraction_prompt_profile", "default") != self.extraction_prompt_profile
-                or self.execution_plan not in {UNIQUENESS_PLAN, BOUNDED_RUNTIME_PLAN} and "extraction_prompt_profile" in bundle):
+                or self.execution_plan not in {UNIQUENESS_PLAN, BOUNDED_RUNTIME_PLAN, REFERENCE16_PRO_TEACHING_PLAN} and "extraction_prompt_profile" in bundle):
             raise EvaluationBudgetAbort("phased_extraction_prompt_profile_changed")
         if bundle.get("verification_mode", "legacy-v4") != self.verification_mode:
             raise EvaluationBudgetAbort("phased_verification_mode_changed")
