@@ -167,6 +167,9 @@ class RealMemoryAcceptance(CoreBusinessFlowFixture, unittest.TestCase):
         self.assertIsNotNone(last['layers']['profile'])
         self.assertFalse(last['layers']['maintenance_pending'], last['layers'])
         self.assertEqual(last['layers']['covered_count'], last['layers']['eligible_count'])
+        self.assertEqual(last['layers']['pending_fact_count'], 0, '自动链路不能留下未处理候选')
+        self.assertFalse(any(c['status'] == 'pending' for c in last['candidates']['candidates']),
+                         '版本不变不能代替真正完成重复skip')
         return last
 
     def test_complete_chain(self):
