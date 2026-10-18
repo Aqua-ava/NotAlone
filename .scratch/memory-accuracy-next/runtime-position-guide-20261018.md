@@ -54,3 +54,13 @@ Emax/工具省略、Vnone/强制、E2/proof3、cap30、零重试、RAW→FULL、
 新增注册/SDK/领取/fixture先出现预期红灯后转绿，最终6模块90项检查全部通过（33.860秒）；覆盖真正独立owned子进程、SDK MockTransport E/V请求、PG实际task/trace的Pro身份及结束后来源残留0。两轴最终复核均0剩余实质问题；主Agent另核任务07投影机械一致。以上仅证明受控工程链路，不认证供应商接受或真实proof交付，尚无新模型请求。
 
 最终类型检查曾因SDK可变关键字的宽dict注解报40条同源错误；以仅含可选max_tokens的TypedDict修正，不改变实际请求。随后注册模块15项复查通过，五源码mypy在pipefail下明确Success、退出0；不将此前tail退出码当作类型检查成功。
+
+## Pro独立首场：正式审核推进但正证未交付
+
+run=18fcc800-361d-4a47-86cd-a0a82021ea39，源码90af01c2，freeze SHA256=aa459fc14226ca1883f6db54481953a649b30e2c5a75cedba6e406726d2430c9。原15/Gold及停止门不变，Emax/Vnone、各8192显式上限。E/V各一次HTTP200，响应精确模型通过；closed2/30、零重试，余28永久关闭。
+
+P01首次完成独立RAW→FULL封存：E仍输出momentary_state，编译recent_state并带一天有效期，与完成事实common_fact/双null的原Gold不符；V supported且issues空，未发现该错误。本次位置及作者自指提案合法，但程序pragmatics_not_supported返回UNKNOWN、basis=null。media和truth_intent各有独立有效依据，其余五轴unknown，未误授信；实际source current/ALL/pending，未发现假事、错人或bad_auto。本窗一般错误1，正向依据交付0/7；按bounded_runtime_positive_delivery_missing停止，后14窗unrun。
+
+完成1窗的七轴审查不等于七轴通过；summary按一般错误窗口记七维meets_gate=false，不能将media/truth_intent单项判断或合法位置提案改写为整个合同达标。RAW与FULL原判断保持，不修标签、时间、Gold或旧失败。
+
+finish closed=true/close_unknown=false/worker_gone=true；launch与worker句柄均已不存在，source-finish为closed、13类来源残留0和自有数据库残留0；专用api-key.json已删除。仅私有暂存既有授权官方key，未创建工作树.env；初次暂存脚本因未安装dotenv在任何写入前失败，后用标准库解析单行，不是API失败/重试。自有五场累计9次已知请求、141次未用额度关闭，正式审核现在1窗，质量门仍未满足。

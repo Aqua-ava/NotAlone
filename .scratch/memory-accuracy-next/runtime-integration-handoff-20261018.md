@@ -23,3 +23,7 @@
 - 候选Pro bounded15需新增封闭profile/登记/owned领取/凭据/SDK冻结；只做交付测试，不宣称模型优劣；暂无实现或调用。
 
 - 指代官方模型查证已集成d1bbff6b；Pro仅候选交付配置，精确身份不符即停，不能用文档认证后端权重。
+
+- Pro闭集90af01c2已验证90相关+15复查/五源码mypy/双审；18fcc800 closed2/30，首窗RAW/FULL1，一般1，basis0，后14unrun，资源/key清理。
+- 当前正式七轴审查1窗但全部质量门未过；五场9请求、141余额闭账。
+- reference从90af独立分支实现Pro reference16闭集；core沿原E2+legacyV/Flash双max适配私有6/4，均不借bounded15。
