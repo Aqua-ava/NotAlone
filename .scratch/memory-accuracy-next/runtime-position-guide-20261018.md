@@ -66,3 +66,14 @@ P01首次完成独立RAW→FULL封存：E仍输出momentary_state，编译recent
 finish closed=true/close_unknown=false/worker_gone=true；launch与worker句柄均已不存在，source-finish为closed、13类来源残留0和自有数据库残留0；专用api-key.json已删除。仅私有暂存既有授权官方key，未创建工作树.env；初次暂存脚本因未安装dotenv在任何写入前失败，后用标准库解析单行，不是API失败/重试。自有五场累计9次已知请求、141次未用额度关闭，正式审核现在1窗，质量门仍未满足。
 
 后续代码定位确认拒绝发生在bounded_proof的类别/言语行为/断言组合校验，早于proposal_matches，故仅能称提案形状与位置域合法，不能说整个证明已认证。非空时间为独立矛盾；0.6还会影响理想采纳门，但不与当前最先发生的类别拒绝混为一谈。
+
+
+## bounded阶段教学增量：实施决定，尚未验收
+
+首窗失败显示模型仍混淆完成动作与瞬时状态；现有提示已区分两者，因此不能将本次错误称为已证明的提示矛盾。下一步增加独立合成对照教学，只应用于显式bounded任务。微例不取原15窗口、Gold及其动作词，不规定confidence，不修补响应、编译结果或时间，也不更改质量门。
+
+原批准规格只要求任务选择同次V，本轮补充E侧教学选择，属于保持既有协议的小范围实现改进：生产GroundedExtractionRuntime继续自身event schema/compiler，评测GroundedV2ExtractionRuntime继续原E2 schema/compiler。两者通过同一封闭提示工厂选择增量；default、核心与指代使用的E2原字节不变。实际worker、优先级装饰器及评测记录包装器必须贯通同一选择，实际请求与冻结预期同源；不能以离线注入替代真实任务接线。
+
+任务仍持久化version/mode/rule_set_sha256三个原字段，不增加迁移或把提示摘要冒充证明规则摘要。profile内容版本化、trace记录profile和最终提示摘要；同一冻结源码内的恢复保持选择，评测源清单和调用核验拒绝漂移。三键配置不承诺任意跨代码升级恢复历史E提示，此限制不应隐藏。替换已有profile或承诺跨升级恢复须另行设计。
+
+验收先从实际SDK/worker接缝红灯开始，覆盖两runtime的协议保留、default字节、保存配置恢复、包装记录身份及owned冻结拒错。通过相关测试、类型和双审之后才能新建真实场；当前没有新API调用或新增质量信用，旧场保持关闭。
