@@ -57,11 +57,13 @@ class ReplyComparisonCapture:
     def __init__(self, output_directory: Path, manifest: dict, *,
                  synthetic_transport: httpx.MockTransport | None = None,
                  allowed_endpoints: tuple[str, ...] = DEFAULT_ENDPOINTS):
-        if (manifest.get("data_kind") != "synthetic" or manifest.get("request_limit") != 48
+        request_limit = manifest.get("request_limit")
+        if (manifest.get("data_kind") != "synthetic" or type(request_limit) is not int
+                or not 1 <= request_limit <= 48
                 or manifest.get("per_arm_limit") != 6
                 or not isinstance(manifest.get("cases"), list)
                 or not 1 <= len(manifest["cases"]) <= 4):
-            raise ValueError("回复比较只允许至多四例合成输入、48次总调用和每组6次调用。")
+            raise ValueError("回复比较只允许至多四例合成输入、1至48次总调用和每组6次调用。")
         output = Path(output_directory)
         output.mkdir(mode=0o700, parents=True, exist_ok=True)
         identity = output.lstat()
@@ -88,7 +90,7 @@ class ReplyComparisonCapture:
         from uuid import UUID
         self.budget = EvaluationBudget.create(
             run_id=UUID(self.bundle["run_id"]), output_directory=output,
-            request_limit=48, allowed_endpoints=allowed_endpoints,
+            request_limit=request_limit, allowed_endpoints=allowed_endpoints,
             config_sha256=self.bundle["manifest_sha256"],
         )
         self._active = None

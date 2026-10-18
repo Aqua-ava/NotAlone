@@ -217,7 +217,9 @@ def validate_persisted_installation(binding: dict, evidence: dict, arm: str) -> 
 
 
 def build_manifest(*, contract, model_configuration: dict, dataset_version: str,
-                   cases: list[dict], coverage_kind: str = "smoke") -> dict:
+                   cases: list[dict], coverage_kind: str = "smoke", request_limit: int = 48) -> dict:
+    if type(request_limit) is not int or not 1 <= request_limit <= 48:
+        raise ValueError("回复比较总物理调用上限须为1至48的整数。")
     if (not 1 <= len(cases) <= 4 or coverage_kind not in {"smoke", "formal"}
             or not isinstance(dataset_version, str) or not dataset_version.strip()
             or contract.model_version != content_digest(model_configuration)):
@@ -244,7 +246,7 @@ def build_manifest(*, contract, model_configuration: dict, dataset_version: str,
             "model_configuration": deepcopy(model_configuration), "data_kind": "synthetic",
             "coverage_kind": coverage_kind, "dataset_version": dataset_version,
             "input_package_version": "confirmed-reply-input-v1", "cases": members,
-            "request_limit": 48, "per_arm_limit": 6}
+            "request_limit": request_limit, "per_arm_limit": 6}
 
 
 def run_reply_comparison(*, manifest: dict, cases: list[dict], capture, invoke_arm) -> dict:
