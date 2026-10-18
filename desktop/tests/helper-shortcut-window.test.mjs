@@ -178,3 +178,39 @@ test('连续快捷键不重复建窗，退出后不再显示或创建', async ()
     assert.equal(f.events.at(-1), 'closed');
   });
 });
+
+
+test('开发监督器重启真实窗口入口时只预加载，主动打开才前置', async () => {
+  const { superviseDevelopmentApp } = await import('../scripts/development-app.mjs');
+  await fixture(async f => {
+    const launches = [], children = [];
+    const running = superviseDevelopmentApp(options => {
+      const child = Object.assign(new EventEmitter(), { connected: true, send(_message, done) { done(); } });
+      const windows = new f.ports.AppWindows({});
+      launches.push({ windows, loaded: windows.open('manager', options) });
+      children.push(child);
+      return child;
+    }, () => {});
+    try {
+      await launches[0].loaded;
+      children[0].emit('message', { type: 'notalone-dev-ready' });
+      assert.equal(f.nativeWindows[0].calls.focus, 1, '首次显式启动正常显示');
+      for (let index = 0; index < 2; index++) {
+        running.restart();
+        children[index].emit('close', 0, null);
+        await launches[index + 1].loaded;
+        children[index + 1].emit('message', { type: 'notalone-dev-ready' });
+        const window = f.nativeWindows[index + 1];
+        assert.equal(window.webContents.getURL(), 'notalone://app/index.html#manager');
+        assert.deepEqual(window.calls, { show: 0, inactive: 0, focus: 0, hide: 0 }, '源码重启不能显示、前置或抢焦点');
+        assert.equal(window.isVisible(), false);
+      }
+      await launches.at(-1).windows.open('manager');
+      assert.equal(f.nativeWindows.at(-1).calls.focus, 1, '用户主动打开仍可恢复');
+    } finally {
+      const stopped = running.stop();
+      children.at(-1).emit('close', 0, null);
+      await stopped;
+    }
+  });
+});

@@ -22,9 +22,11 @@ export class AppWindows {
 
   constructor(private readonly appSession: Session) {}
 
-  open(role: WindowRole): Promise<void> { return this.present(role, true); }
+  open(role: WindowRole, { background = false }: { background?: boolean } = {}): Promise<void> {
+    return this.present(role, true, background);
+  }
 
-  private async present(role: WindowRole, focus: boolean): Promise<void> {
+  private async present(role: WindowRole, focus: boolean, background = false): Promise<void> {
     if (this.quitting) return;
     let hosted = this.windows.get(role);
     if (hosted?.failed || hosted?.window.isDestroyed()) {
@@ -38,6 +40,8 @@ export class AppWindows {
       hosted.ready = this.load(role, hosted);
     }
     await hosted.ready;
+    // 开发热重启只预加载；显式打开仍走原来的显示和焦点流程。
+    if (background) return;
     const window = hosted.window;
     if (this.quitting || window.isDestroyed()) return;
     if (role === 'helper' && !hosted.failed && focus) {

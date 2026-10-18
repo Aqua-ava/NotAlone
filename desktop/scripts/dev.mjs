@@ -76,8 +76,8 @@ async function develop() {
     const environment = { ...process.env, NOTALONE_DEV_SERVER: JSON.stringify({ origin: renderer.origin,
       token: renderer.token, projectDirectory: path.dirname(project) }) };
     delete environment.ELECTRON_RUN_AS_NODE;
-    running = superviseDevelopmentApp(() => spawn(electron,
-      [appDirectory, '--notalone-dev', ...(args.length ? [`--user-data-dir=${args[1]}`] : [])], { cwd: project, env: environment, detached: true,
+    running = superviseDevelopmentApp(({ background }) => spawn(electron,
+      [appDirectory, '--notalone-dev', ...(background ? ['--notalone-dev-background'] : []), ...(args.length ? [`--user-data-dir=${args[1]}`] : [])], { cwd: project, env: environment, detached: true,
         stdio: ['ignore', 'inherit', 'inherit', 'ipc'] }));
     await builder.watch();
     for (const [directory, extension] of [['../backend/src/notalone', '.py'], ['../backend/database/migrations', '.sql']]) {

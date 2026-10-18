@@ -1,6 +1,6 @@
 // 只管理本次启动的 Electron；停止失败时保留 App 的认证恢复入口。
 export function superviseDevelopmentApp(launch, report = console.log) {
-  let child, currentReady = false, stopping = false, restarting = false, settled = false, timeout;
+  let child, currentReady = false, stopping = false, restarting = false, settled = false, launched = false, timeout;
   let complete;
   const closed = new Promise(resolve => { complete = resolve; });
   const finish = code => {
@@ -16,7 +16,7 @@ export function superviseDevelopmentApp(launch, report = console.log) {
   const start = () => {
     let ready = false;
     currentReady = false;
-    try { child = launch(); } catch { report('开发 App 启动失败。'); finish(1); return; }
+    try { child = launch({ background: launched }); launched = true; } catch { report('开发 App 启动失败。'); finish(1); return; }
     child.on('message', message => {
       if (message?.type === 'notalone-dev-ready') {
         ready = true; currentReady = true; report('开发 App 已就绪；保存界面文件即可查看效果。');

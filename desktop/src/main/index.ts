@@ -191,7 +191,7 @@ void app.whenReady().then(async () => {
       { label: '关闭窗口', role: 'close' },
     ] },
   ]));
-  void windows.open('manager').then(async () => {
+  void windows.open('manager', { background: development?.background }).then(async () => {
     if (development) process.send?.({ type: 'notalone-dev-ready' });
     const config = await loadBackendConfiguration(app.getPath('userData'), resourcesDirectory).catch(() => undefined);
     if (config?.source === 'external') await screenPermission.startup();

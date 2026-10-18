@@ -12,7 +12,7 @@ export function validateDevelopmentServer(value: unknown): DevelopmentServer {
   return { origin, token };
 }
 
-export function readDevelopmentServer(packaged: boolean, argv: string[], raw: string | undefined): (DevelopmentServer & { projectDirectory: string }) | undefined {
+export function readDevelopmentServer(packaged: boolean, argv: string[], raw: string | undefined): (DevelopmentServer & { projectDirectory: string; background: boolean }) | undefined {
   // 环境变量本身不能把正式包或普通启动变为开发宿主。
   if (packaged || !argv.includes('--notalone-dev')) return undefined;
   if (!raw || raw.length > 1024) throw new Error('开发服务配置无效');
@@ -20,5 +20,5 @@ export function readDevelopmentServer(packaged: boolean, argv: string[], raw: st
   const server = validateDevelopmentServer(value);
   if (typeof value.projectDirectory !== 'string' || !path.isAbsolute(value.projectDirectory)
     || value.projectDirectory.length > 1024 || /[\0\r\n]/.test(value.projectDirectory)) throw new Error('开发源码目录无效');
-  return { ...server, projectDirectory: value.projectDirectory };
+  return { ...server, projectDirectory: value.projectDirectory, background: argv.includes('--notalone-dev-background') };
 }

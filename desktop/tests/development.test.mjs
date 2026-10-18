@@ -58,8 +58,10 @@ test('正式包忽略开发服务，错误来源和写请求仍被拒绝', async
 test('只有显式源码开发启动可接受回环地址，正式包不能由环境变量打开代理', async () => {
   await resourceBoundary(async ({ readDevelopmentServer }) => {
     const valid = JSON.stringify({ origin: 'http://127.0.0.1:43123', token, projectDirectory: '/synthetic/current' });
-    assert.equal(readDevelopmentServer(true, ['--notalone-dev'], valid), undefined);
-    assert.equal(readDevelopmentServer(false, [], valid), undefined);
+    assert.equal(readDevelopmentServer(true, ['--notalone-dev', '--notalone-dev-background'], valid), undefined);
+    assert.equal(readDevelopmentServer(false, ['--notalone-dev-background'], valid), undefined);
+    assert.equal(readDevelopmentServer(false, ['--notalone-dev'], valid).background, false);
+    assert.equal(readDevelopmentServer(false, ['--notalone-dev', '--notalone-dev-background'], valid).background, true);
     assert.equal(readDevelopmentServer(false, ['--notalone-dev'], valid).projectDirectory, '/synthetic/current');
     for (const origin of ['https://example.org', 'http://0.0.0.0:43123', 'http://localhost:43123', 'http://127.0.0.1:43123/path', 'http://127.0.0.1:65536']) {
       assert.throws(() => readDevelopmentServer(false, ['--notalone-dev'], JSON.stringify({ origin, token, projectDirectory: '/synthetic/current' })));
