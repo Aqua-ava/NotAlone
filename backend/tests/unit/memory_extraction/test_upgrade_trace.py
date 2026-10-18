@@ -154,7 +154,7 @@ class UpgradeTraceTest(unittest.TestCase):
         self.assertEqual(batch['status'],'model_failed')
         self.assertEqual(batch['events'][-1]['payload']['failure_kind'],'invalid_output')
 
-    def test_actual_adjudication_failure_after_e_and_v_keeps_model_failure(self):
+    def test_invalid_adjudication_after_e_and_v_keeps_candidate_pending(self):
         from dataclasses import replace
         from notalone.memory import MemoryCandidate,MemoryCategory
         from notalone.memory_extraction.adjudication_adapters import LangChainAdjudicationRuntime
@@ -178,14 +178,14 @@ class UpgradeTraceTest(unittest.TestCase):
         runner.runtime_builder=lambda:{'extraction':LangChainExtractionRuntime(model=model),
             'verification':LangChainSourceVerificationRuntime(model=model,ledger=observed['ledger']),
             'adjudication':LangChainAdjudicationRuntime(model=model),'ledger':observed['ledger']}
-        with self.assertRaises(ExtractionInvalidOutputError):
-            runner.preview(object())
+        runner.preview(object())
         self.assertEqual(len(model.seen_model_payloads),3)
-        self.assertFalse(observed['saved'])
+        self.assertTrue(observed['saved'])
+        self.assertEqual(memory.list_pending_candidates(scope), ())
         batch=traces.get_batch(scope,observed['trace_id'])
-        self.assertEqual(batch['status'],'model_failed')
-        self.assertEqual(batch['events'][-1]['payload']['failure_kind'],'invalid_output')
-        self.assertEqual(batch['events'][-1]['payload']['failure_stage'],'adjudication_failure')
+        self.assertEqual(batch['status'],'succeeded')
+        self.assertEqual(batch['events'][-1]['payload']['adoption']['pending'], 1)
+        self.assertTrue(any(event['stage'] == 'adjudication_failure' for event in batch['events']))
 
     def test_approved_comparison_records_only_plans_before_actual_adoption(self):
         from notalone.application.memory_upgrade_trace import planned_upgrade_writes
