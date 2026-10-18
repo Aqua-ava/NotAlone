@@ -8,7 +8,7 @@ export interface BindingConsentState {
   revision: number; scopeRevision: number;
   phase: 'offline' | 'loading' | 'ready' | 'owner-unconfigured' | 'unavailable' | 'failed';
   sessions: CliSessionSummary[]; bindings: BindingSummary[]; syncEnabled: boolean | null;
-  sessionIssue: 'unavailable' | 'failed' | null;
+  sessionIssue: 'not-requested' | 'unavailable' | 'failed' | null;
   busy: 'confirm' | 'revoke' | null;
   errorCode: 'selection-stale' | 'confirmation-failed' | 'revoke-busy' | 'revoke-failed' | null;
   notice: 'confirmed' | 'revoked' | null;

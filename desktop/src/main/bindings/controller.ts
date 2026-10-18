@@ -56,7 +56,7 @@ export class BindingConsentController {
       this.publish({ phase: 'offline', sessions: [], bindings: [], syncEnabled: null, sessionIssue: null,
         busy: null, errorCode: null, notice: null,
         scopeRevision: this.state.scopeRevision + 1 });
-      if (generation !== undefined) void this.refresh();
+      if (generation !== undefined) void this.refreshState(false);
     });
   }
   getState(): BindingConsentState { return { ...this.state, sessions: this.state.sessions.map((item) => ({ ...item })),
@@ -65,14 +65,17 @@ export class BindingConsentController {
     this.listeners.add(listener); return () => this.listeners.delete(listener);
   }
   async refresh(): Promise<void> {
+    await this.refreshState(true);
+  }
+  private async refreshState(readSessions: boolean): Promise<void> {
     if (this.state.busy) return;
     const generation = this.backend.getConnectionGeneration();
     if (generation === undefined) return;
     const operation = { generation, epoch: ++this.epoch };
     this.publish({ errorCode: null, notice: null });
-    await this.load(operation);
+    await this.load(operation, readSessions);
   }
-  private async load(operation: Operation): Promise<void> {
+  private async load(operation: Operation, readSessions = this.state.sessionIssue !== 'not-requested'): Promise<void> {
     this.publish({ phase: 'loading' });
     try {
       const setup = await this.backend.requestJson({ method: 'GET', path: '/api/setup/status', maxResponseBytes: 4096 });
@@ -81,14 +84,17 @@ export class BindingConsentController {
         this.publish({ phase: 'owner-unconfigured', sessions: [], bindings: [], syncEnabled: null }); return;
       }
       const directory = await this.backend.requestJson({ method: 'GET', path: '/api/sync/cli-bindings' });
+      if (!this.current(operation)) return;
       const active = bindings(directory.data);
       const list = await Promise.allSettled([
-        this.backend.requestJson({ method: 'GET', path: '/api/sync/cli-sessions' }),
+        // 启动和重连只读本机已保存状态；微信元数据须由用户明确刷新。
+        readSessions ? this.backend.requestJson({ method: 'GET', path: '/api/sync/cli-sessions' })
+          : Promise.resolve({ data: { sessions: [] } }),
         this.backend.requestJson({ method: 'GET', path: '/api/sync/status' }),
       ]);
       if (!this.current(operation)) return;
       let sessionList: CliSessionSummary[] = [];
-      let sessionIssue: BindingConsentState['sessionIssue'] = null;
+      let sessionIssue: BindingConsentState['sessionIssue'] = readSessions ? null : 'not-requested';
       if (list[0].status === 'fulfilled') sessionList = sessions(list[0].value.data);
       else sessionIssue = list[0].reason instanceof BackendRequestFailure && list[0].reason.status === 503 ? 'unavailable' : 'failed';
       const status = list[1].status === 'fulfilled' ? list[1].value.data : null;

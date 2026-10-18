@@ -86,9 +86,9 @@ def create_database(mode: str = "ready", ownership_path: str | Path | None = Non
             recorded = [row[0] for row in connection.execute(
                 "SELECT name FROM public.notalone_schema_migration ORDER BY name",
             ).fetchall()]
-        if (len(expected) != 77 or [name[:3] for name in expected] != [f"{n:03}" for n in range(1, 78)]
+        if (len(expected) < 77 or [name[:3] for name in expected] != [f"{n:03}" for n in range(1, len(expected) + 1)]
                 or recorded != expected):
-            raise RuntimeError("本轮绑定夹具只接受完整001–077迁移。")
+            raise RuntimeError("本轮绑定夹具须完整执行当前连续迁移，至少包含001–077。")
         repeated = subprocess.run(
             [sys.executable, "-m", "notalone.database_migrations", "--migrations", str(migrations)],
             cwd=ROOT, env=env, capture_output=True, timeout=60,

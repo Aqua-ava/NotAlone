@@ -65,10 +65,10 @@ export function BindingConsentPage({ contacts, navigate }: { contacts: ContactSe
     {state.phase === 'owner-unconfigured' && <div className="bindings-explanation"><p>本次运行的本人身份未就绪，请检查受控配置。</p><button className="button" onClick={() => navigate('config')}>前往应用配置</button></div>}
     {state.phase === 'unavailable' && <div className="bindings-explanation"><h3>同步宿主尚未就绪</h3><p>本人渠道身份缺失时，请先确认一份含本人身份的单联系人历史导入，正常退出并重新打开 App，再配置已安装的只读 CLI。导入不会自动授权会话正文读取。</p><button className="button" onClick={() => navigate('import')}>前往历史导入</button></div>}
     {state.phase === 'failed' && <p role="alert">会话与授权读取失败，请刷新重试。当前范围无法确认，暂不能提交授权变更。</p>}
-    {state.sessionIssue && <p role="alert">无法取得当前 CLI 会话元数据，请检查已安装的只读 CLI 后刷新。已有授权如下显示，仍可明确撤销。</p>}
+    {state.sessionIssue && state.sessionIssue !== 'not-requested' && <p role="alert">无法取得当前 CLI 会话元数据，请检查已安装的只读 CLI 后刷新。已有授权如下显示，仍可明确撤销。</p>}
     {available && <>
       <section className="bindings-section" aria-label="待授权会话"><div className="bindings-toolbar"><h2>待授权会话</h2><span>已选 {Object.keys(selection).length} 个</span></div>
-        {unbound.length === 0 && <p>当前没有可新增授权的会话。</p>}
+        {state.sessionIssue === 'not-requested' ? <p>尚未读取微信会话。点击“刷新会话与授权”后读取列表，系统可能请求访问微信数据。</p> : unbound.length === 0 && <p>当前没有可新增授权的会话。</p>}
         {unbound.map((session) => <div className="binding-row" key={session.locator}>
           <label className="binding-choice"><input type="checkbox" disabled={!!state.busy} aria-label={`选择会话 ${session.locator}`} checked={!!selection[session.locator]}
             onChange={(event) => setSelection((previous) => {

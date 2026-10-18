@@ -1,5 +1,5 @@
 import { execFile, spawn, type ChildProcess } from 'node:child_process';
-import { mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { ContactFixture, type ContactDatabase } from './contact-backend-fixture';
@@ -145,8 +145,9 @@ export async function withBindingFixture(directoryPrefix: string, mode: BindingM
   try {
     data = JSON.parse((await execute('create', [databaseScript, 'create', mode, marker], 130_000)).toString('utf8')) as BindingData;
     const ownedName = await readDatabaseOwnership(directory, 'binding', creatorPid);
+    const migrationCount = (await readdir(path.join(project, 'backend/database/migrations'))).filter(name => name.endsWith('.sql')).length;
     if (data.database_name !== ownedName || data.database_url !== `host=/tmp dbname=${ownedName}`
-      || data.migration_count !== 72 || data.migration_repeat !== 0) throw new Error('绑定测试库归属或完整迁移无效。');
+      || data.migration_count !== migrationCount || migrationCount < 77 || data.migration_repeat !== 0) throw new Error('绑定测试库归属或完整迁移无效。');
     fixture = new BindingFixture(directory, python, data);
     await fixture.prepareCli();
     await fixture.setCli(initialCliState());

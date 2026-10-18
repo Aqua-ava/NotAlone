@@ -9,6 +9,9 @@ export type BindingPage = { manager: Page; bindingBackend: BindingFixture; openH
 
 export async function bindingInitialSelection({ manager, bindingBackend, screenshot }: BindingPage): Promise<void> {
   await manager.getByRole('button', { name: '同步设置', exact: true }).click();
+  await expect(manager.getByText('尚未读取微信会话。', { exact: false })).toBeVisible();
+  await expect(manager.getByRole('region', { name: '待授权会话' }).getByRole('checkbox')).toHaveCount(0);
+  await manager.getByRole('button', { name: '刷新会话与授权', exact: true }).click();
   const metadata = manager.getByRole('region', { name: '待授权会话' });
   const first = metadata.getByRole('checkbox', { name: '选择会话 wxid_synthetic_a' });
   const second = metadata.getByRole('checkbox', { name: '选择会话 wxid_synthetic_b' });
@@ -66,6 +69,7 @@ export async function bindingRevokeBusy({ manager, bindingBackend, screenshot }:
 
 export async function bindingMetadataStale({ manager, bindingBackend }: BindingPage): Promise<void> {
   await manager.getByRole('button', { name: '同步设置', exact: true }).click();
+  await manager.getByRole('button', { name: '刷新会话与授权', exact: true }).click();
   const pending = manager.getByRole('region', { name: '待授权会话' });
   const choice = pending.getByRole('checkbox', { name: '选择会话 wxid_synthetic_a' });
   const target = pending.getByRole('combobox', { name: '会话 wxid_synthetic_a 对应联系人' });
@@ -102,6 +106,7 @@ export async function bindingMetadataStale({ manager, bindingBackend }: BindingP
 
 export async function bindingFinalNameStale({ manager, bindingBackend, screenshot }: BindingPage): Promise<void> {
   await manager.getByRole('button', { name: '同步设置', exact: true }).click();
+  await manager.getByRole('button', { name: '刷新会话与授权', exact: true }).click();
   const pending = manager.getByRole('region', { name: '待授权会话' });
   await pending.getByRole('checkbox', { name: '选择会话 wxid_synthetic_a' }).check();
   await pending.getByRole('combobox', { name: '会话 wxid_synthetic_a 对应联系人' }).selectOption(bindingBackend.data.contact_ids[0]);
@@ -171,6 +176,7 @@ export async function bindingCliUnavailable({ manager, bindingBackend }: Binding
 
 export async function bindingNamedArguments({ manager, bindingBackend, openHelper }: BindingPage): Promise<void> {
   await manager.getByRole('button', { name: '同步设置', exact: true }).click();
+  await manager.getByRole('button', { name: '刷新会话与授权', exact: true }).click();
   const pending = manager.getByRole('region', { name: '待授权会话' });
   await pending.getByRole('checkbox', { name: '选择会话 wxid_synthetic_a' }).check();
   const rejected = await manager.evaluate(async (foreign) => {
@@ -215,6 +221,7 @@ export async function bindingNamedArguments({ manager, bindingBackend, openHelpe
 
 export async function bindingStableContacts({ manager, bindingBackend, screenshot }: BindingPage): Promise<void> {
   await manager.getByRole('button', { name: '同步设置', exact: true }).click();
+  await manager.getByRole('button', { name: '刷新会话与授权', exact: true }).click();
   const pending = manager.getByRole('region', { name: '待授权会话' });
   const authorized = manager.getByRole('region', { name: '已授权会话' });
   const submit = manager.getByRole('button', { name: '确认并授权所选会话', exact: true });
@@ -294,6 +301,7 @@ export async function bindingReconfirm({ manager, bindingBackend, screenshot }: 
 
 export async function bindingReconnect({ manager, bindingBackend }: BindingPage, bindingProxy: ContactHttpProxy, failure: boolean): Promise<void> {
   await manager.getByRole('button', { name: '同步设置', exact: true }).click();
+  await manager.getByRole('button', { name: '刷新会话与授权', exact: true }).click();
   const pending = manager.getByRole('region', { name: '待授权会话' });
   await pending.getByRole('checkbox', { name: '选择会话 wxid_synthetic_a' }).check();
   await pending.getByRole('combobox', { name: '会话 wxid_synthetic_a 对应联系人' }).selectOption(bindingBackend.data.contact_ids[0]);
@@ -314,6 +322,8 @@ export async function bindingReconnect({ manager, bindingBackend }: BindingPage,
   await manager.getByRole('button', { name: '重试连接', exact: true }).click();
   const authorized = manager.getByRole('region', { name: '已授权会话' });
   await expect(authorized.getByText('wxid_synthetic_a', { exact: true })).toBeVisible();
+  await expect(manager.getByText('尚未读取微信会话。', { exact: false })).toBeVisible();
+  await manager.getByRole('button', { name: '刷新会话与授权', exact: true }).click();
   await pending.getByRole('checkbox', { name: '选择会话 wxid_synthetic_b' }).check();
   await pending.getByRole('combobox', { name: '会话 wxid_synthetic_b 对应联系人' }).selectOption(bindingBackend.data.contact_ids[1]);
   bindingProxy.release(failure);
@@ -328,6 +338,7 @@ export async function bindingReconnect({ manager, bindingBackend }: BindingPage,
 
 export async function bindingConcurrentNew({ manager, bindingBackend, screenshot }: BindingPage, proxy: ContactHttpProxy): Promise<void> {
   await manager.getByRole('button', { name: '同步设置', exact: true }).click();
+  await manager.getByRole('button', { name: '刷新会话与授权', exact: true }).click();
   const pending = manager.getByRole('region', { name: '待授权会话' });
   for (const locator of ['wxid_synthetic_b', 'wxid_synthetic_a']) {
     await pending.getByRole('checkbox', { name: `选择会话 ${locator}` }).check();
