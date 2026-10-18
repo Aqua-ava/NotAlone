@@ -42,7 +42,7 @@ export async function assistantSessionCombination(browser: Browser, origin: stri
     const sessionA = (await helper.evaluate(() => window.notalone.replies.getState())).savedSession!.sessionId!;
     const pathA = `/api/contacts/${contactA}/assistant-sessions/${sessionA}`;
     await group.getByRole('textbox', { name: '说法1第2条编辑文本', exact: true }).fill('甲明确保存的拒绝。');
-    await group.getByRole('button', { name: '保存本组修改', exact: true }).click();
+    await group.getByRole('textbox', { name: '说法1第2条编辑文本', exact: true }).blur();
     await expect(group.getByRole('combobox', { name: '说法1版本', exact: true }).getByRole('option')).toHaveCount(2);
     await fixture.plan({ count: 1, message_groups: [['甲简短感谢。', '甲明确不参加。']] });
     await helper.getByRole('textbox', { name: '继续修改要求', exact: true }).fill('第一条简短一点');

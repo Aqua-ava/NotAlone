@@ -77,7 +77,7 @@ export function AssistantContinuationControls({ replies, hasUnsavedEdits = false
   }
   return <section aria-label="连续修改" className="assistant-continuation-controls">
     <header><h3>继续调整这组回复</h3><p>不满意的地方写在这里，助手会接着修改。</p></header>
-    <p>编号指向当前展示的整组说法。请先保存本组修改，再继续调整。</p>
+    <p>编号指向当前展示的整组说法。正文编辑结束后自动保存，保存完成即可继续调整。</p>
     <p>连续修改使用本组保存的精确场景：{saved?.turns.find(turn => turn.inputVersionId === saved.currentInputVersionId)?.input?.scene ?? '未声明'}。如需变更场景，请重新生成。</p>
     <label>继续修改要求<textarea aria-label="继续修改要求" value={instruction} disabled={disabled}
       placeholder="例如：第二条简短一点" onChange={(event) => setInstruction(event.target.value)} /></label>

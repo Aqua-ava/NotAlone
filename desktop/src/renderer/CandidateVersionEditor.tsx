@@ -4,7 +4,7 @@ import type { ReplySessionView } from './RewritePanel';
 import { CandidateMessageGroup } from './CandidateMessageGroup';
 import { ReplyBasisChangeNotice } from './ReplyBasisChangeNotice';
 
-// 未保存编辑同步到主进程会话内存；保存和采用版本仍由用户明确操作。
+// 编辑同步到主进程会话内存；结束编辑后自动保存版本，采用版本仍由用户明确选择。
 export function CandidateVersionEditor({ replies, view, candidateId, replyRequestId, number, restored, noteCopy, onDirtyChange }: {
   replies: ReplySessionView;
   view: AssistantCandidateVersionView | undefined;

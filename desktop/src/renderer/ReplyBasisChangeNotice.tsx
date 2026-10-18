@@ -13,6 +13,6 @@ export function ReplyBasisChangeNotice({ changes }: { changes: readonly ReplyBas
     </li>)}</ul>
     <p>{changes.some(change => change.reason === 'skill_policy_changed' || change.reason === 'memory_generation_forbidden')
       ? '请先保留当前编辑并重新生成；旧候选不能继续用于新一轮。'
-      : '仍可回看合法的旧正文；明确继续时将重新核验当前依据。请先保存当前修改。'}</p>
+      : '仍可回看合法的旧正文；明确继续时将重新核验当前依据。请结束正文编辑，等待修改自动保存。'}</p>
   </aside>;
 }

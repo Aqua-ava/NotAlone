@@ -24,12 +24,18 @@ export function CandidateMessageGroup({ identity, number, messages, controls, di
   const active = useRef(true);
   const [copying, setCopying] = useState(false);
   const [saving, setSaving] = useState(false);
+  const pendingSave = useRef(false);
+  const [saveFailed, setSaveFailed] = useState(false);
   const [pasting, setPasting] = useState(false);
   const pendingPaste = useRef(false);
+  const saveAfterPaste = useRef(false);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
   useEffect(() => { setNotice(''); setError(''); }, [signature]);
+  useEffect(() => {
+    if (!pasting && saveAfterPaste.current) { saveAfterPaste.current = false; void saveGroup(); }
+  }, [pasting, signature]);
   async function copyMessage(messageId: string, index: number) {
     if (disabled || dirty || !canCopy || copying || saving) return;
     const operation = signature;
@@ -42,12 +48,12 @@ export function CandidateMessageGroup({ identity, number, messages, controls, di
     } finally { if (active.current) setCopying(false); }
   }
   async function saveGroup() {
-    if (disabled || !dirty || saving || copying) return;
+    if (disabled || !dirty || pendingSave.current || copying || pendingPaste.current || messages.some((message) => !message.text.trim())) return;
     const operation = signature;
-    setSaving(true); setNotice(''); setError('');
+    pendingSave.current = true; setSaving(true); setSaveFailed(false); setNotice(''); setError('');
     try { await save(); }
-    catch { if (active.current && latest.current === operation) setError('修改尚未保存，编辑文字仍保留，请重试。'); }
-    finally { if (active.current) setSaving(false); }
+    catch { if (active.current && latest.current === operation) { setSaveFailed(true); setError('修改尚未保存，编辑文字仍保留，请重试。'); } }
+    finally { pendingSave.current = false; if (active.current) setSaving(false); }
   }
   async function paste(event: ClipboardEvent<HTMLTextAreaElement>, apply: (text: string) => void) {
     event.preventDefault();
@@ -74,15 +80,16 @@ export function CandidateMessageGroup({ identity, number, messages, controls, di
         aria-label={messages.length === 1 && !restored ? `候选${number}编辑文本` : `说法${number}第${index + 1}条编辑文本`}
         value={message.text} maxLength={messages.length > 1 ? 8192 : 65_536}
         onChange={(event) => edit(message.messageId, event.target.value)}
+        onBlur={() => { if (pendingPaste.current) saveAfterPaste.current = true; else void saveGroup(); }}
         onPaste={(event) => void paste(event, (text) => edit(message.messageId, text))}
         onCopy={(event) => { const input = event.currentTarget; noteTextCopy(input.value.slice(input.selectionStart, input.selectionEnd)); }}
         onCut={(event) => { const input = event.currentTarget; noteTextCopy(input.value.slice(input.selectionStart, input.selectionEnd)); }}
       /></label>
       <button disabled={copying || dirty || !canCopy || !message.text.trim()} onClick={() => void copyMessage(message.messageId, index)}>复制第{index + 1}条</button>
     </div>)}
-    <button disabled={!dirty || copying || messages.some((message) => !message.text.trim())} onClick={() => void saveGroup()}>保存本组修改</button>
-    {saving && <p role="status">正在保存本组修改…</p>}
-    {!saving && dirty && <p>保存修改后，再选择当前版本并逐条复制。</p>}
+    {saveFailed && dirty && <button onClick={() => void saveGroup()}>重试保存修改</button>}
+    {saving && <p role="status">正在自动保存修改…</p>}
+    {!saving && dirty && <p>结束编辑后自动保存，再选择当前版本即可复制。</p>}
     {!dirty && !canCopy && <p>选择当前版本后可逐条复制。</p>}
     {copying && <p role="status">正在复制…</p>}
     {pasting && <p role="status">正在核对粘贴来源…</p>}

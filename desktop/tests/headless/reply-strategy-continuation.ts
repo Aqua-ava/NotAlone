@@ -44,7 +44,7 @@ async function continuationScene(pages: EventPages, scene: '回应消息' | '主
   const initial = await state(helper); const sessionId = initial.savedSession!.sessionId!;
   await group.getByRole('textbox', { name: '说法1第2条编辑文本', exact: true }).fill('已保存的第二条编辑。');
   await expect(helper.getByRole('button', { name: '继续修改', exact: true })).toBeDisabled();
-  await group.getByRole('button', { name: '保存本组修改', exact: true }).click();
+  await group.getByRole('textbox', { name: '说法1第2条编辑文本', exact: true }).blur();
   await expect.poll(async () => (await state(helper)).candidateVersions?.items[0].history?.versions.length).toBe(2);
   const edited = (await state(helper)).candidateVersions!.items[0];
   await codePointBoundary(helper, '继续修改要求', '继续修改');

@@ -85,14 +85,14 @@ export async function replyStrategyMessageGroups(browser: Browser, origin: strin
       await expect(first.getByRole('button', { name: '复制第1条', exact: true })).toBeDisabled();
       await expect(first.getByRole('radio', { name: '选择说法1当前版本', exact: true })).toBeDisabled();
       replyTransport.failNextCandidateVersionSave = true;
-      await first.getByRole('button', { name: '保存本组修改', exact: true }).click();
+      await first.getByRole('textbox', { name: '说法1第1条编辑文本', exact: true }).blur();
       await expect(helper.getByRole('alert').filter({ hasText: '本组版本操作尚未确认' })).toBeVisible();
       await expect(first.getByRole('textbox', { name: '说法1第1条编辑文本', exact: true })).toHaveValue(edited[0]);
       expect((await history(rewriteBackend, contactId, sessionId, candidate.candidate_id)).versions).toHaveLength(1);
       await helper.getByRole('button', { name: '重新读取本组版本', exact: true }).click();
-      await expect(first.getByRole('button', { name: '保存本组修改', exact: true })).toBeEnabled();
+      await expect(first.getByRole('button', { name: '重试保存修改', exact: true })).toBeEnabled();
       await expect(first.getByRole('textbox', { name: '说法1第1条编辑文本', exact: true })).toHaveValue(edited[0]);
-      await first.getByRole('button', { name: '保存本组修改', exact: true }).click();
+      await first.getByRole('button', { name: '重试保存修改', exact: true }).click();
       await expect(first.getByRole('combobox', { name: '说法1版本', exact: true }).getByRole('option')).toHaveCount(2);
       const saved = await history(rewriteBackend, contactId, sessionId, candidate.candidate_id);
       const initial = saved.versions[0], revision = saved.versions[1];

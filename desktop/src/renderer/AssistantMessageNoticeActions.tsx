@@ -12,6 +12,6 @@ export function AssistantMessageNoticeActions({ replies, hasUnsavedEdits = false
   return <section aria-label="采用新消息">
     <p role="status">新消息尚未结合。点击后按当前明确方向或目的重新生成。</p>
     <button disabled={disabled} onClick={() => void replies.combineNewMessages()}>结合新消息重新生成</button>
-    {hasUnsavedEdits && <p role="status">请先保存本组修改，再结合新消息。</p>}
+    {hasUnsavedEdits && <p role="status">请结束正文编辑，等待自动保存后再结合新消息。</p>}
   </section>;
 }

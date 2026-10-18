@@ -198,7 +198,7 @@ export async function authenticExpressionGroups(browser: Browser, origin: string
           await expect(firstEditor).toBeEditable();
           expect(await pasteSelection(firstEditor, edited[0])).toBe(false);
           await expect(firstEditor).toHaveValue(edited[0]);
-          await group.getByRole('button', { name: '保存本组修改', exact: true }).click();
+          await firstEditor.blur();
           await expect(group.getByRole('combobox', { name: '说法1版本', exact: true })).toHaveCount(1);
           await expect.poll(async () => (await helper.evaluate(async () => window.notalone.replies.getState()))
             .candidateVersions?.items.find((view) => view.candidateId === item.candidate.candidate_id)?.history?.versions.length,

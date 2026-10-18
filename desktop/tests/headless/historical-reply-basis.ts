@@ -30,7 +30,7 @@ export async function historicalReplyBasis(browser: Browser, origin: string) {
     await expect(group.getByRole('combobox', { name: '说法1版本', exact: true })).toBeEnabled();
     await editor.fill('用户已保存的合成编辑：愿意聊聊，先不作承诺。');
     await expect(helper.getByRole('button', { name: '继续修改', exact: true })).toBeDisabled();
-    await group.getByRole('button', { name: '保存本组修改', exact: true }).click();
+    await editor.blur();
     await expect(group.getByRole('combobox', { name: '说法1版本', exact: true })).toContainText('修改版本 1');
     const original = await readState(helper);
     const sessionId = original.savedSession!.sessionId!;
@@ -118,14 +118,15 @@ export async function historicalReplyBasis(browser: Browser, origin: string) {
     await expect(group.getByRole('combobox', { name: '说法1版本', exact: true })).toBeEnabled();
     await editor.fill('本人依据过期后仍保留的合成编辑。');
     await rewriteBackend.command('historical_basis_expire');
+    await expect(helper.getByRole('button', { name: '继续修改', exact: true })).toBeDisabled();
+    await editor.blur();
+    await expect(group.getByRole('combobox', { name: '说法1版本', exact: true })).toContainText('修改版本 1');
     await openAssistantHistory(helper);
     await helper.getByRole('button', { name: '查看已保存讨论', exact: true }).click();
     await expandSavedDiscussion(helper);
     const discussion = helper.getByRole('region', { name: '已保存的讨论', exact: true });
     await expect(discussion.getByText('本人资料：记忆有效期已结束。', { exact: true })).toBeVisible();
     await expect(editor).toHaveValue('本人依据过期后仍保留的合成编辑。');
-    await expect(helper.getByRole('button', { name: '继续修改', exact: true })).toBeDisabled();
-    await group.getByRole('button', { name: '保存本组修改', exact: true }).click();
     await expect(group.getByRole('combobox', { name: '说法1版本', exact: true })).toContainText('修改版本 1');
     const selection = group.getByRole('radio', { name: '选择说法1当前版本', exact: true });
     await selection.click();

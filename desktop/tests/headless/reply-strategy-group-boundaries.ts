@@ -80,11 +80,16 @@ async function longHistory(browser: Browser, origin: string, scene: Scene) {
     let parent = identity.candidateId;
     for (let revision = 1; revision <= 3; revision++) {
       const texts = fullGroup(revision);
-      for (let index = 0; index < texts.length; index++) await editorOn(pages.helper, index + 1).fill(texts[index]);
-      await groupOn(pages.helper).getByRole('button', { name: '保存本组修改', exact: true }).click();
-      await expect(groupOn(pages.helper).getByRole('combobox', { name: '说法1版本', exact: true }).getByRole('option')).toHaveCount(revision + 1);
-      const saved = await actualHistory(pages, identity), latest = saved.versions[revision];
-      expect(latest.parent_version_id).toBe(parent);
+      for (let index = 0; index < texts.length; index++) {
+        await editorOn(pages.helper, index + 1).fill(texts[index]);
+        await editorOn(pages.helper, index + 1).blur();
+        await expect(groupOn(pages.helper).getByRole('combobox', { name: '说法1版本', exact: true }).getByRole('option'))
+          .toHaveCount((revision - 1) * texts.length + index + 2);
+        const saved = await actualHistory(pages, identity), latest = saved.versions.at(-1)!;
+        expect(latest.parent_version_id).toBe(parent);
+        parent = latest.version_id;
+      }
+      const saved = await actualHistory(pages, identity), latest = saved.versions.at(-1)!;
       expect(latest.requirements).toBeNull();
       expect(latest.messages).toEqual(identity.messages.map((message, index) => ({ ...message, text: texts[index] })));
       expect(saved.selected_version_id).toBeNull();
@@ -109,7 +114,7 @@ async function longHistory(browser: Browser, origin: string, scene: Scene) {
       await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
       const helper = await restored.open('helper');
       await confirmHelperContact(helper, contactId);
-      await expect(groupOn(helper).getByRole('combobox', { name: '说法1版本', exact: true }).getByRole('option')).toHaveCount(4);
+      await expect(groupOn(helper).getByRole('combobox', { name: '说法1版本', exact: true }).getByRole('option')).toHaveCount(25);
       for (let index = 0; index < 8; index++) await expect(editorOn(helper, index + 1)).toHaveValue(fullGroup(3)[index]);
       await expect(groupOn(helper).getByRole('button', { name: '复制第1条', exact: true })).toBeDisabled();
       await selectDisplayed(helper);
@@ -130,7 +135,7 @@ async function deletedRestoredGroup(browser: Browser, origin: string, scene: Sce
       message_groups: [['合成来源支持的关心。', '方便时回复就好。']] });
     const identity = await generated(pages, contactId);
     await editorOn(pages.helper, 1).fill('已保存的来源派生组修改。');
-    await groupOn(pages.helper).getByRole('button', { name: '保存本组修改', exact: true }).click();
+    await editorOn(pages.helper, 1).blur();
     await expect(groupOn(pages.helper).getByRole('combobox', { name: '说法1版本', exact: true }).getByRole('option')).toHaveCount(2);
     const saved = await actualHistory(pages, identity), versionId = saved.versions[1].version_id;
     await host.close();
