@@ -2,6 +2,7 @@
 
 import json
 from langchain_core.messages import HumanMessage, SystemMessage
+from notalone.application.organization_call import organization_model_request
 
 from notalone.memory.organization_deadline import OrganizationAdapterTimeoutContract
 
@@ -84,6 +85,7 @@ class _DeepSeekOrganizationAdapter:
     timeout_contract = OrganizationAdapterTimeoutContract('sdk')
 
     physical_accounting = True
+    physical_scheduling = True
 
     def __init__(self, model, *, layer, budget, transport, personal=False, document_tools=False):
         self.model, self.layer, self.budget, self.transport = model, layer, budget, transport
@@ -103,8 +105,9 @@ class _DeepSeekOrganizationAdapter:
 
     def _invoke(self, prompt, payload, deadline):
         messages = [SystemMessage(content=prompt), HumanMessage(content=json.dumps(payload, ensure_ascii=False))]
-        response = self.model.bind(response_format={'type': 'json_object'}, max_tokens=min(self.budget.max_characters, 8192) if self.personal else self.budget.max_characters,
-                                   timeout=deadline.remaining_seconds()).invoke(messages)
+        with organization_model_request():
+            response = self.model.bind(response_format={'type': 'json_object'}, max_tokens=min(self.budget.max_characters, 8192) if self.personal else self.budget.max_characters,
+                                       timeout=deadline.remaining_seconds()).invoke(messages)
         deadline.check()
         if response.response_metadata.get('finish_reason') != 'stop' or not isinstance(response.content, str):
             raise ValueError('实际模型没有完整结束JSON输出。')

@@ -176,8 +176,10 @@ def maintain_scenes(adapter, *, memories, scenarios, corrections, deadline):
         deadline.check()
         if sum(len(str(m.content)) for m in messages) > adapter.budget.max_characters:
             raise ValueError('文档工具上下文超过预算。')
-        response = adapter.model.bind(tools=TOOLS, max_tokens=min(adapter.budget.max_characters, 8192) if adapter.personal else adapter.budget.max_characters,
-                                      timeout=deadline.remaining_seconds()).invoke(messages)
+        from notalone.application.organization_call import organization_model_request
+        with organization_model_request():
+            response = adapter.model.bind(tools=TOOLS, max_tokens=min(adapter.budget.max_characters, 8192) if adapter.personal else adapter.budget.max_characters,
+                                          timeout=deadline.remaining_seconds()).invoke(messages)
         deadline.check()
         if response.response_metadata.get('finish_reason') not in {'stop', 'tool_calls'} or getattr(response, 'invalid_tool_calls', []):
             raise ValueError('文档工具模型输出未完整结束。')

@@ -31,7 +31,7 @@ class ModelWorkStopped(RuntimeError):
 
 
 class ModelPriorityControl:
-    """整次前台回复优先于尚未开始的一次后台适配器调用。"""
+    """整次前台回复优先于尚未开始的一次后台物理请求。"""
 
     def __init__(self) -> None:
         self._condition = Condition()
@@ -60,11 +60,12 @@ class ModelPriorityControl:
     ) -> Iterator[None]:
         """来源与步骤租约的复验仍由持久层负责，不进入模型适配器。"""
 
+        previous = getattr(self._background_scope, "guard", None)
         self._background_scope.guard = guard
         try:
             yield
         finally:
-            del self._background_scope.guard
+            self._background_scope.guard = previous
 
     def _check_background_scope(self) -> None:
         guard = getattr(self._background_scope, "guard", None)
@@ -125,6 +126,17 @@ class ModelPriorityControl:
             self.check_running()
         # 等待不持有模型许可；返回前复验原来源与步骤租约。
         self._check_background_scope()
+
+    def wait_for_retry(self, seconds: float) -> None:
+        """退避不持模型许可，停止及来源／租约失效可打断剩余等待。"""
+        expires_at = time.monotonic() + seconds
+        while True:
+            self.check_running()
+            self._check_background_scope()
+            remaining = expires_at - time.monotonic()
+            if remaining <= 0:
+                return
+            self._stopped.wait(min(remaining, .1))
 
 
 class MemoryCallAccounting:
@@ -229,15 +241,26 @@ class PriorityExtractionRuntime:
     def extract(self, window: ExtractionWindow) -> ExtractionPayload:
         if self._accounting is not None:
             self._accounting.extraction_started()
+        scheduled = getattr(self._runtime, "extract_scheduled", None)
+        if callable(scheduled):
+            result = scheduled(window, request_context=self._request,
+                               retry_wait=self._control.wait_for_retry)
+        else:
+            # 合成及旧维度Runtime一次extract只有一次调用，保留原接缝。
+            with self._request():
+                result = self._runtime.extract(window)
+        self._control.wait_for_foreground()
+        return result
+
+    @contextmanager
+    def _request(self) -> Iterator[None]:
         with self._control.background_call():
             called_at, started = datetime.now(timezone.utc), time.perf_counter()
-            result = self._runtime.extract(window)
+            yield
             if self._accounting is not None:
                 self._accounting.extraction_returned(
                     called_at, max(0, int((time.perf_counter() - started) * 1000)),
                 )
-        self._control.wait_for_foreground()
-        return result
 
 
 class PriorityVerificationRuntime:
