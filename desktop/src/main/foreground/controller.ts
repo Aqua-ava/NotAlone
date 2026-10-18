@@ -28,6 +28,7 @@ export class ForegroundController {
   private stopped = false;
   private scheduled: unknown;
   private failures = 0;
+  private refreshAfterHelperFocus = false;
   private changePending = false;
   private changeSource: ForegroundChangeSource | undefined;
   private syncPermit: { generation: number; scopeRevision: number } | undefined;
@@ -186,8 +187,9 @@ export class ForegroundController {
   private scheduleNext(): void {
     if (!this.continuous || this.disposed || this.flight || this.state.manualInput || this.state.suspendedByHelperFocus
       || this.readingScopeChanges > 0 || this.scheduled !== undefined) return;
-    // 后端每轮预算 3.2 秒，完成后至少休息 2 秒；失败退避至最多 8 秒。
-    const delay = Math.min(8000, 2000 * 2 ** this.failures);
+    // 周期观察间隔2秒；真正离开助手可立即复查，技术失败仍退避至最多8秒。
+    const delay = this.refreshAfterHelperFocus && this.failures === 0 ? 0 : Math.min(8000, 2000 * 2 ** this.failures);
+    this.refreshAfterHelperFocus = false;
     const handle = this.clock.schedule(async () => {
       if (this.scheduled !== handle) return;
       this.scheduled = undefined;
@@ -290,6 +292,10 @@ export class ForegroundController {
   }
   notifyHelperLifecycle(event: 'focused' | 'blurred' | 'hidden' | 'closed'): void {
     if (this.disposed) return;
+    const focused = event === 'focused';
+    const wasFocused = this.state.suspendedByHelperFocus;
+    if (focused === wasFocused && (focused || event === 'blurred')) return;
+    if (wasFocused && !focused) this.refreshAfterHelperFocus = true;
     this.invalidatePending('paused'); ++this.epoch;
     this.publish({ suspendedByHelperFocus: event === 'focused', foregroundRevision: this.state.foregroundRevision + 1 });
     if (event === 'focused') { this.cancelScheduled(); this.clearObservation('paused', 'helper_focused'); }

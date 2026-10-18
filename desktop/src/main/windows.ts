@@ -169,10 +169,29 @@ export class AppWindows {
       if (!this.quitting) { event.preventDefault(); window.hide(); }
     });
     if (!manager) {
-      window.on('focus', () => this.helperObservation?.onLifecycle('focused'));
-      window.on('blur', () => this.helperObservation?.onLifecycle('blurred'));
-      window.on('hide', () => this.helperObservation?.onLifecycle('hidden'));
-      window.on('closed', () => this.helperObservation?.onLifecycle('closed'));
+      let last: HelperLifecycle | undefined;
+      const publish = (event: HelperLifecycle) => {
+        if (last === event) return;
+        last = event; this.helperObservation?.onLifecycle(event);
+      };
+      const focus = () => publish('focused');
+      const blur = () => { if (last === 'focused') publish('blurred'); };
+      // macOS面板的key-window与应用激活分开变化，应用失活补齐漏掉的blur。
+      const activate = () => {
+        if (!window.isDestroyed() && window.isVisible() && window.isFocused() && app.isActive()) focus();
+      };
+      window.on('focus', focus);
+      window.on('blur', blur);
+      window.on('hide', () => publish('hidden'));
+      window.on('closed', () => {
+        app.removeListener('did-resign-active', blur);
+        app.removeListener('did-become-active', activate);
+        publish('closed');
+      });
+      if (process.platform === 'darwin') {
+        app.on('did-resign-active', blur);
+        app.on('did-become-active', activate);
+      }
     }
     window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     window.webContents.on('will-navigate', (event) => event.preventDefault());

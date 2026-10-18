@@ -57,7 +57,7 @@ test('顶部识别准确但尚未绑定时按正常间隔刷新，不退避八�
    await writeFile(path.join(fixture.directory, 'probe-state.json'), JSON.stringify({ wechat_in_front: false }));
    await next();
    const paused = render();
-   assert.ok(paused.includes('前台定位已暂停'));
+   assert.ok(paused.includes('等待微信切到前台'));
    const pausedRevision = foreground.getState().foregroundRevision;
    const checkingPause = next();
    try {

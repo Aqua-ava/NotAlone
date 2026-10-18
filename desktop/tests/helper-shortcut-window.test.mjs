@@ -22,12 +22,13 @@ const production = await build({ stdin: { contents: `
 async function fixture(use) {
   const directory = await mkdtemp(path.join(tmpdir(), 'notalone-shortcut-window-'));
   const nativeWindows = [], registered = new Map(), handlers = new Map(), events = [], errors = [], copied = [];
-  const app = Object.assign(new EventEmitter(), { hidden: false, showCalls: 0,
+  const app = Object.assign(new EventEmitter(), { hidden: false, active: true, showCalls: 0,
+    isActive() { return this.active; },
     isHidden() { return this.hidden; }, show() { this.showCalls += 1; this.hidden = false; },
     getPath: () => directory, getAppPath: () => directory });
   class NativeWindow extends EventEmitter {
     constructor(options) {
-      super(); this.options = options; this.visible = false; this.minimized = false; this.destroyed = false;
+      super(); this.options = options; this.focused = false; this.visible = false; this.minimized = false; this.destroyed = false;
       this.pinned = options.type === 'panel' || options.alwaysOnTop; this.calls = { show: 0, inactive: 0, focus: 0, hide: 0 };
       this.webContents = { mainFrame: { url: '' }, on() {}, setWindowOpenHandler() {}, send() {},
         getURL: () => this.webContents.mainFrame.url };
@@ -39,9 +40,10 @@ async function fixture(use) {
     isMinimized() { return this.minimized; }
     restore() { this.minimized = false; }
     isVisible() { return this.visible; }
+    isFocused() { return this.focused; }
     show() { this.calls.show += 1; this.visible = true; }
     showInactive() { this.calls.inactive += 1; this.visible = true; }
-    focus() { this.calls.focus += 1; this.emit('focus'); }
+    focus() { this.calls.focus += 1; this.focused = true; this.emit('focus'); }
     hide() { this.calls.hide += 1; this.visible = false; this.emit('hide'); }
     setAlwaysOnTop(value) { this.pinned = value; }
     isAlwaysOnTop() { return this.pinned; }
@@ -87,6 +89,25 @@ test('注册快捷键只显隐同一小窗，观察不返回也不阻塞或聚�
     assert.deepEqual(f.manager().calls, managerCalls);
     assert.deepEqual(f.events, ['hidden'], '保留实际隐藏事件，不伪造获得焦点');
     assert.deepEqual(f.errors, []);
+  });
+});
+
+test('macOS应用失活即使面板未发blur也解除助手暂停', { skip: process.platform !== 'darwin' }, async () => {
+  await fixture(async f => {
+    await f.press();
+    f.helper().focus();
+    assert.deepEqual(f.events, ['focused']);
+    // 系统切到其他App时面板仍可能保有key-window状态；应用失活独立于窗口blur。
+    f.app.active = false; f.app.emit('did-resign-active');
+    assert.deepEqual(f.events, ['focused', 'blurred']);
+    f.helper().emit('blur'); f.app.emit('did-resign-active');
+    assert.deepEqual(f.events, ['focused', 'blurred'], '重复失焦不得取消新观察');
+    f.app.active = true; f.app.emit('did-become-active');
+    assert.deepEqual(f.events, ['focused', 'blurred', 'focused']);
+    f.helper().hide(); f.app.emit('did-become-active');
+    assert.equal(f.events.at(-1), 'hidden');
+    f.helper().destroy();
+    assert.equal(f.app.listenerCount('did-resign-active'), 0);
   });
 });
 

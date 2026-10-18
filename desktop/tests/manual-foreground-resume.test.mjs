@@ -33,7 +33,7 @@ function fixture(t) {
  const foreground = ports.installForegroundBridge({ handle: (name, handler, role) => {
   handlers.set(name, handler); roles.set(name, role); }, publish: () => {} }, backend, contacts);
  // 注入合成时钟，只触发宿主已有调度，不等待或运行原生探针。
- foreground.clock = { schedule: callback => { const key = ++sequence; scheduled.set(key, callback); return key; },
+ foreground.clock = { schedule: (callback, delay) => { callback.delayMs = delay; const key = ++sequence; scheduled.set(key, callback); return key; },
   cancel: key => scheduled.delete(key) };
  t.after(() => foreground.dispose());
  const bridge = ports.createForegroundBridge({ invoke: async (name, ...args) => handlers.get(name)(...args),
@@ -127,4 +127,54 @@ test('恢复后微信可靠观察授予资格，进入助手暂停采集但仍�
  await f.foreground.observeBeforeShow();
  assert.equal(observations, 1, '助手在前台不额外采集微信');
  assert.equal(f.scheduled.size, 0);
+});
+
+
+test('群聊暂停进入助手再离开后立即复查私聊，重复失焦不取消在途观察', async t => {
+ const f = fixture(t); f.foreground.startContinuous();
+ const response = (phase, reason, contactId) => ({ generation: 1, data: {
+  observation_id: id, observed_at: new Date().toISOString(), phase, reason,
+  probe_available: true, wechat_in_front: true, binding_id: contactId, contact_id: contactId } });
+ f.setObservation(async () => response('paused', 'group_chat_unsupported', null));
+ await f.foreground.observeBeforeShow();
+ assert.equal(f.foreground.getState().unsupportedConversation, true);
+ f.foreground.notifyHelperLifecycle('focused'); f.foreground.notifyHelperLifecycle('blurred');
+ const [key, observe] = f.scheduled.entries().next().value;
+ assert.equal(observe.delayMs, 0, '真正离开助手时不再多等两秒');
+ f.scheduled.delete(key);
+ let release; f.setObservation(() => new Promise(resolve => { release = resolve; }));
+ const pending = observe();
+ f.foreground.notifyHelperLifecycle('blurred');
+ release(response('confirmed', 'confirmed_active_binding', id)); await pending;
+ assert.equal(f.foreground.getState().unsupportedConversation, false);
+ assert.equal(f.foreground.getGenerationBlock(), null);
+});
+
+
+test('真正离开助手也保留技术失败退避与手动模式门禁', async t => {
+ const f = fixture(t); f.foreground.startContinuous();
+ f.setObservation(async () => ({ generation: 1, data: { observation_id: id,
+  observed_at: new Date().toISOString(), phase: 'unavailable', reason: 'probe_timeout',
+  probe_available: false, wechat_in_front: false, binding_id: null, contact_id: null } }));
+ await f.foreground.observeBeforeShow();
+ f.foreground.notifyHelperLifecycle('focused'); f.foreground.notifyHelperLifecycle('blurred');
+ assert.equal(f.scheduled.values().next().value.delayMs, 4000);
+ f.foreground.notifyHelperLifecycle('focused'); await f.enterManual();
+ f.foreground.notifyHelperLifecycle('blurred');
+ assert.equal(f.scheduled.size, 0, '手动输入仍不观察');
+});
+
+
+test('离开助手的立即复查等待旧传输结算，不与旧观察并发', async t => {
+ const f = fixture(t); f.foreground.startContinuous();
+ let release; f.setObservation(() => new Promise(resolve => { release = resolve; }));
+ const pending = f.foreground.observeBeforeShow();
+ f.foreground.notifyHelperLifecycle('focused'); f.foreground.notifyHelperLifecycle('blurred');
+ assert.equal(f.scheduled.size, 0, '旧传输未结算时不能发起新观察');
+ release({ generation: 1, data: { observation_id: id, observed_at: new Date().toISOString(),
+  phase: 'confirmed', reason: 'confirmed_active_binding', probe_available: true,
+  wechat_in_front: true, binding_id: id, contact_id: id } });
+ await pending;
+ assert.equal(f.foreground.getState().confirmedContactId, null, '迟到结果不得授予资格');
+ assert.equal(f.scheduled.values().next().value.delayMs, 0);
 });
