@@ -124,7 +124,7 @@ class OrganizationQualityHttpTest(MemoryOverviewHttpFixture, unittest.TestCase):
         from notalone.application.layered_memory_service import LayeredMemoryService
         from notalone.application.organization_evaluation import OrganizationEvaluationRuntime
         from notalone.memory.organization_sdk import DeepSeekOrganizationProposal, DeepSeekOrganizationVerification
-        from notalone.memory.organization_quality import OrganizationQualityService, OrganizationQualityContract
+        from notalone.memory.organization_quality import OrganizationQualityService, OrganizationQualityContract, content_digest
         from notalone.memory.organization_quality_transport import OrganizationQualityHTTPTransport
         from notalone.persistence.layered_memory import PostgresLayeredMemoryStore
         from notalone.persistence.organization_quality import PostgresOrganizationQualityStore
@@ -138,20 +138,36 @@ class OrganizationQualityHttpTest(MemoryOverviewHttpFixture, unittest.TestCase):
             data = json.loads(payload['messages'][1]['content'])
             memory = data['memories'][0]
             ref = {'memory_id': memory['memory_id'], 'revision': memory['revision']}
-            if '独立忠实度核验器' in payload['messages'][0]['content']:
+            if data.get('layer') in {'l2', 'l3'} and 'proposal' in data:
                 result = {'supported': True, 'reasons': []}
+                proposal = data['proposal']
                 if strict_literal_verifier:
-                    proposal = data['proposal']
                     texts = [item['text'] for item in proposal.get('entries', [])] + [paragraph['text']
                         for scenario in proposal.get('scenarios', []) for paragraph in scenario['paragraphs']]
                     result['supported'] = all(text in {m['text'] for m in data['memories']} for text in texts)
+                if data['layer'] == 'l3':
+                    # 仅返回合成合同夹具，不把来源存在或此固定判定当成语义资格。
+                    sources = {(m['memory_id'], m['revision']): m for m in data['memories']}
+                    result['entries'] = []
+                    for index, entry in enumerate(proposal['entries']):
+                        quotes = [{**reference, 'quote': sources[(reference['memory_id'], reference['revision'])]['text']}
+                                  for reference in entry['references']]
+                        result['entries'].append({'entry_index': index, 'entry_sha256': content_digest(entry),
+                            'references': entry['references'], 'supported': result['supported'],
+                            'temporal_basis': 'historical' if entry['temporal_status'] == 'historical' else 'current_unverified',
+                            'temporal_references': [], 'basis': '合成资料仅保留原有时间限定。',
+                            'claims': [{'text': entry['text'], 'sources': quotes,
+                                'subject_role': 'contact' if 'provenance_kind' in memory else 'app_user',
+                                'subject_basis': '合成合同夹具的关系资料主体。', 'supported': result['supported'],
+                                'value_category': 'enduring_fact_or_preference' if result['supported'] else 'none',
+                                'relationship_impact': None, 'eligibility_basis': '仅供工程合同回归，不声明真实语义审阅。'}]})
             elif '从主题和底层' in payload['messages'][0]['content']:
                 if gate_profile:
                     gate_profile[0].set()
                     gate_profile[1].wait(5)
                 result = {'entries': [] if empty_profile else [{'text': memory['text'], 'references': [ref],
-                    'temporal_status': 'uncertain' if data.get('corrections') else 'stable',
-                    'uncertainty': '当前状态按原资料保留，未额外核实。' if data.get('corrections') else ''}]}
+                    'temporal_status': 'uncertain',
+                    'uncertainty': '当前状态按原资料保留，未额外核实。'}]}
             else:
                 result = {'scenarios': [{'topic_key': 'supplement-' + memory['memory_id'] if data.get('corrections') else 'study',
                     'title': '已核对的补充资料' if data.get('corrections') else '合成学习',
@@ -411,7 +427,11 @@ class OrganizationQualityHttpTest(MemoryOverviewHttpFixture, unittest.TestCase):
         self.assertEqual(challenge['model_input']['memories'], prepared['model_input']['memories'])
         actual = next(item for item in report['attempts'] if item['phase'] == 'l3_challenge')
         import json
-        self.assertEqual(json.loads(actual['request_payload']['messages'][1]['content']), challenge['model_input'])
+        from notalone.memory.organization_quality import content_digest
+        expected = {**challenge['model_input'], 'verification_targets': [
+            {'entry_index': index, 'entry_sha256': content_digest(entry)}
+            for index, entry in enumerate(challenge['model_input']['proposal']['entries'])]}
+        self.assertEqual(json.loads(actual['request_payload']['messages'][1]['content']), expected)
         self.assertNotIn('expected_supported', actual['request_payload']['messages'][1]['content'])
         self.assertEqual(report['organization']['status'], 'unknown')
 

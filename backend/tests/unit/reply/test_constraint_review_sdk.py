@@ -16,7 +16,7 @@ from notalone.reply.errors import ReplyCandidatesRejectedError, ReplyInvariantEr
 from notalone.reply.input_budget import InputBudgetExceededError
 from tests.unit.reply.test_input_budget_runtime import SCOPE, prepared_context, reply_output
 from tests.unit.reply.test_langchain_vertical_slice import EmptySkillPort
-from tests.reply_review_support import synthetic_review
+from tests.reply_review_support import synthetic_claim, synthetic_review
 
 
 def sdk_response(request, *, large=False, review_arguments=None, generation_arguments=None):
@@ -68,7 +68,7 @@ class ConstraintReviewSdkTest(unittest.TestCase):
         self.assertEqual(accepted_candidate_numbers(rejected, payload), frozenset())
 
     def test_captured_review_wire_faults_fail_explicitly_without_retry(self):
-        for fault in ("misplaced_propositions", "invalid_json"):
+        for fault in ("misplaced_propositions", "invalid_json", "wrong_range_id"):
             with self.subTest(fault=fault):
                 def respond(request):
                     response = sdk_response(request)
@@ -77,9 +77,12 @@ class ConstraintReviewSdkTest(unittest.TestCase):
                     if call["name"] == "ReplyFidelityReview":
                         review = json.loads(call["arguments"])
                         # 实际seq2/15多传同级propositions；seq5则返回不完整JSON。
-                        review["reviews"]["candidate_1"]["propositions"] = []
-                        call["arguments"] = (json.dumps(review) if fault == "misplaced_propositions"
-                                             else call["arguments"][:-1])
+                        if fault == "misplaced_propositions":
+                            review["reviews"]["candidate_1"]["propositions"] = []
+                        elif fault == "wrong_range_id":
+                            review["reviews"]["candidate_1"]["claims"][0]["start_unit_id"] = "c2u1"
+                        call["arguments"] = (call["arguments"][:-1] if fault == "invalid_json"
+                                             else json.dumps(review))
                     return httpx.Response(200, json=payload)
                 ledger = RecordingLedger()
                 runtime, requests, decisions = self.runtime(respond, ledger=ledger)
@@ -97,22 +100,33 @@ class ConstraintReviewSdkTest(unittest.TestCase):
             accepted_candidate_numbers({}, {"candidates": [{"text": "内部字段缺失。"}]})
 
     def test_pasted_direction_can_support_first_person_and_review_only_filters_once(self):
-        context = prepared_context()
         incoming, direction = "大学那会儿的事情，你还记得吗？", "告诉对方我记得这段往事，继续问他的近况。"
-        context = replace(context, command=replace(context.command, content=replace(context.command.content,
-            draft_text=incoming, input_kind="current_chat", pasted_direction=direction,
-            user_instruction=None)), current_text=incoming,
-            evidence=(replace(context.evidence[0], kind="user_current_chat", text=incoming, status="user_input"),))
-        generation = reply_output().tool_calls[0]["args"]
-        generation["candidates"][0].update(text="我记得这段往事。你最近怎么样？", basis="按用户明确方向。")
-        reviewed = synthetic_review({"draft_text": direction, "candidates": generation["candidates"]})
-        runtime, requests, decisions = self.runtime(lambda request: sdk_response(request,
-            generation_arguments=generation, review_arguments=reviewed))
-        result = runtime.generate(context)
-        self.assertEqual(result.candidates[0].text, generation["candidates"][0]["text"])
-        self.assertEqual(len(requests), 2)
-        self.assertEqual(len(decisions), 2)
-        self.assertEqual((result.usage.input_tokens, result.usage.output_tokens), (30, 7))
+        for statement in ("我记得这段往事。", "那段往事我还有印象。"):
+            with self.subTest(statement=statement):
+                context = prepared_context()
+                context = replace(context, command=replace(context.command, content=replace(context.command.content,
+                    draft_text=incoming, input_kind="current_chat", pasted_direction=direction,
+                    user_instruction=None)), current_text=incoming,
+                    evidence=(replace(context.evidence[0], kind="user_current_chat", text=incoming, status="user_input"),))
+                generation = reply_output().tool_calls[0]["args"]
+                generation["candidates"][0].update(text=statement + "你最近怎么样？", basis="按用户明确方向。")
+                reviewed = synthetic_review({"draft_text": direction, "candidates": generation["candidates"]})
+                state = synthetic_claim(statement, kind="state", modality="stated", sources=[{
+                    "source_path": "/confirmed_direction", "source_quote": "我记得这段往事"}])
+                question = synthetic_claim("你最近怎么样？", start=len(statement) + 1)
+                question["claim_id"] = 2
+                reviewed["reviews"]["candidate_1"]["claims"] = [state, question]
+                runtime, requests, decisions = self.runtime(lambda request: sdk_response(request,
+                    generation_arguments=generation, review_arguments=reviewed))
+                result = runtime.generate(context)
+                self.assertEqual(result.candidates[0].text, generation["candidates"][0]["text"])
+                self.assertEqual(len(requests), 2)
+                self.assertEqual(len(decisions), 2)
+                self.assertTrue(all(request["max_tokens"] == 4096 for request in requests))
+                self.assertEqual((result.usage.input_tokens, result.usage.output_tokens), (30, 7))
+                payload = json.loads(requests[1]["messages"][-1]["content"])
+                self.assertEqual(payload["review_sources"]["/confirmed_direction"], {
+                    "role": "current_user_input", "time_scope": "current"})
 
     def test_pasted_contact_text_gets_one_budgeted_review_and_cannot_authorize_user_memory_claim(self):
         incoming = "大学那会儿的事情，你还记得吗？"
@@ -194,16 +208,23 @@ class ConstraintReviewSdkTest(unittest.TestCase):
     def test_single_candidate_wire_requires_its_exact_slot_and_places_status_inside_result(self):
         runtime, requests, _ = self.runtime(sdk_response)
         runtime.generate(self.context())
-        reviews = requests[1]["tools"][0]["function"]["parameters"]["properties"]["reviews"]
+        parameters = requests[1]["tools"][0]["function"]["parameters"]
+        self.assertEqual(parameters["properties"]["protocol_version"]["enum"], ["reply-fidelity-units-v3"])
+        self.assertIn("protocol_version", parameters["required"])
+        reviews = parameters["properties"]["reviews"]
         self.assertEqual(reviews["type"], "object")
         self.assertEqual(set(reviews["required"]), {"candidate_1"})
         self.assertEqual(set(reviews["properties"]), {"candidate_1"})
         slot = reviews["properties"]["candidate_1"]
         self.assertEqual(slot["properties"]["candidate_number"]["enum"], [1])
+        claim = slot["properties"]["claims"]["items"]
+        self.assertNotIn("text", claim["properties"])
+        self.assertEqual(claim["properties"]["start_unit_id"], {"type": "string"})
+        self.assertEqual(claim["properties"]["end_unit_id"], {"type": "string"})
         checks = slot["properties"]["checks"]["properties"]
         for name, check in checks.items():
             self.assertEqual(set(check["properties"]),
-                             {"reason", "result"} | ({"propositions"} if name == "commitments" else set()))
+                             {"reason", "result"})
             branches = check["properties"]["result"]["anyOf"]
             self.assertEqual([branch["properties"]["status"]["enum"] for branch in branches],
                              [["supported"], ["unknown"], ["violation"]])
@@ -251,15 +272,16 @@ class ConstraintReviewSdkTest(unittest.TestCase):
         self.assert_dynamic_candidate_slots(["candidate_1", "candidate_2", "candidate_3"])
 
     def test_five_explicit_checks_deliver_the_original_candidate_without_a_global_verdict(self):
-        arguments = {"instruction_requires_expansion": False, "reviews": {"candidate_1": {
+        arguments = {"protocol_version": "reply-fidelity-units-v3", "instruction_requires_expansion": False, "reviews": {"candidate_1": {
             "candidate_number": 1, "expression_change": "not_applicable", "checks": {
                 "intent": {"result": {"status": "supported"}, "reason": "保留今晚不参加的立场。"},
                 "instruction": {"result": {"status": "supported"}, "reason": "保留拒绝，未增加下次安排。"},
                 "facts": {"result": {"status": "supported"}, "reason": "没有新增经历或现状。"},
-                "commitments": {"result": {"status": "supported"}, "reason": "没有新增履约安排。", "propositions": []},
+                "commitments": {"result": {"status": "supported"}, "reason": "没有新增履约安排。"},
                 "explanation": {"result": {"status": "supported"}, "reason": "说明与正文中的拒绝一致。"},
             },
         }}}
+        arguments["reviews"]["candidate_1"]["claims"] = [synthetic_claim(reply_output().tool_calls[0]["args"]["candidates"][0]["text"])]
         runtime, requests, _ = self.runtime(lambda request: sdk_response(request, review_arguments=arguments))
         result = runtime.generate(self.context())
         self.assertEqual([item.text for item in result.candidates], ["合成候选：今晚不参加，祝活动顺利。"])
@@ -268,6 +290,22 @@ class ConstraintReviewSdkTest(unittest.TestCase):
         self.assertNotIn("verdict", row_schema["properties"])
         self.assertEqual(set(row_schema["properties"]["checks"]["required"]),
                          {"intent", "instruction", "facts", "commitments", "explanation"})
+
+    def test_review_wire_preserves_canonical_messages_and_all_codepoints(self):
+        messages = ["谢谢🙂e\u0301，", "  回头聊。", "晚安。"]
+        text = "\n\n".join(messages)
+        generation = reply_output().tool_calls[0]["args"]
+        generation["candidates"][0].update(text=text, messages=messages)
+        runtime, requests, decisions = self.runtime(lambda request: sdk_response(request,
+            generation_arguments=generation))
+        result = runtime.generate(self.context())
+        candidate = json.loads(requests[1]["messages"][-1]["content"])["candidates"][0]
+        self.assertEqual((candidate["text"], candidate["messages"]), (text, messages))
+        self.assertEqual(candidate["review_target"]["units"],
+                         [[f"c1u{number}", char] for number, char in enumerate(text, 1)])
+        self.assertEqual(result.candidates[0].text, text)
+        self.assertEqual(list(result.candidates[0].messages), messages)
+        self.assertEqual((len(requests), len(decisions)), (2, 2))
 
     def test_strict_wire_uses_exclusive_checks_without_unsupported_length_keywords(self):
         runtime, requests, _ = self.runtime(sdk_response)
@@ -291,7 +329,7 @@ class ConstraintReviewSdkTest(unittest.TestCase):
         checks = function["parameters"]["properties"]["reviews"]["properties"]["candidate_1"]["properties"]["checks"]
         for name, schema in checks["properties"].items():
             self.assertEqual(set(schema["properties"]),
-                             {"reason", "result"} | ({"propositions"} if name == "commitments" else set()))
+                             {"reason", "result"})
             branches = schema["properties"]["result"]["anyOf"]
             self.assertEqual(len(branches), 3)
             self.assertEqual([branch["properties"]["status"]["enum"] for branch in branches],
@@ -368,11 +406,6 @@ class ConstraintReviewSdkTest(unittest.TestCase):
             if payload["tools"][0]["function"]["name"] == "ReplyFidelityReview":
                 original = json.loads(payload["messages"][-1]["content"])
                 arguments = synthetic_review(original)
-                arguments["reviews"]["candidate_1"]["checks"]["commitments"]["propositions"] = [{
-                    "candidate_path": "/text", "candidate_quote": "不用急着回，看你的时间",
-                    "actor": "接收人", "action": "自行选择回应", "object": "原可选邀请",
-                    "time_scope": "未另定期限", "modality": "optional",
-                }]
                 explanation = arguments["reviews"]["candidate_2"]["checks"]["explanation"]
                 explanation["reason"] = "正文仍含今晚，所称删除没有发生。"
                 explanation["result"].update(
@@ -389,11 +422,6 @@ class ConstraintReviewSdkTest(unittest.TestCase):
                         "candidate_quote": "我开车接你", "source_path": "/draft_text",
                         "source_quote": "想聊聊的话我今晚有空",
                     })
-                commitments["propositions"] = [{
-                        "candidate_path": "/text", "candidate_quote": "我开车接你",
-                        "actor": "说话人", "action": "开车接送", "object": "接收人",
-                        "time_scope": "今晚", "modality": "required",
-                    }]
             return sdk_response(request, review_arguments=arguments, generation_arguments=generation)
 
         context = self.context()
@@ -412,8 +440,8 @@ class ConstraintReviewSdkTest(unittest.TestCase):
         for fault in ("missing", "extra_verdict", "supported_with_violation", "unknown_with_violation",
                       "supported_with_null_violation", "unknown_with_null_violation", "legacy_empty_array",
                       "legacy_violation_array", "null_violation", "violation_array", "missing_violation",
-                      "violation_without_quote", "extra_violation_field", "missing_propositions",
-                      "non_commitment_propositions", "legacy_flat_check", "legacy_flat_commitments",
+                      "violation_without_quote", "extra_violation_field", "legacy_claim_ids",
+                      "non_shared_claim_ids", "legacy_flat_check", "legacy_flat_commitments",
                       "reason_in_result", "propositions_in_result", "duplicate_outer_status",
                       "fabricated_candidate", "fabricated_source", "candidate_as_source", "wrong_field",
                       "missing_proposition", "unrelated_proposition", "unhashable_status"):
@@ -467,10 +495,10 @@ class ConstraintReviewSdkTest(unittest.TestCase):
                             violation.pop("candidate_quote")
                         elif fault == "extra_violation_field":
                             violation["reason"] = "合成额外字段。"
-                        elif fault == "missing_propositions":
-                            row["checks"]["commitments"].pop("propositions")
-                        elif fault == "non_commitment_propositions":
-                            row["checks"]["instruction"]["propositions"] = []
+                        elif fault == "legacy_claim_ids":
+                            row["checks"]["commitments"]["claim_ids"] = [1]
+                        elif fault == "non_shared_claim_ids":
+                            row["checks"]["instruction"]["claim_ids"] = []
                         elif fault == "fabricated_candidate":
                             violation["candidate_quote"] = "明天我来接你"
                         elif fault == "fabricated_source":
@@ -485,11 +513,9 @@ class ConstraintReviewSdkTest(unittest.TestCase):
                             violation["category"] = "added_obligation"
                             row["checks"]["commitments"]["result"].update(status="violation", violation=violation)
                             if fault == "unrelated_proposition":
-                                row["checks"]["commitments"]["propositions"] = [{
-                                    "candidate_path": "/text", "candidate_quote": "祝活动顺利",
-                                    "actor": "说话人", "action": "祝福", "object": "接收人",
-                                    "time_scope": "未限定", "modality": "optional",
-                                }]
+                                row["claims"][0]["end_unit_id"] = "c1u2"
+                            else:
+                                row["claims"] = []
                     return sdk_response(request, review_arguments=arguments)
                 ledger = RecordingLedger()
                 runtime, requests, _ = self.runtime(respond, ledger=ledger)
@@ -506,8 +532,7 @@ class ConstraintReviewSdkTest(unittest.TestCase):
             evidence=(replace(context.evidence[0], text=text),))
         generation = reply_output().tool_calls[0]["args"]
         generation["candidates"][0]["text"] = text
-        for field, limit in (("reason", 256), ("candidate_quote", 512), ("source_quote", 512),
-                             ("actor", 64), ("action", 128), ("object", 128), ("time_scope", 128)):
+        for field, limit in (("reason", 256), ("candidate_quote", 512), ("source_quote", 512)):
             for length in (limit, limit + 1):
                 with self.subTest(field=field, length=length):
                     def respond(request):
@@ -522,17 +547,8 @@ class ConstraintReviewSdkTest(unittest.TestCase):
                                 violation = {"category": "unsupported_fact", "candidate_path": "/text",
                                              "candidate_quote": "合", "source_path": "/draft_text",
                                              "source_quote": "合"}
-                                if field in {"candidate_quote", "source_quote"}:
-                                    violation[field] = "合" * length
-                                    checks["facts"]["result"].update(status="violation", violation=violation)
-                                else:
-                                    violation["category"] = "added_obligation"
-                                    proposition = {"candidate_path": "/text", "candidate_quote": "合",
-                                                   "actor": "说话人", "action": "处理", "object": "事情",
-                                                   "time_scope": "今晚", "modality": "required"}
-                                    proposition[field] = "合" * length
-                                    checks["commitments"]["result"].update(status="violation", violation=violation)
-                                    checks["commitments"]["propositions"] = [proposition]
+                                violation[field] = "合" * length
+                                checks["facts"]["result"].update(status="violation", violation=violation)
                         return sdk_response(request, generation_arguments=generation, review_arguments=arguments)
 
                     runtime, requests, _ = self.runtime(respond)
@@ -551,7 +567,7 @@ class ConstraintReviewSdkTest(unittest.TestCase):
         generation["candidates"] = [dict(generation["candidates"][0]) for _ in range(3)]
         for fault in ("empty_reviews", "four_reviews", "missing_review", "duplicate_number",
                       "out_of_range_number", "boolean_number", "non_object_reviews", "wrong_slot_binding",
-                      "seven_propositions"):
+                      "thirteen_claims"):
             with self.subTest(fault=fault):
                 def respond(request):
                     body = json.loads(request.content)
@@ -576,10 +592,7 @@ class ConstraintReviewSdkTest(unittest.TestCase):
                         elif fault == "wrong_slot_binding":
                             rows["candidate_1"], rows["candidate_2"] = rows["candidate_2"], rows["candidate_1"]
                         else:
-                            rows["candidate_1"]["checks"]["commitments"]["propositions"] = [{
-                                "candidate_path": "/text", "candidate_quote": "今晚不参加", "actor": "说话人",
-                                "action": "不参加", "object": "活动", "time_scope": "今晚", "modality": "stated",
-                            }] * 7
+                            rows["candidate_1"]["claims"] *= 13
                     return sdk_response(request, generation_arguments=generation, review_arguments=arguments)
 
                 runtime, requests, _ = self.runtime(respond)
@@ -637,15 +650,12 @@ class ConstraintReviewSdkTest(unittest.TestCase):
                         "candidate_quote": "我今晚可以开车接你，再帮你把事情处理好",
                         "source_path": "/draft_text", "source_quote": "今晚不参加",
                     })
-                commitments["propositions"] = [{
-                        "candidate_path": "/text", "candidate_quote": "想聊的话我今晚可以开车接你",
-                        "actor": "说话人", "action": "开车接送", "object": "接收人",
-                        "time_scope": "今晚", "modality": "required",
-                    }, {
-                        "candidate_path": "/text", "candidate_quote": "再帮你把事情处理好",
-                        "actor": "说话人", "action": "代为处理事情", "object": "接收人的事情",
-                        "time_scope": "未限定", "modality": "required",
-                    }]
+                parts = ["最近怎么样？", "想聊的话我今晚可以开车接你，", "再帮你把事情处理好。"]
+                claims = [synthetic_claim(part, kind="speech_act" if index == 1 else "commitment",
+                                          start=1 + sum(len(value) for value in parts[:index - 1]))
+                          for index, part in enumerate(parts, 1)]
+                for index, claim in enumerate(claims, 1): claim["claim_id"] = index
+                arguments["reviews"]["candidate_1"]["claims"] = claims
             return sdk_response(request, generation_arguments=generation, review_arguments=arguments)
 
         ledger = RecordingLedger()
@@ -750,6 +760,20 @@ class ConstraintReviewSdkTest(unittest.TestCase):
             runtime.generate(self.context())
         self.assertEqual(len(requests), 1)
 
+    def test_maximum_length_character_table_is_rejected_before_review_dispatch(self):
+        generation = reply_output().tool_calls[0]["args"]
+        text = "合" * 65536
+        generation["candidates"][0]["text"] = text
+        generation["candidates"][0].pop("messages", None)
+        runtime, requests, decisions = self.runtime(lambda request: sdk_response(request,
+            generation_arguments=generation))
+        with self.assertRaises(InputBudgetExceededError):
+            runtime.generate(self.context())
+        self.assertEqual(generation["candidates"][0]["text"], text)
+        self.assertEqual(len(requests), 1)
+        self.assertEqual(len(decisions), 2)
+        self.assertFalse(decisions[-1].allowed)
+
     def test_oversized_review_payload_is_rejected_before_second_dispatch(self):
         runtime, requests, decisions = self.runtime(lambda request: sdk_response(request, large=True), capacity=50000)
         with self.assertRaises(InputBudgetExceededError):
@@ -770,11 +794,13 @@ class RecordingLedger:
 class LayeredReviewSourceContractTest(unittest.TestCase):
     def test_only_actual_profile_text_can_support_fact_or_explanation(self):
         from notalone.reply.adapters.constraint_review_contract import accepted_candidate_numbers, CHECK_CATEGORIES
-        payload = {"draft_text": "你好", "candidates": [{"text": "曾共同学习", "basis": "曾共同学习",
+        payload = {"draft_text": "你好", "candidates": [{"candidate_number": 1, "text": "曾共同学习", "basis": "曾共同学习",
             "messages": [], "risk_notes": []}], "layered_context": {
             "profile_entries": [{"text": "过去共同学习", "references": [{"text": "隐藏引用"}]}],
             "directory": [{"title": "共同学习", "hint": "共同学习", "paragraphs": [{"text": "未读正文"}]}],
             "dependency_ids": ["隐藏依赖"]}}
+        from notalone.reply.adapters.constraint_review_contract import review_target
+        payload["candidates"][0]["review_target"] = review_target(payload["candidates"][0])
         for category, path, quote, valid in (
             ("facts", "/layered_context/profile_entries/0/text", "共同学习", True),
             ("explanation", "/layered_context/profile_entries/0/text", "共同学习", True),

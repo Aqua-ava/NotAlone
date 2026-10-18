@@ -45,6 +45,11 @@ class _ScopedAsyncTransport(httpx.AsyncBaseTransport):
 
     async def handle_async_request(self, request):
         self.capture.check_attempt()
+        loop = asyncio.get_running_loop()
+        if (self.capture.async_lifecycle == "same-loop-v1"
+                and self.capture._async_loop is not None and self.capture._async_loop is not loop):
+            raise RuntimeError("评测异步请求须在同一事件循环内执行。")
+        self.capture._async_loop = loop
         return await self.delegate.handle_async_request(request)
 
     async def aclose(self):
@@ -56,12 +61,20 @@ class ReplyComparisonCapture:
 
     def __init__(self, output_directory: Path, manifest: dict, *,
                  synthetic_transport: httpx.MockTransport | None = None,
-                 allowed_endpoints: tuple[str, ...] = DEFAULT_ENDPOINTS):
-        if (manifest.get("data_kind") != "synthetic" or manifest.get("request_limit") != 48
+                 allowed_endpoints: tuple[str, ...] = DEFAULT_ENDPOINTS,
+                 async_lifecycle: str = "legacy"):
+        if async_lifecycle not in {"legacy", "same-loop-v1"}:
+            raise ValueError("未知评测异步生命周期模式。")
+        if manifest.get("capture_async_lifecycle", "legacy") != async_lifecycle:
+            raise ValueError("异步生命周期模式须与冻结清单一致。")
+        self.async_lifecycle = async_lifecycle
+        request_limit = manifest.get("request_limit")
+        if (manifest.get("data_kind") != "synthetic" or type(request_limit) is not int
+                or not 1 <= request_limit <= 48
                 or manifest.get("per_arm_limit") != 6
                 or not isinstance(manifest.get("cases"), list)
                 or not 1 <= len(manifest["cases"]) <= 4):
-            raise ValueError("回复比较只允许至多四例合成输入、48次总调用和每组6次调用。")
+            raise ValueError("回复比较只允许至多四例合成输入、1至48次总调用和每组6次调用。")
         output = Path(output_directory)
         output.mkdir(mode=0o700, parents=True, exist_ok=True)
         identity = output.lstat()
@@ -88,12 +101,15 @@ class ReplyComparisonCapture:
         from uuid import UUID
         self.budget = EvaluationBudget.create(
             run_id=UUID(self.bundle["run_id"]), output_directory=output,
-            request_limit=48, allowed_endpoints=allowed_endpoints,
+            request_limit=request_limit, allowed_endpoints=allowed_endpoints,
             config_sha256=self.bundle["manifest_sha256"],
         )
         self._active = None
         self._started = {}
         self._closed = False
+        self._close_finished = False
+        self._close_error: BaseException | None = None
+        self._async_loop: asyncio.AbstractEventLoop | None = None
         self.http_client = httpx.Client(trust_env=False, follow_redirects=False,
             transport=_ScopedTransport(self, EvaluationTransport(self.budget, records=self,
                 synthetic_transport=synthetic_transport)))
@@ -205,13 +221,61 @@ class ReplyComparisonCapture:
             raise EvaluationBudgetAbort("reply_comparison_capture_write_failed") from None
 
     def close(self) -> None:
-        if self._closed:
+        """同步使用方关闭；异步使用方须在原循环内等待aclose。"""
+        if self._already_closed():
             return
-        self._closed = True
         try:
-            self.budget.close()
-            self.bundle["budget_receipt"] = self.budget.closed_receipt()
+            asyncio.get_running_loop()
+        except RuntimeError:
+            with self._close_resources():
+                if self.async_lifecycle == "same-loop-v1" and self._async_loop is not None:
+                    raise RuntimeError("须在请求所属事件循环退出前await capture.aclose()。")
+                asyncio.run(self.http_async_client.aclose())
+        else:
+            raise RuntimeError("运行中的事件循环须使用await capture.aclose()。")
+
+    async def aclose(self) -> None:
+        """在异步请求所属事件循环退出前关闭并持久化回执。"""
+        if self._already_closed():
+            return
+        with self._close_resources():
+            if self._async_loop is not None and self._async_loop is not asyncio.get_running_loop():
+                raise RuntimeError("须在请求所属事件循环退出前await capture.aclose()。")
+            await self.http_async_client.aclose()
+
+    def _already_closed(self) -> bool:
+        if not self._closed:
+            return False
+        if not self._close_finished:
+            raise RuntimeError("捕获器仍在关闭中。")
+        if self._close_error is not None:
+            raise self._close_error
+        return True
+
+    def _save_closed_receipt(self) -> None:
+        self.bundle["budget_receipt"] = self.budget.closed_receipt()
+
+    @contextmanager
+    def _close_resources(self):
+        """失败也尝试其余资源及回执落盘，最后保留所有关闭异常。"""
+        self._closed = True
+        errors: list[BaseException] = []
+        for operation in (self.budget.close, self._save_closed_receipt, self.http_client.close):
+            try:
+                operation()
+            except BaseException as error:
+                errors.append(error)
+        try:
+            yield
+        except BaseException as error:
+            errors.append(error)
         finally:
-            self.http_client.close()
-            asyncio.run(self.http_async_client.aclose())
-            self.flush()
+            try:
+                self.flush()
+            except BaseException as error:
+                errors.append(error)
+            self._close_finished = True
+            if errors:
+                self._close_error = (errors[0] if len(errors) == 1 else
+                                     BaseExceptionGroup("评测捕获关闭失败。", errors))
+                raise self._close_error

@@ -120,6 +120,63 @@ class ReplyComparisonCaptureTest(unittest.TestCase):
             self.assertEqual(bundle["arms"][0]["error"]["kind"], "reply_comparison_per_arm_limit_exhausted")
             self.assertTrue(bundle["budget_receipt"]["closed"])
 
+    def test_configured_total_limit_stops_before_twenty_second_provider_attempt(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            configuration = {"request_model": "deepseek-flash"}
+            contract = ReplyQualityContract(model_version=content_digest(configuration))
+            cases = [{**self.case(), "case_id": f"synthetic-{number}"} for number in range(3)]
+            manifest = build_manifest(contract=contract, model_configuration=configuration,
+                dataset_version="synthetic-v1", cases=cases, request_limit=21)
+            sent = []
+
+            def respond(request):
+                sent.append(request)
+                return httpx.Response(200, json={"id": "synthetic-completion", "object": "chat.completion",
+                    "created": 0, "model": "deepseek-flash", "choices": [{"index": 0,
+                        "message": {"role": "assistant", "content": "合成候选"}, "finish_reason": "stop"}]})
+
+            with patch.object(Path, "home", return_value=root), patch.object(os, "environ", {}), \
+                    patch.object(socket.socket, "connect", side_effect=AssertionError("禁止真实网络")):
+                capture = ReplyComparisonCapture(root / "output", manifest,
+                    synthetic_transport=httpx.MockTransport(respond))
+                model = build_deepseek_model(api_key="synthetic-unused-key", max_retries=0,
+                    model_name="deepseek-flash", base_url="https://api.deepseek.com",
+                    extra_body={"thinking": {"type": "disabled"}},
+                    http_client=capture.http_client, http_async_client=capture.http_async_client)
+
+                def invoke(item, arm, request_key, recorder):
+                    for _ in range(6):
+                        model.invoke("合成输入")
+                    return {"request_id": str(uuid4()), "output": {"text": "合成候选"}, "evidence": {}}
+
+                bundle = run_reply_comparison(manifest=manifest, cases=cases, capture=capture, invoke_arm=invoke)
+            self.assertEqual(len(sent), 21)
+            self.assertEqual(len(bundle["calls"]), 21)
+            self.assertEqual(bundle["budget_receipt"]["request_limit"], 21)
+            self.assertEqual(bundle["budget_receipt"]["reserved_requests"], 21)
+            self.assertTrue(bundle["budget_receipt"]["closed"])
+            self.assertEqual([row["status"] for row in bundle["arms"]],
+                             ["succeeded", "succeeded", "succeeded", "blocked", "not_run", "not_run"])
+            self.assertEqual(bundle["arms"][3]["error"]["kind"], "request_limit_exhausted")
+            self.assertEqual(manifest["per_arm_limit"], 6)
+
+    def test_request_limit_defaults_to_forty_eight_and_rejects_invalid_before_output(self):
+        configuration = {"request_model": "deepseek-flash"}
+        contract = ReplyQualityContract(model_version=content_digest(configuration))
+        arguments = {"contract": contract, "model_configuration": configuration,
+                     "dataset_version": "synthetic-v1", "cases": [self.case()]}
+        manifest = build_manifest(**arguments)
+        self.assertEqual(manifest["request_limit"], 48)
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "must-not-exist"
+            for limit in (0, 49, True, 21.0, "21", None):
+                with self.subTest(limit=limit):
+                    with self.assertRaises(ValueError): build_manifest(**arguments, request_limit=limit)
+                    with self.assertRaises(ValueError):
+                        ReplyComparisonCapture(output, {**manifest, "request_limit": limit})
+                    self.assertFalse(output.exists())
+
     def case(self):
         return {"case_id": "synthetic-pair", "scope_kind": "contact", "input_package": {
             "scope": {"owner_id": str(uuid4()), "contact_id": str(uuid4()), "confirmed": True,

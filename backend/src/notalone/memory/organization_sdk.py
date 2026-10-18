@@ -25,9 +25,9 @@ CORRECTED_SCENARIO_PROMPT = POLICY + CORRECTION_POLICY + '''
 "paragraphs":[{"text":"逐字复制所引本次memories.text","references":[{"memory_id":"实际ID","revision":1}]}]}]}。
 标题和hint是固定协议值，不为每个主题另拟标题；无可用独立资料时scenarios为空。'''
 PROFILE_POLICY = '''
-先判L3长期准入，再判时间：仅稳定事实、明确偏好或重要背景；字面忠实/uncertain不豁免准入。
+长期价值与当前持续性分开判断：仅来源确实支持的稳定事实、长期事实或明确偏好、重要历史/关系背景可进入L3；字面忠实/uncertain不豁免价值准入。
 单次计划、假设、条件安排、短期近况及临时冲突留在L2；第三人附带资料不自动属于重要关系背景。
-静态不变事实可stable；持续习惯/安排的当前持续性未知时，有长期价值也须uncertain及具体限定。
+静态不变事实可stable；来源确有长期价值的持续事实/偏好，即使current_unverified也可用uncertain及具体限定保留，不能仅因当前未知否定长期价值；这不放行任何普通未核近况。
 重要已发生背景用historical；保存时间、修订/纠错不认证当前状态。无合格长期内容就返回空entries。
 '''
 PROFILE_PROMPT = POLICY + CORRECTION_POLICY + PROFILE_POLICY + '''
@@ -40,16 +40,27 @@ VERIFICATION_PROMPT = POLICY + CORRECTION_POLICY + '''
 L3只允许稳定事实、明确偏好及重要历史背景。任一无据或不确定则否决。
 输出{"supported":true或false,"reasons":["具体问题"]}。'''
 PROFILE_VERIFICATION_PROMPT = POLICY + PROFILE_POLICY + '''
-独立核验proposal每条，逐项检查主体、否定、时间、条件、冲突、纠正、范围及长期准入。
-输出{"supported":true或false,"reasons":["具体问题"],"entries":[
-{"entry_index":0,"entry_sha256":"原样复制verification_targets对应摘要",
+独立核验proposal；只输出JSON：
+{"supported":true或false,"reasons":[],"entries":[{"entry_index":0,"entry_sha256":"复制对应target摘要",
 "references":[{"memory_id":"实际ID","revision":1}],"supported":true或false,
-"profile_eligible":true或false,"temporal_basis":"static_fact或historical或current_verified或current_unverified或unknown",
-"temporal_references":[],"basis":"该条主体、准入、时间及来源依据"}]}。
-每条恰好一次，索引/摘要对应targets，references等于候选直接引用。supported判断来源支持，profile_eligible判断长期准入，任一不通过则总体否决。
-static_fact仅静态不变事实，不能用于持续活动；historical为明确历史；current_unverified为当前持续性未核实；unknown为不确定。
-current_verified的temporal_references须非空，仅列直接引用中支持现状且timing.current_status=current_verified的版本；其余basis该列表为空，不得自签核实。
-否决也须完整审计；空候选用空entries。'''
+"temporal_basis":"时间类别","temporal_references":[],"basis":"依据","claims":[
+{"text":"条目原文片段","sources":[{"memory_id":"实际ID","revision":1,"quote":"来源原文"}],
+"subject_role":"主体类别","subject_basis":"主体依据","supported":true或false,
+"value_category":"价值类别","eligibility_basis":"长期价值依据","relationship_impact":null}]}]}。
+每entry恰好一次，index/摘要对应verification_targets，references等于候选直接引用。空候选用空entries。
+全局/entry/claim的supported只判断候选在已有时间、不确定性限定下是否忠实有据，任何false仍否决。
+每条claims为1至8项，按最小可独立判真的主命题拆分，可跨句。来源/时间/否定/条件/纠错限定须与被限定主命题合组审计，不把孤立限定当人物事实；不同独立事实（含不同主体）不得混并。各text按序拼接须等于完整entry.text，保留全部字词/标点/限定，不遗漏、重叠或改写；无法完整审计就否决，不裁句或增调用。
+subject_role枚举：app_user=应用使用者本人，contact=已选联系人本人（不是app_user），third_party=其他人，relationship=多主体关系，unknown=主体不明且否决。
+value_category枚举：static_fact=静态稳定事实；enduring_fact_or_preference=来源确实支持长期价值的持续事实/明确偏好；important_history=重要已发生背景；important_relationship=重要关系背景；none=无合格价值。任一none则整条否决，一个合格命题不能替相邻命题准入。
+价值与现状独立：eligibility_basis仅解释长期价值，不认证现状。长期来源确实支持的事实可在current_unverified下以uncertain保留，当前未知本身不是none理由；普通未核近况仍不能冒充enduring。
+时态temporal_basis枚举：static_fact限静态事实；historical须候选historical；current_unverified须候选uncertain及限定；current_verified须temporal_references非空，且全部来自直接引用中timing.current_status=current_verified的版本；unknown否决。其他时态temporal_references为空，不得自签现状。
+sources只用entry直接引用的版本，每版本至多一次，quote须逐字来自该版本memories.text；supported=true时非空。
+value_category=none时relationship_impact为null；否则subject_role为third_party/relationship或value_category为important_relationship时准入需impact，其余为null。需impact但为null表示未提供关系重要性依据，准入否决，不能据此把忠实事实的supported改false。
+impact格式{"kind":"影响类别","sources":[{"memory_id":"实际ID","revision":1,"quote":"联系或影响原文"}],"basis":"为何支持实际联系及重要性"}。
+kind枚举：ongoing_responsibility=持续责任；shared_life_constraint=共同生活约束；important_shared_event=重要共同经历；explicit_relationship_importance=来源明确的重要性。impact.sources非空，沿用直接版本/原文规则，可与claim共用来源或引用entry另一来源。
+重要第三人背景可以合格；亲属称谓、兴趣主题相近、L2标题或核验器解释都不证明影响，缺少有据联系则不得准入。quote存在不证明它支持impact语义，仍须独立检查。
+所有basis/subject_basis/eligibility_basis为1至1000字。否决仍须完整审计；字段完整不证明原子性、主体或重要性正确。
+'''
 
 
 def actual_organization_adapters(ports):

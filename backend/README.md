@@ -192,6 +192,17 @@ PYTHONPATH=backend/src python \
 只得到有限失败回执且不执行查询，后端返回越界资料和真正持久化错误仍按原不变量拒绝。
 供应商复核的 JSON／严格结构无效返回 `502 reply_review_invalid`，不保存或重生成候选；
 有效复核没有可用候选仍返回 `409 reply_candidates_rejected`，内部预算、范围与账本错误不归入复核输出错误。
+复核为原正文的每个 Unicode code point 生成显式字符表（如 `c1u1`），保留空白、标点、换行、emoji 和组合字符，不做归一化。
+每候选至多 12 条共享 `claims` 只返回本候选的 `start_unit_id/end_unit_id`；程序从可信正文派生片段，按序无缝单次覆盖全文，纯空白不能独立成命题。
+原 `text/messages` 保持不变，分条消息沿同一正文映射；任何旧字符切分点仍可表达，也可跨句合组限定条件。
+`facts` 与 `commitments` 的范围由程序固定为全部已验证 `claims`，五项独立结果与每条命题支持许可全部合取；
+供应商不再重复输出 `claim_ids`。私有协议须返回 `protocol_version=reply-fidelity-units-v3`，旧版本、自由 `text` 证书、重复数组或自选子集字段一律拒绝；每条最多引用 2 份实际来源原文。
+来源角色及时态由实际输入类型和资料元数据确定，联系人来信与旧本人资料不能授权本人当前主观状态。
+明确的本次用户声明可支持合法意译；结构守卫不能证明模型正确分类言语行为或判断语义蕴含，仍需独立审阅。
+这仍是原来的一次复核、4096 输出 token、20 秒总时限及既有物理调用上限，不自动重试或重写候选。
+有限真实复验曾因标点／换行遗漏及字段缺失被拒；新范围协议仅有离线结构、SDK HTTP Mock 与完整输入计量证据，未新增真实调用。
+字符表、完整来源、prompt 和 strict schema 均计入原输入预算，超限在发送前拒绝，不截断正文。
+结构完整仍不能证明模型选对命题边界、归属或支持关系，也不能证明 4096 输出下的新协议成功率；旧失败不转签。
 
 逐组输出审阅须保存 `reply.quality.reply_review_binding(case, arm, calls)` 的 `binding`，
 同时固定实际请求／响应、最终候选、持久依据与两侧资料摘要；更换其中任一项不能沿用旧审阅。
@@ -230,3 +241,10 @@ PYTHONPATH=src python -m notalone.experiments.reply_comparison \
 `organization_dependencies`（`reply_case_id`、原 `case_id`、`input_sha256`、
 `case_evidence_sha256`），来源删除或撤销后关闭。Agent 审阅和四例冒烟只报告
 实际覆盖，正式资格仍为 `unknown`；原整理侧 800 次累计账本保持独立。
+
+
+### 回复评测捕获器的异步收尾
+
+`ReplyComparisonCapture` 默认保留 `async_lifecycle="legacy"` 的同步关闭方式，已有比较入口不自动切换。新异步运行器可显式选择 `same-loop-v1`，并在冻结清单中写入相同的 `capture_async_lifecycle`；所有异步请求及 `await capture.aclose()` 必须在同一事件循环退出前完成。不要先 `asyncio.run(request())` 退出连接所属循环，再从别的循环关闭。同步使用方仍调用 `close()`，运行中的异步循环应使用 `aclose()`。
+
+关闭失败时仍尝试关闭预算、同步客户端并落盘回执；多个失败保留为异常组，不能把预算已关闭等同于连接清理成功。新模式拒绝跨循环调用，不自动重试请求。捕获器源码已包含在回复评测合同的 `evaluation_version` 中，因此本修复改变新冻结合同摘要；旧冻结、失败回执与模型质量结论保持原样，不迁移资格。本次仅合成禁网生命周期与兼容检查，不代表新真实模型验收通过。

@@ -12,7 +12,7 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from notalone.reply.adapters.constraint_review_contract import (
-    accepted_candidate_numbers, build_review_tool,
+    accepted_candidate_numbers, build_review_tool, review_source_roles, review_target,
 )
 from notalone.reply.adapters.deepseek_provider import is_official_deepseek_flash
 from notalone.reply.adapters.deepseek_input_budget import build_deepseek_input_budget
@@ -104,13 +104,28 @@ explanation只定位basis/risk_notes，其他四项只定位text/messages。sour
 实际位置。quote必须是所指字段的非空原文片段，不要改写、
 拼接或引候选自评充当来源；缺证增量也对照原句或要求中的实际片段，reason说明缺什么。
 
-commitments另列propositions，逐个写明正文涉及的actor、action、object、time_scope、
-modality（optional可选交流、required必须履行、stated可用状态），及candidate_path/
-candidate_quote。没有相关命题可为空；承诺违反项必须对应其中同路径同引文的一项。
-分别分析说话人的可用时段与接收人可选回应，不把可选交流自动当成履约或具体方案授权。
-各字段用简短明确的中文，未限定的时间/对象如实写未限定，不补充事实。
-instruction_requires_expansion仅在顶层返回一次，reviews为按实际候选数量固定的对象，
-candidate_1至candidate_n各含对应candidate_number、expression_change、checks。
+每候选另列共享claims（1至12项），claim_id从1连续编号。review_target.units每项为
+[字符ID,原字符]，覆盖原text每个Unicode code point，包括空白、标点、换行和emoji组成字符。
+start_unit_id/end_unit_id只复制本候选表中的显式ID（如c1u1），表示含两端的连续范围；
+按序无缝单次覆盖从首至末全部ID，不自行数中文、不输出text、不借别的候选ID。
+程序从原text派生命题正文；纯空白不能独立成命题，须附于相邻有内容片段。
+每个旧字符串切分点都可选；可跨句把限定与主命题合组，不能拆掉条件或合并独立事实。
+原text/messages保留原样，messages与text的双换行连接已验证，不能省略其分隔字符。
+每个片段拆成归属与性质一致的命题，不把“本人有部分记忆”和“请你补充”合成一个optional。
+actor为owner/contact/other/unspecified，kind为state/fact/speech_act/commitment/unknown，
+time_scope为current/historical/unspecified，modality为optional/required/stated。
+facts和commitments始终分别核对全部claims；范围由程序固定，不输出claim_ids或自选子集。
+任何命题缺证都不能因其余命题安全而放行；五项检查各自独立，不能互相豁免。
+当前记忆/感觉/经历断言即使模糊也属于state，不因未写具体细节或加了可选提问变成speech_act。
+speech_act仅用于正在实施的问候、感谢、可选交流等，不携带缺证状态、经历或义务。
+state/fact/commitment的support须核对实际语义支持，不能只因话题或字词相近就supported；
+最多2个source_path/source_quote，必须是实际来源原文。未知则unknown，纯言语行为not_required且sources为空。
+review_sources中的角色与时态由程序决定，不得自报或升级；联系人来信/历史和旧本人资料
+不能授权本人当前主观状态。当前用户明确声明可支持合法意译，不要求复制原句。
+错误的speech_act分类或错误的语义蕴含仍是复核错误，结构合法并不能证明这些判断正确。
+顶层protocol_version必须为reply-fidelity-units-v3，instruction_requires_expansion仅返回一次；
+reviews为按实际候选数量固定的对象，
+candidate_1至candidate_n各含对应candidate_number、expression_change、claims、checks。
 编号与所在字段严格一致且每条恰好一次，不省略拒绝的候选。仅返回这一个工具。
 """
 
@@ -162,6 +177,9 @@ class ReplyConstraintReview:
             "basis": item.basis, "risk_notes": list(item.risk_notes),
             "citation_ids": [str(identifier) for identifier in item.citation_ids],
         } for number, item in enumerate(result.candidates, 1)]
+        for candidate in payload["candidates"]:
+            candidate["review_target"] = review_target(candidate)
+        payload["review_sources"] = review_source_roles(payload)
         payload["literal_changes"] = (literal_change_evidence(content.draft_text, payload["candidates"])
             if content.input_kind == "draft" else [{"candidate_number": item["candidate_number"],
                 "scope": "incoming_text_is_not_user_draft", "status": "unavailable", "changes": [],
@@ -177,7 +195,7 @@ class ReplyConstraintReview:
             budget = budget.with_model_counter(original_model=model, counter=capability[1])
         request = budget.require_request(ModelRequest(
             model=review_model, system_message=SystemMessage(REVIEW_PROMPT),
-            messages=[HumanMessage(json.dumps(payload, ensure_ascii=False))],
+            messages=[HumanMessage(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))],
             tools=[build_review_tool(len(payload["candidates"]))], tool_choice="ReplyFidelityReview",
         ))
         bound = request.model.bind_tools(request.tools, tool_choice=request.tool_choice,
