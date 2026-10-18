@@ -117,3 +117,8 @@
 [本场实际结果](../../grounded-evaluation/reference21-uniqueness-result-20261016.md)：新run closed28/42，27个HTTP200，第28次A15 E触发600秒墙钟退场且远端结果未知，余14永久关闭。A01–A14的RAW/FULL分别封存并收据匹配，部分必需raw/接受/完整15/15，A14为唯一一般错误；外层仍15unknown/6unrun，无完整batch result，不能用15个事实组充作至少15个窗口或拼接旧场。A15未知、A16未跑；第1/3/4条验收保持未勾，State仍claimed，默认放行表为空。
 
 独立核对后仅勾第2与第5条的范围/仓库交付信用：跨消息A02/08/13、省略A06/11、多第三方A10及含糊A01/03/04/05/07/09已覆盖；[现行16条指代用例](../../../backend/src/notalone/memory_extraction/cases/reference.py)、[事项码回归](../../../backend/tests/unit/memory_extraction/test_grounded_v4.py)、[给定码与原无码负控](../../../backend/tests/unit/memory_extraction/test_grounded_v4_runtime.py)及[原21窗helper合成回归](../../../desktop/tests/fixtures/test_reference21_v4_public.py)已入库。它们不替代未完成的全量真实模型回归或证明所有语义含糊都能被模型选码；原A05无码仍auto负控及全部历史失败保留。
+
+
+### 2026-10-18 Agent快速验收与E2依赖修复
+
+用户明确授权Agent替代人工验收，`reviewer_kind=agent`，原安全／数量门不变。E2已标未决目标被省略句引用时的说明丢失已真实红绿修复，16窗口标签控制不当模型成绩；29相关与827全部提取单测通过。[独立16窗新场](../reference-agent-baseline-result-20261018.md)closed29/32，已审15窗，假事实0／错人0／bad_auto1／一般3，A16未跑，必需raw16/18、完整14/18，不能关票。旧预算与全部旧成绩不改，默认空表保持；后继仅按四个实际缺口修正E2通则提示。
