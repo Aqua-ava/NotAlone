@@ -28,6 +28,10 @@ class ProfileWork:
     claim: ClaimedBackgroundTaskStep
     correction_revision: int = 0
     corrections: tuple[dict, ...] = ()
+    existing_profile: dict | None = None
+    changed_scenarios: tuple[dict, ...] = ()
+    removed_scenario_version_ids: tuple[str, ...] = ()
+    base_profile_version_id: UUID | None = None
 
 
 class LayeredProfileStore:
@@ -56,7 +60,7 @@ class LayeredProfileStore:
         return {"version_id": str(row["id"]), "system_generated": True,
                 "updated_at": row["created_at"].isoformat(), "entries": row["entries"]}
 
-    def prepare_profile(self, scope, budget, contract, *, lease_seconds, claim):
+    def prepare_profile(self, scope, budget, contract, *, lease_seconds, claim, incremental=False):
         with self.transaction(scope) as (connection,state,overview):
             self._assert_claim(connection,claim)
             job = connection.execute("SELECT * FROM public.layered_memory_job WHERE task_id=%s AND owner_id=%s AND contact_id IS NOT DISTINCT FROM %s",
@@ -85,12 +89,19 @@ class LayeredProfileStore:
             scenarios = tuple(self._document(row) for row in input_rows)
             corrections = self.correction_context(connection, scope)
             payload = {"scenarios": list(scenarios), "memories": [item.to_payload() for item in memories], 'corrections': corrections}
+            existing, changed, removed, base_id = None, (), (), None
+            if incremental:
+                existing, changed, removed, base_id = self.incremental_profile_context(
+                    connection, scope, state, scenarios, manifest)
+                payload.update(existing_profile=existing, changed_scenarios=changed,
+                    removed_scenario_version_ids=removed, base_profile_version_id=str(base_id) if base_id else None)
             if len(json.dumps(payload,ensure_ascii=False)) > budget.max_characters:
                 connection.execute("UPDATE public.layered_memory_state SET status='failed',error_code='profile_input_budget_exceeded' "
                     "WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s", (scope.owner_id,scope.contact_id))
                 return None
             key = hashlib.sha256(json.dumps({"versions": sorted(str(id) for id in ids),
-                "settings": state["settings_generation"],"task":str(claim.task_id),"revision":job["revision"],"contract": contract,"budget": budget.to_payload()},
+                "settings": state["settings_generation"],"task":str(claim.task_id),"revision":job["revision"],"contract": contract,"budget": budget.to_payload(),
+                "base_profile": str(base_id) if base_id else None},
                 sort_keys=True).encode()).hexdigest()
             previous = connection.execute("SELECT * FROM public.layered_profile_batch WHERE owner_id=%s "
                 "AND contact_id IS NOT DISTINCT FROM %s AND work_key=%s", (scope.owner_id,scope.contact_id,key)).fetchone()
@@ -141,7 +152,27 @@ class LayeredProfileStore:
             connection.execute("UPDATE public.layered_memory_state SET status='updating',error_code=NULL WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s",
                 (scope.owner_id,scope.contact_id))
             connection.execute('UPDATE public.layered_profile_batch SET correction_input=%s WHERE id=%s', (Jsonb(corrections), id))
-            return ProfileWork(id,token,scope,state["settings_generation"],state["organization_generation"],ids,memories,scenarios,manifest,budget_batch_id,claim,state['correction_revision'],corrections)
+            return ProfileWork(id,token,scope,state["settings_generation"],state["organization_generation"],ids,memories,scenarios,manifest,budget_batch_id,claim,state['correction_revision'],corrections,existing,changed,removed,base_id)
+
+    def incremental_profile_context(self, connection, scope, state, scenarios, manifest):
+        """从同一范围最后有效画像比较场景版本；失效的旧正文不进入模型上下文。"""
+        previous = connection.execute("SELECT v.id FROM public.layered_profile_version v "
+            "JOIN public.layered_profile_batch b ON b.id=v.batch_id WHERE v.owner_id=%s "
+            "AND v.contact_id IS NOT DISTINCT FROM %s AND b.settings_generation=%s AND NOT v.withdrawn "
+            "ORDER BY v.created_at DESC,v.id DESC LIMIT 1",
+            (scope.owner_id,scope.contact_id,state['settings_generation'])).fetchone()
+        if not previous:
+            return None, scenarios, (), None
+        base = self.profile_row(connection, scope, previous['id'])
+        current = {item['memory_id']: item for item in manifest}
+        base_versions = {str(value) for value in base['scenario_version_ids']}
+        current_versions = {scene['version_id'] for scene in scenarios}
+        removed = tuple(sorted(base_versions - current_versions))
+        # 不靠少数可见引用缩小旧画像的完整读取证明；任一旧依据失效即以当前资料重建。
+        valid = all(current.get(item['memory_id']) == item for item in base['input_manifest'])
+        existing = self.profile_document(base) if valid else None
+        changed = tuple(scene for scene in scenarios if not valid or scene['version_id'] not in base_versions)
+        return existing, changed, removed, base['id']
 
     def _check_profile(self, connection, state, overview, work):
         self._assert_claim(connection,work.claim)
@@ -149,6 +180,10 @@ class LayeredProfileStore:
             (work.id,work.scope.owner_id,work.scope.contact_id)).fetchone()
         generation, rows = self.generation_rows(connection,work.scope,state["organization_generation"])
         current = {item["memory_id"]: item for item in self._manifest(connection,work.scope,self.eligible(overview))}
+        if work.base_profile_version_id is not None:
+            base = self.profile_row(connection, work.scope, work.base_profile_version_id)
+            if not base or base['withdrawn']:
+                raise LayeredMemoryConflict('增量画像的基准版本已删除或撤回。')
         if (not state["enabled"] or state["settings_generation"] != work.settings_generation
                 or state['correction_revision'] != work.correction_revision
                 or state["organization_generation"] != work.organization_generation
