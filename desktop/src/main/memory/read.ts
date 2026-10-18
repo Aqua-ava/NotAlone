@@ -1,14 +1,14 @@
+import { isUuid } from '../uuid';
 import type { ActiveMemory, MemoryContent, MemoryCorrectionReview, MemoryEvent, MemoryEventEvidence, MemorySource, MemoryVersion, PendingMemoryCandidate } from '../../shared/memory-bridge';
 import { readCurrentStatus } from './current-status';
 
 const categories = ['common_fact', 'preference', 'taboo', 'recent_state', 'relationship_note'] as const;
 const topics = ['health', 'work', 'family', 'travel', 'finance', 'study', 'emotion', 'other'] as const;
-const uuid = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 const invalid = () => new Error('资料响应不可用。');
 const record = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value);
 
 function identifier(value: unknown): string {
-  if (typeof value !== 'string' || !uuid.test(value)) throw invalid();
+  if (!isUuid(value)) throw invalid();
   return value.toLowerCase();
 }
 function optionalIdentifier(value: unknown): string | null { return value == null ? null : identifier(value); }

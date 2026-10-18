@@ -669,26 +669,20 @@ def run_ecnu_evaluation(
     from .evaluation_full140_v4_deadline import Full140V4Deadline
     from .evaluation_reference21_v4_deadline import Reference21V4Deadline
 
-    if ((remaining8_deadline is not None and (not remaining8 or type(remaining8_deadline) is not Remaining8Deadline))
-            or remaining8 and synthetic_transport is None and (
-                type(remaining8_deadline) is not Remaining8Deadline or not remaining8_deadline.live_worker)):
-        raise EvaluationBudgetAbort("remaining8_owned_deadline_required")
-    if ((ambiguity2_deadline is not None and (not ambiguity2 or type(ambiguity2_deadline) is not Ambiguity2Deadline))
-            or ambiguity2 and synthetic_transport is None and (
-                type(ambiguity2_deadline) is not Ambiguity2Deadline or not ambiguity2_deadline.live_worker)):
-        raise EvaluationBudgetAbort("ambiguity2_owned_deadline_required")
-    if ((main16_deadline is not None and (not (main16 or pro16) or type(main16_deadline) is not Main16Deadline))
-            or (main16 or pro16) and synthetic_transport is None and (
-                type(main16_deadline) is not Main16Deadline or not main16_deadline.live_worker)):
-        raise EvaluationBudgetAbort("main16_owned_deadline_required")
-    if ((full140_v4_deadline is not None and (not fixed_full140 or type(full140_v4_deadline) is not Full140V4Deadline))
-            or fixed_full140 and (type(full140_v4_deadline) is not Full140V4Deadline
-                or synthetic_transport is None and not full140_v4_deadline.live_worker)):
-        raise EvaluationBudgetAbort("full140_v4_owned_deadline_required")
-    if ((reference21_v4_deadline is not None and (not reference21_v4 or type(reference21_v4_deadline) is not Reference21V4Deadline))
-            or reference21_v4 and (type(reference21_v4_deadline) is not Reference21V4Deadline
-                or synthetic_transport is None and not reference21_v4_deadline.live_worker)):
-        raise EvaluationBudgetAbort("reference21_v4_owned_deadline_required")
+    # 前三类合成评测可省略控制器；完整集与原基线始终要求对应实例。
+    deadline_contracts = (
+        (remaining8_deadline, remaining8, Remaining8Deadline, False, "remaining8"),
+        (ambiguity2_deadline, ambiguity2, Ambiguity2Deadline, False, "ambiguity2"),
+        (main16_deadline, main16 or pro16, Main16Deadline, False, "main16"),
+        (full140_v4_deadline, fixed_full140, Full140V4Deadline, True, "full140_v4"),
+        (reference21_v4_deadline, reference21_v4, Reference21V4Deadline, True, "reference21_v4"),
+    )
+    for deadline, selected, expected_type, required_for_synthetic, code_prefix in deadline_contracts:
+        if (deadline is not None and (not selected or type(deadline) is not expected_type)
+                or selected and (required_for_synthetic or synthetic_transport is None) and (
+                    type(deadline) is not expected_type
+                    or synthetic_transport is None and not deadline.live_worker)):
+            raise EvaluationBudgetAbort(code_prefix + "_owned_deadline_required")
     bounded = cast(Remaining8Deadline | Ambiguity2Deadline | Main16Deadline | Full140V4Deadline | Reference21V4Deadline | None,
                    remaining8_deadline or ambiguity2_deadline or main16_deadline or full140_v4_deadline or reference21_v4_deadline)
     if official and case_set == "reference21" and not remaining8 and not ambiguity2 and not main16 and not pro16 and (

@@ -1,10 +1,11 @@
+import { isUuid } from '../uuid';
 import type { ContactRelationshipOverview, OwnerFactsPreferencesOverview, OverviewSourceReference } from '../../shared/memory-bridge';
 import { memoryVersions } from './read';
 
 const invalid = () => new Error('联系人概览响应不可用。');
 const record = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value);
 function identifier(value: unknown): string {
-  if (typeof value !== 'string' || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(value)) throw invalid();
+  if (!isUuid(value)) throw invalid();
   return value.toLowerCase();
 }
 function integer(value: unknown, minimum = 0): number {

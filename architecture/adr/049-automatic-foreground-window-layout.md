@@ -5,7 +5,7 @@
 
 > 后续局部修订：[ADR-052](052-header-ocr-foreground-locator.md)将当前正式路径改为顶部名称局部 OCR，替代下方必须同时识别左侧选中行的要求；本文保留历史决定。
 
-> 后续局部修订：[ADR-050](050-continuous-single-frame-contact-follow.md)采用持续单帧观察，替代下方第二帧布局/像素复查及每次最多两帧的约束；唯一前台窗口、内存布局、名称局部 OCR 及质量/绑定门槛保留。[任务01](../../.scratch/foreground-contact-follow/issues/01-single-frame-locator.md)已完成单次入口的代码及合成验证，持续流程与实机验收仍待完成；本文保留原双帧决定及原因。
+> 后续局部修订：[ADR-050](050-continuous-single-frame-contact-follow.md)采用持续单帧观察，替代下方第二帧布局/像素复查及每次最多两帧的约束；唯一前台窗口、内存布局、名称局部 OCR 及质量/绑定门槛保留。实施进度统一见[任务索引](../../.scratch/foreground-contact-follow/planning.md)，验证范围与剩余缺口见各任务的结果记录；本文保留原双帧决定及原因。
 
 用户明确要求移除手填坐标，微信移动、缩放后仍自动定位；并批准先在本机内存分析当前前台微信窗口画面，再仅对顶部与选中会话名称执行 OCR。此决定修订 ADR-030 的“采集前必须已知最小区域”限制，不改变前台、只读、联系人确认、后台 CLI 独立或手动发送边界。
 

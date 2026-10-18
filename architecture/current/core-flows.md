@@ -4,7 +4,7 @@
 
 > 后续目标：记忆时效、纠错、可追溯概览、自动 Skill 草稿/审核和明确范围反馈按[ADR-048](../adr/048-memory-skill-evolution-lifecycle.md)及[正式规格](../../.scratch/memory-skill-evolution/spec.md)扩展；独立集成候选已完成联系人与本人概览的合成 HTTP／PG／React 验证，后续回复接入和 Skill 仍按任务图推进，实际 App／微信另验。DSH 搁置，现有回复运行时、质量放行、授权和人工发送边界保持。
 
-> 前台跟随目标：按[ADR-050](../adr/050-continuous-single-frame-contact-follow.md)采用持续单帧识别及按联系人保留内容、任务；[正式规格](../../.scratch/foreground-contact-follow/spec.md)已发布，[任务01](../../.scratch/foreground-contact-follow/issues/01-single-frame-locator.md)已完成现有单次单帧链路的代码及合成验证，[任务02](../../.scratch/foreground-contact-follow/issues/02-contact-content-restore.md)已完成手动切换的输入、候选编辑恢复及 HTTP/PG 合成验证；[任务05](../../.scratch/foreground-contact-follow/issues/05-contact-generation-jobs.md)已接入多联系人有界派发、只读状态恢复与原协议显式重试；持续流程与实机验收仍待完成。下方相关流程描述目标约束，实际现状仍须从代码和测试核对。
+> 前台跟随约束：按[ADR-050](../adr/050-continuous-single-frame-contact-follow.md)采用持续单帧识别及按联系人保留内容、任务；行为合同见[正式规格](../../.scratch/foreground-contact-follow/spec.md)，实施进度统一见[任务索引](../../.scratch/foreground-contact-follow/planning.md)，验证范围与剩余缺口见各任务的结果记录。下方描述流程约束，不替代代码、测试及实机证据。
 
 启动与结构更新按[ADR-066](../adr/066-in-place-schema-updates-and-database-reuse.md)：已有配置沿用同一本机数据库，先核对真实迁移历史，仅缺少版本时在认证停读、生成结算与连接排空后原地补齐，再复验连接。结构已就绪直接使用；无既有配置的新安装初始化空受管库。普通启动不再备份、复制或切换数据库，异常历史与未完成旧更新保留现场并停止；不因连接失败新建替代库。实现与实测范围见[本次任务](../../.scratch/in-place-database-startup/spec.md)。
 

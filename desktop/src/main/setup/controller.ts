@@ -1,3 +1,4 @@
+import { isUuid } from '../uuid';
 import type { SetupState } from '../../shared/setup-bridge';
 import type { BackendHost } from '../backend/host';
 
@@ -54,7 +55,7 @@ export class SetupController {
       if ((status.data as { owner_configured?: unknown })?.owner_configured !== false) throw new Error();
       const result = await this.backend.requestJson({ method: 'POST', path: '/api/setup/initialize', body: { display_name: displayName, create_only: true }, maxResponseBytes: 4096 });
       const value = result.data as { owner_id?: unknown; created?: unknown };
-      if (typeof value?.owner_id !== 'string' || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(value.owner_id)
+      if (!isUuid(value?.owner_id)
         || value.created !== true) throw new Error();
     });
   }
