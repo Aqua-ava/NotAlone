@@ -32,6 +32,7 @@ class ProfileToolsHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
                                (self.contact_id, self.owner_id))
         self.when = datetime(2026, 1, 1, tzinfo=timezone.utc)
         self.scene_mode = 'create'
+        self.scene_inputs = []
         self.profile_inputs = []
         self.profile_mode = 'normal'
 
