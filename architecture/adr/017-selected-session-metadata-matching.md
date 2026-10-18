@@ -3,6 +3,7 @@
 > 状态：已采纳
 > 决策日期：2026-08-24
 > 替代：ADR-016 中“头像作为主要视觉确认条件”的部分；CLI 主消息来源和联系人隔离边界继续有效。
+> 后续局部修订：[ADR-052](052-header-ocr-foreground-locator.md)将正式定位改为顶部名称局部 OCR、有界 CLI 唯一私聊元数据与已确认绑定核验，不再读取左侧选中行或使用头像指纹消歧；[ADR-023](023-global-cli-sync-and-ocr-foreground-locator.md)及 [ADR-030](030-confirmed-contact-background-sync-consent.md)将已确认范围的后台 CLI 同步与前台定位分离。下文保留历史方案。
 
 `wechat-cli` 能返回会话的 `username`、`display_name`、`last_timestamp` 和短预览，但不能告诉 NotAlone 当前微信窗口打开的是哪个会话。当前窗口可能存在多个同名联系人，因此仅识别顶部 display name 不足；头像也不应成为唯一主要判断依据。
 

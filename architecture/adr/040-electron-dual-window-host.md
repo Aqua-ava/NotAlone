@@ -4,6 +4,7 @@
 
 > 状态：已采纳
 > 决策日期：2026-10-08
+> 后续局部修订：[ADR-061](061-standalone-local-app-onboarding-and-updates.md)将独立分发目标改为随包管理本机后台与数据运行环境，替代下文仅外置依赖／只交付宿主的独立版边界；首版范围见 [ADR-065](065-manual-input-standalone-first-release.md)，已有资料更新见 [ADR-066](066-in-place-schema-updates-and-database-reuse.md)。源码开发路径保留，打包与运行打包版仍须用户明确提出发布任务。
 
 用户已确认本机 Mac App 规格，以 Electron 承载 React/TypeScript 界面，分别提供独立管理后台与输入法式小窗。管理后台处理资料与配置，小窗只处理当次表达。主进程统一管理必要桌面能力；渲染层通过隔离、沙箱和具名 preload 桥接调用，不直接启动 Python、访问数据库或操作微信。仅随包的本地资源获得桥接，任意网页不能继承能力。
 

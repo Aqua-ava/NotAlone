@@ -239,7 +239,7 @@ class RetrievalPort(Protocol):
 
 Tool 的模型参数只表达查询意图、允许的 limit 和时间范围；`ContactScope` 由 runtime context 注入。两个检索结果都必须包含业务引用、实际检索器版本、分数、入选原因和状态，不得混淆原始消息与提炼后的关系资料。
 
-v1 的实现是 PostgreSQL 全文/结构化检索。RAGFlow 若被评估，只能实现同一 port：它返回候选引用，NotAlone 再根据 PostgreSQL 权威状态做二次校验；它不能写 `confirmed_memory`、选择联系人或生成最终候选回复。
+原探索方向是 PostgreSQL 全文/结构化检索；记忆第一期召回现按 [ADR-028](../adr/028-lexical-memory-recall-phase-1.md)采用 Python 侧确定性中文词法评分，L2/L3 分层加载目标见 [ADR-067](../adr/067-layered-scenario-and-profile-context.md)，不能由本草案推断已实现状态。RAGFlow 若被评估，只能实现同一 port：它返回候选引用，NotAlone 再根据 PostgreSQL 权威状态做二次校验；它不能写 `confirmed_memory`、选择联系人或生成最终候选回复。
 
 ## 8. 后台任务与子 Agent
 
