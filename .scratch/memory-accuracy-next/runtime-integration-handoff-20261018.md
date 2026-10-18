@@ -10,11 +10,13 @@
 - bounded独立诊断结论3184a219：未找到程序接线缺陷；相同历史E请求产生不同标签，不能归因V配置。
 - 4源12调用设计纳入不唯一且不能改变修复路径，已决定省去；不重抽、不补输出、不放宽门，原15/七正控质量义务保持。
 - reference Vmax场bd7187de closed14/32、前6safe/full8/18，A07V length/8192全推理/无tool，capture0，后9unrun；结果da4384e6→e6b8669d。
-- 新V32K尚待以本次统一源码独立冻结原16/18+1、cap32零重试；不复开旧预算，不保证无截断或超时。
+- 新V32K在28a8b0f9独立冻结：run67d9ff59，freeze8b69dfdd，90sources、原16/18+1、cap32零重试；运行中已审8窗safe7/general1、10/10/9，非最终结果。
 - core固定候选4e6e2683 closed12/12，mandatory raw/接受/完整6/6/6；同7bef源码留出9ce3731a closed8/8，5/5/3。
 - core留出safe3/general1、positive_loss2，安全/unknown0；原观察边界及评价标签缺口未被V识别，当前无直接编译删字段证据。
 - core结果97b6d8c0→192f3deb，旧收据及更正链保留；不据已揭示H03定向调参后重签独立留出，票claimed。
-- core后续仅通用只读检查引用式表示是否能表达历史观察边界，不读新私有资料、不调用模型、不改Gold。
+- core只读核实：原合同要求text历史边界，已有timing不能替代；B陈述时间不修语用错误、不补签原质量。
+- 零模型原型独立branch codex/statement-time-prototype@40e45dc7：backend/src/notalone/memory_extraction/prototype_statement_time.html；8合成快照/5场景，未并入本分支。
+- 原型编译快照与JS语法通过；file浏览器策略拒绝且禁止绕行，真实UI验收未完成；B新包装旧parser均0解，未批准生产表示变更。
 - 生产放行表空，task03第一AC未满足，goal active；有限六类/按维度AND/任务恢复/隔离及生命周期工程证据见agent-acceptance。
 - 完成仍需原15真实依据/七轴及达标后生命周期、核心独立完整验收、指代原16质量门；不能靠单测或其他票抵扣。
 - 无新真实联系人、聊天发送、业务迁移、push或PR。
