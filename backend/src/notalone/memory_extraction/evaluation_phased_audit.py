@@ -10,7 +10,7 @@ from .evaluation_http_budget import EvaluationBudgetAbort
 from .evaluation_extraction import EvaluationExtractionMode, extraction_tool_name
 from .evaluation_provider_contract import (
     validate_evaluation_policy, MIXED_PLAN, MIXED_REQUEST_VERSION, mixed_phase_policy,
-    FULL140_E2_PLAN, PHASE_SPLIT_PLANS, REFERENCE21_PLANS, PUBLIC_QUALITY_PLANS, UNIQUENESS_PLAN,
+    FULL140_E2_PLAN, PHASE_SPLIT_PLANS, REFERENCE21_PLANS, PUBLIC_QUALITY_PLANS, UNIQUENESS_PLAN, REFERENCE16_PRO_PLAN,
     validate_extraction_prompt_profile,
 )
 from .evaluation_records import canonical_sha256
@@ -211,10 +211,11 @@ class PhasedEvaluationAudit:
         execution_plan: str = "original",
         extraction_prompt_profile: str = "default",
     ):
-        if type(execution_plan) is not str or execution_plan not in {"original", *PHASE_SPLIT_PLANS, BOUNDED_RUNTIME_PLAN}:
+        if type(execution_plan) is not str or execution_plan not in {"original", *PHASE_SPLIT_PLANS, BOUNDED_RUNTIME_PLAN, REFERENCE16_PRO_PLAN}:
             raise ValueError("审核执行身份非法。")
         self._execution_plan = execution_plan
-        e2 = execution_plan == FULL140_E2_PLAN
+        reference16 = execution_plan == REFERENCE16_PRO_PLAN
+        e2 = execution_plan == FULL140_E2_PLAN or reference16
         mixed = execution_plan in PHASE_SPLIT_PLANS
         reference21_v4 = execution_plan in REFERENCE21_PLANS
         public_quality = execution_plan in PUBLIC_QUALITY_PLANS
@@ -246,7 +247,14 @@ class PhasedEvaluationAudit:
             "legacy-v1", "source-fidelity-v2", BOUNDED_RUNTIME_PLAN,
         }:
             raise ValueError("审核参考版本须为已注册封闭值。")
-        if (reference_version == "source-fidelity-v2"
+        if reference16 and (reference_version != "source-fidelity-v2" or case_set != "reference21"
+                or type(case_positions) is not tuple or case_positions != tuple(range(16))
+                or any(type(position) is not int for position in case_positions)
+                or self._extraction_mode is not EvaluationExtractionMode.GROUNDED_V2
+                or self._verification_mode is not SourceVerificationMode.LEGACY_V4
+                or extraction_tool_choice != "forced" or verification_tool_choice != "forced"):
+            raise ValueError("Pro指代审核仅接受原16窗、E2/四槽V和双强制工具。")
+        if not reference16 and (reference_version == "source-fidelity-v2"
                 or self._extraction_mode is EvaluationExtractionMode.GROUNDED_V4):
             if (reference_version != "source-fidelity-v2"
                     or self._extraction_mode is not (EvaluationExtractionMode.GROUNDED_V2 if e2 else EvaluationExtractionMode.GROUNDED_V4)

@@ -18,6 +18,7 @@ from .evaluation_provider_contract import (
     SEMANTIC4_PLAN, SEMANTIC4_MODE, SEMANTIC4_STAGE, SEMANTIC4_KIND, SEMANTIC4_PROMPT_PROFILE,
     UNIQUENESS_PLAN, UNIQUENESS_MODE, UNIQUENESS_STAGE, UNIQUENESS_KIND, UNIQUENESS_E_PROFILE,
     BOUNDED_RUNTIME_KIND, BOUNDED_RUNTIME_MODE, BOUNDED_RUNTIME_STAGE,
+    REFERENCE16_PRO_PLAN, REFERENCE16_PRO_MODE, REFERENCE16_PRO_STAGE, REFERENCE16_PRO_KIND,
 )
 from .evaluation_bounded_cases import BOUNDED_RUNTIME_PLAN
 
@@ -37,6 +38,8 @@ class _FixedPublicControl:
 
 
 _PROFILES = {
+    REFERENCE16_PRO_KIND: _FixedPublicControl(32, 14400, 16, 18, REFERENCE16_PRO_MODE, REFERENCE16_PRO_STAGE,
+                                             tuple(range(16)), 2048, REFERENCE16_PRO_PLAN, "source-fidelity-v2"),
     FULL140_E2_KIND: _FixedPublicControl(280, 86400, 140, 138, FULL140_E2_MODE, FULL140_E2_STAGE,
                                       tuple(range(140)), 16384, FULL140_E2_PLAN, "source-fidelity-v2"),
     BOUNDED_RUNTIME_KIND: _FixedPublicControl(30, 14400, 15, 15, BOUNDED_RUNTIME_MODE, BOUNDED_RUNTIME_STAGE,
@@ -142,7 +145,7 @@ def _launch_owned_public_worker(*, frozen: dict, script: Path, root: Path, helpe
                 and type(value.get("request_limit")) is int and value["request_limit"] == request_limit
                 and type(value.get("reserved_requests")) is int
                 and 0 <= value["reserved_requests"] <= request_limit)
-    closed = (closed_receipt(budget) and (kind not in {FULL140_E2_KIND, MIXED_KIND, REFERENCE21_V4_KIND, SEMANTIC4_KIND, UNIQUENESS_KIND, BOUNDED_RUNTIME_KIND} or (
+    closed = (closed_receipt(budget) and (kind not in {FULL140_E2_KIND, MIXED_KIND, REFERENCE21_V4_KIND, SEMANTIC4_KIND, UNIQUENESS_KIND, BOUNDED_RUNTIME_KIND, REFERENCE16_PRO_KIND} or (
         type(result.get("worker_pid")) is int and result["worker_pid"] == child.pid
         and result.get("execution_plan") == profile.execution_plan))) or (type(deadline.get("worker_pid")) is int
                                        and deadline["worker_pid"] == child.pid and closed_receipt(deadline)
@@ -176,8 +179,10 @@ def _launch_owned_public_worker(*, frozen: dict, script: Path, root: Path, helpe
                "planned_windows": planned_windows, "required_claims": required_claims,
                "case_statuses": [{**selection, "status": status} for selection, status in zip(frozen["selection"], states)],
                "quality_certified": False, "automatic_successor": False}
-    if kind == BOUNDED_RUNTIME_KIND:
-        receipt["execution_plan"] = BOUNDED_RUNTIME_PLAN
+    if kind in {BOUNDED_RUNTIME_KIND, REFERENCE16_PRO_KIND}:
+        receipt["execution_plan"] = profile.execution_plan
+    if kind == REFERENCE16_PRO_KIND:
+        receipt["optional_claims"] = 1
     helper.publish(directory / "finish.json", receipt)
     return receipt
 
@@ -213,6 +218,26 @@ def _verify_owned_public_claim(*, frozen: dict, helper: Any, kind: str,
                 or config.get("phase_request_policy") != mixed_phase_policy()
                 or config.get("tool_choice") != {
                     "extraction": {"mode": "omitted", "name": "GroundedMemoryLabels" if kind == FULL140_E2_KIND else "GroundedMemoryLabelsV4"},
+                    "verification": {"mode": "forced", "name": "SourceVerificationOutput"}})
+            or kind == REFERENCE16_PRO_KIND and (
+                config.get("provider_profile") != "deepseek-pro-reference16-v1"
+                or config.get("request_model") != "deepseek-v4-pro"
+                or type(config.get("request_contract_version")) is not int or config["request_contract_version"] != 4
+                or type(config.get("max_tokens")) is not int or config["max_tokens"] != 8192
+                or config.get("thinking") != {"type": "disabled"} or config.get("reasoning_effort") != "none"
+                or {"phase_request_version", "phase_request_policy", "verification_prompt_profile"} & set(config)
+                or config.get("extraction_mode") != "grounded-v2" or config.get("verification_mode") != "legacy-v4"
+                or config.get("base_url") != "https://api.deepseek.com"
+                or config.get("endpoint") != "https://api.deepseek.com/chat/completions"
+                or type(config.get("timeout")) is not float or config["timeout"] != 300.0
+                or type(config.get("max_retries")) is not int or config["max_retries"] != 0
+                or type(config.get("temperature")) not in (int, float) or config["temperature"] != 0
+                or config.get("stream") is not False or config.get("fallback") is not False
+                or config.get("response_identity_policy") != "first_valid_completion_observation_stop_on_change"
+                or config.get("verification_prompt_sha256") != frozen["verification_prompt_sha256"]
+                or config.get("verification_schema_sha256") != frozen["verification_schema_sha256"]
+                or config.get("tool_choice") != {
+                    "extraction": {"mode": "forced", "name": "GroundedMemoryLabels"},
                     "verification": {"mode": "forced", "name": "SourceVerificationOutput"}})
             or config.get("source_hashes") != frozen["source_hashes"]
             or kind in {SEMANTIC4_KIND, UNIQUENESS_KIND} and (config.get("verification_mode") != "legacy-v4"

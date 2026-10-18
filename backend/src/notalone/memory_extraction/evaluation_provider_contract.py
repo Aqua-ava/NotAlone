@@ -116,6 +116,12 @@ class _OutputParameters(TypedDict, total=False):
     max_tokens: int
 
 
+REFERENCE16_PRO_PLAN = "reference16-pro-v1"
+REFERENCE16_PRO_MODE = "deepseek_bounded_reference16_pro"
+REFERENCE16_PRO_STAGE = "reference16-pro"
+REFERENCE16_PRO_KIND = "reference16-pro"
+
+
 class EvaluationProviderProfile(StrEnum):
     """仅已注册的封闭评测配置；不接受任意端点或生产配置覆盖。"""
 
@@ -124,10 +130,15 @@ class EvaluationProviderProfile(StrEnum):
     DEEPSEEK_PHASE_SPLIT = "deepseek-phase-split-v1"
     DEEPSEEK_BOUNDED_TASK = "deepseek-bounded-task-v1"
     DEEPSEEK_PRO_BOUNDED_TASK = "deepseek-pro-bounded-task-v1"
+    DEEPSEEK_PRO_REFERENCE16 = "deepseek-pro-reference16-v1"
 
     @property
     def is_official(self) -> bool:
-        return self in {self.DEEPSEEK_FLASH_MAX, self.DEEPSEEK_PHASE_SPLIT, self.DEEPSEEK_BOUNDED_TASK, self.DEEPSEEK_PRO_BOUNDED_TASK}
+        return self in {self.DEEPSEEK_FLASH_MAX, self.DEEPSEEK_PHASE_SPLIT, self.DEEPSEEK_BOUNDED_TASK, self.DEEPSEEK_PRO_BOUNDED_TASK, self.DEEPSEEK_PRO_REFERENCE16}
+
+    @property
+    def is_pro(self) -> bool:
+        return self in {self.DEEPSEEK_PRO_BOUNDED_TASK, self.DEEPSEEK_PRO_REFERENCE16}
 
     @property
     def is_bounded(self) -> bool:
@@ -135,7 +146,7 @@ class EvaluationProviderProfile(StrEnum):
 
     @property
     def output_parameters(self) -> _OutputParameters:
-        return {"max_tokens": 8192} if self is self.DEEPSEEK_PRO_BOUNDED_TASK else {}
+        return {"max_tokens": 8192} if self.is_pro else {}
 
     @property
     def base_url(self) -> str:
@@ -148,7 +159,7 @@ class EvaluationProviderProfile(StrEnum):
 
     @property
     def model(self) -> str:
-        if self is self.DEEPSEEK_PRO_BOUNDED_TASK:
+        if self.is_pro:
             return "deepseek-v4-pro"
         return "deepseek-flash" if self.is_official else "ecnu-max"
 
@@ -217,6 +228,10 @@ class ECNUEvaluationContract:
                     else EvaluationExtractionMode.GROUNDED_V4)):
             raise EvaluationBudgetAbort("evaluation_mixed_fixed_plan_required")
         bounded = self._profile.is_bounded
+        reference16 = self._profile is EvaluationProviderProfile.DEEPSEEK_PRO_REFERENCE16
+        if reference16 != (execution_plan == REFERENCE16_PRO_PLAN) or reference16 and (
+                verification_tool_choice != "forced" or self._extraction_mode is not EvaluationExtractionMode.GROUNDED_V2):
+            raise EvaluationBudgetAbort("evaluation_reference16_pro_fixed_plan_required")
         if bounded != (execution_plan == BOUNDED_RUNTIME_PLAN) or bounded and (
                 verification_tool_choice != "forced" or self._extraction_mode is not EvaluationExtractionMode.GROUNDED_V2):
             raise EvaluationBudgetAbort("evaluation_bounded_fixed_plan_required")
@@ -385,10 +400,10 @@ class ECNUEvaluationContract:
                 and identity != self._profile.model):
             raise EvaluationBudgetAbort("evaluation_official_reported_model_changed")
         if self._profile in {EvaluationProviderProfile.DEEPSEEK_PHASE_SPLIT,
-                             EvaluationProviderProfile.DEEPSEEK_BOUNDED_TASK, EvaluationProviderProfile.DEEPSEEK_PRO_BOUNDED_TASK} and (
+                             EvaluationProviderProfile.DEEPSEEK_BOUNDED_TASK, EvaluationProviderProfile.DEEPSEEK_PRO_BOUNDED_TASK, EvaluationProviderProfile.DEEPSEEK_PRO_REFERENCE16} and (
                 len(choices) != 1 or choices[0]["index"] != 0):
             raise EvaluationBudgetAbort("evaluation_completion_invalid")
-        if (self._profile is EvaluationProviderProfile.DEEPSEEK_PRO_BOUNDED_TASK
+        if (self._profile.is_pro
                 and any(choice["finish_reason"] in {"length", "content_filter"} for choice in choices)):
             raise EvaluationBudgetAbort("evaluation_pro_completion_incomplete")
         if self._response_identity_policy == KNOWN_ECNU_RESPONSE_IDENTITY_POLICY:
@@ -433,9 +448,11 @@ def _validate_payload(value: dict, *, verification_tool_choice: str = "forced",
     try:
         function = value["tools"][0]["function"]
         official = provider_profile.is_official
+        reference16 = provider_profile is EvaluationProviderProfile.DEEPSEEK_PRO_REFERENCE16
         mixed_v = provider_profile in {EvaluationProviderProfile.DEEPSEEK_PHASE_SPLIT,
                                        EvaluationProviderProfile.DEEPSEEK_BOUNDED_TASK, EvaluationProviderProfile.DEEPSEEK_PRO_BOUNDED_TASK} and function["name"] == "SourceVerificationOutput"
-        forced = mixed_v or not (official or verification_tool_choice == "omitted"
+        non_thinking = mixed_v or reference16
+        forced = reference16 or mixed_v or not (official or verification_tool_choice == "omitted"
                       and function["name"] == "SourceVerificationOutput")
         fields = _PAYLOAD_FIELDS if forced else _PAYLOAD_FIELDS - {"tool_choice"}
         if official:
@@ -446,11 +463,11 @@ def _validate_payload(value: dict, *, verification_tool_choice: str = "forced",
             or value["model"] != provider_profile.model
             or any(type(value.get(key)) is not int or value[key] != expected
                    for key, expected in provider_profile.output_parameters.items())
-            or (official and value.get("reasoning_effort") != ("none" if mixed_v else "max"))
+            or (official and value.get("reasoning_effort") != ("none" if non_thinking else "max"))
             or type(value["temperature"]) not in (float, int)
             or value["temperature"] != 0
             or value["stream"] is not False
-            or value["thinking"] != {"type": "disabled" if mixed_v else "enabled"}
+            or value["thinking"] != {"type": "disabled" if non_thinking else "enabled"}
             or not isinstance(value["messages"], list)
             or len(value["messages"]) != 2
             or any(

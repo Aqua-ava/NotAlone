@@ -52,6 +52,7 @@ from .evaluation_provider_contract import (
     validate_extraction_prompt_profile,
     BOUNDED_RUNTIME_PLAN, BOUNDED_RUNTIME_MODE, BOUNDED_RUNTIME_STAGE,
     _BOUNDED_MIGRATION_SOURCES,
+    REFERENCE16_PRO_PLAN, REFERENCE16_PRO_MODE, REFERENCE16_PRO_STAGE,
 )
 
 
@@ -136,6 +137,12 @@ _UNIQUENESS_REQUIRED_SOURCES = _SEMANTIC4_REQUIRED_SOURCES | frozenset({
     ".scratch/grounded-ambiguity-check-plan/spec.md",
     ".scratch/grounded-ambiguity-check-plan/implementation-result-20261016.md",
 })
+_REFERENCE16_PRO_REQUIRED_SOURCES = _NULLABLE_REQUIRED_SOURCES | frozenset({
+    PUBLIC_REFERENCE_V2_PATH, PUBLIC_ANNOTATION_V2_PATH,
+    ".scratch/memory-extraction-accuracy/reference-pro16-plan-20261018.md",
+    "backend/src/notalone/runtime_config.py", "desktop/tests/fixtures/reference21-v4-public.py",
+    "desktop/tests/fixtures/grounded_public21.py", "desktop/tests/fixtures/explicit_review_bridge.py",
+})
 _BACKEND_ROOT = _SOURCE_DIRECTORY.parents[2]
 _BOUNDED_BACKEND_SOURCES = frozenset(
     f"backend/{path.relative_to(_BACKEND_ROOT).as_posix()}"
@@ -176,7 +183,8 @@ def _gold_reference(
         raise EvaluationBudgetAbort("ecnu_gold_not_frozen")
     criterion = frozen_gold.get("criteria_path", _CRITERIA_PATH)
     digest = frozen_gold.get("criteria_sha256")
-    required_sources = (_UNIQUENESS_REQUIRED_SOURCES if execution_plan == UNIQUENESS_PLAN else
+    required_sources = (_REFERENCE16_PRO_REQUIRED_SOURCES if execution_plan == REFERENCE16_PRO_PLAN else
+                        _UNIQUENESS_REQUIRED_SOURCES if execution_plan == UNIQUENESS_PLAN else
                         _SEMANTIC4_REQUIRED_SOURCES if execution_plan == SEMANTIC4_PLAN else
                         _REFERENCE21_V4_REQUIRED_SOURCES if execution_plan == REFERENCE21_V4_PLAN else
                         _FULL140_E2_REQUIRED_SOURCES if execution_plan == FULL140_E2_PLAN else
@@ -498,6 +506,23 @@ def run_ecnu_evaluation(
     from .evaluation_provider_contract import EvaluationProviderProfile
     from .grounded_adapter import BOUNDED_STAGE_PROMPT_PROFILE
 
+    pro16 = execution_plan == REFERENCE16_PRO_PLAN
+    if pro16 or provider_profile == EvaluationProviderProfile.DEEPSEEK_PRO_REFERENCE16:
+        if (not pro16 or provider_profile != EvaluationProviderProfile.DEEPSEEK_PRO_REFERENCE16
+                or case_set != "reference21" or type(case_positions) is not tuple
+                or case_positions != tuple(range(16)) or any(type(value) is not int for value in case_positions)
+                or type(request_limit) is not int or request_limit != 32
+                or extraction_mode != "grounded-v2" or extraction_prompt_profile != "default"
+                or verification_mode != "legacy-v4" or verification_tool_choice != "forced"
+                or reference_version != "source-fidelity-v2"
+                or response_identity_policy != "first_valid_completion_observation_stop_on_change"
+                or type(request_timeout_seconds) is not int or request_timeout_seconds != 300
+                or type(max_retries) is not int or max_retries != 0
+                or formal_windows is not None or formal_task_ids != () or database_url is not None
+                or any(value is not None for value in (remaining8_deadline, ambiguity2_deadline,
+                    full140_v4_deadline, reference21_v4_deadline, bounded_runtime_deadline))):
+            raise EvaluationBudgetAbort("evaluation_reference16_pro_fixed_plan_required")
+
     bounded15 = execution_plan == BOUNDED_RUNTIME_PLAN
     if (bounded15 or provider_profile in {EvaluationProviderProfile.DEEPSEEK_BOUNDED_TASK, EvaluationProviderProfile.DEEPSEEK_PRO_BOUNDED_TASK}
             or case_set == "bounded15" or formal_windows is not None or formal_task_ids != ()
@@ -536,7 +561,7 @@ def run_ecnu_evaluation(
     full140_v4 = execution_plan in ("full140-grounded-v4-source-v2", MIXED_PLAN)
     full140_e2 = execution_plan == FULL140_E2_PLAN
     fixed_full140 = full140_v4 or full140_e2
-    fixed_source_v2 = fixed_full140 or reference21_v4
+    fixed_source_v2 = fixed_full140 or reference21_v4 or pro16
     if (type(reference_version) is not str or reference_version not in {"legacy-v1", "source-fidelity-v2"}
             or not fixed_source_v2 and (reference_version != "legacy-v1" or extraction_mode == "grounded-v4")):
         raise EvaluationBudgetAbort("evaluation_full140_v4_fixed_plan_required")
@@ -554,7 +579,7 @@ def run_ecnu_evaluation(
     remaining8 = execution_plan == "reference21-remaining8-v1"
     ambiguity2 = execution_plan == "reference21-ambiguity2-v3"
     main16 = execution_plan == "reference21-main16-v3"
-    if (type(execution_plan) is not str or execution_plan not in {"original", "reference21-remaining8-v1", "reference21-ambiguity2-v3", "reference21-main16-v3", "full140-grounded-v4-source-v2", *PHASE_SPLIT_PLANS}
+    if (type(execution_plan) is not str or execution_plan not in {"original", "reference21-remaining8-v1", "reference21-ambiguity2-v3", "reference21-main16-v3", "full140-grounded-v4-source-v2", REFERENCE16_PRO_PLAN, *PHASE_SPLIT_PLANS}
             or remaining8 and (not official or case_set != "reference21"
                 or type(case_positions) is not tuple or case_positions != _REMAINING8_POSITIONS
                 or any(type(position) is not int for position in case_positions)
@@ -619,8 +644,8 @@ def run_ecnu_evaluation(
             or ambiguity2 and synthetic_transport is None and (
                 type(ambiguity2_deadline) is not Ambiguity2Deadline or not ambiguity2_deadline.live_worker)):
         raise EvaluationBudgetAbort("ambiguity2_owned_deadline_required")
-    if ((main16_deadline is not None and (not main16 or type(main16_deadline) is not Main16Deadline))
-            or main16 and synthetic_transport is None and (
+    if ((main16_deadline is not None and (not (main16 or pro16) or type(main16_deadline) is not Main16Deadline))
+            or (main16 or pro16) and synthetic_transport is None and (
                 type(main16_deadline) is not Main16Deadline or not main16_deadline.live_worker)):
         raise EvaluationBudgetAbort("main16_owned_deadline_required")
     if ((full140_v4_deadline is not None and (not fixed_full140 or type(full140_v4_deadline) is not Full140V4Deadline))
@@ -633,11 +658,11 @@ def run_ecnu_evaluation(
         raise EvaluationBudgetAbort("reference21_v4_owned_deadline_required")
     bounded = cast(Remaining8Deadline | Ambiguity2Deadline | Main16Deadline | Full140V4Deadline | Reference21V4Deadline | None,
                    remaining8_deadline or ambiguity2_deadline or main16_deadline or full140_v4_deadline or reference21_v4_deadline)
-    if official and case_set == "reference21" and not remaining8 and not ambiguity2 and not main16 and (
+    if official and case_set == "reference21" and not remaining8 and not ambiguity2 and not main16 and not pro16 and (
         case_positions is not None or request_limit not in (None, 42)
     ):
         raise EvaluationBudgetAbort("evaluation_official_fixed_reference21_required")
-    if official and not mixed and verification_tool_choice != "omitted":
+    if official and not mixed and not pro16 and verification_tool_choice != "omitted":
         raise EvaluationBudgetAbort("evaluation_official_tools_must_be_omitted")
     if request_limit is not None and (
         not official or type(request_limit) is not int or not 1 <= request_limit <= 280
@@ -685,7 +710,7 @@ def run_ecnu_evaluation(
     else:
         positions = tuple(range(len(_PLAN_CASES))) if case_positions is None else case_positions
         if (type(positions) is not tuple or not positions
-                or (case_positions is not None and len(positions) > 4 and not remaining8 and not main16)
+                or (case_positions is not None and len(positions) > 4 and not remaining8 and not main16 and not pro16)
                 or any(type(position) is not int or not 0 <= position < len(_PLAN_CASES)
                        for position in positions)
                 or len(set(positions)) != len(positions)):
@@ -703,7 +728,7 @@ def run_ecnu_evaluation(
     if type(audit_case) is PhasedEvaluationAudit and audit_case.reference_version != reference_version:
         raise EvaluationBudgetAbort("evaluation_phased_reference_version_mismatch")
     if type(audit_case) is PhasedEvaluationAudit and (mixed != (audit_case.execution_plan in PHASE_SPLIT_PLANS)
-            or mixed and audit_case.execution_plan != execution_plan):
+            or (mixed or pro16) and audit_case.execution_plan != execution_plan):
         raise EvaluationBudgetAbort("evaluation_phased_execution_plan_mismatch")
     if (type(audit_case) is PhasedEvaluationAudit
             and audit_case.extraction_mode != extraction_selected.value):
@@ -718,7 +743,7 @@ def run_ecnu_evaluation(
             and audit_case.verification_tool_choice != verification_tool_choice):
         raise EvaluationBudgetAbort("ecnu_phased_tool_choice_mismatch")
     if (type(audit_case) is PhasedEvaluationAudit
-            and audit_case.extraction_tool_choice != ("omitted" if official else "forced")):
+            and audit_case.extraction_tool_choice != ("omitted" if official and not pro16 else "forced")):
         raise EvaluationBudgetAbort("evaluation_phased_extraction_tool_choice_mismatch")
     if synthetic_transport is None:
         if type(audit_case) is not PhasedEvaluationAudit:
@@ -729,7 +754,7 @@ def run_ecnu_evaluation(
     )
     if synthetic_transport is None or fixed_source_v2:
         if (frozen_gold.get("criteria_path") !=
-                (PUBLIC_REFERENCE_V2_PATH if reference21_v4 else FULL_REFERENCE_V2_PATH if fixed_full140 else
+                (PUBLIC_REFERENCE_V2_PATH if reference21_v4 or pro16 else FULL_REFERENCE_V2_PATH if fixed_full140 else
                  FULL_REFERENCE_PATH if case_set == "full140" else PUBLIC_REFERENCE_PATH)
                 or cast(PhasedEvaluationAudit, audit_case).criteria_sha256 !=
                 reference["criteria_sha256"]):
@@ -752,12 +777,14 @@ def run_ecnu_evaluation(
         execution_plan=execution_plan,
         extraction_prompt_profile=extraction_prompt_profile,
     )
-    if case_set == "full140" or reference21_v4:
+    if case_set == "full140" or reference21_v4 or pro16:
         validation = _load_fixed_reference(repo_root, source_hashes, reference_version=reference_version, case_set=case_set)
         if ((synthetic_transport is None or fixed_source_v2) and
                 cast(PhasedEvaluationAudit, audit_case).reference_sha256 !=
                 validation["reference_sha256"]):
             raise EvaluationBudgetAbort("ecnu_phased_reference_mismatch")
+        if pro16:
+            reference["gold_sha256"] = validation["reference_sha256"]
     windows = tuple(build_window(case) for case in cases)
     if public_quality:
         validate_semantic4_windows(windows)
@@ -776,7 +803,7 @@ def run_ecnu_evaluation(
                          max_retries=max_retries, verification_mode=selected,
                          extraction_mode=extraction_selected, windows=windows, prompt_profile=prompt_profile,
                          extraction_prompt_profile=extraction_prompt_profile),
-        "mode": (FULL140_E2_MODE if full140_e2 else UNIQUENESS_MODE if uniqueness else SEMANTIC4_MODE if public_quality else REFERENCE21_V4_MODE if reference21_v4 else MIXED_MODE if mixed else "deepseek_bounded_full140_v4_source_v2" if full140_v4 else
+        "mode": (REFERENCE16_PRO_MODE if pro16 else FULL140_E2_MODE if full140_e2 else UNIQUENESS_MODE if uniqueness else SEMANTIC4_MODE if public_quality else REFERENCE21_V4_MODE if reference21_v4 else MIXED_MODE if mixed else "deepseek_bounded_full140_v4_source_v2" if full140_v4 else
                  "deepseek_bounded_main16_v3" if main16 else
                  "deepseek_bounded_ambiguity2_v3" if ambiguity2 else
                  "deepseek_bounded_remaining8" if remaining8 else
@@ -785,7 +812,7 @@ def run_ecnu_evaluation(
                  "ecnu_bounded_full140" if case_set == "full140" else
                  "ecnu_bounded_evaluation" if case_positions is None
                  else "ecnu_bounded_diagnostic"),
-        "stage": (FULL140_E2_STAGE if full140_e2 else UNIQUENESS_STAGE if uniqueness else SEMANTIC4_STAGE if public_quality else REFERENCE21_V4_STAGE if reference21_v4 else MIXED_STAGE if mixed else "full140-v4-source-v2" if full140_v4 else "main16-v3" if main16 else "ambiguity2-v3" if ambiguity2 else "remaining8" if remaining8 else "full140" if case_set == "full140" else
+        "stage": (REFERENCE16_PRO_STAGE if pro16 else FULL140_E2_STAGE if full140_e2 else UNIQUENESS_STAGE if uniqueness else SEMANTIC4_STAGE if public_quality else REFERENCE21_V4_STAGE if reference21_v4 else MIXED_STAGE if mixed else "full140-v4-source-v2" if full140_v4 else "main16-v3" if main16 else "ambiguity2-v3" if ambiguity2 else "remaining8" if remaining8 else "full140" if case_set == "full140" else
                   "P1" if case_positions is None else "diagnostic"),
         "base_url": base_url, "endpoint": endpoint, "request_model": request_model,
         **({"reasoning_effort": "max"} if official else {}),
@@ -821,6 +848,12 @@ def run_ecnu_evaluation(
         **{f"{purpose}_schema_sha256": canonical_sha256(schema)
            for purpose, (_, schema) in runtime_contracts.items() if purpose == "verification"},
     }
+    if pro16:
+        config.update(provider_profile=profile.value, request_contract_version=4, max_tokens=8192,
+            thinking={"type": "disabled"}, reasoning_effort="none", tool_choice={
+                "extraction": {"mode": "forced", "name": runtime_contracts["extraction"][1]["title"]},
+                "verification": {"mode": "forced", "name": runtime_contracts["verification"][1]["title"]}})
+        config["omitted_parameters"] = [item for item in config["omitted_parameters"] if item != "max_tokens"]
     if mixed:
         config.pop("thinking")
         config.pop("reasoning_effort")
@@ -860,12 +893,13 @@ def run_ecnu_evaluation(
         mixed_v = mixed and purpose == "verification"
         expected = {
             "model": request_model, "temperature": 0.0, "stream": False,
-            **({"reasoning_effort": "none" if mixed_v else "max"} if official else {}),
-            "thinking": {"type": "disabled" if mixed_v else "enabled"}, "messages": messages,
+            **({"max_tokens": 8192} if pro16 else {}),
+            **({"reasoning_effort": "none" if mixed_v or pro16 else "max"} if official else {}),
+            "thinking": {"type": "disabled" if mixed_v or pro16 else "enabled"}, "messages": messages,
             "tools": [deepcopy(convert_to_openai_tool(schema))],
             "tool_choice": {"type": "function", "function": {"name": schema["title"]}},
         }
-        if official and not mixed_v or purpose == "verification" and verification_tool_choice == "omitted":
+        if official and not mixed_v and not pro16 or purpose == "verification" and verification_tool_choice == "omitted":
             del expected["tool_choice"]
         with (bounded.invocation() if bounded is not None else nullcontext()), contract.expect_request(expected):
             yield
@@ -886,8 +920,8 @@ def run_ecnu_evaluation(
             request_timeout_seconds=request_timeout_seconds, max_retries=max_retries,
             verification_mode=selected,
             verification_tool_choice=verification_tool_choice,
-            reasoning_effort="max" if official else None,
-            extraction_tool_choice="omitted" if official else "forced",
+            reasoning_effort="none" if pro16 else "max" if official else None,
+            extraction_tool_choice="omitted" if official and not pro16 else "forced",
             extraction_mode=extraction_selected,
             execution_plan=execution_plan,
             extraction_prompt_profile=extraction_prompt_profile,

@@ -58,7 +58,7 @@ from notalone.memory_trace.context import current_trace
 from .evaluation_provider_contract import (
     MIXED_REQUEST_VERSION, mixed_phase_policy, FULL140_E2_PLAN, PHASE_SPLIT_PLANS, REFERENCE21_PLANS,
     SEMANTIC4_PROMPT_PROFILE, validate_semantic4_windows,
-    PUBLIC_QUALITY_PLANS, validate_extraction_prompt_profile,
+    PUBLIC_QUALITY_PLANS, validate_extraction_prompt_profile, REFERENCE16_PRO_PLAN,
 )
 
 _BASE_URL = "https://evaluation.invalid/v1"
@@ -556,6 +556,7 @@ def _run_evaluation_batch(
     extraction_selected = EvaluationExtractionMode(extraction_mode)
     from .evaluation_bounded_cases import BOUNDED_RUNTIME_CASES, BOUNDED_RUNTIME_PLAN
 
+    pro16 = execution_plan == REFERENCE16_PRO_PLAN
     bounded = execution_plan == BOUNDED_RUNTIME_PLAN
     bounded_profile = store.bounded_provider_profile if bounded else None
     if bounded:
@@ -589,6 +590,16 @@ def _run_evaluation_batch(
                 raise EvaluationBudgetAbort("evaluation_bounded_task_binding_changed")
     elif formal_task_ids or database_url is not None:
         raise EvaluationBudgetAbort("evaluation_formal_tasks_require_bounded_plan")
+    if pro16 and (store.execution_plan != execution_plan or store.reference_version != "source-fidelity-v2"
+            or cases != _fixed_case_sets()[0][:16] or len(windows) != 16 or len(plan) != 16
+            or extraction_selected is not EvaluationExtractionMode.GROUNDED_V2
+            or selected is not SourceVerificationMode.LEGACY_V4
+            or extraction_tool_choice != "forced" or verification_tool_choice != "forced"
+            or reasoning_effort != "none" or request_model != "deepseek-v4-pro"
+            or base_url != "https://api.deepseek.com" or request_timeout_seconds != 300
+            or type(max_retries) is not int or max_retries != 0 or semantic_audit is None
+            or contract is None or invocation_scope is None):
+        raise EvaluationBudgetAbort("evaluation_reference16_pro_fixed_plan_required")
     mixed = execution_plan in PHASE_SPLIT_PLANS
     reference21_v4 = execution_plan in REFERENCE21_PLANS
     public_quality = execution_plan in PUBLIC_QUALITY_PLANS
@@ -664,16 +675,16 @@ def _run_evaluation_batch(
             model = ChatDeepSeek(
                 api_key=SecretStr(api_key), base_url=base_url,
                 model=request_model, temperature=0.0,
-                **(bounded_profile.output_parameters if bounded_profile is not None else {}),
+                **({"max_tokens": 8192} if pro16 else bounded_profile.output_parameters if bounded_profile is not None else {}),
                 timeout=request_timeout_seconds, max_retries=max_retries,
-                extra_body={"thinking": {"type": "enabled"},
+                extra_body={"thinking": {"type": "disabled" if pro16 else "enabled"},
                             **({"reasoning_effort": "max"} if bounded else
                                {"reasoning_effort": reasoning_effort} if reasoning_effort else {})},
                 http_client=sync_client, http_async_client=async_client,
             )
             verification_model = ChatDeepSeek(
                 api_key=SecretStr(api_key), base_url=base_url, model=request_model, temperature=0.0,
-                **(bounded_profile.output_parameters if bounded_profile is not None else {}),
+                **({"max_tokens": 8192} if pro16 else bounded_profile.output_parameters if bounded_profile is not None else {}),
                 timeout=request_timeout_seconds, max_retries=max_retries,
                 extra_body={"thinking": {"type": "disabled"}, "reasoning_effort": "none"},
                 http_client=sync_client, http_async_client=async_client,
@@ -775,6 +786,7 @@ def _run_evaluation_batch(
                             "phase_request_policy": mixed_phase_policy()} if mixed else {}),
                         **({"reference_version": store.reference_version}
                            if store.reference_version == "source-fidelity-v2" or bounded else {}),
+                        **({"execution_plan": execution_plan} if pro16 else {}),
                         **({"execution_plan": execution_plan, "formal_task_execution": formal_execution} if bounded else {}),
                         "extraction_program": tuple(
                             event["payload"] for event in current_events
@@ -796,6 +808,9 @@ def _run_evaluation_batch(
                     if bounded:
                         dimension_results.extend(EvaluationResult(**item) for item in audited["dimension_results"])
                     if audited["decision"] in {"safety_error", "unknown"}:
+                        if pro16 and audited["decision"] == "unknown":
+                            # 接收了模型结果不等于完成独审；末窗未知也不得签完整批次。
+                            outcomes[position]["status"] = "unknown"
                         raise _BatchStopped("case_semantic_audit_" + audited["decision"])
                     if bounded and position < 7:
                         frames = _bounded_positive_delivery(formal_execution, position)
