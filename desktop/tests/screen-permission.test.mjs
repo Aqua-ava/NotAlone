@@ -12,6 +12,7 @@ const bundle = await build({ stdin: { contents: [
   "export { createElement } from 'react';",
   "export { renderToStaticMarkup } from 'react-dom/server';",
   "export { ScreenPermissionController } from './src/main/screen-permission/controller';",
+  "export { inspectConfiguredScreenPermission } from './src/main/screen-permission/configured';",
   "export { inspectScreenPermission } from './src/main/screen-permission/native';",
   "export { installScreenPermissionBridge } from './src/main/screen-permission/bridge';",
   "export { createScreenPermissionBridge } from './src/preload/screen-permission';",
@@ -30,20 +31,24 @@ test('缺少录屏权限的小窗提供授权及重新检测入口', () => {
   assert.match(html, /不保存或上传/);
 });
 
-test('启动缺权限先显示用途提示，稍后不会申请；再次检查不重复提示', async () => {
+test('启动和跨重启缺权限只更新页面状态，不弹窗或申请', async () => {
   const effects = [];
-  const controller = new ports.ScreenPermissionController({
+  const dependencies = {
     inspect: async (request) => { effects.push(request ? 'request' : 'check'); return false; },
     prompt: async () => { effects.push('prompt'); return false; },
     openSettings: async () => effects.push('settings'),
     onGranted: async () => effects.push('granted'),
-  });
+  };
+  const controller = new ports.ScreenPermissionController(dependencies);
   await controller.startup();
-  assert.deepEqual(effects, ['check', 'prompt']);
+  assert.deepEqual(effects, ['check']);
   assert.equal(controller.getState().phase, 'missing');
   await controller.startup();
   await controller.recheck();
-  assert.deepEqual(effects, ['check', 'prompt', 'check']);
+  assert.deepEqual(effects, ['check', 'check']);
+  const restarted = new ports.ScreenPermissionController(dependencies);
+  await restarted.startup(); restarted.dispose();
+  assert.deepEqual(effects, ['check', 'check', 'check']);
   controller.dispose();
 });
 
@@ -56,11 +61,12 @@ test('用户选择授权才请求系统，未生效打开设置，重新检测�
     onGranted: async () => { effects.push('new-observation'); },
   });
   await controller.startup();
-  assert.deepEqual(effects, ['check', 'prompt', 'request', 'settings']);
+  await controller.request();
+  assert.deepEqual(effects, ['check', 'request', 'settings']);
   granted = true;
   await controller.recheck();
   assert.equal(controller.getState().phase, 'granted');
-  assert.deepEqual(effects, ['check', 'prompt', 'request', 'settings', 'check', 'new-observation']);
+  assert.deepEqual(effects, ['check', 'request', 'settings', 'check', 'new-observation']);
   assert.equal('contactId' in controller.getState(), false);
   controller.dispose();
 });
@@ -118,4 +124,16 @@ test('页面具名权限桥拒绝额外参数，不接收URL、路径或授权�
   assert.equal((await bridge.getState()).phase, 'granted');
   assert.deepEqual(states, ['checking', 'granted', 'granted']);
   controller.dispose();
+});
+
+test('开发权限检查使用与后端一致的配置探针，复查时重新读取配置', async () => {
+  const userData = await mkdtemp(path.join(directory, 'configured-'));
+  const executable = path.join(userData, 'probe');
+  await writeFile(executable, `#!${process.execPath}\nprocess.stdout.write(JSON.stringify({ok:true,granted:!process.argv.includes('--request')}));`, { mode: 0o700 });
+  await writeFile(path.join(userData, 'backend-launch.json'), JSON.stringify({syncProbePath:executable}));
+  const signal = new AbortController().signal;
+  assert.equal(await ports.inspectConfiguredScreenPermission(userData, undefined, false, signal), true);
+  assert.equal(await ports.inspectConfiguredScreenPermission(userData, undefined, true, signal), false);
+  await writeFile(path.join(userData, 'backend-launch.json'), JSON.stringify({syncProbePath:path.join(userData, 'missing')}));
+  assert.equal(await ports.inspectConfiguredScreenPermission(userData, undefined, false, signal), undefined);
 });

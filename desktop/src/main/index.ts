@@ -7,9 +7,8 @@ import { CandidateCopyController } from './candidate-copy/controller';
 import { installElectronCandidateCopy } from './candidate-copy/electron';
 import { app, dialog, ipcMain, Menu, protocol, session, shell } from 'electron';
 import { ScreenPermissionController } from './screen-permission/controller';
-import { inspectScreenPermission } from './screen-permission/native';
+import { inspectConfiguredScreenPermission } from './screen-permission/configured';
 import { installScreenPermissionBridge } from './screen-permission/bridge';
-import { resolveSyncProbePath } from './backend/bundled-helpers';
 import path from 'node:path';
 import { electronPageCommands } from './electron-page-commands';
 import { installResources } from './resources';
@@ -80,13 +79,8 @@ void app.whenReady().then(async () => {
   const contacts = installContactSessionBridge(commands, backend);
   const foreground = installForegroundBridge(commands, backend, contacts);
   const screenPermission = new ScreenPermissionController({
-    inspect: async (request, signal) => inspectScreenPermission(
-      await resolveSyncProbePath(resourcesDirectory), request, signal),
-    prompt: async () => (await dialog.showMessageBox({ type: 'info',
-      title: '开启微信会话自动识别', message: 'NotAlone 需要屏幕录制权限来识别当前微信会话',
-      detail: '仅在本机分析前台微信窗口并识别会话名称，不保存或上传画面，不识别聊天正文。点击“前往授权”后由系统请求许可；若系统没有再次弹窗，可在系统设置中允许当前 NotAlone。暂不授权时仍可手动选择联系人，已授权范围的后台文字同步独立运行。',
-      buttons: ['前往授权', '稍后'], defaultId: 0, cancelId: 1,
-    })).response === 0,
+    inspect: (request, signal) => inspectConfiguredScreenPermission(
+      app.getPath('userData'), resourcesDirectory, request, signal),
     openSettings: () => shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture'),
     onGranted: () => foreground.observeBeforeShow(),
   });

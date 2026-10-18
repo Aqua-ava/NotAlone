@@ -2,7 +2,6 @@ import { initialScreenPermissionState, type ScreenPermissionState } from '../../
 
 export interface ScreenPermissionEffects {
   inspect(request: boolean, signal: AbortSignal): Promise<boolean | undefined>;
-  prompt(): Promise<boolean>;
   openSettings(): Promise<void>;
   onGranted(): Promise<void>;
 }
@@ -24,10 +23,8 @@ export class ScreenPermissionController {
     if (this.started || this.disposed) return Promise.resolve(this.getState());
     this.started = true;
     return this.operate(async (signal) => {
-      const granted = await this.inspect(false, signal);
-      if (granted === false && !signal.aborted && await this.effects.prompt() && !signal.aborted) {
-        await this.requestAccess(signal);
-      }
+      // 启动与热重启仅更新页面状态；系统请求只能来自明确的授权按钮。
+      await this.inspect(false, signal);
     });
   }
   recheck(): Promise<ScreenPermissionState> {
