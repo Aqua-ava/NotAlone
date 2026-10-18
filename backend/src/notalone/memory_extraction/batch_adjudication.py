@@ -5,7 +5,8 @@ from notalone.memory_extraction.adjudication import AdjudicationAction, Adjudica
 from notalone.memory_extraction.errors import ExtractionInvalidOutputError, ExtractionRuntimeError
 from notalone.memory_trace.transport import invoke_traced_model
 
-PROMPT = '''比较每条新记忆与统一已有候选池，逐条输出store/skip/update/merge。
+PROMPT = '''比较每条新记忆与统一已有候选池，也比较新候选彼此，逐条输出store/skip/update/merge。
+即使已有候选池为空也必须去重：同批同义事实保留最早一条store，后续重复才skip；不能全部skip而没有承接事实。
 store：独立新信息。skip：同一事实完全重复、没有增量；事件来源或时间不同不能随意丢弃。
 update：同一事实明确纠错或演变，用新信息替换一个或多个旧目标。
 merge：同一事实或事件的互补信息，保留所有仍正确的细节，合成完整且无冗余的叙述。
