@@ -150,6 +150,7 @@ def main():
     parser.add_argument('--ledger', type=Path, required=True)
     parser.add_argument('--round', required=True)
     parser.add_argument('--case', choices=CASES, default='contact_tea')
+    parser.add_argument('--retain-for-desktop', action='store_true', help='仅成功后保留合成测试库用于开发App验收，随后须显式清理')
     args = parser.parse_args()
     load_project_env()
     if os.environ.get('NOTALONE_ORGANIZATION_QUALITY_CONFIG'):
@@ -167,6 +168,7 @@ def main():
     original = httpx.HTTPTransport.handle_request
     lock = threading.Lock()
     calls = []
+    passed = False
     try:
         RealMemoryAcceptance.setUpClass()
         # 固定物理suite身份；全部整理请求与L1共用同一个问题总账。
@@ -238,14 +240,21 @@ def main():
 
         with patch.object(httpx.HTTPTransport, 'handle_request', measured):
             result = unittest.TextTestRunner(verbosity=2).run(test)
-        return 0 if result.wasSuccessful() else 1
+        passed = result.wasSuccessful()
+        return 0 if passed else 1
     finally:
-        RealMemoryAcceptance.doClassCleanups()
+        retained = bool(args.retain_for_desktop and passed)
+        if retained:
+            atomic_json(args.output / 'desktop-fixture.json', {'database_name': RealMemoryAcceptance.database_name,
+                'owner_id': str(test.acceptance_owner), 'synthetic_only': True, 'cleanup_required': True})
+            RealMemoryAcceptance.admin.close()
+        else:
+            RealMemoryAcceptance.doClassCleanups()
         with psycopg.connect('host=/tmp dbname=postgres') as connection:
             remaining = connection.execute('SELECT 1 FROM pg_database WHERE datname=%s',
                 (RealMemoryAcceptance.database_name,)).fetchone() is not None
-        atomic_json(args.output / 'cleanup.json', {'database_removed': not remaining, 'calls': len(calls),
-            'cleanup_errors': len(RealMemoryAcceptance.tearDown_exceptions)})
+        atomic_json(args.output / 'cleanup.json', {'database_removed': not remaining, 'retained_for_desktop': retained, 'calls': len(calls),
+            'cleanup_errors': len(getattr(RealMemoryAcceptance, 'tearDown_exceptions', ()))})
 
 
 if __name__ == '__main__':
