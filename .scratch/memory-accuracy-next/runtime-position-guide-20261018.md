@@ -32,3 +32,5 @@
 E将首窗标为event并编译common_fact；V实际收到位置标尺，source[0,6)正确，但atom_links及reported的candidate[6,12)仍含开引号且缺末尾句号，正文实际为[7,13)。严格proof_semantics拒绝，未执行adoption/write；不修补输出、不把E标签或HTTP成功算正式审核。该场RAW/FULL、七轴、正向依据交付均0，P01 unknown，其余14 unrun。位置标尺尚未证明有效。
 
 finish的closed=true、close_unknown=false、worker_gone=true，launch与worker进程均已不存在；source-finish记录13类残留0及数据库残留0。临时三字段配置已删除。自有四场已知请求累计7次，未使用113次额度永久关闭，不能当作通过样本数；第二场原关闭未知与独立核对的区别仍保留。
+
+独立只读诊断进一步发现reference.target[0,6)误用整句，作者自指应与mention同为[0,1)。本次先在candidate主引句范围检查失败；target错误尚未被执行检查，但即使仅纠正候选范围仍不能形成basis。原输入分块正确，8码点块仍要求模型块内计数。可另评估全局通用逐码点索引，但不能解决作者锚语义，不据此自动续开相同模型场。
