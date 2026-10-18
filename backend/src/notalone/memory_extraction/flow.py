@@ -445,6 +445,15 @@ class ExtractionFlow:
                 window, prepared, verified_results.get(id(fact)),
                 verification_mode=verification_mode,
             ))
+            verification = verified_results.get(id(fact))
+            evidence = changed.dimension_evidence
+            if (verification_mode is SourceVerificationMode.LEGACY_V4
+                    and verification is not None
+                    and verification.verdict is SourceVerificationVerdict.SUPPORTED
+                    and evidence is not None and evidence.source_bound):
+                changed = replace(changed, verified_source_receipt=(
+                    evidence.candidate_sha256, evidence.window_sha256,
+                    changed.source_dependency_mode.value, changed.requires_all_sources))
             trace_ids[id(changed)] = trace_ids[id(fact)]
             evidenced.append(changed)
         return ExtractionOutcome(

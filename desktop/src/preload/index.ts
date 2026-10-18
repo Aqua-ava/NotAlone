@@ -13,7 +13,6 @@ import { createReplyBridge } from './reply';
 import { createStyleSampleBridge } from './style-samples';
 import { createExpressionPreferenceBridge } from './expression-preferences';
 import { createSkillLearningBridge } from './skill-learning';
-import { createMemoryUpgradeBridge } from './memory-upgrade';
 import { createMemoryBridge } from './memory';
 import { createBindingConsentBridge } from './binding-consent';
 import { createSyncControlBridge } from './sync-control';
@@ -30,7 +29,6 @@ const bridge: AppBridge = {
   styleSamples: createStyleSampleBridge(ipcRenderer),
   expressionPreferences: createExpressionPreferenceBridge(ipcRenderer),
   skillLearning: createSkillLearningBridge(ipcRenderer),
-  memoryUpgrade: createMemoryUpgradeBridge(ipcRenderer),
   candidateCopy: createCandidateCopyBridge(ipcRenderer),
   sources: createSourceDeletionBridge(ipcRenderer),
   memory: createMemoryBridge(ipcRenderer),

@@ -16,7 +16,6 @@ import type { MemoryBridge } from './memory-bridge';
 import type { BindingConsentBridge } from './binding-consent-bridge';
 import type { SyncControlBridge } from './sync-control-bridge';
 import type { SkillLearningBridge } from './skill-learning-bridge';
-import type { MemoryUpgradeBridge } from './memory-upgrade-bridge';
 
 export type AppBridge = WindowBridge & DesktopBridge & {
   backend: BackendBridge; setup: SetupBridge; startup: StartupBridge;
@@ -25,7 +24,6 @@ export type AppBridge = WindowBridge & DesktopBridge & {
   styleSamples: StyleSampleBridge;
   expressionPreferences: ExpressionPreferenceBridge;
   skillLearning: SkillLearningBridge;
-  memoryUpgrade: MemoryUpgradeBridge;
   memory: MemoryBridge; traces: TraceBridge; candidateCopy: CandidateCopyBridge; sources: SourceDeletionBridge; syncControl: SyncControlBridge; foreground: ForegroundBridge;
 };
 import type { TraceBridge } from './trace-bridge';

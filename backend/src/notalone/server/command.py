@@ -333,12 +333,7 @@ def _build_task_host(
     from notalone.application.skill_learning import SkillLearningTaskRunner
     from notalone.persistence.skill_learning import PostgresSkillLearningStore
     from notalone.skills.learning_runtime import LangChainSkillProposalRuntime
-    from notalone.application.memory_upgrade import MemoryUpgradeTaskRunner
-    from notalone.application.memory_upgrade_runtime import UpgradeRuntimeBuilder
-    from notalone.persistence.memory_upgrade import PostgresMemoryUpgradeStore
-    from notalone.persistence.extraction_trace import PostgresExtractionTraceStore
 
-    upgrade_runtime = UpgradeRuntimeBuilder(database_url, dimension_release=dimension_release)
 
     def build_worker() -> BackgroundTaskWorker:
         extraction: ExtractionTaskRunner
@@ -386,11 +381,6 @@ def _build_task_host(
             index_repository=PostgresContactMemoryIndexRepository(database_url),
             deletion_repository=PostgresSourceDeletionRepository(database_url),
             model_priority=model_priority,
-            upgrade_runner=MemoryUpgradeTaskRunner(
-                store=PostgresMemoryUpgradeStore(database_url, algorithm_provider=upgrade_runtime.identity),
-                runtime_builder=upgrade_runtime, trace_store=PostgresExtractionTraceStore(database_url),
-                model_priority=model_priority, dimension_release=dimension_release,
-            ),
             learning_runner=SkillLearningTaskRunner(
                 store=PostgresSkillLearningStore(database_url), runtime_builder=build_learning_runtime,
                 model_priority=model_priority,

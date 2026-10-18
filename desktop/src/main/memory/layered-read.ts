@@ -129,6 +129,7 @@ export function layeredMemory(value: unknown, contactId: string | null): Layered
     || (workId !== null && workRevision === 0)) throw invalid();
   return { schemaVersion: 2, scopeKind: contactId === null ? 'owner' : 'contact', contactId, settingsGeneration: integer(entry.settings_generation), enabled: entry.enabled,
     mappingCursor, mappingNextCursor, maintenancePending: entry.maintenance_pending, scenarioMappings,
+    runtimePolicy: entry.runtime_policy === undefined ? 'qualification' : enumeration(entry.runtime_policy, ['qualification', 'verified_items']),
     qualityStatus, quality: currentQuality, status: enumeration(entry.status, ['disabled', 'ready', 'empty', 'failed', 'updating', 'stale', 'blocked', 'paused']),
     workId, workRevision, currentBatch, modelCallsUsed, modelCallLimit,
     eligibleCount, coveredCount, remainingCount, organizationGeneration: integer(entry.organization_generation), updatedAt: date(entry.updated_at),

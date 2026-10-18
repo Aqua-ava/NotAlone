@@ -110,7 +110,7 @@
 
 独立集成候选的[纠错保护](../../.scratch/memory-skill-integration-preparation/issues/02-correction-and-erasure.md)将完整纠错参与窗口及来源世代加入原删除事务。排队删除即撤下旧比较，执行删除清除纠错正文、候选证明、受影响追踪和恢复副本；仅当仍有效规范消息需要防止旧错误复活时保留无正文`erased_guard`，最后一份有效依据删除后移除决定。该合成工程结果不表示业务库迁移或S分叉库已被处理，S分叉库继续保留原样。
 
-[旧资料升级](../../.scratch/memory-skill-integration-preparation/issues/10-versioned-memory-upgrade.md)的比较、
+已退役的[旧资料升级](../../.scratch/memory-skill-integration-preparation/issues/10-versioned-memory-upgrade.md)所遗留的比较、
 提取结果和裁决也是敏感副本。排队删除即失效旧批准；真实删除在原来源／资料／联系人
 事务内清除受影响批次的可恢复内容及完整追踪，不依赖下一次 GET 补清。工作中只保留
 隔离身份、有限状态与非秘密算法配置，算法身份不含密钥、正文、任意环境变量或带凭据端点。

@@ -82,6 +82,8 @@ class ExtractedFact:
     timing: MemoryTiming = MemoryTiming()
     dimension_evidence: DimensionEvidence | None = None
     event: MemoryEvent | None = None
+    # 同次独立核验的临时回执，仅绑定候选和窗口摘要，不从持久候选恢复。
+    verified_source_receipt: tuple[str, str, str, bool] | None = None
 
     source_dependency_mode: SourceDependencyMode = SourceDependencyMode.ANY
     requires_all_sources: bool = False

@@ -82,6 +82,12 @@ def build_reply_service(
         budget = build_deepseek_input_budget(model) or build_ecnu_input_budget(model)
         if budget is not None:
             input_budget_profile, input_token_counter = budget
+    if layered_memory is not None:
+        default_budgets = getattr(layered_memory, 'default_reply_budgets', None)
+        defaults = default_budgets() if default_budgets is not None else None
+        if defaults is not None:
+            layered_reply_budget = layered_reply_budget or defaults[0]
+            owner_layered_reply_budget = owner_layered_reply_budget or defaults[1]
     configured = getattr(layered_memory, 'reply_configuration', None)
     if configured is not None:
         from notalone.reply.quality import build_reply_contract

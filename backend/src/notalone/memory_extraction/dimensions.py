@@ -25,10 +25,9 @@
 超范围保持未知。指代和转述始终留在相关集合，不凭缺字段排除；版本2/3还保守
 加入time，即使H日期为空。这不是精确相关性分类器，不能据此认定模型质量。
 
-放行表默认**空集**（:data:`DEFAULT_DIMENSION_RELEASE`），因此未放行维度一律
-安静待确认；运维回退把 ``NOTALONE_MEMORY_DIMENSION_GATE`` 显式设为 ``0``，
-关闭这道门即恢复"通过原有三道门槛即自动采纳"的行为，见
-:data:`RELEASE_ALL_DIMENSIONS`。
+默认运行策略使用同次独立来源核验回执，不要求先获全局逐维评测资格，也不
+将supported伪装成有限语义proof。显式DimensionRelease仍采用原逐维策略；
+旧运维回退NOTALONE_MEMORY_DIMENSION_GATE=0仅作为兼容入口保留。
 """
 
 from __future__ import annotations
@@ -241,9 +240,26 @@ def valid_evidence_dimensions(
     return frozenset(valid)
 
 
+def _verified_current_sources(
+    fact: ExtractedFact, *, scope: ContactScope | None, now: datetime | None,
+) -> bool:
+    """默认采纳仅承认本次独立核验回执和仍绑定的原始来源，不认证逐维评测。"""
+    evidence = fact.dimension_evidence
+    if (evidence is None or not evidence.source_bound or evidence.version != 1
+            or scope is None or evidence.scope != scope
+            or fact.verified_source_receipt != (evidence.candidate_sha256, evidence.window_sha256,
+                fact.source_dependency_mode.value, fact.requires_all_sources)
+            or evidence.candidate_sha256 != candidate_digest(fact)
+            or evidence.pragmatics != fact_pragmatics(fact)
+            or not set(fact.source_message_ids) <= {item.message_id for item in evidence.messages}):
+        return False
+    at = now or datetime.now(timezone.utc)
+    return fact.invalid_at is None or fact.invalid_at > at
+
+
 @dataclass(frozen=True, slots=True)
 class DimensionRelease:
-    """允许自动采纳的维度集合；默认空集，未放行维度安静待确认。
+    """自动采纳来源策略；显式构造保留逐维门，生产默认要求同次核验回执。
 
     ``gate_enabled`` 记录这道门是否生效；``allowed`` 是显式放行的维度，
     默认空集。两者合起来的放行集是 :meth:`released`：
@@ -255,10 +271,11 @@ class DimensionRelease:
 
     allowed: frozenset[str] = field(default_factory=frozenset)
     gate_enabled: bool = True
+    verified_sources: bool = False
 
     def __post_init__(self) -> None:
-        if type(self.gate_enabled) is not bool:
-            raise TypeError("维度放行开关必须是 bool。")
+        if type(self.gate_enabled) is not bool or type(self.verified_sources) is not bool:
+            raise TypeError("采纳策略开关必须是 bool。")
         # 构造参数允许直接写 ("subject",) 这类可迭代对象，便于测试与放行台账；
         # 规范化只做一次，之后 frozen dataclass 里的 `allowed` 恒为 frozenset。
         allowed = self.allowed
@@ -282,8 +299,10 @@ class DimensionRelease:
         self, fact: ExtractedFact, *, scope: ContactScope | None = None,
         now: datetime | None = None,
     ) -> bool:
-        """相关维度全部有当前依据、且全部逐类获批，才能通过第四门。"""
+        """默认核对当前核验回执；显式逐维策略仍要求全部相关依据及放行。"""
 
+        if self.verified_sources and self.gate_enabled:
+            return _verified_current_sources(fact, scope=scope, now=now)
         key = dimension_key(fact)
         if not self.gate_enabled:
             return key is not None
@@ -317,12 +336,7 @@ class DimensionRelease:
         *,
         default: "DimensionRelease | None" = None,
     ) -> "DimensionRelease":
-        """以编译期默认放行表为起点，再读取运维开关。
-
-        :data:`DEFAULT_DIMENSION_RELEASE` 是放行台账的唯一权威默认值：放行
-        某个维度＝按台账流程修改它并经评审提交；本方法只在其上处理运维回退，
-        只有显式 ``=0`` 才关闭按维度放行门。``default`` 仅供测试注入。
-        """
+        """读取默认逐项核验策略及兼容运维开关；default仅供显式测试策略注入。"""
 
         values = os.environ if environ is None else environ
         base = DEFAULT_DIMENSION_RELEASE if default is None else default
@@ -331,11 +345,11 @@ class DimensionRelease:
         gate_enabled = (
             values.get(DIMENSION_GATE_VARIABLE, "").strip() != "0"
         )
-        return cls(allowed=base.allowed, gate_enabled=gate_enabled)
+        return cls(allowed=base.allowed, gate_enabled=gate_enabled, verified_sources=base.verified_sources)
 
 
-#: 默认放行表：空集。任何维度未放行都走既有待确认路径。
-DEFAULT_DIMENSION_RELEASE = DimensionRelease()
+#: 默认不声明逐维质量资格；新输入由同次独立核验与来源事务复验决定采纳。
+DEFAULT_DIMENSION_RELEASE = DimensionRelease(verified_sources=True)
 #: 运维回退：不再按维度收紧，等价于启用本门之前的自动采纳行为。
 #: 注意 ``allowed`` 故意留空——生效的放行集由 :attr:`DimensionRelease.released`
 #: 在门关闭时返回全集；只读 ``allowed`` 会误判成"什么都不放行"。

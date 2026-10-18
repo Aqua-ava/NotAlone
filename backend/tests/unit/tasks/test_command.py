@@ -39,6 +39,7 @@ from tests.unit.memory_extraction.verification_helpers import (
     verification_result,
 )
 from tests.unit.reply.test_langchain_vertical_slice import ToolCallingFakeModel
+from tests.unit.memory_extraction.test_flow import _payload
 
 class FakeWorker:
     def __init__(self, results: list[WorkerRunResult]) -> None:
@@ -250,12 +251,11 @@ class PostgresMemoryExtractionRunnerTest(unittest.TestCase):
     def test_default_runner_verification_rejects_unsupported_claim(self) -> None:
         scope = ContactScope(uuid4(), uuid4())
         message = replace(_messages(1)[0], text="我不喝酒")
-        payload = {"unit": "0:0", "kind": "preference", "subject": "self", "topic": "other",
-                   "dependency": None, "unresolved": False, "confidence": 0.95, "sensitivity": "none", "event": None}
+        payload = _payload(message.message_id, text="用户本人不喝酒", subject="self")
         model = ToolCallingFakeModel(responses=[
             AIMessage(content="", tool_calls=[{
-                "name": "GroundedMemoryLabels", "id": "extract-1",
-                "args": {"units": {payload["unit"]: {k: v for k, v in payload.items() if k != "unit"}}},
+                "name": "DirectMemoryExtractionOutput", "id": "extract-1",
+                "args": {"scenes": [{"scene_name": "饮食", "memories": [payload]}]},
             }]),
             AIMessage(content="", tool_calls=[{
                 "name": "SourceVerificationOutput", "id": "verify-1",
@@ -297,17 +297,20 @@ class PostgresMemoryExtractionRunnerTest(unittest.TestCase):
             [LedgerOutcome.SUCCEEDED, LedgerOutcome.SUCCEEDED],
         )
 
-    def test_default_runner_keeps_candidates_pending_without_release(self) -> None:
-        """默认装配不得悄悄全量放行：未放行维度仍走原有待确认路径。"""
+    def test_default_runner_automatically_adopts_verified_current_sources(self) -> None:
+        """普通新消息经独立核验即可采纳，不要求另外放行评测维度。"""
 
         scope = ContactScope(uuid4(), uuid4())
-        message = replace(_messages(1)[0], text="我平时喜欢喝茶")
-        payload = {"unit": "0:0", "kind": "preference", "subject": "contact", "topic": "other",
-                   "dependency": None, "unresolved": False, "confidence": 0.95, "sensitivity": "none", "event": None}
+        message = replace(_messages(1)[0], text="我平时喜欢喝茶", source_snapshots=({
+            "source_ref_id": str(uuid4()), "source_id": str(uuid4()),
+            "source_kind": "source_document", "locator": "synthetic:1",
+            "raw_payload": {}, "source_content_sha256": "a" * 64,
+        },))
+        payload = _payload(message.message_id, text="联系人平时喜欢喝茶", subject="contact")
         model = ToolCallingFakeModel(responses=[
             AIMessage(content="", tool_calls=[{
-                "name": "GroundedMemoryLabels", "id": "extract-default",
-                "args": {"units": {payload["unit"]: {k: v for k, v in payload.items() if k != "unit"}}},
+                "name": "DirectMemoryExtractionOutput", "id": "extract-default",
+                "args": {"scenes": [{"scene_name": "饮食", "memories": [payload]}]},
             }]),
             AIMessage(content="", tool_calls=[{
                 "name": "SourceVerificationOutput", "id": "verify-default",
@@ -334,13 +337,10 @@ class PostgresMemoryExtractionRunnerTest(unittest.TestCase):
             )
             stats = runner.run(scope=scope)
 
-        self.assertEqual(stats.adopted, 0)
-        self.assertEqual(stats.pending, 1)
-        self.assertEqual(store.list_confirmed(scope), ())
-        self.assertEqual(
-            [candidate.text for candidate in store.list_pending_candidates(scope)],
-            ["联系人原话：“我平时喜欢喝茶”"],
-        )
+        self.assertEqual(stats.adopted, 1)
+        self.assertEqual(stats.pending, 0)
+        self.assertEqual([memory.text for memory in store.list_confirmed(scope)], ["联系人平时喜欢喝茶"])
+        self.assertEqual(store.list_pending_candidates(scope), ())
 
     def test_subject_release_alone_cannot_bypass_required_evidence(self) -> None:
         """只放行主体不能绕过既有全部相关维度与来源证明要求。"""
@@ -349,12 +349,11 @@ class PostgresMemoryExtractionRunnerTest(unittest.TestCase):
 
         scope = ContactScope(uuid4(), uuid4())
         message = replace(_messages(1)[0], text="我平时喜欢喝茶")
-        payload = {"unit": "0:0", "kind": "preference", "subject": "contact", "topic": "other",
-                   "dependency": None, "unresolved": False, "confidence": 0.95, "sensitivity": "none", "event": None}
+        payload = _payload(message.message_id, text="联系人平时喜欢喝茶", subject="contact")
         model = ToolCallingFakeModel(responses=[
             AIMessage(content="", tool_calls=[{
-                "name": "GroundedMemoryLabels", "id": "extract-released",
-                "args": {"units": {payload["unit"]: {k: v for k, v in payload.items() if k != "unit"}}},
+                "name": "DirectMemoryExtractionOutput", "id": "extract-released",
+                "args": {"scenes": [{"scene_name": "饮食", "memories": [payload]}]},
             }]),
             AIMessage(content="", tool_calls=[{
                 "name": "SourceVerificationOutput", "id": "verify-released",

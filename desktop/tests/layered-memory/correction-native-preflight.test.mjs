@@ -10,7 +10,7 @@ const compiled = await build({ stdin: { contents: `export { withLayeredMemoryFix
   bundle: true, packages: 'external', platform: 'node', format: 'cjs', write: false });
 const module = { exports: {} };
 new Function('require', 'module', 'exports', compiled.outputFiles[0].text)(createRequire(import.meta.url), module, module.exports);
-const { withLayeredMemoryFixture, prepareNativeCorrection, simulateNativeCorrection, checkNativeCorrection } = module.exports;
+const { withLayeredMemoryFixture, prepareNativeCorrection, simulateNativeCorrection, checkNativeCorrection, waitNativeCorrectionReady } = module.exports;
 
 test('原生八步后验先以真实公开 JSON 核对，HTTP 预检不签发 CUA 收据', { timeout: 90000 }, async () => {
   let cleaned = false;
@@ -46,7 +46,8 @@ test('事实修正后合法重建仍排除旧版本，HTTP 预检不签发 CUA �
           settings_generation: current.data.layered_memory.settings_generation,
         });
         assert.equal(refreshed.status, 200);
-        assert.ok(refreshed.data.layered_memory.profile, '必须实际重建新背景，不能以空结果规避后验。');
+        const ready = await waitNativeCorrectionReady(fixture, step.layeredPath);
+        assert.ok(ready.profile, '必须实际重建新背景，不能以空结果规避后验。');
       }
       const observed = await checkNativeCorrection(fixture, step);
       if (step.action === 'fact') await writeFile(path.join(process.env.NOTALONE_LAYERED_TEST_EVIDENCE_DIR,

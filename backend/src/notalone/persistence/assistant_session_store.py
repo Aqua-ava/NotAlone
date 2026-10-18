@@ -250,6 +250,22 @@ def _dependencies_available(
                 WHERE message.owner_id = %(owner_id)s AND message.id = dependency.id
                   AND {valid_source_ref_exists_sql('message')}
                 UNION ALL
+                SELECT 1 FROM public.source_processing_batch AS batch
+                WHERE batch.owner_id=%(owner_id)s
+                  AND (batch.contact_id=%(contact_id)s OR dependency.id=ANY(%(navigation)s::uuid[]))
+                  AND batch.batch_id=dependency.id AND batch.status='recorded'
+                  AND (
+                    batch.source_kind='source_document' AND EXISTS (
+                      SELECT 1 FROM public.source_document AS source
+                      WHERE source.id=batch.source_id AND source.owner_id=batch.owner_id
+                        AND source.contact_id=batch.contact_id AND source.status='active'
+                    ) OR batch.source_kind='local_wechat_observation' AND EXISTS (
+                      SELECT 1 FROM public.local_wechat_observation AS observation
+                      WHERE observation.id=batch.source_id AND observation.owner_id=batch.owner_id
+                        AND observation.contact_id=batch.contact_id
+                    )
+                  )
+                UNION ALL
                 SELECT 1 FROM public.expression_preference AS preference
                 WHERE preference.owner_id = %(owner_id)s AND preference.id = dependency.id
                   AND preference.status = 'active'

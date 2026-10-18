@@ -55,6 +55,7 @@ export function LayeredMemoryPanel({ state, contactName, busy, read, manage, fac
   const [confirmed, setConfirmed] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const value = state.value;
+  const automatic = value?.runtimePolicy === 'verified_items';
   useEffect(() => { setConfirmed(false); setDeleting(false); }, [value?.contactId, value?.settingsGeneration]);
   const waiting = busy || state.phase === 'loading';
   return <section className="memory-section memory-overview layered-memory" aria-label="主题资料">
@@ -62,7 +63,7 @@ export function LayeredMemoryPanel({ state, contactName, busy, read, manage, fac
       <button className="button" disabled={waiting} onClick={() => void read()}>重新读取主题资料</button></header>
     {state.phase === 'loading' && <p role="status">正在核对当前范围的主题资料…</p>}
     {state.phase === 'error' && <p role="alert">主题资料读取失败或旧入口分页已过期，旧内容已撤下。请重新读取首屏。</p>}
-    {state.phase === 'idle' && <p>尚未读取主题资料。首次不会自动开启。</p>}
+    {state.phase === 'idle' && <p>尚未读取主题资料。新记忆会由系统自动整理。</p>}
     {value && <>
       <p>整理用途：{value.purpose}</p>
       <p>合格资料 {value.eligibleCount} 条 · 已覆盖 {value.coveredCount} 条 · 剩余 {value.remainingCount} 条</p>
@@ -72,7 +73,7 @@ export function LayeredMemoryPanel({ state, contactName, busy, read, manage, fac
         ? '当前工作模型调用预算已耗尽，整理已暂停。刷新不会重置预算。' : statusNames[value.status]}</p>
       {value.maintenancePending && <p role="status">资料已变化，等待后台更新。</p>}
       {value.remainingCount > 0 && value.coveredCount > 0 && <p>目前仅覆盖部分资料；剩余资料尚未整理。</p>}
-      <section className="memory-section-note" aria-label="质量资格">
+      {automatic ? <p className="memory-section-note">记忆会自动更新和整理，逐项核对来源后保存。你可以查看、纠错或停用；回复仅在你开启关系语境时参考这些记忆。</p> : <section className="memory-section-note" aria-label="质量资格">
         <QualityStage name="整理质量" value={value.quality.organization} />
         <QualityStage name="回复读取质量" value={value.quality.reply} />
         {value.quality.synthetic ? <p>仅用于受控合成验证，不代表真实模型质量已获资格。</p>
@@ -80,12 +81,12 @@ export function LayeredMemoryPanel({ state, contactName, busy, read, manage, fac
             : <p>真实资料自动加载已关闭；整理与回复读取质量均已验证后才可使用。</p>}
         {value.qualityStatus === 'unknown' && <p>质量资格未知，资料不会发给模型。</p>}
         {!value.quality.synthetic && value.quality.organization.status !== 'verified' && <p>当前不开放真实资料整理；来源仍有效的已有资料可供查看。</p>}
-      </section>
-      {(value.quality.synthetic || value.quality.organization.status === 'verified') && <div className="memory-section-note">
+      </section>}
+      {(automatic || value.quality.synthetic || value.quality.organization.status === 'verified') && <div className="memory-section-note">
           <p>本批上限：{value.budget.maxMemories} 条记忆、{value.budget.maxScenarios} 个主题、{value.budget.maxParagraphs} 段、{value.budget.maxCharacters} 字符。</p>
           <p>当前工作模型调用授权上限：{value.budget.maxModelCalls} 次。</p>
           {value.budget.maxProfileEntries !== undefined && <p>长期背景最多 {value.budget.maxProfileEntries} 项。</p>}</div>}
-      {(value.quality.synthetic || value.quality.organization.status === 'verified') && <><p>当前工作模型调用：累计已消耗 {value.budget.modelCallsUsed} 次 · 剩余 {value.budget.modelCallsRemaining} 次 · 上限 {value.budget.maxModelCalls} 次。</p>
+      {(automatic || value.quality.synthetic || value.quality.organization.status === 'verified') && <><p>当前工作模型调用：累计已消耗 {value.budget.modelCallsUsed} 次 · 剩余 {value.budget.modelCallsRemaining} 次 · 上限 {value.budget.maxModelCalls} 次。</p>
         <p className="memory-section-note">额度包含失败、超时及已预留后中断的调用。当前合法的新目标或新启用世代独立计额。</p></>}
       {value.enabled && value.workId && <p className="memory-section-note">每次继续仅推进一批，并追加模型调用额度；已消耗调用不会因继续或重启清零。</p>}
       <p>本范围{value.enabled ? '已开启' : '已关闭'} · 更新时间：{time(value.updatedAt)}</p>

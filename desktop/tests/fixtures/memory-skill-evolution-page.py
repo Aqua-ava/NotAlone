@@ -141,7 +141,6 @@ def _run(resources):
             if operation == "prepared":
                 result = {key: state[key] for key in ("source_id", "contact_text", "owner_text")}
                 result["draft_id"] = state["draft"]["draft_id"]
-                result["legal_upgrade_job_id"] = state["legal_upgrade"]["job_id"]
             elif operation == "observations":
                 published = fixture._get(fixture.backend, state["draft_path"])["published"]
                 fixture.assertIsNotNone(published)
@@ -154,21 +153,14 @@ def _run(resources):
                 result = {"used": reply["used_skill"] is not None,
                           "view": reply["used_skill"]["execution_view"],
                           "excluded_text_present": "合成排除方法甲" in str(fixture.reply_model.seen_calls[-1])}
-            elif operation == "remember_upgrade":
-                job_id = command["job_id"]
-                state["upgrade_job"] = fixture._get(
-                    fixture.backend, f"/api/memory-upgrades/{job_id}?contact_id={fixture.contact_id}")
-                fixture.assertEqual(state["upgrade_job"]["batches"][0]["state"], "applied")
-                state["upgrade_jobs"].append(state["upgrade_job"])
-                result = {"remembered": True}
             elif operation == "restart_backend":
                 fixture.backend.close()
                 fixture.backend = fixture._production_backend(fixture.owner_id)
                 expose_backend()
                 result = {"state": "restarted"}
             elif operation == "verify_deleted":
-                # 删除后首次观察直接读数据库，禁止先由升级或历史 GET 擦除副本。
-                fixture.assert_evolution_deleted(state, state["upgrade_job"])
+                # 删除后首次观察直接读数据库，禁止先由历史 GET 擦除副本。
+                fixture.assert_evolution_deleted(state)
                 result = {"verified": True}
             else:
                 raise ValueError("未知组合页面夹具操作。")

@@ -26,8 +26,6 @@ import { installExpressionPreferenceBridge } from './expression-preferences/brid
 import { expressionPreferenceDeletion } from './expression-preferences/deletion';
 import { installSkillLearningBridge } from './skill-learning/bridge';
 import { coordinateSkillLearningDeletion, coordinateSkillLearningSampleDeletion, coordinateSkillLearningSourceDeletion } from './skill-learning/deletion';
-import { installMemoryUpgradeBridge } from './memory-upgrade/bridge';
-import { observeMemoryUpgradeDeletion } from './memory-upgrade/deletion';
 import { installMemoryBridge } from './memory/bridge';
 import { installSourceDeletionBridge } from './sources/bridge';
 import { installBindingConsentBridge } from './bindings/bridge';
@@ -111,7 +109,6 @@ void app.whenReady().then(async () => {
   coordinateOwnerContextChanges(memory, replies);
   const styleSamples = installStyleSampleBridge(commands, backend, contacts, replies);
   const skillLearning = installSkillLearningBridge(commands, backend, contacts);
-  const memoryUpgrade = installMemoryUpgradeBridge(commands, backend, contacts);
   coordinateSkillLearningSampleDeletion(skillLearning, styleSamples);
   const preferences = installExpressionPreferenceBridge(commands, backend, contacts,
     coordinateSkillLearningDeletion(skillLearning, memory, replies,
@@ -128,7 +125,6 @@ void app.whenReady().then(async () => {
   });
   coordinateSkillLearningSourceDeletion(skillLearning, sources);
   sources.onDeletion((phase) => memory.sourceDeletionChanged(phase));
-  observeMemoryUpgradeDeletion(memory, memoryUpgrade, sources);
   installElectronCandidateCopy(windows, new CandidateCopyController(backend, contacts, replies,
     (selection, text) => styleSamples.recordCopied(selection, text)));
   backend.setConnectionChangePreparation(() => replies.prepareGenerationConnectionChange());

@@ -150,6 +150,7 @@ export interface LayeredMemory {
   contactId: string | null;
   settingsGeneration: number;
   enabled: boolean;
+  runtimePolicy: 'qualification' | 'verified_items';
   qualityStatus: 'unknown' | 'failed' | 'verified' | 'synthetic';
   quality: LayeredMemoryQuality;
   status: 'disabled' | 'ready' | 'empty' | 'failed' | 'updating' | 'stale' | 'blocked' | 'paused';

@@ -37,7 +37,7 @@ class LayeredMemoryManagementHttpTest(MemoryOverviewHttpFixture, unittest.TestCa
         self.assertEqual(len(state['scenarios']), 1)
         self.assertEqual(verifier.calls, 1)
 
-    def test_unknown_quality_keeps_confirmed_contact_scope_closed_to_models(self):
+    def test_missing_adapters_keep_default_maintenance_from_calling_models(self):
         contact, _, _ = self.import_contact("合成联系人范围。")
         status, manual = self.backend.request("/api/memories/manual-contact", {
             "contact_id": contact, "text": "双方共同参加合成课程。", "category": "common_fact",
@@ -48,7 +48,7 @@ class LayeredMemoryManagementHttpTest(MemoryOverviewHttpFixture, unittest.TestCa
         self.assertEqual(status, 200, result)
         state = result["layered_memory"]
         self.assertEqual((state["enabled"], state["quality_status"], state["eligible_count"]),
-                         (False, "unknown", 1))
+                         (True, "unknown", 1))
         status, enabled = self.backend.request(path + "/enable", {
             "settings_generation": state["settings_generation"], "purpose_confirmed": True,
         })

@@ -1,4 +1,4 @@
-"""有限主题整理的管理入口；未知质量资格不会调用模型。"""
+"""有限主题整理的管理入口；逐项核验维护与显式质量评测分别执行。"""
 
 from notalone.memory.organization_isolation import isolate_proposal, select_verified
 
@@ -24,7 +24,8 @@ from notalone.application.organization_call import (
 class LayeredMemoryService:
     def __init__(self, store, *, proposer=None, verifier=None, synthetic=False,
                  budget=None, model_priority=None, call_timeout_seconds=30.0, task_host=None, dispatcher=None,
-                 profile_proposer=None, profile_verifier=None, quality=None, synthetic_quality_required=False, adapter_close=None):
+                 profile_proposer=None, profile_verifier=None, quality=None, synthetic_quality_required=False, adapter_close=None,
+                 runtime_policy="qualified_suite"):
         if (not isinstance(call_timeout_seconds, (int, float)) or isinstance(call_timeout_seconds, bool)
                 or not math.isfinite(call_timeout_seconds) or not 0 < call_timeout_seconds <= 120):
             raise ValueError("整理调用必须有不超过120秒的有限等待。")
@@ -36,7 +37,12 @@ class LayeredMemoryService:
             organization_contract=OrganizationQualityContract(budget=self._budget))
         if type(synthetic_quality_required) is not bool or synthetic_quality_required and not synthetic:
             raise ValueError('受控资格链仅允许显式隔离合成装配。')
-        self._quality_required = not synthetic or synthetic_quality_required
+        if synthetic_quality_required and runtime_policy != 'qualified_suite':
+            raise ValueError('显式评测资格要求不能被日常维护策略覆盖。')
+        if runtime_policy not in {"qualified_suite", "verified_items"}:
+            raise ValueError("未知的整理运行策略。")
+        self.runtime_policy = runtime_policy
+        self._quality_required = (not synthetic or synthetic_quality_required) and runtime_policy == "qualified_suite"
         self._call_timeout_seconds = call_timeout_seconds
         self._task_host = task_host
         self._change_feed = None
@@ -44,7 +50,7 @@ class LayeredMemoryService:
         self._maintenance_stopped = False
         self._adapter_close = adapter_close
         self._dispatcher = dispatcher
-        self._contract = "scenario-v3:synthetic-only:deadline-v1:coverage-v1:correction-v1"
+        self._contract = "scenario-v3:deadline-v1:coverage-v1:correction-v1:" + runtime_policy
         self._store, self._proposer, self._verifier = store, proposer, verifier
         if synthetic:
             store.require_synthetic_database()
@@ -83,7 +89,7 @@ class LayeredMemoryService:
         from notalone.memory.organization_sdk import actual_organization_adapters
         ports = (self._proposer, self._verifier, self._profile_proposer, self._profile_verifier)
         contract = self._quality.organization_contract
-        if not actual_organization_adapters(ports):
+        if not actual_organization_adapters(ports, runtime_policy=self.runtime_policy):
             return False
         return (contract.provider == contract.verifier_provider == 'deepseek'
             and contract.budget == self._budget
@@ -98,7 +104,7 @@ class LayeredMemoryService:
         return nullcontext(lambda connection: None) if not self._quality_required else self._quality.publication_guard(owner_id, snapshot)
 
     def _read_available(self, owner_id):
-        return (self._synthetic and not self._quality_required) or self._quality.status(owner_id)['automatic_use_allowed']
+        return self._reading_receipt(owner_id) is not None
 
     def attach_task_host(self, task_host):
         self._task_host=task_host
@@ -161,6 +167,7 @@ class LayeredMemoryService:
         limit = job["model_call_limit"] if job else self._budget.max_model_calls
         return {"schema_version": 2, "scope_kind": "owner" if scope.contact_id is None else "contact", "contact_id": str(scope.contact_id) if scope.contact_id is not None else None,
                 "settings_generation": state["settings_generation"], "enabled": state["enabled"],
+                "runtime_policy": "qualification" if self.runtime_policy == "qualified_suite" else self.runtime_policy,
                 "quality_status": "synthetic" if self._synthetic else self._quality.status(scope.owner_id)["organization"]["status"],
                 "quality": self._quality.status(scope.owner_id, synthetic=self._synthetic),
                 "status": state["status"], "eligible_count": len(entries), "covered_count": covered,
@@ -321,7 +328,7 @@ class LayeredMemoryService:
             self._store.reserve_model_call(work)
             phase = ('l3' if hasattr(work, 'scenario_version_ids') else 'l2') + ('_proposal' if operation == 'propose' else '_verification')
             context = (nullcontext() if self._synthetic else organization_request_context(
-                check, lambda request, response, route: self._quality.check_response_identity(work.scope.owner_id, snapshot, phase, request, response, route),
+                check, lambda request, response, route: self._check_response_identity(work.scope.owner_id, snapshot, phase, request, response, route),
                 deadline, self._budget))
             with context:
                 value = call(deadline)
@@ -329,10 +336,31 @@ class LayeredMemoryService:
             return value
         return bounded_organization_call(invoke, priority=self._priority, guard=check, timeout_seconds=self._call_timeout_seconds)
 
+    def default_reply_budgets(self):
+        """逐项核验资料的有限默认读取；关系语境开关仍由回复流程控制。"""
+        if self.runtime_policy != 'verified_items' or not (self._synthetic or self._real_adapters):
+            return None
+        from notalone.reply.layered_context import LayeredReplyBudget, ScenarioReadBudget
+        return (LayeredReplyBudget(4, 4, 2400, ScenarioReadBudget(2, 8, 4000)),
+                LayeredReplyBudget(4, 4, 1600, ScenarioReadBudget(2, 8, 2400)))
+
+    def _check_response_identity(self, owner_id, snapshot, phase, request, response, route):
+        if self._quality_required:
+            self._quality.check_response_identity(owner_id, snapshot, phase, request, response, route)
+            return
+        # 日常维护不借用评测报告的指纹；仍核对实际请求模型和有身份的完整响应。
+        contract = self._quality.organization_contract
+        expected = contract.verifier_model if phase.endswith('verification') else contract.request_model
+        if request.get('model') != expected or not isinstance(response.get('model'), str) or not response['model']:
+            raise LayeredMemoryConflict('整理模型请求或响应身份不完整。')
+
     def configure_reply(self, contract, source):
         self._quality.configure_reply(contract, source)
 
     def _reading_receipt(self, owner_id, *, connection=None):
+        if self.runtime_policy == 'verified_items' and self._organization_available(owner_id):
+            # 策略身份不是评测通过回执；实际版本与来源仍在capture/validate中复验。
+            return 'verified-items-v1:' + self._quality.organization_contract.identity
         if self._synthetic and not self._quality_required:
             return 'synthetic'
         return self._quality.reading_receipt(owner_id, connection=connection)
@@ -362,7 +390,7 @@ class LayeredMemoryService:
 
     def reading_guard(self, context):
         materials = [item for item in (context.layered_context, context.owner_layered_context) if item is not None]
-        if not materials or self._synthetic and not self._quality_required:
+        if not materials or self.runtime_policy == 'verified_items' or self._synthetic and not self._quality_required:
             return nullcontext()
         receipts = {item.snapshot.quality_receipt for item in materials}
         if len(receipts) != 1:
@@ -370,6 +398,8 @@ class LayeredMemoryService:
         return self._quality.reading_guard(context.scope.owner_id, receipts.pop())
 
     def validate_reply_model(self, prepared, model, profile, contact_budget, owner_budget):
+        if self.runtime_policy == 'verified_items':
+            return
         if self._synthetic and not self._quality_required:
             return
         if prepared.layered_context is not None or prepared.owner_layered_context is not None:
@@ -379,6 +409,8 @@ class LayeredMemoryService:
                 raise LayeredMemoryConflict('实际回复配置已变化，请重新核验读取资格。')
 
     def check_reply_response(self, prepared, model, message):
+        if self.runtime_policy == 'verified_items':
+            return
         if self._synthetic and not self._quality_required:
             return
         if prepared.layered_context is not None or prepared.owner_layered_context is not None:

@@ -66,11 +66,11 @@ kind枚举：ongoing_responsibility=持续责任；shared_life_constraint=共同
 SCENARIO_ITEM_VERIFICATION_PROMPT = VERIFICATION_PROMPT + '\n改用逐主题返回：{"items":[{"index":0,"sha256":"复制target摘要","supported":true,"reasons":[]}]}。每个主题单独判断；不得以一条失败拒绝其他主题。'
 
 
-def actual_organization_adapters(ports):
+def actual_organization_adapters(ports, *, runtime_policy="qualified_suite"):
     """实际候选四Port的统一准入；不把受控传输声明当供应商证明。"""
     exact = (DeepSeekOrganizationProposal, DeepSeekOrganizationVerification,
              DeepSeekOrganizationProposal, DeepSeekOrganizationVerification)
-    return len(ports) == len(exact) and all(type(adapter) is expected and adapter.actual_candidate
+    return len(ports) == len(exact) and all(type(adapter) is expected and (adapter.runtime_candidate if runtime_policy == "verified_items" else adapter.actual_candidate)
         for adapter, expected in zip(ports, exact))
 
 
@@ -85,6 +85,12 @@ class _DeepSeekOrganizationAdapter:
         from notalone.reply.adapters.deepseek_provider import is_official_deepseek_flash
         return bool(is_official_deepseek_flash(self.model) and self.model.max_retries == 0
                     and self.transport.actual_network)
+
+    @property
+    def runtime_candidate(self):
+        from langchain_deepseek import ChatDeepSeek
+        return (type(self.model) is ChatDeepSeek and bool(self.model.model_name)
+            and self.model.max_retries == 0 and self.transport.actual_network)
 
     def _invoke(self, prompt, payload, deadline):
         messages = [SystemMessage(content=prompt), HumanMessage(content=json.dumps(payload, ensure_ascii=False))]
@@ -154,7 +160,7 @@ class DeepSeekOrganizationVerification(_DeepSeekOrganizationAdapter):
         return result['supported']
 
 
-def build_deepseek_organization_adapters(*, budget):
+def build_deepseek_organization_adapters(*, budget, runtime_policy="qualified_suite"):
     """正式整理与显式评测共用工厂；构造不发请求，凭据不输出。"""
     import httpx
     from notalone.reply.adapters.deepseek_provider import build_deepseek_model
@@ -163,7 +169,8 @@ def build_deepseek_organization_adapters(*, budget):
     client = httpx.Client(transport=transport, timeout=30, follow_redirects=False, trust_env=False)
     try:
         model = build_deepseek_model(max_retries=0, timeout_seconds=30, http_client=client,
-            extra_body={'thinking': {'type': 'disabled'}, 'reasoning_effort': 'none'})
+            extra_body=None if runtime_policy == 'verified_items' else
+                {'thinking': {'type': 'disabled'}, 'reasoning_effort': 'none'})
     except Exception:
         client.close()
         raise
@@ -171,7 +178,7 @@ def build_deepseek_organization_adapters(*, budget):
     adapters = [cls(model, layer=layer, budget=budget, transport=transport) for cls, layer in (
         (DeepSeekOrganizationProposal, 'l2'), (DeepSeekOrganizationVerification, 'l2'),
         (DeepSeekOrganizationProposal, 'l3'), (DeepSeekOrganizationVerification, 'l3'))]
-    if not all(adapter.actual_candidate for adapter in adapters):
+    if not actual_organization_adapters(adapters, runtime_policy=runtime_policy):
         client.close()
         raise ValueError('本轮评测只允许已明确授权的官方DeepSeek候选与单次HTTP传输。')
     return tuple(adapters), client.close

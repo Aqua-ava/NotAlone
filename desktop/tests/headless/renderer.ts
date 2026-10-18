@@ -8,7 +8,6 @@ import { createMemoryBridge } from '../../src/preload/memory';
 import { createReplyBridge } from '../../src/preload/reply';
 import { createStyleSampleBridge } from '../../src/preload/style-samples';
 import { createExpressionPreferenceBridge } from '../../src/preload/expression-preferences';
-import { createMemoryUpgradeBridge } from '../../src/preload/memory-upgrade';
 import { createBindingConsentBridge } from '../../src/preload/binding-consent';
 import { createSyncControlBridge } from '../../src/preload/sync-control';
 import { createBackendBridge } from '../../src/preload/backend';
@@ -52,7 +51,6 @@ const bridge: AppBridge = {
   styleSamples: createStyleSampleBridge(transport),
   expressionPreferences: createExpressionPreferenceBridge(transport),
   skillLearning: createSkillLearningBridge(transport),
-  memoryUpgrade: createMemoryUpgradeBridge(transport),
   openManager: () => transport.invoke('page:open-manager'), openHelper: () => transport.invoke('page:open-helper'), hideWindow: unsupported,
   getDesktopSettings: unsupported, setHelperShortcut: unsupported, setHelperPinned: unsupported, onDesktopSettingsChanged: noEvents,
   setup: { getState: unsupported, refresh: unsupported, initializeOwner: unsupported, saveDeepSeekKey: unsupported, saveOfficialDeepSeekKey: unsupported,

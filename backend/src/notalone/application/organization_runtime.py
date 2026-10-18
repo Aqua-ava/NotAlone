@@ -1,4 +1,4 @@
-"""正式后端的显式operator装配；可信来源与实际候选沿同一资格门禁。"""
+"""正式后端默认逐项核验维护；显式operator配置保留独立评测模式。"""
 
 import os
 from contextlib import contextmanager
@@ -45,7 +45,26 @@ def build_layered_memory_service(database_url, *, model_priority=None):
     store = PostgresLayeredMemoryStore(database_url)
     configured = os.environ.get('NOTALONE_ORGANIZATION_QUALITY_CONFIG')
     if not configured:
-        return LayeredMemoryService(store, model_priority=model_priority)
+        from notalone.memory.organization_sdk import build_deepseek_organization_adapters
+        budget = OrganizationBudget(max_model_calls=4, max_characters=32000)
+        contract = OrganizationQualityContract(provider='deepseek', request_model='deepseek-flash',
+            verifier_provider='deepseek', verifier_model='deepseek-flash', budget=budget)
+        quality = OrganizationQualityService(PostgresOrganizationQualityStore(store), organization_contract=contract)
+        try:
+            ports, close = build_deepseek_organization_adapters(budget=budget, runtime_policy='verified_items')
+        except (ValueError, RuntimeError):
+            return LayeredMemoryService(store, budget=budget, model_priority=model_priority,
+                runtime_policy='verified_items', quality=quality)
+        contract = OrganizationQualityContract(provider='deepseek', request_model=ports[0].model.model_name,
+            verifier_provider='deepseek', verifier_model=ports[1].model.model_name, budget=budget)
+        quality = OrganizationQualityService(PostgresOrganizationQualityStore(store), organization_contract=contract)
+        try:
+            return LayeredMemoryService(store, proposer=ports[0], verifier=ports[1],
+                profile_proposer=ports[2], profile_verifier=ports[3], budget=budget,
+                model_priority=model_priority, adapter_close=close, runtime_policy='verified_items', quality=quality)
+        except Exception:
+            close()
+            raise
     path = Path(configured)
     if not path.is_absolute():
         raise ValueError('整理operator配置须是明确绝对路径。')

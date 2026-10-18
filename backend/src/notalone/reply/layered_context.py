@@ -10,7 +10,7 @@ from notalone.reply.errors import ReplyContextInvariantError
 
 @dataclass(frozen=True, slots=True)
 class ScenarioReadBudget:
-    """正文工具的显式合成额度，不借用历史或Skill预算。"""
+    """正文工具的有限额度，不借用历史或Skill预算。"""
 
     calls: int
     paragraphs: int
@@ -28,7 +28,7 @@ class ScenarioReadBudget:
 
 @dataclass(frozen=True, slots=True)
 class LayeredReplyBudget:
-    """只供显式合成验收；生产未标定，不能隐式启用。"""
+    """回复中的有限整理资料预算；资料资格与关系语境开关独立核对。"""
 
     profile_entries: int
     directory_entries: int
@@ -57,7 +57,8 @@ def select_material(snapshot: LayeredMemorySnapshot, budget: LayeredReplyBudget)
         "settings_generation": snapshot.settings_generation,
         "organization_generation": snapshot.organization_generation,
         "profile_version_id": str(snapshot.profile_version_id) if snapshot.profile_version_id else None,
-        "profile_entries": [], "directory": [], "read_policy": "synthetic-scoped-layered-v3",
+        "profile_entries": [], "directory": [], "read_policy": ("verified-items-scoped-layered-v1"
+            if (snapshot.quality_receipt or "").startswith("verified-items-v1:") else "synthetic-scoped-layered-v3"),
         "scenario_read_budget": budget.scenario_read.to_payload() if budget.scenario_read else None,
         "budget": {"profile_entries": budget.profile_entries,
                    "directory_entries": budget.directory_entries, "characters": budget.characters}}

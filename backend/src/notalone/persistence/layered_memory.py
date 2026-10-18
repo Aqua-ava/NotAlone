@@ -70,8 +70,13 @@ class PostgresLayeredMemoryStore(LayeredProfileStore, LayeredCorrectionStore):
                                        (scope.owner_id, scope.contact_id)).fetchone()
             entries = self.eligible(overview)
             current = {item["memory_id"]: item for item in self._manifest(connection, scope, entries)}
-            batches = connection.execute("SELECT id,input_manifest FROM public.layered_memory_batch "
-                "WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s", (scope.owner_id,scope.contact_id)).fetchall()
+            # 历史批次留作审计；只有当前发布集合的依据变化才能撤下当前工作状态。
+            batches = connection.execute("SELECT DISTINCT b.id,b.input_manifest FROM public.layered_memory_batch b "
+                "JOIN public.scenario_document_version v ON v.batch_id=b.id "
+                "JOIN public.layered_memory_generation g ON v.id=ANY(g.scenario_version_ids) "
+                "AND g.owner_id=v.owner_id AND g.contact_id IS NOT DISTINCT FROM v.contact_id "
+                "WHERE g.owner_id=%s AND g.contact_id IS NOT DISTINCT FROM %s "
+                "AND g.organization_generation=%s", (scope.owner_id,scope.contact_id,state['organization_generation'])).fetchall()
             erased = False
             for batch in batches:
                 if any(current.get(item["memory_id"]) != item for item in batch["input_manifest"]):
@@ -263,14 +268,14 @@ class PostgresLayeredMemoryStore(LayeredProfileStore, LayeredCorrectionStore):
             dependencies.update(self.correction_dependency_ids(connection, scope))
             task_id, execute = enqueue_coverage(connection,scope,state,manifest,dependencies,contract,budget,
                 action=action,revision=revision,profile_required=profile_required)
-            self._revoke_previous_profile(connection, scope, state, task_id, execute)
+            self._revoke_previous_profile(connection, scope, state, overview, task_id, execute)
             return task_id, execute
 
     def start_change_feed(self, owner_id, callback):
         from notalone.persistence.layered_change_feed import LayeredChangeFeed
         return LayeredChangeFeed(self._database_url, owner_id, callback)
 
-    def _revoke_previous_profile(self, connection, scope, state, task_id, execute):
+    def _revoke_previous_profile(self, connection, scope, state, overview, task_id, execute):
         generation, rows = self.generation_rows(connection,scope,state['organization_generation'])
         job = connection.execute("SELECT pending_receipt FROM public.layered_memory_job WHERE task_id=%s",(task_id,)).fetchone()
         if execute and generation and generation['profile_version_id']:
@@ -279,8 +284,13 @@ class PostgresLayeredMemoryStore(LayeredProfileStore, LayeredCorrectionStore):
                 (generation['profile_version_id'],)).fetchone()
             # 新目标、重开或下一批开始即撤下受影响画像；仅补成功回执时保持原集合。
             if not job['pending_receipt'] or not profile_task or profile_task['task_id']!=task_id:
+                current = {item['memory_id']: item for item in self._manifest(connection, scope, self.eligible(overview))}
+                valid_rows = [row for row in rows if all(current.get(item['memory_id']) == item
+                    for item in row['input_manifest'])]
+                # 纠错后的旧版本只留审计；当前集合移除失效主题，允许空集合等待重建。
                 self.publish_generation_in_transaction(connection,scope,
-                    expected_generation=state['organization_generation'],scenario_version_ids=[row['id'] for row in rows])
+                    expected_generation=state['organization_generation'],
+                    scenario_version_ids=[row['id'] for row in valid_rows], allow_empty=True)
 
     def maintenance_due(self, owner_id):
         with psycopg.connect(self._database_url, row_factory=dict_row) as connection:
@@ -318,7 +328,7 @@ class PostgresLayeredMemoryStore(LayeredProfileStore, LayeredCorrectionStore):
             dependencies.update(self.correction_dependency_ids(connection, scope))
             task_id, execute = enqueue_coverage(connection, scope, state, manifest, dependencies,
                 contract, budget, action='refresh', revision=None, profile_required=profile_required)
-            self._revoke_previous_profile(connection, scope, state, task_id, execute)
+            self._revoke_previous_profile(connection, scope, state, overview, task_id, execute)
             connection.execute("UPDATE public.layered_memory_job SET target_dirty_revision=%s WHERE task_id=%s",
                                (state['dirty_revision'], task_id))
             connection.execute("UPDATE public.layered_memory_state SET next_due_at=NULL WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s",
@@ -473,7 +483,7 @@ class PostgresLayeredMemoryStore(LayeredProfileStore, LayeredCorrectionStore):
             (scope.owner_id,scope.contact_id,manifest["scenario_version_ids"])).fetchall()
         return manifest, rows
 
-    def publish_generation_in_transaction(self, connection, scope, *, expected_generation, scenario_version_ids, profile_version_id=None):
+    def publish_generation_in_transaction(self, connection, scope, *, expected_generation, scenario_version_ids, profile_version_id=None, allow_empty=False):
         """caller已持范围锁；从真实版本推导完整依赖并原子推进唯一集合。"""
         state = connection.execute("SELECT * FROM public.layered_memory_state WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s",
             (scope.owner_id,scope.contact_id)).fetchone()
@@ -483,7 +493,7 @@ class PostgresLayeredMemoryStore(LayeredProfileStore, LayeredCorrectionStore):
         rows = connection.execute("SELECT v.*,b.input_manifest,b.dependency_ids FROM public.scenario_document_version v "
             "JOIN public.layered_memory_batch b ON b.id=v.batch_id WHERE v.owner_id=%s AND v.contact_id IS NOT DISTINCT FROM %s AND v.id=ANY(%s)",
             (scope.owner_id,scope.contact_id,ids)).fetchall()
-        if (not ids or len(set(ids)) != len(ids) or len(rows) != len(ids)
+        if (not ids and not allow_empty or len(set(ids)) != len(ids) or len(rows) != len(ids)
                 or len({r["scenario_id"] for r in rows}) != len(rows)):
             raise LayeredMemoryConflict("一致集合的主题版本无效。")
         overview = (self._overview.read_owner_in_transaction(connection, scope.owner_id, organization=True)

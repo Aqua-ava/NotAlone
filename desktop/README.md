@@ -254,11 +254,12 @@ node tests/headless/rewrite-lifecycle-check.mjs          # 实际未知命令故
 
 有限合成入口要求 `NOTALONE_LEARNING_EVIDENCE_DIR` 指向仓库外700目录，再执行 `npm run test:pages -- --case skill-learning --timeout-seconds 240`。父进程固定关键模块路径与SHA，隔离Python夹具核对实际加载路径、当前连续迁移和重复0；页面保留实际执行artifact与浏览器响应原字节。09本票运行的001–064结果、模型调用数与资源收尾见[09集成任务](../.scratch/memory-skill-integration-preparation/issues/09-learning-drafts.md)。脚本模型验证不证明真实模型质量、Electron或微信验收。
 
-### 版本化旧资料升级页面（10）
+### 旧资料升级退役
 
-管理窗口“旧资料升级”允许明确选择当前联系人或本人范围、消息与调用预算，先查看新旧差异，再勾选批次确认应用。比较卡片展示冻结算法协议和指纹；旧未知身份保持可回看，重新比较后才能应用。进度支持取消、按剩余预算恢复、合法撤销和删除工作副本；未知响应通过刷新重试原动作。原人工资料与旧版未知证明保留，来源或资料删除同步撤下受影响比较。
+旧资料升级功能已按用户决定移除，不再提供页面、IPC、HTTP 或后台执行入口，也不迁入记忆管理。
+既有记忆继续由记忆页面管理；历史升级副本仍受来源和资料删除规则约束。
 
-有限合成入口要求 `NOTALONE_UPGRADE_EVIDENCE_DIR` 指向仓库外700目录，再执行 `npm run test:pages -- --case memory-upgrade --timeout-seconds 240`。该组使用生产Main/preload/React控制器、隔离HTTP/PG和精确001–065迁移，记录实际加载的关键模块及执行资源摘要、数据库归属与退出结果；仅受控模型脚本替换外部调用。实际验证与未验范围见[10集成任务](../.scratch/memory-skill-integration-preparation/issues/10-versioned-memory-upgrade.md)，页面入口不代表Electron或微信验收。
+正常消息导入或已授权同步后，系统在后台提取并逐项核验记忆，自动采纳、更新或合并合格结果。新记忆自动触发联系人／本人主题资料与长期背景整理；无需先打开页面启用或准备外置评测目录。用户明确停用的范围保持停用，来源不足或人工保护的条目不自动写入。回复只在已开启关系语境时参考对应资料；实际验收见[本次规格](../.scratch/automatic-memory-maintenance/spec.md)。
 
 ### 同输入审核与范围发布页面（11）
 

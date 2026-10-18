@@ -2,6 +2,8 @@
 
 import hashlib
 import json
+import re
+from copy import deepcopy
 import threading
 import time
 from contextlib import contextmanager
@@ -9,21 +11,63 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from uuid import UUID, uuid4
 from langchain_core.messages import HumanMessage
+from langchain_core.outputs import ChatGeneration, ChatResult
+from tests.integration.server.core_business_flow_support import tool_response
 
 import psycopg
 
 from tests.integration.server import test_skill_learning as learning
 from tests.integration.server import test_skill_review as review
-from tests.integration.server.test_memory_upgrade import UpgradeHttpSupport
 from tests.integration.server.memory_skill_evolution_models import EvolutionMemoryModel
 
 
+class DirectEvolutionMemoryModel(EvolutionMemoryModel):
+    """合成模型按正式场景协议输出；核验、裁决与学习仍走原模型边界。"""
+
+    def _generate(self, messages, stop=None, run_manager=None, **kwargs):
+        requested = tuple(tool["function"]["name"] for tool in kwargs.get("tools", ()))
+        if requested != ("DirectMemoryExtractionOutput",):
+            return super()._generate(messages, stop, run_manager, **kwargs)
+        self.wait_for_response()
+        with self.call_lock:
+            if self.started_calls >= self.model_call_limit:
+                raise AssertionError("同源组合模型达到显式调用上限。")
+            self.started_calls += 1
+            self.seen_calls.append(messages)
+            self.requested_tools.append(requested)
+            self.record_model_payload(messages, deepcopy(kwargs))
+        facts = []
+        for message_id, occurred, sender, raw in re.findall(
+            r"\[target\] \[message_id=([0-9a-f-]+)\] occurred_at=(\S+) sender=(contact|self): (.*)",
+            str(messages[-1].content),
+        ):
+            kind = self.proposals.get(raw, {}).get("kind", "not_memory")
+            if kind == "not_memory":
+                continue
+            temporary = kind == "momentary_state"
+            subject = "联系人" if sender == "contact" else "用户"
+            facts.append({
+                "text": (f"截至{occurred[:10]}，" if temporary else "") + f"{subject}原话：“{raw}”",
+                "category": "recent_state" if temporary else kind,
+                "subject": sender, "topic": "other", "source_message_ids": [message_id],
+                "confidence": 0.95, "risk_flags": [], "valid_at": occurred if temporary else None,
+                "invalid_at": ((datetime.fromisoformat(occurred).replace(hour=0, minute=0, second=0)
+                                + timedelta(days=1)).isoformat() if temporary else None),
+                "speech_act": "assertion", "assertion_status": "asserted",
+                "figurative_type": "literal", "alternatives": [],
+                "interpretation_reason": "发送者直接陈述自己的状态或偏好。", "event": None,
+            })
+        return ChatResult(generations=[ChatGeneration(message=tool_response(
+            "DirectMemoryExtractionOutput", {"scenes": [{"scene_name": "合成饮茶与近况", "memories": facts}]},
+        ))])
+
+
 class EvolutionHttpSupport:
-    """仅准备合成资料；批准、停用、升级与删除仍须明确公开命令。"""
+    """仅准备合成资料；批准、停用与删除仍须明确公开命令。"""
 
     production_model_wiring = True
     dimension_release = None
-    extraction_model_factory = EvolutionMemoryModel
+    extraction_model_factory = DirectEvolutionMemoryModel
     reply_model_factory = review.SkillReviewModel
     _bind = learning.SkillLearningHttpTest._bind
     _configure = learning.SkillLearningHttpTest._configure
@@ -32,12 +76,6 @@ class EvolutionHttpSupport:
     _compare = review.SkillReviewHttpTest._compare
     _approve = review.SkillReviewHttpTest._approve
     _delete_source = learning.SkillLearningHttpTest._delete_source
-    _query = UpgradeHttpSupport._query
-    _prepare = UpgradeHttpSupport._prepare
-    _wait = UpgradeHttpSupport._wait
-    _action = UpgradeHttpSupport._action
-    _assert_workflow_erased = UpgradeHttpSupport._assert_workflow_erased
-    _trace_details = UpgradeHttpSupport._trace_details
 
     def setUp(self):
         super().setUp()
@@ -96,6 +134,14 @@ class EvolutionHttpSupport:
         return {**imported, "source": source,
                 "messages": {text: next(item for item in messages if item["text"] == text) for _, text in rows}}
 
+    def _automatic_memory(self, text, *, owner=False):
+        path = "/api/memories/owner" if owner else f"/api/contacts/{self.contact_id}/memories"
+        memories = self._get(self.backend, path)["memories"]
+        matching = [memory for memory in memories if memory["text"] == text]
+        self.assertEqual(len(matching), 1, memories)
+        self.assertEqual(matching[0]["adoption_method"], "auto")
+        return matching[0]
+
     def _candidate_text(self, text):
         candidates = self._get(self.backend, f"/api/contacts/{self.contact_id}/memory-candidates")["candidates"]
         selected = [candidate for candidate in candidates if candidate["text"] == text]
@@ -147,85 +193,8 @@ class EvolutionHttpSupport:
                 "memory_candidate", "confirmed_memory", "owner_memory", "memory_extraction_watermark",
             )}
 
-    def _apply_initial_legal_upgrade(self, root, latent_raw):
-        """任何人工决定之前，用默认质量门明确应用一条合法新 pending。"""
-        self.assertIsNone(self.dimension_release)
-        before = self._evolution_authority()
-        self.assertEqual(len(before["memory_candidate"]), 3)
-        self.assertEqual(before["confirmed_memory"], [])
-        self.assertEqual(before["owner_memory"], [])
-        target = root["messages"][latent_raw]["message_id"]
-        text = "联系人原话：“我刚到家。”"
-        self.extraction_model.proposals[latent_raw] = {"kind": "event", "stage": "occurred"}
-        original_traces = {trace["trace_id"] for trace in self._trace_details()}
-        original_calls = len(self.extraction_model.requested_tools)
-        prepared, prepare_command = self._prepare(limit=20, size=20, calls=12)
-        ready = self._wait(prepared)
-        self.assertEqual(self._evolution_authority(), before)
-        self.assertEqual(ready["algorithm"]["configuration"]["dimension_gate_enabled"], True)
-        self.assertEqual(ready["algorithm"]["configuration"]["dimension_allowed"], [])
-        self.assertEqual(ready["model_calls_used"], 2)
-        self.assertEqual(self.extraction_model.requested_tools[original_calls:], [
-            ("GroundedMemoryLabels",), ("SourceVerificationOutput",),
-        ])
-        actions = ready["batches"][0]["comparison"]["actions"]
-        self.assertEqual(len(actions), 1)
-        action = actions[0]
-        self.assertEqual((action["kind"], action["new"]["text"], action["new"]["source_ids"]),
-                         ("pending", text, [target]))
-        self.assertEqual(action["new"]["event"]["stage"], "occurred")
-        previews = [trace for trace in self._trace_details() if trace["trace_id"] not in original_traces]
-        self.assertEqual(len(previews), 1)
-        preview = previews[0]
-        raw = [event for event in preview["events"] if event["stage"] == "candidate_raw"
-               and event["payload"]["fields"]["text"] == text]
-        self.assertEqual(len(raw), 1)
-        planned = [event for event in preview["events"]
-                   if event["stage"] == "upgrade_preview_write_result"
-                   and event["payload"].get("operation") == "create_pending"]
-        self.assertEqual(len(planned), 1)
-        self.assertEqual(planned[0]["candidate_trace_id"], raw[0]["candidate_trace_id"])
-        self.assertEqual(planned[0]["payload"]["commit_status"], "planned")
-
-        (status, queued), approval = self._action(ready, "apply")
-        self.assertEqual(status, 200, queued)
-        applied = self._wait(ready, states=("applied",))
-        candidate = self._candidate_text(text)
-        self.assertEqual((candidate["candidate_id"], candidate["status"], candidate["source_ids"]),
-                         (action["candidate_id"], "pending", [target]))
-        after = self._evolution_authority()
-        self.assertEqual(len(after["memory_candidate"]), len(before["memory_candidate"]) + 1)
-        for table in ("confirmed_memory", "owner_memory", "memory_extraction_watermark"):
-            self.assertEqual(after[table], before[table], table)
-        with psycopg.connect(self.database_url) as connection:
-            records = connection.execute(
-                "SELECT applied_records FROM public.memory_upgrade_batch WHERE owner_id=%s AND id=%s",
-                (self.owner_id, UUID(applied["batches"][0]["batch_id"])),
-            ).fetchone()[0]
-            saved = connection.execute(
-                "SELECT to_jsonb(row) FROM public.memory_candidate row "
-                "WHERE owner_id=%s AND contact_id=%s AND id=%s",
-                (self.owner_id, self.contact_id, UUID(candidate["candidate_id"])),
-            ).fetchone()[0]
-        self.assertEqual(len(records), 1)
-        self.assertEqual((records[0]["table"], records[0]["id"]),
-                         ("memory_candidate", candidate["candidate_id"]))
-        digest = hashlib.sha256(json.dumps(saved, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
-        self.assertEqual(records[0]["digest"], digest)
-        completed = [trace for trace in self._trace_details()
-                     if trace["trace_id"] not in original_traces | {preview["trace_id"]}]
-        self.assertEqual(len(completed), 1)
-        writes = [event for event in completed[0]["events"]
-                  if event["stage"] in ("upgrade_preview_write_result", "write_result")
-                  and event["payload"].get("operation") == "create_pending"]
-        self.assertEqual([(event["stage"], event["payload"]["commit_status"]) for event in writes],
-                         [("upgrade_preview_write_result", "planned"), ("write_result", "committed")])
-        self.assertEqual({event["candidate_trace_id"] for event in writes}, {raw[0]["candidate_trace_id"]})
-        self.assertEqual(len(self.extraction_model.requested_tools), original_calls + 2)
-        return applied, approval, prepare_command, candidate
-
     def prepare_evolution(self):
-        """先明确应用合法升级，再将共同来源推进待审核；不发布、停用或删除。"""
+        """导入后沿正式提取与核验，再将共同来源推进待审核；不发布或删除。"""
         contact_raw, owner_raw = "我平时喜欢合成热茶。", "本人喜欢合成热茶。"
         history_raw, latent_raw = "今天我在加班。", "我刚到家。"
         self.extraction_model.proposals.update({
@@ -238,9 +207,8 @@ class EvolutionHttpSupport:
             ((False, contact_raw), (True, owner_raw), (False, history_raw), (False, latent_raw)),
             when=datetime(2025, 1, 1, tzinfo=timezone.utc),
         )
-        legal_upgrade, legal_approval, legal_prepare, legal_candidate = self._apply_initial_legal_upgrade(root, latent_raw)
-        original_contact = self._confirm_candidate(self._candidate_text(f"联系人原话：“{contact_raw}”"))
-        original_owner = self._confirm_candidate(self._candidate_text(f"用户原话：“{owner_raw}”"))
+        original_contact = self._automatic_memory(f"联系人原话：“{contact_raw}”")
+        original_owner = self._automatic_memory(f"用户原话：“{owner_raw}”", owner=True)
         historical = self._confirm_candidate(self._candidate_text(f"截至2025-01-01，联系人原话：“{history_raw}”"))
         self.assertEqual(historical["timing"]["current_status"], "historical")
         session = self._ok(f"/api/contacts/{self.contact_id}/assistant-session/default", {})
@@ -249,14 +217,9 @@ class EvolutionHttpSupport:
 
         update_raw = "合成新依据：我现在喜欢合成温茶。"
         self.extraction_model.proposals[update_raw] = {"kind": "preference"}
+        self.extraction_model.adjudication_action = "update"
         updated = self._import_evolution_source(((False, update_raw),), when=datetime(2026, 8, 2, tzinfo=timezone.utc))
-        candidate = self._candidate_text(f"联系人原话：“{update_raw}”")
-        contact = self._ok(
-            f"/api/contacts/{self.contact_id}/memory-candidates/{candidate['candidate_id']}/apply-update", {
-                "previous_memory_id": original_contact["memory_id"], "expected_revision": original_contact["revision"],
-                "correction_decision_ids": [item["decision_id"] for item in candidate.get("correction_review", [])],
-            },
-        )["memory"]
+        contact = self._automatic_memory(f"联系人原话：“{update_raw}”")
         self.assertEqual(contact["supersedes_memory_id"], original_contact["memory_id"])
         self.assertTrue(contact["version_evidence_source_current"])
         owner = self._ok(f"/api/memories/owner/{original_owner['memory_id']}/correct", {
@@ -311,9 +274,6 @@ class EvolutionHttpSupport:
             "contact_id": str(self.contact_id), "other_contact_id": str(self.second_contact_id),
             "source_id": root["source"]["source_id"], "update_source_id": updated["source"]["source_id"],
             "target_message_id": target, "latent_message_id": root["messages"][latent_raw]["message_id"],
-            "legal_upgrade": legal_upgrade, "legal_upgrade_approval": legal_approval,
-            "legal_candidate": legal_candidate,
-            "legal_upgrade_prepare": legal_prepare, "upgrade_jobs": [legal_upgrade],
             "contact_text": contact["text"], "owner_text": owner["text"],
             "contact_memory": contact, "owner_memory": owner,
             "original_contact_memory": original_contact, "original_owner_memory": original_owner,
@@ -428,7 +388,7 @@ class EvolutionHttpSupport:
             release.set()
             self.reply_model.on_provider_enter = previous
 
-    def assert_evolution_deleted(self, state, job=None):
+    def assert_evolution_deleted(self, state):
         """先证明删除事务擦除，再读公开目录；GET 不得替删除完成清理。"""
         request_ids = [UUID(state[key]["reply_request_id"]) for key in ("original_reply", "reply")]
         request_ids.extend(UUID(item["reply"]["reply_request_id"]) for item in state.get("dependent_replies", []))
@@ -436,10 +396,6 @@ class EvolutionHttpSupport:
             UUID(item["path"].rsplit("/", 1)[-1]) for item in state.get("dependent_replies", [])
         }
         with psycopg.connect(self.database_url) as connection:
-            self.assertEqual(connection.execute(
-                "SELECT count(*) FROM public.memory_candidate WHERE owner_id=%s AND contact_id=%s AND id=%s",
-                (self.owner_id, self.contact_id, UUID(state["legal_candidate"]["candidate_id"])),
-            ).fetchone()[0], 0)
             self.assertEqual(connection.execute(
                 "SELECT count(*) FROM public.reply_request WHERE owner_id=%s AND id=ANY(%s::uuid[])",
                 (self.owner_id, request_ids),
@@ -481,11 +437,6 @@ class EvolutionHttpSupport:
                     f"SELECT count(*) FROM public.{table} WHERE owner_id=%s AND contact_id=%s AND ({predicate})",
                     (self.owner_id, self.contact_id),
                 ).fetchone()[0], 0, table)
-        jobs = {item["job_id"]: item for item in state.get("upgrade_jobs", [])}
-        if job is not None:
-            jobs[job["job_id"]] = job
-        for upgrade in jobs.values():
-            self._assert_workflow_erased(upgrade)
         for draft_id, version_id in state.get("publications", []):
             review.SkillReviewHttpTest._assert_physical_review_erasure(self, draft_id, version_id)
 

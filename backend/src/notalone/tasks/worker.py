@@ -346,7 +346,6 @@ class BackgroundTaskWorker:
         "_rule_version",
         "_model_priority",
         "_learning_runner",
-        "_upgrade_runner",
         "_organization_runner",
     )
 
@@ -361,10 +360,9 @@ class BackgroundTaskWorker:
         index_repository: PostgresContactMemoryIndexRepository | None = None,
         model_priority: ModelPriorityControl | None = None,
         learning_runner: LearningTaskRunner | None = None,
-        upgrade_runner=None,
         organization_runner=None,
     ) -> None:
-        if repository is None or (extraction_runner is None and deletion_repository is None and learning_runner is None and upgrade_runner is None and organization_runner is None):
+        if repository is None or (extraction_runner is None and deletion_repository is None and learning_runner is None and organization_runner is None):
             raise TypeError("Worker 必须注入任务仓储及至少一个有限任务执行器。")
         if lease_duration <= timedelta(0):
             raise ValueError("Worker 租约必须是正时间段。")
@@ -377,7 +375,6 @@ class BackgroundTaskWorker:
         self._rule_version = rule_version
         self._model_priority = model_priority
         self._learning_runner = learning_runner
-        self._upgrade_runner = upgrade_runner
         self._organization_runner = organization_runner
 
     def run_once(
@@ -404,9 +401,6 @@ class BackgroundTaskWorker:
             supported_steps += tuple(name for _, name in DELETE_TASK_STEPS)
         if self._learning_runner is not None:
             supported_steps += (BackgroundTaskStepName.PROPOSE_SKILL, BackgroundTaskStepName.VERIFY_SKILL_DRAFTS)
-        if self._upgrade_runner is not None:
-            supported_steps += (BackgroundTaskStepName.PREVIEW_UPGRADE, BackgroundTaskStepName.VERIFY_UPGRADE_PREVIEW,
-                                BackgroundTaskStepName.APPLY_UPGRADE, BackgroundTaskStepName.VERIFY_UPGRADE_APPLY)
         if self._index_repository is not None:
             supported_steps += (
                 BackgroundTaskStepName.INDEX,
@@ -495,42 +489,6 @@ class BackgroundTaskWorker:
                 processed_count=claim.message_count,
                 attempt_count=claim.attempt_count,
             )
-
-        if claim.name in (BackgroundTaskStepName.PREVIEW_UPGRADE, BackgroundTaskStepName.VERIFY_UPGRADE_PREVIEW,
-                           BackgroundTaskStepName.APPLY_UPGRADE, BackgroundTaskStepName.VERIFY_UPGRADE_APPLY):
-            from notalone.memory.upgrade import UpgradeConflict, UpgradeBudgetExceeded, UpgradeAlgorithmChanged
-            try:
-                guard = self._model_priority.background_scope(
-                    lambda: self._repository.check_step_lease(claim),
-                ) if self._model_priority else nullcontext()
-                with guard, _LeaseHeartbeat(self._repository, claim, self._lease_duration,
-                        self._model_priority.stop_event if self._model_priority else None) as heartbeat:
-                    if claim.name is BackgroundTaskStepName.PREVIEW_UPGRADE:
-                        count = self._upgrade_runner.preview(claim)
-                    elif claim.name is BackgroundTaskStepName.APPLY_UPGRADE:
-                        count = self._upgrade_runner.apply(claim)
-                    else:
-                        self._upgrade_runner.verify(claim)
-                        count = 0
-                    heartbeat.raise_if_failed()
-            except ModelWorkStopped:
-                return self._stopped_result(claim)
-            except Exception as error:
-                code = ('budget_exhausted' if isinstance(error, UpgradeBudgetExceeded)
-                        else 'algorithm_changed' if isinstance(error, UpgradeAlgorithmChanged)
-                        else 'sources_changed' if isinstance(error, UpgradeConflict)
-                        else 'trace_write_failed' if isinstance(error, TraceWriteError) else 'temporary_failure')
-                _, retryable = _failure_info(error)
-                task_code = code if code == 'trace_write_failed' else 'memory_upgrade_' + code
-                result = self._record_failure(claim, task_code,
-                    retryable=retryable and not isinstance(error, UpgradeConflict))
-                if result.outcome is WorkerRunOutcome.FAILED:
-                    self._upgrade_runner.failed(claim, code)
-                return result
-            if not self._complete_step(claim, processed_count=count, total_count=claim.message_count):
-                return self._temporary_failure_result(claim)
-            return WorkerRunResult(outcome=WorkerRunOutcome.SUCCEEDED, task_id=claim.task_id,
-                step_name=claim.name, processed_count=count, attempt_count=claim.attempt_count)
 
         if claim.name in (BackgroundTaskStepName.PROPOSE_SKILL, BackgroundTaskStepName.VERIFY_SKILL_DRAFTS):
             try:

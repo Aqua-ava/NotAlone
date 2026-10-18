@@ -390,9 +390,6 @@ class CoreBusinessFlowFixture:
 
         from notalone.server.command import _build_task_host, _build_skill_service
         from notalone.server.reply_wiring import build_reply_service
-        from notalone.application.memory_upgrade import MemoryUpgradeService
-        from notalone.application.memory_upgrade_runtime import UpgradeRuntimeBuilder
-        from notalone.persistence.memory_upgrade import PostgresMemoryUpgradeStore
 
         priority, events = ModelPriorityControl(), EventBus()
         extraction_patch = patch(
@@ -417,9 +414,6 @@ class CoreBusinessFlowFixture:
             import_service=ImportService(repository=PostgresIngestRepository(self.database_url)),
             task_host=task_host, reply_service=reply_service,
             skill_service=_build_skill_service(self.database_url),
-            memory_upgrades=MemoryUpgradeService(PostgresMemoryUpgradeStore(self.database_url,
-                algorithm_provider=UpgradeRuntimeBuilder(self.database_url,
-                    dimension_release=self.dimension_release).identity), task_host=task_host),
             ledger_service=LedgerService(ledger=PostgresOutboundLedger(self.database_url)),
             memory_service=MemoryService(
                 contact_memory=PostgresMemoryStore(self.database_url),

@@ -4,8 +4,6 @@ import { build } from 'esbuild';
 
 const compiled = await build({ stdin: { contents: `
   export { TraceController } from './src/main/traces/controller';
-  export { MemoryUpgradeController } from './src/main/memory-upgrade/controller';
-  export { observeMemoryUpgradeDeletion } from './src/main/memory-upgrade/deletion';
   export { SkillLearningController } from './src/main/skill-learning/controller';
   export { coordinateSkillLearningDeletion } from './src/main/skill-learning/deletion';
   export { ContactSession } from './src/main/contacts/session';
@@ -18,8 +16,6 @@ new Function('require', 'module', 'exports', compiled.outputFiles[0].text)(creat
 const ports = compiledModule.exports;
 export const BackendRequestFailure = ports.BackendRequestFailure;
 export const TraceController = ports.TraceController;
-export const MemoryUpgradeController = ports.MemoryUpgradeController;
-export const observeMemoryUpgradeDeletion = ports.observeMemoryUpgradeDeletion;
 export const SkillLearningController = ports.SkillLearningController;
 export const coordinateSkillLearningDeletion = ports.coordinateSkillLearningDeletion;
 export const ids = { work: '66666666-6666-4666-8666-666666666666', contact: '11111111-1111-4111-8111-111111111111', other: '99999999-9999-4999-8999-999999999999',

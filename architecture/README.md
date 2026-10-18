@@ -103,6 +103,7 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 67. [ADR-067：场景文档与长期画像的分层加载](adr/067-layered-scenario-and-profile-context.md)
 68. [ADR-068：生成候选后由用户选择，不追加模型复核](adr/068-direct-reply-candidates-with-user-selection.md)
 
+70. [ADR-070：默认自动维护记忆并退役旧资料升级](adr/070-automatic-memory-maintenance.md)
 71. [ADR-071：区分错误纠正与状态变化的历史生成资格](adr/071-memory-retirement-and-generation-eligibility.md)
 
 ## 当前架构决策
@@ -115,10 +116,10 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 - Mac 前台 OCR 按 ADR-052 仅识别顶部 display name，再由唯一私聊元数据及已确认绑定定位联系人；CLI 独立同步用户主动选择并确认的联系人及我方文字增量，首次不预选会话。CLI 的外部会话标识不能替代 `contact_id`，同步范围与停止/恢复规则见 ADR-030。
 - 持续前台定位按 ADR-050 采用每轮单帧，进入助手或其他 App 后暂停；一个助手窗口按联系人恢复输入和编辑，切换不取消原生成。约束见[正式规格](../.scratch/foreground-contact-follow/spec.md)，实施进度统一见[任务索引](../.scratch/foreground-contact-follow/planning.md)，验证范围与剩余缺口见各任务的结果记录；任务关闭不表示其他渠道或交付任务已通过验收。ADR-049 的双帧复查仅保留为历史决定。
 - 生成只使用已选联系人及用户本人范围内的有界上下文；模型提取的记忆必须带来源、标记 `auto` 且可撤销。
-- 自动采纳在原有语用、置信度与风险门槛之上要求相关维度全部有当前来源依据并逐类获批；现采用保守相关超集。默认放行表为空，未知或未放行项安静待确认；质量达标和字段可用分别验证，运维回退保持（见 ADR-036、ADR-046、[放行台账](../docs/memory-adoption-dimension-release-ledger.md)）。
+- 正常自动记忆按 [ADR-070](adr/070-automatic-memory-maintenance.md) 使用逐项来源核验，保留语用、置信度、风险及人工纠错保护；不再因旧空放行表而一律待确认。未知或核验不足仍不自动采纳，旧评测结果不因此变成达标。
 - 所有实际记忆提取默认保存从原始聊天到最终处理结果的全过程追踪，保留到手动删除或来源删除，追踪写入失败停止本批；含正文资料与最小出站台账分开管理（见 ADR-037，后端及 React 查看/反查/删除已实现，历史／不可观察载荷明确保留缺口；普通页面验证不代替最终原生 App 验收）。
 - 关系记忆与本人记忆不设置固定常驻模式；记忆召回第一期按当前正文做确定性中文词法评分，使用独立双预算和相关性阈值；联系人记忆目录只保留版本复验职责。
-- 后续 L2/L3 目标按 ADR-067，在关系语境开启时使用受预算限制的 L3 背景与 L2 目录、按需读取正文，同时保留原 L1 动态检索。该分层加载已有受控生产接线，见[运行时装配](../backend/src/notalone/application/organization_runtime.py)与[回复上下文](../backend/src/notalone/reply/context.py)；缺少显式配置或读取资格时不启用。本机实际启用、真实质量放行和 App 验收需分别核验；底层记忆仍不添加常驻模式，现有无正文概览的存储合同保持。
+- 后续 L2/L3 目标按 ADR-067，在关系语境开启时使用受预算限制的 L3 背景与 L2 目录、按需读取正文，同时保留原 L1 动态检索。该分层加载已有受控生产接线，见[运行时装配](../backend/src/notalone/application/organization_runtime.py)与[回复上下文](../backend/src/notalone/reply/context.py)；默认逐项核验策略与自动启用后续由ADR-070修订；显式评测配置仍保留原资格边界。本机实际运行、真实质量和 App 验收需分别核验；底层记忆仍不添加常驻模式，现有无正文概览的存储合同保持。
 - 待确认候选可以参与候选回复，但只能用独立证据类型和独立预算、带强制「未确认」标注作为参考，不得写成确定事实，也不进入已确认记忆集合；用户否决后永久不再参与（见 ADR-035）。
 - 候选回复只在应用内展示，最终由用户修改并亲自发送。
 - 记忆与 Skill 后续演进按 ADR-048 和正式规格推进：历史状态与当前核实分开，自动学习先形成草稿、集中审核后发布；DSH 选型搁置。长期概览与回复检索已有实现；自动 Skill 学习及方法级控制的具体完成范围按对应任务与代码入口核验，不能由局部接入推断全部功能已启用或通过验收。
@@ -132,3 +133,5 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 新术语写入 `CONTEXT.md`，重要取舍写入 `adr/`，未决设计写入 `drafts/`，代码整改写入 `.scratch/`。每个含义只保留一个权威位置。
 
 [ADR-069](adr/069-direct-scene-memory-and-isolated-publication.md) 记录参考腾讯的直接记忆生成、合并和逐项隔离；[规格](../.scratch/tencent-memory-alignment/spec.md) 区分工程实现、适配差异与真实质量。
+
+[ADR-070](adr/070-automatic-memory-maintenance.md) 记录默认自动维护记忆与旧资料升级退役；实现与验证见[本次规格](../.scratch/automatic-memory-maintenance/spec.md)。

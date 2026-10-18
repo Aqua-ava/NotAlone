@@ -99,7 +99,6 @@ from notalone.application.skill_service import (
 from notalone.application.skill_learning import SkillLearningService
 from notalone.persistence.skill_learning import PostgresSkillLearningStore
 from notalone.server.skill_learning import handle_skill_learning
-from notalone.server.memory_upgrade import handle_memory_upgrade
 from notalone.ingest.errors import ImportContentChangedError, ImportPreviewError
 from notalone.ingest.import_command import ContactConfirmationError
 from notalone.persistence.postgres_repository import (
@@ -227,7 +226,6 @@ class BackendApp:
         "_setup_service",
         "_skill_service",
         "_skill_learning",
-        "_memory_upgrades",
         "_style_samples",
         "_expression_preferences",
         "_sync_control",
@@ -261,7 +259,6 @@ class BackendApp:
         trace_service: TraceService | None = None,
         skill_service: SkillService | None = None,
         skill_learning: SkillLearningService | None = None,
-        memory_upgrades=None,
         ledger_service: LedgerService | None = None,
         setup_service: SetupService | None = None,
         style_samples: StyleSampleService | None = None,
@@ -296,7 +293,6 @@ class BackendApp:
         self._setup_service = setup_service
         self._skill_service = skill_service
         self._skill_learning = skill_learning
-        self._memory_upgrades = memory_upgrades
         self._sync_control = sync_control
         self._task_host = task_host
         self._task_service = task_service
@@ -518,10 +514,6 @@ class BackendApp:
             status, payload = handle_skill_learning(self._skill_learning, owner_id=self._owner_id,
                                                     method=method_upper, path=path_value, body=request_body)
             return _json_response(status, payload, headers={"Cache-Control": "no-store"})
-        if path_value == '/api/memory-upgrades' or path_value.startswith('/api/memory-upgrades/'):
-            status, payload = handle_memory_upgrade(self._memory_upgrades, owner_id=self._owner_id,
-                method=method_upper, path=path_value, query=urlsplit(path).query, body=request_body)
-            return _json_response(status, payload, headers={'Cache-Control': 'no-store'})
         if path_value.startswith("/api/contacts/") and "/style-samples" in path_value:
             if self._style_samples is None:
                 return _json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "style_sample_unavailable"})
@@ -2593,12 +2585,6 @@ class BackendServer:
         ).start()
 
 
-def _default_memory_upgrades(database_url, task_host):
-    from notalone.application.memory_upgrade import MemoryUpgradeService
-    from notalone.persistence.memory_upgrade import PostgresMemoryUpgradeStore
-    return MemoryUpgradeService(PostgresMemoryUpgradeStore(database_url), task_host=task_host)
-
-
 def create_app(
     *,
     database_url: str,
@@ -2621,7 +2607,6 @@ def create_app(
     trace_service: TraceService | None = None,
     skill_service: SkillService | None = None,
     skill_learning: SkillLearningService | None = None,
-    memory_upgrades=None,
     ledger_service: LedgerService | None = None,
     setup_service: SetupService | None = None,
     style_samples: StyleSampleService | None = None,
@@ -2691,7 +2676,6 @@ def create_app(
         skill_service=skill_service,
         skill_learning=skill_learning or SkillLearningService(PostgresSkillLearningStore(database_url), task_host=task_host,
             review=reply_service.skill_review if reply_service is not None else None),
-        memory_upgrades=memory_upgrades or _default_memory_upgrades(database_url, task_host),
         ledger_service=ledger_service,
         setup_service=setup_service,
         runtime_shutdown=runtime_shutdown,

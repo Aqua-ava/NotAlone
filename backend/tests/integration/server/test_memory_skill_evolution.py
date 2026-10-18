@@ -18,20 +18,6 @@ from tests.integration.server.memory_skill_evolution_support import EvolutionHtt
 
 
 class MemorySkillEvolutionHttpTest(EvolutionHttpSupport, CoreBusinessFlowFixture, unittest.TestCase):
-    def test_legal_grounded_upgrade_precedes_manual_decisions_and_source_delete_erases_it(self):
-        state = self.prepare_evolution()
-        self.assertIn("legal_upgrade", state.keys())
-        self.assertEqual(state["legal_upgrade"]["batches"][0]["state"], "applied")
-        # 后续人工纠错可撤下同窗口候选；本次落地证据固定在人工动作之前。
-        candidate = state["legal_candidate"]
-        self.assertEqual(candidate["status"], "pending")
-        self.assertEqual(candidate["source_ids"], [state["latent_message_id"]])
-        self._delete_source(state["source_id"])
-        self.assert_evolution_deleted(state)
-        self.backend.close()
-        self.backend = self._production_backend(self.owner_id)
-        self.assert_evolution_deleted(state)
-
     def test_shared_source_reaches_updated_memories_actual_reply_and_pending_skill(self):
         state = self.prepare_evolution()
         contact = self._get(self.backend, f"/api/contacts/{self.contact_id}/relationship-overview")["overview"]
@@ -53,7 +39,7 @@ class MemorySkillEvolutionHttpTest(EvolutionHttpSupport, CoreBusinessFlowFixture
                          [state["independent_skill_id"]])
         self.assertEqual(self.other_backend.request(state["draft_path"])[0], 404)
 
-    def test_shared_source_publication_feedback_upgrade_restart_and_physical_deletion(self):
+    def test_shared_source_publication_feedback_restart_and_physical_deletion(self):
         state = self.prepare_evolution()
         self.assertEqual(self._configure(False)[0][0], 200)
         published = self.publish_evolution(state)
@@ -66,46 +52,17 @@ class MemorySkillEvolutionHttpTest(EvolutionHttpSupport, CoreBusinessFlowFixture
             self.evolution_reply(state, published["version_id"], **extra)
             self.assertIn("合成排除方法甲", str(self._last_evolution_generation_messages()))
 
-        authority_before_upgrade = self._evolution_authority()
-        prepared, prepare_command = self._prepare(limit=20, size=20, calls=12)
-        job = self._wait(prepared)
-        self.assertEqual(self._evolution_authority(), authority_before_upgrade)
-        self.assertEqual(len(job["batches"]), 1)
-        comparison = job["batches"][0]["comparison"]
-        self.assertIn(state["contact_memory"]["memory_id"], {item["memory_id"] for item in comparison["current"]})
-        self.assertGreater(comparison["stats"]["skipped_deleted"], 0)
-        self.assertEqual(comparison["actions"], [], "旧窗口含未知纠错含义，不能把它伪装成新证据。")
-        self.assertEqual(self.backend.request("/api/memory-upgrades", prepare_command)[1]["job_id"], job["job_id"])
-        self.assertEqual(self.other_backend.request(f"/api/memory-upgrades/{job['job_id']}?{self._query()}")[0], 404)
-        (status, _), approval = self._action(job, "apply")
-        self.assertEqual(status, 200)
-        applied = self._wait(job, states=("applied",))
-        self.assertEqual(self._evolution_authority(), authority_before_upgrade)
-        state["upgrade_jobs"].append(applied)
-        self.assertEqual(self.backend.request(f"/api/memory-upgrades/{job['job_id']}?{self._query()}", approval)[0], 200)
         self.backend.close()
         self.backend = self._production_backend(self.owner_id)
-        self.assertEqual(self._wait(job, states=("applied",))["batches"], applied["batches"])
         self.evolution_reply(state, published["version_id"])
         self.assertNotIn("合成排除方法甲", str(self._last_evolution_generation_messages()))
         self._delete_source(state["source_id"])
-        self.assert_evolution_deleted(state, applied)
+        self.assert_evolution_deleted(state)
         self._delete_source(state["source_id"])
         self.backend.close()
         self.backend = self._production_backend(self.owner_id)
-        self.assert_evolution_deleted(state, applied)
+        self.assert_evolution_deleted(state)
         self.assertEqual(self.backend.request(state["draft_path"] + "/approve", state["approve_command"])[0], 409)
-        job_path = f"/api/memory-upgrades/{job['job_id']}?{self._query()}"
-        calls = len(self.extraction_model.seen_calls)
-        status, replayed = self.backend.request(job_path, approval)
-        self.assertEqual(status, 200)
-        self.assertIsNone(replayed["batches"][0]["comparison"])
-        self.assertEqual(len(self.extraction_model.seen_calls), calls)
-        self.assertEqual(self.backend.request(job_path, {**approval, "operation_key": str(uuid4())})[0], 409)
-        (status, _), _ = self._action(replayed, "delete")
-        self.assertEqual(status, 200)
-        self.assertEqual(self.backend.request(job_path)[0], 410)
-
     def test_same_task_reviewed_update_conflict_and_rollback_preserve_method_stop_then_delete(self):
         state = self.prepare_evolution()
         self.assertEqual(self._configure(False)[0][0], 200)
@@ -150,26 +107,6 @@ class MemorySkillEvolutionHttpTest(EvolutionHttpSupport, CoreBusinessFlowFixture
         self._delete_source(state["source_id"])
         self.assert_evolution_deleted(state)
         self.assertIn(self.backend.request(history_path + "/rollback", rollback)[0], (404, 409))
-
-    def test_workflow_deleted_before_same_source_preserves_published_policy_until_source_erasure(self):
-        state = self.prepare_evolution()
-        self.assertEqual(self._configure(False)[0][0], 200)
-        published = self.publish_evolution(state)
-        self.stop_evolution_method(state)
-        prepared, _ = self._prepare(limit=20, size=20, calls=12)
-        job = self._wait(prepared)
-        (status, _), command = self._action(job, "delete")
-        self.assertEqual(status, 200)
-        self._assert_workflow_erased(job)
-        job_path = f"/api/memory-upgrades/{job['job_id']}?{self._query()}"
-        self.assertEqual(self.backend.request(job_path, command, method="DELETE")[0], 200)
-        self.backend.close()
-        self.backend = self._production_backend(self.owner_id)
-        self.assertEqual(self.backend.request(job_path)[0], 410)
-        self.evolution_reply(state, published["version_id"])
-        self.assertNotIn("合成排除方法甲", str(self._last_evolution_generation_messages()))
-        self._delete_source(state["source_id"])
-        self.assert_evolution_deleted(state, job)
 
     def test_rollback_commits_before_waiting_source_deletion_without_restoring_erased_versions(self):
         self._assert_rollback_delete_race(source_first=False)

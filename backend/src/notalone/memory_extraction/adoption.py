@@ -345,6 +345,7 @@ class MemoryAdoption:
                         "required": sorted(required_dimensions(fact)),
                         "evidence_valid": sorted(valid_evidence_dimensions(fact)),
                         "gate_enabled": self._dimension_release.gate_enabled,
+                        "policy": "verified_sources" if self._dimension_release.verified_sources else "dimension_release",
                         "allowed": sorted(self._dimension_release.allowed),
                         "released": sorted(self._dimension_release.released),
                         "passed": self._dimension_release.allows(fact, scope=scope),
@@ -704,7 +705,9 @@ class MemoryAdoption:
         candidates = [
             item
             for item in pool
-            if (self._merge_verifier is not None and fact.source_dependency_mode is SourceDependencyMode.ANY
+            if ((self._merge_verifier is not None or self._dimension_release.verified_sources
+                 and self._dimension_release.allows(fact, scope=scope))
+                and fact.source_dependency_mode is SourceDependencyMode.ANY
                 or self._same_dependencies(scope, fact, item.version))
             and item.topic == fact.topic
             and item.category == fact.category
@@ -855,11 +858,7 @@ class MemoryAdoption:
         pragmatic_decision=None,
         scope: ContactScope | None = None,
     ) -> bool:
-        """四道合取项：语用、置信度、风险白名单，以及维度放行。
-
-        前三项的判定仍由 :func:`can_auto_adopt` 负责，语义不变；维度放行
-        是独立的第四项，默认空放行表下任何维度都安静待确认（ADR-036）。
-        """
+        """语用、置信度、风险及当前来源核验共同决定采纳；显式旧策略保留逐维门。"""
 
         decision = pragmatic_decision or self._pragmatic_interpreter.interpret(fact)
         return can_auto_adopt(

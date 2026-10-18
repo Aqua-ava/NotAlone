@@ -6,7 +6,7 @@ type Memory = { memory_id: string; revision: number; text: string; supersedes_me
 type Item = { text: string; references: { memory_id: string; revision: number }[] };
 type Scenario = { version_id: string; paragraphs: Item[] };
 type Profile = { version_id: string; entries: Item[] };
-type State = { scope_kind: string; contact_id: string | null; settings_generation: number; organization_generation: number;
+type State = { status: string; work_id: string | null; maintenance_pending: boolean; model_calls_used: number; model_call_limit: number; scope_kind: string; contact_id: string | null; settings_generation: number; organization_generation: number;
   pending_fact_count: number; scenarios: Scenario[]; profile: Profile | null;
   feedback: { target_kind: string; version_id: string; item_index: number; reason: string;
     target_text: string | null; basis: { memory_id: string; revision: number }[] }[] };
@@ -20,13 +20,26 @@ async function read<T>(fixture: RewriteFixture, path: string, key: string): Prom
   return response.data[key] as T;
 }
 
+// 默认维护可能已经领取工作；公开HTTP返回排队/进行中时等待该次工作稳定，不假定同步完成。
+export async function waitNativeCorrectionReady(fixture: RewriteFixture, path: string): Promise<State> {
+  const deadline = Date.now() + 10000;
+  let state = await read<State>(fixture, path, 'layered_memory');
+  while ((state.status === 'updating' || (state.status === 'ready' && state.work_id !== null
+    && (state.profile !== null && state.maintenance_pending || state.profile === null && state.model_calls_used < state.model_call_limit))) && Date.now() < deadline) {
+    await new Promise(resolve => setTimeout(resolve, 40));
+    state = await read<State>(fixture, path, 'layered_memory');
+  }
+  assert.notEqual(state.status, 'updating', '有限等待内整理工作应完成。');
+  return state;
+}
+
 // 准备只经生产公开 HTTP；这些准备动作不计为真实桌面操作。
 export async function prepareNativeCorrection(fixture: RewriteFixture, scope: 'contact' | 'owner', index: number,
   previous?: NativeCorrectionStep): Promise<NativeCorrectionStep> {
   const contactId = fixture.data.contact_ids[0];
   const layeredPath = scope === 'owner' ? '/api/memories/owner/layered-memory' : `/api/contacts/${contactId}/layered-memory`;
   const memoriesPath = scope === 'owner' ? '/api/memories/owner' : `/api/contacts/${contactId}/memories`;
-  let state = await read<State>(fixture, layeredPath, 'layered_memory');
+  let state = await waitNativeCorrectionReady(fixture, layeredPath);
   if (index === 0) {
     const enabled = await fixture.request(layeredPath + '/enable', { settings_generation: state.settings_generation, purpose_confirmed: true });
     assert.equal(enabled.status, 200, JSON.stringify(enabled.data));
@@ -41,7 +54,7 @@ export async function prepareNativeCorrection(fixture: RewriteFixture, scope: 'c
     const refreshed = await fixture.request(layeredPath + '/refresh', { settings_generation: state.settings_generation });
     assert.equal(refreshed.status, 200, JSON.stringify(refreshed.data));
   }
-  state = await read<State>(fixture, layeredPath, 'layered_memory');
+  state = await waitNativeCorrectionReady(fixture, layeredPath);
   const kind = index % 2 === 0 ? 'profile' : 'scenario';
   const action = index < 2 ? 'summary' : 'fact';
   assert.ok(state.scenarios.length >= 2 && state.scenarios.length <= 4, JSON.stringify(state));
