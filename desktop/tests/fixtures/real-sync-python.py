@@ -43,6 +43,16 @@ class AcceptanceScope:
     long_running: bool = False
     allow_incoming_test_text: bool = False
     metadata_name: str | None = None
+    execution_not_before: float | None = None
+    execution_until: float | None = None
+
+    @property
+    def run_not_before(self) -> float:
+        return self.not_before if self.execution_not_before is None else self.execution_not_before
+
+    @property
+    def run_until(self) -> float:
+        return self.until if self.execution_until is None else self.execution_until
 
 
 def _fail(code: str = "acceptance_scope_exceeded") -> CliCommandError:
@@ -113,7 +123,8 @@ def load_scope(path: str | Path | None = None) -> AcceptanceScope:
         value = json.loads(text)
         expected = {"locator", "real_cli", "real_wcdb", "sandbox_profile", "audit_path",
                     "pid_audit_path", "approved_texts", "not_before", "until"}
-        optional = {"long_running", "allow_incoming_test_text"}
+        execution_fields = {"execution_not_before", "execution_until"}
+        optional = {"long_running", "allow_incoming_test_text"} | execution_fields
         if (not isinstance(value, dict) or not expected <= set(value)
                 or not set(value) <= expected | optional):
             raise _fail("acceptance_scope_invalid")
@@ -129,11 +140,23 @@ def load_scope(path: str | Path | None = None) -> AcceptanceScope:
                 or any(not isinstance(item, str) or not item.strip() or len(item) > 256 for item in texts)):
             raise _fail("acceptance_scope_invalid")
         times = (value["not_before"], value["until"])
+        has_execution = bool(execution_fields & set(value))
+        if has_execution and not execution_fields <= set(value):
+            raise _fail("acceptance_scope_invalid")
         if (any(isinstance(item, bool) or not isinstance(item, (int, float))
                 or not math.isfinite(item) for item in times)
                 or not 0 < times[0] < times[1]
-                or times[1] - times[0] > (4500 if long_running else 1800)):
+                or times[1] - times[0] > (7200 if has_execution else 4500 if long_running else 1800)):
             raise _fail("acceptance_scope_invalid")
+        if has_execution:
+            execution = (value["execution_not_before"], value["execution_until"])
+            # CLI 无源端 until；短复验的真实运行截止同时延长数据读取上界。
+            if (not long_running or any(
+                    isinstance(item, bool) or not isinstance(item, (int, float))
+                    or not math.isfinite(item) for item in execution)
+                    or not times[0] <= execution[0] < execution[1] == times[1]
+                    or execution[1] - execution[0] > 600):
+                raise _fail("acceptance_scope_invalid")
         paths = {key: Path(value[key]) for key in
                  ("real_cli", "real_wcdb", "sandbox_profile", "audit_path", "pid_audit_path")}
         if any(not item.is_absolute() or item.resolve() != item for item in paths.values()):
@@ -160,10 +183,12 @@ def load_scope(path: str | Path | None = None) -> AcceptanceScope:
                                not_before=float(times[0]), until=float(times[1]),
                                long_running=long_running,
                                allow_incoming_test_text=allow_incoming,
+                               execution_not_before=float(value["execution_not_before"]) if has_execution else None,
+                               execution_until=float(value["execution_until"]) if has_execution else None,
                                real_cli=paths["real_cli"], real_wcdb=paths["real_wcdb"],
                                sandbox_profile=paths["sandbox_profile"], audit_path=paths["audit_path"],
                                pid_audit_path=paths["pid_audit_path"])
-    except (OSError, TypeError, ValueError, json.JSONDecodeError):
+    except (OSError, TypeError, ValueError, OverflowError, json.JSONDecodeError):
         raise _fail("acceptance_scope_invalid") from None
 
 
@@ -178,7 +203,7 @@ class ScopeGuard:
 
     def check_time(self) -> None:
         now = self.clock()
-        if not self.scope.not_before <= now < self.scope.until:
+        if not self.scope.run_not_before <= now < self.scope.run_until:
             raise _fail("acceptance_window_expired")
 
     def command_kind(self, command: tuple[str, ...], *, follow: bool = False) -> str:
@@ -431,12 +456,12 @@ class AuditedProcesses:
         with self._process_lock:
             if self._fatal or self._stop.is_set():
                 raise _fail("acceptance_window_expired")
-            if not self.scope.not_before <= self.clock() < self.scope.until:
+            if not self.scope.run_not_before <= self.clock() < self.scope.run_until:
                 raise _fail("acceptance_window_expired")
             if deadline is not None and time.monotonic() >= deadline:
                 raise _fail("acceptance_cli_timeout")
             self.record("started", kind, None, status="reserved")
-            if not self.scope.not_before <= self.clock() < self.scope.until:
+            if not self.scope.run_not_before <= self.clock() < self.scope.run_until:
                 raise _fail("acceptance_window_expired")
             if deadline is not None and time.monotonic() >= deadline:
                 raise _fail("acceptance_cli_timeout")
@@ -473,7 +498,7 @@ class AuditedProcesses:
             limit = metadata_budget if metadata_budget is not None else 30.0
             if metadata_deadline is not None:
                 limit = max(0.000001, metadata_deadline - time.monotonic())
-            timeout = min(limit, max(0.001, self.scope.until - self.clock()))
+            timeout = min(limit, max(0.001, self.scope.run_until - self.clock()))
             try:
                 stdout, _ = managed.process.communicate(timeout=timeout)
             except subprocess.TimeoutExpired:
@@ -521,7 +546,7 @@ class AuditedProcesses:
 
     def _deadline_loop(self) -> None:
         while not self._stop.wait(0.1):
-            if self.clock() >= self.scope.until:
+            if self.clock() >= self.scope.run_until:
                 self.close()
                 return
 

@@ -128,6 +128,39 @@ class AcceptanceScopeTest(unittest.TestCase):
             cli.tail("synthetic-selected", since_time="2026-10-12T16:00:00")
         self.assertEqual(runner.calls, [])
 
+    def test_short_explicit_renewal_keeps_since_and_content_boundaries(self) -> None:
+        end = self.scope.not_before + 7200
+        scope = replace(self.scope, until=end, long_running=True,
+                        execution_not_before=end - 600, execution_until=end)
+        event = {"type": "message", "cursor": "synthetic-cursor:12", "message": {
+            "id": {"talker": "synthetic-selected", "local_id": 12}, "kind": "text",
+            "text": "合成验收文字", "is_from_me": True, "create_time": 1791782460,
+        }}
+        runner = SyntheticRunner(FakeResult(stdout=json.dumps(event)))
+        now = [end - 300]
+        cli = fixture.build_scoped_cli(scope, runner=runner, clock=lambda: now[0])
+        result = cli.tail("synthetic-selected", since_time="2026-10-12T13:20:01")
+        self.assertEqual(len(result.events), 1)
+        self.assertIn("2026-10-12T13:20:01", runner.calls[0])
+        for change in ({"create_time": end}, {"create_time": 1791782400},
+                       {"text": "未授权文字"}, {"is_from_me": False}, {"kind": "image"}):
+            with self.subTest(change=change):
+                runner.result = FakeResult(stdout=json.dumps(
+                    {**event, "message": {**event["message"], **change}}))
+                with self.assertRaises(CliCommandError):
+                    cli.tail("synthetic-selected", since_time="2026-10-12T13:20:01")
+        count = len(runner.calls)
+        for timestamp in (end - 601, end):
+            now[0] = timestamp
+            with self.assertRaises(CliCommandError) as raised:
+                cli.version()
+            self.assertEqual(raised.exception.code, "acceptance_window_expired")
+        self.assertEqual(len(runner.calls), count)
+        now[0] = end - 300
+        with self.assertRaises(CliCommandError):
+            cli.tail("synthetic-unselected", since_time="2026-10-12T13:20:01")
+        self.assertEqual(len(runner.calls), count)
+
     def test_explicit_incoming_test_text_keeps_the_actual_direction(self) -> None:
         runner = SyntheticRunner(FakeResult(stdout=json.dumps({
             "type": "message", "cursor": "synthetic-cursor:12",
@@ -438,6 +471,38 @@ class AcceptanceScopeTest(unittest.TestCase):
                 selected.write_text(json.dumps(invalid))
                 with self.assertRaises(CliCommandError):
                     fixture.load_scope(selected)
+            end = value["not_before"] + 7200
+            renewed = {**extended, "until": end, "execution_not_before": end - 600,
+                       "execution_until": end}
+            selected.write_text(json.dumps(renewed))
+            loaded = fixture.load_scope(selected)
+            self.assertEqual(loaded.execution_not_before, end - 600)
+            self.assertEqual(loaded.execution_until, loaded.until)
+            invalid_renewals = [
+                {key: item for key, item in renewed.items() if key != missing}
+                for missing in ("execution_not_before", "execution_until")
+            ] + [
+                {**renewed, **change} for change in (
+                    {"execution_not_before": end - 601},
+                    {"execution_not_before": end},
+                    {"execution_not_before": True},
+                    {"execution_not_before": None},
+                    {"execution_not_before": float("nan")},
+                    {"execution_not_before": 10**1000},
+                    {"execution_until": 10**1000},
+                    {"execution_until": float("inf")},
+                    {"execution_until": end - 1},
+                    {"until": end + 1, "execution_until": end + 1,
+                     "execution_not_before": end - 599},
+                    {"long_running": False},
+                    {"not_before": end - 599},
+                )
+            ]
+            for invalid in invalid_renewals:
+                with self.subTest(invalid_fields=set(invalid)):
+                    selected.write_text(json.dumps(invalid))
+                    with self.assertRaises(CliCommandError):
+                        fixture.load_scope(selected)
             selected.write_text(json.dumps(value))
             link = directory / "scope-link.json"
             link.symlink_to(selected)
@@ -492,6 +557,31 @@ class AcceptanceScopeTest(unittest.TestCase):
             records = [json.loads(line) for line in scope.audit_path.read_text().splitlines()]
             self.assertEqual(records[-1]["event"], "finished")
             self.assertEqual(records[-1]["returncode"], -15)
+
+    def test_renewed_deadline_stops_owned_stream_and_prevents_new_spawn(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary).resolve()
+            end = self.scope.not_before + 7200
+            scope = replace(self.scope, until=end, long_running=True,
+                            execution_not_before=end - 600, execution_until=end,
+                            audit_path=directory / "audit.jsonl",
+                            pid_audit_path=directory / "pids.jsonl")
+            created: list[SyntheticProcess] = []
+
+            def spawn(command: tuple[str, ...], **kwargs: object) -> SyntheticProcess:
+                process = SyntheticProcess(follow=True)
+                created.append(process)
+                return process
+
+            now = [end - 300]
+            cli = fixture.build_scoped_cli(scope, process_factory=spawn, clock=lambda: now[0])
+            cli.session_events_follow()
+            now[0] = end
+            self.assertTrue(created[0].stopped.wait(timeout=1))
+            with self.assertRaises(CliCommandError):
+                cli.version()
+            self.assertEqual(len(created), 1)
+            cli.close()
 
 
 if __name__ == "__main__":
