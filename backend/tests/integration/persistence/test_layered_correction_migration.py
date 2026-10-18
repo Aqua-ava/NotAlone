@@ -18,7 +18,7 @@ from notalone.database_migrations import migrate
 
 class LayeredCorrectionMigrationTest(unittest.TestCase):
     def test_077_populated_scopes_upgrade_preserves_data_and_erasure_constraints(self):
-        name = f'notalone_correction_upgrade_{uuid4().hex}_test'
+        name = f'notalone_correction_{uuid4().hex}_test'
         database = make_conninfo(os.environ['NOTALONE_TEST_DATABASE_URL'], dbname=name)
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
