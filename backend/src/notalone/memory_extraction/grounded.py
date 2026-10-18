@@ -216,6 +216,7 @@ def _event_proposal(row: dict[str, Any], members: list[SourceUnit], dependencies
 def _dependencies(
     members: list[SourceUnit], rows: dict[str, dict[str, Any]],
     by_id: dict[str, SourceUnit],
+    member_groups: dict[str, tuple[SourceUnit, ...]] | None = None,
 ) -> list[SourceUnit]:
     """合并分句的依赖取并集；内部互指不新增来源，外部环拒绝。"""
     internal = {unit.id for unit in members}
@@ -226,9 +227,15 @@ def _dependencies(
             return
         if key in path or len(path) >= 8:
             raise ValueError("上下文依赖成环或超出深度预算。")
-        result[key] = by_id[key]
-        if key in rows:
-            visit(rows[key]["dependency"], path | {key})
+        group = (member_groups or {}).get(key, (by_id[key],))
+        group_ids = frozenset(item.id for item in group)
+        if group_ids & path or len(path | group_ids) > 8:
+            raise ValueError("上下文依赖成环或超出深度预算。")
+        for item in group:
+            result[item.id] = item
+        for item in group:
+            if item.id in rows and rows[item.id]["dependency"] not in group_ids:
+                visit(rows[item.id]["dependency"], path | group_ids)
 
     for member in members:
         visit(rows[member.id]["dependency"], frozenset())
@@ -336,6 +343,15 @@ def _compile(
                 frame = _condition(first.text, second.text)
                 if frame is not None:
                     e2_conditions[first.id] = frame
+    # E2引用显式合并事实时一并保留前件；不为未标注的邻接句补依赖。
+    member_groups: dict[str, tuple[SourceUnit, ...]] = {}
+    if e2_semantics:
+        for first, second in zip(units, units[1:]):
+            if (first.target and second.target and first.message.message_id == second.message.message_id
+                    and first.end == second.start and rows[first.id]["kind"] in {"condition", "prefix"}
+                    and rows[second.id]["kind"] in KINDS):
+                paired_members = (first, second)
+                member_groups[first.id] = member_groups[second.id] = paired_members
     results: list[dict[str, Any]] = []
     pending_condition: SourceUnit | None = None
     unknown_groups: dict[tuple, dict[str, Any]] = {}
@@ -369,7 +385,7 @@ def _compile(
         members = ([condition] if condition else []) + [unit]
         if continuation is not None:
             members.append(continuation)
-        dependencies = _dependencies(members, rows, by_id)
+        dependencies = _dependencies(members, rows, by_id, member_groups)
         sources = [unit.message.message_id]
         for dep in dependencies:
             if dep.message.message_id not in sources:
@@ -454,6 +470,8 @@ def _compile(
             unresolved = True
             codes.add("entity_identity")
         alternatives = ["原文指代在本窗口无法唯一确定，保留原句。"] if unresolved else []
+        if e2_semantics and any(rows[dep.id]["unresolved"] for dep in dependencies if dep.id in rows):
+            alternatives.append("所依赖原文仍有未决指代，当前候选不能据此消歧。")
         if kind == "unknown" or version4 and kind == "stage_unknown_state":
             flags.append("grounded:unresolved_kind")
         fact = {
