@@ -186,17 +186,17 @@ class BoundedPublicFixtureTest(unittest.TestCase):
                 self.assertTrue(configurations)
                 self.assertEqual(configurations[0]["model_name"], model_name)
                 config = helper.read_private(directory / "evaluation/manifest.json")["frozen_config"]
-                from notalone.memory_extraction.grounded_adapter import BOUNDED_STAGE_PROMPT_PROFILE, grounded_v2_prompt
+                from notalone.memory_extraction.grounded_adapter import BOUNDED_DEPENDENCY_PROMPT_PROFILE, grounded_v2_prompt
                 from notalone.memory_extraction.evaluation_records import canonical_sha256
-                self.assertEqual(config["extraction_prompt_profile"], BOUNDED_STAGE_PROMPT_PROFILE)
-                self.assertEqual(frozen["fixed"]["extraction_prompt_profile"], BOUNDED_STAGE_PROMPT_PROFILE)
+                self.assertEqual(config["extraction_prompt_profile"], BOUNDED_DEPENDENCY_PROMPT_PROFILE)
+                self.assertEqual(frozen["fixed"]["extraction_prompt_profile"], BOUNDED_DEPENDENCY_PROMPT_PROFILE)
                 prompt_records = [event["payload"] for event in case["traces"][0]["events"]
                                   if event["stage"] in {"grounded_draft", "grounded_compile"}]
                 self.assertEqual(len(prompt_records), 2)
                 for payload in prompt_records:
                     self.assertEqual(payload["protocol"], "grounded-v2")
-                    self.assertEqual(payload["prompt_profile"], BOUNDED_STAGE_PROMPT_PROFILE)
-                    self.assertEqual(payload["prompt_sha256"], canonical_sha256(grounded_v2_prompt(BOUNDED_STAGE_PROMPT_PROFILE)))
+                    self.assertEqual(payload["prompt_profile"], BOUNDED_DEPENDENCY_PROMPT_PROFILE)
+                    self.assertEqual(payload["prompt_sha256"], canonical_sha256(grounded_v2_prompt(BOUNDED_DEPENDENCY_PROMPT_PROFILE)))
                 self.assertEqual(config["request_model"], model_name)
                 self.assertEqual(config["request_contract_version"], 3 if pro else 2)
                 self.assertTrue((directory / "source-finish.json").is_file())
@@ -368,9 +368,9 @@ def synthetic_owned_worker(freeze_path: Path, expected_sha256: str, approval_pat
         if not pro and "max_tokens" in body:
             raise AssertionError("旧Flash不得增加输出参数")
         if counts["requests"] == 1 and name == "GroundedMemoryLabels":
-            from notalone.memory_extraction.grounded_adapter import BOUNDED_STAGE_PROMPT_PROFILE, grounded_v2_prompt
-            if (body["messages"][0]["content"] != grounded_v2_prompt(BOUNDED_STAGE_PROMPT_PROFILE)
-                    or frozen["fixed"]["extraction_prompt_profile"] != BOUNDED_STAGE_PROMPT_PROFILE):
+            from notalone.memory_extraction.grounded_adapter import BOUNDED_DEPENDENCY_PROMPT_PROFILE, grounded_v2_prompt
+            if (body["messages"][0]["content"] != grounded_v2_prompt(BOUNDED_DEPENDENCY_PROMPT_PROFILE)
+                    or frozen["fixed"]["extraction_prompt_profile"] != BOUNDED_DEPENDENCY_PROMPT_PROFILE):
                 raise AssertionError("生产SDK未使用冻结教学profile")
             if body["tools"][0]["function"]["parameters"]["properties"]["units"]["required"] != ["0:0"]:
                 raise AssertionError("合成输出必须对应当前schema的全部原文位置")

@@ -139,13 +139,31 @@ BOUNDED_STAGE_TEACHING_V1 = """
 </bounded_stage_teaching_v1>
 """
 
+BOUNDED_DEPENDENCY_PROMPT_PROFILE = "bounded-dependency-teaching-v2"
+BOUNDED_DEPENDENCY_TEACHING_V2 = """
+<bounded_dependency_teaching_v2>
+以下独立对照只说明既有dependency槽，不是当前来源，不指定其它标签。
+必要的明确别名映射：context 0:0「我把实验记录册叫作青签。」；target 1:0「青签已经编号好了。」。
+虽然target字面是一句完整陈述，理解其中对象仍使用0:0的别名映射，因此该target的dependency为0:0。
+无关背景：context 0:0「今天窗外有雾。」；target 1:0「实验记录册已经编号好了。」。
+target的人物和事项无需该背景补全，因此该target的dependency为null。
+必要的显式声明不因在另一条消息、另一个target或前文中就变成无关背景；一句话字面完整也不等于所需指称已独立明确。
+只选择实际窗口中理解当前主张不可缺少的原文分句；不把所有背景加入依赖，不复制微例编号或正文。
+微例不定义新的证明语法，也不认证别名、人物或任何关系；当前任务仍按原全部字段及未知规则输出。
+</bounded_dependency_teaching_v2>
+"""
+
 
 def grounded_v2_prompt(prompt_profile: str = "default", *, events: bool = False) -> str:
     """两个既有协议共享教学增量；默认提示逐字保留。"""
-    if type(prompt_profile) is not str or prompt_profile not in {"default", BOUNDED_STAGE_PROMPT_PROFILE}:
+    if type(prompt_profile) is not str or prompt_profile not in {
+            "default", BOUNDED_STAGE_PROMPT_PROFILE, BOUNDED_DEPENDENCY_PROMPT_PROFILE}:
         raise ValueError("提取提示profile无效。")
     base = GROUNDED_V2_PROMPT + (GROUNDED_EVENT_PROMPT if events else "")
-    return base + (BOUNDED_STAGE_TEACHING_V1 if prompt_profile == BOUNDED_STAGE_PROMPT_PROFILE else "")
+    if prompt_profile == "default":
+        return base
+    return base + BOUNDED_STAGE_TEACHING_V1 + (
+        BOUNDED_DEPENDENCY_TEACHING_V2 if prompt_profile == BOUNDED_DEPENDENCY_PROMPT_PROFILE else "")
 
 
 GROUNDED_V3_PROMPT = GROUNDED_PROMPT.replace(
@@ -432,7 +450,7 @@ def _extract_grounded(
         raise ExtractionInvalidOutputError("原文结构提取必须返回唯一的指定工具。")
     draft = calls[0].get("args")
     identity = {"protocol": protocol}
-    if prompt_profile == BOUNDED_STAGE_PROMPT_PROFILE:
+    if prompt_profile in {BOUNDED_STAGE_PROMPT_PROFILE, BOUNDED_DEPENDENCY_PROMPT_PROFILE}:
         identity.update(prompt_profile=prompt_profile, prompt_sha256=hashlib.sha256(json.dumps(
             prompt, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False,
         ).encode("utf-8")).hexdigest())

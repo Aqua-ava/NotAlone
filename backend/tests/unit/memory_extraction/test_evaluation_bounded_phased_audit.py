@@ -18,7 +18,7 @@ from notalone.memory_extraction.evaluation_bounded_cases import (
 from notalone.memory_extraction.evaluation_phased_audit import PhasedEvaluationAudit
 from notalone.memory_extraction.evaluation_http_budget import EvaluationBudgetAbort
 from notalone.memory_extraction.evaluation_records import canonical_sha256
-from notalone.memory_extraction.grounded_adapter import BOUNDED_STAGE_PROMPT_PROFILE
+from notalone.memory_extraction.grounded_adapter import BOUNDED_DEPENDENCY_PROMPT_PROFILE
 
 
 class BoundedPhasedAuditTest(unittest.TestCase):
@@ -63,7 +63,7 @@ class BoundedPhasedAuditTest(unittest.TestCase):
             "case_position": 0, "case_name": source["case_name"],
             "execution_plan": BOUNDED_RUNTIME_PLAN, "reference_version": BOUNDED_RUNTIME_PLAN,
             "extraction_mode": "grounded-v2", "verification_mode": "nullable-proof-v3",
-            "extraction_prompt_profile": BOUNDED_STAGE_PROMPT_PROFILE,
+            "extraction_prompt_profile": BOUNDED_DEPENDENCY_PROMPT_PROFILE,
             "extraction_tool_choice": "omitted", "verification_tool_choice": "forced",
             "window": {"messages": [{**source["messages"][0], "message_id": self.source}],
                        "target_message_ids": [self.source]},
@@ -158,7 +158,7 @@ class BoundedPhasedAuditTest(unittest.TestCase):
             "criteria_sha256": self.criteria_sha,
             "case_set": "bounded15", "reference_version": BOUNDED_RUNTIME_PLAN,
             "execution_plan": BOUNDED_RUNTIME_PLAN, "extraction_mode": "grounded-v2",
-            "extraction_prompt_profile": BOUNDED_STAGE_PROMPT_PROFILE,
+            "extraction_prompt_profile": BOUNDED_DEPENDENCY_PROMPT_PROFILE,
             "verification_mode": "nullable-proof-v3", "extraction_tool_choice": "omitted",
             "verification_tool_choice": "forced",
             "raw_reviewer": self.raw_review, "full_reviewer": self.full_review,

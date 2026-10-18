@@ -542,6 +542,95 @@ class BoundedRuntimeSdkTest(unittest.TestCase):
         model.root_client._client.event_hooks = {"request": [_request_hook], "response": [_response_hook]}
         return model
 
+    def test_sdk_cross_reference_prompt_defines_three_anchors_without_repair(self):
+        from notalone.memory import SourceDependencyMode
+        from notalone.memory_extraction.verification_adapters import LangChainSourceVerificationRuntime
+
+        window = messages_window(("这里的“她”指我同事。", "我哥昨天把她的车借给我了。"))
+        fact = replace(compiled_fact(window, kind="relationship_event", dependency="0:0"),
+                       source_dependency_mode=SourceDependencyMode.ALL)
+        proof = expected_proposal(window, fact, "BR_KIN_LEND_V1", "completed_cross")
+        raw = {"candidate_index": 0, "verdict": "supported", "issues": [],
+               "evidence": [{"message_id": str(window.messages[-1].message_id), "quote": window.messages[-1].text}],
+               "proof": proof}
+        model = self.model(tool_name="SourceVerificationOutput", arguments={"results": [raw]})
+        output = LangChainSourceVerificationRuntime(model=model, verification_mode="nullable-proof-v3").verify(
+            window=window, facts=(fact,))
+        prompt = self.requests[-1][2]["messages"][0]["content"]
+        self.assertIn("mention定位事件句中实际使用的代词", prompt)
+        self.assertIn("target定位声明中的完整关系称呼", prompt)
+        self.assertIn("binding定位完整声明句", prompt)
+        self.assertEqual(output, (raw,))
+        checked, = validate_source_verification(output, window=window, facts=(fact,), mode="nullable-proof-v3")
+        self.assertEqual(checked.proof_verification.status, "verified")
+        self.assertIsNotNone(build_dimension_evidence(window, fact, checked).semantic_basis)
+        self.assertEqual(len(self.requests), 1)
+
+    def test_sdk_cross_reference_wrong_anchors_reject_or_remain_unknown(self):
+        from notalone.memory import SourceDependencyMode
+        from notalone.memory_extraction.errors import ExtractionInvalidOutputError
+        from notalone.memory_extraction.verification_adapters import LangChainSourceVerificationRuntime
+
+        window = messages_window(("这里的“她”指我同事。", "我哥昨天把她的车借给我了。"))
+        fact = replace(compiled_fact(window, kind="relationship_event", dependency="0:0"),
+                       source_dependency_mode=SourceDependencyMode.ALL)
+        original = expected_proposal(window, fact, "BR_KIN_LEND_V1", "completed_cross")
+        for variant in ("swapped_anchors", "declaration_pronoun_target", "short_binding",
+                        "missing_author", "wrong_inline", "null"):
+            with self.subTest(variant=variant):
+                proof = deepcopy(original)
+                third_person = proof["reference"][1]
+                if variant == "swapped_anchors":
+                    third_person["mention"], third_person["target"] = third_person["target"], third_person["mention"]
+                elif variant == "declaration_pronoun_target":
+                    start = window.messages[0].text.index("她")
+                    third_person["target"].update(start=start, end=start + 1)
+                elif variant == "short_binding":
+                    third_person["binding"] = deepcopy(third_person["target"])
+                elif variant == "missing_author":
+                    proof["reference"].pop(0)
+                elif variant == "wrong_inline":
+                    proof["atom_links"][0]["variant_id"] = "completed_inline"
+                elif variant == "null":
+                    proof = None
+                raw = {"candidate_index": 0, "verdict": "supported", "issues": [],
+                       "evidence": [{"message_id": str(window.messages[-1].message_id), "quote": window.messages[-1].text}],
+                       "proof": proof}
+                model = self.model(tool_name="SourceVerificationOutput", arguments={"results": [raw]})
+                runtime = LangChainSourceVerificationRuntime(model=model, verification_mode="nullable-proof-v3")
+                if variant == "swapped_anchors":
+                    with self.assertRaises(ExtractionInvalidOutputError):
+                        runtime.verify(window=window, facts=(fact,))
+                    continue
+                output = runtime.verify(window=window, facts=(fact,))
+                self.assertEqual(output, (raw,))
+                checked, = validate_source_verification(output, window=window, facts=(fact,), mode="nullable-proof-v3")
+                self.assertEqual(checked.proof_verification.status, "UNKNOWN")
+                self.assertIsNone(build_dimension_evidence(window, fact, checked).semantic_basis)
+        self.assertEqual(len(self.requests), 6)
+
+    def test_sdk_cross_reference_cannot_restore_missing_candidate_source(self):
+        from notalone.memory import SourceDependencyMode
+        from notalone.memory_extraction.errors import ExtractionInvalidOutputError
+        from notalone.memory_extraction.verification_adapters import LangChainSourceVerificationRuntime
+
+        window = messages_window(("这里的“她”指我同事。", "我哥昨天把她的车借给我了。"))
+        fact = replace(compiled_fact(window, kind="relationship_event", dependency="0:0"),
+                       source_dependency_mode=SourceDependencyMode.ALL)
+        proof = expected_proposal(window, fact, "BR_KIN_LEND_V1", "completed_cross")
+        without_dependency = replace(fact, source_message_ids=(window.messages[-1].message_id,))
+        raw = {"candidate_index": 0, "verdict": "supported", "issues": [],
+               "evidence": [{"message_id": str(window.messages[-1].message_id), "quote": window.messages[-1].text}],
+               "proof": proof}
+        model = self.model(tool_name="SourceVerificationOutput", arguments={"results": [raw]})
+        with self.assertRaises(ExtractionInvalidOutputError):
+            LangChainSourceVerificationRuntime(model=model, verification_mode="nullable-proof-v3").verify(
+                window=window, facts=(without_dependency,))
+        sent = json.loads(self.requests[-1][2]["messages"][1]["content"])
+        self.assertEqual(sent["candidates"][0]["source_message_ids"], [str(window.messages[-1].message_id)])
+        self.assertEqual(len(sent["messages"]), 2)
+        self.assertEqual(len(self.requests), 1)
+
     def test_only_v3_sdk_receives_lossless_codepoint_position_guide(self):
         from notalone.memory_extraction.verification_adapters import LangChainSourceVerificationRuntime, _verification_text
         window = window_for("😀e\u0301“我刚刚到家。”\n尾句")

@@ -41,17 +41,19 @@ def _completion(result: dict) -> httpx.Response:
 
 class VerificationHTTPContractTest(unittest.TestCase):
     def test_existing_prompt_and_schema_bytes_stay_frozen(self):
-        # 改动前 88871e7c 的公开合同摘要，防止新 profile 改写旧场身份。
+        # 旧合同沿 88871e7c；核心 profile 沿 99bbf798；仅 proof3 提示更新三锚释义摘要。
         contracts = (
             ("legacy-v4", "default", "30eaf682a996ca988358c60e1ef9033841738b72edba0f8a5187d430f0c76a07",
              "ec92479140e3c6945efee42115af25e69686fdfdf851bae2dce994eb393344b2"),
             ("legacy-v4", "public-author-quote-v1", "5b84071c341f57b261e504a4247a1964b70a3fa03fdff974d98eb4985e498f5c",
              "ec92479140e3c6945efee42115af25e69686fdfdf851bae2dce994eb393344b2"),
+            ("legacy-v4", "core-source-fidelity-v1", "081ab5442c45afe0fdad10ce0ed639a26869eecb6f645506341ec850ba9b32f0",
+             "ec92479140e3c6945efee42115af25e69686fdfdf851bae2dce994eb393344b2"),
             ("nullable-proof-v1", "default", "9c613bd61eac92a4b8e6160d84a1e3d5e18de1dd88891cfa3f0b0719d0cbfeef",
              "5533c8c33be4047ac20f573f642596d87700309e0ca0e36b93923714981efaed"),
             ("nullable-proof-v2", "default", "2f4b7d8a936447f4559196f02f1d9eaa4b66fb1589a7246a15e56b6f79995693",
              "898d11f5d9410cd5104bbd67d29580f03041076a0e841d7ad2ee28c388a351d8"),
-            ("nullable-proof-v3", "default", "567190fdab261e457d9fa6c400736d16680e686be0c6f0cdfc9a28b6e69a364d",
+            ("nullable-proof-v3", "default", "743f236d8b4441db098918c35e22b27f38b9bdb318becde6d9e734fd8694c2fd",
              "f09fceb25f2b5cfebeb6f8a382a012c28e1e727ea1ae317a9c19cb926a52c897"),
         )
         for mode, profile, prompt_sha, schema_sha in contracts:

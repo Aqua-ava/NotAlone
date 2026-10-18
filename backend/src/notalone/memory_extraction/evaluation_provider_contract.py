@@ -19,7 +19,7 @@ import httpx
 from .evaluation_http_budget import EvaluationBudgetAbort
 from .evaluation_extraction import EvaluationExtractionMode, extraction_tool_name
 from .evaluation_bounded_cases import BOUNDED_RUNTIME_PLAN
-from .grounded_adapter import BOUNDED_STAGE_PROMPT_PROFILE
+from .grounded_adapter import BOUNDED_DEPENDENCY_PROMPT_PROFILE
 
 
 _ENDPOINT = "https://chat.ecnu.edu.cn/open/api/v1/chat/completions"
@@ -87,7 +87,7 @@ _BOUNDED_MIGRATION_SOURCES = frozenset(
 
 def validate_extraction_prompt_profile(execution_plan: str, prompt_profile: str) -> None:
     """新提示须与唯一新身份绑定，旧身份只允许原默认。"""
-    expected = (BOUNDED_STAGE_PROMPT_PROFILE if execution_plan == BOUNDED_RUNTIME_PLAN
+    expected = (BOUNDED_DEPENDENCY_PROMPT_PROFILE if execution_plan == BOUNDED_RUNTIME_PLAN
                 else UNIQUENESS_E_PROFILE if execution_plan == UNIQUENESS_PLAN else "default")
     if type(prompt_profile) is not str or prompt_profile != expected:
         raise EvaluationBudgetAbort("evaluation_extraction_prompt_profile_mismatch")
@@ -335,7 +335,7 @@ class ECNUEvaluationContract:
             from .grounded_adapter import grounded_v4_prompt
             if expected_payload["messages"][0]["content"] != grounded_v4_prompt(self._extraction_prompt_profile):
                 raise EvaluationBudgetAbort("evaluation_extraction_prompt_changed")
-        if (self._extraction_prompt_profile == BOUNDED_STAGE_PROMPT_PROFILE
+        if (self._extraction_prompt_profile == BOUNDED_DEPENDENCY_PROMPT_PROFILE
                 and expected_payload["tools"][0]["function"]["name"] == "GroundedMemoryLabels"):
             from .grounded_adapter import grounded_v2_prompt
             if expected_payload["messages"][0]["content"] != grounded_v2_prompt(self._extraction_prompt_profile):

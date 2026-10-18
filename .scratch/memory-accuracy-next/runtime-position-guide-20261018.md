@@ -115,3 +115,14 @@ P02只读首拒绝复现：E的事件候选只列第二条消息，dependency=nu
 
 
 核心V profile已完成：真实SDK新profile先红后绿，新增4测试覆盖旧合同摘要、请求仅system变化、跨proof/未知profile在HTTP前拒绝、8组输出与伪证据对照。verification_http_contract、bounded_runtime_proof、core_transport_contract共40项通过；verification_adapters定向mypy通过。测试曾因比较证据对象身份而失败，改为公开to_payload内容并排除随机trace IDs后重验通过；产品未因此修改。Standards与主Agent Spec均无实质问题，无真实调用或模型质量信用。private runner接线及真实场由核心线独立冻结。
+
+
+## 跨消息依赖与三锚的独立机制
+
+只读正控test_observed_cross_message_lend_keeps_explicit_property_owner经实际CLI/SDK Mock/隔离PG通过（1项/0.949s）：已选dependency会保留声明相关原文、双source_ids、ALL与正确产权basis。P02因E漏选而非compiler漏存。既有E指令已要求必要依赖，没有逻辑矛盾；新增bounded-dependency-teaching-v2只追加独立记录册别名与无关天气背景对照，不指定kind/confidence，不改变schema/compiler，不程序补依赖。default及stage-v1保留原字节；实际任务、登记和owned统一选择v2。
+
+同次V的proof3提示仅展开原合同的声明三锚：事件代词mention、声明关系称呼target、完整声明binding；cross按来源消息分开判断，作者链独立，所有锚仍受candidate.source_message_ids限制。无需来源或位置不能确定就null，不由V修复E。proof3提示摘要有意变更，schema及legacy/default/public/core/proof1/2不变；两项机制同时进入后继交付候选，不能把真实结果单独归因其中之一。
+
+验证：E最小40项与完整fixture/wire17项通过，5修改源码mypy通过；V相关43项、1源码mypy通过。正确cross verified，交换锚被拒，错误target/短binding/缺作者/inline/null均UNKNOWN且无basis，缺候选来源仍拒。两实现者交叉Spec与独立Standards均无实质问题。新增真实调用0，质量仍只沿上一场P01一窗。
+
+扩大检查发现旧bounded审核夹具未显式传profile、grounded旧负控仍期待TypeError；先复现缺失profile拒绝，再集成参考线测试修复56bab956并按主线v2更新夹具，14项审核模块通过。未放宽生产校验。完整提取单测在600秒上限内873项/39.621s通过；此为单测模块全量，不冒充全项目或真实语义验收。

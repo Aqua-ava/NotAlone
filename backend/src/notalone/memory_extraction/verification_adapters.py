@@ -237,6 +237,12 @@ BR_REQUEST_V1：reported_inline/reported_cross或received_inline/received_cross�
 REL[昨天/前天]让我周末/明天/后天帮她/他顶个班；须明确受益人，保留外层请托与内层requested，不增接受/义务/履行。
 BR_COND_RUN_V1/conditional_plan：如果天晴，我计划明天/后天[只]跑[约]有限正数米/公里；完整保留条件、数量、程度、时间和计划。
 reference定位作者我（无我回答可用完整回答）、来源显式声明三锚或问答三锚；reported定位完整主结构和归属。
+显式声明的三锚分别是：mention定位事件句中实际使用的代词，target定位声明中的完整关系称呼，
+binding定位完整声明句；不能把声明中被解释的代词当target，也不能只用关系称呼作binding。
+声明与事件分属不同消息时使用相应_cross variant，同一消息内才用_inline；按来源消息区分，
+不能因候选把两段引文放在一起而改成inline。作者自指须另列mention=target、binding=null的reference，
+不能用第三人声明链接替代作者链接。所有来源锚必须位于本候选实际source_message_ids中，
+声明缺失、指称不唯一、必要来源未列入或位置不确定时proof留null，不替E补依赖、来源或声明。
 候选仍为实际用户/联系人原话包装及相关原文，不删包装或不利上下文；每个原子必须有atom链接，
 每个需要的自指/第三人/问答关系均有reference，且有一个完整主结构reported链接。不知道时留null，不重试。
 """
