@@ -9,6 +9,9 @@ from typing import Any, Callable
 from .evaluation_http_budget import EvaluationBudgetAbort
 from .evaluation_extraction import EvaluationExtractionMode, extraction_tool_name
 from .evaluation_provider_contract import (
+    REFERENCE16_PRO_RETENTION_V_THINKING_PLAN, REFERENCE16_PRO_RETENTION_V_THINKING_MODE,
+    REFERENCE16_PRO_RETENTION_V_THINKING_STAGE, REFERENCE16_V_THINKING_REQUEST_VERSION,
+    reference16_v_thinking_phase_policy,
     validate_evaluation_policy, MIXED_PLAN, MIXED_REQUEST_VERSION, mixed_phase_policy,
     FULL140_E2_PLAN, PHASE_SPLIT_PLANS, REFERENCE21_PLANS, PUBLIC_QUALITY_PLANS, UNIQUENESS_PLAN, REFERENCE16_PRO_PLANS, REFERENCE16_PRO_TEACHING_PLAN,
     validate_extraction_prompt_profile, validate_verification_prompt_profile, REFERENCE16_PRO_RETENTION_PLAN,
@@ -217,6 +220,7 @@ class PhasedEvaluationAudit:
             raise ValueError("审核执行身份非法。")
         self._execution_plan = execution_plan
         reference16 = execution_plan in REFERENCE16_PRO_PLANS
+        v_thinking = execution_plan == REFERENCE16_PRO_RETENTION_V_THINKING_PLAN
         e2 = execution_plan == FULL140_E2_PLAN or reference16
         mixed = execution_plan in PHASE_SPLIT_PLANS
         reference21_v4 = execution_plan in REFERENCE21_PLANS
@@ -232,6 +236,7 @@ class PhasedEvaluationAudit:
         self._extraction_mode = EvaluationExtractionMode(extraction_mode)
         validate_evaluation_policy(verification_tool_choice)
         if (verification_tool_choice == "omitted" and self._verification_mode is not SourceVerificationMode.NULLABLE_PROOF_V1
+                and not (v_thinking and self._verification_mode is SourceVerificationMode.LEGACY_V4)
                 and not (execution_plan == BOUNDED_RUNTIME_PLAN
                          and self._verification_mode is SourceVerificationMode.NULLABLE_PROOF_V3)):
             raise ValueError("省略V工具选择只用于可空证明评测。")
@@ -258,7 +263,7 @@ class PhasedEvaluationAudit:
                 or any(type(position) is not int for position in case_positions)
                 or self._extraction_mode is not EvaluationExtractionMode.GROUNDED_V2
                 or self._verification_mode is not SourceVerificationMode.LEGACY_V4
-                or extraction_tool_choice != "forced" or verification_tool_choice != "forced"):
+                or extraction_tool_choice != "forced" or verification_tool_choice != ("omitted" if v_thinking else "forced")):
             raise ValueError("Pro指代审核仅接受原16窗、E2/四槽V和双强制工具。")
         if not reference16 and (reference_version == "source-fidelity-v2"
                 or self._extraction_mode is EvaluationExtractionMode.GROUNDED_V4):
@@ -377,7 +382,10 @@ class PhasedEvaluationAudit:
                 or self.execution_plan in PHASE_SPLIT_PLANS and (
                     bundle.get("phase_request_version") != MIXED_REQUEST_VERSION
                     or bundle.get("phase_request_policy") != mixed_phase_policy())
-                or self.execution_plan not in PHASE_SPLIT_PLANS and (
+                or self.execution_plan == REFERENCE16_PRO_RETENTION_V_THINKING_PLAN and (
+                    bundle.get("phase_request_version") != REFERENCE16_V_THINKING_REQUEST_VERSION
+                    or bundle.get("phase_request_policy") != reference16_v_thinking_phase_policy())
+                or self.execution_plan not in {*PHASE_SPLIT_PLANS, REFERENCE16_PRO_RETENTION_V_THINKING_PLAN} and (
                     "phase_request_version" in bundle or "phase_request_policy" in bundle)):
             raise EvaluationBudgetAbort("phased_execution_plan_changed")
         if bundle.get("reference_version", "legacy-v1") != self.reference_version:
@@ -385,10 +393,10 @@ class PhasedEvaluationAudit:
         if bundle.get("extraction_mode", "legacy-e14") != self.extraction_mode:
             raise EvaluationBudgetAbort("phased_extraction_mode_changed")
         if (bundle.get("extraction_prompt_profile", "default") != self.extraction_prompt_profile
-                or self.execution_plan not in {UNIQUENESS_PLAN, BOUNDED_RUNTIME_PLAN, REFERENCE16_PRO_TEACHING_PLAN, REFERENCE16_PRO_RETENTION_PLAN} and "extraction_prompt_profile" in bundle):
+                or self.execution_plan not in {UNIQUENESS_PLAN, BOUNDED_RUNTIME_PLAN, REFERENCE16_PRO_TEACHING_PLAN, REFERENCE16_PRO_RETENTION_PLAN, REFERENCE16_PRO_RETENTION_V_THINKING_PLAN} and "extraction_prompt_profile" in bundle):
             raise EvaluationBudgetAbort("phased_extraction_prompt_profile_changed")
         if (bundle.get("verification_prompt_profile", "default") != self.verification_prompt_profile
-                or self.execution_plan != REFERENCE16_PRO_RETENTION_PLAN and "verification_prompt_profile" in bundle):
+                or self.execution_plan not in (REFERENCE16_PRO_RETENTION_PLAN, REFERENCE16_PRO_RETENTION_V_THINKING_PLAN) and "verification_prompt_profile" in bundle):
             raise EvaluationBudgetAbort("phased_verification_prompt_profile_changed")
         if bundle.get("verification_mode", "legacy-v4") != self.verification_mode:
             raise EvaluationBudgetAbort("phased_verification_mode_changed")

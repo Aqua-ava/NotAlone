@@ -56,6 +56,9 @@ from notalone.memory_extraction.verification import (
 )
 from notalone.memory_trace.context import current_trace
 from .evaluation_provider_contract import (
+    REFERENCE16_PRO_RETENTION_V_THINKING_PLAN, REFERENCE16_PRO_RETENTION_V_THINKING_MODE,
+    REFERENCE16_PRO_RETENTION_V_THINKING_STAGE, REFERENCE16_V_THINKING_REQUEST_VERSION,
+    reference16_v_thinking_phase_policy,
     MIXED_REQUEST_VERSION, mixed_phase_policy, FULL140_E2_PLAN, PHASE_SPLIT_PLANS, REFERENCE21_PLANS,
     SEMANTIC4_PROMPT_PROFILE, validate_semantic4_windows,
     PUBLIC_QUALITY_PLANS, validate_extraction_prompt_profile, REFERENCE16_PRO_PLANS,
@@ -561,6 +564,7 @@ def _run_evaluation_batch(
     from .evaluation_bounded_cases import BOUNDED_RUNTIME_CASES, BOUNDED_RUNTIME_PLAN
 
     pro16 = type(execution_plan) is str and execution_plan in REFERENCE16_PRO_PLANS
+    v_thinking = execution_plan == REFERENCE16_PRO_RETENTION_V_THINKING_PLAN
     bounded = execution_plan == BOUNDED_RUNTIME_PLAN
     bounded_profile = store.bounded_provider_profile if bounded else None
     if bounded:
@@ -599,7 +603,7 @@ def _run_evaluation_batch(
             or cases != _fixed_case_sets()[0][:16] or len(windows) != 16 or len(plan) != 16
             or extraction_selected is not EvaluationExtractionMode.GROUNDED_V2
             or selected is not SourceVerificationMode.LEGACY_V4
-            or extraction_tool_choice != "forced" or verification_tool_choice != "forced"
+            or extraction_tool_choice != "forced" or verification_tool_choice != ("omitted" if v_thinking else "forced")
             or reasoning_effort != "none" or request_model != "deepseek-v4-pro"
             or base_url != "https://api.deepseek.com" or request_timeout_seconds != 300
             or type(max_retries) is not int or max_retries != 0 or semantic_audit is None
@@ -610,7 +614,7 @@ def _run_evaluation_batch(
     public_quality = execution_plan in PUBLIC_QUALITY_PLANS
     core = execution_plan == CORE_PROFILE_PLAN
     prompt_profile = (CORE_SOURCE_FIDELITY_PROFILE if core
-                      else REFERENCE16_RETENTION_V_PROFILE if execution_plan == REFERENCE16_PRO_RETENTION_PLAN
+                      else REFERENCE16_RETENTION_V_PROFILE if execution_plan in (REFERENCE16_PRO_RETENTION_PLAN, REFERENCE16_PRO_RETENTION_V_THINKING_PLAN)
                       else SEMANTIC4_PROMPT_PROFILE if public_quality else "default")
     validate_extraction_prompt_profile(execution_plan, extraction_prompt_profile,
         provider_profile=bounded_profile.value if bounded_profile is not None else None)
@@ -713,10 +717,10 @@ def _run_evaluation_batch(
                 api_key=SecretStr(api_key), base_url=base_url, model=request_model, temperature=0.0,
                 **({"max_tokens": 8192} if pro16 else bounded_profile.output_parameters if bounded_profile is not None else {}),
                 timeout=request_timeout_seconds, max_retries=max_retries,
-                extra_body={"thinking": {"type": "enabled" if bounded and verification_tool_choice == "omitted" else "disabled"},
-                            "reasoning_effort": "max" if bounded and verification_tool_choice == "omitted" else "none"},
+                extra_body={"thinking": {"type": "enabled" if v_thinking or bounded and verification_tool_choice == "omitted" else "disabled"},
+                            "reasoning_effort": "max" if v_thinking or bounded and verification_tool_choice == "omitted" else "none"},
                 http_client=sync_client, http_async_client=async_client,
-            ) if mixed or bounded else model
+            ) if mixed or bounded or v_thinking else model
             for position, (case, window) in enumerate(zip(cases, windows)):
                 current_position = position
                 outcomes[position]["status"] = "unknown"
@@ -761,7 +765,7 @@ def _run_evaluation_batch(
                         verification_model, store, position, window, call_state,
                         invocation_scope=invocation_scope, verification_tool_choice=verification_tool_choice,
                         extraction_tool_choice=extraction_tool_choice, extraction_mode=extraction_selected,
-                    )) if mixed else adapter_model
+                    )) if mixed or v_thinking else adapter_model
                     result = evaluate_case(
                         case, window, _RecordedExtractionRuntime(
                             extraction_runtime(extraction_selected, adapter_model, prompt_profile=extraction_prompt_profile),
@@ -772,6 +776,7 @@ def _run_evaluation_batch(
                                 model=verification_adapter_model, provider=provider,
                                 verification_mode=selected,
                                 prompt_profile=prompt_profile,
+                                force_tool_choice=not v_thinking,
                             ), store, position, prompt_profile=prompt_profile,
                         ),
                     )
@@ -812,10 +817,12 @@ def _run_evaluation_batch(
                         **({"extraction_prompt_profile": extraction_prompt_profile} if extraction_prompt_profile != "default" else {}),
                         **({"execution_plan": execution_plan, "phase_request_version": MIXED_REQUEST_VERSION,
                             "phase_request_policy": mixed_phase_policy()} if mixed else {}),
+                        **({"phase_request_version": REFERENCE16_V_THINKING_REQUEST_VERSION,
+                            "phase_request_policy": reference16_v_thinking_phase_policy()} if v_thinking else {}),
                         **({"reference_version": store.reference_version}
                            if store.reference_version == "source-fidelity-v2" or bounded or core else {}),
                         **({"execution_plan": execution_plan} if pro16 else {}),
-                        **({"verification_prompt_profile": prompt_profile} if execution_plan == REFERENCE16_PRO_RETENTION_PLAN else {}),
+                        **({"verification_prompt_profile": prompt_profile} if execution_plan in (REFERENCE16_PRO_RETENTION_PLAN, REFERENCE16_PRO_RETENTION_V_THINKING_PLAN) else {}),
                         **({"execution_plan": execution_plan, "formal_task_execution": formal_execution} if bounded else {}),
                         **({"execution_plan": execution_plan, "verification_prompt_profile": prompt_profile} if core else {}),
                         "extraction_program": tuple(

@@ -154,3 +154,7 @@
 ### 2026-10-18 统一源码联合场技术硬停
 
 [联合场结果](../reference-retention-result-20261018.md)：source7bef5d1f、run34aa026e closed10/32，4窗safe3／一般1（A01 V资料归属误拒），必需raw5／接受3／FULL3 of18。A05第10个HTTP200仅832B摘要，新增固定码nested_json_invalid；无RAW视图，unknown，A06–A16unrun。worker退出、临时key删除、8回执独审通过；累计241请求，旧场不可回推。A05离线理由修复不据此签模型通过，原Gold／分母／AC／D8／生产空表保持。后继先只读评估V推理与兼容工具策略，不新API。
+
+### 2026-10-18 独立V推理第六版离线接线
+
+[独立计划](../reference-v-thinking-plan-20261018.md)已实施E Pro disabled／none／forced与V Pro enabled／max／omitted，各8192，分阶段合同第六版独立冻结。923提取单测、6源码mypy、最终16定向用例及双审通过；新增真实owned子进程Mock验证和nested_json_invalid未知硬停覆盖。仅工程信用，没有新API或语义成绩；原16／18＋1／32／零重试、Gold／提示／schema／A05编译器及生产空表保持。交主线集成统一回归后再决定冻结；State、未通过AC、旧D8失败与全部旧场结果不变。
