@@ -1,6 +1,7 @@
 """整理与回复读取的独立质量身份；未知证据不能签发资格。"""
 
 from dataclasses import dataclass, field
+from contextvars import ContextVar
 import hashlib
 import json
 
@@ -109,6 +110,9 @@ class OrganizationQualityService:
         self.runtime_unavailable_reason = runtime_unavailable_reason
         self.organization_contract = organization_contract or OrganizationQualityContract()
         self.reply_contract = reply_contract or ReplyQualityContract()
+        self.reply_source = None
+        self._reply_revocations = set()
+        self._reading_hold = ContextVar('reply_qualification_hold', default=None)
         if qualification_source is not None and store is not None:
             qualification_source.validate_target(store._layered._database_url)
 
@@ -192,13 +196,91 @@ class OrganizationQualityService:
             self._store.revoke(owner_id, self.organization_contract.identity, snapshot['receipt'], 'candidate_model_changed')
             raise LayeredMemoryConflict('实际响应模型身份已变化，旧质量资格失效。')
 
+    def configure_reply(self, contract, source):
+        """只装配独立读取合同与operator来源，不改整理合同。"""
+        self.reply_contract, self.reply_source = contract, source
+
+    def reply_qualification(self, owner_id, *, connection=None):
+        missing = {'stage': {'status': 'unknown', 'reasons': ['no_reply_evaluation_report'],
+            'contract_id': self.reply_contract.identity, 'report_id': None}, 'receipt': None, 'model_identities': []}
+        if self.reply_source is None:
+            return missing
+        try:
+            result = self.reply_source.resolve(self.reply_contract, connection=connection)
+            if (result['stage']['contract_id'] != self.reply_contract.identity
+                    or not result.get('receipt')):
+                return missing
+            revoked = (self._store.revocation(owner_id, self.reply_contract.identity, result['receipt'], connection=connection)
+                       if self._store is not None else None)
+            if revoked or (str(owner_id), result['receipt']) in self._reply_revocations:
+                return {**result, 'stage': {**result['stage'], 'status': 'unknown',
+                        'reasons': ['reply_candidate_model_changed']}}
+            return result
+        except Exception:
+            return missing
+
+    def reading_receipt(self, owner_id, *, connection=None):
+        held = self._reading_hold.get()
+        if held is not None and held['owner_id'] == owner_id:
+            refresh = getattr(self.reply_source, 'read_evidence_receipt', None)
+            if refresh is not None and refresh(self.reply_contract) != held['reply_receipt']:
+                return None
+            if connection is not None:
+                held['guard'](connection)
+                if self._store is not None and self._store.revocation(owner_id,
+                        self.reply_contract.identity, held['reply_receipt'], connection=connection):
+                    return None
+            return held['receipt']
+        organization, reply = self.qualification(owner_id), self.reply_qualification(owner_id)
+        if (organization['stage']['status'] != 'verified' or reply['stage']['status'] != 'verified'
+                or not organization.get('receipt') or not reply.get('receipt')):
+            return None
+        return content_digest({'organization_contract': self.organization_contract.identity,
+            'organization': organization['receipt'], 'reply_contract': self.reply_contract.identity,
+            'reply': reply['receipt']})
+
+    def reading_guard(self, owner_id, receipt):
+        """正式writer复用整理来源锁直至业务事务提交，避免删除跨库竞态。"""
+        from contextlib import contextmanager, nullcontext
+        @contextmanager
+        def held():
+            if receipt != self.reading_receipt(owner_id) or receipt is None:
+                raise LayeredMemoryConflict('读取质量回执已经失效。')
+            organization, reply = self.snapshot(owner_id), self.reply_qualification(owner_id)
+            guarded = (self.publication_guard(owner_id, organization)
+                if self._store is not None else nullcontext(lambda connection: None))
+            with guarded as local_guard:
+                token = self._reading_hold.set({'owner_id': owner_id, 'receipt': receipt,
+                    'reply_receipt': reply['receipt'], 'guard': local_guard})
+                try:
+                    yield
+                finally:
+                    self._reading_hold.reset(token)
+        return held()
+
+    def check_reply_identity(self, owner_id, model, message):
+        result = self.reply_qualification(owner_id)
+        metadata = message.response_metadata or {}
+        identity = {'request_model': model.model_name,
+            'response_model': metadata.get('model_name') or metadata.get('model'),
+            'system_fingerprint': metadata.get('system_fingerprint'),
+            'request_route': str(model.root_async_client.base_url).rstrip('/') + '/chat/completions'}
+        if (result['stage']['status'] != 'verified' or not any(
+                all(item.get(key) == value for key, value in identity.items())
+                for item in result['model_identities'])):
+            self._reply_revocations.add((str(owner_id), result.get('receipt')))
+            if self._store is not None and result.get('receipt'):
+                self._store.revoke(owner_id, self.reply_contract.identity, result['receipt'], 'reply_candidate_model_changed')
+            raise LayeredMemoryConflict('实际回复响应身份变化，旧读取资格失效。')
+
     def status(self, owner_id, *, synthetic=False) -> dict:
         def missing(contract):
             return {'status': 'unknown', 'reasons': ['no_evaluation_report'],
                     'contract_id': contract.identity, 'report_id': None}
         organization = self.qualification(owner_id)['stage'] if self._store is not None or self.qualification_source is not None else missing(self.organization_contract)
-        # 受控工程装配没有资格签发能力，即使同库已有真实评测也不继承。
+        reply = self.reply_qualification(owner_id)['stage']
         if synthetic and organization['status'] == 'verified':
             organization = {**organization, 'status': 'unknown', 'reasons': ['actual_model_evidence_missing']}
-        return {'organization': organization, 'reply': missing(self.reply_contract),
-                'synthetic': synthetic, 'automatic_use_allowed': False}
+        return {'organization': organization, 'reply': reply, 'synthetic': synthetic,
+                'automatic_use_allowed': not synthetic and organization['status'] == reply['status'] == 'verified'
+                    and self.reading_receipt(owner_id) is not None}

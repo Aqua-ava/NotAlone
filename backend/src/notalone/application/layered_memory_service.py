@@ -1,6 +1,7 @@
 """有限主题整理的管理入口；未知质量资格不会调用模型。"""
 
 from copy import deepcopy
+from dataclasses import replace
 from contextlib import nullcontext
 import json
 import math
@@ -62,6 +63,7 @@ class LayeredMemoryService:
                 raise ValueError("长期背景须分别装配独立提案和核验。")
             require_adapter_timeout_contract(profile_proposer, "propose", synthetic=synthetic)
             require_adapter_timeout_contract(profile_verifier, "verify", synthetic=synthetic)
+        self.reply_configuration = None
         self._synthetic = synthetic
         if profile_proposer and self._budget.max_model_calls != 4:
             raise ValueError("长期背景装配要求显式四步有限预算。")
@@ -313,20 +315,60 @@ class LayeredMemoryService:
             return value
         return bounded_organization_call(invoke, priority=self._priority, guard=check, timeout_seconds=self._call_timeout_seconds)
 
+    def configure_reply(self, contract, source):
+        self._quality.configure_reply(contract, source)
+
+    def _reading_receipt(self, owner_id, *, connection=None):
+        if self._synthetic and not self._quality_required:
+            return 'synthetic'
+        return self._quality.reading_receipt(owner_id, connection=connection)
+
     def capture(self, scope):
-        return self._store.capture(scope) if self._read_available(scope.owner_id) else None
+        receipt = self._reading_receipt(scope.owner_id)
+        if receipt is None:
+            return None
+        snapshot = self._store.capture(scope)
+        return replace(snapshot, quality_receipt=receipt) if snapshot is not None else None
 
     def read_scenario(self, snapshot, id, range):
-        if not self._read_available(snapshot.scope.owner_id):
-            raise PermissionError("整理读取质量资格尚未获准。")
+        if snapshot.quality_receipt is None or snapshot.quality_receipt != self._reading_receipt(snapshot.scope.owner_id):
+            raise PermissionError("整理读取质量资格尚未获准或已变化。")
         return self._store.read_scenario(snapshot, id, range)
 
     def validate(self, snapshot):
-        return self._read_available(snapshot.scope.owner_id) and self._store.validate(snapshot)
+        return (snapshot.quality_receipt is not None
+            and snapshot.quality_receipt == self._reading_receipt(snapshot.scope.owner_id)
+            and self._store.validate(snapshot))
 
     def validate_in_transaction(self, connection, snapshot):
-        """最终 writer 已持有相同范围锁时使用，不开启第二条连接。"""
-        return self._read_available(snapshot.scope.owner_id) and self._store.validate_in_transaction(connection, snapshot)
+        """最终writer沿原范围锁复验同一质量回执，不开启业务目标的第二事务。"""
+        return (snapshot.quality_receipt is not None
+            and snapshot.quality_receipt == self._reading_receipt(snapshot.scope.owner_id, connection=connection)
+            and self._store.validate_in_transaction(connection, snapshot))
+
+    def reading_guard(self, context):
+        materials = [item for item in (context.layered_context, context.owner_layered_context) if item is not None]
+        if not materials or self._synthetic and not self._quality_required:
+            return nullcontext()
+        receipts = {item.snapshot.quality_receipt for item in materials}
+        if len(receipts) != 1:
+            raise LayeredMemoryConflict('两侧资料不是同一次有效读取资格。')
+        return self._quality.reading_guard(context.scope.owner_id, receipts.pop())
+
+    def validate_reply_model(self, prepared, model, profile, contact_budget, owner_budget):
+        if self._synthetic and not self._quality_required:
+            return
+        if prepared.layered_context is not None or prepared.owner_layered_context is not None:
+            from notalone.reply.quality import build_reply_contract
+            current = build_reply_contract(model, profile, contact_budget, owner_budget)
+            if current.identity != self._quality.reply_contract.identity:
+                raise LayeredMemoryConflict('实际回复配置已变化，请重新核验读取资格。')
+
+    def check_reply_response(self, prepared, model, message):
+        if self._synthetic and not self._quality_required:
+            return
+        if prepared.layered_context is not None or prepared.owner_layered_context is not None:
+            self._quality.check_reply_identity(prepared.scope.owner_id, model, message)
 
     def withdraw_scenario(self, scope, settings_generation, organization_generation, scenario_version_id):
         self._store.withdraw_scenario(scope, settings_generation, organization_generation, scenario_version_id)

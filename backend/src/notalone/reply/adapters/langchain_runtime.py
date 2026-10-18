@@ -644,6 +644,7 @@ class LangChainReplyRuntime:
         "_model_callback_factory",
         "_constraint_review",
         "_layered_memory",
+        "_on_model_response",
     )
 
     def __init__(
@@ -661,6 +662,7 @@ class LangChainReplyRuntime:
         model_callback_factory: Callable[[ReplyContext], object] | None = None,
         constraint_review: ReplyConstraintReview | None = None,
         layered_memory=None,
+        on_model_response=None,
     ) -> None:
         if (
             isinstance(timeout_seconds, bool)
@@ -699,6 +701,7 @@ class LangChainReplyRuntime:
         self._model_callback_factory = model_callback_factory
         self._constraint_review = constraint_review
         self._layered_memory = layered_memory
+        self._on_model_response = on_model_response
 
     def _discover_catalog(self, prepared: ReplyContext) -> SkillCatalog:
         """读取当前目录；读取或结构失败时安全退化为空目录（无 Skill）。"""
@@ -832,6 +835,8 @@ class LangChainReplyRuntime:
                         response_format=output_strategy,
                         on_decision=collect_input_budget,
                         preflight=preflight,
+                        on_response=(lambda model, message: self._on_model_response(prepared, model, message))
+                            if self._on_model_response is not None else None,
                     ),
                 ],
                 response_format=output_strategy,
@@ -869,7 +874,9 @@ class LangChainReplyRuntime:
                         request_text=request_text, callbacks=callbacks,
                         validate_request=validate_request,
                         budget=InputBudgetMiddleware(profile=self._input_budget_profile,
-                            counter=self._input_token_counter, on_decision=collect_input_budget),
+                            counter=self._input_token_counter, on_decision=collect_input_budget,
+                            on_response=(lambda model, message: self._on_model_response(prepared, model, message))
+                                if self._on_model_response is not None else None),
                     )
                 return result
 

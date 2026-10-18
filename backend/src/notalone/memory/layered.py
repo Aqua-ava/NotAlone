@@ -99,6 +99,7 @@ class LayeredMemorySnapshot:
     dependency_ids: tuple[UUID, ...]
     profile_version_id: UUID | None = None
     profile_entries: tuple[dict, ...] = ()
+    quality_receipt: str | None = None
 
 
 class LayeredMemoryPort(Protocol):
