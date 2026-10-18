@@ -6,9 +6,10 @@ import { promisify } from 'node:util';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { acceptanceFlags, failureReport } from './probe-runtime.mjs';
+import { acceptanceFlags, failureReport, runtimeLayout } from './probe-runtime.mjs';
 import { prepareProbeRuntime } from './prepare-probe-runtime.mjs';
 import { requireBuildSpace } from './build-space.mjs';
+import { validateSigningIdentity, requireSigningMode } from './package-signing.mjs';
 
 const run = promisify(execFile);
 const sourceNames = [
@@ -19,10 +20,10 @@ const sourceNames = [
 ];
 
 // 构建进程边界独立于编译内容，便于用合成脚本核验 shell 启动隔离。
-export function repositoryBuildInvocation(script, owned) {
+export function repositoryBuildInvocation(script, owned, signingIdentity = '-') {
   return { program: '/bin/zsh', arguments: ['-f', script], options: {
     timeout: 120_000, maxBuffer: 1_048_576,
-    env: { PATH: '/usr/bin:/bin', ZDOTDIR: owned, NOTALONE_PROBE_SIGNING_IDENTITY: '-', NOTALONE_PROBE_MODULE_CACHE_DIR: path.join(owned, 'module-cache') },
+    env: { PATH: '/usr/bin:/bin', ZDOTDIR: owned, NOTALONE_PROBE_SIGNING_IDENTITY: validateSigningIdentity(signingIdentity), NOTALONE_PROBE_MODULE_CACHE_DIR: path.join(owned, 'module-cache') },
   } };
 }
 
@@ -44,7 +45,8 @@ async function snapshotSource(source, destination) {
   } finally { await input.close(); }
 }
 
-export async function prepareRepositoryProbe(destination) {
+export async function prepareRepositoryProbe(destination, { signingIdentity = '-' } = {}) {
+  validateSigningIdentity(signingIdentity);
   if (process.platform !== 'darwin') throw new Error('helper_check_unavailable');
   if (!path.isAbsolute(destination) || /[\0\r\n]/.test(destination)) throw new Error('helper_prepare_destination');
   await realpath(path.dirname(destination));
@@ -60,11 +62,15 @@ export async function prepareRepositoryProbe(destination) {
       buildSources.push({ name, sha256: await snapshotSource(path.join(repositoryNative, name), path.join(snapshot, name)) });
     }
     const buildSourceDigest = createHash('sha256').update(JSON.stringify(buildSources)).digest('hex');
-    // 只执行仓库构建脚本的自有快照；不继承证书选择、用户配置或调用任何生成产物。
+    // 只执行仓库构建脚本的自有快照；身份来自显式参数，不继承环境选择或运行产物。
     try {
-      const invocation = repositoryBuildInvocation(path.join(snapshot, 'scripts/build_cli.sh'), owned);
+      const invocation = repositoryBuildInvocation(path.join(snapshot, 'scripts/build_cli.sh'), owned, signingIdentity);
       await run(invocation.program, invocation.arguments, invocation.options);
     } catch { throw new Error('helper_probe_build_failed'); }
+    const layout = runtimeLayout();
+    for (const name of [layout.entry, layout.headerChange, layout.library]) {
+      await requireSigningMode(path.join(snapshot, 'build/cli', name), signingIdentity, run);
+    }
     return await prepareProbeRuntime({ directory: path.join(snapshot, 'build/cli'), destination,
       runtimeKind: 'repository-probe', arch: process.arch === 'x64' ? 'x86_64' : process.arch,
       version: `repo-${buildSourceDigest.slice(0, 16)}`, source: `repository:${buildSourceDigest}`, buildSourceDigest, buildSources });
@@ -75,8 +81,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
   let result;
   try {
     const values = process.argv.slice(2);
-    if (values.length !== 2 || values[0] !== '--destination' || !values[1]) throw new Error('helper_prepare_destination');
-    result = await prepareRepositoryProbe(values[1]);
+    if (![2, 4].includes(values.length) || values[0] !== '--destination' || !values[1]
+      || values.length === 4 && values[2] !== '--signing-identity') throw new Error('helper_prepare_destination');
+    result = await prepareRepositoryProbe(values[1], { signingIdentity: values.length === 4
+      ? validateSigningIdentity(values[3]) : '-' });
   } catch (error) { result = failureReport(error); process.exitCode = 2; }
   process.stdout.write(`${JSON.stringify({ ...result, ...acceptanceFlags })}\n`);
 }

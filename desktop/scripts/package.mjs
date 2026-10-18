@@ -10,11 +10,13 @@ import { requireBuildSpace } from './build-space.mjs';
 import { inspectManagedRuntime, runtimeDirectoryName } from './managed-runtime.mjs';
 import { prepareElectronNotices, verifyElectronArchive, verifyElectronNotices, verifyFrontendNotices } from './distribution-notices.mjs';
 import { runtimeMinimumMacOS } from './runtime-platform.mjs';
+import { validateSigningIdentity, packageWithSigning, requireSigningMode } from './package-signing.mjs';
 
 if (process.platform !== 'darwin') throw new Error('本机 App 打包需要 macOS。');
 const run = promisify(execFile);
 const packageArguments = process.argv.slice(2);
 let withProbe = false;
+let signingIdentity;
 const packagePaths = {};
 for (let index = 0; index < packageArguments.length; index++) {
   const key = packageArguments[index];
@@ -24,12 +26,17 @@ for (let index = 0; index < packageArguments.length; index++) {
     withProbe = true; continue;
   }
   const value = packageArguments[++index];
+  if (key === '--signing-identity') {
+    if (signingIdentity !== undefined || value === undefined) throw new Error('package_signing_identity_invalid');
+    signingIdentity = validateSigningIdentity(value); continue;
+  }
   if (typeof value !== 'string' || !value || /[\0\r\n]/.test(value)) throw new Error('helper_check_arguments');
   if (key === '--output-directory' || key === '--electron-zip-directory' || key === '--runtime-directory') {
     if (key in packagePaths || !path.isAbsolute(value)) throw new Error('helper_check_arguments');
     packagePaths[key] = path.resolve(value);
   } else { throw new Error('helper_check_arguments'); }
 }
+signingIdentity ??= '-';
 const electronCache = path.join(homedir(), 'Library/Caches/electron');
 await requireBuildSpace([packagePaths['--output-directory'] || path.resolve('out'), tmpdir(),
   ...(!packagePaths['--electron-zip-directory'] ? [electronCache] : [])]);
@@ -56,7 +63,7 @@ try {
   await verifyFrontendNotices({ directory: path.resolve('dist/licenses/frontend') });
   await cp('dist/licenses/frontend', path.join(licensesDirectory, 'frontend'), { recursive: true });
   const probeDirectory = path.join(staging, 'notalone-probe');
-  const preparedProbe = withProbe ? await prepareRepositoryProbe(probeDirectory) : undefined;
+  const preparedProbe = withProbe ? await prepareRepositoryProbe(probeDirectory, { signingIdentity }) : undefined;
   let preparedManaged;
   let managedDirectory = packagePaths['--runtime-directory'];
   if (managedDirectory) {
@@ -109,7 +116,7 @@ try {
 <key>com.apple.security.cs.allow-jit</key><true/>
 </dict></plist>
 `);
-  const outputs = await packager({
+  const outputs = await packageWithSigning(packager, {
     dir: source,
     name: 'NotAlone',
     appBundleId: 'com.notalone.desktop',
@@ -140,8 +147,6 @@ try {
       await run('plutil', ['-replace', 'NSAppTransportSecurity.NSAllowsArbitraryLoads', '-bool', 'false', plist]);
     }],
     osxSign: {
-      identity: '-',
-      identityValidation: false,
       preAutoEntitlements: false,
       preEmbedProvisioningProfile: false,
       // 自研探针保留已核查的签名，不注入 Electron 的 JIT entitlement。
@@ -153,7 +158,7 @@ try {
         timestamp: 'none',
       }),
     },
-  });
+  }, signingIdentity);
   if (!outputs.length) throw new Error('package_output_unavailable');
   for (const output of outputs) {
     const app = path.join(output, 'NotAlone.app');
@@ -161,7 +166,9 @@ try {
     if (minimumSystem.stdout.trim() !== minimumMacOS) throw new Error('package_minimum_macos_changed');
     await verifyResources(path.join(app, 'Contents/Resources'));
     await run('codesign', ['--verify', '--deep', '--strict', '--verbose=2', app]);
-    console.log(`本机 App 已构建并通过 ad-hoc 签名校验：${app}`);
+    const signingMode = await requireSigningMode(app, signingIdentity, run);
+    console.log(`本机 App 已构建并通过${signingMode === 'ad-hoc' ? '本地 ad-hoc' : '显式证书'}签名校验：${app}`);
+    console.log('实际权限身份延续与正式分发／公证状态仍须单独验证。');
     if (preparedManaged) console.log('包内提供受管Python、后台与PostgreSQL；首启与搬动可用性须另行实测。');
     else console.log('当前包使用外置后台运行环境。');
     console.log('微信工具与授权接入尚未通过独立交付验收。');

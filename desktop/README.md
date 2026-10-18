@@ -111,6 +111,8 @@ React 界面和 CSS 保存后直接更新；兼容的组件修改会保留当前
 
 `npm start` 用于一次性编译后启动磁盘资源；`npm run build` 验证生产前端构建；准备交付或验证签名、权限、原生组件和包内运行时时再运行 `npm run package`。开发模式通过不能代替这些交付检查。
 
+打包缺省仍使用本地 ad-hoc 签名。需要固定证书身份时，显式执行 `npm run package -- --with-probe --signing-identity "$NOTALONE_SIGNING_IDENTITY"`；该变量由操作者事先设置为已选身份名称或完整证书摘要，不保存到仓库。App 与自研探针使用同一参数；单独准备探针可用 `node scripts/prepare-probe.mjs --destination <绝对路径> --signing-identity "$NOTALONE_SIGNING_IDENTITY"`。参数无效或签名失败立即停止，不自动选择或回退。输出按实际签名检查区分 ad-hoc 与证书签名，权限延续、正式分发及公证仍须另验，见[权限记录](../docs/macos-app-permissions-and-errors.md)。
+
 随包 `notalone-runtime/licenses/replacement-kit/README.md` 提供可选的离线组件修改与 App 新副本安装流程；接收者无需本仓库或 Conda。只有开发者重建才需要 Node／clang，普通用户双击流程不变。来源、签名边界与实际证据见[修改库说明](scripts/runtime/PSYCOPG-REBUILD.md)。
 
 任务18于2026-10-10 17:06–17:16（UTC+8）由主Agent直接操作当前微信与隔离App，公开坐标表单成功保存五处pending几何，但唯一布局校验未形成profile，实际1场失败，原因尚未定位。自有进程/目录及精确租约已核验收尾，未自动重启。现已补0600固定阶段/错误码结果和对应公开断言，原始画面不保存；新诊断未再实机验证，真实最小采集、成功自动定位和权限归属继续待验。后端两名质量解析及旧匹配入口的统一资格门禁在新建隔离库38/38通过，不能代替现场green。

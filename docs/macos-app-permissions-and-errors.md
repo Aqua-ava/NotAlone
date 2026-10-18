@@ -1,5 +1,13 @@
 # macOS App 权限与启动错误记录
 
+## 2026-10-18 显式选择 App 与自研探针签名身份
+
+真实录屏验收中，系统记录的旧 App 指定要求使用旧 CDHash，与当前固定包不匹配；系统设置中的开启状态不能证明当前代码获准。[Apple TN3127](https://developer.apple.com/documentation/technotes/tn3127-inside-code-signing-requirements)说明 ad-hoc 指定要求绑定具体代码版本，证书身份的默认要求则按所用身份形成；更换开发／分发身份仍可能需要重新授权。
+
+打包入口新增 `--signing-identity`，未指定时兼容原 ad-hoc；显式值原样传给 App 和自研探针，既不查询默认证书，也不在失败后降级。使用 [Electron Packager 的 `osxSign.identity`](https://electron.github.io/packager/main/interfaces/Options.html#osxSign)；本仓已安装的 `@electron/osx-sign` 2.7.1 在 `identityValidation:false` 时直接使用明确身份，保留 codesign 的实际失败。构建后另核真实签名方式，原有 strict 校验、签名标识及文件摘要库存不变，不改 DR、entitlements、系统信任或 TCC。
+
+本次只完成合成参数、传递、失败不降级和签名方式拒绝测试，未使用真实证书、构建 App、读取私钥或操作系统权限。实际证书签名、跨构建 DR 稳定性和权限延续由唯一候选包验收核实；证书签名不等同于正式分发或公证通过。
+
 ## 2026-10-17 取消强制搬库备份，沿用原库补齐结构
 
 用户已明确要求保留现有数据库连接与资料位置，删除普通启动中的强制备份、恢复校验、外置库复制和切换流程。按 [ADR-066](../architecture/adr/066-in-place-schema-updates-and-database-reuse.md)，已有本机库仅在真实缺少版本时原地执行受信任 SQL；结构就绪直接连接，无既有配置的新安装正常初始化空受管库。日常开发默认继续使用 `npm run dev`。其他连接、未知历史或未完成旧更新停止并保留现场；历史快照的来源删除清理与归属核验边界保持。
