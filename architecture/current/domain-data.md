@@ -26,7 +26,7 @@
 | `contact` | 用户手动创建或选择的具体联系人。 | `contact_id` 是 NotAlone 创建的稳定内部身份；昵称、备注和渠道身份是可变或可重新确认的信息。 |
 | `conversation_binding` | 用户确认的桌面聊天会话与联系人的绑定。 | 保存聊天 App、账号范围、外部会话定位标识、display name 映射、绑定状态与最近验证时间；历史选中会话元数据与视觉指纹字段仅供兼容，不构成当前采集授权；已建立且唯一的映射可自动切换，不能把 display name、视觉指纹或 `talker` 当作 `contact_id`。 |
 | `source_document` | 一次原始导入的文本、截图或语音原始引用。 | 属于一个联系人；保留来源定位、导入时间、导出器名称与版本（可获取时）、用户确认范围、确认时间、确认方式和删除状态。 |
-| `session_capture` | 前台会话同步中一次画面变化产生的端侧视觉观察记录。 | 按 ADR-052 只用于前台状态与顶部 display name；历史选中行和指纹字段不授权新增采集；默认不保存原始视觉帧，也不作为 CLI 消息正文来源。未归属时为仅含 `owner_id` 的临时态。 |
+| `FreshForegroundObservation` | 当前前台定位的一次瞬时内存结果，不是数据库实体。 | 含观察标识、时点、阶段及可选名称／置信度；仅 `confirmed` 阶段携带已核验的 `contact_id` 与 `binding_id`。owner／渠道账号范围由后端固定运行身份核验，不接受调用方注入；不保存原始帧或观察历史，不产生 CLI 消息正文。 |
 | `local_wechat_observation` | 本地微信 CLI 从一个外部会话读取的一次文字增量来源记录。 | 显式关联 `owner_id + contact_id + conversation_binding`，保存外部会话定位标识、CLI 版本、`local_id`/`cursor`、读取时间、`from_me`/sender 和 `capture_mode`（live/cli_catchup）；不保存全量导出文件。 |
 | `background_task` | 一次完整的长时后台工作，取代独立的导入/删除/重建任务表。 | `type` 区分 import/delete/reindex；`scope` 声明作用域（account/contact/source）；状态为 `queued/running/verifying/succeeded/failed/cancelled`，记录总体进度、失败原因、重试与关联来源。删除任务不得跨越隔离边界。 |
 | `background_task_step` | `background_task` 下可恢复、可重试的固定执行步骤。 | 关联父任务并保存 `step_type`、顺序、状态、尝试次数、输入/输出业务引用、错误分类和 Worker 租约；不保存完整聊天正文。只用于确实需要逐步恢复或展示进度的长任务。 |
@@ -53,7 +53,7 @@ source_document
               -> contact_memory_index（自动生成、可重建）
 
 conversation_binding
-  -> session_capture（前台状态与 display name 线索）
+  -> FreshForegroundObservation（已核验绑定的瞬时定位结果，不入库）
   -> local_wechat_observation
       -> message
 
@@ -234,23 +234,24 @@ status
 
 在数据访问层，联系人范围查询的输入必须同时提供 `owner_id` 和 `contact_id`。不允许存在“按昵称搜索所有资料后再选择”的内部便利查询；跨联系人的汇总视图也只能返回非私密、用户主动请求的聚合结果。
 
-`message` 必须显式冗余 `owner_id + contact_id`，不得仅通过 `source_document` 或 `session_capture` 间接推导；检索过滤必须基于 `message` 自身携带的隔离键，而不是依赖来源关联。
+`message` 必须显式冗余 `owner_id + contact_id`，不得仅通过 `source_document` 或 `local_wechat_observation` 间接推导；检索过滤必须基于 `message` 自身携带的隔离键，而不是依赖来源关联。
 
 `conversation_binding` 的首次建立和 display name 改名映射必须经用户确认。按 ADR-052，顶部名称完整且质量达标后，须由有界 CLI 元数据证明唯一私聊，并核验 owner／渠道账号范围内已确认的 active 绑定，才能定位到外部 `talker`/`username`；重名或没有唯一匹配时要求用户选择，不读取左侧选中行或使用头像指纹消歧，不得猜测消息归属。CLI 后台读取独立依赖已确认的稳定绑定；前台定位失败不阻塞已有绑定的读取（ADR-030）。
 
-`session_capture` 是联系人范围对象中唯一允许不携带 `contact_id` 的豁免：它存在一个“未归属临时态”，此时仅含 `owner_id`、不含 `contact_id`。该状态只用于前台 display name 观察和归属判断，必须满足以下规则：
+历史设计中的 `session_capture` 未作为当前数据库实体落地。正式前台路径采用 [FreshForegroundObservation](../../backend/src/notalone/front_sync/foreground_observation.py) 瞬时投影，经认证本机 HTTP 返回；它不是持久化联系人资料，不沿用“先保存未归属记录、再补归属”的设计。
 
-- 未归属的 `session_capture` 不得产生任何 `message`，也不得参与检索。
-- 归属成功的 `session_capture` 必须冗余 `owner_id + contact_id` 并关联已确认的 `conversation_binding`，此后只作为观察证据，不产生 CLI 消息正文。
-- 归属失败（匹配不唯一、绑定失效、顶部 display name 不完整或质量不达标、CLI 元数据不能证明唯一私聊）时，该批次必须丢弃或标记未归属，且必须按临时数据在明确时间点清理，不能静默累积或降级为“默认属于某人”。
+- 后端在固定 owner／渠道账号范围内，按 ADR-052 核验唯一私聊与 active 绑定；只有 `confirmed` 阶段可以携带联系人及绑定标识，其他阶段不得携带身份。
+- 名称和置信度只作为临时预览，不写业务库或普通日志；观察不产生 `message`，也不参与记忆检索。聊天正文与来源由 `local_wechat_observation` 路径管理。
+- [桌面控制器](../../desktop/src/main/foreground/controller.ts)核验连接代际、范围修订号与观察轮次，拒绝过期或晚到的旧结果。名称预览自原采集时点起最多保留五秒，刷新不续期；进入助手、观察失效、范围变更或退出时按当前生命周期清除预览。
+- 清除预览不删除用户已确认的联系人、草稿或已有生成任务；当前展示与任务归属按 ADR-050 分开。匹配失败不得以旧观察猜测新联系人的身份。
 
 ## 来源与删除语义
 
 - 每条 `message` 必须能定位到 `source_document` 中的原始片段或原始文件引用，或者定位到 `local_wechat_observation` 的已绑定会话、CLI 版本、读取时间、外部消息 ID 与游标；本地 CLI 来源不要求保存全量导出文件。
 - 每条候选和已确认资料应保存支持它的消息或来源列表，不能只保存一个无法解释的摘要。
 - 删除一个 `source_document` 时，必须清除其规范化消息、仅由它支持的候选资料、索引和缓存。
-- 删除一个已归属的 `session_capture` 或 `local_wechat_observation`，或解除其会话绑定时，必须按相同语义清除其规范化消息、派生候选资料、索引和缓存。
-- 未归属的 `session_capture` 不产生 `message` 或任何派生资料；其临时数据在归属确认超时或用户停止同步时一并清除。
+- 删除一个 `local_wechat_observation`，或解除其会话绑定时，必须按相同语义清除其规范化消息、派生候选资料、索引和缓存。
+- 前台瞬时观察不是消息来源，没有独立的持久化观察记录或正文派生资料可供级联删除；预览按上述生命周期清除，不能因此删除仍有合法来源的 CLI 消息。
 - 只由被删除来源支持的 `confirmed_memory` 无条件级联删除，不存在"默认"或"视情况"保留的口子。用户若想保留内容，唯一路径是主动执行"另存为不依赖该来源的手动资料"：该操作创建一条与来源无关的新 `confirmed_memory`（来源证据列表置空、候选来源链字段置空），并切断与原来源的依赖，此后原来源的删除不再影响它。
 - 去重后的 `message` 是一条规范化实体，可以由多个来源引用共同支持；同一稳定消息 ID 不产生重复消息。删除一个来源时只移除该来源引用，仍有其他有效来源时保留消息；所有来源引用都删除后，才删除消息及仅由它支持的派生资料。
 - 一条已确认资料有多个来源时，删除其中之一只移除该证据；没有剩余证据时按无条件级联删除规则失效，除非用户已执行"另存为手动资料"。

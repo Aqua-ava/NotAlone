@@ -16,7 +16,7 @@
 
 ### 1. 查询只取当前正文
 
-召回 query 就是本次要处理的文字：`reply_to_message` 取待回复消息正文，`rewrite_draft` 取草稿正文。表达方向只约束说法，不进入 query；近期消息继续作为上下文证据，不参与记忆评分。query 只取前 200 个字符。
+召回 query 就是本次要处理的文字：`reply_to_message` 取待回复消息正文，`rewrite_draft` 取草稿正文。表达方向只约束说法，不进入 query；近期消息继续作为上下文证据，不参与记忆评分。当前实现先归一化 query；不超过 200 个字符时完整参与分词，超出时取开头 100 字和结尾 100 字，并以分隔符隔开，避免截断处拼出不存在的词。此策略修复长消息尾部关键词漏召回，中段仍可能遗漏；见[召回评测记录](../../docs/memory-recall-evaluation-baseline.md)与[实现](../../backend/src/notalone/retrieval/lexical.py)。
 
 ### 2. 第一期只对记忆正文做中文词法评分
 
