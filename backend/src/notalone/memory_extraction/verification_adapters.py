@@ -328,6 +328,16 @@ subject表示当前资料归属，正文仍须保留第三人称呼；未知身�
 阶段或语用标签与完整来源不符时，仍按实际问题uncertain或unsupported。
 只支持保存原有未知，不认证唯一身份或现实真伪。
 """
+CORE_SOURCE_FIDELITY_PROFILE = "core-source-fidelity-v1"
+CORE_SOURCE_FIDELITY_PROMPT = """
+同一原消息中的主观观点可以拆为相连分句。候选通过作者署名引文保留观点归属，
+必要上下文已列入其来源，且原命题的否定、程度、条件和观点范围均未改变时，
+不要求每个后续分句机械重复“我觉得／认为”；不能只因缺少重复措辞就判meaning或pragmatics。
+仍须核对完整原命题；删去观点归属、缺少必要来源或把观点改成客观保证，仍按原规则拒绝或降级。
+明确未来安排的来源支持、现实是否执行和能否自动采纳分别判断；plan/asserted及其他字段
+均忠实，日期遵循来源时区和完整期间时，应supported，不能仅因尚未执行或应留待确认而降级。
+安排缺来源、已发生与未来阶段混淆、条件遗漏或时间槽不符仍按原规则处理，不替候选修字段。
+"""
 
 
 def source_verification_contract(
@@ -335,16 +345,23 @@ def source_verification_contract(
 ) -> tuple[str, dict[str, Any]]:
     """冻结和实际适配器共用封闭合同；新提示只配对原严格四槽。"""
     selected = SourceVerificationMode(mode)
-    if type(prompt_profile) is not str or prompt_profile not in {DEFAULT_PROMPT_PROFILE, PUBLIC_AUTHOR_QUOTE_PROFILE}:
+    if type(prompt_profile) is not str or prompt_profile not in {
+        DEFAULT_PROMPT_PROFILE, PUBLIC_AUTHOR_QUOTE_PROFILE, CORE_SOURCE_FIDELITY_PROFILE,
+    }:
         raise ValueError("来源核验提示profile未受支持。")
     if prompt_profile == PUBLIC_AUTHOR_QUOTE_PROFILE and selected is not SourceVerificationMode.LEGACY_V4:
         raise ValueError("公开作者引句提示仅用于原四槽核验。")
+    if prompt_profile == CORE_SOURCE_FIDELITY_PROFILE and selected is not SourceVerificationMode.LEGACY_V4:
+        raise ValueError("核心来源保真提示仅用于原四槽核验。")
     if selected is SourceVerificationMode.NULLABLE_PROOF_V3:
         return SOURCE_VERIFICATION_SYSTEM_PROMPT + SOURCE_BOUNDED_RUNTIME_PROOF_PROMPT, SOURCE_VERIFICATION_PROOF_V3_SCHEMA
     if selected is SourceVerificationMode.NULLABLE_PROOF_V2:
         return SOURCE_VERIFICATION_SYSTEM_PROMPT + SOURCE_AUTHOR_QUOTE_PROOF_PROMPT, SOURCE_VERIFICATION_PROOF_V2_SCHEMA
     if selected is SourceVerificationMode.NULLABLE_PROOF_V1:
         return SOURCE_VERIFICATION_SYSTEM_PROMPT + SOURCE_PROOF_PROMPT, SOURCE_VERIFICATION_PROOF_SCHEMA
+    if prompt_profile == CORE_SOURCE_FIDELITY_PROFILE:
+        return (SOURCE_VERIFICATION_SYSTEM_PROMPT + PUBLIC_AUTHOR_QUOTE_PROMPT + CORE_SOURCE_FIDELITY_PROMPT,
+                SOURCE_VERIFICATION_SCHEMA)
     return (SOURCE_VERIFICATION_SYSTEM_PROMPT + (
         PUBLIC_AUTHOR_QUOTE_PROMPT if prompt_profile == PUBLIC_AUTHOR_QUOTE_PROFILE else ""
     ), SOURCE_VERIFICATION_SCHEMA)

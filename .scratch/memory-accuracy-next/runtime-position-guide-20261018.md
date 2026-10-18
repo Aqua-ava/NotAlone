@@ -105,3 +105,13 @@ P02 E/V均HTTP200，但实际任务首次执行失败，外层deepseek_result_un
 
 
 P02只读首拒绝复现：E的事件候选只列第二条消息，dependency=null；V的reference.target/binding引用第一条声明。响应JSON/proof形状及字符跨度合法，但source_proof.py的_validate_positions要求每个证明消息同时属于实际窗口与candidate.source_message_ids，故抛“证明区间不属于实际候选来源”，包装为ExtractionInvalidOutputError后正式任务失败。event21 trace与source-close原件一致，不是记录缺失。实施spec第91行将完整窗口新鲜度与正文必需来源分开，语义图实际依赖须进入source_ids；不能通过放宽为任意窗口消息来绕过ALL删除依赖。后续机制仍需独立设计和验证，本次不修改原响应或补签P02。
+
+
+## 核心V独立澄清profile：实施中
+
+核心线固定六窗闭账后，主线仅在本机读取已授权W01/W02的审核证据进行诊断，没有读取四窗留出答案，也未复制私人原句进仓库。W01必需未来安排被无据pragmatics降级，但既有提示已要求区分来源支持与现实执行，不称代码缺陷。W02拆分观点的署名归属与机械重复观点词之间存在可澄清的提示边界；额外候选仍须逐项审核，不能全部强制supported。
+
+拟新增仅legacy-v4可用的core-source-fidelity-v1，由原SYSTEM、既有PUBLIC_AUTHOR_QUOTE_PROMPT和短核心澄清组成。default/public/proof1–3字节与原四槽schema、解析、置信度、采纳门保持。最高SDK Mock核只有system变化，错误profile/协议组合调用前拒绝，for_mode保留profile；它只验证接线，不证明模型质量。核心后继runner须显式绑定profile及prompt/schema/source摘要，新场不自动开启。
+
+
+核心V profile已完成：真实SDK新profile先红后绿，新增4测试覆盖旧合同摘要、请求仅system变化、跨proof/未知profile在HTTP前拒绝、8组输出与伪证据对照。verification_http_contract、bounded_runtime_proof、core_transport_contract共40项通过；verification_adapters定向mypy通过。测试曾因比较证据对象身份而失败，改为公开to_payload内容并排除随机trace IDs后重验通过；产品未因此修改。Standards与主Agent Spec均无实质问题，无真实调用或模型质量信用。private runner接线及真实场由核心线独立冻结。
