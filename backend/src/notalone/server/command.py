@@ -180,6 +180,8 @@ def _run(args: argparse.Namespace, lifetime: ParentLifetime) -> int:
     assert server is not None
     try:
         def start_reading() -> None:
+            if task_host is not None and owner_id is not None:
+                task_host.start_scheduling(owner_id=owner_id)
             if sync_host is not None:
                 sync_host.start()
             write_backend_info(address=f"{host}:{port}", token=app.token)

@@ -272,28 +272,8 @@ class PostgresBackgroundTaskRepository:
                 ).fetchone()
                 if observation is None:
                     return None
-                if observation[2] is not None:
-                    # 旧批次不重排终态；排队中的配置恢复或唤醒重试复用原任务。
-                    task = connection.execute(
-                        """
-                        SELECT id FROM public.background_task
-                        WHERE owner_id = %s AND contact_id = %s
-                          AND task_type = 'observation'
-                          AND status IN ('queued', 'running', 'verifying')
-                        """,
-                        (owner_id, contact_id),
-                    ).fetchone()
-                    return task[0] if task else None
-                task_id = self.create_observation_task(
-                    connection, owner_id=owner_id, contact_id=contact_id,
-                    message_count=observation[1],
-                )
-                connection.execute(
-                    # 取实际登记时刻；事务可能在等待联系人锁之前已经开始。
-                    "UPDATE public.local_wechat_observation SET memory_enqueued_at = clock_timestamp() WHERE id = %s",
-                    (observation[0],),
-                )
-                return task_id
+                from notalone.persistence.extraction_schedule import claim_scope
+                return claim_scope(connection,self,owner_id=owner_id,contact_id=contact_id)
         except psycopg.Error:
             raise BackgroundTaskPersistenceError("观察记忆任务排队失败。") from None
 

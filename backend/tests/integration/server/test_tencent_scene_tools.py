@@ -31,6 +31,7 @@ class SceneToolsHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
             connection.execute("INSERT INTO public.contact(id,owner_id,display_name) VALUES(%s,%s,'合成场景联系人')",
                                (self.contact_id, self.owner_id))
         self.scene_mode = 'create'
+        self.scene_inputs = []
         self.when = datetime(2026, 1, 1, tzinfo=timezone.utc)
 
     def test_imported_chat_becomes_scene_through_document_tools(self):
@@ -137,6 +138,34 @@ class SceneToolsHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self.assertFalse(after['maintenance_pending'])
         self.assertEqual(after['profile']['version_id'], before['profile']['version_id'])
         self.assertEqual(after['model_calls_used'], 2, '无变化只运行提案和独立跳过核验，不重写画像。')
+        third = '再次确认合成读书安排不变。'
+        self.extraction_model.facts[third] = ('common_fact', 'other')
+        self._import_evolution_source([(False, third)], when=self.when + timedelta(days=2))
+        final = self.ready(backend)
+        self.assertNotIn(new, self.scene_inputs[-1], '已核验无变化的资料不能在新任务重复成为输入。')
+        self.assertIn(third, self.scene_inputs[-1])
+        self.assertEqual(final['covered_count'], 3)
+        self.assertEqual(final['scenarios'], before['scenarios'])
+        self.assertEqual(final['model_calls_used'], 2)
+
+    def test_deleted_no_change_source_is_not_reused_by_a_later_task(self):
+        from tests.integration.server.test_skill_learning import SkillLearningHttpTest
+        first, repeated, third = '每周一起参加合成读书会。', '重复确认合成读书安排。', '增加合成阅读讨论。'
+        self.extraction_model.facts = {text: ('common_fact', 'other') for text in (first, repeated, third)}
+        self.extraction_model.action = 'store'
+        self._import_evolution_source([(False, first)], when=self.when)
+        backend = self.scene_backend(with_profile=True)
+        self.ready(backend)
+        self.scene_mode = 'unchanged'
+        source = self._import_evolution_source([(False, repeated)], when=self.when + timedelta(days=1))
+        self.assertEqual(self.ready(backend)['covered_count'], 2)
+        SkillLearningHttpTest._delete_source(self, source['source']['source_id'])
+        self._import_evolution_source([(False, third)], when=self.when + timedelta(days=2))
+        final = self.ready(backend)
+        self.assertEqual(final['covered_count'], 2, '删除的无改动资料不得继续计入跨任务覆盖。')
+        self.assertNotIn(repeated, self.scene_inputs[-1])
+        self.assertIn(third, self.scene_inputs[-1])
+        self.assertFalse(final['maintenance_pending'])
 
     def scene_backend(self, *, with_profile=False):
         from notalone.memory.layered import OrganizationBudget
@@ -155,6 +184,8 @@ class SceneToolsHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
             elif payload.get('tools'):
                 documents = initial['documents']
                 tool_results = [m for m in messages if m['role'] == 'tool']
+                if not tool_results:
+                    self.scene_inputs.append([memory['text'] for memory in initial['memories']])
                 def call(name, args, index):
                     return {'id': str(index), 'type': 'function', 'function': {'name': name, 'arguments': json.dumps(args)}}
                 def document(memories, replaces=()):

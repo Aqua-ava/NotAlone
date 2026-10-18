@@ -439,6 +439,7 @@ class PostgresLayeredMemoryStore(LayeredProfileStore, LayeredCorrectionStore):
             covered.update(item['memory_id'] for batch in connection.execute(
                 "SELECT input_manifest FROM public.layered_memory_batch WHERE task_id=%s AND status='succeeded'",
                 (claim.task_id,)).fetchall() for item in batch['input_manifest'])
+            covered.update(self._unchanged_coverage(connection, scope, state, current, contract))
             target={item['memory_id'] for item in job['target_manifest']}
             entries=tuple(entry for entry in self.unprotected(connection, scope, self.eligible(overview)) if str(entry.memory.memory_id) in target-covered)
             selected=[]
@@ -600,7 +601,7 @@ class PostgresLayeredMemoryStore(LayeredProfileStore, LayeredCorrectionStore):
             job = connection.execute('SELECT contract FROM public.layered_memory_job WHERE task_id=%s',
                                      (work.claim.task_id,)).fetchone()
             if not proposal['scenarios'] and ':document-tools-v1' in job['contract']:
-                self._publish_unchanged(connection, state, work)
+                self._publish_unchanged(connection, state, work, overview, job['contract'])
                 return
             generation, now = state['organization_generation']+1,self._clock()
             _,old=self.generation_rows(connection,work.scope,state['organization_generation'])
@@ -641,7 +642,27 @@ class PostgresLayeredMemoryStore(LayeredProfileStore, LayeredCorrectionStore):
             connection.execute("UPDATE public.layered_memory_state SET status='ready',covered_count=%s,updated_at=%s,error_code=NULL "
                 "WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s",(covered,now,work.scope.owner_id,work.scope.contact_id))
 
-    def _publish_unchanged(self, connection, state, work):
+    def _unchanged_coverage(self, connection, scope, state, current, contract):
+        """复用同策略无改动核验；任何底层版本或已读场景变化都使回执失效。"""
+        _, scenarios = self.generation_rows(connection, scope, state['organization_generation'])
+        versions = {row['id'] for row in scenarios}
+        corrections = list(self.correction_context(connection, scope))
+        rows = connection.execute(
+            "SELECT b.input_manifest,b.reused_version_ids,b.correction_input FROM public.layered_memory_batch b "
+            "JOIN public.layered_memory_job j ON j.task_id=b.task_id "
+            "WHERE b.owner_id=%s AND b.contact_id IS NOT DISTINCT FROM %s "
+            "AND b.settings_generation=%s AND b.status='succeeded' AND j.contract=%s "
+            "AND b.output_payload->'filtered'->'scenarios'='[]'::jsonb "
+            "AND b.output_payload->'verification_result'='true'::jsonb",
+            (scope.owner_id, scope.contact_id, state['settings_generation'], contract),
+        ).fetchall()
+        return {item['memory_id'] for row in rows
+                if set(row['reused_version_ids']) <= versions
+                and row['correction_input'] == corrections
+                and all(current.get(item['memory_id']) == item for item in row['input_manifest'])
+                for item in row['input_manifest']}
+
+    def _publish_unchanged(self, connection, state, work, overview, contract):
         """只有实际提案及独立无改动核验完成后才记录覆盖，保留原集合身份。"""
         generation, rows = self.generation_rows(connection, work.scope, state['organization_generation'])
         connection.execute("UPDATE public.layered_memory_batch SET status='succeeded' WHERE id=%s", (work.id,))
@@ -649,6 +670,8 @@ class PostgresLayeredMemoryStore(LayeredProfileStore, LayeredCorrectionStore):
         covered.update(item['memory_id'] for batch in connection.execute(
             "SELECT input_manifest FROM public.layered_memory_batch WHERE task_id=%s AND status='succeeded'",
             (work.claim.task_id,)).fetchall() for item in batch['input_manifest'])
+        current = {item['memory_id']: item for item in self._manifest(connection, work.scope, self.eligible(overview))}
+        covered.update(self._unchanged_coverage(connection, work.scope, state, current, contract))
         profile = self.profile_row(connection, work.scope, generation['profile_version_id']) if generation and generation['profile_version_id'] else None
         profile_status = ('not_required' if not rows else 'succeeded'
                           if profile and not profile['withdrawn'] else 'pending')
