@@ -24,3 +24,9 @@ LangChain接口依据：官方 `https://reference.langchain.com/python/langchain
 - 无改动红：旧流程创建无意义generation并暂停remaining；绿：独立无变化核验后完成覆盖，保留场景和已有画像版本。
 - 同身份精确edit、多文档merge及来源删除、越界路径、五轮耗尽、旧qualified_suite拆分/合并和预算恢复均由合成公开接口验证。
 - 未调用真实模型、未启动桌面、未打包；真实模型与桌面体验交04验收。
+
+## 工具协议纠错补充
+
+场景工具提示词独立于旧 JSON 提案协议，明确 documents 为完整可读索引，仅允许简单 Markdown 文件名；空场景索引直接创建文档，画像仅写 profile.md。单次工具参数或路径错误以静态错误说明回传 ToolMessage，可在原有五轮内纠正；不读取真实路径、不增加预算，持续越界仍失败且不发布。
+
+公开 HTTP 合成边界先复现 `/memories/preferences.md` 错误导致失败，再验证纠正后正式发布；L2/L3 共16项通过，涵盖未纠正越界、合并来源保留、删除及增量画像。本轮未调用真实模型。
