@@ -233,6 +233,9 @@ class RecordingMemoryPort:
     def deleted_texts(self, scope):
         return ()
 
+    def list_pending_candidates(self, scope):
+        return ()
+
     def create_candidate(self, candidate):
         self.calls.append(("candidate", candidate.text))
         return candidate
@@ -997,8 +1000,9 @@ class RunExtractionTest(unittest.TestCase):
             topic=MemoryTopic.OTHER,
         )
 
-    def test_adjudication_invalid_output_counts_toward_skip(self) -> None:
+    def test_adjudication_invalid_output_retains_pending_without_confirming(self) -> None:
         messages = _messages(3)
+        memory_port = SimilarMemoryPort(self._similar_memory())
 
         stats = run_extraction(
             trace_store=InMemoryTraceStore(),
@@ -1007,7 +1011,7 @@ class RunExtractionTest(unittest.TestCase):
             watermark_message_id=None,
             runtime=PayloadRuntime(),
             verification_runtime=SyntheticSupportingVerifier(),
-            memory_port=SimilarMemoryPort(self._similar_memory()),
+            memory_port=memory_port,
             owner_memory_port=self.owner_port,
             adjudication_runtime=FailingAdjudicationRuntime(
                 ExtractionInvalidOutputError("裁决模型未返回结构化结果。")
@@ -1018,15 +1022,13 @@ class RunExtractionTest(unittest.TestCase):
         )
 
         self.assertEqual(stats.batches, 1)
-        self.assertEqual(stats.failed_batches, 1)
-        self.assertEqual(stats.skipped_batches, 0)
-        self.assertEqual(self.watermark.values, [])
-        self.assertIsNotNone(self.watermark.failure)
-        self.assertEqual(self.watermark.failure.count, 1)
-        self.assertIs(
-            self.watermark.failure.failure_range.code,
-            ExtractionFailureKind.INVALID_OUTPUT,
-        )
+        self.assertEqual(stats.failed_batches, 0)
+        self.assertEqual(stats.pending, 1)
+        self.assertEqual(stats.adopted, 0)
+        self.assertEqual(stats.updated, 0)
+        self.assertEqual([operation for operation, _ in memory_port.calls], ["candidate"])
+        self.assertEqual(self.watermark.values, [messages[-1].message_id])
+        self.assertIsNone(self.watermark.failure)
 
     def test_adjudication_unavailable_never_counts(self) -> None:
         messages = _messages(3)
