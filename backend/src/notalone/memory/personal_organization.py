@@ -27,7 +27,8 @@ corrections非空时每个target还须输出correction_respected布尔值，逐�
 直接事实/偏好要求内容被来源直接支持；推断不要求结论逐字出现在来源，要求引用的事实能合理支撑推理，保留限定、不确定性和相反证据。凭空推测、把单次行为写成确定人格、缺少依据或概率限定要拒绝。
 矛盾需要相冲突的真实主张，不能自行编造矛盾。L3还须有持续背景价值，不收短期安排。核验标题、hint和basis也不能无据。
 不论标题和kind，只要存在沟通操作、决策方法、安慰/回复指令或Agent行动建议，contains_action_guidance必须true并拒绝。
-输出{"items":[{"index":0,"sha256":"复制target摘要","supported":true,"contains_action_guidance":false,"reasons":[],"statements":[{"index":0,"kind":"与原文一致","support_type":"direct/inference/contradiction之一","supported":true,"uncertainty_preserved":true,"basis":"为什么依据支持该事实或推断，说明局限","sources":[{"memory_id":"被该条引用的ID","revision":1,"quote":"该版本memories.text中的逐字片段"}]}]}]}。
+输出{"items":[{"index":0,"sha256":"复制target摘要","supported":true,"contains_action_guidance":false,"reasons":[],"statements":[{"index":0,"kind":"fact","support_type":"direct/inference/contradiction之一","supported":true,"uncertainty_preserved":true,"basis":"为什么依据支持该事实或推断，说明局限","sources":[{"memory_id":"被该条引用的ID","revision":1,"quote":"该版本memories.text中的逐字片段"}]}]}]}。
+kind只能是fact/preference/inference/contradiction，复制对应proposal statement的实际kind，不能输出“与原文一致”等说明文字。
 每个target和statement各出现一次。L2每段一个statement；L3每entry一个statement且index=0。fact/preference的support_type为direct，inference为inference，contradiction为contradiction。
 L3每个statement还须包含temporal_basis（static_fact/current_verified/historical/current_unverified）和temporal_references（memory_id/revision数组）。稳定的临时现状只可用current_verified且引用timing.current_status实际为current_verified的来源；未知现状仅uncertain，历史仅historical。静态事实可用static_fact且temporal_references为空。推断仅用current_unverified且为空。
 sources不为空，只引用对应条目的references，quote须为实际来源片段；引用存在不证明推理正确。无法核验则supported=false，不能凑合通过。'''
@@ -55,9 +56,11 @@ def verify_result(result, proposal, memories, layer, corrections=()):
             matches = [a for a in audit.get('statements', []) if isinstance(a, dict) and type(a.get('index')) is int and a['index'] == si] if valid else []
             verdict = matches[0] if len(matches) == 1 else {}
             kind = statement.get('kind')
+            # 兼容旧提示的说明占位值；仅绑定当前摘要/索引后沿用原类别，后续support_type与全部证据门仍必验。
+            verdict_kind = kind if verdict.get('kind') == '与原文一致' and valid and len(matches) == 1 else verdict.get('kind')
             sources = verdict.get('sources')
             refs = {(r['memory_id'], r['revision']) for r in statement['references']}
-            valid = valid and (kind in {'fact', 'preference', 'inference', 'contradiction'} and verdict.get('kind') == kind
+            valid = valid and (kind in {'fact', 'preference', 'inference', 'contradiction'} and verdict_kind == kind
                 and verdict.get('support_type') == ('direct' if kind in {'fact', 'preference'} else kind)
                 and verdict.get('supported') is True and verdict.get('uncertainty_preserved') is True
                 and isinstance(verdict.get('basis'), str) and 0 < len(verdict['basis'].strip()) <= 1000

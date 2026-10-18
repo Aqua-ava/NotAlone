@@ -109,13 +109,13 @@ class PersonalBackgroundVerificationTest(unittest.TestCase):
             'uncertainty': '未直接表明偏好。', 'temporal_status': 'uncertain',
             'references': [{'memory_id': str(UUID(int=1)), 'revision': 2}]}
 
-    def verify(self, *, supported=True, guidance=False, quote=None, corrections=(), legacy=False, temporal='current_unverified'):
+    def verify(self, *, supported=True, guidance=False, quote=None, corrections=(), legacy=False, temporal='current_unverified', audit_kind=None, bad_digest=False):
         entry = deepcopy(self.entry)
         if legacy:
             for key in ('kind', 'section', 'basis'): entry.pop(key)
-        audit = {'index': 0, 'sha256': content_digest(entry), 'supported': supported,
+        audit = {'index': 0, 'sha256': 'wrong' if bad_digest else content_digest(entry), 'supported': supported,
             'contains_action_guidance': guidance, 'correction_respected': True, 'reasons': [], 'statements': [{
-                'index': 0, 'kind': self.entry['kind'], 'support_type': 'inference' if self.entry['kind'] == 'inference' else 'direct',
+                'index': 0, 'kind': audit_kind or self.entry['kind'], 'support_type': 'inference' if self.entry['kind'] == 'inference' else 'direct',
                 'supported': supported, 'uncertainty_preserved': True, 'basis': '长期上课支持可能的兴趣，不证明确定偏好。',
                 'temporal_basis': temporal, 'temporal_references': [],
                 'sources': [{'memory_id': str(UUID(int=1)), 'revision': 2, 'quote': quote or '每周参加绘画课'}]}]}
@@ -142,3 +142,9 @@ class PersonalBackgroundVerificationTest(unittest.TestCase):
         self.assertEqual(self.verify()[0]['accepted_indices'], [])
         self.assertEqual(self.verify(temporal='current_verified')[0]['accepted_indices'], [])
         self.assertEqual(self.verify(temporal='static_fact')[0]['accepted_indices'], [0])
+
+    def test_old_literal_kind_placeholder_is_only_resolved_with_bound_target(self):
+        self.assertEqual(self.verify(audit_kind='与原文一致')[0]['accepted_indices'], [0])
+        self.assertEqual(self.verify(audit_kind='与原文一致', bad_digest=True)[0]['accepted_indices'], [])
+        self.assertEqual(self.verify(audit_kind='fact')[0]['accepted_indices'], [])
+        self.assertEqual(self.verify(audit_kind='同上')[0]['accepted_indices'], [])
