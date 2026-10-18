@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { ReplyCandidate, ReplyCandidateSelection } from '../shared/reply-bridge';
 import type { ReplyEvidenceState, ReplyLayeredContext, ReplyLayeredScenarioRead, ReplyLayeredStatus, ReplyRetrievalReceipt } from '../shared/reply-evidence';
 import { useRevisionedSession } from './use-revisioned-session';
@@ -115,6 +116,8 @@ export function ReplyEvidence({ evidence, selection, candidate, number, waiting 
   evidence: ReturnType<typeof useReplyEvidence>; selection: ReplyCandidateSelection; candidate: ReplyCandidate; number: number; waiting: boolean;
 }) {
   const { state } = evidence;
+  const selectionKey = JSON.stringify(selection);
+  const [failure, setFailure] = useState<{ key: string; message: string } | null>(null);
   const matches = state.contactId === selection.contactId && state.scopeRevision === selection.scopeRevision
     && state.replyRequestId === selection.replyRequestId && state.candidateId === selection.candidateId;
   const open = matches && state.phase !== 'idle';
@@ -122,8 +125,8 @@ export function ReplyEvidence({ evidence, selection, candidate, number, waiting 
     const revision = evidence.latest.current.scopeRevision;
     try {
       await (close ? window.notalone.replies.closeEvidence(selection) : window.notalone.replies.loadEvidence(selection));
-      if (evidence.active.current && revision === evidence.latest.current.scopeRevision) evidence.setError('');
-    } catch { if (evidence.active.current && revision === evidence.latest.current.scopeRevision) evidence.setError('候选依据暂不可用，请重新确认本次候选。'); }
+      if (evidence.active.current && revision === evidence.latest.current.scopeRevision) setFailure(null);
+    } catch { if (evidence.active.current && revision === evidence.latest.current.scopeRevision) setFailure({ key: selectionKey, message: '候选依据暂不可用，请重新确认本次候选。' }); }
   }
   return <div className="reply-evidence">
     <button disabled={waiting} aria-expanded={open} onClick={() => void operate(open)}>{open ? '收起' : '展开'}候选{number}依据</button>
@@ -157,6 +160,6 @@ export function ReplyEvidence({ evidence, selection, candidate, number, waiting 
         </article>)}
       </>}
     </section>}
-    {matches && evidence.error && <p role="alert">{evidence.error}</p>}
+    {failure?.key === selectionKey && <p role="alert">{failure.message}</p>}
   </div>;
 }

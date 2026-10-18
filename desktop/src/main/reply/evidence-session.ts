@@ -10,6 +10,7 @@ export class ReplyEvidenceSession {
   private operation = 0;
   private pending: AbortController | undefined;
   private generation: number | undefined;
+  private sessionId: string | null | undefined;
   private readonly listeners = new Set<(state: ReplyEvidenceState) => void>();
   constructor(private readonly backend: BackendHost, private readonly replies: ReplySession) {
     replies.onStateChanged((state) => this.receive(state));
@@ -37,17 +38,19 @@ export class ReplyEvidenceSession {
   }
   private assertCandidate(selection: ReplyCandidateSelection): void {
     const state = this.replies.getState();
+    const reply = displayedReply(state);
     if (this.backend.getConnectionGeneration() === undefined || state.phase === 'waiting'
       || state.contactId !== selection.contactId || state.scopeRevision !== selection.scopeRevision
-      || state.result?.replyRequestId !== selection.replyRequestId
-      || !state.result.candidates.some(({ original }) => original.candidateId === selection.candidateId)) throw new Error('候选依据已失效。');
+      || reply?.replyRequestId !== selection.replyRequestId
+      || !reply.candidates.some((candidate) => candidate.candidateId === selection.candidateId)) throw new Error('候选依据已失效。');
   }
   private receive(state: ReplySessionState): void {
     const generation = this.backend.getConnectionGeneration();
-    const requestId = state.phase === 'waiting' ? null : state.result?.replyRequestId ?? null;
-    if (generation !== this.generation || state.scopeRevision !== this.state.scopeRevision
+    const requestId = state.phase === 'waiting' ? null : displayedReply(state)?.replyRequestId ?? null;
+    const sessionId = state.savedSession?.sessionId;
+    if (generation !== this.generation || sessionId !== this.sessionId || state.scopeRevision !== this.state.scopeRevision
       || state.contactId !== this.state.contactId || requestId !== this.state.replyRequestId) {
-      this.cancel(); this.generation = generation;
+      this.cancel(); this.generation = generation; this.sessionId = sessionId;
       this.publish({ scopeRevision: state.scopeRevision, contactId: state.contactId, replyRequestId: requestId, candidateId: null, phase: 'idle', items: [], basisChanges: undefined, retrieval: undefined, layeredContext: undefined, layeredStatus: undefined, layeredScenarioReads: undefined, ownerLayeredContext: undefined, ownerLayeredStatus: undefined, ownerLayeredScenarioReads: undefined });
     }
   }
@@ -56,4 +59,12 @@ export class ReplyEvidenceSession {
     this.state = { ...this.state, ...update, revision: this.state.revision + 1 };
     for (const listener of this.listeners) listener(this.getState());
   }
+}
+
+// 与候选面板一致：新结果优先；恢复只接受当前已读会话的最后一组完成候选。
+function displayedReply(state: ReplySessionState) {
+  if (state.result) return { replyRequestId: state.result.replyRequestId,
+    candidates: state.result.candidates.map(({ original }) => original) };
+  if (state.savedSession?.phase !== 'ready' || !state.savedSession.sessionId) return;
+  return state.savedSession.turns.filter((turn) => turn.state === 'completed' && turn.reply).at(-1)?.reply;
 }
