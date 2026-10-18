@@ -10,7 +10,8 @@
 - bounded独立诊断结论3184a219：未找到程序接线缺陷；相同历史E请求产生不同标签，不能归因V配置。
 - 4源12调用设计纳入不唯一且不能改变修复路径，已决定省去；不重抽、不补输出、不放宽门，原15/七正控质量义务保持。
 - reference Vmax场bd7187de closed14/32、前6safe/full8/18，A07V length/8192全推理/无tool，capture0，后9unrun；结果da4384e6→e6b8669d。
-- 新V32K在28a8b0f9独立冻结：run67d9ff59，freeze8b69dfdd，90sources、原16/18+1、cap32零重试；运行中已审8窗safe7/general1、10/10/9，非最终结果。
+- V32K run67d9ff59/freeze8b69dfdd@28a8b0f9已closed30/32：16全审safe13/general3、安全0，必需18/18/15，可选0/1；unknown/unrun0，质量失败。
+- reference结果811cf0c2→c8b1aa11：90sources/8版本/32回执/266E字段/76V字段/27引用独审通过；旧matcher8/2/9另列；进程退出/key删/清理空，0后继。
 - core固定候选4e6e2683 closed12/12，mandatory raw/接受/完整6/6/6；同7bef源码留出9ce3731a closed8/8，5/5/3。
 - core留出safe3/general1、positive_loss2，安全/unknown0；原观察边界及评价标签缺口未被V识别，当前无直接编译删字段证据。
 - core结果97b6d8c0→192f3deb，旧收据及更正链保留；不据已揭示H03定向调参后重签独立留出，票claimed。
@@ -20,3 +21,4 @@
 - 生产放行表空，task03第一AC未满足，goal active；有限六类/按维度AND/任务恢复/隔离及生命周期工程证据见agent-acceptance。
 - 完成仍需原15真实依据/七轴及达标后生命周期、核心独立完整验收、指代原16质量门；不能靠单测或其他票抵扣。
 - 无新真实联系人、聊天发送、业务迁移、push或PR。
+- 用户最新要求已落c6b210df：失败→原因/假设→最小改动→离线定点→通过标准；不改提示重跑整场。负责人见field-gate-targeted-repair-20261018.md，公共文件先协调。
