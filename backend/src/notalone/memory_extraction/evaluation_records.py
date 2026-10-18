@@ -65,6 +65,21 @@ _CONFIG_FIELDS = _BOUNDED_CONFIG_FIELDS | frozenset({
 })
 
 
+class _CaptureFailureCode(str, Enum):
+    BODY_JSON_INVALID = "body_json_invalid"
+    BODY_ENCODING_INVALID = "body_encoding_invalid"
+    NESTED_JSON_INVALID = "nested_json_invalid"
+    NESTED_JSON_NOT_OBJECT = "nested_json_not_object"
+    SERIALIZATION_FAILED = "serialization_failed"
+    INTERNAL_FAILURE = "internal_failure"
+
+
+class _RedactionFailure(ValueError):
+    def __init__(self, code: _CaptureFailureCode):
+        self.code = code
+        super().__init__(code.value)
+
+
 def _json_value(value: Any) -> Any:
     if isinstance(value, (UUID, datetime)):
         return str(value) if isinstance(value, UUID) else value.isoformat()
@@ -107,13 +122,19 @@ def _redact(
                 removed.append(location)
                 continue
             if key in {"arguments", "body_text"} and isinstance(item, str):
-                decoded = json.loads(item)
+                try:
+                    decoded = json.loads(item)
+                except json.JSONDecodeError:
+                    raise _RedactionFailure(_CaptureFailureCode.NESTED_JSON_INVALID) from None
                 if not isinstance(decoded, dict):
-                    raise ValueError("unstructured_tool_arguments")
+                    raise _RedactionFailure(_CaptureFailureCode.NESTED_JSON_NOT_OBJECT)
                 sanitized, nested = _redact(
                     decoded, path=location + "::json", request=request
                 )
-                result[key] = _canonical(sanitized).decode("utf-8")
+                try:
+                    result[key] = _canonical(sanitized).decode("utf-8")
+                except (ValueError, UnicodeError):
+                    raise _RedactionFailure(_CaptureFailureCode.SERIALIZATION_FAILED) from None
             else:
                 result[key], nested = _redact(item, path=location, request=request)
             removed.extend(nested)
@@ -683,17 +704,32 @@ class EvaluationRecordStore:
             "original_bytes_sha256": hashlib.sha256(body).hexdigest(),
             "original_bytes_length": len(body),
         }
+        failure = _CaptureFailureCode.INTERNAL_FAILURE
         try:
-            parsed = json.loads(body)
-            _redact(parsed)
+            try:
+                parsed = json.loads(body)
+            except json.JSONDecodeError:
+                raise _RedactionFailure(_CaptureFailureCode.BODY_JSON_INVALID) from None
+            except UnicodeError:
+                raise _RedactionFailure(_CaptureFailureCode.BODY_ENCODING_INVALID) from None
+            sanitized, _ = _redact(parsed)
             if len(body) > _MAX_RECORD_BYTES:
                 raise ValueError("too_large")
+            if self._strict_response:
+                try:
+                    _canonical(sanitized)
+                except (ValueError, UnicodeError):
+                    raise _RedactionFailure(_CaptureFailureCode.SERIALIZATION_FAILED) from None
             return {**metadata, "body": parsed}
-        except (ValueError, UnicodeError, RecursionError):
-            return {
-                **metadata, "capture_form": "digest_only",
-                "body_not_saved": "redaction_unavailable",
-            }
+        except _RedactionFailure as error:
+            failure = error.code
+        except Exception:
+            pass
+        return {
+            **metadata, "capture_form": "digest_only",
+            "body_not_saved": "redaction_unavailable",
+            "redaction_failure_code": failure.value,
+        }
 
     def capture_request(self, sequence: int, request: httpx.Request) -> dict:
         self._check_response_sequence(sequence)
@@ -725,7 +761,10 @@ class EvaluationRecordStore:
                 event = self._event(kind="provider_response", request_sequence=sequence, payload=payload)
                 _canonical(event)
             except Exception:
-                payload = {**metadata, "body_not_saved": "redaction_unavailable"}
+                payload = {
+                    **metadata, "body_not_saved": "redaction_unavailable",
+                    "redaction_failure_code": _CaptureFailureCode.INTERNAL_FAILURE.value,
+                }
                 event = self._event(kind="provider_response", request_sequence=sequence, payload=payload)
             # I/O发布在保护之外；落盘失败不得补写同一终态。
             receipt = self._persist(event)
@@ -867,6 +906,7 @@ class EvaluationRecordStore:
                     **{key: event["payload"][key] for key in (
                         "capture_form", "body_not_saved", "original_bytes_sha256",
                         "original_bytes_length", "status_code", "response_obtained",
+                        "redaction_failure_code",
                     ) if key in event["payload"]},
                 } for event in events
                     if event["kind"] in {"provider_request", "provider_response"}
