@@ -21,6 +21,12 @@ class BatchMemoryModel(ScriptedCoreModel):
     actions: dict = {}
     timings: dict = {}
     batch_inputs: list = []
+    batch_http_model: object | None = None
+
+    def bind_tools(self, tools, **kwargs):
+        if self.batch_http_model is not None and tools[0].get('title') == 'BatchMemoryAdjudicationOutput':
+            return self.batch_http_model.bind_tools(tools, **kwargs)
+        return super().bind_tools(tools, **kwargs)
 
     def _generate(self, messages, stop=None, run_manager=None, **kwargs):
         name = kwargs['tools'][0]['function']['name']
@@ -86,6 +92,60 @@ class TencentL1HttpTest(CoreBusinessFlowFixture, unittest.TestCase):
 
     def memories(self):
         return self._ok(f'/api/contacts/{self.contact_id}/memories')['memories']
+
+    def _http_batch_model(self, *, content_only=False):
+        import httpx
+        from notalone.reply.adapters.deepseek_provider import build_deepseek_model
+        requests = []
+        def respond(request):
+            payload = json.loads(request.read())
+            requests.append(payload)
+            data = json.loads(payload['messages'][-1]['content'])
+            result = {'decisions': [{'candidate_id': c['candidate_id'],
+                'action': 'skip' if data['candidate_pool'] else 'store', 'target_ids': [], 'merged_text': None}
+                for c in data['memories']]}
+            message = {'role': 'assistant', 'content': ''}
+            if content_only and data['candidate_pool']:
+                message['content'] = json.dumps(result)
+            else:
+                message['tool_calls'] = [{'id': 'synthetic-batch', 'type': 'function', 'function': {
+                    'name': 'BatchMemoryAdjudicationOutput', 'arguments': json.dumps(result)}}]
+            return httpx.Response(200, json={'id': 'synthetic-batch', 'object': 'chat.completion', 'created': 1,
+                'model': 'deepseek-flash', 'choices': [{'index': 0, 'finish_reason': 'stop' if content_only else 'tool_calls',
+                                                      'message': message}]})
+        client = httpx.Client(transport=httpx.MockTransport(respond))
+        self.addCleanup(client.close)
+        self.extraction_model.batch_http_model = build_deepseek_model(api_key='synthetic-key', model_name='deepseek-flash',
+            base_url='https://api.deepseek.com', extra_body={'thinking': {'type': 'enabled'}},
+            http_client=client, max_retries=0)
+        return requests
+
+    def test_http_batch_forces_tool_without_thinking_and_skip_leaves_no_pending(self):
+        requests = self._http_batch_model()
+        fact = '周末固定去游泳。'
+        self.extraction_model.facts = {fact: ('preference', 'health')}
+        self._import_evolution_source([(False, fact)], when=self.when)
+        before = self.memories()
+        self.assertEqual(len(before), 1)
+        self._import_evolution_source([(False, fact)], when=self.when + timedelta(days=1))
+        self.assertEqual(self.memories(), before)
+        self.assertEqual(len(requests), 2)
+        for payload in requests:
+            self.assertEqual(payload.get('tool_choice'), {'type': 'function', 'function': {'name': 'BatchMemoryAdjudicationOutput'}})
+            self.assertEqual(payload.get('thinking'), {'type': 'disabled'})
+        candidates = self._ok(f'/api/contacts/{self.contact_id}/memory-candidates')['candidates']
+        self.assertFalse([candidate for candidate in candidates if candidate['status'] == 'pending'])
+
+    def test_http_batch_content_json_does_not_downgrade_to_skip(self):
+        self._http_batch_model(content_only=True)
+        fact = '周末固定去游泳。'
+        self.extraction_model.facts = {fact: ('preference', 'health')}
+        self._import_evolution_source([(False, fact)], when=self.when)
+        before = self.memories()
+        self._import_evolution_source([(False, fact)], when=self.when + timedelta(days=1))
+        self.assertEqual(self.memories(), before)
+        candidates = self._ok(f'/api/contacts/{self.contact_id}/memory-candidates')['candidates']
+        self.assertEqual(len([candidate for candidate in candidates if candidate['status'] == 'pending']), 1)
 
     def test_missing_embedding_keeps_candidate_with_public_preparation_diagnostic(self):
         from tempfile import TemporaryDirectory
