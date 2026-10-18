@@ -19,6 +19,7 @@ export class AppWindows {
   private helperPinned = false;
   private helperToggle: Promise<void> = Promise.resolve();
   private helperObservation: HelperObservationHooks | undefined;
+  private helperFocusTimer: ReturnType<typeof setInterval> | undefined;
 
   constructor(private readonly appSession: Session) {}
 
@@ -67,7 +68,13 @@ export class AppWindows {
 
   prepareToQuit(): void {
     this.quitting = true;
+    this.stopHelperFocusCheck();
     this.helperObservation?.onLifecycle('closed');
+  }
+
+  private stopHelperFocusCheck(): void {
+    clearInterval(this.helperFocusTimer);
+    this.helperFocusTimer = undefined;
   }
 
   publish(channel: string, value: unknown, targetRole?: WindowRole): void {
@@ -174,23 +181,34 @@ export class AppWindows {
         if (last === event) return;
         last = event; this.helperObservation?.onLifecycle(event);
       };
-      const focus = () => publish('focused');
-      const blur = () => { if (last === 'focused') publish('blurred'); };
-      // macOS面板的key-window与应用激活分开变化，应用失活补齐漏掉的blur。
-      const activate = () => {
-        if (!window.isDestroyed() && window.isVisible() && window.isFocused() && app.isActive()) focus();
+      // 事件只触发核对；非激活面板也能接收输入，不能用app.isActive代替窗口焦点。
+      const reconcileFocus = () => {
+        if (this.quitting) return;
+        const focused = !window.isDestroyed() && window.isVisible() && window.isFocused();
+        if (focused) {
+          publish('focused');
+          // 暂停期间仅查询本机窗口焦点，补偿漏掉的失焦事件，不采集画面。
+          if (process.platform === 'darwin' && this.helperFocusTimer === undefined) {
+            this.helperFocusTimer = setInterval(reconcileFocus, 500);
+            this.helperFocusTimer.unref();
+          }
+        } else {
+          this.stopHelperFocusCheck();
+          if (last === 'focused') publish('blurred');
+        }
       };
-      window.on('focus', focus);
-      window.on('blur', blur);
-      window.on('hide', () => publish('hidden'));
+      window.on('focus', reconcileFocus);
+      window.on('blur', reconcileFocus);
+      window.on('hide', () => { this.stopHelperFocusCheck(); publish('hidden'); });
       window.on('closed', () => {
-        app.removeListener('did-resign-active', blur);
-        app.removeListener('did-become-active', activate);
+        this.stopHelperFocusCheck();
+        app.removeListener('did-resign-active', reconcileFocus);
+        app.removeListener('did-become-active', reconcileFocus);
         publish('closed');
       });
       if (process.platform === 'darwin') {
-        app.on('did-resign-active', blur);
-        app.on('did-become-active', activate);
+        app.on('did-resign-active', reconcileFocus);
+        app.on('did-become-active', reconcileFocus);
       }
     }
     window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));

@@ -10,6 +10,7 @@ import { build } from 'esbuild';
 // 运行生产注册、窗口和复制桥，仅替换 Electron 原生窗口与事件。
 const production = await build({ stdin: { contents: `
   export { AppWindows } from './src/main/windows';
+  export { ForegroundController } from './src/main/foreground/controller';
   export * from './src/main/desktop-controls';
   export { installElectronCandidateCopy } from './src/main/candidate-copy/electron';
 `, resolveDir: process.cwd() }, bundle: true, platform: 'node', format: 'cjs', write: false,
@@ -55,11 +56,12 @@ async function fixture(use) {
       unregister(key) { registered.delete(key); }, isRegistered: key => registered.has(key) },
     ipcMain: { handle: (key, handler) => handlers.set(key, handler) },
     dialog: { showErrorBox: (...args) => errors.push(args) }, clipboard: { writeText: text => copied.push(text) } };
-  let shortcut;
+  let shortcut, controller;
   try {
     const bundle = path.join(directory, 'production.cjs');
     await writeFile(bundle, production.outputFiles[0].text);
-    const ports = (await import(bundle)).default, controller = new ports.AppWindows({});
+    const ports = (await import(bundle)).default;
+    controller = new ports.AppWindows({});
     let observations = 0;
     controller.setHelperObservation({ beforeShow: () => { observations += 1; return new Promise(() => {}); },
       onLifecycle: event => events.push(event) });
@@ -69,10 +71,50 @@ async function fixture(use) {
       helper: () => nativeWindows.find(window => !window.options.frame),
       manager: () => nativeWindows.find(window => window.options.frame), observations: () => observations });
   } finally {
+    controller?.prepareToQuit();
     shortcut?.dispose(); delete globalThis.__notaloneWindowBoundary;
     await rm(directory, { recursive: true, force: true });
   }
 }
+
+test('微信返回且失焦通知遗漏时，小窗暂停会自行解除并恢复正式观察', { skip: process.platform !== 'darwin' }, async t => {
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  await fixture(async f => {
+    const scheduled = new Map(); let calls = 0;
+    const foreground = new f.ports.ForegroundController({
+      getConnectionGeneration: () => 1, onStateChanged: () => () => {},
+      requestJson: async () => { calls += 1; return { generation: 1, data: {
+        observation_id: '10000000-0000-4000-8000-000000000001', observed_at: new Date().toISOString(),
+        phase: 'manual-required', reason: 'unmatched_requires_selection', probe_available: true,
+        wechat_in_front: true, binding_id: null, contact_id: null,
+        recognized_name: '合成联系人', recognition_confidence: 0.99,
+      } }; },
+    }, { getState: () => ({ scopeRevision: 1, directoryPhase: 'ready', contacts: [] }),
+      onStateChanged: () => () => {} }, {
+      schedule: callback => { const key = {}; scheduled.set(key, callback); return key; },
+      cancel: key => scheduled.delete(key),
+    });
+    try {
+      f.controller.setHelperObservation({ beforeShow: () => foreground.observeBeforeShow(),
+        onLifecycle: event => foreground.notifyHelperLifecycle(event) });
+      foreground.startContinuous(); await f.press();
+      f.app.active = false; f.helper().focus();
+      t.mock.timers.tick(1000);
+      assert.equal(foreground.getState().suspendedByHelperFocus, true, '非激活面板正在输入时必须暂停');
+      assert.equal(scheduled.size, 0);
+      // 原生窗口已经失焦，但没有收到窗口blur或应用失活通知。
+      f.helper().focused = false;
+      t.mock.timers.tick(1000);
+      assert.equal(foreground.getState().suspendedByHelperFocus, false, '不得永久依赖一次失焦通知');
+      assert.equal(scheduled.size, 1);
+      const [key, observe] = scheduled.entries().next().value; scheduled.delete(key); await observe();
+      assert.equal(calls, 1);
+      assert.equal(foreground.getState().phase, 'manual-required');
+      assert.equal(foreground.getState().recognizedName, '合成联系人');
+      assert.notEqual(foreground.getGenerationBlock(), null, '读名不能越过联系人确认');
+    } finally { foreground.dispose(); }
+  });
+});
 
 test('注册快捷键只显隐同一小窗，观察不返回也不阻塞或聚焦', async () => {
   await fixture(async f => {
@@ -92,22 +134,42 @@ test('注册快捷键只显隐同一小窗，观察不返回也不阻塞或聚�
   });
 });
 
-test('macOS应用失活即使面板未发blur也解除助手暂停', { skip: process.platform !== 'darwin' }, async () => {
+test('macOS应用事件核对面板焦点，遗漏blur也能解除助手暂停', { skip: process.platform !== 'darwin' }, async () => {
   await fixture(async f => {
     await f.press();
     f.helper().focus();
     assert.deepEqual(f.events, ['focused']);
-    // 系统切到其他App时面板仍可能保有key-window状态；应用失活独立于窗口blur。
+    // 应用失活不代表面板失焦，非激活面板仍可能正在输入。
     f.app.active = false; f.app.emit('did-resign-active');
+    assert.deepEqual(f.events, ['focused']);
+    f.helper().focused = false; f.app.emit('did-resign-active');
     assert.deepEqual(f.events, ['focused', 'blurred']);
     f.helper().emit('blur'); f.app.emit('did-resign-active');
     assert.deepEqual(f.events, ['focused', 'blurred'], '重复失焦不得取消新观察');
-    f.app.active = true; f.app.emit('did-become-active');
+    f.app.active = true; f.helper().focused = true; f.app.emit('did-become-active');
     assert.deepEqual(f.events, ['focused', 'blurred', 'focused']);
     f.helper().hide(); f.app.emit('did-become-active');
     assert.equal(f.events.at(-1), 'hidden');
     f.helper().destroy();
     assert.equal(f.app.listenerCount('did-resign-active'), 0);
+  });
+});
+
+test('迟到focus不能重新暂停，隐藏和退出后不再发布焦点变化', { skip: process.platform !== 'darwin' }, async t => {
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  await fixture(async f => {
+    await f.press(); f.helper().focus();
+    f.helper().focused = false; f.helper().emit('blur');
+    f.helper().emit('focus');
+    assert.deepEqual(f.events, ['focused', 'blurred']);
+    f.helper().focus(); f.helper().hide();
+    t.mock.timers.tick(1000);
+    assert.equal(f.events.at(-1), 'hidden');
+    await f.press(); f.helper().focus();
+    f.controller.prepareToQuit();
+    f.helper().focused = false; f.helper().emit('blur');
+    t.mock.timers.tick(1000);
+    assert.equal(f.events.at(-1), 'closed');
   });
 });
 
