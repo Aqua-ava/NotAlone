@@ -65,3 +65,10 @@ Pro闭集接线90af01c2已完成90项相关测试、15项最终复查、五源�
 独立只读核对决定稿、实施规格、测试源码与既有验证记录，未发现新增工程缺口：有限六类/反例见`test_bounded_runtime_acceptance.py:323`，逐维度AND见`test_dimension_evidence_flow.py:348`及`test_bounded_memory_api.py:66`；任务配置/恢复见`test_runtime_config.py:80`；版本配对、ALL与旧读取见`test_bounded_runtime_migration.py:201`、`test_all_source_persistence.py:71`；全部状态删除、确认前复核与实际SDK产物生命周期见`test_all_source_deletion.py:96`、`test_bounded_evaluation_sources.py:155`。本次复用工程结果14项来源生命周期、5项独占进程及本轮48单元/35隔离集成证据；各组重叠，不累加为新测试数，也未声称当前HEAD重跑全库。
 
 最新合并90相关测试及7源码类型检查通过。真实新场e00279a0仅P01审核完成即触发potential bad_auto1，实际pending，后14unrun，正证0/7；前场f0e64fae的1/7只保留历史信用，不并入当前场。两场均已关闭并清理。完整质量、真实六规则依据及达标后的实际生命周期仍未完成，因此03第一AC未满足。三线集成和后续结果以runtime-integration-handoff及runtime-position-guide为准。
+
+
+## 双配置统一验收（2026-10-18）
+
+bounded依赖v3 `0a51257d` 与reference独立Vmax `41aaea33`→`241d6cab`完成合并；唯一records冲突保留精确provider校验及新增reference计划。统一926项提取单测（37.943秒）、52项共享入口/SDK/fixture相关测试和8源码mypy通过，独立合并Spec0。最初定向命令把一项integration模块误写为unit，修正模块路径后52项通过，该导入错误不是产品失败。
+
+上一真实bounded场bcbb已closed4/30，2审safe1/safety1，正证1/7、潜在bad_auto1、13窗及生命周期unrun，清理残留0；不把新工程测试当质量信用。core同7bef源码固定6场已closed12/12、6审safe且必需完整6/6；独立闭账确认仅既有future_validity风险追加，随后才允许留出。reference retention旧场closed10/32、4审safe3/general1，A05安全留证失败unknown。新bounded/reference配置尚须新冻结后的真实质量验收；生产空表与task03未完成状态不变。
