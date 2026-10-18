@@ -41,7 +41,7 @@ export function ContactsPage({ session, navigate, manualRelease = false }: { ses
         <button className="button" onClick={() => navigate('import')}>导入单联系人资料</button></>
         : <p>联系人不会自动选中。选择后，两个窗口会显示同一个本次对象。</p>}
     </aside></div>}
-    <p className="contacts-note">首版支持手动输入和单联系人文件导入。微信自动接入尚未提供，无需准备微信工具或系统权限。候选由你编辑并亲自发送。</p>
+    <p className="contacts-note">支持手动输入和单联系人文件导入；本机已配置微信识别时，可在输入小窗恢复微信会话识别。候选由你编辑并亲自发送。</p>
     {session.error && <p className="contacts-note" role="alert">{session.error}</p>}
   </section>;
 }

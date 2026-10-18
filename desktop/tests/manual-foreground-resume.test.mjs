@@ -68,11 +68,11 @@ test('手动确认后通过公开恢复按钮退出手动模式，保留草稿�
  f.foreground.notifyHelperLifecycle('blurred'); assert.equal(f.scheduled.size, 1);
 });
 
-test('纯手动管理版和改写输入不显示恢复按钮，过期确认不得恢复', async t => {
+test('受管模式和改写输入均可主动恢复识别，过期确认不得恢复', async t => {
  const f = fixture(t); await f.enterManual();
  for (const options of [{ manualRelease: true }, { manualInput: true }]) {
   const panel = ports.ForegroundPanel({ state: f.foreground.getState(), session: { state: f.state }, ...options });
-  assert.equal(buttons(panel).some(button => button.props.children === '恢复微信会话识别'), false);
+  assert.equal(buttons(panel).some(button => button.props.children === '恢复微信会话识别'), true);
  }
  for (const change of [{ contactScopeRevision: 0 }, { foregroundRevision: -1 },
    { contactId: '20000000-0000-4000-8000-000000000002' }, { extra: true }]) {
@@ -93,4 +93,14 @@ test('恢复后丢弃手动确认前的在途观察，不沿用旧生成资格',
  assert.equal(f.foreground.getState().manualInput, false);
  assert.equal(f.foreground.getState().recognizedName, null);
  assert.equal(f.foreground.getGenerationBlock(), 'foreground-confirmation-required');
+});
+
+
+test('前台识别说明等待微信或同步关闭，保留切回手动入口', () => {
+ const session = {state:{selectedContactId:id, contacts:[]}};
+ for (const [reason, expected] of [['wechat_not_in_front', '等待微信切到前台'], ['sync_disabled', '同步总开关已关闭']]) {
+  const panel = ports.ForegroundPanel({state:{phase:'paused', reason}, session});
+  assert.match(JSON.stringify(panel), new RegExp(expected));
+  assert.ok(buttons(panel).some(button => button.props.children === '切换为手动输入'));
+ }
 });

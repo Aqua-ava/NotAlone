@@ -34,7 +34,6 @@ export function App() {
   const workspace = useRef<HTMLDivElement>(null);
   useEffect(() => { workspace.current?.scrollTo({ top: 0 }); }, [replies.state.mode, replies.state.options.inputKind]);
   const foreground = useForegroundState(window.notalone.foreground, helper);
-  const manualReplyInput = replies.state.mode === 'rewrite_draft';
   const [error, setError] = useState('');
   const [page, setPage] = useState<ManagerPage>('contacts');
   async function operate(operation: () => Promise<void>) {
@@ -45,7 +44,7 @@ export function App() {
   return helper ? <main className="ime-pane">
     <header className="ime-header">
       <img className="ime-logo" src={logo} alt="NotAlone" />
-      <HelperContactPicker session={contactSession} foreground={foreground} manualRelease={startup.mode === 'managed'} manualInput={manualReplyInput} />
+      <HelperContactPicker session={contactSession} foreground={foreground} />
       <ReplyModePicker replies={replies} enabled={Boolean(contactSession.state.selectedContactId)} />
       <button className="icon-button" aria-label="打开管理后台" title="打开管理后台"
         onClick={() => void operate(window.notalone.openManager)}><Icon name="contacts" size={16} /></button>
@@ -53,7 +52,7 @@ export function App() {
         onClick={() => void operate(window.notalone.hideWindow)}><Icon name="close" size={16} /></button>
     </header>
     <div className="ime-workspace" ref={workspace}>
-    <div className="helper-context"><ForegroundPanel state={foreground} session={contactSession} permission={permission} manualRelease={startup.mode === 'managed'} manualInput={manualReplyInput} /></div>
+    <div className="helper-context"><ForegroundPanel state={foreground} session={contactSession} permission={permission} /></div>
     {replies.state.mode === 'rewrite_draft' ? <RewriteInput contacts={contactSession} replies={replies} />
       : replies.state.mode === 'initiate_conversation' ? <ProactiveReplyInput replies={replies} /> : <DirectedReplyInput replies={replies} />}
     {replies.state.messageNotice.phase === 'connected' && <>
@@ -105,7 +104,7 @@ export function App() {
         {page === 'import' && <ImportPage session={contactSession} />}
         {page === 'memory' && <MemoryPage session={contactSession} navigate={setPage} />}
         {page === 'skillLearning' && <SkillLearningPage session={contactSession} />}
-        {page === 'sync' && <><SyncControlPanel bridge={window.notalone.syncControl} manualRelease={startup.mode === 'managed'} />
+        {page === 'sync' && <><SyncControlPanel bridge={window.notalone.syncControl} />
           {startup.mode === 'managed' ? <div><button className="button primary" onClick={() => setPage('contacts')}>选择联系人并手动输入</button>
             <button className="button" onClick={() => setPage('import')}>导入单联系人资料</button></div>
             : <BindingConsentPage contacts={contactSession} navigate={setPage} />}</>}

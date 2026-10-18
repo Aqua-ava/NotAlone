@@ -23,13 +23,15 @@ export function ForegroundPanel({ state, session, permission, manualRelease = fa
   if (state.manualInput || manualRelease || manualInput) return <section aria-label="手动输入联系人确认"><p role="status">手动输入模式 · {state.manualInput && state.confirmation === 'manual-confirmed' ? '本次联系人已由你确认' : '请明确选择本次联系人'}</p>
     <p>粘贴内容只用于本次候选与助手讨论，不会自动成为长期关系记忆。消息由你亲自发送。</p>
     {(!state.manualInput || state.generationBlock) && session?.state.selectedContactId && <button onClick={() => void session.confirmManualContact(session.state.selectedContactId!)}>确认手动输入联系人</button>}
-    {state.manualInput && !manualRelease && !manualInput && session?.state.selectedContactId && <button
+    {state.manualInput && session?.state.selectedContactId && <button
       onClick={() => void session.resumeForeground(state.foregroundRevision)}>恢复微信会话识别</button>}
     {session?.error && <p role="alert">{session.error}</p>}
   </section>;
   const failure = foregroundFailureReason(state.reason);
   const paused = state.phase === 'paused' || state.suspendedByHelperFocus;
   const message = state.unsupportedConversation ? '群聊暂不支持，前台联系人匹配与新生成已暂停'
+    : state.reason === 'sync_disabled' ? '同步总开关已关闭，前台识别暂停'
+    : state.reason === 'wechat_not_in_front' ? '等待微信切到前台，请打开要聊天的私聊窗口'
     : paused ? '前台定位已暂停' : state.phase === 'observing' ? '正在定位前台会话'
     : state.phase === 'confirmed' ? '已识别采集时的微信会话'
     : state.phase === 'manual-required' ? (state.recognizedName ? '已读到微信会话，请选择对应联系人' : '请手动确认本次联系人')
@@ -45,6 +47,8 @@ export function ForegroundPanel({ state, session, permission, manualRelease = fa
     : state.phase === 'unavailable' ? '前台定位暂不可用，请手动选择联系人' : '前台定位尚未观察';
   return <section aria-label="前台会话定位">
     <p role="status">{message}</p>
+    {state.reason === 'sync_disabled' && <p>请在管理后台的“同步设置”开启已有授权范围的同步，再回到微信会话。</p>}
+    {session?.state.selectedContactId && <button onClick={() => void session.confirmManualContact(session.state.selectedContactId!)}>切换为手动输入</button>}
     {permission && (state.reason === 'screen_capture_permission_missing' || permission.state.phase === 'missing')
       && <ScreenPermissionPanel view={permission} compact />}
     {!paused && !state.unsupportedConversation && state.recognizedName && <p>
