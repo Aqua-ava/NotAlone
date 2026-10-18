@@ -131,6 +131,13 @@ class RealMemoryAcceptance(CoreBusinessFlowFixture, unittest.TestCase):
         old_ids = {m['memory_id'] for m in before['memories']['memories']}
         self.assertTrue(old_ids.isdisjoint(m['memory_id'] for m in after['memories']['memories']))
         self.assertTrue(all(m['adoption_method'] == 'auto' for m in after['memories']['memories']))
+        # 新来源ID的改述重复不是导入幂等：应由记忆裁决跳过。
+        repeated = self.import_dialog(3, self.case['update'], first['contact_id'])
+        unchanged = self.await_result(repeated, 'repeated')
+        self.assertEqual({m['memory_id'] for m in after['memories']['memories']},
+                         {m['memory_id'] for m in unchanged['memories']['memories']})
+        self.assertEqual(after['layers']['profile']['version_id'], unchanged['layers']['profile']['version_id'])
+        self.assertEqual(after['layers']['organization_generation'], unchanged['layers']['organization_generation'])
         # 机器断言只证明链路；语义和旧记忆是否正确退役由独立Agent核对证据。
         atomic_json(self.output / 'result.json', {'passed': True, 'contact_id': first['contact_id'],
             'initial_generation': before['layers']['organization_generation'],
@@ -181,11 +188,28 @@ def main():
             payload = json.loads(request.read())
             phase, reservation = 'l1', None
             if _CURRENT_ORGANIZATION.get() is not None:
-                human = json.loads(payload['messages'][-1]['content'])
+                human = {}
+                for message in payload['messages']:
+                    if message.get('role') != 'user' or not isinstance(message.get('content'), str):
+                        continue
+                    try:
+                        decoded = json.loads(message['content'])
+                    except (ValueError, TypeError):
+                        continue
+                    if isinstance(decoded, dict):
+                        human = decoded
+                        break
                 layer = human.get('layer', 'l3' if payload['messages'][0]['content'].startswith(PROFILE_PROMPT) else 'l2')
                 phase = layer + ('_verification' if 'proposal' in human else '_proposal')
                 reservation = suite.reserve(source_ref='acceptance', owner_id=owner, run_id=run, case_id=case, phase=phase)
             else:
+                system = str(payload.get('messages', [{}])[0].get('content', ''))
+                if '统一已有候选池' in system:
+                    phase = 'l1_adjudication'
+                elif '核验' in system:
+                    phase = 'l1_verification'
+                else:
+                    phase = 'l1_extraction'
                 reserve_problem_attempt()
             with lock:
                 index = len(calls) + 1
