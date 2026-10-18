@@ -1,0 +1,769 @@
+{
+  "format_version": 1,
+  "status": "mechanical_projection_incomplete",
+  "annotation_path": ".scratch/memory-extraction-accuracy/reference-review-projection-20261018.md",
+  "annotation_sha256": "86c3bc474e522b80946f60a2d5af698f60b3b61d93a556a3191ee9fc64dcf073",
+  "provenance": {
+    "synthetic_only": true,
+    "quality_certified": false,
+    "blind_annotation": false,
+    "source_file_sha256": {
+      ".scratch/unfinished-work/memory-gold-reference-v2-20261016.json": "6ec7ee70a47b94d0cdf667be6478b8fe7cbe33e91bc3d4ec5e49ee340914f738",
+      ".scratch/memory-extraction-accuracy/reference-agent-contrast-gold-20261018.json": "7d7ff70e5d906255d7b26a1682433bb73867e264e1f3bb1e6846c3f8f9cd0786"
+    },
+    "source_provenance": {
+      "synthetic_only": true,
+      "model_api_called": false,
+      "subsequent_prompt_read": false,
+      "schema_reference_only": "仅查现有grounded.py的KINDS/OMISSIONS公开类型映射，未读后继E2提示。",
+      "blind_to_subsequent_prompt": true,
+      "reviewer_kind": "agent"
+    },
+    "projection_group": "diagnostic8",
+    "original_gold_by_case": {
+      "D01": {
+        "kind": "request",
+        "category": "relationship_note",
+        "topic": "other",
+        "unresolved": true,
+        "inclusion": "retain",
+        "ideal_destination": "pending",
+        "subject": "contact",
+        "necessary_propositions": [
+          "联系人请求用户：今后讨论原文所指但尚未识别的那段插曲时，不要替联系人推测动机。",
+          "请求的发起者是联系人、接收者是用户；未定的是事项，不是人物。"
+        ],
+        "source_indices": [
+          0
+        ],
+        "unresolved_reason": "那段插曲在本窗没有可唯一识别的事件内容；须说明事项未知。",
+        "forbidden_inferences": [
+          "补出具体插曲或动机",
+          "声称用户曾经揣测或误传",
+          "因人物明确而将事项指代标为已解决",
+          "改成永久不讨论所有事件的禁忌"
+        ],
+        "required_claim_count": 1,
+        "proposition_count_note": "necessary_propositions中的补充项为同一必需主张的语义限定，不增加主张分母。",
+        "speech_act": "request",
+        "assertion_status": "asserted",
+        "figurative_type": "literal",
+        "risk_rule": "没有原句支持的健康、借款等敏感事实，不捏造敏感风险；实际程序阻塞不静默去掉。",
+        "alternatives_requirement": "必须非空，明确所指插曲/事项无法唯一定位；不补另一个具体事件。",
+        "time_note": "以后请求按来源时点记录，结束未知；不得自行补终止日期。"
+      },
+      "D02": {
+        "kind": "request",
+        "category": "relationship_note",
+        "topic": "other",
+        "unresolved": false,
+        "inclusion": "retain",
+        "ideal_destination": "pending",
+        "subject": "contact",
+        "necessary_propositions": [
+          "联系人请求用户：今后讨论上周排队时的争执时，不要替联系人推测动机。",
+          "请求发起者、对象及适用事项均由原句界定。"
+        ],
+        "source_indices": [
+          0
+        ],
+        "unresolved_reason": "事项已有上周排队时的争执这一明示界定；未知地点或动机不影响保留这个确定请求。",
+        "forbidden_inferences": [
+          "补争执地点、双方身份、谁先挑起或真实动机",
+          "单独把请求中的事件提及认证为已经核实的历史事实",
+          "扩大为对所有话题的永久偏好"
+        ],
+        "required_claim_count": 1,
+        "proposition_count_note": "necessary_propositions中的补充项为同一必需主张的语义限定，不增加主张分母。",
+        "speech_act": "request",
+        "assertion_status": "asserted",
+        "figurative_type": "literal",
+        "risk_rule": "没有原句支持的健康、借款等敏感事实，不捏造敏感风险；实际程序阻塞不静默去掉。",
+        "alternatives_requirement": "确定主张不添加虚构备选解释；alternatives为空。",
+        "time_note": "以后请求按来源时点记录，结束未知；不得自行补终止日期。"
+      },
+      "D03": {
+        "kind": "not_memory",
+        "category": null,
+        "topic": "other",
+        "unresolved": false,
+        "inclusion": "none",
+        "ideal_destination": "none",
+        "subject": null,
+        "necessary_propositions": [],
+        "source_indices": [
+          0
+        ],
+        "unresolved_reason": "没有需要保留的身份或事项歧义；不提取是因为只服务当前消息交换。",
+        "forbidden_inferences": [
+          "把链接已贴出作为已完成事实",
+          "补页面内容、具体URL或长期习惯",
+          "为none制造待确认候选"
+        ],
+        "source_meaning": "联系人表示将在下一条消息贴出本次页面链接；未来动作尚未完成，这一含义用于禁止项审计，不生成必需记忆命题。",
+        "required_claim_count": 0,
+        "proposition_count_note": "necessary_propositions中的补充项为同一必需主张的语义限定，不增加主张分母。",
+        "speech_act": null,
+        "assertion_status": null,
+        "figurative_type": null,
+        "risk_rule": "没有原句支持的健康、借款等敏感事实，不捏造敏感风险；实际程序阻塞不静默去掉。",
+        "alternatives_requirement": "无记忆候选，不生成字段。",
+        "time_note": "none，无候选有效期；不把下一条承诺写成已执行。"
+      },
+      "D04": {
+        "kind": "plan",
+        "category": "recent_state",
+        "topic": "other",
+        "unresolved": false,
+        "inclusion": "retain",
+        "ideal_destination": "pending",
+        "subject": "contact",
+        "necessary_propositions": [
+          "联系人明确表示在2026年11月至2027年1月底期间，每周五把社团值班表交给用户。",
+          "保留跨周重复安排及有限期间，仍为未来行为，并非已经交付。"
+        ],
+        "source_indices": [
+          0
+        ],
+        "unresolved_reason": "主体、对象、周期及期间均明确；未来未执行不等于内容歧义。",
+        "forbidden_inferences": [
+          "把周期承诺当成仅本次聊天下一条细节而全部丢弃",
+          "补具体社团或值班人员",
+          "补用户接受、担任负责人或实际交付",
+          "把每周五扩大为每日或永久"
+        ],
+        "required_claim_count": 1,
+        "proposition_count_note": "necessary_propositions中的补充项为同一必需主张的语义限定，不增加主张分母。",
+        "speech_act": "plan",
+        "assertion_status": "asserted",
+        "figurative_type": "literal",
+        "risk_rule": "没有原句支持的健康、借款等敏感事实，不捏造敏感风险；实际程序阻塞不静默去掉。",
+        "alternatives_requirement": "确定主张不添加虚构备选解释；alternatives为空。",
+        "time_note": "来源日期为2026-10-18；未来重复安排期间为2026-11-01至2027-02-01半开区间（+08:00）。不指定每次交付钟点，不声称11月1日恰好发生首次交付。"
+      },
+      "D05": {
+        "kind": "event",
+        "category": "common_fact",
+        "topic": "other",
+        "unresolved": false,
+        "inclusion": "retain",
+        "ideal_destination": "auto",
+        "subject": "contact",
+        "necessary_propositions": [
+          "联系人在来源前一天完成了同事小邱推荐的十公里路线。",
+          "主断言是联系人已完成运动活动；同事小邱及其推荐仅是路线的来源背景。"
+        ],
+        "source_indices": [
+          0
+        ],
+        "unresolved_reason": "完成动作、执行者、距离及背景都明确；不由关系背景改变主断言类型。",
+        "forbidden_inferences": [
+          "因同事背景把已完成活动改为relationship_event或relationship_note",
+          "把十公里写成跑步时长或擅定用时",
+          "补与小邱一起跑、喜欢跑步或固定运动习惯",
+          "把推荐当实际陪同"
+        ],
+        "required_claim_count": 1,
+        "proposition_count_note": "necessary_propositions中的补充项为同一必需主张的语义限定，不增加主张分母。",
+        "speech_act": "assertion",
+        "assertion_status": "asserted",
+        "figurative_type": "literal",
+        "risk_rule": "没有原句支持的健康、借款等敏感事实，不捏造敏感风险；实际程序阻塞不静默去掉。",
+        "alternatives_requirement": "确定主张不添加虚构备选解释；alternatives为空。",
+        "time_note": "昨天按来源时间为2026-10-17；已完成历史命题valid_at/invalid_at均null，不代表现在仍成立。"
+      },
+      "D06": {
+        "kind": "relationship_event",
+        "category": "relationship_note",
+        "topic": "other",
+        "unresolved": false,
+        "inclusion": "retain",
+        "ideal_destination": "auto",
+        "subject": "contact",
+        "necessary_propositions": [
+          "联系人在来源前一天与同事小邱恢复来往。",
+          "主断言是联系人和小邱之间的关系变化；恢复已发生。"
+        ],
+        "source_indices": [
+          0
+        ],
+        "unresolved_reason": "双方由我和同事小邱明确；关系变化本身已经表达，不需要补过去经过。",
+        "forbidden_inferences": [
+          "改为一起完成某项活动",
+          "补先前断交原因、持续多久或谁主动",
+          "把关系恢复写成未来计划",
+          "推断恋爱或亲属关系"
+        ],
+        "required_claim_count": 1,
+        "proposition_count_note": "necessary_propositions中的补充项为同一必需主张的语义限定，不增加主张分母。",
+        "speech_act": "assertion",
+        "assertion_status": "asserted",
+        "figurative_type": "literal",
+        "risk_rule": "没有原句支持的健康、借款等敏感事实，不捏造敏感风险；实际程序阻塞不静默去掉。",
+        "alternatives_requirement": "确定主张不添加虚构备选解释；alternatives为空。",
+        "time_note": "昨天按来源时间为2026-10-17；已完成历史命题valid_at/invalid_at均null，不代表现在仍成立。"
+      },
+      "D07": {
+        "kind": "relationship_event",
+        "category": "relationship_note",
+        "topic": "family",
+        "unresolved": false,
+        "inclusion": "retain",
+        "ideal_destination": "auto",
+        "subject": "contact",
+        "necessary_propositions": [
+          "联系人与堂姐小彤已经和好；关系变化的另一方有明示堂姐身份。",
+          "昨晚来联系人住处是识别小彤的原文背景，不能据此把和好的时间也固定为昨晚。"
+        ],
+        "source_indices": [
+          0
+        ],
+        "unresolved_reason": "小彤的亲属身份明确；家族主题来自堂姐，不来自住处。",
+        "forbidden_inferences": [
+          "把堂姐改成朋友、姐姐或用户亲属",
+          "把和好写成昨晚发生或未来将发生",
+          "从住处推出房屋产权",
+          "补争执原因或来访目的"
+        ],
+        "required_claim_count": 1,
+        "proposition_count_note": "necessary_propositions中的补充项为同一必需主张的语义限定，不增加主张分母。",
+        "speech_act": "assertion",
+        "assertion_status": "asserted",
+        "figurative_type": "literal",
+        "risk_rule": "没有原句支持的健康、借款等敏感事实，不捏造敏感风险；实际程序阻塞不静默去掉。",
+        "alternatives_requirement": "确定主张不添加虚构备选解释；alternatives为空。",
+        "time_note": "昨晚只修饰来访；和好已完成但确切日期未给。历史主张valid_at/invalid_at均null。"
+      },
+      "D08": {
+        "kind": "relationship_event",
+        "category": "relationship_note",
+        "topic": "other",
+        "unresolved": false,
+        "inclusion": "retain",
+        "ideal_destination": "auto",
+        "subject": "contact",
+        "necessary_propositions": [
+          "联系人与小彤已经和好；小彤由姓名和来访背景明确指示。",
+          "原文没有说明小彤与联系人的亲属关系，不能只因来住处就标family。"
+        ],
+        "source_indices": [
+          0
+        ],
+        "unresolved_reason": "没有亲属关系证据不是人物指代歧义；保留明确的和好事件，主题取other。",
+        "forbidden_inferences": [
+          "补小彤是亲属、邻居、恋人或同事",
+          "把没有亲属证据写成已证明不是亲属",
+          "把和好时点擅定为昨晚",
+          "从住处推出房屋产权"
+        ],
+        "required_claim_count": 1,
+        "proposition_count_note": "necessary_propositions中的补充项为同一必需主张的语义限定，不增加主张分母。",
+        "speech_act": "assertion",
+        "assertion_status": "asserted",
+        "figurative_type": "literal",
+        "risk_rule": "没有原句支持的健康、借款等敏感事实，不捏造敏感风险；实际程序阻塞不静默去掉。",
+        "alternatives_requirement": "确定主张不添加虚构备选解释；alternatives为空。",
+        "time_note": "昨晚只修饰来访；和好已完成但确切日期未给。历史主张valid_at/invalid_at均null。"
+      }
+    },
+    "unresolved_projection_fields": [
+      "reason_rule"
+    ],
+    "projection_review": {
+      "reviewer_kind": "agent",
+      "mechanical_equivalence": "passed",
+      "standards": "passed",
+      "formal_reference_complete": false
+    }
+  },
+  "e_fields": [
+    "text",
+    "category",
+    "subject",
+    "topic",
+    "source_message_ids",
+    "confidence",
+    "risk_flags",
+    "valid_at",
+    "invalid_at",
+    "speech_act",
+    "assertion_status",
+    "figurative_type",
+    "alternatives",
+    "interpretation_reason"
+  ],
+  "v_fields": [
+    "candidate_index",
+    "verdict",
+    "issues",
+    "evidence"
+  ],
+  "common_rules": {
+    "boundaries": [
+      "不得并入原A01–A16窗口或18必需命题分母，不拼旧模型结果。",
+      "auto为原采纳门其余条件满足时的理想去向，不批准生产放行；生产默认空表不变。",
+      "source与context只支持话语含义；不认证现实真伪。请求中的事件提及不自动变为独立历史事实。",
+      "unresolved针对保留主张的内容识别；未来未执行、未给无关细节、未知亲属关系本身不自动等于指代不明。",
+      "人物称谓均为合成占位，不映射真实联系人。",
+      "none用kind=not_memory表示输入排除；category/subject等记忆候选字段不适用，不以null字段伪造候选。"
+    ],
+    "pairs": [
+      {
+        "pair_id": "P1",
+        "case_ids": [
+          "D01",
+          "D02"
+        ],
+        "contrast": "人物同样明确，只有事项范围是否明确变化；两项均是值得保留的持续请求，均pending。"
+      },
+      {
+        "pair_id": "P2",
+        "case_ids": [
+          "D03",
+          "D04"
+        ],
+        "contrast": "只服务本次消息交换的一次性链接动作，与有明确跨周期间的独立持续安排；前者none，后者保留plan/pending。"
+      },
+      {
+        "pair_id": "P3",
+        "case_ids": [
+          "D05",
+          "D06"
+        ],
+        "contrast": "完成活动带同事背景，与同一关系方之间关系变化为主断言；类别随主断言而非关系词决定。"
+      },
+      {
+        "pair_id": "P4",
+        "case_ids": [
+          "D07",
+          "D08"
+        ],
+        "contrast": "仅删除堂姐称谓；双方及和好仍明确，family依据随明确亲属证据变化，来住处不替代亲属证据。"
+      }
+    ],
+    "scope": "D01–D08独立诊断，仅7个必需命题；不补主16分数。"
+  },
+  "windows": [
+    {
+      "id": "D01",
+      "position": 0,
+      "case_name": "独立诊断：D01",
+      "input_sha256": "9f95c0d8b671261ecc90f92ba0a11c78dacbc0ded391cd2eb6606bf54aacce18",
+      "target_indices": [
+        0
+      ],
+      "inclusion": "retain",
+      "claims": [
+        {
+          "id": "D01-P1",
+          "required": true,
+          "meaning_requirements": [
+            "联系人请求用户：今后讨论原文所指但尚未识别的那段插曲时，不要替联系人推测动机。",
+            "请求的发起者是联系人、接收者是用户；未定的是事项，不是人物。"
+          ],
+          "variants": [
+            {
+              "id": "D01-P1-v1",
+              "body_requirements": [
+                "联系人请求用户：今后讨论原文所指但尚未识别的那段插曲时，不要替联系人推测动机。",
+                "请求的发起者是联系人、接收者是用户；未定的是事项，不是人物。"
+              ],
+              "subject": "contact",
+              "category": "relationship_note",
+              "allowed_topics": [
+                "other"
+              ],
+              "source_choices": [
+                {
+                  "indices": [
+                    0
+                  ],
+                  "when": "沿原source_indices，不增加来源组合。"
+                }
+              ],
+              "speech_act": "request",
+              "assertion_status": "asserted",
+              "figurative_type": "literal",
+              "valid_at": "2026-10-18T09:00:00+08:00",
+              "invalid_at": null,
+              "time_rule": "以后请求按来源时点记录，结束未知；不得自行补终止日期。",
+              "ideal_destination": "pending",
+              "risk_rule": "没有原句支持的健康、借款等敏感事实，不捏造敏感风险；实际程序阻塞不静默去掉。",
+              "alternatives_rule": "必须非空，明确所指插曲/事项无法唯一定位；不补另一个具体事件。",
+              "reason_rule": null
+            }
+          ]
+        }
+      ],
+      "forbidden_meanings": [
+        "补出具体插曲或动机",
+        "声称用户曾经揣测或误传",
+        "因人物明确而将事项指代标为已解决",
+        "改成永久不讨论所有事件的禁忌"
+      ]
+    },
+    {
+      "id": "D02",
+      "position": 1,
+      "case_name": "独立诊断：D02",
+      "input_sha256": "56c02cdf236558bc3f9ca6f2b61f77f284978df8a3cabc1d250dab9c3d19948a",
+      "target_indices": [
+        0
+      ],
+      "inclusion": "retain",
+      "claims": [
+        {
+          "id": "D02-P1",
+          "required": true,
+          "meaning_requirements": [
+            "联系人请求用户：今后讨论上周排队时的争执时，不要替联系人推测动机。",
+            "请求发起者、对象及适用事项均由原句界定。"
+          ],
+          "variants": [
+            {
+              "id": "D02-P1-v1",
+              "body_requirements": [
+                "联系人请求用户：今后讨论上周排队时的争执时，不要替联系人推测动机。",
+                "请求发起者、对象及适用事项均由原句界定。"
+              ],
+              "subject": "contact",
+              "category": "relationship_note",
+              "allowed_topics": [
+                "other"
+              ],
+              "source_choices": [
+                {
+                  "indices": [
+                    0
+                  ],
+                  "when": "沿原source_indices，不增加来源组合。"
+                }
+              ],
+              "speech_act": "request",
+              "assertion_status": "asserted",
+              "figurative_type": "literal",
+              "valid_at": "2026-10-18T09:00:00+08:00",
+              "invalid_at": null,
+              "time_rule": "以后请求按来源时点记录，结束未知；不得自行补终止日期。",
+              "ideal_destination": "pending",
+              "risk_rule": "没有原句支持的健康、借款等敏感事实，不捏造敏感风险；实际程序阻塞不静默去掉。",
+              "alternatives_rule": "确定主张不添加虚构备选解释；alternatives为空。",
+              "reason_rule": null
+            }
+          ]
+        }
+      ],
+      "forbidden_meanings": [
+        "补争执地点、双方身份、谁先挑起或真实动机",
+        "单独把请求中的事件提及认证为已经核实的历史事实",
+        "扩大为对所有话题的永久偏好"
+      ]
+    },
+    {
+      "id": "D03",
+      "position": 2,
+      "case_name": "独立诊断：D03",
+      "input_sha256": "2467220b4f138a0eeb49bc8fce0c647d1a63485dfb2c06e42a26ebd776102707",
+      "target_indices": [
+        0
+      ],
+      "inclusion": "none",
+      "claims": [],
+      "forbidden_meanings": [
+        "把链接已贴出作为已完成事实",
+        "补页面内容、具体URL或长期习惯",
+        "为none制造待确认候选"
+      ]
+    },
+    {
+      "id": "D04",
+      "position": 3,
+      "case_name": "独立诊断：D04",
+      "input_sha256": "22f3cf72cda931ba5f04863c6a28f04e66deb4ccc100300438b191c61dc5675b",
+      "target_indices": [
+        0
+      ],
+      "inclusion": "retain",
+      "claims": [
+        {
+          "id": "D04-P1",
+          "required": true,
+          "meaning_requirements": [
+            "联系人明确表示在2026年11月至2027年1月底期间，每周五把社团值班表交给用户。",
+            "保留跨周重复安排及有限期间，仍为未来行为，并非已经交付。"
+          ],
+          "variants": [
+            {
+              "id": "D04-P1-v1",
+              "body_requirements": [
+                "联系人明确表示在2026年11月至2027年1月底期间，每周五把社团值班表交给用户。",
+                "保留跨周重复安排及有限期间，仍为未来行为，并非已经交付。"
+              ],
+              "subject": "contact",
+              "category": "recent_state",
+              "allowed_topics": [
+                "other"
+              ],
+              "source_choices": [
+                {
+                  "indices": [
+                    0
+                  ],
+                  "when": "沿原source_indices，不增加来源组合。"
+                }
+              ],
+              "speech_act": "plan",
+              "assertion_status": "asserted",
+              "figurative_type": "literal",
+              "valid_at": "2026-11-01T00:00:00+08:00",
+              "invalid_at": "2027-02-01T00:00:00+08:00",
+              "time_rule": "来源日期为2026-10-18；未来重复安排期间为2026-11-01至2027-02-01半开区间（+08:00）。不指定每次交付钟点，不声称11月1日恰好发生首次交付。",
+              "ideal_destination": "pending",
+              "risk_rule": "没有原句支持的健康、借款等敏感事实，不捏造敏感风险；实际程序阻塞不静默去掉。",
+              "alternatives_rule": "确定主张不添加虚构备选解释；alternatives为空。",
+              "reason_rule": null
+            }
+          ]
+        }
+      ],
+      "forbidden_meanings": [
+        "把周期承诺当成仅本次聊天下一条细节而全部丢弃",
+        "补具体社团或值班人员",
+        "补用户接受、担任负责人或实际交付",
+        "把每周五扩大为每日或永久"
+      ]
+    },
+    {
+      "id": "D05",
+      "position": 4,
+      "case_name": "独立诊断：D05",
+      "input_sha256": "debd8eaf47ac7aaeac370bee7e9c20d9a1c4a54b52de69f1aead7eff3d6bd40c",
+      "target_indices": [
+        0
+      ],
+      "inclusion": "retain",
+      "claims": [
+        {
+          "id": "D05-P1",
+          "required": true,
+          "meaning_requirements": [
+            "联系人在来源前一天完成了同事小邱推荐的十公里路线。",
+            "主断言是联系人已完成运动活动；同事小邱及其推荐仅是路线的来源背景。"
+          ],
+          "variants": [
+            {
+              "id": "D05-P1-v1",
+              "body_requirements": [
+                "联系人在来源前一天完成了同事小邱推荐的十公里路线。",
+                "主断言是联系人已完成运动活动；同事小邱及其推荐仅是路线的来源背景。"
+              ],
+              "subject": "contact",
+              "category": "common_fact",
+              "allowed_topics": [
+                "other"
+              ],
+              "source_choices": [
+                {
+                  "indices": [
+                    0
+                  ],
+                  "when": "沿原source_indices，不增加来源组合。"
+                }
+              ],
+              "speech_act": "assertion",
+              "assertion_status": "asserted",
+              "figurative_type": "literal",
+              "valid_at": null,
+              "invalid_at": null,
+              "time_rule": "昨天按来源时间为2026-10-17；已完成历史命题valid_at/invalid_at均null，不代表现在仍成立。",
+              "ideal_destination": "auto",
+              "risk_rule": "没有原句支持的健康、借款等敏感事实，不捏造敏感风险；实际程序阻塞不静默去掉。",
+              "alternatives_rule": "确定主张不添加虚构备选解释；alternatives为空。",
+              "reason_rule": null
+            }
+          ]
+        }
+      ],
+      "forbidden_meanings": [
+        "因同事背景把已完成活动改为relationship_event或relationship_note",
+        "把十公里写成跑步时长或擅定用时",
+        "补与小邱一起跑、喜欢跑步或固定运动习惯",
+        "把推荐当实际陪同"
+      ]
+    },
+    {
+      "id": "D06",
+      "position": 5,
+      "case_name": "独立诊断：D06",
+      "input_sha256": "395ad83d021aa5d29f870fa037138e6ecc3d2fda68a4fbb8efb5f3846c304ce5",
+      "target_indices": [
+        0
+      ],
+      "inclusion": "retain",
+      "claims": [
+        {
+          "id": "D06-P1",
+          "required": true,
+          "meaning_requirements": [
+            "联系人在来源前一天与同事小邱恢复来往。",
+            "主断言是联系人和小邱之间的关系变化；恢复已发生。"
+          ],
+          "variants": [
+            {
+              "id": "D06-P1-v1",
+              "body_requirements": [
+                "联系人在来源前一天与同事小邱恢复来往。",
+                "主断言是联系人和小邱之间的关系变化；恢复已发生。"
+              ],
+              "subject": "contact",
+              "category": "relationship_note",
+              "allowed_topics": [
+                "other"
+              ],
+              "source_choices": [
+                {
+                  "indices": [
+                    0
+                  ],
+                  "when": "沿原source_indices，不增加来源组合。"
+                }
+              ],
+              "speech_act": "assertion",
+              "assertion_status": "asserted",
+              "figurative_type": "literal",
+              "valid_at": null,
+              "invalid_at": null,
+              "time_rule": "昨天按来源时间为2026-10-17；已完成历史命题valid_at/invalid_at均null，不代表现在仍成立。",
+              "ideal_destination": "auto",
+              "risk_rule": "没有原句支持的健康、借款等敏感事实，不捏造敏感风险；实际程序阻塞不静默去掉。",
+              "alternatives_rule": "确定主张不添加虚构备选解释；alternatives为空。",
+              "reason_rule": null
+            }
+          ]
+        }
+      ],
+      "forbidden_meanings": [
+        "改为一起完成某项活动",
+        "补先前断交原因、持续多久或谁主动",
+        "把关系恢复写成未来计划",
+        "推断恋爱或亲属关系"
+      ]
+    },
+    {
+      "id": "D07",
+      "position": 6,
+      "case_name": "独立诊断：D07",
+      "input_sha256": "29afd57048cc6a7c397d7f13383897ac6857728aa09e1a0554a10e05c165c774",
+      "target_indices": [
+        0
+      ],
+      "inclusion": "retain",
+      "claims": [
+        {
+          "id": "D07-P1",
+          "required": true,
+          "meaning_requirements": [
+            "联系人与堂姐小彤已经和好；关系变化的另一方有明示堂姐身份。",
+            "昨晚来联系人住处是识别小彤的原文背景，不能据此把和好的时间也固定为昨晚。"
+          ],
+          "variants": [
+            {
+              "id": "D07-P1-v1",
+              "body_requirements": [
+                "联系人与堂姐小彤已经和好；关系变化的另一方有明示堂姐身份。",
+                "昨晚来联系人住处是识别小彤的原文背景，不能据此把和好的时间也固定为昨晚。"
+              ],
+              "subject": "contact",
+              "category": "relationship_note",
+              "allowed_topics": [
+                "family"
+              ],
+              "source_choices": [
+                {
+                  "indices": [
+                    0
+                  ],
+                  "when": "沿原source_indices，不增加来源组合。"
+                }
+              ],
+              "speech_act": "assertion",
+              "assertion_status": "asserted",
+              "figurative_type": "literal",
+              "valid_at": null,
+              "invalid_at": null,
+              "time_rule": "昨晚只修饰来访；和好已完成但确切日期未给。历史主张valid_at/invalid_at均null。",
+              "ideal_destination": "auto",
+              "risk_rule": "没有原句支持的健康、借款等敏感事实，不捏造敏感风险；实际程序阻塞不静默去掉。",
+              "alternatives_rule": "确定主张不添加虚构备选解释；alternatives为空。",
+              "reason_rule": null
+            }
+          ]
+        }
+      ],
+      "forbidden_meanings": [
+        "把堂姐改成朋友、姐姐或用户亲属",
+        "把和好写成昨晚发生或未来将发生",
+        "从住处推出房屋产权",
+        "补争执原因或来访目的"
+      ]
+    },
+    {
+      "id": "D08",
+      "position": 7,
+      "case_name": "独立诊断：D08",
+      "input_sha256": "b7c532b7b9c3d93b69841f826dc1a26d2388cdbb7eccfdf78e4ed2b35cca5ead",
+      "target_indices": [
+        0
+      ],
+      "inclusion": "retain",
+      "claims": [
+        {
+          "id": "D08-P1",
+          "required": true,
+          "meaning_requirements": [
+            "联系人与小彤已经和好；小彤由姓名和来访背景明确指示。",
+            "原文没有说明小彤与联系人的亲属关系，不能只因来住处就标family。"
+          ],
+          "variants": [
+            {
+              "id": "D08-P1-v1",
+              "body_requirements": [
+                "联系人与小彤已经和好；小彤由姓名和来访背景明确指示。",
+                "原文没有说明小彤与联系人的亲属关系，不能只因来住处就标family。"
+              ],
+              "subject": "contact",
+              "category": "relationship_note",
+              "allowed_topics": [
+                "other"
+              ],
+              "source_choices": [
+                {
+                  "indices": [
+                    0
+                  ],
+                  "when": "沿原source_indices，不增加来源组合。"
+                }
+              ],
+              "speech_act": "assertion",
+              "assertion_status": "asserted",
+              "figurative_type": "literal",
+              "valid_at": null,
+              "invalid_at": null,
+              "time_rule": "昨晚只修饰来访；和好已完成但确切日期未给。历史主张valid_at/invalid_at均null。",
+              "ideal_destination": "auto",
+              "risk_rule": "没有原句支持的健康、借款等敏感事实，不捏造敏感风险；实际程序阻塞不静默去掉。",
+              "alternatives_rule": "确定主张不添加虚构备选解释；alternatives为空。",
+              "reason_rule": null
+            }
+          ]
+        }
+      ],
+      "forbidden_meanings": [
+        "补小彤是亲属、邻居、恋人或同事",
+        "把没有亲属证据写成已证明不是亲属",
+        "把和好时点擅定为昨晚",
+        "从住处推出房屋产权"
+      ]
+    }
+  ]
+}

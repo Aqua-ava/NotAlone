@@ -1,0 +1,19 @@
+# 任务07审核材料的机械投影
+
+本材料只准备接口，不启动模型、预算或生产放行。原16主集和独立D8分别保存为九键参考；输入副本保留24窗原顺序、完整Window及来源时间，不把两组分母合并。
+
+原主集取自来源保真v2的A01–A16，所有window、claim、variant和common_rules逐字保留；原common_rules内21窗范围描述是原参考的历史上下文，新副本的实际执行集合仅由其16个windows限定。A17–A19/B01/B02不进入本集合，不能借其中命题补分。
+
+D8的必要语义限定全部进入同一claim，不按necessary_propositions条目数扩增分母。D03保留none窗口且claims为空；其余各一项必需，共7项。kind/unresolved及其理由、原完整gold对象留在provenance中，E14副本不伪称包含原E2全部判据。原topic、来源位置、理想去向、禁止推断、备选解释、风险和时间要求均保留。
+
+source_choices只有原source_indices这一种组合；不添加候选来源或合法variant。日期仅转写原time_note：D01/D02从原来源时点起、结束未知；D04采用原明确的月份半开区间；D05–D08的历史主张两端null。D03不生成候选字段。
+
+原D8没有独立reason_rule文本。投影暂以null保留这个缺口，状态为mechanical_projection_incomplete，不自行补主集理由规则或以结构合法冒充可正式执行。需要既有协议能表达“原参考未另定”后再定接线，不倒改旧Gold或旧验收。
+
+input_snapshot的full_window_sha256摘要完整Window；gold_input_sha256沿主集旧public_window_projection形状，诊断original_input_sha256则保持原D8的messages/target_indices摘要。这些摘要用途不同，不互相冒充。尚未冻结模型、提示、执行源码、run_id、预算或凭据。
+
+机械检查覆盖原Gold文件摘要、分组数量、必需命题18与7、主集window全等、D8逐字段映射、24个输入与旧冻结场完整相等。独立Agent另审语义等价；检查通过不代表真实模型质量、RAW盲审或新运行资格。
+
+2026-10-18独立语义与标准审查通过：主16共24个合法variant、18必需＋1可选及全部common_rules与原参考全等；D8仅确认机械等价，7个reason_rule仍null。主16状态可记agent_reviewed_reference，D8继续mechanical_projection_incomplete；不以同一次资料审查消除诊断的判据缺口。
+
+离线接口检查：主16以unrun空证据装配16份审核packet通过；D8因incomplete被原prepare_case_review以review_reference_invalid拒绝。没有伪造候选、审核pass或模型分数。复核命令为指定项目Python执行prepare-reference-review-projection.py；带--previous-freeze可另核旧场完整输入，默认只读，--write才更新副本。

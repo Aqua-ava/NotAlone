@@ -1,0 +1,692 @@
+{
+  "format_version": 1,
+  "status": "offline_input_snapshot",
+  "source_file_sha256": {
+    ".scratch/unfinished-work/memory-gold-reference-v2-20261016.json": "6ec7ee70a47b94d0cdf667be6478b8fe7cbe33e91bc3d4ec5e49ee340914f738",
+    ".scratch/memory-extraction-accuracy/reference-agent-contrast-gold-20261018.json": "7d7ff70e5d906255d7b26a1682433bb73867e264e1f3bb1e6846c3f8f9cd0786"
+  },
+  "groups": {
+    "main16": 16,
+    "diagnostic8": 8
+  },
+  "cases": [
+    {
+      "case_id": "A01",
+      "group": "main16",
+      "window": {
+        "owner_id": "7477121d-e564-5473-9ea7-864ca33b0443",
+        "contact_id": "20a69194-ee62-5bee-8031-653bcfdaaf7e",
+        "messages": [
+          {
+            "message_id": "5e91d8b5-f23f-535f-94e3-99b9c721aa18",
+            "text": "他不是仓库管理员，他在采购部。",
+            "sender": "contact",
+            "occurred_at": "2026-09-15T00:00:00+00:00",
+            "source_snapshots": [],
+            "message_snapshot": {},
+            "message_type": "unknown",
+            "text_representation": "unknown"
+          }
+        ],
+        "target_message_ids": [
+          "5e91d8b5-f23f-535f-94e3-99b9c721aa18"
+        ]
+      },
+      "full_window_sha256": "fe09abd8c0ca3ee9ff2670d52d5487c34e412ed192cc5ebd51eec03c4aad72ab",
+      "gold_input_sha256": "04f01a6314e6e40d7b538b2d73ae3b09506f63c4dba156e492b758176a1613b9"
+    },
+    {
+      "case_id": "A02",
+      "group": "main16",
+      "window": {
+        "owner_id": "7477121d-e564-5473-9ea7-864ca33b0443",
+        "contact_id": "20a69194-ee62-5bee-8031-653bcfdaaf7e",
+        "messages": [
+          {
+            "message_id": "83bc3407-03b4-5bd9-91df-10982f3fdd2b",
+            "text": "老李最近忙吗？",
+            "sender": "self",
+            "occurred_at": "2026-09-15T00:00:00+00:00",
+            "source_snapshots": [],
+            "message_snapshot": {},
+            "message_type": "unknown",
+            "text_representation": "unknown"
+          },
+          {
+            "message_id": "ef09032d-3b3d-51c7-a744-1b521f02f50a",
+            "text": "他约我周末去钓鱼。",
+            "sender": "contact",
+            "occurred_at": "2026-09-15T00:01:00+00:00",
+            "source_snapshots": [],
+            "message_snapshot": {},
+            "message_type": "unknown",
+            "text_representation": "unknown"
+          }
+        ],
+        "target_message_ids": [
+          "ef09032d-3b3d-51c7-a744-1b521f02f50a"
+        ]
+      },
+      "full_window_sha256": "9c35ad762802a0e249f24a94b72baa60677b5e7e24190b71bbb33c87d1bf38aa",
+      "gold_input_sha256": "742d5e97f0fcbd0d8b367b3746c0adc0b67e1c494f7c1bc7a658bf6a838ea103"
+    },
+    {
+      "case_id": "A03",
+      "group": "main16",
+      "window": {
+        "owner_id": "7477121d-e564-5473-9ea7-864ca33b0443",
+        "contact_id": "20a69194-ee62-5bee-8031-653bcfdaaf7e",
+        "messages": [
+          {
+            "message_id": "d2668d44-74f5-5dae-8d08-60c8702dc0f9",
+            "text": "他昨天又跟我借钱了。",
+            "sender": "contact",
+            "occurred_at": "2026-09-15T00:00:00+00:00",
+            "source_snapshots": [],
+            "message_snapshot": {},
+            "message_type": "unknown",
+            "text_representation": "unknown"
+          }
+        ],
+        "target_message_ids": [
+          "d2668d44-74f5-5dae-8d08-60c8702dc0f9"
+        ]
+      },
+      "full_window_sha256": "12aea1243e210952c3ecbbeab2f5d39c309d4545f521f71c6a02b4cac32e4a41",
+      "gold_input_sha256": "6a6a0de53fa54e8661ab75b2f20edc7da4c72506470e66f80a5f0c89e7dded9d"
+    },
+    {
+      "case_id": "A04",
+      "group": "main16",
+      "window": {
+        "owner_id": "7477121d-e564-5473-9ea7-864ca33b0443",
+        "contact_id": "20a69194-ee62-5bee-8031-653bcfdaaf7e",
+        "messages": [
+          {
+            "message_id": "f703bd69-b156-569d-9383-725054ebd30e",
+            "text": "那个事你先别跟别人说。",
+            "sender": "contact",
+            "occurred_at": "2026-09-15T00:00:00+00:00",
+            "source_snapshots": [],
+            "message_snapshot": {},
+            "message_type": "unknown",
+            "text_representation": "unknown"
+          }
+        ],
+        "target_message_ids": [
+          "f703bd69-b156-569d-9383-725054ebd30e"
+        ]
+      },
+      "full_window_sha256": "208f681db07768bff2f77c17aa0e59e86024472d91632dd4d83f3c8df7e3dc6c",
+      "gold_input_sha256": "b448b09ed590877e93e3d1a28b4f4e6f0a76718de26dbb4183b2e1d71d6efd8e"
+    },
+    {
+      "case_id": "A05",
+      "group": "main16",
+      "window": {
+        "owner_id": "7477121d-e564-5473-9ea7-864ca33b0443",
+        "contact_id": "20a69194-ee62-5bee-8031-653bcfdaaf7e",
+        "messages": [
+          {
+            "message_id": "71d22f61-4cce-5e00-8029-b8fa6238e0af",
+            "text": "我姐把她的车借给我了。",
+            "sender": "contact",
+            "occurred_at": "2026-09-15T00:00:00+00:00",
+            "source_snapshots": [],
+            "message_snapshot": {},
+            "message_type": "unknown",
+            "text_representation": "unknown"
+          }
+        ],
+        "target_message_ids": [
+          "71d22f61-4cce-5e00-8029-b8fa6238e0af"
+        ]
+      },
+      "full_window_sha256": "f0777254d3a2470ddb73acae72e2a6875b9724a37c2c656baf4f6d2ebc8f9c25",
+      "gold_input_sha256": "1459fbddcc6c3f15a3e180ebd7ec75f70bc793cbd3dd042fc1389c7051133a4c"
+    },
+    {
+      "case_id": "A06",
+      "group": "main16",
+      "window": {
+        "owner_id": "7477121d-e564-5473-9ea7-864ca33b0443",
+        "contact_id": "20a69194-ee62-5bee-8031-653bcfdaaf7e",
+        "messages": [
+          {
+            "message_id": "141a9c65-b9d6-5e67-8dea-5cd78e792796",
+            "text": "你到机场了吗？",
+            "sender": "self",
+            "occurred_at": "2026-09-15T00:00:00+00:00",
+            "source_snapshots": [],
+            "message_snapshot": {},
+            "message_type": "unknown",
+            "text_representation": "unknown"
+          },
+          {
+            "message_id": "25f63f22-75ec-5c28-b4b8-b5c2a7b5ddeb",
+            "text": "到了，正在等行李。",
+            "sender": "contact",
+            "occurred_at": "2026-09-15T00:01:00+00:00",
+            "source_snapshots": [],
+            "message_snapshot": {},
+            "message_type": "unknown",
+            "text_representation": "unknown"
+          }
+        ],
+        "target_message_ids": [
+          "25f63f22-75ec-5c28-b4b8-b5c2a7b5ddeb"
+        ]
+      },
+      "full_window_sha256": "9dcdc34078099a17eab51edb44c4e514874a6f2a57962e9d331caa76cc043112",
+      "gold_input_sha256": "de162f8e5cced01487046354b265d097da65fd9979d45c538c3d2e0ce9eecebb"
+    },
+    {
+      "case_id": "A07",
+      "group": "main16",
+      "window": {
+        "owner_id": "7477121d-e564-5473-9ea7-864ca33b0443",
+        "contact_id": "20a69194-ee62-5bee-8031-653bcfdaaf7e",
+        "messages": [
+          {
+            "message_id": "1b36dcc8-c4d4-5260-b9a7-fdabdf0a629b",
+            "text": "他们周末要来家里。",
+            "sender": "contact",
+            "occurred_at": "2026-09-15T00:00:00+00:00",
+            "source_snapshots": [],
+            "message_snapshot": {},
+            "message_type": "unknown",
+            "text_representation": "unknown"
+          }
+        ],
+        "target_message_ids": [
+          "1b36dcc8-c4d4-5260-b9a7-fdabdf0a629b"
+        ]
+      },
+      "full_window_sha256": "a7be38e1f67bdffc0367ad7a99695732b8d7220c511f678ce9ef961b6ba0acc3",
+      "gold_input_sha256": "d484b373403cd04029cae70390c3b5d46d05f650db45311eb22b717418141929"
+    },
+    {
+      "case_id": "A08",
+      "group": "main16",
+      "window": {
+        "owner_id": "7477121d-e564-5473-9ea7-864ca33b0443",
+        "contact_id": "20a69194-ee62-5bee-8031-653bcfdaaf7e",
+        "messages": [
+          {
+            "message_id": "09db6f38-5698-5407-87fb-5060122aaa62",
+            "text": "你上次说的那本书叫什么？",
+            "sender": "self",
+            "occurred_at": "2026-09-15T00:00:00+00:00",
+            "source_snapshots": [],
+            "message_snapshot": {},
+            "message_type": "unknown",
+            "text_representation": "unknown"
+          },
+          {
+            "message_id": "2058abe9-6bf6-5a67-a6a0-25aaf05c150b",
+            "text": "《活着》，我刚看完。",
+            "sender": "contact",
+            "occurred_at": "2026-09-15T00:01:00+00:00",
+            "source_snapshots": [],
+            "message_snapshot": {},
+            "message_type": "unknown",
+            "text_representation": "unknown"
+          }
+        ],
+        "target_message_ids": [
+          "2058abe9-6bf6-5a67-a6a0-25aaf05c150b"
+        ]
+      },
+      "full_window_sha256": "ad8824b00505b53f6e3b46ffe1c59e912ee1ebf4d493d6e84bf58ee03fc252a7",
+      "gold_input_sha256": "3afedf18d2615fed891f78860d0547bbfb672080d9867a014138c713400ebd5f"
+    },
+    {
+      "case_id": "A09",
+      "group": "main16",
+      "window": {
+        "owner_id": "7477121d-e564-5473-9ea7-864ca33b0443",
+        "contact_id": "20a69194-ee62-5bee-8031-653bcfdaaf7e",
+        "messages": [
+          {
+            "message_id": "4665f463-e112-5020-a960-2741bdde5093",
+            "text": "那人昨天又来了。",
+            "sender": "contact",
+            "occurred_at": "2026-09-15T00:00:00+00:00",
+            "source_snapshots": [],
+            "message_snapshot": {},
+            "message_type": "unknown",
+            "text_representation": "unknown"
+          }
+        ],
+        "target_message_ids": [
+          "4665f463-e112-5020-a960-2741bdde5093"
+        ]
+      },
+      "full_window_sha256": "8ef664fb7fa9b681fee599f42d97eb36e054071d4cab2889ea464deb5275be5f",
+      "gold_input_sha256": "7e2cf397080187caa261dec7a9d7dbb8177de63f2dc21620002cfba086479a60"
+    },
+    {
+      "case_id": "A10",
+      "group": "main16",
+      "window": {
+        "owner_id": "7477121d-e564-5473-9ea7-864ca33b0443",
+        "contact_id": "20a69194-ee62-5bee-8031-653bcfdaaf7e",
+        "messages": [
+          {
+            "message_id": "10dc5140-b49a-595d-9062-2cc7c87f88e7",
+            "text": "老李借你钱了吗？",
+            "sender": "self",
+            "occurred_at": "2026-09-15T00:00:00+00:00",
+            "source_snapshots": [],
+            "message_snapshot": {},
+            "message_type": "unknown",
+            "text_representation": "unknown"
+          },
+          {
+            "message_id": "393bf17a-56fa-5b0e-98a8-56495e5154f6",
+            "text": "借了，小王没借。",
+            "sender": "contact",
+            "occurred_at": "2026-09-15T00:01:00+00:00",
+            "source_snapshots": [],
+            "message_snapshot": {},
+            "message_type": "unknown",
+            "text_representation": "unknown"
+          }
+        ],
+        "target_message_ids": [
+          "393bf17a-56fa-5b0e-98a8-56495e5154f6"
+        ]
+      },
+      "full_window_sha256": "58a6c8bc66545a72eda57b407dec76d4900702f81fb0cc5d7492cb9b9891a6fa",
+      "gold_input_sha256": "20dafb6b356ce5e066811fe0edac03c44115063565b0cc97ad7f086ba4ffd999"
+    },
+    {
+      "case_id": "A11",
+      "group": "main16",
+      "window": {
+        "owner_id": "7477121d-e564-5473-9ea7-864ca33b0443",
+        "contact_id": "20a69194-ee62-5bee-8031-653bcfdaaf7e",
+        "messages": [
+          {
+            "message_id": "35933253-ff86-5d67-b15e-cf0511766e88",
+            "text": "你感冒好点了吗？",
+            "sender": "self",
+            "occurred_at": "2026-09-15T00:00:00+00:00",
+            "source_snapshots": [],
+            "message_snapshot": {},
+            "message_type": "unknown",
+            "text_representation": "unknown"
+          },
+          {
+            "message_id": "7a159753-b75c-5743-ad6b-ec9f4dbe3cd4",
+            "text": "好多了，谢谢关心。",
+            "sender": "contact",
+            "occurred_at": "2026-09-15T00:01:00+00:00",
+            "source_snapshots": [],
+            "message_snapshot": {},
+            "message_type": "unknown",
+            "text_representation": "unknown"
+          }
+        ],
+        "target_message_ids": [
+          "7a159753-b75c-5743-ad6b-ec9f4dbe3cd4"
+        ]
+      },
+      "full_window_sha256": "4bf93f552b30337b421888ab1c2ed7bdb9f84eceb5707fecca18b69df491a200",
+      "gold_input_sha256": "0f5471a75da0c0ea7385a23b5724bd11fc6f4090d801dc90aab0b7ed889b39f6"
+    },
+    {
+      "case_id": "A12",
+      "group": "main16",
+      "window": {
+        "owner_id": "7477121d-e564-5473-9ea7-864ca33b0443",
+        "contact_id": "20a69194-ee62-5bee-8031-653bcfdaaf7e",
+        "messages": [
+          {
+            "message_id": "bf158e2b-5715-5b5d-8733-94ae7132121f",
+            "text": "咱们上次说的那家店还去吗？",
+            "sender": "contact",
+            "occurred_at": "2026-09-15T00:00:00+00:00",
+            "source_snapshots": [],
+            "message_snapshot": {},
+            "message_type": "unknown",
+            "text_representation": "unknown"
+          }
+        ],
+        "target_message_ids": [
+          "bf158e2b-5715-5b5d-8733-94ae7132121f"
+        ]
+      },
+      "full_window_sha256": "b540822afaf8776c504752c721fa120feb64e479196702fdac44d785e006d9d7",
+      "gold_input_sha256": "0295c6eeb0916a56dcafd67f0b17804c521e15fec0b03e6e6f06eb80567d12f7"
+    },
+    {
+      "case_id": "A13",
+      "group": "main16",
+      "window": {
+        "owner_id": "7477121d-e564-5473-9ea7-864ca33b0443",
+        "contact_id": "20a69194-ee62-5bee-8031-653bcfdaaf7e",
+        "messages": [
+          {
+            "message_id": "7594f753-c3f2-5290-8bb9-65d7e989c334",
+            "text": "门票买好了吗？",
+            "sender": "self",
+            "occurred_at": "2026-09-15T00:00:00+00:00",
+            "source_snapshots": [],
+            "message_snapshot": {},
+            "message_type": "unknown",
+            "text_representation": "unknown"
+          },
+          {
+            "message_id": "48edb91a-0df6-5b9f-a662-5df06233fb91",
+            "text": "买好了，两张。",
+            "sender": "contact",
+            "occurred_at": "2026-09-15T00:01:00+00:00",
+            "source_snapshots": [],
+            "message_snapshot": {},
+            "message_type": "unknown",
+            "text_representation": "unknown"
+          }
+        ],
+        "target_message_ids": [
+          "48edb91a-0df6-5b9f-a662-5df06233fb91"
+        ]
+      },
+      "full_window_sha256": "584a441c6f7790b541c0fe23f90f2c1f702ea9c8be6cde565cc89bdacf446677",
+      "gold_input_sha256": "4dde37e447170cde8d575d9ad0c8202c941f6c06d322ee16bacf4a026341c312"
+    },
+    {
+      "case_id": "A14",
+      "group": "main16",
+      "window": {
+        "owner_id": "7477121d-e564-5473-9ea7-864ca33b0443",
+        "contact_id": "20a69194-ee62-5bee-8031-653bcfdaaf7e",
+        "messages": [
+          {
+            "message_id": "c5a54a72-8eb0-5e3d-ae80-44feaa357a34",
+            "text": "我等下把地址发你。",
+            "sender": "contact",
+            "occurred_at": "2026-09-15T00:00:00+00:00",
+            "source_snapshots": [],
+            "message_snapshot": {},
+            "message_type": "unknown",
+            "text_representation": "unknown"
+          }
+        ],
+        "target_message_ids": [
+          "c5a54a72-8eb0-5e3d-ae80-44feaa357a34"
+        ]
+      },
+      "full_window_sha256": "8fe39165ade0929a8c0ceb67a7d464407ecbc96239ef538d24b337daa27c6ed6",
+      "gold_input_sha256": "b6ef3f7a47a1eaef77a7510aa6126ea1577144bf9c561c09ed0100f9a8401ef9"
+    },
+    {
+      "case_id": "A15",
+      "group": "main16",
+      "window": {
+        "owner_id": "7477121d-e564-5473-9ea7-864ca33b0443",
+        "contact_id": "20a69194-ee62-5bee-8031-653bcfdaaf7e",
+        "messages": [
+          {
+            "message_id": "be8c80c5-ac7d-5e6a-abc5-a360d0c77bff",
+            "text": "你上次借我的书我看完了，谢谢。",
+            "sender": "contact",
+            "occurred_at": "2026-09-15T00:00:00+00:00",
+            "source_snapshots": [],
+            "message_snapshot": {},
+            "message_type": "unknown",
+            "text_representation": "unknown"
+          }
+        ],
+        "target_message_ids": [
+          "be8c80c5-ac7d-5e6a-abc5-a360d0c77bff"
+        ]
+      },
+      "full_window_sha256": "2710ea1b2df5fca1d0a3b248fea1fa57337b3cf28ad7513513a2fade99383009",
+      "gold_input_sha256": "0707efdd06f0fe9cc9499075bde040b738733f7e6846fda1fba352b1b29fb3ad"
+    },
+    {
+      "case_id": "A16",
+      "group": "main16",
+      "window": {
+        "owner_id": "7477121d-e564-5473-9ea7-864ca33b0443",
+        "contact_id": "20a69194-ee62-5bee-8031-653bcfdaaf7e",
+        "messages": [
+          {
+            "message_id": "630759fa-a929-5a2a-9dd7-d01913227fcc",
+            "text": "那个面试怎么样了？",
+            "sender": "self",
+            "occurred_at": "2026-09-15T00:00:00+00:00",
+            "source_snapshots": [],
+            "message_snapshot": {},
+            "message_type": "unknown",
+            "text_representation": "unknown"
+          },
+          {
+            "message_id": "4f899515-26de-5d65-9a3b-bf29b52e287f",
+            "text": "过了，下周一入职。",
+            "sender": "contact",
+            "occurred_at": "2026-09-15T00:01:00+00:00",
+            "source_snapshots": [],
+            "message_snapshot": {},
+            "message_type": "unknown",
+            "text_representation": "unknown"
+          }
+        ],
+        "target_message_ids": [
+          "4f899515-26de-5d65-9a3b-bf29b52e287f"
+        ]
+      },
+      "full_window_sha256": "c294d24e4c38ce2e5fe1382c77a2d179314de87a2fed25ef3fcf3c7a9b8af802",
+      "gold_input_sha256": "2558968d4de940dc1afe7971c3d1937e53bd71aedbcd40f275a0c83a0eb1e47e"
+    },
+    {
+      "case_id": "D01",
+      "group": "diagnostic8",
+      "window": {
+        "owner_id": "7477121d-e564-5473-9ea7-864ca33b0443",
+        "contact_id": "20a69194-ee62-5bee-8031-653bcfdaaf7e",
+        "messages": [
+          {
+            "message_id": "754b3df0-9351-56e9-9c0d-f98b457d8469",
+            "text": "以后聊起那段插曲，请不要替我推测动机。",
+            "sender": "contact",
+            "occurred_at": "2026-10-18T09:00:00+08:00",
+            "source_snapshots": [],
+            "message_snapshot": {},
+            "message_type": "unknown",
+            "text_representation": "unknown"
+          }
+        ],
+        "target_message_ids": [
+          "754b3df0-9351-56e9-9c0d-f98b457d8469"
+        ]
+      },
+      "full_window_sha256": "55128c3bd0cb26a20655e4c1f579905a3882e5eada96e018713028a88389b7bd",
+      "gold_input_sha256": "9f95c0d8b671261ecc90f92ba0a11c78dacbc0ded391cd2eb6606bf54aacce18",
+      "original_input_sha256": "6025991229830fabf142b35d522ead604653567c1c176b019a42604799bb79db"
+    },
+    {
+      "case_id": "D02",
+      "group": "diagnostic8",
+      "window": {
+        "owner_id": "7477121d-e564-5473-9ea7-864ca33b0443",
+        "contact_id": "20a69194-ee62-5bee-8031-653bcfdaaf7e",
+        "messages": [
+          {
+            "message_id": "126e804e-9fff-5e2e-a158-a4a806a0912c",
+            "text": "以后聊起上周排队时的争执，请不要替我推测动机。",
+            "sender": "contact",
+            "occurred_at": "2026-10-18T09:00:00+08:00",
+            "source_snapshots": [],
+            "message_snapshot": {},
+            "message_type": "unknown",
+            "text_representation": "unknown"
+          }
+        ],
+        "target_message_ids": [
+          "126e804e-9fff-5e2e-a158-a4a806a0912c"
+        ]
+      },
+      "full_window_sha256": "f1f2b5dfdfb81c8099b5e0e9b4caa913be4856b51ad327c3f61da4795bebd1df",
+      "gold_input_sha256": "56c02cdf236558bc3f9ca6f2b61f77f284978df8a3cabc1d250dab9c3d19948a",
+      "original_input_sha256": "4480e5763a55274381d6b71b1de78fac1a62551f954b4f8a9425a9e303cd2e12"
+    },
+    {
+      "case_id": "D03",
+      "group": "diagnostic8",
+      "window": {
+        "owner_id": "7477121d-e564-5473-9ea7-864ca33b0443",
+        "contact_id": "20a69194-ee62-5bee-8031-653bcfdaaf7e",
+        "messages": [
+          {
+            "message_id": "1737b84f-ef8a-5bac-95ed-5b7d5e28c30b",
+            "text": "我下一条贴给你本次页面的链接。",
+            "sender": "contact",
+            "occurred_at": "2026-10-18T09:00:00+08:00",
+            "source_snapshots": [],
+            "message_snapshot": {},
+            "message_type": "unknown",
+            "text_representation": "unknown"
+          }
+        ],
+        "target_message_ids": [
+          "1737b84f-ef8a-5bac-95ed-5b7d5e28c30b"
+        ]
+      },
+      "full_window_sha256": "826a7f54c736ef70e0b09d17d2a583d4de945b98ecc3c8ff6e35b8ce3e49d82e",
+      "gold_input_sha256": "2467220b4f138a0eeb49bc8fce0c647d1a63485dfb2c06e42a26ebd776102707",
+      "original_input_sha256": "8d079d52af2a7e0ada717865e6b6ba3c749f6ed8d7abd1e1cabe41df2d5435c5"
+    },
+    {
+      "case_id": "D04",
+      "group": "diagnostic8",
+      "window": {
+        "owner_id": "7477121d-e564-5473-9ea7-864ca33b0443",
+        "contact_id": "20a69194-ee62-5bee-8031-653bcfdaaf7e",
+        "messages": [
+          {
+            "message_id": "8f904590-0c31-54ff-a7f8-6a1aeab659ef",
+            "text": "十一月至明年一月底，我会每周五把社团值班表交给你。",
+            "sender": "contact",
+            "occurred_at": "2026-10-18T09:00:00+08:00",
+            "source_snapshots": [],
+            "message_snapshot": {},
+            "message_type": "unknown",
+            "text_representation": "unknown"
+          }
+        ],
+        "target_message_ids": [
+          "8f904590-0c31-54ff-a7f8-6a1aeab659ef"
+        ]
+      },
+      "full_window_sha256": "bcf4991dfe6d2a5da62e186ad22583d36dea3e6de55788cd279c4d2c2f05f331",
+      "gold_input_sha256": "22f3cf72cda931ba5f04863c6a28f04e66deb4ccc100300438b191c61dc5675b",
+      "original_input_sha256": "812bdfc12742dbc94f8c7ec59d4228bc0537271bfbb5e3afb1d1d0ee442144cd"
+    },
+    {
+      "case_id": "D05",
+      "group": "diagnostic8",
+      "window": {
+        "owner_id": "7477121d-e564-5473-9ea7-864ca33b0443",
+        "contact_id": "20a69194-ee62-5bee-8031-653bcfdaaf7e",
+        "messages": [
+          {
+            "message_id": "51b7b6c4-a90b-577b-b0db-6f3f6243b0b3",
+            "text": "我昨天跑完了同事小邱推荐的十公里路线。",
+            "sender": "contact",
+            "occurred_at": "2026-10-18T09:00:00+08:00",
+            "source_snapshots": [],
+            "message_snapshot": {},
+            "message_type": "unknown",
+            "text_representation": "unknown"
+          }
+        ],
+        "target_message_ids": [
+          "51b7b6c4-a90b-577b-b0db-6f3f6243b0b3"
+        ]
+      },
+      "full_window_sha256": "fe6cb9b93750d2bb18a2e2ed86d93ddf97691d060f013a30f579263f4ecc5218",
+      "gold_input_sha256": "debd8eaf47ac7aaeac370bee7e9c20d9a1c4a54b52de69f1aead7eff3d6bd40c",
+      "original_input_sha256": "c8fe3dc9a6b5fd2ef4c9d72025301b6c190a758119e30005a66b40183bb7906a"
+    },
+    {
+      "case_id": "D06",
+      "group": "diagnostic8",
+      "window": {
+        "owner_id": "7477121d-e564-5473-9ea7-864ca33b0443",
+        "contact_id": "20a69194-ee62-5bee-8031-653bcfdaaf7e",
+        "messages": [
+          {
+            "message_id": "0e6951c7-f8e4-5da3-a4dc-def8a7ad3a5a",
+            "text": "我昨天和同事小邱恢复了来往。",
+            "sender": "contact",
+            "occurred_at": "2026-10-18T09:00:00+08:00",
+            "source_snapshots": [],
+            "message_snapshot": {},
+            "message_type": "unknown",
+            "text_representation": "unknown"
+          }
+        ],
+        "target_message_ids": [
+          "0e6951c7-f8e4-5da3-a4dc-def8a7ad3a5a"
+        ]
+      },
+      "full_window_sha256": "1e417863bb62362679c57f27309622ff8b54300aef182995842f79ee14bdad46",
+      "gold_input_sha256": "395ad83d021aa5d29f870fa037138e6ecc3d2fda68a4fbb8efb5f3846c304ce5",
+      "original_input_sha256": "6d5c53fc339c061ade5e0c069ae39f5fd454257f07dd012726d88f4f9194c51c"
+    },
+    {
+      "case_id": "D07",
+      "group": "diagnostic8",
+      "window": {
+        "owner_id": "7477121d-e564-5473-9ea7-864ca33b0443",
+        "contact_id": "20a69194-ee62-5bee-8031-653bcfdaaf7e",
+        "messages": [
+          {
+            "message_id": "e6003e2f-b1f8-5e7b-a424-ba7a82b7f586",
+            "text": "我和昨晚来我住处的堂姐小彤和好了。",
+            "sender": "contact",
+            "occurred_at": "2026-10-18T09:00:00+08:00",
+            "source_snapshots": [],
+            "message_snapshot": {},
+            "message_type": "unknown",
+            "text_representation": "unknown"
+          }
+        ],
+        "target_message_ids": [
+          "e6003e2f-b1f8-5e7b-a424-ba7a82b7f586"
+        ]
+      },
+      "full_window_sha256": "d29cf72ab4cfe6c2588abf0ed9e7b3931b79eb71f536da7069cf32e2e8f9a4c4",
+      "gold_input_sha256": "29afd57048cc6a7c397d7f13383897ac6857728aa09e1a0554a10e05c165c774",
+      "original_input_sha256": "0afb97e7ba5e9a35fe4d51f95ca64a307f8dac4857f17837e164082ab83132eb"
+    },
+    {
+      "case_id": "D08",
+      "group": "diagnostic8",
+      "window": {
+        "owner_id": "7477121d-e564-5473-9ea7-864ca33b0443",
+        "contact_id": "20a69194-ee62-5bee-8031-653bcfdaaf7e",
+        "messages": [
+          {
+            "message_id": "df3785d1-2799-5780-8b42-bbeebf4b7d61",
+            "text": "我和昨晚来我住处的小彤和好了。",
+            "sender": "contact",
+            "occurred_at": "2026-10-18T09:00:00+08:00",
+            "source_snapshots": [],
+            "message_snapshot": {},
+            "message_type": "unknown",
+            "text_representation": "unknown"
+          }
+        ],
+        "target_message_ids": [
+          "df3785d1-2799-5780-8b42-bbeebf4b7d61"
+        ]
+      },
+      "full_window_sha256": "a24a068b65c3c943a9cb4de5d964b6e7e82d6225464b2b7cc6fa46056a80ec98",
+      "gold_input_sha256": "b7c532b7b9c3d93b69841f826dc1a26d2388cdbb7eccfdf78e4ed2b35cca5ead",
+      "original_input_sha256": "99d8e8a531c820c55f3ec04e9c1fa0d4c76003a0fc2f1245e4eafdac5ddfcc21"
+    }
+  ]
+}
