@@ -10,7 +10,9 @@
 - P02 E 缺 dependency，V 引用了实际 candidate source IDs 外的声明消息；来源守卫正确拒绝，后13窗 unrun，不放宽守卫。
 - 该场 capture gaps 为空，来源13表和隔离库残留0，进程退出，专用 key 已删除；生命周期仍 unrun。
 - 六场13次已知请求、167未用额度关闭只是运行统计，不合并质量分母。
-- 下一场必须新目录、新 run、新冻结、新 cap30；不复开旧场，不复用余额；独立 RAW 先封存再 FULL。
+- 新场e00279a0已closed2/30，P01类别及期限错误未被V识别，potential bad_auto1而实际pending；后14unrun、正证0/7。
+- 新场capture无缺失、进程59079/59157退出、13表及库残留0、key删除。P02依赖/三锚修正仍未真实验证。
+- 只读对照不支持将失败归因v2或立即追加教学；不改Gold/映射、不复开预算。
 - core 固定6场22c25347完整结束：RAW6/6、FULL3/6，安全错误0但一般错误3；留出4尚未启动或读取。
 - core 正独立实现 closed core-current-source-v1 接线（固定6/12或留出4/8），待提交集成和统一冻结后才可新API。
 - reference 原Pro16场28/32已闭账：审核14窗 safe8/general6；A15 V无法留正文而unknown，A16 unrun。

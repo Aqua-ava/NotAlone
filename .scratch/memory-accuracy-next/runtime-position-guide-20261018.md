@@ -126,3 +126,14 @@ P02只读首拒绝复现：E的事件候选只列第二条消息，dependency=nu
 验证：E最小40项与完整fixture/wire17项通过，5修改源码mypy通过；V相关43项、1源码mypy通过。正确cross verified，交换锚被拒，错误target/短binding/缺作者/inline/null均UNKNOWN且无basis，缺候选来源仍拒。两实现者交叉Spec与独立Standards均无实质问题。新增真实调用0，质量仍只沿上一场P01一窗。
 
 扩大检查发现旧bounded审核夹具未显式传profile、grounded旧负控仍期待TypeError；先复现缺失profile拒绝，再集成参考线测试修复56bab956并按主线v2更新夹具，14项审核模块通过。未放宽生产校验。完整提取单测在600秒上限内873项/39.621s通过；此为单测模块全量，不冒充全项目或真实语义验收。
+
+
+## 依赖教学场：首窗安全门停止，修正仍未获真实验证
+
+集成源ed6d9d42；run=e00279a0-facc-4f1e-8068-b3a3ff6deac6，freeze=1b5728f280680714d9318e7d3a9646edaff31cfa41cc797f931060d3ce873c54，原15/Gold、447源码、cap30及零重试。新场仅两次HTTP200，closed2/30、余28永久关闭；P01完成审核，后14窗unrun。合并前90相关测试、7源码mypy及独立冲突复核通过，不替代真实质量。
+
+P01 E选择momentary_state/.85/dependency=null，编译recent_state及观察点至次日零点的4小时期限；原完成事实Gold要求common_fact/双null。RAW十四字段中category/valid_at/invalid_at失败，其余11槽通过，命题原意与主体未错。V仍supported/issues为空；按原potential auto门记bad_auto=1、false_fact=0、wrong_person=0，触发case_semantic_audit_safety_error。正式API仍pending，不把potential auto报告成实际自动写入。proof为UNKNOWN/pragmatics_not_supported，basis=null；五语义轴未获依据，truth_intent/media通过。完整字段契约raw/accepted/full=0/0/0，正证0/7，本场不能借上一场1/7计通过。
+
+独立RAW SHA=30105d3e5c602ec5944468f6482a3868d469c8ba7963b386b15a1dcf3f1b4596，FULL SHA=070a91a7a0698381cdd9791a99fdc388477b482e02d68faffac5a7d39f4a5546；先RAW后FULL，0600 Agent旁件。capture_gaps空，receipt/records/cleanup无错误；finish closed、worker_gone、close_unknown=false。来源13表及隔离库残留0，进程59079/59157退出，专用key删除。生命周期仍unrun，生产放行表空。
+
+只读比较仅证明同句分类不稳定：上场event/.9、此场momentary_state/.85。stage-v1原文保留，v2仅追加依赖例，无离线可证冲突；不能归因v2，也不能确认随机波动。可检验假设是“刚发生的转变”与“当前结果状态”的泛化不足，但已有明确阶段原则，暂不据单窗再加提示或改映射。此场未到P02，来源依赖及三锚修正仍未获得真实正控验证。七场15次已知请求、195未用额度关闭仅为运行统计，不拼质量分母。
