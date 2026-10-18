@@ -14,7 +14,7 @@ from notalone.memory_extraction.adoption import DEFAULT_CONFIDENCE_THRESHOLD, DE
 
 _SOURCE_FILES = (
     "memory_extraction/direct_adapter.py", "memory_extraction/adapters.py", "memory_extraction/merge.py",
-    "memory_extraction/verification_isolation.py",
+    "memory_extraction/verification_isolation.py", "memory_extraction/json_recovery.py",
     "memory_extraction/models.py", "memory_extraction/evidence.py",
     "memory/models.py", "memory/events.py", "memory/timing.py",
     "memory/candidates.py", "memory/dimension_evidence.py", "memory/evidence_binding.py",
@@ -63,6 +63,9 @@ def upgrade_algorithm(components, runtimes, *, dimension_release=None):
     retry = getattr(model, "max_retries", 0)
     if type(retry) is not int or retry != 0:
         raise UpgradeAlgorithmChanged("升级运行时必须逐HTTP计预算或关闭SDK重试。")
+    extraction_retries = getattr(runtimes["extraction"], "_max_retries", 0)
+    if extraction_retries != 0:
+        raise UpgradeAlgorithmChanged("升级运行时必须关闭提取层内部重试。")
     extra = getattr(model, "extra_body", None) or {}
     configuration = {
         "runtime": {name: type(runtimes[name]).__module__ + "." + type(runtimes[name]).__qualname__
@@ -70,6 +73,7 @@ def upgrade_algorithm(components, runtimes, *, dimension_release=None):
         "model_class": type(model).__module__ + "." + type(model).__qualname__,
         "provider": "deepseek", "model_name": getattr(model, "model_name", components.model_name),
         "endpoint": _endpoint(model),
+        "extraction_max_retries": extraction_retries,
         "max_retries": retry, "temperature": getattr(model, "temperature", 0.0),
         "timeout_seconds": getattr(model, "request_timeout", 60.0),
         "thinking": extra.get("thinking", {}).get("type", "not_applicable"),

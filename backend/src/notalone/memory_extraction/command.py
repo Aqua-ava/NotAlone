@@ -546,6 +546,7 @@ def _trace_versions() -> dict[str, str | int]:
                 "grounded",
                 "grounded_adapter",
                 "direct_adapter",
+                "json_recovery",
                 "merge",
                 "verification_isolation",
                 "adjudication_adapters",

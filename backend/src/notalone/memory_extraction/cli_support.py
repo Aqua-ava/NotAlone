@@ -44,7 +44,7 @@ class ExtractionComponents:
     trace_store: PostgresExtractionTraceStore
 
 
-def build_extraction_components(database_url: str, *, max_retries: int = 2) -> ExtractionComponents:
+def build_extraction_components(database_url: str, *, max_retries: int = 0) -> ExtractionComponents:
     model = build_deepseek_model(
         extra_body={"thinking": {"type": "enabled"}},
         http_client=build_trace_http_client(),

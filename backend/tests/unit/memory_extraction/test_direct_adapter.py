@@ -16,7 +16,7 @@ class DirectExtractionTests(unittest.TestCase):
         model = ToolCallingFakeModel(responses=[AIMessage(content='', tool_calls=[{
             'name': 'DirectMemoryExtractionOutput', 'args': {'scenes': scenes}, 'id': 'synthetic',
         }])])
-        return DirectExtractionRuntime(model=model)
+        return DirectExtractionRuntime(model=model, max_retries=0)
 
     def test_invalid_item_does_not_drop_complete_memory(self):
         identifier = uuid4()

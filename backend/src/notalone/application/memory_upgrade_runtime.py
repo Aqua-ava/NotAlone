@@ -13,7 +13,7 @@ def build_upgrade_components(database_url):
 
 def build_upgrade_runtime(components):
     return dict(
-        extraction=DirectExtractionRuntime(model=components.model),
+        extraction=DirectExtractionRuntime(model=components.model, max_retries=0),
         verification=LangChainSourceVerificationRuntime(model=components.model, isolate_items=True,
             ledger=components.ledger, provider="deepseek", force_tool_choice=False),
         adjudication=LangChainAdjudicationRuntime(model=components.model),
