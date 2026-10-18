@@ -177,7 +177,16 @@ export class ReplySession {
   }
   refreshGenerationEligibility(): void {
     const generationBlock = this.generationBlock();
-    if (generationBlock !== this.state.generationBlock) this.publish({ generationBlock });
+    if (generationBlock === this.state.generationBlock) return;
+    const revokedRead = generationBlock !== null && this.savedRead !== undefined;
+    if (revokedRead) this.cancelSavedRead();
+    this.publish({ generationBlock,
+      ...(revokedRead && this.state.savedSession?.phase === 'loading'
+        ? { savedSession: { ...this.state.savedSession, phase: 'failed' as const } } : {}) });
+    // 同一联系人重新确认不会改变范围修订；旧的未授权读取需要按新资格重读。
+    if (generationBlock === null && this.state.contactId && this.state.savedSession?.phase !== 'ready') {
+      void this.readSavedSession({ contactId: this.state.contactId, scopeRevision: this.state.scopeRevision });
+    }
   }
   onStateChanged(listener: (state: ReplySessionState) => void): () => void {
     this.listeners.add(listener);
