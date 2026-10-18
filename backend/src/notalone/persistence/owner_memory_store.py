@@ -412,10 +412,19 @@ class PostgresOwnerMemoryStore:
         except Exception as error:
             raise OwnerMemoryPersistenceError(_OWNER_MEMORY_UNAVAILABLE) from error
 
-    def list_active(self, owner_id: UUID, *, include_expired: bool = False) -> tuple[OwnerMemory, ...]:
+    def list_active(self, owner_id: UUID, *, include_expired: bool = False,
+                    memory_ids: tuple[UUID, ...] | None = None,
+                    include_historical: bool = False) -> tuple[OwnerMemory, ...]:
         _validate_owner_id(owner_id)
         if type(include_expired) is not bool:
             raise TypeError("历史回看标记必须是 bool。")
+        if memory_ids is not None and (not isinstance(memory_ids, tuple)
+                or any(not isinstance(identifier, UUID) for identifier in memory_ids)):
+            raise ValueError("本人记忆引用结构无效。")
+        if memory_ids == ():
+            return ()
+        if type(include_historical) is not bool or include_historical and memory_ids is None:
+            raise ValueError("历史读取必须限定记忆引用。")
         try:
             with self._connect() as connection:
                 if self._connection_factory is None:
@@ -426,7 +435,8 @@ class PostgresOwnerMemoryStore:
                     f"""
                     SELECT {_OWNER_MEMORY_COLUMNS.replace("to_jsonb(owner_memory)", "to_jsonb(memory)")}
                     FROM public.owner_memory AS memory
-                    WHERE owner_id = %s AND status = 'active'
+                    WHERE owner_id = %s AND (status = 'active' OR (%s AND status = 'invalidated'))
+                      {"AND memory.id = ANY(%s::uuid[])" if memory_ids is not None else ""}
                       AND ((adoption_method='manual' AND source_candidate_id IS NULL
                             AND source_ids=ARRAY[owner_id]) OR EXISTS (
                           SELECT 1 FROM public.source_document AS source
@@ -442,8 +452,11 @@ class PostgresOwnerMemoryStore:
                       ))
                     ORDER BY memory.created_at, memory.id
                     """,
-                    (owner_id,),
+                    (owner_id, include_historical, *((list(memory_ids),) if memory_ids is not None else ())),
                 ).fetchall()
+                if include_historical:
+                    for row in rows:
+                        _ensure_memory_sources(connection, owner_id=owner_id, row=row)
                 rows = available_correction_memories(
                     connection, owner_id=owner_id, record_kind="owner_memory", rows=rows,
                 )
@@ -456,8 +469,8 @@ class PostgresOwnerMemoryStore:
         return tuple(
             _from_row(row)
             for row in rows
-            if (row["valid_at"] is None or row["valid_at"] <= now)
-            and (include_expired or _is_effective(_from_row(row), now))
+            if include_historical or ((row["valid_at"] is None or row["valid_at"] <= now)
+                and (include_expired or _is_effective(_from_row(row), now)))
         )
 
     def list_versions(self, *, owner_id: UUID, memory_id: UUID) -> tuple[OwnerMemory, ...]:

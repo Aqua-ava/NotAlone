@@ -1,6 +1,6 @@
 # 02：回复依据范围内批量读取与复验
 Triage: ready-for-agent
-State: open
+State: claimed
 
 ## What to build
 小批依据只读取所需ID，减少同一发送边界的重复复验，同时保持删除、纠错及版本失效。

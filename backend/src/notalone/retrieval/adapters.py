@@ -119,6 +119,7 @@ class InMemoryRetrieval:
         *,
         scope: ContactScope,
         target_message_id: UUID | None = None,
+        message_ids: tuple[UUID, ...] | None = None,
         query: str | None = None,
         limit: int = 50,
         occurred_after: datetime | None = None,
@@ -129,11 +130,15 @@ class InMemoryRetrieval:
         _validate_window(occurred_after, occurred_before, timeout_ms)
         if not isinstance(scope, ContactScope):
             raise TypeError("消息检索范围无效。")
+        if message_ids is not None and (not isinstance(message_ids, tuple)
+                or any(not isinstance(identifier, UUID) for identifier in message_ids)):
+            raise ValueError("消息复验引用结构无效。")
 
         scoped = tuple(
             message
             for message in self.messages
             if message.scope == scope
+            and (message_ids is None or message.message_id in message_ids)
             and _in_time_window(message, occurred_after, occurred_before)
         )
         if target_message_id is not None:

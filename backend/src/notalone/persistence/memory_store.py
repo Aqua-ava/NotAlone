@@ -995,12 +995,21 @@ class PostgresMemoryStore:
             error_message="关系记忆删除失败。",
         )
 
-    def list_confirmed(self, scope: ContactScope, *, include_expired: bool = False) -> tuple[ConfirmedMemory, ...]:
-        """检索默认排除过期；管理回看仍须有活动来源且状态为 active。"""
+    def list_confirmed(self, scope: ContactScope, *, include_expired: bool = False,
+                       memory_ids: tuple[UUID, ...] | None = None,
+                       include_historical: bool = False) -> tuple[ConfirmedMemory, ...]:
+        """默认读取当前有效资料；历史模式只读指定版本并核验完整来源。"""
 
         self._validate_scope(scope)
         if type(include_expired) is not bool:
             raise TypeError("历史回看标记必须是 bool。")
+        if memory_ids is not None and (not isinstance(memory_ids, tuple)
+                or any(not isinstance(identifier, UUID) for identifier in memory_ids)):
+            raise ValueError("关系记忆引用结构无效。")
+        if memory_ids == ():
+            return ()
+        if type(include_historical) is not bool or include_historical and memory_ids is None:
+            raise ValueError("历史读取必须限定记忆引用。")
         current = self._now()
         try:
             with self._connect() as connection:
@@ -1015,9 +1024,10 @@ class PostgresMemoryStore:
                     FROM public.confirmed_memory AS memory
                     WHERE memory.owner_id = %s
                       AND memory.contact_id = %s
-                      AND memory.status = 'active'
+                      {"AND memory.id = ANY(%s::uuid[])" if memory_ids is not None else ""}
+                      AND (memory.status = 'active' OR (%s AND memory.status = 'invalidated'))
                       AND (
-                          memory.valid_at IS NULL OR memory.valid_at <= %s
+                          %s OR memory.valid_at IS NULL OR memory.valid_at <= %s
                       )
                       AND (
                           %s OR memory.invalid_at IS NULL OR %s < memory.invalid_at
@@ -1049,8 +1059,13 @@ class PostgresMemoryStore:
                       )
                     ORDER BY memory.created_at, memory.id
                     """,
-                    (scope.owner_id, scope.contact_id, current, include_expired, current),
+                    (scope.owner_id, scope.contact_id,
+                     *((list(memory_ids),) if memory_ids is not None else ()),
+                     include_historical, include_historical, current, include_expired or include_historical, current),
                 ).fetchall()
+                if include_historical and rows:
+                    self._ensure_active_sources(connection, scope, tuple(dict.fromkeys(
+                        identifier for row in rows for identifier in row["memory_source_ids"])))
                 rows = available_correction_memories(
                     connection, owner_id=scope.owner_id, record_kind="contact_memory", rows=rows,
                 )
@@ -1111,10 +1126,16 @@ class PostgresMemoryStore:
             self._bump_memory_revision(connection, scope)
             return self._memory_from_row(self._timed_memories(connection, [restored])[0])
 
-    def list_pending_candidates(self, scope: ContactScope) -> tuple[MemoryCandidate, ...]:
+    def list_pending_candidates(self, scope: ContactScope, *,
+                                candidate_ids: tuple[UUID, ...] | None = None) -> tuple[MemoryCandidate, ...]:
         """返回联系人范围内所有 pending 候选，供人工处理。"""
 
         self._validate_scope(scope)
+        if candidate_ids is not None and (not isinstance(candidate_ids, tuple)
+                or any(not isinstance(identifier, UUID) for identifier in candidate_ids)):
+            raise ValueError("待确认候选引用结构无效。")
+        if candidate_ids == ():
+            return ()
         try:
             with self._connect() as connection:
                 if self._connection_factory is None:
@@ -1128,9 +1149,11 @@ class PostgresMemoryStore:
                     WHERE owner_id = %s
                       AND contact_id = %s
                       AND status = 'pending'
+                      {"AND id = ANY(%s::uuid[])" if candidate_ids is not None else ""}
                     ORDER BY created_at, id
                     """,
-                    (scope.owner_id, scope.contact_id),
+                    (scope.owner_id, scope.contact_id,
+                     *((list(candidate_ids),) if candidate_ids is not None else ())),
                 ).fetchall()
                 candidates = (
                     self._candidate_from_row(row)
