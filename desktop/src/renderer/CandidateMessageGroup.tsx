@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ClipboardEvent, type ReactNode } from
 
 interface MessageView { messageId: string; text: string; }
 
-export function CandidateMessageGroup({ identity, number, messages, controls, disabled, dirty, canCopy, restored,
+export function CandidateMessageGroup({ identity, number, messages, controls, disabled, dirty, restored,
   edit, save, copy, noteTextCopy, validatePaste }: {
   identity: string;
   number: number;
@@ -10,7 +10,6 @@ export function CandidateMessageGroup({ identity, number, messages, controls, di
   controls: ReactNode;
   disabled: boolean;
   dirty: boolean;
-  canCopy: boolean;
   restored: boolean;
   edit: (messageId: string, text: string) => void;
   save: () => Promise<void>;
@@ -37,7 +36,7 @@ export function CandidateMessageGroup({ identity, number, messages, controls, di
     if (!pasting && saveAfterPaste.current) { saveAfterPaste.current = false; void saveGroup(); }
   }, [pasting, signature]);
   async function copyMessage(messageId: string, index: number) {
-    if (disabled || dirty || !canCopy || copying || saving) return;
+    if (disabled || dirty || copying || saving) return;
     const operation = signature;
     setCopying(true); setNotice(''); setError('');
     try {
@@ -85,12 +84,11 @@ export function CandidateMessageGroup({ identity, number, messages, controls, di
         onCopy={(event) => { const input = event.currentTarget; noteTextCopy(input.value.slice(input.selectionStart, input.selectionEnd)); }}
         onCut={(event) => { const input = event.currentTarget; noteTextCopy(input.value.slice(input.selectionStart, input.selectionEnd)); }}
       /></label>
-      <button disabled={copying || dirty || !canCopy || !message.text.trim()} onClick={() => void copyMessage(message.messageId, index)}>复制第{index + 1}条</button>
+      <button disabled={copying || dirty || !message.text.trim()} onClick={() => void copyMessage(message.messageId, index)}>复制第{index + 1}条</button>
     </div>)}
     {saveFailed && dirty && <button onClick={() => void saveGroup()}>重试保存修改</button>}
     {saving && <p role="status">正在自动保存修改…</p>}
-    {!saving && dirty && <p>结束编辑后自动保存，再选择当前版本即可复制。</p>}
-    {!dirty && !canCopy && <p>选择当前版本后可逐条复制。</p>}
+    {!saving && dirty && <p>结束编辑后自动保存，保存完成即可复制。</p>}
     {copying && <p role="status">正在复制…</p>}
     {pasting && <p role="status">正在核对粘贴来源…</p>}
     {notice && <p role="status">{notice}</p>}

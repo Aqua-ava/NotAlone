@@ -182,7 +182,6 @@ export async function authenticExpressionTyped(browser: Browser, origin: string)
         const editedVersion = history.versions[1];
         expect(editedVersion.messages.map((message) => message.text)).toEqual(['这次不参加。', '谢谢。']);
         expect(editedVersion.messages.map((message) => message.messageId)).toEqual(initial.candidate.messages.map((message) => message.message_id));
-        await group.getByRole('radio', { name: '选择说法1当前版本', exact: true }).click();
         await group.getByRole('button', { name: '复制第1条', exact: true }).click();
         expect(copied).toEqual(['这次不参加。']);
         expect((await helper.evaluate(async () => window.notalone.styleSamples.getState())).samples).toHaveLength(1);

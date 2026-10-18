@@ -79,10 +79,6 @@ export function AssistantSessionPanel({ replies }: { replies: ReplySessionView }
   const currentCopyScope = useRef(copyScopeKey); currentCopyScope.current = copyScopeKey;
   const deleting = replies.state.sessionDeletion === 'deleting';
   const catalog = replies.state.sessionCatalog;
-  const chosen = replies.state.explicitCandidateSelection;
-  const chosenView = replies.state.candidateVersions?.items.find((item) => item.candidateId === chosen?.selection?.candidateId);
-  const canCarry = chosen?.phase === 'ready' && chosen.selection?.sessionId === saved?.sessionId
-    && chosenView?.phase === 'ready' && chosenView.displayVersionId === chosen.selection?.versionId;
   const busy = deleting || catalog?.phase === 'loading' || saved?.phase === 'loading'
     || replies.state.exploration.phase === 'waiting'
     || replies.state.sessionDeletion === 'failed' || replies.state.sourceAvailability === 'checking';
@@ -151,12 +147,8 @@ export function AssistantSessionPanel({ replies }: { replies: ReplySessionView }
     <button disabled={!replies.state.contactId || busy} onClick={() => void replies.newSavedSession()}>
       新开助手会话
     </button>
-    <button disabled={!replies.state.contactId || busy || !canCarry} onClick={() => void replies.newSavedSessionWithCandidate()}>
-      携已选版本新开
-    </button>
     <button disabled={!replies.state.contactId || busy} onClick={() => void replies.listSavedSessions()}>刷新会话列表</button>
         </div>
-        {!canCarry && <p className="session-hint">携入前，请在候选区明确选用要保留的保存版本。</p>}
     {catalog?.phase === 'ready' && <ul className="session-catalog" aria-label="助手会话目录">
       {!catalog.items.length && <li>这位联系人还没有助手会话。</li>}
       {catalog.items.map((item, index) => <li className="session-catalog-item" key={item.sessionId}>

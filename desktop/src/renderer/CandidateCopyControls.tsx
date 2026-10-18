@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import type { ReplySessionState } from '../shared/reply-bridge';
 import { Icon } from './icons';
 
-export function CandidateCopyControls({ state }: { state: ReplySessionState }) {
-  const candidate = state.result?.candidates.find((item) => item.original.candidateId === state.selectedCandidateId);
+export function CandidateCopyControls({ state, candidateId }: { state: ReplySessionState; candidateId: string }) {
+  const candidate = state.result?.candidates.find((item) => item.original.candidateId === candidateId);
   const identity = JSON.stringify([state.scopeRevision, state.contactId, state.result?.replyRequestId,
     candidate?.original.candidateId, candidate?.editedText]);
   const latest = useRef(identity);
@@ -29,7 +29,6 @@ export function CandidateCopyControls({ state }: { state: ReplySessionState }) {
     } finally { if (active.current) setBusy(false); }
   }
   return <>
-    {state.result && state.result.input.mode !== 'rewrite_draft' && <span>请在消息组选择版本后逐条复制。</span>}
     <button disabled={!enabled} onClick={() => void copy(false)}><Icon name="copy" size={13} />复制</button>
     <button className="copy-hide" disabled={!enabled} onClick={() => void copy(true)}>复制并收起</button>
     {busy && <span role="status">正在复制…</span>}

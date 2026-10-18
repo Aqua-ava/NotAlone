@@ -199,7 +199,7 @@ export async function authenticExpressionGroups(browser: Browser, origin: string
           expect(await pasteSelection(firstEditor, edited[0])).toBe(false);
           await expect(firstEditor).toHaveValue(edited[0]);
           await firstEditor.blur();
-          await expect(group.getByRole('combobox', { name: '说法1版本', exact: true })).toHaveCount(1);
+          await expect(group.getByText('修改版本 1', { exact: true })).toBeVisible();
           await expect.poll(async () => (await helper.evaluate(async () => window.notalone.replies.getState()))
             .candidateVersions?.items.find((view) => view.candidateId === item.candidate.candidate_id)?.history?.versions.length,
             { message: `${mode}：公开组修改保存后，受信历史应有两个完整版本` }).toBe(2);
@@ -210,14 +210,12 @@ export async function authenticExpressionGroups(browser: Browser, origin: string
           expect(version.parentVersionId).toBe(history.versions[0].versionId);
           expect(version.messages.map((message) => message.messageId)).toEqual(item.candidate.messages.map((message) => message.message_id));
           expect(version.messages.map((message) => message.text)).toEqual(edited); expect(version.requirements).toBeNull();
-          await group.getByRole('radio', { name: '选择说法1当前版本', exact: true }).click();
-          await expect(group.getByRole('radio', { name: '选择说法1当前版本', exact: true })).toBeChecked();
           await group.getByRole('button', { name: '复制第1条', exact: true }).click();
           await expect(group.getByRole('status').filter({ hasText: '已复制第1条，请自行粘贴并发送' })).toBeVisible();
           expect(copied).toEqual([edited[0]]); expect(hidden).toBe(0);
           expect((await helper.evaluate(async () => window.notalone.styleSamples.getState())).samples).toHaveLength(1);
-          const versionPicker = group.getByRole('combobox', { name: '说法1版本', exact: true });
-          await versionPicker.selectOption(history.versions[0].versionId);
+          const previousVersion = group.getByRole('button', { name: '查看说法1上一版', exact: true });
+          await previousVersion.click();
           await expect(group.getByRole('textbox', { name: '说法1第1条编辑文本', exact: true })).toHaveValue(stage.messages[0]);
           await group.getByRole('button', { name: '主动保存说法1为样本', exact: true }).click();
           await expect.poll(async () => (await helper.evaluate(async () => window.notalone.styleSamples.getState())).samples.length,
@@ -235,10 +233,10 @@ export async function authenticExpressionGroups(browser: Browser, origin: string
           await expect.poll(async () => (await helper.evaluate(async () => window.notalone.replies.getState())).result,
             { message: `${mode}：明确查看会话并完成重读后，实时结果应清空` }).toBeNull();
           await expect.poll(async () => (await helper.evaluate(async () => window.notalone.replies.getState())).candidateVersions?.phase).toBe('ready');
-          await expect(versionPicker).toHaveValue(version.versionId);
-          await versionPicker.selectOption(history.versions[0].versionId);
+          await expect(group.getByText('修改版本 1', { exact: true })).toBeVisible();
+          await previousVersion.click();
           await expect(group.getByRole('textbox', { name: '说法1第2条编辑文本', exact: true })).toHaveValue(stage.messages[1]);
-          await versionPicker.selectOption(version.versionId);
+          await group.getByRole('button', { name: '查看说法1下一版', exact: true }).click();
           await expect(group.getByRole('textbox', { name: '说法1第1条编辑文本', exact: true })).toHaveValue(edited[0]);
           const finalDraft = [edited[0], '谢谢你邀请。先这样。'];
           await group.getByRole('textbox', { name: '说法1第2条编辑文本', exact: true }).fill(finalDraft[1]);

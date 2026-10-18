@@ -47,9 +47,7 @@ async function actualHistory(pages: RewritePages, identity: GroupIdentity) {
   return result.data as { default_display_version_id: string; selected_version_id: string | null;
     versions: Array<{ version_id: string; parent_version_id: string | null; requirements: string | null; messages: GroupIdentity['messages'] }> };
 }
-async function selectDisplayed(page: Page) {
-  await groupOn(page).getByRole('radio', { name: '选择说法1当前版本', exact: true }).click();
-  await expect(groupOn(page).getByRole('radio', { name: '选择说法1当前版本', exact: true })).toBeChecked();
+async function expectDirectCopy(page: Page) {
   await expect(groupOn(page).getByRole('button', { name: '复制第1条', exact: true })).toBeEnabled();
 }
 async function rejectCopy(page: Page, identity: GroupIdentity, versionId: string, messageId: string) {
@@ -83,8 +81,7 @@ async function longHistory(browser: Browser, origin: string, scene: Scene) {
       for (let index = 0; index < texts.length; index++) {
         await editorOn(pages.helper, index + 1).fill(texts[index]);
         await editorOn(pages.helper, index + 1).blur();
-        await expect(groupOn(pages.helper).getByRole('combobox', { name: '说法1版本', exact: true }).getByRole('option'))
-          .toHaveCount((revision - 1) * texts.length + index + 2);
+        await expect(groupOn(pages.helper).getByText(`修改版本 ${(revision - 1) * texts.length + index + 1}`, { exact: true })).toBeVisible();
         const saved = await actualHistory(pages, identity), latest = saved.versions.at(-1)!;
         expect(latest.parent_version_id).toBe(parent);
         parent = latest.version_id;
@@ -98,9 +95,13 @@ async function longHistory(browser: Browser, origin: string, scene: Scene) {
     const saved = await actualHistory(pages, identity);
     // 旧未分页的同一权威历史已超过原预算；生产公开控件仍必须完整读取全部版本。
     expect(Buffer.byteLength(JSON.stringify(saved), 'utf8')).toBeGreaterThan(1_048_576);
-    await groupOn(pages.helper).getByRole('combobox', { name: '说法1版本', exact: true }).selectOption(identity.candidateId);
+    for (let index = 0; index < 24; index++) {
+      await groupOn(pages.helper).getByRole('button', { name: '查看说法1上一版', exact: true }).click();
+      await expect(groupOn(pages.helper).getByText(index === 23 ? '原始版本' : `修改版本 ${23 - index}`, { exact: true })).toBeVisible();
+    }
+    await expect(groupOn(pages.helper).getByRole('button', { name: '查看说法1上一版', exact: true })).toBeDisabled();
     for (let index = 0; index < original.length; index++) await expect(editorOn(pages.helper, index + 1)).toHaveValue(original[index]);
-    await selectDisplayed(pages.helper);
+    await expectDirectCopy(pages.helper);
     await groupOn(pages.helper).getByRole('button', { name: '复制第8条', exact: true }).click();
     await expect(groupOn(pages.helper).getByRole('status')).toContainText('已复制第8条，请自行粘贴并发送。');
     expect(copied).toEqual([original[7]]);
@@ -114,10 +115,9 @@ async function longHistory(browser: Browser, origin: string, scene: Scene) {
       await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
       const helper = await restored.open('helper');
       await confirmHelperContact(helper, contactId);
-      await expect(groupOn(helper).getByRole('combobox', { name: '说法1版本', exact: true }).getByRole('option')).toHaveCount(25);
+      await expect(groupOn(helper).getByText('修改版本 24', { exact: true })).toBeVisible();
       for (let index = 0; index < 8; index++) await expect(editorOn(helper, index + 1)).toHaveValue(fullGroup(3)[index]);
-      await expect(groupOn(helper).getByRole('button', { name: '复制第1条', exact: true })).toBeDisabled();
-      await selectDisplayed(helper);
+      await expectDirectCopy(helper);
       await groupOn(helper).getByRole('button', { name: '复制第1条', exact: true }).click();
       await expect(groupOn(helper).getByRole('status')).toContainText('已复制第1条，请自行粘贴并发送。');
       expect(copied).toEqual([original[7], fullGroup(3)[0]]);
@@ -136,7 +136,7 @@ async function deletedRestoredGroup(browser: Browser, origin: string, scene: Sce
     const identity = await generated(pages, contactId);
     await editorOn(pages.helper, 1).fill('已保存的来源派生组修改。');
     await editorOn(pages.helper, 1).blur();
-    await expect(groupOn(pages.helper).getByRole('combobox', { name: '说法1版本', exact: true }).getByRole('option')).toHaveCount(2);
+    await expect(groupOn(pages.helper).getByText('修改版本 1', { exact: true })).toBeVisible();
     const saved = await actualHistory(pages, identity), versionId = saved.versions[1].version_id;
     await host.close();
     await pages.rewriteBackend.command('restart');
@@ -148,7 +148,7 @@ async function deletedRestoredGroup(browser: Browser, origin: string, scene: Sce
       const helper = await restored.open('helper');
       await confirmHelperContact(helper, contactId);
       await expect(editorOn(helper, 1)).toHaveValue('已保存的来源派生组修改。');
-      await selectDisplayed(helper);
+      await expectDirectCopy(helper);
       await editorOn(helper, 1).fill('恢复后尚未保存的来源派生组编辑。');
       const sources = await pages.rewriteBackend.request(`/api/contacts/${contactId}/sources`);
       const sourceId = (sources.data.sources as Array<{ source_id: string }>)[0].source_id;
@@ -193,7 +193,7 @@ async function foreignIdentity(browser: Browser, origin: string) {
     const contactId = await prepare(pages, '主动聊聊');
     await pages.rewriteBackend.plan({ count: 2, message_groups: [['甲的第一组第1条。', '甲的第一组第2条。'], ['甲的第二组第1条。', '甲的第二组第2条。']] });
     const identity = await generated(pages, contactId);
-    await selectDisplayed(pages.helper);
+    await expectDirectCopy(pages.helper);
     const second = (pages.replyTransport.results[0].data.candidates as Array<{ candidate_id: string; messages: GroupIdentity['messages'] }>)[1];
     for (const [forged, versionId, messageId] of [
       [identity, randomUUID(), identity.messages[0].message_id],
@@ -224,7 +224,7 @@ async function foreignIdentity(browser: Browser, origin: string) {
     expect(await rejectCopy(pages.helper, { ...identity, contactId: pages.rewriteBackend.data.contact_ids[1] },
       identity.candidateId, identity.messages[0].message_id)).toBe('rejected');
     expect(copied).toEqual([identity.messages[0].text]);
-    await expect(groupOn(pages.helper).getByRole('button', { name: '复制第1条', exact: true })).toBeDisabled();
+    await expect(groupOn(pages.helper).getByRole('button', { name: '复制第1条', exact: true })).toBeEnabled();
     expect((await pages.rewriteBackend.command('observations')).payloads).toHaveLength(2);
   }, copySurface);
 }

@@ -23,16 +23,11 @@ async function history(fixture: RewriteFixture, contactId: string, sessionId: st
   return saved.data as { candidate_group_id: string; default_display_version_id: string;
     selected_version_id: string | null; versions: SavedGroupVersion[] };
 }
-async function selected(fixture: RewriteFixture, contactId: string, sessionId: string) {
-  const saved = await fixture.request(`/api/contacts/${contactId}/assistant-sessions/${sessionId}/selections`);
-  expect(saved.status).toBe(200);
-  return saved.data.selection as { candidate_id: string; version_id: string } | null;
-}
 const groupOn = (page: Page, number: number) => page.getByRole('group', { name: `说法${number}消息组`, exact: true });
 
 export async function replyStrategyMessageGroups(browser: Browser, origin: string) {
   for (const scene of ['回应消息', '主动聊聊']) {
-    process.stdout.write(`page_test_scenario: ${scene}整组编辑、明确版本选择、逐条复制与重建恢复\n`);
+    process.stdout.write(`page_test_scenario: ${scene}整组编辑、回退版本直接复制、逐条复制与重建恢复\n`);
     const copied: string[] = [];
     let hidden = 0;
     const copySurface = { writeText: async (text: string) => { copied.push(text); }, hideWindow: () => { hidden++; } };
@@ -62,14 +57,15 @@ export async function replyStrategyMessageGroups(browser: Browser, origin: strin
         expect(saved.versions).toHaveLength(1);
         expect(saved.versions[0].messages).toEqual(candidate.messages);
         const group = groupOn(helper, index + 1);
+        await expect(group.getByRole('radio')).toHaveCount(0);
+        await expect(group.getByRole('combobox')).toHaveCount(0);
         await expect(group.getByRole('textbox', { name: new RegExp(`^说法${index + 1}第[0-9]+条编辑文本$`) })).toHaveCount(2);
         for (const [number, message] of candidate.messages.entries()) {
           await expect(group.getByRole('textbox', { name: `说法${index + 1}第${number + 1}条编辑文本`, exact: true })).toHaveValue(message.text);
-          await expect(group.getByRole('button', { name: `复制第${number + 1}条`, exact: true })).toBeDisabled();
+          await expect(group.getByRole('button', { name: `复制第${number + 1}条`, exact: true })).toBeEnabled();
         }
       }
-      // 默认展示版本和旧单句候选的默认高亮都不能代替明确选择。
-      expect(await selected(rewriteBackend, contactId, sessionId)).toBeNull();
+      // 逐条复制无需预先选中，但仍拒绝缺少具体版本与消息的组复制请求。
       expect(copied).toEqual([]);
       expect(await helper.evaluate(async ({ candidateId, replyRequestId }) => {
         const state = await window.notalone.replies.getState();
@@ -83,7 +79,6 @@ export async function replyStrategyMessageGroups(browser: Browser, origin: strin
       await expect(first.getByRole('textbox', { name: '说法1修改要求', exact: true })).toHaveCount(0);
       await first.getByRole('textbox', { name: '说法1第1条编辑文本', exact: true }).fill(edited[0]);
       await expect(first.getByRole('button', { name: '复制第1条', exact: true })).toBeDisabled();
-      await expect(first.getByRole('radio', { name: '选择说法1当前版本', exact: true })).toBeDisabled();
       replyTransport.failNextCandidateVersionSave = true;
       await first.getByRole('textbox', { name: '说法1第1条编辑文本', exact: true }).blur();
       await expect(helper.getByRole('alert').filter({ hasText: '本组版本操作尚未确认' })).toBeVisible();
@@ -93,56 +88,35 @@ export async function replyStrategyMessageGroups(browser: Browser, origin: strin
       await expect(first.getByRole('button', { name: '重试保存修改', exact: true })).toBeEnabled();
       await expect(first.getByRole('textbox', { name: '说法1第1条编辑文本', exact: true })).toHaveValue(edited[0]);
       await first.getByRole('button', { name: '重试保存修改', exact: true }).click();
-      await expect(first.getByRole('combobox', { name: '说法1版本', exact: true }).getByRole('option')).toHaveCount(2);
+      await expect(first.getByText('修改版本 1', { exact: true })).toBeVisible();
       const saved = await history(rewriteBackend, contactId, sessionId, candidate.candidate_id);
       const initial = saved.versions[0], revision = saved.versions[1];
       expect(revision).toMatchObject({ version_number: 1, parent_version_id: initial.version_id, requirements: null });
       expect(revision.messages).toEqual(candidate.messages.map((message, index) => ({ ...message, text: edited[index] })));
       expect(saved.default_display_version_id).toBe(revision.version_id);
-      expect(await selected(rewriteBackend, contactId, sessionId)).toBeNull();
       await expect(second.getByRole('textbox', { name: '说法2第1条编辑文本', exact: true })).toHaveValue(groups[1][0]);
-      // 选择已真实提交而随后的 GET 失败；重读后选旧版必须使用该旧版自己的键。
-      replyTransport.failNextCandidateSelectionRead = true;
-      await first.getByRole('radio', { name: '选择说法1当前版本', exact: true }).click();
-      await expect(helper.getByRole('alert').filter({ hasText: '当前版本尚未确认选择' })).toBeVisible();
-      await expect(first.getByRole('radio', { name: '选择说法1当前版本', exact: true })).not.toBeChecked();
-      await expect(first.getByRole('button', { name: '复制第1条', exact: true })).toBeDisabled();
-      expect((await selected(rewriteBackend, contactId, sessionId))?.version_id).toBe(revision.version_id);
-      await helper.getByRole('button', { name: '重新读取本组版本', exact: true }).click();
-      await first.getByRole('combobox', { name: '说法1版本', exact: true }).selectOption(initial.version_id);
-      await first.getByRole('radio', { name: '选择说法1当前版本', exact: true }).click();
-      await expect(first.getByRole('radio', { name: '选择说法1当前版本', exact: true })).toBeChecked();
       await expect(first.getByRole('button', { name: '复制第1条', exact: true })).toBeEnabled();
-      expect((await selected(rewriteBackend, contactId, sessionId))?.version_id).toBe(initial.version_id);
-      await first.getByRole('combobox', { name: '说法1版本', exact: true }).selectOption(revision.version_id);
-      await first.getByRole('radio', { name: '选择说法1当前版本', exact: true }).click();
-      await expect(first.getByRole('radio', { name: '选择说法1当前版本', exact: true })).toBeChecked();
-      await expect(first.getByRole('button', { name: '复制第1条', exact: true })).toBeEnabled();
-      expect(await selected(rewriteBackend, contactId, sessionId)).toMatchObject({ candidate_id: candidate.candidate_id, version_id: revision.version_id });
+      await expect(first.getByRole('button', { name: '查看说法1下一版', exact: true })).toBeDisabled();
       for (let index = 0; index < edited.length; index++) {
         await first.getByRole('button', { name: `复制第${index + 1}条`, exact: true }).click();
         await expect(first.getByRole('status')).toContainText(`已复制第${index + 1}条，请自行粘贴并发送。`);
       }
       expect(copied).toEqual(edited);
-      await expect(second.getByRole('button', { name: '复制第1条', exact: true })).toBeDisabled();
-      await first.getByRole('combobox', { name: '说法1版本', exact: true }).selectOption(initial.version_id);
+      await expect(second.getByRole('button', { name: '复制第1条', exact: true })).toBeEnabled();
+      await first.getByRole('button', { name: '查看说法1上一版', exact: true }).click();
       await expect(first.getByRole('textbox', { name: '说法1第1条编辑文本', exact: true })).toHaveValue(groups[0][0]);
-      await expect(first.getByRole('button', { name: '复制第1条', exact: true })).toBeDisabled();
-      expect((await selected(rewriteBackend, contactId, sessionId))?.version_id).toBe(revision.version_id);
-      await first.getByRole('radio', { name: '选择说法1当前版本', exact: true }).click();
-      await expect(first.getByRole('radio', { name: '选择说法1当前版本', exact: true })).toBeChecked();
+      await expect(first.getByRole('button', { name: '查看说法1上一版', exact: true })).toBeDisabled();
       await expect(first.getByRole('button', { name: '复制第1条', exact: true })).toBeEnabled();
       for (let index = 0; index < candidate.messages.length; index++) {
         await first.getByRole('button', { name: `复制第${index + 1}条`, exact: true }).click();
         await expect(first.getByRole('status')).toContainText(`已复制第${index + 1}条，请自行粘贴并发送。`);
       }
       expect(copied).toEqual([...edited, ...groups[0]]);
-      await first.getByRole('combobox', { name: '说法1版本', exact: true }).selectOption(revision.version_id);
-      await expect(first.getByRole('button', { name: '复制第1条', exact: true })).toBeDisabled();
-      expect((await selected(rewriteBackend, contactId, sessionId))?.version_id).toBe(initial.version_id);
+      await first.getByRole('button', { name: '查看说法1下一版', exact: true }).click();
+      await expect(first.getByRole('button', { name: '复制第1条', exact: true })).toBeEnabled();
       expect((await rewriteBackend.command('observations')).payloads).toHaveLength(1);
 
-      // 关闭旧宿主并重新装配真实 Main／HTTP，版本来自 PG；临时高亮不充当选择权威。
+      // 关闭旧宿主并重新装配真实 Main／HTTP，版本来自 PG，恢复后可直接复制当前显示版本。
       await host.close();
       await rewriteBackend.command('restart');
       const restored = new PageHost(await browser.newContext(), origin, userData, { copySurface });
@@ -154,11 +128,7 @@ export async function replyStrategyMessageGroups(browser: Browser, origin: strin
         await confirmHelperContact(nextHelper, contactId);
         const recovered = groupOn(nextHelper, 1);
         await expect(recovered.getByRole('textbox', { name: '说法1第1条编辑文本', exact: true })).toHaveValue(edited[0]);
-        await expect(recovered.getByRole('combobox', { name: '说法1版本', exact: true })).toHaveValue(revision.version_id);
-        await expect(recovered.getByRole('button', { name: '复制第1条', exact: true })).toBeDisabled();
-        expect((await selected(rewriteBackend, contactId, sessionId))?.version_id).toBe(initial.version_id);
-        await recovered.getByRole('radio', { name: '选择说法1当前版本', exact: true }).click();
-        await expect(recovered.getByRole('radio', { name: '选择说法1当前版本', exact: true })).toBeChecked();
+        await expect(recovered.getByText('修改版本 1', { exact: true })).toBeVisible();
         await expect(recovered.getByRole('button', { name: '复制第1条', exact: true })).toBeEnabled();
         await recovered.getByRole('button', { name: '复制第1条', exact: true }).click();
         await expect(recovered.getByRole('status')).toContainText('已复制第1条，请自行粘贴并发送。');
@@ -168,7 +138,7 @@ export async function replyStrategyMessageGroups(browser: Browser, origin: strin
       } finally { await restored.close(); }
       expect((await rewriteBackend.command('observations')).payloads).toHaveLength(1);
     }, copySurface);
-    process.stdout.write(`page_test_scenario_passed: ${scene}整组编辑、明确版本选择、逐条复制与重建恢复\n`);
+    process.stdout.write(`page_test_scenario_passed: ${scene}整组编辑、回退版本直接复制、逐条复制与重建恢复\n`);
   }
   for (const scene of ['回应消息', '主动聊聊']) {
     const scenario = `${scene}真实新消息与${scene === '回应消息' ? '显式刷新' : '断流重连'}保留消息组编辑`;

@@ -9,8 +9,9 @@ import { AssistantSessionBudgetNotice, AssistantSessionPanel } from './Assistant
 import { hasChangedReplyInput } from './ReplyGenerationGuidance';
 import { StyleSamples } from './StyleSamples';
 import { ExpressionPreferences } from './ExpressionPreferences';
+import { CandidateCopyControls } from './CandidateCopyControls';
 import { CandidateVersionEditor } from './CandidateVersionEditor';
-import type { ReplyCandidateDraftUpdate, ReplyCandidateVersionRead, ReplyCandidateVersionEdit, ReplyCandidateVersionDisplay, ReplyCandidateVersionSelection } from '../shared/assistant-candidate-versions';
+import type { ReplyCandidateDraftUpdate, ReplyCandidateVersionRead, ReplyCandidateVersionEdit, ReplyCandidateVersionDisplay } from '../shared/assistant-candidate-versions';
 import type { RequirementChange } from '../shared/assistant-continuation-clarification';
 import { AssistantContinuationControls } from './AssistantContinuationControls';
 import { AssistantMessageNoticeActions } from './AssistantMessageNoticeActions';
@@ -45,7 +46,6 @@ export function useReplySession() {
     readCandidateVersions: (request: ReplyCandidateVersionRead) => versionOperation(() => window.notalone.replies.readCandidateVersions(request)),
     saveCandidateVersion: (request: ReplyCandidateVersionEdit) => versionOperation(() => window.notalone.replies.saveCandidateVersion(request)),
     showCandidateVersion: (request: ReplyCandidateVersionDisplay) => versionOperation(() => window.notalone.replies.showCandidateVersion(request)),
-    selectCandidateVersion: (request: ReplyCandidateVersionSelection) => versionOperation(() => window.notalone.replies.selectCandidateVersion(request)),
     updateOptions: (options: RewriteOptions) => operate(() => window.notalone.replies.updateOptions({ ...selection(), options })),
     setMode: (mode: ReplyMode) => operate(() => window.notalone.replies.setMode({ ...selection(), mode })),
     loadMessages: (older = false) => operate(() => window.notalone.replies.loadMessages({ ...selection(), older })),
@@ -53,11 +53,17 @@ export function useReplySession() {
     readSavedSession: () => operate(() => window.notalone.replies.readSavedSession(selection())),
     listSavedSessions: () => operate(() => window.notalone.replies.listSavedSessions(selection())),
     newSavedSession: () => operate(() => window.notalone.replies.newSavedSession(selection())),
-    newSavedSessionWithCandidate: () => operate(() => {
-      const choice = latest.current.explicitCandidateSelection?.selection;
-      if (!choice) throw new Error('请先明确选用要携入的保存版本。');
-      return window.notalone.replies.newSavedSessionWithCandidate({ ...selection(), sessionId: choice.sessionId,
-        expectedSelectionId: choice.selectionId, candidateId: choice.candidateId, versionId: choice.versionId });
+    newSavedSessionWithCandidate: (request: Pick<ReplyCandidateVersionDisplay, 'sessionId' | 'candidateId' | 'versionId'>) => operate(async () => {
+      const scope = selection();
+      const selected = await window.notalone.replies.selectCandidateVersion({ ...scope, ...request, selectionKey: crypto.randomUUID() });
+      receive(selected);
+      const choice = selected.explicitCandidateSelection;
+      if (!active.current || latest.current.contactId !== scope.contactId || latest.current.scopeRevision !== scope.scopeRevision
+        || selected.savedSession?.sessionId !== request.sessionId || choice?.phase !== 'ready'
+        || choice.selection?.sessionId !== request.sessionId || choice.selection.candidateId !== request.candidateId
+        || choice.selection.versionId !== request.versionId) throw new Error('要携入的回复版本尚未核对，请重试。');
+      return window.notalone.replies.newSavedSessionWithCandidate({ ...scope, ...request,
+        expectedSelectionId: choice.selection.selectionId });
     }),
     selectSavedSession: (sessionId: string) => operate(() => window.notalone.replies.selectSavedSession({ ...selection(), sessionId })),
     deleteSavedSession: (command: AssistantSessionDeletion) => operate(() => window.notalone.replies.deleteSavedSession(command)),
@@ -87,7 +93,6 @@ export function useReplySession() {
       expectedInputVersionId: latest.current.continuation!.expectedInputVersionId, requirementChanges })),
     retryContinuation: () => operate(() => window.notalone.replies.retryContinuation({ ...selection(),
       sessionId: latest.current.savedSession!.sessionId! })),
-    selectCandidate: (candidateId: string) => operate(() => window.notalone.replies.selectCandidate({ ...selection(), replyRequestId: latest.current.result!.replyRequestId, candidateId })),
     editCandidate: (candidateId: string, text: string) => operate(() => window.notalone.replies.editCandidate({ ...selection(), replyRequestId: latest.current.result!.replyRequestId, candidateId, text })),
   };
 }
@@ -280,13 +285,13 @@ export function ReplyCandidates({ replies }: { replies: ReplySessionView }) {
             <p>表达方向：{state.result.input.direction}</p></>}</details>
       {state.result.input.mode === 'rewrite_draft' && !state.result.continuation && <div className="reply-candidate-grid">
         {state.result.candidates.map(({ original, editedText }, index) => <article className="reply-candidate" key={original.candidateId}>
-          <label className="reply-choice"><input type="radio" name="candidate" checked={state.selectedCandidateId === original.candidateId}
-            onChange={() => void replies.selectCandidate(original.candidateId)} />说法 {index + 1}</label>
+          <h3>说法 {index + 1}</h3>
           <CandidateEditor text={editedText} candidateId={original.candidateId} number={index + 1} edit={replies.editCandidate}
             disabled={state.phase === 'waiting' || state.sourceAvailability !== undefined}
             validatePaste={(text) => window.notalone.styleSamples.validateCandidatePaste({ contactId: state.contactId!,
               scopeRevision: state.scopeRevision, replyRequestId: state.result!.replyRequestId, candidateId: original.candidateId, text })}
             copy={(text) => noteCopy(original.candidateId, text)} />
+          <CandidateCopyControls state={state} candidateId={original.candidateId} />
           <details className="candidate-reason"><summary>为什么这样写</summary><p className="reply-basis">{original.basis}</p></details>
           {original.riskNotes.map((note, number) => <p className="reply-risk" key={number}>{note}</p>)}
           <details><summary>查看原候选</summary><p className="reply-original"

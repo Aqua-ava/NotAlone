@@ -6,7 +6,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { build } from 'esbuild';
 
-test('组内复制只接身份并从明确选定的受信版本取文本', async (t) => {
+test('组内复制只接身份并从当前展示的受信版本取文本', async (t) => {
   const owned = await mkdtemp(path.join(tmpdir(), 'notalone-message-copy-'));
   try {
     const bundle = path.join(owned, 'controller.mjs');
@@ -60,7 +60,20 @@ test('组内复制只接身份并从明确选定的受信版本取文本', async
       assert.deepEqual(f.copied, [{ request: selection, text: texts.join('\n\n') }]);
       assert.equal(f.hidden(), 0);
     });
-    for (const mode of ['reply_to_message', 'initiate_conversation']) await t.test(`${mode}不借旧五字段绕过版本选择复制整组`, async () => {
+    for (const selectedCandidateId of [null, firstId]) await t.test('改写候选无需先选中即可按身份复制当前文本', async () => {
+      const f = fixture();
+      f.state.selectedCandidateId = selectedCandidateId;
+      await f.controller.copy(selection, f.surface);
+      assert.deepEqual(f.writes, [texts.join('\n\n')]);
+      assert.deepEqual(f.copied, [{ request: selection, text: texts.join('\n\n') }]);
+    });
+    await t.test('改写复制仍拒绝其他轮次和未知候选', async () => {
+      const f = fixture();
+      await assert.rejects(f.controller.copy({ ...selection, replyRequestId: firstId }, f.surface));
+      await assert.rejects(f.controller.copy({ ...selection, candidateId: firstId }, f.surface));
+      assert.deepEqual(f.writes, []);
+    });
+    for (const mode of ['reply_to_message', 'initiate_conversation']) await t.test(`${mode}不借旧五字段绕过版本身份复制整组`, async () => {
       const f = fixture();
       f.state.result.input.mode = mode;
       f.state.explicitCandidateSelection.selection = null;
@@ -90,7 +103,7 @@ test('组内复制只接身份并从明确选定的受信版本取文本', async
       assert.deepEqual(f.writes, [texts[1]]);
       assert.deepEqual(f.copied, [{ request: messageRequest, text: texts[1] }]);
     });
-    for (const terminal of ['deleted', 'missing']) await t.test(`旧SID${terminal}记录不阻断新SID明确选择的消息版本`, async () => {
+    for (const terminal of ['deleted', 'missing']) await t.test(`旧SID${terminal}记录不阻断新SID当前展示的消息版本`, async () => {
       const f = fixture(true);
       f.state.sessionDeletion = terminal;
       f.state.confirmedSessionDeletion = { sessionId: firstId, contactId, scopeRevision: 1,
@@ -101,10 +114,33 @@ test('组内复制只接身份并从明确选定的受信版本取文本', async
       await assert.rejects(f.controller.copy(messageRequest, f.surface));
       assert.deepEqual(f.writes, [texts[1]]);
     });
+    for (const selectionState of [undefined, { phase: 'ready', selection: null },
+      { phase: 'ready', selection: { sessionId, candidateId, versionId: candidateId } }]) {
+      await t.test('无需明确选中即可复制当前展示的保存版本', async () => {
+        const f = fixture(true);
+        f.state.explicitCandidateSelection = selectionState;
+        await f.controller.copy(messageRequest, f.surface);
+        assert.deepEqual(f.writes, [texts[1]]);
+      });
+    }
+    await t.test('未保存草稿不能借旧版本身份复制保存前的正文', async () => {
+      const f = fixture(true);
+      f.state.candidateDrafts = [{ candidateId, versionId,
+        messages: [{ messageId: firstId, text: '尚未保存的改动' }, { messageId: secondId, text: texts[1] }],
+        requirements: '不增加安排承诺。' }];
+      await assert.rejects(f.controller.copy(messageRequest, f.surface));
+      assert.deepEqual(f.writes, []);
+    });
+    await t.test('草稿与保存版本一致时正常复制', async () => {
+      const f = fixture(true);
+      const version = f.state.candidateVersions.items[0].history.versions[1];
+      f.state.candidateDrafts = [{ candidateId, versionId, messages: structuredClone(version.messages),
+        requirements: version.requirements }];
+      await f.controller.copy(messageRequest, f.surface);
+      assert.deepEqual(f.writes, [texts[1]]);
+    });
     const unavailable = [
-      ['默认展示不代替明确选择', (f) => { f.state.explicitCandidateSelection.selection = null; }],
       ['显示其他版本不能复制旧请求', (f) => { f.state.candidateVersions.items[0].displayVersionId = candidateId; }],
-      ['选择版本与复制请求不同', (f) => { f.state.explicitCandidateSelection.selection.versionId = candidateId; }],
       ['版本读取失败', (f) => { f.state.candidateVersions.phase = 'failed'; }],
       ['该候选版本保存中', (f) => { f.state.candidateVersions.items[0].phase = 'saving'; }],
       ['已选会话不同', (f) => { f.state.savedSession.sessionId = firstId; }],
@@ -128,7 +164,8 @@ test('组内复制只接身份并从明确选定的受信版本取文本', async
     });
     for (const [name, invalidate] of [
       ['写入期间连接换代', (f) => { f.connection.generation = 2; }],
-      ['写入期间明确选择变化', (f) => { f.state.explicitCandidateSelection.selection = null; }],
+      ['写入期间展示版本变化', (f) => { f.state.candidateVersions.items[0].displayVersionId = candidateId; }],
+      ['写入期间开始编辑', (f) => { f.state.candidateDrafts = [{ candidateId, versionId, messages: [], requirements: '' }]; }],
       ['写入期间来源失效', (f) => { f.state.sourceAvailability = 'failed'; }],
     ]) await t.test(name, async () => {
       const f = fixture();

@@ -28,7 +28,7 @@ export function candidateCopyRequest(args: unknown[]): CandidateCopyRequest {
   return { ...selection, versionId: data.versionId.toLowerCase(), messageId: data.messageId.toLowerCase() };
 }
 
-// 渲染层只提交身份；策略消息正文来自主进程已核对的完成轮和明确选择版本。
+// 渲染层只提交身份；策略消息正文来自主进程已核对的完成轮和当前展示版本。
 export class CandidateCopyController {
   private copying = false;
   constructor(private readonly backend: BackendHost, private readonly contacts: ContactSession, private readonly replies: ReplySession,
@@ -47,30 +47,32 @@ export class CandidateCopyController {
       || reply.phase === 'waiting' || reply.sourceAvailability !== undefined
       || deletionBlocksCopy) throw new Error('本次候选已变化，请重新确认。');
     if (request.versionId === undefined && request.messageId === undefined) {
-      if (reply.result?.input.mode !== 'rewrite_draft') throw new Error('请明确选择消息组版本后逐条复制。');
+      if (reply.result?.input.mode !== 'rewrite_draft') throw new Error('请从当前消息组逐条复制。');
       const candidate = reply.result?.candidates.find((item) => item.original.candidateId === request.candidateId);
-      if (reply.result?.replyRequestId !== request.replyRequestId || reply.selectedCandidateId !== request.candidateId
+      if (reply.result?.replyRequestId !== request.replyRequestId
         || !candidate?.editedText.trim()) throw new Error('本次候选已变化，请重新确认。');
       return candidate.editedText;
     }
     const versions = reply.candidateVersions;
-    const chosen = reply.explicitCandidateSelection;
     const view = versions?.items.find((item) => item.candidateId === request.candidateId);
     const history = view?.history;
     const saved = reply.savedSession;
     if (!isUuid(request.versionId) || !isUuid(request.messageId)
       || versions?.phase !== 'ready' || view?.phase !== 'ready'
-      || chosen?.phase !== 'ready' || !chosen.selection
-      || chosen.selection.candidateId !== request.candidateId || chosen.selection.versionId !== request.versionId
       || saved?.phase !== 'ready' || !history || history.candidateId !== request.candidateId
       || versions.sessionId !== saved.sessionId || history.sessionId !== saved.sessionId
-      || chosen.selection.sessionId !== saved.sessionId || view.displayVersionId !== request.versionId) {
+      || view.displayVersionId !== request.versionId) {
       throw new Error('本次候选版本已变化，请重新确认。');
     }
     const turn = saved.turns.find((item) => item.turnId === history.turnId);
     const version = history.versions.find((item) => item.versionId === request.versionId);
     const message = version?.messages.find((item) => item.messageId === request.messageId);
-    if (turn?.state !== 'completed' || turn.reply?.replyRequestId !== request.replyRequestId
+    const draft = reply.candidateDrafts?.find((item) => item.candidateId === request.candidateId);
+    const dirty = draft && (draft.versionId !== request.versionId
+      || draft.requirements !== (version?.requirements ?? '') || draft.messages.length !== version?.messages.length
+      || draft.messages.some((item, index) => item.messageId !== version?.messages[index]?.messageId
+        || item.text !== version?.messages[index]?.text));
+    if (dirty || turn?.state !== 'completed' || turn.reply?.replyRequestId !== request.replyRequestId
       || !turn.reply.candidates.some((item) => item.candidateId === request.candidateId) || !message?.text.trim()) {
       throw new Error('本次候选版本已变化，请重新确认。');
     }

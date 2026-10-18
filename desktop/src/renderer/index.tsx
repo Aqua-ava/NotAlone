@@ -1,6 +1,5 @@
 import { ForegroundPanel, useForegroundState } from './ForegroundPanel';
 import { ScreenPermissionPanel, useScreenPermission } from './ScreenPermissionPanel';
-import { CandidateCopyControls } from './CandidateCopyControls';
 import { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Icon } from './icons';
@@ -73,7 +72,7 @@ export function App() {
     <footer className="ime-footer">
       <span>由你修改并亲自发送</span>
       <HelperPinControl />
-      <CandidateCopyControls state={replies.state} />
+      <span>在回复下复制，再粘贴到聊天窗口发送</span>
     </footer>
     {error && <p role="alert">{error}</p>}
     {contactSession.error && <p role="alert">{contactSession.error}</p>}

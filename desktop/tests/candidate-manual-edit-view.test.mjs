@@ -20,14 +20,14 @@ const { CandidateMessageGroup } = await import(`data:text/javascript;base64,${Bu
 test('候选手动编辑只保留正文与复制入口，不要求重复填写修改说明', () => {
   const html = renderToStaticMarkup(React.createElement(CandidateMessageGroup, {
     identity: 'synthetic', number: 1, messages: [{ messageId: 'message', text: '合成编辑后的回复。' }],
-    controls: null, disabled: false, dirty: true, canCopy: false,
+    controls: null, disabled: false, dirty: true,
     restored: false, edit() {}, save: async () => {}, copy: async () => {}, noteTextCopy() {}, validatePaste: async () => {},
   }));
   assert.doesNotMatch(html, /本组修改要求|说法1修改要求/);
   assert.match(html, /候选1编辑文本/);
   assert.doesNotMatch(html, /保存本组修改|重试保存修改/);
   assert.match(html, /disabled=""[^>]*>复制第1条/);
-  assert.match(html, /结束编辑后自动保存，再选择当前版本即可复制/);
+  assert.match(html, /结束编辑后自动保存，保存完成即可复制/);
 });
 
 test('结束正文编辑自动保存，空白不保存，失败保留文字并允许重试', async t => {
@@ -46,7 +46,7 @@ test('结束正文编辑自动保存，空白不保存，失败保留文字并�
       const [fail, setFail] = useState(false);
       return <><CandidateMessageGroup identity="synthetic" number={1}
         messages={[{messageId:'m', text}]} controls={null} disabled={false}
-        dirty={text !== saved} canCopy={false} restored={false}
+        dirty={text !== saved} restored={false}
         edit={(_, value) => setText(value)} save={async () => {
           setAttempts(n => n + 1); if (fail) throw Error('合成保存失败'); setSaved(text);
         }} copy={async () => {}} noteTextCopy={() => {}} validatePaste={async () => {}} />
@@ -74,4 +74,64 @@ test('结束正文编辑自动保存，空白不保存，失败保留文字并�
   await expect(page.getByTestId('saved')).toHaveText('合成重试内容');
   await expect(page.locator('output')).toHaveText('3');
   await expect(page.getByRole('button', {name:'重试保存修改'})).toHaveCount(0);
+});
+
+
+test('未编辑的回复可直接复制，不要求选择版本', () => {
+  const html = renderToStaticMarkup(React.createElement(CandidateMessageGroup, {
+    identity: 'synthetic', number: 1, messages: [{ messageId: 'message', text: '合成回复。' }],
+    controls: null, disabled: false, dirty: false, restored: false,
+    edit() {}, save: async () => {}, copy: async () => {}, noteTextCopy() {}, validatePaste: async () => {},
+  }));
+  assert.match(html, /<button>复制第1条<\/button>/);
+  assert.doesNotMatch(html, /选择当前版本/);
+});
+
+test('候选用前后按钮回看历史，直接复制当前展示版且不调用选择接口', async t => {
+  const { chromium, expect } = await import('@playwright/test');
+  const browser = await chromium.launch({ headless: true, executablePath: process.env.NOTALONE_TEST_CHROMIUM_PATH });
+  t.after(() => browser.close());
+  const page = await browser.newPage();
+  const bundle = await build({ stdin: { contents: `
+    import React, { useState } from 'react';
+    import { createRoot } from 'react-dom/client';
+    import { CandidateVersionEditor } from './src/renderer/CandidateVersionEditor';
+    const versions = [0, 1, 2].map(n => ({versionId: 'v'+n, versionNumber:n,
+      messages:[{messageId:'m', text:'合成版本'+n}], requirements:null}));
+    const history = {sessionId:'s', candidateId:'c', versions};
+    function View() {
+      const [display, setDisplay] = useState('v2');
+      const [copied, setCopied] = useState('');
+      const [carried, setCarried] = useState('');
+      window.notalone = { candidateCopy: {copy: async request => setCopied(request.versionId)} };
+      const view = {phase:'ready', history, displayVersionId:display};
+      const replies = {state: {phase:'ready', contactId:'contact', scopeRevision:1,
+          candidateVersions:{phase:'ready'}, savedSession:{phase:'ready',sessionId:'s'}},
+        showCandidateVersion: async request => setDisplay(request.versionId),
+        newSavedSessionWithCandidate: async request => setCarried(request.versionId),
+        selectCandidateVersion: () => { throw Error('不应选择版本'); }};
+      return <><CandidateVersionEditor replies={replies} view={view} candidateId="c"
+        replyRequestId="r" number={1} restored={false} noteCopy={() => {}} />
+        <output data-testid="copied">{copied}</output><output data-testid="carried">{carried}</output></>;
+    }
+    createRoot(document.getElementById('root')).render(<View/>);
+  `, resolveDir: process.cwd(), loader: 'tsx' }, bundle: true, platform: 'browser', format: 'iife', write: false });
+  await page.setContent('<div id="root"></div>');
+  await page.addScriptTag({ content: bundle.outputFiles[0].text });
+  await expect(page.getByRole('radio')).toHaveCount(0);
+  await expect(page.getByRole('combobox')).toHaveCount(0);
+  await expect(page.getByRole('textbox')).toHaveValue('合成版本2');
+  const previous = page.getByRole('button', {name:'查看说法1上一版'});
+  const next = page.getByRole('button', {name:'查看说法1下一版'});
+  await expect(next).toBeDisabled();
+  await page.getByRole('button', {name:'复制第1条'}).click();
+  await expect(page.getByTestId('copied')).toHaveText('v2');
+  await previous.click(); await expect(page.getByRole('textbox')).toHaveValue('合成版本1');
+  await previous.click(); await expect(page.getByRole('textbox')).toHaveValue('合成版本0');
+  await expect(previous).toBeDisabled();
+  await page.getByRole('button', {name:'复制第1条'}).click();
+  await expect(page.getByTestId('copied')).toHaveText('v0');
+  await next.click(); await expect(page.getByRole('textbox')).toHaveValue('合成版本1');
+  await page.getByRole('button', {name:'用这组回复新开会话'}).click();
+  await expect(page.getByTestId('carried')).toHaveText('v1');
 });

@@ -21,7 +21,6 @@
 .reply-generation-guidance p { margin: 4px 0; }
 .reply-candidate-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(175px, 1fr)); gap: 8px; }
 .reply-candidate { min-width: 0; border: 1px solid #c8d1cf; border-radius: 4px 7px 3px 5px; background: #fffdf6; padding: 8px; }
-.reply-choice { display: flex; align-items: center; gap: 5px; color: #456b87; font-size: 11px; margin-bottom: 8px; }
 .reply-candidate textarea { width: 100%; min-height: 92px; resize: vertical; background: #faf7ef; border: 1px solid #d8d6ca; border-radius: 3px; padding: 7px; font: inherit; font-size: 13px; line-height: 1.7; }
 .candidate-message-group { min-width: 0; margin: 0; padding: 0; border: 0; display: grid; gap: 7px; }
 .candidate-message-group legend { color: #69787f; font-size: 11px; padding: 0 0 6px; }
@@ -49,3 +48,6 @@
 .directed-input .ime-input label { flex: 1; min-width: 0; display: grid; gap: 3px; }
 .directed-input .ime-input textarea { height: 58px; }
 .directed-input > [role] { padding: 4px; }
+
+.candidate-version-navigation { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.candidate-version-navigation span { color: #69787f; font-size: 12px; }

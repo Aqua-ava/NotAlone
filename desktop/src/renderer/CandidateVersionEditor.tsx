@@ -4,7 +4,7 @@ import type { ReplySessionView } from './RewritePanel';
 import { CandidateMessageGroup } from './CandidateMessageGroup';
 import { ReplyBasisChangeNotice } from './ReplyBasisChangeNotice';
 
-// 编辑同步到主进程会话内存；结束编辑后自动保存版本，采用版本仍由用户明确选择。
+// 编辑同步到主进程会话内存；结束编辑后自动保存版本，复制使用当前展示的已保存版本。
 export function CandidateVersionEditor({ replies, view, candidateId, replyRequestId, number, restored, noteCopy, onDirtyChange }: {
   replies: ReplySessionView;
   view: AssistantCandidateVersionView | undefined;
@@ -25,11 +25,11 @@ export function CandidateVersionEditor({ replies, view, candidateId, replyReques
   const requirements = draft?.requirements ?? '';
   const [error, setError] = useState('');
   const [sampleSaving, setSampleSaving] = useState(false);
+  const [carrying, setCarrying] = useState(false);
   const sampleActive = useRef(true);
   useEffect(() => { sampleActive.current = true; return () => { sampleActive.current = false; }; }, []);
   const editRevision = useRef(0);
   const saveKey = useRef<{ revision: number; key: string } | null>(null);
-  const selectionKey = useRef<{ versionId: string; key: string } | null>(null);
   useEffect(() => {
     if (!version) return;
     if (draft?.versionId !== version.versionId) editRevision.current = 0;
@@ -40,13 +40,9 @@ export function CandidateVersionEditor({ replies, view, candidateId, replyReques
     || requirements !== (version?.requirements ?? '');
   useEffect(() => { onDirtyChange?.(candidateId, Boolean(draft && dirty)); }, [candidateId, draft?.versionId, dirty, onDirtyChange]);
   useEffect(() => () => { onDirtyChange?.(candidateId, false); }, [candidateId, onDirtyChange]);
-  const selected = state.explicitCandidateSelection;
-  const chosen = selected?.phase === 'ready' && selected.selection?.sessionId === history?.sessionId
-    && selected.selection?.candidateId === candidateId && selected.selection?.versionId === version?.versionId;
   const disabled = state.phase === 'waiting' || state.sourceAvailability !== undefined
     || state.sessionDeletion === 'deleting' || state.sessionDeletion === 'failed'
-    || state.candidateVersions?.phase !== 'ready' || view?.phase !== 'ready' || state.savedSession?.phase !== 'ready'
-    || selected?.phase === 'saving' || selected?.phase === 'loading';
+    || state.candidateVersions?.phase !== 'ready' || view?.phase !== 'ready' || state.savedSession?.phase !== 'ready';
   const identity = `${state.contactId}:${state.scopeRevision}:${history?.sessionId}:${candidateId}:${version?.versionId}`;
   const sampleIdentity = useRef(identity);
   sampleIdentity.current = identity;
@@ -77,15 +73,11 @@ export function CandidateVersionEditor({ replies, view, candidateId, replyReques
     await replies.saveCandidateVersion({ ...scope, editKey: saveKey.current.key,
       parentVersionId: version.versionId, messages, requirements: requirements.trim() || null });
   }
-  async function select() {
-    if (!version || draft?.versionId !== version.versionId) return;
-    if (selectionKey.current?.versionId !== version.versionId) {
-      selectionKey.current = { versionId: version.versionId, key: crypto.randomUUID() };
-    }
-    try {
-      await replies.selectCandidateVersion({ ...scope, versionId: version.versionId, selectionKey: selectionKey.current.key });
-      selectionKey.current = null; setError('');
-    } catch { setError('当前版本尚未确认选择，请重试。'); }
+  async function carry() {
+    if (disabled || dirty || carrying || !version) return;
+    setCarrying(true);
+    try { await replies.newSavedSessionWithCandidate({ sessionId: scope.sessionId, candidateId, versionId: version.versionId }); }
+    finally { if (sampleActive.current) setCarrying(false); }
   }
   async function saveSample() {
     if (disabled || sampleSaving || !version || draft?.versionId !== version.versionId) return;
@@ -109,10 +101,18 @@ export function CandidateVersionEditor({ replies, view, candidateId, replyReques
     {view?.phase === 'failed' && <button onClick={retryRead}>重新读取本组版本</button>}
     {error && <p role="alert">{error}</p>}
   </>;
+  const orderedVersions = [...history.versions].sort((a, b) => a.versionNumber - b.versionNumber);
+  const versionIndex = orderedVersions.findIndex((item) => item.versionId === version.versionId);
+  function showVersion(index: number) {
+    const target = orderedVersions[index];
+    if (dirty || disabled || !target) return;
+    void replies.showCandidateVersion({ ...scope, versionId: target.versionId })
+      .catch(() => setError('版本尚未切换，请重试。'));
+  }
   return <>
     <ReplyBasisChangeNotice changes={history?.basisChanges} />
     <CandidateMessageGroup identity={identity} number={number} messages={messages}
-      restored={restored} disabled={disabled || sampleSaving} dirty={dirty} canCopy={Boolean(chosen)}
+      restored={restored} disabled={disabled || sampleSaving || carrying} dirty={dirty}
       edit={editMessage}
       save={save} noteTextCopy={noteCopy}
       validatePaste={(text) => window.notalone.styleSamples.validateCandidatePaste({ ...scope, replyRequestId,
@@ -120,18 +120,17 @@ export function CandidateVersionEditor({ replies, view, candidateId, replyReques
       copy={(messageId) => window.notalone.candidateCopy.copy({ contactId: scope.contactId, scopeRevision: scope.scopeRevision,
         replyRequestId, candidateId, versionId: version.versionId, messageId, hideAfterCopy: false })}
       controls={<>
-        <label>本组版本<select aria-label={`说法${number}版本`} value={version.versionId} disabled={dirty || disabled}
-          onChange={(event) => { void replies.showCandidateVersion({ ...scope, versionId: event.target.value })
-            .catch(() => setError('版本尚未切换，请重试。')); }}>
-          {history.versions.map((item) => <option key={item.versionId} value={item.versionId}>
-            {item.versionNumber === 0 ? '原始版本' : `修改版本 ${item.versionNumber}`}
-          </option>)}
-        </select></label>
-        <label><input type="radio" name="candidate-version" aria-label={`选择说法${number}当前版本`}
-          checked={Boolean(chosen)} disabled={dirty || disabled} onChange={() => void select()} />选择这组当前版本</label>
+        <div className="candidate-version-navigation" role="group" aria-label={`说法${number}版本历史`}>
+          <button aria-label={`查看说法${number}上一版`} disabled={dirty || disabled || versionIndex <= 0}
+            onClick={() => showVersion(versionIndex - 1)}>← 上一版</button>
+          <span>{version.versionNumber === 0 ? '原始版本' : `修改版本 ${version.versionNumber}`}</span>
+          <button aria-label={`查看说法${number}下一版`} disabled={dirty || disabled || versionIndex >= orderedVersions.length - 1}
+            onClick={() => showVersion(versionIndex + 1)}>下一版 →</button>
+        </div>
         <button disabled={sampleSaving || messages.some((message) => !message.text.trim())
           || messages.map((message) => message.text).join('\n\n').length > 4096}
           onClick={() => void saveSample()}>主动保存说法{number}为样本</button>
+        <button disabled={dirty || disabled || carrying} onClick={() => void carry()}>用这组回复新开会话</button>
       </>} />
     {view?.phase === 'failed' && <button onClick={retryRead}>重新读取本组版本</button>}
     {error && <p role="alert">{error}</p>}

@@ -17,9 +17,8 @@ async function selectSession(helper: Page, sessionId: string) {
   await helper.getByRole('button', { name: `查看会话 ${sessionId}`, exact: true }).click();
   await expandSavedDiscussion(helper);
   await expect.poll(() => helper.evaluate(async () => { const state = await window.notalone.replies.getState();
-    return { sessionId: state.savedSession?.sessionId, phase: state.savedSession?.phase,
-      selection: state.explicitCandidateSelection?.phase }; }))
-    .toEqual({ sessionId, phase: 'ready', selection: 'ready' });
+    return { sessionId: state.savedSession?.sessionId, phase: state.savedSession?.phase }; }))
+    .toEqual({ sessionId, phase: 'ready' });
 }
 
 // 只增加跨票交叉场景；真实App停止／重开在独立有限窗口验收。
@@ -43,7 +42,7 @@ export async function assistantSessionCombination(browser: Browser, origin: stri
     const pathA = `/api/contacts/${contactA}/assistant-sessions/${sessionA}`;
     await group.getByRole('textbox', { name: '说法1第2条编辑文本', exact: true }).fill('甲明确保存的拒绝。');
     await group.getByRole('textbox', { name: '说法1第2条编辑文本', exact: true }).blur();
-    await expect(group.getByRole('combobox', { name: '说法1版本', exact: true }).getByRole('option')).toHaveCount(2);
+    await expect(group.getByText('修改版本 1', { exact: true })).toBeVisible();
     await fixture.plan({ count: 1, message_groups: [['甲简短感谢。', '甲明确不参加。']] });
     await helper.getByRole('textbox', { name: '继续修改要求', exact: true }).fill('第一条简短一点');
     await helper.getByRole('button', { name: '继续修改', exact: true }).click();
@@ -66,11 +65,9 @@ export async function assistantSessionCombination(browser: Browser, origin: stri
     expect(turns).toHaveLength(3);
     expect(turns[2].input.content).toMatchObject({ target_message_id: arrived.message_id,
       direction: '感谢邀请，本次不参加。', user_instruction: '自然一点；简短一点' });
-    await group.getByRole('radio', { name: '选择说法1当前版本', exact: true }).click();
     await openAssistantHistory(helper);
-    await expect(helper.getByRole('button', { name: '携已选版本新开', exact: true })).toBeEnabled();
-    const selectedA = (await helper.evaluate(() => window.notalone.replies.getState())).explicitCandidateSelection!.selection;
-    expect(selectedA).not.toBeNull();
+    await expect(group.getByRole('button', { name: '用这组回复新开会话', exact: true })).toBeEnabled();
+    await expect(group.getByRole('button', { name: '复制第1条', exact: true })).toBeEnabled();
 
     await chooseContact(pages, helper, 1);
     await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('乙的独立合成草稿。');
@@ -97,7 +94,8 @@ export async function assistantSessionCombination(browser: Browser, origin: stri
     helper = await opened;
     await chooseContact(pages, helper, 0);
     await selectSession(helper, sessionA);
-    expect((await helper.evaluate(() => window.notalone.replies.getState())).explicitCandidateSelection!.selection).toEqual(selectedA);
+    await expect(helper.getByRole('group', { name: '说法1消息组', exact: true })
+      .getByRole('textbox', { name: '说法1第2条编辑文本', exact: true })).toHaveValue('甲仍不参加。');
     await expect(helper.getByRole('textbox', { name: '草稿', exact: true })).toHaveValue('');
     expect((await fixture.command('observations')).model_calls).toBe(4);
 
@@ -125,7 +123,8 @@ export async function assistantSessionCombination(browser: Browser, origin: stri
     expect(((await fixture.request(pathA)).data.inputs as Array<{ content: { purpose_hint?: string } }>)
       .some((item) => item.content?.purpose_hint === large)).toBe(true);
     await openAssistantHistory(helper);
-    await helper.getByRole('button', { name: '携已选版本新开', exact: true }).click();
+    await helper.getByRole('group', { name: '说法1消息组', exact: true })
+      .getByRole('button', { name: '用这组回复新开会话', exact: true }).click();
     await expandSavedDiscussion(helper);
     await expect(helper.getByRole('article', { name: '携入的已选版本', exact: true })).toBeVisible();
     const childA = (await helper.evaluate(() => window.notalone.replies.getState())).savedSession!.sessionId!;
