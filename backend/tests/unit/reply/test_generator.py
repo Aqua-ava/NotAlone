@@ -35,6 +35,7 @@ from notalone.reply.store import (
     ValidatedReply,
 )
 from notalone.reply.errors import (
+    ReplyCandidatesRejectedError,
     ReplyContextError,
     ReplyInvariantError,
     ReplyPersistenceError,
@@ -214,6 +215,27 @@ class FreshnessRecordingContext(RecordingReplyContext):
 
 
 class ReplyGeneratorTest(unittest.TestCase):
+    def test_captured_layered_reference_is_controlled_rejection_without_promoting_it_to_evidence(self):
+        from notalone.reply.interface import RewriteDraft
+        scope = ContactScope(OWNER_ID, CONTACT_ID)
+        incoming = "一起买点零食边吃边聊吧？"
+        command = GenerateReply(idempotency_key=REQUEST_KEY, scope=scope,
+            conversation_binding_id=BINDING_ID, content=RewriteDraft(draft_text=incoming,
+                input_kind="current_chat", pasted_direction="答应一起准备零食，确认对方现在的坚果选择。",
+                include_relationship_context=True))
+        prepared = ReplyContext(reply_request_id=REQUEST_ID, command=command, scope=scope,
+            current_text=incoming, direction=None, evidence=(ContextEvidence(evidence_id=MESSAGE_ID,
+                kind="user_current_chat", text=incoming, scope=scope, status="user_input",
+                selection_reason="用户为本次已确认联系人粘贴的当前来信。"),), skill_library_revision=1)
+        store = RecordingReplyStore(prepared=prepared)
+        # 固定实际seq3的最小形状：正文来源引用ID不是本次检索evidence_id。
+        runtime = ScriptedReplyRuntime(result=ReplyRuntimeResult(candidates=(RuntimeCandidate(
+            text="好啊，一起挑点零食边吃边聊。", basis="按本次方向并参考实际读取的背景。",
+            citation_ids=(MESSAGE_ID, UNKNOWN_EVIDENCE_ID), risk_notes=()),), used_skill=None))
+        with self.assertRaises(ReplyCandidatesRejectedError):
+            self._generator(store=store, runtime=runtime, prepared=prepared).generate(command, verified_scope=VERIFIED_SCOPE)
+        self.assertIsNone(store.saved)
+
     @staticmethod
     def _generator(
         *,
@@ -703,7 +725,7 @@ class ReplyGeneratorTest(unittest.TestCase):
             )
         )
 
-        with self.assertRaises(ReplyInvariantError):
+        with self.assertRaises(ReplyCandidatesRejectedError):
             self._generator(
                 store=store,
                 runtime=runtime,

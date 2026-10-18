@@ -32,6 +32,7 @@ from notalone.reply.store import (
     ValidatedReply,
 )
 from notalone.reply.errors import (
+    ReplyCandidatesRejectedError,
     ReplyContextError,
     ReplyError,
     ReplyInProgressError,
@@ -130,6 +131,8 @@ class ReplyGenerator:
             self._mark_failed(request, "context_failed")
             raise ReplyContextError("候选回复上下文准备失败。") from None
         try:
+            if context.layered_context is not None or context.owner_layered_context is not None:
+                context = self._context.fit_budget(context, validate=self._runtime.validate_prepared)
             self._validate_context(command, context)
             self._validate_current_context(context)
             self._store.prepare_context(request, context)
@@ -142,7 +145,11 @@ class ReplyGenerator:
         started_ns = time.perf_counter()
         called_at = datetime.now(timezone.utc)
         try:
-            with model_request_scope(lambda: self._store.require_current(request)):
+            def validate_request():
+                self._store.require_current(request)
+                self._validate_current_context(context)
+
+            with model_request_scope(validate_request):
                 runtime_result = self._runtime.generate(context)
         except ReplyRunError:
             self._mark_failed(request, "runtime_failed")
@@ -217,7 +224,8 @@ class ReplyGenerator:
                 called_at,
                 runtime_latency_ms,
             )
-            raise ReplyInvariantError("候选引用不属于本次上下文快照。")
+            # 不可信模型的错误引用属于受控输出拒绝，不升级为后端不变量故障。
+            raise ReplyCandidatesRejectedError("候选引用不属于本次上下文快照。")
         validated = ValidatedReply(
             candidates=runtime_result.candidates,
             used_skill=runtime_result.used_skill,
@@ -533,6 +541,8 @@ class ReplyGenerator:
             context,
             evidence=context.evidence + tuple(additions),
             tool_calls=context.tool_calls + result.tool_calls,
+            layered_scenario_reads=result.layered_scenario_reads,
+            owner_layered_scenario_reads=result.owner_layered_scenario_reads,
             retrieval=append_runtime_receipt(context.retrieval, context.evidence, tuple(additions), result.tool_calls),
         )
 

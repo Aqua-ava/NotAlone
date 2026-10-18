@@ -1,4 +1,5 @@
 import { installForegroundBridge } from './foreground/bridge';
+import { coordinateOwnerContextChanges } from './reply/owner-context-changes';
 import { NativeHeaderChangeSource } from './foreground/native-change-source';
 import { openHeaderChangeDiagnostics } from './foreground/header-change-diagnostics';
 import { resolveHeaderChangeSourcePath } from './backend/bundled-helpers';
@@ -113,6 +114,7 @@ void app.whenReady().then(async () => {
   sync.onStateChanged((state) => foreground.setSyncControlState(state));
   foreground.setSyncControlState(sync.getState());
   const replies = installReplyBridge(commands, backend, contacts, () => foreground.getGenerationBlock());
+  coordinateOwnerContextChanges(memory, replies);
   const styleSamples = installStyleSampleBridge(commands, backend, contacts, replies);
   const skillLearning = installSkillLearningBridge(commands, backend, contacts);
   const memoryUpgrade = installMemoryUpgradeBridge(commands, backend, contacts);
@@ -131,6 +133,7 @@ void app.whenReady().then(async () => {
     await Promise.all([styleChecking, checking, memoryChecking, preferenceChecking]);
   });
   coordinateSkillLearningSourceDeletion(skillLearning, sources);
+  sources.onDeletion((phase) => memory.sourceDeletionChanged(phase));
   observeMemoryUpgradeDeletion(memory, memoryUpgrade, sources);
   installElectronCandidateCopy(windows, new CandidateCopyController(backend, contacts, replies,
     (selection, text) => styleSamples.recordCopied(selection, text)));

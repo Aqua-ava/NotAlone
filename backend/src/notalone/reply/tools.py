@@ -217,7 +217,9 @@ class HistoryToolAccess:
         try:
             parsed_session = _parse_uuid(session_id, name="session_id")
             if parsed_session != self._conversation_binding_id:
-                raise ReplyContextInvariantError("历史 Tool 会话范围不匹配。")
+                # 模型参数不能选择新范围；拒绝后提供有限反馈，不执行检索。
+                self._finish_call("conversation_query", "failed", (), started)
+                return self._status_result("failed", "history_query_session_scope_mismatch")
             anchor = _parse_uuid(anchor_message_id, name="anchor_message_id")
             if anchor is not None and anchor not in self._known_message_ids:
                 raise ValueError("anchor_not_from_current_turn")
@@ -364,6 +366,7 @@ class HistoryToolAccess:
                 if message.session_id is not None
                 else None
             ),
+            "can_query_context": message.session_id == self._conversation_binding_id,
             "source_ids": [str(source_id) for source_id in message.source_ids],
             "status": message.status,
             "text": message.text,
@@ -400,4 +403,9 @@ class HistoryToolAccess:
         }
         if guidance is not None:
             payload["guidance"] = guidance
+        if reason == "history_query_session_scope_mismatch":
+            payload["guidance"] += (
+                "session_id只能使用本轮结果中can_query_context=true的真实session_id；"
+                "缺失时禁止猜测或用source_ids替代，直接使用已有搜索证据。"
+            )
         return json.dumps(payload, ensure_ascii=False)

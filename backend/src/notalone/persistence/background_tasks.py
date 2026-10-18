@@ -23,7 +23,7 @@ from notalone.tasks.models import (
     ExtractionRuntimeConfig,
     ExtractionRuntimeMode,
 )
-from notalone.persistence.locks import lock_contact_scope
+from notalone.persistence.locks import lock_contact_scope, lock_owner_scope
 from notalone.persistence.dimension_evidence import supports_bounded_runtime_evidence
 
 
@@ -397,12 +397,19 @@ class PostgresBackgroundTaskRepository:
                           WHERE binding.owner_id = task.owner_id
                             AND binding.contact_id = task.contact_id
                             AND binding.status = 'active'
-                      )) OR ({_learning_task_eligible_sql(connection)}) OR ({_upgrade_task_eligible_sql(connection)}))
+                      )) OR ({_learning_task_eligible_sql(connection)}) OR ({_upgrade_task_eligible_sql(connection)}) OR ({_layered_task_eligible_sql(connection)}))
                     """,
                     (error_code, owner_id, contact_id, task_id),
                 )
         except psycopg.Error:
             raise BackgroundTaskPersistenceError("排队原因记录失败。") from None
+
+    def has_active_layered_work(self, *, owner_id, contact_id, task_id):
+        with psycopg.connect(self._database_url) as connection:
+            return bool(connection.execute("SELECT 1 FROM public.layered_memory_job j JOIN public.layered_memory_state s "
+                "ON s.owner_id=j.owner_id AND s.contact_id IS NOT DISTINCT FROM j.contact_id WHERE j.task_id=%s AND j.owner_id=%s "
+                "AND j.contact_id IS NOT DISTINCT FROM %s AND j.state='active' AND s.enabled AND j.settings_generation=s.settings_generation",
+                (task_id,owner_id,contact_id)).fetchone())
 
     def get_task(
         self,
@@ -449,7 +456,7 @@ class PostgresBackgroundTaskRepository:
                     LEFT JOIN public.background_task_step AS step
                       ON step.task_id = task.id
                     WHERE task.owner_id = %s
-                      AND task.contact_id = %s
+                      AND task.contact_id IS NOT DISTINCT FROM %s
                       AND task.id = %s
                     ORDER BY step.step_order NULLS LAST
                     """,
@@ -575,7 +582,10 @@ class PostgresBackgroundTaskRepository:
         """原子领取一个联系人范围内、顺序合法的步骤租约。"""
 
         _validate_uuid(owner_id, "owner_id")
-        _validate_uuid(contact_id, "contact_id")
+        if contact_id is not None:
+            _validate_uuid(contact_id, "contact_id")
+        elif task_id is None:
+            raise ValueError("本人整理领取必须明确任务。")
         _validate_uuid(worker_id, "worker_id")
         if task_id is not None:
             _validate_uuid(task_id, "task_id")
@@ -600,7 +610,7 @@ class PostgresBackgroundTaskRepository:
                     LEFT JOIN public.source_document AS source
                       ON source.id = task.source_document_id
                     WHERE task.owner_id = %s
-                      AND task.contact_id = %s
+                      AND task.contact_id IS NOT DISTINCT FROM %s
                       AND ((task.task_type = 'import' AND source.status = 'active')
                    OR (task.task_type = 'delete' AND source.status IN
                        ('delete_requested', 'deleting', 'delete_failed', 'deleted'))
@@ -611,7 +621,7 @@ class PostgresBackgroundTaskRepository:
                          AND binding.contact_id = task.contact_id
                          AND binding.status = 'active'
                    ))
-                   OR ({_learning_task_eligible_sql(connection)}) OR ({_upgrade_task_eligible_sql(connection)}))
+                   OR ({_learning_task_eligible_sql(connection)}) OR ({_upgrade_task_eligible_sql(connection)}) OR ({_layered_task_eligible_sql(connection)}))
                       AND step.status = 'running'
                       AND step.lease_expires_at > now()
                     LIMIT 1
@@ -638,7 +648,7 @@ class PostgresBackgroundTaskRepository:
                     LEFT JOIN public.source_document AS source
                       ON source.id = task.source_document_id
                     WHERE task.owner_id = %s
-                      AND task.contact_id = %s
+                      AND task.contact_id IS NOT DISTINCT FROM %s
                       AND ((task.task_type = 'import' AND source.status = 'active')
                    OR (task.task_type = 'delete' AND source.status IN
                        ('delete_requested', 'deleting', 'delete_failed', 'deleted'))
@@ -649,7 +659,7 @@ class PostgresBackgroundTaskRepository:
                          AND binding.contact_id = task.contact_id
                          AND binding.status = 'active'
                    ))
-                   OR ({_learning_task_eligible_sql(connection)}) OR ({_upgrade_task_eligible_sql(connection)}))
+                   OR ({_learning_task_eligible_sql(connection)}) OR ({_upgrade_task_eligible_sql(connection)}) OR ({_layered_task_eligible_sql(connection)}))
                       AND task.status IN ('queued', 'running', 'verifying')
                       AND (%s::uuid IS NULL OR task.id = %s)
                       AND step.status IN ('pending', 'retryable')
@@ -788,6 +798,10 @@ class PostgresBackgroundTaskRepository:
                     raise BackgroundTaskPersistenceError(
                         "后台步骤完成状态写入失败。"
                     )
+                if claim.name is BackgroundTaskStepName.ORGANIZE_MEMORY:
+                    from notalone.persistence.layered_coverage import finish_coverage_receipt
+                    finish_coverage_receipt(connection, claim)
+                    return
                 next_step = connection.execute(
                     """
                     SELECT step_name
@@ -1163,6 +1177,9 @@ class PostgresBackgroundTaskRepository:
         owner_id: UUID,
         contact_id: UUID,
     ) -> None:
+        if contact_id is None:
+            lock_owner_scope(connection, owner_id=owner_id)
+            return
         lock_contact_scope(
             connection,
             owner_id=owner_id,
@@ -1189,7 +1206,7 @@ class PostgresBackgroundTaskRepository:
             FROM public.background_task AS task
             WHERE task.id = step.task_id
               AND task.owner_id = %s
-              AND task.contact_id = %s
+              AND task.contact_id IS NOT DISTINCT FROM %s
               AND step.status = 'running'
               AND step.lease_expires_at <= now()
             """,
@@ -1203,7 +1220,7 @@ class PostgresBackgroundTaskRepository:
                 finished_at = now(),
                 updated_at = now()
             WHERE task.owner_id = %s
-              AND task.contact_id = %s
+              AND task.contact_id IS NOT DISTINCT FROM %s
               AND task.status IN ('queued', 'running', 'verifying')
               AND EXISTS (
                   SELECT 1
@@ -1232,7 +1249,7 @@ class PostgresBackgroundTaskRepository:
             WHERE step.id = %s
               AND step.task_id = %s
               AND task.owner_id = %s
-              AND task.contact_id = %s
+              AND task.contact_id IS NOT DISTINCT FROM %s
               AND task.status IN ('queued', 'running', 'verifying')
               AND ((task.task_type = 'import' AND source.status = 'active')
                    OR (task.task_type = 'delete' AND source.status IN
@@ -1244,7 +1261,7 @@ class PostgresBackgroundTaskRepository:
                          AND binding.contact_id = task.contact_id
                          AND binding.status = 'active'
                    ))
-                   OR ({_learning_task_eligible_sql(connection)}) OR ({_upgrade_task_eligible_sql(connection)}))
+                   OR ({_learning_task_eligible_sql(connection)}) OR ({_upgrade_task_eligible_sql(connection)}) OR ({_layered_task_eligible_sql(connection)}))
             FOR UPDATE OF task, step
             """,
             (
@@ -1385,3 +1402,13 @@ def _upgrade_task_eligible_sql(connection) -> str:
           AND j.state='active' AND b.state IN ('queued','ready','apply_queued','applied')
           AND (j.scope_kind='owner' OR j.contact_id=b.contact_id) AND binding.status='active'
     )"""
+
+
+def _layered_task_eligible_sql(connection) -> str:
+    if connection.execute("SELECT to_regclass('public.layered_memory_job')").fetchone()[0] is None:
+        return "false"
+    return """task.task_type='layered_memory' AND EXISTS (
+        SELECT 1 FROM public.layered_memory_job j JOIN public.layered_memory_state s
+        ON s.owner_id=j.owner_id AND s.contact_id IS NOT DISTINCT FROM j.contact_id
+        WHERE j.task_id=task.id AND j.owner_id=task.owner_id AND j.contact_id IS NOT DISTINCT FROM task.contact_id
+        AND s.enabled AND s.settings_generation=j.settings_generation AND j.state='active')"""

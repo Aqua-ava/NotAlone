@@ -37,6 +37,80 @@ NOTALONE_DISABLE_DOTENV=1 python -m unittest discover -s tests -v
 
 数据库集成测试只使用名称以 `_test` 结尾的合成测试库；设置 `NOTALONE_TEST_DATABASE_URL` 可指定隔离库。真实模型冒烟另需显式凭据，不属于离线验证。
 
+## 整理质量评测与资格
+
+`notalone.experiments.organization_quality` 的 `contract` 可离线输出当前候选、实际规则／提示词／schema／用途及整理预算身份；不读凭据。`serve --prepare-only` 只在明确命名的自有 `_test` 库装配正式质量 HTTP，可准备输入、记录审阅和创建运行，不构造 SDK。实际候选服务必须同时指定 `--suite-directory` 和 `--suite-source-ref`；SDK 使用已有 DeepSeek 工厂、实际总期限及 `max_retries=0`。当前缺省候选为官方 `deepseek-flash`，响应模型、指纹及脱敏请求路由分别留证，无法辨认的底层模型版本保持 `unknown`。
+
+本人／联系人 `layered-memory/quality-input` 接受实际 `memory_versions`。返回的 `{memories, scenarios, corrections}` 与生产四个 Port 共享白名单、反馈过滤和主题投影；人审支持标注只绑定该实际输入 hash 与投影语义。模型、提示词或预算更新使旧运行资格失效；输入语义未变时不用仅为代码变更重复人工标注。L2 核验沿用冻结旧主题；L3 从共同发布组装器形成独立评测 checkpoint，保存真实分配的 UUID／时刻／完整引用，明确 `published_to_product=false`。缺少正式 L3 会读取的合法底层版本时拒绝冻结，不能静默省略。正确空 L2 且没有独立主题时，正常 L3 调用记为不适用，不伪造执行；两层错误候选挑战分别留证。
+
+2026-10-18 验收政策 v2 将本轮工程验收交给独立 Agent：审阅身份必须为 `kind=agent`，通过现有 `allow_unreviewed_smoke=true` 进行有限真实候选核验。该路径不授予完整质量资格；原八维各15例加4条摘要与2条事实更正的全量门槛、人工审阅身份检查及关闭自动使用的规则保持不变。有限核验保留全部失败分母、实际模型身份和同一持久物理调用总账，不新建目录重置额度。
+
+按顺序使用公开 CLI `annotate → create → execute → review`：输入文件就是对应 HTTP 请求 JSON，`execute` 每次请求仅执行一个有限 case，恢复仍指向同一 run。草稿 `kind/detail/gold`、支持与禁用标签及评分不进入提案或核验输入；挑战只发送另行冻结的候选正文。Agent 标注永不算人工，运行中部分输出不能提前通过审阅，输出变动会清旧审阅。所有失败、预算耗尽及未运行阶段保留分母，未执行／未人审不能授予真实资格。
+
+完整集合由 `notalone.experiments.organization_quality_suite` 的 `create/read/summary/export/calibrate` 管理：清单固定 source 环境变量名、明确 `_test` 库名、owner/run/case、输入／标注 hash 及每子运行分配。每个 case 使用独立合成 owner（联系人再独立 contact），120 基线按八类各15计覆盖，4条总结反馈及2条实际底层更正分别单列；底层更正须复验实际决定、新版本及 fact-error 动作回执，缺证保持未知。支线不扩充独立基线分母。持久物理额度在真实 HTTP transport 发送边界预留，跨阶段、样本、失败、进程及重启不退款、不重置，所有子分配之和不超过总额度。本轮全局边界为800次（原750次边界在实际执行前废止，未消耗调用），属于本轮显式授权，非用户永久总预算；变更有限边界必须在实际执行前明确冻结新清单，不能靠重建目录逃避已用额度。全局标定绑定完整成员证据，不能用一条子报告代替全体标定。评测 CLI 初始完整请求字符预算为8000，与物理次数分列，不改变生产缺省预算，也不代表标定通过。每次尝试保存实际请求 UTF-8 实体及解码响应实体的字节／字符数、生成正文总字符数；无响应为 null。解析 JSON 的重序列化估值另列，不冒充原始实体长度。
+
+两条事实更正支线先公开准备单一旧叶 quality-input，再以 `dataset_version=fact-correction-path-preparation-v1`、`data_kind=fixed_synthetic`、`max_http_attempts=1` 和用途确认建立单 case 预备 run。它不能执行模型或接受质量审阅，30分钟内只登记一次精确 scope／epoch／oldleaf 的实际 fact-error。旧输入及 run 正文仍物理清除；只有同事务真实 corrected 决定和合法新叶才完成无正文回执，并由新叶 quality-input 消费一次。普通运行不采集这段历史。支线清单另含实际原 `fact_error_command` 六字段无正文命令，其摘要与后端回执交叉核验，客户端标签不能证明实际层。`DELETE /api/layered-memory/quality-runs/{origin_run_id}` 可主动撤销已撤正文的预备用途；源删除、禁用、世代变化或最终 case 清理均清回执，迟到操作不会重建。两条预备 case／run 与最终126条分列，未执行不产生模型额度消耗。
+
+普通业务库只消费后端显式装配的 `application.organization_quality_suite.SyntheticSuiteReader` 或固定单源 resolver 返回的无正文摘要，不复制合成评测全文，不接受客户端 `verified=true`。每次模型前后及持锁 writer 重新核验当前合同、来源和回执；源删除／停用／纠正、数据库不可达、任一 guard 漂移或可观测模型身份变化都会关闭资格。源库与业务库明确分离，持锁复验使用同一连接和有限锁等待。输入、checkpoint、运行、请求／响应和审阅正文从第一份快照继承完整参与依赖，源清理直接物理级联，不依赖先 GET。工具导出的自有合成审计文件由操作方按其资源归属一并清理，不是业务正文缓存。
+
+正式 `python -m notalone.server.command` 通过 `application.organization_runtime.build_layered_memory_service` 装配。未设置 `NOTALONE_ORGANIZATION_QUALITY_CONFIG` 时不构造整理 SDK，保持未验证；显式设置时读取该绝对路径的0600 JSON，字段仅为 `schema_version="organization-runtime-v1"`、`suite_directory`（私有 suite 绝对路径）及 `organization_budget`（六项完整预算，`max_model_calls=4`）。模型配置复用既有 `NOTALONE_DEEPSEEK_*`，四个实际 Port 与评测使用同一工厂、重试0、实际期限及出站前后资格复验。业务目标库可为普通库，但必须与所有固定合成来源库分离；来源连接仍只由 suite 清单中的 operator 环境变量引用。来源目录或数据库暂失、用途撤销或模型配置不可用时降为未验证，L1及其余读取可继续启动。来源恢复后重新实时复验，不缓存旧 verified；共享 HTTP client 随后端收尾关闭。
+
+正式装配的未知状态工程用例位于 `tests.integration.server.test_organization_quality_suite`：两个自有随机库、真实迁移、单一公开预备 source、私有配置、官方四 SDK 工厂与 dummy key，并在 transport 封住外网；源撤销／目录丢失／凭据缺失时均验证目标 HTTP 仍可读取 L1、无实际模型请求。enable 的200仅保存范围意愿，未获资格时 `work_id=null`、主题为空、画像为空；不能据此宣称整理已运行。原生验收可将同一正式 command 的 `NOTALONE_BACKEND_INFO` 指向自有握手文件接入当前 App，须另记桌面窗口、实际版本和清理，不能把该 HTTP 用例当成原生通过。评测 `serve` 仅负责合成评测，不代替正式业务启动配置。
+
+界面分别显示整理与回复读取的未验证／未通过／已验证、合同、报告和中文原因。整理获准且范围用途确认后可整理；回复比较未知时仍不自动加载新层，原有 L1 保持。受控工程模式始终公开标记 `synthetic`，不能签发真实资格。真实模型、人审、当前 React 及原生 App 分别记录，不相互冒充。
+
+## 整理质量的公开合成构造
+
+`notalone.experiments.organization_quality_construct` 是独立工程 CLI，只调用显式后端的正式联系人、来源导入、候选确认、手录和 `quality-input` HTTP；不读取私人配置、SQL 或微信，不直接调用模型或授予质量资格。来源构造必须连接只装配受控外部模型 Adapter 的隔离工程后端，生产 Worker 与默认空维度放行表保持。先准备合成 dataset、worksheet、评分草稿和必要的显式消息时刻重构表，再从仓库根目录执行：
+
+```bash
+PYTHONPATH=backend/src python \
+  -m notalone.experiments.organization_quality_construct plan \
+  --dataset /tmp/quality-prep/dataset-draft.jsonl \
+  --worksheet /tmp/quality-prep/public-construction-worksheet.json \
+  --scoring-contract /tmp/quality-prep/draft-scoring-contract.json \
+  --source-date-policy append-draft-source-date \
+  --source-time-overrides /tmp/quality-prep/source-time-overrides.json \
+  --output-dir /tmp/quality-plan
+```
+
+`plan` 完全离线，v2产物 `construction-plan.json` 中每条 `text` 可供人工修改；`draft_memory` 保留原正文、来源标签和时间解释。`source_supported` 默认保留为联系人来源导入路径，`manual_entry` 沿正式手录。兼容性试验可显式 `--manual-entry-rebinding` 转为手录并保留降级缺口；这不满足原来源支持覆盖，最终 `provenance_coverage` 必须如实为不完整，不能据此评满120例。
+
+手录日期策略必须显式选择：`unchanged` 原样保留正文；`append-draft-source-date` 把草稿中的合成日期作为正文前缀，日历日明确时刻与时区未知，`null` 明确日期未知。来源导入保留原正文及实际消息时间，不套用手录前缀；当前公开导入要求含时区时刻，生产提取会跳过未知时刻。只有日历日的来源保持未就绪并阻止 `apply`，不能静默补时区。需要构造新的合成消息时，可提供以下重构表；这是新合成输入的假设，不是还原未知旧消息，也不作为 `valid_at` 或事件发生时间：
+
+```json
+{"schema_version":"synthetic-source-time-overrides-v1","entries":[{"draft_memory_id":"example-m1","original_date_only":"2026-10-16","source_message_at":"2026-10-16T23:30:00+08:00","assumption":"agent_chosen_synthetic_message_time"}]}
+```
+
+工具核对原日历日及实际记忆ID绑定，保存完整假设、重构表摘要与新dataset摘要，所有支持关系重新待审。没有日历日来源时可省略重构表。不把草稿 `kind/detail/as_of`、支持关系或评分说明写入模型；后端实际时间始终取自公开返回。
+
+向已明确授权、已初始化且启用质量输入接口的隔离后端执行；`CONSTRUCTION_BACKEND_URL` 和已提供合成 token 的环境变量名由调用者显式指定：
+
+```bash
+PYTHONPATH=backend/src python \
+  -m notalone.experiments.organization_quality_construct apply \
+  --plan /tmp/quality-plan/construction-plan.json \
+  --backend-base-url "$CONSTRUCTION_BACKEND_URL" \
+  --token-env CONSTRUCTION_BACKEND_TOKEN \
+  --create-contact-name 质量验证合成联系人 \
+  --controlled-source-backend --source-files-shared-with-backend \
+  --source-owner-external-id wxid_synthetic_quality_owner \
+  --source-contact-external-id wxid_synthetic_quality_contact \
+  --confirm-source-candidates \
+  --contact-per-case --defer-quality-input \
+  --output-dir /tmp/quality-bound
+```
+
+`--contact-per-case` 用显示名前缀逐case新建并确认独立联系人，合成渠道定位由显式前缀和实际contact UUID派生。需要共用范围时可省略该参数，或用 `--contact-id <明确选择的联系人UUID>`；完整来源构造应使用自有空隔离联系人，避免旧消息水位影响历史导入。仅有本人场景时不创建或确认联系人。来源文件写在输出的 `synthetic-sources/`，须与后端共享本机文件系统。CLI只从显式token环境变量读取鉴权，不读 `.env`、不跟随重定向、不记录token。
+
+全部来源先按明确消息时间排序，逐条 `preview → commit(expected_content_sha256)`，通过一次有界SSE等待生产Worker完成，再沿公开消息／来源／待确认候选核对。默认维度门保持关闭；只有显式 `--confirm-source-candidates` 才确认本轮合成候选，并记录Agent操作来历，不冒充人审质量。所有来源构造完成后按原case顺序绑定公开 `quality-input`，保持原分母和实际ID/revision。v3的62条来源与92条手录需要400次POST（另有有界GET/SSE），后端受控Adapter会执行工程响应；不允许真实供应商调用。手录降级版本只需276次POST，但来源覆盖不完整。
+
+`--defer-quality-input` 只构造L1及来源链，记录 `constructed_l1_cases` 与逐case `pending_quality_input_request`；`quality_prepared_cases=0`，不POST质量输入，也不生成 `model-inputs.jsonl` 或最终支持审阅包。状态为 `l1_constructed_quality_deferred`，并保留完整公开审计。v3逐contactcase隔离且暂缓质量输入时为398次POST；以后绑定质量输入时还需120次。A06反馈属于scope级；共用联系人或本人scope的资料不能直接当作独立反馈评测。逐联系人隔离不改变本人仍共享owner的事实，必须在反馈合同及scope快照稳定后重新准备实际质量输入，早期L1构造或旧质量快照不替代最终冻结。
+
+未暂缓时，`public-bindings.json` 保存公开请求／返回、来源链、原标签、时间假设、实际版本及case/contract摘要，`http-exchanges.jsonl` 保存无鉴权字段的逐请求审计。`model-inputs.jsonl` 每行只含后端原样 `{memories, scenarios, corrections}`，按生产scope分别核白名单：联系人记忆9字段、原6字段时间和完整版本一事件；本人记忆4字段、8字段时间及5字段事件投影。普通公开时间与模型时间分别保留为 `actual_public_timing/actual_model_timing`，不混用合同。`dataset-rebound.jsonl`、`support-review.json` 仅供人审，将支持关系和未知摘要候选映射至实际ID并保留草稿来源。所有状态仍为 `unknown/quality_verified=false`，不授予真实资料资格，金标和评分说明不得成为模型输入。
+
+输出目录必须不存在。失败保留部分绑定及审计，不自动重试；须先核对已有写入。工具不自动删除后端资料，调用者按实际绑定清理隔离资源。`tests.unit.experiments.test_organization_quality_construct` 验证CLI拒绝边界；`tests.integration.server.test_organization_quality_construct_cli` 穿过真实 `create_app`／HTTP／隔离PostgreSQL、生产Worker与受控外部Adapter，验证两scope和逆序来源的完整构造。其 `SyntheticSourceConstructionModel/source_construction_backend` 是自有合成后端装配示例，不是产品运行配置。实际模型质量及真实App另验。
+
 ## 持久回复探索接口
 
 回应与主动联系共用认证路由 `/api/contacts/{contact_id}/assistant-sessions/{session_id}/explorations`。`POST` 接受 `content`、`operation_key`、可选 `expected_input_version_id`、`previous_id`、`automatic` 和 `change_group`；回应的 `content.type=response_exploration` 携 `target_message_id`，主动的 `purpose_exploration` 携 `purpose_hint`。两场均可携一次性 `correction`、`requirements` 及 `skill_mode=auto|user|disabled`（user须指定有效 `skill_version_id`）。输入版本由既有助手会话原子分配 UUID，不接受客户端整数版本、已确认意愿、回答或来源声明。
@@ -108,3 +182,49 @@ NOTALONE_DISABLE_DOTENV=1 python -m unittest discover -s tests -v
 2026-10-11追加故障窗口验收：总开关持续开启，终止自有真实CLI流并在验收runner边界暂时阻止流重建和单次读取。用户在故障期间发送约定测试文字后解除注入；正式后台线程无手动检查或重试，11.77秒自动补入1条，全局流自动恢复，安全对账无重复、补齐错误为空。故障期间消息数与游标不变，最终自有进程和临时库已清理。该项现已通过，属于受控CLI不可用故障与真实单联系人数据的组合验证，不代表全部故障类型或最终App验收；OCR和模型未运行，生产代码未改。
 
 明确方法反馈使用 `GET/POST /api/contacts/{id}/skill-learning/policies`；提交包含已核验的Skill、版本、具体`method_id`或明确`null`整个Skill、`scope`、`expected_revision`和`operation_key`。撤销使用 `POST .../policies/{policy_id}/undo`。canonical068只保存范围决定和无正文动作，普通意见不写政策，长期修订仍走草稿审核；实际候选验证范围见[13记录](../.scratch/memory-skill-integration-preparation/frontier-13-validation.md)。
+
+### 分层回复的独立质量与快速对照
+
+粘贴来信的 `current_chat` 也经过一次既有忠实度复核，按 `confirmed_direction` 核对用户意图，
+来信不作为用户原稿或本人事实。复核计入同一输入预算、超时和物理调用账本，只筛选原候选，
+不循环改写；复核拒绝表示没有可用候选，不能算作质量改善或正式资格通过。
+模型引用本次 `evidence` 以外的 ID 返回 `reply_candidates_rejected`；历史工具的错误会话参数
+只得到有限失败回执且不执行查询，后端返回越界资料和真正持久化错误仍按原不变量拒绝。
+
+逐组输出审阅须保存 `reply.quality.reply_review_binding(case, arm, calls)` 的 `binding`，
+同时固定实际请求／响应、最终候选、持久依据与两侧资料摘要；更换其中任一项不能沿用旧审阅。
+报告还会交叉核验公开生成回执、独立依据读取和实际模型响应；正式来源逐次核对原整理 case 的实际输出摘要。
+
+正式后端会把同一分层资料服务接入回复。operator 配置可用
+`schema_version: organization-runtime-v2`，保留既有 `suite_directory` 和
+`organization_budget`，另加 `reply`：`directory` 指向私有回复证据目录，
+`contact_budget`、`owner_budget` 分别使用显式 `LayeredReplyBudget` 字段，
+`scenario_read` 使用 `calls`、`paragraphs`、`characters`；不用的一侧填 `null`。
+缺少配置、来源或有效资格时保留原 L1，读取预算变化不会改变整理合同。
+
+快速合成对照入口（默认只生成被阻塞的零调用记录）：
+
+```bash
+PYTHONPATH=src python -m notalone.experiments.reply_comparison \
+  --input-package /absolute/package.json --output-directory /absolute/new-output
+```
+
+输入包包含 `manifest`、`cases`、`contact_budget`、`owner_budget`。manifest 由
+`build_manifest` 从实际 `build_reply_contract` 构造；每例的 `input_package`
+包含已确认的 `scope`、完整 `request`、`installed_l1_version` 回执，另记录真实
+整理输出摘要及支持审阅。执行时增加 `--execute --synthetic-confirmed`、
+`--database-url-env NAME`、`--expected-test-database NAME_test`、`--api-key-env NAME`。
+只在明确自有 `_test` 库内，才可用 `--controlled-layered-installation` 读取已受控安装
+的合法合成候选；它不会授予生产自动使用资格，也不会替用户发送消息。
+每例还须冻结 `installation_binding`：原完整获审 C 输出、原引用到实际 L1 的版本映射，
+以及该例唯一预期侧的实际 profile／scenario 版本、完整正文及摘要。另一侧必须没有
+已安装资料；单侧对照仅使用该侧预算，并明确报告另一侧未覆盖。每组外发前重新核对
+安装状态，生成后核对持久依据；更换候选、来源映射或增加另一侧资料时阻断该组。
+
+每组最多 6 次、总计最多 48 次物理请求，SDK/传输无重试、无重定向。
+生成及独立复核共用一个不可续跑账本；失败、未知和未执行组完整保留，
+不能替换失败例凑数。`bundle.json` 为私有 0600 实际请求、响应、依据及账本回执。
+可信读取资格会重新核原物理账本；正式正例还须绑定活的整理资格回执及每例
+`organization_dependencies`（`reply_case_id`、原 `case_id`、`input_sha256`、
+`case_evidence_sha256`），来源删除或撤销后关闭。Agent 审阅和四例冒烟只报告
+实际覆盖，正式资格仍为 `unknown`；原整理侧 800 次累计账本保持独立。

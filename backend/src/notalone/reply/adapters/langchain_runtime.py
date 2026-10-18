@@ -7,7 +7,7 @@ import math
 from dataclasses import dataclass, field, replace
 from pathlib import PurePosixPath
 from threading import Lock
-from typing import Any, Callable, Mapping
+from typing import Any, Awaitable, Callable, Mapping
 from uuid import UUID
 
 from deepagents.backends.protocol import (
@@ -17,8 +17,10 @@ from deepagents.backends.protocol import (
 )
 from deepagents.middleware.skills import SkillsMiddleware
 from langchain.agents import create_agent
+from langchain.agents.middleware import AgentMiddleware, TracePolicy, omit_payload
 from langchain.agents.structured_output import ToolStrategy
 from langchain.tools import ToolRuntime, tool
+from langchain.tools.tool_node import ToolCallRequest
 from langchain_core.language_models import BaseChatModel
 from langchain_core.tools import BaseTool
 from langgraph.errors import GraphRecursionError
@@ -40,6 +42,8 @@ from notalone.reply.input_budget_receipt import validate_input_budget_receipt
 from notalone.reply.assistant_continuation_reference import continuation_reference_payload
 from notalone.reply.assistant_discussion import DISCUSSION_HISTORY_NOTICE
 from notalone.reply.assistant_discussion_payload import assistant_discussion_payload
+from notalone.reply.layered_context import system_material
+from notalone.reply.scenario_tools import ScenarioToolAccess, ScopedScenarioToolAccess
 from notalone.reply.runtime import (
     ReplyRuntimeResult,
     RuntimeCandidate,
@@ -168,6 +172,9 @@ expression_preferences 是用户明确保存且本次适用的长期表达要求
 不是用户的原句或已核验的渠道消息；根据 confirmed_direction 组织回应，不改写对方原文。
 confirmed_direction 是本次用户明确表达方向；不得把对方原文的立场当成本人的意愿，
 也不得推断这是完整历史或将粘贴内容采纳为长期记忆。
+对方的问题、回忆话题或背景资料不证明用户当前的记忆、感受或共同经历，不能据此替用户自述。
+资料中的旧值、纠错过程、来源日期和系统管理说明不是默认表达目标；未要求说明这些过程时，
+只用适用事实自然回应，把必要依据放在basis，避免将内部元说明搬入候选正文。
 回应和主动联系的 understanding_correction、user_instruction、clarification_answer
 都是本次用户说明。纠正只修正理解，回答只说明关键问题，不能据此替换已确认方向或目的；
 这些文字不是已核验的外部事实，也不能写成长期资料。冲突时保持当前已确认意图并说明。
@@ -381,6 +388,7 @@ class ReplyRuntimeContext:
     skill_library_revision: int
     skill_budget: SkillLoadBudget
     history: HistoryToolAccess | None = None
+    scenarios: ScenarioToolAccess | None = None
 
 
 def _parse_skill_file_path(
@@ -489,6 +497,47 @@ def _create_read_file_tool(
     return read_file
 
 
+class ScenarioArgumentsMiddleware(AgentMiddleware):
+    """先移开框架保留参数，再由工具核原始请求并生成确定拒绝。"""
+
+    trace_policy = TracePolicy(process_inputs=omit_payload, process_outputs=omit_payload)
+
+    async def awrap_tool_call(self, request: ToolCallRequest,
+                             handler: Callable[[ToolCallRequest], Awaitable[Any]]) -> Any:
+        call = request.tool_call
+        if call["name"] == "read_scenario":
+            allowed = {"scenario_id", "paragraph_start", "paragraph_end"}
+            if set(call["args"]) - allowed:
+                # 不改原始AIMessage；工具仍按tool_call_id读取原参数并拒绝，绝不静默采纳。
+                request = request.override(tool_call={**call, "args": {
+                    key: value for key, value in call["args"].items() if key in allowed}})
+        return await handler(request)
+
+
+def _create_scenario_tool() -> BaseTool:
+    # JSON schema保留实际类型及额外参数，让所有拒绝也成为真实ToolMessage。
+    @tool("read_scenario", args_schema={"type": "object", "properties": {
+        "scenario_id": {"type": "string", "description": "本次实际目录中的稳定主题ID"},
+        "paragraph_start": {"type": "integer", "description": "零基起点（包含）"},
+        "paragraph_end": {"type": "integer", "description": "零基终点（不包含）"}},
+        "required": ["scenario_id", "paragraph_start", "paragraph_end"], "additionalProperties": False})
+    def read_scenario(runtime: ToolRuntime[ReplyRuntimeContext], scenario_id=None,
+                      paragraph_start=None, paragraph_end=None, **extra) -> str:
+        """只读本次实际目录的冻结段落。references仅为来源导航，memory_id不是可引用evidence_id。"""
+        # 框架会覆盖模型多传的runtime保留参数；按调用身份核原始args，不能让注入静默掩盖越权请求。
+        raw = next((call["args"] for message in reversed(runtime.state["messages"])
+                    for call in getattr(message, "tool_calls", ())
+                    if call["id"] == runtime.tool_call_id and call["name"] == "read_scenario"), None)
+        if not isinstance(raw, dict):
+            raise ReplyInvariantError("正文工具缺少实际模型参数。")
+        invalid = set(raw) != {"scenario_id", "paragraph_start", "paragraph_end"}
+        return runtime.context.scenarios.read(scenario_id=raw.get("scenario_id"),
+            paragraph_start=raw.get("paragraph_start"), paragraph_end=raw.get("paragraph_end"),
+            **({"unexpected_arguments": True} if invalid else {}))
+
+    return read_scenario
+
+
 def _create_history_tools() -> list[BaseTool]:
     """创建只通过运行上下文取得范围的两个历史 Tool。"""
 
@@ -525,7 +574,7 @@ def _create_history_tools() -> list[BaseTool]:
         after: int = 3,
         timeout_ms: int = 500,
     ) -> str:
-        """读取当前会话一个已命中位置附近的有限时间顺序消息。"""
+        """仅用can_query_context=true结果的真实session_id读取邻近消息；缺失时禁止用source_ids替代。"""
 
         if runtime.context.history is None:
             return HistoryToolAccess._status_result(
@@ -597,6 +646,8 @@ class LangChainReplyRuntime:
         "_model_callbacks",
         "_model_callback_factory",
         "_constraint_review",
+        "_layered_memory",
+        "_on_model_response",
     )
 
     def __init__(
@@ -613,6 +664,8 @@ class LangChainReplyRuntime:
         model_callbacks: tuple = (),
         model_callback_factory: Callable[[ReplyContext], object] | None = None,
         constraint_review: ReplyConstraintReview | None = None,
+        layered_memory=None,
+        on_model_response=None,
     ) -> None:
         if (
             isinstance(timeout_seconds, bool)
@@ -650,6 +703,8 @@ class LangChainReplyRuntime:
         self._model_callbacks = model_callbacks
         self._model_callback_factory = model_callback_factory
         self._constraint_review = constraint_review
+        self._layered_memory = layered_memory
+        self._on_model_response = on_model_response
 
     def _discover_catalog(self, prepared: ReplyContext) -> SkillCatalog:
         """读取当前目录；读取或结构失败时安全退化为空目录（无 Skill）。"""
@@ -750,17 +805,26 @@ class LangChainReplyRuntime:
                     prior_budget=prepared.retrieval.source_messages if prepared.retrieval else None,
                 )
                 agent_tools.extend(_create_history_tools())
+            scenarios = None
+            if self._layered_memory is not None and any(material is not None
+                    and material.to_payload().get("scenario_read_budget") is not None
+                    for material in (prepared.layered_context, prepared.owner_layered_context)):
+                scenarios = ScopedScenarioToolAccess(contact_material=prepared.layered_context,
+                    owner_material=prepared.owner_layered_context, port=self._layered_memory)
+                agent_tools.append(_create_scenario_tool())
             context = ReplyRuntimeContext(
                 scope=prepared.scope,
                 skill_library_revision=catalog.revision,
                 skill_budget=budget,
                 history=history,
+                scenarios=scenarios,
             )
             output_strategy = ToolStrategy(REPLY_RUNTIME_SCHEMA, handle_errors=False)
             graph = create_agent(
                 model=self._model,
                 tools=agent_tools,
                 middleware=[
+                    ScenarioArgumentsMiddleware(),
                     SkillsMiddleware(
                         backend=backend,
                         sources=[(f"{SKILL_SOURCE}/", "NotAlone")],
@@ -774,12 +838,15 @@ class LangChainReplyRuntime:
                         response_format=output_strategy,
                         on_decision=collect_input_budget,
                         preflight=preflight,
+                        on_response=(lambda model, message: self._on_model_response(prepared, model, message))
+                            if self._on_model_response is not None else None,
                     ),
                 ],
                 response_format=output_strategy,
                 context_schema=ReplyRuntimeContext,
                 system_prompt=(BASE_SYSTEM_PROMPT + "\n" + DISCUSSION_HISTORY_NOTICE
-                               if prepared.assistant_discussion is not None else BASE_SYSTEM_PROMPT),
+                               if prepared.assistant_discussion is not None else BASE_SYSTEM_PROMPT)
+                              + system_material(prepared.layered_context) + system_material(prepared.owner_layered_context),
             )
             request_text = _request_text(prepared)
             validate_request = current_model_request_validator()
@@ -796,18 +863,23 @@ class LangChainReplyRuntime:
                     # 每个模型轮消耗 2 步（模型 + 工具节点）。历史工具 3 次预算
                     # 加一次 Skill 读取之后，必须仍留出最终结构化输出轮；
                     # 12 步会让预算反馈后的输出轮撞上递归上限（issue 02）。
-                    config={"recursion_limit": 16, **({'callbacks': list(callbacks)} if callbacks else {})},
+                    config={"recursion_limit": 16 + (2 * scenarios.limits["call_limit"] if scenarios else 0), **({'callbacks': list(callbacks)} if callbacks else {})},
                     context=context,
                 )
                 result = _validated_result(state, budget, self._model_name,
                                            history=history, selection=prepared.command.skill)
+                if scenarios is not None:
+                    result = replace(result, layered_scenario_reads=scenarios.receipts, owner_layered_scenario_reads=scenarios.owner_receipts,
+                                     tool_calls=result.tool_calls + scenarios.tool_calls)
                 if self._constraint_review is not None:
                     result = await self._constraint_review.review(
                         model=self._model, prepared=prepared, result=result,
                         request_text=request_text, callbacks=callbacks,
                         validate_request=validate_request,
                         budget=InputBudgetMiddleware(profile=self._input_budget_profile,
-                            counter=self._input_token_counter, on_decision=collect_input_budget),
+                            counter=self._input_token_counter, on_decision=collect_input_budget,
+                            on_response=(lambda model, message: self._on_model_response(prepared, model, message))
+                                if self._on_model_response is not None else None),
                     )
                 return result
 
@@ -900,6 +972,11 @@ def _request_text(prepared: ReplyContext) -> str:
         }
         for item in prepared.evidence if item.model_visible
     ]
+    payload["citation_policy"] = {
+        "allowed_evidence_ids": [item["evidence_id"] for item in payload["evidence"]],
+        "additional_evidence_ids": "successful_history_tool_evidence_only",
+        "references_are_not_citations": True,
+    }
     if prepared.continuation_basis is not None and prepared.continuation_basis.basis_changes:
         for item in payload["evidence"]:
             if (item["kind"] == "continued_candidate"

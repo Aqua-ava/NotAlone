@@ -10,6 +10,7 @@ from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID, uuid4
+from unittest.mock import patch
 
 from langchain_core.messages import AIMessage, BaseMessage
 from langchain_core.runnables import Runnable
@@ -93,6 +94,28 @@ class HistoryToolFakeModel(SyntheticBudgetModel):
 
 
 class HistoryToolTest(unittest.TestCase):
+    def test_backend_returning_another_contact_still_hard_fails_without_evidence(self):
+        access = self._access()
+        foreign = RetrievedMessage(message_id=MESSAGE_IDS[0], scope=ContactScope(OWNER_ID, OTHER_CONTACT_ID),
+            text="越界返回不应进入上下文。", source_ids=(SOURCE_ID,), role="contact")
+        with patch.object(InMemoryRetrieval, "search_messages", return_value=(foreign,)):
+            with self.assertRaises(ReplyContextInvariantError):
+                access.search(query="旅行计划")
+        self.assertEqual(access.evidence, ())
+
+    def test_captured_source_id_used_as_session_is_denied_with_tool_feedback_and_no_query(self):
+        access = self._access()
+        hit = json.loads(access.search(query="旅行计划", top_k=2))["messages"][0]
+        self.assertIsNone(hit["session_id"])
+        # 固定实际seq5的错误：把source_ids[0]误作缺失的session_id。
+        with patch.object(InMemoryRetrieval, "query_messages", side_effect=AssertionError("禁止查询错误会话")) as query:
+            denied = json.loads(access.query(session_id=hit["source_ids"][0], anchor_message_id=hit["message_id"]))
+        self.assertEqual(denied["status"], "failed")
+        self.assertEqual(denied["reason"], "history_query_session_scope_mismatch")
+        self.assertEqual(denied["messages"], [])
+        self.assertTrue(denied["not_found_is_not_evidence"])
+        query.assert_not_called()
+
     def setUp(self) -> None:
         self.scope = ContactScope(OWNER_ID, CONTACT_ID)
         base = datetime(2026, 9, 1, 12, tzinfo=timezone.utc)
@@ -147,6 +170,7 @@ class HistoryToolTest(unittest.TestCase):
         self.assertEqual(message["factual_role"], "source_message_statement")
         # 检索层没有给出会话标识时如实为 null，不能伪造成当前绑定会话。
         self.assertIsNone(message["session_id"])
+        self.assertFalse(message["can_query_context"])
         self.assertEqual(message["source_ids"], [str(SOURCE_ID)])
         self.assertEqual(message["occurred_at"], "2026-09-01T12:00:00+00:00")
         self.assertEqual(
@@ -197,6 +221,7 @@ class HistoryToolTest(unittest.TestCase):
         )
         payload = access._message_payload(message)
         self.assertEqual(payload["session_id"], str(BINDING_ID))
+        self.assertTrue(payload["can_query_context"])
 
     def test_query_requires_session_and_reads_only_after_search_anchor(self) -> None:
         access = self._access()
@@ -224,12 +249,11 @@ class HistoryToolTest(unittest.TestCase):
     def test_wrong_session_is_rejected_before_history_query(self) -> None:
         access = self._access()
 
-        with self.assertRaises(ReplyContextInvariantError):
-            access.query(
-                session_id=str(UUID("99999999-9999-9999-9999-999999999999")),
-            )
+        denied = json.loads(access.query(session_id=str(UUID("99999999-9999-9999-9999-999999999999"))))
 
-        self.assertEqual(access.tool_calls, ())
+        self.assertEqual(denied["status"], "failed")
+        self.assertEqual(len(access.tool_calls), 1)
+        self.assertEqual(access.tool_calls[0].status, "failed")
 
     def test_total_tool_calls_are_capped_and_failure_is_non_factual(self) -> None:
         access = self._access()

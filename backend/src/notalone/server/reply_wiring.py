@@ -63,6 +63,7 @@ def build_reply_service(
     input_budget_profile: InputBudgetProfile | None = None,
     input_token_counter: InputTokenCounter | None = None,
     on_input_budget: Callable[[InputBudgetDecision], None] | None = None,
+    layered_memory=None, layered_reply_budget=None, owner_layered_reply_budget=None,
 ) -> ReplyService | None:
     """有 active 绑定且模型凭据可用时装配回复服务；否则返回 None。
 
@@ -82,6 +83,17 @@ def build_reply_service(
         budget = build_deepseek_input_budget(model) or build_ecnu_input_budget(model)
         if budget is not None:
             input_budget_profile, input_token_counter = budget
+    configured = getattr(layered_memory, 'reply_configuration', None)
+    if configured is not None:
+        from notalone.reply.quality import build_reply_contract
+        try:
+            contract = build_reply_contract(model, input_budget_profile,
+                configured.contact_budget, configured.owner_budget)
+            layered_memory.configure_reply(contract, configured.source)
+            layered_reply_budget, owner_layered_reply_budget = configured.contact_budget, configured.owner_budget
+        except (ValueError, TypeError, AttributeError):
+            # 未核实配置继续L1，不能用未标定默认值放开新层。
+            layered_reply_budget, owner_layered_reply_budget = None, None
     skill_revision = _skill_library_revision(database_url, owner_id)
     retrieval = PostgresRetrieval(
         database_url,
@@ -97,6 +109,7 @@ def build_reply_service(
             scope.owner_id,
         ),
         overview=PostgresRelationshipOverviewStore(database_url),
+        layered_memory=layered_memory, layered_budget=layered_reply_budget, owner_layered_budget=owner_layered_reply_budget,
     )
     evidence = ExplorationEvidence(retrieval)
     from notalone.persistence.assistant_prepared_context import PreparedAssistantContext
@@ -104,7 +117,7 @@ def build_reply_service(
         ExploredReplyContext(ExpressionPreferenceContext(context, PostgresExpressionPreferenceStore(database_url)),
                              database_url=database_url, evidence=evidence),
         database_url=database_url,
-    ), database_url)
+    ), database_url, layered_memory=layered_memory, layered_budget=layered_reply_budget, owner_layered_budget=owner_layered_reply_budget)
     from langchain_core.globals import get_llm_cache
     from langchain_deepseek import ChatDeepSeek
     from notalone.reply.adapters.model_call_ledger import ModelCallLedger
@@ -124,6 +137,9 @@ def build_reply_service(
             if isinstance(model, ChatDeepSeek) and any(value != 0 for value in (
                 model.max_retries, model.root_client.max_retries, model.root_async_client.max_retries)):
                 raise ValueError("逐次台账不接受隐藏的供应商自动重试。")
+            if layered_memory is not None:
+                layered_memory.validate_reply_model(prepared, model, input_budget_profile,
+                    layered_reply_budget, owner_layered_reply_budget)
             reply_context.validate_current(prepared)
             if model_priority is not None:
                 model_priority.check_running()
@@ -132,9 +148,10 @@ def build_reply_service(
             validate=validate, record_call=lambda identifier: None)
 
     generator = ReplyGenerator(
-        store=PostgresReplyStore(database_url),
+        store=PostgresReplyStore(database_url, layered_memory=layered_memory, layered_budget=layered_reply_budget, owner_layered_budget=owner_layered_reply_budget),
         runtime=LangChainReplyRuntime(
-            model=model,
+            model=model, layered_memory=layered_memory,
+            on_model_response=layered_memory.check_reply_response if layered_memory is not None else None,
             skill_port=PostgresSkillPort(database_url),
             retrieval=retrieval,
             input_budget_profile=input_budget_profile,

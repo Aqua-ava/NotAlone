@@ -64,6 +64,7 @@ class BackgroundTaskType(StrEnum):
     OBSERVATION = "observation"
     SKILL_LEARNING = "skill_learning"
     MEMORY_UPGRADE = "memory_upgrade"
+    LAYERED_MEMORY = "layered_memory"
 
 
 class BackgroundTaskStatus(StrEnum):
@@ -96,6 +97,7 @@ class BackgroundTaskStepName(StrEnum):
     VERIFY_UPGRADE_PREVIEW = "verify_upgrade_preview"
     APPLY_UPGRADE = "apply_upgrade"
     VERIFY_UPGRADE_APPLY = "verify_upgrade_apply"
+    ORGANIZE_MEMORY = "organize_memory"
 
 
 class BackgroundTaskStepStatus(StrEnum):
@@ -142,7 +144,7 @@ SKILL_LEARNING_STEPS = ((BackgroundTaskStepName.PROPOSE_SKILL, 1),
                        (BackgroundTaskStepName.VERIFY_SKILL_DRAFTS, 2))
 VERIFY_STEPS = (BackgroundTaskStepName.VERIFY, BackgroundTaskStepName.VERIFY_NOT_RETRIEVABLE,
                 BackgroundTaskStepName.VERIFY_SKILL_DRAFTS, BackgroundTaskStepName.VERIFY_UPGRADE_PREVIEW,
-                BackgroundTaskStepName.VERIFY_UPGRADE_APPLY)
+                BackgroundTaskStepName.VERIFY_UPGRADE_APPLY, BackgroundTaskStepName.ORGANIZE_MEMORY)
 
 
 @dataclass(frozen=True, slots=True)
@@ -180,11 +182,11 @@ class BackgroundTaskStep:
 
 @dataclass(frozen=True, slots=True)
 class BackgroundTask:
-    """联系人范围后台任务的非正文状态快照。"""
+    """后台任务非正文状态；本人范围只对资料整理开放。"""
 
     task_id: UUID
     owner_id: UUID
-    contact_id: UUID
+    contact_id: UUID | None
     source_document_id: UUID | None
     task_type: BackgroundTaskType
     status: BackgroundTaskStatus
@@ -200,12 +202,12 @@ class BackgroundTask:
     extraction_runtime_config: ExtractionRuntimeConfig | None = None
 
     def __post_init__(self) -> None:
-        ids = (self.task_id, self.owner_id, self.contact_id)
+        ids = (self.task_id, self.owner_id) + (() if self.task_type is BackgroundTaskType.LAYERED_MEMORY and self.contact_id is None else (self.contact_id,))
         if any(not isinstance(value, UUID) for value in ids):
             raise TypeError("后台任务范围必须使用内部 UUID。")
         if not isinstance(self.task_type, BackgroundTaskType):
             raise TypeError("后台任务类型无效。")
-        if self.task_type in (BackgroundTaskType.OBSERVATION, BackgroundTaskType.SKILL_LEARNING, BackgroundTaskType.MEMORY_UPGRADE):
+        if self.task_type in (BackgroundTaskType.OBSERVATION, BackgroundTaskType.SKILL_LEARNING, BackgroundTaskType.MEMORY_UPGRADE, BackgroundTaskType.LAYERED_MEMORY):
             if self.source_document_id is not None:
                 raise ValueError("观察任务不能绑定 source_document_id。")
         elif not isinstance(self.source_document_id, UUID):
@@ -222,6 +224,10 @@ class BackgroundTask:
                 and not isinstance(self.extraction_runtime_config, ExtractionRuntimeConfig)):
             raise ValueError("后台任务提取配置无效。")
 
+    @property
+    def scope_kind(self) -> str:
+        return "owner" if self.contact_id is None else "contact"
+
 
 @dataclass(frozen=True, slots=True)
 class ClaimedBackgroundTaskStep:
@@ -229,7 +235,7 @@ class ClaimedBackgroundTaskStep:
 
     task_id: UUID
     owner_id: UUID
-    contact_id: UUID
+    contact_id: UUID | None
     source_document_id: UUID | None
     step_id: UUID
     name: BackgroundTaskStepName
@@ -241,6 +247,12 @@ class ClaimedBackgroundTaskStep:
     extraction_runtime_config: ExtractionRuntimeConfig | None = None
 
     def __post_init__(self) -> None:
+        if self.contact_id is None and self.name is not BackgroundTaskStepName.ORGANIZE_MEMORY:
+            raise TypeError("只有资料整理步骤允许本人范围。")
         if (self.extraction_runtime_config is not None
                 and not isinstance(self.extraction_runtime_config, ExtractionRuntimeConfig)):
             raise ValueError("后台步骤提取配置无效。")
+
+    @property
+    def scope_kind(self) -> str:
+        return "owner" if self.contact_id is None else "contact"

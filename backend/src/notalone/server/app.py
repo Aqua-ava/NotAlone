@@ -136,6 +136,8 @@ from notalone.memory.models import (
 from notalone.memory.versions import MemoryVersionConflict
 from notalone.application.relationship_overview_service import RelationshipOverviewService
 from notalone.memory.overview import OverviewUnavailable
+from notalone.memory.layered import LayeredMemoryConflict
+from notalone.application.layered_memory_service import LayeredMemoryService
 from notalone.server.memory_overview import overview_payload
 from notalone.front_sync.sync_engine import (
     BindingCandidateView,
@@ -211,6 +213,7 @@ class BackendApp:
         "_ledger_service",
         "_memory_service",
         "_overview_service",
+        "_layered_memory",
         "_message_stream",
         "_owner_id",
         "_reply_service",
@@ -250,6 +253,7 @@ class BackendApp:
         source_service: SourceService | None = None,
         memory_service: MemoryService | None = None,
         overview_service: RelationshipOverviewService | None = None,
+        layered_memory: LayeredMemoryService | None = None,
         import_service: ImportService | None = None,
         task_host: TaskHost | None = None,
         task_service: TaskService | None = None,
@@ -274,6 +278,7 @@ class BackendApp:
         self._ledger_service = ledger_service
         self._memory_service = memory_service
         self._overview_service = overview_service
+        self._layered_memory = layered_memory
         self._message_stream = message_stream
         self._reply_service = reply_service
         self._assistant_sessions = assistant_sessions
@@ -318,6 +323,8 @@ class BackendApp:
                 return
             if self._runtime_shutdown is not None:
                 self._runtime_shutdown()
+            if self._layered_memory is not None:
+                self._layered_memory.stop()
             if self._task_host is not None:
                 self._task_host.stop()
             self._runtime_stopped.set()
@@ -350,7 +357,7 @@ class BackendApp:
                 or path_value == "/api/memories/owner"
                 or path_value.startswith("/api/contacts/") and (
                     "/memories" in path_value or "/memory-candidates" in path_value
-                    or "/relationship-overview" in path_value
+                    or "/relationship-overview" in path_value or "/layered-memory" in path_value
                 )):
             return Response(
                 response.status_code,
@@ -488,6 +495,12 @@ class BackendApp:
                 path=path_value,
                 query=urlsplit(path).query,
             )
+        if path_value.startswith('/api/layered-memory/'):
+            from notalone.server.organization_quality import handle_quality
+            return handle_quality(self._layered_memory, self._owner_id, method_upper, path_value, body)
+        if (path_value.startswith("/api/contacts/") and "/layered-memory" in path_value
+                or path_value.startswith("/api/memories/owner/layered-memory")):
+            return self._handle_layered_memory(method=method_upper, path=path, body=body)
         if path_value.startswith("/api/contacts/") and "/relationship-overview" in path_value:
             return self._handle_overview(method=method_upper, path=path_value)
         if path_value == "/api/memories/owner/overview":
@@ -1550,6 +1563,79 @@ class BackendApp:
         except AssistantSessionError:
             return _json_response(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "assistant_session_failed"})
 
+    def _handle_layered_memory(self, *, method: str, path: str, body: bytes) -> Response:
+        parts = urlsplit(path).path.strip("/").split("/")
+        if (len(parts) not in {4, 5} or parts[3] != "layered-memory"
+                or method != ("GET" if len(parts) == 4 else "POST")
+                or len(parts) == 5 and parts[4] not in {"enable", "refresh", "disable", "delete", "withdraw-profile", "withdraw-scenario", "pause", "continue", "quality-input", "summary-error", "fact-error"}):
+            return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+        if self._layered_memory is None:
+            return _json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "layered_memory_unavailable"})
+        try:
+            from notalone.scopes import OwnerScope
+            scope = OwnerScope(self._owner_id) if parts[:3] == ["api", "memories", "owner"] else ContactScope(self._owner_id, UUID(parts[2]))
+            if method == "GET":
+                query = parse_qs(urlsplit(path).query, keep_blank_values=True)
+                if set(query) - {'mapping_cursor'} or any(len(value) != 1 for value in query.values()):
+                    raise ValueError('映射分页参数无效。')
+                state = self._layered_memory.read(scope, mapping_cursor=query.get('mapping_cursor', [None])[0])
+            else:
+                payload = json.loads(body.decode("utf-8"))
+                if parts[4] == 'quality-input':
+                    if not isinstance(payload, dict) or set(payload) != {'memory_versions'}:
+                        raise ValueError('质量输入只接受实际版本选择。')
+                    prepared = self._layered_memory.prepare_quality_input(scope, payload['memory_versions'])
+                    return _json_response(HTTPStatus.OK, {'quality_input': prepared})
+                allowed = ({"settings_generation", "purpose_confirmed"} if parts[4] == "enable"
+                    else {"settings_generation", "organization_generation", "target_kind", "version_id", "item_index", "reason", "operation_id"} if parts[4] == "summary-error"
+                    else {"settings_generation", "organization_generation", "target_kind", "version_id", "item_index", "memory_id"} if parts[4] == "fact-error"
+                    else {"settings_generation", "organization_generation", "profile_version_id"} if parts[4] == "withdraw-profile"
+                    else {"settings_generation", "organization_generation", "scenario_version_id"} if parts[4] == "withdraw-scenario"
+                    else {"settings_generation", "work_revision"} if parts[4] in {"pause", "continue"}
+                    else {"settings_generation"})
+                if (not isinstance(payload, dict) or set(payload) != allowed
+                        or type(payload["settings_generation"]) is not int
+                        or payload["settings_generation"] < 0
+                        or parts[4] == "enable" and payload["purpose_confirmed"] is not True):
+                    raise ValueError("整理命令无效。")
+                if parts[4] in {"pause", "continue"} and (type(payload["work_revision"]) is not int or payload["work_revision"] < 1):
+                    raise ValueError("覆盖工作修订无效。")
+                if parts[4] in {'summary-error', 'fact-error'}:
+                    if (type(payload['organization_generation']) is not int or payload['organization_generation'] < 0
+                            or payload['target_kind'] not in {'scenario', 'profile'}
+                            or type(payload['item_index']) is not int or not 0 <= payload['item_index'] < 100):
+                        raise ValueError('整理反馈无效。')
+                    UUID(payload['version_id'])
+                    if parts[4] == 'summary-error':
+                        if not isinstance(payload['reason'], str) or not 1 <= len(payload['reason'].strip()) <= 500:
+                            raise ValueError('整理反馈无效。')
+                        UUID(payload['operation_id'])
+                        state = self._layered_memory.report_summary_error(scope, payload)
+                    else:
+                        UUID(payload['memory_id'])
+                        state = self._layered_memory.report_fact_error(scope, payload)
+                elif parts[4] == "withdraw-scenario":
+                    if type(payload["organization_generation"]) is not int or payload["organization_generation"] < 0:
+                        raise ValueError("整理版本无效。")
+                    state = self._layered_memory.withdraw_scenario(scope,payload["settings_generation"],
+                        payload["organization_generation"],UUID(payload["scenario_version_id"]))
+                elif parts[4] == "withdraw-profile":
+                    if type(payload["organization_generation"]) is not int or payload["organization_generation"] < 0:
+                        raise ValueError("整理版本无效。")
+                    state = self._layered_memory.withdraw_profile(scope,payload["settings_generation"],
+                        payload["organization_generation"],UUID(payload["profile_version_id"]))
+                else:
+                    state = self._layered_memory.command(scope, parts[4], payload["settings_generation"], payload.get("work_revision"))
+            return _json_response(HTTPStatus.OK, {"layered_memory": state})
+        except LayeredMemoryConflict:
+            return _json_response(HTTPStatus.CONFLICT, {"error": "layered_memory_changed"})
+        except (ValueError, UnicodeError):
+            return _json_response(HTTPStatus.BAD_REQUEST, {"error": "layered_memory_request_invalid"})
+        except (LookupError, PermissionError):
+            return _json_response(HTTPStatus.NOT_FOUND, {"error": "layered_memory_not_found"})
+        except Exception:
+            return _json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "layered_memory_unavailable"})
+
     def _handle_overview(self, *, method: str, path: str) -> Response:
         parts = path.strip("/").split("/")
         owner_scope = path == "/api/memories/owner/overview"
@@ -2521,6 +2607,7 @@ def create_app(
     source_service: SourceService | None = None,
     memory_service: MemoryService | None = None,
     overview_service: RelationshipOverviewService | None = None,
+    layered_memory: LayeredMemoryService | None = None,
     import_service: ImportService | None = None,
     task_host: TaskHost | None = None,
     task_service: TaskService | None = None,
@@ -2545,7 +2632,17 @@ def create_app(
     )
     from notalone.persistence.memory_overview import PostgresRelationshipOverviewStore
 
+    from notalone.persistence.layered_memory import PostgresLayeredMemoryStore
+
     contacts = ContactDirectory(PostgresContactDirectory(database_url))
+    layered_memory = layered_memory or LayeredMemoryService(PostgresLayeredMemoryStore(database_url))
+    if task_host is not None:
+        layered_memory.attach_task_host(task_host)
+        layered_memory.resume_pending(owner_id)
+    else:
+        from notalone.tasks.organization_dispatch import EmbeddedOrganizationDispatcher
+        layered_memory.attach_dispatcher(EmbeddedOrganizationDispatcher(database_url))
+    layered_memory.start_maintenance(owner_id)
     return BackendApp(
         contact_directory=contacts,
         events=events or EventBus(),
@@ -2571,6 +2668,7 @@ def create_app(
         source_service=source_service or SourceService(database_url),
         memory_service=memory_service,
         overview_service=overview_service or RelationshipOverviewService(PostgresRelationshipOverviewStore(database_url)),
+        layered_memory=layered_memory,
         import_service=import_service,
         task_host=task_host,
         task_service=task_service

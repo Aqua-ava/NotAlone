@@ -67,8 +67,8 @@ export interface ContactOverviewEntry {
 }
 export interface ContactRelationshipOverview {
   version: 1;
-  scopeKind: 'contact';
-  contactId: string;
+  scopeKind: 'contact' | 'owner';
+  contactId: string | null;
   projectionRevision: string;
   memoryRevision: number;
   builtAt: string;
@@ -109,6 +109,91 @@ export interface MemorySection<T> {
   items: T[];
 }
 export type MemorySectionName = 'contact' | 'owner' | 'pending' | 'sources';
+export interface LayeredMemoryReference {
+  memoryId: string;
+  revision: number;
+  provenanceKind: 'manual_entry' | 'source_supported';
+  timing: MemoryTiming;
+}
+export interface LayeredMemoryScenario {
+  scenarioId: string;
+  versionId: string;
+  title: string;
+  hint: string;
+  systemGenerated: true;
+  updatedAt: string;
+  paragraphs: { text: string; references: LayeredMemoryReference[] }[];
+}
+export interface LayeredMemoryProfile {
+  versionId: string;
+  systemGenerated: true;
+  updatedAt: string;
+  entries: { text: string; temporalStatus: 'stable' | 'historical' | 'uncertain'; uncertainty: string; references: LayeredMemoryReference[] }[];
+}
+export interface LayeredMemoryQualityStage {
+  status: 'unknown' | 'failed' | 'verified';
+  reasons: string[];
+  contractId: string | null;
+  reportId: string | null;
+}
+export interface LayeredMemoryQuality {
+  organization: LayeredMemoryQualityStage;
+  reply: LayeredMemoryQualityStage;
+  automaticUseAllowed: boolean;
+  synthetic: boolean;
+}
+export interface LayeredMemory {
+  schemaVersion: 2;
+  scopeKind: 'contact' | 'owner';
+  contactId: string | null;
+  settingsGeneration: number;
+  enabled: boolean;
+  qualityStatus: 'unknown' | 'failed' | 'verified' | 'synthetic';
+  quality: LayeredMemoryQuality;
+  status: 'disabled' | 'ready' | 'empty' | 'failed' | 'updating' | 'stale' | 'blocked' | 'paused';
+  workId: string | null;
+  workRevision: number;
+  currentBatch: number;
+  modelCallsUsed: number;
+  modelCallLimit: number;
+  eligibleCount: number;
+  coveredCount: number;
+  remainingCount: number;
+  mappingCursor: string | null;
+  mappingNextCursor: string | null;
+  maintenancePending: boolean;
+  scenarioMappings: { sourceScenarioId: string; sourceVersionId: string; targets: { scenarioId: string; versionId: string }[] }[];
+  organizationGeneration: number;
+  updatedAt: string | null;
+  errorCode: string | null;
+  purpose: string;
+  budget: { maxMemories: number; maxScenarios: number; maxParagraphs: number; maxCharacters: number; maxModelCalls: number; maxProfileEntries?: number; modelCallsUsed: number; modelCallsRemaining: number };
+  scenarios: LayeredMemoryScenario[];
+  profile: LayeredMemoryProfile | null;
+  correctionRevision: number;
+  protectedCount: number;
+  pendingFactCount: number;
+  feedback: { id: string; targetKind: 'scenario' | 'profile'; versionId: string | null; itemIndex: number; reason: string | null;
+    state: 'active' | 'erased_guard'; targetText: string | null; basis: { memoryId: string; revision: number }[] }[];
+  correctionTarget: { memoryId: string; revision: number } | null;
+}
+export interface LayeredMemoryReadRequest extends ContactSelection { mappingCursor?: string | null }
+export interface LayeredMemoryManagementRequest extends ContactSelection {
+  action: 'enable' | 'refresh' | 'disable' | 'delete' | 'withdraw-profile' | 'withdraw-scenario' | 'pause' | 'continue' | 'summary-error' | 'fact-error';
+  settingsGeneration: number;
+  organizationGeneration?: number;
+  profileVersionId?: string;
+  scenarioVersionId?: string;
+  purposeConfirmed?: true;
+  workRevision?: number;
+  targetKind?: 'scenario' | 'profile';
+  versionId?: string;
+  itemIndex?: number;
+  reason?: string;
+  operationId?: string;
+  memoryId?: string;
+}
+export type LayeredMemoryManagementOptions = Omit<LayeredMemoryManagementRequest, 'contactId' | 'scopeRevision' | 'action' | 'settingsGeneration'>;
 export interface MemoryReadingState {
   revision: number;
   contactId: string | null;
@@ -121,6 +206,7 @@ export interface MemoryReadingState {
   history: MemoryHistoryState;
   overview: MemoryOverviewState;
   ownerOverview: MemoryOverviewState<OwnerFactsPreferencesOverview>;
+  layeredMemory: MemoryOverviewState<LayeredMemory>;
 }
 export interface MemoryReadRequest extends ContactSelection { section?: MemorySectionName; }
 export interface MemoryAdditionRequest extends ContactSelection {
@@ -137,11 +223,27 @@ export interface MemoryRemovalRequest extends ContactSelection {
 export interface MemoryCorrectionRequest extends ContactSelection {
   level: 'owner' | 'contact'; memoryId: string; revision: number; text: string; category: MemoryCategory;
 }
+export type OwnerLayeredMemoryManagementRequest = Omit<LayeredMemoryManagementRequest, 'contactId' | 'scopeRevision'>;
+export interface OwnerLayeredMemoryState extends MemoryOverviewState<LayeredMemory> {
+  memories?: MemorySection<ActiveMemory>;
+  revision: number;
+  mutation: MemoryReadingState['mutation'];
+}
 export interface MemoryBridge {
+  readOwnerMemories(): Promise<void>;
+  correctOwnerMemory(request: Pick<MemoryCorrectionRequest, 'memoryId' | 'revision' | 'text' | 'category'>): Promise<void>;
+  deleteOwnerMemory(request: Pick<MemoryRemovalRequest, 'memoryId' | 'revision'>): Promise<void>;
+  addOwnerMemory(request: Pick<MemoryAdditionRequest, 'text' | 'category'>): Promise<void>;
+  getOwnerLayeredMemoryState(): Promise<OwnerLayeredMemoryState>;
+  readOwnerLayeredMemory(request: { mappingCursor?: string | null }): Promise<void>;
+  manageOwnerLayeredMemory(request: OwnerLayeredMemoryManagementRequest): Promise<void>;
+  onOwnerLayeredMemoryChanged(listener: (state: OwnerLayeredMemoryState) => void): () => void;
   getState(): Promise<MemoryReadingState>;
   refresh(request: MemoryReadRequest): Promise<void>;
   refreshOverview(request: ContactSelection): Promise<void>;
   refreshOwnerOverview(request: ContactSelection): Promise<void>;
+  readLayeredMemory(request: LayeredMemoryReadRequest): Promise<void>;
+  manageLayeredMemory(request: LayeredMemoryManagementRequest): Promise<void>;
   add(request: MemoryAdditionRequest): Promise<void>;
   remove(request: MemoryRemovalRequest): Promise<void>;
   discardCandidate(request: MemoryCandidateRequest): Promise<void>;

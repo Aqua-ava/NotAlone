@@ -1,7 +1,60 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { test } from 'node:test';
 import { historicalReplyFixture, ports } from './fixtures/historical-reply-basis.mjs';
+import { payload as layeredPayload, profilePayload, ids as layeredIds } from './layered-memory/support.mjs';
+
+test('真实HTTP保存的主题正文依据穿过生产解析与React，历史协议仍按匹配版本展示', { timeout: 90_000 }, async () => {
+  const previous = process.env.NOTALONE_LAYERED_TEST_EVIDENCE_DIR;
+  const directory = await mkdtemp(path.join(tmpdir(), 'notalone-layered-parser-contract-'));
+  process.env.NOTALONE_LAYERED_TEST_EVIDENCE_DIR = directory;
+  try {
+    await ports.withLayeredReplyFixture(async (fixture) => {
+      const prepared = await fixture.command('prepared');
+      const actual = await fixture.command('saved_scenario_evidence');
+      await writeFile(path.join(directory, 'actual-saved-evidence.json'), JSON.stringify(actual), { mode: 0o600 });
+      // 完整GET结果先原样进入生产解析器，不改任何请求身份或正文。
+      const parsed = await ports.readReplyEvidence({ requestJson: async () => ({ data: actual, generation: 1 }) },
+        prepared.contact_id, actual.reply_request_id, new AbortController().signal);
+      assert.equal(parsed.layeredContext.schemaVersion, 3);
+      assert.equal(parsed.layeredScenarioReads[0].document.versionId, prepared.scenario_version_id);
+      assert.deepEqual(parsed.layeredScenarioReads[0].document.paragraphRange, [0, 1]);
+      const f = await generatedFixture((f) => {
+        Object.assign(f.records.evidence, actual, { reply_request_id: f.requestId });
+        f.records.saved.turns[0].reply.candidates[0].citation_ids = actual.evidence.filter((item) => item.cited).map((item) => item.evidence_id);
+      });
+      await f.bridge.loadEvidence(f.selection);
+      const state = await f.bridge.getEvidenceState();
+      assert.equal(state.phase, 'ready', JSON.stringify(state));
+      assert.equal(state.layeredContext.schemaVersion, 3);
+      assert.equal(state.layeredContext.readPolicy, 'synthetic-scoped-layered-v3');
+      assert.equal(state.layeredContext.profileVersionId, prepared.profile_version_id);
+      assert.deepEqual(state.layeredScenarioReads.map((item) => item.status), ['succeeded', 'duplicate']);
+      assert.equal(state.layeredScenarioReads[0].document.versionId, prepared.scenario_version_id);
+      assert.deepEqual(state.layeredScenarioReads[0].document.paragraphRange, [0, 1]);
+      const html = await renderEvidence(f);
+      assert.ok(html.includes(prepared.scenario_text));
+      assert.ok(html.includes(prepared.scenario_version_id));
+      assert.ok(html.includes('重复读取'));
+      if (prepared.owner_profile_version_id) {
+        assert.equal(parsed.ownerLayeredContext.scopeKind, 'owner');
+        assert.equal(state.ownerLayeredContext.profileVersionId, prepared.owner_profile_version_id);
+        assert.deepEqual(state.ownerLayeredScenarioReads.map((item) => item.status), ['succeeded', 'duplicate']);
+        assert.equal(state.ownerLayeredScenarioReads[0].document.versionId, prepared.owner_scenario.version_id);
+        assert.ok(html.includes(prepared.owner_scenario.paragraphs[0].text));
+        assert.ok(html.includes(prepared.owner_profile_version_id));
+      }
+      assert.equal((await fixture.command('runtime_proof')).external_model_calls, 0);
+    });
+    process.stdout.write(`saved_evidence_contract: ${directory}\n`);
+  } finally {
+    if (previous === undefined) delete process.env.NOTALONE_LAYERED_TEST_EVIDENCE_DIR;
+    else process.env.NOTALONE_LAYERED_TEST_EVIDENCE_DIR = previous;
+  }
+});
 
 function retrieval(ids, overrides = {}) {
   return { version: 1, retriever_version: 'lexical-v1', status: 'succeeded',
@@ -20,8 +73,38 @@ function retrieval(ids, overrides = {}) {
         used_calls: 1, used_count: 1, used_tokens: 4, exhausted: false } }, ...overrides };
 }
 
-async function generatedFixture(arrange) {
-  const f = await historicalReplyFixture();
+test('公开GET保存的双范围实际材料原样穿过生产解析、Main、preload与React', {
+  skip: !process.env.NOTALONE_SCOPED_REPLY_EVIDENCE,
+}, async () => {
+  const bytes = await readFile(process.env.NOTALONE_SCOPED_REPLY_EVIDENCE);
+  const actual = JSON.parse(bytes);
+  const f = await generatedFixture((f) => { f.records.evidence = actual; }, { replyRequestId: actual.reply_request_id });
+  const parsed = await ports.readReplyEvidence({ requestJson: async () => ({ data: actual, generation: 1 }) },
+    f.scope.contactId, actual.reply_request_id, new AbortController().signal);
+  await f.bridge.loadEvidence(f.selection);
+  const state = await f.bridge.getEvidenceState();
+  assert.equal(state.phase, 'ready', JSON.stringify(state));
+  assert.equal(parsed.layeredContext.scopeKind, 'contact');
+  assert.equal(parsed.ownerLayeredContext.scopeKind, 'owner');
+  assert.equal(state.layeredContext.schemaVersion, 3);
+  assert.equal(state.ownerLayeredContext.schemaVersion, 3);
+  assert.equal(state.ownerLayeredContext.readPolicy, 'synthetic-scoped-layered-v3');
+  assert.equal(state.ownerLayeredScenarioReads[0].status, 'succeeded');
+  const html = await renderEvidence(f);
+  for (const [context, reads] of [[actual.layered_context, actual.layered_scenario_reads], [actual.owner_layered_context, actual.owner_layered_scenario_reads]]) {
+    for (const entry of context.profile_entries) assert(html.includes(entry.text));
+    for (const entry of context.directory) assert(html.includes(entry.title));
+    for (const read of reads) if (read.status === 'succeeded') {
+      assert(html.includes(read.document.version_id));
+      for (const paragraph of read.document.paragraphs) assert(html.includes(paragraph.text));
+    }
+  }
+  assert(html.includes('本次实际读取的本人主题正文'));
+  assert.equal(await readFile(process.env.NOTALONE_SCOPED_REPLY_EVIDENCE, 'utf8'), bytes.toString());
+});
+
+async function generatedFixture(arrange, options) {
+  const f = await historicalReplyFixture(options);
   await f.bridge.readSavedSession(f.scope);
   if (arrange) await arrange(f);
   f.records.saved.turns[0].reply.context_receipt.evidence_ids = f.records.evidence.evidence.map((item) => item.evidence_id);
@@ -251,8 +334,10 @@ test('不可信导航或检索回执拒绝展示，显式重试重新读取合�
 });
 
 test('来源通知清除已呈现或在途的检索快照，重复通知与旧响应不能恢复正文', async () => {
-  for (const order of ['evidence-first', 'source-first']) {
+  for (const [order, foreign] of [['evidence-first', false], ['source-first', false], ['evidence-first', true], ['source-first', true]]) {
     const f = await generatedFixture((f) => { f.records.evidence.retrieval = contactRetrieval(f); });
+    if (foreign) scopedScenarioSnapshots(f);
+    const notifiedContact = foreign ? randomUUID() : f.scope.contactId;
     let release;
     let late;
     if (order === 'evidence-first') {
@@ -272,11 +357,11 @@ test('来源通知清除已呈现或在途的检索快照，重复通知与旧�
       basis_changes: [], placeholder: '相关来源已删除' });
     Object.assign(f.records.saved.inputs[0], { state: 'redacted', content: null,
       basis_changes: [], placeholder: '相关来源已删除' });
-    const deleting = f.replies.revalidateDeletedSource(f.scope.contactId);
+    const deleting = f.replies.revalidateDeletedSource(notifiedContact);
     assert.equal((await f.bridge.getEvidenceState()).retrieval, undefined);
     assert.deepEqual((await f.bridge.getEvidenceState()).items, []);
     await deleting;
-    await f.replies.revalidateDeletedSource(f.scope.contactId);
+    await f.replies.revalidateDeletedSource(notifiedContact);
     if (late) { release(); await late; }
     await f.bridge.readSavedSession(f.scope);
     const state = await f.bridge.getState();
@@ -284,6 +369,8 @@ test('来源通知清除已呈现或在途的检索快照，重复通知与旧�
     assert.equal(state.result, null);
     assert.deepEqual(evidence.items, []);
     assert.equal(evidence.retrieval, undefined);
+    assert.equal(evidence.ownerLayeredContext, undefined);
+    assert.equal(evidence.ownerLayeredScenarioReads, undefined);
     for (const phrase of ['合成当时资料：周末有空。', '合成旧候选：先确认见面时间。']) {
       assert(!JSON.stringify({ state, evidence }).includes(phrase));
     }
@@ -400,5 +487,421 @@ test('同范围的新读取与显式重试接管旧请求，收起后不保留�
     assert.equal(closed.phase, 'idle');
     assert.deepEqual(closed.items, []);
     assert.equal(closed.retrieval, undefined);
+  }
+});
+
+test('实际分层背景和目录随候选快照展示，隐藏依赖不流入界面且收起后清空', async () => {
+  const versionId = randomUUID(), scenarioId = randomUUID();
+  const f = await generatedFixture((f) => {
+    f.records.evidence.layered_status = 'loaded';
+    f.records.evidence.layered_context = { schema_version: 1, scope_kind: 'contact', settings_generation: 2,
+      organization_generation: 3, profile_version_id: versionId,
+      profile_entries: [{ text: '合成已保存长期背景', temporal_status: 'historical', uncertainty: '仅反映过去',
+        references: [{ memory_id: f.memoryId, revision: 1, provenance_kind: 'source_supported', timing: f.records.evidence.evidence[0].timing }] }],
+      directory: [{ scenario_id: scenarioId, version_id: versionId, title: '合成工作主题', hint: '合成目录提示', paragraph_count: 2 }],
+      read_policy: 'synthetic-contact-layered-v1', budget: { profile_entries: 4, directory_entries: 6, characters: 1800 },
+      dependencies: [{ text: '隐藏参与依赖不能展示' }] };
+  });
+  await f.bridge.loadEvidence(f.selection);
+  const state = await f.bridge.getEvidenceState();
+  assert.equal(state.layeredContext?.profileVersionId, versionId);
+  assert.equal(state.layeredStatus, 'loaded');
+  assert.equal(state.layeredContext.dependencies, undefined);
+  const html = await renderEvidence(f);
+  for (const phrase of ['系统整理', '合成已保存长期背景', '合成工作主题', '合成目录提示', '未读取主题正文', '仅反映过去', versionId]) assert(html.includes(phrase), phrase);
+  assert(!html.includes('隐藏参与依赖不能展示'));
+  assert(!f.calls.some((call) => call.path.includes('/layered-context')));
+  await f.bridge.closeEvidence(f.selection);
+  assert.equal((await f.bridge.getEvidenceState()).layeredContext, undefined);
+});
+
+test('分层资料回退状态保留原依据，旧快照不推断最新背景', async () => {
+  const cases = [[undefined, '本次快照未记录分层资料'], ['not_allowed', '未授权'], ['unavailable', '不可用'],
+    ['budget_omitted', '预算限制'], ['quality_closed', '未获质量资格']];
+  for (const [status, phrase] of cases) {
+    const f = await generatedFixture((f) => {
+      if (status) { f.records.evidence.layered_status = status; f.records.evidence.layered_context = null; }
+    });
+    await f.bridge.loadEvidence(f.selection);
+    const state = await f.bridge.getEvidenceState();
+    assert.equal(state.phase, 'ready');
+    assert.equal(state.items.length, 1);
+    const html = await renderEvidence(f);
+    assert(html.includes(phrase), phrase);
+    assert(!html.includes('本次实际加入的联系人背景'));
+  }
+});
+
+test('分层快照状态与正文矛盾时不展示正文，不影响候选编辑', async () => {
+  const f = await generatedFixture((f) => {
+    f.records.evidence.layered_status = 'quality_closed';
+    f.records.evidence.layered_context = { profile_entries: [{ text: '不应泄漏的合成背景' }] };
+  });
+  await f.bridge.editCandidate({ ...f.selection, text: '合成用户编辑保留。' });
+  await f.bridge.loadEvidence(f.selection);
+  const evidence = await f.bridge.getEvidenceState();
+  assert.equal(evidence.phase, 'failed');
+  assert.equal(evidence.layeredContext, undefined);
+  assert(!(await renderEvidence(f)).includes('不应泄漏的合成背景'));
+  assert.equal((await f.bridge.getState()).result.candidates[0].editedText, '合成用户编辑保留。');
+});
+
+function scenarioSnapshot(f) {
+  const scenarioId = randomUUID(), versionId = randomUUID();
+  const reference = { memory_id: f.memoryId, revision: 1, provenance_kind: 'source_supported',
+    timing: f.records.evidence.evidence[0].timing };
+  const context = { schema_version: 2, scope_kind: 'contact', settings_generation: 2,
+    organization_generation: 3, profile_version_id: null, profile_entries: [],
+    directory: [{ scenario_id: scenarioId, version_id: versionId, title: '合成冻结课程', hint: '共同课程的历史资料',
+      paragraph_count: 2, paragraph_range: [0, 2] }],
+    read_policy: 'synthetic-contact-layered-v2',
+    scenario_read_budget: { call_limit: 3, paragraph_limit: 4, character_limit: 1800 }, budget: { profile_entries: 4, directory_entries: 6, characters: 1800 } };
+  const receipt = { schema_version: 1, status: 'succeeded', reason: '已读取本次冻结目录中的主题正文。',
+    scenario_id: scenarioId, paragraph_range: [0, 1],
+    budget: { call_limit: 3, paragraph_limit: 4, character_limit: 1800, used_calls: 1, used_paragraphs: 1, used_characters: 420 },
+    document: { scenario_id: scenarioId, version_id: versionId, title: '合成冻结课程', hint: '共同课程的历史资料',
+      system_generated: true, updated_at: '2026-10-17T01:00:00Z', organization_generation: 3, paragraph_range: [0, 1],
+      paragraphs: [{ text: '合成冻结正文：双方过去共同参加课程，近期安排未知。', references: [reference] }],
+      dependencies: [{ text: '隐藏工具依赖不可展示' }] } };
+  Object.assign(f.records.evidence, { layered_status: 'loaded', layered_context: context, layered_scenario_reads: [receipt] });
+  return { scenarioId, versionId, receipt, context };
+}
+
+function scopedScenarioSnapshots(f) {
+  const contact = scenarioSnapshot(f);
+  Object.assign(contact.context, { schema_version: 3, read_policy: 'synthetic-scoped-layered-v3' });
+  const owner = structuredClone(contact);
+  owner.context.scope_kind = 'owner';
+  owner.scenarioId = randomUUID(); owner.versionId = randomUUID();
+  Object.assign(owner.context.directory[0], { scenario_id: owner.scenarioId, version_id: owner.versionId,
+    title: '合成本人主题', hint: '本人的历史资料' });
+  Object.assign(owner.receipt, { scenario_id: owner.scenarioId });
+  Object.assign(owner.receipt.document, { scenario_id: owner.scenarioId, version_id: owner.versionId,
+    title: '合成本人主题', hint: '本人的历史资料' });
+  owner.receipt.document.paragraphs[0].text = '合成本人冻结正文：过去偏好提前安排，当前仍须核实。';
+  owner.receipt.document.paragraphs[0].references[0].memory_id = randomUUID();
+  Object.assign(owner.context.scenario_read_budget, { call_limit: 1, paragraph_limit: 2, character_limit: 900 });
+  Object.assign(owner.receipt.budget, { call_limit: 1, paragraph_limit: 2, character_limit: 900, used_characters: 60 });
+  Object.assign(f.records.evidence, { owner_layered_status: 'loaded', owner_layered_context: owner.context,
+    owner_layered_scenario_reads: [owner.receipt] });
+  return { contact, owner };
+}
+
+test('两侧实际分层材料穿过生产 Main 与 preload，各自显示范围、正文与独立预算', async () => {
+  const f = await generatedFixture((f) => { scopedScenarioSnapshots(f); });
+  await f.bridge.loadEvidence(f.selection);
+  const state = await f.bridge.getEvidenceState();
+  assert.equal(state.phase, 'ready');
+  assert.equal(state.layeredContext.schemaVersion, 3);
+  assert.equal(state.layeredContext.scopeKind, 'contact');
+  assert.equal(state.ownerLayeredContext.scopeKind, 'owner');
+  assert.equal(state.ownerLayeredContext.readPolicy, 'synthetic-scoped-layered-v3');
+  assert.equal(state.layeredScenarioReads[0].budget.callLimit, 3);
+  assert.equal(state.ownerLayeredScenarioReads[0].budget.callLimit, 1);
+  const html = await renderEvidence(f);
+  for (const text of ['本次实际加入的本人背景与主题目录', '本次实际读取的本人主题正文', '合成本人冻结正文',
+    '合成冻结正文', '60/900 字符', '420/1800 字符']) assert(html.includes(text), text);
+  await f.bridge.closeEvidence(f.selection);
+  assert.equal((await f.bridge.getEvidenceState()).ownerLayeredContext, undefined);
+  assert.equal((await f.bridge.getEvidenceState()).ownerLayeredScenarioReads, undefined);
+});
+
+test('本人资料变更隔离当前与迟到副本，权威复读仅撤下已失效候选并恢复合法编辑', async () => {
+  for (const outcome of ['legal', 'missing', 'unavailable']) {
+    const f = await generatedFixture((f) => { scopedScenarioSnapshots(f); });
+    await f.bridge.editCandidate({ ...f.selection, text: '合成合法用户编辑应保留。' });
+    await f.bridge.loadEvidence(f.selection);
+    let release, entered;
+    const reached = new Promise((resolve) => { entered = resolve; });
+    f.records.beforeResponse = (request) => request.path.endsWith('/evidence')
+      ? new Promise((resolve) => { release = resolve; entered(); }) : undefined;
+    const late = f.bridge.loadEvidence(f.selection); await reached;
+    f.replies.beginOwnerContextChange();
+    assert.equal((await f.bridge.getState()).result, null);
+    assert.deepEqual((await f.bridge.getState()).savedSession.turns, []);
+    assert.equal((await f.bridge.getEvidenceState()).ownerLayeredScenarioReads, undefined);
+    f.records.beforeResponse = undefined;
+    if (outcome !== 'legal') f.records.failure = (request) => request.path.endsWith('/evidence')
+      ? new ports.BackendRequestFailure(outcome === 'missing' ? 'response' : 'connection', outcome === 'missing' ? 404 : undefined) : undefined;
+    if (outcome === 'missing') {
+      Object.assign(f.records.saved.turns[0], { state: 'redacted', input: null, reply: null, placeholder: '相关本人资料已删除' });
+      Object.assign(f.records.saved.inputs[0], { state: 'redacted', content: null, placeholder: '相关本人资料已删除' });
+    }
+    await f.replies.revalidateOwnerContextChange();
+    release(); await late;
+    if (outcome === 'missing') assert.equal((await f.bridge.getState()).result, null);
+    else {
+      if (outcome === 'unavailable') {
+        assert.equal((await f.bridge.getState()).result, null);
+        assert.equal((await f.bridge.getState()).sourceAvailability, 'failed');
+        f.records.failure = undefined; await f.bridge.retrySourceValidation(f.scope);
+      }
+      assert.equal((await f.bridge.getState()).result.candidates[0].editedText, '合成合法用户编辑应保留。');
+      await f.bridge.loadEvidence(f.selection);
+      assert.equal((await f.bridge.getEvidenceState()).ownerLayeredContext.scopeKind, 'owner');
+    }
+  }
+});
+
+test('本人停用与重新启用沿生产管理桥协调缓存，合法历史可重新展开且保留独立输入', async () => {
+  const f = await generatedFixture((f) => { scopedScenarioSnapshots(f); });
+  const requestJson = f.backend.requestJson;
+  let settingsGeneration = 0, release, entered;
+  const reached = new Promise(resolve => { entered = resolve; });
+  f.backend.requestJson = async request => {
+    if (!request.path.startsWith('/api/memories/owner/layered-memory')) return requestJson(request);
+    if (request.method === 'POST') {
+      settingsGeneration++;
+      if (request.path.endsWith('/disable')) { entered(); await new Promise(resolve => { release = resolve; }); }
+    }
+    return { generation: f.records.generation, data: layeredPayload({ scope_kind: 'owner', contact_id: null,
+      settings_generation: settingsGeneration }) };
+  };
+  const memory = ports.installMemoryBridge(f.commands, f.backend, f.contacts);
+  ports.coordinateOwnerContextChanges(memory, f.replies);
+  const bridge = ports.createMemoryBridge(f.transport);
+  await bridge.readOwnerLayeredMemory({});
+  await f.bridge.editCandidate({ ...f.selection, text: '合成停用后保留的合法编辑。' });
+  await f.bridge.loadEvidence(f.selection);
+  const disabling = bridge.manageOwnerLayeredMemory({ action: 'disable', settingsGeneration: 0 });
+  await reached;
+  assert.equal((await f.bridge.getState()).result, null);
+  assert.deepEqual((await f.bridge.getState()).savedSession.turns, []);
+  assert.equal((await f.bridge.getEvidenceState()).ownerLayeredContext, undefined);
+  release(); await disabling;
+  await bridge.manageOwnerLayeredMemory({ action: 'enable', settingsGeneration: 1, purposeConfirmed: true });
+  assert.equal((await f.bridge.getState()).result.candidates[0].editedText, '合成停用后保留的合法编辑。');
+  await f.bridge.loadEvidence(f.selection);
+  assert.equal((await f.bridge.getEvidenceState()).ownerLayeredContext.scopeKind, 'owner');
+  assert.equal(f.contacts.getState().draft, '合成当前草稿。');
+});
+
+test('本人两处事实管理与分层撤回均沿生产桥复验隐藏依赖，不以直接引用漏删为依据', async () => {
+  for (const action of ['correct', 'delete', 'legacy-correct', 'withdraw-profile', 'withdraw-scenario']) {
+    const f = await generatedFixture((f) => { scopedScenarioSnapshots(f); });
+    const requestJson = f.backend.requestJson;
+    const fact = { memory_id: randomUUID(), level: 'owner', text: '合成本人隐藏参与资料', category: 'common_fact', topic: 'other',
+      source_ids: [randomUUID()], status: 'active', adoption_method: 'manual', confidence: 1, risk_flags: [], revision: 1,
+      supersedes_memory_id: null, source_candidate_id: null, valid_at: null, invalid_at: null,
+      timing: { recorded_at: null, source_started_at: null, source_ended_at: null, source_time_complete: false } };
+    let changed = false;
+    f.backend.requestJson = async request => {
+      if (request.path.startsWith('/api/memories/owner')) {
+        if (request.method === 'POST') {
+          assert.equal((await f.bridge.getState()).result, null);
+          assert.equal((await f.bridge.getEvidenceState()).ownerLayeredContext, undefined);
+          changed = true;
+          Object.assign(f.records.saved.turns[0], { state: 'redacted', input: null, reply: null, placeholder: '相关本人资料已删除' });
+          Object.assign(f.records.saved.inputs[0], { state: 'redacted', content: null, placeholder: '相关本人资料已删除' });
+          f.records.failure = r => r.path.endsWith('/evidence') ? new ports.BackendRequestFailure('response', 404) : undefined;
+        }
+        return { generation: f.records.generation, data: request.path === '/api/memories/owner'
+          ? { memories: changed ? [] : [fact] }
+          : (changed ? layeredPayload : profilePayload)({ scope_kind: 'owner', contact_id: null }) };
+      }
+      if (request.path.endsWith('/memory-candidates')) return { generation: f.records.generation, data: { candidates: [] } };
+      return requestJson(request);
+    };
+    const memory = ports.installMemoryBridge(f.commands, f.backend, f.contacts);
+    ports.coordinateOwnerContextChanges(memory, f.replies);
+    const bridge = ports.createMemoryBridge(f.transport);
+    await f.bridge.loadEvidence(f.selection);
+    if (action === 'legacy-correct') {
+      await bridge.refresh({ ...f.scope, section: 'owner' });
+      await bridge.correct({ ...f.scope, level: 'owner', memoryId: fact.memory_id, revision: 1, text: '合成修正', category: 'common_fact' });
+    } else if (action === 'correct' || action === 'delete') {
+      await bridge.readOwnerMemories();
+      await (action === 'correct' ? bridge.correctOwnerMemory({ memoryId: fact.memory_id, revision: 1, text: '合成修正', category: 'common_fact' })
+        : bridge.deleteOwnerMemory({ memoryId: fact.memory_id, revision: 1 }));
+    } else {
+      await bridge.readOwnerLayeredMemory({});
+      await bridge.manageOwnerLayeredMemory({ action, settingsGeneration: 1, organizationGeneration: 1,
+        ...(action === 'withdraw-profile' ? { profileVersionId: layeredIds.profile } : { scenarioVersionId: layeredIds.version }) });
+    }
+    assert.equal(changed, true, action);
+    assert.equal((await f.bridge.getState()).result, null, action);
+    assert.equal((await f.bridge.getEvidenceState()).ownerLayeredScenarioReads, undefined, action);
+    assert(!JSON.stringify(await f.bridge.getState()).includes('合成旧候选'), action);
+  }
+});
+
+test('本人变更取消已发出的生成，迟到完成结果不能替换权威重读的历史', async () => {
+  const f = await generatedFixture((f) => { scopedScenarioSnapshots(f); });
+  const requestJson = f.backend.requestJson;
+  let entered, release;
+  const reached = new Promise(resolve => { entered = resolve; });
+  f.backend.requestJson = async request => {
+    const response = await requestJson(request);
+    if (request.path.endsWith('/replies')) {
+      response.data.candidates[0].text = '合成已失效的迟到生成正文';
+      entered(); await new Promise(resolve => { release = resolve; });
+    }
+    return response;
+  };
+  const generating = f.bridge.generate({ ...f.scope, newRequest: true }); await reached;
+  f.replies.beginOwnerContextChange();
+  await f.replies.revalidateOwnerContextChange();
+  release(); await generating;
+  assert(!JSON.stringify(await f.bridge.getState()).includes('合成已失效的迟到生成正文'));
+  assert.equal(f.contacts.getState().draft, '合成当前草稿。');
+});
+
+test('本人范围只接收新协议，错置外层范围和借用另一侧预算或目录的正文均拒绝展示', async () => {
+  const mutations = [
+    ({ owner }) => { owner.context.scope_kind = 'contact'; },
+    ({ contact }) => { contact.context.scope_kind = 'owner'; },
+    ({ owner }) => { Object.assign(owner.context, { schema_version: 2, read_policy: 'synthetic-contact-layered-v2' }); },
+    ({ owner }) => { owner.context.read_policy = 'synthetic-contact-layered-v2'; },
+    ({ owner, contact }) => { owner.receipt.budget = structuredClone(contact.receipt.budget); },
+    ({ owner, contact }) => { owner.receipt.document.version_id = contact.versionId; },
+    ({ owner, contact }) => { owner.receipt.scenario_id = contact.scenarioId; },
+  ];
+  for (const mutate of mutations) {
+    const f = await generatedFixture((f) => { mutate(scopedScenarioSnapshots(f)); });
+    await f.bridge.loadEvidence(f.selection);
+    const state = await f.bridge.getEvidenceState();
+    assert.equal(state.phase, 'failed');
+    assert.equal(state.ownerLayeredContext, undefined);
+    assert.equal(state.ownerLayeredScenarioReads, undefined);
+  }
+});
+
+test('历史分层协议只接受匹配版本，不给旧版补授主题正文读取额度', async () => {
+  const cases = [
+    { schema_version: 1, read_policy: 'synthetic-contact-layered-v2' },
+    { schema_version: 2, read_policy: 'synthetic-contact-layered-v1' },
+    { schema_version: 3, read_policy: 'synthetic-contact-layered-v2' },
+    { schema_version: 1, read_policy: 'synthetic-contact-layered-v1' },
+  ];
+  for (const protocol of cases) {
+    const f = await generatedFixture((f) => {
+      const snapshot = scenarioSnapshot(f);
+      Object.assign(snapshot.context, protocol);
+    });
+    await f.bridge.loadEvidence(f.selection);
+    assert.equal((await f.bridge.getEvidenceState()).phase, 'failed');
+  }
+  const f = await generatedFixture((f) => {
+    const snapshot = scenarioSnapshot(f);
+    Object.assign(snapshot.context, { schema_version: 1, read_policy: 'synthetic-contact-layered-v1' });
+    delete snapshot.context.scenario_read_budget;
+  });
+  await f.bridge.loadEvidence(f.selection);
+  assert.equal((await f.bridge.getEvidenceState()).phase, 'failed');
+});
+
+test('主题工具实际读取的冻结正文、段落范围与直接引用进入候选依据', async () => {
+  let snapshot;
+  const f = await generatedFixture((f) => { snapshot = scenarioSnapshot(f); });
+  await f.bridge.loadEvidence(f.selection);
+  const state = await f.bridge.getEvidenceState();
+  assert.equal(state.phase, 'ready');
+  assert.equal(state.layeredScenarioReads?.[0].document.versionId, snapshot.versionId);
+  assert.deepEqual(state.layeredContext.directory[0].paragraphRange, [0, 2]);
+  const html = await renderEvidence(f);
+  for (const phrase of ['本次实际读取的联系人主题正文', '合成冻结正文：双方过去共同参加课程，近期安排未知。',
+    '读取成功', '第 1 段', '1/3 次', '1/4 段', '420/1800 字符', snapshot.versionId, f.memoryId, '来源支持']) assert(html.includes(phrase), phrase);
+  assert(!html.includes('未读取主题正文'));
+  assert(!html.includes('隐藏工具依赖不可展示'));
+  assert(!JSON.stringify(state).includes('隐藏工具依赖不可展示'));
+  assert(!f.calls.some((call) => call.path.includes('/layered-memory')));
+  await f.bridge.closeEvidence(f.selection);
+  assert.equal((await f.bridge.getEvidenceState()).layeredScenarioReads, undefined);
+});
+
+test('主题正文版本或目录身份矛盾时拒绝展示，不把别的正文当作冻结依据', async () => {
+  const f = await generatedFixture((f) => {
+    const snapshot = scenarioSnapshot(f);
+    snapshot.receipt.document.title = '不属于冻结目录的标题';
+  });
+  await f.bridge.loadEvidence(f.selection);
+  assert.equal((await f.bridge.getEvidenceState()).phase, 'failed');
+  assert(!(await renderEvidence(f)).includes('合成冻结正文'));
+});
+
+test('拒绝的主题读取只展示确定回执，不追加正文或把未知写成不存在', async () => {
+  const cases = [['duplicate', '重复读取'], ['out_of_range', '段落越界'], ['not_in_directory', '主题不在本次目录'],
+    ['invalid_arguments', '读取参数无效'], ['stale', '冻结版本已失效'], ['budget_exceeded', '读取预算已耗尽']];
+  const f = await generatedFixture((f) => {
+    const snapshot = scenarioSnapshot(f);
+    for (const [status, label] of cases) {
+      const receipt = structuredClone(snapshot.receipt);
+      delete receipt.document;
+      Object.assign(receipt, { status, reason: `合成确定原因：${label}。` });
+      if (status === 'invalid_arguments') Object.assign(receipt, { scenario_id: null, paragraph_range: null });
+      if (status === 'out_of_range') receipt.paragraph_range = [3, -1];
+      f.records.evidence.layered_scenario_reads.push(receipt);
+    }
+  });
+  await f.bridge.loadEvidence(f.selection);
+  const state = await f.bridge.getEvidenceState(), html = await renderEvidence(f);
+  assert.equal(state.phase, 'ready');
+  assert.equal(state.layeredScenarioReads.length, 7);
+  for (const [, label] of cases) assert(html.includes(`合成确定原因：${label}。`), label);
+  assert.equal(html.match(/合成冻结正文：/g)?.length, 1);
+  assert(html.includes('未读取部分仍为未知'));
+  assert(!html.includes('没有资料'));
+});
+
+test('明确无主题读取与旧快照缺少回执分别显示，不补读当前文档', async () => {
+  for (const [reads, expected] of [[[], '本次未调用主题正文读取工具'], [undefined, '本次快照未记录主题正文读取过程']]) {
+    const f = await generatedFixture((f) => { f.records.evidence.layered_scenario_reads = reads; });
+    await f.bridge.loadEvidence(f.selection);
+    assert.equal((await f.bridge.getEvidenceState()).phase, 'ready');
+    assert((await renderEvidence(f)).includes(expected), expected);
+    assert(!f.calls.some((call) => call.path.includes('/layered-memory')));
+  }
+});
+
+test('矛盾的工具正文、段落或引用被拒绝，失败状态不保留先前正文且候选仍可编辑', async () => {
+  const mutations = [
+    (receipt) => { receipt.document.version_id = randomUUID(); },
+    (receipt) => { receipt.document.organization_generation += 1; },
+    (receipt) => { receipt.document.paragraph_range = [0, 2]; },
+    (receipt) => { receipt.document.paragraphs[0].references[0].revision = 0; },
+    (receipt) => { receipt.status = 'duplicate'; },
+    (receipt) => { receipt.budget.used_characters = -1; },
+  ];
+  for (const mutate of mutations) {
+    let snapshot;
+    const f = await generatedFixture((f) => { snapshot = scenarioSnapshot(f); });
+    await f.bridge.loadEvidence(f.selection);
+    assert.equal((await f.bridge.getEvidenceState()).phase, 'ready');
+    await f.bridge.editCandidate({ ...f.selection, text: '合成用户编辑保持。' });
+    mutate(snapshot.receipt);
+    await f.bridge.loadEvidence(f.selection);
+    const state = await f.bridge.getEvidenceState();
+    assert.equal(state.phase, 'failed');
+    assert.equal(state.layeredScenarioReads, undefined);
+    assert(!(await renderEvidence(f)).includes('合成冻结正文'));
+    assert.equal((await f.bridge.getState()).result.candidates[0].editedText, '合成用户编辑保持。');
+  }
+});
+
+test('来源删除或联系人切换撤下已读主题正文，迟到读取不能恢复原正文', async () => {
+  for (const action of ['delete', 'switch']) {
+    const f = await generatedFixture((f) => { scenarioSnapshot(f); });
+    await f.bridge.loadEvidence(f.selection);
+    assert.equal((await f.bridge.getEvidenceState()).layeredScenarioReads.length, 1);
+    let release, entered;
+    const reached = new Promise((resolve) => { entered = resolve; });
+    f.records.beforeResponse = (request) => request.path.endsWith('/evidence')
+      ? new Promise((resolve) => { release = resolve; entered(); }) : undefined;
+    const late = f.bridge.loadEvidence(f.selection);
+    await reached;
+    if (action === 'delete') {
+      f.records.beforeResponse = undefined;
+      f.records.failure = (request) => request.path.endsWith('/evidence') ? new ports.BackendRequestFailure('response', 404) : undefined;
+      await f.replies.revalidateDeletedSource(f.scope.contactId);
+    } else {
+      const other = randomUUID();
+      f.records.directory.push({ contactId: other, displayName: '另一个合成联系人', messageCount: 0, sourceCount: 0 });
+      await f.contacts.refreshContacts();
+      f.contacts.selectContact({ contactId: other, scopeRevision: f.contacts.getState().scopeRevision });
+    }
+    release(); await late;
+    const state = await f.bridge.getEvidenceState();
+    assert.equal(state.layeredScenarioReads, undefined);
+    assert(!JSON.stringify(state).includes('合成冻结正文'));
   }
 });

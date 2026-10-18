@@ -12,7 +12,11 @@ const compiled = await build({ stdin: { contents: `
   export { readContactDirectory } from './src/main/contacts/directory';
   export { readConnection } from './src/main/backend/connection';
   export { withRewriteFixture } from './tests/rewrite-backend-fixture';
+  export { withLayeredReplyFixture } from './tests/layered-reply-fixture';
   export { installReplyBridge } from './src/main/reply/bridge';
+  export { coordinateOwnerContextChanges } from './src/main/reply/owner-context-changes';
+  export { installMemoryBridge } from './src/main/memory/bridge';
+  export { createMemoryBridge } from './src/preload/memory';
   export { createReplyBridge } from './src/preload/reply';
   export { ExpressionPreferenceController } from './src/main/expression-preferences/controller';
   export { expressionPreferenceDeletion } from './src/main/expression-preferences/deletion';
@@ -48,9 +52,9 @@ new Function('require', 'module', 'exports', compiled.outputFiles[0].text)(
 export const ports = compiledModule.exports;
 
 // 合成传输边界复用生产 Main／preload 控制器；真实 HTTP／PG 在独立用例验证。
-export async function historicalReplyFixture() {
+export async function historicalReplyFixture({ replyRequestId } = {}) {
   const contactId = randomUUID(), sessionId = randomUUID(), turnId = randomUUID(), inputVersionId = randomUUID();
-  const candidateId = randomUUID(), requestId = randomUUID(), messageId = randomUUID(), memoryId = randomUUID();
+  const candidateId = randomUUID(), requestId = replyRequestId ?? randomUUID(), messageId = randomUUID(), memoryId = randomUUID();
   const bindingId = randomUUID();
   const candidate = { candidate_id: candidateId, text: '合成旧候选：先确认见面时间。',
     basis: '当时参考了合成关系资料。', citation_ids: [memoryId], risk_notes: [],
@@ -131,12 +135,13 @@ export async function historicalReplyFixture() {
   const commands = { handle: (channel, handler) => { assert(!handlers.has(channel)); handlers.set(channel, handler); },
     publish: (channel, state) => { for (const listener of listeners.get(channel) ?? []) listener(undefined, state); } };
   const replies = ports.installReplyBridge(commands, candidateVersionProtocol(backend), contacts);
-  const bridge = ports.createReplyBridge({ invoke: async (channel, ...args) => handlers.get(channel)(...args),
+  const transport = { invoke: async (channel, ...args) => handlers.get(channel)(...args),
     on: (channel, listener) => { const set = listeners.get(channel) ?? new Set(); set.add(listener); listeners.set(channel, set); },
-    removeListener: (channel, listener) => listeners.get(channel)?.delete(listener) });
+    removeListener: (channel, listener) => listeners.get(channel)?.delete(listener) };
+  const bridge = ports.createReplyBridge(transport);
   contacts.selectContact({ contactId, scopeRevision: contacts.getState().scopeRevision });
   const scope = { contactId, scopeRevision: contacts.getState().scopeRevision };
-  return { bridge, replies, contacts, records, calls, backend, backendListeners, scope, sessionId, turnId, inputVersionId,
+  return { bridge, replies, contacts, commands, transport, records, calls, backend, backendListeners, scope, sessionId, turnId, inputVersionId,
     candidateId, requestId, messageId, memoryId, bindingId };
 }
 

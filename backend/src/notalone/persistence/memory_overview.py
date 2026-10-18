@@ -76,7 +76,7 @@ class PostgresRelationshipOverviewStore:
         except psycopg.Error:
             raise OverviewUnavailable("概览暂不可用。") from None
 
-    def read_owner_in_transaction(self, connection, owner_id: UUID) -> RelationshipOverview:
+    def read_owner_in_transaction(self, connection, owner_id: UUID, *, organization: bool = False) -> RelationshipOverview:
         """调用方已经持有 owner 锁；复用当前连接，不再申请 contact 锁。"""
         if connection.execute("SELECT 1 FROM public.owner WHERE id=%s", (owner_id,)).fetchone() is None:
             raise LookupError("指定范围内的用户不存在。")
@@ -85,8 +85,9 @@ class PostgresRelationshipOverviewStore:
         memory_revision = state["memory_revision"] if state else 0
         rows = connection.execute(
             f"SELECT {_OWNER_MEMORY_COLUMNS} FROM public.owner_memory WHERE owner_id=%s "
-            "AND status IN ('active','invalidated') AND category IN ('common_fact','preference','taboo') "
-            "ORDER BY created_at,id", (owner_id,),
+            "AND status IN ('active','invalidated') "
+            + ("" if organization else "AND category IN ('common_fact','preference','taboo') ")
+            + "ORDER BY created_at,id", (owner_id,),
         ).fetchall()
         rows = available_correction_memories(connection, owner_id=owner_id,
                                              record_kind="owner_memory", rows=rows)

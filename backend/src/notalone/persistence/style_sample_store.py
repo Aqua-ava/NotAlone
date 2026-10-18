@@ -62,10 +62,8 @@ def reply_original_sources(connection: Any, request: ReplyRequest, context: Repl
     declared.update(item.evidence_id for item in context.evidence if item.kind == "message")
     declared.update(identifier for item in context.style_references for identifier in item.source_ids)
     declared.update(identifier for item in context.expression_preferences for identifier in item.source_ids)
-    if not declared:
-        return set()
-    navigation_sources = {identifier for item in context.evidence if item.model_visible and item.navigation
-                          for identifier in item.navigation.dependency_ids}
+    from notalone.persistence.reply_overview_navigation import navigation_dependency_ids
+    navigation_sources = {UUID(identifier) for identifier in navigation_dependency_ids(context)}
     # 导航依赖已在同连接复验为原窗口；仅解析其已登记原始来源身份，
     # 不拿当前新引用补旧证明。候选/决定等身份由快照删除依赖另行保存。
     if navigation_sources:
@@ -74,6 +72,8 @@ def reply_original_sources(connection: Any, request: ReplyRequest, context: Repl
             UNION SELECT id FROM public.local_wechat_observation WHERE owner_id=%s AND id=ANY(%s::uuid[])
         """, (request.scope.owner_id, list(navigation_sources), request.scope.owner_id, list(navigation_sources))).fetchall()
         declared.update(row["id"] if isinstance(row, dict) else row[0] for row in rows)
+    if not declared:
+        return set()
     raw = connection.execute("""
         SELECT source.id FROM public.source_document AS source
         WHERE source.owner_id=%s AND source.id=ANY(%s::uuid[]) AND source.status='active'

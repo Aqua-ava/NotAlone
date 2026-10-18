@@ -17,6 +17,7 @@ from notalone.memory.dimension_evidence import (
     require_current_dimension_evidence,
 )
 from notalone.memory.correction import MemoryCorrectionConflictError
+from notalone.persistence.reply_layered_cleanup import erase_layered_reply_dependencies
 from notalone.memory.events import MemoryEvent
 from notalone.persistence.memory_events import bind_memory_event, has_event_schema
 from notalone.memory.versions import (
@@ -617,7 +618,10 @@ class PostgresMemoryStore:
                 ).fetchone()
                 if memory_row is None:
                     raise MemoryInvariantError("关系记忆写入结果为空。")
+                erase_layered_reply_dependencies(connection, scope, {candidate_id, *source_ids})
                 if expected_previous is not None:
+                    erase_layered_reply_dependencies(connection, scope,
+                        {expected_previous.memory_id, *expected_previous.source_ids})
                     invalidated = connection.execute(
                         "UPDATE public.confirmed_memory SET status='invalidated', "
                         "revision=revision+1, updated_at=now() "
@@ -725,26 +729,10 @@ class PostgresMemoryStore:
                 else:
                     self._ensure_active_sources(connection, scope, source_ids)
                 mode_column, mode_value, mode_params = insert_dependency(mode)
+                erase_layered_reply_dependencies(connection, scope,
+                    {memory_id, *source_ids, *((memory_row["source_candidate_id"],)
+                      if memory_row["source_candidate_id"] else ())})
                 next_revision = memory_row["revision"] + 1
-                invalidated = connection.execute(
-                    """
-                    UPDATE public.confirmed_memory
-                    SET status = 'invalidated',
-                        invalid_at = COALESCE(invalid_at, %s),
-                        revision = %s,
-                        updated_at = now()
-                    WHERE owner_id = %s AND contact_id = %s AND id = %s
-                    """,
-                    (
-                        self._now(),
-                        next_revision,
-                        scope.owner_id,
-                        scope.contact_id,
-                        memory_row["memory_id"],
-                    ),
-                ).rowcount
-                if invalidated != 1:
-                    raise MemoryInvariantError("原关系记忆失效更新失败。")
                 updated = connection.execute(
                     f"""
                     INSERT INTO public.confirmed_memory (
@@ -777,6 +765,26 @@ class PostgresMemoryStore:
                 ).fetchone()
                 if updated is None:
                     raise MemoryInvariantError("关系记忆新版本写入结果为空。")
+                # 同事务先保存合法后继，避免旧叶失效触发器误判整条手录链已删除。
+                invalidated = connection.execute(
+                    """
+                    UPDATE public.confirmed_memory
+                    SET status = 'invalidated',
+                        invalid_at = COALESCE(invalid_at, %s),
+                        revision = %s,
+                        updated_at = now()
+                    WHERE owner_id = %s AND contact_id = %s AND id = %s
+                    """,
+                    (
+                        self._now(),
+                        next_revision,
+                        scope.owner_id,
+                        scope.contact_id,
+                        memory_row["memory_id"],
+                    ),
+                ).rowcount
+                if invalidated != 1:
+                    raise MemoryInvariantError("原关系记忆失效更新失败。")
                 source_candidate = None
                 if memory_row["source_candidate_id"] is not None:
                     candidate_row = self._candidate_for_update(
@@ -869,6 +877,8 @@ class PostgresMemoryStore:
                     return self._candidate_from_row(self._timed_candidates(connection, [row])[0])
                 if row["candidate_status"] != MemoryCandidateStatus.PENDING.value:
                     raise MemoryCorrectionConflictError("当前关系记忆候选不能丢弃。")
+                erase_layered_reply_dependencies(connection, scope,
+                    {candidate_id, *self._source_ids(row["candidate_source_ids"])})
                 from notalone.managed_update_backups import erase_managed_update_backups
                 erase_managed_update_backups(connection)
                 record_decision(
@@ -1070,6 +1080,8 @@ class PostgresMemoryStore:
             self._ensure_active_sources(connection, scope, tuple(dict.fromkeys(
                 (*current["source_ids"], *previous["source_ids"])
             )))
+            erase_layered_reply_dependencies(connection, scope,
+                {memory_id, previous["id"], *current["source_ids"], *previous["source_ids"]})
             proof = restored_version_evidence(connection, previous=previous, revision=expected_revision + 1)
             from notalone.persistence.reply_cleanup import delete_contact_memory_replies
             delete_contact_memory_replies(connection, scope=scope, memory_id=memory_id)
@@ -1159,14 +1171,15 @@ class PostgresMemoryStore:
                     owner_id=scope.owner_id,
                     contact_id=scope.contact_id,
                 )
-                if next_status is MemoryCandidateStatus.REJECTED:
-                    lock_owner_scope(connection, owner_id=scope.owner_id)
+                lock_owner_scope(connection, owner_id=scope.owner_id)
                 row = self._candidate_for_update(connection, candidate_id, scope)
                 if row is None:
                     raise LookupError("关系记忆候选不存在。")
                 self._ensure_scope(row, scope)
                 if row["candidate_status"] == next_status.value:
                     return self._candidate_from_row(self._timed_candidates(connection, [row])[0])
+                erase_layered_reply_dependencies(connection, scope,
+                    {candidate_id, *self._source_ids(row["candidate_source_ids"])})
                 if next_status is MemoryCandidateStatus.REJECTED:
                     if row["candidate_status"] == MemoryCandidateStatus.REJECTED.value:
                         return self._candidate_from_row(self._timed_candidates(connection, [row])[0])
@@ -1232,8 +1245,7 @@ class PostgresMemoryStore:
                     owner_id=scope.owner_id,
                     contact_id=scope.contact_id,
                 )
-                if next_status is ConfirmedMemoryStatus.DELETED:
-                    lock_owner_scope(connection, owner_id=scope.owner_id)
+                lock_owner_scope(connection, owner_id=scope.owner_id)
                 row = self._memory_for_update(
                     connection, memory_id,
                     follow_current=next_status is not ConfirmedMemoryStatus.DELETED,
@@ -1241,6 +1253,9 @@ class PostgresMemoryStore:
                 if row is None:
                     raise LookupError("关系记忆不存在。")
                 self._ensure_scope(row, scope)
+                if row["memory_status"] != next_status.value:
+                    erase_layered_reply_dependencies(connection, scope,
+                        {memory_id, *self._source_ids(row["memory_source_ids"])})
                 if next_status is ConfirmedMemoryStatus.DELETED:
                     if row["memory_status"] == ConfirmedMemoryStatus.DELETED.value:
                         return self._memory_from_row(self._timed_memories(connection, [row])[0])

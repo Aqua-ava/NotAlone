@@ -24,7 +24,7 @@
 
 聊天辅助产品讨论分别记录在[聊天回复策略草图](drafts/conversation-reply-strategy.md)和[持续会话与上下文管理草图](drafts/assistant-session-context.md)：前者讨论回应与主动联系两条路径，后者从 Q1 独立记录助手会话连续性及新开边界，均未替代现行规格。
 
-L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-memory.md)已于 2026-10-17 整体确认，并整理为[正式规格](../.scratch/layered-relationship-memory/spec.md)；[11项拆分](../.scratch/layered-relationship-memory/ticket-proposal.md)已获认可并逐张发布，实际状态见[任务索引](../.scratch/layered-relationship-memory/planning.md)，当前全部 open、尚未领取。加载方向由 ADR-067 局部修订，不代表已有生成正文。
+L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-memory.md)已于 2026-10-17 整体确认，并整理为[正式规格](../.scratch/layered-relationship-memory/spec.md)；[11项拆分](../.scratch/layered-relationship-memory/ticket-proposal.md)已获认可并逐张发布，实际状态见[任务索引](../.scratch/layered-relationship-memory/planning.md)，现按真实依赖分票实现。加载方向由 ADR-067 局部修订；工程实现状态、真实模型质量与自动使用资格分别核验。
 
 记忆持续更新、纠错、概览、回复检索及自动 Skill 学习等 8 个完整功能，已从[草图](drafts/memory-skill-evolution.md)整理为[正式规格](../.scratch/memory-skill-evolution/spec.md)；[15项拆分](../.scratch/memory-skill-evolution/ticket-proposal.md)已确认并逐张发布，实际进度见[任务索引](../.scratch/memory-skill-evolution/planning.md)。DSH 选型搁置，不阻塞本轮交付；当前仅发布规格与任务，功能尚未据此实现。
 

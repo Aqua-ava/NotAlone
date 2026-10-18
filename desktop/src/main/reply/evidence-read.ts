@@ -3,6 +3,7 @@ import type { BackendHost } from '../backend/host';
 import { isUuid } from '../uuid';
 import { readCurrentStatus } from '../memory/current-status';
 import { readReplyBasisChanges } from './basis-changes-read';
+import { readLayeredEvidence } from './layered-evidence-read';
 import { readEvidenceNavigation, readReplyRetrieval } from './retrieval-receipt-read';
 
 const record = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -34,6 +35,6 @@ export async function readReplyEvidence(backend: BackendHost, contactId: string,
         sourceEndedAt: entry.timing.source_ended_at, sourceTimeComplete: entry.timing.source_time_complete,
         ...readCurrentStatus(entry.timing) } };
   });
-  return { generation: response.generation, items, retrieval: readReplyRetrieval(value.retrieval, items),
+  return { generation: response.generation, items, ...readLayeredEvidence(value), retrieval: readReplyRetrieval(value.retrieval, items),
     ...(value.basis_changes === undefined ? {} : { basisChanges: readReplyBasisChanges(value.basis_changes) }) };
 }

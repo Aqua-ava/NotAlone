@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import asyncio
 from typing import Any, Awaitable, Callable, Mapping
 
 from langchain.agents.middleware import (
@@ -72,6 +73,7 @@ class InputBudgetMiddleware(AgentMiddleware):
         response_format: ToolStrategy[Any] | ProviderStrategy[Any] | None = None,
         on_decision: Callable[[InputBudgetDecision], None] | None = None,
         preflight: bool = False,
+        on_response: Callable | None = None,
     ) -> None:
         super().__init__()
         self._profile = profile
@@ -92,6 +94,7 @@ class InputBudgetMiddleware(AgentMiddleware):
         )
         self._on_decision = on_decision
         self._preflight = preflight
+        self._on_response = on_response
 
     def require_request(self, request: ModelRequest) -> ModelRequest:
         """绑定输出上限并检查完整请求；供 Agent 与单次模型适配器共用。"""
@@ -132,7 +135,7 @@ class InputBudgetMiddleware(AgentMiddleware):
                 self._on_decision(decision)
             raise InputBudgetUnavailableError(decision)
         return InputBudgetMiddleware(profile=self._profile, counter=counter,
-                                     on_decision=self._on_decision)
+                                     on_decision=self._on_decision, on_response=self._on_response)
 
     def _validate_output_overrides(self, request: ModelRequest) -> None:
         """SDK 附加正文或输出别名不得覆盖已计量输入与实际输出预留。"""
@@ -325,7 +328,11 @@ class InputBudgetMiddleware(AgentMiddleware):
         prepared = self.require_request(request)
         if self._preflight:
             raise PreparedInputBudget("输入预算预检完成。")
-        return await handler(prepared)
+        response = await handler(prepared)
+        if self._on_response is not None:
+            for message in response.result:
+                await asyncio.to_thread(self.check_response, prepared.model, message)
+        return response
 
     def wrap_model_call(
         self,
@@ -335,7 +342,15 @@ class InputBudgetMiddleware(AgentMiddleware):
         prepared = self.require_request(request)
         if self._preflight:
             raise PreparedInputBudget("输入预算预检完成。")
-        return handler(prepared)
+        response = handler(prepared)
+        if self._on_response is not None:
+            for message in response.result:
+                self.check_response(prepared.model, message)
+        return response
+
+    def check_response(self, model, message):
+        if self._on_response is not None:
+            self._on_response(model, message)
 
     def _unavailable(self, reason: str) -> InputBudgetDecision:
         return InputBudgetDecision(

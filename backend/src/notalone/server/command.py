@@ -93,7 +93,15 @@ def _run(args: argparse.Namespace, lifetime: ParentLifetime) -> int:
     events = EventBus()
     model_priority = ModelPriorityControl()
     setup_service = _build_setup_service(database_url)
-    task_host = _build_task_host(database_url, events, model_priority=model_priority)
+    from notalone.application.organization_runtime import build_layered_memory_service
+    try:
+        layered_memory = build_layered_memory_service(database_url, model_priority=model_priority)
+    except (OSError, ValueError, RuntimeError):
+        model_priority.stop()
+        print('本地整理质量operator配置无效。', file=sys.stderr)
+        return 2
+    task_host = _build_task_host(database_url, events, model_priority=model_priority,organization_runner=layered_memory)
+    layered_memory.attach_task_host(task_host)
     sync_host = _build_sync_host(
         database_url=database_url,
         owner_id=owner_id,
@@ -113,6 +121,7 @@ def _run(args: argparse.Namespace, lifetime: ParentLifetime) -> int:
     reply_service = (
         build_reply_service(
             database_url=database_url, owner_id=owner_id, model_priority=model_priority,
+            layered_memory=layered_memory,
         )
         if owner_id is not None
         else None
@@ -143,6 +152,7 @@ def _run(args: argparse.Namespace, lifetime: ParentLifetime) -> int:
             sync_control=sync_host,
             reply_service=reply_service,
             memory_service=memory_service,
+            layered_memory=layered_memory,
             import_service=import_service,
             task_host=task_host,
             skill_service=skill_service,
@@ -294,6 +304,7 @@ def _build_task_host(
     database_url: str, events: EventBus,
     *, model_priority: ModelPriorityControl | None = None,
     dimension_release: DimensionRelease | None = None,
+    organization_runner=None,
 ) -> TaskHost | None:
     """装配任务宿主；执行前再检查模型与资源，不提前领取持久任务。"""
 
@@ -368,6 +379,7 @@ def _build_task_host(
 
         return BackgroundTaskWorker(
             repository=PostgresBackgroundTaskRepository(database_url),
+            organization_runner=organization_runner,
             extraction_runner=extraction,
             lease_duration=DEFAULT_WORKER_LEASE_DURATION,
             index_repository=PostgresContactMemoryIndexRepository(database_url),
