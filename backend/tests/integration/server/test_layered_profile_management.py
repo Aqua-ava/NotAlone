@@ -142,8 +142,8 @@ class LayeredProfileHttpTest(MemoryOverviewHttpFixture, unittest.TestCase):
         from copy import deepcopy
         import psycopg
         class Extra(ProfileProposal):
-            def propose(inner, **kwargs):
-                result = super().propose(**kwargs)
+            def propose(inner, *, scenarios, memories, budget, deadline):
+                result = super().propose(scenarios=scenarios, memories=memories, budget=budget, deadline=deadline)
                 result['entries'] = [deepcopy(result['entries'][0]) for _ in range(3)]
                 return result
         contact, _, _ = self.prepare_contact()
