@@ -14,7 +14,9 @@ def synthetic_review(
     verdicts = verdicts or ["supported"] * len(payload["candidates"])
     numbers = numbers or list(range(1, len(verdicts) + 1))
     changes = changes or ["not_applicable"] * len(verdicts)
-    source_path = "/draft_text" if payload.get("draft_text") else "/user_instruction"
+    # 粘贴来信的当前意图来自已确认方向，不把对方来信当作用户原稿。
+    source_path = ("/confirmed_direction" if payload.get("input_mode") == "reply_to_pasted_text"
+                   else "/draft_text" if payload.get("draft_text") else "/user_instruction")
     source_quote = payload[source_path[1:]][:512]
     reviews = {}
     for index, (number, verdict) in enumerate(zip(numbers, verdicts)):
