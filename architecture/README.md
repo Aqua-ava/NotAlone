@@ -26,7 +26,7 @@
 
 L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-memory.md)已于 2026-10-17 整体确认，并整理为[正式规格](../.scratch/layered-relationship-memory/spec.md)；[11项拆分](../.scratch/layered-relationship-memory/ticket-proposal.md)已获认可并逐张发布，实际状态见[任务索引](../.scratch/layered-relationship-memory/planning.md)，现按真实依赖分票实现。加载方向由 ADR-067 局部修订；工程实现状态、真实模型质量与自动使用资格分别核验。
 
-记忆持续更新、纠错、概览、回复检索及自动 Skill 学习等 8 个完整功能，已从[草图](drafts/memory-skill-evolution.md)整理为[正式规格](../.scratch/memory-skill-evolution/spec.md)；[15项拆分](../.scratch/memory-skill-evolution/ticket-proposal.md)已确认并逐张发布，实际进度见[任务索引](../.scratch/memory-skill-evolution/planning.md)。DSH 选型搁置，不阻塞本轮交付；当前仅发布规格与任务，功能尚未据此实现。
+记忆持续更新、纠错、概览、回复检索及自动 Skill 学习等 8 个完整功能，已从[草图](drafts/memory-skill-evolution.md)整理为[正式规格](../.scratch/memory-skill-evolution/spec.md)；[15项拆分](../.scratch/memory-skill-evolution/ticket-proposal.md)已确认并逐张发布，实际进度见[任务索引](../.scratch/memory-skill-evolution/planning.md)。DSH 选型搁置，不阻塞本轮交付；联系人／本人概览服务及回复检索已接入正式后端与回复流程，见[后端装配](../backend/src/notalone/server/app.py)和[回复服务装配](../backend/src/notalone/server/reply_wiring.py)；这不表示全部 8 项功能、真实模型质量或实际 App 验收均已完成，其余状态按对应任务核验。
 
 ## ADR 索引
 
@@ -116,10 +116,10 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 - 自动采纳在原有语用、置信度与风险门槛之上要求相关维度全部有当前来源依据并逐类获批；现采用保守相关超集。默认放行表为空，未知或未放行项安静待确认；质量达标和字段可用分别验证，运维回退保持（见 ADR-036、ADR-046、[放行台账](../docs/memory-adoption-dimension-release-ledger.md)）。
 - 所有实际记忆提取默认保存从原始聊天到最终处理结果的全过程追踪，保留到手动删除或来源删除，追踪写入失败停止本批；含正文资料与最小出站台账分开管理（见 ADR-037，后端及 React 查看/反查/删除已实现，历史／不可观察载荷明确保留缺口；普通页面验证不代替最终原生 App 验收）。
 - 关系记忆与本人记忆不设置固定常驻模式；记忆召回第一期按当前正文做确定性中文词法评分，使用独立双预算和相关性阈值；联系人记忆目录只保留版本复验职责。
-- 后续 L2/L3 目标按 ADR-067，在关系语境开启时使用受预算限制的 L3 背景与 L2 目录、按需读取正文，同时保留原 L1 动态检索。该决定是待实现的分层加载例外，不给底层记忆添加常驻模式，也不改变当前无正文概览的存储合同。
+- 后续 L2/L3 目标按 ADR-067，在关系语境开启时使用受预算限制的 L3 背景与 L2 目录、按需读取正文，同时保留原 L1 动态检索。该分层加载已有受控生产接线，见[运行时装配](../backend/src/notalone/application/organization_runtime.py)与[回复上下文](../backend/src/notalone/reply/context.py)；缺少显式配置或读取资格时不启用。本机实际启用、真实质量放行和 App 验收需分别核验；底层记忆仍不添加常驻模式，现有无正文概览的存储合同保持。
 - 待确认候选可以参与候选回复，但只能用独立证据类型和独立预算、带强制「未确认」标注作为参考，不得写成确定事实，也不进入已确认记忆集合；用户否决后永久不再参与（见 ADR-035）。
 - 候选回复只在应用内展示，最终由用户修改并亲自发送。
-- 记忆与 Skill 后续演进按 ADR-048 和正式规格推进：历史状态与当前核实分开，自动学习先形成草稿、集中审核后发布；DSH 选型搁置。此项是待实现的目标约束，不表示当前已有自动 Skill 学习、长期概览或方法级停用。
+- 记忆与 Skill 后续演进按 ADR-048 和正式规格推进：历史状态与当前核实分开，自动学习先形成草稿、集中审核后发布；DSH 选型搁置。长期概览与回复检索已有实现；自动 Skill 学习及方法级控制的具体完成范围按对应任务与代码入口核验，不能由局部接入推断全部功能已启用或通过验收。
 
 ## 状态规则
 
@@ -128,3 +128,5 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 - `已废弃`：由替代 ADR 保留历史原因；从当前阅读路径移除。
 
 新术语写入 `CONTEXT.md`，重要取舍写入 `adr/`，未决设计写入 `drafts/`，代码整改写入 `.scratch/`。每个含义只保留一个权威位置。
+
+[ADR-069](adr/069-direct-scene-memory-and-isolated-publication.md) 记录参考腾讯的直接记忆生成、合并和逐项隔离；[规格](../.scratch/tencent-memory-alignment/spec.md) 区分工程实现、适配差异与真实质量。

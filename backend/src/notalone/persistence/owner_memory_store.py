@@ -147,6 +147,12 @@ class PostgresOwnerMemoryStore:
             ) from error
         return memory
 
+    def confirm_merge(self, *, scope, candidate_id, expected_parents, expected_dimension_evidence=None):
+        """原子合并多个自动版本，手动版本及过期裁决均拒绝。"""
+        from notalone.persistence.memory_merge import confirm_merge
+        return confirm_merge(self, scope=scope, candidate_id=candidate_id,
+            expected_parents=expected_parents, expected_dimension_evidence=expected_dimension_evidence, owner=True)
+
     def confirm_candidate(
         self,
         *,
@@ -154,6 +160,7 @@ class PostgresOwnerMemoryStore:
         adoption_method: AdoptionMethod = AdoptionMethod.MANUAL,
         expected_correction_decision_ids: tuple[UUID, ...] | None = None,
         expected_previous: OwnerMemory | None = None,
+        expected_dimension_evidence: DimensionEvidence | None = None,
     ) -> OwnerMemory:
         """原子确认 self 候选并把它写入 owner 级记忆。"""
 
@@ -211,6 +218,9 @@ class PostgresOwnerMemoryStore:
                         "只有 self 主体候选可以确认到 owner 记忆。"
                     )
                 protected, snapshot = protect_candidate(connection, candidate_from_row(candidate_row))
+                if (expected_dimension_evidence is not None
+                        and protected.dimension_evidence != expected_dimension_evidence):
+                    raise MemoryVersionConflict('本人候选核验依据已变化。')
                 require_reviewed_decisions(
                     protected, adoption_method, expected_correction_decision_ids,
                 )
@@ -592,8 +602,8 @@ class PostgresOwnerMemoryStore:
                     return _from_row(_timed_rows(connection, [previous])[0])
                 if connection.execute(
                     "SELECT EXISTS (SELECT 1 FROM public.owner_memory "
-                    "WHERE owner_id=%s AND supersedes_memory_id=%s) AS replaced",
-                    (owner_id, memory_id),
+                    "WHERE owner_id=%s AND (supersedes_memory_id=%s OR to_jsonb(owner_memory)->'merge_parent_ids' ? %s::text)) AS replaced",
+                    (owner_id, memory_id, memory_id),
                 ).fetchone()["replaced"]:
                     raise MemoryCorrectionConflictError("资料版本已变化，请重新查看当前版本后删除。")
                 from notalone.managed_update_backups import erase_managed_update_backups

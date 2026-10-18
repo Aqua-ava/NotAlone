@@ -15,6 +15,7 @@ class AdjudicationAction(StrEnum):
     UPDATE = "update"
     NOOP = "noop"
     KEEP = "keep"
+    MERGE = "merge"
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,6 +36,8 @@ class AdjudicationDecision:
     model_name: str | None = None
     input_tokens: int | None = None
     output_tokens: int | None = None
+    merged_memory_ids: tuple[UUID, ...] = ()
+    merged_text: str | None = None
 
 
 class AdjudicationRuntime(Protocol):

@@ -10,11 +10,11 @@ from tests.unit.memory_extraction.upgrade_helpers import synthetic_upgrade_algor
 
 
 class UpgradeAlgorithmTest(unittest.TestCase):
-    def test_actual_grounded_verifier_and_effective_configuration_are_bound(self):
+    def test_actual_direct_verifier_and_effective_configuration_are_bound(self):
         current = synthetic_upgrade_algorithm()
         require_upgrade_algorithm(current, synthetic_upgrade_algorithm())
-        self.assertEqual(current['protocol'], 'grounded-labels-v3')
-        self.assertEqual(current['compiler'], 'grounded-source-event-v1')
+        self.assertEqual(current['protocol'], 'direct_scene_memory_v1')
+        self.assertEqual(current['compiler'], '1')
         self.assertEqual(current['verification_mode'], 'legacy-v4')
         self.assertEqual(current['configuration']['max_retries'], 0)
         self.assertEqual(current['configuration']['tool_choice'], 'omitted')

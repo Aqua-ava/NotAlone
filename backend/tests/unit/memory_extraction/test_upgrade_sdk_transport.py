@@ -38,12 +38,9 @@ class UpgradeSdkTransportTest(unittest.TestCase):
         message_id = uuid4()
         window = _window((message_id,))
         fact = _fact(text="合成消息", source_message_ids=(message_id,))
-        name = {'extraction': 'GroundedMemoryLabels', 'verification': 'SourceVerificationOutput',
+        name = {'extraction': 'DirectMemoryExtractionOutput', 'verification': 'SourceVerificationOutput',
                 'adjudication': 'MemoryAdjudicationOutput'}[stage]
-        arguments = {'extraction': {'units': {'0:0': {
-            'kind': 'preference', 'subject': 'contact', 'topic': 'other', 'dependency': None,
-            'unresolved': False, 'confidence': 0.95, 'sensitivity': 'none', 'event': None,
-        }}}, 'verification': {'results': [{
+        arguments = {'extraction': {'scenes': []}, 'verification': {'results': [{
             'candidate_index': 0, 'verdict': 'supported', 'issues': [],
             'evidence': [{'message_id': str(message_id), 'quote': '合成消息'}],
         }]}, 'adjudication': {'action': 'add', 'replaced_memory_id': None}}[stage]
@@ -161,7 +158,7 @@ class UpgradeSdkTransportTest(unittest.TestCase):
     def test_upgrade_failed_sdk_request_does_not_retry(self):
         self._run(response_status=500, cap=3)
 
-    def test_actual_upgrade_grounded_and_adjudication_sdk_requests_keep_their_tools(self):
+    def test_actual_upgrade_direct_and_adjudication_sdk_requests_keep_their_tools(self):
         for stage in ('extraction', 'adjudication'):
             with self.subTest(stage=stage):
                 self._run(response_status=200, cap=1, stage=stage)

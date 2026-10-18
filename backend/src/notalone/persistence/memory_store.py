@@ -442,6 +442,12 @@ class PostgresMemoryStore:
         except (KeyError, TypeError, ValueError):
             raise MemoryInvariantError("关系记忆数据库记录结构无效。") from None
 
+    def confirm_merge(self, *, scope, candidate_id, expected_parents, expected_dimension_evidence=None):
+        """原子合并多个自动版本，手动版本及过期裁决均拒绝。"""
+        from notalone.persistence.memory_merge import confirm_merge
+        return confirm_merge(self, scope=scope, candidate_id=candidate_id,
+            expected_parents=expected_parents, expected_dimension_evidence=expected_dimension_evidence, owner=False)
+
     def confirm(
         self,
         *,
@@ -1261,8 +1267,8 @@ class PostgresMemoryStore:
                         return self._memory_from_row(self._timed_memories(connection, [row])[0])
                     if connection.execute(
                         "SELECT EXISTS (SELECT 1 FROM public.confirmed_memory "
-                        "WHERE owner_id=%s AND contact_id=%s AND supersedes_memory_id=%s) AS replaced",
-                        (scope.owner_id, scope.contact_id, memory_id),
+                        "WHERE owner_id=%s AND contact_id=%s AND (supersedes_memory_id=%s OR to_jsonb(confirmed_memory)->'merge_parent_ids' ? %s::text)) AS replaced",
+                        (scope.owner_id, scope.contact_id, memory_id, memory_id),
                     ).fetchone()["replaced"]:
                         raise MemoryCorrectionConflictError("资料版本已变化，请重新查看当前版本后删除。")
                     from notalone.managed_update_backups import erase_managed_update_backups
@@ -1376,7 +1382,7 @@ class PostgresMemoryStore:
                 FROM public.confirmed_memory
                 WHERE owner_id = %s
                   AND contact_id = %s
-                  AND supersedes_memory_id = %s
+                  AND (supersedes_memory_id = %s OR to_jsonb(confirmed_memory)->'merge_parent_ids' ? %s::text)
                   AND status = 'active'
                 ORDER BY revision DESC, id DESC
                 LIMIT 1
@@ -1385,7 +1391,7 @@ class PostgresMemoryStore:
                 (
                     row["owner_id"],
                     row["contact_id"],
-                    row["memory_id"],
+                    row["memory_id"], row["memory_id"],
                 ),
             ).fetchone()
             if child is None:

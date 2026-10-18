@@ -1,7 +1,7 @@
-"""升级任务显式使用当前原文标签与独立来源核验。"""
+"""升级任务显式使用当前完整记忆生成与独立来源核验。"""
 
 from notalone.memory_extraction.cli_support import build_extraction_components
-from notalone.memory_extraction.grounded_adapter import GroundedExtractionRuntime
+from notalone.memory_extraction.direct_adapter import DirectExtractionRuntime
 from notalone.memory_extraction.verification_adapters import LangChainSourceVerificationRuntime
 from notalone.memory_extraction.adjudication_adapters import LangChainAdjudicationRuntime
 
@@ -13,8 +13,8 @@ def build_upgrade_components(database_url):
 
 def build_upgrade_runtime(components):
     return dict(
-        extraction=GroundedExtractionRuntime(model=components.model),
-        verification=LangChainSourceVerificationRuntime(model=components.model,
+        extraction=DirectExtractionRuntime(model=components.model),
+        verification=LangChainSourceVerificationRuntime(model=components.model, isolate_items=True,
             ledger=components.ledger, provider="deepseek", force_tool_choice=False),
         adjudication=LangChainAdjudicationRuntime(model=components.model),
         ledger=components.ledger, model_name=components.model_name,

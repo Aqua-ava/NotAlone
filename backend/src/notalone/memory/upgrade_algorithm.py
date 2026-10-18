@@ -8,12 +8,13 @@ from urllib.parse import urlsplit
 
 from notalone.memory.upgrade import UpgradeAlgorithmChanged
 from notalone.memory_extraction.dimensions import DimensionRelease
-from notalone.memory_extraction.grounded import GROUNDED_EXTRACTION_PROTOCOL, GROUNDED_COMPILER_VERSION
+from notalone.memory_extraction.direct_adapter import DIRECT_EXTRACTION_PROTOCOL, DIRECT_EXTRACTION_VERSION
 from notalone.memory_extraction.adoption import DEFAULT_CONFIDENCE_THRESHOLD, DEFAULT_SIMILARITY_THRESHOLD
 
 
 _SOURCE_FILES = (
-    "memory_extraction/grounded.py", "memory_extraction/grounded_adapter.py",
+    "memory_extraction/direct_adapter.py", "memory_extraction/adapters.py", "memory_extraction/merge.py",
+    "memory_extraction/verification_isolation.py",
     "memory_extraction/models.py", "memory_extraction/evidence.py",
     "memory/models.py", "memory/events.py", "memory/timing.py",
     "memory/candidates.py", "memory/dimension_evidence.py", "memory/evidence_binding.py",
@@ -28,7 +29,7 @@ _SOURCE_FILES = (
     "application/memory_upgrade_preview.py", "memory/upgrade_snapshot.py",
     "memory/upgrade_algorithm.py", "persistence/memory_upgrade.py",
     "persistence/memory_upgrade_apply.py", "persistence/memory_upgrade_generation.py",
-    "persistence/memory_store.py", "persistence/owner_memory_store.py",
+    "persistence/memory_store.py", "persistence/memory_merge.py", "persistence/owner_memory_store.py",
     "persistence/dimension_evidence.py", "persistence/memory_events.py",
     "persistence/memory_timing.py", "persistence/memory_versions.py",
     "persistence/memory_correction.py", "persistence/correction_evidence.py",
@@ -73,6 +74,7 @@ def upgrade_algorithm(components, runtimes, *, dimension_release=None):
         "timeout_seconds": getattr(model, "request_timeout", 60.0),
         "thinking": extra.get("thinking", {}).get("type", "not_applicable"),
         "tool_choice": runtimes["verification"].tool_choice_policy,
+        "verification_item_isolation": getattr(runtimes["verification"], "_isolate_items", False),
         "dimension_gate_enabled": release.gate_enabled,
         "dimension_allowed": sorted(release.allowed),
         "confidence_threshold": DEFAULT_CONFIDENCE_THRESHOLD,
@@ -82,8 +84,8 @@ def upgrade_algorithm(components, runtimes, *, dimension_release=None):
         "code": {name: hashlib.sha256((Path(__file__).resolve().parents[1] / name).read_bytes()).hexdigest()
                  for name in _SOURCE_FILES},
     }
-    value = {"version": 1, "protocol": GROUNDED_EXTRACTION_PROTOCOL,
-             "compiler": GROUNDED_COMPILER_VERSION,
+    value = {"version": 1, "protocol": DIRECT_EXTRACTION_PROTOCOL,
+             "compiler": DIRECT_EXTRACTION_VERSION,
              "verification_mode": runtimes["verification"].verification_mode.value,
              "configuration": configuration}
     return {**value, "digest": _digest(value)}

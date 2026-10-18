@@ -178,9 +178,11 @@ def run_extraction(
             raise TraceWriteError("trace_configuration")
     run_id = uuid4()
     previous_watermark = watermark_message_id
+    from notalone.memory_extraction.merge import MemoryMergeVerifier
     adoption = MemoryAdoption(
         memory_port=memory_port,
         owner_memory_port=owner_memory_port,
+        merge_verifier=MemoryMergeVerifier(messages=messages, verification_runtime=verification_runtime),
         adjudication_runtime=adjudication_runtime,
         ledger=ledger,
         dimension_release=dimension_release,
@@ -543,6 +545,7 @@ def _trace_versions() -> dict[str, str | int]:
                 "adapters",
                 "grounded",
                 "grounded_adapter",
+                "direct_adapter",
                 "adjudication_adapters",
                 "verification_adapters",
             )
@@ -651,7 +654,7 @@ def _extract_main(argv: list[str] | None = None) -> int:
     except OwnerConfigError as error:
         return _fail(str(error))
 
-    from notalone.memory_extraction.grounded_adapter import GroundedExtractionRuntime
+    from notalone.memory_extraction.direct_adapter import DirectExtractionRuntime
     from notalone.memory_extraction.adjudication_adapters import (
         LangChainAdjudicationRuntime,
     )
@@ -683,8 +686,9 @@ def _extract_main(argv: list[str] | None = None) -> int:
         scope=scope,
         messages=messages,
         watermark_message_id=watermark_message_id,
-        runtime=GroundedExtractionRuntime(model=components.model),
+        runtime=DirectExtractionRuntime(model=components.model),
         verification_runtime=LangChainSourceVerificationRuntime(
+                    isolate_items=True,
             model=components.model,
             ledger=components.ledger,
         ),

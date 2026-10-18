@@ -159,23 +159,28 @@ def scoped_version_ids(
     if table == "confirmed_memory":
         scope += sql.SQL(" AND contact_id=%s")
         params.append(contact_id)
-    ids = []
-    visited: set[UUID] = set()
-    current: UUID | None = memory_id
-    while current is not None:
-        if current in visited or len(ids) >= 100:
-            raise MemoryVersionConflict("版本链超出可核对范围。")
+    ids, pending, visited = [], [(memory_id, frozenset())], set()
+    while pending:
+        current, ancestors = pending.pop(0)
+        if current in ancestors:
+            raise MemoryVersionConflict("版本图存在循环。")
+        if current in visited:
+            continue
+        if len(visited) >= 100:
+            raise MemoryVersionConflict("版本图超出可核对范围。")
+        visited.add(current)
         row = connection.execute(sql.SQL(
-            "SELECT id, supersedes_memory_id FROM public.{} WHERE {} "
-            "AND id=%s AND status <> 'deleted'"
+            "SELECT id, supersedes_memory_id, to_jsonb(memory)->'merge_parent_ids' AS merge_parents "
+            "FROM public.{} AS memory WHERE {} AND id=%s AND status <> 'deleted'"
         ).format(sql.Identifier(table), scope), (*params, current)).fetchone()
         if row is None:
             if not ids:
                 raise LookupError("资料版本不存在或已清除。")
-            break
-        ids.append(row["id"])
-        visited.add(row["id"])
-        current = row["supersedes_memory_id"]
+            continue
+        ids.append(row['id'])
+        if row['supersedes_memory_id'] is not None:
+            pending.append((row['supersedes_memory_id'], ancestors | {current}))
+        pending.extend((UUID(item), ancestors | {current}) for item in (row.get('merge_parents') or []))
     return tuple(ids)
 
 

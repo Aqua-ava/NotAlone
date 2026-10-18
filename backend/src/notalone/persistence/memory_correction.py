@@ -704,11 +704,12 @@ def erase_deleted_memory_bodies(
     table = "confirmed_memory" if record_kind == "contact_memory" else "owner_memory"
     rows = connection.execute(
         f"""WITH RECURSIVE versions AS (
-            SELECT id, supersedes_memory_id, source_candidate_id FROM public.{table}
+            SELECT id, supersedes_memory_id, source_candidate_id, to_jsonb({table})->'merge_parent_ids' AS merge_parents FROM public.{table}
             WHERE owner_id=%s AND id=%s
-            UNION SELECT memory.id, memory.supersedes_memory_id, memory.source_candidate_id
+            UNION SELECT memory.id, memory.supersedes_memory_id, memory.source_candidate_id, to_jsonb(memory)->'merge_parent_ids'
             FROM public.{table} AS memory JOIN versions
               ON memory.id=versions.supersedes_memory_id OR memory.supersedes_memory_id=versions.id
+              OR versions.merge_parents ? memory.id::text OR to_jsonb(memory)->'merge_parent_ids' ? versions.id::text
             WHERE memory.owner_id=%s
         ) SELECT id, source_candidate_id FROM versions""",
         (owner_id, memory_id, owner_id),
@@ -829,7 +830,7 @@ def erase_correction_dependencies(
                 SELECT id FROM public.confirmed_memory WHERE owner_id=%s
                   AND (id=ANY(%s::uuid[]) OR source_candidate_id=ANY(%s::uuid[]))
                 UNION SELECT memory.id FROM public.confirmed_memory AS memory
-                JOIN affected ON memory.supersedes_memory_id=affected.id
+                JOIN affected ON memory.supersedes_memory_id=affected.id OR to_jsonb(memory)->'merge_parent_ids' ? affected.id::text
                 WHERE memory.owner_id=%s
             ) SELECT id, contact_id, source_candidate_id FROM public.confirmed_memory
               WHERE owner_id=%s AND id IN (SELECT id FROM affected)""",
@@ -843,7 +844,7 @@ def erase_correction_dependencies(
                 SELECT id FROM public.owner_memory WHERE owner_id=%s
                   AND (id=ANY(%s::uuid[]) OR source_candidate_id=ANY(%s::uuid[]))
                 UNION SELECT memory.id FROM public.owner_memory AS memory
-                JOIN affected ON memory.supersedes_memory_id=affected.id
+                JOIN affected ON memory.supersedes_memory_id=affected.id OR to_jsonb(memory)->'merge_parent_ids' ? affected.id::text
                 WHERE memory.owner_id=%s
             ) SELECT id, source_candidate_id FROM public.owner_memory WHERE owner_id=%s
               AND id IN (SELECT id FROM affected)""",

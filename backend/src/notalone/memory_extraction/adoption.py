@@ -103,6 +103,7 @@ class MemoryAdoption:
         "_pragmatic_interpreter",
         "_dimension_release",
         "_candidate_namespace",
+        "_merge_verifier",
     )
 
     def __init__(
@@ -117,6 +118,7 @@ class MemoryAdoption:
         pragmatic_interpreter: PragmaticInterpreter | None = None,
         dimension_release: DimensionRelease | None = None,
         candidate_namespace: UUID | None = None,
+        merge_verifier=None,
     ) -> None:
         if memory_port is None:
             raise TypeError("必须显式注入联系人级记忆 port。")
@@ -137,6 +139,7 @@ class MemoryAdoption:
         if candidate_namespace is not None and not isinstance(candidate_namespace, UUID):
             raise TypeError('候选命名空间必须是稳定批次UUID。')
         self._candidate_namespace = candidate_namespace
+        self._merge_verifier = merge_verifier
 
     def adopt(self, scope: ContactScope, outcome: ExtractionOutcome) -> AdoptionStats:
         """按主体逐条采纳；晚发生故障可保留此前已提交的结果。"""
@@ -393,6 +396,19 @@ class MemoryAdoption:
                 action, replaced_id = None, None
             else:
                 action, replaced_id = self._adjudicate(fact, similar, scope)
+            if action is AdjudicationAction.MERGE:
+                decision = replaced_id
+                result = self._merge(scope, fact, similar, decision)
+                if result is None:
+                    pending += 1
+                else:
+                    updated += 1
+                    pool[:] = [item for item in pool if item.memory_id not in decision.merged_memory_ids]
+                    pool.append(_PoolItem(memory_id=result.memory_id, text=result.text,
+                        category=result.category, topic=result.topic, source_ids=result.source_ids,
+                        version=result, dependency_ids=(result.memory_id, *result.source_ids),
+                        claim_source_ids=result.source_ids))
+                continue
             if action is AdjudicationAction.NOOP:
                 record("candidate_result", {"disposition": "noop"})
                 duplicate += 1
@@ -599,7 +615,43 @@ class MemoryAdoption:
         # 裁决要求更新但缺少有效被取代 id 时返回 (UPDATE, None)：
         # adopt 会把它降级为待定候选，而不是静默按 ADD 落库让被取代
         # 的旧记忆保持 active。
-        return actual_action, decision_replaced
+        return actual_action, decision if actual_action is AdjudicationAction.MERGE else decision_replaced
+
+    def _merge(self, scope, fact, similar, decision):
+        port = self._owner_memory_port if fact.subject is FactSubject.SELF else self._memory_port
+        confirm = getattr(port, "confirm_merge", None)
+        try:
+            ids = decision.merged_memory_ids
+            if (self._merge_verifier is None or not callable(confirm) or not 2 <= len(ids) <= 8
+                    or len(set(ids)) != len(ids) or not set(ids) <= {item.memory_id for item in similar}):
+                raise ValueError("合并能力或目标不符合当前范围。")
+            parents = tuple(next(item.version for item in similar if item.memory_id == identifier) for identifier in ids)
+            if any(parent is None for parent in parents):
+                raise ValueError("合并旧版本缺失。")
+            merged = self._merge_verifier.verify(scope=scope, fact=fact, parents=parents, text=decision.merged_text)
+            if _normalize(merged.text) in self._deleted_texts(scope):
+                raise ValueError("合并正文匹配用户删除记录。")
+        except (ValueError, ExtractionRuntimeError):
+            self._create_pending_candidate(scope, fact)
+            record("candidate_result", {"disposition": "pending_merge_rejected"})
+            return None
+        candidate = self._create_pending_candidate(scope, merged)
+        current = _stored_candidate_fact(merged, candidate)
+        if (candidate.status is not MemoryCandidateStatus.PENDING or candidate.correction_review
+                or not self._passes_all_adoption_gates(current, scope=scope)):
+            record("candidate_result", {"disposition": "pending_merge_gates"})
+            return None
+        try:
+            result = confirm(scope=scope, candidate_id=candidate.candidate_id, expected_parents=parents,
+                **({"expected_dimension_evidence": candidate.dimension_evidence} if self._dimension_release.gate_enabled else {}))
+        except (DimensionEvidenceChangedError, MemoryCorrectionConflictError, MemoryVersionConflict):
+            record("candidate_result", {"disposition": "pending_merge_changed"})
+            return None
+        record("candidate_result", {"disposition": "merged", "memory_id": result.memory_id,
+            "merged_memory_ids": ids}, dependency_ids=(result.memory_id, *ids, *result.source_ids),
+            links=({"record_kind": "owner_memory" if fact.subject is FactSubject.SELF else "contact_memory",
+                    "record_id": result.memory_id, "operation": "merge", "commit_status": "committed"},), status="committed")
+        return result
 
     def _same_dependencies(
         self, scope: ContactScope, fact: ExtractedFact,

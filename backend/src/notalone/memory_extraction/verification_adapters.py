@@ -394,7 +394,7 @@ def source_verification_contract(
 class LangChainSourceVerificationRuntime:
     """同一有界窗口内至多一次核验模型调用，不产生可执行工具能力。"""
 
-    __slots__ = ("_model", "_ledger", "_provider", "_verification_mode", "_prompt_profile", "_force_tool_choice")
+    __slots__ = ("_model", "_ledger", "_provider", "_verification_mode", "_prompt_profile", "_force_tool_choice", "_isolate_items")
 
     def __init__(
         self,
@@ -407,6 +407,7 @@ class LangChainSourceVerificationRuntime:
         ),
         prompt_profile: str = DEFAULT_PROMPT_PROFILE,
         force_tool_choice: bool = True,
+        isolate_items: bool = False,
     ) -> None:
         if model is None:
             raise TypeError("必须显式注入来源核验模型。")
@@ -421,6 +422,7 @@ class LangChainSourceVerificationRuntime:
         if type(force_tool_choice) is not bool:
             raise TypeError("工具选择策略必须明确为布尔值。")
         self._force_tool_choice = force_tool_choice
+        self._isolate_items = isolate_items
 
     @property
     def verification_mode(self) -> SourceVerificationMode:
@@ -434,7 +436,7 @@ class LangChainSourceVerificationRuntime:
     def for_mode(self, mode: SourceVerificationMode | str) -> LangChainSourceVerificationRuntime:
         """只选择同一模型的显式协议；构造不调用模型、不增加核验次数。"""
         return LangChainSourceVerificationRuntime(model=self._model, ledger=self._ledger, provider=self._provider,
-            verification_mode=mode, prompt_profile=self._prompt_profile, force_tool_choice=self._force_tool_choice)
+            verification_mode=mode, prompt_profile=self._prompt_profile, force_tool_choice=self._force_tool_choice, isolate_items=self._isolate_items)
 
     def verify(
         self,
@@ -507,7 +509,10 @@ class LangChainSourceVerificationRuntime:
                 )
             raise ExtractionRuntimeError("来源核验模型调用失败。") from None
         try:
-            payloads = _verification_payloads(message)
+            payloads = _verification_payloads(message, allow_invalid_items=self._isolate_items)
+            if self._isolate_items:
+                from notalone.memory_extraction.verification_isolation import isolate_verification_payloads
+                payloads = isolate_verification_payloads(payloads, window=window, facts=facts, mode=self._verification_mode)
             validate_source_verification(
                 payloads, window=window, facts=facts, mode=self._verification_mode,
             )
@@ -571,7 +576,7 @@ def _token_count(value: object) -> int | None:
     return value if type(value) is int and value >= 0 else None
 
 
-def _verification_payloads(message: object) -> tuple[dict[str, Any], ...]:
+def _verification_payloads(message: object, *, allow_invalid_items: bool = False) -> tuple[dict[str, Any], ...]:
     calls = getattr(message, "tool_calls", None)
     if not isinstance(calls, list) or len(calls) != 1:
         raise ExtractionInvalidOutputError("来源核验模型未返回唯一结构化结果。")
@@ -582,7 +587,7 @@ def _verification_payloads(message: object) -> tuple[dict[str, Any], ...]:
         or call.get("name") != SOURCE_VERIFICATION_SCHEMA["title"]
         or not isinstance(args, dict) or set(args) != {"results"}
         or not isinstance(args["results"], list)
-        or any(not isinstance(item, dict) for item in args["results"])
+        or not allow_invalid_items and any(not isinstance(item, dict) for item in args["results"])
     ):
         raise ExtractionInvalidOutputError("来源核验模型未返回合法结构化结果。")
     return tuple(args["results"])

@@ -55,3 +55,5 @@ pending 幂等、有效期/删除/联系人范围过滤，以及修正产生新�
 独立集成候选采用 canonical `060_memory_events_and_version_evidence.sql`，保留001–059原字节，旧event和version_evidence为NULL。
 Grounded追踪记录 `grounded-labels-v3` 与 `grounded-source-event-v1`，并包含实际编译器、适配器和事件代码摘要；后续升级批准失效门禁由独立任务10实现。
 程序与合成 HTTP/PG 验证记录见任务03 Answer；生产默认维度放行仍为空，真实模型质量、原生 App/微信和业务库升级未据此获验收。S分叉库保持原样。
+
+2026-10-18：默认 L1 正文改由模型完整生成，多条合并仍需重新核验且不覆盖人工版本，见 [ADR-069](069-direct-scene-memory-and-isolated-publication.md)。上文 Grounded 描述仅适用于显式历史协议。
