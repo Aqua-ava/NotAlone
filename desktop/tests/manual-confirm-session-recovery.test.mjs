@@ -17,9 +17,10 @@ const contactId = '00000000-0000-4000-8000-000000000001';
 const sessionId = '00000000-0000-4000-8000-000000000002';
 const settle = async () => { for (let i = 0; i < 10; i += 1) await new Promise(setImmediate); };
 
-async function fixture(t, holdFirstRead = false) {
+async function fixture(t, holdFirstRead = false, holdSessionRead = false) {
   const calls = [];
-  let confirmed = false, rejectFirst;
+  let confirmed = false, rejectFirst, releaseSession;
+  const sessionRead = new Promise((resolve) => { releaseSession = resolve; });
   const firstRead = new Promise((resolve) => { rejectFirst = resolve; });
   const host = new BackendHost('/unused/synthetic-manual-recovery');
   // 只替换传输边界，不连接运行时；手动范围仍由真实 Host 的可信确认状态添加。
@@ -37,6 +38,7 @@ async function fixture(t, holdFirstRead = false) {
     }
     if (options.path.endsWith('/selections')) return { selection: null };
     if (options.path === `/api/contacts/${contactId}/assistant-sessions/${sessionId}`) {
+      if (holdSessionRead) await sessionRead;
       return { session_id: sessionId, current_input_version_id: null, turns: [], inputs: [] };
     }
     throw new Error(`未预期请求：${options.path}`);
@@ -51,7 +53,8 @@ async function fixture(t, holdFirstRead = false) {
   foreground.onStateChanged(() => replies.refreshGenerationEligibility());
   contacts.selectContact({ contactId, scopeRevision: contacts.getState().scopeRevision });
   await settle();
-  return { calls, contacts, foreground, replies, rejectFirst,
+  return { calls, contacts, foreground, replies, rejectFirst, releaseSession,
+    revoke: () => { host.clearManualInput(contactId); const finish = foreground.beginReadingScopeChange(); finish(); },
     confirm: () => handlers.get('contacts:confirm-manual')({ contactId, scopeRevision: contacts.getState().scopeRevision }) };
 }
 
@@ -79,3 +82,23 @@ for (const pending of [false, true]) {
     assert(f.calls.every((call) => !call.path.endsWith('/replies')), '恢复只读讨论，不生成候选');
   });
 }
+
+
+test('手动确认后的最终讨论读取在资格撤销后成功迟到，不恢复讨论；再次确认可重读', async (t) => {
+  const f = await fixture(t, false, true);
+  await f.confirm(); await settle();
+  const finalRead = f.calls.find((call) => call.path === `/api/contacts/${contactId}/assistant-sessions/${sessionId}`);
+  assert.equal(finalRead?.manualContactId, contactId, '撤销发生在带手动范围的最终 GET 已发出之后');
+  assert.equal(f.replies.getState().savedSession.phase, 'loading');
+  const revision = f.contacts.getState().scopeRevision;
+  // 经可信宿主撤销手动范围，再由现有读取范围变更入口撤销生成资格；联系人和连接均不变化。
+  f.revoke();
+  assert.equal(f.contacts.getState().scopeRevision, revision);
+  assert.equal(f.replies.getState().generationBlock, 'foreground-confirmation-required');
+  f.releaseSession(); await settle();
+  assert.notEqual(f.replies.getState().savedSession.phase, 'ready');
+  assert.deepEqual(f.replies.getState().savedSession.turns, []);
+  assert.equal(f.replies.getState().result, null);
+  await f.confirm(); await settle();
+  assert.equal(f.replies.getState().savedSession.phase, 'ready');
+});
