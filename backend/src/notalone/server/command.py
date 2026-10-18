@@ -93,9 +93,13 @@ def _run(args: argparse.Namespace, lifetime: ParentLifetime) -> int:
     events = EventBus()
     model_priority = ModelPriorityControl()
     setup_service = _build_setup_service(database_url)
-    from notalone.application.layered_memory_service import LayeredMemoryService
-    from notalone.persistence.layered_memory import PostgresLayeredMemoryStore
-    layered_memory=LayeredMemoryService(PostgresLayeredMemoryStore(database_url),model_priority=model_priority)
+    from notalone.application.organization_runtime import build_layered_memory_service
+    try:
+        layered_memory = build_layered_memory_service(database_url, model_priority=model_priority)
+    except (OSError, ValueError, RuntimeError):
+        model_priority.stop()
+        print('本地整理质量operator配置无效。', file=sys.stderr)
+        return 2
     task_host = _build_task_host(database_url, events, model_priority=model_priority,organization_runner=layered_memory)
     layered_memory.attach_task_host(task_host)
     sync_host = _build_sync_host(

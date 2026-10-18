@@ -3,6 +3,71 @@ import { test } from 'node:test';
 import { fixture, payload, readyPayload, profilePayload, ids } from './support.mjs';
 import { withMemoryPage } from './react-support.mjs';
 
+test('资料页分别展示整理与回复质量，回复合同变化不误报整理资格失效', { timeout: 20000 }, async (t) => {
+  let replyChanged = false;
+  const f = await fixture(async (request) => {
+    if (request.path.includes('/layered-memory')) {
+      if (request.method === 'POST') replyChanged = true;
+      return { generation: 1, data: readyPayload({ quality_status: 'verified', quality: {
+        organization: { status: 'verified', reasons: [], contract_id: 'organization-v1', report_id: 'organization-report-v1' },
+        reply: replyChanged ? { status: 'unknown', reasons: ['contract_changed'], contract_id: 'reply-v2', report_id: 'reply-report-v1' }
+          : { status: 'verified', reasons: [], contract_id: 'reply-v1', report_id: 'reply-report-v1' },
+        automatic_use_allowed: !replyChanged, synthetic: false,
+      } }) };
+    }
+    return { generation: 1, data: request.path.endsWith('/sources') ? { sources: [] }
+      : request.path.endsWith('/memory-candidates') ? { candidates: [] } : { memories: [] } };
+  });
+  await withMemoryPage(f, t.signal, async (page) => {
+    await page.getByRole('button', { name: '主题资料', exact: true }).click();
+    const organization = page.getByRole('group', { name: '整理质量' });
+    const reply = page.getByRole('group', { name: '回复读取质量' });
+    await organization.getByText('已验证', { exact: true }).waitFor();
+    await organization.getByText('评测报告：organization-report-v1', { exact: true }).waitFor();
+    await reply.getByText('已验证', { exact: true }).waitFor();
+    await page.getByText('质量资格有效；仅在关系语境及对应范围已开启时允许真实资料自动加载。', { exact: true }).waitFor();
+    assert.equal(await page.getByText('仅用于受控合成验证，不代表真实模型质量已获资格。', { exact: true }).count(), 0);
+    await page.getByRole('button', { name: '刷新主题资料', exact: true }).click();
+    await reply.getByText('未验证', { exact: true }).waitFor();
+    await reply.getByText('模型、规则、用途或预算合同已变化，须重新评测。', { exact: true }).waitFor();
+    await reply.getByText('质量合同：reply-v2', { exact: true }).waitFor();
+    await organization.getByText('已验证', { exact: true }).waitFor();
+    await organization.getByText('评测报告：organization-report-v1', { exact: true }).waitFor();
+    await page.getByText('真实资料自动加载已关闭；整理与回复读取质量均已验证后才可使用。', { exact: true }).waitFor();
+    await page.getByRole('heading', { name: '合成读书计划' }).waitFor();
+  });
+});
+
+test('资料页显示未通过的具体原因与报告，合成控制数据不显示真实已验证', { timeout: 20000 }, async (t) => {
+  let synthetic = false;
+  const f = await fixture(async (request) => {
+    if (request.path.includes('/layered-memory')) return { generation: 1, data: readyPayload({ quality_status: synthetic ? 'synthetic' : 'failed', quality: {
+      organization: { status: synthetic ? 'unknown' : 'failed', reasons: synthetic ? ['no_evaluation_report'] : ['critical_semantic_errors', 'unrecognized_failure'],
+        contract_id: 'organization-v1', report_id: synthetic ? null : 'failed-report-v1' },
+      reply: { status: 'unknown', reasons: ['no_evaluation_report'], contract_id: 'reply-v1', report_id: null },
+      automatic_use_allowed: false, synthetic,
+    } }) };
+    return { generation: 1, data: request.path.endsWith('/sources') ? { sources: [] }
+      : request.path.endsWith('/memory-candidates') ? { candidates: [] } : { memories: [] } };
+  });
+  await withMemoryPage(f, t.signal, async (page) => {
+    await page.getByRole('button', { name: '主题资料', exact: true }).click();
+    const organization = page.getByRole('group', { name: '整理质量' });
+    await organization.getByText('未通过', { exact: true }).waitFor();
+    await organization.getByText('出现关键语义错误，未满足零关键错误要求。', { exact: true }).waitFor();
+    await organization.getByText('当前质量证据尚不完整，请查看对应评测报告。', { exact: true }).waitFor();
+    assert.equal(await organization.getByText('unrecognized_failure', { exact: true }).count(), 0);
+    await organization.getByText('评测报告：failed-report-v1', { exact: true }).waitFor();
+    await page.getByRole('heading', { name: '合成读书计划' }).waitFor();
+    synthetic = true;
+    await page.getByRole('button', { name: '重新读取主题资料', exact: true }).click();
+    await page.getByText('仅用于受控合成验证，不代表真实模型质量已获资格。', { exact: true }).waitFor();
+    await organization.getByText('未验证', { exact: true }).waitFor();
+    assert.equal(await page.getByText('已验证', { exact: true }).count(), 0);
+    assert.equal(await page.getByText('评测报告：failed-report-v1', { exact: true }).count(), 0);
+  });
+});
+
 test('当前关系资料页面由用户确认用途后开启主题资料，未知质量不会当作成功', { timeout: 20000 }, async (t) => {
   let saved = payload();
   const f = await fixture(async (request) => {

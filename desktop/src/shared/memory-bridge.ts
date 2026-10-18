@@ -130,13 +130,26 @@ export interface LayeredMemoryProfile {
   updatedAt: string;
   entries: { text: string; temporalStatus: 'stable' | 'historical' | 'uncertain'; uncertainty: string; references: LayeredMemoryReference[] }[];
 }
+export interface LayeredMemoryQualityStage {
+  status: 'unknown' | 'failed' | 'verified';
+  reasons: string[];
+  contractId: string | null;
+  reportId: string | null;
+}
+export interface LayeredMemoryQuality {
+  organization: LayeredMemoryQualityStage;
+  reply: LayeredMemoryQualityStage;
+  automaticUseAllowed: boolean;
+  synthetic: boolean;
+}
 export interface LayeredMemory {
   schemaVersion: 2;
   scopeKind: 'contact' | 'owner';
   contactId: string | null;
   settingsGeneration: number;
   enabled: boolean;
-  qualityStatus: 'unknown' | 'synthetic';
+  qualityStatus: 'unknown' | 'failed' | 'verified' | 'synthetic';
+  quality: LayeredMemoryQuality;
   status: 'disabled' | 'ready' | 'empty' | 'failed' | 'updating' | 'stale' | 'blocked' | 'paused';
   workId: string | null;
   workRevision: number;

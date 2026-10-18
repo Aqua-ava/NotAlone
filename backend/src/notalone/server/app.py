@@ -495,6 +495,9 @@ class BackendApp:
                 path=path_value,
                 query=urlsplit(path).query,
             )
+        if path_value.startswith('/api/layered-memory/'):
+            from notalone.server.organization_quality import handle_quality
+            return handle_quality(self._layered_memory, self._owner_id, method_upper, path_value, body)
         if (path_value.startswith("/api/contacts/") and "/layered-memory" in path_value
                 or path_value.startswith("/api/memories/owner/layered-memory")):
             return self._handle_layered_memory(method=method_upper, path=path, body=body)
@@ -1564,7 +1567,7 @@ class BackendApp:
         parts = urlsplit(path).path.strip("/").split("/")
         if (len(parts) not in {4, 5} or parts[3] != "layered-memory"
                 or method != ("GET" if len(parts) == 4 else "POST")
-                or len(parts) == 5 and parts[4] not in {"enable", "refresh", "disable", "delete", "withdraw-profile", "withdraw-scenario", "pause", "continue", "summary-error", "fact-error"}):
+                or len(parts) == 5 and parts[4] not in {"enable", "refresh", "disable", "delete", "withdraw-profile", "withdraw-scenario", "pause", "continue", "quality-input", "summary-error", "fact-error"}):
             return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
         if self._layered_memory is None:
             return _json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "layered_memory_unavailable"})
@@ -1578,6 +1581,11 @@ class BackendApp:
                 state = self._layered_memory.read(scope, mapping_cursor=query.get('mapping_cursor', [None])[0])
             else:
                 payload = json.loads(body.decode("utf-8"))
+                if parts[4] == 'quality-input':
+                    if not isinstance(payload, dict) or set(payload) != {'memory_versions'}:
+                        raise ValueError('质量输入只接受实际版本选择。')
+                    prepared = self._layered_memory.prepare_quality_input(scope, payload['memory_versions'])
+                    return _json_response(HTTPStatus.OK, {'quality_input': prepared})
                 allowed = ({"settings_generation", "purpose_confirmed"} if parts[4] == "enable"
                     else {"settings_generation", "organization_generation", "target_kind", "version_id", "item_index", "reason", "operation_id"} if parts[4] == "summary-error"
                     else {"settings_generation", "organization_generation", "target_kind", "version_id", "item_index", "memory_id"} if parts[4] == "fact-error"

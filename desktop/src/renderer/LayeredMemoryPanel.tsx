@@ -1,12 +1,51 @@
 import { useEffect, useState } from 'react';
-import type { LayeredMemory, LayeredMemoryManagementRequest, LayeredMemoryManagementOptions, MemoryOverviewState } from '../shared/memory-bridge';
+import type { LayeredMemory, LayeredMemoryManagementRequest, LayeredMemoryManagementOptions, LayeredMemoryQualityStage, MemoryOverviewState } from '../shared/memory-bridge';
 import { MemoryTemporalStatus } from './MemoryTemporalStatus';
 
 const statusNames: Record<LayeredMemory['status'], string> = { disabled: '已停用', ready: '本批主题资料整理成功',
   empty: '暂无合格资料可整理', failed: '部分整理未完成，请核对主题资料与长期背景状态', updating: '正在整理，尚未完成',
   stale: '依据已变化，主题资料待刷新', blocked: '已开启范围，质量资格待核验', paused: '已暂停，剩余资料可继续整理' };
+const qualityReasonNames: Record<string, string> = {
+  no_evaluation_report: '尚无当前合同的有效评测报告。',
+  contract_changed: '模型、规则、用途或预算合同已变化，须重新评测。',
+  human_annotations_missing: '缺少固定资料的人工支持标注。',
+  human_output_review_missing: '缺少实际模型产出的逐条人工支持评审。',
+  actual_model_evidence_missing: '缺少实际候选模型的调用证据。',
+  evaluation_incomplete: '评测尚未完成，失败及未完成项目仍计入总数。',
+  coverage_insufficient: '八类语义维度的独立场景覆盖不足。',
+  critical_semantic_errors: '出现关键语义错误，未满足零关键错误要求。',
+  scope_projection_failed: '联系人或本人范围白名单核验未通过。',
+  budget_calibration_missing: '缺少对应阶段的预算标定。',
+  physical_attempt_budget_exhausted: '实际模型尝试预算已耗尽，评测尚未完成。',
+  input_invalidated: '评测输入已失效，须重新核验。',
+  suite_unavailable: '评测合集暂不可核验，资格保持未验证。',
+  qualification_source_unavailable: '评测来源暂不可核验，资格保持未验证。',
+  candidate_model_changed: '实际候选模型身份已变化，须重新评测。',
+  feedback_coverage_insufficient: '本人和联系人两层纠错路径覆盖不足。',
+  suite_member_unavailable: '部分评测成员已失效或暂不可核验。',
+  fixture_annotation_identity_missing: '场景标注与固定合集身份不一致。',
+  fixture_feedback_snapshot_mismatch: '实际纠错上下文与固定场景不一致。',
+  fact_correction_coverage_insufficient: '本人和联系人实际底层更正路径覆盖不足。',
+  fact_correction_path_unproven: '实际底层更正路径的动作与新版本证据不完整。',
+  actual_request_budget_exceeded: '完整模型请求超过本次整理预算，未发送该请求。',
+  evaluation_failed: '部分评测场景失败，完整资格尚未通过。',
+  feedback_output_missing: '纠错路径缺少实际可审阅产出。',
+  suite_physical_receipts_incomplete: '实际请求收据与持久总额度不完整一致。',
+  actual_request_route_missing: '缺少实际请求路由证据。',
+  actual_model_identity_unknown: '实际模型身份未知。',
+  organization_adapter_unavailable: '整理模型配置暂不可用，现有底层资料仍可查看。',
+  reply_comparison_missing: '缺少相同输入与 L1 预算下的回复效果对照。',
+};
 function time(value: string | null): string {
   return value ? `${new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Taipei', dateStyle: 'long', timeStyle: 'medium' }).format(new Date(value))}（UTC+8）` : '未知';
+}
+function QualityStage({ name, value }: { name: string; value: LayeredMemoryQualityStage }) {
+  return <div role="group" aria-label={name}>
+    <h3>{name}</h3><p>{({ unknown: '未验证', failed: '未通过', verified: '已验证' } as const)[value.status]}</p>
+    {value.reasons.map((reason, index) => <p key={index}>{qualityReasonNames[reason] ?? '当前质量证据尚不完整，请查看对应评测报告。'}</p>)}
+    <p>质量合同：{value.contractId ?? '暂无'}</p>
+    <p>评测报告：{value.reportId ?? '暂无'}</p>
+  </div>;
 }
 export function LayeredMemoryPanel({ state, contactName, busy, read, manage, facts, owner = false }: {
   state: MemoryOverviewState<LayeredMemory>; contactName: string; busy: boolean;
@@ -33,13 +72,20 @@ export function LayeredMemoryPanel({ state, contactName, busy, read, manage, fac
         ? '当前工作模型调用预算已耗尽，整理已暂停。刷新不会重置预算。' : statusNames[value.status]}</p>
       {value.maintenancePending && <p role="status">资料已变化，等待后台更新。</p>}
       {value.remainingCount > 0 && value.coveredCount > 0 && <p>目前仅覆盖部分资料；剩余资料尚未整理。</p>}
-      {value.qualityStatus === 'unknown' ? <div className="memory-section-note"><p>质量资格未知，资料不会发给模型。</p>
-        <p>生产调用预算尚未标定；当前不开放真实资料整理或回复加载。</p></div>
-        : <div className="memory-section-note"><p>仅用于受控合成验证，不代表真实模型质量已获资格。</p>
+      <section className="memory-section-note" aria-label="质量资格">
+        <QualityStage name="整理质量" value={value.quality.organization} />
+        <QualityStage name="回复读取质量" value={value.quality.reply} />
+        {value.quality.synthetic ? <p>仅用于受控合成验证，不代表真实模型质量已获资格。</p>
+          : value.quality.automaticUseAllowed ? <p>质量资格有效；仅在关系语境及对应范围已开启时允许真实资料自动加载。</p>
+            : <p>真实资料自动加载已关闭；整理与回复读取质量均已验证后才可使用。</p>}
+        {value.qualityStatus === 'unknown' && <p>质量资格未知，资料不会发给模型。</p>}
+        {!value.quality.synthetic && value.quality.organization.status !== 'verified' && <p>当前不开放真实资料整理；来源仍有效的已有资料可供查看。</p>}
+      </section>
+      {(value.quality.synthetic || value.quality.organization.status === 'verified') && <div className="memory-section-note">
           <p>本批上限：{value.budget.maxMemories} 条记忆、{value.budget.maxScenarios} 个主题、{value.budget.maxParagraphs} 段、{value.budget.maxCharacters} 字符。</p>
           <p>当前工作模型调用授权上限：{value.budget.maxModelCalls} 次。</p>
           {value.budget.maxProfileEntries !== undefined && <p>长期背景最多 {value.budget.maxProfileEntries} 项。</p>}</div>}
-      {value.qualityStatus === 'synthetic' && <><p>当前工作模型调用：累计已消耗 {value.budget.modelCallsUsed} 次 · 剩余 {value.budget.modelCallsRemaining} 次 · 上限 {value.budget.maxModelCalls} 次。</p>
+      {(value.quality.synthetic || value.quality.organization.status === 'verified') && <><p>当前工作模型调用：累计已消耗 {value.budget.modelCallsUsed} 次 · 剩余 {value.budget.modelCallsRemaining} 次 · 上限 {value.budget.maxModelCalls} 次。</p>
         <p className="memory-section-note">额度包含失败、超时及已预留后中断的调用。当前合法的新目标或新启用世代独立计额。</p></>}
       {value.enabled && value.workId && <p className="memory-section-note">每次继续仅推进一批，并追加模型调用额度；已消耗调用不会因继续或重启清零。</p>}
       <p>本范围{value.enabled ? '已开启' : '已关闭'} · 更新时间：{time(value.updatedAt)}</p>
