@@ -173,6 +173,7 @@ class MemoryAdoption:
         adopted = updated = pending = duplicate = deleted_skip = 0
         skipped_non_memory = 0
         skipped_changed = 0
+        original_memory_ids = {item.memory_id for item in (*contact_pool, *owner_pool)}
         batch_plan = self._batch_plan(scope, outcome.accepted, contact_pool, owner_pool)
         for index, fact in enumerate(outcome.accepted):
             trace = current_trace()
@@ -406,6 +407,15 @@ class MemoryAdoption:
                 decision = None
             else:
                 decision = self._adjudicate(fact, similar, scope)
+            # skip 只能依附已经落库且时间边界一致的事实；首批全部 skip 保留待处理。
+            if decision and decision.action is AdjudicationAction.NOOP and not any(
+                (item.memory_id not in original_memory_ids or item in similar)
+                and item.version.valid_at == fact.valid_at
+                and item.version.invalid_at == fact.invalid_at
+                and item.version.event is None and fact.event is None
+                for item in pool
+            ):
+                decision = None
             action = decision.action if decision else None
             replaced_id = decision.replaced_memory_id if decision else None
             if action is AdjudicationAction.MERGE or (action is AdjudicationAction.UPDATE and decision.merged_memory_ids):
@@ -560,20 +570,25 @@ class MemoryAdoption:
                         and self._passes_all_adoption_gates(fact, scope=scope)]
             if not eligible:
                 continue
-            if not pool:
-                plans.update((index, ([], AdjudicationDecision(AdjudicationAction.ADD))) for index, _ in eligible)
-                continue
             called = False
             try:
                 shortlists = hybrid_candidates([fact.text for _, fact in eligible], pool)
                 unified = {str(item.memory_id): item for rows in shortlists for item in rows}
                 memories = [dict(candidate_id=str(index), text=fact.text, category=fact.category.value,
-                    topic=fact.topic.value, candidate_ids=[str(item.memory_id) for item in rows])
+                    topic=fact.topic.value, valid_at=fact.valid_at.isoformat() if fact.valid_at else None,
+                    invalid_at=fact.invalid_at.isoformat() if fact.invalid_at else None,
+                    event=fact.event.to_payload() if fact.event else None,
+                    source_message_ids=[str(value) for value in fact.source_message_ids], candidate_ids=[str(item.memory_id) for item in rows])
                     for (index, fact), rows in zip(eligible, shortlists)]
                 started = time.perf_counter()
                 called = True
                 decisions = runtime(memories=memories, pool=[dict(memory_id=key, text=item.text,
-                    category=item.category.value, topic=item.topic.value) for key, item in unified.items()])
+                    category=item.category.value, topic=item.topic.value,
+                    valid_at=item.version.valid_at.isoformat() if item.version.valid_at else None,
+                    invalid_at=item.version.invalid_at.isoformat() if item.version.invalid_at else None,
+                    event=item.version.event.to_payload() if item.version.event else None,
+                    source_message_ids=[str(value) for value in (item.claim_source_ids or item.source_ids)])
+                    for key, item in unified.items()])
                 self._record_ledger(scope, LedgerOutcome.SUCCEEDED, started)
                 for (index, fact), rows in zip(eligible, shortlists):
                     decision = decisions[str(index)]

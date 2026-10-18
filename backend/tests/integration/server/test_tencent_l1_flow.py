@@ -18,6 +18,9 @@ class BatchMemoryModel(ScriptedCoreModel):
     final_text: str = ''
     target_texts: dict = {}
     invalid_targets: bool = False
+    actions: dict = {}
+    timings: dict = {}
+    batch_inputs: list = []
 
     def _generate(self, messages, stop=None, run_manager=None, **kwargs):
         name = kwargs['tools'][0]['function']['name']
@@ -32,6 +35,7 @@ class BatchMemoryModel(ScriptedCoreModel):
                     source_message_ids=[identifier], confidence=.95, risk_flags=[], valid_at=None,
                     invalid_at=None, speech_act='assertion', assertion_status='asserted',
                     figurative_type='literal', alternatives=[], interpretation_reason='合成直接陈述。', event=None))
+                facts[-1].update(self.timings.get(raw, {}))
             result = {'scenes': [{'scene_name': '合成资料', 'memories': facts}]}
         elif name == 'SourceVerificationOutput':
             payload = json.loads(content)
@@ -40,6 +44,7 @@ class BatchMemoryModel(ScriptedCoreModel):
                           if m['message_id'] in c['source_message_ids']]) for c in payload['candidates']]}
         elif name == 'BatchMemoryAdjudicationOutput':
             payload = json.loads(content)
+            self.batch_inputs.append(payload)
             decisions = []
             for c in payload['memories']:
                 ids = c['candidate_ids']
@@ -47,9 +52,10 @@ class BatchMemoryModel(ScriptedCoreModel):
                     ids = [p['memory_id'] for p in payload['candidate_pool'] if p['text'] in self.target_texts[c['text']]]
                 if self.invalid_targets:
                     ids = [str(uuid4())]
-                decisions.append(dict(candidate_id=c['candidate_id'], action=self.action,
-                    target_ids=ids if self.action in {'merge', 'update'} else [],
-                    merged_text=(self.final_text or c['text']) if self.action in {'merge', 'update'} else None))
+                action = self.actions.get(c['text'], self.action if payload['candidate_pool'] else 'store')
+                decisions.append(dict(candidate_id=c['candidate_id'], action=action,
+                    target_ids=ids if action in {'merge', 'update'} else [],
+                    merged_text=(self.final_text or c['text']) if action in {'merge', 'update'} else None))
             result = {'decisions': decisions}
         elif name == 'MemoryAdjudicationOutput':
             ids = re.findall(r'\[memory_id=([0-9a-f-]+)\]', content)
@@ -79,6 +85,43 @@ class TencentL1HttpTest(CoreBusinessFlowFixture, unittest.TestCase):
 
     def memories(self):
         return self._ok(f'/api/contacts/{self.contact_id}/memories')['memories']
+
+    def test_first_batch_semantic_duplicates_keep_one_fact(self):
+        first, second = '周末喜欢游泳。', '喜欢在周末游泳锻炼。'
+        self.extraction_model.facts = {text: ('preference', 'health') for text in (first, second)}
+        self.extraction_model.actions = {first: 'store', second: 'skip'}
+        self._import_evolution_source([(False, first), (False, second), (True, '收到合成安排。')], when=self.when)
+        self.assertEqual([m['text'] for m in self.memories()], [first])
+        self.assertEqual(len(self.extraction_model.batch_inputs[0]['memories']), 2)
+
+    def test_first_batch_all_skip_stays_pending_without_carrier(self):
+        text = '周末喜欢游泳。'
+        self.extraction_model.facts = {text: ('preference', 'health')}
+        self.extraction_model.actions = {text: 'skip'}
+        self._import_evolution_source([(False, text)], when=self.when)
+        self.assertEqual(self.memories(), [])
+        candidates = self._ok(f'/api/contacts/{self.contact_id}/memory-candidates')['candidates']
+        self.assertTrue(any(c['text'] == text and c['status'] == 'pending' for c in candidates))
+
+    def test_skip_different_time_interval_stays_pending(self):
+        old, new = '从一月开始周末喜欢游泳。', '从二月开始周末喜欢游泳。'
+        self.extraction_model.facts = {text: ('preference', 'health') for text in (old, new)}
+        self.extraction_model.timings = {
+            old: {'valid_at': '2026-01-01T00:00:00+00:00'},
+            new: {'valid_at': '2026-02-01T00:00:00+00:00'},
+        }
+        self._import_evolution_source([(False, old)], when=self.when)
+        self.extraction_model.action = 'skip'
+        self._import_evolution_source([(False, new)], when=self.when + timedelta(days=32))
+        self.assertEqual([m['text'] for m in self.memories()], [old])
+        candidates = self._ok(f'/api/contacts/{self.contact_id}/memory-candidates')['candidates']
+        self.assertTrue(any(c['text'] == new and c['status'] == 'pending' for c in candidates))
+        payload = self.extraction_model.batch_inputs[-1]
+        self.assertNotEqual(payload['memories'][0]['valid_at'], payload['candidate_pool'][0]['valid_at'])
+        for item in payload['memories'] + payload['candidate_pool']:
+            self.assertTrue(item['source_message_ids'])
+            self.assertIn('event', item)
+            self.assertIn('invalid_at', item)
 
     def test_new_chat_updates_old_memory_across_category_and_topic(self):
         old, new = '长期固定参加周末跑步。', '锻炼习惯变更为周末游泳，不再跑步。'
