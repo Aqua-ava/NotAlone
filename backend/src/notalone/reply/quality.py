@@ -24,6 +24,7 @@ def build_reply_contract(model, profile, contact_budget, owner_budget):
     root = Path(__file__).resolve().parents[1]
     rules = {name: (root / name).read_text() for name in (
         'reply/context.py', 'reply/layered_context.py', 'reply/scenario_tools.py',
+        'reply/generator.py', 'reply/tools.py', 'reply/fidelity.py',
         'reply/adapters/langchain_runtime.py', 'reply/adapters/constraint_review.py',
         'reply/adapters/constraint_review_contract.py', 'reply/adapters/input_budget_middleware.py')}
     from notalone.reply.adapters.langchain_runtime import REPLY_RUNTIME_SCHEMA

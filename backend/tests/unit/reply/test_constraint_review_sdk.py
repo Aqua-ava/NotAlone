@@ -24,9 +24,8 @@ def sdk_response(request, *, large=False, review_arguments=None, generation_argu
     review = payload["tools"][0]["function"]["name"] == "ReplyFidelityReview"
     if review:
         name = "ReplyFidelityReview"
-        arguments = synthetic_review(json.loads(payload["messages"][-1]["content"]))
-        if review_arguments is not None:
-            arguments = review_arguments
+        arguments = (review_arguments if review_arguments is not None else
+                     synthetic_review(json.loads(payload["messages"][-1]["content"])))
     else:
         call = reply_output().tool_calls[0]
         name, arguments = call["name"], call["args"]
@@ -47,6 +46,52 @@ def sdk_response(request, *, large=False, review_arguments=None, generation_argu
 
 
 class ConstraintReviewSdkTest(unittest.TestCase):
+    def test_pasted_direction_can_support_first_person_and_review_only_filters_once(self):
+        context = prepared_context()
+        incoming, direction = "大学那会儿的事情，你还记得吗？", "告诉对方我记得这段往事，继续问他的近况。"
+        context = replace(context, command=replace(context.command, content=replace(context.command.content,
+            draft_text=incoming, input_kind="current_chat", pasted_direction=direction,
+            user_instruction=None)), current_text=incoming,
+            evidence=(replace(context.evidence[0], kind="user_current_chat", text=incoming, status="user_input"),))
+        generation = reply_output().tool_calls[0]["args"]
+        generation["candidates"][0].update(text="我记得这段往事。你最近怎么样？", basis="按用户明确方向。")
+        reviewed = synthetic_review({"draft_text": direction, "candidates": generation["candidates"]})
+        runtime, requests, decisions = self.runtime(lambda request: sdk_response(request,
+            generation_arguments=generation, review_arguments=reviewed))
+        result = runtime.generate(context)
+        self.assertEqual(result.candidates[0].text, generation["candidates"][0]["text"])
+        self.assertEqual(len(requests), 2)
+        self.assertEqual(len(decisions), 2)
+        self.assertEqual((result.usage.input_tokens, result.usage.output_tokens), (30, 7))
+
+    def test_pasted_contact_text_gets_one_budgeted_review_and_cannot_authorize_user_memory_claim(self):
+        incoming = "大学那会儿的事情，你还记得吗？"
+        direction = "自然接住回忆，顺着已记录的对方经历继续问；不虚构共同经历。"
+        context = prepared_context()
+        context = replace(context, command=replace(context.command, content=replace(context.command.content,
+            draft_text=incoming, input_kind="current_chat", pasted_direction=direction,
+            user_instruction=None, include_relationship_context=True)), current_text=incoming,
+            evidence=(replace(context.evidence[0], kind="user_current_chat", text=incoming, status="user_input"),))
+        generation = reply_output().tool_calls[0]["args"]
+        generation["candidates"][0].update(text="记得一些片段。", basis="自然回应来信。")
+        reviewed = synthetic_review({"draft_text": direction, "candidates": generation["candidates"]})
+        check = reviewed["reviews"]["candidate_1"]["checks"]["facts"]
+        check.update(reason="来信提问不证明用户拥有该记忆。", result={"status": "violation", "violation": {
+            "category": "unsupported_fact", "candidate_path": "/text", "candidate_quote": "记得一些片段",
+            "source_path": "/confirmed_direction", "source_quote": "不虚构共同经历"}})
+        runtime, requests, decisions = self.runtime(lambda request: sdk_response(request,
+            generation_arguments=generation, review_arguments=reviewed))
+        with self.assertRaises(ReplyCandidatesRejectedError):
+            runtime.generate(context)
+        self.assertEqual(len(requests), 2)
+        self.assertEqual(len(decisions), 2)
+        payload = json.loads(requests[1]["messages"][-1]["content"])
+        self.assertEqual(payload["current_text"], incoming)
+        self.assertEqual(payload["confirmed_direction"], direction)
+        self.assertNotIn("draft_text", payload)
+        self.assertEqual(payload["literal_changes"][0]["status"], "unavailable")
+        self.assertEqual(payload["literal_changes"][0]["scope"], "incoming_text_is_not_user_draft")
+
     def context(self):
         context = prepared_context()
         return replace(context, command=replace(context.command, content=replace(
@@ -612,22 +657,29 @@ class ConstraintReviewSdkTest(unittest.TestCase):
             "reason": "comparison_limit"}])
 
     def test_generation_and_review_share_one_timeout_and_cancel_the_review(self):
-        cancelled = []
-        async def slow(request):
-            review = json.loads(request.content)["tools"][0]["function"]["name"] == "ReplyFidelityReview"
-            try:
-                await asyncio.sleep(.3 if review else .12)
-                return sdk_response(request)
-            except asyncio.CancelledError:
-                cancelled.append(review)
-                raise
-        ledger = RecordingLedger()
-        runtime, requests, _ = self.runtime(slow, timeout=.2, ledger=ledger)
-        with self.assertRaises(ReplyTimeoutError):
-            runtime.generate(self.context())
-        self.assertEqual(len(requests), 2)
-        self.assertEqual(cancelled, [True])
-        self.assertEqual([row.outcome.value for row in ledger.entries], ["succeeded", "run_failed"])
+        for pasted in (False, True):
+            with self.subTest(pasted=pasted):
+                cancelled = []
+                async def slow(request):
+                    review = json.loads(request.content)["tools"][0]["function"]["name"] == "ReplyFidelityReview"
+                    try:
+                        await asyncio.sleep(.3 if review else .12)
+                        return sdk_response(request)
+                    except asyncio.CancelledError:
+                        cancelled.append(review)
+                        raise
+                context = self.context()
+                if pasted:
+                    context = replace(context, command=replace(context.command, content=replace(
+                        context.command.content, input_kind="current_chat", pasted_direction="自然回应，不虚构本人状态。",
+                        user_instruction=None)), evidence=(replace(context.evidence[0], kind="user_current_chat", status="user_input"),))
+                ledger = RecordingLedger()
+                runtime, requests, _ = self.runtime(slow, timeout=.2, ledger=ledger)
+                with self.assertRaises(ReplyTimeoutError):
+                    runtime.generate(context)
+                self.assertEqual(len(requests), 2)
+                self.assertEqual(cancelled, [True])
+                self.assertEqual([row.outcome.value for row in ledger.entries], ["succeeded", "run_failed"])
 
     def test_second_sdk_failure_has_its_own_record_and_failed_ledger_cannot_deliver(self):
         def fail_review(request):

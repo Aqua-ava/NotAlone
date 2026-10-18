@@ -279,7 +279,7 @@ class AssistantSessionHttpTest(unittest.TestCase):
 
     def test_reply_errors_keep_specific_codes_without_leaking_private_details(self) -> None:
         from notalone.reply.errors import (
-            ReplyBudgetError, ReplyInvariantError, ReplyPersistenceError,
+            ReplyBudgetError, ReplyCandidatesRejectedError, ReplyInvariantError, ReplyPersistenceError,
             ReplyProviderContextLimitError, ReplyRunError, ReplyTimeoutError,
         )
 
@@ -289,6 +289,7 @@ class AssistantSessionHttpTest(unittest.TestCase):
         private = "合成内部异常正文不得回显。"
         provider = ReplyProviderContextLimitError()
         for error, expected in (
+            (ReplyCandidatesRejectedError(private), (409, {"error": "reply_candidates_rejected"})),
             (ReplyTimeoutError(private), (504, {"error": "reply_timeout"})),
             (ReplyBudgetError(private), (502, {"error": "reply_budget_exceeded"})),
             (ReplyRunError(private), (500, {"error": "reply_generation_failed"})),

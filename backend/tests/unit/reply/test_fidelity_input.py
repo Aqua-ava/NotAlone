@@ -21,6 +21,16 @@ from tests.input_budget_support import synthetic_budget_kwargs
 
 
 class FidelityInputTests(unittest.TestCase):
+    def test_citation_policy_names_only_actual_evidence_and_excludes_source_reference_ids(self):
+        _, payload, _, _, primary = self.run_content(RewriteDraft(
+            draft_text="一起买点零食边吃边聊吧？", input_kind="current_chat",
+            pasted_direction="确认对方现在的选择，不推断原因。", include_relationship_context=True))
+        policy = payload["citation_policy"]
+        self.assertIn(str(primary), policy["allowed_evidence_ids"])
+        self.assertEqual(len(policy["allowed_evidence_ids"]), 2)
+        self.assertEqual(policy["additional_evidence_ids"], "successful_history_tool_evidence_only")
+        self.assertTrue(policy["references_are_not_citations"])
+
     def run_content(self, content, *, additional_evidence=()):
         scope = ContactScope(uuid4(), uuid4())
         primary_id = uuid4()
