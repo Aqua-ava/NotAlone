@@ -1,23 +1,22 @@
 # Runtime 集成交接
 
-- 分支：`codex/memory-accuracy-integration-20261018`；工作树 `memory-bounded-runtime/NotAlone`。
-- 已提交基线34748a9d；Pro闭集实现90af01c2，逐码点标尺9795f327，包装请求绑定修复1eb194ea。
-- bounded-runtime-v1/071正式任务及隔离持久接线已实现；生产放行表空，无业务迁移、回填或自动放行。
-- Pro实现90相关检查、15定向复查、五源码mypy及Standards/Spec双审通过；非全库质量证明。
-- 最新18fcc800 closed2/30、零重试，首窗RAW/FULL1；E类别和4小时期限错误、V漏检，basis0、后14unrun。
-- 本窗一般错误1、安全0；media/truth_intent单项有效不等于七轴通过，正向依据交付0/7。
-- 最新来源13类及隔离库残留0、进程退出、专用key删除；五场共9请求、141未用额度关闭。
-- 第一场a4a1位置越界；第二场f45e仅V摘要；第三场9578 V前绑定拒绝；第四场1054候选及作者位置错误。
-- 第二场原finish closed=false/close_unknown保持；另有注册库closed、锁释放、进程退出独立证据，不补签旧收据。
-- bounded阶段教学正在实现，尚未验收；仅独立合成增量，不取原15/Gold，不改confidence、compiler或质量门。
-- 生产event与评测E2各保协议；真实worker、优先级包装和记录核验必须共用profile选择。default/core/reference E2不变。
-- 三键任务配置保持；同冻结源码恢复可核验，不承诺跨升级历史E提示恢复。实施边界见runtime-position-guide-20261018.md。
-- 核心新固定6窗22c25347已由核心线启动，隔离源90af；E2/legacyV、Flash双max、cap12、零重试。全过才4留出cap8。
-- 核心旧场用户停止且闭账，旧预算不复开；私有窗口不在主线读取或公开。
-- 指代Pro reference16从90af独立实现，SDK/owned模拟通过后正做最终审查；尚无可集成最终提交或新真实结果。
-- 指代fewshot80ca已闭账41/48；主16 general3/安全0，诊断6/8含bad_auto1；结果bafab10c，不覆盖历史失败。
-- 指代官方查证d1bbff6b、投影82557532已集成；D8原审核条件缺失，保持不完整，不借bounded合同补齐。
-- 原03第一AC未满足，State=claimed，goal=active；真实15七正控/七轴、核心6/4及指代16质量验收仍待完成。
-- 详细证据：agent-acceptance-20261018.md、runtime-position-guide-20261018.md及指代结果文档。
-- 公开历史扫描仍有12项既有engineering本机路径记录；不能称全通过；不push/PR。
-- 不读取新真实联系人、不发送聊天、不改Gold、不复用旧场余额；后续集成仅取通过的本任务提交。
+- 分支 `codex/memory-accuracy-integration-20261018`，工作树 `memory-bounded-runtime/NotAlone`；主仓未修改。
+- 最新集成 ac475b00（reference teaching b2c80417）；core E 04f7df1a→a79258df；core V 99bbf798；bounded E/V 修正 a98b317a。
+- bounded E 为 dependency-teaching-v2；V proof3 澄清既有三锚点合同，不改 compiler、schema、来源守卫或原15/Gold。
+- 原 stage-v1/default/core/reference 配置保持独立；proof3 提示 SHA 有意变更，不声称旧字节不变。
+- 合并验证：30 profile/注册测试及60共享入口/owned/fixture测试通过；7源码 mypy 通过；独立 Spec 冲突复核0问题。
+- a98b317a 已有873项 extraction 单元测试通过；该结果不是当前集成全库认证。
+- 最近真实 bounded 场 f0e64fae 已闭账4/30、4 HTTP200、零重试；首窗 P01 RAW/FULL 通过，依据实际交付1/15、正向1/7。
+- P02 E 缺 dependency，V 引用了实际 candidate source IDs 外的声明消息；来源守卫正确拒绝，后13窗 unrun，不放宽守卫。
+- 该场 capture gaps 为空，来源13表和隔离库残留0，进程退出，专用 key 已删除；生命周期仍 unrun。
+- 六场13次已知请求、167未用额度关闭只是运行统计，不合并质量分母。
+- 下一场必须新目录、新 run、新冻结、新 cap30；不复开旧场，不复用余额；独立 RAW 先封存再 FULL。
+- core 固定6场22c25347完整结束：RAW6/6、FULL3/6，安全错误0但一般错误3；留出4尚未启动或读取。
+- core 正独立实现 closed core-current-source-v1 接线（固定6/12或留出4/8），待提交集成和统一冻结后才可新API。
+- reference 原Pro16场28/32已闭账：审核14窗 safe8/general6；A15 V无法留正文而unknown，A16 unrun。
+- reference teaching b2c80417 的独立新场正在原分支运行；不得改它的冻结源码或把未完成结果记为通过。
+- 生产放行表为空；task03第一AC未满足，State=claimed，goal=active。
+- 后续仍须原15七正控/七轴及生命周期、core6/4、reference16质量验收；不得降低标准或修改Gold。
+- 所有新场仅授权合成隔离数据；无新真实联系人、聊天发送、业务迁移、push或PR。
+- 公开历史扫描仍有12项既有 engineering 本机路径记录；不能称全通过。
+- 细节见 runtime-position-guide-20261018.md、core current-six-four-result 及 reference-pro16-result。
