@@ -7,8 +7,8 @@ import { pendingCleanup } from './cleanup';
 // 未保存编辑必须通知唯一主进程门禁，不能用保存后的通知代替。
 export async function replyStrategyVersionEditGuard(browser: Browser, origin: string) {
   const failures: unknown[] = [];
-  for (const field of ['message', 'requirements'] as const) {
-    const name = field === 'message' ? '恢复组编辑消息后只提醒' : '恢复组仅编辑要求后只提醒';
+  for (const messageNumber of [1, 2] as const) {
+    const name = `恢复组编辑第${messageNumber}条消息后只提醒`;
     process.stdout.write(`page_test_scenario: ${name}\n`);
     try {
       await withEventPages(browser, origin, async ({ manager, helper, fixture }) => {
@@ -50,9 +50,8 @@ export async function replyStrategyVersionEditGuard(browser: Browser, origin: st
         const path = `/api/contacts/${scope.contactId}/assistant-sessions/${scope.sessionId}`;
         const before = await fixture.request(path);
         expect(before.status).toBe(200);
-        const textbox = group.getByRole('textbox', { name: field === 'message'
-          ? '说法1第1条编辑文本' : '说法1修改要求', exact: true });
-        const draft = field === 'message' ? '仍未保存的合成消息编辑。' : '只改说法，不增加合成承诺。';
+        const textbox = group.getByRole('textbox', { name: `说法1第${messageNumber}条编辑文本`, exact: true });
+        const draft = `第${messageNumber}条仍未保存的合成消息编辑。`;
         await expect(textbox).toBeEnabled();
         await textbox.fill(draft);
         await fixture.plan({ explore: { understanding: '未保存编辑后不应出现的自动探索。' } });
@@ -65,7 +64,7 @@ export async function replyStrategyVersionEditGuard(browser: Browser, origin: st
         const observations = await fixture.command('observations');
         const after = await fixture.request(path);
         process.stdout.write(`page_test_version_edit_observation: ${JSON.stringify({
-          field, payloadCount: (observations.payloads as unknown[]).length,
+          messageNumber, payloadCount: (observations.payloads as unknown[]).length,
           currentUnchanged: after.data.current_input_version_id === before.data.current_input_version_id,
         })}\n`);
         expect(observations.payloads).toHaveLength(2);

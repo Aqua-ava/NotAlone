@@ -79,14 +79,13 @@ async function longHistory(browser: Browser, origin: string, scene: Scene) {
     await expect(groupOn(pages.helper).getByRole('textbox', { name: /^说法1第[0-9]+条编辑文本$/ })).toHaveCount(8);
     let parent = identity.candidateId;
     for (let revision = 1; revision <= 3; revision++) {
-      const texts = fullGroup(revision), requirements = `合成第${revision}次修改，只放松措辞，不改变承诺。`;
+      const texts = fullGroup(revision);
       for (let index = 0; index < texts.length; index++) await editorOn(pages.helper, index + 1).fill(texts[index]);
-      await groupOn(pages.helper).getByRole('textbox', { name: '说法1修改要求', exact: true }).fill(requirements);
       await groupOn(pages.helper).getByRole('button', { name: '保存本组修改', exact: true }).click();
       await expect(groupOn(pages.helper).getByRole('combobox', { name: '说法1版本', exact: true }).getByRole('option')).toHaveCount(revision + 1);
       const saved = await actualHistory(pages, identity), latest = saved.versions[revision];
       expect(latest.parent_version_id).toBe(parent);
-      expect(latest.requirements).toBe(requirements);
+      expect(latest.requirements).toBeNull();
       expect(latest.messages).toEqual(identity.messages.map((message, index) => ({ ...message, text: texts[index] })));
       expect(saved.selected_version_id).toBeNull();
       parent = latest.version_id;
@@ -131,7 +130,6 @@ async function deletedRestoredGroup(browser: Browser, origin: string, scene: Sce
       message_groups: [['合成来源支持的关心。', '方便时回复就好。']] });
     const identity = await generated(pages, contactId);
     await editorOn(pages.helper, 1).fill('已保存的来源派生组修改。');
-    await groupOn(pages.helper).getByRole('textbox', { name: '说法1修改要求', exact: true }).fill('保留原来源范围。');
     await groupOn(pages.helper).getByRole('button', { name: '保存本组修改', exact: true }).click();
     await expect(groupOn(pages.helper).getByRole('combobox', { name: '说法1版本', exact: true }).getByRole('option')).toHaveCount(2);
     const saved = await actualHistory(pages, identity), versionId = saved.versions[1].version_id;
@@ -147,7 +145,6 @@ async function deletedRestoredGroup(browser: Browser, origin: string, scene: Sce
       await expect(editorOn(helper, 1)).toHaveValue('已保存的来源派生组修改。');
       await selectDisplayed(helper);
       await editorOn(helper, 1).fill('恢复后尚未保存的来源派生组编辑。');
-      await groupOn(helper).getByRole('textbox', { name: '说法1修改要求', exact: true }).fill('恢复后尚未保存的来源派生要求。');
       const sources = await pages.rewriteBackend.request(`/api/contacts/${contactId}/sources`);
       const sourceId = (sources.data.sources as Array<{ source_id: string }>)[0].source_id;
       await manager.getByRole('button', { name: '记忆', exact: true }).click();
@@ -158,7 +155,7 @@ async function deletedRestoredGroup(browser: Browser, origin: string, scene: Sce
       await manager.getByRole('button', { name: '确认删除来源', exact: true }).click();
       await expect(source.getByText('已删除，已通过不可检索校验', { exact: true })).toBeVisible({ timeout: 15_000 });
       await expect(groupOn(helper)).toHaveCount(0);
-      await expect(helper.getByRole('textbox', { name: '说法1修改要求', exact: true })).toHaveCount(0);
+      await expect(editorOn(helper, 1)).toHaveCount(0);
       expect(await rejectCopy(helper, identity, versionId, identity.messages[0].message_id)).toBe('rejected');
       expect(copied).toEqual([]);
       const unavailable = await pages.rewriteBackend.request(`/api/contacts/${contactId}/assistant-sessions/${identity.sessionId}/candidates/${identity.candidateId}/versions?page=0`);

@@ -42,7 +42,6 @@ export async function assistantSessionCombination(browser: Browser, origin: stri
     const sessionA = (await helper.evaluate(() => window.notalone.replies.getState())).savedSession!.sessionId!;
     const pathA = `/api/contacts/${contactA}/assistant-sessions/${sessionA}`;
     await group.getByRole('textbox', { name: '说法1第2条编辑文本', exact: true }).fill('甲明确保存的拒绝。');
-    await group.getByRole('textbox', { name: '说法1修改要求', exact: true }).fill('不要承诺');
     await group.getByRole('button', { name: '保存本组修改', exact: true }).click();
     await expect(group.getByRole('combobox', { name: '说法1版本', exact: true }).getByRole('option')).toHaveCount(2);
     await fixture.plan({ count: 1, message_groups: [['甲简短感谢。', '甲明确不参加。']] });
@@ -66,7 +65,7 @@ export async function assistantSessionCombination(browser: Browser, origin: stri
     const turns = adopted.turns as Array<{ input: { content: { target_message_id: string; direction: string; user_instruction: string } } }>;
     expect(turns).toHaveLength(3);
     expect(turns[2].input.content).toMatchObject({ target_message_id: arrived.message_id,
-      direction: '感谢邀请，本次不参加。', user_instruction: '自然一点；不要承诺；简短一点' });
+      direction: '感谢邀请，本次不参加。', user_instruction: '自然一点；简短一点' });
     await group.getByRole('radio', { name: '选择说法1当前版本', exact: true }).click();
     await openAssistantHistory(helper);
     await expect(helper.getByRole('button', { name: '携已选版本新开', exact: true })).toBeEnabled();

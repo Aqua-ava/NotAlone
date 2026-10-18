@@ -2,25 +2,23 @@ import { useEffect, useRef, useState, type ClipboardEvent, type ReactNode } from
 
 interface MessageView { messageId: string; text: string; }
 
-export function CandidateMessageGroup({ identity, number, messages, requirements, controls, disabled, dirty, canCopy, restored,
-  edit, editRequirements, save, copy, noteTextCopy, validatePaste }: {
+export function CandidateMessageGroup({ identity, number, messages, controls, disabled, dirty, canCopy, restored,
+  edit, save, copy, noteTextCopy, validatePaste }: {
   identity: string;
   number: number;
   messages: readonly MessageView[];
-  requirements: string;
   controls: ReactNode;
   disabled: boolean;
   dirty: boolean;
   canCopy: boolean;
   restored: boolean;
   edit: (messageId: string, text: string) => void;
-  editRequirements: (text: string) => void;
   save: () => Promise<void>;
   copy: (messageId: string) => Promise<void>;
   noteTextCopy: (text: string) => void;
   validatePaste: (text: string) => Promise<void>;
 }) {
-  const signature = JSON.stringify([identity, messages, requirements]);
+  const signature = JSON.stringify([identity, messages]);
   const latest = useRef(signature);
   latest.current = signature;
   const active = useRef(true);
@@ -82,10 +80,6 @@ export function CandidateMessageGroup({ identity, number, messages, requirements
       /></label>
       <button disabled={copying || dirty || !canCopy || !message.text.trim()} onClick={() => void copyMessage(message.messageId, index)}>复制第{index + 1}条</button>
     </div>)}
-    <label>本组修改要求<textarea aria-label={`说法${number}修改要求`} maxLength={4096} value={requirements}
-      placeholder="可选，只作用于本组当前修改"
-      onPaste={(event) => void paste(event, editRequirements)}
-      onChange={(event) => editRequirements(event.target.value)} /></label>
     <button disabled={!dirty || copying || messages.some((message) => !message.text.trim())} onClick={() => void saveGroup()}>保存本组修改</button>
     {saving && <p role="status">正在保存本组修改…</p>}
     {!saving && dirty && <p>保存修改后，再选择当前版本并逐条复制。</p>}

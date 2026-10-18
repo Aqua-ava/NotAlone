@@ -111,9 +111,9 @@ export function CandidateVersionEditor({ replies, view, candidateId, replyReques
   </>;
   return <>
     <ReplyBasisChangeNotice changes={history?.basisChanges} />
-    <CandidateMessageGroup identity={identity} number={number} messages={messages} requirements={requirements}
+    <CandidateMessageGroup identity={identity} number={number} messages={messages}
       restored={restored} disabled={disabled || sampleSaving} dirty={dirty} canCopy={Boolean(chosen)}
-      edit={editMessage} editRequirements={(text) => { editRevision.current++; setDraft({ ...draft, requirements: text }); setError(''); retainDraft(messages, text); }}
+      edit={editMessage}
       save={save} noteTextCopy={noteCopy}
       validatePaste={(text) => window.notalone.styleSamples.validateCandidatePaste({ ...scope, replyRequestId,
         versionId: version.versionId, text })}

@@ -90,7 +90,6 @@ async function selectedVersion(pages: RewritePages): Promise<string> {
   await expect(helper.getByRole('button', { name: '携已选版本新开', exact: true })).toBeDisabled();
   await group.getByRole('textbox', { name: '说法2第1条编辑文本', exact: true }).fill('明确选用的合成编辑第一条。');
   await group.getByRole('textbox', { name: '说法2第2条编辑文本', exact: true }).fill('明确选用的合成编辑第二条。');
-  await group.getByRole('textbox', { name: '说法2修改要求', exact: true }).fill('不搬入新会话的合成修改要求。');
   await group.getByRole('button', { name: '保存本组修改', exact: true }).click();
   await expect(group.getByRole('combobox', { name: '说法2版本', exact: true }).getByRole('option')).toHaveCount(2);
   await group.getByRole('radio', { name: '选择说法2当前版本', exact: true }).click();

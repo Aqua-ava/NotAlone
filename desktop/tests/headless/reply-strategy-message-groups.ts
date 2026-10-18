@@ -80,16 +80,14 @@ export async function replyStrategyMessageGroups(browser: Browser, origin: strin
       expect(copied).toEqual([]);
       const candidate = candidates[0], first = groupOn(helper, 1), second = groupOn(helper, 2);
       const edited = ['想问问最近过得怎么样。', candidate.messages[1].text];
-      const requirement = '只放松措辞，不新增安排承诺。';
+      await expect(first.getByRole('textbox', { name: '说法1修改要求', exact: true })).toHaveCount(0);
       await first.getByRole('textbox', { name: '说法1第1条编辑文本', exact: true }).fill(edited[0]);
-      await first.getByRole('textbox', { name: '说法1修改要求', exact: true }).fill(requirement);
       await expect(first.getByRole('button', { name: '复制第1条', exact: true })).toBeDisabled();
       await expect(first.getByRole('radio', { name: '选择说法1当前版本', exact: true })).toBeDisabled();
       replyTransport.failNextCandidateVersionSave = true;
       await first.getByRole('button', { name: '保存本组修改', exact: true }).click();
       await expect(helper.getByRole('alert').filter({ hasText: '本组版本操作尚未确认' })).toBeVisible();
       await expect(first.getByRole('textbox', { name: '说法1第1条编辑文本', exact: true })).toHaveValue(edited[0]);
-      await expect(first.getByRole('textbox', { name: '说法1修改要求', exact: true })).toHaveValue(requirement);
       expect((await history(rewriteBackend, contactId, sessionId, candidate.candidate_id)).versions).toHaveLength(1);
       await helper.getByRole('button', { name: '重新读取本组版本', exact: true }).click();
       await expect(first.getByRole('button', { name: '保存本组修改', exact: true })).toBeEnabled();
@@ -98,7 +96,7 @@ export async function replyStrategyMessageGroups(browser: Browser, origin: strin
       await expect(first.getByRole('combobox', { name: '说法1版本', exact: true }).getByRole('option')).toHaveCount(2);
       const saved = await history(rewriteBackend, contactId, sessionId, candidate.candidate_id);
       const initial = saved.versions[0], revision = saved.versions[1];
-      expect(revision).toMatchObject({ version_number: 1, parent_version_id: initial.version_id, requirements: requirement });
+      expect(revision).toMatchObject({ version_number: 1, parent_version_id: initial.version_id, requirements: null });
       expect(revision.messages).toEqual(candidate.messages.map((message, index) => ({ ...message, text: edited[index] })));
       expect(saved.default_display_version_id).toBe(revision.version_id);
       expect(await selected(rewriteBackend, contactId, sessionId)).toBeNull();
@@ -157,7 +155,6 @@ export async function replyStrategyMessageGroups(browser: Browser, origin: strin
         const recovered = groupOn(nextHelper, 1);
         await expect(recovered.getByRole('textbox', { name: '说法1第1条编辑文本', exact: true })).toHaveValue(edited[0]);
         await expect(recovered.getByRole('combobox', { name: '说法1版本', exact: true })).toHaveValue(revision.version_id);
-        await expect(recovered.getByRole('textbox', { name: '说法1修改要求', exact: true })).toHaveValue(requirement);
         await expect(recovered.getByRole('button', { name: '复制第1条', exact: true })).toBeDisabled();
         expect((await selected(rewriteBackend, contactId, sessionId))?.version_id).toBe(initial.version_id);
         await recovered.getByRole('radio', { name: '选择说法1当前版本', exact: true }).click();
@@ -190,7 +187,6 @@ export async function replyStrategyMessageGroups(browser: Browser, origin: strin
       const editor = group.getByRole('textbox', { name: '说法1第1条编辑文本', exact: true });
       await expect(editor).toHaveValue('最近过得怎么样？');
       await editor.fill('我想了解你最近的近况。');
-      await group.getByRole('textbox', { name: '说法1修改要求', exact: true }).fill('只改变说法，不加承诺。');
       const before = await helper.evaluate(async () => (await window.notalone.replies.getState()).savedSession!.currentInputVersionId);
       await fixture.command('append_burst');
       await expect(helper.getByRole('status').filter({ hasText: '当前联系人有新消息，生成依据仍是原快照' })).toBeVisible();
@@ -209,7 +205,6 @@ export async function replyStrategyMessageGroups(browser: Browser, origin: strin
         await expect(helper.getByRole('status').filter({ hasText: '消息提醒已恢复，期间可能有遗漏' })).toBeVisible();
       }
       await expect(editor).toHaveValue('我想了解你最近的近况。');
-      await expect(group.getByRole('textbox', { name: '说法1修改要求', exact: true })).toHaveValue('只改变说法，不加承诺。');
       const after = await helper.evaluate(async () => (await window.notalone.replies.getState()).savedSession!.currentInputVersionId);
       expect(after).toBe(before);
       expect((await fixture.command('observations')).model_calls).toBe(1);

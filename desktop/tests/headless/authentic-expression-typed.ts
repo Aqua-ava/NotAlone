@@ -174,7 +174,6 @@ export async function authenticExpressionTyped(browser: Browser, origin: string)
         const sessionPath = `/api/contacts/${contactId}/assistant-sessions/${initial.output.session_id}`;
         const group = helper.getByRole('group', { name: '说法1消息组', exact: true });
         await group.getByRole('textbox', { name: '说法1第2条编辑文本', exact: true }).fill('谢谢。');
-        await group.getByRole('textbox', { name: '说法1修改要求', exact: true }).fill('不要承诺');
         await group.getByRole('button', { name: '保存本组修改', exact: true }).click();
         await expect.poll(async () => (await helper.evaluate(async () => window.notalone.replies.getState()))
           .candidateVersions?.items.find((entry) => entry.candidateId === initial.candidate.candidate_id)?.history?.versions.length).toBe(2);

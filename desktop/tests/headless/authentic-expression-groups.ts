@@ -195,11 +195,9 @@ export async function authenticExpressionGroups(browser: Browser, origin: string
           await expect(firstEditor).toHaveValue(stage.messages[0]);
           expect((await rewriteBackend.request(`/api/contacts/${contactId}/assistant-sessions/${item.output.session_id}/candidates/${item.candidate.candidate_id}/versions`)).status).toBe(200);
           const edited = ['这次我不参加。', stage.messages[1]];
-          const requirements = '只调整第一条的说法，保持拒绝且不新增承诺。';
           await expect(firstEditor).toBeEditable();
           expect(await pasteSelection(firstEditor, edited[0])).toBe(false);
           await expect(firstEditor).toHaveValue(edited[0]);
-          await group.getByRole('textbox', { name: '说法1修改要求', exact: true }).fill(requirements);
           await group.getByRole('button', { name: '保存本组修改', exact: true }).click();
           await expect(group.getByRole('combobox', { name: '说法1版本', exact: true })).toHaveCount(1);
           await expect.poll(async () => (await helper.evaluate(async () => window.notalone.replies.getState()))
@@ -211,7 +209,7 @@ export async function authenticExpressionGroups(browser: Browser, origin: string
           const version = history.versions[1];
           expect(version.parentVersionId).toBe(history.versions[0].versionId);
           expect(version.messages.map((message) => message.messageId)).toEqual(item.candidate.messages.map((message) => message.message_id));
-          expect(version.messages.map((message) => message.text)).toEqual(edited); expect(version.requirements).toBe(requirements);
+          expect(version.messages.map((message) => message.text)).toEqual(edited); expect(version.requirements).toBeNull();
           await group.getByRole('radio', { name: '选择说法1当前版本', exact: true }).click();
           await expect(group.getByRole('radio', { name: '选择说法1当前版本', exact: true })).toBeChecked();
           await group.getByRole('button', { name: '复制第1条', exact: true }).click();
