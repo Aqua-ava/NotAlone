@@ -103,6 +103,7 @@ void app.whenReady().then(async () => {
   memory.onRecordDeletion((phase) => traces.recordDeletionChanged(phase));
   installBindingConsentBridge(commands, backend, contacts, () => foreground.beginReadingScopeChange());
   const sync = installSyncControlBridge(commands, backend, contacts, () => foreground.beginReadingScopeChange());
+  app.on('before-quit', () => sync.dispose());
   sync.onStateChanged((state) => foreground.setSyncControlState(state));
   foreground.setSyncControlState(sync.getState());
   const replies = installReplyBridge(commands, backend, contacts, () => foreground.getGenerationBlock());
