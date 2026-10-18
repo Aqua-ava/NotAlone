@@ -1,6 +1,6 @@
 # 分层记忆：任务索引与工作流状态
 
-> 更新：2026-10-18。四会话按真实依赖推进；集成分支 `codex/layered-memory-integration`，本轮固定比较基线 `0702940`。本L2/L3工作不修改主仓main；01、02、03、04、05、06、07、08、09已完成工程签收，10由C收束工程交付，11等待10工程前置。
+> 更新：2026-10-18。四会话按真实依赖推进；集成分支 `codex/layered-memory-integration`，本轮固定比较基线 `0702940`。本L2/L3工作不修改主仓main；01–10已完成工程签收，11已在独立工作树领取，继续必要组合接线与快速验收。
 > [正式规格](spec.md)、[已确认拆分](ticket-proposal.md)、[联合方案](../../architecture/drafts/layered-relationship-memory.md)、[ADR-067](../../architecture/adr/067-layered-scenario-and-profile-context.md)。
 
 ## 正式任务
@@ -16,8 +16,8 @@
 | 07 | [联系人背景和主题目录进入回复](issues/07-contact-layered-reply-context.md) | resolved | 04 |
 | 08 | [按需读取主题正文与实际依据回看](issues/08-scenario-read-tool.md) | resolved | 07 |
 | 09 | [本人背景与当前联系人回复组合](issues/09-owner-contact-reply-context.md) | resolved | 05, 08 |
-| 10 | [整理模型质量验证与可用状态](issues/10-organization-quality-gate.md) | claimed | 05 |
-| 11 | [完整回复质量对照与受控启用交付](issues/11-combined-quality-release.md) | open | 06, 09, 10 |
+| 10 | [整理模型质量验证与可用状态](issues/10-organization-quality-gate.md) | resolved | 05 |
+| 11 | [完整回复质量对照与受控启用交付](issues/11-combined-quality-release.md) | claimed | 06, 09, 10 |
 
 ## 当前可领取前沿
 
@@ -77,3 +77,7 @@ flowchart TD
 ## 当前有效：v2由Agent快速验收
 
 用户已撤销本人手验安排。已签收9/11票；06公开HTTP／PG定点行为及类型检查通过，新增说明文案仅独立静态核对，未单独原生点击，不挪用旧App证据。10以独立Agent真实身份审阅并执行14例有限真实整理核验，11继续必要集成与短关键组合验证；复用有效证据、不等待用户逐例审阅、不反复全量。保留完整126材料及正式质量未知／关闭，有限通过不能写成全量质量达标。最终交付可运行入口、实际通过、未覆盖及限制。
+
+## 2026-10-18 当前10/11工程交付
+
+10固定`0cd1e7c6`以`6811389c`独立合并签收，真实14例64次请求、Agent审阅4通过／10未通过，正式质量unknown、自动使用关闭。11已领取，复用现有回复运行时与持久物理额度，补生产接线、独立reply合同及可信证据来源、快照资格复验和最多4对／48次有限实际对照。14失败样例不删，不能拿未通过候选作为合法安装材料；完整质量未过不阻止工程继续，但不得称生产新层可用。
