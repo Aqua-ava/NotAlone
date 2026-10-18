@@ -282,7 +282,6 @@ def _verify_bounded_claim(frozen: dict, config: dict, helper: Any, actual_window
     from .source_proof import bounded_runtime_rule_set_sha256
     from .verification_adapters import source_verification_contract
     from .evaluation_provider_contract import bounded_profile_for_config, EvaluationProviderProfile
-    from .grounded_adapter import BOUNDED_DEPENDENCY_PROMPT_PROFILE
     from notalone.memory_trace.context import snapshot
     from notalone.tasks.models import ExtractionRuntimeConfig, ExtractionRuntimeMode
 
@@ -293,10 +292,10 @@ def _verify_bounded_claim(frozen: dict, config: dict, helper: Any, actual_window
     content = helper.digest(tuple({"messages": row["messages"], "target_indices": row["target_indices"]}
                                   for row in BOUNDED_RUNTIME_INPUTS))
     current_rules = bounded_runtime_rule_set_sha256()
-    if (config.get("extraction_prompt_profile") != BOUNDED_DEPENDENCY_PROMPT_PROFILE
-            or frozen.get("fixed", {}).get("extraction_prompt_profile") != BOUNDED_DEPENDENCY_PROMPT_PROFILE):
-        raise ValueError("bounded_frozen_extraction_prompt_changed")
     profile = bounded_profile_for_config(config)
+    if (config.get("extraction_prompt_profile") != profile.bounded_extraction_prompt_profile
+            or frozen.get("fixed", {}).get("extraction_prompt_profile") != profile.bounded_extraction_prompt_profile):
+        raise ValueError("bounded_frozen_extraction_prompt_changed")
     fixed = frozen.get("fixed", {})
     if fixed.get("provider_profile", EvaluationProviderProfile.DEEPSEEK_BOUNDED_TASK.value) != profile.value:
         raise ValueError("bounded_frozen_provider_changed")
@@ -355,7 +354,7 @@ def _verify_bounded_claim(frozen: dict, config: dict, helper: Any, actual_window
             raise ValueError("bounded_formal_binding_changed")
         task_ids.add(identifiers["task_id"])
         contacts.add(identifiers["contact_id"])
-    contracts = tuple(extraction_contract("grounded-v2", window, prompt_profile=BOUNDED_DEPENDENCY_PROMPT_PROFILE) for window in actual_windows)
+    contracts = tuple(extraction_contract("grounded-v2", window, prompt_profile=profile.bounded_extraction_prompt_profile) for window in actual_windows)
     prompt, schema = source_verification_contract("nullable-proof-v3")
     if (config["extraction_window_contracts"] != [{"input_sha256": item["input_sha256"],
             "prompt_sha256": helper.digest(e_prompt), "schema_sha256": helper.digest(e_schema)}

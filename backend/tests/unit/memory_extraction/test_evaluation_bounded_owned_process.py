@@ -45,7 +45,8 @@ class BoundedOwnedClaimTest(unittest.TestCase):
             directory.mkdir(mode=0o700)
             evaluation = directory / "evaluation"
             evaluation.mkdir(mode=0o700)
-            config, plan, windows = registration.bounded_config()
+            config, plan, windows = registration.bounded_config(prompt_profile=(
+                registration.BOUNDED_DEPENDENCY_V3_PROMPT_PROFILE if thinking else registration.BOUNDED_DEPENDENCY_PROMPT_PROFILE))
             if pro:
                 config.update(request_contract_version=5 if thinking else 3,
                               provider_profile="deepseek-pro-bounded-thinking-v1" if thinking else "deepseek-pro-bounded-task-v1",
@@ -69,7 +70,7 @@ class BoundedOwnedClaimTest(unittest.TestCase):
             if pro:
                 frozen["fixed"] = {"provider_profile": config["provider_profile"], "request_model": "deepseek-v4-pro",
                                    "response_model": "deepseek-v4-pro", "request_contract_version": config["request_contract_version"], "max_tokens": 8192}
-            frozen.setdefault("fixed", {})["extraction_prompt_profile"] = registration.BOUNDED_DEPENDENCY_PROMPT_PROFILE
+            frozen.setdefault("fixed", {})["extraction_prompt_profile"] = config["extraction_prompt_profile"]
             frozen = snapshot(frozen)
             helper = SimpleNamespace(private_directory=lambda path: None, digest=json_only_digest,
                                      read_private=lambda path: json.loads(path.read_bytes()))

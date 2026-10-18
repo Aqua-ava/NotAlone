@@ -612,7 +612,8 @@ def _run_evaluation_batch(
     prompt_profile = (CORE_SOURCE_FIDELITY_PROFILE if core
                       else REFERENCE16_RETENTION_V_PROFILE if execution_plan == REFERENCE16_PRO_RETENTION_PLAN
                       else SEMANTIC4_PROMPT_PROFILE if public_quality else "default")
-    validate_extraction_prompt_profile(execution_plan, extraction_prompt_profile)
+    validate_extraction_prompt_profile(execution_plan, extraction_prompt_profile,
+        provider_profile=bounded_profile.value if bounded_profile is not None else None)
     if store.extraction_prompt_profile != extraction_prompt_profile:
         raise EvaluationBudgetAbort("evaluation_frozen_extraction_prompt_profile_mismatch")
     if mixed != (store.execution_plan in PHASE_SPLIT_PLANS) or mixed and execution_plan != store.execution_plan:

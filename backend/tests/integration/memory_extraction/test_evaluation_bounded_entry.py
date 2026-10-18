@@ -91,8 +91,11 @@ class BoundedEvaluationEntryTest(unittest.TestCase):
                     provider_profile="deepseek-bounded-task-v1", execution_plan=BOUNDED_RUNTIME_PLAN,
                     extraction_mode="grounded-v2")
 
-    def prepared(self, verification_tool_choice="forced"):
+    def prepared(self, verification_tool_choice="forced", provider_profile="deepseek-bounded-task-v1", prompt_override=None):
         fixed = self.fixed()
+        from notalone.memory_extraction.evaluation_provider_contract import EvaluationProviderProfile
+        fixed["extraction_prompt_profile"] = (prompt_override or
+            EvaluationProviderProfile(provider_profile or "deepseek-bounded-task-v1").bounded_extraction_prompt_profile)
         root = Path(__file__).resolve().parents[4]
         hashes = {}
         for relative in entry._BOUNDED_RUNTIME_REQUIRED_SOURCES:
@@ -111,7 +114,7 @@ class BoundedEvaluationEntryTest(unittest.TestCase):
             case_set="bounded15", verification_mode="nullable-proof-v3", verification_tool_choice=verification_tool_choice,
             extraction_tool_choice="omitted", extraction_mode="grounded-v2",
             reference_version=BOUNDED_RUNTIME_PLAN, execution_plan=BOUNDED_RUNTIME_PLAN,
-            extraction_prompt_profile=BOUNDED_DEPENDENCY_PROMPT_PROFILE)
+            extraction_prompt_profile=fixed["extraction_prompt_profile"], provider_profile=provider_profile)
         fixed.update(source_hashes=hashes, frozen_gold={"status": "frozen_agent_review",
             "case_names": [case.name for case in BOUNDED_RUNTIME_CASES],
             "criteria_path": BOUNDED_RUNTIME_REFERENCE_PATH, "criteria_sha256": criteria}, audit_case=audit)
@@ -139,6 +142,12 @@ class BoundedEvaluationEntryTest(unittest.TestCase):
             "notalone.memory_extraction.evaluation_formal_task._task_window", side_effect=lambda _, window, case: window))
         return fixed
 
+    def test_v3_phased_audit_requires_exact_thinking_identity_before_budget(self):
+        for profile in (None, "deepseek-bounded-task-v1", "deepseek-pro-bounded-task-v1"):
+            with self.subTest(profile=profile), self.assertRaisesRegex(ValueError, "提示profile"), \
+                    patch.object(entry.EvaluationBudget, "create", side_effect=AssertionError("不得建账")):
+                self.prepared("omitted", profile, "bounded-dependency-teaching-v3")
+
     def test_fixed_entry_freezes_all_tasks_then_claims_before_single_loader_and_real_sdk_wire(self):
         self.assert_fixed_sdk_wire("deepseek-bounded-task-v1", "deepseek-flash")
 
@@ -152,7 +161,7 @@ class BoundedEvaluationEntryTest(unittest.TestCase):
         from langchain_deepseek import ChatDeepSeek
         from pydantic import SecretStr
 
-        fixed = self.prepared("omitted" if profile == "deepseek-pro-bounded-thinking-v1" else "forced")
+        fixed = self.prepared("omitted" if profile == "deepseek-pro-bounded-thinking-v1" else "forced", profile)
         fixed["provider_profile"] = profile
         thinking = profile == "deepseek-pro-bounded-thinking-v1"
         pro = profile in {"deepseek-pro-bounded-task-v1", "deepseek-pro-bounded-thinking-v1"}
@@ -201,7 +210,7 @@ class BoundedEvaluationEntryTest(unittest.TestCase):
                 for purpose in ("extraction", "verification"):
                     verification = purpose == "verification"
                     prompt, schema = (entry._verification_contract("nullable-proof-v3") if verification
-                        else entry.extraction_contract("grounded-v2", fixed["formal_windows"][0], prompt_profile=BOUNDED_DEPENDENCY_PROMPT_PROFILE))
+                        else entry.extraction_contract("grounded-v2", fixed["formal_windows"][0], prompt_profile=fixed["extraction_prompt_profile"]))
                     messages = [{"role": "system", "content": prompt}, {"role": "user", "content": "合成调用控制"}]
                     model = ChatDeepSeek(api_key=SecretStr(key), model=model_name, base_url="https://api.deepseek.com",
                         temperature=0.0, timeout=300, max_retries=0, http_client=client, http_async_client=async_client,

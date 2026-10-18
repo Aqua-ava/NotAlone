@@ -19,7 +19,7 @@ import httpx
 from .evaluation_http_budget import EvaluationBudgetAbort
 from .evaluation_extraction import EvaluationExtractionMode, extraction_tool_name
 from .evaluation_bounded_cases import BOUNDED_RUNTIME_PLAN
-from .grounded_adapter import BOUNDED_DEPENDENCY_PROMPT_PROFILE, CORE_CURRENT_STATE_PROFILE
+from .grounded_adapter import BOUNDED_DEPENDENCY_PROMPT_PROFILE, BOUNDED_DEPENDENCY_V3_PROMPT_PROFILE, CORE_CURRENT_STATE_PROFILE
 
 
 _ENDPOINT = "https://chat.ecnu.edu.cn/open/api/v1/chat/completions"
@@ -88,9 +88,18 @@ _BOUNDED_MIGRATION_SOURCES = frozenset(
 )
 
 
-def validate_extraction_prompt_profile(execution_plan: str, prompt_profile: str) -> None:
+def validate_extraction_prompt_profile(execution_plan: str, prompt_profile: str, *, provider_profile: str | None = None) -> None:
     """新提示须与唯一新身份绑定，旧身份只允许原默认。"""
-    expected = (BOUNDED_DEPENDENCY_PROMPT_PROFILE if execution_plan == BOUNDED_RUNTIME_PLAN
+    if execution_plan == BOUNDED_RUNTIME_PLAN and provider_profile is not None:
+        try:
+            provider = EvaluationProviderProfile(provider_profile)
+        except (TypeError, ValueError):
+            raise EvaluationBudgetAbort("evaluation_provider_profile_invalid") from None
+        if not provider.is_bounded:
+            raise EvaluationBudgetAbort("evaluation_bounded_fixed_profile_required")
+        expected = provider.bounded_extraction_prompt_profile
+    else:
+        expected = (BOUNDED_DEPENDENCY_PROMPT_PROFILE if execution_plan == BOUNDED_RUNTIME_PLAN
                 else CORE_CURRENT_STATE_PROFILE if execution_plan == CORE_PROFILE_PLAN
                 else REFERENCE16_TEACHING_E_PROFILE if execution_plan in (REFERENCE16_PRO_TEACHING_PLAN, REFERENCE16_PRO_RETENTION_PLAN)
                 else UNIQUENESS_E_PROFILE if execution_plan == UNIQUENESS_PLAN else "default")
@@ -169,6 +178,11 @@ class EvaluationProviderProfile(StrEnum):
         return self in {self.DEEPSEEK_BOUNDED_TASK, self.DEEPSEEK_PRO_BOUNDED_TASK, self.DEEPSEEK_PRO_BOUNDED_THINKING}
 
     @property
+    def bounded_extraction_prompt_profile(self) -> str:
+        return (BOUNDED_DEPENDENCY_V3_PROMPT_PROFILE if self is self.DEEPSEEK_PRO_BOUNDED_THINKING
+                else BOUNDED_DEPENDENCY_PROMPT_PROFILE)
+
+    @property
     def bounded_verification_tool_choice(self) -> str:
         return "omitted" if self is self.DEEPSEEK_PRO_BOUNDED_THINKING else "forced"
 
@@ -243,7 +257,7 @@ class ECNUEvaluationContract:
         verification_prompt_profile: str = "default",
     ):
         validate_evaluation_policy(verification_tool_choice, response_identity_policy)
-        validate_extraction_prompt_profile(execution_plan, extraction_prompt_profile)
+        validate_extraction_prompt_profile(execution_plan, extraction_prompt_profile, provider_profile=provider_profile)
         self._extraction_prompt_profile = extraction_prompt_profile
         self._execution_plan = execution_plan
         validate_verification_prompt_profile(execution_plan, verification_prompt_profile)
@@ -389,7 +403,7 @@ class ECNUEvaluationContract:
             from .grounded_adapter import grounded_v4_prompt
             if expected_payload["messages"][0]["content"] != grounded_v4_prompt(self._extraction_prompt_profile):
                 raise EvaluationBudgetAbort("evaluation_extraction_prompt_changed")
-        if (self._extraction_prompt_profile in {BOUNDED_DEPENDENCY_PROMPT_PROFILE, CORE_CURRENT_STATE_PROFILE}
+        if (self._extraction_prompt_profile in {BOUNDED_DEPENDENCY_PROMPT_PROFILE, BOUNDED_DEPENDENCY_V3_PROMPT_PROFILE, CORE_CURRENT_STATE_PROFILE}
                 and expected_payload["tools"][0]["function"]["name"] == "GroundedMemoryLabels"):
             from .grounded_adapter import grounded_v2_prompt
             if expected_payload["messages"][0]["content"] != grounded_v2_prompt(self._extraction_prompt_profile):

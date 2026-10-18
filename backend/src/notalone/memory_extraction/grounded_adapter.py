@@ -155,6 +155,20 @@ target的人物和事项无需该背景补全，因此该target的dependency为n
 
 
 
+BOUNDED_DEPENDENCY_V3_PROMPT_PROFILE = "bounded-dependency-teaching-v3"
+BOUNDED_DEPENDENCY_TEACHING_V3 = """
+<bounded_dependency_teaching_v3>
+以下独立交叉例只区分是否单独保存与是否提供必要上下文；不指定其它标签或置信度。
+两个分句都是target：0:0「我把实验记录册叫作青签。」；1:0「青签已经编号好了。」。
+若0:0已按原独立保存规则标为kind=not_memory，1:0理解对象仍需要该命名，dependency=0:0。
+对照两个target：0:0「今天窗外有雾。」；1:0「实验记录册已经编号好了。」。
+同样以0:0已按原独立保存规则标为kind=not_memory为前提，1:0无需该背景补全，dependency=null。
+not_memory表示该分句不独立形成候选，不表示它不能被另一候选引用；是否选择依赖仍只取决于理解当前主张是否必需。
+这不要求所有声明都标not_memory，也不把所有not_memory加入依赖；context与target的原角色不变，回到实际原文独立填写。
+</bounded_dependency_teaching_v3>
+"""
+
+
 CORE_CURRENT_STATE_PROFILE = "core-current-state-v1"
 CORE_CURRENT_STATE_GUIDANCE = """
 <core_current_state_v1>
@@ -205,7 +219,7 @@ prefix、condition及省略原因沿原结构规则，不是额外关系事实�
 def grounded_v2_prompt(prompt_profile: str = "default", *, events: bool = False) -> str:
     """两个既有协议共享教学增量；默认提示逐字保留。"""
     if type(prompt_profile) is not str or prompt_profile not in {
-            "default", BOUNDED_STAGE_PROMPT_PROFILE, BOUNDED_DEPENDENCY_PROMPT_PROFILE,
+            "default", BOUNDED_STAGE_PROMPT_PROFILE, BOUNDED_DEPENDENCY_PROMPT_PROFILE, BOUNDED_DEPENDENCY_V3_PROMPT_PROFILE,
             CORE_CURRENT_STATE_PROFILE, REFERENCE_KIND_PROMPT_PROFILE}:
         raise ValueError("提取提示profile无效。")
     base = GROUNDED_V2_PROMPT + (GROUNDED_EVENT_PROMPT if events else "")
@@ -216,7 +230,8 @@ def grounded_v2_prompt(prompt_profile: str = "default", *, events: bool = False)
     if prompt_profile == "default":
         return base
     return base + BOUNDED_STAGE_TEACHING_V1 + (
-        BOUNDED_DEPENDENCY_TEACHING_V2 if prompt_profile == BOUNDED_DEPENDENCY_PROMPT_PROFILE else "")
+        BOUNDED_DEPENDENCY_TEACHING_V2 if prompt_profile in {BOUNDED_DEPENDENCY_PROMPT_PROFILE, BOUNDED_DEPENDENCY_V3_PROMPT_PROFILE} else "") + (
+        BOUNDED_DEPENDENCY_TEACHING_V3 if prompt_profile == BOUNDED_DEPENDENCY_V3_PROMPT_PROFILE else "")
 
 
 GROUNDED_V3_PROMPT = GROUNDED_PROMPT.replace(
@@ -503,7 +518,7 @@ def _extract_grounded(
         raise ExtractionInvalidOutputError("原文结构提取必须返回唯一的指定工具。")
     draft = calls[0].get("args")
     identity = {"protocol": protocol}
-    if prompt_profile in {BOUNDED_STAGE_PROMPT_PROFILE, BOUNDED_DEPENDENCY_PROMPT_PROFILE,
+    if prompt_profile in {BOUNDED_STAGE_PROMPT_PROFILE, BOUNDED_DEPENDENCY_PROMPT_PROFILE, BOUNDED_DEPENDENCY_V3_PROMPT_PROFILE,
                           CORE_CURRENT_STATE_PROFILE, REFERENCE_KIND_PROMPT_PROFILE}:
         identity.update(prompt_profile=prompt_profile, prompt_sha256=hashlib.sha256(json.dumps(
             prompt, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False,

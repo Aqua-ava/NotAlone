@@ -28,13 +28,19 @@ def extraction_runtime_for_config(
     validate_runtime_config(config)
     if config is None or config.mode is ExtractionRuntimeMode.LEGACY:
         return runtime
-    from notalone.memory_extraction.grounded_adapter import BOUNDED_DEPENDENCY_PROMPT_PROFILE
+    from notalone.memory_extraction.grounded_adapter import (
+        BOUNDED_DEPENDENCY_PROMPT_PROFILE, BOUNDED_DEPENDENCY_V3_PROMPT_PROFILE,
+    )
 
     select = getattr(runtime, "for_prompt_profile", None)
     if not callable(select):
         raise ValueError("提取适配器不支持指定任务教学profile。")
-    selected = select(BOUNDED_DEPENDENCY_PROMPT_PROFILE)
-    if getattr(selected, "prompt_profile", None) != BOUNDED_DEPENDENCY_PROMPT_PROFILE:
+    # 仅保留受控调用方显式注入的v3；普通任务仍选v2，provider绑定由评测冻结链验证。
+    profile = (BOUNDED_DEPENDENCY_V3_PROMPT_PROFILE
+               if getattr(runtime, "prompt_profile", None) == BOUNDED_DEPENDENCY_V3_PROMPT_PROFILE
+               else BOUNDED_DEPENDENCY_PROMPT_PROFILE)
+    selected = select(profile)
+    if getattr(selected, "prompt_profile", None) != profile:
         raise ValueError("指定任务与提取教学profile不符。")
     return selected
 

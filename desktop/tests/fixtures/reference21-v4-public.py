@@ -66,7 +66,8 @@ PROFILES["bounded15-pro"] = {**PROFILES["bounded15"],
 
 PROFILES["bounded15-pro-thinking"] = {**PROFILES["bounded15-pro"],
     "provider_profile": EvaluationProviderProfile.DEEPSEEK_PRO_BOUNDED_THINKING.value,
-    "request_contract_version": 5, "verification_tool_choice": "omitted"}
+    "request_contract_version": 5, "verification_tool_choice": "omitted",
+    "extraction_prompt_profile": EvaluationProviderProfile.DEEPSEEK_PRO_BOUNDED_THINKING.bounded_extraction_prompt_profile}
 
 PROFILES["reference16-pro"] = {
     "execution_plan": REFERENCE16_PRO_PLAN, "case_set": "reference21", "case_positions": list(range(16)),
@@ -354,7 +355,7 @@ def worker(*, freeze_path: Path, expected_sha256: str, approval: dict,
     return result
 
 
-def _bounded_contract_fields(data):
+def _bounded_contract_fields(data, fixed):
     """同一正式来源同时固定内容、实际身份和单次任务配置。"""
     from notalone.memory_extraction.evaluation_bounded_cases import BOUNDED_RUNTIME_CASES, BOUNDED_RUNTIME_INPUTS
     from notalone.memory_extraction.evaluation_extraction import extraction_contract
@@ -369,7 +370,7 @@ def _bounded_contract_fields(data):
     repository = PostgresBackgroundTaskRepository(data.database_url)
     for index, (case, window, task_id) in enumerate(zip(BOUNDED_RUNTIME_CASES, data.windows, data.task_ids, strict=True)):
         input_sha = canonical_sha256(window)
-        prompt, schema = extraction_contract("grounded-v2", window, prompt_profile=BOUNDED_DEPENDENCY_PROMPT_PROFILE)
+        prompt, schema = extraction_contract("grounded-v2", window, prompt_profile=fixed["extraction_prompt_profile"])
         task = repository.get_task(owner_id=window.owner_id, contact_id=window.contact_id, task_id=task_id)
         if task.extraction_runtime_config is None:
             raise ValueError("bounded15_saved_task_config_required")
@@ -413,7 +414,7 @@ def _prepare_bounded(*, directory: Path, absolute_start: datetime, profile: str 
                   "absolute_end": (absolute_start + timedelta(seconds=14400)).isoformat(),
                   "source_hashes": sources, "installed_versions": {name: version(name) for name in helper.PACKAGES},
                   "reference_canonical_sha256": helper.digest(reference), "formal_sources": receipt,
-                  "formal_sources_sha256": helper.digest(receipt), **_bounded_contract_fields(data), "quality_certified": False}
+                  "formal_sources_sha256": helper.digest(receipt), **_bounded_contract_fields(data, fixed), "quality_certified": False}
         if profile in {"bounded15-pro", "bounded15-pro-thinking"}:
             frozen["credential_path"] = str(credential_path)
         helper.publish(directory / "freeze.json", frozen)
@@ -447,7 +448,7 @@ def _validate_bounded(frozen: dict) -> tuple[datetime, datetime]:
     if any(helper.file_digest(ROOT / name) != expected for name, expected in frozen["source_hashes"].items()):
         raise ValueError("bounded15_source_drift")
     data = load_bounded_sources(frozen["formal_sources"])
-    fields = _bounded_contract_fields(data)
+    fields = _bounded_contract_fields(data, fixed)
     if any(helper.digest(frozen[key]) != helper.digest(value) for key, value in fields.items()):
         raise ValueError("bounded15_actual_task_or_contract_changed")
     reference = json.loads((ROOT / BOUNDED_REFERENCE).read_bytes())
@@ -503,6 +504,7 @@ def _worker_bounded(*, frozen, freeze_path, synthetic_transport, credential_load
     from notalone.memory_extraction.evaluation_records import _json_value
 
     helper = helpers()
+    fixed = fixed_contract(frozen)
     work_end, _ = validate(frozen)
     directory = Path(frozen["directory"])
     if freeze_path.resolve() != directory / "freeze.json" or get_tracing_context().get("enabled") is True:
@@ -520,7 +522,7 @@ def _worker_bounded(*, frozen, freeze_path, synthetic_transport, credential_load
         case_set="bounded15", reference_version=BOUNDED_RUNTIME_PLAN, execution_plan=BOUNDED_RUNTIME_PLAN,
         extraction_mode="grounded-v2", verification_mode="nullable-proof-v3",
         verification_tool_choice=fixed_contract(frozen)["verification_tool_choice"], extraction_tool_choice="omitted",
-        extraction_prompt_profile=BOUNDED_DEPENDENCY_PROMPT_PROFILE)
+        extraction_prompt_profile=fixed["extraction_prompt_profile"], provider_profile=fixed["provider_profile"])
     loaded = False
 
     def loader():
@@ -546,7 +548,7 @@ def _worker_bounded(*, frozen, freeze_path, synthetic_transport, credential_load
         case_positions=None, case_set="bounded15", request_limit=30, reference_version=BOUNDED_RUNTIME_PLAN,
         verification_mode="nullable-proof-v3", verification_tool_choice=fixed_contract(frozen)["verification_tool_choice"], extraction_mode="grounded-v2",
         execution_plan=BOUNDED_RUNTIME_PLAN, bounded_runtime_deadline=control,
-        extraction_prompt_profile=BOUNDED_DEPENDENCY_PROMPT_PROFILE,
+        extraction_prompt_profile=fixed["extraction_prompt_profile"],
         formal_windows=data.windows, formal_task_ids=data.task_ids, database_url=data.database_url)
     result.update(worker_pid=os.getpid(), execution_plan=BOUNDED_RUNTIME_PLAN)
     helper.publish(directory / "result.json", _json_value(result))

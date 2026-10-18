@@ -21,7 +21,7 @@ from tests.unit.memory_extraction import test_evaluation_provider_contract as pr
 from tests.unit.memory_extraction.test_evaluation_provider_contract import _payload, _completion
 
 
-from notalone.memory_extraction.grounded_adapter import BOUNDED_DEPENDENCY_PROMPT_PROFILE, grounded_v2_prompt
+from notalone.memory_extraction.grounded_adapter import BOUNDED_DEPENDENCY_PROMPT_PROFILE, BOUNDED_DEPENDENCY_V3_PROMPT_PROFILE, grounded_v2_prompt
 
 PLAN = "bounded-runtime15-v1"
 PROFILE = "deepseek-bounded-task-v1"
@@ -48,10 +48,12 @@ class BoundedProviderRegistrationTest(unittest.TestCase):
     _contract = provider_tests.EvaluationProviderContractTest._contract
 
     def bounded_contract(self, **changes):
+        expected_profile = (BOUNDED_DEPENDENCY_V3_PROMPT_PROFILE
+            if changes.get("provider_profile") == "deepseek-pro-bounded-thinking-v1" else BOUNDED_DEPENDENCY_PROMPT_PROFILE)
         return self._contract(**{
             "provider_profile": PROFILE, "execution_plan": PLAN,
             "extraction_mode": "grounded-v2", "verification_tool_choice": "forced",
-            "extraction_prompt_profile": BOUNDED_DEPENDENCY_PROMPT_PROFILE, **changes,
+            "extraction_prompt_profile": expected_profile, **changes,
         })
 
     def test_new_profile_binds_e2_and_exact_phase_requests(self):
@@ -77,6 +79,8 @@ class BoundedProviderRegistrationTest(unittest.TestCase):
             body = {**phase_body(phase), "model": "deepseek-v4-pro", "max_tokens": 8192,
                     "thinking": {"type": "enabled"}, "reasoning_effort": "max"}
             body.pop("tool_choice", None)
+            if phase == "extraction":
+                body["messages"][0]["content"] = grounded_v2_prompt(BOUNDED_DEPENDENCY_V3_PROMPT_PROFILE)
             with contract.expect_request(body):
                 contract.check_request(httpx.Request("POST", ENDPOINT, json=body))
             for change in ({"thinking": {"type": "disabled"}}, {"reasoning_effort": "none"},
@@ -131,7 +135,7 @@ class BoundedProviderRegistrationTest(unittest.TestCase):
         for profile, reason in ((profile, reason) for profile in ("deepseek-pro-bounded-task-v1", "deepseek-pro-bounded-thinking-v1")
                                 for reason in ("length", "content_filter")):
             thinking = profile == "deepseek-pro-bounded-thinking-v1"
-            config, plan, windows = bounded_config()
+            config, plan, windows = bounded_config(prompt_profile=BOUNDED_DEPENDENCY_V3_PROMPT_PROFILE if thinking else BOUNDED_DEPENDENCY_PROMPT_PROFILE)
             config.update(request_contract_version=5 if thinking else 3, provider_profile=profile,
                           request_model="deepseek-v4-pro", max_tokens=8192)
             if thinking:
@@ -256,7 +260,7 @@ class BoundedProviderRegistrationTest(unittest.TestCase):
             contract.check_preflight()
 
 
-def bounded_config(*, windows=None, task_ids=None):
+def bounded_config(*, windows=None, task_ids=None, prompt_profile=BOUNDED_DEPENDENCY_PROMPT_PROFILE):
     owner = uuid4()
     generated = tuple(ExtractionWindow(
         owner_id=owner, contact_id=uuid4(),
@@ -277,7 +281,7 @@ def bounded_config(*, windows=None, task_ids=None):
     rule_hash = rule_set_sha256()
     config = _frozen_config(plan, request_timeout_seconds=300.0, max_retries=0,
         extraction_mode="grounded-v2", verification_mode="nullable-proof-v3", windows=windows,
-        extraction_prompt_profile=BOUNDED_DEPENDENCY_PROMPT_PROFILE)
+        extraction_prompt_profile=prompt_profile)
     config.pop("thinking")
     config.update(mode="deepseek_bounded_runtime15", stage="bounded-runtime15", execution_plan=PLAN,
         reference_version=PLAN, request_contract_version=2, base_url="https://api.deepseek.com",
@@ -296,6 +300,17 @@ def bounded_config(*, windows=None, task_ids=None):
 
 
 class BoundedRecordsRegistrationTest(unittest.TestCase):
+    def test_v3_registration_is_exactly_bound_to_thinking_even_after_all_hashes_change(self):
+        for thinking, prompt in ((False, BOUNDED_DEPENDENCY_V3_PROMPT_PROFILE),
+                                 (True, BOUNDED_DEPENDENCY_PROMPT_PROFILE)):
+            config, plan, windows = bounded_config(prompt_profile=prompt)
+            config.update(provider_profile="deepseek-pro-bounded-thinking-v1" if thinking else "deepseek-pro-bounded-task-v1",
+                          request_contract_version=5 if thinking else 3, request_model="deepseek-v4-pro", max_tokens=8192)
+            if thinking:
+                config["tool_choice"]["verification"]["mode"] = "omitted"
+            with self.subTest(thinking=thinking, prompt=prompt), self.assertRaises(EvaluationBudgetAbort):
+                self.register(config, plan, windows)
+
     def test_current_bounded_registration_requires_dependency_v2(self):
         config, plan, windows = bounded_config()
         self.assertEqual(config["extraction_prompt_profile"], "bounded-dependency-teaching-v2")
@@ -369,7 +384,7 @@ class BoundedRecordsRegistrationTest(unittest.TestCase):
                 self.register({**original, **change}, plan, windows)
 
     def test_thinking_registration_rejects_rehashed_profile_phase_and_version_mismatch(self):
-        original, plan, windows = bounded_config()
+        original, plan, windows = bounded_config(prompt_profile=BOUNDED_DEPENDENCY_V3_PROMPT_PROFILE)
         config = {**original, "request_contract_version": 5,
                   "provider_profile": "deepseek-pro-bounded-thinking-v1", "request_model": "deepseek-v4-pro",
                   "max_tokens": 8192, "tool_choice": {"extraction": {"mode": "omitted", "name": "GroundedMemoryLabels"},

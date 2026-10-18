@@ -212,7 +212,8 @@ class EvaluationRecordStore:
                 or self._execution_plan not in PUBLIC_QUALITY_PLANS and "verification_prompt_profile" in frozen_config):
             raise EvaluationBudgetAbort("invalid_record_verification_prompt_profile")
         self._extraction_prompt_profile = frozen_config.get("extraction_prompt_profile", "default")
-        validate_extraction_prompt_profile(self._execution_plan, self._extraction_prompt_profile)
+        validate_extraction_prompt_profile(self._execution_plan, self._extraction_prompt_profile,
+                                           provider_profile=frozen_config.get("provider_profile"))
         if self._execution_plan not in {UNIQUENESS_PLAN, BOUNDED_RUNTIME_PLAN, CORE_PROFILE_PLAN, REFERENCE16_PRO_TEACHING_PLAN, REFERENCE16_PRO_RETENTION_PLAN} and "extraction_prompt_profile" in frozen_config:
             raise EvaluationBudgetAbort("invalid_record_extraction_prompt_profile")
         self._mixed = type(self._execution_plan) is str and self._execution_plan in PHASE_SPLIT_PLANS

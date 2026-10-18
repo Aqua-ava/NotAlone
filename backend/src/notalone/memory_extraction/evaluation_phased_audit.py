@@ -211,6 +211,7 @@ class PhasedEvaluationAudit:
         execution_plan: str = "original",
         extraction_prompt_profile: str = "default",
         verification_prompt_profile: str = "default",
+        provider_profile: str | None = None,
     ):
         if type(execution_plan) is not str or execution_plan not in {"original", *PHASE_SPLIT_PLANS, BOUNDED_RUNTIME_PLAN, *REFERENCE16_PRO_PLANS}:
             raise ValueError("审核执行身份非法。")
@@ -221,7 +222,7 @@ class PhasedEvaluationAudit:
         reference21_v4 = execution_plan in REFERENCE21_PLANS
         public_quality = execution_plan in PUBLIC_QUALITY_PLANS
         try:
-            validate_extraction_prompt_profile(execution_plan, extraction_prompt_profile)
+            validate_extraction_prompt_profile(execution_plan, extraction_prompt_profile, provider_profile=provider_profile)
             validate_verification_prompt_profile(execution_plan, verification_prompt_profile)
         except EvaluationBudgetAbort:
             raise ValueError("审核提取提示profile与身份不符。") from None

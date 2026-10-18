@@ -331,7 +331,6 @@ def _run_bounded_runtime_evaluation(
 ) -> dict:
     """在共享入口登记固定正式任务；沿原预算、SDK、审核与收尾执行。"""
     from .evaluation_provider_contract import ECNUEvaluationContract, EvaluationProviderProfile
-    from .grounded_adapter import BOUNDED_DEPENDENCY_PROMPT_PROFILE
     from .evaluation_phased_audit import PhasedEvaluationAudit
     from .evaluation_reference import validate_bounded_public_reference
     from notalone.memory.bounded_evidence import rule_set_sha256
@@ -349,7 +348,7 @@ def _run_bounded_runtime_evaluation(
     _bounded_source_inventory(repo_root, source_hashes)
     contract = ECNUEvaluationContract(deadline=deadline, repo_root=repo_root, source_hashes=source_hashes,
         provider_profile=profile, extraction_mode="grounded-v2", execution_plan=BOUNDED_RUNTIME_PLAN,
-        extraction_prompt_profile=BOUNDED_DEPENDENCY_PROMPT_PROFILE,
+        extraction_prompt_profile=profile.bounded_extraction_prompt_profile,
         verification_tool_choice=profile.bounded_verification_tool_choice)
 
     def unique_object(pairs: list[tuple[str, object]]) -> dict:
@@ -375,7 +374,7 @@ def _run_bounded_runtime_evaluation(
                 or audit_case.criteria_sha256 != frozen_gold["criteria_sha256"]
                 or audit_case.execution_plan != BOUNDED_RUNTIME_PLAN or audit_case.reference_version != BOUNDED_RUNTIME_PLAN
                 or audit_case.case_set != "bounded15" or audit_case.case_positions != tuple(range(15))
-                or audit_case.extraction_mode != "grounded-v2" or audit_case.extraction_prompt_profile != BOUNDED_DEPENDENCY_PROMPT_PROFILE
+                or audit_case.extraction_mode != "grounded-v2" or audit_case.extraction_prompt_profile != profile.bounded_extraction_prompt_profile
                 or audit_case.verification_mode != "nullable-proof-v3"
                 or audit_case.extraction_tool_choice != "omitted" or audit_case.verification_tool_choice != profile.bounded_verification_tool_choice):
             raise ValueError("changed_bounded_reference_binding")
@@ -384,11 +383,11 @@ def _run_bounded_runtime_evaluation(
     bindings = _bounded_formal_bindings(windows, task_ids, database_url)
     plan = tuple({"case_position": index, "case_name": case.name, "input_sha256": canonical_sha256(window)}
                  for index, (case, window) in enumerate(zip(BOUNDED_RUNTIME_CASES, windows, strict=True)))
-    extraction_contracts = tuple(deepcopy(extraction_contract("grounded-v2", window, prompt_profile=BOUNDED_DEPENDENCY_PROMPT_PROFILE)) for window in windows)
+    extraction_contracts = tuple(deepcopy(extraction_contract("grounded-v2", window, prompt_profile=profile.bounded_extraction_prompt_profile)) for window in windows)
     v_contract = deepcopy(_verification_contract(SourceVerificationMode.NULLABLE_PROOF_V3))
     config = {**_frozen_config(plan, request_timeout_seconds=300.0, max_retries=0,
         verification_mode="nullable-proof-v3", extraction_mode="grounded-v2", windows=windows,
-        extraction_prompt_profile=BOUNDED_DEPENDENCY_PROMPT_PROFILE),
+        extraction_prompt_profile=profile.bounded_extraction_prompt_profile),
         "mode": BOUNDED_RUNTIME_MODE, "stage": BOUNDED_RUNTIME_STAGE,
         "base_url": profile.base_url, "endpoint": profile.endpoint, "request_model": profile.model,
         "execution_plan": BOUNDED_RUNTIME_PLAN, "reference_version": BOUNDED_RUNTIME_PLAN,
@@ -429,7 +428,7 @@ def _run_bounded_runtime_evaluation(
     def invocation_scope(purpose: str, messages: list[dict], window: ExtractionWindow):
         check_runtime()
         position = windows.index(window)
-        live = (extraction_contract("grounded-v2", window, prompt_profile=BOUNDED_DEPENDENCY_PROMPT_PROFILE) if purpose == "extraction"
+        live = (extraction_contract("grounded-v2", window, prompt_profile=profile.bounded_extraction_prompt_profile) if purpose == "extraction"
                 else _verification_contract(SourceVerificationMode.NULLABLE_PROOF_V3))
         frozen = extraction_contracts[position] if purpose == "extraction" else v_contract
         if purpose not in {"extraction", "verification"} or canonical_sha256(live) != canonical_sha256(frozen):
@@ -466,7 +465,7 @@ def _run_bounded_runtime_evaluation(
             credential_loader=bounded_loader, request_timeout_seconds=300.0, max_retries=0,
             verification_mode="nullable-proof-v3", verification_tool_choice=profile.bounded_verification_tool_choice, reasoning_effort="max",
             extraction_tool_choice="omitted", extraction_mode="grounded-v2", execution_plan=BOUNDED_RUNTIME_PLAN,
-            formal_task_ids=task_ids, database_url=database_url, extraction_prompt_profile=BOUNDED_DEPENDENCY_PROMPT_PROFILE)
+            formal_task_ids=task_ids, database_url=database_url, extraction_prompt_profile=profile.bounded_extraction_prompt_profile)
     except BaseException as error:
         try:
             budget.close()
@@ -517,7 +516,6 @@ def run_ecnu_evaluation(
 ) -> dict:
     """保留原固定计划；剩余8窗须显式选择独立版本，不提供任意子集。"""
     from .evaluation_provider_contract import EvaluationProviderProfile
-    from .grounded_adapter import BOUNDED_DEPENDENCY_PROMPT_PROFILE
 
     pro16 = type(execution_plan) is str and execution_plan in REFERENCE16_PRO_PLANS
     teaching = execution_plan == REFERENCE16_PRO_TEACHING_PLAN
@@ -546,7 +544,7 @@ def run_ecnu_evaluation(
             or database_url is not None or bounded_runtime_deadline is not None):
         if (not bounded15 or provider_profile not in {EvaluationProviderProfile.DEEPSEEK_BOUNDED_TASK, EvaluationProviderProfile.DEEPSEEK_PRO_BOUNDED_TASK, EvaluationProviderProfile.DEEPSEEK_PRO_BOUNDED_THINKING}
                 or reference_version != BOUNDED_RUNTIME_PLAN or case_set != "bounded15" or case_positions is not None
-                or extraction_mode != "grounded-v2" or extraction_prompt_profile != BOUNDED_DEPENDENCY_PROMPT_PROFILE
+                or extraction_mode != "grounded-v2" or extraction_prompt_profile != EvaluationProviderProfile(provider_profile).bounded_extraction_prompt_profile
                 or verification_mode != "nullable-proof-v3" or verification_tool_choice != EvaluationProviderProfile(provider_profile).bounded_verification_tool_choice
                 or response_identity_policy != "first_valid_completion_observation_stop_on_change"
                 or type(request_limit) is not int or request_limit != 30
@@ -574,7 +572,7 @@ def run_ecnu_evaluation(
     uniqueness = execution_plan == UNIQUENESS_PLAN
     public_quality = type(execution_plan) is str and execution_plan in PUBLIC_QUALITY_PLANS
     prompt_profile = REFERENCE16_RETENTION_V_PROFILE if retention else SEMANTIC4_PROMPT_PROFILE if public_quality else "default"
-    validate_extraction_prompt_profile(execution_plan, extraction_prompt_profile)
+    validate_extraction_prompt_profile(execution_plan, extraction_prompt_profile, provider_profile=provider_profile)
     full140_v4 = execution_plan in ("full140-grounded-v4-source-v2", MIXED_PLAN)
     full140_e2 = execution_plan == FULL140_E2_PLAN
     fixed_full140 = full140_v4 or full140_e2
