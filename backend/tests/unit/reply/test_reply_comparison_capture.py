@@ -21,6 +21,33 @@ from notalone.experiments.reply_comparison import (
 
 
 class ReplyComparisonCaptureTest(unittest.TestCase):
+    def test_persisted_installation_accepts_skipped_large_entry_and_directory_only(self):
+        from notalone.experiments.reply_comparison import validate_persisted_installation
+        owner, contact, profile, scenario, version = [str(uuid4()) for _ in range(5)]
+        small = {'text': '保留这一完整小条目。', 'references': []}
+        large = {'text': '大' * 5000, 'references': []}
+        frozen = {'scope': {'owner_id': owner, 'contact_id': contact}, 'settings_generation': 1,
+            'organization_generation': 2, 'profile_version_id': profile, 'profile_entries': [large, small],
+            'scenarios': [{'scenario_id': scenario, 'version_id': version, 'title': '合成主题',
+                           'hint': '完整目录提示。', 'paragraphs': [{'text': '正文。', 'references': []}]}]}
+        binding = {'expected_scopes': ['contact'], 'installed': {'contact': frozen}}
+        for directory_only in (False, True):
+            with self.subTest(directory_only=directory_only):
+                if directory_only:
+                    frozen['profile_entries'] = [large]
+                context = {'schema_version': 3, 'scope_kind': 'contact', 'settings_generation': 1,
+                    'organization_generation': 2, 'profile_version_id': None if directory_only else profile,
+                    'profile_entries': [] if directory_only else [small],
+                    'directory': [{'scenario_id': scenario, 'version_id': version, 'title': '合成主题',
+                        'hint': '完整目录提示。', 'paragraph_count': 1, 'paragraph_range': [0, 1]}],
+                    'read_policy': 'synthetic-scoped-layered-v3', 'scenario_read_budget': None,
+                    'budget': {'profile_entries': 2, 'directory_entries': 1, 'characters': 1600}}
+                evidence = {'layered_context': context, 'owner_layered_context': None,
+                            'layered_scenario_reads': [], 'owner_layered_scenario_reads': []}
+                actual = validate_persisted_installation(binding, evidence, 'layered')
+                self.assertEqual(actual['contact']['context']['profile_entries'], [] if directory_only else [small])
+                self.assertEqual(len(actual['contact']['context']['directory']), 1)
+
     def test_installed_http_header_stays_on_confirmed_assistant_scope(self):
         from notalone.server.app import Response
         from notalone.server.testing import InProcessClient

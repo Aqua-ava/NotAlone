@@ -175,12 +175,27 @@ def validate_persisted_installation(binding: dict, evidence: dict, arm: str) -> 
                 raise ValueError("持久依据出现本组未授权的分层范围。")
             continue
         frozen = binding["installed"][kind]
-        if not isinstance(context, dict) or any(context.get(key) != frozen[key] for key in (
-                "settings_generation", "organization_generation", "profile_version_id")):
+        if not isinstance(context, dict):
             raise ValueError("持久依据的安装版本已变化。")
-        entries = context.get("profile_entries", [])
-        if entries != frozen["profile_entries"][:len(entries)]:
-            raise ValueError("持久依据的profile正文不属于获审安装版本。")
+        # 与生产选择器共用完整条目及字符预算语义，允许跳过大项和仅保留目录。
+        from notalone.memory.layered import LayeredMemorySnapshot, ScenarioDirectoryEntry
+        from notalone.reply.layered_context import LayeredReplyBudget, ScenarioReadBudget, select_material
+        from notalone.scopes import ContactScope, OwnerScope
+        scope = frozen["scope"]
+        snapshot = LayeredMemorySnapshot(schema_version=1,
+            scope=ContactScope(UUID(scope["owner_id"]), UUID(scope["contact_id"])) if kind == "contact"
+                else OwnerScope(UUID(scope["owner_id"])),
+            settings_generation=frozen["settings_generation"], organization_generation=frozen["organization_generation"],
+            scenarios=tuple(ScenarioDirectoryEntry(UUID(item["scenario_id"]), UUID(item["version_id"]),
+                item["title"], item["hint"], len(item["paragraphs"])) for item in frozen["scenarios"]),
+            dependency_ids=(), profile_version_id=UUID(frozen["profile_version_id"]),
+            profile_entries=tuple(frozen["profile_entries"]))
+        read = context.get("scenario_read_budget")
+        read_budget = ScenarioReadBudget(read["call_limit"], read["paragraph_limit"], read["character_limit"]) if read else None
+        budget = LayeredReplyBudget(**context["budget"], scenario_read=read_budget)
+        selected = select_material(snapshot, budget)
+        if selected is None or selected.to_payload() != context:
+            raise ValueError("持久依据不等于冻结安装在本次预算下的合法完整条目。")
         scenarios = {item["scenario_id"]: item for item in frozen["scenarios"]}
         for item in context.get("directory", []):
             prior = scenarios.get(item["scenario_id"])
