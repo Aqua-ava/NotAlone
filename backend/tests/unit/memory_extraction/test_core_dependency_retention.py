@@ -106,3 +106,26 @@ class CoreDependencyRetentionTest(unittest.TestCase):
             self.assertIn("前年冬天", fact.text)
             self.assertEqual((fact.speech_act.value, fact.assertion_status.value), ("report", "reported"))
             self.assertFalse(can_auto_adopt(fact, PragmaticInterpreter().interpret(fact)))
+
+    def test_transitive_negative_condition_and_member_budget_are_preserved(self) -> None:
+        from notalone.memory_extraction.errors import ExtractionInvalidOutputError
+
+        source = window("如果周末没空，我就不去露营。我记得这个安排。我会保留这条说明。")
+        facts = compile_labels(source, labels(row("0:0", "condition"), row("0:1", "plan"),
+                                              row("0:2", "state", dependency="0:1"),
+                                              row("0:3", "state", dependency="0:2")))
+        self.assertIn("如果周末没空", facts[-1]["text"])
+        self.assertIn("我就不去露营", facts[-1]["text"])
+        for pair_count in (4, 5):
+            source = window("前年冬天，我在书店工作。" * pair_count + "我记得这些经历。")
+            items = []
+            for index in range(pair_count):
+                items.extend((row(f"0:{index * 2}", "prefix",
+                                  dependency=f"0:{index * 2 - 1}" if index else None),
+                              row(f"0:{index * 2 + 1}", "event")))
+            items.append(row(f"0:{pair_count * 2}", "state", dependency=f"0:{pair_count * 2 - 1}"))
+            if pair_count == 4:
+                self.assertEqual(len(compile_labels(source, labels(*items))), 5)
+            else:
+                with self.assertRaises(ExtractionInvalidOutputError):
+                    compile_labels(source, labels(*items))
