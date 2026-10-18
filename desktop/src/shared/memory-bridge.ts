@@ -157,17 +157,30 @@ export interface LayeredMemory {
   budget: { maxMemories: number; maxScenarios: number; maxParagraphs: number; maxCharacters: number; maxModelCalls: number; maxProfileEntries?: number; modelCallsUsed: number; modelCallsRemaining: number };
   scenarios: LayeredMemoryScenario[];
   profile: LayeredMemoryProfile | null;
+  correctionRevision: number;
+  protectedCount: number;
+  pendingFactCount: number;
+  feedback: { id: string; targetKind: 'scenario' | 'profile'; versionId: string | null; itemIndex: number; reason: string | null;
+    state: 'active' | 'erased_guard'; targetText: string | null; basis: { memoryId: string; revision: number }[] }[];
+  correctionTarget: { memoryId: string; revision: number } | null;
 }
 export interface LayeredMemoryReadRequest extends ContactSelection { mappingCursor?: string | null }
 export interface LayeredMemoryManagementRequest extends ContactSelection {
-  action: 'enable' | 'refresh' | 'disable' | 'delete' | 'withdraw-profile' | 'withdraw-scenario' | 'pause' | 'continue';
+  action: 'enable' | 'refresh' | 'disable' | 'delete' | 'withdraw-profile' | 'withdraw-scenario' | 'pause' | 'continue' | 'summary-error' | 'fact-error';
   settingsGeneration: number;
   organizationGeneration?: number;
   profileVersionId?: string;
   scenarioVersionId?: string;
   purposeConfirmed?: true;
   workRevision?: number;
+  targetKind?: 'scenario' | 'profile';
+  versionId?: string;
+  itemIndex?: number;
+  reason?: string;
+  operationId?: string;
+  memoryId?: string;
 }
+export type LayeredMemoryManagementOptions = Omit<LayeredMemoryManagementRequest, 'contactId' | 'scopeRevision' | 'action' | 'settingsGeneration'>;
 export interface MemoryReadingState {
   revision: number;
   contactId: string | null;

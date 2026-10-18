@@ -8,7 +8,7 @@ import { MemoryTemporalStatus } from './MemoryTemporalStatus';
 import { MemoryList } from './MemoryList';
 import { OwnerLayeredMemoryPanel } from './OwnerLayeredMemoryPanel';
 import { LayeredMemoryPanel } from './LayeredMemoryPanel';
-import type { LayeredMemoryManagementRequest } from '../shared/memory-bridge';
+import type { LayeredMemoryManagementRequest, LayeredMemoryManagementOptions } from '../shared/memory-bridge';
 import { TracePanel, useTraceReading } from './TracePanel';
 import type { TraceRecordKind } from '../shared/trace-bridge';
 import { UpdateBackupCleanupRecovery } from './UpdateBackupDeletionNotice';
@@ -90,7 +90,7 @@ function useMemoryReading(session: ContactSessionView) {
       }
     }
   }
-  async function manageLayeredMemory(action: LayeredMemoryManagementRequest['action'], settingsGeneration: number, options?: Pick<LayeredMemoryManagementRequest, 'purposeConfirmed' | 'workRevision' | 'organizationGeneration' | 'profileVersionId' | 'scenarioVersionId'>) {
+  async function manageLayeredMemory(action: LayeredMemoryManagementRequest['action'], settingsGeneration: number, options?: LayeredMemoryManagementOptions) {
     const { selectedContactId, scopeRevision } = scope.current;
     if (!selectedContactId) return;
     setError('');
@@ -244,16 +244,17 @@ function SourceReference({ id, sources }: { id: string; sources: MemorySection<M
       : sources.phase === 'loading' || sources.phase === 'idle' ? '来源目录尚未读取完成。' : '引用类型或来源详情暂不可用。'}</p>}</li>;
 }
 
-function MemoryCard({ content, memory, candidate, sources, correct, remove, openVersions, confirmCandidate, discardCandidate, updateMemories, applyCandidateUpdate, busy, trace }: {
+function MemoryCard({ content, memory, candidate, sources, correct, remove, openVersions, confirmCandidate, discardCandidate, updateMemories, applyCandidateUpdate, busy, trace, initiallyEditing = false }: {
   content: MemoryContent; memory?: ActiveMemory; candidate?: PendingMemoryCandidate; sources: MemorySection<MemorySource>;
   correct?: (entry: ActiveMemory, text: string, category: MemoryCorrectionRequest['category']) => Promise<void>; remove?: (entry: ActiveMemory) => Promise<void>; confirmCandidate?: (entry: PendingMemoryCandidate) => Promise<void>; discardCandidate?: (entry: PendingMemoryCandidate) => Promise<void>; busy?: boolean;
   trace: (kind: TraceRecordKind, id: string) => void;
   openVersions?: (entry: ActiveMemory) => Promise<void>;
   updateMemories?: MemorySection<ActiveMemory>;
   applyCandidateUpdate?: (entry: PendingMemoryCandidate, previous: ActiveMemory) => Promise<void>;
+  initiallyEditing?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(initiallyEditing);
   const [removing, setRemoving] = useState(false);
   const [discarding, setDiscarding] = useState(false);
   const [text, setText] = useState(content.text);
@@ -541,9 +542,19 @@ export function MemoryPage({ session, navigate }: { session: ContactSessionView;
   const activeScope = useRef(scopeKey);
   activeScope.current = scopeKey;
   const [selection, setSelection] = useState<{ scope: string; view: MemoryView }>({ scope: scopeKey, view: 'contact' });
+  const [factTarget, setFactTarget] = useState<{ scope: string; memoryId: string; revision: number; editing: boolean } | null>(null);
   const view = selection.view === 'ownerLayeredMemory' ? selection.view : selection.scope === scopeKey ? selection.view : 'contact';
   const tracePanel = useRef<HTMLDivElement>(null);
   const selectView = (next: MemoryView) => setSelection({ scope: scopeKey, view: next });
+  const openFact = (target?: { memoryId: string; revision: number }, editing = false) => {
+    setFactTarget(target ? { scope: scopeKey, ...target, editing } : null);
+    selectView('contact');
+    void memory.refresh('contact');
+  };
+  const correctionTarget = memory.state.layeredMemory.value?.correctionTarget;
+  useEffect(() => {
+    if (correctionTarget && memory.state.contactId === session.state.selectedContactId) openFact(correctionTarget, true);
+  }, [correctionTarget?.memoryId, correctionTarget?.revision, scopeKey]);
   const trace = (kind: TraceRecordKind, id: string) => {
     selectView('sources');
     void traces.find('memory-traces', kind, id).then(() => {
@@ -569,12 +580,19 @@ export function MemoryPage({ session, navigate }: { session: ContactSessionView;
         <p className="memory-scope-note">当前联系人：{contact.displayName}。请以卡片核实状态为准，过期资料仅供回看；历史版本可在概览中查看。</p>
         {view === 'layeredMemory' && <LayeredMemoryPanel key={scopeKey} state={state.layeredMemory} contactName={contact.displayName}
           busy={state.mutation.phase === 'working'} read={memory.readLayeredMemory} manage={memory.manageLayeredMemory}
-          facts={() => selectView('contact')} />}
+          facts={openFact} />}
         {view === 'overview' && <ContactRelationshipOverview key={scopeKey} overview={state.overview} memories={state.contact} refresh={memory.refreshOverview}
           openVersions={memory.openVersions} trace={trace} busy={state.mutation.phase === 'working'} />}
         {view === 'contact' && <ReadingSection title="联系人记忆" note="自动采纳不代表用户确认；手动采纳可能来自录入、确认候选或修正。" empty="这位联系人暂无可查看记忆。"
           state={state.contact} retry={() => void memory.refresh('contact')}>
           <AdditionControl key={`contact:${state.scopeRevision}`} level="contact" phase={state.mutation.phase} add={memory.add} />
+          {factTarget?.scope === scopeKey && <section aria-label="本次纠错的底层记忆"><h3>本次纠错的底层记忆</h3>
+            {state.contact.items.filter(entry => entry.memoryId === factTarget.memoryId && entry.revision === factTarget.revision).map(entry => <MemoryCard
+              key={`${entry.memoryId}:${entry.revision}`} content={entry} memory={entry} sources={state.sources} initiallyEditing={factTarget.editing}
+              trace={trace} correct={memory.correct} remove={memory.remove} openVersions={memory.openVersions} busy={state.mutation.phase === 'working'} />)}
+            {state.contact.phase === 'ready' && !state.contact.items.some(entry => entry.memoryId === factTarget.memoryId && entry.revision === factTarget.revision)
+              && <p role="alert">目标底层版本已变化或不可用，请重新核对资料；不会改选其他记忆。</p>}
+          </section>}
           <MemoryList key={scopeKey} items={state.contact.items} label="联系人记忆">{(entry) => <MemoryCard key={entry.memoryId} content={entry} memory={entry} sources={state.sources}
             trace={trace} correct={memory.correct} remove={memory.remove} openVersions={memory.openVersions} busy={state.mutation.phase === 'working'} />}</MemoryList>
         </ReadingSection>}

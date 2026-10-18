@@ -1,6 +1,7 @@
 """主题资料页面与实际 App 共用的合成 HTTP/PG 边界夹具。"""
 
 import hashlib
+from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
@@ -17,6 +18,13 @@ def main():
         raise RuntimeError("主题资料夹具须使用本工作树和指定环境。")
     directory = Path(os.environ["NOTALONE_ENV_FILE"]).parent
     evidence = Path(os.environ["NOTALONE_LAYERED_TEST_EVIDENCE_DIR"])
+    options = json.loads(os.environ.get('NOTALONE_LAYERED_FIXTURE_OPTIONS', '{}'))
+    if (not isinstance(options, dict) or set(options) - {'max_memories', 'separate_topics'}
+            or type(options.get('max_memories', 1)) is not int or not 1 <= options.get('max_memories', 1) <= 12
+            or type(options.get('separate_topics', False)) is not bool):
+        raise RuntimeError('主题资料合成选项不可核验。')
+    separate_topics = options.get('separate_topics', False)
+    correction_receipts = []
     if not evidence.is_absolute() or evidence.stat().st_mode & 0o777 != 0o700 or evidence.is_relative_to(ROOT):
         raise RuntimeError("主题资料证据目录不可核验。")
     name = f"notalone_core_flow_{uuid4().hex}_test"
@@ -53,11 +61,19 @@ def main():
 
         calls = 0
 
-        def propose(self, *, memories, budget, deadline):
+        def propose(self, *, memories, budget, deadline, corrections=()):
             deadline.check()
             self.calls += 1
-            return {"scenarios": [{"topic_key": "synthetic-learning", "title": "合成学习记录",
-                "hint": "双方共同学习的合成记录", "paragraphs": [{"text": item.text,
+            if corrections:
+                correction_receipts.append({'step': 'scenario_propose', 'corrections': list(corrections)})
+            if separate_topics:
+                return {'scenarios': [{'topic_key': 'synthetic-' + str(item.memory_id),
+                    'title': '已核对的补充资料' if corrections else f'合成独立主题{index + 1}',
+                    'hint': '独立资料的原文背景。' if corrections else '独立事实的合成背景',
+                    'paragraphs': [{'text': item.text, 'references': [{'memory_id': str(item.memory_id), 'revision': item.revision}]}]}
+                    for index, item in enumerate(memories)]}
+            return {"scenarios": [{"topic_key": "synthetic-learning", "title": "已核对的补充资料" if corrections else "合成学习记录",
+                "hint": "独立资料的原文背景。" if corrections else "双方共同学习的合成记录", "paragraphs": [{"text": item.text,
                 "references": [{"memory_id": str(item.memory_id), "revision": item.revision}]}
                 for item in memories]}]}
 
@@ -66,9 +82,11 @@ def main():
 
         calls = 0
 
-        def verify(self, *, memories, proposal, deadline):
+        def verify(self, *, memories, proposal, deadline, corrections=()):
             deadline.check()
             self.calls += 1
+            if corrections:
+                correction_receipts.append({'step': 'scenario_verify', 'corrections': list(corrections)})
             available = {(str(item.memory_id), item.revision): item.text for item in memories}
             return all(len(paragraph["references"]) == 1 and available.get((
                 paragraph["references"][0]["memory_id"], paragraph["references"][0]["revision"])) == paragraph["text"]
@@ -79,11 +97,13 @@ def main():
 
         calls = 0
 
-        def propose(self, *, scenarios, memories, budget, deadline):
+        def propose(self, *, scenarios, memories, budget, deadline, corrections=()):
             deadline.check()
             self.calls += 1
+            if corrections:
+                correction_receipts.append({'step': 'profile_propose', 'corrections': list(corrections)})
             return {"entries": [{"text": item.text, "temporal_status": "uncertain",
-                "uncertainty": "是否持续共同学习尚未核实。",
+                "uncertainty": "当前状态按原资料保留，未额外核实。" if corrections else "是否持续共同学习尚未核实。",
                 "references": [{"memory_id": str(item.memory_id), "revision": item.revision}]}
                 for item in memories]}
 
@@ -92,14 +112,16 @@ def main():
 
         calls = 0
 
-        def verify(self, *, scenarios, memories, proposal, deadline):
+        def verify(self, *, scenarios, memories, proposal, deadline, corrections=()):
             deadline.check()
             self.calls += 1
+            if corrections:
+                correction_receipts.append({'step': 'profile_verify', 'corrections': list(corrections)})
             available = {(str(item.memory_id), item.revision): item.text for item in memories}
             return bool(scenarios) and all(len(entry["references"]) == 1 and available.get((
                 entry["references"][0]["memory_id"], entry["references"][0]["revision"])) == entry["text"]
                 and entry["temporal_status"] == "uncertain"
-                and entry["uncertainty"] == "是否持续共同学习尚未核实。" for entry in proposal["entries"])
+                and entry["uncertainty"] == ("当前状态按原资料保留，未额外核实。" if corrections else "是否持续共同学习尚未核实。") for entry in proposal["entries"])
 
     owner_only = os.environ.get("NOTALONE_LAYERED_OWNER_ONLY") == "1"
     fixture = None
@@ -122,11 +144,20 @@ def main():
             contact, source, message = fixture.import_contact(
                 "双方共同参加合成学习课程。双方后来共同完成合成学习练习。")
             fixture.confirm(contact, "双方共同参加合成学习课程。", message)
-            fixture.confirm(contact, "双方后来共同完成合成学习练习。", message)
+            if separate_topics:
+                _, _, second_message = fixture.import_contact('双方后来共同完成合成学习练习。', contact_id=contact,
+                    when=datetime(2024, 2, 1, tzinfo=timezone.utc))
+                fixture.confirm(contact, "双方后来共同完成合成学习练习。", second_message)
+            else:
+                fixture.confirm(contact, "双方后来共同完成合成学习练习。", message)
             status, created_contact = fixture.backend.request("/api/contacts", {
                 "request_id": str(uuid4()), "display_name": "空资料联系人"})
             fixture.assertEqual(status, 201, created_contact)
             empty = created_contact["contact"]["contact_id"]
+        if separate_topics:
+            for text in ('本人有合成课程学习经历。', '本人另有独立合成运动背景。'):
+                status, result = fixture.backend.request('/api/memories/manual-owner', {'text': text, 'category': 'common_fact'})
+                fixture.assertEqual(status, 200, result)
         (directory / "synthetic.env").write_text(f"NOTALONE_DATABASE_URL={url}\nNOTALONE_OWNER_ID={fixture.owner_id}\n")
         (directory / "synthetic.env").chmod(0o600)
         proposal, verification = Proposal(), Verification()
@@ -134,7 +165,7 @@ def main():
         service = LayeredMemoryService(PostgresLayeredMemoryStore(url), proposer=proposal,
                                        verifier=verification, synthetic=True, profile_proposer=profile_proposal,
                                        profile_verifier=profile_verification,
-                                       budget=OrganizationBudget(max_memories=1, max_model_calls=4))
+                                       budget=OrganizationBudget(max_memories=options.get('max_memories', 1), max_model_calls=4))
         backend = HttpBackend(create_app(database_url=url, owner_id=fixture.owner_id,
             token="synthetic-layered-page-token", memory_service=MemoryService(
                 contact_memory=PostgresMemoryStore(url), owner_memory=PostgresOwnerMemoryStore(url)),
@@ -153,6 +184,7 @@ def main():
                 raise RuntimeError("主题资料夹具加载了其它工作树模块。")
             observed[module_name] = {"path": str(actual), "sha256": digest}
         proof.update(owner_only=owner_only, migrations=expected_migrations, migration_repeat=0, modules=observed,
+                     organization_dispatcher_type=type(service._dispatcher).__name__,
                      external_model_calls=0, quality="synthetic")
         write_backend_info(address=backend.base_url.removeprefix("http://"), token=backend.token)
         print(json.dumps({"ready": {"database_url": url, "owner_id": str(fixture.owner_id),
@@ -176,7 +208,8 @@ def main():
                 fixture.assertEqual(status, 200, result)
             elif operation == "runtime_proof":
                 result = {**proof, "proposal_calls": proposal.calls, "verification_calls": verification.calls,
-                    "profile_proposal_calls": profile_proposal.calls, "profile_verification_calls": profile_verification.calls}
+                    "profile_proposal_calls": profile_proposal.calls, "profile_verification_calls": profile_verification.calls,
+                    "fixture_options": options, "correction_receipts": correction_receipts}
             elif operation == "stop":
                 print(json.dumps({"id": command["id"], "result": {}}), flush=True)
                 break

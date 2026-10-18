@@ -530,16 +530,6 @@ class PostgresOwnerMemoryStore:
                     confidence=previous["confidence"],
                     risk_flags=tuple(previous["risk_flags"] or ()),
                 )
-                erase_layered_reply_dependencies(connection, OwnerScope(owner_id), (memory_id,))
-                updated = connection.execute(
-                    """UPDATE public.owner_memory
-                    SET status = 'invalidated', invalid_at = COALESCE(invalid_at, %s),
-                        revision = %s, updated_at = now()
-                    WHERE owner_id = %s AND id = %s AND status = 'active'""",
-                    (now, corrected.revision, owner_id, memory_id),
-                ).rowcount
-                if updated != 1:
-                    raise OwnerMemoryPersistenceError("本人旧版本失效更新失败。")
                 mode_column, mode_value = _insert_mode(corrected)
                 row = connection.execute(
                     f"""INSERT INTO public.owner_memory (
@@ -556,6 +546,17 @@ class PostgresOwnerMemoryStore:
                 ).fetchone()
                 if row is None:
                     raise OwnerMemoryPersistenceError("本人新版本写入结果为空。")
+                # 同事务先保存合法后继，避免旧叶失效触发器误判整条手录链已删除。
+                erase_layered_reply_dependencies(connection, OwnerScope(owner_id), (memory_id,))
+                updated = connection.execute(
+                    """UPDATE public.owner_memory
+                    SET status = 'invalidated', invalid_at = COALESCE(invalid_at, %s),
+                        revision = %s, updated_at = now()
+                    WHERE owner_id = %s AND id = %s AND status = 'active'""",
+                    (now, corrected.revision, owner_id, memory_id),
+                ).rowcount
+                if updated != 1:
+                    raise OwnerMemoryPersistenceError("本人旧版本失效更新失败。")
                 source_candidate = None
                 if previous["source_candidate_id"] is not None:
                     raw_candidate = connection.execute(

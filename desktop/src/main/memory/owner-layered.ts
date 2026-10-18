@@ -2,6 +2,7 @@ import { activeMemories } from './read';
 import type { MemoryAdditionRequest, OwnerLayeredMemoryManagementRequest, OwnerLayeredMemoryState } from '../../shared/memory-bridge';
 import type { BackendHost } from '../backend/host';
 import { layeredMemory } from './layered-read';
+import { validCorrectionTarget, correctionBody, retryFactCorrection } from './layered-correction';
 
 // 本人范围仅绑定后端连接；联系人选择不参与本人请求和状态有效性。
 export class OwnerLayeredMemoryController {
@@ -97,9 +98,11 @@ export class OwnerLayeredMemoryController {
     this.synchronize();
     const value = this.state.value;
     const work = request.action === 'pause' || request.action === 'continue';
+    const correction = request.action === 'summary-error' || request.action === 'fact-error';
     const affectsReplyContext = !work;
     if (this.generation === undefined || this.deleting || this.state.mutation.phase === 'working' || this.state.phase !== 'ready' || !value
       || request.settingsGeneration !== value.settingsGeneration
+      || (correction && !validCorrectionTarget(value, request))
       || (work && (!value.workId || request.workRevision !== value.workRevision))
       || (request.action === 'withdraw-scenario' && (request.organizationGeneration !== value.organizationGeneration || !value.scenarios.some(item => item.versionId === request.scenarioVersionId)))
       || (request.action === 'withdraw-profile' && (!value.profile || request.profileVersionId !== value.profile.versionId || request.organizationGeneration !== value.organizationGeneration))) throw new Error('本人资料设置已变化，请重新读取。');
@@ -107,12 +110,17 @@ export class OwnerLayeredMemoryController {
     const operation = new AbortController(), generation = this.generation; this.operation = operation;
     this.update({ phase: 'loading', value: null, mutation: { phase: 'working', message: '正在处理本人资料…' } });
     try {
-      if (affectsReplyContext) await this.contextChanged('started');
-      const result = await this.backend.requestJson({ method: 'POST', path: `/api/memories/owner/layered-memory/${request.action}`, signal: operation.signal,
+      if (correction) await this.factsChanged('started');
+      else if (affectsReplyContext) await this.contextChanged('started');
+      const command = { method: 'POST' as const, path: `/api/memories/owner/layered-memory/${request.action}`, signal: operation.signal,
         body: { settings_generation: request.settingsGeneration, ...(work ? { work_revision: request.workRevision } : {}),
           ...(request.action === 'enable' ? { purpose_confirmed: true } : {}),
           ...(request.action === 'withdraw-scenario' ? { organization_generation: request.organizationGeneration, scenario_version_id: request.scenarioVersionId } : {}),
-          ...(request.action === 'withdraw-profile' ? { organization_generation: request.organizationGeneration, profile_version_id: request.profileVersionId } : {}) } });
+          ...(request.action === 'withdraw-profile' ? { organization_generation: request.organizationGeneration, profile_version_id: request.profileVersionId } : {}),
+          ...(correction ? correctionBody(request) : {}) } };
+      const result = await retryFactCorrection(request.action === 'fact-error', () => {
+        this.synchronize(); return this.operation === operation && this.generation === generation && !this.deleting;
+      }, () => this.backend.requestJson(command));
       this.synchronize();
       if (this.operation !== operation || result.generation !== generation) return;
       this.update({ phase: 'ready', value: layeredMemory(result.data, null), mutation: { phase: 'success', message: '本人资料操作已完成并核对。' } }); this.schedule();
@@ -122,7 +130,8 @@ export class OwnerLayeredMemoryController {
       await this.read({});
     } finally {
       if (this.operation === operation) this.operation = undefined;
-      if (affectsReplyContext) await this.contextChanged('settled');
+      if (correction) await this.factsChanged('settled');
+      else if (affectsReplyContext) await this.contextChanged('settled');
     }
   }
 }

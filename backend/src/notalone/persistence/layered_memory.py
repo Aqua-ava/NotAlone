@@ -21,6 +21,7 @@ from notalone.persistence.memory_overview import PostgresRelationshipOverviewSto
 from notalone.scopes import ContactScope, OwnerScope, organization_scope
 from notalone.tasks.models import ClaimedBackgroundTaskStep
 from notalone.persistence.layered_profile import LayeredProfileStore, ProfileWork
+from notalone.persistence.layered_corrections import LayeredCorrectionStore
 
 
 def _digest(value):
@@ -38,9 +39,11 @@ class OrganizationWork:
     claim: ClaimedBackgroundTaskStep
     scenarios: tuple[dict, ...] = ()
     organization_generation: int = 0
+    correction_revision: int = 0
+    corrections: tuple[dict, ...] = ()
 
 
-class PostgresLayeredMemoryStore(LayeredProfileStore):
+class PostgresLayeredMemoryStore(LayeredProfileStore, LayeredCorrectionStore):
     def __init__(self, database_url: str, *, clock=None):
         self._database_url = database_url
         self._clock = clock or (lambda: datetime.now(timezone.utc))
@@ -150,6 +153,10 @@ class PostgresLayeredMemoryStore(LayeredProfileStore):
             if manifest and manifest['profile_version_id'] and state['status'] in {'ready','paused','disabled'}:
                 profile = self.profile_document(self.profile_row(connection,scope,manifest['profile_version_id']))
             state['profile'] = profile
+            state['feedback'] = self.feedback_projection(connection, scope, self.eligible(overview))
+            state['protected_count'] = len(self.eligible(overview)) - len(self.unprotected(connection, scope, self.eligible(overview)))
+            state['pending_fact_count'] = connection.execute('SELECT count(*) AS count FROM public.layered_memory_fact_correction '
+                'WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s', (scope.owner_id, scope.contact_id)).fetchone()['count']
             return state, self.eligible(overview), [self._document(row) for row in rows], job
 
     @staticmethod
@@ -221,6 +228,11 @@ class PostgresLayeredMemoryStore(LayeredProfileStore):
                     removed_ids={row["id"] for row in version_rows}, revoke_running_scope=False)
             cancel_jobs(connection,scope,erase=action=='delete')
             if action=='delete':
+                # 删除结束整个纠错周期；仅下方递增的无正文世代用于拒绝迟到请求。
+                connection.execute("DELETE FROM public.layered_memory_feedback WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s",
+                                   (scope.owner_id,scope.contact_id))
+                connection.execute("DELETE FROM public.layered_memory_fact_correction WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s",
+                                   (scope.owner_id,scope.contact_id))
                 connection.execute("DELETE FROM public.layered_memory_generation WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s",
                                    (scope.owner_id,scope.contact_id))
             enabled = action == "enable"
@@ -246,10 +258,11 @@ class PostgresLayeredMemoryStore(LayeredProfileStore):
         with self.transaction(scope) as (connection,state,overview):
             if not state['enabled']:
                 raise LayeredMemoryConflict('本联系人尚未开启整理。')
-            entries=self.eligible(overview)
+            entries=self.unprotected(connection, scope, self.eligible(overview))
             manifest=self._manifest(connection,scope,entries)
             dependencies={entry.memory.memory_id for entry in entries}
             dependencies.update(identifier for entry in entries for identifier in entry.dependency_ids)
+            dependencies.update(self.correction_dependency_ids(connection, scope))
             task_id, execute = enqueue_coverage(connection,scope,state,manifest,dependencies,contract,budget,
                 action=action,revision=revision,profile_required=profile_required)
             self._revoke_previous_profile(connection, scope, state, task_id, execute)
@@ -300,10 +313,11 @@ class PostgresLayeredMemoryStore(LayeredProfileStore):
             if any(job['state'] == 'active' and job['settings_generation'] == state['settings_generation']
                    for job in current_job(connection, scope)):
                 return None
-            entries = self.eligible(overview)
+            entries = self.unprotected(connection, scope, self.eligible(overview))
             manifest = self._manifest(connection, scope, entries)
             dependencies = {entry.memory.memory_id for entry in entries}
             dependencies.update(identifier for entry in entries for identifier in entry.dependency_ids)
+            dependencies.update(self.correction_dependency_ids(connection, scope))
             task_id, execute = enqueue_coverage(connection, scope, state, manifest, dependencies,
                 contract, budget, action='refresh', revision=None, profile_required=profile_required)
             self._revoke_previous_profile(connection, scope, state, task_id, execute)
@@ -383,10 +397,12 @@ class PostgresLayeredMemoryStore(LayeredProfileStore):
                 "AND g.organization_generation=%s",(scope.owner_id,scope.contact_id,state['organization_generation'])).fetchall()
                 for item in batch['input_manifest']}
             target={item['memory_id'] for item in job['target_manifest']}
-            entries=tuple(entry for entry in self.eligible(overview) if str(entry.memory.memory_id) in target-covered)
+            entries=tuple(entry for entry in self.unprotected(connection, scope, self.eligible(overview)) if str(entry.memory.memory_id) in target-covered)
             selected=[]
+            corrections = self.correction_context(connection, scope)
             for entry in entries[:budget.max_memories]:
-                payload=[self._input(item).to_payload() for item in selected]+[self._input(entry).to_payload()]
+                payload={'memories': [self._input(item).to_payload() for item in selected]+[self._input(entry).to_payload()],
+                         'corrections': corrections}
                 if len(json.dumps(payload,ensure_ascii=False))>budget.max_characters:
                     break
                 selected.append(entry)
@@ -399,7 +415,7 @@ class PostgresLayeredMemoryStore(LayeredProfileStore):
                 return None
             contexts, inherited = [], []
             if with_scenarios:
-                eligible = self.eligible(overview)
+                eligible = self.unprotected(connection, scope, self.eligible(overview))
                 for previous in self.generation_rows(connection, scope, state['organization_generation'])[1][:budget.max_scenarios]:
                     prior = connection.execute("SELECT input_manifest,dependency_ids FROM public.layered_memory_batch WHERE id=%s",
                                                (previous['batch_id'],)).fetchone()
@@ -408,7 +424,7 @@ class PostgresLayeredMemoryStore(LayeredProfileStore):
                     combined = [entry for entry in eligible if str(entry.memory.memory_id) in combined_ids]
                     document = self._document(previous)
                     payload = {'memories': [self._input(item).to_payload() for item in combined],
-                               'scenarios': contexts + [document]}
+                               'scenarios': contexts + [document], 'corrections': corrections}
                     if len(combined) > budget.max_memories or len(json.dumps(payload, ensure_ascii=False)) > budget.max_characters:
                         continue
                     selected = combined
@@ -420,6 +436,7 @@ class PostgresLayeredMemoryStore(LayeredProfileStore):
             dependencies={entry.memory.memory_id for entry in entries}
             dependencies.update(identifier for entry in entries for identifier in entry.dependency_ids)
             dependencies.update(inherited)
+            dependencies.update(self.correction_dependency_ids(connection, scope))
             id=uuid4()
             key=_digest({'job':str(claim.task_id),'inputs':manifest})
             connection.execute("INSERT INTO public.layered_memory_batch(id,owner_id,contact_id,settings_generation,work_key,status,"
@@ -428,10 +445,11 @@ class PostgresLayeredMemoryStore(LayeredProfileStore):
                  Jsonb([item.to_payload() for item in memories]),sorted(dependencies),self._clock(),claim.task_id))
             connection.execute("UPDATE public.layered_memory_batch SET scenario_input=%s,reused_version_ids=%s WHERE id=%s",
                                (Jsonb(contexts), [UUID(item['version_id']) for item in contexts], id))
+            connection.execute('UPDATE public.layered_memory_batch SET correction_input=%s WHERE id=%s', (Jsonb(corrections), id))
             connection.execute("UPDATE public.layered_memory_state SET status='updating',error_code=NULL WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s",
                                (scope.owner_id,scope.contact_id))
             return OrganizationWork(id,scope,state['settings_generation'],memories,manifest,claim,
-                                    tuple(contexts),state['organization_generation'])
+                                    tuple(contexts),state['organization_generation'],state['correction_revision'],corrections)
 
     def generation_rows(self, connection, scope, generation):
         manifest = connection.execute("SELECT * FROM public.layered_memory_generation WHERE owner_id=%s "
@@ -511,10 +529,12 @@ class PostgresLayeredMemoryStore(LayeredProfileStore):
             raise LayeredMemoryConflict('实际读取的旧主题集合已变化。')
         if not state["enabled"] or state["settings_generation"] != work.settings_generation:
             raise LayeredMemoryConflict("整理设置已变化。")
+        if state['correction_revision'] != work.correction_revision:
+            raise LayeredMemoryConflict('整理反馈已变化。')
         batch = connection.execute("SELECT 1 FROM public.layered_memory_batch WHERE id=%s AND owner_id=%s "
             "AND contact_id IS NOT DISTINCT FROM %s AND status='running'", (work.id,work.scope.owner_id,work.scope.contact_id)).fetchone()
         ids = {item.memory_id for item in work.memories}
-        entries = tuple(entry for entry in self.eligible(overview) if entry.memory.memory_id in ids)
+        entries = tuple(entry for entry in self.unprotected(connection, work.scope, self.eligible(overview)) if entry.memory.memory_id in ids)
         if not batch or self._manifest(connection, work.scope, entries) != work.manifest:
             raise LayeredMemoryConflict("整理实际输入已变化。")
 

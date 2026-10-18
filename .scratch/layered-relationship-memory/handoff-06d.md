@@ -1,0 +1,28 @@
+# 06d 实现交接（仍 claimed，工程候选）
+- 当前产品 `010fc20f`；root 原生断言 `5d57fc75`；本交接另行提交。产品冻结，写／测／PG／夹具已全部释放给 root。
+- 本轮四主题提交：`8b4cc9f5` 手录事务保护、`74d20c1b` 事实约束／回执、`941cd14b` 反馈核对、`010fc20f` 观察来源删除闭包。
+- 纯手录更正同事务先存合法后继再失效旧叶；不以失效墓碑作合法 guard，无 078／API 改动。
+- fact-error 撤精确错误叶实际 batch 输入参与的 L2、递归 L3 与使用副本；同批未直接引用输入仍受影响，真实独立旧批次可保留。
+- 无正文待修只绑定 scope＋memory_id/revision；刷新／恢复／普通停用重开不解除，合法 correct 新叶或最后合法依据删除解除。
+- 原命令完整 digest 持久幂等，同 epoch／同请求／精确合法叶可恢复目标；跨重开、请求／叶／来源变化均拒绝。
+- bridge 仅连接中断且范围／来源／连接未变时复用原 body 重试一次；409、取消与范围／来源变化不重试。
+- 078 新表 layered_memory_fact_correction，含 nullable request_digest、精确叶、dependency_ids、protected_message_ids、observation_ids、source_ref_ids 等无正文字段。
+- 当前 078 SHA256：`462506b23dcaab742238480c48d97b6b916aa0f78ea672121ab1c14d6594ade3`。
+- typed 观察／引用合法性核原 owner、原参与 message/source 绑定；来源参与删除清 digest／deps／typed 数组，仍合法 canonical 旧叶保无正文 pending。
+- source_deletion 与 observation_store verifier 复用 layered_corrections.py:12 的 has_fact_correction_dependencies；共享手录 source 与无关更新不清合法回执。
+- feedback DTO 新增 target_text（活动复用 rejected_text；erased_guard 为 null）、basis:[{memory_id,revision}]；仅当前范围合法受保护 L1，无原话／来历／内部依赖。
+- UI 显示目标、合法底层版本核对入口及 pending_fact_count；无正文 guard 不恢复旧正文，不新增 GET 精确跳转或任意撤销命令。
+- runtime proof 扩入实际加载的 memory_store／owner_memory_store／source_tasks／source_deletion／observation_store；实际 dispatcher 是 EmbeddedOrganizationDispatcher。
+- 首红：手录 protected_count 清零；L3 fact 后 L2／Port 仍可读；刷新旧叶回流和原 POST409；bridge 丢响应不重试；反馈目标不可辨。
+- 观察首红边界：旧 POST 已 409，真实失败是删除观察后 digest／依赖残留，不宣称复现 200；原删除来源接口无新 HTTP 路由。
+- 手录 4 例绿，原相关 L1／guard 19 例绿；事实核心 29、相关 25、升级 1 均绿；此前 941 相关 70 例 208.782 秒是观察修复前证据。
+- 010 来源单红→绿；观察／引用双范围 4 例、来源／事实／反馈／手录／升级相关 36 例绿（85.627 秒）。
+- 最终 010＋5d：05 管理／画像 70 例绿（201.710 秒），07 回复与 08 工具 43 例绿（142.271 秒）。
+- 当前 Node 64、typecheck、py_compile、diff-check 绿；共享 HTTP／PG 夹具 2 例绿（8.934 秒），不代表实际 App 或正式 TaskHost 整机资格。
+- 36 个 runner 隔离库均 finally DROP／catalog_absent；四份已知 runtime proof 库与子进程均清理。全部私有命令／日志／marker 在外部 A-06d-handoff.md。
+- root 当前新版八步 HTTP 后验 1 例绿（7.806 秒）；固定 5d 的原 Standards／Spec 增量复核当前代码发现均为 0。
+- 公开扫描既存工程路径 12 项、新增 0；未运行模型／App／headless／微信／业务库／外发／远端。
+- 删除整理结果后的反馈／保护／pending 语义仍待真人；未预选，不扩独立撤销。普通刷新／停用／恢复／来源删除沿已定合同。
+- 正式 09 汇合后必须核本人纠错跨联系人的 prepared／tool／历史依据／reply 副本闭包；08 现有通过仅证明联系人路径，不追 09 WIP。
+- root 协调实际 App／当前 React 交互、真人决定和最终签收；未来正式 09 或真人分支用 fresh 上下文接手，不再延续当前实现会话。
+- 本票／索引仍 claimed，AC 不勾选，真实质量 unknown；入口 Answer 与 planning 已同步，不提前 resolved。

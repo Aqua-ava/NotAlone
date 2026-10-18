@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { LayeredMemory, LayeredMemoryManagementRequest, MemoryOverviewState } from '../shared/memory-bridge';
+import type { LayeredMemory, LayeredMemoryManagementRequest, LayeredMemoryManagementOptions, MemoryOverviewState } from '../shared/memory-bridge';
 import { MemoryTemporalStatus } from './MemoryTemporalStatus';
 
 const statusNames: Record<LayeredMemory['status'], string> = { disabled: '已停用', ready: '本批主题资料整理成功',
@@ -10,8 +10,8 @@ function time(value: string | null): string {
 }
 export function LayeredMemoryPanel({ state, contactName, busy, read, manage, facts, owner = false }: {
   state: MemoryOverviewState<LayeredMemory>; contactName: string; busy: boolean;
-  read: (mappingCursor?: string | null) => Promise<void>; manage: (action: LayeredMemoryManagementRequest['action'], settingsGeneration: number, options?: Pick<LayeredMemoryManagementRequest, 'purposeConfirmed' | 'workRevision' | 'organizationGeneration' | 'profileVersionId' | 'scenarioVersionId'>) => Promise<void>;
-  facts: () => void; owner?: boolean;
+  read: (mappingCursor?: string | null) => Promise<void>; manage: (action: LayeredMemoryManagementRequest['action'], settingsGeneration: number, options?: LayeredMemoryManagementOptions) => Promise<void>;
+  facts: (target?: { memoryId: string; revision: number }) => void; owner?: boolean;
 }) {
   const [confirmed, setConfirmed] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -46,6 +46,7 @@ export function LayeredMemoryPanel({ state, contactName, busy, read, manage, fac
       {!value.enabled && <div className="layered-memory-confirm"><label><input type="checkbox" checked={confirmed} disabled={waiting}
         onChange={(event) => setConfirmed(event.target.checked)} />{owner ? '确认仅整理本人的合法已采纳记忆，并同意以上用途与模型接收范围' : '确认仅整理这位联系人的合法已采纳记忆，并同意以上用途与模型接收范围'}</label>
         <p>仅合格的底层记忆及其时间、引用标识可用于整理；待确认候选与来历未知资料不参与。</p>
+        <p>若此前删除过整理结果，旧纠错与反馈已清除，本次开启会进入新周期，旧总结可能再次出现。普通停用后恢复仍保留纠错保护。</p>
         <button className="button" disabled={waiting || !confirmed} onClick={() => void manage('enable', value.settingsGeneration, { purposeConfirmed: true })}>确认范围并开启</button></div>}
       {value.enabled && <>{value.workId && value.workRevision > 0 && <>
         {(value.status === 'paused' || value.status === 'failed') && <button className="button" disabled={waiting}
@@ -56,7 +57,7 @@ export function LayeredMemoryPanel({ state, contactName, busy, read, manage, fac
         <button className="button" disabled={waiting} onClick={() => void manage('disable', value.settingsGeneration)}>停用主题资料</button></>}
       <button className="button" disabled={waiting} onClick={() => setDeleting(true)}>删除整理结果</button>
       {deleting && <div className="memory-section-note" role="group" aria-label="确认删除主题资料">
-        <p>删除将关闭本范围并清除整理正文、旧版本及相关副本。底层记忆另行管理；只有重新开启后才会再次整理。</p>
+        <p>删除将关闭本范围，清除整理正文、旧版本、相关副本及全部纠错和反馈记录，包括待修正标记。底层记忆保持不变；主动重新开启将进入新周期，旧总结可能再次出现。</p>
         <button className="button" disabled={waiting} onClick={() => void manage('delete', value.settingsGeneration)}>确认删除整理结果</button>
         <button className="button" disabled={waiting} onClick={() => setDeleting(false)}>取消删除</button></div>}
       {!value.enabled && (value.scenarios.length > 0 || value.profile !== null) && <p>已停止整理及回复加载；下方仅供回看来源仍有效的现有文档。</p>}
@@ -75,9 +76,13 @@ export function LayeredMemoryPanel({ state, contactName, busy, read, manage, fac
                 <p>来源聊天时间：{time(reference.timing.sourceStartedAt)}{reference.timing.sourceEndedAt !== reference.timing.sourceStartedAt ? ` 至 ${time(reference.timing.sourceEndedAt)}` : ''}
                   {!reference.timing.sourceTimeComplete ? '（来源时间不完整）' : ''}</p>
                 <p>记忆保存时间：{time(reference.timing.recordedAt)}</p>
-                <button className="button" onClick={facts}>查看或修正底层记忆</button>
+                <button className="button" disabled={waiting} onClick={() => facts(reference)}>查看底层记忆</button>
+                <button className="button" disabled={waiting} onClick={() => void manage('fact-error', value.settingsGeneration,
+                  { organizationGeneration: value.organizationGeneration, targetKind: 'profile', versionId: value.profile!.versionId, itemIndex: index, memoryId: reference.memoryId })}>事实有误：修正此条</button>
               </div>)}
             </details>
+            <SummaryCorrection key={`profile:${value.profile!.versionId}:${index}`} busy={waiting} submit={(reason, operationId) => manage('summary-error', value.settingsGeneration,
+              { organizationGeneration: value.organizationGeneration, targetKind: 'profile', versionId: value.profile!.versionId, itemIndex: index, reason, operationId })} />
           </div>)}
           <details className="memory-details"><summary>查看长期背景版本</summary>
             <p>版本标识：{value.profile.versionId}</p><p>一致集合世代：{value.organizationGeneration}</p></details>
@@ -112,16 +117,49 @@ export function LayeredMemoryPanel({ state, contactName, busy, read, manage, fac
               <p>来源聊天时间：{time(reference.timing.sourceStartedAt)}{reference.timing.sourceEndedAt !== reference.timing.sourceStartedAt ? ` 至 ${time(reference.timing.sourceEndedAt)}` : ''}
                 {!reference.timing.sourceTimeComplete ? '（来源时间不完整）' : ''}</p>
               <p>记忆保存时间：{time(reference.timing.recordedAt)}</p>
-              <button className="button" onClick={facts}>查看或修正底层记忆</button>
+              <button className="button" disabled={waiting} onClick={() => facts(reference)}>查看底层记忆</button>
+              <button className="button" disabled={waiting} onClick={() => void manage('fact-error', value.settingsGeneration,
+                { organizationGeneration: value.organizationGeneration, targetKind: 'scenario', versionId: scenario.versionId, itemIndex: index, memoryId: reference.memoryId })}>事实有误：修正此条</button>
             </div>)}
-          </details></div>)}
+          </details>
+          <SummaryCorrection key={`scenario:${scenario.versionId}:${index}`} busy={waiting} submit={(reason, operationId) => manage('summary-error', value.settingsGeneration,
+            { organizationGeneration: value.organizationGeneration, targetKind: 'scenario', versionId: scenario.versionId, itemIndex: index, reason, operationId })} />
+        </div>)}
         {owner && <><button className="button" disabled={waiting} onClick={() => void manage('withdraw-scenario', value.settingsGeneration,
           { organizationGeneration: value.organizationGeneration, scenarioVersionId: scenario.versionId })}>撤回本版主题资料：{scenario.title}</button>
           <p>撤回仅移除本版主题及依赖它的长期背景，不自动恢复旧版。</p></>}
         <details className="memory-details"><summary>查看主题版本</summary><p>主题标识：{scenario.scenarioId}</p><p>版本标识：{scenario.versionId}</p></details>
       </article>)}</div>
       <p className="memory-section-note">来源聊天时间表示当时说过，不证明事件恰在当天发生，也不保证今天仍成立。事实有误请修正底层记忆，再刷新主题资料。</p>
-      <button className="button" onClick={facts}>{owner ? '管理底层本人记忆' : '管理底层联系人记忆'}</button>
+      <p>补充背景请通过底层记忆的手动录入，整理结果会按合法资料更新。</p>
+      <button className="button" disabled={waiting} onClick={() => facts()}>{owner ? '管理底层本人记忆' : '管理底层联系人记忆'}</button>
+      {value.pendingFactCount > 0 && <p role="status">有 {value.pendingFactCount} 条底层记忆等待修正。相关整理资料已停用；请完成底层修正后刷新，刷新或重新打开不会解除待修正状态。</p>}
+      {value.feedback.length > 0 && <section aria-label="整理纠错反馈"><h3>整理纠错反馈</h3>
+        <p>受保护的旧依据 {value.protectedCount} 条。无法核对的新概括不会自动生效。</p>
+        {value.feedback.map(feedback => <article key={feedback.id}><p>{feedback.targetKind === 'scenario' ? '主题资料' : '长期背景'}第 {feedback.itemIndex + 1} 项：
+          {feedback.state === 'active' ? feedback.reason : '来源敏感内容已清除，仅保留仍有效旧依据的保护。'}</p>
+          {feedback.targetText !== null ? <p>原整理内容：{feedback.targetText}</p> : <p>原整理内容已清除，不从现有资料恢复旧正文。</p>}
+          <p>当前仍受保护且可核对的底层版本：</p>
+          {feedback.basis.map(basis => <button className="button" key={basis.memoryId} disabled={waiting}
+            onClick={() => facts(basis)}>核对底层记忆 {basis.memoryId} · 版本 {basis.revision}</button>)}
+          {!feedback.basis.length && <p>当前没有可打开的已准入底层版本；仍有效的旧依据仅保留无正文保护。</p>}
+          <p>删除关联来源或底层记忆时，反馈敏感内容随之清理；最后一份有效依据删除后清除保护。</p>
+        </article>)}
+      </section>}
     </>}
   </section>;
+}
+
+function SummaryCorrection({ busy, submit }: { busy: boolean; submit: (reason: string, operationId: string) => Promise<void> }) {
+  const [editing, setEditing] = useState(false);
+  const [reason, setReason] = useState('');
+  return <div>
+    <button className="button" disabled={busy} onClick={() => setEditing(true)}>总结有误</button>
+    {editing && <form aria-label="反馈总结错误" onSubmit={event => { event.preventDefault(); void submit(reason.trim(), crypto.randomUUID()); }}>
+      <p>仅反馈整理含义，不修改正确的底层事实；本版及受影响背景将撤下并重新整理。</p>
+      <label>总结错误说明<textarea value={reason} maxLength={500} disabled={busy} onChange={event => setReason(event.target.value)} /></label>
+      <button className="button" disabled={busy || !reason.trim()}>提交总结纠错</button>
+      <button className="button" type="button" disabled={busy} onClick={() => { setEditing(false); setReason(''); }}>取消总结纠错</button>
+    </form>}
+  </div>;
 }
