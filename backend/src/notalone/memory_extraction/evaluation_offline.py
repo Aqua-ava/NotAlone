@@ -103,7 +103,9 @@ class _RecordedVerificationRuntime:
         else:
             prompt, _ = _verification_contract(self.verification_mode)
             messages = [{"role": "system", "content": prompt}, {"role": "user", "content":
-                        verification_adapters._verification_text(window, facts)}]
+                        verification_adapters._verification_text(window, facts, include_position_guide=(
+                            self.verification_mode is SourceVerificationMode.NULLABLE_PROOF_V3
+                        ))}]
             with self._store.stage(self._position, "verification"), self._invocation_scope("verification", messages, window):
                 payloads = self._runtime.verify(window=window, facts=facts)
         if self.verification_mode in {SourceVerificationMode.NULLABLE_PROOF_V1, SourceVerificationMode.NULLABLE_PROOF_V3}:

@@ -592,6 +592,33 @@ class BoundedRuntimeSdkTest(unittest.TestCase):
                 if guide is not None:
                     self.assertLessEqual(len(json.dumps(guide, ensure_ascii=False).encode("utf-8")), 128 * 1024)
 
+    def test_recorded_v3_scope_matches_actual_sdk_request_with_position_guide(self):
+        from contextlib import contextmanager, nullcontext
+        from unittest.mock import Mock
+        from notalone.memory import SourceDependencyMode
+        from notalone.memory_extraction.evaluation_offline import _RecordedVerificationRuntime
+        from notalone.memory_extraction.verification_adapters import LangChainSourceVerificationRuntime
+        window = window_for("我刚到家。")
+        fact = replace(compiled_fact(window), source_dependency_mode=SourceDependencyMode.ALL)
+        raw = {"candidate_index": 0, "verdict": "supported", "issues": [], "evidence": [
+            {"message_id": str(window.messages[0].message_id), "quote": window.messages[0].text}],
+            "proof": arrival_payload(window, fact)}
+        model = self.model(tool_name="SourceVerificationOutput", arguments={"results": [raw]})
+        runtime = LangChainSourceVerificationRuntime(model=model).for_mode("nullable-proof-v3")
+        store = Mock()
+        store.stage.return_value = nullcontext()
+        @contextmanager
+        def invocation_scope(purpose, expected_messages, actual_window):
+            self.assertEqual(purpose, "verification")
+            self.assertEqual(actual_window, window)
+            yield
+            self.assertEqual(len(self.requests), 1)
+            self.assertEqual(self.requests[0][2]["messages"], expected_messages)
+        wrapped = _RecordedVerificationRuntime(runtime, store, 0, invocation_scope)
+        self.assertEqual(wrapped.verify(window=window, facts=(fact,)), (raw,))
+        payload = store.record.call_args.kwargs["payload"]
+        self.assertEqual(payload["results"][0]["proof_verification"]["status"], "verified")
+
     def test_invalid_sdk_raw_responses_are_traced_before_strict_proof3_rejection(self):
         import base64
         import httpx
