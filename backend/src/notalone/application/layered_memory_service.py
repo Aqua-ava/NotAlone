@@ -1,5 +1,7 @@
 """有限主题整理的管理入口；未知质量资格不会调用模型。"""
 
+from notalone.memory.organization_isolation import isolate_proposal, select_verified
+
 from copy import deepcopy
 from dataclasses import replace
 from contextlib import nullcontext
@@ -233,9 +235,16 @@ class LayeredMemoryService:
                 memories=self._model_memories(work), budget=self._budget, deadline=deadline,
                 **self._correction_arguments(self._proposer, 'propose', work),
                 **({"scenarios": self._model_scenarios(work)} if self._scenario_context else {})))
-            proposal = validate_proposal(raw, work.memories, self._budget, scenarios=work.scenarios)
-            validate_correction_proposal(work, proposal)
-            self._store.record_proposal(work, raw)
+            original = deepcopy(raw)
+            def validate_items(value):
+                checked = validate_proposal(value, work.memories, self._budget, scenarios=work.scenarios)
+                validate_correction_proposal(work, checked)
+                return checked
+            raw, proposal, rejected = isolate_proposal(raw, 'scenarios', validate_items, self._budget.max_scenarios)
+            self._store.record_proposal(work, {'original': original, 'filtered': raw, 'rejected': rejected})
+            if original['scenarios'] and not raw['scenarios']:
+                self._store.fail(work, 'proposal_invalid')
+                return 0
             # 核验实际接收全部记忆和完整提案，两者合计仍受单次输入上限约束。
             verification_input = {"memories": [item.to_payload() for item in self._model_memories(work)], "proposal": raw}
             if work.corrections:
@@ -245,13 +254,18 @@ class LayeredMemoryService:
             if len(json.dumps(verification_input, ensure_ascii=False)) > self._budget.max_characters:
                 self._store.fail(work, "verification_input_budget_exceeded")
                 return 0
-            supported = self._call(work, self._verifier, "verify", lambda deadline: self._verifier.verify(
+            operation = 'verify_items' if callable(getattr(self._verifier, 'verify_items', None)) else 'verify'
+            supported = self._call(work, self._verifier, operation, lambda deadline: getattr(self._verifier, operation)(
                 memories=self._model_memories(work), proposal=deepcopy(raw), deadline=deadline,
-                **self._correction_arguments(self._verifier, 'verify', work),
+                **self._correction_arguments(self._verifier, operation, work),
                 **({"scenarios": self._model_scenarios(work)} if self._scenario_context else {})))
-            if supported is not True:
+            filtered, verification_rejected = select_verified(raw, 'scenarios', supported)
+            self._store.record_proposal(work, {'original': original, 'filtered': filtered,
+                'rejected': rejected, 'verification_rejected': verification_rejected})
+            if raw['scenarios'] and not filtered['scenarios'] or supported is False:
                 self._store.fail(work, "faithfulness_rejected")
                 return 0
+            proposal = validate_items(filtered)
             with self._publication_guard(scope.owner_id, quality_snapshot) as final_guard:
                 self._store.publish(work, proposal, self._budget, qualification_guard=final_guard)
             if self._profile_proposer:
@@ -400,22 +414,34 @@ class LayeredMemoryService:
                 scenarios=self._model_scenarios(work),memories=self._model_memories(work),budget=self._budget,deadline=deadline,
                 **self._correction_arguments(self._profile_proposer, 'propose', work)),
                 guard=lambda: self._store.check_profile(work))
-            proposal = validate_profile(raw,work.memories,self._budget)
-            validate_correction_proposal(work, proposal, profile=True)
-            self._store.record_profile_proposal(work,raw)
+            original = deepcopy(raw)
+            def validate_items(value):
+                checked = validate_profile(value, work.memories, self._budget)
+                validate_correction_proposal(work, checked, profile=True)
+                return checked
+            raw, proposal, rejected = isolate_proposal(raw, 'entries', validate_items, self._budget.max_profile_entries)
+            self._store.record_profile_proposal(work, {'original': original, 'filtered': raw, 'rejected': rejected})
+            if original['entries'] and not raw['entries']:
+                self._store.fail_profile(work, 'profile_proposal_invalid')
+                return
             payload = {"scenarios": list(self._model_scenarios(work)),"memories": [item.to_payload() for item in self._model_memories(work)],"proposal": raw}
             if work.corrections:
                 payload['corrections'] = work.corrections
             if len(json.dumps(payload,ensure_ascii=False)) > self._budget.max_characters:
                 self._store.fail_profile(work,"profile_verification_input_budget_exceeded")
                 return
-            supported = self._call(work,self._profile_verifier,"verify",lambda deadline: self._profile_verifier.verify(
+            operation = 'verify_items' if callable(getattr(self._profile_verifier, 'verify_items', None)) else 'verify'
+            supported = self._call(work,self._profile_verifier,operation,lambda deadline: getattr(self._profile_verifier, operation)(
                 scenarios=self._model_scenarios(work),memories=self._model_memories(work),proposal=deepcopy(raw),deadline=deadline,
-                **self._correction_arguments(self._profile_verifier, 'verify', work)),
+                **self._correction_arguments(self._profile_verifier, operation, work)),
                 guard=lambda: self._store.check_profile(work))
-            if supported is not True:
+            filtered, verification_rejected = select_verified(raw, 'entries', supported)
+            self._store.record_profile_proposal(work, {'original': original, 'filtered': filtered,
+                'rejected': rejected, 'verification_rejected': verification_rejected})
+            if raw['entries'] and not filtered['entries'] or supported is False:
                 self._store.fail_profile(work,"profile_faithfulness_rejected")
                 return
+            proposal = validate_items(filtered)
             with self._publication_guard(scope.owner_id, quality_snapshot) as final_guard:
                 self._store.publish_profile(work,proposal,qualification_guard=final_guard)
         except OrganizationBudgetExhausted:

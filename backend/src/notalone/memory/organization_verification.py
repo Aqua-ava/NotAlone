@@ -139,3 +139,29 @@ def profile_verification_supported(result: dict, proposal: dict, memories: list[
                 or basis == 'current_unverified' and entry['temporal_status'] == 'uncertain')
         accepted = accepted and audit['supported'] and temporal_supported and claims_supported
     return accepted
+
+
+def profile_verification_items(result, proposal, memories):
+    """在完整响应中按索引单独审计，不把相邻失败传播给合法条目。"""
+    audits = result.get('entries') if isinstance(result, dict) else None
+    if (not isinstance(result, dict) or set(result) != {'supported', 'reasons', 'entries'}
+            or type(result['supported']) is not bool or not isinstance(result['reasons'], list)
+            or not isinstance(audits, list)):
+        raise ValueError('长期背景核验顶层结构无效。')
+    accepted, rejected = [], []
+    for index, entry in enumerate(proposal['entries']):
+        matches = [audit for audit in audits if isinstance(audit, dict)
+                   and type(audit.get('entry_index')) is int and audit['entry_index'] == index]
+        try:
+            if len(matches) != 1:
+                raise ValueError('条目审计缺失或重复。')
+            audit = {**matches[0], 'entry_index': 0}
+            valid = profile_verification_supported(
+                {'supported': True, 'reasons': [], 'entries': [audit]}, {'entries': [entry]}, memories)
+            if not valid:
+                raise ValueError('条目来源、时间或长期价值未获支持。')
+        except (ValueError, TypeError, KeyError) as error:
+            rejected.append({'index': index, 'reason': str(error)})
+        else:
+            accepted.append(index)
+    return {'accepted_indices': accepted, 'rejected': rejected}

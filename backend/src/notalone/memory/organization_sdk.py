@@ -104,6 +104,36 @@ class DeepSeekOrganizationProposal(_DeepSeekOrganizationAdapter):
 
 
 class DeepSeekOrganizationVerification(_DeepSeekOrganizationAdapter):
+    def verify_items(self, *, memories, scenarios=(), corrections=(), proposal, deadline):
+        from notalone.memory.organization_verification import profile_verification_targets, profile_verification_items
+        from notalone.memory.organization_quality import content_digest
+        payload = {'layer': self.layer, 'memories': [item.to_payload() for item in memories],
+                   'scenarios': list(scenarios), 'corrections': list(corrections), 'proposal': proposal}
+        if self.layer == 'l3':
+            payload['verification_targets'] = profile_verification_targets(proposal)
+            result = self._invoke(PROFILE_VERIFICATION_PROMPT + (CORRECTION_POLICY if corrections else ''), payload, deadline)
+            return profile_verification_items(result, proposal, payload['memories'])
+        payload['verification_targets'] = [{'index': i, 'sha256': content_digest(item)}
+                                           for i, item in enumerate(proposal['scenarios'])]
+        prompt = VERIFICATION_PROMPT + '\n改用逐主题返回：{"items":[{"index":0,"sha256":"复制target摘要","supported":true,"reasons":[]}]}。每个主题单独判断；不得以一条失败拒绝其他主题。'
+        result = self._invoke(prompt, payload, deadline)
+        if not isinstance(result, dict) or set(result) != {'items'} or not isinstance(result['items'], list):
+            raise ValueError('主题核验顶层结构无效。')
+        accepted, rejected = [], []
+        for index, item in enumerate(proposal['scenarios']):
+            matches = [audit for audit in result['items'] if isinstance(audit, dict)
+                       and type(audit.get('index')) is int and audit['index'] == index]
+            valid = len(matches) == 1
+            audit = matches[0] if valid else {}
+            valid = (valid and set(audit) == {'index', 'sha256', 'supported', 'reasons'}
+                     and audit['sha256'] == content_digest(item) and audit['supported'] is True
+                     and isinstance(audit['reasons'], list) and all(isinstance(r, str) for r in audit['reasons']))
+            if valid:
+                accepted.append(index)
+            else:
+                rejected.append({'index': index, 'reason': '主题核验未通过、缺失或未绑定实际正文。'})
+        return {'accepted_indices': accepted, 'rejected': rejected}
+
     def verify(self, *, memories, scenarios=(), corrections=(), proposal, deadline):
         from notalone.memory.organization_verification import profile_verification_targets, profile_verification_supported
         payload = {'layer': self.layer, 'memories': [item.to_payload() for item in memories],
