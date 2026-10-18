@@ -2,6 +2,7 @@
 from contextlib import contextmanager
 import argparse
 import json
+import math
 import os
 from pathlib import Path
 import sqlite3
@@ -38,19 +39,52 @@ class ProblemBudget:
             db.execute('INSERT INTO budget VALUES (?, ?, ?, 0, 0)', (problem, limit, time.time() + minutes * 60))
             db.execute('CREATE TABLE rounds (id TEXT PRIMARY KEY, hypothesis TEXT, evidence TEXT, outcome TEXT)')
 
+    def authorize_continuation(self, *, reason, max_new_rounds=3, minutes):
+        """仅供取得明确继续授权后调用；追加授权历史，不重置预算或轮次。"""
+        if (not isinstance(reason, str) or not reason.strip()
+                or type(max_new_rounds) is not int or not 1 <= max_new_rounds <= 3
+                or type(minutes) not in (int, float) or not math.isfinite(minutes) or minutes <= 0):
+            raise ValueError('继续授权须记录原因、最多三轮及有限的有效期')
+        with self.connection() as db:
+            if db.execute('SELECT 1 FROM rounds WHERE outcome IS NULL').fetchone():
+                raise ProblemStopped('上一轮须先结案，才能记录新的继续授权')
+            db.execute('CREATE TABLE IF NOT EXISTS continuations ('
+                       'id INTEGER PRIMARY KEY, reason TEXT NOT NULL, existing_rounds INTEGER NOT NULL, '
+                       'max_new_rounds INTEGER NOT NULL, authorized_at REAL NOT NULL, deadline REAL NOT NULL)')
+            existing = db.execute('SELECT COUNT(*) FROM rounds').fetchone()[0]
+            now = time.time()
+            db.execute('INSERT INTO continuations(reason,existing_rounds,max_new_rounds,authorized_at,deadline) '
+                       'VALUES (?,?,?,?,?)', (reason.strip(), existing, max_new_rounds, now, now + minutes * 60))
+
+    def _continuations(self, db):
+        if not db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='continuations'").fetchone():
+            return []
+        return [dict(zip(('id', 'reason', 'existing_rounds', 'max_new_rounds', 'authorized_at', 'deadline'), row))
+                for row in db.execute('SELECT * FROM continuations ORDER BY id')]
+
     def start(self, round_id, hypothesis):
         if not round_id.strip() or not hypothesis.strip():
             raise ValueError('每轮必须有标识和可证伪假设')
         with self.connection() as db:
-            self.check(db)
+            self.check(db, starting=True)
             if db.execute('SELECT 1 FROM rounds WHERE outcome IS NULL').fetchone():
                 raise ProblemStopped('上一轮未结案；不得并行或跳过失败')
             db.execute('INSERT INTO rounds VALUES (?, ?, NULL, NULL)', (round_id, hypothesis))
 
-    def check(self, db):
+    def check(self, db, *, starting=False):
         _, limit, deadline, used, streak = db.execute('SELECT * FROM budget').fetchone()
-        if used >= limit or time.time() >= deadline or streak >= 2:
-            raise ProblemStopped('累计预算耗尽、期限已到或连续两轮无改善')
+        grants = self._continuations(db)
+        if used >= limit:
+            raise ProblemStopped('累计调用预算耗尽')
+        if grants:
+            grant = grants[-1]
+            added = db.execute('SELECT COUNT(*) FROM rounds').fetchone()[0] - grant['existing_rounds']
+            if time.time() >= grant['deadline']:
+                raise ProblemStopped('继续授权已过期')
+            if added > grant['max_new_rounds'] or starting and added >= grant['max_new_rounds']:
+                raise ProblemStopped('继续授权的新增轮次已用尽')
+        elif time.time() >= deadline or streak >= 2:
+            raise ProblemStopped('期限已到或连续两轮无改善')
 
     def reserve(self, round_id):
         with self.connection() as db:
@@ -73,7 +107,8 @@ class ProblemBudget:
         with self.connection() as db:
             row = db.execute('SELECT * FROM budget').fetchone()
             rounds = db.execute('SELECT id, outcome FROM rounds').fetchall()
-            return dict(zip(('problem', 'max_calls', 'deadline', 'used', 'no_improvement_rounds'), row), rounds=rounds)
+            return dict(zip(('problem', 'max_calls', 'deadline', 'used', 'no_improvement_rounds'), row), rounds=rounds,
+                        continuations=self._continuations(db))
 
 
 def reserve_problem_attempt():
@@ -95,6 +130,10 @@ def main():
     create.add_argument('--problem', required=True)
     create.add_argument('--calls', type=int, required=True)
     create.add_argument('--minutes', type=int, required=True)
+    continuation = sub.add_parser('authorize-continuation')
+    continuation.add_argument('--reason', required=True)
+    continuation.add_argument('--max-new-rounds', type=int, choices=(1, 2, 3), default=3)
+    continuation.add_argument('--minutes', type=int, required=True)
     start = sub.add_parser('start')
     start.add_argument('--round', required=True)
     start.add_argument('--hypothesis', required=True)
@@ -107,6 +146,8 @@ def main():
     budget = ProblemBudget(args.ledger)
     if args.action == 'create':
         budget.create(args.problem, args.calls, args.minutes)
+    elif args.action == 'authorize-continuation':
+        budget.authorize_continuation(reason=args.reason, max_new_rounds=args.max_new_rounds, minutes=args.minutes)
     elif args.action == 'start':
         budget.start(args.round, args.hypothesis)
     elif args.action == 'finish':
