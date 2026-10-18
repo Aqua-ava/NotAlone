@@ -1,3 +1,4 @@
+import { openAssistantHistory, expandSavedDiscussion } from '../assistant-history-actions';
 import { expect, type Browser } from '@playwright/test';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
 import { confirmDeletion, expectDeletionCleared, saveDeletionDiscussion } from './assistant-session-deletion-support';
@@ -87,7 +88,9 @@ export async function assistantSessionDeletionRecoveredCopy(browser: Browser, or
       const newManual = '新范围独立手写且尚未保存的合成文字。';
       await nextHelper.getByRole('textbox', { name: '草稿', exact: true }).fill(newDraft);
       await manual.fill(newManual);
+      await openAssistantHistory(nextHelper);
       await nextHelper.getByRole('button', { name: '查看已保存讨论', exact: true }).click();
+      await expandSavedDiscussion(nextHelper);
       await nextHelper.getByRole('button', { name: '刷新表达样本', exact: true }).click();
       await expect(nextHelper.getByRole('textbox', { name: '草稿', exact: true })).toHaveValue(newDraft);
       await expect(manual).toHaveValue(newManual);

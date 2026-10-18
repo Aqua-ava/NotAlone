@@ -1,3 +1,4 @@
+import { openAssistantHistory, expandSavedDiscussion } from '../assistant-history-actions';
 import { expect, type Browser, type Page } from '@playwright/test';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
 import { withEventPages, type EventPages } from './message-events';
@@ -10,8 +11,11 @@ async function chooseContact(pages: EventPages, helper: Page, index: 0 | 1) {
 }
 
 async function selectSession(helper: Page, sessionId: string) {
+  await openAssistantHistory(helper);
   await helper.getByRole('button', { name: '刷新会话列表', exact: true }).click();
+  await openAssistantHistory(helper);
   await helper.getByRole('button', { name: `查看会话 ${sessionId}`, exact: true }).click();
+  await expandSavedDiscussion(helper);
   await expect.poll(() => helper.evaluate(async () => { const state = await window.notalone.replies.getState();
     return { sessionId: state.savedSession?.sessionId, phase: state.savedSession?.phase,
       selection: state.explicitCandidateSelection?.phase }; }))
@@ -64,6 +68,7 @@ export async function assistantSessionCombination(browser: Browser, origin: stri
     expect(turns[2].input.content).toMatchObject({ target_message_id: arrived.message_id,
       direction: '感谢邀请，本次不参加。', user_instruction: '自然一点；不要承诺；简短一点' });
     await group.getByRole('radio', { name: '选择说法1当前版本', exact: true }).click();
+    await openAssistantHistory(helper);
     await expect(helper.getByRole('button', { name: '携已选版本新开', exact: true })).toBeEnabled();
     const selectedA = (await helper.evaluate(() => window.notalone.replies.getState())).explicitCandidateSelection!.selection;
     expect(selectedA).not.toBeNull();
@@ -76,6 +81,7 @@ export async function assistantSessionCombination(browser: Browser, origin: stri
     const sessionB = (await helper.evaluate(() => window.notalone.replies.getState())).savedSession!.sessionId!;
     const pathB = `/api/contacts/${contactB}/assistant-sessions/${sessionB}`;
     const keptB = (await fixture.request(pathB)).data;
+    await openAssistantHistory(helper);
     await helper.getByRole('button', { name: '新开助手会话', exact: true }).click();
     expect((await helper.evaluate(() => window.notalone.replies.getState())).savedSession).toMatchObject({
       inputs: [], turns: [], currentInputVersionId: null });
@@ -102,7 +108,9 @@ export async function assistantSessionCombination(browser: Browser, origin: stri
       type: 'purpose_exploration', purpose_hint: large }, expected_input_version_id: adopted.current_input_version_id });
     expect(input.status).toBe(200);
     await selectSession(helper, sessionA);
+    await openAssistantHistory(helper);
     await helper.getByRole('button', { name: '查看已保存讨论', exact: true }).click();
+    await expandSavedDiscussion(helper);
     await expect.poll(() => helper.evaluate(async () => (await window.notalone.replies.getState()).savedSession?.currentInputVersionId))
       .toBe(input.data.input_version_id);
     await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('甲超限后保留的合成草稿。');
@@ -117,7 +125,9 @@ export async function assistantSessionCombination(browser: Browser, origin: stri
     expect((await fixture.command('observations')).model_calls).toBe(4);
     expect(((await fixture.request(pathA)).data.inputs as Array<{ content: { purpose_hint?: string } }>)
       .some((item) => item.content?.purpose_hint === large)).toBe(true);
+    await openAssistantHistory(helper);
     await helper.getByRole('button', { name: '携已选版本新开', exact: true }).click();
+    await expandSavedDiscussion(helper);
     await expect(helper.getByRole('article', { name: '携入的已选版本', exact: true })).toBeVisible();
     const childA = (await helper.evaluate(() => window.notalone.replies.getState())).savedSession!.sessionId!;
     expect(childA).not.toBe(sessionA);
@@ -127,6 +137,7 @@ export async function assistantSessionCombination(browser: Browser, origin: stri
     expect((carry.inputs as Array<{ content: { messages: Array<{ text: string }> } }>)[0].content.messages.map((m) => m.text))
       .toEqual(['甲新消息后的感谢。', '甲仍不参加。']);
     await selectSession(helper, sessionA);
+    await openAssistantHistory(helper);
     await helper.getByRole('button', { name: '删除当前助手会话', exact: true }).click();
     await helper.getByRole('group', { name: '确认删除助手会话', exact: true })
       .getByRole('button', { name: '确认删除会话', exact: true }).click();

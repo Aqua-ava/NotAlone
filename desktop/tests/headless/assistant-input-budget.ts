@@ -1,3 +1,4 @@
+import { openAssistantHistory, expandSavedDiscussion } from '../assistant-history-actions';
 import path from 'node:path';
 import { expect, type Browser } from '@playwright/test';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
@@ -50,6 +51,7 @@ export async function assistantInputBudget(browser: Browser, origin: string) {
         await manager.getByRole('button', { name: '打开输入小窗', exact: true }).click();
         const current: RewritePages = { manager, helper: await opened, rewriteBackend, replyTransport: transport };
         await prepareDraft(current, '临界预算的合成候选');
+        await openAssistantHistory(current.helper);
         await current.helper.getByRole('button', { name: '新开助手会话', exact: true }).click();
         await expect(current.helper.getByText('当前会话还没有讨论。', { exact: true })).toBeVisible();
         // 新开明确清空临时输入后，用户重新填入同一校准请求。
@@ -72,7 +74,9 @@ export async function assistantInputBudget(browser: Browser, origin: string) {
         await expect(current.helper.getByRole('combobox', { name: '本次语气', exact: true })).toHaveValue('polite');
         await expect(current.helper.getByRole('textbox', { name: '本次要求', exact: true })).toHaveValue(instruction);
         await expect(current.helper.getByRole('checkbox', { name: '结合关系语境', exact: true })).not.toBeChecked();
+        await openAssistantHistory(current.helper);
         await current.helper.getByRole('button', { name: '查看已保存讨论', exact: true }).click();
+        await expandSavedDiscussion(current.helper);
         const discussion = current.helper.getByRole('region', { name: '已保存的讨论', exact: true });
         await expect(discussion.getByText(draft, { exact: true })).toBeVisible();
         await expect(discussion.getByText('临界预算的合成候选（说法1）。', { exact: true })).toBeVisible();

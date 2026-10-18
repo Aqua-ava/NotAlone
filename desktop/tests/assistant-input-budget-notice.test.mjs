@@ -22,6 +22,10 @@ test('正常估算生成也显示估算和余量，不声称精确计量或已�
   assert.match(html, /输入长度为估算，已预留余量/);
   assert.match(html, /role="status"/);
   assert.match(html, /估算总量/);
+  const details = html.match(/<details[^>]*class="record-metadata"[^>]*>/)?.[0];
+  assert.ok(details, '正常预算数字放在可展开的详情中');
+  assert.doesNotMatch(details, /\bopen(?:=|\s|>)/);
+  assert.match(html, /<summary>查看输入长度详情<\/summary>/);
   assert.match(html, /输出预留 100 token/);
   assert.match(html, /安全余量 200 token/);
   assert.doesNotMatch(html, /精确|已核实的保守上界|ECNU|ecnu-max/);

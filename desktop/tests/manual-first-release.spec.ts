@@ -1,3 +1,4 @@
+import { openAssistantHistory, expandSavedDiscussion } from './assistant-history-actions';
 import { expect } from '@playwright/test';
 import { test, selectMenu } from './app-fixture';
 import { isolatedAppEnvironment } from './app-fixture';
@@ -130,8 +131,11 @@ test('公开手动输入完成模型设置、依据和编辑，切换隔离、�
   await expect(helper.getByLabel('当前聊天文字', { exact: true })).toHaveValue('');
   await helper.getByText('这组候选的生成输入 · 合成联系人甲', { exact: true }).click();
   await expect(helper.getByText('本次粘贴的对方文字：合成甲：今晚要一起去吗？', { exact: true })).toBeVisible();
+  await openAssistantHistory(helper);
   await helper.getByRole('button', { name: '查看已保存讨论', exact: true }).click();
+  await expandSavedDiscussion(helper);
   await expect(helper.getByRole('region', { name: '已保存的讨论', exact: true })).toBeVisible();
+  await openAssistantHistory(helper);
   await helper.getByRole('button', { name: '删除当前助手会话', exact: true }).click();
   await helper.getByRole('button', { name: '确认删除会话', exact: true }).click();
   await expect(helper.getByText('当前助手会话已删除。', { exact: true })).toBeVisible();

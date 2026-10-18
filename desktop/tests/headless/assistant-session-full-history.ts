@@ -1,3 +1,4 @@
+import { openAssistantHistory, expandSavedDiscussion } from '../assistant-history-actions';
 import path from 'node:path';
 import { expect, type Browser } from '@playwright/test';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
@@ -14,7 +15,9 @@ export async function assistantSessionFullHistory(browser: Browser, origin: stri
     expect(history.wire_bytes).toBeGreaterThan(1_048_576);
     expect(history.characters_per_input).toBe(100_000);
     expect(await rewriteBackend.command('metrics')).toEqual({ model_calls: 0, migration_count: 55, migration_repeat: 0 });
+    await openAssistantHistory(helper);
     await helper.getByRole('button', { name: '查看已保存讨论', exact: true }).click();
+    await expandSavedDiscussion(helper);
     const discussion = helper.getByRole('region', { name: '已保存的讨论', exact: true });
     for (const letter of '甲乙丙丁') await expect(discussion.getByText(letter.repeat(100_000), { exact: true })).toBeVisible();
     const state = await helper.evaluate(async () => window.notalone.replies.getState());
@@ -33,11 +36,14 @@ export async function assistantSessionFullHistory(browser: Browser, origin: stri
     expect((await rewriteBackend.command('metrics')).model_calls).toBe(0);
     await expect(helper.getByRole('textbox', { name: '草稿', exact: true })).toHaveValue('超大完整讨论中的合成新草稿。');
     await expect(helper.getByRole('textbox', { name: '本次要求', exact: true })).toHaveValue('仅保留本次合成草稿的事实。');
+    await openAssistantHistory(helper);
     await helper.getByRole('button', { name: '查看已保存讨论', exact: true }).click();
+    await expandSavedDiscussion(helper);
     for (const letter of '甲乙丙丁') await expect(discussion.getByText(letter.repeat(100_000), { exact: true })).toBeVisible();
     const originalPath = `/api/contacts/${rewriteBackend.data.contact_ids[0]}/assistant-sessions/${history.session_id}`;
     const rejected = await rewriteBackend.request(originalPath);
     expect(rejected.status).toBe(200);
+    await openAssistantHistory(helper);
     await helper.getByRole('button', { name: '新开助手会话', exact: true }).click();
     await expect(helper.getByText('当前会话还没有讨论。', { exact: true })).toBeVisible();
     await expect(helper.getByRole('textbox', { name: '草稿', exact: true })).toHaveValue('');

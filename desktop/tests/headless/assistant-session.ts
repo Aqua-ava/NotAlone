@@ -1,3 +1,4 @@
+import { openAssistantHistory, expandSavedDiscussion } from '../assistant-history-actions';
 import { selectMemoryCategory } from '../memory-page-actions';
 import { expect, type Browser } from '@playwright/test';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
@@ -14,12 +15,16 @@ export async function assistantSessionPersistence(browser: Browser, origin: stri
     await helper.getByRole('button', { name: '生成候选', exact: true }).click();
     await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true }))
       .toHaveValue('可靠保存的合成候选（说法1）。');
+    await openAssistantHistory(helper);
     await helper.getByRole('button', { name: '查看已保存讨论', exact: true }).click();
+    await expandSavedDiscussion(helper);
     const discussion = helper.getByRole('region', { name: '已保存的讨论', exact: true });
     await expect(discussion.getByText('合成讨论：明天再确认时间。', { exact: true })).toBeVisible();
     await expect(discussion.getByText('可靠保存的合成候选（说法1）。', { exact: true })).toBeVisible();
     await helper.getByRole('button', { name: '重试同一次生成', exact: true }).click();
+    await openAssistantHistory(helper);
     await helper.getByRole('button', { name: '查看已保存讨论', exact: true }).click();
+    await expandSavedDiscussion(helper);
     await expect(discussion.getByRole('article')).toHaveCount(1);
     expect((await rewriteBackend.command('observations')).payloads).toHaveLength(1);
   });
@@ -37,7 +42,9 @@ export async function assistantSessionPersistence(browser: Browser, origin: stri
       .toHaveValue('依赖来源的合成候选（说法1）。');
     // 控制输入只改变合成来源状态；尚未清理时也不能重新读出正文。
     await rewriteBackend.command('withdraw_target_source');
+    await openAssistantHistory(helper);
     await helper.getByRole('button', { name: '查看已保存讨论', exact: true }).click();
+    await expandSavedDiscussion(helper);
     const discussion = helper.getByRole('region', { name: '已保存的讨论', exact: true });
     await expect(discussion.getByText('相关来源不可用', { exact: true })).toBeVisible();
     await expect(discussion.getByText('依赖来源的合成讨论。', { exact: true })).toHaveCount(0);
@@ -50,7 +57,9 @@ export async function assistantSessionPersistence(browser: Browser, origin: stri
     await helper.getByRole('button', { name: '生成候选', exact: true }).click();
     await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true }))
       .toHaveValue('与来源无关的合成候选（说法1）。');
+    await openAssistantHistory(helper);
     await helper.getByRole('button', { name: '查看已保存讨论', exact: true }).click();
+    await expandSavedDiscussion(helper);
     await expect(discussion.getByText('与来源无关的合成讨论。', { exact: true })).toBeVisible();
     await expect(discussion.getByText('与来源无关的合成候选（说法1）。', { exact: true })).toBeVisible();
     await expect(discussion.getByText('依赖来源的合成候选（说法1）。', { exact: true })).toHaveCount(0);
@@ -97,7 +106,9 @@ export async function assistantSessionPersistence(browser: Browser, origin: stri
     expect(await helper.evaluate(async () => window.notalone.replies.getState()))
       .toMatchObject({ phase: 'idle', result: null, selectedCandidateId: null });
     // 删除完成通知可使旧投影失效；在操作结束后公开重读，验证最终占位。
+    await openAssistantHistory(helper);
     await helper.getByRole('button', { name: '查看已保存讨论', exact: true }).click();
+    await expandSavedDiscussion(helper);
     await expect(helper.getByRole('region', { name: '已保存的讨论', exact: true })
       .getByText('相关来源不可用', { exact: true })).toBeVisible();
     await expect(editor).toHaveCount(0);

@@ -1,3 +1,4 @@
+import { openAssistantHistory, expandSavedDiscussion } from '../assistant-history-actions';
 import { selectMemoryCategory } from '../memory-page-actions';
 import { expect, type Browser } from '@playwright/test';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
@@ -45,6 +46,7 @@ export async function overviewReplyRetrieval(browser: Browser, origin: string) {
         await helper.getByRole('button', { name: '生成候选', exact: true }).click();
         await expect(editor).toHaveValue(text);
         await helper.getByRole('button', { name: '展开候选1依据', exact: true }).click();
+        await evidence.locator('.evidence-technical > summary').click();
       }
 
       const first = '想问问现在适不适合一起散步？';
@@ -80,7 +82,9 @@ export async function overviewReplyRetrieval(browser: Browser, origin: string) {
       await correction.getByRole('textbox', { name: '资料正文', exact: true }).fill(corrected);
       await correction.getByRole('button', { name: '保存修正', exact: true }).click();
       await expect(contact.getByRole('button', { name: `修正资料：${corrected}`, exact: true })).toBeVisible();
+      await openAssistantHistory(helper);
       await helper.getByRole('button', { name: '查看已保存讨论', exact: true }).click();
+      await expandSavedDiscussion(helper);
       await expect(editor).toHaveValue(edit);
       const discussion = helper.getByRole('region', { name: '已保存的讨论', exact: true });
       await expect(discussion.getByText('依据已变化', { exact: true })).toBeVisible();
@@ -106,7 +110,9 @@ export async function overviewReplyRetrieval(browser: Browser, origin: string) {
       await source.getByRole('button', { name: '删除来源', exact: true }).click();
       await manager.getByRole('button', { name: '确认删除来源', exact: true }).click();
       await expect(source.getByText('已删除，已通过不可检索校验', { exact: true })).toBeVisible({ timeout: 15_000 });
+      await openAssistantHistory(helper);
       await helper.getByRole('button', { name: '查看已保存讨论', exact: true }).click();
+      await expandSavedDiscussion(helper);
       await expect(discussion.getByText('相关来源已删除', { exact: true })).toBeVisible();
       await expect(editor).toHaveCount(0);
       await expect(helper.getByText(prepared.rawText, { exact: true })).toHaveCount(0);

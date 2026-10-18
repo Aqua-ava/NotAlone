@@ -136,11 +136,15 @@ export function ReplyEvidence({ evidence, selection, candidate, number, waiting 
       {state.phase === 'failed' && <><p role="alert">本次依据读取失败，请检查本机连接后重试。</p><button onClick={() => void operate()}>重试候选{number}依据</button></>}
       {state.phase === 'missing' && <p role="status">本次依据不存在或已删除，无法恢复原正文。</p>}
       {state.phase === 'ready' && <>
+        <h4>这条回复参考了什么</h4>
+        <p className="evidence-help">标为“本候选已引用”的内容是这条回复明确引用的依据，其他内容仅作为背景参考。</p>
+        <details className="evidence-technical"><summary>检索过程与技术详情</summary>
         <RetrievalSummary receipt={state.retrieval} />
         <LayeredSummary context={state.layeredContext} status={state.layeredStatus} receipts={state.layeredScenarioReads} />
         <ScenarioReadSummary receipts={state.layeredScenarioReads} />
         <LayeredSummary context={state.ownerLayeredContext} status={state.ownerLayeredStatus} receipts={state.ownerLayeredScenarioReads} owner />
         <ScenarioReadSummary receipts={state.ownerLayeredScenarioReads} owner />
+        </details>
         <ReplyBasisChangeNotice changes={state.basisChanges} />
         {candidate.citationIds.some((id) => !state.items.some((item) => item.evidenceId === id)) && <p>部分引用缺失，不补填后来资料。</p>}
         {!state.items.length && <p>本次没有可展示的依据。</p>}
@@ -152,11 +156,13 @@ export function ReplyEvidence({ evidence, selection, candidate, number, waiting 
           <p>{item.text}</p><p>入选原因：{item.selectionReason}</p>
           <p>生成时状态：{statusNames[item.snapshotStatus] ?? '未识别状态'}</p>
           {['confirmed_memory', 'owner_memory', 'pending_candidate'].includes(item.kind) && <MemoryTemporalStatus timing={item.timing} snapshot />}
+          <details className="record-metadata"><summary>来源时间详情</summary>
           <p>保存时间：{item.timing.recordedAt ?? '未知'}</p>
           {item.timing.sourceStartedAt && item.timing.sourceEndedAt
             ? <p>来源时间：{item.timing.sourceStartedAt} 至 {item.timing.sourceEndedAt}{item.timing.sourceTimeComplete ? '' : '（不完整）'}</p>
             : <p>来源时间未知</p>}
           <p>有效起点：{item.validAt ?? '未知'}；失效时间：{item.invalidAt ?? '未知'}</p>
+          </details>
         </article>)}
       </>}
     </section>}

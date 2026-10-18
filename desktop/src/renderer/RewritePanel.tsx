@@ -230,7 +230,7 @@ export function ReplyCandidates({ replies }: { replies: ReplySessionView }) {
     void window.notalone.styleSamples.noteCandidateCopy({ contactId: state.contactId, scopeRevision: state.scopeRevision,
       replyRequestId, candidateId, text }).catch(() => {});
   }
-  return <section ref={resultRegion} className="reply-candidates" aria-label="候选回复">
+  return <><section ref={resultRegion} className="reply-candidates" aria-label="候选回复">
     <header className="reply-results-heading"><h2>候选回复</h2>
       {candidates.length > 0 && <span>共 {candidates.length} 种说法，可选择并修改</span>}</header>
     {candidates.length > 0 && (!state.result || state.exploration.result || state.exploration.phase === 'waiting' || state.exploration.phase === 'failed'
@@ -287,7 +287,7 @@ export function ReplyCandidates({ replies }: { replies: ReplySessionView }) {
             validatePaste={(text) => window.notalone.styleSamples.validateCandidatePaste({ contactId: state.contactId!,
               scopeRevision: state.scopeRevision, replyRequestId: state.result!.replyRequestId, candidateId: original.candidateId, text })}
             copy={(text) => noteCopy(original.candidateId, text)} />
-          <p className="reply-basis">{original.basis}</p>
+          <details className="candidate-reason"><summary>为什么这样写</summary><p className="reply-basis">{original.basis}</p></details>
           {original.riskNotes.map((note, number) => <p className="reply-risk" key={number}>{note}</p>)}
           <details><summary>查看原候选</summary><p className="reply-original"
             onCopy={() => noteCopy(original.candidateId, window.getSelection()?.toString() ?? '')}>{original.text}</p></details>
@@ -306,7 +306,7 @@ export function ReplyCandidates({ replies }: { replies: ReplySessionView }) {
               number={index + 1} restored={!state.result} noteCopy={(text) => noteCopy(candidate.candidateId, text)}
               onDirtyChange={reportDirty} />
           }
-          <p className="reply-basis">{candidate.basis}</p>
+          <details className="candidate-reason"><summary>为什么这样写</summary><p className="reply-basis">{candidate.basis}</p></details>
           {candidate.riskNotes.map((note, number) => <p className="reply-risk" key={number}>{note}</p>)}
           <ReplyEvidence evidence={evidence} candidate={candidate} number={index + 1} waiting={state.phase === 'waiting'}
             selection={{ contactId: state.contactId!, scopeRevision: state.scopeRevision, replyRequestId: replyRequestId!, candidateId: candidate.candidateId }} />
@@ -317,8 +317,12 @@ export function ReplyCandidates({ replies }: { replies: ReplySessionView }) {
     <AssistantContinuationControls key={`${state.contactId}:${state.scopeRevision}:${state.savedSession?.sessionId}:${state.inputClearRevision ?? 0}`}
       replies={replies} hasUnsavedEdits={hasUnsavedEdits} />
     <AssistantMessageNoticeActions replies={replies} hasUnsavedEdits={hasUnsavedEdits} />
+  </section>
     <AssistantSessionPanel replies={replies} />
-    <StyleSamples replies={replies} />
-    <ExpressionPreferences replies={replies} />
-  </section>;
+    <section className="reply-expression-settings" aria-label="表达设置">
+      <header><h2>表达设置</h2><p>管理你喜欢的说法和长期偏好，不影响本次已生成的文字。</p></header>
+      <StyleSamples replies={replies} />
+      <ExpressionPreferences replies={replies} />
+    </section>
+  </>;
 }

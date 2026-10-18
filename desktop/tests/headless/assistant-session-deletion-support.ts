@@ -1,3 +1,4 @@
+import { openAssistantHistory, expandSavedDiscussion } from '../assistant-history-actions';
 import { readFile } from 'node:fs/promises';
 import { expect, type Page } from '@playwright/test';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
@@ -21,7 +22,9 @@ export async function saveDeletionDiscussion(pages: RewritePages, draft: string,
   await pages.rewriteBackend.plan({ count: 1, prefix });
   await pages.helper.getByRole('button', { name: '生成候选', exact: true }).click();
   await expect(pages.helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveValue(`${prefix}（说法1）。`);
+  await openAssistantHistory(pages.helper);
   await pages.helper.getByRole('button', { name: '查看已保存讨论', exact: true }).click();
+  await expandSavedDiscussion(pages.helper);
   await expect(pages.helper.getByRole('region', { name: '已保存的讨论', exact: true }).getByText(draft, { exact: true })).toBeVisible();
   const state = await pages.helper.evaluate(async () => window.notalone.replies.getState());
   const contactId = pages.rewriteBackend.data.contact_ids[0];
@@ -30,6 +33,7 @@ export async function saveDeletionDiscussion(pages: RewritePages, draft: string,
 }
 
 export async function confirmDeletion(helper: Page) {
+  await openAssistantHistory(helper);
   await helper.getByRole('button', { name: '删除当前助手会话', exact: true }).click();
   await helper.getByRole('group', { name: '确认删除助手会话', exact: true })
     .getByRole('button', { name: '确认删除会话', exact: true }).click();

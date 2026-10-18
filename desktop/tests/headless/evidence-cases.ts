@@ -62,6 +62,10 @@ async function draftEvidence({ manager, helper, rewriteBackend }: RewritePages) 
   await expect(evidence.getByText('这是本次明确输入的合成草稿。', { exact: true })).toBeVisible();
   await expect(evidence.getByText('用户草稿', { exact: true })).toBeVisible();
   await expect(evidence.getByText('本候选已引用', { exact: true })).toBeVisible();
+  await expect(evidence.locator('.evidence-technical')).not.toHaveAttribute('open');
+  await expect(evidence.getByText('来源时间未知', { exact: true })).toBeHidden();
+  await evidence.getByRole('article').filter({ hasText: '这是本次明确输入的合成草稿。' })
+    .locator('.record-metadata > summary').click();
   await expect(evidence.getByText('来源时间未知', { exact: true })).toBeVisible();
   await helper.getByRole('textbox', { name: '候选1编辑文本', exact: true }).fill('我修改的措辞不改生成依据。');
   await expect(evidence.getByText('这是本次明确输入的合成草稿。', { exact: true })).toBeVisible();
@@ -219,6 +223,8 @@ async function legacySnapshot(pages: EvidencePages) {
   await pages.helper.getByRole('button', { name: '展开候选1依据', exact: true }).click();
   const region = pages.helper.getByRole('region', { name: '候选1依据', exact: true });
   await expect(region.getByText('甲的私密合成历史：今晚我会晚一点回复你。', { exact: true })).toBeVisible();
+  await region.getByRole('article').filter({ hasText: '甲的私密合成历史：今晚我会晚一点回复你。' })
+    .locator('.record-metadata > summary').click();
   await expect(region.getByText('来源时间未知', { exact: true })).toBeVisible();
   await expect(region.getByText('保存时间：未知', { exact: true })).toBeVisible();
   const current = await pages.rewriteBackend.request(`/api/contacts/${pages.rewriteBackend.data.contact_ids[0]}/messages`);

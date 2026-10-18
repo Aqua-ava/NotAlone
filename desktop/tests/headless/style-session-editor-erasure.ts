@@ -1,3 +1,4 @@
+import { openAssistantHistory } from '../assistant-history-actions';
 import { expect, type Browser, type Locator } from '@playwright/test';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
 import type { RewritePages } from '../rewrite-page-scenarios';
@@ -80,12 +81,15 @@ async function editorAfterSessionDeletion(pages: RewritePages, kind: 'candidate'
   }
   const expectedBefore = kind === 'candidate' ? unsavedCandidate : kind === 'manual' ? unsavedManual : '';
   await expect(manual).toHaveValue(expectedBefore);
+  await openAssistantHistory(helper);
   await helper.getByRole('button', { name: '删除当前助手会话', exact: true }).click();
   const confirmation = helper.getByRole('group', { name: '确认删除助手会话', exact: true });
   await expect(confirmation.getByText('已主动保存的表达样本仍会保留，可在表达样本管理中单独删除。', { exact: true })).toBeVisible();
   await confirmation.getByRole('button', { name: '取消删除会话', exact: true }).click();
   await expect(manual).toHaveValue(expectedBefore);
   expect((await rewriteBackend.request(sessionPath)).status).toBe(200);
+
+  await openAssistantHistory(helper);
 
   await helper.getByRole('button', { name: '删除当前助手会话', exact: true }).click();
   await confirmation.getByRole('button', { name: '确认删除会话', exact: true }).click();

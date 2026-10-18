@@ -1,3 +1,4 @@
+import { openAssistantHistory, expandSavedDiscussion } from '../assistant-history-actions';
 import { randomUUID } from 'node:crypto';
 import { expect, type Browser } from '@playwright/test';
 import type { RewritePages } from '../rewrite-page-scenarios';
@@ -120,7 +121,9 @@ async function newSessionClearsDeletionNotice(pages: RewritePages) {
   const deleted = await helper.evaluate(async () => window.notalone.replies.getState());
   expect(deleted.confirmedSessionDeletion).toMatchObject({ sessionId: saved.sessionId, contactId: saved.contactId,
     scopeRevision: deleted.scopeRevision });
+  await openAssistantHistory(helper);
   await helper.getByRole('button', { name: '查看已保存讨论', exact: true }).click();
+  await expandSavedDiscussion(helper);
   await expect(helper.getByText('当前会话还没有讨论。', { exact: true })).toBeVisible();
   const restored = await helper.evaluate(async () => window.notalone.replies.getState());
   const freshId = restored.savedSession!.sessionId!;
@@ -188,7 +191,11 @@ async function unsavedCandidateCopy(pages: RewritePages, copies: string[]) {
   expect(await rewriteBackend.request(samplePath)).toEqual(retained);
   expect((await rewriteBackend.command('observations')).payloads).toHaveLength(1);
 
+  await openAssistantHistory(helper);
+
   await helper.getByRole('button', { name: '查看已保存讨论', exact: true }).click();
+
+  await expandSavedDiscussion(helper);
   await expect(helper.getByText('当前会话还没有讨论。', { exact: true })).toBeVisible();
   const fresh = await helper.evaluate(async () => window.notalone.replies.getState());
   expect(fresh.savedSession!.sessionId).not.toBe(saved.sessionId);

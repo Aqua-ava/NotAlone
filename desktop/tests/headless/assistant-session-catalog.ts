@@ -1,3 +1,4 @@
+import { openAssistantHistory, expandSavedDiscussion } from '../assistant-history-actions';
 import { ensureReplySettingsOpen } from '../reply-settings-actions';
 import { randomUUID } from 'node:crypto';
 import { expect, type Browser, type Page } from '@playwright/test';
@@ -16,16 +17,21 @@ async function saveDraft(pages: RewritePages) {
   await pages.rewriteBackend.plan({ count: 1, prefix: '目录中保留的合成旧候选' });
   await pages.helper.getByRole('button', { name: '生成候选', exact: true }).click();
   await expect(pages.helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveValue('目录中保留的合成旧候选（说法1）。');
+  await openAssistantHistory(pages.helper);
   await pages.helper.getByRole('button', { name: '查看已保存讨论', exact: true }).click();
+  await expandSavedDiscussion(pages.helper);
   await expect(pages.helper.getByRole('article', { name: '第1轮讨论', exact: true })).toBeVisible();
   return (await pages.helper.evaluate(async () => window.notalone.replies.getState())).savedSession!.sessionId!;
 }
 async function listSessions(helper: Page) {
+  await openAssistantHistory(helper);
   await helper.getByRole('button', { name: '刷新会话列表', exact: true }).click();
   await expect(helper.getByRole('list', { name: '助手会话目录', exact: true })).toBeVisible();
 }
 async function selectSession(helper: Page, sessionId: string) {
+  await openAssistantHistory(helper);
   await helper.getByRole('button', { name: `查看会话 ${sessionId}`, exact: true }).click();
+  await expandSavedDiscussion(helper);
   await expect.poll(() => helper.evaluate(async () => { const state = await window.notalone.replies.getState();
     return { sessionId: state.savedSession?.sessionId, read: state.savedSession?.phase,
       catalog: state.sessionCatalog?.phase, pending: state.sessionCatalog?.selectionPending }; })).toEqual({
@@ -41,6 +47,7 @@ export async function assistantSessionCatalog(browser: Browser, origin: string) 
     await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('尚未提交的临时合成草稿。');
     await helper.getByRole('combobox', { name: '本次语气', exact: true }).selectOption('polite');
     await helper.getByRole('textbox', { name: '本次要求', exact: true }).fill('不要搬入新会话的要求。');
+    await openAssistantHistory(helper);
     await helper.getByRole('button', { name: '新开助手会话', exact: true }).click();
     await expect.poll(() => helper.evaluate(async (sid) => { const state = await window.notalone.replies.getState();
       return state.savedSession?.sessionId !== sid && state.sessionCatalog?.phase === 'ready'; }, oldId)).toBe(true);
@@ -82,6 +89,7 @@ export async function assistantSessionCatalog(browser: Browser, origin: string) 
     await helper.getByRole('textbox', { name: '本次策略要求', exact: true }).fill('未提交的合成策略要求。');
     await ensureReplySettingsOpen(helper, '策略选择');
     await helper.getByRole('combobox', { name: '策略选择', exact: true }).selectOption('disabled');
+    await openAssistantHistory(helper);
     await helper.getByRole('button', { name: '新开助手会话', exact: true }).click();
     await expect.poll(() => helper.evaluate(async (sid) => { const state = await window.notalone.replies.getState();
       return state.savedSession?.sessionId !== sid && state.sessionCatalog?.phase === 'ready'; }, oldId)).toBe(true);
@@ -113,6 +121,7 @@ export async function assistantSessionCatalogGuards(browser: Browser, origin: st
     await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('切换失败应保留的合成草稿。');
     await helper.getByRole('textbox', { name: '候选1编辑文本', exact: true }).fill('切换失败应保留的候选编辑。');
     replyTransport.failSessionReads = true;
+    await openAssistantHistory(helper);
     await helper.getByRole('button', { name: '新开助手会话', exact: true }).click();
     await expect(helper.getByText('助手会话操作尚未确认，请刷新列表后明确选择会话。', { exact: true })).toBeVisible();
     await expect(helper.getByRole('textbox', { name: '草稿', exact: true })).toHaveValue('切换失败应保留的合成草稿。');
@@ -144,6 +153,7 @@ export async function assistantSessionCatalogGuards(browser: Browser, origin: st
       await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('甲的保留草稿。');
     }
     replyTransport.nextSessionRead = 'hold'; const held = replyTransport.heldCount;
+    await openAssistantHistory(helper);
     await helper.getByRole('button', { name: '新开助手会话', exact: true }).click();
     await expect.poll(() => replyTransport.heldCount).toBe(held + 1);
     await manager.getByRole('button', { name: '选择合成联系人乙', exact: true }).click();
@@ -166,6 +176,7 @@ export async function assistantSessionCatalogGuards(browser: Browser, origin: st
       expect((await rewriteBackend.request(path)).data).toEqual({ sessions: [], current_session_id: null });
     }
     await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('未绑定联系人应保留的草稿。');
+    await openAssistantHistory(helper);
     await helper.getByRole('button', { name: '新开助手会话', exact: true }).click();
     await expect(helper.getByText('助手会话操作尚未确认，请刷新列表后明确选择会话。', { exact: true })).toBeVisible();
     await expect(helper.getByRole('textbox', { name: '草稿', exact: true })).toHaveValue('未绑定联系人应保留的草稿。');

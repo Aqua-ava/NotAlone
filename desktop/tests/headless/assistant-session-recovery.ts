@@ -1,3 +1,4 @@
+import { openAssistantHistory, expandSavedDiscussion } from '../assistant-history-actions';
 import { selectMemoryCategory } from '../memory-page-actions';
 import { expect, type Browser, type Page } from '@playwright/test';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
@@ -282,7 +283,9 @@ async function readFailure(pages: RewritePages) {
     .toBe('读取暂时失败也应保留的合成候选编辑。');
   const beforeFailure = await helper.evaluate(async () => window.notalone.replies.getState());
   replyTransport.failSessionReads = true;
+  await openAssistantHistory(helper);
   await helper.getByRole('button', { name: '查看已保存讨论', exact: true }).click();
+  await expandSavedDiscussion(helper);
   await expect(helper.getByRole('alert').filter({ hasText: '已保存讨论暂不可用' })).toBeVisible();
   await expect(helper.getByRole('region', { name: '已保存的讨论', exact: true })).toHaveCount(0);
   await expect(helper.getByText('恢复读取失败不能沿用缓存。', { exact: true })).toHaveCount(0);
@@ -297,7 +300,9 @@ async function readFailure(pages: RewritePages) {
   await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('重试时保留的未提交草稿。');
   await expect(helper.getByRole('alert').filter({ hasText: '已保存讨论暂不可用' })).toBeVisible();
   expect(replyTransport.sessionRequests).toHaveLength(attempts);
+  await openAssistantHistory(helper);
   await helper.getByRole('button', { name: '重试读取已保存讨论', exact: true }).click();
+  await expandSavedDiscussion(helper);
   await expect(helper.getByRole('region', { name: '已保存的讨论', exact: true })
     .getByText('恢复读取成功的原候选（说法1）。', { exact: true })).toBeVisible();
   await expect(helper.getByRole('textbox', { name: '草稿', exact: true })).toHaveValue('重试时保留的未提交草稿。');

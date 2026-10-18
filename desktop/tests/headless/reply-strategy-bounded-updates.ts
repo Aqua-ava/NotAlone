@@ -1,3 +1,4 @@
+import { openAssistantHistory } from '../assistant-history-actions';
 import { ensureReplySettingsOpen } from '../reply-settings-actions';
 import { expect, type Browser } from '@playwright/test';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
@@ -248,6 +249,7 @@ async function freshTaskAfterDeletion(pages: EventPages) {
   const old = await open(pages, '准备删除的合成方向讨论。');
   const oldScope = await pages.helper.evaluate(async () => (await window.notalone.replies.getState()).scopeRevision);
   const oldPath = `/api/contacts/${pages.fixture.data.contact_ids[0]}/assistant-sessions/${old.sessionId}`;
+  await openAssistantHistory(pages.helper);
   await pages.helper.getByRole('button', { name: '删除当前助手会话', exact: true }).click();
   await pages.helper.getByRole('group', { name: '确认删除助手会话', exact: true })
     .getByRole('button', { name: '确认删除会话', exact: true }).click();

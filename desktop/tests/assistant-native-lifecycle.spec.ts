@@ -1,3 +1,4 @@
+import { openAssistantHistory, expandSavedDiscussion } from './assistant-history-actions';
 import { expect, type ElectronApplication, type Page } from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -80,7 +81,9 @@ test('真实小窗关闭继续、正常退出停止，原目录重开只恢复�
       await manager.getByRole('button', { name: '打开输入小窗', exact: true }).click();
       await expect.poll(() => helperWindow.evaluate((window) => window.isVisible())).toBe(true);
       await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
+      await openAssistantHistory(helper);
       await helper.getByRole('button', { name: '查看已保存讨论', exact: true }).click();
+      await expandSavedDiscussion(helper);
       await expect(helper.getByRole('region', { name: '已保存的讨论', exact: true })
         .getByText('关小窗后可靠完成的合成候选（说法1）。', { exact: true })).toBeVisible();
 
@@ -115,7 +118,9 @@ test('真实小窗关闭继续、正常退出停止，原目录重开只恢复�
       }), { mode: 0o600 });
       const next = await openRewriteAppPages(reopened);
       await chooseContact(next.manager, next.helper, rewriteBackend);
+      await openAssistantHistory(next.helper);
       await next.helper.getByRole('button', { name: '查看已保存讨论', exact: true }).click();
+      await expandSavedDiscussion(next.helper);
       await expect(next.helper.getByText('上次生成中断。', { exact: true })).toBeVisible();
       await expect(next.helper.getByRole('button', { name: '重试上次中断生成', exact: true })).toBeEnabled();
       expect((await read()).turns).toEqual(stopped.turns);

@@ -1,3 +1,4 @@
+import { openAssistantHistory, expandSavedDiscussion } from '../assistant-history-actions';
 import { ensureReplySettingsOpen } from '../reply-settings-actions';
 import { selectMemoryCategory } from '../memory-page-actions';
 import { writeFile } from 'node:fs/promises';
@@ -93,7 +94,9 @@ async function checkErased(helper: Page, sessionPath: string, pages: RewritePage
   expect((visible.candidateVersions?.items ?? []).filter((item) => erasedCandidateIds.has(item.candidateId))
     .every((item) => item.history === null)).toBe(true);
   // 删除先清空本地历史；沿现有公开动作重读，不能把空投影当删除占位已恢复。
+  await openAssistantHistory(helper);
   await helper.getByRole('button', { name: '查看已保存讨论', exact: true }).click();
+  await expandSavedDiscussion(helper);
   await expect.poll(async () => (await helper.evaluate(async () => window.notalone.replies.getState()))
     .savedSession?.sessionId).toBe(sessionPath.split('/').at(-1));
   await expect.poll(async () => (await helper.evaluate(async () => window.notalone.replies.getState()))
@@ -226,8 +229,11 @@ export async function authenticExpressionGroups(browser: Browser, origin: string
           expect(originalSample.text).toBe(stage.messages.join('\n\n')); expect(originalSample.originKind).toBe('candidate');
           expect(originalSample.originId).toBe(item.candidate.candidate_id); expect(originalSample.sourceIds.length).toBeGreaterThan(0);
           derivedSampleIds.push(originalSample.sampleId);
+          await openAssistantHistory(helper);
           await helper.getByRole('button', { name: '刷新会话列表', exact: true }).click();
+          await openAssistantHistory(helper);
           await helper.getByRole('button', { name: `查看会话 ${item.output.session_id}`, exact: true }).click();
+          await expandSavedDiscussion(helper);
           await expect.poll(async () => (await helper.evaluate(async () => window.notalone.replies.getState())).result,
             { message: `${mode}：明确查看会话并完成重读后，实时结果应清空` }).toBeNull();
           await expect.poll(async () => (await helper.evaluate(async () => window.notalone.replies.getState())).candidateVersions?.phase).toBe('ready');

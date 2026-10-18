@@ -106,3 +106,62 @@
 .strategy-direction-header > span { display: inline-block; font-size: 11px; color: #4d7e97; margin-top: 6px; }
 .compose-submit { margin-top: 18px; }
 .ime-pane .ime-workspace { overflow-anchor: none; }
+/* 候选之后的辅助区域：历史与表达设置保持独立，默认只显示入口。 */
+.ime-pane .assistant-session-panel, .ime-pane .reply-expression-settings { margin: 0 0 18px; padding: 20px 24px; border: 1px solid #dfe6ea; border-radius: 14px; background: #fff; }
+.reply-expression-settings > header { margin-bottom: 16px; }
+.reply-expression-settings h2 { font-size: 17px; margin: 0 0 6px; }
+.reply-expression-settings header p, .section-empty { color: #75858f; font-size: 12px; }
+.ime-pane .style-samples { border: 1px solid #dfe7ec; border-radius: 9px; margin: 12px 0 0; padding: 14px 16px; background: #fafcfd; }
+.ime-pane .style-samples > summary { font-size: 14px; font-weight: 600; color: #304e62; }
+.ime-pane .style-samples p { font-size: 12px; color: #6a7c88; margin: 8px 0; }
+.ime-pane .style-samples h3 { font-size: 14px; margin: 16px 0 10px; }
+.ime-pane .style-samples label { display: grid; gap: 8px; margin: 12px 0; font-size: 13px; }
+.ime-pane .style-samples label:has(input[type=checkbox]) { display: flex; align-items: center; }
+.ime-pane .style-samples button, .ime-pane .assistant-session-panel button, .ime-pane .assistant-continuation-controls button, .ime-pane .reply-evidence > button { border: 1px solid #cbd9e1; padding: 8px 12px; border-radius: 7px; background: #fff; color: #346781; font-size: 12px; line-height: 1.6; margin: 4px 8px 4px 0; overflow-wrap: anywhere; text-align: left; }
+.ime-pane .style-samples button:hover:not(:disabled), .ime-pane .assistant-session-panel button:hover:not(:disabled) { background: #edf5fa; }
+.expression-manual, .expression-preference-form { border-block: 1px solid #e0e8ed; padding: 4px 0 14px; margin: 14px 0; }
+.expression-message-options { display: grid; gap: 8px; max-height: 300px; overflow-y: auto; padding: 0 8px 12px 0; margin-top: 18px; }
+.ime-pane .expression-message-options button { display: block; width: 100%; margin: 0; }
+.ime-pane .style-samples ul { list-style: none; padding: 0; display: grid; gap: 10px; }
+.ime-pane .style-samples li { padding: 14px; border: 1px solid #e0e7eb; border-radius: 8px; background: #fff; }
+.ime-pane .style-samples li p { font-size: 14px; color: #2d4352; white-space: pre-wrap; }
+.record-metadata, .evidence-technical { margin: 12px 0; padding: 10px 12px; background: #f5f8fa; border: 1px solid #e1e8ec; border-radius: 7px; font-size: 12px; overflow-wrap: anywhere; }
+.ime-pane .record-metadata p, .ime-pane .record-metadata small { color: #73838e; line-height: 1.7; }
+.ime-pane .candidate-reason { margin: 12px 0; padding-top: 10px; border-top: 1px solid #e0e8ed; }
+.ime-pane .reply-evidence > section { margin-top: 12px; padding: 14px; border: 1px solid #dce6ec; border-radius: 8px; background: #fff; }
+.reply-evidence h4 { margin: 12px 0 6px; font-size: 14px; }
+.ime-pane .reply-evidence > section > p, .evidence-help { font-size: 12px; color: #72838e; }
+.ime-pane .reply-evidence article { margin-top: 14px; padding: 12px; border: 1px solid #e3e9ed; border-radius: 8px; background: #fafcfd; }
+.ime-pane .reply-evidence article p { margin: 6px 0; font-size: 13px; white-space: pre-wrap; }
+.ime-pane .assistant-continuation-controls { margin-top: 24px; padding: 20px; border: 1px solid #dce6ed; border-radius: 10px; background: #f7fafc; }
+.assistant-continuation-controls h3 { margin: 0 0 6px; font-size: 16px; }
+.ime-pane .assistant-continuation-controls > p, .assistant-continuation-controls header p { color: #70818d; font-size: 12px; margin: 8px 0; }
+.ime-pane .assistant-continuation-controls > label { display: grid; gap: 8px; margin: 14px 0; font-size: 13px; }
+@media (max-width: 700px) {
+  .ime-pane .assistant-session-panel, .ime-pane .reply-expression-settings { padding: 16px; }
+}
+.session-browser > summary { display: list-item; font-size: 17px; font-weight: 600; color: #2d4657; }
+.session-browser > summary span { display: block; margin: 6px 0 0 18px; font-size: 12px; font-weight: 400; color: #748590; }
+.session-browser-content { padding-top: 18px; }
+.session-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.session-hint { font-size: 12px; color: #75858f; margin: 6px 0 14px; }
+.session-catalog { list-style: none; padding: 0; margin: 16px 0; display: grid; gap: 8px; }
+.session-catalog-item { border: 1px solid #e0e7ec; background: #f8fafc; border-radius: 8px; padding: 10px 12px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.session-catalog-item > span { font-size: 11px; color: #4e7d95; border-radius: 5px; padding: 4px 7px; background: #eaf2f7; }
+.session-metadata { flex-basis: 100%; font-size: 12px; color: #72838f; overflow-wrap: anywhere; }
+.session-history { margin-top: 18px; display: grid; gap: 10px; }
+.session-entry { border: 1px solid #dde6ec; border-radius: 9px; background: #fafcfd; padding: 14px; }
+.session-entry summary { font-weight: 500; }
+.session-entry-content { padding-top: 12px; }
+.session-entry-content p { margin: 8px 0; font-size: 13px; white-space: pre-wrap; }
+.session-entry-content p[data-assistant-candidate-id] { padding: 12px 14px; background: #fff; border: 1px solid #e2e8ec; border-radius: 8px; color: #314a59; }
+.session-entry-content dl { margin: 0; display: grid; grid-template-columns: minmax(100px, 150px) minmax(0, 1fr); gap: 10px 16px; font-size: 13px; }
+.session-entry-content dt { color: #7b8b95; }
+.session-entry-content dd { margin: 0; overflow-wrap: anywhere; }
+.session-confirmation { padding: 16px; margin: 10px 0; border: 1px solid #e5ccc1; background: #fff6f1; border-radius: 8px; }
+.session-attention { display: block; margin: 8px 0; color: #956238; font-size: 12px; }
+.assistant-session-panel > p[role=status] { color: #75858f; font-size: 12px; }
+@media (max-width: 500px) { .session-entry-content dl { grid-template-columns: 1fr; gap: 6px; } .session-entry-content dd { margin-bottom: 10px; } }
+.session-browser > summary > span:first-child { display: inline; margin: 0; font-size: 17px; font-weight: 600; color: #2d4657; }
+.session-browser > summary > small { display: block; margin: 6px 0 0 18px; font-size: 12px; font-weight: 400; color: #748590; }
+.session-browser > summary > .session-attention { color: #956238; }

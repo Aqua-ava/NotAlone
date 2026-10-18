@@ -1,3 +1,4 @@
+import { openAssistantHistory, expandSavedDiscussion } from '../assistant-history-actions';
 import { expect, type Browser } from '@playwright/test';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
 import { withRewritePages } from './rewrite-acceptance';
@@ -21,11 +22,15 @@ export async function assistantSessionDeletion(browser: Browser, origin: string)
     const samples = helper.getByRole('list', { name: '表达样本目录', exact: true });
     await expect(samples.getByText('删除会话后独立保留的合成样本。', { exact: true })).toBeVisible();
     await helper.getByText('我的表达样本', { exact: true }).click();
+    await openAssistantHistory(helper);
     await helper.getByRole('button', { name: '查看已保存讨论', exact: true }).click();
+    await expandSavedDiscussion(helper);
     const session = await helper.evaluate(async () => window.notalone.replies.getState());
     const sessionId = session.savedSession!.sessionId!;
     const path = `/api/contacts/${contactId}/assistant-sessions/${sessionId}`;
     expect((await rewriteBackend.request(path)).status).toBe(200);
+
+    await openAssistantHistory(helper);
 
     await helper.getByRole('button', { name: '删除当前助手会话', exact: true }).click();
     const confirmation = helper.getByRole('group', { name: '确认删除助手会话', exact: true });
@@ -37,6 +42,8 @@ export async function assistantSessionDeletion(browser: Browser, origin: string)
     expect((await rewriteBackend.request(path)).status).toBe(200);
     await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true }))
       .toHaveValue('需要清除的合成候选（说法1）。');
+
+    await openAssistantHistory(helper);
 
     await helper.getByRole('button', { name: '删除当前助手会话', exact: true }).click();
     await confirmation.getByRole('button', { name: '确认删除会话', exact: true }).click();

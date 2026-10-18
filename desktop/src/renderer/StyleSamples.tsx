@@ -89,7 +89,7 @@ export function StyleSamples({ replies }: { replies: ReplySessionView }) {
         return <li key={id} data-style-sample-id={id}>{sample ? sample.text : '样本暂不可读，请刷新表达样本。'}</li>;
       })}</ul></section>}
     <button disabled={!enabled} onClick={() => void operate(() => window.notalone.styleSamples.refresh(selection))}>刷新表达样本</button>
-    <label>手工表达样本<textarea aria-label="手工表达样本" maxLength={4096} value={manual} disabled={!enabled}
+    <div className="expression-manual"><h3>添加自己的说法</h3><label>手工表达样本<textarea aria-label="手工表达样本" maxLength={4096} value={manual} disabled={!enabled}
       onPaste={(event) => void pasteManual(event)}
       onChange={(event) => { ++editRevision.current; const text = event.target.value; setManual(text);
         const cancelPasteId = pendingPasteId.current; pendingPasteId.current = undefined;
@@ -104,14 +104,18 @@ export function StyleSamples({ replies }: { replies: ReplySessionView }) {
       if (saved.contactId === selection.contactId && saved.scopeRevision === selection.scopeRevision && saved.phase === 'ready' && !saved.error) {
         ++editRevision.current; setManual(''); await window.notalone.styleSamples.updateManualText({ ...selection, text: '' });
       }
-    })}>主动保存手工文字</button>
+    })}>主动保存手工文字</button></div>
     {replies.state.result?.input.mode === 'rewrite_draft' && replies.state.result.candidates.map(({ original, editedText }, index) => <button key={original.candidateId}
       disabled={!enabled || !editedText.trim() || editedText.length > 4096 || replies.state.sourceAvailability !== undefined}
       onClick={() => void operate(() => window.notalone.styleSamples.saveCandidate({ ...selection, replyRequestId: replies.state.result!.replyRequestId, candidateId: original.candidateId }))}>主动保存说法{index + 1}为样本</button>)}
+    <div className="expression-message-options"><h3>从本人消息中选取</h3><p>点击一条消息，将它保存为表达样本。</p>
     {replies.state.messages.items.filter((message) => message.speaker === 'user' && message.text?.trim()).map((message) =>
       <button key={message.messageId} disabled={!enabled || (message.text?.length ?? 0) > 4096}
         onClick={() => void operate(() => window.notalone.styleSamples.saveMessage({ ...selection, messageId: message.messageId }))}>主动保存本人消息为样本：{message.text?.slice(0, 24)}</button>)}
+    </div>
     {view.state.phase === 'loading' && <p role="status">正在读取表达样本…</p>}
+    <h3>已保存的样本</h3>
+    {!view.state.samples.length && <p className="section-empty">还没有保存表达样本。</p>}
     <ul aria-label="表达样本目录" onCopy={noteSampleCopy}>{view.state.samples.map((sample) => <li key={sample.sampleId} data-style-sample-id={sample.sampleId}><p>{sample.text}</p>
       <small>{sample.originKind === 'manual' ? '手工保存' : sample.originKind === 'candidate' ? '候选衍生，保留来源依赖' : '本人消息衍生，保留来源依赖'} · 发送状态未知</small>
       <button disabled={!enabled} aria-label={`删除表达样本：${sample.text}`} onClick={() => void operate(() => window.notalone.styleSamples.deleteSample({ ...selection, sampleId: sample.sampleId }))}>删除样本</button></li>)}</ul>

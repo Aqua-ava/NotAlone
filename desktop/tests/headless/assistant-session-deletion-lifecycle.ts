@@ -1,3 +1,4 @@
+import { openAssistantHistory, expandSavedDiscussion } from '../assistant-history-actions';
 import { expect, type Browser, type Page } from '@playwright/test';
 import type { RewritePages } from '../rewrite-page-scenarios';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
@@ -48,7 +49,9 @@ async function runningDeletion(pages: RewritePages, host: PageHost, userData: st
     await helper.getByRole('button', { name: '生成候选', exact: true }).click();
     await expect(helper.getByRole('status').filter({ hasText: '正在等待本次生成结果' })).toBeVisible();
     await expect.poll(async () => (await rewriteBackend.command('observations')).model_entered).toBe(true);
+    await openAssistantHistory(helper);
     await helper.getByRole('button', { name: '查看已保存讨论', exact: true }).click();
+    await expandSavedDiscussion(helper);
     await expect(helper.getByText('本轮生成尚未完成。', { exact: true })).toBeVisible();
     const state = await helper.evaluate(async () => window.notalone.replies.getState());
     const sessionId = state.savedSession!.sessionId!;
@@ -122,7 +125,9 @@ async function completedResponseHeld(pages: RewritePages) {
     expect(baseline.data.reply_request_id).toBe(replyTransport.results[0].data.reply_request_id);
     expect(baseline.data.candidates).toEqual(replyTransport.results[0].data.candidates);
     expect((await rewriteBackend.command('observations')).payloads).toHaveLength(1);
+    await openAssistantHistory(helper);
     await helper.getByRole('button', { name: '查看已保存讨论', exact: true }).click();
+    await expandSavedDiscussion(helper);
     await expect(helper.getByRole('region', { name: '已保存的讨论', exact: true })
       .getByText('已保存但迟到的合成候选（说法1）。', { exact: true })).toBeVisible();
     const state = await helper.evaluate(async () => window.notalone.replies.getState());

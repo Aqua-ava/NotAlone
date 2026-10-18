@@ -1,3 +1,4 @@
+import { openAssistantHistory, expandSavedDiscussion } from '../assistant-history-actions';
 import { expect, type Browser, type Page } from '@playwright/test';
 import { withEventPages, type EventPages } from './message-events';
 import { prepareDirectionTask, openDirectionTask } from './reply-strategy-bounded-updates';
@@ -151,6 +152,7 @@ async function confirmedCandidateContinues(pages: EventPages, scene: '回应消�
       await pages.helper.close();
     } else {
       // 从公开按钮切会话；不能绕过仍处于等待的界面门禁调用桥接。
+      await openAssistantHistory(pages.helper);
       const create = pages.helper.getByRole('button', { name: '新开助手会话', exact: true });
       await expect(create).toBeEnabled();
       await create.click();
@@ -185,8 +187,11 @@ async function confirmedCandidateContinues(pages: EventPages, scene: '回应消�
       expect(switched.savedSession?.turns).toEqual([]);
       expect(switched.result).toBeNull();
       expect(switched.exploration.result).toBeNull();
+      await openAssistantHistory(helper);
       await helper.getByRole('button', { name: '刷新会话列表', exact: true }).click();
+      await openAssistantHistory(helper);
       await helper.getByRole('button', { name: `查看会话 ${sessionId}`, exact: true }).click();
+      await expandSavedDiscussion(helper);
     }
     await expect.poll(async () => (await helper.evaluate(() => window.notalone.replies.getState()))
       .savedSession?.turns[0]?.state).toBe('completed');

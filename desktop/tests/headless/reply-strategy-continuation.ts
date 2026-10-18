@@ -1,3 +1,4 @@
+import { openAssistantHistory, expandSavedDiscussion } from '../assistant-history-actions';
 import { expect, type Browser, type Page } from '@playwright/test';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
 import { withEventPages, type EventPages } from './message-events';
@@ -37,7 +38,9 @@ async function continuationScene(pages: EventPages, scene: '回应消息' | '主
   await helper.getByRole('button', { name: '生成候选', exact: true }).click();
   const group = helper.getByRole('group', { name: '说法1消息组', exact: true });
   await expect(group.getByRole('textbox', { name: '说法1第2条编辑文本', exact: true })).toHaveValue('第一组第二条。');
+  await openAssistantHistory(helper);
   await helper.getByRole('button', { name: '查看已保存讨论', exact: true }).click();
+  await expandSavedDiscussion(helper);
   const initial = await state(helper); const sessionId = initial.savedSession!.sessionId!;
   await group.getByRole('textbox', { name: '说法1第2条编辑文本', exact: true }).fill('已保存的第二条编辑。');
   await group.getByRole('textbox', { name: '说法1修改要求', exact: true }).fill('不要承诺');

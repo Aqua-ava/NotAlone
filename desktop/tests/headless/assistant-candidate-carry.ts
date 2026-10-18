@@ -1,3 +1,4 @@
+import { openAssistantHistory, expandSavedDiscussion } from '../assistant-history-actions';
 import path from 'node:path';
 import { expect, type Browser, type Page } from '@playwright/test';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
@@ -19,19 +20,26 @@ async function exerciseFork(pages: RewritePages, originalId: string, expectedTex
   const path = `/api/contacts/${contactId}/assistant-sessions/${originalId}`;
   const original = (await rewriteBackend.request(path)).data;
   const before = await rewriteBackend.command('metrics');
+  await openAssistantHistory(helper);
   await helper.getByRole('button', { name: '新开助手会话', exact: true }).click();
   await expect(helper.getByText('当前会话还没有讨论。', { exact: true })).toBeVisible();
   const blank = (await helper.evaluate(async () => window.notalone.replies.getState())).savedSession!;
   expect(blank).toMatchObject({ phase: 'ready', inputs: [], turns: [], currentInputVersionId: null });
   expect(blank.sessionId).not.toBe(originalId);
+  await openAssistantHistory(helper);
   await helper.getByRole('button', { name: '刷新会话列表', exact: true }).click();
+  await openAssistantHistory(helper);
   await helper.getByRole('button', { name: `查看会话 ${originalId}`, exact: true }).click();
+  await expandSavedDiscussion(helper);
   await expect.poll(() => helper.evaluate(async () => (await window.notalone.replies.getState()).savedSession?.sessionId))
     .toBe(originalId);
+  await openAssistantHistory(helper);
   await expect(helper.getByRole('button', { name: '携已选版本新开', exact: true })).toBeEnabled();
   await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('未提交的旧会话合成草稿不得携入。');
   await helper.getByRole('textbox', { name: '本次要求', exact: true }).fill('未提交的旧会话临时要求不得携入。');
+  await openAssistantHistory(helper);
   await helper.getByRole('button', { name: '携已选版本新开', exact: true }).click();
+  await expandSavedDiscussion(helper);
   const carried = helper.getByRole('article', { name: '携入的已选版本', exact: true });
   await expect(carried).toBeVisible();
   for (const text of expectedTexts) await expect(carried.getByText(text, { exact: true })).toBeVisible();
@@ -60,6 +68,7 @@ async function selectedVersion(pages: RewritePages): Promise<string> {
   await chooseContact(pages);
   await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('合成原稿：谢谢邀请，这次不参与。');
   await helper.getByRole('textbox', { name: '本次要求', exact: true }).fill('只属于旧讨论的合成要求。');
+  await openAssistantHistory(helper);
   await expect(helper.getByRole('button', { name: '携已选版本新开', exact: true })).toBeDisabled();
   await rewriteBackend.plan({ count: 2, message_groups: [['未选用的合成第一组。'],
     ['待编辑的合成第一条。', '待编辑的合成第二条。']] });
@@ -69,11 +78,15 @@ async function selectedVersion(pages: RewritePages): Promise<string> {
   // 即时草稿沿用文本编辑；通过公开旧会话入口读取已保存版本再逐条修改。
   const generatedSessionId = (await helper.evaluate(() => window.notalone.replies.getState())).savedSession!.sessionId!;
   const generatedMetrics = await rewriteBackend.command('metrics');
+  await openAssistantHistory(helper);
   await helper.getByRole('button', { name: '刷新会话列表', exact: true }).click();
+  await openAssistantHistory(helper);
   await helper.getByRole('button', { name: `查看会话 ${generatedSessionId}`, exact: true }).click();
+  await expandSavedDiscussion(helper);
   const group = helper.getByRole('group', { name: '说法2消息组', exact: true });
   await expect(group.getByRole('textbox', { name: '说法2第1条编辑文本', exact: true })).toBeVisible();
   expect(await rewriteBackend.command('metrics')).toEqual(generatedMetrics);
+  await openAssistantHistory(helper);
   await expect(helper.getByRole('button', { name: '携已选版本新开', exact: true })).toBeDisabled();
   await group.getByRole('textbox', { name: '说法2第1条编辑文本', exact: true }).fill('明确选用的合成编辑第一条。');
   await group.getByRole('textbox', { name: '说法2第2条编辑文本', exact: true }).fill('明确选用的合成编辑第二条。');
@@ -82,6 +95,7 @@ async function selectedVersion(pages: RewritePages): Promise<string> {
   await expect(group.getByRole('combobox', { name: '说法2版本', exact: true }).getByRole('option')).toHaveCount(2);
   await group.getByRole('radio', { name: '选择说法2当前版本', exact: true }).click();
   await expect(group.getByRole('radio', { name: '选择说法2当前版本', exact: true })).toBeChecked();
+  await openAssistantHistory(helper);
   await expect(helper.getByRole('button', { name: '携已选版本新开', exact: true })).toBeEnabled();
   return (await helper.evaluate(async () => window.notalone.replies.getState())).savedSession!.sessionId!;
 }

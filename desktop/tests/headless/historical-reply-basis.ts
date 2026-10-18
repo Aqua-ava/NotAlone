@@ -1,3 +1,4 @@
+import { openAssistantHistory, expandSavedDiscussion } from '../assistant-history-actions';
 import { selectMemoryCategory } from '../memory-page-actions';
 import path from 'node:path';
 import { expect, type Browser, type Page } from '@playwright/test';
@@ -23,7 +24,9 @@ export async function historicalReplyBasis(browser: Browser, origin: string) {
     const group = helper.getByRole('group', { name: '说法1消息组', exact: true });
     const editor = group.getByRole('textbox', { name: '候选1编辑文本', exact: true });
     await expect(editor).toHaveValue('历史合成候选（说法1）。');
+    await openAssistantHistory(helper);
     await helper.getByRole('button', { name: '查看已保存讨论', exact: true }).click();
+    await expandSavedDiscussion(helper);
     await expect(group.getByRole('combobox', { name: '说法1版本', exact: true })).toBeEnabled();
     await editor.fill('用户已保存的合成编辑：愿意聊聊，先不作承诺。');
     await expect(helper.getByRole('button', { name: '继续修改', exact: true })).toBeDisabled();
@@ -53,7 +56,9 @@ export async function historicalReplyBasis(browser: Browser, origin: string) {
     expect(freshMemory).toBeDefined();
     const freshMemoryId = freshMemory!.memory_id;
     const calls = ((await rewriteBackend.command('observations')).payloads as unknown[]).length;
+    await openAssistantHistory(helper);
     await helper.getByRole('button', { name: '查看已保存讨论', exact: true }).click();
+    await expandSavedDiscussion(helper);
     const discussion = helper.getByRole('region', { name: '已保存的讨论', exact: true });
     await expect(discussion.getByText('依据已变化', { exact: true })).toBeVisible();
     await expect(discussion.getByText('关系资料：记忆已修正、否决或替代。', { exact: true })).toBeVisible();
@@ -84,7 +89,9 @@ export async function historicalReplyBasis(browser: Browser, origin: string) {
     await source.getByRole('button', { name: '删除来源', exact: true }).click();
     await manager.getByRole('button', { name: '确认删除来源', exact: true }).click();
     await expect(source.getByText('已删除，已通过不可检索校验', { exact: true })).toBeVisible({ timeout: 15_000 });
+    await openAssistantHistory(helper);
     await helper.getByRole('button', { name: '查看已保存讨论', exact: true }).click();
+    await expandSavedDiscussion(helper);
     await expect(discussion.getByText('相关来源已删除', { exact: true })).toHaveCount(2);
     await expect(discussion.getByText('历史合成候选（说法1）。', { exact: true })).toHaveCount(0);
     await expect(discussion.getByText('新依据合成候选（说法1）。', { exact: true })).toHaveCount(0);
@@ -105,11 +112,15 @@ export async function historicalReplyBasis(browser: Browser, origin: string) {
     const group = helper.getByRole('group', { name: '说法1消息组', exact: true });
     const editor = group.getByRole('textbox', { name: '候选1编辑文本', exact: true });
     await expect(editor).toHaveValue('本人依据合成候选（说法1）。');
+    await openAssistantHistory(helper);
     await helper.getByRole('button', { name: '查看已保存讨论', exact: true }).click();
+    await expandSavedDiscussion(helper);
     await expect(group.getByRole('combobox', { name: '说法1版本', exact: true })).toBeEnabled();
     await editor.fill('本人依据过期后仍保留的合成编辑。');
     await rewriteBackend.command('historical_basis_expire');
+    await openAssistantHistory(helper);
     await helper.getByRole('button', { name: '查看已保存讨论', exact: true }).click();
+    await expandSavedDiscussion(helper);
     const discussion = helper.getByRole('region', { name: '已保存的讨论', exact: true });
     await expect(discussion.getByText('本人资料：记忆有效期已结束。', { exact: true })).toBeVisible();
     await expect(editor).toHaveValue('本人依据过期后仍保留的合成编辑。');
@@ -119,9 +130,12 @@ export async function historicalReplyBasis(browser: Browser, origin: string) {
     const selection = group.getByRole('radio', { name: '选择说法1当前版本', exact: true });
     await selection.click();
     await expect(selection).toBeChecked();
+    await openAssistantHistory(helper);
     await expect(helper.getByRole('button', { name: '携已选版本新开', exact: true })).toBeEnabled();
     const calls = ((await rewriteBackend.command('observations')).payloads as unknown[]).length;
+    await openAssistantHistory(helper);
     await helper.getByRole('button', { name: '携已选版本新开', exact: true }).click();
+    await expandSavedDiscussion(helper);
     const carried = helper.getByRole('article', { name: '携入的已选版本', exact: true });
     await expect(carried.getByText('本人依据过期后仍保留的合成编辑。', { exact: true })).toBeVisible();
     await expect(carried.getByText('本人资料：记忆有效期已结束。', { exact: true })).toBeVisible();
@@ -133,7 +147,9 @@ export async function historicalReplyBasis(browser: Browser, origin: string) {
     await owner.getByRole('button', { name: `删除资料：${prepared.text}`, exact: true }).click();
     await owner.getByRole('group', { name: '确认删除资料', exact: true }).getByRole('button', { name: '确认删除', exact: true }).click();
     await expect(owner.getByText(prepared.text, { exact: true })).toHaveCount(0);
+    await openAssistantHistory(helper);
     await helper.getByRole('button', { name: '查看已保存讨论', exact: true }).click();
+    await expandSavedDiscussion(helper);
     await expect(discussion.getByText('相关来源已删除', { exact: true })).toBeVisible();
     await expect(carried).toHaveCount(0);
     await expect(helper.getByText('本人依据过期后仍保留的合成编辑。', { exact: true })).toHaveCount(0);

@@ -1,3 +1,4 @@
+import { openAssistantHistory, expandSavedDiscussion } from '../assistant-history-actions';
 import { ensureReplySettingsOpen } from '../reply-settings-actions';
 import { selectMemoryCategory } from '../memory-page-actions';
 import { writeFile } from 'node:fs/promises';
@@ -124,7 +125,9 @@ async function checkErased(helper: Page, pages: RewritePages, sessionPath: strin
   }
   expect(turns.filter((turn) => turn.state === 'completed')).toHaveLength(1);
   expect((await pages.rewriteBackend.request(sessionPath + '/replies', independent.request)).data).toEqual(independent.output);
+  await openAssistantHistory(helper);
   await helper.getByRole('button', { name: '查看已保存讨论', exact: true }).click();
+  await expandSavedDiscussion(helper);
   await expect.poll(async () => (await helper.evaluate(async () => window.notalone.replies.getState()))
     .savedSession?.turns.filter((turn) => turn.state === 'redacted').length).toBe(3);
   const discussion = helper.getByRole('region', { name: '已保存的讨论', exact: true });

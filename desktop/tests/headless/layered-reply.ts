@@ -64,6 +64,8 @@ export async function layeredReply(browser: Browser, origin: string) {
         catch (error) { process.stderr.write((await helper.locator('body').innerText()).slice(-8000)); throw error; }
         await helper.getByRole('button', { name: '展开候选1依据', exact: true }).click();
         await expect.poll(() => helper.evaluate(() => window.notalone.replies.getEvidenceState().then(state => state.phase))).toBe('ready');
+        await helper.getByRole('region', { name: '候选1依据', exact: true })
+          .locator('.evidence-technical > summary').click();
       }
       await generate(String(prepared.contact_id), true, '想聊聊共同学习的经历。');
       await expect(contactBackground.getByText(String(prepared.profile_text), { exact: true })).toBeVisible();

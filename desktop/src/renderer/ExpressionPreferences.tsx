@@ -51,6 +51,7 @@ export function ExpressionPreferences({ replies }: { replies: ReplySessionView }
     <p>仅在你明确长期保存后供后续适用回复参考；当前明确意图优先。本次指令、选择、复制和表达样本不会自动保存为长期偏好。</p>
     <ExpressionPreferenceBasis preferences={used} />
     <button disabled={!enabled} onClick={() => void operate(() => window.notalone.expressionPreferences.refresh(selection))}>刷新长期偏好</button>
+    <div className="expression-preference-form"><h3>{editing ? "修改长期偏好" : "添加长期偏好"}</h3>
     <label>长期表达要求<textarea aria-label="长期表达要求" maxLength={512} value={text} disabled={!enabled}
       onChange={(event) => { ++editRevision.current; setText(event.target.value); }} /></label>
     <label>适用联系人范围<select aria-label="适用联系人范围" value={appliesTo} disabled={!enabled || editing?.origin.kind === 'message'}
@@ -63,11 +64,15 @@ export function ExpressionPreferences({ replies }: { replies: ReplySessionView }
       onChange={(event) => { ++editRevision.current; setConfirmed(event.target.checked); }} />明确长期保存</label>
     <button disabled={!enabled || !confirmed || !text.trim()} onClick={() => void submit()}>{editing ? '确认修改长期偏好' : '确认保存长期偏好'}</button>
     {editing && <button disabled={!enabled} onClick={clear}>取消修改</button>}
+    </div>
     {view.state.phase === 'loading' && <p role="status">正在读取长期偏好…</p>}
+    <h3>已保存的偏好</h3>
+    {!view.state.preferences.length && <p className="section-empty">还没有保存长期表达偏好。</p>}
     <ul aria-label="长期表达偏好目录">{view.state.preferences.map((item) => <li key={item.preferenceId}><p>{item.text}</p>
-      <small>{item.scope.contactId ? '当前联系人' : '本人全局'} · {item.scope.replyMode ? modeNames[item.scope.replyMode] : '全部输入模式'} · 版本{item.revision}<br />
+      <small>{item.scope.contactId ? '当前联系人' : '本人全局'} · {item.scope.replyMode ? modeNames[item.scope.replyMode] : '全部输入模式'} · 版本{item.revision}</small>
+      <details className="record-metadata"><summary>来源与修改记录</summary><small>
         {item.origin.kind === 'manual' ? '用户手动明确保存' : `用户明确保存，消息来源 ${item.origin.id}`} · 修改于 {item.updatedAt}<br />
-        用户操作 {item.confirmedOperationKey}{item.sourceIds.length ? ` · 依赖来源 ${item.sourceIds.join('、')}` : ''}</small>
+        用户操作 {item.confirmedOperationKey}{item.sourceIds.length ? ` · 依赖来源 ${item.sourceIds.join('、')}` : ''}</small></details>
       <button disabled={!enabled} onClick={() => edit(item)} aria-label={`修改长期偏好：${item.text}`}>修改偏好</button>
       <button disabled={!enabled} onClick={() => void operate(() => window.notalone.expressionPreferences.remove({ ...selection,
         preferenceId: item.preferenceId, expectedRevision: item.revision }))} aria-label={`删除长期偏好：${item.text}`}>删除偏好</button></li>)}</ul>

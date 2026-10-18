@@ -20,8 +20,8 @@ export function AssistantInputBudgetNotice({ budget, historical = false }: {
   }
   return <aside aria-label={historical ? '当时的模型输入预算' : '模型输入预算'} role={warning || budget.state === 'ready' ? 'status' : 'alert'}>
     <p>{message}</p>
-    {budget.totalTokens !== null && <p>{estimated ? '估算总量' : budget.measurementKind === 'verified_upper_bound' ? '已核实的保守上界' : '本次输入计量'}：
+    {budget.totalTokens !== null && <details className="record-metadata"><summary>查看输入长度详情</summary><p>{estimated ? '估算总量' : budget.measurementKind === 'verified_upper_bound' ? '已核实的保守上界' : '本次输入计量'}：
       {budget.totalTokens} / {budget.contextWindowTokens} token（含输出预留 {budget.outputReserveTokens} token
-      {budget.safetyMarginTokens > 0 && <>、安全余量 {budget.safetyMarginTokens} token</>}）。</p>}
+      {budget.safetyMarginTokens > 0 && <>、安全余量 {budget.safetyMarginTokens} token</>}）。</p></details>}
   </aside>;
 }

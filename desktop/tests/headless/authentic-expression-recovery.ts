@@ -1,3 +1,4 @@
+import { openAssistantHistory } from '../assistant-history-actions';
 import { selectMemoryCategory } from '../memory-page-actions';
 import { randomUUID } from 'node:crypto';
 import { expect, type Browser, type Page } from '@playwright/test';
@@ -176,6 +177,7 @@ export async function authenticExpressionSessionRetention(browser: Browser, orig
       expect(sample.origin_kind).toBe('candidate');
       expect(sample.source_ids.length).toBeGreaterThan(0);
       const oldPath = `/api/contacts/${contactId}/assistant-sessions/${first.result.session_id}`;
+      await openAssistantHistory(helper);
       await helper.getByRole('button', { name: '删除当前助手会话', exact: true }).click();
       await helper.getByRole('group', { name: '确认删除助手会话', exact: true })
         .getByRole('button', { name: '确认删除会话', exact: true }).click();
@@ -184,6 +186,7 @@ export async function authenticExpressionSessionRetention(browser: Browser, orig
       expect(await rewriteBackend.request(samplePath)).toEqual(savedSamples);
       await expect(list.getByText(sourceReply, { exact: true })).toBeVisible();
       await expect(helper.getByRole('region', { name: '已保存的讨论', exact: true })).toHaveCount(0);
+      await openAssistantHistory(helper);
       await helper.getByRole('button', { name: '新开助手会话', exact: true }).click();
       await expect(helper.getByText('当前会话还没有讨论。', { exact: true })).toBeVisible();
       expect((await rewriteBackend.command('observations')).payloads).toHaveLength(1);
