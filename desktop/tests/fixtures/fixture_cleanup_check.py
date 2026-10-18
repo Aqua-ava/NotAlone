@@ -23,6 +23,8 @@ import json, pathlib, runpy, sys
 sys.path.insert(0, str(pathlib.Path(sys.argv[1]).parent))
 namespace = runpy.run_path(sys.argv[1])
 fixture_class = namespace[sys.argv[2]]
+from fixture_cleanup import bind_prepared_database
+fixture_class._prepared_database_name = bind_prepared_database()
 mode = sys.argv[3]
 instances = []
 original_setup = fixture_class.setUp
