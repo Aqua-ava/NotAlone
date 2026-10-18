@@ -88,3 +88,6 @@ bounded-stage-teaching-v1已在双runtime、真实worker、优先级包装、评
 额外任务/优先级回归40项中31项通过、旧默认测试库中的worker导入9项失败于source_processing。改用现有CoreBusinessFlowFixture创建、完整迁移和清理的本轮独立库，先单失败例1项通过，再worker全模块10项通过；没有修改旧共享库结构，也不把初次失败计为通过。一次直接调用fixture混入类在建库前因缺addClassCleanup失败，后用TestCase子类正确管理清理。所有资料为测试夹具合成，未读真实联系人或业务库。
 
 10个修改源码mypy --follow-imports=silent通过；worker的5项类型错误在HEAD旧文件副本中同类同数量复现，故不能宣称11模块全通过。此轮没有真实API调用。下一步先集成指代Pro16独立入口并回归重叠模块，再冻结新的bounded15场。
+
+
+阶段教学已提交61c102ba；指代独立Pro16入口542398af已无冲突集成为17a0efe0。合并后两路profile/SDK/登记/owned/审核/fixture共66项检查通过（28.115s），6个共享源码mypy通过。两路保持不同提示与推理配置，不因共享Pro模型而互借Gold、窗口或预算；真实质量仍各场独立验收。
