@@ -28,6 +28,8 @@ class ProfileWork:
     claim: ClaimedBackgroundTaskStep
     correction_revision: int = 0
     corrections: tuple[dict, ...] = ()
+    previous_profile: dict | None = None
+    changed_scenario_ids: tuple[str, ...] = ()
 
 
 class LayeredProfileStore:
@@ -82,7 +84,29 @@ class LayeredProfileStore:
             memories = tuple(self._input(entry) for entry in entries)
             scenarios = tuple(self._document(row) for row in input_rows)
             corrections = self.correction_context(connection, scope)
-            payload = {"scenarios": list(scenarios), "memories": [item.to_payload() for item in memories], 'corrections': corrections}
+            prior = connection.execute("SELECT v.*,b.input_manifest,b.scenario_version_ids,b.correction_input,b.input_payload "
+                "FROM public.layered_profile_version v JOIN public.layered_profile_batch b ON b.id=v.batch_id "
+                "WHERE v.owner_id=%s AND v.contact_id IS NOT DISTINCT FROM %s AND NOT v.withdrawn "
+                "AND b.status='succeeded' AND b.settings_generation=%s ORDER BY v.created_at DESC LIMIT 1",
+                (scope.owner_id, scope.contact_id, state['settings_generation'])).fetchone()
+            current_manifest = {item['memory_id']: item for item in manifest}
+            # 旧画像也属于模型实际输入；完整递归依据失效时不能回流其正文。
+            if prior and (corrections or prior['correction_input'] or any(
+                    current_manifest.get(item['memory_id']) != item for item in prior['input_manifest'])):
+                prior = None
+            previous_profile = self.profile_document(prior)
+            old_ids = set(prior['scenario_version_ids']) if prior else set()
+            changed_ids = tuple(str(identifier) for identifier in ids if identifier not in old_ids)
+            if prior and set(ids) == old_ids and prior['input_payload'].get('contract') == contract:
+                if generation['profile_version_id'] != prior['id']:
+                    self.publish_generation_in_transaction(connection, scope,
+                        expected_generation=state['organization_generation'], scenario_version_ids=ids,
+                        profile_version_id=prior['id'])
+                connection.execute("UPDATE public.layered_memory_job SET profile_status='succeeded' WHERE task_id=%s", (claim.task_id,))
+                connection.execute("UPDATE public.layered_memory_state SET status='ready',error_code=NULL "
+                    "WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s", (scope.owner_id, scope.contact_id))
+                return None
+            payload = {"contract": contract, "previous_profile": previous_profile, "changed_scenario_ids": changed_ids, "scenarios": list(scenarios), "memories": [item.to_payload() for item in memories], 'corrections': corrections}
             if len(json.dumps(payload,ensure_ascii=False)) > budget.max_characters:
                 connection.execute("UPDATE public.layered_memory_state SET status='failed',error_code='profile_input_budget_exceeded' "
                     "WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s", (scope.owner_id,scope.contact_id))
@@ -139,7 +163,7 @@ class LayeredProfileStore:
             connection.execute("UPDATE public.layered_memory_state SET status='updating',error_code=NULL WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s",
                 (scope.owner_id,scope.contact_id))
             connection.execute('UPDATE public.layered_profile_batch SET correction_input=%s WHERE id=%s', (Jsonb(corrections), id))
-            return ProfileWork(id,token,scope,state["settings_generation"],state["organization_generation"],ids,memories,scenarios,manifest,budget_batch_id,claim,state['correction_revision'],corrections)
+            return ProfileWork(id,token,scope,state["settings_generation"],state["organization_generation"],ids,memories,scenarios,manifest,budget_batch_id,claim,state['correction_revision'],corrections,previous_profile,changed_ids)
 
     def _check_profile(self, connection, state, overview, work):
         self._assert_claim(connection,work.claim)

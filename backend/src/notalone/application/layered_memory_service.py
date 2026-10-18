@@ -245,6 +245,9 @@ class LayeredMemoryService:
             original = deepcopy(raw)
             def validate_items(value):
                 checked = validate_proposal(value, work.memories, self._budget, scenarios=work.scenarios)
+                if self._scenario_context:
+                    from notalone.memory.scenario_publication import require_explicit_replacements
+                    require_explicit_replacements(work.scope, checked, work.scenarios)
                 validate_correction_proposal(work, checked)
                 return checked
             raw, proposal, rejected = isolate_proposal(raw, 'scenarios', validate_items, self._budget.max_scenarios)
@@ -434,6 +437,19 @@ class LayeredMemoryService:
         self._store.withdraw_profile(scope,settings_generation,organization_generation,profile_version_id)
         return self.read(scope)
 
+    def _profile_context_arguments(self, work):
+        parameters = inspect.signature(self._profile_proposer.propose).parameters
+        previous = None
+        if work.previous_profile is not None:
+            previous = {"version_id": work.previous_profile['version_id'], "entries": [
+                {"text": item['text'], "temporal_status": item['temporal_status'],
+                 "uncertainty": item['uncertainty'], "references": [
+                     {key: ref[key] for key in ('memory_id', 'revision')} for ref in item['references']]}
+                for item in work.previous_profile['entries']]}
+        context = {"previous_profile": previous, "changed_scenario_ids": work.changed_scenario_ids}
+        # 老的合成适配器仅用来核验既有服务合同；实际 SDK 必须接收完整更新上下文。
+        return {key: value for key, value in context.items() if key in parameters}
+
     def _organize_profile(self, scope, claim):
         quality_snapshot = self._quality.snapshot(scope.owner_id) if self._quality_required else None
         work = self._store.prepare_profile(scope,self._budget,"profile-v1:synthetic-only:deadline-v1:correction-v1" +
@@ -444,6 +460,7 @@ class LayeredMemoryService:
         try:
             raw = self._call(work,self._profile_proposer,"propose",lambda deadline: self._profile_proposer.propose(
                 scenarios=self._model_scenarios(work),memories=self._model_memories(work),budget=self._budget,deadline=deadline,
+                **self._profile_context_arguments(work),
                 **self._correction_arguments(self._profile_proposer, 'propose', work)),
                 guard=lambda: self._store.check_profile(work))
             original = deepcopy(raw)

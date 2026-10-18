@@ -18,7 +18,11 @@ L3 temporal_status固定uncertain，uncertainty固定“当前状态按原资料
 SCENARIO_PROMPT = POLICY + CORRECTION_POLICY + '''
 生成持续主题，格式{"scenarios":[{"topic_key":"稳定英文key","title":"中文标题","hint":"中文目录提示",
 "paragraphs":[{"text":"完整有据段落","references":[{"memory_id":"实际ID","revision":1}]}]}]}。
-所有正文和目录均须有据，引用只能来自本次memories。'''
+所有正文和目录均须有据，引用只能来自本次memories。
+scenarios是当前主题目录及正文。优先更新既有持续主题，不能按本批新建同义主题或直接追加旧段落。
+更新时输出scenario_id为原场景ID，replaces为被替换的version_id列表，paragraphs是重整后的完整正文。
+合并多个主题时replaces列出全部旧version_id；保留仍有效背景，去除重复。新主题不带scenario_id且replaces为空。
+未变化主题不输出；没有变化时返回空scenarios。旧正文只帮助组织，重整后的每个段落仍须直接引用本次memories。'''
 CORRECTED_SCENARIO_PROMPT = POLICY + CORRECTION_POLICY + '''
 本次有纠错保护，只生成独立合法新资料，格式为
 {"scenarios":[{"topic_key":"稳定英文key","title":"已核对的补充资料","hint":"独立资料的原文背景。",
@@ -33,7 +37,9 @@ PROFILE_POLICY = '''
 PROFILE_PROMPT = POLICY + CORRECTION_POLICY + PROFILE_POLICY + '''
 从主题和底层资料选择精简稳定背景，格式{"entries":[{"text":"完整条目","references":[{"memory_id":"实际ID","revision":1}],
 "temporal_status":"stable或historical或uncertain","uncertainty":"必要不确定性"}]}。
-允许省略不重要资料；不能只以主题或旧画像证明事实，不能把临时安排写为长期。'''
+previous_profile是同范围且来源有效的已有画像，changed_scenario_ids指出变化的L2。
+依据变化主题和现有画像持续修订同一份逻辑画像，输出完整新entries，不能只输出本批增量或重复追加旧条目。
+保留仍有依据的稳定背景；纠正或删除过时内容。允许省略不重要资料；不能只以主题或旧画像证明事实，不能把临时安排写为长期。'''
 VERIFICATION_PROMPT = POLICY + CORRECTION_POLICY + '''
 你是独立忠实度核验器，检查候选每处标题/目录/正文和限定是否忠实于memories实际版本。
 逐项检查主体、否定、时间、计划/发生、条件、范围泄露、纠正和长期/临时。ID存在和置信度不能证明支持。
@@ -106,10 +112,11 @@ class _DeepSeekOrganizationAdapter:
 
 
 class DeepSeekOrganizationProposal(_DeepSeekOrganizationAdapter):
-    def propose(self, *, memories, scenarios=(), corrections=(), budget, deadline):
+    def propose(self, *, memories, scenarios=(), corrections=(), previous_profile=None, changed_scenario_ids=(), budget, deadline):
         prompt = (CORRECTED_SCENARIO_PROMPT if corrections else SCENARIO_PROMPT) if self.layer == 'l2' else PROFILE_PROMPT
         return self._invoke(prompt,
-            {'memories': [item.to_payload() for item in memories], 'scenarios': list(scenarios), 'corrections': list(corrections), 'budget': budget.to_payload()}, deadline)
+            {'memories': [item.to_payload() for item in memories], 'scenarios': list(scenarios), 'corrections': list(corrections),
+             'previous_profile': previous_profile, 'changed_scenario_ids': list(changed_scenario_ids), 'budget': budget.to_payload()}, deadline)
 
 
 class DeepSeekOrganizationVerification(_DeepSeekOrganizationAdapter):

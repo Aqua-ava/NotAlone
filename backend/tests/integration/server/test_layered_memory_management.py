@@ -183,6 +183,28 @@ class LayeredMemoryManagementHttpTest(MemoryOverviewHttpFixture, unittest.TestCa
                          ('paused', paused['work_id'], paused['model_calls_used']))
         self.assertEqual(proposer.inputs, [])
 
+    def test_existing_topic_without_explicit_replacement_is_not_appended(self):
+        class MissingReplacement(EchoProposal):
+            def propose(inner, *, memories, scenarios, budget, deadline):
+                return super().propose(memories=memories, budget=budget, deadline=deadline)
+        class ContextVerification(ControlledVerification):
+            def verify(inner, *, memories, scenarios, proposal, deadline):
+                return True
+        contact, _, message = self.import_contact('合成课程。')
+        self.confirm(contact, '双方共同参加合成课程。', message)
+        backend = self.controlled(proposer=MissingReplacement(), verifier=ContextVerification())
+        ready = self.enable(backend, contact)
+        _, _, message = self.import_contact('新增合成练习。', contact_id=contact,
+                                            when=datetime(2024, 2, 1, tzinfo=timezone.utc))
+        self.confirm(contact, '双方共同参加合成练习。', message)
+        before = self._get(backend, f"/api/contacts/{contact}/layered-memory")["layered_memory"]
+        status, value = backend.request(f'/api/contacts/{contact}/layered-memory/refresh', {
+            'settings_generation': before['settings_generation']})
+        self.assertEqual(status, 200, value)
+        result = value['layered_memory']
+        self.assertEqual(result['error_code'], 'proposal_invalid')
+        self.assertEqual(result['scenarios'][0]['version_id'], ready['scenarios'][0]['version_id'])
+
     def test_incremental_rename_keeps_identity_and_revokes_frozen_old_version(self):
         from notalone.scopes import ContactScope
         class RenamingProposal(EchoProposal):

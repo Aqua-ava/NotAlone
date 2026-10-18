@@ -43,3 +43,13 @@ def plan_scenario_publication(scope, proposal, previous, budget, *, task_id, bat
         retained = [old for old in retained if old['scenario_id'] != identity]
         retained.append(row)
     return plans, tuple(sorted(retained, key=lambda row: row['scenario_id']))
+
+
+def require_explicit_replacements(scope, proposal, scenarios):
+    """实际持续整理不能借遗漏 replaces 将旧主题默认为追加。"""
+    existing = {item['scenario_id']: item['version_id'] for item in scenarios}
+    for item in proposal['scenarios']:
+        identity = item.get('scenario_id') or str(uuid5(scope.contact_id or scope.owner_id,
+                                                       str(scope.owner_id) + ':' + item['topic_key']))
+        if identity in existing and existing[identity] not in item.get('replaces', []):
+            raise ValueError('更新已有主题必须显式替换旧版本并返回完整正文。')

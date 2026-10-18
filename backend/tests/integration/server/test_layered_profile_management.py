@@ -77,6 +77,74 @@ class LayeredProfileHttpTest(MemoryOverviewHttpFixture, unittest.TestCase):
         self.assertEqual(status, 200, result)
         return result["layered_memory"]
 
+    def test_incremental_profile_receives_valid_previous_profile(self):
+        class Incremental(ProfileProposal):
+            def __init__(inner):
+                super().__init__()
+                inner.previous = []
+            def propose(inner, *, scenarios, memories, previous_profile, changed_scenario_ids, budget, deadline):
+                inner.previous.append((previous_profile, changed_scenario_ids))
+                return super().propose(scenarios=scenarios, memories=memories, budget=budget, deadline=deadline)
+        contact, _, _ = self.prepare_contact()
+        proposer = Incremental()
+        backend = self.controlled(profile_proposer=proposer, scenario_proposer=EchoProposal())
+        ready = self.enable(backend, contact)
+        self.assertEqual(ready['status'], 'ready', ready)
+        self.assertIsNone(proposer.previous[0][0])
+        _, _, message = self.import_contact('双方还一起参加合成练习。', contact_id=contact,
+                                            when=datetime(2024, 2, 1, tzinfo=timezone.utc))
+        self.confirm(contact, '双方还一起参加合成练习。', message)
+        done = self._get_refresh(backend, contact, self.read(backend, contact))
+        self.assertEqual(done['status'], 'ready', done)
+        self.assertEqual(proposer.previous[-1][0]['version_id'], ready['profile']['version_id'])
+        self.assertTrue(proposer.previous[-1][1])
+
+    def test_unchanged_scenarios_reuse_profile_without_model_call(self):
+        class StableScenario(ControlledProposal):
+            def propose(inner, *, memories, scenarios, budget, deadline):
+                if scenarios:
+                    return {'scenarios': []}
+                return super().propose(memories=memories, budget=budget, deadline=deadline)
+        contact, _, _ = self.prepare_contact()
+        class ContextVerification(ControlledVerification):
+            def verify(inner, *, memories, scenarios, proposal, deadline):
+                return True
+        backend = self.controlled(scenario_proposer=StableScenario(), scenario_verifier=ContextVerification())
+        ready = self.enable(backend, contact)
+        self.assertEqual(ready['status'], 'ready', ready)
+        _, _, message = self.import_contact('一次无长期价值的新消息。', contact_id=contact,
+                                            when=datetime(2024, 2, 1, tzinfo=timezone.utc))
+        self.confirm(contact, '一次新的短期安排。', message)
+        done = self._get_refresh(backend, contact, self.read(backend, contact))
+        self.assertIn(done['status'], {'ready', 'paused'}, done)
+        self.assertEqual(done['model_calls_used'], 2)
+        self.assertEqual(done['profile']['version_id'], ready['profile']['version_id'])
+        self.assertEqual(len(self.profile_proposer.inputs), 1)
+
+    def test_deleted_uncited_profile_input_cannot_return_as_previous_profile(self):
+        class Recording(ProfileProposal):
+            def __init__(inner):
+                super().__init__()
+                inner.previous = []
+            def propose(inner, *, scenarios, memories, previous_profile, changed_scenario_ids, budget, deadline):
+                inner.previous.append(previous_profile)
+                return super().propose(scenarios=scenarios, memories=memories, budget=budget, deadline=deadline)
+        contact, _, _ = self.prepare_contact()
+        _, extra_source, message = self.import_contact('未被直接引用的另一项学习背景。', contact_id=contact,
+                                                       when=datetime(2024, 2, 1, tzinfo=timezone.utc))
+        self.confirm(contact, '双方分别参加过另一次学习。', message)
+        proposer = Recording()
+        backend = self.controlled(profile_proposer=proposer)
+        ready = self.enable(backend, contact)
+        self.assertIsNotNone(ready['profile'])
+        self.assertEqual(len(proposer.inputs[0][1]), 2)
+        self.delete_source(contact, extra_source)
+        state = self.read(backend, contact)
+        rebuilt = self._get_refresh(backend, contact, state)
+        self.assertEqual(rebuilt['status'], 'ready', rebuilt)
+        self.assertIsNone(proposer.previous[-1])
+        self.assertNotEqual(rebuilt['profile']['version_id'], ready['profile']['version_id'])
+
     def test_dirty_does_not_resume_failed_profile_or_refill_paused_budget(self):
         from threading import Event
         for paused in (False, True):
