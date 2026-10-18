@@ -89,6 +89,41 @@ class E2StableFactGuidanceTest(unittest.TestCase):
         self.assertEqual(facts[0]["text"], "联系人原话：“我目前是桥梁检测员。”")
         self.assertEqual((facts[0]["valid_at"], facts[0]["invalid_at"]), (None, None))
 
+    def test_reusable_information_boundaries_reach_both_e2_requests(self) -> None:
+        source = window("这件事情请先保密。")
+        for events in (False, True):
+            with self.subTest(events=events):
+                request, facts = self.sdk_result(
+                    source, labels(row("0:0", "request", unresolved=True)), events=events,
+                )
+                prompt = request["messages"][0]["content"]
+                for rule in ("事项、对象及角色", "不能仅因家里／住处或来访就选family",
+                             "一次性消息传递动作", "纯礼貌谢语用greeting", "明确承诺、关系约束"):
+                    self.assertTrue(rule in prompt, f"实际E2请求缺少边界指导：{rule}")
+                self.assertTrue(facts[0]["alternatives"])
+                self.assertEqual(facts[0]["speech_act"], "request")
+
+    def test_given_omissions_do_not_erase_neighboring_facts_or_real_commitments(self) -> None:
+        controls = (
+            ("我完成了说明书，辛苦你啦。", ("event", "greeting"), 1, "assertion"),
+            ("我稍后把文件发过去。", ("not_memory",), 0, None),
+            ("我保证明天把合同交给你。", ("plan",), 1, "plan"),
+            ("我明天按约定把签好的合同发给你。", ("plan",), 1, "plan"),
+            ("以后别公开我的地址。", ("request",), 1, "request"),
+            ("我弟弟明天来访。", ("plan",), 1, "plan"),
+        )
+        for text, kinds, count, speech in controls:
+            for events in (False, True):
+                with self.subTest(text=text, events=events):
+                    source = window(text)
+                    _, facts = self.sdk_result(source, labels(*(row(f"0:{index}", kind)
+                        for index, kind in enumerate(kinds))), events=events)
+                    self.assertEqual(len(facts), count)
+                    if facts:
+                        self.assertEqual(facts[0]["speech_act"], speech)
+                        self.assertIn(text.split("，")[0], facts[0]["text"])
+                        self.assertEqual(facts[0]["source_message_ids"], [str(source.messages[0].message_id)])
+
     def test_given_labels_preserve_types_dates_and_existing_kind_enum(self) -> None:
         controls = (
             ("我学的是水文勘测。", "event", "common_fact", "assertion", "asserted", False),

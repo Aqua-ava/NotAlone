@@ -135,7 +135,7 @@ class GroundedV3RuntimeTest(unittest.TestCase):
         prompt = requests[0]["messages"][0]["content"]
         # 本次当前判断／未来安排提示修订后重签；原schema和给定标签输出保持。
         self.assertEqual(hashlib.sha256(prompt.encode()).hexdigest(),
-                         "c1ae0bb24d82e79e2bc3e7ec213704f5ac7138ee93fe9eb92b8dd907dc73d342")
+                         "283e7e75239067bec8c98615336ca9af46f9cef6d2cc180342567aa42a7d82e5")
 
     def test_given_kind_labels_keep_participation_report_negation_condition_and_quote_boundaries(self):
         # 每项kind是合成输入标签；这些通过不代表模型能正确分类或增加质量样本数。
