@@ -154,12 +154,23 @@ target的人物和事项无需该背景补全，因此该target的dependency为n
 """
 
 
+
+CORE_CURRENT_STATE_PROFILE = "core-current-state-v1"
+CORE_CURRENT_STATE_GUIDANCE = """
+<core_current_state_v1>
+来源主断言若是当前条件下的能力、可行性或可用性，保存的是状态而非已经发生的动作，用state；保留原有的期间限定、理解所需前缀或dependency，沿state规则记录来源观察期，不当成event稳定事实，也不补成未来计划。
+这不把长期技能或能力陈述一律临时化；已完成动作、明确未来安排、稳定身份与长期习惯仍沿原类型。按完整主张及条件判断，不能仅因“可以”“现在”等词选state或臆造失效日期；主题继续只采用来源依据，无具体依据沿other。
+</core_current_state_v1>
+"""
+
 def grounded_v2_prompt(prompt_profile: str = "default", *, events: bool = False) -> str:
     """两个既有协议共享教学增量；默认提示逐字保留。"""
     if type(prompt_profile) is not str or prompt_profile not in {
-            "default", BOUNDED_STAGE_PROMPT_PROFILE, BOUNDED_DEPENDENCY_PROMPT_PROFILE}:
+            "default", BOUNDED_STAGE_PROMPT_PROFILE, BOUNDED_DEPENDENCY_PROMPT_PROFILE, CORE_CURRENT_STATE_PROFILE}:
         raise ValueError("提取提示profile无效。")
     base = GROUNDED_V2_PROMPT + (GROUNDED_EVENT_PROMPT if events else "")
+    if prompt_profile == CORE_CURRENT_STATE_PROFILE:
+        return base + CORE_CURRENT_STATE_GUIDANCE
     if prompt_profile == "default":
         return base
     return base + BOUNDED_STAGE_TEACHING_V1 + (
@@ -450,7 +461,7 @@ def _extract_grounded(
         raise ExtractionInvalidOutputError("原文结构提取必须返回唯一的指定工具。")
     draft = calls[0].get("args")
     identity = {"protocol": protocol}
-    if prompt_profile in {BOUNDED_STAGE_PROMPT_PROFILE, BOUNDED_DEPENDENCY_PROMPT_PROFILE}:
+    if prompt_profile in {BOUNDED_STAGE_PROMPT_PROFILE, BOUNDED_DEPENDENCY_PROMPT_PROFILE, CORE_CURRENT_STATE_PROFILE}:
         identity.update(prompt_profile=prompt_profile, prompt_sha256=hashlib.sha256(json.dumps(
             prompt, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False,
         ).encode("utf-8")).hexdigest())
