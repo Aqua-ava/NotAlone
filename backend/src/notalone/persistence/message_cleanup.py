@@ -89,6 +89,7 @@ def cleanup_derived_data(
           AND contact_id = %s
           AND status IN ('pending', 'confirmed')
           AND COALESCE(to_jsonb(memory_candidate)->>'source_dependency_mode','any')='any'
+          AND COALESCE((to_jsonb(memory_candidate)->>'requires_all_sources')::boolean,false)=false
           AND source_ids && %s::uuid[]
         FOR UPDATE
         """,
@@ -119,7 +120,7 @@ def cleanup_derived_data(
 
     memories = connection.execute(
         """
-        SELECT id, source_ids, supersedes_memory_id, to_jsonb(confirmed_memory)->>'source_dependency_mode'
+        SELECT id, source_ids, supersedes_memory_id, CASE WHEN to_jsonb(confirmed_memory)->>'requires_all_sources'='true' THEN 'all' ELSE to_jsonb(confirmed_memory)->>'source_dependency_mode' END
         FROM public.confirmed_memory
         WHERE owner_id = %s
           AND contact_id = %s
@@ -182,6 +183,7 @@ def cleanup_derived_data(
         WHERE owner_id = %s
           AND status = 'active'
           AND COALESCE(to_jsonb(owner_memory)->>'source_dependency_mode','any')='any'
+          AND COALESCE((to_jsonb(owner_memory)->>'requires_all_sources')::boolean,false)=false
           AND source_ids && %s::uuid[]
         FOR UPDATE
         """,

@@ -84,8 +84,11 @@ class ExtractedFact:
     event: MemoryEvent | None = None
 
     source_dependency_mode: SourceDependencyMode = SourceDependencyMode.ANY
+    requires_all_sources: bool = False
 
     def __post_init__(self) -> None:
+        if type(self.requires_all_sources) is not bool:
+            raise TypeError("完整正文的来源依赖标记必须为布尔值。")
         if not isinstance(self.source_dependency_mode, SourceDependencyMode):
             raise TypeError("来源依赖方式必须是受控枚举。")
         if self.event is not None and not isinstance(self.event, MemoryEvent):

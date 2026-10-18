@@ -1,4 +1,4 @@
-"""写入裁决：同事件演变的判定与版本化失效（ADD/UPDATE/NOOP/KEEP）。"""
+"""写入裁决：同事件演变的判定与版本化失效（ADD/UPDATE/NOOP/KEEP/MERGE）。"""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from uuid import UUID
 
 
 class AdjudicationAction(StrEnum):
-    """写入裁决的四种动作。"""
+    """写入裁决动作。"""
 
     ADD = "add"
     UPDATE = "update"

@@ -18,14 +18,14 @@ class LayeredMemoryManagementHttpTest(MemoryOverviewHttpFixture, unittest.TestCa
     def test_partial_proposal_and_verification_publish_only_supported_theme(self):
         from copy import deepcopy
         class PartialProposal(ControlledProposal):
-            def propose(inner, **kwargs):
-                raw = super().propose(**kwargs)
+            def propose(inner, *, memories, budget, deadline):
+                raw = super().propose(memories=memories, budget=budget, deadline=deadline)
                 second = deepcopy(raw['scenarios'][0])
                 second['topic_key'] = 'other-theme'
                 return {'scenarios': [None, raw['scenarios'][0], second]}
         class PartialVerification(ControlledVerification):
             calls = 0
-            def verify_items(inner, **kwargs):
+            def verify_items(inner, *, memories, proposal, deadline):
                 inner.calls += 1
                 return {'accepted_indices': [0], 'rejected': [{'index': 1, 'reason': 'faithfulness_rejected'}]}
         contact, _, message = self.import_contact('合成经历：双方共同参加过课程。')

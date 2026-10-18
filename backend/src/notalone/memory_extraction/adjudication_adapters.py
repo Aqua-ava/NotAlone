@@ -37,7 +37,7 @@ ADJUDICATION_SCHEMA: dict[str, Any] = {
         "merged_memory_ids": {"type": "array", "items": {"type": "string"}},
         "merged_text": {"anyOf": [{"type": "string"}, {"type": "null"}]},
         "action": {
-            "description": "裁决动作四选一。",
+            "description": "裁决动作，合并必须附正文和父版本。",
             "type": "string",
             "enum": [item.value for item in AdjudicationAction],
         },
@@ -90,7 +90,7 @@ class LangChainAdjudicationRuntime:
             raise ExtractionInvalidOutputError("裁决模型未返回结构化结果。")
         try:
             action = AdjudicationAction(args["action"])
-        except ValueError as error:
+        except (TypeError, ValueError) as error:
             raise ExtractionInvalidOutputError("裁决动作非法。") from error
         replaced_raw = args.get("replaced_memory_id")
         replaced = None

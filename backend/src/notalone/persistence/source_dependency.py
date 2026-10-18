@@ -40,8 +40,22 @@ def ensure_all_sources(
         raise PermissionError("ALL来源须为同一范围内全部活动的规范消息。")
 
 
-def insert_dependency(mode: SourceDependencyMode) -> tuple[str, str, tuple[str, ...]]:
-    """旧ANY写入不引用新列；ALL显式保存模式。"""
+def insert_dependency(mode: SourceDependencyMode, *, requires_all_sources=False, connection=None, table=None):
+    """旧库保留原协议；完整正文生命周期必须有明确迁移支持。"""
+    columns, values, params = ('', '', ())
     if mode is SourceDependencyMode.ALL:
-        return ', source_dependency_mode', ', %s', ('all',)
-    return '', '', ()
+        columns, values, params = ', source_dependency_mode', ', %s', ('all',)
+    if requires_all_sources:
+        require_lifecycle_schema(connection, table)
+        columns += ', requires_all_sources'
+        values += ', %s'
+        params += (True,)
+    return columns, values, params
+
+
+def require_lifecycle_schema(connection, table):
+    if table not in {'memory_candidate', 'confirmed_memory', 'owner_memory'}:
+        raise ValueError('全部来源依赖表无效。')
+    row = connection.execute("SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name=%s AND column_name='requires_all_sources') AS available", (table,)).fetchone()
+    if not (row['available'] if isinstance(row, dict) else row[0]):
+        raise ValueError('数据库尚未启用完整记忆来源生命周期。')

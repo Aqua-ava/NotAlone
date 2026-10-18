@@ -472,6 +472,7 @@ def _to_fact(payload: dict) -> ExtractedFact:
         raise ValueError("语用判断依据不能为空。")
     return ExtractedFact(
         text=payload["text"],
+        requires_all_sources=payload.get("_requires_all_sources") is True,
         category=MemoryCategory(payload["category"]),
         subject=FactSubject(payload["subject"]),
         topic=MemoryTopic(payload["topic"]),

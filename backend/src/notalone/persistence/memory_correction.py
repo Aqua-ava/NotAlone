@@ -556,6 +556,7 @@ def candidate_from_row(row: dict[str, Any]) -> MemoryCandidate:
         dimension_evidence=DimensionEvidence.from_payload(raw) if raw is not None else None,
         event=MemoryEvent.from_payload(row.get("event")),
         source_dependency_mode=dependency_mode(row.get("source_dependency_mode")),
+        requires_all_sources=bool(row.get("requires_all_sources")),
     )
 
 

@@ -107,3 +107,85 @@ class MemoryMergeTest(PostgresMemoryTimingTest):
                     statuses = connection.execute(f'SELECT status, revision FROM public.{table} WHERE id=ANY(%s)', ([p.memory_id for p in parents],)).fetchall()
                 self.assertIsNone(created)
                 self.assertEqual(statuses, [('active', 1), ('active', 1)])
+
+    def test_deleting_one_parent_source_erases_merge_candidate_body(self):
+        import psycopg
+        from tests.integration.persistence.test_memory_timing import SECOND_DATE
+        from notalone.persistence.source_deletion import PostgresSourceDeletionRepository
+        _, extra = self._add_source_messages(self.scope.owner_id, self.scope.contact_id, (SECOND_DATE,))
+        parents = []
+        for index, source in enumerate((self.first, extra[0])):
+            candidate = self.store.create_candidate(replace(self._candidate((source,)), text=f'独立父事实{index}'))
+            parents.append(self.store.confirm(scope=self.scope, candidate_id=candidate.candidate_id))
+        candidate = self.store.create_candidate(replace(self._candidate((self.first, extra[0])), text='合并两个不同来源的完整事实'))
+        result = self.store.confirm_merge(scope=self.scope, candidate_id=candidate.candidate_id, expected_parents=tuple(parents))
+        PostgresSourceDeletionRepository(self.database_url).delete_source(owner_id=self.scope.owner_id,
+            contact_id=self.scope.contact_id, source_document_id=self.source_id)
+        with psycopg.connect(self.database_url) as connection:
+            memory = connection.execute('SELECT text_content FROM public.confirmed_memory WHERE id=%s', (result.memory_id,)).fetchone()
+            remaining = connection.execute('SELECT text_content, source_ids FROM public.memory_candidate WHERE id=%s', (candidate.candidate_id,)).fetchone()
+        self.assertIsNone(memory)
+        self.assertTrue(remaining is None or remaining[0] == '已删除的资料', repr(remaining))
+
+    def _full_dependency_candidate(self, owner=False):
+        from tests.integration.persistence.test_memory_timing import SECOND_DATE
+        _, extra = self._add_source_messages(self.scope.owner_id, self.scope.contact_id, (SECOND_DATE,))
+        return self.store.create_candidate(replace(self._candidate((self.first, extra[0]),
+            subject=FactSubject.SELF if owner else FactSubject.CONTACT), requires_all_sources=True))
+
+    def _delete_first_source(self):
+        from notalone.persistence.source_deletion import PostgresSourceDeletionRepository
+        PostgresSourceDeletionRepository(self.database_url).delete_source(owner_id=self.scope.owner_id,
+            contact_id=self.scope.contact_id, source_document_id=self.source_id)
+
+    def test_pending_direct_candidate_erased_when_one_source_deleted(self):
+        import psycopg
+        candidate = self._full_dependency_candidate()
+        self.assertTrue(candidate.requires_all_sources)
+        self.assertTrue(self.store.get_candidate(scope=self.scope, candidate_id=candidate.candidate_id).requires_all_sources)
+        from uuid import uuid4
+        trace_id = uuid4()
+        with psycopg.connect(self.database_url) as connection:
+            connection.execute("INSERT INTO public.memory_extraction_trace(trace_id,owner_id,contact_id,run_id,batch_key) VALUES (%s,%s,%s,%s,'synthetic-merge')",
+                (trace_id, self.scope.owner_id, self.scope.contact_id, uuid4()))
+            connection.execute("INSERT INTO public.memory_extraction_trace_event(event_id,trace_id,owner_id,contact_id,position,stage,payload) VALUES (%s,%s,%s,%s,0,'window','{\"text\":\"合成待删正文\"}')",
+                (uuid4(), trace_id, self.scope.owner_id, self.scope.contact_id))
+            connection.execute("INSERT INTO public.memory_extraction_trace_dependency(trace_id,owner_id,contact_id,source_id) VALUES (%s,%s,%s,%s)",
+                (trace_id, self.scope.owner_id, self.scope.contact_id, self.first))
+        self._delete_first_source()
+        with psycopg.connect(self.database_url) as connection:
+            events = connection.execute('SELECT count(*) FROM public.memory_extraction_trace_event WHERE trace_id=%s', (trace_id,)).fetchone()[0]
+            self.assertEqual(events, 0)
+        with psycopg.connect(self.database_url) as connection:
+            row = connection.execute('SELECT text_content FROM public.memory_candidate WHERE id=%s', (candidate.candidate_id,)).fetchone()
+        self.assertIsNone(row)
+
+    def test_direct_contact_confirm_preserves_lifecycle_and_deletion(self):
+        candidate = self._full_dependency_candidate()
+        memory = self.store.confirm(scope=self.scope, candidate_id=candidate.candidate_id)
+        self.assertTrue(memory.requires_all_sources)
+        self.assertEqual(memory.source_dependency_mode, SourceDependencyMode.ANY)
+        self._delete_first_source()
+        self.assertEqual(self.store.list_confirmed(self.scope), ())
+
+    def test_direct_owner_confirm_preserves_lifecycle_and_deletion(self):
+        candidate = self._full_dependency_candidate(owner=True)
+        store = PostgresOwnerMemoryStore(self.database_url)
+        memory = store.confirm_candidate(candidate=candidate, adoption_method=AdoptionMethod.AUTO)
+        self.assertTrue(memory.requires_all_sources)
+        self.assertEqual(memory.source_dependency_mode, SourceDependencyMode.ANY)
+        self._delete_first_source()
+        self.assertEqual(store.list_active(self.scope.owner_id), ())
+
+    def test_manual_correction_preserves_full_source_lifecycle(self):
+        candidate = self._full_dependency_candidate()
+        memory = self.store.confirm(scope=self.scope, candidate_id=candidate.candidate_id)
+        corrected = self.store.correct(scope=self.scope, memory_id=memory.memory_id, text='合成人工修正正文')
+        self.assertTrue(corrected.requires_all_sources)
+
+    def test_owner_correction_preserves_full_source_lifecycle(self):
+        candidate = self._full_dependency_candidate(owner=True)
+        store = PostgresOwnerMemoryStore(self.database_url)
+        memory = store.confirm_candidate(candidate=candidate, adoption_method=AdoptionMethod.AUTO)
+        corrected = store.correct(owner_id=self.scope.owner_id, memory_id=memory.memory_id, text='合成本人修正正文')
+        self.assertTrue(corrected.requires_all_sources)

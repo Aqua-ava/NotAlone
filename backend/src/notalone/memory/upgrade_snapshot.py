@@ -59,6 +59,7 @@ def restore_outcome(value: dict) -> ExtractionOutcome:
             dimension_evidence=DimensionEvidence.from_payload(row['dimension_evidence']) if row.get('dimension_evidence') else None,
             event=MemoryEvent.from_payload(row.get('event')),
             source_dependency_mode=SourceDependencyMode(row.get('source_dependency_mode', 'any')),
+            requires_all_sources=row.get('requires_all_sources', False),
         ))
     return ExtractionOutcome(accepted=tuple(facts), rejected_count=value['rejected_count'],
                              extraction_completed=value['extraction_completed'],candidate_trace_ids=trace_ids)
@@ -78,6 +79,7 @@ def comparison_payload(compared) -> dict:
             'new': {'text': candidate.text, 'category': candidate.category.value, 'topic': candidate.topic.value,
                     'subject': candidate.subject.value, 'source_ids': [str(item) for item in candidate.source_ids],
                     'source_dependency_mode': candidate.source_dependency_mode.value,
+                    'requires_all_sources': candidate.requires_all_sources,
                     'timing': candidate.timing.to_payload(), 'event': candidate.event.to_payload() if candidate.event else None,
                     'correction_review': [item.to_payload() for item in candidate.correction_review],
                     'has_new_proof': candidate.dimension_evidence is not None},
@@ -98,5 +100,6 @@ def _memory_payload(memory):
             'category': memory.category.value, 'topic': memory.topic.value,
             'source_ids': [str(item) for item in memory.source_ids],
             'source_dependency_mode': memory.source_dependency_mode.value,
+            'requires_all_sources': memory.requires_all_sources,
             'timing': memory.timing.to_payload(), 'event': memory.event.to_payload() if memory.event else None,
             'proof_kind': 'version_receipt' if memory.version_evidence else 'unknown'}

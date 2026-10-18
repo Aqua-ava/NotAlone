@@ -187,6 +187,9 @@ class PostgresSourceDeletionRepository:
                     connection, owner_id=owner_id, contact_id=contact_id,
                     removed_ids=set(orphan_message_ids),
                 )
+                # 兼容只登记规范消息/候选依赖的追踪，不只依赖来源文档 ID。
+                erase_source_traces(connection, owner_id=owner_id,
+                    removed_ids={source_document_id, *orphan_message_ids, *all_memory_ids})
                 delete_source_replies(
                     connection,
                     owner_id=owner_id,

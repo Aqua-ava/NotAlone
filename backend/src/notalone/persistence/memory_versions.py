@@ -40,6 +40,8 @@ def version_record_digest(memory: ConfirmedMemory | OwnerMemory, *, revision: in
             "confidence": memory.confidence, "risk_flags": list(memory.risk_flags),
             "supersedes_memory_id": str(memory.supersedes_memory_id) if memory.supersedes_memory_id else None,
             "event": memory.event.to_payload() if memory.event else None}
+    if memory.requires_all_sources:
+        body["requires_all_sources"] = True
     if memory.source_dependency_mode is SourceDependencyMode.ALL:
         body["source_dependency_mode"] = "all"
     return hashlib.sha256(json.dumps(body, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
@@ -112,7 +114,8 @@ def raw_memory(row: dict) -> ConfirmedMemory | OwnerMemory:
                   invalid_at=row["invalid_at"], revision=row["revision"], confidence=row["confidence"],
                   risk_flags=tuple(row["risk_flags"] or ()), supersedes_memory_id=row["supersedes_memory_id"],
                   event=MemoryEvent.from_payload(row.get("event")),
-                  source_dependency_mode=dependency_mode(row.get("source_dependency_mode")))
+                  source_dependency_mode=dependency_mode(row.get("source_dependency_mode")),
+                  requires_all_sources=bool(row.get("requires_all_sources")))
     return (ConfirmedMemory(scope=ContactScope(row["owner_id"], row["contact_id"]), **fields)
             if "contact_id" in row else OwnerMemory(owner_id=row["owner_id"], **fields))
 

@@ -94,6 +94,7 @@ _CANDIDATE_COLUMNS = """
     to_jsonb(memory_candidate)->'dimension_evidence' AS candidate_dimension_evidence,
     to_jsonb(memory_candidate)->'event' AS candidate_event,
     to_jsonb(memory_candidate)->>'source_dependency_mode' AS candidate_dependency_mode,
+    to_jsonb(memory_candidate)->'requires_all_sources' AS candidate_requires_all_sources,
     created_at AS recorded_at
 """
 
@@ -117,6 +118,7 @@ _MEMORY_COLUMNS = """
     to_jsonb(confirmed_memory)->'event' AS memory_event,
     to_jsonb(confirmed_memory)->'version_evidence' AS version_evidence,
     to_jsonb(confirmed_memory)->>'source_dependency_mode' AS memory_dependency_mode,
+    to_jsonb(confirmed_memory)->'requires_all_sources' AS memory_requires_all_sources,
     created_at AS recorded_at
 """
 
@@ -198,7 +200,7 @@ class PostgresMemoryStore:
                     if (candidate.dimension_evidence is not None
                             and candidate.dimension_evidence.version == 4):
                         raise MemoryInvariantError("新版本依据必须使用ALL来源。")
-                mode_column, mode_value, mode_params = insert_dependency(candidate.source_dependency_mode)
+                mode_column, mode_value, mode_params = insert_dependency(candidate.source_dependency_mode, requires_all_sources=candidate.requires_all_sources, connection=connection, table='memory_candidate')
                 evidence_column = ""
                 evidence_value = ""
                 evidence_params: tuple[Any, ...] = ()
@@ -559,7 +561,8 @@ class PostgresMemoryStore:
                                        contact_id=scope.contact_id, source_ids=source_ids)
                 else:
                     self._ensure_active_sources(connection, scope, source_ids)
-                mode_column, mode_value, mode_params = insert_dependency(mode)
+                requires_all_sources = bool(candidate_row.get('candidate_requires_all_sources')) or bool(expected_previous and expected_previous.requires_all_sources)
+                mode_column, mode_value, mode_params = insert_dependency(mode, requires_all_sources=requires_all_sources, connection=connection, table='confirmed_memory')
 
                 candidate = self._candidate_from_row(self._timed_candidates(
                     connection, [candidate_row], lock_sources=True
@@ -582,6 +585,7 @@ class PostgresMemoryStore:
                         confidence=candidate.confidence, risk_flags=candidate.risk_flags,
                         revision=expected_previous.revision + 1,
                         supersedes_memory_id=expected_previous.memory_id, event=candidate.event,
+                        source_dependency_mode=mode, requires_all_sources=requires_all_sources,
                     )
                     proof = create_version_evidence(connection, previous=expected_previous, current=proposed)
                     if adoption_method is AdoptionMethod.AUTO:
@@ -734,7 +738,8 @@ class PostgresMemoryStore:
                                        contact_id=scope.contact_id, source_ids=source_ids)
                 else:
                     self._ensure_active_sources(connection, scope, source_ids)
-                mode_column, mode_value, mode_params = insert_dependency(mode)
+                requires_all_sources = bool(memory_row.get('memory_requires_all_sources'))
+                mode_column, mode_value, mode_params = insert_dependency(mode, requires_all_sources=requires_all_sources, connection=connection, table='confirmed_memory')
                 erase_layered_reply_dependencies(connection, scope,
                     {memory_id, *source_ids, *((memory_row["source_candidate_id"],)
                       if memory_row["source_candidate_id"] else ())})
@@ -896,7 +901,8 @@ class PostgresMemoryStore:
                     ),
                 )
                 mode = dependency_mode(row.get("candidate_dependency_mode"))
-                mode_column, mode_value, mode_params = insert_dependency(mode)
+                requires_all_sources = bool(row.get('candidate_requires_all_sources'))
+                mode_column, mode_value, mode_params = insert_dependency(mode, requires_all_sources=requires_all_sources, connection=connection, table='confirmed_memory')
                 if mode is SourceDependencyMode.ALL:
                     ensure_all_sources(connection, owner_id=scope.owner_id,
                                        contact_id=scope.contact_id,
@@ -1531,6 +1537,7 @@ class PostgresMemoryStore:
             ) if row.get("candidate_event") is not None and "_bound_dimension_evidence" in row
                    else MemoryEvent.from_payload(row.get("candidate_event"))),
             source_dependency_mode=dependency_mode(row.get("candidate_dependency_mode")),
+            requires_all_sources=bool(row.get("candidate_requires_all_sources")),
         )
 
     @classmethod
@@ -1555,6 +1562,7 @@ class PostgresMemoryStore:
             version_evidence=row.get("_bound_version_evidence", VersionEvidence.from_payload(row.get("version_evidence"))),
             can_revert_auto_update=row.get("_can_revert_auto_update", False),
             source_dependency_mode=dependency_mode(row.get("memory_dependency_mode")),
+            requires_all_sources=bool(row.get("memory_requires_all_sources")),
         )
 
     @classmethod

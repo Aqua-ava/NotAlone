@@ -37,7 +37,7 @@ from notalone.memory.models import (
     OwnerMemory,
     SourceDependencyMode,
 )
-from notalone.persistence.source_dependency import dependency_mode, ensure_all_sources
+from notalone.persistence.source_dependency import dependency_mode, ensure_all_sources, require_lifecycle_schema
 from notalone.persistence.locks import lock_contact_scope, lock_owner_scope
 from notalone.persistence.memory_timing import timed_memory_rows
 from notalone.persistence.memory_versions import (
@@ -75,6 +75,7 @@ _OWNER_MEMORY_COLUMNS = """
     to_jsonb(owner_memory)->'event' AS memory_event,
     to_jsonb(owner_memory)->'version_evidence' AS version_evidence,
     to_jsonb(owner_memory)->>'source_dependency_mode' AS dependency_mode,
+    to_jsonb(owner_memory)->'requires_all_sources' AS requires_all_sources,
     created_at AS recorded_at
 """
 
@@ -114,7 +115,7 @@ class PostgresOwnerMemoryStore:
                         owner_id=memory.owner_id,
                         source_ids=memory.source_ids,
                     )
-                mode_column, mode_value = _insert_mode(memory)
+                mode_column, mode_value = _insert_mode(memory, connection)
                 row = connection.execute(
                     f"""
                     INSERT INTO public.owner_memory (
@@ -193,7 +194,7 @@ class PostgresOwnerMemoryStore:
                                AS dimension_evidence,
                            to_jsonb(memory_candidate)->'event' AS event,
                            to_jsonb(memory_candidate)->>'source_dependency_mode'
-                               AS dependency_mode
+                               AS dependency_mode, to_jsonb(memory_candidate)->'requires_all_sources' AS requires_all_sources
                     FROM public.memory_candidate
                     WHERE owner_id = %s AND contact_id = %s AND id = %s
                     FOR UPDATE
@@ -313,7 +314,7 @@ class PostgresOwnerMemoryStore:
                         interpretation_reason=(
                             candidate_row["interpretation_reason"] or ""
                         ),
-                        source_dependency_mode=candidate_mode,
+                        source_dependency_mode=candidate_mode, requires_all_sources=bool(candidate_row.get('requires_all_sources')),
                         dimension_evidence=(
                             DimensionEvidence.from_payload(raw)
                             if raw is not None else None
@@ -336,7 +337,7 @@ class PostgresOwnerMemoryStore:
                     topic=MemoryTopic(candidate_row["topic"]),
                     source_ids=sources,
                     source_candidate_id=candidate_id,
-                    source_dependency_mode=mode,
+                    source_dependency_mode=mode, requires_all_sources=bool(candidate_row.get('requires_all_sources')) or bool(expected_previous and expected_previous.requires_all_sources),
                     adoption_method=adoption_method,
                     status=ConfirmedMemoryStatus.ACTIVE,
                     valid_at=candidate_row["valid_at"],
@@ -356,7 +357,7 @@ class PostgresOwnerMemoryStore:
                     memory = replace(memory, version_evidence=proof)
                     event_column += ", version_evidence"
                     event_value += ", %(version_evidence)s"
-                mode_column, mode_value = _insert_mode(memory)
+                mode_column, mode_value = _insert_mode(memory, connection)
                 row = connection.execute(
                     f"""
                     INSERT INTO public.owner_memory (
@@ -531,7 +532,7 @@ class PostgresOwnerMemoryStore:
                     memory_id=uuid4(), owner_id=owner_id, text=text,
                     category=category or MemoryCategory(previous["category"]),
                     topic=MemoryTopic(previous["topic"]), source_ids=sources,
-                    source_dependency_mode=mode,
+                    source_dependency_mode=mode, requires_all_sources=bool(previous.get('requires_all_sources')),
                     adoption_method=AdoptionMethod.MANUAL,
                     status=ConfirmedMemoryStatus.ACTIVE,
                     supersedes_memory_id=memory_id,
@@ -540,7 +541,7 @@ class PostgresOwnerMemoryStore:
                     confidence=previous["confidence"],
                     risk_flags=tuple(previous["risk_flags"] or ()),
                 )
-                mode_column, mode_value = _insert_mode(corrected)
+                mode_column, mode_value = _insert_mode(corrected, connection)
                 row = connection.execute(
                     f"""INSERT INTO public.owner_memory (
                         id, owner_id, text_content, category, topic, source_ids,
@@ -848,6 +849,7 @@ def _to_row(memory: OwnerMemory) -> dict[str, Any]:
         "event": Jsonb(memory.event.to_payload()) if memory.event is not None else None,
         "version_evidence": Jsonb(memory.version_evidence.to_payload()) if memory.version_evidence else None,
         "source_dependency_mode": memory.source_dependency_mode.value,
+        "requires_all_sources": memory.requires_all_sources,
     }
 
 
@@ -872,6 +874,7 @@ def _from_row(row: dict[str, Any]) -> OwnerMemory:
         version_evidence=row.get("_bound_version_evidence", VersionEvidence.from_payload(row.get("version_evidence"))),
         can_revert_auto_update=row.get("_can_revert_auto_update", False),
         source_dependency_mode=dependency_mode(row.get("dependency_mode")),
+        requires_all_sources=bool(row.get("requires_all_sources")),
     )
 
 
@@ -888,7 +891,12 @@ def _timed_rows(
     return timed
 
 
-def _insert_mode(memory: OwnerMemory) -> tuple[str, str]:
+def _insert_mode(memory: OwnerMemory, connection) -> tuple[str, str]:
+    columns, values = '', ''
     if memory.source_dependency_mode is SourceDependencyMode.ALL:
-        return ", source_dependency_mode", ", %(source_dependency_mode)s"
-    return "", ""
+        columns, values = ', source_dependency_mode', ', %(source_dependency_mode)s'
+    if memory.requires_all_sources:
+        require_lifecycle_schema(connection, 'owner_memory')
+        columns += ', requires_all_sources'
+        values += ', %(requires_all_sources)s'
+    return columns, values

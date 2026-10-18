@@ -24,8 +24,8 @@ def collect_all_source_memory_ids(
             arguments.append(contact_id)
         rows = connection.execute(sql.SQL(
             "SELECT id FROM public.{} WHERE {} AND source_ids && %s::uuid[] "
-            "AND to_jsonb({})->>'source_dependency_mode'='all' FOR UPDATE"
-        ).format(sql.Identifier(table), scope, sql.Identifier(table)),
+            "AND (to_jsonb({})->>'source_dependency_mode'='all' OR to_jsonb({})->>'requires_all_sources'='true') FOR UPDATE"
+        ).format(sql.Identifier(table), scope, sql.Identifier(table), sql.Identifier(table)),
             (*arguments, list(removed_ids)),
         ).fetchall()
         affected.update(row[0] for row in rows)
@@ -64,11 +64,11 @@ def erase_source_memories(
             "supersedes_memory_id IS NOT NULL"
         )
         if all_only:
-            scope_sql += sql.SQL(" AND to_jsonb({})->>'source_dependency_mode'='all'").format(sql.Identifier(table))
+            scope_sql += sql.SQL(" AND (to_jsonb({})->>'source_dependency_mode'='all' OR to_jsonb({})->>'requires_all_sources'='true')").format(sql.Identifier(table), sql.Identifier(table))
         rows = connection.execute(
-            sql.SQL("SELECT id, source_ids, {}, to_jsonb({})->>'source_dependency_mode' FROM public.{} WHERE {} "
+            sql.SQL("SELECT id, source_ids, {}, CASE WHEN to_jsonb({})->>'requires_all_sources'='true' THEN 'all' ELSE to_jsonb({})->>'source_dependency_mode' END FROM public.{} WHERE {} "
                     "AND source_ids && %s::uuid[] FOR UPDATE").format(
-                        version_sensitive, sql.Identifier(table), sql.Identifier(table), scope_sql,
+                        version_sensitive, sql.Identifier(table), sql.Identifier(table), sql.Identifier(table), scope_sql,
                     ),
             (*scope_args, list(removed_ids)),
         ).fetchall()

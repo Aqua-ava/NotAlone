@@ -21,6 +21,8 @@ def same_pending_identity(left: MemoryCandidate, right: MemoryCandidate) -> bool
     # 时间边界进一步区分同一消息中的两次事件，不把评分当事件身份。
     return (
         left.scope == right.scope and left.subject is right.subject
+        and left.requires_all_sources == right.requires_all_sources
+        and (not left.requires_all_sources or set(left.source_ids) == set(right.source_ids))
         and left.source_dependency_mode is right.source_dependency_mode
         and (left.source_dependency_mode is SourceDependencyMode.ANY or (
             left.dimension_evidence is not None and right.dimension_evidence is not None

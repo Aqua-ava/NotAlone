@@ -30,6 +30,7 @@ from notalone.memory.dimension_evidence import DimensionEvidenceChangedError
 from notalone.memory.correction import MemoryCorrectionConflictError
 from notalone.memory_extraction.adjudication import (
     AdjudicationAction,
+    AdjudicationDecision,
     AdjudicationRuntime,
     SimilarMemory,
     similarity,
@@ -40,7 +41,7 @@ from notalone.memory_extraction.dimensions import (
     required_dimensions,
     valid_evidence_dimensions,
 )
-from notalone.memory_extraction.errors import ExtractionRuntimeError
+from notalone.memory_extraction.errors import ExtractionInvalidOutputError, ExtractionRuntimeError
 from notalone.memory_extraction.flow import ExtractionOutcome
 from notalone.memory_extraction.models import ExtractedFact, FactSubject
 from notalone.memory_extraction.pragmatics import (
@@ -393,11 +394,12 @@ class MemoryAdoption:
             )
             if shortlist_truncated:
                 record("adjudication", {"status": "not_executed", "reason": "incomplete_shortlist"})
-                action, replaced_id = None, None
+                decision = None
             else:
-                action, replaced_id = self._adjudicate(fact, similar, scope)
+                decision = self._adjudicate(fact, similar, scope)
+            action = decision.action if decision else None
+            replaced_id = decision.replaced_memory_id if decision else None
             if action is AdjudicationAction.MERGE:
-                decision = replaced_id
                 result = self._merge(scope, fact, similar, decision)
                 if result is None:
                     pending += 1
@@ -540,7 +542,7 @@ class MemoryAdoption:
                     "action": AdjudicationAction.ADD,
                 },
             )
-            return AdjudicationAction.ADD, None
+            return AdjudicationDecision(AdjudicationAction.ADD)
         started_ns = time.perf_counter()
         record(
             "adjudication_input",
@@ -563,6 +565,11 @@ class MemoryAdoption:
                     for item in similar
                 ),
             )
+        except ExtractionInvalidOutputError:
+            record("adjudication_failure", {"status": "rejected", "reason": "invalid_item_contract"},
+                started_at=adjudication_started_at, status="failed")
+            self._record_ledger(scope, LedgerOutcome.REJECTED_BY_VALIDATION, started_ns)
+            return None
         except ExtractionRuntimeError:
             record(
                 "adjudication_failure",
@@ -612,10 +619,10 @@ class MemoryAdoption:
             input_tokens=decision.input_tokens,
             output_tokens=decision.output_tokens,
         )
-        # 裁决要求更新但缺少有效被取代 id 时返回 (UPDATE, None)：
+        # 裁决要求更新但缺少有效被取代 id 时保留 UPDATE 与空 ID：
         # adopt 会把它降级为待定候选，而不是静默按 ADD 落库让被取代
         # 的旧记忆保持 active。
-        return actual_action, decision if actual_action is AdjudicationAction.MERGE else decision_replaced
+        return replace(decision, action=actual_action, replaced_memory_id=decision_replaced) if actual_action else None
 
     def _merge(self, scope, fact, similar, decision):
         port = self._owner_memory_port if fact.subject is FactSubject.SELF else self._memory_port
@@ -658,6 +665,9 @@ class MemoryAdoption:
         previous: MemoryCandidate | ConfirmedMemory | OwnerMemory,
     ) -> bool:
         """ALL只复用同一来源组与完整当前依据，清proof不能借去重恢复信用。"""
+        if (previous.requires_all_sources != fact.requires_all_sources
+                or fact.requires_all_sources and set(previous.source_ids) != set(fact.source_message_ids)):
+            return False
         previous_mode = previous.source_dependency_mode
         if fact.source_dependency_mode is SourceDependencyMode.ANY:
             return previous_mode is SourceDependencyMode.ANY
@@ -694,7 +704,8 @@ class MemoryAdoption:
         candidates = [
             item
             for item in pool
-            if self._same_dependencies(scope, fact, item.version)
+            if (self._merge_verifier is not None and fact.source_dependency_mode is SourceDependencyMode.ANY
+                or self._same_dependencies(scope, fact, item.version))
             and item.topic == fact.topic
             and item.category == fact.category
             and similarity(fact.text, item.text) >= self._similarity_threshold
@@ -983,6 +994,7 @@ class MemoryAdoption:
             topic=fact.topic,
             source_ids=fact.source_message_ids,
             source_dependency_mode=fact.source_dependency_mode,
+            requires_all_sources=fact.requires_all_sources,
             adoption_method=AdoptionMethod.AUTO,
             status=ConfirmedMemoryStatus.ACTIVE,
             valid_at=fact.valid_at,
@@ -1113,6 +1125,7 @@ def _candidate_from_fact(
         interpretation_reason=fact.interpretation_reason,
         timing=fact.timing, dimension_evidence=fact.dimension_evidence, event=fact.event,
         source_dependency_mode=fact.source_dependency_mode,
+        requires_all_sources=fact.requires_all_sources,
     )
 
 
@@ -1124,7 +1137,8 @@ def _stored_candidate_fact(fact: ExtractedFact, candidate: MemoryCandidate) -> E
                    confidence=candidate.confidence, risk_flags=candidate.risk_flags,
                    alternatives=candidate.alternatives, interpretation_reason=candidate.interpretation_reason,
                    valid_at=candidate.valid_at, invalid_at=candidate.invalid_at,
-                   dimension_evidence=candidate.dimension_evidence, event=candidate.event)
+                   dimension_evidence=candidate.dimension_evidence, event=candidate.event,
+                   requires_all_sources=candidate.requires_all_sources)
 
 
 def _normalize(text: str) -> str:

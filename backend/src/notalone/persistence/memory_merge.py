@@ -5,7 +5,7 @@ from dataclasses import replace
 from notalone.memory.models import AdoptionMethod, ConfirmedMemoryStatus, SourceDependencyMode
 from notalone.memory.versions import MemoryVersionConflict, require_auto_previous, require_auto_update_previous
 from notalone.persistence.locks import lock_contact_scope, lock_owner_scope
-from notalone.persistence.source_dependency import ensure_all_sources
+from notalone.persistence.source_dependency import ensure_all_sources, require_lifecycle_schema
 from notalone.persistence.reply_layered_cleanup import erase_layered_reply_dependencies
 from notalone.scopes import OwnerScope
 
@@ -61,11 +61,15 @@ def confirm_merge(store, *, scope, candidate_id, expected_parents, expected_dime
                 adoption_method=AdoptionMethod.AUTO, expected_dimension_evidence=expected_dimension_evidence)
         if receipt:
             return result
-        connection.execute(f'UPDATE public.{table} SET merge_parent_ids=%s, source_dependency_mode=\'all\' WHERE owner_id=%s AND id=%s',
+        require_lifecycle_schema(connection, 'memory_candidate')
+        require_lifecycle_schema(connection, table)
+        connection.execute('UPDATE public.memory_candidate SET requires_all_sources=true WHERE owner_id=%s AND contact_id=%s AND id=%s',
+                           (scope.owner_id, scope.contact_id, candidate_id))
+        connection.execute(f'UPDATE public.{table} SET merge_parent_ids=%s, requires_all_sources=true, source_dependency_mode=\'all\' WHERE owner_id=%s AND id=%s',
                            (ids, scope.owner_id, result.memory_id))
         erase_layered_reply_dependencies(connection, OwnerScope(scope.owner_id) if owner else scope, tuple(ids))
         updated = connection.execute(f'UPDATE public.{table} SET status=\'invalidated\', revision=revision+1, updated_at=now() WHERE owner_id=%s AND id=ANY(%s) AND status=\'active\' AND adoption_method=\'auto\'',
                                      (scope.owner_id, ids)).rowcount
         if updated != len(ids):
             raise MemoryVersionConflict('合并父版本在写入前发生变化。')
-        return replace(result, source_dependency_mode=SourceDependencyMode.ALL)
+        return replace(result, source_dependency_mode=SourceDependencyMode.ALL, requires_all_sources=True)

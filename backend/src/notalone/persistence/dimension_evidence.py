@@ -138,7 +138,7 @@ def erase_dimension_evidence(
         UPDATE public.memory_candidate
         SET dimension_evidence=NULL, updated_at=now()
         WHERE owner_id=%s AND contact_id=%s AND dimension_evidence IS NOT NULL
-          AND (NOT %s OR to_jsonb(memory_candidate)->>'source_dependency_mode'='all')
+          AND (NOT %s OR to_jsonb(memory_candidate)->>'source_dependency_mode'='all' OR to_jsonb(memory_candidate)->>'requires_all_sources'='true')
           AND EXISTS (
               SELECT 1
               FROM jsonb_array_elements(dimension_evidence->'messages') AS message

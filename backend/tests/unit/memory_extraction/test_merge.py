@@ -82,6 +82,56 @@ class MergeTests(unittest.TestCase):
         self.assertEqual(candidate.text, merged_text)
         self.assertEqual(set(candidate.source_ids), self.window.message_id_set)
 
+    def test_all_source_merged_memory_remains_recallable_for_later_updates(self):
+        from notalone.memory import InMemoryMemoryStore, SourceDependencyMode
+        from notalone.memory_extraction.adoption import MemoryAdoption, _candidate_from_fact
+        from notalone.memory_extraction.adjudication import AdjudicationDecision, AdjudicationAction
+        from notalone.memory_extraction.flow import ExtractionOutcome
+        from notalone.memory_extraction.dimensions import DimensionRelease
+        self.setup_data()
+        class Store(InMemoryMemoryStore):
+            def list_confirmed(inner, *args, **kwargs):
+                return tuple(replace(item, source_dependency_mode=SourceDependencyMode.ALL)
+                    for item in super().list_confirmed(*args, **kwargs))
+        store = Store()
+        previous = store.create_candidate(_candidate_from_fact(self.scope, replace(self.fact, text='联系人喜欢文字沟通。')))
+        store.confirm(scope=self.scope, candidate_id=previous.candidate_id)
+        class Adjudicator:
+            seen = ()
+            def adjudicate(inner, **kwargs):
+                inner.seen = kwargs['similar']
+                return AdjudicationDecision(AdjudicationAction.KEEP)
+        adjudicator = Adjudicator()
+        stats = MemoryAdoption(memory_port=store, adjudication_runtime=adjudicator,
+            merge_verifier=object(), dimension_release=DimensionRelease(gate_enabled=False),
+            similarity_threshold=0).adopt(self.scope, ExtractionOutcome((replace(self.fact, text='联系人现在喜欢文字沟通和电话说明。'),)))
+        self.assertEqual(stats.adopted, 1)
+        self.assertEqual(len(adjudicator.seen), 1)
+
+    def test_invalid_first_adjudication_does_not_block_next_candidate(self):
+        from notalone.memory import InMemoryMemoryStore
+        from notalone.memory_extraction.adoption import MemoryAdoption, _candidate_from_fact
+        from notalone.memory_extraction.adjudication import AdjudicationDecision, AdjudicationAction
+        from notalone.memory_extraction.errors import ExtractionInvalidOutputError
+        from notalone.memory_extraction.flow import ExtractionOutcome
+        from notalone.memory_extraction.dimensions import DimensionRelease
+        self.setup_data()
+        store = InMemoryMemoryStore()
+        previous = store.create_candidate(_candidate_from_fact(self.scope, replace(self.fact, text='联系人喜欢文字沟通。')))
+        store.confirm(scope=self.scope, candidate_id=previous.candidate_id)
+        class Adjudicator:
+            count = 0
+            def adjudicate(inner, **kwargs):
+                inner.count += 1
+                if inner.count == 1:
+                    raise ExtractionInvalidOutputError('非法合并父版本')
+                return AdjudicationDecision(AdjudicationAction.KEEP)
+        stats = MemoryAdoption(memory_port=store, adjudication_runtime=Adjudicator(),
+            dimension_release=DimensionRelease(gate_enabled=False), similarity_threshold=0).adopt(self.scope,
+            ExtractionOutcome((replace(self.fact, text='联系人喜欢第一类说明。'), replace(self.fact, text='联系人喜欢第二类说明。'))))
+        self.assertEqual((stats.pending, stats.adopted), (1, 1))
+
+
 class MergeDecisionTests(unittest.TestCase):
     def test_model_merge_requires_known_parents_and_complete_text(self):
         from langchain_core.messages import AIMessage

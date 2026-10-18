@@ -116,6 +116,7 @@ def _memory_fields(candidate, previous):
     return dict(memory_id=uuid5(candidate.candidate_id, 'upgrade_memory'), text=candidate.text, category=candidate.category, topic=candidate.topic,
         source_ids=tuple(dict.fromkeys((*(previous.source_ids if previous else ()), *candidate.source_ids))),
         source_candidate_id=candidate.candidate_id, adoption_method=AdoptionMethod.AUTO,
+        requires_all_sources=candidate.requires_all_sources or bool(previous and previous.requires_all_sources),
         source_dependency_mode=(SourceDependencyMode.ALL if previous is not None
             and previous.source_dependency_mode is SourceDependencyMode.ALL else candidate.source_dependency_mode),
         status=ConfirmedMemoryStatus.ACTIVE,

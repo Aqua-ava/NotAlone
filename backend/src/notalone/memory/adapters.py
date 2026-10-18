@@ -107,6 +107,7 @@ class InMemoryMemoryStore:
             category=candidate.category,
             topic=candidate.topic,
             source_ids=sources,
+            requires_all_sources=candidate.requires_all_sources or bool(expected_previous and expected_previous.requires_all_sources),
             source_dependency_mode=(SourceDependencyMode.ALL if expected_previous is not None
                 and expected_previous.source_dependency_mode is SourceDependencyMode.ALL
                 else candidate.source_dependency_mode),
@@ -217,6 +218,7 @@ class InMemoryMemoryStore:
             category=candidate.category,
             source_ids=candidate.source_ids,
             source_dependency_mode=candidate.source_dependency_mode,
+            requires_all_sources=candidate.requires_all_sources,
             source_candidate_id=candidate.candidate_id,
             adoption_method=AdoptionMethod.AUTO,
             topic=candidate.topic,

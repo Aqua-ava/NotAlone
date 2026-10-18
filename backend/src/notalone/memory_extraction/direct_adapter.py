@@ -94,6 +94,6 @@ class DirectExtractionRuntime:
                 continue
             for memory in scene["memories"]:
                 # 保留场景标签供原始候选追踪，不把它作为正文或证据。
-                facts.append({**memory, "_scene_name": scene["scene_name"]}
+                facts.append({**memory, "_scene_name": scene["scene_name"], "_requires_all_sources": True}
                              if isinstance(memory, dict) else {"_invalid": memory})
         return tuple(facts)

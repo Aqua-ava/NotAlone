@@ -48,6 +48,7 @@ class MemoryMergeVerifier:
             'speech_act': fact.speech_act.value, 'assertion_status': fact.assertion_status.value,
             'figurative_type': fact.figurative_type.value, 'alternatives': list(fact.alternatives),
             'interpretation_reason': '对新候选与旧记忆的合并正文重新核验。', 'event': None,
+            '_requires_all_sources': True,
         }
         window = ExtractionWindow(owner_id=scope.owner_id, contact_id=scope.contact_id,
             messages=messages, target_message_ids=fact.source_message_ids)
