@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID, uuid4
@@ -416,7 +417,9 @@ class PostgresReplyStore:
         if not isinstance(request, ReplyRequest):
             raise ReplyStoreInvariantError("回复请求租约结构无效。")
         try:
-            with self._connect() as connection:
+            guard = (self._layered_memory.reading_guard(context)
+                     if self._layered_memory is not None and hasattr(self._layered_memory, 'reading_guard') else nullcontext())
+            with guard, self._connect() as connection:
                 lock_owner_scope(connection, owner_id=request.scope.owner_id)
                 row = connection.execute(
                     """
@@ -597,6 +600,8 @@ class PostgresReplyStore:
                         raise ReplyStoreInvariantError(
                             "回复尝试完成状态写入不一致。"
                         )
+                    require_material(context, self._layered_memory, connection=connection,
+                        budget=self._layered_budget, owner_budget=self._owner_layered_budget)
         except ExplorationExpired:
             self._prune_expired_exploration(request.scope)
             raise ReplyStoreInvariantError("探索任务已过期。") from None

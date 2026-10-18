@@ -121,6 +121,7 @@ def _run(args: argparse.Namespace, lifetime: ParentLifetime) -> int:
     reply_service = (
         build_reply_service(
             database_url=database_url, owner_id=owner_id, model_priority=model_priority,
+            layered_memory=layered_memory,
         )
         if owner_id is not None
         else None

@@ -171,6 +171,7 @@ class ReplyConstraintReview:
                                          **request.model_settings)
         response = await bound.ainvoke([request.system_message, *request.messages],
                                       config={"callbacks": list(callbacks)} if callbacks else None)
+        await asyncio.to_thread(budget.check_response, review_model, response)
         if response.invalid_tool_calls or len(response.tool_calls) != 1 or response.tool_calls[0]["name"] != "ReplyFidelityReview":
             raise ReplyInvariantError("候选复核没有返回唯一有效的结构化结果。")
         accepted = accepted_candidate_numbers(response.tool_calls[0]["args"], payload)

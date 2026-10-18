@@ -182,3 +182,43 @@ PYTHONPATH=backend/src python \
 2026-10-11追加故障窗口验收：总开关持续开启，终止自有真实CLI流并在验收runner边界暂时阻止流重建和单次读取。用户在故障期间发送约定测试文字后解除注入；正式后台线程无手动检查或重试，11.77秒自动补入1条，全局流自动恢复，安全对账无重复、补齐错误为空。故障期间消息数与游标不变，最终自有进程和临时库已清理。该项现已通过，属于受控CLI不可用故障与真实单联系人数据的组合验证，不代表全部故障类型或最终App验收；OCR和模型未运行，生产代码未改。
 
 明确方法反馈使用 `GET/POST /api/contacts/{id}/skill-learning/policies`；提交包含已核验的Skill、版本、具体`method_id`或明确`null`整个Skill、`scope`、`expected_revision`和`operation_key`。撤销使用 `POST .../policies/{policy_id}/undo`。canonical068只保存范围决定和无正文动作，普通意见不写政策，长期修订仍走草稿审核；实际候选验证范围见[13记录](../.scratch/memory-skill-integration-preparation/frontier-13-validation.md)。
+
+### 分层回复的独立质量与快速对照
+
+逐组输出审阅须保存 `reply.quality.reply_review_binding(case, arm, calls)` 的 `binding`，
+同时固定实际请求／响应、最终候选、持久依据与两侧资料摘要；更换其中任一项不能沿用旧审阅。
+报告还会交叉核验公开生成回执、独立依据读取和实际模型响应；正式来源逐次核对原整理 case 的实际输出摘要。
+
+正式后端会把同一分层资料服务接入回复。operator 配置可用
+`schema_version: organization-runtime-v2`，保留既有 `suite_directory` 和
+`organization_budget`，另加 `reply`：`directory` 指向私有回复证据目录，
+`contact_budget`、`owner_budget` 分别使用显式 `LayeredReplyBudget` 字段，
+`scenario_read` 使用 `calls`、`paragraphs`、`characters`；不用的一侧填 `null`。
+缺少配置、来源或有效资格时保留原 L1，读取预算变化不会改变整理合同。
+
+快速合成对照入口（默认只生成被阻塞的零调用记录）：
+
+```bash
+PYTHONPATH=src python -m notalone.experiments.reply_comparison \
+  --input-package /absolute/package.json --output-directory /absolute/new-output
+```
+
+输入包包含 `manifest`、`cases`、`contact_budget`、`owner_budget`。manifest 由
+`build_manifest` 从实际 `build_reply_contract` 构造；每例的 `input_package`
+包含已确认的 `scope`、完整 `request`、`installed_l1_version` 回执，另记录真实
+整理输出摘要及支持审阅。执行时增加 `--execute --synthetic-confirmed`、
+`--database-url-env NAME`、`--expected-test-database NAME_test`、`--api-key-env NAME`。
+只在明确自有 `_test` 库内，才可用 `--controlled-layered-installation` 读取已受控安装
+的合法合成候选；它不会授予生产自动使用资格，也不会替用户发送消息。
+每例还须冻结 `installation_binding`：原完整获审 C 输出、原引用到实际 L1 的版本映射，
+以及该例唯一预期侧的实际 profile／scenario 版本、完整正文及摘要。另一侧必须没有
+已安装资料；单侧对照仅使用该侧预算，并明确报告另一侧未覆盖。每组外发前重新核对
+安装状态，生成后核对持久依据；更换候选、来源映射或增加另一侧资料时阻断该组。
+
+每组最多 6 次、总计最多 48 次物理请求，SDK/传输无重试、无重定向。
+生成及独立复核共用一个不可续跑账本；失败、未知和未执行组完整保留，
+不能替换失败例凑数。`bundle.json` 为私有 0600 实际请求、响应、依据及账本回执。
+可信读取资格会重新核原物理账本；正式正例还须绑定活的整理资格回执及每例
+`organization_dependencies`（`reply_case_id`、原 `case_id`、`input_sha256`、
+`case_evidence_sha256`），来源删除或撤销后关闭。Agent 审阅和四例冒烟只报告
+实际覆盖，正式资格仍为 `unknown`；原整理侧 800 次累计账本保持独立。

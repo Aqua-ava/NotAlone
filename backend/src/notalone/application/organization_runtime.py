@@ -50,18 +50,28 @@ def build_layered_memory_service(database_url, *, model_priority=None):
     if not path.is_absolute():
         raise ValueError('整理operator配置须是明确绝对路径。')
     value = private_json(path)
-    if (not isinstance(value, dict) or set(value) != {'schema_version', 'suite_directory', 'organization_budget'}
-            or value['schema_version'] != 'organization-runtime-v1'
+    fields = {'schema_version', 'suite_directory', 'organization_budget'}
+    if (not isinstance(value, dict) or set(value) - (fields | {'reply'}) or not fields <= set(value)
+            or value['schema_version'] not in {'organization-runtime-v1', 'organization-runtime-v2'}
             or not isinstance(value['suite_directory'], str) or not Path(value['suite_directory']).is_absolute()
             or not isinstance(value['organization_budget'], dict)
             or set(value['organization_budget']) != set(OrganizationBudget.__dataclass_fields__)):
         raise ValueError('整理operator配置结构无效。')
+    reply_configuration = None
+    if value.get('reply') is not None:
+        from notalone.application.reply_qualification import ReplyReadConfiguration
+        try:
+            reply_configuration = ReplyReadConfiguration(value['reply'])
+        except (ValueError, TypeError, KeyError):
+            pass  # 回复配置无效只关闭读取；原整理合同和L1继续独立工作。
     budget = OrganizationBudget(**value['organization_budget'])
     if budget.max_model_calls != 4:
         raise ValueError('整理候选装配要求明确四阶段有限预算。')
     source = ConfiguredSuiteSource(Path(value['suite_directory']))
     contract = OrganizationQualityContract(provider='deepseek', request_model='deepseek-flash',
         verifier_provider='deepseek', verifier_model='deepseek-flash', budget=budget)
+    if reply_configuration is not None:
+        reply_configuration.source.bind_organization(source, contract)
     quality = OrganizationQualityService(PostgresOrganizationQualityStore(store), organization_contract=contract,
         qualification_source=source)
     from notalone.memory.organization_sdk import build_deepseek_organization_adapters
@@ -69,10 +79,14 @@ def build_layered_memory_service(database_url, *, model_priority=None):
         ports, close = build_deepseek_organization_adapters(budget=budget)
     except (ValueError, RuntimeError):
         quality.runtime_unavailable_reason = 'organization_adapter_unavailable'
-        return LayeredMemoryService(store, budget=budget, model_priority=model_priority, quality=quality)
+        service = LayeredMemoryService(store, budget=budget, model_priority=model_priority, quality=quality)
+        service.reply_configuration = reply_configuration
+        return service
     try:
-        return LayeredMemoryService(store, proposer=ports[0], verifier=ports[1], profile_proposer=ports[2],
+        service = LayeredMemoryService(store, proposer=ports[0], verifier=ports[1], profile_proposer=ports[2],
             profile_verifier=ports[3], budget=budget, model_priority=model_priority, quality=quality, adapter_close=close)
+        service.reply_configuration = reply_configuration
+        return service
     except Exception:
         close()
         raise
