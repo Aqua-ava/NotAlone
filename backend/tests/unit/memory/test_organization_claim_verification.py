@@ -115,8 +115,11 @@ class OrganizationClaimVerificationTest(unittest.TestCase):
 
     def test_third_person_value_requires_bound_relationship_impact(self):
         claims = [self.claim(self.parts[0]), self.claim(self.parts[1], role='third_party')]
+        self.assertFalse(self.verify(self.response(claims)))
+        missing = deepcopy(claims)
+        del missing[1]['relationship_impact']
         with self.assertRaises(ValueError):
-            self.verify(self.response(claims))
+            self.verify(self.response(missing))
         impact = {'kind': 'important_shared_event', 'sources': [{**self.reference, 'quote': self.memory.text}],
                   'basis': '仅测试关系依据的结构绑定，不证明原文具有关系重要性。'}
         claims[1]['relationship_impact'] = impact
@@ -127,6 +130,38 @@ class OrganizationClaimVerificationTest(unittest.TestCase):
                 self.verify(self.response([claims[0], dict(claims[1], relationship_impact=altered)]))
         claims[1].update(value_category='none', relationship_impact=None)
         self.assertFalse(self.verify(self.response(claims)))
+
+    def test_missing_relationship_evidence_does_not_skip_later_structure_checks(self):
+        claims = [self.claim(self.parts[0], role='third_party'), self.claim(self.parts[1])]
+        self.assertFalse(self.verify(self.response(claims)))
+        claims[1]['sources'][0]['quote'] = '不存在的引文'
+        with self.assertRaises(ValueError):
+            self.verify(self.response(claims))
+        claims[1] = self.claim(self.parts[1], role='third_party')
+        claims[1]['relationship_impact'] = {'kind': 'ongoing_responsibility'}
+        with self.assertRaises(ValueError):
+            self.verify(self.response(claims))
+
+    def test_cross_sentence_qualified_fact_remains_complete_and_unknown_is_not_exempt(self):
+        qualifier = '资料中的记录日期只是正文说明，不是后端来源时间。'
+        fact = '本人核对生日是8月16日，先前8月6日为录入错误。'
+        text = qualifier + fact
+        self.memory = OrganizationInput(UUID(int=31), 2, text, 'manual_entry',
+            {'current_status': 'current_unverified'}, None, 'common_fact', None, None)
+        self.entry = {**self.entry, 'text': text, 'temporal_status': 'stable'}
+        grouped = self.claim(text, role='app_user')
+        grouped['value_category'] = 'static_fact'
+        response = self.response([grouped])
+        response['entries'][0]['temporal_basis'] = 'static_fact'
+        self.assertTrue(self.verify(response))
+        split = [self.claim(qualifier, role='unknown'), self.claim(fact, role='app_user')]
+        for claim in split:
+            claim['value_category'] = 'static_fact'
+        response['entries'][0]['claims'] = split
+        self.assertFalse(self.verify(response))
+        response['entries'][0]['claims'] = [dict(grouped, text=fact)]
+        with self.assertRaises(ValueError):
+            self.verify(response)
 
     def test_value_schema_rejects_old_roles_unknown_categories_and_unneeded_impact(self):
         claim = self.claim(self.memory.text)

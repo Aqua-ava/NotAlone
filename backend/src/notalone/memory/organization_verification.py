@@ -52,7 +52,7 @@ def _bound_sources(sources, references, inputs, *, required):
         seen.add(reference)
 
 
-def _relationship_impact(claim, references, inputs):
+def _relationship_impact(claim, references, inputs) -> bool:
     impact = claim['relationship_impact']
     required = claim['value_category'] != 'none' and (
         claim['subject_role'] in {'third_party', 'relationship'}
@@ -60,13 +60,17 @@ def _relationship_impact(claim, references, inputs):
     if not required:
         if impact is not None:
             raise ValueError('不主张关系准入的命题须用空关系依据。')
-        return
+        return True
+    if impact is None:
+        # 显式null表示未提供关系重要性依据，只否决准入，不补造证据。
+        return False
     if (not isinstance(impact, dict) or set(impact) != {'kind', 'sources', 'basis'}
             or not isinstance(impact['kind'], str) or impact['kind'] not in RELATIONSHIP_IMPACT_KINDS
             or not isinstance(impact['basis'], str) or not 1 <= len(impact['basis'].strip()) <= 1000):
         raise ValueError('关系准入缺少独立的有界影响依据。')
     # 引文真实存在只证明绑定；它是否支持联系及重要性仍是模型语义判断。
     _bound_sources(impact['sources'], references, inputs, required=True)
+    return True
 
 
 def _claims_supported(claims: object, entry: dict, references, inputs) -> bool:
@@ -86,10 +90,10 @@ def _claims_supported(claims: object, entry: dict, references, inputs) -> bool:
                        for name in ('subject_basis', 'eligibility_basis'))):
             raise ValueError('长期背景命题审计结构无效。')
         _bound_sources(claim['sources'], references, inputs, required=claim['supported'])
-        _relationship_impact(claim, references, inputs)
+        impact_supported = _relationship_impact(claim, references, inputs)
         parts.append(claim['text'])
         accepted = (accepted and claim['supported'] and claim['value_category'] != 'none'
-                    and claim['subject_role'] != 'unknown')
+                    and claim['subject_role'] != 'unknown' and impact_supported)
     if ''.join(parts) != entry['text']:
         raise ValueError('命题原文须有序完整覆盖条目，不能遗漏或改写。')
     return accepted

@@ -49,16 +49,16 @@ PROFILE_VERIFICATION_PROMPT = POLICY + PROFILE_POLICY + '''
 "value_category":"价值类别","eligibility_basis":"长期价值依据","relationship_impact":null}]}]}。
 每entry恰好一次，index/摘要对应verification_targets，references等于候选直接引用。空候选用空entries。
 全局/entry/claim的supported只判断候选在已有时间、不确定性限定下是否忠实有据，任何false仍否决。
-每条claims为1至8项，按可独立判断的命题拆分，包括不同主体。各text按序直接拼接须等于完整entry.text，保留全部字词/标点/限定，不遗漏、重叠或改写。否定、日期、条件及纠错限定须随命题，不将孤立日期/旧错误值独立当真；无法完整审计就否决，不裁句或增调用。
+每条claims为1至8项，按最小可独立判真的主命题拆分，可跨句。来源/时间/否定/条件/纠错限定须与被限定主命题合组审计，不把孤立限定当人物事实；不同独立事实（含不同主体）不得混并。各text按序拼接须等于完整entry.text，保留全部字词/标点/限定，不遗漏、重叠或改写；无法完整审计就否决，不裁句或增调用。
 subject_role枚举：app_user=应用使用者本人，contact=已选联系人本人（不是app_user），third_party=其他人，relationship=多主体关系，unknown=主体不明且否决。
 value_category枚举：static_fact=静态稳定事实；enduring_fact_or_preference=来源确实支持长期价值的持续事实/明确偏好；important_history=重要已发生背景；important_relationship=重要关系背景；none=无合格价值。任一none则整条否决，一个合格命题不能替相邻命题准入。
 价值与现状独立：eligibility_basis仅解释长期价值，不认证现状。长期来源确实支持的事实可在current_unverified下以uncertain保留，当前未知本身不是none理由；普通未核近况仍不能冒充enduring。
 时态temporal_basis枚举：static_fact限静态事实；historical须候选historical；current_unverified须候选uncertain及限定；current_verified须temporal_references非空，且全部来自直接引用中timing.current_status=current_verified的版本；unknown否决。其他时态temporal_references为空，不得自签现状。
 sources只用entry直接引用的版本，每版本至多一次，quote须逐字来自该版本memories.text；supported=true时非空。
-value_category=none时relationship_impact为null；否则subject_role为third_party/relationship或value_category为important_relationship时必须给impact，其余为null。
+value_category=none时relationship_impact为null；否则subject_role为third_party/relationship或value_category为important_relationship时准入需impact，其余为null。需impact但为null表示未提供关系重要性依据，准入否决，不能据此把忠实事实的supported改false。
 impact格式{"kind":"影响类别","sources":[{"memory_id":"实际ID","revision":1,"quote":"联系或影响原文"}],"basis":"为何支持实际联系及重要性"}。
 kind枚举：ongoing_responsibility=持续责任；shared_life_constraint=共同生活约束；important_shared_event=重要共同经历；explicit_relationship_importance=来源明确的重要性。impact.sources非空，沿用直接版本/原文规则，可与claim共用来源或引用entry另一来源。
-重要第三人背景可以合格；亲属称谓、兴趣主题相近、L2标题或核验器解释都不证明影响，缺少有据联系则选none。quote存在不证明它支持impact语义，仍须独立检查。
+重要第三人背景可以合格；亲属称谓、兴趣主题相近、L2标题或核验器解释都不证明影响，缺少有据联系则不得准入。quote存在不证明它支持impact语义，仍须独立检查。
 所有basis/subject_basis/eligibility_basis为1至1000字。否决仍须完整审计；字段完整不证明原子性、主体或重要性正确。
 '''
 
