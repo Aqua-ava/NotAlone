@@ -215,6 +215,12 @@ SOURCE_BOUNDED_RUNTIME_PROOF_PROMPT = """
 本次显式协议为nullable-proof-v3。原candidate_index/verdict/issues/evidence四槽仍必填；
 只允许额外可缺或null的proof；非null精确四键version=3、atom_links、reference、reported。
 只提Unicode码点半开整数位置，不提身份、唯一性、可信布尔、摘要、能力或语义图。
+位置从各自完整字符串的0开始，end是末字符之后的位置，不能超过该字符串的码点数。
+每个汉字、中文标点及引号都计1个码点；不是UTF-8字节数，也不是从1开始计数。
+source相对指定消息全文；candidate相对完整候选text，须计入作者包装和观察前缀，
+但事件片段本身只覆盖原话内文，不能从开引号开始或包含闭引号。先逐字复核两侧切片再提交。
+即使只有实际作者的“我”，正向依据也需要reference的mention与target定位该来源“我”，binding=null；
+reference为null或缺少必要链接只表示关系未获证明，不能代替自指定位。位置不确定时proof留null。
 完整实际窗口最多4条、每条和候选最多4096码点；最多两个第三人、一条显式指称链或一组问答。
 atom_links上限16，reference/reported各8；同类重复边非法。只选一个主规则：
 BR_AUTHOR_ARRIVAL_V1/direct_quote：实际作者我刚/刚刚到家完整事件，frame=direct。
