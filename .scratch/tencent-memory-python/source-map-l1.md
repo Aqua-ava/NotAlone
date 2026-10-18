@@ -1,6 +1,6 @@
 # L1 源码对应与产品适配
 
-腾讯只读基线：`/Users/local-user/learn/open_learn/TencentDB-Agent-Memory`，commit `e9a8293`。下列腾讯路径均相对 `MemoryCore/src/`。本任务自行实现 Python，不引入腾讯运行时、服务或 Node sidecar。
+腾讯只读基线：`TencentDB-Agent-Memory`，commit `e9a8293`。下列腾讯路径均相对 `MemoryCore/src/`。本任务自行实现 Python，不引入腾讯运行时、服务或 Node sidecar。
 
 | 腾讯源码 | 本地实现 | 对应行为 |
 | --- | --- | --- |
