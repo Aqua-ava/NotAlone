@@ -19,7 +19,9 @@ from notalone.memory_trace.context import (
     CallObservation,
     current_trace,
     snapshot,
+    record_ledger_entry,
 )
+from notalone.ledger.models import LedgerEntry, LedgerOutcome
 from notalone.memory_trace.ports import TraceWriteError
 
 
@@ -188,6 +190,25 @@ def build_trace_http_client(
         transport=transport,
         event_hooks={"request": [_request_hook], "response": [_response_hook]},
     )
+
+
+def record_model_retry(purpose: str, *, outcome: LedgerOutcome) -> None:
+    """下一次尝试前结算本次实际出站，不让最终成功覆盖早先请求。"""
+    trace = current_trace()
+    if trace is None or trace.ledger is None or not trace.call_was_invoked(purpose):
+        return
+    call = trace.observations[trace.calls[purpose]]
+    if call.ledger_entry is not None:
+        return
+    finished = call.finished_at or datetime.now(timezone.utc)
+    entry = LedgerEntry(
+        entry_id=uuid4(), owner_id=trace.scope.owner_id, contact_id=trace.scope.contact_id,
+        provider=trace.provider, model_name=trace.model_name, input_tokens=None, output_tokens=None,
+        latency_ms=max(0, int((finished - call.called_at).total_seconds() * 1000)),
+        outcome=outcome, called_at=call.called_at,
+    )
+    record_ledger_entry(purpose, trace.ledger, entry, started_at=finished)
+    trace.discard_call(purpose)
 
 
 def invoke_traced_model(

@@ -1,6 +1,8 @@
 """按场景直接生成完整记忆；逐条校验交给统一提取流程。"""
 
 from copy import deepcopy
+from collections.abc import Callable
+from contextlib import AbstractContextManager, nullcontext
 import time
 import httpx
 from openai import APIConnectionError, APIStatusError
@@ -14,7 +16,8 @@ from notalone.memory_extraction.errors import ExtractionInvalidOutputError, Extr
 from notalone.memory_extraction.models import ExtractionWindow
 from notalone.memory_extraction.runtime import ExtractionPayload
 from notalone.memory_trace import TraceWriteError
-from notalone.memory_trace.transport import invoke_traced_model
+from notalone.memory_trace.transport import invoke_traced_model, record_model_retry
+from notalone.ledger.models import LedgerOutcome
 
 DIRECT_EXTRACTION_PROTOCOL = "direct_scene_memory_v1"
 DIRECT_EXTRACTION_VERSION = "1"
@@ -86,24 +89,35 @@ class DirectExtractionRuntime:
         return GroundedExtractionRuntime(model=self._model).for_prompt_profile(profile)
 
     def extract(self, window: ExtractionWindow) -> ExtractionPayload:
+        return self.extract_scheduled(window, request_context=nullcontext, retry_wait=time.sleep)
+
+    def extract_scheduled(
+        self, window: ExtractionWindow, *,
+        request_context: Callable[[], AbstractContextManager[None]],
+        retry_wait: Callable[[float], None],
+    ) -> ExtractionPayload:
+        """调度仅包住一次请求，解析失败后的退避在许可外进行。"""
         for attempt in range(self._max_retries + 1):
-            try:
-                return self._extract_once(window)
-            except TraceWriteError:
-                raise
-            except Exception as error:
-                invalid = isinstance(error, ExtractionInvalidOutputError)
-                transient = isinstance(error, (APIConnectionError, httpx.TransportError)) or (
-                    isinstance(error, APIStatusError) and (error.status_code in (408, 429) or error.status_code >= 500))
-                record("extraction_recovery", {"attempt": attempt + 1, "error_code": type(error).__name__,
-                    "will_retry": (invalid or transient) and attempt < self._max_retries})
-                if not (invalid or transient) or attempt == self._max_retries:
-                    if invalid:
-                        raise
-                    raise ExtractionRuntimeError(f"模型调用失败（{type(error).__name__}），本批保留待重试。") from error
-                from notalone.experiments.problem_budget import check_problem_budget
-                check_problem_budget()
-                time.sleep(self._retry_delay_seconds)
+            with request_context():
+                try:
+                    return self._extract_once(window)
+                except TraceWriteError:
+                    raise
+                except Exception as error:
+                    invalid = isinstance(error, ExtractionInvalidOutputError)
+                    transient = isinstance(error, (APIConnectionError, httpx.TransportError)) or (
+                        isinstance(error, APIStatusError) and (error.status_code in (408, 429) or error.status_code >= 500))
+                    record("extraction_recovery", {"attempt": attempt + 1, "error_code": type(error).__name__,
+                        "will_retry": (invalid or transient) and attempt < self._max_retries})
+                    if not (invalid or transient) or attempt == self._max_retries:
+                        if invalid:
+                            raise
+                        raise ExtractionRuntimeError(f"模型调用失败（{type(error).__name__}），本批保留待重试。") from error
+                    from notalone.experiments.problem_budget import check_problem_budget
+                    check_problem_budget()
+                    record_model_retry("extraction", outcome=(LedgerOutcome.REJECTED_BY_VALIDATION
+                                       if invalid else LedgerOutcome.RUN_FAILED))
+            retry_wait(self._retry_delay_seconds)
         raise AssertionError("不可达的提取重试状态。")
 
     def _extract_once(self, window: ExtractionWindow) -> ExtractionPayload:

@@ -54,6 +54,36 @@ class SceneToolsHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         memories = self._ok(f'/api/contacts/{self.contact_id}/memories')['memories']
         self.assertEqual(state['scenarios'][0]['paragraphs'][0]['references'][0]['memory_id'], memories[0]['memory_id'])
 
+    def test_foreground_runs_between_document_model_requests(self):
+        from concurrent.futures import ThreadPoolExecutor
+        from notalone.application.model_priority import ModelPriorityControl
+        text = '每周与联系人一起参加合成读书会。'
+        self.extraction_model.facts = {text: ('common_fact', 'other')}
+        self._import_evolution_source([(False, text)], when=self.when)
+        priority = ModelPriorityControl()
+        order, requested, entered = [], Event(), Event()
+
+        def foreground():
+            requested.set()
+            with priority.foreground():
+                order.append('foreground')
+                entered.set()
+
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            replies = []
+            def observe(payload):
+                order.append('model')
+                if len(order) == 1:
+                    replies.append(executor.submit(foreground))
+                    self.assertTrue(requested.wait(1))
+                    self.assertFalse(entered.wait(.05), '在途物理请求仍须互斥。')
+            backend = self.scene_backend(model_priority=priority, request_observer=observe)
+            state = self.ready(backend)
+            replies[0].result(timeout=1)
+        self.assertEqual(order, ['model', 'foreground', 'model', 'model'])
+        self.assertEqual(state['model_calls_used'], 3)
+        self.assertEqual([p['text'] for s in state['scenarios'] for p in s['paragraphs']], [text])
+
     def test_personal_document_tools_keep_metadata_and_no_change_receipt(self):
         text, repeated = '长期每周参加合成读书会。', '重复确认合成读书安排。'
         self.extraction_model.facts = {value: ('common_fact', 'other') for value in (text, repeated)}
@@ -225,7 +255,7 @@ class SceneToolsHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self.assertIn(third, self.scene_inputs[-1])
         self.assertFalse(final['maintenance_pending'])
 
-    def scene_backend(self, *, with_profile=False, personal=False):
+    def scene_backend(self, *, with_profile=False, personal=False, model_priority=None, request_observer=None):
         from notalone.memory.layered import OrganizationBudget
         from notalone.memory.organization_sdk import DeepSeekOrganizationProposal, DeepSeekOrganizationVerification
         from notalone.memory.organization_quality_transport import OrganizationQualityHTTPTransport
@@ -235,6 +265,8 @@ class SceneToolsHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         budget = OrganizationBudget(max_model_calls=16, max_characters=32000)
         def respond(request):
             payload = json.loads(request.content)
+            if request_observer is not None:
+                request_observer(payload)
             messages = payload['messages']
             initial = json.loads(messages[1]['content'])
             if payload.get('tools'):
@@ -330,7 +362,7 @@ class SceneToolsHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
             pp.timeout_contract = pv.timeout_contract = SYNTHETIC_ORGANIZATION_TIMEOUT
             profile = {'profile_proposer': pp, 'profile_verifier': pv}
         service = LayeredMemoryService(PostgresLayeredMemoryStore(self.database_url), proposer=proposer, verifier=verifier,
-                                      budget=budget, synthetic=True, runtime_policy='verified_items', **profile)
+                                      budget=budget, synthetic=True, runtime_policy='verified_items', model_priority=model_priority, **profile)
         backend = HttpBackend(create_app(database_url=self.database_url, owner_id=self.owner_id, token='synthetic-scene-tools', layered_memory=service), self.owner_id)
         self.addCleanup(backend.close)
         return backend

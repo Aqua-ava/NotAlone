@@ -129,8 +129,10 @@ profile.md格式：# 长期背景，然后每条<!-- ENTRY {"temporal_status":"u
         deadline.check()
         if sum(len(str(m.content)) for m in messages) > adapter.budget.max_characters:
             raise ValueError('画像工具上下文超出预算。')
-        response = adapter.model.bind(tools=TOOLS, max_tokens=min(adapter.budget.max_characters, 8192) if adapter.personal else adapter.budget.max_characters,
-            timeout=deadline.remaining_seconds()).invoke(messages)
+        from notalone.application.organization_call import organization_model_request
+        with organization_model_request():
+            response = adapter.model.bind(tools=TOOLS, max_tokens=min(adapter.budget.max_characters, 8192) if adapter.personal else adapter.budget.max_characters,
+                timeout=deadline.remaining_seconds()).invoke(messages)
         deadline.check()
         if response.response_metadata.get('finish_reason') not in {'stop', 'tool_calls'} or getattr(response, 'invalid_tool_calls', []):
             raise ValueError('画像工具输出没有完整结束。')

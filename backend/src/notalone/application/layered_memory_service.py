@@ -347,7 +347,8 @@ class LayeredMemoryService:
                 value = call(deadline)
             check()
             return value
-        return bounded_organization_call(invoke, priority=self._priority, guard=check, timeout_seconds=self._call_timeout_seconds)
+        return bounded_organization_call(invoke, priority=self._priority, guard=check, timeout_seconds=self._call_timeout_seconds,
+                                         per_request=getattr(adapter, 'physical_scheduling', False))
 
     def default_reply_budgets(self):
         """逐项核验资料的有限默认读取；关系语境开关仍由回复流程控制。"""

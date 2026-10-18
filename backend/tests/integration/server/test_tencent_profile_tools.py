@@ -45,6 +45,36 @@ class ProfileToolsHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self.assertEqual([e['text'] for e in state['profile']['entries']], [text])
         self.assertEqual(state['model_calls_used'], 7)
 
+    def test_foreground_runs_between_profile_document_requests(self):
+        from concurrent.futures import ThreadPoolExecutor
+        from notalone.application.model_priority import ModelPriorityControl
+        text = '长期每周参加合成读书会。'
+        self.extraction_model.facts = {text: ('common_fact', 'other')}
+        self._import_evolution_source([(False, text)], when=self.when)
+        priority = ModelPriorityControl()
+        order, requested, entered = [], Event(), Event()
+        def foreground():
+            requested.set()
+            with priority.foreground():
+                order.append('foreground')
+                entered.set()
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            replies = []
+            def observe(payload):
+                initial = json.loads(payload['messages'][1]['content'])
+                if initial.get('layer') != 'l3' or not payload.get('tools'):
+                    return
+                order.append('model')
+                if len(order) == 1:
+                    replies.append(executor.submit(foreground))
+                    self.assertTrue(requested.wait(1))
+                    self.assertFalse(entered.wait(.05), '画像在途请求仍须独占许可。')
+            state = self.ready(self.scene_backend(with_profile=True, model_priority=priority, request_observer=observe))
+            replies[0].result(timeout=1)
+        self.assertEqual(order, ['model', 'foreground', 'model'])
+        self.assertEqual(state['model_calls_used'], 6)
+        self.assertEqual([e['text'] for e in state['profile']['entries']], [text])
+
     def test_bad_profile_entry_does_not_reject_valid_sibling(self):
         text = '长期每周参加合成读书会。'
         self.extraction_model.facts = {text: ('common_fact', 'other')}
