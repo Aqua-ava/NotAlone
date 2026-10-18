@@ -153,12 +153,14 @@ class OrganizationQualityHttpTest(MemoryOverviewHttpFixture, unittest.TestCase):
                         quotes = [{**reference, 'quote': sources[(reference['memory_id'], reference['revision'])]['text']}
                                   for reference in entry['references']]
                         result['entries'].append({'entry_index': index, 'entry_sha256': content_digest(entry),
-                            'references': entry['references'], 'supported': result['supported'], 'profile_eligible': result['supported'],
+                            'references': entry['references'], 'supported': result['supported'],
                             'temporal_basis': 'historical' if entry['temporal_status'] == 'historical' else 'current_unverified',
                             'temporal_references': [], 'basis': '合成资料仅保留原有时间限定。',
-                            'claims': [{'text': entry['text'], 'sources': quotes, 'subject_role': 'relationship',
+                            'claims': [{'text': entry['text'], 'sources': quotes,
+                                'subject_role': 'contact' if 'provenance_kind' in memory else 'app_user',
                                 'subject_basis': '合成合同夹具的关系资料主体。', 'supported': result['supported'],
-                                'profile_eligible': result['supported'], 'eligibility_basis': '仅供工程合同回归，不声明真实语义审阅。'}]})
+                                'value_category': 'enduring_fact_or_preference' if result['supported'] else 'none',
+                                'relationship_impact': None, 'eligibility_basis': '仅供工程合同回归，不声明真实语义审阅。'}]})
             elif '从主题和底层' in payload['messages'][0]['content']:
                 if gate_profile:
                     gate_profile[0].set()

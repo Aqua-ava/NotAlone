@@ -34,12 +34,12 @@ class OrganizationVerificationContractTest(unittest.TestCase):
     def audit(self, entry=None, **changes):
         entry = entry or self.entry
         return {'entry_index': 0, 'entry_sha256': content_digest(entry),
-            'references': deepcopy(entry['references']), 'supported': True, 'profile_eligible': True,
+            'references': deepcopy(entry['references']), 'supported': True,
             'temporal_basis': 'current_unverified', 'temporal_references': [],
             'basis': '只支持过去持续的安排，当前是否继续未核实。',
             'claims': [{'text': entry['text'], 'sources': [{**entry['references'][0], 'quote': self.memory.text}],
-                'subject_role': 'owner', 'subject_basis': '来源明确记载本人事实。',
-                'supported': True, 'profile_eligible': True, 'eligibility_basis': '仅测试逐条时间门，不替代语义判断。'}], **changes}
+                'subject_role': 'app_user', 'subject_basis': '来源明确记载本人事实。',
+                'supported': True, 'value_category': 'enduring_fact_or_preference', 'relationship_impact': None, 'eligibility_basis': '仅测试逐条时间门，不替代语义判断。'}], **changes}
 
     def verify(self, response, *, entries=None, memories=None, layer='l3'):
         model = ResponseModel(response)
@@ -61,6 +61,7 @@ class OrganizationVerificationContractTest(unittest.TestCase):
     def test_static_birthday_is_not_rejected_by_unverified_generic_source_status(self):
         birthday = {**self.entry, 'text': '联系人生日月日为7月9日。', 'uncertainty': '仅来自所提供资料。'}
         audit = self.audit(birthday, temporal_basis='static_fact', basis='生日月日是静态事实，不声称活动仍在持续。')
+        audit['claims'][0]['value_category'] = 'static_fact'
         result, model = self.verify({'supported': True, 'reasons': [], 'entries': [audit]}, entries=[birthday])
         self.assertTrue(result)
         request = json.loads(model.requests[0][-1].content)
@@ -70,7 +71,8 @@ class OrganizationVerificationContractTest(unittest.TestCase):
         for text in ('本人计划某次节日出游。', '本人仅在天气晴朗时参加某次活动。'):
             with self.subTest(text=text):
                 entry = {**self.entry, 'text': text, 'temporal_status': 'uncertain'}
-                audit = self.audit(entry, profile_eligible=False, basis='一次性计划或条件不属于长期背景。')
+                audit = self.audit(entry, basis='一次性计划或条件不属于长期背景。')
+                audit['claims'][0]['value_category'] = 'none'
                 self.assertFalse(self.verify({'supported': True, 'reasons': [], 'entries': [audit]}, entries=[entry])[0])
 
     def test_current_evidence_requires_actual_referenced_verified_version(self):

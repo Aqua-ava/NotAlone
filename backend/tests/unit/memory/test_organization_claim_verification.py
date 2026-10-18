@@ -23,13 +23,14 @@ class OrganizationClaimVerificationTest(unittest.TestCase):
     def claim(self, text, *, eligible=True, role='contact', quote=None):
         return {'text': text, 'sources': [{**self.reference, 'quote': quote or text}],
             'subject_role': role, 'subject_basis': '来源原句明确记载该命题的主体。',
-            'supported': True, 'profile_eligible': eligible,
+            'supported': True, 'value_category': 'enduring_fact_or_preference' if eligible else 'none',
+            'relationship_impact': None,
             'eligibility_basis': '此命题须独立判断长期价值，不借相邻命题获得准入。'}
 
     def response(self, claims):
         return {'supported': True, 'reasons': [], 'entries': [{
             'entry_index': 0, 'entry_sha256': content_digest(self.entry),
-            'references': [self.reference], 'supported': True, 'profile_eligible': True,
+            'references': [self.reference], 'supported': True,
             'temporal_basis': 'current_unverified', 'temporal_references': [],
             'basis': '有字面来源，当前持续性未核实。', 'claims': claims}]}
 
@@ -45,7 +46,7 @@ class OrganizationClaimVerificationTest(unittest.TestCase):
         first = self.claim(self.parts[0])
         second = self.claim(self.parts[1], eligible=False, role='third_party')
         self.assertFalse(self.verify(self.response([first, second])))
-        second.update(profile_eligible=True, supported=False)
+        second.update(value_category='enduring_fact_or_preference', subject_role='contact', supported=False)
         self.assertFalse(self.verify(self.response([first, second])))
         second.update(supported=True, subject_role='unknown')
         self.assertFalse(self.verify(self.response([first, second])))
@@ -94,12 +95,59 @@ class OrganizationClaimVerificationTest(unittest.TestCase):
                 self.entry = {**self.entry, 'text': text, 'temporal_status': status}
                 claim = self.claim(text, role=role)
                 claim['eligibility_basis'] = reason
+                claim['value_category'] = {'static_fact': 'static_fact', 'historical': 'important_history'}.get(basis, 'important_relationship')
+                if role in {'third_party', 'relationship'}:
+                    claim['relationship_impact'] = {'kind': 'ongoing_responsibility',
+                        'sources': [{**self.reference, 'quote': text}], 'basis': reason}
                 response = self.response([claim])
                 response['entries'][0]['temporal_basis'] = basis
                 self.assertTrue(self.verify(response))
 
+    def test_enduring_value_and_unknown_current_state_are_independent(self):
+        self.entry['text'] = self.parts[0]
+        claims = [self.claim(self.parts[0])]
+        self.assertTrue(self.verify(self.response(claims)))
+        self.entry['temporal_status'] = 'stable'
+        self.assertFalse(self.verify(self.response(claims)))
+        self.entry['temporal_status'] = 'uncertain'
+        claims[0]['value_category'] = 'none'
+        self.assertFalse(self.verify(self.response(claims)))
+
+    def test_third_person_value_requires_bound_relationship_impact(self):
+        claims = [self.claim(self.parts[0]), self.claim(self.parts[1], role='third_party')]
+        with self.assertRaises(ValueError):
+            self.verify(self.response(claims))
+        impact = {'kind': 'important_shared_event', 'sources': [{**self.reference, 'quote': self.memory.text}],
+                  'basis': '仅测试关系依据的结构绑定，不证明原文具有关系重要性。'}
+        claims[1]['relationship_impact'] = impact
+        for altered in (dict(impact, kind='kinship_only'), dict(impact, sources=[]), dict(impact, basis=''),
+                        dict(impact, sources=[{**self.reference, 'revision': 1, 'quote': self.memory.text}]),
+                        dict(impact, sources=[{**self.reference, 'quote': '并不存在的关系依据'}])):
+            with self.subTest(impact=altered), self.assertRaises(ValueError):
+                self.verify(self.response([claims[0], dict(claims[1], relationship_impact=altered)]))
+        claims[1].update(value_category='none', relationship_impact=None)
+        self.assertFalse(self.verify(self.response(claims)))
+
+    def test_value_schema_rejects_old_roles_unknown_categories_and_unneeded_impact(self):
+        claim = self.claim(self.memory.text)
+        for altered in (dict(claim, subject_role='owner'), dict(claim, value_category='current_verified'),
+                        dict(claim, value_category='uncertain'), dict(claim, profile_eligible=True),
+                        dict(claim, relationship_impact={'kind': 'ongoing_responsibility',
+                            'sources': [{**self.reference, 'quote': self.memory.text}], 'basis': '不应带额外关系依据。'})):
+            with self.subTest(claim=altered), self.assertRaises(ValueError):
+                self.verify(self.response([altered]))
+
+    def test_supported_false_is_never_overridden_by_a_valid_value_category(self):
+        for level in ('global', 'entry', 'claim'):
+            response = self.response([self.claim(self.memory.text)])
+            target = response if level == 'global' else response['entries'][0] if level == 'entry' else response['entries'][0]['claims'][0]
+            target['supported'] = False
+            with self.subTest(level=level):
+                self.assertFalse(self.verify(response))
+
     def test_old_entry_only_schema_is_structural_failure(self):
         response = self.response([self.claim(self.memory.text)])
+        response['entries'][0]['profile_eligible'] = True
         del response['entries'][0]['claims']
         with self.assertRaises(ValueError):
             self.verify(response)
