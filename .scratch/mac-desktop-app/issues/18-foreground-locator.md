@@ -2,7 +2,7 @@
 
 Type: task
 State: claimed
-Triage: ready-for-human
+Triage: ready-for-agent
 Blocked by: 09, 16
 Spec: ../spec.md
 
@@ -159,3 +159,7 @@ Spec: ../spec.md
 ### 2026-10-18 当前包权限核验仍待
 
 录屏重新登记已获范围授权，但系统添加要求本机解锁，未完成并安全撤回；没有授予新权限。当前包 installed 已实测，正向截图/OCR、助手停采与 CLI 组合仍无通过证据；CLI 接入在当前 App 责任链也发生 AppData 批准等待，不能以其他宿主的空窗口预检代签权限责任。App/后端与自有 CLI 已停，原目录恢复，原 AC 保持，见[本轮结果](../../real-chat-app-e2e/result-20261018.md)。
+
+### 2026-10-18 Agent 快速验收最新结果
+
+当前包已按批准路径处理录屏登记，但启动仍有缺权限用途提示，本段选择稍后，正式前台识别及助手焦点组合未通过。重复系统密码框已定位为验收中途撤销再登记 FDA 的 Agent 流程错误并修正，未改变产品门禁。CLI 接入元数据与绑定已恢复，第 01 条本机收取但 CLI 未返回正文，先由 Agent 定位；普通验收不再等待用户。原 AC 未新增勾选，见[最新阶段结果](../../real-chat-app-e2e/result-20261018.md)。
