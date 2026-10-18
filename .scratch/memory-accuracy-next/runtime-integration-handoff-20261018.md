@@ -33,3 +33,5 @@
 - bounded依赖v3离线102项/8源码mypy及双审通过，仅thinking选择；后继须新冻结，不复用旧预算。reference独立Vmax version6仍离线验证；core前四窗FULL通过但未整场闭账。
 
 - reference独立Vmax 41aaea33→241d6cab已集成；唯一records冲突同时保留bounded provider校验和新reference计划。统一926单测/52相关/8源码mypy通过，合并Spec0。后继bounded原15 cap30与reference原16 cap32将用此统一源码新冻结，均零重试。
+
+- 新依赖v3场6b75690f已closed2/30：P01类别/期限错且V漏检，potential bad_auto1、实际pending，正证0/7，14窗/生命周期unrun；资源清零/key删除。reference同源bd7187de仍运行，core同7bef留出9ce3731a已开。

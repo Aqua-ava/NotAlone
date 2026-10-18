@@ -152,3 +152,8 @@ P01 E选择momentary_state/.85/dependency=null，编译recent_state及观察点�
 ### 2026-10-18 双max正式安全停止
 
 [本场结果](runtime-thinking-result-20261018.md)：closed4/30，2审safe1/safety1，P02必要声明遗漏且V proof=null；potential bad_auto1、实际pending。正证1/7，余13窗及生命周期unrun，资源残留0；不得按913工程通过签质量。
+
+
+### 依赖v3场正式安全停止
+
+[实际结果](runtime-dependency-v3-result-20261018.md)：closed2/30，P01类别和双时间错误未被V识别，potential bad_auto1；正证0/7、后14窗和生命周期unrun。全部资源清理，P02依赖机制尚未覆盖，不能据此签v3效果。

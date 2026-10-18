@@ -133,3 +133,6 @@
 
 
 2026-10-18：[双max原15窗结果](../runtime-thinking-result-20261018.md) closed4/30，2窗独立审核safe1/safety1；P02必要指代声明来源遗漏，potential bad_auto1但实际pending。正证1/7，13窗及生命周期unrun，清理残留0。第一AC未满足，原claimed/默认空放行表和逐类批准保持；不合并历史质量分母。
+
+
+2026-10-18：[v3原15场](../runtime-dependency-v3-result-20261018.md) closed2/30，P01独立审核safety1/potential bad_auto1、实际pending；正证0/7，后14与生命周期unrun，来源残留0。工程统一926单测不抵消质量失败，第一AC/claimed/生产空表保持。
