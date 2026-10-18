@@ -4,7 +4,7 @@ import { BackendRequestFailure } from '../backend/json-client';
 import type { ContactSession } from '../contacts/session';
 import { readSyncStatus, setSyncEnabled, controlBackfill } from './status';
 
-type Scope = { generation: number; scopeRevision: number };
+type Scope = { generation: number };
 type Operation = 'refresh' | 'enable' | 'disable' | 'pause' | 'retry';
 
 export class SyncControlController {
@@ -28,9 +28,12 @@ export class SyncControlController {
     const generation = this.backend.getConnectionGeneration();
     const contact = this.contacts.getState();
     const next = generation !== undefined && ['ready', 'loading'].includes(contact.directoryPhase)
-      ? { generation, scopeRevision: contact.scopeRevision } : undefined;
-    if (next?.generation === this.scope?.generation && next?.scopeRevision === this.scope?.scopeRevision
-      && contact.scopeRevision === this.state.scopeRevision) return;
+      ? { generation } : undefined;
+    // 同步报告属于连接全局，展示联系人变化只更新页面命令修订。
+    if (next?.generation === this.scope?.generation) {
+      if (contact.scopeRevision !== this.state.scopeRevision) this.publish({ scopeRevision: contact.scopeRevision });
+      return;
+    }
     this.pending?.abort(); this.pending = undefined; ++this.epoch;
     this.scope = next;
     this.publish({ scopeRevision: contact.scopeRevision, phase: generation === undefined ? 'offline' : 'unavailable',
@@ -65,8 +68,7 @@ export class SyncControlController {
     const pending = new AbortController();
     this.pending = pending;
     const current = () => !pending.signal.aborted && scope === this.scope && epoch === this.epoch
-      && scope.generation === this.backend.getConnectionGeneration()
-      && scope.scopeRevision === this.contacts.getState().scopeRevision;
+      && scope.generation === this.backend.getConnectionGeneration();
     this.publish({ phase: 'loading', report: null, busy: operation === 'refresh' ? null : operation, errorCode: null });
     try {
       const result = operation === 'refresh' ? await readSyncStatus(this.backend, pending.signal)

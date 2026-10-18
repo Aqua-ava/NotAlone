@@ -9,6 +9,10 @@ import { isTransientForegroundContextChange, isUnsupportedForegroundConversation
 import type { ContactSelection } from '../../shared/contact-session-bridge';
 
 type Flight = { abort: AbortController; promise: Promise<void> };
+const awaitingSelectionReasons = new Set([
+  'ambiguous_requires_selection', 'unmatched_requires_selection',
+  'session_candidates_truncated', 'manual_confirmation_required',
+]);
 
 export interface ObservationClock {
   schedule(callback: () => Promise<void>, delayMs: number): unknown;
@@ -31,7 +35,9 @@ export class ForegroundController {
   private refreshAfterHelperFocus = false;
   private changePending = false;
   private changeSource: ForegroundChangeSource | undefined;
-  private syncPermit: { generation: number; scopeRevision: number } | undefined;
+  private syncPermit: { generation: number } | undefined;
+  private captureAuthorityRevision = 0;
+  private selectingObservedContact = false;
   private manualRequired = false;
   private flight: Flight | undefined;
   private nameExpiry: ReturnType<typeof setTimeout> | undefined;
@@ -50,7 +56,7 @@ export class ForegroundController {
     this.unsubscribe = [backend.onStateChanged(() => {
       const generation = backend.getConnectionGeneration();
       if (generation === this.generation) return;
-      this.generation = generation; this.syncPermit = undefined;
+      this.generation = generation; this.syncPermit = undefined; ++this.captureAuthorityRevision;
       this.qualification = undefined;
       this.invalidatePending();
       this.clearObservation('unavailable', 'connection_changed'); this.scheduleNext();
@@ -58,7 +64,10 @@ export class ForegroundController {
       if (state.scopeRevision !== this.scopeRevision) {
         this.scopeRevision = state.scopeRevision;
         this.qualification = undefined;
-        this.invalidatePending(); this.clearObservation('idle', 'contact_changed');
+        if (!this.selectingObservedContact) {
+          ++this.captureAuthorityRevision;
+          this.invalidatePending(); this.clearObservation('idle', 'contact_changed');
+        }
       }
       this.updateChangeSource();
     })];
@@ -71,9 +80,11 @@ export class ForegroundController {
   }
   setSyncControlState(state: SyncControlState): void {
     const generation = this.backend.getConnectionGeneration();
+    const hadPermit = Boolean(this.syncPermit);
     this.syncPermit = state.phase === 'ready' && state.report?.enabled === true && state.busy === null
-      && state.scopeRevision === this.contacts.getState().scopeRevision && generation !== undefined
-      ? { generation, scopeRevision: state.scopeRevision } : undefined;
+      && generation !== undefined
+      ? { generation } : undefined;
+    if (hadPermit && !this.syncPermit) ++this.captureAuthorityRevision;
     if (!this.syncPermit) this.changePending = false;
     this.updateChangeSource();
   }
@@ -82,12 +93,12 @@ export class ForegroundController {
     const generation = this.backend.getConnectionGeneration();
     const observed = this.state.observedAt;
     const capturedAt = Date.parse(observed ?? '');
-    if (!this.continuous || this.disposed || this.stopped || this.state.suspendedByHelperFocus
+    if (!this.continuous || this.disposed || this.stopped || this.state.manualInput || this.state.suspendedByHelperFocus
       || this.readingScopeChanges > 0 || generation === undefined || !this.syncPermit
-      || this.syncPermit.generation !== generation || this.syncPermit.scopeRevision !== contact.scopeRevision
+      || this.syncPermit.generation !== generation
       || !['ready', 'loading'].includes(contact.directoryPhase) || this.state.wechatInFront !== true
       || !observed || !Number.isFinite(capturedAt) || capturedAt > Date.now() || Date.now() - capturedAt >= 5000) return;
-    return { scope: `${generation}:${contact.scopeRevision}`, observation: observed };
+    return { scope: `${generation}:${this.captureAuthorityRevision}`, observation: observed };
   }
   private updateChangeSource(): void {
     const permit = this.changePermit();
@@ -109,7 +120,7 @@ export class ForegroundController {
   confirmManual(selection: ContactSelection) {
     const generation = this.backend.getConnectionGeneration();
     if (this.disposed || this.stopped || generation === undefined) throw new Error('本次联系人确认不可用。');
-    this.cancelScheduled(); this.invalidatePending(); ++this.epoch;
+    this.cancelScheduled(); this.invalidatePending(); ++this.epoch; ++this.captureAuthorityRevision;
     const selected = this.contacts.selectContact(selection);
     this.state = { ...this.state, manualInput: true, unsupportedConversation: false };
     this.qualification = { generation, scopeRevision: selected.scopeRevision, contactId: selection.contactId, kind: 'manual-confirmed' };
@@ -149,12 +160,13 @@ export class ForegroundController {
       || (contact.directoryPhase !== 'ready' && contact.directoryPhase !== 'loading')) {
       throw new Error('联系人确认已失效，请重新选择本次联系人。');
     }
-    this.invalidatePending(); ++this.epoch;
+    this.invalidatePending(); ++this.epoch; ++this.captureAuthorityRevision;
     const selected = this.contacts.selectContact({ contactId: selection.contactId, scopeRevision: contact.scopeRevision });
     this.manualRequired = false;
     this.state = { ...this.state, manualInput: false };
     this.qualification = { generation, scopeRevision: selected.scopeRevision, contactId: selection.contactId, kind: 'manual-confirmed' };
-    this.publish({ foregroundRevision: this.state.foregroundRevision + 1, suggestedContactId: null });
+    this.publish({ foregroundRevision: this.state.foregroundRevision + 1, suggestedContactId: null,
+      observedAt: null, wechatInFront: null, recognizedName: null, recognitionConfidence: null });
     return selected;
   }
   onStateChanged(listener: (state: ForegroundState) => void): () => void {
@@ -167,8 +179,11 @@ export class ForegroundController {
   }
   // 仅可信宿主的无身份变化提示；真实失败的退避不受事件风暴影响。
   notifyForegroundChange(): void {
-    if (!this.continuous || this.disposed || this.stopped || this.state.suspendedByHelperFocus
+    if (!this.continuous || this.disposed || this.stopped || this.state.manualInput || this.state.suspendedByHelperFocus
       || this.readingScopeChanges > 0 || this.backend.getConnectionGeneration() === undefined) return;
+    // 顶部变化只撤销旧生成资格，不携带或授予新联系人身份。
+    this.qualification = undefined;
+    this.publish({ foregroundRevision: this.state.foregroundRevision + 1 });
     if (this.flight) { this.changePending = true; return; }
     if (this.failures > 0) return;
     this.cancelScheduled();
@@ -231,6 +246,9 @@ export class ForegroundController {
       signal: abort.signal, timeoutMs: 3500, maxResponseBytes: 4096 }).then((response) => {
       if (!current() || response.generation !== generation) return;
       const observation = foregroundObservation(response.data);
+      // 丢弃已过时的身份/待选择结果，避免旧建议建立永久人工门；技术失败及安全暂停仍处理。
+      if (this.changePending && (observation.phase === 'confirmed'
+        || observation.phase === 'manual-required' && awaitingSelectionReasons.has(observation.reason))) return;
       // 群聊暂停跨助手获焦/失败保留，只有新的完整私聊证据才能解除。
       const privateVerified = observation.phase === 'confirmed'
         || (observation.phase === 'manual-required' && observation.reason === 'unmatched_requires_selection');
@@ -255,7 +273,10 @@ export class ForegroundController {
             recognizedName: observation.recognizedName, recognitionConfidence: observation.recognitionConfidence,
             suggestedContactId: observation.contactId }); return;
         }
-        const selected = this.contacts.selectContact({ contactId: observation.contactId, scopeRevision: scope });
+        this.selectingObservedContact = true;
+        let selected;
+        try { selected = this.contacts.selectContact({ contactId: observation.contactId, scopeRevision: scope }); }
+        finally { this.selectingObservedContact = false; }
         this.qualification = { generation, scopeRevision: selected.scopeRevision,
           contactId: observation.contactId, kind: 'verified-binding' };
       }
@@ -274,10 +295,7 @@ export class ForegroundController {
     const settled = request.finally(() => {
       if (this.flight?.abort === abort) {
         this.flight = undefined;
-        const awaitingContact = this.state.phase === 'manual-required' && [
-          'ambiguous_requires_selection', 'unmatched_requires_selection',
-          'session_candidates_truncated', 'manual_confirmation_required',
-        ].includes(this.state.reason ?? '');
+        const awaitingContact = this.state.phase === 'manual-required' && awaitingSelectionReasons.has(this.state.reason ?? '');
         this.failures = this.state.phase === 'unavailable' || (this.state.phase === 'manual-required' && !awaitingContact)
           ? Math.min(2, this.failures + 1) : 0;
         const repeat = this.changePending && this.failures === 0;
@@ -318,6 +336,7 @@ export class ForegroundController {
     };
   }
   private invalidateReadingScope(): void {
+    ++this.captureAuthorityRevision;
     this.qualification = undefined;
     this.invalidatePending(); ++this.epoch;
     this.clearObservation('manual-required', 'reading_scope_changed');

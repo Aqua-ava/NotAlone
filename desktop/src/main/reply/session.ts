@@ -100,6 +100,7 @@ export class ReplySession {
   private messagePending: AbortController | undefined;
   private readonly messageNotices: AssistantMessageNotices;
   private savedRead: AbortController | undefined;
+  private contactRestoreTimer: ReturnType<typeof setTimeout> | undefined;
   private readonly sessionProjection = new AssistantSessionProjection();
   private sessionDelete: AbortController | undefined;
   private catalogPending: AbortController | undefined;
@@ -140,6 +141,7 @@ export class ReplySession {
       const generation = backend.getConnectionGeneration();
       if (generation !== versionGeneration) {
         versionGeneration = generation;
+        this.cancelContactRestore();
         this.retainedContent.clear(); this.retainedRetries.clear(); this.restoredRetry = undefined; this.pendingContent = undefined; this.retainedSourceValidation = undefined; this.contentGeneration = undefined;
         this.publish({ inputBudgetNotice: undefined, scene: '', inputClearRevision: (this.state.inputClearRevision ?? 0) + 1 });
         this.generationJobs.cancelAll();
@@ -184,7 +186,8 @@ export class ReplySession {
       ...(revokedRead && this.state.savedSession?.phase === 'loading'
         ? { savedSession: { ...this.state.savedSession, phase: 'failed' as const } } : {}) });
     // 同一联系人重新确认不会改变范围修订；旧的未授权读取需要按新资格重读。
-    if (generationBlock === null && this.state.contactId && this.state.savedSession?.phase !== 'ready') {
+    if (generationBlock === null && this.state.contactId && this.state.savedSession?.phase !== 'ready'
+      && this.contactRestoreTimer === undefined) {
       void this.readSavedSession({ contactId: this.state.contactId, scopeRevision: this.state.scopeRevision });
     }
   }
@@ -489,6 +492,7 @@ export class ReplySession {
 
   async readSavedSession(selection: ContactSelection): Promise<void> {
     this.assertScope(selection);
+    this.cancelContactRestore();
     if (this.pendingExpressionPreferenceDeletions > 0 || this.pendingOwnerContextChanges > 0 || this.state.sessionDeletion === 'deleting'
       || this.catalogPending || this.state.sessionCatalog?.selectionPending) return;
     this.candidateRestoreOperation += 1;
@@ -2019,6 +2023,9 @@ export class ReplySession {
       throw new Error('请刷新会话列表并明确选择本次助手会话。');
     }
   }
+  private cancelContactRestore(): void {
+    clearTimeout(this.contactRestoreTimer); this.contactRestoreTimer = undefined;
+  }
   private receiveContact(state: ContactSessionState): void {
     if (state.directoryPhase === 'ready') {
       for (const [key, retry] of this.retainedRetries) if (!state.contacts.some((contact) => contact.contactId === retry.contactId)) this.retainedRetries.delete(key);
@@ -2033,6 +2040,7 @@ export class ReplySession {
       }
     } else if (!['ready', 'loading'].includes(state.directoryPhase)) this.retainedContent.clear();
     if (state.scopeRevision !== this.state.scopeRevision || state.selectedContactId !== this.state.contactId) {
+      this.cancelContactRestore();
       const generation = this.backend.getConnectionGeneration();
       if (generation !== undefined && generation === this.contentGeneration && this.state.contactId
         && state.contacts.some((contact) => contact.contactId === this.state.contactId)) {
@@ -2065,7 +2073,15 @@ export class ReplySession {
       this.candidateSourceCheck = undefined;
       // 同连接恢复前先核验原会话；新连接没有输入缓存，不触发生成。
       if (state.selectedContactId && state.directoryPhase === 'ready') {
-        void this.readSavedSession({ contactId: state.selectedContactId, scopeRevision: state.scopeRevision });
+        const selection = { contactId: state.selectedContactId, scopeRevision: state.scopeRevision };
+        this.publish({ savedSession: { phase: 'loading', sessionId: null, turns: [], inputs: [], currentInputVersionId: null } });
+        // 身份已立即发布；短暂途经的联系人不启动完整恢复，显式读取仍立即执行。
+        this.contactRestoreTimer = setTimeout(() => {
+          this.contactRestoreTimer = undefined;
+          if (generation !== this.backend.getConnectionGeneration() || selection.contactId !== this.state.contactId
+            || selection.scopeRevision !== this.state.scopeRevision) return;
+          void this.readSavedSession(selection);
+        }, 150);
       }
     } else if (state.draft !== this.draft) {
       this.draft = state.draft;

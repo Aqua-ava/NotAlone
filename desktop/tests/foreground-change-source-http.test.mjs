@@ -111,3 +111,86 @@ test('变化源仅在已确认enabled且范围／代际有效时运行，关闭�
   }finally{unsubscribe();foreground.dispose();client.cancelPending();}
  });
 });
+
+test('自动切人保留采集许可与全局同步报告，在途变化只提交最新联系人', async () => {
+ await ports.withContinuousForegroundFixture(async fixture => {
+  const [a,b] = fixture.data.contact_ids;
+  const names = ['合成切换甲','合成切换乙'];
+  await fixture.setCli({sessions:[a,b].map((contact,i)=>({username:`wxid_synthetic_${i?'b':'a'}`,display_name:names[i],chat_type:'private',last_timestamp:1700000000})).concat([{username:'wxid_synthetic_unbound',display_name:'合成未绑定旧会话',chat_type:'private',last_timestamp:1700000000}]),messages:{}});
+  await fixture.request('/api/sync/cli-bindings/confirm',{selections:[{locator:'wxid_synthetic_a',contact_id:a},{locator:'wxid_synthetic_b',contact_id:b}]});
+  await fixture.request('/api/sync/enable',{});
+  const client = new ports.JsonClient(await ports.readConnection(fixture.infoPath));
+  let statuses=0, hold, disableHold;
+  const backend={getConnectionGeneration:()=>1,onStateChanged:()=>()=>{},async requestJson(request){
+   if(request.path==='/api/sync/status')statuses++;
+   if(request.path==='/api/sync/disable'&&disableHold){disableHold.received.resolve();await disableHold.release.promise;}
+   const result=await client.perform(request);
+   if(request.path.endsWith('/observe')&&hold){const waiting=hold;hold=undefined;waiting.received.resolve();await waiting.release.promise;}
+   return {...result,generation:1};
+  }};
+  const contacts=new ports.ContactSession(()=>ports.readContactDirectory(backend));contacts.setConnection(1);await contacts.refreshContacts();
+  const tasks=new Map();let key=0;const clock={schedule(callback,delay){tasks.set(++key,{callback,delay});return key;},cancel(handle){tasks.delete(handle);}};
+  const foreground=new ports.ForegroundController(backend,contacts,clock);
+  const permits=[];foreground.attachChangeSource({update(permit){permits.push(permit);},dispose(){}});
+  const sync=new ports.SyncControlController(backend,contacts,()=>foreground.beginReadingScopeChange());
+  const unsubscribe=sync.onStateChanged(state=>foreground.setSyncControlState(state));
+  const setName=name=>writeFile(path.join(fixture.directory,'probe-state.json'),JSON.stringify({capture_version:'automatic-header-v3',display_name:name}));
+  try {
+   const deadline=Date.now()+3000;while(sync.getState().phase!=='ready'&&Date.now()<deadline)await new Promise(r=>setTimeout(r,10));
+   foreground.setSyncControlState(sync.getState());foreground.startContinuous();
+   await setName(names[0]);await foreground.observeBeforeShow();await flush();
+   const readyEnd=Date.now()+3000;while(sync.getState().phase!=='ready'&&Date.now()<readyEnd)await new Promise(r=>setTimeout(r,10));
+   const scope=permits.at(-1)?.scope;assert.ok(scope);const statusCount=statuses;permits.length=0;
+   await setName(names[1]);await foreground.observeBeforeShow();await flush();
+   assert.equal(contacts.getState().selectedContactId,b);
+   assert.equal(statuses,statusCount,'自动切人不能重新读取全局同步状态');
+   assert.ok(permits.length>0&&permits.every(permit=>permit?.scope===scope),'切人不能撤销或重建采集许可');
+   const selected=[];const stop=contacts.onStateChanged(state=>selected.push(state.selectedContactId));
+   const waiting={received:deferred(),release:deferred()};hold=waiting;
+   await setName(names[0]);const pending=foreground.observeBeforeShow();await waiting.received.promise;
+   await setName(names[1]);foreground.notifyForegroundChange();
+   assert.equal(foreground.getGenerationBlock(),'foreground-confirmation-required','新顶部未核验前不能沿用旧联系人生成');
+   waiting.release.resolve();await pending;
+   const end=Date.now()+3000;while(foreground.getGenerationBlock()!==null&&Date.now()<end)await new Promise(r=>setTimeout(r,10));
+   await flush();stop();assert.ok(!selected.includes(a),'已有更新提示时旧联系人不能短暂覆盖界面');
+   assert.equal(contacts.getState().selectedContactId,b);
+   assert.equal(foreground.getGenerationBlock(),null,'最新正式观察重新授予资格');
+   for(const obsoleteName of ['合成未绑定旧会话','合成不存在旧会话']) {
+    const obsolete={received:deferred(),release:deferred()};hold=obsolete;
+    const oldStates=[];const stopStates=foreground.onStateChanged(state=>oldStates.push(state));
+    await setName(obsoleteName);const obsoletePending=foreground.observeBeforeShow();await obsolete.received.promise;
+    await setName(names[0]);foreground.notifyForegroundChange();obsolete.release.resolve();await obsoletePending;
+    const latestEnd=Date.now()+3000;while(foreground.getGenerationBlock()!==null&&Date.now()<latestEnd)await new Promise(r=>setTimeout(r,10));
+    stopStates();
+    assert.equal(contacts.getState().selectedContactId,a,'过时未绑定或歧义观察不能阻止最新可靠联系人自动确认');
+    assert.equal(foreground.getState().confirmation,'verified-binding');
+    assert.ok(oldStates.every(state=>state.phase!=='manual-required'&&state.recognizedName!==obsoleteName),'过时名称和建议不得发布');
+    await setName(names[1]);await foreground.observeBeforeShow();
+   }
+   const staleScope=contacts.getState().scopeRevision;
+   contacts.selectContact({contactId:a,scopeRevision:staleScope});
+   assert.equal(permits.at(-1),undefined,'人工切换撤销旧观察许可');
+   await assert.rejects(sync.disable({scopeRevision:staleScope}));
+   await setName(names[0]);await foreground.observeBeforeShow();
+   const afterManual=permits.at(-1)?.scope;assert.ok(afterManual&&afterManual!==scope);
+   foreground.confirm({contactId:a,contactScopeRevision:contacts.getState().scopeRevision,
+    foregroundRevision:foreground.getState().foregroundRevision});
+   assert.equal(permits.at(-1),undefined,'同联系人显式确认也不能续用旧采集证据');
+   await foreground.observeBeforeShow();
+
+   const finishBinding=foreground.beginReadingScopeChange();
+   assert.equal(permits.at(-1),undefined,'绑定修改开始立即停源');finishBinding();
+   assert.equal(permits.at(-1),undefined,'绑定修改结束不能沿用旧观察');
+   await foreground.observeBeforeShow();assert.notEqual(permits.at(-1)?.scope,afterManual);
+   disableHold={received:deferred(),release:deferred()};
+   const disabling=sync.disable({scopeRevision:contacts.getState().scopeRevision});await disableHold.received.promise;
+   assert.equal(permits.at(-1),undefined);
+   contacts.selectContact({contactId:b,scopeRevision:contacts.getState().scopeRevision});
+   disableHold.release.resolve();await disabling;
+   assert.equal(sync.getState().phase,'ready');assert.equal(sync.getState().report.enabled,false,'关闭跨切人仍须完成');
+   assert.equal(permits.at(-1),undefined);
+   contacts.setConnection(undefined);assert.equal(sync.getState().report,null,'目录失效必须丢弃全局授权状态');
+
+  } finally {unsubscribe();foreground.dispose();client.cancelPending();}
+ });
+});

@@ -53,6 +53,10 @@ export function App() {
     </header>
     <div className="ime-workspace" ref={workspace}>
     <div className="helper-context"><ForegroundPanel state={foreground} session={contactSession} permission={permission} /></div>
+    {replies.state.contactId && replies.state.contactId === contactSession.state.selectedContactId
+      && replies.state.savedSession?.phase === 'loading' && <p role="status" className="rewrite-privacy">
+        已切换联系人，正在恢复这位联系人的历史讨论与回复…
+      </p>}
     {replies.state.mode === 'rewrite_draft' ? <RewriteInput contacts={contactSession} replies={replies} />
       : replies.state.mode === 'initiate_conversation' ? <ProactiveReplyInput replies={replies} /> : <DirectedReplyInput replies={replies} />}
     {replies.state.messageNotice.phase === 'connected' && <>
