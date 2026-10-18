@@ -26,9 +26,13 @@ export async function resolveSyncProbePath(resourcesDirectory: string | undefine
   return bundledRuntime();
 }
 
-// 辅助流只使用当前有效包的独立身份，绝不从配置的外部探针旁猜测兄弟文件。
-export async function resolveHeaderChangeSourcePath(resourcesDirectory: string | undefined): Promise<string | undefined> {
-  return (await verifiedBundledRuntime(resourcesDirectory))?.headerChange;
+// 辅助流只使用正式资源或显式开发入口的固定资源，均须通过完整组校验。
+// 不从配置的外部探针旁猜测兄弟文件，也不改变后端运行模式。
+export async function resolveHeaderChangeSourcePath(resourcesDirectory: string | undefined,
+  developmentProjectDirectory?: string): Promise<string | undefined> {
+  const resources = resourcesDirectory ?? (developmentProjectDirectory && path.isAbsolute(developmentProjectDirectory)
+    ? path.join(developmentProjectDirectory, 'desktop', '.dev', 'resources') : undefined);
+  return (await verifiedBundledRuntime(resources))?.headerChange;
 }
 
 // 仅核对包内清单和字节完整性，不运行输入、加载动态库或宣称发行者可信。

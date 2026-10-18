@@ -89,7 +89,7 @@ void app.whenReady().then(async () => {
   app.on('before-quit', () => screenPermission.dispose());
   const headerChangeDiagnostics = openHeaderChangeDiagnostics(process.env);
   const headerChanges = new NativeHeaderChangeSource(async () =>
-    resolveHeaderChangeSourcePath(resourcesDirectory), headerChangeDiagnostics);
+    resolveHeaderChangeSourcePath(resourcesDirectory, development?.projectDirectory), headerChangeDiagnostics);
   app.on('will-quit', () => headerChangeDiagnostics?.close());
   foreground.attachChangeSource(headerChanges);
   windows.setHelperObservation({ beforeShow: () => foreground.observeBeforeShow(),

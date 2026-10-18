@@ -104,3 +104,27 @@ test('前台识别说明等待微信或同步关闭，保留切回手动入口',
   assert.ok(buttons(panel).some(button => button.props.children === '切换为手动输入'));
  }
 });
+
+
+test('恢复后微信可靠观察授予资格，进入助手暂停采集但仍可使用该联系人', async t => {
+ const f = fixture(t); f.foreground.startContinuous(); f.foreground.notifyHelperLifecycle('focused');
+ await f.enterManual(); await f.bridge.resume(f.selection());
+ let observations = 0;
+ f.setObservation(async () => { observations += 1; return { generation: 1, data: {
+  observation_id: id, observed_at: new Date().toISOString(), phase: 'confirmed',
+  reason: 'confirmed_active_binding', probe_available: true, wechat_in_front: true,
+  binding_id: id, contact_id: id } }; });
+ f.foreground.notifyHelperLifecycle('blurred');
+ const [key, observe] = f.scheduled.entries().next().value; f.scheduled.delete(key);
+ await observe();
+ assert.equal(observations, 1);
+ assert.equal(f.foreground.getState().confirmedContactId, id);
+ assert.equal(f.foreground.getGenerationBlock(), null);
+ f.foreground.notifyHelperLifecycle('focused');
+ assert.equal(f.foreground.getState().reason, 'helper_focused');
+ assert.equal(f.foreground.getState().confirmedContactId, id, '正常打开助手必须保留刚确认的联系人');
+ assert.equal(f.foreground.getGenerationBlock(), null, '助手暂停采集不应禁用已确认联系人的生成');
+ await f.foreground.observeBeforeShow();
+ assert.equal(observations, 1, '助手在前台不额外采集微信');
+ assert.equal(f.scheduled.size, 0);
+});

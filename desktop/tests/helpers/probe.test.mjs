@@ -1,13 +1,19 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { access, chmod, mkdtemp, mkdir, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
+import { access, chmod, cp, mkdtemp, mkdir, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { build } from 'esbuild';
 import { repositoryBuildInvocation } from '../../scripts/prepare-probe.mjs';
 import { inspectRuntime } from '../../scripts/probe-runtime.mjs';
+
+test('开发加速源接线使用已验证仓库根，不使用临时Electron应用目录', async () => {
+  const entry = await readFile('src/main/index.ts', 'utf8');
+  assert.match(entry, /resolveHeaderChangeSourcePath\(resourcesDirectory, development\?\.projectDirectory\)/);
+  assert.doesNotMatch(entry, /resolveHeaderChangeSourcePath\([^;]*app\.getAppPath\(/);
+});
 
 test('仓库构建 shell 不执行合成启动配置，配置目录隔离于用户目录', { skip: process.platform !== 'darwin' }, async () => {
   const owned = await mkdtemp(path.join(tmpdir(), 'notalone-build-shell-'));
@@ -71,7 +77,7 @@ if (process.argv[4] === 'save') {
 const config = await loadBackendConfiguration(userData, resources);
 config.projectDirectory = userData;
 process.stdout.write(JSON.stringify({ paths, probe: backendEnvironment(config, userData).NOTALONE_SYNC_PROBE,
-  headerChange: await resolveHeaderChangeSourcePath(resources) }));`, resolveDir: process.cwd(), sourcefile: 'probe-startup.ts', loader: 'ts' }, outfile: runner, bundle: true, platform: 'node', format: 'esm', logLevel: 'silent' });
+  headerChange: await resolveHeaderChangeSourcePath(resources, process.env.NOTALONE_SYNTHETIC_PROJECT_PATH) }));`, resolveDir: process.cwd(), sourcefile: 'probe-startup.ts', loader: 'ts' }, outfile: runner, bundle: true, platform: 'node', format: 'esm', logLevel: 'silent' });
     const startup = (mode = 'read', extra = {}) => spawnSync(process.execPath, [runner, resources, userData, mode], {
       encoding: 'utf8', timeout: 10_000, env: { PATH: '/usr/bin:/bin', NOTALONE_BACKEND_INFO: path.join(userData, 'backend.info'), ...extra },
     });
@@ -88,6 +94,19 @@ process.stdout.write(JSON.stringify({ paths, probe: backendEnvironment(config, u
     assert.equal(JSON.parse(external.stdout).headerChange, helper, '外部正式probe也只用当前有效包内的独立helper。');
     const unbundled = startup('read', { NOTALONE_SYNC_PROBE: path.join(userData, 'external-probe'), NOTALONE_SYNTHETIC_NO_RESOURCES: '1' });
     assert.equal(JSON.parse(unbundled.stdout).headerChange, undefined, '无有效包时不查外部probe的兄弟文件。');
+
+    const developmentApp = path.join(owned, 'desktop');
+    const developmentResources = path.join(developmentApp, '.dev', 'resources');
+    await mkdir(developmentResources, { recursive: true });
+    await cp(destination, path.join(developmentResources, 'notalone-probe'), { recursive: true });
+    const developmentEnvironment = { NOTALONE_SYNTHETIC_NO_RESOURCES: '1', NOTALONE_SYNTHETIC_PROJECT_PATH: owned };
+    assert.equal(JSON.parse(startup('read', developmentEnvironment).stdout).headerChange,
+      path.join(developmentResources, 'notalone-probe', 'notalone-header-change-source'), '开发版只从固定.dev/resources整组校验辅助源。');
+    assert.equal(JSON.parse(startup('read', { NOTALONE_SYNTHETIC_PROJECT_PATH: owned }).stdout).headerChange,
+      helper, '正式资源优先，不能使用开发副本。');
+    await writeFile(path.join(developmentResources, 'notalone-probe', 'notalone-header-change-source'), 'invalid');
+    assert.equal(JSON.parse(startup('read', developmentEnvironment).stdout).headerChange,
+      undefined, '开发副本字节不匹配时停用，不绕过完整性核验。');
 
     const helperBytes = await readFile(helper);
     await chmod(helper, 0o644);
