@@ -75,7 +75,8 @@ class TencentL1HttpTest(CoreBusinessFlowFixture, unittest.TestCase):
 
     def setUp(self):
         self.addCleanup(patch.stopall)
-        patch("notalone.memory_extraction.recall.embed_texts", side_effect=lambda texts: [(1.0, 0.0) for _ in texts]).start()
+        self.embedding_patch = patch("notalone.memory_extraction.recall.embed_texts", side_effect=lambda texts: [(1.0, 0.0) for _ in texts])
+        self.embedding_patch.start()
         super().setUp()
         self.contact_id = uuid4()
         with psycopg.connect(self.database_url) as connection:
@@ -85,6 +86,23 @@ class TencentL1HttpTest(CoreBusinessFlowFixture, unittest.TestCase):
 
     def memories(self):
         return self._ok(f'/api/contacts/{self.contact_id}/memories')['memories']
+
+    def test_missing_embedding_keeps_candidate_with_public_preparation_diagnostic(self):
+        from tempfile import TemporaryDirectory
+        from notalone.memory_extraction import recall
+        first, new = '周末喜欢游泳。', '周末喜欢读书。'
+        self.extraction_model.facts = {t: ('preference', 'health') for t in (first, new)}
+        self.extraction_model.actions = {first: 'store', new: 'store'}
+        self._import_evolution_source([(False, first)], when=self.when)
+        self.embedding_patch.stop()
+        with TemporaryDirectory() as empty, patch.dict('os.environ', {'NOTALONE_MEMORY_EMBEDDING_CACHE': empty}), patch.object(recall, '_MODEL', None):
+            self._import_evolution_source([(False, new)], when=self.when + timedelta(days=1))
+        self.assertEqual([m['text'] for m in self.memories()], [first])
+        candidates = self._ok(f'/api/contacts/{self.contact_id}/memory-candidates')['candidates']
+        pending = next(c for c in candidates if c['text'] == new)
+        self.assertEqual(pending['status'], 'pending')
+        self.assertIn('embedding_unavailable', pending['failure_reason'] or '')
+        self.assertIn('scripts/prepare_memory_embedding.py', pending['failure_reason'])
 
     def test_first_batch_semantic_duplicates_keep_one_fact(self):
         first, second = '周末喜欢游泳。', '喜欢在周末游泳锻炼。'
