@@ -21,3 +21,5 @@
 复用 `tests.integration.server.test_observation_auto_flow.ObservationAutoFlowFixture.record/publish` 的输入结构：在隔离库为合成 owner/contact 创建已确认 `PostgresConversationBindingRepository.create_binding`，通过 `PostgresObservationStore.record_batch_with_messages` 提交 `CLI_BACKGROUND` 合成消息，再将 `created_message_ids` 交给 `EventBusMessagePublisher.publish_message_created`；host 使用真实生产 worker/runtime factory，不使用 fixture 的 `ObservationModel` 或 `SyntheticSupportingVerifier`。启动 `host.start_scheduling(owner_id=...)`，先提交 1 条完成首次预热，再提交 1 条确认无提前派发，第三条达到阈值 2；下一条不足阈值时仅控制 `extraction_schedule.utcnow` 到最后输入后 601 秒，让同一 scanner 自行派发。通过 HTTP task/current-memory 和 L2/L3 当前状态断言，不直接入库候选或调用 worker，所有模型传输仍绑定同一个问题预算账本。
 
 相邻验证：`test_observation_auto_flow` 的 replay/调度失败重试及 `tests.unit.application.test_import_service` 共 10 项通过；另 `test_committed_observation_automatically_processes_original_task` 的任务成功，但旧断言仍期待 1 条 pending candidate，现有默认自动采纳实际为 0，未在调度票修改该旧语义夹具。
+
+后续修复旧断言：观察 HTTP 夹具接入生产 MemoryService 装配，原单例改从公开 `/api/contacts/{id}/memories` 验证自动采纳后的正确正文与 `adoption_method=auto`，不再要求候选保持 pending。
