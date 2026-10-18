@@ -27,7 +27,7 @@ corrections非空时每个target还须输出correction_respected布尔值，逐�
 直接事实/偏好要求内容被来源直接支持；推断不要求结论逐字出现在来源，要求引用的事实能合理支撑推理，保留限定、不确定性和相反证据。凭空推测、把单次行为写成确定人格、缺少依据或概率限定要拒绝。
 矛盾需要相冲突的真实主张，不能自行编造矛盾。L3还须有持续背景价值，不收短期安排。核验标题、hint和basis也不能无据。
 不论标题和kind，只要存在沟通操作、决策方法、安慰/回复指令或Agent行动建议，contains_action_guidance必须true并拒绝。
-输出{"items":[{"index":0,"sha256":"复制target摘要","supported":true,"contains_action_guidance":false,"reasons":[],"statements":[{"index":0,"kind":"fact","support_type":"direct/inference/contradiction之一","supported":true,"uncertainty_preserved":true,"basis":"为什么依据支持该事实或推断，说明局限","sources":[{"memory_id":"被该条引用的ID","revision":1,"quote":"该版本memories.text中的逐字片段"}]}]}]}。
+输出{"items":[{"index":0,"sha256":"复制target摘要","supported":true,"contains_action_guidance":false,"correction_respected":true,"reasons":[],"statements":[{"index":0,"kind":"fact","support_type":"direct/inference/contradiction之一","supported":true,"uncertainty_preserved":true,"temporal_basis":"current_unverified","temporal_references":[],"basis":"为什么依据支持该事实或推断，说明局限","sources":[{"memory_id":"被该条引用的ID","revision":1,"quote":"该版本memories.text中的逐字片段"}]}]}]}。
 kind只能是fact/preference/inference/contradiction，复制对应proposal statement的实际kind，不能输出“与原文一致”等说明文字。
 每个target和statement各出现一次。L2每段一个statement；L3每entry一个statement且index=0。fact/preference的support_type为direct，inference为inference，contradiction为contradiction。
 L3每个statement还须包含temporal_basis（static_fact/current_verified/historical/current_unverified）和temporal_references（memory_id/revision数组）。稳定的临时现状只可用current_verified且引用timing.current_status实际为current_verified的来源；未知现状仅uncertain，历史仅historical。静态事实可用static_fact且temporal_references为空。推断仅用current_unverified且为空。

@@ -148,3 +148,16 @@ class PersonalBackgroundVerificationTest(unittest.TestCase):
         self.assertEqual(self.verify(audit_kind='与原文一致', bad_digest=True)[0]['accepted_indices'], [])
         self.assertEqual(self.verify(audit_kind='fact')[0]['accepted_indices'], [])
         self.assertEqual(self.verify(audit_kind='同上')[0]['accepted_indices'], [])
+
+    def test_personal_verifier_example_includes_time_and_correction_fields(self):
+        from notalone.memory.personal_organization import VERIFICATION_PROMPT, verify_result
+        example = json.loads('{' + VERIFICATION_PROMPT.split('输出{', 1)[1].split('。', 1)[0])
+        self.assertIn('correction_respected', example['items'][0])
+        statement = example['items'][0]['statements'][0]
+        self.assertIn('temporal_basis', statement)
+        self.assertIn('temporal_references', statement)
+        result, model = self.verify()
+        response = deepcopy(model.response)
+        response['items'][0]['statements'][0].pop('temporal_basis')
+        response['items'][0]['statements'][0].pop('temporal_references')
+        self.assertEqual(verify_result(response, {'entries': [self.entry]}, [self.memory.to_payload()], 'l3')['accepted_indices'], [])
