@@ -376,7 +376,7 @@ class MemoryAdoption:
             similarity_started_at = datetime.now(timezone.utc)
             planned = batch_plan.get(index)
             if planned is not None:
-                similar, planned_decision = planned
+                similar, planned_decision, pending_reason = planned
                 shortlist_truncated = False
             else:
                 similar, shortlist_truncated = self._similar_memories(scope, fact, pool)
@@ -439,7 +439,7 @@ class MemoryAdoption:
                 # 段或指向范围外）：不能静默按 ADD 落库，否则被取代的
                 # 旧记忆保持 active，与新事实并存。降级为待定候选，
                 # 由用户确认。
-                self._create_pending_candidate(scope, fact)
+                self._create_pending_candidate(scope, fact, failure_reason=pending_reason if planned is not None else None)
                 if shortlist_truncated:
                     disposition = "pending_incomplete_shortlist"
                 elif action:
@@ -562,7 +562,7 @@ class MemoryAdoption:
         runtime = getattr(self._adjudication_runtime, 'adjudicate_batch', None)
         if not callable(runtime) or not self._dimension_release.verified_sources:
             return {}
-        from notalone.memory_extraction.recall import hybrid_candidates
+        from notalone.memory_extraction.recall import hybrid_candidates, EmbeddingUnavailableError, EMBEDDING_UNAVAILABLE
         plans = {}
         for owner, pool in ((False, contact_pool), (True, owner_pool)):
             eligible = [(index, fact) for index, fact in enumerate(facts)
@@ -595,14 +595,15 @@ class MemoryAdoption:
                     # 事件的独立来源不能仅凭正文相似被skip吞掉。
                     if decision.action is AdjudicationAction.NOOP and fact.event is not None:
                         decision = None
-                    plans[index] = (rows, decision)
+                    plans[index] = (rows, decision, None)
                 record('batch_adjudication', {'memories': memories, 'decisions': decisions,
                        'recall': 'bm25_local_embedding_rrf', 'scope_kind': 'owner' if owner else 'contact'})
-            except (ValueError, ImportError, OSError, ExtractionRuntimeError):
+            except (ValueError, ImportError, OSError, ExtractionRuntimeError) as error:
                 if called:
                     self._record_ledger(scope, LedgerOutcome.RUN_FAILED, started)
-                plans.update((index, ([], None)) for index, _ in eligible)
-                record('batch_adjudication', {'status': 'pending', 'reason': 'recall_or_model_failed'})
+                reason = EMBEDDING_UNAVAILABLE if isinstance(error, EmbeddingUnavailableError) else None
+                plans.update((index, ([], None, reason)) for index, _ in eligible)
+                record('batch_adjudication', {'status': 'pending', 'reason': reason or 'recall_or_model_failed'})
         return plans
 
     def _adjudicate(self, fact, similar, scope: ContactScope):
@@ -1014,9 +1015,11 @@ class MemoryAdoption:
         return bool(matches)
 
     def _create_pending_candidate(
-        self, scope: ContactScope, fact: ExtractedFact
+        self, scope: ContactScope, fact: ExtractedFact, *, failure_reason: str | None = None
     ) -> MemoryCandidate:
         candidate = _candidate_from_fact(scope, fact, namespace=self._candidate_namespace)
+        if failure_reason:
+            candidate = replace(candidate, failure_reason=failure_reason)
         for existing in self._memory_port.list_pending_candidates(scope):
             if same_pending_identity(existing, candidate):
                 record("write_result", {"operation": "reuse_pending", "actual": existing,

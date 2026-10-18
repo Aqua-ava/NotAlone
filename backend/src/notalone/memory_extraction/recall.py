@@ -10,23 +10,32 @@ _MODEL = None
 _MODEL_LOCK = Lock()
 
 
+class EmbeddingUnavailableError(OSError):
+    """本机语义模型缺失、加载或推理失败，可安全显示的准备提示。"""
+
+
+EMBEDDING_UNAVAILABLE = ('embedding_unavailable：本机语义模型不可用；请在项目根目录使用 NotAlone Python 环境运行 '
+    'python scripts/prepare_memory_embedding.py 准备模型。候选保留待处理，运行时不会下载模型。')
+
+
 def embed_texts(texts):
     """仅加载预置本机模型，禁止隐式下载或向外部发送资料。"""
     global _MODEL
     with _MODEL_LOCK:
-        if _MODEL is None:
-            from fastembed import TextEmbedding
-            cache = Path(os.environ.get('NOTALONE_MEMORY_EMBEDDING_CACHE',
-                str(Path.home() / '.cache/notalone/memory-embedding')))
-            snapshot = cache / 'models--Qdrant--bge-small-zh-v1.5/snapshots/46fbe35fd4374a00fee7de77dfddaeb6dd6a2c59'
-            if not (snapshot / 'model_optimized.onnx').is_file():
-                raise OSError('请先运行本机embedding准备命令；运行时禁止下载。')
-            _MODEL = TextEmbedding(model_name='BAAI/bge-small-zh-v1.5',
-                cache_dir=str(cache), specific_model_path=str(snapshot), local_files_only=True, threads=2)
         try:
+            if _MODEL is None:
+                from fastembed import TextEmbedding
+                cache = Path(os.environ.get('NOTALONE_MEMORY_EMBEDDING_CACHE',
+                    str(Path.home() / '.cache/notalone/memory-embedding')))
+                snapshot = cache / 'models--Qdrant--bge-small-zh-v1.5/snapshots/46fbe35fd4374a00fee7de77dfddaeb6dd6a2c59'
+                if not (snapshot / 'model_optimized.onnx').is_file():
+                    raise OSError('本机模型未准备。')
+                _MODEL = TextEmbedding(model_name='BAAI/bge-small-zh-v1.5',
+                    cache_dir=str(cache), specific_model_path=str(snapshot), local_files_only=True, threads=2)
             return [tuple(float(value) for value in row) for row in _MODEL.embed(texts)]
         except Exception as error:
-            raise OSError("本机embedding推理失败，保留候选待处理。") from error
+            raise EmbeddingUnavailableError(EMBEDDING_UNAVAILABLE) from error
+
 
 
 def _tokens(text):
