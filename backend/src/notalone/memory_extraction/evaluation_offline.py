@@ -56,6 +56,9 @@ from notalone.memory_extraction.verification import (
 )
 from notalone.memory_trace.context import current_trace
 from .evaluation_provider_contract import (
+    REFERENCE16_PRO_RETENTION_V_TOKEN32K_PLAN, REFERENCE16_PRO_RETENTION_V_TOKEN32K_MODE,
+    REFERENCE16_PRO_RETENTION_V_TOKEN32K_STAGE, REFERENCE16_V_TOKEN32K_REQUEST_VERSION,
+    reference16_v_token32k_phase_policy,
     REFERENCE16_PRO_RETENTION_V_THINKING_PLAN, REFERENCE16_PRO_RETENTION_V_THINKING_MODE,
     REFERENCE16_PRO_RETENTION_V_THINKING_STAGE, REFERENCE16_V_THINKING_REQUEST_VERSION,
     reference16_v_thinking_phase_policy,
@@ -564,7 +567,8 @@ def _run_evaluation_batch(
     from .evaluation_bounded_cases import BOUNDED_RUNTIME_CASES, BOUNDED_RUNTIME_PLAN
 
     pro16 = type(execution_plan) is str and execution_plan in REFERENCE16_PRO_PLANS
-    v_thinking = execution_plan == REFERENCE16_PRO_RETENTION_V_THINKING_PLAN
+    v_token32k = execution_plan == REFERENCE16_PRO_RETENTION_V_TOKEN32K_PLAN
+    v_thinking = execution_plan in (REFERENCE16_PRO_RETENTION_V_THINKING_PLAN, REFERENCE16_PRO_RETENTION_V_TOKEN32K_PLAN)
     bounded = execution_plan == BOUNDED_RUNTIME_PLAN
     bounded_profile = store.bounded_provider_profile if bounded else None
     if bounded:
@@ -614,7 +618,7 @@ def _run_evaluation_batch(
     public_quality = execution_plan in PUBLIC_QUALITY_PLANS
     core = execution_plan == CORE_PROFILE_PLAN
     prompt_profile = (CORE_SOURCE_FIDELITY_PROFILE if core
-                      else REFERENCE16_RETENTION_V_PROFILE if execution_plan in (REFERENCE16_PRO_RETENTION_PLAN, REFERENCE16_PRO_RETENTION_V_THINKING_PLAN)
+                      else REFERENCE16_RETENTION_V_PROFILE if execution_plan in (REFERENCE16_PRO_RETENTION_PLAN, REFERENCE16_PRO_RETENTION_V_THINKING_PLAN, REFERENCE16_PRO_RETENTION_V_TOKEN32K_PLAN)
                       else SEMANTIC4_PROMPT_PROFILE if public_quality else "default")
     validate_extraction_prompt_profile(execution_plan, extraction_prompt_profile,
         provider_profile=bounded_profile.value if bounded_profile is not None else None)
@@ -715,7 +719,7 @@ def _run_evaluation_batch(
             )
             verification_model = ChatDeepSeek(
                 api_key=SecretStr(api_key), base_url=base_url, model=request_model, temperature=0.0,
-                **({"max_tokens": 8192} if pro16 else bounded_profile.output_parameters if bounded_profile is not None else {}),
+                **({"max_tokens": 32768 if v_token32k else 8192} if pro16 else bounded_profile.output_parameters if bounded_profile is not None else {}),
                 timeout=request_timeout_seconds, max_retries=max_retries,
                 extra_body={"thinking": {"type": "enabled" if v_thinking or bounded and verification_tool_choice == "omitted" else "disabled"},
                             "reasoning_effort": "max" if v_thinking or bounded and verification_tool_choice == "omitted" else "none"},
@@ -817,12 +821,14 @@ def _run_evaluation_batch(
                         **({"extraction_prompt_profile": extraction_prompt_profile} if extraction_prompt_profile != "default" else {}),
                         **({"execution_plan": execution_plan, "phase_request_version": MIXED_REQUEST_VERSION,
                             "phase_request_policy": mixed_phase_policy()} if mixed else {}),
-                        **({"phase_request_version": REFERENCE16_V_THINKING_REQUEST_VERSION,
+                        **({"phase_request_version": REFERENCE16_V_TOKEN32K_REQUEST_VERSION,
+                            "phase_request_policy": reference16_v_token32k_phase_policy()} if v_token32k else
+                           {"phase_request_version": REFERENCE16_V_THINKING_REQUEST_VERSION,
                             "phase_request_policy": reference16_v_thinking_phase_policy()} if v_thinking else {}),
                         **({"reference_version": store.reference_version}
                            if store.reference_version == "source-fidelity-v2" or bounded or core else {}),
                         **({"execution_plan": execution_plan} if pro16 else {}),
-                        **({"verification_prompt_profile": prompt_profile} if execution_plan in (REFERENCE16_PRO_RETENTION_PLAN, REFERENCE16_PRO_RETENTION_V_THINKING_PLAN) else {}),
+                        **({"verification_prompt_profile": prompt_profile} if execution_plan in (REFERENCE16_PRO_RETENTION_PLAN, REFERENCE16_PRO_RETENTION_V_THINKING_PLAN, REFERENCE16_PRO_RETENTION_V_TOKEN32K_PLAN) else {}),
                         **({"execution_plan": execution_plan, "formal_task_execution": formal_execution} if bounded else {}),
                         **({"execution_plan": execution_plan, "verification_prompt_profile": prompt_profile} if core else {}),
                         "extraction_program": tuple(

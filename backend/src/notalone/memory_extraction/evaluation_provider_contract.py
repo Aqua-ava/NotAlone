@@ -101,7 +101,7 @@ def validate_extraction_prompt_profile(execution_plan: str, prompt_profile: str,
     else:
         expected = (BOUNDED_DEPENDENCY_PROMPT_PROFILE if execution_plan == BOUNDED_RUNTIME_PLAN
                 else CORE_CURRENT_STATE_PROFILE if execution_plan == CORE_PROFILE_PLAN
-                else REFERENCE16_TEACHING_E_PROFILE if execution_plan in (REFERENCE16_PRO_TEACHING_PLAN, REFERENCE16_PRO_RETENTION_PLAN, REFERENCE16_PRO_RETENTION_V_THINKING_PLAN)
+                else REFERENCE16_TEACHING_E_PROFILE if execution_plan in (REFERENCE16_PRO_TEACHING_PLAN, REFERENCE16_PRO_RETENTION_PLAN, REFERENCE16_PRO_RETENTION_V_THINKING_PLAN, REFERENCE16_PRO_RETENTION_V_TOKEN32K_PLAN)
                 else UNIQUENESS_E_PROFILE if execution_plan == UNIQUENESS_PLAN else "default")
     if type(prompt_profile) is not str or prompt_profile != expected:
         raise EvaluationBudgetAbort("evaluation_extraction_prompt_profile_mismatch")
@@ -149,7 +149,12 @@ REFERENCE16_PRO_RETENTION_V_THINKING_MODE = "deepseek_bounded_reference16_pro_re
 REFERENCE16_PRO_RETENTION_V_THINKING_STAGE = "reference16-pro-retention-v-thinking"
 REFERENCE16_PRO_RETENTION_V_THINKING_KIND = "reference16-pro-retention-v-thinking"
 REFERENCE16_V_THINKING_REQUEST_VERSION = "deepseek-reference16-v-thinking-v1"
-REFERENCE16_PRO_PLANS = frozenset({REFERENCE16_PRO_PLAN, REFERENCE16_PRO_TEACHING_PLAN, REFERENCE16_PRO_RETENTION_PLAN, REFERENCE16_PRO_RETENTION_V_THINKING_PLAN})
+REFERENCE16_PRO_RETENTION_V_TOKEN32K_PLAN = "reference16-pro-retention-v-token32k-v1"
+REFERENCE16_PRO_RETENTION_V_TOKEN32K_MODE = "deepseek_bounded_reference16_pro_retention_v_token32k"
+REFERENCE16_PRO_RETENTION_V_TOKEN32K_STAGE = "reference16-pro-retention-v-token32k"
+REFERENCE16_PRO_RETENTION_V_TOKEN32K_KIND = "reference16-pro-retention-v-token32k"
+REFERENCE16_V_TOKEN32K_REQUEST_VERSION = "deepseek-reference16-v-token32k-v1"
+REFERENCE16_PRO_PLANS = frozenset({REFERENCE16_PRO_PLAN, REFERENCE16_PRO_TEACHING_PLAN, REFERENCE16_PRO_RETENTION_PLAN, REFERENCE16_PRO_RETENTION_V_THINKING_PLAN, REFERENCE16_PRO_RETENTION_V_TOKEN32K_PLAN})
 
 
 def reference16_v_thinking_phase_policy() -> dict:
@@ -160,10 +165,17 @@ def reference16_v_thinking_phase_policy() -> dict:
     }
 
 
+def reference16_v_token32k_phase_policy() -> dict:
+    """固定分阶段输出上限；旧V推理合同保持原形。"""
+    return {
+        "extraction": {"thinking_mode": "disabled", "reasoning_effort": "none", "tool_choice_mode": "forced", "max_tokens": 8192},
+        "verification": {"thinking_mode": "enabled", "reasoning_effort": "max", "tool_choice_mode": "omitted", "max_tokens": 32768},
+    }
+
 
 def validate_verification_prompt_profile(execution_plan: str, prompt_profile: str) -> None:
     """新V提示仅与保留计划配对；旧入口继续内部选择原有提示。"""
-    expected = REFERENCE16_RETENTION_V_PROFILE if execution_plan in (REFERENCE16_PRO_RETENTION_PLAN, REFERENCE16_PRO_RETENTION_V_THINKING_PLAN) else "default"
+    expected = REFERENCE16_RETENTION_V_PROFILE if execution_plan in (REFERENCE16_PRO_RETENTION_PLAN, REFERENCE16_PRO_RETENTION_V_THINKING_PLAN, REFERENCE16_PRO_RETENTION_V_TOKEN32K_PLAN) else "default"
     if type(prompt_profile) is not str or prompt_profile != expected:
         raise EvaluationBudgetAbort("evaluation_verification_prompt_profile_mismatch")
 
@@ -179,18 +191,19 @@ class EvaluationProviderProfile(StrEnum):
     DEEPSEEK_PRO_BOUNDED_THINKING = "deepseek-pro-bounded-thinking-v1"
     DEEPSEEK_PRO_REFERENCE16 = "deepseek-pro-reference16-v1"
     DEEPSEEK_PRO_REFERENCE16_V_THINKING = "deepseek-pro-reference16-v-thinking-v1"
+    DEEPSEEK_PRO_REFERENCE16_V_TOKEN32K = "deepseek-pro-reference16-v-token32k-v1"
 
     @property
     def is_official(self) -> bool:
-        return self in {self.DEEPSEEK_FLASH_MAX, self.DEEPSEEK_PHASE_SPLIT, self.DEEPSEEK_BOUNDED_TASK, self.DEEPSEEK_PRO_BOUNDED_TASK, self.DEEPSEEK_PRO_BOUNDED_THINKING, self.DEEPSEEK_PRO_REFERENCE16, self.DEEPSEEK_PRO_REFERENCE16_V_THINKING}
+        return self in {self.DEEPSEEK_FLASH_MAX, self.DEEPSEEK_PHASE_SPLIT, self.DEEPSEEK_BOUNDED_TASK, self.DEEPSEEK_PRO_BOUNDED_TASK, self.DEEPSEEK_PRO_BOUNDED_THINKING, self.DEEPSEEK_PRO_REFERENCE16, self.DEEPSEEK_PRO_REFERENCE16_V_THINKING, self.DEEPSEEK_PRO_REFERENCE16_V_TOKEN32K}
 
     @property
     def is_pro(self) -> bool:
-        return self in {self.DEEPSEEK_PRO_BOUNDED_TASK, self.DEEPSEEK_PRO_BOUNDED_THINKING, self.DEEPSEEK_PRO_REFERENCE16, self.DEEPSEEK_PRO_REFERENCE16_V_THINKING}
+        return self in {self.DEEPSEEK_PRO_BOUNDED_TASK, self.DEEPSEEK_PRO_BOUNDED_THINKING, self.DEEPSEEK_PRO_REFERENCE16, self.DEEPSEEK_PRO_REFERENCE16_V_THINKING, self.DEEPSEEK_PRO_REFERENCE16_V_TOKEN32K}
 
     @property
     def is_reference16(self) -> bool:
-        return self in {self.DEEPSEEK_PRO_REFERENCE16, self.DEEPSEEK_PRO_REFERENCE16_V_THINKING}
+        return self in {self.DEEPSEEK_PRO_REFERENCE16, self.DEEPSEEK_PRO_REFERENCE16_V_THINKING, self.DEEPSEEK_PRO_REFERENCE16_V_TOKEN32K}
 
     @property
     def is_bounded(self) -> bool:
@@ -211,7 +224,15 @@ class EvaluationProviderProfile(StrEnum):
 
     @property
     def output_parameters(self) -> _OutputParameters:
-        return {"max_tokens": 8192} if self.is_pro else {}
+        return {"max_tokens": 8192} if self.is_pro and self is not self.DEEPSEEK_PRO_REFERENCE16_V_TOKEN32K else {}
+
+    def output_parameters_for_phase(self, purpose: str) -> _OutputParameters:
+        """新合同只按明确阶段给出固定上限。"""
+        if purpose not in {"extraction", "verification"}:
+            raise EvaluationBudgetAbort("evaluation_request_phase_invalid")
+        if self is self.DEEPSEEK_PRO_REFERENCE16_V_TOKEN32K:
+            return {"max_tokens": 8192 if purpose == "extraction" else 32768}
+        return self.output_parameters
 
     @property
     def base_url(self) -> str:
@@ -304,9 +325,11 @@ class ECNUEvaluationContract:
             raise EvaluationBudgetAbort("evaluation_core_fixed_plan_required")
         bounded = self._profile.is_bounded
         reference16 = self._profile.is_reference16
-        v_thinking = self._profile is EvaluationProviderProfile.DEEPSEEK_PRO_REFERENCE16_V_THINKING
+        v_token32k = self._profile is EvaluationProviderProfile.DEEPSEEK_PRO_REFERENCE16_V_TOKEN32K
+        v_thinking = self._profile in {EvaluationProviderProfile.DEEPSEEK_PRO_REFERENCE16_V_THINKING, EvaluationProviderProfile.DEEPSEEK_PRO_REFERENCE16_V_TOKEN32K}
         if reference16 != (execution_plan in REFERENCE16_PRO_PLANS) or reference16 and (
-                v_thinking != (execution_plan == REFERENCE16_PRO_RETENTION_V_THINKING_PLAN)
+                v_thinking != (execution_plan in (REFERENCE16_PRO_RETENTION_V_THINKING_PLAN, REFERENCE16_PRO_RETENTION_V_TOKEN32K_PLAN))
+                or v_token32k != (execution_plan == REFERENCE16_PRO_RETENTION_V_TOKEN32K_PLAN)
                 or verification_tool_choice != ("omitted" if v_thinking else "forced")
                 or self._extraction_mode is not EvaluationExtractionMode.GROUNDED_V2):
             raise EvaluationBudgetAbort("evaluation_reference16_pro_fixed_plan_required")
@@ -504,7 +527,7 @@ class ECNUEvaluationContract:
                 and identity != self._profile.model):
             raise EvaluationBudgetAbort("evaluation_official_reported_model_changed")
         if self._profile in {EvaluationProviderProfile.DEEPSEEK_PHASE_SPLIT,
-                             EvaluationProviderProfile.DEEPSEEK_BOUNDED_TASK, EvaluationProviderProfile.DEEPSEEK_PRO_BOUNDED_TASK, EvaluationProviderProfile.DEEPSEEK_PRO_BOUNDED_THINKING, EvaluationProviderProfile.DEEPSEEK_PRO_REFERENCE16, EvaluationProviderProfile.DEEPSEEK_PRO_REFERENCE16_V_THINKING} and (
+                             EvaluationProviderProfile.DEEPSEEK_BOUNDED_TASK, EvaluationProviderProfile.DEEPSEEK_PRO_BOUNDED_TASK, EvaluationProviderProfile.DEEPSEEK_PRO_BOUNDED_THINKING, EvaluationProviderProfile.DEEPSEEK_PRO_REFERENCE16, EvaluationProviderProfile.DEEPSEEK_PRO_REFERENCE16_V_THINKING, EvaluationProviderProfile.DEEPSEEK_PRO_REFERENCE16_V_TOKEN32K} and (
                 len(choices) != 1 or choices[0]["index"] != 0):
             raise EvaluationBudgetAbort("evaluation_completion_invalid")
         if (self._profile.is_pro
@@ -555,19 +578,20 @@ def _validate_payload(value: dict, *, verification_tool_choice: str = "forced",
         reference16 = provider_profile is EvaluationProviderProfile.DEEPSEEK_PRO_REFERENCE16
         mixed_v = provider_profile in {EvaluationProviderProfile.DEEPSEEK_PHASE_SPLIT,
                                        EvaluationProviderProfile.DEEPSEEK_BOUNDED_TASK, EvaluationProviderProfile.DEEPSEEK_PRO_BOUNDED_TASK} and function["name"] == "SourceVerificationOutput"
-        reference_e = provider_profile is EvaluationProviderProfile.DEEPSEEK_PRO_REFERENCE16_V_THINKING and function["name"] != "SourceVerificationOutput"
+        reference_e = provider_profile in {EvaluationProviderProfile.DEEPSEEK_PRO_REFERENCE16_V_THINKING, EvaluationProviderProfile.DEEPSEEK_PRO_REFERENCE16_V_TOKEN32K} and function["name"] != "SourceVerificationOutput"
         non_thinking = mixed_v or reference16 or reference_e
         forced = reference16 or reference_e or mixed_v or not (official or verification_tool_choice == "omitted"
                       and function["name"] == "SourceVerificationOutput")
         fields = _PAYLOAD_FIELDS if forced else _PAYLOAD_FIELDS - {"tool_choice"}
         if official:
             fields = fields | {"reasoning_effort"}
-        fields = fields | set(provider_profile.output_parameters)
+        output_parameters = provider_profile.output_parameters_for_phase("verification" if function["name"] == "SourceVerificationOutput" else "extraction")
+        fields = fields | set(output_parameters)
         if (
             not isinstance(value, dict) or set(value) != fields
             or value["model"] != provider_profile.model
             or any(type(value.get(key)) is not int or value[key] != expected
-                   for key, expected in provider_profile.output_parameters.items())
+                   for key, expected in output_parameters.items())
             or (official and value.get("reasoning_effort") != ("none" if non_thinking else "max"))
             or type(value["temperature"]) not in (float, int)
             or value["temperature"] != 0

@@ -9,6 +9,9 @@ from typing import Any, Callable
 from .evaluation_http_budget import EvaluationBudgetAbort
 from .evaluation_extraction import EvaluationExtractionMode, extraction_tool_name
 from .evaluation_provider_contract import (
+    REFERENCE16_PRO_RETENTION_V_TOKEN32K_PLAN, REFERENCE16_PRO_RETENTION_V_TOKEN32K_MODE,
+    REFERENCE16_PRO_RETENTION_V_TOKEN32K_STAGE, REFERENCE16_V_TOKEN32K_REQUEST_VERSION,
+    reference16_v_token32k_phase_policy,
     REFERENCE16_PRO_RETENTION_V_THINKING_PLAN, REFERENCE16_PRO_RETENTION_V_THINKING_MODE,
     REFERENCE16_PRO_RETENTION_V_THINKING_STAGE, REFERENCE16_V_THINKING_REQUEST_VERSION,
     reference16_v_thinking_phase_policy,
@@ -220,7 +223,8 @@ class PhasedEvaluationAudit:
             raise ValueError("审核执行身份非法。")
         self._execution_plan = execution_plan
         reference16 = execution_plan in REFERENCE16_PRO_PLANS
-        v_thinking = execution_plan == REFERENCE16_PRO_RETENTION_V_THINKING_PLAN
+        v_token32k = execution_plan == REFERENCE16_PRO_RETENTION_V_TOKEN32K_PLAN
+        v_thinking = execution_plan in (REFERENCE16_PRO_RETENTION_V_THINKING_PLAN, REFERENCE16_PRO_RETENTION_V_TOKEN32K_PLAN)
         e2 = execution_plan == FULL140_E2_PLAN or reference16
         mixed = execution_plan in PHASE_SPLIT_PLANS
         reference21_v4 = execution_plan in REFERENCE21_PLANS
@@ -385,7 +389,10 @@ class PhasedEvaluationAudit:
                 or self.execution_plan == REFERENCE16_PRO_RETENTION_V_THINKING_PLAN and (
                     bundle.get("phase_request_version") != REFERENCE16_V_THINKING_REQUEST_VERSION
                     or bundle.get("phase_request_policy") != reference16_v_thinking_phase_policy())
-                or self.execution_plan not in {*PHASE_SPLIT_PLANS, REFERENCE16_PRO_RETENTION_V_THINKING_PLAN} and (
+                or self.execution_plan == REFERENCE16_PRO_RETENTION_V_TOKEN32K_PLAN and (
+                    bundle.get("phase_request_version") != REFERENCE16_V_TOKEN32K_REQUEST_VERSION
+                    or canonical_sha256(bundle.get("phase_request_policy")) != canonical_sha256(reference16_v_token32k_phase_policy()))
+                or self.execution_plan not in {*PHASE_SPLIT_PLANS, REFERENCE16_PRO_RETENTION_V_THINKING_PLAN, REFERENCE16_PRO_RETENTION_V_TOKEN32K_PLAN} and (
                     "phase_request_version" in bundle or "phase_request_policy" in bundle)):
             raise EvaluationBudgetAbort("phased_execution_plan_changed")
         if bundle.get("reference_version", "legacy-v1") != self.reference_version:
@@ -393,10 +400,10 @@ class PhasedEvaluationAudit:
         if bundle.get("extraction_mode", "legacy-e14") != self.extraction_mode:
             raise EvaluationBudgetAbort("phased_extraction_mode_changed")
         if (bundle.get("extraction_prompt_profile", "default") != self.extraction_prompt_profile
-                or self.execution_plan not in {UNIQUENESS_PLAN, BOUNDED_RUNTIME_PLAN, REFERENCE16_PRO_TEACHING_PLAN, REFERENCE16_PRO_RETENTION_PLAN, REFERENCE16_PRO_RETENTION_V_THINKING_PLAN} and "extraction_prompt_profile" in bundle):
+                or self.execution_plan not in {UNIQUENESS_PLAN, BOUNDED_RUNTIME_PLAN, REFERENCE16_PRO_TEACHING_PLAN, REFERENCE16_PRO_RETENTION_PLAN, REFERENCE16_PRO_RETENTION_V_THINKING_PLAN, REFERENCE16_PRO_RETENTION_V_TOKEN32K_PLAN} and "extraction_prompt_profile" in bundle):
             raise EvaluationBudgetAbort("phased_extraction_prompt_profile_changed")
         if (bundle.get("verification_prompt_profile", "default") != self.verification_prompt_profile
-                or self.execution_plan not in (REFERENCE16_PRO_RETENTION_PLAN, REFERENCE16_PRO_RETENTION_V_THINKING_PLAN) and "verification_prompt_profile" in bundle):
+                or self.execution_plan not in (REFERENCE16_PRO_RETENTION_PLAN, REFERENCE16_PRO_RETENTION_V_THINKING_PLAN, REFERENCE16_PRO_RETENTION_V_TOKEN32K_PLAN) and "verification_prompt_profile" in bundle):
             raise EvaluationBudgetAbort("phased_verification_prompt_profile_changed")
         if bundle.get("verification_mode", "legacy-v4") != self.verification_mode:
             raise EvaluationBudgetAbort("phased_verification_mode_changed")

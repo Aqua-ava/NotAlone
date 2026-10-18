@@ -34,11 +34,15 @@ class Reference16TeachingSDKTest(unittest.TestCase):
         import json
         from tests.integration.memory_extraction.test_evaluation_ecnu import EvaluationECNUTest
         from notalone.memory_extraction.evaluation_ecnu import _REFERENCE16_PRO_TEACHING_REQUIRED_SOURCES, _PLAN_CASES
-        v_thinking = execution_plan == "reference16-pro-retention-v-thinking-v1"
+        v_token32k = execution_plan == "reference16-pro-retention-v-token32k-v1"
+        v_thinking = execution_plan in ("reference16-pro-retention-v-thinking-v1", "reference16-pro-retention-v-token32k-v1")
         sources = _REFERENCE16_PRO_TEACHING_REQUIRED_SOURCES
         if v_thinking:
             from notalone.memory_extraction.evaluation_ecnu import _REFERENCE16_PRO_RETENTION_V_THINKING_REQUIRED_SOURCES
             sources = _REFERENCE16_PRO_RETENTION_V_THINKING_REQUIRED_SOURCES
+        if v_token32k:
+            from notalone.memory_extraction.evaluation_ecnu import _REFERENCE16_PRO_RETENTION_V_TOKEN32K_REQUIRED_SOURCES
+            sources = _REFERENCE16_PRO_RETENTION_V_TOKEN32K_REQUIRED_SOURCES
         if execution_plan == "reference16-pro-retention-v1":
             from notalone.memory_extraction.evaluation_ecnu import _REFERENCE16_PRO_RETENTION_REQUIRED_SOURCES
             sources = _REFERENCE16_PRO_RETENTION_REQUIRED_SOURCES
@@ -114,7 +118,7 @@ class Reference16TeachingSDKTest(unittest.TestCase):
                 source_hashes=hashes, frozen_gold={"status": "frozen_agent_review", "case_names": [case.name for case in _PLAN_CASES],
                     "criteria_path": PUBLIC_REFERENCE_V2_PATH, "criteria_sha256": hashes[PUBLIC_REFERENCE_V2_PATH]},
                 credential_loader=helper.credential, audit_case=audit, synthetic_transport=httpx.MockTransport(respond),
-                provider_profile="deepseek-pro-reference16-v-thinking-v1" if v_thinking else "deepseek-pro-reference16-v1", execution_plan=execution_plan, extraction_prompt_profile="reference-kind-teaching-v1", verification_prompt_profile=verification_profile,
+                provider_profile="deepseek-pro-reference16-v-token32k-v1" if v_token32k else "deepseek-pro-reference16-v-thinking-v1" if v_thinking else "deepseek-pro-reference16-v1", execution_plan=execution_plan, extraction_prompt_profile="reference-kind-teaching-v1", verification_prompt_profile=verification_profile,
                 extraction_mode="grounded-v2", verification_mode="legacy-v4", verification_tool_choice="omitted" if v_thinking else "forced",
                 case_set="reference21", case_positions=tuple(range(16)), reference_version="source-fidelity-v2",
                 request_limit=32, request_timeout_seconds=300, max_retries=0)
@@ -143,7 +147,7 @@ class Reference16TeachingSDKTest(unittest.TestCase):
             thinking_v = v_thinking and body["tools"][0]["function"]["name"] == "SourceVerificationOutput"
             self.assertEqual(body["thinking"], {"type": "enabled" if thinking_v else "disabled"})
             self.assertEqual(body["reasoning_effort"], "max" if thinking_v else "none")
-            self.assertEqual(body["max_tokens"], 8192)
+            self.assertEqual(body["max_tokens"], 32768 if v_token32k and thinking_v else 8192)
             if thinking_v:
                 self.assertNotIn("tool_choice", body)
             else:
@@ -169,7 +173,19 @@ class Reference16TeachingSDKTest(unittest.TestCase):
         else:
             self.assertNotIn("verification_prompt_profile", config)
         self.assertEqual(config["extraction_prompt_sha256"], canonical_sha256(helper.requests[0]["messages"][0]["content"]))
+        if v_token32k:
+            self.assertEqual(config["request_contract_version"], 7)
+            self.assertEqual(config["provider_profile"], "deepseek-pro-reference16-v-token32k-v1")
+            self.assertNotIn("max_tokens", config)
+            self.assertNotIn("thinking", config)
+            self.assertNotIn("reasoning_effort", config)
+            self.assertEqual(config["phase_request_version"], "deepseek-reference16-v-token32k-v1")
+            self.assertEqual(config["phase_request_policy"], {
+                "extraction": {"thinking_mode":"disabled", "reasoning_effort":"none", "tool_choice_mode":"forced", "max_tokens":8192},
+                "verification": {"thinking_mode":"enabled", "reasoning_effort":"max", "tool_choice_mode":"omitted", "max_tokens":32768}})
+            return result
         if v_thinking:
+            self.assertEqual(config["max_tokens"], 8192)
             self.assertEqual(config["request_contract_version"], 6)
             self.assertEqual(config["provider_profile"], "deepseek-pro-reference16-v-thinking-v1")
             self.assertNotIn("thinking", config)
