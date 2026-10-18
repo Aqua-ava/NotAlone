@@ -27,6 +27,7 @@ from notalone.persistence.locks import (
 from notalone.persistence.observation_store import ObservationMode, PostgresObservationStore
 from notalone.scopes import ContactScope
 from notalone.server.app import create_app
+from notalone.server.command import _build_memory_service
 from notalone.server.event_bus import EventBus
 from notalone.server.event_publisher import EventBusMessagePublisher
 from notalone.tasks.worker import BackgroundTaskWorker, PostgresMemoryExtractionRunner
@@ -98,6 +99,7 @@ class ObservationAutoFlowFixture(CoreBusinessFlowFixture):
         self.backend = HttpBackend(create_app(
             database_url=self.database_url, owner_id=self.scope.owner_id,
             events=self.events, task_host=self.host,
+            memory_service=_build_memory_service(self.database_url),
             runtime_shutdown=self.priority.stop,
         ), self.scope.owner_id)
         self.addCleanup(self.backend.close)
@@ -184,7 +186,10 @@ class ObservationAutoFlowTest(ObservationAutoFlowFixture, unittest.TestCase):
         self.assertEqual([step["name"] for step in task["steps"]],
                          ["extract_memory", "index", "verify"])
         self.assertEqual(self.model.calls, [frozenset(batch.message_ids)])
-        self.assertEqual(len(PostgresMemoryStore(self.database_url).list_pending_candidates(self.scope)), 1)
+        status, body = self.backend.request(f"/api/contacts/{self.scope.contact_id}/memories")
+        self.assertEqual(status, 200, body)
+        self.assertEqual([memory["text"] for memory in body["memories"]], ["联系人喜欢科幻小说"])
+        self.assertEqual(body["memories"][0]["adoption_method"], "auto")
 
     def test_replayed_batch_does_not_reset_completed_task(self):
         batch = self.record()
