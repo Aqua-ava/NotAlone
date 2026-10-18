@@ -32,3 +32,18 @@
 reference 的 A07/A16 误判语用与 A10 类别漏检，以及 core 的正文历史边界/标签错误，须各自检查原协议、原标签及真实响应。不得假定 reference 已接 bounded 六规则，也不得把增加拒绝率称作提高提取准确性。各负责人交付同样五段链后才决定修复。
 
 本次只读源码审计与执行标准记录，0模型调用、0生产修改、0业务数据处理；未重跑测试，未新增质量信用。reference 独立审计通过，结果811cf0c2已集成为c8b1aa11；16全审、一般3，质量仍失败。
+
+## P01 原响应离线单字段复现
+
+基于656dc1b8重放原run6b75690f；原result摘要`f33f2f2cb880b8bd1785b7b6b8ebb765a696bbdcd92f1986338e440fe43c9720`。实际E选择momentary_state，重新编译逐字段等于原候选；act/assertion本来正确，错误为category及valid_at/invalid_at。预期来自已批准作者到达规则及历史双null合同，不读取Gold。
+
+| 对照输入 | 生产verify结果 | 有限依据 |
+| --- | --- | --- |
+| 原候选 | UNKNOWN / pragmatics_not_supported | 无 |
+| 人工只把category改为common_fact | unsupported / known_time_difference | 无 |
+| 人工只清空valid_at/invalid_at | UNKNOWN / pragmatics_not_supported | 无 |
+| 人工同时改正上述三字段 | verified / BR_AUTHOR_ARRIVAL_V1 | 有 |
+
+四组原正文、来源及模型proposal完全保持。ALL恢复由实际trace确认，不用默认ANY制造伪失败。独立Agent核原件摘要、window往返、重新编译、V请求逐字段一致及四组仅声明字段变更，实质问题0。离线脚本退出0，0API/DB/产品源码修改；脚本与摘要留端侧`runtime-field-replay/replay.py`及`summary.json`，不提交原响应。
+
+这排除了该例的引用位置、提案或编译器阻塞：类别门先挡，时间门随后挡；最小源码修复建议为无。人工输入通过不能签模型改善、原场质量或持久化生命周期。下一修复仍须以真实标签选择或V字段判断的可证伪机制为依据，禁止自动改写三字段使结果转绿。
