@@ -149,8 +149,10 @@ class SceneToolsHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         def respond(request):
             payload = json.loads(request.content)
             messages = payload['messages']
-            if payload.get('tools'):
-                initial = json.loads(messages[1]['content'])
+            initial = json.loads(messages[1]['content'])
+            if initial.get('layer') == 'l3' and hasattr(self, 'profile_response'):
+                message = self.profile_response(payload)
+            elif payload.get('tools'):
                 documents = initial['documents']
                 tool_results = [m for m in messages if m['role'] == 'tool']
                 def call(name, args, index):
@@ -171,9 +173,14 @@ class SceneToolsHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
                 elif documents and len(tool_results) == len(documents):
                     memories = initial['memories'][:1] if self.scene_mode == 'lossy_merge' else initial['memories']
                     calls = [call('write', {'path': documents[0]['path'], 'content': document(memories, [d['version_id'] for d in documents])}, 10)]
+                    if self.scene_mode == 'append':
+                        old_content = '\n'.join(m['content'] for m in tool_results)
+                        added = [m for m in memories if m['memory_id'] not in old_content]
+                        calls = [call('write', {'path': 'scene-' + m['memory_id'] + '.md', 'content': document([m])}, 10+i) for i,m in enumerate(added)]
                     if self.scene_mode == 'edit':
                         calls = [call('edit', {'path': documents[0]['path'], 'edits': [{'oldText': tool_results[0]['content'], 'newText': document(memories)}]}, 10)]
-                    calls += [call('write', {'path': d['path'], 'content': '[DELETED]'}, 11+i) for i, d in enumerate(documents[1:])]
+                    if self.scene_mode != 'append':
+                        calls += [call('write', {'path': d['path'], 'content': '[DELETED]'}, 11+i) for i, d in enumerate(documents[1:])]
                 else:
                     calls = []
                 message = {'content': '' if calls else '完成', 'tool_calls': calls}
@@ -205,7 +212,7 @@ class SceneToolsHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         proposer.timeout_contract = verifier.timeout_contract = SYNTHETIC_ORGANIZATION_TIMEOUT
         profile = {}
         if with_profile:
-            pp = DeepSeekOrganizationProposal(Model(), layer='l3', budget=budget, transport=transport)
+            pp = DeepSeekOrganizationProposal(Model(), layer='l3', budget=budget, transport=transport, document_tools=hasattr(self, 'profile_response'))
             pv = DeepSeekOrganizationVerification(Model(), layer='l3', budget=budget, transport=transport)
             pp.timeout_contract = pv.timeout_contract = SYNTHETIC_ORGANIZATION_TIMEOUT
             profile = {'profile_proposer': pp, 'profile_verifier': pv}
