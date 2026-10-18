@@ -20,10 +20,12 @@
 - reference teaching场已closed28/32，14审safe10/general4、完整9/18；A15 capture unknown/A16 unrun。结果59da7a93已集成。
 - A05严格单消息理由修复1491348a→78241cc8已集成；84相关及2源码mypy通过，独立复核无产品问题。
 - 统一913项全量已通过（35.679秒）；旧omitted断言按批准合同修正，14审核模块和独立增量Spec通过，无产品门/Gold变化。
-- 下一步同提交冻结三线：core fixed6 cap12→原门过再heldout4 cap8；reference retention原16 cap32；bounded双max原15 cap30。
+- 同7bef5d1f三线已启动：core fixed6仍运行，W01独立FULL通过；heldout4仍封闭。reference retention closed10/32，结果31dd4599待集成。
 - 生产放行表为空；task03第一AC未满足，State=claimed，goal=active。
 - 后续仍须原15七正控/七轴及生命周期、core6/4、reference16质量验收；不得降低标准或修改Gold。
 - 所有新场仅授权合成隔离数据；无新真实联系人、聊天发送、业务迁移、push或PR。
 - 公开历史扫描仍有12项既有 engineering 本机路径记录；不能称全通过。
 - 细节见 runtime-position-guide-20261018.md、core current-six-four-result 及 reference-pro16-result。
-- 双max59项+兼容14项+6源码mypy通过；reference合并后51+30项、7源码mypy及独立Spec0问题。当前无活动真实API。
+- 双max59项+兼容14项+6源码mypy通过；reference合并后51+30项、7源码mypy及独立Spec0问题。主bounded已关闭，core独立冻结场仍活跃。
+
+- 最新bounded bcbbefa3已closed4/30，safe1/safety1、potential bad_auto1，正证1/7，13窗及生命周期unrun；资源清零。详见runtime-thinking-result-20261018.md。

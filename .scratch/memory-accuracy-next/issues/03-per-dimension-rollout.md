@@ -130,3 +130,6 @@
 ### 2026-10-16 唯一性对照不增加运行时维度放行信用
 
 [新场结果](../../grounded-evaluation/reference21-uniqueness-result-20261016.md)closed28/42，A01–A14部分审核、A15未知、其余6窗未跑；没有完整21/140真实回归或至少15窗门槛。15条实际evidence均version=1/source_bound=false/semantic_basis=null，typed_evaluated与typed_credit均false；不能把给定码的确定性正控、有限author quote可信完整到达切片或V supported推广为任意指代/转述/保真/媒体运行时分类。第一条验收仍未勾，原3/4与State claimed保持。默认空表、原0.7/风险语义、有效依据和逐类批准的合取门不变，未做业务迁移、回填或自动放行；所有旧run与本场余14额度永久关闭。
+
+
+2026-10-18：[双max原15窗结果](../runtime-thinking-result-20261018.md) closed4/30，2窗独立审核safe1/safety1；P02必要指代声明来源遗漏，potential bad_auto1但实际pending。正证1/7，13窗及生命周期unrun，清理残留0。第一AC未满足，原claimed/默认空放行表和逐类批准保持；不合并历史质量分母。
