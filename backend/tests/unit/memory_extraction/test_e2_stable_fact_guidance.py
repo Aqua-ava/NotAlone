@@ -103,6 +103,15 @@ class E2StableFactGuidanceTest(unittest.TestCase):
                 self.assertTrue(facts[0]["alternatives"])
                 self.assertEqual(facts[0]["speech_act"], "request")
 
+    def test_e2_replaces_conflicting_rules_and_orders_semantic_decisions(self) -> None:
+        source = window("那项安排先别告诉同事。")
+        for events in (False, True):
+            request, _ = self.sdk_result(source, labels(row("0:0", "request", unresolved=True)), events=events)
+            prompt = request["messages"][0]["content"]
+            self.assertFalse("身份明确则false" in prompt, "E2仍含人物明确即清除其他未知的冲突句")
+            for rule in ("纳入判定优先于后续阶段", "主断言", "对象来历", "亲属间互动优先family"):
+                self.assertTrue(rule in prompt, f"E2缺少判定顺序或主断言规则：{rule}")
+
     def test_given_omissions_do_not_erase_neighboring_facts_or_real_commitments(self) -> None:
         controls = (
             ("我完成了说明书，辛苦你啦。", ("event", "greeting"), 1, "assertion"),
@@ -123,6 +132,26 @@ class E2StableFactGuidanceTest(unittest.TestCase):
                         self.assertEqual(facts[0]["speech_act"], speech)
                         self.assertIn(text.split("，")[0], facts[0]["text"])
                         self.assertEqual(facts[0]["source_message_ids"], [str(source.messages[0].message_id)])
+
+    def test_cross_wording_controls_keep_main_assertion_and_topic_independent(self) -> None:
+        controls = (
+            ("同事送的拼图我拼完了。", "event", "other", False, "common_fact", "assertion"),
+            ("同事把拼图送给我了。", "relationship_event", "other", False, "relationship_note", "assertion"),
+            ("我已经把同事的望远镜还给他了。", "relationship_event", "other", False, "relationship_note", "assertion"),
+            ("姨妈把园艺工具赠给我了。", "relationship_event", "family", False, "relationship_note", "assertion"),
+            ("我姑姑从事测绘工作。", "third_party_fact", "work", False, "relationship_note", "report"),
+            ("那项安排先不要转告合作方。", "request", "other", True, "relationship_note", "request"),
+            ("我的手机号码不要告诉同事。", "request", "other", False, "relationship_note", "request"),
+        )
+        for text, kind, topic, unresolved, category, speech in controls:
+            with self.subTest(text=text):
+                source = window(text)
+                _, facts = self.sdk_result(source, labels(row("0:0", kind, topic=topic, unresolved=unresolved)))
+                self.assertEqual(len(facts), 1)
+                self.assertEqual((facts[0]["category"], facts[0]["speech_act"], facts[0]["topic"]),
+                                 (category, speech, topic))
+                self.assertEqual(bool(facts[0]["alternatives"]), unresolved)
+                self.assertIn(text, facts[0]["text"])
 
     def test_given_labels_preserve_types_dates_and_existing_kind_enum(self) -> None:
         controls = (
