@@ -6,11 +6,12 @@ def isolate_proposal(raw, key, validate, limit):
     """累计重验数量、引用、纠错及总预算，返回合法原文和规范化结果。"""
     if not isinstance(raw, dict) or set(raw) != {key} or not isinstance(raw[key], list):
         raise ValueError('整理输出顶层结构无效。')
-    if len(raw[key]) > limit:
-        raise ValueError('整理输出条目数超出预算。')
     kept, rejected = [], []
     normalized = validate({key: []})
     for index, item in enumerate(raw[key]):
+        if len(kept) >= limit:
+            rejected.append({'index': index, 'reason': '整理输出条目数超出预算，该项未收录。'})
+            continue
         try:
             candidate = validate({key: deepcopy(kept + [item])})
         except (ValueError, TypeError, KeyError) as error:

@@ -138,6 +138,27 @@ class LayeredProfileHttpTest(MemoryOverviewHttpFixture, unittest.TestCase):
         self.assertEqual(current['profile']['entries'][0]['kind'], 'inference')
         self.assertGreater(current['protected_count'], 0)
 
+    def test_oversized_profile_preserves_valid_prefix_and_reports_excess(self):
+        from copy import deepcopy
+        import psycopg
+        class Extra(ProfileProposal):
+            def propose(inner, **kwargs):
+                result = super().propose(**kwargs)
+                result['entries'] = [deepcopy(result['entries'][0]) for _ in range(3)]
+                return result
+        contact, _, _ = self.prepare_contact()
+        backend = self.controlled(profile_proposer=Extra(), budget=OrganizationBudget(
+            max_model_calls=4, max_profile_entries=2))
+        ready = self.enable(backend, contact)
+        self.assertEqual(ready['status'], 'ready', ready)
+        self.assertEqual(len(ready['profile']['entries']), 2)
+        with psycopg.connect(self.database_url) as connection:
+            output = connection.execute('SELECT output_payload FROM layered_profile_batch WHERE owner_id=%s AND contact_id=%s',
+                (self.owner_id, contact)).fetchone()[0]
+        self.assertEqual(len(output['original']['entries']), 3)
+        self.assertEqual(output['rejected'][0]['index'], 2)
+        self.assertIn('预算', output['rejected'][0]['reason'])
+
     def test_incremental_profile_receives_valid_previous_profile(self):
         class Incremental(ProfileProposal):
             def __init__(inner):
