@@ -35,5 +35,6 @@ export const initialForegroundState: ForegroundState = Object.freeze({
 export interface ForegroundBridge {
   getState(): Promise<ForegroundState>;
   confirm(selection: ForegroundConfirmation): Promise<ContactSessionState>;
+  resume(selection: ForegroundConfirmation): Promise<ForegroundState>;
   onStateChanged(listener: (state: ForegroundState) => void): () => void;
 }

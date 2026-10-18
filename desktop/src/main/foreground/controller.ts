@@ -116,6 +116,27 @@ export class ForegroundController {
       observedAt: null, suggestedContactId: null, wechatInFront: null, probeAvailable: null });
     return selected;
   }
+  // 仅由 helper 的明确恢复操作调用，不授予联系人或桌面会话资格。
+  resume(selection: ForegroundConfirmation): ForegroundState {
+    const contact = this.contacts.getState();
+    const generation = this.backend.getConnectionGeneration();
+    if (this.disposed || this.stopped || !this.state.manualInput || this.readingScopeChanges > 0
+      || generation === undefined || generation !== this.generation
+      || selection.foregroundRevision !== this.state.foregroundRevision
+      || selection.contactScopeRevision !== contact.scopeRevision
+      || selection.contactId !== contact.selectedContactId || contact.directoryPhase !== 'ready') {
+      throw new Error('前台识别恢复已失效，请重新选择本次联系人。');
+    }
+    this.cancelScheduled(); this.invalidatePending(); ++this.epoch;
+    this.qualification = undefined;
+    this.backend.clearManualInput(selection.contactId);
+    this.state = { ...this.state, manualInput: false };
+    // 恢复宿主已有观察调度，不把手动输入确认转换成桌面会话资格。
+    this.clearObservation(this.state.suspendedByHelperFocus ? 'paused' : 'idle',
+      this.state.suspendedByHelperFocus ? 'helper_focused' : null);
+    this.scheduleNext(); this.updateChangeSource();
+    return this.getState();
+  }
   // 仅由helper具名桥调用；同步校验并选择，异步旧观察不能在确认后覆盖资格。
   confirm(selection: ForegroundConfirmation) {
     const generation = this.backend.getConnectionGeneration();

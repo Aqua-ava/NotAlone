@@ -7,6 +7,8 @@ export function createForegroundBridge(transport: PageTransport): ForegroundBrid
       : Promise.reject(new Error('前台状态操作不可用。')),
     confirm: (...args: unknown[]) => args.length === 1 ? transport.invoke('foreground:confirm', args[0])
       : Promise.reject(new Error('前台联系人确认不可用。')),
+    resume: (...args: unknown[]) => args.length === 1 ? transport.invoke('foreground:resume', args[0])
+      : Promise.reject(new Error('前台识别恢复不可用。')),
     onStateChanged: (listener: (state: ForegroundState) => void) => {
       if (typeof listener !== 'function') throw new Error('前台状态操作不可用。');
       const receive = (_event: unknown, state: ForegroundState) => listener(state);

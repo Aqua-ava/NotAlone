@@ -32,6 +32,9 @@ export function installForegroundBridge(commands: PageCommands, backend: Backend
     backend.clearManualInput(confirmation.contactId);
     return selected;
   }, 'helper');
+  commands.handle('foreground:resume', (...args: unknown[]) => {
+    return controller.resume(confirmationArguments(args));
+  }, 'helper');
   commands.handle('contacts:confirm-manual', async (...args: unknown[]) => {
     const selection = selectionArguments(args);
     const generation = backend.getConnectionGeneration(), state = contacts.getState();

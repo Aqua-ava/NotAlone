@@ -31,6 +31,18 @@ export function useContactSession() {
     }
   }
 
+  async function resumeForeground(foregroundRevision: number) {
+    const { selectedContactId, scopeRevision } = latest.current;
+    if (!selectedContactId) return;
+    try {
+      await window.notalone.foreground.resume({ contactId: selectedContactId,
+        contactScopeRevision: scopeRevision, foregroundRevision });
+      if (active.current) setError('');
+    } catch {
+      if (active.current) setError('微信会话识别暂时无法恢复，请重新选择本次联系人。');
+    }
+  }
+
   async function setDraft(text: string) {
     const { selectedContactId, scopeRevision } = latest.current;
     if (!selectedContactId) return;
@@ -61,7 +73,7 @@ export function useContactSession() {
     } catch { if (active.current) setError('本次联系人未确认，请刷新目录后重新选择。'); return false; }
   }
 
-  return { state, error, selectContact, confirmContact, confirmManualContact, createContact, setDraft, refreshContacts };
+  return { state, error, selectContact, confirmContact, confirmManualContact, resumeForeground, createContact, setDraft, refreshContacts };
 }
 
 export type ContactSessionView = ReturnType<typeof useContactSession>;
