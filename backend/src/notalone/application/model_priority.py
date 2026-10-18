@@ -26,6 +26,9 @@ from notalone.scopes import ContactScope, VerifiedConversationScope
 from notalone.tasks.models import ExtractionRuntimeConfig
 
 
+_RETRY_GUARD_INTERVAL_SECONDS = 1.0
+
+
 class ModelWorkStopped(RuntimeError):
     """协作停止，不属于模型失败或业务成功。"""
 
@@ -128,7 +131,10 @@ class ModelPriorityControl:
         self._check_background_scope()
 
     def wait_for_retry(self, seconds: float) -> None:
-        """退避不持模型许可，停止及来源／租约失效可打断剩余等待。"""
+        """停止事件即时唤醒；持久来源／租约复验最多每秒一次。
+
+        默认30秒退避至多31次复验；下一物理请求仍在许可边界强制复验。
+        """
         expires_at = time.monotonic() + seconds
         while True:
             self.check_running()
@@ -136,7 +142,7 @@ class ModelPriorityControl:
             remaining = expires_at - time.monotonic()
             if remaining <= 0:
                 return
-            self._stopped.wait(min(remaining, .1))
+            self._stopped.wait(min(remaining, _RETRY_GUARD_INTERVAL_SECONDS))
 
 
 class MemoryCallAccounting:
