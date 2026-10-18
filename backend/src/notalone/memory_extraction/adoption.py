@@ -170,6 +170,7 @@ class MemoryAdoption:
             started_at=pool_started_at,
         )
 
+        batch_decisions = self._batch_decisions(scope, outcome, contact_pool, owner_pool, deleted)
         adopted = updated = pending = duplicate = deleted_skip = 0
         skipped_non_memory = 0
         skipped_changed = 0
@@ -397,7 +398,7 @@ class MemoryAdoption:
                 record("adjudication", {"status": "not_executed", "reason": "incomplete_shortlist"})
                 decision = None
             else:
-                decision = self._adjudicate(fact, similar, scope)
+                decision = self._adjudicate(fact, similar, scope, batch_decisions)
             action = decision.action if decision else None
             replaced_id = decision.replaced_memory_id if decision else None
             if action is AdjudicationAction.MERGE:
@@ -529,7 +530,62 @@ class MemoryAdoption:
             skipped_changed=skipped_changed,
         )
 
-    def _adjudicate(self, fact, similar, scope: ContactScope):
+    @staticmethod
+    def _decision_key(fact, similar):
+        return (fact.subject, fact.category, fact.topic, fact.text, fact.valid_at, fact.invalid_at,
+                repr(fact.event), tuple(fact.source_message_ids),
+                tuple((item.memory_id, item.version.revision) for item in similar))
+
+    def _batch_decisions(self, scope, outcome, contact_pool, owner_pool, deleted):
+        """冻结合格候选与旧池；后续池改变时不得复用过期裁决。"""
+        batch = getattr(self._adjudication_runtime, "adjudicate_batch", None)
+        if not callable(batch):
+            return {}
+        inputs, keys = [], []
+        for original in outcome.accepted:
+            pragmatic = self._interpret_for_adoption(original, scope)
+            fact = self._pragmatic_interpreter.prepare_for_adoption(original, decision=pragmatic)
+            if (_normalize(fact.text) in deleted or not self._passes_all_adoption_gates(
+                    fact, pragmatic_decision=pragmatic, scope=scope)):
+                continue
+            assess = getattr(self._memory_port, "assess_correction", None)
+            if callable(assess):
+                protected = assess(_candidate_from_fact(scope, fact, namespace=self._candidate_namespace))
+                if protected.correction_review or protected.failure_reason:
+                    continue
+            pool = owner_pool if fact.subject is FactSubject.SELF else contact_pool
+            if any(_normalize(item.text) == _normalize(fact.text)
+                   and set(item.source_ids) == set(fact.source_message_ids)
+                   and item.version.valid_at == fact.valid_at and item.version.invalid_at == fact.invalid_at
+                   and item.version.event == fact.event for item in pool):
+                continue
+            similar, truncated = self._similar_memories(scope, fact, pool)
+            if not similar or truncated:
+                continue
+            keys.append(self._decision_key(fact, similar))
+            inputs.append((fact.text, tuple(SimilarMemory(item.memory_id, item.text, item.topic.value)
+                                           for item in similar)))
+        if not inputs:
+            return {}
+        started = time.perf_counter()
+        try:
+            decisions = batch(candidates=tuple(inputs))
+            if len(decisions) != len(inputs):
+                raise ExtractionInvalidOutputError("批量裁决未覆盖全部候选。")
+        except ExtractionInvalidOutputError:
+            self._record_ledger(scope, LedgerOutcome.REJECTED_BY_VALIDATION, started)
+            return dict.fromkeys(keys)
+        except ExtractionRuntimeError:
+            self._record_ledger(scope, LedgerOutcome.RUN_FAILED, started)
+            raise
+        usage = next((item for item in decisions if item is not None), None)
+        self._record_ledger(scope, LedgerOutcome.SUCCEEDED, started,
+            model_name=usage.model_name if usage else None,
+            input_tokens=usage.input_tokens if usage else None,
+            output_tokens=usage.output_tokens if usage else None)
+        return dict(zip(keys, decisions))
+
+    def _adjudicate(self, fact, similar, scope: ContactScope, batch_decisions=None):
         if not similar or self._adjudication_runtime is None:
             record(
                 "adjudication",
@@ -555,7 +611,9 @@ class MemoryAdoption:
         )
         adjudication_started_at = datetime.now(timezone.utc)
         try:
-            decision = self._adjudication_runtime.adjudicate(
+            key = self._decision_key(fact, similar)
+            cached = batch_decisions is not None and key in batch_decisions
+            decision = batch_decisions[key] if cached else self._adjudication_runtime.adjudicate(
                 candidate_text=fact.text,
                 similar=tuple(
                     SimilarMemory(
@@ -580,10 +638,17 @@ class MemoryAdoption:
             )
             self._record_ledger(scope, LedgerOutcome.RUN_FAILED, started_ns)
             raise
+        if decision is None:
+            return None
         outcome = LedgerOutcome.SUCCEEDED
         actual_action = decision.action
-        # 现有裁决只比较正文；不能据此吞掉来自另一有效来源的新事件主张。
-        if decision.action is AdjudicationAction.NOOP:
+        # 等价改写只允许同一来源、时态和事件；不能吞掉另一来源的新主张。
+        if decision.action is AdjudicationAction.NOOP and not any(
+                item.memory_id == decision.duplicate_memory_id
+                and set(item.source_ids) == set(fact.source_message_ids)
+                and item.version.valid_at == fact.valid_at and item.version.invalid_at == fact.invalid_at
+                and item.version.event == fact.event
+                and self._same_dependencies(scope, fact, item.version) for item in similar):
             actual_action = None
             outcome = LedgerOutcome.REJECTED_BY_VALIDATION
         if decision.action is not AdjudicationAction.UPDATE and decision.replaced_memory_id is not None:
@@ -612,14 +677,9 @@ class MemoryAdoption:
             },
             started_at=adjudication_started_at,
         )
-        self._record_ledger(
-            scope,
-            outcome,
-            started_ns,
-            model_name=decision.model_name,
-            input_tokens=decision.input_tokens,
-            output_tokens=decision.output_tokens,
-        )
+        if not cached:
+            self._record_ledger(scope, outcome, started_ns, model_name=decision.model_name,
+                input_tokens=decision.input_tokens, output_tokens=decision.output_tokens)
         # 裁决要求更新但缺少有效被取代 id 时保留 UPDATE 与空 ID：
         # adopt 会把它降级为待定候选，而不是静默按 ADD 落库让被取代
         # 的旧记忆保持 active。

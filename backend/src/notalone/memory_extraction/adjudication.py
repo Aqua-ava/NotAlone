@@ -38,6 +38,7 @@ class AdjudicationDecision:
     output_tokens: int | None = None
     merged_memory_ids: tuple[UUID, ...] = ()
     merged_text: str | None = None
+    duplicate_memory_id: UUID | None = None
 
 
 class AdjudicationRuntime(Protocol):

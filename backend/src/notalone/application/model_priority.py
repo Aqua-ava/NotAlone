@@ -282,12 +282,21 @@ class PriorityAdjudicationRuntime:
     def adjudicate(
         self, *, candidate_text: str, similar: tuple[SimilarMemory, ...],
     ) -> AdjudicationDecision:
+        return self._invoke(lambda: self._runtime.adjudicate(candidate_text=candidate_text, similar=similar))
+
+    def adjudicate_batch(self, *, candidates):
+        batch = getattr(self._runtime, "adjudicate_batch", None)
+        if not callable(batch):
+            return tuple(self.adjudicate(candidate_text=text, similar=similar) for text, similar in candidates)
+        return self._invoke(lambda: batch(candidates=candidates))
+
+    def _invoke(self, call):
         returned = False
         called_at, latency_ms = datetime.now(timezone.utc), 0
         try:
             with self._control.background_call():
                 called_at, started = datetime.now(timezone.utc), time.perf_counter()
-                result = self._runtime.adjudicate(candidate_text=candidate_text, similar=similar)
+                result = call()
                 returned = True
                 latency_ms = max(0, int((time.perf_counter() - started) * 1000))
             self._control.wait_for_foreground()

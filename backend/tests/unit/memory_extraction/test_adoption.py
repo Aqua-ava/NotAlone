@@ -107,6 +107,44 @@ class MemoryAdoptionTest(unittest.TestCase):
     def _fact(self, **overrides: object) -> ExtractedFact:
         return _fact(**overrides)
 
+    def test_batch_adjudicates_same_source_paraphrases_without_duplicate_writes(self):
+        facts = (self._fact(text="对方最近开始跑步"),
+                 self._fact(text="对方最近开始游泳", topic=MemoryTopic.OTHER))
+        self.adoption.adopt(self.scope, ExtractionOutcome(accepted=facts))
+        class BatchRuntime:
+            calls = 0
+            def adjudicate_batch(inner, *, candidates):
+                inner.calls += 1
+                return tuple(AdjudicationDecision(AdjudicationAction.NOOP, duplicate_memory_id=similar[0].memory_id) for _, similar in candidates)
+            def adjudicate(inner, **kwargs):
+                raise AssertionError("应复用同一批裁决")
+        runtime = BatchRuntime()
+        from notalone.application.model_priority import PriorityAdjudicationRuntime, ModelPriorityControl
+        adoption = MemoryAdoption(memory_port=self.store, dimension_release=RELEASE_ALL_DIMENSIONS,
+                                  adjudication_runtime=PriorityAdjudicationRuntime(runtime, ModelPriorityControl()))
+        stats = adoption.adopt(self.scope, ExtractionOutcome(accepted=(
+            self._fact(text="对方最近已开始跑步"),
+            self._fact(text="对方最近已开始游泳", topic=MemoryTopic.OTHER))))
+        self.assertEqual(runtime.calls, 1)
+        self.assertEqual(stats.skipped_duplicate, 2)
+        self.assertEqual(len(self.store.list_confirmed(self.scope)), 2)
+
+    def test_noop_must_match_its_actual_source_target(self):
+        from uuid import uuid4
+        other_source = uuid4()
+        self.adoption.adopt(self.scope, ExtractionOutcome(accepted=(
+            self._fact(text="对方喜欢跑步", source_message_ids=(other_source,)),
+            self._fact(text="对方喜欢游泳"))))
+        target = next(item for item in self.store.list_confirmed(self.scope) if item.source_ids == (other_source,))
+        class Runtime:
+            def adjudicate(inner, **kwargs):
+                return AdjudicationDecision(AdjudicationAction.NOOP, duplicate_memory_id=target.memory_id)
+        adoption = MemoryAdoption(memory_port=self.store, dimension_release=RELEASE_ALL_DIMENSIONS,
+            adjudication_runtime=Runtime(), merge_verifier=object(), similarity_threshold=0)
+        result = adoption.adopt(self.scope, ExtractionOutcome(accepted=(self._fact(text="对方很喜欢跑步"),)))
+        self.assertEqual(result.pending, 1)
+        self.assertEqual(result.skipped_duplicate, 0)
+
     def test_sensitive_fact_keeps_provenance_in_pending_candidate(self) -> None:
         stats = self.adoption.adopt(
             self.scope,

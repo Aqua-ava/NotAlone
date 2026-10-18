@@ -156,3 +156,21 @@ class MergeDecisionTests(unittest.TestCase):
                 self.assertEqual(decision.action, AdjudicationAction.MERGE)
                 self.assertEqual(decision.merged_memory_ids, tuple(item.memory_id for item in parents))
                 self.assertEqual(decision.merged_text, args['merged_text'])
+
+
+class BatchAdjudicationTests(unittest.TestCase):
+    def test_bad_batch_item_does_not_discard_valid_decision(self):
+        from langchain_core.messages import AIMessage
+        from notalone.memory_extraction.adjudication import SimilarMemory, AdjudicationAction
+        from notalone.memory_extraction.adjudication_adapters import LangChainAdjudicationRuntime
+        from tests.unit.reply.test_langchain_vertical_slice import ToolCallingFakeModel
+        parents = (SimilarMemory(uuid4(), "偏好文字", "other"),)
+        model = ToolCallingFakeModel(responses=[AIMessage(content="", tool_calls=[{
+            "name": "BatchMemoryAdjudicationOutput", "id": "batch", "args": {"decisions": [
+                {"candidate_index": 0, "action": "nonsense", "replaced_memory_id": None},
+                {"candidate_index": 1, "action": "noop", "replaced_memory_id": None}
+            ]}}])])
+        decisions = LangChainAdjudicationRuntime(model=model).adjudicate_batch(
+            candidates=(("偏好文字说明", parents), ("喜欢文字", parents)))
+        self.assertIsNone(decisions[0])
+        self.assertEqual(decisions[1].action, AdjudicationAction.NOOP)
