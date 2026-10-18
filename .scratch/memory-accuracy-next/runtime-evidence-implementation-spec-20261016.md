@@ -2,7 +2,7 @@
 
 Triage: ready-for-agent
 
-范围来自用户已批准的[决定稿](runtime-evidence-completion-decision-20261016.md)，用于完成[原03](issues/03-per-dimension-rollout.md)剩余第一条。当前为实施准备，尚未实现或验收。按核心事实、指代、维度的既定顺序推进；不新增任务票，不把规格发布算作关票。
+范围来自用户已批准的[决定稿](runtime-evidence-completion-decision-20261016.md)，用于完成[原03](issues/03-per-dimension-rollout.md)剩余第一条。指定任务接线与隔离工程验收已完成，见[工程结果](bounded-runtime-formal-entry-result-20261017.md)；真实模型交付与质量尚未通过。2026-10-18用户授权三线并行及Agent快速验收，不等待人工；保持原质量阈值，工程结果不代替真实模型成绩。
 
 ## 问题
 
@@ -98,7 +98,7 @@ evidence4新增实际`target_message_ids`：非空唯一、属于完整messages�
 
 ### 迁移与架构记录
 
-当前迁移最大059，实施前再次核号；仅新增一条前向迁移，包含任务配置、三类资料的来源依赖方式及evidence4/basis3严格形状和范围约束。历史SQL、旧NULL和旧版本不改。新写all和新模式须核迁移能力；旧读取以缺列兼容投影归legacy/any。仅在自有隔离库执行，业务库迁移不在范围内。
+原设计时迁移最大059；实际实现使用071_bounded_runtime_evidence.sql，2026-10-18基线最大072，本轮复用已有迁移，不新增或重编号；该前向迁移包含任务配置、三类资料的来源依赖方式及evidence4/basis3严格形状和范围约束。历史SQL、旧NULL和旧版本不改。新写all和新模式须核迁移能力；旧读取以缺列兼容投影归legacy/any。仅在自有隔离库执行，业务库迁移不在范围内。
 
 新增ADR记录对046/047/060的有限范围、正式任务选择、版本与新记录删除语义的局部修订，并同步现行文档；不将实施准备写成已验证状态。
 

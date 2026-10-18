@@ -1,6 +1,6 @@
 # ADR-063：指定任务的有限运行依据与正文来源依赖
 
-> 状态：已采纳；尚未实现或验收。决策日期：2026-10-16。
+> 状态：已采纳；指定任务接线与隔离工程验收已完成，真实模型交付和质量验收另记。决策日期：2026-10-16。
 > 局部修订：[ADR-046](046-source-bound-dimension-evidence.md)、[ADR-047](047-bounded-source-semantic-proof.md)、[ADR-060](060-author-arrival-quote-representation.md)的有限作用域、正式任务接线及新记录删除语义；旧合同保留。
 
 单消息作者到家切片不能覆盖跨消息指代、省略和多第三人，保存快照或V的通用supported也不能代签这些关系。按[已批准决定](../../.scratch/memory-accuracy-next/runtime-evidence-completion-decision-20261016.md)，采用指定任务显式启用的有限六类运行依据，而不切换全局默认或承诺通用中文证明。实施与验收边界见[实施规格](../../.scratch/memory-accuracy-next/runtime-evidence-implementation-spec-20261016.md)，字段和封闭产生式以[精确合同](../../.scratch/memory-accuracy-next/runtime-evidence-wire-contract-20261016.md)为准。
