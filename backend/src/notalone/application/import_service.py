@@ -165,6 +165,7 @@ class TaskHost:
         "_pending",
         "_active",
         "_task_repository",
+        "_schedule_thread",
     )
 
     def __init__(
@@ -181,6 +182,7 @@ class TaskHost:
         self._event_publisher = event_publisher
         self._model_priority = model_priority
         self._task_repository = task_repository
+        self._schedule_thread = None
         self._stopped = threading.Event()
         self._stop_complete = threading.Event()
         self._connections: dict[int, psycopg.Connection] = {}
@@ -192,6 +194,29 @@ class TaskHost:
         self._progress: dict[tuple[UUID, UUID], dict[str, object]] = {}
         self._pending: dict[tuple[UUID, UUID], dict[UUID | None, bool]] = {}
         self._active: dict[tuple[UUID, UUID], UUID | None] = {}
+
+    def start_scheduling(self, *, owner_id: UUID, interval_seconds: float = 2.0) -> None:
+        """应用启动时恢复已提交工作；计时线程只唤醒原TaskHost，不执行业务。"""
+        if not isinstance(owner_id, UUID) or interval_seconds <= 0:
+            raise ValueError('调度需要明确用户和正数扫描间隔。')
+        with self._lock:
+            if self._stopped.is_set() or self._schedule_thread is not None:
+                return
+            def scan():
+                from notalone.persistence.extraction_schedule import recover_due
+                import logging
+                while not self._stopped.is_set():
+                    try:
+                        if self._task_repository is not None:
+                            for contact_id, task_id in recover_due(self._task_repository,owner_id=owner_id):
+                                if self._stopped.is_set():
+                                    break
+                                self.wake(owner_id=owner_id,contact_id=contact_id,task_id=task_id)
+                    except Exception:
+                        logging.getLogger(__name__).warning('extraction_schedule_scan_failed')
+                    self._stopped.wait(interval_seconds)
+            self._schedule_thread = threading.Thread(target=scan,name='notalone-extraction-scheduler',daemon=True)
+            self._schedule_thread.start()
 
     def start(
         self, *, owner_id: UUID, contact_id: UUID, task_id: UUID | None = None,
@@ -282,7 +307,7 @@ class TaskHost:
             return
         deadline = time.monotonic() + min(4.0, max(0.0, timeout))
         with self._lock:
-            threads = tuple(self._threads.values())
+            threads = tuple(self._threads.values()) + ((self._schedule_thread,) if self._schedule_thread else ())
         for thread in threads:
             if thread is not threading.current_thread():
                 thread.join(timeout=max(0.0, deadline - time.monotonic()))

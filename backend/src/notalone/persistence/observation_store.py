@@ -1330,6 +1330,9 @@ class PostgresObservationStore:
                     ),
                 }
             )
+        from notalone.persistence.extraction_schedule import record_messages
+        record_messages(connection, owner_id=owner_id, contact_id=contact_id,
+            observation_id=observation_id, message_ids=created_message_ids)
         return _CliMessagesWrite(
             message_ids=tuple(message_ids),
             created_message_ids=tuple(created_message_ids),
