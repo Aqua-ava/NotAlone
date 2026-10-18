@@ -21,4 +21,14 @@ Conda NotAlone；显式`NOTALONE_DISABLE_DOTENV=1`、工作树`PYTHONPATH`及`-B
 2. `python -B -m unittest tests.integration.tasks.test_bounded_runtime_acceptance tests.integration.tasks.test_runtime_config tests.integration.server.test_task_runtime_config_api tests.integration.tasks.test_bounded_evaluation_sources.BoundedEvaluationSourcesTest.test_actual_sdk_outputs_confirm_correct_reject_and_rebind_without_new_model_call -v`：35项通过，包含19个正式来源/任务/API控制、8个配置持久化、7个HTTP合同、1个实际SDK Mock生命周期控制。随机自有隔离库由测试删除。
 3. 独立Agent只读缺口审查：基础接线与生命周期已有覆盖，未发现需要重建框架的证据；真实模型proof3交付及七轴质量仍缺。
 
-上述83项是本轮工程检查，SDK响应为Mock，真实模型成绩为0；不与旧批次累加质量分母。最终结果与三线提交待完成后追加。
+上述83项是本轮工程检查，SDK响应为Mock；不与旧批次累加质量分母。
+
+## 集成与真实验证
+
+- 核心代码 `d159417d` → 集成 `2cfe0a4b`：保留显式历史／条件前件依赖和已知未决标记；核心边界测试与结果 `c42252cf` → `660cf31c`。
+- 指代独立测试与Agent Gold／计划 `eeeeb0dd` → `6674c85d`，生产修改已包含在核心共享提交，未重复改写。
+- 集成后bounded相关46项、依赖相关10项通过；v3提示澄清后proof相关27项通过。各组有重叠，不累加为唯一测试数；不重跑旧长全量。
+- 本票状态澄清与v3六行提示各经Standards／Spec独立Agent审查，均0实质问题；提示改善幅度不能由代码审查推断。
+- [两次独立真实场](runtime15-agent-result-20261018.md)共4次已知HTTP200、零重试：首场位置越界拒绝，次场V正文无法脱敏保存，正式审核均0。每场仅首窗unknown、后14unrun，余28分别永久关闭；七轴质量及六规则真实交付未达标。
+
+工程修复和本地集成完成不等于原三票全部质量义务完成。核心六窗／四留出、本票15窗真实proof3／七轴门保持未覆盖，原03第一AC不勾、State继续claimed，生产放行表仍空。不会把Agent替代人工解释为降低质量门。

@@ -18,3 +18,13 @@ Triage: ready-for-agent
 仅在nullable-proof-v3提示补充0基Unicode码点计数、完整候选字符串偏移、内文与包装边界及作者自指链接说明；不改schema、解析器、有限语法、默认模式或放行门。27项bounded proof单元检查通过。提示是否改善真实交付须在新冻结场独立验证，不能由合成对照代签。
 
 生产放行表保持空。本票原AC与State继续保留；没有业务迁移、真实联系人读取、桌面或聊天发送、远端Git。为独立工作树准备仅官方模型三字段的0600本地配置，不输出凭据；模型loader在领取后读取该受控文件。
+
+## 提示修正后的独立场
+
+源码 `be5d9245` 经独立Standards／Spec增量审查均0实质问题后，新建 `f45e22ab-c5f8-41d2-b9fa-9794b5e30c4a`，冻结SHA256 `8b8ea91ad3c3817bbb8ea60cbb618a7e0bb1400ec1f224dc285e689e5841fb63`。仍为原15窗、同一Gold和最多30次HTTP；不是恢复旧预算。
+
+首窗E／V各返回一次200，预约2/30、零重试。V的1574字节响应在现有脱敏记录器处失败，仅保存SHA256 `fd376961e020fc856103b21fed5e386332110d6679041f884f72ecb680a38f7d` 和状态200，`body_not_saved=redaction_unavailable`。没有可重解析的响应正文，不能判断是外层JSON、工具参数JSON还是其他记录异常，更不能声称提示已修复真实proof交付。未补发、未改写或恢复响应。
+
+外层停止码`deepseek_hard_stop`，附`bounded_runtime_failed_task_snapshot_unavailable`及完成收据不可用。原finish保留`closed=false/close_unknown=true`。事后仅只读核对注册库：`closed=1`、关闭标记存在、预约2、in-flight锁空闲、owned进程组已退出；另存绑定run的独立退场记录，不覆盖原finish。余28额度永久关闭。
+
+正式RAW/FULL仍0、七轴0、basis交付0，P01 unknown、后14未运行。来源先独立归档，再经正式删除清理13类残留及隔离库，均为0；实际模型输出生命周期未运行。两场总计4个已知200请求、56个未用额度关闭；不能把两次首窗当作两个合格质量样本。没有第三场或自动后继。
