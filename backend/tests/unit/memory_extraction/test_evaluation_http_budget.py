@@ -32,6 +32,25 @@ class EvaluationHttpBudgetTest(unittest.TestCase):
             config_sha256="a" * 64,
         )
 
+    def test_trace_hook_and_evaluation_transport_reserve_problem_once(self):
+        import os
+        from notalone.experiments.problem_budget import ProblemBudget
+        from notalone.memory_trace.transport import build_trace_http_client
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary)
+            problem = ProblemBudget(home / 'problem.sqlite3')
+            problem.create('synthetic', 3, 10)
+            problem.start('r1', 'one physical request')
+            with patch.object(Path, 'home', return_value=home), patch.dict(os.environ, {
+                    'NOTALONE_PROBLEM_BUDGET': str(problem.path), 'NOTALONE_PROBLEM_ROUND': 'r1'}):
+                budget = self._budget(home)
+                transport = EvaluationTransport(budget, synthetic_transport=httpx.MockTransport(
+                    lambda request: httpx.Response(200, json={})))
+                with build_trace_http_client(transport=transport) as client:
+                    client.post('https://synthetic.invalid/v1/chat', json={})
+                self.assertEqual(problem.snapshot()['used'], 1)
+                self.assertEqual(budget.snapshot()['reserved_requests'], 1)
+
     def test_retry_loop_spends_all_failed_attempts_and_does_not_catch_hard_stop(self):
         with tempfile.TemporaryDirectory() as temporary:
             with patch.object(Path, "home", return_value=Path(temporary)):

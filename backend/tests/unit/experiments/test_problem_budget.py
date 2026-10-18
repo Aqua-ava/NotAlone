@@ -61,3 +61,36 @@ class ProblemBudgetTests(unittest.TestCase):
         with patch.dict(os.environ, {'NOTALONE_PROBLEM_BUDGET': str(self.path), 'NOTALONE_PROBLEM_ROUND': 'r1'}):
             reserve_problem_attempt()
         self.assertEqual(self.budget.snapshot()['used'], 1)
+
+
+    def test_production_extraction_transport_counts_each_physical_attempt(self):
+        import httpx
+        from notalone.memory_trace.transport import build_trace_http_client
+        self.budget.start('r1', 'transport budget')
+        sent = []
+        def handle(request):
+            sent.append(request)
+            return httpx.Response(503, json={'error': 'synthetic'})
+        with patch.dict(os.environ, {'NOTALONE_PROBLEM_BUDGET': str(self.path), 'NOTALONE_PROBLEM_ROUND': 'r1'}):
+            with build_trace_http_client(transport=httpx.MockTransport(handle)) as client:
+                for _ in range(3):
+                    client.post('https://synthetic.invalid/chat', json={})
+                with self.assertRaises(ProblemStopped):
+                    client.post('https://synthetic.invalid/chat', json={})
+        self.assertEqual(len(sent), 3)
+        self.assertEqual(self.budget.snapshot()['used'], 3)
+
+    def test_production_organization_transport_shares_same_budget(self):
+        import time
+        import httpx
+        from notalone.memory.organization_deadline import OrganizationCallDeadline
+        from notalone.memory.organization_quality_transport import OrganizationQualityHTTPTransport, organization_request_context
+        from notalone.memory.layered import OrganizationBudget
+        self.budget.start('r1', 'layered transport budget')
+        transport = OrganizationQualityHTTPTransport(httpx.MockTransport(lambda request: httpx.Response(200, json={})))
+        with patch.dict(os.environ, {'NOTALONE_PROBLEM_BUDGET': str(self.path), 'NOTALONE_PROBLEM_ROUND': 'r1'}):
+            with organization_request_context(lambda: None, lambda *args: None,
+                    OrganizationCallDeadline(time.monotonic()+10), OrganizationBudget()):
+                with httpx.Client(transport=transport) as client:
+                    client.post('https://synthetic.invalid/chat', json={})
+        self.assertEqual(self.budget.snapshot()['used'], 1)

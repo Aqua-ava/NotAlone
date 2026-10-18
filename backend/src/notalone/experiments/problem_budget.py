@@ -76,7 +76,20 @@ class ProblemBudget:
             return dict(zip(('problem', 'max_calls', 'deadline', 'used', 'no_improvement_rounds'), row), rounds=rounds)
 
 
-def reserve_problem_attempt():
+def check_problem_budget():
+    """重试等待前复验既有总账，不另扣调用、不延长期限。"""
+    path, round_id = os.environ.get('NOTALONE_PROBLEM_BUDGET'), os.environ.get('NOTALONE_PROBLEM_ROUND')
+    if path is None and round_id is None:
+        return
+    if not path or not round_id:
+        raise ProblemStopped('问题总账与轮次必须同时绑定')
+    with ProblemBudget(path).connection() as connection:
+        ProblemBudget(path).check(connection)
+        if not connection.execute('SELECT 1 FROM rounds WHERE id=? AND outcome IS NULL', (round_id,)).fetchone():
+            raise ProblemStopped('该轮不存在或已经结案')
+
+
+def reserve_problem_attempt(*, request=None):
     """两类已有评测发送边界调用；未绑定的历史工具保持原合同。"""
     path = os.environ.get('NOTALONE_PROBLEM_BUDGET')
     round_id = os.environ.get('NOTALONE_PROBLEM_ROUND')
@@ -84,7 +97,12 @@ def reserve_problem_attempt():
         return
     if not path or not round_id:
         raise ProblemStopped('问题总账与轮次必须同时绑定')
+    reservation = (str(path), round_id)
+    if request is not None and request.extensions.get('notalone_problem_budget') == reservation:
+        return
     ProblemBudget(path).reserve(round_id)
+    if request is not None:
+        request.extensions['notalone_problem_budget'] = reservation
 
 
 def main():

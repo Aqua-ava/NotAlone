@@ -366,7 +366,7 @@ class EvaluationBudget:
                 if count >= self._manifest["request_limit"]:
                     raise EvaluationBudgetAbort("request_limit_exhausted")
                 from notalone.experiments.problem_budget import reserve_problem_attempt
-                reserve_problem_attempt()
+                reserve_problem_attempt(request=request)
                 database.execute(
                     "INSERT INTO requests VALUES (?, ?)", (count + 1, endpoint)
                 )

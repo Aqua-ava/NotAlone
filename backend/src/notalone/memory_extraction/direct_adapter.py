@@ -101,6 +101,8 @@ class DirectExtractionRuntime:
                     if invalid:
                         raise
                     raise ExtractionRuntimeError(f"模型调用失败（{type(error).__name__}），本批保留待重试。") from error
+                from notalone.experiments.problem_budget import check_problem_budget
+                check_problem_budget()
                 time.sleep(self._retry_delay_seconds)
         raise AssertionError("不可达的提取重试状态。")
 
