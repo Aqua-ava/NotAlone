@@ -77,3 +77,9 @@ bounded依赖v3 `0a51257d` 与reference独立Vmax `41aaea33`→`241d6cab`完成�
 ## 独立V32K集成检查
 
 60c5e088→9c7cec88无冲突集成，主复验46项相关/SDK/owned/fixture及旧bounded/core检查（4.919秒）和6源码mypy通过；主核backend源码、测试与desktop测试逐字等于作者通过936全量的提交，不重复声称主全量重跑。仅V上限32768，E8192及所有旧profile/提示/Gold保持。新实际质量场尚未运行；bounded原15、core留出及reference质量缺口均不因此关闭。
+
+## 隔离逐字段诊断原型集成
+
+9428709c无冲突集成为14b53c84，仅新增隔离模块、13项接口测试、合成对照及短计划。主实际13tests/1.240秒、默认mypy单源码通过；代码/测试SHA与独审一致，Standards/Spec实质0。两项timestamp代替文本证据缺口有离线红绿，元数据现在仅辅助time，任何状态使用metadata均需text；空缺证仍合法。
+
+复用实际legacy-retention语义提示，八字段输出由程序汇总且恒semantic_verified=false，不接生产、采纳、旧V或E。拟定最小W1/W3旧新配对4调用仍须事前冻结与留证selftest；当前0新API。人工响应和接口测试不计语义质量，原15/七轴、核心留出及reference一般错误门均保持未满足。公开扫描仍12项既有engineering路径问题。
