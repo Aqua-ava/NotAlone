@@ -9,6 +9,52 @@ from notalone.application.reply_qualification import ReplyComparisonSource
 
 
 class ReplyQualificationTest(unittest.TestCase):
+    def test_production_configuration_records_disabled_review_without_beta_route(self):
+        from types import SimpleNamespace
+        from notalone.reply.quality import reply_model_configuration
+
+        model = SimpleNamespace(model_name='deepseek-flash', max_retries=0,
+            root_async_client=SimpleNamespace(base_url='https://api.deepseek.com/'),
+            _get_request_payload=lambda messages: {'model': 'deepseek-flash', 'messages': messages,
+                                                   'temperature': 0.0})
+        configuration = reply_model_configuration(model)
+
+        self.assertEqual(configuration['post_generation_review'], 'disabled')
+        self.assertEqual(configuration['request_route'], 'https://api.deepseek.com/chat/completions')
+        self.assertNotIn('review_route', configuration)
+        self.assertEqual(configuration['parameters']['temperature'], 0.0)
+
+    def test_production_wiring_change_invalidates_reply_contract(self):
+        from dataclasses import dataclass
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        from notalone.reply.quality import build_reply_contract
+
+        @dataclass
+        class Profile:
+            context_window: int = 4096
+
+        model = SimpleNamespace(model_name='deepseek-flash', max_retries=0,
+            root_client=SimpleNamespace(max_retries=0),
+            root_async_client=SimpleNamespace(base_url='https://api.deepseek.com/', max_retries=0),
+            _get_request_payload=lambda messages: {'model': 'deepseek-flash', 'messages': messages})
+        baseline = build_reply_contract(model, Profile(), None, None)
+        original_read = Path.read_text
+
+        def changed_wiring(path, *args, **kwargs):
+            text = original_read(path, *args, **kwargs)
+            if path.as_posix().endswith('/server/reply_wiring.py'):
+                return text + '\n# 合成接线变化，不能继承原回复质量资格。\n'
+            return text
+
+        with patch.object(Path, 'read_text', changed_wiring):
+            changed = build_reply_contract(model, Profile(), None, None)
+
+        self.assertNotEqual(changed.identity, baseline.identity)
+        self.assertNotEqual(changed.rules_version, baseline.rules_version)
+        self.assertEqual(changed.model_version, baseline.model_version)
+        self.assertEqual(changed.budget_version, baseline.budget_version)
+
     def test_replacing_final_reply_cannot_reuse_old_review_or_persisted_evidence(self):
         from copy import deepcopy
         import json

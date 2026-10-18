@@ -210,6 +210,8 @@ GitHub Actions 的最小 CI 在 push、Pull Request 或手动触发时检查完�
 | `NOTALONE_TEST_DATABASE_URL` | 隔离测试库，名称必须以 `_test` 结尾。 |
 | `NOTALONE_MEMORY_DIMENSION_GATE` | 默认开启维度放行门；只有显式 `0` 才回退到原有三道采纳门槛。 |
 
+候选回复按 [ADR-068](architecture/adr/068-direct-reply-candidates-with-user-selection.md)在检索后直接生成，经程序检查结构、引用与当前来源后展示，由用户选择、修改并亲自发送；不再追加一次模型回复核验。记忆入库及 L2/L3 整理的核验独立保留，候选展示不代表内容已被系统证明正确。
+
 官方 `deepseek-flash` 默认使用完整文字请求长度估算，并另留输出与安全余量；界面明确标记估算。`input_budget_unavailable` 表示本地无法核验当前模型的输入长度配置，不表示账户余额不足，详见 [ADR-062](architecture/adr/062-official-deepseek-reply-input-budget.md)。
 
 ```bash

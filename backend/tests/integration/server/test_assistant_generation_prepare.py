@@ -335,7 +335,7 @@ class AssistantGenerationPrepareHttpTest(unittest.TestCase):
             finally:
                 release.set()
             self.assertEqual(running.result(timeout=10)[0], 200)
-        assert_generation_review_calls(self, self.model, generation=1, review=1)
+        assert_generation_review_calls(self, self.model, generation=1, review=0)
         self.assertEqual(self.backend.request(path + "/replies/prepare", body),
                          (200, {**receipt, "state": "completed"}))
 
@@ -376,8 +376,8 @@ class AssistantGenerationPrepareHttpTest(unittest.TestCase):
 
     def test_old_format_reliably_expired_c_is_sealed_without_retrying_the_attempt(self) -> None:
         clock = {"now": datetime.now(timezone.utc)}
-        with patch("notalone.server.reply_wiring.PostgresReplyStore", side_effect=lambda url:
-                   PostgresReplyStore(url, clock=lambda: clock["now"])):
+        with patch("notalone.server.reply_wiring.PostgresReplyStore", side_effect=lambda url, **kwargs:
+                   PostgresReplyStore(url, clock=lambda: clock["now"], **kwargs)):
             self.backend = self._backend()
         path, body = self._session_path(), self._body(draft="合成过期任务原编辑")
         status, receipt = self.backend.request(path + "/replies/prepare", body)
@@ -466,7 +466,7 @@ class AssistantGenerationPrepareHttpTest(unittest.TestCase):
         ))
         self.assertEqual(self.backend.request(path)[1]["current_input_version_id"], next_receipt["input_version_id"])
         self.assertEqual(self.backend.request(path + "/replies", body), (200, generated))
-        assert_generation_review_calls(self, self.model, generation=1, review=1)
+        assert_generation_review_calls(self, self.model, generation=1, review=0)
 
     def test_invalidated_old_key_cannot_prepare_or_generate_but_explicit_fresh_retry_can(self) -> None:
         path = self._session_path()
@@ -497,8 +497,8 @@ class AssistantGenerationPrepareHttpTest(unittest.TestCase):
         status, generated = self.backend.request(path + "/replies", retry_body)
         self.assertEqual(status, 200, generated)
         self.assertEqual(generated["turn_id"], retry["turn_id"])
-        assert_generation_review_calls(self, self.model, generation=1, review=1)
-        self.assertEqual(self.backend.request("/api/ledger/summary")[1]["total_calls"], 1 + 1)
+        assert_generation_review_calls(self, self.model, generation=1, review=0)
+        self.assertEqual(self.backend.request("/api/ledger/summary")[1]["total_calls"], 1)
 
     def test_real_exploration_confirmation_and_prepare_share_canonical_input_without_extra_model_calls(self) -> None:
         self.model = ExplorationControlledModel()
@@ -587,7 +587,7 @@ class AssistantGenerationPrepareHttpTest(unittest.TestCase):
             200, {**prepared, "state": "completed"},
         ))
         self.assertEqual(self.backend.request(path + "/replies", new_body), (200, generated))
-        assert_generation_review_calls(self, self.model, generation=1, review=1)
+        assert_generation_review_calls(self, self.model, generation=1, review=0)
 
     def _unreserved_prepare_rejection(self, path, body, status, payload):
         key = body.get("replacement", body)["idempotency_key"]
@@ -692,7 +692,7 @@ class AssistantGenerationPrepareHttpTest(unittest.TestCase):
             200, {**old_receipt, "state": "completed"},
         ))
         self.assertEqual(self.backend.request(path + "/replies", old_body), (200, completed))
-        assert_generation_review_calls(self, self.model, generation=1, review=1)
+        assert_generation_review_calls(self, self.model, generation=1, review=0)
 
     def test_replace_prepare_beats_the_late_old_model_result_in_public_saved_candidates(self) -> None:
         self.model = LatePreparedModel()
@@ -729,8 +729,8 @@ class AssistantGenerationPrepareHttpTest(unittest.TestCase):
         self.assertIsNone(turns[old_body["idempotency_key"]]["reply"])
         self.assertEqual(turns[new_body["idempotency_key"]]["state"], "completed")
         self.assertEqual(turns[new_body["idempotency_key"]]["reply"]["candidates"][0]["text"], "合成有效新候选")
-        assert_generation_review_calls(self, self.model, generation=2, review=1)
-        self.assertEqual(self.backend.request("/api/ledger/summary")[1]["total_calls"], 2 + 1)
+        assert_generation_review_calls(self, self.model, generation=2, review=0)
+        self.assertEqual(self.backend.request("/api/ledger/summary")[1]["total_calls"], 2)
 
     def test_source_and_session_deletion_reject_prepared_recovery_with_zero_model_calls(self) -> None:
         path = self._session_path()
@@ -813,7 +813,7 @@ class AssistantGenerationPrepareHttpTest(unittest.TestCase):
         status, generated = self.backend.request(path + "/replies", retry_body)
         self.assertEqual(status, 200, generated)
         self.assertEqual(generated["turn_id"], retry_receipt["turn_id"])
-        assert_generation_review_calls(self, self.model, generation=1, review=1)
+        assert_generation_review_calls(self, self.model, generation=1, review=0)
 
     def test_prepare_reports_the_actual_running_retry_without_rewriting_the_failed_turn(self) -> None:
         self.model = LatePreparedModel()
@@ -857,7 +857,7 @@ class AssistantGenerationPrepareHttpTest(unittest.TestCase):
         self.assertEqual(self.backend.request(path + "/replies/prepare", body), (
             200, {**prepared, "state": "completed"},
         ))
-        assert_generation_review_calls(self, self.model, generation=1, review=1)
+        assert_generation_review_calls(self, self.model, generation=1, review=0)
 
     def test_prepare_reports_canonical_completion_before_the_session_turn_is_completed(self) -> None:
         completion = AssistantCompletionBarrierStore(DATABASE_URL)
@@ -878,7 +878,7 @@ class AssistantGenerationPrepareHttpTest(unittest.TestCase):
                 self.assertEqual(actual_turn["state"], "running")
                 self.assertEqual(actual_turn["reply_request_id"], actual_request["id"])
                 self.assertEqual(actual_request["state"], "completed")
-                assert_generation_review_calls(self, self.model, generation=1, review=1)
+                assert_generation_review_calls(self, self.model, generation=1, review=0)
 
                 self.assertEqual(self.backend.request(path + "/replies/prepare", body), (
                     200, {**prepared, "state": "completed"},
@@ -886,7 +886,7 @@ class AssistantGenerationPrepareHttpTest(unittest.TestCase):
 
                 self.assertEqual(self.backend.request(path)[1], before)
                 self.assertEqual(self._generation_metadata(body), (actual_turn, actual_request))
-                assert_generation_review_calls(self, self.model, generation=1, review=1)
+                assert_generation_review_calls(self, self.model, generation=1, review=0)
             finally:
                 completion.release.set()
             status, generated = generation.result(timeout=10)
@@ -896,17 +896,17 @@ class AssistantGenerationPrepareHttpTest(unittest.TestCase):
         self.assertEqual(self.backend.request(path + "/replies/prepare", body), (
             200, {**prepared, "state": "completed"},
         ))
-        assert_generation_review_calls(self, self.model, generation=1, review=1)
-        self.assertEqual(self.backend.request("/api/ledger/summary")[1]["total_calls"], 1 + 1)
+        assert_generation_review_calls(self, self.model, generation=1, review=0)
+        self.assertEqual(self.backend.request("/api/ledger/summary")[1]["total_calls"], 1)
 
-    def test_expired_attempt_cannot_borrow_a_new_attempt_lease_for_late_review(self) -> None:
+    def test_expired_attempt_cannot_borrow_a_new_attempt_lease_for_late_candidate(self) -> None:
         clock = {'now': datetime.now(timezone.utc)}
         self.model = LatePreparedModel()
         self.model.release_second_response = threading.Event()
         self.addCleanup(self.model.release_first_response.set)
         self.addCleanup(self.model.release_second_response.set)
-        with patch('notalone.server.reply_wiring.PostgresReplyStore', side_effect=lambda url:
-                   PostgresReplyStore(url, clock=lambda: clock['now'])):
+        with patch('notalone.server.reply_wiring.PostgresReplyStore', side_effect=lambda url, **kwargs:
+                   PostgresReplyStore(url, clock=lambda: clock['now'], **kwargs)):
             self.backend = self._backend()
         path, body = self._session_path(), self._body(draft='合成同键原稿')
         self.assertEqual(self.backend.request(path + '/replies/prepare', body)[0], 200)
@@ -933,7 +933,7 @@ class AssistantGenerationPrepareHttpTest(unittest.TestCase):
             status, current = newer.result(timeout=10)
         self.assertEqual(status, 200, current)
         self.assertEqual(current['candidates'][0]['text'], '合成有效新候选')
-        assert_generation_review_calls(self, self.model, generation=2, review=1)
+        assert_generation_review_calls(self, self.model, generation=2, review=0)
         self.assertEqual(self.backend.request(path + '/replies', body), (200, current))
         with psycopg.connect(DATABASE_URL) as connection:
             attempts = connection.execute(
@@ -945,25 +945,25 @@ class AssistantGenerationPrepareHttpTest(unittest.TestCase):
             ).fetchall()
         self.assertEqual(attempts, [(1, 'expired'), (2, 'completed')])
 
-    def test_interrupt_after_review_precheck_stops_dispatch_at_the_model_callback(self) -> None:
-        path, body = self._session_path(), self._body(draft='合成复核发送前取消原稿')
+    def test_interrupt_after_generation_blocks_candidate_before_save(self) -> None:
+        path, body = self._session_path(), self._body(draft='合成生成后保存前取消原稿')
         status, prepared = self.backend.request(path + '/replies/prepare', body)
         self.assertEqual(status, 200, prepared)
         self.model.plans.append({'text': '合成原稿候选', 'basis': '保留合成原稿原意。'})
         entered, release = threading.Event(), threading.Event()
-        original_bind = type(self.model).bind_tools
+        original_generate = type(self.model)._generate
 
-        def bind(model, tools, **kwargs):
-            if kwargs.get('tool_choice') == 'ReplyFidelityReview':
-                entered.set()
-                if not release.wait(10):
-                    raise TimeoutError('合成复核发送前门未释放。')
-            return original_bind(model, tools, **kwargs)
+        def generate(model, *args, **kwargs):
+            result = original_generate(model, *args, **kwargs)
+            entered.set()
+            if not release.wait(10):
+                raise TimeoutError('合成生成响应门未释放。')
+            return result
 
-        with patch.object(type(self.model), 'bind_tools', bind), ThreadPoolExecutor(max_workers=1) as pool:
+        with patch.object(type(self.model), '_generate', generate), ThreadPoolExecutor(max_workers=1) as pool:
             running = pool.submit(self.backend.request, path + '/replies', body)
             try:
-                self.assertTrue(entered.wait(5), '复核已通过前置复验但尚未触发实际模型回调。')
+                self.assertTrue(entered.wait(5), '模型已生成候选，但尚未返回持久化链。')
                 assert_generation_review_calls(self, self.model, generation=1, review=0)
                 status, stopped = self.backend.request(path + '/interrupt', {
                     'request_key': prepared['request_key'], 'input_version_id': prepared['input_version_id'],
@@ -975,6 +975,11 @@ class AssistantGenerationPrepareHttpTest(unittest.TestCase):
             self.assertNotEqual(running.result(timeout=10)[0], 200)
         assert_generation_review_calls(self, self.model, generation=1, review=0)
         self.assertEqual(self.backend.request('/api/ledger/summary')[1]['total_calls'], 1)
+        with psycopg.connect(DATABASE_URL) as connection:
+            self.assertEqual(connection.execute(
+                'SELECT count(*) FROM public.reply_candidate WHERE owner_id=%s',
+                (self.owner_id,),
+            ).fetchone()[0], 0)
 
     def test_confirmed_exploration_completed_metadata_survives_later_current_before_a_completion(self) -> None:
         self.model = ExplorationControlledModel()
@@ -1129,8 +1134,8 @@ class AssistantGenerationPrepareHttpTest(unittest.TestCase):
         self.assertEqual(self.backend.request(path + "/replies/prepare", body), (
             200, {**prepared, "state": "completed"},
         ))
-        assert_generation_review_calls(self, self.model, generation=1, review=1)
-        self.assertEqual(self.backend.request("/api/ledger/summary")[1]["total_calls"], 1 + 1)
+        assert_generation_review_calls(self, self.model, generation=1, review=0)
+        self.assertEqual(self.backend.request("/api/ledger/summary")[1]["total_calls"], 1)
 
 
 if __name__ == "__main__":

@@ -162,7 +162,7 @@ class AssistantDiscussionBudgetHttpTest(unittest.TestCase):
         self.assertEqual(status, 200, first)
         self.assertEqual(first["input_budget"]["state"], "warning")
         calls_before = len(self.fixture.reply_model.seen_model_payloads)
-        # 首轮窗口同时容纳生成和复核；新增完整讨论使下一轮生成本身超过窗口。
+        # 首轮窗口容纳完整生成；新增完整讨论使下一轮生成本身超过窗口。
         added_text = "新增合成完整讨论：" + "继续保留原始要求。" * 1000
         added = self._discussion(limited, path, added_text)
 
@@ -216,8 +216,8 @@ class AssistantDiscussionBudgetHttpTest(unittest.TestCase):
         )
 
         self.assertEqual(status, 200, generated)
-        self.assertEqual(len(self.fixture.reply_model.seen_model_payloads), 2)
-        self.assertEqual(self.fixture.reply_model.review_calls, 1)
+        self.assertEqual(len(self.fixture.reply_model.seen_model_payloads), 1)
+        self.assertEqual(self.fixture.reply_model.review_calls, 0)
         self.assertEqual(counters[0].seen_payloads, self.fixture.reply_model.seen_model_payloads)
         items = self._model_request(counters[0].seen_payloads[0])["assistant_discussion"]["items"]
         self.assertEqual([item["kind"] for item in items], ["generation_input"])

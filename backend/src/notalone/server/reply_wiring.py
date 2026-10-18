@@ -46,7 +46,6 @@ from notalone.reply.adapters.deepseek_provider import build_deepseek_model
 from notalone.reply.adapters.deepseek_input_budget import build_deepseek_input_budget
 from notalone.reply.adapters.ecnu_input_budget import build_ecnu_input_budget, ECNU_BASE_URL, ECNU_MODEL
 from notalone.reply.adapters.langchain_runtime import LangChainReplyRuntime
-from notalone.reply.adapters.constraint_review import ReplyConstraintReview
 from notalone.reply.context import RetrievalReplyContext
 from notalone.reply.generator import ReplyGenerator
 from notalone.reply.exploration_context import ExplorationEvidence
@@ -158,8 +157,7 @@ def build_reply_service(
             input_token_counter=input_token_counter,
             on_input_budget=on_input_budget,
             model_callback_factory=call_ledger,
-            constraint_review=ReplyConstraintReview(validate_current=reply_context.validate_current,
-                check_running=model_priority.check_running if model_priority is not None else None),
+            # 候选经确定性来源与结构检查后交用户选择，不追加模型复核（ADR-068）。
         ),
         context=reply_context,
         # 实际模型轮已分别记账，外层不能再写一条汇总而重复计算。

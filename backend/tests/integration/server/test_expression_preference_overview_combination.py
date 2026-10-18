@@ -41,10 +41,9 @@ class ExpressionPreferenceOverviewCombinationHttpTest(OverviewReplyHttpFixture, 
         with psycopg.connect(cls.database_url) as connection:
             cls.actual_database = connection.execute("SELECT current_database()").fetchone()[0]
             actual = [row[0] for row in connection.execute("SELECT name FROM public.notalone_schema_migration ORDER BY name")]
-        if (cls.actual_database != os.environ["NOTALONE_EXPECTED_TEST_DATABASE"] or actual != official
-                or len(actual) != 75 or actual[-1] != "075_layered_profile_generation.sql"):
-            raise RuntimeError("联合验收仅允许本轮精确001–075自有库。")
-        if [int(item[:3]) for item in actual] != list(range(1, 76)) or migrate(cls.database_url, directory):
+        if cls.actual_database != os.environ["NOTALONE_EXPECTED_TEST_DATABASE"] or actual != official:
+            raise RuntimeError("联合验收仅允许已应用全部正式迁移的本轮自有库。")
+        if [int(item[:3]) for item in actual] != list(range(1, len(official) + 1)) or migrate(cls.database_url, directory):
             raise RuntimeError("联合验收迁移须连续且重复0。")
         cls.migration_names = actual
 
@@ -99,7 +98,7 @@ class ExpressionPreferenceOverviewCombinationHttpTest(OverviewReplyHttpFixture, 
     def _assert_dual_snapshot(self, receipt, *, has_preferences=True):
         row = self.saved_turn(receipt)
         payload = row["prepared_context"]
-        self.assertEqual((payload["version"], payload["schema_revision"]), (2, 5))
+        self.assertEqual((payload["version"], payload["schema_revision"]), (2, 9))
         scope = ContactScope(self.owner_id, row["contact_id"])
         with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
             lock_owner_scope(connection, owner_id=self.owner_id)
@@ -113,7 +112,7 @@ class ExpressionPreferenceOverviewCombinationHttpTest(OverviewReplyHttpFixture, 
         navigation = [item.navigation for item in decoded.evidence if item.navigation is not None]
         self.assertTrue(navigation)
         self.assertEqual(encode_context(decoded), payload)
-        self.observations.append({"schema_revision": 5, "preference_count": len(decoded.expression_preferences),
+        self.observations.append({"schema_revision": payload["schema_revision"], "preference_count": len(decoded.expression_preferences),
                                   "navigation_count": len(navigation), "codec_roundtrip": True,
                                   "history_id_count": len(decoded.history_message_ids or ())})
         return row
@@ -127,7 +126,7 @@ class ExpressionPreferenceOverviewCombinationHttpTest(OverviewReplyHttpFixture, 
         self.assertEqual(first["turn_id"], receipt["turn_id"])
         self.assertEqual(first["context_receipt"]["expression_preference_ids"], [preference["preference_id"]])
         self.assertEqual(restarted.request(path + "/replies", body), (200, first))
-        self.assertEqual((len(self.reply_model.seen_calls), self.reply_model.review_calls), (2, 1))
+        self.assertEqual((len(self.reply_model.seen_calls), self.reply_model.review_calls), (1, 0))
         history = self._get(restarted, path + f"/candidates/{first['candidates'][0]['candidate_id']}/versions")
         command = {"idempotency_key": str(uuid4()), "expected_input_version_id": first["input_version_id"],
                    "instruction": "自然一点", "requirement_changes": [{"action": "add", "replacement": "保留原意"}],
@@ -144,7 +143,7 @@ class ExpressionPreferenceOverviewCombinationHttpTest(OverviewReplyHttpFixture, 
         self.assertEqual(continued["context_receipt"]["expression_preference_ids"], [])
         self.assertNotIn("expression_preferences", self.reply_model.payloads[-1])
         self.assertEqual(self._backend(self.owner_id).request(path + "/continue", command), (200, continued))
-        self.assertEqual((len(self.reply_model.seen_calls), self.reply_model.review_calls), (4, 2))
+        self.assertEqual((len(self.reply_model.seen_calls), self.reply_model.review_calls), (2, 0))
 
         contact, _, _, _, path, body, receipt = self._dual_prepare()
         row = self.saved_turn(receipt); payload = row["prepared_context"]; payload["schema_revision"] = 3

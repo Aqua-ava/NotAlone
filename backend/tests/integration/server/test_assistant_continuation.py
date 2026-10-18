@@ -149,13 +149,13 @@ class AssistantContinuationHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         return json.loads(result.stdout)
 
     def _model_payload(self):
-        # 意图与累积要求须核对生成输入，复核调用继续保留在总调用记录中。
+        # 意图与累积要求须核对生成输入；总调用记录同时捕获意外的复核调用。
         return next(json.loads(message.content) for call in reversed(self.reply_model.seen_calls)
                     for message in call if isinstance(message, HumanMessage)
                     and json.loads(message.content).get("generation_stage") != "candidate_fidelity_review")
 
     def _assert_model_calls(self, *, generation, review, since=0):
-        """总调用保留全部复核；分别核对两种实际请求，阻断路径仍直接核对总数。"""
+        """分别统计实际请求；生产路径要求复核为零，阻断路径仍核对总数。"""
         calls = self.reply_model.seen_calls
         is_review = [any(isinstance(message, HumanMessage)
                          and json.loads(message.content).get("generation_stage") == "candidate_fidelity_review"
@@ -165,7 +165,7 @@ class AssistantContinuationHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self.assertEqual(self.reply_model.review_calls, sum(is_review))
 
     def _generation_budget(self, decisions, counter):
-        """从实际计量请求定位生成回执，不能误用更大的后续复核回执设阈值。"""
+        """从实际计量请求定位生成回执，按该轮完整生成输入设阈值。"""
         self.assertEqual(len(decisions), len(counter.seen_payloads))
         return next(decision for decision, payload in reversed(list(zip(decisions, counter.seen_payloads)))
                     if any(message["role"] == "user"
@@ -231,12 +231,12 @@ class AssistantContinuationHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
                          ["第二种合成说法。"])
         self.assertFalse(payload["continuation_reference"]["is_current_draft"])
         self.assertIn("自然一点", payload["user_instruction"])
-        self._assert_model_calls(generation=2, review=1)
+        self._assert_model_calls(generation=2, review=0)
         saved = self._get(self.backend, path)["turns"][-1]
         self.assertEqual(saved["input"]["continuation"], continued["continuation"])
         self.assertEqual(saved["input"]["continued_from_candidate_id"], second["candidate_id"])
         self.assertEqual(self.backend.request(path + "/continue", command), (200, continued))
-        self._assert_model_calls(generation=2, review=1)
+        self._assert_model_calls(generation=2, review=0)
 
     def test_displayed_edited_version_uses_its_complete_message_group(self):
         self.reply_model.candidate_groups[1] = ["原版完整第一段。", "原版完整第二段。"]
@@ -271,7 +271,7 @@ class AssistantContinuationHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self.assertEqual(saved["input"]["continuation"], continued["continuation"])
         self.assertEqual(saved["input"]["continued_from_candidate_id"], second["candidate_id"])
         self.assertEqual(self.backend.request(path + "/continue", command), (200, continued))
-        self._assert_model_calls(generation=2, review=1)
+        self._assert_model_calls(generation=2, review=0)
 
     def _display_edited_second(self, requirements, *, content=None, with_source=False):
         path, generated, frame = self._generated(content=content, with_source=with_source)
@@ -299,7 +299,7 @@ class AssistantContinuationHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         saved = self._get(self.backend, path)["turns"][-1]
         self.assertEqual(saved["input"]["continuation"], continued["continuation"])
         self.assertEqual(self.backend.request(path + "/continue", command), (200, continued))
-        self._assert_model_calls(generation=2, review=1)
+        self._assert_model_calls(generation=2, review=0)
 
     def test_selected_edited_version_conflict_clarifies_before_reserve_and_model(self):
         path, generated, frame = self._display_edited_second("正式一点")
@@ -317,7 +317,7 @@ class AssistantContinuationHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self.assertEqual(status, 200, continued)
         self.assertEqual(continued["continuation"]["effective_requirements"], ["自然一点"])
         self.assertEqual(self.backend.request(path + "/continue", command), (200, continued))
-        self._assert_model_calls(generation=2, review=1)
+        self._assert_model_calls(generation=2, review=0)
 
     def test_selected_requirements_and_new_intention_use_full_cumulative_budget(self):
         legal = "😀" * 4096
@@ -377,7 +377,7 @@ class AssistantContinuationHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
                 saved = self._get(self.backend, path)["turns"][-1]
                 self.assertEqual(saved["input"]["continuation"], continued["continuation"])
                 self.assertEqual(self.backend.request(path + "/continue", command), (200, continued))
-                self._assert_model_calls(generation=1, review=1, since=before)
+                self._assert_model_calls(generation=1, review=0, since=before)
 
     def test_selected_original_version_does_not_inherit_later_edit_requirements(self):
         path, generated, frame = self._display_edited_second("正式一点")
@@ -398,7 +398,7 @@ class AssistantContinuationHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self.assertEqual([item["text"] for item in self._model_payload()["continuation_reference"]["messages"]],
                          ["第二种合成说法。"])
         self.assertEqual(self.backend.request(path + "/continue", command), (200, continued))
-        self._assert_model_calls(generation=2, review=1)
+        self._assert_model_calls(generation=2, review=0)
 
     def test_replacing_selected_edit_requirements_does_not_inherit_sibling_branch(self):
         path, generated, frame = self._display_edited_second("自然一点")
@@ -427,7 +427,7 @@ class AssistantContinuationHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self.assertEqual([item["text"] for item in self._model_payload()["continuation_reference"]["messages"]],
                          ["第二种合成说法。"])
         self.assertEqual(self.backend.request(path + "/continue", command), (200, continued))
-        self._assert_model_calls(generation=2, review=1)
+        self._assert_model_calls(generation=2, review=0)
 
     def test_changed_intention_preserves_selected_requirements_and_clarifies_conflicts(self):
         reason = "以身体不舒服为由拒绝"
@@ -486,7 +486,7 @@ class AssistantContinuationHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self.assertEqual(continued["continuation"]["effective_requirements"], [legal])
         self.assertEqual(self._model_payload()["user_instruction"], legal)
         self.assertEqual(self.backend.request(path + "/continue", command), (200, continued))
-        self._assert_model_calls(generation=1, review=1, since=before_calls)
+        self._assert_model_calls(generation=1, review=0, since=before_calls)
 
         capacity = self._generation_budget(baseline_decisions, baseline_counter).total_tokens - 1
         limited, decisions, counter = self._limited_backend(capacity)
@@ -565,11 +565,11 @@ class AssistantContinuationHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self.assertEqual(continued["continuation"]["submission"], command)
         self.assertEqual(self.backend.request(path + "/continue/prepare", command),
                          (200, {**prepared, "state": "completed"}))
-        self._assert_model_calls(generation=2, review=1)
+        self._assert_model_calls(generation=2, review=0)
         changed = {**command, "instruction": "第二条简短一点"}
         self.assertEqual(self.backend.request(path + "/continue/prepare", changed),
                          (409, {"error": "assistant_session_input_conflict"}))
-        self._assert_model_calls(generation=2, review=1)
+        self._assert_model_calls(generation=2, review=0)
 
     def test_default_client_prepares_identity_before_execution_and_freezes_requirements(self):
         path, generated, frame = self._display_edited_second("正式一点")
@@ -593,8 +593,8 @@ class AssistantContinuationHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self.assertEqual(receipt["turnId"], saved["turn_id"])
         self.assertEqual(saved["input"]["continuation"]["effective_requirements"], ["自然一点"])
         self.assertEqual(self._model_payload()["user_instruction"], "自然一点")
-        self.assertEqual(len(self.reply_model.seen_calls), 3)
-        self.assertEqual(self.reply_model.review_calls, 1)
+        self.assertEqual(len(self.reply_model.seen_calls), 2)
+        self.assertEqual(self.reply_model.review_calls, 0)
 
     def test_continuation_prepare_clarifies_without_claiming_or_model(self):
         path, generated, frame = self._display_edited_second("正式一点")
@@ -707,10 +707,10 @@ class AssistantContinuationHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
             with self.subTest(path=ordinary_path):
                 status, rejected = self.backend.request(ordinary_path, plain)
                 self.assertNotEqual(status, 200, rejected)
-                self._assert_model_calls(generation=2, review=1)
+                self._assert_model_calls(generation=2, review=0)
         self.assertEqual(self.backend.request(path + "/continue", command), (200, continued))
         self.assertEqual(len(self._get(self.backend, path)["turns"]), 2)
-        self._assert_model_calls(generation=2, review=1)
+        self._assert_model_calls(generation=2, review=0)
 
     def test_latest_explicit_intention_overrides_candidate_and_keeps_compatible_requirements(self):
         path, generated, frame = self._generated(content={
@@ -922,7 +922,7 @@ class AssistantContinuationHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self.assertEqual(status, 409, clarified)
         self.assertEqual(clarified["clarification"]["reason"], "requirements_conflict")
         self.assertEqual(clarified["clarification"]["requirements"], ["自然一点"])
-        self._assert_model_calls(generation=1, review=1)
+        self._assert_model_calls(generation=1, review=0)
         status, continued = self.backend.request(path + "/continue", {
             **command, "requirement_changes": [{"action": "replace", "previous": "自然一点",
                                                "replacement": "正式一点"}],
@@ -930,7 +930,7 @@ class AssistantContinuationHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self.assertEqual(status, 200, continued)
         self.assertEqual(continued["continuation"]["effective_requirements"], ["正式一点"])
         self.assertEqual(self._model_payload()["user_instruction"], "正式一点")
-        self._assert_model_calls(generation=2, review=2)
+        self._assert_model_calls(generation=2, review=0)
 
     def test_source_delete_erases_continuation_and_reopen_cannot_restore_it(self):
         path, generated, frame = self._generated(with_source=True)
@@ -983,7 +983,7 @@ class AssistantContinuationHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         })
         self.assertEqual(status, 409, rejected)
         self.assertEqual(self._get(self.backend, path)["current_input_version_id"], newest["input_version_id"])
-        self._assert_model_calls(generation=2, review=1)
+        self._assert_model_calls(generation=2, review=0)
 
     def test_current_input_changed_during_model_prevents_save_and_stale_retry_model(self):
         path, generated, frame = self._generated()
@@ -1020,13 +1020,13 @@ class AssistantContinuationHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         path, first, frame = self._generated(content={"type": "rewrite_draft", "draft_text": original_draft})
         status, continued = baseline.request(path + "/continue", self._command(first, frame))
         self.assertEqual(status, 200, continued)
-        self._assert_model_calls(generation=2, review=1)
+        self._assert_model_calls(generation=2, review=0)
         self.assertEqual(baseline_counter.seen_payloads[-1], self.reply_model.seen_model_payloads[-1])
         capacity = self._generation_budget(baseline_decisions, baseline_counter).total_tokens + 100
 
         limited, decisions, counter = self._limited_backend(capacity)
         self.backend = limited
-        # 先前完整生成和复核已成功；用实际生成窗口核验累积历史能在下一模型前阻断。
+        # 先前完整生成已成功；用实际生成窗口核验累积历史能在下一模型前阻断。
         frame = self._frame(path, continued)
         before = len(self.reply_model.seen_calls)
         status, blocked = limited.request(path + "/continue", self._command(
@@ -1072,7 +1072,7 @@ class AssistantContinuationHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self.assertEqual(self.backend.request(path + "/continue", changed_version)[0], 409)
         command["displayed_group"]["candidates"][1]["version_id"] = original["version_id"]
         self.assertEqual(self.backend.request(path + "/continue", command), (200, continued))
-        self._assert_model_calls(generation=2, review=1)
+        self._assert_model_calls(generation=2, review=0)
 
     def test_unrelated_legacy_global_key_keeps_its_normal_input_without_assistant_history(self):
         path, generated, frame = self._generated()
@@ -1086,7 +1086,7 @@ class AssistantContinuationHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self.assertNotIn("continuation_reference", self._model_payload())
         self.assertEqual(len(self._get(self.backend, path)["turns"]), 2)
         self.assertEqual(self.backend.request("/api/reply/generate", body), (200, legacy))
-        self._assert_model_calls(generation=3, review=1)
+        self._assert_model_calls(generation=3, review=0)
 
     def test_source_deleted_during_continuation_model_cannot_publish_or_retry_candidates(self):
         path, generated, frame = self._generated(with_source=True)
@@ -1212,7 +1212,7 @@ class AssistantContinuationHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self.assertEqual(status, 409)
         self.assertEqual(clarified["clarification"]["reason"], "requirements_conflict")
         self.assertEqual(clarified["clarification"]["requirements"], ["简短一点"])
-        self._assert_model_calls(generation=1, review=1)
+        self._assert_model_calls(generation=1, review=0)
         status, continued = self.backend.request(path + "/continue", {
             **command, "requirement_changes": [{"action": "replace", "previous": "简短一点",
                                                "replacement": "详细一点"}],
@@ -1220,7 +1220,7 @@ class AssistantContinuationHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self.assertEqual(status, 200, continued)
         self.assertEqual(continued["continuation"]["effective_requirements"], ["自然一点", "详细一点"])
         self.assertEqual(self._model_payload()["user_instruction"], "自然一点；详细一点")
-        self._assert_model_calls(generation=2, review=2)
+        self._assert_model_calls(generation=2, review=0)
 
     def test_unknown_mixed_clause_is_not_automatically_accepted_as_natural_tone(self):
         requirement = "自然一点并暗示一个未确认的约定"
@@ -1232,13 +1232,13 @@ class AssistantContinuationHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self.assertEqual(status, 409)
         self.assertEqual(clarified["clarification"]["reason"], "requirements_need_confirmation")
         self.assertEqual(clarified["clarification"]["requirements"], [requirement])
-        self._assert_model_calls(generation=1, review=1)
+        self._assert_model_calls(generation=1, review=0)
         status, continued = self.backend.request(path + "/continue", {
             **command, "requirement_changes": [{"action": "remove", "previous": requirement}],
         })
         self.assertEqual(status, 200, continued)
         self.assertEqual(continued["continuation"]["effective_requirements"], ["详细一点"])
-        self._assert_model_calls(generation=2, review=2)
+        self._assert_model_calls(generation=2, review=0)
 
     def test_replacement_revalidates_conflicts_with_untouched_requirements_before_model(self):
         path, generated, frame = self._generated(content={
@@ -1256,7 +1256,7 @@ class AssistantContinuationHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         saved = self._get(self.backend, path)
         self.assertEqual(saved["current_input_version_id"], generated["input_version_id"])
         self.assertEqual(len(saved["turns"]), 1)
-        self._assert_model_calls(generation=1, review=1)
+        self._assert_model_calls(generation=1, review=0)
 
         status, continued = self.backend.request(path + "/continue", {
             **command, "requirement_changes": [
@@ -1270,7 +1270,7 @@ class AssistantContinuationHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self.assertEqual(self._model_payload()["user_instruction"], "正式一点")
         self.assertEqual(self._get(self.backend, path)["turns"][-1]["input"]["continuation"],
                          continued["continuation"])
-        self._assert_model_calls(generation=2, review=2)
+        self._assert_model_calls(generation=2, review=0)
 
     def test_conjoined_known_requirements_revalidate_every_dimension_before_model(self):
         path, generated, frame = self._generated(content={
@@ -1286,7 +1286,7 @@ class AssistantContinuationHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         saved = self._get(self.backend, path)
         self.assertEqual(saved["current_input_version_id"], generated["input_version_id"])
         self.assertEqual(len(saved["turns"]), 1)
-        self._assert_model_calls(generation=1, review=1)
+        self._assert_model_calls(generation=1, review=0)
 
         status, continued = self.backend.request(path + "/continue", {
             **command, "instruction": "继续", "requirement_changes": [
@@ -1298,7 +1298,7 @@ class AssistantContinuationHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self.assertEqual(status, 200, continued)
         self.assertEqual(continued["continuation"]["effective_requirements"], ["正式一点", "简短一点"])
         self.assertEqual(self._model_payload()["user_instruction"], "正式一点；简短一点")
-        self._assert_model_calls(generation=2, review=2)
+        self._assert_model_calls(generation=2, review=0)
 
     def test_new_mixed_requirement_clarifies_compatibility_then_accepts_explicit_add(self):
         requirement = "正式一点并保留祝福"
@@ -1315,7 +1315,7 @@ class AssistantContinuationHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         saved = self._get(self.backend, path)
         self.assertEqual(saved["current_input_version_id"], generated["input_version_id"])
         self.assertEqual(len(saved["turns"]), 1)
-        self._assert_model_calls(generation=1, review=1)
+        self._assert_model_calls(generation=1, review=0)
 
         status, continued = self.backend.request(path + "/continue", {
             **command, "instruction": "继续", "requirement_changes": [
@@ -1327,7 +1327,7 @@ class AssistantContinuationHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self.assertEqual(status, 200, continued)
         self.assertEqual(continued["continuation"]["effective_requirements"], ["正式一点", "保留祝福"])
         self.assertEqual(self._model_payload()["user_instruction"], "正式一点；保留祝福")
-        self._assert_model_calls(generation=2, review=2)
+        self._assert_model_calls(generation=2, review=0)
 
     def test_single_unknown_requirement_and_unchanged_unknown_continuation_can_generate(self):
         requirement = "保留末尾的祝福"
@@ -1347,7 +1347,7 @@ class AssistantContinuationHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self.assertEqual(repeated["continuation"]["effective_requirements"], [requirement])
         self.assertEqual(self._model_payload()["user_instruction"], requirement)
         self.assertEqual(len(self._get(self.backend, path)["turns"]), 3)
-        self._assert_model_calls(generation=3, review=2)
+        self._assert_model_calls(generation=3, review=0)
 
 
     def test_explicit_compound_replacement_cannot_bypass_untouched_tone_conflict(self):
@@ -1391,7 +1391,7 @@ class AssistantContinuationHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         reopened = self._backend(self.owner_id)
         self.assertEqual(self._get(reopened, path)["turns"][-1]["input"]["continuation"], continued["continuation"])
         self.assertEqual(reopened.request(path + "/continue", corrected), (200, continued))
-        self._assert_model_calls(generation=1, review=1, since=before_calls)
+        self._assert_model_calls(generation=1, review=0, since=before_calls)
 
 
     def test_confirmed_mixed_replacement_and_add_still_revalidate_known_tone(self):
@@ -1440,7 +1440,7 @@ class AssistantContinuationHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
                 saved = self._get(self.backend, path)["turns"][-1]
                 self.assertEqual(saved["input"]["continuation"], continued["continuation"])
                 self.assertEqual(self.backend.request(path + "/continue", corrected), (200, continued))
-                self._assert_model_calls(generation=1, review=1, since=before_calls)
+                self._assert_model_calls(generation=1, review=0, since=before_calls)
 
 
     def test_clarification_distinguishes_existing_and_new_requirement_actions(self):
@@ -1540,7 +1540,7 @@ class AssistantContinuationHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         ))
         self.assertEqual(status, 200, unchanged)
         self.assertEqual(unchanged["continuation"]["effective_requirements"], [requirement])
-        self._assert_model_calls(generation=2, review=2, since=before_calls)
+        self._assert_model_calls(generation=2, review=0, since=before_calls)
 
 
     def test_legal_4096_input_clarification_preserves_more_than_32_requirements(self):
@@ -1670,7 +1670,7 @@ class AssistantContinuationHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
                 saved = self._get(self.backend, path)
                 self.assertEqual(len(saved["turns"]), 2)
                 self.assertEqual(saved["turns"][-1]["input"]["continuation"]["effective_requirements"], [legal])
-                self._assert_model_calls(generation=1, review=1, since=before)
+                self._assert_model_calls(generation=1, review=0, since=before)
 
     def test_default_json_client_refuses_over_4096_codepoints_before_http(self):
         for field in ("instruction", "replacement"):
@@ -1710,9 +1710,9 @@ class AssistantContinuationHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
                 self.assertEqual(observed["result"]["effectiveRequirements"], [legal])
                 self.assertEqual(self._model_payload()["user_instruction"], legal)
                 self.assertEqual(self._get(self.backend, path)["turns"][-1]["input"]["continuation"]["effective_requirements"], [legal])
-                self._assert_model_calls(generation=1, review=1, since=before)
+                self._assert_model_calls(generation=1, review=0, since=before)
                 print(f"unicode_default_client_boundary: field={field} codepoints=4096 "
-                      "status=200 model_delta=2", flush=True)
+                      f"status=200 model_delta={len(self.reply_model.seen_calls) - before}", flush=True)
 
     def test_default_json_client_confirms_all_33_and_2048_actual_clarification_options(self):
         for requirements in (

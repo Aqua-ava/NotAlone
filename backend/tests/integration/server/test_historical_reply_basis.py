@@ -501,8 +501,8 @@ class HistoricalReplyBasisHttpTest(unittest.TestCase):
         self.fixture._delete_source(source_id)
         self.assertTrue(all(turn["state"] == "redacted" for turn in self.fixture.backend.request(other_path)[1]["turns"]))
         self.assertEqual(self.fixture.backend.request(versions_path), (404, {"error": "not_found"}))
-        self.assertEqual(self.fixture.model.review_calls, 1)
-        self.assertEqual(len(self.fixture.model.seen_calls), 3)
+        self.assertEqual(self.fixture.model.review_calls, 0)
+        self.assertEqual(len(self.fixture.model.seen_calls), 2)
 
     def test_legacy_missing_time_and_revision_metadata_stays_unknown_and_is_not_backfilled(self) -> None:
         memory_id, _, generated = self._generate("owner")

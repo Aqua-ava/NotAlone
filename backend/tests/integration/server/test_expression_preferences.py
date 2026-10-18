@@ -789,8 +789,8 @@ class ExpressionPreferencesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self.assertEqual(generated["turn_id"], receipt["turn_id"])
         self.assertEqual(generated["context_receipt"]["expression_preferences"][0]["text"], preference["text"])
         calls_after_generation = len(self.reply_model.seen_calls)
-        self.assertEqual(calls_after_generation, 2)
-        self.assertEqual(self.reply_model.review_calls, 1)
+        self.assertEqual(calls_after_generation, 1)
+        self.assertEqual(self.reply_model.review_calls, 0)
         second_body = {**body, "idempotency_key": str(uuid4())}
         status, second = restarted.request(path + "/replies/prepare", second_body)
         self.assertEqual(status, 200, second)
@@ -814,8 +814,8 @@ class ExpressionPreferencesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self._save("主动样本使用的明确长期合成偏好。")
         reply, _, _ = self._generate(self.contact_id)
         calls_before_prepare = len(self.reply_model.seen_calls)
-        self.assertEqual(calls_before_prepare, 2)
-        self.assertEqual(self.reply_model.review_calls, 1)
+        self.assertEqual(calls_before_prepare, 1)
+        self.assertEqual(self.reply_model.review_calls, 0)
         samples = f"/api/contacts/{self.contact_id}/style-samples"
         status, saved = self.backend.request(samples, {"idempotency_key": str(uuid4()),
             "text": reply["candidates"][0]["text"],

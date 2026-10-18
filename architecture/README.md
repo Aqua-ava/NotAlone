@@ -101,6 +101,7 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 65. [ADR-065：独立 App 首版先交付手动输入路径](adr/065-manual-input-standalone-first-release.md)
 66. [ADR-066：沿用现有数据库并原地补齐结构](adr/066-in-place-schema-updates-and-database-reuse.md)
 67. [ADR-067：场景文档与长期画像的分层加载](adr/067-layered-scenario-and-profile-context.md)
+68. [ADR-068：生成候选后由用户选择，不追加模型复核](adr/068-direct-reply-candidates-with-user-selection.md)
 
 ## 当前架构决策
 

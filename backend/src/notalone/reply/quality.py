@@ -11,12 +11,9 @@ from notalone.reply.errors import ReplyInvariantError
 
 def reply_model_configuration(model):
     """只取实际请求参数和接收路由，不取凭据或客户端内部状态。"""
-    from notalone.reply.adapters.deepseek_provider import is_official_deepseek_flash
-    from notalone.reply.adapters.deepseek_input_budget import DEEPSEEK_REVIEW_BASE_URL
     route = str(model.root_async_client.base_url).rstrip('/') + '/chat/completions'
-    review_route = (DEEPSEEK_REVIEW_BASE_URL.rstrip('/') + '/chat/completions'
-                    if is_official_deepseek_flash(model) else route)
-    return {'request_model': model.model_name, 'request_route': route, 'review_route': review_route,
+    return {'request_model': model.model_name, 'request_route': route,
+            'post_generation_review': 'disabled',
             'parameters': model._get_request_payload([]), 'sdk_retries': model.max_retries}
 
 
@@ -25,8 +22,8 @@ def build_reply_contract(model, profile, contact_budget, owner_budget):
     rules = {name: (root / name).read_text() for name in (
         'reply/context.py', 'reply/layered_context.py', 'reply/scenario_tools.py',
         'reply/generator.py', 'reply/tools.py', 'reply/fidelity.py',
-        'reply/adapters/langchain_runtime.py', 'reply/adapters/constraint_review.py',
-        'reply/adapters/constraint_review_contract.py', 'reply/adapters/input_budget_middleware.py')}
+        'reply/adapters/langchain_runtime.py', 'reply/adapters/input_budget_middleware.py',
+        'server/reply_wiring.py')}
     from notalone.reply.adapters.langchain_runtime import REPLY_RUNTIME_SCHEMA
     from langchain_core.utils.function_calling import convert_to_openai_tool
     config = reply_model_configuration(model)
@@ -163,6 +160,7 @@ def _captured_output_matches(arm, calls):
                     if function.get('name') == 'ReplyRuntimeOutput':
                         candidates = [_candidate_value(item) for item in json.loads(function['arguments'])['candidates']]
                     elif function.get('name') == 'ReplyFidelityReview':
+                        # 只重放旧报告中的实际复核，不代表当前生产仍调用复核模型。
                         from notalone.reply.adapters.constraint_review_contract import accepted_candidate_numbers
                         payload = next(json.loads(message['content']) for message in reversed(call['request']['messages'])
                                        if message.get('role') == 'user')

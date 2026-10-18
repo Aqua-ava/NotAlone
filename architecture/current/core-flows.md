@@ -149,6 +149,8 @@ CLI 可以在用户切回已绑定联系人时补读本地数据库中水位之�
   -> 用户选择、编辑、手动发送
 ```
 
+按 [ADR-068](../adr/068-direct-reply-candidates-with-user-selection.md)，候选生成后不追加模型语义复核；结构、范围、来源与引用检查继续由程序执行，候选的最终表达由用户选择和修改。来源引用有效不等于语义已核验。记忆入库、L2/L3 整理核验及离线质量资格独立保持。
+
 回复运行时固定为确定性外壳 `validate_scope -> assess_request_risk -> assemble_initial_context -> create_agent bounded Tool loop -> validate_agent_output -> persist_trace -> return_result`。内部循环使用 LangChain `create_agent`，并接受 LangGraph 作为底层 runtime；v1 不直接手写自定义 `StateGraph`。若以后出现明确的暂停恢复或复杂固定流程，可以把整个 `create_agent` 作为自定义图中的节点。完整边界见 `../drafts/agent-runtime.md`、ADR-006 与 ADR-009。
 
 每次生成由调用方提供联系人范围内的幂等 `request_key`。同键同输入的已完成请求直接返回原候选；同键不同输入明确报冲突；有效租约内正在执行时返回“处理中”；失败或租约过期后可以复用同一请求身份重试，不得产生第二份请求或重复候选。

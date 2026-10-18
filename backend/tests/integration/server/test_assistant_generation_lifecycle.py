@@ -168,7 +168,7 @@ class AssistantGenerationInterruptionHttpTest(unittest.TestCase):
         status, completed = self.backend.request(path + "/replies", body)
         self.assertEqual(status, 200, completed)
         self.assertEqual(completed["turn_id"], failed["turn_id"])
-        assert_generation_review_calls(self, self.model, generation=1, review=1)
+        assert_generation_review_calls(self, self.model, generation=1, review=0)
 
     def test_prepare_budget_failure_without_request_quit_preserves_failure_and_fences_key(self) -> None:
         path = self._session_path()
@@ -224,13 +224,13 @@ class AssistantGenerationInterruptionHttpTest(unittest.TestCase):
         self.assertEqual(self.backend.request(path + "/replies", fresh_body)[0], 200)
         self.assertEqual(self.backend.request(path + "/interrupt", interruption), (200, terminal))
         self.assertEqual(self.backend.request(path)[1]["current_input_version_id"], fresh["input_version_id"])
-        assert_generation_review_calls(self, self.model, generation=1, review=1)
+        assert_generation_review_calls(self, self.model, generation=1, review=0)
 
     def test_expired_request_reports_no_running_generation(self) -> None:
         moment = [datetime.now(timezone.utc)]
         self.model = LatePreparedModel()
-        with patch("notalone.server.reply_wiring.PostgresReplyStore", side_effect=lambda url:
-                   PostgresReplyStore(url, clock=lambda: moment[0])):
+        with patch("notalone.server.reply_wiring.PostgresReplyStore", side_effect=lambda url, **kwargs:
+                   PostgresReplyStore(url, clock=lambda: moment[0], **kwargs)):
             self.backend = self._backend()
         path = self._session_path()
         body = self._body()
@@ -310,7 +310,7 @@ class AssistantGenerationInterruptionHttpTest(unittest.TestCase):
         self.assertEqual(turns[prepared["request_key"]]["state"], "completed")
         self.assertIsNone(turns[prepared["request_key"]]["interruption_reason"])
         self.assertEqual(turns[newer["request_key"]]["state"], "running")
-        assert_generation_review_calls(self, self.model, generation=1, review=1)
+        assert_generation_review_calls(self, self.model, generation=1, review=0)
         self.assertEqual(reopened.request(path + "/interrupt", self._interruption_body(prepared)),
                          (200, completed))
 
@@ -360,7 +360,7 @@ class AssistantGenerationInterruptionHttpTest(unittest.TestCase):
         self.assertEqual(turns[prepared["request_key"]]["interruption_reason"], "app_quit")
         self.assertIsNone(turns[prepared["request_key"]]["reply"])
         self.assertEqual(turns[retry["request_key"]]["state"], "completed")
-        assert_generation_review_calls(self, self.model, generation=2, review=1)
+        assert_generation_review_calls(self, self.model, generation=2, review=0)
         with psycopg.connect(DATABASE_URL) as connection:
             self.assertEqual(connection.execute(
                 "SELECT request.state, attempt.state, attempt.failure_reason, "
@@ -438,7 +438,7 @@ class AssistantGenerationInterruptionHttpTest(unittest.TestCase):
         self.assertEqual(status, 200, completed)
         self.assertEqual(completed["turn_id"], prepared["turn_id"])
         self.assertEqual(self._backend().request(path)[1]["turns"][0]["state"], "completed")
-        assert_generation_review_calls(self, self.model, generation=1, review=1)
+        assert_generation_review_calls(self, self.model, generation=1, review=0)
 
     def test_interruption_rejects_foreign_scope_wrong_identity_and_body_fields_without_writes(self) -> None:
         path = self._session_path()
@@ -581,7 +581,7 @@ class AssistantGenerationInterruptionHttpTest(unittest.TestCase):
         self.assertEqual(status, 200, result)
         self.assertEqual(result["input_version_id"], newer["input_version_id"])
         self.assertEqual(result["candidates"][0]["text"], "合成有效新候选")
-        assert_generation_review_calls(self, self.model, generation=2, review=1)
+        assert_generation_review_calls(self, self.model, generation=2, review=0)
 
 
 if __name__ == "__main__":
