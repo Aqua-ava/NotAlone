@@ -31,6 +31,12 @@ class ReplyEvidenceService:
             raise ReplyStoreInvariantError("回复检索回执与保存依据不一致。") from None
         return {
             "reply_request_id": str(request_id),
+            # 与生成回执独立读取同一持久结果，供逐条审阅绑定真实候选。
+            "candidate_output": [{"candidate_id": str(item.candidate_id), "text": item.text,
+                "basis": item.basis, "citation_ids": [str(value) for value in item.citation_ids],
+                "risk_notes": list(item.risk_notes), "messages": [
+                    {"message_id": str(message.message_id), "text": message.text}
+                    for message in item.message_group]} for item in stored.result.candidates],
             "layered_context": stored.layered_context,
             "layered_status": stored.layered_status,
             "owner_layered_context": stored.owner_layered_context,

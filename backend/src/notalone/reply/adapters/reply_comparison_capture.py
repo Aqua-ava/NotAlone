@@ -158,12 +158,13 @@ class ReplyComparisonCapture:
             self._active["evidence"]["input_budget"] = deepcopy(payload)
         self.flush()
 
-    def http_step(self, *, method: str, path: str, status: int, response: object) -> None:
+    def http_step(self, *, method: str, path: str, status: int, response: object, request: object = None) -> None:
         """只保存本次公开接口回执；失败时也能回看已完成的准备。"""
         if self._active is None:
             raise EvaluationBudgetAbort("reply_comparison_http_without_arm")
         self._active["evidence"].setdefault("http_steps", []).append({
-            "method": method, "path": path, "status": status, "response": deepcopy(response)})
+            "method": method, "path": path, "status": status, "request": deepcopy(request),
+            "response": deepcopy(response)})
         self.flush()
 
     @contextmanager

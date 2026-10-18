@@ -107,14 +107,24 @@ class ReplyQualityReleaseHttpTest(OverviewReplyHttpFixture, unittest.TestCase):
         self.assertEqual(len(self.actual_calls), 1)
         self.assertNotIn('changed-after-send', str(self._get(self.backend, path)))
 
-    def test_installed_pair_runs_same_l1_through_public_http_and_actual_sdk_capture(self):
+    def _run_installed_pair(self, *, mutation=None, expected_scope='contact'):
+        from copy import deepcopy
+        from uuid import uuid4
         from notalone.experiments.reply_comparison import (
-            InstalledReplyHttpAdapter, build_manifest, installed_l1_version, run_reply_comparison)
+            InstalledReplyHttpAdapter, build_manifest, capture_installation_state,
+            installed_l1_version, run_reply_comparison, validate_installation_binding)
         from notalone.reply.adapters.reply_comparison_capture import ReplyComparisonCapture
         from notalone.reply.adapters.deepseek_input_budget import build_deepseek_input_budget
         from notalone.reply.quality import build_reply_contract, reply_model_configuration
-        contact, _, _, ready, _ = self.prepare_layered_reply()
+        contact, _, management, ready, _ = self.prepare_layered_reply()
         self.assertEqual(self.backend.request(f'/api/contacts/{contact}/manual-confirmation', {})[0], 200)
+        if mutation == 'extra_scope' or expected_scope == 'owner':
+            self.manual_owner('本人合成学习经历。')
+        if expected_scope == 'owner':
+            self.assertEqual(management.request(f'/api/contacts/{contact}/layered-memory/delete',
+                {'settings_generation': ready['settings_generation']})[0], 200)
+            self.assertEqual(management.request('/api/memories/owner/layered-memory/enable',
+                {'settings_generation': 0, 'purpose_confirmed': True})[0], 200)
         budget = LayeredReplyBudget(4, 4, 4000)
         prototype = build_deepseek_model(api_key='synthetic-offline-unused', max_retries=0,
             base_url='https://api.deepseek.com', extra_body={'thinking': {'type': 'disabled'}})
@@ -122,12 +132,38 @@ class ReplyQualityReleaseHttpTest(OverviewReplyHttpFixture, unittest.TestCase):
         self.addCleanup(lambda: asyncio.run(prototype.root_async_client.close()))
         scope = {'owner_id': str(self.owner_id), 'contact_id': contact, 'confirmed': True,
                  'confirmation_receipt': {'kind': 'manual'}}
-        case = {'case_id': 'controlled-public-pair', 'scope_kind': 'contact',
+        state = capture_installation_state(self.service, scope, expected_scopes=[expected_scope])[expected_scope]
+        original = {'l2': {'scenarios': [{key: item[key] for key in ('title', 'hint', 'paragraphs')}
+                                        for item in deepcopy(state['scenarios'])]},
+                    'l3': {'entries': deepcopy(state['profile_entries'])},
+                    'l2_verification': True, 'l3_verification': True, 'l2_challenge': False, 'l3_challenge': False}
+        mapping = {}
+        def original_references(value):
+            if isinstance(value, list):
+                for item in value:
+                    original_references(item)
+            elif isinstance(value, dict):
+                if 'memory_id' in value:
+                    target = (value['memory_id'], value['revision'])
+                    mapping.setdefault(target, {'original_memory_id': str(uuid4()), 'original_revision': 7,
+                        'installed_memory_id': target[0], 'installed_revision': target[1]})
+                    value.clear()
+                    value.update(memory_id=mapping[target]['original_memory_id'], revision=7)
+                else:
+                    for item in value.values():
+                        original_references(item)
+        original_references(original)
+        binding = {'schema_version': 'controlled-layered-installation-v1', 'expected_scopes': [expected_scope],
+            'original_output': original, 'reference_mapping': list(mapping.values()),
+            'installed': {expected_scope: state}}
+        case = {'case_id': 'controlled-public-pair', 'scope_kind': expected_scope,
             'organization_review': {'reviewer_kind': 'agent', 'decision': 'approved'},
-            'organization_output_sha256': content_digest(ready), 'input_package': {'scope': scope,
+            'organization_output_sha256': content_digest(original), 'installation_binding': binding,
+            'input_package': {'scope': scope,
             'request': self.rewrite_body(contact, '聊聊共同课程。'),
             'l1_version': installed_l1_version(self.database_url, scope)}}
-        contract = build_reply_contract(prototype, build_deepseek_input_budget(prototype)[0], budget, None)
+        validate_installation_binding(binding, case['organization_output_sha256'], case['organization_review'])
+        contract = build_reply_contract(prototype, build_deepseek_input_budget(prototype)[0], budget, budget)
         manifest = build_manifest(contract=contract, model_configuration=reply_model_configuration(prototype),
             dataset_version='controlled-public-pair-v1', cases=[case])
         def respond(request):
@@ -151,12 +187,60 @@ class ReplyQualityReleaseHttpTest(OverviewReplyHttpFixture, unittest.TestCase):
             http_client=capture.http_client, http_async_client=capture.http_async_client)
         adapter = InstalledReplyHttpAdapter.from_installed_database(database_url=self.database_url,
             expected_database=self.database_url.split('dbname=')[-1], model=model, capture=capture,
-            contact_budget=budget, owner_budget=None, layered_memory=self.service)
-        bundle = run_reply_comparison(manifest=manifest, cases=[case], capture=capture, invoke_arm=adapter)
+            contact_budget=budget, owner_budget=budget, layered_memory=self.service)
+        def invoke(item, arm, key, recorder):
+            if arm == 'layered' and mutation == 'replacement':
+                import psycopg
+                from psycopg.types.json import Jsonb
+                changed = deepcopy(state['profile_entries'])
+                changed[0]['text'] = '实际已替换为未获本例支持审阅的候选。'
+                with psycopg.connect(self.database_url) as connection:
+                    connection.execute('UPDATE public.layered_profile_version SET entries=%s WHERE id=%s',
+                        (Jsonb(changed), state['profile_version_id']))
+            if arm == 'layered' and mutation == 'extra_scope':
+                self.assertEqual(management.request('/api/memories/owner/layered-memory/enable',
+                    {'settings_generation': 0, 'purpose_confirmed': True})[0], 200)
+            return adapter(item, arm, key, recorder)
+        bundle = run_reply_comparison(manifest=manifest, cases=[case], capture=capture, invoke_arm=invoke)
+        return bundle, contract
+
+    def test_installed_pair_runs_same_l1_through_public_http_and_actual_sdk_capture(self):
+        bundle, contract = self._run_installed_pair()
         self.assertEqual([arm['status'] for arm in bundle['arms']], ['succeeded', 'succeeded'],
             [{key: row[key] for key in ('arm', 'status', 'error')} for row in bundle['arms']])
         self.assertEqual(bundle['budget_receipt']['reserved_requests'], 2)
         baseline, layered = bundle['arms']
         self.assertIsNone(baseline['evidence']['reply_evidence']['layered_context'])
         self.assertIsNotNone(layered['evidence']['reply_evidence']['layered_context'])
+        self.assertIsNone(layered['evidence']['reply_evidence']['owner_layered_context'])
+        self.assertEqual(layered['evidence']['installation_receipt']['uncovered_scopes'], ['owner'])
         self.assertEqual(baseline['evidence']['l1_budget'], layered['evidence']['l1_budget'])
+        from notalone.reply.quality import comparison_report
+        reasons = comparison_report(bundle, contract)['stage']['reasons']
+        self.assertNotIn('reply_output_capture_changed', reasons)
+        self.assertNotIn('reply_installation_binding_incomplete', reasons)
+
+    def test_owner_only_installed_pair_does_not_require_contact_material(self):
+        bundle, contract = self._run_installed_pair(expected_scope='owner')
+        self.assertEqual([arm['status'] for arm in bundle['arms']], ['succeeded', 'succeeded'],
+            [row['error'] for row in bundle['arms']])
+        layered = bundle['arms'][1]
+        self.assertIsNone(layered['evidence']['reply_evidence']['layered_context'])
+        self.assertIsNotNone(layered['evidence']['reply_evidence']['owner_layered_context'])
+        self.assertEqual(layered['evidence']['installation_receipt']['uncovered_scopes'], ['contact'])
+        from notalone.reply.quality import comparison_report
+        reasons = comparison_report(bundle, contract)['stage']['reasons']
+        self.assertNotIn('reply_output_capture_changed', reasons)
+        self.assertNotIn('reply_installation_binding_incomplete', reasons)
+
+    def test_replaced_installed_candidate_blocks_layered_arm_before_provider_call(self):
+        bundle, _ = self._run_installed_pair(mutation='replacement')
+        self.assertEqual([arm['status'] for arm in bundle['arms']], ['succeeded', 'blocked'])
+        self.assertEqual(bundle['arms'][1]['error']['kind'], 'installed_layered_material_changed')
+        self.assertFalse(any(call['arm'] == 'layered' for call in bundle['calls']))
+
+    def test_unapproved_other_scope_blocks_layered_arm_before_provider_call(self):
+        bundle, _ = self._run_installed_pair(mutation='extra_scope')
+        self.assertEqual([arm['status'] for arm in bundle['arms']], ['succeeded', 'blocked'])
+        self.assertEqual(bundle['arms'][1]['error']['kind'], 'unexpected_installed_layered_scope')
+        self.assertFalse(any(call['arm'] == 'layered' for call in bundle['calls']))

@@ -185,6 +185,10 @@ PYTHONPATH=backend/src python \
 
 ### 分层回复的独立质量与快速对照
 
+逐组输出审阅须保存 `reply.quality.reply_review_binding(case, arm, calls)` 的 `binding`，
+同时固定实际请求／响应、最终候选、持久依据与两侧资料摘要；更换其中任一项不能沿用旧审阅。
+报告还会交叉核验公开生成回执、独立依据读取和实际模型响应；正式来源逐次核对原整理 case 的实际输出摘要。
+
 正式后端会把同一分层资料服务接入回复。operator 配置可用
 `schema_version: organization-runtime-v2`，保留既有 `suite_directory` 和
 `organization_budget`，另加 `reply`：`directory` 指向私有回复证据目录，
@@ -206,6 +210,10 @@ PYTHONPATH=src python -m notalone.experiments.reply_comparison \
 `--database-url-env NAME`、`--expected-test-database NAME_test`、`--api-key-env NAME`。
 只在明确自有 `_test` 库内，才可用 `--controlled-layered-installation` 读取已受控安装
 的合法合成候选；它不会授予生产自动使用资格，也不会替用户发送消息。
+每例还须冻结 `installation_binding`：原完整获审 C 输出、原引用到实际 L1 的版本映射，
+以及该例唯一预期侧的实际 profile／scenario 版本、完整正文及摘要。另一侧必须没有
+已安装资料；单侧对照仅使用该侧预算，并明确报告另一侧未覆盖。每组外发前重新核对
+安装状态，生成后核对持久依据；更换候选、来源映射或增加另一侧资料时阻断该组。
 
 每组最多 6 次、总计最多 48 次物理请求，SDK/传输无重试、无重定向。
 生成及独立复核共用一个不可续跑账本；失败、未知和未执行组完整保留，

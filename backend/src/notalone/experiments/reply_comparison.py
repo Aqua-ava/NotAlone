@@ -38,6 +38,169 @@ def canonical_input(input_package: dict) -> dict:
     return value
 
 
+def _candidate_material(output: dict, mapping: list[dict]) -> dict:
+    references = {}
+    for item in mapping:
+        key = (item["original_memory_id"], item["original_revision"])
+        target = (item["installed_memory_id"], item["installed_revision"])
+        if key in references or target in references.values():
+            raise ValueError("安装引用映射须逐项唯一。")
+        for identifier in (key[0], target[0]):
+            UUID(identifier)
+        if any(type(revision) is not int or revision < 1 for revision in (key[1], target[1])):
+            raise ValueError("安装引用revision无效。")
+        references[key] = target
+    used = set()
+
+    def remap(value):
+        if isinstance(value, list):
+            return [remap(item) for item in value]
+        if isinstance(value, dict):
+            if "memory_id" in value:
+                key = (value["memory_id"], value["revision"])
+                if set(value) != {"memory_id", "revision"} or key not in references:
+                    raise ValueError("获审输出引用缺少明确原版本到安装版本映射。")
+                used.add(key)
+                target = references[key]
+                return {"memory_id": target[0], "revision": target[1]}
+            return {key: remap(item) for key, item in value.items()}
+        return value
+
+    scenarios = [{key: item[key] for key in ("title", "hint", "paragraphs")}
+                 for item in output["l2"]["scenarios"]]
+    material = remap({"scenarios": scenarios, "profile": output["l3"]["entries"]})
+    if used != set(references) or not used:
+        raise ValueError("安装引用映射必须完整且没有额外条目。")
+    material["scenarios"].sort(key=content_digest)
+    return material
+
+
+def _installed_candidate_fields(value):
+    """真实writer补入来源类型和时间；候选等价比较只投影其原引用字段。"""
+    if isinstance(value, list):
+        return [_installed_candidate_fields(item) for item in value]
+    if isinstance(value, dict):
+        if "memory_id" in value:
+            if set(value) - {"memory_id", "revision", "provenance_kind", "timing"}:
+                raise ValueError("安装引用出现未知派生字段。")
+            return {key: value[key] for key in ("memory_id", "revision")}
+        return {key: _installed_candidate_fields(item) for key, item in value.items()}
+    return value
+
+
+def validate_installation_binding(binding: dict, organization_output_sha256: str, review: dict) -> str:
+    """独立静态重算原完整候选、原到实引用和安装正文；不信摘要形状。"""
+    if (not isinstance(binding, dict) or binding.get("schema_version") != "controlled-layered-installation-v1"
+            or binding.get("expected_scopes") not in (["contact"], ["owner"])
+            or (review or {}).get("decision") != "approved"
+            or (review or {}).get("reviewer_kind") not in {"agent", "human"}):
+        raise ValueError("每个受控C候选须明确一侧范围和支持审阅。")
+    original = binding["original_output"]
+    if (content_digest(original) != organization_output_sha256
+            or original.get("l2_verification") is not True or original.get("l3_verification") is not True):
+        raise ValueError("原完整获审整理输出已变化或未通过核验。")
+    expected = binding["expected_scopes"]
+    if set(binding["installed"]) != set(expected):
+        raise ValueError("安装范围与冻结候选不一致。")
+    installed = binding["installed"][expected[0]]
+    if any(type(installed.get(key)) is not int or installed[key] < 0
+           for key in ("settings_generation", "organization_generation")):
+        raise ValueError("安装世代必须为明确非负整数。")
+    UUID(installed["scope"]["owner_id"])
+    if expected == ["contact"]:
+        UUID(installed["scope"]["contact_id"])
+    elif installed["scope"].get("contact_id") is not None:
+        raise ValueError("本人安装不能绑定联系人scope。")
+    profile, scenarios = installed["profile_entries"], installed["scenarios"]
+    if (installed["profile_sha256"] != content_digest(profile)
+            or not installed["profile_version_id"] or not scenarios
+            or len({item["scenario_id"] for item in scenarios}) != len(scenarios)
+            or len({item["version_id"] for item in scenarios}) != len(scenarios)):
+        raise ValueError("安装的profile或scenario版本不完整。")
+    UUID(installed["profile_version_id"])
+    for item in scenarios:
+        UUID(item["scenario_id"])
+        UUID(item["version_id"])
+        if item["body_sha256"] != content_digest({key: item[key] for key in ("title", "hint", "paragraphs")}):
+            raise ValueError("安装主题正文摘要不一致。")
+    actual = {"profile": profile, "scenarios": sorted(
+        ({key: item[key] for key in ("title", "hint", "paragraphs")} for item in scenarios), key=content_digest)}
+    actual = _installed_candidate_fields(actual)
+    actual["scenarios"].sort(key=content_digest)
+    if actual != _candidate_material(original, binding["reference_mapping"]):
+        raise ValueError("实际安装正文不等于原获审候选经明确引用映射后的正文。")
+    return content_digest(binding)
+
+
+def capture_installation_state(layered_memory, scope: dict, *, expected_scopes=None) -> dict:
+    """沿现有合法读取接口固定两侧的实际版本及完整正文。"""
+    from notalone.scopes import ContactScope, OwnerScope
+    states = {}
+    for kind, value in (("contact", ContactScope(UUID(scope["owner_id"]), UUID(scope["contact_id"]))),
+                        ("owner", OwnerScope(UUID(scope["owner_id"])))):
+        snapshot = layered_memory.capture(value)
+        if snapshot is None:
+            states[kind] = None
+            continue
+        if expected_scopes is not None and kind not in expected_scopes:
+            raise ReplyComparisonBlocked("unexpected_installed_layered_scope")
+        scenarios = []
+        for item in snapshot.scenarios:
+            document = layered_memory.read_scenario(snapshot, item.scenario_id, (0, item.paragraph_count))
+            body = {key: document[key] for key in ("title", "hint", "paragraphs")}
+            scenarios.append({"scenario_id": str(item.scenario_id), "version_id": str(item.version_id),
+                              **body, "body_sha256": content_digest(body)})
+        entries = list(snapshot.profile_entries)
+        states[kind] = {"scope": {"owner_id": scope["owner_id"],
+                                  "contact_id": scope["contact_id"] if kind == "contact" else None},
+            "settings_generation": snapshot.settings_generation, "organization_generation": snapshot.organization_generation,
+            "profile_version_id": str(snapshot.profile_version_id) if snapshot.profile_version_id else None,
+            "profile_entries": entries, "profile_sha256": content_digest(entries), "scenarios": scenarios}
+    return states
+
+
+def actual_evidence_material_receipt(evidence: dict) -> dict:
+    return {kind: {"context": evidence.get(context), "scenario_reads": evidence.get(reads, [])}
+            for kind, context, reads in (("contact", "layered_context", "layered_scenario_reads"),
+                                         ("owner", "owner_layered_context", "owner_layered_scenario_reads"))}
+
+
+def validate_persisted_installation(binding: dict, evidence: dict, arm: str) -> dict:
+    """持久依据只能使用冻结版本、对应profile条目及主题段落。"""
+    actual = actual_evidence_material_receipt(evidence)
+    for kind, receipt in actual.items():
+        context = receipt["context"]
+        if arm == "baseline" or kind not in binding["expected_scopes"]:
+            if context is not None or receipt["scenario_reads"]:
+                raise ValueError("持久依据出现本组未授权的分层范围。")
+            continue
+        frozen = binding["installed"][kind]
+        if not isinstance(context, dict) or any(context.get(key) != frozen[key] for key in (
+                "settings_generation", "organization_generation", "profile_version_id")):
+            raise ValueError("持久依据的安装版本已变化。")
+        entries = context.get("profile_entries", [])
+        if entries != frozen["profile_entries"][:len(entries)]:
+            raise ValueError("持久依据的profile正文不属于获审安装版本。")
+        scenarios = {item["scenario_id"]: item for item in frozen["scenarios"]}
+        for item in context.get("directory", []):
+            prior = scenarios.get(item["scenario_id"])
+            if (prior is None or any(item.get(key) != prior[key] for key in ("version_id", "title", "hint"))
+                    or item.get("paragraph_count") != len(prior["paragraphs"])):
+                raise ValueError("持久主题目录不属于获审安装版本。")
+        for read in receipt["scenario_reads"]:
+            if read.get("status") != "succeeded":
+                continue
+            document = read["document"]
+            prior = scenarios.get(read["scenario_id"])
+            start, end = read["paragraph_range"]
+            if (prior is None or not 0 <= start < end <= len(prior["paragraphs"])
+                    or any(document.get(key) != prior[key] for key in ("scenario_id", "version_id", "title", "hint"))
+                    or document.get("organization_generation") != frozen["organization_generation"]
+                    or document.get("paragraphs") != prior["paragraphs"][start:end]):
+                raise ValueError("持久主题读取正文不属于获审安装版本。")
+    return actual
+
+
 def build_manifest(*, contract, model_configuration: dict, dataset_version: str,
                    cases: list[dict], coverage_kind: str = "smoke") -> dict:
     if (not 1 <= len(cases) <= 4 or coverage_kind not in {"smoke", "formal"}
@@ -58,6 +221,8 @@ def build_manifest(*, contract, model_configuration: dict, dataset_version: str,
                         "scope_kind": case["scope_kind"],
                         "organization_output_sha256": case.get("organization_output_sha256"),
                         "organization_review": deepcopy(case.get("organization_review"))})
+        if "installation_binding" in case:
+            members[-1]["installation_binding"] = deepcopy(case["installation_binding"])
     if len({item["case_id"] for item in members}) != len(members):
         raise ValueError("case_id须唯一。")
     return {"reply_contract": contract.to_payload(), "contract_id": contract.identity,
@@ -74,7 +239,8 @@ def run_reply_comparison(*, manifest: dict, cases: list[dict], capture, invoke_a
     by_id = {case["case_id"]: deepcopy(case) for case in cases}
     for member in manifest["cases"]:
         if (member["case_id"] not in by_id
-                or content_digest(canonical_input(by_id[member["case_id"]]["input_package"])) != member["input_sha256"]):
+                or content_digest(canonical_input(by_id[member["case_id"]]["input_package"])) != member["input_sha256"]
+                or member.get("installation_binding") != by_id[member["case_id"]].get("installation_binding")):
             raise ValueError("完整输入摘要在执行前发生变化。")
     try:
         with capture.budget.batch():
@@ -113,9 +279,10 @@ def run_reply_comparison(*, manifest: dict, cases: list[dict], capture, invoke_a
 class InstalledReplyHttpAdapter:
     """已安装scope沿新会话、准备、生成、依据四个公开HTTP接口运行。"""
 
-    def __init__(self, request, *, check_l1_version=None):
+    def __init__(self, request, *, check_l1_version=None, check_installation=None):
         self._request = request
         self._check_l1_version = check_l1_version
+        self._check_installation = check_installation
 
     @staticmethod
     def request_confirmed_contact(client, *, token: str, contact_id: str,
@@ -138,12 +305,13 @@ class InstalledReplyHttpAdapter:
         scope = package["scope"]
         if self._check_l1_version is not None:
             self._check_l1_version(package)
+        installation = self._check_installation(case) if self._check_installation is not None else None
         request = self._request
         contact = scope["contact_id"]
 
         def call(method, path, payload=None):
             status, body = request(scope["owner_id"], arm, method, path, payload)
-            capture.http_step(method=method, path=path, status=status, response=body)
+            capture.http_step(method=method, path=path, status=status, response=body, request=payload)
             if status != 200:
                 raise ReplyComparisonBlocked(f"http_{status}_{body.get('error', 'unknown')}")
             return body
@@ -155,14 +323,24 @@ class InstalledReplyHttpAdapter:
         prepared = call("POST", path + "/replies/prepare", body)
         if prepared.get("request_key") != request_key:
             raise ReplyComparisonBlocked("prepared_request_identity_changed")
+        if self._check_installation is not None and self._check_installation(case) != installation:
+            raise ReplyComparisonBlocked("installed_layered_material_changed")
         generated = call("POST", path + "/replies", body)
         identifier = generated["reply_request_id"]
         evidence = call("GET", f"/api/contacts/{contact}/replies/{identifier}/evidence")
         if self._check_l1_version is not None:
             self._check_l1_version(package)
+        if self._check_installation is not None:
+            if self._check_installation(case) != installation:
+                raise ReplyComparisonBlocked("installed_layered_material_changed")
+            try:
+                validate_persisted_installation(case["installation_binding"], evidence, arm)
+            except (ValueError, KeyError, TypeError):
+                raise ReplyComparisonBlocked("persisted_layered_material_changed") from None
         return {"request_id": identifier, "output": generated,
                 "evidence": {"session_id": session["session_id"], "request_key": request_key,
                              "preparation": prepared, "reply_evidence": evidence,
+                             "installation_receipt": installation,
                              "l1_budget": {kind: {key: budget[key] for key in ("limit", "char_limit")}
                                  for kind, budget in evidence.get("retrieval", {}).get("budgets", {}).items()
                                  if kind in {"contact_memory", "owner_memory", "pending_candidate"}},
@@ -205,35 +383,58 @@ class InstalledReplyHttpAdapter:
         layered = layered_memory or LayeredMemoryService(PostgresLayeredMemoryStore(database_url))
         clients = {}
         confirmed_scopes = {}
+        active_cases = {}
+        current_case = [None]
 
         def check_l1(package):
             if installed_l1_version(database_url, package["scope"]) != package["l1_version"]:
                 raise ReplyComparisonBlocked("installed_l1_version_changed")
             confirmed_scopes[package["scope"]["owner_id"]] = package["scope"]["contact_id"]
 
+        def check_installation(case):
+            try:
+                binding = case["installation_binding"]
+                digest = validate_installation_binding(binding, case["organization_output_sha256"], case["organization_review"])
+                if binding["expected_scopes"] != [case["scope_kind"]]:
+                    raise ValueError("C候选原范围与安装范围不一致。")
+                scope = case["input_package"]["scope"]
+                states = capture_installation_state(layered, scope, expected_scopes=binding["expected_scopes"])
+                installed = {kind: state for kind, state in states.items() if state is not None}
+                if installed != binding["installed"]:
+                    raise ReplyComparisonBlocked("installed_layered_material_changed")
+                for kind in binding["expected_scopes"]:
+                    if (contact_budget if kind == "contact" else owner_budget) is None:
+                        raise ReplyComparisonBlocked("layered_budget_missing_for_expected_scope")
+                active_cases[scope["owner_id"]] = case
+                current_case[0] = case
+                return {"binding_sha256": digest, "expected_scopes": binding["expected_scopes"],
+                        "uncovered_scopes": [kind for kind in ("contact", "owner") if kind not in installed],
+                        "installed": installed}
+            except (ValueError, KeyError, TypeError):
+                raise ReplyComparisonBlocked("installation_binding_invalid") from None
+
+        def on_input_budget(decision):
+            # 运行时每轮计量后、SDK发送前重新核对，独立于L1版本守卫。
+            if current_case[0] is not None:
+                check_installation(current_case[0])
+            capture.input_budget(decision)
+
         def request(owner_id, arm, method, path, body):
             contact_id = confirmed_scopes.get(owner_id)
             if contact_id is None or not path.startswith(f"/api/contacts/{contact_id}/"):
                 raise ReplyComparisonBlocked("http_contact_scope_changed")
             key = (owner_id, arm)
-            if arm == "layered" and method == "POST" and path.endswith("/assistant-sessions"):
-                from notalone.scopes import ContactScope, OwnerScope
-                contact_id = path.split("/")[3]
-                scopes = ((ContactScope(UUID(owner_id), UUID(contact_id)), contact_budget),
-                          (OwnerScope(UUID(owner_id)), owner_budget))
-                if not any(budget is not None for _, budget in scopes):
-                    raise ReplyComparisonBlocked("layered_budgets_missing")
-                if any(budget is not None and layered.capture(scope) is None for scope, budget in scopes):
-                    raise ReplyComparisonBlocked("installed_layered_material_unavailable")
+            expected = active_cases[owner_id]["installation_binding"]["expected_scopes"]
+            key = (owner_id, contact_id, arm, tuple(expected))
             if key not in clients:
                 # 同一真实SDK，baseline只省去两个分层预算，其余构造保持一致。
                 with patch("notalone.server.reply_wiring.build_deepseek_model", return_value=model):
                     service = build_reply_service(database_url=database_url, owner_id=UUID(owner_id),
                         layered_memory=layered,
-                        layered_reply_budget=contact_budget if arm == "layered" else None,
-                        owner_layered_reply_budget=owner_budget if arm == "layered" else None,
+                        layered_reply_budget=contact_budget if arm == "layered" and "contact" in expected else None,
+                        owner_layered_reply_budget=owner_budget if arm == "layered" and "owner" in expected else None,
                         input_budget_profile=profile, input_token_counter=counter,
-                        on_input_budget=capture.input_budget)
+                        on_input_budget=on_input_budget)
                 if service is None:
                     raise ReplyComparisonBlocked("reply_service_unavailable")
                 token = str(uuid4())
@@ -247,7 +448,7 @@ class InstalledReplyHttpAdapter:
             return cls.request_confirmed_contact(client, token=token, contact_id=contact_id,
                                                  method=method, path=path, body=body)
 
-        return cls(request, check_l1_version=check_l1)
+        return cls(request, check_l1_version=check_l1, check_installation=check_installation)
 
 
 def installed_l1_version(database_url: str, scope: dict) -> str:

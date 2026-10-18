@@ -63,6 +63,8 @@ class ReplyComparisonSource:
             raise ValueError('原整理资格回执已经变化。')
         report = SyntheticSuiteReader(source.directory).report(contract)
         members = {row['case_id']: row for row in report['members']}
+        outputs = {row['case_id']: row for row in report['cases']}
+        reply_cases = {row['case_id']: row for row in manifest['cases']}
         dependencies = manifest.get('organization_dependencies', [])
         if (len(dependencies) != len(manifest['cases'])
                 or len({row['case_id'] for row in dependencies}) != len(dependencies)
@@ -73,6 +75,10 @@ class ReplyComparisonSource:
             if actual is None or any(row.get(key) != actual[key]
                     for key in ('input_sha256', 'case_evidence_sha256')):
                 raise ValueError('原整理case输入、版本或输出已变化。')
+            # 原case回执与回复所装候选须属于同一实际输出，不能借另一已过case背书。
+            reply_case = reply_cases[row['reply_case_id']]
+            if outputs[row['case_id']]['output_sha256'] != reply_case.get('organization_output_sha256'):
+                raise ValueError('回复安装候选不属于原获审整理输出。')
 
     def _validate_ledger(self, bundle):
         receipt = bundle['budget_receipt']

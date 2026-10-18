@@ -1,10 +1,12 @@
 """独立回复读取合同与证据判定；不授予整理资格。"""
 from dataclasses import asdict
 import json
+import re
 from pathlib import Path
 from collections import Counter
 
 from notalone.memory.organization_quality import ReplyQualityContract, content_digest, _source_identity
+from notalone.reply.errors import ReplyInvariantError
 
 
 def reply_model_configuration(model):
@@ -37,7 +39,8 @@ def build_reply_contract(model, profile, contact_budget, owner_budget):
         budget_version=content_digest(budgets), evaluation_version=_source_identity([
             'reply/quality.py', 'application/reply_qualification.py',
             'memory/organization_quality.py', 'reply/prepared_context_codec.py', 'persistence/reply_store.py',
-            'experiments/reply_comparison.py', 'reply/adapters/reply_comparison_capture.py']))
+            'experiments/reply_comparison.py', 'reply/adapters/reply_comparison_capture.py',
+            'application/reply_evidence.py']))
 
 
 
@@ -57,6 +60,118 @@ def _generation_input(request):
                 if item.get('kind') not in {'user_draft', 'user_current_chat', 'user_purpose'}]
             return inputs
     return None
+
+
+def reply_review_binding(case, arm, calls):
+    """审阅固定实际请求、响应、最终候选及两侧持久资料，不能迁移结论。"""
+    evidence = arm.get('evidence') or {}
+    persisted = evidence.get('reply_evidence') or {}
+    return {'input_sha256': case.get('input_sha256'),
+        'input_package_sha256': content_digest(evidence.get('input_package')),
+        'requests_sha256': content_digest([{key: call.get(key) for key in
+            ('sequence', 'request_route', 'request')} for call in calls]),
+        'responses_sha256': content_digest([{key: call.get(key) for key in
+            ('sequence', 'response', 'outcome')} for call in calls]),
+        'output_sha256': content_digest(arm.get('output')),
+        'evidence_sha256': content_digest(persisted),
+        'scope_material_sha256': content_digest({key: persisted.get(key) for key in
+            ('layered_context', 'owner_layered_context', 'layered_scenario_reads', 'owner_layered_scenario_reads')}),
+        'installation_sha256': content_digest(case.get('installation_binding'))}
+
+
+def _candidate_value(item):
+    messages = item.get('messages') or [item['text']]
+    messages = [value['text'] if isinstance(value, dict) else value for value in messages]
+    return {'text': '\n\n'.join(messages), 'messages': messages, 'basis': item['basis'],
+            'citation_ids': item['citation_ids'], 'risk_notes': item['risk_notes']}
+
+
+def _request_materials(request):
+    materials = []
+    for message in request.get('messages', []):
+        if message.get('role') != 'system':
+            continue
+        content = message.get('content')
+        # SDK为缓存前缀发送文本块；原始块仍完整参与请求摘要。
+        if isinstance(content, list):
+            content = '\n'.join(item['text'] for item in content
+                if isinstance(item, dict) and item.get('type') == 'text' and isinstance(item.get('text'), str))
+        if not isinstance(content, str):
+            continue
+        for block in re.findall(r'<relationship_background>(.*?)</relationship_background>',
+                                content, re.DOTALL):
+            materials.append(json.loads(block[block.index('{'):].strip()))
+    return {item['scope_kind']: item for item in materials}
+
+
+def _captured_output_matches(arm, calls):
+    """公开生成、独立持久读取和实际模型响应须描述同一最终结果。"""
+    try:
+        evidence, output = arm['evidence'], arm['output']
+        persisted = evidence['reply_evidence']
+        if (not output['candidates'] or persisted['candidate_output'] != output['candidates']
+                or len({persisted['reply_request_id'], arm['request_id'], output['reply_request_id']}) != 1
+                or any(item['text'] != _candidate_value(item)['text'] for item in output['candidates'])):
+            return False
+        steps = evidence['http_steps']
+        generated = [step for step in steps if step['method'] == 'POST' and step['path'].endswith('/replies')]
+        read = [step for step in steps if step['method'] == 'GET' and step['path'].endswith('/evidence')]
+        if (len(generated) != 1 or len(read) != 1 or generated[0]['status'] != 200 or read[0]['status'] != 200
+                or generated[0]['response'] != output or read[0]['response'] != persisted):
+            return False
+        from notalone.experiments.reply_comparison import canonical_input
+        if canonical_input({'request': generated[0].get('request') or {}})['request'] != evidence['input_package']['request']:
+            return False
+        actual_input = _generation_input(calls[0]['request'])
+        content = evidence['input_package']['request'].get('content') or {}
+        if content.get('type') == 'rewrite_draft':
+            pasted = content.get('input_kind') == 'current_chat'
+            if (actual_input is None or actual_input['input_mode'] != ('reply_to_pasted_text' if pasted else 'rewrite_draft')
+                    or actual_input['current_text' if pasted else 'draft_text'] != content.get('draft_text')
+                    or actual_input['user_instruction'] != content.get('user_instruction')
+                    or actual_input['include_relationship_context'] != content.get('include_relationship_context', False)
+                    or pasted and actual_input['confirmed_direction'] != content.get('pasted_direction')):
+                return False
+        saved_l1 = {item['evidence_id']: item for item in persisted.get('evidence', [])}
+        for item in (actual_input or {}).get('l1', []):
+            saved = saved_l1.get(item['evidence_id'], {})
+            if any(item.get(key) != saved.get(key) for key in ('kind', 'text', 'timing')):
+                return False
+        materials = _request_materials(calls[0]['request'])
+        expected = {scope: persisted[key] for scope, key in
+            (('contact', 'layered_context'), ('owner', 'owner_layered_context')) if persisted.get(key) is not None}
+        if materials != expected or (arm['arm'] == 'baseline' and materials):
+            return False
+        # 正文只有实际工具返回并进入下一轮请求，才能作为已送达资料。
+        tool_receipts = []
+        for call in calls:
+            for message in call['request'].get('messages', []):
+                if message.get('role') == 'tool' and isinstance(message.get('content'), str):
+                    try:
+                        tool_receipts.append(json.loads(message['content']))
+                    except ValueError:
+                        pass
+        if any(receipt not in tool_receipts for key in ('layered_scenario_reads', 'owner_layered_scenario_reads')
+               for receipt in persisted.get(key, []) if receipt.get('status') == 'succeeded'):
+            return False
+        candidates = None
+        for call in calls:
+            for choice in (call.get('response') or {}).get('choices', []):
+                for tool in choice.get('message', {}).get('tool_calls', []):
+                    function = tool.get('function', {})
+                    if function.get('name') == 'ReplyRuntimeOutput':
+                        candidates = [_candidate_value(item) for item in json.loads(function['arguments'])['candidates']]
+                    elif function.get('name') == 'ReplyFidelityReview':
+                        from notalone.reply.adapters.constraint_review_contract import accepted_candidate_numbers
+                        payload = next(json.loads(message['content']) for message in reversed(call['request']['messages'])
+                                       if message.get('role') == 'user')
+                        if candidates != [_candidate_value(item) for item in payload['candidates']]:
+                            return False
+                        accepted = accepted_candidate_numbers(json.loads(function['arguments']), payload)
+                        candidates = [item for number, item in enumerate(candidates, 1) if number in accepted]
+        return candidates == [_candidate_value(item) for item in output['candidates']]
+    except (KeyError, TypeError, ValueError, StopIteration, IndexError, AttributeError, ReplyInvariantError):
+        return False
 
 
 def comparison_report(bundle, contract):
@@ -87,6 +202,29 @@ def comparison_report(bundle, contract):
             failures.append('reply_paired_input_changed')
         if (case.get('organization_review') or {}).get('decision') != 'approved':
             reasons.append('organization_candidate_not_supported')
+        try:
+            from notalone.experiments.reply_comparison import validate_installation_binding, validate_persisted_installation
+            binding = case['installation_binding']
+            digest = validate_installation_binding(binding, case['organization_output_sha256'], case['organization_review'])
+            if binding['expected_scopes'] != [case['scope_kind']]:
+                raise ValueError('原整理候选范围改变。')
+            expected_receipt = {'binding_sha256': digest, 'expected_scopes': binding['expected_scopes'],
+                'uncovered_scopes': [kind for kind in ('contact', 'owner') if kind not in binding['installed']],
+                'installed': binding['installed']}
+            for arm in pair:
+                evidence = arm.get('evidence') or {}
+                if arm.get('status') != 'succeeded':
+                    continue
+                if evidence.get('installation_receipt') != expected_receipt:
+                    raise ValueError('实际安装回执不等于原获审候选映射。')
+                scope = evidence['input_package']['scope']
+                for kind, installed in binding['installed'].items():
+                    if installed['scope'] != {'owner_id': scope['owner_id'],
+                            'contact_id': scope['contact_id'] if kind == 'contact' else None}:
+                        raise ValueError('实际安装不属于本次确认范围。')
+                validate_persisted_installation(binding, evidence['reply_evidence'], arm['arm'])
+        except (ValueError, TypeError, KeyError):
+            reasons.append('reply_installation_binding_incomplete')
     receipt = bundle.get('budget_receipt', {})
     limit = manifest.get('request_limit')
     if (type(limit) is not int or limit < 1 or receipt.get('closed') is not True
@@ -143,6 +281,13 @@ def comparison_report(bundle, contract):
     review_index = {(r['case_id'], r['arm']): r for r in reviews}
     if len(review_index) != len(reviews) or set(review_index) != expected:
         reasons.append('reply_output_review_missing')
+    for key, arm in indexed.items():
+        case = next((item for item in cases if item['case_id'] == key[0]), None)
+        arm_calls = [call for call in calls if (call.get('case_id'), call.get('arm')) == key]
+        if case is not None and (review_index.get(key) or {}).get('binding') != reply_review_binding(case, arm, arm_calls):
+            failures.append('reply_review_binding_changed')
+        if arm.get('status') == 'succeeded' and not _captured_output_matches(arm, arm_calls):
+            failures.append('reply_output_capture_changed')
     if any(r.get('reviewer_kind') != 'human' for r in reviews) or not reviews:
         reasons.append('reply_human_review_missing')
     if any(r.get('decision') != 'approved' for r in reviews):
