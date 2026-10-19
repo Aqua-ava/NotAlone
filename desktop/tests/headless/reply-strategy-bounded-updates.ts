@@ -1,5 +1,4 @@
 import { openAssistantHistory } from '../assistant-history-actions';
-import { ensureReplySettingsOpen } from '../reply-settings-actions';
 import { expect, type Browser } from '@playwright/test';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
 import { withEventPages, type EventPages } from './message-events';
@@ -16,8 +15,6 @@ async function prepare(pages: EventPages, scene: '回应消息' | '主动聊聊'
   await helper.getByRole('button', { name: scene, exact: true }).click();
   if (scene === '回应消息') await helper.getByRole('radio', { name: /甲的原始合成消息/ }).click();
   else await helper.getByRole('textbox', { name: '主动目的', exact: true }).fill('想了解近况，还未决定本次意愿。');
-  await ensureReplySettingsOpen(helper, '策略选择');
-  await helper.getByRole('combobox', { name: '策略选择', exact: true }).selectOption('disabled');
   await expect(helper.getByRole('status').filter({ hasText: '新消息提醒已连接' })).toBeVisible();
 }
 async function open(pages: EventPages, understanding: string) {
@@ -258,8 +255,6 @@ async function freshTaskAfterDeletion(pages: EventPages) {
   // 同一联系人／scope直接明确探索，不点击恢复、新开会话或重新选择联系人。
   await pages.helper.getByRole('button', { name: '主动聊聊', exact: true }).click();
   await pages.helper.getByRole('textbox', { name: '主动目的', exact: true }).fill('删除旧讨论后，想了解近况，还没确认意愿。');
-  await ensureReplySettingsOpen(pages.helper, '策略选择');
-  await pages.helper.getByRole('combobox', { name: '策略选择', exact: true }).selectOption('disabled');
   const fresh = await open(pages, '用户明确开启的新合成任务。');
   expect(fresh.sessionId).not.toBe(old.sessionId);
   expect(await pages.helper.evaluate(async () => window.notalone.replies.getState())).toMatchObject({
@@ -302,8 +297,6 @@ async function savedVersionStopsAutomaticUpdates(pages: EventPages) {
   });
   await helper.getByRole('button', { name: '主动聊聊', exact: true }).click();
   await helper.getByRole('textbox', { name: '主动目的', exact: true }).fill('想了解近况，还没确认本次意愿。');
-  await ensureReplySettingsOpen(helper, '策略选择');
-  await helper.getByRole('combobox', { name: '策略选择', exact: true }).selectOption('disabled');
   await expect(helper.getByRole('status').filter({ hasText: '新消息提醒已连接' })).toBeVisible();
   const task = await open(pages, '编辑前明确开启的未确认合成探索。');
   expect(task.sessionId).toBe(prior.sessionId);

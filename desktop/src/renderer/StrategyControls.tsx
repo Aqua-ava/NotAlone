@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ReplySessionView } from './RewritePanel';
-import { ReplySceneInput } from './ReplySceneInput';
 
 export function StrategyControls({ replies }: { replies: ReplySessionView }) {
   const { state } = replies, result = state.exploration.result;
+  const candidateSkill = state.result?.usedSkill;
+  const candidateVersion = candidateSkill && (candidateSkill.versionNumber
+    ?? state.skillChoices.find((item) => item.versionId === candidateSkill.versionId)?.versionNumber);
   const [answerDraft, setAnswerDraft] = useState({ question: '', text: '' });
   const pausedQuestion = useRef('');
   const question = result?.question ? `${result.inputVersion}:${result.question.questionId}` : '';
@@ -31,16 +33,16 @@ export function StrategyControls({ replies }: { replies: ReplySessionView }) {
       <button disabled={!available} onClick={() => void replies.explore()}>更新理解</button>
       <span className="strategy-note">补充或纠正后，更新方向建议。</span>
     </div>
-    <details className="strategy-settings">
-      <summary>场景与策略设置（可选）</summary>
-      <ReplySceneInput replies={replies} />
-      <label className="strategy-field">策略选择<select aria-label="策略选择" disabled={!available} value={state.skillChoice.mode === 'user' ? state.skillChoice.versionId! : state.skillChoice.mode}
-        onChange={(event) => void replies.updateSkill(event.target.value === 'auto' || event.target.value === 'disabled'
-          ? { mode: event.target.value, versionId: null } : { mode: 'user', versionId: event.target.value })}>
-        <option value="auto">按当前场景选择</option><option value="disabled">关闭 Skill，使用通用流程</option>
-        {state.skillChoices.map((skill) => <option key={skill.versionId} value={skill.versionId}>{skill.name} · 版本 {skill.versionNumber}</option>)}
-      </select></label>
-    </details>
+    <div className="strategy-meta" role="status" aria-label="本次使用的策略">
+      <strong>本次策略</strong>
+      {!result && !state.result && <p>将根据当前对话自动匹配，完成后显示实际使用的策略。</p>}
+      {result && <p>方向理解：{result.usedSkill
+        ? `实际 Skill：${result.usedSkill.name} · 版本 ${result.usedSkill.versionNumber}` : '本次使用通用流程。'}</p>}
+      {state.result && <p>候选生成：{candidateSkill?.loadState === 'loaded'
+        ? `实际 Skill：${candidateSkill.name}${candidateVersion ? ` · 版本 ${candidateVersion}` : ''}`
+        : candidateSkill?.loadState === 'resource_failed' ? '策略资源读取失败，本次使用通用流程。'
+        : candidateSkill === null ? '本次使用通用流程。' : '该结果未记录实际策略。'}</p>}
+    </div>
     {state.exploration.automaticUpdatesPaused && state.errorCode !== 'provider_context_limit'
       && <p className="strategy-status" role="status">本次自动更新已暂停，请点“更新理解”继续。</p>}
     {state.exploration.phase === 'waiting' && <p className="strategy-status" role="status">正在理解本次情境…</p>}
@@ -53,7 +55,6 @@ export function StrategyControls({ replies }: { replies: ReplySessionView }) {
         <p>{result.understanding}</p>
         {result.currentStep && <p className="strategy-current-step"><strong>建议下一步</strong>{result.currentStep}</p>}
         {result.confirmedIntent && <p className="strategy-confirmed"><strong>已确认本次意愿：</strong>{result.confirmedIntent}</p>}
-        <p className="strategy-meta">{result.usedSkill ? `实际 Skill：${result.usedSkill.name} · 版本 ${result.usedSkill.versionNumber}` : '本次使用通用流程。'}</p>
       </section>
       <details className="strategy-details"><summary>本次理解的依据</summary>
         <div className="strategy-evidence">{result.evidence.filter((item) => result.citationIds.includes(item.evidenceId))

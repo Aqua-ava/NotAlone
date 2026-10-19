@@ -69,6 +69,11 @@ class DesktopRewriteModel(ScriptedCoreModel):
         if not self.plans:
             raise AssertionError("桌面模型脚本耗尽，禁止外部调用。")
         plan = self.plans.pop(0)
+        if payload["input_mode"] == "exploration_skill_selection":
+            if "select_skill" not in plan:
+                raise AssertionError("桌面自动策略选择脚本耗尽，禁止额外模型调用。")
+            self.responses.append(tool_response("ExplorationSkillSelection", {"version_id": plan["select_skill"]}))
+            return super()._generate(messages, stop, run_manager, **kwargs)
         if plan.get("provider_context_limit"):
             self.record_model_payload(messages, kwargs)
             self.seen_calls.append(messages)

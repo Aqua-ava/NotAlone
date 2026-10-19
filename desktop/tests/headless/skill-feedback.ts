@@ -1,4 +1,4 @@
-import { ensureReplySettingsOpen } from '../reply-settings-actions';
+import { declareReplyScene } from '../reply-settings-actions';
 import { selectMemoryCategory } from '../memory-page-actions';
 import { expect, type Browser } from '@playwright/test';
 import path from 'node:path';
@@ -36,8 +36,7 @@ export async function skillFeedback(browser: Browser, origin: string) {
       await confirmHelperContact(helper, contactA);
       await helper.getByRole('button', { name: '主动聊聊', exact: true }).click();
       await helper.getByRole('textbox', { name: '主动目的', exact: true }).fill('只说明我的想法，不作额外承诺');
-      await ensureReplySettingsOpen(helper, '本次精确场景');
-      await helper.getByRole('textbox', { name: '本次精确场景', exact: true }).fill('核对安排');
+      await declareReplyScene(helper, '核对安排');
       await helper.evaluate(async versionId => {
         const contact = await window.notalone.contacts.getState();
         await window.notalone.replies.updateSkill({ contactId: contact.selectedContactId!, scopeRevision: contact.scopeRevision,
@@ -128,11 +127,9 @@ export async function skillFeedback(browser: Browser, origin: string) {
         const state = await window.notalone.replies.getState();
         return { contact: state.contactId, phase: state.savedSession?.phase };
       })).toEqual({ contact: contactB, phase: 'ready' });
-      await ensureReplySettingsOpen(helper, '本次精确场景');
-      await helper.getByRole('textbox', { name: '本次精确场景', exact: true }).fill('乙的独立场景');
+      await declareReplyScene(helper, '乙的独立场景');
       await helper.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption(contactA);
-      await ensureReplySettingsOpen(helper, '本次精确场景');
-      await expect(helper.getByRole('textbox', { name: '本次精确场景', exact: true })).toHaveValue('核对安排');
+      expect((await helper.evaluate(() => window.notalone.replies.getState())).scene).toBe('核对安排');
       await expect(editor).toHaveValue('甲在范围停用后的独立编辑。');
       expect((await helper.evaluate(async () => (await window.notalone.replies.getState()).result!.usedSkill!)).executionView).toEqual(actual.executionView);
       panel = await open();

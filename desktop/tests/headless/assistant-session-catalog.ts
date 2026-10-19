@@ -1,5 +1,4 @@
 import { openAssistantHistory, expandSavedDiscussion } from '../assistant-history-actions';
-import { ensureReplySettingsOpen } from '../reply-settings-actions';
 import { randomUUID } from 'node:crypto';
 import { expect, type Browser, type Page } from '@playwright/test';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
@@ -87,15 +86,13 @@ export async function assistantSessionCatalog(browser: Browser, origin: string) 
     await helper.getByRole('textbox', { name: '主动目的', exact: true }).fill('未提交的合成目的。');
     await helper.getByRole('textbox', { name: '纠正理解', exact: true }).fill('未提交的合成纠正。');
     await helper.getByRole('textbox', { name: '本次策略要求', exact: true }).fill('未提交的合成策略要求。');
-    await ensureReplySettingsOpen(helper, '策略选择');
-    await helper.getByRole('combobox', { name: '策略选择', exact: true }).selectOption('disabled');
     await openAssistantHistory(helper);
     await helper.getByRole('button', { name: '新开助手会话', exact: true }).click();
     await expect.poll(() => helper.evaluate(async (sid) => { const state = await window.notalone.replies.getState();
       return state.savedSession?.sessionId !== sid && state.sessionCatalog?.phase === 'ready'; }, oldId)).toBe(true);
     await expect(helper.getByText('当前会话还没有讨论。', { exact: true })).toBeVisible();
     expect(await helper.evaluate(async () => window.notalone.replies.getState())).toMatchObject({ direction: '', purpose: '', correction: '',
-      requirements: '', clarificationAnswer: '', exploration: { phase: 'idle', result: null }, skillChoice: { mode: 'disabled', versionId: null } });
+      requirements: '', clarificationAnswer: '', exploration: { phase: 'idle', result: null }, skillChoice: { mode: 'auto', versionId: null } });
     await rewriteBackend.command('revoke', { contact_id: contactId });
     await listSessions(helper); await selectSession(helper, oldId);
     const discussion = helper.getByRole('region', { name: '已保存的讨论', exact: true });

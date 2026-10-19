@@ -1,4 +1,3 @@
-import { ensureReplySettingsOpen } from '../reply-settings-actions';
 import { selectMemoryCategory } from '../memory-page-actions';
 import { expect, type Browser } from '@playwright/test';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
@@ -18,8 +17,6 @@ export async function replyStrategyDialogue(browser: Browser, origin: string) {
         const target = helper.getByRole('radio', { name: /甲的私密合成历史/ });
         await target.click(); await expect(target).toBeChecked();
       } else await helper.getByRole('textbox', { name: '主动目的', exact: true }).fill('想聊聊，还不确定要推进什么。');
-      await ensureReplySettingsOpen(helper, '策略选择');
-      await helper.getByRole('combobox', { name: '策略选择', exact: true }).selectOption('disabled');
       await rewriteBackend.plan({ explore: { understanding: '合成目的仍需由用户确认。', cite_all: true,
         question: { text: '这次是否愿意作出新的安排承诺？', impact: 'commitment' } } });
       await helper.getByRole('button', { name: '帮我理清方向', exact: true }).click();

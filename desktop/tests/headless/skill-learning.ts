@@ -1,4 +1,4 @@
-import { ensureReplySettingsOpen } from '../reply-settings-actions';
+import { declareReplyScene } from '../reply-settings-actions';
 import { selectMemoryCategory } from '../memory-page-actions';
 import { expect, type Browser } from '@playwright/test';
 import path from 'node:path';
@@ -132,8 +132,7 @@ export async function skillLearning(browser: Browser, origin: string, reviewMode
         await confirmHelperContact(helper, fixture.data.contact_ids[0]);
         await helper.getByRole('button', { name: '主动聊聊', exact: true }).click();
         await helper.getByRole('textbox', { name: '主动目的', exact: true }).fill('说明想法，不作额外承诺');
-        await ensureReplySettingsOpen(helper, '本次精确场景');
-        await helper.getByRole('textbox', { name: '本次精确场景', exact: true }).fill('核对安排');
+        await declareReplyScene(helper, '核对安排');
         await helper.evaluate(async versionId => {
           const contact = await window.notalone.contacts.getState();
           await window.notalone.replies.updateSkill({ contactId: contact.selectedContactId!, scopeRevision: contact.scopeRevision,
@@ -145,8 +144,7 @@ export async function skillLearning(browser: Browser, origin: string, reviewMode
         expect(actual.usedSkill).toMatchObject({ versionId: published.version_id, versionNumber: 1, scope: published.scope });
         expect(actual.input.scene).toBe('核对安排');
         await expect(helper.getByRole('region', { name: '候选回复', exact: true })).toContainText('范围：精确场景「核对安排」');
-        await ensureReplySettingsOpen(helper, '本次精确场景');
-        await helper.getByRole('textbox', { name: '本次精确场景', exact: true }).fill('其他场景');
+        await declareReplyScene(helper, '其他场景');
         await helper.getByRole('button', { name: '生成候选', exact: true }).click();
         await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveValue('我先说明一下想法。');
         actual = await helper.evaluate(async () => (await window.notalone.replies.getState()).result!);

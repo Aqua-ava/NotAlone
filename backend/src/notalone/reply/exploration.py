@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from collections.abc import Callable
 from contextlib import AbstractContextManager
 from typing import Any, Literal, Protocol
 from uuid import UUID
 
 from notalone.scopes import ContactScope
+from notalone.skills import SkillCatalog
 
 
 class ExplorationError(RuntimeError):
@@ -75,10 +77,13 @@ class ExplorationContext:
     evidence: tuple[dict[str, Any], ...]
     skill: dict[str, Any] | None = None
     previous_intents: tuple[str, ...] = ()
+    validate_current: Callable[[], None] | None = field(default=None, compare=False)
 
 
 class ExplorationRuntime(Protocol):
     def explore(self, context: ExplorationContext) -> dict[str, Any]: ...
+
+    def select_skill(self, context: ExplorationContext, catalog: SkillCatalog) -> UUID | None: ...
 
 
 class ExplorationPriority(Protocol):

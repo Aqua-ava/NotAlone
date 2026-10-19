@@ -1,4 +1,3 @@
-import { ensureReplySettingsOpen } from '../reply-settings-actions';
 import { expect, type Browser } from '@playwright/test';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
 import { withEventPages } from './message-events';
@@ -16,8 +15,6 @@ export async function replyStrategyVersionEditGuard(browser: Browser, origin: st
         await confirmHelperContact(helper, fixture.data.contact_ids[0]);
         await helper.getByRole('button', { name: '主动聊聊', exact: true }).click();
         await helper.getByRole('textbox', { name: '主动目的', exact: true }).fill('只了解合成近况，不承诺安排。');
-        await ensureReplySettingsOpen(helper, '策略选择');
-        await helper.getByRole('combobox', { name: '策略选择', exact: true }).selectOption('disabled');
         await fixture.plan({ count: 1, message_groups: [['想问问最近怎么样。', '方便时再聊就好。']] });
         await helper.getByRole('button', { name: '生成候选', exact: true }).click();
         const group = helper.getByRole('group', { name: '说法1消息组', exact: true });
@@ -32,8 +29,6 @@ export async function replyStrategyVersionEditGuard(browser: Browser, origin: st
         });
         await helper.getByRole('button', { name: '主动聊聊', exact: true }).click();
         await helper.getByRole('textbox', { name: '主动目的', exact: true }).fill('想了解合成近况，还没有确认本次意愿。');
-        await ensureReplySettingsOpen(helper, '策略选择');
-        await helper.getByRole('combobox', { name: '策略选择', exact: true }).selectOption('disabled');
         await expect(helper.getByRole('status').filter({ hasText: '新消息提醒已连接' })).toBeVisible();
         await fixture.plan({ explore: { understanding: '编辑前已明确开启的未确认合成探索。' } });
         await helper.getByRole('button', { name: '帮我理清方向', exact: true }).click();

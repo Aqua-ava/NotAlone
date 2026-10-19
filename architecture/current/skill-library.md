@@ -144,7 +144,7 @@ validate_scope
   → assess_request_risk
   → Retrieval / Context 组装当前联系人 ReplyContext
   → SkillPort.catalog(scope) 发现元数据
-  → 系统或用户选择 0/1 个 Skill
+  → 系统根据当前对话与精简目录自动选择 0/1 个 Skill
   → 按需加载 SKILL.md 和辅助资源
   → Reply Runtime 生成候选
   → 校验候选并持久化
@@ -211,7 +211,7 @@ PostgreSQL 继续是 Skill 目录、版本、状态、资源元数据和删除�
 
 编辑递增修订并撤销旧对照；暂留保持待审核，拒绝保存明确决定。对照绑定输入版本、草稿修订、来源世代、偏好修订、目标版本与库修订。用户明确确认范围和替代关系后，同一持锁事务幂等发布不可变版本、来源记录和方法映射。旧本地包保持 `review_origin=false`，不能回填为用户审核。
 
-目录、正文、资源、准备与最终候选均核对版本和来源范围。场景只按用户声明逐字匹配，进入输入身份、继续、中断恢复及联系人缓存；入口模式不建立场景授权。13候选的准备编码为version2/schema5：已编码的历史依据变化新增`reply_skill/skill_policy_changed`严格变体，旧schema4必须经原身份、可靠终态及租约核对后显式重新准备；不补签执行视图或场景。
+目录、正文、资源、准备与最终候选均核对版本和来源范围。按 [ADR-074](../adr/074-automatic-conversation-skill-loading.md)，当前对话自动判断受控目录内的策略相关性，回复区仅展示实际策略。授权场景仍只按用户声明逐字匹配，进入输入身份、继续、中断恢复及联系人缓存；入口模式不建立场景授权。13候选的准备编码为version2/schema5：已编码的历史依据变化新增`reply_skill/skill_policy_changed`严格变体，旧schema4必须经原身份、可靠终态及租约核对后显式重新准备；不补签执行视图或场景。
 
 私人依据留在原取材联系人范围；扩大策略范围不扩大依据读取权限。额外对照材料、偏好、样本与概览隐藏导航均承担删除依赖。来源删除在原事务清除对照、发布正文、资源、方法及跨联系人使用副本，也清除尚未创建回复请求但明确选择了该版本的准备输入。实际验证与未验边界见[11集成记录](../../.scratch/memory-skill-integration-preparation/frontier-11-validation.md)。
 

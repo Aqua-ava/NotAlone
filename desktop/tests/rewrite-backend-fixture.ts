@@ -9,7 +9,7 @@ const project = path.resolve('..');
 
 export type Prepared = { database_url: string; owner_id: string; contact_ids: string[]; other_contact_id: string; empty_contact_id: string;
   migration_count?: number; migration_repeat?: number };
-export type ModelPlan = { explore?: { understanding?: string; direction?: string; invalid_evidence?: boolean; same_stance?: boolean; cite_all?: boolean;
+export type ModelPlan = { select_skill?: string | null; explore?: { understanding?: string; direction?: string; invalid_evidence?: boolean; same_stance?: boolean; cite_all?: boolean;
   options?: Array<{ intent: string; label: string; reason: string; pause?: boolean }>;
   question?: { text: string; impact: 'stance' | 'commitment' | 'ambiguity' } | null; ambiguities?: string[]; group?: string };
   read_skill?: string; count?: number; message_groups?: string[][]; risk_notes?: string[]; prefix?: string; fault?: 'timeout' | 'failure'; probe_history?: boolean; cite_history?: boolean; cite_pending?: boolean; text?: string; basis?: string; citation_ids?: string[] };

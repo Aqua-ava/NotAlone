@@ -172,7 +172,7 @@ v1 的检索应可解释：先用联系人过滤，再用时间、关键词、�
 
 每次候选回复任务都必须由用户确定表达方向：`rewrite_draft` 以用户已有草稿确定基础方向，并允许用户补充约束；`reply_to_message` 可以由用户直接输入方向，也可以在方向为空时请求模型提供建议。模型建议必须由用户选择或修改后确认，不能自动成为表达方向；确认前不得进入候选回复生成。系统随后在已验证的联系人范围内自动组装与该方向相关的回复上下文，用户不需要逐项选择材料。UI 必须允许用户查看实际选入项，并在重新生成前从本次上下文中移除不适用材料或补充遗漏材料；这类调整只作用于本次生成，不得静默修改长期关系资料。从本次上下文移除材料也不等于删除其来源或权威记录。
 
-方向建议使用独立的最小上下文，包含当前待回复消息或用户主动联系目的、少量近期对话、已有连续性提醒和极少量相关记忆。按 [ADR-043](../adr/043-conversation-scenarios-and-direction-exploration.md)，场景明确时可经受控 Skill 边界读取至多一个已启用版本的有限策略资料；不加载风格样本、日历或网络结果，不执行业务 Agent Tool 补查或候选 Tool loop。加载 Skill 不确认用户意愿，确认方向后才生成候选。用户主动打开的方向探索可在任务活跃且未确认方向时随已授权新消息有界更新；关闭或离开任务停止，已确认方向或编辑中只提示。本轮已接此扩展、主动联系与消息组的合成自动路径；[聊天策略规格](../../.scratch/conversation-reply-strategy/spec.md)及各票Answer记录实际HTTP／Page证据，固定源策略38场已通过，须与同次命令后续A18测试失败以及未验真实App／原生／真人质量区分。
+方向建议使用独立的最小上下文，包含当前待回复消息或用户主动联系目的、少量近期对话、已有连续性提醒和极少量相关记忆。按 [ADR-043](../adr/043-conversation-scenarios-and-direction-exploration.md) 与 [ADR-074](../adr/074-automatic-conversation-skill-loading.md)，先建立合法任务，再根据当前对话和受控精简目录自动选择零或一个版本，选择后读取其有限策略正文；沟通任务的推断不能扩大用户声明的精确场景权限；不加载风格样本、日历或网络结果，不执行业务 Agent Tool 补查或候选 Tool loop。加载 Skill 不确认用户意愿，确认方向后才生成候选。用户主动打开的方向探索可在任务活跃且未确认方向时随已授权新消息有界更新；关闭或离开任务停止，已确认方向或编辑中只提示。本轮已接此扩展、主动联系与消息组的合成自动路径；[聊天策略规格](../../.scratch/conversation-reply-strategy/spec.md)及各票Answer记录实际HTTP／Page证据，固定源策略38场已通过，须与同次命令后续A18测试失败以及未验真实App／原生／真人质量区分。
 
 记忆的来源聊天时间、保存时间与有效期随检索结果进入回复上下文和模型输入，
 也进入本次依据快照供用户回看；生成前后重新核对时间投影。历史快照缺少新时间
@@ -272,7 +272,7 @@ v1 风格样本送入提示词但权重受限：最多 5 条、明确标注为�
 
 Skill 采用 progressive disclosure：LangChain `create_agent` 组合 Deep Agents `SkillsMiddleware`，middleware 只从当前 owner/contact 的受控 discovery backend 发现已启用版本，并通过 NotAlone 定制提示词把 `name + description` 等精简目录放入模型上下文。模型需要完整策略时调用受控只读 `read_file(file_path, offset=0, limit=1000)`；该读取能力只接受目录中已列出的 `SKILL.md` 或允许的 Skill 辅助资源相对路径，经 `SkillPort` 校验范围、状态、不可变版本和目录修订后返回内容，不是通用文件系统读取。定制提示词不展示 `allowed-tools`，不允许脚本执行，也不允许外部 URL 下载。
 
-用户显式选择 Skill 时，应用层通过同一个 `SkillPort` 校验并预加载，不要求模型再次调用 `read_file`。自动模式可以不加载 Skill；加载成功时 UI 必须展示本次使用的名称和版本并允许用户关闭或更换。每次最多使用一个不可变版本；Skill 及其辅助资源只提供经校验的策略文本或静态素材，其内容不能注册 Tool、MCP、Shell、文件写入、子 Agent 或外部资源访问。
+用户显式选择 Skill 时，应用层通过同一个 `SkillPort` 校验并预加载，不要求模型再次调用 `read_file`。按 [ADR-074](../adr/074-automatic-conversation-skill-loading.md)，正常回复入口自动判断并按需加载；可以不加载 Skill，UI 仅展示当前结果实际使用的名称和版本或通用流程，不提供手选控件。旧显式版本 API 保留管理、历史兼容与内部固定版本用途。每次最多使用一个不可变版本；Skill 及其辅助资源只提供经校验的策略文本或静态素材，其内容不能注册 Tool、MCP、Shell、文件写入、子 Agent 或外部资源访问。
 
 Skill 库管理不属于 Agent Loop。v1 用户在独立入口明确导入本地 Skill 包；安装、更新、启用和停用先校验并固化不可变版本，候选回复运行时只读取已经启用的版本。同一 owner 的 Skill 名称唯一，库使用 owner 级 `skill_library_revision`；任一 Skill 导入、更新、启用、禁用或删除时都递增该 revision，并使该 owner 所有联系人范围的旧目录失效。Skill 目录缓存仍绑定 `owner_id + contact_id + skill_library_revision`；任一项变化时，下一轮运行先清除旧目录、旧 Skill Tool 结果、辅助资源结果和包含旧 Skill 正文的摘要，或使用新的运行状态。采用 `SkillsMiddleware` 不等于采用完整 `create_deep_agent`，候选回复不启用 Deep Agents 的通用文件系统、Shell、Subagent 或长期任务 harness。
 

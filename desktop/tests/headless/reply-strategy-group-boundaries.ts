@@ -1,4 +1,3 @@
-import { ensureReplySettingsOpen } from '../reply-settings-actions';
 import { selectMemoryCategory } from '../memory-page-actions';
 import { expect, type Browser, type Page } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
@@ -27,8 +26,6 @@ async function prepare(pages: RewritePages, scene: Scene) {
     await pages.helper.getByRole('radio', { name: /甲的私密合成历史/ }).click();
     await pages.helper.getByRole('textbox', { name: '表达方向', exact: true }).fill('关心近况，不增加安排承诺。');
   } else await pages.helper.getByRole('textbox', { name: '主动目的', exact: true }).fill('关心近况，不增加安排承诺。');
-  await ensureReplySettingsOpen(pages.helper, '策略选择');
-  await pages.helper.getByRole('combobox', { name: '策略选择', exact: true }).selectOption('disabled');
   return contactId;
 }
 async function generated(pages: RewritePages, contactId: string): Promise<GroupIdentity> {

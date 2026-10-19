@@ -1056,9 +1056,10 @@ export class ReplySession {
         this.stopAutomaticExploration();
       }
     }
+    const automaticSkill: ReplySkillChoice = { mode: 'auto', versionId: null };
     const signature = JSON.stringify({ mode: this.state.mode, target: this.state.targetMessageId,
       purpose: this.explorationPurpose ?? this.state.purpose, correction: this.state.correction,
-      requirements: this.state.requirements, skill: this.state.skillChoice, scene: this.state.scene || null, changeGroup, automatic });
+      requirements: this.state.requirements, skill: automaticSkill, scene: null, changeGroup, automatic });
     if (!automatic && this.strategyJob?.type === 'open' && !this.strategyJob.request.automatic
       && this.strategyJob.signature === signature && this.state.exploration.phase === 'failed') {
       await this.runStrategy(this.strategyJob); return;
@@ -1067,7 +1068,10 @@ export class ReplySession {
     if (generation === undefined) throw new Error('后端连接不可用，请重新连接。');
     const operation = ++this.explorationOperation;
     const pending = new AbortController(); this.explorationPending = pending;
-    this.publish({ exploration: { phase: 'waiting', result: null, canRetry: false } });
+    // 新探索按当前对话自动判断，不继承其他模式或旧输入中已隐藏的手动设置。
+    this.generationSkillChoice = undefined;
+    this.publish({ skillChoice: automaticSkill, scene: '', skillChoices: [],
+      exploration: { phase: 'waiting', result: null, canRetry: false } });
     try {
       const previous = this.currentExploration;
       const identity = previous ? { sessionId: previous.sessionId, currentInputVersionId: previous.inputVersion, generation }
@@ -1079,7 +1083,7 @@ export class ReplySession {
         operationKey: randomUUID(), expectedInputVersionId: identity.currentInputVersionId, previousId: previous?.taskId ?? null,
         scene: this.state.mode as 'reply_to_message' | 'initiate_conversation', targetMessageId: this.state.targetMessageId,
         purposeHint: this.explorationPurpose, correction: this.state.correction.trim(), requirements: this.state.requirements.trim(),
-        skill: { ...this.state.skillChoice }, skillScene: this.state.scene || null, changeGroup, automatic };
+        skill: automaticSkill, skillScene: null, changeGroup, automatic };
       if (!automatic && !previous?.confirmedIntent && !this.automaticExploration) {
         this.automaticExploration = { contactId: selection.contactId, scopeRevision: selection.scopeRevision,
           generation, sessionId: identity.sessionId, remaining: 3, expiresAt: Date.now() + 15 * 60_000, queued: false };

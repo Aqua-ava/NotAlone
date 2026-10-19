@@ -648,6 +648,7 @@ class LangChainReplyRuntime:
         "_constraint_review",
         "_layered_memory",
         "_on_model_response",
+        "_skill_selection_method",
     )
 
     def __init__(
@@ -666,6 +667,7 @@ class LangChainReplyRuntime:
         constraint_review: ReplyConstraintReview | None = None,
         layered_memory=None,
         on_model_response=None,
+        skill_selection_method: Callable[[ReplyContext], str | None] | None = None,
     ) -> None:
         if (
             isinstance(timeout_seconds, bool)
@@ -703,6 +705,7 @@ class LangChainReplyRuntime:
         self._model_callbacks = model_callbacks
         self._model_callback_factory = model_callback_factory
         self._constraint_review = constraint_review
+        self._skill_selection_method = skill_selection_method
         self._layered_memory = layered_memory
         self._on_model_response = on_model_response
 
@@ -868,6 +871,15 @@ class LangChainReplyRuntime:
                 )
                 result = _validated_result(state, budget, self._model_name,
                                            history=history, selection=prepared.command.skill)
+                if result.used_skill is not None and self._skill_selection_method is not None:
+                    method = self._skill_selection_method(prepared)
+                    if method is not None:
+                        if method not in ("auto", "user"):
+                            raise ReplyInvariantError("策略选择来源无效。")
+                        reason = ("系统根据当前对话自动选择，并沿用本次探索的固定版本。" if method == "auto"
+                                  else result.used_skill.selection_reason)
+                        result = replace(result, used_skill=replace(result.used_skill,
+                            selection_method=method, selection_reason=reason))
                 if scenarios is not None:
                     result = replace(result, layered_scenario_reads=scenarios.receipts, owner_layered_scenario_reads=scenarios.owner_receipts,
                                      tool_calls=result.tool_calls + scenarios.tool_calls)

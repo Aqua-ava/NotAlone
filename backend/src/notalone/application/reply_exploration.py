@@ -79,8 +79,7 @@ class ReplyExplorationService:
                 selected = self._pinned_skill(scope, replay)
                 previous = self._store.read(scope, request.previous_id,
                                             purpose=ExplorationReadPurpose.HISTORY) if request.previous_id else None
-                intents = _previous_group(previous, selected, change_group=request.change_group)
-                return self._run(self._store.retry(replay), selected, intents)
+                return self._run(self._store.retry(replay), selected, previous, change_group=request.change_group)
             return self._public(replay)
         previous = self._store.read(
             scope, request.previous_id, purpose=ExplorationReadPurpose.CURRENT
@@ -109,30 +108,47 @@ class ReplyExplorationService:
             scope=scope, request=replace(request, content=content),
             snapshots=snapshots, skill=selected, previous=previous,
         )
-        intents = _previous_group(previous, selected, change_group=request.change_group)
-        return self._run(task, selected, intents)
+        return self._run(task, selected, previous, change_group=request.change_group)
 
     def _run(
         self, task: ExplorationTask, selected: ExplorationSkillSelection,
-        previous_intents: tuple[str, ...],
+        previous: ExplorationTask | None, *, change_group: bool,
     ) -> dict[str, Any]:
         scope, content, snapshots = task.scope, task.content, task.snapshots
-        context = ExplorationContext(
-            scope, content, tuple(item.model_payload for item in snapshots), selected.model_payload,
-            previous_intents,
-        )
         try:
+            if not task.skill_selection_complete:
+                self._require_running(task)
+                context = ExplorationContext(scope, content, tuple(item.model_payload for item in snapshots),
+                                             validate_current=lambda current=task: self._require_running(current))
+                version_id = self._runtime.select_skill(context, selected.catalog)
+                if version_id is not None and not any(entry.version_id == version_id for entry in selected.catalog.entries):
+                    raise ExplorationError("自动策略选择不属于当前目录。")
+                task = self._store.pin_skill(task, version_id)
+                selected = self._pinned_skill(scope, task)
+            self._require_running(task)
+            context = ExplorationContext(
+                scope, content, tuple(item.model_payload for item in snapshots), selected.model_payload,
+                _previous_group(previous, selected, change_group=change_group),
+                validate_current=lambda current=task: self._require_running(current),
+            )
             result = validate_exploration_output(self._runtime.explore(context), context)
             self._validate_task(scope, task)
             result = {**result, "evidence": [item.model_payload for item in snapshots],
                       "used_skill": {"name": selected.entry.name, "version_id": str(selected.entry.version_id),
-                                     "version_number": selected.entry.version_number} if selected.entry else None,
+                                     "version_number": selected.entry.version_number,
+                                     "selection_method": "auto" if content.skill_mode == "auto" else "user"} if selected.entry else None,
                       "skill_choices": [{"name": entry.name, "version_id": str(entry.version_id),
                                          "version_number": entry.version_number} for entry in selected.catalog.entries]}
             return self._public(self._store.complete(task, result))
         except Exception:
             self._store.fail(task)
             raise
+
+    def _require_running(self, task: ExplorationTask) -> None:
+        current = self._store.read(task.scope, task.exploration_id)
+        if current != task or current.state != "running":
+            raise ExplorationStale("探索任务已停止或替换。")
+        self._validate_task(task.scope, task)
 
     def read(self, *, scope: ContactScope, exploration_id: UUID) -> dict[str, Any]:
         task = self._store.read(scope, exploration_id)

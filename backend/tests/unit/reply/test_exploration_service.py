@@ -52,9 +52,19 @@ class SyntheticExplorationStore:
             selected_intent=previous.selected_intent if previous else None,
             selection_id=previous.selection_id if previous else None,
             selection_source=previous.selection_source if previous else None,
+            skill_selection_complete=(request.content.skill_mode != "auto" or skill.entry is not None
+                                      or not skill.catalog.entries),
         )
         self.tasks[task.exploration_id] = task
         return task
+
+    def pin_skill(self, task, version_id):
+        current = self.read(task.scope, task.exploration_id)
+        if current != task or current.state != "running" or current.skill_selection_complete:
+            raise ExplorationStale("合成策略选择已失效。")
+        current = replace(task, skill_version_id=version_id, skill_selection_complete=True)
+        self.tasks[current.exploration_id] = current
+        return current
 
     def complete(self, task, result):
         result = {**result, "exploration_id": str(task.exploration_id),
@@ -85,7 +95,8 @@ class SyntheticExplorationStore:
         self.tasks[task.exploration_id] = replace(task, state="confirmed")
 
     def fail(self, task):
-        self.tasks[task.exploration_id] = replace(task, state="failed", result=None)
+        if self.tasks[task.exploration_id].state == "running":
+            self.tasks[task.exploration_id] = replace(task, state="failed", result=None)
 
     def stop(self, scope, exploration_id, input_version_id):
         task = self.read(scope, exploration_id)
@@ -114,6 +125,13 @@ class NoHistory:
 class ScriptedExploration:
     def __init__(self):
         self.results, self.calls, self.on_call = [], [], None
+        self.selection_calls, self.skill_choice, self.on_selection = [], None, None
+
+    def select_skill(self, context, catalog):
+        self.selection_calls.append((context, catalog))
+        if self.on_selection:
+            self.on_selection()
+        return self.skill_choice
 
     def explore(self, context):
         self.calls.append(context)
@@ -397,3 +415,52 @@ class ExplorationServiceTest(TestCase):
         current = self.store.tasks[UUID(newer["exploration_id"])]
         self.assertEqual(current.selected_intent, "改为明确拒绝邀请")
         self.assertEqual(self.generator.commands, [])
+
+    def _automatic_skills(self):
+        from tests.unit.reply.test_exploration_skill import SyntheticSkills as AvailableSkills
+
+        self.skills = AvailableSkills(self.scope)
+        self.runtime.skill_choice = self.skills.entry.version_id
+        self.service = ReplyExplorationService(store=self.store, evidence=NoHistory(),
+            skills=self.skills, runtime=self.runtime, generation=self.generator)
+        self.runtime.results.append(exploration_result())
+        return {"scope": self.scope, "session_id": self.session_id,
+                "content": ExplorationInput("initiate_conversation", purpose_hint="想恢复联系并了解近况"),
+                "operation_key": uuid4()}
+
+    def test_automatic_choice_uses_current_input_and_never_creates_a_scope_scene(self):
+        request = self._automatic_skills()
+        declared_scenes = []
+        self.skills.for_scene = lambda scene: declared_scenes.append(scene) or self.skills
+        result = self.service.open(**request)
+        self.assertEqual(result["used_skill"]["selection_method"], "auto")
+        choice_context, catalog = self.runtime.selection_calls[0]
+        self.assertEqual(choice_context.input.purpose_hint, request["content"].purpose_hint)
+        self.assertIsNone(choice_context.skill)
+        self.assertEqual(catalog, self.skills.catalog_value)
+        self.assertTrue(declared_scenes)
+        self.assertEqual(set(declared_scenes), {None})
+        self.assertIsNone(self.runtime.calls[0].input.skill_scene)
+        self.assertEqual(self.runtime.calls[0].skill["version_id"], str(self.skills.entry.version_id))
+
+    def test_stopping_during_automatic_choice_prevents_loading_or_exploration(self):
+        request = self._automatic_skills()
+
+        def stop():
+            task = next(iter(self.store.tasks.values()))
+            self.store.stop(self.scope, task.exploration_id, task.input_version_id)
+
+        self.runtime.on_selection = stop
+        with self.assertRaises(ExplorationStale):
+            self.service.open(**request)
+        self.assertEqual(self.skills.loaded_versions, [])
+        self.assertEqual(self.runtime.calls, [])
+        self.assertEqual(next(iter(self.store.tasks.values())).state, "paused")
+
+    def test_foreign_catalog_cannot_reach_the_automatic_selector(self):
+        request = self._automatic_skills()
+        self.skills.catalog_value = SkillCatalog(ContactScope(uuid4(), uuid4()), 8, ())
+        with self.assertRaises(ExplorationStale):
+            self.service.open(**request)
+        self.assertEqual(self.runtime.selection_calls, [])
+        self.assertEqual(self.runtime.calls, [])

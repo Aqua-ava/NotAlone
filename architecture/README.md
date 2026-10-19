@@ -107,6 +107,8 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 71. [ADR-071：区分错误纠正与状态变化的历史生成资格](adr/071-memory-retirement-and-generation-eligibility.md)
 73. [ADR-073：前台观察与后台同步独立执行](adr/073-foreground-observation-independent-of-background-sync.md)
 
+74. [ADR-074：当前对话自动判断并加载回复 Skill](adr/074-automatic-conversation-skill-loading.md)
+
 ## 当前架构决策
 
 - 旧 Swift 主界面已按 ADR-039 退役；共享前端采用 TypeScript + React，由 ADR-040 的 Electron 双窗口宿主承载；已接通业务页面，完整原生验收仍未完成。Python 后台与 Mac 原生探针保留。

@@ -39,10 +39,10 @@ def select_exploration_skill(
         selected = next((entry for entry in catalog.entries if entry.version_id == content.skill_version_id), None)
         if selected is None:
             raise ExplorationStale("所选Skill当前不可用。")
-    elif content.skill_mode == "auto" and (communication_scene or content.skill_scene):
-        # 入口类型不能证明主要沟通任务；未知任务沿通用流程，不猜描述或立场。
+    elif content.skill_mode == "auto" and communication_scene:
+        # 沟通任务只用于相关性判断；显式 skill_scene 只负责目录权限。
         selected = next((entry for entry in catalog.entries
-                         if (content.skill_scene or communication_scene) in entry.applicable_scenes), None)
+                         if communication_scene in entry.applicable_scenes), None)
     version = None
     if selected:
         try:
