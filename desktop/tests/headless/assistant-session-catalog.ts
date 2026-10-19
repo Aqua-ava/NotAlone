@@ -84,8 +84,8 @@ export async function assistantSessionCatalog(browser: Browser, origin: string) 
     expect(recorded.status).toBe(200);
     await helper.getByRole('button', { name: '主动聊聊', exact: true }).click();
     await helper.getByRole('textbox', { name: '主动目的', exact: true }).fill('未提交的合成目的。');
-    await helper.getByRole('textbox', { name: '纠正理解', exact: true }).fill('未提交的合成纠正。');
-    await helper.getByRole('textbox', { name: '本次策略要求', exact: true }).fill('未提交的合成策略要求。');
+    await helper.getByRole('textbox', { name: '补充你的想法或要求', exact: true }).fill('未提交的合成纠正。');
+    await helper.getByRole('textbox', { name: '补充你的想法或要求', exact: true }).fill('未提交的合成纠正。\n未提交的合成策略要求。');
     await openAssistantHistory(helper);
     await helper.getByRole('button', { name: '新开助手会话', exact: true }).click();
     await expect.poll(() => helper.evaluate(async (sid) => { const state = await window.notalone.replies.getState();

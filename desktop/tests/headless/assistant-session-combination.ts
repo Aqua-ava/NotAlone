@@ -33,7 +33,7 @@ export async function assistantSessionCombination(browser: Browser, origin: stri
     await helper.getByRole('button', { name: '回应消息', exact: true }).click();
     await helper.getByRole('radio', { name: /甲的原始合成消息/ }).click();
     await helper.getByRole('textbox', { name: '表达方向', exact: true }).fill('感谢邀请，本次不参加。');
-    await helper.getByRole('textbox', { name: '本次策略要求', exact: true }).fill('自然一点');
+    await helper.getByRole('textbox', { name: '补充你的想法或要求', exact: true }).fill('自然一点');
     await fixture.plan({ count: 1, message_groups: [['甲的合成感谢。', '甲本次不参加。']] });
     await helper.getByRole('button', { name: '生成候选', exact: true }).click();
     const group = helper.getByRole('group', { name: '说法1消息组', exact: true });

@@ -51,8 +51,8 @@ function SavedDiscussion({ input }: { input: SavedAssistantInput }) {
     {input.placeholder ? <p>{input.placeholder}</p> : content && <dl>
       {content.type === 'purpose_exploration' ? <><dt>当时的主动目的</dt><dd>{content.purposeHint}</dd></>
         : <><dt>当时选择的消息</dt><dd>{content.targetMessageId}</dd></>}
-      {content.correction && <><dt>纠正理解</dt><dd>{content.correction}</dd></>}
-      {content.requirements && <><dt>本次要求</dt><dd>{content.requirements}</dd></>}
+      {(content.correction || content.requirements) && <><dt>补充你的想法或要求</dt>
+        <dd>{[content.correction, content.requirements].filter(Boolean).join('\n')}</dd></>}
       {content.answer && <><dt>关键问题回答</dt><dd>{content.answer}</dd></>}
       {content.confirmedIntent && <><dt>已确认的本次意愿</dt><dd>{content.confirmedIntent}</dd></>}
       <dt>当时的策略选择</dt><dd>{content.skillMode === 'disabled' ? '使用通用流程'

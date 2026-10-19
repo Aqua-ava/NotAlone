@@ -163,9 +163,14 @@ export async function authenticExpressionTyped(browser: Browser, origin: string)
         expect(sample.sendingStatus).toBe('unknown');
         await helper.getByRole('button', { name: mode === 'response' ? '回应消息' : '主动聊聊', exact: true }).click();
         if (mode === 'response') await helper.getByRole('radio', { name: /合成当前邀请/ }).click();
-        await helper.getByRole('textbox', { name: '纠正理解', exact: true }).fill('这只是合成邀约，不是已确认约定。');
         await helper.getByRole('textbox', { name: mode === 'response' ? '表达方向' : '主动目的', exact: true }).fill(currentIntent);
-        await helper.getByRole('textbox', { name: '本次策略要求', exact: true }).fill('不要承诺');
+        // 此质量用例固定旧协议输入；统一混合补充由独立入口回归覆盖。
+        await helper.evaluate(async (requirements) => {
+          const state = await window.notalone.replies.getState();
+          const scope = { contactId: state.contactId!, scopeRevision: state.scopeRevision };
+          await window.notalone.replies.updateCorrection({ ...scope, correction: '这只是合成邀约，不是已确认约定。' });
+          await window.notalone.replies.updateRequirements({ ...scope, requirements });
+        }, '不要承诺');
         const initial = await ordinary(pages, mode, 'current', rows, ['这次不参加。', '谢谢你邀请。'],
           '保留本次拒绝，表达样本仅供说法参考。', mode === 'proactive');
         const sessionPath = `/api/contacts/${contactId}/assistant-sessions/${initial.output.session_id}`;

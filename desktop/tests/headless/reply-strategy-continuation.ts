@@ -33,7 +33,7 @@ async function continuationScene(pages: EventPages, scene: '回应消息' | '主
   await helper.getByRole('button', { name: scene, exact: true }).click();
   if (scene === '回应消息') await helper.getByRole('radio', { name: /甲的原始合成消息/ }).click();
   await helper.getByRole('textbox', { name: scene === '回应消息' ? '表达方向' : '主动目的', exact: true }).fill('拒绝本次邀约。');
-  await helper.getByRole('textbox', { name: '本次策略要求', exact: true }).fill('自然一点；不要承诺');
+  await helper.getByRole('textbox', { name: '补充你的想法或要求', exact: true }).fill('自然一点；不要承诺');
   await fixture.plan({ count: 1, message_groups: [['第一组第一条。', '第一组第二条。']] });
   await helper.getByRole('button', { name: '生成候选', exact: true }).click();
   const group = helper.getByRole('group', { name: '说法1消息组', exact: true });

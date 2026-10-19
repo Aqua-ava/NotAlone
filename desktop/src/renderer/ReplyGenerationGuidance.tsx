@@ -10,7 +10,7 @@ export function DirectionGenerationNotice({ state }: { state: ReplySessionState 
   if (!result || !needsDirectionClarification(state)) return null;
   return <div className="reply-generation-guidance" role="status">
     <strong>{result.question ? '还有关键问题，尚未生成新候选' : '仍有待澄清的信息，尚未生成新候选'}</strong>
-    <p>{result.question?.text ?? '请补充“纠正理解”或“本次要求”，再点击“更新理解”。'}</p>
+    <p>{result.question?.text ?? '请填写“补充你的想法或要求”，再点击“更新理解”。'}</p>
     {result.question && <button onClick={() => {
       const answer = document.getElementById('reply-clarification-answer');
       answer?.focus();

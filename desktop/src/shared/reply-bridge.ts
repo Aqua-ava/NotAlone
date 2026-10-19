@@ -49,6 +49,7 @@ export interface ReplyMessagePageRequest extends ContactSelection { older: boole
 export interface ReplyMessageSelection extends ContactSelection { messageId: string; }
 export interface ReplyDirectionUpdate extends ContactSelection { direction: string; }
 export interface ReplyCorrectionUpdate extends ContactSelection { correction: string; }
+export interface ReplySupplementUpdate extends ContactSelection { supplement: string; }
 export interface ReplyDirectionChoice extends ContactSelection { suggestionId: string; inputVersion: string; }
 export interface ReplySkillVersion { name: string; versionId: string; versionNumber: number; }
 export interface ReplyUsedSkill {
@@ -169,6 +170,7 @@ export interface ReplySessionState {
   direction: string;
   correction: string;
   requirements: string;
+  supplementInput?: boolean;
   clarificationAnswer: string;
   skillChoice: ReplySkillChoice;
   scene?: string;
@@ -210,6 +212,7 @@ export interface ReplyBridge extends ReplyEvidenceCommands {
   selectMessage(selection: ReplyMessageSelection): Promise<ReplySessionState>;
   updateDirection(update: ReplyDirectionUpdate): Promise<ReplySessionState>;
   updateCorrection(update: ReplyCorrectionUpdate): Promise<ReplySessionState>;
+  updateSupplement(update: ReplySupplementUpdate): Promise<ReplySessionState>;
   explore(selection: ContactSelection): Promise<void>;
   changeDirections(selection: ContactSelection): Promise<void>;
   beginClarificationEdit(selection: ReplyClarificationEdit): Promise<ReplySessionState>;

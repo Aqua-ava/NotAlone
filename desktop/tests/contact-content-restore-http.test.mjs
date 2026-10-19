@@ -240,6 +240,42 @@ test('后台删除待回复来源后只清除失效引用，保留独立草稿�
   assert.match(after.contentRestoreNotice, /待回复对象/);
 });
 
+for (const switchToRewrite of [false, true]) test(`统一混合补充在非当前联系人来源删除后不再恢复（切改写：${switchToRewrite}）`, async (t) => {
+  const f = await budgetPublicFixture(t); const [a, b] = f.data.contact_ids;
+  const scope = await f.connect(a);
+  await f.bridge.setMode({ ...scope, mode: 'reply_to_message' });
+  const target = (await f.bridge.getState()).messages.items[0];
+  await f.bridge.selectMessage({ ...scope, messageId: target.messageId });
+  const supplement = '这只是合成问候，不是邀约；回复简短自然。';
+  await f.bridge.updateSupplement({ ...scope, supplement });
+  await f.connect(b); await f.connect(a);
+  assert.equal((await f.bridge.getState()).requirements, supplement);
+  if (switchToRewrite) await f.bridge.setMode({ contactId: a, scopeRevision: f.contacts.getState().scopeRevision, mode: 'rewrite_draft' });
+  await f.connect(b);
+  const sources = await f.request(`/api/contacts/${a}/sources`);
+  const sourceId = sources.sources[0].source_id;
+  await f.request(`/api/contacts/${a}/sources/${sourceId}`, undefined, 'DELETE');
+  const deadline = Date.now() + 10000;
+  let deleted = false;
+  while (Date.now() < deadline) {
+    const source = (await f.request(`/api/contacts/${a}/sources`)).sources.find((item) => item.source_id === sourceId);
+    if (source.status === 'deleted' && source.task_status === 'succeeded') { deleted = true; break; }
+    assert.notEqual(source.task_status, 'failed');
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  assert.ok(deleted);
+  await f.replies.revalidateDeletedSource(a);
+  await f.connect(a);
+  const after = await f.bridge.getState();
+  assert.equal(after.targetMessageId, null);
+  assert.equal(after.correction, '');
+  assert.equal(after.requirements, '');
+  assert.equal(JSON.stringify(after).includes(supplement), false);
+  await f.connect(b); await f.connect(a);
+  assert.equal((await f.bridge.getState()).requirements, '');
+  assert.equal((await f.command('metrics')).model_calls, 0);
+});
+
 test('同名联系人保持独立，Skill 只恢复当前联系人仍启用的版本', async (t) => {
   const f = await budgetPublicFixture(t); const [a, b] = f.data.contact_ids;
   await f.command('same_names');

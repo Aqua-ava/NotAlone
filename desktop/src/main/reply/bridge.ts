@@ -193,6 +193,11 @@ export function installReplyBridge(commands: PageCommands, backend: BackendHost,
     }
     return replies.retryInterruptedGeneration(value as unknown as AssistantInterruptedRetry);
   }, 'helper');
+  commands.handle('reply:update-supplement', (...args: unknown[]) => {
+    const value = fields(args, ['contactId', 'scopeRevision', 'supplement']);
+    if (typeof value.supplement !== 'string' || value.supplement.length > 8193) throw new Error('补充内容最多4096个字符。');
+    return replies.updateSupplement(value as unknown as import('../../shared/reply-bridge').ReplySupplementUpdate);
+  }, 'helper');
   commands.handle('reply:update-correction', (...args: unknown[]) => {
     const value = fields(args, ['contactId', 'scopeRevision', 'correction']);
     if (typeof value.correction !== 'string' || value.correction.length > 4096) throw new Error('纠正内容不可用。');

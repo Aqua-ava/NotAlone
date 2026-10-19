@@ -50,3 +50,12 @@ test('读取失败与历史缺少实际策略记录不会被展示成成功加�
   assert.ok(unknownVersion.includes('实际 Skill：版本未记录'));
   assert.ok(!unknownVersion.includes('undefined'));
 });
+
+
+test('单一补充框同时展示旧纠正与要求，不要求用户分类', () => {
+  const html = render({ correction: '只是普通问候。', requirements: '简短自然，不提见面。' });
+  assert.equal((html.match(/<textarea\b/g) ?? []).length, 1);
+  assert.match(html, /aria-label="补充你的想法或要求"/);
+  assert.ok(html.includes('只是普通问候。\n简短自然，不提见面。'));
+  assert.doesNotMatch(html, /aria-label="纠正理解"|aria-label="本次策略要求"/);
+});

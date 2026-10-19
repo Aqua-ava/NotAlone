@@ -35,7 +35,7 @@ export async function replyStrategyDialogue(browser: Browser, origin: string) {
       const first = replyTransport.explorationResults[0].data;
       expect(first.kind).toBe('clarification');
       expect(first.input_version_id).toMatch(/^[a-f0-9-]{36}$/);
-      await helper.getByRole('textbox', { name: '纠正理解', exact: true }).fill('这次只是了解近况，没有安排承诺。');
+      await helper.getByRole('textbox', { name: '补充你的想法或要求', exact: true }).fill('这次只是了解近况，没有安排承诺。');
       await rewriteBackend.plan({ explore: { understanding: '纠正只更新理解。',
         question: { text: '本次是否只了解近况？', impact: 'ambiguity' } } });
       await helper.getByRole('button', { name: '更新理解', exact: true }).click();
@@ -50,6 +50,8 @@ export async function replyStrategyDialogue(browser: Browser, origin: string) {
       await helper.getByRole('button', { name: '确认方向：愿意等待', exact: true }).click();
       await expect.poll(() => replyTransport.explorationResults.length).toBe(4);
       expect(replyTransport.explorationResults.at(-1)?.status, JSON.stringify(replyTransport.explorationResults.at(-1))).toBe(200);
+      await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveCount(0);
+      await helper.getByRole('button', { name: '生成候选', exact: true }).click();
       await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveValue('本次已确认合成意愿（说法1）。');
       const generated = replyTransport.explorationResults.at(-1)!.data;
       expect(generated.kind).toBe('generated');
@@ -61,7 +63,8 @@ export async function replyStrategyDialogue(browser: Browser, origin: string) {
       const payloads = observations.payloads as Array<Record<string, unknown>>;
       const reply = payloads.at(-1)!;
       expect(reply.input_mode).toBe(scene === '回应消息' ? 'reply_to_message' : 'initiate_conversation');
-      expect(reply.understanding_correction).toBe('这次只是了解近况，没有安排承诺。');
+      expect(reply.understanding_correction).toBeNull();
+      expect(reply.user_instruction).toBe('这次只是了解近况，没有安排承诺。');
       expect(reply.clarification_answer).toBe('只了解近况。');
       expect(JSON.stringify(reply)).not.toContain('乙的私密合成历史');
       expect(JSON.stringify(reply)).not.toContain('另一用户的私密合成历史');

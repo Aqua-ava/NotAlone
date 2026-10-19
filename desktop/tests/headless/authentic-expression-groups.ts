@@ -141,9 +141,14 @@ export async function authenticExpressionGroups(browser: Browser, origin: string
             const target = helper.getByRole('radio', { name: /合成当前邀请/ });
             await target.click(); await expect(target).toBeChecked();
           }
-          await helper.getByRole('textbox', { name: '纠正理解', exact: true }).fill('这只是合成邀约，不是已确认约定。');
           await helper.getByRole('textbox', { name: mode === 'response' ? '表达方向' : '主动目的', exact: true }).fill(stage.intent);
-          await helper.getByRole('textbox', { name: '本次策略要求', exact: true }).fill(stage.requirement);
+          // 此质量用例固定旧协议输入；统一混合补充由独立入口回归覆盖。
+          await helper.evaluate(async (requirements) => {
+            const state = await window.notalone.replies.getState();
+            const scope = { contactId: state.contactId!, scopeRevision: state.scopeRevision };
+            await window.notalone.replies.updateCorrection({ ...scope, correction: '这只是合成邀约，不是已确认约定。' });
+            await window.notalone.replies.updateRequirements({ ...scope, requirements });
+          }, stage.requirement);
           const item = await captureGeneration(pages, mode, stage.label, rows,
             { message_groups: [[...stage.messages]], basis: stage.basis,
               ...(mode === 'proactive' && index === 0 ? { probe_history: true } : {}) });

@@ -16,17 +16,22 @@ export type RetainedContactContent = {
   inputVersionId: string | null;
   candidateDrafts: NonNullable<ReplySessionState['candidateDrafts']>;
   input: Pick<ReplySessionState, 'options' | 'mode' | 'targetMessageId' | 'direction' | 'purpose'
-    | 'correction' | 'requirements' | 'clarificationAnswer' | 'skillChoice' | 'scene'>;
+    | 'correction' | 'requirements' | 'supplementInput' | 'clarificationAnswer' | 'skillChoice' | 'scene'>;
 };
 
 export function retainContactContent(state: ReplySessionState, directionDerived: boolean, draft: string): RetainedContactContent | undefined {
   if (state.sessionDeletion === 'deleting' || state.sessionDeletion === 'failed'
     || state.sessionCatalog?.selectionPending || state.sourceAvailability) return;
-  const { options, mode, targetMessageId, direction, purpose, correction, requirements, clarificationAnswer, skillChoice, scene } = state;
+  const { options, mode, targetMessageId, direction, purpose, correction, requirements, supplementInput, clarificationAnswer, skillChoice, scene } = state;
   return structuredClone({ sessionId: state.savedSession?.sessionId ?? null, draft, directionDerived, inputVersionId: state.savedSession?.currentInputVersionId ?? state.result?.inputVersionId ?? null, candidateDrafts: state.candidateDrafts ?? [],
     result: state.result ? { continuation: state.result.continuation, replyRequestId: state.result.replyRequestId, selectedCandidateId: state.selectedCandidateId,
       edits: state.result.candidates.map((candidate) => ({ candidateId: candidate.original.candidateId, text: candidate.editedText })) } : undefined,
-    input: { options, mode, targetMessageId, direction, purpose, correction, requirements, clarificationAnswer, skillChoice, scene } });
+    input: { options, mode, targetMessageId, direction, purpose, correction, requirements, supplementInput, clarificationAnswer, skillChoice, scene } });
+}
+
+// 混合补充可能含来源派生理解；只有明确来自旧独立要求入口的内容可继续保留。
+export function invalidatedSupplement(input: RetainedContactContent['input']): Partial<RetainedContactContent['input']> {
+  return input.supplementInput === true || input.mode !== 'rewrite_draft' && input.supplementInput !== false ? { requirements: '', supplementInput: false } : {};
 }
 
 // 只有权威读取确认后的字段可以回到视图；失效引用只清理相关输入。
@@ -38,6 +43,7 @@ export async function validateContactInput(backend: BackendHost, contactId: stri
   const notices: string[] = content.notice ? [content.notice] : [];
   if (content.inputVersionId && !saved.inputs.some((input) => input.inputVersionId === content.inputVersionId && input.state === 'active')) {
     update.correction = ''; update.clarificationAnswer = '';
+    Object.assign(update, invalidatedSupplement(content.input));
     if (content.directionDerived) { update.direction = ''; update.purpose = ''; }
     notices.push('原讨论来源已失效，相关理解已清除。');
   }
@@ -54,6 +60,7 @@ export async function validateContactInput(backend: BackendHost, contactId: stri
     } while (cursor);
     if (!update.messages) {
       update.targetMessageId = null; update.correction = ''; update.clarificationAnswer = '';
+      Object.assign(update, invalidatedSupplement(content.input));
       if (content.directionDerived) update.direction = '';
       notices.push('待回复对象已不可用，请重新选择。');
     }
@@ -104,6 +111,7 @@ export async function validateContactInput(backend: BackendHost, contactId: stri
 export function removeDependentContent(content: RetainedContactContent): RetainedContactContent {
   return { ...content, notice: '部分来源尚未核对，相关派生内容已清除，独立输入仍保留。', result: undefined, candidateDrafts: [], inputVersionId: null,
     input: { ...content.input, targetMessageId: null, correction: '', clarificationAnswer: '',
+      ...invalidatedSupplement(content.input),
       ...(content.directionDerived ? { direction: '', purpose: '' } : {}) } };
 }
 
@@ -115,8 +123,8 @@ export async function revalidateRetainedContent(backend: BackendHost, contactId:
   if (!current() || saved.generation !== backend.getConnectionGeneration()) throw new Error('删除复验范围已变化。');
   const update = await validateContactInput(backend, contactId, content, '', { ...saved, phase: 'ready' }, signal, current);
   const valid = new Set(saved.turns.flatMap((turn) => turn.reply?.candidates.map((candidate) => candidate.candidateId) ?? []));
-  const { options, mode, targetMessageId, direction, purpose, correction, requirements, clarificationAnswer, skillChoice, scene } = { ...content.input, ...update };
+  const { options, mode, targetMessageId, direction, purpose, correction, requirements, supplementInput, clarificationAnswer, skillChoice, scene } = { ...content.input, ...update };
   return { ...content, notice: update.contentRestoreNotice, result: update.result ? content.result : undefined,
     candidateDrafts: content.candidateDrafts.filter((draft) => valid.has(draft.candidateId)),
-    input: { options, mode, targetMessageId, direction, purpose, correction, requirements, clarificationAnswer, skillChoice, scene } };
+    input: { options, mode, targetMessageId, direction, purpose, correction, requirements, supplementInput, clarificationAnswer, skillChoice, scene } };
 }

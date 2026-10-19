@@ -13,7 +13,7 @@ async function adoptWhileGenerating(pages: EventPages, scene: '回应消息' | '
   await helper.getByRole('button', { name: scene, exact: true }).click();
   if (scene === '回应消息') await helper.getByRole('radio', { name: /甲的原始合成消息/ }).click();
   await helper.getByRole('textbox', { name: scene === '回应消息' ? '表达方向' : '主动目的', exact: true }).fill('只说明本次立场，不作未来约定。');
-  await helper.getByRole('textbox', { name: '本次策略要求', exact: true }).fill('不要承诺');
+  await helper.getByRole('textbox', { name: '补充你的想法或要求', exact: true }).fill('不要承诺');
   const messages = ['当前受控说法第一条。', '当前受控说法第二条。'];
   // 两个模型的返回顺序不作为身份依据，使用真实turn/CURRENT及reply UUID。
   await fixture.plan({ count: 1, message_groups: [messages] });

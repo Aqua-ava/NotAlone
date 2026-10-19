@@ -25,7 +25,7 @@ import { AssistantGenerationJobs, type AssistantGenerationReceipt, type Assistan
 import type { ReplyContinuation, ReplyContinuationConfirmation } from '../../shared/reply-bridge';
 import { requirementChangeFromClarification, type AssistantContinuationCommand } from './assistant-continuation';
 import { captureReplyContinuation, continuationInputSnapshot } from './continuation-view';
-import { retainContactContent, validateContactInput, removeDependentContent, revalidateRetainedContent, type RetainedContactContent } from './contact-content';
+import { invalidatedSupplement, retainContactContent, validateContactInput, removeDependentContent, revalidateRetainedContent, type RetainedContactContent } from './contact-content';
 import { readReplyScene, sceneSnapshot } from './scene';
 import { AssistantSessionProjection, type AssistantProjectionRead, type AssistantProjectionScope, type AssistantProjectionVerification } from './assistant-session-projection';
 import { AssistantMessageNotices, type MessageNoticeAdoption } from './assistant-message-notices';
@@ -894,7 +894,8 @@ export class ReplySession {
       if (contactId === currentContact && !options.preserveInput) {
         this.cancelMessagePage();
         this.publish({ messages: { phase: 'idle', items: [], nextCursor: null }, targetMessageId: null,
-          correction: '', ...(this.directionDerived ? { direction: '', purpose: '' } : {}) });
+          correction: '', ...invalidatedSupplement(this.state),
+          ...(this.directionDerived ? { direction: '', purpose: '' } : {}) });
         this.directionDerived = false;
         if (currentContact && generation !== undefined) {
           await this.loadMessages({ contactId: currentContact, scopeRevision, older: false });
@@ -1049,6 +1050,19 @@ export class ReplySession {
     return this.getState();
   }
 
+  updateSupplement(update: import('../../shared/reply-bridge').ReplySupplementUpdate): ReplySessionState {
+    this.assertScope(update);
+    if (this.state.mode === 'rewrite_draft') throw new Error('请先选择聊天场景。');
+    const previousLength = [this.state.correction, this.state.requirements].filter(Boolean).join('\n').length;
+    // 旧双框可能合计超限，允许逐步缩短，但超限内容不能提交给模型。
+    if (update.supplement.length > 4096 && update.supplement.length > previousLength) throw new Error('补充内容最多4096个字符。');
+    if (update.supplement !== this.state.requirements || this.state.correction || this.state.supplementInput !== true) {
+      // 统一补充沿用请求级要求槽；一次更新清掉旧纠正，避免隐藏文字继续影响回复。
+      this.invalidateInput(true); this.publish({ requirements: update.supplement, correction: '', supplementInput: true });
+    }
+    return this.getState();
+  }
+
   updateCorrection(update: ReplyCorrectionUpdate): ReplySessionState {
     this.assertScope(update);
     if (this.state.mode === 'rewrite_draft') throw new Error('请先选择聊天场景。');
@@ -1059,7 +1073,9 @@ export class ReplySession {
   }
 
   async explore(selection: ContactSelection, changeGroup = false, automatic = false): Promise<void> {
-    this.assertScope(selection); this.refreshGenerationEligibility();
+    this.assertScope(selection);
+    if ([this.state.correction, this.state.requirements].filter(Boolean).join('\n').length > 4096) throw new Error('请将补充内容缩短至4096个字符以内再更新。');
+    this.refreshGenerationEligibility();
     this.assertSessionSelection();
     if (this.state.generationBlock || this.state.mode === 'rewrite_draft' || this.state.phase === 'waiting'
       || this.state.exploration.phase === 'waiting' || this.state.mode === 'reply_to_message' && !this.state.targetMessageId) return;
@@ -1156,7 +1172,7 @@ export class ReplySession {
   }
   updateRequirements(update: ReplyRequirementsUpdate): ReplySessionState {
     this.assertScope(update);
-    if (update.requirements !== this.state.requirements) { this.invalidateInput(true); this.publish({ requirements: update.requirements }); }
+    if (update.requirements !== this.state.requirements || this.state.supplementInput !== false) { this.invalidateInput(true); this.publish({ requirements: update.requirements, supplementInput: false }); }
     return this.getState();
   }
   updateSkill(update: ReplySkillUpdate): ReplySessionState {
@@ -1364,6 +1380,7 @@ export class ReplySession {
 
   async generate(selection: GenerateReply): Promise<void> {
     const contactState = this.assertScope(selection);
+    if (this.state.mode !== 'rewrite_draft' && [this.state.correction, this.state.requirements].filter(Boolean).join('\n').length > 4096) throw new Error('请将补充内容缩短至4096个字符以内再生成。');
     this.assertSessionSelection();
     this.refreshGenerationEligibility();
     if (this.state.generationBlock) throw new Error('请先确认本次联系人。');

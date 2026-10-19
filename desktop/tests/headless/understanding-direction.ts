@@ -51,7 +51,7 @@ export async function understandingDirection(browser: Browser, origin: string) {
     await expect(strategy).toContainText('甲的私密合成历史');
     await expect(strategy).toContainText('还不清楚你是否愿意等待。');
     expect(replyTransport.requests).toHaveLength(0);
-    await helper.getByRole('textbox', { name: '纠正理解', exact: true }).fill('这次讨论的是今晚的回复安排，不是邀约。');
+    await helper.getByRole('textbox', { name: '补充你的想法或要求', exact: true }).fill('这次讨论的是今晚的回复安排，不是邀约。');
     await rewriteBackend.plan({ explore: { understanding: '这里只涉及今晚回复的安排。', question: { text: '本次是否不增加承诺？', impact: 'commitment' } } });
     await helper.getByRole('button', { name: '更新理解', exact: true }).click();
     await expect(strategy).toContainText('这里只涉及今晚回复的安排。');
@@ -60,7 +60,7 @@ export async function understandingDirection(browser: Browser, origin: string) {
     await helper.getByRole('button', { name: '确认方向：愿意等待', exact: true }).click();
     await expect(strategy).toContainText('已确认本次意愿：表示愿意等待，但不增加承诺。');
     await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveCount(0);
-    await helper.getByRole('textbox', { name: '纠正理解', exact: true }).fill('纠正理解，原方向仍保留。');
+    await helper.getByRole('textbox', { name: '补充你的想法或要求', exact: true }).fill('纠正理解，原方向仍保留。');
     await rewriteBackend.plan({ fault: 'failure' });
     await helper.getByRole('button', { name: '更新理解', exact: true }).click();
     await expect(helper.getByRole('alert')).toContainText('方向建议暂不可用');
@@ -70,7 +70,7 @@ export async function understandingDirection(browser: Browser, origin: string) {
     await helper.getByRole('button', { name: '重试策略操作', exact: true }).click();
     await expect(strategy).toContainText('纠正后仍沿用用户已确认的等待方向。');
     expect(replyTransport.explorationRequests.at(-1)).toEqual(failed);
-    await helper.getByRole('textbox', { name: '纠正理解', exact: true }).fill('本次纠正结果丢包，仍保留原方向。');
+    await helper.getByRole('textbox', { name: '补充你的想法或要求', exact: true }).fill('本次纠正结果丢包，仍保留原方向。');
     replyTransport.nextExploration = 'drop';
     await rewriteBackend.plan({ explore: { understanding: '本次纠正已保存，返回丢包。' } });
     await helper.getByRole('button', { name: '更新理解', exact: true }).click();
@@ -97,7 +97,7 @@ export async function understandingDirection(browser: Browser, origin: string) {
     const payloads = (await rewriteBackend.command('observations')).payloads as Array<Record<string, unknown>>;
     expect(payloads).toHaveLength(6);
     expect(payloads.filter((item) => item.input_mode === 'reply_to_message')).toHaveLength(1);
-    expect(payloads.at(-1)).toMatchObject({ understanding_correction: '本次纠正结果丢包，仍保留原方向。',
+    expect(payloads.at(-1)).toMatchObject({ understanding_correction: null, user_instruction: '本次纠正结果丢包，仍保留原方向。',
       fidelity_contract: { current_intent: { text: '表示愿意等待，但不增加承诺。' } } });
     // 确认响应只含候选；公开GET实际完成轮次后还原原生成输入和请求键。
     const history = await rewriteBackend.request(`/api/contacts/${contactId}/assistant-sessions/${turn.session_id}`);
@@ -115,7 +115,7 @@ export async function understandingDirection(browser: Browser, origin: string) {
       content: { ...savedContent, understanding_correction: '同一键换成另一个理解纠正。' } })).status).toBe(409);
     expect((await rewriteBackend.command('observations')).payloads).toHaveLength(6);
     await helper.getByRole('textbox', { name: '表达方向', exact: true }).fill('我想直接说明今晚不再等了。');
-    await helper.getByRole('textbox', { name: '纠正理解', exact: true }).fill('今晚已经没有时间继续等待。');
+    await helper.getByRole('textbox', { name: '补充你的想法或要求', exact: true }).fill('今晚已经没有时间继续等待。');
     await rewriteBackend.plan({ explore: { understanding: '今晚的等待时间有限。' } });
     await helper.getByRole('button', { name: '更新理解', exact: true }).click();
     await expect(strategy).toContainText('今晚的等待时间有限。');
@@ -163,7 +163,7 @@ export async function understandingDirection(browser: Browser, origin: string) {
     expect(unconfirmed.status).toBe(409);
     expect((await rewriteBackend.command('observations')).payloads).toHaveLength(1);
     const beforeUpdate = replyTransport.explorationResults.length;
-    await helper.getByRole('textbox', { name: '纠正理解', exact: true }).fill('换一个理解快照。');
+    await helper.getByRole('textbox', { name: '补充你的想法或要求', exact: true }).fill('换一个理解快照。');
     await rewriteBackend.plan({ explore: {} });
     await helper.getByRole('button', { name: '更新理解', exact: true }).click();
     await expect.poll(() => replyTransport.explorationResults.length).toBe(beforeUpdate + 1);
@@ -184,7 +184,7 @@ export async function understandingDirection(browser: Browser, origin: string) {
     replyTransport.nextExploration = 'hold';
     await helper.getByRole('button', { name: '帮我理清方向', exact: true }).click();
     await expect.poll(() => replyTransport.explorationResults.length).toBe(1);
-    await helper.getByRole('textbox', { name: '纠正理解', exact: true }).fill('更新输入使迟到理解失效。');
+    await helper.getByRole('textbox', { name: '补充你的想法或要求', exact: true }).fill('更新输入使迟到理解失效。');
     await rewriteBackend.plan({ explore: { understanding: '新快照理解' } });
     await helper.getByRole('button', { name: '更新理解', exact: true }).click();
     const strategy = helper.getByRole('region', { name: '理解与方向', exact: true });
@@ -214,7 +214,7 @@ export async function understandingDirection(browser: Browser, origin: string) {
     await helper.getByRole('button', { name: '帮我理清方向', exact: true }).click();
     await expect(helper.getByRole('button', { name: '确认方向：愿意等待', exact: true })).toBeVisible();
     const first = replyTransport.explorationResults.at(-1)!.data;
-    await helper.getByRole('textbox', { name: '纠正理解', exact: true }).fill('合成来源派生纠正，不确认意愿。');
+    await helper.getByRole('textbox', { name: '补充你的想法或要求', exact: true }).fill('合成来源派生纠正，不确认意愿。');
     await rewriteBackend.plan({ explore: { direction: marker, question: { text: '是否只保留本次意愿？', impact: 'commitment' } } });
     await helper.getByRole('button', { name: '更新理解', exact: true }).click();
     await expect.poll(() => replyTransport.explorationResults.length).toBe(2);
@@ -226,7 +226,7 @@ export async function understandingDirection(browser: Browser, origin: string) {
     const sources = await rewriteBackend.request(`/api/contacts/${contactId}/sources`);
     await deleteDirectionSource(manager, rewriteBackend, (sources.data.sources as Array<{ source_id: string }>)[0].source_id);
     await expect(helper.getByRole('textbox', { name: '表达方向', exact: true })).toHaveValue('');
-    await expect(helper.getByRole('textbox', { name: '纠正理解', exact: true })).toHaveValue('');
+    await expect(helper.getByRole('textbox', { name: '补充你的想法或要求', exact: true })).toHaveValue('');
     await expect(helper.getByRole('button', { name: '生成候选', exact: true })).toBeDisabled();
     await expect(helper.getByText('合成来源派生隐私标记', { exact: false })).toHaveCount(0);
     const saved = await rewriteBackend.request(`/api/contacts/${contactId}/assistant-sessions/${first.session_id}`);
@@ -256,7 +256,7 @@ export async function understandingDirection(browser: Browser, origin: string) {
     await helper.getByRole('button', { name: '确认方向：愿意等待', exact: true }).click();
     await expect(helper.getByRole('textbox', { name: '表达方向', exact: true })).toHaveValue(direction);
     await rewriteBackend.command('shift_direction_dependency', { target_source: dependency.target_source });
-    await helper.getByRole('textbox', { name: '纠正理解', exact: true }).fill('只纠正当前语境，原先明确的意愿仍保留。');
+    await helper.getByRole('textbox', { name: '补充你的想法或要求', exact: true }).fill('只纠正当前语境，原先明确的意愿仍保留。');
     await rewriteBackend.plan({ explore: {} });
     await helper.getByRole('button', { name: '更新理解', exact: true }).click();
     await expect.poll(() => replyTransport.explorationResults.length).toBe(3);
@@ -295,7 +295,7 @@ export async function understandingDirection(browser: Browser, origin: string) {
     await expect(helper.getByRole('textbox', { name: '表达方向', exact: true })).toHaveValue('表示愿意等待，但不增加承诺。');
     const selected = replyTransport.explorationResults.at(-1)!.data;
     await rewriteBackend.command('age_exploration', { seconds: 895 });
-    await helper.getByRole('textbox', { name: '纠正理解', exact: true }).fill('纠正后仍保留同一个明确意愿。');
+    await helper.getByRole('textbox', { name: '补充你的想法或要求', exact: true }).fill('纠正后仍保留同一个明确意愿。');
     await rewriteBackend.plan({ explore: {} });
     await helper.getByRole('button', { name: '更新理解', exact: true }).click();
     await expect.poll(() => replyTransport.explorationResults.length).toBe(3);

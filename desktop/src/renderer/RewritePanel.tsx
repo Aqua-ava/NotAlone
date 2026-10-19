@@ -93,6 +93,7 @@ export function useReplySession() {
     combineNewMessages: () => operate(() => window.notalone.replies.combineNewMessages(selection())),
     selectMessage: (messageId: string) => operate(() => window.notalone.replies.selectMessage({ ...selection(), messageId })),
     updateDirection: (direction: string) => operate(() => window.notalone.replies.updateDirection({ ...selection(), direction })),
+    updateSupplement: (supplement: string) => operate(() => window.notalone.replies.updateSupplement({ ...selection(), supplement })),
     updateCorrection: (correction: string) => operate(() => window.notalone.replies.updateCorrection({ ...selection(), correction })),
     explore: (changeGroup = false) => operate(() => changeGroup ? window.notalone.replies.changeDirections(selection()) : window.notalone.replies.explore(selection())),
     beginClarificationEdit: (inputVersion: string, questionId: string) => operate(() => window.notalone.replies.beginClarificationEdit({ ...selection(), inputVersion, questionId })),
