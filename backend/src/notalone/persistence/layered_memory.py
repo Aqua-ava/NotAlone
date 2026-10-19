@@ -280,7 +280,8 @@ class PostgresLayeredMemoryStore(LayeredProfileStore, LayeredCorrectionStore):
         job = connection.execute("SELECT pending_receipt FROM public.layered_memory_job WHERE task_id=%s",(task_id,)).fetchone()
         if not execute or not generation:
             return
-        current = {item['memory_id']: item for item in self._manifest(connection, scope, self.eligible(overview))}
+        current = {item['memory_id']: item for item in self._manifest(
+            connection, scope, self.unprotected(connection, scope, self.eligible(overview)))}
         valid_rows = [row for row in rows if all(current.get(item['memory_id']) == item
             for item in row['input_manifest'])]
         profile_task = (connection.execute("SELECT b.task_id FROM public.layered_profile_version v "

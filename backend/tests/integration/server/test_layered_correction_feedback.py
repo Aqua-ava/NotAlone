@@ -44,14 +44,18 @@ class LayeredCorrectionFeedbackHttpTest(MemoryOverviewHttpFixture, unittest.Test
         leaf = result["memory"]
         guarded = self._get(backend, path)["layered_memory"]
         for feedback in guarded["feedback"]:
-            self.assertEqual(feedback["state"], "erased_guard")
-            self.assertIsNone(feedback["target_text"])
-            self.assertIsNone(feedback["reason"])
+            # 更正保留原目标和理由供审计，保护归属仍投影当前合法叶。
+            self.assertEqual(feedback["state"], "active")
+            self.assertIn(feedback["target_text"], {primary["text"], unrelated["text"]})
+            self.assertEqual(feedback["reason"], "该合成主题总结含义有误。")
             self.assertEqual({item["memory_id"] for item in feedback["basis"]}, {leaf["memory_id"], unrelated["memory_id"]})
             self.assertNotIn("text", str(feedback["basis"]))
         self.assertEqual(self.backend.request(f"{memories}/{leaf['memory_id']}/delete", {})[0], 200)
         guarded = self._get(backend, path)["layered_memory"]
         for feedback in guarded["feedback"]:
+            self.assertEqual(feedback["state"], "erased_guard")
+            self.assertIsNone(feedback["target_text"])
+            self.assertIsNone(feedback["reason"])
             self.assertEqual(feedback["basis"], [{"memory_id": unrelated["memory_id"], "revision": unrelated["revision"]}])
         self.assertEqual(self.backend.request(f"{memories}/{unrelated['memory_id']}/delete", {})[0], 200)
         self.assertEqual(self._get(backend, path)["layered_memory"]["feedback"], [])

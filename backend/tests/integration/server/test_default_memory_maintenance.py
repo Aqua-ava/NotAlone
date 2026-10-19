@@ -134,7 +134,7 @@ class DefaultMemoryMaintenanceTest(CoreBusinessFlowFixture, unittest.TestCase):
                 result['scenarios'][0]['topic_key'] = 'learning-' + str(memories[0].memory_id)
                 return result
 
-        backend = LayeredProfileHttpTest.controlled(self, scenario_proposer=CurrentFactProposal())
+        backend = LayeredProfileHttpTest.controlled(self, scenario_proposer=CurrentFactProposal(), automatic_maintenance=True)
         path = f'/api/contacts/{contact}/layered-memory'
         status, result = self.backend.request('/api/memories/manual-contact',
             {'contact_id': str(contact), 'text': '双方共同学习合成课程。', 'category': 'common_fact'})

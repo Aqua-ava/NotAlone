@@ -56,9 +56,10 @@ class LayeredCorrectionManualHttpTest(MemoryOverviewHttpFixture, unittest.TestCa
         current = self._get(backend, path)["layered_memory"]
         self.assertEqual(current["protected_count"], 1, "同一手录链换措辞不能解除整理纠错保护")
         self.assertEqual([item["id"] for item in current["feedback"]], [feedback_id])
-        self.assertGreater(current["correction_revision"], revision)
-        self.assertEqual(current["feedback"][0]["state"], "erased_guard")
-        self.assertIsNone(current["feedback"][0]["reason"])
+        # ADR-071/084：记忆更正保留原反馈审计；真实删除才清正文。
+        self.assertEqual(current["correction_revision"], revision)
+        self.assertEqual(current["feedback"][0]["state"], "active")
+        self.assertEqual(current["feedback"][0]["reason"], "这项总结含义有误。")
         status, result = self.backend.request(f"{memories}/{leaf['memory_id']}/correct", {
             "revision": leaf["revision"], "text": "共同经历包括一次合成课程。",
             "category": "relationship_note"})
@@ -68,8 +69,12 @@ class LayeredCorrectionManualHttpTest(MemoryOverviewHttpFixture, unittest.TestCa
         status, result = backend.request(path + "/refresh", {
             "settings_generation": ready["settings_generation"]})
         self.assertEqual(status, 200, result)
-        self.assertEqual(result["layered_memory"]["scenarios"], [])
+        self.assertEqual(result["layered_memory"]["scenarios"], [] if target_kind == 'scenario' else ready['scenarios'])
         self.assertIsNone(result["layered_memory"]["profile"])
+        from notalone.scopes import ContactScope, OwnerScope
+        from uuid import UUID
+        scope = OwnerScope(self.owner_id) if owner else ContactScope(self.owner_id, UUID(contact))
+        self.assertIsNone(self.service.capture(scope), "画像反馈保留L2审计，但旧手录链不得重返生成")
         self.assertEqual(len(proposal.inputs), 1, "受保护的后继版本不能重新送入整理模型")
         revision = result["layered_memory"]["correction_revision"]
         status, result = self.backend.request(f"{memories}/{leaf['memory_id']}/delete", {})

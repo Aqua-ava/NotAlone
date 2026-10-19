@@ -72,10 +72,12 @@ class LayeredProfileStore:
                 return None
             ids = tuple(row["id"] for row in rows)
             allowed = self.unprotected(connection, scope, self.eligible(overview))
-            allowed_ids = {str(entry.memory.memory_id) for entry in allowed}
-            # 冻结集合仍绑定全部当前版本；实际语义输入只读取可证明独立的主题。
-            input_rows = [row for row in rows if all(ref['memory_id'] in allowed_ids
-                for paragraph in row['paragraphs'] for ref in paragraph['references'])]
+            allowed_manifest = {item['memory_id']: item for item in self._manifest(connection, scope, allowed)}
+            # 冻结集合仍绑定全部当前版本；可见引用和实际完整输入均须独立合法。
+            # 含受保护隐藏输入的旧主题整行排除，不能裁掉依赖后复用其正文。
+            input_rows = [row for row in rows if all(ref['memory_id'] in allowed_manifest
+                for paragraph in row['paragraphs'] for ref in paragraph['references'])
+                and all(allowed_manifest.get(item['memory_id']) == item for item in row['input_manifest'])]
             if not input_rows:
                 connection.execute("UPDATE public.layered_memory_job SET profile_status='not_required' WHERE task_id=%s", (claim.task_id,))
                 return None

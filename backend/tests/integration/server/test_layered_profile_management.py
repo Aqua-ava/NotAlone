@@ -13,6 +13,7 @@ from notalone.scopes import ContactScope
 from notalone.server.app import create_app
 from tests.integration.server.core_business_flow_support import HttpBackend
 from tests.integration.server.memory_overview_support import MemoryOverviewHttpFixture
+from tests.integration.server.layered_manual_support import create_controlled_layered_app
 from tests.integration.server.test_layered_memory_management import ControlledProposal, ControlledVerification, EchoProposal
 
 
@@ -50,7 +51,7 @@ class ProfileVerification:
 
 class LayeredProfileHttpTest(MemoryOverviewHttpFixture, unittest.TestCase):
     def controlled(self, *, profile_proposer=None, profile_verifier=None, clock=None,
-                   scenario_proposer=None, scenario_verifier=None, **options):
+                   scenario_proposer=None, scenario_verifier=None, automatic_maintenance=False, **options):
         self.profile_proposer = profile_proposer or ProfileProposal()
         self.profile_verifier = profile_verifier or ProfileVerification()
         self.scenario_proposer = scenario_proposer or ControlledProposal()
@@ -58,7 +59,8 @@ class LayeredProfileHttpTest(MemoryOverviewHttpFixture, unittest.TestCase):
         self.service = LayeredMemoryService(PostgresLayeredMemoryStore(self.database_url, clock=clock),
             proposer=self.scenario_proposer, verifier=self.scenario_verifier, synthetic=True,
             profile_proposer=self.profile_proposer, profile_verifier=self.profile_verifier, **options)
-        backend = HttpBackend(create_app(database_url=self.database_url, owner_id=self.owner_id,
+        backend = HttpBackend(create_controlled_layered_app(automatic_maintenance=automatic_maintenance,
+            database_url=self.database_url, owner_id=self.owner_id,
             token="synthetic-profile-token", layered_memory=self.service), self.owner_id)
         self.addCleanup(backend.close)
         return backend
@@ -243,7 +245,7 @@ class LayeredProfileHttpTest(MemoryOverviewHttpFixture, unittest.TestCase):
                             raise RuntimeError('合成画像核验失败')
                         return value
                 verifier = FailOnce()
-                backend = self.controlled(profile_verifier=verifier)
+                backend = self.controlled(profile_verifier=verifier, automatic_maintenance=True)
                 initial = self.enable(backend, contact)
                 if paused:
                     initial = self._get_refresh(backend, contact, initial)
@@ -272,7 +274,7 @@ class LayeredProfileHttpTest(MemoryOverviewHttpFixture, unittest.TestCase):
         from threading import Event
         from time import monotonic
         contact, _, _ = self.prepare_contact()
-        backend = self.controlled(scenario_proposer=EchoProposal())
+        backend = self.controlled(scenario_proposer=EchoProposal(), automatic_maintenance=True)
         ready = self.enable(backend, contact)
         snapshot = self.service.capture(ContactScope(self.owner_id, UUID(contact)))
         status, result = self.backend.request('/api/memories/manual-contact', {
@@ -395,7 +397,7 @@ class LayeredProfileHttpTest(MemoryOverviewHttpFixture, unittest.TestCase):
                 self.assertEqual(snapshot.profile_entries,())
                 self.assertTrue(self.service.validate(snapshot))
 
-    def test_source_or_correction_before_and_after_profile_commit_erases_every_version(self):
+    def test_source_erasure_and_error_retirement_keep_distinct_profile_lifecycles(self):
         for action in ("source","correction"):
             for before in (True,False):
                 with self.subTest(action=action,before=before):
@@ -427,16 +429,23 @@ class LayeredProfileHttpTest(MemoryOverviewHttpFixture, unittest.TestCase):
                     if action == 'source':
                         self.assertIsNone(current['profile'])
                         self.assertEqual(current['scenarios'], [])
-                    # 自动维护可发布修正后的合法版本；被撤销的实际输入及旧版本必须物理消失。
+                    self.assertIsNone(self.service.capture(ContactScope(self.owner_id, UUID(contact))),
+                                      "来源删除或错误退役后，旧画像均不得继续进入生成")
+                    # 来源删除物理清除全部派生输入；错误退役保留既有审计，不恢复生成资格。
                     import psycopg
                     with psycopg.connect(self.database_url) as db:
                         for table, (key, ids) in retired.items():
-                            self.assertFalse(db.execute(f'SELECT 1 FROM public.{table} WHERE owner_id=%s AND contact_id=%s AND {key}=ANY(%s)',
-                                (self.owner_id,contact,ids)).fetchone(), table)
-                        for table in ('layered_memory_batch', 'layered_profile_batch'):
-                            self.assertFalse(db.execute(f"SELECT 1 FROM public.{table} WHERE owner_id=%s AND contact_id=%s "
-                                "AND input_manifest @> %s::jsonb", (self.owner_id,contact,
-                                json.dumps([{'memory_id':memory['memory_id'],'revision':memory['revision']}]))).fetchone(), table)
+                            retained = db.execute(f'SELECT count(*) FROM public.{table} WHERE owner_id=%s AND contact_id=%s AND {key}=ANY(%s)',
+                                (self.owner_id,contact,ids)).fetchone()[0]
+                            self.assertEqual(retained, 0 if action == 'source' else len(ids), table)
+                        if action == 'source':
+                            for table in ('layered_memory_batch', 'layered_profile_batch'):
+                                self.assertFalse(db.execute(f"SELECT 1 FROM public.{table} WHERE owner_id=%s AND contact_id=%s "
+                                    "AND input_manifest @> %s::jsonb", (self.owner_id,contact,
+                                    json.dumps([{'memory_id':memory['memory_id'],'revision':memory['revision']}]))).fetchone(), table)
+                    if action == 'correction':
+                        self.assertIsNone(current['profile'], "当前目录撤销旧画像，历史审计仍保留在原版本")
+                    backend.close()
 
     def test_late_profile_after_disable_or_delete_cannot_cross_reenable_aba(self):
         for action in ("disable","delete"):
@@ -508,15 +517,22 @@ class LayeredProfileHttpTest(MemoryOverviewHttpFixture, unittest.TestCase):
         self.assertEqual(again["profile"],recovered["profile"])
         self.assertEqual(again["organization_generation"],recovered["organization_generation"])
 
-    def test_profile_actual_transport_timeout_releases_foreground_for_each_semantic_step(self):
+    def test_profile_adapter_transport_timeout_releases_foreground_for_each_semantic_step(self):
+        self._profile_timeout_case(total_budget=None, transport_timeout=.2, require_transport=True)
+
+    def test_profile_short_total_budget_does_not_publish_and_releases_foreground(self):
+        self._profile_timeout_case(total_budget=.2, transport_timeout=None, require_transport=False)
+
+    def _profile_timeout_case(self, *, total_budget, transport_timeout, require_transport):
         from concurrent.futures import ThreadPoolExecutor
         from threading import Event
         from notalone.application.model_priority import ModelPriorityControl
         from notalone.memory.organization_deadline import OrganizationCallTimeout
-        for phase in ("proposal","verification"):
+        for phase in ("proposal", "verification"):
             with self.subTest(phase=phase):
-                contact,_,_ = self.prepare_contact()
-                started,finished,foreground = Event(),Event(),Event()
+                contact, _, _ = self.prepare_contact()
+                started, finished, foreground, timed_out = Event(), Event(), Event(), Event()
+                waits = []
                 class SlowProfile:
                     timeout_contract = SYNTHETIC_ORGANIZATION_TIMEOUT
                     def propose(self, *, scenarios, memories, budget, deadline):
@@ -526,25 +542,48 @@ class LayeredProfileHttpTest(MemoryOverviewHttpFixture, unittest.TestCase):
                     def transport(self, deadline):
                         started.set()
                         try:
-                            if not Event().wait(deadline.remaining_seconds()):
+                            remaining = deadline.remaining_seconds()
+                            timeout = min(remaining, transport_timeout) if transport_timeout is not None else remaining
+                            waits.append(timeout)
+                            if not Event().wait(timeout):
+                                timed_out.set()
                                 raise OrganizationCallTimeout()
                         finally:
                             finished.set()
-                slow,priority = SlowProfile(),ModelPriorityControl()
+                slow, priority = SlowProfile(), ModelPriorityControl()
+                # 实际传输用独立更严格期限；总预算用例仍包含真实数据库前置步骤。
+                # 默认总预算不能被误称为0.2秒总期限，传输期限也不替代生产总期限。
+                options = {} if total_budget is None else {"call_timeout_seconds": total_budget}
                 backend = self.controlled(profile_proposer=slow if phase == "proposal" else None,
-                    profile_verifier=slow if phase == "verification" else None,call_timeout_seconds=.2,model_priority=priority)
+                    profile_verifier=slow if phase == "verification" else None, model_priority=priority, **options)
                 def reply():
                     with priority.foreground():
                         foreground.set()
                 with ThreadPoolExecutor(max_workers=2) as workers:
-                    organizing = workers.submit(self.enable,backend,contact)
-                    self.assertTrue(started.wait(3))
+                    organizing = workers.submit(self.enable, backend, contact)
+                    entered = started.wait(3)
+                    if require_transport:
+                        self.assertTrue(entered, "实际传输超时回归必须进入指定L3步骤")
                     replying = workers.submit(reply)
-                    self.assertTrue(finished.wait(2),"实际Adapter必须按剩余deadline到期")
+                    if entered:
+                        self.assertTrue(finished.wait(2), "实际Adapter必须按传输剩余期限到期")
                     self.assertTrue(foreground.wait(1))
                     replying.result(1)
                     state = organizing.result(3)
-                self.assertEqual((state["status"],state["error_code"],state["profile"]),("failed","model_call_timeout",None))
+                self.assertEqual((state["status"], state["error_code"], state["profile"]),
+                                 ("failed", "model_call_timeout", None))
+                used, limit = state['budget']['model_calls_used'], state['budget']['max_model_calls']
+                expected = 3 if phase == "proposal" else 4
+                self.assertGreaterEqual(used, 0)
+                self.assertLessEqual(used, expected)
+                self.assertEqual(state['budget']['model_calls_remaining'], limit - used)
+                if entered:
+                    self.assertEqual(used, expected, "超时不能返还已预留的模型调用额度")
+                if require_transport:
+                    self.assertTrue(timed_out.is_set(), "传输必须实际等待到期，不能直接伪造超时")
+                    self.assertEqual(len(waits), 1)
+                    self.assertGreater(waits[0], 0)
+                    self.assertLessEqual(waits[0], transport_timeout)
 
     def test_profile_verification_complete_payload_has_independent_input_limit(self):
         contact,_,_ = self.prepare_contact()
