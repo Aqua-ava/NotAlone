@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 from uuid import UUID, uuid4
 
 import psycopg
+from psycopg import sql
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
@@ -15,6 +17,31 @@ from notalone.persistence.locks import lock_contact_scope, lock_owner_scope
 from notalone.scopes import ContactScope
 from notalone.persistence.memory_correction import source_documents_available
 from notalone.source_processing.models import ProcessingRecord
+
+
+_CAPTURE_CHECK_ROWS = 4096
+_RECORD_INSERT_ROWS = 500
+_RECORD_INSERT_BYTES = 2 * 1024 * 1024
+
+
+def _encoded_json(value: bytes) -> bytes:
+    """复用分块计量时编码的同一份 JSON，不在驱动里再次序列化。"""
+    return value
+
+
+def _insert_processing_records(
+    connection: psycopg.Connection[Any], rows: list[tuple[Any, ...]]
+) -> None:
+    query = sql.SQL(
+        "INSERT INTO public.source_processing_record "
+        "(record_id, batch_id, owner_id, contact_id, position, locator, "
+        "message_id, source_ref_id, outcome, payload) VALUES {}"
+    ).format(sql.SQL(", ").join(
+        sql.SQL("(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)") for _ in rows
+    ))
+    result = connection.execute(query, tuple(value for row in rows for value in row))
+    if result.rowcount != len(rows):
+        raise SourceProcessingWriteError()
 
 
 class SourceProcessingWriteError(RuntimeError):
@@ -38,10 +65,15 @@ def save_processing_batch(
 
     batch_id = uuid4()
     try:
-        for record in records:
+        for start in range(0, len(records), _CAPTURE_CHECK_ROWS):
+            capture_ids = list(dict.fromkeys(
+                record.record_id for record in records[start:start + _CAPTURE_CHECK_ROWS]
+            ))
             deleted_capture = connection.execute(
-                "SELECT 1 FROM public.source_processing_capture_tombstone WHERE owner_id=%s AND contact_id=%s AND capture_record_id=%s",
-                (scope.owner_id, scope.contact_id, record.record_id),
+                "SELECT 1 FROM public.source_processing_capture_tombstone "
+                "WHERE owner_id=%s AND contact_id=%s "
+                "AND capture_record_id=ANY(%s::uuid[]) LIMIT 1",
+                (scope.owner_id, scope.contact_id, capture_ids),
             ).fetchone()
             if deleted_capture is not None:
                 raise SourceProcessingWriteError()
@@ -56,6 +88,8 @@ def save_processing_batch(
                 status,
             ),
         )
+        rows: list[tuple[Any, ...]] = []
+        chunk_bytes = 0
         for position, record in enumerate(records):
             receipt = receipts.get(
                 str(record.record_id), receipts.get(record.locator, {})
@@ -64,28 +98,33 @@ def save_processing_batch(
             outcome = receipt.get(
                 "outcome", payload.get("outcome", "filtered")
             )
-            connection.execute(
-                "INSERT INTO public.source_processing_record (record_id, batch_id, owner_id, contact_id, position, locator, message_id, source_ref_id, outcome, payload) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
-                (
-                    uuid4(),
-                    batch_id,
-                    scope.owner_id,
-                    scope.contact_id,
-                    position,
-                    record.locator,
-                    receipt.get("message_id"),
-                    receipt.get("source_ref_id"),
-                    outcome,
-                    Jsonb(
-                        {
-                            **payload,
-                            "capture_record_id": str(record.record_id),
-                            "persistence": snapshot(receipt),
-                            "model_read_status": "not_claimed",
-                        }
-                    ),
-                ),
+            encoded = json.dumps({
+                **payload,
+                "capture_record_id": str(record.record_id),
+                "persistence": snapshot(receipt),
+                "model_read_status": "not_claimed",
+            }).encode("utf-8")
+            fields = (
+                uuid4(), batch_id, scope.owner_id, scope.contact_id,
+                position, record.locator, receipt.get("message_id"),
+                receipt.get("source_ref_id"), outcome,
             )
+            # 非 JSON 参数按文字编码保守计量；不把参数预算冒充协议总字节数。
+            row_bytes = len(encoded) + sum(
+                len(str(value).encode("utf-8")) for value in fields if value is not None
+            )
+            if rows and (len(rows) >= _RECORD_INSERT_ROWS
+                         or chunk_bytes + row_bytes > _RECORD_INSERT_BYTES):
+                _insert_processing_records(connection, rows)
+                rows, chunk_bytes = [], 0
+            rows.append((*fields, Jsonb(encoded, dumps=_encoded_json)))
+            chunk_bytes += row_bytes
+            # 超预算单条仍完整保存，且不与下一条组成更大的块。
+            if row_bytes > _RECORD_INSERT_BYTES:
+                _insert_processing_records(connection, rows)
+                rows, chunk_bytes = [], 0
+        if rows:
+            _insert_processing_records(connection, rows)
     except (psycopg.Error, TypeError, ValueError):
         raise SourceProcessingWriteError() from None
     return batch_id
