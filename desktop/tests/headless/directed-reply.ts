@@ -6,6 +6,29 @@ import type { RewritePages } from '../rewrite-page-scenarios';
 import { PageHost } from './page-host';
 import { fillWorkspaceThought, setWorkspaceContext, generateWorkspace } from '../workspace-actions';
 import { openAssistantHistory, expandSavedDiscussion } from '../assistant-history-actions';
+import type { ReplySessionState } from '../../src/shared/reply-bridge';
+
+// 只记录公开身份与阶段，不输出草稿、候选正文或检索材料。
+function generationIdentity(state: ReplySessionState) {
+  const saved = state.savedSession;
+  const turn = saved?.turns.find(item => item.inputVersionId === saved.currentInputVersionId);
+  return { revision: state.revision, phase: state.phase, errorCode: state.errorCode, canRetry: state.canRetry,
+    contactId: state.contactId, scopeRevision: state.scopeRevision, generationBlock: state.generationBlock,
+    sourceAvailability: state.sourceAvailability, contextEnabled: state.options.includeRelationshipContext,
+    exclusions: state.options.excludedMessageIds?.length ?? 0, action: state.options.workspaceAction,
+    resultRequestId: state.result?.replyRequestId, resultInputVersionId: state.result?.inputVersionId,
+    resultCandidateIds: state.result?.candidates.map(item => item.original.candidateId),
+    savedPhase: saved?.phase, sessionId: saved?.sessionId, currentInputVersionId: saved?.currentInputVersionId,
+    currentTurn: turn && { turnId: turn.turnId, state: turn.state, requestKey: turn.requestKey,
+      inputVersionId: turn.inputVersionId, replyRequestId: turn.reply?.replyRequestId },
+    catalog: state.sessionCatalog && { phase: state.sessionCatalog.phase, selectionPending: state.sessionCatalog.selectionPending },
+    versionPhase: state.candidateVersions?.phase,
+    versions: state.candidateVersions?.items.map(item => ({ candidateId: item.candidateId,
+      phase: item.phase, displayVersionId: item.displayVersionId, historyTurnId: item.history?.turnId })),
+    jobs: state.generationJobs?.map(job => ({ requestKey: job.requestKey, inputVersionId: job.inputVersionId,
+      turnId: job.turnId, phase: job.phase })),
+  };
+}
 
 async function confirmedTarget(pages: RewritePages) {
   const { helper, replyTransport, rewriteBackend } = pages;
@@ -103,6 +126,14 @@ async function unavailableTarget(pages: RewritePages) {
   await expect(helper.getByText('暂无可用的最近聊天。可以补充上下文，或先写下想法。', { exact: true })).toBeVisible();
   await openAssistantHistory(helper);
   await helper.getByRole('button', { name: '新开助手会话', exact: true }).click();
+  // 点击后仍可能短暂显示旧工作区；必须等新会话的清空和恢复完成再输入。
+  await expect.poll(() => helper.evaluate(async previousSessionId => {
+    const state = await window.notalone.replies.getState();
+    return Boolean(state.savedSession?.sessionId && state.savedSession.sessionId !== previousSessionId
+      && state.savedSession.phase === 'ready' && !state.sessionCatalog?.selectionPending
+      && state.mode === 'rewrite_draft' && state.options.inputKind === 'workspace');
+  }, result.session_id)).toBe(true);
+  await expect(helper.getByRole('textbox', { name: '有什么想说的', exact: true })).toHaveValue('');
   await fillWorkspaceThought(helper, '我会稍晚再回复。');
   await setWorkspaceContext(helper, false);
   await rewriteBackend.plan({ count: 1, prefix: '只据本人想法表达' });
@@ -114,8 +145,62 @@ async function unavailableTarget(pages: RewritePages) {
   expect(JSON.stringify(payloads.at(-1))).not.toContain('甲的私密合成历史');
 }
 
-async function inputIdentity(pages: RewritePages) {
+async function inputIdentity(pages: RewritePages, host: PageHost) {
   const { helper, replyTransport, rewriteBackend } = pages;
+  const generateAndWait = async (action: 'express' | 'suggest', retryTimeout = false) => {
+    const before = await helper.evaluate(() => window.notalone.replies.getState());
+    if (retryTimeout) expect(before).toMatchObject({ phase: 'failed', errorCode: 'timeout', canRetry: true });
+    else {
+      expect(['idle', 'ready']).toContain(before.phase);
+      expect(before.errorCode).toBeUndefined();
+    }
+    expect(before.savedSession?.phase).toBe('ready');
+    const scope = { contactId: before.contactId, scopeRevision: before.scopeRevision,
+      sessionId: before.savedSession!.sessionId, previousReplyId: before.result?.replyRequestId ?? null };
+    if (retryTimeout) await helper.getByRole('button', { name: '重试同一次生成', exact: true }).click();
+    else await generateWorkspace(helper, action);
+    // 先确认生成已启动，再等公开命令；不能只等到前置 updateOptions 完成。
+    await expect.poll(() => helper.evaluate(async captured => {
+      const state = await window.notalone.replies.getState();
+      return state.contactId === captured.contactId && state.scopeRevision === captured.scopeRevision
+        && state.savedSession?.sessionId === captured.sessionId
+        && state.revision > captured.revision
+        && (state.phase === 'waiting' || state.phase === 'failed'
+          || Boolean(state.result && state.result.replyRequestId !== captured.previousReplyId));
+    }, { ...scope, revision: before.revision })).toBe(true);
+    await host.awaitPendingCommands();
+    const generated = await helper.evaluate(() => window.notalone.replies.getState());
+    expect(generated.phase).toBe('ready');
+    expect(generated.errorCode).toBeUndefined();
+    expect(generated.result).not.toBeNull();
+    expect(generated.result!.replyRequestId).not.toBe(scope.previousReplyId);
+    const inputVersionId = generated.result!.inputVersionId;
+    const replyRequestId = generated.result!.replyRequestId;
+    // 完成后自动重读历史可能仍在途；沿用真实读取预算，再核对同一结果与版本。
+    if (generated.savedSession?.phase !== 'ready' || generated.candidateVersions?.phase !== 'ready') {
+      await expect.poll(() => helper.evaluate(async captured => {
+        const state = await window.notalone.replies.getState();
+        return state.contactId === captured.contactId && state.scopeRevision === captured.scopeRevision
+          && state.savedSession?.sessionId === captured.sessionId && state.result?.replyRequestId === captured.replyRequestId
+          && (state.savedSession.phase === 'loading' || state.savedSession.phase === 'ready'
+            && state.savedSession.currentInputVersionId === captured.inputVersionId
+            && state.savedSession.turns.some(turn => turn.inputVersionId === captured.inputVersionId
+              && turn.reply?.replyRequestId === captured.replyRequestId));
+      }, { ...scope, inputVersionId, replyRequestId })).toBe(true);
+      await host.awaitPendingCommands();
+    }
+    const completed = await helper.evaluate(() => window.notalone.replies.getState());
+    expect({ contactId: completed.contactId, scopeRevision: completed.scopeRevision, sessionId: completed.savedSession?.sessionId })
+      .toEqual({ contactId: scope.contactId, scopeRevision: scope.scopeRevision, sessionId: scope.sessionId });
+    expect(completed.phase).toBe('ready');
+    expect(completed.result?.replyRequestId).toBe(replyRequestId);
+    expect(completed.savedSession).toMatchObject({ phase: 'ready', currentInputVersionId: inputVersionId });
+    const turn = completed.savedSession!.turns.find(item => item.inputVersionId === inputVersionId);
+    expect(turn).toMatchObject({ state: 'completed', reply: { replyRequestId } });
+    expect(completed.generationJobs?.find(job => job.turnId === turn!.turnId)).toMatchObject({
+      contactId: scope.contactId, sessionId: scope.sessionId, inputVersionId, requestKey: turn!.requestKey, phase: 'completed' });
+    expect(completed.candidateVersions?.phase).toBe('ready');
+  };
   await rewriteBackend.command('older_messages');
   await prepareReply(pages, '甲', '第一版明确想法。');
   await rewriteBackend.plan({ count: 1, prefix: '第一版回复' });
@@ -135,14 +220,43 @@ async function inputIdentity(pages: RewritePages) {
   expect(await rewriteBackend.request(`/api/contacts/${rewriteBackend.data.contact_ids[0]}/assistant-sessions/${result.data.session_id}/replies`, original)).toEqual(result);
   await expect(editor).toHaveValue('保留我的编辑。');
   let previousKey = original.idempotency_key;
+  let capture: ((state: ReplySessionState) => void) | undefined;
+  await helper.exposeFunction('recordDirectedState', (state: ReplySessionState) => capture?.(state));
+  await helper.evaluate(() => {
+    const diagnostic = window as typeof window & {
+      recordDirectedState: (state: ReplySessionState) => Promise<void>;
+    };
+    window.notalone.replies.onStateChanged(state => { void diagnostic.recordDirectedState(state); });
+  });
   for (const change of ['想法', '排除', '背景', '建议'] as const) {
-    if (change === '想法') await fillWorkspaceThought(helper, '第二版明确想法。');
-    if (change === '排除') await helper.getByRole('checkbox', { name: /甲的较早合成消息 01/ }).uncheck();
-    if (change === '背景') await setWorkspaceContext(helper, false);
-    const prefix = `${change}变更后的候选`;
-    await rewriteBackend.plan({ count: 1, prefix });
-    await generateWorkspace(helper, change === '建议' ? 'suggest' : 'express');
-    await expect(editor).toHaveValue(`${prefix}（说法1）。`);
+    const started = Date.now();
+    const trace = [{ elapsedMs: 0, ...generationIdentity(await helper.evaluate(() => window.notalone.replies.getState())) }];
+    capture = state => {
+      trace.push({ elapsedMs: Date.now() - started, ...generationIdentity(state) });
+      if (trace.length > 32) trace.shift();
+    };
+    try {
+      if (change === '想法') await fillWorkspaceThought(helper, '第二版明确想法。');
+      if (change === '排除') await helper.getByRole('checkbox', { name: /甲的较早合成消息 01/ }).uncheck();
+      if (change === '背景') await setWorkspaceContext(helper, false);
+      const prefix = `${change}变更后的候选`;
+      await rewriteBackend.plan({ count: 1, prefix });
+      await generateAndWait(change === '建议' ? 'suggest' : 'express');
+      await expect(editor).toHaveValue(`${prefix}（说法1）。`);
+    } catch (error) {
+      const state = await helper.evaluate(() => window.notalone.replies.getState());
+      const response = replyTransport.results.at(-1);
+      process.stdout.write(`page_test_directed_generation: ${JSON.stringify({ change,
+        state: generationIdentity(state), trace,
+        requestCount: replyTransport.requests.length,
+        lastRequestKey: replyTransport.requests.at(-1)?.idempotency_key,
+        lastResponse: response && { status: response.status, replyRequestId: response.data.reply_request_id,
+          inputVersionId: response.data.input_version_id, turnId: response.data.turn_id,
+          sessionId: response.data.session_id, state: response.data.state },
+        modelCalls: (await rewriteBackend.command('observations')).model_calls,
+      })}\n`);
+      throw error;
+    } finally { capture = undefined; }
     const current = replyTransport.requests.at(-1)!;
     expect(current.idempotency_key).not.toBe(previousKey);
     expect(current).toMatchObject({ content: { draft_text: '第二版明确想法。',
@@ -152,13 +266,25 @@ async function inputIdentity(pages: RewritePages) {
   const payloads = (await rewriteBackend.command('observations')).payloads as Array<Record<string, unknown>>;
   expect(payloads.at(-1)).toMatchObject({ fidelity_contract: { current_intent: null } });
   await rewriteBackend.plan({ fault: 'timeout' });
+  const beforeTimeout = await helper.evaluate(() => window.notalone.replies.getState());
   await generateWorkspace(helper, 'suggest');
+  // 合成模型直接抛超时，但准备、失败落盘与终态复验仍属于公开生成命令。
+  await expect.poll(() => helper.evaluate(async captured => {
+    const state = await window.notalone.replies.getState();
+    return state.contactId === captured.contactId && state.scopeRevision === captured.scopeRevision
+      && state.savedSession?.sessionId === captured.sessionId && state.revision > captured.revision
+      && (state.phase === 'waiting' || state.phase === 'failed');
+  }, { contactId: beforeTimeout.contactId, scopeRevision: beforeTimeout.scopeRevision,
+    sessionId: beforeTimeout.savedSession?.sessionId, revision: beforeTimeout.revision })).toBe(true);
+  await host.awaitPendingCommands();
+  expect(await helper.evaluate(() => window.notalone.replies.getState()))
+    .toMatchObject({ phase: 'failed', errorCode: 'timeout', canRetry: true });
   await expect(helper.getByRole('alert')).toContainText('本次生成超时');
   const timedOut = replyTransport.requests.at(-1)!;
   expect(timedOut.idempotency_key).not.toBe(previousKey);
   expect(replyTransport.results.at(-1)).toEqual({ status: 504, data: { error: 'reply_timeout' } });
   await rewriteBackend.plan({ count: 1, prefix: '同键失败恢复' });
-  await helper.getByRole('button', { name: '重试同一次生成', exact: true }).click();
+  await generateAndWait('suggest', true);
   await expect(editor).toHaveValue('同键失败恢复（说法1）。');
   expect(replyTransport.requests.at(-1)).toEqual(timedOut);
   expect((await rewriteBackend.command('observations')).payloads).toHaveLength(7);
@@ -166,13 +292,30 @@ async function inputIdentity(pages: RewritePages) {
 
 async function emptyAndRejected(pages: RewritePages) {
   const { manager, helper, replyTransport, rewriteBackend } = pages;
+  const expectManualInput = async (contactId: string) => {
+    // 手动确认 HTTP 尚未收尾时，旧渠道确认按钮可能仍在；等待原操作，不再点击另一确认入口。
+    await expect.poll(() => helper.evaluate(async () => {
+      const contact = await window.notalone.contacts.getState();
+      const foreground = await window.notalone.foreground.getState();
+      const reply = await window.notalone.replies.getState();
+      return { contactId: contact.selectedContactId, manualInput: foreground.manualInput,
+        confirmation: foreground.confirmation, confirmedContactId: foreground.confirmedContactId,
+        foregroundBlock: foreground.generationBlock, replyContactId: reply.contactId,
+        scopeMatches: contact.scopeRevision === reply.scopeRevision, replyBlock: reply.generationBlock };
+    })).toEqual({ contactId, manualInput: true, confirmation: 'manual-confirmed', confirmedContactId: contactId,
+      foregroundBlock: null, replyContactId: contactId, scopeMatches: true, replyBlock: null });
+  };
   await manager.getByRole('button', { name: '选择无消息的合成联系人', exact: true }).click();
-  await confirmHelperContact(helper, rewriteBackend.data.empty_contact_id);
+  await expect(helper.getByRole('combobox', { name: '本次联系人', exact: true })).toHaveValue(rewriteBackend.data.empty_contact_id);
+  await helper.getByRole('button', { name: '切换为手动输入', exact: true }).click();
+  await expectManualInput(rewriteBackend.data.empty_contact_id);
   await setWorkspaceContext(helper, true);
   await expect(helper.getByText('暂无可用的最近聊天。可以补充上下文，或先写下想法。', { exact: true })).toBeVisible();
   await expect(helper.getByRole('button', { name: '帮我表达', exact: true })).toBeDisabled();
   await expect(helper.getByRole('button', { name: '帮我想想', exact: true })).toBeEnabled();
   expect(replyTransport.requests).toEqual([]);
+  await helper.getByRole('button', { name: '恢复微信会话识别', exact: true }).click();
+  await expect.poll(() => helper.evaluate(async () => (await window.notalone.foreground.getState()).manualInput)).toBe(false);
   await prepareReply(pages, '甲', '明确说明现在的安排。');
   replyTransport.failMessages = true;
   await helper.getByRole('button', { name: '刷新最近聊天', exact: true }).click();
@@ -186,6 +329,8 @@ async function emptyAndRejected(pages: RewritePages) {
   expect(denied).toEqual({ status: 409, data: { error: 'assistant_session_rejected', reason: 'no_active_binding' } });
   expect((await rewriteBackend.command('observations')).payloads).toEqual([]);
   // 真实桌面显式确认的联系人可独立工作，不把微信绑定当作手动工作区的前提。
+  await helper.getByRole('button', { name: '切换为手动输入', exact: true }).click();
+  await expectManualInput(rewriteBackend.data.contact_ids[0]);
   await rewriteBackend.plan({ count: 1, prefix: '已手动确认联系人后的表达' });
   await generateWorkspace(helper);
   await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveValue('已手动确认联系人后的表达（说法1）。');
