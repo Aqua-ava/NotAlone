@@ -19,17 +19,11 @@ from tests.integration.server.memory_overview_support import MemoryOverviewHttpF
 from tests.integration.server import test_owner_memory_overview as owner_support
 
 
-CURRENT_MIGRATION_TAIL = (
-    "064_owner_memory_revision.sql",
-    "065_expression_preferences.sql",
-    "066_skill_learning_drafts.sql",
-    "067_memory_upgrade_batches.sql",
-    "068_skill_review_publication.sql",
-    "069_skill_history_operations.sql",
-    "070_skill_scope_policies.sql",
-    "071_bounded_runtime_evidence.sql",
-    "072_scoped_media_lifecycle.sql",
+from tests.integration.server.legacy_overview_upgrade_support import (
+    UPGRADE_TAIL, seed_legacy_correction, upgraded_record,
 )
+
+CURRENT_MIGRATION_TAIL = UPGRADE_TAIL[1:]
 
 
 class OwnerOverviewForwardUpgradeHttpTest(MemoryOverviewHttpFixture, unittest.TestCase):
@@ -84,10 +78,7 @@ class OwnerOverviewForwardUpgradeHttpTest(MemoryOverviewHttpFixture, unittest.Te
         contact, _, message = self.import_self("本人偏好热茶。")
         original = self.confirm(contact, "本人偏好热茶。", message, subject=FactSubject.SELF,
                                 category="preference")
-        status, corrected = self.backend.request(f"/api/memories/owner/{original['memory_id']}/correct", {
-            "text": "本人偏好温茶。",
-        })
-        self.assertEqual(status, 200, corrected)
+        corrected = seed_legacy_correction(self, original, "本人偏好温茶。", owner=True)
         manual = self.add_owner("本人已毕业。")
         tables = ("owner_memory", "memory_candidate", "memory_correction_decision", "message", "message_source_ref")
         with psycopg.connect(self.database_url) as connection:
@@ -101,9 +92,7 @@ class OwnerOverviewForwardUpgradeHttpTest(MemoryOverviewHttpFixture, unittest.Te
         self.assertEqual(migrate(self.database_url, self.migrations), ())
         with psycopg.connect(self.database_url) as connection:
             for table in tables:
-                # 071 只为旧记忆追加 any 默认值，原字段与证明仍须逐字保持。
-                expected = ([({**record, "source_dependency_mode": "any"},) for record, in before[table]]
-                            if table in {"owner_memory", "memory_candidate"} else before[table])
+                expected = [(upgraded_record(table, record),) for record, in before[table]]
                 self.assertEqual(connection.execute(sql.SQL("SELECT to_jsonb(record) FROM public.{} record ORDER BY id")
                     .format(sql.Identifier(table))).fetchall(), expected)
             self.assertEqual(connection.execute("SELECT name,checksum FROM public.notalone_schema_migration "
