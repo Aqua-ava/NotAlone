@@ -38,7 +38,7 @@ ROOT = Path(__file__).resolve().parents[3]
 class RuntimeExecutionCliTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls.database_name = f"notalone_runtime_execution_{uuid4().hex}_test"
+        cls.database_name = f"notalone_runtime_{uuid4().hex}_test"
         cls.admin = psycopg.connect("host=/tmp dbname=postgres", autocommit=True)
         cls.admin.execute(sql.SQL("CREATE DATABASE {} TEMPLATE template0").format(sql.Identifier(cls.database_name)))
         cls.addClassCleanup(cls.drop_database)

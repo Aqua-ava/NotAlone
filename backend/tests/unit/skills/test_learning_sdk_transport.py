@@ -115,7 +115,7 @@ class LearningSdkTransportTest(unittest.TestCase):
                         self.assertEqual(len(requests), 1)
                         self.assertIsNone(proposal)
                         self.assertEqual(entries[0].outcome, LedgerOutcome.RUN_FAILED)
-                        self.assertEqual(extraction_model.max_retries, 2)
+                        self.assertEqual(extraction_model.max_retries, 0)
                         self.assertIsNot(runtime._model, extraction_model)
                         self.assertEqual(runtime._model.max_retries, 0)
                         # 只有上层明确重试才第二次发送，并独立记账；SDK不私自重试。
@@ -124,7 +124,7 @@ class LearningSdkTransportTest(unittest.TestCase):
                         entries = ledger.list_by_owner(scope.owner_id)
                         self.assertEqual([entry.outcome for entry in entries],
                                          [LedgerOutcome.RUN_FAILED, LedgerOutcome.SUCCEEDED])
-                        self.assertEqual(extraction_model.max_retries, 2)
+                        self.assertEqual(extraction_model.max_retries, 0)
                         self.assertNotIn("合成纠正", repr(entries))
                         for body in requests:
                             self.assertEqual(body["thinking"], {"type": "enabled"})
