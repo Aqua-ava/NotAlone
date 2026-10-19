@@ -20,7 +20,7 @@ from notalone.persistence.setup_owner_directory import PostgresOwnerDirectory
 from notalone.server.app import create_app
 from tests.integration.server.core_business_flow_support import HttpBackend
 from tests.integration.server.test_memory_event_updates import (
-    MemoryEventDefaultUpdatesHttpTest, MemoryEventUpdatesHttpTest,
+    MemoryEventHistoricalReviewHttpTest, MemoryEventUpdatesHttpTest,
 )
 
 
@@ -29,13 +29,12 @@ class _DesktopEventSetupMixin:
 
     def _backend(self, owner_id: UUID) -> HttpBackend:
         def desktop_app(**kwargs):
-            return create_app(
-                **kwargs,
-                setup_service=SetupService(
-                    owner_directory=PostgresOwnerDirectory(self.database_url),
-                    env_path=Path(self.temporary.name) / "synthetic-setup.env",
-                ),
+            # 基础 HTTP 夹具已提供 setup；本入口只替换为自有桌面配置路径。
+            kwargs["setup_service"] = SetupService(
+                owner_directory=PostgresOwnerDirectory(self.database_url),
+                env_path=Path(self.temporary.name) / "synthetic-setup.env",
             )
+            return create_app(**kwargs)
 
         with patch("tests.integration.server.core_business_flow_support.create_app",
                    side_effect=desktop_app):
@@ -46,7 +45,7 @@ class _DesktopAutoEventFixture(_DesktopEventSetupMixin, MemoryEventUpdatesHttpTe
     pass
 
 
-class _DesktopManualEventFixture(_DesktopEventSetupMixin, MemoryEventDefaultUpdatesHttpTest):
+class _DesktopManualEventFixture(_DesktopEventSetupMixin, MemoryEventHistoricalReviewHttpTest):
     pass
 
 
