@@ -400,16 +400,21 @@ def main() -> None:
                 fixture._release_response_gates()
                 result = {}
             elif operation == "observations":
-                result = {"payloads": fixture.reply_model.payloads,
+                # 长场景只读取本次模型输入，避免重复传输累计历史；总调用数仍可验证重放。
+                latest = command.get("latest", False)
+                payloads = fixture.reply_model.payloads
+                calls = fixture.reply_model.seen_calls
+                result = {"payloads": payloads[-1:] if latest else payloads,
+                          "model_calls": len(payloads),
                           "skill_reads": [[str(message.content) for message in messages
                                            if isinstance(message, ToolMessage) and message.name == "read_file"]
-                                          for messages in fixture.reply_model.seen_calls],
+                                          for messages in (calls[-1:] if latest else calls)],
                           "model_entered": fixture.reply_model.entered.is_set(),
                           "tool_names": fixture.reply_model.bound_tool_names,
-                          "outbound": [str(message.content) for messages in fixture.reply_model.seen_calls
+                          "outbound": [str(message.content) for messages in (calls[-1:] if latest else calls)
                                        for message in messages],
                           "outbound_calls": [[str(message.content) for message in messages]
-                                             for messages in fixture.reply_model.seen_calls]}
+                                             for messages in (calls[-1:] if latest else calls)]}
             elif operation == "read_group_as_other_owner":
                 # 同一实际组路径，仅更换为夹具已有的另一owner认证，不拼接错误联系人。
                 session_id, candidate_id = UUID(command["session_id"]), UUID(command["candidate_id"])
