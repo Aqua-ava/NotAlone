@@ -1,3 +1,4 @@
+import { setWorkspaceContext } from '../workspace-actions';
 import { openAssistantHistory, expandSavedDiscussion } from '../assistant-history-actions';
 import { selectMemoryCategory } from '../memory-page-actions';
 import { expect, type Browser } from '@playwright/test';
@@ -39,11 +40,11 @@ export async function overviewReplyRetrieval(browser: Browser, origin: string) {
         return article;
       }
       async function generate(draft: string, text: string, background: boolean, kinds?: string[]) {
-        await helper.getByRole('textbox', { name: '草稿', exact: true }).fill(draft);
-        await helper.getByRole('checkbox', { name: '结合关系语境', exact: true }).setChecked(background);
+        await helper.getByRole('textbox', { name: '有什么想说的', exact: true }).fill(draft);
+        await setWorkspaceContext(helper, background);
         await fixture.command('plan', { plan: { text, basis: '只依实际资料提问，未核实处保持未知。',
           ...(kinds ? { cite_kinds: kinds } : {}) } });
-        await helper.getByRole('button', { name: '生成候选', exact: true }).click();
+        await helper.getByRole('button', { name: '帮我表达', exact: true }).click();
         await expect(editor).toHaveValue(text);
         await helper.getByRole('button', { name: '展开候选1依据', exact: true }).click();
         await evidence.locator('.evidence-technical > summary').click();
@@ -119,9 +120,12 @@ export async function overviewReplyRetrieval(browser: Browser, origin: string) {
       await expect(helper.getByText(first, { exact: true })).toHaveCount(0);
       await expect(helper.getByText(edit, { exact: true })).toHaveCount(0);
 
-      await confirmHelperContact(helper, prepared.contactId);
+      await helper.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption(prepared.emptyContactId);
+      await confirmHelperContact(helper, prepared.emptyContactId);
       await generate('桉树彗星。', '只把这句话整理清楚。', true);
       await expect(evidence.getByText('本次检索未查到相关依据；不表示没有这件事。', { exact: true })).toBeVisible();
+      await helper.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption(prepared.contactId);
+      await confirmHelperContact(helper, prepared.contactId);
       await fixture.command('more_related');
       await generate(prepared.draft, '先询问当前散步安排。', true, ['confirmed_memory', 'owner_memory', 'pending_candidate']);
       await expect(evidence.getByText('本次检索预算已耗尽，未查到的内容仍为未知。', { exact: true })).toBeVisible();
