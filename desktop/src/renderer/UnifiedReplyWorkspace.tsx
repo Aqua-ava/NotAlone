@@ -32,8 +32,17 @@ export function UnifiedReplyWorkspace({ contacts, replies }: { contacts: Contact
     }
   }, [workspaceReady, state.savedSession?.phase, state.contactId, state.scopeRevision, state.inputClearRevision,
     contacts.state.selectedContactId, state.messages.phase]);
-  const disabled = !contacts.state.selectedContactId || !workspaceReady || submitting || state.phase === 'waiting'
-    || Boolean(state.generationBlock) || state.sourceAvailability !== undefined || state.sessionDeletion === 'deleting';
+  const sameScope = Boolean(state.contactId) && state.contactId === contacts.state.selectedContactId
+    && state.scopeRevision === contacts.state.scopeRevision;
+  // 新联系人尚无可读取会话时，只开放其独立本地草稿；不把旧输入迁移或授权为生成上下文。
+  const localDraftOnly = sameScope && Boolean(state.generationBlock) && state.savedSession?.phase === 'failed'
+    && state.savedSession.sessionId === null && state.mode === 'rewrite_draft' && state.options.inputKind === undefined
+    && !state.result && state.sessionCatalog?.phase !== 'loading' && !state.sessionCatalog?.selectionPending;
+  const inputBlocked = !sameScope || submitting || state.phase === 'waiting'
+    || state.savedSession?.phase === 'loading' || state.sessionCatalog?.phase === 'loading' || state.sessionCatalog?.selectionPending === true
+    || state.sourceAvailability !== undefined || state.sessionDeletion === 'deleting';
+  const draftDisabled = inputBlocked || !workspaceReady && !localDraftOnly;
+  const disabled = inputBlocked || !workspaceReady || Boolean(state.generationBlock);
   const update = (value: Partial<RewriteOptions>) => {
     const next = { ...options, ...value }; setOptions(next); void replies.updateOptions(next);
   };
@@ -55,7 +64,8 @@ export function UnifiedReplyWorkspace({ contacts, replies }: { contacts: Contact
   return <section className="compose-panel unified-workspace" aria-label="表达工作区">
     <header className="compose-heading"><span className="section-eyebrow">一起想，把话说好</span>
       <h2>有什么想说的？</h2><p>写下想法、方向或草稿；没有思路，也可以让我帮你想。</p></header>
-    {workspaceReady || !contacts.state.selectedContactId ? <HelperDraft session={contacts} workspace disabled={disabled} />
+    {workspaceReady || localDraftOnly || !contacts.state.selectedContactId ? <HelperDraft
+      key={`${contacts.state.selectedContactId}:${contacts.state.scopeRevision}`} session={contacts} workspace disabled={draftDisabled} />
       : <p role="status">正在恢复这位联系人的想法和聊天背景…</p>}
     {state.workspaceMigrationNotice && <p role="status" className="rewrite-privacy">{state.workspaceMigrationNotice}</p>}
     {state.generationBlock && <p role="status" className="rewrite-privacy">生成前，请先在上方确认本次联系人。</p>}
