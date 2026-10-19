@@ -270,17 +270,29 @@ async function managerSwitch(pages: RewritePages) {
 }
 
 export async function replyStrategyGroupBoundaries(browser: Browser, origin: string) {
-  for (const scene of ['空思路', '已有想法'] as const) {
+  const selected = process.env.NOTALONE_GROUP_BOUNDARIES_SCENE;
+  if (selected !== undefined && selected !== 'suggest' && selected !== 'express') {
+    throw new Error('NOTALONE_GROUP_BOUNDARIES_SCENE 仅允许 suggest 或 express。');
+  }
+  // 两种入口各自使用独立夹具；拆分运行必须汇总两者，保留原数据量和每个动作的时限。
+  const scenes: readonly Scene[] = selected === 'suggest' ? ['空思路']
+    : selected === 'express' ? ['已有想法'] : ['空思路', '已有想法'];
+  process.stdout.write(`page_test_group_variant: ${selected ?? 'all'}\n`);
+  for (const scene of scenes) {
     for (const [name, run] of [
       [`${scene}完整八条组长历史、旧版明确复制及真实重建`, longHistory],
       [`${scene}来源删除清除恢复组和未保存编辑并拒绝重开复制`, deletedRestoredGroup],
     ] as const) {
+      const started = Date.now();
       process.stdout.write(`page_test_scenario: ${name}\n`);
       await run(browser, origin, scene);
       process.stdout.write(`page_test_scenario_passed: ${name}\n`);
+      process.stdout.write(`page_test_scenario_duration: ${JSON.stringify({ name, elapsedMs: Date.now() - started })}\n`);
     }
   }
-  process.stdout.write('page_test_scenario: 错版本、错组消息、跨联系人和跨用户身份拒绝\n');
-  await foreignIdentity(browser, origin);
-  process.stdout.write('page_test_scenario_passed: 错版本、错组消息、跨联系人和跨用户身份拒绝\n');
+  if (selected !== 'suggest') {
+    process.stdout.write('page_test_scenario: 错版本、错组消息、跨联系人和跨用户身份拒绝\n');
+    await foreignIdentity(browser, origin);
+    process.stdout.write('page_test_scenario_passed: 错版本、错组消息、跨联系人和跨用户身份拒绝\n');
+  }
 }

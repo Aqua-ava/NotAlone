@@ -33,3 +33,9 @@ State: in-progress
 understanding-direction 已越过跨联系人锁定场景，新增失败位于保留历史依赖的继续修改阶段。独立隔离HTTP与真实Main/preload桥验证通过：prepare/execute均200，两轮完成、模型调用3次、候选正确，夹具已清理。页面增加不含正文的阶段、错误分类、模型计数和权威轮次状态诊断，保留原断言和5秒时限，等待串行重跑；不能宣称完整回归通过。
 
 验证命令：在desktop目录执行 `node --test tests/workspace-candidate-version-parallel.test.mjs`、`node --test tests/assistant-candidate-version-ports.test.mjs`、`npm run typecheck`；限定修改文件的 `git diff --check` 通过。没有扩大联系人读取范围、持久化或外部发送能力；未新增浏览器、开发服务或打包实例，未推送。
+
+原长历史页面复跑：空思路和已有想法两组各24版保存、逐版回看、旧版复制和真实重建均通过，原5秒单步断言不变；整体在第4个来源删除场景触及300秒总预算，无法据此宣称整个case通过。两组保存步骤合计分别78.8秒和82.7秒。已增加受控 `NOTALONE_GROUP_BOUNDARIES_SCENE=suggest|express` 入口：suggest保留空思路长历史和来源删除；express保留已有想法长历史、来源删除及全部身份拒绝。必须两组均通过才覆盖原case，未设置时仍运行原全部场景；非法值拒绝。各场景增加总耗时记录。
+
+response-scene-entry 的无消息联系人没有已确认桌面绑定。测试改为明确点击“切换为手动输入”，返回甲后再次确认手动联系人，保留公开状态和消息隔离断言，不伪造绑定。类型和限定差异检查通过，页面等待串行复验。
+
+understanding-direction 的新诊断确认失败时仍在生成：公开phase/continuation均waiting，模型调用已到3次，第二轮权威状态running且尚无reply，无错误或澄清。继续测量执行耗时，未放宽5秒断言或猜改生产。
