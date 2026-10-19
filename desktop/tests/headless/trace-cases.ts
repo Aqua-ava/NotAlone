@@ -52,8 +52,13 @@ export async function memoryTracesFull(browser: Browser, origin: string) {
         await panel.getByText(/批次结束与水位/).click();
         await expect(panel.getByRole('group', { name: '过程详情', exact: true }).getByText(/"extracted": 0/)).toBeVisible();
         await showTrace(page, data);
-        await panel.getByText(/采纳门槛/).click();
-        await expect(panel.getByRole('group', { name: '过程详情', exact: true }).getByText(/"passed": false/)).toBeVisible();
+        // 原始上下文未知时先进入人工复核，追踪须如实显示未执行采纳门槛。
+        const candidateSummary = panel.getByText('候选处理结果', { exact: true });
+        await candidateSummary.click();
+        const details = candidateSummary.locator('..');
+        await expect(details.getByText(/"disposition": "pending_correction_review"/)).toBeVisible();
+        await expect(details.getByText(/"not_executed": \[[\s\S]*"adoption_gates"/)).toBeVisible();
+        await expect(panel.getByText(/\d+\. 采纳门槛$/)).toHaveCount(0);
         await panel.getByRole('combobox', { name: '记录类型' }).selectOption('candidate');
         await panel.getByRole('textbox', { name: '记录标识' }).fill(data.trace_candidate_id);
         await panel.getByRole('button', { name: '查找记录过程' }).click();
@@ -148,7 +153,8 @@ export async function memoryTracesLifecycle(browser: Browser, origin: string) {
             void window.notalone.contacts.getState().then((scope) => window.notalone.traces.show({ contactId: scope.selectedContactId!, scopeRevision: scope.scopeRevision, resource: 'memory-traces', batchId: id }));
           }, data.trace_id);
           await expect.poll(() => proxy.heldCount).toBe(1);
-          await page.getByRole('region', { name: '来源删除管理', exact: true }).getByRole('button', { name: '删除来源', exact: true }).click();
+          await page.getByRole('region', { name: '来源删除管理', exact: true }).getByRole('listitem')
+            .filter({ hasText: `来源标识：${data.source_document_id}` }).getByRole('button', { name: '删除来源', exact: true }).click();
           await page.getByRole('button', { name: '确认删除来源', exact: true }).click();
           await expect(panel.getByRole('group', { name: '过程详情', exact: true })).toHaveCount(0);
           await expect(page.getByText('已删除，已通过不可检索校验', { exact: true })).toBeVisible();
@@ -214,6 +220,8 @@ export async function memoryTracesRecordDeletion(browser: Browser, origin: strin
             await expect(panel.getByRole('group', { name: '过程详情', exact: true })).toHaveCount(0);
             if (late) { proxy.holdPath = null; proxy.release(); }
             expect(await page.evaluate(async () => (await window.notalone.traces.getState()).detail)).toBeNull();
+            // 卡片撤下早于资料删除核对结束；等正式收尾通知解除过程读取门禁。
+            await expect(panel.getByText('资料操作已结束，请重新读取过程并确认删除结果。', { exact: true })).toBeVisible();
             await panel.getByRole('button', { name: '查看批次列表', exact: true }).click();
             await panel.getByRole('button', { name: `查看批次：${data.trace_id}`, exact: true }).click();
             await expect(panel.getByText('过程正文已删除，仅保留实际存在的状态与标识。', { exact: true })).toBeVisible();

@@ -8,7 +8,7 @@ export async function memoryDetails(manager: Page, memoryBackend: MemoryFixture)
   await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
   await manager.getByRole('button', { name: '记忆', exact: true }).click();
   const categories = manager.getByRole('navigation', { name: '记忆分类', exact: true });
-  await expect(categories.getByRole('button')).toHaveCount(6);
+  await expect(categories.getByRole('button')).toHaveText(['联系人记忆', '本人记忆', '待确认候选', '本人主题资料', '主题资料', '联系人概览', '本人概览', '来源与过程']);
   await expect(categories.getByRole('button', { name: '联系人记忆', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await expect(manager.getByRole('region', { name: '本人记忆', exact: true })).toHaveCount(0);
   await expect(manager.getByRole('region', { name: '联系人经历与关系变化', exact: true })).toHaveCount(0);
@@ -145,7 +145,7 @@ export async function memoryNamedArguments(manager: Page, memoryBackend: MemoryF
     }));
   }, memoryBackend.data.other_contact_id);
   expect(rejected).toEqual([true, true, true, true, true, true]);
-  expect(await manager.evaluate(() => Object.keys(window.notalone.memory).sort())).toEqual(['add', 'applyCandidateUpdate', 'confirmCandidate', 'correct', 'discardCandidate', 'getState', 'onStateChanged', 'openVersions', 'refresh', 'refreshOverview', 'refreshOwnerOverview', 'remove', 'revertAutoUpdate']);
+  expect(await manager.evaluate(() => Object.keys(window.notalone.memory).sort())).toEqual(['add', 'addOwnerMemory', 'applyCandidateUpdate', 'confirmCandidate', 'correct', 'correctOwnerMemory', 'deleteOwnerMemory', 'discardCandidate', 'getOwnerLayeredMemoryState', 'getState', 'manageLayeredMemory', 'manageOwnerLayeredMemory', 'onOwnerLayeredMemoryChanged', 'onStateChanged', 'openVersions', 'readLayeredMemory', 'readOwnerLayeredMemory', 'readOwnerMemories', 'refresh', 'refreshOverview', 'refreshOwnerOverview', 'remove', 'revertAutoUpdate']);
   await expect(manager.getByText('甲喜欢合成茉莉茶。', { exact: true })).toBeVisible();
   await expect(manager.getByText('另一用户的联系人资料。', { exact: true })).toHaveCount(0);
   expect(await manager.evaluate(async () => {
