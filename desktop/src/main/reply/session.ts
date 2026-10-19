@@ -714,6 +714,7 @@ export class ReplySession {
       throw new Error('本次助手会话已变化，请重新确认。');
     }
     if (this.state.sessionDeletion === 'deleting') return;
+    const workspaceInput = this.state.options.inputKind === 'workspace';
     this.sessionProjection.invalidateSource();
     const owningGeneration = this.backend.getConnectionGeneration();
     if (owningGeneration !== undefined) this.generationJobs.cancelSession({ connectionGeneration: owningGeneration,
@@ -745,7 +746,9 @@ export class ReplySession {
       this.contacts.clearDraft(selection);
       this.publish({ sessionDeletion: result.phase, savedSession: { phase: 'idle', sessionId: null, turns: [], inputs: [], currentInputVersionId: null },
         sessionCatalog: undefined,
-        options: defaults(), workspaceMigrationNotice: undefined, inputClearRevision: (this.state.inputClearRevision ?? 0) + 1,
+        // 保留工作区的空白入口；删除仍清空所有内容，也不隐式新建助手会话。
+        options: { ...defaults(), ...(workspaceInput ? { inputKind: 'workspace' as const } : {}) },
+        workspaceMigrationNotice: undefined, inputClearRevision: (this.state.inputClearRevision ?? 0) + 1,
         confirmedSessionDeletion: { sessionId: selection.sessionId, contactId: selection.contactId,
           scopeRevision: selection.scopeRevision, connectionGeneration: result.generation,
           revision: this.state.revision + 1 },
