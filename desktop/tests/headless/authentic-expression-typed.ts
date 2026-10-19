@@ -1,3 +1,4 @@
+import { setWorkspaceContext, fillWorkspaceInstruction, continueWorkspace } from '../workspace-actions';
 import { openAssistantHistory, expandSavedDiscussion } from '../assistant-history-actions';
 import { selectMemoryCategory } from '../memory-page-actions';
 import { writeFile } from 'node:fs/promises';
@@ -28,7 +29,12 @@ async function capture(pages: RewritePages, mode: string, label: string, rows: C
   await pages.rewriteBackend.plan({ count: 1, message_groups: [messages], basis,
     ...(probeHistory ? { probe_history: true } : {}) });
   const started = performance.now();
-  await action();
+  process.stdout.write(`page_test_typed_phase: ${mode}/${label}/start\n`);
+  try { await action(); } catch (error) {
+    const state = await pages.helper.evaluate(() => window.notalone.replies.getState());
+    process.stdout.write(`page_test_typed_failure: ${JSON.stringify({ label, phase: state.phase, continuation: state.continuation, savedSession: { phase: state.savedSession?.phase, turns: state.savedSession?.turns.map(t => ({ state: t.state, turnId: t.turnId })) } })}\n`);
+    throw error;
+  }
   const observed = await pages.rewriteBackend.command('observations');
   const payloads = observed.payloads as Record<string, unknown>[];
   const callCount = probeHistory ? 2 : 1;
@@ -46,7 +52,7 @@ async function ordinary(pages: RewritePages, mode: string, label: string, rows: 
   messages: string[], basis: string, probeHistory = false): Promise<Generation> {
   const before = pages.replyTransport.results.length;
   const row = await capture(pages, mode, label, rows, messages, basis, async () => {
-    await pages.helper.getByRole('button', { name: '生成候选', exact: true }).click();
+    await pages.helper.getByRole('button', { name: '帮我表达', exact: true }).click();
     await expect.poll(() => pages.replyTransport.results.length).toBe(before + 1);
     await expect.poll(async () => (await pages.helper.evaluate(async () => window.notalone.replies.getState()))
       .result?.replyRequestId).toBe(pages.replyTransport.results.at(-1)!.data.reply_request_id);
@@ -57,7 +63,7 @@ async function ordinary(pages: RewritePages, mode: string, label: string, rows: 
     output: result.data, candidate: (result.data.candidates as Candidate[])[0] };
 }
 
-async function typed(pages: RewritePages, mode: string, label: string, rows: Capture[], sessionPath: string,
+async function typed(pages: RewritePages, host: PageHost, mode: string, label: string, rows: Capture[], sessionPath: string,
   instruction: string, messages: string[], basis: string): Promise<Generation> {
   const previous = await pages.rewriteBackend.request(sessionPath);
   expect(previous.status).toBe(200);
@@ -65,14 +71,14 @@ async function typed(pages: RewritePages, mode: string, label: string, rows: Cap
   let completed: Turn | undefined;
   const row = await capture(pages, mode, label, rows, messages, basis, async () => {
     await pages.helper.getByRole('textbox', { name: '继续修改要求', exact: true }).fill(instruction);
-    await pages.helper.getByRole('button', { name: '继续修改', exact: true }).click();
+    await continueWorkspace(pages.helper, host);
     await expect.poll(async () => {
       const saved = await pages.rewriteBackend.request(sessionPath);
       if (saved.status !== 200) return false;
       const turns = saved.data.turns as Turn[];
       if (turns.length !== beforeTurns + 1 || turns.at(-1)?.state !== 'completed') return false;
       completed = turns.at(-1); return true;
-    }).toBe(true);
+    }, { message: `${mode}/${label}继续修改须追加一个completed turn` }).toBe(true);
     await expect.poll(async () => (await pages.helper.evaluate(async () => window.notalone.replies.getState()))
       .result?.candidates[0]?.original.candidateId).toBe(completed!.reply!.candidates[0].candidate_id);
   });
@@ -155,22 +161,16 @@ export async function authenticExpressionTyped(browser: Browser, origin: string)
         const contactId = rewriteBackend.data.contact_ids[0];
         await rewriteBackend.command('fidelity_history');
         await chooseContact(manager, helper, contactId);
-        await helper.getByRole('textbox', { name: '草稿', exact: true }).fill(independentInput);
+        await setWorkspaceContext(helper, false);
+        await helper.getByRole('textbox', { name: '有什么想说的', exact: true }).fill(independentInput);
         const independent = await ordinary(pages, mode, 'independent', rows, [independentOutput], '只保留独立合成草稿。');
         await helper.getByText('我的表达样本', { exact: true }).click();
         const sample = await saveManual(helper, oldExpression);
         expect(sample.originKind).toBe('manual'); expect(sample.sourceIds).toEqual([]);
         expect(sample.sendingStatus).toBe('unknown');
-        await helper.getByRole('button', { name: mode === 'response' ? '回应消息' : '主动聊聊', exact: true }).click();
-        if (mode === 'response') await helper.getByRole('radio', { name: /合成当前邀请/ }).click();
-        await helper.getByRole('textbox', { name: mode === 'response' ? '表达方向' : '主动目的', exact: true }).fill(currentIntent);
-        // 此质量用例固定旧协议输入；统一混合补充由独立入口回归覆盖。
-        await helper.evaluate(async (requirements) => {
-          const state = await window.notalone.replies.getState();
-          const scope = { contactId: state.contactId!, scopeRevision: state.scopeRevision };
-          await window.notalone.replies.updateCorrection({ ...scope, correction: '这只是合成邀约，不是已确认约定。' });
-          await window.notalone.replies.updateRequirements({ ...scope, requirements });
-        }, '不要承诺');
+        await setWorkspaceContext(helper, true);
+        await helper.getByRole('textbox', { name: '有什么想说的', exact: true }).fill(currentIntent);
+        await fillWorkspaceInstruction(helper, '不要承诺');
         const initial = await ordinary(pages, mode, 'current', rows, ['这次不参加。', '谢谢你邀请。'],
           '保留本次拒绝，表达样本仅供说法参考。', mode === 'proactive');
         const sessionPath = `/api/contacts/${contactId}/assistant-sessions/${initial.output.session_id}`;
@@ -187,9 +187,9 @@ export async function authenticExpressionTyped(browser: Browser, origin: string)
         await group.getByRole('button', { name: '复制第1条', exact: true }).click();
         expect(copied).toEqual(['这次不参加。']);
         expect((await helper.evaluate(async () => window.notalone.styleSamples.getState())).samples).toHaveLength(1);
-        const edited = await typed(pages, mode, 'edited', rows, sessionPath, '第一条自然一点',
+        const edited = await typed(pages, host, mode, 'edited', rows, sessionPath, '第一条自然一点',
           ['这次不参加。', '谢谢你。'], '完整保留拒绝与不要承诺，仅调整说法。');
-        expect(rows.at(-1)!.payload[mode === 'response' ? 'confirmed_direction' : 'confirmed_purpose']).toBe(currentIntent);
+        expect(rows.at(-1)!.payload.draft_text).toBe(currentIntent);
         expect(rows.at(-1)!.payload.user_instruction).toBe('不要承诺；自然一点');
         expect(rows.at(-1)!.payload.continuation_reference).toMatchObject({
           candidate_id: initial.candidate.candidate_id, version_id: editedVersion.versionId, is_current_draft: false,
@@ -201,10 +201,10 @@ export async function authenticExpressionTyped(browser: Browser, origin: string)
         });
         expect(edited.output.continuation).toMatchObject({ candidate_id: initial.candidate.candidate_id,
           version_id: editedVersion.versionId, effective_requirements: ['不要承诺', '自然一点'] });
-        const unsupported = await typed(pages, mode, 'unsupported', rows, sessionPath, '第一条简短一点',
+        const unsupported = await typed(pages, host, mode, 'unsupported', rows, sessionPath, '第一条简短一点',
           ['这次不参加。', '那就明晚七点我陪你去合成海边。'], '沿旧样本安排未来陪同。');
         expect(rows.at(-1)!.payload.user_instruction).toBe('不要承诺；自然一点；简短一点');
-        expect(rows.at(-1)!.payload[mode === 'response' ? 'confirmed_direction' : 'confirmed_purpose']).toBe(currentIntent);
+        expect(rows.at(-1)!.payload.draft_text).toBe(currentIntent);
         expect(rows.at(-1)!.payload.continuation_reference).toMatchObject({ is_current_draft: false,
           messages: [{ text: '这次不参加。' }, { text: '谢谢你。' }] });
         expect(unsupported.output.continuation).toMatchObject({ effective_requirements: ['不要承诺', '自然一点', '简短一点'] });

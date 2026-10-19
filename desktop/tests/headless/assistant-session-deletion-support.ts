@@ -1,3 +1,4 @@
+import { fillWorkspaceInstruction, setWorkspaceContext, setWorkspaceTone, openWorkspaceSettings } from '../workspace-actions';
 import { openAssistantHistory, expandSavedDiscussion } from '../assistant-history-actions';
 import { readFile } from 'node:fs/promises';
 import { expect, type Page } from '@playwright/test';
@@ -13,14 +14,14 @@ export async function chooseDeletionContact(pages: RewritePages, index: 0 | 1 = 
 
 export async function saveDeletionDiscussion(pages: RewritePages, draft: string, prefix: string, options = false) {
   await chooseDeletionContact(pages);
-  await pages.helper.getByRole('textbox', { name: '草稿', exact: true }).fill(draft);
+  await pages.helper.getByRole('textbox', { name: '有什么想说的', exact: true }).fill(draft);
   if (options) {
-    await pages.helper.getByRole('combobox', { name: '本次语气', exact: true }).selectOption('polite');
-    await pages.helper.getByRole('textbox', { name: '本次要求', exact: true }).fill('会话删除时也要清除的合成要求。');
-    await pages.helper.getByRole('checkbox', { name: '结合关系语境', exact: true }).check();
+    await setWorkspaceTone(pages.helper, 'polite');
+    await fillWorkspaceInstruction(pages.helper, '会话删除时也要清除的合成要求。');
+    await setWorkspaceContext(pages.helper, true);
   }
   await pages.rewriteBackend.plan({ count: 1, prefix });
-  await pages.helper.getByRole('button', { name: '生成候选', exact: true }).click();
+  await pages.helper.getByRole('button', { name: '帮我表达', exact: true }).click();
   await expect(pages.helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveValue(`${prefix}（说法1）。`);
   await openAssistantHistory(pages.helper);
   await pages.helper.getByRole('button', { name: '查看已保存讨论', exact: true }).click();
@@ -40,10 +41,13 @@ export async function confirmDeletion(helper: Page) {
 }
 
 export async function expectDeletionCleared(helper: Page) {
-  await expect(helper.getByRole('textbox', { name: '草稿', exact: true })).toHaveValue('');
+  await expect(helper.getByRole('textbox', { name: '有什么想说的', exact: true })).toHaveValue('');
+  await openWorkspaceSettings(helper);
   await expect(helper.getByRole('textbox', { name: '本次要求', exact: true })).toHaveValue('');
   await expect(helper.getByRole('combobox', { name: '本次语气', exact: true })).toHaveValue('original');
-  await expect(helper.getByRole('checkbox', { name: '结合关系语境', exact: true })).not.toBeChecked();
+  const context = helper.getByRole('checkbox', { name: '参考最近聊天和相关关系资料', exact: true });
+  if (!await context.isVisible()) await helper.getByText('最近聊天 · 查看／补充', { exact: true }).click();
+  await expect(context).not.toBeChecked();
   await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveCount(0);
   await expect(helper.getByRole('region', { name: '已保存的讨论', exact: true })).toHaveCount(0);
   expect(await helper.evaluate(async () => window.notalone.replies.getState())).toMatchObject({

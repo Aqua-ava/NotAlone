@@ -17,7 +17,7 @@ async function deleteTransportFailure(pages: RewritePages) {
     expect(replyTransport.sessionReads.at(-1)?.status).toBe(200);
     expect((await rewriteBackend.request(saved.path)).status).toBe(200);
     await expect(helper.getByRole('status').filter({ hasText: /当前助手会话已删除|当前助手会话已不存在/ })).toHaveCount(0);
-    await expect(helper.getByRole('textbox', { name: '草稿', exact: true })).toHaveValue(draft);
+    await expect(helper.getByRole('textbox', { name: '有什么想说的', exact: true })).toHaveValue(draft);
     await expect(helper.getByRole('textbox', { name: '本次要求', exact: true })).toHaveValue('会话删除时也要清除的合成要求。');
     expect((await rewriteBackend.command('observations')).payloads).toHaveLength(1);
     const strategyPosts = replyTransport.explorationRequests.length;
@@ -58,7 +58,7 @@ async function deletionVerificationFailure(pages: RewritePages) {
     expect(replyTransport.sessionDeletes.at(-1)).toEqual({ path: saved.path, status: 200 });
     expect(replyTransport.sessionReads.at(-1)?.status).toBe(503);
     await expect(helper.getByRole('status').filter({ hasText: /当前助手会话已删除|当前助手会话已不存在/ })).toHaveCount(0);
-    await expect(helper.getByRole('textbox', { name: '草稿', exact: true })).toHaveValue(draft);
+    await expect(helper.getByRole('textbox', { name: '有什么想说的', exact: true })).toHaveValue(draft);
     expect(await helper.evaluate(async () => window.notalone.replies.getState())).toMatchObject({
       sessionDeletion: 'failed', savedSession: { sessionId: saved.sessionId, turns: [] },
     });
@@ -134,9 +134,9 @@ async function newSessionClearsDeletionNotice(pages: RewritePages) {
   expect(restored.confirmedSessionDeletion).toEqual(deleted.confirmedSessionDeletion);
   expect((await rewriteBackend.command('observations')).payloads).toHaveLength(1);
 
-  await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('读取新会话后明确生成的合成草稿。');
+  await helper.getByRole('textbox', { name: '有什么想说的', exact: true }).fill('读取新会话后明确生成的合成草稿。');
   await rewriteBackend.plan({ count: 1, prefix: '读取后新会话的合成候选' });
-  await helper.getByRole('button', { name: '生成候选', exact: true }).click();
+  await helper.getByRole('button', { name: '帮我表达', exact: true }).click();
   await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveValue('读取后新会话的合成候选（说法1）。');
   expect((await rewriteBackend.command('observations')).payloads).toHaveLength(2);
   await confirmDeletion(helper);
@@ -146,9 +146,9 @@ async function newSessionClearsDeletionNotice(pages: RewritePages) {
   expect(await rewriteBackend.request(`/api/contacts/${saved.contactId}/assistant-sessions/${freshId}`))
     .toEqual({ status: 404, data: { error: 'not_found' } });
   // 不读取默认会话，用户明确生成时也会采用新的 sid；历史清除回执保持独立。
-  await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('直接明确生成下一会话的合成草稿。');
+  await helper.getByRole('textbox', { name: '有什么想说的', exact: true }).fill('直接明确生成下一会话的合成草稿。');
   await rewriteBackend.plan({ count: 1, prefix: '直接生成新会话的合成候选' });
-  await helper.getByRole('button', { name: '生成候选', exact: true }).click();
+  await helper.getByRole('button', { name: '帮我表达', exact: true }).click();
   await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveValue('直接生成新会话的合成候选（说法1）。');
   const generated = await helper.evaluate(async () => window.notalone.replies.getState());
   expect(generated.savedSession!.sessionId).not.toBe(freshId);
@@ -171,9 +171,8 @@ async function unsavedCandidateCopy(pages: RewritePages, copies: string[]) {
   const samplePath = `/api/contacts/${saved.contactId}/style-samples`;
   const retained = await rewriteBackend.request(samplePath);
   expect(retained.status).toBe(200);
-  await helper.getByRole('radio', { name: '说法 1', exact: true }).check();
-  await helper.getByRole('button', { name: '复制', exact: true }).click();
-  await expect(helper.getByRole('status').filter({ hasText: '已复制当前编辑文本' })).toBeVisible();
+  await helper.getByRole('group', { name: '说法1消息组', exact: true }).getByRole('button', { name: '复制第1条', exact: true }).click();
+  await expect(helper.getByRole('status').filter({ hasText: '已复制第1条' })).toBeVisible();
   expect(copies).toEqual(['未保存副本的合成候选（说法1）。']);
   // 仅替换宿主剪贴板输入；真实 onPaste 登记合法候选来历，随后编辑没有主动保存。
   await manual.evaluate((element, text) => {
@@ -203,9 +202,9 @@ async function unsavedCandidateCopy(pages: RewritePages, copies: string[]) {
     .toMatchObject({ turns: [], inputs: [] });
   await expect(helper.getByRole('status').filter({ hasText: /当前助手会话已删除|当前助手会话已不存在/ })).toHaveCount(0);
   expect((await rewriteBackend.command('observations')).payloads).toHaveLength(1);
-  await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('用户明确发起的新会话合成草稿。');
+  await helper.getByRole('textbox', { name: '有什么想说的', exact: true }).fill('用户明确发起的新会话合成草稿。');
   await rewriteBackend.plan({ count: 1, prefix: '新会话的独立合成候选' });
-  await helper.getByRole('button', { name: '生成候选', exact: true }).click();
+  await helper.getByRole('button', { name: '帮我表达', exact: true }).click();
   await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveValue('新会话的独立合成候选（说法1）。');
   await expect(helper.getByRole('status').filter({ hasText: /当前助手会话已删除|当前助手会话已不存在/ })).toHaveCount(0);
   expect((await rewriteBackend.command('observations')).payloads).toHaveLength(2);

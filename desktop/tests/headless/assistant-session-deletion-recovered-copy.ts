@@ -36,6 +36,8 @@ export async function assistantSessionDeletionRecoveredCopy(browser: Browser, or
       await confirmHelperContact(nextHelper, saved.contactId);
       const discussion = nextHelper.getByRole('region', { name: '已保存的讨论', exact: true });
       const historical = discussion.getByText(candidateText, { exact: true });
+      await expect.poll(() => nextHelper.evaluate(async () => (await window.notalone.replies.getState()).savedSession?.phase)).toBe('ready');
+      await expandSavedDiscussion(nextHelper);
       await expect(historical).toBeVisible();
       const recovered = await nextHelper.evaluate(async () => window.notalone.replies.getState());
       expect(recovered).toMatchObject({ result: null, selectedCandidateId: null,
@@ -86,13 +88,13 @@ export async function assistantSessionDeletionRecoveredCopy(browser: Browser, or
       await expect(nextHelper.getByText('当前会话还没有讨论。', { exact: true })).toBeVisible();
       const newDraft = '新范围独立输入且不应被旧候选删除清除的合成草稿。';
       const newManual = '新范围独立手写且尚未保存的合成文字。';
-      await nextHelper.getByRole('textbox', { name: '草稿', exact: true }).fill(newDraft);
+      await nextHelper.getByRole('textbox', { name: '有什么想说的', exact: true }).fill(newDraft);
       await manual.fill(newManual);
       await openAssistantHistory(nextHelper);
       await nextHelper.getByRole('button', { name: '查看已保存讨论', exact: true }).click();
       await expandSavedDiscussion(nextHelper);
       await nextHelper.getByRole('button', { name: '刷新表达样本', exact: true }).click();
-      await expect(nextHelper.getByRole('textbox', { name: '草稿', exact: true })).toHaveValue(newDraft);
+      await expect(nextHelper.getByRole('textbox', { name: '有什么想说的', exact: true })).toHaveValue(newDraft);
       await expect(manual).toHaveValue(newManual);
       expect((await nextHelper.evaluate(async () => window.notalone.replies.getState())).contactId).toBe(otherContactId);
       expect((await rewriteBackend.request(`/api/contacts/${otherContactId}/style-samples`)).data.samples).toEqual([]);

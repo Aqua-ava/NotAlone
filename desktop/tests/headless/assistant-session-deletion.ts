@@ -11,9 +11,9 @@ export async function assistantSessionDeletion(browser: Browser, origin: string)
     const contactId = rewriteBackend.data.contact_ids[0];
     await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
     await confirmHelperContact(helper, contactId);
-    await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('需要主动删除的合成讨论。');
+    await helper.getByRole('textbox', { name: '有什么想说的', exact: true }).fill('需要主动删除的合成讨论。');
     await rewriteBackend.plan({ count: 1, prefix: '需要清除的合成候选' });
-    await helper.getByRole('button', { name: '生成候选', exact: true }).click();
+    await helper.getByRole('button', { name: '帮我表达', exact: true }).click();
     await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true }))
       .toHaveValue('需要清除的合成候选（说法1）。');
     await helper.getByText('我的表达样本', { exact: true }).click();
@@ -51,7 +51,7 @@ export async function assistantSessionDeletion(browser: Browser, origin: string)
     expect(await rewriteBackend.request(path)).toEqual({ status: 404, data: { error: 'not_found' } });
     await expect(helper.getByRole('region', { name: '已保存的讨论', exact: true })).toHaveCount(0);
     await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveCount(0);
-    await expect(helper.getByRole('textbox', { name: '草稿', exact: true })).toHaveValue('');
+    await expect(helper.getByRole('textbox', { name: '有什么想说的', exact: true })).toHaveValue('');
     expect(await helper.evaluate(async () => window.notalone.replies.getState())).toMatchObject({
       result: null, selectedCandidateId: null, canRetry: false, direction: '', purpose: '',
       savedSession: { sessionId: null, turns: [] },
