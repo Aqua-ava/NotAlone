@@ -32,9 +32,9 @@ async function editorAfterSessionDeletion(pages: RewritePages, kind: 'candidate'
   const contactId = rewriteBackend.data.contact_ids[0];
   await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
   await confirmHelperContact(helper, contactId);
-  await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('本次合成意图是拒绝，不新增承诺。');
+  await helper.getByRole('textbox', { name: '有什么想说的', exact: true }).fill('本次合成意图是拒绝，不新增承诺。');
   await rewriteBackend.plan({ count: 1, text: replyText, basis: '只核对删除与独立保留的数据契约。' });
-  await helper.getByRole('button', { name: '生成候选', exact: true }).click();
+  await helper.getByRole('button', { name: '帮我表达', exact: true }).click();
   const editor = helper.getByRole('textbox', { name: '候选1编辑文本', exact: true });
   await expect(editor).toHaveValue(replyText);
   const generation = replyTransport.results.at(-1)!;

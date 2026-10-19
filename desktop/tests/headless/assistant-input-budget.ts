@@ -1,3 +1,4 @@
+import { setWorkspaceContext, setWorkspaceTone, fillWorkspaceInstruction, openWorkspaceSettings } from '../workspace-actions';
 import { openAssistantHistory, expandSavedDiscussion } from '../assistant-history-actions';
 import path from 'node:path';
 import { expect, type Browser } from '@playwright/test';
@@ -15,9 +16,10 @@ export { draft as budgetDraft, instruction as budgetInstruction };
 export async function prepareDraft({ manager, helper, rewriteBackend }: RewritePages, prefix: string) {
   await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
   await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
-  await helper.getByRole('textbox', { name: '草稿', exact: true }).fill(draft);
-  await helper.getByRole('combobox', { name: '本次语气', exact: true }).selectOption('polite');
-  await helper.getByRole('textbox', { name: '本次要求', exact: true }).fill(instruction);
+  await setWorkspaceContext(helper, false);
+  await helper.getByRole('textbox', { name: '有什么想说的', exact: true }).fill(draft);
+  await setWorkspaceTone(helper, 'polite');
+  await fillWorkspaceInstruction(helper, instruction);
   await rewriteBackend.plan({ count: 1, prefix });
 }
 
@@ -28,7 +30,7 @@ export async function assistantInputBudget(browser: Browser, origin: string) {
   await withRewritePages(browser, origin, async (pages, host, userData) => {
     const { helper, rewriteBackend, replyTransport } = pages;
     await prepareDraft(pages, '预算校准的合成候选');
-    await helper.getByRole('button', { name: '生成候选', exact: true }).click();
+    await helper.getByRole('button', { name: '帮我表达', exact: true }).click();
     await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true }))
       .toHaveValue('预算校准的合成候选（说法1）。');
     const calibration = replyTransport.results[0].data.input_budget as { state: string; total_tokens: number };
@@ -38,7 +40,7 @@ export async function assistantInputBudget(browser: Browser, origin: string) {
     const stages = await rewriteBackend.command('calibration');
     const capacity = Number(stages.maximum_stage_total) + 100;
     const initial = await rewriteBackend.command('metrics');
-    expect(initial).toEqual({ model_calls: 2, migration_count: 72, migration_repeat: 0 });
+    expect(initial).toEqual({ model_calls: 1, migration_count: 89, migration_repeat: 0 });
     await host.close();
     await rewriteBackend.command('configure', { capacity });
     const transport = await RewriteHttpProxy.attach(rewriteBackend.infoPath);
@@ -55,25 +57,26 @@ export async function assistantInputBudget(browser: Browser, origin: string) {
         await current.helper.getByRole('button', { name: '新开助手会话', exact: true }).click();
         await expect(current.helper.getByText('当前会话还没有讨论。', { exact: true })).toBeVisible();
         // 新开明确清空临时输入后，用户重新填入同一校准请求。
-        await current.helper.getByRole('textbox', { name: '草稿', exact: true }).fill(draft);
-        await current.helper.getByRole('combobox', { name: '本次语气', exact: true }).selectOption('polite');
-        await current.helper.getByRole('textbox', { name: '本次要求', exact: true }).fill(instruction);
-        await current.helper.getByRole('button', { name: '生成候选', exact: true }).click();
+        await setWorkspaceContext(current.helper, false);
+        await current.helper.getByRole('textbox', { name: '有什么想说的', exact: true }).fill(draft);
+        await setWorkspaceTone(current.helper, 'polite');
+        await fillWorkspaceInstruction(current.helper, instruction);
+        await current.helper.getByRole('button', { name: '帮我表达', exact: true }).click();
         await expect(current.helper.getByRole('textbox', { name: '候选1编辑文本', exact: true }))
           .toHaveValue('临界预算的合成候选（说法1）。');
         const generated = transport.results[0];
         expect(generated.status).toBe(200);
         expect(generated.data.input_budget).toMatchObject({ state: 'warning', allowed: true, context_window_tokens: capacity });
         const metrics = await rewriteBackend.command('metrics');
-        expect(metrics).toEqual({ model_calls: 4, migration_count: 72, migration_repeat: 0 });
-        process.stdout.write(`page_test_budget_warning: http=200 state=warning model_calls=4 initial_total=${calibration.total_tokens} capacity=${capacity} migrations=72 repeat=0\n`);
+        expect(metrics).toEqual({ model_calls: 2, migration_count: 89, migration_repeat: 0 });
+        process.stdout.write(`page_test_budget_warning: http=200 state=warning model_calls=2 initial_total=${calibration.total_tokens} capacity=${capacity} migrations=89 repeat=0\n`);
         await expect(current.helper.getByRole('status', { name: '模型输入预算', exact: true }))
           .toContainText('当前讨论已接近模型输入上限');
         await expect(current.helper.getByRole('alert', { name: '模型输入预算', exact: true })).toHaveCount(0);
-        await expect(current.helper.getByRole('textbox', { name: '草稿', exact: true })).toHaveValue(draft);
+        await expect(current.helper.getByRole('textbox', { name: '有什么想说的', exact: true })).toHaveValue(draft);
         await expect(current.helper.getByRole('combobox', { name: '本次语气', exact: true })).toHaveValue('polite');
         await expect(current.helper.getByRole('textbox', { name: '本次要求', exact: true })).toHaveValue(instruction);
-        await expect(current.helper.getByRole('checkbox', { name: '结合关系语境', exact: true })).not.toBeChecked();
+        await expect(current.helper.getByRole('checkbox', { name: '参考最近聊天和相关关系资料', exact: true })).not.toBeChecked();
         await openAssistantHistory(current.helper);
         await current.helper.getByRole('button', { name: '查看已保存讨论', exact: true }).click();
         await expandSavedDiscussion(current.helper);
@@ -87,7 +90,7 @@ export async function assistantInputBudget(browser: Browser, origin: string) {
         expect(saved.status).toBe(200);
         expect((saved.data.turns as Array<{ reply: { input_budget: unknown } }>)[0].reply.input_budget)
           .toEqual(generated.data.input_budget);
-        expect((await rewriteBackend.command('metrics')).model_calls).toBe(4);
+        expect((await rewriteBackend.command('metrics')).model_calls).toBe(2);
       } finally { transport.release(); await next.close(); }
     } finally { await transport.close(); }
   }, undefined, path.resolve('tests/fixtures/assistant-input-budget-page-backend.py'));
