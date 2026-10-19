@@ -95,7 +95,12 @@ test('普通增漏错字经完整名单核验，未绑定近邻和改名均不�
         assert.equal(foreground.getGenerationBlock(), null);
       }
       await fixture.setCli({ sessions: [session, { ...session, username: 'wxid_synthetic_unbound_near',
-        display_name: '合成侧式甲' }], messages: {} });
+        display_name: '合成侧式甲' }, { ...session, username: 'wxid_synthetic_corp_near',
+        display_name: '合成测式甲', chat_type: 'corp_im' }], messages: {} });
+      const exact = await observe(session.display_name);
+      assert.equal(exact.reason, 'confirmed_active_binding_name_match');
+      assert.equal(exact.confirmedContactId, contactId);
+      assert.equal(exact.recognitionConfidence, 0.5);
       assert.equal((await observe('合成侧试甲')).reason, 'ambiguous_requires_selection');
       assert.notEqual(foreground.getGenerationBlock(), null);
       const ambiguous = await fixture.request('/api/sync/foreground/observe', {});

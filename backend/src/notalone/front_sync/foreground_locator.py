@@ -353,7 +353,7 @@ class ForegroundLocator:
                 return result("manual-required", "quality_unverified")
             if decision.kind != "unique" or decision.candidate_index is None:
                 return result("manual-required", "ambiguous_requires_selection")
-            if member_suffix and decision.method != "exact":
+            if member_suffix and (decision.method != "exact" or quality.display_name_confidence < 0.90):
                 return result("paused", "group_chat_suspected")
             candidate = candidates[decision.candidate_index]
             full_name = normalize_display_text(candidate.display_name)
@@ -380,6 +380,7 @@ class ForegroundLocator:
                     and normalize_display_text(binding.display_name) == full_name):
                 return FreshForegroundObservation.create(
                     phase="confirmed", reason=("confirmed_active_binding" if decision.method == "exact"
+                                               and quality.display_name_confidence >= 0.90
                                                else "confirmed_active_binding_name_match"),
                     probe_available=True, wechat_in_front=True,
                     binding_id=binding.binding_id, contact_id=binding.scope.contact_id,

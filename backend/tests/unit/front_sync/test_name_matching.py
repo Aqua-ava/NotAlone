@@ -48,9 +48,22 @@ class SessionNameMatchingTest(unittest.TestCase):
                 result = self.assert_decision(raw, 0.5, ("合成甲乙", "遥远对象"), "unique", method="edit")
                 self.assertEqual(result.candidate_index, 0)
 
-    def test_low_quality_exact_can_match_only_when_no_close_competitor_exists(self):
-        self.assert_decision("合成甲", 0.3, ("合成甲", "遥远对象"), "unique", method="edit")
-        self.assert_decision("合成甲", 0.3, ("合成甲", "合成乙"), "ambiguous")
+    def test_complete_unique_exact_precedes_near_names_at_valid_low_confidence(self):
+        for confidence in (0.3, 0.5, 0.89):
+            with self.subTest(confidence=confidence):
+                candidates = (private("合甲"), SessionNameCandidate("合乙", "corp_im"),
+                              private("合丙"), private("合丁"))
+                result = match_session_names("合甲", confidence, candidates)
+                self.assertEqual((result.kind, result.candidate_index, result.method), ("unique", 0, "exact"))
+                self.assertEqual(result.plausible_indices, (0,))
+
+    def test_low_confidence_exact_still_checks_same_name_collisions_and_anchors(self):
+        self.assert_decision("合甲", 0.5, ("合甲", "合甲", "合乙"), "ambiguous")
+        self.assert_decision("ＡＢ", 0.5, ("ＡＢ", "ab"), "ambiguous")
+        self.assert_decision("Q", 0.5, ("Q", "R"), "unmatched")
+        self.assert_decision("合甲", 0.29, ("合甲", "合乙"), "quality-unverified")
+        result = match_session_names("合甲", 0.5, (private("合甲"), SessionNameCandidate("合甲", "group")))
+        self.assertEqual(result.kind, "group")
 
     def test_high_confidence_wrong_text_does_not_gain_an_unlimited_edit_budget(self):
         self.assert_decision("遥远对象", 1, ("合成甲乙",), "unmatched")
@@ -86,7 +99,7 @@ class SessionNameMatchingTest(unittest.TestCase):
                 self.assertEqual(result.plausible_indices, (0,))
 
     def test_group_match_has_priority_over_private_and_other_competitors(self):
-        result = match_session_names("合成甲", 0.5, (
+        result = match_session_names("合成丁", 0.5, (
             private("合成甲"), SessionNameCandidate("合成乙", "group"),
             SessionNameCandidate("合成丙", "official_account")))
         self.assertEqual(result.kind, "group")
@@ -94,7 +107,7 @@ class SessionNameMatchingTest(unittest.TestCase):
         self.assertIsNone(result.candidate_index)
 
     def test_other_type_near_neighbor_is_not_filtered_before_disambiguation(self):
-        result = match_session_names("合成甲", 0.5, (
+        result = match_session_names("合成丙", 0.5, (
             private("合成甲"), SessionNameCandidate("合成乙", "official_account")))
         self.assertEqual(result.kind, "ambiguous")
         self.assertEqual(result.plausible_indices, (0, 1))
@@ -226,7 +239,7 @@ class SessionNameMatchingTest(unittest.TestCase):
     def test_five_thousand_long_common_prefixes_have_a_bounded_budget(self):
         names = tuple(private("A" * 250 + f"{index:04d}") for index in range(5000))
         started = perf_counter()
-        result = match_session_names("A" * 250 + "0000", 0.5, names)
+        result = match_session_names("A" * 250 + "000X", 0.5, names)
         self.assertEqual(result.kind, "ambiguous")
         self.assertLess(perf_counter() - started, 2)
 
@@ -235,7 +248,8 @@ class SessionNameMatchingTest(unittest.TestCase):
                           ("合成甲", "合成乙"), ("合成", "合成"), ("Nora O1", "Nora 01")):
             with self.subTest(raw=raw, name=name):
                 result = match_session_names(raw, 0.5, (private(name),))
-                self.assertEqual((result.kind, result.method, result.candidate_index), ("unique", "edit", 0))
+                self.assertEqual((result.kind, result.method, result.candidate_index),
+                                 ("unique", "exact" if raw == name else "edit", 0))
 
     def test_two_character_name_with_only_one_equal_anchor_cannot_identify_someone(self):
         for raw, name in (("合甲", "合成"), ("A", "A"), ("A甲", "A乙"), ("🐯🐱", "🐯🐱")):
@@ -249,9 +263,9 @@ class SessionNameMatchingTest(unittest.TestCase):
         self.assertEqual((result.kind, result.method, result.plausible_indices), ("unique", "exact", (0,)))
         self.assertEqual(match_session_names("A", 0.95, (private("A"),)).kind, "unique")
 
-    def test_low_confidence_exact_also_considers_other_near_names(self):
+    def test_low_confidence_full_exact_does_not_mix_in_edit_neighbors(self):
         result = match_session_names("合成甲", 0.5, (private("合成甲"), private("合成乙")))
-        self.assertEqual((result.kind, result.plausible_indices), ("ambiguous", (0, 1)))
+        self.assertEqual((result.kind, result.plausible_indices), ("unique", (0,)))
 
     def test_normalization_is_only_nfkc_casefold_and_unicode_whitespace(self):
         for raw, name, method in (("合成  测试", "合成 测试", "exact"),
@@ -297,7 +311,7 @@ class SessionNameMatchingTest(unittest.TestCase):
 
     def test_unknown_type_is_never_ignored_or_confirmed(self):
         unknown = SessionNameCandidate("合成乙", "unknown")
-        result = match_session_names("合成甲", 0.5, (private("合成甲"), unknown))
+        result = match_session_names("合成丙", 0.5, (private("合成甲"), unknown))
         self.assertEqual((result.kind, result.plausible_indices), ("ambiguous", (0, 1)))
         self.assertEqual(match_session_names("合成乙", 0.95, (unknown,)).kind, "unmatched")
 

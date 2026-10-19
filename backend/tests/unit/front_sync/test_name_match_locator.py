@@ -37,6 +37,29 @@ class NameMatchLocatorTest(unittest.TestCase):
         self.assertEqual((result.phase, result.reason), ("confirmed", "confirmed_active_binding_name_match"))
         self.assertEqual(result.recognition_confidence, 0.3)
 
+    def test_unique_exact_name_is_not_blocked_by_other_one_character_names(self):
+        result = self.locate(self.payload("合甲"), candidates=(candidate("合甲"),
+            candidate("合乙", "synthetic_corp", "corp_im"), candidate("合丙", "synthetic_other_a"),
+            candidate("合丁", "synthetic_other_b")), bindings=(binding("合甲"),))
+        self.assertEqual((result.phase, result.reason), ("confirmed", "confirmed_active_binding_name_match"))
+        self.assertEqual((result.recognized_name, result.recognition_confidence), ("合甲", 0.5))
+
+    def test_exact_unbound_or_renamed_name_never_falls_back_to_bound_near_name(self):
+        result = self.locate(self.payload("合甲"), candidates=(candidate("合甲", "synthetic_unbound"),
+            candidate("合乙")), bindings=(binding("合乙"),))
+        self.assertEqual(result.reason, "unmatched_requires_selection")
+        self.assertIsNone(result.contact_id)
+        result = self.locate(self.payload("合甲"), candidates=(candidate("合甲"),
+            candidate("合乙", "synthetic_other")), bindings=(binding("旧完整名称"),))
+        self.assertEqual(result.reason, "unmatched_requires_selection")
+        self.assertIsNone(result.contact_id)
+
+    def test_exact_same_name_in_another_type_is_not_hidden_by_binding(self):
+        result = self.locate(self.payload("合甲"), candidates=(candidate("合甲"),
+            candidate("合甲", "synthetic_corp", "corp_im")), bindings=(binding("合甲"),))
+        self.assertEqual(result.reason, "ambiguous_requires_selection")
+        self.assertEqual(self.binding_calls, [])
+
     def test_short_name_one_surviving_character_cannot_confirm(self):
         result = self.locate(self.payload("合柿"), candidates=(candidate("合成"),), bindings=(binding("合成"),))
         self.assertEqual(result.phase, "manual-required")

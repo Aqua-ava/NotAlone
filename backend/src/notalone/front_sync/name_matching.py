@@ -170,11 +170,20 @@ def match_session_names(
             return NameMatchDecision("unmatched", plausible_indices=indices)
         return NameMatchDecision("unique", indices[0], method, indices)
 
-    if not has_tail and raw_confidence >= 0.9 and exact_indices:
+    # 完整名称命中优先于纠错；分数不足以证明姓名错误，近似字不能覆盖零编辑命中。
+    if not has_tail and exact_indices:
         indices = tuple(exact_indices)
         legacy_equal = len(indices) == 1 and " ".join(raw_text.split()) == " ".join(
             candidates[indices[0]].display_name.split())
-        return decide(indices, method="exact" if legacy_equal else "normalized")
+        exact_anchors = None
+        if raw_confidence < 0.9 and len(indices) == 1:
+            index = indices[0]
+            enough_text = (sum(character.isalnum() for character in raw)
+                           - max(_expansion_excess(raw_text),
+                                 _expansion_excess(candidates[index].display_name)) >= 2)
+            exact_anchors = ({index} if enough_text and _can_supply_anchors(raw_text)
+                             and _can_supply_anchors(candidates[index].display_name) else set())
+        return decide(indices, method="exact" if legacy_equal else "normalized", anchored=exact_anchors)
 
     plausible = []
     anchored = set()
