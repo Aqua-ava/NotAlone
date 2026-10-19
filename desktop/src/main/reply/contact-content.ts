@@ -20,19 +20,33 @@ export type RetainedContactContent = {
   result?: { continuation?: NonNullable<ReplySessionState['result']>['continuation']; replyRequestId: string; selectedCandidateId: string | null; edits: { candidateId: string; text: string }[] };
   derivedIntent: DerivedIntent;
   inputVersionId: string | null;
+  workspaceRequirementInputVersion?: string;
   candidateDrafts: NonNullable<ReplySessionState['candidateDrafts']>;
   input: Pick<ReplySessionState, 'options' | 'mode' | 'targetMessageId' | 'direction' | 'purpose'
     | 'correction' | 'requirements' | 'supplementInput' | 'clarificationAnswer' | 'skillChoice' | 'scene' | 'workspaceMigrationNotice'>;
 };
 
-export function retainContactContent(state: ReplySessionState, derivedIntent: DerivedIntent, draft: string): RetainedContactContent | undefined {
+export function retainContactContent(state: ReplySessionState, derivedIntent: DerivedIntent, draft: string,
+  workspaceRequirementInputVersion?: string): RetainedContactContent | undefined {
   if (state.sessionDeletion === 'deleting' || state.sessionDeletion === 'failed'
     || state.sessionCatalog?.selectionPending || state.sourceAvailability) return;
   const { options, mode, targetMessageId, direction, purpose, correction, requirements, supplementInput, clarificationAnswer, skillChoice, scene, workspaceMigrationNotice } = state;
-  return structuredClone({ sessionId: state.savedSession?.sessionId ?? null, draft, derivedIntent, inputVersionId: state.savedSession?.currentInputVersionId ?? state.result?.inputVersionId ?? null, candidateDrafts: state.candidateDrafts ?? [],
+  return structuredClone({ sessionId: state.savedSession?.sessionId ?? null, draft, derivedIntent, workspaceRequirementInputVersion, inputVersionId: state.savedSession?.currentInputVersionId ?? state.result?.inputVersionId ?? null, candidateDrafts: state.candidateDrafts ?? [],
     result: state.result ? { continuation: state.result.continuation, replyRequestId: state.result.replyRequestId, selectedCandidateId: state.selectedCandidateId,
       edits: state.result.candidates.map((candidate) => ({ candidateId: candidate.original.candidateId, text: candidate.editedText })) } : undefined,
     input: { options, mode, targetMessageId, direction, purpose, correction, requirements, supplementInput, clarificationAnswer, skillChoice, scene, workspaceMigrationNotice } });
+}
+
+// 临时关联只含版本身份；切回联系人后必须重新核对当前讨论、有效输入和恢复结果。
+export function restoredWorkspaceRequirementVersion(content: RetainedContactContent, saved: SavedAssistantSession,
+  result: ReplySessionState['result'] | undefined): string | undefined {
+  const version = content.workspaceRequirementInputVersion;
+  return version && content.input.mode === 'rewrite_draft' && content.input.options.inputKind === 'workspace'
+    && version === content.inputVersionId && content.sessionId === saved.sessionId
+    && version === saved.currentInputVersionId
+    && saved.inputs.some((input) => input.inputVersionId === version && input.state === 'active')
+    && result?.assistantSessionId === saved.sessionId && result.inputVersionId === version
+    && result.input.mode === 'rewrite_draft' && result.input.inputKind === 'workspace' ? version : undefined;
 }
 
 // 混合补充可能含来源派生理解；只有明确来自旧独立要求入口的内容可继续保留。
@@ -115,7 +129,7 @@ export async function validateContactInput(backend: BackendHost, contactId: stri
 }
 
 export function removeDependentContent(content: RetainedContactContent): RetainedContactContent {
-  return { ...content, notice: '部分来源尚未核对，相关派生内容已清除，独立输入仍保留。', result: undefined, candidateDrafts: [], inputVersionId: null,
+  return { ...content, notice: '部分来源尚未核对，相关派生内容已清除，独立输入仍保留。', result: undefined, candidateDrafts: [], inputVersionId: null, workspaceRequirementInputVersion: undefined,
     input: { ...content.input, targetMessageId: null, correction: '', clarificationAnswer: '',
       ...invalidatedSupplement(content.input),
       ...invalidatedIntent(content.derivedIntent) } };
@@ -131,6 +145,7 @@ export async function revalidateRetainedContent(backend: BackendHost, contactId:
   const valid = new Set(saved.turns.flatMap((turn) => turn.reply?.candidates.map((candidate) => candidate.candidateId) ?? []));
   const { options, mode, targetMessageId, direction, purpose, correction, requirements, supplementInput, clarificationAnswer, skillChoice, scene, workspaceMigrationNotice } = { ...content.input, ...update };
   return { ...content, notice: update.contentRestoreNotice, result: update.result ? content.result : undefined,
+    workspaceRequirementInputVersion: restoredWorkspaceRequirementVersion(content, { ...saved, phase: 'ready' }, update.result),
     candidateDrafts: content.candidateDrafts.filter((draft) => valid.has(draft.candidateId)),
     input: { options, mode, targetMessageId, direction, purpose, correction, requirements, supplementInput, clarificationAnswer, skillChoice, scene, workspaceMigrationNotice } };
 }

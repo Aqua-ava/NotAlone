@@ -7,7 +7,7 @@ import { BackendRequestFailure } from '../backend/json-client';
 import { isUuid } from '../uuid';
 import type { ContactSession } from '../contacts/session';
 import { captureAssistantGenerationStopping } from './assistant-generation-interruption';
-import { interruptedReplyInput } from './assistant-interrupted-retry';
+import { interruptedReplyInput, savedReplySkillChoice } from './assistant-interrupted-retry';
 import { checkPreparationFormat } from './preparation-format';
 import { newAssistantSessionWithCandidate } from './assistant-candidate-carry';
 import type { AssistantCandidateCarry } from '../../shared/reply-bridge';
@@ -25,7 +25,7 @@ import { AssistantGenerationJobs, type AssistantGenerationReceipt, type Assistan
 import type { ReplyContinuation, ReplyContinuationConfirmation } from '../../shared/reply-bridge';
 import { requirementChangeFromClarification, type AssistantContinuationCommand } from './assistant-continuation';
 import { captureReplyContinuation, continuationInputSnapshot } from './continuation-view';
-import { invalidatedIntent, type DerivedIntent, invalidatedSupplement, retainContactContent, validateContactInput, removeDependentContent, revalidateRetainedContent, type RetainedContactContent } from './contact-content';
+import { invalidatedIntent, type DerivedIntent, invalidatedSupplement, retainContactContent, restoredWorkspaceRequirementVersion, validateContactInput, removeDependentContent, revalidateRetainedContent, type RetainedContactContent } from './contact-content';
 import { readReplyScene, sceneSnapshot } from './scene';
 import { AssistantSessionProjection, type AssistantProjectionRead, type AssistantProjectionScope, type AssistantProjectionVerification } from './assistant-session-projection';
 import { AssistantMessageNotices, type MessageNoticeAdoption } from './assistant-message-notices';
@@ -74,6 +74,8 @@ export class ReplySession {
     phase: 'idle', result: null, selectedCandidateId: null, canRetry: false };
   private currentExploration: DirectionExploration | undefined;
   private generationSkillChoice: ReplySkillChoice | undefined;
+  // 只关联未被用户改写要求的权威输入版本，完整累计正文仍由后端回读。
+  private workspaceRequirementInputVersion: string | undefined;
   private explorationPurpose: string | undefined;
   private strategyJob: StrategyJob | undefined;
   private derivedIntent: DerivedIntent = { direction: false, purpose: false };
@@ -144,6 +146,7 @@ export class ReplySession {
       const generation = backend.getConnectionGeneration();
       if (generation !== versionGeneration) {
         versionGeneration = generation;
+        this.workspaceRequirementInputVersion = undefined;
         this.cancelContactRestore();
         this.retainedContent.clear(); this.retainedRetries.clear(); this.restoredRetry = undefined; this.pendingContent = undefined; this.retainedSourceValidation = undefined; this.contentGeneration = undefined;
         this.publish({ inputBudgetNotice: undefined, scene: '', inputClearRevision: (this.state.inputClearRevision ?? 0) + 1 });
@@ -221,6 +224,7 @@ export class ReplySession {
   }
   pendingGenerationReceipts(): PendingAssistantGenerationReceipt[] { return this.generationJobs.pendingReceipts(); }
   async prepareGenerationConnectionChange(): Promise<void> {
+    this.workspaceRequirementInputVersion = undefined;
     const settling = this.generationJobs.prepareConnectionChange();
     this.leaveGenerationView();
     await settling;
@@ -348,6 +352,10 @@ export class ReplySession {
           const frozenScene = readReplyScene(accepted.verifiedTurn.input?.scene);
           if (frozenScene !== result.effectiveScene) throw new Error('继续输入的场景与已保存版本不一致。');
           const input = continuationInputSnapshot(result.effectiveInput, this.state, contactDisplayName, frozenScene);
+          if (input.mode === 'rewrite_draft' && input.inputKind === 'workspace') {
+            input.skillChoice = savedReplySkillChoice(accepted.verifiedTurn);
+            this.workspaceRequirementInputVersion = result.inputVersionId;
+          }
           this.savedRead?.abort(); this.savedRead = undefined;
           this.continuationAttempt = undefined;
           this.publish({ phase: 'ready', savedSession: accepted.snapshot,
@@ -576,6 +584,7 @@ export class ReplySession {
             direction: content.derivedIntent.direction && Boolean(restoredInput.direction),
             purpose: content.derivedIntent.purpose && Boolean(restoredInput.purpose),
           };
+          this.workspaceRequirementInputVersion = restoredWorkspaceRequirementVersion(content, this.state.savedSession!, restoredInput.result);
           this.publish({ ...restoredInput, candidateDrafts, inputClearRevision: (this.state.inputClearRevision ?? 0) + 1 });
         }
         if (current() && inputOperation === this.operation) {
@@ -648,6 +657,7 @@ export class ReplySession {
       || this.state.sessionDeletion === 'failed' || this.state.sourceAvailability === 'checking') {
       throw new Error('请等待当前操作完成后再切换助手会话。');
     }
+    this.workspaceRequirementInputVersion = undefined;
     const previous = this.state.sessionCatalog;
     this.leaveGenerationView();
     const pending = new AbortController(); this.catalogPending = pending;
@@ -714,6 +724,7 @@ export class ReplySession {
       throw new Error('本次助手会话已变化，请重新确认。');
     }
     if (this.state.sessionDeletion === 'deleting') return;
+    this.workspaceRequirementInputVersion = undefined;
     const workspaceInput = this.state.options.inputKind === 'workspace';
     this.sessionProjection.invalidateSource();
     const owningGeneration = this.backend.getConnectionGeneration();
@@ -800,7 +811,7 @@ export class ReplySession {
 
   // 本人依赖可跨联系人且含不对界面公开的参与资料；由原会话和依据 GET 决定精确撤下范围。
   beginOwnerContextChange(): void {
-    const content = this.pendingContent ?? retainContactContent(this.state, this.derivedIntent, this.draft);
+    const content = this.pendingContent ?? retainContactContent(this.state, this.derivedIntent, this.draft, this.workspaceRequirementInputVersion);
     if (this.state.contactId && content) this.retainedContent.set(this.state.contactId, content);
     const held = this.heldResult ?? (this.state.result ? { result: this.state.result,
       selectedCandidateId: this.state.selectedCandidateId } : undefined);
@@ -854,7 +865,7 @@ export class ReplySession {
     if (owningGeneration !== undefined) this.generationJobs.cancelContact(owningGeneration, contactId);
     const activeContact = this.state.contactId, activeScope = this.state.scopeRevision;
     const restoring = this.pendingContent;
-    const displayedContent = retainContactContent(this.state, this.derivedIntent, this.draft);
+    const displayedContent = retainContactContent(this.state, this.derivedIntent, this.draft, this.workspaceRequirementInputVersion);
     const activeContent = restoring ?? displayedContent;
     if (activeContact && activeContent) this.retainedContent.set(activeContact, activeContent);
     const validation = { checking: true }; this.retainedSourceValidation = validation;
@@ -939,7 +950,7 @@ export class ReplySession {
           && owningGeneration === this.backend.getConnectionGeneration()) {
           this.publish({ candidateDrafts: clean?.candidateDrafts ?? [] });
           if (restoring && clean && activeContact) {
-            const latest = retainContactContent(this.state, this.derivedIntent, this.draft);
+            const latest = retainContactContent(this.state, this.derivedIntent, this.draft, this.workspaceRequirementInputVersion);
             if (displayedContent && latest) {
               const input = { ...clean.input };
               for (const key of Object.keys(input) as (keyof typeof input)[]) {
@@ -947,7 +958,12 @@ export class ReplySession {
                   Object.assign(input, { [key]: latest.input[key] });
                 }
               }
+              const requirementsChanged = latest.input.options.tone !== displayedContent.input.options.tone
+                || latest.input.options.instruction !== displayedContent.input.options.instruction
+                || latest.input.options.inputKind !== displayedContent.input.options.inputKind
+                || latest.input.mode !== displayedContent.input.mode;
               this.pendingContent = { ...clean, input,
+                workspaceRequirementInputVersion: requirementsChanged ? undefined : clean.workspaceRequirementInputVersion,
                 draft: latest.draft !== displayedContent.draft ? latest.draft : clean.draft };
             } else this.pendingContent = clean;
             await this.readSavedSession({ contactId: activeContact, scopeRevision: activeScope });
@@ -966,6 +982,7 @@ export class ReplySession {
   enterWorkspace(selection: ContactSelection): ReplySessionState {
     const contact = this.assertScope(selection); this.assertSessionSelection();
     if (this.state.mode === 'rewrite_draft' && this.state.options.inputKind === 'workspace') return this.getState();
+    this.workspaceRequirementInputVersion = undefined;
     if (this.state.savedSession?.phase !== 'ready') throw new Error('请等待联系人内容恢复完成。');
     const previous = this.state.options, mode = this.state.mode;
     const pasted = mode === 'rewrite_draft' && previous.inputKind === 'current_chat';
@@ -994,6 +1011,10 @@ export class ReplySession {
   updateOptions(update: RewriteOptionsUpdate): ReplySessionState {
     this.assertScope(update);
     if (JSON.stringify(update.options) !== JSON.stringify(this.state.options)) {
+      if (update.options.tone !== this.state.options.tone || update.options.instruction !== this.state.options.instruction
+        || update.options.inputKind !== this.state.options.inputKind) {
+        this.workspaceRequirementInputVersion = undefined;
+      }
       this.notifyInputChanged();
       this.cancelPending();
       this.lastAttempt = undefined;
@@ -1005,6 +1026,7 @@ export class ReplySession {
   async setMode(update: ReplyModeUpdate): Promise<void> {
     this.assertScope(update);
     if (update.mode !== this.state.mode) {
+      this.workspaceRequirementInputVersion = undefined;
       this.invalidateInput();
       this.cancelMessagePage();
       this.publish({ mode: update.mode, messages: { ...this.state.messages,
@@ -1523,6 +1545,7 @@ export class ReplySession {
         userInstruction: [tones[options.tone], options.instruction.trim()].filter(Boolean).join('\n') || null,
         includeRelationshipContext: options.includeRelationshipContext,
         ...(options.inputKind === 'workspace' ? { inputKind: 'workspace', workspaceAction: options.workspaceAction,
+          skillChoice: { ...(this.generationSkillChoice ?? this.state.skillChoice) },
           ...(options.contextText?.trim() ? { contextText: options.contextText.trim() } : {}),
           ...(options.excludedMessageIds?.length ? { excludedMessageIds: [...options.excludedMessageIds] } : {}) } : {}),
         ...(options.inputKind === 'current_chat' ? { inputKind: 'current_chat', pastedDirection: options.pastedDirection!.trim() } : {}) }
@@ -1568,8 +1591,9 @@ export class ReplySession {
     replaceable?: PendingAssistantGenerationReceipt, expectedInputVersionId?: string, interrupted?: InterruptedReplyOrigin,
     messageAdoption?: MessageAdoptionCommand): Promise<void> {
     const adoptNewMessageId = messageAdoption?.messageId;
+    if (selection.newRequest && adoptNewMessageId === undefined) this.workspaceRequirementInputVersion = undefined;
     if (adoptNewMessageId !== undefined && (!isUuid(adoptNewMessageId) || !isUuid(expectedInputVersionId)
-      || interrupted !== undefined || input.mode === 'rewrite_draft')) throw new Error('本次新消息采用身份无效。');
+      || interrupted !== undefined || input.mode === 'rewrite_draft' && input.inputKind !== 'workspace')) throw new Error('本次新消息采用身份无效。');
     const generation = this.backend.getConnectionGeneration();
     const retryCandidateIds = !selection.newRequest && this.lastAttempt
       ? this.state.result?.candidates.map((candidate) => candidate.original.candidateId) ?? [] : [];
@@ -1636,6 +1660,9 @@ export class ReplySession {
         if (!current()) return;
         accepted = this.sessionProjection.acceptCompletion(verification, saved, completionIdentity);
         if (accepted.kind !== 'accepted') { await rejectCompletion(); return; }
+      }
+      if (attempt.adoptNewMessageId !== undefined && resultInput.mode === 'rewrite_draft' && resultInput.inputKind === 'workspace') {
+        this.workspaceRequirementInputVersion = result.inputVersionId;
       }
       this.savedRead?.abort(); this.savedRead = undefined;
       const inputBudgetNotice = result.inputBudget ? { contactId: selection.contactId,
@@ -2142,9 +2169,10 @@ export class ReplySession {
       const generation = this.backend.getConnectionGeneration();
       if (generation !== undefined && generation === this.contentGeneration && this.state.contactId
         && state.contacts.some((contact) => contact.contactId === this.state.contactId)) {
-        const content = this.pendingContent ?? retainContactContent(this.getState(), this.derivedIntent, this.draft);
+        const content = this.pendingContent ?? retainContactContent(this.getState(), this.derivedIntent, this.draft, this.workspaceRequirementInputVersion);
         if (content) this.retainedContent.set(this.state.contactId, content);
       }
+      this.workspaceRequirementInputVersion = undefined;
       this.contentGeneration = generation; this.retainedSourceValidation = undefined;
       this.pendingContent = state.selectedContactId ? this.retainedContent.get(state.selectedContactId) : undefined;
       if (generation !== undefined && this.state.contactId && !state.contacts.some((contact) => contact.contactId === this.state.contactId)) {
@@ -2200,12 +2228,20 @@ export class ReplySession {
     const generation = this.backend.getConnectionGeneration();
     const sessionId = this.state.savedSession?.sessionId;
     const mode = this.state.mode;
+    const options = this.state.options;
+    const workspace = mode === 'rewrite_draft' && options.inputKind === 'workspace';
     const operation = this.operation;
     if (!notice || generation === undefined || !sessionId || notice.sessionId !== sessionId
-      || this.state.generationBlock || mode === 'rewrite_draft') throw new Error('请先核对当前联系人与新消息提醒。');
+      || this.state.generationBlock || mode === 'rewrite_draft' && !workspace) throw new Error('请先核对当前联系人与新消息提醒。');
+    if (workspace && !options.includeRelationshipContext) throw new Error('请先启用联系人上下文，再结合新消息。');
+    if (workspace && options.excludedMessageIds?.includes(notice.messageId)) throw new Error('这条新消息已从上下文排除，请先恢复选择。');
     const receipt = this.generationJobs.requestReceipt({ connectionGeneration: generation, contactId: selection.contactId, sessionId });
     if (this.state.phase === 'waiting' && !receipt) throw new Error('请等实际生成身份确认后再结合新消息。');
-    const expected = receipt?.inputVersionId ?? this.state.savedSession?.currentInputVersionId;
+    // 已完成生成的本地展示可尚未加载讨论快照；随后仍须回读并核验权威 CURRENT。
+    const result = this.state.result;
+    const completedInputVersion = result?.assistantSessionId === sessionId && result.input.contactId === selection.contactId
+      ? result.inputVersionId : undefined;
+    const expected = receipt?.inputVersionId ?? this.state.savedSession?.currentInputVersionId ?? completedInputVersion;
     if (!expected) throw new Error('请先重新读取当前已保存讨论。');
     const pending = new AbortController();
     const current = () => this.messageNotices.isAdoptionCurrent(notice) && operation === this.operation
@@ -2228,15 +2264,35 @@ export class ReplySession {
     const common = { contactId: selection.contactId, contactDisplayName: contact.displayName,
       correction: this.state.correction.trim(), userInstruction: this.state.requirements.trim(),
       clarificationAnswer: this.state.clarificationAnswer.trim(), skillChoice: { ...(this.generationSkillChoice ?? this.state.skillChoice) }, ...sceneSnapshot(this.state.scene || null) };
-    const input: ReplyInputSnapshot = mode === 'reply_to_message'
+    const input: ReplyInputSnapshot = mode === 'rewrite_draft'
+      ? { contactId: common.contactId, contactDisplayName: common.contactDisplayName, ...sceneSnapshot(this.state.scene || null),
+        mode, inputKind: 'workspace', workspaceAction: options.workspaceAction,
+        draftText: contacts.draft.trim(),
+        userInstruction: [tones[options.tone], options.instruction.trim()].filter(Boolean).join('\n') || null,
+        includeRelationshipContext: options.includeRelationshipContext,
+        skillChoice: { ...(this.generationSkillChoice ?? this.state.skillChoice) },
+        ...(options.contextText?.trim() ? { contextText: options.contextText.trim() } : {}),
+        ...(options.excludedMessageIds?.length ? { excludedMessageIds: [...options.excludedMessageIds] } : {}) }
+      : mode === 'reply_to_message'
       ? { ...common, mode, target, direction: this.state.direction.trim() }
       : { ...common, mode, purpose: this.state.purpose.trim() };
-    if (input.mode === 'reply_to_message' ? !input.direction : !input.purpose) throw new Error('请明确本次方向或目的。');
+    if (input.mode === 'rewrite_draft'
+      ? !input.draftText && input.workspaceAction !== 'suggest'
+      : input.mode === 'reply_to_message' ? !input.direction : !input.purpose) throw new Error('请明确本次想法、方向或目的。');
     const originalInput = saved.turns.find((turn) => turn.inputVersionId === expected)?.input;
     const originalContent = originalInput?.content;
+    if (input.mode === 'rewrite_draft' && this.workspaceRequirementInputVersion === expected
+      && originalContent?.type === 'rewrite_draft' && originalContent.input_kind === 'workspace') {
+      const requirements = originalContent.user_instruction;
+      if (requirements !== undefined && requirements !== null && typeof requirements !== 'string') {
+        throw new Error('已保存的本次要求无法核验，请重新读取讨论。');
+      }
+      input.userInstruction = requirements ?? null;
+    }
     const adoptNewMessageId = originalContent?.type === mode
-      && (originalContent.user_instruction ?? '') === common.userInstruction
-      && (originalInput?.scene ?? null) === (common.scene ?? null) ? notice.messageId : undefined;
+      && (mode !== 'rewrite_draft' || originalContent.input_kind === 'workspace')
+      && (originalContent.user_instruction ?? '') === (input.userInstruction ?? '')
+      && (workspace || (originalInput?.scene ?? null) === (common.scene ?? null)) ? notice.messageId : undefined;
     this.invalidateExploration(); this.notifyInputChanged();
     this.publish({ messages: { phase: 'ready', items: page.messages, nextCursor: page.nextCursor },
       ...(mode === 'reply_to_message' ? { targetMessageId: target.messageId } : {}) });

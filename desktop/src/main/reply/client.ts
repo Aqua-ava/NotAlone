@@ -15,7 +15,8 @@ export type ReplyRequestOptions = Readonly<{ adoptNewMessageId?: string; expecte
 export function replyRequestBody(input: ReplyInputSnapshot, requestKey: string, options?: ReplyRequestOptions) {
   const expected = options?.expectedInputVersionId, adopted = options?.adoptNewMessageId;
   if (expected !== undefined && !isUuid(expected)) throw new Error('本次重试输入已变化。');
-  if (adopted !== undefined && (!isUuid(adopted) || expected === undefined || input.mode === 'rewrite_draft'
+  if (adopted !== undefined && (!isUuid(adopted) || expected === undefined
+    || input.mode === 'rewrite_draft' && input.inputKind !== 'workspace'
     || input.mode === 'reply_to_message' && input.target.messageId.toLowerCase() !== adopted.toLowerCase())) {
     throw new Error('本次新消息采用身份无效。');
   }
@@ -37,8 +38,8 @@ export function replyRequestBody(input: ReplyInputSnapshot, requestKey: string, 
   };
   return Object.freeze({ contact_id: input.contactId, idempotency_key: requestKey,
     ...sceneSnapshot(input.scene),
-    ...(input.mode !== 'rewrite_draft' && input.skillChoice?.mode === 'disabled' ? { skill_disabled: true } : {}),
-    ...(input.mode !== 'rewrite_draft' && input.skillChoice?.mode === 'user' ? { skill_version_id: input.skillChoice.versionId } : {}),
+    ...((input.mode !== 'rewrite_draft' || input.inputKind === 'workspace') && input.skillChoice?.mode === 'disabled' ? { skill_disabled: true } : {}),
+    ...((input.mode !== 'rewrite_draft' || input.inputKind === 'workspace') && input.skillChoice?.mode === 'user' ? { skill_version_id: input.skillChoice.versionId } : {}),
     content: Object.freeze(content),
     ...(expected === undefined ? {} : { expected_input_version_id: expected.toLowerCase() }),
     ...(adopted === undefined ? {} : { adopt_new_message_id: adopted.toLowerCase() }) });
@@ -50,8 +51,12 @@ export function matchesReplyAdoption(input: unknown, submission: unknown): boole
   const value = input.continuation.message_adoption;
   if (!isRecord(value) || !Object.hasOwn(value, 'content') || !isRecord(value.content)) return false;
   const { content, ...expected } = submission, { content: actualContent, ...actual } = value;
+  const sameValue = (left: unknown, right: unknown) => Array.isArray(left) || Array.isArray(right)
+    ? Array.isArray(left) && Array.isArray(right) && left.length === right.length
+      && left.every((field, index) => typeof field === 'string' && field === right[index])
+    : left === right;
   const sameFields = (left: Record<string, unknown>, right: object) => Object.keys(left).length === Object.keys(right).length
-    && Object.entries(right).every(([key, field]) => Object.hasOwn(left, key) && left[key] === field);
+    && Object.entries(right).every(([key, field]) => Object.hasOwn(left, key) && sameValue(left[key], field));
   return sameFields(actual, expected) && sameFields(actualContent, content);
 }
 

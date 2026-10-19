@@ -1,3 +1,4 @@
+import { fillWorkspaceThought, generateWorkspace } from '../workspace-actions';
 import { declareReplyScene } from '../reply-settings-actions';
 import { selectMemoryCategory } from '../memory-page-actions';
 import { expect, type Browser } from '@playwright/test';
@@ -34,15 +35,14 @@ export async function skillFeedback(browser: Browser, origin: string) {
       const helper = await host.open('helper');
       const [contactA, contactB] = fixture.data.contact_ids;
       await confirmHelperContact(helper, contactA);
-      await helper.getByRole('button', { name: '主动聊聊', exact: true }).click();
-      await helper.getByRole('textbox', { name: '主动目的', exact: true }).fill('只说明我的想法，不作额外承诺');
+      await fillWorkspaceThought(helper, '只说明我的想法，不作额外承诺');
       await declareReplyScene(helper, '核对安排');
       await helper.evaluate(async versionId => {
         const contact = await window.notalone.contacts.getState();
         await window.notalone.replies.updateSkill({ contactId: contact.selectedContactId!, scopeRevision: contact.scopeRevision,
           skill: { mode: 'user', versionId } });
       }, prepared.version_id as string);
-      await helper.getByRole('button', { name: '生成候选', exact: true }).click();
+      await generateWorkspace(helper);
       const editor = helper.getByRole('textbox', { name: '候选1编辑文本', exact: true });
       await expect(editor).toHaveValue('先核对一下，再说明我的想法。');
       await editor.fill('这句太生硬，我只改当前候选的说法。');
@@ -100,7 +100,11 @@ export async function skillFeedback(browser: Browser, origin: string) {
         await writeGenerationEvidence(stage, { originalRequestKey, generationPrepares, state });
       };
       await expect(editor).toHaveValue('这句太生硬，我只改当前候选的说法。');
-      await helper.getByRole('button', { name: '生成候选', exact: true }).click();
+      // 幂等与权限边界：故意经公开 bridge 重放原准备；新工作区按钮总是发起新请求。
+      await helper.evaluate(async () => {
+        const state = await window.notalone.replies.getState();
+        await window.notalone.replies.generate({ contactId: state.contactId!, scopeRevision: state.scopeRevision, newRequest: false });
+      });
       try {
         await expect.poll(async () => helper.evaluate(async () => (await window.notalone.replies.getState()).phase)).toBe('failed');
       } finally { await captureGeneration('original'); }
@@ -108,7 +112,7 @@ export async function skillFeedback(browser: Browser, origin: string) {
         failure: { status: 409, code: 'assistant_session_rejected', reason: 'skill_policy_changed' } }]);
       await expect(editor).toHaveValue('这句太生硬，我只改当前候选的说法。');
       expect((await fixture.command('observations')).reply_calls).toBe(5);
-      await helper.getByRole('button', { name: '重新生成', exact: true }).click();
+      await generateWorkspace(helper);
       try {
         await expect.poll(async () => helper.evaluate(async () =>
           (await window.notalone.replies.getState()).result?.usedSkill?.executionView?.policyRevision ?? 0)).toBeGreaterThan(0);
@@ -129,7 +133,10 @@ export async function skillFeedback(browser: Browser, origin: string) {
       })).toEqual({ contact: contactB, phase: 'ready' });
       await declareReplyScene(helper, '乙的独立场景');
       await helper.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption(contactA);
-      expect((await helper.evaluate(() => window.notalone.replies.getState())).scene).toBe('核对安排');
+      await expect.poll(() => helper.evaluate(async () => {
+        const state = await window.notalone.replies.getState();
+        return { contact: state.contactId, phase: state.savedSession?.phase, scene: state.scene };
+      })).toEqual({ contact: contactA, phase: 'ready', scene: '核对安排' });
       await expect(editor).toHaveValue('甲在范围停用后的独立编辑。');
       expect((await helper.evaluate(async () => (await window.notalone.replies.getState()).result!.usedSkill!)).executionView).toEqual(actual.executionView);
       panel = await open();

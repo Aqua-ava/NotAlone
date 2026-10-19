@@ -110,6 +110,7 @@ export interface RewriteSnapshot {
   contextText?: string;
   excludedMessageIds?: string[];
   pastedDirection?: string;
+  skillChoice?: ReplySkillChoice;
 }
 export interface DirectedReplySnapshot {
   mode: 'reply_to_message';
