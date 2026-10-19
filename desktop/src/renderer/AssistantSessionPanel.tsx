@@ -19,6 +19,10 @@ function SavedTurn({ turn, index, retry, busy, showPreferences }: {
         : typeof turn.input?.content.direction === 'string' ? turn.input.content.direction
         : typeof turn.input?.content.purpose === 'string' ? turn.input.content.purpose : '本轮回复输入'}</p>
       {turn.input?.content.input_kind === 'current_chat' && <p>本次粘贴的对方文字，未经渠道核验。表达方向：{String(turn.input.content.pasted_direction ?? '')}</p>}
+      {turn.input?.content.input_kind === 'workspace' && <>
+        <p>{turn.input.content.workspace_action === 'suggest' ? '帮我想想 · 建议不代表已确认立场' : '帮我表达'}</p>
+        {typeof turn.input.content.context_text === 'string' && <p>补充聊天：{turn.input.content.context_text}</p>}
+      </>}
       {typeof turn.input?.content.user_instruction === 'string' && <p>{turn.input.content.user_instruction}</p>}
       <p>原精确场景：{turn.input?.scene ?? '未声明'}</p>
       {turn.reply?.usedSkill && <p>本轮实际 Skill：{turn.reply.usedSkill.name} · 版本 {turn.reply.usedSkill.versionNumber ?? turn.reply.usedSkill.versionId}

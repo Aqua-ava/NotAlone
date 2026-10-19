@@ -153,6 +153,12 @@ def allows_history(command: GenerateReply) -> bool:
     )
 
 
+def workspace_recent_only(command: GenerateReply) -> bool:
+    """排除消息时保守停用可能携回原文的派生资料与补查。"""
+    return (isinstance(command.content, RewriteDraft) and command.content.input_kind == "workspace"
+            and bool(command.content.excluded_message_ids))
+
+
 class _ScoredMemory(Protocol):
     """阈值与字符预算需要的最小记忆形状。"""
 
@@ -512,9 +518,37 @@ class RetrievalReplyContext:
                     status="user_input",
                 )
             ]
+            if command.content.input_kind == "workspace":
+                # 点击动作是真实的本次请求；空想法不构造虚假的草稿或已确认方向。
+                evidence = [ContextEvidence(
+                    evidence_id=self._new_id(), kind="user_purpose", scope=scope,
+                    text="帮我表达" if command.content.workspace_action == "express" else "帮我想想",
+                    selection_reason="用户主动选择的本次工作区动作，不代表已采纳任何建议立场。",
+                    status="user_input",
+                )]
+                if command.content.draft_text.strip():
+                    evidence.append(ContextEvidence(
+                        evidence_id=self._new_id(), kind="user_draft", scope=scope,
+                        text=command.content.draft_text, status="user_input",
+                        selection_reason="用户本次提供的想法、方向或草稿。"))
+                if command.content.context_text and command.content.context_text.strip():
+                    evidence.append(ContextEvidence(
+                        evidence_id=self._new_id(), kind="user_current_chat", scope=scope,
+                        text=command.content.context_text, status="user_input",
+                        selection_reason="用户为当前联系人补充的聊天上下文，不作为本人意图或长期记忆。"))
+                if allows_history(command):
+                    evidence.extend(self._message_evidence(message, is_target=False)
+                        for message in self._search_messages(scope=scope)
+                        if message.message_id not in command.content.excluded_message_ids)
+                if history_message_ids is not None:
+                    history_message_ids = tuple(item for item in history_message_ids
+                        if item not in command.content.excluded_message_ids)
             receipt = None
-            if allows_history(command):
-                related, receipt = self._related_memory_context(scope=scope, query=command.content.draft_text)
+            if allows_history(command) and not workspace_recent_only(command):
+                query = command.content.draft_text
+                if command.content.input_kind == "workspace":
+                    query = "\n".join(item.text for item in evidence if item.kind != "user_purpose")
+                related, receipt = self._related_memory_context(scope=scope, query=query)
                 evidence.extend(related)
             if continuation is not None:
                 evidence.append(continuation)
@@ -546,7 +580,7 @@ class RetrievalReplyContext:
         """仅补当前联系人的未核实或历史依据；沿现有原话窗口和运行预算。"""
         for prefix, scope, budget in (("", context.scope, self._layered_budget),
                 ("owner_", OwnerScope(context.scope.owner_id), self._owner_layered_budget)):
-            if not allows_history(context.command):
+            if not allows_history(context.command) or workspace_recent_only(context.command):
                 context = replace(context, **{prefix + "layered_status": "not_allowed"})
             elif self._layered_memory is not None and budget is not None:
                 try:
@@ -568,7 +602,8 @@ class RetrievalReplyContext:
             for identifier in item.navigation.source_message_ids))
         existing = {item.evidence_id for item in context.evidence if item.kind == "message"}
         anchors = tuple(identifier for identifier in anchors if identifier not in existing)
-        history = HistoryToolAccess(retrieval=(self._retrieval.restrict_messages(context.history_message_ids)
+        history = HistoryToolAccess(excluded_message_ids=(context.command.content.excluded_message_ids
+            if isinstance(context.command.content, RewriteDraft) else ()), retrieval=(self._retrieval.restrict_messages(context.history_message_ids)
             if context.history_message_ids is not None else self._retrieval), scope=context.scope,
             conversation_binding_id=context.command.conversation_binding_id,
             initial_evidence_ids=tuple(item.evidence_id for item in context.evidence),
@@ -738,7 +773,7 @@ class RetrievalReplyContext:
         return revision
 
     def _select_references(self, command: GenerateReply, scope: ContactScope) -> tuple[StyleReference, ...]:
-        if self._style_references is None or not allows_history(command):
+        if self._style_references is None or not allows_history(command) or workspace_recent_only(command):
             return ()
         references = self._style_references.select_references(scope)
         require_reference_contract(scope, references)

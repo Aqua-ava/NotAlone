@@ -92,11 +92,16 @@ function options(args: unknown[]): RewriteOptionsUpdate {
   const value = fields(args, ['contactId', 'scopeRevision', 'options']);
   const settings = value.options as Record<string, unknown> | undefined;
   if (!settings || typeof settings !== 'object' || Array.isArray(settings) || Object.keys(settings).length < 3
-    || !Object.keys(settings).every((key) => ['tone', 'instruction', 'includeRelationshipContext', 'inputKind', 'pastedDirection'].includes(key))
+    || !Object.keys(settings).every((key) => ['tone', 'instruction', 'includeRelationshipContext', 'inputKind', 'pastedDirection', 'workspaceAction', 'contextText', 'excludedMessageIds'].includes(key))
     || !['original', 'warm', 'concise', 'polite'].includes(settings.tone as string)
     || typeof settings.instruction !== 'string' || settings.instruction.length > 4096
     || typeof settings.includeRelationshipContext !== 'boolean'
-    || settings.inputKind !== undefined && !['draft', 'current_chat'].includes(settings.inputKind as string)
+    || settings.inputKind !== undefined && !['draft', 'current_chat', 'workspace'].includes(settings.inputKind as string)
+    || settings.workspaceAction !== undefined && !['express', 'suggest'].includes(settings.workspaceAction as string)
+    || settings.contextText !== undefined && (typeof settings.contextText !== 'string' || settings.contextText.length > 65_536)
+    || settings.excludedMessageIds !== undefined && (!Array.isArray(settings.excludedMessageIds)
+      || settings.excludedMessageIds.length > 500 || !settings.excludedMessageIds.every(isUuid)
+      || new Set(settings.excludedMessageIds.map((id: string) => id.toLowerCase())).size !== settings.excludedMessageIds.length)
     || settings.pastedDirection !== undefined && (typeof settings.pastedDirection !== 'string' || settings.pastedDirection.length > 4096)) throw new Error('本次改写要求不可用。');
   return { contactId: value.contactId as string, scopeRevision: value.scopeRevision as number, options: { ...settings } as unknown as RewriteOptions };
 }
@@ -111,6 +116,8 @@ export function installReplyBridge(commands: PageCommands, backend: BackendHost,
   commands.handle('reply:close-evidence', (...args: unknown[]) => evidence.close(candidate(args)), 'helper');
   replies.onStateChanged((state) => commands.publish('reply:state-changed', state));
   commands.handle('reply:get-state', (...args: unknown[]) => { noArguments(args); return replies.getState(); });
+  commands.handle('reply:enter-workspace', (...args: unknown[]) =>
+    replies.enterWorkspace(fields(args, ['contactId', 'scopeRevision']) as unknown as ContactSelection), 'helper');
   commands.handle('reply:update-options', (...args: unknown[]) => { return replies.updateOptions(options(args)); }, 'helper');
   commands.handle('reply:set-mode', (...args: unknown[]) => {
     const value = fields(args, ['contactId', 'scopeRevision', 'mode']);
@@ -168,8 +175,9 @@ export function installReplyBridge(commands: PageCommands, backend: BackendHost,
     return replies.updatePurpose(value as unknown as import('../../shared/reply-bridge').ReplyPurposeUpdate);
   }, 'helper');
   commands.handle('reply:generate', (...args: unknown[]) => {
-    const value = fields(args, ['contactId', 'scopeRevision', 'newRequest']);
-    if (typeof value.newRequest !== 'boolean') throw new Error('本次生成操作不可用。');
+    const optional = args[0] && typeof args[0] === 'object' && Object.hasOwn(args[0], 'workspaceAction') ? ['workspaceAction'] : [];
+    const value = fields(args, ['contactId', 'scopeRevision', 'newRequest', ...optional]);
+    if (typeof value.newRequest !== 'boolean' || optional.length && !['express', 'suggest'].includes(value.workspaceAction as string)) throw new Error('本次生成操作不可用。');
     return replies.generate(value as unknown as GenerateReply);
   }, 'helper');
   commands.handle('reply:continue-session', (...args: unknown[]) => replies.continueSession(continuation(args)), 'helper');

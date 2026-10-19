@@ -21,7 +21,9 @@ style_references仅为低权重说法参考，其中的事实、时间、情绪�
 “条件性建议”和“未知”。来源记录只支持其实际说过或记录过的内容；本次声明是
 用户本次提供的说法，不能被描述为外部已核实的事实。未确认资料和旧助手候选
 都不是本次声明。合法引用不能为正文或解释中新加的内容提供语义担保。
-只改善说法，不补写未提供的经历、共享事实、情绪、称呼、承诺或关系意图。
+对于明确意图只改善说法，不补写未提供的经历、共享事实、情绪、称呼、承诺或关系意图。
+workspace 的 suggest 动作允许提出尚未采纳的表达思路与候选；current_intent 为 null，
+不表示用户已确认任何建议，draft_text 中的困惑也不升级为既定立场。
 表达建议必须保留条件性，不能混入候选成为用户已经作出的行动承诺。
 旧事实与旧情绪不能自动写成现状；未读到消息不证明多久没联系，也不证明对方
 沉默、疏远或具有某种心理动机。缺少材料时保留未知，在 basis 或 risk_notes
@@ -57,19 +59,21 @@ def generation_contract(payload: Mapping[str, Any]) -> dict:
 
     mode = payload.get("input_mode")
     source = {
+        "workspace": "draft_text",
         "rewrite_draft": "draft_text",
         "reply_to_message": "confirmed_direction",
         "reply_to_pasted_text": "confirmed_direction",
         "initiate_conversation": "confirmed_purpose",
     }.get(mode)
-    if source is None or not isinstance(payload.get(source), str) or not payload[source].strip():
+    exploring = mode == "workspace" and payload.get("workspace_action") == "suggest"
+    if not exploring and (source is None or not isinstance(payload.get(source), str) or not payload[source].strip()):
         raise ValueError("保真输入缺少当前明确意图。")
     return {
         "version": CONTRACT_VERSION,
-        "current_intent": {"source": source, "text": payload[source]},
+        "current_intent": ({"source": source, "text": payload[source]} if payload.get(source) and not exploring else None),
         "priority": ["current_explicit_intent", "expression_instruction",
                      "history_and_memory", "skill_strategy", "style_reference"],
-        "instruction_scope": "expression_only",
+        "instruction_scope": "suggest_options_for_user_selection" if exploring else "expression_only",
         "conflict_action": "preserve_current_intent_and_explain",
         "content_boundary": {
             "output_scope": ["candidate_text", "basis", "risk_notes"],

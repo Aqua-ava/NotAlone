@@ -14,6 +14,7 @@ export function createReplyBridge(ipcRenderer: PageTransport): ReplyBridge {
       return () => ipcRenderer.removeListener('reply:evidence-changed', receive);
     },
     getState: (...args: unknown[]) => args.length === 0 ? ipcRenderer.invoke('reply:get-state') : Promise.reject(new Error('本次表达操作不可用。')),
+    enterWorkspace: (...args: unknown[]) => ipcRenderer.invoke('reply:enter-workspace', ...args),
     updateOptions: (update: RewriteOptionsUpdate) => ipcRenderer.invoke('reply:update-options', update),
     setMode: (...args: unknown[]) => ipcRenderer.invoke('reply:set-mode', ...args),
     loadMessages: (...args: unknown[]) => ipcRenderer.invoke('reply:load-messages', ...args),

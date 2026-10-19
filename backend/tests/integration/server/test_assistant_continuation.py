@@ -93,7 +93,7 @@ class AssistantContinuationHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
                     "VALUES (%s,%s,%s,'source_document',%s,'synthetic:continuation','{}'::jsonb)",
                     (message_id, self.owner_id, contact_id, self.source_id),
                 )
-                content = {"type": "reply_to_message", "target_message_id": str(message_id),
+                content = content or {"type": "reply_to_message", "target_message_id": str(message_id),
                            "direction": "拒绝邀约", "user_instruction": "自然一点"}
         self.bindings.create_binding(
             owner_id=self.owner_id, contact_id=contact_id, channel="wechat",
@@ -125,6 +125,110 @@ class AssistantContinuationHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
                                  "version_id": history["default_display_version_id"]}
                                 for history in histories]}
         return path, generated, frame
+
+    def test_workspace_empty_idea_generates_and_continues_with_context(self):
+        content = {"type": "rewrite_draft", "input_kind": "workspace", "workspace_action": "suggest",
+                   "draft_text": "", "context_text": "对方：最近工作很累。",
+                   "excluded_message_ids": [str(uuid4())], "include_relationship_context": True}
+        path, generated, frame = self._generated(content=content, with_source=True, with_sample=True)
+        self.assertTrue(generated["candidates"][0]["basis"])
+        status, continued = self.backend.request(path + "/continue", self._command(
+            generated, frame, instruction="第一条简短一点"))
+        self.assertEqual(status, 200, continued)
+        payload = next(json.loads(message.content) for message in self.reply_model.seen_calls[-1]
+                       if isinstance(message, HumanMessage))
+        self.assertEqual(payload["input_mode"], "workspace")
+        self.assertEqual(payload["workspace_action"], "suggest")
+        self.assertEqual(payload["context_text"], content["context_text"])
+        self.assertIsNone(payload["fidelity_contract"]["current_intent"])
+        self.assertNotIn("assistant_discussion", payload)
+        self.assertNotIn("expression_preferences", payload)
+        self.assertEqual(payload["style_references"], [])
+        self.assertNotIn("conversation_search", self.reply_model.bound_tool_names)
+        self.assertNotIn("read_scenario", self.reply_model.bound_tool_names)
+        self.assertTrue(any(item["kind"] == "message" for item in payload["evidence"]))
+        self.assertTrue(all(item["kind"] in {"user_draft", "user_current_chat", "user_purpose",
+                           "message", "continued_candidate"} for item in payload["evidence"]))
+
+    def test_workspace_preparation_interrupt_and_retry_preserve_empty_idea(self):
+        path, generated, frame = self._generated(content={
+            "type": "rewrite_draft", "input_kind": "workspace", "workspace_action": "suggest",
+            "draft_text": "", "include_relationship_context": True,
+            "context_text": "对方：今天终于休息了。", "excluded_message_ids": [str(uuid4())]})
+        command = self._command(generated, frame, instruction="第一条简短一点")
+        status, prepared = self.backend.request(path + "/continue/prepare", command)
+        self.assertEqual(status, 200, prepared)
+        status, stopped = self.backend.request(path + "/interrupt", {
+            "request_key": prepared["request_key"], "input_version_id": prepared["input_version_id"]})
+        self.assertEqual(status, 200, stopped)
+        retry = {"original_turn_id": prepared["turn_id"],
+                 "original_input_version_id": prepared["input_version_id"], "request_key": str(uuid4())}
+        status, recovered = self.backend.request(path + "/retry-interrupted", retry)
+        self.assertEqual(status, 200, recovered)
+        content = recovered["restored_input"]["content"]
+        self.assertEqual(content["workspace_action"], "suggest")
+        self.assertEqual(content["draft_text"], "")
+        self.assertEqual(content["context_text"], "对方：今天终于休息了。")
+        self.assertEqual(len(content["excluded_message_ids"]), 1)
+        self.assertEqual(self.backend.request(path + "/retry-interrupted", retry), (200, recovered))
+
+    def test_workspace_recent_source_delete_erases_saved_input_and_candidate(self):
+        path, generated, frame = self._generated(with_source=True, content={
+            "type": "rewrite_draft", "input_kind": "workspace", "workspace_action": "suggest",
+            "draft_text": "", "include_relationship_context": True})
+        contact_id = path.split("/")[3]
+        status, deletion = self.backend.request(
+            f"/api/contacts/{contact_id}/sources/{self.source_id}", method="DELETE")
+        self.assertEqual(status, 202, deletion)
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            source = self._get(self.backend, f"/api/contacts/{contact_id}/sources")["sources"][0]
+            if source["status"] == "deleted" and source["task_status"] == "succeeded":
+                break
+            self.assertNotEqual(source["task_status"], "failed", source)
+            time.sleep(0.02)
+        self.assertEqual(source["status"], "deleted", source)
+        reopened = self._get(self._backend(self.owner_id), path)
+        self.assertEqual(reopened["turns"][0]["state"], "redacted")
+        self.assertIsNone(reopened["turns"][0]["input"])
+        self.assertIsNone(reopened["turns"][0]["reply"])
+        before = len(self.reply_model.seen_calls)
+        self.assertEqual(self.backend.request(path + "/continue", self._command(generated, frame))[0], 409)
+        self.assertEqual(len(self.reply_model.seen_calls), before)
+
+    def test_workspace_excluded_recent_message_cannot_return_from_saved_discussion(self):
+        path, _, _ = self._generated(with_source=True, with_sample=True)
+        saved = self._get(self.backend, path)
+        target = saved["turns"][0]["input"]["content"]["target_message_id"]
+        status, generated = self.backend.request(path + "/replies", {
+            "contact_id": path.split("/")[3], "idempotency_key": str(uuid4()),
+            "content": {"type": "rewrite_draft", "input_kind": "workspace", "workspace_action": "suggest",
+                        "draft_text": "", "include_relationship_context": True,
+                        "excluded_message_ids": [target]}})
+        self.assertEqual(status, 200, generated)
+        payload = next(json.loads(message.content) for message in self.reply_model.seen_calls[-1]
+                       if isinstance(message, HumanMessage))
+        self.assertEqual([item["kind"] for item in payload["evidence"]], ["user_purpose"])
+        self.assertNotIn("合成邀约", json.dumps(payload, ensure_ascii=False))
+        self.assertNotIn("assistant_discussion", payload)
+        self.assertEqual(payload["style_references"], [])
+        self.assertNotIn("conversation_search", self.reply_model.bound_tool_names)
+
+    def test_workspace_user_intention_update_switches_to_expression_without_losing_context(self):
+        path, generated, frame = self._generated(content={
+            "type": "rewrite_draft", "input_kind": "workspace", "workspace_action": "suggest",
+            "draft_text": "", "include_relationship_context": True,
+            "context_text": "对方：周末要不要一起出门？"})
+        status, continued = self.backend.request(path + "/continue", self._command(
+            generated, frame, instruction="第一条简短一点", intention_update="婉拒，不作承诺"))
+        self.assertEqual(status, 200, continued)
+        payload = next(json.loads(message.content) for message in self.reply_model.seen_calls[-1]
+                       if isinstance(message, HumanMessage))
+        self.assertEqual(payload["input_mode"], "workspace")
+        self.assertEqual(payload["workspace_action"], "express")
+        self.assertEqual(payload["draft_text"], "婉拒，不作承诺")
+        self.assertEqual(payload["context_text"], "对方：周末要不要一起出门？")
+        self.assertEqual(payload["fidelity_contract"]["current_intent"]["text"], "婉拒，不作承诺")
 
     def _command(self, generated, frame, *, instruction="第二条自然一点", **changes):
         return {"idempotency_key": str(uuid4()),

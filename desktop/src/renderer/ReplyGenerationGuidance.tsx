@@ -23,7 +23,13 @@ export function hasChangedReplyInput(state: ReplySessionState): boolean {
   const input = state.result?.input;
   if (!input) return false;
   if (input.mode !== state.mode) return true;
-  if (input.mode === 'rewrite_draft') return false;
+  if (input.mode === 'rewrite_draft') {
+    if (input.inputKind !== 'workspace') return false;
+    return input.workspaceAction !== state.options.workspaceAction
+      || (input.contextText ?? '').trim() !== (state.options.contextText ?? '').trim()
+      || input.includeRelationshipContext !== state.options.includeRelationshipContext
+      || JSON.stringify([...(input.excludedMessageIds ?? [])].sort()) !== JSON.stringify([...(state.options.excludedMessageIds ?? [])].sort());
+  }
   return (input.mode === 'reply_to_message'
     ? input.target.messageId !== state.targetMessageId || input.direction.trim() !== state.direction.trim()
     : input.purpose.trim() !== state.purpose.trim())

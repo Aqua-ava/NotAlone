@@ -245,6 +245,8 @@ def reserve_continuation_in_transaction(
                               user_instruction=user_instruction, clarification_answer=None)
         else:
             content = (replace(old_content, pasted_direction=intention, user_instruction=user_instruction) if pasted else
+                       replace(old_content, draft_text=intention, user_instruction=user_instruction,
+                               workspace_action="express") if old_content.input_kind == "workspace" else
                        RewriteDraft(intention, user_instruction, old_content.include_relationship_context))
     else:
         # 编号只选择说法参考；旧候选不能替换本次明确意愿或用户原句。

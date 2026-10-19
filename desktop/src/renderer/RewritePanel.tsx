@@ -64,6 +64,7 @@ export function useReplySession() {
     });
   }
   return { state, error,
+    enterWorkspace: () => operate(() => window.notalone.replies.enterWorkspace(selection())),
     updateCandidateVersionDraft: (request: ReplyCandidateDraftUpdate) => versionOperation(() => window.notalone.replies.updateCandidateVersionDraft(request)),
     readCandidateVersions: (request: ReplyCandidateVersionRead) => versionOperation(() => window.notalone.replies.readCandidateVersions(request)),
     saveCandidateVersion: (request: ReplyCandidateVersionEdit) => versionOperation(() => window.notalone.replies.saveCandidateVersion(request)),
@@ -107,6 +108,11 @@ export function useReplySession() {
     updatePurpose: (purpose: string) => operate(() => window.notalone.replies.updatePurpose({ ...selection(), purpose })),
     retryInterruptedGeneration: (sessionId: string, turnId: string, inputVersionId: string) =>
       operate(() => window.notalone.replies.retryInterruptedGeneration({ ...selection(), sessionId, turnId, inputVersionId })),
+    generateWorkspace: (workspaceAction: 'express' | 'suggest', options: RewriteOptions) => operate(async () => {
+      const scope = selection();
+      await window.notalone.replies.updateOptions({ ...scope, options });
+      await window.notalone.replies.generate({ ...scope, newRequest: true, workspaceAction });
+    }),
     generate: (newRequest = false) => operate(() => window.notalone.replies.generate({ ...selection(), newRequest })),
     continueSession: (instruction: string, intentionUpdate?: string) => operate(() => window.notalone.replies.continueSession({
       ...selection(), sessionId: latest.current.savedSession!.sessionId!, instruction,
@@ -270,7 +276,7 @@ export function ReplyCandidates({ replies }: { replies: ReplySessionView }) {
     const result = state.result;
     // 删除复核暂时清空结果，返回后须重读同一会话的可信完成记录。
     if (!result) { completedRead.current = ''; return; }
-    if (result.input.mode === 'rewrite_draft' && !result.continuation || state.phase !== 'ready'
+    if (result.input.mode === 'rewrite_draft' && result.input.inputKind !== 'workspace' && !result.continuation || state.phase !== 'ready'
       || state.savedSession?.sessionId !== result.assistantSessionId || state.savedSession?.phase !== 'idle') return;
     const identity = `${state.contactId}:${state.scopeRevision}:${result.assistantSessionId}:${result.replyRequestId}`;
     if (completedRead.current === identity) return;
@@ -325,12 +331,14 @@ export function ReplyCandidates({ replies }: { replies: ReplySessionView }) {
       <details className="reply-input-snapshot"><summary>这组候选的生成输入 · {state.result.input.contactDisplayName}</summary>
         <p>精确场景：{state.result.input.scene ?? '未声明'}</p>
         {state.result.input.mode === 'rewrite_draft' ? <><p>{state.result.input.inputKind === 'current_chat' ? '本次粘贴的对方文字：' : '本人草稿：'}{state.result.input.draftText}</p>
+          {state.result.input.inputKind === 'workspace' && <><p>本次动作：{state.result.input.workspaceAction === 'suggest' ? '帮我想想（建议尚未代表你的立场）' : '帮我表达'}</p>
+            {state.result.input.contextText && <p>补充聊天：{state.result.input.contextText}</p>}</>}
           {state.result.input.inputKind === 'current_chat' && <p>表达方向：{state.result.input.pastedDirection}</p>}<p>{state.result.input.userInstruction ?? '没有额外要求'}</p>
           <p>关系语境：{state.result.input.includeRelationshipContext ? '已开启' : '关闭'}</p></>
           : state.result.input.mode === 'initiate_conversation' ? <p>主动目的：{state.result.input.purpose}</p>
           : <><p>待回复消息：{state.result.input.target.text ?? state.result.input.target.mediaPlaceholder}</p>
             <p>表达方向：{state.result.input.direction}</p></>}</details>
-      {state.result.input.mode === 'rewrite_draft' && !state.result.continuation && <div className="reply-candidate-grid">
+      {state.result.input.mode === 'rewrite_draft' && state.result.input.inputKind !== 'workspace' && !state.result.continuation && <div className="reply-candidate-grid">
         {state.result.candidates.map(({ original, editedText }, index) => <article className="reply-candidate" key={original.candidateId}>
           <h3>说法 {index + 1}</h3>
           <CandidateEditor text={editedText} candidateId={original.candidateId} number={index + 1} edit={replies.editCandidate}
@@ -339,7 +347,7 @@ export function ReplyCandidates({ replies }: { replies: ReplySessionView }) {
               scopeRevision: state.scopeRevision, replyRequestId: state.result!.replyRequestId, candidateId: original.candidateId, text })}
             copy={(text) => noteCopy(original.candidateId, text)} />
           <CandidateCopyControls state={state} candidateId={original.candidateId} />
-          <details className="candidate-reason"><summary>为什么这样写</summary><p className="reply-basis">{original.basis}</p></details>
+          <div className="candidate-reason"><small>为什么这样建议</small><p className="reply-basis">{original.basis}</p></div>
           {original.riskNotes.map((note, number) => <p className="reply-risk" key={number}>{note}</p>)}
           <details><summary>查看原候选</summary><p className="reply-original"
             onCopy={() => noteCopy(original.candidateId, window.getSelection()?.toString() ?? '')}>{original.text}</p></details>
@@ -347,8 +355,8 @@ export function ReplyCandidates({ replies }: { replies: ReplySessionView }) {
             selection={{ contactId: state.contactId!, scopeRevision: state.scopeRevision, replyRequestId: state.result!.replyRequestId, candidateId: original.candidateId }} />
         </article>)}
       </div>}
-    </> : state.phase !== 'waiting' && candidates.length === 0 && <div className="reply-empty"><p>暂无候选</p><small>准备好你的意思，再选择合适的表达。</small></div>}
-    {(state.result?.input.mode !== 'rewrite_draft' || state.result.continuation || !state.result) && candidates.length > 0 && <div className="reply-candidate-grid">
+    </> : state.phase !== 'waiting' && candidates.length === 0 && <div className="reply-empty"><p>暂无候选</p><small>写下想法让我帮你表达，或点击「帮我想想」获取建议。</small></div>}
+    {(state.result?.input.mode !== 'rewrite_draft' || state.result.input.inputKind === 'workspace' || state.result.continuation || !state.result) && candidates.length > 0 && <div className="reply-candidate-grid">
       {candidates.map((candidate, index) => {
         const view = state.candidateVersions?.items.find((item) => item.candidateId === candidate.candidateId);
         return <article className="reply-candidate" key={candidate.candidateId}>
@@ -358,7 +366,7 @@ export function ReplyCandidates({ replies }: { replies: ReplySessionView }) {
               number={index + 1} restored={!state.result} noteCopy={(text) => noteCopy(candidate.candidateId, text)}
               onDirtyChange={reportDirty} />
           }
-          <details className="candidate-reason"><summary>为什么这样写</summary><p className="reply-basis">{candidate.basis}</p></details>
+          <div className="candidate-reason"><small>为什么这样建议</small><p className="reply-basis">{candidate.basis}</p></div>
           {candidate.riskNotes.map((note, number) => <p className="reply-risk" key={number}>{note}</p>)}
           <ReplyEvidence evidence={evidence} candidate={candidate} number={index + 1} waiting={state.phase === 'waiting'}
             selection={{ contactId: state.contactId!, scopeRevision: state.scopeRevision, replyRequestId: replyRequestId!, candidateId: candidate.candidateId }} />

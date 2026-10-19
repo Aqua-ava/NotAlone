@@ -86,6 +86,7 @@ class HistoryToolAccess:
 
     __slots__ = (
         "_retrieval",
+        "_excluded_message_ids",
         "_scope",
         "_conversation_binding_id",
         "_known_message_ids",
@@ -108,6 +109,7 @@ class HistoryToolAccess:
         max_calls: int = MAX_HISTORY_TOOL_CALLS,
         prior_budget: SourceMessageBudget | None = None,
         navigation_message_ids: tuple[UUID, ...] = (),
+        excluded_message_ids: tuple[UUID, ...] = (),
     ) -> None:
         if retrieval is None:
             raise TypeError("历史 Tool 必须注入 RetrievalPort。")
@@ -121,6 +123,7 @@ class HistoryToolAccess:
             not isinstance(item, UUID) for item in initial_evidence_ids
         ):
             raise TypeError("历史 Tool 初始证据引用结构无效。")
+        self._excluded_message_ids = frozenset(excluded_message_ids)
         self._retrieval = retrieval
         self._scope = scope
         self._conversation_binding_id = conversation_binding_id
@@ -279,7 +282,8 @@ class HistoryToolAccess:
         if elapsed_ms > timeout_ms:
             self._finish_call(tool_name, "timeout", (), started)
             return self._status_result("timeout", "history_timeout")
-        validated = self._validate_messages(messages)
+        validated = tuple(item for item in self._validate_messages(messages)
+                          if item.message_id not in self._excluded_message_ids)
         if not validated:
             self._finish_call(tool_name, "empty", (), started)
             return self._status_result("empty", "no_matching_history")

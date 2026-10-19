@@ -9,16 +9,20 @@ import type { AssistantContinuationClarification, RequirementChange } from './as
 import type { ReplyBasisChange } from './reply-basis-change';
 import type { SkillPublicationScope } from './skill-learning-bridge';
 
+export type WorkspaceAction = 'express' | 'suggest';
 export type RewriteTone = 'original' | 'warm' | 'concise' | 'polite';
 export interface RewriteOptions {
   tone: RewriteTone;
   instruction: string;
   includeRelationshipContext: boolean;
-  inputKind?: 'draft' | 'current_chat';
+  inputKind?: 'draft' | 'current_chat' | 'workspace';
+  workspaceAction?: WorkspaceAction;
+  contextText?: string;
+  excludedMessageIds?: string[];
   pastedDirection?: string;
 }
 export interface RewriteOptionsUpdate extends ContactSelection { options: RewriteOptions; }
-export interface GenerateReply extends ContactSelection { newRequest: boolean; }
+export interface GenerateReply extends ContactSelection { newRequest: boolean; workspaceAction?: WorkspaceAction; }
 export interface AssistantInterruptedRetry extends ContactSelection { sessionId: string; turnId: string; inputVersionId: string; }
 export interface AssistantSessionDeletion extends ContactSelection { sessionId: string; confirmed: true; }
 export interface AssistantSessionSelection extends ContactSelection { sessionId: string; }
@@ -101,7 +105,10 @@ export interface RewriteSnapshot {
   userInstruction: string | null;
   includeRelationshipContext: boolean;
   scene?: string | null;
-  inputKind?: 'draft' | 'current_chat';
+  inputKind?: 'draft' | 'current_chat' | 'workspace';
+  workspaceAction?: WorkspaceAction;
+  contextText?: string;
+  excludedMessageIds?: string[];
   pastedDirection?: string;
 }
 export interface DirectedReplySnapshot {
@@ -152,6 +159,7 @@ export interface ReplyGenerationJobState {
   canRetry?: boolean;
 }
 export interface ReplySessionState {
+  workspaceMigrationNotice?: string;
   generationJobs?: ReplyGenerationJobState[];
   generationRecoveryPending?: number;
 
@@ -197,6 +205,7 @@ export interface ReplyCandidateSelection extends ContactSelection { replyRequest
 export interface ReplyCandidateEdit extends ReplyCandidateSelection { text: string; }
 export interface ReplyBridge extends ReplyEvidenceCommands {
   getState(): Promise<ReplySessionState>;
+  enterWorkspace(selection: ContactSelection): Promise<ReplySessionState>;
   updateOptions(update: RewriteOptionsUpdate): Promise<ReplySessionState>;
   setMode(update: ReplyModeUpdate): Promise<void>;
   loadMessages(request: ReplyMessagePageRequest): Promise<void>;

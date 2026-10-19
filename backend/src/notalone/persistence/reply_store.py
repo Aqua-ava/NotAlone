@@ -52,6 +52,7 @@ from notalone.reply.errors import (
 )
 from notalone.reply.exploration import ExplorationExpired
 from notalone.reply.interface import (
+    RewriteDraft,
     ContextReceipt,
     GenerateReply,
     CandidateMessage,
@@ -924,7 +925,10 @@ class PostgresReplyStore:
             == request.continued_from_candidate_id
             and _normalize_input(context.command) == request.normalized_input
             and isinstance(context.current_text, str)
-            and bool(context.current_text.strip())
+            and (bool(context.current_text.strip()) or (
+                isinstance(context.command.content, RewriteDraft)
+                and context.command.content.input_kind == "workspace"
+                and context.command.content.workspace_action == "suggest"))
             and isinstance(context.evidence, tuple)
             and context.evidence
             and isinstance(context.skill_library_revision, int)

@@ -113,6 +113,8 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 77. [ADR-077：完整名称命中优先于编辑近邻](adr/077-exact-session-name-before-edit-neighbors.md)
 78. [ADR-078：按请求复用原生前台观察进程](adr/078-request-driven-native-observation-worker.md)
 
+79. [ADR-079：统一表达工作区与直接建议候选](adr/079-unified-expression-workspace.md)
+
 ## 当前架构决策
 
 - 旧 Swift 主界面已按 ADR-039 退役；共享前端采用 TypeScript + React，由 ADR-040 的 Electron 双窗口宿主承载；已接通业务页面，完整原生验收仍未完成。Python 后台与 Mac 原生探针保留。

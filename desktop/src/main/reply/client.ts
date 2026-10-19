@@ -23,6 +23,9 @@ export function replyRequestBody(input: ReplyInputSnapshot, requestKey: string, 
   const content = input.mode === 'rewrite_draft' ? {
     type: 'rewrite_draft', draft_text: input.draftText, user_instruction: instruction,
     include_relationship_context: input.includeRelationshipContext,
+    ...(input.inputKind === 'workspace' ? { input_kind: 'workspace', workspace_action: input.workspaceAction,
+      ...(input.contextText ? { context_text: input.contextText } : {}),
+      ...(input.excludedMessageIds?.length ? { excluded_message_ids: [...input.excludedMessageIds] } : {}) } : {}),
     ...(input.inputKind === 'current_chat' ? { input_kind: 'current_chat', pasted_direction: input.pastedDirection } : {}),
   } : input.mode === 'initiate_conversation' ? {
     type: 'initiate_conversation', purpose: input.purpose, understanding_correction: input.correction || null,

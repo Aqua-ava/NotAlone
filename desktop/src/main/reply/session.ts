@@ -64,10 +64,11 @@ export class ReplySession {
   hasEdits(): boolean {
     return Boolean(this.state.result || this.heldResult || this.state.phase === 'waiting' || this.state.targetMessageId
       || this.state.direction || this.state.purpose || this.state.mode !== 'rewrite_draft' || this.state.options.instruction
-      || this.state.options.tone !== 'original' || this.state.options.includeRelationshipContext || this.state.scene);
+      || this.state.options.tone !== 'original' || this.state.options.includeRelationshipContext || this.state.scene
+      || this.state.options.contextText || this.state.options.excludedMessageIds?.length);
   }
   private state: ReplySessionState = { revision: 0, scopeRevision: 0, contactId: null, generationBlock: null,
-    options: defaults(), mode: 'rewrite_draft', scene: '', messages: { phase: 'idle', items: [], nextCursor: null },
+    options: defaults(), workspaceMigrationNotice: undefined, mode: 'rewrite_draft', scene: '', messages: { phase: 'idle', items: [], nextCursor: null },
     messageNotice: { phase: 'idle', changed: false, needsRefresh: false },
     targetMessageId: null, direction: '', purpose: '', correction: '', requirements: '', clarificationAnswer: '', skillChoice: { mode: 'auto', versionId: null }, skillChoices: [], exploration: { phase: 'idle', result: null },
     phase: 'idle', result: null, selectedCandidateId: null, canRetry: false };
@@ -683,7 +684,7 @@ export class ReplySession {
         inputs: saved.inputs, currentInputVersionId: saved.currentInputVersionId },
         sessionCatalog: { phase: 'ready', items, currentSessionId: saved.sessionId, selectionPending: false },
         sessionDeletion: undefined, confirmedSessionDeletion: undefined,
-        options: defaults(), inputClearRevision: (this.state.inputClearRevision ?? 0) + 1,
+        options: defaults(), workspaceMigrationNotice: undefined, inputClearRevision: (this.state.inputClearRevision ?? 0) + 1,
         mode: 'rewrite_draft', scene: '', targetMessageId: null, direction: '', purpose: '', correction: '', requirements: '', clarificationAnswer: '',
         skillChoice: { mode: 'auto', versionId: null }, skillChoices: [], contentRestoreNotice: undefined, candidateDrafts: [],
         result: null, selectedCandidateId: null, canRetry: false, phase: 'idle', errorCode: undefined }, 'authoritative');
@@ -739,7 +740,7 @@ export class ReplySession {
       this.contacts.clearDraft(selection);
       this.publish({ sessionDeletion: result.phase, savedSession: { phase: 'idle', sessionId: null, turns: [], inputs: [], currentInputVersionId: null },
         sessionCatalog: undefined,
-        options: defaults(), inputClearRevision: (this.state.inputClearRevision ?? 0) + 1,
+        options: defaults(), workspaceMigrationNotice: undefined, inputClearRevision: (this.state.inputClearRevision ?? 0) + 1,
         confirmedSessionDeletion: { sessionId: selection.sessionId, contactId: selection.contactId,
           scopeRevision: selection.scopeRevision, connectionGeneration: result.generation,
           revision: this.state.revision + 1 },
@@ -951,6 +952,35 @@ export class ReplySession {
     this.assertScope(selection);
     if (this.state.sourceAvailability === 'failed') await this.revalidateDeletedSource(selection.contactId,
       this.heldResult?.preserveInput ? { preserveInput: true } : {});
+  }
+
+  // 只迁移当前编辑输入；历史轮次与原候选继续保持原输入来历。
+  enterWorkspace(selection: ContactSelection): ReplySessionState {
+    const contact = this.assertScope(selection); this.assertSessionSelection();
+    if (this.state.mode === 'rewrite_draft' && this.state.options.inputKind === 'workspace') return this.getState();
+    if (this.state.savedSession?.phase !== 'ready') throw new Error('请等待联系人内容恢复完成。');
+    const previous = this.state.options, mode = this.state.mode;
+    const pasted = mode === 'rewrite_draft' && previous.inputKind === 'current_chat';
+    const scenario = mode !== 'rewrite_draft';
+    const derived = mode === 'reply_to_message' ? this.derivedIntent.direction
+      : mode === 'initiate_conversation' && this.derivedIntent.purpose;
+    const mixedSupplement = scenario && Boolean(this.state.correction
+      || this.state.requirements && this.state.supplementInput !== false);
+    const draft = pasted ? previous.pastedDirection ?? '' : mode === 'reply_to_message'
+      ? derived ? '' : this.state.direction : mode === 'initiate_conversation' ? derived ? '' : this.state.purpose : contact.draft;
+    const { pastedDirection: _legacyDirection, workspaceAction: _legacyAction, ...options } = previous;
+    this.invalidateInput();
+    // 同一同步命令先更新内部草稿，避免联系人通知把这次迁移当成独立编辑。
+    this.draft = draft;
+    this.contacts.setDraft({ ...selection, text: draft });
+    this.publish({ mode: 'rewrite_draft', targetMessageId: null,
+      options: { ...options, inputKind: 'workspace', includeRelationshipContext: true,
+        instruction: scenario ? this.state.supplementInput === false ? this.state.requirements : '' : previous.instruction,
+        ...(pasted ? { contextText: contact.draft } : {}) },
+      inputClearRevision: (this.state.inputClearRevision ?? 0) + 1,
+      workspaceMigrationNotice: derived || mixedSupplement
+        ? '旧模式的方向建议和依赖原讨论的补充已保留在历史中，查看后可明确采用。' : undefined });
+    return this.getState();
   }
 
   updateOptions(update: RewriteOptionsUpdate): ReplySessionState {
@@ -1385,11 +1415,26 @@ export class ReplySession {
   }
 
   async generate(selection: GenerateReply): Promise<void> {
-    const contactState = this.assertScope(selection);
-    if (this.state.mode !== 'rewrite_draft' && [this.state.correction, this.state.requirements].filter(Boolean).join('\n').length > 4096) throw new Error('请将补充内容缩短至4096个字符以内再生成。');
+    let contactState = this.assertScope(selection);
+    if (selection.workspaceAction === undefined && this.state.mode !== 'rewrite_draft' && [this.state.correction, this.state.requirements].filter(Boolean).join('\n').length > 4096) throw new Error('请将补充内容缩短至4096个字符以内再生成。');
     this.assertSessionSelection();
     this.refreshGenerationEligibility();
     if (this.state.generationBlock) throw new Error('请先确认本次联系人。');
+    // 点击动作与本次输入一起冻结，恢复旧场景也不再走选消息或确认方向的门禁。
+    if (selection.workspaceAction !== undefined) {
+      this.enterWorkspace(selection);
+      contactState = this.assertScope(selection);
+      if (selection.workspaceAction === 'express' && !contactState.draft.trim()) return;
+      const previous = this.state.options;
+      if (this.state.mode !== 'rewrite_draft' || this.state.targetMessageId !== null || previous.inputKind !== 'workspace'
+        || previous.workspaceAction !== selection.workspaceAction) {
+        this.invalidateInput();
+        const { pastedDirection: _legacyDirection, ...options } = previous;
+        this.publish({ mode: 'rewrite_draft', targetMessageId: null, options: { ...options,
+          inputKind: 'workspace', workspaceAction: selection.workspaceAction,
+          includeRelationshipContext: previous.inputKind === 'workspace' ? previous.includeRelationshipContext : true } });
+      }
+    }
     if (this.state.errorCode?.startsWith('prepared_context_') && !selection.newRequest) return;
     if (this.state.errorCode?.startsWith('prepared_context_')
       && !this.state.savedSession?.turns.some((turn) => turn.requiresReprepare
@@ -1460,7 +1505,7 @@ export class ReplySession {
     const contact = contactState.contacts.find((item) => item.contactId === selection.contactId)!;
     const options = this.state.options;
     const target = this.state.messages.items.find((item) => item.messageId === this.state.targetMessageId);
-    if (this.state.mode === 'rewrite_draft' ? !contactState.draft.trim()
+    if (this.state.mode === 'rewrite_draft' ? !contactState.draft.trim() && !(options.inputKind === 'workspace' && options.workspaceAction === 'suggest')
       : this.state.mode === 'initiate_conversation' ? !this.state.purpose.trim() : !target || !this.state.direction.trim()) return;
     if (this.state.mode === 'rewrite_draft' && options.inputKind === 'current_chat' && !options.pastedDirection?.trim()) return;
     this.notifyInputChanged();
@@ -1469,6 +1514,9 @@ export class ReplySession {
       ? { ...common, mode: 'rewrite_draft', draftText: contactState.draft.trim(),
         userInstruction: [tones[options.tone], options.instruction.trim()].filter(Boolean).join('\n') || null,
         includeRelationshipContext: options.includeRelationshipContext,
+        ...(options.inputKind === 'workspace' ? { inputKind: 'workspace', workspaceAction: options.workspaceAction,
+          ...(options.contextText?.trim() ? { contextText: options.contextText.trim() } : {}),
+          ...(options.excludedMessageIds?.length ? { excludedMessageIds: [...options.excludedMessageIds] } : {}) } : {}),
         ...(options.inputKind === 'current_chat' ? { inputKind: 'current_chat', pastedDirection: options.pastedDirection!.trim() } : {}) }
       : this.state.mode === 'initiate_conversation'
         ? { ...common, mode: 'initiate_conversation', purpose: this.state.purpose.trim(), correction: this.state.correction.trim(), userInstruction: this.state.requirements.trim(), clarificationAnswer: this.state.clarificationAnswer.trim(), skillChoice: { ...(this.generationSkillChoice ?? this.state.skillChoice) } }
@@ -2106,7 +2154,7 @@ export class ReplySession {
       this.lastAttempt = undefined;
       this.draft = state.draft;
       this.publish({ scopeRevision: state.scopeRevision, contactId: state.selectedContactId, candidateDrafts: [], contentRestoreNotice: undefined,
-        options: defaults(), mode: 'rewrite_draft', scene: '', messages: { phase: 'idle', items: [], nextCursor: null },
+        options: defaults(), workspaceMigrationNotice: undefined, mode: 'rewrite_draft', scene: '', messages: { phase: 'idle', items: [], nextCursor: null },
         targetMessageId: null, direction: '', purpose: '', correction: '', requirements: '', clarificationAnswer: '', skillChoice: { mode: 'auto', versionId: null }, skillChoices: [], exploration: { phase: 'idle', result: null },
         phase: 'idle', errorCode: undefined, result: null, selectedCandidateId: null, canRetry: false,
         savedSession: { phase: 'idle', sessionId: null, turns: [], inputs: [], currentInputVersionId: null }, sessionDeletion: undefined,

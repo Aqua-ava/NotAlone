@@ -15,7 +15,8 @@ export async function interruptedReplyInput(backend: BackendHost, turn: SavedAss
   const content = turn.input?.content;
   const common = { contactId: contact.contactId, contactDisplayName: contact.displayName, ...sceneSnapshot(turn.input?.scene) };
   if (!content) throw new Error('中断生成输入暂不可重试。');
-  if (content.type === 'rewrite_draft' && text(content.draft_text, Infinity)
+  if (content.type === 'rewrite_draft' && (text(content.draft_text, Infinity)
+      || content.draft_text === '' && content.input_kind === 'workspace' && content.workspace_action === 'suggest')
     && (content.user_instruction == null || typeof content.user_instruction === 'string')
     && typeof content.include_relationship_context === 'boolean') {
     return { ...common, mode: 'rewrite_draft', draftText: content.draft_text,

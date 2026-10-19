@@ -79,41 +79,37 @@ class RewriteDraft:
     draft_text: str
     user_instruction: str | None = None
     include_relationship_context: bool = False
-    input_kind: Literal["draft", "current_chat"] = "draft"
+    input_kind: Literal["draft", "current_chat", "workspace"] = "draft"
     pasted_direction: str | None = None
+    workspace_action: Literal["express", "suggest"] | None = None
+    context_text: str | None = None
+    excluded_message_ids: tuple[UUID, ...] = ()
 
     def __post_init__(self) -> None:
-        if not isinstance(self.draft_text, str) or not self.draft_text.strip():
-            raise ValueError("改写草稿不能为空。")
-        if self.user_instruction is not None and (
-            not isinstance(self.user_instruction, str)
-            or not self.user_instruction.strip()
-        ):
-            raise ValueError("一次性改写要求不能为空字符串。")
-        if not isinstance(self.include_relationship_context, bool):
-            raise TypeError("是否使用联系人背景必须是布尔值。")
-        if self.input_kind not in ("draft", "current_chat") or self.input_kind == "current_chat" and (
-            not isinstance(self.pasted_direction, str) or not self.pasted_direction.strip() or len(self.pasted_direction) > 4096
-        ) or self.input_kind == "draft" and self.pasted_direction is not None:
-            raise ValueError("粘贴当前聊天须明确本次表达方向。")
+        if not self.is_valid():
+            raise ValueError("表达输入无效；帮我表达需要想法或草稿。")
 
     def is_valid(self) -> bool:
-        """供应用边界重复校验不可信输入。"""
-
-        return (
-            isinstance(self.draft_text, str)
-            and bool(self.draft_text.strip())
-            and (
-                self.user_instruction is None
-                or (
-                    isinstance(self.user_instruction, str)
-                    and bool(self.user_instruction.strip())
-                )
-            )
-            and isinstance(self.include_relationship_context, bool)
-            and self.input_kind in ("draft", "current_chat")
-            and (self.input_kind != "current_chat" or isinstance(self.pasted_direction, str) and bool(self.pasted_direction.strip()))
-        )
+        """供应用边界重复校验，不把探索请求伪装成已确认意图。"""
+        if (not isinstance(self.draft_text, str)
+                or not isinstance(self.include_relationship_context, bool)
+                or self.input_kind not in ("draft", "current_chat", "workspace")
+                or self.user_instruction is not None and (
+                    not isinstance(self.user_instruction, str) or not self.user_instruction.strip())):
+            return False
+        if self.input_kind == "workspace":
+            return (self.workspace_action in ("express", "suggest")
+                    and (self.workspace_action == "suggest" or bool(self.draft_text.strip()))
+                    and self.pasted_direction is None
+                    and (self.context_text is None or isinstance(self.context_text, str) and len(self.context_text) <= 65536)
+                    and isinstance(self.excluded_message_ids, tuple)
+                    and len(self.excluded_message_ids) <= 500
+                    and all(isinstance(item, UUID) for item in self.excluded_message_ids))
+        return (bool(self.draft_text.strip()) and self.workspace_action is None
+                and self.context_text is None and not self.excluded_message_ids
+                and (self.pasted_direction is None if self.input_kind == "draft" else
+                     isinstance(self.pasted_direction, str) and bool(self.pasted_direction.strip())
+                     and len(self.pasted_direction) <= 4096))
 
 
 @dataclass(frozen=True, slots=True, repr=False)

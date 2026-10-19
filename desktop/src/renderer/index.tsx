@@ -14,9 +14,8 @@ import { StartupReadiness, StartupSettings, useStartupState } from './StartupSet
 import { CurrentContactLabel, HelperContactPicker, useContactSession } from './contact-session';
 import { ContactsPage } from './ContactsPage';
 import { ImportPage } from './ImportPage';
-import { ReplyCandidates, ReplyModePicker, ReplySourcePicker, RewriteInput, useReplySession } from './RewritePanel';
-import { DirectedReplyInput } from './DirectedReplyInput';
-import { ProactiveReplyInput } from './ProactiveReplyInput';
+import { ReplyCandidates, useReplySession } from './RewritePanel';
+import { UnifiedReplyWorkspace } from './UnifiedReplyWorkspace';
 import { MemoryPage } from './MemoryPage';
 import { BindingConsentPage } from './BindingConsentPage';
 import { SyncControlPanel } from './SyncControlPanel';
@@ -46,7 +45,6 @@ export function App() {
     <header className="ime-header">
       <img className="ime-logo" src={logo} alt="NotAlone" />
       <HelperContactPicker session={contactSession} foreground={foreground} />
-      <ReplyModePicker replies={replies} enabled={Boolean(contactSession.state.selectedContactId)} />
       <button className="icon-button" aria-label="打开管理后台" title="打开管理后台"
         onClick={() => void operate(window.notalone.openManager)}><Icon name="contacts" size={16} /></button>
       <button className="icon-button" aria-label="隐藏输入小窗" title="隐藏输入小窗"
@@ -58,9 +56,7 @@ export function App() {
       && replies.state.savedSession?.phase === 'loading' && <p role="status" className="rewrite-privacy">
         已切换联系人，正在恢复这位联系人的历史讨论与回复…
       </p>}
-    <ReplySourcePicker replies={replies} />
-    {replies.state.mode === 'rewrite_draft' ? <RewriteInput contacts={contactSession} replies={replies} />
-      : replies.state.mode === 'initiate_conversation' ? <ProactiveReplyInput replies={replies} /> : <DirectedReplyInput replies={replies} />}
+    <UnifiedReplyWorkspace contacts={contactSession} replies={replies} />
     <PrioritySyncStatus contactId={contactSession.state.selectedContactId} bridge={window.notalone.syncControl} />
     {replies.state.messageNotice.phase === 'connected' && <>
       {replies.state.messageNotice.needsRefresh && <p role="status">消息提醒有待核对，请主动刷新消息。生成依据仍是原快照。</p>}

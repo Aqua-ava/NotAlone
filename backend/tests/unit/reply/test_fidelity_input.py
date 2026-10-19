@@ -125,6 +125,36 @@ class FidelityInputTests(unittest.TestCase):
         self.assertIn("条件性建议", system)
         self.assertIn("未读到消息不证明多久没联系", system)
 
+    def test_workspace_suggestion_returns_sentences_and_reasons_without_confirmed_intent(self):
+        result, payload, system, _, _ = self.run_content(RewriteDraft(
+            draft_text='', input_kind='workspace', workspace_action='suggest',
+            context_text='对方：最近工作很累。', include_relationship_context=True))
+        self.assertEqual(payload['input_mode'], 'workspace')
+        self.assertEqual(payload['workspace_action'], 'suggest')
+        self.assertEqual(payload['draft_text'], '')
+        self.assertEqual(payload['fidelity_contract']['current_intent'], None)
+        self.assertEqual(payload['fidelity_contract']['instruction_scope'], 'suggest_options_for_user_selection')
+        self.assertNotIn('confirmed_direction', payload)
+        self.assertIn('尚未选择', system)
+        self.assertTrue(result.candidates[0].text)
+        self.assertTrue(result.candidates[0].basis)
+
+    def test_workspace_expression_preserves_user_idea_as_current_intent(self):
+        _, payload, _, _, _ = self.run_content(RewriteDraft(
+            draft_text='想婉拒，不作下次的承诺。', input_kind='workspace', workspace_action='express',
+            include_relationship_context=True))
+        self.assertEqual(payload['workspace_action'], 'express')
+        self.assertEqual(payload['fidelity_contract']['current_intent'], {
+            'source': 'draft_text', 'text': '想婉拒，不作下次的承诺。'})
+        self.assertEqual(payload['fidelity_contract']['instruction_scope'], 'expression_only')
+
+    def test_workspace_question_does_not_become_confirmed_stance(self):
+        _, payload, _, _, _ = self.run_content(RewriteDraft(
+            draft_text='不知道该不该问近况。', input_kind='workspace', workspace_action='suggest',
+            include_relationship_context=True))
+        self.assertEqual(payload['draft_text'], '不知道该不该问近况。')
+        self.assertIsNone(payload['fidelity_contract']['current_intent'])
+
 
 if __name__ == "__main__":
     unittest.main()

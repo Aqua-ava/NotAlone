@@ -22,17 +22,17 @@ export type RetainedContactContent = {
   inputVersionId: string | null;
   candidateDrafts: NonNullable<ReplySessionState['candidateDrafts']>;
   input: Pick<ReplySessionState, 'options' | 'mode' | 'targetMessageId' | 'direction' | 'purpose'
-    | 'correction' | 'requirements' | 'supplementInput' | 'clarificationAnswer' | 'skillChoice' | 'scene'>;
+    | 'correction' | 'requirements' | 'supplementInput' | 'clarificationAnswer' | 'skillChoice' | 'scene' | 'workspaceMigrationNotice'>;
 };
 
 export function retainContactContent(state: ReplySessionState, derivedIntent: DerivedIntent, draft: string): RetainedContactContent | undefined {
   if (state.sessionDeletion === 'deleting' || state.sessionDeletion === 'failed'
     || state.sessionCatalog?.selectionPending || state.sourceAvailability) return;
-  const { options, mode, targetMessageId, direction, purpose, correction, requirements, supplementInput, clarificationAnswer, skillChoice, scene } = state;
+  const { options, mode, targetMessageId, direction, purpose, correction, requirements, supplementInput, clarificationAnswer, skillChoice, scene, workspaceMigrationNotice } = state;
   return structuredClone({ sessionId: state.savedSession?.sessionId ?? null, draft, derivedIntent, inputVersionId: state.savedSession?.currentInputVersionId ?? state.result?.inputVersionId ?? null, candidateDrafts: state.candidateDrafts ?? [],
     result: state.result ? { continuation: state.result.continuation, replyRequestId: state.result.replyRequestId, selectedCandidateId: state.selectedCandidateId,
       edits: state.result.candidates.map((candidate) => ({ candidateId: candidate.original.candidateId, text: candidate.editedText })) } : undefined,
-    input: { options, mode, targetMessageId, direction, purpose, correction, requirements, supplementInput, clarificationAnswer, skillChoice, scene } });
+    input: { options, mode, targetMessageId, direction, purpose, correction, requirements, supplementInput, clarificationAnswer, skillChoice, scene, workspaceMigrationNotice } });
 }
 
 // 混合补充可能含来源派生理解；只有明确来自旧独立要求入口的内容可继续保留。
@@ -129,8 +129,8 @@ export async function revalidateRetainedContent(backend: BackendHost, contactId:
   if (!current() || saved.generation !== backend.getConnectionGeneration()) throw new Error('删除复验范围已变化。');
   const update = await validateContactInput(backend, contactId, content, '', { ...saved, phase: 'ready' }, signal, current);
   const valid = new Set(saved.turns.flatMap((turn) => turn.reply?.candidates.map((candidate) => candidate.candidateId) ?? []));
-  const { options, mode, targetMessageId, direction, purpose, correction, requirements, supplementInput, clarificationAnswer, skillChoice, scene } = { ...content.input, ...update };
+  const { options, mode, targetMessageId, direction, purpose, correction, requirements, supplementInput, clarificationAnswer, skillChoice, scene, workspaceMigrationNotice } = { ...content.input, ...update };
   return { ...content, notice: update.contentRestoreNotice, result: update.result ? content.result : undefined,
     candidateDrafts: content.candidateDrafts.filter((draft) => valid.has(draft.candidateId)),
-    input: { options, mode, targetMessageId, direction, purpose, correction, requirements, supplementInput, clarificationAnswer, skillChoice, scene } };
+    input: { options, mode, targetMessageId, direction, purpose, correction, requirements, supplementInput, clarificationAnswer, skillChoice, scene, workspaceMigrationNotice } };
 }
