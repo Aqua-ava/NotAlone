@@ -448,7 +448,7 @@ test('生成清空当前turn投影后完整来源复验仍清历史版本缓存�
 });
 
 test('版本来源复验不发布已删消息与派生目的，权威有效消息和独立手写目的保留', async () => {
-  for (const editedPurpose of [false, true]) {
+  for (const purposeOrigin of ['derived', 'edited-derived', 'independent']) {
     const f = await fixture(), deletedMessageId = randomUUID(), validMessageId = randomUUID();
     const deletedText = '本次删除的合成消息原文。', validText = '本次仍有效的独立合成消息。';
     const derivedPurpose = '本次来源派生的合成目的。', manualPurpose = '用户独立手写的合成目的。';
@@ -459,12 +459,15 @@ test('版本来源复验不发布已删消息与派生目的，权威有效消�
     await f.bridge.selectMessage({ ...f.scope, messageId: deletedMessageId });
     await f.bridge.setMode({ ...f.scope, mode: 'initiate_conversation' });
     await f.bridge.updatePurpose({ ...f.scope, purpose: '用户最初手写的合成目的。' });
-    f.records.explorationOutcome = { kind: 'generated', exploration_id: randomUUID(), confirmed_intent: derivedPurpose,
-      turn: { ...f.records.saved.turns[0].reply, session_id: f.sessionId,
-        input_version_id: f.records.saved.turns[0].input_version_id, state: 'completed' } };
-    await f.bridge.explore(f.scope);
-    assert.equal((await f.bridge.getState()).purpose, derivedPurpose);
-    if (editedPurpose) await f.bridge.updatePurpose({ ...f.scope, purpose: manualPurpose });
+    if (purposeOrigin !== 'independent') {
+      f.records.explorationOutcome = { kind: 'generated', exploration_id: randomUUID(), confirmed_intent: derivedPurpose,
+        turn: { ...f.records.saved.turns[0].reply, session_id: f.sessionId,
+          input_version_id: f.records.saved.turns[0].input_version_id, state: 'completed' } };
+      await f.bridge.explore(f.scope);
+      assert.equal((await f.bridge.getState()).purpose, derivedPurpose);
+    }
+    // 编辑模型建议仍有来源依赖；独立输入须从未采纳模型建议的路径进入。
+    if (purposeOrigin !== 'derived') await f.bridge.updatePurpose({ ...f.scope, purpose: manualPurpose });
     let confirmed = false;
     const published = [];
     const unsubscribe = f.bridge.onStateChanged((state) => { if (confirmed) published.push(state); });
@@ -482,8 +485,9 @@ test('版本来源复验不发布已删消息与派生目的，权威有效消�
     assert(published.every((event) => !JSON.stringify(event).includes(deletedText)));
     assert.equal(state.targetMessageId, null);
     assert.equal(state.messages.items.find((item) => item.messageId === validMessageId).text, validText);
-    assert.equal(state.purpose, editedPurpose ? manualPurpose : '');
-    assert(published.every((event) => editedPurpose || !JSON.stringify(event).includes(derivedPurpose)));
+    assert.equal(state.purpose, purposeOrigin === 'independent' ? manualPurpose : '');
+    assert(published.every((event) => !JSON.stringify(event).includes(derivedPurpose)));
+    if (purposeOrigin !== 'independent') assert(published.every((event) => !JSON.stringify(event).includes(manualPurpose)));
     assert.equal(state.result, null);
     assert.equal(state.savedSession.turns[0].state, 'unavailable');
   }
