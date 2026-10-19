@@ -6,12 +6,16 @@ import json
 import os
 import tempfile
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
+from threading import Event
+from unittest.mock import patch
 from uuid import UUID, uuid4
 
 import psycopg
 from psycopg import sql
+from psycopg.conninfo import make_conninfo
 
 from notalone.ingest.import_command import import_file
 from notalone.ingest.models import (
@@ -114,6 +118,378 @@ class SourceProcessingTraceTest(unittest.TestCase):
                 confirmation=self.confirmation,
                 repository=self.repository,
             )
+
+    def install_transaction_gate(self, table, event, condition, *, fail=False):
+        """仅在本用例 owner 的真实写入点阻塞，安排两个公开操作的交错。"""
+        name = "synthetic_processing_gate_" + uuid4().hex
+        key = uuid4().int % (2**63 - 1)
+        with psycopg.connect(DATABASE_URL) as connection:
+            connection.execute(sql.SQL(
+                "CREATE FUNCTION public.{name}() RETURNS trigger LANGUAGE plpgsql AS $body$ "
+                "BEGIN IF NEW.owner_id={owner}::uuid AND {condition} THEN "
+                "PERFORM pg_advisory_xact_lock({key}); {failure} END IF; RETURN NEW; END $body$"
+            ).format(name=sql.Identifier(name), owner=sql.Literal(str(self.scope.owner_id)),
+                     condition=sql.SQL(condition), key=sql.Literal(key),
+                     failure=sql.SQL("RAISE EXCEPTION '合成撤销回滚';" if fail else "")))
+            connection.execute(sql.SQL(
+                "CREATE TRIGGER {name} BEFORE {event} ON public.{table} "
+                "FOR EACH ROW EXECUTE FUNCTION public.{name}()"
+            ).format(name=sql.Identifier(name), event=sql.SQL(event), table=sql.Identifier(table)))
+
+        def cleanup_gate():
+            with psycopg.connect(DATABASE_URL) as connection:
+                connection.execute(sql.SQL("DROP TRIGGER IF EXISTS {name} ON public.{table}")
+                                   .format(name=sql.Identifier(name), table=sql.Identifier(table)))
+                connection.execute(sql.SQL("DROP FUNCTION public.{}()")
+                                   .format(sql.Identifier(name)))
+        self.addCleanup(cleanup_gate)
+        return key
+
+    def wait_for_operation(self, connection, application_name, future):
+        """一次有界就绪等待，只观察本用例连接的锁或终态。"""
+        pause = Event()
+        for _ in range(300):
+            if future.done():
+                return
+            waiting = connection.execute(
+                "SELECT 1 FROM pg_stat_activity WHERE datname=current_database() "
+                "AND application_name=%s AND wait_event_type='Lock'",
+                (application_name,),
+            ).fetchone()
+            if waiting is not None:
+                return
+            pause.wait(0.01)
+        self.fail("合成并发操作未在限时内进入锁等待或终态。")
+
+    def test_pending_processing_deletion_rejects_cached_import_replay(self):
+        from notalone.ingest.jsonl_reader import read_jsonl
+        from notalone.ingest.normalizer import normalize_document
+        from notalone.persistence.source_processing import SourceProcessingWriteError
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "synthetic.jsonl"
+            path.write_text("".join(json.dumps(record, ensure_ascii=False) + "\n"
+                                    for record in self.records()), encoding="utf-8")
+            document = normalize_document(read_jsonl(path))
+        arguments = dict(owner_id=self.scope.owner_id, document=document,
+                         confirmation=self.confirmation)
+        self.repository.import_document(**arguments)
+        batch_id = self.processing.list_batches(self.scope)[0]["batch_id"]
+        key = self.install_transaction_gate("source_processing_record", "UPDATE", "NEW.payload IS NULL")
+        delete_name, replay_name = "synthetic_delete_" + uuid4().hex, "synthetic_replay_" + uuid4().hex
+        deleting = PostgresSourceProcessingStore(make_conninfo(DATABASE_URL, application_name=delete_name))
+        replaying = PostgresIngestRepository(make_conninfo(DATABASE_URL, application_name=replay_name))
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            with psycopg.connect(DATABASE_URL, autocommit=True) as gate:
+                gate.execute("SELECT pg_advisory_lock(%s)", (key,))
+                deletion = executor.submit(deleting.delete_batch, self.scope, batch_id)
+                try:
+                    self.wait_for_operation(gate, delete_name, deletion)
+                    replay = executor.submit(replaying.import_document, **arguments)
+                    self.wait_for_operation(gate, replay_name, replay)
+                finally:
+                    gate.execute("SELECT pg_advisory_unlock(%s)", (key,))
+            deletion.result(timeout=10)
+            with self.assertRaises(SourceProcessingWriteError):
+                replay.result(timeout=10)
+        self.assertEqual(len(self.processing.list_batches(self.scope)), 1)
+        self.assertEqual(self.processing.get_batch(self.scope, batch_id)["status"], "deleted")
+
+    def test_pending_binding_revocation_rejects_late_observation_body(self):
+        from notalone.persistence.conversation_repository import PostgresConversationBindingRepository
+        from notalone.persistence.observation_store import (
+            ObservationMode, ObservationNotFoundError, PostgresObservationStore,
+        )
+        from notalone.wechat_cli import LocalWechatCli
+        from notalone.wechat_cli.normalizer import normalize_cli_events
+        from tests.integration.front_sync.cli_fakes import ScriptedCliRunner, tail_stdout
+
+        binding = PostgresConversationBindingRepository(DATABASE_URL).create_binding(
+            owner_id=self.scope.owner_id, contact_id=self.scope.contact_id,
+            channel="wechat", account_scope="synthetic",
+            conversation_locator=self.contact_external_id,
+        )
+        runner = ScriptedCliRunner()
+        runner.tail_queues[self.contact_external_id].append(
+            tail_stdout(self.contact_external_id, [(201, "合成撤销交错正文", False)]) + "\n"
+        )
+        messages = normalize_cli_events(LocalWechatCli(runner=runner).tail(self.contact_external_id).events)
+        key = self.install_transaction_gate("conversation_binding", "UPDATE", "NEW.status='revoked'")
+        revoke_name, write_name = "synthetic_revoke_" + uuid4().hex, "synthetic_write_" + uuid4().hex
+        revoking = PostgresConversationBindingRepository(make_conninfo(DATABASE_URL, application_name=revoke_name))
+        writing = PostgresObservationStore(make_conninfo(DATABASE_URL, application_name=write_name))
+        arguments = dict(owner_id=self.scope.owner_id, contact_id=self.scope.contact_id,
+                         binding_id=binding.binding_id, mode=ObservationMode.CLI_BACKGROUND,
+                         cli_version="synthetic-1", conversation_locator=self.contact_external_id,
+                         last_local_id=201, last_cursor="synthetic:201", record_count=1,
+                         messages=messages)
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            with psycopg.connect(DATABASE_URL, autocommit=True) as gate:
+                gate.execute("SELECT pg_advisory_lock(%s)", (key,))
+                revocation = executor.submit(revoking.revoke_binding, owner_id=self.scope.owner_id,
+                                             contact_id=self.scope.contact_id, binding_id=binding.binding_id)
+                try:
+                    self.wait_for_operation(gate, revoke_name, revocation)
+                    observation = executor.submit(writing.record_batch_with_messages, **arguments)
+                    self.wait_for_operation(gate, write_name, observation)
+                finally:
+                    gate.execute("SELECT pg_advisory_unlock(%s)", (key,))
+            revocation.result(timeout=10)
+            with self.assertRaises(ObservationNotFoundError):
+                observation.result(timeout=10)
+        self.assertEqual(self.processing.list_batches(self.scope), ())
+        self.assertIsNone(writing.read_cursor(owner_id=self.scope.owner_id, contact_id=self.scope.contact_id))
+
+    def batch_records(self, count):
+        templates = self.records()
+        for position in range(count):
+            occurred_at = datetime.fromtimestamp(1786500000 + position, timezone.utc)
+            yield {
+                **templates[position % 2],
+                "id": {"local_id": 101 + position, "server_id_str": f"synthetic-{101 + position}",
+                       "talker": self.contact_external_id},
+                "create_time": 1786500000 + position,
+                "time_iso": occurred_at.isoformat(),
+                "time": occurred_at.strftime("%Y-%m-%d %H:%M:%S"),
+                "text": f"合成批量正文{position:04d}",
+            }
+
+    def test_large_import_keeps_order_and_receipts_with_four_processing_statements(self):
+        statements = []
+
+        class CountingConnection(psycopg.Connection):
+            def execute(connection, query, params=None, **kwargs):
+                text = query.as_string(connection) if isinstance(query, sql.Composable) else query
+                if ("source_processing_capture_tombstone" in text
+                        or text.startswith("INSERT INTO public.source_processing_")):
+                    statements.append(text)
+                return super().execute(query, params, **kwargs)
+
+        with patch("psycopg.connect", CountingConnection.connect):
+            self.import_lines([json.dumps(record, ensure_ascii=False) + "\n"
+                               for record in self.batch_records(1000)])
+        batch = self.processing.get_batch(self.scope, self.processing.list_batches(self.scope)[0]["batch_id"])
+        self.assertEqual(len(batch["records"]), 1000)
+        self.assertEqual([row["position"] for row in batch["records"]], list(range(1000)))
+        self.assertEqual(batch["records"][0]["payload"]["parsed"]["text"], "合成批量正文0000")
+        self.assertEqual(batch["records"][-1]["payload"]["parsed"]["text"], "合成批量正文0999")
+        self.assertTrue(all(row["message_id"] and row["source_ref_id"] for row in batch["records"]))
+        self.assertEqual(len(statements), 4)
+
+    def test_later_processing_block_failure_rolls_back_messages_and_trace(self):
+        from notalone.memory_extraction.cli_support import load_contact_messages
+        from notalone.persistence.source_processing import SourceProcessingWriteError
+
+        name = "synthetic_late_fault_" + uuid4().hex
+        with psycopg.connect(DATABASE_URL) as connection:
+            connection.execute(sql.SQL(
+                "CREATE FUNCTION public.{name}() RETURNS trigger LANGUAGE plpgsql AS $body$ "
+                "BEGIN IF NEW.owner_id={owner}::uuid AND NEW.position>=500 THEN "
+                "RAISE EXCEPTION '合成后续块故障'; END IF; RETURN NEW; END $body$"
+            ).format(name=sql.Identifier(name), owner=sql.Literal(str(self.scope.owner_id))))
+            connection.execute(sql.SQL(
+                "CREATE TRIGGER {name} BEFORE INSERT ON public.source_processing_record "
+                "FOR EACH ROW EXECUTE FUNCTION public.{name}()"
+            ).format(name=sql.Identifier(name)))
+        def cleanup_fault():
+            with psycopg.connect(DATABASE_URL) as connection:
+                connection.execute(sql.SQL("DROP TRIGGER {name} ON public.source_processing_record")
+                                   .format(name=sql.Identifier(name)))
+                connection.execute(sql.SQL("DROP FUNCTION public.{}()").format(sql.Identifier(name)))
+        self.addCleanup(cleanup_fault)
+        with self.assertRaises(SourceProcessingWriteError) as raised:
+            self.import_lines([json.dumps(record, ensure_ascii=False) + "\n"
+                               for record in self.batch_records(600)])
+        self.assertNotIn("合成批量正文", repr(raised.exception))
+        self.assertIsNone(raised.exception.__cause__)
+        self.assertEqual(load_contact_messages(self.scope, DATABASE_URL), ())
+        self.assertEqual(self.processing.list_batches(self.scope), ())
+
+    def test_later_invalid_processing_payload_rolls_back_import(self):
+        from dataclasses import replace
+        from notalone.ingest.jsonl_reader import read_jsonl
+        from notalone.ingest.normalizer import normalize_document
+        from notalone.memory_extraction.cli_support import load_contact_messages
+        from notalone.persistence.source_processing import SourceProcessingWriteError
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "synthetic.jsonl"
+            path.write_text("".join(json.dumps(record, ensure_ascii=False) + "\n"
+                                    for record in self.batch_records(600)), encoding="utf-8")
+            document = normalize_document(read_jsonl(path))
+        messages = list(document.messages)
+        messages[501] = replace(messages[501], processing_record=replace(
+            messages[501].processing_record, payload_json="合成非法 JSON",
+        ))
+        with self.assertRaises(SourceProcessingWriteError):
+            self.repository.import_document(owner_id=self.scope.owner_id,
+                document=replace(document, messages=tuple(messages)), confirmation=self.confirmation)
+        self.assertEqual(load_contact_messages(self.scope, DATABASE_URL), ())
+        self.assertEqual(self.processing.list_batches(self.scope), ())
+
+    def test_byte_chunks_and_oversize_record_preserve_complete_body(self):
+        from psycopg.types.json import Jsonb
+
+        sizes = []
+        class MeasuringConnection(psycopg.Connection):
+            def execute(connection, query, params=None, **kwargs):
+                text = query.as_string(connection) if isinstance(query, sql.Composable) else query
+                if text.startswith("INSERT INTO public.source_processing_record"):
+                    lengths = []
+                    for value in params:
+                        if isinstance(value, Jsonb):
+                            encoded = value.dumps(value.obj) if value.dumps else json.dumps(value.obj)
+                            lengths.append(len(encoded.encode("utf-8") if isinstance(encoded, str) else encoded))
+                        elif value is not None:
+                            lengths.append(len(str(value).encode("utf-8")))
+                    sizes.append((len(params) // 10, sum(lengths)))
+                return super().execute(query, params, **kwargs)
+
+        records = list(self.batch_records(14))
+        records[0]["text"] = "x" * 900_000
+        for record in records[1:]:
+            record["text"] = "y" * 90_000
+        with patch("psycopg.connect", MeasuringConnection.connect):
+            self.import_lines([json.dumps(record, ensure_ascii=False) + "\n" for record in records])
+        batch = self.processing.get_batch(self.scope, self.processing.list_batches(self.scope)[0]["batch_id"])
+        self.assertEqual([row["payload"]["parsed"]["text"] for row in batch["records"]],
+                         [record["text"] for record in records])
+        self.assertTrue(any(size > 2 * 1024 * 1024 for _, size in sizes))
+        self.assertTrue(all(size <= 2 * 1024 * 1024 or rows == 1 for rows, size in sizes))
+        self.assertLess(len(sizes), len(records))
+
+    def prepare_observation(self):
+        from notalone.persistence.conversation_repository import PostgresConversationBindingRepository
+        from notalone.persistence.observation_store import ObservationMode
+        from notalone.wechat_cli import LocalWechatCli
+        from notalone.wechat_cli.normalizer import normalize_cli_events
+        from tests.integration.front_sync.cli_fakes import ScriptedCliRunner, tail_stdout
+
+        binding = PostgresConversationBindingRepository(DATABASE_URL).create_binding(
+            owner_id=self.scope.owner_id, contact_id=self.scope.contact_id,
+            channel="wechat", account_scope="synthetic",
+            conversation_locator=self.contact_external_id,
+        )
+        runner = ScriptedCliRunner()
+        runner.tail_queues[self.contact_external_id].append(
+            tail_stdout(self.contact_external_id, [(201, "合成并发观察正文", False)]) + "\n"
+        )
+        messages = normalize_cli_events(LocalWechatCli(runner=runner).tail(self.contact_external_id).events)
+        return binding, dict(owner_id=self.scope.owner_id, contact_id=self.scope.contact_id,
+            binding_id=binding.binding_id, mode=ObservationMode.CLI_BACKGROUND,
+            cli_version="synthetic-1", conversation_locator=self.contact_external_id,
+            last_local_id=201, last_cursor="synthetic:201", record_count=1, messages=messages)
+
+    def test_observation_holding_scope_lock_finishes_before_binding_revocation(self):
+        from notalone.persistence.conversation_repository import PostgresConversationBindingRepository
+        from notalone.persistence.observation_store import ObservationNotFoundError, PostgresObservationStore
+
+        binding, arguments = self.prepare_observation()
+        key = self.install_transaction_gate("source_processing_batch", "INSERT", "TRUE")
+        write_name, revoke_name = "synthetic_write_" + uuid4().hex, "synthetic_revoke_" + uuid4().hex
+        writing = PostgresObservationStore(make_conninfo(DATABASE_URL, application_name=write_name))
+        revoking = PostgresConversationBindingRepository(make_conninfo(DATABASE_URL, application_name=revoke_name))
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            with psycopg.connect(DATABASE_URL, autocommit=True) as gate:
+                gate.execute("SELECT pg_advisory_lock(%s)", (key,))
+                observation = executor.submit(writing.record_batch_with_messages, **arguments)
+                try:
+                    self.wait_for_operation(gate, write_name, observation)
+                    revocation = executor.submit(revoking.revoke_binding, owner_id=self.scope.owner_id,
+                        contact_id=self.scope.contact_id, binding_id=binding.binding_id)
+                    self.wait_for_operation(gate, revoke_name, revocation)
+                finally:
+                    gate.execute("SELECT pg_advisory_unlock(%s)", (key,))
+            self.assertEqual(len(observation.result(timeout=10).message_ids), 1)
+            revocation.result(timeout=10)
+        batch = self.processing.get_batch(self.scope, self.processing.list_batches(self.scope)[0]["batch_id"])
+        self.assertEqual(batch["records"][0]["payload"]["converted"]["text_content"], "合成并发观察正文")
+        with self.assertRaises(ObservationNotFoundError):
+            writing.record_batch_with_messages(**arguments)
+
+    def test_rolled_back_binding_revocation_allows_waiting_observation(self):
+        from notalone.persistence.conversation_repository import (
+            ConversationBindingPersistenceError, PostgresConversationBindingRepository,
+        )
+        from notalone.persistence.observation_store import PostgresObservationStore
+
+        binding, arguments = self.prepare_observation()
+        key = self.install_transaction_gate("conversation_binding", "UPDATE", "NEW.status='revoked'", fail=True)
+        revoke_name, write_name = "synthetic_revoke_" + uuid4().hex, "synthetic_write_" + uuid4().hex
+        revoking = PostgresConversationBindingRepository(make_conninfo(DATABASE_URL, application_name=revoke_name))
+        writing = PostgresObservationStore(make_conninfo(DATABASE_URL, application_name=write_name))
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            with psycopg.connect(DATABASE_URL, autocommit=True) as gate:
+                gate.execute("SELECT pg_advisory_lock(%s)", (key,))
+                revocation = executor.submit(revoking.revoke_binding, owner_id=self.scope.owner_id,
+                    contact_id=self.scope.contact_id, binding_id=binding.binding_id)
+                try:
+                    self.wait_for_operation(gate, revoke_name, revocation)
+                    observation = executor.submit(writing.record_batch_with_messages, **arguments)
+                    self.wait_for_operation(gate, write_name, observation)
+                finally:
+                    gate.execute("SELECT pg_advisory_unlock(%s)", (key,))
+            with self.assertRaises(ConversationBindingPersistenceError):
+                revocation.result(timeout=10)
+            self.assertEqual(len(observation.result(timeout=10).message_ids), 1)
+        self.assertEqual(len(self.processing.list_batches(self.scope)), 1)
+
+    def test_binding_revocation_does_not_lock_another_contact_of_same_owner(self):
+        from notalone.persistence.conversation_repository import PostgresConversationBindingRepository
+        from notalone.source_processing.models import ProcessingRecord
+
+        binding, _ = self.prepare_observation()
+        other_scope = ContactScope(self.scope.owner_id, uuid4())
+        with psycopg.connect(DATABASE_URL) as connection:
+            connection.execute("INSERT INTO public.contact(owner_id,id,display_name) VALUES (%s,%s,'合成其他联系人')",
+                               (other_scope.owner_id, other_scope.contact_id))
+        key = self.install_transaction_gate("conversation_binding", "UPDATE", "NEW.status='revoked'")
+        revoke_name = "synthetic_revoke_" + uuid4().hex
+        revoking = PostgresConversationBindingRepository(make_conninfo(DATABASE_URL, application_name=revoke_name))
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            with psycopg.connect(DATABASE_URL, autocommit=True) as gate:
+                gate.execute("SELECT pg_advisory_lock(%s)", (key,))
+                revocation = executor.submit(revoking.revoke_binding, owner_id=self.scope.owner_id,
+                    contact_id=self.scope.contact_id, binding_id=binding.binding_id)
+                try:
+                    self.wait_for_operation(gate, revoke_name, revocation)
+                    other = PostgresIngestRepository(make_conninfo(DATABASE_URL, options="-c statement_timeout=2000"))
+                    other.record_input_failure(scope=other_scope,
+                        record=ProcessingRecord.capture("synthetic:failure", {"outcome": "input_rejected"}))
+                    self.assertEqual(len(self.processing.list_batches(other_scope)), 1)
+                finally:
+                    gate.execute("SELECT pg_advisory_unlock(%s)", (key,))
+            revocation.result(timeout=10)
+
+    def test_capture_in_later_check_chunk_rejects_whole_observation(self):
+        from notalone.persistence.observation_store import PostgresObservationStore
+        from notalone.persistence.source_processing import SourceProcessingWriteError
+        from notalone.source_processing.models import ProcessingRecord
+
+        _, arguments = self.prepare_observation()
+        records = tuple(ProcessingRecord.capture(f"synthetic:{i}", {"outcome": "filtered"}) for i in range(4097))
+        arguments.update(messages=(), record_count=0, event_count=1, non_text_count=1,
+                         processing_records=(records[-1],))
+        writing = PostgresObservationStore(DATABASE_URL)
+        writing.record_batch_with_messages(**arguments)
+        batch_id = self.processing.list_batches(self.scope)[0]["batch_id"]
+        self.processing.delete_batch(self.scope, batch_id)
+        arguments.update(event_count=len(records), non_text_count=len(records), processing_records=records,
+                         last_local_id=202, last_cursor="synthetic:202")
+        with self.assertRaises(SourceProcessingWriteError):
+            writing.record_batch_with_messages(**arguments)
+        self.assertEqual(len(self.processing.list_batches(self.scope)), 1)
+        self.assertEqual(writing.read_cursor(owner_id=self.scope.owner_id,
+            contact_id=self.scope.contact_id).last_local_id, 201)
+
+    def test_empty_observation_does_not_create_processing_batch(self):
+        from notalone.persistence.observation_store import PostgresObservationStore
+
+        _, arguments = self.prepare_observation()
+        arguments.update(messages=(), record_count=0, processing_records=())
+        result = PostgresObservationStore(DATABASE_URL).record_batch_with_messages(**arguments)
+        self.assertEqual(result.message_ids, ())
+        self.assertEqual(self.processing.list_batches(self.scope), ())
 
     def test_confirmed_import_reveals_exact_record_and_actual_conversions(
         self,

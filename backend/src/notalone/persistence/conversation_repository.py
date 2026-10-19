@@ -13,6 +13,8 @@ import psycopg
 from psycopg.conninfo import conninfo_to_dict
 from psycopg.types.json import Jsonb
 
+from notalone.persistence.locks import lock_contact_scope
+
 from notalone.conversation import (
     ConversationBinding,
     ConversationBindingStatus,
@@ -227,6 +229,7 @@ class PostgresConversationBindingRepository:
             raise TypeError("binding_id 必须是 UUID。")
         try:
             with psycopg.connect(self._database_url) as connection:
+                lock_contact_scope(connection, owner_id=owner_id, contact_id=contact_id)
                 row = connection.execute(
                     f"""
                     UPDATE public.conversation_binding

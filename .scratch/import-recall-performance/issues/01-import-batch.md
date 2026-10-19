@@ -1,6 +1,6 @@
 # 01：导入追踪批量核验与分块写入
 Triage: ready-for-agent
-State: open
+State: claimed
 
 ## What to build
 在原事务中减少长历史导入追踪查写，保持完整来源收据、顺序、撤销和删除安全；交付真实 PostgreSQL 前后对照数据。
@@ -16,3 +16,5 @@ None (can start immediately)。
 
 ## Comments
 用户已授权实施。责任代码：source_processing、必要 postgres_repository/observation/删除及绑定锁边界和相关测试。规则摘要不缓存，跨范围先报告；不得修改协调 main 或原工作区。最终追加 Answer、真实命令/数据影响/风险，验证后本地提交并标记 resolved，不 push。
+
+2026-10-19：功能已实施，真实 PostgreSQL 相关回归 108 项、导入单元测试 44 项通过；1000 条普通导入追踪实测 2001→4 条业务 SQL。撤销与观察共用联系人锁，并在锁内复验；双连接覆盖观察先持锁、撤销先持锁、撤销回滚和同 owner 不同联系人。历史导入/手动追踪删除交错在原行锁/FK下通过，未扩改导入锁或公共锁文件。正式前后计时、内存及协议消息计数继续单独记录。
