@@ -135,8 +135,8 @@ export async function priorityImport(pages: ImportPages): Promise<void> {
   await confirm(pages, prepared.file_path as string);
   await manager.getByRole('button', { name: '正式导入这份资料', exact: true }).click();
   await expect.poll(async () => (await importBackend.command('observations')).extraction_entered).toBe(true);
-  await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('我会晚一点回复你。');
-  await helper.getByRole('button', { name: '生成候选', exact: true }).click();
+  await helper.getByRole('textbox', { name: '有什么想说的', exact: true }).fill('我会晚一点回复你。');
+  await helper.getByRole('button', { name: '帮我表达', exact: true }).click();
   await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveCount(0);
   // 点击完成不证明 HTTP 已进入优先级等待；逐个释放已开始的模型调用，
   // 直到真实回复模型进入。最多释放三次，始终留下至少一次后续模型工作。
