@@ -1,3 +1,4 @@
+import { setWorkspaceContext } from '../workspace-actions';
 import { expect, type Browser } from '@playwright/test';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
 import { withRewritePages } from './rewrite-acceptance';
@@ -9,12 +10,12 @@ export async function styleCopyLimits(browser: Browser, origin: string) {
     await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
     await confirmHelperContact(helper, contactId);
     await helper.getByText('我的表达样本', { exact: true }).click();
-    await helper.getByRole('button', { name: '回应消息', exact: true }).click();
-    const message = helper.getByRole('radio', { name: /甲的私密合成历史/ });
-    await message.click(); await expect(message).toBeChecked();
-    await helper.getByRole('textbox', { name: '表达方向', exact: true }).fill('只回应本次消息，不增加安排。');
+    await setWorkspaceContext(helper, true);
+    const message = helper.getByRole('checkbox', { name: /甲的私密合成历史/ });
+    await message.check(); await expect(message).toBeChecked();
+    await helper.getByRole('textbox', { name: '有什么想说的', exact: true }).fill('只回应本次消息，不增加安排。');
     await rewriteBackend.plan({ count: 1, prefix: '复制边界合成候选' });
-    await helper.getByRole('button', { name: '生成候选', exact: true }).click();
+    await helper.getByRole('button', { name: '帮我表达', exact: true }).click();
     const editor = helper.getByRole('textbox', { name: '候选1编辑文本', exact: true });
     await expect(editor).toHaveValue('复制边界合成候选（说法1）。');
     const manual = helper.getByRole('textbox', { name: '手工表达样本', exact: true });
@@ -27,7 +28,7 @@ export async function styleCopyLimits(browser: Browser, origin: string) {
       await manual.fill('');
       await editor.fill(item.edited);
       await expect.poll(async () => (await helper.evaluate(async () => window.notalone.replies.getState()))
-        .result?.candidates[0].editedText).toBe(item.edited);
+        .candidateDrafts?.[0]?.messages[0].text).toBe(item.edited);
       await editor.evaluate((element, input) => {
         const editor = element as HTMLTextAreaElement;
         editor.focus(); editor.setSelectionRange(0, input.length);
