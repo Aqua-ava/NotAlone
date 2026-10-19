@@ -263,7 +263,7 @@ async function deletedSource(pages: RewritePages, host: PageHost, userData: stri
 }
 
 async function authorization(pages: RewritePages) {
-  const { helper, rewriteBackend } = pages;
+  const { manager, helper, rewriteBackend, replyTransport } = pages;
   await saveDraft(pages, '按真实联系人隔离的讨论。', '范围隔离的原候选');
   await readSavedDiscussion(helper);
   const state = await helper.evaluate(async () => window.notalone.replies.getState());
@@ -274,8 +274,28 @@ async function authorization(pages: RewritePages) {
   expect(foreign).toEqual({ status: 404, data: { error: 'not_found' } });
   await chooseContact(pages, 1);
   await rewriteBackend.command('revoke', { contact_id: rewriteBackend.data.contact_ids[0] });
-  // 桌面绑定撤销后，按 ADR-065 显式确认手动范围；讨论读取仍按 owner/contact 隔离。
-  await chooseContact(pages);
+  const contactId = rewriteBackend.data.contact_ids[0];
+  await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+  const readAuthorization = () => helper.evaluate(async () => {
+    const contact = await window.notalone.contacts.getState();
+    const foreground = await window.notalone.foreground.getState();
+    const reply = await window.notalone.replies.getState();
+    return { contactId: contact.selectedContactId, confirmation: foreground.confirmation,
+      confirmedContactId: foreground.confirmedContactId, foregroundBlock: foreground.generationBlock,
+      manualInput: foreground.manualInput, replyContactId: reply.contactId,
+      scopeMatches: reply.scopeRevision === contact.scopeRevision, replyBlock: reply.generationBlock };
+  });
+  await expect.poll(readAuthorization).toMatchObject({ contactId, confirmation: 'required', confirmedContactId: null,
+    foregroundBlock: 'foreground-confirmation-required', replyContactId: contactId,
+    scopeMatches: true, replyBlock: 'foreground-confirmation-required' });
+  await expect(helper.getByRole('button', { name: '帮我表达', exact: true })).toBeDisabled();
+  await expect(helper.getByRole('button', { name: '帮我想想', exact: true })).toBeDisabled();
+  expect(await rewriteBackend.request(`/api/contacts/${contactId}/assistant-session/binding`)).toEqual({ status: 409,
+    data: { error: 'assistant_session_rejected', reason: 'no_active_binding' } });
+  // 渠道确认不能替代手动输入资格；通过 ADR-065 的独立入口恢复本次联系人。
+  await helper.getByRole('button', { name: '切换为手动输入', exact: true }).click();
+  await expect.poll(readAuthorization).toEqual({ contactId, confirmation: 'manual-confirmed', confirmedContactId: contactId,
+    foregroundBlock: null, manualInput: true, replyContactId: contactId, scopeMatches: true, replyBlock: null });
   await readSavedDiscussion(helper);
   await expandSavedDiscussion(helper);
   const discussion = helper.getByRole('region', { name: '已保存的讨论', exact: true });
@@ -289,6 +309,8 @@ async function authorization(pages: RewritePages) {
   expect(await rewriteBackend.request(`/api/contacts/${rewriteBackend.data.other_contact_id}/assistant-session/default`, {}))
     .toEqual(foreign);
   expect((await rewriteBackend.command('observations')).payloads).toHaveLength(1);
+  expect(replyTransport.requests).toHaveLength(1);
+  expect(replyTransport.explorationRequests).toEqual([]);
 }
 
 async function readFailure(pages: RewritePages) {
@@ -311,7 +333,8 @@ async function readFailure(pages: RewritePages) {
   await expandSavedDiscussion(helper);
   await expect(helper.getByRole('alert').filter({ hasText: '已保存讨论暂不可用' })).toBeVisible();
   await expect(helper.getByRole('region', { name: '已保存的讨论', exact: true })).toHaveCount(0);
-  await expect(helper.getByText('恢复读取失败不能沿用缓存。', { exact: true })).toHaveCount(0);
+  // 历史正文已隔离；工作区保留用户想法，textarea 的文本节点不能算作历史缓存。
+  await expect(helper.getByRole('textbox', { name: '有什么想说的', exact: true })).toHaveValue('恢复读取失败不能沿用缓存。');
   // 503 只证明本次讨论读取未知，不撤销仍有效的候选和用户编辑。
   await expect(candidate).toHaveValue('读取暂时失败也应保留的合成候选编辑。');
   expect(await helper.evaluate(async () => window.notalone.replies.getState())).toMatchObject({
