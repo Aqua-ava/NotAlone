@@ -53,7 +53,7 @@ class EventReplyModel(rewrite.DesktopRewriteModel):
         if self.pause_generation_response:
             payload = next(json.loads(message.content) for message in messages
                            if isinstance(message, rewrite.HumanMessage))
-            if payload["input_mode"] in {"rewrite_draft", "reply_to_message", "initiate_conversation"}:
+            if payload["input_mode"] in {"rewrite_draft", "reply_to_message", "initiate_conversation", "workspace"}:
                 self.pause_generation_response = False
                 self.pause_next_response()
                 self.generation_entered.set()

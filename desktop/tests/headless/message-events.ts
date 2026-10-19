@@ -1,3 +1,4 @@
+import { setWorkspaceContext } from '../workspace-actions';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
 import { expect, type Browser, type Page } from '@playwright/test';
 import path from 'node:path';
@@ -40,20 +41,29 @@ export async function withEventPages(browser: Browser, origin: string, use: (pag
   }, released, path.resolve('tests/fixtures/message-events-backend.py'), path.resolve('..'),
   'database-ownership.json');
 }
-async function prepare({ manager, helper, fixture, awaitPendingCommands }: EventPages, contact: '甲' | '乙' = '甲') {
+async function generateAndWait(pages: EventPages) {
+  const before = await pages.helper.evaluate(() => window.notalone.replies.getState());
+  const requestKeys = before.generationJobs?.map(job => job.requestKey) ?? [];
+  await pages.helper.getByRole('button', { name: '帮我表达', exact: true }).click();
+  // 页面先提交 options 再发 generate；等新任务实际登记后，才能等待其具名命令结算。
+  await expect.poll(() => pages.helper.evaluate(async ({ contactId, requestKeys }) => {
+    const state = await window.notalone.replies.getState();
+    return state.generationJobs?.some(job => job.contactId === contactId && !requestKeys.includes(job.requestKey)) ?? false;
+  }, { contactId: before.contactId, requestKeys })).toBe(true);
+  await pages.awaitPendingCommands();
+}
+async function prepare(pages: EventPages, contact: '甲' | '乙' = '甲') {
+  const { manager, helper, fixture } = pages;
   await manager.getByRole('button', { name: `选择合成联系人${contact}`, exact: true }).click();
   await confirmHelperContact(helper, fixture.data.contact_ids[contact === '甲' ? 0 : 1]);
-  await helper.getByRole('button', { name: '回应消息', exact: true }).click();
-  const target = helper.getByRole('radio', { name: new RegExp(`${contact}的原始合成消息`) });
-  await target.click();
-  await expect(target).toBeChecked();
-  await helper.getByRole('textbox', { name: '表达方向', exact: true }).fill('说明原时间安排。');
+  await setWorkspaceContext(helper, true);
+  await expect(helper.getByRole('checkbox', { name: new RegExp(`${contact}的原始合成消息`) })).toBeChecked();
+  await helper.getByRole('textbox', { name: '有什么想说的', exact: true }).fill('说明原时间安排。');
   await fixture.plan({ count: 1, prefix: `${contact}原快照候选` });
-  await helper.getByRole('button', { name: '生成候选', exact: true }).click();
   const editor = helper.getByRole('textbox', { name: '候选1编辑文本', exact: true });
   try {
     // 页面点击返回不代表认证 HTTP 生成与后续会话核验已经完成。
-    await awaitPendingCommands();
+    await generateAndWait(pages);
     const completed = await helper.evaluate(() => window.notalone.replies.getState());
     expect({ phase: completed.phase, errorCode: completed.errorCode ?? null }).toEqual({ phase: 'ready', errorCode: null });
     await expect(editor).toHaveValue(`${contact}原快照候选（说法1）。`);
@@ -73,6 +83,8 @@ async function prepare({ manager, helper, fixture, awaitPendingCommands }: Event
     throw error;
   }
   await editor.fill('用户仍在编辑的措辞。');
+  await expect.poll(() => helper.evaluate(async () => (await window.notalone.replies.getState())
+    .candidateDrafts?.[0]?.messages[0].text)).toBe('用户仍在编辑的措辞。');
   const requestId = await helper.evaluate(async () => (await window.notalone.replies.getState()).result!.replyRequestId);
   const endpoint = `/api/contacts/${fixture.data.contact_ids[contact === '甲' ? 0 : 1]}/replies/${requestId}/evidence`;
   const before = await fixture.request(endpoint);
@@ -85,9 +97,9 @@ async function newMessage(pages: EventPages) {
   const { editor, endpoint, before } = await prepare(pages);
   await fixture.command('append_message');
   await expect(helper.getByRole('status').filter({ hasText: '当前联系人有新消息，生成依据仍是原快照' })).toBeVisible();
-  await expect(helper.getByRole('radio', { name: /甲的新合成消息/ })).toBeVisible();
-  await expect(helper.getByRole('radio', { name: /甲的原始合成消息/ })).toBeChecked();
-  await expect(helper.getByRole('textbox', { name: '表达方向', exact: true })).toHaveValue('说明原时间安排。');
+  await expect(helper.getByRole('checkbox', { name: /甲的新合成消息/ })).toBeVisible();
+  await expect(helper.getByRole('checkbox', { name: /甲的原始合成消息/ })).toBeChecked();
+  await expect(helper.getByRole('textbox', { name: '有什么想说的', exact: true })).toHaveValue('说明原时间安排。');
   await expect(editor).toHaveValue('用户仍在编辑的措辞。');
   expect((await fixture.request(endpoint)).data).toEqual(before.data);
   expect((await fixture.command('observations')).model_calls).toBe(1);
@@ -100,9 +112,9 @@ async function streamRecovery(pages: EventPages) {
   await fixture.command('append_message');
   await expect(editor).toHaveValue('用户仍在编辑的措辞。');
   await helper.getByRole('button', { name: '重连消息提醒', exact: true }).click();
-  await expect(helper.getByRole('radio', { name: /甲的新合成消息/ })).toBeVisible();
-  await expect(helper.getByRole('radio', { name: /甲的原始合成消息/ })).toBeChecked();
-  await expect(helper.getByRole('textbox', { name: '表达方向', exact: true })).toHaveValue('说明原时间安排。');
+  await expect(helper.getByRole('checkbox', { name: /甲的新合成消息/ })).toBeVisible();
+  await expect(helper.getByRole('checkbox', { name: /甲的原始合成消息/ })).toBeChecked();
+  await expect(helper.getByRole('textbox', { name: '有什么想说的', exact: true })).toHaveValue('说明原时间安排。');
   await expect(editor).toHaveValue('用户仍在编辑的措辞。');
   expect((await fixture.request(endpoint)).data).toEqual(before.data);
   expect((await fixture.command('observations')).model_calls).toBe(1);
@@ -110,12 +122,27 @@ async function streamRecovery(pages: EventPages) {
 async function pagedBurst(pages: EventPages) {
   const { helper, fixture } = pages;
   const { editor, endpoint, before } = await prepare(pages);
-  const messages = helper.getByRole('group', { name: '待回复消息', exact: true });
+  const messages = helper.getByRole('group', { name: '最近聊天材料', exact: true });
   await fixture.command('append_paged_burst');
   const projection = await fixture.request(`/api/contacts/${fixture.data.contact_ids[0]}/messages?limit=100`);
   expect(projection.status).toBe(200);
-  const burst = (projection.data.messages as Array<{ message_id: string; text: string; occurred_at: string }>)
-    .filter((message) => message.text.startsWith('甲的分页突发消息：'));
+  type Message = { message_id: string; text: string; occurred_at: string };
+  const allMessages = projection.data.messages as Message[];
+  const expectedAll = [...Array.from({ length: 25 }, (_, index) =>
+    `甲的分页突发消息：第${String(25 - index).padStart(2, '0')}条近况更新。`), '甲的原始合成消息。'];
+  expect(allMessages.map(message => message.text)).toEqual(expectedAll);
+  expect(projection.data.next_cursor).toBeNull();
+  const firstPage = await fixture.request(`/api/contacts/${fixture.data.contact_ids[0]}/messages?limit=20`);
+  expect(firstPage.status).toBe(200);
+  expect(firstPage.data.messages).toHaveLength(20);
+  expect(firstPage.data.next_cursor).toEqual(expect.any(String));
+  const secondPage = await fixture.request(`/api/contacts/${fixture.data.contact_ids[0]}/messages?limit=20&before=${firstPage.data.next_cursor}`);
+  expect(secondPage.status).toBe(200);
+  expect(secondPage.data.messages).toHaveLength(6);
+  expect(secondPage.data.next_cursor).toBeNull();
+  expect([...(firstPage.data.messages as Message[]), ...(secondPage.data.messages as Message[])])
+    .toEqual(allMessages);
+  const burst = allMessages.filter((message) => message.text.startsWith('甲的分页突发消息：'));
   expect(burst).toHaveLength(25);
   expect(new Set(burst.map((message) => message.occurred_at.slice(0, 19))).size).toBe(1);
   expect(new Set(burst.map((message) => message.occurred_at)).size).toBe(25);
@@ -124,18 +151,17 @@ async function pagedBurst(pages: EventPages) {
     expect(burst[index - 1].occurred_at > burst[index].occurred_at).toBe(true);
     expect(burst[index - 1].message_id < burst[index].message_id).toBe(true);
   }
-  await expect(messages.getByRole('radio', { name: /甲的分页突发消息：第25条/ })).toBeVisible();
-  await expect(messages.getByRole('radio', { name: /甲的原始合成消息/ })).toBeChecked();
-  await expect(messages.getByRole('radio')).toHaveCount(21);
-  await helper.getByRole('button', { name: '加载更早消息', exact: true }).click();
-  await expect(messages.getByRole('radio')).toHaveCount(26);
-  const expected = Array.from({ length: 25 }, (_, index) =>
+  await expect(messages.getByRole('checkbox', { name: /甲的分页突发消息：第25条/ })).toBeVisible();
+  // 新消息合并最近20条并保留已加载的原消息；完整分页顺序由同范围真实HTTP投影核验。
+  await expect(messages.getByRole('checkbox')).toHaveCount(21);
+  const expected = Array.from({ length: 20 }, (_, index) =>
     `甲的分页突发消息：第${String(25 - index).padStart(2, '0')}条近况更新。`);
   expected.push('甲的原始合成消息。');
   const labels = await messages.locator('label').allTextContents();
   for (const [index, text] of expected.entries()) expect(labels[index]).toContain(text);
-  await expect(messages.getByRole('radio', { name: /甲的原始合成消息/ })).toBeChecked();
-  await expect(helper.getByRole('textbox', { name: '表达方向', exact: true })).toHaveValue('说明原时间安排。');
+  await expect(messages.getByRole('checkbox', { checked: true })).toHaveCount(21);
+  await expect(messages.getByRole('checkbox', { name: /甲的原始合成消息/ })).toBeChecked();
+  await expect(helper.getByRole('textbox', { name: '有什么想说的', exact: true })).toHaveValue('说明原时间安排。');
   await expect(editor).toHaveValue('用户仍在编辑的措辞。');
   expect((await fixture.request(endpoint)).data).toEqual(before.data);
   expect((await fixture.command('observations')).model_calls).toBe(1);
@@ -197,13 +223,12 @@ async function scopeAndRegeneration(pages: EventPages) {
     try { await window.notalone.replies.reconnectMessages({ contactId: contacts.selectedContactId!, scopeRevision: contacts.scopeRevision }); return 'accepted'; }
     catch { return 'rejected'; }
   })).toBe('rejected');
-  await helper.getByRole('button', { name: '刷新消息', exact: true }).click();
-  const target = helper.getByRole('radio', { name: /甲的新合成消息/ });
-  await target.click(); await expect(target).toBeChecked();
-  await helper.getByRole('textbox', { name: '表达方向', exact: true }).fill('根据新时间安排表达。');
+  await helper.getByRole('button', { name: '刷新最近聊天', exact: true }).click();
+  const target = helper.getByRole('checkbox', { name: /甲的新合成消息/ });
+  await target.check(); await expect(target).toBeChecked();
+  await helper.getByRole('textbox', { name: '有什么想说的', exact: true }).fill('根据新时间安排表达。');
   await fixture.plan({ count: 1, prefix: '新请求候选' });
-  await helper.getByRole('button', { name: '重新生成', exact: true }).click();
-  await pages.awaitPendingCommands();
+  await generateAndWait(pages);
   const regenerated = await helper.evaluate(() => window.notalone.replies.getState());
   expect({ phase: regenerated.phase, errorCode: regenerated.errorCode ?? null }).toEqual({ phase: 'ready', errorCode: null });
   await expect(editor).toHaveValue('新请求候选（说法1）。');
@@ -219,7 +244,7 @@ export async function messageEvents(browser: Browser, origin: string) {
   for (const [name, scenario] of [
     ['真实新消息自动更新列表且保留选择、编辑和依据快照', newMessage],
     ['真实断流后重连自动恢复最新消息且保留选择、编辑和依据', streamRecovery],
-    ['超过一页的新消息自动更新并补齐分页缺口、保留原选择和依据', pagedBurst],
+    ['超过一页的新消息合并最近20条与原选择，真实分页无缺口且保留编辑和依据', pagedBurst],
     ['联系人切换后迟到消息核验失效', (pages: EventPages) => staleNotice(pages, 'contact')],
     ['认证连接更换后迟到消息核验失效', (pages: EventPages) => staleNotice(pages, 'connection')],
     ['owner/contact投影、具名角色字段与新请求保留旧依据', scopeAndRegeneration],
