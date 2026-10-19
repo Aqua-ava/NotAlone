@@ -1,6 +1,6 @@
 # 02：后台召回单批预计算复用
 Triage: ready-for-agent
-State: open
+State: claimed
 
 ## What to build
 减少同批候选反复分词、统计和范数计算，保持公开召回与逐条采纳的数值、顺序和来源合同；交付前后对照数据。
