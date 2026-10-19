@@ -97,7 +97,7 @@ async function candidateContinues(pages: EventPages, action: WorkspaceAction, de
     const restored = await helper.evaluate(() => window.notalone.replies.getState());
     expect(restored.savedSession?.sessionId).toBe(sessionId);
     expect(restored.savedSession?.currentInputVersionId).toBe(original.current_input_version_id);
-    expect(restored.options).toMatchObject({ inputKind: 'workspace', workspaceAction: action });
+    expect(restored.savedSession?.turns[0]?.input?.content).toMatchObject({ input_kind: 'workspace', workspace_action: action });
     await expect(helper.getByRole('textbox', { name: '说法1第1条编辑文本', exact: true })).toHaveValue(messages[0]);
     await expect(helper.getByRole('textbox', { name: '说法1第2条编辑文本', exact: true })).toHaveValue(messages[1]);
     expect((await pages.fixture.command('observations')).payloads).toHaveLength(1);

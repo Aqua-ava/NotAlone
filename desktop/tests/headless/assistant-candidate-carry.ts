@@ -1,5 +1,7 @@
+import { fillWorkspaceInstruction, openWorkspaceSettings } from '../workspace-actions';
 import { openAssistantHistory, expandSavedDiscussion } from '../assistant-history-actions';
 import path from 'node:path';
+import { readdir } from 'node:fs/promises';
 import { expect, type Browser, type Page } from '@playwright/test';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
 import type { RewritePages } from '../rewrite-page-scenarios';
@@ -36,15 +38,21 @@ async function exerciseFork(pages: RewritePages, originalId: string, expectedTex
     .toBe(originalId);
   await openAssistantHistory(helper);
   await expect(group.getByRole('button', { name: '用这组回复新开会话', exact: true })).toBeEnabled();
-  await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('未提交的旧会话合成草稿不得携入。');
-  await helper.getByRole('textbox', { name: '本次要求', exact: true }).fill('未提交的旧会话临时要求不得携入。');
+  await helper.getByRole('textbox', { name: '有什么想说的', exact: true }).fill('未提交的旧会话合成草稿不得携入。');
+  await fillWorkspaceInstruction(helper, '未提交的旧会话临时要求不得携入。');
   await openAssistantHistory(helper);
+  const originalCandidate = await helper.evaluate(async () => {
+    const state = await window.notalone.replies.getState();
+    const candidate = state.candidateVersions!.items.find(item => item.history!.candidateNumber === 2)!;
+    return { candidateId: candidate.candidateId, versionId: candidate.displayVersionId };
+  });
   await group.getByRole('button', { name: '用这组回复新开会话', exact: true }).click();
   await expandSavedDiscussion(helper);
   const carried = helper.getByRole('article', { name: '携入的已选版本', exact: true });
   await expect(carried).toBeVisible();
   for (const text of expectedTexts) await expect(carried.getByText(text, { exact: true })).toBeVisible();
-  await expect(helper.getByRole('textbox', { name: '草稿', exact: true })).toHaveValue('');
+  await expect(helper.getByRole('textbox', { name: '有什么想说的', exact: true })).toHaveValue('');
+  await openWorkspaceSettings(helper);
   await expect(helper.getByRole('textbox', { name: '本次要求', exact: true })).toHaveValue('');
   await expect(helper.getByRole('article', { name: '第1轮讨论', exact: true })).toHaveCount(0);
   const state = await helper.evaluate(async () => window.notalone.replies.getState());
@@ -59,24 +67,30 @@ async function exerciseFork(pages: RewritePages, originalId: string, expectedTex
   expect(saved.data.turns).toEqual([]);
   expect((saved.data.inputs as Array<{ content: { messages: Array<{ text: string }> } }>)[0].content.messages.map((m) => m.text))
     .toEqual(expectedTexts);
+  const origin = state.savedSession!.inputs[0].content;
+  if (origin?.type !== 'candidate_carry') throw new Error('本次携入的权威来历未恢复。');
+  expect(origin.originCandidateId).toBe(originalCandidate.candidateId);
+  expect(origin.originVersionId).toBe(originalCandidate.versionId);
+  expect(origin.originSelectionId).toBeTruthy();
   expect((await rewriteBackend.request(path)).data).toEqual(original);
   expect(await rewriteBackend.command('metrics')).toEqual(before);
-  process.stdout.write(`page_test_carry: blank_empty=true carry_messages=${expectedTexts.length} old_unchanged=true new_turns=0 automatic_model_delta=0 migrations=55 repeat=0\n`);
+  process.stdout.write(`page_test_carry: blank_empty=true carry_messages=${expectedTexts.length} old_unchanged=true new_turns=0 automatic_model_delta=0 migrations=${before.migration_count} repeat=${before.migration_repeat}\n`);
 }
 
 async function selectedVersion(pages: RewritePages): Promise<string> {
   const { helper, rewriteBackend } = pages;
   await chooseContact(pages);
-  await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('合成原稿：谢谢邀请，这次不参与。');
-  await helper.getByRole('textbox', { name: '本次要求', exact: true }).fill('只属于旧讨论的合成要求。');
+  await helper.getByRole('textbox', { name: '有什么想说的', exact: true }).fill('合成原稿：谢谢邀请，这次不参与。');
+  await fillWorkspaceInstruction(helper, '只属于旧讨论的合成要求。');
   await openAssistantHistory(helper);
   await expect(helper.getByRole('button', { name: '携已选版本新开', exact: true })).toHaveCount(0);
   await rewriteBackend.plan({ count: 2, message_groups: [['未选用的合成第一组。'],
     ['待编辑的合成第一条。', '待编辑的合成第二条。']] });
-  await helper.getByRole('button', { name: '生成候选', exact: true }).click();
-  await expect(helper.getByRole('textbox', { name: '候选2编辑文本', exact: true }))
-    .toHaveValue('待编辑的合成第一条。\n\n待编辑的合成第二条。');
-  // 即时草稿沿用文本编辑；通过公开旧会话入口读取已保存版本再逐条修改。
+  await helper.getByRole('button', { name: '帮我表达', exact: true }).click();
+  await expect(helper.getByRole('textbox', { name: '说法2第1条编辑文本', exact: true })).toHaveValue('待编辑的合成第一条。');
+  await expect(helper.getByRole('textbox', { name: '说法2第2条编辑文本', exact: true })).toHaveValue('待编辑的合成第二条。');
+  expect(pages.replyTransport.requests.at(-1)).toMatchObject({ content: { type: 'rewrite_draft', input_kind: 'workspace', workspace_action: 'express' } });
+  // 工作区直接提供逐条版本编辑；重读同一讨论须保持消息组和原来历。
   const generatedSessionId = (await helper.evaluate(() => window.notalone.replies.getState())).savedSession!.sessionId!;
   const generatedMetrics = await rewriteBackend.command('metrics');
   await openAssistantHistory(helper);
@@ -101,11 +115,14 @@ async function selectedVersion(pages: RewritePages): Promise<string> {
 }
 
 export async function assistantCandidateCarry(browser: Browser, origin: string) {
+  const migrationCount = (await readdir(path.resolve('../backend/database/migrations'))).filter(name => /^\d{3}.*\.sql$/.test(name)).length;
+  expect(migrationCount).toBeGreaterThan(0);
   for (const full of [false, true]) {
     const name = `${full ? '已满' : '普通'}会话公开空新开与完整已选编辑版本携入，旧记录及零自动生成`;
     process.stdout.write(`page_test_scenario: ${name}\n`);
     await withRewritePages(browser, origin, async (pages, host, userData) => {
       const oldId = await selectedVersion(pages);
+      expect(await pages.rewriteBackend.command('metrics')).toEqual({ model_calls: 1, migration_count: migrationCount, migration_repeat: 0 });
       const texts = ['明确选用的合成编辑第一条。', '明确选用的合成编辑第二条。'];
       if (!full) return exerciseFork(pages, oldId, texts);
       await host.close();
@@ -120,10 +137,10 @@ export async function assistantCandidateCarry(browser: Browser, origin: string) 
         const helper: Page = await opened;
         const current = { manager, helper, rewriteBackend: pages.rewriteBackend, replyTransport: transport };
         await chooseContact(current);
-        await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('已满预算的合成当前草稿。');
-        await helper.getByRole('button', { name: '生成候选', exact: true }).click();
+        await helper.getByRole('textbox', { name: '有什么想说的', exact: true }).fill('已满预算的合成当前草稿。');
+        await helper.getByRole('button', { name: '帮我表达', exact: true }).click();
         await expect(helper.getByRole('alert', { name: '模型输入预算', exact: true })).toBeVisible();
-        expect(await pages.rewriteBackend.command('metrics')).toEqual({ model_calls: 1, migration_count: 55, migration_repeat: 0 });
+        expect(await pages.rewriteBackend.command('metrics')).toEqual({ model_calls: 1, migration_count: migrationCount, migration_repeat: 0 });
         await exerciseFork(current, oldId, texts);
       } finally { transport.release(); await next.close(); await transport.close(); }
     }, undefined, path.resolve('tests/fixtures/assistant-input-budget-page-backend.py'));

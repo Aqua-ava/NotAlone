@@ -1,5 +1,6 @@
 import { openAssistantHistory, expandSavedDiscussion } from '../assistant-history-actions';
 import { expect, type Browser, type Page } from '@playwright/test';
+import { fillWorkspaceThought, fillWorkspaceInstruction, generateWorkspace, setWorkspaceContext } from '../workspace-actions';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
 import { withEventPages, type EventPages } from './message-events';
 
@@ -30,12 +31,11 @@ export async function assistantSessionCombination(browser: Browser, origin: stri
     let helper = pages.helper;
     const contactA = fixture.data.contact_ids[0], contactB = fixture.data.contact_ids[1];
     await chooseContact(pages, helper, 0);
-    await helper.getByRole('button', { name: '回应消息', exact: true }).click();
-    await helper.getByRole('radio', { name: /甲的原始合成消息/ }).click();
-    await helper.getByRole('textbox', { name: '表达方向', exact: true }).fill('感谢邀请，本次不参加。');
-    await helper.getByRole('textbox', { name: '补充你的想法或要求', exact: true }).fill('自然一点');
+    await fillWorkspaceThought(helper, '感谢邀请，本次不参加。');
+    await fillWorkspaceInstruction(helper, '自然一点；简短一点');
+    await setWorkspaceContext(helper, true);
     await fixture.plan({ count: 1, message_groups: [['甲的合成感谢。', '甲本次不参加。']] });
-    await helper.getByRole('button', { name: '生成候选', exact: true }).click();
+    await generateWorkspace(helper);
     const group = helper.getByRole('group', { name: '说法1消息组', exact: true });
     await expect(group.getByRole('textbox', { name: '说法1第2条编辑文本', exact: true })).toHaveValue('甲本次不参加。');
     const sessionA = (await helper.evaluate(() => window.notalone.replies.getState())).savedSession!.sessionId!;
@@ -50,6 +50,10 @@ export async function assistantSessionCombination(browser: Browser, origin: stri
       .toBe('completed');
     const beforeMessage = (await fixture.request(pathA)).data;
     expect(beforeMessage.turns).toHaveLength(2);
+    const priorReply = (await helper.evaluate(() => window.notalone.replies.getState())).result!.replyRequestId;
+    const priorEvidencePath = `/api/contacts/${contactA}/replies/${priorReply}/evidence`;
+    const priorEvidence = await fixture.request(priorEvidencePath);
+    expect(priorEvidence.status).toBe(200);
     await fixture.command('append_other_contact');
     await pages.awaitPendingCommands();
     expect((await helper.evaluate(() => window.notalone.replies.getState())).messageNotice.changed).toBe(false);
@@ -57,22 +61,32 @@ export async function assistantSessionCombination(browser: Browser, origin: stri
     await expect(helper.getByRole('status').filter({ hasText: '当前联系人有新消息' })).toBeVisible();
     expect((await fixture.command('observations')).model_calls).toBe(2);
     await expect(group.getByRole('textbox', { name: '说法1第2条编辑文本', exact: true })).toHaveValue('甲明确不参加。');
+    expect(await fixture.request(priorEvidencePath)).toEqual(priorEvidence);
+    // 工作区不再选择一条新消息；显式刷新背景后，由同一动作重新生成。
+    await helper.getByRole('button', { name: '刷新最近聊天', exact: true }).click();
+    await expect(helper.getByRole('checkbox', { name: /使用消息：甲的新合成消息/ })).toBeChecked();
+    expect((await fixture.command('observations')).model_calls).toBe(2);
     await fixture.plan({ count: 1, message_groups: [['甲新消息后的感谢。', '甲仍不参加。']] });
-    await helper.getByRole('button', { name: '结合新消息重新生成', exact: true }).click();
+    await generateWorkspace(helper);
     await expect(group.getByRole('textbox', { name: '说法1第2条编辑文本', exact: true })).toHaveValue('甲仍不参加。');
     const adopted = (await fixture.request(pathA)).data;
-    const turns = adopted.turns as Array<{ input: { content: { target_message_id: string; direction: string; user_instruction: string } } }>;
+    const turns = adopted.turns as Array<{ input: { content: Record<string, unknown> } }>;
     expect(turns).toHaveLength(3);
-    expect(turns[2].input.content).toMatchObject({ target_message_id: arrived.message_id,
-      direction: '感谢邀请，本次不参加。', user_instruction: '自然一点；简短一点' });
+    expect(turns[2].input.content).toMatchObject({ input_kind: 'workspace', workspace_action: 'express',
+      draft_text: '感谢邀请，本次不参加。', user_instruction: '自然一点；简短一点' });
+    expect(turns[2].input.content).not.toHaveProperty('target_message_id');
+    const adoptedReply = (await helper.evaluate(() => window.notalone.replies.getState())).result!.replyRequestId;
+    const adoptedEvidence = await fixture.request(`/api/contacts/${contactA}/replies/${adoptedReply}/evidence`);
+    expect(adoptedEvidence.status).toBe(200);
+    expect(adoptedEvidence.data.evidence).toEqual(expect.arrayContaining([expect.objectContaining({ evidence_id: arrived.message_id, kind: 'message' })]));
     await openAssistantHistory(helper);
     await expect(group.getByRole('button', { name: '用这组回复新开会话', exact: true })).toBeEnabled();
     await expect(group.getByRole('button', { name: '复制第1条', exact: true })).toBeEnabled();
 
     await chooseContact(pages, helper, 1);
-    await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('乙的独立合成草稿。');
+    await fillWorkspaceThought(helper, '乙的独立合成草稿。');
     await fixture.plan({ count: 1, prefix: '乙的独立合成候选' });
-    await helper.getByRole('button', { name: '生成候选', exact: true }).click();
+    await generateWorkspace(helper);
     await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveValue('乙的独立合成候选（说法1）。');
     const sessionB = (await helper.evaluate(() => window.notalone.replies.getState())).savedSession!.sessionId!;
     const pathB = `/api/contacts/${contactB}/assistant-sessions/${sessionB}`;
@@ -87,7 +101,7 @@ export async function assistantSessionCombination(browser: Browser, origin: stri
     expect((await fixture.request(`/api/contacts/${fixture.data.other_contact_id}/assistant-sessions/${sessionA}`)).status).toBe(404);
 
     // 重建公开页面后只从权威存储恢复，未保存的草稿不参与恢复。
-    await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('未提交且不应恢复的乙草稿。');
+    await fillWorkspaceThought(helper, '未提交且不应恢复的乙草稿。');
     await helper.close();
     const opened = pages.manager.context().waitForEvent('page');
     await pages.manager.getByRole('button', { name: '打开输入小窗', exact: true }).click();
@@ -96,7 +110,7 @@ export async function assistantSessionCombination(browser: Browser, origin: stri
     await selectSession(helper, sessionA);
     await expect(helper.getByRole('group', { name: '说法1消息组', exact: true })
       .getByRole('textbox', { name: '说法1第2条编辑文本', exact: true })).toHaveValue('甲仍不参加。');
-    await expect(helper.getByRole('textbox', { name: '草稿', exact: true })).toHaveValue('');
+    await expect(helper.getByRole('textbox', { name: '有什么想说的', exact: true })).toHaveValue('');
     expect((await fixture.command('observations')).model_calls).toBe(4);
 
     // 合法完整历史经公开HTTP保存，真实预算守卫必须拒绝而非截断。
@@ -110,10 +124,10 @@ export async function assistantSessionCombination(browser: Browser, origin: stri
     await expandSavedDiscussion(helper);
     await expect.poll(() => helper.evaluate(async () => (await window.notalone.replies.getState()).savedSession?.currentInputVersionId))
       .toBe(input.data.input_version_id);
-    await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('甲超限后保留的合成草稿。');
+    await fillWorkspaceThought(helper, '甲超限后保留的合成草稿。');
     await expect.poll(() => helper.evaluate(async () => (await window.notalone.contacts.getState()).draft))
       .toBe('甲超限后保留的合成草稿。');
-    await helper.getByRole('button', { name: '生成候选', exact: true }).click();
+    await generateWorkspace(helper);
     await pages.awaitPendingCommands();
     const budgetState = await helper.evaluate(() => window.notalone.replies.getState());
     expect(budgetState.errorCode).toBe('input_budget_exceeded');

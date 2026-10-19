@@ -1,3 +1,4 @@
+import { fillWorkspaceThought, fillWorkspaceInstruction, generateWorkspace, setWorkspaceContext } from '../workspace-actions';
 import { openAssistantHistory, expandSavedDiscussion } from '../assistant-history-actions';
 import { selectMemoryCategory } from '../memory-page-actions';
 import { expect, type Browser, type Page } from '@playwright/test';
@@ -6,6 +7,8 @@ import { PageHost } from './page-host';
 import { withRewritePages } from './rewrite-acceptance';
 import type { RewritePages } from '../rewrite-page-scenarios';
 
+const candidateEditor = (page: Page, number = 1) => page.getByRole('group', { name: `说法${number}消息组`, exact: true }).getByRole('textbox');
+
 async function chooseContact({ manager, helper, rewriteBackend }: RewritePages, index: 0 | 1 = 0) {
   await manager.getByRole('button', { name: index === 0 ? '选择合成联系人甲' : '选择合成联系人乙', exact: true }).click();
   await confirmHelperContact(helper, rewriteBackend.data.contact_ids[index]);
@@ -13,21 +16,21 @@ async function chooseContact({ manager, helper, rewriteBackend }: RewritePages, 
 
 async function saveDraft(pages: RewritePages, draft: string, prefix: string) {
   await chooseContact(pages);
-  await pages.helper.getByRole('textbox', { name: '草稿', exact: true }).fill(draft);
+  await fillWorkspaceThought(pages.helper, draft);
+  await setWorkspaceContext(pages.helper, false);
   await pages.rewriteBackend.plan({ count: 1, prefix });
-  await pages.helper.getByRole('button', { name: '生成候选', exact: true }).click();
-  await expect(pages.helper.getByRole('textbox', { name: '候选1编辑文本', exact: true }))
+  await generateWorkspace(pages.helper, 'express');
+  await expect(candidateEditor(pages.helper))
     .toHaveValue(`${prefix}（说法1）。`);
 }
 
 async function saveDependentReply(pages: RewritePages) {
   await chooseContact(pages);
-  await pages.helper.getByRole('button', { name: '回应消息', exact: true }).click();
-  await pages.helper.getByRole('radio', { name: /甲的私密合成历史/ }).click();
-  await pages.helper.getByRole('textbox', { name: '表达方向', exact: true }).fill('依赖来源的恢复讨论。');
+  await fillWorkspaceThought(pages.helper, '依赖来源的恢复讨论。');
+  await setWorkspaceContext(pages.helper, true);
   await pages.rewriteBackend.plan({ count: 1, prefix: '依赖来源的恢复候选' });
-  await pages.helper.getByRole('button', { name: '生成候选', exact: true }).click();
-  await expect(pages.helper.getByRole('textbox', { name: '候选1编辑文本', exact: true }))
+  await generateWorkspace(pages.helper, 'express');
+  await expect(candidateEditor(pages.helper))
     .toHaveValue('依赖来源的恢复候选（说法1）。');
 }
 
@@ -39,16 +42,18 @@ function readSavedDiscussion(helper: Page) {
 }
 
 async function expectRecoveredDiscussion(helper: Page) {
+  await expandSavedDiscussion(helper);
   const discussion = helper.getByRole('region', { name: '已保存的讨论', exact: true });
   await expect(discussion.getByText('已保存的合成讨论：明天再确认。', { exact: true })).toBeVisible();
   await expect(discussion.getByText('跨连接保存的合成候选（说法1）。', { exact: true })).toBeVisible();
   await expect(discussion.getByText('跨连接保存的合成候选（说法2）。', { exact: true })).toBeVisible();
   await expect(discussion.getByRole('article')).toHaveCount(1);
-  await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveCount(0);
-  await expect(helper.getByRole('textbox', { name: '草稿', exact: true })).toHaveValue('');
+  await expect(candidateEditor(helper)).toHaveValue('跨连接可靠保存的合成编辑。');
+  await expect(helper.getByRole('group', { name: '说法1消息组', exact: true }).getByText('修改版本 1', { exact: true })).toBeVisible();
+  await expect(helper.getByRole('textbox', { name: '有什么想说的', exact: true })).toHaveValue('');
   await expect(helper.getByRole('textbox', { name: '本次要求', exact: true })).toHaveValue('');
   await expect(helper.getByRole('combobox', { name: '本次语气', exact: true })).toHaveValue('original');
-  await expect(helper.getByText('未保存的合成编辑。', { exact: true })).toHaveCount(0);
+  await expect(candidateEditor(helper)).not.toHaveValue('未保存的合成编辑。');
   expect(await helper.evaluate(async () => window.notalone.replies.getState())).toMatchObject({
     result: null, selectedCandidateId: null, direction: '', purpose: '', canRetry: false,
   });
@@ -56,25 +61,27 @@ async function expectRecoveredDiscussion(helper: Page) {
 
 // 使用同一合成联系人和 PostgreSQL；重建宿主只替换必要生命周期输入。
 export async function assistantSessionRecovery(browser: Browser, origin: string) {
-  process.stdout.write('page_test_scenario: 重连与重开只恢复可靠保存的讨论及原候选\n');
+  process.stdout.write('page_test_scenario: 重连与重开恢复原讨论和已保存候选版本，丢弃未保存编辑\n');
   await withRewritePages(browser, origin, async ({ manager, helper, rewriteBackend, replyTransport }, host, userData) => {
     const contactId = rewriteBackend.data.contact_ids[0];
     await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
     await confirmHelperContact(helper, contactId);
-    await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('已保存的合成讨论：明天再确认。');
+    await helper.getByRole('textbox', { name: '有什么想说的', exact: true }).fill('已保存的合成讨论：明天再确认。');
     await rewriteBackend.plan({ count: 2, prefix: '跨连接保存的合成候选' });
-    await helper.getByRole('button', { name: '生成候选', exact: true }).click();
-    await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true }))
+    await helper.getByRole('button', { name: '帮我表达', exact: true }).click();
+    await expect(candidateEditor(helper))
       .toHaveValue('跨连接保存的合成候选（说法1）。');
-    const selected = helper.getByRole('radio', { name: '说法 2', exact: true });
-    await selected.click();
-    await expect(selected).toBeChecked();
-    await helper.getByRole('textbox', { name: '候选1编辑文本', exact: true }).fill('未保存的合成编辑。');
-    await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('未提交的新合成草稿。');
+    await candidateEditor(helper).fill('跨连接可靠保存的合成编辑。');
+    await candidateEditor(helper).blur();
+    await expect(helper.getByRole('group', { name: '说法1消息组', exact: true })
+      .getByText('修改版本 1', { exact: true })).toBeVisible();
+    await fillWorkspaceThought(helper, '未提交的新合成草稿。');
+    await fillWorkspaceInstruction(helper, '未提交的合成要求。');
     await helper.getByRole('combobox', { name: '本次语气', exact: true }).selectOption('polite');
-    await helper.getByRole('textbox', { name: '本次要求', exact: true }).fill('未提交的合成要求。');
-    await helper.getByRole('button', { name: '主动聊聊', exact: true }).click();
-    await helper.getByRole('textbox', { name: '主动目的', exact: true }).fill('未提交的合成主动目的。');
+    // 最后一次编辑保持焦点，断线前不触发失焦保存。
+    await candidateEditor(helper).fill('未保存的合成编辑。');
+    await expect(helper.getByRole('group', { name: '说法1消息组', exact: true })
+      .getByRole('button', { name: '复制第1条', exact: true })).toBeDisabled();
 
     replyTransport.failRuntime = true;
     await expect(manager.getByRole('status').filter({ hasText: '尚未连接' })).toBeVisible();
@@ -100,7 +107,7 @@ export async function assistantSessionRecovery(browser: Browser, origin: string)
       expect((await rewriteBackend.command('observations')).payloads).toHaveLength(1);
     } finally { await reopened.close(); }
   });
-  process.stdout.write('page_test_scenario_passed: 重连与重开只恢复可靠保存的讨论及原候选\n');
+  process.stdout.write('page_test_scenario_passed: 重连与重开恢复原讨论和已保存候选版本，丢弃未保存编辑\n');
 }
 
 async function contactScope(pages: RewritePages) {
@@ -114,6 +121,7 @@ async function contactScope(pages: RewritePages) {
     await expect.poll(() => replyTransport.heldCount).toBe(heldBefore + 1);
     expect(replyTransport.sessionReads.at(-1)).toEqual({ status: 200, states: ['completed'] });
     await chooseContact(pages, 1);
+    await openAssistantHistory(helper);
     await expect(helper.getByText('当前会话还没有讨论。', { exact: true })).toBeVisible();
     replyTransport.release();
     await pending;
@@ -142,13 +150,14 @@ async function staleConnection(pages: RewritePages) {
     replyTransport.failRuntime = false;
     await manager.getByRole('button', { name: '重试连接', exact: true }).click();
     await chooseContact(pages);
+    await expandSavedDiscussion(helper);
     await expect(helper.getByRole('region', { name: '已保存的讨论', exact: true })
       .getByText('相关来源不可用', { exact: true })).toBeVisible();
     replyTransport.release();
     await pending;
     await expect(helper.getByText('依赖来源的恢复讨论。', { exact: true })).toHaveCount(0);
     await expect(helper.getByText('依赖来源的恢复候选（说法1）。', { exact: true })).toHaveCount(0);
-    await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveCount(0);
+    await expect(candidateEditor(helper)).toHaveCount(0);
     expect((await rewriteBackend.command('observations')).payloads).toHaveLength(1);
   } finally { replyTransport.failRuntime = false; replyTransport.release(); await pending; }
 }
@@ -156,27 +165,30 @@ async function staleConnection(pages: RewritePages) {
 async function runningRequest(pages: RewritePages) {
   const { manager, helper, rewriteBackend, replyTransport } = pages;
   await chooseContact(pages);
+  await openAssistantHistory(helper);
   await expect(helper.getByText('当前会话还没有讨论。', { exact: true })).toBeVisible();
-  await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('已经保存但尚未完成的合成输入。');
+  await helper.getByRole('textbox', { name: '有什么想说的', exact: true }).fill('已经保存但尚未完成的合成输入。');
   await rewriteBackend.command('hold');
   await rewriteBackend.plan({ count: 1, prefix: '用户读取后才显示的原候选' });
   const pending = helper.evaluate(async () => {
     const contact = await window.notalone.contacts.getState();
-    await window.notalone.replies.generate({ contactId: contact.selectedContactId!, scopeRevision: contact.scopeRevision, newRequest: true });
+    await window.notalone.replies.generate({ contactId: contact.selectedContactId!, scopeRevision: contact.scopeRevision, newRequest: true, workspaceAction: 'express' });
   });
   try {
     await expect(helper.getByRole('status').filter({ hasText: '正在等待本次生成结果' })).toBeVisible();
     await readSavedDiscussion(helper);
+    await expandSavedDiscussion(helper);
     await expect(helper.getByText('本轮生成尚未完成。', { exact: true })).toBeVisible();
     replyTransport.failRuntime = true;
     await expect(manager.getByRole('status').filter({ hasText: '尚未连接' })).toBeVisible();
     replyTransport.failRuntime = false;
     await manager.getByRole('button', { name: '重试连接', exact: true }).click();
     await chooseContact(pages);
+    await expandSavedDiscussion(helper);
     await expect(helper.getByText('本轮生成尚未完成。', { exact: true })).toBeVisible();
     await expect(helper.getByRole('region', { name: '已保存的讨论', exact: true })
       .getByText('已经保存但尚未完成的合成输入。', { exact: true })).toBeVisible();
-    await expect(helper.getByRole('textbox', { name: '草稿', exact: true })).toHaveValue('');
+    await expect(helper.getByRole('textbox', { name: '有什么想说的', exact: true })).toHaveValue('');
     await expect(helper.getByRole('button', { name: '重试同一次生成', exact: true })).toHaveCount(0);
     expect(replyTransport.requests).toHaveLength(1);
     expect((await rewriteBackend.command('observations')).payloads).toHaveLength(0);
@@ -184,6 +196,7 @@ async function runningRequest(pages: RewritePages) {
     await pending;
     await expect.poll(() => replyTransport.results.length).toBe(1);
     await readSavedDiscussion(helper);
+    await expandSavedDiscussion(helper);
     await expect(helper.getByRole('region', { name: '已保存的讨论', exact: true })
       .getByText('用户读取后才显示的原候选（说法1）。', { exact: true })).toBeVisible();
     expect((await rewriteBackend.command('observations')).payloads).toHaveLength(1);
@@ -197,6 +210,7 @@ async function deletedSource(pages: RewritePages, host: PageHost, userData: stri
   await saveDependentReply(pages);
   await chooseContact(pages, 1);
   await chooseContact(pages);
+  await expandSavedDiscussion(helper);
   await expect(helper.getByRole('region', { name: '已保存的讨论', exact: true })
     .getByText('依赖来源的恢复讨论。', { exact: true })).toBeVisible();
   replyTransport.nextSessionRead = 'hold';
@@ -215,12 +229,13 @@ async function deletedSource(pages: RewritePages, host: PageHost, userData: stri
     await readSavedDiscussion(helper);
     replyTransport.release();
     await pending;
+    await expandSavedDiscussion(helper);
     const discussion = helper.getByRole('region', { name: '已保存的讨论', exact: true });
     await expect(discussion.getByText('相关来源已删除', { exact: true })).toBeVisible();
     await expect(discussion.getByText('不依赖来源的恢复讨论。', { exact: true })).toBeVisible();
     await expect(discussion.getByText('不依赖来源的恢复候选（说法1）。', { exact: true })).toBeVisible();
     await expect(discussion.getByText('依赖来源的恢复讨论。', { exact: true })).toHaveCount(0);
-    await expect(helper.getByRole('textbox', { name: '表达方向', exact: true })).toHaveValue('依赖来源的恢复讨论。');
+    await expect(helper.getByRole('textbox', { name: '有什么想说的', exact: true })).toHaveValue('依赖来源的恢复讨论。');
     await expect(helper.getByText('依赖来源的恢复候选（说法1）。', { exact: true })).toHaveCount(0);
     expect((await rewriteBackend.command('observations')).payloads).toHaveLength(2);
   } finally { replyTransport.release(); await pending; }
@@ -233,6 +248,7 @@ async function deletedSource(pages: RewritePages, host: PageHost, userData: stri
     await nextManager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
     const nextHelper = await reopened.open('helper');
     await confirmHelperContact(nextHelper, rewriteBackend.data.contact_ids[0]);
+    await expandSavedDiscussion(nextHelper);
     const discussion = nextHelper.getByRole('region', { name: '已保存的讨论', exact: true });
     await expect(discussion.getByText('相关来源已删除', { exact: true })).toBeVisible();
     await expect(discussion.getByText('不依赖来源的恢复讨论。', { exact: true })).toBeVisible();
@@ -257,6 +273,7 @@ async function authorization(pages: RewritePages) {
   // 桌面绑定撤销后，按 ADR-065 显式确认手动范围；讨论读取仍按 owner/contact 隔离。
   await chooseContact(pages);
   await readSavedDiscussion(helper);
+  await expandSavedDiscussion(helper);
   const discussion = helper.getByRole('region', { name: '已保存的讨论', exact: true });
   await expect(discussion.getByText('按真实联系人隔离的讨论。', { exact: true })).toBeVisible();
   await expect(discussion.getByText('范围隔离的原候选（说法1）。', { exact: true })).toBeVisible();
@@ -275,12 +292,14 @@ async function readFailure(pages: RewritePages) {
   await saveDraft(pages, '恢复读取失败不能沿用缓存。', '恢复读取成功的原候选');
   await chooseContact(pages, 1);
   await chooseContact(pages);
+  await expandSavedDiscussion(helper);
   await expect(helper.getByRole('region', { name: '已保存的讨论', exact: true })
     .getByText('恢复读取失败不能沿用缓存。', { exact: true })).toBeVisible();
-  const candidate = helper.getByRole('textbox', { name: '候选1编辑文本', exact: true });
+  const candidate = candidateEditor(helper);
   await candidate.fill('读取暂时失败也应保留的合成候选编辑。');
-  await expect.poll(() => helper.evaluate(async () => (await window.notalone.replies.getState()).result?.candidates[0].editedText))
-    .toBe('读取暂时失败也应保留的合成候选编辑。');
+  await candidate.blur();
+  await expect(helper.getByRole('group', { name: '说法1消息组', exact: true })
+    .getByText('修改版本 1', { exact: true })).toBeVisible();
   const beforeFailure = await helper.evaluate(async () => window.notalone.replies.getState());
   replyTransport.failSessionReads = true;
   await openAssistantHistory(helper);
@@ -297,7 +316,7 @@ async function readFailure(pages: RewritePages) {
   });
   const attempts = replyTransport.sessionRequests.length;
   replyTransport.failSessionReads = false;
-  await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('重试时保留的未提交草稿。');
+  await helper.getByRole('textbox', { name: '有什么想说的', exact: true }).fill('重试时保留的未提交草稿。');
   await expect(helper.getByRole('alert').filter({ hasText: '已保存讨论暂不可用' })).toBeVisible();
   expect(replyTransport.sessionRequests).toHaveLength(attempts);
   await openAssistantHistory(helper);
@@ -305,7 +324,7 @@ async function readFailure(pages: RewritePages) {
   await expandSavedDiscussion(helper);
   await expect(helper.getByRole('region', { name: '已保存的讨论', exact: true })
     .getByText('恢复读取成功的原候选（说法1）。', { exact: true })).toBeVisible();
-  await expect(helper.getByRole('textbox', { name: '草稿', exact: true })).toHaveValue('重试时保留的未提交草稿。');
+  await expect(helper.getByRole('textbox', { name: '有什么想说的', exact: true })).toHaveValue('重试时保留的未提交草稿。');
   await expect(candidate).toHaveValue('读取暂时失败也应保留的合成候选编辑。');
   expect(replyTransport.sessionRequests).toHaveLength(attempts + 1);
   expect((await rewriteBackend.command('observations')).payloads).toHaveLength(1);
