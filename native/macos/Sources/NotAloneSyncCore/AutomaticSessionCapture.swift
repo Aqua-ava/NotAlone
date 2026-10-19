@@ -114,10 +114,12 @@ public enum AutomaticSessionCapture {
             guard try context() == current else { throw AutomaticCaptureFailure.context }
             let formatter = ISO8601DateFormatter()
             formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-            return ["ok": true, "wechat_in_front": true, "capture_version": "automatic-header-v3",
+            var result: [String: Any] = ["ok": true, "wechat_in_front": true, "capture_version": "automatic-header-v4",
                     "captured_at": formatter.string(from: capturedAt), "display_name": name.text,
                     "quality": ["layout_verified": true, "display_name_confidence": name.confidence,
                                 "name_complete": name.isComplete]]
+            if let fallback = name.textFallback { result["text_fallback"] = fallback.protocolValue }
+            return result
         } catch {
             return ["ok": false, "stage": stage, "error": (error as? MinimalSessionError)?.rawValue
                     ?? (error as? AutomaticCaptureFailure)?.rawValue
@@ -174,8 +176,10 @@ struct HeaderOcrResult {
     let text: String
     let confidence: Double
     let isComplete: Bool
+    let textFallback: HeaderTextFallback?
 
-    init(fragments: [(RecognizedLine, CGRect)]) {
+    init(fragments: [(RecognizedLine, CGRect)], textFallback: HeaderTextFallback? = nil) {
+        self.textFallback = textFallback
         text = fragments.map { $0.0.text }.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
         confidence = fragments.allSatisfy({ $0.0.confidence.isFinite && (0...1).contains($0.0.confidence) })
             ? Double(fragments.map { $0.0.confidence }.min() ?? 0) : .nan

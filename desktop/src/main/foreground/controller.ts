@@ -39,6 +39,7 @@ export class ForegroundController {
   private captureAuthorityRevision = 0;
   private selectingObservedContact = false;
   private manualRequired = false;
+  private qualityOnlyManualGate = false;
   private flight: Flight | undefined;
   private nameExpiry: ReturnType<typeof setTimeout> | undefined;
   private generation: number | undefined;
@@ -163,6 +164,7 @@ export class ForegroundController {
     this.invalidatePending(); ++this.epoch; ++this.captureAuthorityRevision;
     const selected = this.contacts.selectContact({ contactId: selection.contactId, scopeRevision: contact.scopeRevision });
     this.manualRequired = false;
+    this.qualityOnlyManualGate = false;
     this.state = { ...this.state, manualInput: false };
     this.qualification = { generation, scopeRevision: selected.scopeRevision, contactId: selection.contactId, kind: 'manual-confirmed' };
     this.publish({ foregroundRevision: this.state.foregroundRevision + 1, suggestedContactId: null,
@@ -256,7 +258,17 @@ export class ForegroundController {
         || (this.state.unsupportedConversation && !privateVerified);
       // 未绑定只撤销当轮资格；后续完整绑定可独立恢复，不清除低分或歧义等既有人工门。
       if ((observation.phase === 'manual-required' && observation.reason !== 'unmatched_requires_selection') || (observation.phase === 'unavailable'
-        && !isTransientForegroundContextChange(observation.reason))) this.manualRequired = true;
+        && !isTransientForegroundContextChange(observation.reason))) {
+        this.qualityOnlyManualGate = observation.reason === 'quality_unverified'
+          && (!this.manualRequired || this.qualityOnlyManualGate);
+        this.manualRequired = true;
+      }
+      // 独立高质量尾部文字证据只解除单纯质量门，不覆盖歧义、超时或明确手动模式。
+      if (observation.phase === 'confirmed' && observation.reason === 'confirmed_active_binding_emoji_fallback'
+        && this.qualityOnlyManualGate) {
+        this.manualRequired = false;
+        this.qualityOnlyManualGate = false;
+      }
       if (unsupportedConversation || this.manualRequired || observation.phase === 'manual-required'
         || observation.phase === 'unavailable' || observation.reason === 'sync_disabled') this.qualification = undefined;
       this.state = { ...this.state, unsupportedConversation };
@@ -354,7 +366,10 @@ export class ForegroundController {
   }
   private clearObservation(phase: ForegroundState['phase'], reason: string | null): void {
     if (phase === 'manual-required' || phase === 'unavailable') this.qualification = undefined;
-    if (reason === 'observation_timeout' || reason === 'observation_unavailable' || reason === 'contact_unavailable') this.manualRequired = true;
+    if (reason === 'observation_timeout' || reason === 'observation_unavailable' || reason === 'contact_unavailable') {
+      this.manualRequired = true;
+      this.qualityOnlyManualGate = false;
+    }
     this.publish({ phase, reason, observedAt: null, probeAvailable: null, wechatInFront: null,
       recognizedName: null, recognitionConfidence: null,
       foregroundRevision: this.state.foregroundRevision + 1, suggestedContactId: null });

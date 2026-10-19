@@ -25,8 +25,10 @@ if __name__ == "__main__":
             "display_name_confidence": state.get("display_name_confidence", 0.95),
         },
     }
-    if version == "automatic-header-v3":
+    if version in ("automatic-header-v3", "automatic-header-v4"):
         payload["quality"]["name_complete"] = state.get("name_complete", True)
+        if "text_fallback" in state:
+            payload["text_fallback"] = state["text_fallback"]
     else:
         payload["selected_row_name"] = state.get("selected_row_name", "唯一合成会话")
         payload["quality"]["selected_row_name_confidence"] = state.get("selected_row_name_confidence", 0.96)

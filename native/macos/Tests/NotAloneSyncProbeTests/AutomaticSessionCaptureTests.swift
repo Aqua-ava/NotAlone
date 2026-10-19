@@ -51,9 +51,40 @@ final class AutomaticSessionCaptureTests: XCTestCase {
         let quality = try XCTUnwrap(result["quality"] as? [String: Any])
         XCTAssertEqual(quality["display_name_confidence"] as? Double, Double(Float(0.65)))
         XCTAssertEqual(quality["name_complete"] as? Bool, true)
-        XCTAssertEqual(result["capture_version"] as? String, "automatic-header-v3")
+        XCTAssertEqual(result["capture_version"] as? String, "automatic-header-v4")
         XCTAssertNil(quality["selected_row_name_confidence"])
         XCTAssertNil(result["selected_row_name"])
+    }
+
+    @MainActor
+    func testHeaderFallbackProtocolRetainsRawQualityAndUsesTheSameFrame() async throws {
+        let context = CalibrationContext(processId: 7, windowId: 9,
+            frame: CGRect(x: 0, y: 0, width: 900, height: 700), version: "4.0.6", build: "29387")
+        let box = CGRect(x: 0.1, y: 0.2, width: 0.3, height: 0.6)
+        let candidate = HeaderTextFallback(HeaderOcrResult(fragments: [
+            (RecognizedLine(text: "合成", speaker: .unknown, confidence: 0.99), box)]))
+        var captures = 0, recognitions = 0
+        let result = await AutomaticSessionCapture.observeHeader(context: { context }, capture: { _ in
+            captures += 1
+            return self.window(rows: [])
+        }, recognize: { _ in
+            recognitions += 1
+            return HeaderOcrResult(fragments: [(RecognizedLine(text: "合成學", speaker: .unknown, confidence: 0.3), box)],
+                textFallback: candidate)
+        })
+        XCTAssertEqual(captures, 1)
+        XCTAssertEqual(recognitions, 1)
+        XCTAssertEqual(result["display_name"] as? String, "合成學")
+        let quality = try XCTUnwrap(result["quality"] as? [String: Any])
+        XCTAssertEqual(quality["display_name_confidence"] as? Double, Double(Float(0.3)))
+        XCTAssertEqual(quality["name_complete"] as? Bool, true)
+        let fallback = try XCTUnwrap(result["text_fallback"] as? [String: Any])
+        XCTAssertEqual(Set(fallback.keys), Set(["version", "text", "confidence", "text_complete", "mask_verified"]))
+        XCTAssertEqual(fallback["version"] as? String, "isolated-color-tail-v1")
+        XCTAssertEqual(fallback["text"] as? String, "合成")
+        XCTAssertEqual(fallback["confidence"] as? Double, Double(Float(0.99)))
+        XCTAssertEqual(fallback["text_complete"] as? Bool, true)
+        XCTAssertEqual(fallback["mask_verified"] as? Bool, true)
     }
 
     @MainActor

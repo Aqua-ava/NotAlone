@@ -66,6 +66,7 @@ export function ForegroundPanel({ state, session, permission, manualRelease = fa
     </button>}
     {state.confirmation === 'manual-confirmed' && <p>本次联系人已由你确认。</p>}
     {state.confirmation === 'verified-binding' && <p>本次联系人已通过微信会话绑定确认。</p>}
+    {state.reason === 'confirmed_active_binding_emoji_fallback' && <p>已通过尾部表情文字核验与唯一会话绑定确认；上方分数仍是原始 OCR 结果。</p>}
     {(state.phase === 'confirmed' || state.suggestedContactId || state.recognizedName) && state.observedAt && <p>
       识别结果对应 <time dateTime={state.observedAt}>{new Date(state.observedAt).toLocaleTimeString('zh-CN', { hour12: false })}</time> 采集时的会话；之后的切换可能尚未反映。
     </p>}

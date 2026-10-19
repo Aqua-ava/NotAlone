@@ -184,6 +184,40 @@ function observationResponse(phase, reason, contactId = null) {
   probe_available: phase !== 'unavailable', wechat_in_front: phase !== 'unavailable', binding_id: contactId, contact_id: contactId } };
 }
 
+test('独立尾部文字证据可恢复单纯质量门，原始低分仍展示', async t => {
+ const f = fixture(t);
+ f.setObservation(async () => observationResponse('manual-required', 'quality_unverified'));
+ await f.foreground.observeBeforeShow();
+ const response = observationResponse('confirmed', 'confirmed_active_binding_emoji_fallback', id);
+ Object.assign(response.data, { recognized_name: '合成學', recognition_confidence: 0.3 });
+ f.setObservation(async () => response); await f.foreground.observeBeforeShow();
+ assert.equal(f.foreground.getGenerationBlock(), null);
+ assert.equal(f.foreground.getState().recognitionConfidence, 0.3);
+ const panel = ports.ForegroundPanel({ state: f.foreground.getState(), session: { state: f.state } });
+ assert.ok(JSON.stringify(panel).includes('尾部表情文字核验'));
+});
+
+test('尾部文字核验不能清除歧义、超时、混合历史或明确手动模式', async t => {
+ for (const prior of [
+  [['manual-required', 'ambiguous_requires_selection']],
+  [['unavailable', 'probe_timeout']],
+  [['manual-required', 'quality_unverified'], ['manual-required', 'ambiguous_requires_selection']],
+  [['manual-required', 'ambiguous_requires_selection'], ['manual-required', 'quality_unverified']],
+ ]) {
+  const f = fixture(t);
+  for (const [phase, reason] of prior) {
+   f.setObservation(async () => observationResponse(phase, reason)); await f.foreground.observeBeforeShow();
+  }
+  f.setObservation(async () => observationResponse('confirmed', 'confirmed_active_binding_emoji_fallback', id));
+  await f.foreground.observeBeforeShow();
+  assert.equal(f.foreground.getState().reason, 'manual_confirmation_required');
+  assert.notEqual(f.foreground.getGenerationBlock(), null);
+ }
+ const f = fixture(t); await f.enterManual();
+ let calls = 0; f.setObservation(async () => { ++calls; return observationResponse('confirmed', 'confirmed_active_binding_emoji_fallback', id); });
+ await f.foreground.observeBeforeShow(); assert.equal(calls, 0); assert.equal(f.foreground.getState().manualInput, true);
+});
+
 test('未绑定只限制当轮并明确提示选择，返回可靠绑定私聊无需清除旧人工门', async t => {
  const f = fixture(t);
  f.setObservation(async () => observationResponse('confirmed', 'confirmed_active_binding', id));

@@ -108,6 +108,7 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 73. [ADR-073：前台观察与后台同步独立执行](adr/073-foreground-observation-independent-of-background-sync.md)
 
 74. [ADR-074：当前对话自动判断并加载回复 Skill](adr/074-automatic-conversation-skill-loading.md)
+75. [ADR-075：孤立尾部表情的独立文字证据](adr/075-isolated-emoji-tail-text-evidence.md)
 
 ## 当前架构决策
 

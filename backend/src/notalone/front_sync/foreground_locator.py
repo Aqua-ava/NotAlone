@@ -17,6 +17,7 @@ from notalone.conversation.matcher import (
     normalize_display_text,
 )
 from notalone.front_sync.foreground_observation import FreshForegroundObservation
+from notalone.front_sync.emoji_tail import has_supported_emoji_suffix
 from notalone.front_sync.observation_budget import FRESH_PROBE_SECONDS
 from notalone.front_sync.probe_adapter import (
     FrontSessionProbeObservation,
@@ -140,17 +141,22 @@ class ForegroundLocator:
 
         recognized = {}
         if (observation.quality is not None
-                and observation.quality.capture_version == "automatic-header-v3"
+                and observation.quality.capture_version in ("automatic-header-v3", "automatic-header-v4")
                 and observation.captured_at is not None and observation.evidence is not None):
             raw_name = observation.evidence.display_name
             if (isinstance(raw_name, str) and raw_name.strip() and len(raw_name) <= 256
                     and "\n" not in raw_name and "\r" not in raw_name):
                 recognized = {"recognized_name": raw_name,
                               "recognition_confidence": observation.quality.display_name_confidence}
+        if observation.text_fallback is not None:
+            return self._observe_emoji_fallback(
+                observation, deadline=deadline, check_current=check_current,
+                recognized=recognized, member_suffix=bool(member_suffix),
+            )
         evidence = observation.qualified_evidence
         quality_failure = None
         if (evidence is None or observation.quality is None
-                or observation.quality.capture_version not in ("automatic-window-v2", "automatic-header-v3")
+                or observation.quality.capture_version not in ("automatic-window-v2", "automatic-header-v3", "automatic-header-v4")
                 or observation.captured_at is None):
             if member_suffix:
                 return pause_group()
@@ -261,6 +267,88 @@ class ForegroundLocator:
             observed_at=observation.captured_at,
             **recognized,
         )
+
+    def _observe_emoji_fallback(
+        self, observation: FrontSessionProbeObservation, *, deadline: float,
+        check_current: Callable[[], None] | None, recognized: dict, member_suffix: bool,
+    ) -> FreshForegroundObservation:
+        """只以全会话前缀消歧核验已有绑定，不用原始误识别文本授予身份。"""
+
+        def result(phase: str, reason: str) -> FreshForegroundObservation:
+            return FreshForegroundObservation.create(
+                phase=phase, reason=reason, probe_available=phase != "unavailable",
+                wechat_in_front=True, observed_at=observation.captured_at,
+                **(recognized if phase == "manual-required" else {}),
+            )
+
+        if member_suffix:
+            return result("paused", "group_chat_suspected")
+        fallback = observation.text_fallback
+        quality = observation.quality
+        if (fallback is None or quality is None or quality.capture_version != "automatic-header-v4"
+                or quality.name_complete is not True or observation.captured_at is None
+                or observation.evidence is None or not recognized
+                or fallback.text_complete is not True or fallback.mask_verified is not True
+                or fallback.confidence < 0.90
+                or fallback.text != normalize_display_text(fallback.text)):
+            return result("manual-required", "quality_unverified")
+        prefix = fallback.text
+        if re.search(r"[（(]\s*[0-9０-９]+\s*[）)]\s*$", prefix):
+            return result("paused", "group_chat_suspected")
+        remaining = deadline - monotonic()
+        if remaining <= 0:
+            return result("unavailable", "observation_timeout")
+        try:
+            if check_current is not None:
+                check_current()
+            candidates = self._cli.sessions(
+                keyword=None, type_filter="all", limit=5000,
+                timeout_seconds=min(0.25, remaining),
+            )
+            if monotonic() >= deadline:
+                raise TimeoutError
+            matching = tuple(item for item in candidates
+                             if normalize_display_text(item.display_name).startswith(prefix))
+            if any(item.chat_type == "group" for item in matching):
+                return result("paused", "group_chat_suspected")
+            if len(candidates) >= 5000:
+                return result("manual-required", "session_candidates_truncated")
+            if len(matching) != 1 or matching[0].chat_type != "private":
+                return result("manual-required", "ambiguous_requires_selection")
+            candidate = matching[0]
+            full_name = normalize_display_text(candidate.display_name)
+            if (not isinstance(candidate.username, str) or not candidate.username.strip()
+                    or sum(item.username == candidate.username for item in candidates) != 1
+                    or candidate.display_name != candidate.display_name.rstrip()
+                    or not has_supported_emoji_suffix(full_name, prefix)):
+                return result("manual-required", "unmatched_requires_selection")
+            if check_current is not None:
+                check_current()
+            bindings = self._bindings.list_active_bindings(
+                owner_id=self._owner_id, channel=self._channel,
+                account_scope=self._account_scope, bounded=True,
+            )
+            if monotonic() >= deadline:
+                raise TimeoutError
+        except TimeoutError:
+            return result("unavailable", "observation_timeout")
+        except (CliAdapterError, ConversationBindingPersistenceError):
+            return result("unavailable", "binding_verification_unavailable")
+        if check_current is not None:
+            check_current()
+        active = tuple(item for item in bindings if item.conversation_locator == candidate.username)
+        if len(active) == 1:
+            binding = active[0]
+            if (binding.scope.owner_id == self._owner_id and binding.channel == self._channel
+                    and binding.account_scope == self._account_scope and binding.status == "active"
+                    and normalize_display_text(binding.display_name) == full_name):
+                return FreshForegroundObservation.create(
+                    phase="confirmed", reason="confirmed_active_binding_emoji_fallback",
+                    probe_available=True, wechat_in_front=True,
+                    binding_id=binding.binding_id, contact_id=binding.scope.contact_id,
+                    observed_at=observation.captured_at, **recognized,
+                )
+        return result("manual-required", "unmatched_requires_selection")
 
     def observe(self, *, enabled: bool) -> ForegroundLocatorStatus:
         """观察一次前台状态；禁用时不启动探针。"""
