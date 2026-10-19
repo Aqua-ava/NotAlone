@@ -874,11 +874,13 @@ def _poll_process(process: object) -> int | None:
 def _parse_candidate(value: object) -> ChatCandidate:
     if not isinstance(value, dict):
         raise CliOutputError("cli_output_invalid", "微信 CLI 会话候选无效。")
+    username = _require_text(value.get("username"), "candidate.username")
+    display_name = value.get("display_name")
+    if isinstance(display_name, str) and not display_name.strip():
+        display_name = username
     return ChatCandidate(
-        username=_require_text(value.get("username"), "candidate.username"),
-        display_name=_require_text(
-            value.get("display_name"), "candidate.display_name"
-        ),
+        username=username,
+        display_name=_require_text(display_name, "candidate.display_name"),
         match=_optional_text(value.get("match")),
         chat_type=_require_text(value.get("chat_type"), "candidate.chat_type"),
         last_timestamp=_optional_int(value.get("last_timestamp")),

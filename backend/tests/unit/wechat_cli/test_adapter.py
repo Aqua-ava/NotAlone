@@ -552,6 +552,92 @@ class LocalWechatCliAdapterTest(unittest.TestCase):
             ),
         )
 
+    def test_sessions_preserves_named_candidates_when_another_name_is_blank(self) -> None:
+        for display_name in ("", " \t\n\u3000"):
+            with self.subTest(display_name=display_name):
+                runner = RecordingRunner(FakeCommandResult(
+                    returncode=0,
+                    stdout=json.dumps({
+                        "ok": True,
+                        "data": {
+                            "sessions": [
+                                {
+                                    "username": "wxid_unnamed",
+                                    "display_name": display_name,
+                                    "chat_type": "private",
+                                },
+                                {
+                                    "username": "wxid_named",
+                                    "display_name": "合成联系人",
+                                    "chat_type": "private",
+                                },
+                            ],
+                        },
+                    }),
+                ))
+
+                sessions = LocalWechatCli(runner=runner).sessions(
+                    type_filter="private", limit=5000,
+                )
+
+                self.assertEqual(
+                    [(item.username, item.display_name) for item in sessions],
+                    [
+                        ("wxid_unnamed", "wxid_unnamed"),
+                        ("wxid_named", "合成联系人"),
+                    ],
+                )
+
+    def test_sessions_rejects_missing_or_non_string_display_names(self) -> None:
+        for fields in (
+            {},
+            {"display_name": None},
+            {"display_name": False},
+            {"display_name": 42},
+            {"display_name": []},
+            {"display_name": {}},
+        ):
+            with self.subTest(fields=fields):
+                candidate = {"username": "wxid_1", "chat_type": "private"}
+                candidate.update(fields)
+                runner = RecordingRunner(FakeCommandResult(
+                    returncode=0,
+                    stdout=json.dumps({
+                        "ok": True, "data": {"sessions": [candidate]},
+                    }),
+                ))
+
+                with self.assertRaises(CliOutputError) as raised:
+                    LocalWechatCli(runner=runner).sessions()
+
+                self.assertEqual(raised.exception.code, "cli_output_invalid")
+
+    def test_sessions_requires_valid_username_before_name_fallback(self) -> None:
+        for fields in (
+            {},
+            {"username": None},
+            {"username": False},
+            {"username": 42},
+            {"username": []},
+            {"username": {}},
+            {"username": ""},
+            {"username": " \t\u3000"},
+        ):
+            with self.subTest(fields=fields):
+                candidate = {"display_name": "", "chat_type": "private"}
+                candidate.update(fields)
+                runner = RecordingRunner(FakeCommandResult(
+                    returncode=0,
+                    stdout=json.dumps({
+                        "ok": True, "data": {"sessions": [candidate]},
+                    }),
+                ))
+
+                with self.assertRaises(CliOutputError) as raised:
+                    LocalWechatCli(runner=runner).sessions()
+
+                self.assertEqual(raised.exception.code, "cli_output_invalid")
+
     def test_tail_uses_cursor_for_incremental_read(self) -> None:
         runner = RecordingRunner(
             FakeCommandResult(
