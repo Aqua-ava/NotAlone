@@ -491,6 +491,89 @@ class SourceProcessingTraceTest(unittest.TestCase):
         self.assertEqual(result.message_ids, ())
         self.assertEqual(self.processing.list_batches(self.scope), ())
 
+    def test_later_processing_block_failure_does_not_advance_sync_cursor(self):
+        from notalone.memory_extraction.cli_support import load_contact_messages
+        from notalone.persistence.observation_store import PostgresObservationStore
+        from notalone.persistence.source_processing import SourceProcessingWriteError
+        from notalone.wechat_cli import LocalWechatCli
+        from notalone.wechat_cli.normalizer import normalize_cli_events
+        from tests.integration.front_sync.cli_fakes import ScriptedCliRunner, tail_stdout
+
+        _, arguments = self.prepare_observation()
+        runner = ScriptedCliRunner()
+        runner.tail_queues[self.contact_external_id].append(tail_stdout(
+            self.contact_external_id,
+            [(201 + i, f"合成后续块同步正文{i}", False) for i in range(600)],
+        ) + "\n")
+        tail = LocalWechatCli(runner=runner).tail(self.contact_external_id)
+        messages = normalize_cli_events(tail.events)
+        arguments.update(messages=messages, record_count=len(messages),
+                         last_local_id=tail.last_local_id, last_cursor=tail.cursor)
+        self.install_processing_fault(after_position=500)
+        writing = PostgresObservationStore(DATABASE_URL)
+        with self.assertRaises(SourceProcessingWriteError):
+            writing.record_batch_with_messages(**arguments)
+        self.assertIsNone(writing.read_cursor(owner_id=self.scope.owner_id, contact_id=self.scope.contact_id))
+        self.assertEqual(load_contact_messages(self.scope, DATABASE_URL), ())
+        self.assertEqual(self.processing.list_batches(self.scope), ())
+
+    def check_source_delete_interleaving(self, *, writer_first):
+        from notalone.ingest.jsonl_reader import read_jsonl
+        from notalone.ingest.normalizer import normalize_document
+        from notalone.memory_extraction.cli_support import load_contact_messages
+        from notalone.persistence.postgres_repository import ImportPersistenceError
+        from notalone.persistence.source_deletion import PostgresSourceDeletionRepository
+        from notalone.persistence.source_processing import SourceProcessingWriteError
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "synthetic.jsonl"
+            path.write_text("".join(json.dumps(record, ensure_ascii=False) + "\n"
+                                    for record in self.records()), encoding="utf-8")
+            document = normalize_document(read_jsonl(path))
+        arguments = dict(owner_id=self.scope.owner_id, document=document, confirmation=self.confirmation)
+        first = self.repository.import_document(**arguments)
+        if writer_first:
+            key = self.install_transaction_gate("source_processing_batch", "INSERT", "TRUE")
+        else:
+            key = self.install_transaction_gate("source_processing_record", "UPDATE", "NEW.payload IS NULL")
+        write_name, delete_name = "synthetic_write_" + uuid4().hex, "synthetic_delete_" + uuid4().hex
+        writing = PostgresIngestRepository(make_conninfo(DATABASE_URL, application_name=write_name))
+        deleting = PostgresSourceDeletionRepository(make_conninfo(DATABASE_URL, application_name=delete_name))
+        def delete():
+            return deleting.delete_source(owner_id=self.scope.owner_id, contact_id=self.scope.contact_id,
+                                          source_document_id=first.source_document_id)
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            with psycopg.connect(DATABASE_URL, autocommit=True) as gate:
+                gate.execute("SELECT pg_advisory_lock(%s)", (key,))
+                if writer_first:
+                    replay = executor.submit(writing.import_document, **arguments)
+                    self.wait_for_operation(gate, write_name, replay)
+                    deletion = executor.submit(delete)
+                    second_name, second = delete_name, deletion
+                else:
+                    deletion = executor.submit(delete)
+                    self.wait_for_operation(gate, delete_name, deletion)
+                    replay = executor.submit(writing.import_document, **arguments)
+                    second_name, second = write_name, replay
+                try:
+                    self.wait_for_operation(gate, second_name, second)
+                finally:
+                    gate.execute("SELECT pg_advisory_unlock(%s)", (key,))
+            deletion.result(timeout=10)
+            if writer_first:
+                self.assertEqual(replay.result(timeout=10).outcome, "already_imported")
+            else:
+                with self.assertRaises((ImportPersistenceError, SourceProcessingWriteError)):
+                    replay.result(timeout=10)
+        self.assertEqual(load_contact_messages(self.scope, DATABASE_URL), ())
+        self.assertTrue(all(batch["status"] == "deleted" for batch in self.processing.list_batches(self.scope)))
+
+    def test_source_delete_after_prepared_import_cleans_committed_processing(self):
+        self.check_source_delete_interleaving(writer_first=True)
+
+    def test_source_delete_before_cached_import_rejects_replay(self):
+        self.check_source_delete_interleaving(writer_first=False)
+
     def test_confirmed_import_reveals_exact_record_and_actual_conversions(
         self,
     ):
@@ -1527,15 +1610,16 @@ class SourceProcessingTraceTest(unittest.TestCase):
             "不保存的关闭窗口正文", json.dumps(batch, ensure_ascii=False)
         )
 
-    def install_processing_fault(self):
+    def install_processing_fault(self, *, after_position=0):
         name = f"synthetic_processing_fault_{self.scope.owner_id.hex}"
         with psycopg.connect(DATABASE_URL) as connection:
             connection.execute(
                 sql.SQL(
-                    "CREATE FUNCTION public.{name}() RETURNS trigger LANGUAGE plpgsql AS $body$ BEGIN IF NEW.owner_id = {owner}::uuid THEN RAISE EXCEPTION '合成来源存储故障'; END IF; RETURN NEW; END $body$"
+                    "CREATE FUNCTION public.{name}() RETURNS trigger LANGUAGE plpgsql AS $body$ BEGIN IF NEW.owner_id = {owner}::uuid AND NEW.position >= {position} THEN RAISE EXCEPTION '合成来源存储故障'; END IF; RETURN NEW; END $body$"
                 ).format(
                     name=sql.Identifier(name),
                     owner=sql.Literal(str(self.scope.owner_id)),
+                    position=sql.Literal(after_position),
                 )
             )
             connection.execute(
