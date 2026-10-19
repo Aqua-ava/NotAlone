@@ -1,4 +1,4 @@
-"""固定main的Grounded默认装配与纠错保护组合；模型只返回合成标签。"""
+"""重放历史 Grounded 审核与纠错保护；模型只返回合成标签。"""
 
 import json
 from pathlib import Path
@@ -6,6 +6,7 @@ import re
 import threading
 import time
 import unittest
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from unittest.mock import patch
 from uuid import UUID, uuid4
@@ -48,13 +49,36 @@ def automatic_fact_text(variant, *, source=False):
     return f"{'我' if source else '联系人'}{time_word}到家。"
 
 
+@contextmanager
+def controlled_adjudication(decide):
+    """在单项及批量模型边界提供同一决定，保留真实自动写入事务。"""
+    def batch(runtime, *, candidates):
+        return tuple(decide(runtime, candidate_text=text, similar=similar)
+                     for text, similar in candidates)
+
+    with patch.object(LangChainAdjudicationRuntime, "adjudicate", decide), \
+            patch.object(LangChainAdjudicationRuntime, "adjudicate_batch", batch):
+        yield
+
+
 class GroundedCorrectionAutomaticHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
-    """有限隔离任务验证事务竞争，显式门回退只在本合成夹具中使用。"""
+    """历史审核流程验证事务竞争，显式门回退只在本合成夹具中使用。"""
 
     extraction_model_factory = GroundedCorrectionModel
     production_model_wiring = True
-    # 生产默认空放行表保持；本组只验证已到达写入边界的纠错和原子性。
+    # 本组回放旧自动采纳写入边界；当前默认 Direct 流程由独立测试覆盖。
     dimension_release = DimensionRelease(gate_enabled=False)
+
+    def _production_backend(self, owner_id):
+        from notalone.tasks.worker import PostgresMemoryExtractionRunner
+
+        def historical_review_runner(database_url, **kwargs):
+            # ADR-069 保留历史审核合同；真实 Worker、核验与纠错事务继续执行。
+            kwargs["runtime"] = kwargs["runtime"].for_prompt_profile("default")
+            return PostgresMemoryExtractionRunner(database_url, **kwargs, automatic=False)
+
+        with patch("notalone.tasks.worker.PostgresMemoryExtractionRunner", historical_review_runner):
+            return super()._production_backend(owner_id)
 
     def _import_auto(self, backend, label, tea, *, contact_id=None, offset=0):
         path = Path(self.temporary.name) / f"synthetic-auto-{label}.jsonl"
@@ -161,7 +185,7 @@ class GroundedCorrectionAutomaticHttpTest(CoreBusinessFlowFixture, unittest.Test
                 replaced_memory_id=UUID(old["memory_id"]),
             )
 
-        with patch.object(LangChainAdjudicationRuntime, "adjudicate", update), \
+        with controlled_adjudication(update), \
                 patch.object(store_class, method, confirm_and_pause):
             second = self._import_auto(
                 backend, "自动更新新依据", "乌龙茶", offset=100,
@@ -252,7 +276,7 @@ class GroundedCorrectionAutomaticHttpTest(CoreBusinessFlowFixture, unittest.Test
             return AdjudicationDecision(action=AdjudicationAction.UPDATE,
                                        replaced_memory_id=UUID(old["memory_id"]))
 
-        with patch.object(LangChainAdjudicationRuntime, "adjudicate", update), \
+        with controlled_adjudication(update), \
                 patch.object(store_class, confirm_method, confirm), \
                 patch.object(store_class, "invalidate", invalidate):
             second = self._import_auto(
@@ -317,7 +341,7 @@ class GroundedCorrectionAutomaticHttpTest(CoreBusinessFlowFixture, unittest.Test
             return AdjudicationDecision(action=AdjudicationAction.UPDATE,
                                        replaced_memory_id=UUID(old["memory_id"]))
 
-        with patch.object(LangChainAdjudicationRuntime, "adjudicate", update), \
+        with controlled_adjudication(update), \
                 patch.object(store_class, method, confirm_and_pause):
             second = self._import_auto(
                 backend, "人工优先新依据", "乌龙茶", offset=100,
@@ -346,8 +370,8 @@ class GroundedCorrectionAutomaticHttpTest(CoreBusinessFlowFixture, unittest.Test
                              [manual_id])
 
 
-    def test_main_grounded_protocol_keeps_production_default_pending(self):
-        self.dimension_release = None
+    def test_historical_grounded_protocol_preserves_pending_review(self):
+        self.dimension_release = DimensionRelease()
         backend = self._backend(self.owner_id)
         imported = self._import_auto(backend, "默认Grounded门", "茉莉茶")
         self._wait_task(backend, imported, "succeeded")
@@ -381,8 +405,8 @@ class SelfGroundedCorrectionAutomaticHttpTest(GroundedCorrectionAutomaticHttpTes
 
     fact_from_me = True
 
-    def test_main_grounded_protocol_keeps_production_default_pending(self):
-        self.dimension_release = None
+    def test_historical_grounded_protocol_preserves_pending_review(self):
+        self.dimension_release = DimensionRelease()
         backend = self._backend(self.owner_id)
         imported = self._import_auto(backend, "本人默认Grounded门", "茉莉茶")
         self._wait_task(backend, imported, "succeeded")
