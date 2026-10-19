@@ -124,12 +124,18 @@ class DesktopRewriteModel(ScriptedCoreModel):
                 "current_step": "本次只说明意愿，不推进其他安排。", "tradeoffs": ["简短表达可能只推进当前一步。"],
             }))
             return super()._generate(messages, stop, run_manager, **kwargs)
-        primary = next(item for item in payload["evidence"]
-                       if (item["kind"] == "user_draft" if payload["input_mode"] == "rewrite_draft"
-                           else item["kind"] == "user_current_chat" if payload["input_mode"] == "reply_to_pasted_text"
-                           else item["kind"] == "user_purpose" if payload["input_mode"] == "initiate_conversation"
-                           else item["kind"] == "message" and item["text"] == payload["current_text"]))
-        citations = [primary["evidence_id"]]
+        if payload["input_mode"] == "workspace":
+            # 有想法时引用实际草稿；空建议可引用实际点击动作，不制造用户输入。
+            preferred = ("user_draft", "user_current_chat", "message", "user_purpose")
+            primary = next((item for kind in preferred for item in payload["evidence"]
+                            if item["kind"] == kind), None)
+        else:
+            primary = next(item for item in payload["evidence"]
+                           if (item["kind"] == "user_draft" if payload["input_mode"] == "rewrite_draft"
+                               else item["kind"] == "user_current_chat" if payload["input_mode"] == "reply_to_pasted_text"
+                               else item["kind"] == "user_purpose" if payload["input_mode"] == "initiate_conversation"
+                               else item["kind"] == "message" and item["text"] == payload["current_text"]))
+        citations = [primary["evidence_id"]] if primary is not None else []
         if plan.get("cite_pending"):
             citations.extend(item["evidence_id"] for item in payload["evidence"] if item["kind"] == "pending_candidate")
         if plan.get("cite_history"):
