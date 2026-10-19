@@ -15,17 +15,20 @@ def current_job(connection, scope):
 
 def cancel_jobs(connection, scope, *, erase=False):
     connection.execute("UPDATE public.background_task SET status='cancelled' WHERE id IN ("
-        "SELECT task_id FROM public.layered_memory_job WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s) "
-        "AND status<>'succeeded'", (scope.owner_id,scope.contact_id))
+        "SELECT task_id FROM public.layered_memory_job WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s "
+        "AND (%s OR state<>'invalidated')) "
+        "AND status<>'succeeded'", (scope.owner_id,scope.contact_id,erase))
     connection.execute("UPDATE public.background_task_step SET status='cancelled',worker_id=NULL,lease_expires_at=NULL,"
         "lease_generation=lease_generation+1 WHERE task_id IN (SELECT task_id FROM public.layered_memory_job "
-        "WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s) AND status<>'succeeded'", (scope.owner_id,scope.contact_id))
+        "WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s AND (%s OR state<>'invalidated')) "
+        "AND status<>'succeeded'", (scope.owner_id,scope.contact_id,erase))
     if erase:
         connection.execute("DELETE FROM public.layered_memory_job WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s",
                            (scope.owner_id,scope.contact_id))
     else:
         connection.execute("UPDATE public.layered_memory_job SET state='invalidated',target_manifest='[]',"
-            "dependency_ids='{}',revision=revision+1 WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s AND state<>'complete'",
+            "dependency_ids='{}',revision=revision+1 WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s "
+            "AND state NOT IN ('complete','invalidated')",
             (scope.owner_id,scope.contact_id))
 
 
@@ -34,7 +37,13 @@ def enqueue_coverage(connection, scope, state, manifest, dependencies, contract,
     key = _digest({"inputs":manifest,"settings_generation":state['settings_generation'],
                    "correction_revision": state['correction_revision'], "contract":contract,"budget":budget.to_payload()})
     jobs = current_job(connection,scope)
-    job = next((row for row in jobs if row['target_key']==key), None)
+    by_key = {row['target_key']: row for row in jobs}
+    job = by_key.get(key)
+    # 同一资料可能因来源元数据更新而失效；旧任务已撤销，不能重新认领。
+    # 恢复键沿失效任务派生，保留旧审计及唯一约束；重复刷新仍复用同一次恢复。
+    while job is not None and job['state'] == 'invalidated':
+        key = _digest({'target_key': key, 'invalidated_task_id': str(job['task_id'])})
+        job = by_key.get(key)
     if action in {'pause','continue'}:
         job = next((row for row in jobs if row['settings_generation']==state['settings_generation']),None)
         if not job or revision is None:
