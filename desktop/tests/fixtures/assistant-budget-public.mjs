@@ -76,10 +76,10 @@ export async function budgetPublicFixture(t, { toolHistory = false, continuous =
       if (failure) throw failure;
     } }, { label: '预算', evidence,
     matchesPreparedDatabase: (name) => !data || data.database_url === `host=/tmp dbname=${name}`,
-    cleanupConfirmed: () => process.stdout.write('budget_public_cleanup: 001–087 repeat=0 owned_database_remaining=0\n'),
+    cleanupConfirmed: () => process.stdout.write('budget_public_cleanup: 001–089 repeat=0 owned_database_remaining=0\n'),
   }));
   data = await ready;
-  assert.equal(data.migration_count, 87); assert.equal(data.migration_repeat, 0);
+  assert.equal(data.migration_count, 89); assert.equal(data.migration_repeat, 0);
   client = new ports.JsonClient(data);
   const messageObservers = new Set();
   let generation = 7; const backendListeners = new Set(), delivery = {};

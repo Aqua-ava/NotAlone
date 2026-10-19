@@ -278,7 +278,7 @@ test('用户暂停首次覆盖再继续同一工作，显示真实批次且保�
     await page.getByText('合格资料 2 条 · 已覆盖 1 条 · 剩余 1 条', { exact: true }).waitFor();
     await page.getByText('当前批次：1', { exact: true }).waitFor();
     await page.getByText('累计已用 2 / 已授权 2 次模型调用', { exact: true }).waitFor({ timeout: 3000 });
-    await page.getByText('本批上限：2 条记忆、2 个主题、3 段、500 字符。', { exact: true }).waitFor({ timeout: 3000 });
+    await page.getByText('本批上限：2 条新记忆、2 个主题、3 段、500 字符。', { exact: true }).waitFor({ timeout: 3000 });
     await page.getByText('当前工作模型调用授权上限：2 次。', { exact: true }).waitFor();
     await page.getByText('每次继续仅推进一批，并追加模型调用额度；已消耗调用不会因继续或重启清零。', { exact: true }).waitFor();
     await page.getByRole('button', { name: '继续整理主题资料', exact: true }).click();
@@ -286,7 +286,7 @@ test('用户暂停首次覆盖再继续同一工作，显示真实批次且保�
     await page.getByText('当前批次：2', { exact: true }).waitFor();
     await page.getByText('累计已用 4 / 已授权 4 次模型调用', { exact: true }).waitFor();
     await page.getByText('当前工作模型调用授权上限：4 次。', { exact: true }).waitFor();
-    await page.getByText('本批上限：2 条记忆、2 个主题、3 段、500 字符。', { exact: true }).waitFor();
+    await page.getByText('本批上限：2 条新记忆、2 个主题、3 段、500 字符。', { exact: true }).waitFor();
     await page.getByText('曾计划参加合成读书会，当前是否成行尚未核实。', { exact: true }).waitFor();
     await page.getByText('后来继续参加合成阅读讨论。', { exact: true }).waitFor();
     assert.equal(await page.getByRole('button', { name: '继续整理主题资料', exact: true }).count(), 0);

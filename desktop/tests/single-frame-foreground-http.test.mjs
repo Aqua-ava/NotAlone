@@ -162,7 +162,15 @@ test('顶部单名称经正式HTTP自动跟随已确认A与B，极低分或截�
       return foreground.getState();
     };
     try {
-      const tails = await fixture.tails();
+      // 开启同步会异步读取两位已授权联系人；等首轮实际完成后再观察前台探针的额外读取。
+      let tails = [];
+      const initialSyncDeadline = performance.now() + 5000;
+      do {
+        tails = await fixture.tails();
+        if (tails.includes('wxid_synthetic_a') && tails.includes('wxid_synthetic_b')) break;
+        await new Promise(resolve => setTimeout(resolve, 25));
+      } while (performance.now() < initialSyncDeadline);
+      assert.deepEqual([...tails].sort(), ['wxid_synthetic_a', 'wxid_synthetic_b']);
       let state = await observe(names[0]);
       assert.equal(state.confirmation, 'verified-binding');
       assert.equal(state.confirmedContactId, a);

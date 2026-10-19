@@ -108,6 +108,6 @@ export async function withMessageOptInFixture(use) {
     }
   }, () => { cleaned = true; }, path.resolve('tests/fixtures/message-events-backend.py')); }
   finally {
-    if (cleaned) process.stdout.write('message_opt_in_cleanup: 001–072 repeat=0 owned_database_remaining=0\n');
+    if (cleaned) process.stdout.write('message_opt_in_cleanup: 001–089 repeat=0 owned_database_remaining=0\n');
   }
 }

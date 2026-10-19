@@ -16,10 +16,20 @@ const { BackendHost, ContactSession, installForegroundBridge, ReplySession, Back
 const contactId = '00000000-0000-4000-8000-000000000001';
 const sessionId = '00000000-0000-4000-8000-000000000002';
 const settle = async () => { for (let i = 0; i < 10; i += 1) await new Promise(setImmediate); };
+async function observedWithin(promise, message) {
+  let timer;
+  try {
+    await Promise.race([promise, new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(message)), 5000);
+    })]);
+  } finally { clearTimeout(timer); }
+}
 
 async function fixture(t, holdFirstRead = false, holdSessionRead = false) {
   const calls = [];
   let confirmed = false, rejectFirst, releaseSession;
+  let observeFirstRead;
+  const firstReadStarted = new Promise((resolve) => { observeFirstRead = resolve; });
   const sessionRead = new Promise((resolve) => { releaseSession = resolve; });
   const firstRead = new Promise((resolve) => { rejectFirst = resolve; });
   const host = new BackendHost('/unused/synthetic-manual-recovery');
@@ -30,6 +40,7 @@ async function fixture(t, holdFirstRead = false, holdSessionRead = false) {
     calls.push({ path: options.path, manualContactId: options.manualContactId ?? null });
     if (options.path.endsWith('/manual-confirmation')) { confirmed = true; return { confirmed: true }; }
     if (options.path.endsWith('/assistant-session/default')) {
+      observeFirstRead();
       if (!confirmed || options.manualContactId !== contactId) {
         if (holdFirstRead) await firstRead;
         throw new BackendRequestFailure('response', 409, 'assistant_session_rejected');
@@ -52,6 +63,7 @@ async function fixture(t, holdFirstRead = false, holdSessionRead = false) {
   const replies = new ReplySession(contacts, host, () => foreground.getGenerationBlock());
   foreground.onStateChanged(() => replies.refreshGenerationEligibility());
   contacts.selectContact({ contactId, scopeRevision: contacts.getState().scopeRevision });
+  await observedWithin(firstReadStarted, '联系人恢复未发出首次讨论读取。');
   await settle();
   return { calls, contacts, foreground, replies, rejectFirst, releaseSession,
     revoke: () => { host.clearManualInput(contactId); const finish = foreground.beginReadingScopeChange(); finish(); },

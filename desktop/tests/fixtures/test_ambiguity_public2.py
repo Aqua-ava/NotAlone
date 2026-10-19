@@ -57,8 +57,14 @@ class AmbiguityPublic2Test(unittest.TestCase):
         self.assertEqual(frozen["fixed"]["batch_work_seconds"], 5380)
         self.assertEqual(frozen["fixed"].get("label_policy"), "v3-guidance-v1")
         self.assertEqual(runner.PLAN, ".scratch/grounded-evaluation/v3-label-guidance-public2-plan-20261016.md")
-        # 当前源码冻结纳入后继控制及新增提取模块；旧79项真实freeze保持封存。
-        self.assertEqual(len(frozen["source_hashes"]), 89)
+        # 当前源码冻结纳入全部提取模块；旧79项真实freeze保持封存。
+        source_root = runner.ROOT / "backend/src/notalone/memory_extraction"
+        extraction_sources = {path.relative_to(runner.ROOT).as_posix() for path in source_root.rglob("*.py")}
+        self.assertEqual(
+            {name for name in frozen["source_hashes"] if name.startswith("backend/src/notalone/memory_extraction/")},
+            extraction_sources,
+        )
+        self.assertEqual(len(frozen["source_hashes"]) - len(extraction_sources), 28)
         self.assertIn("backend/src/notalone/memory_extraction/evaluation_main16_deadline.py", frozen["source_hashes"])
         self.assertIn("backend/src/notalone/memory_extraction/evaluation_full140_v4_deadline.py", frozen["source_hashes"])
         self.assertIn("backend/src/notalone/memory_extraction/evaluation_reference21_v4_deadline.py", frozen["source_hashes"])

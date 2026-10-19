@@ -218,7 +218,7 @@ test('概览修订保留合法编辑和原导航，两种真实来源通知次�
     await f.bridge.readSavedSession(f.scope()); await f.bridge.loadEvidence(selection);
     assert.equal((await f.bridge.getState()).result.candidates[0].editedText, edit);
     assert.equal((await f.bridge.getEvidenceState()).retrieval.overviewRevisions.contact.projectionRevision, evidence.retrieval.overviewRevisions.contact.projectionRevision);
-    assert.ok((await f.bridge.getEvidenceState()).basisChanges.some((change) => change.reason === 'memory_revised'));
+    assert.ok((await f.bridge.getEvidenceState()).basisChanges.some((change) => change.reason === 'memory_generation_forbidden'));
     let release, reached, held = false, pending;
     const atResponse = new Promise((resolve) => { reached = resolve; });
     if (order === 'inflight') {

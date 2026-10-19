@@ -18,7 +18,7 @@ test('生命周期夹具经生产同步宿主返回非微信暂停，重建后�
       for (let round = 0; round < 2; round++) {
         const observed = await fixture.request('/api/sync/foreground/observe', {});
         assert.equal(observed.status, 200);
-        assert.equal(observed.data.phase, 'paused');
+        assert.equal(observed.data.phase, 'paused', JSON.stringify(observed.data));
         assert.equal(observed.data.wechat_in_front, false);
         assert.equal(observed.data.contact_id, null);
         assert.equal((await fixture.command('observations')).payloads.length, 0);

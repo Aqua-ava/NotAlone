@@ -80,6 +80,7 @@ def summarize_native(raw):
 def install():
     """仅在受限后端中旁路计时既有调用，不另起进程或发出请求。"""
     from notalone.server.app import BackendApp
+    from notalone.front_sync.session_worker import NativeSessionWorker, SessionWorkerError
     global register_cli_read_causes
 
     destination = Path(os.environ["NOTALONE_OBSERVATION_MEASUREMENT_FILE"])
@@ -87,6 +88,7 @@ def install():
     lock = threading.Lock()
     original_run = subprocess.run
     original_handle = BackendApp.handle
+    original_worker_observe = NativeSessionWorker.observe
 
     def record(value):
         # 只接受本模块构造的数值/固定枚举；失败会使本轮验收缺证，不默默丢弃。
@@ -130,6 +132,29 @@ def install():
                     "single_frame_requested": "--single-frame" in command,
                     "outcome": outcome, "native_status": native_status, **summarize_native(stderr)})
 
+    def measured_worker_observe(self, *args, **kwargs):
+        if self._executable != probe:
+            return original_worker_observe(self, *args, **kwargs)
+        start = time.monotonic()
+        started_at = time.time() * 1000
+        record({"kind": "probe-start", "started_at_ms": started_at})
+        outcome = "failed"
+        native_status = "unknown"
+        try:
+            result = original_worker_observe(self, *args, **kwargs)
+            native_status = native_result(json.dumps(result))
+            outcome = "returned"
+            return result
+        except SessionWorkerError as error:
+            outcome = "timeout" if error.code == "probe_timeout" else "failed"
+            raise
+        finally:
+            # 常驻协议不返回原生 stderr；只记录真实请求，不补造图帧或 OCR 耗时。
+            record({"kind": "probe", "transport": "worker", "started_at_ms": started_at,
+                    "elapsed_ms": (time.monotonic() - start) * 1000,
+                    "single_frame_requested": True, "outcome": outcome,
+                    "native_status": native_status, **summarize_native(None)})
+
     def measured_handle(self, **kwargs):
         if kwargs.get("method") != "POST" or kwargs.get("path") != "/api/sync/foreground/observe":
             return original_handle(self, **kwargs)
@@ -142,5 +167,6 @@ def install():
                     "elapsed_ms": (time.monotonic() - start) * 1000})
 
     subprocess.run = measured_run
+    NativeSessionWorker.observe = measured_worker_observe
     BackendApp.handle = measured_handle
     record({"kind": "installed"})

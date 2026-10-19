@@ -80,7 +80,7 @@ test('多轮实际 HTTP 生成恢复后，每个历史轮次显示自己的偏�
             scope: expected.scope, revision: expected.revision }]);
         }
         const markup = renderToStaticMarkup(React.createElement(AssistantSessionPanel, { replies: { state } }));
-        const articles = [...markup.matchAll(/<article aria-label="第(\d+)轮讨论">([\s\S]*?)<\/article>/g)];
+        const articles = [...markup.matchAll(/<article\b[^>]*\baria-label="第(\d+)轮讨论"[^>]*>([\s\S]*?)<\/article>/g)];
         assert.equal(articles.length, 2);
         assert.match(articles[0][2], /第一轮生成时的旧要求：保留称呼。/);
         assert.match(articles[0][2], /当前联系人 · 改写草稿 · 生成时版本1/);

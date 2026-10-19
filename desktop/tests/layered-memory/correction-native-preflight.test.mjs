@@ -32,11 +32,11 @@ test('原生八步后验先以真实公开 JSON 核对，HTTP 预检不签发 CU
   assert.equal(cleaned, true);
 });
 
-test('事实修正后合法重建仍排除旧版本，HTTP 预检不签发 CUA 收据', { timeout: 90000 }, async () => {
+for (const scope of ['contact', 'owner']) test(`${scope}事实修正后合法重建仍排除旧版本，HTTP 预检不签发 CUA 收据`, { timeout: 90000 }, async () => {
   let cleaned = false;
   await withLayeredMemoryFixture(async fixture => {
     let previous;
-    for (const scope of ['contact', 'owner']) for (let index = 0; index < 4; index++) {
+    for (let index = 0; index < 4; index++) {
       const step = await prepareNativeCorrection(fixture, scope, index, previous);
       await simulateNativeCorrection(fixture, step);
       if (step.action === 'fact') {

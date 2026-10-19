@@ -21,8 +21,10 @@ class ObservationMeasurementsTests(unittest.TestCase):
 
     def test_probe_start_is_visible_before_boundary_returns(self):
         from notalone.server.app import BackendApp
+        from notalone.front_sync.session_worker import NativeSessionWorker
 
         original_run, original_handle = subprocess.run, BackendApp.handle
+        original_worker_observe = NativeSessionWorker.observe
         with tempfile.TemporaryDirectory() as directory:
             destination = Path(directory) / "numeric.jsonl"
             destination.touch(mode=0o600)
@@ -40,11 +42,14 @@ class ObservationMeasurementsTests(unittest.TestCase):
                     subprocess.run(["synthetic-probe"])
             finally:
                 subprocess.run, BackendApp.handle = original_run, original_handle
+                NativeSessionWorker.observe = original_worker_observe
 
     def test_measurement_keeps_real_subprocess_output_and_timeout_semantics(self):
         from notalone.server.app import BackendApp
+        from notalone.front_sync.session_worker import NativeSessionWorker
 
         original_run, original_handle = subprocess.run, BackendApp.handle
+        original_worker_observe = NativeSessionWorker.observe
         with tempfile.TemporaryDirectory() as directory:
             destination = Path(directory) / "numeric.jsonl"
             destination.touch(mode=0o600)
@@ -60,6 +65,7 @@ class ObservationMeasurementsTests(unittest.TestCase):
                                        capture_output=True, text=True, timeout=0.01)
             finally:
                 subprocess.run, BackendApp.handle = original_run, original_handle
+                NativeSessionWorker.observe = original_worker_observe
             saved = destination.read_text()
             self.assertNotIn("合成私密名称", saved)
             records = [json.loads(line) for line in saved.splitlines()]

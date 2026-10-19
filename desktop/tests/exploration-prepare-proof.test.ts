@@ -15,7 +15,7 @@ const base = `/api/contacts/${contactId}/assistant-sessions/${sessionId}/explora
 test('具名策略准备证明必须绑定原task、input、action和operation，实际键由服务端确认', async (t) => {
   let status = 409;
   const proof = { contact_id: contactId, session_id: sessionId, request_key: actualKey, state: 'not_reserved' };
-  const confirmation = { input_version_id: inputId, suggestion_id: choiceId };
+  const confirmation = { input_version_id: inputId, suggestion_id: choiceId, generate: true };
   const expectedBinding = { exploration_id: taskId, input_version_id: inputId, action: 'prepare-confirm', operation_key: null };
   const confirmedResponse = { error: 'assistant_session_rejected', reason: 'request_deleted',
     no_generation: proof, exploration_preparation: expectedBinding };
@@ -51,7 +51,7 @@ test('具名策略准备证明必须绑定原task、input、action和operation�
         && error.noGeneration === undefined && !('private_text' in error));
   });
   status = 409;
-  const answer = { input_version_id: inputId, question_id: choiceId, answer: '本次不见面。', operation_key: operationKey };
+  const answer = { input_version_id: inputId, question_id: choiceId, answer: '本次不见面。', operation_key: operationKey, generate: true };
   response = { ...confirmedResponse, exploration_preparation: { ...expectedBinding, action: 'prepare-answer', operation_key: operationKey } };
   await assert.rejects(client.perform({ method: 'POST', path: base + '/prepare-answer', body: answer,
     acceptAssistantNoGenerationProof: true }), (error: unknown) => error instanceof BackendRequestFailure

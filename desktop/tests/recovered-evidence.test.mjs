@@ -129,6 +129,7 @@ test('公开依据按钮的守卫拒绝显示错误，恢复候选可展开与�
   await page.evaluate(props => window.renderEvidence(props), { selection: f.selection, candidate, number: 1, waiting: false });
   await page.getByRole('button', { name: '展开候选1依据' }).click();
   await page.getByText('合成当时资料：周末有空。', { exact: true }).waitFor();
+  await page.getByText('检索过程与技术详情', { exact: true }).click();
   await page.getByText('合成生成时L1背景。', { exact: true }).waitFor();
   assert.equal(f.calls.some(r => r.path.includes('/layered-context')), false);
   assert.equal(await page.getByRole('alert').count(), 0);

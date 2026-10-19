@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import path from 'node:path';
-import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { test, after } from 'node:test';
 import { build } from 'esbuild';
@@ -40,8 +40,9 @@ test('后台尾读不阻塞前台身份，慢单帧可完成且真正超时仍�
   const contacts = new ports.ContactSession(() => ports.readContactDirectory(backend));
   contacts.setConnection(1); await contacts.refreshContacts();
   const foreground = new ports.ForegroundController(backend, contacts);
-  const probe = path.join(fixture.directory, 'unavailable-probe');
-  const source = await readFile(probe, 'utf8');
+  // 常驻探针逐轮读合成输入；修改磁盘可执行文件不会改变已运行的进程。
+  const delayObservation = async delay => writeFile(path.join(fixture.directory, 'probe-state.json'), JSON.stringify({
+   capture_version: 'automatic-header-v3', display_name: '合成窗口预算甲', delay_seconds: delay }));
   const withBusyCycle = async use => {
    const gate = path.join(fixture.directory, 'hold-tail-wxid_synthetic_a');
    const before = (await fixture.tails()).length;
@@ -61,11 +62,13 @@ test('后台尾读不阻塞前台身份，慢单帧可完成且真正超时仍�
    await foreground.observeBeforeShow();
    assert.equal(foreground.getState().confirmation, 'verified-binding');
    contacts.setDraft({ contactId: a, scopeRevision: contacts.getState().scopeRevision, text: '合成恢复草稿' });
-   await writeFile(probe, source.replace('\n', '\nimport time\ntime.sleep(1.05)\n'));
+   await delayObservation(1.05);
+   const slowStarted = Date.now();
    await foreground.observeBeforeShow();
+   assert.ok(Date.now() - slowStarted >= 1000, '本轮合成观察须实际经历慢帧延迟');
    assert.equal(foreground.getState().confirmation, 'verified-binding',
     `完整单帧被拒绝：${foreground.getState().reason}`);
-   await writeFile(probe, source);
+   await delayObservation(0);
    deliveryDelay = 1700;
    await foreground.observeBeforeShow();
    assert.equal(foreground.getState().confirmation, 'verified-binding', '有效HTTP响应不能被旧1.5秒UI预算截断');
@@ -85,13 +88,13 @@ test('后台尾读不阻塞前台身份，慢单帧可完成且真正超时仍�
    });
    await foreground.observeBeforeShow();
    assert.equal(foreground.getState().confirmation, 'verified-binding', '同步锁释放后可靠绑定应自动恢复');
-   await writeFile(probe, source.replace('\n', '\nimport time\ntime.sleep(5)\n'));
+   await delayObservation(5);
    const started = Date.now();
    await foreground.observeBeforeShow();
    assert.equal(foreground.getState().reason, 'probe_timeout', '真正挂起的探针仍须有限退出');
    assert.ok(Date.now() - started < 4000, '单轮不能无限等待');
    assert.equal(foreground.getGenerationBlock(), 'foreground-confirmation-required');
-   await writeFile(probe, source);
+   await delayObservation(0);
    await withBusyCycle(() => foreground.observeBeforeShow());
    await foreground.observeBeforeShow();
    assert.equal(foreground.getState().reason, 'manual_confirmation_required', '真实超时不能被后续窗口恢复静默解除');

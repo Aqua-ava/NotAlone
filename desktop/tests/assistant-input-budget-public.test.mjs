@@ -186,7 +186,7 @@ for (const newRequest of [false, true]) {
     const contactId = f.data.contact_ids[0], base = `/api/contacts/${contactId}/assistant-sessions`;
     const text = '工具预算拒绝后继续本次表达的合成草稿。';
     const options = { tone: 'original', instruction: '只保留本次草稿，不增加承诺。', includeRelationshipContext: true };
-    // 多条同联系人合成资料确保工具展开的预算高于无工具成功重试的独立复核。
+    // 多条同联系人合成资料确保工具展开的预算高于无工具成功重试。
     await f.command('older_messages', { contact_id: contactId });
     const calibration = await f.request(base, {});
     await f.command('plan', { plan: { probe_history: true, probe_query: '合成', text, count: 1 } });
@@ -195,11 +195,11 @@ for (const newRequest of [false, true]) {
         user_instruction: options.instruction, include_relationship_context: true } });
     assert.equal(completed.candidates[0].citation_ids.length, 2);
     const calibrated = await f.command('metrics');
-    // 检索前、检索后两次候选调用，再加一次独立忠实性复核；预算也覆盖复核。
+    // 按 ADR-068，检索前、检索后各一次候选调用，生成后不追加模型复核。
     assert.equal(calibrated.payloads.length, 2);
-    assert.equal(calibrated.model_calls, 3); assert.equal(calibrated.decisions.length, 3);
-    const [beforeTool, afterTool, review] = calibrated.decisions;
-    assert.deepEqual([beforeTool.allowed, afterTool.allowed, review.allowed], [true, true, true]);
+    assert.equal(calibrated.model_calls, 2); assert.equal(calibrated.decisions.length, 2);
+    const [beforeTool, afterTool] = calibrated.decisions;
+    assert.deepEqual([beforeTool.allowed, afterTool.allowed], [true, true]);
     const capacity = afterTool.total_tokens - 100;
     assert(capacity > beforeTool.total_tokens);
     await f.configure({ capacity });
@@ -259,10 +259,10 @@ for (const newRequest of [false, true]) {
     assert.equal(retried.result.candidates[0].original.text, text);
     assert.equal(f.contacts.getState().draft, text); assert.deepEqual(retried.options, options);
     const recovered = await f.command('metrics');
-    // 无工具恢复执行一次候选生成和一次独立复核，两阶段均在同一容量内。
+    // 同次无工具恢复只执行一次候选生成，该次调用的预算检查仍须通过。
     assert.equal(recovered.payloads.length, failureMetrics.payloads.length + 1);
-    assert.equal(recovered.model_calls, failureMetrics.model_calls + 2);
-    assert.deepEqual(recovered.decisions.slice(failureMetrics.decisions.length).map((decision) => decision.allowed), [true, true]);
+    assert.equal(recovered.model_calls, failureMetrics.model_calls + 1);
+    assert.deepEqual(recovered.decisions.slice(failureMetrics.decisions.length).map((decision) => decision.allowed), [true]);
   });
 }
 
