@@ -1,4 +1,4 @@
-"""真实提取 Worker 与默认采纳门产生本人概览的来源和版本。"""
+"""历史人工审核夹具经真实提取 Worker 保留本人概览的来源和版本。"""
 
 from datetime import datetime
 import unittest
@@ -38,7 +38,7 @@ class OwnerOverviewExtractionHttpTest(MemoryOverviewHttpFixture, unittest.TestCa
         return candidate, result["memory"]
 
     def test_full_original_worker_window_is_checked_without_exposing_contact_context(self):
-        self.activate_event_worker()
+        self.activate_historical_review_worker()
         imported = self.extract_self("本人偏好热茶。")
         contact = imported["contact_id"]
         self.assertEqual(self.owner_overview()["entries"], [])
@@ -64,7 +64,7 @@ class OwnerOverviewExtractionHttpTest(MemoryOverviewHttpFixture, unittest.TestCa
                 "WHERE owner_id=%s AND id=%s", (self.owner_id, candidate["candidate_id"])).fetchone(), original)
 
     def test_explicit_self_update_preserves_original_versions_and_source_deletion_beats_recovery(self):
-        self.activate_event_worker()
+        self.activate_historical_review_worker()
         first = self.extract_self("本人偏好热茶。")
         contact = first["contact_id"]
         _, old = self.confirm_extracted(contact)

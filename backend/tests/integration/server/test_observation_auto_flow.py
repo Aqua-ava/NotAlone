@@ -184,7 +184,12 @@ class ObservationAutoFlowTest(ObservationAutoFlowFixture, unittest.TestCase):
         self.assertEqual([step["name"] for step in task["steps"]],
                          ["extract_memory", "index", "verify"])
         self.assertEqual(self.model.calls, [frozenset(batch.message_ids)])
-        self.assertEqual(len(PostgresMemoryStore(self.database_url).list_pending_candidates(self.scope)), 1)
+        memory = PostgresMemoryStore(self.database_url)
+        self.assertEqual(memory.list_pending_candidates(self.scope), ())
+        saved = memory.list_confirmed(self.scope)
+        self.assertEqual(len(saved), 1)
+        self.assertEqual((saved[0].text, saved[0].adoption_method.value), ('联系人喜欢科幻小说', 'auto'))
+        self.assertEqual(set(saved[0].source_ids), set(batch.message_ids))
 
     def test_replayed_batch_does_not_reset_completed_task(self):
         batch = self.record()

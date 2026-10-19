@@ -20,13 +20,32 @@ from psycopg.types.json import Jsonb
 from notalone.memory_extraction.dimensions import DimensionRelease
 from tests.fidelity_http_support import FidelityControlledModel
 from tests.integration.server.core_business_flow_support import (
-    CoreBusinessFlowFixture, tool_response,
+    CoreBusinessFlowFixture, ScriptedCoreModel, tool_response,
 )
 
 
+class EventScriptedModel(ScriptedCoreModel):
+    """按真实批量裁决请求封装预先指定动作；不改变裁决或采纳结果。"""
+
+    def _generate(self, messages, stop=None, run_manager=None, **kwargs):
+        self.wait_for_response()
+        names = [item.get('function', {}).get('name') for item in kwargs.get('tools', [])]
+        index = len(self.seen_calls)
+        if names == ['BatchMemoryAdjudicationOutput'] and index < len(self.responses):
+            calls = self.responses[index].tool_calls
+            if len(calls) == 1 and calls[0]['name'] == 'MemoryAdjudicationOutput':
+                candidates = json.loads(str(messages[-1].content))
+                self.responses[index] = tool_response('BatchMemoryAdjudicationOutput', {
+                    'decisions': [{**calls[0]['args'], 'candidate_index': item['candidate_index']}
+                                  for item in candidates],
+                })
+        return super()._generate(messages, stop, run_manager, **kwargs)
+
+
 class MemoryEventUpdatesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
-    # 仅用合成配置走原有三门；生产默认空放行表仍由公开默认路径验证。
+    # 自动事件更新仍经独立来源核验；合成配置只解除额外逐维放行条件。
     dimension_release = DimensionRelease(gate_enabled=False)
+    extraction_model_factory = EventScriptedModel
 
     @classmethod
     def _drop_database(cls) -> None:
@@ -151,6 +170,21 @@ class MemoryEventUpdatesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
             time.sleep(0.02)
         self.fail("本轮来源删除未在时限内通过不可检索校验。")
 
+    def assert_automatic_candidate_terminated(self, contact_id, text, *, source_id=None):
+        prefix = f"/api/contacts/{contact_id}"
+        self.assertEqual(self._get(self.backend, prefix + '/memory-candidates')['candidates'], [])
+        with psycopg.connect(self.database_url) as connection:
+            rows = connection.execute("SELECT status,failure_reason,source_ids,event FROM public.memory_candidate "
+                "WHERE owner_id=%s AND contact_id=%s AND text_content=%s "
+                "AND (%s::uuid IS NULL OR %s::uuid=ANY(source_ids))",
+                (self.owner_id,contact_id,text,source_id,source_id)).fetchall()
+        self.assertTrue(rows, "失败候选仍保留原始正文与来源审计")
+        for status, reason, sources, event in rows:
+            self.assertEqual(status, 'rejected')
+            self.assertIsNotNone(reason)
+            self.assertTrue(sources)
+        return rows
+
     def test_general_text_support_cannot_certify_event_fields_or_enable_automatic_adoption(self):
         imported = self.import_event(
             original="合成记录：我参加完读书会。", claim="已参加完读书会。",
@@ -158,10 +192,9 @@ class MemoryEventUpdatesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         )
         prefix = f"/api/contacts/{imported['contact_id']}"
         self.assertEqual(self._get(self.backend, prefix + "/memories")["memories"], [])
-        pending = self._get(self.backend, prefix + "/memory-candidates")["candidates"]
-        self.assertEqual(len(pending), 1)
-        self.assertEqual((pending[0]["event"]["stage_verified"],
-                          pending[0]["event"]["occurrence_verified"]), (False, False))
+        rows = self.assert_automatic_candidate_terminated(imported['contact_id'], '已参加完读书会。',
+            source_id=imported['message']['message_id'])
+        self.assertEqual((rows[0][3]['stage_verified'], rows[0][3]['occurrence_verified']), (False, False))
 
     def test_verified_different_occurrence_cannot_replace_an_auto_event_by_text_adjudication(self):
         first = self.import_event(
@@ -173,14 +206,15 @@ class MemoryEventUpdatesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         prefix = f"/api/contacts/{first['contact_id']}"
         old = self._get(self.backend, prefix + "/memories")["memories"][0]
         self.assertEqual(old["adoption_method"], "auto")
-        self.import_event(
+        second = self.import_event(
             original="合成另一事件：已参加2026-08-07T09:00:00+08:00的读书会。", claim="已参加读书会。",
             when="2026-08-08T10:00:00+08:00", contact_id=first["contact_id"], action="update", replaced_id=old["memory_id"],
             event_spec={"stage": "occurred", "occurrence_start": "2026-08-07T09:00:00+08:00"},
             event_verification={"stage_verdict": "supported", "occurrence_verdict": "supported"},
         )
         self.assertEqual(self._get(self.backend, prefix + "/memories")["memories"], [old])
-        self.assertEqual(len(self._get(self.backend, prefix + "/memory-candidates")["candidates"]), 1)
+        self.assert_automatic_candidate_terminated(first["contact_id"], "已参加读书会。",
+            source_id=second["message"]["message_id"])
 
     def _undo_before_retry_with_lost_receipt(self, *, subject: str) -> None:
         first = self.import_event(original="合成旧依据：读书会在一号会议室举行。", claim="读书会在一号会议室举行。",
@@ -471,7 +505,7 @@ class MemoryEventUpdatesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self.assertEqual(self._get(self.backend, "/api/memories/owner")["memories"], [])
         self.assertEqual(self.backend.request(operation, body)[0], 404)
 
-    def test_auto_update_with_missing_original_window_remains_pending_without_refilling_it(self):
+    def test_auto_update_with_missing_original_window_terminates_without_refilling_it(self):
         first = self.import_event(
             original="合成旧资料：读书会在一号会议室举行。", claim="读书会在一号会议室举行。",
             when="2026-08-01T10:00:00+08:00",
@@ -488,8 +522,7 @@ class MemoryEventUpdatesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
             when="2026-08-01T11:00:00+08:00", contact_id=first["contact_id"], action="update", replaced_id=old["memory_id"],
         )
         self.assertEqual([item["memory_id"] for item in self._get(self.backend, path)["memories"]], [old["memory_id"]])
-        pending = self._get(self.backend, f"/api/contacts/{first['contact_id']}/memory-candidates")["candidates"]
-        self.assertEqual([item["text"] for item in pending], ["读书会改到二号会议室举行。"])
+        self.assert_automatic_candidate_terminated(first['contact_id'], '读书会改到二号会议室举行。')
         with psycopg.connect(self.database_url) as connection:
             self.assertEqual(connection.execute("SELECT dimension_evidence, correction_evidence FROM public.memory_candidate WHERE owner_id=%s AND id=%s",
                                                (self.owner_id, candidate_id)).fetchone(), (None, None))
@@ -637,8 +670,7 @@ class MemoryEventUpdatesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
             contact_id=first["contact_id"], action="update", replaced_id=corrected["memory"]["memory_id"],
         )
         self.assertEqual(self._get(self.backend, path)["memories"], [corrected["memory"]])
-        pending = self._get(self.backend, f"/api/contacts/{first['contact_id']}/memory-candidates")["candidates"]
-        self.assertEqual([item["text"] for item in pending], ["读书会改到二号会议室举行。"])
+        self.assert_automatic_candidate_terminated(first['contact_id'], '读书会改到二号会议室举行。')
 
     def test_retry_after_committed_version_and_lost_trace_receipt_does_not_publish_it_twice(self):
         first = self.import_event(
@@ -697,8 +729,7 @@ class MemoryEventUpdatesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
                     contact_id=first["contact_id"], action=action, replaced_id=old["memory_id"],
                 )
                 self.assertEqual(self._get(self.backend, path)["memories"], [old])
-                pending = self._get(self.backend, f"/api/contacts/{first['contact_id']}/memory-candidates")["candidates"]
-                self.assertEqual([item["text"] for item in pending], ["读书会在二号会议室举行。"])
+                self.assert_automatic_candidate_terminated(first['contact_id'], '读书会在二号会议室举行。')
 
     def test_text_only_noop_cannot_silently_drop_a_new_event_source(self):
         first = self.import_event(
@@ -712,9 +743,8 @@ class MemoryEventUpdatesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
             when="2026-08-02T10:00:00+08:00", contact_id=first["contact_id"], action="noop",
         )
         self.assertEqual(self._get(self.backend, prefix + "/memories")["memories"], [old])
-        pending = self._get(self.backend, prefix + "/memory-candidates")["candidates"]
-        self.assertEqual([item["text"] for item in pending], ["联系人参加了读书会。"])
-        self.assertEqual(pending[0]["source_ids"], [second["message"]["message_id"]])
+        self.assert_automatic_candidate_terminated(first['contact_id'], '联系人参加了读书会。',
+            source_id=second['message']['message_id'])
 
     def test_many_similar_manual_records_keep_a_new_claim_within_the_adjudication_budget(self):
         imported = self.import_event(
@@ -738,6 +768,10 @@ class MemoryEventUpdatesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
                 text = getattr(message, "content", "")
                 if isinstance(text, str) and text.startswith("新事实：") and text.count("[memory_id=") > 8:
                     raise RuntimeError("合成裁决输入超过八项预算。")
+                if isinstance(text, str) and text.startswith('['):
+                    payload = json.loads(text)
+                    if any(len(item.get('similar', [])) > 8 for item in payload):
+                        raise RuntimeError("合成批量裁决输入超过八项预算。")
             return original_generate(messages, *args, **kwargs)
 
         with patch.object(type(self.extraction_model), "_generate", bounded_provider):
@@ -746,10 +780,14 @@ class MemoryEventUpdatesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
                 claim="另外一场读书会在一号会议室举行。", when="2026-09-01T10:00:00+08:00",
                 contact_id=imported["contact_id"], action="add",
             )
-        self.assertEqual(self._get(self.backend, prefix + "/memories")["memories"], before)
-        pending = self._get(self.backend, prefix + "/memory-candidates")["candidates"]
-        self.assertEqual([item["text"] for item in pending], ["另外一场读书会在一号会议室举行。"])
-        self.assertEqual(pending[0]["source_ids"], [second["message"]["message_id"]])
+        current = self._get(self.backend, prefix + "/memories")["memories"]
+        self.assertEqual({item['memory_id'] for item in before},
+            {item['memory_id'] for item in current if item['memory_id'] in {old['memory_id'] for old in before}})
+        added = [item for item in current if item['memory_id'] not in {old['memory_id'] for old in before}]
+        self.assertEqual(len(added), 1)
+        self.assertEqual((added[0]['text'], added[0]['adoption_method'], added[0]['source_ids']),
+            ('另外一场读书会在一号会议室举行。', 'auto', [second['message']['message_id']]))
+        self.assertEqual(self._get(self.backend, prefix + '/memory-candidates')['candidates'], [])
 
     def test_same_source_and_words_with_distinct_verified_time_bounds_are_not_one_version(self):
         imported = self.import_event(
@@ -765,17 +803,19 @@ class MemoryEventUpdatesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
             datetime.fromisoformat("2026-09-01T00:00:00+08:00"),
         })
 
-    def test_changed_confidence_or_window_proof_does_not_duplicate_or_upgrade_old_pending(self):
+
+    def test_source_verified_confidence_changes_do_not_duplicate_automatic_memory(self):
         imported = self.import_event(
             original="合成资料：这次读书会在一号会议室举行。", claim="读书会在一号会议室举行。",
             when="2026-08-01T10:00:00+08:00", fact_overrides={"confidence": 0.1},
             additional_fact_overrides=({"confidence": 0.95},),
         )
-        path = f"/api/contacts/{imported['contact_id']}"
-        self.assertEqual(self._get(self.backend, f"{path}/memories")["memories"], [])
-        pending = self._get(self.backend, f"{path}/memory-candidates")["candidates"]
-        self.assertEqual(len(pending), 1)
-        self.assertEqual(pending[0]["confidence"], 0.1)
+        prefix = f"/api/contacts/{imported['contact_id']}"
+        memories = self._get(self.backend, prefix + '/memories')['memories']
+        self.assertEqual(len(memories), 1)
+        self.assertEqual((memories[0]['text'], memories[0]['adoption_method'], memories[0]['source_ids']),
+            ('读书会在一号会议室举行。', 'auto', [imported['message']['message_id']]))
+        self.assertEqual(self._get(self.backend, prefix + '/memory-candidates')['candidates'], [])
 
     def test_manual_confirmation_winning_the_auto_commit_race_is_not_reported_as_an_auto_update(self):
         first = self.import_event(
@@ -827,10 +867,36 @@ class MemoryEventUpdatesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
                              for event in detail["events"]), "人工确认胜出后不得报告自动更新或旧版已失效。")
 
 
-class MemoryEventDefaultUpdatesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
-    dimension_release = None
+class MemoryEventHistoricalReviewHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
+    """显式历史人工审核合同，验证旧候选仍能查看、确认、修改和删除。"""
+
+    dimension_release = DimensionRelease()
+    extraction_model_factory = EventScriptedModel
     reply_model_factory = FidelityControlledModel
     import_event = MemoryEventUpdatesHttpTest.import_event
+
+    def _backend(self, owner_id):
+        from notalone.tasks.worker import PostgresMemoryExtractionRunner
+
+        def historical_review_runner(*args, **kwargs):
+            return PostgresMemoryExtractionRunner(*args, **kwargs, automatic=False)
+
+        with patch('tests.integration.server.core_business_flow_support.PostgresMemoryExtractionRunner',
+                   historical_review_runner):
+            return super()._backend(owner_id)
+
+    def test_historical_changed_confidence_or_window_proof_does_not_duplicate_or_upgrade_old_pending(self):
+        imported = self.import_event(
+            original="合成资料：这次读书会在一号会议室举行。", claim="读书会在一号会议室举行。",
+            when="2026-08-01T10:00:00+08:00", fact_overrides={"confidence": 0.1},
+            additional_fact_overrides=({"confidence": 0.95},),
+        )
+        path = f"/api/contacts/{imported['contact_id']}"
+        self.assertEqual(self._get(self.backend, f"{path}/memories")["memories"], [])
+        pending = self._get(self.backend, f"{path}/memory-candidates")["candidates"]
+        self.assertEqual(len(pending), 1)
+        self.assertEqual(pending[0]["confidence"], 0.1)
+
 
     def test_plan_keeps_its_source_verified_stage_after_the_occurrence_interval_passes(self):
         imported = self.import_event(
@@ -1115,9 +1181,9 @@ class MemoryEventDefaultUpdatesHttpTest(CoreBusinessFlowFixture, unittest.TestCa
         super()._drop_database()
         if cls.admin.execute("SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname=%s)",
                              (cls.database_name,)).fetchone()[0]:
-            raise RuntimeError("本轮默认门测试库清理未确认。")
+            raise RuntimeError("本轮历史人工审核测试库清理未确认。")
 
-    def test_default_gate_keeps_a_new_occurrence_pending_until_user_explicitly_applies_it(self):
+    def test_historical_review_keeps_a_new_occurrence_pending_until_user_explicitly_applies_it(self):
         first = self.import_event(
             original="合成计划：准备参加这次读书会。", claim="计划参加这次读书会。",
             when="2026-08-01T10:00:00+08:00", fact_overrides={"speech_act": "plan"},

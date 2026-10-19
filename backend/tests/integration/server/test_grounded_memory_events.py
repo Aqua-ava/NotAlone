@@ -1,6 +1,7 @@
 """实际生产 builder 经公开导入、独立核验、保存、历史及删除的合成闭环。"""
 
 import json
+import psycopg
 from datetime import datetime
 from pathlib import Path
 import unittest
@@ -41,8 +42,8 @@ class GroundedMemoryEventsHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
 
     def test_default_builder_verifies_planned_event_without_turning_elapsed_time_into_occurrence(self):
         imported, prefix = self.import_grounded("🙂明天去看展。")
-        self.assertEqual(self._get(self.backend, prefix + "/memories")["memories"], [])
-        candidate = self._get(self.backend, prefix + "/memory-candidates")["candidates"][0]
+        self.assertEqual(self._get(self.backend, prefix + "/memory-candidates")["candidates"], [])
+        candidate = self._get(self.backend, prefix + "/memories")["memories"][0]
         event = candidate["event"]
         self.assertEqual((event["stage"], event["stage_verified"], event["occurrence_verified"]), ("planned", True, True))
         self.assertEqual(event["occurrence_start"], "2026-08-02T00:00:00+08:00")
@@ -50,12 +51,10 @@ class GroundedMemoryEventsHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self.assertEqual(candidate["text"], "联系人原话：“🙂明天去看展。”")
         self.assertEqual(event["stage_evidence"][0]["char_end"], 7)
         self.assertEqual(len(self.extraction_model.seen_calls), 2)
-        status, confirmed = self.backend.request(prefix + f"/memory-candidates/{candidate['candidate_id']}/confirm", {})
-        self.assertEqual(status, 200, confirmed)
         restarted = self._backend(self.owner_id)
         saved = self._get(restarted, prefix + "/memories")["memories"][0]
         self.assertEqual(saved["event"], event)
-        self.assertEqual(saved["adoption_method"], "manual")
+        self.assertEqual(saved["adoption_method"], "auto")
         versions = self._get(restarted, prefix + f"/memories/{saved['memory_id']}/versions")["versions"]
         self.assertEqual(versions[0]["event"], event)
         source = self._get(self.backend, prefix + "/sources")["sources"][0]
@@ -66,10 +65,16 @@ class GroundedMemoryEventsHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self.dimension_release = DimensionRelease(gate_enabled=False)
         self.extraction_model.verify_events = False
         self.backend = self._backend(self.owner_id)
-        _, prefix = self.import_grounded("我已取件。", kind="event", stage="occurred", period=False)
+        imported, prefix = self.import_grounded("我已取件。", kind="event", stage="occurred", period=False)
         self.assertEqual(self._get(self.backend, prefix + "/memories")["memories"], [])
-        candidate = self._get(self.backend, prefix + "/memory-candidates")["candidates"][0]
-        self.assertEqual((candidate["event"]["stage_verified"], candidate["event"]["occurrence_verified"]), (False, False))
+        self.assertEqual(self._get(self.backend, prefix + "/memory-candidates")["candidates"], [])
+        with psycopg.connect(self.database_url) as connection:
+            event, status, reason = connection.execute(
+                "SELECT event,status,failure_reason FROM public.memory_candidate WHERE owner_id=%s AND contact_id=%s",
+                (self.owner_id, imported['contact_id'])).fetchone()
+        self.assertEqual((event["stage_verified"], event["occurrence_verified"]), (False, False))
+        self.assertEqual(status, 'rejected')
+        self.assertIsNotNone(reason)
 
     def test_independent_stage_and_time_verification_allows_synthetic_released_save(self):
         self.dimension_release = DimensionRelease(gate_enabled=False)

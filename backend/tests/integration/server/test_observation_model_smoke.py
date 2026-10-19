@@ -32,23 +32,24 @@ class ObservationModelScenario(ObservationAutoFlowFixture):
         self.addCleanup(gate.stop)
         super().setUp()
 
-    def test_observation_pending_evidence_replay_delete_and_shutdown(self):
+    def test_observation_automatic_evidence_replay_delete_and_shutdown(self):
         batch = self.record()
         self.publish(batch)
         task = self.wait_task()
         self.assertEqual(task["task_type"], "observation")
         memory = PostgresMemoryStore(self.database_url)
-        pending = memory.list_pending_candidates(self.scope)
-        self.assertGreaterEqual(len(pending), 1, "合成明确偏好未生成待确认候选。")
-        self.assertFalse(memory.list_confirmed(self.scope))
-        for candidate in pending:
+        self.assertFalse(memory.list_pending_candidates(self.scope))
+        saved = memory.list_confirmed(self.scope)
+        self.assertGreaterEqual(len(saved), 1, "合成明确偏好应在来源核验后自动采纳。")
+        for candidate in saved:
+            self.assertEqual(candidate.adoption_method.value, 'auto')
             self.assertTrue(candidate.source_ids)
             self.assertTrue(set(candidate.source_ids).issubset(set(batch.message_ids)))
         retrieval = PostgresRetrieval(self.database_url, memory_store=memory)
-        self.assertTrue(retrieval.search_pending_candidates(scope=self.scope, query="科幻小说"))
+        self.assertTrue(retrieval.search_confirmed_memories(scope=self.scope, query="科幻小说"))
         for wrong_scope in (ContactScope(self.scope.owner_id, uuid4()),
                             ContactScope(uuid4(), self.scope.contact_id)):
-            self.assertFalse(retrieval.search_pending_candidates(scope=wrong_scope, query="科幻小说"))
+            self.assertFalse(retrieval.search_confirmed_memories(scope=wrong_scope, query="科幻小说"))
         ledger = PostgresOutboundLedger(self.database_url)
         entries = ledger.list_by_owner(self.scope.owner_id)
         self.assertTrue(entries)
@@ -63,7 +64,7 @@ class ObservationModelScenario(ObservationAutoFlowFixture):
             owner_id=self.scope.owner_id, contact_id=self.scope.contact_id,
             observation_id=batch.observation.observation_id,
         )
-        self.assertFalse(retrieval.search_pending_candidates(scope=self.scope, query="科幻小说"))
+        self.assertFalse(retrieval.search_confirmed_memories(scope=self.scope, query="科幻小说"))
         code, _ = self.backend.request("/api/runtime/shutdown", {})
         self.assertEqual(code, 200)
         self.publish(batch)

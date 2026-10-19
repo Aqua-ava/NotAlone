@@ -18,7 +18,7 @@ class RelationshipOverviewEventsHttpTest(MemoryOverviewHttpFixture, unittest.Tes
         })
         self.assertEqual(status, 200, saved)
         owner_memory = saved["memory"]
-        self.activate_event_worker()
+        self.activate_historical_review_worker()
         imported = self.import_event(
             original="合成计划：对方计划参加下个月的读书会。",
             claim="对方计划参加读书会。", when="2026-08-04T10:00:00+08:00",
@@ -61,7 +61,7 @@ class RelationshipOverviewEventsHttpTest(MemoryOverviewHttpFixture, unittest.Tes
                 "WHERE owner_id=%s AND scope_kind='owner'", (self.owner_id,)).fetchone()[0], 0)
 
     def test_plan_and_source_verified_completion_form_traceable_manual_versions_without_time_inference(self):
-        self.activate_event_worker()
+        self.activate_historical_review_worker()
         first = self.import_event(
             original="合成计划：明天参加读书会。",
             claim="计划参加读书会。", when="2026-08-04T10:00:00+08:00",
