@@ -1,5 +1,6 @@
+import { setWorkspaceContext } from '../workspace-actions';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
-import { expect, type Browser } from '@playwright/test';
+import { expect, type Browser, type Page } from '@playwright/test';
 import { withRewritePages } from './rewrite-acceptance';
 import type { RewritePages } from '../rewrite-page-scenarios';
 import { EvidenceHttpProxy } from '../evidence-http-proxy';
@@ -29,14 +30,45 @@ async function withEvidencePages(browser: Browser, origin: string, use: (pages: 
   });
 }
 
+async function awaitWorkspaceScope(helper: Page, contactId: string) {
+  // 联系人确认只解除资格门；等同范围恢复和自动工作区迁移完成，再编辑本轮配置。
+  await expect.poll(() => helper.evaluate(async expectedContact => {
+    const contacts = await window.notalone.contacts.getState();
+    const reply = await window.notalone.replies.getState();
+    return contacts.selectedContactId === expectedContact && reply.contactId === expectedContact
+      && contacts.scopeRevision === reply.scopeRevision && reply.options.inputKind === 'workspace'
+      && reply.mode === 'rewrite_draft' && reply.savedSession?.phase === 'ready'
+      && (!reply.sessionCatalog || reply.sessionCatalog.phase === 'ready'
+        && !reply.sessionCatalog.selectionPending && reply.sessionCatalog.currentSessionId === reply.savedSession.sessionId)
+      && reply.phase !== 'waiting' && reply.sourceAvailability === undefined;
+  }, contactId)).toBe(true);
+  await expect(helper.getByRole('textbox', { name: '有什么想说的', exact: true })).toBeEditable();
+}
 async function prepare(pages: RewritePages, contact: '甲' | '乙' = '甲', count = 1) {
   await pages.manager.getByRole('button', { name: `选择合成联系人${contact}`, exact: true }).click();
   await confirmHelperContact(pages.helper, pages.rewriteBackend.data.contact_ids[contact === '甲' ? 0 : 1]);
-  await pages.helper.getByRole('textbox', { name: '草稿', exact: true }).fill(`${contact}的原始生成输入。`);
+  await awaitWorkspaceScope(pages.helper, pages.rewriteBackend.data.contact_ids[contact === '甲' ? 0 : 1]);
+  await setWorkspaceContext(pages.helper, false);
+  await pages.helper.getByRole('textbox', { name: '有什么想说的', exact: true }).fill(`${contact}的原始生成输入。`);
   await pages.rewriteBackend.plan({ count, prefix: `${contact}的依据候选` });
-  const regenerate = pages.helper.getByRole('button', { name: '重新生成', exact: true });
-  // 同场景第二轮必须显式建立新请求，不把正确的同键重放误当作新模型结果。
-  await (await regenerate.count() ? regenerate : pages.helper.getByRole('button', { name: '生成候选', exact: true })).click();
+  const previous = await pages.helper.evaluate(() => window.notalone.replies.getState());
+  const previousRequestId = previous.result?.replyRequestId
+    ?? previous.savedSession?.turns.filter(turn => turn.state === 'completed').at(-1)?.reply?.replyRequestId;
+  // 恢复后的旧候选可以同文；必须验证新请求完成，不能凭编辑框文字判定本轮完成。
+  await pages.helper.getByRole('button', { name: '帮我表达', exact: true }).click();
+  await expect.poll(() => pages.helper.evaluate(async expected => {
+    const state = await window.notalone.replies.getState();
+    const result = state.result;
+    const saved = state.savedSession;
+    if (state.phase !== 'ready' || state.contactId !== expected.contactId || state.scopeRevision !== expected.scopeRevision
+      || !result || result.replyRequestId === expected.previousRequestId || saved?.phase !== 'ready'
+      || state.candidateVersions?.phase !== 'ready' || state.candidateVersions.sessionId !== saved.sessionId) return false;
+    const turn = saved.turns.find(item => item.state === 'completed' && item.reply?.replyRequestId === result.replyRequestId);
+    return Boolean(turn && result.candidates.every(candidate => state.candidateVersions!.items.some(view =>
+      view.phase === 'ready' && view.candidateId === candidate.original.candidateId
+      && view.history?.sessionId === saved.sessionId && view.history.turnId === turn.turnId
+      && view.history.candidateGroupId === result.replyRequestId)));
+  }, { contactId: previous.contactId, scopeRevision: previous.scopeRevision, previousRequestId })).toBe(true);
   await expect(pages.helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveValue(`${contact}的依据候选（说法1）。`);
 }
 function loadPending(pages: RewritePages) {
@@ -52,9 +84,12 @@ function loadPending(pages: RewritePages) {
 async function draftEvidence({ manager, helper, rewriteBackend }: RewritePages) {
   await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
   await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
-  await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('这是本次明确输入的合成草稿。');
+  await awaitWorkspaceScope(helper, rewriteBackend.data.contact_ids[0]);
+  // 本场景验证纯本次输入快照，显式关闭工作区默认关系资料。
+  await setWorkspaceContext(helper, false);
+  await helper.getByRole('textbox', { name: '有什么想说的', exact: true }).fill('这是本次明确输入的合成草稿。');
   await rewriteBackend.plan({ count: 1, prefix: '依据验收候选' });
-  await helper.getByRole('button', { name: '生成候选', exact: true }).click();
+  await helper.getByRole('button', { name: '帮我表达', exact: true }).click();
   await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveValue('依据验收候选（说法1）。');
   const evidence = helper.getByRole('region', { name: '候选1依据', exact: true });
   await expect(evidence).toHaveCount(0);
@@ -63,10 +98,23 @@ async function draftEvidence({ manager, helper, rewriteBackend }: RewritePages) 
   await expect(evidence.getByText('用户草稿', { exact: true })).toBeVisible();
   await expect(evidence.getByText('本候选已引用', { exact: true })).toBeVisible();
   await expect(evidence.locator('.evidence-technical')).not.toHaveAttribute('open');
-  await expect(evidence.getByText('来源时间未知', { exact: true })).toBeHidden();
-  await evidence.getByRole('article').filter({ hasText: '这是本次明确输入的合成草稿。' })
-    .locator('.record-metadata > summary').click();
-  await expect(evidence.getByText('来源时间未知', { exact: true })).toBeVisible();
+  const draft = evidence.getByRole('article').filter({ has: helper.getByText('用户草稿', { exact: true }) });
+  const purpose = evidence.getByRole('article').filter({ has: helper.getByText('本次主动目的', { exact: true }) });
+  await expect(evidence.getByRole('article')).toHaveCount(2);
+  await expect(draft).toHaveCount(1);
+  await expect(purpose).toHaveCount(1);
+  for (const item of [draft, purpose]) {
+    await expect(item.locator('.record-metadata')).not.toHaveAttribute('open');
+    await expect(item.getByText('来源时间未知', { exact: true })).toBeHidden();
+  }
+  await draft.locator('.record-metadata > summary').click();
+  await expect(draft.getByText('来源时间未知', { exact: true })).toBeVisible();
+  await expect(purpose.getByText('来源时间未知', { exact: true })).toBeHidden();
+  await purpose.locator('.record-metadata > summary').click();
+  for (const item of [draft, purpose]) await expect(item.getByText('来源时间未知', { exact: true })).toBeVisible();
+  await purpose.locator('.record-metadata > summary').click();
+  await expect(purpose.getByText('来源时间未知', { exact: true })).toBeHidden();
+  await expect(draft.getByText('来源时间未知', { exact: true })).toBeVisible();
   await helper.getByRole('textbox', { name: '候选1编辑文本', exact: true }).fill('我修改的措辞不改生成依据。');
   await expect(evidence.getByText('这是本次明确输入的合成草稿。', { exact: true })).toBeVisible();
   await helper.getByRole('button', { name: '收起候选1依据', exact: true }).click();
@@ -93,13 +141,13 @@ async function newInput(pages: EvidencePages) {
   await prepare(pages, '甲', 2);
   await pages.helper.getByRole('button', { name: '展开候选1依据', exact: true }).click();
   await expect(pages.helper.getByRole('region', { name: '候选1依据', exact: true }).getByText('甲的原始生成输入。', { exact: true })).toBeVisible();
-  await pages.helper.getByRole('textbox', { name: '草稿', exact: true }).fill('后来更改的草稿。');
+  await pages.helper.getByRole('textbox', { name: '有什么想说的', exact: true }).fill('后来更改的草稿。');
   await expect(pages.helper.getByRole('region', { name: '候选1依据', exact: true }).getByText('甲的原始生成输入。', { exact: true })).toBeVisible();
   await pages.helper.getByRole('button', { name: '展开候选2依据', exact: true }).click();
   await expect(pages.helper.getByRole('region', { name: '候选1依据', exact: true })).toHaveCount(0);
   await expect(pages.helper.getByRole('region', { name: '候选2依据', exact: true }).getByText('本候选已引用', { exact: true })).toBeVisible();
   await pages.rewriteBackend.plan({ count: 1, prefix: '后来草稿候选' });
-  await pages.helper.getByRole('button', { name: '重新生成', exact: true }).click();
+  await pages.helper.getByRole('button', { name: '帮我表达', exact: true }).click();
   await expect(pages.helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveValue('后来草稿候选（说法1）。');
   await expect(pages.helper.getByRole('region', { name: '候选1依据', exact: true })).toHaveCount(0);
   await pages.helper.getByRole('button', { name: '展开候选1依据', exact: true }).click();
@@ -113,7 +161,9 @@ async function stale(pages: EvidencePages, change: 'contact' | 'connection' | 'g
     pages.evidenceTransport.fail = fail;
     pages.evidenceTransport.next = 'hold';
     const held = pages.evidenceTransport.heldCount;
-    const pending = loadPending(pages);
+    // 立即接住回绝，既防未处理拒绝终止清理，也不把本应发出的请求误当迟到成功。
+    const pending = loadPending(pages).then(value => ({ status: 'fulfilled' as const, value }),
+      error => ({ status: 'rejected' as const, error: error instanceof Error ? error.message : String(error) }));
     await expect.poll(() => pages.evidenceTransport.heldCount).toBe(held + 1);
     pages.evidenceTransport.fail = false;
     if (change === 'connection') {
@@ -125,11 +175,11 @@ async function stale(pages: EvidencePages, change: 'contact' | 'connection' | 'g
     } else if (change === 'contact') await prepare(pages, '乙');
     else {
       await pages.rewriteBackend.plan({ count: 1, prefix: '新一轮生成' });
-      await pages.helper.getByRole('button', { name: '重新生成', exact: true }).click();
+      await pages.helper.getByRole('button', { name: '帮我表达', exact: true }).click();
       await expect(pages.helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveValue('新一轮生成（说法1）。');
     }
     pages.evidenceTransport.release();
-    expect(await pending).toBe('completed');
+    expect(await pending).toEqual({ status: 'fulfilled', value: 'completed' });
     await expect(pages.helper.getByRole('region', { name: '候选1依据', exact: true })).toHaveCount(0);
     await expect(pages.helper.getByRole('alert')).toHaveCount(0);
     await pages.helper.getByRole('button', { name: '展开候选1依据', exact: true }).click();
@@ -212,25 +262,27 @@ async function removedEvidence(pages: EvidencePages) {
 async function legacySnapshot(pages: EvidencePages) {
   await pages.manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
   await confirmHelperContact(pages.helper, pages.rewriteBackend.data.contact_ids[0]);
-  await pages.helper.getByRole('button', { name: '回应消息', exact: true }).click();
-  await pages.helper.getByRole('radio', { name: /甲的私密合成历史/ }).click();
-  await pages.helper.getByRole('textbox', { name: '表达方向', exact: true }).fill('只说明现在可以回复。');
+  await awaitWorkspaceScope(pages.helper, pages.rewriteBackend.data.contact_ids[0]);
+  await setWorkspaceContext(pages.helper, true);
+  await pages.helper.getByRole('checkbox', { name: /甲的私密合成历史/ }).check();
+  await pages.helper.getByRole('textbox', { name: '有什么想说的', exact: true }).fill('只说明现在可以回复。');
   await pages.rewriteBackend.plan({ count: 1, prefix: '旧快照候选' });
-  await pages.helper.getByRole('button', { name: '生成候选', exact: true }).click();
+  await pages.helper.getByRole('button', { name: '帮我表达', exact: true }).click();
   await expect(pages.helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveValue('旧快照候选（说法1）。');
   const requestId = pages.replyTransport.results[0].data.reply_request_id as string;
   await arrangeSnapshot(pages, 'legacy_timing', requestId);
   await pages.helper.getByRole('button', { name: '展开候选1依据', exact: true }).click();
   const region = pages.helper.getByRole('region', { name: '候选1依据', exact: true });
   await expect(region.getByText('甲的私密合成历史：今晚我会晚一点回复你。', { exact: true })).toBeVisible();
-  await region.getByRole('article').filter({ hasText: '甲的私密合成历史：今晚我会晚一点回复你。' })
-    .locator('.record-metadata > summary').click();
-  await expect(region.getByText('来源时间未知', { exact: true })).toBeVisible();
-  await expect(region.getByText('保存时间：未知', { exact: true })).toBeVisible();
+  const history = region.getByRole('article').filter({ hasText: '甲的私密合成历史：今晚我会晚一点回复你。' });
+  await expect(history).toHaveCount(1);
+  await history.locator('.record-metadata > summary').click();
+  await expect(history.getByText('来源时间未知', { exact: true })).toBeVisible();
+  await expect(history.getByText('保存时间：未知', { exact: true })).toBeVisible();
   const current = await pages.rewriteBackend.request(`/api/contacts/${pages.rewriteBackend.data.contact_ids[0]}/messages`);
   expect((current.data.messages as Array<{ occurred_at: string | null }>)[0].occurred_at).not.toBeNull();
   // 当前消息有时间，但生成旧快照缺时间，页面仍保持未知。
-  await expect(region.getByText('来源时间未知', { exact: true })).toBeVisible();
+  await expect(history.getByText('来源时间未知', { exact: true })).toBeVisible();
 }
 
 export async function replyEvidence(browser: Browser, origin: string) {
