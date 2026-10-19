@@ -1,0 +1,72 @@
+{
+  "baseline": "7e0b086960f82320216ad983235f01dcdfb394de",
+  "optimized": "93b0b88617b9016e360e77fb68dbddd78fe7f2c4",
+  "business_refine": {
+    "escaped-single": {
+      "summary": {
+        "run": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "cleanup": {
+        "databases_removed": true,
+        "remaining_threads": []
+      }
+    },
+    "business": {
+      "summary": {
+        "run": 6,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "cleanup": {
+        "databases_removed": true,
+        "remaining_threads": []
+      }
+    },
+    "related": {
+      "summary": {
+        "run": 83,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "cleanup": {
+        "databases_removed": true,
+        "remaining_threads": []
+      }
+    }
+  },
+  "final_integration": {
+    "business": {
+      "summary": {
+        "run": 6,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "cleanup": {
+        "databases_removed": true,
+        "remaining_threads": []
+      }
+    },
+    "ingest_unit": {
+      "run": 52,
+      "failures": 0,
+      "errors": 0,
+      "seconds": 0.725
+    }
+  },
+  "native_final": {
+    "owned_database_removed": true,
+    "recorded_processes_gone": true,
+    "user_directory_removed": true,
+    "user_directory_bytes_before": 15216140,
+    "user_directory_bytes_after": 0,
+    "final_ui_acceptance": "blocked_by_other_live_same_bundle_instance; no action in that window",
+    "prior_v1_ui_acceptance": "passed"
+  },
+  "native_v1": "real App import, replay, trace receipt and contact isolation passed; see verification.md"
+}

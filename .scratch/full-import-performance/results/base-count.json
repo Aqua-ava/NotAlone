@@ -1,0 +1,115 @@
+{
+  "revision": "7e0b086960f82320216ad983235f01dcdfb394de",
+  "mode": "count",
+  "python": "3.12.13",
+  "hash_seed": 0,
+  "machine": "arm64",
+  "psycopg": "3.3.4",
+  "libpq": 180000,
+  "transport": "local",
+  "results": [
+    {
+      "profile": "import_file",
+      "records": 100,
+      "input_sha256": "94a472d2c642ed8d1af18023e9e4d85d2639a760a84537b590217849e64eae56",
+      "samples": [
+        {
+          "python_execute_calls": 13,
+          "other_sql": 213,
+          "sql_statement_executions": 318,
+          "driver_wait_calls": 26,
+          "source_sql": 102,
+          "python_executemany_calls": 4,
+          "processing_business_sql": 3,
+          "json_parameter_bytes": 290850,
+          "commit_calls": 1,
+          "protocol_messages": {
+            "F.Query": 2,
+            "B.CommandComplete": 320,
+            "B.ReadyForQuery": 19,
+            "F.Parse": 17,
+            "F.Bind": 318,
+            "F.Describe": 318,
+            "F.Execute": 318,
+            "F.Sync": 17,
+            "F.Flush": 4
+          },
+          "pl_function_calls": {
+            "invalidate_relationship_overview_projection": 201
+          }
+        }
+      ],
+      "sample_count": 1
+    },
+    {
+      "profile": "import_file",
+      "records": 1000,
+      "input_sha256": "aac5e39010162eff8bacebca5c9be2f5a34a968ec45a2843a5ccbc0919582521",
+      "samples": [
+        {
+          "python_execute_calls": 14,
+          "other_sql": 2013,
+          "sql_statement_executions": 3019,
+          "driver_wait_calls": 27,
+          "source_sql": 1002,
+          "python_executemany_calls": 4,
+          "processing_business_sql": 4,
+          "json_parameter_bytes": 2908904,
+          "commit_calls": 1,
+          "protocol_messages": {
+            "F.Query": 2,
+            "B.CommandComplete": 3021,
+            "B.ReadyForQuery": 20,
+            "F.Parse": 18,
+            "F.Bind": 3019,
+            "F.Describe": 3019,
+            "F.Execute": 3019,
+            "F.Sync": 18,
+            "F.Flush": 4
+          },
+          "pl_function_calls": {
+            "invalidate_relationship_overview_projection": 2001
+          }
+        }
+      ],
+      "sample_count": 1
+    },
+    {
+      "profile": "import_file",
+      "records": 10000,
+      "input_sha256": "48d1a6022f8b7042eb7c9ad66b5cc7491a475c5d8bee75c495972517241097c2",
+      "samples": [
+        {
+          "python_execute_calls": 34,
+          "other_sql": 20013,
+          "sql_statement_executions": 30039,
+          "driver_wait_calls": 47,
+          "source_sql": 10002,
+          "python_executemany_calls": 4,
+          "processing_business_sql": 24,
+          "json_parameter_bytes": 29121808,
+          "commit_calls": 1,
+          "protocol_messages": {
+            "F.Query": 2,
+            "B.CommandComplete": 30041,
+            "B.ReadyForQuery": 41,
+            "F.Parse": 24,
+            "F.Bind": 30039,
+            "F.Describe": 30039,
+            "F.Execute": 30039,
+            "F.Sync": 39,
+            "F.Flush": 4
+          },
+          "pl_function_calls": {
+            "invalidate_relationship_overview_projection": 20001
+          }
+        }
+      ],
+      "sample_count": 1
+    }
+  ],
+  "owned_database": "notalone_import_benchmark_3c9aed898365406a95ac7fecf7aa168d_test",
+  "measurement_note": "协议消息与驱动等待分别实测；不等于 TCP 包数或网络往返。时间无计数/追踪，P95 为 nearest-rank；内存为独立 tracemalloc Python 峰值。import_file 从读取文件到事务提交，不含预览与后台提取。phases 含独立包装开销，仅供定位。",
+  "server_version": 160014,
+  "owned_database_removed": true
+}

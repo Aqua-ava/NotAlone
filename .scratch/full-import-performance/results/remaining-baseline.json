@@ -1,0 +1,129 @@
+{
+  "baseline": "7e0b086960f82320216ad983235f01dcdfb394de",
+  "current": "dfb80f8846a0951862cc633d6e2f952638e9f404",
+  "tests": [
+    {
+      "testID": "tests.integration.server.test_import_auto_flow.ImportAutoFlowHttpTest.test_three_model_failures_are_terminal_until_explicit_recovery",
+      "base": {
+        "status": "failure",
+        "exception": "TaskWaitError",
+        "phase": "extract_memory",
+        "task_status": "failed",
+        "error_code": "memory_extraction_failed",
+        "attempt_count": 3,
+        "parse_normalize_succeeded": true
+      },
+      "new": {
+        "status": "failure",
+        "exception": "TaskWaitError",
+        "phase": "extract_memory",
+        "task_status": "failed",
+        "error_code": "memory_extraction_failed",
+        "attempt_count": 3,
+        "parse_normalize_succeeded": true
+      },
+      "same_failure": true
+    },
+    {
+      "testID": "tests.integration.server.test_import_auto_flow.ImportAutoFlowHttpTest.test_worker_contention_can_outlast_short_wait_without_failing_task",
+      "base": {
+        "status": "failure",
+        "exception": "TaskWaitError",
+        "phase": "extract_memory",
+        "task_status": "failed",
+        "error_code": "memory_extraction_failed",
+        "attempt_count": 3,
+        "parse_normalize_succeeded": true
+      },
+      "new": {
+        "status": "failure",
+        "exception": "TaskWaitError",
+        "phase": "extract_memory",
+        "task_status": "failed",
+        "error_code": "memory_extraction_failed",
+        "attempt_count": 3,
+        "parse_normalize_succeeded": true
+      },
+      "same_failure": true
+    },
+    {
+      "testID": "tests.integration.server.test_relationship_overview_events.RelationshipOverviewEventsHttpTest.test_plan_and_source_verified_completion_form_traceable_manual_versions_without_time_inference",
+      "base": {
+        "status": "failure",
+        "exception": "AssertionError",
+        "phase": "extract_memory",
+        "task_status": "failed",
+        "error_code": "memory_extraction_failed",
+        "attempt_count": 3,
+        "parse_normalize_succeeded": true
+      },
+      "new": {
+        "status": "failure",
+        "exception": "AssertionError",
+        "phase": "extract_memory",
+        "task_status": "failed",
+        "error_code": "memory_extraction_failed",
+        "attempt_count": 3,
+        "parse_normalize_succeeded": true
+      },
+      "same_failure": true
+    },
+    {
+      "testID": "tests.integration.server.test_relationship_overview_events.RelationshipOverviewEventsHttpTest.test_used_owner_context_revision_changes_projection_without_creating_owner_overview",
+      "base": {
+        "status": "failure",
+        "exception": "AssertionError",
+        "phase": "extract_memory",
+        "task_status": "failed",
+        "error_code": "memory_extraction_failed",
+        "attempt_count": 3,
+        "parse_normalize_succeeded": true
+      },
+      "new": {
+        "status": "failure",
+        "exception": "AssertionError",
+        "phase": "extract_memory",
+        "task_status": "failed",
+        "error_code": "memory_extraction_failed",
+        "attempt_count": 3,
+        "parse_normalize_succeeded": true
+      },
+      "same_failure": true
+    },
+    {
+      "testID": "tests.integration.tasks.test_observation_task.ObservationTaskPersistenceTest.test_real_runner_uses_observation_watermark_and_source_deletion",
+      "base": {
+        "status": "failure",
+        "exception": "AssertionError",
+        "phase": "list_pending_candidates_after_three_successful_worker_steps",
+        "actual": 0,
+        "expected": 1
+      },
+      "new": {
+        "status": "failure",
+        "exception": "AssertionError",
+        "phase": "list_pending_candidates_after_three_successful_worker_steps",
+        "actual": 0,
+        "expected": 1
+      },
+      "same_failure": true
+    }
+  ],
+  "cleanup": {
+    "base": {
+      "databases_removed": true,
+      "threads_stopped": true,
+      "child_processes": true,
+      "remaining_threads": [],
+      "owned_database_count": 2
+    },
+    "new": {
+      "databases_removed": true,
+      "threads_stopped": true,
+      "child_processes": true,
+      "remaining_threads": [],
+      "owned_database_count": 2
+    },
+    "runner_pids_stopped": true
+  }
+}

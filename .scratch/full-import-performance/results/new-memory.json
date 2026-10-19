@@ -1,0 +1,76 @@
+{
+  "revision": "93b0b88617b9016e360e77fb68dbddd78fe7f2c4",
+  "mode": "memory",
+  "python": "3.12.13",
+  "hash_seed": 0,
+  "machine": "arm64",
+  "psycopg": "3.3.4",
+  "libpq": 180000,
+  "transport": "local",
+  "results": [
+    {
+      "profile": "import_file",
+      "records": 100,
+      "input_sha256": "94a472d2c642ed8d1af18023e9e4d85d2639a760a84537b590217849e64eae56",
+      "samples": [
+        1216501
+      ],
+      "sample_count": 1,
+      "python_peak_bytes": 1216501
+    },
+    {
+      "profile": "preview",
+      "records": 100,
+      "input_sha256": "94a472d2c642ed8d1af18023e9e4d85d2639a760a84537b590217849e64eae56",
+      "samples": [
+        359345
+      ],
+      "sample_count": 1,
+      "python_peak_bytes": 359345
+    },
+    {
+      "profile": "import_file",
+      "records": 1000,
+      "input_sha256": "aac5e39010162eff8bacebca5c9be2f5a34a968ec45a2843a5ccbc0919582521",
+      "samples": [
+        11228316
+      ],
+      "sample_count": 1,
+      "python_peak_bytes": 11228316
+    },
+    {
+      "profile": "preview",
+      "records": 1000,
+      "input_sha256": "aac5e39010162eff8bacebca5c9be2f5a34a968ec45a2843a5ccbc0919582521",
+      "samples": [
+        3718884
+      ],
+      "sample_count": 1,
+      "python_peak_bytes": 3718884
+    },
+    {
+      "profile": "import_file",
+      "records": 10000,
+      "input_sha256": "48d1a6022f8b7042eb7c9ad66b5cc7491a475c5d8bee75c495972517241097c2",
+      "samples": [
+        112261662
+      ],
+      "sample_count": 1,
+      "python_peak_bytes": 112261662
+    },
+    {
+      "profile": "preview",
+      "records": 10000,
+      "input_sha256": "48d1a6022f8b7042eb7c9ad66b5cc7491a475c5d8bee75c495972517241097c2",
+      "samples": [
+        37855028
+      ],
+      "sample_count": 1,
+      "python_peak_bytes": 37855028
+    }
+  ],
+  "owned_database": "notalone_import_benchmark_30fa47d1a25b4bc7841adacbe3e78c74_test",
+  "measurement_note": "协议消息与驱动等待分别实测；不等于 TCP 包数或网络往返。时间无计数/追踪，P95 为 nearest-rank；内存为独立 tracemalloc Python 峰值。import_file 从读取文件到事务提交，不含预览与后台提取。phases 含独立包装开销，仅供定位。",
+  "server_version": 160014,
+  "owned_database_removed": true
+}
