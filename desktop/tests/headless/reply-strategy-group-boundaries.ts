@@ -70,14 +70,53 @@ async function longHistory(browser: Browser, origin: string, scene: Scene) {
     await pages.rewriteBackend.plan({ count: 1, message_groups: [original] });
     const identity = await generated(pages, contactId, scene === '已有想法' ? 'express' : 'suggest');
     await expect(groupOn(pages.helper).getByRole('textbox', { name: /^说法1第[0-9]+条编辑文本$/ })).toHaveCount(8);
+    type RequestProgress = { method: string; page: string | null; receipt: boolean; status: number | null;
+      elapsedMs: number | null; wireBytes: number | null };
+    let requests: RequestProgress[] = [];
+    pages.replyTransport.server.on('request', (incoming, response) => {
+      const url = new URL(incoming.url ?? '/', 'http://127.0.0.1');
+      if (!url.pathname.endsWith(`/candidates/${identity.candidateId}/versions`)) return;
+      const started = Date.now(), socket = response.socket, before = socket?.bytesWritten ?? 0;
+      const trace: RequestProgress = { method: incoming.method ?? '', page: url.searchParams.get('page'),
+        receipt: url.searchParams.has('receipt'), status: null, elapsedMs: null, wireBytes: null };
+      requests.push(trace);
+      response.once('finish', () => {
+        trace.status = response.statusCode; trace.elapsedMs = Date.now() - started;
+        trace.wireBytes = socket ? socket.bytesWritten - before : null;
+      });
+    });
     let parent = identity.candidateId;
     for (let revision = 1; revision <= 3; revision++) {
       const texts = fullGroup(revision);
       for (let index = 0; index < texts.length; index++) {
+        const version = (revision - 1) * texts.length + index + 1, started = Date.now();
+        requests = [];
+        process.stdout.write(`page_test_version_progress: ${JSON.stringify({ scene, stage: 'save-start', version, message: index + 1 })}\n`);
         await editorOn(pages.helper, index + 1).fill(texts[index]);
         await editorOn(pages.helper, index + 1).blur();
-        await expect(groupOn(pages.helper).getByText(`修改版本 ${(revision - 1) * texts.length + index + 1}`, { exact: true })).toBeVisible();
+        try {
+          await expect(groupOn(pages.helper).getByText(`修改版本 ${version}`, { exact: true })).toBeVisible();
+        } catch (error) {
+          const failedAfterMs = Date.now() - started, progress = requests.map(item => ({ ...item }));
+          const state = await pages.helper.evaluate(async () => {
+            const state = await window.notalone.replies.getState();
+            return { phase: state.phase, error: state.errorCode, versionPhase: state.candidateVersions?.phase,
+              items: state.candidateVersions?.items.map(item => ({ phase: item.phase, versions: item.history?.versions.length ?? 0 })) };
+          });
+          const history = await actualHistory(pages, identity);
+          const page = await pages.rewriteBackend.request(`/api/contacts/${identity.contactId}/assistant-sessions/${identity.sessionId}/candidates/${identity.candidateId}/versions?page=0`);
+          process.stderr.write(`page_test_version_failure: ${JSON.stringify({ scene, version, failedAfterMs, ...state,
+            backendVersions: history.versions.length, fullHistoryBytes: Buffer.byteLength(JSON.stringify(history), 'utf8'),
+            firstPageStatus: page.status, firstPageBytes: Buffer.byteLength(JSON.stringify(page.data), 'utf8'),
+            requests: progress })}\n`);
+          throw error;
+        }
         const saved = await actualHistory(pages, identity), latest = saved.versions.at(-1)!;
+        process.stdout.write(`page_test_version_progress: ${JSON.stringify({ scene, stage: 'saved', version,
+          elapsedMs: Date.now() - started, versions: saved.versions.length,
+          fullHistoryBytes: Buffer.byteLength(JSON.stringify(saved), 'utf8'),
+          requestCount: requests.length,
+          maxPageWireBytes: Math.max(0, ...requests.filter(item => item.page !== null).map(item => item.wireBytes ?? 0)) })}\n`);
         expect(latest.parent_version_id).toBe(parent);
         parent = latest.version_id;
       }
@@ -91,8 +130,10 @@ async function longHistory(browser: Browser, origin: string, scene: Scene) {
     // 旧未分页的同一权威历史已超过原预算；生产公开控件仍必须完整读取全部版本。
     expect(Buffer.byteLength(JSON.stringify(saved), 'utf8')).toBeGreaterThan(1_048_576);
     for (let index = 0; index < 24; index++) {
+      process.stdout.write(`page_test_version_progress: ${JSON.stringify({ scene, stage: 'review-start', version: 23 - index })}\n`);
       await groupOn(pages.helper).getByRole('button', { name: '查看说法1上一版', exact: true }).click();
       await expect(groupOn(pages.helper).getByText(index === 23 ? '原始版本' : `修改版本 ${23 - index}`, { exact: true })).toBeVisible();
+      process.stdout.write(`page_test_version_progress: ${JSON.stringify({ scene, stage: 'reviewed', version: 23 - index })}\n`);
     }
     await expect(groupOn(pages.helper).getByRole('button', { name: '查看说法1上一版', exact: true })).toBeDisabled();
     for (let index = 0; index < original.length; index++) await expect(editorOn(pages.helper, index + 1)).toHaveValue(original[index]);

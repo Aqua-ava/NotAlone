@@ -137,7 +137,23 @@ export async function understandingDirection(browser: Browser, origin: string) {
     await expect.poll(() => replyTransport.heldCount).toBe(1);
     await manager.getByRole('button', { name: '选择合成联系人乙', exact: true }).click();
     await confirmHelperContact(helper, rewriteBackend.data.contact_ids[1]);
-    await fillWorkspaceThought(helper, '乙的独立想法。');
+    try {
+      await fillWorkspaceThought(helper, '乙的独立想法。');
+    } catch (error) {
+      const state = await helper.evaluate(async () => {
+        const reply = await window.notalone.replies.getState();
+        const contacts = await window.notalone.contacts.getState();
+        return { contactMatchesSelection: reply.contactId === contacts.selectedContactId,
+          phase: reply.phase, savedPhase: reply.savedSession?.phase, mode: reply.mode,
+          inputKind: reply.options.inputKind, generationBlock: reply.generationBlock,
+          sourceAvailability: reply.sourceAvailability ?? null, sessionDeletion: reply.sessionDeletion ?? null,
+          catalogPhase: reply.sessionCatalog?.phase, selectionPending: reply.sessionCatalog?.selectionPending,
+          jobs: reply.generationJobs?.map(job => ({ phase: job.phase, belongsToCurrentContact: job.contactId === reply.contactId })) };
+      });
+      process.stderr.write(`page_test_workspace_late_result_input: ${JSON.stringify({ ...state,
+        heldResponses: replyTransport.heldCount })}\n`);
+      throw error;
+    }
     const requestKey = replyTransport.requests[0].idempotency_key as string;
     replyTransport.release();
     await expect.poll(() => helper.evaluate(async key => (await window.notalone.replies.getState()).generationJobs
