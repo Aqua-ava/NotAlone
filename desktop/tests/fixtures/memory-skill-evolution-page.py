@@ -79,7 +79,6 @@ def _run(resources):
     from notalone.persistence import skill_history, skill_policies, skill_execution_view
     from notalone.server.connection_info import write_backend_info
     from tests.integration.server.test_memory_skill_evolution import MemorySkillEvolutionHttpTest
-    from tests.integration.server.memory_skill_evolution_models import EvolutionMemoryModel
 
     expected = json.loads(os.environ["NOTALONE_EVOLUTION_EXPECTED_MODULES"])
     directory = Path(os.environ["NOTALONE_EVOLUTION_EVIDENCE_DIR"]).resolve()
@@ -88,7 +87,7 @@ def _run(resources):
         raise RuntimeError("组合页面证据须保存到仓库外 700 目录。")
     proof_path = directory / f"evolution-page-{uuid4().hex}.json"
 
-    class PageMemoryModel(EvolutionMemoryModel):
+    class PageMemoryModel(MemorySkillEvolutionHttpTest.extraction_model_factory):
         model_call_limit: int = 12
 
     class PageReplyModel(MemorySkillEvolutionHttpTest.reply_model_factory):
@@ -118,7 +117,7 @@ def _run(resources):
         os.environ.update(NOTALONE_DATABASE_URL=fixture.database_url,
                           NOTALONE_TEST_DATABASE_URL=fixture.database_url)
         migration_proof = guard_test_migrations(fixture.database_url, fixture.database_name, ROOT,
-            expected_count=72, expected_tail="072_scoped_media_lifecycle.sql")
+            expected_count=89, expected_tail="089_style_sample_generation_dependencies.sql")
         fixture.setUp()
         state = fixture.prepare_evolution()
         if migrate(fixture.database_url, ROOT / "backend/database/migrations"):
