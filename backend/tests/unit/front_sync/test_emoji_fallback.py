@@ -1,4 +1,4 @@
-"""合成标题的受限 emoji 回退；仅触达探针协议与只读元数据边界。"""
+"""同图尾部证据与 ADR-076 通用名单核验；仅触达只读元数据边界。"""
 
 from __future__ import annotations
 
@@ -81,7 +81,7 @@ class EmojiFallbackTest(unittest.TestCase):
     def test_unique_confirmed_full_emoji_name_preserves_raw_preview_and_score(self):
         result = self.locate()
         self.assertEqual((result.phase, result.reason, result.binding_id, result.contact_id),
-                         ("confirmed", "confirmed_active_binding_emoji_fallback", BINDING, CONTACT))
+                         ("confirmed", "confirmed_active_binding_name_match", BINDING, CONTACT))
         self.assertEqual((result.recognized_name, result.recognition_confidence), ("合成學", 0.3))
         self.assertEqual(self.cli_calls[0]["keyword"], None)
         self.assertEqual((self.cli_calls[0]["type_filter"], self.cli_calls[0]["limit"]), ("all", 5000))
@@ -110,9 +110,9 @@ class EmojiFallbackTest(unittest.TestCase):
             with self.subTest(version=version):
                 result = self.locate(payload)
                 self.assertEqual((result.phase, result.reason), ("confirmed", "confirmed_active_binding"))
-                self.assertEqual(self.cli_calls[0]["keyword"], "合成🐯")
+                self.assertIsNone(self.cli_calls[0]["keyword"])
 
-    def test_fallback_presence_never_uses_high_confidence_raw_exact_name(self):
+    def test_invalid_fallback_cannot_use_raw_exact_but_valid_fallback_checks_full_list(self):
         payload = envelope()
         payload["display_name"] = "合成&"
         payload["quality"]["display_name_confidence"] = 1.0
@@ -120,7 +120,7 @@ class EmojiFallbackTest(unittest.TestCase):
             payload["text_fallback"]["confidence"] = confidence
             with self.subTest(confidence=confidence):
                 result = self.locate(payload, candidates=(candidate("合成&"),), bindings=(binding("合成&"),))
-                self.assertEqual(result.phase, "manual-required")
+                self.assertEqual(result.phase, "manual-required" if confidence < 0.9 else "confirmed")
                 self.assertEqual(result.recognized_name, "合成&")
                 self.assertEqual(result.recognition_confidence, 1.0)
         self.assertIsNone(self.parse(payload).qualified_evidence)
@@ -230,21 +230,24 @@ class EmojiFallbackTest(unittest.TestCase):
                 self.assertEqual(result.phase, "paused")
                 self.assertIsNone(result.recognized_name)
 
-    def test_colored_normal_letter_or_punctuation_is_not_an_emoji_tail(self):
+    def test_colored_ordinary_suffix_requires_unique_unchanged_full_binding(self):
         for name in ("合成A", "合成&", "合成-", "合成 17", "合成 🐯", "合成🐯A"):
             with self.subTest(name=name):
                 result = self.locate(candidates=(candidate(name),), bindings=(binding(name),))
-                self.assertEqual((result.phase, result.reason), ("manual-required", "unmatched_requires_selection"))
-                self.assertEqual(self.binding_calls, [])
+                self.assertEqual((result.phase, result.reason), ("confirmed", "confirmed_active_binding_name_match"))
+                self.assertEqual(len(self.binding_calls), 1)
 
-    def test_does_not_strip_fallback_prefix_spaces_or_change_case_or_script(self):
+    def test_fallback_normalization_and_bounded_edits_are_independent_of_binding_rename_check(self):
         for text, name in (("合成 ", "合成🐯"), (" 合成", "合成🐯"), ("Nora", "nora🐯"),
-                           ("合成测试", "合成測試🐯"), ("A01", "A1🐯")):
+                           ("A01", "A1🐯")):
             payload = envelope()
             payload["text_fallback"]["text"] = text
             with self.subTest(text=text, name=name):
                 self.assertEqual(self.locate(payload, candidates=(candidate(name),), bindings=(binding(name),)).phase,
-                                 "manual-required")
+                                 "confirmed")
+        payload["text_fallback"]["text"] = "合成测试"
+        self.assertEqual(self.locate(payload, candidates=(candidate("合成測試🐯"),),
+                                     bindings=(binding("合成測試🐯"),)).phase, "manual-required")
 
     def test_mixed_prefix_internal_space_and_multiple_simple_emoji_are_supported(self):
         payload = envelope()
@@ -285,11 +288,11 @@ class EmojiFallbackTest(unittest.TestCase):
             result = self.locate(deadline=10)
         self.assertEqual(result.phase, "confirmed")
         self.assertAlmostEqual(self.cli_calls[0]["timeout_seconds"], 0.1)
-        with patch("notalone.front_sync.foreground_locator.monotonic", side_effect=[8, 9, 10.1]):
+        with patch("notalone.front_sync.foreground_locator.monotonic", side_effect=lambda: 10.1 if self.cli_calls else 8):
             result = self.locate(deadline=10)
         self.assertEqual((result.phase, result.reason), ("unavailable", "observation_timeout"))
         self.assertEqual(self.binding_calls, [])
-        with patch("notalone.front_sync.foreground_locator.monotonic", side_effect=[8, 10]):
+        with patch("notalone.front_sync.foreground_locator.monotonic", side_effect=iter([8, 10, 10]).__next__):
             result = self.locate(deadline=10)
         self.assertEqual((result.phase, result.reason), ("unavailable", "observation_timeout"))
         self.assertEqual(self.cli_calls, [])
@@ -308,19 +311,16 @@ class EmojiFallbackTest(unittest.TestCase):
         self.assertEqual(self.cli_calls, [])
 
     def test_cancellation_after_metadata_or_binding_lookup_cannot_publish_identity(self):
-        for stop_at in (4, 5):
-            calls = 0
-
+        for stop_after in ("metadata", "binding"):
             def cancel():
-                nonlocal calls
-                calls += 1
-                if calls == stop_at:
+                if (stop_after == "metadata" and self.cli_calls
+                        or stop_after == "binding" and self.binding_calls):
                     raise RuntimeError("synthetic_cancelled")
 
-            with self.subTest(stop_at=stop_at), self.assertRaisesRegex(RuntimeError, "synthetic_cancelled"):
+            with self.subTest(stop_after=stop_after), self.assertRaisesRegex(RuntimeError, "synthetic_cancelled"):
                 self.locate(check_current=cancel)
             self.assertEqual(len(self.cli_calls), 1)
-            self.assertEqual(len(self.binding_calls), stop_at - 4)
+            self.assertEqual(len(self.binding_calls), int(stop_after == "binding"))
 
 
 class SupportedEmojiSuffixTest(unittest.TestCase):

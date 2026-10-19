@@ -263,8 +263,9 @@ export class ForegroundController {
           && (!this.manualRequired || this.qualityOnlyManualGate);
         this.manualRequired = true;
       }
-      // 独立高质量尾部文字证据只解除单纯质量门，不覆盖歧义、超时或明确手动模式。
-      if (observation.phase === 'confirmed' && observation.reason === 'confirmed_active_binding_emoji_fallback'
+      // 新鲜名单核验或旧尾部文字证据只解除单纯质量门，不覆盖歧义、超时或明确手动模式。
+      if (observation.phase === 'confirmed' && ['confirmed_active_binding_name_match',
+        'confirmed_active_binding_emoji_fallback'].includes(observation.reason)
         && this.qualityOnlyManualGate) {
         this.manualRequired = false;
         this.qualityOnlyManualGate = false;

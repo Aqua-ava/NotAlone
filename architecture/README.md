@@ -109,6 +109,7 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 
 74. [ADR-074：当前对话自动判断并加载回复 Skill](adr/074-automatic-conversation-skill-loading.md)
 75. [ADR-075：孤立尾部表情的独立文字证据](adr/075-isolated-emoji-tail-text-evidence.md)
+76. [ADR-076：结合完整会话名单核验标题 OCR](adr/076-session-list-assisted-name-matching.md)
 
 ## 当前架构决策
 
@@ -117,7 +118,7 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 - 首版范围按 ADR-065 先交付手动粘贴聊天文字或单联系人导入的完整使用路径，明确创建／选择联系人后生成、查看依据及编辑候选。微信自动初始化与渠道验收保留未完成，不作为本次首版前提；资料更新按 ADR-066 原地补齐，历史副本删除清理、隐私与人工发送要求保持。
 - 数据隔离键为 `owner_id + contact_id`；`contact_id` 由 NotAlone 创建，昵称、备注和微信来源标识不能替代它。
 - 文字是统一的检索与生成表示；前台 display name OCR、本地微信 CLI、截图和语音都是输入适配器。
-- Mac 前台 OCR 按 ADR-052 仅识别顶部 display name，再由唯一私聊元数据及已确认绑定定位联系人；CLI 独立同步用户主动选择并确认的联系人及我方文字增量，首次不预选会话。CLI 的外部会话标识不能替代 `contact_id`，同步范围与停止/恢复规则见 ADR-030。
+- Mac 前台 OCR 按 ADR-052 仅识别顶部 display name，再按 ADR-076 结合完整会话名单、唯一私聊及已确认绑定定位联系人；CLI 独立同步用户主动选择并确认的联系人及我方文字增量，首次不预选会话。CLI 的外部会话标识不能替代 `contact_id`，同步范围与停止/恢复规则见 ADR-030。
 - 持续前台定位按 ADR-050 采用每轮单帧，进入助手或其他 App 后暂停；一个助手窗口按联系人恢复输入和编辑，切换不取消原生成。约束见[正式规格](../.scratch/foreground-contact-follow/spec.md)，实施进度统一见[任务索引](../.scratch/foreground-contact-follow/planning.md)，验证范围与剩余缺口见各任务的结果记录；任务关闭不表示其他渠道或交付任务已通过验收。ADR-049 的双帧复查仅保留为历史决定。
 - 生成只使用已选联系人及用户本人范围内的有界上下文；模型提取的记忆必须带来源、标记 `auto` 且可撤销。
 - 正常自动记忆按 [ADR-070](adr/070-automatic-memory-maintenance.md) 使用逐项来源核验，保留语用、置信度、风险及人工纠错保护；不再因旧空放行表而一律待确认。未知或核验不足仍不自动采纳，旧评测结果不因此变成达标。

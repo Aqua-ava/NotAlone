@@ -39,15 +39,15 @@ test('同图尾部文字经认证HTTP恢复质量门，前缀碰撞撤销身份�
       await writeFile(path.join(fixture.directory, 'probe-state.json'), JSON.stringify(state));
       await foreground.observeBeforeShow(); return foreground.getState();
     };
-    const raw = { capture_version: 'automatic-header-v3', display_name: '合成學', display_name_confidence: 0.3 };
-    const fallback = { ...raw, capture_version: 'automatic-header-v4', text_fallback: {
+    const raw = { capture_version: 'automatic-header-v3', display_name: '合成學', display_name_confidence: 0.3, name_complete: false };
+    const fallback = { ...raw, name_complete: true, capture_version: 'automatic-header-v4', text_fallback: {
       version: 'isolated-color-tail-v1', text: '合成', confidence: 0.95, text_complete: true, mask_verified: true,
     } };
     try {
       assert.equal((await observe(raw)).reason, 'quality_unverified');
       const confirmed = await observe(fallback);
       assert.equal(confirmed.phase, 'confirmed');
-      assert.equal(confirmed.reason, 'confirmed_active_binding_emoji_fallback');
+      assert.equal(confirmed.reason, 'confirmed_active_binding_name_match');
       assert.equal(confirmed.confirmedContactId, contactId);
       assert.equal(confirmed.recognizedName, '合成學');
       assert.equal(confirmed.recognitionConfidence, 0.3);
@@ -58,6 +58,58 @@ test('同图尾部文字经认证HTTP恢复质量门，前缀碰撞撤销身份�
       await fixture.setCli({ sessions: [session], messages: {} });
       assert.equal((await observe(fallback)).reason, 'manual_confirmation_required');
       assert.notEqual(foreground.getGenerationBlock(), null);
+    } finally { foreground.dispose(); }
+  });
+});
+
+test('普通增漏错字经完整名单核验，未绑定近邻和改名均不能自动确认', async () => {
+  await ports.withVerifiedForegroundFixture(async fixture => {
+    const contactId = fixture.data.contact_ids[0];
+    const session = { username: 'wxid_synthetic_name_match', display_name: '合成测试甲',
+      chat_type: 'private', last_timestamp: 1700000000 };
+    await fixture.setCli({ sessions: [session], messages: {} });
+    assert.equal((await fixture.request('/api/sync/cli-bindings/confirm', { selections: [
+      { locator: session.username, contact_id: contactId },
+    ] })).status, 200);
+    assert.equal((await fixture.request('/api/sync/enable', {})).status, 200);
+    const client = new ports.JsonClient(await ports.readConnection(fixture.infoPath));
+    const backend = { getConnectionGeneration: () => 1, onStateChanged: () => () => {},
+      async requestJson(request) { return { ...await client.perform(request), generation: 1 }; } };
+    const contacts = new ports.ContactSession(() => ports.readContactDirectory(backend));
+    contacts.setConnection(1); await contacts.refreshContacts();
+    const foreground = new ports.ForegroundController(backend, contacts);
+    const observe = async (text, confidence = 0.5) => {
+      await writeFile(path.join(fixture.directory, 'probe-state.json'), JSON.stringify({
+        capture_version: 'automatic-header-v3', display_name: text, display_name_confidence: confidence,
+      }));
+      await foreground.observeBeforeShow(); return foreground.getState();
+    };
+    try {
+      assert.equal((await observe(session.display_name, 0.2)).reason, 'quality_unverified');
+      for (const text of ['合成侧试甲', '合测试甲', '合成测测试甲', session.display_name]) {
+        const state = await observe(text);
+        assert.equal(state.reason, 'confirmed_active_binding_name_match');
+        assert.equal(state.confirmedContactId, contactId);
+        assert.equal(state.recognizedName, text);
+        assert.equal(state.recognitionConfidence, 0.5);
+        assert.equal(foreground.getGenerationBlock(), null);
+      }
+      await fixture.setCli({ sessions: [session, { ...session, username: 'wxid_synthetic_unbound_near',
+        display_name: '合成侧式甲' }], messages: {} });
+      assert.equal((await observe('合成侧试甲')).reason, 'ambiguous_requires_selection');
+      assert.notEqual(foreground.getGenerationBlock(), null);
+      const ambiguous = await fixture.request('/api/sync/foreground/observe', {});
+      assert.equal(ambiguous.data.contact_id, null);
+      assert.equal(ambiguous.data.binding_id, null);
+      await fixture.setCli({ sessions: [{ ...session, display_name: '合成测试乙' }], messages: {} });
+      await writeFile(path.join(fixture.directory, 'probe-state.json'), JSON.stringify({
+        capture_version: 'automatic-header-v3', display_name: '合成测试乙', display_name_confidence: 1,
+      }));
+      const renamed = await fixture.request('/api/sync/foreground/observe', {});
+      assert.equal(renamed.data.reason, 'unmatched_requires_selection');
+      assert.equal(renamed.data.contact_id, null);
+      assert.equal((await fixture.request('/api/sync/cli-bindings')).data.bindings.length, 1);
+      assert.ok((await fixture.tails()).every(value => value === session.username));
     } finally { foreground.dispose(); }
   });
 });
