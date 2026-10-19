@@ -63,14 +63,14 @@ def _input_payload(normalized: str) -> dict[str, Any]:
             "skill_disabled": skill == "disabled", **({'scene': scene} if scene is not None else {})}
 
 
-def _active_binding(connection: Any, scope: ContactScope) -> UUID:
+def _active_binding(connection: Any, scope: ContactScope, *, allow_manual: bool = True) -> UUID:
     if not connection.execute(
         "SELECT 1 FROM public.contact WHERE owner_id = %s AND id = %s",
         (scope.owner_id, scope.contact_id),
     ).fetchone():
         raise AssistantSessionNotFound("指定范围内不存在联系人。")
     from notalone.application.manual_input_scope import manual_input_contact
-    if manual_input_contact.get() is not None:
+    if allow_manual and manual_input_contact.get() is not None:
         if manual_input_contact.get() != scope.contact_id:
             raise AssistantSessionRejected("scope_mismatch")
         manual = connection.execute(
@@ -573,6 +573,11 @@ class PostgresAssistantSessionStore:
             (scope.owner_id, scope.contact_id, session_id),
         ).fetchone():
             raise AssistantSessionNotFound("指定范围内不存在助手会话。")
+
+    def require_conversation_binding(self, scope: ContactScope) -> None:
+        """只读同范围已有渠道绑定；手动输入确认不能替代前台绑定资格。"""
+        with self._transaction(scope) as connection:
+            _active_binding(connection, scope, allow_manual=False)
 
     def default(self, scope: ContactScope) -> UUID:
         with self._transaction(scope) as connection:

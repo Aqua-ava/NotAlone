@@ -3,18 +3,24 @@ import { createRequire } from 'node:module';
 import test from 'node:test';
 import { build } from 'esbuild';
 
-const compiled = await build({ stdin: { contents: `export { installForegroundBridge } from './src/main/foreground/bridge';`,
+const compiled = await build({ stdin: { contents: `export { installForegroundBridge } from './src/main/foreground/bridge';
+  export { BackendRequestFailure } from './src/main/backend/json-client';`,
   resolveDir: process.cwd() }, bundle: true, platform: 'node', format: 'cjs', write: false });
 const module = { exports: {} };
 new Function('require', 'module', 'exports', compiled.outputFiles[0].text)(createRequire(import.meta.url), module, module.exports);
-const { installForegroundBridge } = module.exports;
+const { installForegroundBridge, BackendRequestFailure } = module.exports;
 const contactId = '10000000-0000-4000-8000-000000000001';
 const otherId = '10000000-0000-4000-8000-000000000002';
 const binding = (id = contactId, suffix = '1') => ({ binding_id: `20000000-0000-4000-8000-00000000000${suffix}`,
   contact_id: id, conversation_locator: `wxid_synthetic_${suffix}`, display_name: '合成绑定', status: 'active' });
 
 function fixture(t, bindings = []) {
-  let generation = 1, read = async () => ({ generation, data: { bindings } });
+  let generation = 1, read = async () => {
+    if (bindings.filter(item => item.contact_id === contactId && item.status === 'active').length !== 1) {
+      throw new BackendRequestFailure('response', 409, 'assistant_session_rejected');
+    }
+    return { generation, data: { confirmed: true } };
+  };
   const calls = [], handlers = new Map();
   const state = { contacts: [contactId, otherId].map(contactId => ({ contactId, displayName: '合成联系人' })),
     selectedContactId: contactId, scopeRevision: 1, directoryPhase: 'ready' };
@@ -38,16 +44,16 @@ for (const [name, bindings] of [['未绑定', []], ['仅另一联系人绑定', 
     assert.equal(f.foreground.getGenerationBlock(), 'foreground-confirmation-required');
     assert.equal(f.foreground.getState().confirmation, 'required');
     assert.equal(f.state.selectedContactId, contactId);
-    assert.deepEqual(f.calls.map(call => [call.method, call.path]), [['GET', '/api/sync/cli-bindings']]);
+    assert.deepEqual(f.calls.map(call => [call.method, call.path]), [['GET', `/api/contacts/${contactId}/assistant-session/binding`]]);
   });
 }
 
-test('唯一已有绑定允许显式确认，只读授权目录不读取聊天或自动生成', async t => {
+test('唯一已有绑定允许显式确认，只核验指定联系人不读取目录或聊天', async t => {
   const f = fixture(t, [binding(), binding(otherId, '2')]);
   await f.confirm();
   assert.equal(f.foreground.getGenerationBlock(), null);
   assert.equal(f.foreground.getState().confirmedContactId, contactId);
-  assert.deepEqual(f.calls, [{ method: 'GET', path: '/api/sync/cli-bindings' }, { clearManual: contactId }]);
+  assert.deepEqual(f.calls, [{ method: 'GET', path: `/api/contacts/${contactId}/assistant-session/binding` }, { clearManual: contactId }]);
 });
 
 for (const change of ['contact', 'foreground', 'connection']) {
@@ -61,7 +67,7 @@ for (const change of ['contact', 'foreground', 'connection']) {
     if (change === 'contact') { f.state.selectedContactId = otherId; f.state.scopeRevision += 1; }
     else if (change === 'foreground') { f.foreground.notifyHelperLifecycle('focused'); }
     else f.reconnect();
-    release({ generation: 1, data: { bindings: [binding()] } });
+    release({ generation: 1, data: { confirmed: true } });
     await assert.rejects(pending);
     assert.equal(f.foreground.getGenerationBlock(), 'foreground-confirmation-required');
     assert.equal(f.calls.length, 1);

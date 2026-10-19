@@ -1367,6 +1367,11 @@ class BackendApp:
             return _json_response(status, payload, headers={"Cache-Control": "no-store"})
         try:
             contact_id = UUID(parts[2])
+            if parts[3:] == ["assistant-session", "binding"]:
+                if method != "GET":
+                    return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+                service.require_conversation_binding(owner_id=self._owner_id, contact_id=contact_id)
+                return _json_response(HTTPStatus.OK, {"confirmed": True}, headers={"Cache-Control": "no-store"})
             if parts[3:] == ["assistant-session", "default"] and method == "POST":
                 session_id = service.default(owner_id=self._owner_id, contact_id=contact_id)
                 return _json_response(HTTPStatus.OK, {"session_id": str(session_id)})

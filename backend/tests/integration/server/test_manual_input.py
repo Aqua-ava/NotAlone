@@ -6,7 +6,7 @@ import time
 import unittest
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from tests.fidelity_http_support import FidelityHttpFixture
 
@@ -71,6 +71,33 @@ class ManualInputHttpTest(FidelityHttpFixture, unittest.TestCase):
         self.assertEqual(self.manual_request(other_path, {}, contact_id=contact)[0], 400)
         self.assertEqual(self.manual_request(other_path, {}, contact_id=other)[0], 409)
         self.assertEqual(self.manual_request(path, {}, contact_id=contact, backend=self.other_backend)[0], 404)
+
+    def test_binding_qualification_is_scoped_read_only_and_independent_of_sync_runtime(self):
+        contact, _ = self.create_contact()
+        path = f"/api/contacts/{contact}/assistant-session/binding"
+        self.assertEqual(self.manual_request('/api/sync/cli-bindings')[0], 503)
+        self.assertEqual(self.manual_request(path)[0], 409)
+        self.assertEqual(self.manual_request(f"/api/contacts/{contact}/manual-confirmation", {})[0], 200)
+        self.assertEqual(self.manual_request(path, contact_id=contact)[0], 409)
+        self.assertEqual(self.manual_request(path, backend=self.other_backend)[0], 404)
+        self.assertEqual(self.manual_request(f"/api/contacts/{uuid4()}/assistant-session/binding")[0], 404)
+        self.assertEqual(self.manual_request(path, {})[0], 404)
+        binding = self.bindings.create_binding(owner_id=self.owner_id, contact_id=UUID(contact),
+            channel='wechat', account_scope='synthetic-qualification', conversation_locator='synthetic-binding-one')
+        self.assertEqual(self.manual_request(path), (200, {'confirmed': True}))
+        self.assertEqual(self.manual_request(path, contact_id=contact), (200, {'confirmed': True}))
+        self.assertEqual(self.manual_request(f"/api/contacts/{contact}/assistant-sessions")[1]['sessions'], [])
+        other, _ = self.create_contact('另一位未绑定的合成联系人')
+        self.assertEqual(self.manual_request(f"/api/contacts/{other}/assistant-session/binding")[0], 409)
+        second = self.bindings.create_binding(owner_id=self.owner_id, contact_id=UUID(contact),
+            channel='wechat', account_scope='synthetic-qualification', conversation_locator='synthetic-binding-two')
+        self.assertEqual(self.manual_request(path)[0], 409)
+        self.bindings.revoke_binding(owner_id=self.owner_id, contact_id=UUID(contact), binding_id=second.binding_id)
+        self.assertEqual(self.manual_request(path), (200, {'confirmed': True}))
+        self.bindings.revoke_binding(owner_id=self.owner_id, contact_id=UUID(contact), binding_id=binding.binding_id)
+        self.assertEqual(self.manual_request(path)[0], 409)
+        self.assertEqual(self.manual_request(path, contact_id=contact)[0], 409)
+        self.assertEqual(self.manual_request(f"/api/contacts/{contact}/assistant-sessions")[1]['sessions'], [])
 
     def test_pasted_current_text_is_distinct_from_the_owners_draft_and_requires_direction(self):
         contact, _ = self.create_contact()
