@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Literal
@@ -25,6 +26,43 @@ from notalone.persistence.source_processing import (
 from notalone.scopes import ContactScope
 from notalone.source_processing.models import ProcessingRecord
 from notalone.source_processing.rule_capture import capture_execution
+
+
+_IMPORT_WRITE_ROWS = 500
+_IMPORT_WRITE_BYTES = 2 * 1024 * 1024
+
+
+def _insert_import_rows(
+    cursor: psycopg.Cursor[Any],
+    statement: str,
+    placeholders: str,
+    rows: Iterable[tuple[Any, ...]],
+) -> None:
+    """按行数和 UTF-8 参数体积限制单条写入；超大单行完整保留。"""
+    block: list[tuple[Any, ...]] = []
+    block_bytes = 0
+    for row in rows:
+        row_bytes = len(placeholders) + sum(
+            len(value.encode("utf-8")) if isinstance(value, str) else 32
+            for value in row
+        )
+        if block and (
+            len(block) >= _IMPORT_WRITE_ROWS
+            or block_bytes + row_bytes > _IMPORT_WRITE_BYTES
+        ):
+            cursor.execute(
+                statement + ",".join([placeholders] * len(block)),
+                tuple(value for parameters in block for value in parameters),
+            )
+            block = []
+            block_bytes = 0
+        block.append(row)
+        block_bytes += row_bytes
+    if block:
+        cursor.execute(
+            statement + ",".join([placeholders] * len(block)),
+            tuple(value for parameters in block for value in parameters),
+        )
 
 
 class ImportPersistenceError(RuntimeError):
@@ -506,97 +544,43 @@ class PostgresIngestRepository:
                 strict=True,
             )
         ]
-        message_parameters = [
-            (
-                message_id,
-                owner_id,
-                contact_id,
-                message.speaker,
-                message.message_type,
-                message.text_content,
-                message.media_placeholder,
-                message.occurred_at,
-            )
-            for message_id, message, _ in messages_with_ids
-        ]
         with connection.cursor() as cursor:
-            cursor.executemany(
-                """
-                INSERT INTO public.message (
-                    id,
-                    owner_id,
-                    contact_id,
-                    speaker,
-                    message_type,
-                    text_content,
-                    media_placeholder,
-                    occurred_at
-                )
-                VALUES (
-                    %s, %s, %s, %s,
-                    %s, %s, %s, %s
-                )
-                """,
-                message_parameters,
-            )
-            metadata_parameters = [
+            _insert_import_rows(
+                cursor,
+                "INSERT INTO public.message (id,owner_id,contact_id,speaker,"
+                "message_type,text_content,media_placeholder,occurred_at) VALUES ",
+                "(%s,%s,%s,%s,%s,%s,%s,%s)",
                 (
-                    message_id,
-                    owner_id,
-                    contact_id,
-                    metadata.external_local_id,
-                    metadata.external_server_id,
-                    metadata.external_talker,
-                    metadata.source_create_time,
-                )
-                for message_id, _, metadata in messages_with_ids
-            ]
-            cursor.executemany(
-                """
-                INSERT INTO public.wechat_message_metadata (
-                    message_id,
-                    owner_id,
-                    contact_id,
-                    external_local_id,
-                    external_server_id,
-                    external_talker,
-                    source_create_time
-                )
-                VALUES (
-                    %s, %s, %s, %s,
-                    %s, %s, %s
-                )
-                """,
-                metadata_parameters,
+                    (message_id, owner_id, contact_id, message.speaker,
+                     message.message_type, message.text_content,
+                     message.media_placeholder, message.occurred_at)
+                    for message_id, message, _ in messages_with_ids
+                ),
+            )
+            _insert_import_rows(
+                cursor,
+                "INSERT INTO public.wechat_message_metadata (message_id,owner_id,"
+                "contact_id,external_local_id,external_server_id,external_talker,"
+                "source_create_time) VALUES ",
+                "(%s,%s,%s,%s,%s,%s,%s)",
+                (
+                    (message_id, owner_id, contact_id, metadata.external_local_id,
+                     metadata.external_server_id, metadata.external_talker,
+                     metadata.source_create_time)
+                    for message_id, _, metadata in messages_with_ids
+                ),
             )
             # 每条消息写一条导入来源引用；原始 JSON 作为来源证据随引用保存。
-            ref_parameters = [
+            _insert_import_rows(
+                cursor,
+                "INSERT INTO public.message_source_ref (message_id,owner_id,"
+                "contact_id,source_kind,source_document_id,source_locator,raw_payload) VALUES ",
+                "(%s,%s,%s,'source_document',%s,%s,%s::jsonb)",
                 (
-                    message_id,
-                    owner_id,
-                    contact_id,
-                    source_document_id,
-                    message.source_locator,
-                    metadata.raw_payload_json,
-                )
-                for message_id, message, metadata in messages_with_ids
-            ]
-            cursor.executemany(
-                """
-                INSERT INTO public.message_source_ref (
-                    message_id,
-                    owner_id,
-                    contact_id,
-                    source_kind,
-                    source_document_id,
-                    source_locator,
-                    raw_payload
-                )
-                VALUES (
-                    %s, %s, %s, 'source_document', %s, %s, %s::jsonb
-                )
-                """,
-                ref_parameters,
+                    (message_id, owner_id, contact_id, source_document_id,
+                     message.source_locator, metadata.raw_payload_json)
+                    for message_id, message, metadata in messages_with_ids
+                ),
             )
 
         task_id = PostgresIngestRepository._ensure_import_task(
