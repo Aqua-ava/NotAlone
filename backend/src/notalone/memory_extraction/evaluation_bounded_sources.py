@@ -17,7 +17,7 @@ import psycopg
 from psycopg import sql
 from psycopg.conninfo import make_conninfo
 
-from notalone.database_migrations import migrate
+from notalone.database_migrations import _load_migrations, migrate
 from notalone.ingest.jsonl_reader import read_jsonl
 from notalone.ingest.models import ExistingContactSelection, ImportConfirmationRequest
 from notalone.ingest.normalizer import normalize_document
@@ -123,7 +123,7 @@ def _check_database(connection: psycopg.Connection, database: dict, *, marker: b
 
 
 def _receipt(receipt: dict) -> tuple[dict, Path]:
-    if (type(receipt) is not dict or type(receipt.get("format_version")) is not int or receipt.get("format_version") != 1
+    if (type(receipt) is not dict or type(receipt.get("format_version")) is not int or receipt.get("format_version") not in (1, 2)
             or receipt.get("execution_plan") != BOUNDED_RUNTIME_PLAN
             or receipt.get("status") != "prepared" or type(receipt.get("receipt_path")) is not str):
         raise BoundedSourcesError("bounded_sources_receipt_invalid")
@@ -266,9 +266,12 @@ def prepare_bounded_sources(directory: Path) -> dict:
             admin.execute(sql.SQL("ALTER DATABASE {} SET timezone TO 'UTC'").format(sql.Identifier(name)))
         database_url = _connection_info(name)
         migrations = Path(__file__).resolve().parents[3] / "database/migrations"
-        if len(tuple(migrations.glob("*.sql"))) != 72:
+        migration_set = _load_migrations(migrations)
+        if len(migration_set) < 89:
             raise BoundedSourcesError("bounded_sources_migration_set_changed")
         applied = migrate(database_url, migrations)
+        if applied != tuple(item.name for item in migration_set):
+            raise BoundedSourcesError("bounded_sources_migration_set_changed")
         owner = uuid4()
         with psycopg.connect(database_url) as connection:
             connection.execute("INSERT INTO public.owner(id,display_name) VALUES(%s,'公开合成评测用户')", (owner,))
@@ -276,9 +279,10 @@ def prepare_bounded_sources(directory: Path) -> dict:
                                (owner, "wxid_bounded_owner_" + owner.hex))
         cases = [_prepare_case(database_url, owner, directory, descriptor, position) for position in range(15)]
         receipt = {
-            "format_version": 1, "execution_plan": BOUNDED_RUNTIME_PLAN, "status": "prepared",
+            "format_version": 2, "execution_plan": BOUNDED_RUNTIME_PLAN, "status": "prepared",
             "receipt_path": str(directory / _RECEIPT), "directory_identity": identity, "database": database,
             "owner_id": str(owner), "migrations": list(applied), "cases": cases,
+            "migration_checksums": {item.name: item.checksum for item in migration_set},
             "bounded_inputs_sha256": canonical_sha256([{"messages": item["messages"], "target_indices": item["target_indices"]}
                                                       for item in BOUNDED_RUNTIME_INPUTS]),
             "windows_sha256": canonical_sha256([item["window"] for item in cases]),
@@ -309,6 +313,16 @@ def load_bounded_sources(receipt: dict) -> BoundedSources:
     """按原件和DB身份重读正式loader；不从保存JSON恢复来源信用。"""
     saved, path = _receipt(receipt)
     database_url = _connection_info(saved["database"]["name"])
+    # 旧凭证仍可用于明确清理；运行必须同时匹配冻结集合、当前文件及实际数据库收据。
+    migration_set = _load_migrations(Path(__file__).resolve().parents[3] / "database/migrations")
+    checksums = {item.name: item.checksum for item in migration_set}
+    if (saved["format_version"] != 2 or saved.get("migrations") != list(checksums)
+            or saved.get("migration_checksums") != checksums):
+        raise BoundedSourcesError("bounded_sources_migration_set_changed")
+    with psycopg.connect(database_url) as connection:
+        ledger = connection.execute("SELECT name,checksum FROM public.notalone_schema_migration ORDER BY name").fetchall()
+    if ledger != list(checksums.items()):
+        raise BoundedSourcesError("bounded_sources_migration_set_changed")
     owner = UUID(saved["owner_id"])
     windows = []
     tasks = []
