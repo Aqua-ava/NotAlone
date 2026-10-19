@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after } from 'node:test';
@@ -38,7 +38,8 @@ export async function eventually(read, accepts, message) {
 export async function withMessageOptInFixture(use) {
   let cleaned = false;
   try { await ports.withRewriteFixture('notalone-message-opt-in-http-', async (fixture) => {
-    assert.equal(fixture.data.migration_count, 72);
+    const migrations = await readdir(new URL('../../../backend/database/migrations/', import.meta.url));
+    assert.equal(fixture.data.migration_count, migrations.filter((name) => name.endsWith('.sql')).length);
     assert.equal(fixture.data.migration_repeat, 0);
     const connection = await ports.readConnection(fixture.infoPath);
     assert(connection);

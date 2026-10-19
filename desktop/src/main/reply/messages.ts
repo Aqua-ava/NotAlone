@@ -5,6 +5,18 @@ import type { BackendHost } from '../backend/host';
 const record = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 const optionalText = (value: unknown): value is string | null => value === null || (typeof value === 'string' && value.length <= 65_536);
 
+// 最新页覆盖同 ID 的旧投影，同时保留用户已加载的历史，顺序与后端分页一致。
+export function mergeReplyMessages(previous: readonly ReplyMessage[], incoming: readonly ReplyMessage[]): ReplyMessage[] {
+  const messages = new Map(previous.map((message) => [message.messageId, message]));
+  for (const message of incoming) messages.set(message.messageId, message);
+  return [...messages.values()].sort((left, right) => {
+    const leftTime = left.occurredAt === null ? -Infinity : Date.parse(left.occurredAt);
+    const rightTime = right.occurredAt === null ? -Infinity : Date.parse(right.occurredAt);
+    if (leftTime !== rightTime) return leftTime < rightTime ? 1 : -1;
+    return left.messageId < right.messageId ? 1 : left.messageId === right.messageId ? 0 : -1;
+  });
+}
+
 // 页码只来自后端游标，联系人只来自主进程已确认范围。
 export async function readReplyMessages(backend: Pick<BackendHost, 'requestJson'>, contactId: string, before: string | null, signal: AbortSignal) {
   const response = await backend.requestJson({ method: 'GET',

@@ -3174,7 +3174,11 @@ def _message_payload(message: StreamedMessage) -> dict[str, object]:
         "message_type": message.message_type,
         "text": message.text,
         "media_placeholder": message.media_placeholder,
-        "occurred_at": _format_timestamp(message.occurred_at),
+        # 列表合并须与数据库分页顺序一致，保留同秒消息的亚秒精度。
+        "occurred_at": (
+            None if message.occurred_at is None
+            else message.occurred_at.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+        ),
         "quoted": quoted,
     }
 

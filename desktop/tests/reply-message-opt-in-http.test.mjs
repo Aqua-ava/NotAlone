@@ -19,7 +19,7 @@ test('刷新确认的提醒在重读与切回联系人后不再恢复，也不�
   });
 });
 
-test('最新页刷新在途时断流重连，较旧刷新不能确认新的提醒缺口', async () => {
+test('最新页刷新在途时断流重连会自动补读，较旧刷新不能覆盖补齐结果', async () => {
   await withMessageOptInFixture(async (f) => {
     const scope = await f.connect();
     let arrived, release;
@@ -32,12 +32,15 @@ test('最新页刷新在途时断流重连，较旧刷新不能确认新的提�
     try {
       await observed; await f.fixture.command('disconnect_stream');
       await eventually(() => f.bridge.getState(), (state) => state.messageNotice.phase === 'interrupted', '认证SSE须实际断流。');
+      const missed = await f.fixture.command('append_message');
       await f.bridge.reconnectMessages(scope);
-      await eventually(() => f.bridge.getState(), (state) => state.messageNotice.phase === 'connected', '须建立新订阅。');
+      await eventually(() => f.bridge.getState(), (state) => state.messageNotice.phase === 'connected'
+        && !state.messageNotice.needsRefresh && state.messages.items.some((item) => item.messageId === missed.message_id),
+      '新订阅须自动补读断流期间的新消息，无需手动刷新。');
       release(); await refreshing;
-      assert.equal((await f.bridge.getState()).messageNotice.needsRefresh, true);
-      await f.bridge.loadMessages({ ...scope, older: false });
-      assert.equal((await f.bridge.getState()).messageNotice.needsRefresh, false);
+      const after = await f.bridge.getState();
+      assert.equal(after.messageNotice.needsRefresh, false);
+      assert(after.messages.items.some((item) => item.messageId === missed.message_id), '旧页迟到不能覆盖自动补读的新消息。');
       assert.equal((await f.fixture.command('observations')).model_calls, 0);
     } finally { release(); await refreshing; }
   });

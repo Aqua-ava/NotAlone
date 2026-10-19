@@ -65,10 +65,9 @@ async function newMessage(pages: EventPages) {
   const { editor, endpoint, before } = await prepare(pages);
   await fixture.command('append_message');
   await expect(helper.getByRole('status').filter({ hasText: '当前联系人有新消息，生成依据仍是原快照' })).toBeVisible();
-  await expect(editor).toHaveValue('用户仍在编辑的措辞。');
-  await expect(helper.getByRole('radio', { name: /甲的新合成消息/ })).toHaveCount(0);
-  await helper.getByRole('button', { name: '刷新消息', exact: true }).click();
   await expect(helper.getByRole('radio', { name: /甲的新合成消息/ })).toBeVisible();
+  await expect(helper.getByRole('radio', { name: /甲的原始合成消息/ })).toBeChecked();
+  await expect(helper.getByRole('textbox', { name: '表达方向', exact: true })).toHaveValue('说明原时间安排。');
   await expect(editor).toHaveValue('用户仍在编辑的措辞。');
   expect((await fixture.request(endpoint)).data).toEqual(before.data);
   expect((await fixture.command('observations')).model_calls).toBe(1);
@@ -81,10 +80,37 @@ async function streamRecovery(pages: EventPages) {
   await fixture.command('append_message');
   await expect(editor).toHaveValue('用户仍在编辑的措辞。');
   await helper.getByRole('button', { name: '重连消息提醒', exact: true }).click();
-  await expect(helper.getByRole('status').filter({ hasText: '消息提醒有待核对，请主动刷新消息' })).toBeVisible();
-  await expect(helper.getByRole('radio', { name: /甲的新合成消息/ })).toHaveCount(0);
-  await helper.getByRole('button', { name: '刷新消息', exact: true }).click();
   await expect(helper.getByRole('radio', { name: /甲的新合成消息/ })).toBeVisible();
+  await expect(helper.getByRole('radio', { name: /甲的原始合成消息/ })).toBeChecked();
+  await expect(helper.getByRole('textbox', { name: '表达方向', exact: true })).toHaveValue('说明原时间安排。');
+  await expect(editor).toHaveValue('用户仍在编辑的措辞。');
+  expect((await fixture.request(endpoint)).data).toEqual(before.data);
+  expect((await fixture.command('observations')).model_calls).toBe(1);
+}
+async function pagedBurst(pages: EventPages) {
+  const { helper, fixture } = pages;
+  const { editor, endpoint, before } = await prepare(pages);
+  const messages = helper.getByRole('group', { name: '待回复消息', exact: true });
+  await fixture.command('append_paged_burst');
+  const projection = await fixture.request(`/api/contacts/${fixture.data.contact_ids[0]}/messages?limit=100`);
+  expect(projection.status).toBe(200);
+  const burst = (projection.data.messages as Array<{ text: string; occurred_at: string }>)
+    .filter((message) => message.text.startsWith('甲的分页突发消息：'));
+  expect(burst).toHaveLength(25);
+  expect(new Set(burst.map((message) => message.occurred_at.slice(0, 19))).size).toBe(1);
+  expect(new Set(burst.map((message) => message.occurred_at)).size).toBe(25);
+  await expect(messages.getByRole('radio', { name: /甲的分页突发消息：第25条/ })).toBeVisible();
+  await expect(messages.getByRole('radio', { name: /甲的原始合成消息/ })).toBeChecked();
+  await expect(messages.getByRole('radio')).toHaveCount(21);
+  await helper.getByRole('button', { name: '加载更早消息', exact: true }).click();
+  await expect(messages.getByRole('radio')).toHaveCount(26);
+  const expected = Array.from({ length: 25 }, (_, index) =>
+    `甲的分页突发消息：第${String(25 - index).padStart(2, '0')}条近况更新。`);
+  expected.push('甲的原始合成消息。');
+  const labels = await messages.locator('label').allTextContents();
+  for (const [index, text] of expected.entries()) expect(labels[index]).toContain(text);
+  await expect(messages.getByRole('radio', { name: /甲的原始合成消息/ })).toBeChecked();
+  await expect(helper.getByRole('textbox', { name: '表达方向', exact: true })).toHaveValue('说明原时间安排。');
   await expect(editor).toHaveValue('用户仍在编辑的措辞。');
   expect((await fixture.request(endpoint)).data).toEqual(before.data);
   expect((await fixture.command('observations')).model_calls).toBe(1);
@@ -163,8 +189,9 @@ async function scopeAndRegeneration(pages: EventPages) {
 }
 export async function messageEvents(browser: Browser, origin: string) {
   for (const [name, scenario] of [
-    ['真实新消息提醒与主动刷新保留编辑和依据快照', newMessage],
-    ['真实断流与用户重连、有限刷新恢复且不覆盖编辑', streamRecovery],
+    ['真实新消息自动更新列表且保留选择、编辑和依据快照', newMessage],
+    ['真实断流后重连自动恢复最新消息且保留选择、编辑和依据', streamRecovery],
+    ['超过一页的新消息自动更新并补齐分页缺口、保留原选择和依据', pagedBurst],
     ['联系人切换后迟到消息核验失效', (pages: EventPages) => staleNotice(pages, 'contact')],
     ['认证连接更换后迟到消息核验失效', (pages: EventPages) => staleNotice(pages, 'connection')],
     ['owner/contact投影、具名角色字段与新请求保留旧依据', scopeAndRegeneration],

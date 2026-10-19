@@ -14,7 +14,7 @@ import type { AssistantCandidateCarry } from '../../shared/reply-bridge';
 import { matchesReplyAdoption, type InterruptedReplyOrigin } from './client';
 import type { DirectionExploration, ReplyClarificationAnswer, ReplyClarificationEdit, ReplyRequirementsUpdate, ReplySkillChoice, ReplySkillUpdate } from '../../shared/reply-bridge';
 import { actOnExploration, explorationIdentity, openExploration, type ExplorationRequest, type ExplorationAction } from './exploration-client';
-import { readReplyMessages } from './messages';
+import { mergeReplyMessages, readReplyMessages } from './messages';
 import { readReplyEvidence } from './evidence-read';
 import { defaultAssistantSession, deleteAssistantSession, readAssistantSession } from './assistant-sessions';
 import { listAssistantSessions, newAssistantSession, selectAssistantSession } from './assistant-session-catalog';
@@ -98,6 +98,7 @@ export class ReplySession {
   private continuationAttempt: { scope: ContactSelection; generation: number; command: AssistantContinuationCommand } | undefined;
   private messageOperation = 0;
   private messagePending: AbortController | undefined;
+  private automaticMessageRevision = 0;
   private readonly messageNotices: AssistantMessageNotices;
   private savedRead: AbortController | undefined;
   private contactRestoreTimer: ReturnType<typeof setTimeout> | undefined;
@@ -125,8 +126,9 @@ export class ReplySession {
       const retained = this.retainedContent.get(contactId)?.sessionId;
       if (retained) sessions.add(retained);
       return [...sessions];
-    }, (messageNotice, effect) => {
-      this.publish({ messageNotice });
+    }, (messageNotice, effect, page) => {
+      const messages = page ? this.acceptAutomaticMessagePage(page) : undefined;
+      this.publish({ messageNotice, ...(messages ? { messages } : {}) });
       if (effect === 'verified') this.queueAutomaticExploration();
       if (effect === 'uncertain' && this.automaticExploration) this.stopAutomaticExploration(true);
     });
@@ -980,6 +982,7 @@ export class ReplySession {
     this.cancelMessagePage();
     const operation = this.messageOperation;
     const generation = this.backend.getConnectionGeneration();
+    const automaticRevision = this.automaticMessageRevision;
     const pending = new AbortController();
     this.messagePending = pending;
     const current = () => operation === this.messageOperation && generation === this.backend.getConnectionGeneration()
@@ -989,17 +992,29 @@ export class ReplySession {
     try {
       const page = await readReplyMessages(this.backend, request.contactId, before, pending.signal);
       if (!current() || page.generation !== generation) return;
-      const known = new Set(this.state.messages.items.map((item) => item.messageId));
-      const items = before ? [...this.state.messages.items, ...page.messages.filter((item) => !known.has(item.messageId))] : page.messages;
+      const automaticallyUpdated = automaticRevision !== this.automaticMessageRevision;
+      const items = before || automaticallyUpdated ? mergeReplyMessages(this.state.messages.items, page.messages) : page.messages;
+      const nextCursor = automaticallyUpdated && (!before || this.state.messages.nextCursor !== before)
+        ? this.state.messages.nextCursor : page.nextCursor;
       if (this.state.targetMessageId && !items.some((item) => item.messageId === this.state.targetMessageId)) {
         this.invalidateInput();
         this.publish({ targetMessageId: null });
       }
-      this.publish({ messages: { phase: 'ready', items, nextCursor: page.nextCursor } });
+      this.publish({ messages: { phase: 'ready', items, nextCursor } });
       if (noticeRefresh) this.messageNotices.confirmRefresh(noticeRefresh);
     } catch {
       if (current()) this.publish({ messages: { ...this.state.messages, phase: 'failed' } });
     } finally { if (this.messagePending === pending) this.messagePending = undefined; }
+  }
+  private acceptAutomaticMessagePage(page: Awaited<ReturnType<typeof readReplyMessages>>): ReplySessionState['messages'] | undefined {
+    if (page.generation !== this.backend.getConnectionGeneration() || this.pendingContent || this.candidateSourceCheck) return;
+    const previous = this.state.messages;
+    const known = new Set(previous.items.map((item) => item.messageId));
+    const overlaps = page.messages.some((message) => known.has(message.messageId));
+    ++this.automaticMessageRevision;
+    return { phase: previous.phase === 'loading' ? 'loading' : 'ready',
+      items: mergeReplyMessages(previous.items, page.messages),
+      nextCursor: previous.items.length && overlaps ? previous.nextCursor : page.nextCursor };
   }
   selectMessage(selection: ReplyMessageSelection): ReplySessionState {
     this.assertScope(selection);

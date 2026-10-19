@@ -11,7 +11,7 @@ import os
 import sys
 import threading
 import traceback
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
@@ -98,7 +98,9 @@ class MessageEventsFixture(rewrite.DesktopRewriteFixture):
             return super()._backend(owner_id)
 
     def append_message(self, contact_id: str, *, owner_id: UUID | None = None,
-                       text: str = "甲的新合成消息：时间安排更新。") -> dict[str, str]:
+                       text: str = "甲的新合成消息：时间安排更新。",
+                       publish_event: bool = True,
+                       occurred_at: datetime | None = None) -> dict[str, str]:
         owner_id = owner_id or self.owner_id
         message_id = uuid4()
         with psycopg.connect(self.database_url) as connection:
@@ -109,8 +111,8 @@ class MessageEventsFixture(rewrite.DesktopRewriteFixture):
             connection.execute(
                 """INSERT INTO public.message (
                     id, owner_id, contact_id, speaker, message_type, text_content, occurred_at
-                ) VALUES (%s,%s,%s,'contact','text',%s,now())""",
-                (message_id, owner_id, UUID(contact_id), text),
+                ) VALUES (%s,%s,%s,'contact','text',%s,COALESCE(%s,now()))""",
+                (message_id, owner_id, UUID(contact_id), text, occurred_at),
             )
             connection.execute(
                 """INSERT INTO public.message_source_ref (
@@ -120,10 +122,11 @@ class MessageEventsFixture(rewrite.DesktopRewriteFixture):
                 (message_id, owner_id, UUID(contact_id), source_id, f"synthetic:{message_id}"),
             )
         # 两位合成 owner 的事件进同一总线，仍由生产订阅按认证 owner 筛选。
-        self.event_buses[self.owner_id].publish(BackendEvent.message_created(
-            scope=ContactScope(owner_id, UUID(contact_id)),
-            occurred_at=datetime.now(timezone.utc), message_id=message_id,
-        ))
+        if publish_event:
+            self.event_buses[self.owner_id].publish(BackendEvent.message_created(
+                scope=ContactScope(owner_id, UUID(contact_id)),
+                occurred_at=datetime.now(timezone.utc), message_id=message_id,
+            ))
         return {"message_id": str(message_id)}
 
 
@@ -177,6 +180,21 @@ def main() -> None:
                 result = {"messages": [fixture.append_message(
                     contact_ids[0], text=f"甲的新合成消息：第{index + 1}条近况更新。",
                 ) for index in range(3)]}
+            elif operation == "append_paged_burst":
+                # 先提交全部消息，再逐条发布真实事件，稳定覆盖最新一页与原选择之间的缺口。
+                # 固定在同一秒内递增，避免慢机运行速度掩盖 API 丢失亚秒精度的排序问题。
+                second = datetime.now(timezone.utc).replace(microsecond=0)
+                messages = [fixture.append_message(
+                    contact_ids[0], text=f"甲的分页突发消息：第{index + 1:02d}条近况更新。",
+                    publish_event=False,
+                    occurred_at=second + timedelta(milliseconds=(index + 1) * 10),
+                ) for index in range(25)]
+                for message in messages:
+                    fixture.event_buses[fixture.owner_id].publish(BackendEvent.message_created(
+                        scope=ContactScope(fixture.owner_id, UUID(contact_ids[0])),
+                        occurred_at=datetime.now(timezone.utc), message_id=UUID(message["message_id"]),
+                    ))
+                result = {"messages": messages}
             elif operation == "append_other_contact":
                 result = fixture.append_message(contact_ids[1], text="乙的新合成消息：时间安排更新。")
             elif operation == "append_other_owner":
