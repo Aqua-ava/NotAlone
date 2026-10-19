@@ -67,6 +67,6 @@
 ## 公开前检查
 
 - 公开内容保留产品代码、架构、任务规格与必要合成验收证据；私人协调过程、原始资料、凭据和本机身份信息留在端侧。官网部署主机由 `NOTALONE_WEB_HOST` 显式提供。
-- 提交后执行 `node scripts/check_public_history.mjs --ref main --working-tree`，检查该分支完整可达历史及当前文件。检查只在端侧读取，不联网。
+- 提交后执行 `node scripts/check_public_history.mjs --ref HEAD --working-tree`，检查当前分支完整可达历史及当前文件；准备公开 `main` 时另执行 `node scripts/check_public_history.mjs --ref main`。检查只在端侧读取，不联网。
 - 2026-10-13 本地 `main` 完整历史已按用户授权脱敏；原提交引用通过 [提交映射](../publication-commit-map.tsv) 定位清理后的版本。冻结评测中原摘要仍指向原始证据，新增的脱敏说明区分公开副本与原始运行，不代表重跑。
 - 原历史和未提交文件的恢复副本保存在仓库外私有目录。其他开发工作树继续保留原历史，公开时仅使用经过检查的分支；不要用 `--all` 或 `--mirror` 带出未清理分支。已有 GitHub 历史只有在另行授权更新远端后才会改变。
