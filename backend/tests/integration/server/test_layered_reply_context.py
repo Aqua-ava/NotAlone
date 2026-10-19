@@ -27,6 +27,8 @@ class LayeredReplyHttpTest(OverviewReplyHttpFixture, unittest.TestCase):
         path = self.reply_path(contact)
         status, turn = self.backend.request(path + "/replies", self.rewrite_body(contact, "聊聊共同参加的课程。"))
         self.assertEqual(status, 200, turn)
+        self.assertEqual(len(self.reply_model.seen_calls), 1, "默认正式装配不追加历史模型复核")
+        self.assertEqual(self.reply_model.review_calls, 0)
         system = "\n".join(str(message.content) for call in self.reply_model.seen_calls
                            for message in call if isinstance(message, SystemMessage))
         self.assertIn("双方有共同学习经历", system)
@@ -330,7 +332,8 @@ class LayeredReplyHttpTest(OverviewReplyHttpFixture, unittest.TestCase):
         self.assertNotEqual(self.backend.request(path + "/replies", body)[0], 200)
         self.assertEqual(len(self.reply_model.seen_calls), 0)
 
-    def test_independent_review_receives_exact_frozen_background_for_past_facts(self):
+    def test_historical_independent_review_receives_exact_frozen_background_for_past_facts(self):
+        self.historical_constraint_review = True
         import json
         from langchain_core.messages import HumanMessage
         from notalone.reply.layered_context import LayeredReplyBudget
@@ -363,7 +366,8 @@ class LayeredReplyHttpTest(OverviewReplyHttpFixture, unittest.TestCase):
         self.assertNotIn("dependency_ids", str(sent))
         self.assertNotIn("paragraphs", str(sent))
 
-    def test_review_accepts_only_actual_profile_text_as_layered_fact_source_path(self):
+    def test_historical_review_accepts_only_actual_profile_text_as_layered_fact_source_path(self):
+        self.historical_constraint_review = True
         contact, _, _, ready, path = self.prepare_layered_reply()
         body = self.rewrite_body(contact, "你好。")
         body["content"]["user_instruction"] = "自然表达。"
@@ -379,7 +383,8 @@ class LayeredReplyHttpTest(OverviewReplyHttpFixture, unittest.TestCase):
         self.assertEqual(self.backend.request(path + "/replies", body),
             (409, {"error": "reply_candidates_rejected"}))
 
-    def test_review_budget_failure_preserves_frozen_input_and_stops_before_send(self):
+    def test_historical_review_budget_failure_preserves_frozen_input_and_stops_before_send(self):
+        self.historical_constraint_review = True
         contact, _, _, _, path = self.prepare_layered_reply()
         decisions = []
         self.layered_reply_options["on_input_budget"] = decisions.append
@@ -406,7 +411,8 @@ class LayeredReplyHttpTest(OverviewReplyHttpFixture, unittest.TestCase):
         self.assertIn("双方有共同学习经历", str(self.reply_model.seen_calls[-1]))
         self.assertGreater(decisions[-1].total_tokens, self.reply_capacity)
 
-    def test_review_rejects_directory_and_background_as_current_intent_sources(self):
+    def test_historical_review_rejects_directory_and_background_as_current_intent_sources(self):
+        self.historical_constraint_review = True
         contact, _, _, ready, path = self.prepare_layered_reply()
         for category, source_path, quote in (
             ("facts", "/layered_context/directory/0/title", ready["scenarios"][0]["title"]),
@@ -425,9 +431,10 @@ class LayeredReplyHttpTest(OverviewReplyHttpFixture, unittest.TestCase):
                     return report
                 self.reply_model.review_transform = invalid_source
                 self.assertEqual(self.backend.request(path + "/replies", body),
-                    (500, {"error": "reply_generation_failed"}))
+                    (502, {"error": "reply_review_invalid"}))
 
-    def test_disabling_frozen_background_before_review_prevents_review_send(self):
+    def test_historical_disabling_frozen_background_before_review_prevents_review_send(self):
+        self.historical_constraint_review = True
         from concurrent.futures import ThreadPoolExecutor
         contact, _, management, ready, path = self.prepare_layered_reply()
         body = self.rewrite_body(contact, "你好。")

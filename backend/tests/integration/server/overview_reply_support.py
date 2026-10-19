@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from contextlib import ExitStack
 from unittest.mock import patch
 from uuid import UUID, uuid4
 
@@ -91,7 +92,23 @@ class OverviewReplyHttpFixture(MemoryOverviewHttpFixture):
         priority = ModelPriorityControl()
         budget_options = synthetic_budget_kwargs(self.reply_model, capacity=getattr(self, "reply_capacity", 100000))
         self.reply_input_counter = budget_options["input_token_counter"]
-        with patch("notalone.server.reply_wiring.build_deepseek_model", return_value=self.reply_model):
+        with ExitStack() as wiring:
+            wiring.enter_context(patch("notalone.server.reply_wiring.build_deepseek_model", return_value=self.reply_model))
+            if getattr(self, 'historical_constraint_review', False):
+                from notalone.reply.adapters.constraint_review import ReplyConstraintReview
+                from notalone.reply.adapters.langchain_runtime import LangChainReplyRuntime
+                from notalone.reply.generator import ReplyGenerator
+                context = {}
+                # 仅冻结旧复核合同显式装配；默认正式路径仍只有生成，不追加模型轮。
+                def runtime(**options):
+                    return LangChainReplyRuntime(**options, constraint_review=ReplyConstraintReview(
+                        validate_current=lambda prepared: context['value'].validate_current(prepared),
+                        check_running=priority.check_running))
+                def generator(**options):
+                    context['value'] = options['context']
+                    return ReplyGenerator(**options)
+                wiring.enter_context(patch('notalone.server.reply_wiring.LangChainReplyRuntime', runtime))
+                wiring.enter_context(patch('notalone.server.reply_wiring.ReplyGenerator', generator))
             service = build_reply_service(database_url=self.database_url, owner_id=owner_id,
                                           model_priority=priority, **getattr(self, "layered_reply_options", {}),
                                           **budget_options)
