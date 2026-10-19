@@ -7,7 +7,6 @@ from typing import Any
 from uuid import UUID, uuid4
 
 import psycopg
-from psycopg import sql
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
@@ -20,28 +19,11 @@ from notalone.source_processing.models import ProcessingRecord
 
 
 _CAPTURE_CHECK_ROWS = 4096
-_RECORD_INSERT_ROWS = 500
-_RECORD_INSERT_BYTES = 2 * 1024 * 1024
 
 
 def _encoded_json(value: bytes) -> bytes:
-    """复用分块计量时编码的同一份 JSON，不在驱动里再次序列化。"""
+    """复用当前记录已编码的 JSON，不在驱动里再次序列化。"""
     return value
-
-
-def _insert_processing_records(
-    connection: psycopg.Connection[Any], rows: list[tuple[Any, ...]]
-) -> None:
-    query = sql.SQL(
-        "INSERT INTO public.source_processing_record "
-        "(record_id, batch_id, owner_id, contact_id, position, locator, "
-        "message_id, source_ref_id, outcome, payload) VALUES {}"
-    ).format(sql.SQL(", ").join(
-        sql.SQL("(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)") for _ in rows
-    ))
-    result = connection.execute(query, tuple(value for row in rows for value in row))
-    if result.rowcount != len(rows):
-        raise SourceProcessingWriteError()
 
 
 class SourceProcessingWriteError(RuntimeError):
@@ -88,43 +70,38 @@ def save_processing_batch(
                 status,
             ),
         )
-        rows: list[tuple[Any, ...]] = []
-        chunk_bytes = 0
-        for position, record in enumerate(records):
-            receipt = receipts.get(
-                str(record.record_id), receipts.get(record.locator, {})
-            )
-            payload = record.payload()
-            outcome = receipt.get(
-                "outcome", payload.get("outcome", "filtered")
-            )
-            encoded = json.dumps({
-                **payload,
-                "capture_record_id": str(record.record_id),
-                "persistence": snapshot(receipt),
-                "model_read_status": "not_claimed",
-            }).encode("utf-8")
-            fields = (
-                uuid4(), batch_id, scope.owner_id, scope.contact_id,
-                position, record.locator, receipt.get("message_id"),
-                receipt.get("source_ref_id"), outcome,
-            )
-            # 非 JSON 参数按文字编码保守计量；不把参数预算冒充协议总字节数。
-            row_bytes = len(encoded) + sum(
-                len(str(value).encode("utf-8")) for value in fields if value is not None
-            )
-            if rows and (len(rows) >= _RECORD_INSERT_ROWS
-                         or chunk_bytes + row_bytes > _RECORD_INSERT_BYTES):
-                _insert_processing_records(connection, rows)
-                rows, chunk_bytes = [], 0
-            rows.append((*fields, Jsonb(encoded, dumps=_encoded_json)))
-            chunk_bytes += row_bytes
-            # 超预算单条仍完整保存，且不与下一条组成更大的块。
-            if row_bytes > _RECORD_INSERT_BYTES:
-                _insert_processing_records(connection, rows)
-                rows, chunk_bytes = [], 0
-        if rows:
-            _insert_processing_records(connection, rows)
+        # COPY 逐条编码、由驱动有界发送，避免整批 JSON 与巨型占位 SQL 的副本。
+        # 所有墓碑检查已完成；COPY 与调用方业务写入仍属于同一事务。
+        with connection.cursor() as cursor:
+            with cursor.copy(
+                "COPY public.source_processing_record "
+                "(record_id, batch_id, owner_id, contact_id, position, locator, "
+                "message_id, source_ref_id, outcome, payload) FROM STDIN"
+            ) as copy:
+                for position, record in enumerate(records):
+                    receipt = receipts.get(
+                        str(record.record_id), receipts.get(record.locator, {})
+                    )
+                    payload = record.payload()
+                    outcome = receipt.get(
+                        "outcome", payload.get("outcome", "filtered")
+                    )
+                    payload.update(
+                        capture_record_id=str(record.record_id),
+                        persistence=snapshot(receipt),
+                        model_read_status="not_claimed",
+                    )
+                    encoded = json.dumps(
+                        payload, ensure_ascii=False, separators=(",", ":")
+                    ).encode("utf-8")
+                    copy.write_row((
+                        uuid4(), batch_id, scope.owner_id, scope.contact_id,
+                        position, record.locator, receipt.get("message_id"),
+                        receipt.get("source_ref_id"), outcome,
+                        Jsonb(encoded, dumps=_encoded_json),
+                    ))
+            if cursor.rowcount != len(records):
+                raise SourceProcessingWriteError()
     except (psycopg.Error, TypeError, ValueError):
         raise SourceProcessingWriteError() from None
     return batch_id
