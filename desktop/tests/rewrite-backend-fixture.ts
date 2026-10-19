@@ -49,10 +49,18 @@ export class RewriteFixture {
       // 命令通道失败时仍关闭本轮stdin，使Python进入已有finally清理；不向未知PID发信号。
       if (this.child.exitCode === null && this.child.signalCode === null) this.child.stdin?.end();
     }
-    for (let count = 0; this.child.exitCode === null && this.child.signalCode === null && count < 100; count++) {
-      await new Promise((resolve) => setTimeout(resolve, 100));
+    // 分层夹具有三个服务顺序收尾；用一次有界退出等待，不能把十秒后的正常退出误报为泄漏。
+    if (this.child.exitCode === null && this.child.signalCode === null) {
+      await new Promise<void>((resolve, reject) => {
+        const exited = () => { clearTimeout(timer); resolve(); };
+        const timer = setTimeout(() => {
+          this.child.removeListener('exit', exited);
+          reject(new Error('本轮改写夹具在 60 秒内未退出。', { cause: failure }));
+        }, 60_000);
+        this.child.once('exit', exited);
+      });
     }
-    if (failure || this.child.exitCode !== 0) throw new Error('本轮改写夹具或测试库未正常清理。');
+    if (failure || this.child.exitCode !== 0) throw new Error('本轮改写夹具或测试库未正常清理。', { cause: failure });
   }
 }
 
@@ -71,12 +79,20 @@ export async function withRewriteFixture(directoryPrefix: string, use: (fixture:
   });
   const evidence = new FixtureProcessEvidence(child);
   const fixture = new RewriteFixture(directory, pythonExecutable, child, commandTimeoutMs);
-  let failed = false;
+  let failure: unknown;
   try { await fixture.ready; await use(fixture); }
-  catch (error) { failed = true; throw error; }
-  finally {
+  catch (error) { failure = error; }
+  try {
     await cleanupCoreFixture(fixture, { label: '改写', cleanupConfirmed, markerFilename: ownershipFilename, evidence,
-      preserveDirectory: failed,
+      preserveDirectory: failure !== undefined,
       matchesPreparedDatabase: (name) => !fixture.data || fixture.data.database_url.endsWith(`dbname=${name}`) });
+  } catch (cleanupError) {
+    if (failure !== undefined) {
+      throw new AggregateError([failure, cleanupError],
+        `页面原始失败：${failure instanceof Error ? failure.message : String(failure)}；${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`,
+        { cause: failure });
+    }
+    throw cleanupError;
   }
+  if (failure !== undefined) throw failure;
 }

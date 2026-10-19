@@ -34,7 +34,8 @@ test("既有外置后台保持原命令协议，旧版不必识别受管寿命�
   await writeFile(executable, `#!${process.execPath}\nconst fs=require("node:fs"); if(JSON.stringify(process.argv.slice(2))!==JSON.stringify(["-m","notalone.server.command","--host","127.0.0.1"]))process.exit(2);fs.writeFileSync(${JSON.stringify(marker)},"started");setInterval(()=>{},1000);`, {mode:0o700});
   const child = await OwnedBackendProcess.launch({ source: "external", pythonExecutable: executable, projectDirectory: project, infoPath: path.join(directory,"legacy.info") }, () => true);
   try {
-    const deadline = Date.now()+2000;
+    // 全量测试会并行编译；这里核验旧版命令兼容性，不把进程调度延迟当作启动性能要求。
+    const deadline = Date.now()+10000;
     while(await readFile(marker,"utf8").catch(()=>"")!=="started" && child.isRunning() && Date.now()<deadline) await new Promise(resolve=>setTimeout(resolve,10));
     assert.equal(await readFile(marker,"utf8").catch(()=>""), "started");
     assert.equal(child.isRunning(),true);
