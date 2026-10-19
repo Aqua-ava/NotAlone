@@ -25,7 +25,7 @@ import { AssistantGenerationJobs, type AssistantGenerationReceipt, type Assistan
 import type { ReplyContinuation, ReplyContinuationConfirmation } from '../../shared/reply-bridge';
 import { requirementChangeFromClarification, type AssistantContinuationCommand } from './assistant-continuation';
 import { captureReplyContinuation, continuationInputSnapshot } from './continuation-view';
-import { invalidatedSupplement, retainContactContent, validateContactInput, removeDependentContent, revalidateRetainedContent, type RetainedContactContent } from './contact-content';
+import { invalidatedIntent, type DerivedIntent, invalidatedSupplement, retainContactContent, validateContactInput, removeDependentContent, revalidateRetainedContent, type RetainedContactContent } from './contact-content';
 import { readReplyScene, sceneSnapshot } from './scene';
 import { AssistantSessionProjection, type AssistantProjectionRead, type AssistantProjectionScope, type AssistantProjectionVerification } from './assistant-session-projection';
 import { AssistantMessageNotices, type MessageNoticeAdoption } from './assistant-message-notices';
@@ -75,7 +75,7 @@ export class ReplySession {
   private generationSkillChoice: ReplySkillChoice | undefined;
   private explorationPurpose: string | undefined;
   private strategyJob: StrategyJob | undefined;
-  private directionDerived = false;
+  private derivedIntent: DerivedIntent = { direction: false, purpose: false };
   private explorationOperation = 0;
   private explorationPending: AbortController | undefined;
   private strategyCandidatePending: AbortController | undefined;
@@ -171,7 +171,7 @@ export class ReplySession {
     // 完整来源复验期间只隔离现有视图，不另存可恢复正文。
     return { ...state, candidateDrafts: [], inputBudgetNotice: undefined, continuation: undefined, result: null, selectedCandidateId: null, canRetry: false,
       messages: { phase: 'loading', items: [], nextCursor: null }, targetMessageId: null,
-      ...(this.directionDerived ? { direction: '', purpose: '' } : {}),
+      ...invalidatedIntent(this.derivedIntent),
       exploration: { phase: 'idle', result: null },
       savedSession: state.savedSession ? { ...state.savedSession,
         phase: state.savedSession.phase === 'failed' ? 'failed' : 'loading', turns: [], inputs: [], currentInputVersionId: null } : undefined,
@@ -571,7 +571,10 @@ export class ReplySession {
           this.retainedContent.delete(selection.contactId);
           this.draft = content.draft;
           this.contacts.setDraft({ ...selection, text: content.draft });
-          this.directionDerived = content.directionDerived && Boolean(restoredInput.direction || restoredInput.purpose);
+          this.derivedIntent = {
+            direction: content.derivedIntent.direction && Boolean(restoredInput.direction),
+            purpose: content.derivedIntent.purpose && Boolean(restoredInput.purpose),
+          };
           this.publish({ ...restoredInput, candidateDrafts, inputClearRevision: (this.state.inputClearRevision ?? 0) + 1 });
         }
         if (current() && inputOperation === this.operation) {
@@ -671,7 +674,7 @@ export class ReplySession {
       this.savedRead?.abort(); this.savedRead = undefined;
       this.candidateSourceCheck?.pending.abort();
       this.lastAttempt = undefined;
-      this.invalidateExploration(); this.directionDerived = false;
+      this.invalidateExploration(); this.derivedIntent = { direction: false, purpose: false };
       this.notifyInputChanged(); this.retainedContent.delete(selection.contactId); this.contacts.clearDraft(selection);
       const items = (previous?.items ?? []).map((item) => ({ ...item, isCurrent: item.sessionId === saved.sessionId }));
       if (!items.some((item) => item.sessionId === saved.sessionId)) items.push({ sessionId: saved.sessionId, isCurrent: true });
@@ -713,7 +716,7 @@ export class ReplySession {
     this.candidateVersions.setScope(null);
     this.savedRead?.abort(); this.savedRead = undefined;
     this.cancelPending(); this.lastAttempt = undefined;
-    this.invalidateExploration(); this.directionDerived = false;
+    this.invalidateExploration(); this.derivedIntent = { direction: false, purpose: false };
     this.notifyInputChanged();
     const pending = new AbortController(); this.sessionDelete = pending;
     const generation = this.backend.getConnectionGeneration();
@@ -788,7 +791,7 @@ export class ReplySession {
 
   // 本人依赖可跨联系人且含不对界面公开的参与资料；由原会话和依据 GET 决定精确撤下范围。
   beginOwnerContextChange(): void {
-    const content = this.pendingContent ?? retainContactContent(this.state, this.directionDerived, this.draft);
+    const content = this.pendingContent ?? retainContactContent(this.state, this.derivedIntent, this.draft);
     if (this.state.contactId && content) this.retainedContent.set(this.state.contactId, content);
     const held = this.heldResult ?? (this.state.result ? { result: this.state.result,
       selectedCandidateId: this.state.selectedCandidateId } : undefined);
@@ -842,7 +845,7 @@ export class ReplySession {
     if (owningGeneration !== undefined) this.generationJobs.cancelContact(owningGeneration, contactId);
     const activeContact = this.state.contactId, activeScope = this.state.scopeRevision;
     const restoring = this.pendingContent;
-    const displayedContent = retainContactContent(this.state, this.directionDerived, this.draft);
+    const displayedContent = retainContactContent(this.state, this.derivedIntent, this.draft);
     const activeContent = restoring ?? displayedContent;
     if (activeContact && activeContent) this.retainedContent.set(activeContact, activeContent);
     const validation = { checking: true }; this.retainedSourceValidation = validation;
@@ -895,8 +898,8 @@ export class ReplySession {
         this.cancelMessagePage();
         this.publish({ messages: { phase: 'idle', items: [], nextCursor: null }, targetMessageId: null,
           correction: '', ...invalidatedSupplement(this.state),
-          ...(this.directionDerived ? { direction: '', purpose: '' } : {}) });
-        this.directionDerived = false;
+          ...invalidatedIntent(this.derivedIntent) });
+        this.derivedIntent = { direction: false, purpose: false };
         if (currentContact && generation !== undefined) {
           await this.loadMessages({ contactId: currentContact, scopeRevision, older: false });
         }
@@ -927,7 +930,7 @@ export class ReplySession {
           && owningGeneration === this.backend.getConnectionGeneration()) {
           this.publish({ candidateDrafts: clean?.candidateDrafts ?? [] });
           if (restoring && clean && activeContact) {
-            const latest = retainContactContent(this.state, this.directionDerived, this.draft);
+            const latest = retainContactContent(this.state, this.derivedIntent, this.draft);
             if (displayedContent && latest) {
               const input = { ...clean.input };
               for (const key of Object.keys(input) as (keyof typeof input)[]) {
@@ -1024,8 +1027,8 @@ export class ReplySession {
       throw new Error('待回复消息已失效，请重新选择。');
     }
     if (selection.messageId !== this.state.targetMessageId) {
-      const suggested = this.directionDerived;
-      this.directionDerived = false;
+      const suggested = this.derivedIntent.direction;
+      this.derivedIntent.direction = false;
       this.invalidateInput(); this.publish({ targetMessageId: selection.messageId,
         ...(suggested ? { direction: '' } : {}) });
     }
@@ -1035,7 +1038,7 @@ export class ReplySession {
     this.assertScope(update);
     if (this.state.mode !== 'reply_to_message') throw new Error('请先切换到回复模式。');
     if (update.direction !== this.state.direction) {
-      this.directionDerived = false;
+      // 手动修改不解除已确认建议的来源依赖，删除来源时仍须清理派生文字。
       this.invalidateInput(); this.publish({ direction: update.direction });
     }
     return this.getState();
@@ -1044,7 +1047,7 @@ export class ReplySession {
     this.assertScope(update);
     if (this.state.mode !== 'initiate_conversation') throw new Error('请先选择主动聊聊。');
     if (update.purpose !== this.state.purpose) {
-      this.directionDerived = false;
+      // 手动修改不解除已确认建议的来源依赖，删除来源时仍须清理派生文字。
       this.invalidateInput(); this.publish({ purpose: update.purpose });
     }
     return this.getState();
@@ -1257,7 +1260,10 @@ export class ReplySession {
         this.generationSkillChoice = result.result.usedSkill
           ? { mode: 'user', versionId: result.result.usedSkill.versionId } : { mode: 'disabled', versionId: null };
         const confirmed = result.result.confirmedIntent;
-        if (confirmed) { this.directionDerived = true; this.stopAutomaticExploration(); }
+        if (confirmed) {
+          this.derivedIntent[this.state.mode === 'reply_to_message' ? 'direction' : 'purpose'] = true;
+          this.stopAutomaticExploration();
+        }
         this.publish({ exploration: { phase: 'ready', result: result.result, canRetry: true,
           automaticUpdatesPaused: !confirmed && !this.automaticExploration
             && Boolean(this.state.exploration.automaticUpdatesPaused) },
@@ -1272,7 +1278,7 @@ export class ReplySession {
         this.currentExploration = undefined; this.explorationPurpose = undefined;
         const input = job.input.mode === 'rewrite_draft' ? job.input : job.input.mode === 'reply_to_message'
           ? { ...job.input, direction: result.confirmedIntent } : { ...job.input, purpose: result.confirmedIntent };
-        this.directionDerived = true;
+        if (input.mode !== 'rewrite_draft') this.derivedIntent[input.mode === 'reply_to_message' ? 'direction' : 'purpose'] = true;
         this.publish({ exploration: { phase: 'ready', result: null, canRetry: true }, phase: 'ready', errorCode: undefined,
           savedSession: { phase: 'idle', sessionId: result.reply.assistantSessionId, turns: [], inputs: [], currentInputVersionId: null },
           ...(input.mode === 'reply_to_message' ? { direction: input.direction } : input.mode === 'initiate_conversation' ? { purpose: input.purpose } : {}) });
@@ -1941,15 +1947,15 @@ export class ReplySession {
     const ownedRead = this.clearUnavailableCandidateSource(check.scope, candidateIds, invalidInputs, strategyTargetUnavailable, read);
     const targetUnavailable = messages && this.state.targetMessageId !== null
       && !messages.items.some((message) => message.messageId === this.state.targetMessageId);
-    const clearMessageDirection = targetUnavailable && this.directionDerived && this.state.mode === 'reply_to_message';
-    if (clearMessageDirection) this.directionDerived = false;
+    const clearMessageDirection = targetUnavailable && this.derivedIntent.direction;
+    if (clearMessageDirection) this.derivedIntent.direction = false;
     this.candidateSourceCheck = undefined;
     check.pending.abort();
     const snapshot = { phase: 'ready' as const, sessionId: saved.sessionId, turns, inputs,
       currentInputVersionId: saved.currentInputVersionId };
     this.publish({ savedSession: snapshot,
       ...(messages ? { messages, ...(targetUnavailable ? { targetMessageId: null } : {}) } : {}),
-      ...(clearMessageDirection ? { direction: '', purpose: '' } : {}),
+      ...(clearMessageDirection ? { direction: '' } : {}),
       sourceAvailability: this.heldResult ? this.sourceCheck ? 'checking' : 'failed' : undefined }, 'authoritative');
     return { snapshot: { ...saved, turns, inputs },
       read: ownedRead ? this.sessionProjection.acceptSourceProjection(ownedRead, snapshot) : undefined };
@@ -1978,7 +1984,7 @@ export class ReplySession {
     const clearStrategy = this.strategyJob?.request.sessionId === scope.sessionId
       && (!affected || clearResult || clearHeld || clearExploration || strategyTargetUnavailable
         || (jobInputId && inputIds.has(jobInputId)));
-    const clearDerived = this.directionDerived && (!affected || clearResult || clearHeld || clearExploration || clearStrategy);
+    const clearDerived = (this.derivedIntent.direction || this.derivedIntent.purpose) && (!affected || clearResult || clearHeld || clearExploration || clearStrategy);
     if (!affected || clearResult || clearHeld) {
       const result = clearResult ? this.state.result : this.heldResult?.result;
       if (result?.inputVersionId) inputIds.add(result.inputVersionId);
@@ -1996,7 +2002,7 @@ export class ReplySession {
     this.candidateVersions.invalidate(scope, affected ? [...affected] : undefined);
     const placeholder = '相关来源不可用';
     this.publish({ ...(!affected ? { messages: { phase: 'idle' as const, items: [], nextCursor: null }, targetMessageId: null } : {}),
-      ...(clearDerived ? { direction: '', purpose: '' } : {}),
+      ...(clearDerived ? invalidatedIntent(this.derivedIntent) : {}),
       ...(saved ? { savedSession: { ...saved,
       turns: saved.turns.map((turn) => turnIds.has(turn.turnId)
         ? { ...turn, state: 'unavailable', input: null, reply: null, placeholder } : turn),
@@ -2005,7 +2011,7 @@ export class ReplySession {
       currentInputVersionId: saved.currentInputVersionId && inputIds.has(saved.currentInputVersionId)
         ? null : saved.currentInputVersionId } } : {}),
       ...(clearResult ? { result: null, selectedCandidateId: null, phase: 'idle', canRetry: false, errorCode: undefined } : {}) });
-    if (clearDerived) this.directionDerived = false;
+    if (clearDerived) this.derivedIntent = { direction: false, purpose: false };
     return ownedRead;
   }
   private async restoreCandidateVersions(selection: ContactSelection, sessionId: string, candidateIds: string[], complete = false): Promise<void> {
@@ -2080,7 +2086,7 @@ export class ReplySession {
       const generation = this.backend.getConnectionGeneration();
       if (generation !== undefined && generation === this.contentGeneration && this.state.contactId
         && state.contacts.some((contact) => contact.contactId === this.state.contactId)) {
-        const content = this.pendingContent ?? retainContactContent(this.getState(), this.directionDerived, this.draft);
+        const content = this.pendingContent ?? retainContactContent(this.getState(), this.derivedIntent, this.draft);
         if (content) this.retainedContent.set(this.state.contactId, content);
       }
       this.contentGeneration = generation; this.retainedSourceValidation = undefined;
@@ -2096,7 +2102,7 @@ export class ReplySession {
       this.leaveGenerationView();
       this.cancelMessagePage();
       this.invalidateExploration();
-      this.directionDerived = false;
+      this.derivedIntent = { direction: false, purpose: false };
       this.lastAttempt = undefined;
       this.draft = state.draft;
       this.publish({ scopeRevision: state.scopeRevision, contactId: state.selectedContactId, candidateDrafts: [], contentRestoreNotice: undefined,

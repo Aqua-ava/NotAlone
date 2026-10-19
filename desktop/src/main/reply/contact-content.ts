@@ -6,24 +6,30 @@ import { interruptedReplyInput } from './assistant-interrupted-retry';
 import { isUuid } from '../uuid';
 import type { ReplySessionState } from '../../shared/reply-bridge';
 
+// 两个模式的输入分别保留来历，切换模式不能让独立输入继承另一字段的来源依赖。
+export type DerivedIntent = { direction: boolean; purpose: boolean };
+export function invalidatedIntent(derived: DerivedIntent): Partial<ReplySessionState> {
+  return { ...(derived.direction ? { direction: '' } : {}), ...(derived.purpose ? { purpose: '' } : {}) };
+}
+
 // 仅保留本次输入；权限、请求状态、消息正文和已保存讨论必须重新读取。
 export type RetainedContactContent = {
   sessionId: string | null;
   draft: string;
   notice?: string;
   result?: { continuation?: NonNullable<ReplySessionState['result']>['continuation']; replyRequestId: string; selectedCandidateId: string | null; edits: { candidateId: string; text: string }[] };
-  directionDerived: boolean;
+  derivedIntent: DerivedIntent;
   inputVersionId: string | null;
   candidateDrafts: NonNullable<ReplySessionState['candidateDrafts']>;
   input: Pick<ReplySessionState, 'options' | 'mode' | 'targetMessageId' | 'direction' | 'purpose'
     | 'correction' | 'requirements' | 'supplementInput' | 'clarificationAnswer' | 'skillChoice' | 'scene'>;
 };
 
-export function retainContactContent(state: ReplySessionState, directionDerived: boolean, draft: string): RetainedContactContent | undefined {
+export function retainContactContent(state: ReplySessionState, derivedIntent: DerivedIntent, draft: string): RetainedContactContent | undefined {
   if (state.sessionDeletion === 'deleting' || state.sessionDeletion === 'failed'
     || state.sessionCatalog?.selectionPending || state.sourceAvailability) return;
   const { options, mode, targetMessageId, direction, purpose, correction, requirements, supplementInput, clarificationAnswer, skillChoice, scene } = state;
-  return structuredClone({ sessionId: state.savedSession?.sessionId ?? null, draft, directionDerived, inputVersionId: state.savedSession?.currentInputVersionId ?? state.result?.inputVersionId ?? null, candidateDrafts: state.candidateDrafts ?? [],
+  return structuredClone({ sessionId: state.savedSession?.sessionId ?? null, draft, derivedIntent, inputVersionId: state.savedSession?.currentInputVersionId ?? state.result?.inputVersionId ?? null, candidateDrafts: state.candidateDrafts ?? [],
     result: state.result ? { continuation: state.result.continuation, replyRequestId: state.result.replyRequestId, selectedCandidateId: state.selectedCandidateId,
       edits: state.result.candidates.map((candidate) => ({ candidateId: candidate.original.candidateId, text: candidate.editedText })) } : undefined,
     input: { options, mode, targetMessageId, direction, purpose, correction, requirements, supplementInput, clarificationAnswer, skillChoice, scene } });
@@ -44,7 +50,7 @@ export async function validateContactInput(backend: BackendHost, contactId: stri
   if (content.inputVersionId && !saved.inputs.some((input) => input.inputVersionId === content.inputVersionId && input.state === 'active')) {
     update.correction = ''; update.clarificationAnswer = '';
     Object.assign(update, invalidatedSupplement(content.input));
-    if (content.directionDerived) { update.direction = ''; update.purpose = ''; }
+    Object.assign(update, invalidatedIntent(content.derivedIntent));
     notices.push('原讨论来源已失效，相关理解已清除。');
   }
   if (content.input.targetMessageId) {
@@ -61,7 +67,7 @@ export async function validateContactInput(backend: BackendHost, contactId: stri
     if (!update.messages) {
       update.targetMessageId = null; update.correction = ''; update.clarificationAnswer = '';
       Object.assign(update, invalidatedSupplement(content.input));
-      if (content.directionDerived) update.direction = '';
+      if (content.derivedIntent.direction) update.direction = '';
       notices.push('待回复对象已不可用，请重新选择。');
     }
   }
@@ -112,7 +118,7 @@ export function removeDependentContent(content: RetainedContactContent): Retaine
   return { ...content, notice: '部分来源尚未核对，相关派生内容已清除，独立输入仍保留。', result: undefined, candidateDrafts: [], inputVersionId: null,
     input: { ...content.input, targetMessageId: null, correction: '', clarificationAnswer: '',
       ...invalidatedSupplement(content.input),
-      ...(content.directionDerived ? { direction: '', purpose: '' } : {}) } };
+      ...invalidatedIntent(content.derivedIntent) } };
 }
 
 // 删除检查点同样清洗非当前联系人；只把权威读取仍认可的依赖留在内存。
