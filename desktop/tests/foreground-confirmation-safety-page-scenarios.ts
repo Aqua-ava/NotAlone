@@ -1,3 +1,4 @@
+import { setWorkspaceContext, setWorkspaceTone, fillWorkspaceInstruction, openWorkspaceSettings } from './workspace-actions';
 import { expect, type Page } from '@playwright/test';
 import type { BindingFixture } from './binding-backend-fixture';
 
@@ -23,7 +24,7 @@ export async function foregroundConfirmationSafetyFlow(manager: Page, openHelper
   }, contactA);
   const helper = await openHelper();
   const picker = helper.getByRole('combobox', { name: '本次联系人', exact: true });
-  const editor = helper.getByRole('textbox', { name: '草稿', exact: true });
+  const editor = helper.getByRole('textbox', { name: '有什么想说的', exact: true });
   await expect(picker).toHaveValue(contactA);
   const draftA = '联系人A的本轮合成草稿';
   await editor.fill(draftA);

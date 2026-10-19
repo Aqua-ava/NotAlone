@@ -53,6 +53,7 @@ export class PageHost implements PageCommands {
   private readonly pages = new Map<Page, PageRole>();
   private readonly pendingEvents = new Set<Promise<unknown>>();
   private readonly pendingCommands = new Set<Promise<unknown>>();
+  private readonly pendingWindowCommands = new Set<Promise<unknown>>();
   private closing = false;
   private readonly released = ownResource();
   readonly backend: BackendHost;
@@ -141,7 +142,11 @@ export class PageHost implements PageCommands {
       if (this.closing || source.page !== page || source.frame !== page.mainFrame()
         || page.url() !== `${this.origin}/#${role}` || typeof channel !== 'string' || !Array.isArray(args)) throw new Error('页面操作不可用。');
       if (channel === 'page:open-manager' || channel === 'page:open-helper') {
-        noArguments(args); return this.open(channel === 'page:open-helper' ? 'helper' : 'manager').then(() => undefined);
+        noArguments(args);
+        const pending = this.open(channel === 'page:open-helper' ? 'helper' : 'manager').then(() => undefined);
+        this.pendingWindowCommands.add(pending);
+        try { return await pending; }
+        finally { this.pendingWindowCommands.delete(pending); }
       }
       const command = this.handlers.get(channel);
       if (!command || (command.role && command.role !== this.pages.get(page))) throw new Error('页面操作不可用。');
@@ -159,6 +164,10 @@ export class PageHost implements PageCommands {
   // 观察本轮公开页面命令是否已经完成或取消，不替换业务响应。
   async awaitPendingCommands(): Promise<void> {
     await Promise.allSettled(this.pendingCommands);
+  }
+  // URL就绪不代表宿主已发布焦点；只等开窗命令，避免与测试刻意挂起的业务请求互等。
+  async awaitPendingWindowCommands(): Promise<void> {
+    await Promise.all(this.pendingWindowCommands);
   }
   async close(): Promise<void> {
     this.closing = true;

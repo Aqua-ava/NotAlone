@@ -7,7 +7,30 @@ import { ownResource } from './cleanup';
 import { withPausedForegroundFixture, withManualForegroundFixture, withContinuousForegroundFixture } from '../foreground-backend-fixture';
 import { initialCliState, type BindingFixture } from '../binding-backend-fixture';
 import { ContactHttpProxy } from '../contact-http-proxy';
+import { fillWorkspaceInstruction } from '../workspace-actions';
 import { foregroundObservationPaused, foregroundPausedWithManualDraft, foregroundManualConfirmation } from '../foreground-page-scenarios';
+
+async function awaitAuthorizedSync(backend: BindingFixture, priorityContactId: string | null): Promise<void> {
+  // 开关补齐和查看联系人优先读取是已授权后台工作，必须先取得公开完成回执再测纯定位。
+  await expect.poll(async () => {
+    const response = await backend.request('/api/sync/status');
+    const report = response.data;
+    return { status: response.status, enabled: report.sync_enabled, pending: report.cli_pending_count,
+      backfill: report.cli_backfill_phase, total: report.cli_backfill_total_contacts,
+      completed: report.cli_backfill_completed_contacts, failure: report.cli_backfill_failure_code,
+      priority: report.cli_priority_contact_id,
+      priorityFinished: priorityContactId === null || typeof report.cli_priority_last_success_at === 'string',
+      priorityFailure: report.cli_priority_last_failure_code };
+  }).toEqual({ status: 200, enabled: true, pending: 0, backfill: 'complete', total: 1, completed: 1,
+    failure: null, priority: priorityContactId, priorityFinished: true, priorityFailure: null });
+}
+
+async function observeWithoutBodyReads(backend: BindingFixture) {
+  const before = await backend.tails();
+  const observation = await backend.request('/api/sync/foreground/observe', {});
+  expect(await backend.tails()).toEqual(before);
+  return observation;
+}
 
 export async function withForegroundPages(browser: Browser, origin: string, fixture: BindingFixture,
   use: (manager: Page, openHelper: () => Promise<Page>, host: PageHost) => Promise<void>): Promise<void> {
@@ -21,6 +44,7 @@ export async function withForegroundPages(browser: Browser, origin: string, fixt
         await manager.getByRole('button', { name: '打开输入小窗', exact: true }).click();
         const helper = await opened;
         await helper.waitForURL(`${origin}/#helper`);
+        await host.awaitPendingWindowCommands();
         return helper;
       }, host);
     } finally {
@@ -37,8 +61,8 @@ export async function foregroundPaused(browser: Browser, origin: string): Promis
   const released = ownResource();
   await withPausedForegroundFixture(async (fixture) => {
     await foregroundObservationPaused(fixture);
-    await withForegroundPages(browser, origin, fixture, async (_manager, openHelper) => {
-      await foregroundPausedWithManualDraft(await openHelper(), fixture);
+    await withForegroundPages(browser, origin, fixture, async (manager, openHelper) => {
+      await foregroundPausedWithManualDraft(manager, await openHelper(), fixture);
     });
   }, released);
   process.stdout.write(`page_test_scenario_passed: ${name}\n`);
@@ -54,7 +78,7 @@ export async function foregroundManual(browser: Browser, origin: string): Promis
     await withForegroundPages(browser, origin, backend, async (manager, openHelper) => {
       await foregroundManualConfirmation(manager, openHelper, backend, setVisible);
     });
-  }, released);
+  }, released, 'single-account');
   process.stdout.write(`page_test_scenario_passed: ${name}\n`);
 }
 
@@ -78,7 +102,8 @@ export async function foregroundVerified(browser: Browser, origin: string): Prom
     const active = (bindings.data.bindings as { binding_id: string; contact_id: string }[])
       .find((item) => item.contact_id === contactId)!;
     expect(active).toBeDefined();
-    let tails = await backend.tails();
+    await awaitAuthorizedSync(backend, null);
+    const tails = await backend.tails();
     const observed = await backend.request('/api/sync/foreground/observe', {});
     expect(observed.status).toBe(200);
     expect(observed.data.phase).toBe('confirmed');
@@ -91,51 +116,84 @@ export async function foregroundVerified(browser: Browser, origin: string): Prom
     const proxy = await ContactHttpProxy.attach(backend.infoPath);
     try {
       await withForegroundPages(browser, origin, backend, async (manager, openHelper) => {
+        const expectConfirmedHelper = async (page: Page, stage: string) => {
+          try {
+            await expect(page.getByText('本次联系人已通过微信会话绑定确认。', { exact: true }), stage).toBeVisible();
+          } catch (error) {
+            const foreground = await page.evaluate(async () => {
+              const value = await window.notalone.foreground.getState();
+              return { phase: value.phase, reason: value.reason, generationBlock: value.generationBlock,
+                confirmation: value.confirmation, suspendedByHelperFocus: value.suspendedByHelperFocus };
+            });
+            const response = await backend.request('/api/sync/cli-bindings');
+            const bindings = response.data.bindings as { binding_id: string; status: string }[];
+            process.stdout.write(`foreground_confirmation_diagnostic: ${JSON.stringify({ stage, foreground,
+              bindingsStatus: response.status, expectedBindingStatus: bindings.find(item => item.binding_id === active.binding_id)?.status ?? null })}\n`);
+            throw error;
+          }
+        };
         await expect(manager.getByRole('region', { name: '联系人目录', exact: true })
           .getByRole('button', { name: /^选择/ }).first()).toBeVisible();
         const helper = await openHelper();
         await expect(helper.getByRole('combobox', { name: '本次联系人', exact: true })).toHaveValue(contactId);
-        await expect(helper.getByText('本次联系人已通过微信会话绑定确认。', { exact: true })).toBeVisible();
-        await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('唯一绑定下的合成草稿');
-        await expect(helper.getByRole('button', { name: '生成候选', exact: true })).toBeEnabled();
+        await expectConfirmedHelper(helper, 'initial-helper');
+        await helper.getByRole('textbox', { name: '有什么想说的', exact: true }).fill('唯一绑定下的合成草稿');
+        await expect(helper.getByRole('button', { name: '帮我表达', exact: true })).toBeEnabled();
         await manager.evaluate(async () => {
           await window.notalone.syncControl.refresh();
           const state = await window.notalone.syncControl.getState();
           await window.notalone.syncControl.disable({ scopeRevision: state.scopeRevision });
         });
-        await expect(helper.getByRole('button', { name: '生成候选', exact: true })).toBeDisabled();
-        await expect(helper.getByRole('textbox', { name: '草稿', exact: true })).toHaveValue('唯一绑定下的合成草稿');
+        await expect(helper.getByRole('button', { name: '帮我表达', exact: true })).toBeDisabled();
+        await expect(helper.getByRole('textbox', { name: '有什么想说的', exact: true })).toHaveValue('唯一绑定下的合成草稿');
         await manager.evaluate(async () => {
           const state = await window.notalone.syncControl.getState();
           await window.notalone.syncControl.enable({ scopeRevision: state.scopeRevision });
         });
-        await expect(helper.getByRole('button', { name: '生成候选', exact: true })).toBeDisabled();
-        // 重新开启允许已确认CLI范围补齐；后续定位观察从此水位证明不新增正文读取。
-        tails = await backend.tails();
-        expect(await backend.tails()).toEqual(tails);
+        await expect(helper.getByRole('button', { name: '帮我表达', exact: true })).toBeDisabled();
+        await awaitAuthorizedSync(backend, contactId);
+        // 重新开启允许已确认CLI范围补齐；完成后的独立定位仍不得读取正文。
+        expect((await observeWithoutBodyReads(backend)).data.contact_id).toBe(contactId);
         await helper.close();
         const restored = await openHelper();
         const picker = restored.getByRole('combobox', { name: '本次联系人', exact: true });
-        const editor = restored.getByRole('textbox', { name: '草稿', exact: true });
+        const editor = restored.getByRole('textbox', { name: '有什么想说的', exact: true });
         await expect(picker).toHaveValue(contactId);
         await expect(editor).toHaveValue('唯一绑定下的合成草稿');
-        await expect(restored.getByText('本次联系人已通过微信会话绑定确认。', { exact: true })).toBeVisible();
+        await expectConfirmedHelper(restored, 'reenabled-helper');
         await expect(editor).toHaveValue('唯一绑定下的合成草稿');
         const otherContact = backend.data.contact_ids[1];
-        await picker.selectOption(otherContact);
+        // 无绑定的B只经管理页选择本地草稿范围，不能借helper渠道确认获得生成资格。
+        await manager.evaluate(async contactId => {
+          const state = await window.notalone.contacts.getState();
+          await window.notalone.contacts.selectContact({ contactId, scopeRevision: state.scopeRevision });
+        }, otherContact);
         await expect.poll(() => restored.evaluate(async () =>
           (await window.notalone.contacts.getState()).selectedContactId)).toBe(otherContact);
+        await awaitAuthorizedSync(backend, null);
         await editor.fill('另一联系人的合成草稿');
+        await expect(restored.getByRole('button', { name: '帮我表达', exact: true })).toBeDisabled();
+        await expect(restored.getByRole('button', { name: '帮我想想', exact: true })).toBeDisabled();
+        expect(await restored.evaluate(async () => {
+          const contact = await window.notalone.contacts.getState();
+          try {
+            await window.notalone.replies.generate({ contactId: contact.selectedContactId!, scopeRevision: contact.scopeRevision,
+              newRequest: true, workspaceAction: 'express' });
+            return 'accepted';
+          } catch (error) { return error instanceof Error ? error.message : String(error); }
+        })).toContain('请先确认本次联系人');
         await expect.poll(() => restored.evaluate(async () =>
           (await window.notalone.contacts.getState()).draft)).toBe('另一联系人的合成草稿');
         await restored.close();
         const different = await openHelper();
         await expect(different.getByRole('combobox', { name: '本次联系人', exact: true })).toHaveValue(contactId);
-        await expect(different.getByRole('textbox', { name: '草稿', exact: true })).toHaveValue('唯一绑定下的合成草稿');
-        await expect(different.getByRole('button', { name: '生成候选', exact: true })).toBeEnabled();
-        expect(await backend.tails()).toEqual(tails);
+        await expect(different.getByRole('textbox', { name: '有什么想说的', exact: true })).toHaveValue('唯一绑定下的合成草稿');
+        await expect(different.getByRole('button', { name: '帮我表达', exact: true })).toBeEnabled();
+        await awaitAuthorizedSync(backend, contactId);
+        const afterSwitch = await observeWithoutBodyReads(backend);
+        expect(afterSwitch.data).toMatchObject({ phase: 'confirmed', contact_id: contactId, binding_id: active.binding_id });
         const instruction = different.getByRole('textbox', { name: '本次要求', exact: true });
-        await instruction.fill('正在编辑的合成要求');
+        await fillWorkspaceInstruction(different, '正在编辑的合成要求');
         await expect.poll(() => different.evaluate(async () =>
           (await window.notalone.replies.getState()).options.instruction)).toBe('正在编辑的合成要求');
         const managerOpened = different.context().waitForEvent('page');
@@ -176,42 +234,46 @@ export async function foregroundVerified(browser: Browser, origin: string): Prom
           const state = await window.notalone.syncControl.getState();
           await window.notalone.syncControl.enable({ scopeRevision: state.scopeRevision });
         });
-        tails = await backend.tails();
+        await awaitAuthorizedSync(backend, contactId);
         for (const chatType of ['private', 'group']) {
           state.sessions[1].display_name = '唯一合成会话';
           state.sessions[1].chat_type = chatType;
           await backend.setCli(state);
-          const duplicate = await backend.request('/api/sync/foreground/observe', {});
+          const duplicate = await observeWithoutBodyReads(backend);
           expect(duplicate.status).toBe(200);
-          expect(duplicate.data.phase).toBe('manual-required');
+          // 私聊重名要求手动选择；同名群聊会暂停定位，不能借私聊绑定授予身份。
+          expect({ phase: duplicate.data.phase, reason: duplicate.data.reason }, `duplicate-${chatType}`)
+            .toEqual(chatType === 'group'
+              ? { phase: 'paused', reason: 'group_chat_suspected' }
+              : { phase: 'manual-required', reason: 'ambiguous_requires_selection' });
           expect(duplicate.data.binding_id).toBeNull();
           expect(duplicate.data.contact_id).toBeNull();
-          expect(await backend.tails()).toEqual(tails);
         }
         state.sessions[1].display_name = '另一合成会话';
         state.sessions[0].display_name = '已改名合成会话';
         await backend.setCli(state);
-        const renamed = await backend.request('/api/sync/foreground/observe', {});
-        expect(renamed.data.phase).toBe('manual-required');
+        const renamed = await observeWithoutBodyReads(backend);
+        expect(renamed.data.phase, `renamed: phase=${renamed.data.phase}, reason=${renamed.data.reason}`)
+          .toBe('manual-required');
         expect(renamed.data.contact_id).toBeNull();
         state.sessions[0].display_name = '唯一合成会话';
         await backend.setCli(state);
         const beforeRevoke = await openHelper();
-        await expect(beforeRevoke.getByText('本次联系人已通过微信会话绑定确认。', { exact: true })).toBeVisible();
-        await beforeRevoke.getByRole('textbox', { name: '草稿', exact: true }).fill('解绑时保留的合成草稿');
-        await expect(beforeRevoke.getByRole('button', { name: '生成候选', exact: true })).toBeEnabled();
+        await expectConfirmedHelper(beforeRevoke, 'restored-name-before-revoke');
+        await beforeRevoke.getByRole('textbox', { name: '有什么想说的', exact: true }).fill('解绑时保留的合成草稿');
+        await expect(beforeRevoke.getByRole('button', { name: '帮我表达', exact: true })).toBeEnabled();
         await manager.evaluate(async ({ contactId, bindingId }) => {
           await window.notalone.bindings.refresh();
           const state = await window.notalone.bindings.getState();
           await window.notalone.bindings.revokeBinding({ scopeRevision: state.scopeRevision, contactId, bindingId });
         }, { contactId, bindingId: active.binding_id });
-        await expect(beforeRevoke.getByRole('button', { name: '生成候选', exact: true })).toBeDisabled();
-        await expect(beforeRevoke.getByRole('textbox', { name: '草稿', exact: true })).toHaveValue('解绑时保留的合成草稿');
-        const revoked = await backend.request('/api/sync/foreground/observe', {});
-        expect(revoked.data.phase).toBe('manual-required');
+        await expect(beforeRevoke.getByRole('button', { name: '帮我表达', exact: true })).toBeDisabled();
+        await expect(beforeRevoke.getByRole('textbox', { name: '有什么想说的', exact: true })).toHaveValue('解绑时保留的合成草稿');
+        const revoked = await observeWithoutBodyReads(backend);
+        expect(revoked.data.phase, `revoked: phase=${revoked.data.phase}, reason=${revoked.data.reason}`)
+          .toBe('manual-required');
         expect(revoked.data.binding_id).toBeNull();
         expect(revoked.data.contact_id).toBeNull();
-        expect(await backend.tails()).toEqual(tails);
       });
     } finally {
       try { await proxy.close(); }
