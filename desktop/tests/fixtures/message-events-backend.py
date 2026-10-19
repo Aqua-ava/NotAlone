@@ -100,9 +100,10 @@ class MessageEventsFixture(rewrite.DesktopRewriteFixture):
     def append_message(self, contact_id: str, *, owner_id: UUID | None = None,
                        text: str = "甲的新合成消息：时间安排更新。",
                        publish_event: bool = True,
-                       occurred_at: datetime | None = None) -> dict[str, str]:
+                       occurred_at: datetime | None = None,
+                       message_id: UUID | None = None) -> dict[str, str]:
         owner_id = owner_id or self.owner_id
-        message_id = uuid4()
+        message_id = message_id or uuid4()
         with psycopg.connect(self.database_url) as connection:
             source_id = connection.execute(
                 "SELECT id FROM public.source_document WHERE owner_id=%s AND contact_id=%s",
@@ -182,12 +183,14 @@ def main() -> None:
                 ) for index in range(3)]}
             elif operation == "append_paged_burst":
                 # 先提交全部消息，再逐条发布真实事件，稳定覆盖最新一页与原选择之间的缺口。
-                # 固定在同一秒内递增，避免慢机运行速度掩盖 API 丢失亚秒精度的排序问题。
+                # 时间在同一毫秒内递增，UUID 反向递减，稳定暴露 Date.parse 丢失微秒后的逆序。
                 second = datetime.now(timezone.utc).replace(microsecond=0)
+                message_id_prefix = uuid4().int & ~0xff
                 messages = [fixture.append_message(
                     contact_ids[0], text=f"甲的分页突发消息：第{index + 1:02d}条近况更新。",
                     publish_event=False,
-                    occurred_at=second + timedelta(milliseconds=(index + 1) * 10),
+                    occurred_at=second + timedelta(microseconds=index + 1),
+                    message_id=UUID(int=message_id_prefix + 25 - index),
                 ) for index in range(25)]
                 for message in messages:
                     fixture.event_buses[fixture.owner_id].publish(BackendEvent.message_created(
@@ -214,6 +217,11 @@ def main() -> None:
             elif operation == "disconnect_stream":
                 fixture.event_buses[fixture.owner_id].disconnect_streams()
                 result = {}
+            elif operation == "model_status":
+                result = {"model_calls": len(fixture.reply_model.seen_calls),
+                          "model_entered": fixture.reply_model.entered.is_set(),
+                          "pending_plans": len(fixture.reply_model.plans),
+                          "input_modes": [payload["input_mode"] for payload in fixture.reply_model.payloads]}
             elif operation == "observations":
                 result = {"model_calls": len(fixture.reply_model.seen_calls),
                           "payloads": fixture.reply_model.payloads,

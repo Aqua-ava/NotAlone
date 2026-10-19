@@ -40,7 +40,7 @@ export async function withEventPages(browser: Browser, origin: string, use: (pag
   }, released, path.resolve('tests/fixtures/message-events-backend.py'), path.resolve('..'),
   'database-ownership.json');
 }
-async function prepare({ manager, helper, fixture }: EventPages, contact: '甲' | '乙' = '甲') {
+async function prepare({ manager, helper, fixture, awaitPendingCommands }: EventPages, contact: '甲' | '乙' = '甲') {
   await manager.getByRole('button', { name: `选择合成联系人${contact}`, exact: true }).click();
   await confirmHelperContact(helper, fixture.data.contact_ids[contact === '甲' ? 0 : 1]);
   await helper.getByRole('button', { name: '回应消息', exact: true }).click();
@@ -51,7 +51,27 @@ async function prepare({ manager, helper, fixture }: EventPages, contact: '甲' 
   await fixture.plan({ count: 1, prefix: `${contact}原快照候选` });
   await helper.getByRole('button', { name: '生成候选', exact: true }).click();
   const editor = helper.getByRole('textbox', { name: '候选1编辑文本', exact: true });
-  await expect(editor).toHaveValue(`${contact}原快照候选（说法1）。`);
+  try {
+    // 页面点击返回不代表认证 HTTP 生成与后续会话核验已经完成。
+    await awaitPendingCommands();
+    const completed = await helper.evaluate(() => window.notalone.replies.getState());
+    expect({ phase: completed.phase, errorCode: completed.errorCode ?? null }).toEqual({ phase: 'ready', errorCode: null });
+    await expect(editor).toHaveValue(`${contact}原快照候选（说法1）。`);
+  }
+  catch (error) {
+    const state = await helper.evaluate(async () => {
+      const reply = await window.notalone.replies.getState();
+      const foreground = await window.notalone.foreground.getState();
+      return { phase: reply.phase, errorCode: reply.errorCode ?? null,
+        generationBlock: reply.generationBlock, explorationPhase: reply.exploration.phase,
+        hasExplorationResult: Boolean(reply.exploration.result), candidateCount: reply.result?.candidates.length ?? 0,
+        foregroundPhase: foreground.phase, foregroundConfirmation: foreground.confirmation,
+        foregroundBlock: foreground.generationBlock };
+    });
+    process.stderr.write(`page_test_prepare_failure: ${JSON.stringify({ ...state,
+      model: await fixture.command('model_status') })}\n`);
+    throw error;
+  }
   await editor.fill('用户仍在编辑的措辞。');
   const requestId = await helper.evaluate(async () => (await window.notalone.replies.getState()).result!.replyRequestId);
   const endpoint = `/api/contacts/${fixture.data.contact_ids[contact === '甲' ? 0 : 1]}/replies/${requestId}/evidence`;
@@ -94,11 +114,16 @@ async function pagedBurst(pages: EventPages) {
   await fixture.command('append_paged_burst');
   const projection = await fixture.request(`/api/contacts/${fixture.data.contact_ids[0]}/messages?limit=100`);
   expect(projection.status).toBe(200);
-  const burst = (projection.data.messages as Array<{ text: string; occurred_at: string }>)
+  const burst = (projection.data.messages as Array<{ message_id: string; text: string; occurred_at: string }>)
     .filter((message) => message.text.startsWith('甲的分页突发消息：'));
   expect(burst).toHaveLength(25);
   expect(new Set(burst.map((message) => message.occurred_at.slice(0, 19))).size).toBe(1);
   expect(new Set(burst.map((message) => message.occurred_at)).size).toBe(25);
+  expect(new Set(burst.map((message) => Date.parse(message.occurred_at))).size).toBe(1);
+  for (let index = 1; index < burst.length; index++) {
+    expect(burst[index - 1].occurred_at > burst[index].occurred_at).toBe(true);
+    expect(burst[index - 1].message_id < burst[index].message_id).toBe(true);
+  }
   await expect(messages.getByRole('radio', { name: /甲的分页突发消息：第25条/ })).toBeVisible();
   await expect(messages.getByRole('radio', { name: /甲的原始合成消息/ })).toBeChecked();
   await expect(messages.getByRole('radio')).toHaveCount(21);
@@ -178,6 +203,9 @@ async function scopeAndRegeneration(pages: EventPages) {
   await helper.getByRole('textbox', { name: '表达方向', exact: true }).fill('根据新时间安排表达。');
   await fixture.plan({ count: 1, prefix: '新请求候选' });
   await helper.getByRole('button', { name: '重新生成', exact: true }).click();
+  await pages.awaitPendingCommands();
+  const regenerated = await helper.evaluate(() => window.notalone.replies.getState());
+  expect({ phase: regenerated.phase, errorCode: regenerated.errorCode ?? null }).toEqual({ phase: 'ready', errorCode: null });
   await expect(editor).toHaveValue('新请求候选（说法1）。');
   const next = await helper.evaluate(async () => (await window.notalone.replies.getState()).result!.replyRequestId);
   expect(endpoint.endsWith(`/${next}/evidence`)).toBe(false);

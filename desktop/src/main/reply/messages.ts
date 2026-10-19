@@ -4,6 +4,10 @@ import type { BackendHost } from '../backend/host';
 
 const record = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 const optionalText = (value: unknown): value is string | null => value === null || (typeof value === 'string' && value.length <= 65_536);
+const remainingMicroseconds = (value: string | null): number => {
+  const fraction = value?.match(/T\d{2}:\d{2}:\d{2}\.(\d+)/)?.[1] ?? '';
+  return Number(fraction.slice(3, 6).padEnd(3, '0'));
+};
 
 // 最新页覆盖同 ID 的旧投影，同时保留用户已加载的历史，顺序与后端分页一致。
 export function mergeReplyMessages(previous: readonly ReplyMessage[], incoming: readonly ReplyMessage[]): ReplyMessage[] {
@@ -13,6 +17,9 @@ export function mergeReplyMessages(previous: readonly ReplyMessage[], incoming: 
     const leftTime = left.occurredAt === null ? -Infinity : Date.parse(left.occurredAt);
     const rightTime = right.occurredAt === null ? -Infinity : Date.parse(right.occurredAt);
     if (leftTime !== rightTime) return leftTime < rightTime ? 1 : -1;
+    // Date.parse 只保留毫秒，先补比较服务端剩余微秒，再用 ID 打破平局。
+    const microseconds = remainingMicroseconds(right.occurredAt) - remainingMicroseconds(left.occurredAt);
+    if (microseconds) return microseconds;
     return left.messageId < right.messageId ? 1 : left.messageId === right.messageId ? 0 : -1;
   });
 }
