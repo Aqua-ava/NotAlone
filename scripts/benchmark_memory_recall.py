@@ -136,6 +136,7 @@ def measure(modules, texts, pool, samples: int, *, memory: bool = False) -> dict
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--baseline-ref", default=BASELINE)
     parser.add_argument("--mode", choices=("count", "timing", "memory", "local"), required=True)
     parser.add_argument("--sizes", nargs="+", type=int, default=[100, 1000, 10000])
     parser.add_argument("--queries", type=int, default=20)
@@ -147,16 +148,19 @@ def main() -> None:
         parser.error("请显式设置 PYTHONHASHSEED=0，固定 query 集合累加顺序。")
     if min(*args.sizes, args.queries, args.dimension, args.samples) < 1:
         parser.error("负载及样本数必须为正整数。")
+    if args.mode == "local" and len(args.sizes) != 1:
+        parser.error("真实编码每次进程只接受一个池尺寸，以区分首次加载。")
+    baseline_sha = git("rev-parse", f"{args.baseline_ref}^{{commit}}")
     os.environ.update(NOTALONE_DISABLE_DOTENV="1", HF_HUB_OFFLINE="1", TRANSFORMERS_OFFLINE="1")
     sys.dont_write_bytecode = True
     sys.path.insert(0, str(ROOT / "backend/src"))
-    if git("show", f"{BASELINE}:{LEXICAL}") != (ROOT / LEXICAL).read_text().strip():
+    if git("show", f"{baseline_sha}:{LEXICAL}") != (ROOT / LEXICAL).read_text().strip():
         raise RuntimeError("词法实现不同，不能宣称只比较召回复用。")
     source = (ROOT / SOURCE).read_text()
-    baseline = load_source("baseline_recall", git("show", f"{BASELINE}:{SOURCE}"))
+    baseline = load_source("baseline_recall", git("show", f"{baseline_sha}:{SOURCE}"))
     current = load_source("current_recall", source)
     modules = {"baseline": baseline, "current": current}
-    report = {"mode": args.mode, "baseline_sha": BASELINE, "worktree_head": git("rev-parse", "HEAD"),
+    report = {"mode": args.mode, "baseline_sha": baseline_sha, "worktree_head": git("rev-parse", "HEAD"),
               "current_source_sha256": hashlib.sha256(source.encode()).hexdigest(),
               "script_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
               "python": sys.version, "executable": sys.executable, "platform": platform.platform(),
@@ -180,16 +184,33 @@ def main() -> None:
         elif args.mode == "local":
             if any(module._MODEL is not None for module in modules.values()):
                 raise RuntimeError("真实编码每次进程只测一个池尺寸，以区分首次加载。")
+            encoding = {name: [] for name in modules}
+
+            def measured_encoder(name, original):
+                def embed(values):
+                    started = time.perf_counter()
+                    vectors = original(values)
+                    encoding[name].append({"elapsed_ms": (time.perf_counter() - started) * 1000,
+                                           "inputs": len(values), "dimension": len(vectors[0])})
+                    return vectors
+                return embed
+
             cold, expected = {}, None
-            for name, module in modules.items():
-                started = time.perf_counter()
-                rows = identifiers(module.hybrid_candidates(texts, pool))
-                cold[name] = (time.perf_counter() - started) * 1000
-                if expected is not None and rows != expected:
-                    raise AssertionError("真实模型有序召回 ID 不一致。")
-                expected = rows
+            with replace(baseline, embed_texts=measured_encoder("baseline", baseline.embed_texts)), replace(
+                current, embed_texts=measured_encoder("current", current.embed_texts),
+            ):
+                for name, module in modules.items():
+                    started = time.perf_counter()
+                    rows = identifiers(module.hybrid_candidates(texts, pool))
+                    cold[name] = (time.perf_counter() - started) * 1000
+                    if expected is not None and rows != expected:
+                        raise AssertionError("真实模型有序召回 ID 不一致。")
+                    expected = rows
+                steady_state = measure(modules, texts, pool, args.samples)
             result.update(cold_load_and_first_recall_ms=cold,
-                          steady_state=measure(modules, texts, pool, args.samples),
+                          steady_state=steady_state, encoding_events=encoding,
+                          encoding_steady_state={name: summary([row["elapsed_ms"] for row in events[2:]])
+                                                 for name, events in encoding.items()},
                           embedding_inputs_per_call=len(texts) + len(pool))
         else:
             with replace(baseline, embed_texts=lambda values: vectors), replace(current, embed_texts=lambda values: vectors):
