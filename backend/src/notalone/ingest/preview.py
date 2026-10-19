@@ -19,7 +19,7 @@ from notalone.ingest.validator import validate_records
 def build_preview(path: Path) -> ImportPreview:
     """完整校验文件并构造不会写数据库的预览结果。"""
     # 第一步只负责读文件、计算指纹并逐行解析 JSON。
-    document = read_jsonl(path)
+    document = read_jsonl(path, capture_processing=False)
     # 第二步校验每条记录和整份文件，返回候选联系人及消息类型统计。
     owner_channel_identity, channel_identity, kind_counts = validate_records(
         document.records

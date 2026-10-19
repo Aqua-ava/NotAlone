@@ -6,11 +6,14 @@ import contextlib
 import io
 import os
 import unittest
+import tempfile
 from pathlib import Path
 from unittest.mock import patch
 from uuid import uuid4
 
 from notalone.ingest.import_command import import_file, main
+from notalone.ingest.errors import ImportContentChangedError
+from notalone.ingest.preview import build_preview
 from notalone.ingest.models import (
     ExistingContactSelection,
     ImportConfirmationRequest,
@@ -60,6 +63,24 @@ class FakeRepository:
 
 
 class ImportFileTest(unittest.TestCase):
+    def test_commit_rechecks_file_bytes_after_preview_even_with_same_mtime(self) -> None:
+        repository = FakeRepository()
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "synthetic.jsonl"
+            path.write_bytes((FIXTURES_DIR / "valid_single_contact.jsonl").read_bytes())
+            preview = build_preview(path)
+            metadata = path.stat()
+            path.write_bytes(path.read_bytes().replace(b"server-101", b"server-999", 1))
+            os.utime(path, ns=(metadata.st_atime_ns, metadata.st_mtime_ns))
+            with self.assertRaises(ImportContentChangedError):
+                import_file(
+                    path=path, owner_id=uuid4(),
+                    expected_content_sha256=preview.content_sha256,
+                    confirmation=ImportConfirmationRequest(ExistingContactSelection(uuid4())),
+                    repository=repository,
+                )
+            self.assertEqual(repository.import_count, 0)
+
     def test_imports_for_an_existing_internal_contact(self) -> None:
         repository = FakeRepository()
         contact_id = uuid4()

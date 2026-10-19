@@ -36,7 +36,7 @@ class JsonlDocument:
     processing_records: tuple[ProcessingRecord, ...] = ()
 
 
-def read_jsonl(path: Path) -> JsonlDocument:
+def read_jsonl(path: Path, *, capture_processing: bool = True) -> JsonlDocument:
     """完整读取 JSONL；任一行失败时不返回部分结果。
 
     参数 ``path`` 是待读取文件的路径。成功时返回 ``JsonlDocument``；读取、编码或
@@ -76,7 +76,11 @@ def read_jsonl(path: Path) -> JsonlDocument:
             "read",
             "file_size_limit",
         )
-    reading = capture_execution(read_started_at, __file__)
+    # 预览只消费解析结果；正式导入保留每条实际读取与解析追踪。
+    reading = (
+        capture_execution(read_started_at, __file__)
+        if capture_processing else None
+    )
 
     # JSONL 约定使用 UTF-8；不静默猜测其他编码，避免正文被错误解码后继续导入。
     decode_started_at = datetime.now(timezone.utc)
@@ -135,18 +139,19 @@ def read_jsonl(path: Path) -> JsonlDocument:
                 locator=f"jsonl:{line_number}",
             )
         records.append(record)
-        processing_records.append(
-            ProcessingRecord.capture(
-                f"jsonl:{line_number}",
-                {
-                    "capture_layer": "jsonl_record_text",
-                    "record_text": line,
-                    "parsed": record,
-                    "read": reading,
-                    "parse": capture_execution(started_at, __file__),
-                },
+        if capture_processing:
+            processing_records.append(
+                ProcessingRecord.capture(
+                    f"jsonl:{line_number}",
+                    {
+                        "capture_layer": "jsonl_record_text",
+                        "record_text": line,
+                        "parsed": record,
+                        "read": reading,
+                        "parse": capture_execution(started_at, __file__),
+                    },
+                )
             )
-        )
 
     if not records:
         raise _reader_error(

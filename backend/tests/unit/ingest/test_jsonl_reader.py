@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import unittest
+import hashlib
+import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
@@ -12,6 +14,18 @@ from notalone.ingest.jsonl_reader import read_jsonl
 
 
 class ReadJsonlTest(unittest.TestCase):
+    def test_read_without_processing_preserves_bytes_digest_and_records(self) -> None:
+        content = '{"text":"合成原话🌿\\n下一行","nested":{"value":1}}\r\n'
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "synthetic.jsonl"
+            path.write_bytes(content.encode("utf-8"))
+            document = read_jsonl(path, capture_processing=False)
+            captured = read_jsonl(path)
+        self.assertEqual(document.records, (json.loads(content),))
+        self.assertEqual(document.content_sha256, hashlib.sha256(content.encode("utf-8")).hexdigest())
+        self.assertEqual(document.processing_records, ())
+        self.assertEqual(captured.processing_records[0].payload()["record_text"], content)
+
     def test_rejects_file_larger_than_64_mib_before_reading_content(self) -> None:
         with TemporaryDirectory() as directory:
             path = Path(directory) / "oversized.jsonl"

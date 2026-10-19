@@ -21,7 +21,10 @@ class ProcessingRecord:
     def capture(
         cls, locator: str, payload: dict[str, Any]
     ) -> ProcessingRecord:
-        return cls(uuid4(), locator, json.dumps(payload, ensure_ascii=False))
+        return cls(
+            uuid4(), locator,
+            json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+        )
 
     def payload(self) -> dict[str, Any]:
         return json.loads(self.payload_json)
@@ -30,7 +33,10 @@ class ProcessingRecord:
         return ProcessingRecord(
             self.record_id,
             self.locator,
-            json.dumps({**self.payload(), **fields}, ensure_ascii=False),
+            json.dumps(
+                {**self.payload(), **fields},
+                ensure_ascii=False, separators=(",", ":"),
+            ),
         )
 
 

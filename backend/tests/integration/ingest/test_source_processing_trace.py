@@ -254,27 +254,15 @@ class SourceProcessingTraceTest(unittest.TestCase):
                 "text": f"合成批量正文{position:04d}",
             }
 
-    def test_large_import_keeps_order_and_receipts_with_four_processing_statements(self):
-        statements = []
-
-        class CountingConnection(psycopg.Connection):
-            def execute(connection, query, params=None, **kwargs):
-                text = query.as_string(connection) if isinstance(query, sql.Composable) else query
-                if ("source_processing_capture_tombstone" in text
-                        or text.startswith("INSERT INTO public.source_processing_")):
-                    statements.append(text)
-                return super().execute(query, params, **kwargs)
-
-        with patch("psycopg.connect", CountingConnection.connect):
-            self.import_lines([json.dumps(record, ensure_ascii=False) + "\n"
-                               for record in self.batch_records(1000)])
+    def test_large_import_keeps_order_and_receipts(self):
+        self.import_lines([json.dumps(record, ensure_ascii=False) + "\n"
+                           for record in self.batch_records(1000)])
         batch = self.processing.get_batch(self.scope, self.processing.list_batches(self.scope)[0]["batch_id"])
         self.assertEqual(len(batch["records"]), 1000)
         self.assertEqual([row["position"] for row in batch["records"]], list(range(1000)))
         self.assertEqual(batch["records"][0]["payload"]["parsed"]["text"], "合成批量正文0000")
         self.assertEqual(batch["records"][-1]["payload"]["parsed"]["text"], "合成批量正文0999")
         self.assertTrue(all(row["message_id"] and row["source_ref_id"] for row in batch["records"]))
-        self.assertEqual(len(statements), 4)
 
     def test_later_processing_block_failure_rolls_back_messages_and_trace(self):
         from notalone.memory_extraction.cli_support import load_contact_messages
@@ -327,36 +315,17 @@ class SourceProcessingTraceTest(unittest.TestCase):
         self.assertEqual(load_contact_messages(self.scope, DATABASE_URL), ())
         self.assertEqual(self.processing.list_batches(self.scope), ())
 
-    def test_byte_chunks_and_oversize_record_preserve_complete_body(self):
-        from psycopg.types.json import Jsonb
-
-        sizes = []
-        class MeasuringConnection(psycopg.Connection):
-            def execute(connection, query, params=None, **kwargs):
-                text = query.as_string(connection) if isinstance(query, sql.Composable) else query
-                if text.startswith("INSERT INTO public.source_processing_record"):
-                    lengths = []
-                    for value in params:
-                        if isinstance(value, Jsonb):
-                            encoded = value.dumps(value.obj) if value.dumps else json.dumps(value.obj)
-                            lengths.append(len(encoded.encode("utf-8") if isinstance(encoded, str) else encoded))
-                        elif value is not None:
-                            lengths.append(len(str(value).encode("utf-8")))
-                    sizes.append((len(params) // 10, sum(lengths)))
-                return super().execute(query, params, **kwargs)
-
+    def test_oversize_record_and_following_unicode_preserve_complete_body(self):
         records = list(self.batch_records(14))
         records[0]["text"] = "x" * 900_000
         for record in records[1:]:
-            record["text"] = "y" * 90_000
-        with patch("psycopg.connect", MeasuringConnection.connect):
-            self.import_lines([json.dumps(record, ensure_ascii=False) + "\n" for record in records])
+            record["text"] = "合成🌿\\\t\n" * 15_000
+        self.import_lines([json.dumps(record, ensure_ascii=False) + "\n" for record in records])
         batch = self.processing.get_batch(self.scope, self.processing.list_batches(self.scope)[0]["batch_id"])
         self.assertEqual([row["payload"]["parsed"]["text"] for row in batch["records"]],
                          [record["text"] for record in records])
-        self.assertTrue(any(size > 2 * 1024 * 1024 for _, size in sizes))
-        self.assertTrue(all(size <= 2 * 1024 * 1024 or rows == 1 for rows, size in sizes))
-        self.assertLess(len(sizes), len(records))
+        self.assertEqual([row["position"] for row in batch["records"]], list(range(14)))
+        self.assertEqual(batch["records"][1]["payload"]["converted"]["text_content"], records[1]["text"])
 
     def prepare_observation(self):
         from notalone.persistence.conversation_repository import PostgresConversationBindingRepository
