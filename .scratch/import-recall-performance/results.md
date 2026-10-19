@@ -63,4 +63,6 @@ perl -e 'alarm 600; exec @ARGV' -- python /tmp/notalone-import-recall-isolated.p
 
 ## 数据影响与剩余边界
 
-只处理合成资料。产品仍按 owner/contact 隔离；规则版本逐次读取、调用方事务、来源收据、撤销和删除路径保持，未增加长期正文或向量缓存。召回统计与批写编码仅在当前执行内存活，不新增迁移、外部模型调用或同步授权。性能改善集中在已测路径；内存增加及小负载波动已保留，不能据此宣称整个 App 提速同一倍数。完整公开历史仍须按工程工作流检查，既有 26 处历史命中不代表本轮新增。
+只处理合成资料。产品仍按 owner/contact 隔离；规则版本逐次读取、调用方事务、来源收据、撤销和删除路径保持，未增加长期正文或向量缓存。召回统计与批写编码仅在当前执行内存活，不新增迁移、外部模型调用或同步授权。性能改善集中在已测路径；内存增加及小负载波动已保留，不能据此宣称整个 App 提速同一倍数。
+
+主会话提交后执行 `node scripts/check_public_history.mjs --ref main --working-tree`，退出 1，仍为 26 处既有命中，无本轮新增；日志 `/tmp/notalone-import-recall-public-history.log`，不标成通过。`git diff --check` 通过，协调 main 干净；四个工作提交均经 merge-base 核验可达。开发模式最终为 stopped，原入口分支及用户已有删除保持原状。
