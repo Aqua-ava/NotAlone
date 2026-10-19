@@ -38,9 +38,9 @@ async function exerciseFork(pages: RewritePages, originalId: string, expectedTex
   await helper.getByRole('button', { name: '刷新会话列表', exact: true }).click();
   await openAssistantHistory(helper);
   await helper.getByRole('button', { name: `查看会话 ${originalId}`, exact: true }).click();
-  await expandSavedDiscussion(helper);
   await expect.poll(() => helper.evaluate(async () => (await window.notalone.replies.getState()).savedSession?.sessionId))
     .toBe(originalId);
+  await expandSavedDiscussion(helper);
   await openAssistantHistory(helper);
   await expect(group.getByRole('button', { name: '用这组回复新开会话', exact: true })).toBeEnabled();
   await helper.getByRole('textbox', { name: '有什么想说的', exact: true }).fill('未提交的旧会话合成草稿不得携入。');
@@ -52,9 +52,20 @@ async function exerciseFork(pages: RewritePages, originalId: string, expectedTex
     return { candidateId: candidate.candidateId, versionId: candidate.displayVersionId };
   });
   await group.getByRole('button', { name: '用这组回复新开会话', exact: true }).click();
-  await expandSavedDiscussion(helper);
+  // 携入命令异步切换会话，须等新记录就绪后展开，不能扫描仍在显示的旧讨论。
+  await expect.poll(() => helper.evaluate(async (previousId) => {
+    const state = await window.notalone.replies.getState();
+    return Boolean(state.savedSession?.sessionId && state.savedSession.sessionId !== previousId
+      && state.savedSession.phase === 'ready' && state.sessionCatalog?.phase === 'ready'
+      && !state.sessionCatalog.selectionPending && state.savedSession.inputs[0]?.content?.type === 'candidate_carry');
+  }, originalId)).toBe(true);
+  await openAssistantHistory(helper);
   const carried = helper.getByRole('article', { name: '携入的已选版本', exact: true });
   await expect(carried).toBeVisible();
+  const carriedDetails = carried.locator('details.session-entry-details');
+  if (!await carriedDetails.evaluate(element => (element as HTMLDetailsElement).open)) {
+    await carriedDetails.locator(':scope > summary').click();
+  }
   for (const text of expectedTexts) await expect(carried.getByText(text, { exact: true })).toBeVisible();
   await expect(helper.getByRole('textbox', { name: '有什么想说的', exact: true })).toHaveValue('');
   await openWorkspaceSettings(helper);

@@ -16,10 +16,13 @@ async function selectSession(helper: Page, sessionId: string) {
   await helper.getByRole('button', { name: '刷新会话列表', exact: true }).click();
   await openAssistantHistory(helper);
   await helper.getByRole('button', { name: `查看会话 ${sessionId}`, exact: true }).click();
-  await expandSavedDiscussion(helper);
   await expect.poll(() => helper.evaluate(async () => { const state = await window.notalone.replies.getState();
-    return { sessionId: state.savedSession?.sessionId, phase: state.savedSession?.phase }; }))
-    .toEqual({ sessionId, phase: 'ready' });
+    return { sessionId: state.savedSession?.sessionId, phase: state.savedSession?.phase,
+      catalog: state.sessionCatalog?.phase, pending: state.sessionCatalog?.selectionPending }; }))
+    .toEqual({ sessionId, phase: 'ready', catalog: 'ready', pending: false });
+  const saved = (await helper.evaluate(() => window.notalone.replies.getState())).savedSession!;
+  await expect(helper.locator('.session-history .session-entry-details')).toHaveCount(saved.inputs.length);
+  await expandSavedDiscussion(helper);
 }
 
 // 只增加跨票交叉场景；真实App停止／重开在独立有限窗口验收。
@@ -116,8 +119,18 @@ export async function assistantSessionCombination(browser: Browser, origin: stri
     const keptB = (await fixture.request(pathB)).data;
     await openAssistantHistory(helper);
     await helper.getByRole('button', { name: '新开助手会话', exact: true }).click();
-    expect((await helper.evaluate(() => window.notalone.replies.getState())).savedSession).toMatchObject({
-      inputs: [], turns: [], currentInputVersionId: null });
+    // 点击只启动异步切换；先等权威新会话及目录恢复完成，再核验完整空状态。
+    await expect.poll(() => helper.evaluate(async oldId => {
+      const state = await window.notalone.replies.getState();
+      return { changed: Boolean(state.savedSession?.sessionId && state.savedSession.sessionId !== oldId),
+        phase: state.savedSession?.phase, catalog: state.sessionCatalog?.phase,
+        pending: state.sessionCatalog?.selectionPending };
+    }, sessionB)).toEqual({ changed: true, phase: 'ready', catalog: 'ready', pending: false });
+    const openedB = (await helper.evaluate(() => window.notalone.replies.getState())).savedSession!;
+    expect(openedB).toMatchObject({ phase: 'ready', inputs: [], turns: [], currentInputVersionId: null });
+    expect((await fixture.request(`/api/contacts/${contactB}/assistant-sessions/${openedB.sessionId}`)).data)
+      .toMatchObject({ inputs: [], turns: [], current_input_version_id: null });
+    expect((await fixture.request(pathB)).data).toEqual(keptB);
     await selectSession(helper, sessionB);
     expect((await fixture.command('observations')).model_calls).toBe(4);
     expect((await fixture.request(`/api/contacts/${contactB}/assistant-sessions/${sessionA}`)).status).toBe(404);
@@ -150,9 +163,23 @@ export async function assistantSessionCombination(browser: Browser, origin: stri
     await fillWorkspaceThought(helper, '甲超限后保留的合成草稿。');
     await expect.poll(() => helper.evaluate(async () => (await window.notalone.contacts.getState()).draft))
       .toBe('甲超限后保留的合成草稿。');
+    const beforeBudget = await helper.evaluate(() => window.notalone.replies.getState());
+    expect(['idle', 'ready']).toContain(beforeBudget.phase);
+    expect(beforeBudget.errorCode).toBeUndefined();
+    const budgetScope = { contactId: contactA, scopeRevision: beforeBudget.scopeRevision, sessionId: sessionA };
     await generateWorkspace(helper);
+    // 工作区先保存选项，再启动生成；先确认生成已进入公开状态，不能只等到前一个命令。
+    await expect.poll(() => helper.evaluate(async captured => {
+      const state = await window.notalone.replies.getState();
+      return state.contactId === captured.contactId && state.scopeRevision === captured.scopeRevision
+        && state.savedSession?.sessionId === captured.sessionId
+        && (state.phase === 'waiting' || state.phase === 'failed');
+    }, budgetScope)).toBe(true);
     await pages.awaitPendingCommands();
     const budgetState = await helper.evaluate(() => window.notalone.replies.getState());
+    expect({ contactId: budgetState.contactId, scopeRevision: budgetState.scopeRevision,
+      sessionId: budgetState.savedSession?.sessionId }).toEqual(budgetScope);
+    expect(budgetState.phase).toBe('failed');
     expect(budgetState.errorCode).toBe('input_budget_exceeded');
     process.stdout.write(`page_test_combination_budget: phase=${budgetState.phase} code=${budgetState.errorCode} calls=4\n`);
     await expect(helper.getByRole('alert', { name: '模型输入预算', exact: true })).toBeVisible();
