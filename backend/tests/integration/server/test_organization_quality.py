@@ -2,6 +2,7 @@
 import unittest
 
 from tests.integration.server.memory_overview_support import MemoryOverviewHttpFixture
+from tests.integration.server.layered_manual_support import create_controlled_layered_app
 
 
 class OrganizationQualityHttpTest(MemoryOverviewHttpFixture, unittest.TestCase):
@@ -15,7 +16,8 @@ class OrganizationQualityHttpTest(MemoryOverviewHttpFixture, unittest.TestCase):
         status, result = self.backend.request(path + '/enable', {
             'settings_generation': 0, 'purpose_confirmed': True, 'verified': True})
         self.assertEqual(status, 400, result)
-        self.assertFalse(self._get(self.backend, path)['layered_memory']['enabled'])
+        self.assertEqual(self._get(self.backend, path)['layered_memory'], state,
+            '拒绝伪造verified参数后，默认开启状态及未知资格均保持原样')
 
     def test_prepared_public_input_uses_actual_versions_and_minimum_scope_projection(self):
         status, added = self.backend.request('/api/memories/manual-owner', {
@@ -161,6 +163,11 @@ class OrganizationQualityHttpTest(MemoryOverviewHttpFixture, unittest.TestCase):
                                 'subject_basis': '合成合同夹具的关系资料主体。', 'supported': result['supported'],
                                 'value_category': 'enduring_fact_or_preference' if result['supported'] else 'none',
                                 'relationship_impact': None, 'eligibility_basis': '仅供工程合同回归，不声明真实语义审阅。'}]})
+                else:
+                    # 当前L2 SDK逐主题核验，回执须绑定每个实际正文摘要。
+                    result = {'items': [{'index': index, 'sha256': content_digest(item),
+                        'supported': result['supported'], 'reasons': result['reasons']}
+                        for index, item in enumerate(proposal['scenarios'])]}
             elif '从主题和底层' in payload['messages'][0]['content']:
                 if gate_profile:
                     gate_profile[0].set()
@@ -385,7 +392,8 @@ class OrganizationQualityHttpTest(MemoryOverviewHttpFixture, unittest.TestCase):
         service = LayeredMemoryService(PostgresLayeredMemoryStore(self.database_url), synthetic=True,
             proposer=EmptyProposal(), verifier=Verification(), profile_proposer=NoProfile(), profile_verifier=Verification(),
             budget=OrganizationBudget(max_model_calls=4))
-        production = HttpBackend(create_app(database_url=self.database_url, owner_id=self.owner_id,
+        production = HttpBackend(create_controlled_layered_app(automatic_maintenance=False,
+            database_url=self.database_url, owner_id=self.owner_id,
             token='synthetic-empty-production', layered_memory=service), self.owner_id)
         self.addCleanup(production.close)
         status, enabled = production.request('/api/memories/owner/layered-memory/enable', {'settings_generation': 0, 'purpose_confirmed': True})
@@ -523,23 +531,26 @@ class OrganizationQualityHttpTest(MemoryOverviewHttpFixture, unittest.TestCase):
         self.addCleanup(backend.close)
         ready = None
         if feedback_layer or empty_second:
+            # 空L2结果场景只预置保留主题；已有完整画像会被正式流程直接复用。
+            profile_ports = {} if empty_second else {'profile_proposer': ports[2], 'profile_verifier': ports[3]}
             setup_service = LayeredMemoryService(PostgresLayeredMemoryStore(self.database_url), synthetic=True,
-                budget=contract.budget, proposer=ports[0], verifier=ports[1], profile_proposer=ports[2], profile_verifier=ports[3])
-            setup_backend = HttpBackend(create_app(database_url=self.database_url, owner_id=self.owner_id,
+                budget=contract.budget, proposer=ports[0], verifier=ports[1], **profile_ports)
+            setup_backend = HttpBackend(create_controlled_layered_app(automatic_maintenance=False,
+                database_url=self.database_url, owner_id=self.owner_id,
                 token='synthetic-feedback-setup', layered_memory=setup_service), self.owner_id)
             self.addCleanup(setup_backend.close)
             status, initial = setup_backend.request(base + '/enable', {'settings_generation': 0, 'purpose_confirmed': True})
             self.assertEqual(status, 200, initial)
             ready = initial['layered_memory']
-            from uuid import uuid4
-            command = {'settings_generation': ready['settings_generation'],
-                'organization_generation': ready['organization_generation'], 'target_kind': 'scenario' if feedback_layer == 'l2' else 'profile',
-                'version_id': ready['scenarios'][0]['version_id'] if feedback_layer == 'l2' else ready['profile']['version_id'], 'item_index': 0}
-            if fact_pending:
-                command['memory_id'] = added['memory']['memory_id']
-            else:
-                command.update(reason='合成评测要求阻止旧总结复活。', operation_id=str(uuid4()))
             if feedback_layer:
+                from uuid import uuid4
+                command = {'settings_generation': ready['settings_generation'],
+                    'organization_generation': ready['organization_generation'], 'target_kind': 'scenario' if feedback_layer == 'l2' else 'profile',
+                    'version_id': ready['scenarios'][0]['version_id'] if feedback_layer == 'l2' else ready['profile']['version_id'], 'item_index': 0}
+                if fact_pending:
+                    command['memory_id'] = added['memory']['memory_id']
+                else:
+                    command.update(reason='合成评测要求阻止旧总结复活。', operation_id=str(uuid4()))
                 status, feedback = setup_backend.request(base + ('/fact-error' if fact_pending else '/summary-error'), command)
                 self.assertEqual(status, 200, feedback)
             setup_backend.close()
@@ -581,7 +592,8 @@ class OrganizationQualityHttpTest(MemoryOverviewHttpFixture, unittest.TestCase):
             proposer=ports[0], verifier=ports[1], profile_proposer=ports[2], profile_verifier=ports[3])
         captured.clear()
         fourth_input_received.clear()
-        production = HttpBackend(create_app(database_url=self.database_url, owner_id=self.owner_id,
+        production = HttpBackend(create_controlled_layered_app(automatic_maintenance=False,
+            database_url=self.database_url, owner_id=self.owner_id,
             token='synthetic-full-port-production', layered_memory=service), self.owner_id)
         self.addCleanup(production.close)
         status, enabled = production.request(base + ('/refresh' if ready else '/enable'),

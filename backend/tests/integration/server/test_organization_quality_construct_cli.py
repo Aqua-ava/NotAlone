@@ -56,12 +56,13 @@ class SyntheticSourceConstructionModel(ScriptedCoreModel):
 
 
 def source_construction_backend(fixture, model):
-    """真实应用和生产Worker；仅替换两个外部模型Adapter，默认维度门不变。"""
+    """重放冻结评测的历史人工确认合同，真实应用、Worker与来源核验保持不变。"""
     import psycopg
     from notalone.application.import_service import ImportService, TaskHost
     from notalone.application.memory_service import MemoryService
     from notalone.application.model_priority import ModelPriorityControl
     from notalone.memory_extraction.adapters import LangChainExtractionRuntime
+    from notalone.memory_extraction.dimensions import DimensionRelease
     from notalone.memory_extraction.verification_adapters import LangChainSourceVerificationRuntime
     from notalone.persistence.background_tasks import PostgresBackgroundTaskRepository
     from notalone.persistence.contact_memory_index import PostgresContactMemoryIndexRepository
@@ -81,7 +82,8 @@ def source_construction_backend(fixture, model):
     runner = PostgresMemoryExtractionRunner(
         database_url, runtime=LangChainExtractionRuntime(model=model),
         verification_runtime=LangChainSourceVerificationRuntime(model=model, ledger=ledger, provider='synthetic'),
-        ledger=ledger, provider='synthetic', model_name='synthetic-source-construction', dimension_release=None,
+        ledger=ledger, provider='synthetic', model_name='synthetic-source-construction',
+        dimension_release=DimensionRelease(), automatic=False,
     )
 
     def connect_lock():
