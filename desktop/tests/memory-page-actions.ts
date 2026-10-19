@@ -22,6 +22,7 @@ export async function openMemoryTrace(page: Page, text: string, category: Memory
 }
 
 export async function expandOverviewDetails(card: Locator) {
-  const details = card.locator('details').filter({ has: card.getByText('查看逐项来源与修订', { exact: true }) });
-  if (await details.getAttribute('open') === null) await details.getByText('查看逐项来源与修订', { exact: true }).click();
+  const summary = card.getByText('查看逐项来源与修订', { exact: true });
+  const details = summary.locator('..');
+  if (await details.getAttribute('open') === null) await summary.click();
 }

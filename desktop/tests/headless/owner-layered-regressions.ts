@@ -65,6 +65,6 @@ export async function ownerLayeredRegressions(browser: Browser, origin: string) 
       expect(JSON.stringify(projection.data)).not.toContain(recentText);
       expect((await fixture.command('runtime_proof')).external_model_calls).toBe(0);
     } finally { await host.close(); }
-  }), released, { ownerOnly: true });
+  }), released, { ownerOnly: true, initiallyDisabled: true });
   process.stdout.write('page_test_scenario_passed: owner-new-entry-invalidates-old-facts-overview-history-and-recent-state-is-organized\n');
 }

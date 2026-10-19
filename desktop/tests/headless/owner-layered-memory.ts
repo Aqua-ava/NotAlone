@@ -54,6 +54,6 @@ export async function ownerLayeredMemory(browser: Browser, origin: string) {
       expect(proof.proposal_calls).toBeGreaterThan(0);
       expect(proof.profile_proposal_calls).toBeGreaterThan(0);
     } finally { await host.close(); }
-  }), released, { ownerOnly: true });
+  }), released, { ownerOnly: true, initiallyDisabled: true });
   process.stdout.write('page_test_scenario_passed: owner-layered-no-contact-manual-entry-two-layers-withdraw-disable-delete\n');
 }

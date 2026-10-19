@@ -62,7 +62,12 @@ export async function layeredMemory(browser: Browser, origin: string) {
       await fixture.command('add_memory');
       await expect(panel.getByText('双方新近完成合成复习。', { exact: true }).first()).toBeVisible({ timeout: 15000 });
       await expect(panel.getByText('合格资料 3 条 · 已覆盖 3 条 · 剩余 0 条', { exact: true }).first()).toBeVisible();
-      await expect(profile.getByText('双方新近完成合成复习。', { exact: true })).toBeVisible();
+      try { await expect(profile.getByText('双方新近完成合成复习。', { exact: true })).toBeVisible(); }
+      catch (error) {
+        const state = await fixture.request(endpoint);
+        process.stderr.write(`page_profile_update_diagnostic: ${JSON.stringify({ state: state.data, runtime: await fixture.command('runtime_proof') })}\n`);
+        throw error;
+      }
       await expect(panel.getByText('双方共同参加合成学习课程。', { exact: true }).first()).toBeVisible();
       await panel.getByText('查看第 1 段依据与时间', { exact: true }).click();
       await expect(panel.locator('.memory-overview-entries').getByText(/底层记忆：.*版本 1.*来源支持/).first()).toBeVisible();
@@ -102,6 +107,6 @@ export async function layeredMemory(browser: Browser, origin: string) {
       await expect(panel.getByText('暂无合格资料可整理', { exact: true })).toBeVisible();
     } catch (error) { process.stderr.write(`${(error as Error).stack}\n`); throw error; }
     finally { await host.close(); }
-  }), released);
+  }), released, { initiallyDisabled: true });
   process.stdout.write('page_test_scenario_passed: layered-memory-multi-batch-profile-evidence-withdrawal-continue-scope-disable-delete-and-source-erasure\n');
 }
