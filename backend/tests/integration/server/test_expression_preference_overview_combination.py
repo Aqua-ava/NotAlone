@@ -193,7 +193,7 @@ class ExpressionPreferenceOverviewCombinationHttpTest(OverviewReplyHttpFixture, 
                 else:
                     original = self.manual_owner("本人喜欢热茶。", category="preference")
                     correction_path = f"/api/memories/owner/{original['memory_id']}/correct"
-                status, corrected = self.backend.request(correction_path, {"text": "现在偏好安静散步。"})
+                status, corrected = self.backend.request(correction_path, {"text": "现在偏好安静散步。", "change_kind": "state_changed"})
                 self.assertEqual(status, 200, corrected)
                 self.activate_replies(contact)
                 path = self.reply_path(contact)

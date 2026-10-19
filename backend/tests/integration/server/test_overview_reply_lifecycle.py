@@ -11,7 +11,7 @@ class OverviewReplyLifecycleHttpTest(OverviewReplyHttpFixture, unittest.TestCase
         contact, _, _ = self.import_contact("合成关系原话：一起聊聊兴趣。")
         original = self.manual_owner("本人喜欢热茶。", category="preference")
         status, corrected = self.backend.request(
-            f"/api/memories/owner/{original['memory_id']}/correct", {"text": "本人偏好安静的散步。"})
+            f"/api/memories/owner/{original['memory_id']}/correct", {"text": "本人偏好安静的散步。", "change_kind": "state_changed"})
         self.assertEqual(status, 200, corrected)
         versions = self._get(self.backend, f"/api/memories/owner/{corrected['memory']['memory_id']}/versions")
         old_version = next(item for item in versions["versions"] if item["memory_id"] == original["memory_id"])
@@ -82,7 +82,7 @@ class OverviewReplyLifecycleHttpTest(OverviewReplyHttpFixture, unittest.TestCase
         contact, source, message = self.import_contact("合成原话：对方喜欢热茶。")
         original = self.confirm(contact, "对方喜欢热茶。", message, category="preference")
         status, corrected = self.backend.request(
-            f"/api/contacts/{contact}/memories/{original['memory_id']}/correct", {"text": "对方喜欢冰茶。"})
+            f"/api/contacts/{contact}/memories/{original['memory_id']}/correct", {"text": "对方喜欢冰茶。", "change_kind": "state_changed"})
         self.assertEqual(status, 200, corrected)
         versions = self._get(self.backend, f"/api/contacts/{contact}/memories/{corrected['memory']['memory_id']}/versions")
         old_version = next(item for item in versions["versions"] if item["memory_id"] == original["memory_id"])

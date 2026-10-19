@@ -460,9 +460,13 @@ class OwnerContactLayeredReplyHttpTest(OverviewReplyHttpFixture, unittest.TestCa
                 ready['profile']['version_id'] if action == 'withdraw-profile' else ready['scenarios'][0]['version_id'])
         status, result = management.request('/api/memories/owner/layered-memory/' + action, payload)
         self.assertEqual(status, 200, result)
-        for selected, turn in ((contact, first), (second, other)):
-            evidence = self._get(self.backend, self.evidence_path(selected, turn))
-            self.assertIn('memory_generation_forbidden', [item['reason'] for item in evidence['basis_changes']])
+        # 删除或撤回分层结果会同步擦除跨联系人候选副本，不再留下可读正文。
+        for selected, turn, session_path in ((contact, first, path), (second, other, second_path)):
+            self.assertEqual(self.backend.request(self.evidence_path(selected, turn))[0], 404)
+            session = self._get(self.backend, session_path)
+            self.assertTrue(session['turns'])
+            self.assertTrue(all(item['state'] == 'redacted' and item['reply'] is None
+                                for item in session['turns']))
         self.assertEqual(self.read(management, contact)['profile']['version_id'], contact_before['profile']['version_id'])
         self.assertNotEqual(self.backend.request(path + '/replies', body)[0], 200)
         self.backend = self._backend(self.owner_id)
