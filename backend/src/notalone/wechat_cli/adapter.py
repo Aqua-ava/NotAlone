@@ -353,7 +353,10 @@ class LocalWechatCli:
             ["--include-media-paths", "false", "--strict-read-only"]
         )
         result = self._invoke(tuple(command), timeout_seconds=timeout_seconds)
-        return _parse_tail_output(result.stdout, expected_talker=talker)
+        page = _parse_tail_output(result.stdout, expected_talker=talker)
+        if page.has_more and page.cursor == cursor:
+            raise CliOutputError("cli_output_invalid", "微信 CLI 后续页游标没有前进。")
+        return page
 
     def tail_follow(
         self,
@@ -627,6 +630,7 @@ def _message_table_missing(message: str | None) -> bool:
 
 
 def _parse_tail_output(stdout: str, *, expected_talker: str) -> TailResult:
+    has_more = False
     # 单次查询保留 envelope：JSONL 空输出会丢失实时来源证明。
     try:
         envelope = json.loads(stdout)
@@ -646,14 +650,16 @@ def _parse_tail_output(stdout: str, *, expected_talker: str) -> TailResult:
             or freshness.get("message_source") != "live_message_db"
             or not isinstance(query, dict)
             or query.get("chat") != expected_talker
-            # 当前调用方只完成单批补齐；有后续页不能报告已补齐。
-            or query.get("has_more") is not False
+            or not isinstance(query.get("has_more"), bool)
             or envelope.get("warnings")
             or envelope.get("error")
             or data.get("warnings")
             or data.get("error")
         ):
             raise CliOutputError("cli_freshness_unknown", "微信 CLI 未确认当前会话的实时读取结果。")
+        has_more = query["has_more"]
+        if not raw_events and has_more:
+            raise CliOutputError("cli_output_invalid", "微信 CLI 后续页没有可推进的事件。")
         if not raw_events:
             # 空查询只证明检查完成，不用 envelope cursor 推进消息水位。
             return TailResult(events=(), cursor=None, last_local_id=None, freshness_confirmed=True)
@@ -716,6 +722,7 @@ def _parse_tail_output(stdout: str, *, expected_talker: str) -> TailResult:
         non_text_count=non_text_count,
         freshness_confirmed=True,
         filtered_records=tuple(filtered_records),
+        has_more=has_more,
     )
 
 

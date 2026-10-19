@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import unittest
 from collections import deque
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from uuid import UUID, uuid4
@@ -195,6 +195,12 @@ class FakeBackfillStateStore:
             current.last_cursor,
         )
         self.states[key] = current
+        return current
+
+    def mark_progress(self, **kwargs):
+        current = self.mark_complete(**kwargs)
+        current = replace(current, phase="backfilling")
+        self.states[(kwargs["owner_id"], kwargs["contact_id"])] = current
         return current
 
     def mark_complete(self, **kwargs):

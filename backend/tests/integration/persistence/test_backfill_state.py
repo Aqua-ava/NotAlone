@@ -130,6 +130,26 @@ class PostgresBackfillStateStoreTest(unittest.TestCase):
         self.assertEqual(recovered.phase, BackfillPhase.COMPLETE)
         self.assertEqual(recovered.last_cursor, "local_id:12")
 
+    def test_page_progress_survives_restart_without_completing(self) -> None:
+        scope = {
+            "owner_id": self.owner_id,
+            "contact_id": self.contact_id,
+            "binding_id": self.binding_id,
+        }
+        self.store.ensure_started(
+            **scope, trigger_at=datetime(2026, 9, 8, 11, tzinfo=timezone.utc)
+        )
+        self.store.mark_progress(
+            **scope, message_count=50, non_text_count=2,
+            last_local_id=52, last_cursor="local_id:52",
+        )
+        recovered = PostgresBackfillStateStore(TEST_DATABASE_URL).read(**scope)
+        self.assertEqual(recovered.phase, BackfillPhase.BACKFILLING)
+        self.assertEqual(recovered.message_count, 50)
+        self.assertEqual(recovered.non_text_count, 2)
+        self.assertEqual(recovered.last_cursor, "local_id:52")
+        self.assertIsNone(recovered.completed_at)
+
     def test_failed_state_has_no_completed_timestamp(self) -> None:
         self.store.ensure_started(
             owner_id=self.owner_id,

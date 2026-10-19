@@ -257,7 +257,7 @@ class LocalWechatCliAdapterTest(unittest.TestCase):
             {"freshness": {"message_source": "cache"}},
             {"query": {"chat": "wxid_other", "has_more": False}},
             {"query": {"chat": "wxid_1"}},
-            {"query": {"chat": "wxid_1", "has_more": True}},
+            {"query": {"chat": "wxid_1", "has_more": 1}},
             {"warnings": ["合成降级警告"]},
             {"error": {"message": "合成错误"}},
         ]
@@ -317,9 +317,10 @@ class LocalWechatCliAdapterTest(unittest.TestCase):
                 "query": {"chat": "wxid_1", "has_more": True},
             },
         })))
-        with self.assertRaises(CliOutputError) as raised:
-            LocalWechatCli(runner=runner).tail("wxid_1")
-        self.assertEqual(raised.exception.code, "cli_freshness_unknown")
+        result = LocalWechatCli(runner=runner).tail("wxid_1")
+        self.assertTrue(result.freshness_confirmed)
+        self.assertTrue(result.has_more)
+        self.assertEqual(result.last_local_id, 43)
 
     def test_close_terminates_inflight_one_shot_command(self) -> None:
         process = BlockingCommandProcess()

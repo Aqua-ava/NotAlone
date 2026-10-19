@@ -299,6 +299,41 @@ class PostgresBackfillStateStore:
             error_message="补齐状态启动失败。",
         )
 
+    def mark_progress(
+        self,
+        *,
+        owner_id: UUID,
+        contact_id: UUID,
+        binding_id: UUID,
+        message_count: int,
+        last_local_id: int | None,
+        last_cursor: str | None,
+        non_text_count: int = 0,
+    ) -> BackfillState:
+        """在每页来源提交后保存累计进度，尚有后续页时不标记完成。"""
+
+        self._validate_count(message_count)
+        self._validate_count(non_text_count)
+        self._validate_watermark(last_local_id=last_local_id, last_cursor=last_cursor)
+        return self._update(
+            owner_id=owner_id,
+            contact_id=contact_id,
+            binding_id=binding_id,
+            sql_set=(
+                "phase = %s, message_count = %s, last_local_id = %s, "
+                "last_cursor = %s, failure_code = NULL, completed_at = NULL, "
+                "updated_at = now(), non_text_count = %s"
+            ),
+            values=(
+                BackfillPhase.BACKFILLING.value,
+                message_count,
+                last_local_id,
+                last_cursor,
+                non_text_count,
+            ),
+            error_message="补齐分页进度写入失败。",
+        )
+
     def mark_complete(
         self,
         *,

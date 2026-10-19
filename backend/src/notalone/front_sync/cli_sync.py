@@ -169,6 +169,9 @@ class BackfillStatePort(Protocol):
     def mark_running(self, **kwargs: object) -> object:
         """记录补齐进入执行状态。"""
 
+    def mark_progress(self, **kwargs: object) -> object:
+        """在来源页成功后记录累计进度，保持补齐进行中。"""
+
     def mark_complete(self, **kwargs: object) -> object:
         """在来源批次成功后记录完成状态。"""
 
@@ -474,6 +477,7 @@ class CliBackgroundSync:
 
         written = 0
         processed = 0
+        continuations: list[tuple[str, bool]] = []
         budget = _MAX_BINDINGS_PER_CYCLE if max_bindings is None else max_bindings
         while self._pending_locators and processed < budget:
             locator = self._pending_locators.popleft()
@@ -497,9 +501,10 @@ class CliBackgroundSync:
                 timing.last_cli_duration_ms = None
                 timing.last_store_duration_ms = None
             completed = False
+            has_more = False
             task_failure: str | None = None
             try:
-                written += self._read_binding(
+                page_count, has_more = self._read_binding(
                     binding,
                     disabled_window=disabled_window,
                     backfill_trigger_at=(
@@ -510,7 +515,10 @@ class CliBackgroundSync:
                     cli_deadline=min(started + self._cli_timeout_seconds, cli_deadline)
                     if cli_deadline is not None else started + self._cli_timeout_seconds,
                 )
+                written += page_count
                 completed = True
+                if has_more:
+                    continuations.append((locator, live_read))
             except CliNormalizationError:
                 self._failure_code = "cli_normalization_failed"
                 task_failure = self._failure_code
@@ -540,7 +548,16 @@ class CliBackgroundSync:
                     if completed:
                         timing.last_success_at = self._clock().astimezone(timezone.utc)
                     self._priority_timing = timing
-                self._backfill_pending_locators.discard(locator)
+                if not completed or not has_more:
+                    self._backfill_pending_locators.discard(locator)
+
+        # 每个联系人每轮最多一页，续页排在本轮未处理联系人之后。
+        # 下一轮会重新核验开关和 active 绑定，不能在这里连续读完历史。
+        for locator, live_read in continuations:
+            if live_read:
+                self._enqueue_live(locator)
+            else:
+                self._enqueue(locator)
 
         if (
             self._backfill_check_requested
@@ -1089,7 +1106,7 @@ class CliBackgroundSync:
         live_read: bool,
         timing: _PriorityReadTiming | None = None,
         cli_deadline: float | None = None,
-    ) -> int:
+    ) -> tuple[int, bool]:
         contact_id = binding.scope.contact_id
         backfill_state = self._prepare_backfill_state(
             binding,
@@ -1106,7 +1123,7 @@ class CliBackgroundSync:
         )
         if backfill_suppressed:
             if not live_read:
-                return 0
+                return 0, False
             # “暂停补齐”不应关闭已开启的实时同步；这次读取只推进
             # 普通联系人 cursor，不改变 paused/failed 的补齐生命周期。
             backfill_state = None
@@ -1187,6 +1204,17 @@ class CliBackgroundSync:
                 incomplete=True,
             )
             raise error
+        if result.has_more and (
+            result.last_local_id is None
+            or result.cursor is None
+            or (cursor is not None and (
+                result.last_local_id <= cursor.last_local_id
+                or result.cursor == cursor.last_cursor
+            ))
+        ):
+            error = CliOutputError("cli_output_invalid", "微信 CLI 后续页水位没有前进。")
+            self._fail_backfill(binding, error.code, backfill_state, incomplete=True)
+            raise error
         if result.last_local_id is None or result.cursor is None:
             if result.last_local_id is not None or result.cursor is not None:
                 error = CliOutputError(
@@ -1201,8 +1229,9 @@ class CliBackgroundSync:
                 )
                 raise error
             if backfill_state is not None:
-                self._complete_backfill(
+                self._save_backfill_progress(
                     binding,
+                    previous_state=backfill_state,
                     message_count=0,
                     last_local_id=(
                         None if cursor is None else cursor.last_local_id
@@ -1211,7 +1240,7 @@ class CliBackgroundSync:
                         None if cursor is None else cursor.last_cursor
                     ),
                 )
-            return 0
+            return 0, False
         try:
             processing_receipts: list[ProcessingRecord] = []
             messages = normalize_cli_events(
@@ -1286,8 +1315,10 @@ class CliBackgroundSync:
             if timing is not None and store_started is not None:
                 timing.last_store_duration_ms = self._elapsed_ms(store_started)
         if backfill_state is not None:
-            self._complete_backfill(
+            self._save_backfill_progress(
                 binding,
+                previous_state=backfill_state,
+                has_more=result.has_more,
                 message_count=len(messages),
                 last_local_id=result.last_local_id,
                 last_cursor=result.cursor,
@@ -1298,7 +1329,7 @@ class CliBackgroundSync:
             messages=messages,
             message_ids=getattr(batch, "created_message_ids", ()),
         )
-        return len(messages)
+        return len(messages), result.has_more
 
     def _record_input_failure(
         self,
@@ -1466,6 +1497,20 @@ class CliBackgroundSync:
             )
             self._last_backfill_state = existing
 
+        # 进程重启或新检查不能清空仍在逐页推进的任务计数。
+        # 保留其原触发时间，只有显式 retry 或新的已完成任务才重置。
+        if _backfill_phase_value(getattr(existing, "phase", None)) in {
+            BackfillPhase.GAP_DETECTED.value,
+            BackfillPhase.BACKFILLING.value,
+        }:
+            running = store.mark_running(
+                owner_id=self._owner_id,
+                contact_id=contact_id,
+                binding_id=binding.binding_id,
+            )
+            self._last_backfill_state = running
+            return running
+
         selected_trigger_at = trigger_at
         if selected_trigger_at is None:
             assert disabled_window is not None
@@ -1493,26 +1538,29 @@ class CliBackgroundSync:
         self._last_backfill_state = running
         return running
 
-    def _complete_backfill(
+    def _save_backfill_progress(
         self,
         binding: object,
         *,
+        previous_state: object,
         message_count: int,
         last_local_id: int | None,
         last_cursor: str | None,
         non_text_count: int = 0,
+        has_more: bool = False,
     ) -> None:
         store = self._backfill_state
         if store is None:
             return
-        state = store.mark_complete(
+        mark = store.mark_progress if has_more else store.mark_complete
+        state = mark(
             owner_id=self._owner_id,
             contact_id=binding.scope.contact_id,
             binding_id=binding.binding_id,
-            message_count=message_count,
+            message_count=getattr(previous_state, "message_count", 0) + message_count,
             last_local_id=last_local_id,
             last_cursor=last_cursor,
-            non_text_count=non_text_count,
+            non_text_count=getattr(previous_state, "non_text_count", 0) + non_text_count,
         )
         self._last_backfill_state = state
 
