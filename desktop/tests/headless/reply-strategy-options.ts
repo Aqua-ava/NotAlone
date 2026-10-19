@@ -4,7 +4,7 @@ import { withRewritePages } from './rewrite-acceptance';
 
 // 方向选择已退役：直接给建议，用户也可自行提出想法后表达。
 export async function replyStrategyOptions(browser: Browser, origin: string) {
-  await withRewritePages(browser, origin, async ({ manager, helper, rewriteBackend, replyTransport }) => {
+  await withRewritePages(browser, origin, async ({ manager, helper, rewriteBackend, replyTransport }, host) => {
     process.stdout.write('page_test_scenario: 工作区空输入建议、换组与自行表达\n');
     const contactId = rewriteBackend.data.contact_ids[0];
     await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
@@ -36,11 +36,64 @@ export async function replyStrategyOptions(browser: Browser, origin: string) {
         throw error;
       }
     };
+    const generateAndWait = async (action: '帮我想想' | '帮我表达', check: () => Promise<void>) => {
+      await verifyGeneration(async () => {
+        const before = await helper.evaluate(() => window.notalone.replies.getState());
+        expect(['idle', 'ready']).toContain(before.phase);
+        expect(before.errorCode).toBeUndefined();
+        expect(before.savedSession?.phase).toBe('ready');
+        const scope = { contactId, scopeRevision: before.scopeRevision, sessionId: before.savedSession!.sessionId,
+          previousReplyId: before.result?.replyRequestId ?? null };
+        await helper.getByRole('button', { name: action, exact: true }).click();
+        // 先确认本次生成已启动，避免只等到工作区前置的 updateOptions 命令。
+        await expect.poll(() => helper.evaluate(async captured => {
+          const state = await window.notalone.replies.getState();
+          return state.contactId === captured.contactId && state.scopeRevision === captured.scopeRevision
+            && state.savedSession?.sessionId === captured.sessionId
+            && (state.phase === 'waiting' || state.phase === 'failed'
+              || Boolean(state.result && state.result.replyRequestId !== captured.previousReplyId));
+        }, scope)).toBe(true);
+        await host.awaitPendingCommands();
+        const generated = await helper.evaluate(() => window.notalone.replies.getState());
+        expect(generated.phase).toBe('ready');
+        expect(generated.errorCode).toBeUndefined();
+        expect(generated.result).not.toBeNull();
+        expect(generated.result!.replyRequestId).not.toBe(scope.previousReplyId);
+        const inputVersionId = generated.result!.inputVersionId;
+        const replyRequestId = generated.result!.replyRequestId;
+        // generate 已含当前候选版本恢复；若自动读取完整讨论仍在进行，再等该公开命令收尾。
+        if (generated.savedSession?.phase !== 'ready' || generated.candidateVersions?.phase !== 'ready') {
+          await expect.poll(() => helper.evaluate(async captured => {
+            const state = await window.notalone.replies.getState();
+            return state.contactId === captured.contactId && state.scopeRevision === captured.scopeRevision
+              && state.savedSession?.sessionId === captured.sessionId
+              && state.result?.replyRequestId === captured.replyRequestId
+              && (state.savedSession.phase === 'loading' || state.savedSession.phase === 'ready'
+                && state.savedSession.currentInputVersionId === captured.inputVersionId
+                && state.savedSession.turns.some(turn => turn.inputVersionId === captured.inputVersionId
+                  && turn.reply?.replyRequestId === captured.replyRequestId));
+          }, { ...scope, inputVersionId, replyRequestId })).toBe(true);
+          await host.awaitPendingCommands();
+        }
+        const completed = await helper.evaluate(() => window.notalone.replies.getState());
+        expect({ contactId: completed.contactId, scopeRevision: completed.scopeRevision,
+          sessionId: completed.savedSession?.sessionId }).toEqual({ contactId, scopeRevision: scope.scopeRevision,
+          sessionId: scope.sessionId });
+        expect(completed.phase).toBe('ready');
+        expect(completed.result?.replyRequestId).toBe(generated.result!.replyRequestId);
+        expect(completed.savedSession).toMatchObject({ phase: 'ready', currentInputVersionId: inputVersionId });
+        const turn = completed.savedSession!.turns.find(item => item.inputVersionId === inputVersionId);
+        expect(turn).toMatchObject({ state: 'completed', reply: { replyRequestId } });
+        expect(completed.generationJobs?.find(job => job.turnId === turn!.turnId)).toMatchObject({
+          contactId, sessionId: scope.sessionId, inputVersionId, requestKey: turn!.requestKey, phase: 'completed' });
+        expect(completed.candidateVersions?.phase).toBe('ready');
+        await check();
+      });
+    };
     await expect(idea).toHaveValue('');
     await expect(helper.getByRole('button', { name: '帮我表达', exact: true })).toBeDisabled();
     await rewriteBackend.plan({ count: 3, prefix: '尚未采纳的合成思路', basis: '根据最近聊天提出可选说法，尚未代表用户立场。' });
-    await helper.getByRole('button', { name: '帮我想想', exact: true }).click();
-    await verifyGeneration(() => expect(candidate(3)).toHaveValue('尚未采纳的合成思路（说法3）。'));
+    await generateAndWait('帮我想想', () => expect(candidate(3)).toHaveValue('尚未采纳的合成思路（说法3）。'));
     await expect(helper.getByText('根据最近聊天提出可选说法，尚未代表用户立场。', { exact: true })).toHaveCount(3);
     await expect(helper.getByText('根据最近聊天提出可选说法，尚未代表用户立场。', { exact: true }).first()).toBeVisible();
     await expect(idea).toHaveValue('');
@@ -51,8 +104,7 @@ export async function replyStrategyOptions(browser: Browser, origin: string) {
     expect(firstPayloads).toHaveLength(1);
     expect(firstPayloads[0]).toMatchObject({ input_mode: 'workspace', fidelity_contract: { current_intent: null } });
     await rewriteBackend.plan({ count: 2, prefix: '另一组可选说法' });
-    await helper.getByRole('button', { name: '帮我想想', exact: true }).click();
-    await verifyGeneration(async () => {
+    await generateAndWait('帮我想想', async () => {
       await expect.poll(() => replyTransport.results.length).toBe(2);
       expect(replyTransport.results[1].status).toBe(200);
       await expect(candidate(2)).toHaveValue('另一组可选说法（说法2）。');
@@ -63,8 +115,7 @@ export async function replyStrategyOptions(browser: Browser, origin: string) {
     await expect(idea).toHaveValue('');
     await idea.fill('只说明本次收到了消息，不安排后续。');
     await rewriteBackend.plan({ count: 1, prefix: '我已收到，先到这里' });
-    await helper.getByRole('button', { name: '帮我表达', exact: true }).click();
-    await verifyGeneration(() => expect(candidate(1)).toHaveValue('我已收到，先到这里（说法1）。'));
+    await generateAndWait('帮我表达', () => expect(candidate(1)).toHaveValue('我已收到，先到这里（说法1）。'));
     expect(replyTransport.requests.at(-1)).toMatchObject({ content: { input_kind: 'workspace', workspace_action: 'express',
       draft_text: '只说明本次收到了消息，不安排后续。' } });
     expect((await rewriteBackend.command('observations')).payloads).toHaveLength(3);

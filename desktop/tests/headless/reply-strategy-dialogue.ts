@@ -47,11 +47,44 @@ export async function replyStrategyDialogue(browser: Browser, origin: string) {
       const sourceId = (material.source_ids as string[])[0];
       await manager.getByRole('button', { name: '记忆', exact: true }).click();
       await selectMemoryCategory(manager, '来源与过程');
-      const source = manager.getByRole('region', { name: '来源删除管理', exact: true }).getByRole('listitem')
-        .filter({ hasText: `来源标识：${sourceId}` });
+      const sources = manager.getByRole('region', { name: '来源删除管理', exact: true });
+      await expect.poll(() => manager.evaluate(async expected => {
+        const state = await window.notalone.sources.getState();
+        return state.contactId === expected.contactId && state.phase === 'ready'
+          && expected.sourceIds.every(id => state.sources.some(source => source.sourceId === id));
+      }, { contactId, sourceIds: material.source_ids as string[] })).toBe(true);
+      const pagination = sources.getByRole('navigation', { name: '来源删除管理分页', exact: true });
+      const pageStatus = pagination.getByRole('status');
+      await expect(pageStatus).toHaveText(/^共 \d+ 条 · 第 1 \/ \d+ 页$/);
+      const source = sources.getByRole('listitem').filter({ hasText: `来源标识：${sourceId}` });
+      // 合成来源的生成顺序不等于目录顺序；通过公开分页找到原定来源，不能只查第一页。
+      async function revealOriginalSource(deadline?: number) {
+        const wait = () => deadline === undefined ? {} : { timeout: Math.max(1, deadline - Date.now()) };
+        await expect(pageStatus).toHaveText(/^共 \d+ 条 · 第 \d+ \/ \d+ 页$/, wait());
+        const [, current, total] = (await pageStatus.innerText()).match(/第 (\d+) \/ (\d+) 页$/)!;
+        for (let page = Number(current); page > 1; page -= 1) {
+          await pagination.getByRole('button', { name: '上一页', exact: true }).click(wait());
+          await expect(pageStatus).toHaveText(new RegExp(`第 ${page - 1} / ${total} 页$`), wait());
+        }
+        for (let page = 1; page < Number(total) && await source.count() === 0; page += 1) {
+          await pagination.getByRole('button', { name: '下一页', exact: true }).click(wait());
+          await expect(pageStatus).toHaveText(new RegExp(`第 ${page + 1} / ${total} 页$`), wait());
+        }
+        await expect(source).toBeVisible(wait());
+      }
+      await revealOriginalSource();
       await source.getByRole('button', { name: '删除来源', exact: true }).click();
       await manager.getByRole('button', { name: '确认删除来源', exact: true }).click();
-      await expect(source.getByText('已删除，已通过不可检索校验', { exact: true })).toBeVisible({ timeout: 15_000 });
+      const deletionDeadline = Date.now() + 15_000;
+      // 删除轮询会卸载并重建目录分页；完成后重新沿公开目录定位同一来源，仍共用原15秒预算。
+      await expect.poll(() => manager.evaluate(async ({ contactId, sourceId }) => {
+        const state = await window.notalone.sources.getState();
+        return state.contactId === contactId && state.phase === 'ready'
+          ? state.sources.find(item => item.sourceId === sourceId)?.task?.status : undefined;
+      }, { contactId, sourceId }), { timeout: Math.max(1, deletionDeadline - Date.now()) }).toBe('succeeded');
+      await revealOriginalSource(deletionDeadline);
+      await expect(source.getByText('已删除，已通过不可检索校验', { exact: true }))
+        .toBeVisible({ timeout: Math.max(1, deletionDeadline - Date.now()) });
       await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveCount(0);
       await expect(idea).toHaveValue(action === '帮我表达' ? '这次只是了解近况，没有安排承诺。' : '');
       expect((await rewriteBackend.command('observations')).payloads).toHaveLength(1);
