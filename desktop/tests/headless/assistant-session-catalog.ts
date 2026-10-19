@@ -32,11 +32,14 @@ async function listSessions(helper: Page) {
 async function selectSession(helper: Page, sessionId: string) {
   await openAssistantHistory(helper);
   await helper.getByRole('button', { name: `查看会话 ${sessionId}`, exact: true }).click();
-  await expandSavedDiscussion(helper);
   await expect.poll(() => helper.evaluate(async () => { const state = await window.notalone.replies.getState();
     return { sessionId: state.savedSession?.sessionId, read: state.savedSession?.phase,
       catalog: state.sessionCatalog?.phase, pending: state.sessionCatalog?.selectionPending }; })).toEqual({
     sessionId, read: 'ready', catalog: 'ready', pending: false });
+  // 切换完成会替换旧历史 DOM；先等新记录挂载，再通过 summary 展开对应讨论。
+  const saved = (await helper.evaluate(() => window.notalone.replies.getState())).savedSession!;
+  await expect(helper.locator('.session-history .session-entry-details')).toHaveCount(saved.inputs.length);
+  await expandSavedDiscussion(helper);
 }
 
 export async function assistantSessionCatalog(browser: Browser, origin: string) {
@@ -173,11 +176,25 @@ export async function assistantSessionCatalogGuards(browser: Browser, origin: st
     expect((await rewriteBackend.command('observations')).payloads).toEqual([]);
   });
   process.stdout.write('page_test_scenario: 无记录目录不隐式创建，未绑定联系人不能借新开授权生成\n');
-  await withRewritePages(browser, origin, async ({ manager, helper, rewriteBackend }) => {
+  await withRewritePages(browser, origin, async ({ manager, helper, rewriteBackend, replyTransport }) => {
+    const contactId = rewriteBackend.data.empty_contact_id;
     await manager.getByRole('button', { name: '选择无消息的合成联系人', exact: true }).click();
-    await confirmHelperContact(helper, rewriteBackend.data.empty_contact_id);
+    // 本场明确检验未授权联系人，不能用人工确认帮助函数改变待验证的前提。
+    const readAuthorization = () => helper.evaluate(async () => {
+      const contact = await window.notalone.contacts.getState();
+      const foreground = await window.notalone.foreground.getState();
+      const reply = await window.notalone.replies.getState();
+      return { contactId: contact.selectedContactId, confirmation: foreground.confirmation,
+        confirmedContactId: foreground.confirmedContactId, foregroundBlock: foreground.generationBlock,
+        replyContactId: reply.contactId, scopeMatches: reply.scopeRevision === contact.scopeRevision,
+        replyBlock: reply.generationBlock };
+    });
+    const unauthorized = { contactId, confirmation: 'required', confirmedContactId: null,
+      foregroundBlock: 'foreground-confirmation-required', replyContactId: contactId,
+      scopeMatches: true, replyBlock: 'foreground-confirmation-required' };
+    await expect.poll(readAuthorization).toEqual(unauthorized);
     await expect.poll(() => helper.evaluate(async () => (await window.notalone.replies.getState()).savedSession?.phase)).toBe('failed');
-    const path = `/api/contacts/${rewriteBackend.data.empty_contact_id}/assistant-sessions`;
+    const path = `/api/contacts/${contactId}/assistant-sessions`;
     for (let count = 0; count < 2; count++) {
       await listSessions(helper);
       await expect(helper.getByText('这位联系人还没有助手会话。', { exact: true })).toBeVisible();
@@ -190,7 +207,12 @@ export async function assistantSessionCatalogGuards(browser: Browser, origin: st
     await expect(helper.getByText('助手会话操作尚未确认，请刷新列表后明确选择会话。', { exact: true })).toBeVisible();
     await expect(helper.getByRole('button', { name: '帮我表达', exact: true })).toBeDisabled();
     await expect(helper.getByRole('button', { name: '帮我想想', exact: true })).toBeDisabled();
+    expect(await rewriteBackend.request(path, {})).toEqual({ status: 409,
+      data: { error: 'assistant_session_rejected', reason: 'no_active_binding' } });
     expect((await rewriteBackend.request(path)).data).toEqual({ sessions: [], current_session_id: null });
+    await expect.poll(readAuthorization).toEqual(unauthorized);
+    expect(replyTransport.requests).toEqual([]);
+    expect(replyTransport.explorationRequests).toEqual([]);
     expect((await rewriteBackend.command('observations')).payloads).toEqual([]);
   });
 }
