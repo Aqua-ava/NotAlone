@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import datetime
+from typing import TypeVar
 from uuid import UUID
 
 from notalone.retrieval.lexical import (
@@ -16,6 +17,28 @@ from notalone.retrieval.models import (
     RetrievedOwnerMemory,
     RetrievedPendingCandidate,
 )
+
+
+_RecallT = TypeVar("_RecallT", RetrievedMemory, RetrievedOwnerMemory, RetrievedPendingCandidate)
+
+
+def merge_memory_recalls(recalls: tuple[tuple[_RecallT, ...], ...]) -> tuple[_RecallT, ...]:
+    """独立查询按同资料最高分去重；统一排序后由调用方一次应用原预算。"""
+    if len(recalls) == 1:
+        return recalls[0]
+    merged: dict[UUID, _RecallT] = {}
+    for recall in recalls:
+        for item in recall:
+            identifier = item.candidate_id if isinstance(item, RetrievedPendingCandidate) else item.memory_id
+            previous = merged.get(identifier)
+            if previous is None or (item.relevance_score or 0.0) > (previous.relevance_score or 0.0):
+                merged[identifier] = item
+    return tuple(sorted(merged.values(), key=lambda item: _memory_ranking_key(
+        item.relevance_score,
+        manual_adoption=False if isinstance(item, RetrievedPendingCandidate) else item.adoption_method == "manual",
+        confidence=item.confidence, valid_at=item.valid_at,
+        memory_id=item.candidate_id if isinstance(item, RetrievedPendingCandidate) else item.memory_id,
+    )))
 
 
 def recall_owner_memories(

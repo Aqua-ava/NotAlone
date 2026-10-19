@@ -16,7 +16,7 @@ export async function replyStrategyDialogue(browser: Browser, origin: string) {
       await expect(idea).toBeEnabled();
       if (action === '帮我表达') await idea.fill('这次只是了解近况，没有安排承诺。');
       await helper.getByText('最近聊天 · 查看／补充', { exact: true }).click();
-      await helper.getByRole('textbox', { name: '补充聊天上下文', exact: true }).fill('对方：最近有点忙，想了解近况。');
+      await helper.getByRole('textbox', { name: '补充聊天上下文', exact: true }).fill('对方：这份合成已确认资料的二十一个来源，你怎么看？');
       await rewriteBackend.plan({ count: 1, prefix: '根据本次背景的合成建议', basis: '根据最近对话提供一种可选说法。' });
       await helper.getByRole('button', { name: action, exact: true }).click();
       await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveValue('根据本次背景的合成建议（说法1）。');
@@ -37,7 +37,7 @@ export async function replyStrategyDialogue(browser: Browser, origin: string) {
       expect(JSON.stringify(evidence.data)).not.toContain('另一用户的私密合成历史');
       const payloads = (await rewriteBackend.command('observations')).payloads as Array<Record<string, unknown>>;
       expect(payloads).toHaveLength(1);
-      expect(payloads[0]).toMatchObject({ input_mode: 'workspace', context_text: '对方：最近有点忙，想了解近况。',
+      expect(payloads[0]).toMatchObject({ input_mode: 'workspace', context_text: '对方：这份合成已确认资料的二十一个来源，你怎么看？',
         fidelity_contract: { current_intent: action === '帮我表达'
           ? { source: 'draft_text', text: '这次只是了解近况，没有安排承诺。' } : null } });
       const saved = await rewriteBackend.request(`/api/contacts/${contactId}/assistant-sessions/${generated.session_id}`);

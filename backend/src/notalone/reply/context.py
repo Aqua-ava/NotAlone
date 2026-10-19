@@ -42,7 +42,7 @@ from notalone.retrieval import (
     RetrievedPendingCandidate,
 )
 from notalone.retrieval.lexical import RELEVANCE_THRESHOLD
-from notalone.retrieval.ranking import recall_memories, recall_owner_memories
+from notalone.retrieval.ranking import merge_memory_recalls, recall_memories, recall_owner_memories
 from notalone.scopes import ContactScope, OwnerScope, VerifiedConversationScope
 
 
@@ -546,9 +546,14 @@ class RetrievalReplyContext:
             receipt = None
             if allows_history(command) and not workspace_recent_only(command):
                 query = command.content.draft_text
+                background_query = None
                 if command.content.input_kind == "workspace":
-                    query = "\n".join(item.text for item in evidence if item.kind != "user_purpose")
-                related, receipt = self._related_memory_context(scope=scope, query=query)
+                    background_query = "\n".join(item.text for item in evidence
+                                                   if item.kind in ("message", "user_current_chat"))
+                    if not query.strip():
+                        query, background_query = background_query, None
+                related, receipt = self._related_memory_context(scope=scope, query=query,
+                                                                 background_query=background_query)
                 evidence.extend(related)
             if continuation is not None:
                 evidence.append(continuation)
@@ -640,10 +645,12 @@ class RetrievalReplyContext:
         return replace(context, evidence=combined, retrieval=receipt, tool_calls=history.tool_calls)
 
     def _related_memory_context(
-        self, *, scope: ContactScope, query: str,
+        self, *, scope: ContactScope, query: str, background_query: str | None = None,
     ) -> tuple[list[ContextEvidence], ReplyRetrievalReceipt | None]:
+        recall_queries = tuple(dict.fromkeys(value for value in (query, background_query)
+                                             if value and value.strip())) or ("",)
         if self._overview is None:
-            return self._related_memory_evidence(scope=scope, query=query), None
+            return self._related_memory_evidence(scope=scope, queries=recall_queries), None
         try:
             contact = self._overview.read_contact(scope)
         except Exception:
@@ -673,31 +680,41 @@ class RetrievalReplyContext:
             return (entry.provenance_kind in ("manual_entry", "source_supported")
                     and is_generation_eligible(entry.memory, include_historical=True)
                     and (entry.memory.valid_at is None or entry.memory.valid_at <= now))
-        contact_ranked = recall_memories(tuple(
+        contact_candidates = tuple(
             RetrievedMemory(entry.memory.memory_id, scope, entry.memory.text, entry.memory.category.value,
                             entry.memory.source_ids, entry.memory.adoption_method.value, entry.memory.revision,
                             timing=entry.memory.timing)
             for entry in (contact.entries if contact else ()) if navigable(entry)
-        ), query=query, limit=max(1, len(contact.entries) if contact else 1))
+        )
+        contact_ranked = merge_memory_recalls(tuple(recall_memories(contact_candidates,
+            query=value, limit=max(1, len(contact_candidates))) for value in recall_queries))
         contact_nav = self._select_memories(contact_ranked,
             limit=self._memory_limit, char_budget=self._memory_char_budget)
-        owner_ranked = recall_owner_memories(tuple(
+        owner_candidates = tuple(
             RetrievedOwnerMemory(entry.memory.memory_id, scope.owner_id, entry.memory.text,
                                  entry.memory.category.value, entry.memory.topic.value, entry.memory.source_ids,
                                  entry.memory.adoption_method.value, entry.memory.revision, timing=entry.memory.timing)
             for entry in (owner.entries if owner else ()) if navigable(entry)
-        ), query=query, limit=max(1, len(owner.entries) if owner else 1))
+        )
+        owner_ranked = merge_memory_recalls(tuple(recall_owner_memories(owner_candidates,
+            query=value, limit=max(1, len(owner_candidates))) for value in recall_queries))
         owner_nav = self._select_memories(owner_ranked,
             limit=self._owner_memory_limit, char_budget=self._owner_memory_char_budget)
         contact_exhausted = len(contact_nav) < sum(item.relevance_score >= RELEVANCE_THRESHOLD for item in contact_ranked)
         owner_exhausted = len(owner_nav) < sum(item.relevance_score >= RELEVANCE_THRESHOLD for item in owner_ranked)
-        contact_memories = self._search_memories(scope=scope, query=query,
-            memory_ids=tuple(item.memory_id for item in contact_nav), include_historical=True) if contact_nav else ()
-        owner_memories = self._search_owner_memories(scope=scope, query=query,
-            memory_ids=tuple(item.memory_id for item in owner_nav), include_historical=True) if owner_nav else ()
+        # 按导航身份回读时仍分别评分，不能重新拼接 query 稀释已命中的资料。
+        contact_memories = self._select_memories(merge_memory_recalls(tuple(
+            self._search_memories(scope=scope, query=value,
+                memory_ids=tuple(item.memory_id for item in contact_nav), include_historical=True, select_budget=False)
+            for value in recall_queries)), limit=self._memory_limit, char_budget=self._memory_char_budget) if contact_nav else ()
+        owner_memories = self._select_memories(merge_memory_recalls(tuple(
+            self._search_owner_memories(scope=scope, query=value,
+                memory_ids=tuple(item.memory_id for item in owner_nav), include_historical=True, select_budget=False)
+            for value in recall_queries)), limit=self._owner_memory_limit, char_budget=self._owner_memory_char_budget) if owner_nav else ()
         pending_failed = False
         try:
-            pending_ranked = self._search_pending_candidates(scope=scope, query=query, select_budget=False)
+            pending_ranked = merge_memory_recalls(tuple(self._search_pending_candidates(
+                scope=scope, query=value, select_budget=False) for value in recall_queries))
         except ReplyContextInvariantError:
             raise
         except ReplyContextError:
@@ -742,18 +759,25 @@ class RetrievalReplyContext:
                     if contact_exhausted or owner_exhausted or pending_exhausted else "succeeded" if evidence else "empty"),
         )
 
-    def _related_memory_evidence(self, *, scope: ContactScope, query: str) -> list[ContextEvidence]:
+    def _related_memory_evidence(self, *, scope: ContactScope, queries: tuple[str, ...]) -> list[ContextEvidence]:
         """共享三类有界资料召回，是否允许历史仍由各场景决定。"""
 
         return [
             self._memory_evidence(memory)
-            for memory in self._search_memories_or_empty(scope=scope, query=query)
+            for memory in self._select_memories(merge_memory_recalls(tuple(
+                self._search_memories_or_empty(scope=scope, query=query, select_budget=False) for query in queries)),
+                limit=self._memory_limit, char_budget=self._memory_char_budget)
         ] + [
             self._owner_memory_evidence(memory, scope=scope)
-            for memory in self._search_owner_memories_or_empty(scope=scope, query=query)
+            for memory in self._select_memories(merge_memory_recalls(tuple(
+                self._search_owner_memories_or_empty(scope=scope, query=query, select_budget=False) for query in queries)),
+                limit=self._owner_memory_limit, char_budget=self._owner_memory_char_budget)
         ] + [
             self._pending_candidate_evidence(candidate, scope=scope)
-            for candidate in self._search_pending_candidates_or_empty(scope=scope, query=query)
+            for candidate in self._select_memories(merge_memory_recalls(tuple(
+                self._search_pending_candidates_or_empty(scope=scope, query=query,
+                    select_budget=len(queries) == 1) for query in queries)),
+                limit=self._pending_limit, char_budget=self._pending_char_budget)
         ]
 
     def _current_skill_revision(self, scope: ContactScope) -> int:
@@ -1112,6 +1136,7 @@ class RetrievalReplyContext:
         query: str | None = None,
         memory_ids: tuple[UUID, ...] | None = None,
         include_historical: bool = False,
+        select_budget: bool = True,
     ) -> tuple[RetrievedMemory, ...]:
         try:
             arguments = {"scope": scope, "query": query, "limit": self._memory_limit}
@@ -1131,6 +1156,8 @@ class RetrievalReplyContext:
             raise ReplyContextInvariantError(
                 "关系记忆检索结果超出联系人范围。"
             )
+        if not select_budget:
+            return memories
         return self._select_memories(
             memories,
             limit=self._memory_limit,
@@ -1144,6 +1171,7 @@ class RetrievalReplyContext:
         query: str | None = None,
         memory_ids: tuple[UUID, ...] | None = None,
         include_historical: bool = False,
+        select_budget: bool = True,
     ) -> tuple[RetrievedOwnerMemory, ...]:
         try:
             arguments = {"owner_id": scope.owner_id, "query": query, "limit": self._owner_memory_limit}
@@ -1162,6 +1190,8 @@ class RetrievalReplyContext:
             for memory in memories
         ):
             raise ReplyContextInvariantError("本人记忆检索结果超出 owner 范围。")
+        if not select_budget:
+            return memories
         return self._select_memories(
             memories,
             limit=self._owner_memory_limit,
@@ -1225,6 +1255,7 @@ class RetrievalReplyContext:
         *,
         scope: ContactScope,
         query: str | None = None,
+        select_budget: bool = True,
     ) -> tuple[RetrievedPendingCandidate, ...]:
         """待确认候选不可用时安全降级，不阻断消息和已确认资料。
 
@@ -1233,7 +1264,7 @@ class RetrievalReplyContext:
         """
 
         try:
-            return self._search_pending_candidates(scope=scope, query=query)
+            return self._search_pending_candidates(scope=scope, query=query, select_budget=select_budget)
         except ReplyContextInvariantError:
             raise
         except ReplyContextError:
@@ -1268,11 +1299,12 @@ class RetrievalReplyContext:
         *,
         scope: ContactScope,
         query: str | None = None,
+        select_budget: bool = True,
     ) -> tuple[RetrievedMemory, ...]:
         """关系记忆缺失时安全降级，不阻断当前消息和近期对话。"""
 
         try:
-            return self._search_memories(scope=scope, query=query)
+            return self._search_memories(scope=scope, query=query, select_budget=select_budget)
         except ReplyContextError:
             return ()
 
@@ -1281,11 +1313,12 @@ class RetrievalReplyContext:
         *,
         scope: ContactScope,
         query: str | None = None,
+        select_budget: bool = True,
     ) -> tuple[RetrievedOwnerMemory, ...]:
         """本人记忆缺失时安全降级，不阻断当前消息和近期对话。"""
 
         try:
-            return self._search_owner_memories(scope=scope, query=query)
+            return self._search_owner_memories(scope=scope, query=query, select_budget=select_budget)
         except ReplyContextError:
             return ()
 
