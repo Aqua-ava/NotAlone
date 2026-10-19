@@ -1,12 +1,13 @@
 import { createServer, request as httpRequest, type Server } from 'node:http';
 import { readFile, writeFile } from 'node:fs/promises';
 
-// 只暂停真实 DELETE 转发或具名依据响应；业务内容仍来自生产后端，四秒自动放行。
+// 只暂停真实 DELETE 转发或一次具名依据响应；依据由场景显式释放，finally兜底清理。
 export class SourceDeletionProxy {
   readonly server: Server;
   holdDelete = false;
   holdEvidencePath: string | null = null;
   readonly heldStatuses: number[] = [];
+  readonly evidenceRequests: { phase: string; status?: number; held: boolean }[] = [];
   private gateTimer: NodeJS.Timeout | undefined;
   private readonly held: Array<(failure: boolean) => void> = [];
   private readonly pending = new Set<ReturnType<typeof httpRequest>>();
@@ -14,6 +15,8 @@ export class SourceDeletionProxy {
 
   constructor(address: string) {
     this.server = createServer((incoming, response) => {
+      const watched = incoming.method === 'GET' && incoming.url === this.holdEvidencePath;
+      if (watched) this.evidenceRequests.push({ phase: 'received', held: false });
       const forward = () => {
       const outgoing = httpRequest(`http://${address}${incoming.url}`, { method: incoming.method, headers: incoming.headers }, (result) => {
         const chunks: Buffer[] = [];
@@ -24,10 +27,11 @@ export class SourceDeletionProxy {
             response.writeHead(failure ? 503 : result.statusCode ?? 500, { 'Content-Type': 'application/json' });
             response.end(failure ? '{"error":"synthetic_transport_unavailable"}' : Buffer.concat(chunks));
           };
+          if (watched) this.evidenceRequests.push({ phase: 'response', status: result.statusCode, held: incoming.url === this.holdEvidencePath });
           if (incoming.method === 'GET' && incoming.url === this.holdEvidencePath) {
+            this.holdEvidencePath = null;
             this.heldStatuses.push(result.statusCode ?? 0);
             this.held.push(deliver);
-            this.scheduleRelease();
           } else deliver(false);
         });
       });
