@@ -32,7 +32,16 @@ export async function candidateVisibility(browser: Browser, origin: string) {
         responses: replyTransport.results.map(item => ({ status: item.status, error: item.data.error })) })}\n`);
       throw error;
     });
-    await expect(candidate).toBeInViewport({ ratio: 0.8 });
+    await expect(candidate).toBeInViewport({ ratio: 0.8 }).catch(async (error) => {
+      await helper.screenshot({ path: 'artifacts/headless-pages/candidate-visibility-failed.png' });
+      process.stderr.write(`page_test_layout: ${JSON.stringify(await helper.evaluate(() => {
+        const workspace = document.querySelector('.ime-workspace')!;
+        const candidate = document.querySelector('[aria-label="候选1编辑文本"]')!;
+        return { scrollTop: workspace.scrollTop, workspace: workspace.getBoundingClientRect().toJSON(),
+          candidate: candidate.getBoundingClientRect().toJSON() };
+      }))}\n`);
+      throw error;
+    });
     await expect(helper.locator('.ime-header')).toBeInViewport({ ratio: 1 });
     const footer = helper.locator('.ime-footer');
     await expect(footer).toBeInViewport({ ratio: 1 });

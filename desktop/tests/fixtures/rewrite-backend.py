@@ -126,6 +126,7 @@ class DesktopRewriteModel(ScriptedCoreModel):
             return super()._generate(messages, stop, run_manager, **kwargs)
         primary = next(item for item in payload["evidence"]
                        if (item["kind"] == "user_draft" if payload["input_mode"] == "rewrite_draft"
+                           else item["kind"] == "user_current_chat" if payload["input_mode"] == "reply_to_pasted_text"
                            else item["kind"] == "user_purpose" if payload["input_mode"] == "initiate_conversation"
                            else item["kind"] == "message" and item["text"] == payload["current_text"]))
         citations = [primary["evidence_id"]]

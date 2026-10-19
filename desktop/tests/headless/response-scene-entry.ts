@@ -6,8 +6,12 @@ export async function responseSceneEntry(browser: Browser, origin: string) {
   await withRewritePages(browser, origin, async ({ manager, helper, rewriteBackend, replyTransport }) => {
     await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
     await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
+    const modes = helper.getByRole('group', { name: '沟通场景与改写', exact: true });
+    await expect(modes.getByRole('button')).toHaveText(['改写', '回应消息', '主动聊聊']);
     await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('我想保留这份草稿，今晚再说明安排。');
     await helper.getByRole('button', { name: '回应消息', exact: true }).click();
+    const sources = helper.getByRole('group', { name: '回复消息来源', exact: true });
+    await expect(sources.getByRole('button')).toHaveText(['粘贴文字', '从已有消息中选择']);
     const targets = helper.getByRole('group', { name: '待回复消息', exact: true });
     await expect(targets.getByRole('radio', { checked: true })).toHaveCount(0);
     await helper.getByRole('textbox', { name: '表达方向', exact: true }).fill('说明今晚会晚一点，不增加承诺。');
@@ -43,5 +47,53 @@ export async function responseSceneEntry(browser: Browser, origin: string) {
     await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveValue('保留草稿的回应（说法1）。');
     expect(replyTransport.requests.at(-1)).toMatchObject({ content: { type: 'rewrite_draft', draft_text: '我想保留这份草稿，今晚再说明安排。', include_relationship_context: false } });
     expect((await rewriteBackend.command('observations')).payloads).toHaveLength(2);
+    await helper.getByRole('button', { name: '回应消息', exact: true }).click();
+    await sources.getByRole('button', { name: '粘贴文字', exact: true }).click();
+    await expect(modes.getByRole('button', { name: '回应消息', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await expect(modes.getByRole('button', { name: '改写', exact: true })).toHaveAttribute('aria-pressed', 'false');
+    await helper.getByRole('textbox', { name: '当前聊天文字', exact: true }).fill('合成粘贴原话：周末有空吗？');
+    await expect(helper.getByRole('button', { name: '生成候选', exact: true })).toBeDisabled();
+    await helper.getByRole('textbox', { name: '粘贴文字的表达方向', exact: true }).fill('这次不去，简短婉拒。');
+    await rewriteBackend.plan({ count: 1, prefix: '这次先不去了' });
+    await helper.getByRole('button', { name: '生成候选', exact: true }).click();
+    await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveValue('这次先不去了（说法1）。');
+    expect(replyTransport.requests.at(-1)).toMatchObject({ content: {
+      type: 'rewrite_draft', input_kind: 'current_chat', draft_text: '合成粘贴原话：周末有空吗？', pasted_direction: '这次不去，简短婉拒。',
+    } });
+    await sources.getByRole('button', { name: '从已有消息中选择', exact: true }).click();
+    await expect(targets.getByRole('radio', { checked: true })).toHaveCount(1);
+    await expect(helper.getByRole('textbox', { name: '表达方向', exact: true })).toHaveValue('说明今晚会晚一点，不增加承诺。');
+    await sources.getByRole('button', { name: '粘贴文字', exact: true }).click();
+    await expect(helper.getByRole('textbox', { name: '粘贴文字的表达方向', exact: true })).toHaveValue('这次不去，简短婉拒。');
+    // 上面的幂等重放也经过 HTTP 代理；切换来源本身不追加生成。
+    expect(replyTransport.requests).toHaveLength(4);
+    await manager.getByRole('textbox', { name: '联系人展示名称', exact: true }).fill('合成无消息联系人');
+    await manager.getByRole('button', { name: '创建联系人', exact: true }).click();
+    await manager.getByRole('button', { name: '选择合成无消息联系人', exact: true }).click();
+    const emptyContactId = await helper.getByRole('combobox', { name: '本次联系人', exact: true }).inputValue();
+    await confirmHelperContact(helper, emptyContactId);
+    await helper.getByRole('button', { name: '回应消息', exact: true }).click();
+    await expect(sources.getByRole('button', { name: '粘贴文字', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await expect(helper.getByRole('textbox', { name: '当前聊天文字', exact: true })).toHaveValue('');
+    await expect(helper.getByRole('textbox', { name: '粘贴文字的表达方向', exact: true })).toHaveValue('');
+    await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveCount(0);
+    await sources.getByRole('button', { name: '从已有消息中选择', exact: true }).click();
+    await expect(helper.getByText('这位联系人暂无可用消息，可以选择“粘贴文字”来回应。', { exact: true })).toBeVisible();
+    await helper.getByRole('button', { name: '刷新消息', exact: true }).click();
+    await expect(sources.getByRole('button', { name: '从已有消息中选择', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await expect(helper.getByRole('button', { name: '生成候选', exact: true })).toBeDisabled();
+    await helper.getByRole('button', { name: '主动聊聊', exact: true }).click();
+    replyTransport.nextMessages = 'hold';
+    const heldBefore = replyTransport.heldCount;
+    await helper.getByRole('button', { name: '回应消息', exact: true }).click();
+    await expect.poll(() => replyTransport.heldCount).toBe(heldBefore + 1);
+    await helper.getByRole('button', { name: '主动聊聊', exact: true }).click();
+    replyTransport.release();
+    await expect(helper.getByRole('textbox', { name: '主动目的', exact: true })).toBeVisible();
+    await expect(sources).toHaveCount(0);
+    await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+    await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
+    await expect(sources.getByRole('button', { name: '粘贴文字', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    expect(replyTransport.requests).toHaveLength(4);
   });
 }

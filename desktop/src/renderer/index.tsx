@@ -14,7 +14,7 @@ import { StartupReadiness, StartupSettings, useStartupState } from './StartupSet
 import { CurrentContactLabel, HelperContactPicker, useContactSession } from './contact-session';
 import { ContactsPage } from './ContactsPage';
 import { ImportPage } from './ImportPage';
-import { ReplyCandidates, ReplyModePicker, RewriteInput, useReplySession } from './RewritePanel';
+import { ReplyCandidates, ReplyModePicker, ReplySourcePicker, RewriteInput, useReplySession } from './RewritePanel';
 import { DirectedReplyInput } from './DirectedReplyInput';
 import { ProactiveReplyInput } from './ProactiveReplyInput';
 import { MemoryPage } from './MemoryPage';
@@ -58,6 +58,7 @@ export function App() {
       && replies.state.savedSession?.phase === 'loading' && <p role="status" className="rewrite-privacy">
         已切换联系人，正在恢复这位联系人的历史讨论与回复…
       </p>}
+    <ReplySourcePicker replies={replies} />
     {replies.state.mode === 'rewrite_draft' ? <RewriteInput contacts={contactSession} replies={replies} />
       : replies.state.mode === 'initiate_conversation' ? <ProactiveReplyInput replies={replies} /> : <DirectedReplyInput replies={replies} />}
     <PrioritySyncStatus contactId={contactSession.state.selectedContactId} bridge={window.notalone.syncControl} />

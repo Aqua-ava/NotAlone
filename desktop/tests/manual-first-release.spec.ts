@@ -54,7 +54,7 @@ test('空目录首启后可明确创建手动联系人，不要求微信身份�
   await manager.getByRole('button', { name: '手动输入本次聊天', exact: true }).click();
   const helper = await opened;
   await expect(helper).toHaveURL(/#helper$/);
-  await expect(helper.getByRole('button', { name: '回应粘贴文字', exact: true })).toBeVisible({ timeout: 1000 });
+  await expect(helper.getByRole('button', { name: '回应消息', exact: true })).toBeVisible({ timeout: 1000 });
   const databasePid = Number((await readFile(path.join(userData, 'managed/postgres/postmaster.pid'), 'utf8')).split('\n')[0]);
   await selectMenu(app, 'NotAlone', '退出 NotAlone');
   await expect.poll(() => appProcess.exitCode).toBe(0);
@@ -101,7 +101,8 @@ test('公开手动输入完成模型设置、依据和编辑，切换隔离、�
   await manager.getByRole('button', { name: '选择联系人并手动输入', exact: true }).click();
   await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
   await manager.getByRole('button', { name: '手动输入本次聊天', exact: true }).click();
-  await helper.getByRole('button', { name: '回应粘贴文字', exact: true }).click();
+  await helper.getByRole('button', { name: '回应消息', exact: true }).click();
+  await helper.getByRole('button', { name: '粘贴文字', exact: true }).click();
   await helper.getByLabel('当前聊天文字', { exact: true }).fill('合成甲：今晚要一起去吗？');
   await expect(helper.getByRole('button', { name: '生成候选', exact: true })).toBeDisabled();
   await helper.getByLabel('粘贴文字的表达方向', { exact: true }).fill('今天不去，简短婉拒，不增加承诺');
@@ -118,7 +119,8 @@ test('公开手动输入完成模型设置、依据和编辑，切换隔离、�
   await manager.getByRole('button', { name: '手动输入本次聊天', exact: true }).click();
   await expect(helper.getByLabel('草稿', { exact: true })).toHaveValue('');
   await expect(helper.getByLabel('候选1编辑文本', { exact: true })).toHaveCount(0);
-  await helper.getByRole('button', { name: '回应粘贴文字', exact: true }).click();
+  await helper.getByRole('button', { name: '回应消息', exact: true }).click();
+  await helper.getByRole('button', { name: '粘贴文字', exact: true }).click();
   await helper.getByLabel('当前聊天文字', { exact: true }).fill('合成乙：明天再确认时间。');
   await helper.getByLabel('粘贴文字的表达方向', { exact: true }).fill('表示收到，暂不承诺时间');
   await helper.getByRole('button', { name: '生成候选', exact: true }).click();
@@ -140,7 +142,8 @@ test('公开手动输入完成模型设置、依据和编辑，切换隔离、�
   await helper.getByRole('button', { name: '确认删除会话', exact: true }).click();
   await expect(helper.getByText('当前助手会话已删除。', { exact: true })).toBeVisible();
   await expect(candidate).toHaveCount(0);
-  await helper.getByRole('button', { name: '回应粘贴文字', exact: true }).click();
+  await helper.getByRole('button', { name: '回应消息', exact: true }).click();
+  await helper.getByRole('button', { name: '粘贴文字', exact: true }).click();
   await expect(helper.getByLabel('当前聊天文字', { exact: true })).toHaveValue('');
   await helper.getByLabel('当前聊天文字', { exact: true }).fill('合成模型故障：请稍后再联系。');
   await helper.getByLabel('粘贴文字的表达方向', { exact: true }).fill('表示收到');

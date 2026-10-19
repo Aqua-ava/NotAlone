@@ -41,13 +41,35 @@ export function useReplySession() {
       throw error;
     }
   }
+  const modeChange = useRef(0);
+  function changeMode(mode: ReplyMode, inputKind?: RewriteOptions['inputKind'], preferPasteWhenEmpty = false) {
+    const operation = ++modeChange.current;
+    const scope = selection();
+    const current = () => active.current && operation === modeChange.current
+      && latest.current.contactId === scope.contactId && latest.current.scopeRevision === scope.scopeRevision;
+    return operate(async () => {
+      if (inputKind) {
+        receive(await window.notalone.replies.updateOptions({ ...scope, options: { ...latest.current.options, inputKind } }));
+        if (!current()) return;
+      }
+      await window.notalone.replies.setMode({ ...scope, mode });
+      if (!current()) return;
+      receive(await window.notalone.replies.getState());
+      if (!current() || !preferPasteWhenEmpty) return;
+      const next = latest.current;
+      if (next.mode === 'reply_to_message' && next.messages.phase === 'ready' && !next.messages.items.length) {
+        receive(await window.notalone.replies.updateOptions({ ...scope, options: { ...next.options, inputKind: 'current_chat' } }));
+        if (current()) await window.notalone.replies.setMode({ ...scope, mode: 'rewrite_draft' });
+      }
+    });
+  }
   return { state, error,
     updateCandidateVersionDraft: (request: ReplyCandidateDraftUpdate) => versionOperation(() => window.notalone.replies.updateCandidateVersionDraft(request)),
     readCandidateVersions: (request: ReplyCandidateVersionRead) => versionOperation(() => window.notalone.replies.readCandidateVersions(request)),
     saveCandidateVersion: (request: ReplyCandidateVersionEdit) => versionOperation(() => window.notalone.replies.saveCandidateVersion(request)),
     showCandidateVersion: (request: ReplyCandidateVersionDisplay) => versionOperation(() => window.notalone.replies.showCandidateVersion(request)),
     updateOptions: (options: RewriteOptions) => operate(() => window.notalone.replies.updateOptions({ ...selection(), options })),
-    setMode: (mode: ReplyMode) => operate(() => window.notalone.replies.setMode({ ...selection(), mode })),
+    setMode: changeMode,
     loadMessages: (older = false) => operate(() => window.notalone.replies.loadMessages({ ...selection(), older })),
     retrySourceValidation: () => operate(() => window.notalone.replies.retrySourceValidation(selection())),
     readSavedSession: () => operate(() => window.notalone.replies.readSavedSession(selection())),
@@ -99,17 +121,29 @@ export function useReplySession() {
 export type ReplySessionView = ReturnType<typeof useReplySession>;
 
 export function ReplyModePicker({ replies, enabled }: { replies: ReplySessionView; enabled: boolean }) {
+  const responding = replies.state.mode === 'reply_to_message'
+    || replies.state.mode === 'rewrite_draft' && replies.state.options.inputKind === 'current_chat';
   return <div className="ime-modes" role="group" aria-label="沟通场景与改写">
     <button className={replies.state.mode === 'rewrite_draft' && replies.state.options.inputKind !== 'current_chat' ? 'active' : ''}
       aria-pressed={replies.state.mode === 'rewrite_draft' && replies.state.options.inputKind !== 'current_chat'}
-      disabled={!enabled} onClick={() => { void replies.setMode('rewrite_draft'); void replies.updateOptions({ ...replies.state.options, inputKind: 'draft' }); }}>改写</button>
-    <button className={replies.state.mode === 'rewrite_draft' && replies.state.options.inputKind === 'current_chat' ? 'active' : ''}
-      aria-pressed={replies.state.mode === 'rewrite_draft' && replies.state.options.inputKind === 'current_chat'}
-      disabled={!enabled} onClick={() => { void replies.setMode('rewrite_draft'); void replies.updateOptions({ ...replies.state.options, inputKind: 'current_chat' }); }}>回应粘贴文字</button>
-    <button className={replies.state.mode === 'reply_to_message' ? 'active' : ''} aria-pressed={replies.state.mode === 'reply_to_message'}
-      disabled={!enabled} onClick={() => void replies.setMode('reply_to_message')}>回应消息</button>
+      disabled={!enabled} onClick={() => void replies.setMode('rewrite_draft', 'draft')}>改写</button>
+    <button className={responding ? 'active' : ''} aria-pressed={responding}
+      disabled={!enabled} onClick={() => { if (!responding) void replies.setMode('reply_to_message', undefined, true); }}>回应消息</button>
     <button className={replies.state.mode === 'initiate_conversation' ? 'active' : ''} aria-pressed={replies.state.mode === 'initiate_conversation'}
       disabled={!enabled} onClick={() => void replies.setMode('initiate_conversation')}>主动聊聊</button>
+  </div>;
+}
+
+export function ReplySourcePicker({ replies }: { replies: ReplySessionView }) {
+  const pasted = replies.state.mode === 'rewrite_draft' && replies.state.options.inputKind === 'current_chat';
+  if (!pasted && replies.state.mode !== 'reply_to_message') return null;
+  const enabled = Boolean(replies.state.contactId);
+  return <div className="reply-source-picker" role="group" aria-label="回复消息来源">
+    <span>消息来源</span>
+    <button className={pasted ? 'active' : ''} aria-pressed={pasted} disabled={!enabled}
+      onClick={() => void replies.setMode('rewrite_draft', 'current_chat')}>粘贴文字</button>
+    <button className={!pasted ? 'active' : ''} aria-pressed={!pasted} disabled={!enabled}
+      onClick={() => void replies.setMode('reply_to_message')}>从已有消息中选择</button>
   </div>;
 }
 
@@ -204,11 +238,23 @@ export function ReplyCandidates({ replies }: { replies: ReplySessionView }) {
   const resultRegion = useRef<HTMLElement>(null);
   const visibleResult = useRef('');
   useEffect(() => {
-    if (!replyRequestId || !candidates.length || state.phase === 'waiting') return;
+    if (!replyRequestId || !candidates.length || state.phase === 'waiting' || state.phase === 'failed') return;
     const identity = `${state.contactId}:${state.scopeRevision}:${replyRequestId}`;
     if (visibleResult.current === identity) return;
-    visibleResult.current = identity;
-    resultRegion.current?.scrollIntoView({ block: 'start' });
+    const region = resultRegion.current;
+    if (!region) return;
+    const revealEditor = () => {
+      const editor = region.querySelector('article textarea');
+      if (!editor) return false;
+      visibleResult.current = identity;
+      editor.scrollIntoView({ block: 'nearest' });
+      return true;
+    };
+    if (revealEditor()) return;
+    // 消息版本异步就绪后才挂载正文；只在本组首次可编辑时滚动。
+    const observer = new MutationObserver(() => { if (revealEditor()) observer.disconnect(); });
+    observer.observe(region, { childList: true, subtree: true });
+    return () => observer.disconnect();
   }, [replyRequestId, candidates.length, state.phase, state.contactId, state.scopeRevision]);
   useEffect(() => {
     if (state.phase === 'failed') resultRegion.current?.scrollIntoView({ block: 'start' });

@@ -17,6 +17,10 @@
 .helper-context button { margin-top: 8px; text-decoration: underline; text-underline-offset: 3px; }
 .ime-pane .compose-panel, .ime-pane .reply-candidates { padding: 24px; border: 1px solid #dfe6ea; border-radius: 14px; background: #fff; margin-bottom: 20px; box-shadow: 0 3px 14px #213d4b04; }
 .compose-heading { margin-bottom: 20px; }
+.reply-source-picker { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 14px; font-size: 13px; }
+.reply-source-picker > span { color: #526c7c; margin-right: 4px; }
+.ime-pane .reply-source-picker button { padding: 8px 12px; border: 1px solid #cbd9e1; border-radius: 8px; background: #fff; color: #526c7c; }
+.ime-pane .reply-source-picker button.active { border-color: #2f688c; background: #edf5fa; color: #245f91; font-weight: 600; }
 .section-eyebrow { display: block; color: #537d99; font-size: 12px; font-weight: 600; margin-bottom: 6px; }
 .compose-heading h2 { margin: 0 0 6px; font-size: 21px; line-height: 1.4; }
 .compose-heading p { color: #71818c; font-size: 13px; }
