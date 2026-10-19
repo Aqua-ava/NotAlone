@@ -16,7 +16,7 @@ from notalone.memory.layered import (
 )
 from notalone.memory.models import ConfirmedMemoryStatus
 from notalone.persistence.locks import lock_contact_scope, lock_owner_scope
-from notalone.persistence.layered_coverage import current_job, cancel_jobs, enqueue_coverage
+from notalone.persistence.layered_coverage import current_job, cancel_jobs, enqueue_coverage, covered_input_ids
 from notalone.persistence.memory_overview import PostgresRelationshipOverviewStore
 from notalone.scopes import ContactScope, OwnerScope, organization_scope
 from notalone.tasks.models import ClaimedBackgroundTaskStep
@@ -268,29 +268,31 @@ class PostgresLayeredMemoryStore(LayeredProfileStore, LayeredCorrectionStore):
             dependencies.update(self.correction_dependency_ids(connection, scope))
             task_id, execute = enqueue_coverage(connection,scope,state,manifest,dependencies,contract,budget,
                 action=action,revision=revision,profile_required=profile_required)
-            self._revoke_previous_profile(connection, scope, state, overview, task_id, execute)
+            self._prepare_current_generation(connection, scope, state, overview, task_id, execute)
             return task_id, execute
 
     def start_change_feed(self, owner_id, callback):
         from notalone.persistence.layered_change_feed import LayeredChangeFeed
         return LayeredChangeFeed(self._database_url, owner_id, callback)
 
-    def _revoke_previous_profile(self, connection, scope, state, overview, task_id, execute):
+    def _prepare_current_generation(self, connection, scope, state, overview, task_id, execute):
         generation, rows = self.generation_rows(connection,scope,state['organization_generation'])
         job = connection.execute("SELECT pending_receipt FROM public.layered_memory_job WHERE task_id=%s",(task_id,)).fetchone()
-        if execute and generation and generation['profile_version_id']:
-            profile_task = connection.execute("SELECT b.task_id FROM public.layered_profile_version v "
-                "JOIN public.layered_profile_batch b ON b.id=v.batch_id WHERE v.id=%s",
-                (generation['profile_version_id'],)).fetchone()
-            # 新目标、重开或下一批开始即撤下受影响画像；仅补成功回执时保持原集合。
-            if not job['pending_receipt'] or not profile_task or profile_task['task_id']!=task_id:
-                current = {item['memory_id']: item for item in self._manifest(connection, scope, self.eligible(overview))}
-                valid_rows = [row for row in rows if all(current.get(item['memory_id']) == item
-                    for item in row['input_manifest'])]
-                # 纠错后的旧版本只留审计；当前集合移除失效主题，允许空集合等待重建。
-                self.publish_generation_in_transaction(connection,scope,
-                    expected_generation=state['organization_generation'],
-                    scenario_version_ids=[row['id'] for row in valid_rows], allow_empty=True)
+        if not execute or not generation:
+            return
+        current = {item['memory_id']: item for item in self._manifest(connection, scope, self.eligible(overview))}
+        valid_rows = [row for row in rows if all(current.get(item['memory_id']) == item
+            for item in row['input_manifest'])]
+        profile_task = (connection.execute("SELECT b.task_id FROM public.layered_profile_version v "
+            "JOIN public.layered_profile_batch b ON b.id=v.batch_id WHERE v.id=%s",
+            (generation['profile_version_id'],)).fetchone() if generation['profile_version_id'] else None)
+        revoke_profile = generation['profile_version_id'] and (
+            not job['pending_receipt'] or not profile_task or profile_task['task_id'] != task_id)
+        # 无画像的范围也要撤下失效主题；旧正文只留审计，不能抵扣覆盖或拼入新段落。
+        if len(valid_rows) != len(rows) or revoke_profile:
+            self.publish_generation_in_transaction(connection, scope,
+                expected_generation=state['organization_generation'],
+                scenario_version_ids=[row['id'] for row in valid_rows], allow_empty=True)
 
     def maintenance_due(self, owner_id):
         with psycopg.connect(self._database_url, row_factory=dict_row) as connection:
@@ -328,7 +330,7 @@ class PostgresLayeredMemoryStore(LayeredProfileStore, LayeredCorrectionStore):
             dependencies.update(self.correction_dependency_ids(connection, scope))
             task_id, execute = enqueue_coverage(connection, scope, state, manifest, dependencies,
                 contract, budget, action='refresh', revision=None, profile_required=profile_required)
-            self._revoke_previous_profile(connection, scope, state, overview, task_id, execute)
+            self._prepare_current_generation(connection, scope, state, overview, task_id, execute)
             connection.execute("UPDATE public.layered_memory_job SET target_dirty_revision=%s WHERE task_id=%s",
                                (state['dirty_revision'], task_id))
             connection.execute("UPDATE public.layered_memory_state SET next_due_at=NULL WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s",
@@ -427,12 +429,7 @@ class PostgresLayeredMemoryStore(LayeredProfileStore, LayeredCorrectionStore):
                 return None
             # 同一步重领只恢复未提交的批次；租约本身仍由任务仓储校验。
             connection.execute("DELETE FROM public.layered_memory_batch WHERE task_id=%s AND status<>'succeeded'",(claim.task_id,))
-            covered={item['memory_id'] for batch in connection.execute(
-                "SELECT b.input_manifest FROM public.layered_memory_generation g JOIN public.scenario_document_version v "
-                "ON v.id=ANY(g.scenario_version_ids) AND v.owner_id=g.owner_id AND v.contact_id IS NOT DISTINCT FROM g.contact_id "
-                "JOIN public.layered_memory_batch b ON b.id=v.batch_id WHERE g.owner_id=%s AND g.contact_id IS NOT DISTINCT FROM %s "
-                "AND g.organization_generation=%s",(scope.owner_id,scope.contact_id,state['organization_generation'])).fetchall()
-                for item in batch['input_manifest']}
+            covered = covered_input_ids(connection, scope, state['organization_generation'], job['target_manifest'])
             target={item['memory_id'] for item in job['target_manifest']}
             entries=tuple(entry for entry in self.unprotected(connection, scope, self.eligible(overview)) if str(entry.memory.memory_id) in target-covered)
             selected=[]
