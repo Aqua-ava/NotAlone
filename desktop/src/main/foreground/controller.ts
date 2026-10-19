@@ -9,6 +9,10 @@ import { isTransientForegroundContextChange, isUnsupportedForegroundConversation
 import type { ContactSelection } from '../../shared/contact-session-bridge';
 
 type Flight = { abort: AbortController; promise: Promise<void> };
+export type ForegroundMeasurement = {
+  event: 'change_received' | 'change_queued' | 'poll_scheduled' | 'request_started' | 'request_settled' | 'result_published';
+  durationMs: number; changedContact: boolean; confirmed: boolean; phase: ForegroundState['phase'];
+};
 const awaitingSelectionReasons = new Set([
   'ambiguous_requires_selection', 'unmatched_requires_selection',
   'session_candidates_truncated', 'manual_confirmation_required',
@@ -38,6 +42,7 @@ export class ForegroundController {
   private syncPermit: { generation: number } | undefined;
   private captureAuthorityRevision = 0;
   private selectingObservedContact = false;
+  private measurement: ((value: ForegroundMeasurement) => void) | undefined;
   private manualRequired = false;
   private qualityOnlyManualGate = false;
   private flight: Flight | undefined;
@@ -74,6 +79,12 @@ export class ForegroundController {
     })];
   }
   getState(): ForegroundState { return { ...this.state }; }
+  // 只供可信宿主的显式验收；仅发送固定事件与数值，不暴露会话文字或标识。
+  observeMeasurements(listener: (value: ForegroundMeasurement) => void): void { this.measurement = listener; }
+  private measure(event: ForegroundMeasurement['event'], durationMs = 0, changedContact = false): void {
+    try { this.measurement?.({ event, durationMs, changedContact, confirmed: this.state.phase === 'confirmed', phase: this.state.phase }); }
+    catch { /* 诊断故障不能改变观察调度或身份资格。 */ }
+  }
   attachChangeSource(source: ForegroundChangeSource): void {
     this.changeSource?.dispose();
     if (this.disposed) { source.dispose(); return; }
@@ -183,10 +194,11 @@ export class ForegroundController {
   notifyForegroundChange(): void {
     if (!this.continuous || this.disposed || this.stopped || this.state.manualInput || this.state.suspendedByHelperFocus
       || this.readingScopeChanges > 0 || this.backend.getConnectionGeneration() === undefined) return;
+    this.measure('change_received');
     // 顶部变化只撤销旧生成资格，不携带或授予新联系人身份。
     this.qualification = undefined;
     this.publish({ foregroundRevision: this.state.foregroundRevision + 1 });
-    if (this.flight) { this.changePending = true; return; }
+    if (this.flight) { this.changePending = true; this.measure('change_queued'); return; }
     if (this.failures > 0) return;
     this.cancelScheduled();
     void this.observeBeforeShow();
@@ -206,6 +218,7 @@ export class ForegroundController {
       || this.readingScopeChanges > 0 || this.scheduled !== undefined) return;
     // 周期观察间隔2秒；真正离开助手可立即复查，技术失败仍退避至最多8秒。
     const delay = this.refreshAfterHelperFocus && this.failures === 0 ? 0 : Math.min(8000, 2000 * 2 ** this.failures);
+    this.measure('poll_scheduled', delay);
     this.refreshAfterHelperFocus = false;
     const handle = this.clock.schedule(async () => {
       if (this.scheduled !== handle) return;
@@ -228,6 +241,8 @@ export class ForegroundController {
     }
     const scope = this.contacts.getState().scopeRevision;
     const epoch = ++this.epoch;
+    const began = performance.now();
+    this.measure('request_started');
     const abort = new AbortController();
     const current = () => !this.disposed && !abort.signal.aborted && epoch === this.epoch
       && !this.state.suspendedByHelperFocus && generation === this.backend.getConnectionGeneration()
@@ -275,8 +290,10 @@ export class ForegroundController {
       this.state = { ...this.state, unsupportedConversation };
       // 消费前先废弃flight，内部选择不能把已消费的观察当异步旧结果。
       ++this.epoch;
+      let changedContact = false;
       if (observation.contactId) {
         const contact = this.contacts.getState();
+        changedContact = contact.selectedContactId !== observation.contactId;
         if (contact.directoryPhase !== 'ready'
           || !contact.contacts.some((item) => item.contactId === observation.contactId)) {
           this.qualification = undefined;
@@ -299,6 +316,7 @@ export class ForegroundController {
         recognizedName: unsupportedConversation ? null : observation.recognizedName,
         recognitionConfidence: unsupportedConversation ? null : observation.recognitionConfidence,
         probeAvailable: observation.probeAvailable, wechatInFront: observation.wechatInFront, suggestedContactId: null });
+      this.measure('result_published', performance.now() - began, changedContact);
     }).catch((error: unknown) => {
       if (!current()) return;
       // 认证接口明确繁忙时撤销当轮资格；不改变此前已触发的人工确认门。
@@ -308,6 +326,7 @@ export class ForegroundController {
     });
     // UI 超时可以结束等待，但底层传输未结算时仍占有唯一观察许可。
     const settled = request.finally(() => {
+      this.measure('request_settled', performance.now() - began);
       if (this.flight?.abort === abort) {
         this.flight = undefined;
         const awaitingContact = this.state.phase === 'manual-required' && awaitingSelectionReasons.has(this.state.reason ?? '');

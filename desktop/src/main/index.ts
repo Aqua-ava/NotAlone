@@ -93,6 +93,7 @@ void app.whenReady().then(async () => {
     resolveHeaderChangeSourcePath(resourcesDirectory, development?.projectDirectory), headerChangeDiagnostics);
   app.on('will-quit', () => headerChangeDiagnostics?.close());
   foreground.attachChangeSource(headerChanges);
+  foreground.observeMeasurements(value => headerChanges.recordObservation(value));
   windows.setHelperObservation({ beforeShow: () => foreground.observeBeforeShow(),
     onLifecycle: (event) => { foreground.notifyHelperLifecycle(event); replies.notifyHelperLifecycle(event); } });
   app.on('will-quit', () => foreground.dispose());

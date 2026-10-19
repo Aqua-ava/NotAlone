@@ -1,5 +1,6 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import path from 'node:path';
+import type { ForegroundMeasurement } from './controller';
 import { diagnosticSignal, NativeHeaderChangeDiagnosticDecoder, type HeaderChangeDiagnosticRecord,
   type HeaderChangeDiagnosticSink, type HeaderChangeHostReason } from './header-change-diagnostics';
 
@@ -24,6 +25,12 @@ export class NativeHeaderChangeSource implements ForegroundChangeSource {
   private closed: Promise<void> = Promise.resolve();
   private ordinal = 0;
   private readonly diagnosticBegan = performance.now();
+
+  recordObservation(value: ForegroundMeasurement): void {
+    try { this.diagnostics?.record({ kind: 'observation', ordinal: this.ordinal,
+      elapsedMs: performance.now() - this.diagnosticBegan, ...value }); }
+    catch { /* 显式计时不参与采集和身份判定。 */ }
+  }
 
   constructor(private readonly executable: () => Promise<string | undefined>,
     private readonly diagnostics?: HeaderChangeDiagnosticSink) {

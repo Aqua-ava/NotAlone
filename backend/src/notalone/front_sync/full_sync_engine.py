@@ -124,11 +124,13 @@ class CliFullSyncEngine:
 
     def disable_sync(self) -> None:
         self._sync_state.disable(owner_id=self._owner_id, at=self._clock())
+        self._close_foreground()
         self._background.close()
 
     def close(self) -> None:
         """关闭后台与兼容前台读取资源，但不改变持久化开关。"""
 
+        self._close_foreground()
         self._background.close()
         close_fallback = getattr(self._fallback, "close", None)
         if callable(close_fallback):
@@ -138,11 +140,22 @@ class CliFullSyncEngine:
             close_cli()
 
     def cancel_pending_io(self) -> None:
-        """在同步线程退出前中断正在等待的 CLI 一次性命令。"""
+        """在同步线程退出前中断 CLI 与原生定位的在途等待。"""
 
+        self._close_foreground()
         close_cli = getattr(self._cli, "close", None)
         if callable(close_cli):
             close_cli()
+
+    def cancel_foreground_observation(self) -> None:
+        """只中断原生前台观察；后台 CLI 正文同步保持独立。"""
+
+        self._close_foreground()
+
+    def _close_foreground(self) -> None:
+        close_foreground = getattr(self._foreground, "close", None)
+        if callable(close_foreground):
+            close_foreground()
 
     def sync_enabled(self) -> bool:
         return bool(self._sync_state.read(owner_id=self._owner_id).enabled)

@@ -308,7 +308,13 @@ class SyncHost:
             if monotonic() >= deadline:
                 raise SyncHostBusy("本次前台观察预算已过期。")
             result = self._engine.observe_foreground(deadline=deadline, check_current=check_current)
-            check_current()
+            try:
+                check_current()
+            except BaseException:
+                cancel = getattr(self._engine, "cancel_foreground_observation", None)
+                if callable(cancel):
+                    cancel()
+                raise
             return result
 
     def status(self) -> FrontSyncCycleReport | None:

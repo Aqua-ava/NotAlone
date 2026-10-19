@@ -45,7 +45,7 @@ test('变化取消正常空等，在途仅合并一轮；技术失败仍退避�
   try {
    await writeFile(path.join(fixture.directory,'probe-state.json'),JSON.stringify({capture_version:'automatic-header-v3',display_name:'变化合成会话'}));
    foreground.startContinuous(); await next();
-   assert.equal(scheduled.values().next().value.delay,2000);
+   assert.equal(scheduled.values().next().value.delay,2000,JSON.stringify(foreground.getState()));
    foreground.notifyForegroundChange(); await waitCount(2);
    assert.equal(foreground.getState().recognizedName,'变化合成会话');
    const held={received:deferred(),release:deferred()}; hold=held;

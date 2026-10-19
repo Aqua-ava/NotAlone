@@ -14,7 +14,7 @@ import { validateSigningIdentity, requireSigningMode } from './package-signing.m
 const run = promisify(execFile);
 const sourceNames = [
   'scripts/build_cli.sh',
-  ...['ProbeCore', 'SessionCaptureSafety', 'RegionCalibration', 'MinimalRegionLayout', 'MinimalSessionCapture', 'AutomaticSessionCapture', 'HeaderTextFallback', 'HeaderChangeDetector', 'HeaderChangeGeometry', 'HeaderChangeDiagnostics', 'HeaderChangeSource', 'SessionCapturePreview', 'ForegroundStatusPreview', 'CaptureSupport', 'SelectedSession', 'FrontSyncStatusReport', 'BackendStatusPolling']
+  ...['ProbeCore', 'SessionCaptureSafety', 'RegionCalibration', 'MinimalRegionLayout', 'MinimalSessionCapture', 'AutomaticSessionCapture', 'SessionObservationWorker', 'HeaderTextFallback', 'HeaderChangeDetector', 'HeaderChangeGeometry', 'HeaderChangeDiagnostics', 'HeaderChangeSource', 'SessionCapturePreview', 'ForegroundStatusPreview', 'CaptureSupport', 'SelectedSession', 'FrontSyncStatusReport', 'BackendStatusPolling']
     .map((name) => `Sources/NotAloneSyncCore/${name}.swift`),
   'Sources/NotAloneSyncCLI/main.swift',
 ];

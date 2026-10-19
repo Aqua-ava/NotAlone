@@ -16,6 +16,18 @@ const record = { kind: 'host', event: 'reconcile', reason: 'no_permit', ordinal:
   permitPresent: false, childPresent: false, resolving: false, blocked: false, freshProof: false,
   epochCurrent: true, paused: false, stopping: false, renewalEligible: false, code: null, signal: 'none' };
 
+test('正式观察计时只接收固定事件与有限数值，不记录姓名或联系人标识', async () => {
+  const output = path.join(directory, 'observation.jsonl');
+  const sink = openHeaderChangeDiagnostics({ NOTALONE_HEADER_CHANGE_HOST_DIAGNOSTICS_FILE: output });
+  const metric = { kind: 'observation', ordinal: 1, elapsedMs: 10, event: 'result_published',
+    durationMs: 154, changedContact: true, confirmed: true, phase: 'confirmed' };
+  for (const bad of [{ ...metric, event: 'private-name' }, { ...metric, durationMs: Infinity },
+    { ...metric, durationMs: -1 }, { ...metric, confirmed: 'true' }, { ...metric, contactId: 'synthetic' },
+    { ...metric, name: '合成名称' }]) sink.record(bad);
+  sink.record(metric); sink.close();
+  assert.deepEqual((await readFile(output, 'utf8')).trim().split('\n').map(JSON.parse), [metric]);
+});
+
 test('最终帧分账只接受三个有界计数，饱和显式标记且每源仅一次', async () => {
   const accepted=[],invalid=[];
   const decoder=new NativeHeaderChangeDiagnosticDecoder(value=>accepted.push(value),()=>invalid.push(true));
@@ -141,13 +153,13 @@ test('私有时钟锚点仅一条有限数值，非法范围不占首次且计�
     { ...anchor, elapsedMs: 0.1, sampleSpanMs: 1 }, { ...anchor, name: 'private-clock-value' }]) sink.record(invalid);
   sink.record(anchor);
   sink.record({ ...anchor, epochMs: 1792000001000 });
-  for (let ordinal = 0; ordinal < 1000; ordinal++) sink.record({ ...record, ordinal });
+  for (let ordinal = 0; ordinal < 5000; ordinal++) sink.record({ ...record, ordinal });
   sink.close(); sink.record(anchor);
   const text = await readFile(output, 'utf8'), rows = text.trim().split('\n').map(JSON.parse);
   assert.deepEqual(rows[0], anchor);
   assert.equal(rows.filter(row => row.kind === 'clock-anchor').length, 1);
-  assert.equal(rows.length, 512);
-  assert.ok(Buffer.byteLength(text) <= 256 * 1024);
+  assert.equal(rows.length, 4096);
+  assert.ok(Buffer.byteLength(text) <= 2 * 1024 * 1024);
   assert.equal((await stat(output)).mode & 0o777, 0o600);
   assert.doesNotMatch(text, /private-clock-value|NaN|Infinity/);
 });
@@ -157,11 +169,11 @@ test('宿主诊断行数与字节有界，关闭后无写入，非有限耗时�
   const sink = openHeaderChangeDiagnostics({ NOTALONE_HEADER_CHANGE_HOST_DIAGNOSTICS_FILE: output });
   for (const invalid of [{ ...record, elapsedMs: NaN }, { ...record, elapsedMs: Infinity },
     { ...record, leaseElapsedMs: -1 }, { ...record, reason: 'private-value' }, { ...record, signal: 'private-value' }]) sink.record(invalid);
-  for (let ordinal = 0; ordinal < 1000; ++ordinal) sink.record({ ...record, ordinal });
+  for (let ordinal = 0; ordinal < 5000; ++ordinal) sink.record({ ...record, ordinal });
   sink.close(); sink.record(record);
   const bytes = await readFile(output);
-  assert.equal(bytes.toString().trim().split('\n').length, 512);
-  assert.ok(bytes.length <= 256 * 1024);
+  assert.equal(bytes.toString().trim().split('\n').length, 4096);
+  assert.ok(bytes.length <= 2 * 1024 * 1024);
   assert.doesNotMatch(bytes.toString(), /private-value|NaN|Infinity/);
 });
 

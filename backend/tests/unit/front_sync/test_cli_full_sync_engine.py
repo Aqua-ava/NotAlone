@@ -111,6 +111,7 @@ class FakeBackground:
 
 class FakeForeground:
     def __init__(self) -> None:
+        self.close_calls = 0
         self.calls: list[bool] = []
         self.fresh_calls: list[bool] = []
         self.result = ForegroundLocatorStatus(
@@ -123,6 +124,9 @@ class FakeForeground:
             decision_reason=None,
             candidates=(),
         )
+
+    def close(self) -> None:
+        self.close_calls += 1
 
     def observe(self, *, enabled: bool) -> ForegroundLocatorStatus:
         self.calls.append(enabled)
@@ -357,6 +361,15 @@ class CliFullSyncEngineTest(unittest.TestCase):
         self.engine.cancel_pending_io()
 
         self.assertEqual(self.cli.close_calls, 1)
+        self.assertEqual(self.foreground.close_calls, 1)
+        self.assertTrue(self.state.enabled)
+
+    def test_disable_sync_and_close_stop_native_foreground_resources(self) -> None:
+        self.engine.disable_sync()
+        self.assertEqual(self.foreground.close_calls, 1)
+        self.assertFalse(self.state.enabled)
+        self.engine.close()
+        self.assertEqual(self.foreground.close_calls, 2)
 
     def test_cli_availability_retries_after_a_temporary_failure(self) -> None:
         from notalone.front_sync.full_sync_engine import CliFullSyncEngine

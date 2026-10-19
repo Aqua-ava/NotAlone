@@ -16,6 +16,7 @@ private struct ProbeOptions {
         [--crop x,y,width,height] [--show-text]
       swift run notalone-sync-probe --session [--show-text]
       swift run notalone-sync-probe --session --json [--minimal-region] [--single-frame]
+      swift run notalone-sync-probe --session-worker --json
       swift run notalone-sync-probe --screen-capture-permission --json [--request]
       swift run notalone-sync-probe --calibrate-minimal-region --json [--coordinates]
       swift run notalone-sync-probe --verify-minimal-region --json
@@ -29,6 +30,7 @@ private struct ProbeOptions {
       --preview-session    显式本机可视化预览，由用户点击观察；图帧与文字不保存，8分钟退出。
       --preview-session-name 自动显示当前微信会话名称；仅本机内存处理，20分钟退出。
       --preview-foreground 前台状态悬浮验收，仅查询元数据、不截图或OCR，8分钟退出。
+      --session-worker --json  宿主专用：按 stdin 请求单轮观察，空闲60秒退出，不自主采集。
       --header-change-source --json  宿主专用：最多60秒，只发顶部局部变化/暂停事件，不OCR或保存帧。
       --foreground-status --json  开发诊断：只输出前台分类及前置检查，不创建窗口或采集图像。
       --screen-capture-permission --json  仅静默检查屏幕录制权限，不读取窗口或采集图像。
@@ -104,6 +106,9 @@ struct NotAloneSyncCLI {
     static func main() async {
         do {
             let arguments = Array(CommandLine.arguments.dropFirst())
+            if try SessionObservationWorker.accepts(arguments: arguments) {
+                exit(await SessionObservationWorker.run() ? EXIT_SUCCESS : EXIT_FAILURE)
+            }
             if let permission = try ScreenCapturePermissionCommand.run(arguments: arguments) {
                 printJsonLine(permission)
                 return

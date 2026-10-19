@@ -77,10 +77,36 @@ class ForegroundLocator:
         self._cli = cli
         self._bindings = bindings
 
+    def close(self) -> None:
+        """停止原生定位资源；不修改绑定或后台授权。"""
+
+        close_probe = getattr(self._probe, "close", None)
+        if callable(close_probe):
+            close_probe()
+
     def observe_fresh(
         self, *, enabled: bool, deadline: float, check_current: Callable[[], None] | None = None,
     ) -> FreshForegroundObservation:
-        """独立一次定位与元数据消歧，不读正文、不消费历史或写绑定。"""
+        """独立一次定位；取消、错误及超时回收本轮原生资源。"""
+
+        try:
+            result = self._observe_fresh(
+                enabled=enabled, deadline=deadline, check_current=check_current,
+            )
+            # 包括非前台、质量不合格等早退；不能留下已被撤销的热进程。
+            if check_current is not None:
+                check_current()
+        except BaseException:
+            self.close()
+            raise
+        if not enabled or result.phase == "unavailable" or monotonic() >= deadline:
+            self.close()
+        return result
+
+    def _observe_fresh(
+        self, *, enabled: bool, deadline: float, check_current: Callable[[], None] | None,
+    ) -> FreshForegroundObservation:
+        """只读观察及名单核验；清理由公开入口统一收尾。"""
 
         if check_current is not None:
             check_current()
@@ -231,6 +257,7 @@ class ForegroundLocator:
             if monotonic() >= deadline:
                 raise TimeoutError
         except TimeoutError:
+            self.close()
             if member_suffix:
                 return pause_group()
             if quality_failure is not None:
@@ -241,6 +268,7 @@ class ForegroundLocator:
                 observed_at=observation.captured_at,
             )
         except (CliAdapterError, ConversationBindingPersistenceError):
+            self.close()
             if member_suffix:
                 return pause_group()
             if quality_failure is not None:
@@ -369,8 +397,10 @@ class ForegroundLocator:
             )
             current()
         except TimeoutError:
+            self.close()
             return result("unavailable", "observation_timeout")
         except (CliAdapterError, ConversationBindingPersistenceError):
+            self.close()
             return result("unavailable", "binding_verification_unavailable")
         active = tuple(item for item in bindings if item.conversation_locator == candidate.username)
         if len(active) == 1:

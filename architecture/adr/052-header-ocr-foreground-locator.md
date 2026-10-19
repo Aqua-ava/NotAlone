@@ -1,6 +1,7 @@
 # ADR-052：顶部名称 OCR 接入正式前台定位
 
 > 状态：已采纳；代码及正式 App 集成验证分别记录
+> 后续局部修订：[ADR-078](078-request-driven-native-observation-worker.md)允许按请求串行复用原生观察进程，替代短生命周期要求；新帧、前台、身份和隐私门保留。
 > 决策日期：2026-10-15
 > 后续局部修订：[ADR-076](076-session-list-assisted-name-matching.md)以完整会话名单核验普通增漏错字及尾部证据；保留原始分数、已有绑定和其他安全门。
 > 后续局部修订：[ADR-075](075-isolated-emoji-tail-text-evidence.md)增加独立尾部表情文字证据；完整名称路径、原始分数及未修订门禁保留。

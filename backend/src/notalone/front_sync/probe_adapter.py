@@ -2,8 +2,8 @@
 
 探针是 ``native/macos/`` 工程的本地二进制，负责判断微信是否在前台并
 给出顶部 display name；旧协议另含选中行的最小元数据。本适配器只解析
-``--session --json`` 的机器可读输出；任何无法解析或无法运行的情况都
-失败关闭，不猜测前台状态。
+单次兼容输出与 ``--session-worker --json`` 的有界机器协议；任何无法解析
+或无法运行的情况都失败关闭，不猜测前台状态。
 """
 
 from __future__ import annotations
@@ -18,6 +18,7 @@ from typing import Any, Callable, Protocol
 
 from notalone.conversation.matcher import FrontSessionEvidence, normalize_display_text
 from notalone.front_sync.observation_budget import FRESH_PROBE_SECONDS
+from notalone.front_sync.session_worker import NativeSessionWorker, SessionWorkerError
 
 
 class ProbeAdapterError(RuntimeError):
@@ -142,7 +143,7 @@ class _SubprocessResult:
 
 
 class MacosFrontSessionProbe:
-    """调用本机探针二进制的单次前台定位；不保存截图或正文。"""
+    """fresh 路径复用本机进程、每轮重新定位；不保存截图或正文。"""
 
     __slots__ = (
         "_executable",
@@ -150,6 +151,7 @@ class MacosFrontSessionProbe:
         "_default_runner",
         "_timeout_seconds",
         "_permission_blocked",
+        "_worker",
     )
 
     def __init__(
@@ -167,10 +169,16 @@ class MacosFrontSessionProbe:
         self._timeout_seconds = timeout_seconds
         self._runner = runner or self._run_command
         self._default_runner = runner is None
+        self._worker = NativeSessionWorker(executable)
         # 权限失败不是普通的瞬时探针错误。macOS 可能在子进程每次
         # 调用 ScreenCaptureKit 时重新弹窗；本进程内先熔断，避免后台
         # 心跳把同一个授权请求重复触发。
         self._permission_blocked = False
+
+    def close(self) -> None:
+        """停止常驻原生资源；不改变权限门或持久化同步开关。"""
+
+        self._worker.close()
 
     def reset_permission_gate(self) -> None:
         """在用户明确完成授权后允许再次尝试一次探针。"""
@@ -191,14 +199,22 @@ class MacosFrontSessionProbe:
             or not 0 < timeout_seconds <= FRESH_PROBE_SECONDS
         ):
             raise ValueError("新观察的探针预算超出有界范围。")
-        runner = (
-            (lambda command: self._run_command(command, timeout_seconds=timeout_seconds))
-            if self._default_runner
-            else self._runner
-        )
-        return self._observe(
-            (self._executable, "--session", "--json", "--minimal-region", "--single-frame"), runner,
-        )
+        command = (self._executable, "--session", "--json", "--minimal-region", "--single-frame")
+        if not self._default_runner:
+            return self._observe(command, self._runner)
+
+        def run_worker(command: tuple[str, ...]) -> CommandResult:
+            del command
+            envelope = self._worker.observe(timeout_seconds=timeout_seconds)
+            return _SubprocessResult(0, json.dumps(envelope), "")
+
+        try:
+            return self._observe(command, run_worker)
+        except SessionWorkerError as error:
+            raise ProbeAdapterError(error.code, "前台定位原生进程不可用。") from None
+        except ProbeAdapterError:
+            self._worker.close()
+            raise
 
     def _observe(
         self, command: tuple[str, ...], runner: CommandRunner,
@@ -223,6 +239,7 @@ class MacosFrontSessionProbe:
             )
             if code == "screen_capture_permission_missing":
                 self._permission_blocked = True
+                self._worker.close()
             raise ProbeAdapterError(code, message)
         try:
             envelope = json.loads(result.stdout)
@@ -238,6 +255,7 @@ class MacosFrontSessionProbe:
             code, message = self._failure_from_envelope(envelope)
             if code == "screen_capture_permission_missing":
                 self._permission_blocked = True
+                self._worker.close()
             raise ProbeAdapterError(code, message)
         in_front = envelope.get("wechat_in_front")
         if not isinstance(in_front, bool):

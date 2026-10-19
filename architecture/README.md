@@ -111,6 +111,7 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 75. [ADR-075：孤立尾部表情的独立文字证据](adr/075-isolated-emoji-tail-text-evidence.md)
 76. [ADR-076：结合完整会话名单核验标题 OCR](adr/076-session-list-assisted-name-matching.md)
 77. [ADR-077：完整名称命中优先于编辑近邻](adr/077-exact-session-name-before-edit-neighbors.md)
+78. [ADR-078：按请求复用原生前台观察进程](adr/078-request-driven-native-observation-worker.md)
 
 ## 当前架构决策
 
