@@ -135,3 +135,53 @@ test('候选用前后按钮回看历史，直接复制当前展示版且不调�
   await page.getByRole('button', {name:'用这组回复新开会话'}).click();
   await expect(page.getByTestId('carried')).toHaveText('v1');
 });
+
+test('异步粘贴核验使候选失焦后，核验通过自动保存而无需再次聚焦', async t => {
+  const { chromium, expect } = await import('@playwright/test');
+  const browser = await chromium.launch({ headless: true, executablePath: process.env.NOTALONE_TEST_CHROMIUM_PATH });
+  t.after(() => browser.close());
+  const page = await browser.newPage();
+  const bundle = await build({ stdin: { contents: `
+    import React, { useState } from 'react';
+    import { createRoot } from 'react-dom/client';
+    import { CandidateMessageGroup } from './src/renderer/CandidateMessageGroup';
+    function View() {
+      const [text, setText] = useState('合成粘贴前原文');
+      const [saved, setSaved] = useState(text);
+      const [attempts, setAttempts] = useState(0);
+      return <><CandidateMessageGroup identity="synthetic-paste" number={1}
+        messages={[{messageId:'m', text}]} controls={null} disabled={false}
+        dirty={text !== saved} restored={false} edit={(_, value) => setText(value)}
+        save={async () => { setAttempts(n => n + 1); setSaved(text); }}
+        copy={async () => {}} noteTextCopy={() => {}}
+        validatePaste={() => new Promise(resolve => { window.releasePasteValidation = resolve; })} />
+        <output data-testid="attempts">{attempts}</output><p data-testid="saved">{saved}</p></>;
+    }
+    createRoot(document.getElementById('root')).render(<View/>);
+  `, resolveDir: process.cwd(), loader: 'tsx' }, bundle: true, platform: 'browser', format: 'iife', write: false });
+  await page.setContent('<div id="root"></div>');
+  await page.addScriptTag({ content: bundle.outputFiles[0].text });
+  const input = page.getByRole('textbox', { name: '候选1编辑文本', exact: true });
+  await expect(input).toHaveValue('合成粘贴前原文');
+  await input.focus();
+  await input.evaluate(element => {
+    element.setSelectionRange(0, element.value.length);
+    const clipboardData = new DataTransfer();
+    clipboardData.setData('text/plain', '异步核验通过的合成粘贴内容');
+    element.dispatchEvent(new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData }));
+  });
+  await expect(page.getByRole('status').filter({ hasText: '正在核对粘贴来源' })).toHaveText('正在核对粘贴来源…');
+  await expect(input).toBeDisabled();
+  // 不人工触发 blur/Tab：浏览器禁用当前 fieldset 后已失焦，但可能不派发 blur 事件。
+  await expect(input).not.toBeFocused();
+  await expect(input).toHaveValue('合成粘贴前原文');
+  await expect(page.getByTestId('attempts')).toHaveText('0');
+  await page.evaluate(() => window.releasePasteValidation());
+  await expect(input).toHaveValue('异步核验通过的合成粘贴内容');
+  await expect(page.getByRole('status').filter({ hasText: '正在核对粘贴来源' })).toHaveCount(0);
+  await expect(page.getByTestId('saved')).toHaveText('异步核验通过的合成粘贴内容');
+  await expect(page.getByTestId('attempts')).toHaveText('1');
+  await expect(input).not.toBeFocused();
+  await expect(page.getByRole('button', { name: '复制第1条', exact: true })).toBeEnabled();
+  await expect(page.getByRole('alert')).toHaveCount(0);
+});

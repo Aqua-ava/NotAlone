@@ -27,13 +27,16 @@ export function CandidateMessageGroup({ identity, number, messages, controls, di
   const [saveFailed, setSaveFailed] = useState(false);
   const [pasting, setPasting] = useState(false);
   const pendingPaste = useRef(false);
-  const saveAfterPaste = useRef(false);
+  const saveAfterPaste = useRef<string | null>(null);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
   useEffect(() => { setNotice(''); setError(''); }, [signature]);
   useEffect(() => {
-    if (!pasting && saveAfterPaste.current) { saveAfterPaste.current = false; void saveGroup(); }
+    if (!pasting && saveAfterPaste.current !== null) {
+      const pendingIdentity = saveAfterPaste.current; saveAfterPaste.current = null;
+      if (pendingIdentity === identity) void saveGroup();
+    }
   }, [pasting, signature]);
   async function copyMessage(messageId: string, index: number) {
     if (disabled || dirty || copying || saving) return;
@@ -63,11 +66,16 @@ export function CandidateMessageGroup({ identity, number, messages, controls, di
     const inserted = text.slice(0, Math.max(0, input.maxLength - input.value.length + end - start));
     const next = input.value.slice(0, start) + inserted + input.value.slice(end);
     const operation = signature;
-    pendingPaste.current = true; setPasting(true); setNotice(''); setError('');
+    pendingPaste.current = true; saveAfterPaste.current = null; setPasting(true); setNotice(''); setError('');
     try {
       await validatePaste(text);
-      if (active.current && latest.current === operation) apply(next);
+      if (active.current && latest.current === operation) {
+        // 禁用 fieldset 可能让浏览器直接失焦而不派发 blur；核验通过后补记当前候选的保存。
+        if (input.ownerDocument.activeElement !== input) saveAfterPaste.current = identity;
+        apply(next);
+      } else saveAfterPaste.current = null;
     } catch {
+      saveAfterPaste.current = null;
       if (active.current && latest.current === operation) setError('这段粘贴文字的来源尚未确认，原编辑文字仍保留。请在原来源入口保存。');
     } finally { pendingPaste.current = false; if (active.current) setPasting(false); }
   }
@@ -79,7 +87,7 @@ export function CandidateMessageGroup({ identity, number, messages, controls, di
         aria-label={messages.length === 1 && !restored ? `候选${number}编辑文本` : `说法${number}第${index + 1}条编辑文本`}
         value={message.text} maxLength={messages.length > 1 ? 8192 : 65_536}
         onChange={(event) => edit(message.messageId, event.target.value)}
-        onBlur={() => { if (pendingPaste.current) saveAfterPaste.current = true; else void saveGroup(); }}
+        onBlur={() => { if (pendingPaste.current) saveAfterPaste.current = identity; else void saveGroup(); }}
         onPaste={(event) => void paste(event, (text) => edit(message.messageId, text))}
         onCopy={(event) => { const input = event.currentTarget; noteTextCopy(input.value.slice(input.selectionStart, input.selectionEnd)); }}
         onCut={(event) => { const input = event.currentTarget; noteTextCopy(input.value.slice(input.selectionStart, input.selectionEnd)); }}

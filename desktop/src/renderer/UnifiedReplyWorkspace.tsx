@@ -8,10 +8,14 @@ import { Icon } from './icons';
 const workspaceOptions = (options: RewriteOptions): RewriteOptions => ({ ...options,
   inputKind: 'workspace', includeRelationshipContext: options.inputKind === 'workspace' ? options.includeRelationshipContext : true });
 
+interface WorkspaceSubmission { contactId: string | null; scopeRevision: number; sessionId: string | null | undefined; }
+
 export function UnifiedReplyWorkspace({ contacts, replies }: { contacts: ContactSessionView; replies: ReplySessionView }) {
   const { state } = replies;
   const [options, setOptions] = useState(() => workspaceOptions(state.options));
-  const [submitting, setSubmitting] = useState(false);
+  const [submission, setSubmission] = useState<WorkspaceSubmission | null>(null);
+  const submitting = submission !== null && submission.contactId === state.contactId
+    && submission.scopeRevision === state.scopeRevision && submission.sessionId === state.savedSession?.sessionId;
   const workspaceReady = state.options.inputKind === 'workspace' && state.mode === 'rewrite_draft';
   useEffect(() => { setOptions(workspaceOptions(state.options)); }, [state.scopeRevision, state.inputClearRevision]);
   useEffect(() => {
@@ -34,10 +38,14 @@ export function UnifiedReplyWorkspace({ contacts, replies }: { contacts: Contact
     const next = { ...options, ...value }; setOptions(next); void replies.updateOptions(next);
   };
   async function generate(action: 'express' | 'suggest') {
-    setSubmitting(true);
+    const pending = { contactId: state.contactId, scopeRevision: state.scopeRevision, sessionId: state.savedSession?.sessionId };
+    setSubmission(pending);
     try {
       await replies.generateWorkspace(action, options);
-    } finally { setSubmitting(false); }
+    } finally {
+      // 旧范围的迟到完成只能解除自己的提交，不能影响用户切换后的新提交。
+      setSubmission(current => current === pending ? null : current);
+    }
   }
   const latest = state.messages.items.reduce<string | null>((value, message) => {
     const time = message.occurredAt;
