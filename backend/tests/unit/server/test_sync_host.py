@@ -5,6 +5,7 @@ from __future__ import annotations
 import threading
 import time
 import unittest
+from dataclasses import replace
 from uuid import uuid4
 
 from notalone.front_sync import FrontSyncPhase
@@ -128,6 +129,40 @@ class BlockingCycleEngine(FakeEngine):
         return super().cycle()
 
 
+class CooperativeEngine(FakeEngine):
+    """通过切片接口暂停首个任务，观察后续任务的公开调用顺序。"""
+
+    def __init__(self) -> None:
+        super().__init__(enabled=True)
+        self.first_started = threading.Event()
+        self.release_first = threading.Event()
+        self.second_started = threading.Event()
+        self.step_priorities = []
+        self.running = 0
+        self.maximum_running = 0
+        self.cancel_started = threading.Event()
+
+    def cycle_step(self, *, priority_contact_id, priority_requested_at):
+        if not self.enabled:
+            return super().cycle()
+        self.step_priorities.append((priority_contact_id, priority_requested_at))
+        self.running += 1
+        self.maximum_running = max(self.maximum_running, self.running)
+        try:
+            if len(self.step_priorities) == 1:
+                self.first_started.set()
+                self.release_first.wait(timeout=2.0)
+                return replace(super().cycle(), cli_pending_count=1)
+            self.second_started.set()
+            return super().cycle()
+        finally:
+            self.running -= 1
+
+    def cancel_pending_io(self):
+        super().cancel_pending_io()
+        self.cancel_started.set()
+
+
 class SyncHostTest(unittest.TestCase):
     def setUp(self) -> None:
         self.engine = FakeEngine()
@@ -217,13 +252,14 @@ class SyncHostTest(unittest.TestCase):
             stopper.join(timeout=1)
             host.stop()
 
-    def test_selected_contact_priority_is_forwarded_to_engine(self) -> None:
+    def test_registered_priority_is_forwarded_to_legacy_engine_on_next_check(self) -> None:
         contact_id = uuid4()
 
         result = self.host.set_priority_contact(contact_id)
 
-        self.assertEqual(self.engine.priority_contact_calls, [contact_id])
         self.assertEqual(result, self.host.status())
+        self.host.check()
+        self.assertEqual(self.engine.priority_contact_calls, [contact_id])
 
     def test_status_is_none_before_any_cycle(self) -> None:
         self.assertIsNone(self.host.status())
@@ -253,6 +289,136 @@ class SyncHostTest(unittest.TestCase):
         finally:
             engine.release_cycle.set()
             status_thread.join(timeout=1.0)
+            host.stop()
+
+    def test_priority_registration_does_not_wait_for_running_cycle(self) -> None:
+        engine = BlockingCycleEngine()
+        host = SyncHost(engine=engine, interval=3.0)
+        registered = threading.Event()
+        contact_id = uuid4()
+        host.start()
+        self.assertTrue(engine.cycle_started.wait(timeout=1.0))
+
+        def register() -> None:
+            host.set_priority_contact(contact_id)
+            registered.set()
+
+        request = threading.Thread(target=register)
+        request.start()
+        try:
+            self.assertTrue(registered.wait(timeout=0.2), "优先联系人登记不能等待慢同步轮次。")
+        finally:
+            engine.release_cycle.set()
+            request.join(timeout=1.0)
+            host.stop()
+
+    def test_next_pending_step_uses_latest_priority_without_heartbeat_delay(self) -> None:
+        engine = CooperativeEngine()
+        host = SyncHost(engine=engine, interval=3.0)
+        first, latest = uuid4(), uuid4()
+        host.start()
+        try:
+            self.assertTrue(engine.first_started.wait(timeout=0.2), "宿主应使用有界切片接口。")
+            host.set_priority_contact(first)
+            host.set_priority_contact(latest)
+            engine.release_first.set()
+            self.assertTrue(engine.second_started.wait(timeout=0.2), "有待处理任务时不能再等待三秒心跳。")
+            self.assertEqual(engine.step_priorities[1][0], latest)
+            self.assertIsNotNone(engine.step_priorities[1][1])
+            self.assertEqual(engine.maximum_running, 1, "切片不得并发执行。")
+        finally:
+            engine.release_first.set()
+            host.stop()
+
+    def test_stop_discards_priority_waiting_behind_a_running_step(self) -> None:
+        engine = CooperativeEngine()
+        host = SyncHost(engine=engine, interval=3.0)
+        host.start()
+        self.assertTrue(engine.first_started.wait(timeout=0.2))
+        host.set_priority_contact(uuid4())
+        stopper = threading.Thread(target=host.stop)
+        stopper.start()
+        try:
+            self.assertTrue(engine.cancel_started.wait(timeout=0.2))
+            engine.release_first.set()
+            stopper.join(timeout=1.0)
+            self.assertFalse(stopper.is_alive())
+            self.assertEqual(len(engine.step_priorities), 1)
+            self.assertEqual(engine.close_calls, 1)
+            with self.assertRaises(RuntimeError):
+                host.set_priority_contact(uuid4())
+        finally:
+            engine.release_first.set()
+            stopper.join(timeout=1.0)
+            host.stop()
+
+    def test_disabled_host_does_not_read_when_priority_request_wakes_it(self) -> None:
+        engine = CooperativeEngine()
+        engine.release_first.set()
+        host = SyncHost(engine=engine, interval=3.0)
+        host.start()
+        try:
+            self.assertTrue(engine.second_started.wait(timeout=0.2))
+            self.assertFalse(host.disable().sync_enabled)
+            reads = len(engine.step_priorities)
+            engine.second_started.clear()
+            host.set_priority_contact(uuid4())
+            self.assertFalse(engine.second_started.wait(timeout=0.05))
+            self.assertEqual(len(engine.step_priorities), reads)
+        finally:
+            host.stop()
+
+    def test_production_engine_rechecks_latest_contact_between_cli_bindings(self) -> None:
+        from tests.unit.front_sync import test_cli_background_sync as background_fixture
+        from tests.unit.front_sync import test_cli_full_sync_engine as full_fixture
+        from notalone.front_sync.cli_sync import CliBackgroundSync
+        from notalone.front_sync.full_sync_engine import CliFullSyncEngine
+
+        started, release, selected = threading.Event(), threading.Event(), threading.Event()
+        bindings = [background_fixture.FakeBinding(uuid4(), uuid4(), f"synthetic_{index}", "合成联系人")
+                    for index in range(3)]
+
+        class SlowCli(background_fixture.FakeCli):
+            def __init__(self):
+                super().__init__(stream_events=[])
+                self.running = 0
+                self.maximum_running = 0
+
+            def tail(self, talker, **kwargs):
+                self.running += 1
+                self.maximum_running = max(self.maximum_running, self.running)
+                try:
+                    result = super().tail(talker, **kwargs)
+                    if len(self.tail_calls) == 1:
+                        started.set()
+                        release.wait(timeout=1.0)
+                    if talker == bindings[2].conversation_locator:
+                        selected.set()
+                    return result
+                finally:
+                    self.running -= 1
+
+        cli, state = SlowCli(), full_fixture.FakeState()
+        background = CliBackgroundSync(owner_id=background_fixture.OWNER_ID, channel="wechat",
+            account_scope="synthetic", cli=cli, bindings=bindings,
+            observation_store=background_fixture.FakeObservationStore(), sync_state=state)
+        engine = CliFullSyncEngine(owner_id=background_fixture.OWNER_ID, channel="wechat",
+            account_scope="synthetic", cli=cli, sync_state=state, background=background,
+            foreground=full_fixture.FakeForeground(), binding_coordinator=full_fixture.FakeBindingCoordinator(),
+            fallback=full_fixture.FakeFallback())
+        host = SyncHost(engine=engine, interval=3.0)
+        host.start()
+        try:
+            self.assertTrue(started.wait(timeout=0.2))
+            host.set_priority_contact(bindings[1].contact_id)
+            host.set_priority_contact(bindings[2].contact_id)
+            release.set()
+            self.assertTrue(selected.wait(timeout=0.2))
+            self.assertEqual([call["talker"] for call in cli.tail_calls[:2]],
+                             [bindings[0].conversation_locator, bindings[2].conversation_locator])
+            self.assertEqual(cli.maximum_running, 1)
+        finally:
+            release.set()
             host.stop()
 
     def test_enable_delegates_and_returns_fresh_report(self) -> None:

@@ -13,7 +13,11 @@ from notalone.front_sync.cli_binding import (
     CliBindingCoordinator,
     CliBindingSelection,
 )
-from notalone.front_sync.cli_sync import CliBackgroundSync, CliSyncCycleResult
+from notalone.front_sync.cli_sync import (
+    CLI_TASK_TIMEOUT_SECONDS,
+    CliBackgroundSync,
+    CliSyncCycleResult,
+)
 from notalone.front_sync.foreground_observation import FreshForegroundObservation
 from notalone.front_sync.foreground_locator import (
     ForegroundLocator,
@@ -216,14 +220,40 @@ class CliFullSyncEngine:
             foreground=_unknown_foreground_status(enabled),
         )
 
+    def cycle_step(
+        self, *, priority_contact_id: UUID | None, priority_requested_at: float | None,
+    ) -> FrontSyncCycleReport:
+        """常驻宿主每次只读取一个绑定，随后归还控制以应用新的优先目标。"""
+        self.set_priority_contact(priority_contact_id)
+        return self._background_step(priority_requested_at=priority_requested_at)
+
+    def _background_step(self, *, priority_requested_at: float | None = None) -> FrontSyncCycleReport:
+        deadline = monotonic() + CLI_TASK_TIMEOUT_SECONDS
+        enabled = self.sync_enabled()
+        background = self._background.cycle(
+            enabled=enabled, priority_contact_id=self._priority_contact_id,
+            max_bindings=1, priority_requested_at=priority_requested_at,
+            cli_deadline=deadline,
+        )
+        if background.cli_available is not None:
+            self._cli_status = (background.cli_available, background.cli_failure_code)
+            self._cli_last_checked_at = self._clock()
+        return self._build_report(
+            enabled=enabled, background=background,
+            foreground=_unknown_foreground_status(enabled), refresh_cli=False,
+        )
+
     def _build_report(
         self,
         *,
         enabled: bool,
         background: CliSyncCycleResult,
         foreground: ForegroundLocatorStatus,
+        refresh_cli: bool = True,
     ) -> FrontSyncCycleReport:
-        cli_available, cli_failure = self._cli_availability()
+        cli_available, cli_failure = (
+            self._cli_availability() if refresh_cli else (self._cli_status or (False, None))
+        )
 
         if not enabled:
             phase = FrontSyncPhase.SYNC_DISABLED
@@ -255,6 +285,13 @@ class CliFullSyncEngine:
             cli_pending_count=background.status.pending_count,
             cli_batch_message_count=background.batch_message_count,
             cli_failure_code=background.status.failure_code,
+            cli_priority_contact_id=background.status.priority_contact_id,
+            cli_priority_last_success_at=background.status.priority_last_success_at,
+            cli_priority_last_duration_ms=background.status.priority_last_duration_ms,
+            cli_priority_last_cli_duration_ms=background.status.priority_last_cli_duration_ms,
+            cli_priority_last_store_duration_ms=background.status.priority_last_store_duration_ms,
+            cli_priority_last_failure_code=background.status.priority_last_failure_code,
+            cli_priority_queue_wait_ms=background.status.priority_queue_wait_ms,
             cli_backfill_phase=background.status.backfill_phase,
             cli_backfill_contact_id=background.status.backfill_contact_id,
             cli_backfill_message_count=background.status.backfill_message_count,
@@ -317,16 +354,7 @@ class CliFullSyncEngine:
             self._background.request_safety_sweep()
         # 批量绑定在 NotAlone 界面完成，不应为了返回状态再次触发
         # 屏幕录制/OCR，也不以旧前台身份刷新当前联系人。
-        enabled = self.sync_enabled()
-        background = self._background.cycle(
-            enabled=enabled,
-            priority_contact_id=self._priority_contact_id,
-        )
-        return self._build_report(
-            enabled=enabled,
-            background=background,
-            foreground=_unknown_foreground_status(enabled),
-        )
+        return self._background_step()
 
     # ------------------------------------------------------------------
     # 当前全局流诊断；绑定确认仍保留旧兼容入口
@@ -353,13 +381,7 @@ class CliFullSyncEngine:
 
     def _follow_diagnostic_report(self) -> FrontSyncCycleReport:
         """诊断只刷新正式后台通道，不调用OCR或旧前台引擎。"""
-        enabled = self.sync_enabled()
-        background = self._background.cycle(enabled=enabled)
-        return self._build_report(
-            enabled=enabled,
-            background=background,
-            foreground=_unknown_foreground_status(enabled),
-        )
+        return self._background_step()
 
     def confirm_binding(self, *, contact_id: UUID, locator: str) -> FrontSyncCycleReport:
         return self._fallback.confirm_binding(contact_id=contact_id, locator=locator)
@@ -384,7 +406,7 @@ class CliFullSyncEngine:
         )
         if self._cli_status is None or retry_unavailable:
             try:
-                self._cli.version()
+                self._cli.version(timeout_seconds=CLI_TASK_TIMEOUT_SECONDS)
             except CliAdapterError as error:
                 self._cli_status = (False, error.code)
             else:

@@ -16,6 +16,16 @@ export interface SyncBackfillReport {
   nonTextCount: number;
 }
 
+export interface SyncPriorityReport {
+  contactId: string | null;
+  lastSuccessAt: string | null;
+  lastDurationMs: number | null;
+  lastCliDurationMs: number | null;
+  lastStoreDurationMs: number | null;
+  lastFailureCode: string | null;
+  queueWaitMs: number | null;
+}
+
 // 只展示最近循环的最小报告，不提供联系人定位、观察身份或正文。
 export interface SyncStatusReport {
   enabled: boolean;
@@ -28,6 +38,7 @@ export interface SyncStatusReport {
   probeAvailable: boolean;
   wechatInFront: boolean;
   backfill: SyncBackfillReport;
+  priority?: SyncPriorityReport;
 }
 export interface SyncControlState {
   revision: number;

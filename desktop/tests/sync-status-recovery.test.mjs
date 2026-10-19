@@ -17,9 +17,12 @@ function report() {
   ...Object.fromEntries(['total_contacts','completed_contacts','succeeded_contacts','skipped_contacts','failed_contacts',
    'incomplete_contacts','pending_contacts','total_message_count','total_non_text_count'].map(key=>[`cli_backfill_${key}`,0])) };
 }
-function fixture(t, failures = 1) {
+function fixture(t, failures = 1, priority = false) {
  t.mock.timers.enable({ apis: ['setTimeout'] });
- const control = { failures, failureCode:'sync_status_unavailable', mutationFailure:false, barrier:undefined };
+ const control = { failures, failureCode:'sync_status_unavailable', mutationFailure:false, barrier:undefined,
+  extra:priority?{cli_priority_contact_id:id,cli_priority_last_success_at:'2026-10-19T06:00:00+00:00',
+   cli_priority_last_duration_ms:100,cli_priority_last_cli_duration_ms:70,cli_priority_last_store_duration_ms:20,
+   cli_priority_last_failure_code:null,cli_priority_queue_wait_ms:10}:{} };
  let generation=1; const listeners=new Set(), requests=[];
  const backend = { getConnectionGeneration:()=>generation,
   onStateChanged:listener=>{listeners.add(listener);return()=>listeners.delete(listener);},
@@ -30,7 +33,7 @@ function fixture(t, failures = 1) {
    if(request.method==='POST'&&control.mutationFailure) throw new ports.BackendRequestFailure('response',503,'sync_status_unavailable');
    if(control.barrier) await control.barrier;
    if(control.failures>0){control.failures--;throw new ports.BackendRequestFailure('response',503,control.failureCode);}
-   return {generation:captured,data:report()};
+   return {generation:captured,data:{...report(),...control.extra}};
   } };
  const contact={directoryPhase:'ready',scopeRevision:1,selectedContactId:id,contacts:[{contactId:id}]};
  const contactListeners=new Set();
@@ -95,4 +98,37 @@ test('释放控制器取消恢复定时与订阅，不阻止退出且不再发�
  const f=fixture(t,20);await flush();f.sync.dispose();
  f.connect(2);t.mock.timers.tick(32000);await flush();
  await f.sync.refresh();assert.equal(f.requests.length,1);
+});
+
+test('优先读取指标自动只读更新，刷新期间保留有效报告且单flight',async t=>{
+ const f=fixture(t,0,true);await flush();
+ assert.equal(f.sync.getState().phase,'ready');
+ const original=f.sync.getState().report;
+ let release;f.control.barrier=new Promise(resolve=>{release=resolve;});
+ t.mock.timers.tick(3000);await flush();
+ assert.equal(f.requests.filter(request=>request.path==='/api/sync/status').length,2);
+ assert.equal(f.sync.getState().phase,'ready');
+ assert.deepEqual(f.sync.getState().report,original);
+ t.mock.timers.tick(9000);await flush();assert.equal(f.requests.length,2);
+ f.control.extra.cli_priority_last_success_at='2026-10-19T06:00:03+00:00';
+ release();await flush();
+ assert.equal(f.sync.getState().report.priority.lastSuccessAt,'2026-10-19T06:00:03+00:00');
+ assert.ok(f.requests.every(request=>request.method==='GET'));
+});
+
+test('用户关闭同步可取消在途只读轮询，迟到结果不能恢复轮询',async t=>{
+ const f=fixture(t,0,true);await flush();
+ let release;f.control.barrier=new Promise(resolve=>{release=resolve;});
+ t.mock.timers.tick(3000);await flush();
+ const poll=f.requests.at(-1);
+ f.control.barrier=undefined;f.control.extra.sync_enabled=false;
+ try {
+  await f.sync.disable({scopeRevision:1});
+  assert.equal(poll.signal.aborted,true);
+  assert.equal(f.sync.getState().report.enabled,false);
+ } finally {release();}
+ await flush();t.mock.timers.tick(12000);await flush();
+ assert.equal(f.requests.filter(request=>request.path==='/api/sync/disable').length,1);
+ assert.equal(f.requests.filter(request=>request.path==='/api/sync/status').length,2);
+ assert.equal(f.sync.getState().report.enabled,false);
 });

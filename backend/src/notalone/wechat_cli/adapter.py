@@ -326,12 +326,15 @@ class LocalWechatCli:
         cursor: str | None = None,
         since_time: str | None = None,
         limit: int | None = None,
+        timeout_seconds: float | None = None,
     ) -> TailResult:
         """读取一次会话文字增量；不传 cursor 表示首次读取。
 
         没有新消息时返回空结果而不是错误；调用方保持既有水位。
+        显式预算只作用于本次读取，None 沿用实例默认预算。
         """
 
+        _validate_command_timeout(timeout_seconds)
         talker = _require_text(talker, "talker")
         if cursor is not None and since_time is not None:
             raise ValueError("cursor 与 since_time 不能同时提供。")
@@ -349,7 +352,7 @@ class LocalWechatCli:
         command.extend(
             ["--include-media-paths", "false", "--strict-read-only"]
         )
-        result = self._invoke(tuple(command))
+        result = self._invoke(tuple(command), timeout_seconds=timeout_seconds)
         return _parse_tail_output(result.stdout, expected_talker=talker)
 
     def tail_follow(
@@ -434,10 +437,13 @@ class LocalWechatCli:
             ) from error
         return SessionEventStream(process)
 
-    def version(self) -> str:
+    def version(self, *, timeout_seconds: float | None = None) -> str:
         """读取 CLI 版本标识，用于观察来源元数据。"""
 
-        envelope = self._run_json((self._executable, "--version"))
+        _validate_command_timeout(timeout_seconds)
+        envelope = self._run_json(
+            (self._executable, "--version"), timeout_seconds=timeout_seconds
+        )
         data = _object_field(envelope, "data")
         return _require_text(data.get("version"), "data.version")
 
@@ -899,6 +905,15 @@ def _object_field(value: object, field: str) -> dict[str, Any]:
             "cli_output_invalid", f"微信 CLI 字段 {field} 无效。"
         )
     return value[field]
+
+
+def _validate_command_timeout(timeout_seconds: float | None) -> None:
+    if timeout_seconds is not None and (
+        isinstance(timeout_seconds, bool)
+        or not math.isfinite(timeout_seconds)
+        or timeout_seconds <= 0
+    ):
+        raise ValueError("CLI 单次命令预算必须为有限正数。")
 
 
 def _require_text(value: object, field: str) -> str:

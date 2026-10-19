@@ -2,7 +2,7 @@
 
 菜单栏不再每 3 秒拉起子进程执行 ``front-sync status``；同步循环的权威
 驱动方变为后端常驻进程（ADR-020）。SyncHost 持有应用层 FrontSyncEngine，
-启动时播种一轮初始化报告，之后只在同步开启时按心跳间隔执行 cycle，
+启动时播种初始化报告，同步开启时按有界切片推进，空闲后等待心跳，
 并缓存最近一次报告供状态 API 返回。
 """
 
@@ -214,6 +214,11 @@ class SyncHost:
         "_runtime_status",
         "_last_valid_observation",
         "_stop_event",
+        "_wake_event",
+        "_priority_contact_id",
+        "_priority_requested_at",
+        "_priority_revision",
+        "_applied_priority_revision",
         "_thread",
         "_closed",
     )
@@ -241,6 +246,11 @@ class SyncHost:
         )
         self._last_valid_observation: LatestValidForegroundObservation | None = None
         self._stop_event = threading.Event()
+        self._wake_event = threading.Event()
+        self._priority_contact_id: UUID | None = None
+        self._priority_requested_at: float | None = None
+        self._priority_revision = 0
+        self._applied_priority_revision = 0
         self._thread: threading.Thread | None = None
         self._closed = False
 
@@ -269,6 +279,7 @@ class SyncHost:
 
         with self._state_lock:
             self._stop_event.set()
+            self._wake_event.set()
             thread = self._thread
             self._thread = None
         # HTTP 手动检查也可能阻塞在 CLI 中；没有循环线程时同样取消 I/O。
@@ -326,13 +337,18 @@ class SyncHost:
     def set_priority_contact(
         self, contact_id: UUID | None
     ) -> FrontSyncCycleReport | None:
-        """更新应用查看联系人；不额外触发同步周期。"""
+        """快速登记最新查看联系人，唤醒单 worker 在下一切片应用。"""
 
         if contact_id is not None and not isinstance(contact_id, UUID):
             raise TypeError("contact_id 必须是 UUID 或 None。")
-        with self._active_engine():
-            self._engine.set_priority_contact(contact_id)
-            return self.status()
+        with self._state_lock:
+            if self._stop_event.is_set():
+                raise SyncHostStopped("同步宿主已停止。")
+            self._priority_contact_id = contact_id
+            self._priority_requested_at = monotonic()
+            self._priority_revision += 1
+            self._wake_event.set()
+            return self._latest
 
     def pause_backfill(self) -> FrontSyncCycleReport:
         with self._active_engine():
@@ -476,6 +492,7 @@ class SyncHost:
         finally:
             with self._state_lock:
                 self._observation_mutations -= 1
+                self._wake_event.set()
 
     @contextmanager
     def _active_foreground(self) -> Iterator[Callable[[], None]]:
@@ -523,12 +540,26 @@ class SyncHost:
             self._run_cycle_guarded()
         while True:
             with self._state_lock:
-                interval = 0.25 if self._follow_smoke_active else self._interval
-            if self._stop_event.wait(interval):
+                continuing = (
+                    self._latest is not None and self._latest.sync_enabled
+                    and self._latest.cli_pending_count > 0
+                )
+                authority_pending = self._observation_mutations > 0
+                interval = (
+                    None if authority_pending else 0 if continuing
+                    else 0.25 if self._follow_smoke_active else self._interval
+                )
+            self._wake_event.wait(interval)
+            self._wake_event.clear()
+            if self._stop_event.is_set():
                 return
             with self._engine_lock:
                 if self._stop_event.is_set():
                     return
+                with self._state_lock:
+                    authority_pending = self._observation_mutations > 0
+                if authority_pending:
+                    continue
                 try:
                     enabled = self._engine.sync_enabled()
                 except Exception:
@@ -548,7 +579,18 @@ class SyncHost:
             return None
 
     def _run_cycle_locked(self) -> FrontSyncCycleReport:
-        report = self._engine.cycle()
+        with self._state_lock:
+            priority = self._priority_contact_id
+            requested_at = self._priority_requested_at
+            revision = self._priority_revision
+        step = getattr(self._engine, "cycle_step", None)
+        if callable(step):
+            report = step(priority_contact_id=priority, priority_requested_at=requested_at)
+        else:
+            if revision != self._applied_priority_revision:
+                self._engine.set_priority_contact(priority)
+                self._applied_priority_revision = revision
+            report = self._engine.cycle()
         self._cache_report_locked(report)
         return report
 

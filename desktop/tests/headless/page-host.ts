@@ -21,6 +21,7 @@ import { installSkillLearningBridge } from '../../src/main/skill-learning/bridge
 import { coordinateSkillLearningDeletion, coordinateSkillLearningSampleDeletion, coordinateSkillLearningSourceDeletion } from '../../src/main/skill-learning/deletion';
 import { installBindingConsentBridge } from '../../src/main/bindings/bridge';
 import { installSyncControlBridge } from '../../src/main/sync/bridge';
+import { SyncPriorityController } from '../../src/main/sync/priority';
 import { noArguments, type PageCommands, type PageRole } from '../../src/main/page-commands';
 import { ownResource } from './cleanup';
 
@@ -57,6 +58,8 @@ export class PageHost implements PageCommands {
   readonly backend: BackendHost;
   readonly diagnostics: StartupDiagnostics;
   readonly foreground: ForegroundController;
+  private readonly sync: ReturnType<typeof installSyncControlBridge>;
+  private readonly syncPriority: SyncPriorityController;
   private readonly replies: ReturnType<typeof installReplyBridge>;
   constructor(private readonly context: BrowserContext, private readonly origin: string, userData: string, options: { copySurface?: CandidateCopySurface; chooseImportFile?: ImportFileSelector } = {}) {
     this.diagnostics = new StartupDiagnostics(userData);
@@ -64,7 +67,8 @@ export class PageHost implements PageCommands {
     const contacts = installContactSessionBridge(this, this.backend);
     this.foreground = installForegroundBridge(this, this.backend, contacts);
     installBindingConsentBridge(this, this.backend, contacts, () => this.foreground.beginReadingScopeChange());
-    installSyncControlBridge(this, this.backend, contacts, () => this.foreground.beginReadingScopeChange());
+    this.sync = installSyncControlBridge(this, this.backend, contacts, () => this.foreground.beginReadingScopeChange());
+    this.syncPriority = new SyncPriorityController(this.backend, contacts, this.sync);
     const imports = new ImportController(this.backend, contacts);
     installImportBridge(this, imports);
     this.handle('imports:choose-file', (...args: unknown[]) => {
@@ -160,6 +164,7 @@ export class PageHost implements PageCommands {
     this.closing = true;
     this.foreground.dispose();
     this.diagnostics.cancel();
+    await this.syncPriority.dispose(); this.sync.dispose();
     const stopped = await this.backend.stop();
     await Promise.allSettled(this.pendingEvents);
     await this.context.close();

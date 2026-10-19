@@ -64,7 +64,7 @@ class FakeCli:
         self.tail_calls: list[dict[str, object]] = []
         self.tail_results: dict[str, deque[TailResult]] = {}
 
-    def version(self) -> str:
+    def version(self, *, timeout_seconds: float | None = None) -> str:
         return "1.6.20-test"
 
     def session_events_follow(self, **kwargs):
@@ -380,6 +380,145 @@ class CliBackgroundSyncTest(unittest.TestCase):
         )
         self.assertEqual(result.status.bound_count, 2)
         self.assertEqual(result.status.backfill_contact_id, self.binding_b.contact_id)
+
+    def test_single_binding_step_returns_before_reading_other_contacts(self) -> None:
+        first = self.sync.cycle(enabled=True, priority_contact_id=self.binding_b.contact_id, max_bindings=1)
+        self.assertEqual([call["talker"] for call in self.cli.tail_calls], ["wxid_b"])
+        self.assertEqual(first.status.pending_count, 1)
+        second = self.sync.cycle(enabled=True, priority_contact_id=self.binding_a.contact_id, max_bindings=1)
+        self.assertEqual([call["talker"] for call in self.cli.tail_calls], ["wxid_b", "wxid_a"])
+        self.assertEqual(second.status.pending_count, 0)
+
+    def test_priority_read_reports_separate_queue_cli_and_store_durations(self) -> None:
+        moment = [20.0]
+
+        class TimedCli(FakeCli):
+            def tail(self, talker, **kwargs):
+                result = super().tail(talker, **kwargs)
+                moment[0] += 0.25
+                return result
+
+        class TimedStore(FakeObservationStore):
+            def record_batch_with_messages(self, **kwargs):
+                result = super().record_batch_with_messages(**kwargs)
+                moment[0] += 0.125
+                return result
+
+        cli, store = TimedCli(stream_events=[]), TimedStore()
+        cli.tail_results = self.cli.tail_results
+        sync = CliBackgroundSync(
+            owner_id=OWNER_ID, channel="wechat", account_scope="wx-account", cli=cli,
+            bindings=[self.binding_a], observation_store=store,
+            clock=lambda: self.now, monotonic_clock=lambda: moment[0],
+        )
+        report = sync.cycle(enabled=True, priority_contact_id=self.binding_a.contact_id,
+                            max_bindings=1, priority_requested_at=19.5)
+        self.assertEqual(report.status.priority_contact_id, self.binding_a.contact_id)
+        self.assertEqual(report.status.priority_queue_wait_ms, 500)
+        self.assertEqual(report.status.priority_last_cli_duration_ms, 250)
+        self.assertEqual(report.status.priority_last_store_duration_ms, 125)
+        self.assertEqual(report.status.priority_last_duration_ms, 375)
+        self.assertEqual(report.status.priority_last_success_at, self.now)
+        self.assertIsNone(report.status.priority_last_failure_code)
+        self.assertEqual(cli.tail_calls[0]["timeout_seconds"], 3.0)
+
+    def test_timeout_keeps_reliable_cursor_and_does_not_starve_next_binding(self) -> None:
+        self.sync.cycle(enabled=True, priority_contact_id=self.binding_a.contact_id)
+        cursor = self.store.read_cursor(owner_id=OWNER_ID, contact_id=self.binding_a.contact_id)
+        self.cli.tail_calls.clear()
+        self.now += timedelta(seconds=3)
+        self.sync.request_safety_sweep()
+
+        def timeout(talker, **kwargs):
+            self.cli.tail_calls.append({"talker": talker, **kwargs})
+            if talker == "wxid_a":
+                raise CliCommandError("cli_timeout", "合成有界命令超时。")
+            return TailResult((), None, None, freshness_confirmed=True)
+
+        self.cli.tail = timeout
+        failed = self.sync.cycle(enabled=True, priority_contact_id=self.binding_a.contact_id, max_bindings=1)
+        self.assertEqual(failed.status.priority_last_failure_code, "cli_timeout")
+        self.assertEqual(self.store.read_cursor(owner_id=OWNER_ID, contact_id=self.binding_a.contact_id), cursor)
+        self.assertIsNone(failed.status.priority_queue_wait_ms, "未登记时间不能伪造零排队。")
+        self.sync.cycle(enabled=True, priority_contact_id=self.binding_a.contact_id, max_bindings=1)
+        self.assertEqual([call["talker"] for call in self.cli.tail_calls], ["wxid_a", "wxid_b"])
+        self.assertTrue(all(0 < call["timeout_seconds"] <= 3.0 for call in self.cli.tail_calls))
+
+    def test_tail_and_metadata_version_share_the_same_cli_budget(self) -> None:
+        moment = [0.0]
+
+        class BudgetCli(FakeCli):
+            def __init__(self):
+                super().__init__(stream_events=[])
+                self.version_budgets = []
+
+            def tail(self, talker, **kwargs):
+                result = super().tail(talker, **kwargs)
+                moment[0] += 2.5
+                return result
+
+            def version(self, *, timeout_seconds=None):
+                self.version_budgets.append(timeout_seconds)
+                return super().version(timeout_seconds=timeout_seconds)
+
+        cli = BudgetCli()
+        cli.tail_results = self.cli.tail_results
+        sync = CliBackgroundSync(owner_id=OWNER_ID, channel="wechat", account_scope="wx-account",
+            cli=cli, bindings=[self.binding_a], observation_store=self.store,
+            clock=lambda: self.now, monotonic_clock=lambda: moment[0])
+        result = sync.cycle(enabled=True, priority_contact_id=self.binding_a.contact_id, max_bindings=1)
+        self.assertEqual(cli.tail_calls[0]["timeout_seconds"], 3.0)
+        self.assertEqual(cli.version_budgets, [0.5], "metadata 不能重新获得一份三秒预算。")
+        self.assertEqual(result.batch_message_count, 1)
+
+    def test_exhausted_tail_budget_does_not_start_version_or_advance_cursor(self) -> None:
+        moment = [0.0]
+
+        class ExhaustedCli(FakeCli):
+            def __init__(self):
+                super().__init__(stream_events=[])
+                self.version_calls = 0
+
+            def tail(self, talker, **kwargs):
+                result = super().tail(talker, **kwargs)
+                moment[0] += 3.0
+                return result
+
+            def version(self, *, timeout_seconds=None):
+                self.version_calls += 1
+                return super().version(timeout_seconds=timeout_seconds)
+
+        cli = ExhaustedCli()
+        cli.tail_results = self.cli.tail_results
+        sync = CliBackgroundSync(owner_id=OWNER_ID, channel="wechat", account_scope="wx-account",
+            cli=cli, bindings=[self.binding_a], observation_store=self.store,
+            clock=lambda: self.now, monotonic_clock=lambda: moment[0])
+        report = sync.cycle(enabled=True, priority_contact_id=self.binding_a.contact_id, max_bindings=1)
+        self.assertEqual(cli.version_calls, 0)
+        self.assertEqual(report.status.priority_last_failure_code, "cli_timeout")
+        self.assertIsNone(report.status.priority_last_success_at)
+        self.assertIsNone(self.store.read_cursor(owner_id=OWNER_ID, contact_id=self.binding_a.contact_id))
+        self.assertEqual(self.store.recorded, [])
+
+    def test_expired_step_before_tail_keeps_unmeasured_cli_and_queue_times_null(self) -> None:
+        sync = CliBackgroundSync(owner_id=OWNER_ID, channel="wechat", account_scope="wx-account",
+            cli=self.cli, bindings=[self.binding_a], observation_store=self.store,
+            clock=lambda: self.now, monotonic_clock=lambda: 20.0)
+        report = sync.cycle(enabled=True, priority_contact_id=self.binding_a.contact_id, max_bindings=1,
+                            priority_requested_at=19.0, cli_deadline=19.5)
+        self.assertEqual(self.cli.tail_calls, [])
+        self.assertEqual(report.status.priority_last_failure_code, "cli_timeout")
+        self.assertIsNone(report.status.priority_last_cli_duration_ms)
+        self.assertIsNone(report.status.priority_queue_wait_ms)
+
+    def test_revoked_priority_binding_is_not_read_by_next_step_or_reported_as_current(self) -> None:
+        self.sync.cycle(enabled=True, priority_contact_id=self.binding_b.contact_id, max_bindings=1)
+        self.bindings.remove(self.binding_a)
+        self.cli.tail_calls.clear()
+        report = self.sync.cycle(enabled=True, priority_contact_id=self.binding_a.contact_id, max_bindings=1)
+        self.assertEqual(self.cli.tail_calls, [])
+        self.assertIsNone(report.status.priority_contact_id)
+        self.assertIsNone(report.status.priority_last_success_at)
 
     def test_round_robin_keeps_non_priority_contacts_progressing(self) -> None:
         bindings = [

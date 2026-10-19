@@ -11,6 +11,7 @@ from __future__ import annotations
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Protocol
 from uuid import UUID
 
@@ -95,6 +96,13 @@ class FrontSyncCycleReport:
     cli_pending_count: int = 0
     cli_batch_message_count: int = 0
     cli_failure_code: str | None = None
+    cli_priority_contact_id: UUID | None = None
+    cli_priority_last_success_at: datetime | None = None
+    cli_priority_last_duration_ms: int | None = None
+    cli_priority_last_cli_duration_ms: int | None = None
+    cli_priority_last_store_duration_ms: int | None = None
+    cli_priority_last_failure_code: str | None = None
+    cli_priority_queue_wait_ms: int | None = None
     cli_backfill_phase: str = "not_required"
     cli_backfill_contact_id: UUID | None = None
     cli_backfill_message_count: int = 0

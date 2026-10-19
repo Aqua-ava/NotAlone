@@ -30,6 +30,7 @@ import { installMemoryBridge } from './memory/bridge';
 import { installSourceDeletionBridge } from './sources/bridge';
 import { installBindingConsentBridge } from './bindings/bridge';
 import { installSyncControlBridge } from './sync/bridge';
+import { SyncPriorityController } from './sync/priority';
 import { SetupController } from './setup/controller';
 import { installSetupBridge } from './setup/bridge';
 import { StartupDiagnostics } from './startup/diagnostics';
@@ -103,7 +104,8 @@ void app.whenReady().then(async () => {
   memory.onRecordDeletion((phase) => traces.recordDeletionChanged(phase));
   installBindingConsentBridge(commands, backend, contacts, () => foreground.beginReadingScopeChange());
   const sync = installSyncControlBridge(commands, backend, contacts, () => foreground.beginReadingScopeChange());
-  app.on('before-quit', () => sync.dispose());
+  const syncPriority = new SyncPriorityController(backend, contacts, sync);
+  app.on('before-quit', () => { sync.dispose(); void syncPriority.dispose(); });
   sync.onStateChanged((state) => foreground.setSyncControlState(state));
   foreground.setSyncControlState(sync.getState());
   const replies = installReplyBridge(commands, backend, contacts, () => foreground.getGenerationBlock());
@@ -134,6 +136,7 @@ void app.whenReady().then(async () => {
   installStartupBridge(windows, diagnostics, backend, app.getPath('userData'));
   app.on('before-quit', () => { foreground.stopContinuous(); diagnostics.cancel(); });
   installQuitLifecycle(backend, windows, async () => {
+    await syncPriority.dispose();
     await headerChanges.shutdown();
     await replies.beginGenerationClosing(
       (receipt) => interruptAssistantGeneration(backend, receipt),

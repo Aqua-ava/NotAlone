@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import unittest
 from dataclasses import replace
+from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
 from notalone.conversation.matcher import BindingMatchReason
@@ -266,6 +267,30 @@ class SyncApiContractTest(unittest.TestCase):
         self.assertEqual(payload["cli_pending_count"], 2)
         self.assertEqual(payload["cli_batch_message_count"], 4)
         self.assertEqual(payload["foreground_phase"], "waiting_foreground")
+
+    def test_status_includes_priority_read_timing_without_message_body(self) -> None:
+        self.sync.next_report = replace(
+            _report(), sync_mode="cli_background",
+            cli_priority_contact_id=CONTACT_ID,
+            cli_priority_last_success_at=datetime(2026, 10, 19, 6, tzinfo=timezone.utc),
+            cli_priority_last_duration_ms=145,
+            cli_priority_last_cli_duration_ms=90,
+            cli_priority_last_store_duration_ms=30,
+            cli_priority_last_failure_code=None,
+            cli_priority_queue_wait_ms=24,
+        )
+        response = self.client.get("/api/sync/status", headers=self.headers)
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["cli_priority_contact_id"], str(CONTACT_ID))
+        self.assertEqual(payload["cli_priority_last_success_at"], "2026-10-19T06:00:00+00:00")
+        self.assertEqual(payload["cli_priority_last_duration_ms"], 145)
+        self.assertEqual(payload["cli_priority_last_cli_duration_ms"], 90)
+        self.assertEqual(payload["cli_priority_last_store_duration_ms"], 30)
+        self.assertIsNone(payload["cli_priority_last_failure_code"])
+        self.assertEqual(payload["cli_priority_queue_wait_ms"], 24)
+        self.assertNotIn("text", payload)
+        self.assertNotIn("content", payload)
 
     def test_status_includes_cli_backfill_metadata_without_message_body(self) -> None:
         self.sync.next_report = replace(

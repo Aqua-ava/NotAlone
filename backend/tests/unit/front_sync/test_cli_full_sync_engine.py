@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import unittest
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from time import monotonic
 from uuid import UUID
@@ -49,6 +49,9 @@ class FakeBackground:
     def __init__(self) -> None:
         self.calls: list[bool] = []
         self.priority_calls: list[UUID | None] = []
+        self.step_budgets: list[int | None] = []
+        self.priority_requests: list[float | None] = []
+        self.cli_deadlines: list[float | None] = []
         self.safety_sweep_requests = 0
         self.smoke_enabled = False
         self.interruptions = 0
@@ -70,9 +73,15 @@ class FakeBackground:
         *,
         enabled: bool,
         priority_contact_id: UUID | None = None,
+        max_bindings: int | None = None,
+        priority_requested_at: float | None = None,
+        cli_deadline: float | None = None,
     ) -> CliSyncCycleResult:
         self.calls.append(enabled)
         self.priority_calls.append(priority_contact_id)
+        self.step_budgets.append(max_bindings)
+        self.priority_requests.append(priority_requested_at)
+        self.cli_deadlines.append(cli_deadline)
         return self.result
 
     def close(self) -> None:
@@ -132,8 +141,10 @@ class FakeCli:
     def __init__(self) -> None:
         self.close_calls = 0
         self.version_failures = 0
+        self.version_calls = 0
 
-    def version(self) -> str:
+    def version(self, *, timeout_seconds: float | None = None) -> str:
+        self.version_calls += 1
         if self.version_failures > 0:
             self.version_failures -= 1
             raise CliCommandError("cli_not_found", "合成 CLI 暂不可用")
@@ -253,6 +264,27 @@ class CliFullSyncEngineTest(unittest.TestCase):
         self.engine.cycle()
 
         self.assertEqual(self.background.priority_calls, [CONTACT_ID])
+
+    def test_host_step_reads_only_one_binding_and_keeps_priority_registration_time(self) -> None:
+        report = self.engine.cycle_step(priority_contact_id=CONTACT_ID, priority_requested_at=12.0)
+        self.assertEqual(self.background.priority_calls, [CONTACT_ID])
+        self.assertEqual(self.background.step_budgets, [1])
+        self.assertEqual(self.background.priority_requests, [12.0])
+        self.assertEqual(report.cli_batch_message_count, 3)
+
+    def test_host_step_reuses_current_cli_health_without_extra_report_command(self) -> None:
+        self.background.result = replace(self.background.result, cli_available=True)
+        report = self.engine.cycle_step(priority_contact_id=CONTACT_ID, priority_requested_at=12.0)
+        self.assertTrue(report.cli_available)
+        self.assertEqual(self.cli.version_calls, 0, "状态展示不得额外占用CLI读取预算。")
+        self.assertIsNotNone(self.background.cli_deadlines[0])
+
+    def test_binding_confirmation_and_diagnostics_also_return_after_one_binding(self) -> None:
+        self.engine.confirm_cli_bindings(())
+        self.engine.enable_follow_smoke()
+        self.assertEqual(self.background.step_budgets, [1, 1])
+        self.assertTrue(all(deadline is not None for deadline in self.background.cli_deadlines))
+        self.assertEqual(self.cli.version_calls, 0)
 
     def test_cycles_switches_and_backfill_controls_never_launch_visual_reads(self) -> None:
         # 即使视觉端口有可用身份，后台也不能据此授予身份或隐式优先级。

@@ -14,6 +14,8 @@ export class SyncControlController {
   private pending: AbortController | undefined;
   private recoveryTimer: ReturnType<typeof setTimeout> | undefined;
   private recoveryFailures = 0;
+  private snapshotTimer: ReturnType<typeof setTimeout> | undefined;
+  private snapshotRefreshing = false;
   private disposed = false;
   private readonly unsubscribe: (() => void)[];
   private readonly listeners = new Set<(state: SyncControlState) => void>();
@@ -29,13 +31,26 @@ export class SyncControlController {
     this.listeners.add(listener); return () => this.listeners.delete(listener);
   }
   dispose(): void {
-    this.disposed = true; this.cancelRecovery();
+    this.disposed = true; this.cancelRecovery(); this.cancelSnapshot();
     this.pending?.abort(); this.pending = undefined; ++this.epoch;
     for (const unsubscribe of this.unsubscribe) unsubscribe();
     this.listeners.clear();
   }
   private cancelRecovery(): void {
     clearTimeout(this.recoveryTimer); this.recoveryTimer = undefined; this.recoveryFailures = 0;
+  }
+  private cancelSnapshot(): void {
+    clearTimeout(this.snapshotTimer); this.snapshotTimer = undefined;
+  }
+  private scheduleSnapshot(scope: Scope): void {
+    if (this.disposed || this.snapshotTimer !== undefined || scope !== this.scope
+      || this.state.phase !== 'ready' || !this.state.report?.enabled || !this.state.report.priority) return;
+    this.snapshotTimer = setTimeout(() => {
+      this.snapshotTimer = undefined;
+      if (!this.disposed && !this.pending && scope === this.scope
+        && scope.generation === this.backend.getConnectionGeneration()) void this.perform('refresh', scope, true);
+    }, 3000);
+    this.snapshotTimer.unref?.();
   }
   private scheduleRecovery(scope: Scope): void {
     if (this.disposed || this.recoveryTimer !== undefined || scope !== this.scope) return;
@@ -60,7 +75,7 @@ export class SyncControlController {
       if (contact.scopeRevision !== this.state.scopeRevision) this.publish({ scopeRevision: contact.scopeRevision });
       return;
     }
-    this.cancelRecovery();
+    this.cancelRecovery(); this.cancelSnapshot();
     this.pending?.abort(); this.pending = undefined; ++this.epoch;
     this.scope = next;
     this.publish({ scopeRevision: contact.scopeRevision, phase: generation === undefined ? 'offline' : 'unavailable',
@@ -70,7 +85,7 @@ export class SyncControlController {
   }
   async refresh(): Promise<void> {
     if (this.disposed) return;
-    this.cancelRecovery();
+    this.cancelRecovery(); this.cancelSnapshot();
     this.synchronizeScope();
     if (!this.scope || this.pending) return;
     await this.perform('refresh', this.scope);
@@ -81,25 +96,31 @@ export class SyncControlController {
   retry(request: SyncControlRequest): Promise<void> { return this.control(request, 'retry'); }
   private async control(request: SyncControlRequest, operation: Exclude<Operation, 'refresh'>): Promise<void> {
     this.synchronizeScope();
+    if (this.snapshotRefreshing && request.scopeRevision === this.state.scopeRevision) {
+      // 用户停读优先于只读指标请求；迟到快照由 epoch 和取消信号共同失效。
+      this.pending?.abort(); this.pending = undefined; ++this.epoch; this.snapshotRefreshing = false;
+    }
     if (this.disposed || !this.scope || this.pending || this.state.phase !== 'ready' || !this.state.report
       || request.scopeRevision !== this.state.scopeRevision) throw new Error('本次同步范围已失效，请刷新状态后重试。');
     if (operation === 'pause' || operation === 'retry') {
       const phases = operation === 'pause' ? ['gap_detected', 'backfilling', 'incomplete'] : ['paused', 'failed', 'incomplete'];
       if (!this.state.report.enabled || !phases.includes(this.state.report.backfill.phase)) throw new Error('当前补齐状态不支持本次操作。');
     }
-    this.cancelRecovery();
+    this.cancelRecovery(); this.cancelSnapshot();
     const finish = operation === 'disable' || operation === 'pause' ? this.beginReadingScopeChange() : undefined;
     try { await this.perform(operation, this.scope); }
     finally { finish?.(); }
   }
-  private async perform(operation: Operation, scope: Scope): Promise<void> {
+  private async perform(operation: Operation, scope: Scope, background = false): Promise<void> {
     const enabledBefore = this.state.report?.enabled;
     const epoch = ++this.epoch;
     const pending = new AbortController();
     this.pending = pending;
+    this.snapshotRefreshing = background;
     const current = () => !this.disposed && !pending.signal.aborted && scope === this.scope && epoch === this.epoch
       && scope.generation === this.backend.getConnectionGeneration();
-    this.publish({ phase: 'loading', report: null, busy: operation === 'refresh' ? null : operation, errorCode: null });
+    // 自动刷新只读缓存报告，保留有效展示和前台许可，不闪烁成暂停或重放启停命令。
+    if (!background) this.publish({ phase: 'loading', report: null, busy: operation === 'refresh' ? null : operation, errorCode: null });
     try {
       const result = operation === 'refresh' ? await readSyncStatus(this.backend, pending.signal)
         : operation === 'enable' || operation === 'disable' ? await setSyncEnabled(this.backend, operation === 'enable', pending.signal)
@@ -118,8 +139,8 @@ export class SyncControlController {
       if (operation === 'refresh' && error instanceof BackendRequestFailure && error.kind === 'response'
         && error.status === 503 && error.code === 'sync_status_unavailable') this.scheduleRecovery(scope);
     } finally {
-      if (this.pending === pending) this.pending = undefined;
-      if (current()) this.publish({ busy: null });
+      if (this.pending === pending) { this.pending = undefined; this.snapshotRefreshing = false; }
+      if (current()) { this.publish({ busy: null }); this.scheduleSnapshot(scope); }
     }
   }
   private publish(update: Partial<SyncControlState>): void {

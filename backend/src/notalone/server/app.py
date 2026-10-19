@@ -2897,6 +2897,19 @@ def _sync_status_payload(report: FrontSyncCycleReport) -> dict[str, object]:
                 "cli_pending_count": report.cli_pending_count,
                 "cli_batch_message_count": report.cli_batch_message_count,
                 "cli_failure_code": report.cli_failure_code,
+                "cli_priority_contact_id": (
+                    None if report.cli_priority_contact_id is None
+                    else str(report.cli_priority_contact_id)
+                ),
+                "cli_priority_last_success_at": (
+                    None if report.cli_priority_last_success_at is None
+                    else report.cli_priority_last_success_at.astimezone(timezone.utc).isoformat()
+                ),
+                "cli_priority_last_duration_ms": report.cli_priority_last_duration_ms,
+                "cli_priority_last_cli_duration_ms": report.cli_priority_last_cli_duration_ms,
+                "cli_priority_last_store_duration_ms": report.cli_priority_last_store_duration_ms,
+                "cli_priority_last_failure_code": report.cli_priority_last_failure_code,
+                "cli_priority_queue_wait_ms": report.cli_priority_queue_wait_ms,
                 "cli_backfill_phase": report.cli_backfill_phase,
                 "cli_backfill_contact_id": (
                     None

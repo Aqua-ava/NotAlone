@@ -11,9 +11,11 @@ from __future__ import annotations
 
 from collections import deque
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from enum import StrEnum
+from math import isfinite
+from time import monotonic
 from typing import Protocol
 from uuid import UUID
 
@@ -42,6 +44,7 @@ from notalone.persistence.source_processing import SourceProcessingWriteError
 from notalone.source_processing.models import ProcessingRecord
 from notalone.wechat_cli import (
     CliAdapterError,
+    CliCommandError,
     CliOutputError,
     LocalWechatCli,
     SessionEventStream,
@@ -72,6 +75,13 @@ class CliSyncStatus:
     failure_code: str | None
     bound_count: int
     pending_count: int = 0
+    priority_contact_id: UUID | None = None
+    priority_last_success_at: datetime | None = None
+    priority_last_duration_ms: int | None = None
+    priority_last_cli_duration_ms: int | None = None
+    priority_last_store_duration_ms: int | None = None
+    priority_last_failure_code: str | None = None
+    priority_queue_wait_ms: int | None = None
     backfill_phase: str = "not_required"
     backfill_contact_id: UUID | None = None
     backfill_message_count: int = 0
@@ -95,6 +105,21 @@ class CliSyncCycleResult:
 
     status: CliSyncStatus
     batch_message_count: int
+    cli_available: bool | None = None
+    cli_failure_code: str | None = None
+
+
+@dataclass(slots=True)
+class _PriorityReadTiming:
+    contact_id: UUID | None = None
+    requested_at: float | None = None
+    pending_requested_at: float | None = None
+    last_success_at: datetime | None = None
+    last_duration_ms: int | None = None
+    last_cli_duration_ms: int | None = None
+    last_store_duration_ms: int | None = None
+    last_failure_code: str | None = None
+    queue_wait_ms: int | None = None
 
 
 class BindingSourcePort(Protocol):
@@ -170,6 +195,7 @@ class SyncStatePort(Protocol):
 _MAX_EVENTS_PER_CYCLE = 128
 _MAX_BINDINGS_PER_CYCLE = 32
 _PRIORITY_READ_INTERVAL = timedelta(seconds=3)
+CLI_TASK_TIMEOUT_SECONDS = 3.0
 _SAFETY_SWEEP_INTERVAL = timedelta(seconds=15)
 _SAFETY_SWEEP_BINDINGS_PER_CYCLE = 8
 _INCOMPLETE_CLI_FAILURE_CODES = frozenset(
@@ -223,6 +249,10 @@ class CliBackgroundSync:
         "_backfill_trigger_at",
         "_backfill_pending_locators",
         "_backfill_paused",
+        "_cli_timeout_seconds",
+        "_monotonic_clock",
+        "_priority_timing",
+        "_last_cli_result",
     )
 
     def __init__(
@@ -240,9 +270,15 @@ class CliBackgroundSync:
         sync_state: SyncStatePort | None = None,
         message_events: MessageEventPublisher | None = None,
         clock: Callable[[], datetime] | None = None,
+        monotonic_clock: Callable[[], float] | None = None,
+        cli_timeout_seconds: float = CLI_TASK_TIMEOUT_SECONDS,
     ) -> None:
         if not isinstance(owner_id, UUID):
             raise TypeError("owner_id 必须是 UUID。")
+        if (isinstance(cli_timeout_seconds, bool)
+                or not isinstance(cli_timeout_seconds, (int, float))
+                or not isfinite(cli_timeout_seconds) or cli_timeout_seconds <= 0):
+            raise ValueError("CLI 命令预算必须是有限正数。")
         if not isinstance(cli, LocalWechatCli) and not hasattr(cli, "tail"):
             raise TypeError("cli 必须提供 tail 接口。")
         self._owner_id = owner_id
@@ -255,6 +291,10 @@ class CliBackgroundSync:
         self._sync_state = sync_state
         self._message_events = message_events or NullMessageEventPublisher()
         self._clock = clock or (lambda: datetime.now(timezone.utc))
+        self._monotonic_clock = monotonic_clock or monotonic
+        self._cli_timeout_seconds = float(cli_timeout_seconds)
+        self._priority_timing = _PriorityReadTiming()
+        self._last_cli_result: tuple[bool, str | None] | None = None
         self._stream: SessionEventStream | object | None = None
         self._stream_supported = True
         self._stream_retry_at: datetime | None = None
@@ -291,11 +331,19 @@ class CliBackgroundSync:
         *,
         enabled: bool,
         priority_contact_id: UUID | None = None,
+        max_bindings: int | None = None,
+        priority_requested_at: float | None = None,
+        cli_deadline: float | None = None,
     ) -> CliSyncCycleResult:
         """执行一次后台同步心跳；关闭时立即关闭唯一全局流。"""
 
         if not isinstance(enabled, bool):
             raise TypeError("enabled 必须是 bool。")
+        if max_bindings is not None and (
+            isinstance(max_bindings, bool) or not isinstance(max_bindings, int)
+            or not 1 <= max_bindings <= 32
+        ):
+            raise ValueError("单次读取绑定预算必须在 1 到 32 之间。")
         if priority_contact_id is not None and not isinstance(
             priority_contact_id, UUID
         ):
@@ -355,6 +403,10 @@ class CliBackgroundSync:
         }
         priority_binding = self._priority_binding(
             bindings, priority_contact_id
+        )
+        self._set_priority_timing(
+            None if priority_binding is None else priority_binding.scope.contact_id,
+            priority_requested_at,
         )
         priority_locator = (
             None
@@ -422,7 +474,8 @@ class CliBackgroundSync:
 
         written = 0
         processed = 0
-        while self._pending_locators and processed < _MAX_BINDINGS_PER_CYCLE:
+        budget = _MAX_BINDINGS_PER_CYCLE if max_bindings is None else max_bindings
+        while self._pending_locators and processed < budget:
             locator = self._pending_locators.popleft()
             self._pending_locator_set.discard(locator)
             live_read = locator in self._live_pending_locators
@@ -435,6 +488,16 @@ class CliBackgroundSync:
                 self._backfill_check_requested
                 and locator in self._backfill_pending_locators
             )
+            timing = (
+                replace(self._priority_timing)
+                if binding.scope.contact_id == self._priority_timing.contact_id else None
+            )
+            started = self._monotonic_clock()
+            if timing is not None:
+                timing.last_cli_duration_ms = None
+                timing.last_store_duration_ms = None
+            completed = False
+            task_failure: str | None = None
             try:
                 written += self._read_binding(
                     binding,
@@ -443,26 +506,40 @@ class CliBackgroundSync:
                         self._backfill_trigger_at if backfill_read else None
                     ),
                     live_read=live_read,
+                    timing=timing,
+                    cli_deadline=min(started + self._cli_timeout_seconds, cli_deadline)
+                    if cli_deadline is not None else started + self._cli_timeout_seconds,
                 )
-                # 同一 locator 的补齐队列可以被本轮独立 live 请求升级；
-                # 只有确实带有 live 标记的读取才更新独立节奏。
-                if locator == priority_locator and live_read:
-                    self._last_priority_read_at = self._clock()
+                completed = True
             except CliNormalizationError:
                 self._failure_code = "cli_normalization_failed"
+                task_failure = self._failure_code
             except CliAdapterError as error:
                 self._failure_code = error.code
+                task_failure = self._failure_code
                 # 不在当前轮立刻回队；否则一个持续失败的会话会占满队列。
                 # 全局流的安全轮询或降级轮询会在后续心跳重试它。
             except ObservationPersistenceError:
                 self._failure_code = "observation_persistence_failed"
+                task_failure = self._failure_code
                 # 与 CLI 错误相同，延后到后续有界轮询，保证其他联系人公平。
             except SourceProcessingWriteError:
                 self._failure_code = "source_processing_write_failed"
+                task_failure = self._failure_code
             except BackfillStatePersistenceError:
                 self._failure_code = "backfill_state_unavailable"
+                task_failure = self._failure_code
                 # 补齐状态无法写入时不能把本轮显示为完成；后续心跳重试。
             finally:
+                if locator == priority_locator and live_read:
+                    # 失败同样消耗本次读取机会，避免立即续跑时反复抢占其他绑定。
+                    self._last_priority_read_at = self._clock()
+                if timing is not None and (not completed or timing.last_cli_duration_ms is not None):
+                    timing.last_duration_ms = self._elapsed_ms(started)
+                    timing.last_failure_code = None if completed else (task_failure or "cli_sync_failed")
+                    if completed:
+                        timing.last_success_at = self._clock().astimezone(timezone.utc)
+                    self._priority_timing = timing
                 self._backfill_pending_locators.discard(locator)
 
         if (
@@ -504,6 +581,7 @@ class CliBackgroundSync:
                 failure_code=self._failure_code,
                 bound_count=len(bindings),
                 pending_count=len(self._pending_locators),
+                **self._priority_status_fields(),
                 **self._backfill_status_fields(
                     bindings=bindings,
                     states=backfill_states,
@@ -516,6 +594,8 @@ class CliBackgroundSync:
                 ),
             ),
             batch_message_count=written,
+            cli_available=None if self._last_cli_result is None else self._last_cli_result[0],
+            cli_failure_code=None if self._last_cli_result is None else self._last_cli_result[1],
         )
 
     def _failure_result(
@@ -563,6 +643,36 @@ class CliBackgroundSync:
         self._stream_failures = 0
         self._follow_smoke_enabled = False
         self._failure_code = None
+        self._priority_timing = _PriorityReadTiming()
+
+    def _elapsed_ms(self, started: float) -> int:
+        return max(0, round((self._monotonic_clock() - started) * 1000))
+
+    def _remaining_cli_timeout(self, deadline: float | None) -> float:
+        remaining = self._cli_timeout_seconds if deadline is None else deadline - self._monotonic_clock()
+        if remaining <= 0:
+            raise CliCommandError("cli_timeout", "本次后台读取的 CLI 总预算已耗尽。")
+        return min(self._cli_timeout_seconds, remaining)
+
+    def _set_priority_timing(self, contact_id: UUID | None, requested_at: float | None) -> None:
+        if contact_id != self._priority_timing.contact_id:
+            self._priority_timing = _PriorityReadTiming(contact_id=contact_id)
+        timing = self._priority_timing
+        if contact_id is not None and requested_at is not None and requested_at != timing.requested_at:
+            timing.requested_at = requested_at
+            timing.pending_requested_at = requested_at
+
+    def _priority_status_fields(self) -> dict[str, object]:
+        timing = self._priority_timing
+        return {
+            "priority_contact_id": timing.contact_id,
+            "priority_last_success_at": timing.last_success_at,
+            "priority_last_duration_ms": timing.last_duration_ms,
+            "priority_last_cli_duration_ms": timing.last_cli_duration_ms,
+            "priority_last_store_duration_ms": timing.last_store_duration_ms,
+            "priority_last_failure_code": timing.last_failure_code,
+            "priority_queue_wait_ms": timing.queue_wait_ms,
+        }
 
     def enable_follow_smoke(self) -> None:
         """开始观察当前全局流，不启动兼容前台读取。"""
@@ -977,6 +1087,8 @@ class CliBackgroundSync:
         disabled_window: tuple[float, float] | None,
         backfill_trigger_at: datetime | None,
         live_read: bool,
+        timing: _PriorityReadTiming | None = None,
+        cli_deadline: float | None = None,
     ) -> int:
         contact_id = binding.scope.contact_id
         backfill_state = self._prepare_backfill_state(
@@ -1025,12 +1137,21 @@ class CliBackgroundSync:
                 .replace(tzinfo=None)
                 .isoformat(timespec="seconds")
             )
+        cli_started: float | None = None
         try:
+            timeout = self._remaining_cli_timeout(cli_deadline)
+            cli_started = self._monotonic_clock()
+            if timing is not None and timing.pending_requested_at is not None:
+                timing.queue_wait_ms = max(0, round((cli_started - timing.pending_requested_at) * 1000))
+                timing.pending_requested_at = None
             result: TailResult = self._cli.tail(
                 binding.conversation_locator,
+                timeout_seconds=timeout,
                 **kwargs,
             )
+            self._last_cli_result = (True, None)
         except CliAdapterError as error:
+            self._last_cli_result = (False, error.code)
             self._record_input_failure(binding, error, backfill_state)
             self._fail_backfill(
                 binding,
@@ -1039,6 +1160,9 @@ class CliBackgroundSync:
                 incomplete=_is_incomplete_cli_failure(error.code),
             )
             raise
+        finally:
+            if timing is not None and cli_started is not None:
+                timing.last_cli_duration_ms = self._elapsed_ms(cli_started)
         # 真实适配器对"没有新消息"的一次性 tail 输出为空，且
         # freshness_confirmed=False（wechat_cli/models.TailResult 契约）。
         # 常规 live 轮询的空结果是正常稳态：保持既有水位直接返回 0。
@@ -1099,7 +1223,9 @@ class CliBackgroundSync:
                 binding, "cli_normalization_failed", backfill_state
             )
             raise
+        store_started: float | None = None
         try:
+            cli_version = self._cli_version_value(timing=timing, cli_deadline=cli_deadline)
             event_count = (
                 len(result.events)
                 if result.event_count is None
@@ -1110,12 +1236,13 @@ class CliBackgroundSync:
                 if result.event_count is None
                 else result.non_text_count
             )
+            store_started = self._monotonic_clock()
             batch = self._observation_store.record_batch_with_messages(
                 owner_id=self._owner_id,
                 contact_id=contact_id,
                 binding_id=binding.binding_id,
                 mode=ObservationMode.CLI_BACKGROUND,
-                cli_version=self._cli_version_value(),
+                cli_version=cli_version,
                 conversation_locator=binding.conversation_locator,
                 since_local_id=(
                     None if cursor is None else cursor.last_local_id
@@ -1155,6 +1282,9 @@ class CliBackgroundSync:
                 binding, "source_processing_write_failed", backfill_state
             )
             raise
+        finally:
+            if timing is not None and store_started is not None:
+                timing.last_store_duration_ms = self._elapsed_ms(store_started)
         if backfill_state is not None:
             self._complete_backfill(
                 binding,
@@ -1582,9 +1712,19 @@ class CliBackgroundSync:
             ),
         }
 
-    def _cli_version_value(self) -> str:
+    def _cli_version_value(self, *, timing: _PriorityReadTiming | None = None,
+                           cli_deadline: float | None = None) -> str:
         if self._cli_version is None:
-            self._cli_version = self._cli.version()
+            started = self._monotonic_clock()
+            try:
+                self._cli_version = self._cli.version(timeout_seconds=self._remaining_cli_timeout(cli_deadline))
+                self._last_cli_result = (True, None)
+            except CliAdapterError as error:
+                self._last_cli_result = (False, error.code)
+                raise
+            finally:
+                if timing is not None:
+                    timing.last_cli_duration_ms = (timing.last_cli_duration_ms or 0) + self._elapsed_ms(started)
         return self._cli_version
 
     def _publish_message_events(

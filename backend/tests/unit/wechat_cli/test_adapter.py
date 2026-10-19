@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 import json
+import os
+import shlex
 import subprocess
+import tempfile
 import threading
+import time
 import unittest
 from dataclasses import dataclass
+from pathlib import Path
 from unittest.mock import patch
 
 from notalone.wechat_cli import (
@@ -119,6 +124,81 @@ class BlockingCommandProcess:
 
 
 class LocalWechatCliAdapterTest(unittest.TestCase):
+    def test_tail_explicit_budget_reaps_process_without_accepting_partial_success(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="notalone-tail-budget-") as directory:
+            root = Path(directory)
+            pid_path = root / "child.pid"
+            executable = root / "synthetic-cli"
+            partial = json.dumps({"ok": True, "data": {
+                "events": [], "cursor": "synthetic-cursor",
+                "freshness": {"message_source": "live_message_db"},
+                "query": {"chat": "wxid_1", "has_more": False},
+            }})
+            executable.write_text(
+                "#!/bin/sh\n"
+                f"printf '%s\\n' {shlex.quote(partial)}\n"
+                f"printf '%s' \"$$\" > {shlex.quote(str(pid_path))}\n"
+                "exec /bin/sleep 5\n",
+                encoding="utf-8",
+            )
+            executable.chmod(0o700)
+            cli = LocalWechatCli(executable=str(executable))
+            started = time.monotonic()
+            try:
+                with self.assertRaises(CliCommandError) as raised:
+                    cli.tail("wxid_1", timeout_seconds=1.0)
+                elapsed = time.monotonic() - started
+                self.assertEqual(raised.exception.code, "cli_timeout")
+                self.assertLess(elapsed, 2.5)
+                pid = int(pid_path.read_text(encoding="utf-8"))
+                with self.assertRaises(ProcessLookupError):
+                    os.kill(pid, 0)
+            finally:
+                cli.close()
+
+    def test_tail_rejects_invalid_explicit_budgets_before_running(self) -> None:
+        for budget in (0, -0.1, float("nan"), float("inf"), -float("inf"), True, False):
+            with self.subTest(budget=budget):
+                runner = RecordingRunner(FakeCommandResult(returncode=0, stdout=""))
+                with self.assertRaises(ValueError):
+                    LocalWechatCli(runner=runner).tail("wxid_1", timeout_seconds=budget)
+                self.assertEqual(runner.calls, [])
+
+    def test_version_explicit_budget_times_out_and_reaps_real_process(self) -> None:
+        real_popen = subprocess.Popen
+        processes = []
+
+        def controlled_process(command, **options):
+            del command
+            process = real_popen(("/bin/sleep", "5"), **options)
+            processes.append(process)
+            return process
+
+        cli = LocalWechatCli(executable="synthetic-version-cli")
+        started = time.monotonic()
+        try:
+            with patch("notalone.wechat_cli.adapter.subprocess.Popen", side_effect=controlled_process):
+                with self.assertRaises(CliCommandError) as raised:
+                    cli.version(timeout_seconds=0.05)
+            self.assertEqual(raised.exception.code, "cli_timeout")
+            self.assertLess(time.monotonic() - started, 1.5)
+            self.assertEqual(len(processes), 1)
+            self.assertIsNotNone(processes[0].returncode)
+            with self.assertRaises(ProcessLookupError):
+                os.kill(processes[0].pid, 0)
+        finally:
+            cli.close()
+
+    def test_version_rejects_invalid_explicit_budgets_before_running(self) -> None:
+        for budget in (0, -0.1, float("nan"), float("inf"), -float("inf"), True, False):
+            with self.subTest(budget=budget):
+                runner = RecordingRunner(FakeCommandResult(returncode=0, stdout=json.dumps({
+                    "ok": True, "data": {"version": "1.6.20"},
+                })))
+                with self.assertRaises(ValueError):
+                    LocalWechatCli(runner=runner).version(timeout_seconds=budget)
+                self.assertEqual(runner.calls, [])
+
     def test_empty_live_tail_envelope_confirms_freshness_without_advancing(self) -> None:
         runner = RecordingRunner(FakeCommandResult(returncode=0, stdout=json.dumps({
             "ok": True,

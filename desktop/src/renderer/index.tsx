@@ -21,6 +21,7 @@ import { MemoryPage } from './MemoryPage';
 import { BindingConsentPage } from './BindingConsentPage';
 import { SyncControlPanel } from './SyncControlPanel';
 import { SkillLearningPage } from './SkillLearningPage';
+import { PrioritySyncStatus } from './PrioritySyncStatus';
 
 const helper = window.location.hash === '#helper';
 document.title = helper ? 'NotAlone · 输入小窗' : 'NotAlone · 管理后台';
@@ -59,6 +60,7 @@ export function App() {
       </p>}
     {replies.state.mode === 'rewrite_draft' ? <RewriteInput contacts={contactSession} replies={replies} />
       : replies.state.mode === 'initiate_conversation' ? <ProactiveReplyInput replies={replies} /> : <DirectedReplyInput replies={replies} />}
+    <PrioritySyncStatus contactId={contactSession.state.selectedContactId} bridge={window.notalone.syncControl} />
     {replies.state.messageNotice.phase === 'connected' && <>
       {replies.state.messageNotice.needsRefresh && <p role="status">消息提醒有待核对，请主动刷新消息。生成依据仍是原快照。</p>}
       {replies.state.messageNotice.changed && <p role="status">当前联系人有新消息，生成依据仍是原快照。由你决定是否重新生成。</p>}
