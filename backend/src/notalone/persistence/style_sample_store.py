@@ -314,30 +314,9 @@ def capture_declared_reply_sources(connection: Any, request: ReplyRequest, conte
 
 def _require_generation_sample(connection: Any, scope: ContactScope, row: dict[str, Any]) -> None:
     """样本审计可读；生成沿保存时的候选及样本依赖复验事实资格。"""
-    from notalone.persistence.assistant_session_store import _reply_dependencies
     from notalone.persistence.reply_basis_changes import require_generation_memory_dependencies
 
-    pending = [row]
-    seen: set[UUID] = set()
-    while pending:
-        item = pending.pop()
-        if item["id"] in seen:
-            continue
-        seen.add(item["id"])
-        if item["origin_kind"] == "candidate":
-            origin = connection.execute(
-                "SELECT reply_request_id FROM public.reply_candidate "
-                "WHERE owner_id=%s AND contact_id=%s AND id=%s",
-                (scope.owner_id, scope.contact_id, item["origin_id"]),
-            ).fetchone()
-            if origin is None:
-                raise ReplyStoreInvariantError("表达样本的候选依据不可用。")
-            require_generation_memory_dependencies(connection, scope,
-                _reply_dependencies(connection, scope, origin["reply_request_id"]))
-        if item["dependency_sample_ids"]:
-            pending.extend(connection.execute("SELECT * FROM public.style_sample "
-                "WHERE owner_id=%s AND contact_id=%s AND id=ANY(%s::uuid[])",
-                (scope.owner_id, scope.contact_id, item["dependency_sample_ids"])).fetchall())
+    require_generation_memory_dependencies(connection, scope, {row["id"]})
 
 
 def require_context_style_references(connection: Any, scope: ContactScope,
@@ -470,6 +449,8 @@ def _erase_samples(connection: Any, *, owner_id: UUID, sample_ids: list[UUID]) -
         WHERE owner_id=%s AND id=ANY(%s::uuid[])
     """, (owner_id, affected))
     if affected:
+        connection.execute("DELETE FROM public.style_sample_generation_dependency WHERE owner_id=%s AND sample_id=ANY(%s::uuid[])",
+                           (owner_id, affected))
         connection.execute("DELETE FROM public.style_sample_expression_preference_use WHERE owner_id=%s AND sample_id=ANY(%s::uuid[])",
                            (owner_id, affected))
     return request_ids
@@ -623,6 +604,8 @@ class PostgresStyleSampleStore:
                       command.origin_kind, command.origin_id, sources, dependencies)).fetchone()
                 if row is None:
                     raise StyleSampleError("表达样本保存未返回记录。")
+                from notalone.persistence.style_sample_generation import capture_sample_generation_dependencies
+                capture_sample_generation_dependencies(connection, scope, row)
                 if command.origin_kind == "candidate":
                     from notalone.persistence.expression_preferences import capture_sample_expression_preferences
 

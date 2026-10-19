@@ -219,8 +219,10 @@ def forbidden_generation_memory_dependencies(
             break
         visited.update(current)
         samples = connection.execute(
-            "SELECT sample.origin_kind, sample.dependency_sample_ids, candidate.reply_request_id "
-            "FROM public.style_sample AS sample LEFT JOIN public.reply_candidate AS candidate "
+            "SELECT sample.*, captured.dependency_ids AS generation_dependencies, candidate.reply_request_id "
+            "FROM public.style_sample AS sample LEFT JOIN public.style_sample_generation_dependency AS captured "
+            "ON captured.sample_id=sample.id AND captured.owner_id=sample.owner_id AND captured.contact_id=sample.contact_id "
+            "LEFT JOIN public.reply_candidate AS candidate "
             "ON sample.origin_kind='candidate' AND candidate.id=sample.origin_id "
             "AND candidate.owner_id=sample.owner_id AND candidate.contact_id=sample.contact_id "
             "WHERE sample.owner_id=%s AND sample.contact_id=%s AND sample.id=ANY(%s::uuid[])",
@@ -228,10 +230,13 @@ def forbidden_generation_memory_dependencies(
         ).fetchall()
         pending = set()
         for sample in samples:
-            if require_sample_origins and sample["origin_kind"] == "candidate" and sample["reply_request_id"] is None:
-                raise ReplyStoreInvariantError("表达样本的候选依据不可用，只能回看，请重新生成。")
             pending.update(sample["dependency_sample_ids"] or ())
-            if sample["reply_request_id"] is not None:
+            if sample["generation_dependencies"] is not None:
+                pending.update(sample["generation_dependencies"])
+            elif require_sample_origins:
+                from notalone.persistence.style_sample_generation import capture_sample_generation_dependencies
+                pending.update(capture_sample_generation_dependencies(connection, scope, sample))
+            elif sample["reply_request_id"] is not None:
                 pending.update(_reply_dependencies(connection, scope, sample["reply_request_id"]))
         dependencies.update(pending)
     rows = connection.execute("""

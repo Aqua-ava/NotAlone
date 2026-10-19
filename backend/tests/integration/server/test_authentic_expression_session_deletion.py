@@ -132,7 +132,13 @@ class AuthenticExpressionSessionDeletionTests(FidelityHttpFixture, unittest.Test
                     ).fetchone()[0], 0)
                 self.assertEqual(len(self.reply_model.payloads), calls + 1)
 
-    def _exercise_retention(self, removal: str) -> None:
+    def test_legacy_saved_sample_is_backfilled_before_its_origin_session_is_deleted(self):
+        self._exercise_retention("sample", legacy=True)
+
+    def test_unknown_legacy_sample_stays_auditable_but_cannot_enter_generation(self):
+        self._exercise_retention("sample", unknown=True)
+
+    def _exercise_retention(self, removal: str, *, legacy=False, unknown=False) -> None:
         contact, target, source = self.prepare_contact(self.owner_id)
         saved = self.backend.request(f"/api/contacts/{contact}/assistant-session/default", {})[1]
         old_path = f"/api/contacts/{contact}/assistant-sessions/{saved['session_id']}"
@@ -162,6 +168,11 @@ class AuthenticExpressionSessionDeletionTests(FidelityHttpFixture, unittest.Test
             self.assertEqual(len(turns), 1)
             self.assertEqual(turns[0][0]["content"]["direction"], old_body["content"]["direction"])
 
+        if legacy:
+            # 模拟迁移前已保存且原候选仍存在的样本；不能用空集假装已核验。
+            with psycopg.connect(self.database_url) as connection:
+                connection.execute("DELETE FROM public.style_sample_generation_dependency WHERE owner_id=%s AND sample_id=%s",
+                                   (self.owner_id, sample_id))
         status, deleted = self.backend.request(old_path, {"confirmed": True}, method="DELETE")
         self.assertEqual(status, 200, deleted)
         reopened = self._backend(self.owner_id)
@@ -187,6 +198,11 @@ class AuthenticExpressionSessionDeletionTests(FidelityHttpFixture, unittest.Test
             self.assertEqual(connection.execute("SELECT count(*) FROM public.reply_request WHERE owner_id=%s AND id=%s",
                                                 (self.owner_id, old_reply["reply_request_id"])).fetchone()[0], 0)
 
+        if unknown:
+            # 模拟原候选早已删除且没有历史快照的存量；此时不能重造依赖。
+            with psycopg.connect(self.database_url) as connection:
+                connection.execute("DELETE FROM public.style_sample_generation_dependency WHERE owner_id=%s AND sample_id=%s",
+                                   (self.owner_id, sample_id))
         new_session = reopened.request(f"/api/contacts/{contact}/assistant-session/default", {})[1]
         self.assertNotEqual(new_session["session_id"], saved["session_id"])
         new_path = f"/api/contacts/{contact}/assistant-sessions/{new_session['session_id']}"
@@ -197,8 +213,9 @@ class AuthenticExpressionSessionDeletionTests(FidelityHttpFixture, unittest.Test
         self.reply_model.plans.append({"text": "这次不参加。", "basis": "参考说法但保留当前拒绝。"})
         status, generated = reopened.request(new_path + "/replies", body)
         self.assertEqual(status, 200, generated)
-        self.assertEqual(set(generated["context_receipt"]["style_sample_ids"]), {sample_id, manual_id})
-        self.assertEqual({item["sample_id"] for item in self.reply_model.payloads[-1]["style_references"]}, {sample_id, manual_id})
+        expected_samples = {manual_id} if unknown else {sample_id, manual_id}
+        self.assertEqual(set(generated["context_receipt"]["style_sample_ids"]), expected_samples)
+        self.assertEqual({item["sample_id"] for item in self.reply_model.payloads[-1]["style_references"]}, expected_samples)
         self.assertEqual(self.reply_model.payloads[-1]["fidelity_contract"]["current_intent"]["text"], body["content"]["purpose"])
         self.assertEqual(len(self.reply_model.payloads), 2)
 
@@ -221,6 +238,10 @@ class AuthenticExpressionSessionDeletionTests(FidelityHttpFixture, unittest.Test
         self.assertEqual(reopened.request(f"/api/contacts/{contact}/style-samples/{sample_id}")[0], 410)
         self.assertEqual(self._get(reopened, f"/api/contacts/{contact}/style-samples/{manual_id}")["sample"], manual["sample"])
         after = self._get(self._backend(self.owner_id), new_path)
+        if unknown:
+            self.assertEqual(after["turns"][0]["reply"]["candidates"], generated["candidates"])
+            self.assertEqual(len(self.reply_model.payloads), 2)
+            return
         self.assertEqual(after["turns"][0]["state"], "redacted")
         self.assertIsNone(after["turns"][0]["input"])
         self.assertIsNone(after["turns"][0]["reply"])

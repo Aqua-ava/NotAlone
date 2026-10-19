@@ -125,6 +125,8 @@ def delete_assistant_session(
         "ON CONFLICT (owner_id, contact_id, idempotency_key) DO NOTHING",
         (scope.owner_id, scope.contact_id, turn_ids),
     )
+    from notalone.persistence.style_sample_generation import preserve_sample_generation_dependencies
+    preserve_sample_generation_dependencies(connection, scope, request_ids)
     invalidate_reply_keys(connection, owner_id=scope.owner_id, request_ids=request_ids)
     from notalone.persistence.assistant_session_store import erase_assistant_source_turns
     erase_assistant_source_turns(
