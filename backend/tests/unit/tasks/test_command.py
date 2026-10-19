@@ -382,7 +382,8 @@ class PostgresMemoryExtractionRunnerTest(unittest.TestCase):
             stats = runner.run(scope=scope)
 
         self.assertEqual(stats.adopted, 0)
-        self.assertEqual(stats.pending, 1)
+        self.assertEqual((stats.pending, stats.rejected_by_contract), (0, 1))
+        self.assertEqual(store.list_pending_candidates(scope), ())
         self.assertEqual(store.list_confirmed(scope), ())
 
 

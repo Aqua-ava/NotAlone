@@ -440,7 +440,7 @@ class E2FieldSemanticsTest(unittest.TestCase):
                 self.assertEqual(events["extraction_return"]["payloads"][0], final)
                 self.assertEqual(len(requests), 2)
                 self.assertEqual(stats.adopted, 0)
-                self.assertEqual(stats.pending, 0 if verdict == "unsupported" else 1)
+                self.assertEqual((stats.pending, stats.rejected_by_contract), (0, 1))
                 self.assertNotIn("e2_field_semantics", events)
 
     def test_old_versions_keep_140_public_windows_across_six_given_kinds(self) -> None:

@@ -257,4 +257,4 @@ class E2CalendarFollowupTest(unittest.TestCase):
                                      ["GroundedMemoryLabels", "SourceVerificationOutput"])
                     self.assertIn("2026-11-01", json.dumps(requests[1], ensure_ascii=False))
                     self.assertEqual(stats.adopted, 0)
-                    self.assertEqual(stats.pending, 0 if verdict == "unsupported" else 1)
+                    self.assertEqual((stats.pending, stats.rejected_by_contract), (0, 1))

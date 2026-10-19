@@ -81,7 +81,7 @@ class GroundedV3RuntimeTest(unittest.TestCase):
         self.assertEqual(events["grounded_compile"]["protocol"], "grounded-v3")
         self.assertEqual(len(events["grounded_compile"]["payloads"][0]["alternatives"]), 2)
         self.assertEqual(stats.adopted, 0)
-        self.assertEqual(stats.pending, 1)
+        self.assertEqual((stats.pending, stats.rejected_by_contract), (0, 1))
 
     def test_v3_financial_guidance_preserves_negative_source_and_supplied_labels(self):
         # 合成响应仅验证指导已上wire及原编译合同，不认证模型会遵守指导。

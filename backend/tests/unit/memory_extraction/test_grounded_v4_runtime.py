@@ -14,6 +14,7 @@ from uuid import uuid4
 import httpx
 
 from notalone.memory.adapters import InMemoryMemoryStore
+from tests.unit.memory_extraction.automatic_result_helpers import failed_automatic_candidate
 from notalone.memory_extraction.command import run_extraction
 from notalone.memory_trace.adapters import InMemoryTraceStore
 from notalone.memory_trace.transport import build_trace_http_client
@@ -183,7 +184,7 @@ class GroundedV4RuntimeTest(unittest.TestCase):
                 self.assertEqual(hashlib.sha256(prompt.encode()).hexdigest(), prompt_sha)
                 self.assertEqual(canonical_sha256([schema(source) for source in windows]), schemas_sha)
 
-    def test_sdk_matter_reference_guidance_keeps_supported_confident_request_pending(self):
+    def test_sdk_matter_reference_guidance_preserves_failed_confident_request(self):
         from notalone.memory_extraction.grounded_adapter import (
             GroundedV4ExtractionRuntime, GROUNDED_V2_PROMPT, GROUNDED_V3_PROMPT,
             grounded_schema, grounded_schema_v3,
@@ -231,16 +232,17 @@ class GroundedV4RuntimeTest(unittest.TestCase):
         for old_prompt in (GROUNDED_V2_PROMPT, GROUNDED_V3_PROMPT):
             self.assertNotIn("matter_reference", old_prompt)
             self.assertNotIn("出借施事、接收者、物品所有者和代词指称分别核对", old_prompt)
-        self.assertEqual((stats.adopted, stats.pending), (0, 1))
+        self.assertEqual((stats.adopted, stats.pending, stats.rejected_by_contract), (0, 0, 1))
         self.assertEqual(store.list_confirmed(scope), ())
-        pending, = store.list_pending_candidates(scope)
-        self.assertEqual(pending.confidence, 1.0)
-        self.assertEqual(pending.text, "截至2026-10-14，联系人原话：“那件事情你暂时不要透露。”")
-        self.assertIn("pragmatic:ambiguous", pending.risk_flags)
-        self.assertIn("事项指称在本窗口无法唯一识别", pending.alternatives[0])
-        self.assertIsNotNone(pending.dimension_evidence)
-        assert pending.dimension_evidence is not None
-        self.assertIsNone(pending.dimension_evidence.semantic_basis)
+        failed = failed_automatic_candidate(self, store, scope, traces)
+        self.assertEqual(failed.confidence, 1.0)
+        self.assertEqual(failed.text, "截至2026-10-14，联系人原话：“那件事情你暂时不要透露。”")
+        # 自动路径不追加语用人工门，原始未决解释与独立核验风险仍保留。
+        self.assertNotIn("pragmatic:ambiguous", failed.risk_flags)
+        self.assertIn("事项指称在本窗口无法唯一识别", failed.alternatives[0])
+        self.assertIsNotNone(failed.dimension_evidence)
+        assert failed.dimension_evidence is not None
+        self.assertIsNone(failed.dimension_evidence.semantic_basis)
         detail = traces.get_batch(scope, traces.list_batches(scope)[0]["trace_id"])
         events = {event["stage"]: event["payload"] for event in detail["events"]}
         self.assertEqual(events["grounded_draft"]["draft"], draft)
@@ -345,7 +347,7 @@ class GroundedV4RuntimeTest(unittest.TestCase):
         self.assertEqual((fact["category"], fact["valid_at"], fact["invalid_at"]), ("common_fact", None, None))
         self.assertNotIn("semantic_basis", fact)
 
-    def test_sdk_object_ownership_contract_keeps_confidence_one_supported_candidate_pending(self):
+    def test_sdk_object_ownership_contract_preserves_failed_confidence_one_candidate(self):
         from notalone.memory_extraction.grounded_adapter import GroundedV4ExtractionRuntime
         from tests.unit.memory_extraction.verification_helpers import FixedSourceVerifier, verification_result
 
@@ -390,31 +392,32 @@ class GroundedV4RuntimeTest(unittest.TestCase):
         self.assertTrue(codes["uniqueItems"])
         self.assertEqual(len(verifier.calls), 1)
         self.assertEqual(stats.adopted, 0)
-        self.assertEqual(stats.pending, 1)
+        self.assertEqual((stats.pending, stats.rejected_by_contract), (0, 1))
         self.assertEqual(store.list_confirmed(scope), ())
-        pending, = store.list_pending_candidates(scope)
-        self.assertEqual(pending.confidence, 1.0)
-        self.assertEqual(pending.text, "联系人原话：“我姐把她的车借给我了。”")
-        self.assertEqual(pending.interpretation_reason,
+        failed = failed_automatic_candidate(self, store, scope, traces)
+        self.assertEqual(failed.confidence, 1.0)
+        self.assertEqual(failed.text, "联系人原话：“我姐把她的车借给我了。”")
+        self.assertEqual(failed.interpretation_reason,
                          "按所引原文分句保留内容；类型为模型判断，来源定位和时间由程序校验。"
                          " 当前未决说明：所引原句中的物品所有者在本窗口无法唯一确定；"
                          "不因出借或接收认定所有者，保留原句。")
-        self.assertEqual((pending.valid_at, pending.invalid_at), (None, None))
-        self.assertIn("pragmatic:ambiguous", pending.risk_flags)
-        self.assertNotIn("semantic:unverified", pending.risk_flags)
+        self.assertEqual((failed.valid_at, failed.invalid_at), (None, None))
+        # 自动路径不追加语用人工门，原始未决解释与独立核验风险仍保留。
+        self.assertNotIn("pragmatic:ambiguous", failed.risk_flags)
+        self.assertNotIn("semantic:unverified", failed.risk_flags)
         detail = traces.get_batch(scope, traces.list_batches(scope)[0]["trace_id"])
         events = {event["stage"]: event["payload"] for event in detail["events"]}
         self.assertEqual(events["verification"]["result"]["model_verdict"], "supported")
         self.assertEqual(events["verification"]["result"]["verdict"], "uncertain")
-        self.assertIn("semantic:pragmatics", pending.risk_flags)
+        self.assertIn("semantic:pragmatics", failed.risk_flags)
         self.assertEqual(events["grounded_draft"]["draft"], draft)
         self.assertEqual(events["grounded_compile"]["payloads"][0]["speech_act"], "assertion")
         self.assertEqual(events["grounded_compile"]["payloads"][0]["assertion_status"], "asserted")
         self.assertEqual(events["grounded_compile"]["payloads"][0]["interpretation_reason"],
-                         pending.interpretation_reason)
-        self.assertIsNotNone(pending.dimension_evidence)
-        assert pending.dimension_evidence is not None
-        self.assertIsNone(pending.dimension_evidence.semantic_basis)
+                         failed.interpretation_reason)
+        self.assertIsNotNone(failed.dimension_evidence)
+        assert failed.dimension_evidence is not None
+        self.assertIsNone(failed.dimension_evidence.semantic_basis)
 
     def test_old_plans_reject_v4_before_credentials_budget_audit_or_transport(self):
         from notalone.memory_extraction.evaluation_ecnu import run_ecnu_evaluation
@@ -442,7 +445,7 @@ class GroundedV4RuntimeTest(unittest.TestCase):
                                 )
         self.assertFalse(output.exists())
 
-    def test_sdk_unknowns_preserve_quote_and_all_new_kinds_stay_pending(self):
+    def test_sdk_unknowns_preserve_quote_without_creating_pending_tasks(self):
         from notalone.memory_extraction.grounded_adapter import GroundedV4ExtractionRuntime
 
         for text, kind, codes in (
@@ -469,7 +472,7 @@ class GroundedV4RuntimeTest(unittest.TestCase):
                     )
                 self.assertEqual(len(requests), 1)
                 self.assertEqual(stats.adopted, 0)
-                self.assertEqual(stats.pending, 1)
+                self.assertEqual((stats.pending, stats.rejected_by_contract), (0, 1))
 
     def test_v4_rejects_legacy_tool_name_and_corrupt_draft_without_repair_call(self):
         from notalone.memory_extraction.grounded_adapter import GroundedV4ExtractionRuntime
@@ -546,7 +549,7 @@ class GroundedV4RuntimeTest(unittest.TestCase):
         self.assertEqual(compiled["payloads"][0]["valid_at"], "2026-11-01T00:00:00+08:00")
         self.assertEqual(compiled["payloads"][0]["invalid_at"], "2026-12-01T00:00:00+08:00")
         self.assertEqual(stats.adopted, 0)
-        self.assertEqual(stats.pending, 1)
+        self.assertEqual((stats.pending, stats.rejected_by_contract), (0, 1))
 
 
 if __name__ == "__main__":

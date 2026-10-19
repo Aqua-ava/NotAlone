@@ -15,6 +15,7 @@ from uuid import uuid4
 import httpx
 
 from notalone.memory.adapters import InMemoryMemoryStore
+from tests.unit.memory_extraction.automatic_result_helpers import failed_automatic_candidate
 from notalone.memory_extraction.command import run_extraction
 from notalone.memory_extraction.grounded import (
     compile_draft, compile_labels, compile_labels_v3, compile_labels_v4, source_units,
@@ -133,8 +134,8 @@ class GroundedQuoteAlternativesTest(unittest.TestCase):
                 self.assertEqual(fact["alternatives"], [note])
                 self.assertEqual(events["grounded_draft"]["draft"], original)
                 self.assertEqual(draft, original)
-                self.assertEqual((stats.adopted, stats.pending), (0, 1))
-                saved, = memories.list_pending_candidates(scope)
+                self.assertEqual((stats.adopted, stats.pending, stats.rejected_by_contract), (0, 0, 1))
+                saved = failed_automatic_candidate(self, memories, scope, traces)
                 self.assertEqual(saved.interpretation_reason, fact["interpretation_reason"])
                 self.assertEqual(saved.alternatives, (note,))
                 self.assertIsNone(saved.event)

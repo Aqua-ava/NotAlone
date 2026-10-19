@@ -141,7 +141,7 @@ class TraceTransportTest(unittest.TestCase):
                 owner_memory_port=None,
                 trace_store=traces,
             )
-        self.assertEqual(stats.pending, 1)
+        self.assertEqual((stats.pending, stats.rejected_by_contract), (0, 1))
         detail = traces.get_batch(
             scope, traces.list_batches(scope)[0]["trace_id"]
         )
