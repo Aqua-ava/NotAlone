@@ -374,7 +374,7 @@ test('切换联系人保留有效的原生成，恢复输入不会再次提交',
   assert.equal((await f.command('metrics')).model_calls, 1);
 });
 
-test('编号继续后的草稿分组编辑恢复仍使用分组版本编辑器', async (t) => {
+test('编号继续后恢复分组正文与历史要求，界面不恢复旧要求输入框', async (t) => {
   const f = await budgetPublicFixture(t); const [a, b] = f.data.contact_ids;
   const scope = await f.connect(a);
   f.contacts.setDraft({ ...scope, text: '编号继续的合成草稿。' });
@@ -396,8 +396,13 @@ test('编号继续后的草稿分组编辑恢复仍使用分组版本编辑器',
   await f.connect(b); await f.connect(a);
   const after = await f.bridge.getState();
   assert.deepEqual(after.result.continuation, before.result.continuation);
-  assert.match(f.renderCandidates(after), /编号继续的未保存分组编辑/);
-  assert.match(f.renderCandidates(after), /继续分组临时要求/);
+  assert.deepEqual(after.candidateDrafts, [{ candidateId: view.candidateId, versionId: version.versionId,
+    messages, requirements: '继续分组临时要求' }]);
+  const html = f.renderCandidates(after);
+  assert.match(html, /编号继续的未保存分组编辑/);
+  assert.match(html, /说法1第1条编辑文本/);
+  assert.match(html, /说法1第2条编辑文本/);
+  assert.doesNotMatch(html, /本组修改要求|说法1修改要求|继续分组临时要求/);
   assert.equal((await f.command('metrics')).model_calls, callsBeforeEdit);
 });
 
