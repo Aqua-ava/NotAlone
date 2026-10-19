@@ -20,6 +20,7 @@ from notalone.memory.models import (
     FactSubject,
     MemoryCandidate,
     MemoryCategory,
+    MemoryChangeKind,
     MemoryTopic,
     OwnerMemory,
 )
@@ -79,7 +80,7 @@ class FakeContactMemory:
         self.pending: list[MemoryCandidate] = []
         self.confirm_calls: list[UUID] = []
         self.discard_calls: list[UUID] = []
-        self.correct_calls: list[tuple[UUID, str, MemoryCategory | None]] = []
+        self.correct_calls: list[tuple[UUID, str, MemoryCategory | None, MemoryChangeKind]] = []
         self.delete_calls: list[UUID] = []
 
     def create_candidate(self, candidate: MemoryCandidate) -> MemoryCandidate:
@@ -147,8 +148,9 @@ class FakeContactMemory:
         memory_id: UUID,
         text: str,
         category: MemoryCategory | None = None,
+        change_kind: MemoryChangeKind = MemoryChangeKind.ERROR_CORRECTION,
     ) -> ConfirmedMemory:
-        self.correct_calls.append((memory_id, text, category))
+        self.correct_calls.append((memory_id, text, category, change_kind))
         return _memory(scope.contact_id)
 
     def delete(self, *, scope: ContactScope, memory_id: UUID) -> ConfirmedMemory:
@@ -599,7 +601,8 @@ class MemoryApiContractTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
             self.contact.correct_calls,
-            [(memory_id, "修正后的记忆文本", MemoryCategory.COMMON_FACT)],
+            [(memory_id, "修正后的记忆文本", MemoryCategory.COMMON_FACT,
+              MemoryChangeKind.ERROR_CORRECTION)],
         )
 
     def test_deletes_contact_memory(self) -> None:
