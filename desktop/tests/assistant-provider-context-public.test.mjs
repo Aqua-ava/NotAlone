@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { budgetPublicFixture } from './fixtures/assistant-budget-public.mjs';
 
-const enabled = process.env.CONDA_DEFAULT_ENV === 'NotAlone' && process.env.PGPORT === '55441';
+// 自有测试库的创建、归属和回收由 budgetPublicFixture 核验，端口不是隔离凭据。
+const enabled = process.env.CONDA_DEFAULT_ENV === 'NotAlone';
 const notice = /模型提示这次内容过长，请新开助手会话。/;
 
 test('服务实际限长通过公开生成呈现独立错误，保留草稿讨论且不伪造预算', { skip: !enabled }, async (t) => {
