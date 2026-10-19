@@ -62,6 +62,8 @@ def _request_row(cursor: Any, scope: ContactScope, request_id: UUID) -> dict[str
 
 
 def _require_samples(cursor: Any, scope: ContactScope, identifiers: tuple[UUID, ...]) -> None:
+    if not identifiers:
+        return
     from notalone.application.style_sample_service import StyleSampleError
     from notalone.persistence.style_sample_store import _current_sample
 
@@ -80,6 +82,8 @@ def _require_samples(cursor: Any, scope: ContactScope, identifiers: tuple[UUID, 
 
 def _raw_sources(cursor: Any, scope: ContactScope, identifiers: tuple[UUID, ...]) -> set[UUID]:
     # A已核验并捕获消息/记忆的raw根；这里仅取实际raw ID，不在保存或读取时重新展开ref。
+    if not identifiers:
+        return set()
     rows = cursor.execute(
         "SELECT id FROM public.source_document WHERE owner_id=%s AND id=ANY(%s::uuid[]) "
         "UNION SELECT id FROM public.local_wechat_observation WHERE owner_id=%s AND id=ANY(%s::uuid[])",
@@ -175,13 +179,16 @@ def reply_style_sample_dependencies(
     if type(require_available) is not bool:
         raise ReplyStoreInvariantError("历史依赖读取模式无效。")
     with _connection(connection).cursor(row_factory=dict_row) as cursor:
-        _request_row(cursor, scope, request_id)
+        rows = [_request_row(cursor, scope, request_id)]
         requests = _reply_ancestor_ids(cursor, owner_id=scope.owner_id, request_id=request_id)
-        rows = cursor.execute(
-            "SELECT idempotency_key,context_snapshot FROM public.reply_request "
-            "WHERE owner_id=%s AND contact_id=%s AND id=ANY(%s::uuid[])",
-            (scope.owner_id, scope.contact_id, requests),
-        ).fetchall()
+        parents = [identifier for identifier in requests if identifier != request_id]
+        # 当前请求已按联系人读取，只有真正的祖先需要再批量取其捕获结构。
+        if parents:
+            rows.extend(cursor.execute(
+                "SELECT idempotency_key,context_snapshot FROM public.reply_request "
+                "WHERE owner_id=%s AND contact_id=%s AND id=ANY(%s::uuid[])",
+                (scope.owner_id, scope.contact_id, parents),
+            ).fetchall())
         identifiers = {row["sample_id"] for row in cursor.execute(
             "SELECT sample_id FROM public.reply_style_sample_use "
             "WHERE owner_id=%s AND contact_id=%s AND reply_request_id=ANY(%s::uuid[])",
@@ -191,6 +198,9 @@ def reply_style_sample_dependencies(
             metadata = _metadata(row, scope)
             if metadata is not None:
                 identifiers.update(metadata[1])
+        # 请求、祖先和捕获结构仍须核验；没有样本根时无需再遍历空图。
+        if not identifiers:
+            return ()
         dependencies = cursor.execute(
             "WITH RECURSIVE samples(id) AS (SELECT unnest(%s::uuid[]) UNION "
             "SELECT dependency.id FROM samples JOIN public.style_sample AS sample ON sample.id=samples.id "

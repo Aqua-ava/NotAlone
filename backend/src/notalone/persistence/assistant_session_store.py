@@ -208,6 +208,8 @@ def _partition_assistant_dependencies(
 ) -> DiscussionDependencies:
     """既有turn依赖按实际同范围样本分型；样本仍沿C唯一可用性门禁。"""
 
+    if not dependencies:
+        return DiscussionDependencies((), ())
     from notalone.persistence.reply_discussion_dependencies import _require_samples
 
     rows = connection.execute(
