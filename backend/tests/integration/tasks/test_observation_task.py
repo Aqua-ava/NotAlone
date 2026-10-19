@@ -168,8 +168,12 @@ class ObservationTaskPersistenceTest(unittest.TestCase):
             self.assertEqual(worker.run_once(**args).outcome, WorkerRunOutcome.SUCCEEDED)
         self.assertEqual(seen, list(batch.message_ids))
         memories = PostgresMemoryStore(TEST_DATABASE_URL)
-        self.assertEqual(len(memories.list_pending_candidates(scope)), 1)
-        self.assertEqual(memories.list_confirmed(scope), ())
+        self.assertEqual(memories.list_pending_candidates(scope), ())
+        memory, = memories.list_confirmed(scope)
+        self.assertEqual(memory.adoption_method.value, "auto")
+        candidate = memories.get_candidate(scope=scope, candidate_id=memory.source_candidate_id)
+        self.assertEqual(candidate.source_ids, memory.source_ids)
+        self.assertTrue(memory.source_ids)
         self.assertEqual(PostgresWatermarkStore(TEST_DATABASE_URL).get(scope),
                          batch.message_ids[0])
 

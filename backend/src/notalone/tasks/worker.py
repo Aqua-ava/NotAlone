@@ -190,6 +190,7 @@ class PostgresMemoryExtractionRunner:
 
     __slots__ = (
         "_adjudication_runtime",
+        "_automatic",
         "_batch_size",
         "_database_url",
         "_dimension_release",
@@ -220,6 +221,7 @@ class PostgresMemoryExtractionRunner:
         model_name: str | None = None,
         dimension_release: DimensionRelease | None = None,
         trace_store: TracePort | None = None,
+        automatic: bool = True,
     ) -> None:
         if not isinstance(database_url, str) or not database_url.strip():
             raise ValueError("database_url 不能为空。")
@@ -233,6 +235,7 @@ class PostgresMemoryExtractionRunner:
         # None 表示沿用运维开关与默认空放行表（ADR-036），不是"全部放行"。
         dimension_release = DimensionRelease.resolve(dimension_release)
         self._dimension_release = dimension_release
+        self._automatic = automatic
         self._database_url = database_url
         if runtime is None:
             from notalone.memory_extraction.direct_adapter import (
@@ -329,6 +332,11 @@ class PostgresMemoryExtractionRunner:
             dimension_release=self._dimension_release,
             trace_store=self._trace_store,
             selection_receipts=tuple(selection_receipts),
+            # 显式历史 bounded 任务保留冻结采纳合同（ADR-069）。
+            automatic=self._automatic and not (
+                extraction_runtime_config is not None
+                and extraction_runtime_config.mode is ExtractionRuntimeMode.BOUNDED_RUNTIME_V1
+            ),
             **task_options,
         )
 

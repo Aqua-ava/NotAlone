@@ -68,6 +68,9 @@ def _messages(count: int):
             text=f"合成消息 {index}",
             sender=MessageSender.CONTACT,
             occurred_at=base + timedelta(minutes=index),
+            source_snapshots=({"source_ref_id": str(uuid4()), "source_id": str(uuid4()),
+                "source_kind": "source_document", "locator": f"synthetic:{index}",
+                "raw_payload": {}, "source_content_sha256": "a" * 64},),
         )
         for index in range(count)
     )
@@ -223,8 +226,9 @@ class UnavailableVerificationModel:
         raise TimeoutError("synthetic provider timeout")
 
 
-class RecordingMemoryPort:
+class RecordingMemoryPort(InMemoryMemoryStore):
     def __init__(self) -> None:
+        super().__init__()
         self.calls = []
 
     def list_confirmed(self, scope):
@@ -235,10 +239,11 @@ class RecordingMemoryPort:
 
     def create_candidate(self, candidate):
         self.calls.append(("candidate", candidate.text))
-        return candidate
+        return super().create_candidate(candidate)
 
     def confirm(self, *, scope, candidate_id, adoption_method=None):
         self.calls.append(("confirm", str(candidate_id)))
+        return super().confirm(scope=scope, candidate_id=candidate_id, adoption_method=adoption_method)
 
     def invalidate(self, *, scope, memory_id):
         self.calls.append(("invalidate", str(memory_id)))
@@ -297,6 +302,13 @@ class RecordingWatermark:
         self.skips.append(failure_range)
 
 
+class CapturingMemoryStore(InMemoryMemoryStore):
+    def create_candidate(self, candidate):
+        result = super().create_candidate(candidate)
+        self.last_candidate_id = result.candidate_id
+        return result
+
+
 class RunExtractionTest(unittest.TestCase):
     """只用合成窗口与空候选；不调用真实模型。"""
 
@@ -305,9 +317,8 @@ class RunExtractionTest(unittest.TestCase):
         self.memory_port = RecordingMemoryPort()
         self.owner_port = RecordingOwnerPort()
         self.watermark = RecordingWatermark()
-        # 本类验证原有三道门槛与批次统计，显式放行全部维度；
-        # 默认收紧（空放行表）由 test_adoption 单独覆盖。
-        self.dimension_release = RELEASE_ALL_DIMENSIONS
+        # 命令使用当前逐条核验策略；显式旧维度策略由 test_adoption 覆盖。
+        self.dimension_release = None
 
     def test_ledger_keeps_extraction_and_verification_latency_and_start_separate(self) -> None:
         messages = (replace(_messages(1)[0], text="我习惯直接打电话沟通"),)
@@ -454,9 +465,9 @@ class RunExtractionTest(unittest.TestCase):
         entry, = ledger.list_by_owner(OWNER_ID)
         self.assertEqual(entry.outcome, LedgerOutcome.SUCCEEDED)
 
-    def test_missing_verifier_retains_candidate_as_pending_with_risk(self) -> None:
+    def test_missing_verifier_fails_candidate_without_manual_work(self) -> None:
         messages = _messages(1)
-        store = InMemoryMemoryStore()
+        store = CapturingMemoryStore()
 
         stats = run_extraction(
             trace_store=InMemoryTraceStore(),
@@ -471,15 +482,17 @@ class RunExtractionTest(unittest.TestCase):
         )
 
         self.assertEqual(stats.adopted, 0)
-        self.assertEqual(stats.pending, 1)
+        self.assertEqual((stats.pending, stats.rejected_by_contract), (0, 1))
         self.assertEqual(store.list_confirmed(self.scope), ())
-        candidate, = store.list_pending_candidates(self.scope)
+        self.assertEqual(store.list_pending_candidates(self.scope), ())
+        candidate = store.get_candidate(scope=self.scope, candidate_id=store.last_candidate_id)
+        self.assertEqual(candidate.status.value, "rejected")
         self.assertIn("semantic:unverified", candidate.risk_flags)
         self.assertEqual(self.watermark.values, [messages[0].message_id])
 
-    def test_uncertain_verification_retains_original_candidate_as_pending(self) -> None:
+    def test_uncertain_verification_preserves_failed_candidate_without_manual_work(self) -> None:
         messages = _messages(1)
-        store = InMemoryMemoryStore()
+        store = CapturingMemoryStore()
         verifier = FixedSourceVerifier((verification_result(
             verdict="uncertain", issues=("insufficient_evidence",),
         ),))
@@ -497,10 +510,12 @@ class RunExtractionTest(unittest.TestCase):
             dimension_release=self.dimension_release,
         )
 
-        self.assertEqual(stats.pending, 1)
+        self.assertEqual((stats.pending, stats.rejected_by_contract), (0, 1))
         self.assertEqual(stats.failed_batches, 0)
         self.assertEqual(store.list_confirmed(self.scope), ())
-        candidate, = store.list_pending_candidates(self.scope)
+        self.assertEqual(store.list_pending_candidates(self.scope), ())
+        candidate = store.get_candidate(scope=self.scope, candidate_id=store.last_candidate_id)
+        self.assertEqual(candidate.status.value, "rejected")
         self.assertEqual(candidate.text, "他习惯直接打电话沟通")
         self.assertEqual(candidate.source_ids, (messages[0].message_id,))
         self.assertIn("semantic:insufficient_evidence", candidate.risk_flags)
@@ -653,7 +668,7 @@ class RunExtractionTest(unittest.TestCase):
             + [LedgerOutcome.SUCCEEDED] * 3,
         )
 
-    def test_supported_verification_keeps_existing_adoption_gates(self) -> None:
+    def test_supported_verification_does_not_create_manual_work_for_descriptive_labels(self) -> None:
         messages = _messages(1)
         for overrides in (
             {"confidence": 0.6},
@@ -673,13 +688,12 @@ class RunExtractionTest(unittest.TestCase):
                     owner_memory_port=self.owner_port,
                 )
 
-                self.assertEqual(stats.adopted, 0)
-                self.assertEqual(stats.pending, 1)
-                self.assertEqual(store.list_confirmed(self.scope), ())
-                candidate, = store.list_pending_candidates(self.scope)
-                self.assertEqual(candidate.text, "他习惯直接打电话沟通")
-                if "risk_flags" in overrides:
-                    self.assertIn("health", candidate.risk_flags)
+                self.assertEqual((stats.adopted, stats.pending), (1, 0))
+                self.assertEqual(store.list_pending_candidates(self.scope), ())
+                memory, = store.list_confirmed(self.scope)
+                self.assertEqual(memory.text, "他习惯直接打电话沟通")
+                self.assertEqual(memory.adoption_method, AdoptionMethod.AUTO)
+                self.assertEqual(memory.source_ids, (messages[0].message_id,))
 
     def test_full_run_batches_and_watermark(self) -> None:
         messages = _messages(7)
@@ -997,17 +1011,19 @@ class RunExtractionTest(unittest.TestCase):
             topic=MemoryTopic.OTHER,
         )
 
-    def test_adjudication_invalid_output_counts_toward_skip(self) -> None:
+    def test_adjudication_invalid_output_fails_item_without_manual_work(self) -> None:
         messages = _messages(3)
+        traces = InMemoryTraceStore()
+        store = SimilarMemoryPort(self._similar_memory())
 
         stats = run_extraction(
-            trace_store=InMemoryTraceStore(),
+            trace_store=traces,
             scope=self.scope,
             messages=messages,
             watermark_message_id=None,
             runtime=PayloadRuntime(),
             verification_runtime=SyntheticSupportingVerifier(),
-            memory_port=SimilarMemoryPort(self._similar_memory()),
+            memory_port=store,
             owner_memory_port=self.owner_port,
             adjudication_runtime=FailingAdjudicationRuntime(
                 ExtractionInvalidOutputError("裁决模型未返回结构化结果。")
@@ -1017,16 +1033,15 @@ class RunExtractionTest(unittest.TestCase):
             batch_size=3,
         )
 
-        self.assertEqual(stats.batches, 1)
-        self.assertEqual(stats.failed_batches, 1)
-        self.assertEqual(stats.skipped_batches, 0)
-        self.assertEqual(self.watermark.values, [])
-        self.assertIsNotNone(self.watermark.failure)
-        self.assertEqual(self.watermark.failure.count, 1)
-        self.assertIs(
-            self.watermark.failure.failure_range.code,
-            ExtractionFailureKind.INVALID_OUTPUT,
-        )
+        self.assertEqual((stats.batches, stats.failed_batches, stats.skipped_batches), (1, 0, 0))
+        self.assertEqual((stats.pending, stats.rejected_by_contract), (0, 1))
+        self.assertEqual(store.list_pending_candidates(self.scope), ())
+        self.assertEqual(self.watermark.values, [messages[-1].message_id])
+        self.assertIsNone(self.watermark.failure)
+        detail = traces.get_batch(self.scope, traces.list_batches(self.scope)[0]["trace_id"])
+        self.assertTrue(any(event["stage"] == "adjudication_failure" and
+                            event["payload"].get("reason") == "invalid_item_contract"
+                            for event in detail["events"]))
 
     def test_adjudication_unavailable_never_counts(self) -> None:
         messages = _messages(3)

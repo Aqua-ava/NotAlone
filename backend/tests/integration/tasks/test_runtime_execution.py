@@ -101,7 +101,12 @@ class RuntimeExecutionCliTest(unittest.TestCase):
             body = json.loads(request.content)
             requests.append(body)
             name = body["tools"][0]["function"]["name"]
-            if name == "GroundedMemoryLabels":
+            if name == "DirectMemoryExtractionOutput":
+                from tests.unit.memory_extraction.test_command import _payload
+                payload = {"scenes": [{"scene_name": "到家", "memories": [
+                    {**_payload(message.message_id), "text": "联系人已到家。"}
+                ]}]}
+            elif name == "GroundedMemoryLabels":
                 payload = {"units": {
                     "0:0": {"kind": "event", "subject": "contact", "topic": "other", "dependency": None,
                             "unresolved": False, "confidence": 0.95, "sensitivity": "none", "event": None},
@@ -132,12 +137,17 @@ class RuntimeExecutionCliTest(unittest.TestCase):
         self.assertEqual(task.status.value, "succeeded")
         self.assertEqual(task.extraction_runtime_config.mode, mode)
         self.assertEqual([body["tools"][0]["function"]["name"] for body in requests],
-                         ["GroundedMemoryLabels", "SourceVerificationOutput"])
+                         ["DirectMemoryExtractionOutput" if mode is ExtractionRuntimeMode.LEGACY else "GroundedMemoryLabels",
+                          "SourceVerificationOutput"])
         traces = PostgresExtractionTraceStore(self.database_url)
         detail = traces.get_batch(self.scope, traces.list_batches(self.scope)[0]["trace_id"])
         events = {item["stage"]: item["payload"] for item in detail["events"]}
-        self.assertEqual(events["grounded_compile"]["payloads"][0], events["candidate_raw"]["fields"])
-        self.assertEqual(events["grounded_draft"]["draft"]["units"]["0:0"]["kind"], "event")
+        if mode is ExtractionRuntimeMode.BOUNDED_RUNTIME_V1:
+            self.assertEqual(events["grounded_compile"]["payloads"][0], events["candidate_raw"]["fields"])
+            self.assertEqual(events["grounded_draft"]["draft"]["units"]["0:0"]["kind"], "event")
+        else:
+            self.assertEqual(events["candidate_raw"]["fields"]["text"], "联系人已到家。")
+            self.assertNotIn("grounded_compile", events)
         return requests
 
     def test_actual_cli_commits_explicit_legacy_and_preserves_utc_loader_time(self) -> None:

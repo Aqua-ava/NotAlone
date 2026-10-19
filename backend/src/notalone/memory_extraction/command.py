@@ -119,6 +119,7 @@ def run_extraction(
     selection_receipts: tuple[dict[str, Any], ...] = (),
     task_id: UUID | None = None,
     extraction_runtime_config: ExtractionRuntimeConfig | None = None,
+    automatic: bool = True,
 ) -> ExtractionRunStats:
     """按水位分批串行提取并采纳；输出不可用的批次连续失败后跳过。"""
 
@@ -180,7 +181,7 @@ def run_extraction(
     previous_watermark = watermark_message_id
     from notalone.memory_extraction.merge import MemoryMergeVerifier
     adoption = MemoryAdoption(
-        automatic=True,
+        automatic=automatic,
         memory_port=memory_port,
         owner_memory_port=owner_memory_port,
         merge_verifier=MemoryMergeVerifier(messages=messages, verification_runtime=verification_runtime),
