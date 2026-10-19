@@ -79,6 +79,8 @@ class ImportBusinessBatchTest(unittest.TestCase):
 
     def test_cross_block_and_oversized_record_keep_text_receipts_and_replay(self):
         records = list(self.records(502))
+        escaped = "合成正文\t制表\n换行\\路径😀"
+        records[0]["text"] = escaped
         oversized = "合成大正文" * 150_000
         self.assertGreater(len(oversized.encode("utf-8")), 2 * 1024 * 1024)
         records[250]["text"] = oversized
@@ -88,8 +90,28 @@ class ImportBusinessBatchTest(unittest.TestCase):
         messages = load_contact_messages(self.scope, self.database_url)
         self.assertEqual(len(messages), 502)
         self.assertEqual((messages[0].text, messages[250].text, messages[-1].text),
-                         ("合成正文0000", oversized, "合成正文0501"))
+                         (escaped, oversized, "合成正文0501"))
         self.assertEqual(load_contact_messages(self.other, self.database_url), ())
+        with psycopg.connect(self.database_url) as connection:
+            stored = connection.execute(
+                "SELECT message.text_content, message.media_placeholder, message.occurred_at, "
+                "metadata.external_local_id, metadata.external_server_id, metadata.external_talker, "
+                "metadata.source_create_time, ref.raw_payload, jsonb_typeof(ref.raw_payload) "
+                "FROM public.message_source_ref AS ref "
+                "JOIN public.message AS message ON message.id=ref.message_id "
+                "JOIN public.wechat_message_metadata AS metadata ON metadata.message_id=message.id "
+                "WHERE ref.owner_id=%s AND ref.contact_id=%s AND ref.source_document_id=%s "
+                "AND ref.source_locator='jsonl:1'",
+                (self.scope.owner_id, self.scope.contact_id, first.source_document_id),
+            ).fetchone()
+        self.assertEqual(stored[:7], (
+            escaped, None, datetime.fromisoformat(records[0]["time_iso"]),
+            records[0]["id"]["local_id"], records[0]["id"]["server_id_str"],
+            self.contact_external_id, records[0]["create_time"],
+        ))
+        self.assertIsInstance(stored[7], dict)
+        self.assertEqual(stored[7], records[0])
+        self.assertEqual(stored[8], "object")
         for item in self.processing.list_batches(self.scope):
             batch = self.processing.get_batch(self.scope, item["batch_id"])
             self.assertEqual([row["position"] for row in batch["records"]], list(range(502)))
@@ -121,6 +143,33 @@ class ImportBusinessBatchTest(unittest.TestCase):
         self.assertEqual((failed_batches[0]["status"], failed_batches[0]["source_id"]), ("failed", None))
         self.assertEqual(self.overviews.read_contact(self.scope), before)
         self.assertEqual(self.overviews.read_owner(self.scope.owner_id), owner_before)
+
+    def test_skipped_source_ref_rejects_import_and_rolls_back_prior_blocks(self):
+        name = "synthetic_business_skip_" + uuid4().hex
+        with psycopg.connect(self.database_url) as connection:
+            connection.execute(sql.SQL("CREATE FUNCTION public.{name}() RETURNS trigger LANGUAGE plpgsql AS $$ "
+                "BEGIN IF NEW.owner_id={owner}::uuid AND NEW.source_locator='jsonl:501' THEN "
+                "RETURN NULL; END IF; RETURN NEW; END $$").format(
+                    name=sql.Identifier(name), owner=sql.Literal(str(self.scope.owner_id))))
+            connection.execute(sql.SQL("CREATE TRIGGER {name} BEFORE INSERT ON public.message_source_ref "
+                "FOR EACH ROW EXECUTE FUNCTION public.{name}()").format(name=sql.Identifier(name)))
+        def cleanup_skip():
+            with psycopg.connect(self.database_url) as connection:
+                connection.execute(sql.SQL("DROP TRIGGER {name} ON public.message_source_ref").format(name=sql.Identifier(name)))
+                connection.execute(sql.SQL("DROP FUNCTION public.{name}()").format(name=sql.Identifier(name)))
+        self.addCleanup(cleanup_skip)
+        with self.assertRaises(ImportPersistenceError) as raised:
+            self.import_records(self.records(502))
+        self.assertIsNone(raised.exception.__cause__)
+        self.assertEqual(load_contact_messages(self.scope, self.database_url), ())
+        with psycopg.connect(self.database_url) as connection:
+            for table in ("source_document", "message_source_ref", "wechat_message_metadata"):
+                count = connection.execute(sql.SQL("SELECT count(*) FROM public.{} WHERE owner_id=%s AND contact_id=%s").format(
+                    sql.Identifier(table)), (self.scope.owner_id, self.scope.contact_id)).fetchone()[0]
+                self.assertEqual(count, 0)
+        failed_batches = self.processing.list_batches(self.scope)
+        self.assertEqual(len(failed_batches), 1)
+        self.assertEqual((failed_batches[0]["status"], failed_batches[0]["source_id"]), ("failed", None))
 
     def test_statement_insert_invalidates_dependencies_and_rollback_preserves_them(self):
         # 工程夹具直接写无来源消息，独立验证 message INSERT 的投影依赖范围。
