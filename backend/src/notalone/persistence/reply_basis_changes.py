@@ -239,6 +239,8 @@ def forbidden_generation_memory_dependencies(
             elif sample["reply_request_id"] is not None:
                 pending.update(_reply_dependencies(connection, scope, sample["reply_request_id"]))
         dependencies.update(pending)
+    # 候选依赖沿派生记忆检查状态；只报告实际使用的身份。
+    # 同一已使用记忆的内部候选不重复投影，未使用的删除指纹也不能冒充另一条记忆。
     rows = connection.execute("""
         WITH RECURSIVE used(id) AS (
           SELECT unnest(%(ids)s::uuid[])
@@ -259,12 +261,14 @@ def forbidden_generation_memory_dependencies(
           SELECT id,id AS match_id,'confirmed_memory' AS kind,status,retirement_reason FROM public.confirmed_memory
           WHERE owner_id=%(owner_id)s
           UNION ALL
-          SELECT id,source_candidate_id,'confirmed_memory',status,retirement_reason FROM public.confirmed_memory
+          SELECT CASE WHEN id IN (SELECT id FROM used) THEN id ELSE source_candidate_id END,source_candidate_id,
+            CASE WHEN id IN (SELECT id FROM used) THEN 'confirmed_memory' ELSE 'pending_candidate' END,status,retirement_reason FROM public.confirmed_memory
           WHERE owner_id=%(owner_id)s AND source_candidate_id IS NOT NULL
           UNION ALL
           SELECT id,id,'owner_memory',status,retirement_reason FROM public.owner_memory WHERE owner_id=%(owner_id)s
           UNION ALL
-          SELECT id,source_candidate_id,'owner_memory',status,retirement_reason FROM public.owner_memory
+          SELECT CASE WHEN id IN (SELECT id FROM used) THEN id ELSE source_candidate_id END,source_candidate_id,
+            CASE WHEN id IN (SELECT id FROM used) THEN 'owner_memory' ELSE 'pending_candidate' END,status,retirement_reason FROM public.owner_memory
           WHERE owner_id=%(owner_id)s AND source_candidate_id IS NOT NULL
           UNION ALL
           SELECT id,id,'pending_candidate',status,'unknown' FROM public.memory_candidate WHERE owner_id=%(owner_id)s
