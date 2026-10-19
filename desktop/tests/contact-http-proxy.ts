@@ -20,6 +20,7 @@ export class ContactHttpProxy {
   holdContacts = false;
   readonly holdBindingPaths = new Set<string>();
   readonly holdRequestPaths = new Set<string>();
+  readonly bindingRevocations: Array<{ status: number | undefined; error: string | null }> = [];
   failRuntimeStatus = false;
   heldCount = 0;
   private runtimeStopped = false;
@@ -43,6 +44,14 @@ export class ContactHttpProxy {
           const chunks: Buffer[] = [];
           result.on('data', (chunk: Buffer) => chunks.push(chunk));
           result.on('end', () => {
+            if (incoming.method === 'POST' && incoming.url === '/api/sync/cli-bindings/revoke') {
+              let error: string | null = null;
+              try {
+                const payload: unknown = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+                if (payload && typeof payload === 'object' && 'error' in payload && typeof payload.error === 'string') error = payload.error;
+              } catch { /* 无效正文照常交付，不能把记录失败变成产品传输故障。 */ }
+              this.bindingRevocations.push({ status: result.statusCode, error });
+            }
             if (this.foregroundObservation && incoming.method === 'POST' && incoming.url === '/api/sync/foreground/observe'
               && incoming.headers.authorization === `Bearer ${this.runtimeToken}`) {
               const target = this.foregroundObservation;

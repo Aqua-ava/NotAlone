@@ -35,7 +35,7 @@ export async function bindingInitialSelection({ manager, bindingBackend, screens
   await screenshot('bindings-unselected-refresh.png');
 }
 
-export async function bindingRevokeBusy({ manager, bindingBackend, screenshot }: BindingPage): Promise<void> {
+export async function bindingRevokeBusy({ manager, bindingBackend, screenshot }: BindingPage, proxy?: ContactHttpProxy): Promise<void> {
   await expect(manager.getByRole('status').filter({ hasText: '已连接' })).toBeVisible({ timeout: 15_000 });
   await bindingBackend.request('/api/sync/cli-bindings/confirm', { selections: [
     { locator: 'wxid_synthetic_a', contact_id: bindingBackend.data.contact_ids[0] },
@@ -46,21 +46,29 @@ export async function bindingRevokeBusy({ manager, bindingBackend, screenshot }:
   const authorized = manager.getByRole('region', { name: '已授权会话' });
   await authorized.getByRole('button', { name: '撤销会话 wxid_synthetic_a 的后台读取授权', exact: true }).click();
   const dialog = manager.getByRole('dialog', { name: '撤销后台读取授权确认' });
-  const gate = path.join(bindingBackend.directory, 'hold-tail-wxid_synthetic_a');
-  const reads = (await bindingBackend.tails()).length;
+  // tail 单步已限3秒，无法覆盖撤销的4秒锁等待；真实授权复读仍走较长的元数据读取预算。
+  const gate = path.join(bindingBackend.directory, 'hold-sessions');
+  const ready = path.join(bindingBackend.directory, 'held-sessions-ready');
+  await rm(ready, { force: true });
   await writeFile(gate, '');
-  const cycle = bindingBackend.request('/api/sync/check', {});
+  const confirmation = bindingBackend.request('/api/sync/cli-bindings/confirm', { selections: [
+    { locator: 'wxid_synthetic_a', contact_id: bindingBackend.data.contact_ids[0] },
+  ] });
   try {
-    await expect.poll(async () => (await bindingBackend.tails()).length).toBeGreaterThan(reads);
+    await expect.poll(async () => readFile(ready).then(() => true, () => false)).toBe(true);
     await dialog.getByRole('button', { name: '确认撤销此会话授权', exact: true }).click();
     await expect(dialog.getByText('当前同步仍在收尾，尚未撤销授权。请稍后重新确认撤销。', { exact: true })).toBeVisible({ timeout: 7000 });
+    if (proxy) expect(proxy.bindingRevocations).toEqual([{ status: 409, error: 'cli_binding_revoke_busy' }]);
     await expect(dialog.getByRole('button', { name: '确认撤销此会话授权', exact: true })).toBeEnabled();
     await expect(manager.getByText('已撤销此会话的后台读取授权，历史资料仍保留。', { exact: true })).toHaveCount(0);
     await screenshot('bindings-revoke-busy.png');
-  } finally { await rm(gate, { force: true }); await cycle; }
+  } finally { await rm(gate, { force: true }); expect((await confirmation).status).toBe(200); }
   expect(((await bindingBackend.request('/api/sync/cli-bindings')).data.bindings as unknown[]).length).toBe(1);
   await dialog.getByRole('button', { name: '确认撤销此会话授权', exact: true }).click();
   await expect(dialog).toHaveCount(0);
+  if (proxy) expect(proxy.bindingRevocations).toEqual([
+    { status: 409, error: 'cli_binding_revoke_busy' }, { status: 200, error: null },
+  ]);
   await expect(authorized.getByText('wxid_synthetic_a', { exact: true })).toHaveCount(0);
   const finalReads = await bindingBackend.tails();
   for (let count = 0; count < 2; count++) await bindingBackend.request('/api/sync/check', {});
