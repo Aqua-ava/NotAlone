@@ -2,7 +2,7 @@ import { selectMemoryCategory } from '../memory-page-actions';
 import { expect, type Browser, type Page } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
-import { fillWorkspaceThought, setWorkspaceContext, fillWorkspaceInstruction, generateWorkspace } from '../workspace-actions';
+import { fillWorkspaceThought, setWorkspaceContext, fillWorkspaceInstruction, generateWorkspace, continueWorkspace } from '../workspace-actions';
 import { withRewritePages } from './rewrite-acceptance';
 import { PageHost } from './page-host';
 import type { RewriteFixture } from '../rewrite-backend-fixture';
@@ -218,7 +218,7 @@ export async function understandingDirection(browser: Browser, origin: string) {
   });
 
   process.stdout.write('page_test_scenario: workspace-retained-history-dependency-deletion\n');
-  await withRewritePages(browser, origin, async pages => {
+  await withRewritePages(browser, origin, async (pages, host) => {
     const { manager, helper, rewriteBackend, replyTransport } = pages;
     const dependency = await rewriteBackend.command('direction_dependency');
     const contactId = await openWorkspace(pages);
@@ -237,8 +237,8 @@ export async function understandingDirection(browser: Browser, origin: string) {
     const continuation = helper.getByRole('region', { name: '连续修改', exact: true });
     await continuation.getByRole('textbox', { name: '继续修改要求', exact: true }).fill('第一条简短一点');
     await rewriteBackend.plan({ count: 1, prefix: '继续修改保留历史依赖' });
-    await continuation.getByRole('button', { name: '继续修改', exact: true }).click();
     try {
+      await continueWorkspace(helper, host);
       await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveValue('继续修改保留历史依赖（说法1）。');
     } catch (error) {
       const diagnostics = await Promise.allSettled([
