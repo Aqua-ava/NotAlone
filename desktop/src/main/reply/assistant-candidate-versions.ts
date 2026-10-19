@@ -324,14 +324,16 @@ export class AssistantCandidateVersionSession {
   }
   private async readPages(request: ReplyCandidateVersionRead, signal: AbortSignal,
     generation: number | undefined, current: () => boolean): Promise<AssistantCandidateHistory | null> {
-    const versions: unknown[] = [];
     let first: Record<string, unknown> | undefined;
-    let pageNumber = 0;
-    while (current()) {
+    const reading = new AbortController();
+    const abort = () => reading.abort();
+    signal.addEventListener('abort', abort, { once: true });
+    if (signal.aborted) abort();
+    const readPage = async (pageNumber: number): Promise<Record<string, unknown> | null> => {
       const through = first ? `&through=${first.default_display_version_id}` : '';
       const response = await this.backend.requestJson({ method: 'GET',
         path: `/api/contacts/${request.contactId}/assistant-sessions/${request.sessionId}/candidates/${request.candidateId}/versions?page=${pageNumber}${through}`,
-        signal });
+        signal: reading.signal });
       if (!current() || response.generation !== generation) return null;
       const page = response.data;
       if (!exact(page, ['session_id', 'turn_id', 'candidate_id', 'candidate_group_id', 'candidate_number',
@@ -346,16 +348,36 @@ export class AssistantCandidateVersionSession {
       if (first && ['session_id', 'turn_id', 'candidate_id', 'candidate_group_id', 'candidate_number',
         'default_display_version_id', 'version_count'].some((key) => page[key] !== first![key])) throw invalid();
       if (first && JSON.stringify(basisChanges) !== JSON.stringify(readReplyBasisChanges(first.basis_changes))) throw invalid();
-      first ??= page;
-      versions.push(page.versions[0]);
-      if (page.next_page === null) {
-        const { page_number: _pageNumber, version_count: _versionCount, next_page: _nextPage, ...header } = first;
-        // 完整收齐后才进入受信视图；任意页失败让局部累积正文随此调用丢弃。
-        return history({ ...header, selected_version_id: null, versions }, request);
+      return page;
+    };
+    try {
+      if (!current()) return null;
+      first = await readPage(0) ?? undefined;
+      if (!first || !current()) return null;
+      const versions = [...first.versions as unknown[]];
+      // 首页面固定历史锚点；每批至多四页，各页仍独立核验来源，完成后按页码合并。
+      for (let start = 1; start < (first.version_count as number); start += 4) {
+        if (!current()) return null;
+        let firstFailure: { reason: unknown } | undefined;
+        const results = await Promise.allSettled(Array.from({ length: Math.min(4, (first.version_count as number) - start) },
+          (_, offset) => readPage(start + offset).catch(error => {
+            firstFailure ??= { reason: error }; reading.abort(); throw error;
+          })));
+        // 立即取消仍在途页面；已确认的来源撤回或协议无效优先于网络失败和取消。
+        const failures = results.filter((result): result is PromiseRejectedResult => result.status === 'rejected');
+        if (failures.length) throw (failures.find(result => sourceUnavailable(result.reason))
+          ?? failures.find(result => !(result.reason instanceof BackendRequestFailure)) ?? firstFailure!).reason;
+        const pages = results.map(result => (result as PromiseFulfilledResult<Record<string, unknown> | null>).value);
+        if (!current() || pages.some(page => page === null)) return null;
+        for (const page of pages) versions.push((page!.versions as unknown[])[0]);
       }
-      pageNumber += 1;
-    }
-    return null;
+      const { page_number: _pageNumber, version_count: _versionCount, next_page: _nextPage, ...header } = first;
+      // 任一页失败均不发布局部正文；只在完整收齐后进入受信视图。
+      return history({ ...header, selected_version_id: null, versions }, request);
+    } catch (error) {
+      reading.abort();
+      throw error;
+    } finally { signal.removeEventListener('abort', abort); }
   }
   private assertScope(request: VersionScope & { candidateId?: string }): void {
     if (this.backend.getConnectionGeneration() === undefined || this.scope?.contactId !== request.contactId

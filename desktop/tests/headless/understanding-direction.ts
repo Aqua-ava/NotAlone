@@ -238,7 +238,30 @@ export async function understandingDirection(browser: Browser, origin: string) {
     await continuation.getByRole('textbox', { name: '继续修改要求', exact: true }).fill('第一条简短一点');
     await rewriteBackend.plan({ count: 1, prefix: '继续修改保留历史依赖' });
     await continuation.getByRole('button', { name: '继续修改', exact: true }).click();
-    await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveValue('继续修改保留历史依赖（说法1）。');
+    try {
+      await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveValue('继续修改保留历史依赖（说法1）。');
+    } catch (error) {
+      const diagnostics = await Promise.allSettled([
+        helper.evaluate(async () => {
+          const state = await window.notalone.replies.getState();
+          return { phase: state.phase, errorCode: state.errorCode ?? null,
+            continuationPhase: state.continuation?.phase ?? null,
+            clarificationReason: state.continuation?.clarification?.reason ?? null,
+            sourceAvailability: state.sourceAvailability ?? null, savedPhase: state.savedSession?.phase,
+            candidateVersionPhase: state.candidateVersions?.phase,
+            jobs: state.generationJobs?.map(job => job.phase) };
+        }),
+        rewriteBackend.command('observations').then(value => ({ modelCalls: value.model_calls,
+          payloadCount: Array.isArray(value.payloads) ? value.payloads.length : null })),
+        rewriteBackend.request(`/api/contacts/${contactId}/assistant-sessions/${generated.session_id}`)
+          .then(value => ({ status: value.status, turns: Array.isArray(value.data.turns)
+            ? value.data.turns.map(turn => ({ state: turn.state, hasReply: Boolean(turn.reply) })) : null })),
+      ]);
+      process.stderr.write(`page_test_retained_history_continuation: ${JSON.stringify(diagnostics.map((item, index) =>
+        item.status === 'fulfilled' ? { source: ['ui', 'model', 'saved'][index], value: item.value }
+          : { source: ['ui', 'model', 'saved'][index], unavailable: true }))}\n`);
+      throw error;
+    }
     const payloads = (await rewriteBackend.command('observations')).payloads as Array<{ evidence: Array<{ kind: string; text: string }> }>;
     expect(payloads).toHaveLength(3);
     expect(payloads.at(-1)!.evidence.filter(item => item.kind === 'message').map(item => item.text))
