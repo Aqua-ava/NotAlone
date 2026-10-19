@@ -50,6 +50,28 @@ class ManualInputHttpTest(FidelityHttpFixture, unittest.TestCase):
         self.assertEqual(self.manual_request(f"/api/contacts/{other}/assistant-session/default", {}, contact_id=contact)[0], 400)
         self.assertEqual(self.manual_request(default, {}, contact_id=contact, backend=self.other_backend)[0], 404)
 
+    def test_new_session_without_channel_binding_requires_explicit_manual_scope(self):
+        contact, _ = self.create_contact()
+        path = f"/api/contacts/{contact}/assistant-sessions"
+        default = f"/api/contacts/{contact}/assistant-session/default"
+        self.assertEqual(self.manual_request(path, {}, contact_id=contact)[0], 409)
+        self.assertEqual(self.manual_request(f"/api/contacts/{contact}/manual-confirmation", {})[0], 200)
+        self.assertEqual(self.manual_request(path, {})[0], 409)
+        status, original = self.manual_request(default, {}, contact_id=contact)
+        self.assertEqual(status, 200, original)
+        status, created = self.manual_request(path, {}, contact_id=contact)
+        self.assertEqual(status, 200, created)
+        self.assertNotEqual(created["session_id"], original["session_id"])
+        self.assertEqual(self.manual_request(default, {}, contact_id=contact), (200, created))
+        status, saved = self.manual_request(path + '/' + created['session_id'], contact_id=contact)
+        self.assertEqual(status, 200, saved)
+        self.assertEqual(saved['turns'], [])
+        other, _ = self.create_contact("未确认的另一位合成联系人")
+        other_path = f"/api/contacts/{other}/assistant-sessions"
+        self.assertEqual(self.manual_request(other_path, {}, contact_id=contact)[0], 400)
+        self.assertEqual(self.manual_request(other_path, {}, contact_id=other)[0], 409)
+        self.assertEqual(self.manual_request(path, {}, contact_id=contact, backend=self.other_backend)[0], 404)
+
     def test_pasted_current_text_is_distinct_from_the_owners_draft_and_requires_direction(self):
         contact, _ = self.create_contact()
         self.assertEqual(self.manual_request(f"/api/contacts/{contact}/manual-confirmation", {})[0], 200)

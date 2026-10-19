@@ -26,8 +26,10 @@ export function useContactSession() {
     try {
       receive(await window.notalone.foreground.confirm({ contactId, contactScopeRevision, foregroundRevision }));
       if (active.current) setError('');
-    } catch {
-      if (active.current) setError('联系人确认已失效，请重新选择本次联系人。');
+    } catch (error) {
+      if (active.current) setError(error instanceof Error && error.message.includes('foreground_binding_required')
+        ? '当前联系人没有唯一有效的微信绑定，请选择“切换为手动输入”。'
+        : '联系人确认已失效，请重新选择本次联系人。');
     }
   }
 

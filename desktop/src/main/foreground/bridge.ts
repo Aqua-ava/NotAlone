@@ -5,6 +5,7 @@ import { normalizeUuid } from '../uuid';
 import type { ForegroundConfirmation } from '../../shared/foreground-bridge';
 import { ForegroundController } from './controller';
 import { selectionArguments } from '../contacts/bridge';
+import { bindingSummary } from '../bindings/controller';
 
 function confirmationArguments(args: unknown[]): ForegroundConfirmation {
   const value = args[0];
@@ -26,8 +27,21 @@ export function installForegroundBridge(commands: PageCommands, backend: Backend
   commands.handle('foreground:get-state', (...args: unknown[]) => {
     noArguments(args); return controller.getState();
   }, 'helper');
-  commands.handle('foreground:confirm', (...args: unknown[]) => {
+  commands.handle('foreground:confirm', async (...args: unknown[]) => {
     const confirmation = confirmationArguments(args);
+    const generation = controller.checkConfirmation(confirmation);
+    // 这里只读已授权绑定，不读取微信名单、聊天正文或创建新授权。
+    const response = await backend.requestJson({ method: 'GET', path: '/api/sync/cli-bindings' });
+    if (response.generation !== generation || backend.getConnectionGeneration() !== generation) {
+      throw new Error('联系人确认已失效，请重新选择本次联系人。');
+    }
+    controller.checkConfirmation(confirmation);
+    const data = response.data;
+    if (!data || typeof data !== 'object' || !('bindings' in data) || !Array.isArray(data.bindings)) {
+      throw new Error('微信绑定暂时无法核验，请重试或切换为手动输入。');
+    }
+    const bindings = data.bindings.map(bindingSummary).filter(binding => binding.contactId === confirmation.contactId && binding.status === 'active');
+    if (bindings.length !== 1) throw new Error('foreground_binding_required');
     const selected = controller.confirm(confirmation);
     backend.clearManualInput(confirmation.contactId);
     return selected;

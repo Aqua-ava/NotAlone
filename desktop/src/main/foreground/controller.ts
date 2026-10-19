@@ -161,8 +161,8 @@ export class ForegroundController {
     this.scheduleNext(); this.updateChangeSource();
     return this.getState();
   }
-  // 仅由helper具名桥调用；同步校验并选择，异步旧观察不能在确认后覆盖资格。
-  confirm(selection: ForegroundConfirmation) {
+  // 异步核验绑定前后均检查同一身份，过时操作不能读取或确认新范围。
+  checkConfirmation(selection: ForegroundConfirmation): number {
     const generation = this.backend.getConnectionGeneration();
     const contact = this.contacts.getState();
     if (this.disposed || this.stopped || this.state.unsupportedConversation || this.readingScopeChanges > 0 || generation === undefined || generation !== this.generation
@@ -172,6 +172,12 @@ export class ForegroundController {
       || (contact.directoryPhase !== 'ready' && contact.directoryPhase !== 'loading')) {
       throw new Error('联系人确认已失效，请重新选择本次联系人。');
     }
+    return generation;
+  }
+  // 仅由helper具名桥调用；绑定核验成功后同步选择，旧观察不能覆盖资格。
+  confirm(selection: ForegroundConfirmation) {
+    const generation = this.checkConfirmation(selection);
+    const contact = this.contacts.getState();
     this.invalidatePending(); ++this.epoch; ++this.captureAuthorityRevision;
     const selected = this.contacts.selectContact({ contactId: selection.contactId, scopeRevision: contact.scopeRevision });
     this.manualRequired = false;
