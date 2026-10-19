@@ -747,6 +747,17 @@ class PostgresMemoryStore:
                 requires_all_sources = bool(memory_row.get('memory_requires_all_sources'))
                 mode_column, mode_value, mode_params = insert_dependency(mode, requires_all_sources=requires_all_sources, connection=connection, table='confirmed_memory')
                 next_revision = memory_row["revision"] + 1
+                retirement_columns = connection.execute(
+                    "SELECT count(*) AS count FROM pg_attribute "
+                    "WHERE attrelid = 'public.confirmed_memory'::regclass AND NOT attisdropped "
+                    "AND attname IN ('retirement_reason', 'retired_at')"
+                ).fetchone()["count"]
+                if retirement_columns == 1 or (retirement_columns == 0
+                        and change_kind is not MemoryChangeKind.ERROR_CORRECTION):
+                    raise MemoryPersistenceError("关系记忆结构尚不支持本次修正。")
+                # 旧库纠错仍使原版失效，读回保持unknown；不能把缺少退役记录的旧版当作合法历史。
+                retirement_update = "retirement_reason = %s, retired_at = %s," if retirement_columns == 2 else ""
+                retirement_params = (change_kind.value, self._now()) if retirement_columns == 2 else ()
                 updated = connection.execute(
                     f"""
                     INSERT INTO public.confirmed_memory (
@@ -781,17 +792,15 @@ class PostgresMemoryStore:
                     raise MemoryInvariantError("关系记忆新版本写入结果为空。")
                 # 同事务先保存合法后继，避免旧叶失效触发器误判整条手录链已删除。
                 invalidated = connection.execute(
-                    """
+                    f"""
                     UPDATE public.confirmed_memory
                     SET status = 'invalidated',
-                        retirement_reason = %s, retired_at = %s,
+                        {retirement_update}
                         revision = %s,
                         updated_at = now()
                     WHERE owner_id = %s AND contact_id = %s AND id = %s
                     """,
-                    (
-                        change_kind.value,
-                        self._now(),
+                    retirement_params + (
                         next_revision,
                         scope.owner_id,
                         scope.contact_id,

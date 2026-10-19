@@ -194,9 +194,8 @@ class ContactDeletionTest(unittest.TestCase):
 
 
 class ContactBackupDeletionTest(unittest.TestCase):
-    _fixture = backup_fixture.ManagedUpdateBackupDeletionTest._fixture
-    _command = backup_fixture.ManagedUpdateBackupDeletionTest._command
-    _response_code = staticmethod(backup_fixture.ManagedUpdateBackupDeletionTest._response_code)
+    _fingerprint = staticmethod(backup_fixture.ManagedUpdateBackupDeletionTest._fingerprint)
+    _historical_archive = backup_fixture.ManagedUpdateBackupDeletionTest._historical_archive
     setUp = backup_fixture.ManagedUpdateBackupDeletionTest.setUp
 
     def test_contact_delete_erases_real_app_dump_that_can_restore_the_contact(self):
@@ -207,7 +206,7 @@ class ContactBackupDeletionTest(unittest.TestCase):
                 self.assertEqual(connection.execute(
                     'SELECT display_name FROM public.contact WHERE id=%s',
                     (self.scope['contact_id'],),
-                ).fetchone(), ('合成保留联系人',))
+                ).fetchone(), ('合成联系人',))
         scope = ContactScope(self.scope['owner_id'], self.scope['contact_id'])
         with patch.dict(os.environ, NOTALONE_MANAGED_USER_DATA=str(self.user_data)):
             self.assertTrue(delete_contact(self.target['database_url'], scope))

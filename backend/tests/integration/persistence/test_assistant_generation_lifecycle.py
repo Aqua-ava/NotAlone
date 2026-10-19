@@ -23,30 +23,10 @@ from notalone.scopes import ContactScope
 DATABASE_URL = os.environ.get("NOTALONE_TEST_DATABASE_URL", "")
 MIGRATIONS = Path(__file__).resolve().parents[3] / "database" / "migrations"
 INTERRUPTION_MIGRATION = "054_assistant_generation_interruption.sql"
-CURRENT_MIGRATION_TAIL = (
-    INTERRUPTION_MIGRATION,
-    "055_assistant_candidate_carry_input.sql",
-    "056_memory_candidate_dimension_evidence.sql",
-    "057_memory_candidate_semantic_basis.sql",
-    "058_assistant_prepared_context.sql",
-    "059_memory_candidate_author_quote_basis.sql",
-    "060_manual_contact_confirmation.sql",
-    "061_memory_correction_protection.sql",
-    "062_memory_events_and_version_evidence.sql",
-    "063_relationship_overview_projection.sql",
-    "064_owner_memory_revision.sql",
-    "065_expression_preferences.sql",
-    "066_skill_learning_drafts.sql",
-    "067_memory_upgrade_batches.sql",
-    "068_skill_review_publication.sql",
-    "069_skill_history_operations.sql",
-    "070_skill_scope_policies.sql",
-    "071_bounded_runtime_evidence.sql",
-    "072_scoped_media_lifecycle.sql",
-    "073_layered_scenario_documents.sql",
-    "074_layered_memory_coverage.sql",
-    "075_layered_profile_generation.sql",
-)
+# 053是固定升级起点；完整升级的尾部随正式迁移目录推进。
+CURRENT_MIGRATION_TAIL = tuple(sorted(
+    path.name for path in MIGRATIONS.glob("*.sql") if int(path.name[:3]) >= 54
+))
 
 
 class AssistantGenerationInterruptionMigrationTest(unittest.TestCase):
@@ -122,7 +102,7 @@ class AssistantGenerationInterruptionMigrationTest(unittest.TestCase):
         with psycopg.connect(self.database_url) as connection:
             self.assertEqual(connection.execute(
                 "SELECT count(*), max(name) FROM public.notalone_schema_migration",
-            ).fetchone(), (75, CURRENT_MIGRATION_TAIL[-1]))
+            ).fetchone(), (53 + len(CURRENT_MIGRATION_TAIL), CURRENT_MIGRATION_TAIL[-1]))
         _, _, _, turn_id = self._reserved_turn()
         with psycopg.connect(self.database_url) as connection:
             self.assertIsNone(connection.execute(

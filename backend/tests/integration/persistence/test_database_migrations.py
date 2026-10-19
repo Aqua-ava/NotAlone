@@ -33,15 +33,9 @@ EVOLUTION_MIGRATIONS = (
     "070_skill_scope_policies.sql",
 )
 
-INTEGRATION_MIGRATIONS = EVOLUTION_MIGRATIONS + (
-    "071_bounded_runtime_evidence.sql",
-    "072_scoped_media_lifecycle.sql",
-    "073_layered_scenario_documents.sql",
-    "074_layered_memory_coverage.sql",
-    "075_layered_profile_generation.sql",
-    "076_layered_memory_maintenance.sql",
-    "077_owner_layered_scope.sql",
-)
+REPOSITORY_MIGRATIONS = tuple(sorted(path.name for path in (ROOT / "database/migrations").glob("*.sql")))
+# 历史前缀和各迁移语义继续固定；全量升级应验证当前正式目录的完整尾部。
+INTEGRATION_MIGRATIONS = tuple(name for name in REPOSITORY_MIGRATIONS if int(name[:3]) >= 61)
 
 
 class DatabaseMigrationCommandTest(unittest.TestCase):
@@ -208,8 +202,9 @@ class DatabaseMigrationCommandTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         applied = json.loads(result.stdout)["applied"]
         expected = sorted(path.name for path in (ROOT / "database/migrations").glob("*.sql"))
-        self.assertEqual(len(expected), 77)
-        self.assertEqual(expected[-1], '077_owner_layered_scope.sql')
+        self.assertGreaterEqual(len(expected), 77)
+        self.assertEqual(expected[76], '077_owner_layered_scope.sql')
+        self.assertEqual([int(name[:3]) for name in expected], list(range(1, len(expected) + 1)))
         self.assertEqual(applied, expected)
         repeated = self._run(directory=ROOT / "database/migrations")
         self.assertEqual(repeated.returncode, 0, repeated.stderr)
@@ -328,7 +323,7 @@ COMMIT;
                 "SELECT name,checksum,applied_at FROM public.notalone_schema_migration ORDER BY name"
             ).fetchall()
             self.assertEqual(completed[:last_version], history)
-            self.assertEqual((len(completed), completed[-1][0]), (77, "077_owner_layered_scope.sql"))
+            self.assertEqual((len(completed), completed[-1][0]), (len(REPOSITORY_MIGRATIONS), REPOSITORY_MIGRATIONS[-1]))
         repeated = self._run(directory=ROOT / "database/migrations")
         self.assertEqual(repeated.returncode, 0, repeated.stderr)
         self.assertEqual(json.loads(repeated.stdout)["applied"], [])
