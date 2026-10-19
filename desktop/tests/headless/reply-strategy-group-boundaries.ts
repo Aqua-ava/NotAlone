@@ -1,3 +1,5 @@
+import { fillWorkspaceThought, generateWorkspace } from '../workspace-actions';
+import { expandSavedDiscussion } from '../assistant-history-actions';
 import { selectMemoryCategory } from '../memory-page-actions';
 import { expect, type Browser, type Page } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
@@ -6,7 +8,7 @@ import type { RewritePages } from '../rewrite-page-scenarios';
 import { withRewritePages } from './rewrite-acceptance';
 import { PageHost } from './page-host';
 
-type Scene = '回应消息' | '主动聊聊';
+type Scene = '空思路' | '已有想法';
 interface GroupIdentity {
   contactId: string;
   sessionId: string;
@@ -21,15 +23,11 @@ async function prepare(pages: RewritePages, scene: Scene) {
   const contactId = pages.rewriteBackend.data.contact_ids[0];
   await pages.manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
   await confirmHelperContact(pages.helper, contactId);
-  await pages.helper.getByRole('button', { name: scene, exact: true }).click();
-  if (scene === '回应消息') {
-    await pages.helper.getByRole('radio', { name: /甲的私密合成历史/ }).click();
-    await pages.helper.getByRole('textbox', { name: '表达方向', exact: true }).fill('关心近况，不增加安排承诺。');
-  } else await pages.helper.getByRole('textbox', { name: '主动目的', exact: true }).fill('关心近况，不增加安排承诺。');
+  await fillWorkspaceThought(pages.helper, scene === '已有想法' ? '关心近况，不增加安排承诺。' : '');
   return contactId;
 }
-async function generated(pages: RewritePages, contactId: string): Promise<GroupIdentity> {
-  await pages.helper.getByRole('button', { name: '生成候选', exact: true }).click();
+async function generated(pages: RewritePages, contactId: string, action: 'express' | 'suggest' = 'suggest'): Promise<GroupIdentity> {
+  await generateWorkspace(pages.helper, action);
   await expect.poll(() => pages.replyTransport.results.length).toBe(1);
   const result = pages.replyTransport.results[0];
   expect(result.status).toBe(200);
@@ -70,7 +68,7 @@ async function longHistory(browser: Browser, origin: string, scene: Scene) {
   await withRewritePages(browser, origin, async (pages, host, userData) => {
     const contactId = await prepare(pages, scene), original = fullGroup(0);
     await pages.rewriteBackend.plan({ count: 1, message_groups: [original] });
-    const identity = await generated(pages, contactId);
+    const identity = await generated(pages, contactId, scene === '已有想法' ? 'express' : 'suggest');
     await expect(groupOn(pages.helper).getByRole('textbox', { name: /^说法1第[0-9]+条编辑文本$/ })).toHaveCount(8);
     let parent = identity.candidateId;
     for (let revision = 1; revision <= 3; revision++) {
@@ -130,7 +128,7 @@ async function deletedRestoredGroup(browser: Browser, origin: string, scene: Sce
     const contactId = await prepare(pages, scene);
     await pages.rewriteBackend.plan({ count: 1, probe_history: true, cite_history: true,
       message_groups: [['合成来源支持的关心。', '方便时回复就好。']] });
-    const identity = await generated(pages, contactId);
+    const identity = await generated(pages, contactId, scene === '已有想法' ? 'express' : 'suggest');
     await editorOn(pages.helper, 1).fill('已保存的来源派生组修改。');
     await editorOn(pages.helper, 1).blur();
     await expect(groupOn(pages.helper).getByText('修改版本 1', { exact: true })).toBeVisible();
@@ -174,6 +172,7 @@ async function deletedRestoredGroup(browser: Browser, origin: string, scene: Sce
       await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
       const helper = await reopened.open('helper');
       await confirmHelperContact(helper, contactId);
+      await expandSavedDiscussion(helper);
       await expect(helper.getByRole('region', { name: '已保存的讨论', exact: true }).getByText('相关来源已删除', { exact: true })).toBeVisible();
       await expect(groupOn(helper)).toHaveCount(0);
       expect(await rejectCopy(helper, identity, versionId, identity.messages[0].message_id)).toBe('rejected');
@@ -187,7 +186,7 @@ async function foreignIdentity(browser: Browser, origin: string) {
   const copied: string[] = [];
   const copySurface = { writeText: async (text: string) => { copied.push(text); }, hideWindow: () => {} };
   await withRewritePages(browser, origin, async (pages) => {
-    const contactId = await prepare(pages, '主动聊聊');
+    const contactId = await prepare(pages, '空思路');
     await pages.rewriteBackend.plan({ count: 2, message_groups: [['甲的第一组第1条。', '甲的第一组第2条。'], ['甲的第二组第1条。', '甲的第二组第2条。']] });
     const identity = await generated(pages, contactId);
     await expectDirectCopy(pages.helper);
@@ -213,10 +212,9 @@ async function foreignIdentity(browser: Browser, origin: string) {
     await managerSwitch(pages);
     await expect(groupOn(pages.helper)).toHaveCount(0);
     expect(await rejectCopy(pages.helper, identity, identity.candidateId, identity.messages[0].message_id)).toBe('rejected');
-    await pages.helper.getByRole('button', { name: '主动聊聊', exact: true }).click();
-    await pages.helper.getByRole('textbox', { name: '主动目的', exact: true }).fill('乙的新合成联系目的。');
+    await fillWorkspaceThought(pages.helper, '乙的新合成联系目的。');
     await pages.rewriteBackend.plan({ count: 1, message_groups: [['乙的新独立组第1条。', '乙的新独立组第2条。']] });
-    await pages.helper.getByRole('button', { name: '生成候选', exact: true }).click();
+    await generateWorkspace(pages.helper, 'suggest');
     await expect(editorOn(pages.helper, 1)).toHaveValue('乙的新独立组第1条。');
     expect(await rejectCopy(pages.helper, { ...identity, contactId: pages.rewriteBackend.data.contact_ids[1] },
       identity.candidateId, identity.messages[0].message_id)).toBe('rejected');
@@ -231,7 +229,7 @@ async function managerSwitch(pages: RewritePages) {
 }
 
 export async function replyStrategyGroupBoundaries(browser: Browser, origin: string) {
-  for (const scene of ['回应消息', '主动聊聊'] as const) {
+  for (const scene of ['空思路', '已有想法'] as const) {
     for (const [name, run] of [
       [`${scene}完整八条组长历史、旧版明确复制及真实重建`, longHistory],
       [`${scene}来源删除清除恢复组和未保存编辑并拒绝重开复制`, deletedRestoredGroup],

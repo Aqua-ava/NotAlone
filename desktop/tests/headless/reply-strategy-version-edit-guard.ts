@@ -1,3 +1,4 @@
+import { fillWorkspaceThought, generateWorkspace } from '../workspace-actions';
 import { expect, type Browser } from '@playwright/test';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
 import { withEventPages } from './message-events';
@@ -13,10 +14,9 @@ export async function replyStrategyVersionEditGuard(browser: Browser, origin: st
       await withEventPages(browser, origin, async ({ manager, helper, fixture }) => {
         await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
         await confirmHelperContact(helper, fixture.data.contact_ids[0]);
-        await helper.getByRole('button', { name: '主动聊聊', exact: true }).click();
-        await helper.getByRole('textbox', { name: '主动目的', exact: true }).fill('只了解合成近况，不承诺安排。');
+        await fillWorkspaceThought(helper, '');
         await fixture.plan({ count: 1, message_groups: [['想问问最近怎么样。', '方便时再聊就好。']] });
-        await helper.getByRole('button', { name: '生成候选', exact: true }).click();
+        await generateWorkspace(helper, 'suggest');
         const group = helper.getByRole('group', { name: '说法1消息组', exact: true });
         await expect(group.getByRole('textbox', { name: '说法1第1条编辑文本', exact: true }))
           .toHaveValue('想问问最近怎么样。');
@@ -27,21 +27,13 @@ export async function replyStrategyVersionEditGuard(browser: Browser, origin: st
           await window.notalone.replies.selectSavedSession(scope);
           return scope;
         });
-        await helper.getByRole('button', { name: '主动聊聊', exact: true }).click();
-        await helper.getByRole('textbox', { name: '主动目的', exact: true }).fill('想了解合成近况，还没有确认本次意愿。');
         await expect(helper.getByRole('status').filter({ hasText: '新消息提醒已连接' })).toBeVisible();
-        await fixture.plan({ explore: { understanding: '编辑前已明确开启的未确认合成探索。' } });
-        await helper.getByRole('button', { name: '帮我理清方向', exact: true }).click();
-        const directions = helper.getByRole('region', { name: '理解与方向', exact: true });
-        await expect(directions).toContainText('编辑前已明确开启的未确认合成探索。');
         const prior = await helper.evaluate(async (scope) => {
           await window.notalone.replies.readSavedSession({ contactId: scope.contactId, scopeRevision: scope.scopeRevision });
           return window.notalone.replies.getState();
         }, scope);
-        expect(prior.result).toBeNull();
         expect(prior.savedSession?.phase).toBe('ready');
-        expect(prior.exploration.result?.sessionId).toBe(scope.sessionId);
-        expect(prior.exploration.result?.confirmedIntent).toBeNull();
+        expect(prior.exploration.result).toBeNull();
         const path = `/api/contacts/${scope.contactId}/assistant-sessions/${scope.sessionId}`;
         const before = await fixture.request(path);
         expect(before.status).toBe(200);
@@ -49,7 +41,6 @@ export async function replyStrategyVersionEditGuard(browser: Browser, origin: st
         const draft = `第${messageNumber}条仍未保存的合成消息编辑。`;
         await expect(textbox).toBeEnabled();
         await textbox.fill(draft);
-        await fixture.plan({ explore: { understanding: '未保存编辑后不应出现的自动探索。' } });
         await fixture.command('append_burst');
         await expect(helper.getByRole('status').filter({ hasText: '当前联系人有新消息' })).toBeVisible();
         // 超过原150毫秒合并窗，再用第二次真实通知验证未悄悄重新开启。
@@ -62,14 +53,13 @@ export async function replyStrategyVersionEditGuard(browser: Browser, origin: st
           messageNumber, payloadCount: (observations.payloads as unknown[]).length,
           currentUnchanged: after.data.current_input_version_id === before.data.current_input_version_id,
         })}\n`);
-        expect(observations.payloads).toHaveLength(2);
+        expect(observations.payloads).toHaveLength(1);
         expect(after.status).toBe(200);
         expect(after.data.current_input_version_id).toBe(before.data.current_input_version_id);
         expect(after.data.turns).toEqual(before.data.turns);
-        await expect(directions).toContainText('编辑前已明确开启的未确认合成探索。');
         await expect(textbox).toHaveValue(draft);
         const state = await helper.evaluate(async () => window.notalone.replies.getState());
-        expect(state.exploration.result?.taskId).toBe(prior.exploration.result?.taskId);
+        expect(state.exploration.result).toBeNull();
         expect(state.candidateVersions?.items[0].history?.versions).toHaveLength(1);
       });
       process.stdout.write(`page_test_scenario_passed: ${name}\n`);

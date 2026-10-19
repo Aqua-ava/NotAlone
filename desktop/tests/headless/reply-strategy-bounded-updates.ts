@@ -1,250 +1,120 @@
 import { openAssistantHistory } from '../assistant-history-actions';
 import { expect, type Browser } from '@playwright/test';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
+import { fillWorkspaceThought, generateWorkspace, setWorkspaceContext, workspaceInput } from '../workspace-actions';
 import { withEventPages, type EventPages } from './message-events';
 
-const manualNotice = '本次自动更新已暂停，请点“更新理解”继续。';
-export { prepare as prepareDirectionTask, open as openDirectionTask };
-async function current(pages: EventPages) {
-  return pages.helper.evaluate(async () => (await window.notalone.replies.getState()).exploration.result);
+export type WorkspaceAction = 'express' | 'suggest';
+export async function prepareWorkspaceTask(pages: EventPages, action: WorkspaceAction) {
+  await pages.manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+  await confirmHelperContact(pages.helper, pages.fixture.data.contact_ids[0]);
+  await fillWorkspaceThought(pages.helper, action === 'express' ? '只关心近期状态，不增加安排承诺。' : '');
+  await expect(pages.helper.getByRole('status').filter({ hasText: '新消息提醒已连接' })).toBeVisible();
+  await expect.poll(async () => (await pages.helper.evaluate(() => window.notalone.replies.getState())).savedSession?.phase).toBe('ready');
 }
-async function prepare(pages: EventPages, scene: '回应消息' | '主动聊聊') {
-  const { manager, helper, fixture } = pages;
-  await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
-  await confirmHelperContact(helper, fixture.data.contact_ids[0]);
-  await helper.getByRole('button', { name: scene, exact: true }).click();
-  if (scene === '回应消息') await helper.getByRole('radio', { name: /甲的原始合成消息/ }).click();
-  else await helper.getByRole('textbox', { name: '主动目的', exact: true }).fill('想了解近况，还未决定本次意愿。');
-  await expect(helper.getByRole('status').filter({ hasText: '新消息提醒已连接' })).toBeVisible();
-}
-async function open(pages: EventPages, understanding: string) {
-  await pages.fixture.plan({ explore: { understanding } });
-  await pages.helper.getByRole('button', { name: '帮我理清方向', exact: true }).click();
-  await expect(pages.helper.getByRole('region', { name: '理解与方向', exact: true })).toContainText(understanding);
-  const result = await current(pages);
-  expect(result?.confirmedIntent).toBeNull();
-  return result!;
+export async function openWorkspaceTask(pages: EventPages, action: WorkspaceAction, prefix: string) {
+  const basis = '先关心近况，给对方自由回应的空间。';
+  await pages.fixture.plan({ count: 1, prefix, basis });
+  await generateWorkspace(pages.helper, action);
+  await expect(pages.helper.getByRole('textbox', { name: /^(候选1|说法1第1条)编辑文本$/ })).toHaveValue(`${prefix}（说法1）。`);
+  await expect(pages.helper.getByRole('region', { name: '候选回复', exact: true }).getByText(basis, { exact: true })).toBeVisible();
+  await expect.poll(async () => (await pages.helper.evaluate(() => window.notalone.replies.getState())).savedSession?.turns.at(-1)?.state).toBe('completed');
+  const state = await pages.helper.evaluate(() => window.notalone.replies.getState());
+  expect(state.exploration.result).toBeNull();
+  expect(state.options).toMatchObject({ inputKind: 'workspace', workspaceAction: action });
+  return { sessionId: state.savedSession!.sessionId!, inputVersion: state.savedSession!.currentInputVersionId! };
 }
 async function reread(pages: EventPages, sessionId: string) {
   const saved = await pages.fixture.request(`/api/contacts/${pages.fixture.data.contact_ids[0]}/assistant-sessions/${sessionId}`);
   expect(saved.status).toBe(200);
   return saved.data;
 }
-async function bounded(pages: EventPages, scene: '回应消息' | '主动聊聊') {
-  await prepare(pages, scene);
-  // 打开场景尚不是开启任务，经过真实消息投影的通知也不能自主调用模型。
-  await pages.fixture.command('append_message');
-  await expect(pages.helper.getByRole('status').filter({ hasText: '当前联系人有新消息' })).toBeVisible();
-  expect((await pages.fixture.command('observations')).payloads).toEqual([]);
-  let result = await open(pages, '用户明确开启的合成方向任务。');
-  const root = result;
-  for (let index = 0; index < 3; index++) {
-    const understanding = `第${index + 1}次有界合成更新，意愿仍未确认。`;
-    await pages.fixture.plan({ explore: { understanding } });
-    await pages.fixture.command('append_burst');
-    await expect(pages.helper.getByRole('region', { name: '理解与方向', exact: true })).toContainText(understanding);
-    const next = (await current(pages))!;
-    expect(next.taskId).not.toBe(result.taskId);
-    expect(next.inputVersion).not.toBe(result.inputVersion);
-    expect(next.sessionId).toBe(root.sessionId);
-    expect(next.confirmedIntent).toBeNull();
-    expect(next.usedSkill).toBeNull();
-    const saved = await reread(pages, root.sessionId);
-    expect(saved.current_input_version_id).toBe(next.inputVersion);
-    expect(saved.turns).toEqual([]);
-    const observations = await pages.fixture.command('observations');
-    expect(observations.payloads).toHaveLength(index + 2);
-    expect(JSON.stringify(observations.payloads)).not.toContain('乙的新合成消息');
-    expect(JSON.stringify(observations.payloads)).not.toContain('另一用户的新合成消息');
-    result = next;
-  }
+async function burstWithoutGeneration(pages: EventPages, count: number) {
   await pages.fixture.command('append_burst');
-  await expect(pages.helper.getByRole('status').filter({ hasText: manualNotice })).toBeVisible();
-  expect((await pages.fixture.command('observations')).payloads).toHaveLength(4);
-  expect((await current(pages))?.taskId).toBe(result.taskId);
-  await pages.fixture.plan({ explore: { understanding: '用户手动更新后的合成理解。' } });
-  await pages.helper.getByRole('button', { name: '更新理解', exact: true }).click();
-  await expect(pages.helper.getByRole('region', { name: '理解与方向', exact: true })).toContainText('用户手动更新后的合成理解。');
-  expect((await pages.fixture.command('observations')).payloads).toHaveLength(5);
-  await expect(pages.helper.getByRole('region', { name: '候选回复', exact: true }).getByRole('textbox', { name: /候选.*编辑文本/ })).toHaveCount(0);
-  const saved = await reread(pages, root.sessionId);
-  expect(saved.turns).toEqual([]);
-}
-async function stopsAfterFailure(pages: EventPages, expired: boolean) {
-  await prepare(pages, '主动聊聊');
-  const first = await open(pages, '等待新消息的合成任务。');
-  if (expired) await pages.fixture.command('age_exploration');
-  else await pages.fixture.plan({ fault: 'failure' });
-  await pages.fixture.command('append_message');
-  await expect(pages.helper.getByRole('status').filter({ hasText: manualNotice })).toBeVisible();
-  const count = expired ? 1 : 2;
+  await expect(pages.helper.getByRole('status').filter({ hasText: '当前联系人有新消息' })).toBeVisible();
+  // 真实 SSE 已投影后覆盖原150ms合并窗口，检查没有延迟发起的模型请求。
+  await pages.helper.waitForTimeout(400);
   expect((await pages.fixture.command('observations')).payloads).toHaveLength(count);
-  await pages.fixture.command('append_message');
-  await expect(pages.helper.getByRole('status').filter({ hasText: '当前联系人有新消息' })).toBeVisible();
-  expect((await pages.fixture.command('observations')).payloads).toHaveLength(count);
-  await pages.fixture.plan({ explore: { understanding: '用户再次手动开启的合成探索。' } });
-  await pages.helper.getByRole('button', { name: '更新理解', exact: true }).click();
-  await expect(pages.helper.getByRole('region', { name: '理解与方向', exact: true })).toContainText('用户再次手动开启的合成探索。');
-  expect((await pages.fixture.command('observations')).payloads).toHaveLength(count + 1);
-  expect((await reread(pages, first.sessionId)).turns).toEqual([]);
 }
-async function leavingScene(pages: EventPages) {
-  await prepare(pages, '主动聊聊');
-  const first = await open(pages, '离开场景前的合成任务。');
-  await pages.helper.getByRole('button', { name: '改写', exact: true }).click();
-  await pages.fixture.command('append_burst');
-  await expect(pages.helper.getByRole('status').filter({ hasText: '当前联系人有新消息' })).toBeVisible();
-  expect((await pages.fixture.command('observations')).payloads).toHaveLength(1);
-  expect((await reread(pages, first.sessionId)).current_input_version_id).toBe(first.inputVersion);
-  expect(await current(pages)).toBeNull();
-}
-
-async function messagesWhileOpening(pages: EventPages) {
-  await prepare(pages, '主动聊聊');
-  await pages.fixture.plan({ explore: { understanding: '初始快照仍在模型处理。' } });
-  await pages.fixture.command('hold');
-  try {
-    await pages.helper.getByRole('button', { name: '帮我理清方向', exact: true }).click();
-    await expect.poll(async () => (await pages.fixture.command('observations')).model_entered).toBe(true);
-    await pages.fixture.plan({ explore: { understanding: '明确任务首次等待期间的消息已合并更新。' } });
-    await pages.fixture.command('append_burst');
-    await expect(pages.helper.getByRole('status').filter({ hasText: '当前联系人有新消息' })).toBeVisible();
-    expect((await pages.fixture.command('observations')).payloads).toEqual([]);
-    await pages.fixture.command('release');
-    await expect(pages.helper.getByRole('region', { name: '理解与方向', exact: true }))
-      .toContainText('明确任务首次等待期间的消息已合并更新。');
-    expect((await pages.fixture.command('observations')).payloads).toHaveLength(2);
-    const result = (await current(pages))!;
-    expect(result.confirmedIntent).toBeNull();
-    const saved = await reread(pages, result.sessionId);
-    expect(saved.current_input_version_id).toBe(result.inputVersion);
-    expect(saved.turns).toEqual([]);
-  } finally { await pages.fixture.command('release'); }
-}
-
-async function interruptedAutomaticRequest(pages: EventPages) {
-  await prepare(pages, '主动聊聊');
-  await open(pages, '中断前的合成理解。');
-  await pages.fixture.plan({ explore: { understanding: '中断后不能迟到发布的理解。' } });
-  await pages.fixture.command('hold');
-  try {
-    await pages.fixture.command('append_message');
-    await expect.poll(async () => (await pages.fixture.command('observations')).model_entered).toBe(true);
-    await pages.fixture.command('disconnect_stream');
-    await expect(pages.helper.getByRole('status').filter({ hasText: manualNotice })).toBeVisible();
-    await expect(pages.helper.getByRole('button', { name: '更新理解', exact: true })).toBeEnabled();
-    await pages.fixture.command('release');
-    await expect.poll(async () => (await pages.fixture.command('observations')).payloads).toHaveLength(2);
-    await pages.fixture.plan({ explore: { understanding: '中断后用户明确手动更新。' } });
-    await pages.helper.getByRole('button', { name: '更新理解', exact: true }).click();
-    await expect(pages.helper.getByRole('region', { name: '理解与方向', exact: true }))
-      .toContainText('中断后用户明确手动更新。');
-    expect((await pages.fixture.command('observations')).payloads).toHaveLength(3);
-    const result = (await current(pages))!;
-    expect(result.confirmedIntent).toBeNull();
-    expect((await reread(pages, result.sessionId)).turns).toEqual([]);
-  } finally { await pages.fixture.command('release'); }
-}
-async function unsubmittedAnswer(pages: EventPages) {
-  await prepare(pages, '主动聊聊');
-  await pages.fixture.plan({ explore: { understanding: '尚需用户说明时间范围。',
-    question: { text: '本次是关心今天，还是询问近期？', impact: 'ambiguity' } } });
-  await pages.helper.getByRole('button', { name: '帮我理清方向', exact: true }).click();
-  const answer = pages.helper.getByRole('textbox', { name: '关键问题回答', exact: true });
-  await expect(answer).toBeVisible();
-  const first = (await current(pages))!;
-  await answer.fill('这段合成回答还没提交，我正在补充。');
-  await expect(pages.helper.getByRole('status').filter({ hasText: manualNotice })).toBeVisible();
-  await pages.fixture.command('append_burst');
-  await expect(pages.helper.getByRole('status').filter({ hasText: '当前联系人有新消息' })).toBeVisible();
-  await expect(answer).toHaveValue('这段合成回答还没提交，我正在补充。');
-  expect((await pages.fixture.command('observations')).payloads).toHaveLength(1);
-  expect((await current(pages))?.taskId).toBe(first.taskId);
-  const saved = await reread(pages, first.sessionId);
-  expect(saved.current_input_version_id).toBe(first.inputVersion);
-  expect(saved.turns).toEqual([]);
-}
-
-async function interruptedFirstRequest(pages: EventPages) {
-  await prepare(pages, '主动聊聊');
-  await pages.fixture.plan({ explore: { understanding: '首次明确请求完成，但自动任务已暂停。' } });
-  await pages.fixture.command('hold');
-  try {
-    await pages.helper.getByRole('button', { name: '帮我理清方向', exact: true }).click();
-    await expect.poll(async () => (await pages.fixture.command('observations')).model_entered).toBe(true);
-    await pages.fixture.command('disconnect_stream');
-    await expect(pages.helper.getByRole('status').filter({ hasText: manualNotice })).toBeVisible();
-    await pages.fixture.command('release');
-    await expect(pages.helper.getByRole('region', { name: '理解与方向', exact: true }))
-      .toContainText('首次明确请求完成，但自动任务已暂停。');
-    await expect(pages.helper.getByRole('status').filter({ hasText: manualNotice })).toBeVisible();
-    await pages.fixture.command('append_burst');
-    expect((await pages.fixture.command('observations')).payloads).toHaveLength(1);
-    await pages.fixture.plan({ explore: { understanding: '首次断流后用户重新手动开启。' } });
-    await pages.helper.getByRole('button', { name: '更新理解', exact: true }).click();
-    await expect(pages.helper.getByRole('region', { name: '理解与方向', exact: true }))
-      .toContainText('首次断流后用户重新手动开启。');
-    expect((await pages.fixture.command('observations')).payloads).toHaveLength(2);
-    expect((await reread(pages, (await current(pages))!.sessionId)).turns).toEqual([]);
-  } finally { await pages.fixture.command('release'); }
-}
-async function answerCannotMoveToNewQuestion(pages: EventPages, changePurpose: boolean) {
-  await prepare(pages, '主动聊聊');
-  await pages.fixture.plan({ explore: { question: { text: '原问题：是否询问今天？', impact: 'ambiguity' } } });
-  await pages.helper.getByRole('button', { name: '帮我理清方向', exact: true }).click();
-  const answer = pages.helper.getByRole('textbox', { name: '关键问题回答', exact: true });
-  await expect(answer).toBeVisible();
-  const first = (await current(pages))!;
-  const draft = '只回答原问题的合成未提交文字。';
-  await answer.fill(draft);
-  await expect(pages.helper.getByRole('status').filter({ hasText: manualNotice })).toBeVisible();
-  if (changePurpose) await pages.helper.getByRole('textbox', { name: '主动目的', exact: true }).fill('改为只了解合成近期状态。');
-  await pages.fixture.plan({ explore: { understanding: '新输入有一个独立问题。',
-    question: { text: '新问题：是否只询问近期？', impact: 'ambiguity' } } });
-  await pages.helper.getByRole('button', { name: '更新理解', exact: true }).click();
-  await expect(pages.helper.getByRole('group', { name: '关键澄清', exact: true })).toContainText('新问题：是否只询问近期？');
-  await expect(answer).toHaveValue('');
-  await expect(pages.helper.getByRole('button', { name: '提交回答', exact: true })).toBeDisabled();
-  const next = (await current(pages))!;
-  expect(next.inputVersion).not.toBe(first.inputVersion);
-  expect(next.question?.questionId).not.toBe(first.question?.questionId);
+async function bounded(pages: EventPages, action: WorkspaceAction) {
+  await prepareWorkspaceTask(pages, action);
+  await burstWithoutGeneration(pages, 0);
+  const first = await openWorkspaceTask(pages, action, '用户明确请求的候选');
+  const before = await reread(pages, first.sessionId);
+  const editor = pages.helper.getByRole('textbox', { name: /^(候选1|说法1第1条)编辑文本$/ });
+  await editor.fill('正在编辑的合成候选，不要被新消息替换。');
+  await pages.fixture.command('append_other_contact');
+  await pages.fixture.command('append_other_owner');
+  for (let index = 0; index < 4; index++) await burstWithoutGeneration(pages, 1);
+  await expect(editor).toHaveValue('正在编辑的合成候选，不要被新消息替换。');
+  const unchanged = await reread(pages, first.sessionId);
+  expect(unchanged.current_input_version_id).toBe(before.current_input_version_id);
+  expect(unchanged.turns).toEqual(before.turns);
+  await openWorkspaceTask(pages, action, '再次明确请求的候选');
   const observations = await pages.fixture.command('observations');
   expect(observations.payloads).toHaveLength(2);
-  expect(JSON.stringify(observations.payloads)).not.toContain(draft);
-  expect((await reread(pages, next.sessionId)).turns).toEqual([]);
+  const payload = JSON.stringify((observations.payloads as object[]).at(-1));
+  expect(payload).toContain('甲的新合成消息');
+  expect(payload).not.toContain('乙的新合成消息');
+  expect(payload).not.toContain('另一用户的新合成消息');
 }
-async function confirmedQuestionKeepsIntent(pages: EventPages) {
-  await prepare(pages, '主动聊聊');
-  await pages.fixture.plan({ explore: { question: { text: '这次是否不增加承诺？', impact: 'commitment' } } });
-  await pages.helper.getByRole('button', { name: '帮我理清方向', exact: true }).click();
-  await expect(pages.helper.getByRole('group', { name: '关键澄清', exact: true })).toBeVisible();
-  await pages.helper.getByRole('button', { name: '确认方向：愿意等待', exact: true }).click();
-  await expect(pages.helper.getByRole('region', { name: '理解与方向', exact: true })).toContainText('已确认本次意愿');
-  const selected = (await current(pages))!;
-  expect(selected.confirmedIntent).toBe('表示愿意等待，但不增加承诺。');
-  await pages.helper.getByRole('textbox', { name: '关键问题回答', exact: true }).fill('原问题的未提交合成回答。');
-  await expect(pages.helper.getByRole('status').filter({ hasText: manualNotice })).toHaveCount(0);
-  await pages.fixture.plan({ explore: { understanding: '手动刷新仍保留用户已确认的意愿。',
-    question: { text: '继续澄清承诺边界。', impact: 'commitment' } } });
-  await pages.helper.getByRole('button', { name: '更新理解', exact: true }).click();
-  await expect(pages.helper.getByRole('region', { name: '理解与方向', exact: true }))
-    .toContainText('手动刷新仍保留用户已确认的意愿。');
-  const next = (await current(pages))!;
-  expect(next.confirmedIntent).toBe(selected.confirmedIntent);
-  expect(next.sessionId).toBe(selected.sessionId);
-  expect(next.inputVersion).not.toBe(selected.inputVersion);
-  await expect(pages.helper.getByRole('textbox', { name: '关键问题回答', exact: true })).toHaveValue('');
-  await pages.fixture.command('append_burst');
-  await expect(pages.helper.getByRole('status').filter({ hasText: '当前联系人有新消息' })).toBeVisible();
-  expect((await pages.fixture.command('observations')).payloads).toHaveLength(2);
-  expect((await current(pages))?.confirmedIntent).toBe(selected.confirmedIntent);
-  expect((await reread(pages, next.sessionId)).turns).toEqual([]);
+async function messagesWhileGenerating(pages: EventPages, interrupted: boolean) {
+  await prepareWorkspaceTask(pages, 'suggest');
+  const sessionId = (await pages.helper.evaluate(() => window.notalone.replies.getState())).savedSession!.sessionId!;
+  await pages.fixture.plan({ count: 1, prefix: '首次明确请求的候选' });
+  await pages.fixture.command('hold');
+  try {
+    await generateWorkspace(pages.helper, 'suggest');
+    await expect.poll(async () => (await pages.fixture.command('observations')).model_entered).toBe(true);
+    const before = await reread(pages, sessionId);
+    if (interrupted) {
+      await pages.fixture.command('disconnect_stream');
+      await expect(pages.helper.getByRole('status').filter({ hasText: '消息提醒已中断' })).toBeVisible();
+    }
+    await pages.fixture.command('append_burst');
+    if (interrupted) await pages.helper.getByRole('button', { name: '重连消息提醒', exact: true }).click();
+    await expect(pages.helper.getByRole('status').filter({ hasText: '新消息提醒已连接' })).toBeVisible();
+    await pages.helper.waitForTimeout(400);
+    expect((await pages.fixture.command('observations')).payloads).toEqual([]);
+    expect((await reread(pages, sessionId)).current_input_version_id).toBe(before.current_input_version_id);
+    await pages.fixture.command('release');
+    await expect(pages.helper.getByRole('textbox', { name: /^(候选1|说法1第1条)编辑文本$/ })).toHaveValue('首次明确请求的候选（说法1）。');
+    await burstWithoutGeneration(pages, 1);
+    const after = await reread(pages, sessionId);
+    expect(after.current_input_version_id).toBe(before.current_input_version_id);
+    expect(after.turns).toHaveLength(1);
+  } finally { await pages.fixture.command('release'); }
 }
-
+async function unsubmittedInputs(pages: EventPages) {
+  await prepareWorkspaceTask(pages, 'express');
+  const first = await openWorkspaceTask(pages, 'express', '编辑输入前的候选');
+  const before = await reread(pages, first.sessionId);
+  const thought = '这段合成想法还没提交，我正在补充。';
+  await fillWorkspaceThought(pages.helper, thought);
+  await setWorkspaceContext(pages.helper, true);
+  const context = pages.helper.getByRole('textbox', { name: '补充聊天上下文', exact: true });
+  await context.fill('仅本次补充的合成聊天，不代表用户承诺。');
+  await burstWithoutGeneration(pages, 1);
+  await expect(workspaceInput(pages.helper)).toHaveValue(thought);
+  await expect(context).toHaveValue('仅本次补充的合成聊天，不代表用户承诺。');
+  expect((await reread(pages, first.sessionId)).current_input_version_id).toBe(before.current_input_version_id);
+  expect(JSON.stringify((await pages.fixture.command('observations')).payloads)).not.toContain(thought);
+}
+async function failureNeedsExplicitRequest(pages: EventPages) {
+  await prepareWorkspaceTask(pages, 'suggest');
+  await pages.fixture.plan({ fault: 'failure' });
+  await generateWorkspace(pages.helper, 'suggest');
+  await expect.poll(async () => (await pages.helper.evaluate(() => window.notalone.replies.getState())).phase).toBe('failed');
+  const count = ((await pages.fixture.command('observations')).payloads as unknown[]).length;
+  expect(count).toBe(1);
+  await burstWithoutGeneration(pages, count);
+  await openWorkspaceTask(pages, 'suggest', '失败后用户明确请求的候选');
+  expect((await pages.fixture.command('observations')).payloads).toHaveLength(count + 1);
+}
 async function freshTaskAfterDeletion(pages: EventPages) {
-  await prepare(pages, '主动聊聊');
-  const old = await open(pages, '准备删除的合成方向讨论。');
-  const oldScope = await pages.helper.evaluate(async () => (await window.notalone.replies.getState()).scopeRevision);
+  await prepareWorkspaceTask(pages, 'suggest');
+  const old = await openWorkspaceTask(pages, 'suggest', '准备删除的合成候选');
+  const oldScope = (await pages.helper.evaluate(() => window.notalone.replies.getState())).scopeRevision;
   const oldPath = `/api/contacts/${pages.fixture.data.contact_ids[0]}/assistant-sessions/${old.sessionId}`;
   await openAssistantHistory(pages.helper);
   await pages.helper.getByRole('button', { name: '删除当前助手会话', exact: true }).click();
@@ -252,117 +122,55 @@ async function freshTaskAfterDeletion(pages: EventPages) {
     .getByRole('button', { name: '确认删除会话', exact: true }).click();
   await expect(pages.helper.getByRole('status').filter({ hasText: '当前助手会话已删除' })).toBeVisible();
   expect((await pages.fixture.request(oldPath)).status).toBe(404);
-  // 同一联系人／scope直接明确探索，不点击恢复、新开会话或重新选择联系人。
-  await pages.helper.getByRole('button', { name: '主动聊聊', exact: true }).click();
-  await pages.helper.getByRole('textbox', { name: '主动目的', exact: true }).fill('删除旧讨论后，想了解近况，还没确认意愿。');
-  const fresh = await open(pages, '用户明确开启的新合成任务。');
+  await burstWithoutGeneration(pages, 1);
+  await fillWorkspaceThought(pages.helper, '删除旧讨论后想了解近况。');
+  const fresh = await openWorkspaceTask(pages, 'suggest', '删除后用户明确请求的候选');
   expect(fresh.sessionId).not.toBe(old.sessionId);
-  expect(await pages.helper.evaluate(async () => window.notalone.replies.getState())).toMatchObject({
-    scopeRevision: oldScope, confirmedSessionDeletion: { sessionId: old.sessionId },
-  });
-  expect((await pages.fixture.command('observations')).payloads).toHaveLength(2);
-  await pages.fixture.plan({ explore: { understanding: '已删除旧会话后的新任务收到真实通知。' } });
-  await pages.fixture.command('append_burst');
-  await expect(pages.helper.getByRole('region', { name: '理解与方向', exact: true }))
-    .toContainText('已删除旧会话后的新任务收到真实通知。');
-  const next = (await current(pages))!;
-  expect(next.sessionId).toBe(fresh.sessionId);
-  expect(next.taskId).not.toBe(fresh.taskId);
-  expect(next.inputVersion).not.toBe(fresh.inputVersion);
-  expect(next.confirmedIntent).toBeNull();
-  expect((await pages.fixture.command('observations')).payloads).toHaveLength(3);
-  const saved = await reread(pages, next.sessionId);
-  expect(saved.current_input_version_id).toBe(next.inputVersion);
-  expect(saved.turns).toEqual([]);
+  expect((await pages.helper.evaluate(() => window.notalone.replies.getState())).scopeRevision).toBe(oldScope);
+  await burstWithoutGeneration(pages, 2);
+  const saved = await reread(pages, fresh.sessionId);
+  expect(saved.current_input_version_id).toBe(fresh.inputVersion);
+  expect(saved.turns).toHaveLength(1);
   expect((await pages.fixture.request(oldPath)).status).toBe(404);
 }
-
-async function savedVersionStopsAutomaticUpdates(pages: EventPages) {
-  const { manager, helper, fixture } = pages;
-  await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
-  await confirmHelperContact(helper, fixture.data.contact_ids[0]);
-  await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('只保留原意的合成草稿。');
-  await fixture.plan({ count: 1, prefix: '保存编辑前的合成候选' });
-  await helper.getByRole('button', { name: '生成候选', exact: true }).click();
-  await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true }))
-    .toHaveValue('保存编辑前的合成候选（说法1）。');
-  const prior = await helper.evaluate(async () => {
+async function savedVersionStaysUnchanged(pages: EventPages) {
+  await prepareWorkspaceTask(pages, 'express');
+  const first = await openWorkspaceTask(pages, 'express', '保存编辑前的合成候选');
+  const saved = await pages.helper.evaluate(async () => {
     const state = await window.notalone.replies.getState();
-    const sessionId = state.savedSession!.sessionId!, candidateId = state.result!.candidates[0].original.candidateId;
-    const read = await window.notalone.replies.readCandidateVersions({
-      contactId: state.contactId!, scopeRevision: state.scopeRevision, sessionId, candidateId,
-    });
-    const version = read.candidateVersions!.items.find((item) => item.candidateId === candidateId)!.history!.versions.at(-1)!;
-    return { contactId: state.contactId!, scopeRevision: state.scopeRevision, sessionId, candidateId, version };
-  });
-  await helper.getByRole('button', { name: '主动聊聊', exact: true }).click();
-  await helper.getByRole('textbox', { name: '主动目的', exact: true }).fill('想了解近况，还没确认本次意愿。');
-  await expect(helper.getByRole('status').filter({ hasText: '新消息提醒已连接' })).toBeVisible();
-  const task = await open(pages, '编辑前明确开启的未确认合成探索。');
-  expect(task.sessionId).toBe(prior.sessionId);
-  const before = await reread(pages, task.sessionId);
-  const saved = await helper.evaluate(async (prior) => {
-    const { version, ...identity } = prior;
-    return window.notalone.replies.saveCandidateVersion({ ...identity, editKey: crypto.randomUUID(),
+    const identity = { contactId: state.contactId!, scopeRevision: state.scopeRevision,
+      sessionId: state.savedSession!.sessionId!, candidateId: state.result!.candidates[0].original.candidateId };
+    const read = await window.notalone.replies.readCandidateVersions(identity);
+    const version = read.candidateVersions!.items.find(item => item.candidateId === identity.candidateId)!.history!.versions.at(-1)!;
+    const updated = await window.notalone.replies.saveCandidateVersion({ ...identity, editKey: crypto.randomUUID(),
       parentVersionId: version.versionId, requirements: '本次只修改说法。',
-      messages: version.messages.map((message) => ({ ...message, text: '用户明确保存的合成版本编辑。' })),
-    });
-  }, prior);
-  const history = saved.candidateVersions!.items.find((item) => item.candidateId === prior.candidateId)!.history!;
-  expect(history.versions.at(-1)!.text).toBe('用户明确保存的合成版本编辑。');
-  // 这里只验证具名公开保存入口；完整组编辑组件由R08继续接入，不冒其UI已完成。
-  await fixture.plan({ explore: { understanding: '编辑后不得出现的自动理解。' } });
-  await fixture.command('append_burst');
-  await expect(helper.getByRole('status').filter({ hasText: '当前联系人有新消息' })).toBeVisible();
-  // 超过原150毫秒合并窗口后复验，再给第二次通知同样的有界处理机会。
-  await new Promise((resolve) => setTimeout(resolve, 350));
-  await fixture.command('append_burst');
-  await new Promise((resolve) => setTimeout(resolve, 350));
-  await expect(helper.getByRole('region', { name: '理解与方向', exact: true })).toContainText('编辑前明确开启的未确认合成探索。');
-  expect((await fixture.command('observations')).payloads).toHaveLength(2);
-  const after = await reread(pages, task.sessionId);
+      messages: version.messages.map(message => ({ ...message, text: '用户明确保存的合成版本编辑。' })) });
+    return { identity, versions: updated.candidateVersions };
+  });
+  expect(saved.versions!.items.find(item => item.candidateId === saved.identity.candidateId)!.history!.versions.at(-1)!.text)
+    .toBe('用户明确保存的合成版本编辑。');
+  const before = await reread(pages, first.sessionId);
+  await burstWithoutGeneration(pages, 1);
+  const rereadVersions = await pages.helper.evaluate(identity => window.notalone.replies.readCandidateVersions(identity), saved.identity);
+  expect(rereadVersions.candidateVersions).toEqual(saved.versions);
+  const after = await reread(pages, first.sessionId);
   expect(after.current_input_version_id).toBe(before.current_input_version_id);
   expect(after.turns).toEqual(before.turns);
 }
-
 export async function replyStrategyBoundedUpdates(browser: Browser, origin: string) {
   const scenarios: Array<[string, (pages: EventPages) => Promise<void>]> = [
-    ...(['回应消息', '主动聊聊'] as const).map((scene): [string, (pages: EventPages) => Promise<void>] =>
-      [`${scene}显式任务内合并真实通知与三次预算`, (pages) => bounded(pages, scene)]),
-    ['自动探索失败后停止重试并等待手动更新', (pages) => stopsAfterFailure(pages, false)],
-    ['真实根任务过期后模型前拒绝并等待手动更新', (pages) => stopsAfterFailure(pages, true)],
-    ['切回草稿停止探索更新且不改原讨论输入', leavingScene],
-    ['首次明确探索等待期间的通知合并为一次后续更新', messagesWhileOpening],
-    ['自动请求在途遇到消息流中断后可手动刷新', interruptedAutomaticRequest],
-    ['编辑尚未提交的关键回答后仅提醒且保留文字', unsubmittedAnswer],
-    ['首次手动请求中断后完成回执不重启自动任务', interruptedFirstRequest],
-    ['手动刷新后的新问题不继承旧问题回答草稿', (pages) => answerCannotMoveToNewQuestion(pages, false)],
-    ['改变目的后的新问题不继承旧输入回答草稿', (pages) => answerCannotMoveToNewQuestion(pages, true)],
-    ['编辑已确认任务的回答后手动刷新保留意愿接续', confirmedQuestionKeepsIntent],
-    ['旧会话确认删除后直接明确的新任务继续有界更新', freshTaskAfterDeletion],
-    ['经公开版本入口保存编辑后新消息只提醒而不自动探索', savedVersionStopsAutomaticUpdates],
+    ...(['express', 'suggest'] as const).map((action): [string, (pages: EventPages) => Promise<void>] =>
+      [`${action}仅明确操作调用模型且通知保持候选编辑与隔离`, pages => bounded(pages, action)]),
+    ['首次候选在途收到消息不追加生成', pages => messagesWhileGenerating(pages, false)],
+    ['首次候选在途断流重连不追加生成', pages => messagesWhileGenerating(pages, true)],
+    ['未提交的想法与补充上下文不被通知修改或上传', unsubmittedInputs],
+    ['失败后仅用户明确动作可以重新生成', failureNeedsExplicitRequest],
+    ['删除旧讨论后明确请求建立新会话且不自动复活', freshTaskAfterDeletion],
+    ['公开入口保存候选版本后通知不修改版本或讨论', savedVersionStaysUnchanged],
   ];
   for (const [name, scenario] of scenarios) {
     process.stdout.write(`page_test_scenario: ${name}\n`);
-    await withEventPages(browser, origin, async (pages) => {
-      try { await scenario(pages); }
-      catch (error) {
-        const [readState, readObservations] = await Promise.allSettled([
-          pages.helper.evaluate(async () => window.notalone.replies.getState()),
-          pages.fixture.command('observations'),
-        ]);
-        // 仅留本轮合成任务的阶段和计数，不记录正文、身份或握手。
-        if (readState.status === 'fulfilled' && readObservations.status === 'fulfilled') {
-          const state = readState.value, observations = readObservations.value;
-          process.stdout.write(`page_test_strategy_observation: ${JSON.stringify({
-            phase: state.exploration.phase, paused: Boolean(state.exploration.automaticUpdatesPaused),
-            mode: state.mode, savedPhase: state.savedSession?.phase, generationBlock: state.generationBlock,
-            modelEntered: observations.model_entered, payloadCount: (observations.payloads as unknown[]).length,
-          })}\n`);
-        } else process.stdout.write('page_test_strategy_observation: 本轮阶段证据未读取成功，保留原断言失败。\n');
-        throw error;
-      }
-    });
+    await withEventPages(browser, origin, scenario);
     process.stdout.write(`page_test_scenario_passed: ${name}\n`);
   }
 }

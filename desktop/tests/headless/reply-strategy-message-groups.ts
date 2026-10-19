@@ -1,3 +1,4 @@
+import { fillWorkspaceThought, generateWorkspace } from '../workspace-actions';
 import { expect, type Browser, type Page } from '@playwright/test';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
 import { withRewritePages } from './rewrite-acceptance';
@@ -26,7 +27,7 @@ async function history(fixture: RewriteFixture, contactId: string, sessionId: st
 const groupOn = (page: Page, number: number) => page.getByRole('group', { name: `说法${number}消息组`, exact: true });
 
 export async function replyStrategyMessageGroups(browser: Browser, origin: string) {
-  for (const scene of ['回应消息', '主动聊聊']) {
+  for (const scene of ['空思路', '已有想法']) {
     process.stdout.write(`page_test_scenario: ${scene}整组编辑、回退版本直接复制、逐条复制与重建恢复\n`);
     const copied: string[] = [];
     let hidden = 0;
@@ -35,14 +36,10 @@ export async function replyStrategyMessageGroups(browser: Browser, origin: strin
       const contactId = rewriteBackend.data.contact_ids[0];
       await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
       await confirmHelperContact(helper, contactId);
-      await helper.getByRole('button', { name: scene, exact: true }).click();
-      if (scene === '回应消息') {
-        await helper.getByRole('radio', { name: /甲的私密合成历史/ }).click();
-        await helper.getByRole('textbox', { name: '表达方向', exact: true }).fill('关心近况，不增加安排承诺。');
-      } else await helper.getByRole('textbox', { name: '主动目的', exact: true }).fill('关心近况，不增加安排承诺。');
+      await fillWorkspaceThought(helper, scene === '已有想法' ? '关心近况，不增加安排承诺。' : '');
       const groups = [['最近怎么样？', '方便时聊聊就好，不急着安排。'], ['想问问最近的近况。', '如果正在忙，之后再说也可以。']];
       await rewriteBackend.plan({ count: 2, message_groups: groups });
-      await helper.getByRole('button', { name: '生成候选', exact: true }).click();
+      await generateWorkspace(helper, scene === '已有想法' ? 'express' : 'suggest');
       await expect.poll(() => replyTransport.results.length).toBe(1);
       const generated = replyTransport.results[0];
       expect(generated.status).toBe(200);
@@ -140,19 +137,15 @@ export async function replyStrategyMessageGroups(browser: Browser, origin: strin
     }, copySurface);
     process.stdout.write(`page_test_scenario_passed: ${scene}整组编辑、回退版本直接复制、逐条复制与重建恢复\n`);
   }
-  for (const scene of ['回应消息', '主动聊聊']) {
-    const scenario = `${scene}真实新消息与${scene === '回应消息' ? '显式刷新' : '断流重连'}保留消息组编辑`;
+  for (const scene of ['空思路', '已有想法']) {
+    const scenario = `${scene}真实新消息与${scene === '空思路' ? '显式刷新' : '断流重连'}保留消息组编辑`;
     process.stdout.write(`page_test_scenario: ${scenario}\n`);
     await withEventPages(browser, origin, async ({ manager, helper, fixture }) => {
       await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
       await confirmHelperContact(helper, fixture.data.contact_ids[0]);
-      await helper.getByRole('button', { name: scene, exact: true }).click();
-      if (scene === '回应消息') {
-        await helper.getByRole('radio', { name: /甲的原始合成消息/ }).click();
-        await helper.getByRole('textbox', { name: '表达方向', exact: true }).fill('只关心近况，不承诺安排。');
-      } else await helper.getByRole('textbox', { name: '主动目的', exact: true }).fill('只关心近况，不承诺安排。');
+      await fillWorkspaceThought(helper, scene === '已有想法' ? '只关心近况，不承诺安排。' : '');
       await fixture.plan({ count: 1, message_groups: [['最近过得怎么样？', '方便时再说就好。']] });
-      await helper.getByRole('button', { name: '生成候选', exact: true }).click();
+      await generateWorkspace(helper, scene === '已有想法' ? 'express' : 'suggest');
       const group = groupOn(helper, 1);
       const editor = group.getByRole('textbox', { name: '说法1第1条编辑文本', exact: true });
       await expect(editor).toHaveValue('最近过得怎么样？');
@@ -161,18 +154,17 @@ export async function replyStrategyMessageGroups(browser: Browser, origin: strin
       await fixture.command('append_burst');
       await expect(helper.getByRole('status').filter({ hasText: '当前联系人有新消息，生成依据仍是原快照' })).toBeVisible();
       await expect(editor).toHaveValue('我想了解你最近的近况。');
-      if (scene === '回应消息') {
-        await helper.getByRole('button', { name: '刷新消息', exact: true }).click();
-        await expect(helper.getByRole('radio', { name: /甲的新合成消息/ }).first()).toBeVisible();
+      if (scene === '空思路') {
+        await helper.locator('details.workspace-context > summary').click();
+        await helper.getByRole('button', { name: '刷新最近聊天', exact: true }).click();
+        await expect(helper.getByRole('checkbox', { name: /使用消息：甲的新合成消息/ }).first()).toBeVisible();
       } else {
-        // 主动目的没有待回复消息列表，改走现有公开断流／重连，不伪造刷新目标。
-        await expect(helper.getByRole('button', { name: '刷新消息', exact: true })).toHaveCount(0);
-        await expect(helper.getByRole('group', { name: '待回复消息', exact: true })).toHaveCount(0);
+        // 断流恢复只核对消息状态，不重新生成或覆盖正在编辑的候选。
         await fixture.command('disconnect_stream');
         await expect(helper.getByRole('status').filter({ hasText: '消息提醒已中断' })).toBeVisible();
         await fixture.command('append_message');
         await helper.getByRole('button', { name: '重连消息提醒', exact: true }).click();
-        await expect(helper.getByRole('status').filter({ hasText: '消息提醒已恢复，期间可能有遗漏' })).toBeVisible();
+        await expect.poll(async () => (await helper.evaluate(() => window.notalone.replies.getState())).messageNotice.phase).toBe('connected');
       }
       await expect(editor).toHaveValue('我想了解你最近的近况。');
       const after = await helper.evaluate(async () => (await window.notalone.replies.getState()).savedSession!.currentInputVersionId);
