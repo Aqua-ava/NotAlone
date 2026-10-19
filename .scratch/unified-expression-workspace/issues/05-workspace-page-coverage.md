@@ -1,11 +1,24 @@
 # 工作区页面覆盖与真实失败诊断
 
 Triage: ready-for-agent
-State: in-progress
+State: resolved
 
 规格：[统一表达工作区](../spec.md)。接管回归任务交接的7个页面文件并继续处理本任务已适配页面的真实失败；单浏览器租约仍由独立串行回归任务持有。
 
 ## Answer
+
+最终验收：本记录接管的剩余工作区失败均已修复并通过原页面复验，资源清理均确认成功。整库其他页面仍以协调回归任务的汇总为准，本文不宣称整库全部通过。
+
+| 页面 | 最终结果 |
+| --- | --- |
+| reply-strategy-options | 11.7秒，完整通过 |
+| response-scene-entry | 21.9秒，完整通过 |
+| understanding-direction | 77.2秒，完整通过，包括历史依赖续改后的来源删除和旧请求拒绝 |
+| reply-strategy-group-boundaries | 264.3秒，原全部5场景通过；两种动作各24版×8条，保留原300秒总预算和单步断言 |
+
+长历史结果位于回归目录 `reply-strategy-group-boundaries@suggest/run.log`，但该轮启动时环境白名单尚未转发场景键，日志明确为 `page_test_group_variant: all`。验收按实际执行的全部5场景计算，不按目录后缀误记部分覆盖；后续调度白名单已另案修复。两个完整长历史场景分别116.2秒、117.9秒，两来源删除场景分别9.5秒、10.3秒，最后身份拒绝场景也通过。
+
+## 诊断与修复记录
 
 - candidate-copy、candidate-visibility：按消息组版本复制、失败重试、原文和修改版、隐藏与可见区域边界。
 - authentic-expression-groups、authentic-expression-recovery：本人意图、连续版本、来源删除及恢复后正文保护。
