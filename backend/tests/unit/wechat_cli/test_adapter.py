@@ -124,6 +124,40 @@ class BlockingCommandProcess:
 
 
 class LocalWechatCliAdapterTest(unittest.TestCase):
+    def test_adapter_close_reaps_follow_process_before_stream_owner_closes(self) -> None:
+        real_popen = subprocess.Popen
+        for mode in ("sessions", "talker"):
+            with self.subTest(mode=mode):
+                processes = []
+
+                def controlled_process(command, **options):
+                    del command
+                    process = real_popen(("/bin/sleep", "30"), **options)
+                    processes.append(process)
+                    return process
+
+                cli = LocalWechatCli(executable="synthetic-follow-cli")
+                stream = None
+                try:
+                    with patch("notalone.wechat_cli.adapter.subprocess.Popen", side_effect=controlled_process):
+                        stream = (cli.session_events_follow() if mode == "sessions"
+                                  else cli.tail_follow("wxid_synthetic"))
+                    cli.close()
+                    self.assertIsNotNone(processes[0].poll(), "适配器关闭后监听进程仍在读取")
+                    with self.assertRaises(ProcessLookupError):
+                        os.kill(processes[0].pid, 0)
+                    cli.close()
+                finally:
+                    for process in processes:
+                        if process.poll() is None:
+                            process.kill()
+                        process.wait(timeout=2)
+                    if stream is not None:
+                        stream.close()
+                    for process in processes:
+                        if process.stdout is not None:
+                            process.stdout.close()
+
     def test_tail_explicit_budget_reaps_process_without_accepting_partial_success(self) -> None:
         with tempfile.TemporaryDirectory(prefix="notalone-tail-budget-") as directory:
             root = Path(directory)

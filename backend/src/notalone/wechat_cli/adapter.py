@@ -377,7 +377,7 @@ class LocalWechatCli:
             ]
         )
         try:
-            process = self._follow_runner(tuple(command))
+            process = self._start_follow(tuple(command))
         except FileNotFoundError as error:
             raise CliCommandError(
                 "cli_not_found", "微信 CLI 不可用。"
@@ -426,7 +426,7 @@ class LocalWechatCli:
             ]
         )
         try:
-            process = self._follow_runner(tuple(command))
+            process = self._start_follow(tuple(command))
         except FileNotFoundError as error:
             raise CliCommandError(
                 "cli_not_found", "微信 CLI 不可用。"
@@ -448,7 +448,7 @@ class LocalWechatCli:
         return _require_text(data.get("version"), "data.version")
 
     def close(self) -> None:
-        """终止正在执行的一次性命令；已完成命令不受影响。"""
+        """回收一次性命令与监听进程，不依赖同步引擎先取得关闭锁。"""
 
         with self._process_lock:
             processes = tuple(self._active_processes)
@@ -473,6 +473,20 @@ class LocalWechatCli:
                     wait(timeout=1.0)
                 except (TimeoutError, subprocess.TimeoutExpired):
                     pass
+            if _poll_process(process) is not None:
+                with self._process_lock:
+                    self._active_processes.discard(process)
+
+    def _start_follow(self, command: tuple[str, ...]) -> object:
+        # 创建与登记共用关闭锁，避免取消恰好遗漏刚启动的监听进程。
+        with self._process_lock:
+            self._active_processes = {
+                process for process in self._active_processes
+                if _poll_process(process) is None
+            }
+            process = self._follow_runner(command)
+            self._active_processes.add(process)
+            return process
 
     def _run_json(self, command: tuple[str, ...], *, timeout_seconds: float | None = None) -> dict[str, Any]:
         result = self._invoke(command, timeout_seconds=timeout_seconds)

@@ -1,5 +1,15 @@
 # macOS App 权限与启动错误记录
 
+## 2026-10-19 取消读取时回收长期 CLI 监听
+
+本次“node 访问其他 App 数据”连续提示由 TCC 的 `SystemPolicyAppData`／`AUTHREQ_PROMPTING` 日志映射到微信 CLI，责任身份为开发启动链的 Node。连续请求中既有旧监听，也有当时的新调用；开发 App 已停止后，仍发现三个运行超过两小时、父进程已退出的 `tail --mode sessions --follow`。核对项目路径、完整只读命令和父 PID 后，仅向这三个残留发送 SIGTERM，均确认退出；随后十秒系统事件观察没有新同类请求，项目 CLI 进程为零。没有修改 TCC、签名、系统权限、绑定或持久化同步开关。
+
+代码核对发现，退出前的 `cancel_pending_io()` 已调用 `LocalWechatCli.close()`，但适配器原先只登记一次性命令，未覆盖长期监听。引擎收尾尚在等待时，这条取消路径无法停掉监听。现在全局与兼容单会话监听也纳入同一进程清单；创建与登记共用关闭锁，取消时直接终止并回收，不依赖引擎先取得关闭锁。已退出对象在关闭或下次创建时移除，适配器仍可复用。
+
+验证：`tests.unit.wechat_cli.test_adapter.LocalWechatCliAdapterTest.test_adapter_close_reaps_follow_process_before_stream_owner_closes` 使用真实合成睡眠进程，先在全局／单会话两种模式失败，修复后通过；包含适配器、全局流、运行时关闭、同步宿主与后台同步的六个模块共127项通过，独立只读审查未发现阻断问题。测试不启动真实 CLI、不读取聊天、不创建构建产物。Computer Use 尝试核对当前界面时，工具禁止访问当前 Codex 宿主；本轮没有重新启动产品 App，不认证 GUI 或真实微信端到端链路。
+
+尚不能从既有残留确定当时具体经过哪条退出路径。本次不修改后端整体收尾超时，也不保证强杀后的后代回收；取消快照完成后新发起的读取仍需由上层停止协调，不能据此宣称所有异常退出路径均已闭合。
+
 ## 2026-10-19 外置 CLI 签名拒绝与相同字节恢复
 
 优先同步实机复测遇到外置 CLI 在约数毫秒内返回命令失败；独立 `--version` 退出 -9。系统崩溃报告为 `SIGKILL (Code Signature Invalid)`，终止原因为 `CODESIGNING`／`Taskgated Invalid Signature`，系统日志也有加载签名错误；磁盘 `codesign --verify --strict` 仍通过，不能仅凭磁盘校验判定工具可运行。
