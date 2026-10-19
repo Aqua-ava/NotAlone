@@ -3,6 +3,8 @@
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 import threading
+import json
+from unittest.mock import patch
 import re
 import time
 import unittest
@@ -58,7 +60,28 @@ class ControlledCoreModel(ScriptedCoreModel):
         if index >= len(self.responses):
             raise AssertionError("合成模型脚本耗尽。")
         response = self.responses[index]
-        if requested_tools == ['GroundedMemoryLabels']:
+        if requested_tools == ['DirectMemoryExtractionOutput']:
+            facts = []
+            for identifier, sender, raw in re.findall(
+                r"\[target\] \[message_id=([^]]+)\] occurred_at=\S+ sender=(contact|self): (.*)$",
+                str(messages[-1].content), re.MULTILINE):
+                if '喜欢' not in raw or any(mark in raw for mark in ('？', '?')):
+                    continue
+                quotes = re.findall(r'我(?:平时|也)喜欢[^。]+。?', raw)
+                if len(quotes) < 2:
+                    quotes = [raw]
+                for quote in quotes:
+                    facts.append({'text': ('联系人' if sender == 'contact' else '本人') + '原话：“' + quote + '”',
+                        'category': 'preference', 'subject': sender, 'topic': 'other', 'source_message_ids': [identifier],
+                        'confidence': 0.95, 'risk_flags': [], 'valid_at': None, 'invalid_at': None,
+                        'speech_act': 'assertion', 'assertion_status': 'asserted', 'figurative_type': 'literal',
+                        'alternatives': [], 'interpretation_reason': '合成来源中的直接偏好陈述。'})
+            response = tool_response('DirectMemoryExtractionOutput', {'scenes': [{'scene_name': '合成偏好', 'memories': facts}]})
+        elif requested_tools == ['BatchMemoryAdjudicationOutput']:
+            decision = response.tool_calls[0]['args']
+            response = tool_response('BatchMemoryAdjudicationOutput', {'decisions': [
+                {**decision, 'candidate_index': item['candidate_index']} for item in json.loads(str(messages[-1].content))]})
+        elif requested_tools == ['GroundedMemoryLabels']:
             # 沿实际生产提取协议标注真实合成原句；不以旧自由正文协议冒充裁决。
             labels = {}
             for unit, sender, raw in re.findall(
@@ -76,7 +99,7 @@ class ModelPriorityLifecycleHttpTest(CoreBusinessFlowFixture, unittest.TestCase)
     extraction_model_factory = ControlledCoreModel
     reply_model_factory = ControlledCoreModel
     production_model_wiring = True
-    # 本组合只核对已到达裁决边界的调度；生产默认空放行表保持原样。
+    # 本组合沿默认 Direct/批量裁决核对调度，合成已核验事实不受额外逐维发布门限制。
     dimension_release = DimensionRelease(gate_enabled=False)
 
     def setUp(self):
@@ -163,18 +186,22 @@ class ModelPriorityLifecycleHttpTest(CoreBusinessFlowFixture, unittest.TestCase)
         except AssertionError as error:
             self.fail(f"{error}；实际模型协议：{self.extraction_model.requested_tools}")
         self.assertEqual(self.extraction_model.requested_tools,
-                         [['GroundedMemoryLabels'], ['SourceVerificationOutput']]
-                         + [['MemoryAdjudicationOutput']] * (next_index - 1))
+                         [['DirectMemoryExtractionOutput'], ['SourceVerificationOutput']]
+                         + [[getattr(self, 'adjudication_protocol', 'BatchMemoryAdjudicationOutput')]] * (next_index - 1))
 
     def test_reply_has_priority_after_source_verification(self):
         imported = self._import(self.backend, "核验优先", "茉莉茶")
         self._prepare_adjudication(imported)
         self._assert_foreground_priority(imported, 1, 2)
 
-    def test_reply_has_priority_between_adjudication_calls(self):
-        imported = self._import(self.backend, "裁决优先", "茉莉茶")
-        self._prepare_adjudication(imported, two_facts=True)
-        self._assert_foreground_priority(imported, 2, 3)
+    def test_reply_has_priority_between_historical_single_item_adjudication_calls(self):
+        from notalone.application.model_priority import PriorityAdjudicationRuntime
+        # 旧接口没有批量入口；单项仍经正式优先级包装，避免包装层预批量后因池变化再裁决。
+        self.adjudication_protocol = 'MemoryAdjudicationOutput'
+        with patch.object(PriorityAdjudicationRuntime, 'adjudicate_batch', None):
+            imported = self._import(self.backend, "裁决优先", "茉莉茶")
+            self._prepare_adjudication(imported, two_facts=True)
+            self._assert_foreground_priority(imported, 2, 3)
 
     def test_adjudication_result_waits_for_reply_before_changing_memory(self):
         imported = self._import(self.backend, "裁决结果交接", "茉莉茶")
@@ -206,9 +233,9 @@ class ModelPriorityLifecycleHttpTest(CoreBusinessFlowFixture, unittest.TestCase)
         self.assertEqual({row["text"] for row in memories},
                          {"联系人很喜欢茉莉茶。", f"联系人原话：“{imported['fact_message']['text']}”"})
         self.assertEqual(len(self.extraction_model.seen_calls), 3)
-        self.assertIn(' 原文=', str(self.extraction_model.seen_calls[0][-1].content))
+        self.assertIn('[message_id=', str(self.extraction_model.seen_calls[0][-1].content))
         self.assertEqual(self.extraction_model.requested_tools,
-                         [['GroundedMemoryLabels'], ['SourceVerificationOutput'], ['MemoryAdjudicationOutput']])
+                         [['DirectMemoryExtractionOutput'], ['SourceVerificationOutput'], ['BatchMemoryAdjudicationOutput']])
 
     def test_foreground_wait_longer_than_runtime_and_request_lease_still_succeeds(self):
         extraction = self.extraction_model.block_call(0)
