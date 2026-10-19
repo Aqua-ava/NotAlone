@@ -49,8 +49,11 @@ class RecoverableModel(ScriptedCoreModel):
         if self.unavailable:
             raise RuntimeError("合成模型暂时不可用。")
         tools = kwargs.get("tools", [])
-        if tools and tools[0]["function"]["name"] == "GroundedMemoryLabels":
-            # 公开CLI使用默认定位协议；恢复夹具仍只返回明确的非记忆标签。
+        if tools and tools[0]["function"]["name"] == "DirectMemoryExtractionOutput":
+            # 默认 CLI 已使用直接提取；空结果仍经真实任务重试与完成路径。
+            self.responses[len(self.seen_calls)] = tool_response("DirectMemoryExtractionOutput", {"scenes": []})
+        elif tools and tools[0]["function"]["name"] == "GroundedMemoryLabels":
+            # 显式历史协议保留原非记忆标签夹具。
             schema = tools[0]["function"]["parameters"]["properties"]["units"]["properties"]
             labels = {unit: {"kind": "not_memory", "subject": "contact", "topic": "other",
                 "dependency": None, "unresolved": False, "confidence": 0.95,

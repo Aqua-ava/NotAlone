@@ -14,6 +14,7 @@ import time
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 from uuid import UUID, uuid4
+from unittest.mock import patch
 
 import psycopg
 from psycopg import sql
@@ -175,7 +176,9 @@ class BindingBackend:
         self.temporary = tempfile.TemporaryDirectory(prefix="notalone-binding-")
         self.directory = Path(self.temporary.name)
         self.ownership_path = self.directory / "database-ownership.json"
-        self.data = create_database(mode, self.ownership_path)
+        # 建库只在本夹具作用域绑定双URL，不把已清理数据库泄漏给后续模块。
+        with patch.dict(os.environ):
+            self.data = create_database(mode, self.ownership_path)
         self.process = None
         try:
             executable = prepare_cli(self.directory)

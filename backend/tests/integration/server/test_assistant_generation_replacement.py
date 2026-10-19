@@ -605,11 +605,23 @@ class AssistantGenerationReplacementHttpTest(unittest.TestCase):
                               instruction=old_requirement)
         old_body["expected_input_version_id"] = discussion["input_version_id"]
         new_body = self._body(draft="合成简短新原句。", instruction=new_requirement)
+        # 用真实完整序列化测量独立新会话基线，避免提示词演进挤破固定数字。
+        # 此探测在模型前被预算拒绝；随后仍要求累计旧讨论超过同一个预算。
+        calibration, _ = self._budget_backend(self.input_profile.output_reserve_tokens + 1)
+        status, probe_session = calibration.request(f"/api/contacts/{self.contact_id}/assistant-sessions", {})
+        self.assertEqual(status, 200, probe_session)
+        probe_path = f"/api/contacts/{self.contact_id}/assistant-sessions/{probe_session['session_id']}"
+        status, probe = calibration.request(probe_path + "/replies", {
+            **new_body, "idempotency_key": str(uuid4()),
+        })
+        self.assertEqual(status, 409, probe)
+        self.assertEqual(probe['error'], 'input_budget_exceeded')
+        self.assertEqual(len(self.model.seen_calls), 0)
+        capacity = probe['input_budget']['total_tokens'] + 256
         with ThreadPoolExecutor(max_workers=1) as pool:
             running = pool.submit(self.backend.request, path + "/replies", old_body)
             try:
                 self.assertTrue(self.model.response_entered.wait(5))
-                capacity = 13000
                 limited, counter = self._budget_backend(capacity)
                 calls_before = len(self.model.seen_calls)
                 status, blocked = limited.request(path + "/replace", {

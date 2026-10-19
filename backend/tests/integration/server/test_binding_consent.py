@@ -168,18 +168,34 @@ class BindingConsentApiTests(unittest.TestCase):
         self.assertEqual(self.backend.tails(), reads)
 
     def test_busy_timeout_retains_authorization_and_requires_explicit_retry(self) -> None:
-        with ThreadPoolExecutor(max_workers=2) as pool:
-            gate, cycle, selection = self.block_authorized_cycle(pool)
-            started = time.monotonic()
+        backend = self.backend
+        contact = backend.data["contact_ids"][0]
+        confirmation = {"selections": [{"locator": "wxid_synthetic_a", "contact_id": contact}]}
+        self.assertEqual(backend.request("/api/sync/cli-bindings/confirm", confirmation)[0], 200)
+        binding = backend.request("/api/sync/cli-bindings")[1]["bindings"][0]
+        selection = {"contact_id": contact, "binding_id": binding["binding_id"]}
+        # 后台单步 CLI 已限于3秒；改用真实授权复读持锁超过撤销的4秒预算。
+        # 仍经公开HTTP与合成CLI，不延长生产预算，也不伪造宿主锁结果。
+        gate = backend.directory / "hold-sessions"
+        ready = backend.directory / "held-sessions-ready"
+        gate.touch()
+        self.addCleanup(lambda: gate.unlink(missing_ok=True))
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            confirmation_result = pool.submit(backend.request, "/api/sync/cli-bindings/confirm", confirmation)
             try:
-                code, result = self.backend.request("/api/sync/cli-bindings/revoke", selection)
+                deadline = time.monotonic() + 5
+                while not ready.exists() and time.monotonic() < deadline:
+                    time.sleep(0.02)
+                self.assertTrue(ready.exists(), "授权复读未进入受控CLI边界。")
+                started = time.monotonic()
+                code, result = backend.request("/api/sync/cli-bindings/revoke", selection)
                 self.assertEqual((code, result), (409, {"error": "cli_binding_revoke_busy"}))
                 self.assertLess(time.monotonic() - started, 6)
             finally:
                 gate.unlink(missing_ok=True)
-            self.assertEqual(cycle.result()[0], 200)
-        self.assertEqual(len(self.backend.request("/api/sync/cli-bindings")[1]["bindings"]), 1)
-        self.assertEqual(self.backend.request("/api/sync/cli-bindings/revoke", selection)[1]["status"], "revoked")
+            self.assertEqual(confirmation_result.result()[0], 200)
+        self.assertEqual(len(backend.request("/api/sync/cli-bindings")[1]["bindings"]), 1)
+        self.assertEqual(backend.request("/api/sync/cli-bindings/revoke", selection)[1]["status"], "revoked")
 
 
 
