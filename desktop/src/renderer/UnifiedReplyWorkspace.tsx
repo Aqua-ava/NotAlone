@@ -16,9 +16,11 @@ export function UnifiedReplyWorkspace({ contacts, replies }: { contacts: Contact
   useEffect(() => { setOptions(workspaceOptions(state.options)); }, [state.scopeRevision, state.inputClearRevision]);
   useEffect(() => {
     if (state.contactId && state.contactId === contacts.state.selectedContactId && state.savedSession?.phase === 'ready'
+      && state.sessionCatalog?.phase !== 'loading' && !state.sessionCatalog?.selectionPending
       && state.phase !== 'waiting' && !workspaceReady && state.sourceAvailability === undefined) void replies.enterWorkspace();
   }, [state.contactId, state.scopeRevision, state.inputClearRevision, state.savedSession?.phase,
-    state.phase, state.sourceAvailability, state.generationBlock, contacts.state.selectedContactId, workspaceReady]);
+    state.phase, state.sourceAvailability, state.generationBlock, state.sessionCatalog?.phase,
+    state.sessionCatalog?.selectionPending, contacts.state.selectedContactId, workspaceReady]);
   useEffect(() => {
     if (workspaceReady && state.savedSession?.phase === 'ready' && state.contactId
       && state.contactId === contacts.state.selectedContactId && state.messages.phase === 'idle') {

@@ -19,13 +19,17 @@ export function DirectionGenerationNotice({ state }: { state: ReplySessionState 
   </div>;
 }
 
-export function hasChangedReplyInput(state: ReplySessionState): boolean {
+export function hasChangedReplyInput(state: ReplySessionState, currentDraft?: string): boolean {
   const input = state.result?.input;
   if (!input) return false;
   if (input.mode !== state.mode) return true;
   if (input.mode === 'rewrite_draft') {
     if (input.inputKind !== 'workspace') return false;
-    return input.workspaceAction !== state.options.workspaceAction
+    const tones = { original: '', warm: '本次语气自然温和。', concise: '本次表达简洁直接。', polite: '本次语气礼貌克制。' };
+    const instruction = [tones[state.options.tone], (state.options.instruction ?? '').trim()].filter(Boolean).join('\n');
+    return currentDraft !== undefined && input.draftText.trim() !== currentDraft.trim()
+      || (input.userInstruction ?? '').trim() !== instruction
+      || input.workspaceAction !== state.options.workspaceAction
       || (input.contextText ?? '').trim() !== (state.options.contextText ?? '').trim()
       || input.includeRelationshipContext !== state.options.includeRelationshipContext
       || JSON.stringify([...(input.excludedMessageIds ?? [])].sort()) !== JSON.stringify([...(state.options.excludedMessageIds ?? [])].sort());

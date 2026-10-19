@@ -69,7 +69,7 @@ export function App() {
       && <button disabled={replies.state.messages.phase === 'loading'} onClick={() => void replies.loadMessages()}>刷新消息</button>}
     <div className="ime-status-line"><BackendBadge state={backend} compact />
       <div className="ime-contact-note"><CurrentContactLabel state={contactSession.state} /></div></div>
-    <ReplyCandidates replies={replies} />
+    <ReplyCandidates replies={replies} currentDraft={contactSession.state.draft} />
     </div>
     <footer className="ime-footer">
       <span>由你修改并亲自发送</span>

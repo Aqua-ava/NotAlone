@@ -682,7 +682,7 @@ export class ReplySession {
       this.candidateVersions.setScope(null); this.candidateSourceCheck = undefined;
       this.publish({ savedSession: { phase: 'ready', sessionId: saved.sessionId, turns: saved.turns,
         inputs: saved.inputs, currentInputVersionId: saved.currentInputVersionId },
-        sessionCatalog: { phase: 'ready', items, currentSessionId: saved.sessionId, selectionPending: false },
+        sessionCatalog: { phase: 'loading', items, currentSessionId: saved.sessionId, selectionPending: true },
         sessionDeletion: undefined, confirmedSessionDeletion: undefined,
         options: defaults(), workspaceMigrationNotice: undefined, inputClearRevision: (this.state.inputClearRevision ?? 0) + 1,
         mode: 'rewrite_draft', scene: '', targetMessageId: null, direction: '', purpose: '', correction: '', requirements: '', clarificationAnswer: '',
@@ -690,6 +690,11 @@ export class ReplySession {
         result: null, selectedCandidateId: null, canRetry: false, phase: 'idle', errorCode: undefined }, 'authoritative');
       await this.restoreCandidateVersions(selection, saved.sessionId,
         saved.turns.flatMap((turn) => turn.reply?.candidates.map((candidate) => candidate.candidateId) ?? []), true);
+      if (current()) {
+        // 完成通知发出前释放切换锁，接收方才能立即进入新会话的工作区。
+        this.catalogPending = undefined;
+        this.publish({ sessionCatalog: { phase: 'ready', items, currentSessionId: saved.sessionId, selectionPending: false } });
+      }
     } catch (error) {
       if (carry && current() && generation !== undefined && error instanceof BackendRequestFailure
         && error.kind === 'response' && (error.status === 404 && error.code === 'not_found'

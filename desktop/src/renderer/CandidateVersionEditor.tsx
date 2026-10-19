@@ -32,7 +32,10 @@ export function CandidateVersionEditor({ replies, view, candidateId, replyReques
   const saveKey = useRef<{ revision: number; key: string } | null>(null);
   useEffect(() => {
     if (!version) return;
-    if (draft?.versionId !== version.versionId) editRevision.current = 0;
+    if (draft?.versionId !== version.versionId) {
+      editRevision.current = 0;
+      saveKey.current = null;
+    }
     setDraft((previous) => previous?.versionId === version.versionId && editRevision.current > 0 ? previous
       : retained ?? { versionId: version.versionId, messages: version.messages.map((message) => ({ ...message })), requirements: version.requirements ?? '' });
   }, [version, retained]);

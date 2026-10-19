@@ -105,7 +105,8 @@ export function StyleSamples({ replies }: { replies: ReplySessionView }) {
         ++editRevision.current; setManual(''); await window.notalone.styleSamples.updateManualText({ ...selection, text: '' });
       }
     })}>主动保存手工文字</button></div>
-    {replies.state.result?.input.mode === 'rewrite_draft' && replies.state.result.candidates.map(({ original, editedText }, index) => <button key={original.candidateId}
+    {replies.state.result?.input.mode === 'rewrite_draft' && replies.state.result.input.inputKind !== 'workspace'
+      && replies.state.result.candidates.map(({ original, editedText }, index) => <button key={original.candidateId}
       disabled={!enabled || !editedText.trim() || editedText.length > 4096 || replies.state.sourceAvailability !== undefined}
       onClick={() => void operate(() => window.notalone.styleSamples.saveCandidate({ ...selection, replyRequestId: replies.state.result!.replyRequestId, candidateId: original.candidateId }))}>主动保存说法{index + 1}为样本</button>)}
     <div className="expression-message-options"><h3>从本人消息中选取</h3><p>点击一条消息，将它保存为表达样本。</p>
