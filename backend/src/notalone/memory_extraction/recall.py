@@ -47,15 +47,19 @@ def hybrid_candidates(texts, pool, *, top_k=5):
     if (len(vectors) != len(texts) + len(pool) or not vectors or not vectors[0]
             or any(len(row) != len(vectors[0]) or not all(isfinite(x) for x in row) for row in vectors)):
         raise ValueError('本机embedding输出不符合维度契约。')
+    if not texts:
+        return []
+    corpus = _Bm25Corpus([item.text for item in pool])
+    memory_vectors = vectors[len(texts):]
+    memory_norms = [sqrt(sum(x*x for x in vector)) for vector in memory_vectors]
     result = []
     for query_index, text in enumerate(texts):
         query = vectors[query_index]
         norm = sqrt(sum(x*x for x in query))
         semantic = []
-        lexical = [(score, index) for index, score in enumerate(bm25_scores(text, [item.text for item in pool])) if score > 0]
-        for index, item in enumerate(pool):
-            vector = vectors[len(texts) + index]
-            denominator = norm * sqrt(sum(x*x for x in vector))
+        lexical = [(score, index) for index, score in enumerate(corpus.scores(text)) if score > 0]
+        for index, vector in enumerate(memory_vectors):
+            denominator = norm * memory_norms[index]
             cosine = sum(a*b for a,b in zip(query, vector)) / denominator if denominator else 0
             semantic.append((cosine, index))
         scores = Counter()
@@ -68,23 +72,41 @@ def hybrid_candidates(texts, pool, *, top_k=5):
 
 def bm25_scores(query: str, texts: list[str]) -> list[float]:
     """复用中文双字/拉丁词法，按文档频率及长度归一化排序。"""
-    def terms(text):
-        return [token.text for token in tokenize(text) if len(token.text) >= 2]
-    documents = [Counter(terms(text)) for text in texts]
-    if not documents:
-        return []
-    query_terms = set(terms(query))
-    lengths = [sum(document.values()) for document in documents]
-    average = sum(lengths) / len(lengths) or 1
-    frequency = Counter(term for document in documents for term in document)
-    scores = []
-    for document, length in zip(documents, lengths):
-        score = 0.0
-        for term in query_terms:
-            count = document[term]
-            if not count:
-                continue
-            inverse = log(1 + (len(documents) - frequency[term] + 0.5) / (frequency[term] + 0.5))
-            score += inverse * count * 2.2 / (count + 1.2 * (0.25 + 0.75 * length / average))
-        scores.append(score)
-    return scores
+    return _Bm25Corpus(texts).scores(query)
+
+
+def _terms(text: str) -> list[str]:
+    return [token.text for token in tokenize(text) if len(token.text) >= 2]
+
+
+class _Bm25Corpus:
+    """只属于一次调用的语料统计；独立评分不沿用旧池。"""
+
+    def __init__(self, texts: list[str]) -> None:
+        self._documents = [Counter(_terms(text)) for text in texts]
+        lengths = [sum(document.values()) for document in self._documents]
+        average = sum(lengths) / len(lengths) if lengths else 1
+        average = average or 1
+        self._length_factors = [1.2 * (0.25 + 0.75 * length / average) for length in lengths]
+        self._frequency = Counter(term for document in self._documents for term in document)
+        self._inverse: dict[str, float] = {}
+
+    def scores(self, query: str) -> list[float]:
+        if not self._documents:
+            return []
+        query_terms = set(_terms(query))
+        scores = []
+        for document, length_factor in zip(self._documents, self._length_factors):
+            score = 0.0
+            for term in query_terms:
+                count = document[term]
+                if not count:
+                    continue
+                inverse = self._inverse.get(term)
+                if inverse is None:
+                    frequency = self._frequency[term]
+                    inverse = log(1 + (len(self._documents) - frequency + 0.5) / (frequency + 0.5))
+                    self._inverse[term] = inverse
+                score += inverse * count * 2.2 / (count + length_factor)
+            scores.append(score)
+        return scores
