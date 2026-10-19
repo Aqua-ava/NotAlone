@@ -1,3 +1,4 @@
+import { setWorkspaceContext } from '../workspace-actions';
 import { expect, type Browser } from '@playwright/test';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
 import { withRewritePages } from './rewrite-acceptance';
@@ -16,10 +17,10 @@ export async function styleReference(browser: Browser, origin: string) {
       await expect(manual).toHaveValue('');
       await expect.poll(async () => (await helper.evaluate(async () => window.notalone.styleSamples.getState())).samples.length).toBe(index + 1);
     }
-    await helper.getByRole('button', { name: '主动聊聊', exact: true }).click();
-    await helper.getByRole('textbox', { name: '主动目的', exact: true }).fill('明确拒绝本次聚会，不增加约定。');
+    await setWorkspaceContext(helper, true);
+    await helper.getByRole('textbox', { name: '有什么想说的', exact: true }).fill('明确拒绝本次聚会，不增加约定。');
     await rewriteBackend.plan({ count: 1, text: '本次我不参加。', basis: '保留当前拒绝，不沿旧样本增加约定。' });
-    await helper.getByRole('button', { name: '生成候选', exact: true }).click();
+    await helper.getByRole('button', { name: '帮我表达', exact: true }).click();
     await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveValue('本次我不参加。');
     const observed = await rewriteBackend.command('observations');
     const payload = (observed.payloads as Record<string, unknown>[]).at(-1)!;
