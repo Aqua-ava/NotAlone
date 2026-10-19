@@ -81,7 +81,7 @@ class ProtocolTrace:
 def counted_connections(directory, counts):
     def record_sql(connection, query, executions):
         text = query.as_string(connection) if isinstance(query, sql.Composable) else query
-        if "source_processing_capture_tombstone" in text or text.startswith("INSERT INTO public.source_processing_"):
+        if "source_processing_" in text:
             kind = "processing_business_sql"
         elif "pg_advisory" in text:
             kind = "scope_lock_sql"
@@ -324,7 +324,9 @@ def main():
                                 elif (payload["parsed"]["text"] != raw[position]["text"]
                                       or payload["converted"]["text_content"] != raw[position]["text"]
                                       or payload["parsed"] != raw[position]
-                                      or not row["message_id"] or not row["source_ref_id"]):
+                                      or not row["message_id"] or not row["source_ref_id"]
+                                      or payload["persistence"]["message_id"] != str(row["message_id"])
+                                      or payload["persistence"]["source_ref_id"] != str(row["source_ref_id"])):
                                     raise AssertionError("导入结果原始及规范化正文不符。")
                             del batch
                             with psycopg.connect(database_url) as connection:
