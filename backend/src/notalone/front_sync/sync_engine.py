@@ -102,6 +102,7 @@ class FrontSyncCycleReport:
     cli_priority_last_cli_duration_ms: int | None = None
     cli_priority_last_store_duration_ms: int | None = None
     cli_priority_last_failure_code: str | None = None
+    cli_priority_local_history_state: str | None = None
     cli_priority_queue_wait_ms: int | None = None
     cli_backfill_phase: str = "not_required"
     cli_backfill_contact_id: UUID | None = None

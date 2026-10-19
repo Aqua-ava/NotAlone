@@ -304,6 +304,7 @@ class CliFullSyncEngine:
             cli_priority_last_cli_duration_ms=background.status.priority_last_cli_duration_ms,
             cli_priority_last_store_duration_ms=background.status.priority_last_store_duration_ms,
             cli_priority_last_failure_code=background.status.priority_last_failure_code,
+            cli_priority_local_history_state=background.status.priority_local_history_state,
             cli_priority_queue_wait_ms=background.status.priority_queue_wait_ms,
             cli_backfill_phase=background.status.backfill_phase,
             cli_backfill_contact_id=background.status.backfill_contact_id,

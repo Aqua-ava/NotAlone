@@ -81,6 +81,7 @@ class CliSyncStatus:
     priority_last_cli_duration_ms: int | None = None
     priority_last_store_duration_ms: int | None = None
     priority_last_failure_code: str | None = None
+    priority_local_history_state: str | None = None
     priority_queue_wait_ms: int | None = None
     backfill_phase: str = "not_required"
     backfill_contact_id: UUID | None = None
@@ -119,6 +120,7 @@ class _PriorityReadTiming:
     last_cli_duration_ms: int | None = None
     last_store_duration_ms: int | None = None
     last_failure_code: str | None = None
+    local_history_state: str | None = None
     queue_wait_ms: int | None = None
 
 
@@ -201,6 +203,7 @@ _PRIORITY_READ_INTERVAL = timedelta(seconds=3)
 CLI_TASK_TIMEOUT_SECONDS = 3.0
 _SAFETY_SWEEP_INTERVAL = timedelta(seconds=15)
 _SAFETY_SWEEP_BINDINGS_PER_CYCLE = 8
+_LOCAL_HISTORY_CODES = frozenset({"local_history_deleted", "local_history_empty"})
 _INCOMPLETE_CLI_FAILURE_CODES = frozenset(
     {
         "cli_unavailable",
@@ -500,6 +503,7 @@ class CliBackgroundSync:
             if timing is not None:
                 timing.last_cli_duration_ms = None
                 timing.last_store_duration_ms = None
+                timing.local_history_state = None
             completed = False
             has_more = False
             task_failure: str | None = None
@@ -688,6 +692,7 @@ class CliBackgroundSync:
             "priority_last_cli_duration_ms": timing.last_cli_duration_ms,
             "priority_last_store_duration_ms": timing.last_store_duration_ms,
             "priority_last_failure_code": timing.last_failure_code,
+            "priority_local_history_state": timing.local_history_state,
             "priority_queue_wait_ms": timing.queue_wait_ms,
         }
 
@@ -1180,6 +1185,24 @@ class CliBackgroundSync:
         finally:
             if timing is not None and cli_started is not None:
                 timing.last_cli_duration_ms = self._elapsed_ms(cli_started)
+        if result.local_history_state in {"deleted", "empty"}:
+            if timing is not None:
+                timing.local_history_state = result.local_history_state
+            # 本地没有可读历史不等于覆盖完整；仍保留原游标及未来轮询。
+            # 修正此前缺表错误的分类，但不改变用户暂停的补齐任务。
+            unavailable_state = backfill_state
+            if unavailable_state is None and self._backfill_state is not None:
+                previous = self._backfill_state.read(
+                    owner_id=self._owner_id, contact_id=contact_id,
+                    binding_id=binding.binding_id,
+                )
+                if _backfill_phase_value(getattr(previous, "phase", None)) == BackfillPhase.INCOMPLETE.value:
+                    unavailable_state = previous
+            self._fail_backfill(
+                binding, f"local_history_{result.local_history_state}",
+                unavailable_state, incomplete=True,
+            )
+            return 0, False
         # 真实适配器对"没有新消息"的一次性 tail 输出为空，且
         # freshness_confirmed=False（wechat_cli/models.TailResult 契约）。
         # 常规 live 轮询的空结果是正常稳态：保持既有水位直接返回 0。
@@ -1208,8 +1231,7 @@ class CliBackgroundSync:
             result.last_local_id is None
             or result.cursor is None
             or (cursor is not None and (
-                result.last_local_id <= cursor.last_local_id
-                or result.cursor == cursor.last_cursor
+                result.cursor == cursor.last_cursor
             ))
         ):
             error = CliOutputError("cli_output_invalid", "微信 CLI 后续页水位没有前进。")
@@ -1279,6 +1301,7 @@ class CliBackgroundSync:
                 since_cursor=None if cursor is None else cursor.last_cursor,
                 last_local_id=result.last_local_id,
                 last_cursor=result.cursor,
+                cursor_ordered=True,
                 record_count=len(messages),
                 event_count=event_count,
                 non_text_count=non_text_count,
@@ -1402,8 +1425,8 @@ class CliBackgroundSync:
             == binding.conversation_locator
         )
         cursor_is_ahead = reliable is None or (
-            getattr(cursor, "last_local_id", 0)
-            > getattr(reliable, "last_local_id", 0)
+            getattr(cursor, "last_cursor", None)
+            != getattr(reliable, "last_cursor", None)
         )
         if not cursor_matches_binding or cursor_is_ahead:
             rewind(
@@ -1411,6 +1434,7 @@ class CliBackgroundSync:
                 contact_id=contact_id,
                 binding_id=binding.binding_id,
                 target=reliable,
+                expected_cursor=cursor.last_cursor,
             )
             return reliable
         return cursor
@@ -1701,12 +1725,18 @@ class CliBackgroundSync:
                 ),
                 None,
             )
+        actual_incomplete = [
+            state for state in incomplete_states
+            if getattr(state, "failure_code", None) not in _LOCAL_HISTORY_CODES
+        ]
         if active_states:
             phase = BackfillPhase.BACKFILLING.value
-        elif incomplete_states:
+        elif actual_incomplete:
             phase = BackfillPhase.INCOMPLETE.value
         elif failed_states:
             phase = BackfillPhase.FAILED.value
+        elif incomplete_states:
+            phase = BackfillPhase.INCOMPLETE.value
         elif paused_states:
             phase = BackfillPhase.PAUSED.value
         elif states and completed_contacts == total_contacts:
@@ -1714,7 +1744,8 @@ class CliBackgroundSync:
         else:
             phase = BackfillPhase.GAP_DETECTED.value
 
-        failure_state = next(iter(incomplete_states or failed_states), None)
+        # 本地无记录是覆盖说明，不能遮住其他会话真正的读取故障。
+        failure_state = next(iter(actual_incomplete or failed_states or incomplete_states), None)
         scope = getattr(current, "scope", None)
         contact_id = getattr(scope, "contact_id", None)
         return {

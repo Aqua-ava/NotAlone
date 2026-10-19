@@ -13,6 +13,10 @@ const backfillLabels: Record<SyncBackfillPhase, string> = { not_required: '当�
   backfilling: '正在补齐历史消息', complete: '补齐已完成', failed: '补齐失败', incomplete: '无法确认补齐完整性', paused: '补齐已暂停' };
 const backfillFailures: Record<string, string> = { cli_freshness_unknown: 'CLI未能确认覆盖到当前水位，请检查后显式重试。',
   cli_output_invalid: 'CLI返回的数据无法解析，本次补齐未完成，请检查后显式重试。' };
+const localHistoryNotices: Record<string, string> = {
+  local_history_deleted: '部分已确认会话在本机微信有删除记录，当前没有可读历史。历史覆盖尚未确认；这些会话收到新消息后会再次检查。',
+  local_history_empty: '部分已确认会话在本机微信暂未保存聊天记录。历史覆盖尚未确认；这些会话收到新消息后会再次检查。',
+};
 
 export function SyncControlPanel({ bridge, manualRelease = false }: { bridge: SyncControlBridge; manualRelease?: boolean }) {
   const { state, latest, active, error, setError } = useRevisionedSession(initial, bridge);
@@ -26,6 +30,8 @@ export function SyncControlPanel({ bridge, manualRelease = false }: { bridge: Sy
     catch { if (active.current && scopeRevision === latest.current.scopeRevision) setError('本次同步范围已变化，请刷新状态后重试。'); }
   }
   const report = state.report;
+  const localHistory = report?.backfill.failedContacts === 0
+    ? localHistoryNotices[report.backfill.failureCode ?? ''] : undefined;
   const available = state.phase === 'ready' && report !== null && state.busy === null;
   const switchSync = () => operate(() => report?.enabled
     ? bridge.disable({ scopeRevision: state.scopeRevision }) : bridge.enable({ scopeRevision: state.scopeRevision }));
@@ -60,11 +66,11 @@ export function SyncControlPanel({ bridge, manualRelease = false }: { bridge: Sy
       {error && <p role="alert">{error}</p>}
     </section>
     <section className="bindings-explanation" aria-label="历史补齐"><h2>历史补齐</h2>
-      <p role="status">{report ? backfillLabels[report.backfill.phase] : '补齐状态尚未确认'}</p>
+      <p role="status">{localHistory ? '部分会话本地无可读历史，覆盖尚未确认' : report ? backfillLabels[report.backfill.phase] : '补齐状态尚未确认'}</p>
       {report && <><p>已完成{report.backfill.completedContacts}／{report.backfill.totalContacts}个会话，待处理{report.backfill.pendingContacts}个；
         失败{report.backfill.failedContacts}个，无法确认完整{report.backfill.incompleteContacts}个。</p>
         <p>已写入文字{report.backfill.messageCount}条，已跳过非文字{report.backfill.nonTextCount}条。</p>
-        {report.backfill.failureCode && <p role="alert">{backfillFailures[report.backfill.failureCode]
+        {report.backfill.failureCode && <p role={localHistory ? 'status' : 'alert'}>{localHistory ?? backfillFailures[report.backfill.failureCode]
           ?? '本次补齐遇到错误，请检查本机服务与CLI后显式重试。'}</p>}</>}
       <div className="bindings-toolbar"><button className="button"
         disabled={!available || !report?.enabled || !['gap_detected', 'backfilling', 'incomplete'].includes(report.backfill.phase)}

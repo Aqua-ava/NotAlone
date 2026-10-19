@@ -29,3 +29,12 @@ test('公开同步状态保留当前优先联系人的成功时间与分阶段�
     lastSuccessAt: '2026-10-19T06:00:00.123456+00:00', lastDurationMs: 145,
     lastCliDurationMs: 90, lastStoreDurationMs: 30, lastFailureCode: null, queueWaitMs: 24 });
 });
+
+test('本地无历史状态单独传递，未知分类不能伪装为已核验', async () => {
+  for (const state of ['deleted', 'empty', null]) {
+    const result = await read({ ...report(), cli_priority_local_history_state: state });
+    assert.equal(result.report.priority.localHistoryState, state);
+    assert.equal(result.report.priority.lastFailureCode, null);
+  }
+  await assert.rejects(() => read({ ...report(), cli_priority_local_history_state: 'complete' }));
+});

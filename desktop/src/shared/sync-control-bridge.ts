@@ -23,6 +23,7 @@ export interface SyncPriorityReport {
   lastCliDurationMs: number | null;
   lastStoreDurationMs: number | null;
   lastFailureCode: string | null;
+  localHistoryState?: 'deleted' | 'empty' | null;
   queueWaitMs: number | null;
 }
 

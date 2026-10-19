@@ -2909,6 +2909,7 @@ def _sync_status_payload(report: FrontSyncCycleReport) -> dict[str, object]:
                 "cli_priority_last_cli_duration_ms": report.cli_priority_last_cli_duration_ms,
                 "cli_priority_last_store_duration_ms": report.cli_priority_last_store_duration_ms,
                 "cli_priority_last_failure_code": report.cli_priority_last_failure_code,
+                "cli_priority_local_history_state": report.cli_priority_local_history_state,
                 "cli_priority_queue_wait_ms": report.cli_priority_queue_wait_ms,
                 "cli_backfill_phase": report.cli_backfill_phase,
                 "cli_backfill_contact_id": (

@@ -11,6 +11,7 @@ import threading
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from time import monotonic
 from typing import Any, Protocol
 
 from notalone.source_processing.models import ProcessingRecord
@@ -28,6 +29,11 @@ from notalone.wechat_cli.models import (
     MessageIdentifier,
     TailFollowItem,
     TailResult,
+)
+from notalone.wechat_cli.local_availability import (
+    classify_local_history_probe,
+    is_exact_missing_message_table,
+    local_history_probe_sql,
 )
 
 
@@ -352,7 +358,24 @@ class LocalWechatCli:
         command.extend(
             ["--include-media-paths", "false", "--strict-read-only"]
         )
-        result = self._invoke(tuple(command), timeout_seconds=timeout_seconds)
+        deadline = monotonic() + (self._timeout_seconds if timeout_seconds is None else timeout_seconds)
+        result = self._invoke(tuple(command), timeout_seconds=timeout_seconds, allow_failure=True)
+        if result.returncode != 0:
+            if is_exact_missing_message_table(result.stdout):
+                remaining = deadline - monotonic()
+                if remaining <= 0:
+                    raise CliCommandError("cli_timeout", "微信 CLI 命令超时。")
+                probe = self._invoke((
+                    self._executable, "sql", local_history_probe_sql(talker),
+                    "--subdir", "session", "--file", "session.db", "--strict-read-only",
+                ), timeout_seconds=remaining)
+                availability = classify_local_history_probe(probe.stdout)
+                if availability is not None:
+                    return TailResult(
+                        events=(), cursor=None, freshness_confirmed=True,
+                        local_history_state=availability.removeprefix("local_history_"),
+                    )
+            raise _command_failure(result)
         page = _parse_tail_output(result.stdout, expected_talker=talker)
         if page.has_more and page.cursor == cursor:
             raise CliOutputError("cli_output_invalid", "微信 CLI 后续页游标没有前进。")
@@ -505,7 +528,8 @@ class LocalWechatCli:
             )
         return value
 
-    def _invoke(self, command: tuple[str, ...], *, timeout_seconds: float | None = None) -> CommandResult:
+    def _invoke(self, command: tuple[str, ...], *, timeout_seconds: float | None = None,
+                allow_failure: bool = False) -> CommandResult:
         try:
             result = (self._run_command(command, timeout_seconds=timeout_seconds)
                       if self._default_runner and timeout_seconds is not None else self._runner(command))
@@ -517,7 +541,7 @@ class LocalWechatCli:
             raise CliCommandError(
                 "cli_timeout", "微信 CLI 命令超时。"
             ) from error
-        if result.returncode != 0:
+        if result.returncode != 0 and not allow_failure:
             raise _command_failure(result)
         return result
 
@@ -631,6 +655,8 @@ def _message_table_missing(message: str | None) -> bool:
 
 def _parse_tail_output(stdout: str, *, expected_talker: str) -> TailResult:
     has_more = False
+    ordered_page = False
+    page_cursor = None
     # 单次查询保留 envelope：JSONL 空输出会丢失实时来源证明。
     try:
         envelope = json.loads(stdout)
@@ -658,6 +684,8 @@ def _parse_tail_output(stdout: str, *, expected_talker: str) -> TailResult:
         ):
             raise CliOutputError("cli_freshness_unknown", "微信 CLI 未确认当前会话的实时读取结果。")
         has_more = query["has_more"]
+        ordered_page = True
+        page_cursor = data.get("cursor")
         if not raw_events and has_more:
             raise CliOutputError("cli_output_invalid", "微信 CLI 后续页没有可推进的事件。")
         if not raw_events:
@@ -702,9 +730,9 @@ def _parse_tail_output(stdout: str, *, expected_talker: str) -> TailResult:
             raise unsupported_error
         event_count += 1
         local_id = item.local_id
-        # 文字与非文字事件都参与水位推进；cursor 必须和选出的最大
-        # local_id 来自同一条事件，不能在 JSONL 乱序时取最后一行。
-        if last_local_id is None or local_id > last_local_id:
+        # 实时 tail 页按微信排序位置排列，local_id 并不单调。
+        # 旧 JSONL 输入没有分页顺序保证，保留其原有兼容行为。
+        if ordered_page or last_local_id is None or local_id > last_local_id:
             last_local_id = local_id
             last_cursor = item.cursor
         if item.event is None:
@@ -714,6 +742,8 @@ def _parse_tail_output(stdout: str, *, expected_talker: str) -> TailResult:
                 filtered_records.append(item.processing_record)
             continue
         events.append(item.event)
+    if ordered_page and page_cursor is not None and page_cursor != last_cursor:
+        raise CliOutputError("cli_output_invalid", "微信 CLI 页游标与最后事件不一致。")
     return TailResult(
         events=tuple(events),
         cursor=last_cursor,

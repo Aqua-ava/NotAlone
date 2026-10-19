@@ -26,11 +26,16 @@ function priorityReport(fields: Record<string, unknown>): SyncPriorityReport | u
     throw new Error('同步报告不可用。');
   }
   const duration = (key: string) => fields[key] === null ? null : count(fields[key]);
+  const localHistoryState = fields.cli_priority_local_history_state;
+  if (localHistoryState !== undefined && localHistoryState !== null && localHistoryState !== 'deleted' && localHistoryState !== 'empty') {
+    throw new Error('同步报告不可用。');
+  }
   return { contactId: contactId === null ? null : contactId.toLowerCase(), lastSuccessAt,
     lastDurationMs: duration('cli_priority_last_duration_ms'),
     lastCliDurationMs: duration('cli_priority_last_cli_duration_ms'),
     lastStoreDurationMs: duration('cli_priority_last_store_duration_ms'),
     lastFailureCode: failureCode(fields.cli_priority_last_failure_code),
+    ...('cli_priority_local_history_state' in fields ? { localHistoryState } : {}),
     queueWaitMs: duration('cli_priority_queue_wait_ms') };
 }
 function backfillReport(fields: Record<string, unknown>): SyncBackfillReport {
