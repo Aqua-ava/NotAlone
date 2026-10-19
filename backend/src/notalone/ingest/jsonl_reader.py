@@ -21,6 +21,7 @@ from notalone.source_processing.rule_capture import capture_execution
 
 MAX_JSONL_BYTES = 64 * 1024 * 1024
 MAX_JSONL_RECORDS = 500_000
+_READ_CHUNK_BYTES = 64 * 1024
 
 
 # 读取成功后把路径、指纹和全部记录捆绑成一个不可变结果。
@@ -59,7 +60,15 @@ def read_jsonl(path: Path, *, capture_processing: bool = True) -> JsonlDocument:
             )
         with os.fdopen(descriptor, "rb") as file:
             descriptor = None
-            content = file.read(MAX_JSONL_BYTES + 1)
+            # 按实际内容增长，避免小文件也临时分配完整上限；短读不代表文件结束。
+            content = bytearray()
+            while len(content) <= MAX_JSONL_BYTES:
+                chunk = file.read(
+                    min(_READ_CHUNK_BYTES, MAX_JSONL_BYTES + 1 - len(content))
+                )
+                if not chunk:
+                    break
+                content.extend(chunk)
     except ImportPreviewError:
         raise
     except OSError:
