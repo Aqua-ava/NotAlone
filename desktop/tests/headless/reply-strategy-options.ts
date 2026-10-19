@@ -10,11 +10,13 @@ export async function replyStrategyOptions(browser: Browser, origin: string) {
     await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
     await confirmHelperContact(helper, contactId);
     const idea = helper.getByRole('textbox', { name: '有什么想说的', exact: true });
+    // 再次生成可能经已保存讨论恢复候选；消息组身份不依赖即时/恢复状态的编辑框名称。
+    const candidate = (number: number) => helper.getByRole('group', { name: `说法${number}消息组`, exact: true }).getByRole('textbox');
     await expect(idea).toHaveValue('');
     await expect(helper.getByRole('button', { name: '帮我表达', exact: true })).toBeDisabled();
     await rewriteBackend.plan({ count: 3, prefix: '尚未采纳的合成思路', basis: '根据最近聊天提出可选说法，尚未代表用户立场。' });
     await helper.getByRole('button', { name: '帮我想想', exact: true }).click();
-    await expect(helper.getByRole('textbox', { name: '候选3编辑文本', exact: true })).toHaveValue('尚未采纳的合成思路（说法3）。');
+    await expect(candidate(3)).toHaveValue('尚未采纳的合成思路（说法3）。');
     await expect(helper.getByText('根据最近聊天提出可选说法，尚未代表用户立场。', { exact: true })).toHaveCount(3);
     await expect(helper.getByText('根据最近聊天提出可选说法，尚未代表用户立场。', { exact: true }).first()).toBeVisible();
     await expect(idea).toHaveValue('');
@@ -26,14 +28,17 @@ export async function replyStrategyOptions(browser: Browser, origin: string) {
     expect(firstPayloads[0]).toMatchObject({ input_mode: 'workspace', fidelity_contract: { current_intent: null } });
     await rewriteBackend.plan({ count: 2, prefix: '另一组可选说法' });
     await helper.getByRole('button', { name: '帮我想想', exact: true }).click();
-    await expect(helper.getByRole('textbox', { name: '候选2编辑文本', exact: true })).toHaveValue('另一组可选说法（说法2）。');
+    await expect.poll(() => replyTransport.results.length).toBe(2);
+    expect(replyTransport.results[1].status).toBe(200);
+    await expect(candidate(2)).toHaveValue('另一组可选说法（说法2）。');
+    await expect(helper.getByRole('group', { name: '说法3消息组', exact: true })).toHaveCount(0);
     expect(replyTransport.requests.at(-1)?.idempotency_key).not.toBe(first.idempotency_key);
     // 不选择候选也能自行表达；建议不能自动填入本人想法。
     await expect(idea).toHaveValue('');
     await idea.fill('只说明本次收到了消息，不安排后续。');
     await rewriteBackend.plan({ count: 1, prefix: '我已收到，先到这里' });
     await helper.getByRole('button', { name: '帮我表达', exact: true }).click();
-    await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveValue('我已收到，先到这里（说法1）。');
+    await expect(candidate(1)).toHaveValue('我已收到，先到这里（说法1）。');
     expect(replyTransport.requests.at(-1)).toMatchObject({ content: { input_kind: 'workspace', workspace_action: 'express',
       draft_text: '只说明本次收到了消息，不安排后续。' } });
     expect((await rewriteBackend.command('observations')).payloads).toHaveLength(3);

@@ -1,3 +1,4 @@
+import { fillWorkspaceThought, fillWorkspaceInstruction, setWorkspaceContext } from '../workspace-actions';
 import { openAssistantHistory, expandSavedDiscussion } from '../assistant-history-actions';
 import { selectMemoryCategory } from '../memory-page-actions';
 import { writeFile } from 'node:fs/promises';
@@ -33,7 +34,7 @@ async function captureGeneration(pages: RewritePages, mode: string, label: strin
   const calls = ((await pages.rewriteBackend.command('observations')).payloads as unknown[]).length;
   await pages.rewriteBackend.plan({ count: 1, ...plan });
   const started = performance.now();
-  await pages.helper.getByRole('button', { name: '生成候选', exact: true }).click();
+  await pages.helper.getByRole('button', { name: '帮我表达', exact: true }).click();
   await expect.poll(() => pages.replyTransport.results.length).toBe(before + 1);
   const elapsed = performance.now() - started;
   const result = pages.replyTransport.results.at(-1)!;
@@ -48,6 +49,8 @@ async function captureGeneration(pages: RewritePages, mode: string, label: strin
   rows.push({ case_id: `${mode}-group-public-${label}`, owner_id: pages.rewriteBackend.data.owner_id,
     contact_id: pages.rewriteBackend.data.contact_ids[0], payload, system_prompt: system,
     output: result.data, latency_ms: elapsed, call_count: callCount, model_inputs: payloads.slice(calls) });
+  expect(pages.replyTransport.requests.at(-1)).toMatchObject({ content: { type: 'rewrite_draft', input_kind: 'workspace', workspace_action: 'express' } });
+  expect(payload.input_mode).toBe('workspace');
   const candidate = (result.data.candidates as Candidate[])[0];
   expect(candidate.text).toBe(candidate.messages.map((message) => message.text).join('\n\n'));
   return { request: pages.replyTransport.requests.at(-1)!, output: result.data, candidate } satisfies Generation;
@@ -112,8 +115,8 @@ async function checkErased(helper: Page, sessionPath: string, pages: RewritePage
 export async function authenticExpressionGroups(browser: Browser, origin: string) {
   const rows: object[] = [], edits: object[] = [];
   try {
-    for (const mode of ['response', 'proactive'] as const) {
-      const removal = mode === 'response' ? 'sample' : 'source';
+    for (const removal of ['sample', 'source'] as const) {
+      const mode = removal === 'sample' ? 'workspace-recent' : 'workspace-history';
       const name = `${mode}公开消息组的样本冲突、编辑来源、普通重新生成及${removal}删除恢复`;
       process.stdout.write(`page_test_scenario: ${name}\n`);
       const copied: string[] = []; let hidden = 0;
@@ -123,10 +126,12 @@ export async function authenticExpressionGroups(browser: Browser, origin: string
         const contactId = rewriteBackend.data.contact_ids[0];
         await rewriteBackend.command('fidelity_history');
         await chooseContact(manager, helper, contactId);
-        await helper.getByRole('textbox', { name: '草稿', exact: true }).fill(independentInput);
+        await setWorkspaceContext(helper, false);
+        await fillWorkspaceThought(helper, independentInput);
         const independent = await captureGeneration(pages, mode, 'independent', rows,
           { text: independentOutput, basis: '只保留这份无关系语境的独立合成草稿。' });
         await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveValue(independentOutput);
+        expect(independent.request).toMatchObject({ content: { include_relationship_context: false } });
         await helper.getByText('我的表达样本', { exact: true }).click();
         await helper.getByRole('textbox', { name: '手工表达样本', exact: true }).fill(oldExpression);
         await helper.getByRole('button', { name: '主动保存手工文字', exact: true }).click();
@@ -136,23 +141,17 @@ export async function authenticExpressionGroups(browser: Browser, origin: string
         const generated: Generation[] = [];
         const derivedSampleIds: string[] = [];
         for (const [index, stage] of stages.entries()) {
-          await helper.getByRole('button', { name: mode === 'response' ? '回应消息' : '主动聊聊', exact: true }).click();
-          if (mode === 'response') {
-            const target = helper.getByRole('radio', { name: /合成当前邀请/ });
-            await target.click(); await expect(target).toBeChecked();
-          }
-          await helper.getByRole('textbox', { name: mode === 'response' ? '表达方向' : '主动目的', exact: true }).fill(stage.intent);
-          // 此质量用例固定旧协议输入；统一混合补充由独立入口回归覆盖。
-          await helper.evaluate(async (requirements) => {
-            const state = await window.notalone.replies.getState();
-            const scope = { contactId: state.contactId!, scopeRevision: state.scopeRevision };
-            await window.notalone.replies.updateCorrection({ ...scope, correction: '这只是合成邀约，不是已确认约定。' });
-            await window.notalone.replies.updateRequirements({ ...scope, requirements });
-          }, stage.requirement);
+          await setWorkspaceContext(helper, true);
+          await fillWorkspaceThought(helper, stage.intent);
+          await fillWorkspaceInstruction(helper, stage.requirement);
+          await helper.getByRole('textbox', { name: '补充聊天上下文', exact: true })
+            .fill('对方发来合成邀约，双方尚未确认约定。');
           const item = await captureGeneration(pages, mode, stage.label, rows,
             { message_groups: [[...stage.messages]], basis: stage.basis,
-              ...(mode === 'proactive' && index === 0 ? { probe_history: true } : {}) });
+              ...(removal === 'source' && index === 0 ? { probe_history: true } : {}) });
           generated.push(item);
+          expect(item.request).toMatchObject({ content: { draft_text: stage.intent,
+            include_relationship_context: true, context_text: '对方发来合成邀约，双方尚未确认约定。' } });
           expect(item.candidate.messages.map((message) => message.text)).toEqual([...stage.messages]);
           expect(new Set(item.candidate.messages.map((message) => message.message_id)).size).toBe(2);
           const observed = await rewriteBackend.command('observations');
@@ -191,7 +190,7 @@ export async function authenticExpressionGroups(browser: Browser, origin: string
           const pasteVersions = (await helper.evaluate(async () => window.notalone.replies.getState())).candidateVersions!
             .items.find((view) => view.candidateId === item.candidate.candidate_id)!.history!;
           expect(pasteVersions.versions).toHaveLength(1);
-          expect((await rewriteBackend.command('observations')).payloads).toHaveLength(mode === 'response' ? 2 : 3);
+          expect((await rewriteBackend.command('observations')).payloads).toHaveLength(removal === 'sample' ? 2 : 3);
           await helper.getByRole('button', { name: `删除表达样本：${laterExpression}`, exact: true }).click();
           await expect.poll(async () => (await helper.evaluate(async () => window.notalone.styleSamples.getState())).samples.length).toBe(1);
           await expect(firstEditor).toHaveValue(stage.messages[0]);
@@ -241,7 +240,10 @@ export async function authenticExpressionGroups(browser: Browser, origin: string
           await group.getByRole('button', { name: '查看说法1下一版', exact: true }).click();
           await expect(group.getByRole('textbox', { name: '说法1第1条编辑文本', exact: true })).toHaveValue(edited[0]);
           const finalDraft = [edited[0], '谢谢你邀请。先这样。'];
-          await group.getByRole('textbox', { name: '说法1第2条编辑文本', exact: true }).fill(finalDraft[1]);
+          const finalEditor = group.getByRole('textbox', { name: '说法1第2条编辑文本', exact: true });
+          await finalEditor.fill(finalDraft[1]);
+          await finalEditor.blur();
+          await expect(group.getByText('修改版本 2', { exact: true })).toBeVisible();
           await group.getByRole('button', { name: '主动保存说法1为样本', exact: true }).click();
           await expect.poll(async () => (await helper.evaluate(async () => window.notalone.styleSamples.getState())).samples.length).toBe(3);
           const derived = (await helper.evaluate(async () => window.notalone.styleSamples.getState())).samples
@@ -251,15 +253,20 @@ export async function authenticExpressionGroups(browser: Browser, origin: string
           derivedSampleIds.push(derived.sampleId);
           const afterSamples = (await helper.evaluate(async () => window.notalone.replies.getState())).candidateVersions!
             .items.find((view) => view.candidateId === item.candidate.candidate_id)!.history!;
-          expect(afterSamples.versions).toEqual(history.versions);
+          expect(afterSamples.versions).toHaveLength(3);
+          expect(afterSamples.versions.slice(0, 2)).toEqual(history.versions);
+          const finalVersion = afterSamples.versions[2];
+          expect(finalVersion.parentVersionId).toBe(version.versionId);
+          expect(finalVersion.messages.map(message => message.messageId)).toEqual(item.candidate.messages.map(message => message.message_id));
+          expect(finalVersion.messages.map(message => message.text)).toEqual(finalDraft);
           edits.push({ mode, session_id: item.output.session_id, reply_request_id: item.output.reply_request_id,
             candidate_id: item.candidate.candidate_id, version, original_version_sample: originalSample,
             rejected_later_sample_paste: { sample_id: laterSample.sampleId, text: laterExpression,
               original_candidate_message_preserved: stage.messages[0], sample_count_after_rejection: 2,
               version_count_after_rejection: pasteVersions.versions.length, candidate_available_after_sample_deletion: true },
-            restored_result_was_null: true, final_unsaved_draft: finalDraft, final_draft_sample: derived,
+            restored_result_was_null: true, final_saved_version: finalVersion, final_draft_sample: derived,
             copied: [...copied], external_sending: '未调用外部发送；只使用合成复制surface', model_calls_for_edit_and_copy_and_save: 0 });
-          expect((await rewriteBackend.command('observations')).payloads).toHaveLength(mode === 'response' ? 2 : 3);
+          expect((await rewriteBackend.command('observations')).payloads).toHaveLength(removal === 'sample' ? 2 : 3);
         }
         const sessionPath = `/api/contacts/${contactId}/assistant-sessions/${generated[0].output.session_id}`;
         if (removal === 'sample') {
@@ -273,7 +280,7 @@ export async function authenticExpressionGroups(browser: Browser, origin: string
           await expect(sources.getByText('已删除，已通过不可检索校验', { exact: true })).toBeVisible();
         }
         const remaining = removal === 'sample' ? [] : [sample.sampleId];
-        const expectedModelCalls = mode === 'response' ? 4 : 5;
+        const expectedModelCalls = removal === 'sample' ? 4 : 5;
         await checkErased(helper, sessionPath, pages, generated, independent, remaining, expectedModelCalls);
         pages.replyTransport.failRuntime = true;
         await expect(manager.getByRole('status').filter({ hasText: '尚未连接' })).toBeVisible();
@@ -295,8 +302,8 @@ export async function authenticExpressionGroups(browser: Browser, origin: string
     }
   } finally {
     await writeFile('artifacts/headless-pages/authentic-expression-groups-observations.json', JSON.stringify({
-      data_kind: 'synthetic', data_version: 'authentic-expression-public-groups-v1', entry_point: 'page', rows,
-      ui_edits: edits, coverage: { continuation: '仅普通重新生成；类型化连续修改尚未接入',
+      data_kind: 'synthetic', data_version: 'authentic-expression-workspace-groups-v2', entry_point: 'page', rows,
+      ui_edits: edits, coverage: { workspace_action: 'express', continuation: '本用例覆盖直接重新生成、逐条编辑及版本保存',
         native_acceptance: false, real_model_quality: 'unknown' },
     }, null, 2) + '\n', { mode: 0o600 });
   }

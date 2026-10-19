@@ -49,7 +49,21 @@ export async function replyStrategyTransition(browser: Browser, origin: string) 
       // 即使没有修改输入，明确再次点击动作也必须创建新请求；只有重试复用旧请求。
       await rewriteBackend.plan({ count: 1, prefix: '再次明确请求候选' });
       await generateWorkspace(helper, nextAction);
-      await expect(editor).toHaveValue('再次明确请求候选（说法1）。');
+      try {
+        await expect.poll(() => replyTransport.results.length, { timeout: 15_000 }).toBe(4);
+        expect(replyTransport.results[3].status, JSON.stringify(replyTransport.results[3].data)).toBe(200);
+        await expect(editor).toHaveValue('再次明确请求候选（说法1）。');
+      } catch (error) {
+        const observed = await helper.evaluate(async () => {
+          const state = await window.notalone.replies.getState();
+          return { phase: state.phase, errorCode: state.errorCode, canRetry: state.canRetry,
+            savedPhase: state.savedSession?.phase, generationJobs: state.generationJobs?.map(job => ({ phase: job.phase })) };
+        });
+        process.stdout.write(`page_test_transition_failure: ${JSON.stringify({ ...observed,
+          http: replyTransport.results.map(item => ({ status: item.status, error: item.data.error, reason: item.data.reason })),
+          preparation: replyTransport.replyPreparations })}\n`);
+        throw error;
+      }
       expect(replyTransport.requests.at(-1)!.idempotency_key).not.toBe(nextRequest.idempotency_key);
       expect((await rewriteBackend.command('observations')).payloads).toHaveLength(3);
     });

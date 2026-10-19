@@ -8,6 +8,7 @@ export async function conversationStrategyEntry(browser: Browser, origin: string
     await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
     await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
     const idea = helper.getByRole('textbox', { name: '有什么想说的', exact: true });
+    const firstCandidate = helper.getByRole('group', { name: '说法1消息组', exact: true }).getByRole('textbox');
     await expect(idea).toBeVisible();
     await expect(helper.getByRole('button', { name: '帮我表达', exact: true })).toBeDisabled();
     await expect(helper.getByRole('button', { name: '帮我想想', exact: true })).toBeEnabled();
@@ -17,7 +18,7 @@ export async function conversationStrategyEntry(browser: Browser, origin: string
     expect((await rewriteBackend.command('observations')).payloads).toEqual([]);
     await rewriteBackend.plan({ count: 1, prefix: '没有思路也能直接得到建议', basis: '结合最近聊天给出一个低假设的开场。' });
     await helper.getByRole('button', { name: '帮我想想', exact: true }).click();
-    await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true }))
+    await expect(firstCandidate)
       .toHaveValue('没有思路也能直接得到建议（说法1）。');
     await expect(helper.getByText('结合最近聊天给出一个低假设的开场。', { exact: true })).toBeVisible();
     expect(replyTransport.requests.at(-1)).toMatchObject({ content: {
@@ -32,7 +33,9 @@ export async function conversationStrategyEntry(browser: Browser, origin: string
     await idea.fill('想问问合成近况，不安排见面。');
     await rewriteBackend.plan({ count: 2, prefix: '最近怎么样，有空聊聊吗', cite_pending: true });
     await helper.getByRole('button', { name: '帮我表达', exact: true }).click();
-    await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveValue('最近怎么样，有空聊聊吗（说法1）。');
+    await expect.poll(() => replyTransport.results.length, { timeout: 15_000 }).toBe(2);
+    expect(replyTransport.results[1].status, JSON.stringify(replyTransport.results[1].data)).toBe(200);
+    await expect(firstCandidate).toHaveValue('最近怎么样，有空聊聊吗（说法1）。');
     const payloads = (await rewriteBackend.command('observations')).payloads as Array<Record<string, unknown>>;
     expect(payloads).toHaveLength(2);
     expect(payloads[0]).toMatchObject({ input_mode: 'workspace', workspace_action: 'suggest', draft_text: '' });

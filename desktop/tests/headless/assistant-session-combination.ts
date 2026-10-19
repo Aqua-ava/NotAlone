@@ -46,8 +46,31 @@ export async function assistantSessionCombination(browser: Browser, origin: stri
     await fixture.plan({ count: 1, message_groups: [['甲简短感谢。', '甲明确不参加。']] });
     await helper.getByRole('textbox', { name: '继续修改要求', exact: true }).fill('第一条简短一点');
     await helper.getByRole('button', { name: '继续修改', exact: true }).click();
-    await expect.poll(() => helper.evaluate(async () => (await window.notalone.replies.getState()).continuation?.phase))
-      .toBe('completed');
+    try {
+      await expect.poll(() => helper.evaluate(async () => (await window.notalone.replies.getState()).continuation?.phase),
+        { message: '已保存版本的本次继续修改应完成' }).toBe('completed');
+    } catch (error) {
+      const diagnostics = await Promise.allSettled([
+        helper.evaluate(async () => {
+          const state = await window.notalone.replies.getState();
+          return { phase: state.phase, errorCode: state.errorCode ?? null,
+            continuationPhase: state.continuation?.phase ?? null,
+            generationBlock: state.generationBlock, sourceAvailability: state.sourceAvailability ?? null,
+            savedPhase: state.savedSession?.phase, savedTurns: state.savedSession?.turns.map(turn => turn.state),
+            versionPhase: state.candidateVersions?.phase, dirtyDraftCount: state.candidateDrafts?.length ?? 0,
+            generationJobs: state.generationJobs?.map(job => job.phase) };
+        }),
+        fixture.command('model_status'),
+        fixture.request(pathA).then(response => ({ status: response.status,
+          turns: Array.isArray(response.data.turns) ? response.data.turns.map(turn => ({ state: turn.state,
+            hasReply: Boolean(turn.reply), requiresReprepare: turn.requires_reprepare ?? false })) : null })),
+      ]);
+      // 只记录阶段和计数，不回显正文、握手或环境配置；原超时和业务断言保持不变。
+      process.stderr.write(`page_test_combination_continuation: ${JSON.stringify(diagnostics.map((item, index) =>
+        item.status === 'fulfilled' ? { source: ['ui', 'model', 'saved'][index], value: item.value }
+          : { source: ['ui', 'model', 'saved'][index], unavailable: true }))}\n`);
+      throw error;
+    }
     const beforeMessage = (await fixture.request(pathA)).data;
     expect(beforeMessage.turns).toHaveLength(2);
     const priorReply = (await helper.evaluate(() => window.notalone.replies.getState())).result!.replyRequestId;

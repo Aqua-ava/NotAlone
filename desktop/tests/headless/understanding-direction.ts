@@ -96,6 +96,8 @@ export async function understandingDirection(browser: Browser, origin: string) {
     const { helper, rewriteBackend, replyTransport } = pages;
     const pending = await rewriteBackend.command('strategy_pending');
     const contactId = await openWorkspace(pages);
+    // 待确认资料仍需达到正式相关性阈值；本场用相关困惑触发检索，不要求无关资料无条件入选。
+    await fillWorkspaceThought(helper, '对方可能正在忙，我该怎么关心近况？');
     await rewriteBackend.plan({ count: 1, prefix: '仅供选择的思路', cite_pending: true,
       basis: '未确认近况仅作参考，不当成当前事实。' });
     await generateWorkspace(helper, 'suggest');
@@ -116,7 +118,10 @@ export async function understandingDirection(browser: Browser, origin: string) {
     const invalid = await rewriteBackend.request('/api/reply/generate', { contact_id: contactId, idempotency_key: randomUUID(),
       content: { type: 'rewrite_draft', input_kind: 'workspace', workspace_action: 'express', draft_text: '', include_relationship_context: true } });
     expect(invalid.status).toBe(400);
-    expect((await rewriteBackend.command('observations')).payloads).toHaveLength(1);
+    const payloads = (await rewriteBackend.command('observations')).payloads as Array<Record<string, unknown>>;
+    expect(payloads).toHaveLength(1);
+    expect(payloads[0]).toMatchObject({ input_mode: 'workspace', workspace_action: 'suggest',
+      fidelity_contract: { current_intent: null } });
     const ledger = await rewriteBackend.request('/api/ledger/summary');
     expect(ledger.status).toBe(200);
     expect(JSON.stringify(ledger.data)).not.toContain('甲的私密合成历史');

@@ -16,7 +16,7 @@ export async function assistantSessionFullHistory(browser: Browser, origin: stri
     expect(history.wire_bytes).toBeGreaterThan(1_048_576);
     expect(history.characters_per_input).toBe(100_000);
     const initialMetrics = await rewriteBackend.command('metrics');
-    expect(initialMetrics).toEqual({ model_calls: 0, migration_count: 88, migration_repeat: 0 });
+    expect(initialMetrics).toEqual({ model_calls: 0, migration_count: 89, migration_repeat: 0 });
     await openAssistantHistory(helper);
     await helper.getByRole('button', { name: '查看已保存讨论', exact: true }).click();
     await expandSavedDiscussion(helper);

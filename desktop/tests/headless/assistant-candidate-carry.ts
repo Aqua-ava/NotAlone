@@ -77,6 +77,41 @@ async function exerciseFork(pages: RewritePages, originalId: string, expectedTex
   process.stdout.write(`page_test_carry: blank_empty=true carry_messages=${expectedTexts.length} old_unchanged=true new_turns=0 automatic_model_delta=0 migrations=${before.migration_count} repeat=${before.migration_repeat}\n`);
 }
 
+async function saveGroupMessage(pages: RewritePages, messageNumber: 1 | 2, text: string, versionNumber: number) {
+  const { helper, rewriteBackend } = pages;
+  const group = helper.getByRole('group', { name: '说法2消息组', exact: true });
+  const editor = group.getByRole('textbox', { name: `说法2第${messageNumber}条编辑文本`, exact: true });
+  let stage = 'editing';
+  try {
+    await editor.fill(text);
+    await expect(editor).toHaveValue(text);
+    await expect(group.getByRole('button', { name: '复制第1条', exact: true })).toBeDisabled();
+    stage = 'saving';
+    await editor.blur();
+    await expect(group.getByText(`修改版本 ${versionNumber}`, { exact: true })).toBeVisible();
+    await expect(group.getByRole('button', { name: '复制第1条', exact: true })).toBeEnabled();
+  } catch (error) {
+    const state = await helper.evaluate(() => window.notalone.replies.getState());
+    const view = state.candidateVersions?.items.find(item => item.history?.candidateNumber === 2);
+    const draft = state.candidateDrafts?.find(item => item.candidateId === view?.candidateId);
+    const diagnostic: Record<string, unknown> = { stage, messageNumber, expectedVersion: versionNumber,
+      phase: state.phase, savedPhase: state.savedSession?.phase, versionsPhase: state.candidateVersions?.phase,
+      viewPhase: view?.phase, displayedVersionNumber: view?.history?.versions.find(item => item.versionId === view.displayVersionId)?.versionNumber,
+      versionNumbers: view?.history?.versions.map(item => item.versionNumber),
+      retainedEditMatches: draft?.messages[messageNumber - 1]?.text === text,
+      renderedEditMatches: await editor.inputValue().then(value => value === text).catch(() => null) };
+    if (view?.candidateId && state.savedSession?.sessionId) {
+      const response = await rewriteBackend.request(`/api/contacts/${state.contactId}/assistant-sessions/${state.savedSession.sessionId}/candidates/${view.candidateId}/versions`);
+      diagnostic.savedVersions = { status: response.status, versions: Array.isArray(response.data.versions)
+        ? response.data.versions.map(version => ({ number: version.version_number,
+          editedMessageMatches: version.messages?.[messageNumber - 1]?.text === text })) : null };
+    }
+    // 只记录保存阶段、版本序号和相等性，不回显合成正文或身份。
+    process.stderr.write(`page_test_carry_edit: ${JSON.stringify(diagnostic)}\n`);
+    throw error;
+  }
+}
+
 async function selectedVersion(pages: RewritePages): Promise<string> {
   const { helper, rewriteBackend } = pages;
   await chooseContact(pages);
@@ -103,12 +138,8 @@ async function selectedVersion(pages: RewritePages): Promise<string> {
   expect(await rewriteBackend.command('metrics')).toEqual(generatedMetrics);
   await openAssistantHistory(helper);
   await expect(group.getByRole('button', { name: '用这组回复新开会话', exact: true })).toBeEnabled();
-  await group.getByRole('textbox', { name: '说法2第1条编辑文本', exact: true }).fill('明确选用的合成编辑第一条。');
-  await group.getByRole('textbox', { name: '说法2第1条编辑文本', exact: true }).blur();
-  await expect(group.getByText('修改版本 1', { exact: true })).toBeVisible();
-  await group.getByRole('textbox', { name: '说法2第2条编辑文本', exact: true }).fill('明确选用的合成编辑第二条。');
-  await group.getByRole('textbox', { name: '说法2第2条编辑文本', exact: true }).blur();
-  await expect(group.getByText('修改版本 2', { exact: true })).toBeVisible();
+  await saveGroupMessage(pages, 1, '明确选用的合成编辑第一条。', 1);
+  await saveGroupMessage(pages, 2, '明确选用的合成编辑第二条。', 2);
   await openAssistantHistory(helper);
   await expect(group.getByRole('button', { name: '用这组回复新开会话', exact: true })).toBeEnabled();
   return (await helper.evaluate(async () => window.notalone.replies.getState())).savedSession!.sessionId!;

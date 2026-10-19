@@ -1,4 +1,4 @@
-import { fillWorkspaceThought, fillWorkspaceInstruction, generateWorkspace, setWorkspaceContext } from '../workspace-actions';
+import { fillWorkspaceThought, fillWorkspaceInstruction, generateWorkspace, openWorkspaceSettings, setWorkspaceContext } from '../workspace-actions';
 import { openAssistantHistory, expandSavedDiscussion } from '../assistant-history-actions';
 import { selectMemoryCategory } from '../memory-page-actions';
 import { expect, type Browser, type Page } from '@playwright/test';
@@ -51,6 +51,7 @@ async function expectRecoveredDiscussion(helper: Page) {
   await expect(candidateEditor(helper)).toHaveValue('跨连接可靠保存的合成编辑。');
   await expect(helper.getByRole('group', { name: '说法1消息组', exact: true }).getByText('修改版本 1', { exact: true })).toBeVisible();
   await expect(helper.getByRole('textbox', { name: '有什么想说的', exact: true })).toHaveValue('');
+  await openWorkspaceSettings(helper);
   await expect(helper.getByRole('textbox', { name: '本次要求', exact: true })).toHaveValue('');
   await expect(helper.getByRole('combobox', { name: '本次语气', exact: true })).toHaveValue('original');
   await expect(candidateEditor(helper)).not.toHaveValue('未保存的合成编辑。');
@@ -176,6 +177,9 @@ async function runningRequest(pages: RewritePages) {
   });
   try {
     await expect(helper.getByRole('status').filter({ hasText: '正在等待本次生成结果' })).toBeVisible();
+    // waiting/running也包含prepare；先证明确切原请求已进入模型，再模拟断线恢复。
+    await expect.poll(async () => (await rewriteBackend.command('observations')).model_entered).toBe(true);
+    expect(replyTransport.requests).toHaveLength(1);
     await readSavedDiscussion(helper);
     await expandSavedDiscussion(helper);
     await expect(helper.getByText('本轮生成尚未完成。', { exact: true })).toBeVisible();

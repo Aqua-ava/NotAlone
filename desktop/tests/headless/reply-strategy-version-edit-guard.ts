@@ -66,6 +66,7 @@ export async function replyStrategyVersionEditGuard(browser: Browser, origin: st
     } catch (error) {
       if (pendingCleanup.size) throw error;
       failures.push(error);
+      process.stdout.write(`page_test_version_edit_failure: ${String(error instanceof Error ? error.stack ?? error.message : error).slice(0, 3500)}\n`);
       process.stdout.write(`page_test_scenario_failed: ${name}\n`);
     }
   }

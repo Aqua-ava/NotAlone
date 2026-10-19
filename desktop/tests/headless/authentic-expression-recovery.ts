@@ -1,4 +1,5 @@
-import { openAssistantHistory } from '../assistant-history-actions';
+import { fillWorkspaceThought, setWorkspaceContext } from '../workspace-actions';
+import { openAssistantHistory, expandSavedDiscussion } from '../assistant-history-actions';
 import { selectMemoryCategory } from '../memory-page-actions';
 import { randomUUID } from 'node:crypto';
 import { expect, type Browser, type Page } from '@playwright/test';
@@ -12,7 +13,7 @@ const independentReply = '独立保存的合成候选。';
 const currentIntent = '本次明确拒绝聚会，不增加安排。';
 const referenceReply = '这次我不参加。';
 const manualSample = '合成旧说法：我过去总答应，明晚七点陪你去合成海边。';
-const sourceDirection = '只回应选定的合成消息，不增加安排。';
+const sourceDirection = '只结合最近的合成聊天回应，不增加安排。';
 const sourceReply = '来自合成原始来源的样本候选。';
 
 type Generation = { request: Record<string, unknown>; result: Record<string, unknown> };
@@ -31,12 +32,17 @@ async function chooseContact(manager: Page, helper: Page, contactId: string) {
 
 async function generate(pages: RewritePages, text: string) {
   await pages.rewriteBackend.plan({ count: 1, text, basis: '仅核验合成材料的数据与控制契约。' });
-  await pages.helper.getByRole('button', { name: '生成候选', exact: true }).click();
+  await pages.helper.getByRole('button', { name: '帮我表达', exact: true }).click();
   await expect(pages.helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveValue(text);
-  return latestGeneration(pages);
+  const generation = latestGeneration(pages);
+  expect(generation.request).toMatchObject({ content: { type: 'rewrite_draft', input_kind: 'workspace', workspace_action: 'express' } });
+  return generation;
 }
 
 async function expectSavedAfterDeletion(helper: Page, redactedCount: number) {
+  await openAssistantHistory(helper);
+  await helper.getByRole('button', { name: '查看已保存讨论', exact: true }).click();
+  await expandSavedDiscussion(helper);
   const discussion = helper.getByRole('region', { name: '已保存的讨论', exact: true });
   await expect(discussion.getByText(independentInput, { exact: true })).toBeVisible();
   await expect(discussion.getByText(independentReply, { exact: true })).toBeVisible();
@@ -49,7 +55,8 @@ async function expectSavedAfterDeletion(helper: Page, redactedCount: number) {
   expect(state.savedSession?.phase).toBe('ready');
   const completed = state.savedSession!.turns.filter((turn) => turn.state === 'completed');
   expect(completed).toHaveLength(1);
-  expect(completed[0].input?.content).toMatchObject({ draft_text: independentInput });
+  expect(completed[0].input?.content).toMatchObject({ draft_text: independentInput, input_kind: 'workspace',
+    workspace_action: 'express', include_relationship_context: false });
   expect(completed[0].reply?.candidates[0].text).toBe(independentReply);
   const redacted = state.savedSession!.turns.filter((turn) => turn.state === 'redacted');
   expect(redacted).toHaveLength(redactedCount);
@@ -62,26 +69,28 @@ async function deletionRecovery(pages: RewritePages, host: PageHost, userData: s
   const { manager, helper, rewriteBackend, replyTransport } = pages;
   const contactId = rewriteBackend.data.contact_ids[0];
   await chooseContact(manager, helper, contactId);
-  await helper.getByRole('textbox', { name: '草稿', exact: true }).fill(independentInput);
+  await setWorkspaceContext(helper, false);
+  await fillWorkspaceThought(helper, independentInput);
   const independent = await generate(pages, independentReply);
+  expect(independent.request).toMatchObject({ content: { include_relationship_context: false } });
   await helper.getByText('我的表达样本', { exact: true }).click();
   if (removal === 'sample') {
     await helper.getByRole('textbox', { name: '手工表达样本', exact: true }).fill(manualSample);
     await helper.getByRole('button', { name: '主动保存手工文字', exact: true }).click();
   } else {
-    await helper.getByRole('button', { name: '回应消息', exact: true }).click();
-    await helper.getByRole('radio', { name: /甲的私密合成历史/ }).click();
-    await helper.getByRole('textbox', { name: '表达方向', exact: true }).fill(sourceDirection);
+    await setWorkspaceContext(helper, true);
+    await fillWorkspaceThought(helper, sourceDirection);
     await generate(pages, sourceReply);
-    await helper.getByRole('button', { name: '主动保存说法1为样本', exact: true }).click();
+    await helper.getByRole('group', { name: '说法1消息组', exact: true }).getByRole('button', { name: '主动保存说法1为样本', exact: true }).click();
   }
   await expect.poll(async () => (await helper.evaluate(async () => window.notalone.styleSamples.getState())).samples.length).toBe(1);
   const sample = (await helper.evaluate(async () => window.notalone.styleSamples.getState())).samples[0];
   expect(sample.originKind).toBe(removal === 'sample' ? 'manual' : 'candidate');
   if (removal === 'source') expect(sample.sourceIds.length).toBeGreaterThan(0);
-  await helper.getByRole('button', { name: '主动聊聊', exact: true }).click();
-  await helper.getByRole('textbox', { name: '主动目的', exact: true }).fill(currentIntent);
+  await setWorkspaceContext(helper, true);
+  await fillWorkspaceThought(helper, currentIntent);
   const reference = await generate(pages, referenceReply);
+  expect(reference.request).toMatchObject({ content: { include_relationship_context: true, draft_text: currentIntent } });
   const payloads = (await rewriteBackend.command('observations')).payloads as Record<string, unknown>[];
   const payload = payloads.at(-1)!;
   expect(payload.fidelity_contract).toMatchObject({ current_intent: { text: currentIntent } });
@@ -161,12 +170,11 @@ export async function authenticExpressionSessionRetention(browser: Browser, orig
       const { manager, helper, rewriteBackend } = pages;
       const contactId = rewriteBackend.data.contact_ids[0];
       await chooseContact(manager, helper, contactId);
-      await helper.getByRole('button', { name: '回应消息', exact: true }).click();
-      await helper.getByRole('radio', { name: /甲的私密合成历史/ }).click();
-      await helper.getByRole('textbox', { name: '表达方向', exact: true }).fill(sourceDirection);
+      await setWorkspaceContext(helper, true);
+      await fillWorkspaceThought(helper, sourceDirection);
       const first = await generate(pages, sourceReply);
       await helper.getByText('我的表达样本', { exact: true }).click();
-      await helper.getByRole('button', { name: '主动保存说法1为样本', exact: true }).click();
+      await helper.getByRole('group', { name: '说法1消息组', exact: true }).getByRole('button', { name: '主动保存说法1为样本', exact: true }).click();
       const list = helper.getByRole('list', { name: '表达样本目录', exact: true });
       await expect(list.getByText(sourceReply, { exact: true })).toBeVisible();
       const samplePath = `/api/contacts/${contactId}/style-samples`;
@@ -190,8 +198,8 @@ export async function authenticExpressionSessionRetention(browser: Browser, orig
       await helper.getByRole('button', { name: '新开助手会话', exact: true }).click();
       await expect(helper.getByText('当前会话还没有讨论。', { exact: true })).toBeVisible();
       expect((await rewriteBackend.command('observations')).payloads).toHaveLength(1);
-      await helper.getByRole('button', { name: '主动聊聊', exact: true }).click();
-      await helper.getByRole('textbox', { name: '主动目的', exact: true }).fill(currentIntent);
+      await setWorkspaceContext(helper, true);
+      await fillWorkspaceThought(helper, currentIntent);
       const second = await generate(pages, referenceReply);
       expect(second.result.session_id).not.toBe(first.result.session_id);
       expect((second.result.context_receipt as { style_sample_ids: string[] }).style_sample_ids).toEqual([sample.sample_id]);
