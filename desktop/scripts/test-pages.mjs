@@ -58,6 +58,13 @@ function pageFixtureEnvironment(options, environment) {
     }
     result[key] = directory;
   }
+  if (options.names?.includes('reply-strategy-group-boundaries')) {
+    const key = 'NOTALONE_GROUP_BOUNDARIES_SCENE', scene = environment[key];
+    if (scene !== undefined) {
+      if (!['suggest', 'express'].includes(scene)) throw new Error('page_test_environment: 长历史场景只允许 suggest 或 express');
+      result[key] = scene;
+    }
+  }
   if (options.names?.includes('layered-reply')) {
     for (const key of ['NOTALONE_LAYERED_OWNER_CONTEXT', 'NOTALONE_LAYERED_SCENARIO_READS']) {
       if (environment[key] === '1') result[key] = '1';

@@ -72,3 +72,14 @@ test('双范围页面开关只透传，不把标志值当作证据目录或启�
   await assert.rejects(run(options), /SYNTHETIC_LEASE_STOP/);
   assert.deepEqual(paths, ['/synthetic/evidence']);
 });
+
+test('候选长历史可按原场景分别运行，环境选择仅传入对应页面并拒绝拼写错误', async () => {
+  const source = await readFile('scripts/test-pages.mjs', 'utf8');
+  const helper = source.slice(source.indexOf('function pageFixtureEnvironment('), source.indexOf('async function run('));
+  const { pageFixtureEnvironment } = runInNewContext(`${helper}; ({ pageFixtureEnvironment });`, { path, desktop: process.cwd() });
+  const key = 'NOTALONE_GROUP_BOUNDARIES_SCENE', options = { names: ['reply-strategy-group-boundaries'] };
+  for (const value of ['suggest', 'express']) assert.equal(pageFixtureEnvironment(options, { [key]: value })[key], value);
+  assert.equal(pageFixtureEnvironment({ names: ['reply-evidence'] }, { [key]: 'suggest' })[key], undefined);
+  assert.equal(pageFixtureEnvironment(options, {})[key], undefined);
+  for (const value of ['', 'both', 'suggest,express']) assert.throws(() => pageFixtureEnvironment(options, { [key]: value }), /page_test_environment/);
+});
