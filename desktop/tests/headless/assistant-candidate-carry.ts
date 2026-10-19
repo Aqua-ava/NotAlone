@@ -8,6 +8,11 @@ import type { RewritePages } from '../rewrite-page-scenarios';
 import { RewriteHttpProxy } from '../rewrite-http-proxy';
 import { PageHost } from './page-host';
 import { withRewritePages } from './rewrite-acceptance';
+import type { PageTransportControl } from './renderer';
+
+type CarryEditObservation = { events: string[]; commands: Array<{ channel: string; outcome: string; reason?: string }> };
+type CarryEditWindow = Window & { pageTransportControl?: PageTransportControl; carryEditObservation?: CarryEditObservation;
+  stopCarryEditObservation?: () => void };
 
 async function chooseContact(pages: RewritePages) {
   await pages.manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
@@ -82,6 +87,38 @@ async function saveGroupMessage(pages: RewritePages, messageNumber: 1 | 2, text:
   const group = helper.getByRole('group', { name: '说法2消息组', exact: true });
   const editor = group.getByRole('textbox', { name: `说法2第${messageNumber}条编辑文本`, exact: true });
   let stage = 'editing';
+  await helper.evaluate((label) => {
+    const surface = window as CarryEditWindow;
+    const previous = surface.pageTransportControl;
+    const observation: CarryEditObservation = { events: [], commands: [] };
+    surface.carryEditObservation = observation;
+    const observeEvent = (event: Event) => {
+      if (event.target instanceof HTMLTextAreaElement && event.target.getAttribute('aria-label') === label) {
+        observation.events.push(event.type);
+      }
+    };
+    for (const type of ['focusin', 'input', 'change', 'focusout']) document.addEventListener(type, observeEvent, true);
+    surface.pageTransportControl = {
+      receiveEvent: (channel, state) => previous?.receiveEvent(channel, state) ?? false,
+      observeInvoke(channel, args, pending) {
+        previous?.observeInvoke(channel, args, pending);
+        if (!['reply:update-candidate-version-draft', 'reply:save-candidate-version'].includes(channel)) return;
+        const command: CarryEditObservation['commands'][number] = { channel, outcome: 'pending' };
+        observation.commands.push(command);
+        void pending.then(() => { command.outcome = 'fulfilled'; }, error => {
+          command.outcome = 'rejected';
+          // 只分类产品守卫，不记录参数、正文或任意异常文本。
+          command.reason = ['联系人已变化', '内容恢复完成', '来源核验完成', '明确选择本次助手会话',
+            '编辑版本尚未核对', '候选版本操作不可用', '消息身份已变化'].find(text => String(error).includes(text)) ?? 'other';
+        });
+      },
+    };
+    surface.stopCarryEditObservation = () => {
+      for (const type of ['focusin', 'input', 'change', 'focusout']) document.removeEventListener(type, observeEvent, true);
+      surface.pageTransportControl = previous;
+      delete surface.stopCarryEditObservation;
+    };
+  }, `说法2第${messageNumber}条编辑文本`);
   try {
     await editor.fill(text);
     await expect(editor).toHaveValue(text);
@@ -96,10 +133,16 @@ async function saveGroupMessage(pages: RewritePages, messageNumber: 1 | 2, text:
     const draft = state.candidateDrafts?.find(item => item.candidateId === view?.candidateId);
     const diagnostic: Record<string, unknown> = { stage, messageNumber, expectedVersion: versionNumber,
       phase: state.phase, savedPhase: state.savedSession?.phase, versionsPhase: state.candidateVersions?.phase,
+      catalogPhase: state.sessionCatalog?.phase, selectionPending: state.sessionCatalog?.selectionPending,
+      sourceAvailability: state.sourceAvailability,
       viewPhase: view?.phase, displayedVersionNumber: view?.history?.versions.find(item => item.versionId === view.displayVersionId)?.versionNumber,
       versionNumbers: view?.history?.versions.map(item => item.versionNumber),
       retainedEditMatches: draft?.messages[messageNumber - 1]?.text === text,
-      renderedEditMatches: await editor.inputValue().then(value => value === text).catch(() => null) };
+      renderedEditMatches: await editor.inputValue().then(value => value === text).catch(() => null),
+      editorFocused: await editor.evaluate(element => element === document.activeElement).catch(() => null),
+      editorEnabled: await editor.isEnabled().catch(() => null),
+      dirtyNoticeVisible: await group.getByText('结束编辑后自动保存，保存完成即可复制。', { exact: true }).isVisible(),
+      observation: await helper.evaluate(() => (window as CarryEditWindow).carryEditObservation) };
     if (view?.candidateId && state.savedSession?.sessionId) {
       const response = await rewriteBackend.request(`/api/contacts/${state.contactId}/assistant-sessions/${state.savedSession.sessionId}/candidates/${view.candidateId}/versions`);
       diagnostic.savedVersions = { status: response.status, versions: Array.isArray(response.data.versions)
@@ -109,7 +152,7 @@ async function saveGroupMessage(pages: RewritePages, messageNumber: 1 | 2, text:
     // 只记录保存阶段、版本序号和相等性，不回显合成正文或身份。
     process.stderr.write(`page_test_carry_edit: ${JSON.stringify(diagnostic)}\n`);
     throw error;
-  }
+  } finally { await helper.evaluate(() => (window as CarryEditWindow).stopCarryEditObservation?.()); }
 }
 
 async function selectedVersion(pages: RewritePages): Promise<string> {

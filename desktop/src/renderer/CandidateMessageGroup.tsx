@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ClipboardEvent, type ReactNode } from
 
 interface MessageView { messageId: string; text: string; }
 
-export function CandidateMessageGroup({ identity, number, messages, controls, disabled, dirty, restored,
+export function CandidateMessageGroup({ identity, number, messages, controls, disabled, dirty, restored, retrySave = false,
   edit, save, copy, noteTextCopy, validatePaste }: {
   identity: string;
   number: number;
@@ -11,6 +11,7 @@ export function CandidateMessageGroup({ identity, number, messages, controls, di
   disabled: boolean;
   dirty: boolean;
   restored: boolean;
+  retrySave?: boolean;
   edit: (messageId: string, text: string) => void;
   save: () => Promise<void>;
   copy: (messageId: string) => Promise<void>;
@@ -94,12 +95,12 @@ export function CandidateMessageGroup({ identity, number, messages, controls, di
       /></label>
       <button disabled={copying || dirty || !message.text.trim()} onClick={() => void copyMessage(message.messageId, index)}>复制第{index + 1}条</button>
     </div>)}
-    {saveFailed && dirty && <button onClick={() => void saveGroup()}>重试保存修改</button>}
+    {(saveFailed || retrySave) && dirty && <button onClick={() => void saveGroup()}>重试保存修改</button>}
     {saving && <p role="status">正在自动保存修改…</p>}
     {!saving && dirty && <p>结束编辑后自动保存，保存完成即可复制。</p>}
     {copying && <p role="status">正在复制…</p>}
     {pasting && <p role="status">正在核对粘贴来源…</p>}
     {notice && <p role="status">{notice}</p>}
-    {error && <p role="alert">{error}</p>}
+    {(error || retrySave && dirty) && <p role="alert">{error || '修改尚未保存，编辑文字仍保留，请重试。'}</p>}
   </fieldset>;
 }

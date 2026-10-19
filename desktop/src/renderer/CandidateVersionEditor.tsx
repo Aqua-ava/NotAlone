@@ -26,6 +26,7 @@ export function CandidateVersionEditor({ replies, view, candidateId, replyReques
   const [error, setError] = useState('');
   const [sampleSaving, setSampleSaving] = useState(false);
   const [carrying, setCarrying] = useState(false);
+  const [failedSaveIdentity, setFailedSaveIdentity] = useState<string | null>(null);
   const sampleActive = useRef(true);
   useEffect(() => { sampleActive.current = true; return () => { sampleActive.current = false; }; }, []);
   const editRevision = useRef(0);
@@ -35,6 +36,7 @@ export function CandidateVersionEditor({ replies, view, candidateId, replyReques
     if (draft?.versionId !== version.versionId) {
       editRevision.current = 0;
       saveKey.current = null;
+      setFailedSaveIdentity(null);
     }
     setDraft((previous) => previous?.versionId === version.versionId && editRevision.current > 0 ? previous
       : retained ?? { versionId: version.versionId, messages: version.messages.map((message) => ({ ...message })), requirements: version.requirements ?? '' });
@@ -44,6 +46,7 @@ export function CandidateVersionEditor({ replies, view, candidateId, replyReques
   useEffect(() => { onDirtyChange?.(candidateId, Boolean(draft && dirty)); }, [candidateId, draft?.versionId, dirty, onDirtyChange]);
   useEffect(() => () => { onDirtyChange?.(candidateId, false); }, [candidateId, onDirtyChange]);
   const disabled = state.phase === 'waiting' || state.sourceAvailability !== undefined
+    || state.sessionCatalog?.phase === 'loading' || state.sessionCatalog?.selectionPending === true
     || state.sessionDeletion === 'deleting' || state.sessionDeletion === 'failed'
     || state.candidateVersions?.phase !== 'ready' || view?.phase !== 'ready' || state.savedSession?.phase !== 'ready';
   const identity = `${state.contactId}:${state.scopeRevision}:${history?.sessionId}:${candidateId}:${version?.versionId}`;
@@ -51,6 +54,9 @@ export function CandidateVersionEditor({ replies, view, candidateId, replyReques
   sampleIdentity.current = identity;
   const scope = { contactId: state.contactId!, scopeRevision: state.scopeRevision,
     sessionId: state.savedSession?.sessionId ?? '', candidateId };
+  const saveScope = `${scope.contactId}:${scope.scopeRevision}:${scope.sessionId}:${candidateId}`;
+  const latestSaveScope = useRef(saveScope);
+  latestSaveScope.current = saveScope;
   function retainDraft(messages: AssistantCandidateMessage[], requirements: string) {
     if (!version || draft?.versionId !== version.versionId) return;
     const operation = identity, revision = editRevision.current;
@@ -73,8 +79,18 @@ export function CandidateVersionEditor({ replies, view, candidateId, replyReques
     if (!saveKey.current || saveKey.current.revision !== editRevision.current) {
       saveKey.current = { revision: editRevision.current, key: crypto.randomUUID() };
     }
-    await replies.saveCandidateVersion({ ...scope, editKey: saveKey.current.key,
-      parentVersionId: version.versionId, messages, requirements: requirements.trim() || null });
+    const operation = saveScope, failedIdentity = `${saveScope}:${version.versionId}`;
+    setFailedSaveIdentity(null); setError('');
+    try {
+      await replies.saveCandidateVersion({ ...scope, editKey: saveKey.current.key,
+        parentVersionId: version.versionId, messages, requirements: requirements.trim() || null });
+    } catch (error) {
+      // 历史加载会卸载消息组；重试身份保留在版本编辑器，且不跨联系人或会话。
+      if (sampleActive.current && latestSaveScope.current === operation) {
+        setFailedSaveIdentity(failedIdentity);
+      }
+      throw error;
+    }
   }
   async function carry() {
     if (disabled || dirty || carrying || !version) return;
@@ -116,6 +132,7 @@ export function CandidateVersionEditor({ replies, view, candidateId, replyReques
     <ReplyBasisChangeNotice changes={history?.basisChanges} />
     <CandidateMessageGroup identity={identity} number={number} messages={messages}
       restored={restored} disabled={disabled || sampleSaving || carrying} dirty={dirty}
+      retrySave={failedSaveIdentity === `${saveScope}:${version.versionId}`}
       edit={editMessage}
       save={save} noteTextCopy={noteCopy}
       validatePaste={(text) => window.notalone.styleSamples.validateCandidatePaste({ ...scope, replyRequestId,
