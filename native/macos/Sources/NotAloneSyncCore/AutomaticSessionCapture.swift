@@ -180,17 +180,28 @@ struct HeaderOcrResult {
 
     init(fragments: [(RecognizedLine, CGRect)], textFallback: HeaderTextFallback? = nil) {
         self.textFallback = textFallback
-        text = fragments.map { $0.0.text }.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+        let boxes = fragments.map { $0.1 }
+        let bounded = !boxes.isEmpty && boxes.allSatisfy { box in
+            box.minX.isFinite && box.maxX.isFinite && box.minY.isFinite && box.maxY.isFinite
+                && box.width > 0 && box.height > 0 && box.minX > 0.01 && box.maxX < 0.99
+                && box.minY > 0.01 && box.maxY < 0.99
+        }
+        let horizontal = bounded ? fragments.sorted { $0.1.minX < $1.1.minX } : fragments
+        let commonBottom = boxes.map { $0.minY }.max() ?? 0
+        let commonTop = boxes.map { $0.maxY }.min() ?? 0
+        let tallest = boxes.map { $0.height }.max() ?? 0
+        // 大小写字形的中心高度可不同；只有全体框共享足够的纵向区域才按标题单行拼接。
+        let singleLine = bounded && commonTop - commonBottom >= tallest * 0.5
+            && zip(horizontal, horizontal.dropFirst()).allSatisfy { left, right in
+                left.1.maxX <= right.1.minX + 0.000001
+            }
+        text = (singleLine ? horizontal : fragments).map { $0.0.text }.joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         confidence = fragments.allSatisfy({ $0.0.confidence.isFinite && (0...1).contains($0.0.confidence) })
             ? Double(fragments.map { $0.0.confidence }.min() ?? 0) : .nan
         // 原始文字照常展示；边界截断或省略名称只能作为未确认线索。
-        isComplete = !text.isEmpty && text.count <= 256 && !text.contains("\n") && !text.contains("\r")
-            && !text.contains("…") && !text.contains("...") && fragments.allSatisfy {
-                let box = $0.1
-                return box.minX.isFinite && box.maxX.isFinite && box.minY.isFinite && box.maxY.isFinite
-                    && box.width > 0 && box.height > 0 && box.minX > 0.01 && box.maxX < 0.99
-                    && box.minY > 0.01 && box.maxY < 0.99
-            }
+        isComplete = singleLine && !text.isEmpty && text.count <= 256 && !text.contains("\n") && !text.contains("\r")
+            && !text.contains("…") && !text.contains("...")
     }
 }
 
