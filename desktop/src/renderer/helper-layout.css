@@ -132,6 +132,42 @@
 .record-metadata, .evidence-technical { margin: 12px 0; padding: 10px 12px; background: #f5f8fa; border: 1px solid #e1e8ec; border-radius: 7px; font-size: 12px; overflow-wrap: anywhere; }
 .ime-pane .record-metadata p, .ime-pane .record-metadata small { color: #73838e; line-height: 1.7; }
 .ime-pane .candidate-reason { margin: 12px 0; padding-top: 10px; border-top: 1px solid #e0e8ed; }
+/* 候选共用外框：编号、可编辑正文与复制图标排成一条，长正文自然换行。 */
+.ime-pane .compact-replies .reply-results-heading { margin-bottom: 10px; }
+.ime-pane .compact-replies .reply-candidate-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0; }
+.ime-pane .compact-replies .reply-candidate { display: grid; grid-template-columns: 64px minmax(0, 1fr); align-items: start; gap: 12px; padding: 13px 0; border: 0; border-radius: 0; background: transparent; }
+.ime-pane .compact-replies .reply-candidate + .reply-candidate { border-top: 1px solid #e5ecef; }
+.ime-pane .compact-replies .candidate-strip-label { display: flex; align-items: center; gap: 8px; margin: 8px 0 0; color: #81939f; font-size: 12px; font-weight: 400; white-space: nowrap; }
+.candidate-strip-label span { font-variant-numeric: tabular-nums; }
+.candidate-strip-label small { font-size: inherit; }
+.candidate-strip-content { min-width: 0; }
+.ime-pane .compact-replies .candidate-message-group { gap: 6px; }
+.compact-replies .candidate-message, .compact-replies .legacy-candidate-editor { display: grid; grid-template-columns: minmax(0, 1fr) 28px; align-items: start; column-gap: 12px; }
+.compact-replies .candidate-message > label { min-width: 0; }
+.ime-pane .compact-replies textarea { field-sizing: content; min-height: 36px; max-height: 280px; resize: none; overflow-y: auto; padding: 4px 5px; border: 1px solid transparent; border-radius: 5px; background: transparent; font-size: 15px; line-height: 1.7; }
+.ime-pane .compact-replies textarea:hover:not(:disabled) { background: #f7fafb; }
+.ime-pane .compact-replies textarea:focus { outline: none; border-color: #aac7da; background: #f7fafb; }
+.ime-pane .compact-replies .candidate-copy-icon { display: inline-grid; place-items: center; width: 28px; height: 28px; padding: 5px; margin: 4px 0 0; border: 1px solid #d5e1e8; border-radius: 5px; background: #fff; color: #446f8a; }
+.compact-replies .candidate-copy-icon:disabled { opacity: .45; }
+.compact-replies .legacy-candidate-editor > textarea { grid-column: 1; grid-row: 1; }
+.compact-replies .legacy-candidate-editor > .candidate-copy-icon { grid-column: 2; grid-row: 1; }
+.compact-replies .legacy-candidate-editor > :not(textarea):not(.candidate-copy-icon) { grid-column: 1 / -1; }
+.compact-replies:not(.show-candidate-details) .candidate-more-actions, .compact-replies:not(.show-candidate-details) .copy-hide { display: none; }
+.candidate-copy-notice { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.reply-generation-details { margin-top: 6px; padding-top: 12px; border-top: 1px solid #e5ecef; }
+.reply-generation-details > summary { display: flex; justify-content: space-between; gap: 12px; list-style: none; }
+.reply-generation-details > summary::after { content: '⌄'; }
+.reply-generation-details[open] > summary::after { content: '⌃'; }
+.reply-generation-details > summary span:first-child { margin-right: auto; }
+.reply-generation-details > summary span:last-child { color: #8b784f; }
+.candidate-detail { padding: 12px 0; border-top: 1px solid #e5ecef; }
+.candidate-detail h3 { margin: 0; font-size: 13px; }
+.reply-budget-details { font-size: 11px; margin: 4px 0; }
+@media (max-width: 480px) {
+  .ime-pane .compact-replies .reply-candidate { grid-template-columns: 50px minmax(0, 1fr); gap: 6px; }
+  .ime-pane .compact-replies .candidate-strip-label { gap: 4px; font-size: 11px; }
+  .compact-replies .candidate-message, .compact-replies .legacy-candidate-editor { column-gap: 5px; }
+}
 .ime-pane .reply-evidence > section { margin-top: 12px; padding: 14px; border: 1px solid #dce6ec; border-radius: 8px; background: #fff; }
 .reply-evidence h4 { margin: 12px 0 6px; font-size: 14px; }
 .ime-pane .reply-evidence > section > p, .evidence-help { font-size: 12px; color: #72838e; }

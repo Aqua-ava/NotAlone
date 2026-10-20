@@ -72,7 +72,10 @@ export function AssistantSessionBudgetNotice({ replies }: { replies: ReplySessio
   const notice = state.inputBudgetNotice;
   const budget = notice?.contactId === state.contactId && notice.scopeRevision === state.scopeRevision
     && notice.sessionId === state.savedSession?.sessionId && !state.sourceAvailability ? notice.decision : undefined;
-  return budget ? <AssistantInputBudgetNotice budget={budget} /> : null;
+  if (!budget || budget.state === 'ready' && budget.measurementKind !== 'approximate') return null;
+  return budget.state === 'ready'
+    ? <details className="reply-budget-details"><summary>输入长度说明</summary><AssistantInputBudgetNotice budget={budget} /></details>
+    : <AssistantInputBudgetNotice budget={budget} />;
 }
 
 export function AssistantSessionPanel({ replies }: { replies: ReplySessionView }) {

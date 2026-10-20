@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type ClipboardEvent, type ReactNode } from 'react';
 
+import { Icon } from './icons';
+
 interface MessageView { messageId: string; text: string; }
 
 export function CandidateMessageGroup({ identity, number, messages, controls, disabled, dirty, restored, retrySave = false,
@@ -22,6 +24,12 @@ export function CandidateMessageGroup({ identity, number, messages, controls, di
   const latest = useRef(signature);
   latest.current = signature;
   const active = useRef(true);
+  const [copiedMessage, setCopiedMessage] = useState<string | null>(null);
+  useEffect(() => {
+    if (!copiedMessage) return;
+    const timer = setTimeout(() => setCopiedMessage(null), 1400);
+    return () => clearTimeout(timer);
+  }, [copiedMessage]);
   const [copying, setCopying] = useState(false);
   const [saving, setSaving] = useState(false);
   const pendingSave = useRef(false);
@@ -32,7 +40,7 @@ export function CandidateMessageGroup({ identity, number, messages, controls, di
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
-  useEffect(() => { setNotice(''); setError(''); }, [signature]);
+  useEffect(() => { setNotice(''); setError(''); setCopiedMessage(null); }, [signature]);
   useEffect(() => {
     if (!pasting && saveAfterPaste.current !== null) {
       const pendingIdentity = saveAfterPaste.current; saveAfterPaste.current = null;
@@ -45,7 +53,7 @@ export function CandidateMessageGroup({ identity, number, messages, controls, di
     setCopying(true); setNotice(''); setError('');
     try {
       await copy(messageId);
-      if (active.current && latest.current === operation) setNotice(`已复制第${index + 1}条，请自行粘贴并发送。`);
+      if (active.current && latest.current === operation) { setCopiedMessage(messageId); setNotice(`已复制第${index + 1}条，请自行粘贴并发送。`); }
     } catch {
       if (active.current && latest.current === operation) setError('复制未确认，编辑文字仍保留，请重试。');
     } finally { if (active.current) setCopying(false); }
@@ -83,7 +91,7 @@ export function CandidateMessageGroup({ identity, number, messages, controls, di
   return <fieldset className="candidate-message-group" aria-label={`说法${number}消息组`} disabled={disabled || saving || pasting || copying}>
     {messages.length > 1 && <legend>共{messages.length}条，按顺序发送</legend>}
     {messages.map((message, index) => <div className="candidate-message" key={message.messageId}>
-      <label>{messages.length > 1 && <span>第{index + 1}条</span>}<textarea
+      <label>{messages.length > 1 && <span>第{index + 1}条</span>}<textarea rows={1}
         aria-label={messages.length === 1 && !restored ? `候选${number}编辑文本` : `说法${number}第${index + 1}条编辑文本`}
         value={message.text} maxLength={messages.length > 1 ? 8192 : 65_536}
         onChange={(event) => edit(message.messageId, event.target.value)}
@@ -92,7 +100,7 @@ export function CandidateMessageGroup({ identity, number, messages, controls, di
         onCopy={(event) => { const input = event.currentTarget; noteTextCopy(input.value.slice(input.selectionStart, input.selectionEnd)); }}
         onCut={(event) => { const input = event.currentTarget; noteTextCopy(input.value.slice(input.selectionStart, input.selectionEnd)); }}
       /></label>
-      <button aria-label={`复制第${index + 1}条`} disabled={copying || dirty || !message.text.trim()} onClick={() => void copyMessage(message.messageId, index)}>{messages.length > 1 ? `复制第${index + 1}条` : '复制'}</button>
+      <button className="candidate-copy-icon" title={copiedMessage === message.messageId ? '已复制' : `复制第${index + 1}条`} aria-label={`复制第${index + 1}条`} disabled={copying || dirty || !message.text.trim()} onClick={() => void copyMessage(message.messageId, index)}><Icon name={copiedMessage === message.messageId ? 'check' : 'copy'} size={15} /></button>
     </div>)}
     {controls}
     {(saveFailed || retrySave) && dirty && <button onClick={() => void saveGroup()}>重试保存修改</button>}
@@ -100,7 +108,7 @@ export function CandidateMessageGroup({ identity, number, messages, controls, di
     {!saving && dirty && <p>结束编辑后自动保存，保存完成即可复制。</p>}
     {copying && <p role="status">正在复制…</p>}
     {pasting && <p role="status">正在核对粘贴来源…</p>}
-    {notice && <p role="status">{notice}</p>}
+    {notice && <p className="candidate-copy-notice" role="status">{notice}</p>}
     {(error || retrySave && dirty) && <p role="alert">{error || '修改尚未保存，编辑文字仍保留，请重试。'}</p>}
   </fieldset>;
 }

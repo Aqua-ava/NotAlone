@@ -223,7 +223,7 @@ function CandidateEditor({ text, candidateId, number, edit, copy, validatePaste,
       if (active.current && latest.current === operation) setError('这段粘贴文字的来源尚未确认，原编辑文字仍保留。请在原来源入口保存。');
     } finally { pendingPaste.current = false; if (active.current) setPasting(false); }
   }
-  return <><textarea aria-label={`候选${number}编辑文本`} maxLength={65_536} value={value} disabled={disabled || pasting}
+  return <><textarea rows={1} aria-label={`候选${number}编辑文本`} maxLength={65_536} value={value} disabled={disabled || pasting}
     onPaste={(event) => void paste(event)}
     onCopy={(event) => { const input = event.currentTarget; copy(input.value.slice(input.selectionStart, input.selectionEnd)); }}
     onCut={(event) => { const input = event.currentTarget; copy(input.value.slice(input.selectionStart, input.selectionEnd)); }}
@@ -235,6 +235,7 @@ function CandidateEditor({ text, candidateId, number, edit, copy, validatePaste,
 
 export function ReplyCandidates({ replies, currentDraft }: { replies: ReplySessionView; currentDraft?: string }) {
   const { state } = replies;
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const evidence = useReplyEvidence();
   const usedSkill = state.result?.usedSkill;
   const usedVersion = usedSkill && (usedSkill.versionNumber ?? state.skillChoices.find((item) => item.versionId === usedSkill.versionId)?.versionNumber);
@@ -288,9 +289,9 @@ export function ReplyCandidates({ replies, currentDraft }: { replies: ReplySessi
     void window.notalone.styleSamples.noteCandidateCopy({ contactId: state.contactId, scopeRevision: state.scopeRevision,
       replyRequestId, candidateId, text }).catch(() => {});
   }
-  return <><section ref={resultRegion} className="reply-candidates" aria-label="候选回复">
+  return <><section ref={resultRegion} className={`reply-candidates compact-replies${detailsOpen ? ' show-candidate-details' : ''}`} aria-label="候选回复">
     <header className="reply-results-heading"><h2>候选回复</h2>
-      {candidates.length > 0 && <span>共 {candidates.length} 种说法，可选择并修改</span>}</header>
+      {candidates.length > 0 && <span>{candidates.length} 种说法 · 可直接编辑</span>}</header>
     {candidates.length > 0 && (!state.result || state.exploration.result || state.exploration.phase === 'waiting' || state.exploration.phase === 'failed'
       || state.phase === 'waiting' || state.phase === 'failed' || hasChangedReplyInput(state, currentDraft))
       && <p className="reply-generation-guidance" role="status">上一组候选，尚未按当前输入重新生成。</p>}
@@ -323,6 +324,35 @@ export function ReplyCandidates({ replies, currentDraft }: { replies: ReplySessi
     {state.phase === 'failed' && (state.errorCode === 'unavailable' || state.errorCode === 'input_budget_unavailable') && <button onClick={() => void window.notalone.openManager()}>打开本人和模型设置</button>}
     {state.phase === 'failed' && state.mode === 'reply_to_message' && <p className="reply-note">可以刷新待回复消息重新选择，或切换到草稿改写。</p>}
     {state.result ? <>
+      {state.result.input.mode === 'rewrite_draft' && state.result.input.inputKind !== 'workspace' && !state.result.continuation && <div className="reply-candidate-grid">
+        {state.result.candidates.map(({ original, editedText }, index) => <article className="reply-candidate" key={original.candidateId}>
+          <h3 className="candidate-strip-label" aria-label={`说法 ${index + 1}`}><span>{String(index + 1).padStart(2, '0')}</span><small>说法</small></h3>
+          <div className="candidate-strip-content legacy-candidate-editor"><CandidateEditor text={editedText} candidateId={original.candidateId} number={index + 1} edit={replies.editCandidate}
+            disabled={state.phase === 'waiting' || state.sourceAvailability !== undefined}
+            validatePaste={(text) => window.notalone.styleSamples.validateCandidatePaste({ contactId: state.contactId!,
+              scopeRevision: state.scopeRevision, replyRequestId: state.result!.replyRequestId, candidateId: original.candidateId, text })}
+            copy={(text) => noteCopy(original.candidateId, text)} />
+          <CandidateCopyControls state={state} candidateId={original.candidateId} /></div>
+        </article>)}
+      </div>}
+    </> : state.phase !== 'waiting' && candidates.length === 0 && <div className="reply-empty"><p>暂无候选</p><small>写下想法让我帮你表达，或点击「帮我想想」获取建议。</small></div>}
+    {(state.result?.input.mode !== 'rewrite_draft' || state.result.input.inputKind === 'workspace' || state.result.continuation || !state.result) && candidates.length > 0 && <div className="reply-candidate-grid">
+      {candidates.map((candidate, index) => {
+        const view = state.candidateVersions?.items.find((item) => item.candidateId === candidate.candidateId);
+        return <article className="reply-candidate" key={candidate.candidateId}>
+          <h3 className="candidate-strip-label" aria-label={`说法 ${index + 1}`}><span>{String(index + 1).padStart(2, '0')}</span><small>说法</small></h3>
+          <div className="candidate-strip-content">{replyRequestId && <CandidateVersionEditor key={`${state.contactId}:${state.scopeRevision}:${state.savedSession?.sessionId}:${candidate.candidateId}:${replyRequestId}`}
+              replies={replies} view={view} candidateId={candidate.candidateId} replyRequestId={replyRequestId}
+              number={index + 1} restored={!state.result} noteCopy={(text) => noteCopy(candidate.candidateId, text)}
+              onDirtyChange={reportDirty} />
+          }</div>
+        </article>;
+      })}
+    </div>}
+    {candidates.length > 0 && <details className="reply-generation-details" open={detailsOpen} onToggle={(event) => setDetailsOpen(event.currentTarget.open)}>
+      <summary><span>生成说明与更多操作</span><span>{candidates.some((candidate) => candidate.riskNotes.length) ? '有表达提醒 · 查看依据' : '输入与依据'}</span></summary>
+      <p className="reply-note">展开后可查看各条依据，并使用回复旁的更多操作。</p>
+      {state.result && <>
       {usedSkill === null ? <p className="reply-note">这组候选使用通用流程。</p> : usedSkill && <p className="reply-note">
         这组候选实际 Skill：{usedSkill.name} · 版本 {usedVersion ?? usedSkill.versionId}{usedSkill.loadState === 'resource_failed' ? '（部分资源读取失败）' : ''}
         {usedSkill.scope && ` · 范围：${usedSkill.scope.kind === 'scene' ? `精确场景「${usedSkill.scope.scene}」` : usedSkill.scope.kind === 'contact' ? '当前联系人' : '本人通用'}`}
@@ -338,41 +368,17 @@ export function ReplyCandidates({ replies, currentDraft }: { replies: ReplySessi
           : state.result.input.mode === 'initiate_conversation' ? <p>主动目的：{state.result.input.purpose}</p>
           : <><p>待回复消息：{state.result.input.target.text ?? state.result.input.target.mediaPlaceholder}</p>
             <p>表达方向：{state.result.input.direction}</p></>}</details>
-      {state.result.input.mode === 'rewrite_draft' && state.result.input.inputKind !== 'workspace' && !state.result.continuation && <div className="reply-candidate-grid">
-        {state.result.candidates.map(({ original, editedText }, index) => <article className="reply-candidate" key={original.candidateId}>
-          <h3>说法 {index + 1}</h3>
-          <CandidateEditor text={editedText} candidateId={original.candidateId} number={index + 1} edit={replies.editCandidate}
-            disabled={state.phase === 'waiting' || state.sourceAvailability !== undefined}
-            validatePaste={(text) => window.notalone.styleSamples.validateCandidatePaste({ contactId: state.contactId!,
-              scopeRevision: state.scopeRevision, replyRequestId: state.result!.replyRequestId, candidateId: original.candidateId, text })}
-            copy={(text) => noteCopy(original.candidateId, text)} />
-          <CandidateCopyControls state={state} candidateId={original.candidateId} />
-          <div className="candidate-reason"><small>为什么这样建议</small><p className="reply-basis">{original.basis}</p></div>
-          {original.riskNotes.map((note, number) => <p className="reply-risk" key={number}>{note}</p>)}
-          <details><summary>查看原候选</summary><p className="reply-original"
-            onCopy={() => noteCopy(original.candidateId, window.getSelection()?.toString() ?? '')}>{original.text}</p></details>
-          <ReplyEvidence evidence={evidence} candidate={original} number={index + 1} waiting={state.phase === 'waiting'}
-            selection={{ contactId: state.contactId!, scopeRevision: state.scopeRevision, replyRequestId: state.result!.replyRequestId, candidateId: original.candidateId }} />
-        </article>)}
-      </div>}
-    </> : state.phase !== 'waiting' && candidates.length === 0 && <div className="reply-empty"><p>暂无候选</p><small>写下想法让我帮你表达，或点击「帮我想想」获取建议。</small></div>}
-    {(state.result?.input.mode !== 'rewrite_draft' || state.result.input.inputKind === 'workspace' || state.result.continuation || !state.result) && candidates.length > 0 && <div className="reply-candidate-grid">
-      {candidates.map((candidate, index) => {
-        const view = state.candidateVersions?.items.find((item) => item.candidateId === candidate.candidateId);
-        return <article className="reply-candidate" key={candidate.candidateId}>
-          <h3>说法 {index + 1}</h3>
-          {replyRequestId && <CandidateVersionEditor key={`${state.contactId}:${state.scopeRevision}:${state.savedSession?.sessionId}:${candidate.candidateId}:${replyRequestId}`}
-              replies={replies} view={view} candidateId={candidate.candidateId} replyRequestId={replyRequestId}
-              number={index + 1} restored={!state.result} noteCopy={(text) => noteCopy(candidate.candidateId, text)}
-              onDirtyChange={reportDirty} />
-          }
-          <div className="candidate-reason"><small>为什么这样建议</small><p className="reply-basis">{candidate.basis}</p></div>
-          {candidate.riskNotes.map((note, number) => <p className="reply-risk" key={number}>{note}</p>)}
-          <ReplyEvidence evidence={evidence} candidate={candidate} number={index + 1} waiting={state.phase === 'waiting'}
-            selection={{ contactId: state.contactId!, scopeRevision: state.scopeRevision, replyRequestId: replyRequestId!, candidateId: candidate.candidateId }} />
-        </article>;
-      })}
-    </div>}
+      </>}
+      {candidates.map((candidate, index) => <section className="candidate-detail" key={candidate.candidateId} aria-label={`说法${index + 1}依据与提醒`}>
+        <h3>说法 {index + 1}</h3>
+        <div className="candidate-reason"><small>为什么这样建议</small><p className="reply-basis">{candidate.basis}</p></div>
+        {candidate.riskNotes.map((note, number) => <p className="reply-risk" key={number}>{note}</p>)}
+        <details><summary>查看原候选</summary><p className="reply-original"
+          onCopy={() => noteCopy(candidate.candidateId, window.getSelection()?.toString() ?? '')}>{candidate.text}</p></details>
+        {replyRequestId && <ReplyEvidence evidence={evidence} candidate={candidate} number={index + 1} waiting={state.phase === 'waiting'}
+          selection={{ contactId: state.contactId!, scopeRevision: state.scopeRevision, replyRequestId, candidateId: candidate.candidateId }} />}
+      </section>)}
+    </details>}
     {replies.error && <p className="reply-note" role="alert">{replies.error}</p>}
     <AssistantContinuationControls key={`${state.contactId}:${state.scopeRevision}:${state.savedSession?.sessionId}:${state.inputClearRevision ?? 0}`}
       replies={replies} hasUnsavedEdits={hasUnsavedEdits} />

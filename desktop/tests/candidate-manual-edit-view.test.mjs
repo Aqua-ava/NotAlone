@@ -26,7 +26,7 @@ test('候选手动编辑只保留正文与复制入口，不要求重复填写�
   assert.doesNotMatch(html, /本组修改要求|说法1修改要求/);
   assert.match(html, /候选1编辑文本/);
   assert.doesNotMatch(html, /保存本组修改|重试保存修改/);
-  assert.match(html, /disabled=""[^>]*>复制/);
+  assert.match(html, /aria-label="复制第1条" disabled=""/);
   assert.match(html, /结束编辑后自动保存，保存完成即可复制/);
 });
 
@@ -83,7 +83,7 @@ test('未编辑的回复可直接复制，不要求选择版本', () => {
     controls: null, disabled: false, dirty: false, restored: false,
     edit() {}, save: async () => {}, copy: async () => {}, noteTextCopy() {}, validatePaste: async () => {},
   }));
-  assert.match(html, /<button aria-label="复制第1条">复制<\/button>/);
+  assert.match(html, /aria-label="复制第1条"><svg/);
   assert.doesNotMatch(html, /选择当前版本|<legend/);
   assert.doesNotMatch(html, />第1条</);
 });
