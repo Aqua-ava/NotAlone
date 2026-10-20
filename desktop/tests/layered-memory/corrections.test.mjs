@@ -4,10 +4,17 @@ import { fixture, profilePayload, ids } from './support.mjs';
 
 for (const scope of ['contact', 'owner']) for (const targetKind of ['scenario', 'profile']) {
   test(`${scope} 的 ${targetKind} 总结纠错绑定实际项，处理中撤下旧副本并回看反馈`, async () => {
-    let finish, posted;
+    let finish, posted, committed;
+    const reads = [];
     const f = await fixture(async request => {
-      if (request.method === 'POST') { posted = request; return new Promise(resolve => { finish = resolve; }); }
-      return { generation: 1, data: profilePayload({ scope_kind: scope, contact_id: scope === 'owner' ? null : ids.contact }) };
+      if (request.method === 'POST') {
+        posted = request;
+        return new Promise(resolve => { finish = response => { committed = response; resolve(response); }; });
+      }
+      const response = committed ?? { generation: 1,
+        data: profilePayload({ scope_kind: scope, contact_id: scope === 'owner' ? null : ids.contact }) };
+      reads.push({ path: request.path, committed: response === committed });
+      return response;
     });
     const read = () => scope === 'owner' ? f.bridge.readOwnerLayeredMemory({}) : f.bridge.readLayeredMemory(f.selection());
     const state = async () => scope === 'owner' ? f.bridge.getOwnerLayeredMemoryState() : (await f.bridge.getState()).layeredMemory;
@@ -24,6 +31,7 @@ for (const scope of ['contact', 'owner']) for (const targetKind of ['scenario', 
     await new Promise(resolve => setImmediate(resolve));
     assert.equal((await state()).value, null);
     await assert.rejects(read());
+    assert.equal(reads.length, 1, '写入结算前不得越过处理中门禁发起GET');
     assert.equal(posted.path, `${scope === 'owner' ? '/api/memories/owner' : `/api/contacts/${ids.contact}`}/layered-memory/summary-error`);
     assert.deepEqual(posted.body, { settings_generation: 1, organization_generation: 1, target_kind: targetKind,
       version_id: base.versionId, item_index: 0, reason: base.reason, operation_id: ids.other });
@@ -32,6 +40,9 @@ for (const scope of ['contact', 'owner']) for (const targetKind of ['scenario', 
       correction_revision: 1, protected_count: 1,
       feedback: [{ id: ids.other, target_kind: targetKind, version_id: base.versionId, item_index: 0, reason: base.reason, state: 'active', target_text: '原合成整理内容。', basis: [{ memory_id: ids.memory, revision: 1 }] }] }) });
     await pending;
+    const readPath = `${scope === 'owner' ? '/api/memories/owner' : `/api/contacts/${ids.contact}`}/layered-memory`;
+    assert.deepEqual(reads, [{ path: readPath, committed: false }, { path: readPath, committed: true }],
+      '写入结算后必须重新GET已提交的权威结果，不能只复用POST响应或读取旧夹具快照');
     assert.equal((await state()).value.feedback[0].reason, base.reason);
     assert.equal((await state()).value.correctionRevision, 1);
     f.disconnect();
