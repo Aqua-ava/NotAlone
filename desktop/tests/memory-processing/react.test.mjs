@@ -37,36 +37,34 @@ test('记忆页默认展示真实中断进度，显式继续并回读，来源�
   });
 });
 
-test('无可靠总量不画百分比，读取失败不能显示完成，本人入口明确当前任务的联系人', { timeout: 20000 }, async t => {
-  let fail = false;
-  const writes = [];
+test('完成和停止只在折叠历史中展示，重新开始必须显式点击', { timeout: 20000 }, async t => {
+  const writes = []; let restarted = false;
   const f = await fixture(async request => {
-    if (request.method !== 'GET') writes.push(request);
     if (request.path.includes('/memory-processing')) {
-      if (fail) throw new Error('synthetic unavailable');
-      return { generation: 1, data: { ...processingPayload({ status: 'stopped', action: 'restart', processed_count: null, total_count: null, reason_code: 'task_cancelled' }),
-        ...(request.path.startsWith('/api/owner/') ? { scope: 'owner', contact_id: null } : {}) } };
+      if (request.method === 'POST') { writes.push(request.body); restarted = true; return { generation: 1, data: { task_id: ids.work, status: 'queued' } }; }
+      const result = processingPayload({ status: restarted ? 'queued' : 'stopped', action: restarted ? null : 'restart',
+        processed_count: null, total_count: null, reason_code: restarted ? null : 'memory_extraction_failed' });
+      result.tasks.push({ ...result.tasks[0], task_id: ids.other, status: 'completed', action: null, reason_code: null });
+      return { generation: 1, data: result };
     }
-    const data = otherResponse(request);
-    if (request.path.startsWith('/api/memories/owner/layered-memory')) Object.assign(data.layered_memory, { scope_kind: 'owner', contact_id: null });
-    return { generation: 1, data };
+    return { generation: 1, data: otherResponse(request) };
   });
   await withMemoryPage(f, t.signal, async page => {
-    const card = page.getByRole('region', { name: '记忆处理状态' });
-    await card.getByText('记忆生成已停止', { exact: true }).waitFor();
-    assert.equal(await card.getByRole('progressbar').count(), 0);
-    await card.getByRole('button', { name: '重新开始', exact: true }).waitFor();
-    await page.getByRole('navigation', { name: '记忆分类' }).getByRole('button', { name: '我', exact: true }).click();
-    await card.getByRole('status').filter({ hasText: '合成主题联系人的聊天 · 记忆生成已停止' }).waitFor();
-    assert.equal(await card.getByText('该任务没有可靠的历史进度统计', { exact: true }).count(), 0);
-    await card.getByRole('button', { name: '详情', exact: true }).click();
-    await card.getByText('全部联系人任务（可能含本人信息），非本人专属。', { exact: true }).waitFor();
-    await card.getByText('资料联系人：合成主题联系人', { exact: true }).first().waitFor();
-    fail = true;
-    await card.getByRole('button', { name: '刷新进度' }).click();
-    await card.getByText('处理状态暂时读取失败，请刷新重试。', { exact: true }).waitFor();
-    assert.equal(await card.getByText('本次处理完成', { exact: true }).count(), 0);
+    const history = page.getByRole('group', { name: '处理历史', exact: true });
+    await history.locator('summary').waitFor();
+    assert.equal(await history.getAttribute('open'), null);
+    assert.equal(await page.getByRole('region', { name: '记忆处理状态' }).count(), 0);
+    assert.equal(await page.getByRole('button', { name: '重新开始', exact: true }).isVisible(), false);
+    await history.locator('summary').click();
+    await history.getByRole('heading', { name: '历史导入 · 本次处理完成', exact: true }).waitFor();
+    assert.equal(await history.getByText('旧记录，暂无统计', { exact: true }).count(), 2);
+    const text = await history.innerText();
+    for (const hidden of [ids.work, ids.other, 'memory_extraction_failed', '背景整理', '没有可靠的历史进度统计']) assert.ok(!text.includes(hidden));
     assert.equal(writes.length, 0);
+    await history.getByRole('button', { name: '重新开始', exact: true }).click();
+    await page.getByRole('region', { name: '记忆处理状态' }).getByText('等待生成记忆', { exact: true }).waitFor();
+    assert.deepEqual(writes, [{ task_id: ids.work, action: 'restart' }]);
+    assert.equal(await history.getByRole('heading').count(), 1);
   });
 });
 
@@ -93,5 +91,55 @@ test('可见页面按真实进展更新记忆，新增结果不清空正在编�
     await card.getByText('已处理 40 / 53 条聊天', { exact: true }).first().waitFor();
     await page.getByText('新生成合成偏好。', { exact: true }).waitFor();
     assert.equal(await input.inputValue(), '尚未保存的人工草稿。');
+  });
+});
+
+test('本人当前任务标明聊天归属和中文失败原因，读取失败不冒充无任务', { timeout: 20000 }, async t => {
+  let fail = false; const writes = [];
+  const f = await fixture(async request => {
+    if (request.method !== 'GET') writes.push(request);
+    if (request.path.includes('/memory-processing')) {
+      if (fail) throw new Error('synthetic unavailable');
+      const result = processingPayload({ status: 'failed', reason_code: 'memory_extraction_failed', processed_count: null, total_count: null });
+      result.tasks.push({ ...result.tasks[0], task_id: ids.other, status: 'stopped', action: 'restart', reason_code: 'task_cancelled' });
+      if (request.path.startsWith('/api/owner/')) Object.assign(result, { scope: 'owner', contact_id: null });
+      return { generation: 1, data: result };
+    }
+    return { generation: 1, data: otherResponse(request) };
+  });
+  await withMemoryPage(f, t.signal, async page => {
+    await page.getByRole('navigation', { name: '记忆分类' }).getByRole('button', { name: '我', exact: true }).click();
+    const card = page.getByRole('region', { name: '记忆处理状态' });
+    await card.getByRole('status').filter({ hasText: '合成主题联系人的聊天 · 记忆生成失败' }).waitFor();
+    await card.getByText('上次未能从聊天中生成记忆，具体原因未记录。', { exact: true }).waitFor();
+    await card.getByRole('button', { name: '详情', exact: true }).click();
+    assert.equal(await card.getByRole('heading').count(), 1);
+    assert.equal(await card.getByRole('progressbar').count(), 0);
+    assert.ok(!(await card.innerText()).includes('memory_extraction_failed'));
+    fail = true;
+    await card.getByRole('button', { name: '刷新进度' }).click();
+    await card.getByText('处理状态暂时读取失败，请刷新重试。', { exact: true }).waitFor();
+    assert.equal(await card.getByText('本次处理完成', { exact: true }).count(), 0);
+    assert.equal(writes.length, 0);
+  });
+});
+
+test('较多历史分页查看，不把所有旧任务展开成长页', { timeout: 20000 }, async t => {
+  const f = await fixture(async request => {
+    if (request.path.includes('/memory-processing')) {
+      const result = processingPayload({ status: 'completed', action: null, reason_code: null });
+      result.tasks = Array.from({ length: 7 }, (_, index) => ({ ...result.tasks[0],
+        task_id: `10000000-0000-4000-8000-${String(index).padStart(12, '0')}` }));
+      return { generation: 1, data: result };
+    }
+    return { generation: 1, data: otherResponse(request) };
+  });
+  await withMemoryPage(f, t.signal, async page => {
+    const history = page.getByRole('group', { name: '处理历史', exact: true });
+    await history.locator('summary').click();
+    assert.equal(await history.getByRole('heading').count(), 6);
+    await history.getByRole('button', { name: '下一页', exact: true }).click();
+    assert.equal(await history.getByRole('heading').count(), 1);
+    assert.equal(await page.getByRole('region', { name: '记忆处理状态' }).count(), 0);
   });
 });

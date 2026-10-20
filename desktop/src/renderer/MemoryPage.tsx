@@ -603,11 +603,11 @@ export function MemoryPage({ session, navigate }: { session: ContactSessionView;
         onClick={() => void memory.refresh()}>刷新记忆</button></div>}
     </div>
     <div className="memory-view-content" key={`${scopeKey}:${view}`}>
-    {(view === 'owner' || (contact && view === 'contact')) && <MemoryProcessingCard request={view === 'owner' ? { scope: 'owner' }
-      : { scope: 'contact', contactId: contact!.contactId, scopeRevision: session.state.scopeRevision }}
-      contactNames={Object.fromEntries(session.state.contacts.map(contact => [contact.contactId, contact.displayName]))} organization={state.layeredMemory}
+    <MemoryProcessingCard request={view === 'owner' ? { scope: 'owner' }
+      : contact && view === 'contact' ? { scope: 'contact', contactId: contact.contactId, scopeRevision: session.state.scopeRevision } : undefined}
+      contactNames={Object.fromEntries(session.state.contacts.map(contact => [contact.contactId, contact.displayName]))}
       onProgress={() => window.notalone.memory.refreshProcessingResults(view === 'owner' ? { scope: 'owner' }
-        : { scope: 'contact', contactId: contact!.contactId, scopeRevision: session.state.scopeRevision })} />}
+        : { scope: 'contact', contactId: contact!.contactId, scopeRevision: session.state.scopeRevision })}>
     {view === 'owner' && <OwnerLayeredMemoryPanel onVersions={contact ? openVersions : undefined}
       onTrace={contact ? entry => trace('owner_memory', entry.memoryId) : undefined} />}
     {!contact ? view === 'owner' ? null : <section className="memory-no-contact" aria-label="资料范围未确认"><h2>选择一位联系人</h2>
@@ -660,6 +660,7 @@ export function MemoryPage({ session, navigate }: { session: ContactSessionView;
         </>}
         </details>
       </>}
+    </MemoryProcessingCard>
     </div>
     {state.mutation.phase !== 'idle' && <p className="memory-section-note" role={state.mutation.phase === 'error' ? 'alert' : 'status'}>{state.mutation.message}</p>}
     {state.mutation.backupCleanupRequired && <UpdateBackupCleanupRecovery />}
