@@ -570,6 +570,9 @@ def _trace_versions() -> dict[str, str | int]:
         "memory_timing": hashlib.sha256(
             (directory.parent / "memory" / "timing.py").read_bytes()
         ).hexdigest(),
+        "memory_conditions": hashlib.sha256(
+            (directory.parent / "memory" / "conditions.py").read_bytes()
+        ).hexdigest(),
         "memory_events": hashlib.sha256(
             (directory.parent / "memory" / "events.py").read_bytes()
         ).hexdigest(),

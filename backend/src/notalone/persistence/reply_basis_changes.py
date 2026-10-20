@@ -11,6 +11,7 @@ from psycopg import sql
 
 from notalone.persistence.memory_timing import timed_memory_rows
 from notalone.persistence.memory_events import bind_memory_event
+from notalone.persistence.memory_conditions import bind_memory_conditions
 from notalone.memory.retirement import is_generation_status_eligible
 from notalone.reply.context import ContextEvidence
 from notalone.retrieval.models import history_timing
@@ -31,6 +32,7 @@ def read_reply_basis_changes(
           coalesce(memory.revision, own.revision) AS revision,
           coalesce(memory.category, own.category, candidate.category) AS category,
           coalesce(memory.event, own.event, candidate.event) AS event,
+          coalesce(to_jsonb(memory)->'conditions', to_jsonb(own)->'conditions', to_jsonb(candidate)->'conditions') AS conditions,
           coalesce(memory.source_candidate_id, own.source_candidate_id, candidate.id) AS event_candidate_id,
           coalesce(memory.text_content, own.text_content, candidate.text_content) AS text_content,
           coalesce(memory.source_ids, own.source_ids, candidate.source_ids) AS source_ids,
@@ -85,6 +87,7 @@ def read_reply_basis_changes(
                   else "memory_time_changed" if (
                       _period_changed(row, original) or time_status_changed
                       or ("event" in original and original["event"] != _current_event(connection, row))
+                      or ("conditions" in original and original["conditions"] != _current_conditions(connection, row))
                   ) else None)
         if reason is not None:
             key = row["evidence_id"], row["kind"]
@@ -141,7 +144,7 @@ def require_current_reply_memory(
         retirement = sql.SQL("'unknown'") if kind == "pending_candidate" else sql.SQL("retirement_reason")
         rows = connection.execute(sql.SQL(
             "SELECT id AS evidence_id,%(kind)s AS kind,owner_id,%(contact_id)s::uuid AS contact_id,"
-            "status,text_content,source_ids,valid_at,invalid_at,category,created_at AS recorded_at,event,"
+            "status,text_content,source_ids,valid_at,invalid_at,category,created_at AS recorded_at,event,to_jsonb(" + table + ")->'conditions' AS conditions,"
             "{} AS event_candidate_id,"
             "{} AS retirement_reason,{} AS revision,valid_at>now() AS future,invalid_at<=now() AS expired "
             "FROM public.{} WHERE owner_id=%(owner_id)s AND id=ANY(%(ids)s::uuid[]) {}"
@@ -161,7 +164,8 @@ def require_current_reply_memory(
                     or len(row["source_ids"]) != len(item.source_ids) or set(row["source_ids"]) != set(item.source_ids)
                     or row["valid_at"] != item.valid_at or row["invalid_at"] != item.invalid_at
                     or current_timing != item.timing
-                    or _current_event(connection, row) != (item.event.to_payload(current=True) if item.event else None)):
+                    or _current_event(connection, row) != (item.event.to_payload(current=True) if item.event else None)
+                    or _current_conditions(connection, row) != (item.conditions.to_payload(current=True) if item.conditions else None)):
                 raise ReplyStoreInvariantError("本次新候选的记忆依据版本已变化。")
 
 
@@ -174,15 +178,15 @@ def historical_basis_revision_sha256(
         """
         WITH RECURSIVE nodes AS (
           SELECT id, 'confirmed_memory' AS kind, supersedes_memory_id AS previous,
-            revision, status, retirement_reason, text_content, source_ids, valid_at, invalid_at, category, created_at AS recorded_at, owner_id, contact_id, event
+            revision, status, retirement_reason, text_content, source_ids, valid_at, invalid_at, category, created_at AS recorded_at, owner_id, contact_id, event, to_jsonb(confirmed_memory)->'conditions' AS conditions
           FROM public.confirmed_memory WHERE owner_id=%s AND contact_id=%s
           UNION ALL
           SELECT id, 'owner_memory', supersedes_memory_id, revision, status, retirement_reason,
-            text_content, source_ids, valid_at, invalid_at, category, created_at, owner_id, NULL::uuid, event
+            text_content, source_ids, valid_at, invalid_at, category, created_at, owner_id, NULL::uuid, event, to_jsonb(owner_memory)->'conditions'
           FROM public.owner_memory WHERE owner_id=%s
           UNION ALL
           SELECT id, 'pending_candidate', NULL::uuid, 0, status, 'unknown',
-            text_content, source_ids, valid_at, invalid_at, category, created_at, owner_id, contact_id, event
+            text_content, source_ids, valid_at, invalid_at, category, created_at, owner_id, contact_id, event, to_jsonb(memory_candidate)->'conditions'
           FROM public.memory_candidate WHERE owner_id=%s AND contact_id=%s
         ), used AS (
           SELECT * FROM nodes WHERE id=ANY(%s::uuid[])
@@ -290,3 +294,8 @@ def forbidden_generation_memory_dependencies(
         ORDER BY memory.kind,memory.id
     """, {"ids": list(dependencies), "owner_id": scope.owner_id}).fetchall()
     return tuple((row["id"], row["kind"]) for row in rows)
+
+
+def _current_conditions(connection: Any, row: dict) -> dict | None:
+    value = bind_memory_conditions(connection, owner_id=row["owner_id"], candidate_id=row.get("event_candidate_id"), raw=row.get("conditions"), text=row["text_content"])
+    return value.to_payload(current=True) if value else None

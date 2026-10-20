@@ -457,6 +457,12 @@ class LangChainSourceVerificationRuntime:
             invoked = True
 
         prompt, schema = source_verification_contract(self._verification_mode, prompt_profile=self._prompt_profile)
+        if any(fact.conditions is not None for fact in facts):
+            schema = deepcopy(schema)
+            schema["properties"]["results"]["items"]["properties"]["condition_verification"] = {
+                "type": ["array", "null"], "maxItems": 8, "items": {"type": "object", "additionalProperties": False,
+                "properties": {"index": {"type": "integer", "minimum": 0}, "verdict": {"type": "string", "enum": [item.value for item in SourceVerificationVerdict]}, "evidence": {"type": "array", "maxItems": 8, "items": EVENT_POSITION_SCHEMA}}, "required": ["index", "verdict", "evidence"]}}
+            prompt += "\nconditions须逐项独立核验，condition_verification列全每项index、verdict、evidence位置；通用supported不代签条件。只核验原话对条件限定的支持，不能认证现在仍满足，更不能从条件变化推断原禁忌或偏好撤销。无条件提案返回null。"
         has_events = any(fact.event is not None for fact in facts)
         if has_events:
             schema = deepcopy(schema)
@@ -617,6 +623,7 @@ def _verification_text(
             "assertion_status": fact.assertion_status.value,
             "figurative_type": fact.figurative_type.value,
             **({"event": fact.event.to_payload()} if fact.event is not None else {}),
+            **({"conditions": fact.conditions.to_payload()} if fact.conditions is not None else {}),
         } for index, fact in enumerate(facts)],
     }
     if include_position_guide:

@@ -1,3 +1,4 @@
+import { MemoryConditionsDetails, MemoryConditionsEditor, conditionEditorText, conditionEditProposal, conditionEditorValid } from './MemoryConditionsDetails';
 import { memoryTimeText as timeText } from './memory-time-format';
 import { MemoryEventDetails } from './MemoryEventDetails';
 export { MemoryEventDetails } from './MemoryEventDetails';
@@ -105,12 +106,12 @@ function useMemoryReading(session: ContactSessionView) {
     setError('');
     if (session.state.selectedContactId) void refresh();
   }, [session.state.selectedContactId, session.state.scopeRevision]);
-  async function correct(entry: MemoryVersion, text: string, category: MemoryCorrectionRequest['category'], changeKind: MemoryCorrectionRequest['changeKind']) {
+  async function correct(entry: MemoryVersion, text: string, category: MemoryCorrectionRequest['category'], changeKind: MemoryCorrectionRequest['changeKind'], conditions?: MemoryCorrectionRequest['conditions']) {
     const { selectedContactId, scopeRevision } = scope.current;
     if (!selectedContactId) return;
     setError('');
     try { await window.notalone.memory.correct({ contactId: selectedContactId, scopeRevision, level: entry.level,
-      memoryId: entry.memoryId, revision: entry.revision, text, category, changeKind }); }
+      memoryId: entry.memoryId, revision: entry.revision, text, category, changeKind, ...(conditions === undefined ? {} : { conditions }) }); }
     catch {
       if (active.current && scope.current.selectedContactId === selectedContactId && scope.current.scopeRevision === scopeRevision) {
         setError('资料范围或版本已变化，请刷新后再修正。');
@@ -220,7 +221,7 @@ function SourceReference({ id, sources }: { id: string; sources: MemorySection<M
 
 export function MemoryCard({ content, memory, removalTarget = memory, candidate, sources, correct, remove, openVersions, confirmCandidate, discardCandidate, updateMemories, applyCandidateUpdate, busy, trace, initiallyEditing = false }: {
   content: MemoryContent; memory?: MemoryVersion; removalTarget?: MemoryVersion; candidate?: PendingMemoryCandidate; sources: MemorySection<MemorySource>;
-  correct?: (entry: MemoryVersion, text: string, category: MemoryCorrectionRequest['category'], changeKind: MemoryCorrectionRequest['changeKind']) => Promise<void>; remove?: (entry: MemoryVersion) => Promise<void>; confirmCandidate?: (entry: PendingMemoryCandidate) => Promise<void>; discardCandidate?: (entry: PendingMemoryCandidate) => Promise<void>; busy?: boolean;
+  correct?: (entry: MemoryVersion, text: string, category: MemoryCorrectionRequest['category'], changeKind: MemoryCorrectionRequest['changeKind'], conditions?: MemoryCorrectionRequest['conditions']) => Promise<void>; remove?: (entry: MemoryVersion) => Promise<void>; confirmCandidate?: (entry: PendingMemoryCandidate) => Promise<void>; discardCandidate?: (entry: PendingMemoryCandidate) => Promise<void>; busy?: boolean;
   trace: (kind: TraceRecordKind, id: string, text: string) => void;
   openVersions?: (entry: MemoryVersion) => Promise<void>;
   updateMemories?: MemorySection<MemoryVersion>;
@@ -233,6 +234,7 @@ export function MemoryCard({ content, memory, removalTarget = memory, candidate,
   const [discarding, setDiscarding] = useState(false);
   const [text, setText] = useState(content.text);
   const [category, setCategory] = useState(content.category);
+  const [conditionText, setConditionText] = useState(conditionEditorText(content.conditions));
   const [changeKind, setChangeKind] = useState<NonNullable<MemoryCorrectionRequest['changeKind']>>('error_correction');
   const availability = memory ? memoryAvailability(memory) : null;
   const retired = availability?.excluded === true;
@@ -250,6 +252,7 @@ export function MemoryCard({ content, memory, removalTarget = memory, candidate,
       <p>确认会保存这项新候选，原人工决定继续保留。</p>
       <ul className="memory-source-references" aria-label="新增证据来源">{review.newSourceIds.map((id) => <SourceReference key={id} id={id} sources={sources} />)}</ul>
     </div>)}
+    <MemoryConditionsDetails conditions={content.conditions} />
     <MemoryTemporalStatus timing={content.timing} validAt={content.validAt} invalidAt={content.invalidAt} compact />
       <button className="button" aria-label={`查看依据：${content.text}`} onClick={() => {
         if (candidate) trace('candidate', candidate.candidateId, content.text);
@@ -260,18 +263,19 @@ export function MemoryCard({ content, memory, removalTarget = memory, candidate,
     {memory?.status === 'active' && correct && <button className="button" disabled={busy}
       aria-label={`修正资料：${content.text}`} onClick={() => { setRemoving(false); setEditing(true); }}>修改</button>}
     {editing && memory?.status === 'active' && correct && <form aria-label={memory.level === 'owner' ? '修正本人资料' : '修正联系人资料'} className="memory-edit-form" onSubmit={(event) => {
-      event.preventDefault(); void correct(memory, text, category, changeKind);
+      event.preventDefault(); void correct(memory, text, category, changeKind, conditionEditProposal(conditionText, content.conditions));
     }}><label>资料正文<textarea aria-label="资料正文" value={text} disabled={busy} onChange={(event) => setText(event.target.value)} /></label>
       <label>资料分类<select aria-label="资料分类" value={category} disabled={busy}
         onChange={(event) => setCategory(event.target.value as MemoryCorrectionRequest['category'])}>
         {Object.entries(categoryNames).map(([value, name]) => <option key={value} value={value}>{name}</option>)}</select></label>
+      <MemoryConditionsEditor value={conditionText} onChange={setConditionText} disabled={busy} />
       <label>修改原因<select aria-label="修改原因" value={changeKind} disabled={busy}
         onChange={event => setChangeKind(event.target.value as NonNullable<MemoryCorrectionRequest['changeKind']>)}>
         <option value="error_correction">纠正错误</option><option value="state_changed">记录变化</option></select></label>
       <p>{changeKind === 'error_correction' ? '原来的内容记错了。旧版只保留供查看，不再用于生成。'
         : '原来的内容曾经成立，后来发生变化。旧版将划线保留，不再引用。'}</p>
       <p>保存新的手动版本并保留来源；本次保存时间不代表变化发生时间。</p>
-      <button className="button" type="submit" disabled={busy || !text.trim()}>保存修正</button>
+      <button className="button" type="submit" disabled={busy || !text.trim() || !conditionEditorValid(conditionText)}>保存修正</button>
       <button className="button" type="button" disabled={busy} onClick={() => setEditing(false)}>取消修正</button>
     </form>}
     {memory && remove && <button className="button" disabled={busy}
@@ -369,6 +373,7 @@ export function MemoryVersionHistory({ history, revert, busy }: {
       <p>{entry.text}</p><p>来源聊天时间：{sourceTime(entry)}</p><p>保存时间：{timeText(entry.timing.recordedAt)}</p>
       <MemoryTemporalStatus timing={entry.timing} validAt={entry.validAt} invalidAt={entry.invalidAt} />
       <MemoryEventDetails event={entry.event} />
+      <MemoryConditionsDetails conditions={entry.conditions} />
       <p>记忆标识：{entry.memoryId}</p>
       {entry.supersedesMemoryId && <p>替代版本引用：{entry.supersedesMemoryId}</p>}
       {entry.supersedesMemoryId && <p>{entry.versionEvidenceSourceCurrent === true ? '原始版本依据当前有效。' : '原始版本依据未核实或已变化，不提供恢复承诺。'}</p>}
@@ -442,6 +447,7 @@ export function ContactRelationshipOverview({ overview, memories, refresh, openV
             <p>{item.timing.currentStatusReason}</p>
             <div className="memory-times"><p>来源聊天时间：{sourceTime(item)}</p><p>保存时间：{timeText(item.timing.recordedAt)}</p></div>
             <MemoryEventDetails event={item.event} />
+            <MemoryConditionsDetails conditions={item.conditions} />
             <p>底层资料版本：{item.revision} · 记忆标识：{item.memoryId}</p>
             <p>{provenance.kind === 'manual_entry' ? '用户手动录入（来源为手录资料）。'
               : provenance.kind === 'source_supported' ? '有来源支持，不表示已认证现实真伪。' : '来源来历未核实。'}</p>
@@ -496,6 +502,7 @@ export function OwnerFactsOverview({ overview, memories, contactId, refresh, ope
             <p>{item.timing.currentStatusReason}</p>
             <div className="memory-times"><p>来源聊天时间：{sourceTime(item)}</p><p>保存时间：{timeText(item.timing.recordedAt)}</p></div>
             <MemoryEventDetails event={item.event} />
+            <MemoryConditionsDetails conditions={item.conditions} />
             <p>底层资料版本：{item.revision} · 记忆标识：{item.memoryId}</p>
             <p>{provenance.kind === 'manual_entry' ? '用户手动录入（来源为手录资料）。'
               : provenance.kind === 'source_supported' ? '有来源支持，不表示已认证现实真伪。' : '来源来历未核实。'}</p>

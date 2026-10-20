@@ -8,6 +8,7 @@ from uuid import UUID, uuid4
 
 from notalone.memory.models import MemoryCategory, SourceDependencyMode
 from notalone.memory.events import MemoryEvent
+from notalone.memory.conditions import MemoryConditions
 from notalone.memory.timing import MemoryTiming
 from notalone.memory_extraction.errors import ExtractionRuntimeError
 from notalone.memory_extraction.evidence import build_dimension_evidence
@@ -173,7 +174,9 @@ class ExtractionFlow:
             )
             source_started_at = datetime.now(timezone.utc)
             source_ids = set(fact.source_message_ids)
-            source_valid = source_ids <= window_ids and bool(
+            condition_refs = tuple(ref for item in fact.conditions.items for ref in item.evidence) if fact.conditions else ()
+            positions_valid = all(ref.message_id in source_ids and any(message.message_id == ref.message_id and ref.char_end <= len(message.text) and message.text_representation == "text" for message in window.messages) for ref in condition_refs)
+            source_valid = positions_valid and source_ids <= window_ids and bool(
                 source_ids & target_ids
             )
             record(
@@ -431,7 +434,7 @@ class ExtractionFlow:
         evidenced = []
         for fact in accepted:
             event_fact = replace(fact, event=(verified_results[id(fact)].event
-                if id(fact) in verified_results else fact.event))
+                if id(fact) in verified_results else fact.event), conditions=(verified_results[id(fact)].conditions if id(fact) in verified_results else fact.conditions))
             prepared = event_fact
             if verification_mode == SourceVerificationMode.NULLABLE_PROOF_V3:
                 # 后续采纳沿同一幂等规范化，避免追加风险使刚签的摘要失效。
@@ -498,6 +501,7 @@ def _to_fact(payload: dict) -> ExtractedFact:
         alternatives=tuple(alternatives),
         interpretation_reason=interpretation_reason,
         event=MemoryEvent.from_payload(payload.get("event"), proposal=True),
+        conditions=MemoryConditions.from_payload(payload.get("conditions"), proposal=True),
     )
 
 
