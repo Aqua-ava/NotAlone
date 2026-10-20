@@ -29,8 +29,16 @@ class ReplyEvidenceService:
             require_receipt_evidence(stored.retrieval, stored.evidence)
         except (TypeError, ValueError):
             raise ReplyStoreInvariantError("回复检索回执与保存依据不一致。") from None
+        if stored.style_references is not None and (
+            {item.sample_id for item in stored.style_references}
+            != set(stored.result.context_receipt.style_sample_ids)
+        ):
+            raise ReplyStoreInvariantError("表达参考快照与生成回执不一致。")
         return {
             "reply_request_id": str(request_id),
+            "style_references": ([{"sample_id": str(item.sample_id), "text": item.text}
+                                  for item in stored.style_references]
+                                 if stored.style_references is not None else None),
             # 与生成回执独立读取同一持久结果，供逐条审阅绑定真实候选。
             "candidate_output": [{"candidate_id": str(item.candidate_id), "text": item.text,
                 "basis": item.basis, "citation_ids": [str(value) for value in item.citation_ids],

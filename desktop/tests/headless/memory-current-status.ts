@@ -29,29 +29,22 @@ export async function memoryCurrentStatus(browser: Browser, origin: string) {
       citation_ids: [prepared.unverified_memory_id, prepared.dynamic_memory_id, prepared.narrow_memory_id] });
     await helper.getByRole('button', { name: '帮我表达', exact: true }).click();
     await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveValue('最近忙吗？');
-    await helper.getByRole('button', { name: '展开候选1依据', exact: true }).click();
-    const evidence = helper.getByRole('region', { name: '候选1依据', exact: true });
+    await helper.getByRole('button', { name: '本次参考', exact: true }).click();
+    const evidence = helper.getByRole('region', { name: '本次参考内容', exact: true });
     const cited = evidence.getByRole('article').filter({ has: helper.getByText('合成旧近况：最近在加班。', { exact: true }) });
-    await expect(cited.getByText('本候选已引用', { exact: true })).toBeVisible();
     await expect(cited.getByText('生成时核实状态：当前未核实', { exact: true })).toBeVisible();
     for (const text of ['合成职业近况：对方是建筑师。', '合成窄时段：这个月仅晚上在加班。']) {
       const item = evidence.getByRole('article').filter({ has: helper.getByText(text, { exact: true }) });
-      await expect(item.getByText('本候选已引用', { exact: true })).toBeVisible();
       await expect(item.getByText('生成时核实状态：当前未核实', { exact: true })).toBeVisible();
     }
-    await expect(evidence.locator('.evidence-context')).not.toHaveAttribute('open');
-    await evidence.locator('.evidence-context > summary').click();
     // 概览导航允许带历史标注回读过期资料；它不能冒充当期事实或本候选引用。
     const historical = evidence.getByRole('article')
-      .filter({ has: helper.getByText('关系资料', { exact: true }) })
       .filter({ has: helper.getByText('合成历史近况：这个月在加班。', { exact: true }) });
     await expect(historical).toHaveCount(1);
     await expect(historical.getByText('生成时核实状态：历史资料（已过期）', { exact: true })).toBeVisible();
     await historical.locator('.record-metadata > summary').click();
     await expect(historical.getByText('由联系人概览定位，底层资料来历：来源支持。', { exact: true })).toBeVisible();
-    await expect(historical.getByText('生成上下文，未被候选引用', { exact: true })).toBeVisible();
     await expect(historical.getByText(/入选原因：历史资料，仅用于追溯；当前未核实，不得当作当前事实。/)).toBeVisible();
-    await expect(historical.getByText('本候选已引用', { exact: true })).toHaveCount(0);
     await openImportManagement(manager);
     const source = manager.getByRole('region', { name: '已导入资料', exact: true }).locator(`[data-source-id="${prepared.source_id}"]`);
     await source.getByRole('button', { name: '删除来源', exact: true }).click();

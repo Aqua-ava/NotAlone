@@ -63,6 +63,14 @@ class StyleReferenceApiTests(FidelityHttpFixture, unittest.TestCase):
         reopened = self._backend(self.owner_id)
         self.assertEqual(reopened.request("/api/reply/generate", body), (200, result))
         self.assertEqual(len(self.reply_model.payloads), 1)
+        evidence_path = f"/api/contacts/{contact}/replies/{result['reply_request_id']}/evidence"
+        evidence_status, evidence = reopened.request(evidence_path)
+        self.assertEqual(evidence_status, 200, evidence)
+        self.assertEqual(evidence["style_references"], [
+            {"sample_id": row["sample_id"], "text": row["text"]} for row in references
+        ])
+        self._save(contact, "生成之后保存的样本，不得补入历史参考。")
+        self.assertEqual(reopened.request(evidence_path), (200, evidence))
         started = time.perf_counter()
         wrong_status, wrong = self.backend.request("/api/reply/generate", {**body, "idempotency_key": str(uuid4())})
         wrong_elapsed_ms = (time.perf_counter() - started) * 1000
@@ -90,6 +98,31 @@ class StyleReferenceApiTests(FidelityHttpFixture, unittest.TestCase):
         self.assertEqual(status, 200, result)
         self.assertEqual(self.reply_model.payloads[-1].get("style_references", []), [])
         self.assertEqual(result["context_receipt"].get("style_sample_ids", []), [])
+        evidence_status, evidence = self.backend.request(
+            f"/api/contacts/{contact}/replies/{result['reply_request_id']}/evidence")
+        self.assertEqual(evidence_status, 200, evidence)
+        self.assertEqual(evidence["style_references"], [])
+
+    def test_legacy_style_snapshot_is_unknown_and_invalid_snapshot_is_not_exposed(self):
+        contact, _, _ = self.prepare_contact(self.owner_id, history=False)
+        self._save(contact, "合成表达参考。")
+        self.reply_model.plans.append({"text": "这次我不参加。", "basis": "保留当前意图。"})
+        status, result = self.backend.request("/api/reply/generate", self._body(contact))
+        self.assertEqual(status, 200, result)
+        path = f"/api/contacts/{contact}/replies/{result['reply_request_id']}/evidence"
+        # 构造旧版本持久快照，只通过正式 HTTP 判断兼容行为。
+        with psycopg.connect(self.database_url) as connection:
+            connection.execute("UPDATE public.reply_request SET context_snapshot=context_snapshot - 'style_references' WHERE id=%s",
+                               (result["reply_request_id"],))
+        legacy_status, legacy = self.backend.request(path)
+        self.assertEqual(legacy_status, 200, legacy)
+        self.assertIsNone(legacy["style_references"])
+        with psycopg.connect(self.database_url) as connection:
+            connection.execute("UPDATE public.reply_request SET context_snapshot=jsonb_set(context_snapshot, '{style_references}', %s::jsonb) WHERE id=%s",
+                               (json.dumps([{"text": "invalid"}]), result["reply_request_id"]))
+        invalid_status, invalid = self.backend.request(path)
+        self.assertNotEqual(invalid_status, 200)
+        self.assertNotIn("style_references", invalid)
 
     def test_default_draft_does_not_read_saved_contact_samples(self):
         contact, _, _ = self.prepare_contact(self.owner_id, history=False)

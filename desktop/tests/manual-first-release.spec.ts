@@ -112,8 +112,8 @@ test('公开手动输入完成模型设置、依据和编辑，切换隔离、�
   const audit = JSON.parse(await readFile(path.join(userData, 'synthetic-model-audit.json'), 'utf8'));
   expect(audit).toMatchObject({ calls: 1, network: 'mock-only', last_mode: 'reply_to_pasted_text', last_evidence_kind: 'user_current_chat' });
   await candidate.fill('合成甲，改成我自己的说法。');
-  await helper.getByRole('button', { name: '展开候选1依据', exact: true }).click();
-  await expect(helper.getByRole('region', { name: '候选1依据', exact: true }).getByText('本次粘贴的对方文字（未经渠道核验）', { exact: true })).toBeVisible();
+  await helper.getByRole('button', { name: '本次参考', exact: true }).click();
+  await expect(helper.getByRole('region', { name: '本次参考内容', exact: true }).getByText('你补充的聊天（未经渠道核验）', { exact: true })).toBeVisible();
   await manager.bringToFront();
   await manager.getByRole('button', { name: '选择合成联系人乙', exact: true }).click();
   await manager.getByRole('button', { name: '手动输入本次聊天', exact: true }).click();

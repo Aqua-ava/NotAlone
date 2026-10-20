@@ -70,6 +70,8 @@ async function prepare(pages: RewritePages, contact: '甲' | '乙' = '甲', coun
       && view.history.candidateGroupId === result.replyRequestId)));
   }, { contactId: previous.contactId, scopeRevision: previous.scopeRevision, previousRequestId })).toBe(true);
   await expect(pages.helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveValue(`${contact}的依据候选（说法1）。`);
+  await expect.poll(() => pages.helper.evaluate(() => window.notalone.replies.getEvidenceState().then(state => state.phase)))
+    .toMatch(/^(ready|failed)$/);
 }
 function loadPending(pages: RewritePages) {
   return pages.helper.evaluate(async () => {
@@ -91,57 +93,50 @@ async function draftEvidence({ manager, helper, rewriteBackend }: RewritePages) 
   await rewriteBackend.plan({ count: 1, prefix: '依据验收候选' });
   await helper.getByRole('button', { name: '帮我表达', exact: true }).click();
   await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveValue('依据验收候选（说法1）。');
-  const evidence = helper.getByRole('region', { name: '候选1依据', exact: true });
+  const evidence = helper.getByRole('region', { name: '本次参考内容', exact: true });
   await expect(evidence).toHaveCount(0);
-  await helper.getByRole('button', { name: '展开候选1依据', exact: true }).click();
+  await expect(helper.getByRole('button', { name: '本次参考', exact: true })).toHaveAttribute('aria-expanded', 'false');
+  await helper.getByRole('button', { name: '本次参考', exact: true }).click();
   await expect(evidence.getByText('这是本次明确输入的合成草稿。', { exact: true })).toBeVisible();
-  await expect(evidence.getByText('用户草稿', { exact: true })).toBeVisible();
-  await expect(evidence.getByText('本候选已引用', { exact: true })).toBeVisible();
+  await expect(helper.getByRole('button', { name: '本次参考', exact: true })).toHaveCount(1);
+  await expect(evidence.getByText('你的草稿', { exact: true })).toBeVisible();
+  await expect(evidence.getByText('以下材料实际提供给了模型，不代表每条候选都引用了每一项。', { exact: true })).toBeVisible();
   await expect(evidence.locator('.evidence-technical')).not.toHaveAttribute('open');
-  const draft = evidence.getByRole('article').filter({ has: helper.getByText('用户草稿', { exact: true }) });
-  const purpose = evidence.getByRole('article', { includeHidden: true }).filter({ has: helper.getByText('本次主动目的', { exact: true }) });
-  await expect(evidence.getByRole('article')).toHaveCount(1);
-  await expect(evidence.locator('.evidence-citations').getByRole('article')).toHaveCount(1);
-  await expect(evidence.locator('.evidence-context')).not.toHaveAttribute('open');
-  await expect(purpose).toBeHidden();
-  await evidence.getByText('其他上下文（1条）', { exact: true }).click();
-  await expect(purpose).toBeVisible();
-  await expect(evidence.getByRole('article')).toHaveCount(2);
+  const draft = evidence.getByRole('article').filter({ has: helper.getByText('你的草稿', { exact: true }) });
+  const purpose = evidence.getByRole('article').filter({ has: helper.getByText('本次表达目的', { exact: true }) });
+  await expect(evidence.getByRole('region', { name: '本次输入', exact: true })).toBeVisible();
   await expect(draft).toHaveCount(1);
   await expect(purpose).toHaveCount(1);
   for (const item of [draft, purpose]) {
-    await expect(item.locator('.record-metadata')).not.toHaveAttribute('open');
-    await expect(item.getByText('来源时间未知', { exact: true })).toBeHidden();
+    await expect(item.locator('details')).not.toHaveAttribute('open');
+    await expect(item.getByText(/^来源时间：/)).toBeHidden();
     await expect(item.getByText(/^入选原因：/)).toBeHidden();
-    await expect(item.getByText(/^生成时状态：/)).toBeHidden();
   }
-  await draft.locator('.record-metadata > summary').click();
-  await expect(draft.getByText('来源时间未知', { exact: true })).toBeVisible();
+  await draft.getByText('来源与时间', { exact: true }).click();
+  await expect(draft.getByText(/^来源时间：未知/)).toBeVisible();
   await expect(draft.getByText(/^入选原因：/)).toBeVisible();
-  await expect(draft.getByText(/^生成时状态：/)).toBeVisible();
-  await expect(purpose.getByText('来源时间未知', { exact: true })).toBeHidden();
-  await purpose.locator('.record-metadata > summary').click();
-  for (const item of [draft, purpose]) await expect(item.getByText('来源时间未知', { exact: true })).toBeVisible();
-  await purpose.locator('.record-metadata > summary').click();
-  await expect(purpose.getByText('来源时间未知', { exact: true })).toBeHidden();
-  await expect(draft.getByText('来源时间未知', { exact: true })).toBeVisible();
+  await expect(purpose.getByText(/^来源时间：/)).toBeHidden();
+  await purpose.getByText('来源与时间', { exact: true }).click();
+  await expect(purpose.getByText(/^来源时间：未知/)).toBeVisible();
+  await purpose.getByText('来源与时间', { exact: true }).click();
+  await expect(purpose.getByText(/^来源时间：/)).toBeHidden();
+  await expect(draft.getByText(/^来源时间：未知/)).toBeVisible();
   await helper.getByRole('textbox', { name: '候选1编辑文本', exact: true }).fill('我修改的措辞不改生成依据。');
   await expect(evidence.getByText('这是本次明确输入的合成草稿。', { exact: true })).toBeVisible();
-  await helper.getByRole('button', { name: '收起候选1依据', exact: true }).click();
+  await helper.getByRole('button', { name: '本次参考', exact: true }).click();
   await expect(evidence).toHaveCount(0);
 }
 
 async function failures(pages: EvidencePages) {
-  await prepare(pages);
-  expect(pages.evidenceTransport.paths).toEqual([]);
   pages.evidenceTransport.fail = true;
-  await pages.helper.getByRole('button', { name: '展开候选1依据', exact: true }).click();
-  await expect(pages.helper.getByRole('alert')).toContainText('本次依据读取失败');
+  await prepare(pages);
+  await pages.helper.getByRole('button', { name: '本次参考', exact: true }).click();
+  await expect(pages.helper.getByRole('alert')).toContainText('本次参考读取失败');
   await expect(pages.helper.getByText('合成原始错误不得显示', { exact: false })).toHaveCount(0);
-  await expect(pages.helper.getByRole('region', { name: '候选1依据', exact: true }).getByText('甲的原始生成输入。', { exact: true })).toHaveCount(0);
+  await expect(pages.helper.getByRole('region', { name: '本次参考内容', exact: true }).getByText('甲的原始生成输入。', { exact: true })).toHaveCount(0);
   pages.evidenceTransport.fail = false;
-  await pages.helper.getByRole('button', { name: '重试候选1依据', exact: true }).click();
-  await expect(pages.helper.getByRole('region', { name: '候选1依据', exact: true }).getByText('甲的原始生成输入。', { exact: true })).toBeVisible();
+  await pages.helper.getByRole('button', { name: '重试本次参考', exact: true }).click();
+  await expect(pages.helper.getByRole('region', { name: '本次参考内容', exact: true }).getByText('甲的原始生成输入。', { exact: true })).toBeVisible();
   expect(pages.evidenceTransport.paths).toHaveLength(2);
   expect(pages.evidenceTransport.paths[1]).toBe(pages.evidenceTransport.paths[0]);
   await expect(pages.helper.getByRole('alert')).toHaveCount(0);
@@ -149,19 +144,19 @@ async function failures(pages: EvidencePages) {
 
 async function newInput(pages: EvidencePages) {
   await prepare(pages, '甲', 2);
-  await pages.helper.getByRole('button', { name: '展开候选1依据', exact: true }).click();
-  await expect(pages.helper.getByRole('region', { name: '候选1依据', exact: true }).getByText('甲的原始生成输入。', { exact: true })).toBeVisible();
+  await pages.helper.getByRole('button', { name: '本次参考', exact: true }).click();
+  await expect(pages.helper.getByRole('region', { name: '本次参考内容', exact: true }).getByText('甲的原始生成输入。', { exact: true })).toBeVisible();
   await pages.helper.getByRole('textbox', { name: '有什么想说的', exact: true }).fill('后来更改的草稿。');
-  await expect(pages.helper.getByRole('region', { name: '候选1依据', exact: true }).getByText('甲的原始生成输入。', { exact: true })).toBeVisible();
-  await pages.helper.getByRole('button', { name: '展开候选2依据', exact: true }).click();
-  await expect(pages.helper.getByRole('region', { name: '候选1依据', exact: true })).toHaveCount(0);
-  await expect(pages.helper.getByRole('region', { name: '候选2依据', exact: true }).getByText('本候选已引用', { exact: true })).toBeVisible();
+  await expect(pages.helper.getByRole('region', { name: '本次参考内容', exact: true }).getByText('甲的原始生成输入。', { exact: true })).toBeVisible();
+  await expect(pages.helper.getByRole('button', { name: '本次参考', exact: true })).toHaveCount(1);
+  await expect(pages.helper.getByRole('button', { name: /候选[12]依据/ })).toHaveCount(0);
+  await expect(pages.helper.getByRole('region', { name: '本次参考内容', exact: true })).toHaveCount(1);
   await pages.rewriteBackend.plan({ count: 1, prefix: '后来草稿候选' });
   await pages.helper.getByRole('button', { name: '帮我表达', exact: true }).click();
   await expect(pages.helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveValue('后来草稿候选（说法1）。');
-  await expect(pages.helper.getByRole('region', { name: '候选1依据', exact: true })).toHaveCount(0);
-  await pages.helper.getByRole('button', { name: '展开候选1依据', exact: true }).click();
-  await expect(pages.helper.getByRole('region', { name: '候选1依据', exact: true }).getByText('后来更改的草稿。', { exact: true })).toBeVisible();
+  await expect(pages.helper.getByRole('region', { name: '本次参考内容', exact: true })).toHaveCount(0);
+  await pages.helper.getByRole('button', { name: '本次参考', exact: true }).click();
+  await expect(pages.helper.getByRole('region', { name: '本次参考内容', exact: true }).getByText('后来更改的草稿。', { exact: true })).toBeVisible();
   expect(pages.evidenceTransport.paths.at(-1)).not.toBe(pages.evidenceTransport.paths[0]);
 }
 
@@ -190,11 +185,11 @@ async function stale(pages: EvidencePages, change: 'contact' | 'connection' | 'g
     }
     pages.evidenceTransport.release();
     expect(await pending).toEqual({ status: 'fulfilled', value: 'completed' });
-    await expect(pages.helper.getByRole('region', { name: '候选1依据', exact: true })).toHaveCount(0);
+    await expect(pages.helper.getByRole('region', { name: '本次参考内容', exact: true })).toHaveCount(0);
     await expect(pages.helper.getByRole('alert')).toHaveCount(0);
-    await pages.helper.getByRole('button', { name: '展开候选1依据', exact: true }).click();
-    await expect(pages.helper.getByRole('region', { name: '候选1依据', exact: true }).getByText(change === 'generation' ? '甲的原始生成输入。' : '乙的原始生成输入。', { exact: true })).toBeVisible();
-    await pages.helper.getByRole('button', { name: '收起候选1依据', exact: true }).click();
+    await pages.helper.getByRole('button', { name: '本次参考', exact: true }).click();
+    await expect(pages.helper.getByRole('region', { name: '本次参考内容', exact: true }).getByText(change === 'generation' ? '甲的原始生成输入。' : '乙的原始生成输入。', { exact: true })).toBeVisible();
+    await pages.helper.getByRole('button', { name: '本次参考', exact: true }).click();
   }
 }
 
@@ -223,8 +218,8 @@ async function parameterGuards(pages: EvidencePages) {
   }, { other: pages.rewriteBackend.data.contact_ids[1], outside: pages.rewriteBackend.data.other_contact_id });
   expect(denied).toEqual(Array(10).fill(true));
   expect(pages.evidenceTransport.paths).toHaveLength(paths);
-  await pages.helper.getByRole('button', { name: '展开候选1依据', exact: true }).click();
-  await expect(pages.helper.getByRole('region', { name: '候选1依据', exact: true }).getByText('甲的原始生成输入。', { exact: true })).toBeVisible();
+  await pages.helper.getByRole('button', { name: '本次参考', exact: true }).click();
+  await expect(pages.helper.getByRole('region', { name: '本次参考内容', exact: true }).getByText('甲的原始生成输入。', { exact: true })).toBeVisible();
   const rejected = await pages.manager.evaluate(async () => {
     const state = await window.notalone.replies.getState();
     try { await window.notalone.replies.loadEvidence({ contactId: state.contactId!, scopeRevision: state.scopeRevision,
@@ -253,19 +248,20 @@ async function arrangeSnapshot(pages: RewritePages, operation: 'remove_request' 
 
 async function removedEvidence(pages: EvidencePages) {
   await prepare(pages);
-  await pages.helper.getByRole('button', { name: '展开候选1依据', exact: true }).click();
-  const region = pages.helper.getByRole('region', { name: '候选1依据', exact: true });
+  await pages.helper.getByRole('button', { name: '本次参考', exact: true }).click();
+  const region = pages.helper.getByRole('region', { name: '本次参考内容', exact: true });
   await expect(region.getByText('甲的原始生成输入。', { exact: true })).toBeVisible();
-  await pages.helper.getByRole('button', { name: '收起候选1依据', exact: true }).click();
+  await pages.helper.getByRole('button', { name: '本次参考', exact: true }).click();
   const requestId = pages.replyTransport.results[0].data.reply_request_id as string;
   await arrangeSnapshot(pages, 'remove_request', requestId);
+  await loadPending(pages);
   const endpoint = `/api/contacts/${pages.rewriteBackend.data.contact_ids[0]}/replies/${requestId}/evidence`;
   expect(await pages.rewriteBackend.request(endpoint)).toEqual({ status: 404, data: { error: 'not_found' } });
-  await pages.helper.getByRole('button', { name: '展开候选1依据', exact: true }).click();
-  await expect(region.getByText('本次依据不存在或已删除，无法恢复原正文。', { exact: true })).toBeVisible();
+  await pages.helper.getByRole('button', { name: '本次参考', exact: true }).click();
+  await expect(region.getByText('本次参考不存在或已删除，无法恢复原正文。', { exact: true })).toBeVisible();
   await expect(region.getByText('甲的原始生成输入。', { exact: true })).toHaveCount(0);
-  await pages.helper.getByRole('button', { name: '收起候选1依据', exact: true }).click();
-  await pages.helper.getByRole('button', { name: '展开候选1依据', exact: true }).click();
+  await pages.helper.getByRole('button', { name: '本次参考', exact: true }).click();
+  await pages.helper.getByRole('button', { name: '本次参考', exact: true }).click();
   await expect(region.getByText('甲的原始生成输入。', { exact: true })).toHaveCount(0);
 }
 
@@ -281,19 +277,19 @@ async function legacySnapshot(pages: EvidencePages) {
   await expect(pages.helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveValue('旧快照候选（说法1）。');
   const requestId = pages.replyTransport.results[0].data.reply_request_id as string;
   await arrangeSnapshot(pages, 'legacy_timing', requestId);
-  await pages.helper.getByRole('button', { name: '展开候选1依据', exact: true }).click();
-  const region = pages.helper.getByRole('region', { name: '候选1依据', exact: true });
-  await region.locator('.evidence-context > summary').click();
+  await loadPending(pages);
+  await pages.helper.getByRole('button', { name: '本次参考', exact: true }).click();
+  const region = pages.helper.getByRole('region', { name: '本次参考内容', exact: true });
   await expect(region.getByText('甲的私密合成历史：今晚我会晚一点回复你。', { exact: true })).toBeVisible();
   const history = region.getByRole('article').filter({ hasText: '甲的私密合成历史：今晚我会晚一点回复你。' });
   await expect(history).toHaveCount(1);
   await history.locator('.record-metadata > summary').click();
-  await expect(history.getByText('来源时间未知', { exact: true })).toBeVisible();
+  await expect(history.getByText(/^来源时间：未知/)).toBeVisible();
   await expect(history.getByText('保存时间：未知', { exact: true })).toBeVisible();
   const current = await pages.rewriteBackend.request(`/api/contacts/${pages.rewriteBackend.data.contact_ids[0]}/messages`);
   expect((current.data.messages as Array<{ occurred_at: string | null }>)[0].occurred_at).not.toBeNull();
   // 当前消息有时间，但生成旧快照缺时间，页面仍保持未知。
-  await expect(history.getByText('来源时间未知', { exact: true })).toBeVisible();
+  await expect(history.getByText(/^来源时间：未知/)).toBeVisible();
 }
 
 export async function replyEvidence(browser: Browser, origin: string) {

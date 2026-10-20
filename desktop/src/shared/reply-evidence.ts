@@ -87,6 +87,8 @@ export interface ReplyEvidenceState {
   candidateId: string | null;
   phase: 'idle' | 'loading' | 'ready' | 'failed' | 'missing';
   items: ReplyEvidenceItem[];
+  /** null 表示旧快照没有保存表达样本正文，不能用当前资料补齐。 */
+  styleReferences?: Array<{ sampleId: string; text: string }> | null;
   basisChanges?: ReplyBasisChange[];
   retrieval?: ReplyRetrievalReceipt | null;
   layeredContext?: ReplyLayeredContext | null;

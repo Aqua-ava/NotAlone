@@ -81,8 +81,8 @@ export async function historicalReplyBasis(browser: Browser, origin: string) {
     } }>).at(-1)!;
     expect(actual.continuation_reference.version_id).toBe(editedVersionId);
     expect(actual.continuation_reference.messages[0].text).toBe('用户已保存的合成编辑：愿意聊聊，先不作承诺。');
-    await helper.getByRole('button', { name: '展开候选1依据', exact: true }).click();
-    const evidence = helper.getByRole('region', { name: '候选1依据', exact: true });
+    await helper.getByRole('button', { name: '本次参考', exact: true }).click();
+    const evidence = helper.getByRole('region', { name: '本次参考内容', exact: true });
     await expect(evidence.getByText(freshText, { exact: true })).toBeVisible();
 
     // 明确状态变化允许引用旧版；随后纠正错误则只允许回看，不能再次续写。

@@ -70,8 +70,10 @@ test('工作区候选直接展示理由，版本未核验前不开放编辑', ()
     savedSession: { phase: 'idle', sessionId: 'synthetic-session', turns: [], inputs: [] },
     result: { replyRequestId: 'synthetic-request', assistantSessionId: 'synthetic-session', contextEvidenceIds: [],
       input: { mode: 'rewrite_draft', inputKind: 'workspace', workspaceAction: 'suggest', draftText: '',
-        contactDisplayName: '合成联系人', includeRelationshipContext: true }, candidates: [{ original: candidate, editedText: candidate.text }] } };
+        contactDisplayName: '合成联系人', includeRelationshipContext: true }, candidates: [candidate, { ...candidate, candidateId: 'synthetic-second', text: '忙完了吗？' }].map(original => ({ original, editedText: original.text })) } };
   const html = view.renderToStaticMarkup(view.createElement(view.ReplyCandidates, { replies: { state } }));
+  assert.equal((html.match(/>本次参考</g) ?? []).length, 1, '一轮多个候选共用一个参考入口');
+  assert.doesNotMatch(html, /class="reply-references"[^>]* open/, '初始默认收起');
   assert.match(html, /为什么这样建议/);
   assert.match(html, /从近况开始，方便对方接话。/);
   assert.match(html, /正在读取本组版本/);

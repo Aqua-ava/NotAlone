@@ -18,7 +18,7 @@ export class ReplyEvidenceSession {
   }
   getState(): ReplyEvidenceState { return structuredClone(this.state); }
   onStateChanged(listener: (state: ReplyEvidenceState) => void) { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
-  close(selection: ReplyCandidateSelection): void { this.assertCandidate(selection); this.cancel(); this.publish({ candidateId: null, phase: 'idle', items: [], basisChanges: undefined, retrieval: undefined, layeredContext: undefined, layeredStatus: undefined, layeredScenarioReads: undefined, ownerLayeredContext: undefined, ownerLayeredStatus: undefined, ownerLayeredScenarioReads: undefined }); }
+  close(selection: ReplyCandidateSelection): void { this.assertCandidate(selection); this.cancel(); this.publish({ candidateId: null, phase: 'idle', items: [], styleReferences: undefined, basisChanges: undefined, retrieval: undefined, layeredContext: undefined, layeredStatus: undefined, layeredScenarioReads: undefined, ownerLayeredContext: undefined, ownerLayeredStatus: undefined, ownerLayeredScenarioReads: undefined }); }
   async load(selection: ReplyCandidateSelection): Promise<void> {
     this.assertCandidate(selection);
     this.cancel();
@@ -28,12 +28,12 @@ export class ReplyEvidenceSession {
     const current = () => operation === this.operation && generation === this.backend.getConnectionGeneration()
       && this.state.scopeRevision === selection.scopeRevision && this.state.contactId === selection.contactId
       && this.state.replyRequestId === selection.replyRequestId;
-    this.publish({ candidateId: selection.candidateId, phase: 'loading', items: [], basisChanges: undefined, retrieval: undefined, layeredContext: undefined, layeredStatus: undefined, layeredScenarioReads: undefined, ownerLayeredContext: undefined, ownerLayeredStatus: undefined, ownerLayeredScenarioReads: undefined });
+    this.publish({ candidateId: selection.candidateId, phase: 'loading', items: [], styleReferences: undefined, basisChanges: undefined, retrieval: undefined, layeredContext: undefined, layeredStatus: undefined, layeredScenarioReads: undefined, ownerLayeredContext: undefined, ownerLayeredStatus: undefined, ownerLayeredScenarioReads: undefined });
     try {
       const result = await readReplyEvidence(this.backend, selection.contactId, selection.replyRequestId, pending.signal);
-      if (current() && result.generation === generation) this.publish({ phase: 'ready', items: result.items, basisChanges: result.basisChanges, retrieval: result.retrieval, layeredContext: result.layeredContext, layeredStatus: result.layeredStatus, layeredScenarioReads: result.layeredScenarioReads, ownerLayeredContext: result.ownerLayeredContext, ownerLayeredStatus: result.ownerLayeredStatus, ownerLayeredScenarioReads: result.ownerLayeredScenarioReads });
+      if (current() && result.generation === generation) this.publish({ phase: 'ready', items: result.items, styleReferences: result.styleReferences, basisChanges: result.basisChanges, retrieval: result.retrieval, layeredContext: result.layeredContext, layeredStatus: result.layeredStatus, layeredScenarioReads: result.layeredScenarioReads, ownerLayeredContext: result.ownerLayeredContext, ownerLayeredStatus: result.ownerLayeredStatus, ownerLayeredScenarioReads: result.ownerLayeredScenarioReads });
     } catch (error) {
-      if (current()) this.publish({ phase: error instanceof BackendRequestFailure && error.status === 404 ? 'missing' : 'failed', items: [], basisChanges: undefined, retrieval: undefined, layeredContext: undefined, layeredStatus: undefined, layeredScenarioReads: undefined, ownerLayeredContext: undefined, ownerLayeredStatus: undefined, ownerLayeredScenarioReads: undefined });
+      if (current()) this.publish({ phase: error instanceof BackendRequestFailure && error.status === 404 ? 'missing' : 'failed', items: [], styleReferences: undefined, basisChanges: undefined, retrieval: undefined, layeredContext: undefined, layeredStatus: undefined, layeredScenarioReads: undefined, ownerLayeredContext: undefined, ownerLayeredStatus: undefined, ownerLayeredScenarioReads: undefined });
     } finally { if (this.pending === pending) this.pending = undefined; }
   }
   private assertCandidate(selection: ReplyCandidateSelection): void {
@@ -51,7 +51,7 @@ export class ReplyEvidenceSession {
     if (generation !== this.generation || sessionId !== this.sessionId || state.scopeRevision !== this.state.scopeRevision
       || state.contactId !== this.state.contactId || requestId !== this.state.replyRequestId) {
       this.cancel(); this.generation = generation; this.sessionId = sessionId;
-      this.publish({ scopeRevision: state.scopeRevision, contactId: state.contactId, replyRequestId: requestId, candidateId: null, phase: 'idle', items: [], basisChanges: undefined, retrieval: undefined, layeredContext: undefined, layeredStatus: undefined, layeredScenarioReads: undefined, ownerLayeredContext: undefined, ownerLayeredStatus: undefined, ownerLayeredScenarioReads: undefined });
+      this.publish({ scopeRevision: state.scopeRevision, contactId: state.contactId, replyRequestId: requestId, candidateId: null, phase: 'idle', items: [], styleReferences: undefined, basisChanges: undefined, retrieval: undefined, layeredContext: undefined, layeredStatus: undefined, layeredScenarioReads: undefined, ownerLayeredContext: undefined, ownerLayeredStatus: undefined, ownerLayeredScenarioReads: undefined });
     }
   }
   private cancel() { ++this.operation; this.pending?.abort(); this.pending = undefined; }

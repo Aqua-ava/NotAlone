@@ -180,6 +180,16 @@ export function ReplyEvidence({ evidence, selection, candidate, number, waiting 
           </div>
         </details>}
         <details className="evidence-technical"><summary>检索过程与技术详情</summary>
+          <ReplyEvidenceTechnicalDetails state={state} />
+        </details>
+      </>}
+    </section>}
+    {failure?.key === selectionKey && <p role="alert">{failure.message}</p>}
+  </div>;
+}
+
+export function ReplyEvidenceTechnicalDetails({ state }: { state: ReplyEvidenceState }) {
+  return (
           <div className="evidence-technical-content" role="region" aria-label="检索技术详情列表" tabIndex={0}>
           <p>本次生成快照；状态和时间对应生成时，不代表资料当前仍可检索。</p>
           <RetrievalSummary receipt={state.retrieval} />
@@ -188,9 +198,5 @@ export function ReplyEvidence({ evidence, selection, candidate, number, waiting 
           <LayeredSummary context={state.ownerLayeredContext} status={state.ownerLayeredStatus} receipts={state.ownerLayeredScenarioReads} owner />
           <ScenarioReadSummary receipts={state.ownerLayeredScenarioReads} owner />
           </div>
-        </details>
-      </>}
-    </section>}
-    {failure?.key === selectionKey && <p role="alert">{failure.message}</p>}
-  </div>;
+  );
 }

@@ -130,9 +130,9 @@ def main() -> None:
             applied = migrate(database_url, ROOT / "backend/database/migrations")
             official = sorted(path.name for path in (ROOT / "backend/database/migrations").glob("[0-9][0-9][0-9]_*.sql"))
             if ([int(name[:3]) for name in official] != list(range(1, len(official) + 1))
-                    or len(applied) != 89 or len(official) != 89
-                    or official[-1] != "089_style_sample_generation_dependencies.sql"):
-                raise RuntimeError("概览回复夹具须使用正式连续001–当前迁移，精确到088。")
+                    or len(applied) != 91 or len(official) != 91
+                    or official[-1] != "091_memory_processing_scope_receipts.sql"):
+                raise RuntimeError("概览回复夹具须使用正式连续001–当前迁移，精确到091。")
             if migrate(database_url, ROOT / "backend/database/migrations"):
                 raise RuntimeError("概览回复迁移重复执行不应新增迁移。")
             with psycopg.connect(database_url) as connection:

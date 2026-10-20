@@ -4,7 +4,8 @@ import { HelperDraft, type ContactSessionView } from './contact-session';
 import { Icon } from './icons';
 import { useRevisionedSession } from './use-revisioned-session';
 import './rewrite.css';
-import { ReplyEvidence, useReplyEvidence } from './ReplyEvidence';
+import { useReplyEvidence } from './ReplyEvidence';
+import { ReplyReferences } from './ReplyReferences';
 import { AssistantSessionBudgetNotice, AssistantSessionPanel } from './AssistantSessionPanel';
 import { hasChangedReplyInput } from './ReplyGenerationGuidance';
 import { StyleSamples } from './StyleSamples';
@@ -349,9 +350,17 @@ export function ReplyCandidates({ replies, currentDraft }: { replies: ReplySessi
         </article>;
       })}
     </div>}
+    {replyRequestId && candidates.length > 0 && state.contactId && <ReplyReferences
+      key={`${state.contactId}:${state.scopeRevision}:${state.savedSession?.sessionId}:${replyRequestId}`}
+      evidence={evidence} candidates={candidates}
+      selection={{ contactId: state.contactId, scopeRevision: state.scopeRevision, replyRequestId, candidateId: candidates[0].candidateId }}
+      styleSampleIds={(state.result ?? recovered?.reply)?.styleSampleIds}
+      expressionPreferences={(state.result ?? recovered?.reply)?.expressionPreferences}
+      usedSkill={(state.result ?? recovered?.reply)?.usedSkill}
+      waiting={state.phase === 'waiting' || state.sourceAvailability === 'checking' || state.sourceAvailability === 'failed'} />}
     {candidates.length > 0 && <details className="reply-generation-details" open={detailsOpen} onToggle={(event) => setDetailsOpen(event.currentTarget.open)}>
       <summary><span>生成说明与更多操作</span><span>{candidates.some((candidate) => candidate.riskNotes.length) ? '有表达提醒 · 查看依据' : '输入与依据'}</span></summary>
-      <p className="reply-note">展开后可查看各条依据，并使用回复旁的更多操作。</p>
+      <p className="reply-note">展开后可查看各条建议的说明与提醒，并使用回复旁的更多操作。</p>
       {state.result && <>
       {usedSkill === null ? <p className="reply-note">这组候选使用通用流程。</p> : usedSkill && <p className="reply-note">
         这组候选实际 Skill：{usedSkill.name} · 版本 {usedVersion ?? usedSkill.versionId}{usedSkill.loadState === 'resource_failed' ? '（部分资源读取失败）' : ''}
@@ -375,8 +384,6 @@ export function ReplyCandidates({ replies, currentDraft }: { replies: ReplySessi
         {candidate.riskNotes.map((note, number) => <p className="reply-risk" key={number}>{note}</p>)}
         <details><summary>查看原候选</summary><p className="reply-original"
           onCopy={() => noteCopy(candidate.candidateId, window.getSelection()?.toString() ?? '')}>{candidate.text}</p></details>
-        {replyRequestId && <ReplyEvidence evidence={evidence} candidate={candidate} number={index + 1} waiting={state.phase === 'waiting'}
-          selection={{ contactId: state.contactId!, scopeRevision: state.scopeRevision, replyRequestId, candidateId: candidate.candidateId }} />}
       </section>)}
     </details>}
     {replies.error && <p className="reply-note" role="alert">{replies.error}</p>}

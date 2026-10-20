@@ -10,6 +10,23 @@ const record = (value: unknown): value is Record<string, unknown> => Boolean(val
 const text = (value: unknown): value is string => typeof value === 'string' && value.length <= 65_536;
 const date = (value: unknown): value is string | null => value === null || (typeof value === 'string' && value.length <= 80 && Number.isFinite(Date.parse(value)));
 
+function readStyleReferences(value: unknown) {
+  if (value === undefined || value === null) return null;
+  if (!Array.isArray(value) || value.length > 5) throw new Error('表达参考快照格式无效。');
+  const ids = new Set<string>();
+  let characters = 0;
+  return value.map((entry: unknown) => {
+    if (!record(entry) || !isUuid(entry.sample_id) || typeof entry.text !== 'string' || !entry.text.trim()) {
+      throw new Error('表达参考快照格式无效。');
+    }
+    const sampleId = entry.sample_id.toLowerCase();
+    characters += Array.from(entry.text).length;
+    if (ids.has(sampleId) || characters > 600) throw new Error('表达参考快照格式无效。');
+    ids.add(sampleId);
+    return { sampleId, text: entry.text };
+  });
+}
+
 // 只读持久化生成快照，不借助后来消息或资料补齐正文和时间。
 export async function readReplyEvidence(backend: BackendHost, contactId: string, requestId: string, signal: AbortSignal) {
   const response = await backend.requestJson({ method: 'GET', path: `/api/contacts/${contactId}/replies/${requestId}/evidence`, signal, timeoutMs: 10_000 });
@@ -35,6 +52,7 @@ export async function readReplyEvidence(backend: BackendHost, contactId: string,
         sourceEndedAt: entry.timing.source_ended_at, sourceTimeComplete: entry.timing.source_time_complete,
         ...readCurrentStatus(entry.timing) } };
   });
-  return { generation: response.generation, items, ...readLayeredEvidence(value), retrieval: readReplyRetrieval(value.retrieval, items),
+  return { generation: response.generation, items, styleReferences: readStyleReferences(value.style_references),
+    ...readLayeredEvidence(value), retrieval: readReplyRetrieval(value.retrieval, items),
     ...(value.basis_changes === undefined ? {} : { basisChanges: readReplyBasisChanges(value.basis_changes) }) };
 }

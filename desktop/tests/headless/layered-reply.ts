@@ -17,7 +17,7 @@ export async function layeredReply(browser: Browser, origin: string) {
       const manager = await host.open('manager'), opened = manager.context().waitForEvent('page');
       await manager.getByRole('button', { name: '打开输入小窗', exact: true }).click();
       const helper = await opened;
-      const evidence = helper.getByRole('region', { name: '候选1依据', exact: true });
+      const evidence = helper.getByRole('region', { name: '本次参考内容', exact: true });
       const contactBackground = evidence.getByRole('region', { name: '本次联系人系统整理资料', exact: true });
       const contactReads = evidence.getByRole('region', { name: '本次联系人主题正文读取', exact: true });
       const ownerBackground = evidence.getByRole('region', { name: '本次本人系统整理资料', exact: true });
@@ -62,9 +62,9 @@ export async function layeredReply(browser: Browser, origin: string) {
           expect(await editor.inputValue()).toBe(candidate.text);
         }
         catch (error) { process.stderr.write((await helper.locator('body').innerText()).slice(-8000)); throw error; }
-        await helper.getByRole('button', { name: '展开候选1依据', exact: true }).click();
+        await helper.getByRole('button', { name: '本次参考', exact: true }).click();
         await expect.poll(() => helper.evaluate(() => window.notalone.replies.getEvidenceState().then(state => state.phase))).toBe('ready');
-        await helper.getByRole('region', { name: '候选1依据', exact: true })
+        await helper.getByRole('region', { name: '本次参考内容', exact: true })
           .locator('.evidence-technical > summary').click();
       }
       await generate(String(prepared.contact_id), true, '想聊聊共同学习的经历。');
@@ -103,11 +103,12 @@ export async function layeredReply(browser: Browser, origin: string) {
         expect(read.ownerLayeredScenarioReads?.[0].document?.versionId).toBe(ownerScenario.version_id);
         expect(read.ownerLayeredScenarioReads?.[0].document?.paragraphRange).toEqual([0, 1]);
       }
-      await helper.getByRole('button', { name: '收起候选1依据', exact: true }).click();
-      expect((await helper.evaluate(() => window.notalone.replies.getEvidenceState())).layeredScenarioReads).toBeUndefined();
-      await helper.getByRole('button', { name: '展开候选1依据', exact: true }).click();
+      await helper.getByRole('button', { name: '本次参考', exact: true }).click();
+      await expect(evidence).toHaveCount(0);
+      expect((await helper.evaluate(() => window.notalone.replies.getEvidenceState())).layeredScenarioReads).toEqual(read.layeredScenarioReads);
+      await helper.getByRole('button', { name: '本次参考', exact: true }).click();
       await expect.poll(() => helper.evaluate(() => window.notalone.replies.getEvidenceState().then(state => state.phase))).toBe('ready');
-      await helper.getByRole('region', { name: '候选1依据', exact: true })
+      await helper.getByRole('region', { name: '本次参考内容', exact: true })
         .locator('.evidence-technical > summary').click();
       await expect(contactReads.getByText(`第 1 段：${prepared.scenario_text}`, { exact: true })).toBeVisible();
       await generate(String(prepared.other_contact_id), true, '另一个联系人的合成候选。');

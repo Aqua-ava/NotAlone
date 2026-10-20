@@ -27,10 +27,10 @@ export async function overviewReplyRetrieval(browser: Browser, origin: string) {
       await helper.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption(prepared.contactId);
       await confirmHelperContact(helper, prepared.contactId);
       const editor = helper.getByRole('textbox', { name: '候选1编辑文本', exact: true });
-      const evidence = helper.getByRole('region', { name: '候选1依据', exact: true });
+      const evidence = helper.getByRole('region', { name: '本次参考内容', exact: true });
       async function expectEvidenceArticle(kind: string, text: string) {
-        const article = evidence.getByRole('article')
-          .filter({ has: helper.getByText(kind, { exact: true }) })
+        const group = kind === '消息' ? '聊天记录' : kind === '本人资料' ? '本人资料' : '关系资料';
+        const article = evidence.getByRole('region', { name: group, exact: true }).getByRole('article')
           .filter({ has: helper.getByText(text, { exact: true }) });
         await expect(article).toHaveCount(1);
         await expect(article).toBeVisible();
@@ -48,7 +48,7 @@ export async function overviewReplyRetrieval(browser: Browser, origin: string) {
           ...(kinds ? { cite_kinds: kinds } : {}) } });
         await helper.getByRole('button', { name: '帮我表达', exact: true }).click();
         await expect(editor).toHaveValue(text);
-        await helper.getByRole('button', { name: '展开候选1依据', exact: true }).click();
+        await helper.getByRole('button', { name: '本次参考', exact: true }).click();
         await evidence.locator('.evidence-technical > summary').click();
       }
 
@@ -65,8 +65,7 @@ export async function overviewReplyRetrieval(browser: Browser, origin: string) {
       await expect(history.getByText('生成时核实状态：历史资料（已过期）', { exact: true })).toBeVisible();
       await expect(unknown.getByText('生成时核实状态：当前未核实', { exact: true })).toBeVisible();
       const pending = await expectEvidenceArticle('未确认记忆候选', prepared.pending.text);
-      await expect(pending.getByText('未确认记忆候选', { exact: true })).toBeVisible();
-      await expect(pending.getByText('生成时状态：待确认', { exact: true })).toBeVisible();
+      await expect(pending.getByText('未确认参考，不作为确定事实', { exact: true })).toBeVisible();
       await expect(evidence.getByText('由联系人概览定位，底层资料来历：手动录入。', { exact: true })).toBeVisible();
       await expect(evidence.getByText('由本人概览定位，底层资料来历：来源支持。', { exact: true })).toHaveCount(2);
       await expect(evidence.getByText(/原话补查：.*估算 token/)).toBeVisible();

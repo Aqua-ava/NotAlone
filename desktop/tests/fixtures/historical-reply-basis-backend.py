@@ -62,9 +62,9 @@ def main() -> None:
             cls.addClassCleanup(drop_owned)
             applied = migrate(database_url, root / "backend/database/migrations")
             expected = sorted(path.name for path in (root / "backend/database/migrations").glob("*.sql"))
-            if (len(expected) != 89 or [int(name[:3]) for name in expected] != list(range(1, 90))
+            if (len(expected) != 91 or [int(name[:3]) for name in expected] != list(range(1, 92))
                     or list(applied) != expected or migrate(database_url, root / "backend/database/migrations") != ()):
-                raise RuntimeError("历史依据夹具须使用正式001–089迁移，重复执行为0。")
+                raise RuntimeError("历史依据夹具须使用正式001–091迁移，重复执行为0。")
             cls.migration_receipt = definitions["verify_full_migrations"](database_name, database_url)
 
         fixture_type.setUpClass = classmethod(prepare_owned)

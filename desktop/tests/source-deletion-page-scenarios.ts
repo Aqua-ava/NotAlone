@@ -149,8 +149,8 @@ export async function sourceDeletionReplies(manager: Page, helper: Page, fixture
   const editor = helper.getByRole('textbox', { name: '候选1编辑文本', exact: true });
   await expect(editor).toHaveValue('来源引用合成候选。', { timeout: 15_000 });
   await editor.fill('本人资料引用的本轮编辑稿。');
-  await helper.getByRole('button', { name: '展开候选1依据', exact: true }).click();
-  const evidence = helper.getByRole('region', { name: '候选1依据', exact: true });
+  await helper.getByRole('button', { name: '本次参考', exact: true }).click();
+  const evidence = helper.getByRole('region', { name: '本次参考内容', exact: true });
   await expect(evidence.getByText('本人喜欢合成绿茶。', { exact: true })).toBeVisible();
   const copy = await currentCopyRequest(helper);
   const state = await helper.evaluate(() => window.notalone.replies.getState());
@@ -190,8 +190,8 @@ export async function sourceDeletionCrossContact(manager: Page, helper: Page, fi
   await helper.getByRole('button', { name: '帮我表达', exact: true }).click();
   const editor = helper.getByRole('textbox', { name: '候选1编辑文本', exact: true });
   await expect(editor).toHaveValue('来源引用合成候选。', { timeout: 2500 });
-  await helper.getByRole('button', { name: '展开候选1依据', exact: true }).click();
-  await expect(helper.getByRole('region', { name: '候选1依据', exact: true }).getByText('本人喜欢合成绿茶。', { exact: true })).toBeVisible({ timeout: 1500 });
+  await helper.getByRole('button', { name: '本次参考', exact: true }).click();
+  await expect(helper.getByRole('region', { name: '本次参考内容', exact: true }).getByText('本人喜欢合成绿茶。', { exact: true })).toBeVisible({ timeout: 1500 });
   const copy = await currentCopyRequest(helper);
   const reply = await helper.evaluate(() => window.notalone.replies.getState());
   proxy.release();
@@ -204,7 +204,7 @@ export async function sourceDeletionCrossContact(manager: Page, helper: Page, fi
   }, { timeout: 15_000 }).toBe('succeeded');
   expect((await fixture.http(`/api/contacts/${reply.contactId}/replies/${reply.result!.replyRequestId}/evidence`)).status).toBe(404);
   await expect(editor).toHaveCount(0);
-  await expect(helper.getByRole('region', { name: '候选1依据', exact: true })).toHaveCount(0);
+  await expect(helper.getByRole('region', { name: '本次参考内容', exact: true })).toHaveCount(0);
   await expect(helper.getByRole('textbox', { name: '有什么想说的', exact: true })).toHaveValue('说明本人喜欢合成绿茶。');
   await expectCopyBlocked(helper, copy);
 }
@@ -310,8 +310,8 @@ export async function sourceDeletionStaleRequest(manager: Page, helper: Page, fi
   const editor = helper.getByRole('textbox', { name: '候选1编辑文本', exact: true });
   await expect(editor).toHaveValue('来源引用合成候选。', { timeout: 15_000 });
   await editor.fill('旧请求编辑稿不得恢复。');
-  await helper.getByRole('button', { name: '展开候选1依据', exact: true }).click();
-  await expect(helper.getByRole('region', { name: '候选1依据', exact: true }).getByText('旧请求的独立合成草稿。', { exact: true })).toBeVisible();
+  await helper.getByRole('button', { name: '本次参考', exact: true }).click();
+  await expect(helper.getByRole('region', { name: '本次参考内容', exact: true }).getByText('旧请求的独立合成草稿。', { exact: true })).toBeVisible();
   const copy = await currentCopyRequest(helper);
   const old = await helper.evaluate(() => window.notalone.replies.getState());
   proxy.holdEvidencePath = `/api/contacts/${old.contactId}/replies/${old.result!.replyRequestId}/evidence`;
@@ -335,7 +335,7 @@ export async function sourceDeletionStaleRequest(manager: Page, helper: Page, fi
   }
   expect(proxy.heldStatuses).toEqual([200]);
   await expect(editor).toHaveCount(0);
-  await expect(helper.getByRole('region', { name: '候选1依据', exact: true })).toHaveCount(0);
+  await expect(helper.getByRole('region', { name: '本次参考内容', exact: true })).toHaveCount(0);
   await expectCopyBlocked(helper, copy);
   await expect(draft).toBeDisabled();
   await expect(helper.getByRole('button', { name: '帮我表达', exact: true })).toBeDisabled();
@@ -368,8 +368,8 @@ export async function sourceDeletionStaleRequest(manager: Page, helper: Page, fi
   await expect(panel.getByText('已删除，已通过不可检索校验', { exact: true })).toBeVisible({ timeout: 15_000 });
   await expect(editor).toHaveValue('新请求的本轮编辑稿。');
   await expect(draft).toHaveValue('新请求的独立合成草稿。');
-  await helper.getByRole('button', { name: '展开候选1依据', exact: true }).click();
-  const basis = helper.getByRole('region', { name: '候选1依据', exact: true });
+  await helper.getByRole('button', { name: '本次参考', exact: true }).click();
+  const basis = helper.getByRole('region', { name: '本次参考内容', exact: true });
   await expect(basis.getByText('新请求的独立合成草稿。', { exact: true })).toBeVisible();
   await expect(basis.getByText('旧请求的独立合成草稿。', { exact: true })).toHaveCount(0);
   // 独立用户输入仍属于历史讨论；唯一旧文本必须位于该历史轮次，不能回到当前候选依据。

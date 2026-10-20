@@ -37,6 +37,7 @@ from notalone.reply.interface import (
     SkillUse,
     UserSkillChoice,
 )
+from notalone.reply.style_reference import StyleReference
 from notalone.reply.runtime import RuntimeCandidate
 from notalone.reply.retrieval_receipt import ReplyRetrievalReceipt, require_receipt_evidence
 from notalone.reply.input_budget import InputBudgetDecision
@@ -106,6 +107,7 @@ class StoredReplyRequest:
     evidence: tuple[ContextEvidence, ...]
     result: ReplyGenerated | None
     retrieval: ReplyRetrievalReceipt | None = None
+    style_references: tuple[StyleReference, ...] | None = None
     layered_context: dict | None = None
     layered_status: str = "quality_closed"
     layered_scenario_reads: tuple[dict, ...] = ()
@@ -160,6 +162,7 @@ class _MutableReplyRecord:
     evidence: tuple[ContextEvidence, ...] = ()
     result: ReplyGenerated | None = None
     retrieval: ReplyRetrievalReceipt | None = None
+    style_references: tuple[StyleReference, ...] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -391,6 +394,7 @@ class InMemoryReplyStore:
             )
             record.evidence = tuple(context.evidence)
             record.retrieval = context.retrieval
+            record.style_references = context.style_references
             record.result = result
             record.state = ReplyAttemptState.COMPLETED
             record.attempts[-1] = replace(
@@ -439,6 +443,7 @@ class InMemoryReplyStore:
                 evidence=record.evidence,
                 result=record.result,
                 retrieval=record.retrieval,
+                style_references=record.style_references,
             )
 
     def _record_for_request(self, request: ReplyRequest) -> _MutableReplyRecord:

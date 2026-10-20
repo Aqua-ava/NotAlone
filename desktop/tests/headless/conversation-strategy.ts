@@ -20,6 +20,7 @@ export async function conversationStrategyEntry(browser: Browser, origin: string
     await helper.getByRole('button', { name: '帮我想想', exact: true }).click();
     await expect(firstCandidate)
       .toHaveValue('没有思路也能直接得到建议（说法1）。');
+    await helper.getByText('生成说明与更多操作', { exact: true }).click();
     await expect(helper.getByText('结合最近聊天给出一个低假设的开场。', { exact: true })).toBeVisible();
     expect(replyTransport.requests.at(-1)).toMatchObject({ content: {
       type: 'rewrite_draft', input_kind: 'workspace', workspace_action: 'suggest', draft_text: '',
@@ -53,12 +54,11 @@ export async function conversationStrategyEntry(browser: Browser, origin: string
       .getByText('想问问合成近况，不安排见面。', { exact: true })).toBeVisible();
     await helper.getByText('这组候选的生成输入 · 合成联系人甲', { exact: true }).click();
     await expect(helper.locator('.reply-input-snapshot').getByText('补充聊天：对方说：最近有一点忙。', { exact: true })).toBeVisible();
-    await helper.getByRole('button', { name: '展开候选1依据', exact: true }).click();
-    const evidence = helper.getByRole('region', { name: '候选1依据', exact: true });
-    await expect(evidence.getByText('未确认记忆候选', { exact: true })).toBeVisible();
-    await evidence.getByRole('article').filter({ has: helper.getByText('未确认记忆候选', { exact: true }) })
+    await helper.getByRole('button', { name: '本次参考', exact: true }).click();
+    const evidence = helper.getByRole('region', { name: '本次参考内容', exact: true });
+    await expect(evidence.getByText('未确认参考，不作为确定事实', { exact: true })).toBeVisible();
+    await evidence.getByRole('article').filter({ has: helper.getByText('未确认参考，不作为确定事实', { exact: true }) })
       .locator('.record-metadata > summary').click();
-    await expect(evidence.getByText('生成时状态：待确认', { exact: true })).toBeVisible();
     await expect(evidence.getByText(/入选原因：未确认候选、仅供参考、不得当作事实/)).toBeVisible();
   });
 }
