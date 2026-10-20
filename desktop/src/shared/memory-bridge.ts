@@ -114,6 +114,9 @@ export interface MemorySection<T> {
 }
 export type MemorySectionName = 'contact' | 'owner' | 'pending' | 'sources';
 export interface LayeredMemoryReference {
+  event?: MemoryEvent | null;
+  validAt?: string | null;
+  invalidAt?: string | null;
   memoryId: string;
   revision: number;
   provenanceKind: 'manual_entry' | 'source_supported';

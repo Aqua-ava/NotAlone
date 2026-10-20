@@ -1,6 +1,7 @@
 import type { ReplyEvidenceItem } from '../../shared/reply-evidence';
 import type { BackendHost } from '../backend/host';
 import { isUuid } from '../uuid';
+import { memoryTemporalFields } from '../memory/read';
 import { readCurrentStatus } from '../memory/current-status';
 import { readReplyBasisChanges } from './basis-changes-read';
 import { readLayeredEvidence } from './layered-evidence-read';
@@ -29,7 +30,7 @@ export async function readReplyEvidence(backend: BackendHost, contactId: string,
     if (known.has(evidenceId)) throw new Error('依据快照格式无效。');
     known.add(evidenceId);
     return { evidenceId, kind: entry.kind as ReplyEvidenceItem['kind'], text: entry.text, selectionReason: entry.selection_reason,
-      snapshotStatus: entry.snapshot_status, cited: entry.cited, validAt: entry.valid_at, invalidAt: entry.invalid_at,
+      snapshotStatus: entry.snapshot_status, cited: entry.cited, ...memoryTemporalFields(entry),
       navigation: readEvidenceNavigation(entry.navigation, evidenceId, entry.kind as ReplyEvidenceItem['kind']),
       timing: { recordedAt: entry.timing.recorded_at, sourceStartedAt: entry.timing.source_started_at,
         sourceEndedAt: entry.timing.source_ended_at, sourceTimeComplete: entry.timing.source_time_complete,

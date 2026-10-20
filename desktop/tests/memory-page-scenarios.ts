@@ -36,7 +36,7 @@ export async function memoryDetails(manager: Page, memoryBackend: MemoryFixture)
   await expect(contact.getByText('旧版关系备注。', { exact: true })).toHaveCount(0);
   await expect(expired.getByText('甲已过期的合成状态。', { exact: true })).toBeVisible();
   await expandMemoryDetails(expired);
-  await expect(expired.getByText('当前核实状态：历史资料（已过期）', { exact: true })).toBeVisible();
+  await expect(expired.getByText('适用性：历史资料；不能据此认定当前情况', { exact: true })).toBeVisible();
   await expect(contact.getByText('甲尚未生效的合成状态。', { exact: true })).toHaveCount(0);
   const details = automatic.getByRole('button', { name: '查看来源与版本：甲喜欢合成茉莉茶。' });
   await expect(details).toHaveAttribute('aria-expanded', 'false');

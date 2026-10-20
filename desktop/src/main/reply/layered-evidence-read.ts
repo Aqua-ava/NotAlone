@@ -1,6 +1,7 @@
 import { readPersonalBackground } from '../personal-background';
 import type { ReplyLayeredContext, ReplyLayeredScenarioDocument, ReplyLayeredScenarioRead, ReplyLayeredStatus } from '../../shared/reply-evidence';
 import { isUuid } from '../uuid';
+import { memoryTemporalFields } from '../memory/read';
 import { readCurrentStatus } from '../memory/current-status';
 
 const record = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -60,7 +61,7 @@ function scenarioReads(value: unknown, context: ReplyLayeredContext | null | und
         if (!record(ref) || !isUuid(ref.memory_id) || !integer(ref.revision) || ref.revision < 1
           || (ref.provenance_kind !== undefined && !['manual_entry', 'source_supported'].includes(ref.provenance_kind as string))) throw invalid();
         const result: ReplyLayeredScenarioDocument['paragraphs'][number]['references'][number] = {
-          memoryId: ref.memory_id.toLowerCase(), revision: ref.revision };
+          ...memoryTemporalFields(ref), memoryId: ref.memory_id.toLowerCase(), revision: ref.revision };
         if (ref.provenance_kind !== undefined) result.provenanceKind = ref.provenance_kind as 'manual_entry' | 'source_supported';
         if (ref.timing !== undefined) {
           if (!record(ref.timing) || !date(ref.timing.recorded_at) || !date(ref.timing.source_started_at)
@@ -125,7 +126,7 @@ function readScope(status: unknown, context: unknown, reads: unknown, scopeKind:
         || !['manual_entry', 'source_supported'].includes(ref.provenance_kind as string) || !record(ref.timing)
         || !date(ref.timing.recorded_at) || !date(ref.timing.source_started_at) || !date(ref.timing.source_ended_at)
         || typeof ref.timing.source_time_complete !== 'boolean') throw invalid();
-      return { memoryId: ref.memory_id.toLowerCase(), revision: ref.revision,
+      return { ...memoryTemporalFields(ref), memoryId: ref.memory_id.toLowerCase(), revision: ref.revision,
         provenanceKind: ref.provenance_kind as 'manual_entry' | 'source_supported',
         timing: { recordedAt: ref.timing.recorded_at, sourceStartedAt: ref.timing.source_started_at,
           sourceEndedAt: ref.timing.source_ended_at, sourceTimeComplete: ref.timing.source_time_complete, ...readCurrentStatus(ref.timing) } };

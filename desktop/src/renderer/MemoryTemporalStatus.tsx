@@ -1,10 +1,18 @@
+import { memoryDateText as dateText } from './memory-time-format';
 import type { MemoryTiming } from '../shared/memory-bridge';
 
-const labels = { current_verified: '当前已核实（来源支持当期区间）', current_unverified: '当前未核实',
-  historical: '历史资料（已过期）', stable: '稳定事实或明确偏好' };
-export function MemoryTemporalStatus({ timing, snapshot = false, compact = false }: { timing: MemoryTiming; snapshot?: boolean; compact?: boolean }) {
+
+const labels = { current_verified: '来源支持明确适用期间', current_unverified: '是否仍适用，尚不确定',
+  historical: '历史资料；不能据此认定当前情况', stable: '未指定期限的事实或偏好' };
+export function MemoryTemporalStatus({ timing, validAt, invalidAt, snapshot = false, compact = false }: {
+  timing: MemoryTiming; validAt?: string | null; invalidAt?: string | null; snapshot?: boolean; compact?: boolean;
+}) {
+  const start = timing.sourceStartedAt, end = timing.sourceEndedAt;
   return <div className="memory-temporal-status">
-    <p>{snapshot ? '生成时核实状态' : '当前核实状态'}：{labels[timing.currentStatus]}</p>
+    <p>来源日期：{start && end ? `${dateText(start)}${dateText(start) === dateText(end) ? '' : ` 至 ${dateText(end)}`}` : '未知'}
+      {!timing.sourceTimeComplete && '（来源日期不完整）'}</p>
+    {(validAt || invalidAt) && <p>适用期间：{validAt ?? '起点未指定'} 至 {invalidAt ?? '终点未指定'}（结束时刻不含在内）</p>}
+    <p>{snapshot ? '生成时适用性' : '适用性'}：{labels[timing.currentStatus]}</p>
     {!compact && <p>{timing.currentStatusReason}</p>}
   </div>;
 }

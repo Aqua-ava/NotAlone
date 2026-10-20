@@ -39,12 +39,42 @@ test('生产资料控制器保留核实状态，旧回复快照只显示未知�
     selection_reason: '生成时参考资料。', snapshot_status: 'active', cited: true, valid_at: null, invalid_at: null, timing: legacy }] };
   const saved = await ports.readReplyEvidence(backend, contactId, requestId, new AbortController().signal);
   assert.equal(saved.items[0].timing.currentStatus, 'current_unverified');
+  assert.equal(saved.items[0].event, null);
   const scopeRevision = contacts.getState().scopeRevision;
   const state = { revision: 1, scopeRevision, contactId, replyRequestId: requestId, candidateId, phase: 'ready', items: saved.items };
   const html = ports.renderToStaticMarkup(ports.createElement(ports.ReplyEvidence, {
     evidence: { state, error: '' }, selection: { contactId, scopeRevision, replyRequestId: requestId, candidateId },
     candidate: { citationIds: [memoryId] }, number: 1, waiting: false,
   }));
-  assert.match(html, /当前未核实/);
-  assert.match(html, /生成时核实状态/);
+  assert.match(html, /是否仍适用，尚不确定/);
+  assert.match(html, /生成时适用性/);
+});
+
+test('回复冻结依据保留过去计划的来源、事件和适用期间，不以保存日期替代来源', async () => {
+  const contactId = randomUUID(), requestId = randomUUID(), memoryId = randomUUID(), messageId = randomUUID();
+  const event = { version: 1, stage: 'planned', stage_verified: true,
+    stage_evidence: [{ message_id: messageId, char_start: 0, char_end: 6 }],
+    occurrence_start: '2020-06-02T09:00:00+08:00', occurrence_end: null, occurrence_verified: true,
+    occurrence_evidence: [{ message_id: messageId, char_start: 0, char_end: 2 }] };
+  const data = { reply_request_id: requestId, evidence: [{ evidence_id: memoryId, kind: 'confirmed_memory',
+    text: '合成计划：明天看医生。', selection_reason: '过去的计划。', snapshot_status: 'active', cited: true,
+    valid_at: '2020-06-01T00:00:00+08:00', invalid_at: '2020-06-03T00:00:00+08:00', event,
+    timing: { recorded_at: '2026-10-20T09:00:00+08:00', source_started_at: '2020-06-01T23:30:00-07:00',
+      source_ended_at: '2020-06-01T23:30:00-07:00', source_time_complete: false,
+      current_status: 'historical', current_status_reason: '来源中的计划日期已过去，未确认发生。' } }] };
+  const backend = { requestJson: async () => ({ generation: 4, data }) };
+  const saved = await ports.readReplyEvidence(backend, contactId, requestId, new AbortController().signal);
+  assert.equal(saved.items[0].event?.stage, 'planned');
+  assert.equal(saved.items[0].event.occurrenceStart, '2020-06-02T09:00:00+08:00');
+  const candidateId = randomUUID();
+  const html = ports.renderToStaticMarkup(ports.createElement(ports.ReplyEvidence, {
+    evidence: { state: { revision: 1, scopeRevision: 1, contactId, replyRequestId: requestId, candidateId, phase: 'ready', items: saved.items }, error: '' },
+    selection: { contactId, scopeRevision: 1, replyRequestId: requestId, candidateId }, candidate: { citationIds: [memoryId] }, number: 1, waiting: false,
+  }));
+  assert.match(html, /来源日期：2020年6月1日/);
+  assert.match(html, /来源日期不完整/);
+  assert.match(html, /适用期间/);
+  assert.match(html, /事件阶段：计划/);
+  assert.match(html, /保存时间：2026-10-20/);
+  assert.doesNotMatch(html, /时间待核实|时间已核实|事件阶段：已发生/);
 });

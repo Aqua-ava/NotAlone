@@ -167,6 +167,7 @@ class ReplyConstraintReview:
             "evidence_id": str(item.evidence_id), "kind": item.kind,
             "factual_role": factual_role(item.kind), "text": item.text,
             "status": item.status, "timing": item.timing.to_payload(),
+            "event": item.event.to_payload(current=True) if item.event else None,
         } for item in result.additional_evidence if item.model_visible)
         if prepared.owner_layered_context is not None:
             payload["owner_layered_context"] = prepared.owner_layered_context.to_payload()
