@@ -1,3 +1,4 @@
+import { expandMemorySection, selectMemoryCategory } from '../memory-page-actions';
 import { expect, type Browser } from '@playwright/test';
 import { withLayeredMemoryFixture } from '../layered-memory-fixture';
 import { withControllerEnvironment } from './backend-fixture';
@@ -14,7 +15,8 @@ export async function ownerLayeredMemory(browser: Browser, origin: string) {
       await host.backend.connect();
       const manager = await host.open('manager');
       await manager.getByRole('button', { name: '记忆', exact: true }).click();
-      await manager.getByRole('button', { name: '本人主题资料', exact: true }).click();
+      await selectMemoryCategory(manager, '本人主题资料');
+      await expandMemorySection(manager, '补充本人资料');
       await manager.getByLabel('本人资料内容', { exact: true }).fill('本人喜欢合成读书活动。');
       await manager.getByRole('button', { name: '保存本人资料', exact: true }).click();
       await expect(manager.getByText('本人资料已保存，请核对整理状态。', { exact: true })).toBeVisible();

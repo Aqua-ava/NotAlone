@@ -39,6 +39,7 @@ export async function memoryOwnerCorrection(manager: Page, fixture: MemoryFixtur
 export async function memoryManualAddition(manager: Page, fixture: MemoryFixture) {
   await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
   await manager.getByRole('button', { name: '记忆', exact: true }).click();
+  await selectMemoryCategory(manager, '联系人记忆');
   const contact = manager.getByRole('region', { name: '联系人记忆', exact: true });
   await expect(contact.getByText('甲喜欢合成茉莉茶。', { exact: true })).toBeVisible();
   await contact.getByRole('button', { name: '补充联系人资料', exact: true }).click();
@@ -53,6 +54,7 @@ export async function memoryManualAddition(manager: Page, fixture: MemoryFixture
   expect((actual.data.memories as Array<Record<string, unknown>>).find((item) => item.text === '甲手动补充的合成偏好。'))
     .toMatchObject({ contact_id: fixture.data.contact_ids[0], category: 'preference', adoption_method: 'manual', status: 'active' });
   await manager.getByRole('combobox', { name: '资料联系人', exact: true }).selectOption(fixture.data.contact_ids[1]);
+  await selectMemoryCategory(manager, '联系人记忆');
   await expect(manager.getByText('乙喜欢合成乌龙茶。', { exact: true })).toBeVisible();
   await expect(manager.getByText('甲手动补充的合成偏好。', { exact: true })).toHaveCount(0);
   await selectMemoryCategory(manager, '本人记忆');
@@ -67,6 +69,7 @@ export async function memoryManualAddition(manager: Page, fixture: MemoryFixture
   expect(actualOwn.status).toBe(200);
   expect((actualOwn.data.memories as Array<Record<string, unknown>>).find((item) => item.text === '本人手动补充的合成事实。'))
     .toMatchObject({ level: 'owner', adoption_method: 'manual', status: 'active' });
+  await selectMemoryCategory(manager, '联系人记忆');
   await manager.getByRole('combobox', { name: '资料联系人', exact: true }).selectOption(fixture.data.contact_ids[0]);
   await selectMemoryCategory(manager, '本人记忆');
   await expect(owner.getByText('本人手动补充的合成事实。', { exact: true })).toBeVisible();
@@ -75,6 +78,7 @@ export async function memoryManualAddition(manager: Page, fixture: MemoryFixture
 export async function memoryContactCorrection(manager: Page, fixture: MemoryFixture) {
   await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
   await manager.getByRole('button', { name: '记忆', exact: true }).click();
+  await selectMemoryCategory(manager, '联系人记忆');
   const contact = manager.getByRole('region', { name: '联系人记忆', exact: true });
   await expect(contact.getByText('甲喜欢合成茉莉茶。', { exact: true })).toBeVisible();
   const before = await fixture.readMemorySection(fixture.data.contact_ids[0], 'contact');
@@ -102,6 +106,7 @@ export async function memoryContactCorrection(manager: Page, fixture: MemoryFixt
 export async function memoryRemoval(manager: Page, fixture: MemoryFixture) {
   await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
   await manager.getByRole('button', { name: '记忆', exact: true }).click();
+  await selectMemoryCategory(manager, '联系人记忆');
   const contact = manager.getByRole('region', { name: '联系人记忆', exact: true });
   const owner = manager.getByRole('region', { name: '本人记忆', exact: true });
   await expect(contact.getByText('甲喜欢合成茉莉茶。', { exact: true })).toBeVisible();
@@ -300,6 +305,7 @@ export async function memoryMutationArguments(manager: Page, helper: Page, fixtu
 export async function memoryMutationStale(manager: Page, fixture: MemoryFixture, proxy: import('./memory-http-proxy').MemoryHttpProxy, reconnect: boolean, failure: boolean) {
   await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
   await manager.getByRole('button', { name: '记忆', exact: true }).click();
+  await selectMemoryCategory(manager, '联系人记忆');
   const contact = manager.getByRole('region', { name: '联系人记忆', exact: true });
   await expect(contact.getByText('甲喜欢合成茉莉茶。', { exact: true })).toBeVisible();
   const before = await fixture.readMemorySection(fixture.data.contact_ids[0], 'contact');
@@ -329,10 +335,12 @@ export async function memoryMutationStale(manager: Page, fixture: MemoryFixture,
   } else {
     await manager.getByRole('combobox', { name: '资料联系人' }).selectOption(fixture.data.contact_ids[1]);
   }
+  await selectMemoryCategory(manager, '联系人记忆');
   await expect(manager.getByText('乙喜欢合成乌龙茶。', { exact: true })).toBeVisible();
   if (!reconnect) {
     proxy.holdPath = null;
     await manager.getByRole('combobox', { name: '资料联系人' }).selectOption(fixture.data.contact_ids[0]);
+    await selectMemoryCategory(manager, '联系人记忆');
     await expect(contact.getByText(text, { exact: true })).toBeVisible();
   }
   proxy.release(failure);

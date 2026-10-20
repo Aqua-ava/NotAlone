@@ -34,3 +34,11 @@ export async function withMemoryPage(f, signal, run) {
     } finally { unsubscribe(); unsubscribeOwner(); }
   } finally { signal.removeEventListener('abort', cancel); f.disconnect(); await browser.close(); }
 }
+
+// 通过精简后的公开导航进入整理资料，管理操作需要主动展开详情。
+export async function selectLayeredMemory(page, owner = false) {
+  await page.getByRole('navigation', { name: '记忆分类', exact: true })
+    .getByRole('button', { name: owner ? '我' : '对方', exact: true }).click();
+  const summary = page.locator('summary').filter({ hasText: /^整理设置与状态$/ });
+  if (await summary.locator('..').getAttribute('open') === null) await summary.click();
+}

@@ -3,7 +3,7 @@ import type { ActiveMemory, MemoryChangeKind, OwnerLayeredMemoryManagementReques
 import { MemoryTemporalStatus } from './MemoryTemporalStatus';
 import { LayeredMemoryPanel } from './LayeredMemoryPanel';
 
-export function OwnerLayeredMemoryPanel() {
+export function OwnerLayeredMemoryPanel({ onFacts }: { onFacts?: () => void } = {}) {
   const [state, setState] = useState<OwnerLayeredMemoryState>({ revision: -1, phase: 'idle', value: null, mutation: { phase: 'idle', message: '' } });
   const [error, setError] = useState('');
   const [text, setText] = useState('');
@@ -25,23 +25,28 @@ export function OwnerLayeredMemoryPanel() {
     try { await command(); } catch { setError('本人资料范围或设置已变化，请重新读取后重试。'); }
   }
   const facts = (target?: { memoryId: string; revision: number }, editing = false) => {
+    if (onFacts && !target) { onFacts(); return; }
     setFactTarget(target ? { ...target, editing } : null); setShowFacts(true); void run(() => window.notalone.memory.readOwnerMemories());
   };
   const correctionTarget = state.value?.correctionTarget;
   useEffect(() => { if (correctionTarget) facts(correctionTarget, true); }, [correctionTarget?.memoryId, correctionTarget?.revision]);
   return <>
+    <LayeredMemoryPanel owner state={state} contactName="本人" busy={state.mutation.phase === 'working'} facts={facts}
+      read={mappingCursor => run(() => window.notalone.memory.readOwnerLayeredMemory({ mappingCursor }))}
+      manage={(action, settingsGeneration, options) => run(() => window.notalone.memory.manageOwnerLayeredMemory({ action, settingsGeneration, ...options } as OwnerLayeredMemoryManagementRequest))} />
+    <details className="memory-disclosure"><summary>补充本人资料</summary>
     <form className="memory-section memory-edit-form" aria-label="补充本人资料" onSubmit={event => {
       event.preventDefault(); setError('');
       void window.notalone.memory.addOwnerMemory({ text: text.trim(), category: 'common_fact' })
         .then(() => setText('')).catch(() => setError('本人资料保存结果未确认，请核对后重试。'));
     }}>
-      <h2>补充本人资料</h2><p>仅保存你自己的事实或背景，作为本人底层记忆；不会创建联系人。</p>
+      <h2>补充本人资料</h2><p>补充你的经历、偏好，帮助助手更了解你。</p>
       <label>本人资料内容<textarea value={text} maxLength={4000} onChange={event => setText(event.target.value)} disabled={state.mutation.phase === 'working'} /></label>
       <button className="button" type="submit" disabled={!text.trim() || state.mutation.phase === 'working'}>保存本人资料</button>
-    </form>
+    </form></details>
     {showFacts && <section className="memory-section" aria-label="本人底层记忆">
       <h2>本人底层记忆</h2><p>仅当前本人的已采纳资料；自动采纳不代表用户确认。</p>
-      <button className="button" disabled={state.mutation.phase === 'working'} onClick={() => facts()}>重新读取本人底层记忆</button>
+      <button className="button" disabled={state.mutation.phase === 'working'} onClick={() => void run(() => window.notalone.memory.readOwnerMemories())}>重新读取本人底层记忆</button>
       {state.memories?.phase === 'loading' && <p role="status">正在读取本人底层记忆…</p>}
       {state.memories?.phase === 'error' && <p role="alert">本人底层记忆读取失败，旧内容已撤下。</p>}
       {state.memories?.phase === 'ready' && state.memories.items.length === 0 && <p>暂无本人底层记忆。</p>}
@@ -54,9 +59,6 @@ export function OwnerLayeredMemoryPanel() {
       {state.memories?.phase === 'ready' && state.memories.items.map(memory => <OwnerFactCard key={`${memory.memoryId}:${memory.revision}`} memory={memory}
         busy={state.mutation.phase === 'working'} run={run} />)}
     </section>}
-    <LayeredMemoryPanel owner state={state} contactName="本人" busy={state.mutation.phase === 'working'} facts={facts}
-      read={mappingCursor => run(() => window.notalone.memory.readOwnerLayeredMemory({ mappingCursor }))}
-      manage={(action, settingsGeneration, options) => run(() => window.notalone.memory.manageOwnerLayeredMemory({ action, settingsGeneration, ...options } as OwnerLayeredMemoryManagementRequest))} />
     {state.mutation.phase !== 'idle' && <p role={state.mutation.phase === 'error' ? 'alert' : 'status'}>{state.mutation.message}</p>}
     {error && <p role="alert">{error}</p>}
   </>;

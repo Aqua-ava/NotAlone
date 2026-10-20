@@ -278,8 +278,6 @@ function MemoryCard({ content, memory, candidate, sources, correct, remove, open
       onClick={() => setExpanded((value) => !value)}>{expanded ? '收起来源与版本' : '查看来源与版本'}</button>
     {memory && correct && <button className="button" disabled={busy}
       aria-label={`修正资料：${content.text}`} onClick={() => { setRemoving(false); setEditing(true); }}>修正资料</button>}
-    {memory && openVersions && <button className="button" disabled={busy}
-      aria-label={`查看版本历史：${content.text}`} onClick={() => void openVersions(memory)}>查看版本历史</button>}
     {editing && memory && correct && <form aria-label={memory.level === 'owner' ? '修正本人资料' : '修正联系人资料'} className="memory-edit-form" onSubmit={(event) => {
       event.preventDefault(); void correct(memory, text, category, changeKind);
     }}><label>资料正文<textarea aria-label="资料正文" value={text} disabled={busy} onChange={(event) => setText(event.target.value)} /></label>
@@ -315,6 +313,9 @@ function MemoryCard({ content, memory, candidate, sources, correct, remove, open
       <button className="button" disabled={busy} onClick={() => setDiscarding(false)}>取消丢弃</button>
     </div>}
     {expanded && <div className="memory-details">
+    {memory && openVersions && <button className="button" disabled={busy}
+      aria-label={`查看版本历史：${content.text}`} onClick={() => void openVersions(memory)}>查看版本历史</button>}
+
       <p>{content.timing.currentStatusReason}</p>
       <div className="memory-times"><p>来源聊天时间：{sourceTime(content)}</p><p>保存时间：{timeText(content.timing.recordedAt)}</p></div>
       <MemoryEventDetails event={content.event} />
@@ -477,7 +478,7 @@ export function ContactRelationshipOverview({ overview, memories, refresh, openV
           {leaf ? <button className="button" disabled={busy} onClick={() => void openVersions(leaf)}
             aria-label={`查看变化依据：${item.text}`}>查看底层资料与版本历史</button>
             : <p className="memory-section-note">当前底层版本暂不可核对；此项只供回看，请刷新资料后再修正。</p>}
-          <p className="memory-section-note">修正或删除请切换到联系人记忆，概览会重新核对。</p>
+          <p className="memory-section-note">修正或删除请展开逐条记忆，历史记录会重新核对。</p>
           </details>
         </article>;
       }}</MemoryList>
@@ -532,7 +533,7 @@ export function OwnerFactsOverview({ overview, memories, contactId, refresh, ope
           {leaf ? <button className="button" disabled={busy} onClick={() => void openVersions(leaf)}
             aria-label={`查看本人变化依据：${item.text}`}>查看本人底层资料与版本历史</button>
             : <p className="memory-section-note">当前本人底层版本暂不可核对；此项只供回看，请刷新资料后再修正。</p>}
-          <p className="memory-section-note">切换到本人记忆修正或删除，概览会重新核对。</p>
+          <p className="memory-section-note">展开逐条记忆修正或删除，历史记录会重新核对。</p>
           </details>
         </article>;
       }}</MemoryList>
@@ -541,8 +542,7 @@ export function OwnerFactsOverview({ overview, memories, contactId, refresh, ope
   </section>;
 }
 
-const memoryViews = { contact: '联系人记忆', owner: '本人记忆', pending: '待确认候选',
-  ownerLayeredMemory: '本人主题资料', layeredMemory: '主题资料', overview: '联系人概览', ownerOverview: '本人概览', sources: '来源与过程' } as const;
+const memoryViews = { contact: '对方', owner: '我', pending: '待确认' } as const;
 type MemoryView = keyof typeof memoryViews;
 
 export function MemoryPage({ session, navigate }: { session: ContactSessionView; navigate: (page: ManagerPage) => void }) {
@@ -553,20 +553,41 @@ export function MemoryPage({ session, navigate }: { session: ContactSessionView;
   activeScope.current = scopeKey;
   const [selection, setSelection] = useState<{ scope: string; view: MemoryView }>({ scope: scopeKey, view: 'contact' });
   const [factTarget, setFactTarget] = useState<{ scope: string; memoryId: string; revision: number; editing: boolean } | null>(null);
-  const view = selection.view === 'ownerLayeredMemory' ? selection.view : selection.scope === scopeKey ? selection.view : 'contact';
+  const view = selection.view === 'owner' ? selection.view : selection.scope === scopeKey ? selection.view : 'contact';
+  const detailKey = `${scopeKey}:${view}`;
+  const [historySelection, setHistorySelection] = useState<{ key: string; open: boolean } | null>(null);
+  const historyOpen = historySelection?.key === detailKey && historySelection.open;
   const tracePanel = useRef<HTMLDivElement>(null);
+  const factsDetails = useRef<HTMLDetailsElement>(null);
+  const historyDetails = useRef<HTMLDetailsElement>(null);
+  const revealFacts = () => {
+    if (factsDetails.current) {
+      factsDetails.current.open = true;
+      factsDetails.current.scrollIntoView({ block: 'start' });
+    }
+  };
+  const openVersions = async (entry: ActiveMemory) => {
+    setHistorySelection({ key: detailKey, open: true });
+    if (historyDetails.current) historyDetails.current.open = true;
+    await memory.openVersions(entry);
+  };
   const selectView = (next: MemoryView) => setSelection({ scope: scopeKey, view: next });
   const openFact = (target?: { memoryId: string; revision: number }, editing = false) => {
     setFactTarget(target ? { scope: scopeKey, ...target, editing } : null);
     selectView('contact');
+    revealFacts();
     void memory.refresh('contact');
   };
+  useEffect(() => {
+    if (factTarget?.scope === scopeKey) revealFacts();
+  }, [factTarget, scopeKey]);
   const correctionTarget = memory.state.layeredMemory.value?.correctionTarget;
   useEffect(() => {
     if (correctionTarget && memory.state.contactId === session.state.selectedContactId) openFact(correctionTarget, true);
   }, [correctionTarget?.memoryId, correctionTarget?.revision, scopeKey]);
   const trace = (kind: TraceRecordKind, id: string) => {
-    selectView('sources');
+    setHistorySelection({ key: detailKey, open: true });
+    if (historyDetails.current) historyDetails.current.open = true;
     void traces.find('memory-traces', kind, id).then(() => {
       if (activeScope.current === scopeKey) tracePanel.current?.scrollIntoView({ block: 'start' });
     });
@@ -574,46 +595,42 @@ export function MemoryPage({ session, navigate }: { session: ContactSessionView;
   const contact = session.state.contacts.find((entry) => entry.contactId === session.state.selectedContactId);
   const { state } = memory;
   return <div className="memory-page">
-    <div className="memory-navigation"><div className="memory-toolbar"><label>资料联系人 <select aria-label="资料联系人" value={session.state.selectedContactId ?? ''}
+    <div className="memory-navigation"><nav className="memory-tabs" aria-label="记忆分类">{(Object.keys(memoryViews) as MemoryView[]).map((name) =>
+      <button key={name} aria-pressed={view === name} onClick={() => selectView(name)}>{memoryViews[name]}</button>)}</nav>
+    {view !== 'owner' && <div className="memory-toolbar"><label>资料联系人 <select aria-label="资料联系人" value={session.state.selectedContactId ?? ''}
       disabled={session.state.contacts.length === 0} onChange={(event) => void session.selectContact(event.target.value)}>
       <option value="" disabled>先确认联系人</option>{session.state.contacts.map((entry) => <option key={entry.contactId} value={entry.contactId}>{entry.displayName}</option>)}</select></label>
       <button className="button" disabled={!contact || [state.contact, state.owner, state.pending, state.sources].some((section) => section.phase === 'loading')}
-        onClick={() => void memory.refresh()}>刷新记忆</button></div>
-      <nav className="memory-tabs" aria-label="记忆分类">{(Object.keys(memoryViews) as MemoryView[]).filter(name => contact || name === 'ownerLayeredMemory').map((name) =>
-        <button key={name} aria-pressed={view === name} onClick={() => selectView(name)}>{memoryViews[name]}</button>)}</nav>
+        onClick={() => void memory.refresh()}>刷新记忆</button></div>}
     </div>
-    {view === 'ownerLayeredMemory' && <OwnerLayeredMemoryPanel />}
-    {view === 'ownerLayeredMemory' ? null : !contact ? <section className="memory-no-contact" aria-label="资料范围未确认"><h2>先确认本次联系人</h2>
+    <div className="memory-view-content" key={`${scopeKey}:${view}`}>
+    {view === 'owner' && <OwnerLayeredMemoryPanel onFacts={contact ? revealFacts : undefined} />}
+    {!contact ? view === 'owner' ? null : <section className="memory-no-contact" aria-label="资料范围未确认"><h2>先确认本次联系人</h2>
       <p>选择联系人后，查看该范围的关系记忆、待确认候选与来源，以及当前本人的共享资料。</p>
       <button className="button" onClick={() => navigate('contacts')}>前往联系人目录</button></section>
       : <>
-        <p className="memory-scope-note">当前联系人：{contact.displayName}。请以卡片核实状态为准，过期资料仅供回看；历史版本可在概览中查看。</p>
-        {view === 'layeredMemory' && <LayeredMemoryPanel key={scopeKey} state={state.layeredMemory} contactName={contact.displayName}
+        {view === 'contact' && <LayeredMemoryPanel key={scopeKey} state={state.layeredMemory} contactName={contact.displayName}
           busy={state.mutation.phase === 'working'} read={memory.readLayeredMemory} manage={memory.manageLayeredMemory}
           facts={openFact} />}
-        {view === 'overview' && <ContactRelationshipOverview key={scopeKey} overview={state.overview} memories={state.contact} refresh={memory.refreshOverview}
-          openVersions={memory.openVersions} trace={trace} busy={state.mutation.phase === 'working'} />}
-        {view === 'contact' && <ReadingSection title="联系人记忆" note="自动采纳不代表用户确认；手动采纳可能来自录入、确认候选或修正。" empty="这位联系人暂无可查看记忆。"
+        {view === 'contact' && <details ref={factsDetails} className="memory-disclosure"><summary>逐条记忆</summary><ReadingSection title="联系人记忆" note="自动采纳不代表用户确认；手动采纳可能来自录入、确认候选或修正。" empty="这位联系人暂无可查看记忆。"
           state={state.contact} retry={() => void memory.refresh('contact')}>
           <AdditionControl key={`contact:${state.scopeRevision}`} level="contact" phase={state.mutation.phase} add={memory.add} />
           {factTarget?.scope === scopeKey && <section aria-label="本次纠错的底层记忆"><h3>本次纠错的底层记忆</h3>
             {state.contact.items.filter(entry => entry.memoryId === factTarget.memoryId && entry.revision === factTarget.revision).map(entry => <MemoryCard
               key={`${entry.memoryId}:${entry.revision}`} content={entry} memory={entry} sources={state.sources} initiallyEditing={factTarget.editing}
-              trace={trace} correct={memory.correct} remove={memory.remove} openVersions={memory.openVersions} busy={state.mutation.phase === 'working'} />)}
+              trace={trace} correct={memory.correct} remove={memory.remove} openVersions={openVersions} busy={state.mutation.phase === 'working'} />)}
             {state.contact.phase === 'ready' && !state.contact.items.some(entry => entry.memoryId === factTarget.memoryId && entry.revision === factTarget.revision)
               && <p role="alert">目标底层版本已变化或不可用，请重新核对资料；不会改选其他记忆。</p>}
           </section>}
           <MemoryList key={scopeKey} items={state.contact.items} label="联系人记忆">{(entry) => <MemoryCard key={entry.memoryId} content={entry} memory={entry} sources={state.sources}
-            trace={trace} correct={memory.correct} remove={memory.remove} openVersions={memory.openVersions} busy={state.mutation.phase === 'working'} />}</MemoryList>
-        </ReadingSection>}
-        {view === 'ownerOverview' && <OwnerFactsOverview key={scopeKey} overview={state.ownerOverview} memories={state.owner} contactId={contact.contactId} refresh={memory.refreshOwnerOverview}
-          openVersions={memory.openVersions} trace={trace} busy={state.mutation.phase === 'working'} />}
-        {view === 'owner' && <ReadingSection title="本人记忆" note="属于当前本人，可在与不同联系人的回复中共享使用。" empty="当前本人暂无可查看记忆。"
+            trace={trace} correct={memory.correct} remove={memory.remove} openVersions={openVersions} busy={state.mutation.phase === 'working'} />}</MemoryList>
+        </ReadingSection></details>}
+        {view === 'owner' && <details ref={factsDetails} className="memory-disclosure"><summary>逐条记忆</summary><ReadingSection title="本人记忆" note="属于当前本人，可在与不同联系人的回复中共享使用。" empty="当前本人暂无可查看记忆。"
           state={state.owner} retry={() => void memory.refresh('owner')}>
           <AdditionControl key={`owner:${state.scopeRevision}`} level="owner" phase={state.mutation.phase} add={memory.add} />
           <MemoryList key={scopeKey} items={state.owner.items} label="本人记忆">{(entry) => <MemoryCard key={entry.memoryId} content={entry} memory={entry} sources={state.sources}
-            trace={trace} correct={memory.correct} remove={memory.remove} openVersions={memory.openVersions} busy={state.mutation.phase === 'working'} />}</MemoryList>
-        </ReadingSection>}
+            trace={trace} correct={memory.correct} remove={memory.remove} openVersions={openVersions} busy={state.mutation.phase === 'working'} />}</MemoryList>
+        </ReadingSection></details>}
         {view === 'pending' && <ReadingSection title="待确认候选" note="仅来自当前联系人范围；本人、联系人与双方主体分别标明，未经确认不能当作确定事实。" empty="这位联系人暂无待确认候选。"
           state={state.pending} retry={() => void memory.refresh('pending')}>
           <MemoryList key={scopeKey} items={state.pending.items} label="待确认候选">{(entry) => <MemoryCard key={entry.candidateId} content={entry} candidate={entry} sources={state.sources}
@@ -621,16 +638,28 @@ export function MemoryPage({ session, navigate }: { session: ContactSessionView;
             updateMemories={entry.subject === 'self' ? state.owner : state.contact} applyCandidateUpdate={memory.applyCandidateUpdate}
             busy={state.mutation.phase === 'working'} />}</MemoryList>
         </ReadingSection>}
-        {view === 'sources' && <ReadingSection title="当前联系人来源" note="来源目录不能解析所有消息、观察或人工引用；无法核对的引用会保留未知说明。" empty="这位联系人暂无来源记录。"
+        <details ref={historyDetails} className="memory-disclosure" open={historyOpen}
+          onToggle={event => setHistorySelection({ key: detailKey, open: event.currentTarget.open })}><summary>历史与来源</summary>
+        {historyOpen && <>
+        {view === 'contact' && <ContactRelationshipOverview overview={state.overview} memories={state.contact} refresh={memory.refreshOverview}
+          openVersions={openVersions} trace={trace} busy={state.mutation.phase === 'working'} />}
+        {view === 'owner' && <OwnerFactsOverview overview={state.ownerOverview} memories={state.owner} contactId={contact.contactId} refresh={memory.refreshOwnerOverview}
+          openVersions={openVersions} trace={trace} busy={state.mutation.phase === 'working'} />}
+        {(view === 'owner' ? state.history.level === 'owner' : state.history.level === 'contact') &&
+          <MemoryVersionHistory history={state.history} revert={memory.revertAutoUpdate} busy={state.mutation.phase === 'working'} />}
+        {view === 'owner' && <p className="memory-section-note">以下来源与提取过程属于当前选择的联系人：{contact.displayName}。本人记忆的完整来历可在逐项详情中核对。</p>}
+        <ReadingSection title="当前联系人来源" note="来源目录不能解析所有消息、观察或人工引用；无法核对的引用会保留未知说明。" empty="这位联系人暂无来源记录。"
           state={state.sources} retry={() => void memory.refresh('sources')}>
           <MemoryList key={scopeKey} items={state.sources.items} label="当前联系人来源" className="memory-source-list" list>{(entry) => <li key={entry.sourceId}>
             <b>{entry.fileName ?? '文件名不可用'}</b><p>来源标识：{entry.sourceId}</p><p>{entry.recordCount} 条记录 · {sourceNames[entry.status]}</p>
           </li>}</MemoryList>
-        </ReadingSection>}
+        </ReadingSection>
+        <SourceDeletionPanel session={session} />
+        <div ref={tracePanel} className="memory-trace-target"><TracePanel key={session.state.scopeRevision} traces={traces} /></div>
+        </>}
+        </details>
       </>}
-    {contact && <MemoryVersionHistory history={state.history} revert={memory.revertAutoUpdate} busy={state.mutation.phase === 'working'} />}
-    {contact && view === 'sources' && <SourceDeletionPanel session={session} />}
-    {contact && view === 'sources' && <div ref={tracePanel} className="memory-trace-target"><TracePanel key={session.state.scopeRevision} traces={traces} /></div>}
+    </div>
     {state.mutation.phase !== 'idle' && <p className="memory-section-note" role={state.mutation.phase === 'error' ? 'alert' : 'status'}>{state.mutation.message}</p>}
     {state.mutation.backupCleanupRequired && <UpdateBackupCleanupRecovery />}
     {memory.error && <p className="memory-section-note" role="alert">{memory.error}</p>}

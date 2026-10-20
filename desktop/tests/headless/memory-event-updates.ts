@@ -7,6 +7,7 @@ async function openMemoryPage(manager: Page) {
   await manager.getByRole('button', { name: '选择合成事件联系人', exact: true }).click();
   await manager.getByRole('button', { name: '记忆', exact: true }).click();
   await manager.getByRole('button', { name: '刷新记忆', exact: true }).click();
+  await selectMemoryCategory(manager, '联系人记忆');
   return manager.getByRole('region', { name: '联系人记忆', exact: true });
 }
 
@@ -18,6 +19,7 @@ export async function memoryEventUpdates(browser: Browser, origin: string) {
     const contact = await openMemoryPage(manager);
     const current = contact.getByRole('article').filter({ has: manager.getByText(prepared.current.text, { exact: true }) });
     await expect(current.getByText('自动采纳（可撤销）', { exact: true })).toBeVisible();
+    await expandMemoryDetails(current);
     await current.getByRole('button', { name: `查看版本历史：${prepared.current.text}`, exact: true }).click();
     const history = manager.getByRole('region', { name: '资料版本历史', exact: true });
     await expect(history.getByText(prepared.old.text, { exact: true })).toBeVisible();
@@ -71,6 +73,7 @@ export async function memoryEventUpdates(browser: Browser, origin: string) {
     await expandMemoryDetails(current);
     await expect(current.getByText('手动采纳', { exact: true })).toBeVisible();
     await expect(current.getByText('事件阶段：已发生（来源已核验）', { exact: true })).toBeVisible();
+    await expandMemoryDetails(current);
     await current.getByRole('button', { name: `查看版本历史：${prepared.pending[0].text}`, exact: true }).click();
     const history = manager.getByRole('region', { name: '资料版本历史', exact: true });
     await expect(history.getByText(prepared.old.text, { exact: true })).toBeVisible();

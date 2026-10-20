@@ -78,6 +78,7 @@ export async function ownerFactsOverview(browser: Browser, origin: string) {
       await selectMemoryCategory(manager, '本人概览');
       await expect(overview.getByText(prepared.manualPreference.text, { exact: true })).toHaveCount(0);
       await expect(overview.getByRole('article')).toHaveCount(2);
+      await selectMemoryCategory(manager, '联系人记忆');
       await manager.getByRole('combobox', { name: '资料联系人', exact: true }).selectOption(prepared.otherContactId);
       await selectMemoryCategory(manager, '本人概览');
       await expect(overview.getByRole('article')).toHaveCount(2);

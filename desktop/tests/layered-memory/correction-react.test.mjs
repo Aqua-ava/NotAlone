@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { fixture, profilePayload, ids } from './support.mjs';
-import { withMemoryPage } from './react-support.mjs';
+import { selectLayeredMemory, withMemoryPage } from './react-support.mjs';
 
 for (const scope of ['contact', 'owner']) for (const kind of ['scenario', 'profile']) for (const action of ['summary', 'fact']) {
   test(`当前React ${scope}/${kind} ${action}纠错使用实际目标并保留手录入口`, { timeout: 20000 }, async t => {
@@ -33,7 +33,7 @@ for (const scope of ['contact', 'owner']) for (const kind of ['scenario', 'profi
     await withMemoryPage(f, t.signal, async page => {
       const errors = [];
       page.on('pageerror', error => errors.push(error.message));
-      await page.getByRole('button', { name: scope === 'owner' ? '本人主题资料' : '主题资料', exact: true }).click();
+      await selectLayeredMemory(page, scope === 'owner');
       const item = kind === 'profile' ? page.getByRole('region', { name: '长期背景', exact: true })
         : page.locator(`#layered-scenario-${ids.version}`);
       if (action === 'summary') {
@@ -44,6 +44,7 @@ for (const scope of ['contact', 'owner']) for (const kind of ['scenario', 'profi
         assert.equal(posts[0].body.reason, '总结把计划写成事实。');
         await page.getByRole('button', { name: scope === 'owner' ? '管理底层本人记忆' : '管理底层联系人记忆' }).click();
         if (scope === 'contact') await page.getByRole('button', { name: '补充联系人资料', exact: true }).click();
+        else await page.locator('summary').filter({ hasText: /^补充本人资料$/ }).click();
         await page.getByRole('button', { name: scope === 'owner' ? '保存本人资料' : '保存资料', exact: true }).waitFor();
       } else {
         await item.getByText(kind === 'profile' ? '查看第 1 项依据与时间' : '查看第 1 段依据与时间', { exact: true }).click();

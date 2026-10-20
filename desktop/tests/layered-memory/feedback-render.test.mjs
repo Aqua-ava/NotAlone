@@ -33,7 +33,7 @@ for (const scope of ['contact', 'owner']) for (const erased of [false, true]) {
         assert.match(html, /原整理内容已清除/);
         assert.doesNotMatch(html, /原整理目标是合成课程计划/);
       } else assert.match(html, /原整理内容：原整理目标是合成课程计划/);
-      assert.match(html, scope === 'owner' ? /范围：仅当前本人/ : /范围：仅当前联系人 合成联系人/);
+      assert.match(html, scope === 'owner' ? /<h2>关于我<\/h2>/ : /<h2>关于 合成联系人<\/h2>/);
     } finally { f.disconnect(); }
   });
 }

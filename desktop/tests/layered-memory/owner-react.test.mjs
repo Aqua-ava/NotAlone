@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { fixture, payload } from './support.mjs';
-import { withMemoryPage } from './react-support.mjs';
+import { selectLayeredMemory, withMemoryPage } from './react-support.mjs';
 
 test('无联系人可通过当前React页面确认本人范围、停用及删除', { timeout: 20000 }, async (t) => {
   let saved = payload({ scope_kind: 'owner', contact_id: null });
@@ -11,7 +11,7 @@ test('无联系人可通过当前React页面确认本人范围、停用及删除
     return { generation: 1, data: saved };
   }, { noContact: true });
   await withMemoryPage(f, t.signal, async page => {
-    await page.getByRole('button', { name: '本人主题资料', exact: true }).click();
+    await selectLayeredMemory(page, true);
     await page.getByRole('checkbox', { name: /确认仅整理本人的/ }).check();
     await page.getByRole('button', { name: '确认范围并开启' }).click();
     await page.getByText('已开启范围，质量资格待核验', { exact: true }).waitFor();

@@ -60,20 +60,23 @@ export function LayeredMemoryPanel({ state, contactName, busy, read, manage, fac
   useEffect(() => { setConfirmed(false); setDeleting(false); }, [value?.contactId, value?.settingsGeneration]);
   const waiting = busy || state.phase === 'loading';
   return <section className="memory-section memory-overview layered-memory" aria-label="主题资料">
-    <header><div><h2>主题资料</h2><p>{owner ? '范围：仅当前本人；只整理合法本人记忆，不包含联系人的身份或多联系人原话。' : `范围：仅当前联系人 ${contactName}；不包含本人或其他联系人的资料。`}</p></div>
-      <button className="button" disabled={waiting} onClick={() => void read()}>重新读取主题资料</button></header>
+    <header><div><h2>{owner ? '关于我' : `关于 ${contactName}`}</h2><p>从记忆中整理的经历与偏好，可以随时核对和修正。</p></div></header>
     {state.phase === 'loading' && <p role="status">正在核对当前范围的主题资料…</p>}
     {state.phase === 'error' && <p role="alert">主题资料读取失败或旧入口分页已过期，旧内容已撤下。请重新读取首屏。</p>}
     {state.phase === 'idle' && <p>尚未读取主题资料。新记忆会由系统自动整理。</p>}
     {value && <>
-      <p>整理用途：{value.purpose}</p>
-      <p>合格资料 {value.eligibleCount} 条 · 已覆盖 {value.coveredCount} 条 · 剩余 {value.remainingCount} 条</p>
-      {value.workId && <p>当前批次：{value.currentBatch}</p>}
-      {value.workId && <p>累计已用 {value.modelCallsUsed} / 已授权 {value.modelCallLimit} 次模型调用</p>}
       <p role={value.status === 'failed' || value.status === 'paused' ? 'alert' : 'status'}>{value.errorCode === 'model_call_budget_exhausted'
         ? '当前工作模型调用预算已耗尽，整理已暂停。刷新不会重置预算。' : statusNames[value.status]}</p>
       {value.maintenancePending && <p role="status">资料已变化，等待后台更新。</p>}
       {value.remainingCount > 0 && value.coveredCount > 0 && <p>目前仅覆盖部分资料；剩余资料尚未整理。</p>}
+    </>}
+    <details className="memory-details memory-organization-settings"><summary>整理设置与状态</summary>
+      <button className="button" disabled={waiting} onClick={() => void read()}>重新读取主题资料</button>
+      {value && <>
+      <p>整理用途：{value.purpose}</p>
+      <p>合格资料 {value.eligibleCount} 条 · 已覆盖 {value.coveredCount} 条 · 剩余 {value.remainingCount} 条</p>
+      {value.workId && <p>当前批次：{value.currentBatch}</p>}
+      {value.workId && <p>累计已用 {value.modelCallsUsed} / 已授权 {value.modelCallLimit} 次模型调用</p>}
       {automatic ? <p className="memory-section-note">记忆会自动更新和整理，逐项核对来源后保存。你可以查看、纠错或停用；回复仅在你开启关系语境时参考这些记忆。</p> : <section className="memory-section-note" aria-label="质量资格">
         <QualityStage name="整理质量" value={value.quality.organization} />
         <QualityStage name="回复读取质量" value={value.quality.reply} />
@@ -109,8 +112,11 @@ export function LayeredMemoryPanel({ state, contactName, busy, read, manage, fac
         <p>删除将关闭本范围，清除整理正文、旧版本、相关副本及全部纠错和反馈记录，包括待修正标记。底层记忆保持不变；主动重新开启将进入新周期，旧总结可能再次出现。</p>
         <button className="button" disabled={waiting} onClick={() => void manage('delete', value.settingsGeneration)}>确认删除整理结果</button>
         <button className="button" disabled={waiting} onClick={() => setDeleting(false)}>取消删除</button></div>}
+      </>}
+    </details>
+    {value && <>
       {!value.enabled && (value.scenarios.length > 0 || value.profile !== null) && <p>已停止整理及回复加载；下方仅供回看来源仍有效的现有文档。</p>}
-      <section className="memory-card" aria-label="长期背景">
+      {(value.profile || value.scenarios.length > 0) && <section className="memory-card" aria-label="长期背景">
         <div className="memory-card-labels"><h3>长期背景</h3>{value.profile && <b>系统整理</b>}</div>
         {value.profile ? <>
           <p className="memory-times">更新时间：{time(value.profile.updatedAt)}</p>
@@ -139,8 +145,8 @@ export function LayeredMemoryPanel({ state, contactName, busy, read, manage, fac
             { organizationGeneration: value.organizationGeneration, profileVersionId: value.profile!.versionId })}>撤回本版长期背景</button>
           <p>撤回仅移除当前长期背景，不自动恢复旧版。事实有误可查看或修正底层记忆。</p>
         </> : <p>暂无可展示的长期背景。</p>}
-      </section>
-      {value.scenarios.length === 0 && value.status === 'ready' && <p>本批没有可展示的主题资料。</p>}
+      </section>}
+      {value.scenarios.length === 0 && !value.profile && <p className="memory-empty">还没有整理好的记忆。可以先补充资料，已有记忆会逐步整理到这里。</p>}
       {(value.mappingCursor || value.mappingNextCursor || value.scenarioMappings.length > 0) && <div>
         <p>旧入口映射按页展示，更多目标请翻页。</p>
         {value.mappingCursor && <button className="button" disabled={waiting} onClick={() => void read(null)}>返回旧入口首屏</button>}
@@ -180,8 +186,6 @@ export function LayeredMemoryPanel({ state, contactName, busy, read, manage, fac
           <p>撤回仅移除本版主题及依赖它的长期背景，不自动恢复旧版。</p></>}
         <details className="memory-details"><summary>查看主题版本</summary><p>主题标识：{scenario.scenarioId}</p><p>版本标识：{scenario.versionId}</p></details>
       </article>)}</div>
-      <p className="memory-section-note">来源聊天时间表示当时说过，不证明事件恰在当天发生，也不保证今天仍成立。事实有误请修正底层记忆，再刷新主题资料。</p>
-      <p>补充背景请通过底层记忆的手动录入，整理结果会按合法资料更新。</p>
       <button className="button" disabled={waiting} onClick={() => facts()}>{owner ? '管理底层本人记忆' : '管理底层联系人记忆'}</button>
       {value.pendingFactCount > 0 && <p role="status">有 {value.pendingFactCount} 条底层记忆等待修正。相关整理资料已停用；请完成底层修正后刷新，刷新或重新打开不会解除待修正状态。</p>}
       {value.feedback.length > 0 && <section aria-label="整理纠错反馈"><h3>整理纠错反馈</h3>

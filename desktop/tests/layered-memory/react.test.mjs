@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { fixture, payload, readyPayload, profilePayload, ids } from './support.mjs';
-import { withMemoryPage } from './react-support.mjs';
+import { selectLayeredMemory, withMemoryPage } from './react-support.mjs';
 
 test('资料页分别展示整理与回复质量，回复合同变化不误报整理资格失效', { timeout: 20000 }, async (t) => {
   let replyChanged = false;
@@ -19,7 +19,7 @@ test('资料页分别展示整理与回复质量，回复合同变化不误报�
       : request.path.endsWith('/memory-candidates') ? { candidates: [] } : { memories: [] } };
   });
   await withMemoryPage(f, t.signal, async (page) => {
-    await page.getByRole('button', { name: '主题资料', exact: true }).click();
+    await selectLayeredMemory(page);
     const organization = page.getByRole('group', { name: '整理质量' });
     const reply = page.getByRole('group', { name: '回复读取质量' });
     await organization.getByText('已验证', { exact: true }).waitFor();
@@ -51,7 +51,7 @@ test('资料页显示未通过的具体原因与报告，合成控制数据不�
       : request.path.endsWith('/memory-candidates') ? { candidates: [] } : { memories: [] } };
   });
   await withMemoryPage(f, t.signal, async (page) => {
-    await page.getByRole('button', { name: '主题资料', exact: true }).click();
+    await selectLayeredMemory(page);
     const organization = page.getByRole('group', { name: '整理质量' });
     await organization.getByText('未通过', { exact: true }).waitFor();
     await organization.getByText('出现关键语义错误，未满足零关键错误要求。', { exact: true }).waitFor();
@@ -79,7 +79,7 @@ test('当前关系资料页面由用户确认用途后开启主题资料，未�
       : request.path.endsWith('/memory-candidates') ? { candidates: [] } : { memories: [] } };
   });
   await withMemoryPage(f, t.signal, async (page) => {
-      await page.getByRole('button', { name: '主题资料', exact: true }).click({ timeout: 3000 });
+      await selectLayeredMemory(page);
       const confirm = page.getByRole('checkbox', { name: /确认仅整理/ });
       await confirm.waitFor();
       assert.equal(await confirm.isChecked(), false);
@@ -104,7 +104,7 @@ test('用户查看系统整理的部分覆盖与段落时间依据，停用回�
       : request.path.endsWith('/memory-candidates') ? { candidates: [] } : { memories: [] } };
   });
   await withMemoryPage(f, t.signal, async (page) => {
-    await page.getByRole('button', { name: '主题资料', exact: true }).click();
+    await selectLayeredMemory(page);
     await page.getByText('本批主题资料整理成功', { exact: true }).waitFor();
     await page.getByText('合格资料 3 条 · 已覆盖 2 条 · 剩余 1 条', { exact: true }).waitFor();
     await page.getByText('系统整理', { exact: true }).waitFor();
@@ -124,7 +124,7 @@ test('用户查看系统整理的部分覆盖与段落时间依据，停用回�
     assert.equal(await page.getByText('曾计划参加合成读书会，当前是否成行尚未核实。', { exact: true }).count(), 0);
     assert.deepEqual((await f.bridge.getState()).layeredMemory.value.scenarios, []);
     await page.getByRole('button', { name: '管理底层联系人记忆' }).click();
-    assert.equal(await page.getByRole('button', { name: '联系人记忆', exact: true }).getAttribute('aria-pressed'), 'true');
+    assert.equal(await page.getByRole('button', { name: '对方', exact: true }).getAttribute('aria-pressed'), 'true');
   });
 });
 
@@ -140,7 +140,7 @@ test('用户刷新可分别观察空资料与整理失败，失败不会保留�
       : request.path.endsWith('/memory-candidates') ? { candidates: [] } : { memories: [] } };
   });
   await withMemoryPage(f, t.signal, async (page) => {
-    await page.getByRole('button', { name: '主题资料', exact: true }).click();
+    await selectLayeredMemory(page);
     await page.getByText('暂无合格资料可整理', { exact: true }).waitFor();
     await page.getByRole('button', { name: '刷新主题资料' }).click();
     await page.getByText('暂无合格资料可整理', { exact: true }).waitFor();
@@ -165,7 +165,7 @@ test('用户逐项查看长期背景与依据，停用仍可回看，并可撤�
       : request.path.endsWith('/memory-candidates') ? { candidates: [] } : { memories: [] } };
   });
   await withMemoryPage(f, t.signal, async (page) => {
-    await page.getByRole('button', { name: '主题资料', exact: true }).click();
+    await selectLayeredMemory(page);
     const profile = page.getByRole('region', { name: '长期背景', exact: true });
     await profile.getByText('系统整理', { exact: true }).waitFor({ timeout: 3000 });
     await profile.getByText('曾有共同读书安排，是否持续尚未核实。', { exact: true }).waitFor();
@@ -202,7 +202,7 @@ test('模型调用额度耗尽时显示累计与剩余，刷新后仍暂停并�
       : request.path.endsWith('/memory-candidates') ? { candidates: [] } : { memories: [] } };
   });
   await withMemoryPage(f, t.signal, async (page) => {
-    await page.getByRole('button', { name: '主题资料', exact: true }).click();
+    await selectLayeredMemory(page);
     const paused = page.getByText('当前工作模型调用预算已耗尽，整理已暂停。刷新不会重置预算。', { exact: true });
     await paused.waitFor({ timeout: 3000 });
     await page.getByText('当前工作模型调用：累计已消耗 4 次 · 剩余 0 次 · 上限 4 次。', { exact: true }).waitFor();
@@ -225,7 +225,7 @@ test('模型调用计数缺失或不合法时撤下旧正文，不能显示未�
       : request.path.endsWith('/memory-candidates') ? { candidates: [] } : { memories: [] } };
   });
   await withMemoryPage(f, t.signal, async (page) => {
-    await page.getByRole('button', { name: '主题资料', exact: true }).click();
+    await selectLayeredMemory(page);
     const wrong = [
       { model_calls_used: 3, model_calls_remaining: 0 },
       { model_calls_used: 4, model_calls_remaining: 1 },
@@ -271,7 +271,7 @@ test('用户暂停首次覆盖再继续同一工作，显示真实批次且保�
       : request.path.endsWith('/memory-candidates') ? { candidates: [] } : { memories: [] } };
   });
   await withMemoryPage(f, t.signal, async (page) => {
-    await page.getByRole('button', { name: '主题资料', exact: true }).click();
+    await selectLayeredMemory(page);
     await page.getByText('正在整理，尚未完成', { exact: true }).waitFor();
     await page.getByRole('button', { name: '暂停整理主题资料', exact: true }).click();
     await page.getByText('已暂停，剩余资料可继续整理', { exact: true }).waitFor({ timeout: 3000 });
@@ -302,7 +302,7 @@ test('资料变化显示待更新与真实剩余，后台完成后自动展示�
   const f = await fixture(async (request) => ({ generation: 1, data: request.path.includes('/layered-memory') ? saved
     : request.path.endsWith('/sources') ? { sources: [] } : request.path.endsWith('/memory-candidates') ? { candidates: [] } : { memories: [] } }));
   try { await withMemoryPage(f, t.signal, async (page) => {
-    await page.getByRole('button', { name: '主题资料', exact: true }).click();
+    await selectLayeredMemory(page);
     await page.getByText('资料已变化，等待后台更新。', { exact: true }).waitFor({ timeout: 3000 });
     await page.getByText('合格资料 3 条 · 已覆盖 0 条 · 剩余 3 条', { exact: true }).waitFor();
     saved = readyPayload({ maintenance_pending: false });
@@ -319,7 +319,7 @@ test('旧主题入口展示拆分后的合法终端并导航到当前版本', { 
   const f = await fixture(async (request) => ({ generation: 1, data: request.path.includes('/layered-memory') ? saved
     : request.path.endsWith('/sources') ? { sources: [] } : request.path.endsWith('/memory-candidates') ? { candidates: [] } : { memories: [] } }));
   try { await withMemoryPage(f, t.signal, async (page) => {
-    await page.getByRole('button', { name: '主题资料', exact: true }).click();
+    await selectLayeredMemory(page);
     await page.getByText('查看旧主题入口的当前去向', { exact: true }).click({ timeout: 3000 });
     await page.getByText(`旧主题：${ids.other} · 旧版本：${ids.work}`, { exact: true }).waitFor();
     await page.getByRole('link', { name: '查看当前主题：合成写作计划', exact: true }).click();
@@ -338,7 +338,7 @@ test('旧入口分页只显示当前页，可查看最旧入口并返回首屏',
     ? request.path.includes('mapping_cursor=') ? last : first
     : request.path.endsWith('/sources') ? { sources: [] } : request.path.endsWith('/memory-candidates') ? { candidates: [] } : { memories: [] } }));
   await withMemoryPage(f, t.signal, async (page) => {
-    await page.getByRole('button', { name: '主题资料', exact: true }).click();
+    await selectLayeredMemory(page);
     await page.getByRole('button', { name: '下一页旧入口', exact: true }).click({ timeout: 3000 });
     await page.getByText('查看旧主题入口的当前去向', { exact: true }).click();
     await page.getByText(`旧主题：${ids.other} · 旧版本：${ids.work}`, { exact: true }).waitFor();

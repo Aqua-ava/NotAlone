@@ -10,6 +10,7 @@ export async function memoryCurrentStatus(browser: Browser, origin: string) {
     await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
     await manager.getByRole('button', { name: '记忆', exact: true }).click();
     await manager.getByRole('button', { name: '刷新记忆', exact: true }).click();
+    await selectMemoryCategory(manager, '联系人记忆');
     const contact = manager.getByRole('region', { name: '联系人记忆', exact: true });
     const card = (text: string) => contact.getByRole('article').filter({ has: manager.getByText(text, { exact: true }) });
     await expect(card('合成旧近况：最近在加班。').getByText('当前核实状态：当前未核实', { exact: true })).toBeVisible();

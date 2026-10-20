@@ -1,7 +1,7 @@
 .memory-page { display: grid; gap: 19px; }
-.memory-navigation { position: sticky; top: 0; z-index: 2; display: grid; gap: 14px; padding: 14px 0; background: #f4f1e8; border-bottom: 1px solid #c5cecb; }
+.memory-navigation { position: sticky; top: 0; z-index: 2; display: grid; gap: 12px; padding: 14px 0; background: #f4f1e8; border-bottom: 1px solid #c5cecb; }
 .memory-tabs { display: flex; flex-wrap: wrap; gap: 7px; }
-.memory-tabs button { padding: 9px 13px; border: 1px solid transparent; border-radius: 5px; color: #627985; font: inherit; font-size: 12px; }
+.memory-tabs button { min-width: 76px; padding: 9px 18px; border: 1px solid transparent; border-radius: 5px; color: #627985; font: inherit; font-size: 14px; }
 .memory-tabs button[aria-pressed="true"] { border-color: #afc4cd; background: #e1edf0; color: #355f7c; }
 .memory-tabs button:hover { background: #e8efed; }
 .memory-tabs button:focus-visible { outline: 2px solid #426f8a; outline-offset: 2px; }
@@ -65,3 +65,14 @@
 .skill-publication { padding: 18px; border: 1px solid #aac4c8; background: #f2f7ef; border-radius: 5px; }
 .skill-review [role="alert"] { color: #99594e; }
 @media (max-width: 900px) { .skill-comparison-grid { grid-template-columns: 1fr; } }
+
+/* 一级按资料主体导航，核对和管理信息按需展开。 */
+.memory-view-content { display: grid; gap: 14px; min-width: 0; }
+.memory-disclosure { border: 1px solid #c5cecb; border-radius: 6px; background: #fffdf7c9; min-width: 0; scroll-margin-top: 145px; }
+.memory-disclosure > summary { padding: 16px 20px; cursor: pointer; color: #426f8a; font-size: 13px; }
+.memory-disclosure > summary:focus-visible { outline: 2px solid #426f8a; outline-offset: 2px; }
+.memory-disclosure[open] > summary { border-bottom: 1px solid #dce1d8; }
+.memory-disclosure > .memory-section { border: 0; background: transparent; }
+.memory-disclosure > .memory-section-note { margin: 16px 20px; }
+.memory-organization-settings { margin: 14px 0 20px; }
+.memory-empty { padding: 22px 0; color: #737e80; font-size: 13px; line-height: 1.9; }
