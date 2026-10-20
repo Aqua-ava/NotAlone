@@ -160,7 +160,7 @@ test('参与概览的本人资料被修正或删除时撤缓存，来源事件�
       }
       return { generation: 1, data: request.path.endsWith('/memory-candidates') ? { candidates: [] }
         : request.path.endsWith('/sources') ? { sources: [] }
-          : { memories: request.path === '/api/memories/owner' ? (committed && action === 'remove' ? [] : [owner]) : [memory()] } };
+          : { memories: request.path.endsWith('/owner-memories') ? (committed && action === 'remove' ? [] : [owner]) : [memory()] } };
     });
     await f.bridge.refresh(f.selection()); await f.bridge.refreshOverview(f.selection());
     const request = { ...f.selection(), level: 'owner', memoryId: owner.memory_id, revision: 1 };
@@ -280,7 +280,7 @@ test('资料删除与来源事件交错时保持提交复验门，成功或响�
         ? overview(items.map((item) => sourceEntry(item)))
         : request.path.endsWith('/memory-candidates') ? { candidates: [] }
           : request.path.endsWith('/sources') ? { sources: [] }
-            : request.path === '/api/memories/owner' ? { memories: [] } : { memories: items } };
+            : request.path.endsWith('/owner-memories') ? { memories: [] } : { memories: items } };
     });
     await f.bridge.refresh({ ...f.selection(), section: 'contact' });
     await f.bridge.refreshOverview(f.selection());
@@ -328,7 +328,7 @@ test('提交后的概览核对被来源事件取消时结束等待，专用刷�
       }
       return { generation: 1, data: request.path.endsWith('/memory-candidates') ? { candidates: [] }
         : request.path.endsWith('/sources') ? { sources: [] }
-          : { memories: sourceChanged ? [] : request.path === '/api/memories/owner' ? [owner] : [committed ? corrected : memory()] } };
+          : { memories: sourceChanged ? [] : request.path.endsWith('/owner-memories') ? [owner] : [committed ? corrected : memory()] } };
     });
     await f.bridge.refresh(f.selection()); await f.bridge.refreshOverview(f.selection());
     const previous = level === 'owner' ? owner : memory();

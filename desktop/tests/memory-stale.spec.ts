@@ -1,6 +1,6 @@
 import { test as memoryTest } from './memory-fixture';
 import { MemoryHttpProxy } from './memory-http-proxy';
-import { memoryNewestRefresh, memoryScopeRoundTrip, memoryReconnect, memoryIndependentFailures, memorySectionFailure } from './memory-page-scenarios';
+import { memoryNewestRefresh, memoryOwnerScopeStale, memoryScopeRoundTrip, memoryReconnect, memoryIndependentFailures, memorySectionFailure } from './memory-page-scenarios';
 
 const test = memoryTest.extend<{ memoryProxy: MemoryHttpProxy }>({
   memoryBackendMode: 'reused',
@@ -28,4 +28,8 @@ test('某栏失败不冒充空资料，其他栏可用，失败栏可以独立�
 
 for (const section of ['contact', 'owner', 'pending', 'sources'] as const) test(`${section} 栏的加载、失败与独立重读保持其他栏可用`, async ({ runningApp: { app }, memoryBackend, memoryProxy }) => {
   await memorySectionFailure(await app.firstWindow(), memoryBackend, memoryProxy, section);
+});
+
+for (const failure of [false, true]) test(`切换联系人后本人资料的迟到${failure ? '失败' : '成功'}不恢复上一位资料`, async ({ runningApp: { app }, memoryBackend, memoryProxy }) => {
+  await memoryOwnerScopeStale(await app.firstWindow(), memoryBackend, memoryProxy, failure);
 });

@@ -125,11 +125,11 @@ class OwnerMemoryPort(Protocol):
     ) -> OwnerMemory:
         """原子确认 self 候选；自动替代只操作复验通过的原版本。"""
 
-    def list_active(self, owner_id: UUID, *, include_expired: bool = False) -> tuple[OwnerMemory, ...]:
-        """读取当前有效本人资料；管理回看可包含仍有活动来源的过期资料。"""
+    def list_active(self, owner_id: UUID, *, include_expired: bool = False, contact_id: UUID | None = None) -> tuple[OwnerMemory, ...]:
+        """读取当前本人资料；contact_id 仅按全部有效来源限制管理视图，不改变归属。"""
 
-    def list_versions(self, *, owner_id: UUID, memory_id: UUID) -> tuple[OwnerMemory, ...]:
-        """读取本人资料的版本链，保留原联系人来源依赖。"""
+    def list_versions(self, *, owner_id: UUID, memory_id: UUID, contact_id: UUID | None = None) -> tuple[OwnerMemory, ...]:
+        """读取本人版本链；指定 contact_id 时遇其他联系人来源即截断。"""
 
     def revert_auto_update(self, *, owner_id: UUID, memory_id: UUID, expected_revision: int) -> OwnerMemory:
         """撤销本人自动更新前复验完整参与来源及旧版。"""

@@ -226,7 +226,7 @@ test('删除资料撤下受影响正文，成功或响应未知都拒绝迟到�
         }
         return { generation: 1, data: { candidates: committed ? [] : [oldCandidate] } };
       }
-      const kind = request.path.includes('/memories/owner') ? 'owner' : 'contact';
+      const kind = request.path.includes('/owner-memories') ? 'owner' : 'contact';
       return { generation: 1, data: { memories: [active(otherId, kind),
         ...(!committed || kind !== level ? [active(memoryId, kind)] : [])] } };
     } };

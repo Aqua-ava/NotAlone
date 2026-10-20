@@ -78,7 +78,7 @@ test('本人独立概览沿生产桥查看真实手录偏好、来源与版本�
   assert.match(html, /本人明确偏好合成无糖饮品/);
   assert.match(html, /用户手动录入/);
   assert.match(html, /底层资料版本：1/);
-  assert.match(html, /切换到本人记忆修正或删除/);
+  assert.match(html, /展开逐条记忆修正或删除/);
   assert.ok(html.includes(ids.source));
   assert.deepEqual(state.overview, { phase: 'idle', value: null });
   assert.deepEqual(state.contact, { phase: 'idle', items: [] });
@@ -225,7 +225,7 @@ test('本人删除与来源事件的两种提交顺序及重复通知都不复�
       const items = removed || deleted ? [] : [memory()];
       return { generation: 1, data: request.path === '/api/memories/owner/overview' ? overview(items.map((item) => entry(item)))
         : request.path.endsWith('/memory-candidates') ? { candidates: [] } : request.path.endsWith('/sources') ? { sources: [] }
-          : request.path === '/api/memories/owner' ? { memories: items } : { memories: [] } };
+          : request.path.endsWith('/owner-memories') ? { memories: items } : { memories: [] } };
     });
     await f.bridge.refresh(f.selection()); await f.bridge.refreshOwnerOverview(f.selection());
     const deleting = f.bridge.remove({ ...f.selection(), level: 'owner', memoryId: ids.current, revision: 1 });

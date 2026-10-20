@@ -34,7 +34,7 @@ export async function openMemoryTrace(page: Page, text: string, category: Memory
   await selectMemoryCategory(page, category);
   const card = page.getByRole('article').filter({ has: page.getByText(text, { exact: true }) });
   await expandMemoryDetails(card);
-  await card.getByRole('button', { name: category === '本人记忆' ? '查看来源过程' : `查看提取过程：${text}`, exact: true }).click();
+  await card.getByRole('button', { name: `查看提取过程：${text}`, exact: true }).click();
 }
 
 export async function expandOverviewDetails(card: Locator) {

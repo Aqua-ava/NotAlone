@@ -36,7 +36,9 @@ export async function memoryReading(browser: Browser, origin: string) {
       await expect(manager.getByText('乙喜欢合成乌龙茶。', { exact: true })).toBeVisible();
       await expect(manager.getByText('甲喜欢合成茉莉茶。', { exact: true })).toHaveCount(0);
       await selectMemoryCategory(manager, '本人记忆');
-      await expect(manager.getByText('本人喜欢合成绿茶。', { exact: true })).toBeVisible();
+      await expect(manager.getByText('还没有记住你和这位联系人交流中的事。', { exact: true })).toBeVisible();
+      await expect(manager.getByText('本人喜欢合成绿茶。', { exact: true })).toHaveCount(0);
+      await expect(manager.getByRole('combobox', { name: '资料联系人', exact: true })).toBeVisible();
       await selectMemoryCategory(manager, '联系人记忆');
       await manager.getByRole('combobox', { name: '资料联系人' }).selectOption(fixture.data.empty_contact_id);
       await selectMemoryCategory(manager, '联系人记忆');

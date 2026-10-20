@@ -2,6 +2,7 @@ import path from 'node:path';
 import { expect, type Browser } from '@playwright/test';
 import { withControllerEnvironment, withRewriteBackend } from './backend-fixture';
 import { PageHost } from './page-host';
+import { selectMemoryCategory } from '../memory-page-actions';
 
 export async function memoryProcessing(browser: Browser, origin: string) {
   await withRewriteBackend(async (fixture) => withControllerEnvironment(fixture, async (userData) => {
@@ -13,6 +14,13 @@ export async function memoryProcessing(browser: Browser, origin: string) {
       await manager.getByRole('button', { name: '记忆', exact: true }).click();
       const card = manager.getByRole('region', { name: '记忆处理状态', exact: true });
       const history = manager.locator('details[aria-label="处理历史"]');
+      await selectMemoryCategory(manager, '本人记忆');
+      await expect(card).toContainText('暂时无法处理，请稍后重试');
+      await manager.getByRole('combobox', { name: '资料联系人', exact: true }).selectOption(fixture.data.empty_contact_id);
+      await expect(manager.getByRole('button', { name: '我', exact: true })).toHaveAttribute('aria-pressed', 'true');
+      await expect(card).toHaveCount(0);
+      await expect(history).toHaveCount(0);
+      await manager.getByRole('combobox', { name: '资料联系人', exact: true }).selectOption(fixture.data.contact_ids[0]);
       await expect(card).toContainText('暂时无法处理，请稍后重试');
       await card.getByRole('button', { name: '详情', exact: true }).click();
       await expect(card.getByText('历史导入 · 记忆生成已中断', { exact: true })).toBeVisible();

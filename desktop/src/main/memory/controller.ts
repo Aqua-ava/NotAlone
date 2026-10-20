@@ -364,7 +364,7 @@ export class MemoryReadingController {
     const current = () => { this.synchronizeScope(); return this.scope === scope && this.historyOperation === operation; };
     let unavailable = false;
     try {
-      const path = request.level === 'owner' ? `/api/memories/owner/${active.memoryId}/versions`
+      const path = request.level === 'owner' ? `/api/contacts/${scope.contactId}/owner-memories/${active.memoryId}/versions`
         : `/api/contacts/${scope.contactId}/memories/${active.memoryId}/versions`;
       const result = await this.backend.requestJson({ method: 'GET', path, signal: operation.abort.signal });
       if (!current() || result.generation !== scope.generation) return;
@@ -417,7 +417,7 @@ export class MemoryReadingController {
       || viewed?.memoryId !== active.memoryId || viewed.revision !== active.revision || viewed.canRevertAutoUpdate !== true) {
       throw new Error('自动版本或原始依据已变化，请刷新后再撤销。');
     }
-    const path = request.level === 'owner' ? `/api/memories/owner/${active.memoryId}/revert-auto-update`
+    const path = request.level === 'owner' ? `/api/contacts/${scope.contactId}/owner-memories/${active.memoryId}/revert-auto-update`
       : `/api/contacts/${scope.contactId}/memories/${active.memoryId}/revert-auto-update`;
     await this.deleteAndRefresh(scope, path, [request.level, 'pending'], { expected_revision: active.revision }, true);
   }
@@ -433,7 +433,7 @@ export class MemoryReadingController {
     if (!scope || request.contactId !== scope.contactId || request.scopeRevision !== scope.scopeRevision
       || !['owner', 'contact'].includes(request.level) || this.state[request.level].phase !== 'ready' || !previous
       || previous.revision !== request.revision || this.mutation) throw new Error('资料范围或版本已失效，请刷新后再修正。');
-    const path = request.level === 'owner' ? `/api/memories/owner/${request.memoryId}/correct`
+    const path = request.level === 'owner' ? `/api/contacts/${scope.contactId}/owner-memories/${request.memoryId}/correct`
       : `/api/contacts/${scope.contactId}/memories/${request.memoryId}/correct`;
     const reading = this.protectReads(scope, [request.level, 'pending']);
     try {
@@ -447,7 +447,7 @@ export class MemoryReadingController {
       || !['owner', 'contact'].includes(request.level) || this.mutation) throw new Error('资料范围已失效，请刷新后再补充。');
     const body = { text: request.text, category: request.category,
       ...(request.level === 'contact' ? { contact_id: scope.contactId } : {}) };
-    await this.writeAndRefresh(scope, `/api/memories/manual-${request.level}`, body,
+    await this.writeAndRefresh(scope, request.level === 'owner' ? `/api/contacts/${scope.contactId}/owner-memories` : '/api/memories/manual-contact', body,
       request.level === 'contact' ? ['contact', 'sources'] : ['owner']);
   }
   async remove(request: MemoryRemovalRequest): Promise<void> {
@@ -457,7 +457,7 @@ export class MemoryReadingController {
     if (!scope || request.contactId !== scope.contactId || request.scopeRevision !== scope.scopeRevision
       || this.state[request.level].phase !== 'ready' || !previous || previous.revision !== request.revision
       || this.mutation) throw new Error('资料范围或版本已失效，请刷新后再删除。');
-    const path = request.level === 'owner' ? `/api/memories/owner/${request.memoryId}/delete`
+    const path = request.level === 'owner' ? `/api/contacts/${scope.contactId}/owner-memories/${request.memoryId}/delete`
       : `/api/contacts/${scope.contactId}/memories/${request.memoryId}/delete`;
     this.publish({ [request.level]: { phase: 'ready',
       items: this.state[request.level].items.filter((item) => item.memoryId !== request.memoryId) } });
@@ -591,7 +591,7 @@ export class MemoryReadingController {
       return this.scope === scope && this.operations.get(section)?.revision === operation.revision;
     };
     const contactPath = `/api/contacts/${scope.contactId}`;
-    const paths = { contact: `${contactPath}/memories`, owner: '/api/memories/owner',
+    const paths = { contact: `${contactPath}/memories`, owner: `${contactPath}/owner-memories`,
       pending: `${contactPath}/memory-candidates`, sources: `${contactPath}/sources` };
     try {
       const result = await this.backend.requestJson({ method: 'GET', path: paths[section], signal: operation.abort.signal });

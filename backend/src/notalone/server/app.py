@@ -547,6 +547,7 @@ class BackendApp:
             and (
                 "/memories" in path_value
                 or "/memory-candidates" in path_value
+                or "/owner-memories" in path_value
             )
         ):
             return self._handle_memory(
@@ -1792,6 +1793,48 @@ class BackendApp:
             raise MemoryRequestInvalid()
         contact_id = _uuid_or_raise(parts[0], "contact_id")
         segment = parts[1]
+        if segment == "owner-memories":
+            if method == "GET" and len(parts) == 2:
+                return _json_response(HTTPStatus.OK, {"memories": [
+                    _owner_memory_payload(memory) for memory in service.list_owner_memories(
+                        owner_id=owner_id, contact_id=contact_id,
+                    )
+                ]}, headers={"Cache-Control": "no-store"})
+            if method == "POST" and len(parts) == 2:
+                entry = _manual_entry_or_raise(_parse_memory_json(body))
+                memory = service.add_manual_owner_memory(
+                    owner_id=owner_id, contact_id=contact_id, entry=ManualMemoryEntry(**entry),
+                )
+                return _json_response(HTTPStatus.OK, {"memory": _owner_memory_payload(memory)})
+            if len(parts) == 4:
+                memory_id = _uuid_or_raise(parts[2], "memory_id")
+                if method == "GET" and parts[3] == "versions":
+                    return _json_response(HTTPStatus.OK, {"versions": [
+                        _owner_memory_payload(memory) for memory in service.list_contact_owner_versions(
+                            owner_id=owner_id, contact_id=contact_id, memory_id=memory_id,
+                        )
+                    ]}, headers={"Cache-Control": "no-store"})
+                if method == "POST" and parts[3] == "delete":
+                    memory = service.delete_owner_memory(owner_id=owner_id, contact_id=contact_id, memory_id=memory_id)
+                    return _json_response(HTTPStatus.OK, {"memory": _owner_memory_payload(memory)})
+                if method == "POST" and parts[3] == "correct":
+                    payload = _parse_memory_json(body)
+                    text = payload.get("text")
+                    if not isinstance(text, str) or not text.strip():
+                        raise MemoryRequestInvalid()
+                    memory = service.correct_owner_memory(
+                        owner_id=owner_id, contact_id=contact_id, memory_id=memory_id,
+                        text=text, category=_optional_category(payload.get("category")),
+                        change_kind=_memory_change_kind(payload),
+                    )
+                    return _json_response(HTTPStatus.OK, {"memory": _owner_memory_payload(memory)})
+                if method == "POST" and parts[3] == "revert-auto-update":
+                    memory = service.revert_contact_owner_update(
+                        owner_id=owner_id, contact_id=contact_id, memory_id=memory_id,
+                        expected_revision=_memory_revision_or_raise(body),
+                    )
+                    return _json_response(HTTPStatus.OK, {"memory": _owner_memory_payload(memory)},
+                                          headers={"Cache-Control": "no-store"})
         if method == "GET" and segment == "memories" and len(parts) == 2:
             return _json_response(
                 HTTPStatus.OK,

@@ -160,7 +160,7 @@ test('只有服务端核对仍合法的自动版本可以撤销，未知旧证�
     }
     assert.match(html, /撤销本次自动更新/);
     await controller.revertAutoUpdate({ ...selection(), level, memoryId: ids.current, revision: 3 });
-    assert.equal(posted.path, level === 'owner' ? `/api/memories/owner/${ids.current}/revert-auto-update`
+    assert.equal(posted.path, level === 'owner' ? `/api/contacts/${ids.contact}/owner-memories/${ids.current}/revert-auto-update`
       : `/api/contacts/${ids.contact}/memories/${ids.current}/revert-auto-update`);
     assert.deepEqual(posted.body, { expected_revision: 3 });
     assert.equal(controller.getState().mutation.phase, 'success');

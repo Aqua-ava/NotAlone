@@ -412,7 +412,7 @@ class PostgresOwnerMemoryStore:
         except Exception as error:
             raise OwnerMemoryPersistenceError(_OWNER_MEMORY_UNAVAILABLE) from error
 
-    def list_active(self, owner_id: UUID, *, include_expired: bool = False) -> tuple[OwnerMemory, ...]:
+    def list_active(self, owner_id: UUID, *, include_expired: bool = False, contact_id: UUID | None = None) -> tuple[OwnerMemory, ...]:
         _validate_owner_id(owner_id)
         if type(include_expired) is not bool:
             raise TypeError("历史回看标记必须是 bool。")
@@ -447,6 +447,8 @@ class PostgresOwnerMemoryStore:
                 rows = available_correction_memories(
                     connection, owner_id=owner_id, record_kind="owner_memory", rows=rows,
                 )
+                if contact_id is not None:
+                    rows = _contact_view_rows(connection, owner_id, contact_id, rows)
                 rows = _timed_rows(connection, rows)
         except Exception as error:
             raise OwnerMemoryPersistenceError(
@@ -460,7 +462,7 @@ class PostgresOwnerMemoryStore:
             and (include_expired or _is_effective(_from_row(row), now))
         )
 
-    def list_versions(self, *, owner_id: UUID, memory_id: UUID) -> tuple[OwnerMemory, ...]:
+    def list_versions(self, *, owner_id: UUID, memory_id: UUID, contact_id: UUID | None = None) -> tuple[OwnerMemory, ...]:
         _validate_owner_id(owner_id)
         if not isinstance(memory_id, UUID):
             raise ValueError("本人资料标识无效。")
@@ -473,6 +475,17 @@ class PostgresOwnerMemoryStore:
                 "WHERE owner_id=%s AND id=ANY(%s) ORDER BY array_position(%s::uuid[],id)",
                 (owner_id, list(ids), list(ids)),
             ).fetchall()
+            if contact_id is not None:
+                allowed = {row["memory_id"]: row for row in _contact_view_rows(connection, owner_id, contact_id, rows)}
+                visible = []
+                for row in rows:
+                    if row["memory_id"] not in allowed:
+                        break
+                    visible.append(allowed[row["memory_id"]])
+                if not visible or memory_id not in {row["memory_id"] for row in visible}:
+                    raise LookupError("当前联系人没有这条本人记忆。")
+                rows = visible
+                rows[-1] = {**rows[-1], "supersedes_memory_id": None}
             for row in rows:
                 _ensure_memory_sources(connection, owner_id=owner_id, row=row)
             return tuple(_from_row(row) for row in _timed_rows(connection, rows))
@@ -906,3 +919,47 @@ def _insert_mode(memory: OwnerMemory, connection) -> tuple[str, str]:
         columns += ', requires_all_sources'
         values += ', %(requires_all_sources)s'
     return columns, values
+
+
+def _contact_view_rows(
+    connection: psycopg.Connection[Any], owner_id: UUID, contact_id: UUID,
+    rows: Sequence[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """联系人视图只接受全部直接来源仍属于当前联系人的资料。"""
+    previous_ids = [row["supersedes_memory_id"] for row in rows if row["supersedes_memory_id"]]
+    parents = connection.execute(
+        "SELECT id AS memory_id, source_ids FROM public.owner_memory "
+        "WHERE owner_id=%s AND id=ANY(%s) AND status <> 'deleted'",
+        (owner_id, previous_ids),
+    ).fetchall() if previous_ids else []
+    source_ids = list({source for row in [*rows, *parents] for source in row["source_ids"]})
+    if not source_ids:
+        return []
+    available = connection.execute(
+        f"""SELECT id FROM public.source_document
+        WHERE owner_id=%s AND contact_id=%s AND id=ANY(%s) AND status='active'
+        UNION SELECT id FROM public.local_wechat_observation
+        WHERE owner_id=%s AND contact_id=%s AND id=ANY(%s)
+        UNION SELECT message.id FROM public.message AS message
+        WHERE message.owner_id=%s AND message.contact_id=%s AND message.id=ANY(%s)
+          AND {valid_source_ref_exists_sql('message')}""",
+        (owner_id, contact_id, source_ids) * 3,
+    ).fetchall()
+    allowed = {row["id"] for row in available}
+    visible_ids = {row["memory_id"] for row in [*rows, *parents]
+                   if row["source_ids"] and set(row["source_ids"]) <= allowed}
+    result = []
+    for row in rows:
+        if row["memory_id"] not in visible_ids:
+            continue
+        projected = dict(row)
+        if row["supersedes_memory_id"] is not None and row["supersedes_memory_id"] not in visible_ids:
+            projected.update(supersedes_memory_id=None, version_evidence=None)
+        proof = projected.get("version_evidence")
+        if proof and any(
+            window and any(scope != str(contact_id) for scope in window["message_scopes"].values())
+            for window in (proof.get("previous_window"), proof.get("current_window"))
+        ):
+            projected["version_evidence"] = None
+        result.append(projected)
+    return result

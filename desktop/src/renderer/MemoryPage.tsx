@@ -7,7 +7,6 @@ import './memory.css';
 import { SourceDeletionPanel } from './SourceDeletionPanel';
 import { MemoryTemporalStatus } from './MemoryTemporalStatus';
 import { MemoryList } from './MemoryList';
-import { OwnerLayeredMemoryPanel } from './OwnerLayeredMemoryPanel';
 import { LayeredMemoryPanel } from './LayeredMemoryPanel';
 import type { LayeredMemoryManagementRequest, LayeredMemoryManagementOptions } from '../shared/memory-bridge';
 import { TracePanel, useTraceReading } from './TracePanel';
@@ -48,7 +47,6 @@ function useMemoryReading(session: ContactSessionView) {
     try {
       await Promise.all([window.notalone.memory.refresh({ contactId: selectedContactId, scopeRevision, ...(section ? { section } : {}) }),
         ...(!section ? [window.notalone.memory.refreshOverview({ contactId: selectedContactId, scopeRevision }),
-          window.notalone.memory.refreshOwnerOverview({ contactId: selectedContactId, scopeRevision }),
           window.notalone.memory.readLayeredMemory({ contactId: selectedContactId, scopeRevision })] : [])]);
     }
     catch {
@@ -416,7 +414,7 @@ function AdditionControl({ level, phase, add }: {
       <label>资料分类<select aria-label="资料分类" value={category} disabled={busy}
         onChange={(event) => setCategory(event.target.value as MemoryAdditionRequest['category'])}>
         {Object.entries(categoryNames).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-      <p>{level === 'owner' ? '本人资料可在不同联系人的回复中共享使用。' : '只保存到当前已确认联系人的资料。'}手动补充不会成为自动采纳。</p>
+      <p>{level === 'owner' ? '这条本人资料会关联当前联系人，显示在你们的记忆里。' : '只保存到当前已确认联系人的资料。'}手动补充不会成为自动采纳。</p>
       <button className="button" type="submit" disabled={busy || !text.trim()}>保存资料</button>
       <button className="button" type="button" disabled={busy} onClick={() => setOpen(false)}>取消补充</button>
     </form>}
@@ -428,7 +426,8 @@ function ReadingSection<T>({ title, note, empty, state, retry, children }: {
 }) {
   return <section className="memory-section" aria-label={title}>
     <header><div><h2>{title === '联系人记忆' ? '记住的事' : title === '待确认候选' ? '需要你确认' : title}</h2>{note && <p>{note}</p>}</div>
-      {!['联系人记忆', '待确认候选'].includes(title) && <button className="button" disabled={state.phase === 'loading'} onClick={retry} aria-label={`重新读取${title}`}>刷新</button>}</header>
+      {(state.phase === 'error' || !['联系人记忆', '待确认候选'].includes(title)) &&
+        <button className="button" disabled={state.phase === 'loading'} onClick={retry} aria-label={`重新读取${title}`}>刷新</button>}</header>
     {(state.phase === 'loading' || state.phase === 'idle') && <p className="memory-section-note" role="status">正在读取{title}…</p>}
     {state.phase === 'error' && <p className="memory-section-note" role="alert">{title}读取失败，请重试。</p>}
     {state.phase === 'ready' && (<>{state.items.length === 0 && <p className="memory-section-note">{empty}</p>}{children}</>)}
@@ -551,9 +550,8 @@ export function MemoryPage({ session, navigate }: { session: ContactSessionView;
   const scopeKey = `${session.state.selectedContactId}:${session.state.scopeRevision}`;
   const activeScope = useRef(scopeKey);
   activeScope.current = scopeKey;
-  const [selection, setSelection] = useState<{ scope: string; view: MemoryView }>({ scope: scopeKey, view: 'contact' });
+  const [view, selectView] = useState<MemoryView>('contact');
   const [factTarget, setFactTarget] = useState<{ scope: string; memoryId: string; revision: number; editing: boolean } | null>(null);
-  const view = selection.view === 'owner' ? selection.view : selection.scope === scopeKey ? selection.view : 'contact';
   const detailKey = `${scopeKey}:${view}`;
   const [historySelection, setHistorySelection] = useState<{ key: string; open: boolean } | null>(null);
   const historyOpen = historySelection?.key === detailKey && historySelection.open;
@@ -570,7 +568,6 @@ export function MemoryPage({ session, navigate }: { session: ContactSessionView;
     if (historyDetails.current) historyDetails.current.open = true;
     await memory.openVersions(entry);
   };
-  const selectView = (next: MemoryView) => setSelection({ scope: scopeKey, view: next });
   const openFact = (target?: { memoryId: string; revision: number }, editing = false) => {
     setFactTarget(target ? { scope: scopeKey, ...target, editing } : null);
     selectView('contact');
@@ -596,21 +593,18 @@ export function MemoryPage({ session, navigate }: { session: ContactSessionView;
   return <div className="memory-page">
     <div className="memory-navigation"><nav className="memory-tabs" aria-label="记忆分类">{(Object.keys(memoryViews) as MemoryView[]).map((name) =>
       <button key={name} aria-pressed={view === name} onClick={() => selectView(name)}>{memoryViews[name]}</button>)}</nav>
-    {view !== 'owner' && <div className="memory-toolbar"><label>联系人 <select aria-label="资料联系人" value={session.state.selectedContactId ?? ''}
+    <div className="memory-toolbar"><label>联系人 <select aria-label="资料联系人" value={session.state.selectedContactId ?? ''}
       disabled={session.state.contacts.length === 0} onChange={(event) => void session.selectContact(event.target.value)}>
       <option value="" disabled>先确认联系人</option>{session.state.contacts.map((entry) => <option key={entry.contactId} value={entry.contactId}>{entry.displayName}</option>)}</select></label>
       <button className="button" disabled={!contact || [state.contact, state.owner, state.pending, state.sources].some((section) => section.phase === 'loading')}
-        onClick={() => void memory.refresh()}>刷新记忆</button></div>}
+        onClick={() => void memory.refresh()}>刷新记忆</button></div>
     </div>
     <div className="memory-view-content" key={`${scopeKey}:${view}`}>
-    <MemoryProcessingCard request={view === 'owner' ? { scope: 'owner' }
-      : contact && view === 'contact' ? { scope: 'contact', contactId: contact.contactId, scopeRevision: session.state.scopeRevision } : undefined}
+    <MemoryProcessingCard request={contact ? { scope: 'contact', contactId: contact.contactId, scopeRevision: session.state.scopeRevision } : undefined}
       contactNames={Object.fromEntries(session.state.contacts.map(contact => [contact.contactId, contact.displayName]))}
-      onProgress={() => window.notalone.memory.refreshProcessingResults(view === 'owner' ? { scope: 'owner' }
-        : { scope: 'contact', contactId: contact!.contactId, scopeRevision: session.state.scopeRevision })}>
-    {view === 'owner' && <OwnerLayeredMemoryPanel onVersions={contact ? openVersions : undefined}
-      onTrace={contact ? entry => trace('owner_memory', entry.memoryId) : undefined} />}
-    {!contact ? view === 'owner' ? null : <section className="memory-no-contact" aria-label="资料范围未确认"><h2>选择一位联系人</h2>
+      onProgress={contact ? () => window.notalone.memory.refreshProcessingResults({ scope: 'contact', contactId: contact.contactId,
+        scopeRevision: session.state.scopeRevision }) : undefined}>
+    {!contact ? <section className="memory-no-contact" aria-label="资料范围未确认"><h2>选择一位联系人</h2>
       <p>查看你们之间记住的事。</p>
       <button className="button" onClick={() => navigate('contacts')}>前往联系人目录</button></section>
       : <>
@@ -628,6 +622,13 @@ export function MemoryPage({ session, navigate }: { session: ContactSessionView;
             initiallyEditing={factTarget?.scope === scopeKey && factTarget.memoryId === entry.memoryId && factTarget.revision === entry.revision && factTarget.editing}
             trace={trace} correct={memory.correct} remove={memory.remove} openVersions={openVersions} busy={state.mutation.phase === 'working'} />}</MemoryList>
         </ReadingSection></div>}
+        {view === 'owner' && <ReadingSection title="我的记忆" note="" empty="还没有记住你和这位联系人交流中的事。"
+          state={state.owner} retry={() => void memory.refresh('owner')}>
+          <AdditionControl key={`owner:${scopeKey}`} level="owner" phase={state.mutation.phase} add={memory.add} />
+          <MemoryList key={scopeKey} items={state.owner.items} label="我的记忆">{entry => <MemoryCard
+            key={`${entry.memoryId}:${entry.revision}`} content={entry} memory={entry} sources={state.sources}
+            trace={trace} correct={memory.correct} remove={memory.remove} openVersions={openVersions} busy={state.mutation.phase === 'working'} />}</MemoryList>
+        </ReadingSection>}
         {view === 'pending' && <ReadingSection title="待确认候选" note="这些内容还没记住，需要你核对一下。" empty="暂时没有需要确认的内容。"
           state={state.pending} retry={() => void memory.refresh('pending')}>
           <MemoryList key={scopeKey} items={state.pending.items} label="待确认候选">{(entry) => <MemoryCard key={entry.candidateId} content={entry} candidate={entry} sources={state.sources}
@@ -644,11 +645,9 @@ export function MemoryPage({ session, navigate }: { session: ContactSessionView;
         {historyOpen && <>
         {view === 'contact' && <ContactRelationshipOverview overview={state.overview} memories={state.contact} refresh={memory.refreshOverview}
           openVersions={openVersions} trace={trace} busy={state.mutation.phase === 'working'} />}
-        {view === 'owner' && <OwnerFactsOverview overview={state.ownerOverview} memories={state.owner} contactId={contact.contactId} refresh={memory.refreshOwnerOverview}
-          openVersions={openVersions} trace={trace} busy={state.mutation.phase === 'working'} />}
         {(view === 'owner' ? state.history.level === 'owner' : state.history.level === 'contact') &&
           <MemoryVersionHistory history={state.history} revert={memory.revertAutoUpdate} busy={state.mutation.phase === 'working'} />}
-        {view === 'owner' && <p className="memory-section-note">以下来源与提取过程属于当前选择的联系人：{contact.displayName}。本人记忆的完整来历可在逐项详情中核对。</p>}
+        {view === 'owner' && <p className="memory-section-note">这里只显示与{contact.displayName}相关的来源与提取过程。</p>}
         <ReadingSection title="当前联系人来源" note="来源目录不能解析所有消息、观察或人工引用；无法核对的引用会保留未知说明。" empty="这位联系人暂无来源记录。"
           state={state.sources} retry={() => void memory.refresh('sources')}>
           <MemoryList key={scopeKey} items={state.sources.items} label="当前联系人来源" className="memory-source-list" list>{(entry) => <li key={entry.sourceId}>
