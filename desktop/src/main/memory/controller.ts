@@ -172,6 +172,12 @@ export class MemoryReadingController {
     this.ownerOverviewRequested = true;
     await this.readOwnerOverview(scope);
   }
+  releaseLayeredMemory(request: ContactSelection): void {
+    this.synchronizeScope();
+    if (request.contactId !== this.scope?.contactId || request.scopeRevision !== this.scope?.scopeRevision) return;
+    this.layeredRequested = false;
+    this.clearLayered();
+  }
   async readLayeredMemory(request: LayeredMemoryReadRequest): Promise<void> {
     this.synchronizeScope();
     const scope = this.scope;

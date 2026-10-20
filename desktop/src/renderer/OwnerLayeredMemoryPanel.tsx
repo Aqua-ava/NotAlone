@@ -40,7 +40,7 @@ export function OwnerLayeredMemoryPanel({ onVersions, onTrace }: OwnerMemoryActi
     const unsubscribe = window.notalone.memory.onOwnerLayeredMemoryChanged(receive);
     void window.notalone.memory.getOwnerLayeredMemoryState().then(receive).catch(() => {});
     void window.notalone.memory.readOwnerMemories().catch(() => { if (active) setError('你的记忆暂不可读取，请重试。'); });
-    return () => { active = false; unsubscribe(); };
+    return () => { active = false; unsubscribe(); void window.notalone.memory.releaseOwnerLayeredMemory().catch(() => {}); };
   }, []);
   async function run(command: () => Promise<void>) {
     setError('');

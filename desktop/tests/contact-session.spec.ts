@@ -78,6 +78,7 @@ test('两个窗口共享本次联系人，隐藏恢复保留草稿，A→B→A �
           phase: state.phase, confirmation: state.confirmation, suspendedByHelperFocus: state.suspendedByHelperFocus });
       });
       const stopContacts = window.notalone.contacts.onStateChanged((state) => {
+        if ('kind' in state) return;
         record({ kind: 'contacts', revision: state.revision, scopeRevision: state.scopeRevision,
           selectedFixtureIndex: contactIds.indexOf(state.selectedContactId ?? ''), directoryPhase: state.directoryPhase });
       });

@@ -4,6 +4,7 @@ import type { ContactSelection } from '../../shared/contact-session-bridge';
 import type { SkillDraft, SkillLearningState, SkillPolicySelection, SkillReviewForm, SkillReviewSelection, SkillStrategyEdit } from '../../shared/skill-learning-bridge';
 import { isUuid } from '../uuid';
 import { createHash, randomUUID } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 import { BackendRequestFailure } from '../backend/json-client';
 import { readComparison, readPublication, readPublicationScope, readReviewForm, readReviewInput, readStrategyEdit, sameInput, sameScope, sameStrategy } from './review-validation';
 import { SkillHistorySession } from './history';
@@ -306,6 +307,7 @@ export class SkillLearningController {
     } finally { if (this.pending === pending) { this.pending = undefined; this.mutating = false; } }
   }
   private publish(change: Partial<SkillLearningState>) {
+    if (Object.entries(change).every(([key, value]) => isDeepStrictEqual(this.state[key as keyof SkillLearningState], value))) return;
     this.state = { ...this.state, ...change, revision: this.state.revision + 1 };
     for (const listener of this.listeners) listener(this.getState());
   }

@@ -4,10 +4,11 @@ import { build } from 'esbuild';
 
 const output = await build({ stdin: { contents: `
   export { ContactSession } from './src/main/contacts/session';
+  export { contactDraftUpdate } from './src/shared/contact-session-bridge';
   export { installReplyBridge } from './src/main/reply/bridge';
   export { createReplyBridge } from './src/preload/reply';
 `, resolveDir: process.cwd() }, bundle: true, platform: 'node', format: 'esm', write: false });
-const { ContactSession, installReplyBridge, createReplyBridge } = await import(`data:text/javascript;base64,${Buffer.from(output.outputFiles[0].text).toString('base64')}`);
+const { ContactSession, installReplyBridge, createReplyBridge, contactDraftUpdate } = await import(`data:text/javascript;base64,${Buffer.from(output.outputFiles[0].text).toString('base64')}`);
 
 export async function replyInputFixture(rounds) {
   const contactId = randomUUID(), otherContactId = randomUUID(), sessionId = randomUUID();
@@ -44,7 +45,7 @@ export async function replyInputFixture(rounds) {
   await bridge.readSavedSession(scope());
   assert.equal(replies.getState().savedSession?.turns.length, rounds);
   events.length = 0; responses.length = 0;
-  return { bridge, replies, contacts, scope, events, responses, otherContactId, handlers, calls, setForward: (listener) => { forward = listener; } };
+  return { bridge, replies, contacts, scope, events, responses, otherContactId, handlers, calls, contactDraftUpdate, setForward: (listener) => { forward = listener; } };
 }
 
 

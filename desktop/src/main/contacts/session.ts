@@ -1,4 +1,5 @@
 import type { ContactDraft, ContactSelection, ContactSessionState, ContactSummary } from '../../shared/contact-session-bridge';
+import { contactDraftUpdate, type ContactDraftUpdate } from '../../shared/contact-session-bridge';
 
 export type ContactDirectoryResult = {
   generation: number;
@@ -13,7 +14,7 @@ export class ContactSession {
   };
   private generation: number | undefined;
   private directoryRequest = 0;
-  private readonly listeners = new Set<(state: ContactSessionState) => void>();
+  private readonly listeners = new Set<(state: ContactSessionState, kind: 'full' | 'draft') => void>();
 
   constructor(private readonly readDirectory: () => Promise<ContactDirectoryResult>) {}
 
@@ -21,7 +22,7 @@ export class ContactSession {
     return { ...this.state, contacts: this.state.contacts.map((contact) => ({ ...contact })) };
   }
 
-  onStateChanged(listener: (state: ContactSessionState) => void): () => void {
+  onStateChanged(listener: (state: ContactSessionState, kind: 'full' | 'draft') => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
   }
@@ -72,12 +73,12 @@ export class ContactSession {
     return this.getState();
   }
 
-  setDraft(draft: ContactDraft): ContactSessionState {
+  setDraft(draft: ContactDraft): ContactDraftUpdate {
     if (!this.isCurrent(draft) || draft.contactId !== this.state.selectedContactId) {
       throw new Error('本次联系人已变化，请重新输入草稿。');
     }
-    this.publish({ draft: draft.text });
-    return this.getState();
+    this.publish({ draft: draft.text }, 'draft');
+    return contactDraftUpdate(this.state);
   }
 
   clearDraft(selection: ContactSelection): void {
@@ -97,8 +98,8 @@ export class ContactSession {
       draft: '', scopeRevision: this.state.scopeRevision + 1 });
   }
 
-  private publish(update: Partial<ContactSessionState>): void {
+  private publish(update: Partial<ContactSessionState>, kind: 'full' | 'draft' = 'full'): void {
     this.state = { ...this.state, ...update, revision: this.state.revision + 1 };
-    for (const listener of this.listeners) listener(this.getState());
+    for (const listener of this.listeners) listener(this.getState(), kind);
   }
 }

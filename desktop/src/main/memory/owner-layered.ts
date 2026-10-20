@@ -12,6 +12,7 @@ export class OwnerLayeredMemoryController {
   private operation: AbortController | undefined;
   private timer: ReturnType<typeof setTimeout> | undefined;
   private requested = false;
+  private viewReleased = false;
   private factsRequested = false;
   private factsOperation: AbortController | undefined;
   private factWriteOperation: AbortController | undefined;
@@ -33,9 +34,20 @@ export class OwnerLayeredMemoryController {
     else { this.deleting = Math.max(0, this.deleting - 1); if (!this.deleting && this.requested) void this.read({}).catch(() => {}); if (!this.deleting && this.factsRequested) void this.readFacts().catch(() => {}); }
   }
   private clear() { clearTimeout(this.timer); this.timer = undefined; this.operation?.abort(); this.operation = undefined; }
+  releaseView() {
+    this.viewReleased = true;
+    this.requested = false; this.factsRequested = false;
+    clearTimeout(this.timer); this.timer = undefined;
+    this.factsOperation?.abort(); this.factsOperation = undefined;
+    // 离页仅取消读取；已提交的修改仍按原来源和连接门禁结算。
+    if (this.state.mutation.phase !== 'working') {
+      this.clear();
+      this.update({ phase: 'idle', value: null, ...(this.state.memories ? { memories: { phase: 'idle' as const, items: [] } } : {}) });
+    }
+  }
   private schedule() {
     clearTimeout(this.timer);
-    if (this.state.value?.enabled && (this.state.value.runtimePolicy === 'verified_items' || this.state.value.qualityStatus === 'synthetic' || this.state.value.qualityStatus === 'verified')) {
+    if (this.requested && this.state.value?.enabled && (this.state.value.runtimePolicy === 'verified_items' || this.state.value.qualityStatus === 'synthetic' || this.state.value.qualityStatus === 'verified')) {
       const mappingCursor = this.state.value.mappingCursor;
       this.timer = setTimeout(() => void this.read({ mappingCursor }, true).catch(() => {}), 1000); this.timer.unref();
     }
@@ -43,7 +55,9 @@ export class OwnerLayeredMemoryController {
   async read(request: { mappingCursor?: string | null }, background = false, verifyingWrite = false) {
     this.synchronize();
     if (this.generation === undefined || this.deleting || (this.state.mutation.phase === 'working' && !verifyingWrite)) throw new Error('本人资料暂不可读取。');
-    this.requested = true; this.clear();
+    if (!background && !verifyingWrite) this.viewReleased = false;
+    if (!background && !this.viewReleased) this.requested = true;
+    this.clear();
     const operation = new AbortController(), generation = this.generation; this.operation = operation;
     if (!background) this.update({ phase: 'loading', value: null });
     try {
@@ -60,6 +74,7 @@ export class OwnerLayeredMemoryController {
   async readFacts(background = false, verifyingWrite = false) {
     this.synchronize();
     if (this.generation === undefined || (this.state.mutation.phase === 'working' && !verifyingWrite)) throw new Error('本人底层资料暂不可读取。');
+    if (!background && !verifyingWrite) this.viewReleased = false;
     this.factsRequested = true;
     // 删除期间也保留用户的查看意图，待来源门禁解除后再读取最新资料。
     if (this.deleting) return;
@@ -107,7 +122,7 @@ export class OwnerLayeredMemoryController {
     } catch (error) {
       if (this.factWriteOperation === operation) {
         this.update({ phase: 'error', value: null, mutation: { phase: 'error', message: '本人资料保存结果未确认，请核对后再重试。' } });
-        await this.read({});
+        await this.read({}, false, true);
         if (this.factsRequested) await this.readFacts();
       }
       throw error;
@@ -150,7 +165,7 @@ export class OwnerLayeredMemoryController {
     } catch {
       if (this.operation !== operation) return;
       this.update({ phase: 'error', value: null, mutation: { phase: 'error', message: '本人资料操作未完成，请核对当前状态后重试。' } });
-      await this.read({});
+      await this.read({}, false, true);
     } finally {
       if (this.operation === operation) this.operation = undefined;
       if (correction) await this.factsChanged('settled');

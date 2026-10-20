@@ -14,6 +14,7 @@ export function createMemoryBridge(ipcRenderer: PageTransport): MemoryBridge {
     deleteOwnerMemory: (...args: [Pick<MemoryRemovalRequest, 'memoryId' | 'revision'>]) => args.length === 1 ? ipcRenderer.invoke('memory:delete-owner-fact', args[0]) : Promise.reject(new Error('本人资料删除不可用。')),
     addOwnerMemory: (...args: [Pick<MemoryAdditionRequest, 'text' | 'category'>]) => args.length === 1 ? ipcRenderer.invoke('memory:add-owner', args[0]) : Promise.reject(new Error('本人资料补充不可用。')),
     getOwnerLayeredMemoryState: (...args: unknown[]) => args.length === 0 ? ipcRenderer.invoke('memory:owner-layered-state') : Promise.reject(new Error('本人资料读取不可用。')),
+    releaseOwnerLayeredMemory: (...args: unknown[]) => args.length === 0 ? ipcRenderer.invoke('memory:release-owner-layered') : Promise.reject(new Error('本人资料操作不可用。')),
     readOwnerLayeredMemory: (...args: [{ mappingCursor?: string | null }]) => args.length === 1 ? ipcRenderer.invoke('memory:read-owner-layered', args[0]) : Promise.reject(new Error('本人资料读取不可用。')),
     manageOwnerLayeredMemory: (...args: [OwnerLayeredMemoryManagementRequest]) => args.length === 1 ? ipcRenderer.invoke('memory:manage-owner-layered', args[0]) : Promise.reject(new Error('本人资料操作不可用。')),
     onOwnerLayeredMemoryChanged: (listener: (state: OwnerLayeredMemoryState) => void) => {
@@ -31,6 +32,8 @@ export function createMemoryBridge(ipcRenderer: PageTransport): MemoryBridge {
       : Promise.reject(new Error('本人概览读取不可用。')),
     readLayeredMemory: (...args: [LayeredMemoryReadRequest]) => args.length === 1 ? ipcRenderer.invoke('memory:read-layered-memory', args[0])
       : Promise.reject(new Error('主题资料读取不可用。')),
+    releaseLayeredMemory: (...args: [ContactSelection]) => args.length === 1 ? ipcRenderer.invoke('memory:release-layered-memory', args[0])
+      : Promise.reject(new Error('主题资料操作不可用。')),
     manageLayeredMemory: (...args: [LayeredMemoryManagementRequest]) => args.length === 1 ? ipcRenderer.invoke('memory:manage-layered-memory', args[0])
       : Promise.reject(new Error('主题资料操作不可用。')),
     add: (...args: [MemoryAdditionRequest]) => args.length === 1 ? ipcRenderer.invoke('memory:add', args[0])
