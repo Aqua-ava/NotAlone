@@ -1,9 +1,9 @@
 # 记忆时间语义：纵向任务拆分提案
 
-Triage: ready-for-human
+Triage: ready-for-agent
 State: open
 
-> 功能方案已获用户同意。此文件供确认任务粒度、依赖及规格中的测试边界；尚未发布 `issues/` 实现票。确认后按 Local Markdown tracker 逐票发布，并用 implement-spec 编排，TDD 实现，最终 code-review 双轴评审。
+> 功能方案已获用户同意。用户已确认本文件任务粒度、依赖及规格测试边界；已按 Local Markdown tracker 发布四票。使用 implement-spec 编排，TDD 实现，最终 code-review 双轴评审。
 
 ## 01：时间含义贯穿记忆页面与回复依据
 
