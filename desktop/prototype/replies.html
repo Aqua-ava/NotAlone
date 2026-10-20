@@ -19,6 +19,7 @@
 textarea{display:block;width:100%;background:transparent;border:1px solid transparent;border-radius:5px;resize:none;overflow:hidden;line-height:1.7;font-size:15px;margin:0;padding:3px 5px 3px 0;min-height:36px;outline:none}textarea:hover{background:#f7fafb}textarea:focus{border-color:#b2cddc;background:#f7fafb;padding-left:5px}
 .row-bottom{display:flex;align-items:flex-start;gap:12px;margin-top:5px}.basis{font-size:11px;color:#8595a0;flex:1}.basis summary{cursor:pointer;list-style:none;display:inline-block}.basis summary::after{content:"⌄";margin-left:5px}.basis[open] summary::after{content:"⌃"}.basis p{font-size:12px;line-height:1.7;color:#697e8c;margin:9px 0 0;padding:10px;background:#f5f8fa;border-radius:6px}.risk{font-size:10px;color:#a47e43;line-height:1.6}
 .foot{border-top:1px solid #e9eef1;padding:11px 20px;background:#fcfdfe;font-size:11px;color:#8a99a3}.foot summary{cursor:pointer;list-style:none;display:flex;justify-content:space-between}.foot p{line-height:1.8;margin-bottom:2px}
+.A .reply{display:grid;grid-template-columns:66px minmax(0,1fr) 28px;align-items:center;column-gap:14px;padding:13px 0}.A .reply-top{display:contents}.A .label{grid-column:1;grid-row:1;white-space:nowrap}.A textarea{grid-column:2;grid-row:1;min-width:0}.A .copy{grid-column:3;grid-row:1}.A .foot .row-bottom{padding:10px 0;border-top:1px solid #e7edf0}.A .foot .row-bottom::before{content:attr(data-label);font-size:11px;color:#708592;white-space:nowrap}.A .foot .row-bottom:first-child{margin-top:12px}.A .foot .risk{max-width:none}
 .B .rows{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));padding:8px 0 18px}.B .reply{padding:0 18px;display:flex;flex-direction:column}.B .reply+.reply{border-top:0;border-left:1px solid #e5ecef}.B textarea{min-height:110px}.B .row-bottom{margin-top:auto;padding-top:12px;display:block}.B .risk{display:block;margin-top:7px}.B .reply-top{margin-bottom:14px}
 .C .rows{padding:0 14px 8px;display:grid;grid-template-columns:1fr 1fr;gap:0 16px}.C .reply:first-child{grid-column:1/-1;background:#f1f7fa;padding:16px;border:1px solid #e2edf3;border-radius:8px;margin:4px 0 5px}.C .reply:first-child textarea{font-size:17px}.C .reply:not(:first-child){padding:14px 6px;border-top:0}.C .reply:nth-child(3){border-left:1px solid #edf1f4;padding-left:18px}.C .row-bottom{display:block}.C .risk{display:block;margin-top:5px}
 .after{display:flex;align-items:center;justify-content:space-between;margin-top:18px;color:#98a4ab;font-size:11px}.after span:last-child{color:#6f8796}
@@ -38,7 +39,7 @@ textarea{display:block;width:100%;background:transparent;border:1px solid transp
     <section class="candidates" id="candidates" aria-label="候选回复">
       <header class="heading"><h2>候选回复<span class="count">3 种说法</span></h2><span class="hint">正文可直接编辑</span></header>
       <div class="rows" id="rows"></div>
-      <details class="foot"><summary><span>生成说明</span><span>输入与依据 ⌄</span></summary><p>本页仅使用合成示例。三个版本表达同一方向，依据均来自上方示例想法。编辑留在当前页面，复制取编辑后的文字。</p></details>
+      <details class="foot"><summary><span>生成说明</span><span id="generation-hint">输入与依据 ⌄</span></summary><p>本页仅使用合成示例。三个版本表达同一方向，依据均来自上方示例想法。编辑留在当前页面，复制取编辑后的文字。</p><div id="explanations"></div></details>
     </section>
     <div class="after"><span>选择喜欢的说法，修改后复制</span><span>由你亲自发送</span></div>
     <div class="caption" id="caption"></div>
@@ -46,7 +47,7 @@ textarea{display:block;width:100%;background:transparent;border:1px solid transp
 </main>
 <nav class="switcher" aria-label="切换排版方案">
   <button class="arrow" id="prev" aria-label="上一个方案">←</button>
-  <button data-variant="A">A · 三行清单</button><button data-variant="B">B · 三列并排</button><button data-variant="C">C · 重点一条</button>
+  <button data-variant="A">A · 横向长条</button><button data-variant="B">B · 三列并排</button><button data-variant="C">C · 重点一条</button>
   <button class="arrow" id="next" aria-label="下一个方案">→</button>
 </nav>
 <div class="sr" role="status" id="status"></div>
@@ -58,13 +59,14 @@ const samples=[
   {name:'简短',text:'收到，谢谢推荐，周末有空去看看～',basis:'省去评价，直接回应推荐；保留“有空”这个前提。'},
   {name:'热情',text:'看着就很想去！谢谢你推荐，周末有空我去逛逛，回来跟你分享。',basis:'表达更多期待，并加了一句后续分享。新增内容需要你自行判断是否保留。',risk:'新增「回来跟你分享」'}
 ];
-const captions={A:'<strong>A · 三行清单</strong>　共用一个大框，用细线分隔。最省空间，也最适合长回复。',B:'<strong>B · 三列并排</strong>　三个说法平行对照。宽窗口更清楚，窄窗口会有更多换行。',C:'<strong>C · 重点一条</strong>　第一条完整铺开，另两条放下面。阅读重点更明确。'};
+const captions={A:'<strong>A · 横向长条</strong>　编号与风格在左，正文居中，复制在右。三条共用一个框，依据收在底部。',B:'<strong>B · 三列并排</strong>　三个说法平行对照。宽窗口更清楚，窄窗口会有更多换行。',C:'<strong>C · 重点一条</strong>　第一条完整铺开，另两条放下面。阅读重点更明确。'};
 let current=new URLSearchParams(location.search).get('variant')||'A';
 if(!['A','B','C'].includes(current))current='A';
 const rows=document.getElementById('rows');
 samples.forEach((sample,index)=>{
   const article=document.createElement('article');article.className='reply';
   article.innerHTML=`<div class="reply-top"><span class="label"><span class="num">0${index+1}</span>${sample.name}</span><button class="copy" aria-label="复制第${index+1}条回复" title="复制">${copyIcon}</button></div><textarea rows="1" aria-label="第${index+1}条回复" spellcheck="false"></textarea><div class="row-bottom"><details class="basis"><summary>依据</summary><p>${sample.basis}</p></details>${sample.risk?`<span class="risk">${sample.risk}</span>`:''}</div>`;
+  article.querySelector(".row-bottom").dataset.label=`0${index+1} ${sample.name}`;
   const editor=article.querySelector('textarea');editor.value=sample.text;
   editor.addEventListener('input',()=>{sample.text=editor.value;fit(editor)});
   article.querySelector('.copy').addEventListener('click',async(event)=>{
@@ -76,9 +78,13 @@ samples.forEach((sample,index)=>{
 });
 function fit(editor){editor.style.height='auto';editor.style.height=editor.scrollHeight+'px'}
 function resize(){document.querySelectorAll('textarea').forEach(fit)}
+const explanations=Array.from(document.querySelectorAll('.row-bottom'));
+const articles=Array.from(rows.children);
 function show(variant){
   current=variant;const url=new URL(location.href);url.searchParams.set('variant',variant);history.replaceState(null,'',url);
   document.getElementById('candidates').className='candidates '+variant;
+  explanations.forEach((item,index)=>(variant==='A'?document.getElementById('explanations'):articles[index]).append(item));
+  document.getElementById('generation-hint').textContent=variant==='A'?'1 项新增表达提醒 · 依据 ⌄':'输入与依据 ⌄';
   document.querySelectorAll('[data-variant]').forEach(button=>{button.classList.toggle('active',button.dataset.variant===variant);button.setAttribute('aria-pressed',String(button.dataset.variant===variant))});
   document.getElementById('caption').innerHTML=captions[variant];resize();
 }
