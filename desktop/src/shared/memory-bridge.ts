@@ -20,6 +20,14 @@ export interface MemoryEvent {
   occurrenceVerified: boolean;
   occurrenceEvidence: MemoryEventEvidence[];
 }
+export interface MemoryConditions {
+  version: 1;
+  items: Array<{ text: string; evidence: MemoryEventEvidence[]; sourceSupported: boolean }>;
+}
+export interface MemoryConditionsProposal {
+  version: 1;
+  items: Array<{ text: string; evidence: MemoryEventEvidence[] }>;
+}
 export interface MemoryTiming {
   recordedAt: string | null;
   sourceStartedAt: string | null;
@@ -39,6 +47,7 @@ export interface MemoryContent {
   validAt: string | null;
   invalidAt: string | null;
   event?: MemoryEvent | null;
+  conditions?: MemoryConditions | null;
 }
 export interface ActiveMemory extends MemoryContent {
   memoryId: string;
@@ -118,6 +127,7 @@ export interface MemorySection<T> {
 export type MemorySectionName = 'contact' | 'owner' | 'pending' | 'sources';
 export interface LayeredMemoryReference {
   event?: MemoryEvent | null;
+  conditions?: MemoryConditions | null;
   validAt?: string | null;
   invalidAt?: string | null;
   memoryId: string;
@@ -235,6 +245,7 @@ export type MemoryChangeKind = 'error_correction' | 'state_changed';
 export interface MemoryCorrectionRequest extends ContactSelection {
   level: 'owner' | 'contact'; memoryId: string; revision: number; text: string; category: MemoryCategory;
   changeKind?: MemoryChangeKind;
+  conditions?: MemoryConditionsProposal | null;
 }
 export type OwnerLayeredMemoryManagementRequest = Omit<LayeredMemoryManagementRequest, 'contactId' | 'scopeRevision'>;
 export interface OwnerLayeredMemoryState extends MemoryOverviewState<LayeredMemory> {
@@ -248,7 +259,7 @@ export interface MemoryBridge {
   readProcessing(request: MemoryProcessingRequest): Promise<MemoryProcessing>;
   cancelProcessingRead(request: MemoryProcessingRequest): Promise<void>;
   readOwnerMemories(): Promise<void>;
-  correctOwnerMemory(request: Pick<MemoryCorrectionRequest, 'memoryId' | 'revision' | 'text' | 'category' | 'changeKind'>): Promise<void>;
+  correctOwnerMemory(request: Pick<MemoryCorrectionRequest, 'memoryId' | 'revision' | 'text' | 'category' | 'changeKind' | 'conditions'>): Promise<void>;
   deleteOwnerMemory(request: Pick<MemoryRemovalRequest, 'memoryId' | 'revision'>): Promise<void>;
   addOwnerMemory(request: Pick<MemoryAdditionRequest, 'text' | 'category'>): Promise<void>;
   getOwnerLayeredMemoryState(): Promise<OwnerLayeredMemoryState>;

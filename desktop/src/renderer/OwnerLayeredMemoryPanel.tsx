@@ -1,3 +1,4 @@
+import { MemoryConditionsDetails, MemoryConditionsEditor, conditionEditorText, conditionEditProposal, conditionEditorValid } from './MemoryConditionsDetails';
 import { memoryTimeText as timeText } from './memory-time-format';
 import { MemoryEventDetails } from './MemoryEventDetails';
 import { useEffect, useRef, useState } from 'react';
@@ -96,6 +97,7 @@ function OwnerFactCard({ memory, removalTarget = memory, busy, run, initiallyEdi
   const [deleting, setDeleting] = useState(false);
   const [text, setText] = useState(memory.text);
   const [category, setCategory] = useState(memory.category);
+  const [conditionText, setConditionText] = useState(conditionEditorText(memory.conditions));
   const [changeKind, setChangeKind] = useState<MemoryChangeKind>('error_correction');
   const editor = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
@@ -106,6 +108,7 @@ function OwnerFactCard({ memory, removalTarget = memory, busy, run, initiallyEdi
     <p className="memory-text">{availability.excluded ? <s>{memory.text}</s> : memory.text}</p>
     <p className="memory-availability">{availability.label}</p>
     <p className="memory-section-note">{memory.adoptionMethod === 'auto' ? '自动记下 · 未经你确认' : '手动记下'}</p>
+    <MemoryConditionsDetails conditions={memory.conditions} />
     <MemoryTemporalStatus timing={memory.timing} validAt={memory.validAt} invalidAt={memory.invalidAt} compact />
     <details className="memory-details"><summary>查看详情</summary>
       <p>版本 {memory.revision}</p><p>{memory.timing.currentStatusReason}</p>
@@ -123,17 +126,20 @@ function OwnerFactCard({ memory, removalTarget = memory, busy, run, initiallyEdi
     </details>
     {memory.status === 'active' && <button className="button" aria-label="修正本人记忆" disabled={busy} onClick={() => setEditing(!editing)}>修改</button>}
     <button className="button" aria-label="删除本人记忆" disabled={busy} onClick={() => setDeleting(true)}>删除</button>
-    {editing && memory.status === 'active' && <form className="memory-edit-form" onSubmit={event => { event.preventDefault(); void run(() => window.notalone.memory.correctOwnerMemory({ memoryId: memory.memoryId, revision: memory.revision, text: text.trim(), category, changeKind })); }}>
+    {editing && memory.status === 'active' && <form className="memory-edit-form" onSubmit={event => { event.preventDefault();
+      const conditions = conditionEditProposal(conditionText, memory.conditions);
+      void run(() => window.notalone.memory.correctOwnerMemory({ memoryId: memory.memoryId, revision: memory.revision, text: text.trim(), category, changeKind, ...(conditions === undefined ? {} : { conditions }) })); }}>
       <label>修正本人记忆内容<textarea ref={editor} value={text} maxLength={4000} onChange={event => setText(event.target.value)} /></label>
       <label>资料分类<select aria-label="资料分类" value={category} disabled={busy} onChange={event => setCategory(event.target.value as MemoryCategory)}>
         {Object.entries(categoryNames).map(([value, name]) => <option key={value} value={value}>{name}</option>)}</select></label>
+      <MemoryConditionsEditor value={conditionText} onChange={setConditionText} disabled={busy} />
       <label>修改原因<select aria-label="修改原因" value={changeKind} disabled={busy}
         onChange={event => setChangeKind(event.target.value as MemoryChangeKind)}>
         <option value="error_correction">纠正错误</option><option value="state_changed">记录变化</option></select></label>
       <p>{changeKind === 'error_correction' ? '原来的内容记错了。旧版只保留供查看，不再用于生成。'
         : '原来的内容曾经成立，后来发生变化。旧版将划线保留，不再引用。'}</p>
       <p>保存新的手动版本并保留来源；本次保存时间不代表变化发生时间。</p>
-      <button className="button" disabled={busy || !text.trim()}>保存本人记忆修正</button>
+      <button className="button" disabled={busy || !text.trim() || !conditionEditorValid(conditionText)}>保存本人记忆修正</button>
     </form>}
     {deleting && <div role="group" aria-label="确认删除本人记忆"><p>删除这条记忆后，相关摘要也会失效。若旧条目已有替代记忆，请删除对应的当前条目以清除旧记录。此操作无法撤销。</p>
       {removalTarget.memoryId !== memory.memoryId && <p>将删除当前记忆「{removalTarget.text}」及相关旧条目。</p>}

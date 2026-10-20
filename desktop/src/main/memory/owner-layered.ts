@@ -1,5 +1,6 @@
+import { conditionCorrectionFields } from './condition-proposal';
 import { listedMemories } from './read';
-import type { MemoryAdditionRequest, OwnerLayeredMemoryManagementRequest, OwnerLayeredMemoryState } from '../../shared/memory-bridge';
+import type { MemoryAdditionRequest, MemoryConditionsProposal, OwnerLayeredMemoryManagementRequest, OwnerLayeredMemoryState } from '../../shared/memory-bridge';
 import type { BackendHost } from '../backend/host';
 import { layeredMemory } from './layered-read';
 import { validCorrectionTarget, correctionBody, retryFactCorrection } from './layered-correction';
@@ -76,10 +77,10 @@ export class OwnerLayeredMemoryController {
     }
     finally { if (this.factsOperation === operation) this.factsOperation = undefined; }
   }
-  async changeFact(action: 'correct' | 'delete', request: { memoryId: string; revision: number; text?: string; category?: MemoryAdditionRequest['category']; changeKind?: 'error_correction' | 'state_changed' }) {
+  async changeFact(action: 'correct' | 'delete', request: { memoryId: string; revision: number; text?: string; category?: MemoryAdditionRequest['category']; changeKind?: 'error_correction' | 'state_changed'; conditions?: MemoryConditionsProposal | null }) {
     this.synchronize();
     if (this.state.memories?.phase !== 'ready' || !this.state.memories.items.some(item => (action === 'delete' || item.status === 'active') && item.memoryId === request.memoryId && item.revision === request.revision)) throw new Error('本人底层资料版本已变化，请重新读取。');
-    await this.writeFact(`/api/memories/owner/${request.memoryId}/${action}`, action === 'correct' ? { text: request.text, category: request.category, change_kind: request.changeKind ?? 'error_correction' } : {});
+    await this.writeFact(`/api/memories/owner/${request.memoryId}/${action}`, action === 'correct' ? { text: request.text, category: request.category, change_kind: request.changeKind ?? 'error_correction', ...conditionCorrectionFields(request.conditions) } : {});
   }
   async add(request: Pick<MemoryAdditionRequest, 'text' | 'category'>) { await this.writeFact('/api/memories/manual-owner', request); }
   private async writeFact(path: string, body: unknown) {

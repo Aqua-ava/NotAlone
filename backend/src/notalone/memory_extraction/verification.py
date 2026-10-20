@@ -10,6 +10,7 @@ from uuid import UUID
 
 from notalone.memory_extraction.errors import ExtractionInvalidOutputError
 from notalone.memory_extraction.models import ExtractedFact, ExtractionWindow
+from notalone.memory.conditions import MemoryConditions
 from notalone.memory.events import EventEvidence, EventStage, MemoryEvent
 from dataclasses import replace
 from notalone.memory_trace.context import current_trace, record
@@ -74,6 +75,7 @@ class SourceVerificationResult:
     model_issues: tuple[SourceVerificationIssue, ...] = ()
     proof_verification: ProofVerification | None = None
     event: MemoryEvent | None = None
+    conditions: MemoryConditions | None = None
 
 
 class SourceVerificationRuntime(Protocol):
@@ -126,7 +128,7 @@ def validate_source_verification(
                 "issues",
                 "evidence",
             }
-            optional_fields = {"event_verification"}
+            optional_fields = {"event_verification", "condition_verification"}
             if mode in {SourceVerificationMode.NULLABLE_PROOF_V1, SourceVerificationMode.NULLABLE_PROOF_V2, SourceVerificationMode.NULLABLE_PROOF_V3}:
                 optional_fields.add("proof")
             fields_valid = (isinstance(payload, dict) and required_fields <= set(payload)
@@ -324,7 +326,7 @@ def validate_source_verification(
                 proof=proof, verification_mode=mode,
                 model_verdict=model_verdict, model_issues=model_issues,
                 proof_verification=proof_verification,
-                event=event,
+                event=event, conditions=_verify_conditions(payload.get("condition_verification"), fact=fact, window=window),
             )
     except (TypeError, ValueError, KeyError, AttributeError):
         _record_contract(
@@ -404,3 +406,23 @@ def _record_contract(
         started_at=started_at,
         status="passed" if passed else "failed",
     )
+
+
+def _verify_conditions(raw: object, *, fact: ExtractedFact, window: ExtractionWindow) -> MemoryConditions | None:
+    """通用正文支持不能签条件；每项独立核验且只允许候选自己的实际来源。"""
+    conditions = fact.conditions
+    if raw is None:
+        return conditions
+    if conditions is None or not isinstance(raw, list) or len(raw) != len(conditions.items):
+        raise ValueError("条件核验覆盖不完整。")
+    messages = {item.message_id: item for item in window.messages}
+    results = {}
+    for item in raw:
+        if not isinstance(item, dict) or set(item) != {"index", "verdict", "evidence"} or type(item["index"]) is not int or item["index"] in results or not 0 <= item["index"] < len(conditions.items) or not isinstance(item["evidence"], list):
+            raise ValueError("条件核验结构无效。")
+        verdict = SourceVerificationVerdict(item["verdict"])
+        refs = tuple(EventEvidence.from_payload(ref) for ref in item["evidence"])
+        if len(refs) > 8 or any(ref.message_id not in fact.source_message_ids or ref.message_id not in messages or ref.char_end > len(messages[ref.message_id].text) or messages[ref.message_id].text_representation != "text" for ref in refs):
+            raise ValueError("条件核验超出候选来源。")
+        results[item["index"]] = replace(conditions.items[item["index"]], evidence=refs, source_supported=verdict is SourceVerificationVerdict.SUPPORTED)
+    return MemoryConditions(tuple(results[index] for index in range(len(conditions.items))))

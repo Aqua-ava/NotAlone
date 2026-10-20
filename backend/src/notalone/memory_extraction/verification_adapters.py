@@ -462,6 +462,12 @@ class LangChainSourceVerificationRuntime:
             prompt = prompt.replace("未来安排、当前临时状态和暂时请求按原期间／观察点规则另核；", "未来安排、当前临时状态和暂时请求只按原话明示期间另核；")
             prompt = prompt.replace("暂时关系请求的正文须保留来源日期与暂时限定；valid_at已填观察点不能替正文补日期。", "暂时关系请求须保留来源日期与暂时限定；来源日期不作为事实适用起点。")
             prompt += "\n直接提取时间核验：只用各消息source_calendar_at解释当地日历，相对表达须归属该消息；unknown时不使用occurred_at的数据库时区替代。event v2须保留原表达与年/月/日/时刻精度，事件阶段、发生日期和事实适用期分开核验；转述时点未确定保持日期未知。"
+        if any(fact.conditions is not None for fact in facts):
+            schema = deepcopy(schema)
+            schema["properties"]["results"]["items"]["properties"]["condition_verification"] = {
+                "type": ["array", "null"], "maxItems": 8, "items": {"type": "object", "additionalProperties": False,
+                "properties": {"index": {"type": "integer", "minimum": 0}, "verdict": {"type": "string", "enum": [item.value for item in SourceVerificationVerdict]}, "evidence": {"type": "array", "maxItems": 8, "items": EVENT_POSITION_SCHEMA}}, "required": ["index", "verdict", "evidence"]}}
+            prompt += "\nconditions须逐项独立核验，condition_verification列全每项index、verdict、evidence位置；通用supported不代签条件。只核验原话对条件限定的支持，不能认证现在仍满足，更不能从条件变化推断原禁忌或偏好撤销。无条件提案返回null。"
         has_events = any(fact.event is not None for fact in facts)
         if has_events:
             schema = deepcopy(schema)
@@ -623,6 +629,7 @@ def _verification_text(
             "assertion_status": fact.assertion_status.value,
             "figurative_type": fact.figurative_type.value,
             **({"event": fact.event.to_payload()} if fact.event is not None else {}),
+            **({"conditions": fact.conditions.to_payload()} if fact.conditions is not None else {}),
         } for index, fact in enumerate(facts)],
     }
     if include_position_guide:

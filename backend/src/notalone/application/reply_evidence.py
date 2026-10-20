@@ -57,6 +57,7 @@ class ReplyEvidenceService:
                     **({"navigation": entry.navigation.to_payload()} if entry.navigation else {}),
                     "timing": entry.timing.to_payload(),
                     "event": entry.event.to_payload() if entry.event else None,
+                    "conditions": entry.conditions.to_payload() if entry.conditions else None,
                     "valid_at": entry.valid_at.isoformat() if entry.valid_at else None,
                     "invalid_at": entry.invalid_at.isoformat() if entry.invalid_at else None,
                 }

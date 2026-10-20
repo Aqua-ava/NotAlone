@@ -9,6 +9,7 @@ from uuid import UUID
 
 from notalone.memory.dimension_evidence import DimensionEvidence
 from notalone.memory.correction import CorrectionReview
+from notalone.memory.conditions import MemoryConditions
 from notalone.memory.events import MemoryEvent
 from notalone.memory.version_evidence import VersionEvidence
 
@@ -131,6 +132,7 @@ class MemoryCandidate:
     failure_reason: str | None = None
     timing: MemoryTiming = MemoryTiming()
     event: MemoryEvent | None = None
+    conditions: MemoryConditions | None = None
     dimension_evidence: DimensionEvidence | None = None
     correction_review: tuple[CorrectionReview, ...] = ()
 
@@ -142,6 +144,8 @@ class MemoryCandidate:
             raise TypeError("完整正文的来源依赖标记必须为布尔值。")
         if not isinstance(self.source_dependency_mode, SourceDependencyMode):
             raise TypeError("来源依赖方式必须是受控枚举。")
+        if self.conditions is not None and not isinstance(self.conditions, MemoryConditions):
+            raise ValueError("适用条件结构无效。")
         if self.event is not None and not isinstance(self.event, MemoryEvent):
             raise ValueError("记忆事件信息无效。")
         if self.dimension_evidence is not None and (
@@ -217,6 +221,7 @@ class ConfirmedMemory:
     supersedes_memory_id: UUID | None = None
     timing: MemoryTiming = MemoryTiming()
     event: MemoryEvent | None = None
+    conditions: MemoryConditions | None = None
     version_evidence: VersionEvidence | None = None
     can_revert_auto_update: bool = False
     retirement_reason: MemoryRetirementReason = MemoryRetirementReason.UNKNOWN
@@ -233,6 +238,8 @@ class ConfirmedMemory:
             raise TypeError("完整正文的来源依赖标记必须为布尔值。")
         if not isinstance(self.source_dependency_mode, SourceDependencyMode):
             raise TypeError("来源依赖方式必须是受控枚举。")
+        if self.conditions is not None and not isinstance(self.conditions, MemoryConditions):
+            raise ValueError("适用条件结构无效。")
         if self.event is not None and not isinstance(self.event, MemoryEvent):
             raise ValueError("记忆事件信息无效。")
         if not isinstance(self.memory_id, UUID):
@@ -311,6 +318,7 @@ class OwnerMemory:
     supersedes_memory_id: UUID | None = None
     timing: MemoryTiming = MemoryTiming()
     event: MemoryEvent | None = None
+    conditions: MemoryConditions | None = None
     version_evidence: VersionEvidence | None = None
     can_revert_auto_update: bool = False
     retirement_reason: MemoryRetirementReason = MemoryRetirementReason.UNKNOWN
@@ -327,6 +335,8 @@ class OwnerMemory:
             raise TypeError("完整正文的来源依赖标记必须为布尔值。")
         if not isinstance(self.source_dependency_mode, SourceDependencyMode):
             raise TypeError("来源依赖方式必须是受控枚举。")
+        if self.conditions is not None and not isinstance(self.conditions, MemoryConditions):
+            raise ValueError("适用条件结构无效。")
         if self.event is not None and not isinstance(self.event, MemoryEvent):
             raise ValueError("记忆事件信息无效。")
         if not isinstance(self.memory_id, UUID) or not isinstance(

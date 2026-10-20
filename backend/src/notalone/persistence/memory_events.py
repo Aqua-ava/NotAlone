@@ -6,6 +6,7 @@ from psycopg import sql
 from psycopg.rows import dict_row
 
 from notalone.memory.events import MemoryEvent
+from notalone.persistence.memory_conditions import conditions_clear_sql
 from notalone.memory.correction import MemoryCorrectionConflictError
 from notalone.persistence.correction_evidence import validate_frozen_snapshot
 
@@ -62,11 +63,12 @@ def erase_event_version_dependencies(connection: Any, *, owner_id: UUID, removed
     """原始阶段、发生时间与两侧窗口的任何参与来源删除都撤下其派生副本。"""
     if not has_event_schema(connection):
         return
+    clear_conditions = conditions_clear_sql(connection)
     removed = {str(item) for item in removed_ids}
     with connection.cursor(row_factory=dict_row) as cursor:
         candidates = cursor.execute(
             "SELECT id, contact_id, source_ids, correction_evidence, dimension_evidence "
-            "FROM public.memory_candidate WHERE owner_id=%s AND event IS NOT NULL", (owner_id,),
+            "FROM public.memory_candidate WHERE owner_id=%s AND (event IS NOT NULL OR jsonb_typeof(to_jsonb(memory_candidate)->'conditions')='object')", (owner_id,),
         ).fetchall()
         candidate_ids = {
             row["id"] for row in candidates if removed & (
@@ -76,10 +78,10 @@ def erase_event_version_dependencies(connection: Any, *, owner_id: UUID, removed
         affected = {}
         for table in ("confirmed_memory", "owner_memory"):
             rows = cursor.execute(sql.SQL(
-                "SELECT id, source_candidate_id, version_evidence FROM public.{} "
-                "WHERE owner_id=%s AND (version_evidence IS NOT NULL OR event IS NOT NULL)"
-            ).format(sql.Identifier(table)), (owner_id,)).fetchall()
-            seeds = {row["id"] for row in rows if row["source_candidate_id"] in candidate_ids or (
+                "SELECT id, source_candidate_id, source_ids, version_evidence, to_jsonb({})->'conditions' AS conditions FROM public.{} "
+                "WHERE owner_id=%s AND (version_evidence IS NOT NULL OR event IS NOT NULL OR jsonb_typeof(to_jsonb({})->'conditions')='object')"
+            ).format(sql.Identifier(table), sql.Identifier(table), sql.Identifier(table)), (owner_id,)).fetchall()
+            seeds = {row["id"] for row in rows if row["source_candidate_id"] in candidate_ids or (row.get("conditions") is not None and removed & {str(item) for item in row["source_ids"]}) or (
                 row["version_evidence"] is not None and removed & (
                     _window_ids(row["version_evidence"].get("previous_window"))
                     | _window_ids(row["version_evidence"].get("current_window"))))}
@@ -109,13 +111,13 @@ def erase_event_version_dependencies(connection: Any, *, owner_id: UUID, removed
                     record_kind="contact_memory" if table == "confirmed_memory" else "owner_memory", record_id=row["id"])
             cursor.execute(sql.SQL(
                 "UPDATE public.{} SET text_content='已删除的资料', status='deleted', revision=revision+1, "
-                "risk_flags='{{}}'::text[], event=NULL, version_evidence=NULL, updated_at=now() "
+                "risk_flags='{{}}'::text[], event=NULL, version_evidence=NULL" + clear_conditions + ", updated_at=now() "
                 "WHERE owner_id=%s AND id=ANY(%s::uuid[])"
             ).format(sql.Identifier(table)), (owner_id, [row["id"] for row in rows]))
         cursor.execute(
             "UPDATE public.memory_candidate SET text_content='已删除的资料', status='invalidated', "
             "interpretation_reason='', alternatives='{}'::text[], risk_flags='{}'::text[], failure_reason=NULL, "
-            "event=NULL, dimension_evidence=NULL, correction_evidence=NULL, correction_decision_ids=NULL, updated_at=now() "
+            "event=NULL, dimension_evidence=NULL, correction_evidence=NULL, correction_decision_ids=NULL" + clear_conditions + ", updated_at=now() "
             "WHERE owner_id=%s AND id=ANY(%s::uuid[])", (owner_id, list(candidate_ids)),
         )
         erase_correction_dependencies(connection, owner_id=owner_id, removed_ids=affected_ids, record_deletion=True)

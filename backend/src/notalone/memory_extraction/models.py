@@ -20,6 +20,7 @@ from notalone.memory.models import (
     MemoryTopic,
 )
 from notalone.memory.timing import MemoryTiming
+from notalone.memory.conditions import MemoryConditions
 from notalone.memory.events import MemoryEvent
 
 __all__ = [
@@ -82,6 +83,7 @@ class ExtractedFact:
     timing: MemoryTiming = MemoryTiming()
     dimension_evidence: DimensionEvidence | None = None
     event: MemoryEvent | None = None
+    conditions: MemoryConditions | None = None
     # 同次独立核验的临时回执，仅绑定候选和窗口摘要，不从持久候选恢复。
     verified_source_receipt: tuple[str, str, str, bool] | None = None
 
@@ -93,6 +95,8 @@ class ExtractedFact:
             raise TypeError("完整正文的来源依赖标记必须为布尔值。")
         if not isinstance(self.source_dependency_mode, SourceDependencyMode):
             raise TypeError("来源依赖方式必须是受控枚举。")
+        if self.conditions is not None and not isinstance(self.conditions, MemoryConditions):
+            raise ValueError("适用条件结构无效。")
         if self.event is not None and not isinstance(self.event, MemoryEvent):
             raise ValueError("提取事件结构无效。")
         if self.dimension_evidence is not None and not isinstance(

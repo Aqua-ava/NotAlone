@@ -9,6 +9,7 @@ from notalone.memory_trace.context import record
 
 from langchain_core.language_models import BaseChatModel
 
+from notalone.memory.conditions import CONDITIONS_PROPOSAL_SCHEMA
 from notalone.memory_extraction.adapters import EXTRACTION_SCHEMA, _window_text
 from notalone.memory.events import EVENT_PROPOSAL_V2_SCHEMA
 from notalone.memory_extraction.errors import ExtractionInvalidOutputError, ExtractionRuntimeError
@@ -73,6 +74,8 @@ _direct_fields = DIRECT_EXTRACTION_SCHEMA["properties"]["scenes"]["items"]["prop
 _direct_fields["event"] = EVENT_PROPOSAL_V2_SCHEMA
 _direct_fields["valid_at"]["description"] = "仅原话明确的事实适用起点；来源时区未知或无期限时null，不默认消息/采纳时间。"
 _direct_fields["invalid_at"]["description"] = "仅原话明确完整适用期间的结束边界；未知时null，不按瞬时状态默认当天结束。"
+_direct_fields["conditions"] = CONDITIONS_PROPOSAL_SCHEMA
+DIRECT_EXTRACTION_PROMPT += "\n有适用限定时填写conditions，保留条件原文与各自来源位置；无来源不推断。出差结束、离职等条件变化不等于撤销不愿通话、工资禁忌等原主张；缺条件不表示永久适用。"
 
 
 class DirectExtractionRuntime:

@@ -19,6 +19,8 @@ from notalone.memory.dimension_evidence import (
 )
 from notalone.memory.correction import MemoryCorrectionConflictError
 from notalone.memory.events import MemoryEvent
+from notalone.memory.conditions import MemoryConditions
+from notalone.persistence.memory_conditions import bind_memory_conditions, manual_conditions
 from notalone.persistence.memory_events import bind_memory_event
 from notalone.memory.versions import (
     MemoryVersionConflict, require_auto_previous, require_auto_update_previous,
@@ -74,6 +76,7 @@ _OWNER_MEMORY_COLUMNS = """
     source_candidate_id,
     supersedes_memory_id,
     to_jsonb(owner_memory)->'event' AS memory_event,
+    to_jsonb(owner_memory)->'conditions' AS memory_conditions,
     to_jsonb(owner_memory)->'version_evidence' AS version_evidence,
     to_jsonb(owner_memory)->>'retirement_reason' AS retirement_reason,
     (to_jsonb(owner_memory)->>'retired_at')::timestamptz AS retired_at,
@@ -196,6 +199,7 @@ class PostgresOwnerMemoryStore:
                            to_jsonb(memory_candidate)->'dimension_evidence'
                                AS dimension_evidence,
                            to_jsonb(memory_candidate)->'event' AS event,
+                           to_jsonb(memory_candidate)->'conditions' AS conditions,
                            to_jsonb(memory_candidate)->>'source_dependency_mode'
                                AS dependency_mode, to_jsonb(memory_candidate)->'requires_all_sources' AS requires_all_sources
                     FROM public.memory_candidate
@@ -322,7 +326,7 @@ class PostgresOwnerMemoryStore:
                             DimensionEvidence.from_payload(raw)
                             if raw is not None else None
                         ),
-                        event=MemoryEvent.from_payload(candidate_row.get("event")),
+                        event=MemoryEvent.from_payload(candidate_row.get("event")), conditions=MemoryConditions.from_payload(candidate_row.get("conditions")),
                     )
                     current = bind_stored_dimension_evidence(
                         connection, stored, lock_sources=True
@@ -349,10 +353,13 @@ class PostgresOwnerMemoryStore:
                     risk_flags=tuple(candidate_row["risk_flags"] or ()),
                     revision=expected_previous.revision + 1 if expected_previous else 1,
                     supersedes_memory_id=expected_previous.memory_id if expected_previous else None,
-                    event=MemoryEvent.from_payload(candidate_row.get("event")),
+                    event=MemoryEvent.from_payload(candidate_row.get("event")), conditions=MemoryConditions.from_payload(candidate_row.get("conditions")),
                 )
                 event_column = ", event" if memory.event is not None else ""
                 event_value = ", %(event)s" if memory.event is not None else ""
+                if memory.conditions is not None:
+                    event_column += ", conditions"
+                    event_value += ", %(conditions)s"
                 if expected_previous is not None:
                     proof = create_version_evidence(connection, previous=expected_previous, current=memory)
                     if adoption_method is AdoptionMethod.AUTO:
@@ -531,6 +538,7 @@ class PostgresOwnerMemoryStore:
         self, *, owner_id: UUID, memory_id: UUID, text: str,
         category: MemoryCategory | None = None,
         change_kind: MemoryChangeKind = MemoryChangeKind.ERROR_CORRECTION,
+        conditions: object = ...,
     ) -> OwnerMemory:
         """原子替换当前有效本人资料；旧版与候选链留作审计。"""
         _validate_owner_id(owner_id)
@@ -572,8 +580,12 @@ class PostgresOwnerMemoryStore:
                     revision=previous["revision"] + 1,
                     confidence=previous["confidence"],
                     risk_flags=tuple(previous["risk_flags"] or ()),
+                    conditions=manual_conditions(connection, owner_id=owner_id, previous=previous.get("memory_conditions"), proposed=conditions, source_ids=sources),
                 )
                 mode_column, mode_value = _insert_mode(corrected, connection)
+                if corrected.conditions is not None:
+                    mode_column += ", conditions"
+                    mode_value += ", %(conditions)s"
                 row = connection.execute(
                     f"""INSERT INTO public.owner_memory (
                         id, owner_id, text_content, category, topic, source_ids,
@@ -878,6 +890,7 @@ def _to_row(memory: OwnerMemory) -> dict[str, Any]:
         "source_candidate_id": memory.source_candidate_id,
         "supersedes_memory_id": memory.supersedes_memory_id,
         "event": Jsonb(memory.event.to_payload()) if memory.event is not None else None,
+        "conditions": Jsonb(memory.conditions.to_payload()) if memory.conditions else None,
         "version_evidence": Jsonb(memory.version_evidence.to_payload()) if memory.version_evidence else None,
         "source_dependency_mode": memory.source_dependency_mode.value,
         "requires_all_sources": memory.requires_all_sources,
@@ -902,6 +915,7 @@ def _from_row(row: dict[str, Any]) -> OwnerMemory:
         source_candidate_id=row["source_candidate_id"],
         supersedes_memory_id=row["supersedes_memory_id"],
         timing=row["timing"], event=row.get("_bound_event", MemoryEvent.from_payload(row.get("memory_event"))),
+        conditions=row.get("_bound_conditions", MemoryConditions.from_payload(row.get("memory_conditions"))),
         version_evidence=row.get("_bound_version_evidence", VersionEvidence.from_payload(row.get("version_evidence"))),
         can_revert_auto_update=row.get("_can_revert_auto_update", False),
         retirement_reason=MemoryRetirementReason(row.get("retirement_reason") or "unknown"),
@@ -916,6 +930,7 @@ def _timed_rows(
 ) -> list[dict[str, Any]]:
     timed = timed_memory_rows(connection, rows, source_ids_key="source_ids", contact_scoped=False)
     for row in timed:
+        row["_bound_conditions"] = bind_memory_conditions(connection, owner_id=row["owner_id"], candidate_id=row["source_candidate_id"], raw=row.get("memory_conditions"), text=row["text_content"])
         row["_bound_event"] = bind_memory_event(connection, owner_id=row["owner_id"],
             candidate_id=row["source_candidate_id"], raw=row.get("memory_event"))
         row["_bound_version_evidence"], row["_can_revert_auto_update"] = bind_version_evidence(
