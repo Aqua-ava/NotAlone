@@ -9,6 +9,7 @@ import re
 import subprocess
 import threading
 from collections.abc import Callable, Sequence
+from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from time import monotonic
@@ -47,6 +48,7 @@ class CommandResult(Protocol):
 
 CommandRunner = Callable[[tuple[str, ...]], CommandResult]
 FollowProcessRunner = Callable[[tuple[str, ...]], object]
+_MAX_PENDING_SESSION_EVENTS = 256
 
 
 @dataclass(frozen=True, slots=True)
@@ -154,19 +156,19 @@ class SessionEventStream:
 
     def __init__(self, process: object) -> None:
         self._process = process
-        self._queue: queue.Queue[CliSessionEvent | BaseException | None] = (
-            queue.Queue()
-        )
+        self._queue: deque[CliSessionEvent | BaseException] = deque()
         self._closed = False
         self._stop_requested = False
         self._lock = threading.Lock()
+        self._condition = threading.Condition(self._lock)
         self._reader = threading.Thread(target=self._read_loop, daemon=True)
         self._reader.start()
 
     @property
     def closed(self) -> bool:
         with self._lock:
-            return self._closed
+            # 自然 EOF 仍须交付已读元数据，协调器才可从最后消费水位重连。
+            return self._closed and not self._queue
 
     @property
     def process_id(self) -> int | None:
@@ -176,10 +178,12 @@ class SessionEventStream:
         return value if isinstance(value, int) and value > 0 else None
 
     def read(self, timeout: float | None = None) -> CliSessionEvent | None:
-        try:
-            item = self._queue.get(timeout=timeout)
-        except queue.Empty:
-            return None
+        with self._condition:
+            self._condition.wait_for(lambda: self._queue or self._closed, timeout)
+            if not self._queue:
+                return None
+            item = self._queue.popleft()
+            self._condition.notify_all()
         if isinstance(item, BaseException):
             raise item
         return item
@@ -190,6 +194,8 @@ class SessionEventStream:
             if self._stop_requested:
                 return
             self._closed = True
+            self._queue.clear()
+            self._condition.notify_all()
             terminate = getattr(self._process, "terminate", None)
             if callable(terminate):
                 terminate()
@@ -204,6 +210,20 @@ class SessionEventStream:
                     kill()
                     wait(timeout=1.0)
             self._stop_requested = True
+        self._reader.join(timeout=1.0)
+
+    def _put(self, item: CliSessionEvent | BaseException) -> bool:
+        # 只暂停继续读管道，不合并事件、不提前采纳全局或联系人水位。
+        # close 会唤醒满队列的生产者；结束状态独立保存，不占队列槽。
+        with self._condition:
+            self._condition.wait_for(
+                lambda: len(self._queue) < _MAX_PENDING_SESSION_EVENTS or self._closed
+            )
+            if self._closed:
+                return False
+            self._queue.append(item)
+            self._condition.notify_all()
+            return True
 
     def _read_loop(self) -> None:
         try:
@@ -216,21 +236,22 @@ class SessionEventStream:
                     break
                 event = _parse_session_line(line)
                 if event is not None:
-                    self._queue.put(event)
+                    if not self._put(event):
+                        break
             returncode = _poll_process(self._process)
             if returncode not in (None, 0) and not self.closed:
-                self._queue.put(
+                self._put(
                     CliCommandError(
                         "cli_follow_failed", "微信 CLI 流进程异常退出。"
                     )
                 )
         except CliAdapterError as error:
             if not self.closed:
-                self._queue.put(error)
+                self._put(error)
         finally:
-            with self._lock:
+            with self._condition:
                 self._closed = True
-            self._queue.put(None)
+                self._condition.notify_all()
 
 
 class LocalWechatCli:
