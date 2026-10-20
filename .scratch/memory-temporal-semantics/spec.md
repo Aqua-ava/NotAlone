@@ -1,9 +1,9 @@
 # 基于来源的记忆时间、适用条件与变化
 
 Triage: ready-for-agent
-State: open
+State: resolved
 
-> 2026-10-20：用户已确认功能方案，并明确要求通过 ask-matt 选择 skill 完成。本文为可审阅的实现规格；用户随后明确同意四票粒度、依赖与测试边界，授权发布并进入实现。尚未实现或验收，不以文档状态证明产品能力。
+> 2026-10-20：用户已确认方案、四票粒度、依赖与测试边界。四票已在 `codex/memory-temporal-semantics` 实现，完成增量回归、实际开发 App 验收与双轴复评；详见 [集成验证](integration-verification.md)。全量验证超时及已复现的基线失败如实保留，不以完成状态宣称所有测试通过或真实模型质量达标。
 
 ## Problem Statement
 
