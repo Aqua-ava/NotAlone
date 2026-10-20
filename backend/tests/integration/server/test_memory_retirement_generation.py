@@ -49,17 +49,25 @@ class MemoryRetirementGenerationHttpTest(unittest.TestCase):
         self.assertNotEqual(status, 200, result)
         self.assertEqual(len(self.fixture.model.seen_calls), calls)
 
-    def test_state_change_keeps_old_candidate_eligible_as_labeled_history(self):
-        memory_id, _, generated = self._generate("contact")
-        self._correct("contact", memory_id, change_kind="state_changed")
+    def test_contact_state_change_preserves_audit_but_blocks_continuation(self):
+        self._state_change_blocks_continuation("contact")
+
+    def test_owner_state_change_preserves_audit_but_blocks_continuation(self):
+        self._state_change_blocks_continuation("owner")
+
+    def _state_change_blocks_continuation(self, kind):
+        memory_id, _, generated = self._generate(kind)
+        self._correct(kind, memory_id, change_kind="state_changed")
+        calls = len(self.fixture.model.seen_calls)
         body = self.fixture._body(draft="这次先轻松问候")
         body["continued_from_candidate_id"] = generated["candidates"][0]["candidate_id"]
-        self.fixture.model.responses.append(self.fixture._candidate(str(self.fixture.draft_id)))
         status, result = self.fixture.backend.request(self.path + "/replies", body)
-        self.assertEqual(status, 200, result)
-        payload = next(json.loads(item.content) for item in self.fixture.model.seen_calls[-1]
-                       if isinstance(item, HumanMessage))
-        self.assertTrue(any(item["kind"] == "continued_candidate" for item in payload["evidence"]))
+        self.assertNotEqual(status, 200, result)
+        self.assertEqual(len(self.fixture.model.seen_calls), calls)
+        status, saved = self.fixture.backend.request(self.path)
+        self.assertEqual(status, 200, saved)
+        self.assertIn("memory_generation_forbidden", [
+            item["reason"] for turn in saved["turns"] for item in turn["basis_changes"]])
 
     def test_fresh_generation_does_not_restore_corrected_candidate_from_discussion(self):
         memory_id, _, generated = self._generate("contact")
@@ -221,7 +229,7 @@ class MemoryRetirementGenerationHttpTest(unittest.TestCase):
                 (self.fixture.owner_id, self.fixture.contact_id)).fetchall())
         self.assertIn(UUID(str(memory_id)), captured[UUID(root_sample)])
         self.assertIn(UUID(root_sample), captured[UUID(child_sample)])
-        self._correct("contact", memory_id)
+        self._correct("contact", memory_id, change_kind="state_changed")
         calls = len(self.fixture.model.seen_calls)
         body = self.fixture._body(draft="继续问候")
         body["continued_from_candidate_id"] = generated["candidates"][0]["candidate_id"]

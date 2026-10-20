@@ -204,8 +204,8 @@ export interface MemoryReadingState {
   contactId: string | null;
   scopeRevision: number;
   mutation: { phase: 'idle' | 'working' | 'success' | 'error'; message: string; backupCleanupRequired?: boolean };
-  contact: MemorySection<ActiveMemory>;
-  owner: MemorySection<ActiveMemory>;
+  contact: MemorySection<MemoryVersion>;
+  owner: MemorySection<MemoryVersion>;
   pending: MemorySection<PendingMemoryCandidate>;
   sources: MemorySection<MemorySource>;
   history: MemoryHistoryState;
@@ -232,7 +232,7 @@ export interface MemoryCorrectionRequest extends ContactSelection {
 }
 export type OwnerLayeredMemoryManagementRequest = Omit<LayeredMemoryManagementRequest, 'contactId' | 'scopeRevision'>;
 export interface OwnerLayeredMemoryState extends MemoryOverviewState<LayeredMemory> {
-  memories?: MemorySection<ActiveMemory>;
+  memories?: MemorySection<MemoryVersion>;
   revision: number;
   mutation: MemoryReadingState['mutation'];
 }

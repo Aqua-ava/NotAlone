@@ -167,7 +167,7 @@ class OverviewNavigationTest(unittest.TestCase):
         self.assertEqual(loads(tools.search(query="完全无关乙"))["status"], "empty")
         self.assertEqual(loads(tools.search(query="完全无关丙"))["status"], "budget_exceeded")
 
-    def test_historical_navigation_uses_the_actual_old_version_and_keeps_it_unverified(self):
+    def test_historical_navigation_excludes_retired_state_changes(self):
         store = InMemoryMemoryStore()
         candidate = store.create_candidate(MemoryCandidate(
             UUID("71000000-0000-0000-0000-000000000066"), SCOPE,
@@ -187,14 +187,35 @@ class OverviewNavigationTest(unittest.TestCase):
         ), verified_scope=VERIFIED)
         history = [item for item in context.evidence if item.kind == "confirmed_memory"]
 
-        self.assertEqual([(item.evidence_id, item.text, item.revision, item.status) for item in history],
-                         [(old.memory_id, "去年在合成公司加班", 2, "invalidated")])
-        self.assertEqual(history[0].timing.current_status, "historical")
-        self.assertIn("不得当作当前事实", history[0].selection_reason)
+        self.assertEqual(history, [])
         builder.validate_current(context)
-        store.delete(scope=SCOPE, memory_id=new.memory_id)
-        with self.assertRaises(ReplyContextInvariantError):
-            builder.validate_current(context)
+        self.assertIn(old.text, [item.text for item in store.list_versions(
+            scope=SCOPE, memory_id=new.memory_id)])
+
+    def test_expired_active_overview_memory_is_excluded_from_navigation(self):
+        from datetime import timedelta
+        store = InMemoryMemoryStore()
+        candidate = store.create_candidate(MemoryCandidate(
+            UUID("71000000-0000-0000-0000-000000000067"), SCOPE,
+            "去年在合成公司加班", MemoryCategory.RECENT_STATE, (SOURCE,),
+            invalid_at=datetime.now(timezone.utc) - timedelta(days=1),
+        ))
+        memory = store.confirm(scope=SCOPE, candidate_id=candidate.candidate_id,
+                               adoption_method=AdoptionMethod.MANUAL)
+        overview = OverviewFixture((OverviewEntry(memory, None, "source_supported", ()),))
+        builder = RetrievalReplyContext(retrieval=InMemoryRetrieval(memory_store=store),
+                                        skill_library_revision=0, overview=overview)
+        context = builder.build(command=GenerateReply(
+            UUID("72000000-0000-0000-0000-000000000067"), SCOPE, BINDING,
+            RewriteDraft("去年加班", include_relationship_context=True),
+        ), verified_scope=VERIFIED)
+        self.assertEqual([item for item in context.evidence if item.kind == "confirmed_memory"], [])
+        from notalone.persistence.layered_memory import PostgresLayeredMemoryStore
+        layered = PostgresLayeredMemoryStore("synthetic-only")
+        projection = RelationshipOverview(SCOPE, "a" * 64, 1, NOW, (
+            OverviewEntry(memory, OverviewMemoryIdentity(memory.memory_id, memory.revision), "source_supported", ()),
+        ))
+        self.assertEqual(layered.eligible(projection), ())
 
     def test_contact_budget_exhaustion_does_not_spend_owner_budget_or_claim_empty(self):
         store = InMemoryMemoryStore()

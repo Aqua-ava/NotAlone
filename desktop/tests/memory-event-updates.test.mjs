@@ -12,6 +12,7 @@ const compiled = await build({ stdin: { contents: `
   export { createMemoryBridge } from './src/preload/memory';
   export { BackendRequestFailure } from './src/main/backend/json-client';
   export * from './src/renderer/MemoryPage';
+  export { memoryRemovalTarget } from './src/renderer/memory-availability';
   export { renderToStaticMarkup } from 'react-dom/server';
   export { createElement } from 'react';
 `, resolveDir: process.cwd() }, bundle: true, packages: 'external', jsx: 'automatic', platform: 'node', format: 'cjs',
@@ -21,6 +22,57 @@ new Function('require', 'module', 'exports', compiled.outputFiles[0].text)(
   createRequire(import.meta.url), compiledModule, compiledModule.exports,
 );
 const ports = compiledModule.exports;
+
+test('管理列表同时展示当前和失效记忆，失效条目划线且不能作为候选更新目标', async () => {
+  const current = memoryDto('contact', { memory_id: ids.current, text: '目前住在合成城市乙。' });
+  const retired = memoryDto('contact', { status: 'invalidated', retirement_reason: 'state_changed', text: '以前住在合成城市甲。' });
+  const candidate = candidateDto();
+  let writes = 0;
+  const { controller, selection } = await controllerFixture(async (request) => {
+    if (request.method === 'POST') writes++;
+    const data = request.path.endsWith('/memory-candidates') ? { candidates: [candidate] }
+      : request.path.endsWith('/owner-memories') ? { memories: [] }
+      : request.path.endsWith('/sources') ? { sources: [] } : { memories: [current, retired] };
+    return { generation: 1, data };
+  });
+  await controller.refresh(selection());
+  const entries = controller.getState().contact.items;
+  assert.deepEqual(entries.map(item => item.status), ['active', 'invalidated']);
+  const html = entries.map(memory => ports.renderToStaticMarkup(ports.createElement(ports.MemoryCard, {
+    content: memory, memory, sources: { phase: 'ready', items: [] }, trace: () => {},
+    correct: async () => {}, remove: async () => {}, openVersions: async () => {},
+  }))).join('');
+  assert.match(html, /<s>以前住在合成城市甲。<\/s>/);
+  assert.match(html, /已失效 · 不再引用/);
+  assert.match(html, /有效记忆 · 可用于回复/);
+  assert.doesNotMatch(html, /查看版本历史|修正资料：以前住在/);
+  assert.match(html, /删除资料：以前住在/);
+  await assert.rejects(controller.applyCandidateUpdate({ ...selection(), candidateId: ids.candidate,
+    previousMemoryId: ids.previous, expectedRevision: 2 }));
+  await assert.rejects(controller.correct({ ...selection(), level: 'contact', memoryId: ids.previous,
+    revision: 2, text: '不允许修改失效旧版。', category: 'common_fact' }));
+  assert.equal(writes, 0);
+  await controller.remove({ ...selection(), level: 'contact', memoryId: ids.previous, revision: 2 });
+  assert.equal(writes, 1);
+});
+
+test('到期记忆划线，未来生效与普通历史事件不会被误标为过期', () => {
+  const base = { memoryId: ids.current, level: 'contact', status: 'active', adoptionMethod: 'manual',
+    revision: 1, supersedesMemoryId: null, sourceCandidateId: null, text: '合成有效期条目。',
+    category: 'common_fact', topic: 'other', sourceIds: [ids.source], confidence: 1, riskFlags: [],
+    validAt: null, invalidAt: null, timing: { recordedAt: null, sourceStartedAt: null, sourceEndedAt: null,
+      sourceTimeComplete: false, currentStatus: 'historical', currentStatusReason: '过去发生的事件。' } };
+  const render = overrides => {
+    const memory = { ...base, ...overrides };
+    return ports.renderToStaticMarkup(ports.createElement(ports.MemoryCard, {
+      memory, content: memory, sources: { phase: 'ready', items: [] }, trace: () => {},
+    }));
+  };
+  assert.match(render({ invalidAt: '2000-01-01T00:00:00Z' }), /<s>合成有效期条目。<\/s>/);
+  assert.match(render({ invalidAt: '2000-01-01T00:00:00Z' }), /已过期 · 不再引用/);
+  assert.doesNotMatch(render({}), /<s>/);
+  assert.match(render({ validAt: '2100-01-01T00:00:00Z' }), /尚未生效 · 暂不引用/);
+});
 
 const ids = { contact: '11111111-1111-4111-8111-111111111111', other: '99999999-9999-4999-8999-999999999999',
   previous: '22222222-2222-4222-8222-222222222222', current: '33333333-3333-4333-8333-333333333333',
@@ -84,7 +136,7 @@ test('用户明确选择旧版并应用新候选，保留当前纠正决定和�
   }));
   assert.match(html, /选择要更新的当前资料/);
   assert.match(html, /请先选择并核对旧资料/);
-  assert.match(html, /旧版保留在历史中/);
+  assert.match(html, /旧条目划线保留且不再引用/);
 });
 
 test('用户主动查看变化历史，旧版保留原采纳身份和独立来源时间', async () => {
@@ -551,4 +603,13 @@ test('人工修正优先于旧历史的迟到404或409，不撤下新的人工�
     assert.equal(state.history.phase, 'idle');
     assert.equal(state.mutation.phase, 'success');
   }
+});
+
+test('失效记忆只沿同范围唯一替代链定位删除目标，孤立或歧义条目不猜目标', () => {
+  const old = { memoryId: ids.previous, level: 'contact', status: 'invalidated', supersedesMemoryId: null };
+  const current = { memoryId: ids.current, level: 'contact', status: 'active', supersedesMemoryId: ids.previous };
+  assert.equal(ports.memoryRemovalTarget(old, [old, current]), current);
+  assert.equal(ports.memoryRemovalTarget(old, [old]), old);
+  assert.equal(ports.memoryRemovalTarget(old, [old, current, { ...current, memoryId: ids.other }]), old);
+  assert.equal(ports.memoryRemovalTarget(old, [old, { ...current, level: 'owner' }]), old);
 });

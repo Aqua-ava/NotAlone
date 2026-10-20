@@ -412,9 +412,9 @@ class PostgresOwnerMemoryStore:
         except Exception as error:
             raise OwnerMemoryPersistenceError(_OWNER_MEMORY_UNAVAILABLE) from error
 
-    def list_active(self, owner_id: UUID, *, include_expired: bool = False, contact_id: UUID | None = None) -> tuple[OwnerMemory, ...]:
+    def list_active(self, owner_id: UUID, *, include_invalidated: bool = False, include_expired: bool = False, contact_id: UUID | None = None) -> tuple[OwnerMemory, ...]:
         _validate_owner_id(owner_id)
-        if type(include_expired) is not bool:
+        if type(include_expired) is not bool or type(include_invalidated) is not bool:
             raise TypeError("历史回看标记必须是 bool。")
         try:
             with self._connect() as connection:
@@ -426,7 +426,8 @@ class PostgresOwnerMemoryStore:
                     f"""
                     SELECT {_OWNER_MEMORY_COLUMNS.replace("to_jsonb(owner_memory)", "to_jsonb(memory)")}
                     FROM public.owner_memory AS memory
-                    WHERE owner_id = %s AND status = 'active'
+                    WHERE owner_id = %s
+                      AND (status = 'active' OR (%s AND status = 'invalidated'))
                       AND ((adoption_method='manual' AND source_candidate_id IS NULL
                             AND source_ids=ARRAY[owner_id]) OR EXISTS (
                           SELECT 1 FROM public.source_document AS source
@@ -442,11 +443,24 @@ class PostgresOwnerMemoryStore:
                       ))
                     ORDER BY memory.created_at, memory.id
                     """,
-                    (owner_id,),
+                    (owner_id, include_invalidated),
                 ).fetchall()
                 rows = available_correction_memories(
                     connection, owner_id=owner_id, record_kind="owner_memory", rows=rows,
                 )
+                visible = []
+                for row in rows:
+                    if row["status"] == "invalidated":
+                        # owner_id 仅表示本人手录来历，其余旧版来源必须全部可用。
+                        try:
+                            _ensure_active_sources(
+                                connection, owner_id=owner_id,
+                                source_ids=tuple(source for source in row["source_ids"] if source != owner_id),
+                            )
+                        except PermissionError:
+                            continue
+                    visible.append(row)
+                rows = visible
                 if contact_id is not None:
                     rows = _contact_view_rows(connection, owner_id, contact_id, rows)
                 rows = _timed_rows(connection, rows)

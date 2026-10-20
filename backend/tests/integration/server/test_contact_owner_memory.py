@@ -2,7 +2,7 @@
 import json
 from pathlib import Path
 import unittest
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import psycopg
 from psycopg import sql
@@ -88,10 +88,74 @@ class ContactOwnerMemoryTest(unittest.TestCase):
         versions = self.request("GET", f"{self.path}/{latest}/versions")
         self.assertEqual(versions.status_code, 200, versions.json())
         self.assertEqual([m["memory_id"] for m in versions.json()["versions"]], [latest, memory_id])
-        self.assertEqual(len(self.request("GET", self.path).json()["memories"]), 1)
+        listed = self.request("GET", self.path).json()["memories"]
+        self.assertEqual({m["memory_id"]: m["status"] for m in listed},
+                         {memory_id: "invalidated", latest: "active"})
+        self.assertEqual([m.memory_id for m in self.store.list_active(self.owner_id)],
+                         [UUID(latest)])
         self.assertEqual(self.request("GET", f"/api/contacts/{self.other_id}/owner-memories").json()["memories"], [])
         self.assertEqual(self.request("POST", f"{self.path}/{latest}/delete").status_code, 200)
         self.assertEqual(self.request("GET", self.path).json()["memories"], [])
+
+    def test_invalidated_owner_memories_keep_contact_and_source_boundaries(self):
+        from dataclasses import replace
+        current = self.memory(self.contact_id)
+        other = self.memory(self.other_id, "其他联系人的旧本人资料")
+        retired = self.store.create(replace(current, memory_id=uuid4(),
+            status=ConfirmedMemoryStatus.INVALIDATED, text="以前的本人偏好"))
+        self.store.create(replace(other, memory_id=uuid4(), status=ConfirmedMemoryStatus.INVALIDATED))
+        mixed = self.store.create(replace(retired, memory_id=uuid4(),
+            source_ids=current.source_ids + other.source_ids))
+        listed = self.request("GET", self.path).json()["memories"]
+        self.assertEqual({m["memory_id"] for m in listed},
+                         {str(current.memory_id), str(retired.memory_id)})
+        self.assertNotIn(str(mixed.memory_id), {m["memory_id"] for m in listed})
+        self.assertEqual({m.memory_id for m in self.store.list_active(self.owner_id)},
+                         {current.memory_id, other.memory_id})
+        with psycopg.connect(self.database_url) as connection:
+            connection.execute("UPDATE public.source_document SET status='deleted',file_name=NULL,content_sha256=NULL,"
+                               "record_count=0,deleted_at=now() WHERE id=%s", (current.source_ids[0],))
+        self.assertEqual(self.request("GET", self.path).json()["memories"], [])
+        global_list = self.request("GET", "/api/memories/owner")
+        self.assertEqual(global_list.status_code, 200, global_list.json())
+        self.assertNotIn(str(mixed.memory_id),
+                         {m["memory_id"] for m in global_list.json()["memories"]})
+
+    def test_contact_memory_list_keeps_retired_entries_until_deleted(self):
+        path = f"/api/contacts/{self.contact_id}/memories"
+        created = self.request("POST", "/api/memories/manual-contact",
+                               {"contact_id": str(self.contact_id), "text": "对方喜欢散步", "category": "preference"})
+        self.assertEqual(created.status_code, 200, created.json())
+        old_id = created.json()["memory"]["memory_id"]
+        corrected = self.request("POST", f"{path}/{old_id}/correct",
+                                 {"text": "对方喜欢慢跑"})
+        self.assertEqual(corrected.status_code, 200, corrected.json())
+        new_id = corrected.json()["memory"]["memory_id"]
+        listed = self.request("GET", path)
+        self.assertEqual(listed.status_code, 200, listed.json())
+        self.assertEqual({m["memory_id"]: m["status"] for m in listed.json()["memories"]},
+                         {old_id: "invalidated", new_id: "active"})
+        self.assertEqual(self.request("GET", f"/api/contacts/{self.other_id}/memories").json()["memories"], [])
+        self.assertEqual(self.request("POST", f"{path}/{new_id}/delete").status_code, 200)
+        self.assertEqual(self.request("GET", path).json()["memories"], [])
+
+    def test_retired_contact_memory_with_removed_source_is_hidden(self):
+        from notalone.scopes import ContactScope
+        old = self.service.add_manual_contact_memory(
+            owner_id=self.owner_id, contact_id=self.contact_id,
+            entry=ManualMemoryEntry("过去喜欢散步", MemoryCategory.PREFERENCE),
+        )
+        extra = self.memory(self.contact_id, "用于合成第二来源")
+        store = PostgresMemoryStore(self.database_url)
+        store.invalidate(scope=ContactScope(self.owner_id, self.contact_id), memory_id=old.memory_id)
+        with psycopg.connect(self.database_url) as connection:
+            connection.execute("UPDATE public.confirmed_memory SET source_ids=%s WHERE id=%s",
+                               (list(old.source_ids + extra.source_ids), old.memory_id))
+            connection.execute("UPDATE public.source_document SET status='deleted',file_name=NULL,content_sha256=NULL,"
+                               "record_count=0,deleted_at=now() WHERE id=%s", (old.source_ids[0],))
+        response = self.request("GET", f"/api/contacts/{self.contact_id}/memories")
+        self.assertEqual(response.status_code, 200, response.json())
+        self.assertEqual(response.json()["memories"], [])
 
     def test_mixed_or_removed_sources_do_not_enter_contact_view(self):
         from dataclasses import replace

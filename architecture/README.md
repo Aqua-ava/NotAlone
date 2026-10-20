@@ -115,6 +115,8 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 
 79. [ADR-079：统一表达工作区与直接建议候选](adr/079-unified-expression-workspace.md)
 
+80. [ADR-080：统一记忆列表与失效记忆禁用](adr/080-unified-memory-list-and-retired-exclusion.md)
+
 ## 当前架构决策
 
 - 旧 Swift 主界面已按 ADR-039 退役；共享前端采用 TypeScript + React，由 ADR-040 的 Electron 双窗口宿主承载；已接通业务页面，完整原生验收仍未完成。Python 后台与 Mac 原生探针保留。

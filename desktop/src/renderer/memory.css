@@ -115,3 +115,15 @@
 @media (max-width: 700px) { .memory-toolbar { width: 100%; } .memory-toolbar select { min-width: 120px; max-width: 220px; } }
 
 .memory-facts > .section-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 16px; }
+.memory-retired .memory-text {
+  color: var(--color-text-muted, #68787c);
+}
+
+.memory-retired .memory-text s {
+  text-decoration-thickness: 1.5px;
+}
+
+.memory-availability {
+  font-size: 0.85rem;
+  color: var(--color-text-muted, #68787c);
+}

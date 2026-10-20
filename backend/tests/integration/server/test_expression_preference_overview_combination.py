@@ -18,8 +18,6 @@ from notalone.reply.prepared_context_codec import decode_context, encode_context
 from notalone.scopes import ContactScope
 
 from notalone.persistence.locks import lock_owner_scope
-from notalone.persistence.style_sample_store import require_reply_sources_current
-from notalone.reply.errors import ReplyStoreInvariantError
 
 from tests.integration.server.overview_reply_support import OverviewReplyHttpFixture
 from tests.integration.server.test_overview_prepared_context import OverviewPreparedContextHttpTest
@@ -183,7 +181,7 @@ class ExpressionPreferenceOverviewCombinationHttpTest(OverviewReplyHttpFixture, 
                 self.observations.append({"erasure_kind": kind, "no_reply_request_before_delete": True,
                                           "prepared_json_erased_before_get": True, "late_reply_rejected": True})
 
-    def test_old_legal_contact_and_owner_navigation_keep_preference_receipts_and_sample_erasure(self):
+    def test_retired_memories_are_excluded_while_preference_receipts_and_sample_erasure_remain(self):
         for kind in ("confirmed_memory", "owner_memory"):
             with self.subTest(kind=kind):
                 contact, _, message = self.import_contact("合成关系原话：喜欢热茶。")
@@ -210,7 +208,6 @@ class ExpressionPreferenceOverviewCombinationHttpTest(OverviewReplyHttpFixture, 
                 body = self.rewrite_body(contact, "之前喜欢热茶，现在想再核实。")
                 self.reply_model.plans.append({
                     "text": "之前喜欢热茶，现在想再核实。", "basis": "历史资料须重新核实。",
-                    "cite_kinds": [kind],
                 })
                 status, turn = self.backend.request(path + "/replies", body)
                 self.assertEqual(status, 200, turn)
@@ -221,14 +218,7 @@ class ExpressionPreferenceOverviewCombinationHttpTest(OverviewReplyHttpFixture, 
                 }])
                 evidence_path = self.evidence_path(contact, turn)
                 evidence = self._get(self.backend, evidence_path)
-                old = next(row for row in evidence["evidence"] if row["evidence_id"] == original["memory_id"])
-                self.assertEqual(old["kind"], kind)
-                self.assertEqual(old["text"], original["text"])
-                self.assertEqual(old["snapshot_status"], "invalidated")
-                self.assertEqual(old["timing"]["current_status"], "historical")
-                self.assertEqual(old["navigation"]["memory_revision"], 2)
-                self.assertEqual(old["navigation"]["scope_kind"], "contact" if kind == "confirmed_memory" else "owner")
-                self.assertTrue(old["cited"])
+                self.assertNotIn(original["memory_id"], [row["evidence_id"] for row in evidence["evidence"]])
                 self.assertEqual(evidence["retrieval"]["retriever_version"], "lexical-v1")
                 payload = self.reply_model.payloads[-1]
                 self.assertIsNone(payload["user_instruction"])
@@ -236,13 +226,6 @@ class ExpressionPreferenceOverviewCombinationHttpTest(OverviewReplyHttpFixture, 
                     "current_explicit_intent", "expression_instruction", "long_term_expression_preference",
                 ])
                 self.assertEqual(payload["expression_preferences"][0]["text"], preference_body["text"])
-                if kind == "owner_memory":
-                    # 当前生成的默认来源门仍拒绝旧本人版本；样本另走显式历史保存。
-                    with psycopg.connect(self.database_url) as connection:
-                        lock_owner_scope(connection, owner_id=self.owner_id)
-                        with self.assertRaises(ReplyStoreInvariantError):
-                            require_reply_sources_current(connection, owner_id=self.owner_id,
-                                request_id=UUID(turn["reply_request_id"]))
                 update = {
                     "operation_key": str(uuid4()), "expected_revision": 1, "text": "用户后续修改的要求。",
                     "scope": preference_body["scope"], "confirm_long_term": True,

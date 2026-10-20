@@ -121,9 +121,7 @@ class PostgresLayeredMemoryStore(LayeredProfileStore, LayeredCorrectionStore):
                     or memory.valid_at is not None and memory.valid_at > now):
                 continue
             if memory.invalid_at is not None and memory.invalid_at <= now:
-                timing = replace(memory.timing, current_status="historical", current_status_reason=
-                    "已离开资料声明的适用区间；仅作历史，不证明计划已发生或当前状态。")
-                memory = replace(memory, timing=timing)
+                continue
             entries.append(replace(entry, memory=memory))
         return tuple(entries)
 

@@ -1,4 +1,4 @@
-import { activeMemories } from './read';
+import { listedMemories } from './read';
 import type { MemoryAdditionRequest, OwnerLayeredMemoryManagementRequest, OwnerLayeredMemoryState } from '../../shared/memory-bridge';
 import type { BackendHost } from '../backend/host';
 import { layeredMemory } from './layered-read';
@@ -69,7 +69,7 @@ export class OwnerLayeredMemoryController {
       const result = await this.backend.requestJson({ method: 'GET', path: '/api/memories/owner', signal: operation.signal });
       this.synchronize();
       if (this.factsOperation !== operation || result.generation !== generation) return;
-      this.update({ memories: { phase: 'ready', items: activeMemories(result.data, 'owner', null) } });
+      this.update({ memories: { phase: 'ready', items: listedMemories(result.data, 'owner', null) } });
     } catch {
       if (background) throw new Error('本人记忆内容暂未刷新。');
       if (this.factsOperation === operation) this.update({ memories: { phase: 'error', items: [] } });
@@ -78,7 +78,7 @@ export class OwnerLayeredMemoryController {
   }
   async changeFact(action: 'correct' | 'delete', request: { memoryId: string; revision: number; text?: string; category?: MemoryAdditionRequest['category']; changeKind?: 'error_correction' | 'state_changed' }) {
     this.synchronize();
-    if (this.state.memories?.phase !== 'ready' || !this.state.memories.items.some(item => item.memoryId === request.memoryId && item.revision === request.revision)) throw new Error('本人底层资料版本已变化，请重新读取。');
+    if (this.state.memories?.phase !== 'ready' || !this.state.memories.items.some(item => (action === 'delete' || item.status === 'active') && item.memoryId === request.memoryId && item.revision === request.revision)) throw new Error('本人底层资料版本已变化，请重新读取。');
     await this.writeFact(`/api/memories/owner/${request.memoryId}/${action}`, action === 'correct' ? { text: request.text, category: request.category, change_kind: request.changeKind ?? 'error_correction' } : {});
   }
   async add(request: Pick<MemoryAdditionRequest, 'text' | 'category'>) { await this.writeFact('/api/memories/manual-owner', request); }

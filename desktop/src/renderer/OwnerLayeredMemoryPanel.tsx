@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import type { ActiveMemory, MemoryCategory, MemoryChangeKind, OwnerLayeredMemoryState } from '../shared/memory-bridge';
+import type { MemoryVersion, MemoryCategory, MemoryChangeKind, OwnerLayeredMemoryState } from '../shared/memory-bridge';
 import { MemoryTemporalStatus } from './MemoryTemporalStatus';
 import { MemoryList } from './MemoryList';
+import { memoryAvailability, memoryRemovalTarget } from './memory-availability';
 
 const categoryNames = { common_fact: '共同事实', preference: '偏好', taboo: '禁忌', recent_state: '近期状态', relationship_note: '关系备注' };
 
@@ -13,7 +14,7 @@ function timeText(value: string | null): string {
   return `${field('year')}年${field('month')}月${field('day')}日 ${field('hour')}:${field('minute')}:${field('second')}（UTC+8）`;
 }
 
-function sourceTime(memory: ActiveMemory): string {
+function sourceTime(memory: MemoryVersion): string {
   const { sourceStartedAt: start, sourceEndedAt: end, sourceTimeComplete: complete } = memory.timing;
   if (!start || !end) return '未知（来源时间不完整）';
   const range = Date.parse(start) === Date.parse(end) ? timeText(start) : `${timeText(start)} 至 ${timeText(end)}`;
@@ -21,8 +22,8 @@ function sourceTime(memory: ActiveMemory): string {
 }
 
 type OwnerMemoryActions = {
-  onVersions?: (entry: ActiveMemory) => Promise<void>;
-  onTrace?: (entry: ActiveMemory) => void;
+  onVersions?: (entry: MemoryVersion) => Promise<void>;
+  onTrace?: (entry: MemoryVersion) => void;
 };
 
 export function OwnerLayeredMemoryPanel({ onVersions, onTrace }: OwnerMemoryActions = {}) {
@@ -80,11 +81,11 @@ export function OwnerLayeredMemoryPanel({ onVersions, onTrace }: OwnerMemoryActi
         && !state.memories.items.some(memory => memory.memoryId === factTarget.memoryId && memory.revision === factTarget.revision)
         && <p role="alert">目标本人底层版本已变化或不可用，请重新核对资料；不会改选其他记忆。</p>}
       {targetMemory && <section aria-label="本次纠错的本人底层记忆"><h3>需要修正的记忆</h3>
-        <OwnerFactCard key={`${targetMemory.memoryId}:${targetMemory.revision}`} memory={targetMemory} initiallyEditing={factTarget?.editing}
+        <OwnerFactCard key={`${targetMemory.memoryId}:${targetMemory.revision}`} memory={targetMemory} removalTarget={memoryRemovalTarget(targetMemory, state.memories?.items ?? [])} initiallyEditing={factTarget?.editing}
           busy={state.mutation.phase === 'working'} run={run} onVersions={onVersions} onTrace={onTrace} />
       </section>}
       {state.memories?.phase === 'ready' && <MemoryList label="我的记忆" items={state.memories.items.filter(memory => memory !== targetMemory)}>
-        {memory => <OwnerFactCard key={`${memory.memoryId}:${memory.revision}`} memory={memory}
+        {memory => <OwnerFactCard key={`${memory.memoryId}:${memory.revision}`} memory={memory} removalTarget={memoryRemovalTarget(memory, state.memories?.items ?? [])}
           busy={state.mutation.phase === 'working'} run={run} onVersions={onVersions} onTrace={onTrace} />}
       </MemoryList>}
     </section>
@@ -94,7 +95,7 @@ export function OwnerLayeredMemoryPanel({ onVersions, onTrace }: OwnerMemoryActi
 }
 
 
-function OwnerFactCard({ memory, busy, run, initiallyEditing = false, onVersions, onTrace }: OwnerMemoryActions & { memory: ActiveMemory; busy: boolean; run: (command: () => Promise<void>) => Promise<void>; initiallyEditing?: boolean }) {
+function OwnerFactCard({ memory, removalTarget = memory, busy, run, initiallyEditing = false, onVersions, onTrace }: OwnerMemoryActions & { memory: MemoryVersion; removalTarget?: MemoryVersion; busy: boolean; run: (command: () => Promise<void>) => Promise<void>; initiallyEditing?: boolean }) {
   const [editing, setEditing] = useState(initiallyEditing);
   const [deleting, setDeleting] = useState(false);
   const [text, setText] = useState(memory.text);
@@ -104,8 +105,10 @@ function OwnerFactCard({ memory, busy, run, initiallyEditing = false, onVersions
   useEffect(() => {
     if (initiallyEditing) { setEditing(true); editor.current?.focus(); editor.current?.scrollIntoView({ block: 'center' }); }
   }, [initiallyEditing]);
-  return <article className="memory-card">
-    <p className="memory-text">{memory.text}</p>
+  const availability = memoryAvailability(memory);
+  return <article className={`memory-card ${availability.excluded ? 'memory-retired' : ''}`}>
+    <p className="memory-text">{availability.excluded ? <s>{memory.text}</s> : memory.text}</p>
+    <p className="memory-availability">{availability.label}</p>
     <p className="memory-section-note">{memory.adoptionMethod === 'auto' ? '自动记下 · 未经你确认' : '手动记下'}</p>
     {memory.timing.currentStatus !== 'stable' && <p className="memory-section-note">{({ current_verified: '时间已核实', current_unverified: '时间待核实', historical: '过去的信息' } as const)[memory.timing.currentStatus]}</p>}
     <details className="memory-details"><summary>查看详情</summary>
@@ -119,12 +122,11 @@ function OwnerFactCard({ memory, busy, run, initiallyEditing = false, onVersions
       {memory.supersedesMemoryId && <p>替代版本引用：{memory.supersedesMemoryId}</p>}
       {memory.sourceCandidateId && <p>来源候选引用：{memory.sourceCandidateId}</p>}
       <p>来源标识：{memory.sourceIds.join('、') || '来源标识不可用'}</p>
-      {onVersions && <button className="button" disabled={busy} onClick={() => void run(() => onVersions(memory))}>版本历史</button>}
       {onTrace && <button className="button" onClick={() => onTrace(memory)}>查看来源过程</button>}
     </details>
-    <button className="button" aria-label="修正本人记忆" disabled={busy} onClick={() => setEditing(!editing)}>修改</button>
+    {memory.status === 'active' && <button className="button" aria-label="修正本人记忆" disabled={busy} onClick={() => setEditing(!editing)}>修改</button>}
     <button className="button" aria-label="删除本人记忆" disabled={busy} onClick={() => setDeleting(true)}>删除</button>
-    {editing && <form className="memory-edit-form" onSubmit={event => { event.preventDefault(); void run(() => window.notalone.memory.correctOwnerMemory({ memoryId: memory.memoryId, revision: memory.revision, text: text.trim(), category, changeKind })); }}>
+    {editing && memory.status === 'active' && <form className="memory-edit-form" onSubmit={event => { event.preventDefault(); void run(() => window.notalone.memory.correctOwnerMemory({ memoryId: memory.memoryId, revision: memory.revision, text: text.trim(), category, changeKind })); }}>
       <label>修正本人记忆内容<textarea ref={editor} value={text} maxLength={4000} onChange={event => setText(event.target.value)} /></label>
       <label>资料分类<select aria-label="资料分类" value={category} disabled={busy} onChange={event => setCategory(event.target.value as MemoryCategory)}>
         {Object.entries(categoryNames).map(([value, name]) => <option key={value} value={value}>{name}</option>)}</select></label>
@@ -132,12 +134,13 @@ function OwnerFactCard({ memory, busy, run, initiallyEditing = false, onVersions
         onChange={event => setChangeKind(event.target.value as MemoryChangeKind)}>
         <option value="error_correction">纠正错误</option><option value="state_changed">记录变化</option></select></label>
       <p>{changeKind === 'error_correction' ? '原来的内容记错了。旧版只保留供查看，不再用于生成。'
-        : '原来的内容曾经成立，后来发生变化。旧版可作为历史参考。'}</p>
+        : '原来的内容曾经成立，后来发生变化。旧版将划线保留，不再引用。'}</p>
       <p>保存新的手动版本并保留来源；本次保存时间不代表变化发生时间。</p>
       <button className="button" disabled={busy || !text.trim()}>保存本人记忆修正</button>
     </form>}
-    {deleting && <div role="group" aria-label="确认删除本人记忆"><p>删除这条记忆后，使用它的摘要也会失效。此操作无法撤销。</p>
-      <button className="button" disabled={busy} onClick={() => void run(() => window.notalone.memory.deleteOwnerMemory({ memoryId: memory.memoryId, revision: memory.revision }))}>确认删除本人记忆</button>
+    {deleting && <div role="group" aria-label="确认删除本人记忆"><p>删除这条记忆后，相关摘要也会失效。若旧条目已有替代记忆，请删除对应的当前条目以清除旧记录。此操作无法撤销。</p>
+      {removalTarget.memoryId !== memory.memoryId && <p>将删除当前记忆「{removalTarget.text}」及相关旧条目。</p>}
+      <button className="button" disabled={busy} onClick={() => void run(() => window.notalone.memory.deleteOwnerMemory({ memoryId: removalTarget.memoryId, revision: removalTarget.revision }))}>确认删除本人记忆</button>
       <button className="button" onClick={() => setDeleting(false)}>取消删除本人记忆</button></div>}
   </article>;
 }
