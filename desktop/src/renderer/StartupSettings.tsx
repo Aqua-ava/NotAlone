@@ -17,8 +17,37 @@ export function useStartupState(): StartupState {
   return state;
 }
 
-export function StartupReadiness({ state, onConfigure }: { state: StartupState; onConfigure?: () => void }) {
+export function StartupReadiness({ state, backend, onConfigure }: {
+  state: StartupState; backend?: BackendState; onConfigure?: () => void;
+}) {
+  const [retrying, setRetrying] = useState(false);
+  const [error, setError] = useState('');
+  async function retry() {
+    if (retrying || !backend?.canRetryConnection) return;
+    setRetrying(true); setError('');
+    try { await window.notalone.startup.retry(); }
+    catch { setError('暂时无法重新连接，请稍后重试或查看诊断。'); }
+    finally { setRetrying(false); }
+  }
+  if (state.phase === 'ready') return null;
   if (state.mode === 'managed') return <ManagedSetup state={state} />;
+  const blocked = state.phase === 'blocked' || (backend?.phase === 'disconnected' && !!backend.errorCode);
+  return <section className="startup-readiness" aria-label="启动状态">
+    <h2>{blocked ? '启动遇到问题' : '正在启动 NotAlone'}</h2>
+    <p role={blocked ? 'alert' : 'status'}>{blocked
+      ? (state.code ? startupMessages[state.code][0] : '本机服务暂时无法启动。')
+      : state.phase === 'preparing' ? '正在准备本机资料…' : '正在连接本机服务…'}</p>
+    {blocked && <div className="startup-actions">
+      <button className="button" disabled={!backend?.canRetryConnection || retrying} onClick={() => void retry()}>
+        {retrying ? '正在重试…' : '重试连接'}
+      </button>
+      {onConfigure && <button className="button" onClick={onConfigure}>查看诊断</button>}
+    </div>}
+    {error && <p role="alert">{error}</p>}
+  </section>;
+}
+
+function StartupDiagnostics({ state }: { state: StartupState }) {
   return <section className="startup-readiness" aria-label="机器环境诊断">
     <h2>机器环境</h2>
     <p role={state.phase === 'blocked' ? 'alert' : undefined}>{state.phase === 'preparing' && state.step === 'updating-schema' ? '正在补齐本机数据库结构…'
@@ -27,11 +56,20 @@ export function StartupReadiness({ state, onConfigure }: { state: StartupState; 
     {state.code && <p className="startup-guidance">{startupMessages[state.code][1]}</p>}
     {state.helperWarnings.includes('cli_unavailable') && <p className="startup-guidance">微信 CLI 未就绪。确认绝对路径后，才可使用已确认范围的文字同步。</p>}
     {state.helperWarnings.includes('probe_unavailable') && <p className="startup-guidance">前台定位探针未就绪。配置完整 helper 后，才可检查前台定位。</p>}
-    {onConfigure && state.phase === 'blocked' && <button className="button" onClick={onConfigure}>核对启动路径</button>}
   </section>;
 }
 
-export function StartupSettings({ state, backend }: { state: StartupState; backend: BackendState }) {
+export function StartupSettings({ state, backend, open = false, onOpenChange }: {
+  state: StartupState; backend: BackendState; open?: boolean; onOpenChange?: (open: boolean) => void;
+}) {
+  if (state.mode === 'managed') return null;
+  return <details className="startup-troubleshooting" open={open} onToggle={(event) => onOpenChange?.(event.currentTarget.open)}>
+    <summary>故障排查</summary>
+    {open && <StartupPathSettings state={state} backend={backend} />}
+  </details>;
+}
+
+function StartupPathSettings({ state, backend }: { state: StartupState; backend: BackendState }) {
   const [paths, setPaths] = useState<StartupPaths>();
   const [saving, setSaving] = useState(false);
   const [preparing, setPreparing] = useState(false);
@@ -68,7 +106,7 @@ export function StartupSettings({ state, backend }: { state: StartupState; backe
   }
   if (state.mode === 'managed') return <ManagedSetup state={state} />;
   return <section className="startup-settings" aria-label="本机启动配置">
-    <StartupReadiness state={state} />
+    <StartupDiagnostics state={state} />
     <h2>本机启动路径</h2>
     <p>这里只保存非秘密绝对路径。数据库连接与模型凭据保存在你选定的配置文件中，不在本页显示。</p>
     {paths && <div className="startup-paths">
@@ -82,7 +120,7 @@ export function StartupSettings({ state, backend }: { state: StartupState; backe
       <button className="button" disabled={!paths || !editable} onClick={() => void save()}>{saving ? '正在保存…' : '保存启动路径'}</button>
       <button className="button" disabled={!backend.canRetryConnection || checking || saving} onClick={() => void retry()}>重新检查并连接</button>
     </div>
-    {!editable && (backend.canPrepareConfiguration || preparing) && <p>先明确停止本次服务，再修改启动路径。失联不能证明服务已停读，未获确认时保留原运行时与恢复入口。</p>}
+    {!editable && (backend.canPrepareConfiguration || preparing) && <p>修改路径前需要停止本机服务。停止期间同步和回复生成暂不可用，已有资料会保留。</p>}
     {message && <p>{message}</p>}{error && <p role="alert">{error}</p>}
   </section>;
 }

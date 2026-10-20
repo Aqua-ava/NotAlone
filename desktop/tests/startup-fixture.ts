@@ -1,3 +1,4 @@
+import type { Page } from '@playwright/test';
 import { execFile } from 'node:child_process';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -8,6 +9,14 @@ import { test as appTest } from './app-fixture';
 const execute = promisify(execFile);
 export const projectDirectory = path.resolve('..');
 export const pythonExecutable = path.join(process.env.CONDA_PREFIX ?? '/unconfigured', 'bin/python');
+
+export async function openStartupDiagnostics(page: Page): Promise<void> {
+  await page.getByRole('button', { name: '设置', exact: true }).click();
+  for (const name of ['高级', '故障排查']) {
+    const summary = page.locator('summary').filter({ hasText: new RegExp(`^${name}$`) });
+    if (!await summary.evaluate((element) => (element.parentElement as HTMLDetailsElement).open)) await summary.click();
+  }
+}
 
 export async function prepareDatabase(action: 'create' | 'migrate' | 'drop' | 'untracked' | 'drift' | 'restore-drift' | 'incomplete'
   | 'owner-incomplete' | 'restore-owner-timestamp', database?: string): Promise<{ database: string; database_url: string }> {

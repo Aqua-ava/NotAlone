@@ -5,7 +5,7 @@ import { selectMenu } from './app-fixture';
 import { test as backendTest } from './backend-fixture';
 import { SetupFixture } from './setup-fixture';
 import { SetupHttpProxy } from './setup-http-proxy';
-import { prepareDatabase, projectDirectory, test as startupTest } from './startup-fixture';
+import { openStartupDiagnostics, prepareDatabase, projectDirectory, test as startupTest } from './startup-fixture';
 
 const test = startupTest.extend<{ machineSetup: { setup: SetupFixture; proxy: SetupHttpProxy } }>({
   databaseState: 'ready',
@@ -31,7 +31,9 @@ test('本人初始化后的正常重启仍检查机器账本，修正后明确�
   const manager = await app.firstWindow();
   await manager.getByRole('button', { name: '设置', exact: true }).click();
   const panel = manager.getByRole('region', { name: 'AI 服务' });
-  await expect(manager.getByText('机器环境已就绪。', { exact: true })).toBeVisible();
+  await expect(manager.getByText('已连接', { exact: true })).toBeVisible({ timeout: 15_000 });
+  await expect(manager.getByRole('heading', { name: '机器环境', exact: true })).toHaveCount(0);
+  await expect(manager.getByRole('heading', { name: '本机启动路径', exact: true })).toHaveCount(0);
   await expect(panel.getByText('本人身份尚未初始化', { exact: true })).toBeVisible({ timeout: 15_000 });
   proxy.closeAfterShutdown = true;
   proxy.afterShutdown = async () => {
@@ -47,23 +49,25 @@ test('本人初始化后的正常重启仍检查机器账本，修正后明确�
   await prepareDatabase('restore-drift', startupDatabase.database);
   await panel.getByRole('button', { name: '重试加载配置', exact: true }).click();
   await expect(panel.getByText('本次运行的本人身份已就绪', { exact: true })).toBeAttached({ timeout: 15_000 });
-  await expect(manager.getByText('机器环境已就绪。', { exact: true })).toBeVisible();
+  await expect(manager.getByText('已连接', { exact: true })).toBeVisible({ timeout: 15_000 });
+  await expect(manager.getByRole('heading', { name: '机器环境', exact: true })).toHaveCount(0);
+  await expect(manager.getByRole('heading', { name: '本机启动路径', exact: true })).toHaveCount(0);
   expect((await setup.request('/api/setup/status')).data.runtime_owner_configured).toBe(true);
   expect((await readFile(setup.envPath)).equals(saved)).toBe(true);
   expect(proxy.initializeCompletedCount).toBe(1);
-  await manager.getByRole('region', { name: '机器环境诊断' }).screenshot({ path: test.info().outputPath('machine-gate-restored.png') });
+  await manager.screenshot({ path: test.info().outputPath('machine-gate-restored.png') });
 });
 
 const driftTest = test.extend({ databaseState: 'drift' });
 driftTest('合法既有后端也须通过机器门禁，阻塞时不把运行连接当作数据库就绪', async ({ runningApp: { app, appProcess }, startupDatabase, machineSetup: { setup, proxy } }) => {
   const manager = await app.firstWindow();
-  await manager.getByRole('button', { name: '设置', exact: true }).click();
+  await openStartupDiagnostics(manager);
   await expect(manager.getByText('数据库迁移账本或基线发生漂移。', { exact: true })).toBeVisible();
   await expect(manager.getByText('尚未连接', { exact: true })).toBeVisible();
   expect((await setup.request('/api/runtime/status')).data.state).toBe('running');
   await prepareDatabase('restore-drift', startupDatabase.database);
   await manager.getByRole('button', { name: '重新检查并连接', exact: true }).click();
-  await expect(manager.getByText('已验证既有运行时。', { exact: true })).toBeVisible({ timeout: 15_000 });
+  await expect(manager.getByText('已连接', { exact: true })).toBeVisible({ timeout: 15_000 });
   proxy.closeAfterShutdown = true;
   proxy.afterShutdown = () => setup.waitForExit(setup.reusedBackend!);
   await selectMenu(app, 'NotAlone', '退出 NotAlone');
@@ -74,7 +78,7 @@ driftTest('合法既有后端也须通过机器门禁，阻塞时不把运行连
 backendTest('路径修改未确认停读时保留旧目标，拒绝保存和另起连接', async ({ runningApp: { app, appProcess, userData }, backend }) => {
   const manager = await app.firstWindow();
   await expect(manager.getByText('已连接', { exact: true })).toBeVisible();
-  await manager.getByRole('button', { name: '设置', exact: true }).click();
+  await openStartupDiagnostics(manager);
   const before = await readFile(path.join(userData, 'backend-launch.json'));
   backend.service.shutdownMode = 'failure';
   await manager.getByRole('button', { name: '停止服务以修改路径', exact: true }).click();
@@ -98,7 +102,7 @@ backendTest('路径修改未确认停读时保留旧目标，拒绝保存和另�
 test('失联仍锁定原运行时，停读失败不能保存，原实例确认退出后才可修正路径', async ({ runningApp: { app, userData }, machineSetup: { setup, proxy } }) => {
   const manager = await app.firstWindow();
   await expect(manager.getByText('已连接', { exact: true })).toBeVisible({ timeout: 15_000 });
-  await manager.getByRole('button', { name: '设置', exact: true }).click();
+  await openStartupDiagnostics(manager);
   const before = await readFile(path.join(userData, 'backend-launch.json'));
   expect((await setup.request('/api/runtime/status')).data.state).toBe('running');
   proxy.failRuntimeStatus = true;

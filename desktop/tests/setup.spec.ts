@@ -104,13 +104,13 @@ test.describe('复用运行时', () => {
     await manager.getByRole('button', { name: '设置', exact: true }).click();
     const panel = manager.getByRole('region', { name: 'AI 服务' });
     await expect(panel.getByText('DeepSeek · 已配置', { exact: true })).toBeVisible({ timeout: 15_000 });
-    await expect(manager.getByText('已验证既有运行时。', { exact: true })).toBeVisible();
+    await expect.poll(() => manager.evaluate(() => window.notalone.backend.getState())).toMatchObject({ phase: 'connected', reused: true });
     const previous = await readFile(setup.infoPath);
     await panel.getByRole('button', { name: '更换密钥' }).click();
     await panel.getByLabel('DeepSeek API Key').fill('sk-synthetic-reused-update');
     await panel.getByRole('button', { name: '保存 DeepSeek 密钥' }).click();
     // 先确认新实例，避免把点击前仍可见的已配置状态误当作重启完成。
-    await expect(manager.getByText('已启动并验证本机运行时。', { exact: true })).toBeVisible({ timeout: 15_000 });
+    await expect.poll(() => manager.evaluate(() => window.notalone.backend.getState()), { timeout: 15_000 }).toMatchObject({ phase: 'connected', reused: false });
     await expect(panel.getByText('DeepSeek · 已配置', { exact: true })).toBeVisible({ timeout: 15_000 });
     await expect.poll(() => setup.reusedBackend?.exitCode).toBe(0);
     expect((await readFile(setup.infoPath)).equals(previous)).toBe(false);

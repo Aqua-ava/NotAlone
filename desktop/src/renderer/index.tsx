@@ -37,6 +37,14 @@ export function App() {
   const [error, setError] = useState('');
   const [page, setPage] = useState<ManagerPage>('contacts');
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
+  const diagnostics = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (page === 'config' && advancedOpen && diagnosticsOpen) diagnostics.current?.scrollIntoView({ block: 'start' });
+  }, [page, advancedOpen, diagnosticsOpen]);
+  function showDiagnostics() {
+    setPage('config'); setAdvancedOpen(true); setDiagnosticsOpen(true);
+  }
   async function operate(operation: () => Promise<void>) {
     try { await operation(); setError(''); }
     catch { setError('窗口暂时无法打开，请从“窗口”菜单重试。'); }
@@ -101,15 +109,16 @@ export function App() {
       <main className="manager-content">
         {page === 'import' && <button className="button" onClick={() => { setAdvancedOpen(true); setPage('config'); }}>返回设置 · 高级</button>}
         <div className="manager-title"><h1>{currentPage.title}</h1><p>{currentPage.description}</p></div>
-        <BackendConnectionNote state={backend} startup={startup} />
-        {page === 'config' ? <StartupSettings state={startup} backend={backend} />
-          : startup.phase !== 'ready' && <StartupReadiness state={startup} onConfigure={() => setPage('config')} />}
+        <BackendConnectionNote state={backend} startup={startup} onDiagnose={showDiagnostics} />
+        {!(page === 'config' && advancedOpen && diagnosticsOpen && startup.mode !== 'managed')
+          && <StartupReadiness state={startup} backend={backend} onConfigure={showDiagnostics} />}
         {(page === 'config' || startup.mode === 'managed' && backend.phase === 'connected') && <SetupPanel />}
         {page === 'config' && <><ScreenPermissionPanel view={permission} /><DesktopControls />
           <details className="startup-settings" open={advancedOpen} onToggle={(event) => setAdvancedOpen(event.currentTarget.open)}>
             <summary>高级</summary>
             <p>从文件补充旧记录。已通过自动同步获取的记录，无需重复导入。</p>
             <button className="button" onClick={() => setPage('import')}>从文件导入</button>
+            <div ref={diagnostics}><StartupSettings state={startup} backend={backend} open={diagnosticsOpen} onOpenChange={setDiagnosticsOpen} /></div>
           </details></>}
         {page === 'contacts' && <ContactsPage session={contactSession} navigate={setPage} manualRelease={startup.mode === 'managed'} />}
         {page === 'import' && <ImportPage session={contactSession} />}

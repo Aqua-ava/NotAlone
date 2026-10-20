@@ -225,7 +225,7 @@ export async function staleImportConnection(pages: ImportStalePages, failure: bo
   await expect(manager.getByText('本机服务尚未连接', { exact: true })).toBeVisible();
   await importBackend.command('restart');
   await manager.getByRole('button', { name: '重试连接', exact: true }).click();
-  await expect(manager.getByText('本机服务已连接', { exact: true })).toBeVisible();
+  await expect(manager.getByText('已连接', { exact: true })).toBeVisible();
   importProxy.release(failure);
   expect(await latePromise).toBe('completed');
   await expect(manager.getByText('尚未选择文件', { exact: true })).toBeVisible();
@@ -255,7 +255,7 @@ export async function lostImportResponse(pages: ImportStalePages): Promise<void>
 
 export async function firstImportBootstrap(manager: Page, contactBackend: ContactFixture,
   chooseFile: (filePath: string) => Promise<void>): Promise<void> {
-  await expect(manager.getByText('本机服务已连接', { exact: true })).toBeVisible({ timeout: 20_000 });
+  await expect(manager.getByText('已连接', { exact: true })).toBeVisible({ timeout: 20_000 });
   const request = (endpoint: string) => requestFixtureHttp(contactBackend.infoPath, endpoint);
   expect((await request('/api/sync/status')).status).toBe(503);
   const filePath = path.join(contactBackend.directory, 'first-owner.jsonl');
