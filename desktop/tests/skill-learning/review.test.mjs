@@ -220,7 +220,10 @@ test('历史回滚500未知回执只重试完整原动作，具名桥拒绝附�
     assert.equal(f.controller.getState().history.retry, true);
     const original = f.records.calls.at(-1).body;
     await f.bridge.refresh(f.scope());
-    assert.deepEqual(f.records.calls.at(-1).body, original, '轮询不取消或替换未知回滚动作');
+    assert.equal(f.controller.getState().history.retry, true, '刷新待审核数量不解除未知回滚状态');
+    const pendingRollbacks = f.records.calls.filter(call => call.path.endsWith('/rollback'));
+    assert.equal(pendingRollbacks.length, 1, '轮询不重新提交未知回滚');
+    assert.deepEqual(pendingRollbacks[0].body, original, '轮询不取消或替换未知回滚动作');
     await assert.rejects(f.bridge.rollbackHistory(selection));
     await f.bridge.retryHistory(f.scope());
     const calls = f.records.calls.filter(call => call.path.endsWith('/rollback'));

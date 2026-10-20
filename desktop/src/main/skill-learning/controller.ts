@@ -70,17 +70,13 @@ export class SkillLearningController {
   async refresh(selection: ContactSelection) {
     const scope = this.assertScope(selection);
     if (this.deletions.size || this.reviewBusy) return;
-    if (this.state.policies) {
-      const policies = this.state.policies;
-      await this.history.open(scope);
-      if (this.scope === scope && this.state.policies === policies && !this.deletions.size) await this.policies.open(scope);
-      return;
-    }
-    if (this.state.history) { await this.history.open(scope); return; }
     if (this.reviewRetry && this.state.review) {
       await this.retryReview({ ...selection, draftId: this.reviewRetry.draftId, expectedRevision: this.state.review.draft.revision });
     } else if (this.state.review?.published) await this.performReview(scope, this.state.review.draft.draft_id);
     else await this.perform(scope, 'GET');
+    if (this.scope !== scope || this.deletions.size) return;
+    if (this.state.history) await this.history.open(scope);
+    if (this.scope === scope && !this.deletions.size && this.state.policies) await this.policies.open(scope);
   }
   async configure(selection: ContactSelection & { enabled: boolean; confirmed: true }) {
     const scope = this.assertScope(selection);
@@ -99,7 +95,6 @@ export class SkillLearningController {
   async openHistory(selection: ContactSelection) {
     const scope = this.assertScope(selection);
     if (this.deletions.size || this.reviewBusy) return;
-    this.publish({ review: null });
     await this.history.open(scope);
   }
   async closeHistory(selection: ContactSelection) { this.assertScope(selection); this.history.clear(); this.policies.clear(); }
@@ -230,6 +225,7 @@ export class SkillLearningController {
       if (action === 'approve' && (draft.status !== 'published' || published?.name !== draft.sanitized_strategy.name)) throw new Error('发布回执与草稿不一致。');
       const drafts = this.state.drafts.filter(item => item.draft_id !== draftId);
       if (draft.status === 'pending') drafts.push(draft);
+      if (action === 'approve') this.history.clear();
       if (action) this.reviewKeys.clear();
       this.reviewRetry = undefined;
       this.publish({ phase: 'ready', drafts, review: action === 'decision' ? null : {

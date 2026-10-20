@@ -14,7 +14,8 @@ export async function skillLifecycle(browser: Browser, origin: string) {
       await host.backend.connect();
       let manager = await host.open('manager');
       await manager.getByRole('button', { name: '选择合成学习甲联系人', exact: true }).click();
-      await manager.getByRole('button', { name: 'Skill 待审核', exact: true }).click();
+      await manager.getByRole('button', { name: 'Skill', exact: true }).click();
+      await manager.getByRole('tab', { name: /^待审核/ }).click();
       const panel = manager.getByRole('region', { name: 'Skill待审核', exact: true });
       await panel.getByRole('button', { name: '开启此联系人的经验整理', exact: true }).click();
       await expect(panel.getByRole('button', { name: '关闭经验整理', exact: true })).toBeEnabled();
@@ -37,7 +38,7 @@ export async function skillLifecycle(browser: Browser, origin: string) {
       await review.getByRole('checkbox', { name: '确认上述替代版本与方法延续映射', exact: true }).check();
       await review.getByRole('button', { name: '批准并发布', exact: true }).click();
       await expect(review.getByRole('heading', { name: '已发布 careful-response · 版本 2', exact: true })).toBeVisible();
-      await panel.getByRole('button', { name: '查看已发布版本', exact: true }).click();
+      await manager.getByRole('tab', { name: '已有 Skill', exact: true }).click();
       let histories = manager.getByRole('region', { name: 'Skill版本历史', exact: true });
       let primary = histories.getByRole('article', { name: '版本历史 careful-response', exact: true });
       await expect(primary.getByRole('heading', { name: '版本 2 · 当前版本', exact: true })).toBeVisible();
@@ -51,8 +52,8 @@ export async function skillLifecycle(browser: Browser, origin: string) {
       host = new PageHost(await browser.newContext(), origin, userData);
       await host.backend.connect(); manager = await host.open('manager');
       await manager.getByRole('button', { name: '选择合成学习甲联系人', exact: true }).click();
-      await manager.getByRole('button', { name: 'Skill 待审核', exact: true }).click();
-      await manager.getByRole('button', { name: '查看已发布版本', exact: true }).click();
+      await manager.getByRole('button', { name: 'Skill', exact: true }).click();
+      await manager.getByRole('tab', { name: '已有 Skill', exact: true }).click();
       histories = manager.getByRole('region', { name: 'Skill版本历史', exact: true });
       primary = histories.getByRole('article', { name: '版本历史 careful-response', exact: true });
       await expect(primary.getByRole('heading', { name: '版本 1 · 当前版本', exact: true })).toBeVisible();
@@ -69,8 +70,8 @@ export async function skillLifecycle(browser: Browser, origin: string) {
         await manager.getByRole('button', { name: '确认删除来源', exact: true }).click();
         await expect(source.getByText('已删除，已通过不可检索校验', { exact: true })).toBeVisible();
       }
-      await manager.getByRole('button', { name: 'Skill 待审核', exact: true }).click();
-      await manager.getByRole('button', { name: '查看已发布版本', exact: true }).click();
+      await manager.getByRole('button', { name: 'Skill', exact: true }).click();
+      await manager.getByRole('tab', { name: '已有 Skill', exact: true }).click();
       await expect(primary.getByRole('heading', { name: '版本 1 · 当前版本', exact: true })).toBeVisible();
       await expect(primary.getByRole('heading', { name: /^版本 2/ })).toHaveCount(0);
       const observations = await fixture.command('observations');

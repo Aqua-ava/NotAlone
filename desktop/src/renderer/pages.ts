@@ -1,8 +1,8 @@
 export const managerPages = {
   skillLearning: {
-    title: 'Skill 待审核', icon: 'memory',
-    description: '集中查看自动整理的方法、真实来源和适用范围建议。',
-    emptyTitle: '请先选择联系人', emptyDescription: '经验草稿只从已授权范围产生。', action: '选择联系人',
+    title: 'Skill', icon: 'memory',
+    description: '管理已有 Skill，审核自动整理的新方法。',
+    emptyTitle: '请先选择联系人', emptyDescription: '选择联系人后查看适用的 Skill 和待审核建议。', action: '选择联系人',
   },
   contacts: {
     title: '联系人', icon: 'contacts',
