@@ -12,8 +12,8 @@ export const managerPages = {
     action: '选择联系人',
   },
   import: {
-    title: '历史导入', icon: 'import',
-    description: '每次导入仅归属于一位联系人，确认预览后才会保存。',
+    title: '从文件导入', icon: 'import',
+    description: '备用入口：补充自动同步未覆盖的旧记录。每次仅归属于一位联系人，确认预览后才会保存。',
     emptyTitle: '请先连接本机服务',
     emptyDescription: '连接完成后，选择一份单联系人历史文件并核对资料范围。',
     action: '选择历史文件',
@@ -33,7 +33,7 @@ export const managerPages = {
     action: '确认同步范围',
   },
   config: {
-    title: '应用配置', icon: 'config',
+    title: '设置', icon: 'config',
     description: '管理本人身份与模型服务，清楚知道每次生成使用的配置。',
     emptyTitle: '配置状态暂不可用',
     emptyDescription: '连接完成后，可查看本人身份和模型服务的配置状态。',

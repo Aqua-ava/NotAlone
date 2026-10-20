@@ -31,7 +31,7 @@ shortcutTest('其他App在前台时只唤起同一小窗，第二次隐藏并保
   const manager = await app.firstWindow();
   expect(await app.evaluate(({ app }) => app.isPackaged)).toBe(true);
   await expect(manager.getByRole('status').filter({ hasText: '尚未连接' })).toBeVisible();
-  await manager.getByRole('button', { name: '应用配置', exact: true }).click();
+  await manager.getByRole('button', { name: '设置', exact: true }).click();
   const controls = manager.getByRole('region', { name: '桌面操作' });
   await controls.getByRole('textbox', { name: '小窗快捷键' }).fill('Command+Shift+Y');
   await controls.getByRole('button', { name: '保存快捷键' }).click();

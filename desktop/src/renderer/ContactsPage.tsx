@@ -13,8 +13,8 @@ export function ContactsPage({ session, navigate, manualRelease = false }: { ses
         onClick={() => void session.refreshContacts()}>刷新联系人</button></div>
     {state.directoryPhase === 'loading' && <p className="contacts-note" aria-live="polite">正在读取联系人目录…</p>}
     {state.directoryPhase === 'unavailable' && <div className="contacts-empty"><h3>联系人暂不可用</h3><p>连接本机服务后，确认本次运行的本人身份，再查看联系人。</p></div>}
-    {state.directoryPhase === 'owner-unconfigured' && <div className="contacts-empty"><h3>本次运行的本人身份未就绪</h3><p>请在应用配置中检查本人身份和受控配置，再重新连接。</p>
-      <button className="button" onClick={() => navigate('config')}>前往应用配置</button></div>}
+    {state.directoryPhase === 'owner-unconfigured' && <div className="contacts-empty"><h3>本次运行的本人身份未就绪</h3><p>请在设置中检查本人身份和受控配置，再重新连接。</p>
+      <button className="button" onClick={() => navigate('config')}>前往设置</button></div>}
     {state.directoryPhase === 'error' && <p className="contacts-note" role="alert">联系人目录读取失败，请刷新重试。</p>}
     {state.directoryPhase === 'ready' && state.contacts.length === 0 && <div className="contacts-empty"><h3>还没有联系人</h3>
       <p>填写下方展示名称创建联系人，创建后再明确选择本次对象。名称相同也会创建不同的联系人。</p></div>}
@@ -38,7 +38,7 @@ export function ContactsPage({ session, navigate, manualRelease = false }: { ses
       {selected ? <><dl><div><dt>消息</dt><dd>{selected.messageCount} 条</dd></div></dl>
         <p>本次文字和候选对应这位联系人。切换后清空编辑输入，已生成候选与编辑按联系人保留。</p>
         <button className="button primary" onClick={() => { void session.confirmManualContact(selected.contactId).then((confirmed) => { if (confirmed) return window.notalone.openHelper(); }); }}>手动输入本次聊天</button>
-        <button className="button" onClick={() => navigate('import')}>导入单联系人资料</button></>
+        <p>如需从文件补充旧记录，可前往「设置 → 高级 → 从文件导入」。</p></>
         : <p>联系人不会自动选中。选择后，两个窗口会显示同一个本次对象。</p>}
     </aside></div>}
     <p className="contacts-note">支持手动输入和单联系人文件导入；本机已配置微信识别时，可在输入小窗恢复微信会话识别。候选由你编辑并亲自发送。</p>

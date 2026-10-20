@@ -15,7 +15,7 @@ const test = setupTest.extend<{ transportProxy: SetupHttpProxy }>({
 for (const invalidation of ['connection', 'refresh'] as const) {
   test(`保存失败后的真实状态查询被 ${invalidation} 淘汰时，不发布旧错误`, async ({ runningApp: { app }, setup, transportProxy }) => {
     const manager = await app.firstWindow();
-    await manager.getByRole('button', { name: '应用配置', exact: true }).click();
+    await manager.getByRole('button', { name: '设置', exact: true }).click();
     const panel = manager.getByRole('region', { name: '本人身份与模型' });
     await expect(panel.getByText('DeepSeek 已配置', { exact: true })).toBeVisible({ timeout: 15_000 });
     await rename(setup.envPath, path.join(setup.directory, 'saved-synthetic.env'));
@@ -49,7 +49,7 @@ for (const invalidation of ['connection', 'refresh'] as const) {
 
 test('真实凭据请求迟到且连接失效后，不保留保存中或采纳旧成功响应', async ({ runningApp: { app }, transportProxy }) => {
   const manager = await app.firstWindow();
-  await manager.getByRole('button', { name: '应用配置', exact: true }).click();
+  await manager.getByRole('button', { name: '设置', exact: true }).click();
   const panel = manager.getByRole('region', { name: '本人身份与模型' });
   await expect(panel.getByText('DeepSeek 已配置', { exact: true })).toBeVisible({ timeout: 15_000 });
   transportProxy.holdCredentialResponses = true;

@@ -30,7 +30,7 @@ export function DesktopControls() {
         <button className="button" disabled={saving} onClick={() => void saveShortcut()}>{saving ? '正在保存…' : '保存快捷键'}</button></div>
       <p>使用 Command、Control 或 Alt 加一个按键，例如 Command+Shift+K。</p>
       <p role="status">{settings.shortcutRegistered ? `已注册 ${settings.helperShortcut}`
-        : '快捷键未启用，请在应用配置中换一个组合。'}</p>
+        : '快捷键未启用，请在设置中换一个组合。'}</p>
     </> : <p role="status">正在读取桌面设置…</p>}
     {(error || loadError) && <p role="alert">{error || loadError}</p>}
   </section>;
@@ -39,7 +39,7 @@ export function DesktopControls() {
 export function ShortcutWarning() {
   const { settings } = useDesktopSettings();
   return settings?.shortcutRegistered === false
-    ? <p className="shortcut-warning" role="note">快捷键未启用，请在应用配置中换一个组合。</p> : null;
+    ? <p className="shortcut-warning" role="note">快捷键未启用，请在设置中换一个组合。</p> : null;
 }
 
 export function HelperPinControl() {

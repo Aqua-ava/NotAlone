@@ -24,7 +24,7 @@ const test = setupTest.extend<{ peer: SetupFixture; transportProxy: SetupHttpPro
 
 test('App空库检查后的竞争创建，在写本轮配置之前拒绝既有身份', async ({ runningApp: { app }, setup, peer, transportProxy }) => {
   const manager = await app.firstWindow();
-  await manager.getByRole('button', { name: '应用配置', exact: true }).click();
+  await manager.getByRole('button', { name: '设置', exact: true }).click();
   const panel = manager.getByRole('region', { name: '本人身份与模型' });
   await expect(panel.getByText('本人身份尚未初始化', { exact: true })).toBeVisible({ timeout: 15_000 });
   transportProxy.holdSetupStatusResponses = true;

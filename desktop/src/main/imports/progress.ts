@@ -17,7 +17,7 @@ function taskError(value: unknown): string | null {
   if (value === null) return null;
   if (typeof value !== 'string') throw invalid();
   const messages: Record<string, string> = {
-    model_configuration_unavailable: '模型配置不可用，请检查应用配置后继续原任务。',
+    model_configuration_unavailable: '模型配置不可用，请检查设置后继续原任务。',
     execution_resources_unavailable: '处理资源暂不可用，资料已保存，请稍后继续原任务。',
     memory_extraction_failed: '关系提取未完成，已保存的消息保留，可重试原失败任务。',
     index_rebuild_failed: '关系目录更新失败，可重试原失败任务。',

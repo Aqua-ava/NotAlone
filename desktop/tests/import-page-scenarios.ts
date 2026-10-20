@@ -1,3 +1,4 @@
+import { openFileImport } from './file-import-navigation';
 import { confirmHelperContact } from './foreground-confirmation-actions';
 import { expect, type Page } from '@playwright/test';
 import { readFile, writeFile } from 'node:fs/promises';
@@ -15,7 +16,7 @@ export type ImportPages = {
 
 // 文件输入由测试宿主拥有，页面仅使用生产具名选择和预览确认入口。
 export async function confirmImportPage(manager: Page, target?: string): Promise<void> {
-  await manager.getByRole('button', { name: '历史导入', exact: true }).click();
+  await openFileImport(manager);
   await manager.getByRole('button', { name: '选择历史文件', exact: true }).click();
   await manager.getByRole('combobox', { name: '资料归属联系人' }).selectOption(target ?? 'new');
   if (!target) await manager.getByRole('textbox', { name: '新联系人名称' }).fill('合成导入联系人');

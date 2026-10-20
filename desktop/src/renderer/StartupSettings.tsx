@@ -40,7 +40,7 @@ export function StartupSettings({ state, backend }: { state: StartupState; backe
   useEffect(() => {
     let active = true;
     void window.notalone.startup.getPaths().then((value) => { if (active) setPaths(value); })
-      .catch(() => { if (active) setError('启动路径暂时无法读取，请重新打开应用配置。'); });
+      .catch(() => { if (active) setError('启动路径暂时无法读取，请重新打开设置。'); });
     return () => { active = false; };
   }, []);
   const checking = state.phase === 'checking' || backend.phase === 'connecting';

@@ -49,7 +49,7 @@ export function ImportPage({ session }: { session: ContactSessionView }) {
   return <section className="import-panel" aria-label="历史文件导入">
     <div className="import-intro"><h2>先核对，再保存</h2>
       <p>仅接受单联系人 JSONL；本次选择只用于预览，确认后再进行导入。NotAlone 不运行导出工具，也不读取其他文件。</p>
-      <p>这里只导入你已持有的单联系人文件。微信自动接入尚未提供；没有文件时可返回联系人目录，选择联系人后手动粘贴文字。</p></div>
+      <p>仅在需要补充自动同步未覆盖的旧记录、且你已持有单联系人 JSONL 文件时使用。已同步的记录无需重复导入；没有文件时，可返回联系人目录手动输入文字。</p></div>
     {!available && <p className="import-note">请先连接本机服务并完成本次运行的本人配置，再选择历史文件。</p>}
     <div className="import-file"><button className="button" disabled={!available || busy}
       onClick={() => void operate(() => window.notalone.imports.chooseFile())}>选择历史文件</button>

@@ -1,3 +1,4 @@
+import { openFileImport } from './file-import-navigation';
 import { expect, type ElectronApplication, type Page } from '@playwright/test';
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -27,7 +28,7 @@ async function importHttp(fixture: ContactFixture, endpoint: '/api/imports/previ
 async function chooseNewImport(app: ElectronApplication, filePath: string): Promise<Page> {
   await selectedDialog(app, filePath);
   const manager = await app.firstWindow();
-  await manager.getByRole('button', { name: '历史导入', exact: true }).click();
+  await openFileImport(manager);
   await manager.getByRole('button', { name: '选择历史文件', exact: true }).click();
   await manager.getByRole('combobox', { name: '资料归属联系人' }).selectOption('new');
   await manager.getByRole('textbox', { name: '新联系人名称' }).fill('预览合成联系人');
@@ -51,7 +52,7 @@ test('主动选择单联系人历史并核对预览，确认不会提前保存�
   await writeFile(filePath, await readFile(path.resolve('../backend/tests/fixtures/valid_single_contact.jsonl')));
   await selectedDialog(app, filePath);
   const manager = await app.firstWindow();
-  await manager.getByRole('button', { name: '历史导入', exact: true }).click();
+  await openFileImport(manager);
   await manager.getByRole('button', { name: '选择历史文件', exact: true }).click();
   await expect(manager.getByText('single-contact.jsonl', { exact: true })).toBeVisible();
   await manager.getByRole('combobox', { name: '资料归属联系人' }).selectOption('new');
@@ -77,7 +78,7 @@ test('导航返回后仍准确显示本次新联系人名称，重新预览须�
   await manager.getByRole('button', { name: '预览资料范围', exact: true }).click();
   await manager.getByRole('checkbox', { name: '我已核对本人渠道身份、联系人和这份文件的资料范围' }).check();
   await manager.getByRole('button', { name: '联系人与绑定', exact: true }).click();
-  await manager.getByRole('button', { name: '历史导入', exact: true }).click();
+  await openFileImport(manager);
   await expect(manager.getByRole('textbox', { name: '新联系人名称' })).toHaveValue('预览合成联系人');
   await manager.getByRole('button', { name: '预览资料范围', exact: true }).click();
   await expect(manager.getByRole('checkbox', { name: '我已核对本人渠道身份、联系人和这份文件的资料范围' })).not.toBeChecked();
@@ -212,7 +213,7 @@ test.describe('已有联系人确认', () => {
     const filePath = await syntheticFile(contactBackend);
     await selectedDialog(app, filePath);
     const manager = await app.firstWindow();
-    await manager.getByRole('button', { name: '历史导入', exact: true }).click();
+    await openFileImport(manager);
     await manager.getByRole('button', { name: '选择历史文件', exact: true }).click();
     await manager.getByRole('combobox', { name: '资料归属联系人' }).selectOption(contactBackend.data.contact_ids[0]);
     await manager.getByRole('button', { name: '预览资料范围', exact: true }).click();

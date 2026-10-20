@@ -143,7 +143,7 @@ export async function bindingFinalNameStale({ manager, bindingBackend, screensho
 export async function bindingNoChannel({ manager, bindingBackend }: BindingPage): Promise<void> {
   await manager.getByRole('button', { name: '同步设置', exact: true }).click();
   await expect(manager.getByText('同步宿主尚未就绪', { exact: true })).toBeVisible({ timeout: 15_000 });
-  await expect(manager.getByRole('button', { name: '前往历史导入', exact: true })).toBeVisible();
+  await expect(manager.getByRole('button', { name: '前往从文件导入', exact: true })).toBeVisible();
   expect((await bindingBackend.request('/api/sync/cli-sessions')).status).toBe(503);
   await expect(manager.getByRole('checkbox')).toHaveCount(0);
   expect(await bindingBackend.tails()).toEqual([]);

@@ -5,7 +5,7 @@ import { test } from './setup-fixture';
 
 test('空白真实后端显示首启本人配置，并等待用户明确初始化', async ({ runningApp: { app }, setup }) => {
   const manager = await app.firstWindow();
-  await manager.getByRole('button', { name: '应用配置', exact: true }).click();
+  await manager.getByRole('button', { name: '设置', exact: true }).click();
   const panel = manager.getByRole('region', { name: '本人身份与模型' });
   await expect(panel.getByText('本人身份尚未初始化', { exact: true })).toBeVisible({ timeout: 15_000 });
   await expect(panel.getByText('DeepSeek 尚未配置', { exact: true })).toBeVisible();
@@ -21,7 +21,7 @@ test.describe('既有配置', () => {
   test('真实既有配置直接复用，不再显示初始化或回显密钥', async ({ runningApp: { app }, setup }) => {
     const before = await readFile(setup.envPath);
     const manager = await app.firstWindow();
-    await manager.getByRole('button', { name: '应用配置', exact: true }).click();
+    await manager.getByRole('button', { name: '设置', exact: true }).click();
     const panel = manager.getByRole('region', { name: '本人身份与模型' });
     await expect(panel.getByText('本次运行的本人身份已就绪', { exact: true })).toBeVisible({ timeout: 15_000 });
     await expect(panel.getByText('DeepSeek 已配置', { exact: true })).toBeVisible();
@@ -37,7 +37,7 @@ test.describe('既有配置', () => {
 
   test('密钥保存失败保持真实已配置状态，输入清空且安全错误不回显', async ({ runningApp: { app }, setup }) => {
     const manager = await app.firstWindow();
-    await manager.getByRole('button', { name: '应用配置', exact: true }).click();
+    await manager.getByRole('button', { name: '设置', exact: true }).click();
     const panel = manager.getByRole('region', { name: '本人身份与模型' });
     await expect(panel.getByText('DeepSeek 已配置', { exact: true })).toBeVisible({ timeout: 15_000 });
     await rename(setup.envPath, path.join(setup.directory, 'saved-synthetic.env'));
@@ -55,7 +55,7 @@ test.describe('既有配置', () => {
 
   test('具名配置桥接拒绝非法参数和小窗写入，renderer 没有通用请求能力', async ({ runningApp: { app }, setup }) => {
     const manager = await app.firstWindow();
-    await manager.getByRole('button', { name: '应用配置', exact: true }).click();
+    await manager.getByRole('button', { name: '设置', exact: true }).click();
     await expect(manager.getByText('DeepSeek 已配置', { exact: true })).toBeVisible({ timeout: 15_000 });
     const rejection = await manager.evaluate(async () => {
       const bridge = window.notalone.setup as unknown as Record<string, (...args: unknown[]) => Promise<unknown>>;
@@ -84,7 +84,7 @@ test.describe('未绑定运行身份', () => {
   test.use({ setupSeed: 'unbound' });
   test('全库已有本人资料不自动认作当前身份，阻塞初始化并提示检查配置', async ({ runningApp: { app }, setup }) => {
     const manager = await app.firstWindow();
-    await manager.getByRole('button', { name: '应用配置', exact: true }).click();
+    await manager.getByRole('button', { name: '设置', exact: true }).click();
     const panel = manager.getByRole('region', { name: '本人身份与模型' });
     await expect(panel.getByText('检测到既有本人资料，但本次运行尚未绑定本人身份。请检查受控配置后重新连接。', { exact: true })).toBeVisible({ timeout: 15_000 });
     await expect(panel.getByRole('button', { name: '初始化本人' })).toHaveCount(0);
@@ -101,7 +101,7 @@ test.describe('复用运行时', () => {
   test.use({ setupSeed: 'reused' });
   test('更新密钥正常关闭经验证的复用服务，再启动唯一新运行时', async ({ runningApp: { app }, setup }) => {
     const manager = await app.firstWindow();
-    await manager.getByRole('button', { name: '应用配置', exact: true }).click();
+    await manager.getByRole('button', { name: '设置', exact: true }).click();
     const panel = manager.getByRole('region', { name: '本人身份与模型' });
     await expect(panel.getByText('DeepSeek 已配置', { exact: true })).toBeVisible({ timeout: 15_000 });
     await expect(manager.getByText('已验证既有运行时。', { exact: true })).toBeVisible();
@@ -122,7 +122,7 @@ test.describe('不存在的运行本人 UUID', () => {
   test.use({ setupSeed: 'wrong-owner' });
   test('库中其他 owner 存在且 contacts200为空时，仍拒绝本次身份就绪和自动恢复', async ({ runningApp: { app }, setup }) => {
     const manager = await app.firstWindow();
-    await manager.getByRole('button', { name: '应用配置', exact: true }).click();
+    await manager.getByRole('button', { name: '设置', exact: true }).click();
     const panel = manager.getByRole('region', { name: '本人身份与模型' });
     await expect(panel.getByText('检测到既有本人资料，但本次运行尚未绑定本人身份。请检查受控配置后重新连接。', { exact: true })).toBeVisible({ timeout: 15_000 });
     expect(await setup.request('/api/contacts')).toEqual({ status: 200, data: { contacts: [] } });
@@ -139,7 +139,7 @@ test.describe('不存在的运行本人 UUID', () => {
 
 test('已保存的本人配置遇到真实启动失败时不报就绪，恢复后明确重试加载', async ({ runningApp: { app }, setup }) => {
   const manager = await app.firstWindow();
-  await manager.getByRole('button', { name: '应用配置', exact: true }).click();
+  await manager.getByRole('button', { name: '设置', exact: true }).click();
   const panel = manager.getByRole('region', { name: '本人身份与模型' });
   await expect(panel.getByText('本人身份尚未初始化', { exact: true })).toBeVisible({ timeout: 15_000 });
   await writeFile(path.join(setup.directory, 'restart-unavailable'), 'synthetic unavailable');
@@ -156,7 +156,7 @@ test('已保存的本人配置遇到真实启动失败时不报就绪，恢复�
 
 test('用户明确初始化本人后，认证停读并重启真实后端使本人范围就绪', async ({ runningApp: { app, appProcess }, setup }) => {
   const manager = await app.firstWindow();
-  await manager.getByRole('button', { name: '应用配置', exact: true }).click();
+  await manager.getByRole('button', { name: '设置', exact: true }).click();
   const panel = manager.getByRole('region', { name: '本人身份与模型' });
   await expect(panel.getByText('本人身份尚未初始化', { exact: true })).toBeVisible({ timeout: 15_000 });
   await panel.getByRole('textbox', { name: '本人展示名称' }).fill('首启合成用户');
@@ -174,7 +174,7 @@ test('DeepSeek 密钥只受控提交，提交后清空且仅展示已配置和�
   manager.on('console', (message) => logs.push(message.text()));
   app.process().stdout?.on('data', (data: Buffer) => logs.push(data.toString()));
   app.process().stderr?.on('data', (data: Buffer) => logs.push(data.toString()));
-  await manager.getByRole('button', { name: '应用配置', exact: true }).click();
+  await manager.getByRole('button', { name: '设置', exact: true }).click();
   const panel = manager.getByRole('region', { name: '本人身份与模型' });
   await expect(panel.getByText('本人身份尚未初始化', { exact: true })).toBeVisible({ timeout: 15_000 });
   await panel.getByRole('textbox', { name: '本人展示名称' }).fill('密钥合成用户');

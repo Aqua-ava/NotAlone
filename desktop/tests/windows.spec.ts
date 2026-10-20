@@ -1,3 +1,4 @@
+import { openFileImport } from './file-import-navigation';
 import { expect, type ElectronApplication, type Page } from '@playwright/test';
 import { test, selectMenu } from './app-fixture';
 
@@ -72,12 +73,12 @@ test('界面显示品牌资源和真实未就绪状态，不提供假联系人�
   await expect.poll(() => manager.getByRole('img', { name: 'NotAlone', exact: true })
     .evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth > 0)).toBe(true);
   await expect(manager.getByText('联系人暂不可用', { exact: true })).toBeVisible();
-  for (const page of ['历史导入', '记忆', '同步设置', '应用配置']) {
+  for (const page of ['记忆', '同步设置', '设置']) {
     await manager.getByRole('button', { name: page, exact: true }).click();
     await expect(manager.getByRole('heading', { name: page, exact: true })).toBeVisible();
     await expect(manager.getByRole('status').filter({ hasText: '尚未连接' })).toBeVisible();
   }
-  await manager.getByRole('button', { name: '历史导入', exact: true }).click();
+  await openFileImport(manager);
   await expect(manager.getByRole('button', { name: '选择历史文件' })).toBeDisabled();
   const helperOpened = app.waitForEvent('window');
   await manager.getByRole('button', { name: '打开输入小窗' }).click();

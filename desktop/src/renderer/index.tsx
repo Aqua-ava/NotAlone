@@ -36,11 +36,13 @@ export function App() {
   const foreground = useForegroundState(window.notalone.foreground, helper);
   const [error, setError] = useState('');
   const [page, setPage] = useState<ManagerPage>('contacts');
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   async function operate(operation: () => Promise<void>) {
     try { await operation(); setError(''); }
     catch { setError('窗口暂时无法打开，请从“窗口”菜单重试。'); }
   }
   const currentPage = managerPages[page];
+  const navigationPage = page === 'import' ? 'config' : page;
   return helper ? <main className="ime-pane">
     <header className="ime-header">
       <img className="ime-logo" src={logo} alt="NotAlone" />
@@ -83,33 +85,39 @@ export function App() {
       <div className="admin-brand"><img src={logo} alt="NotAlone" /><small>让每一次表达，更像你自己</small></div>
       <span className="sidebar-label">关系与表达</span>
       <nav aria-label="管理导航">
-        {(Object.keys(managerPages) as ManagerPage[]).map((key) => <button key={key}
-          className={page === key ? 'active' : ''} aria-current={page === key ? 'page' : undefined}
+        {(Object.keys(managerPages) as ManagerPage[]).filter((key) => key !== 'import').map((key) => <button key={key}
+          className={navigationPage === key ? 'active' : ''} aria-current={navigationPage === key ? 'page' : undefined}
           onClick={() => setPage(key)}><Icon name={managerPages[key].icon} />{managerPages[key].title}</button>)}
       </nav>
       <div className="sidebar-help"><Icon name="write" size={15} /><b>表达由你做主</b><p>候选可编辑，消息由你亲自发送。</p></div>
     </aside>
     <div className="admin-workspace">
       <header className="admin-topbar">
-        <span>管理后台 <i>／</i> {currentPage.title}</span>
+        <span>管理后台 <i>／</i> {page === 'import' && <>设置 <i>／</i> 高级 <i>／</i> </>}{currentPage.title}</span>
         <div><CurrentContactLabel state={contactSession.state} /><BackendBadge state={backend} />
           <button className="button primary" onClick={() => void operate(window.notalone.openHelper)}><Icon name="write" size={15} />打开输入小窗</button></div>
       </header>
       <ShortcutWarning />
       <main className="manager-content">
+        {page === 'import' && <button className="button" onClick={() => { setAdvancedOpen(true); setPage('config'); }}>返回设置 · 高级</button>}
         <div className="manager-title"><h1>{currentPage.title}</h1><p>{currentPage.description}</p></div>
         <BackendConnectionNote state={backend} startup={startup} />
         {page === 'config' ? <StartupSettings state={startup} backend={backend} />
           : startup.phase !== 'ready' && <StartupReadiness state={startup} onConfigure={() => setPage('config')} />}
         {(page === 'config' || startup.mode === 'managed' && backend.phase === 'connected') && <SetupPanel />}
-        {page === 'config' && <><ScreenPermissionPanel view={permission} /><DesktopControls /></>}
+        {page === 'config' && <><ScreenPermissionPanel view={permission} /><DesktopControls />
+          <details className="startup-settings" open={advancedOpen} onToggle={(event) => setAdvancedOpen(event.currentTarget.open)}>
+            <summary>高级</summary>
+            <p>从文件补充旧记录。已通过自动同步获取的记录，无需重复导入。</p>
+            <button className="button" onClick={() => setPage('import')}>从文件导入</button>
+          </details></>}
         {page === 'contacts' && <ContactsPage session={contactSession} navigate={setPage} manualRelease={startup.mode === 'managed'} />}
         {page === 'import' && <ImportPage session={contactSession} />}
         {page === 'memory' && <MemoryPage session={contactSession} navigate={setPage} />}
         {page === 'skillLearning' && <SkillLearningPage session={contactSession} />}
         {page === 'sync' && <><SyncControlPanel bridge={window.notalone.syncControl} />
           {startup.mode === 'managed' ? <div><button className="button primary" onClick={() => setPage('contacts')}>选择联系人并手动输入</button>
-            <button className="button" onClick={() => setPage('import')}>导入单联系人资料</button></div>
+            <p>如需从文件补充旧记录，可前往「设置 → 高级 → 从文件导入」。</p></div>
             : <BindingConsentPage contacts={contactSession} navigate={setPage} />}</>}
         {page !== 'config' && page !== 'contacts' && page !== 'import' && page !== 'memory' && page !== 'sync' && page !== 'skillLearning' && <section className="empty-panel" aria-label={currentPage.title}>
           <div className="empty-symbol"><Icon name={currentPage.icon} size={32} /></div>

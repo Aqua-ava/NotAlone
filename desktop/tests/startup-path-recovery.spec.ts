@@ -17,7 +17,7 @@ for (const [condition, message] of [
   });
   pathTest(`项目 ${condition} 显示对应原因，修正项目路径后公开重试恢复`, async ({ runningApp: { app, userData } }) => {
     const manager = await app.firstWindow();
-    await manager.getByRole('button', { name: '应用配置', exact: true }).click();
+    await manager.getByRole('button', { name: '设置', exact: true }).click();
     await expect(manager.getByText(message, { exact: true })).toBeVisible();
     expect(await access(path.join(userData, 'backend.info')).then(() => true, () => false)).toBe(false);
     await manager.getByLabel('项目目录', { exact: true }).fill(projectDirectory);

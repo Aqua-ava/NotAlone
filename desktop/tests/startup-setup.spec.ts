@@ -29,7 +29,7 @@ const test = startupTest.extend<{ machineSetup: { setup: SetupFixture; proxy: Se
 
 test('本人初始化后的正常重启仍检查机器账本，修正后明确加载配置恢复', async ({ runningApp: { app }, startupDatabase, machineSetup: { setup, proxy } }) => {
   const manager = await app.firstWindow();
-  await manager.getByRole('button', { name: '应用配置', exact: true }).click();
+  await manager.getByRole('button', { name: '设置', exact: true }).click();
   const panel = manager.getByRole('region', { name: '本人身份与模型' });
   await expect(manager.getByText('机器环境已就绪。', { exact: true })).toBeVisible();
   await expect(panel.getByText('本人身份尚未初始化', { exact: true })).toBeVisible({ timeout: 15_000 });
@@ -57,7 +57,7 @@ test('本人初始化后的正常重启仍检查机器账本，修正后明确�
 const driftTest = test.extend({ databaseState: 'drift' });
 driftTest('合法既有后端也须通过机器门禁，阻塞时不把运行连接当作数据库就绪', async ({ runningApp: { app, appProcess }, startupDatabase, machineSetup: { setup, proxy } }) => {
   const manager = await app.firstWindow();
-  await manager.getByRole('button', { name: '应用配置', exact: true }).click();
+  await manager.getByRole('button', { name: '设置', exact: true }).click();
   await expect(manager.getByText('数据库迁移账本或基线发生漂移。', { exact: true })).toBeVisible();
   await expect(manager.getByText('尚未连接', { exact: true })).toBeVisible();
   expect((await setup.request('/api/runtime/status')).data.state).toBe('running');
@@ -74,7 +74,7 @@ driftTest('合法既有后端也须通过机器门禁，阻塞时不把运行连
 backendTest('路径修改未确认停读时保留旧目标，拒绝保存和另起连接', async ({ runningApp: { app, appProcess, userData }, backend }) => {
   const manager = await app.firstWindow();
   await expect(manager.getByText('已连接', { exact: true })).toBeVisible();
-  await manager.getByRole('button', { name: '应用配置', exact: true }).click();
+  await manager.getByRole('button', { name: '设置', exact: true }).click();
   const before = await readFile(path.join(userData, 'backend-launch.json'));
   backend.service.shutdownMode = 'failure';
   await manager.getByRole('button', { name: '停止服务以修改路径', exact: true }).click();
@@ -98,7 +98,7 @@ backendTest('路径修改未确认停读时保留旧目标，拒绝保存和另�
 test('失联仍锁定原运行时，停读失败不能保存，原实例确认退出后才可修正路径', async ({ runningApp: { app, userData }, machineSetup: { setup, proxy } }) => {
   const manager = await app.firstWindow();
   await expect(manager.getByText('已连接', { exact: true })).toBeVisible({ timeout: 15_000 });
-  await manager.getByRole('button', { name: '应用配置', exact: true }).click();
+  await manager.getByRole('button', { name: '设置', exact: true }).click();
   const before = await readFile(path.join(userData, 'backend-launch.json'));
   expect((await setup.request('/api/runtime/status')).data.state).toBe('running');
   proxy.failRuntimeStatus = true;

@@ -13,7 +13,7 @@ const test = setupTest.extend<{ transportProxy: SetupHttpProxy }>({
 
 test('本人初始化失败后的恢复查询失联，不发布旧initialize-failed', async ({ runningApp: { app }, setup, transportProxy }) => {
   const manager = await app.firstWindow();
-  await manager.getByRole('button', { name: '应用配置', exact: true }).click();
+  await manager.getByRole('button', { name: '设置', exact: true }).click();
   await expect(manager.getByText('本人身份尚未初始化', { exact: true })).toBeVisible({ timeout: 15_000 });
   await mkdir(setup.envPath);
   transportProxy.holdStatusAfterInitialize = true;
@@ -31,7 +31,7 @@ test('本人初始化失败后的恢复查询失联，不发布旧initialize-fai
 
 test('初始化已真实写入而响应丢失时，用户可明确重新加载受控配置而不重新初始化', async ({ runningApp: { app }, setup, transportProxy }) => {
   const manager = await app.firstWindow();
-  await manager.getByRole('button', { name: '应用配置', exact: true }).click();
+  await manager.getByRole('button', { name: '设置', exact: true }).click();
   const panel = manager.getByRole('region', { name: '本人身份与模型' });
   await expect(panel.getByText('本人身份尚未初始化', { exact: true })).toBeVisible({ timeout: 15_000 });
   transportProxy.dropInitializeResponse = true;
