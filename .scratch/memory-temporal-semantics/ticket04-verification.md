@@ -25,3 +25,23 @@
 ## 数据与剩余验收
 
 094仅新增兼容可空列及未解决矛盾关联索引；旧记录和旧完成快照保持未知。无存量重解释。原生只允许 `npm run dev`，本票未启动App；主Agent持有合成fixture入口并负责原生与最终双轴评审。两条明确基线失败不改断言、不计为本票新通过。
+
+## 双轴评审修复
+
+稳定修复提交 `b3c50133`：
+
+- 有相似旧资料的 ADD／KEEP 空关系公开红例改为待确认；独立事项以 `independent` 经过独立核验，仅用新消息支持新事实。混合人工资料无法冻结关系时，任务仍成功，候选待确认且变化依据未知，旧 active 保持不变。
+- 原事实→未解决矛盾→有据澄清公开三次导入通过。事务摘要绑定原始持久版本；分层读取复用既有摘要字段显式纳入当前投影，旧 L2／L3 不会遗漏反证。
+- 同一计划提前至更早安排日期、取消但无发生日期均经正式导入通过；更早导入的取消不能覆盖较新计划。原有早期回忆与来源门禁保留。
+- 相同条件文本仅更换来源消息／位置，主张改变但条件未改变的核验可以更新；原条件核验与人工保护继续生效。
+- 公开导入后的本人 L2／L3 真实整理输入经过正式 SDK payload，非空变化摘要只含五项安全字段，不带消息／版本标识。后端证明和删除依赖保留。
+
+增量命令均使用前述 Conda、显式 PYTHONPATH，并关闭 dotenv：
+
+- 前述五个记忆提取单元模块，加 `tests.integration.persistence.test_database_migrations.DatabaseMigrationCommandTest.test_all_repository_migrations_install_and_repeat`：84 tests，OK。
+- `python -m unittest tests.integration.server.test_memory_event_updates.MemoryEventUpdatesHttpTest -v`：33 tests，75.763秒，OK。未运行或降级两条已确认基线失败。
+- `npm run typecheck`；`node --test tests/memory-evolution.test.mjs tests/memory-evolution-react.test.mjs`：类型检查通过，5 tests，OK；实际三种页面含第六类独立事项及翻页后的旧资料未知。
+- 分层兼容修复后单独复验本人 L2／L3 payload、冲突后澄清及旧摘要撤资格：3 tests，10.869秒，OK。
+- 随后完整复验 `test_memory_timeline`、`test_memory_timeline_merge`、`test_memory_evolution_reply` 三个公开模块：25 tests，52.367秒，OK。
+
+没有新增096，也没有改写094／095。094约束只要求可空JSON对象和版本1，新增关系枚举由应用协议校验。原生与最终复评由主Agent在集成分支继续。
