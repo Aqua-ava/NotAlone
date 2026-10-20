@@ -135,8 +135,11 @@ export class MemoryReadingController {
     const scope = this.scope;
     if (!scope || request.contactId !== scope.contactId || request.scopeRevision !== scope.scopeRevision) throw new Error('资料范围已变化。');
     if (this.mutation || this.sourceDeletionDepth) return;
-    const refreshed = await Promise.all(sections.filter(section => this.state[section].phase === 'ready' && !this.operations.has(section))
-      .map(section => this.readSection(section, scope, false, true)));
+    const refreshed = await Promise.all([
+      ...sections.filter(section => this.state[section].phase === 'ready' && !this.operations.has(section))
+        .map(section => this.readSection(section, scope, false, true)),
+      ...(this.overviewRequested && !this.overviewOperation ? [this.readOverview(scope)] : []),
+    ]);
     if (refreshed.some(success => !success)) throw new Error('记忆内容暂未刷新。');
   }
   async refresh(request: MemoryReadRequest): Promise<void> {

@@ -439,10 +439,12 @@ export function ContactRelationshipOverview({ overview, memories, refresh, openV
 }) {
   return <section className="memory-section memory-overview" aria-label="联系人经历与关系变化">
     <header><div><h2>联系人经历与关系变化</h2>
-      <p>这是已采纳资料的投影，呈现经历与版本变化，不包含未确认推断；不进行性格或动机分析。</p></div>
-      <button className="button" disabled={busy || overview.phase === 'loading'} onClick={() => void refresh()}>刷新联系人概览</button></header>
+      <p>这是已采纳资料的投影，呈现经历与版本变化，不包含未确认推断；不进行性格或动机分析。</p></div></header>
     {(overview.phase === 'idle' || overview.phase === 'loading') && <p role="status">正在核对概览与来源…</p>}
-    {overview.phase === 'error' && <p role="alert">概览读取失败，旧概览已撤下，请刷新重试。</p>}
+    {overview.phase === 'error' && <div>
+      <p role="alert">概览加载失败，请重试。</p>
+      <button className="button" disabled={busy} onClick={() => void refresh()}>重试</button>
+    </div>}
     {overview.phase === 'ready' && overview.value && <>
       <p className="memory-section-note">资料集合修订：{overview.value.memoryRevision} · 整理时间：{timeText(overview.value.builtAt)}</p>
       {overview.value.entries.length === 0 && <p>这位联系人暂无有合法依据的概览资料。</p>}

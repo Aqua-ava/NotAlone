@@ -73,7 +73,8 @@ export async function contactRelationshipOverview(browser: Browser, origin: stri
       await selectMemoryCategory(manager, '联系人概览');
       for (const text of [prepared.old.text, prepared.current.text, correctedText]) await expect(overview.getByText(text, { exact: true })).toHaveCount(0);
       await expect(overview.getByText(prepared.manual.text, { exact: true })).toBeVisible();
-      await overview.getByRole('button', { name: '刷新联系人概览', exact: true }).click();
+      await expect(overview.getByRole('button', { name: '刷新联系人概览', exact: true })).toHaveCount(0);
+      await expect(overview.getByRole('button', { name: '重试', exact: true })).toHaveCount(0);
       await expect(overview.getByRole('article')).toHaveCount(1);
       await manager.getByRole('combobox', { name: '资料联系人', exact: true }).selectOption(prepared.otherContactId);
       await selectMemoryCategory(manager, '联系人概览');
