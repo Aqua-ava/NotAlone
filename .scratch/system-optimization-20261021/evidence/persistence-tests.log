@@ -1,0 +1,6 @@
+test_partner_events_keep_contact_cursors_and_dedup_across_a_b_a (tests.integration.front_sync.test_confirmed_contact_continuity.ConfirmedContactContinuityTest.test_partner_events_keep_contact_cursors_and_dedup_across_a_b_a) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.503s
+
+OK

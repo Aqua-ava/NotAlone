@@ -57,7 +57,13 @@ PYTHONPATH=src "$HOME/miniconda3/envs/NotAlone/bin/python" -m unittest discover 
 PYTHONPATH=src "$HOME/miniconda3/envs/NotAlone/bin/python" -m unittest tests.integration.server.test_events tests.integration.server.test_http_resource_limits -v
 ```
 
-分别 **115、229、79、22 项，合计 445 项通过**。原始输出为 `evidence/{wechat,sync,server,http}-tests.log`。
+分别 **115、229、79、22 项，共 445 项通过；另在临时 PostgreSQL 集群通过 1 项双联系人持久化回归，合计 446 项**。原始输出为 `evidence/{wechat,sync,server,http}-tests.log`。持久化原始输出为 [persistence-tests.log](evidence/persistence-tests.log)，复现命令：
+
+```bash
+"$HOME/miniconda3/envs/NotAlone/bin/python" .scratch/system-optimization-20261021/evidence/run_persistence.py
+```
+
+该脚本创建不监听 TCP 的 UTF-8 临时 PostgreSQL 集群；用现有测试创建随机 `_test` 库并执行原迁移，核对后删除数据库、停止集群并删除目录。首次临时集群未指定 UTF-8，在原 `_test` 安全核对处失败；按 UTF-8 重建后通过，没有修改安全断言。
 
 从工作树根复现性能（先将固定基线 `backend/src` 用 git archive 解至临时目录）：
 
@@ -72,11 +78,11 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=backend/src "$HOME/miniconda3/envs/NotAlone
 ## 已覆盖与限制
 
 - 满 CLI 队列的停止、reader join、回收重试、错误交付、EOF 排空、全量事件顺序；真实 SessionEventStream 接到 CliBackgroundSync 后，8 轮消费 1000 项，重连 cursor 为 1000，联系人正文游标仍为已写入的 local_id:10，未绑定会话不读正文。
-- 原同步模块回归覆盖关闭/重新开启补齐、可靠水位回退、写失败不推进游标、重连退避、无授权不读、规范化重复消息保留给写侧去重。未改正文写入及数据库去重协议；本票没有重跑真实 PostgreSQL 的持久化去重端到端，05 集成应补相应合成库验证。
+- 原同步模块回归覆盖关闭/重新开启补齐、可靠水位回退、写失败不推进游标、重连退避、无授权不读、规范化重复消息保留给写侧去重。未改正文写入及数据库去重协议；另以真实 PostgreSQL 临时合成库运行既有双联系人回归，核对 A→B→A 独立游标、重复事件不增加规范消息、重建协调器后重放仍去重。
 - SSE owner 隔离、实时同序、不同 task_id 与失败状态、超过 256 项恢复提示的有界性、300 个任务逐项 HTTP 权威读取、实际 HTTP SSE EOF、头部预算不缩短 SSE 寿命、关闭唤醒。
 - HTTP 缺失/错误 token、两种认证头、400/413 优先级、已认证零星正文、未完成零星头部、提前 EOF、连接超额及额度恢复、实际 SSE 和 shutdown。关闭回归使用 10 秒输入预算，排除依靠短超时自然结束的假阳性。
 - 默认 32 连接包括 SSE；达到上限时新请求（包括控制请求）先收到 503，需等已有连接释放。没有为控制请求在认证前另开无界线程。
-- 这不是服务吞吐或完整 App RSS 基准。没有启动真实 App/微信、调用外部模型、读取私人资料或连接业务库；没有修改默认 desktop 测试清单。05 负责统一默认入口、全量与 dev App/必要微信验收。
+- 这不是服务吞吐或完整 App RSS 基准。没有启动真实 App/微信、调用外部模型、读取私人资料或连接业务库；额外的 PostgreSQL 只存在于自建临时合成集群；没有修改默认 desktop 测试清单。05 负责统一默认入口、全量与 dev App/必要微信验收。
 
 ## Standards
 
@@ -92,4 +98,4 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=backend/src "$HOME/miniconda3/envs/NotAlone
 
 仅调整进程内元数据与 HTTP 资源管理；未增加持久化、模型出站、读取授权、聊天发送、迁移或私人夹具。停止可丢弃尚未消费的触发元数据，但不推进可靠正文游标，恢复仍从原授权范围可靠位置补齐。SSE 溢出通过 EOF 显式暴露缺口，权威记录不由通知队列删除。
 
-隔离回环服务、合成 reader 和计时子进程全部结束；基线源码临时副本约 6 MiB 在证据固定后删除，保留约 128 KiB 的合成日志/JSON/脚本。没有创建浏览器页、第二个 App 或常驻服务；本聊天未启动或停止既有 App；起初共享主仓 dev:status 为 development，收尾为 stopped，本工作树始终未启动 App，05 需按协作规则核对热更新现场。最终提交后执行 `node scripts/check_public_history.mjs --ref HEAD --working-tree`，合成证据中的源码路径已归一化，检查结果随最终交付报告；没有 push、远端分支、PR 或发布。
+隔离回环服务、合成 reader 和计时子进程全部结束；基线源码临时副本约 6 MiB 在证据固定后删除，保留约 144 KiB 的合成日志/JSON/脚本。两次临时 PostgreSQL 集群（首次安全核对失败、UTF-8 重建后通过）均已停止并删除，共清理约 93.4 MiB 文件，见 [持久化清理记录](evidence/persistence-cleanup.json)。没有创建浏览器页、第二个 App 或常驻服务；本聊天未启动或停止既有 App；起初共享主仓 dev:status 为 development，收尾为 stopped，本工作树始终未启动 App，05 需按协作规则核对热更新现场。最终提交后执行 `node scripts/check_public_history.mjs --ref HEAD --working-tree`，合成证据中的源码路径已归一化，检查已通过（issues: 0），新增证据提交后再次核验；没有 push、远端分支、PR 或发布。

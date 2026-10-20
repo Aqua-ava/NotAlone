@@ -10,5 +10,8 @@
   "app_dev_status_initial": "development",
   "app_dev_status_final": "stopped",
   "app_shutdown_by_this_chat": false,
-  "followup": "05核对并恢复热更新现场，不由本票启动第二实例"
+  "followup": "05核对并恢复热更新现场，不由本票启动第二实例",
+  "isolated_pg_cluster_attempts": 2,
+  "isolated_pg_clusters_stopped_and_removed": true,
+  "isolated_pg_temporary_bytes_removed": 97921026
 }

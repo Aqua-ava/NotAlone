@@ -22,9 +22,16 @@
       "command": "python -m unittest tests.integration.server.test_events tests.integration.server.test_http_resource_limits -v",
       "count": 22,
       "result": "OK"
+    },
+    {
+      "command": "python .scratch/system-optimization-20261021/evidence/run_persistence.py",
+      "count": 1,
+      "result": "OK",
+      "isolated_utf8_pg": true,
+      "tcp_listening": false
     }
   ],
-  "total": 445,
+  "total": 446,
   "all_synthetic": true,
   "real_app_run": false,
   "real_wechat_run": false,
