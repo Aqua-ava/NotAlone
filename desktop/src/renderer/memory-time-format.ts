@@ -11,3 +11,9 @@ export function memoryTimeText(value: string | null): string {
   const offset = parts[2] === 'Z' ? '' : `${parts[3]}${Number(parts[4])}${parts[5] === '00' ? '' : `:${parts[5]}`}`;
   return `${memoryDateText(value)} ${parts[1]}（UTC${offset}）`;
 }
+
+// 缺少原始偏移时后端保留已知UTC时刻；明确标出显示时区，不冒充来源当地日。
+export function memorySourceDateText(value: string): string {
+  const offset = /(Z|[+-]\d{2}:\d{2})$/.exec(value)?.[1];
+  return `${memoryDateText(value)}${offset ? `（UTC${offset === 'Z' || offset === '+00:00' ? '' : offset}）` : ''}`;
+}

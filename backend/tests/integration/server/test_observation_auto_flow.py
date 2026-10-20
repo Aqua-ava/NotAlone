@@ -130,7 +130,7 @@ class ObservationAutoFlowFixture(CoreBusinessFlowFixture):
             model_priority=self.priority,
         )
 
-    def record(self, number=1, *, same_second=False):
+    def record(self, number=1, *, same_second=False, missing_date=False):
         locator = self.binding.conversation_locator
         timestamp = 1790812800 if same_second else 1790812800 + number
         return self.store.record_batch_with_messages(
@@ -141,7 +141,7 @@ class ObservationAutoFlowFixture(CoreBusinessFlowFixture):
             messages=(NormalizedMessage(
                 source_locator=f"cli:{number}", speaker="contact", message_type="text",
                 text_content=self.message_text, media_placeholder=None,
-                occurred_at=datetime.fromtimestamp(timestamp, timezone.utc),
+                occurred_at=None if missing_date else datetime.fromtimestamp(timestamp, timezone.utc),
                 wechat_metadata=WechatMessageMetadata(
                     external_local_id=number, external_server_id=f"synthetic-{number}",
                     external_talker=locator, source_create_time=timestamp,
@@ -176,6 +176,31 @@ class ObservationAutoFlowFixture(CoreBusinessFlowFixture):
         self.fail(f"任务未达到预期状态：{latest}")
 
 class ObservationAutoFlowTest(ObservationAutoFlowFixture, unittest.TestCase):
+    def test_unknown_date_receipt_preserves_existing_legacy_watermark(self):
+        from notalone.persistence.watermark_store import PostgresWatermarkStore
+        first = self.record()
+        self.publish(first)
+        self.wait_task()
+        watermark = PostgresWatermarkStore(self.database_url)
+        previous = watermark.get(self.scope)
+        second = self.record(2, missing_date=True)
+        self.publish(second)
+        self.wait_task()
+        self.assertEqual(watermark.get(self.scope), previous)
+        self.assertEqual(self.model.calls[-1], frozenset(second.message_ids))
+
+    def test_new_authorized_observation_with_unknown_date_is_processed_once(self):
+        batch = self.record(missing_date=True)
+        self.publish(batch)
+        task = self.wait_task()
+        self.assertEqual(task["steps"][0]["processed_count"], 1)
+        saved = PostgresMemoryStore(self.database_url).list_confirmed(self.scope)
+        self.assertEqual(len(saved), 1)
+        self.assertIsNone(saved[0].timing.source_started_at)
+        self.assertFalse(saved[0].timing.source_time_complete)
+        self.publish(batch)
+        self.assertEqual(len(self.model.calls), 1)
+
     def test_committed_observation_automatically_processes_original_task(self):
         batch = self.record()
         self.publish(batch)

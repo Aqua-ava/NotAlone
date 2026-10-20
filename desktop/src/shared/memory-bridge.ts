@@ -8,7 +8,10 @@ export type MemoryCurrentStatus = 'current_verified' | 'current_unverified' | 'h
 export type MemoryEventStage = 'planned' | 'agreed' | 'rescheduled' | 'cancelled' | 'occurred' | 'unknown';
 export interface MemoryEventEvidence { messageId: string; charStart: number; charEnd: number; }
 export interface MemoryEvent {
-  version: 1;
+  version: 1 | 2;
+  occurrencePrecision?: 'year' | 'month' | 'day' | 'instant' | 'unknown';
+  occurrenceExpression?: string | null;
+  anchorMessageId?: string | null;
   stage: MemoryEventStage;
   stageVerified: boolean;
   stageEvidence: MemoryEventEvidence[];

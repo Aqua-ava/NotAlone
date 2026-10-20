@@ -129,7 +129,7 @@ def load_contact_messages(
             reason = "unsupported_sender"
         if reason == "selected" and not text.strip():
             reason = "empty_text"
-        if reason == "selected" and occurred is None:
+        if reason == "selected" and occurred is None and message_ids is None:
             reason = "missing_occurred_at"
         if selection_receipts is not None:
             selection_receipts.append(

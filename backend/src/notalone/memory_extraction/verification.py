@@ -346,6 +346,9 @@ def _verify_event(raw: object, *, fact: ExtractedFact, window: ExtractionWindow)
     """独立V阶段／发生槽与实际来源位置合取，通用supported不代签。"""
     event = fact.event
     if raw is None:
+        if event is not None and event.version == 2:
+            from .event_calendar import checked_event_calendar
+            return checked_event_calendar(event, {message.message_id: message for message in window.messages}, fact.source_message_ids)
         return event
     if event is None or not isinstance(raw, dict) or set(raw) != {
         "stage_verdict", "occurrence_verdict", "stage_evidence", "occurrence_evidence",
@@ -370,8 +373,9 @@ def _verify_event(raw: object, *, fact: ExtractedFact, window: ExtractionWindow)
     occurrence, occurrence_evidence = verify("occurrence")
     if stage and event.stage is EventStage.UNKNOWN or occurrence and event.occurrence_start is None:
         raise ValueError("未知事件字段不能核验为支持。")
-    return replace(event, stage_verified=stage, stage_evidence=stage_evidence,
-                   occurrence_verified=occurrence, occurrence_evidence=occurrence_evidence)
+    from .event_calendar import checked_event_calendar
+    return checked_event_calendar(replace(event, stage_verified=stage, stage_evidence=stage_evidence,
+                   occurrence_verified=occurrence, occurrence_evidence=occurrence_evidence), messages, fact.source_message_ids)
 
 
 def _record_contract(

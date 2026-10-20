@@ -13,6 +13,7 @@ def _same_event_meaning(left: MemoryEvent | None, right: MemoryEvent | None) -> 
         or left.occurrence_verified and right.occurrence_verified and (
             left.occurrence_start != right.occurrence_start
             or left.occurrence_end != right.occurrence_end
+            or left.occurrence_precision != right.occurrence_precision
         )
     )
 
