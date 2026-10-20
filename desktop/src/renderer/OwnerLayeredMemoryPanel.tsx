@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import type { ActiveMemory, MemoryCategory, MemoryChangeKind, OwnerLayeredMemoryManagementRequest, OwnerLayeredMemoryState } from '../shared/memory-bridge';
+import type { ActiveMemory, MemoryCategory, MemoryChangeKind, OwnerLayeredMemoryState } from '../shared/memory-bridge';
 import { MemoryTemporalStatus } from './MemoryTemporalStatus';
-import { LayeredMemoryPanel } from './LayeredMemoryPanel';
 import { MemoryList } from './MemoryList';
 
 const categoryNames = { common_fact: '共同事实', preference: '偏好', taboo: '禁忌', recent_state: '近期状态', relationship_note: '关系备注' };
@@ -31,7 +30,6 @@ export function OwnerLayeredMemoryPanel({ onVersions, onTrace }: OwnerMemoryActi
   const [error, setError] = useState('');
   const [text, setText] = useState('');
   const [category, setCategory] = useState<MemoryCategory>('common_fact');
-  const [showSummary, setShowSummary] = useState(false);
   const factsSection = useRef<HTMLElement>(null);
   const [factTarget, setFactTarget] = useState<{ memoryId: string; revision: number; editing: boolean } | null>(null);
   const revision = useRef(-1);
@@ -51,7 +49,6 @@ export function OwnerLayeredMemoryPanel({ onVersions, onTrace }: OwnerMemoryActi
   }
   const facts = (target?: { memoryId: string; revision: number }, editing = false) => {
     setFactTarget(target ? { ...target, editing } : null);
-    setShowSummary(false);
     factsSection.current?.scrollIntoView({ block: 'start' });
     void run(() => window.notalone.memory.readOwnerMemories());
   };
@@ -91,16 +88,6 @@ export function OwnerLayeredMemoryPanel({ onVersions, onTrace }: OwnerMemoryActi
           busy={state.mutation.phase === 'working'} run={run} onVersions={onVersions} onTrace={onTrace} />}
       </MemoryList>}
     </section>
-    <details className="memory-disclosure memory-secondary" open={showSummary} onToggle={event => {
-      const opened = event.currentTarget.open;
-      if (opened === showSummary) return;
-      setShowSummary(opened);
-      if (opened) void run(() => window.notalone.memory.readOwnerLayeredMemory({}));
-    }}><summary>查看摘要</summary>
-      {showSummary && <LayeredMemoryPanel owner state={state} contactName="本人" busy={state.mutation.phase === 'working'} facts={facts}
-        read={mappingCursor => run(() => window.notalone.memory.readOwnerLayeredMemory({ mappingCursor }))}
-        manage={(action, settingsGeneration, options) => run(() => window.notalone.memory.manageOwnerLayeredMemory({ action, settingsGeneration, ...options } as OwnerLayeredMemoryManagementRequest))} />}
-    </details>
     {state.mutation.phase !== 'idle' && <p role={state.mutation.phase === 'error' ? 'alert' : 'status'}>{state.mutation.message}</p>}
     {error && <p role="alert">{error}</p>}
   </>;

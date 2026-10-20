@@ -1,19 +1,17 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 
-export type MemoryCategory = '联系人记忆' | '本人记忆' | '待确认候选' | '主题资料' | '本人主题资料' | '联系人概览' | '本人概览';
+export type MemoryCategory = '联系人记忆' | '本人记忆' | '待确认候选' | '联系人概览' | '本人概览';
 
 // 经公开入口和详情操作，保留各业务测试对同一资料范围的访问。
 export async function selectMemoryCategory(page: Page, category: MemoryCategory) {
   if (!await page.getByRole('navigation', { name: '记忆分类', exact: true }).isVisible())
     await page.getByRole('button', { name: '记忆', exact: true }).click();
-  const owner = ['本人记忆', '本人主题资料', '本人概览'].includes(category);
+  const owner = ['本人记忆', '本人概览'].includes(category);
   const entry = owner ? '我' : category === '待确认候选' ? '待确认' : '对方';
   const button = page.getByRole('navigation', { name: '记忆分类', exact: true }).getByRole('button', { name: entry, exact: true });
   await button.click();
   await expect(button).toHaveAttribute('aria-pressed', 'true');
-  const detail = ['联系人概览', '本人概览'].includes(category) ? '版本历史'
-      : ['主题资料', '本人主题资料'].includes(category) ? '整理管理' : null;
-  if (['主题资料', '本人主题资料'].includes(category)) await expandMemorySection(page, '查看摘要');
+  const detail = ['联系人概览', '本人概览'].includes(category) ? '版本历史' : null;
   if (detail) await expandMemorySection(page, detail);
 }
 

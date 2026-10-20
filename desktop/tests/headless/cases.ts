@@ -22,7 +22,8 @@ export async function memoryReading(browser: Browser, origin: string) {
       await expect(contact.getByText('甲的新版本关系备注。', { exact: true })).toBeVisible();
       await expect(contact.getByText('旧版关系备注。', { exact: true })).toHaveCount(0);
       await expect(manager.getByText('另一用户的本人资料。', { exact: true })).toHaveCount(0);
-      await expect(manager.locator('summary').filter({ hasText: /^查看摘要$/ }).locator('..')).not.toHaveAttribute('open');
+      await expect(manager.getByText('查看摘要', { exact: true })).toHaveCount(0);
+      await expect(manager.getByRole('region', { name: '主题资料', exact: true })).toHaveCount(0);
       await manager.screenshot({ path: 'artifacts/headless-pages/memory-reading.png' });
       await selectMemoryCategory(manager, '待确认候选');
       await expect(manager.getByText('尚未记住', { exact: true })).toHaveCount(3);

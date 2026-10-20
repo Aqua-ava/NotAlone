@@ -6,7 +6,6 @@ import type { ManagerPage } from './pages';
 import './memory.css';
 import { MemoryTemporalStatus } from './MemoryTemporalStatus';
 import { MemoryList } from './MemoryList';
-import { LayeredMemoryPanel } from './LayeredMemoryPanel';
 import type { LayeredMemoryManagementRequest, LayeredMemoryManagementOptions } from '../shared/memory-bridge';
 import { MemoryEvidence } from './MemoryEvidence';
 import type { TraceRecordKind } from '../shared/trace-bridge';
@@ -632,10 +631,6 @@ export function MemoryPage({ session, navigate }: { session: ContactSessionView;
             updateMemories={entry.subject === 'self' ? state.owner : state.contact} applyCandidateUpdate={memory.applyCandidateUpdate}
             busy={state.mutation.phase === 'working'} />}</MemoryList>
         </ReadingSection>}
-        {view === 'contact' && <details className="memory-disclosure memory-secondary"><summary>查看摘要</summary>
-          <LayeredMemoryPanel key={scopeKey} state={state.layeredMemory} contactName={contact.displayName}
-            busy={state.mutation.phase === 'working'} read={memory.readLayeredMemory} manage={memory.manageLayeredMemory} facts={openFact} />
-        </details>}
         {evidenceTarget?.scope === detailKey && <div ref={evidencePanel}>
           <MemoryEvidence key={`${scopeKey}:${evidenceTarget.kind}:${evidenceTarget.id}`} session={session}
             kind={evidenceTarget.kind} recordId={evidenceTarget.id} text={evidenceTarget.text} onClose={() => setEvidenceTarget(null)} />
