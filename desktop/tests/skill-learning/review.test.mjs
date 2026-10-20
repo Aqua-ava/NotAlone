@@ -312,6 +312,37 @@ test('用户通过生产审核桥看到同输入两侧、改输入撤下旧对�
   } finally { await rm(f.owned, { recursive: true, force: true }); }
 });
 
+test('已发布回执后台复验可被前台读取或配置抢占，迟到结果不恢复旧审核', async () => {
+  const f = await reviewFixture();
+  try {
+    await f.bridge.openReview({ ...f.scope(), draftId: f.draft.draft_id });
+    const form = f.controller.getState().review.form;
+    form.input = { incoming_text: '合成询问', intent: '先核对安排', scene: '核对安排' };
+    await f.bridge.updateReview({ ...f.selected(), form });
+    await f.bridge.compareReview(f.selected());
+    await f.bridge.approveReview({ ...f.selected(), comparisonId: f.controller.getState().review.comparison.comparison_id,
+      confirmed: true, replacementsConfirmed: true });
+    for (const action of ['openHistory', 'configure']) {
+      const gate = Promise.withResolvers();
+      f.records.barrier = { promise: gate.promise };
+      const polling = f.bridge.poll(f.scope());
+      await new Promise(resolve => setImmediate(resolve));
+      assert.equal(f.controller.getState().phase, 'ready');
+      const before = f.records.calls.length;
+      try {
+        if (action === 'configure') await f.bridge.configure({ ...f.scope(), enabled: false, confirmed: true });
+        else await f.bridge.openHistory(f.scope());
+        assert.ok(f.records.calls.length > before, '后台核验不能吞掉前台操作');
+        if (action === 'configure') assert.equal(f.records.calls.at(-1).method, 'POST');
+        else assert.equal(f.controller.getState().history.phase, 'ready');
+        const state = f.controller.getState();
+        gate.resolve(); await polling;
+        assert.deepEqual(f.controller.getState().review, state.review, '被抢占的迟到核验不能恢复审核回执');
+      } finally { gate.resolve(); await polling; }
+    }
+  } finally { await rm(f.owned, { recursive: true, force: true }); }
+});
+
 for (const [label, malformed] of [
   ['新侧loaded但缺版本', comparison => { comparison.after.version_id = null; }],
   ['新侧版本不属于本次对照', comparison => { comparison.after.version_id = randomUUID(); }],

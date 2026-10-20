@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit",
     "start": "npm run dev",
     "test": "npm run typecheck && node scripts/test-safe.mjs",
+    "test:polling": "node --test tests/skill-learning/*.test.mjs tests/background-task-polling.test.mjs tests/contact-relationship-overview.test.mjs tests/memory-processing/bridge.test.mjs",
     "test:app": "node scripts/test-app.mjs",
     "test:app:status": "node scripts/test-app.mjs --status",
     "test:pages": "node scripts/test-pages.mjs",

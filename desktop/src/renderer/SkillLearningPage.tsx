@@ -22,7 +22,7 @@ export function SkillLearningPage({ session }: { session: ContactSessionView }) 
   const current = contactId !== null && state.contactId === contactId && state.scopeRevision === scopeRevision;
   useEffect(() => {
     if (!contactId) return;
-    const refresh = () => { void bridge.refresh({ contactId, scopeRevision }).catch(() => {}); };
+    const refresh = () => { void bridge.poll({ contactId, scopeRevision }).catch(() => {}); };
     refresh();
     const timer = setInterval(refresh, 3000);
     return () => clearInterval(timer);

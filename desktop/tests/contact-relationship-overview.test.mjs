@@ -124,7 +124,13 @@ test('后台记忆处理进度变化后自动更新概览，加载失败仅显�
   await f.bridge.refresh({ ...f.selection(), section: 'contact' });
   await f.bridge.refreshOverview(f.selection());
   current = memory({ text: '后台整理后新增的合成经历。' });
+  const refreshingStates = [];
+  const unsubscribe = f.bridge.onStateChanged(state => refreshingStates.push(state.overview));
   await f.bridge.refreshProcessingResults({ scope: 'contact', ...f.selection() });
+  unsubscribe();
+  assert.ok(refreshingStates.length > 0);
+  assert.ok(refreshingStates.every(state => state.phase === 'ready' && state.value !== null),
+    '后台刷新过程中概览和其中的按钮持续存在，不退回首次加载状态');
   assert.match(render(), /后台整理后新增的合成经历/);
   assert.doesNotMatch(render(), /刷新联系人概览|>重试<\/button>/);
 

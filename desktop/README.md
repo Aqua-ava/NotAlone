@@ -130,10 +130,13 @@ npm ci
 npx install-electron     # 首次显式准备锁定版本的 Electron 运行时
 npm run typecheck
 npm test                # 类型检查、安全调度、自研探针及外置路径配置，真实 App 不运行
+npm run test:polling     # 后台刷新稳定性回归，含无头 Chrome 页面；不启动 Electron
 npm run dev             # 日常开发
 npm start               # 一次性编译启动
 npm run package
 ```
+
+修改自动刷新页面后运行 `npm run test:polling`：用合成响应和可控慢请求检查刷新进行中的按钮、焦点及内容，不只检查请求完成后的画面。后台核验保留同范围已就绪视图，首次加载、手动刷新及写入仍有反馈；读取失败、来源删除、切换联系人和重连继续撤下失效内容。该命令使用本机已有 Chrome，不下载浏览器、不读取真实聊天或调用模型。
 
 本机 arm64 产物为 `out/NotAlone-darwin-arm64/NotAlone.app`。可在 Finder 双击打开；包只包含编译后的本地资源和最小启动清单，不依赖开发服务器、原型目录或仓库绝对路径。打包只替换本目录的 `out/` 产物，不覆盖历史 App。当前为 ad-hoc 本机签名，未做 Developer ID 分发、公证或 DMG；权限与签名边界见[台账](../docs/macos-app-permissions-and-errors.md)。
 

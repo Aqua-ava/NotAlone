@@ -18,9 +18,9 @@ export class SkillHistorySession {
     ++this.operation; this.pending?.abort(); this.pending = undefined; this.retry = undefined;
     this.state = null; this.changed(null);
   }
-  async open(scope: Scope) {
-    if (this.state?.phase === 'writing' || this.retry) return;
-    await this.perform(scope);
+  async open(scope: Scope, background = false) {
+    if (this.state?.phase === 'writing' || this.retry || background && this.pending) return;
+    await this.perform(scope, undefined, undefined, background);
   }
   async rollback(scope: Scope, skillId: string, versionId: string) {
     if (this.state?.phase !== 'ready' || this.retry) throw new Error('请先刷新版本历史。');
@@ -33,10 +33,13 @@ export class SkillHistorySession {
     if (!this.retry || this.retry.scope !== scope) throw new Error('没有可重试的原回滚动作。');
     await this.perform(scope, this.retry.skillId, this.retry.body);
   }
-  private async perform(scope: Scope, skillId?: string, body?: Record<string, unknown>) {
+  private async perform(scope: Scope, skillId?: string, body?: Record<string, unknown>, background = false) {
     const operation = ++this.operation; this.pending?.abort(); const pending = this.pending = new AbortController();
     const current = () => this.scope() === scope && operation === this.operation && scope.generation === this.backend.getConnectionGeneration();
-    this.publish({ phase: body ? 'writing' : 'loading', skills: this.state?.skills ?? [], error: null, retry: false });
+    // 同一范围的后台复验保留已核验视图；首次读取、写入和失败仍显式切换状态。
+    if (!(background && this.state?.phase === 'ready')) {
+      this.publish({ phase: body ? 'writing' : 'loading', skills: this.state?.skills ?? [], error: null, retry: false });
+    }
     if (body) this.retry = { scope, skillId: skillId!, body };
     try {
       const result = await this.backend.requestJson({ method: body ? 'POST' : 'GET',
