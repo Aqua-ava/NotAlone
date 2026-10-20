@@ -11,6 +11,10 @@ from uuid import UUID, uuid4
 import psycopg
 from psycopg import sql
 
+from notalone.application.memory_upgrade import MemoryUpgradeService
+from notalone.managed_update_backups import ManagedUpdateBackupError
+from notalone.memory.upgrade import UpgradeScope
+from notalone.persistence.memory_upgrade import PostgresMemoryUpgradeStore
 from notalone.database_adoption import _owned_database, _run_pg, _verified_backup
 from notalone.database_audit import digest, schema_catalog
 from notalone.database_migrations import MigrationError, migrate
@@ -180,10 +184,12 @@ class ManagedUpdateBackupDeletionTest(unittest.TestCase):
         return job, self._latest_archive()
 
     def _delete_upgrade(self, job: UUID):
-        return self._client().request("DELETE", f"/api/memory-upgrades/{job}?contact_id={self.target['contact']}",
-            headers={"Authorization": "Bearer synthetic"}, body=json.dumps({
-                "action": "delete", "expected_revision": 1, "operation_key": str(uuid4()), "confirmed": True,
-            }).encode())
+        # 历史升级已无公开入口，仍验证保留的删除业务及归档清理合同。
+        service = MemoryUpgradeService(PostgresMemoryUpgradeStore(self.target["database_url"]))
+        return service.operate(
+            UpgradeScope(self.scope["owner_id"], "contact", self.scope["contact_id"]), job,
+            action="delete", expected_revision=1, operation_key=uuid4(),
+        )
 
     def test_upgrade_deletion_erases_the_archive_that_restored_the_private_preview(self) -> None:
         job, archive = self._upgrade_and_archive()
@@ -193,9 +199,8 @@ class ManagedUpdateBackupDeletionTest(unittest.TestCase):
                 self.assertEqual(connection.execute("SELECT comparison->>'text' FROM public.memory_upgrade_batch WHERE job_id=%s",
                     (job,)).fetchone()[0], "仅合成的升级比较")
         with patch.dict(os.environ, {"NOTALONE_MANAGED_USER_DATA": str(self.user_data)}):
-            response = self._delete_upgrade(job)
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(json.loads(response.body)["state"], "deleted")
+            result = self._delete_upgrade(job)
+        self.assertEqual(result["state"], "deleted")
         with psycopg.connect(self.target["database_url"]) as connection:
             self.assertEqual(connection.execute("SELECT state,comparison,extracted_outcome FROM public.memory_upgrade_batch WHERE job_id=%s",
                 (job,)).fetchone(), ("invalidated", None, None))
@@ -226,9 +231,13 @@ class ManagedUpdateBackupDeletionTest(unittest.TestCase):
                 for resource in ("preference", "upgrade"):
                     with self.subTest(archive=kind, resource=resource):
                         with patch.dict(os.environ, {"NOTALONE_MANAGED_USER_DATA": str(self.user_data)}):
-                            response = self._delete_preference(preference) if resource == "preference" else self._delete_upgrade(job)
-                        self.assertEqual(response.status_code, 409)
-                        self.assertEqual(json.loads(response.body), {"error": "update_backup_cleanup_required"})
+                            if resource == "preference":
+                                response = self._delete_preference(preference)
+                                self.assertEqual(response.status_code, 409)
+                                self.assertEqual(json.loads(response.body), {"error": "update_backup_cleanup_required"})
+                            else:
+                                with self.assertRaises(ManagedUpdateBackupError):
+                                    self._delete_upgrade(job)
                         for path, original in original_archives.items():
                             self.assertEqual(path.read_bytes(), original)
                         with psycopg.connect(self.target["database_url"]) as connection:

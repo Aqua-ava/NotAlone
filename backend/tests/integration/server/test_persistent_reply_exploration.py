@@ -2,6 +2,7 @@
 
 import json
 import unittest
+from typing import Callable
 from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import patch
 from uuid import UUID, uuid4
@@ -17,8 +18,21 @@ from tests.integration.server.core_business_flow_support import ScriptedCoreMode
 
 
 class ExplorationControlledModel(FidelityControlledModel):
+    selection_callback: Callable | None = None
+
     def _generate(self, messages, stop=None, run_manager=None, **kwargs):
         payload = next(json.loads(message.content) for message in messages if isinstance(message, HumanMessage))
+        if payload.get("input_mode") == "exploration_skill_selection":
+            self.entered.set()
+            self.wait_for_response()
+            self.payloads.append(payload)
+            if not self.plans or "select_skill" not in self.plans[0]:
+                raise AssertionError("自动策略选择脚本耗尽，禁止额外模型调用。")
+            version = self.plans.pop(0)["select_skill"]
+            if self.selection_callback:
+                self.selection_callback()
+            self.responses.append(tool_response("ExplorationSkillSelection", {"version_id": version}))
+            return ScriptedCoreModel._generate(self, messages, stop, run_manager, **kwargs)
         if payload.get("input_mode") != "direction_exploration":
             if self.plans and "read_skill" in self.plans[0]:
                 self.payloads.append(payload)

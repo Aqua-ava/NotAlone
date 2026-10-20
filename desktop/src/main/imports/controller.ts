@@ -267,21 +267,22 @@ export class ImportController {
     } finally { this.pending.delete(abort); }
   }
 
-  private async loadTask(request: number, generation: number): Promise<void> {
+  private async loadTask(request: number, generation: number, background = false): Promise<void> {
     if (!this.current(request, generation) || !this.state.submission?.receipt) return;
     const receipt = this.state.submission.receipt;
     const read = ++this.taskRequest;
     clearTimeout(this.pollTimer);
-    this.publishSubmission({ taskBusy: 'refresh', taskError: null });
+    // 定时读取不占用前台按钮；显式刷新及任务写入仍显示忙碌。
+    if (!background) this.publishSubmission({ taskBusy: 'refresh', taskError: null });
     const abort = this.beginRequest();
     try {
       const response = await this.backend.requestJson({ method: 'GET',
         path: `/api/tasks/status?contact_id=${receipt.contactId}&task_id=${receipt.taskId}`, signal: abort.signal });
       if (!this.current(request, generation) || read !== this.taskRequest) return;
       const task = importTask(response.data, receipt);
-      this.publishSubmission({ task, taskBusy: null });
+      this.publishSubmission({ task, taskBusy: null, taskError: null });
       if (['queued', 'running', 'verifying'].includes(task.status)) {
-        this.pollTimer = setTimeout(() => void this.loadTask(request, generation), 1500);
+        this.pollTimer = setTimeout(() => void this.loadTask(request, generation, true), 1500);
       }
     } catch {
       if (this.current(request, generation) && read === this.taskRequest) this.publishSubmission({ task: null, taskBusy: null,

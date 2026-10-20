@@ -8,6 +8,9 @@ from typing import Any, Literal, Union, get_args, get_origin, get_type_hints
 from notalone.memory.layered import LayeredMemorySnapshot, ScenarioDirectoryEntry
 from notalone.reply.layered_context import LayeredReplyMaterial
 from notalone.memory.timing import MemoryTiming
+from notalone.memory.events import MemoryEvent
+from notalone.memory.conditions import MemoryConditions
+from notalone.memory.evolution import MemoryEvolution
 from notalone.reply.expression_preference_models import ExpressionPreferenceScope, ExpressionPreference
 from notalone.reply.errors import ReplyContextInvariantError
 from notalone.reply.expression_preferences import expression_reply_mode, require_preference_contract
@@ -16,19 +19,18 @@ from notalone.reply.retrieval_receipt import (MemoryNavigation, OverviewRevision
 from notalone.reply.assistant_discussion import DiscussionContext, DiscussionItem, DiscussionSnapshot, DiscussionIdentity
 from notalone.reply.context import ReplyContext, ContextEvidence, ToolCallTrace, ContinuedReplyCandidate, allows_history
 from notalone.reply.interface import ConfirmedDirection, DirectionSource, SuggestionReference, GenerateReply, ReplyBasisChange
-from notalone.reply.style_reference import StyleReference
 from notalone.reply.assistant_continuation_reference import ContinuationGenerateReply
 from notalone.scopes import ContactScope, OwnerScope
 
 _TYPES = {cls.__name__: cls for cls in (LayeredMemorySnapshot, ScenarioDirectoryEntry, LayeredReplyMaterial, MemoryTiming, DiscussionContext, DiscussionItem,
     DiscussionSnapshot, DiscussionIdentity, ContextEvidence, ToolCallTrace, ConfirmedDirection,
-    SuggestionReference, StyleReference, ContactScope, OwnerScope, ContinuedReplyCandidate, ReplyBasisChange,
+    SuggestionReference, ContactScope, OwnerScope, ContinuedReplyCandidate, ReplyBasisChange,
     ExpressionPreferenceScope, ExpressionPreference, MemoryNavigation, OverviewRevision,
     ReplyRetrievalReceipt, RetrievalQuery, RetrievalBudget, SourceMessageBudget)}
 
 CONTEXT_VERSION = 2
 # 结构字段每次演进必须提升修订；不为旧快照静默补字段。
-CONTEXT_SCHEMA_REVISION = 9
+CONTEXT_SCHEMA_REVISION = 13
 
 
 class PreparedContextFormatError(ValueError):
@@ -60,6 +62,12 @@ def _construct(cls: type, values: dict[str, Any]) -> Any:
 
 
 def _encode(value: Any) -> Any:
+    if isinstance(value, MemoryEvolution):
+        return {"memory_evolution": value.to_payload(current=True)}
+    if isinstance(value, MemoryConditions):
+        return {"memory_conditions": value.to_payload(current=True)}
+    if isinstance(value, MemoryEvent):
+        return {"memory_event": value.to_payload(current=True)}
     if isinstance(value, UUID):
         return {"uuid": str(value)}
     if isinstance(value, datetime):
@@ -84,6 +92,12 @@ def _decode(value: Any) -> Any:
         return tuple(_decode(item) for item in value)
     if not isinstance(value, dict):
         return value
+    if set(value) == {"memory_evolution"}:
+        return MemoryEvolution.from_payload(value["memory_evolution"])
+    if set(value) == {"memory_conditions"}:
+        return MemoryConditions.from_payload(value["memory_conditions"])
+    if set(value) == {"memory_event"}:
+        return MemoryEvent.from_payload(value["memory_event"])
     if set(value) == {"mapping"}:
         return {key: _decode(item) for key, item in value["mapping"].items()}
     if set(value) == {"list"}:

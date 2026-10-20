@@ -16,13 +16,9 @@ after(async () => {
 });
 
 for (const mode of ['reply_to_message', 'initiate_conversation']) {
-  test(`C06 ${mode}样本冲突经typed续改与真实SSE显式采用，再删除样本清新旧讨论`, async () => {
+  test(`C06 ${mode}当前意图经typed续改与真实SSE显式采用后保留`, async () => {
     await withMessageOptInFixture(async (f) => {
       const scope = await f.connect();
-      const samplesPath = `/api/contacts/${scope.contactId}/style-samples`;
-      const sample = (await f.request(samplesPath, { idempotency_key: randomUUID(),
-        text: '合成旧表达：我总是答应，明晚陪同。', origin: { kind: 'manual' } })).sample;
-      assert.deepEqual(sample.source_ids, []);
       await f.bridge.setMode({ ...scope, mode });
       let originalTarget;
       if (mode === 'reply_to_message') {
@@ -78,33 +74,17 @@ for (const mode of ['reply_to_message', 'initiate_conversation']) {
       assert.equal(observed.payloads.length, 3);
       for (const payload of observed.payloads) {
         assert.equal(payload.fidelity_contract.current_intent.text, intent);
-        assert.deepEqual(payload.style_references.map((item) => item.sample_id), [sample.sample_id]);
-        assert(payload.style_references.every((item) => item.weight === 'low' && item.factual_role === 'expression_reference'));
       }
       assert.equal(observed.payloads[1].continuation_reference.is_current_draft, false);
       assert.equal(observed.payloads[1].continuation_reference.version_id, edited.displayVersionId);
       assert.deepEqual(observed.payloads[1].continuation_reference.messages.map((message) => message.text),
         ['本次先不参加。', '谢谢你。']);
       assert.match(JSON.stringify(observed.payloads[2]), /甲的新合成消息：时间安排更新。/);
-      const independent = (await f.request(samplesPath, { idempotency_key: randomUUID(),
-        text: '生成之后独立主动保存的合成表达。', origin: { kind: 'manual' } })).sample;
-      await f.request(`${samplesPath}/${sample.sample_id}`, undefined, 'DELETE');
-      await f.bridge.readSavedSession(scope);
-      const erased = await f.request(path);
-      assert.equal(erased.current_input_version_id, null);
-      assert(erased.turns.every((turn) => turn.state === 'redacted' && turn.input === null && turn.reply === null));
-      const erasedView = await f.bridge.getState();
-      assert.equal(erasedView.result, null);
-      assert.equal(erasedView.savedSession.currentInputVersionId, null);
-      assert.equal(JSON.stringify(erasedView).includes('明晚七点我陪你去合成海边。'), false);
-      await assert.rejects(f.request(path + '/continue', typedSubmission));
-      assert.deepEqual((await f.request(`${samplesPath}/${independent.sample_id}`)).sample, independent);
-      assert.equal((await f.fixture.command('observations')).model_calls, 3);
-      rows.push({ case_id: `${mode}-style-typed-opt-in-delete`, sample_id: sample.sample_id,
+      rows.push({ case_id: `${mode}-typed-opt-in`,
         session_id: sessionId, original_target_message_id: originalTarget ?? null,
         new_message_id: arrived.message_id, typed_submission: typedSubmission,
         model_inputs: observed.payloads, outputs: saved.turns.map((turn) => turn.reply), actual_calls: 3,
-        notice_model_delta: 0, deletion_model_delta: 0, deleted_projection: erased,
+        notice_model_delta: 0,
         control_contract_completed: true, semantic_review: '故意整组新增承诺；未进行真人审阅',
       });
     });

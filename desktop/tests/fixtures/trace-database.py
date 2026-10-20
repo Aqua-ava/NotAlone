@@ -8,11 +8,13 @@ import os
 import sys
 from pathlib import Path
 from uuid import UUID
+from unittest.mock import patch
 
 import psycopg
 
 from notalone.memory_extraction.cli_support import load_contact_messages
 from notalone.memory_extraction.command import run_extraction
+from notalone.memory_extraction.adoption import MemoryAdoption
 from notalone.memory_extraction.errors import ExtractionRuntimeError
 from notalone.persistence.extraction_trace import PostgresExtractionTraceStore
 from notalone.persistence.memory_store import PostgresMemoryStore
@@ -50,11 +52,15 @@ def create_database(mode="full", ownership_path=None):
         memory_store = PostgresMemoryStore(url)
 
         def extract(runtime):
-            return run_extraction(
-                scope=scope, messages=messages, watermark_message_id=None,
-                runtime=runtime, memory_port=memory_store,
-                owner_memory_port=PostgresOwnerMemoryStore(url), trace_store=trace_store,
-            )
+            # 本夹具显式准备人工确认／删除候选；真实提取、来源和追踪存储仍完整执行。
+            # 只在本进程该次调用使用手动采纳，正式运行时的自动策略保持不变。
+            with patch("notalone.memory_extraction.command.MemoryAdoption",
+                       side_effect=lambda **options: MemoryAdoption(**{**options, "automatic": False})):
+                return run_extraction(
+                    scope=scope, messages=messages, watermark_message_id=None,
+                    runtime=runtime, memory_port=memory_store,
+                    owner_memory_port=PostgresOwnerMemoryStore(url), trace_store=trace_store,
+                )
 
         # 21 个真实零候选执行，覆盖有界分页；脚本模型没有供应商请求捕获，缺口如实保存。
         for _ in range(21 if mode == "full" else 0):

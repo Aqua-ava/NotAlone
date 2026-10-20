@@ -14,12 +14,17 @@ export class MemoryFixture extends ContactFixture {
     const response = await this.memoryRequest('/api/memories/manual-contact', { contact_id: contactId, text, category: 'relationship_note' });
     if (response.status !== 200) throw new Error('本轮合成资料安排失败。');
   }
+  async addSyntheticOwnerMemory(contactId: string, text: string): Promise<void> {
+    if (!this.data.contact_ids.includes(contactId)) throw new Error('合成本人资料只允许写入本轮联系人。');
+    const response = await this.memoryRequest(`/api/contacts/${contactId}/owner-memories`, { text, category: 'common_fact' });
+    if (response.status !== 200) throw new Error('本轮合成本人资料安排失败。');
+  }
   async readMemorySection(contactId: string, section: 'contact' | 'owner' | 'pending' | 'sources') {
     if (![...this.data.contact_ids, this.data.empty_contact_id, this.data.other_contact_id].includes(contactId)) {
       throw new Error('合成读取只允许本轮固定联系人。');
     }
     const contact = `/api/contacts/${contactId}`;
-    const endpoints = { contact: `${contact}/memories`, owner: '/api/memories/owner',
+    const endpoints = { contact: `${contact}/memories`, owner: `${contact}/owner-memories`,
       pending: `${contact}/memory-candidates`, sources: `${contact}/sources` };
     return this.memoryRequest(endpoints[section]);
   }

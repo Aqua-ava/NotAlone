@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { fixture, payload, profilePayload, ids, TraceController } from './support.mjs';
+import { fixture, payload, readyPayload, profilePayload, ids, TraceController } from './support.mjs';
 const owner = () => payload({ scope_kind: 'owner', contact_id: null, scenario_enabled: false, profile_enabled: false });
 test('本人主题资料不依赖联系人，切换联系人保留独立状态和 owner 路由', async () => {
   const calls = [];
@@ -226,4 +226,64 @@ test('独立本人写入不主动打开未请求列表，断连后也不恢复�
   assert.equal(state.contactId, null);
   assert.equal(state.owner.phase, 'idle');
   assert.deepEqual(state.owner.items, []);
+});
+
+test('本人保存成功但列表复读失败不宣称成功，可只读刷新核对', async () => {
+  let saved = false, failRead = false;
+  const writes = [];
+  const mutations = [];
+  const f = await fixture(async request => {
+    if (request.method === 'POST') { writes.push(request); saved = true; failRead = true; }
+    if (request.path === '/api/memories/owner') {
+      if (failRead) throw new Error('合成复读失败');
+      return { generation: 1, data: { memories: [] } };
+    }
+    return { generation: 1, data: owner() };
+  }, { noContact: true });
+  const unsubscribe = f.bridge.onOwnerLayeredMemoryChanged(state => mutations.push(state.mutation.phase));
+  await f.bridge.readOwnerMemories();
+  await assert.rejects(f.bridge.addOwnerMemory({ text: '合成保存成功事实', category: 'preference' }));
+  assert.equal(saved, true);
+  assert.equal((await f.bridge.getOwnerLayeredMemoryState()).mutation.phase, 'error');
+  assert.equal((await f.bridge.getOwnerLayeredMemoryState()).memories.phase, 'error');
+  assert.equal(mutations.includes('success'), false);
+  failRead = false;
+  await f.bridge.readOwnerMemories();
+  assert.equal((await f.bridge.getOwnerLayeredMemoryState()).memories.phase, 'ready');
+  assert.equal(writes.length, 1);
+  unsubscribe(); f.disconnect();
+});
+
+test('本人保存后列表复读跨过轮询周期，完成核验后仍继续读取摘要进度', async t => {
+  let saved = false, layeredReads = 0, finishRead, enteredRead;
+  const reading = new Promise(resolve => { enteredRead = resolve; });
+  const f = await fixture(async request => {
+    if (request.method === 'POST') saved = true;
+    if (request.path === '/api/memories/owner') {
+      if (saved) {
+        enteredRead();
+        return new Promise(resolve => { finishRead = resolve; });
+      }
+      return { generation: 1, data: { memories: [] } };
+    }
+    if (request.path === '/api/memories/owner/layered-memory') layeredReads++;
+    return { generation: 1, data: readyPayload({ scope_kind: 'owner', contact_id: null,
+      runtime_policy: 'verified_items', quality_status: 'unknown', quality: undefined }) };
+  }, { noContact: true });
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  try {
+    await f.bridge.readOwnerMemories();
+    const writing = f.bridge.addOwnerMemory({ text: '合成慢复读资料', category: 'common_fact' });
+    await reading;
+    assert.equal((await f.bridge.getOwnerLayeredMemoryState()).mutation.phase, 'working');
+    t.mock.timers.tick(1000);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(layeredReads, 1, '写入核验期间不启动并行摘要读取');
+    finishRead({ generation: 1, data: { memories: [] } });
+    await writing;
+    assert.equal((await f.bridge.getOwnerLayeredMemoryState()).mutation.phase, 'success');
+    t.mock.timers.tick(1000);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(layeredReads, 2, '完成写后核验应恢复摘要自动读取');
+  } finally { f.disconnect(); t.mock.timers.reset(); }
 });

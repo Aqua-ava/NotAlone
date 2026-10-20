@@ -34,7 +34,7 @@ test('错误或原因不明的旧依据只供回看并提示重新生成', async
   assert.equal(state.savedSession.phase, 'ready');
   const html = renderSession(state);
   assert.match(html, /合成旧候选：先确认见面时间。/);
-  assert.match(html, /依据已纠错或失效原因不明，仅可回看，请重新生成/);
+  assert.match(html, /记忆依据已失效或过期，仅可回看，请重新生成/);
   assert.doesNotMatch(html, /明确继续时将重新核验当前依据/);
 });
 
@@ -235,12 +235,11 @@ test('携入的合法旧版本保留表达正文与时效提醒，读取不会�
   f.records.saved.inputs.push({ input_version_id: carryId, type: 'candidate_carry',
     conversation_binding_id: f.bindingId, turn_id: null, state: 'active', placeholder: null,
     basis_changes: [{ evidence_id: f.memoryId, kind: 'owner_memory', reason: 'memory_expired' }],
-    content: { type: 'candidate_carry', metadata_version: 1, origin_owner_id: randomUUID(),
+    content: { type: 'candidate_carry', metadata_version: 2, origin_owner_id: randomUUID(),
       origin_contact_id: f.scope.contactId, origin_binding_id: f.bindingId, origin_session_id: randomUUID(),
       origin_input_version_id: f.inputVersionId, origin_turn_id: f.turnId, origin_reply_request_id: f.requestId,
       origin_candidate_id: f.candidateId, origin_version_id: f.candidateId, origin_selection_id: randomUUID(),
-      payload_sha256: 'a'.repeat(64), style_sample_ids: [],
-      messages: [{ message_id: f.messageId, text: '合成携入旧编辑，仅作表达参考。' }] } });
+      payload_sha256: 'a'.repeat(64), messages: [{ message_id: f.messageId, text: '合成携入旧编辑，仅作表达参考。' }] } });
   await f.bridge.readSavedSession(f.scope);
   const state = await f.bridge.getState();
   assert.equal(state.savedSession.phase, 'ready');

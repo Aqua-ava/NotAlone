@@ -10,7 +10,7 @@ const modules = {
   'notalone.persistence.assistant_session_inputs': 'backend/src/notalone/persistence/assistant_session_inputs.py',
   'notalone.persistence.assistant_prepared_context': 'backend/src/notalone/persistence/assistant_prepared_context.py',
   'notalone.persistence.owner_memory_store': 'backend/src/notalone/persistence/owner_memory_store.py',
-  'notalone.persistence.style_sample_store': 'backend/src/notalone/persistence/style_sample_store.py',
+  'notalone.persistence.reply_sources': 'backend/src/notalone/persistence/reply_sources.py',
   'notalone.persistence.reply_overview_navigation': 'backend/src/notalone/persistence/reply_overview_navigation.py',
   'notalone.reply.layered_context': 'backend/src/notalone/reply/layered_context.py',
   'notalone.reply.scenario_tools': 'backend/src/notalone/reply/scenario_tools.py',

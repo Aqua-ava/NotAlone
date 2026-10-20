@@ -47,8 +47,8 @@ export function ExpressionPreferences({ replies }: { replies: ReplySessionView }
     ++editRevision.current; setEditing(item); setText(item.text); setAppliesTo(item.scope.contactId ? 'contact' : 'owner');
     setReplyMode(item.scope.replyMode); setConfirmed(false);
   }
-  return <details className="style-samples" id="assistant-expression-preferences"><summary>长期表达偏好</summary>
-    <p>仅在你明确长期保存后供后续适用回复参考；当前明确意图优先。本次指令、选择、复制和表达样本不会自动保存为长期偏好。</p>
+  return <details className="expression-preferences" id="assistant-expression-preferences"><summary>长期表达偏好</summary>
+    <p>仅在你明确长期保存后供后续适用回复参考；当前明确意图优先。本次指令、选择和复制不会自动保存为长期偏好。</p>
     <ExpressionPreferenceBasis preferences={used} />
     <button disabled={!enabled} onClick={() => void operate(() => window.notalone.expressionPreferences.refresh(selection))}>刷新长期偏好</button>
     <div className="expression-preference-form"><h3>{editing ? "修改长期偏好" : "添加长期偏好"}</h3>

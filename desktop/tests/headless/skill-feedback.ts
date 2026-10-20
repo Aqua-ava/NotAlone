@@ -1,5 +1,6 @@
-import { ensureReplySettingsOpen } from '../reply-settings-actions';
-import { selectMemoryCategory } from '../memory-page-actions';
+import { fillWorkspaceThought, generateWorkspace } from '../workspace-actions';
+import { declareReplyScene } from '../reply-settings-actions';
+import { openImportManagement } from '../memory-page-actions';
 import { expect, type Browser } from '@playwright/test';
 import path from 'node:path';
 import { withRewriteFixture } from '../rewrite-backend-fixture';
@@ -19,31 +20,30 @@ export async function skillFeedback(browser: Browser, origin: string) {
       await host.backend.connect();
       let manager = await host.open('manager');
       const open = async () => {
-        await manager.getByRole('button', { name: '联系人与绑定', exact: true }).click();
+        await manager.getByRole('button', { name: '联系人', exact: true }).click();
         await manager.getByRole('button', { name: '选择合成学习甲联系人', exact: true }).click();
-        await manager.getByRole('button', { name: 'Skill 待审核', exact: true }).click();
-        await manager.getByRole('button', { name: '查看已发布版本', exact: true }).click();
+        await manager.getByRole('button', { name: 'Skill', exact: true }).click();
+        await manager.getByRole('tab', { name: '已有 Skill', exact: true }).click();
         await manager.getByRole('button', { name: '管理方法停用', exact: true }).click();
         return manager.getByRole('region', { name: '方法与Skill反馈', exact: true });
       };
       await manager.getByRole('button', { name: '选择合成学习甲联系人', exact: true }).click();
-      await manager.getByRole('button', { name: 'Skill 待审核', exact: true }).click();
+      await manager.getByRole('button', { name: 'Skill', exact: true }).click();
+      await manager.getByRole('tab', { name: /^待审核/ }).click();
       await manager.getByRole('button', { name: '开启此联系人的经验整理', exact: true }).click();
       await expect(manager.getByRole('button', { name: '关闭经验整理', exact: true })).toBeEnabled();
       const prepared = await fixture.command('prepare_feedback');
       const helper = await host.open('helper');
       const [contactA, contactB] = fixture.data.contact_ids;
       await confirmHelperContact(helper, contactA);
-      await helper.getByRole('button', { name: '主动聊聊', exact: true }).click();
-      await helper.getByRole('textbox', { name: '主动目的', exact: true }).fill('只说明我的想法，不作额外承诺');
-      await ensureReplySettingsOpen(helper, '本次精确场景');
-      await helper.getByRole('textbox', { name: '本次精确场景', exact: true }).fill('核对安排');
+      await fillWorkspaceThought(helper, '只说明我的想法，不作额外承诺');
+      await declareReplyScene(helper, '核对安排');
       await helper.evaluate(async versionId => {
         const contact = await window.notalone.contacts.getState();
         await window.notalone.replies.updateSkill({ contactId: contact.selectedContactId!, scopeRevision: contact.scopeRevision,
           skill: { mode: 'user', versionId } });
       }, prepared.version_id as string);
-      await helper.getByRole('button', { name: '生成候选', exact: true }).click();
+      await generateWorkspace(helper);
       const editor = helper.getByRole('textbox', { name: '候选1编辑文本', exact: true });
       await expect(editor).toHaveValue('先核对一下，再说明我的想法。');
       await editor.fill('这句太生硬，我只改当前候选的说法。');
@@ -101,7 +101,11 @@ export async function skillFeedback(browser: Browser, origin: string) {
         await writeGenerationEvidence(stage, { originalRequestKey, generationPrepares, state });
       };
       await expect(editor).toHaveValue('这句太生硬，我只改当前候选的说法。');
-      await helper.getByRole('button', { name: '生成候选', exact: true }).click();
+      // 幂等与权限边界：故意经公开 bridge 重放原准备；新工作区按钮总是发起新请求。
+      await helper.evaluate(async () => {
+        const state = await window.notalone.replies.getState();
+        await window.notalone.replies.generate({ contactId: state.contactId!, scopeRevision: state.scopeRevision, newRequest: false });
+      });
       try {
         await expect.poll(async () => helper.evaluate(async () => (await window.notalone.replies.getState()).phase)).toBe('failed');
       } finally { await captureGeneration('original'); }
@@ -109,7 +113,7 @@ export async function skillFeedback(browser: Browser, origin: string) {
         failure: { status: 409, code: 'assistant_session_rejected', reason: 'skill_policy_changed' } }]);
       await expect(editor).toHaveValue('这句太生硬，我只改当前候选的说法。');
       expect((await fixture.command('observations')).reply_calls).toBe(5);
-      await helper.getByRole('button', { name: '重新生成', exact: true }).click();
+      await generateWorkspace(helper);
       try {
         await expect.poll(async () => helper.evaluate(async () =>
           (await window.notalone.replies.getState()).result?.usedSkill?.executionView?.policyRevision ?? 0)).toBeGreaterThan(0);
@@ -128,11 +132,12 @@ export async function skillFeedback(browser: Browser, origin: string) {
         const state = await window.notalone.replies.getState();
         return { contact: state.contactId, phase: state.savedSession?.phase };
       })).toEqual({ contact: contactB, phase: 'ready' });
-      await ensureReplySettingsOpen(helper, '本次精确场景');
-      await helper.getByRole('textbox', { name: '本次精确场景', exact: true }).fill('乙的独立场景');
+      await declareReplyScene(helper, '乙的独立场景');
       await helper.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption(contactA);
-      await ensureReplySettingsOpen(helper, '本次精确场景');
-      await expect(helper.getByRole('textbox', { name: '本次精确场景', exact: true })).toHaveValue('核对安排');
+      await expect.poll(() => helper.evaluate(async () => {
+        const state = await window.notalone.replies.getState();
+        return { contact: state.contactId, phase: state.savedSession?.phase, scene: state.scene };
+      })).toEqual({ contact: contactA, phase: 'ready', scene: '核对安排' });
       await expect(editor).toHaveValue('甲在范围停用后的独立编辑。');
       expect((await helper.evaluate(async () => (await window.notalone.replies.getState()).result!.usedSkill!)).executionView).toEqual(actual.executionView);
       panel = await open();
@@ -175,9 +180,8 @@ export async function skillFeedback(browser: Browser, origin: string) {
       await expect(panel.getByRole('heading', { name: 'careful-response · 整个Skill已停用', exact: true })).toBeVisible();
       for (const other of [false, true]) expect((await fixture.command('feedback_reply', { version_id: prepared.version_id, other })).used).toBe(false);
       await manager.getByRole('button', { name: '记忆', exact: true }).click();
-      await selectMemoryCategory(manager, '来源与过程');
-      const source = manager.getByRole('region', { name: '来源删除管理', exact: true }).getByRole('listitem')
-        .filter({ hasText: `来源标识：${prepared.source_id}` });
+      await openImportManagement(manager);
+      const source = manager.getByRole('region', { name: '已导入资料', exact: true }).locator(`[data-source-id="${prepared.source_id}"]`);
       await source.getByRole('button', { name: '删除来源', exact: true }).click();
       await manager.getByRole('button', { name: '确认删除来源', exact: true }).click();
       try { await expect(source.getByText('已删除，已通过不可检索校验', { exact: true })).toBeVisible(); }
@@ -188,8 +192,8 @@ export async function skillFeedback(browser: Browser, origin: string) {
         await manager.getByRole('button', { name: '确认删除来源', exact: true }).click();
         await expect(source.getByText('已删除，已通过不可检索校验', { exact: true })).toBeVisible();
       }
-      await manager.getByRole('button', { name: 'Skill 待审核', exact: true }).click();
-      await manager.getByRole('button', { name: '查看已发布版本', exact: true }).click();
+      await manager.getByRole('button', { name: 'Skill', exact: true }).click();
+      await manager.getByRole('tab', { name: '已有 Skill', exact: true }).click();
       await expect(manager.getByRole('region', { name: 'Skill版本历史', exact: true })).toContainText('当前没有可查看的有效发布版本。');
       await manager.getByRole('button', { name: '管理方法停用', exact: true }).click();
       panel = manager.getByRole('region', { name: '方法与Skill反馈', exact: true });

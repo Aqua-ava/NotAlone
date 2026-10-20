@@ -117,7 +117,7 @@ PYTHONPATH=backend/src python \
 
 返回明确区分 `directions`、`clarification`、`paused` 和 `generated`。`GET /{exploration_id}` 读取当前结果；`POST /{exploration_id}/confirm` 携实际 `input_version_id` 及 `suggestion_id` 或 `direct_intent`，`/answer` 携实际输入／问题 UUID、`answer` 和独立 `operation_key`，`/stop` 携实际输入 UUID。纠正与回答不建立意愿确认；有服务器保存的确认且关键歧义消失才进入原有回复生成链。完成操作原样重放沿既有助手会话结果，不推进新输入或再次调用模型；修改原操作、来源删除或范围变化拒绝重放。旧 `/api/reply/explore` 返回 `409 exploration_protocol_changed`。
 
-正式 052 保存探索的有限正文、来源身份及删除依赖；原15分钟期限不因刷新重置，自动更新最多3次，暂停任务拒绝继续。实际生成在模型前及保存事务再次核对选择、A当前输入和Skill目录版本，过期后退出owner事务再独立擦除正文。探索只加载所选Skill的受控静态文件，不接表达样本。`test_persistent_reply_exploration` 使用正式生产装配、合成受控模型和真实HTTP／随机PostgreSQL，验证这些后端边界；它不证明页面、真人模型质量、原生读取或App验收。
+正式 052 保存探索的有限正文、来源身份及删除依赖；原15分钟期限不因刷新重置，自动更新最多3次，暂停任务拒绝继续。实际生成在模型前及保存事务再次核对选择、A当前输入和Skill目录版本，过期后退出owner事务再独立擦除正文。探索只加载所选Skill的受控静态文件。`test_persistent_reply_exploration` 使用正式生产装配、合成受控模型和真实HTTP／随机PostgreSQL，验证这些后端边界；它不证明页面、真人模型质量、原生读取或App验收。
 
 ## 授权经验草稿（09）
 
@@ -125,7 +125,7 @@ PYTHONPATH=backend/src python \
 
 正式 `064_skill_learning_drafts.sql` 承接063，保存默认关闭的授权、动作回执、独立草稿、有界批次、材料消费回执和方法身份。纠正优先，每批最多8份／24000字符，按完整JSON计入转义与目标方法元数据；普通经验通常至少两份，合法单份过半预算或下一份无法合入时可先处理已选完整材料，未选材料不记消费。允许无新增或复用，草稿不进入当前回复运行目录。
 
-合法历史候选／编辑仅在学习取材局部使用 historical 核验，当前生成门保持原语义。实际参与的偏好与样本来历、原始来源及其世代都进入草稿依赖；删除在同一事务擦除相关草稿、批次与恢复副本，迟到提案不能重新写入。审核发布见11；反馈及政策表查询尚未开放。只在自有合成库验证，业务库未迁移；真实结果、原始失败及未验范围见[09集成任务](../.scratch/memory-skill-integration-preparation/issues/09-learning-drafts.md)。
+合法历史候选／编辑仅在学习取材局部使用 historical 核验，当前生成门保持原语义。实际参与的偏好来历、原始来源及其世代都进入草稿依赖；删除在同一事务擦除相关草稿、批次与恢复副本，迟到提案不能重新写入。审核发布见11；反馈及政策表查询尚未开放。只在自有合成库验证，业务库未迁移；真实结果、原始失败及未验范围见[09集成任务](../.scratch/memory-skill-integration-preparation/issues/09-learning-drafts.md)。
 
 ## Skill 同输入审核与范围发布（11）
 
@@ -147,7 +147,7 @@ PYTHONPATH=backend/src python \
 
 当前联系人管理请求携 `?contact_id={id}`，认证HTTP验证联系人归属，SQL只读取本人全局和该联系人偏好；无查询范围的目录／单项请求只管理本人全局，不返回其他联系人正文。修改和删除同样在当前查询范围内复验，未知或其他owner的联系人返回404；当前React控制器始终携已选范围。
 
-生产回复链有界读取适用偏好，当前明确意图优先，模型前与提交事务复验。回复回执与保存的助手会话提供生成时实际正文、范围和版本；修改后的目录不替换历史依据。删除偏好或参与来源清理相关回复、讨论和候选衍生样本；主动保存样本的独立偏好依赖不会因先删助手会话而消失。一次性指令、选择、复制和表达样本不会自动保存为长期偏好。
+生产回复链有界读取适用偏好，当前明确意图优先，模型前与提交事务复验。回复回执与保存的助手会话提供生成时实际正文、范围和版本；修改后的目录不替换历史依据。删除偏好或参与来源清理相关回复和讨论。一次性指令、选择和复制不会自动保存为长期偏好。主动收藏表达样本按[ADR-082](../architecture/adr/082-retire-explicit-style-samples.md)退役，升级通过版本化迁移清理旧样本及受影响的冻结输入与恢复资料；旧快照不能重新带入样本。
 
 正式迁移为 `063_expression_preferences.sql`，在本任务自有隔离库验证真实001–062→063、旧资料/未知证明保持和重复执行；HTTP夹具不再直接应用pending。联系人物理维护须经 `persistence.contact_deletion.delete_contact` 在同一事务清理偏好派生闭包，去除无正文墓碑的联系人身份并保留失效操作键；直接SQL级联受FK阻止。当前没有整体联系人删除产品入口。准确命令、失败记录及未验范围见[08集成任务](../.scratch/memory-skill-integration-preparation/issues/08-expression-preferences.md)。业务库未升级，原生App/微信和真实模型质量未验。
 

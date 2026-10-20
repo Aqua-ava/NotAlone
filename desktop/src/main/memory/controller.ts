@@ -1,8 +1,9 @@
+import { conditionCorrectionFields } from './condition-proposal';
 import type { LayeredMemoryReadRequest, LayeredMemoryManagementRequest, MemoryAdditionRequest, MemoryCandidateRequest, MemoryCandidateUpdateRequest, MemoryCorrectionRequest, MemoryReadingState, MemoryReadRequest, MemoryRemovalRequest, MemorySectionName } from '../../shared/memory-bridge';
 import type { BackendHost } from '../backend/host';
 import { BackendRequestFailure } from '../backend/json-client';
 import type { ContactSession } from '../contacts/session';
-import { activeMemories, memorySources, memoryVersions, pendingCandidates } from './read';
+import { listedMemories, memorySources, memoryVersions, pendingCandidates } from './read';
 import type { ContactSelection } from '../../shared/contact-session-bridge';
 import { contactRelationshipOverview, ownerFactsPreferencesOverview } from './overview-read';
 import { layeredMemory } from './layered-read';
@@ -122,6 +123,25 @@ export class MemoryReadingController {
     this.protectedReads = undefined;
     this.scope = next;
     this.publish({ contactId: next?.contactId ?? null, scopeRevision: contact.scopeRevision, mutation: { phase: 'idle', message: '' }, ...empty() });
+  }
+  async refreshOwnerProcessingResults(): Promise<void> {
+    this.synchronizeScope();
+    const scope = this.scope;
+    if (scope && !this.mutation && !this.sourceDeletionDepth && this.state.owner.phase === 'ready' && !this.operations.has('owner')) {
+      if (!await this.readSection('owner', scope, false, true)) throw new Error('本人记忆内容暂未刷新。');
+    }
+  }
+  async refreshProcessingResults(request: ContactSelection): Promise<void> {
+    this.synchronizeScope();
+    const scope = this.scope;
+    if (!scope || request.contactId !== scope.contactId || request.scopeRevision !== scope.scopeRevision) throw new Error('资料范围已变化。');
+    if (this.mutation || this.sourceDeletionDepth) return;
+    const refreshed = await Promise.all([
+      ...sections.filter(section => this.state[section].phase === 'ready' && !this.operations.has(section))
+        .map(section => this.readSection(section, scope, false, true)),
+      ...(this.overviewRequested && !this.overviewOperation ? [this.readOverview(scope, true)] : []),
+    ]);
+    if (refreshed.some(success => !success)) throw new Error('记忆内容暂未刷新。');
   }
   async refresh(request: MemoryReadRequest): Promise<void> {
     this.synchronizeScope();
@@ -283,11 +303,11 @@ export class MemoryReadingController {
     this.ownerOverviewOperation = undefined;
     this.publish({ ownerOverview: { phase: this.ownerOverviewRequested ? 'loading' : 'idle', value: null } });
   }
-  private async readOverview(scope: Scope): Promise<boolean> {
+  private async readOverview(scope: Scope, background = false): Promise<boolean> {
     this.overviewOperation?.abort.abort();
     const operation = { abort: new AbortController() };
     this.overviewOperation = operation;
-    this.publish({ overview: { phase: 'loading', value: null } });
+    if (!background || this.state.overview.phase !== 'ready') this.publish({ overview: { phase: 'loading', value: null } });
     const current = () => { this.synchronizeScope(); return this.scope === scope && this.overviewOperation === operation; };
     try {
       const result = await this.backend.requestJson({ method: 'GET',
@@ -348,7 +368,7 @@ export class MemoryReadingController {
     const current = () => { this.synchronizeScope(); return this.scope === scope && this.historyOperation === operation; };
     let unavailable = false;
     try {
-      const path = request.level === 'owner' ? `/api/memories/owner/${active.memoryId}/versions`
+      const path = request.level === 'owner' ? `/api/contacts/${scope.contactId}/owner-memories/${active.memoryId}/versions`
         : `/api/contacts/${scope.contactId}/memories/${active.memoryId}/versions`;
       const result = await this.backend.requestJson({ method: 'GET', path, signal: operation.abort.signal });
       if (!current() || result.generation !== scope.generation) return;
@@ -401,7 +421,7 @@ export class MemoryReadingController {
       || viewed?.memoryId !== active.memoryId || viewed.revision !== active.revision || viewed.canRevertAutoUpdate !== true) {
       throw new Error('自动版本或原始依据已变化，请刷新后再撤销。');
     }
-    const path = request.level === 'owner' ? `/api/memories/owner/${active.memoryId}/revert-auto-update`
+    const path = request.level === 'owner' ? `/api/contacts/${scope.contactId}/owner-memories/${active.memoryId}/revert-auto-update`
       : `/api/contacts/${scope.contactId}/memories/${active.memoryId}/revert-auto-update`;
     await this.deleteAndRefresh(scope, path, [request.level, 'pending'], { expected_revision: active.revision }, true);
   }
@@ -416,12 +436,12 @@ export class MemoryReadingController {
     const previous = this.state[request.level].items.find((item) => item.memoryId === request.memoryId);
     if (!scope || request.contactId !== scope.contactId || request.scopeRevision !== scope.scopeRevision
       || !['owner', 'contact'].includes(request.level) || this.state[request.level].phase !== 'ready' || !previous
-      || previous.revision !== request.revision || this.mutation) throw new Error('资料范围或版本已失效，请刷新后再修正。');
-    const path = request.level === 'owner' ? `/api/memories/owner/${request.memoryId}/correct`
+      || previous.status !== 'active' || previous.revision !== request.revision || this.mutation) throw new Error('资料范围或版本已失效，请刷新后再修正。');
+    const path = request.level === 'owner' ? `/api/contacts/${scope.contactId}/owner-memories/${request.memoryId}/correct`
       : `/api/contacts/${scope.contactId}/memories/${request.memoryId}/correct`;
     const reading = this.protectReads(scope, [request.level, 'pending']);
     try {
-      await this.writeAndRefresh(scope, path, { text: request.text, category: request.category, change_kind: request.changeKind ?? 'error_correction' }, [request.level, 'pending']);
+      await this.writeAndRefresh(scope, path, { text: request.text, category: request.category, change_kind: request.changeKind ?? 'error_correction', ...conditionCorrectionFields(request.conditions) }, [request.level, 'pending']);
     } finally { this.settleProtectedReads(reading); }
   }
   async add(request: MemoryAdditionRequest): Promise<void> {
@@ -431,7 +451,7 @@ export class MemoryReadingController {
       || !['owner', 'contact'].includes(request.level) || this.mutation) throw new Error('资料范围已失效，请刷新后再补充。');
     const body = { text: request.text, category: request.category,
       ...(request.level === 'contact' ? { contact_id: scope.contactId } : {}) };
-    await this.writeAndRefresh(scope, `/api/memories/manual-${request.level}`, body,
+    await this.writeAndRefresh(scope, request.level === 'owner' ? `/api/contacts/${scope.contactId}/owner-memories` : '/api/memories/manual-contact', body,
       request.level === 'contact' ? ['contact', 'sources'] : ['owner']);
   }
   async remove(request: MemoryRemovalRequest): Promise<void> {
@@ -441,7 +461,7 @@ export class MemoryReadingController {
     if (!scope || request.contactId !== scope.contactId || request.scopeRevision !== scope.scopeRevision
       || this.state[request.level].phase !== 'ready' || !previous || previous.revision !== request.revision
       || this.mutation) throw new Error('资料范围或版本已失效，请刷新后再删除。');
-    const path = request.level === 'owner' ? `/api/memories/owner/${request.memoryId}/delete`
+    const path = request.level === 'owner' ? `/api/contacts/${scope.contactId}/owner-memories/${request.memoryId}/delete`
       : `/api/contacts/${scope.contactId}/memories/${request.memoryId}/delete`;
     this.publish({ [request.level]: { phase: 'ready',
       items: this.state[request.level].items.filter((item) => item.memoryId !== request.memoryId) } });
@@ -473,7 +493,7 @@ export class MemoryReadingController {
     const previous = this.state[level].items.find((item) => item.memoryId === request.previousMemoryId);
     if (!scope || request.contactId !== scope.contactId || request.scopeRevision !== scope.scopeRevision
       || this.state.pending.phase !== 'ready' || !candidate || this.state[level].phase !== 'ready'
-      || !previous || previous.revision !== request.expectedRevision || this.mutation) {
+      || !previous || previous.status !== 'active' || previous.revision !== request.expectedRevision || this.mutation) {
       throw new Error('所选候选或旧版已变化，请刷新后再应用。');
     }
     await this.deleteAndRefresh(scope, `/api/contacts/${scope.contactId}/memory-candidates/${candidate.candidateId}/apply-update`,
@@ -562,33 +582,33 @@ export class MemoryReadingController {
       if (sections.includes('owner')) await this.ownerLayeredContextChanged('settled');
     }
   }
-  private async readSection(section: MemorySectionName, scope: Scope, afterWrite = false): Promise<boolean> {
+  private async readSection(section: MemorySectionName, scope: Scope, afterWrite = false, background = false): Promise<boolean> {
     if (section === 'owner') this.ownerRequested = true;
     if (section === 'owner' && this.ownerFactsWriteDepth) return false;
     if (!afterWrite && this.protectedReads?.scope === scope && this.protectedReads.sections.has(section)) return false;
     this.operations.get(section)?.abort.abort();
     const operation = { revision: ++this.operationRevision, abort: new AbortController() };
     this.operations.set(section, operation);
-    this.publish({ [section]: { phase: 'loading', items: [] } });
+    if (!background) this.publish({ [section]: { phase: 'loading', items: [] } });
     const current = () => {
       this.synchronizeScope();
       return this.scope === scope && this.operations.get(section)?.revision === operation.revision;
     };
     const contactPath = `/api/contacts/${scope.contactId}`;
-    const paths = { contact: `${contactPath}/memories`, owner: '/api/memories/owner',
+    const paths = { contact: `${contactPath}/memories`, owner: `${contactPath}/owner-memories`,
       pending: `${contactPath}/memory-candidates`, sources: `${contactPath}/sources` };
     try {
       const result = await this.backend.requestJson({ method: 'GET', path: paths[section], signal: operation.abort.signal });
       if (!current() || result.generation !== scope.generation) return false;
       switch (section) {
-        case 'contact': this.publish({ contact: { phase: 'ready', items: activeMemories(result.data, 'contact', scope.contactId) } }); break;
-        case 'owner': this.publish({ owner: { phase: 'ready', items: activeMemories(result.data, 'owner', scope.contactId) } }); break;
+        case 'contact': this.publish({ contact: { phase: 'ready', items: listedMemories(result.data, 'contact', scope.contactId) } }); break;
+        case 'owner': this.publish({ owner: { phase: 'ready', items: listedMemories(result.data, 'owner', scope.contactId) } }); break;
         case 'pending': this.publish({ pending: { phase: 'ready', items: pendingCandidates(result.data) } }); break;
         case 'sources': this.publish({ sources: { phase: 'ready', items: memorySources(result.data) } }); break;
       }
       return true;
     } catch {
-      if (current()) this.publish({ [section]: { phase: 'error', items: [] } });
+      if (current() && !background) this.publish({ [section]: { phase: 'error', items: [] } });
       return false;
     } finally {
       if (this.operations.get(section)?.revision === operation.revision) this.operations.delete(section);

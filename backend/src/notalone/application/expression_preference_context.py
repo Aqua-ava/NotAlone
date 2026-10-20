@@ -8,7 +8,7 @@ from notalone.application.expression_preference_service import (
     ExpressionPreferenceConflict, ExpressionPreferenceDeleted, ExpressionPreferenceError,
     ExpressionPreferenceNotFound, ExpressionPreferencePort, ExpressionPreferenceSnapshot,
 )
-from notalone.reply.context import ReplyContext, ReplyContextPort
+from notalone.reply.context import ReplyContext, ReplyContextPort, workspace_recent_only
 from notalone.reply.errors import ReplyContextError, ReplyExpressionPreferencesChangedError
 from notalone.reply.expression_preferences import expression_reply_mode, require_preference_contract
 from notalone.reply.interface import RewriteDraft
@@ -28,8 +28,8 @@ class ExpressionPreferenceContext:
         require_preference_contract(context.scope, expression_reply_mode(context.command), snapshot.preferences, snapshot.revision)
         content = context.command.content
         # 本次要求非空时不注入长期偏好；整体修订仍拦截在途变化。
-        preferences = (() if isinstance(content, RewriteDraft) and content.user_instruction
-                       and content.user_instruction.strip() else snapshot.preferences)
+        preferences = (() if workspace_recent_only(context.command) or (isinstance(content, RewriteDraft)
+                       and content.user_instruction and content.user_instruction.strip()) else snapshot.preferences)
         return replace(context, expression_preferences=preferences, expression_preference_revision=snapshot.revision)
 
     def validate_current(self, context: ReplyContext) -> None:

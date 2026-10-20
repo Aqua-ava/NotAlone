@@ -66,7 +66,7 @@ class MemoryService:
         contact_id: UUID,
     ) -> tuple[ConfirmedMemory, ...]:
         return self._contact_memory.list_confirmed(
-            ContactScope(owner_id=owner_id, contact_id=contact_id), include_expired=True,
+            ContactScope(owner_id=owner_id, contact_id=contact_id), include_expired=True, include_invalidated=True,
         )
 
     def list_pending(
@@ -79,8 +79,17 @@ class MemoryService:
             ContactScope(owner_id=owner_id, contact_id=contact_id)
         )
 
-    def list_owner_memories(self, *, owner_id: UUID) -> tuple[OwnerMemory, ...]:
-        return self._owner_memory.list_active(owner_id, include_expired=True)
+    def list_owner_memories(self, *, owner_id: UUID, contact_id: UUID | None = None) -> tuple[OwnerMemory, ...]:
+        return self._owner_memory.list_active(
+            owner_id, include_expired=True, include_invalidated=True, **({"contact_id": contact_id} if contact_id is not None else {}),
+        )
+
+    def list_contact_owner_versions(
+        self, *, owner_id: UUID, contact_id: UUID, memory_id: UUID,
+    ) -> tuple[OwnerMemory, ...]:
+        return self._owner_memory.list_versions(
+            owner_id=owner_id, memory_id=memory_id, contact_id=contact_id,
+        )
 
     def list_versions(
         self, *, owner_id: UUID, memory_id: UUID, contact_id: UUID | None = None,
@@ -102,6 +111,18 @@ class MemoryService:
         return self._contact_memory.revert_auto_update(
             scope=ContactScope(owner_id=owner_id, contact_id=contact_id),
             memory_id=memory_id, expected_revision=expected_revision,
+        )
+
+    def revert_contact_owner_update(
+        self, *, owner_id: UUID, contact_id: UUID, memory_id: UUID, expected_revision: int,
+    ) -> OwnerMemory:
+        versions = self.list_contact_owner_versions(
+            owner_id=owner_id, contact_id=contact_id, memory_id=memory_id,
+        )
+        if not versions[0].supersedes_memory_id:
+            raise MemoryVersionConflict("没有可在当前联系人范围恢复的旧版。")
+        return self._owner_memory.revert_auto_update(
+            owner_id=owner_id, memory_id=memory_id, expected_revision=expected_revision,
         )
 
     # -- pending 候选人工处理 ------------------------------------------
@@ -211,10 +232,19 @@ class MemoryService:
         *,
         owner_id: UUID,
         entry: ManualMemoryEntry,
+        contact_id: UUID | None = None,
     ) -> OwnerMemory:
         from uuid import uuid4
 
         from notalone.memory.models import ConfirmedMemoryStatus
+
+        if contact_id is not None:
+            candidate = self._contact_memory.create_manual_candidate(MemoryCandidate(
+                candidate_id=uuid4(), scope=ContactScope(owner_id, contact_id),
+                text=entry.text, category=entry.category, topic=entry.topic,
+                subject=FactSubject.SELF, source_ids=(contact_id,),
+            ))
+            return self._owner_memory.confirm_candidate(candidate=candidate, adoption_method=AdoptionMethod.MANUAL)
 
         return self._owner_memory.create(
             OwnerMemory(
@@ -240,13 +270,14 @@ class MemoryService:
         text: str,
         category: MemoryCategory | None = None,
         change_kind: MemoryChangeKind = MemoryChangeKind.ERROR_CORRECTION,
+        conditions: object = ...,
     ) -> ConfirmedMemory:
         return self._contact_memory.correct(
             scope=ContactScope(owner_id=owner_id, contact_id=contact_id),
             memory_id=memory_id,
             text=text,
             category=category,
-            change_kind=change_kind,
+            change_kind=change_kind, **({"conditions": conditions} if conditions is not ... else {}),
         )
 
     def delete_contact_memory(
@@ -261,15 +292,21 @@ class MemoryService:
             memory_id=memory_id,
         )
 
-    def delete_owner_memory(self, *, owner_id: UUID, memory_id: UUID) -> OwnerMemory:
+    def delete_owner_memory(self, *, owner_id: UUID, memory_id: UUID, contact_id: UUID | None = None) -> OwnerMemory:
+        if contact_id is not None:
+            self.list_contact_owner_versions(owner_id=owner_id, contact_id=contact_id, memory_id=memory_id)
         return self._owner_memory.delete(owner_id, memory_id)
 
     def correct_owner_memory(
         self, *, owner_id: UUID, memory_id: UUID, text: str,
         category: MemoryCategory | None = None,
+        contact_id: UUID | None = None,
         change_kind: MemoryChangeKind = MemoryChangeKind.ERROR_CORRECTION,
+        conditions: object = ...,
     ) -> OwnerMemory:
+        if contact_id is not None:
+            self.list_contact_owner_versions(owner_id=owner_id, contact_id=contact_id, memory_id=memory_id)
         return self._owner_memory.correct(
             owner_id=owner_id, memory_id=memory_id, text=text, category=category,
-            change_kind=change_kind,
+            change_kind=change_kind, **({"conditions": conditions} if conditions is not ... else {}),
         )

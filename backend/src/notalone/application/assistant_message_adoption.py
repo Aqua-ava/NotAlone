@@ -9,7 +9,7 @@ from uuid import UUID
 
 from notalone.application.reply_request import ReplyRequestInvalid, parse_reply_request
 from notalone.application.reply_service import ReplyServiceRequest
-from notalone.reply.interface import InitiateConversation, ReplyToMessage
+from notalone.reply.interface import InitiateConversation, ReplyToMessage, RewriteDraft
 
 
 @dataclass(frozen=True, slots=True, repr=False, kw_only=True)
@@ -33,11 +33,17 @@ def parse_assistant_reply_request(body: bytes) -> tuple[UUID, ReplyServiceReques
     if (set(payload) - allowed or not isinstance(content, dict)
             or content.get("user_instruction") is not None or content.get("suggestion") is not None
             or payload.get("suggestion") is not None or payload.get("continued_from_candidate_id") is not None
-            or content.get("type") not in ("reply_to_message", "initiate_conversation")):
+            or content.get("type") not in ("reply_to_message", "initiate_conversation", "rewrite_draft")):
         raise ReplyRequestInvalid()
-    content_fields = {"type", "understanding_correction", "user_instruction", "clarification_answer", "suggestion"}
-    content_fields.update({"direction", "direction_source", "target_message_id"}
-                          if content["type"] == "reply_to_message" else {"purpose", "purpose_source"})
+    if content["type"] == "rewrite_draft":
+        if content.get("input_kind") != "workspace":
+            raise ReplyRequestInvalid()
+        content_fields = {"type", "draft_text", "user_instruction", "include_relationship_context",
+                          "input_kind", "workspace_action", "context_text", "excluded_message_ids"}
+    else:
+        content_fields = {"type", "understanding_correction", "user_instruction", "clarification_answer", "suggestion"}
+        content_fields.update({"direction", "direction_source", "target_message_id"}
+                              if content["type"] == "reply_to_message" else {"purpose", "purpose_source"})
     if set(content) - content_fields:
         raise ReplyRequestInvalid()
     marker = payload["adopt_new_message_id"]
@@ -49,7 +55,9 @@ def parse_assistant_reply_request(body: bytes) -> tuple[UUID, ReplyServiceReques
         raise ReplyRequestInvalid() from None
     contact_id, request = parse_reply_request(body)
     if (request.expected_input_version_id is None
-            or not isinstance(request.content, (ReplyToMessage, InitiateConversation))
+            or not isinstance(request.content, (ReplyToMessage, InitiateConversation, RewriteDraft))
+            or isinstance(request.content, RewriteDraft) and (
+                not request.content.include_relationship_context or message_id in request.content.excluded_message_ids)
             or isinstance(request.content, ReplyToMessage) and request.content.target_message_id != message_id):
         raise ReplyRequestInvalid()
     return contact_id, AssistantMessageAdoptionRequest(

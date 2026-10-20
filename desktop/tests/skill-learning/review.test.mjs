@@ -220,7 +220,10 @@ test('历史回滚500未知回执只重试完整原动作，具名桥拒绝附�
     assert.equal(f.controller.getState().history.retry, true);
     const original = f.records.calls.at(-1).body;
     await f.bridge.refresh(f.scope());
-    assert.deepEqual(f.records.calls.at(-1).body, original, '轮询不取消或替换未知回滚动作');
+    assert.equal(f.controller.getState().history.retry, true, '刷新待审核数量不解除未知回滚状态');
+    const pendingRollbacks = f.records.calls.filter(call => call.path.endsWith('/rollback'));
+    assert.equal(pendingRollbacks.length, 1, '轮询不重新提交未知回滚');
+    assert.deepEqual(pendingRollbacks[0].body, original, '轮询不取消或替换未知回滚动作');
     await assert.rejects(f.bridge.rollbackHistory(selection));
     await f.bridge.retryHistory(f.scope());
     const calls = f.records.calls.filter(call => call.path.endsWith('/rollback'));
@@ -306,6 +309,37 @@ test('用户通过生产审核桥看到同输入两侧、改输入撤下旧对�
     assert.equal(f.controller.getState().review.published.revision, 3, '发布后的刷新读取真实权威回执');
     f.records.deleted = true; await f.bridge.refresh(f.scope());
     assert.equal(f.controller.getState().review, null, '发布后来源删除也必须清除策略与回执');
+  } finally { await rm(f.owned, { recursive: true, force: true }); }
+});
+
+test('已发布回执后台复验可被前台读取或配置抢占，迟到结果不恢复旧审核', async () => {
+  const f = await reviewFixture();
+  try {
+    await f.bridge.openReview({ ...f.scope(), draftId: f.draft.draft_id });
+    const form = f.controller.getState().review.form;
+    form.input = { incoming_text: '合成询问', intent: '先核对安排', scene: '核对安排' };
+    await f.bridge.updateReview({ ...f.selected(), form });
+    await f.bridge.compareReview(f.selected());
+    await f.bridge.approveReview({ ...f.selected(), comparisonId: f.controller.getState().review.comparison.comparison_id,
+      confirmed: true, replacementsConfirmed: true });
+    for (const action of ['openHistory', 'configure']) {
+      const gate = Promise.withResolvers();
+      f.records.barrier = { promise: gate.promise };
+      const polling = f.bridge.poll(f.scope());
+      await new Promise(resolve => setImmediate(resolve));
+      assert.equal(f.controller.getState().phase, 'ready');
+      const before = f.records.calls.length;
+      try {
+        if (action === 'configure') await f.bridge.configure({ ...f.scope(), enabled: false, confirmed: true });
+        else await f.bridge.openHistory(f.scope());
+        assert.ok(f.records.calls.length > before, '后台核验不能吞掉前台操作');
+        if (action === 'configure') assert.equal(f.records.calls.at(-1).method, 'POST');
+        else assert.equal(f.controller.getState().history.phase, 'ready');
+        const state = f.controller.getState();
+        gate.resolve(); await polling;
+        assert.deepEqual(f.controller.getState().review, state.review, '被抢占的迟到核验不能恢复审核回执');
+      } finally { gate.resolve(); await polling; }
+    }
   } finally { await rm(f.owned, { recursive: true, force: true }); }
 });
 

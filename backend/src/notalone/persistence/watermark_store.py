@@ -59,19 +59,21 @@ class PostgresWatermarkStore:
         skipped_range: FailureRange | None = None,
     ) -> None:
         """由追踪存储持有事务；此方法绝不自行提交。"""
-        if skipped_range is not None:
+        if skipped_range is not None and last_message_id is None:
             last_message_id = skipped_range.to_message_id
         if last_message_id is not None:
+            # 无日期新目标由处理回执完成，不覆盖只用于旧时间顺序路径的水位。
             connection.execute(
                 """
                 INSERT INTO public.memory_extraction_watermark
                     (owner_id,contact_id,last_message_id)
-                VALUES (%s,%s,%s)
+                VALUES (%s,%s,(SELECT id FROM public.message WHERE id=%s
+                    AND owner_id=%s AND contact_id=%s AND occurred_at IS NOT NULL))
                 ON CONFLICT (owner_id,contact_id) DO UPDATE SET
-                    last_message_id=EXCLUDED.last_message_id, failure_count=0,
+                    last_message_id=COALESCE(EXCLUDED.last_message_id, public.memory_extraction_watermark.last_message_id), failure_count=0,
                     failure_code=NULL,failed_from_id=NULL,failed_to_id=NULL,updated_at=now()
             """,
-                (scope.owner_id, scope.contact_id, last_message_id),
+                (scope.owner_id, scope.contact_id, last_message_id, scope.owner_id, scope.contact_id),
             )
             if skipped_range is not None:
                 connection.execute(

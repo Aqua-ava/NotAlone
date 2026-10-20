@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after } from 'node:test';
@@ -38,7 +38,8 @@ export async function eventually(read, accepts, message) {
 export async function withMessageOptInFixture(use) {
   let cleaned = false;
   try { await ports.withRewriteFixture('notalone-message-opt-in-http-', async (fixture) => {
-    assert.equal(fixture.data.migration_count, 72);
+    const migrations = await readdir(new URL('../../../backend/database/migrations/', import.meta.url));
+    assert.equal(fixture.data.migration_count, migrations.filter((name) => name.endsWith('.sql')).length);
     assert.equal(fixture.data.migration_repeat, 0);
     const connection = await ports.readConnection(fixture.infoPath);
     assert(connection);
@@ -90,7 +91,7 @@ export async function withMessageOptInFixture(use) {
         disconnect: () => { generation += 1; runtime.cancelPending(); for (const listener of backendListeners) listener(); },
         renderCandidates: (state) => {
           const previous = globalThis.window;
-          globalThis.window = { notalone: { styleSamples: {} } };
+          globalThis.window = { notalone: { candidateProvenance: {} } };
           try { return ports.renderToStaticMarkup(ports.createElement(ports.ReplyCandidates, { replies: { state, error: '' } })); }
           finally { if (previous === undefined) delete globalThis.window; else globalThis.window = previous; }
         },
@@ -107,6 +108,6 @@ export async function withMessageOptInFixture(use) {
     }
   }, () => { cleaned = true; }, path.resolve('tests/fixtures/message-events-backend.py')); }
   finally {
-    if (cleaned) process.stdout.write('message_opt_in_cleanup: 001–072 repeat=0 owned_database_remaining=0\n');
+    if (cleaned) process.stdout.write('message_opt_in_cleanup: 001–089 repeat=0 owned_database_remaining=0\n');
   }
 }

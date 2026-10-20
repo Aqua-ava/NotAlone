@@ -9,6 +9,7 @@ import time
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from unittest.mock import patch
 from uuid import UUID, uuid4
 from langchain_core.messages import HumanMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
@@ -26,7 +27,7 @@ class DirectEvolutionMemoryModel(EvolutionMemoryModel):
 
     def _generate(self, messages, stop=None, run_manager=None, **kwargs):
         requested = tuple(tool["function"]["name"] for tool in kwargs.get("tools", ()))
-        if requested != ("DirectMemoryExtractionOutput",):
+        if requested not in {("DirectMemoryExtractionOutput",), ("BatchMemoryAdjudicationOutput",)}:
             return super()._generate(messages, stop, run_manager, **kwargs)
         self.wait_for_response()
         with self.call_lock:
@@ -36,6 +37,19 @@ class DirectEvolutionMemoryModel(EvolutionMemoryModel):
             self.seen_calls.append(messages)
             self.requested_tools.append(requested)
             self.record_model_payload(messages, deepcopy(kwargs))
+        if requested == ("BatchMemoryAdjudicationOutput",):
+            decisions = []
+            for item in json.loads(messages[-1].content):
+                similar = item["similar"]
+                if self.adjudication_action == "update" and not similar:
+                    raise AssertionError("合成更新裁决必须引用本次实际相似资料。")
+                decisions.append({
+                    "candidate_index": item["candidate_index"], "action": self.adjudication_action,
+                    "replaced_memory_id": similar[0]["memory_id"] if self.adjudication_action == "update" else None,
+                })
+            return ChatResult(generations=[ChatGeneration(message=tool_response(
+                "BatchMemoryAdjudicationOutput", {"decisions": decisions},
+            ))])
         facts = []
         for message_id, occurred, sender, raw in re.findall(
             r"\[target\] \[message_id=([0-9a-f-]+)\] occurred_at=(\S+) sender=(contact|self): (.*)",
@@ -195,6 +209,15 @@ class EvolutionHttpSupport:
 
     def prepare_evolution(self):
         """导入后沿正式提取与核验，再将共同来源推进待审核；不发布或删除。"""
+        from notalone.tasks.worker import PostgresMemoryExtractionRunner
+
+        def historical_review_runner(database_url, **kwargs):
+            return PostgresMemoryExtractionRunner(database_url, **kwargs, automatic=False)
+
+        # 先重放历史人工审核资料；已过期状态在当前自动流程中应终结而非待办。
+        self.backend.close()
+        with patch("notalone.tasks.worker.PostgresMemoryExtractionRunner", historical_review_runner):
+            self.backend = self._production_backend(self.owner_id)
         contact_raw, owner_raw = "我平时喜欢合成热茶。", "本人喜欢合成热茶。"
         history_raw, latent_raw = "今天我在加班。", "我刚到家。"
         self.extraction_model.proposals.update({
@@ -211,6 +234,9 @@ class EvolutionHttpSupport:
         original_owner = self._automatic_memory(f"用户原话：“{owner_raw}”", owner=True)
         historical = self._confirm_candidate(self._candidate_text(f"截至2025-01-01，联系人原话：“{history_raw}”"))
         self.assertEqual(historical["timing"]["current_status"], "historical")
+        # 后续增量更新、回复、学习与删除全部恢复当前默认装配。
+        self.backend.close()
+        self.backend = self._production_backend(self.owner_id)
         session = self._ok(f"/api/contacts/{self.contact_id}/assistant-session/default", {})
         session_path = f"/api/contacts/{self.contact_id}/assistant-sessions/{session['session_id']}"
         original_reply, original_body, original_evidence_path, original_evidence = self._evolution_session_reply(session_path)

@@ -19,7 +19,7 @@ class MergeTests(unittest.TestCase):
         self.scope = ContactScope(self.window.owner_id, self.window.contact_id)
         self.fact = _to_fact(_payload(ids[2]))
         self.parents = tuple(SimpleNamespace(memory_id=uuid4(), adoption_method=AdoptionMethod.AUTO,
-            category=self.fact.category, topic=self.fact.topic, event=None, valid_at=None, invalid_at=None,
+            category=self.fact.category, topic=self.fact.topic, event=None, conditions=None, valid_at=None, invalid_at=None,
             source_ids=(identifier,)) for identifier in ids[:2])
 
     def test_merged_text_is_reverified_with_all_source_messages(self):
@@ -47,7 +47,7 @@ class MergeTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             verifier.verify(scope=self.scope, fact=self.fact, parents=self.parents, text='合并正文')
 
-    def test_adoption_routes_verified_merge_to_atomic_port(self):
+    def test_legacy_merge_without_relation_proof_never_reaches_atomic_port(self):
         from notalone.memory import InMemoryMemoryStore
         from notalone.memory_extraction.adoption import MemoryAdoption, _candidate_from_fact
         from notalone.memory_extraction.adjudication import AdjudicationDecision, AdjudicationAction
@@ -76,11 +76,9 @@ class MergeTests(unittest.TestCase):
             dimension_release=DimensionRelease(gate_enabled=False),
             merge_verifier=MemoryMergeVerifier(messages=self.window.messages,
                 verification_runtime=SyntheticSupportingVerifier())).adopt(self.scope, ExtractionOutcome(accepted=(fact,)))
-        self.assertEqual(stats.updated, 1)
-        self.assertEqual(store.merged['expected_parents'], tuple(parents))
-        candidate = store.get_candidate(scope=self.scope, candidate_id=store.merged['candidate_id'])
-        self.assertEqual(candidate.text, merged_text)
-        self.assertEqual(set(candidate.source_ids), self.window.message_id_set)
+        self.assertEqual((stats.updated, stats.pending), (0, 1))
+        self.assertIsNone(store.merged)
+        self.assertEqual(store.list_confirmed(self.scope), tuple(parents))
 
     def test_all_source_merged_memory_remains_recallable_for_later_updates(self):
         from notalone.memory import InMemoryMemoryStore, SourceDependencyMode
@@ -105,7 +103,7 @@ class MergeTests(unittest.TestCase):
         stats = MemoryAdoption(memory_port=store, adjudication_runtime=adjudicator,
             merge_verifier=object(), dimension_release=DimensionRelease(gate_enabled=False),
             similarity_threshold=0).adopt(self.scope, ExtractionOutcome((replace(self.fact, text='联系人现在喜欢文字沟通和电话说明。'),)))
-        self.assertEqual(stats.adopted, 1)
+        self.assertEqual((stats.adopted, stats.pending), (0, 1))
         self.assertEqual(len(adjudicator.seen), 1)
 
     def test_invalid_first_adjudication_does_not_block_next_candidate(self):
@@ -126,10 +124,12 @@ class MergeTests(unittest.TestCase):
                 if inner.count == 1:
                     raise ExtractionInvalidOutputError('非法合并父版本')
                 return AdjudicationDecision(AdjudicationAction.KEEP)
-        stats = MemoryAdoption(memory_port=store, adjudication_runtime=Adjudicator(),
+        adjudicator = Adjudicator()
+        stats = MemoryAdoption(memory_port=store, adjudication_runtime=adjudicator,
             dimension_release=DimensionRelease(gate_enabled=False), similarity_threshold=0).adopt(self.scope,
             ExtractionOutcome((replace(self.fact, text='联系人喜欢第一类说明。'), replace(self.fact, text='联系人喜欢第二类说明。'))))
-        self.assertEqual((stats.pending, stats.adopted), (1, 1))
+        self.assertEqual(adjudicator.count, 2)
+        self.assertEqual((stats.pending, stats.adopted), (2, 0))
 
 
 class MergeDecisionTests(unittest.TestCase):

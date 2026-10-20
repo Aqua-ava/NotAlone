@@ -70,9 +70,11 @@ class _CapturedRetrieval(HindsightRetrieval):
         query: str | None = None,
         limit: int = 20,
         memory_ids: tuple[UUID, ...] | None = None,
+        include_historical: bool = False,
     ) -> tuple[RetrievedMemory, ...]:
         result = super().search_confirmed_memories(
-            scope=scope, query=query, limit=limit, memory_ids=memory_ids
+            scope=scope, query=query, limit=limit, memory_ids=memory_ids,
+            **({"include_historical": True} if include_historical else {}),
         )
         if query is not None and memory_ids is None:
             self.returned = result

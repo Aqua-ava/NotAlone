@@ -59,7 +59,7 @@ class SyntheticCli:
         self.tail_calls: list[tuple[str, str | None]] = []
         self.results: dict[str, TailResult] = {}
 
-    def version(self) -> str:
+    def version(self, *, timeout_seconds: float | None = None) -> str:
         return "synthetic-continuity"
 
     def session_events_follow(self, **kwargs: object) -> SyntheticSessionStream:

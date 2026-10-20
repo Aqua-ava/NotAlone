@@ -8,7 +8,7 @@ const critical = Object.freeze({
   'notalone.persistence.reply_store': 'backend/src/notalone/persistence/reply_store.py',
   'notalone.reply.context': 'backend/src/notalone/reply/context.py',
   'notalone.persistence.assistant_session_store': 'backend/src/notalone/persistence/assistant_session_store.py',
-  'notalone.persistence.style_sample_store': 'backend/src/notalone/persistence/style_sample_store.py',
+  'notalone.persistence.reply_sources': 'backend/src/notalone/persistence/reply_sources.py',
   'tests.integration.server.test_skill_learning': 'backend/tests/integration/server/test_skill_learning.py',
   'notalone.application.skill_learning': 'backend/src/notalone/application/skill_learning.py',
   'notalone.persistence.skill_learning': 'backend/src/notalone/persistence/skill_learning.py',

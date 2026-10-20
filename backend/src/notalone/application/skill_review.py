@@ -57,8 +57,6 @@ class SkillReviewService:
             dependencies.update(item.source_ids)
             if item.navigation is not None:
                 dependencies.update(item.navigation.dependency_ids)
-        for item in context.style_references:
-            dependencies.add(item.sample_id)
         for item in context.expression_preferences:
             dependencies.add(item.preference_id)
             dependencies.update(item.source_ids)
@@ -133,7 +131,6 @@ def context_identity(context):
     return content_digest({'text': context.current_text, 'evidence': evidence,
         'binding': context.command.conversation_binding_id, 'scene': context.command.scene,
         'library': context.skill_library_revision, 'memory': context.memory_revision, 'index': context.index_revision,
-        'styles': [asdict(item) for item in context.style_references],
         'preferences': [asdict(item) for item in context.expression_preferences],
         'preference_revision': context.expression_preference_revision})
 

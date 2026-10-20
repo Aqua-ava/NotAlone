@@ -90,6 +90,31 @@ class SkillReviewHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self.assertEqual(status, 200, result)
         return result['draft'], command
 
+    def _extra_review_memory(self, text):
+        from notalone.memory.models import FactSubject, MemoryCandidate, MemoryCategory, MemoryTopic
+        from notalone.memory_extraction.cli_support import load_contact_messages
+        from notalone.memory_extraction.evidence import build_dimension_evidence
+        from notalone.memory_extraction.models import ExtractedFact, ExtractionWindow
+        from notalone.persistence.memory_store import PostgresMemoryStore
+        from notalone.scopes import ContactScope
+
+        source, message = self._source_message()
+        with psycopg.connect(self.database_url) as connection:
+            connection.execute("UPDATE public.message SET text_content=%s WHERE id=%s", (text, message))
+        scope = ContactScope(self.owner_id, self.contact_id)
+        fact = ExtractedFact(text=text, category=MemoryCategory.PREFERENCE, subject=FactSubject.CONTACT,
+            topic=MemoryTopic.OTHER, source_message_ids=(message,), confidence=.95)
+        # 每条合成记忆只依赖自己的原始消息，避免新版背景窗口夹带旧版来源。
+        evidence = build_dimension_evidence(ExtractionWindow(self.owner_id, self.contact_id,
+            load_contact_messages(scope, self.database_url, message_ids=(message,))), fact, None)
+        candidate = PostgresMemoryStore(self.database_url).create_candidate(MemoryCandidate(
+            candidate_id=uuid4(), scope=scope, text=text, category=fact.category, subject=fact.subject,
+            topic=fact.topic, source_ids=(message,), dimension_evidence=evidence))
+        status, confirmed = self.backend.request(
+            f'/api/contacts/{self.contact_id}/memory-candidates/{candidate.candidate_id}/confirm', {})
+        self.assertEqual(status, 200, confirmed)
+        return source, message, confirmed['memory']['memory_id']
+
     def _approve(self, path, draft, *, operation=None):
         command = {'expected_revision': draft['revision'], 'operation_key': operation or str(uuid4()),
                    'comparison_id': draft['comparison']['comparison_id'], 'scope': draft['comparison']['scope'],
@@ -543,16 +568,11 @@ class SkillReviewHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
 
     def test_extra_preview_source_erases_wide_publication_and_other_contact_reply_before_get(self):
         path, draft, _, _ = self._draft_for_review()
-        source, message = self._source_message()
-        with psycopg.connect(self.database_url) as connection:
-            connection.execute("UPDATE public.message SET speaker='user' WHERE id=%s", (message,))
-        status, sample = self.backend.request(f'/api/contacts/{self.contact_id}/style-samples', {
-            'idempotency_key': str(uuid4()), 'text': '用户主动保存的合成参考表达。',
-            'origin': {'kind': 'message', 'id': str(message)}})
-        self.assertEqual(status, 200, sample)
+        source, _, memory_id = self._extra_review_memory('对方偏好先说明自己的想法。')
         compared, _ = self._compare(path, draft, kind='owner')
-        self.assertTrue(any(json.loads(next(item.content for item in call if isinstance(item, HumanMessage)))['style_references']
-                            for call in self.reply_model.seen_calls))
+        payload = json.loads(next(item.content for item in self.reply_model.seen_calls[-1] if isinstance(item, HumanMessage)))
+        self.assertIn(memory_id, [item['evidence_id'] for item in payload['evidence']
+                                 if item['kind'] == 'confirmed_memory'])
         result, approve = self._approve(path, compared)
         self._bind(self.second_contact_id)
         status, session = self.backend.request(f'/api/contacts/{self.second_contact_id}/assistant-session/default', {})

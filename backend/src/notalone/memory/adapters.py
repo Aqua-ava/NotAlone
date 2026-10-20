@@ -121,7 +121,7 @@ class InMemoryMemoryStore:
             timing=replace(candidate.timing, recorded_at=datetime.now(timezone.utc)),
             revision=expected_previous.revision + 1 if expected_previous else 1,
             supersedes_memory_id=expected_previous.memory_id if expected_previous else None,
-            event=candidate.event,
+            event=candidate.event, conditions=candidate.conditions, evolution=candidate.evolution,
         )
         if expected_previous is not None:
             self._memories[expected_previous.memory_id] = replace(
@@ -285,10 +285,13 @@ class InMemoryMemoryStore:
         return self._memories[memory.memory_id]
 
     def list_confirmed(self, scope: ContactScope, *, include_expired: bool = False,
+                       include_invalidated: bool = False,
                        memory_ids: tuple[UUID, ...] | None = None,
                        include_historical: bool = False) -> tuple[ConfirmedMemory, ...]:
         if not isinstance(scope, ContactScope):
             raise TypeError("关系记忆查询范围无效。")
+        if type(include_expired) is not bool or type(include_invalidated) is not bool:
+            raise TypeError("历史回看标记必须是 bool。")
         if type(include_historical) is not bool or include_historical and memory_ids is None:
             raise ValueError("历史读取必须限定记忆引用。")
         return tuple(
@@ -296,10 +299,10 @@ class InMemoryMemoryStore:
             for memory in self._memories.values()
             if memory.scope == scope
             and (memory.status is ConfirmedMemoryStatus.ACTIVE
-                 or include_historical and memory.status is ConfirmedMemoryStatus.INVALIDATED)
+                 or (include_historical or include_invalidated) and memory.status is ConfirmedMemoryStatus.INVALIDATED)
             and (memory_ids is None or memory.memory_id in memory_ids)
             and (include_historical or memory.valid_at is None or memory.valid_at <= datetime.now(timezone.utc))
-            and (include_expired or include_historical or memory.is_retrievable())
+            and (include_expired or include_historical or memory.invalid_at is None or datetime.now(timezone.utc) < memory.invalid_at)
         )
 
     def list_versions(self, *, scope: ContactScope, memory_id: UUID) -> tuple[ConfirmedMemory, ...]:

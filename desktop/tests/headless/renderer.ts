@@ -6,7 +6,7 @@ import { createContactSessionBridge } from '../../src/preload/contact-session';
 import { createImportBridge } from '../../src/preload/imports';
 import { createMemoryBridge } from '../../src/preload/memory';
 import { createReplyBridge } from '../../src/preload/reply';
-import { createStyleSampleBridge } from '../../src/preload/style-samples';
+import { createCandidateProvenanceBridge } from '../../src/preload/candidate-provenance';
 import { createExpressionPreferenceBridge } from '../../src/preload/expression-preferences';
 import { createBindingConsentBridge } from '../../src/preload/binding-consent';
 import { createSyncControlBridge } from '../../src/preload/sync-control';
@@ -48,7 +48,7 @@ const bridge: AppBridge = {
   backend: createBackendBridge(transport), startup: createStartupBridge(transport),
   screenPermission: createScreenPermissionBridge(transport),
   contacts: createContactSessionBridge(transport), memory: createMemoryBridge(transport), replies: createReplyBridge(transport),
-  styleSamples: createStyleSampleBridge(transport),
+  candidateProvenance: createCandidateProvenanceBridge(transport),
   expressionPreferences: createExpressionPreferenceBridge(transport),
   skillLearning: createSkillLearningBridge(transport),
   openManager: () => transport.invoke('page:open-manager'), openHelper: () => transport.invoke('page:open-helper'), hideWindow: unsupported,

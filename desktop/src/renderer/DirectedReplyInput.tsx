@@ -16,8 +16,8 @@ export function DirectedReplyInput({ replies }: { replies: ReplySessionView }) {
     <div className="message-heading"><b>选择待回复消息</b>
       <button disabled={!enabled || state.messages.phase === 'loading'} onClick={() => void replies.loadMessages()}>刷新消息</button></div>
     {state.messages.phase === 'loading' && <p role="status">正在读取这位联系人的消息…</p>}
-    {state.messages.phase === 'failed' && <p role="alert">消息读取失败，请刷新重试，也可以切换到草稿改写。</p>}
-    {state.messages.phase === 'ready' && !state.messages.items.length && <p>这位联系人暂无可用消息，可以使用草稿改写。</p>}
+    {state.messages.phase === 'failed' && <p role="alert">消息读取失败，请刷新重试，也可以选择“粘贴文字”。</p>}
+    {state.messages.phase === 'ready' && !state.messages.items.length && <p>这位联系人暂无可用消息，可以选择“粘贴文字”来回应。</p>}
     <div className="reply-message-list" role="group" aria-label="待回复消息">
       {state.messages.items.map((message) => <label className="reply-message" key={message.messageId}>
         <input type="radio" name="target-message" checked={state.targetMessageId === message.messageId}

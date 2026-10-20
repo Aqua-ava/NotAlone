@@ -28,8 +28,7 @@ from notalone.persistence.assistant_session_store import (
     _active_binding, _partition_assistant_dependencies, _reply_dependencies,
 )
 from notalone.persistence.locks import lock_owner_scope
-from notalone.persistence.reply_discussion_dependencies import reply_style_sample_dependencies
-from notalone.persistence.style_sample_store import require_reply_sources_current
+from notalone.persistence.reply_sources import require_reply_sources_current
 from notalone.reply.assistant_discussion import DiscussionDependencies
 from notalone.reply.errors import ReplyStoreInvariantError
 from notalone.reply.interface import CandidateMessage, ReplyBasisChange
@@ -89,7 +88,7 @@ def _version(history: AssistantCandidateHistory, version_id: UUID) -> AssistantC
 def _origin_dependencies(
     connection: Any, scope: ContactScope, history: AssistantCandidateHistory,
 ) -> tuple[DiscussionDependencies, UUID, UUID]:
-    """来源与样本仅消费既有 A/C 端口，不另建捕获或删除权威。"""
+    """来源仅消费既有 A/C 端口，不另建捕获或删除权威。"""
 
     from notalone.persistence.skill_execution_view import saved_skill_policy_change
     if saved_skill_policy_change(connection, scope, history.candidate_group_id) is not None:
@@ -116,12 +115,10 @@ def _origin_dependencies(
             require_generation_memory_dependencies(cursor, scope, dependencies)
             typed = _partition_assistant_dependencies(cursor, scope, dependencies)
             sources = verified_discussion_dependencies(cursor, scope, typed.source_ids, historical=True)
-            samples = tuple(sorted(set(typed.style_sample_ids) | set(
-                reply_style_sample_dependencies(connection, scope, history.candidate_group_id),
-            )))
+
         except ReplyStoreInvariantError:
             raise AssistantSessionRejected("source_unavailable") from None
-        return (DiscussionDependencies(tuple(sorted(sources)), samples),
+        return (DiscussionDependencies(tuple(sorted(sources))),
                 turn["conversation_binding_id"], turn["input_version_id"])
 
 
@@ -160,8 +157,7 @@ def read_candidate_carry_in_transaction(
     dependencies, binding_id, input_version_id = _origin_dependencies(connection, scope, history)
     if (binding_id != conversation_binding_id
             or input_version_id != origin.origin_input_version_id
-            or dependencies.source_ids != tuple(sorted(set(dependency_ids)))
-            or dependencies.style_sample_ids != origin.style_sample_ids):
+            or dependencies.source_ids != tuple(sorted(set(dependency_ids)))):
         raise AssistantSessionRejected("source_unavailable")
     return ResolvedCandidateCarry(origin, version.messages, history.candidate_number,
                                   version.version_number, version.parent_version_id, dependencies,
@@ -204,7 +200,6 @@ def new_assistant_session_with_candidate(
         scope.owner_id, scope.contact_id, binding_id, session_id, origin_input_version_id,
         history.turn_id, history.candidate_group_id, history.candidate_id,
         version.version_id, selection.selection_id, _messages_fingerprint(version.messages),
-        dependencies.style_sample_ids,
     )
     # 复用目录的唯一新会话 writer；局部导入避免目录适配器的组合循环。
     from notalone.persistence.assistant_session_catalog import new_assistant_session_in_transaction
@@ -230,7 +225,7 @@ def read_candidate_carry_lineage_for_deletion(
 ) -> tuple[AssistantCarryInputLineage, ...]:
     """同事务只核验真实携入父边；不授予当前来源读取或生成资格。
 
-    删除中的原始来源或样本已经不可用，不能用当前可用性拒绝识别删除边。
+    删除中的原始来源已经不可用，不能用当前可用性拒绝识别删除边。
     边只交 A 唯一无正文 selector，C 仍独立决定真实来源及消费记录的删除根。
     """
 

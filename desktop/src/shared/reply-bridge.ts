@@ -9,16 +9,20 @@ import type { AssistantContinuationClarification, RequirementChange } from './as
 import type { ReplyBasisChange } from './reply-basis-change';
 import type { SkillPublicationScope } from './skill-learning-bridge';
 
+export type WorkspaceAction = 'express' | 'suggest';
 export type RewriteTone = 'original' | 'warm' | 'concise' | 'polite';
 export interface RewriteOptions {
   tone: RewriteTone;
   instruction: string;
   includeRelationshipContext: boolean;
-  inputKind?: 'draft' | 'current_chat';
+  inputKind?: 'draft' | 'current_chat' | 'workspace';
+  workspaceAction?: WorkspaceAction;
+  contextText?: string;
+  excludedMessageIds?: string[];
   pastedDirection?: string;
 }
 export interface RewriteOptionsUpdate extends ContactSelection { options: RewriteOptions; }
-export interface GenerateReply extends ContactSelection { newRequest: boolean; }
+export interface GenerateReply extends ContactSelection { newRequest: boolean; workspaceAction?: WorkspaceAction; }
 export interface AssistantInterruptedRetry extends ContactSelection { sessionId: string; turnId: string; inputVersionId: string; }
 export interface AssistantSessionDeletion extends ContactSelection { sessionId: string; confirmed: true; }
 export interface AssistantSessionSelection extends ContactSelection { sessionId: string; }
@@ -49,6 +53,7 @@ export interface ReplyMessagePageRequest extends ContactSelection { older: boole
 export interface ReplyMessageSelection extends ContactSelection { messageId: string; }
 export interface ReplyDirectionUpdate extends ContactSelection { direction: string; }
 export interface ReplyCorrectionUpdate extends ContactSelection { correction: string; }
+export interface ReplySupplementUpdate extends ContactSelection { supplement: string; }
 export interface ReplyDirectionChoice extends ContactSelection { suggestionId: string; inputVersion: string; }
 export interface ReplySkillVersion { name: string; versionId: string; versionNumber: number; }
 export interface ReplyUsedSkill {
@@ -100,8 +105,12 @@ export interface RewriteSnapshot {
   userInstruction: string | null;
   includeRelationshipContext: boolean;
   scene?: string | null;
-  inputKind?: 'draft' | 'current_chat';
+  inputKind?: 'draft' | 'current_chat' | 'workspace';
+  workspaceAction?: WorkspaceAction;
+  contextText?: string;
+  excludedMessageIds?: string[];
   pastedDirection?: string;
+  skillChoice?: ReplySkillChoice;
 }
 export interface DirectedReplySnapshot {
   mode: 'reply_to_message';
@@ -135,7 +144,6 @@ export interface ReplyResult {
   candidates: EditableReplyCandidate[];
   contextEvidenceIds: string[];
   basisChanges?: ReplyBasisChange[];
-  styleSampleIds?: string[];
   expressionPreferenceIds?: string[];
   expressionPreferences?: ExpressionPreferenceReceipt[];
   usedSkill?: ReplyUsedSkill | null;
@@ -151,6 +159,7 @@ export interface ReplyGenerationJobState {
   canRetry?: boolean;
 }
 export interface ReplySessionState {
+  workspaceMigrationNotice?: string;
   generationJobs?: ReplyGenerationJobState[];
   generationRecoveryPending?: number;
 
@@ -169,6 +178,7 @@ export interface ReplySessionState {
   direction: string;
   correction: string;
   requirements: string;
+  supplementInput?: boolean;
   clarificationAnswer: string;
   skillChoice: ReplySkillChoice;
   scene?: string;
@@ -200,6 +210,7 @@ export type ReplyInputCommand =
   | { type: 'direction'; update: ReplyDirectionUpdate }
   | { type: 'purpose'; update: ReplyPurposeUpdate }
   | { type: 'correction'; update: ReplyCorrectionUpdate }
+  | { type: 'supplement'; update: ReplySupplementUpdate }
   | { type: 'requirements'; update: ReplyRequirementsUpdate }
   | { type: 'scene'; update: ReplySceneUpdate }
   | { type: 'candidate'; update: ReplyCandidateEdit }
@@ -210,6 +221,7 @@ export interface ReplyBridge extends ReplyEvidenceCommands {
   getState(): Promise<ReplySessionState>;
   updateInput(command: ReplyInputCommand): Promise<void>;
   onStateUpdated(listener: (update: ReplyStateUpdate) => void): () => void;
+  enterWorkspace(selection: ContactSelection): Promise<ReplySessionState>;
   updateOptions(update: RewriteOptionsUpdate): Promise<ReplySessionState>;
   setMode(update: ReplyModeUpdate): Promise<void>;
   loadMessages(request: ReplyMessagePageRequest): Promise<void>;
@@ -225,6 +237,7 @@ export interface ReplyBridge extends ReplyEvidenceCommands {
   selectMessage(selection: ReplyMessageSelection): Promise<ReplySessionState>;
   updateDirection(update: ReplyDirectionUpdate): Promise<ReplySessionState>;
   updateCorrection(update: ReplyCorrectionUpdate): Promise<ReplySessionState>;
+  updateSupplement(update: ReplySupplementUpdate): Promise<ReplySessionState>;
   explore(selection: ContactSelection): Promise<void>;
   changeDirections(selection: ContactSelection): Promise<void>;
   beginClarificationEdit(selection: ReplyClarificationEdit): Promise<ReplySessionState>;

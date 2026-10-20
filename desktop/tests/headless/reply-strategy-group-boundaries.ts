@@ -1,5 +1,6 @@
-import { ensureReplySettingsOpen } from '../reply-settings-actions';
-import { selectMemoryCategory } from '../memory-page-actions';
+import { fillWorkspaceThought, generateWorkspace } from '../workspace-actions';
+import { expandSavedDiscussion } from '../assistant-history-actions';
+import { openImportManagement } from '../memory-page-actions';
 import { expect, type Browser, type Page } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
@@ -7,7 +8,7 @@ import type { RewritePages } from '../rewrite-page-scenarios';
 import { withRewritePages } from './rewrite-acceptance';
 import { PageHost } from './page-host';
 
-type Scene = '回应消息' | '主动聊聊';
+type Scene = '空思路' | '已有想法';
 interface GroupIdentity {
   contactId: string;
   sessionId: string;
@@ -22,17 +23,11 @@ async function prepare(pages: RewritePages, scene: Scene) {
   const contactId = pages.rewriteBackend.data.contact_ids[0];
   await pages.manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
   await confirmHelperContact(pages.helper, contactId);
-  await pages.helper.getByRole('button', { name: scene, exact: true }).click();
-  if (scene === '回应消息') {
-    await pages.helper.getByRole('radio', { name: /甲的私密合成历史/ }).click();
-    await pages.helper.getByRole('textbox', { name: '表达方向', exact: true }).fill('关心近况，不增加安排承诺。');
-  } else await pages.helper.getByRole('textbox', { name: '主动目的', exact: true }).fill('关心近况，不增加安排承诺。');
-  await ensureReplySettingsOpen(pages.helper, '策略选择');
-  await pages.helper.getByRole('combobox', { name: '策略选择', exact: true }).selectOption('disabled');
+  await fillWorkspaceThought(pages.helper, scene === '已有想法' ? '关心近况，不增加安排承诺。' : '');
   return contactId;
 }
-async function generated(pages: RewritePages, contactId: string): Promise<GroupIdentity> {
-  await pages.helper.getByRole('button', { name: '生成候选', exact: true }).click();
+async function generated(pages: RewritePages, contactId: string, action: 'express' | 'suggest' = 'suggest'): Promise<GroupIdentity> {
+  await generateWorkspace(pages.helper, action);
   await expect.poll(() => pages.replyTransport.results.length).toBe(1);
   const result = pages.replyTransport.results[0];
   expect(result.status).toBe(200);
@@ -73,16 +68,55 @@ async function longHistory(browser: Browser, origin: string, scene: Scene) {
   await withRewritePages(browser, origin, async (pages, host, userData) => {
     const contactId = await prepare(pages, scene), original = fullGroup(0);
     await pages.rewriteBackend.plan({ count: 1, message_groups: [original] });
-    const identity = await generated(pages, contactId);
+    const identity = await generated(pages, contactId, scene === '已有想法' ? 'express' : 'suggest');
     await expect(groupOn(pages.helper).getByRole('textbox', { name: /^说法1第[0-9]+条编辑文本$/ })).toHaveCount(8);
+    type RequestProgress = { method: string; page: string | null; receipt: boolean; status: number | null;
+      elapsedMs: number | null; wireBytes: number | null };
+    let requests: RequestProgress[] = [];
+    pages.replyTransport.server.on('request', (incoming, response) => {
+      const url = new URL(incoming.url ?? '/', 'http://127.0.0.1');
+      if (!url.pathname.endsWith(`/candidates/${identity.candidateId}/versions`)) return;
+      const started = Date.now(), socket = response.socket, before = socket?.bytesWritten ?? 0;
+      const trace: RequestProgress = { method: incoming.method ?? '', page: url.searchParams.get('page'),
+        receipt: url.searchParams.has('receipt'), status: null, elapsedMs: null, wireBytes: null };
+      requests.push(trace);
+      response.once('finish', () => {
+        trace.status = response.statusCode; trace.elapsedMs = Date.now() - started;
+        trace.wireBytes = socket ? socket.bytesWritten - before : null;
+      });
+    });
     let parent = identity.candidateId;
     for (let revision = 1; revision <= 3; revision++) {
       const texts = fullGroup(revision);
       for (let index = 0; index < texts.length; index++) {
+        const version = (revision - 1) * texts.length + index + 1, started = Date.now();
+        requests = [];
+        process.stdout.write(`page_test_version_progress: ${JSON.stringify({ scene, stage: 'save-start', version, message: index + 1 })}\n`);
         await editorOn(pages.helper, index + 1).fill(texts[index]);
         await editorOn(pages.helper, index + 1).blur();
-        await expect(groupOn(pages.helper).getByText(`修改版本 ${(revision - 1) * texts.length + index + 1}`, { exact: true })).toBeVisible();
+        try {
+          await expect(groupOn(pages.helper).getByText(`修改版本 ${version}`, { exact: true })).toBeVisible();
+        } catch (error) {
+          const failedAfterMs = Date.now() - started, progress = requests.map(item => ({ ...item }));
+          const state = await pages.helper.evaluate(async () => {
+            const state = await window.notalone.replies.getState();
+            return { phase: state.phase, error: state.errorCode, versionPhase: state.candidateVersions?.phase,
+              items: state.candidateVersions?.items.map(item => ({ phase: item.phase, versions: item.history?.versions.length ?? 0 })) };
+          });
+          const history = await actualHistory(pages, identity);
+          const page = await pages.rewriteBackend.request(`/api/contacts/${identity.contactId}/assistant-sessions/${identity.sessionId}/candidates/${identity.candidateId}/versions?page=0`);
+          process.stderr.write(`page_test_version_failure: ${JSON.stringify({ scene, version, failedAfterMs, ...state,
+            backendVersions: history.versions.length, fullHistoryBytes: Buffer.byteLength(JSON.stringify(history), 'utf8'),
+            firstPageStatus: page.status, firstPageBytes: Buffer.byteLength(JSON.stringify(page.data), 'utf8'),
+            requests: progress })}\n`);
+          throw error;
+        }
         const saved = await actualHistory(pages, identity), latest = saved.versions.at(-1)!;
+        process.stdout.write(`page_test_version_progress: ${JSON.stringify({ scene, stage: 'saved', version,
+          elapsedMs: Date.now() - started, versions: saved.versions.length,
+          fullHistoryBytes: Buffer.byteLength(JSON.stringify(saved), 'utf8'),
+          requestCount: requests.length,
+          maxPageWireBytes: Math.max(0, ...requests.filter(item => item.page !== null).map(item => item.wireBytes ?? 0)) })}\n`);
         expect(latest.parent_version_id).toBe(parent);
         parent = latest.version_id;
       }
@@ -96,8 +130,10 @@ async function longHistory(browser: Browser, origin: string, scene: Scene) {
     // 旧未分页的同一权威历史已超过原预算；生产公开控件仍必须完整读取全部版本。
     expect(Buffer.byteLength(JSON.stringify(saved), 'utf8')).toBeGreaterThan(1_048_576);
     for (let index = 0; index < 24; index++) {
+      process.stdout.write(`page_test_version_progress: ${JSON.stringify({ scene, stage: 'review-start', version: 23 - index })}\n`);
       await groupOn(pages.helper).getByRole('button', { name: '查看说法1上一版', exact: true }).click();
       await expect(groupOn(pages.helper).getByText(index === 23 ? '原始版本' : `修改版本 ${23 - index}`, { exact: true })).toBeVisible();
+      process.stdout.write(`page_test_version_progress: ${JSON.stringify({ scene, stage: 'reviewed', version: 23 - index })}\n`);
     }
     await expect(groupOn(pages.helper).getByRole('button', { name: '查看说法1上一版', exact: true })).toBeDisabled();
     for (let index = 0; index < original.length; index++) await expect(editorOn(pages.helper, index + 1)).toHaveValue(original[index]);
@@ -133,7 +169,7 @@ async function deletedRestoredGroup(browser: Browser, origin: string, scene: Sce
     const contactId = await prepare(pages, scene);
     await pages.rewriteBackend.plan({ count: 1, probe_history: true, cite_history: true,
       message_groups: [['合成来源支持的关心。', '方便时回复就好。']] });
-    const identity = await generated(pages, contactId);
+    const identity = await generated(pages, contactId, scene === '已有想法' ? 'express' : 'suggest');
     await editorOn(pages.helper, 1).fill('已保存的来源派生组修改。');
     await editorOn(pages.helper, 1).blur();
     await expect(groupOn(pages.helper).getByText('修改版本 1', { exact: true })).toBeVisible();
@@ -153,9 +189,8 @@ async function deletedRestoredGroup(browser: Browser, origin: string, scene: Sce
       const sources = await pages.rewriteBackend.request(`/api/contacts/${contactId}/sources`);
       const sourceId = (sources.data.sources as Array<{ source_id: string }>)[0].source_id;
       await manager.getByRole('button', { name: '记忆', exact: true }).click();
-      await selectMemoryCategory(manager, '来源与过程');
-      const source = manager.getByRole('region', { name: '来源删除管理', exact: true }).getByRole('listitem')
-        .filter({ hasText: `来源标识：${sourceId}` });
+      await openImportManagement(manager);
+      const source = manager.getByRole('region', { name: '已导入资料', exact: true }).locator(`[data-source-id="${sourceId}"]`);
       await source.getByRole('button', { name: '删除来源', exact: true }).click();
       await manager.getByRole('button', { name: '确认删除来源', exact: true }).click();
       await expect(source.getByText('已删除，已通过不可检索校验', { exact: true })).toBeVisible({ timeout: 15_000 });
@@ -177,6 +212,7 @@ async function deletedRestoredGroup(browser: Browser, origin: string, scene: Sce
       await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
       const helper = await reopened.open('helper');
       await confirmHelperContact(helper, contactId);
+      await expandSavedDiscussion(helper);
       await expect(helper.getByRole('region', { name: '已保存的讨论', exact: true }).getByText('相关来源已删除', { exact: true })).toBeVisible();
       await expect(groupOn(helper)).toHaveCount(0);
       expect(await rejectCopy(helper, identity, versionId, identity.messages[0].message_id)).toBe('rejected');
@@ -190,7 +226,7 @@ async function foreignIdentity(browser: Browser, origin: string) {
   const copied: string[] = [];
   const copySurface = { writeText: async (text: string) => { copied.push(text); }, hideWindow: () => {} };
   await withRewritePages(browser, origin, async (pages) => {
-    const contactId = await prepare(pages, '主动聊聊');
+    const contactId = await prepare(pages, '空思路');
     await pages.rewriteBackend.plan({ count: 2, message_groups: [['甲的第一组第1条。', '甲的第一组第2条。'], ['甲的第二组第1条。', '甲的第二组第2条。']] });
     const identity = await generated(pages, contactId);
     await expectDirectCopy(pages.helper);
@@ -216,10 +252,9 @@ async function foreignIdentity(browser: Browser, origin: string) {
     await managerSwitch(pages);
     await expect(groupOn(pages.helper)).toHaveCount(0);
     expect(await rejectCopy(pages.helper, identity, identity.candidateId, identity.messages[0].message_id)).toBe('rejected');
-    await pages.helper.getByRole('button', { name: '主动聊聊', exact: true }).click();
-    await pages.helper.getByRole('textbox', { name: '主动目的', exact: true }).fill('乙的新合成联系目的。');
+    await fillWorkspaceThought(pages.helper, '乙的新合成联系目的。');
     await pages.rewriteBackend.plan({ count: 1, message_groups: [['乙的新独立组第1条。', '乙的新独立组第2条。']] });
-    await pages.helper.getByRole('button', { name: '生成候选', exact: true }).click();
+    await generateWorkspace(pages.helper, 'suggest');
     await expect(editorOn(pages.helper, 1)).toHaveValue('乙的新独立组第1条。');
     expect(await rejectCopy(pages.helper, { ...identity, contactId: pages.rewriteBackend.data.contact_ids[1] },
       identity.candidateId, identity.messages[0].message_id)).toBe('rejected');
@@ -234,17 +269,29 @@ async function managerSwitch(pages: RewritePages) {
 }
 
 export async function replyStrategyGroupBoundaries(browser: Browser, origin: string) {
-  for (const scene of ['回应消息', '主动聊聊'] as const) {
+  const selected = process.env.NOTALONE_GROUP_BOUNDARIES_SCENE;
+  if (selected !== undefined && selected !== 'suggest' && selected !== 'express') {
+    throw new Error('NOTALONE_GROUP_BOUNDARIES_SCENE 仅允许 suggest 或 express。');
+  }
+  // 两种入口各自使用独立夹具；拆分运行必须汇总两者，保留原数据量和每个动作的时限。
+  const scenes: readonly Scene[] = selected === 'suggest' ? ['空思路']
+    : selected === 'express' ? ['已有想法'] : ['空思路', '已有想法'];
+  process.stdout.write(`page_test_group_variant: ${selected ?? 'all'}\n`);
+  for (const scene of scenes) {
     for (const [name, run] of [
       [`${scene}完整八条组长历史、旧版明确复制及真实重建`, longHistory],
       [`${scene}来源删除清除恢复组和未保存编辑并拒绝重开复制`, deletedRestoredGroup],
     ] as const) {
+      const started = Date.now();
       process.stdout.write(`page_test_scenario: ${name}\n`);
       await run(browser, origin, scene);
       process.stdout.write(`page_test_scenario_passed: ${name}\n`);
+      process.stdout.write(`page_test_scenario_duration: ${JSON.stringify({ name, elapsedMs: Date.now() - started })}\n`);
     }
   }
-  process.stdout.write('page_test_scenario: 错版本、错组消息、跨联系人和跨用户身份拒绝\n');
-  await foreignIdentity(browser, origin);
-  process.stdout.write('page_test_scenario_passed: 错版本、错组消息、跨联系人和跨用户身份拒绝\n');
+  if (selected !== 'suggest') {
+    process.stdout.write('page_test_scenario: 错版本、错组消息、跨联系人和跨用户身份拒绝\n');
+    await foreignIdentity(browser, origin);
+    process.stdout.write('page_test_scenario_passed: 错版本、错组消息、跨联系人和跨用户身份拒绝\n');
+  }
 }

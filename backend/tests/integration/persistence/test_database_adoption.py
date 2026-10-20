@@ -291,99 +291,15 @@ class DatabaseAdoptionTest(unittest.TestCase):
             self.assertEqual(connection.execute(
                 "SELECT count(*) FROM public.notalone_schema_migration"
             ).fetchone()[0], 0)
-        self.assertEqual(migrate(self.url, MIGRATIONS), (
-            "036_source_deletion_tasks.sql",
-            "037_pending_candidate_evidence_kind.sql",
-            "038_memory_candidate_interpretation.sql",
-            "039_memory_extraction_trace.sql",
-            "040_source_processing_trace.sql",
-            "041_source_processing_capture_tombstone.sql",
-            "042_extraction_trace_call_receipts.sql",
-            "043_extraction_trace_record_operations.sql",
-            "044_owner_memory_versioning.sql",
-            "045_observation_background_task.sql",
-            "046_background_step_lease_generation.sql",
-            "047_observation_memory_enqueue_receipt.sql",
-            "048_assistant_sessions.sql",
-            "049_style_samples.sql",
-            "050_reply_purpose_evidence.sql",
-            "051_assistant_session_inputs.sql",
-            "052_reply_exploration.sql",
-            "053_assistant_candidate_versions.sql",
-            "054_assistant_generation_interruption.sql",
-            "055_assistant_candidate_carry_input.sql",
-            "056_memory_candidate_dimension_evidence.sql",
-            "057_memory_candidate_semantic_basis.sql",
-            "058_assistant_prepared_context.sql",
-            "059_memory_candidate_author_quote_basis.sql",
-            "060_manual_contact_confirmation.sql",
-            "061_memory_correction_protection.sql",
-            "062_memory_events_and_version_evidence.sql",
-            "063_relationship_overview_projection.sql",
-            "064_owner_memory_revision.sql",
-            "065_expression_preferences.sql",
-            "066_skill_learning_drafts.sql",
-            "067_memory_upgrade_batches.sql",
-            "068_skill_review_publication.sql",
-            "069_skill_history_operations.sql",
-            "070_skill_scope_policies.sql",
-            "071_bounded_runtime_evidence.sql",
-            "072_scoped_media_lifecycle.sql",
-            "073_layered_scenario_documents.sql",
-            "074_layered_memory_coverage.sql",
-            "075_layered_profile_generation.sql",
-            "076_layered_memory_maintenance.sql",
-            "077_owner_layered_scope.sql",
-        ))
+        expected = tuple(sorted(path.name for path in MIGRATIONS.glob("*.sql") if int(path.name[:3]) > 35))
+        self.assertEqual(expected[0], "036_source_deletion_tasks.sql")
+        self.assertEqual(migrate(self.url, MIGRATIONS), expected)
         self.assertEqual(migrate(self.url, MIGRATIONS), ())
         self.assertFalse(adopt_legacy_database(self.url, MIGRATIONS, self.backup).adopted)
         with self._fixture_connection() as connection:
             self.assertEqual(connection.execute(
-                "SELECT name FROM public.notalone_schema_migration"
-            ).fetchall(), [
-                ("036_source_deletion_tasks.sql",),
-                ("037_pending_candidate_evidence_kind.sql",),
-                ("038_memory_candidate_interpretation.sql",),
-                ("039_memory_extraction_trace.sql",),
-                ("040_source_processing_trace.sql",),
-                ("041_source_processing_capture_tombstone.sql",),
-                ("042_extraction_trace_call_receipts.sql",),
-                ("043_extraction_trace_record_operations.sql",),
-                ("044_owner_memory_versioning.sql",),
-                ("045_observation_background_task.sql",),
-                ("046_background_step_lease_generation.sql",),
-                ("047_observation_memory_enqueue_receipt.sql",),
-                ("048_assistant_sessions.sql",),
-                ("049_style_samples.sql",),
-                ("050_reply_purpose_evidence.sql",),
-                ("051_assistant_session_inputs.sql",),
-                ("052_reply_exploration.sql",),
-                ("053_assistant_candidate_versions.sql",),
-                ("054_assistant_generation_interruption.sql",),
-                ("055_assistant_candidate_carry_input.sql",),
-                ("056_memory_candidate_dimension_evidence.sql",),
-                ("057_memory_candidate_semantic_basis.sql",),
-                ("058_assistant_prepared_context.sql",),
-                ("059_memory_candidate_author_quote_basis.sql",),
-                ("060_manual_contact_confirmation.sql",),
-                ("061_memory_correction_protection.sql",),
-                ("062_memory_events_and_version_evidence.sql",),
-                ("063_relationship_overview_projection.sql",),
-                ("064_owner_memory_revision.sql",),
-                ("065_expression_preferences.sql",),
-                ("066_skill_learning_drafts.sql",),
-                ("067_memory_upgrade_batches.sql",),
-                ("068_skill_review_publication.sql",),
-                ("069_skill_history_operations.sql",),
-                ("070_skill_scope_policies.sql",),
-                ("071_bounded_runtime_evidence.sql",),
-                ("072_scoped_media_lifecycle.sql",),
-                ("073_layered_scenario_documents.sql",),
-                ("074_layered_memory_coverage.sql",),
-                ("075_layered_profile_generation.sql",),
-                ("076_layered_memory_maintenance.sql",),
-                ("077_owner_layered_scope.sql",),
-            ])
+                "SELECT name FROM public.notalone_schema_migration ORDER BY name"
+            ).fetchall(), [(name,) for name in expected])
 
     def test_full_035_needs_no_repair_and_preserves_ids_pause_and_message_evidence(self) -> None:
         owner, contact, binding, document, message = self._seed_scope()

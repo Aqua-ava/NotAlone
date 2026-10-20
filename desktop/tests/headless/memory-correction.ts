@@ -1,4 +1,4 @@
-import { selectMemoryCategory } from '../memory-page-actions';
+import { openImportManagement, selectMemoryCategory } from '../memory-page-actions';
 import { expect, type Browser } from '@playwright/test';
 import path from 'node:path';
 import type { ContactDatabase } from '../contact-backend-fixture';
@@ -51,9 +51,8 @@ export async function memoryCorrectionProtection(browser: Browser, origin: strin
         await expect(contact.getByText('甲喝合成咖啡只是工作需要。', { exact: true })).toBeVisible();
         const actual = await fixture.http(`/api/contacts/${data.contact_ids[0]}/memories`);
         expect((actual.data.memories as Array<Record<string, unknown>>).map((item) => item.adoption_method)).toEqual(['manual', 'manual']);
-        await selectMemoryCategory(manager, '来源与过程');
-        const source = manager.getByRole('region', { name: '来源删除管理', exact: true }).getByRole('listitem')
-          .filter({ hasText: `来源标识：${data.old_source_id}` });
+        await openImportManagement(manager);
+        const source = manager.getByRole('region', { name: '已导入资料', exact: true }).locator(`[data-source-id="${data.old_source_id}"]`);
         await source.getByRole('button', { name: '删除来源', exact: true }).click();
         await manager.getByRole('button', { name: '确认删除来源', exact: true }).click();
         await expect(source.getByText('已删除，已通过不可检索校验', { exact: true })).toBeVisible({ timeout: 15_000 });

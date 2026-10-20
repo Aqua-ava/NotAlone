@@ -5,9 +5,9 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { test, selectMenu, isolatedAppEnvironment } from './app-fixture';
 
-test('应用配置显示默认全局快捷键的真实注册结果', async ({ runningApp: { app } }) => {
+test('设置显示默认全局快捷键的真实注册结果', async ({ runningApp: { app } }) => {
   const manager = await app.firstWindow();
-  await manager.getByRole('button', { name: '应用配置', exact: true }).click();
+  await manager.getByRole('button', { name: '设置', exact: true }).click();
   const controls = manager.getByRole('region', { name: '桌面操作' });
   await expect(controls.getByRole('textbox', { name: '小窗快捷键' })).toHaveValue('Command+Shift+Space');
   await expect(controls.getByRole('status')).toHaveText('已注册 Command+Shift+Space');
@@ -37,10 +37,10 @@ require('./dist/main/index.cjs');`);
 conflictTest('默认快捷键冲突在首屏可见，换键可恢复，修改失败保留旧键', async ({ runningApp: { app } }) => {
   test.skip(Boolean(process.env.NOTALONE_TEST_APP_EXECUTABLE), '占用场景只包装隔离构建入口，不修改签名包');
   const manager = await app.firstWindow();
-  await expect(manager.getByText('快捷键未启用，请在应用配置中换一个组合。', { exact: true })).toBeVisible();
-  await manager.getByRole('button', { name: '应用配置', exact: true }).click();
+  await expect(manager.getByText('快捷键未启用，请在设置中换一个组合。', { exact: true })).toBeVisible();
+  await manager.getByRole('button', { name: '设置', exact: true }).click();
   const controls = manager.getByRole('region', { name: '桌面操作' });
-  await expect(controls.getByRole('status')).toHaveText('快捷键未启用，请在应用配置中换一个组合。');
+  await expect(controls.getByRole('status')).toHaveText('快捷键未启用，请在设置中换一个组合。');
   await controls.getByRole('textbox', { name: '小窗快捷键' }).fill('Command+Shift+K');
   await controls.getByRole('button', { name: '保存快捷键' }).click();
   await expect(controls.getByRole('status')).toHaveText('已注册 Command+Shift+K');
@@ -54,7 +54,7 @@ conflictTest('默认快捷键冲突在首屏可见，换键可恢复，修改失
 
 test('用户可以修改快捷键并在重启后继续使用已保存的组合', async ({ runningApp: { app, appProcess }, appDirectory }) => {
   const manager = await app.firstWindow();
-  await manager.getByRole('button', { name: '应用配置', exact: true }).click();
+  await manager.getByRole('button', { name: '设置', exact: true }).click();
   const controls = manager.getByRole('region', { name: '桌面操作' });
   await controls.getByRole('textbox', { name: '小窗快捷键' }).fill('Command+Shift+K');
   await controls.getByRole('button', { name: '保存快捷键' }).click();
@@ -72,14 +72,14 @@ test('用户可以修改快捷键并在重启后继续使用已保存的组合',
   });
   try {
     const reopened = await restarted.firstWindow();
-    await reopened.getByRole('button', { name: '应用配置', exact: true }).click();
+    await reopened.getByRole('button', { name: '设置', exact: true }).click();
     await expect(reopened.getByRole('region', { name: '桌面操作' }).getByRole('status')).toHaveText('已注册 Command+Shift+K');
   } finally { await restarted.close(); }
 });
 
 test('保存失败仍保留可用旧键和安全错误，恢复文件后可再次修改', async ({ runningApp: { app } }) => {
   const manager = await app.firstWindow();
-  await manager.getByRole('button', { name: '应用配置', exact: true }).click();
+  await manager.getByRole('button', { name: '设置', exact: true }).click();
   const controls = manager.getByRole('region', { name: '桌面操作' });
   await controls.getByRole('textbox', { name: '小窗快捷键' }).fill('Command+Shift+K');
   await controls.getByRole('button', { name: '保存快捷键' }).click();
@@ -134,7 +134,7 @@ test('正文区域的置顶按钮可点击，隐藏恢复保留置顶且不会�
 
 test('非法快捷键不会覆盖已注册组合，退出会注销本轮快捷键', async ({ runningApp: { app, appProcess } }) => {
   const manager = await app.firstWindow();
-  await manager.getByRole('button', { name: '应用配置', exact: true }).click();
+  await manager.getByRole('button', { name: '设置', exact: true }).click();
   const controls = manager.getByRole('region', { name: '桌面操作' });
   await controls.getByRole('textbox', { name: '小窗快捷键' }).fill('Space');
   await controls.getByRole('button', { name: '保存快捷键' }).click();

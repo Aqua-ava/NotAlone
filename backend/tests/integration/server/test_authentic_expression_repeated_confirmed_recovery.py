@@ -1,4 +1,4 @@
-"""已确认策略再次中断仍按原身份恢复，实际手工样本依赖不能丢。"""
+"""已确认策略再次中断仍按原身份恢复，并保留完整已确认意图。"""
 
 from __future__ import annotations
 
@@ -29,23 +29,19 @@ class AuthenticExpressionRepeatedConfirmedRecoveryTests(FidelityHttpFixture, uni
                 Path(target).write_text(json.dumps({
                     "data_kind": "synthetic", "rows": cls.capture_rows,
                     "human_fidelity_pass": 0, "quality_verified": False,
-                    "coverage": "真实HTTP重复准备中断及样本派生删除；不代表Host或原生退出",
+                    "coverage": "真实HTTP重复准备中断及完整身份恢复；不代表Host或原生退出",
                 }, ensure_ascii=False, indent=2) + "\n")
         finally:
             super().tearDownClass()
 
-    def test_response_repeated_prepared_recovery_keeps_confirmed_intent_and_sample_lineage(self):
+    def test_response_repeated_prepared_recovery_keeps_confirmed_intent_and_identity(self):
         self._exercise("response_exploration")
 
-    def test_proactive_repeated_prepared_recovery_keeps_confirmed_intent_and_sample_lineage(self):
+    def test_proactive_repeated_prepared_recovery_keeps_confirmed_intent_and_identity(self):
         self._exercise("purpose_exploration")
 
     def _exercise(self, scene: str):
         contact, target, _ = self.prepare_contact(self.owner_id)
-        samples = f"/api/contacts/{contact}/style-samples"
-        sample = self._post(samples, {"idempotency_key": str(uuid4()), "text": "仅供说法参考的合成手工样本。",
-                                      "origin": {"kind": "manual"}})["sample"]
-        self.assertEqual(sample["source_ids"], [])
         session = self._post(f"/api/contacts/{contact}/assistant-session/default", {})
         path = f"/api/contacts/{contact}/assistant-sessions/{session['session_id']}"
         content = ({"type": scene, "target_message_id": target} if scene == "response_exploration" else
@@ -59,7 +55,7 @@ class AuthenticExpressionRepeatedConfirmedRecoveryTests(FidelityHttpFixture, uni
         original = self._post(action + "/prepare-confirm", confirmation)["generation"]
         self.reply_model.entered.clear()
         gate = self.reply_model.pause_next_response()
-        self.reply_model.plans.append({"text": "只了解合成近况。", "basis": "已确认本次意愿，手工样本仅作表达参考。"})
+        self.reply_model.plans.append({"text": "只了解合成近况。", "basis": "仅表达已确认本次意愿。"})
         returned = []
         worker = threading.Thread(target=lambda: returned.append(self.backend.request(action + "/confirm", confirmation)),
                                   daemon=True)
@@ -74,10 +70,6 @@ class AuthenticExpressionRepeatedConfirmedRecoveryTests(FidelityHttpFixture, uni
         self.assertEqual(len(returned), 1)
         self.assertNotEqual(returned[0][0], 200, returned)
         self.assertEqual(len(self.reply_model.payloads), 2)
-        references = self.reply_model.payloads[-1]["style_references"]
-        self.assertEqual([item["sample_id"] for item in references], [sample["sample_id"]])
-        self.assertTrue(all(item["weight"] == "low" and item["factual_role"] == "expression_reference" for item in references))
-
         first_body = self._retry_body(original)
         first = self._post(path + "/retry-interrupted/prepare", first_body)
         self._interrupt(path, first)
@@ -111,21 +103,10 @@ class AuthenticExpressionRepeatedConfirmedRecoveryTests(FidelityHttpFixture, uni
                          explored["options"][0]["intent"])
         self.assertEqual(self.backend.request(path + "/retry-interrupted", second_body), (200, result))
         self.assertEqual(len(self.reply_model.payloads), 3)
-        independent = self._post(samples, {"idempotency_key": str(uuid4()), "text": "恢复后独立保存的另一合成手工表达。",
-                                           "origin": {"kind": "manual"}})["sample"]
-        self.assertEqual(self.backend.request(samples + "/" + sample["sample_id"], method="DELETE")[0], 200)
-        erased = self._backend(self.owner_id).request(path)[1]
-        self.assertIsNone(erased["current_input_version_id"])
-        self.assertEqual(len(erased["turns"]), 3)
-        self.assertTrue(all(turn["state"] == "redacted" and turn["input"] is None and turn["reply"] is None
-                            for turn in erased["turns"]))
-        self.assertEqual(self.backend.request(samples + "/" + independent["sample_id"])[1]["sample"], independent)
-        self.assertNotEqual(self.backend.request(path + "/retry-interrupted", second_body)[0], 200)
-        self.assertEqual(len(self.reply_model.payloads), 3)
         capture.update(control_contract_completed=True, actual_calls=3,
                        actual_model_inputs=copy.deepcopy(self.reply_model.payloads), actual_output=result,
                        actual_model_outputs=[copy.deepcopy(message.tool_calls) for message in self.reply_model.responses],
-                       deleted_projection=erased, prepare_model_delta=0, deletion_model_delta=0)
+                       completed_projection=saved, prepare_model_delta=0)
 
     def _post(self, path: str, body: dict) -> dict:
         status, result = self.backend.request(path, body)

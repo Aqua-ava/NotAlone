@@ -6,11 +6,9 @@ import json
 import unittest
 from uuid import UUID, uuid4
 
-from notalone.application.style_sample_service import SaveStyleSample
 from notalone.persistence.assistant_candidate_versions import (
     EditAssistantCandidate, PostgresAssistantCandidateVersions,
 )
-from notalone.persistence.style_sample_store import PostgresStyleSampleStore
 from notalone.reply.interface import CandidateMessage
 from notalone.scopes import ContactScope
 
@@ -390,71 +388,6 @@ class AssistantDiscussionBudgetHttpTest(unittest.TestCase):
         self.assertTrue(candidates[1]["is_default_display"])
         self.assertTrue(all(item["is_sent"] is False for item in candidates))
 
-    def test_history_only_sample_dependency_is_separate_from_current_five_and_erased_by_c(self):
-        backend, _ = self.fixture._budget_backend(self.fixture.owner_id)
-        contact_id, path = self.fixture._session(backend)
-        scope = ContactScope(self.fixture.owner_id, UUID(contact_id))
-        samples = PostgresStyleSampleStore(self.fixture.database_url)
-        old = samples.save(scope, SaveStyleSample(uuid4(), "合成旧独立表达样本。", "manual"))
-        independent = self._discussion(backend, path, "合成来源无关讨论保持完整。")
-        original_body = self.fixture._body(contact_id, "合成旧一轮原句。")
-        original_body["expected_input_version_id"] = independent["input_version_id"]
-        original_body["content"]["include_relationship_context"] = True
-        self.fixture._plan("合成引用旧表达风格的旧 AI 候选。")
-        status, first = backend.request(path + "/replies", original_body)
-        self.assertEqual(status, 200, first)
-        current = [samples.save(scope, SaveStyleSample(
-            uuid4(), f"合成当前第 {number} 个独立样本。", "manual",
-        )) for number in range(5)]
-        expected = first["input_version_id"]
-        for number in range(2):
-            body = self.fixture._body(contact_id, f"合成第 {number + 2} 轮当前原句。")
-            body["expected_input_version_id"] = expected
-            body["content"]["include_relationship_context"] = True
-            self.fixture._plan(body["content"]["draft_text"])
-            status, reply = backend.request(path + "/replies", body)
-            self.assertEqual(status, 200, reply)
-            expected = reply["input_version_id"]
-            self.assertEqual(set(reply["context_receipt"]["style_sample_ids"]),
-                             {str(sample.sample_id) for sample in current})
-            direct = self._model_request(self.fixture.reply_model.seen_model_payloads[-1])["style_references"]
-            self.assertNotIn(str(old.sample_id), {item["sample_id"] for item in direct})
-
-        samples.delete(scope, old.sample_id)
-
-        status, saved = backend.request(path)
-        self.assertEqual(status, 200, saved)
-        self.assertTrue(all(turn["state"] == "redacted" and turn["reply"] is None
-                            for turn in saved["turns"]))
-        self.assertEqual(saved["inputs"][0]["content"]["purpose_hint"], "合成来源无关讨论保持完整。")
-        self.assertIsNone(saved["current_input_version_id"])
-        erased_inputs = [item for item in saved["inputs"] if item["type"] == "generation"]
-        self.assertEqual(len(erased_inputs), 3)
-        self.assertTrue(all(item["state"] == "redacted" and item["content"] is None
-                            for item in erased_inputs))
-        self.assertIn(expected, {item["input_version_id"] for item in erased_inputs})
-        calls = len(self.fixture.reply_model.seen_model_payloads)
-        stale_body = self.fixture._body(contact_id, "合成删除后的独立当前原句。")
-        stale_body["expected_input_version_id"] = expected
-        self.assertEqual(backend.request(path + "/replies", stale_body), (
-            409, {"error": "assistant_session_input_conflict"},
-        ))
-        self.assertEqual(len(self.fixture.reply_model.seen_model_payloads), calls)
-        self.assertEqual(backend.request(path), (200, saved))
-        # 用户明确输入新的独立原句，用新键提交，不恢复已擦除的旧 CURRENT 身份。
-        body = self.fixture._body(contact_id, "合成删除后的独立当前原句。")
-        self.assertNotEqual(body["idempotency_key"], stale_body["idempotency_key"])
-        self.fixture._plan(body["content"]["draft_text"])
-        status, generated = backend.request(path + "/replies", body)
-        self.assertEqual(status, 200, generated)
-        self.assertEqual(len(self.fixture.reply_model.seen_model_payloads), calls + 1)
-        self.assertNotIn(generated["input_version_id"],
-                         {item["input_version_id"] for item in erased_inputs})
-        self.assertEqual(backend.request(path)[1]["current_input_version_id"],
-                         generated["input_version_id"])
-        items = self._model_request(self.fixture.reply_model.seen_model_payloads[-1])["assistant_discussion"]["items"]
-        self.assertEqual([item["kind"] for item in items], ["discussion_input"])
-        self.assertNotIn("合成引用旧表达风格的旧 AI 候选。", json.dumps(items, ensure_ascii=False))
 
 
 if __name__ == "__main__":

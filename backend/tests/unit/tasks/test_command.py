@@ -318,6 +318,12 @@ class PostgresMemoryExtractionRunnerTest(unittest.TestCase):
                     evidence=((message.message_id, "我平时喜欢喝茶"),),
                 )]},
             }]),
+            AIMessage(content="", tool_calls=[{
+                "name": "BatchMemoryAdjudicationOutput", "id": "adopt-default",
+                "args": {"decisions": [{"candidate_index": 0, "action": "add",
+                    "replaced_memory_id": None, "merged_memory_ids": [],
+                    "merged_text": None, "duplicate_memory_id": None, "relation": None}]},
+            }]),
         ])
         store = InMemoryMemoryStore()
         with patch(
@@ -338,6 +344,7 @@ class PostgresMemoryExtractionRunnerTest(unittest.TestCase):
             stats = runner.run(scope=scope)
 
         self.assertEqual(stats.adopted, 1)
+        self.assertEqual(len(model.seen_calls), 3)
         self.assertEqual(stats.pending, 0)
         self.assertEqual([memory.text for memory in store.list_confirmed(scope)], ["联系人平时喜欢喝茶"])
         self.assertEqual(store.list_pending_candidates(scope), ())
@@ -382,7 +389,8 @@ class PostgresMemoryExtractionRunnerTest(unittest.TestCase):
             stats = runner.run(scope=scope)
 
         self.assertEqual(stats.adopted, 0)
-        self.assertEqual(stats.pending, 1)
+        self.assertEqual((stats.pending, stats.rejected_by_contract), (0, 1))
+        self.assertEqual(store.list_pending_candidates(scope), ())
         self.assertEqual(store.list_confirmed(scope), ())
 
 

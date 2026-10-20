@@ -15,7 +15,6 @@
 ## 环境
 
 - Python 产品代码使用 Conda 环境 `NotAlone`（Python 3.12）。**不要执行 `conda activate`**，改用 PATH 前缀 `PATH="$HOME/miniconda3/envs/NotAlone/bin:$PATH"`，或直接用绝对路径 `"$HOME/miniconda3/envs/NotAlone/bin/python"`、`"$HOME/miniconda3/envs/NotAlone/bin/python" -m pip`。`conda activate` 每次多花 0.5–1.8 秒，日常开发一天调用几百次就是几十分钟纯开销。
-- 最小 CI 的后端白名单测试例外：GitHub 托管 runner 使用独立 Python 3.12，以 `-S` 仅运行标准库和合成夹具测试；具体列表见 `.github/workflows/ci.yml`。本机继续使用上述 Conda 环境；CI 结果不代表完整依赖、数据库、模型或桌面集成已验证。
 - Python 工程位于 `backend/`，包含 `src/notalone/`、`tests/`、`database/` 与 `pyproject.toml`；从仓库根目录安装用 `python -m pip install -e ./backend`。根 `.env` 保持原位置，运行入口见 [后端说明](../../backend/README.md)。
 - `desktop/` 是 Electron + React/TypeScript 桌面端；当前已接入受控后端、联系人、历史导入预览、会话读取授权、草稿改写与只读关系资料。完整业务闭环与最新版 App 验收尚未完成；验证按下方“桌面验收”执行，不沿用历史 App 的业务或权限验收。
 - **桌面开发只用热更新**：先执行 `cd desktop && npm run dev:status`，已有当前项目开发实例就复用，没有才后台启动 `npm run dev`；`npm start` 也走同一入口。React/CSS 热更新，main、preload、共享代码和 Python 变化由开发监督器经认证退出后串行重启。启动后必须再查 `dev:status`，核对实际 `--notalone-dev` 宿主及其监督器仍存活；服务就绪另查应用界面。发现打包版时通过应用菜单正常退出，不强杀、不继续启动第二份。
@@ -68,6 +67,6 @@
 ## 公开前检查
 
 - 公开内容保留产品代码、架构、任务规格与必要合成验收证据；私人协调过程、原始资料、凭据和本机身份信息留在端侧。官网部署主机由 `NOTALONE_WEB_HOST` 显式提供。
-- 提交后执行 `node scripts/check_public_history.mjs --ref main --working-tree`，检查该分支完整可达历史及当前文件。检查只在端侧读取，不联网。
+- 提交后执行 `node scripts/check_public_history.mjs --ref HEAD --working-tree`，检查当前分支完整可达历史及当前文件；准备公开 `main` 时另执行 `node scripts/check_public_history.mjs --ref main`。检查只在端侧读取，不联网。
 - 2026-10-13 本地 `main` 完整历史已按用户授权脱敏；原提交引用通过 [提交映射](../publication-commit-map.tsv) 定位清理后的版本。冻结评测中原摘要仍指向原始证据，新增的脱敏说明区分公开副本与原始运行，不代表重跑。
 - 原历史和未提交文件的恢复副本保存在仓库外私有目录。其他开发工作树继续保留原历史，公开时仅使用经过检查的分支；不要用 `--all` 或 `--mirror` 带出未清理分支。已有 GitHub 历史只有在另行授权更新远端后才会改变。

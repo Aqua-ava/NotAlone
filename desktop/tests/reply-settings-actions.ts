@@ -1,12 +1,9 @@
-import { expect, type Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
 
-// 经真实折叠控件展开设置，重复调用不会把已展开区域关闭。
-export async function ensureReplySettingsOpen(helper: Page, field: '策略选择' | '本次精确场景'): Promise<void> {
-  const control = helper.getByRole(field === '策略选择' ? 'combobox' : 'textbox', {
-    name: field, exact: true, includeHidden: true,
-  });
-  const settings = helper.locator('details').filter({ has: control });
-  await expect(settings).toHaveCount(1);
-  if (await settings.getAttribute('open') === null) await settings.locator('summary').click();
-  await expect(control).toBeVisible();
+// 学习与反馈回归经公开 bridge 显式声明权限范围，不从自动匹配结果推断场景授权。
+export async function declareReplyScene(helper: Page, scene: string): Promise<void> {
+  await helper.evaluate(async value => {
+    const state = await window.notalone.contacts.getState();
+    await window.notalone.replies.updateScene({ contactId: state.selectedContactId!, scopeRevision: state.scopeRevision, scene: value });
+  }, scene);
 }

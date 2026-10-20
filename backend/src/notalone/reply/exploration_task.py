@@ -67,6 +67,7 @@ class ExplorationTask:
     selected_intent: str | None = None
     selection_id: UUID | None = None
     selection_source: DirectionSource | None = None
+    skill_selection_complete: bool = True
 
     @property
     def has_confirmed_intent(self) -> bool:
@@ -122,6 +123,8 @@ class ExplorationStore(Protocol):
     def complete(
         self, task: ExplorationTask, result: dict[str, Any],
     ) -> ExplorationTask: ...
+
+    def pin_skill(self, task: ExplorationTask, version_id: UUID | None) -> ExplorationTask: ...
 
     def select(
         self, scope: ContactScope, exploration_id: UUID, input_version_id: UUID,

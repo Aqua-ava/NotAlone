@@ -1,7 +1,10 @@
+import { MemoryEvolutionDetails } from './MemoryEvolutionDetails';
+import { MemoryConditionsDetails } from './MemoryConditionsDetails';
+import { MemoryEventDetails } from './MemoryEventDetails';
 import { PersonalBackgroundDetails } from './PersonalBackgroundDetails';
 import { useState } from 'react';
 import type { ReplyCandidate, ReplyCandidateSelection } from '../shared/reply-bridge';
-import type { ReplyEvidenceState, ReplyLayeredContext, ReplyLayeredScenarioRead, ReplyLayeredStatus, ReplyRetrievalReceipt } from '../shared/reply-evidence';
+import type { ReplyEvidenceItem, ReplyEvidenceState, ReplyLayeredContext, ReplyLayeredScenarioRead, ReplyLayeredStatus, ReplyRetrievalReceipt } from '../shared/reply-evidence';
 import { useRevisionedSession } from './use-revisioned-session';
 import { MemoryTemporalStatus } from './MemoryTemporalStatus';
 import { ReplyBasisChangeNotice } from './ReplyBasisChangeNotice';
@@ -53,7 +56,10 @@ function LayeredSummary({ context, status, receipts, owner = false }: { context?
       {entry.uncertainty && <p>不确定性：{entry.uncertainty}</p>}
       {entry.references.map((ref) => <div key={`${ref.memoryId}:${ref.revision}`}>
         <p>底层资料：{ref.memoryId}；版本：{ref.revision}；{ref.provenanceKind === 'manual_entry' ? '手动录入' : '来源支持'}。</p>
-        <MemoryTemporalStatus timing={ref.timing} snapshot />
+        <MemoryTemporalStatus timing={ref.timing} validAt={ref.validAt} invalidAt={ref.invalidAt} snapshot />
+        <MemoryEventDetails event={ref.event} />
+        <MemoryConditionsDetails conditions={ref.conditions} />
+        <MemoryEvolutionDetails evolution={ref.evolution} />
         <p>保存时间：{ref.timing.recordedAt ?? '未知'}；来源时间：{ref.timing.sourceStartedAt ?? '未知'} 至 {ref.timing.sourceEndedAt ?? '未知'}{ref.timing.sourceTimeComplete ? '' : '（不完整）'}。</p>
       </div>)}
     </article>)}
@@ -100,14 +106,43 @@ function ScenarioReadSummary({ receipts, owner = false }: { receipts?: ReplyLaye
             <p>底层资料：{ref.memoryId}；版本：{ref.revision}；
               {ref.provenanceKind === 'manual_entry' ? '手动录入' : ref.provenanceKind === 'source_supported' ? '来源支持' : '本次快照未记录来历'}。</p>
             {ref.timing ? <>
-              <MemoryTemporalStatus timing={ref.timing} snapshot />
+              <MemoryTemporalStatus timing={ref.timing} validAt={ref.validAt} invalidAt={ref.invalidAt} snapshot />
+              <MemoryEventDetails event={ref.event} />
               <p>保存时间：{ref.timing.recordedAt ?? '未知'}；来源时间：{ref.timing.sourceStartedAt ?? '未知'} 至 {ref.timing.sourceEndedAt ?? '未知'}{ref.timing.sourceTimeComplete ? '' : '（不完整）'}。</p>
-            </> : <p>本次快照未记录来源时间与核实状态。</p>}
+            </> : <p>本次快照未记录来源日期与适用性。</p>}
+            <MemoryConditionsDetails conditions={ref.conditions} />
+            <MemoryEvolutionDetails evolution={ref.evolution} />
           </div>)}
         </div>)}
       </>}
     </article>)}
   </section>;
+}
+
+function EvidenceItem({ item, cited, changes }: {
+  item: ReplyEvidenceItem; cited: boolean; changes: ReplyEvidenceState['basisChanges'];
+}) {
+  return <article>
+    <div className="evidence-item-heading">
+      <strong>{kindNames[item.kind]}</strong>
+      <span>{cited ? '本候选已引用' : item.cited ? '同组其他候选已引用' : '生成上下文，未被候选引用'}</span>
+    </div>
+    <ReplyBasisChangeNotice changes={changes?.filter((change) => change.evidenceId === item.evidenceId && change.kind === item.kind)} />
+    <p className="evidence-quote">{item.text}</p>
+    {['confirmed_memory', 'owner_memory', 'pending_candidate'].includes(item.kind) && <MemoryTemporalStatus timing={item.timing} validAt={item.validAt} invalidAt={item.invalidAt} snapshot />}
+    {['deleted', 'invalidated'].includes(item.snapshotStatus) && <p>生成时状态：{statusNames[item.snapshotStatus]}</p>}
+    <details className="record-metadata"><summary>来源时间详情</summary>
+      {item.navigation && <p>{item.navigation.scopeKind === 'contact' ? '由联系人概览定位' : '由本人概览定位'}，底层资料来历：{item.navigation.provenanceKind === 'manual_entry' ? '手动录入' : '来源支持'}。</p>}
+      <p>入选原因：{item.selectionReason}</p>
+      <p>生成时状态：{statusNames[item.snapshotStatus] ?? '未识别状态'}</p>
+      <p>保存时间：{item.timing.recordedAt ?? '未知'}</p>
+      {item.timing.sourceStartedAt && item.timing.sourceEndedAt
+        ? <p>来源时间：{item.timing.sourceStartedAt} 至 {item.timing.sourceEndedAt}{item.timing.sourceTimeComplete ? '' : '（不完整）'}</p>
+        : <p>来源时间未知</p>}
+      {['confirmed_memory', 'owner_memory', 'pending_candidate'].includes(item.kind) && <><MemoryEventDetails event={item.event} /><MemoryConditionsDetails conditions={item.conditions} /><MemoryEvolutionDetails evolution={item.evolution} /></>}
+      <p>有效起点：{item.validAt ?? '未知'}；失效时间：{item.invalidAt ?? '未知'}</p>
+    </details>
+  </article>;
 }
 
 export function useReplyEvidence() {
@@ -123,6 +158,8 @@ export function ReplyEvidence({ evidence, selection, candidate, number, waiting 
   const matches = state.contactId === selection.contactId && state.scopeRevision === selection.scopeRevision
     && state.replyRequestId === selection.replyRequestId && state.candidateId === selection.candidateId;
   const open = matches && state.phase !== 'idle';
+  const citedItems = state.items.filter((item) => candidate.citationIds.includes(item.evidenceId));
+  const contextItems = state.items.filter((item) => !candidate.citationIds.includes(item.evidenceId));
   async function operate(close = false) {
     const revision = evidence.latest.current.scopeRevision;
     try {
@@ -131,43 +168,45 @@ export function ReplyEvidence({ evidence, selection, candidate, number, waiting 
     } catch { if (evidence.active.current && revision === evidence.latest.current.scopeRevision) setFailure({ key: selectionKey, message: '候选依据暂不可用，请重新确认本次候选。' }); }
   }
   return <div className="reply-evidence">
-    <button disabled={waiting} aria-expanded={open} onClick={() => void operate(open)}>{open ? '收起' : '展开'}候选{number}依据</button>
-    {open && <section aria-label={`候选${number}依据`}>
-      <p>本次生成快照；状态和时间对应生成时，不代表资料当前仍可检索。</p>
+    <button disabled={waiting} aria-expanded={open} aria-label={`${open ? '收起' : '展开'}候选${number}依据`} onClick={() => void operate(open)}>{open ? '收起依据' : '查看依据'}</button>
+    {open && <section key={selectionKey} aria-label={`候选${number}依据`}>
       {state.phase === 'loading' && <p role="status">正在读取本次依据…</p>}
       {state.phase === 'failed' && <><p role="alert">本次依据读取失败，请检查本机连接后重试。</p><button onClick={() => void operate()}>重试候选{number}依据</button></>}
       {state.phase === 'missing' && <p role="status">本次依据不存在或已删除，无法恢复原正文。</p>}
       {state.phase === 'ready' && <>
-        <h4>这条回复参考了什么</h4>
-        <p className="evidence-help">标为“本候选已引用”的内容是这条回复明确引用的依据，其他内容仅作为背景参考。</p>
-        <details className="evidence-technical"><summary>检索过程与技术详情</summary>
-        <RetrievalSummary receipt={state.retrieval} />
-        <LayeredSummary context={state.layeredContext} status={state.layeredStatus} receipts={state.layeredScenarioReads} />
-        <ScenarioReadSummary receipts={state.layeredScenarioReads} />
-        <LayeredSummary context={state.ownerLayeredContext} status={state.ownerLayeredStatus} receipts={state.ownerLayeredScenarioReads} owner />
-        <ScenarioReadSummary receipts={state.ownerLayeredScenarioReads} owner />
-        </details>
+        <div className="evidence-heading"><h4>直接依据</h4><span>{citedItems.length} 条引用</span></div>
+        <p className="evidence-help">以下为生成时引用的原文。</p>
         <ReplyBasisChangeNotice changes={state.basisChanges} />
         {candidate.citationIds.some((id) => !state.items.some((item) => item.evidenceId === id)) && <p>部分引用缺失，不补填后来资料。</p>}
-        {!state.items.length && <p>本次没有可展示的依据。</p>}
-        {state.items.map((item) => <article key={item.evidenceId}>
-          <strong>{kindNames[item.kind]}</strong>
-          {item.navigation && <p>{item.navigation.scopeKind === 'contact' ? '由联系人概览定位' : '由本人概览定位'}，底层资料来历：{item.navigation.provenanceKind === 'manual_entry' ? '手动录入' : '来源支持'}。</p>}
-          <ReplyBasisChangeNotice changes={state.basisChanges?.filter((change) => change.evidenceId === item.evidenceId && change.kind === item.kind)} />
-          <p>{candidate.citationIds.includes(item.evidenceId) ? '本候选已引用' : item.cited ? '同组其他候选已引用' : '生成上下文，未被候选引用'}</p>
-          <p>{item.text}</p><p>入选原因：{item.selectionReason}</p>
-          <p>生成时状态：{statusNames[item.snapshotStatus] ?? '未识别状态'}</p>
-          {['confirmed_memory', 'owner_memory', 'pending_candidate'].includes(item.kind) && <MemoryTemporalStatus timing={item.timing} snapshot />}
-          <details className="record-metadata"><summary>来源时间详情</summary>
-          <p>保存时间：{item.timing.recordedAt ?? '未知'}</p>
-          {item.timing.sourceStartedAt && item.timing.sourceEndedAt
-            ? <p>来源时间：{item.timing.sourceStartedAt} 至 {item.timing.sourceEndedAt}{item.timing.sourceTimeComplete ? '' : '（不完整）'}</p>
-            : <p>来源时间未知</p>}
-          <p>有效起点：{item.validAt ?? '未知'}；失效时间：{item.invalidAt ?? '未知'}</p>
-          </details>
-        </article>)}
+        {!citedItems.length && <p>这条回复没有可展示的直接引用。</p>}
+        <div className="evidence-citations">
+          {citedItems.map((item) => <EvidenceItem key={item.evidenceId} item={item} cited changes={state.basisChanges} />)}
+        </div>
+        {contextItems.length > 0 && <details className="evidence-context">
+          <summary>其他上下文（{contextItems.length}条）</summary>
+          <p className="evidence-help">这些内容参与了本次生成，但未被这条回复直接引用。</p>
+          <div className="evidence-context-list" role="region" aria-label="其他上下文列表" tabIndex={0}>
+            {contextItems.map((item) => <EvidenceItem key={item.evidenceId} item={item} cited={false} changes={state.basisChanges} />)}
+          </div>
+        </details>}
+        <details className="evidence-technical"><summary>检索过程与技术详情</summary>
+          <ReplyEvidenceTechnicalDetails state={state} />
+        </details>
       </>}
     </section>}
     {failure?.key === selectionKey && <p role="alert">{failure.message}</p>}
   </div>;
+}
+
+export function ReplyEvidenceTechnicalDetails({ state }: { state: ReplyEvidenceState }) {
+  return (
+          <div className="evidence-technical-content" role="region" aria-label="检索技术详情列表" tabIndex={0}>
+          <p>本次生成快照；状态和时间对应生成时，不代表资料当前仍可检索。</p>
+          <RetrievalSummary receipt={state.retrieval} />
+          <LayeredSummary context={state.layeredContext} status={state.layeredStatus} receipts={state.layeredScenarioReads} />
+          <ScenarioReadSummary receipts={state.layeredScenarioReads} />
+          <LayeredSummary context={state.ownerLayeredContext} status={state.ownerLayeredStatus} receipts={state.ownerLayeredScenarioReads} owner />
+          <ScenarioReadSummary receipts={state.ownerLayeredScenarioReads} owner />
+          </div>
+  );
 }

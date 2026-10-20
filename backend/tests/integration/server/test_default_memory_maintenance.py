@@ -76,13 +76,15 @@ class DefaultMemoryMaintenanceTest(CoreBusinessFlowFixture, unittest.TestCase):
         deadline = monotonic() + 5
         while monotonic() < deadline:
             state = backend.request(path)[1]['layered_memory']
-            if state['status'] == 'ready' and state['profile'] is not None:
+            if (state['status'] == 'ready' and state['profile'] is not None
+                    and not state['maintenance_pending']):
                 break
             Event().wait(.05)
         self.assertEqual(state['status'], 'ready', state)
         self.assertEqual(state['model_calls_used'], 4)
         self.assertTrue(state['scenarios'])
         self.assertIsNotNone(state['profile'])
+        self.assertFalse(state['maintenance_pending'])
         self.assertEqual(state['runtime_policy'], 'verified_items')
         snapshot = service.capture(scope)
         self.assertIsNotNone(snapshot)
@@ -93,11 +95,17 @@ class DefaultMemoryMaintenanceTest(CoreBusinessFlowFixture, unittest.TestCase):
         deadline = monotonic() + 5
         while monotonic() < deadline:
             updated = backend.request(path)[1]['layered_memory']
-            if updated['status'] == 'ready' and updated['covered_count'] == 2:
+            if (updated['status'] == 'ready' and updated['covered_count'] == 2
+                    and updated['profile'] is not None
+                    and updated['profile']['version_id'] != state['profile']['version_id']
+                    and not updated['maintenance_pending']):
                 break
             Event().wait(.05)
         self.assertEqual(updated['status'], 'ready', updated)
         self.assertEqual(updated['covered_count'], 2)
+        self.assertIsNotNone(updated['profile'])
+        self.assertNotEqual(updated['profile']['version_id'], state['profile']['version_id'])
+        self.assertFalse(updated['maintenance_pending'])
         self.assertEqual(updated['model_calls_used'], 4)
         self.assertFalse(service.validate(snapshot))
         snapshot = service.capture(scope)
@@ -126,7 +134,7 @@ class DefaultMemoryMaintenanceTest(CoreBusinessFlowFixture, unittest.TestCase):
                 result['scenarios'][0]['topic_key'] = 'learning-' + str(memories[0].memory_id)
                 return result
 
-        backend = LayeredProfileHttpTest.controlled(self, scenario_proposer=CurrentFactProposal())
+        backend = LayeredProfileHttpTest.controlled(self, scenario_proposer=CurrentFactProposal(), automatic_maintenance=True)
         path = f'/api/contacts/{contact}/layered-memory'
         status, result = self.backend.request('/api/memories/manual-contact',
             {'contact_id': str(contact), 'text': '双方共同学习合成课程。', 'category': 'common_fact'})

@@ -14,6 +14,7 @@ from psycopg.types.json import Jsonb
 
 from notalone.database_migrations import migrate
 from notalone.memory import AdoptionMethod, MemoryCandidate, MemoryCategory, SourceDependencyMode
+from notalone.memory.models import MemoryChangeKind
 from notalone.memory_extraction.models import FactSubject
 from notalone.persistence import PostgresMemoryStore, PostgresOwnerMemoryStore
 from notalone.persistence.memory_store import MemoryPersistenceError
@@ -127,6 +128,28 @@ class AllSourcePersistenceTest(unittest.TestCase):
         old = self.store.create_candidate(self._candidate(source_ids=(self.source,), source_dependency_mode=SourceDependencyMode.ANY))
         self.assertIs(old.source_dependency_mode, SourceDependencyMode.ANY)
 
+    def test_partial_layered_schema_failure_rolls_back_memory_confirmation(self):
+        candidate = self.store.create_candidate(self._candidate(source_dependency_mode=SourceDependencyMode.ANY))
+        with psycopg.connect(self.url) as connection:
+            connection.execute('DROP TABLE public.layered_profile_version CASCADE')
+        # 只有整个分层结构尚未建立才兼容跳过；现行结构损坏不能忽略删除依赖。
+        with self.assertRaises(MemoryPersistenceError):
+            self.store.confirm(scope=self.scope, candidate_id=candidate.candidate_id,
+                               adoption_method=AdoptionMethod.MANUAL)
+        self.assertEqual(self.store.list_confirmed(self.scope), ())
+        self.assertEqual(self.store.get_candidate(scope=self.scope, candidate_id=candidate.candidate_id).status.value,
+                         'pending')
+
+    def test_partial_retirement_columns_reject_correction_without_changing_memory(self):
+        candidate = self.store.create_candidate(self._candidate(source_dependency_mode=SourceDependencyMode.ANY))
+        memory = self.store.confirm(scope=self.scope, candidate_id=candidate.candidate_id,
+                                    adoption_method=AdoptionMethod.MANUAL)
+        with psycopg.connect(self.url) as connection:
+            connection.execute('ALTER TABLE public.confirmed_memory DROP COLUMN retired_at')
+        with self.assertRaises(MemoryPersistenceError):
+            self.store.correct(scope=self.scope, memory_id=memory.memory_id, text='不得部分记录退役原因。')
+        self.assertEqual([item.memory_id for item in self.store.list_confirmed(self.scope)], [memory.memory_id])
+
     def test_legacy_missing_columns_read_any_and_reject_all_before_new_writes(self):
         # 仅在自有随机库重建001–059，核真实缺列旧结构而非放松071约束。
         with psycopg.connect(self.url) as connection:
@@ -143,8 +166,12 @@ class AllSourcePersistenceTest(unittest.TestCase):
         self.assertIs(candidate.source_dependency_mode, SourceDependencyMode.ANY)
         memory = self.store.confirm(scope=self.scope, candidate_id=candidate.candidate_id, adoption_method=AdoptionMethod.MANUAL)
         self.assertIs(memory.source_dependency_mode, SourceDependencyMode.ANY)
+        with self.assertRaises(MemoryPersistenceError):
+            self.store.correct(scope=self.scope, memory_id=memory.memory_id, text='旧库不能记录事实变化。',
+                               change_kind=MemoryChangeKind.STATE_CHANGED)
         corrected = self.store.correct(scope=self.scope, memory_id=memory.memory_id, text='旧库修正合成正文')
         self.assertIs(corrected.source_dependency_mode, SourceDependencyMode.ANY)
+        self.assertEqual(corrected.revision, memory.revision + 1)
         self.assertEqual(len(self.store.list_confirmed(self.scope)), 1)
         from notalone.memory import OwnerMemory, MemoryTopic, ConfirmedMemoryStatus
         from notalone.persistence.owner_memory_store import OwnerMemoryPersistenceError

@@ -14,13 +14,14 @@ import { installMemoryBridge } from '../../src/main/memory/bridge';
 import { installTraceBridge } from '../../src/main/traces/bridge';
 import { installSourceDeletionBridge } from '../../src/main/sources/bridge';
 import { installReplyBridge } from '../../src/main/reply/bridge';
-import { installStyleSampleBridge } from '../../src/main/style-samples/bridge';
+import { installCandidateProvenanceBridge } from '../../src/main/candidate-provenance/bridge';
 import { installExpressionPreferenceBridge } from '../../src/main/expression-preferences/bridge';
 import { expressionPreferenceDeletion } from '../../src/main/expression-preferences/deletion';
 import { installSkillLearningBridge } from '../../src/main/skill-learning/bridge';
-import { coordinateSkillLearningDeletion, coordinateSkillLearningSampleDeletion, coordinateSkillLearningSourceDeletion } from '../../src/main/skill-learning/deletion';
+import { coordinateSkillLearningDeletion, coordinateSkillLearningSourceDeletion } from '../../src/main/skill-learning/deletion';
 import { installBindingConsentBridge } from '../../src/main/bindings/bridge';
 import { installSyncControlBridge } from '../../src/main/sync/bridge';
+import { SyncPriorityController } from '../../src/main/sync/priority';
 import { noArguments, type PageCommands, type PageRole } from '../../src/main/page-commands';
 import { ownResource } from './cleanup';
 
@@ -52,11 +53,14 @@ export class PageHost implements PageCommands {
   private readonly pages = new Map<Page, PageRole>();
   private readonly pendingEvents = new Set<Promise<unknown>>();
   private readonly pendingCommands = new Set<Promise<unknown>>();
+  private readonly pendingWindowCommands = new Set<Promise<unknown>>();
   private closing = false;
   private readonly released = ownResource();
   readonly backend: BackendHost;
   readonly diagnostics: StartupDiagnostics;
   readonly foreground: ForegroundController;
+  private readonly sync: ReturnType<typeof installSyncControlBridge>;
+  private readonly syncPriority: SyncPriorityController;
   private readonly replies: ReturnType<typeof installReplyBridge>;
   constructor(private readonly context: BrowserContext, private readonly origin: string, userData: string, options: { copySurface?: CandidateCopySurface; chooseImportFile?: ImportFileSelector } = {}) {
     this.diagnostics = new StartupDiagnostics(userData);
@@ -64,7 +68,8 @@ export class PageHost implements PageCommands {
     const contacts = installContactSessionBridge(this, this.backend);
     this.foreground = installForegroundBridge(this, this.backend, contacts);
     installBindingConsentBridge(this, this.backend, contacts, () => this.foreground.beginReadingScopeChange());
-    installSyncControlBridge(this, this.backend, contacts, () => this.foreground.beginReadingScopeChange());
+    this.sync = installSyncControlBridge(this, this.backend, contacts, () => this.foreground.beginReadingScopeChange());
+    this.syncPriority = new SyncPriorityController(this.backend, contacts, this.sync);
     const imports = new ImportController(this.backend, contacts);
     installImportBridge(this, imports);
     this.handle('imports:choose-file', (...args: unknown[]) => {
@@ -76,26 +81,25 @@ export class PageHost implements PageCommands {
     const traces = installTraceBridge(this, this.backend, contacts);
     memory.onRecordDeletion((phase) => traces.recordDeletionChanged(phase));
     const replies = this.replies = installReplyBridge(this, this.backend, contacts, () => this.foreground.getGenerationBlock());
-    const styleSamples = installStyleSampleBridge(this, this.backend, contacts, replies);
+    const candidateProvenance = installCandidateProvenanceBridge(this, this.backend, contacts, replies);
     const skillLearning = installSkillLearningBridge(this, this.backend, contacts);
-    coordinateSkillLearningSampleDeletion(skillLearning, styleSamples);
     const preferences = installExpressionPreferenceBridge(this, this.backend, contacts,
       coordinateSkillLearningDeletion(skillLearning, memory, replies,
-        expressionPreferenceDeletion(traces, replies, styleSamples)));
+        expressionPreferenceDeletion(traces, replies, candidateProvenance)));
     this.foreground.onStateChanged(() => replies.refreshGenerationEligibility());
     const sources = installSourceDeletionBridge(this, this.backend, contacts, async (contactId) => {
       traces.invalidateSource();
       skillLearning.invalidate();
-      const styleChecking = styleSamples.invalidateSource(contactId);
+      candidateProvenance.invalidateSource();
       const checking = replies.revalidateDeletedSource(contactId);
       const memoryChecking = memory.revalidateDeletedSource(contactId);
       const preferenceChecking = preferences.invalidateSource(contactId);
-      await Promise.all([styleChecking, checking, memoryChecking, preferenceChecking]);
+      await Promise.all([checking, memoryChecking, preferenceChecking]);
     });
     coordinateSkillLearningSourceDeletion(skillLearning, sources);
     sources.onDeletion((phase) => memory.sourceDeletionChanged(phase));
     const copies = new CandidateCopyController(this.backend, contacts, replies,
-      (selection, text) => styleSamples.recordCopied(selection, text));
+      (selection, text) => candidateProvenance.recordCopied(selection, text));
     this.handle('candidate-copy:copy', (...args: unknown[]) => {
       const request = candidateCopyRequest(args);
       if (!options.copySurface) throw new Error('本轮页面未提供系统复制输入。');
@@ -137,7 +141,11 @@ export class PageHost implements PageCommands {
       if (this.closing || source.page !== page || source.frame !== page.mainFrame()
         || page.url() !== `${this.origin}/#${role}` || typeof channel !== 'string' || !Array.isArray(args)) throw new Error('页面操作不可用。');
       if (channel === 'page:open-manager' || channel === 'page:open-helper') {
-        noArguments(args); return this.open(channel === 'page:open-helper' ? 'helper' : 'manager').then(() => undefined);
+        noArguments(args);
+        const pending = this.open(channel === 'page:open-helper' ? 'helper' : 'manager').then(() => undefined);
+        this.pendingWindowCommands.add(pending);
+        try { return await pending; }
+        finally { this.pendingWindowCommands.delete(pending); }
       }
       const command = this.handlers.get(channel);
       if (!command || (command.role && command.role !== this.pages.get(page))) throw new Error('页面操作不可用。');
@@ -156,10 +164,15 @@ export class PageHost implements PageCommands {
   async awaitPendingCommands(): Promise<void> {
     await Promise.allSettled(this.pendingCommands);
   }
+  // URL就绪不代表宿主已发布焦点；只等开窗命令，避免与测试刻意挂起的业务请求互等。
+  async awaitPendingWindowCommands(): Promise<void> {
+    await Promise.all(this.pendingWindowCommands);
+  }
   async close(): Promise<void> {
     this.closing = true;
     this.foreground.dispose();
     this.diagnostics.cancel();
+    await this.syncPriority.dispose(); this.sync.dispose();
     const stopped = await this.backend.stop();
     await Promise.allSettled(this.pendingEvents);
     await this.context.close();

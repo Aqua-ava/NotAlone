@@ -77,7 +77,7 @@ class SyncReadCausesTest(unittest.TestCase):
             owner_id=sync_fixture.OWNER_ID, channel="wechat", account_scope="synthetic",
             cli=self.cli, bindings=[self.binding], observation_store=base.store,
             backfill_state=base.backfill_store, sync_state=base.sync_state,
-            clock=lambda: self.now)
+            clock=lambda: self.now, monotonic_clock=lambda: 0.0)
         self.addCleanup(self.sync.close)
 
     def rows(self):
@@ -235,7 +235,7 @@ class SyncReadCausesTest(unittest.TestCase):
             owner_id=sync_fixture.OWNER_ID, channel="wechat", account_scope="synthetic",
             cli=self.cli, bindings=[self.binding], observation_store=base.store,
             backfill_state=base.backfill_store, sync_state=base.sync_state,
-            clock=lambda: self.now)
+            clock=lambda: self.now, monotonic_clock=lambda: 0.0)
         self.addCleanup(self.sync.close)
         self.assertEqual(run(), observed)
         self.assertEqual(self.commands, observed_commands)

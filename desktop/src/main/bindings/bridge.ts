@@ -43,6 +43,9 @@ export function installBindingConsentBridge(commands: PageCommands, backend: Bac
   commands.handle('bindings:refresh', (...args: unknown[]) => {
     noArguments(args); return bindings.refresh();
   }, 'manager');
+  commands.handle('bindings:refresh-saved', (...args: unknown[]) => {
+    noArguments(args); return bindings.refreshSaved();
+  }, 'manager');
   commands.handle('bindings:confirm-selections', (...args: unknown[]) => {
     return bindings.confirmSelections(confirmation(args));
   }, 'manager');

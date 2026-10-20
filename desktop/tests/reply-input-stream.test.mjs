@@ -75,3 +75,22 @@ test('增量缺口只开一轮权威读取，迟到旧快照不覆盖新联系�
     assert.equal(reads, 1);
   } finally { unsubscribe(); }
 });
+
+test('统一补充通过增量输入替换旧双框，不回传历史并保留完整响应兼容入口', async () => {
+  const f = await fixture(100);
+  await f.bridge.setMode({ ...f.scope(), mode: 'initiate_conversation' });
+  await f.bridge.updateCorrection({ ...f.scope(), correction: '旧纠正' });
+  await f.bridge.updateRequirements({ ...f.scope(), requirements: '旧要求' });
+  f.events.length = 0; f.responses.length = 0;
+  await f.bridge.updateInput({ type: 'supplement', update: { ...f.scope(), supplement: '新的统一补充' } });
+  const state = f.replies.getState();
+  assert.equal(state.requirements, '新的统一补充');
+  assert.equal(state.correction, '');
+  assert.equal(state.supplementInput, true);
+  assert.ok(f.events.length > 0);
+  assert.ok(f.events.every(event => event.state.kind === 'patch' && !event.state.changes.savedSession));
+  assert.equal(f.responses.filter(response => response.value?.savedSession).length, 0);
+  const compatible = await f.bridge.updateSupplement({ ...f.scope(), supplement: '兼容完整响应' });
+  assert.equal(compatible.savedSession.turns.length, 100);
+  assert.equal(compatible.requirements, '兼容完整响应');
+});

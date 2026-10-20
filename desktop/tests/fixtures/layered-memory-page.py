@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import sys
+import traceback
 import unittest
 from uuid import uuid4
 
@@ -19,9 +20,10 @@ def main():
     directory = Path(os.environ["NOTALONE_ENV_FILE"]).parent
     evidence = Path(os.environ["NOTALONE_LAYERED_TEST_EVIDENCE_DIR"])
     options = json.loads(os.environ.get('NOTALONE_LAYERED_FIXTURE_OPTIONS', '{}'))
-    if (not isinstance(options, dict) or set(options) - {'max_memories', 'separate_topics'}
+    if (not isinstance(options, dict) or set(options) - {'max_memories', 'separate_topics', 'initially_disabled'}
             or type(options.get('max_memories', 1)) is not int or not 1 <= options.get('max_memories', 1) <= 12
-            or type(options.get('separate_topics', False)) is not bool):
+            or type(options.get('separate_topics', False)) is not bool
+            or type(options.get('initially_disabled', False)) is not bool):
         raise RuntimeError('主题资料合成选项不可核验。')
     separate_topics = options.get('separate_topics', False)
     correction_receipts = []
@@ -54,7 +56,13 @@ def main():
     from tests.integration.server.memory_overview_support import MemoryOverviewHttpFixture
 
     class Fixture(MemoryOverviewHttpFixture, unittest.TestCase):
-        pass
+        def _callCleanup(self, function, /, *args, **kwargs):
+            try:
+                super()._callCleanup(function, *args, **kwargs)
+            except BaseException:
+                # 独立夹具没有 unittest 结果收集器，保留清理失败的原始诊断。
+                traceback.print_exc()
+                raise
 
     class Proposal:
         timeout_contract = SYNTHETIC_ORGANIZATION_TIMEOUT
@@ -158,6 +166,18 @@ def main():
             for text in ('本人有合成课程学习经历。', '本人另有独立合成运动背景。'):
                 status, result = fixture.backend.request('/api/memories/manual-owner', {'text': text, 'category': 'common_fact'})
                 fixture.assertEqual(status, 200, result)
+        if options.get('initially_disabled', False):
+            # 默认新范围自动维护；开启门回归从明确停用状态开始，不伪造生产默认值。
+            paths = ['/api/memories/owner/layered-memory'] if owner_only else [
+                f'/api/contacts/{contact}/layered-memory', f'/api/contacts/{empty}/layered-memory']
+            for target in paths:
+                status, current = fixture.backend.request(target)
+                fixture.assertEqual(status, 200, current)
+                fixture.assertTrue(current['layered_memory']['enabled'])
+                status, disabled = fixture.backend.request(target + '/disable', {
+                    'settings_generation': current['layered_memory']['settings_generation']})
+                fixture.assertEqual(status, 200, disabled)
+                fixture.assertFalse(disabled['layered_memory']['enabled'])
         (directory / "synthetic.env").write_text(f"NOTALONE_DATABASE_URL={url}\nNOTALONE_OWNER_ID={fixture.owner_id}\n")
         (directory / "synthetic.env").chmod(0o600)
         proposal, verification = Proposal(), Verification()
@@ -165,7 +185,9 @@ def main():
         service = LayeredMemoryService(PostgresLayeredMemoryStore(url), proposer=proposal,
                                        verifier=verification, synthetic=True, profile_proposer=profile_proposal,
                                        profile_verifier=profile_verification,
-                                       budget=OrganizationBudget(max_memories=options.get('max_memories', 1), max_model_calls=4))
+                                       # 单批只覆盖指定条数；完整旧主题及画像输入使用独立的合成容量。
+                                       budget=OrganizationBudget(max_memories=max(12, options.get('max_memories', 1)),
+                                       max_batch_memories=options.get('max_memories', 1), max_characters=16000, max_model_calls=4))
         backend = HttpBackend(create_app(database_url=url, owner_id=fixture.owner_id,
             token="synthetic-layered-page-token", memory_service=MemoryService(
                 contact_memory=PostgresMemoryStore(url), owner_memory=PostgresOwnerMemoryStore(url)),

@@ -121,7 +121,7 @@ def _memory_fields(candidate, previous):
             and previous.source_dependency_mode is SourceDependencyMode.ALL else candidate.source_dependency_mode),
         status=ConfirmedMemoryStatus.ACTIVE,
         valid_at=candidate.valid_at, invalid_at=candidate.invalid_at, confidence=candidate.confidence,
-        risk_flags=candidate.risk_flags, timing=candidate.timing, event=candidate.event,
+        risk_flags=candidate.risk_flags, timing=candidate.timing, event=candidate.event, conditions=candidate.conditions,
         revision=previous.revision+1 if previous else 1,
         supersedes_memory_id=previous.memory_id if previous else None)
 

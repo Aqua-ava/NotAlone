@@ -37,6 +37,11 @@ from tests.integration.server.core_business_flow_support import (
 )
 
 
+def active_memories(payload):
+    """纠错保护只核对当前有效版本；来源删除断言仍核对完整管理列表。"""
+    return [memory for memory in payload["memories"] if memory["status"] == "active"]
+
+
 class MemoryCorrectionProtectionHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
     def setUp(self):
         self.owner_id, self.contact_id = uuid4(), uuid4()
@@ -201,7 +206,7 @@ class MemoryCorrectionProtectionHttpTest(CoreBusinessFlowFixture, unittest.TestC
         self._candidate("对方偏爱喝咖啡。")
         self.assertEqual(self._request("memory-candidates")["candidates"], [])
         self.assertEqual(
-            [row["memory_id"] for row in self._request("memories")["memories"]],
+            [row["memory_id"] for row in active_memories(self._request("memories"))],
             [corrected["memory_id"]],
         )
 
@@ -246,7 +251,7 @@ class MemoryCorrectionProtectionHttpTest(CoreBusinessFlowFixture, unittest.TestC
         self.assertEqual(review["new_message_ids"], [str(new_message)])
         self.assertEqual(review["new_source_ids"], [str(new_source)])
         self.assertEqual(
-            [row["memory_id"] for row in self._request("memories")["memories"]],
+            [row["memory_id"] for row in active_memories(self._request("memories"))],
             [corrected["memory_id"]],
         )
 
@@ -291,7 +296,7 @@ class MemoryCorrectionProtectionHttpTest(CoreBusinessFlowFixture, unittest.TestC
             self._request(f"memory-candidates/{candidate.candidate_id}/confirm", {
                 "correction_decision_ids": [row["decision_id"] for row in review],
             })
-            self.assertEqual(len(self._get(self.backend, prefix)["memories"]), 2)
+            self.assertEqual(len(active_memories(self._get(self.backend, prefix))), 2)
         with psycopg.connect(self.database_url, autocommit=True) as lock:
             self.assertTrue(try_acquire_global_worker_lock(lock))
             try:
@@ -552,8 +557,8 @@ class MemoryCorrectionProtectionHttpTest(CoreBusinessFlowFixture, unittest.TestC
         self.assertEqual(status, 200, replay)
         self.assertEqual(result["memory"]["memory_id"], replay["memory"]["memory_id"])
         self.assertEqual(result["memory"]["adoption_method"], "manual")
-        self.assertEqual(len(self._request("memories")["memories"]), 2)
-        self.assertIn(corrected["memory_id"], [item["memory_id"] for item in self._request("memories")["memories"]])
+        self.assertEqual(len(active_memories(self._request("memories"))), 2)
+        self.assertIn(corrected["memory_id"], [item["memory_id"] for item in active_memories(self._request("memories"))])
 
     def test_confirmation_accepts_complete_review_after_more_than_one_hundred_decisions(self):
         corrected_ids = []
@@ -582,7 +587,7 @@ class MemoryCorrectionProtectionHttpTest(CoreBusinessFlowFixture, unittest.TestC
         status, replay = self.backend.request(path, body)
         self.assertEqual(status, 200, replay)
         self.assertEqual(result["memory"]["memory_id"], replay["memory"]["memory_id"])
-        memories = self._request("memories")["memories"]
+        memories = active_memories(self._request("memories"))
         self.assertEqual(len(memories), 102)
         self.assertTrue(set(corrected_ids).issubset(row["memory_id"] for row in memories))
 
@@ -595,7 +600,7 @@ class MemoryCorrectionProtectionHttpTest(CoreBusinessFlowFixture, unittest.TestC
         })
         self.assertEqual(status, 200, response)
         self.assertEqual(response["memory"]["adoption_method"], "manual")
-        self.assertEqual(len(self._request("memories")["memories"]), 2)
+        self.assertEqual(len(active_memories(self._request("memories"))), 2)
 
     def test_manual_contact_correction_still_requires_review_of_new_canonical_evidence(self):
         self._assert_manual_correction_review(FactSubject.CONTACT)
@@ -613,7 +618,7 @@ class MemoryCorrectionProtectionHttpTest(CoreBusinessFlowFixture, unittest.TestC
         corrected = self._request(f"memories/{original['memory']['memory_id']}/correct", {
             "text": "当前本人主动纠正独立手录根。",
         })["memory"]
-        self.assertEqual(self._request("memories")["memories"][0]["memory_id"], corrected["memory_id"])
+        self.assertEqual(active_memories(self._request("memories"))[0]["memory_id"], corrected["memory_id"])
         with psycopg.connect(self.database_url) as connection:
             self.assertIsNone(connection.execute("SELECT correction_evidence FROM public.memory_candidate WHERE owner_id=%s AND id=%s",
                                                 (self.owner_id, candidate_id)).fetchone()[0])
@@ -645,7 +650,7 @@ class MemoryCorrectionProtectionHttpTest(CoreBusinessFlowFixture, unittest.TestC
         self.assertEqual(review[0]["corrected_text"], corrected_text)
         self.assertEqual(review[0]["new_message_ids"], [str(fresh)])
         self.assertEqual(review[0]["new_source_ids"], [str(source)])
-        self.assertEqual(self._get(self.backend, path)["memories"][0]["memory_id"],
+        self.assertEqual(active_memories(self._get(self.backend, path))[0]["memory_id"],
                          corrected["memory"]["memory_id"])
         status, result = self.backend.request(
             f"/api/contacts/{self.contact_id}/memory-candidates/{candidate.candidate_id}/confirm", {},
@@ -674,7 +679,7 @@ class MemoryCorrectionProtectionHttpTest(CoreBusinessFlowFixture, unittest.TestC
         self.assertEqual(result["memory"]["memory_id"], replay["memory"]["memory_id"])
         status, conflict = self.backend.request(path, {"text": "另一个迟到判断。"})
         self.assertEqual((status, conflict), (409, {"error": "memory_correction_conflict"}))
-        self.assertEqual(len(self._request("memories")["memories"]), 1)
+        self.assertEqual(len(active_memories(self._request("memories"))), 1)
 
     def test_duplicate_rejection_replays_without_second_deleted_version(self):
         rejected = self._candidate("联系人喜欢咖啡。")
@@ -844,7 +849,7 @@ class MemoryCorrectionProtectionHttpTest(CoreBusinessFlowFixture, unittest.TestC
         corrected = self._request(f"memories/{original['memory_id']}/correct", {
             "text": "本联系人新的人工判断。",
         })["memory"]
-        self.assertEqual([row["memory_id"] for row in self._request("memories")["memories"]], [corrected["memory_id"]])
+        self.assertEqual([row["memory_id"] for row in active_memories(self._request("memories"))], [corrected["memory_id"]])
         status, response = self.backend.request(
             f"/api/contacts/{other_scope.contact_id}/memory-candidates/{stale.candidate_id}/confirm", {},
         )

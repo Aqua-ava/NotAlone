@@ -8,6 +8,7 @@ from notalone.reply.errors import (
 from notalone.reply.input_budget import InputBudgetExceededError, InputBudgetUnavailableError
 
 import json
+import psycopg
 import logging
 import secrets
 import threading
@@ -35,9 +36,6 @@ from notalone.application.reply_request import (
 )
 from notalone.application.assistant_message_adoption import parse_assistant_reply_request
 from notalone.application.source_service import SourceService
-from notalone.application.style_sample_service import StyleSampleService
-from notalone.persistence.style_sample_store import PostgresStyleSampleStore
-from notalone.server.style_samples import handle_style_samples
 from notalone.application.expression_preference_service import ExpressionPreferenceService
 from notalone.persistence.expression_preferences import PostgresExpressionPreferenceStore
 from notalone.server.expression_preferences import handle_expression_preferences
@@ -226,7 +224,6 @@ class BackendApp:
         "_setup_service",
         "_skill_service",
         "_skill_learning",
-        "_style_samples",
         "_expression_preferences",
         "_sync_control",
         "_task_host",
@@ -261,7 +258,6 @@ class BackendApp:
         skill_learning: SkillLearningService | None = None,
         ledger_service: LedgerService | None = None,
         setup_service: SetupService | None = None,
-        style_samples: StyleSampleService | None = None,
         expression_preferences: ExpressionPreferenceService | None = None,
         runtime_shutdown: Callable[[], None] | None = None,
     ) -> None:
@@ -282,7 +278,6 @@ class BackendApp:
         self._assistant_sessions = assistant_sessions
         self._candidate_versions = candidate_versions
         self._reply_evidence = reply_evidence
-        self._style_samples = style_samples
         self._expression_preferences = expression_preferences
         self._runtime_shutdown = runtime_shutdown
         self._runtime_shutdown_lock = threading.Lock()
@@ -486,6 +481,8 @@ class BackendApp:
                 HTTPStatus.OK,
                 {"contacts": [_contact_payload(contact) for contact in contacts]},
             )
+        if (path_value.startswith("/api/contacts/") or path_value.startswith("/api/owner/")) and "/memory-processing" in path_value:
+            return self._handle_memory_processing(method_upper, path_value, request_body)
         if _is_trace_path(path_value):
             return self._handle_trace(
                 method=method_upper,
@@ -514,12 +511,6 @@ class BackendApp:
             status, payload = handle_skill_learning(self._skill_learning, owner_id=self._owner_id,
                                                     method=method_upper, path=path_value, body=request_body)
             return _json_response(status, payload, headers={"Cache-Control": "no-store"})
-        if path_value.startswith("/api/contacts/") and "/style-samples" in path_value:
-            if self._style_samples is None:
-                return _json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "style_sample_unavailable"})
-            status, payload = handle_style_samples(self._style_samples, owner_id=self._owner_id,
-                                                   method=method_upper, path=path_value, body=request_body)
-            return _json_response(status, payload)
         if path_value.startswith("/api/contacts/") and path_value.endswith("/messages"):
             return self._handle_messages(
                 method=method_upper,
@@ -544,6 +535,7 @@ class BackendApp:
             and (
                 "/memories" in path_value
                 or "/memory-candidates" in path_value
+                or "/owner-memories" in path_value
             )
         ):
             return self._handle_memory(
@@ -790,16 +782,19 @@ class BackendApp:
             if method != "GET":
                 return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
             try:
-                bindings = sync.cli_bindings()
+                bindings = sync.cli_bindings(include_revoked=True)
             except Exception:
                 return _json_response(
                     HTTPStatus.INTERNAL_SERVER_ERROR,
                     {"error": "cli_bindings_failed"},
                 )
-            return _json_response(
-                HTTPStatus.OK,
-                {"bindings": [_cli_binding_payload(binding) for binding in bindings]},
-            )
+            payload = {"bindings": [_cli_binding_payload(binding) for binding in bindings
+                                    if binding.status.value == "active"]}
+            revoked = [_cli_binding_payload(binding) for binding in bindings
+                       if binding.status.value == "revoked"]
+            if revoked:
+                payload["revoked_bindings"] = revoked
+            return _json_response(HTTPStatus.OK, payload)
         if method != "POST":
             return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
         if path == "/api/sync/foreground/observe":
@@ -1367,6 +1362,11 @@ class BackendApp:
             return _json_response(status, payload, headers={"Cache-Control": "no-store"})
         try:
             contact_id = UUID(parts[2])
+            if parts[3:] == ["assistant-session", "binding"]:
+                if method != "GET":
+                    return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+                service.require_conversation_binding(owner_id=self._owner_id, contact_id=contact_id)
+                return _json_response(HTTPStatus.OK, {"confirmed": True}, headers={"Cache-Control": "no-store"})
             if parts[3:] == ["assistant-session", "default"] and method == "POST":
                 session_id = service.default(owner_id=self._owner_id, contact_id=contact_id)
                 return _json_response(HTTPStatus.OK, {"session_id": str(session_id)})
@@ -1769,7 +1769,7 @@ class BackendApp:
             memory = service.correct_owner_memory(
                 owner_id=owner_id, memory_id=memory_id, text=text,
                 category=_optional_category(payload.get("category")),
-                change_kind=_memory_change_kind(payload),
+                change_kind=_memory_change_kind(payload), conditions=_manual_conditions_payload(payload),
             )
             return _json_response(
                 HTTPStatus.OK, {"memory": _owner_memory_payload(memory)}
@@ -1781,6 +1781,48 @@ class BackendApp:
             raise MemoryRequestInvalid()
         contact_id = _uuid_or_raise(parts[0], "contact_id")
         segment = parts[1]
+        if segment == "owner-memories":
+            if method == "GET" and len(parts) == 2:
+                return _json_response(HTTPStatus.OK, {"memories": [
+                    _owner_memory_payload(memory) for memory in service.list_owner_memories(
+                        owner_id=owner_id, contact_id=contact_id,
+                    )
+                ]}, headers={"Cache-Control": "no-store"})
+            if method == "POST" and len(parts) == 2:
+                entry = _manual_entry_or_raise(_parse_memory_json(body))
+                memory = service.add_manual_owner_memory(
+                    owner_id=owner_id, contact_id=contact_id, entry=ManualMemoryEntry(**entry),
+                )
+                return _json_response(HTTPStatus.OK, {"memory": _owner_memory_payload(memory)})
+            if len(parts) == 4:
+                memory_id = _uuid_or_raise(parts[2], "memory_id")
+                if method == "GET" and parts[3] == "versions":
+                    return _json_response(HTTPStatus.OK, {"versions": [
+                        _owner_memory_payload(memory) for memory in service.list_contact_owner_versions(
+                            owner_id=owner_id, contact_id=contact_id, memory_id=memory_id,
+                        )
+                    ]}, headers={"Cache-Control": "no-store"})
+                if method == "POST" and parts[3] == "delete":
+                    memory = service.delete_owner_memory(owner_id=owner_id, contact_id=contact_id, memory_id=memory_id)
+                    return _json_response(HTTPStatus.OK, {"memory": _owner_memory_payload(memory)})
+                if method == "POST" and parts[3] == "correct":
+                    payload = _parse_memory_json(body)
+                    text = payload.get("text")
+                    if not isinstance(text, str) or not text.strip():
+                        raise MemoryRequestInvalid()
+                    memory = service.correct_owner_memory(
+                        owner_id=owner_id, contact_id=contact_id, memory_id=memory_id,
+                        text=text, category=_optional_category(payload.get("category")),
+                        change_kind=_memory_change_kind(payload), conditions=_manual_conditions_payload(payload),
+                    )
+                    return _json_response(HTTPStatus.OK, {"memory": _owner_memory_payload(memory)})
+                if method == "POST" and parts[3] == "revert-auto-update":
+                    memory = service.revert_contact_owner_update(
+                        owner_id=owner_id, contact_id=contact_id, memory_id=memory_id,
+                        expected_revision=_memory_revision_or_raise(body),
+                    )
+                    return _json_response(HTTPStatus.OK, {"memory": _owner_memory_payload(memory)},
+                                          headers={"Cache-Control": "no-store"})
         if method == "GET" and segment == "memories" and len(parts) == 2:
             return _json_response(
                 HTTPStatus.OK,
@@ -1906,13 +1948,47 @@ class BackendApp:
                     memory_id=memory_id,
                     text=text,
                     category=category,
-                    change_kind=_memory_change_kind(payload),
+                    change_kind=_memory_change_kind(payload), conditions=_manual_conditions_payload(payload),
                 )
                 return _json_response(
                     HTTPStatus.OK, {"memory": _memory_payload(memory)}
                 )
             raise MemoryRequestInvalid()
         raise MemoryRequestInvalid()
+
+    def _handle_memory_processing(self, method: str, path: str, body: bytes) -> Response:
+        """仅 GET 投影持久状态；模型处理必须由显式恢复命令唤醒。"""
+        if self._task_service is None:
+            return _json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "memory_processing_unavailable"})
+        try:
+            parts = path.strip("/").split("/")
+            if parts[:2] == ["api", "owner"]:
+                contact_id = None
+                tail = parts[2:]
+            elif parts[:2] == ["api", "contacts"] and len(parts) >= 4:
+                contact_id = UUID(parts[2])
+                tail = parts[3:]
+            else:
+                raise ValueError()
+            if method == "GET" and tail == ["memory-processing"]:
+                result = self._task_service.memory_processing(owner_id=self._owner_id, contact_id=contact_id, host=self._task_host)
+            elif method == "POST" and tail == ["memory-processing", "resume"]:
+                payload = json.loads(body)
+                if not isinstance(payload, dict) or set(payload) != {"task_id", "action"} or payload["action"] not in ("resume", "restart"):
+                    raise ValueError()
+                result = self._task_service.resume_memory_processing(owner_id=self._owner_id, contact_id=contact_id,
+                    task_id=UUID(payload["task_id"]), action=payload["action"], host=self._task_host)
+            else:
+                raise ValueError()
+            return _json_response(HTTPStatus.OK, result)
+        except BackgroundTaskNotFoundError:
+            return _json_response(HTTPStatus.NOT_FOUND, {"error": "memory_processing_not_found"})
+        except BackgroundTaskStateError:
+            return _json_response(HTTPStatus.CONFLICT, {"error": "memory_processing_state_conflict"})
+        except (ValueError, TypeError, AttributeError):
+            return _json_response(HTTPStatus.BAD_REQUEST, {"error": "memory_processing_request_invalid"})
+        except (BackgroundTaskPersistenceError, psycopg.Error, ModelWorkStopped):
+            return _json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "memory_processing_unavailable"})
 
     def _handle_import_task(
         self,
@@ -2609,7 +2685,6 @@ def create_app(
     skill_learning: SkillLearningService | None = None,
     ledger_service: LedgerService | None = None,
     setup_service: SetupService | None = None,
-    style_samples: StyleSampleService | None = None,
     expression_preferences: ExpressionPreferenceService | None = None,
     follow_smoke: FollowSmokeController | None = None,
     runtime_shutdown: Callable[[], None] | None = None,
@@ -2653,7 +2728,6 @@ def create_app(
         candidate_versions=candidate_versions or PostgresAssistantCandidateVersions(database_url),
         reply_evidence=reply_evidence
         or ReplyEvidenceService(PostgresReplyStore(database_url)),
-        style_samples=style_samples or StyleSampleService(PostgresStyleSampleStore(database_url)),
         expression_preferences=expression_preferences or ExpressionPreferenceService(
             PostgresExpressionPreferenceStore(database_url),
         ),
@@ -2897,6 +2971,20 @@ def _sync_status_payload(report: FrontSyncCycleReport) -> dict[str, object]:
                 "cli_pending_count": report.cli_pending_count,
                 "cli_batch_message_count": report.cli_batch_message_count,
                 "cli_failure_code": report.cli_failure_code,
+                "cli_priority_contact_id": (
+                    None if report.cli_priority_contact_id is None
+                    else str(report.cli_priority_contact_id)
+                ),
+                "cli_priority_last_success_at": (
+                    None if report.cli_priority_last_success_at is None
+                    else report.cli_priority_last_success_at.astimezone(timezone.utc).isoformat()
+                ),
+                "cli_priority_last_duration_ms": report.cli_priority_last_duration_ms,
+                "cli_priority_last_cli_duration_ms": report.cli_priority_last_cli_duration_ms,
+                "cli_priority_last_store_duration_ms": report.cli_priority_last_store_duration_ms,
+                "cli_priority_last_failure_code": report.cli_priority_last_failure_code,
+                "cli_priority_local_history_state": report.cli_priority_local_history_state,
+                "cli_priority_queue_wait_ms": report.cli_priority_queue_wait_ms,
                 "cli_backfill_phase": report.cli_backfill_phase,
                 "cli_backfill_contact_id": (
                     None
@@ -3074,7 +3162,6 @@ def _reply_payload(reply: ReplyGenerated) -> dict[str, object]:
             "evidence_ids": [
                 str(evidence) for evidence in reply.context_receipt.evidence_ids
             ],
-            "style_sample_ids": [str(identifier) for identifier in reply.context_receipt.style_sample_ids],
             "expression_preference_ids": [str(identifier) for identifier in reply.context_receipt.expression_preference_ids],
             "expression_preferences": [
                 preference_receipt_payload(item) for item in reply.context_receipt.expression_preferences
@@ -3174,7 +3261,11 @@ def _message_payload(message: StreamedMessage) -> dict[str, object]:
         "message_type": message.message_type,
         "text": message.text,
         "media_placeholder": message.media_placeholder,
-        "occurred_at": _format_timestamp(message.occurred_at),
+        # 列表合并须与数据库分页顺序一致，保留同秒消息的亚秒精度。
+        "occurred_at": (
+            None if message.occurred_at is None
+            else message.occurred_at.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+        ),
         "quoted": quoted,
     }
 
@@ -3241,7 +3332,7 @@ def _parse_memory_json(body: bytes) -> dict[str, object]:
 
 
 def _memory_change_kind(payload: dict[str, object]) -> MemoryChangeKind:
-    """旧修正入口默认纠错；只有明确选择变化才能保留历史生成资格。"""
+    """旧修正入口默认纠错；选择变化只记录退役原因，旧版本均不再用于生成。"""
     value = payload.get("change_kind", MemoryChangeKind.ERROR_CORRECTION.value)
     if not isinstance(value, str):
         raise MemoryRequestInvalid()
@@ -3409,6 +3500,8 @@ def _owner_memory_payload(memory: OwnerMemory) -> dict[str, object]:
         "risk_flags": list(memory.risk_flags),
         "timing": memory.timing.to_payload(),
         "event": memory.event.to_payload(current=True) if memory.event is not None else None,
+        "conditions": memory.conditions.to_payload(current=True) if memory.conditions else None,
+        "evolution": memory.evolution.to_payload(current=True) if memory.evolution else None,
         "version_evidence": memory.version_evidence.to_payload() if memory.version_evidence else None,
         "version_evidence_source_current": bool(memory.version_evidence and memory.version_evidence.source_current),
         "can_revert_auto_update": memory.can_revert_auto_update,
@@ -3443,6 +3536,8 @@ def _memory_payload(memory: ConfirmedMemory) -> dict[str, object]:
         ),
         "timing": memory.timing.to_payload(),
         "event": memory.event.to_payload(current=True) if memory.event is not None else None,
+        "conditions": memory.conditions.to_payload(current=True) if memory.conditions else None,
+        "evolution": memory.evolution.to_payload(current=True) if memory.evolution else None,
         "version_evidence": memory.version_evidence.to_payload() if memory.version_evidence else None,
         "version_evidence_source_current": bool(memory.version_evidence and memory.version_evidence.source_current),
         "can_revert_auto_update": memory.can_revert_auto_update,
@@ -3474,6 +3569,8 @@ def _memory_candidate_payload(candidate: MemoryCandidate) -> dict[str, object]:
         "failure_reason": candidate.failure_reason,
         "timing": candidate.timing.to_payload(),
         "event": candidate.event.to_payload(current=True) if candidate.event is not None else None,
+        "conditions": candidate.conditions.to_payload(current=True) if candidate.conditions else None,
+        "evolution": candidate.evolution.to_payload(current=True) if candidate.evolution else None,
         "valid_at": _iso_or_none(candidate.valid_at),
         "invalid_at": _iso_or_none(candidate.invalid_at),
     }
@@ -3491,3 +3588,11 @@ def _memory_candidate_payload(candidate: MemoryCandidate) -> dict[str, object]:
     if "source_dependency_mode" in payload:
         payload["dimension_evidence_dimensions"] = bounded_dimension_states(candidate)
     return payload
+
+
+def _manual_conditions_payload(payload):
+    from notalone.memory.conditions import MemoryConditions
+    try:
+        return MemoryConditions.from_payload(payload["conditions"], proposal=True) if "conditions" in payload else ...
+    except (TypeError, ValueError):
+        raise MemoryRequestInvalid() from None

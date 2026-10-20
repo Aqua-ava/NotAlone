@@ -22,7 +22,7 @@ from notalone.persistence.assistant_candidate_versions import (
 )
 from notalone.persistence.assistant_session_inputs import require_current_input
 from notalone.persistence.assistant_session_store import PostgresAssistantSessionStore
-from notalone.persistence.style_sample_store import require_reply_sources_current
+from notalone.persistence.reply_sources import require_reply_sources_current
 from notalone.reply.assistant_continuation_reference import AssistantContinuationReference
 from notalone.reply.interface import AccumulatedReplyRequirements, ConfirmedDirection, DirectionSource, InitiateConversation, ReplyInput, ReplyToMessage, RewriteDraft
 from notalone.scopes import ContactScope
@@ -245,6 +245,8 @@ def reserve_continuation_in_transaction(
                               user_instruction=user_instruction, clarification_answer=None)
         else:
             content = (replace(old_content, pasted_direction=intention, user_instruction=user_instruction) if pasted else
+                       replace(old_content, draft_text=intention, user_instruction=user_instruction,
+                               workspace_action="express") if old_content.input_kind == "workspace" else
                        RewriteDraft(intention, user_instruction, old_content.include_relationship_context))
     else:
         # 编号只选择说法参考；旧候选不能替换本次明确意愿或用户原句。

@@ -35,3 +35,11 @@
 .import-progress .import-complete { color: #528267; }
 .import-sources { padding-left: 18px; overflow-wrap: anywhere; }
 .import-sync-reload { margin-top: 18px; border-top: 1px solid #cdd8ce; padding-top: 10px; }
+.import-management { margin-top: 30px; padding-top: 24px; border-top: 1px solid #c5cecb; }
+.import-management h2 { color: #355f7c; font-size: 15px; font-weight: 500; }
+.import-management > p { color: #737e80; font-size: 12px; line-height: 1.85; }
+.import-management > p[role="alert"] { color: #99594e; }
+.import-management .memory-section h3 { margin: 0 0 12px; color: #496e88; font-size: 14px; font-weight: 500; }
+.import-management .memory-section > p, .import-management [role="dialog"] { color: #737e80; font-size: 12px; line-height: 1.85; }
+.import-management [role="dialog"] { margin-top: 18px; padding-top: 12px; border-top: 1px solid #c5cecb; }
+.import-management [role="dialog"] .button + .button { margin-left: 10px; }

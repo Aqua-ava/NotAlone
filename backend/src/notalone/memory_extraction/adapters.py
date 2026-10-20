@@ -402,7 +402,8 @@ class LangChainExtractionRuntime:
         )
 
 
-def _window_text(window: ExtractionWindow) -> str:
+def _window_text(window: ExtractionWindow, *, source_calendar: bool = False) -> str:
+    from .event_calendar import source_calendar_time
     target_ids = window.target_message_id_set
     lines = [
         f"{index + 1}. "
@@ -410,6 +411,7 @@ def _window_text(window: ExtractionWindow) -> str:
         f"[message_id={message.message_id}] "
         f"occurred_at={message.occurred_at.isoformat() if message.occurred_at else 'unknown'} "
         f"sender={message.sender.value}: {message.text}"
+        + (f"\n[calendar message_id={message.message_id}] source_calendar_at={source_calendar_time(message).isoformat() if source_calendar_time(message) else 'unknown'}" if source_calendar else "")
         for index, message in enumerate(window.messages)
     ]
     return "\n".join(lines)

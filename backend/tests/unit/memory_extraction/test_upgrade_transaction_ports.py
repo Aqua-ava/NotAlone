@@ -40,7 +40,7 @@ class ExistingTransaction:
             self.started = True
             return TransactionRows()
         if 'FROM public.owner_memory AS memory' in query:
-            if params != (self.scope.owner_id,):
+            if params != (self.scope.owner_id, False):
                 raise AssertionError('共享事务读取必须保持原账号范围。')
             self.started = True
             return TransactionRows()

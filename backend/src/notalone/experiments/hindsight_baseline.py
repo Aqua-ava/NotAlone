@@ -88,6 +88,7 @@ class _ObservedRetrieval:
         *,
         scope: ContactScope,
         target_message_id: UUID | None = None,
+        message_ids: tuple[UUID, ...] | None = None,
         query: str | None = None,
         limit: int = 50,
         occurred_after: datetime | None = None,
@@ -98,6 +99,7 @@ class _ObservedRetrieval:
             lambda: self.delegate.search_messages(
                 scope=scope,
                 target_message_id=target_message_id,
+                **({"message_ids": message_ids} if message_ids is not None else {}),
                 query=query,
                 limit=limit,
                 occurred_after=occurred_after,
@@ -138,6 +140,7 @@ class _ObservedRetrieval:
         query: str | None = None,
         limit: int = 20,
         memory_ids: tuple[UUID, ...] | None = None,
+        include_historical: bool = False,
     ) -> tuple[RetrievedMemory, ...]:
         return self._run(
             lambda: self.delegate.search_confirmed_memories(
@@ -145,6 +148,7 @@ class _ObservedRetrieval:
                 query=query,
                 limit=limit,
                 memory_ids=memory_ids,
+                **({"include_historical": True} if include_historical else {}),
             )
         )
 
@@ -155,6 +159,7 @@ class _ObservedRetrieval:
         query: str | None = None,
         limit: int = 20,
         memory_ids: tuple[UUID, ...] | None = None,
+        include_historical: bool = False,
     ) -> tuple[RetrievedOwnerMemory, ...]:
         return self._run(
             lambda: self.delegate.search_owner_memories(
@@ -162,6 +167,7 @@ class _ObservedRetrieval:
                 query=query,
                 limit=limit,
                 memory_ids=memory_ids,
+                **({"include_historical": True} if include_historical else {}),
             )
         )
 

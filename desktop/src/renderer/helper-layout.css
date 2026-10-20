@@ -17,6 +17,10 @@
 .helper-context button { margin-top: 8px; text-decoration: underline; text-underline-offset: 3px; }
 .ime-pane .compose-panel, .ime-pane .reply-candidates { padding: 24px; border: 1px solid #dfe6ea; border-radius: 14px; background: #fff; margin-bottom: 20px; box-shadow: 0 3px 14px #213d4b04; }
 .compose-heading { margin-bottom: 20px; }
+.reply-source-picker { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 14px; font-size: 13px; }
+.reply-source-picker > span { color: #526c7c; margin-right: 4px; }
+.ime-pane .reply-source-picker button { padding: 8px 12px; border: 1px solid #cbd9e1; border-radius: 8px; background: #fff; color: #526c7c; }
+.ime-pane .reply-source-picker button.active { border-color: #2f688c; background: #edf5fa; color: #245f91; font-weight: 600; }
 .section-eyebrow { display: block; color: #537d99; font-size: 12px; font-weight: 600; margin-bottom: 6px; }
 .compose-heading h2 { margin: 0 0 6px; font-size: 21px; line-height: 1.4; }
 .compose-heading p { color: #71818c; font-size: 13px; }
@@ -72,7 +76,7 @@
 .ime-pane .reply-results-heading { margin-bottom: 18px; flex-wrap: wrap; }
 .ime-pane .reply-results-heading h2 { font-size: 19px; }
 .ime-pane .reply-results-heading span { font-size: 12px; }
-.ime-pane .reply-candidate-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 270px), 1fr)); gap: 16px; }
+.ime-pane .reply-candidate-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 400px), 1fr)); gap: 16px; align-items: start; }
 .ime-pane .reply-candidate { padding: 18px; border: 1px solid #dbe4e9; border-radius: 10px; background: #fbfcfd; }
 .ime-pane .reply-candidate:has(input[type=radio]:checked) { border-color: #7faccc; box-shadow: 0 0 0 1px #7faccc; }
 .reply-candidate h3 { font-size: 16px; margin: 0 0 16px; }
@@ -80,7 +84,7 @@
 .ime-pane .candidate-message-group > label { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; }
 .ime-pane .candidate-message-group > label:has(textarea) { display: grid; }
 .ime-pane .candidate-message-group legend, .ime-pane .candidate-message label { font-size: 12px; }
-.ime-pane .reply-candidate textarea { background: #fff; font-size: 14px; min-height: 120px; }
+.ime-pane .reply-candidate textarea { background: #fff; font-size: 15px; min-height: 76px; }
 .ime-pane .reply-choice { font-size: 15px; font-weight: 600; }
 .ime-pane .reply-generation-guidance { border-radius: 8px; padding: 12px 16px; margin: 12px 0 18px; }
 .ime-pane .ime-footer { min-height: 54px; height: auto; padding: 10px 20px; background: #fff; border-top: 1px solid #dfe6ea; font-size: 12px; flex-wrap: wrap; }
@@ -111,23 +115,57 @@
 .reply-expression-settings > header { margin-bottom: 16px; }
 .reply-expression-settings h2 { font-size: 17px; margin: 0 0 6px; }
 .reply-expression-settings header p, .section-empty { color: #75858f; font-size: 12px; }
-.ime-pane .style-samples { border: 1px solid #dfe7ec; border-radius: 9px; margin: 12px 0 0; padding: 14px 16px; background: #fafcfd; }
-.ime-pane .style-samples > summary { font-size: 14px; font-weight: 600; color: #304e62; }
-.ime-pane .style-samples p { font-size: 12px; color: #6a7c88; margin: 8px 0; }
-.ime-pane .style-samples h3 { font-size: 14px; margin: 16px 0 10px; }
-.ime-pane .style-samples label { display: grid; gap: 8px; margin: 12px 0; font-size: 13px; }
-.ime-pane .style-samples label:has(input[type=checkbox]) { display: flex; align-items: center; }
-.ime-pane .style-samples button, .ime-pane .assistant-session-panel button, .ime-pane .assistant-continuation-controls button, .ime-pane .reply-evidence > button { border: 1px solid #cbd9e1; padding: 8px 12px; border-radius: 7px; background: #fff; color: #346781; font-size: 12px; line-height: 1.6; margin: 4px 8px 4px 0; overflow-wrap: anywhere; text-align: left; }
-.ime-pane .style-samples button:hover:not(:disabled), .ime-pane .assistant-session-panel button:hover:not(:disabled) { background: #edf5fa; }
-.expression-manual, .expression-preference-form { border-block: 1px solid #e0e8ed; padding: 4px 0 14px; margin: 14px 0; }
-.expression-message-options { display: grid; gap: 8px; max-height: 300px; overflow-y: auto; padding: 0 8px 12px 0; margin-top: 18px; }
-.ime-pane .expression-message-options button { display: block; width: 100%; margin: 0; }
-.ime-pane .style-samples ul { list-style: none; padding: 0; display: grid; gap: 10px; }
-.ime-pane .style-samples li { padding: 14px; border: 1px solid #e0e7eb; border-radius: 8px; background: #fff; }
-.ime-pane .style-samples li p { font-size: 14px; color: #2d4352; white-space: pre-wrap; }
+.ime-pane .expression-preferences { border: 1px solid #dfe7ec; border-radius: 9px; margin: 12px 0 0; padding: 14px 16px; background: #fafcfd; }
+.ime-pane .expression-preferences > summary { font-size: 14px; font-weight: 600; color: #304e62; }
+.ime-pane .expression-preferences p { font-size: 12px; color: #6a7c88; margin: 8px 0; }
+.ime-pane .expression-preferences h3 { font-size: 14px; margin: 16px 0 10px; }
+.ime-pane .expression-preferences label { display: grid; gap: 8px; margin: 12px 0; font-size: 13px; }
+.ime-pane .expression-preferences label:has(input[type=checkbox]) { display: flex; align-items: center; }
+.ime-pane .expression-preferences button, .ime-pane .assistant-session-panel button, .ime-pane .assistant-continuation-controls button, .ime-pane .reply-evidence > button { border: 1px solid #cbd9e1; padding: 8px 12px; border-radius: 7px; background: #fff; color: #346781; font-size: 12px; line-height: 1.6; margin: 4px 8px 4px 0; overflow-wrap: anywhere; text-align: left; }
+.ime-pane .expression-preferences button:hover:not(:disabled), .ime-pane .assistant-session-panel button:hover:not(:disabled) { background: #edf5fa; }
+.expression-preference-form { border-block: 1px solid #e0e8ed; padding: 4px 0 14px; margin: 14px 0; }
+.ime-pane .expression-preferences ul { list-style: none; padding: 0; display: grid; gap: 10px; }
+.ime-pane .expression-preferences li { padding: 14px; border: 1px solid #e0e7eb; border-radius: 8px; background: #fff; }
+.ime-pane .expression-preferences li p { font-size: 14px; color: #2d4352; white-space: pre-wrap; }
 .record-metadata, .evidence-technical { margin: 12px 0; padding: 10px 12px; background: #f5f8fa; border: 1px solid #e1e8ec; border-radius: 7px; font-size: 12px; overflow-wrap: anywhere; }
 .ime-pane .record-metadata p, .ime-pane .record-metadata small { color: #73838e; line-height: 1.7; }
 .ime-pane .candidate-reason { margin: 12px 0; padding-top: 10px; border-top: 1px solid #e0e8ed; }
+/* 候选共用外框：编号、可编辑正文与复制图标排成一条，长正文自然换行。 */
+.ime-pane .compact-replies .reply-results-heading { margin-bottom: 10px; }
+.ime-pane .compact-replies .reply-candidate-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0; }
+.ime-pane .compact-replies .reply-candidate { display: grid; grid-template-columns: 64px minmax(0, 1fr); align-items: start; gap: 12px; padding: 13px 0; border: 0; border-radius: 0; background: transparent; }
+.ime-pane .compact-replies .reply-candidate + .reply-candidate { border-top: 1px solid #e5ecef; }
+.ime-pane .compact-replies .candidate-strip-label { display: flex; align-items: center; gap: 8px; margin: 8px 0 0; color: #81939f; font-size: 12px; font-weight: 400; white-space: nowrap; }
+.candidate-strip-label span { font-variant-numeric: tabular-nums; }
+.candidate-strip-label small { font-size: inherit; }
+.candidate-strip-content { min-width: 0; }
+.ime-pane .compact-replies .candidate-message-group { gap: 6px; }
+.compact-replies .candidate-message, .compact-replies .legacy-candidate-editor { display: grid; grid-template-columns: minmax(0, 1fr) 28px; align-items: start; column-gap: 12px; }
+.compact-replies .candidate-message > label { min-width: 0; }
+.ime-pane .compact-replies textarea { field-sizing: content; min-height: 36px; max-height: 280px; resize: none; overflow-y: auto; padding: 4px 5px; border: 1px solid transparent; border-radius: 5px; background: transparent; font-size: 15px; line-height: 1.7; }
+.ime-pane .compact-replies textarea:hover:not(:disabled) { background: #f7fafb; }
+.ime-pane .compact-replies textarea:focus { outline: none; border-color: #aac7da; background: #f7fafb; }
+.ime-pane .compact-replies .candidate-copy-icon { display: inline-grid; place-items: center; width: 28px; height: 28px; padding: 5px; margin: 4px 0 0; border: 1px solid #d5e1e8; border-radius: 5px; background: #fff; color: #446f8a; }
+.compact-replies .candidate-copy-icon:disabled { opacity: .45; }
+.compact-replies .legacy-candidate-editor > textarea { grid-column: 1; grid-row: 1; }
+.compact-replies .legacy-candidate-editor > .candidate-copy-icon { grid-column: 2; grid-row: 1; }
+.compact-replies .legacy-candidate-editor > :not(textarea):not(.candidate-copy-icon) { grid-column: 1 / -1; }
+.compact-replies:not(.show-candidate-details) .candidate-more-actions, .compact-replies:not(.show-candidate-details) .copy-hide { display: none; }
+.candidate-copy-notice { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.reply-generation-details { margin-top: 6px; padding-top: 12px; border-top: 1px solid #e5ecef; }
+.reply-generation-details > summary { display: flex; justify-content: space-between; gap: 12px; list-style: none; }
+.reply-generation-details > summary::after { content: '⌄'; }
+.reply-generation-details[open] > summary::after { content: '⌃'; }
+.reply-generation-details > summary span:first-child { margin-right: auto; }
+.reply-generation-details > summary span:last-child { color: #8b784f; }
+.candidate-detail { padding: 12px 0; border-top: 1px solid #e5ecef; }
+.candidate-detail h3 { margin: 0; font-size: 13px; }
+.reply-budget-details { font-size: 11px; margin: 4px 0; }
+@media (max-width: 480px) {
+  .ime-pane .compact-replies .reply-candidate { grid-template-columns: 50px minmax(0, 1fr); gap: 6px; }
+  .ime-pane .compact-replies .candidate-strip-label { gap: 4px; font-size: 11px; }
+  .compact-replies .candidate-message, .compact-replies .legacy-candidate-editor { column-gap: 5px; }
+}
 .ime-pane .reply-evidence > section { margin-top: 12px; padding: 14px; border: 1px solid #dce6ec; border-radius: 8px; background: #fff; }
 .reply-evidence h4 { margin: 12px 0 6px; font-size: 14px; }
 .ime-pane .reply-evidence > section > p, .evidence-help { font-size: 12px; color: #72838e; }
@@ -165,3 +203,20 @@
 .session-browser > summary > span:first-child { display: inline; margin: 0; font-size: 17px; font-weight: 600; color: #2d4657; }
 .session-browser > summary > small { display: block; margin: 6px 0 0 18px; font-size: 12px; font-weight: 400; color: #748590; }
 .session-browser > summary > .session-attention { color: #956238; }
+
+/* 回复正文优先；引用、上下文与技术记录逐层展开。 */
+.evidence-heading, .evidence-item-heading { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
+.evidence-heading > span, .evidence-item-heading > span { color: #526c7d; font-size: 12px; }
+.reply-evidence .evidence-heading h4 { margin: 0; }
+.ime-pane .reply-evidence .evidence-citations article { margin-top: 8px; border: 0; border-left: 3px solid #9ebfcb; border-radius: 0 6px 6px 0; padding: 10px 12px; }
+.ime-pane .reply-evidence .evidence-quote { color: #283f4e; font-size: 14px; line-height: 1.7; overflow-wrap: anywhere; }
+.reply-evidence .record-metadata { padding: 0; margin: 8px 0 0; background: transparent; border: 0; }
+.reply-evidence summary, .candidate-more-actions summary { cursor: pointer; color: #526c7d; line-height: 1.7; font-size: 12px; }
+.evidence-context, .reply-evidence .evidence-technical { margin: 12px 0 0; padding: 10px 0 0; border: 0; border-top: 1px solid #e3e9ed; background: transparent; border-radius: 0; }
+.evidence-citations { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 8px; align-items: start; }
+.evidence-context-list, .evidence-technical-content { max-height: min(360px, 55vh); overflow-y: auto; overscroll-behavior: contain; padding-right: 6px; }
+.evidence-context-list:focus-visible, .evidence-technical-content:focus-visible { outline: 2px solid #669ab6; outline-offset: 2px; }
+.ime-pane .reply-evidence .evidence-context-list article { margin-top: 8px; padding: 10px; }
+.candidate-more-actions { justify-self: start; }
+.candidate-more-actions[open] { width: 100%; }
+.ime-pane .candidate-more-actions button { margin: 8px 8px 0 0; }

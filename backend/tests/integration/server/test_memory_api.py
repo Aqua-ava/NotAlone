@@ -20,6 +20,7 @@ from notalone.memory.models import (
     FactSubject,
     MemoryCandidate,
     MemoryCategory,
+    MemoryChangeKind,
     MemoryTopic,
     OwnerMemory,
 )
@@ -79,7 +80,7 @@ class FakeContactMemory:
         self.pending: list[MemoryCandidate] = []
         self.confirm_calls: list[UUID] = []
         self.discard_calls: list[UUID] = []
-        self.correct_calls: list[tuple[UUID, str, MemoryCategory | None]] = []
+        self.correct_calls: list[tuple[UUID, str, MemoryCategory | None, MemoryChangeKind]] = []
         self.delete_calls: list[UUID] = []
 
     def create_candidate(self, candidate: MemoryCandidate) -> MemoryCandidate:
@@ -107,11 +108,13 @@ class FakeContactMemory:
             if candidate.scope == scope and candidate.candidate_id == candidate_id
         )
 
-    def list_confirmed(self, scope: ContactScope, *, include_expired: bool = False) -> tuple[ConfirmedMemory, ...]:
+    def list_confirmed(self, scope: ContactScope, *, include_expired: bool = False, include_invalidated: bool = False) -> tuple[ConfirmedMemory, ...]:
         return tuple(
             memory
             for memory in self.memories
-            if memory.scope == scope and memory.status is ConfirmedMemoryStatus.ACTIVE
+            if memory.scope == scope
+            and (memory.status is ConfirmedMemoryStatus.ACTIVE
+                 or (include_invalidated and memory.status is ConfirmedMemoryStatus.INVALIDATED))
         )
 
     def confirm(
@@ -147,8 +150,9 @@ class FakeContactMemory:
         memory_id: UUID,
         text: str,
         category: MemoryCategory | None = None,
+        change_kind: MemoryChangeKind = MemoryChangeKind.ERROR_CORRECTION,
     ) -> ConfirmedMemory:
-        self.correct_calls.append((memory_id, text, category))
+        self.correct_calls.append((memory_id, text, category, change_kind))
         return _memory(scope.contact_id)
 
     def delete(self, *, scope: ContactScope, memory_id: UUID) -> ConfirmedMemory:
@@ -185,11 +189,13 @@ class FakeOwnerMemory:
         self.memories.append(memory)
         return memory
 
-    def list_active(self, owner_id: UUID, *, include_expired: bool = False) -> tuple[OwnerMemory, ...]:
+    def list_active(self, owner_id: UUID, *, include_invalidated: bool = False, include_expired: bool = False) -> tuple[OwnerMemory, ...]:
         return tuple(
             memory
             for memory in self.memories
-            if memory.owner_id == owner_id and memory.status is ConfirmedMemoryStatus.ACTIVE
+            if memory.owner_id == owner_id
+            and (memory.status is ConfirmedMemoryStatus.ACTIVE
+                 or (include_invalidated and memory.status is ConfirmedMemoryStatus.INVALIDATED))
         )
 
     def delete(self, owner_id: UUID, memory_id: UUID) -> OwnerMemory:
@@ -209,7 +215,7 @@ class FakeOwnerMemory:
 class FailingContactMemory(FakeContactMemory):
     """模拟持久化层故障，验证 HTTP 层不会直接断开连接。"""
 
-    def list_confirmed(self, scope: ContactScope, *, include_expired: bool = False) -> tuple[ConfirmedMemory, ...]:
+    def list_confirmed(self, scope: ContactScope, *, include_expired: bool = False, include_invalidated: bool = False) -> tuple[ConfirmedMemory, ...]:
         raise RuntimeError("synthetic persistence detail")
 
 
@@ -599,7 +605,8 @@ class MemoryApiContractTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
             self.contact.correct_calls,
-            [(memory_id, "修正后的记忆文本", MemoryCategory.COMMON_FACT)],
+            [(memory_id, "修正后的记忆文本", MemoryCategory.COMMON_FACT,
+              MemoryChangeKind.ERROR_CORRECTION)],
         )
 
     def test_deletes_contact_memory(self) -> None:

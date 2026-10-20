@@ -44,7 +44,7 @@ class AutomaticMemoryTest(unittest.TestCase):
         return ExtractionFlow(runtime=DirectExtractionRuntime(model=model),
             verification_runtime=LangChainSourceVerificationRuntime(model=model)).run(window)
 
-    def test_new_verified_message_automatically_updates_prior_auto_version(self):
+    def test_legacy_update_without_relation_proof_preserves_prior_auto_version(self):
         first = MemoryAdoption(memory_port=self.store).adopt(self.scope, self.extract('联系人喜欢文字沟通。'))
         self.assertEqual(first.adopted, 1)
         previous, = self.store.list_confirmed(self.scope)
@@ -53,11 +53,8 @@ class AutomaticMemoryTest(unittest.TestCase):
                 return AdjudicationDecision(AdjudicationAction.UPDATE, replaced_memory_id=previous.memory_id)
         result = MemoryAdoption(memory_port=self.store, adjudication_runtime=Update(),
             similarity_threshold=0).adopt(self.scope, self.extract('联系人现在喜欢电话沟通。'))
-        self.assertEqual((result.updated, result.pending), (1, 0))
-        current, = self.store.list_confirmed(self.scope)
-        self.assertEqual(current.text, '联系人现在喜欢电话沟通。')
-        self.assertEqual(current.supersedes_memory_id, previous.memory_id)
-        self.assertEqual(current.adoption_method, AdoptionMethod.AUTO)
+        self.assertEqual((result.updated, result.pending), (0, 1))
+        self.assertEqual(self.store.list_confirmed(self.scope), (previous,))
 
     def test_missing_sources_uncertain_or_sensitive_remain_unconfirmed(self):
         for options in ({'sources': False}, {'verdict': 'uncertain'}, {'risk_flags': ['sensitive']}, {'confidence': 0.2}):
@@ -68,7 +65,7 @@ class AutomaticMemoryTest(unittest.TestCase):
                 self.assertEqual(result.adopted, 0)
                 self.assertEqual(store.list_confirmed(self.scope), ())
 
-    def test_verified_explicit_correction_updates_auto_memory_without_manual_confirmation(self):
+    def test_verified_correction_without_relation_proof_remains_pending(self):
         MemoryAdoption(memory_port=self.store).adopt(self.scope, self.extract('联系人平时最喜欢喝乌龙茶，日常一直选乌龙茶。'))
         previous, = self.store.list_confirmed(self.scope)
         class Update:
@@ -76,7 +73,8 @@ class AutomaticMemoryTest(unittest.TestCase):
                 return AdjudicationDecision(AdjudicationAction.UPDATE, replaced_memory_id=previous.memory_id)
         result = MemoryAdoption(memory_port=self.store, adjudication_runtime=Update()).adopt(self.scope,
             self.extract('联系人此前的日常口味是乌龙茶；现更正为已不喝乌龙茶，改为每天喝红茶，以后都选红茶。', speech_act='correction'))
-        self.assertEqual((result.updated, result.pending), (1, 0))
+        self.assertEqual((result.updated, result.pending), (0, 1))
+        self.assertEqual(self.store.list_confirmed(self.scope), (previous,))
 
     def test_unverified_or_uncertain_correction_stays_pending(self):
         for options in ({'sources': False}, {'verdict': 'uncertain'}):
@@ -130,7 +128,7 @@ class AutomaticMemoryTest(unittest.TestCase):
         self.assertEqual((result.adopted, result.pending), (0, 1))
         self.assertEqual(store.list_confirmed(self.scope), ())
 
-    def test_default_merge_reverifies_all_sources_before_atomic_publication(self):
+    def test_legacy_merge_cannot_publish_without_relation_proof(self):
         from notalone.memory_extraction.merge import MemoryMergeVerifier
         class Store(InMemoryMemoryStore):
             def confirm_merge(inner, **kwargs):
@@ -153,11 +151,9 @@ class AutomaticMemoryTest(unittest.TestCase):
         result = MemoryAdoption(memory_port=store, adjudication_runtime=Merge(), similarity_threshold=0,
             merge_verifier=MemoryMergeVerifier(messages=self.messages,
                 verification_runtime=LangChainSourceVerificationRuntime(model=model))).adopt(self.scope, outcome)
-        self.assertEqual((result.updated, result.pending), (1, 0))
-        self.assertEqual(store.parents, parents)
-        merged = next(item for item in store.list_confirmed(self.scope) if item.text == merged_text)
-        self.assertEqual(set(merged.source_ids), {message.message_id for message in self.messages})
-        self.assertTrue(merged.requires_all_sources)
+        self.assertEqual((result.updated, result.pending), (0, 1))
+        self.assertFalse(hasattr(store, 'parents'))
+        self.assertEqual(store.list_confirmed(self.scope), parents)
 
     def test_verified_self_memory_uses_owner_scope_without_contact_memory(self):
         from tests.integration.server.test_memory_api import FakeOwnerMemory

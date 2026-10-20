@@ -270,7 +270,7 @@ class DictionarySourceCursor:
             key = 'source_id'
         elif 'AS available' in query:
             key = 'available'
-        elif 'FROM public.style_sample' in query or 'jsonb_path_query' in query:
+        elif 'jsonb_path_query' in query:
             key = 'id'
         else:
             raise AssertionError('字典来源端口出现未声明查询。')
@@ -301,8 +301,6 @@ class SourceRowQueries(MaterialQueries):
             return MaterialRows([(self.source_id,)])
         if 'AS available' in query:
             return MaterialRows([(True,)])
-        if 'FROM public.style_sample' in query:
-            return MaterialRows([])
         if 'SELECT version.id FROM public.reply_skill_version' in query:
             return MaterialRows([])
         if any('SELECT id FROM public.'+table+' WHERE' in query for table in (
@@ -368,8 +366,6 @@ class HistoricalSkillAvailabilityQueries(HistoricalSkillQueries):
             return super().execute(query, params)
         if 'AS available' in query:
             return MaterialRows([(set(params['dependencies']) <= {self.source_id},)])
-        if 'FROM public.style_sample' in query:
-            return MaterialRows([])
         if 'SELECT version.id FROM public.reply_skill_version' in query:
             return MaterialRows([] if self.skill_deleted else [(self.skill_version_id,)])
         for table, identifiers in (('assistant_session_turn', {self.turn_id}),

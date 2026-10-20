@@ -12,6 +12,7 @@ from notalone.server.app import create_app
 from tests.integration.server.core_business_flow_support import HttpBackend
 
 from tests.integration.server.memory_overview_support import MemoryOverviewHttpFixture
+from tests.integration.server.layered_manual_support import create_controlled_layered_app
 
 
 class LayeredMemoryManagementHttpTest(MemoryOverviewHttpFixture, unittest.TestCase):
@@ -89,7 +90,8 @@ class LayeredMemoryManagementHttpTest(MemoryOverviewHttpFixture, unittest.TestCa
             self.task_host=task_host
             self.service.attach_task_host(task_host)
             self.addCleanup(task_host.stop)
-        backend = HttpBackend(create_app(database_url=self.database_url, owner_id=self.owner_id,
+        backend = HttpBackend(create_controlled_layered_app(automatic_maintenance=asynchronous,
+            database_url=self.database_url, owner_id=self.owner_id,
             token="synthetic-layered-token", layered_memory=self.service,task_host=task_host), self.owner_id)
         self.addCleanup(backend.close)
         return backend
@@ -134,23 +136,42 @@ class LayeredMemoryManagementHttpTest(MemoryOverviewHttpFixture, unittest.TestCa
                          ("ready", 3, 0))
         self.assertEqual(len(proposer.inputs), 2)
 
-    def test_natural_expiration_automatically_rebuilds_as_history(self):
+    def test_natural_expiration_excludes_generation_and_keeps_readonly_audit(self):
         from datetime import timedelta
         from threading import Event
+        from unittest.mock import patch
+        import psycopg
         contact, _, message = self.import_contact("合成限时安排。")
+        expires_at = datetime.now(timezone.utc) + timedelta(seconds=3)
         self.confirm(contact, "双方安排合成课程。", message,
-                     invalid_at=datetime.now(timezone.utc) + timedelta(seconds=3))
+                     invalid_at=expires_at)
         changed = Event()
         class ExpiringProposal(EchoProposal):
-            def propose(self, *, memories, budget, deadline):
-                result = super().propose(memories=memories, budget=budget, deadline=deadline)
-                if memories[0].timing['current_status'] == 'historical':
-                    changed.set()
-                return result
-        backend = self.controlled(proposer=ExpiringProposal(), asynchronous=True)
-        self.enable(backend, contact)
-        self.assertTrue(self.task_finished.wait(5))
-        self.assertTrue(changed.wait(5), "自然失效须按已保存边界唤醒，不依赖页面轮询")
+            calls = 0
+            def propose(inner, *, memories, budget, deadline):
+                inner.calls += 1
+                return super().propose(memories=memories, budget=budget, deadline=deadline)
+        proposer = ExpiringProposal()
+        backend = self.controlled(proposer=proposer, asynchronous=True)
+        enqueue = self.service._store.enqueue_maintenance
+        def observe_boundary(*args, **kwargs):
+            task = enqueue(*args, **kwargs)
+            if datetime.now(timezone.utc) >= expires_at:
+                changed.set()
+            return task
+        with patch.object(self.service._store, "enqueue_maintenance", side_effect=observe_boundary):
+            self.enable(backend, contact)
+            self.assertTrue(self.task_finished.wait(5))
+            self.assertTrue(changed.wait(5), "自然失效须按已保存边界唤醒，不依赖页面轮询")
+        state = self._get(backend, f"/api/contacts/{contact}/layered-memory")["layered_memory"]
+        self.assertEqual(state['status'], 'stale', state)
+        self.assertEqual((state['eligible_count'], state['covered_count'], state['remaining_count']), (0, 0, 0))
+        self.assertEqual(proposer.calls, 1, "失效资料不得重新参与历史主题生成。")
+        with psycopg.connect(self.database_url) as connection:
+            self.assertEqual(connection.execute(
+                "SELECT count(*) FROM public.scenario_document_version WHERE owner_id=%s AND contact_id=%s",
+                (self.owner_id, UUID(contact)),
+            ).fetchone()[0], 1, "已发布的旧版本继续保留只读审计。")
 
     def test_restart_recovers_committed_changes_but_not_a_budget_pause(self):
         from threading import Event
@@ -255,7 +276,10 @@ class LayeredMemoryManagementHttpTest(MemoryOverviewHttpFixture, unittest.TestCa
                 if not scenarios or getattr(self, 'reuse_retired', False):
                     return {'scenarios': [{'topic_key': 'course', 'title': '合成课程', 'hint': '合成主题资料', 'paragraphs': [paragraph]}]}
                 if getattr(self, 'append_current', False):
+                    # 同主题追加必须显式替换当前版本；独立反例另行验证缺少replaces会拒绝。
                     return {'scenarios': [{'topic_key': 'combined-course', 'title': '合成追加资料',
+                        'scenario_id': scenarios[0]['scenario_id'],
+                        'replaces': [item['version_id'] for item in scenarios],
                         'hint': '同主题新增资料', 'paragraphs': [paragraph]}]}
                 keys = ['course-part-one', 'course-part-two'] if len(scenarios) == 1 else ['combined-course']
                 return {'scenarios': [{'topic_key': key, 'title': '合成拆并主题', 'hint': '合成归组资料',
@@ -279,7 +303,7 @@ class LayeredMemoryManagementHttpTest(MemoryOverviewHttpFixture, unittest.TestCa
             status, response = backend.request(path+'/refresh', {'settings_generation': ready['settings_generation']})
             self.assertEqual(status, 200, response)
             current = response['layered_memory']
-            self.assertEqual(current['status'], 'ready')
+            self.assertEqual(current['status'], 'ready', current)
             self.assertEqual(len(current['scenarios']), expected)
             retired_versions.update(item['version_id'] for item in current['scenarios'])
             mapping = next(item for item in current['scenario_mappings'] if item['source_version_id'] == old['version_id'])
@@ -292,7 +316,7 @@ class LayeredMemoryManagementHttpTest(MemoryOverviewHttpFixture, unittest.TestCa
         status, response = backend.request(path+'/refresh', {'settings_generation': ready['settings_generation']})
         self.assertEqual(status, 200, response)
         current = response['layered_memory']
-        self.assertEqual(current['status'], 'ready')
+        self.assertEqual(current['status'], 'ready', current)
         mapping = next(item for item in current['scenario_mappings'] if item['source_version_id'] == old['version_id'])
         self.assertEqual({item['version_id'] for item in mapping['targets']}, {item['version_id'] for item in current['scenarios']})
         retired_versions.update(item['version_id'] for item in current['scenarios'])
@@ -813,7 +837,10 @@ class LayeredMemoryManagementHttpTest(MemoryOverviewHttpFixture, unittest.TestCa
         self.assertEqual(ready["eligible_count"],1)
         self.assertEqual([item.text for item in self.proposal.inputs[0]], ["双方共同参加过课程。"])
         self.assertEqual(self.proposal.inputs[0][0].provenance_kind,"manual_entry")
-        self.assertFalse(self._get(backend,f"/api/contacts/{other}/layered-memory")["layered_memory"]["enabled"])
+        other_state = self._get(backend,f"/api/contacts/{other}/layered-memory")["layered_memory"]
+        self.assertTrue(other_state["enabled"], "默认开启不授权当前任务读取其他联系人")
+        self.assertEqual(other_state["scenarios"], [])
+        self.assertEqual(len(self.proposal.inputs), 1)
         foreign = self._backend(uuid4())
         status, result = foreign.request(f"/api/contacts/{contact}/layered-memory")
         self.assertEqual(status,404,result)
@@ -877,7 +904,7 @@ class LayeredMemoryManagementHttpTest(MemoryOverviewHttpFixture, unittest.TestCa
             with self.subTest(adapter=type(adapter).__name__), self.assertRaises(ValueError):
                 self.controlled(proposer=adapter)
         state = self._get(self.backend, f"/api/contacts/{contact}/layered-memory")["layered_memory"]
-        self.assertEqual((state["enabled"], state["settings_generation"], state["scenarios"]), (False, 0, []))
+        self.assertEqual((state["enabled"], state["settings_generation"], state["scenarios"]), (True, 0, []))
 
     def test_complete_verification_input_over_budget_never_calls_verifier_or_publishes(self):
         contact, _, _ = self.import_contact("合成范围：核验输入也须有界。")
@@ -935,10 +962,18 @@ class LayeredMemoryManagementHttpTest(MemoryOverviewHttpFixture, unittest.TestCa
             valid_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
             invalid_at=datetime(2099, 1, 2, tzinfo=timezone.utc))
         now = [datetime(2099, 1, 1, tzinfo=timezone.utc)]
-        backend = self.controlled(clock=lambda: now[0])
+        class HistoricalProposal(ControlledProposal):
+            def propose(inner, *, memories, budget, deadline):
+                result = super().propose(memories=memories, budget=budget, deadline=deadline)
+                if memories[0].timing['current_status'] == 'historical':
+                    result['scenarios'][0]['topic_key'] = 'historical-experience'
+                return result
+        backend = self.controlled(proposer=HistoricalProposal(), clock=lambda: now[0])
         ready = self.enable(backend, contact)
         snapshot = self.service.capture(ContactScope(self.owner_id,UUID(contact)))
         self.assertTrue(self.service.validate(snapshot))
+        # 首批冻结后启动真实维护，单独检验时钟边界，避免首批enable与后台抢跑。
+        self.service.start_maintenance(self.owner_id)
         now[0] = datetime(2099, 1, 3, tzinfo=timezone.utc)
         self.assertFalse(self.service.validate(snapshot))
         path = f"/api/contacts/{contact}/layered-memory"
@@ -956,6 +991,13 @@ class LayeredMemoryManagementHttpTest(MemoryOverviewHttpFixture, unittest.TestCa
         self.assertEqual(reference["timing"]["current_status"], "historical")
         self.assertEqual(datetime.fromisoformat(self.proposal.inputs[-1][0].invalid_at),
                          datetime(2099, 1, 2, tzinfo=timezone.utc))
+        self.assertFalse(self.service.validate(snapshot), "旧当前资料快照不可因历史重建复活")
+        import psycopg
+        with psycopg.connect(self.database_url) as connection:
+            old = connection.execute('SELECT paragraphs FROM public.scenario_document_version '
+                'WHERE owner_id=%s AND contact_id=%s AND id=%s',
+                (self.owner_id, UUID(contact), ready['scenarios'][0]['version_id'])).fetchone()
+            self.assertEqual(old[0], ready['scenarios'][0]['paragraphs'], "旧正文仅供审计，不能被历史版本覆盖")
 
     def test_public_read_port_freezes_one_generation_and_revokes_snapshot_on_disable(self):
         from notalone.scopes import ContactScope
@@ -993,7 +1035,7 @@ class LayeredMemoryManagementHttpTest(MemoryOverviewHttpFixture, unittest.TestCa
         self.assertEqual(failed["layered_memory"]["error_code"], "faithfulness_rejected")
         self.assertEqual(failed["layered_memory"]["scenarios"], [])
 
-    def test_correction_before_or_after_publish_cannot_restore_invalidated_body(self):
+    def test_correction_before_or_after_publish_cannot_reuse_retired_body(self):
         for during_proposal in (False, True):
             with self.subTest(during_proposal=during_proposal):
                 contact, _, message = self.import_contact("合成经历：双方共同参加过课程。")
@@ -1009,8 +1051,16 @@ class LayeredMemoryManagementHttpTest(MemoryOverviewHttpFixture, unittest.TestCa
                     status, result = correction()
                     self.assertEqual(status, 200, result)
                 state = self._get(backend, f"/api/contacts/{contact}/layered-memory")["layered_memory"]
-                self.assertEqual(state["scenarios"], [])
+                # 已发布的历史正文保留审计；写入前更正仍必须阻止旧输入发布。
+                if during_proposal:
+                    self.assertEqual(state["scenarios"], [])
+                else:
+                    self.assertEqual(state["scenarios"], ready["scenarios"])
                 self.assertEqual(state["status"], "stale")
+                from notalone.scopes import ContactScope
+                self.assertIsNone(self.service.capture(ContactScope(self.owner_id, UUID(contact))),
+                                  "错误退役事实不得通过保留的审计正文重新进入生成")
+                backend.close()
 
 
 class ControlledProposal:

@@ -123,10 +123,10 @@ def main() -> None:
 
         applied = migrate(database_url, ROOT / "backend/database/migrations")
         official = sorted(path.name for path in (ROOT / "backend/database/migrations").glob("[0-9][0-9][0-9]_*.sql"))
-        if (len(applied) != 65 or list(applied) != official
-                or [int(name[:3]) for name in official] != list(range(1, 66))
-                or official[-1] != "065_memory_upgrade_batches.sql"):
-            raise RuntimeError("概览夹具须使用正式连续001–当前迁移，包含065。")
+        if (len(applied) != len(official) or list(applied) != official
+                or [int(name[:3]) for name in official] != list(range(1, len(official) + 1))
+                or "096_retire_style_samples.sql" not in official):
+            raise RuntimeError("概览夹具须使用正式连续001–当前迁移，包含096。")
         if migrate(database_url, ROOT / "backend/database/migrations"):
             raise RuntimeError("概览迁移重复执行不应新增迁移。")
         proof["migrations"] = official
@@ -134,7 +134,7 @@ def main() -> None:
         DesktopOverviewFixture.setUpClass()
         fixture = DesktopOverviewFixture(methodName="runTest")
         fixture.setUp()
-        fixture.activate_event_worker()
+        fixture.activate_historical_review_worker()
         guard_modules()
         first = fixture.import_event(
             original="合成计划：明天参加读书会。",

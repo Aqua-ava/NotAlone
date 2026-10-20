@@ -53,12 +53,9 @@ export function readReplyResult(value: unknown) {
     return { candidateId, text: item.text, basis: item.basis, citationIds: identifiers(item.citation_ids), riskNotes: [...item.risk_notes] };
   });
   const contextEvidenceIds = identifiers(value.context_receipt.evidence_ids);
-  const styleSampleIds = identifiers(value.context_receipt.style_sample_ids ?? []);
-  if (styleSampleIds.length > 5 || new Set(styleSampleIds).size !== styleSampleIds.length
-    || styleSampleIds.some((id) => contextEvidenceIds.includes(id))) throw new Error('表达参考格式无效。');
   const expressionPreferenceIds = identifiers(value.context_receipt.expression_preference_ids ?? []);
   if (expressionPreferenceIds.length > 5 || new Set(expressionPreferenceIds).size !== expressionPreferenceIds.length
-    || expressionPreferenceIds.some((id) => contextEvidenceIds.includes(id) || styleSampleIds.includes(id))) throw new Error('长期偏好回执格式无效。');
+    || expressionPreferenceIds.some((id) => contextEvidenceIds.includes(id))) throw new Error('长期偏好回执格式无效。');
   const snapshots = value.context_receipt.expression_preferences ?? [];
   if (!Array.isArray(snapshots) || snapshots.length > 5) throw new Error('长期偏好回执格式无效。');
   const expressionPreferences = snapshots.map(readExpressionPreferenceReceipt);
@@ -66,7 +63,7 @@ export function readReplyResult(value: unknown) {
     || new Set(expressionPreferences.map((item) => item.preferenceId)).size !== expressionPreferences.length
     || expressionPreferences.some((item) => !expressionPreferenceIds.includes(item.preferenceId))
     || expressionPreferences.reduce((size, item) => size + item.text.length, 0) > 1536) throw new Error('长期偏好回执格式无效。');
-  return { replyRequestId: value.reply_request_id.toLowerCase(), candidates, contextEvidenceIds, styleSampleIds, expressionPreferenceIds, expressionPreferences,
+  return { replyRequestId: value.reply_request_id.toLowerCase(), candidates, contextEvidenceIds, expressionPreferenceIds, expressionPreferences,
     ...(value.basis_changes === undefined ? {} : { basisChanges: readReplyBasisChanges(value.basis_changes) }),
     ...(value.input_budget === undefined ? {} : { inputBudget: readInputBudget(value.input_budget, true) }),
     ...(value.used_skill === undefined ? {} : { usedSkill: readUsedSkill(value.used_skill) }) };

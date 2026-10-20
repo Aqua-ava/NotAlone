@@ -1,6 +1,7 @@
+import { fillWorkspaceThought, setWorkspaceContext, generateWorkspace } from '../workspace-actions';
 import { expect, type Browser } from '@playwright/test';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
-import { selectMemoryCategory } from '../memory-page-actions';
+import { openImportManagement } from '../memory-page-actions';
 import { withLayeredReplyFixture } from '../layered-reply-fixture';
 import { withControllerEnvironment } from './backend-fixture';
 import { ownResource } from './cleanup';
@@ -16,7 +17,7 @@ export async function layeredReply(browser: Browser, origin: string) {
       const manager = await host.open('manager'), opened = manager.context().waitForEvent('page');
       await manager.getByRole('button', { name: '打开输入小窗', exact: true }).click();
       const helper = await opened;
-      const evidence = helper.getByRole('region', { name: '候选1依据', exact: true });
+      const evidence = helper.getByRole('region', { name: '本次参考内容', exact: true });
       const contactBackground = evidence.getByRole('region', { name: '本次联系人系统整理资料', exact: true });
       const contactReads = evidence.getByRole('region', { name: '本次联系人主题正文读取', exact: true });
       const ownerBackground = evidence.getByRole('region', { name: '本次本人系统整理资料', exact: true });
@@ -25,14 +26,13 @@ export async function layeredReply(browser: Browser, origin: string) {
       async function generate(contactId: string, context: boolean, text: string, readScenario = false) {
         await helper.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption(contactId);
         await confirmHelperContact(helper, contactId);
-        await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('聊聊共同参加的课程。');
-        await helper.getByRole('checkbox', { name: '结合关系语境', exact: true }).setChecked(context);
+        await fillWorkspaceThought(helper, '聊聊共同参加的课程。');
+        await setWorkspaceContext(helper, context);
         if (readScenario) await fixture.command('plan_scenario_reads', { text });
         else await fixture.command('plan', { plan: { text, basis: '按本次草稿，不扩大未知事实。' } });
         // 后续同输入轮显式重新生成，避免复用上一轮的幂等请求。
         const previousReplyId = await helper.evaluate(() => window.notalone.replies.getState().then(state => state.result?.replyRequestId ?? null));
-        const regenerate = helper.getByRole('button', { name: '重新生成', exact: true });
-        await (await regenerate.count() ? regenerate : helper.getByRole('button', { name: '生成候选', exact: true })).click();
+        await generateWorkspace(helper);
         try {
           // 按生产执行请求的25秒合同等待本轮完成，旧候选不能满足新生成判据。
           await expect.poll(async () => {
@@ -62,9 +62,9 @@ export async function layeredReply(browser: Browser, origin: string) {
           expect(await editor.inputValue()).toBe(candidate.text);
         }
         catch (error) { process.stderr.write((await helper.locator('body').innerText()).slice(-8000)); throw error; }
-        await helper.getByRole('button', { name: '展开候选1依据', exact: true }).click();
+        await helper.getByRole('button', { name: '本次参考', exact: true }).click();
         await expect.poll(() => helper.evaluate(() => window.notalone.replies.getEvidenceState().then(state => state.phase))).toBe('ready');
-        await helper.getByRole('region', { name: '候选1依据', exact: true })
+        await helper.getByRole('region', { name: '本次参考内容', exact: true })
           .locator('.evidence-technical > summary').click();
       }
       await generate(String(prepared.contact_id), true, '想聊聊共同学习的经历。');
@@ -103,12 +103,16 @@ export async function layeredReply(browser: Browser, origin: string) {
         expect(read.ownerLayeredScenarioReads?.[0].document?.versionId).toBe(ownerScenario.version_id);
         expect(read.ownerLayeredScenarioReads?.[0].document?.paragraphRange).toEqual([0, 1]);
       }
-      await helper.getByRole('button', { name: '收起候选1依据', exact: true }).click();
-      expect((await helper.evaluate(() => window.notalone.replies.getEvidenceState())).layeredScenarioReads).toBeUndefined();
-      await helper.getByRole('button', { name: '展开候选1依据', exact: true }).click();
+      await helper.getByRole('button', { name: '本次参考', exact: true }).click();
+      await expect(evidence).toHaveCount(0);
+      expect((await helper.evaluate(() => window.notalone.replies.getEvidenceState())).layeredScenarioReads).toEqual(read.layeredScenarioReads);
+      await helper.getByRole('button', { name: '本次参考', exact: true }).click();
+      await expect.poll(() => helper.evaluate(() => window.notalone.replies.getEvidenceState().then(state => state.phase))).toBe('ready');
+      await helper.getByRole('region', { name: '本次参考内容', exact: true })
+        .locator('.evidence-technical > summary').click();
       await expect(contactReads.getByText(`第 1 段：${prepared.scenario_text}`, { exact: true })).toBeVisible();
       await generate(String(prepared.other_contact_id), true, '另一个联系人的合成候选。');
-      await expect(contactBackground.getByText(String(prepared.profile_text), { exact: true })).toHaveCount(0);
+      await expect(contactBackground.getByText(String(prepared.profile_text), { exact: true }), '切换其他联系人后不得保留前联系人画像').toHaveCount(0);
       await expect(contactReads.getByText(`第 1 段：${prepared.scenario_text}`, { exact: true })).toHaveCount(0);
       expect((await helper.evaluate(() => window.notalone.replies.getEvidenceState())).layeredContext).toBeNull();
       if (hasOwner) {
@@ -126,14 +130,13 @@ export async function layeredReply(browser: Browser, origin: string) {
       }
       await generate(String(prepared.contact_id), false, '关闭关系语境后按草稿表达。');
       await expect(evidence.getByText('本次未授权加载系统整理资料。', { exact: true })).toBeVisible();
-      await expect(contactBackground.getByText(String(prepared.profile_text), { exact: true })).toHaveCount(0);
+      await expect(contactBackground.getByText(String(prepared.profile_text), { exact: true }), '关闭关系语境后不得加载联系人画像').toHaveCount(0);
       expect((await fixture.command('runtime_proof')).external_model_calls).toBe(0);
       await generate(String(prepared.contact_id), true, '删除来源前保留本次合法课程依据。', true);
       await expect(contactReads.getByText(`第 1 段：${prepared.scenario_text}`, { exact: true })).toBeVisible();
       await manager.getByRole('button', { name: '记忆', exact: true }).click();
-      await selectMemoryCategory(manager, '来源与过程');
-      const source = manager.getByRole('region', { name: '来源删除管理', exact: true }).getByRole('listitem')
-        .filter({ hasText: `来源标识：${prepared.source_id}` });
+      await openImportManagement(manager);
+      const source = manager.getByRole('region', { name: '已导入资料', exact: true }).locator(`[data-source-id="${prepared.source_id}"]`);
       await source.getByRole('button', { name: '删除来源', exact: true }).click();
       await manager.getByRole('button', { name: '确认删除来源', exact: true }).click();
       await expect(source.getByText('已删除，已通过不可检索校验', { exact: true })).toBeVisible({ timeout: 15_000 });

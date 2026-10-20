@@ -161,19 +161,27 @@ class ObservationTaskPersistenceTest(unittest.TestCase):
             ),
             index_repository=PostgresContactMemoryIndexRepository(TEST_DATABASE_URL),
         )
-        task_id = self._create_task()
+        task_id = self.repository.enqueue_observation_message(
+            owner_id=self.owner_id, contact_id=self.contact_id,
+            message_id=batch.message_ids[0],
+        )
+        self.assertIsNotNone(task_id)
         args = dict(owner_id=self.owner_id, contact_id=self.contact_id,
                     task_id=task_id, worker_id=uuid4())
         for _ in range(3):
             self.assertEqual(worker.run_once(**args).outcome, WorkerRunOutcome.SUCCEEDED)
         self.assertEqual(seen, list(batch.message_ids))
         memories = PostgresMemoryStore(TEST_DATABASE_URL)
-        self.assertEqual(len(memories.list_pending_candidates(scope)), 1)
-        self.assertEqual(memories.list_confirmed(scope), ())
+        self.assertEqual(memories.list_pending_candidates(scope), ())
+        memory, = memories.list_confirmed(scope)
+        self.assertEqual(memory.adoption_method.value, "auto")
+        candidate = memories.get_candidate(scope=scope, candidate_id=memory.source_candidate_id)
+        self.assertEqual(candidate.source_ids, memory.source_ids)
+        self.assertTrue(memory.source_ids)
         self.assertEqual(PostgresWatermarkStore(TEST_DATABASE_URL).get(scope),
                          batch.message_ids[0])
 
-        # 重排同一联系人仍沿用水位；不把已有消息重复送给模型。
+        # 重排同一联系人沿用任务完成回执；不把已有消息重复送给模型。
         self.assertEqual(self._create_task(), task_id)
         for _ in range(3):
             self.assertEqual(worker.run_once(**args).outcome, WorkerRunOutcome.SUCCEEDED)

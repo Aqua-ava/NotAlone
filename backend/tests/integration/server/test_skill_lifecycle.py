@@ -30,6 +30,7 @@ class SkillLifecycleHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
     _source_message = review.SkillReviewHttpTest._source_message
     _draft_for_review = review.SkillReviewHttpTest._draft_for_review
     _compare = review.SkillReviewHttpTest._compare
+    _extra_review_memory = review.SkillReviewHttpTest._extra_review_memory
     _approve = review.SkillReviewHttpTest._approve
     _assert_physical_review_erasure = review.SkillReviewHttpTest._assert_physical_review_erasure
 
@@ -97,24 +98,27 @@ class SkillLifecycleHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
 
     def test_update_inherits_target_extra_review_sources_before_any_read(self):
         path, draft, _, _ = self._draft_for_review()
-        source, message = self._source_message()
-        with psycopg.connect(self.database_url) as connection:
-            connection.execute("UPDATE public.message SET speaker='user' WHERE id=%s", (message,))
-        status, sample = self.backend.request(f'/api/contacts/{self.contact_id}/style-samples', {
-            'idempotency_key': str(uuid4()), 'text': '合成旧版审核额外参考表达。',
-            'origin': {'kind': 'message', 'id': str(message)}})
-        self.assertEqual(status, 200, sample)
+        old_text = '对方偏好先说明自己的想法。合成旧版审核额外背景。'
+        source, message, memory_id = self._extra_review_memory(old_text)
         compared, _ = self._compare(path, draft, kind='owner')
+        payload = json.loads(next(item.content for item in self.reply_model.seen_calls[-1] if isinstance(item, HumanMessage)))
+        self.assertIn(memory_id, [item['evidence_id'] for item in payload['evidence']
+                                 if item['kind'] == 'confirmed_memory'])
         first, _ = self._approve(path, compared)
         skill = first['published']['skill_id']
-        for number in range(5):
-            status, sample = self.backend.request(f'/api/contacts/{self.contact_id}/style-samples', {
-                'idempotency_key': str(uuid4()), 'text': f'合成新版独立参考{number}。', 'origin': {'kind': 'manual'}})
-            self.assertEqual(status, 200, sample)
         updated_path, updated = self._next_draft([skill], [str(uuid5(UUID(skill), 'method:clarify'))])
-        # 新版对照不再直接读取样本，必须经目标发布来历继承旧版完整来源。
+        newer_ids = {
+            self._extra_review_memory(
+                f'对方偏好说明自己的想法，合成审核情境：怎样说明自己的想法？说明想法，不作额外承诺，核对安排。合成新版背景{index}。'
+            )[2] for index in range(5)
+        }
+        # 更相关的五条记忆占满检索预算；新版只能经目标发布来历继承旧版来源。
         compared, _ = self._compare(updated_path, updated, kind='owner')
-        self.assertNotIn('合成旧版审核额外参考表达', str(self.reply_model.seen_calls[-1]))
+        payload = json.loads(next(item.content for item in self.reply_model.seen_calls[-1] if isinstance(item, HumanMessage)))
+        self.assertEqual(newer_ids, {item['evidence_id'] for item in payload['evidence']
+                                    if item['kind'] == 'confirmed_memory'})
+        for old_value in (old_text, str(source), str(message), memory_id):
+            self.assertNotIn(old_value, str(payload))
         second, _ = self._approve(updated_path, compared)
         from notalone.application.source_service import SourceService
         with patch.object(SourceService, '_start', return_value=None):

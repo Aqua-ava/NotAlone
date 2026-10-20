@@ -727,34 +727,6 @@ class SkillLearningHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self.assertEqual(self._get(self.backend, self.path)['drafts'], [])
         self.assertEqual(len(self.extraction_model.seen_calls), 1)
 
-    def test_sample_origin_inherits_disabled_skill_after_original_materials_consumed(self):
-        path, candidate, skill, source = self._historical_skill_usage()
-        status, saved = self.backend.request(f'/api/contacts/{self.contact_id}/style-samples', {
-            'idempotency_key': str(uuid4()), 'text': '合成用户主动保存的历史表达。',
-            'origin': {'kind': 'candidate', 'id': candidate['candidate_id']},
-        })
-        self.assertEqual(status, 200, saved)
-        sample_id = saved['sample']['sample_id']
-        self._record_learning_edit_and_selection(path, candidate)
-        self.extraction_model.responses.append(tool_response('SkillLearningProposal', {'outcome': 'no_change'}))
-        self.assertEqual(self._configure()[0][0], 200)
-        self.assertEqual(self._wait_learning()['drafts'], [])
-        self.assertEqual(self._configure(False)[0][0], 200)
-        self.assertEqual(self.backend.request(f"/api/skills/{skill['skill_id']}/disable", {})[0], 200)
-        status, created = self.backend.request(f'/api/contacts/{self.contact_id}/assistant-sessions', {})
-        self.assertEqual(status, 200, created)
-        path, candidate = self._generated_candidate()
-        self._record_learning_edit_and_selection(path, candidate)
-        self.extraction_model.responses.append(tool_response('SkillLearningProposal', synthetic_proposal()))
-        self.assertEqual(self._configure()[0][0], 200)
-        draft = self._wait_learning()['drafts'][0]
-        self.assertEqual(self.backend.request(f"/api/skills/{skill['skill_id']}/delete", {})[0], 200)
-        self._assert_learning_storage_erased_before_read()
-        self._assert_erased_learning()
-        self._assert_historical_skill_materials(draft, skill, source)
-        for material in draft['private_evidence']['materials']:
-            self.assertIn(sample_id, material['dependency_ids'], '仅新会话样本间接使用也须继承原Skill')
-        self.assertEqual(len(self.extraction_model.seen_calls), 2)
 
     def test_actual_usage_edits_and_selection_are_bounded_material_without_sending_claim(self):
         self._bind(self.contact_id)
@@ -846,44 +818,6 @@ class SkillLearningHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self.assertEqual(self._get(self.backend, self.path)['drafts'], [])
         self.assertEqual(len(self.extraction_model.seen_calls), 1)
 
-    def test_sample_preserves_preference_provenance_after_original_materials_consumed(self):
-        self._bind(self.contact_id)
-        status, saved = self.backend.request('/api/expression-preferences', {
-            'operation_key': str(uuid4()), 'text': '长期先核实再回答。',
-            'scope': {'contact_id': None, 'reply_mode': None},
-            'origin': {'kind': 'manual'}, 'confirm_long_term': True,
-        })
-        self.assertEqual(status, 200, saved)
-        preference = saved['preference']
-        path, candidate = self._generated_candidate()
-        status, sample = self.backend.request(f'/api/contacts/{self.contact_id}/style-samples', {
-            'idempotency_key': str(uuid4()), 'text': '合成主动保留的核实表达。',
-            'origin': {'kind': 'candidate', 'id': candidate['candidate_id']},
-        })
-        self.assertEqual(status, 200, sample)
-        self._record_learning_edit_and_selection(path, candidate)
-        self.extraction_model.responses.append(tool_response('SkillLearningProposal', {'outcome': 'no_change'}))
-        self.assertEqual(self._configure()[0][0], 200)
-        self.assertEqual(self._wait_learning()['drafts'], [])
-        self.assertEqual(self._configure(False)[0][0], 200)
-        item = f"/api/expression-preferences/{preference['preference_id']}?contact_id={self.contact_id}"
-        self.assertEqual(self.backend.request(item, {
-            'operation_key': str(uuid4()), 'expected_revision': 1, 'text': preference['text'],
-            'scope': {'contact_id': None, 'reply_mode': 'initiate_conversation'}, 'confirm_long_term': True,
-        }, method='PATCH')[0], 200)
-        self.assertEqual(self.backend.request(f'/api/contacts/{self.contact_id}/assistant-sessions', {})[0], 200)
-        path, current = self._generated_candidate()
-        self._record_learning_edit_and_selection(path, current)
-        self.extraction_model.responses.append(tool_response('SkillLearningProposal', synthetic_proposal()))
-        self.assertEqual(self._configure()[0][0], 200)
-        draft = self._wait_learning()['drafts'][0]
-        expected = {preference['preference_id'], sample['sample']['sample_id']}
-        self.assertTrue(expected <= set(draft['private_evidence']['source_dependencies']))
-        self.assertEqual(self.backend.request(item, {
-            'operation_key': str(uuid4()), 'expected_revision': 2,
-        }, method='DELETE')[0], 200)
-        self._assert_learning_storage_erased_before_read()
-        self.assertEqual(len(self.extraction_model.seen_calls), 2)
 
     def test_corrected_memory_keeps_legal_historical_edit_as_learning_material(self):
         self._bind(self.contact_id)

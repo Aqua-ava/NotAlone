@@ -13,6 +13,7 @@ def _same_event_meaning(left: MemoryEvent | None, right: MemoryEvent | None) -> 
         or left.occurrence_verified and right.occurrence_verified and (
             left.occurrence_start != right.occurrence_start
             or left.occurrence_end != right.occurrence_end
+            or left.occurrence_precision != right.occurrence_precision
         )
     )
 
@@ -36,5 +37,6 @@ def same_pending_identity(left: MemoryCandidate, right: MemoryCandidate) -> bool
              or bool(set(left.source_ids) & set(right.source_ids))
              and same_verified_event_claim(left.event, right.event))
         and left.valid_at == right.valid_at and left.invalid_at == right.invalid_at
+        and left.conditions == right.conditions and left.evolution == right.evolution
         and _same_event_meaning(left.event, right.event)
     )

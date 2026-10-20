@@ -1,4 +1,5 @@
-import { selectMemoryCategory } from '../memory-page-actions';
+import { workspaceInput, fillWorkspaceThought, fillWorkspaceInstruction, generateWorkspace } from '../workspace-actions';
+import { openImportManagement } from '../memory-page-actions';
 import { expect, type Browser } from '@playwright/test';
 import path from 'node:path';
 import type { ChildProcess } from 'node:child_process';
@@ -49,16 +50,16 @@ export async function expressionPreferences(browser: Browser, origin: string) {
       await panel.getByRole('checkbox', { name: '明确长期保存', exact: true }).check();
       await panel.getByRole('button', { name: '确认保存长期偏好', exact: true }).click();
       await expect(directory.getByText('平时尽量用短句。', { exact: true })).toBeVisible();
-      await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('好的，收到安排，我会再核对具体内容。');
+      await fillWorkspaceThought(helper, '好的，收到安排，我会再核对具体内容。');
       expect((await fixture.command('pause_response')).state).toBe('paused');
       let waiting: Record<string, unknown>;
       try {
-        await helper.getByRole('button', { name: '生成候选', exact: true }).click();
+        await generateWorkspace(helper);
         expect((await fixture.command('await_model')).started_calls).toBe(1);
         await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveCount(0);
         waiting = await fixture.command('observations');
         expect(waiting.model_calls).toBe(0);
-        expect(waiting.turns).toMatchObject([{ state: 'running', schema_revision: 4, preference_revisions: [1] }]);
+        expect(waiting.turns).toMatchObject([{ state: 'running', schema_revision: 9, preference_revisions: [1] }]);
         await panel.getByRole('button', { name: '修改长期偏好：平时尽量用短句。', exact: true }).click();
         await panel.getByRole('textbox', { name: '长期表达要求', exact: true }).fill('恢复时明确修改的合成表达要求。');
         await panel.getByRole('checkbox', { name: '明确长期保存', exact: true }).check();
@@ -68,7 +69,7 @@ export async function expressionPreferences(browser: Browser, origin: string) {
       await expect(helper.getByText('旧准备已停止，已填写内容仍会保留。请明确重新准备后生成。', { exact: true })).toBeVisible();
       await host.awaitPendingCommands();
       await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveCount(0);
-      await expect(helper.getByRole('textbox', { name: '草稿', exact: true })).toHaveValue('好的，收到安排，我会再核对具体内容。');
+      await expect(workspaceInput(helper)).toHaveValue('好的，收到安排，我会再核对具体内容。');
       const rejected = await fixture.command('observations');
       expect(rejected.model_calls).toBe(1); expect(rejected.started_calls).toBe(1);
       const waitingTurns = waiting.turns as Array<{ request_key: string }>;
@@ -84,10 +85,10 @@ export async function expressionPreferences(browser: Browser, origin: string) {
       expect(regenerated.model_calls).toBe(2); expect(regenerated.started_calls).toBe(2);
       const freshTurns = regenerated.turns as Array<{ request_key: string }>;
       expect(freshTurns).toHaveLength(2); expect(freshTurns[1].request_key).not.toBe(waitingTurns[0].request_key);
-      expect(freshTurns[1]).toMatchObject({ state: 'completed', schema_revision: 4, preference_revisions: [2] });
+      expect(freshTurns[1]).toMatchObject({ state: 'completed', schema_revision: 9, preference_revisions: [2] });
       process.stdout.write('page_test_step: expression-preferences-first-rejected-explicit-reprepare-revision2-complete\n');
-      await helper.getByRole('textbox', { name: '本次要求', exact: true }).fill('这次详细说明，保留两句话。');
-      await helper.getByRole('button', { name: '重新生成', exact: true }).click();
+      await fillWorkspaceInstruction(helper, '这次详细说明，保留两句话。');
+      await generateWorkspace(helper);
       await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true }))
         .toHaveValue('好的，收到安排。我会再核对具体内容。');
       await expect(directory.getByRole('listitem')).toHaveCount(1);
@@ -122,9 +123,8 @@ export async function expressionPreferences(browser: Browser, origin: string) {
       await expect(directory.getByText('有来源的合成表达要求。', { exact: true })).toBeVisible();
       const manager = await host.open('manager');
       await manager.getByRole('button', { name: '记忆', exact: true }).click();
-      await selectMemoryCategory(manager, '来源与过程');
-      const source = manager.getByRole('region', { name: '来源删除管理', exact: true }).getByRole('listitem')
-        .filter({ hasText: `来源标识：${prepared.source_id}` });
+      await openImportManagement(manager);
+      const source = manager.getByRole('region', { name: '已导入资料', exact: true }).locator(`[data-source-id="${prepared.source_id}"]`);
       await source.getByRole('button', { name: '删除来源', exact: true }).click();
       await manager.getByRole('button', { name: '确认删除来源', exact: true }).click();
       await expect(source.getByText('已删除，已通过不可检索校验', { exact: true })).toBeVisible();

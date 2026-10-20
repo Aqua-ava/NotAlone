@@ -508,7 +508,7 @@ class AssistantSessionDeletionHttpTest(unittest.TestCase):
         self.assertEqual(self.backend.request(child_path)[1], remaining)
         self.assertEqual(len(self.model.seen_calls), 2)
 
-    def test_source_messages_memories_and_explicit_manual_sample_survive_session_delete(self) -> None:
+    def test_source_messages_and_memories_survive_session_delete(self) -> None:
         source_id, message_id = self._source_message()
         self.assertEqual(self.backend.request("/api/memories/manual-contact", {
             "contact_id": str(self.contact_id), "text": "合成联系人长期偏好轻松交流", "category": "preference", "topic": "other",
@@ -516,13 +516,8 @@ class AssistantSessionDeletionHttpTest(unittest.TestCase):
         self.assertEqual(self.backend.request("/api/memories/manual-owner", {
             "text": "合成本人长期偏好简洁表达", "category": "preference", "topic": "other",
         })[0], 200)
-        sample_path = f"/api/contacts/{self.contact_id}/style-samples"
-        status, sample = self.backend.request(sample_path, {
-            "idempotency_key": str(uuid4()), "text": "主动保存的独立合成样本", "origin": {"kind": "manual"},
-        })
-        self.assertEqual(status, 200, sample)
         paths = [f"/api/contacts/{self.contact_id}/sources", f"/api/contacts/{self.contact_id}/messages",
-                 f"/api/contacts/{self.contact_id}/memories", "/api/memories/owner", sample_path]
+                 f"/api/contacts/{self.contact_id}/memories", "/api/memories/owner"]
         original = [self.backend.request(path) for path in paths]
         self.assertIn(source_id, [source["source_id"] for source in original[0][1]["sources"]])
         self.assertIn(message_id, [message["message_id"] for message in original[1][1]["messages"]])
@@ -536,29 +531,5 @@ class AssistantSessionDeletionHttpTest(unittest.TestCase):
         self.assertEqual(self.backend.request(path, {"confirmed": True}, method="DELETE")[0], 200)
         for public_path, before in zip(paths, original, strict=True):
             self.assertEqual(self.backend.request(public_path), before)
-        self.assertEqual(self.backend.request(f"{sample_path}/{sample['sample']['sample_id']}")[0], 200)
         self.assertEqual(self.backend.request(path), (404, {"error": "not_found"}))
-        self.assertEqual(len(self.model.seen_calls), 1)
-
-    def test_explicit_candidate_sample_remains_independent_and_deleted_candidate_cannot_be_saved_again(self) -> None:
-        source_id, message_id = self._source_message()
-        self.model.responses = [self._candidate("候选产生的合成表达", message_id)]
-        path = self._path(self._default())
-        status, reply = self.backend.request(path + "/replies", {
-            "contact_id": str(self.contact_id), "idempotency_key": str(uuid4()),
-            "content": {"type": "reply_to_message", "target_message_id": message_id, "direction": "轻松回应"},
-        })
-        self.assertEqual(status, 200, reply)
-        sample_path = f"/api/contacts/{self.contact_id}/style-samples"
-        save = {"idempotency_key": str(uuid4()), "text": "用户主动另存的合成最终表达",
-                "origin": {"kind": "candidate", "id": reply["candidates"][0]["candidate_id"]}}
-        status, saved = self.backend.request(sample_path, save)
-        self.assertEqual(status, 200, saved)
-        self.assertEqual(set(saved["sample"]["source_ids"]), {source_id, message_id})
-
-        self.assertEqual(self.backend.request(path, {"confirmed": True}, method="DELETE")[0], 200)
-        self.assertEqual(self.backend.request(path), (404, {"error": "not_found"}))
-        self.assertEqual(self.backend.request(sample_path)[1]["samples"], [saved["sample"]])
-        self.assertEqual(self.backend.request(sample_path, save), (200, saved))
-        self.assertEqual(self.backend.request(sample_path, {**save, "idempotency_key": str(uuid4())})[0], 404)
         self.assertEqual(len(self.model.seen_calls), 1)

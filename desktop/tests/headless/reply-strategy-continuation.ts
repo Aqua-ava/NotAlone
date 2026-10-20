@@ -1,3 +1,4 @@
+import { fillWorkspaceThought, fillWorkspaceInstruction, generateWorkspace } from '../workspace-actions';
 import { openAssistantHistory, expandSavedDiscussion } from '../assistant-history-actions';
 import { expect, type Browser, type Page } from '@playwright/test';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
@@ -25,17 +26,15 @@ async function saved(pages: EventPages, sessionId: string) {
   return { turns, current_input_version_id: response.data.current_input_version_id };
 }
 
-async function continuationScene(pages: EventPages, scene: '回应消息' | '主动聊聊') {
+async function continuationScene(pages: EventPages, input: '空思路' | '已有想法') {
   const { manager, helper, fixture } = pages;
-  expect(fixture.data.migration_count).toBe(55); expect(fixture.data.migration_repeat).toBe(0);
+  expect(fixture.data.migration_count).toBe(89); expect(fixture.data.migration_repeat).toBe(0);
   await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
   await confirmHelperContact(helper, fixture.data.contact_ids[0]);
-  await helper.getByRole('button', { name: scene, exact: true }).click();
-  if (scene === '回应消息') await helper.getByRole('radio', { name: /甲的原始合成消息/ }).click();
-  await helper.getByRole('textbox', { name: scene === '回应消息' ? '表达方向' : '主动目的', exact: true }).fill('拒绝本次邀约。');
-  await helper.getByRole('textbox', { name: '本次策略要求', exact: true }).fill('自然一点；不要承诺');
+  await fillWorkspaceThought(helper, input === '已有想法' ? '拒绝本次邀约。' : '');
+  await fillWorkspaceInstruction(helper, '自然一点；不要承诺');
   await fixture.plan({ count: 1, message_groups: [['第一组第一条。', '第一组第二条。']] });
-  await helper.getByRole('button', { name: '生成候选', exact: true }).click();
+  await generateWorkspace(helper, input === '已有想法' ? 'express' : 'suggest');
   const group = helper.getByRole('group', { name: '说法1消息组', exact: true });
   await expect(group.getByRole('textbox', { name: '说法1第2条编辑文本', exact: true })).toHaveValue('第一组第二条。');
   await openAssistantHistory(helper);
@@ -59,7 +58,7 @@ async function continuationScene(pages: EventPages, scene: '回应消息' | '主
   expect(first.turns).toHaveLength(2);
   expect(first.turns[1].input.continuation.submission.intention_update).toBe(intention);
   expect(first.turns[1].input.continuation.version_id).toBe(edited.displayVersionId);
-  expect(first.turns[1].input.content[scene === '回应消息' ? 'direction' : 'purpose']).toBe(intention);
+  expect(first.turns[1].input.content.draft_text).toBe(intention);
   expect(first.turns[1].input.content.user_instruction).toBe('自然一点；不要承诺；简短一点');
   await expect(helper.getByRole('textbox', { name: '本次改口', exact: true })).toHaveValue('');
   await expect(group.getByRole('textbox', { name: '说法1第2条编辑文本', exact: true })).toHaveValue('本次先不参加。');
@@ -79,8 +78,8 @@ async function continuationScene(pages: EventPages, scene: '回应消息' | '主
   const second = await saved(pages, sessionId);
   expect(second.turns).toHaveLength(3);
   expect(second.turns[2].input.continuation.submission.intention_update).toBeUndefined();
-  expect(second.turns[2].input.content.type).toBe(scene === '回应消息' ? 'reply_to_message' : 'initiate_conversation');
-  expect(second.turns[2].input.content[scene === '回应消息' ? 'direction' : 'purpose']).toBe(intention);
+  expect(second.turns[2].input.content).toMatchObject({ type: 'rewrite_draft', input_kind: 'workspace', workspace_action: 'express' });
+  expect(second.turns[2].input.content.draft_text).toBe(intention);
   const actualInputs = (await fixture.command('observations')).payloads as Array<Record<string, unknown>>;
   const reference = actualInputs.at(-1)!.continuation_reference as {
     messages: Array<{ text: string }>; is_current_draft: boolean;
@@ -102,23 +101,26 @@ async function continuationScene(pages: EventPages, scene: '回应消息' | '主
   await expect(group.getByRole('textbox', { name: '说法1第2条编辑文本', exact: true })).toHaveValue('本次无法参加。');
   expect((await fixture.command('observations')).model_calls).toBe(3);
   await fixture.plan({ count: 1, message_groups: [['结合当前新消息的表达。', '保持本次明确意愿。']] });
-  await helper.getByRole('button', { name: '结合新消息继续', exact: true }).click();
+  await helper.getByRole('textbox', { name: '继续修改要求', exact: true }).fill('第一条简短一点');
+  await helper.getByRole('button', { name: '继续修改', exact: true }).click();
+  await expect.poll(async () => (await state(helper)).continuation?.phase).toBe('completed');
   await expect(group.getByRole('textbox', { name: '说法1第2条编辑文本', exact: true })).toHaveValue('保持本次明确意愿。');
   const final = await saved(pages, sessionId);
   expect(final.turns).toHaveLength(4);
   expect(final.current_input_version_id).toBe(final.turns[3].input_version_id);
-  expect(final.turns[3].input.content[scene === '回应消息' ? 'target_message_id' : 'purpose'])
-    .toBe(scene === '回应消息' ? arrived.message_id : intention);
+  expect(final.turns[3].input.content).toMatchObject({ type: 'rewrite_draft', input_kind: 'workspace',
+    workspace_action: 'express', draft_text: intention });
   expect(final.turns[3].input.content.user_instruction).toBe('正式一点；不要承诺；简短一点');
-  expect((await state(helper)).messageNotice.changed).toBe(false);
-  expect((await fixture.command('observations')).model_calls).toBe(4);
+  const latest = await fixture.command('observations');
+  expect(latest.model_calls).toBe(4);
+  expect(JSON.stringify((latest.payloads as unknown[]).at(-1))).toContain(arrived.message_id);
 }
 
 export async function replyStrategyContinuation(browser: Browser, origin: string) {
-  for (const scene of ['回应消息', '主动聊聊'] as const) {
-    const name = `${scene}完整组编辑→明确改口→要求澄清→显式结合真实新消息`;
+  for (const input of ['空思路', '已有想法'] as const) {
+    const name = `${input}直接候选→完整组编辑→明确改口→要求澄清→新消息后显式继续`;
     process.stdout.write(`page_test_scenario: ${name}\n`);
-    await withEventPages(browser, origin, (pages) => continuationScene(pages, scene));
+    await withEventPages(browser, origin, (pages) => continuationScene(pages, input));
     process.stdout.write(`page_test_scenario_passed: ${name}\n`);
   }
 }

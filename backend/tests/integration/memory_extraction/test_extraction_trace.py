@@ -119,6 +119,7 @@ class ExtractionTraceTest(unittest.TestCase):
             )
 
     def run_batch(self, payloads, **options):
+        # 只有历史人工候选回归显式传 automatic=False；默认继续走自动终结。
         return run_extraction(
             scope=self.scope,
             messages=self.messages,
@@ -174,7 +175,7 @@ class ExtractionTraceTest(unittest.TestCase):
     def test_pending_candidate_can_reveal_original_window_and_each_processing_step(
         self,
     ):
-        stats = self.run_batch((_payload(self.message_ids[0]),))
+        stats = self.run_batch((_payload(self.message_ids[0]),), automatic=False)
         self.assertEqual(stats.pending, 1)
         candidate = self.memory.list_pending_candidates(self.scope)[0]
         lookup = self.traces.find_record(
@@ -464,6 +465,7 @@ class ExtractionTraceTest(unittest.TestCase):
         )
 
         run_extraction(
+                automatic=False,
             scope=self.scope,
             messages=self.messages,
             watermark_message_id=None,
@@ -510,7 +512,7 @@ class ExtractionTraceTest(unittest.TestCase):
     ):
         from notalone.memory.models import AdoptionMethod
 
-        self.run_batch((_payload(self.message_ids[0]),))
+        self.run_batch((_payload(self.message_ids[0]),), automatic=False)
         candidate = self.memory.list_pending_candidates(self.scope)[0]
         memory = self.memory.confirm(
             scope=self.scope,
@@ -534,7 +536,7 @@ class ExtractionTraceTest(unittest.TestCase):
         )
 
     def test_discarding_a_pending_candidate_erases_its_trace_copy(self):
-        self.run_batch((_payload(self.message_ids[0]),))
+        self.run_batch((_payload(self.message_ids[0]),), automatic=False)
         candidate = self.memory.list_pending_candidates(self.scope)[0]
         self.memory.discard_candidate_with_fingerprint(
             scope=self.scope, candidate_id=candidate.candidate_id
@@ -584,6 +586,7 @@ class ExtractionTraceTest(unittest.TestCase):
 
         with self.assertRaises(TraceWriteError):
             run_extraction(
+                automatic=False,
                 scope=self.scope,
                 messages=self.messages,
                 watermark_message_id=None,
@@ -610,7 +613,7 @@ class ExtractionTraceTest(unittest.TestCase):
         self.assertEqual(detail["links"][0]["commit_status"], "committed")
         self.assertTrue(detail["write_receipts"][0]["observed_after_failure"])
         self.assertIsNone(self.watermark.get(self.scope))
-        stats = self.run_batch((_payload(self.message_ids[0]),))
+        stats = self.run_batch((_payload(self.message_ids[0]),), automatic=False)
         self.assertEqual(stats.skipped_duplicate, 1)
         self.assertEqual(
             len(self.memory.list_pending_candidates(self.scope)), 1
@@ -630,7 +633,8 @@ class ExtractionTraceTest(unittest.TestCase):
                 {**good, "source_message_ids": [str(uuid4())]},
                 {**good, "text": "合成玩笑", "figurative_type": "joke"},
                 {**good, "text": "合成待确认", "confidence": 0.4},
-            )
+            ),
+            automatic=False,
         )
         detail = self.traces.get_batch(
             self.scope, self.traces.list_batches(self.scope)[0]["trace_id"]
@@ -886,7 +890,14 @@ class ExtractionTraceTest(unittest.TestCase):
         self.assertEqual(receipt["commit_status"], "unknown")
         self.assertEqual(receipt["current_record_status"], "active")
         self.assertEqual(self.memory.list_confirmed(self.scope), (old,))
-        self.assertEqual([item.text for item in self.memory.list_pending_candidates(self.scope)], [newer["text"]])
+        self.assertEqual(self.memory.list_pending_candidates(self.scope), ())
+        failure = next(event["payload"] for event in detail["events"]
+                       if event["stage"] == "candidate_result"
+                       and event["payload"].get("disposition") == "automatic_write_failed")
+        failed = self.memory.get_candidate(scope=self.scope, candidate_id=UUID(failure["candidate_id"]))
+        self.assertEqual(failed.text, newer["text"])
+        self.assertEqual(failed.status.value, "rejected")
+        self.assertIsNotNone(failed.failure_reason)
         retry = run_extraction(
             messages=(self.messages[1],), watermark_message_id=None,
             runtime=FixedRuntime((newer,)), memory_port=self.memory,

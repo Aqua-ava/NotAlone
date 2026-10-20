@@ -1,3 +1,4 @@
+import { openFileImport } from './file-import-navigation';
 import { expect } from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -25,7 +26,7 @@ test('签名包通过真实系统文件选择器预览并完整导入六条合�
   const manager = await app.firstWindow();
   await expect(manager.getByRole('button', { name: '选择合成联系人甲', exact: true })).toBeVisible({ timeout: 20_000 });
   expect(await app.evaluate(({ app }) => app.isPackaged)).toBe(true);
-  await manager.getByRole('button', { name: '历史导入', exact: true }).click();
+  await openFileImport(manager);
   console.log(`native_import_only_file: ${importBackend.data.file_path}`);
   await manager.getByRole('button', { name: '选择历史文件', exact: true }).click();
   console.log('native_import_only_stage: waiting-for-native-file-selection');

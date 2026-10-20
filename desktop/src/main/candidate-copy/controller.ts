@@ -47,7 +47,9 @@ export class CandidateCopyController {
       || reply.phase === 'waiting' || reply.sourceAvailability !== undefined
       || deletionBlocksCopy) throw new Error('本次候选已变化，请重新确认。');
     if (request.versionId === undefined && request.messageId === undefined) {
-      if (reply.result?.input.mode !== 'rewrite_draft') throw new Error('请从当前消息组逐条复制。');
+      if (reply.result?.input.mode !== 'rewrite_draft' || reply.result.input.inputKind === 'workspace') {
+        throw new Error('请从当前消息组逐条复制。');
+      }
       const candidate = reply.result?.candidates.find((item) => item.original.candidateId === request.candidateId);
       if (reply.result?.replyRequestId !== request.replyRequestId
         || !candidate?.editedText.trim()) throw new Error('本次候选已变化，请重新确认。');

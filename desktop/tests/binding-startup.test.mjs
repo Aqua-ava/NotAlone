@@ -19,6 +19,7 @@ function fixture({ withBinding = false, revokeFails = false } = {}) {
     contact_id: '22222222-2222-4222-8222-222222222222',
     conversation_locator: 'wxid_synthetic', display_name: '合成联系人', status: 'active' };
   let active = withBinding ? [binding] : [];
+  let revoked = [];
   const backend = {
     getConnectionGeneration: () => generation,
     onStateChanged: (callback) => { listener = callback; },
@@ -26,10 +27,11 @@ function fixture({ withBinding = false, revokeFails = false } = {}) {
       calls.push(path);
       if (path === '/api/sync/cli-bindings/revoke') {
         if (revokeFails) throw new Error('合成撤销失败');
-        active = []; return { generation, data: { ...binding, status: 'revoked' } };
+        active = []; revoked = [{ ...binding, status: 'revoked' }];
+        return { generation, data: revoked[0] };
       }
       const data = path === '/api/setup/status' ? { runtime_owner_configured: true }
-        : path === '/api/sync/cli-bindings' ? { bindings: active }
+        : path === '/api/sync/cli-bindings' ? { bindings: active, revoked_bindings: revoked }
         : path === '/api/sync/cli-sessions' ? { sessions: [{ username: 'wxid_synthetic', display_name: '合成联系人', last_timestamp: null, bound_contact_id: null }] }
         : { sync_enabled: false };
       return { generation, data };
@@ -80,5 +82,51 @@ for (const revokeFails of [false, true]) test(`启动后直接撤销${revokeFail
     contactId: state.bindings[0].contactId, bindingId: state.bindings[0].bindingId });
   assert.equal(calls.filter((path) => path === '/api/sync/cli-sessions').length, 0);
   assert.equal(controller.getState().bindings.length, revokeFails ? 1 : 0);
+  assert.equal(controller.getState().sessionIssue, 'not-requested');
+});
+
+
+test('联系人页面只刷新已保存状态，保留会话选择缓存与已撤销关联', async () => {
+  const { controller, calls, connect } = fixture({ withBinding: true });
+  await connect(1);
+  await controller.refreshSaved();
+  assert.equal(calls.filter((path) => path === '/api/sync/cli-sessions').length, 0);
+  await controller.refresh();
+  const sessions = controller.getState().sessions;
+  calls.length = 0;
+  await controller.refreshSaved();
+  assert.deepEqual(controller.getState().sessions, sessions);
+  assert.equal(calls.filter((path) => path === '/api/sync/cli-sessions').length, 0);
+  const state = controller.getState();
+  await controller.revokeBinding({ scopeRevision: state.scopeRevision,
+    contactId: state.bindings[0].contactId, bindingId: state.bindings[0].bindingId });
+  assert.equal(controller.getState().bindings.length, 0);
+  assert.equal(controller.getState().knownBindings.length, 1);
+  assert.equal(controller.getState().knownBindings[0].status, 'revoked');
+  const snapshot = controller.getState();
+  snapshot.knownBindings[0].displayName = '不能篡改保存状态';
+  assert.equal(controller.getState().knownBindings[0].displayName, '合成联系人');
+  await connect(undefined);
+  assert.deepEqual(controller.getState().knownBindings, []);
+});
+
+
+for (const reconnect of [false, true]) test(`${reconnect ? '重连' : '启动'}加载未完成时刷新保存状态，撤销仍不读取微信名单`, async () => {
+  const { controller, calls, connect } = fixture({ withBinding: true });
+  if (reconnect) {
+    await connect(1);
+    await controller.refresh();
+    await connect(undefined);
+    calls.length = 0;
+  }
+  // 不等待连接初始化：页面的保存状态刷新先完成，并淘汰旧加载结果。
+  const connecting = connect(reconnect ? 2 : 1);
+  await controller.refreshSaved();
+  await connecting;
+  const state = controller.getState();
+  assert.equal(state.phase, 'ready');
+  await controller.revokeBinding({ scopeRevision: state.scopeRevision,
+    contactId: state.bindings[0].contactId, bindingId: state.bindings[0].bindingId });
+  assert.equal(calls.filter((path) => path === '/api/sync/cli-sessions').length, 0);
   assert.equal(controller.getState().sessionIssue, 'not-requested');
 });

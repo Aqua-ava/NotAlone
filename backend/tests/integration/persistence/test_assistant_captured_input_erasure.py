@@ -10,7 +10,6 @@ import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
-from notalone.application.style_sample_service import SaveStyleSample
 from notalone.persistence.assistant_candidate_versions import (
     EditAssistantCandidate, PostgresAssistantCandidateVersions,
 )
@@ -145,9 +144,6 @@ class AssistantCapturedInputErasureTest(unittest.TestCase):
     def test_invalid_typed_capture_and_stale_discussion_hash_reject_and_roll_back(self) -> None:
         root = self.a._discussion("合成等待严格复验的讨论。")
         prepared = self.fixture._prepare(relationship=False)
-        sample = self.fixture.samples.save(self.a.scope, SaveStyleSample(
-            uuid4(), "合成独立手写表达。", "manual",
-        ))
         with psycopg.connect(support.support.DATABASE_URL) as connection:
             captured = captured_reply_discussion_uses(connection, self.a.scope)[0]
         identity = captured.snapshot.records[0]
@@ -167,19 +163,24 @@ class AssistantCapturedInputErasureTest(unittest.TestCase):
                 records=(replace(identity, payload_sha256="0" * 64),))),),
         }
         before = self.a.sessions.read_session(self.a.scope, self.a.session_id)
+        with psycopg.connect(support.support.DATABASE_URL) as connection:
+            before_contact = connection.execute("SELECT display_name FROM public.contact WHERE id=%s",
+                                                (self.a.contact_id,)).fetchone()
         for label, uses in variants.items():
             with self.subTest(label=label):
                 with self.assertRaises(ReplyStoreInvariantError):
                     with psycopg.connect(support.support.DATABASE_URL, row_factory=dict_row) as connection:
                         lock_owner_scope(connection, owner_id=self.a.owner_id)
-                        connection.execute("UPDATE public.style_sample SET final_text='合成应回滚的写入。' WHERE id=%s",
-                                           (sample.sample_id,))
+                        connection.execute("UPDATE public.contact SET display_name='合成应回滚的写入。' WHERE id=%s",
+                                           (self.a.contact_id,))
                         erase_assistant_source_turns(
                             connection, owner_id=self.a.owner_id, contact_id=self.a.contact_id,
                             removed_ids=set(), reply_request_ids=[], turn_ids=[prepared[1]], captured_uses=uses,
                         )
                 self.assertEqual(self.a.sessions.read_session(self.a.scope, self.a.session_id), before)
-                self.assertEqual(self.fixture.samples.read(self.a.scope, sample.sample_id).text, sample.text)
+                with psycopg.connect(support.support.DATABASE_URL) as connection:
+                    self.assertEqual(connection.execute("SELECT display_name FROM public.contact WHERE id=%s",
+                                                        (self.a.contact_id,)).fetchone(), before_contact)
         self.assertEqual(root, identity.input_version_id)
 
     def test_actual_rebinding_keeps_legitimate_captured_history_with_its_own_binding(self) -> None:
@@ -266,63 +267,3 @@ class AssistantCapturedInputErasureTest(unittest.TestCase):
                     removed_ids=set(), reply_request_ids=[], turn_ids=[old_turn], captured_uses=captures,
                 )
         self.assertEqual(versions.read(self.a.scope, self.a.session_id, candidate.candidate_id), before)
-
-    def test_explicit_turn_delete_keeps_already_saved_independent_sample(self) -> None:
-        candidate, _, old_turn = self.a._complete()
-        saved = self.fixture.samples.save(self.a.scope, SaveStyleSample(
-            uuid4(), candidate.text, "candidate", candidate.candidate_id,
-        ))
-        prepared = self.fixture._prepare(relationship=False)
-        self.fixture._save(prepared)
-        independent = self.a._discussion("后续未被捕获的合成独立讨论。")
-        with psycopg.connect(support.support.DATABASE_URL, row_factory=dict_row) as connection:
-            lock_owner_scope(connection, owner_id=self.a.owner_id)
-            captures = captured_reply_discussion_uses(connection, self.a.scope)
-            erase_assistant_source_turns(
-                connection, owner_id=self.a.owner_id, contact_id=self.a.contact_id,
-                removed_ids=set(), reply_request_ids=[], turn_ids=[old_turn], captured_uses=captures,
-            )
-        self.assertEqual(self.fixture.samples.read(self.a.scope, saved.sample_id), saved)
-        self.assertEqual(self.a.sessions.read_session(self.a.scope, self.a.session_id).current_input_version_id,
-                         independent)
-
-    def test_source_backed_sample_identity_closes_history_after_source_delete_requested(self) -> None:
-        source = self.a._source()
-        candidate, _, _ = self.a._complete(source=source)
-        saved = self.fixture.samples.save(self.a.scope, SaveStyleSample(
-            uuid4(), candidate.text, "candidate", candidate.candidate_id,
-        ))
-        _, historical_request, historical_turn = self.a._complete(
-            "实际使用来源关联样本的合成历史意愿。",
-            style_references=self.fixture.samples.select_references(self.a.scope),
-        )
-        prepared = self.fixture._prepare((), relationship=False)
-        self.fixture._save(prepared)
-        independent = self.a._discussion("来源删除预处理后保留的无关手写讨论。")
-        with psycopg.connect(support.support.DATABASE_URL, row_factory=dict_row) as connection:
-            lock_owner_scope(connection, owner_id=self.a.owner_id)
-            captures = captured_reply_discussion_uses(connection, self.a.scope)
-            self.assertEqual(len(captures), 1)
-            self.assertEqual(captures[0].snapshot.current_input_version_id,
-                             prepared[3].assistant_discussion.current_input_version_id)
-            connection.execute("UPDATE public.source_document SET status='delete_requested' WHERE id=%s",
-                               (source[0],))
-            selected = select_assistant_input_dependents(
-                connection, owner_id=self.a.owner_id, contact_id=self.a.contact_id,
-                removed_ids=set(), reply_request_ids=[], turn_ids=(historical_turn,), captured_uses=captures,
-            )
-            self.assertEqual(set(selected.turn_ids), {historical_turn, prepared[1]})
-            self.assertEqual(set(selected.reply_request_ids), {historical_request, prepared[2].request_id})
-            erase_assistant_source_turns(
-                connection, owner_id=self.a.owner_id, contact_id=self.a.contact_id,
-                removed_ids=set(), reply_request_ids=[], turn_ids=[historical_turn], captured_uses=captures,
-            )
-            # A仅擦除会话记录；真实样本/source清理由C唯一caller随后执行。
-            self.assertEqual(connection.execute(
-                "SELECT final_text FROM public.style_sample WHERE owner_id=%s AND contact_id=%s AND id=%s",
-                (self.a.owner_id, self.a.contact_id, saved.sample_id),
-            ).fetchone()["final_text"], saved.text)
-        after = self.a.sessions.read_session(self.a.scope, self.a.session_id)
-        self.assertEqual(after.current_input_version_id, independent)
-        self.assertEqual({turn.turn_id for turn in after.turns if turn.state == "redacted"},
-                         {historical_turn, prepared[1]})

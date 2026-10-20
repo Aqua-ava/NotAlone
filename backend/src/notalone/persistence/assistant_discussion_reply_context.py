@@ -42,7 +42,7 @@ class PostgresAssistantDiscussionContext:
         continued_candidate: ContinuedReplyCandidate | None = None,
         history_message_ids: tuple[UUID, ...] | None = None,
     ) -> ReplyContext:
-        # C 的样本选择及 B 的探索读取会自开 owner 事务，须先完成并释放。
+        # C 的偏好选择及 B 的探索读取会自开 owner 事务，须先完成并释放。
         context = self._context.build(
             command=command, verified_scope=verified_scope,
             reply_request_id=reply_request_id, continued_candidate=continued_candidate,

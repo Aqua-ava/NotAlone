@@ -2,7 +2,7 @@ import { expect, type ElectronApplication } from '@playwright/test';
 import { isolatedAppEnvironment, selectMenu } from './app-fixture';
 import { launchApp } from './app-test-gate';
 import { test } from './rewrite-fixture';
-import { prepareTransientRewrite, assertTransientRewriteCleared } from './rewrite-page-scenarios';
+import { prepareTransientRewrite, assertWorkspaceRecovery } from './rewrite-page-scenarios';
 
 test('同一 userData 正常退出再启动不恢复草稿、编辑和当次语气', async ({ runningApp: { app, appProcess, userData }, appDirectory, rewriteBackend }) => {
   const manager = await app.firstWindow();
@@ -26,7 +26,7 @@ test('同一 userData 正常退出再启动不恢复草稿、编辑和当次语�
     const nextOpened = restarted.waitForEvent('window');
     await nextManager.getByRole('button', { name: '打开输入小窗', exact: true }).click();
     const nextHelper = await nextOpened;
-    await assertTransientRewriteCleared(nextHelper);
+    await assertWorkspaceRecovery(nextHelper);
     expect((await rewriteBackend.command('observations')).payloads).toHaveLength(1);
     await selectMenu(restarted, 'NotAlone', '退出 NotAlone');
     await expect.poll(() => restartedProcess.exitCode).toBe(0);

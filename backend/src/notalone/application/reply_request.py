@@ -128,32 +128,22 @@ def _scenario_declarations(content: dict[str, Any]) -> dict[str, str | None]:
 
 
 def _parse_rewrite_draft(content: dict[str, Any]) -> RewriteDraft:
-    draft_text = content.get("draft_text")
-    if not isinstance(draft_text, str) or not draft_text.strip():
+    excluded = content.get("excluded_message_ids", [])
+    if not isinstance(excluded, list) or len(excluded) > 500:
         raise ReplyRequestInvalid()
-    instruction = content.get("user_instruction")
-    if instruction is not None and (
-        not isinstance(instruction, str) or not instruction.strip()
-    ):
-        raise ReplyRequestInvalid()
-    include_context = content.get("include_relationship_context", False)
-    if not isinstance(include_context, bool):
-        raise ReplyRequestInvalid()
-    input_kind = content.get("input_kind", "draft")
-    direction = content.get("pasted_direction")
-    if input_kind not in ("draft", "current_chat") or input_kind == "current_chat" and (
-        not isinstance(direction, str) or not direction.strip() or len(direction) > 4096
-    ) or input_kind == "draft" and direction is not None:
-        raise ReplyRequestInvalid()
-    draft = RewriteDraft(
-        draft_text=draft_text,
-        user_instruction=instruction,
-        include_relationship_context=include_context,
-        input_kind=input_kind,
-        pasted_direction=direction,
-    )
-    if not draft.is_valid():
-        raise ReplyRequestInvalid()
+    try:
+        draft = RewriteDraft(
+            draft_text=content.get("draft_text"),
+            user_instruction=content.get("user_instruction"),
+            include_relationship_context=content.get("include_relationship_context", False),
+            input_kind=content.get("input_kind", "draft"),
+            pasted_direction=content.get("pasted_direction"),
+            workspace_action=content.get("workspace_action"),
+            context_text=content.get("context_text"),
+            excluded_message_ids=tuple(_uuid_field({"id": value}, "id") for value in excluded),
+        )
+    except (ValueError, TypeError):
+        raise ReplyRequestInvalid() from None
     return draft
 
 

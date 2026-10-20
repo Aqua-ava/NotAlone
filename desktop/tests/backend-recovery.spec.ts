@@ -32,7 +32,7 @@ test('本 App 子进程启动失败后明确重试能创建新运行时，旧退
   await expect(manager.getByText('本机服务连接失败，请重试。', { exact: true })).toBeVisible({ timeout: 15_000 });
   await manager.getByRole('button', { name: '重试连接' }).click();
   await expect(manager.getByRole('status')).toContainText('已连接', { timeout: 15_000 });
-  await expect(manager.getByText('已启动并验证本机运行时。', { exact: true })).toBeVisible();
+  await expect.poll(() => manager.evaluate(() => window.notalone.backend.getState())).toMatchObject({ phase: 'connected', reused: false });
   await selectMenu(app, 'NotAlone', '退出 NotAlone');
   await expect.poll(() => appProcess.exitCode).toBe(0);
 });

@@ -14,7 +14,7 @@ from notalone.application.assistant_session_service import AssistantSessionConfl
 from notalone.persistence.assistant_continuation import _request_from_input
 from notalone.persistence.assistant_session_inputs import require_current_input
 from notalone.persistence.assistant_session_store import PostgresAssistantSessionStore, _expand_message_sources
-from notalone.reply.interface import AccumulatedReplyRequirements, ReplyToMessage
+from notalone.reply.interface import AccumulatedReplyRequirements, ReplyToMessage, RewriteDraft
 from notalone.scopes import ContactScope
 
 
@@ -52,7 +52,8 @@ def reserve_message_adoption_in_transaction(
             raise AssistantSessionRejected("invalid_message_adoption")
         payload = current["input_payload"]
         restored = _restore_request(scope, command, payload)
-        if type(restored.content) is not type(command.content):
+        if (type(restored.content) is not type(command.content)
+                or isinstance(restored.content, RewriteDraft) and restored.content.input_kind != "workspace"):
             raise AssistantSessionRejected("invalid_message_adoption")
         previous = payload.get("continuation")
         # 只复原权威元数据并核全文相等；普通短要求沿原声明完整保留。
@@ -60,8 +61,13 @@ def reserve_message_adoption_in_transaction(
                         else [restored.content.user_instruction] if restored.content.user_instruction else [])
         accumulated = AccumulatedReplyRequirements(tuple(requirements)) if requirements else None
         content = replace(command.content, user_instruction=accumulated)
-        intent_field = "direction" if isinstance(content, ReplyToMessage) else "purpose"
-        intent_changed = getattr(restored.content, intent_field).text != getattr(content, intent_field).text
+        if isinstance(content, RewriteDraft):
+            intent_field = "draft_text"
+            intent_changed = (restored.content.draft_text, restored.content.workspace_action) != (
+                content.draft_text, content.workspace_action)
+        else:
+            intent_field = "direction" if isinstance(content, ReplyToMessage) else "purpose"
+            intent_changed = getattr(restored.content, intent_field).text != getattr(content, intent_field).text
         metadata = {"version": 1, "submission": command.submission, "message_adoption": command.submission,
                     "candidate_group_id": None, "candidate_number": None, "candidate_id": None, "version_id": None,
                     "effective_intent": {"source": intent_field}, "effective_requirements": list(requirements),

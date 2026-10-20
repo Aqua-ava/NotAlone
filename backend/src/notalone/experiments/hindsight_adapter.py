@@ -55,10 +55,12 @@ class HindsightRetrieval:
         query: str | None = None,
         limit: int = 20,
         memory_ids: tuple[UUID, ...] | None = None,
+        include_historical: bool = False,
     ) -> tuple[RetrievedMemory, ...]:
-        if query is None or memory_ids is not None:
+        if query is None or memory_ids is not None or include_historical:
             return self.local.search_confirmed_memories(
-                scope=scope, query=query, limit=limit, memory_ids=memory_ids
+                scope=scope, query=query, limit=limit, memory_ids=memory_ids,
+                **({"include_historical": True} if include_historical else {}),
             )
         if not 1 <= limit <= 20:
             raise ValueError("记忆 limit 超出预算。")
@@ -155,9 +157,11 @@ class HindsightRetrieval:
         query: str | None = None,
         limit: int = 20,
         memory_ids: tuple[UUID, ...] | None = None,
+        include_historical: bool = False,
     ) -> tuple[RetrievedOwnerMemory, ...]:
         return self.local.search_owner_memories(
-            owner_id=owner_id, query=query, limit=limit, memory_ids=memory_ids
+            owner_id=owner_id, query=query, limit=limit, memory_ids=memory_ids,
+            **({"include_historical": True} if include_historical else {}),
         )
 
     def search_pending_candidates(
@@ -182,6 +186,7 @@ class HindsightRetrieval:
         *,
         scope: ContactScope,
         target_message_id: UUID | None = None,
+        message_ids: tuple[UUID, ...] | None = None,
         query: str | None = None,
         limit: int = 50,
         occurred_after: datetime | None = None,
@@ -191,6 +196,7 @@ class HindsightRetrieval:
         return self.local.search_messages(
             scope=scope,
             target_message_id=target_message_id,
+            **({"message_ids": message_ids} if message_ids is not None else {}),
             query=query,
             limit=limit,
             occurred_after=occurred_after,

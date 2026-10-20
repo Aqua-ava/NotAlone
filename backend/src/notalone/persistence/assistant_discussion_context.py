@@ -22,10 +22,9 @@ from notalone.persistence.assistant_session_inputs import (
 from notalone.persistence.assistant_session_store import (
     _dependencies_available, _partition_assistant_dependencies, _reply_dependencies,
 )
-from notalone.persistence.style_sample_store import (
+from notalone.persistence.reply_sources import (
     _with_reply_source_validation, captured_reply_sources, require_reply_sources_current,
 )
-from notalone.persistence.reply_discussion_dependencies import reply_style_sample_dependencies
 from notalone.persistence.reply_basis_changes import (historical_basis_revision_sha256,
     require_generation_memory_dependencies)
 from notalone.reply.assistant_discussion import (
@@ -158,16 +157,15 @@ def _generation_dependencies(connection: Any, scope: ContactScope, row: dict[str
     sources.update(_reply_dependencies(connection, scope, row["reply_request_id"]))
     sources.update(captured_reply_sources(connection, owner_id=scope.owner_id, request_id=row["reply_request_id"]))
     typed = _partition_assistant_dependencies(connection, scope, sources)
-    samples = (set(inherited.style_sample_ids) | set(typed.style_sample_ids)
-               | set(reply_style_sample_dependencies(connection, scope, row["reply_request_id"])))
-    return DiscussionDependencies(typed.source_ids, tuple(sorted(samples)))
+    return DiscussionDependencies(typed.source_ids)
 
 
+# 无样本旧历史保留既有指纹的空末槽；不恢复任何已退役内容。
 def _generation_identity(row: dict[str, Any], dependencies: DiscussionDependencies) -> DiscussionIdentity:
     return DiscussionIdentity(
         "generation_input", row["id"],
         _fingerprint((row["input_payload"], row["input_digest"], row["conversation_binding_id"],
-                      row["reply_request_id"], dependencies.source_ids, dependencies.style_sample_ids)),
+                      row["reply_request_id"], dependencies.source_ids, ())),
         turn_id=row["turn_id"],
     )
 
@@ -339,7 +337,6 @@ def _require_captured_records(
     *, policy_current=False,
 ) -> DiscussionDependencies:
     dependencies: set[UUID] = set()
-    samples: set[UUID] = set()
     input_rows = {row["id"]: row for row in _input_rows(cursor, scope, snapshot.session_id)}
     captured_by_input: dict[UUID, DiscussionDependencies] = {}
     histories: dict[UUID, AssistantCandidateHistory] = {}
@@ -358,7 +355,6 @@ def _require_captured_records(
                     dependency_ids=tuple(row["dependency_ids"]),
                     conversation_binding_id=row["conversation_binding_id"],
                 )
-                samples.update(carry.dependencies.style_sample_ids)
             continue
         if identity.input_version_id not in captured_by_input:
             if not _generation_input_available(cursor, scope, row, policy_current=policy_current):
@@ -366,7 +362,6 @@ def _require_captured_records(
             captured_by_input[identity.input_version_id] = _generation_dependencies(cursor, scope, row)
         captured = captured_by_input[identity.input_version_id]
         dependencies.update(captured.source_ids)
-        samples.update(captured.style_sample_ids)
         if identity.kind == "generation_input":
             current_identity = _generation_identity(row, captured)
         else:
@@ -383,4 +378,4 @@ def _require_captured_records(
             current_identity = _candidate_identity(row, history, version)
         if current_identity != identity:
             raise ReplyStoreInvariantError("本次使用的助手历史内容已改变。")
-    return DiscussionDependencies(tuple(sorted(dependencies)), tuple(sorted(samples)))
+    return DiscussionDependencies(tuple(sorted(dependencies)))

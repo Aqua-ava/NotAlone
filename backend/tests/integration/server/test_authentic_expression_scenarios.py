@@ -43,39 +43,33 @@ class AuthenticExpressionScenarioTests(FidelityHttpFixture, unittest.TestCase):
         finally:
             super().tearDownClass()
 
-    def test_response_current_intent_and_continuation_keep_sample_as_expression_only(self):
+    def test_response_current_intent_and_continuation_preserve_current_intent(self):
         self._exercise_scenario("response")
 
-    def test_proactive_current_intent_and_continuation_keep_sample_as_expression_only(self):
+    def test_proactive_current_intent_and_continuation_preserve_current_intent(self):
         self._exercise_scenario("proactive")
 
-    def test_response_declarations_sample_and_continuation_remain_once_only_and_are_erased(self):
+    def test_response_declarations_and_continuation_remain_once_only(self):
         self._exercise_scenario("response", declared=True)
 
-    def test_proactive_declarations_sample_and_continuation_remain_once_only_and_are_erased(self):
+    def test_proactive_declarations_and_continuation_remain_once_only(self):
         self._exercise_scenario("proactive", declared=True)
 
-    def test_response_message_groups_are_reviewed_as_a_whole_and_erased_with_their_sample(self):
+    def test_response_message_groups_are_reviewed_as_a_whole_without_added_commitments(self):
         self._exercise_scenario("response", declared=True, grouped=True)
 
-    def test_proactive_message_groups_are_reviewed_as_a_whole_and_erased_with_their_sample(self):
+    def test_proactive_message_groups_are_reviewed_as_a_whole_without_added_commitments(self):
         self._exercise_scenario("proactive", declared=True, grouped=True)
 
     def _exercise_scenario(self, mode: str, *, declared: bool = False, grouped: bool = False):
         contact, target, _ = self.prepare_contact(self.owner_id)
-        status, saved_sample = self.backend.request(f"/api/contacts/{contact}/style-samples", {
-            "idempotency_key": str(uuid4()), "text": "合成旧表达：我总是答应，明晚七点陪你去合成海边。",
-            "origin": {"kind": "manual"},
-        })
-        self.assertEqual(status, 200, saved_sample)
-        sample_id = saved_sample["sample"]["sample_id"]
         status, saved = self.backend.request(f"/api/contacts/{contact}/assistant-session/default", {})
         self.assertEqual(status, 200, saved)
         path = f"/api/contacts/{contact}/assistant-sessions/{saved['session_id']}"
         stages = (
-            ("current", "明确拒绝本次合成邀请，不增加约定。", "这次不参加，谢谢你邀请。", "保留本次拒绝，仅参考样本说法。"),
+            ("current", "明确拒绝本次合成邀请，不增加约定。", "这次不参加，谢谢你邀请。", "保留本次拒绝。"),
             ("continued", "仍然拒绝本次合成邀请，改成短句，不增加约定。", "这次不参加。", "继续保留当前拒绝，不沿旧表达增加承诺。"),
-            ("unsupported", "仍然拒绝本次合成邀请，改成短句，不增加约定。", "好呀，明晚七点我陪你去合成海边。", "按旧样本中的邀约安排。"),
+            ("unsupported", "仍然拒绝本次合成邀请，改成短句，不增加约定。", "好呀，明晚七点我陪你去合成海边。", "擅自增加了没有依据的邀约安排。"),
         )
         message_groups = (
             ("这次不参加。", "谢谢你邀请。"),
@@ -108,9 +102,6 @@ class AuthenticExpressionScenarioTests(FidelityHttpFixture, unittest.TestCase):
             self.assertEqual(status, 200, result)
             payload = self.reply_model.payloads[-1]
             self.assertEqual(payload["fidelity_contract"]["current_intent"]["text"], intent)
-            self.assertEqual([item["sample_id"] for item in payload["style_references"]], [sample_id])
-            self.assertEqual(result["context_receipt"]["style_sample_ids"], [sample_id])
-            self.assertNotIn(sample_id, result["context_receipt"]["evidence_ids"])
             self.assertEqual(result["candidates"][0]["text"], text)
             if grouped:
                 messages = result["candidates"][0]["messages"]
@@ -128,11 +119,11 @@ class AuthenticExpressionScenarioTests(FidelityHttpFixture, unittest.TestCase):
             self.assertEqual(len(self.reply_model.payloads), index + 1)
             system = "\n".join(str(message.content) for message in self.reply_model.seen_calls[-1] if message.type == "system")
             if grouped:
-                captures, case_id = self.group_capture_rows, f"{mode}-group-style-{label}"
+                captures, case_id = self.group_capture_rows, f"{mode}-group-intent-{label}"
             elif declared:
-                captures, case_id = self.declared_capture_rows, f"{mode}-declared-style-{label}"
+                captures, case_id = self.declared_capture_rows, f"{mode}-declared-intent-{label}"
             else:
-                captures, case_id = self.capture_rows, f"{mode}-style-{label}"
+                captures, case_id = self.capture_rows, f"{mode}-intent-{label}"
             captures.append({"case_id": case_id, "owner_id": str(self.owner_id), "contact_id": contact,
                                       "payload": payload, "system_prompt": system, "output": result,
                                       "latency_ms": elapsed_ms, "call_count": 1})
@@ -153,17 +144,6 @@ class AuthenticExpressionScenarioTests(FidelityHttpFixture, unittest.TestCase):
                 self.assertEqual([turn["reply"]["candidates"][0]["messages"] for turn in saved["turns"]],
                                  [result["candidates"][0]["messages"] for result in results])
 
-        status, deleted = self.backend.request(f"/api/contacts/{contact}/style-samples/{sample_id}", method="DELETE")
-        self.assertEqual(status, 200, deleted)
-        recovered = self._get(self._backend(self.owner_id), path)
-        self.assertEqual(len(recovered["turns"]), 3)
-        self.assertTrue(all(turn["state"] == "redacted" and turn["input"] is None and turn["reply"] is None for turn in recovered["turns"]))
-        for body, result in zip(bodies, results):
-            self.assertNotEqual(self.backend.request(path + "/replies", body)[0], 200)
-            self.assertNotEqual(self.backend.request(f"/api/contacts/{contact}/replies/{result['reply_request_id']}/evidence")[0], 200)
-        self.assertNotEqual(self.backend.request(path + "/replies", {**bodies[-1], "idempotency_key": str(uuid4()),
-                                                                   "continued_from_candidate_id": previous})[0], 200)
-        self.assertEqual(len(self.reply_model.payloads), 3)
 
 
 if __name__ == "__main__":

@@ -28,7 +28,7 @@ test('App 用受控绝对 Python 和项目启动真实 BackendServer，认证退
     await Promise.all([window.notalone.backend.retryConnection(), window.notalone.backend.retryConnection(), window.notalone.backend.retryConnection()]);
   });
   await expect(manager.getByRole('status')).toContainText('已连接', { timeout: 15_000 });
-  await expect(manager.getByText('已启动并验证本机运行时。', { exact: true })).toBeVisible();
+  await expect.poll(() => manager.evaluate(() => window.notalone.backend.getState())).toMatchObject({ phase: 'connected', reused: false });
   const fields = new Map((await readFile(backend.infoPath, 'utf8')).trim().split('\n').map((line) => {
     const split = line.indexOf('=');
     return [line.slice(0, split), line.slice(split + 1)] as const;

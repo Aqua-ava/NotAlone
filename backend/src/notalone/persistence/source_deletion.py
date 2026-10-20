@@ -28,7 +28,7 @@ from notalone.persistence.source_memory_erasure import (
 )
 from notalone.persistence.memory_correction import has_correction_dependencies
 from notalone.persistence.source_processing import erase_source_processing
-from notalone.persistence.style_sample_store import erase_source_style_samples
+
 from notalone.persistence.expression_preferences import erase_source_expression_preferences
 from notalone.scopes import ContactScope
 from notalone.managed_update_backups import erase_managed_update_backups, ManagedUpdateBackupError
@@ -194,10 +194,6 @@ class PostgresSourceDeletionRepository:
                     connection,
                     owner_id=owner_id,
                     contact_id=contact_id,
-                    removed_ids={source_document_id, *orphan_message_ids, *all_memory_ids},
-                )
-                erase_source_style_samples(
-                    connection, owner_id=owner_id,
                     removed_ids={source_document_id, *orphan_message_ids, *all_memory_ids},
                 )
                 erase_source_expression_preferences(

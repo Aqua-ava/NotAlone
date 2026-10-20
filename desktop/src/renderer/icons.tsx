@@ -7,6 +7,7 @@ const paths = {
   write: 'M16 3l5 5L9 20l-6 1 1-6L16 3ZM13 6l5 5',
   close: 'M6 6l12 12M18 6 6 18',
   sparkle: 'M12 3l3 6 6 3-6 3-3 6-3-6-6-3 6-3 3-6Z',
+  check: 'M5 12l4 4L19 6',
   copy: 'M8 8h13v13H8V8ZM16 8V3H3v13h5',
   chevron: 'M7 10l5 5 5-5',
 } as const;

@@ -14,7 +14,6 @@ from notalone.reply.input_budget import (
     InputBudgetExceededError,
     InputBudgetUnavailableError,
 )
-from notalone.reply.style_reference import StyleReference
 from notalone.retrieval import InMemoryRetrieval, RetrievedMessage
 from tests.input_budget_support import synthetic_budget_kwargs
 from tests.integration.server.core_business_flow_support import (
@@ -115,38 +114,6 @@ class InputBudgetRuntimeLimitTest(unittest.TestCase):
         self.assertEqual(tool_result["status"], "ok")
         self.assertLessEqual(len(tool_result["messages"]), 8)
         self.assertIn(history_text, final_messages[-1]["content"])
-
-    def test_full_style_reference_can_cross_total_limit_without_model_call(self):
-        prepared = prepared_context()
-        prepared = replace(prepared, command=replace(
-            prepared.command,
-            content=replace(
-                prepared.command.content, include_relationship_context=True,
-            ),
-        ))
-        baseline, _, _, decisions = runtime_fixture()
-        baseline.generate(prepared)
-        total = decisions[0].total_tokens
-        sample_text = "合成表达样本：可以简短温和，但不提供本次事实。" * 8
-        reference = StyleReference(
-            sample_id=UUID("00000000-0000-0000-0000-000000000030"),
-            scope=SCOPE, text=sample_text,
-        )
-        styled = replace(prepared, style_references=(reference,))
-        runtime, model, counter, decisions = runtime_fixture(total + 1)
-
-        with self.assertRaises(InputBudgetExceededError):
-            runtime.generate(styled)
-
-        self.assertEqual(model.seen_calls, [])
-        self.assertEqual(decisions[0].state, BudgetState.EXCEEDED)
-        payload = json.loads(counter.seen_payloads[0]["messages"][1]["content"])
-        self.assertEqual(payload["style_references"], [{
-            "sample_id": str(reference.sample_id), "text": sample_text,
-            "factual_role": "expression_reference", "weight": "low",
-        }])
-        self.assertNotIn("messages", decisions[0].to_payload())
-        self.assertNotIn(sample_text, str(decisions[0].to_payload()))
 
     def test_explicit_unknown_model_profile_never_reaches_model_or_counter(self):
         model = ScriptedCoreModel()

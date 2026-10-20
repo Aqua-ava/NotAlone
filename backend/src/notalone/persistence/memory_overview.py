@@ -43,7 +43,7 @@ def _memory_dependency(
 ) -> dict:
     """统一单项无正文指纹；原证明是否已知由调用范围明确决定。"""
     return {"memory_id": str(memory.memory_id), "revision": memory.revision,
-        "status": memory.status.value, "record_sha256": version_record_digest(memory),
+        "status": memory.status.value, "record_sha256": version_record_digest(memory, current_projection=True),
         "timing_sha256": _digest(memory.timing.to_payload()),
         "version_evidence_sha256": _digest(memory.version_evidence.to_payload() if memory.version_evidence else None),
         "current_event_sha256": _digest(memory.event.to_payload(current=True) if memory.event else None),

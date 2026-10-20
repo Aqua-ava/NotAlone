@@ -480,7 +480,7 @@ class TraceTransportTest(unittest.TestCase):
                 dimension_release=RELEASE_ALL_DIMENSIONS,
                 ledger=ledger,
             )
-        self.assertEqual(stats.updated, 1)
+        self.assertEqual((stats.updated, stats.pending), (0, 1))
         detail = traces.get_batch(
             scope, traces.list_batches(scope)[0]["trace_id"]
         )
@@ -523,4 +523,5 @@ class TraceTransportTest(unittest.TestCase):
         )
         adjudication = requests[2]["messages"][1]["content"]
         self.assertIn(str(old.memory_id), adjudication)
-        self.assertNotIn(str(messages[0].message_id), adjudication)
+        self.assertIn('"version": 2', adjudication)
+        self.assertNotIn('raw_payload', adjudication)

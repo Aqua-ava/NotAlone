@@ -6,7 +6,7 @@ import { ports, renderSession } from './fixtures/historical-reply-basis.mjs';
 
 function renderCandidates(state) {
   const previous = globalThis.window;
-  globalThis.window = { notalone: { styleSamples: {} } };
+  globalThis.window = { notalone: { candidateProvenance: {} } };
   try { return ports.renderToStaticMarkup(ports.createElement(ports.ReplyCandidates, { replies: { state, error: '' } })); }
   finally { if (previous === undefined) delete globalThis.window; else globalThis.window = previous; }
 }
@@ -61,22 +61,27 @@ for (const operation of ['generate', 'replay', 'continue']) test(`${operation}�
       await f.request(`/api/contacts/${scope.contactId}/memories/${prepared.memoryId}/correct`,
         { text: '合成完成后修正：喜欢轻松散步，不必作出承诺。' });
       const after = await f.request(path);
-      assert.equal(after.turns.find((turn) => turn.turn_id === written.turn_id).basis_changes[0].reason, 'memory_revised');
+      assert.equal(after.turns.find((turn) => turn.turn_id === written.turn_id).basis_changes[0].reason, 'memory_generation_forbidden');
     } finally { release(); await generating; }
     const state = await f.bridge.getState();
     assert.equal(state.phase, 'ready');
-    assert.deepEqual(state.result.basisChanges, [{ evidenceId: prepared.memoryId, kind: 'confirmed_memory', reason: 'memory_revised' }]);
-    assert.match(renderCandidates(state), /依据已变化/);
+    assert.deepEqual(state.result.basisChanges, [{ evidenceId: prepared.memoryId, kind: 'confirmed_memory', reason: 'memory_generation_forbidden' }]);
+    assert.match(renderCandidates(state), /依据已纠错或失效原因不明，仅可回看，请重新生成/);
     assert.equal((await f.fixture.command('observations')).payloads.length, callsBefore + (operation === 'replay' ? 0 : 1));
     if (operation === 'replay') {
       assert.equal(state.result.replyRequestId, original.state.result.replyRequestId);
       assert.equal(state.result.candidates[0].editedText, '同键重放前用户保留的合成编辑。');
       assert.equal(state.selectedCandidateId, original.state.selectedCandidateId);
     } else if (operation === 'continue') assert.equal(state.continuation.phase, 'completed');
+    await f.bridge.readSavedSession(scope);
+    const modelCalls = (await f.fixture.command('observations')).payloads.length;
+    await f.bridge.continueSession({ ...scope, sessionId, instruction: '第一条简短一点', intentionUpdate: prepared.text });
+    assert.equal((await f.bridge.getState()).continuation.phase, 'failed', '错误依据不能经旧候选继续带入生成');
+    assert.equal((await f.fixture.command('observations')).payloads.length, modelCalls);
   });
 });
 
-for (const kind of ['contact', 'owner']) test(`生产目录及公开控制器回看${kind}修正旧候选，明确继续采用新依据与当前意图`, { timeout: 60_000 }, async () => {
+for (const kind of ['contact', 'owner']) test(`生产目录及公开控制器回看${kind}状态变化旧候选，明确继续采用新依据与当前意图`, { timeout: 60_000 }, async () => {
   await withHistoricalReplyHttpFixture(async (f) => {
     const generated = await generateWithMemory(f, kind);
     let scope = generated.scope;
@@ -92,7 +97,7 @@ for (const kind of ['contact', 'owner']) test(`生产目录及公开控制器回
     f.contacts.setDraft({ ...other, text: '乙独立的草稿不受甲修正影响。' });
     const path = kind === 'contact' ? `/api/contacts/${scope.contactId}/memories/${prepared.memoryId}/correct`
       : `/api/memories/owner/${prepared.memoryId}/correct`;
-    const corrected = await f.request(path, { text: '我喜欢慢慢散步，希望表达轻松自然。' });
+    const corrected = await f.request(path, { text: '我喜欢慢慢散步，希望表达轻松自然。', change_kind: 'state_changed' });
     const freshMemoryId = corrected.memory.memory_id;
     assert.equal(f.contacts.getState().draft, '乙独立的草稿不受甲修正影响。');
     const callsBefore = (await f.fixture.command('observations')).payloads.length;

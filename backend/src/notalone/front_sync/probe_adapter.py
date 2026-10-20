@@ -2,8 +2,8 @@
 
 探针是 ``native/macos/`` 工程的本地二进制，负责判断微信是否在前台并
 给出顶部 display name；旧协议另含选中行的最小元数据。本适配器只解析
-``--session --json`` 的机器可读输出；任何无法解析或无法运行的情况都
-失败关闭，不猜测前台状态。
+单次兼容输出与 ``--session-worker --json`` 的有界机器协议；任何无法解析
+或无法运行的情况都失败关闭，不猜测前台状态。
 """
 
 from __future__ import annotations
@@ -18,6 +18,7 @@ from typing import Any, Callable, Protocol
 
 from notalone.conversation.matcher import FrontSessionEvidence, normalize_display_text
 from notalone.front_sync.observation_budget import FRESH_PROBE_SECONDS
+from notalone.front_sync.session_worker import NativeSessionWorker, SessionWorkerError
 
 
 class ProbeAdapterError(RuntimeError):
@@ -51,9 +52,10 @@ class FrontSessionQuality:
     def __post_init__(self) -> None:
         if self.capture_version not in (
             "minimal-region-v1", "automatic-window-v1", "automatic-window-v2", "automatic-header-v3",
+            "automatic-header-v4",
         ):
             raise ValueError("前台定位质量无效。")
-        header_only = self.capture_version == "automatic-header-v3"
+        header_only = self.capture_version in ("automatic-header-v3", "automatic-header-v4")
         if header_only:
             if type(self.name_complete) is not bool or self.selected_row_name_confidence is not None:
                 raise ValueError("前台定位质量无效。")
@@ -65,19 +67,39 @@ class FrontSessionQuality:
         if any(
             isinstance(value, bool)
             or not isinstance(value, (int, float))
-            or not math.isfinite(value)
             or not 0 <= value <= 1
+            or not math.isfinite(value)
             for value in confidences
         ):
             raise ValueError("前台定位质量无效。")
 
     @property
     def meets_minimum_confidence(self) -> bool:
-        if self.capture_version == "automatic-header-v3":
+        if self.capture_version in ("automatic-header-v3", "automatic-header-v4"):
             return self.name_complete is True and self.display_name_confidence >= 0.90
         return self.selected_row_name_confidence is not None and min(
             self.display_name_confidence, self.selected_row_name_confidence,
         ) >= 0.90
+
+
+@dataclass(frozen=True, slots=True)
+class FrontSessionTextFallback:
+    """同图尾部彩色遮罩的文字候选，不能替代完整原始名称。"""
+
+    version: str
+    text: str
+    confidence: float
+    text_complete: bool
+    mask_verified: bool
+
+    def __post_init__(self) -> None:
+        if (self.version != "isolated-color-tail-v1"
+                or not isinstance(self.text, str) or not self.text.strip() or len(self.text) > 256
+                or any(part in self.text for part in ("\n", "\r", "…", "⋯", "..."))
+                or type(self.text_complete) is not bool or type(self.mask_verified) is not bool
+                or isinstance(self.confidence, bool) or not isinstance(self.confidence, (int, float))
+                or not 0 <= self.confidence <= 1 or not math.isfinite(self.confidence)):
+            raise ValueError("前台定位文字候选无效。")
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,6 +111,7 @@ class FrontSessionProbeObservation:
     selected_row_name: str | None = None
     quality: FrontSessionQuality | None = None
     captured_at: datetime | None = None
+    text_fallback: FrontSessionTextFallback | None = None
 
     @property
     def qualified_evidence(self) -> FrontSessionEvidence | None:
@@ -99,12 +122,13 @@ class FrontSessionProbeObservation:
             or self.evidence is None
             or self.quality is None
             or not self.quality.meets_minimum_confidence
+            or self.text_fallback is not None
         ):
             return None
         name = normalize_display_text(self.evidence.display_name)
         if not name:
             return None
-        if self.quality.capture_version == "automatic-header-v3":
+        if self.quality.capture_version in ("automatic-header-v3", "automatic-header-v4"):
             return self.evidence if self.selected_row_name is None else None
         if name != normalize_display_text(self.selected_row_name):
             return None
@@ -119,7 +143,7 @@ class _SubprocessResult:
 
 
 class MacosFrontSessionProbe:
-    """调用本机探针二进制的单次前台定位；不保存截图或正文。"""
+    """fresh 路径复用本机进程、每轮重新定位；不保存截图或正文。"""
 
     __slots__ = (
         "_executable",
@@ -127,6 +151,7 @@ class MacosFrontSessionProbe:
         "_default_runner",
         "_timeout_seconds",
         "_permission_blocked",
+        "_worker",
     )
 
     def __init__(
@@ -144,10 +169,16 @@ class MacosFrontSessionProbe:
         self._timeout_seconds = timeout_seconds
         self._runner = runner or self._run_command
         self._default_runner = runner is None
+        self._worker = NativeSessionWorker(executable)
         # 权限失败不是普通的瞬时探针错误。macOS 可能在子进程每次
         # 调用 ScreenCaptureKit 时重新弹窗；本进程内先熔断，避免后台
         # 心跳把同一个授权请求重复触发。
         self._permission_blocked = False
+
+    def close(self) -> None:
+        """停止常驻原生资源；不改变权限门或持久化同步开关。"""
+
+        self._worker.close()
 
     def reset_permission_gate(self) -> None:
         """在用户明确完成授权后允许再次尝试一次探针。"""
@@ -168,14 +199,22 @@ class MacosFrontSessionProbe:
             or not 0 < timeout_seconds <= FRESH_PROBE_SECONDS
         ):
             raise ValueError("新观察的探针预算超出有界范围。")
-        runner = (
-            (lambda command: self._run_command(command, timeout_seconds=timeout_seconds))
-            if self._default_runner
-            else self._runner
-        )
-        return self._observe(
-            (self._executable, "--session", "--json", "--minimal-region", "--single-frame"), runner,
-        )
+        command = (self._executable, "--session", "--json", "--minimal-region", "--single-frame")
+        if not self._default_runner:
+            return self._observe(command, self._runner)
+
+        def run_worker(command: tuple[str, ...]) -> CommandResult:
+            del command
+            envelope = self._worker.observe(timeout_seconds=timeout_seconds)
+            return _SubprocessResult(0, json.dumps(envelope), "")
+
+        try:
+            return self._observe(command, run_worker)
+        except SessionWorkerError as error:
+            raise ProbeAdapterError(error.code, "前台定位原生进程不可用。") from None
+        except ProbeAdapterError:
+            self._worker.close()
+            raise
 
     def _observe(
         self, command: tuple[str, ...], runner: CommandRunner,
@@ -200,6 +239,7 @@ class MacosFrontSessionProbe:
             )
             if code == "screen_capture_permission_missing":
                 self._permission_blocked = True
+                self._worker.close()
             raise ProbeAdapterError(code, message)
         try:
             envelope = json.loads(result.stdout)
@@ -215,6 +255,7 @@ class MacosFrontSessionProbe:
             code, message = self._failure_from_envelope(envelope)
             if code == "screen_capture_permission_missing":
                 self._permission_blocked = True
+                self._worker.close()
             raise ProbeAdapterError(code, message)
         in_front = envelope.get("wechat_in_front")
         if not isinstance(in_front, bool):
@@ -228,6 +269,7 @@ class MacosFrontSessionProbe:
             selected_row_name=_optional_text(envelope.get("selected_row_name")),
             quality=_quality(envelope),
             captured_at=_captured_at(envelope),
+            text_fallback=_text_fallback(envelope),
             evidence=FrontSessionEvidence(
                 display_name=_optional_text(envelope.get("display_name")),
                 last_time_text=_optional_text(envelope.get("last_time_text")),
@@ -290,7 +332,7 @@ def _optional_text(value: object) -> str | None:
 def _captured_at(envelope: dict[str, Any]) -> datetime | None:
     """单帧协议必须给出 UTC 采集时点；旧协议不补造采集时间。"""
 
-    if envelope.get("capture_version") not in ("automatic-window-v2", "automatic-header-v3"):
+    if envelope.get("capture_version") not in ("automatic-window-v2", "automatic-header-v3", "automatic-header-v4"):
         return None
     value = envelope.get("captured_at")
     try:
@@ -310,13 +352,14 @@ def _quality(envelope: dict[str, Any]) -> FrontSessionQuality | None:
     """旧协议、未校验布局或缺必要证据不获得质量资格。"""
 
     version = envelope.get("capture_version")
-    if version not in ("minimal-region-v1", "automatic-window-v1", "automatic-window-v2", "automatic-header-v3"):
+    if version not in ("minimal-region-v1", "automatic-window-v1", "automatic-window-v2", "automatic-header-v3", "automatic-header-v4"):
         return None
-    header_only = version == "automatic-header-v3"
-    if header_only and set(envelope) != {
-        "ok", "wechat_in_front", "display_name", "capture_version", "captured_at", "quality",
-    }:
-        raise ProbeAdapterError("probe_output_invalid", "前台定位协议字段无效。")
+    header_only = version in ("automatic-header-v3", "automatic-header-v4")
+    if header_only:
+        required = {"ok", "wechat_in_front", "display_name", "capture_version", "captured_at", "quality"}
+        optional = {"text_fallback"} if version == "automatic-header-v4" else set()
+        if not required.issubset(envelope) or set(envelope) - required - optional:
+            raise ProbeAdapterError("probe_output_invalid", "前台定位协议字段无效。")
     quality = envelope.get("quality")
     if quality is None:
         return None
@@ -342,3 +385,17 @@ def _quality(envelope: dict[str, Any]) -> FrontSessionQuality | None:
             "probe_output_invalid", "前台定位质量无效。",
         ) from error
     return result if quality["layout_verified"] else None
+
+
+def _text_fallback(envelope: dict[str, Any]) -> FrontSessionTextFallback | None:
+    if "text_fallback" not in envelope:
+        return None
+    value = envelope["text_fallback"]
+    fields = {"version", "text", "confidence", "text_complete", "mask_verified"}
+    if (envelope.get("capture_version") != "automatic-header-v4"
+            or not isinstance(value, dict) or set(value) != fields):
+        raise ProbeAdapterError("probe_output_invalid", "前台定位文字候选无效。")
+    try:
+        return FrontSessionTextFallback(**value)
+    except (ValueError, TypeError) as error:
+        raise ProbeAdapterError("probe_output_invalid", "前台定位文字候选无效。") from error

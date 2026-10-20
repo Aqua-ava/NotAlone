@@ -12,8 +12,11 @@ from notalone.reply.assistant_discussion import DiscussionContext
 from notalone.reply.layered_context import LayeredReplyMaterial, LayeredReplyBudget, select_material, require_material
 from notalone.memory.layered import LayeredMemoryPort
 from notalone.memory.timing import MemoryTiming
+from notalone.memory.events import MemoryEvent
+from notalone.memory.conditions import MemoryConditions
+from notalone.memory.evolution import MemoryEvolution
 from notalone.memory.models import ConfirmedMemory, OwnerMemory
-from notalone.memory.retirement import is_generation_eligible, is_generation_status_eligible
+from notalone.memory.retirement import is_generation_eligible
 from notalone.memory.overview import OverviewEntry, RelationshipOverview, RelationshipOverviewPort
 from notalone.reply.retrieval_receipt import (
     MemoryNavigation, OverviewRevision, ReplyRetrievalReceipt, RetrievalBudget, RetrievalQuery,
@@ -32,7 +35,6 @@ from notalone.reply.interface import (
     RewriteDraft,
 )
 from notalone.reply.risk import DeterministicRiskHints, RiskHintPort
-from notalone.reply.style_reference import StyleReference, StyleReferencePort, require_reference_contract
 from notalone.retrieval import (
     RetrievalError,
     RetrievalPort,
@@ -42,7 +44,7 @@ from notalone.retrieval import (
     RetrievedPendingCandidate,
 )
 from notalone.retrieval.lexical import RELEVANCE_THRESHOLD
-from notalone.retrieval.ranking import recall_memories, recall_owner_memories
+from notalone.retrieval.ranking import merge_memory_recalls, recall_memories, recall_owner_memories
 from notalone.scopes import ContactScope, OwnerScope, VerifiedConversationScope
 
 
@@ -153,6 +155,12 @@ def allows_history(command: GenerateReply) -> bool:
     )
 
 
+def workspace_recent_only(command: GenerateReply) -> bool:
+    """排除消息时保守停用可能携回原文的派生资料与补查。"""
+    return (isinstance(command.content, RewriteDraft) and command.content.input_kind == "workspace"
+            and bool(command.content.excluded_message_ids))
+
+
 class _ScoredMemory(Protocol):
     """阈值与字符预算需要的最小记忆形状。"""
 
@@ -183,8 +191,17 @@ class ContextEvidence:
     timing: MemoryTiming = MemoryTiming()
     model_visible: bool = True
     navigation: MemoryNavigation | None = None
+    event: MemoryEvent | None = None
+    conditions: MemoryConditions | None = None
+    evolution: MemoryEvolution | None = None
 
     def __post_init__(self) -> None:
+        if self.evolution is not None and not isinstance(self.evolution, MemoryEvolution):
+            raise ValueError("回复变化依据结构无效。")
+        if self.conditions is not None and not isinstance(self.conditions, MemoryConditions):
+            raise ValueError("回复适用条件结构无效。")
+        if self.event is not None and not isinstance(self.event, MemoryEvent):
+            raise TypeError("回复依据事件结构无效。")
         if not isinstance(self.timing, MemoryTiming):
             raise TypeError("回复依据时间结构无效。")
         if type(self.model_visible) is not bool:
@@ -245,7 +262,6 @@ class ReplyContext:
     memory_revision: int | None = None
     index_revision: int | None = None
     tool_calls: tuple[ToolCallTrace, ...] = ()
-    style_references: tuple[StyleReference, ...] = ()
     assistant_discussion: DiscussionContext | None = None
     continuation_basis: ContinuedReplyCandidate | None = None
     retrieval: ReplyRetrievalReceipt | None = None
@@ -276,7 +292,6 @@ class ReplyContext:
                 )
                 for item in self.evidence
             )
-            or (not allows_history(self.command) and bool(self.style_references))
             or (not allows_history(self.command) and (self.layered_context is not None or self.owner_layered_context is not None))
             or (not allows_history(self.command) and bool(self.layered_scenario_reads or self.owner_layered_scenario_reads))
         )
@@ -331,7 +346,6 @@ class RetrievalReplyContext:
         "_memory_index",
         "_risk_hints",
         "_skill_revision_reader",
-        "_style_references",
         "_overview",
         "_layered_memory",
         "_layered_budget",
@@ -354,7 +368,6 @@ class RetrievalReplyContext:
         memory_index: ContactMemoryIndexPort | None = None,
         risk_hints: RiskHintPort | None = None,
         skill_revision_reader: Callable[[ContactScope], int] | None = None,
-        style_references: StyleReferencePort | None = None,
         overview: RelationshipOverviewPort | None = None,
         layered_memory: LayeredMemoryPort | None = None,
         layered_budget: LayeredReplyBudget | None = None,
@@ -403,7 +416,6 @@ class RetrievalReplyContext:
         if skill_revision_reader is not None and not callable(skill_revision_reader):
             raise TypeError("Skill revision 读取器必须是 callable。")
         self._skill_revision_reader = skill_revision_reader
-        self._style_references = style_references
         self._overview = overview
         self._layered_memory, self._layered_budget = layered_memory, layered_budget
         self._owner_layered_budget = owner_layered_budget
@@ -463,7 +475,6 @@ class RetrievalReplyContext:
                 risk_notes=self._risk_notes(command, target[0].text),
                 memory_revision=memory_revision,
                 index_revision=index_revision,
-                style_references=self._select_references(command, scope),
                 continuation_basis=continued_candidate,
                 retrieval=receipt,
                 history_message_ids=history_message_ids,
@@ -492,7 +503,6 @@ class RetrievalReplyContext:
                 skill_library_revision=self._current_skill_revision(scope),
                 risk_notes=self._risk_notes(command, purpose.text),
                 memory_revision=memory_revision, index_revision=index_revision,
-                style_references=self._select_references(command, scope),
                 continuation_basis=continued_candidate,
                 retrieval=receipt,
                 history_message_ids=history_message_ids,
@@ -512,9 +522,42 @@ class RetrievalReplyContext:
                     status="user_input",
                 )
             ]
+            if command.content.input_kind == "workspace":
+                # 点击动作是真实的本次请求；空想法不构造虚假的草稿或已确认方向。
+                evidence = [ContextEvidence(
+                    evidence_id=self._new_id(), kind="user_purpose", scope=scope,
+                    text="帮我表达" if command.content.workspace_action == "express" else "帮我想想",
+                    selection_reason="用户主动选择的本次工作区动作，不代表已采纳任何建议立场。",
+                    status="user_input",
+                )]
+                if command.content.draft_text.strip():
+                    evidence.append(ContextEvidence(
+                        evidence_id=self._new_id(), kind="user_draft", scope=scope,
+                        text=command.content.draft_text, status="user_input",
+                        selection_reason="用户本次提供的想法、方向或草稿。"))
+                if command.content.context_text and command.content.context_text.strip():
+                    evidence.append(ContextEvidence(
+                        evidence_id=self._new_id(), kind="user_current_chat", scope=scope,
+                        text=command.content.context_text, status="user_input",
+                        selection_reason="用户为当前联系人补充的聊天上下文，不作为本人意图或长期记忆。"))
+                if allows_history(command):
+                    evidence.extend(self._message_evidence(message, is_target=False)
+                        for message in self._search_messages(scope=scope)
+                        if message.message_id not in command.content.excluded_message_ids)
+                if history_message_ids is not None:
+                    history_message_ids = tuple(item for item in history_message_ids
+                        if item not in command.content.excluded_message_ids)
             receipt = None
-            if allows_history(command):
-                related, receipt = self._related_memory_context(scope=scope, query=command.content.draft_text)
+            if allows_history(command) and not workspace_recent_only(command):
+                query = command.content.draft_text
+                background_query = None
+                if command.content.input_kind == "workspace":
+                    background_query = "\n".join(item.text for item in evidence
+                                                   if item.kind in ("message", "user_current_chat"))
+                    if not query.strip():
+                        query, background_query = background_query, None
+                related, receipt = self._related_memory_context(scope=scope, query=query,
+                                                                 background_query=background_query)
                 evidence.extend(related)
             if continuation is not None:
                 evidence.append(continuation)
@@ -534,7 +577,6 @@ class RetrievalReplyContext:
                 ),
                 memory_revision=memory_revision,
                 index_revision=index_revision,
-                style_references=self._select_references(command, scope),
                 continuation_basis=continued_candidate,
                 retrieval=receipt,
                 history_message_ids=history_message_ids,
@@ -546,7 +588,7 @@ class RetrievalReplyContext:
         """仅补当前联系人的未核实或历史依据；沿现有原话窗口和运行预算。"""
         for prefix, scope, budget in (("", context.scope, self._layered_budget),
                 ("owner_", OwnerScope(context.scope.owner_id), self._owner_layered_budget)):
-            if not allows_history(context.command):
+            if not allows_history(context.command) or workspace_recent_only(context.command):
                 context = replace(context, **{prefix + "layered_status": "not_allowed"})
             elif self._layered_memory is not None and budget is not None:
                 try:
@@ -568,7 +610,8 @@ class RetrievalReplyContext:
             for identifier in item.navigation.source_message_ids))
         existing = {item.evidence_id for item in context.evidence if item.kind == "message"}
         anchors = tuple(identifier for identifier in anchors if identifier not in existing)
-        history = HistoryToolAccess(retrieval=(self._retrieval.restrict_messages(context.history_message_ids)
+        history = HistoryToolAccess(excluded_message_ids=(context.command.content.excluded_message_ids
+            if isinstance(context.command.content, RewriteDraft) else ()), retrieval=(self._retrieval.restrict_messages(context.history_message_ids)
             if context.history_message_ids is not None else self._retrieval), scope=context.scope,
             conversation_binding_id=context.command.conversation_binding_id,
             initial_evidence_ids=tuple(item.evidence_id for item in context.evidence),
@@ -605,10 +648,12 @@ class RetrievalReplyContext:
         return replace(context, evidence=combined, retrieval=receipt, tool_calls=history.tool_calls)
 
     def _related_memory_context(
-        self, *, scope: ContactScope, query: str,
+        self, *, scope: ContactScope, query: str, background_query: str | None = None,
     ) -> tuple[list[ContextEvidence], ReplyRetrievalReceipt | None]:
+        recall_queries = tuple(dict.fromkeys(value for value in (query, background_query)
+                                             if value and value.strip())) or ("",)
         if self._overview is None:
-            return self._related_memory_evidence(scope=scope, query=query), None
+            return self._related_memory_evidence(scope=scope, queries=recall_queries), None
         try:
             contact = self._overview.read_contact(scope)
         except Exception:
@@ -638,31 +683,41 @@ class RetrievalReplyContext:
             return (entry.provenance_kind in ("manual_entry", "source_supported")
                     and is_generation_eligible(entry.memory, include_historical=True)
                     and (entry.memory.valid_at is None or entry.memory.valid_at <= now))
-        contact_ranked = recall_memories(tuple(
+        contact_candidates = tuple(
             RetrievedMemory(entry.memory.memory_id, scope, entry.memory.text, entry.memory.category.value,
                             entry.memory.source_ids, entry.memory.adoption_method.value, entry.memory.revision,
                             timing=entry.memory.timing)
             for entry in (contact.entries if contact else ()) if navigable(entry)
-        ), query=query, limit=max(1, len(contact.entries) if contact else 1))
+        )
+        contact_ranked = merge_memory_recalls(tuple(recall_memories(contact_candidates,
+            query=value, limit=max(1, len(contact_candidates))) for value in recall_queries))
         contact_nav = self._select_memories(contact_ranked,
             limit=self._memory_limit, char_budget=self._memory_char_budget)
-        owner_ranked = recall_owner_memories(tuple(
+        owner_candidates = tuple(
             RetrievedOwnerMemory(entry.memory.memory_id, scope.owner_id, entry.memory.text,
                                  entry.memory.category.value, entry.memory.topic.value, entry.memory.source_ids,
                                  entry.memory.adoption_method.value, entry.memory.revision, timing=entry.memory.timing)
             for entry in (owner.entries if owner else ()) if navigable(entry)
-        ), query=query, limit=max(1, len(owner.entries) if owner else 1))
+        )
+        owner_ranked = merge_memory_recalls(tuple(recall_owner_memories(owner_candidates,
+            query=value, limit=max(1, len(owner_candidates))) for value in recall_queries))
         owner_nav = self._select_memories(owner_ranked,
             limit=self._owner_memory_limit, char_budget=self._owner_memory_char_budget)
         contact_exhausted = len(contact_nav) < sum(item.relevance_score >= RELEVANCE_THRESHOLD for item in contact_ranked)
         owner_exhausted = len(owner_nav) < sum(item.relevance_score >= RELEVANCE_THRESHOLD for item in owner_ranked)
-        contact_memories = self._search_memories(scope=scope, query=query,
-            memory_ids=tuple(item.memory_id for item in contact_nav), include_historical=True) if contact_nav else ()
-        owner_memories = self._search_owner_memories(scope=scope, query=query,
-            memory_ids=tuple(item.memory_id for item in owner_nav), include_historical=True) if owner_nav else ()
+        # 按导航身份回读时仍分别评分，不能重新拼接 query 稀释已命中的资料。
+        contact_memories = self._select_memories(merge_memory_recalls(tuple(
+            self._search_memories(scope=scope, query=value,
+                memory_ids=tuple(item.memory_id for item in contact_nav), include_historical=True, select_budget=False)
+            for value in recall_queries)), limit=self._memory_limit, char_budget=self._memory_char_budget) if contact_nav else ()
+        owner_memories = self._select_memories(merge_memory_recalls(tuple(
+            self._search_owner_memories(scope=scope, query=value,
+                memory_ids=tuple(item.memory_id for item in owner_nav), include_historical=True, select_budget=False)
+            for value in recall_queries)), limit=self._owner_memory_limit, char_budget=self._owner_memory_char_budget) if owner_nav else ()
         pending_failed = False
         try:
-            pending_ranked = self._search_pending_candidates(scope=scope, query=query, select_budget=False)
+            pending_ranked = merge_memory_recalls(tuple(self._search_pending_candidates(
+                scope=scope, query=value, select_budget=False) for value in recall_queries))
         except ReplyContextInvariantError:
             raise
         except ReplyContextError:
@@ -707,18 +762,25 @@ class RetrievalReplyContext:
                     if contact_exhausted or owner_exhausted or pending_exhausted else "succeeded" if evidence else "empty"),
         )
 
-    def _related_memory_evidence(self, *, scope: ContactScope, query: str) -> list[ContextEvidence]:
+    def _related_memory_evidence(self, *, scope: ContactScope, queries: tuple[str, ...]) -> list[ContextEvidence]:
         """共享三类有界资料召回，是否允许历史仍由各场景决定。"""
 
         return [
             self._memory_evidence(memory)
-            for memory in self._search_memories_or_empty(scope=scope, query=query)
+            for memory in self._select_memories(merge_memory_recalls(tuple(
+                self._search_memories_or_empty(scope=scope, query=query, select_budget=False) for query in queries)),
+                limit=self._memory_limit, char_budget=self._memory_char_budget)
         ] + [
             self._owner_memory_evidence(memory, scope=scope)
-            for memory in self._search_owner_memories_or_empty(scope=scope, query=query)
+            for memory in self._select_memories(merge_memory_recalls(tuple(
+                self._search_owner_memories_or_empty(scope=scope, query=query, select_budget=False) for query in queries)),
+                limit=self._owner_memory_limit, char_budget=self._owner_memory_char_budget)
         ] + [
             self._pending_candidate_evidence(candidate, scope=scope)
-            for candidate in self._search_pending_candidates_or_empty(scope=scope, query=query)
+            for candidate in self._select_memories(merge_memory_recalls(tuple(
+                self._search_pending_candidates_or_empty(scope=scope, query=query,
+                    select_budget=len(queries) == 1) for query in queries)),
+                limit=self._pending_limit, char_budget=self._pending_char_budget)
         ]
 
     def _current_skill_revision(self, scope: ContactScope) -> int:
@@ -736,13 +798,6 @@ class RetrievalReplyContext:
         if not isinstance(revision, int) or revision < 0:
             raise ReplyContextInvariantError("Skill revision 结构无效。")
         return revision
-
-    def _select_references(self, command: GenerateReply, scope: ContactScope) -> tuple[StyleReference, ...]:
-        if self._style_references is None or not allows_history(command):
-            return ()
-        references = self._style_references.select_references(scope)
-        require_reference_contract(scope, references)
-        return references
 
     def validate_current(self, context: ReplyContext) -> None:
         require_material(context, self._layered_memory, budget=self._layered_budget, owner_budget=self._owner_layered_budget)
@@ -771,12 +826,6 @@ class RetrievalReplyContext:
                         or current.projection_revision != expected.projection_revision
                         or current.memory_revision != expected.memory_revision)):
                     raise ReplyContextInvariantError("概览导航修订已变化。")
-        require_reference_contract(scope, context.style_references)
-        if context.style_references:
-            if self._style_references is None:
-                raise ReplyContextInvariantError("表达参考无法重新核验。")
-            self._style_references.validate_references(scope, context.style_references)
-
         memory_revision, index_revision = self._version_snapshot(scope)
         if context.memory_revision is not None and (
             memory_revision is None
@@ -923,6 +972,10 @@ class RetrievalReplyContext:
             or memory.valid_at != evidence.valid_at
             or memory.invalid_at != evidence.invalid_at
             or memory.status != evidence.status
+            or memory.event != evidence.event
+            or memory.conditions != evidence.conditions
+            or (memory.evolution.to_payload(current=True) if memory.evolution else None)
+               != (evidence.evolution.to_payload(current=True) if evidence.evolution else None)
             or memory.timing != evidence.timing
         ):
             raise ReplyContextInvariantError("关系记忆依据已失效或版本不一致。")
@@ -956,15 +1009,16 @@ class RetrievalReplyContext:
             or memory.valid_at != evidence.valid_at
             or memory.invalid_at != evidence.invalid_at
             or memory.status != evidence.status
+            or memory.event != evidence.event
+            or memory.conditions != evidence.conditions
+            or (memory.evolution.to_payload(current=True) if memory.evolution else None)
+               != (evidence.evolution.to_payload(current=True) if evidence.evolution else None)
             or memory.timing != evidence.timing
         ):
             raise ReplyContextInvariantError("本人记忆依据已失效或版本不一致。")
 
     @staticmethod
     def _memory_is_usable(memory, evidence: ContextEvidence, now: datetime) -> bool:
-        if evidence.navigation is not None and evidence.timing.current_status == "historical":
-            return (is_generation_status_eligible(memory.status, memory.retirement_reason, include_historical=True)
-                    and (memory.valid_at is None or memory.valid_at <= now))
         return RetrievalReplyContext._is_current(memory.status, memory.valid_at, memory.invalid_at, now)
 
     @staticmethod
@@ -1036,6 +1090,10 @@ class RetrievalReplyContext:
             or candidate.valid_at != evidence.valid_at
             or candidate.invalid_at != evidence.invalid_at
             or candidate.status != evidence.status
+            or candidate.event != evidence.event
+            or candidate.conditions != evidence.conditions
+            or (candidate.evolution.to_payload(current=True) if candidate.evolution else None)
+               != (evidence.evolution.to_payload(current=True) if evidence.evolution else None)
             or candidate.timing != evidence.timing
             or not evidence.selection_reason.startswith(expected_reason)
         ):
@@ -1091,6 +1149,7 @@ class RetrievalReplyContext:
         query: str | None = None,
         memory_ids: tuple[UUID, ...] | None = None,
         include_historical: bool = False,
+        select_budget: bool = True,
     ) -> tuple[RetrievedMemory, ...]:
         try:
             arguments = {"scope": scope, "query": query, "limit": self._memory_limit}
@@ -1110,6 +1169,8 @@ class RetrievalReplyContext:
             raise ReplyContextInvariantError(
                 "关系记忆检索结果超出联系人范围。"
             )
+        if not select_budget:
+            return memories
         return self._select_memories(
             memories,
             limit=self._memory_limit,
@@ -1123,6 +1184,7 @@ class RetrievalReplyContext:
         query: str | None = None,
         memory_ids: tuple[UUID, ...] | None = None,
         include_historical: bool = False,
+        select_budget: bool = True,
     ) -> tuple[RetrievedOwnerMemory, ...]:
         try:
             arguments = {"owner_id": scope.owner_id, "query": query, "limit": self._owner_memory_limit}
@@ -1141,6 +1203,8 @@ class RetrievalReplyContext:
             for memory in memories
         ):
             raise ReplyContextInvariantError("本人记忆检索结果超出 owner 范围。")
+        if not select_budget:
+            return memories
         return self._select_memories(
             memories,
             limit=self._owner_memory_limit,
@@ -1204,6 +1268,7 @@ class RetrievalReplyContext:
         *,
         scope: ContactScope,
         query: str | None = None,
+        select_budget: bool = True,
     ) -> tuple[RetrievedPendingCandidate, ...]:
         """待确认候选不可用时安全降级，不阻断消息和已确认资料。
 
@@ -1212,7 +1277,7 @@ class RetrievalReplyContext:
         """
 
         try:
-            return self._search_pending_candidates(scope=scope, query=query)
+            return self._search_pending_candidates(scope=scope, query=query, select_budget=select_budget)
         except ReplyContextInvariantError:
             raise
         except ReplyContextError:
@@ -1247,11 +1312,12 @@ class RetrievalReplyContext:
         *,
         scope: ContactScope,
         query: str | None = None,
+        select_budget: bool = True,
     ) -> tuple[RetrievedMemory, ...]:
         """关系记忆缺失时安全降级，不阻断当前消息和近期对话。"""
 
         try:
-            return self._search_memories(scope=scope, query=query)
+            return self._search_memories(scope=scope, query=query, select_budget=select_budget)
         except ReplyContextError:
             return ()
 
@@ -1260,11 +1326,12 @@ class RetrievalReplyContext:
         *,
         scope: ContactScope,
         query: str | None = None,
+        select_budget: bool = True,
     ) -> tuple[RetrievedOwnerMemory, ...]:
         """本人记忆缺失时安全降级，不阻断当前消息和近期对话。"""
 
         try:
-            return self._search_owner_memories(scope=scope, query=query)
+            return self._search_owner_memories(scope=scope, query=query, select_budget=select_budget)
         except ReplyContextError:
             return ()
 
@@ -1454,6 +1521,7 @@ class RetrievalReplyContext:
             invalid_at=memory.invalid_at,
             revision=memory.revision,
             timing=memory.timing,
+            event=memory.event, conditions=memory.conditions, evolution=memory.evolution,
         )
 
     @staticmethod
@@ -1483,6 +1551,7 @@ class RetrievalReplyContext:
             invalid_at=memory.invalid_at,
             revision=memory.revision,
             timing=memory.timing,
+            event=memory.event, conditions=memory.conditions, evolution=memory.evolution,
         )
 
     @staticmethod
@@ -1511,4 +1580,5 @@ class RetrievalReplyContext:
             valid_at=candidate.valid_at,
             invalid_at=candidate.invalid_at,
             timing=candidate.timing,
+            event=candidate.event, conditions=candidate.conditions, evolution=candidate.evolution,
         )

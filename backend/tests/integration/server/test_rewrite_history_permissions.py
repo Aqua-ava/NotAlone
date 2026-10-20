@@ -126,6 +126,15 @@ class RewriteHistoryPermissionHttpTest(CoreBusinessFlowFixture, unittest.TestCas
         current = self._import(self.backend, "授权A", "授权茉莉茶")
         other_contact = self._import(self.backend, "授权B", "授权乌龙茶")
         other_owner = self._import(self.other_backend, "授权另一用户", "授权大红袍")
+        # 明确保留一条历史待确认候选；当前默认提取已自动采纳，不能借其偶然状态验证权限。
+        from notalone.memory.models import MemoryCandidate, MemoryCategory
+        from notalone.persistence.memory_store import PostgresMemoryStore
+        from notalone.scopes import ContactScope
+        pending_record = PostgresMemoryStore(self.database_url).create_candidate(MemoryCandidate(
+            candidate_id=uuid4(), scope=ContactScope(self.owner_id, UUID(current["contact_id"])),
+            text="授权茉莉茶的未确认偏好。", category=MemoryCategory.PREFERENCE,
+            source_ids=(UUID(current["fact_message"]["message_id"]),),
+        ))
         memory_ids = []
         foreign_ids = {
             message["message_id"] for imported in (other_contact, other_owner)
@@ -179,7 +188,7 @@ class RewriteHistoryPermissionHttpTest(CoreBusinessFlowFixture, unittest.TestCas
                 self.assertEqual({item["kind"] for item in evidence},
                                  {"user_draft", "message", "confirmed_memory", "owner_memory", "pending_candidate"})
                 pending = [item for item in evidence if item["kind"] == "pending_candidate"]
-                self.assertTrue(pending)
+                self.assertIn(str(pending_record.candidate_id), [item["evidence_id"] for item in pending])
                 self.assertTrue(all(item["snapshot_status"] == "pending" and
                                     item["selection_reason"].startswith("未确认候选、仅供参考、不得当作事实。")
                                     for item in pending))
@@ -240,7 +249,7 @@ class RewriteHistoryPermissionHttpTest(CoreBusinessFlowFixture, unittest.TestCas
             "contact_id": current["contact_id"], "idempotency_key": str(uuid4()),
             "content": {"type": "rewrite_draft", "draft_text": "我们找个时间再聊。"},
         })
-        self.assertEqual((status, reply), (500, {"error": "reply_generation_failed"}))
+        self.assertEqual((status, reply), (409, {"error": "reply_candidates_rejected"}))
         for messages in self.reply_model.seen_calls:
             outbound = "\n".join(str(message.content) for message in messages)
             for message in current["messages"]:

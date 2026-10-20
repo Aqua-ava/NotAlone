@@ -175,6 +175,6 @@ export async function foregroundConfirmationSafety(browser: Browser, origin: str
       expect(helpers).toHaveLength(1);
       await foregroundRenderGap(manager, helpers[0], host, backend);
     });
-  }, released);
+  }, released, 'single-account');
   process.stdout.write(`page_test_scenario_passed: ${name}\n`);
 }

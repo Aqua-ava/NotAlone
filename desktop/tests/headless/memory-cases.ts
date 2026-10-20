@@ -5,7 +5,7 @@ import { ownResource } from './cleanup';
 import { MemoryHttpProxy } from '../memory-http-proxy';
 import type { MemoryFixture } from '../memory-backend-fixture';
 import { memoryAllEmpty, memoryDetails, memoryIndependentFailures, memoryNamedArguments, memoryPagination,
-  memoryNewestRefresh, memoryReconnect, memoryScopeAndEmpty, memoryScopeRoundTrip, memorySectionFailure } from '../memory-page-scenarios';
+  memoryNewestRefresh, memoryOwnerScopeStale, memoryReconnect, memoryScopeAndEmpty, memoryScopeRoundTrip, memorySectionFailure } from '../memory-page-scenarios';
 
 type Scenario = (page: Page, fixture: MemoryFixture, proxy: MemoryHttpProxy) => Promise<void>;
 
@@ -42,6 +42,7 @@ export async function memoryReadingFull(browser: Browser, origin: string) {
 export async function memoryStaleFull(browser: Browser, origin: string) {
   for (const failure of [false, true]) {
     const outcome = failure ? 'failure' : 'success';
+    await runScenario(browser, origin, `memory-owner-scope-stale-${outcome}`, (page, fixture, proxy) => memoryOwnerScopeStale(page, fixture, proxy, failure));
     await runScenario(browser, origin, `memory-newest-refresh-${outcome}`, (page, fixture, proxy) => memoryNewestRefresh(page, fixture, proxy, failure));
     await runScenario(browser, origin, `memory-scope-round-trip-${outcome}`, (page, fixture, proxy) => memoryScopeRoundTrip(page, fixture, proxy, failure));
     await runScenario(browser, origin, `memory-reconnect-${outcome}`, (page, fixture, proxy) => memoryReconnect(page, fixture, proxy, failure));

@@ -27,7 +27,7 @@ from notalone.persistence.reply_cleanup import (
     ReplyCleanupError,
     delete_source_replies,
 )
-from notalone.persistence.style_sample_store import erase_source_style_samples
+
 from notalone.persistence.expression_preferences import erase_source_expression_preferences
 from notalone.persistence.source_memory_erasure import (
     collect_all_source_memory_ids, erase_source_memories,
@@ -50,7 +50,7 @@ class ObservationNotFoundError(ObservationPersistenceError):
 
 
 class ObservationWatermarkError(ObservationPersistenceError):
-    """水位非法：首次读取不允许 0，水位只能单调前移。"""
+    """水位或读取起点非法，不能用陈旧位置覆盖已提交结果。"""
 
 
 class ObservationMode(StrEnum):
@@ -300,7 +300,7 @@ class PostgresObservationStore:
                       AND contact_id = %s
                       AND binding_id = %s
                       AND is_reliable
-                    ORDER BY last_local_id DESC, read_at DESC, id DESC
+                    ORDER BY commit_order DESC NULLS LAST, read_at DESC, id DESC
                     LIMIT 1
                     """,
                     (owner_id, contact_id, binding_id),
@@ -330,6 +330,7 @@ class PostgresObservationStore:
         contact_id: UUID,
         binding_id: UUID,
         target: ObservationCursor | None,
+        expected_cursor: str | None = None,
     ) -> None:
         """把超前游标回退到可靠位置；没有可靠位置时回到 baseline。"""
 
@@ -358,6 +359,15 @@ class PostgresObservationStore:
                     owner_id=owner_id,
                     contact_id=contact_id,
                 )
+                if expected_cursor is not None:
+                    current = connection.execute(
+                        """
+                        SELECT last_cursor FROM public.wechat_observation_cursor
+                        WHERE owner_id = %s AND contact_id = %s FOR UPDATE
+                        """, (owner_id, contact_id),
+                    ).fetchone()
+                    if current is None or current[0] != expected_cursor:
+                        raise ObservationWatermarkError("观察位置已改变，拒绝使用过期快照回退。")
                 if target is None:
                     connection.execute(
                         """
@@ -564,6 +574,9 @@ class PostgresObservationStore:
                     binding_id=binding_id,
                     conversation_locator=conversation_locator,
                 )
+                lock_contact_scope(
+                    connection, owner_id=owner_id, contact_id=contact_id,
+                )
                 observation, created = self._insert_observation(
                     connection,
                     owner_id=owner_id,
@@ -698,6 +711,7 @@ class PostgresObservationStore:
         event_count: int | None = None,
         non_text_count: int = 0,
         processing_records: tuple[ProcessingRecord, ...] | None = None,
+        cursor_ordered: bool = False,
     ) -> RecordedObservationBatch:
         """在同一事务写入观察来源、前移水位并写入规范消息。
 
@@ -717,6 +731,7 @@ class PostgresObservationStore:
             since_cursor=since_cursor,
             event_count=event_count,
             non_text_count=non_text_count,
+            cursor_ordered=cursor_ordered,
         )
         event_count = record_count if event_count is None else event_count
         self._validate_scope(owner_id=owner_id, contact_id=contact_id)
@@ -762,15 +777,24 @@ class PostgresObservationStore:
                     event_count=event_count,
                     non_text_count=non_text_count,
                 )
-                self._advance_cursor_if_needed(
-                    connection,
-                    owner_id=owner_id,
-                    contact_id=contact_id,
-                    binding_id=binding_id,
-                    conversation_locator=conversation_locator,
-                    last_local_id=last_local_id,
-                    last_cursor=last_cursor,
-                )
+                if cursor_ordered:
+                    self._advance_ordered_cursor(
+                        connection, owner_id=owner_id, contact_id=contact_id,
+                        binding_id=binding_id, conversation_locator=conversation_locator,
+                        last_local_id=last_local_id, last_cursor=last_cursor,
+                        since_cursor=since_cursor,
+                        observation_id=observation.observation_id, created=created,
+                    )
+                else:
+                    self._advance_cursor_if_needed(
+                        connection,
+                        owner_id=owner_id,
+                        contact_id=contact_id,
+                        binding_id=binding_id,
+                        conversation_locator=conversation_locator,
+                        last_local_id=last_local_id,
+                        last_cursor=last_cursor,
+                    )
                 write = (
                     self._write_cli_messages(
                         connection,
@@ -934,8 +958,6 @@ class PostgresObservationStore:
                     contact_id=contact_id,
                     removed_ids={observation_id, *orphan_message_ids, *all_memory_ids},
                 )
-                erase_source_style_samples(connection, owner_id=owner_id,
-                                           removed_ids={observation_id, *orphan_message_ids, *all_memory_ids})
                 erase_source_expression_preferences(connection, owner_id=owner_id,
                                                     removed_ids={observation_id, *orphan_message_ids, *all_memory_ids})
                 cleanup_derived_data(
@@ -983,9 +1005,12 @@ class PostgresObservationStore:
         since_cursor: str | None,
         event_count: int | None,
         non_text_count: int,
+        cursor_ordered: bool = False,
     ) -> None:
         """观察批次写入前的共享参数校验；非法水位失败关闭。"""
 
+        if not isinstance(cursor_ordered, bool):
+            raise TypeError("cursor_ordered 必须是 bool。")
         if not isinstance(binding_id, UUID):
             raise TypeError("binding_id 必须是 UUID。")
         if not isinstance(mode, ObservationMode):
@@ -1022,10 +1047,12 @@ class PostgresObservationStore:
             raise ObservationWatermarkError(
                 "起始 local_id 必须是正整数或为空。"
             )
-        if since_local_id is not None and since_local_id > last_local_id:
+        if not cursor_ordered and since_local_id is not None and since_local_id > last_local_id:
             raise ObservationWatermarkError("起始水位不能晚于成功水位。")
         if since_local_id is None and since_cursor is not None:
             raise ObservationWatermarkError("首次读取不携带起始 cursor。")
+        if cursor_ordered and since_local_id is not None and since_cursor is None:
+            raise ObservationWatermarkError("不透明位置续读必须携带起始 cursor。")
         if since_cursor is not None:
             self._validate_text(since_cursor, "since_cursor")
 
@@ -1059,7 +1086,8 @@ class PostgresObservationStore:
             )
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, true)
             ON CONFLICT (owner_id, contact_id, binding_id, mode,
-                         COALESCE(since_local_id, 0), last_local_id)
+                         COALESCE(since_local_id, 0), last_local_id,
+                         COALESCE(since_cursor, ''), last_cursor)
             DO NOTHING
             RETURNING {_OBSERVATION_COLUMNS}
             """,
@@ -1091,6 +1119,8 @@ class PostgresObservationStore:
                   AND mode = %s
                   AND COALESCE(since_local_id, 0) = %s
                   AND last_local_id = %s
+                  AND COALESCE(since_cursor, '') = %s
+                  AND last_cursor = %s
                 """,
                 (
                     owner_id,
@@ -1099,6 +1129,8 @@ class PostgresObservationStore:
                     str(mode),
                     0 if since_local_id is None else since_local_id,
                     last_local_id,
+                    since_cursor or "",
+                    last_cursor,
                 ),
             ).fetchone()
             if existing is None:
@@ -1358,6 +1390,65 @@ class PostgresObservationStore:
             conversation_locator=conversation_locator,
             last_local_id=last_local_id,
             last_cursor=last_cursor,
+        )
+
+    @staticmethod
+    def _advance_ordered_cursor(
+        connection: psycopg.Connection[Any],
+        *,
+        owner_id: UUID,
+        contact_id: UUID,
+        binding_id: UUID,
+        conversation_locator: str,
+        last_local_id: int,
+        last_cursor: str,
+        since_cursor: str | None,
+        observation_id: UUID,
+        created: bool,
+    ) -> None:
+        """联系人锁内按读取起点 CAS 提交不透明位置；旧页重试不回退。"""
+
+        if not created:
+            return
+        current = connection.execute(
+            """
+            SELECT binding_id, conversation_locator, last_cursor
+            FROM public.wechat_observation_cursor
+            WHERE owner_id = %s AND contact_id = %s
+            FOR UPDATE
+            """, (owner_id, contact_id),
+        ).fetchone()
+        if current is None:
+            # 独立 cursor 丢失时，可从本页之前最后可靠来源继续；
+            # 新插入的本页尚未完成提交，不能拿它证明自己的起点。
+            current = connection.execute(
+                """
+                SELECT binding_id, conversation_locator, last_cursor
+                FROM public.local_wechat_observation
+                WHERE owner_id = %s AND contact_id = %s AND binding_id = %s
+                  AND is_reliable AND id <> %s
+                ORDER BY commit_order DESC NULLS LAST, read_at DESC, id DESC LIMIT 1
+                """, (owner_id, contact_id, binding_id, observation_id),
+            ).fetchone()
+        expected = None if current is None else current[2]
+        if (current is not None and (
+            current[1] != conversation_locator
+        )) or expected != since_cursor:
+            raise ObservationWatermarkError("观察起始 cursor 已过期，必须从已提交位置重读。")
+        connection.execute(
+            """
+            INSERT INTO public.wechat_observation_cursor (
+                owner_id, contact_id, binding_id, conversation_locator,
+                last_local_id, last_cursor
+            ) VALUES (%s, %s, %s, %s, %s, %s)
+            ON CONFLICT (owner_id, contact_id) DO UPDATE SET
+                binding_id = EXCLUDED.binding_id,
+                conversation_locator = EXCLUDED.conversation_locator,
+                last_local_id = EXCLUDED.last_local_id,
+                last_cursor = EXCLUDED.last_cursor,
+                updated_at = now()
+            """, (owner_id, contact_id, binding_id, conversation_locator,
+                    last_local_id, last_cursor),
         )
 
     @staticmethod

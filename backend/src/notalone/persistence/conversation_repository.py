@@ -349,13 +349,32 @@ class PostgresConversationBindingRepository:
     ) -> tuple[PersistedConversationBinding, ...]:
         """列出当前 owner 的 active 绑定，供匹配层投影为证据。"""
 
+        return self._list_bindings(owner_id=owner_id, channel=channel,
+                                   account_scope=account_scope, bounded=bounded,
+                                   include_revoked=False)
+
+    def list_saved_bindings(
+        self, *, owner_id: UUID, channel: str, account_scope: str,
+    ) -> tuple[PersistedConversationBinding, ...]:
+        """只读已保存关联，含撤销记录；不得用作正文读取授权集合。"""
+
+        return self._list_bindings(owner_id=owner_id, channel=channel,
+                                   account_scope=account_scope, bounded=False,
+                                   include_revoked=True)
+
+    def _list_bindings(
+        self, *, owner_id: UUID, channel: str | None, account_scope: str | None,
+        bounded: bool, include_revoked: bool,
+    ) -> tuple[PersistedConversationBinding, ...]:
         if not isinstance(owner_id, UUID):
             raise TypeError("owner_id 必须是 UUID。")
         if channel is not None:
             self._validate_text(channel, "channel")
         if account_scope is not None:
             self._validate_text(account_scope, "account_scope")
-        clauses = ["owner_id = %s", "status = 'active'"]
+        clauses = ["owner_id = %s"]
+        if not include_revoked:
+            clauses.append("status = 'active'")
         parameters: list[object] = [owner_id]
         if channel is not None:
             clauses.append("channel = %s")

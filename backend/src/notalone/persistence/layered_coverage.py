@@ -15,18 +15,36 @@ def current_job(connection, scope):
 
 def cancel_jobs(connection, scope, *, erase=False):
     connection.execute("UPDATE public.background_task SET status='cancelled' WHERE id IN ("
-        "SELECT task_id FROM public.layered_memory_job WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s) "
-        "AND status<>'succeeded'", (scope.owner_id,scope.contact_id))
+        "SELECT task_id FROM public.layered_memory_job WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s "
+        "AND (%s OR state<>'invalidated')) "
+        "AND status<>'succeeded'", (scope.owner_id,scope.contact_id,erase))
     connection.execute("UPDATE public.background_task_step SET status='cancelled',worker_id=NULL,lease_expires_at=NULL,"
         "lease_generation=lease_generation+1 WHERE task_id IN (SELECT task_id FROM public.layered_memory_job "
-        "WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s) AND status<>'succeeded'", (scope.owner_id,scope.contact_id))
+        "WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s AND (%s OR state<>'invalidated')) "
+        "AND status<>'succeeded'", (scope.owner_id,scope.contact_id,erase))
     if erase:
         connection.execute("DELETE FROM public.layered_memory_job WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s",
                            (scope.owner_id,scope.contact_id))
     else:
         connection.execute("UPDATE public.layered_memory_job SET state='invalidated',target_manifest='[]',"
-            "dependency_ids='{}',revision=revision+1 WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s AND state<>'complete'",
+            "dependency_ids='{}',revision=revision+1 WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s "
+            "AND state NOT IN ('complete','invalidated')",
             (scope.owner_id,scope.contact_id))
+
+
+def covered_input_ids(connection, scope, generation, manifest):
+    """只有完整实际输入仍匹配的已发布批次，才能抵扣本轮覆盖目标。"""
+    current = {item['memory_id']: item for item in manifest}
+    batches = connection.execute(
+        "SELECT DISTINCT b.id,b.input_manifest FROM public.layered_memory_generation g "
+        "JOIN public.scenario_document_version v ON v.id=ANY(g.scenario_version_ids) "
+        "AND v.owner_id=g.owner_id AND v.contact_id IS NOT DISTINCT FROM g.contact_id "
+        "JOIN public.layered_memory_batch b ON b.id=v.batch_id WHERE g.owner_id=%s "
+        "AND g.contact_id IS NOT DISTINCT FROM %s AND g.organization_generation=%s",
+        (scope.owner_id, scope.contact_id, generation)).fetchall()
+    return {item['memory_id'] for batch in batches
+            if all(current.get(item['memory_id']) == item for item in batch['input_manifest'])
+            for item in batch['input_manifest']}
 
 
 def enqueue_coverage(connection, scope, state, manifest, dependencies, contract, budget, *, action, revision, profile_required=False):
@@ -34,7 +52,13 @@ def enqueue_coverage(connection, scope, state, manifest, dependencies, contract,
     key = _digest({"inputs":manifest,"settings_generation":state['settings_generation'],
                    "correction_revision": state['correction_revision'], "contract":contract,"budget":budget.to_payload()})
     jobs = current_job(connection,scope)
-    job = next((row for row in jobs if row['target_key']==key), None)
+    by_key = {row['target_key']: row for row in jobs}
+    job = by_key.get(key)
+    # 同一资料可能因来源元数据更新而失效；旧任务已撤销，不能重新认领。
+    # 恢复键沿失效任务派生，保留旧审计及唯一约束；重复刷新仍复用同一次恢复。
+    while job is not None and job['state'] == 'invalidated':
+        key = _digest({'target_key': key, 'invalidated_task_id': str(job['task_id'])})
+        job = by_key.get(key)
     if action in {'pause','continue'}:
         job = next((row for row in jobs if row['settings_generation']==state['settings_generation']),None)
         if not job or revision is None:
@@ -99,12 +123,7 @@ def enqueue_coverage(connection, scope, state, manifest, dependencies, contract,
                        (state['dirty_revision'], task_id))
     connection.execute("UPDATE public.layered_memory_state SET next_due_at=NULL WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s",
                        (scope.owner_id,scope.contact_id))
-    covered={item['memory_id'] for row in connection.execute(
-        "SELECT b.input_manifest FROM public.layered_memory_generation g JOIN public.scenario_document_version v "
-        "ON v.id=ANY(g.scenario_version_ids) AND v.owner_id=g.owner_id AND v.contact_id IS NOT DISTINCT FROM g.contact_id "
-        "JOIN public.layered_memory_batch b ON b.id=v.batch_id WHERE g.owner_id=%s AND g.contact_id IS NOT DISTINCT FROM %s "
-        "AND g.organization_generation=%s",(scope.owner_id,scope.contact_id,state['organization_generation'])).fetchall()
-        for item in row['input_manifest']}
+    covered = covered_input_ids(connection, scope, state['organization_generation'], manifest)
     if not {item['memory_id'] for item in manifest}-covered and not (profile_required and manifest):
         connection.execute("UPDATE public.layered_memory_job SET state='complete' WHERE task_id=%s",(task_id,))
         connection.execute("UPDATE public.background_task SET status='succeeded',finished_at=now() WHERE id=%s",(task_id,))

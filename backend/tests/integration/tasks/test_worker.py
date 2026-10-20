@@ -468,6 +468,8 @@ class BackgroundTaskWorkerTest(unittest.TestCase):
         )
         self.assertEqual(len(memories), 1)
         self.assertEqual(memories[0].adoption_method.value, "auto")
+        self.assertEqual(memories[0].text, "联系人下周去上海出差")
+        # 默认自动流程终结未通过的候选，不把不确定内容转为人工待办。
         self.assertEqual(
             self._scalar(
                 """
@@ -477,7 +479,7 @@ class BackgroundTaskWorkerTest(unittest.TestCase):
                 """,
                 (self.owner_id, self.contact_id),
             ),
-            1,
+            0,
         )
         watermark = self._scalar(
             """

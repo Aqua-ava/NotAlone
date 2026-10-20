@@ -233,7 +233,7 @@ class InMemoryRetrieval:
             memory
             for memory in self.owner_memories
             if memory.owner_id == owner_id
-            and is_generation_status_eligible(memory.status, memory.retirement_reason, include_historical=include_historical)
+            and is_generation_status_eligible(memory.status, memory.retirement_reason, include_historical=include_historical, invalid_at=memory.invalid_at)
             and (memory.valid_at is None or memory.valid_at <= now)
             and (include_historical or memory.invalid_at is None or now < memory.invalid_at)
             and (memory_ids is None or memory.memory_id in memory_ids)

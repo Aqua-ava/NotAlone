@@ -114,20 +114,24 @@ class AssistantSessionInputUpgradeTest(unittest.TestCase):
                  Jsonb({"content": {"type": "rewrite_draft", "draft_text": "升级前合成输入"}})),
             )
         self._upgrade()
-        from notalone.persistence.assistant_session_inputs import PostgresAssistantSessionInputs
-        inputs = PostgresAssistantSessionInputs(self.database_url)
-        saved = inputs.read_inputs(self.scope, self.session_id)
-        self.assertEqual(len(saved), 1)
-        self.assertEqual(saved[0].input_version_id, input_version_id)
-        self.assertEqual(saved[0].turn_id, turn_id)
-        self.assertEqual(saved[0].type, "generation")
-        self.assertIsNone(saved[0].content)
-        self.assertTrue(inputs.is_current_input(self.scope, self.session_id, input_version_id))
-        turns = PostgresAssistantSessionStore(self.database_url).read(self.scope, self.session_id)
-        self.assertEqual(turns[0].input["content"]["draft_text"], "升级前合成输入")
+        # 纯051迁移证明直接读取当时结构；现行运行时的后续字段不属于该历史合同。
+        with psycopg.connect(self.database_url) as connection:
+            saved = connection.execute(
+                "SELECT id, turn_id, input_type, content FROM public.assistant_session_input WHERE session_id = %s",
+                (self.session_id,),
+            ).fetchall()
+            self.assertEqual(saved, [(input_version_id, turn_id, "generation", None)])
+            current = connection.execute(
+                "SELECT current_input_version_id FROM public.assistant_session WHERE id = %s", (self.session_id,),
+            ).fetchone()[0]
+            self.assertEqual(current, input_version_id)
+            payload = connection.execute(
+                "SELECT input_payload FROM public.assistant_session_turn WHERE id = %s", (turn_id,),
+            ).fetchone()[0]
+            self.assertEqual(payload["content"]["draft_text"], "升级前合成输入")
 
     def test_discussion_versions_keep_the_current_pointer_and_reject_stale_correction(self) -> None:
-        self._upgrade()
+        self._upgrade(current_runtime=True)
         from notalone.persistence.assistant_session_inputs import PostgresAssistantSessionInputs
         inputs = PostgresAssistantSessionInputs(self.database_url)
         first = inputs.record_discussion_input(self.scope, self.session_id, {
@@ -148,7 +152,7 @@ class AssistantSessionInputUpgradeTest(unittest.TestCase):
         self.assertEqual(PostgresAssistantSessionStore(self.database_url).read(self.scope, self.session_id), ())
 
     def test_discussion_recording_reuses_the_callers_owner_transaction_and_rolls_back(self) -> None:
-        self._upgrade()
+        self._upgrade(current_runtime=True)
         from notalone.persistence.assistant_session_inputs import (
             PostgresAssistantSessionInputs, record_discussion_input_in_transaction,
         )
@@ -183,7 +187,7 @@ class AssistantSessionInputUpgradeTest(unittest.TestCase):
                 self.assertTrue(inputs.is_current_input(self.scope, self.session_id, committed))
 
     def test_discussion_inputs_follow_session_and_contact_erasure(self) -> None:
-        self._upgrade()
+        self._upgrade(current_runtime=True)
         from notalone.persistence.assistant_session_inputs import PostgresAssistantSessionInputs
         inputs = PostgresAssistantSessionInputs(self.database_url)
         version = inputs.record_discussion_input(self.scope, self.session_id, {
@@ -245,7 +249,7 @@ class AssistantSessionInputUpgradeTest(unittest.TestCase):
             })
 
     def test_concurrent_corrections_from_one_version_only_advance_once(self) -> None:
-        self._upgrade()
+        self._upgrade(current_runtime=True)
         from notalone.persistence.assistant_session_inputs import PostgresAssistantSessionInputs
         inputs = PostgresAssistantSessionInputs(self.database_url)
         version = inputs.record_discussion_input(self.scope, self.session_id, {
@@ -271,7 +275,7 @@ class AssistantSessionInputUpgradeTest(unittest.TestCase):
         self.assertEqual(len(inputs.read_inputs(self.scope, self.session_id)), 2)
 
     def test_discussion_preserves_confirmed_fields_and_explicit_skill_choice(self) -> None:
-        self._upgrade()
+        self._upgrade(current_runtime=True)
         from notalone.persistence.assistant_session_inputs import PostgresAssistantSessionInputs
         inputs = PostgresAssistantSessionInputs(self.database_url)
         skill_version_id = uuid4()
@@ -287,7 +291,7 @@ class AssistantSessionInputUpgradeTest(unittest.TestCase):
         self.assertEqual(PostgresAssistantSessionStore(self.database_url).read(self.scope, self.session_id), ())
 
     def test_verified_dependencies_reject_arbitrary_other_contact_sources(self) -> None:
-        self._upgrade()
+        self._upgrade(current_runtime=True)
         from notalone.persistence.assistant_session_inputs import PostgresAssistantSessionInputs
         inputs = PostgresAssistantSessionInputs(self.database_url)
         other_contact, foreign_source = uuid4(), uuid4()
@@ -342,7 +346,7 @@ class AssistantSessionInputUpgradeTest(unittest.TestCase):
         self.assertIsNone(inputs.read_inputs(self.scope, self.session_id)[0].content)
 
     def test_current_input_can_be_required_inside_an_existing_owner_transaction(self) -> None:
-        self._upgrade()
+        self._upgrade(current_runtime=True)
         from notalone.persistence.assistant_session_inputs import (
             PostgresAssistantSessionInputs, require_current_input,
         )
@@ -382,7 +386,7 @@ class AssistantSessionInputUpgradeTest(unittest.TestCase):
         self.assertEqual(inputs.current_input_version_id(self.scope, self.session_id), version)
 
     def test_discussion_content_rejects_unknown_types_and_overlong_values_without_truncation(self) -> None:
-        self._upgrade()
+        self._upgrade(current_runtime=True)
         from notalone.persistence.assistant_session_inputs import PostgresAssistantSessionInputs
         inputs = PostgresAssistantSessionInputs(self.database_url)
         base = {"type": "purpose_exploration", "purpose_hint": "合成边界讨论"}
@@ -407,7 +411,7 @@ class AssistantSessionInputUpgradeTest(unittest.TestCase):
         self.assertEqual(len(inputs.read_inputs(self.scope, self.session_id)), 1)
 
     def test_contact_memory_cannot_validate_its_deleted_original_source(self) -> None:
-        self._upgrade()
+        self._upgrade(current_runtime=True)
         from notalone.persistence.assistant_session_inputs import PostgresAssistantSessionInputs
         inputs = PostgresAssistantSessionInputs(self.database_url)
         source_id, memory_id = uuid4(), uuid4()

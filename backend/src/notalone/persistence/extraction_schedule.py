@@ -23,6 +23,23 @@ def record_messages(connection, *, owner_id, contact_id, observation_id, message
         (list(ids),owner_id,contact_id,observation_id)).fetchall()
     if not count:
         return
+    previous = connection.execute(
+        "SELECT id,status FROM public.background_task WHERE owner_id=%s AND contact_id=%s "
+        "AND task_type='observation' FOR UPDATE", (owner_id, contact_id),
+    ).fetchone()
+    if previous is not None and previous[1] == 'cancelled':
+        # 新观察只重开新目标；取消前尚未领取的回执也不能随新输入重新排队。
+        connection.execute(
+            'UPDATE public.memory_extraction_receipt SET task_id=%s '
+            'WHERE owner_id=%s AND contact_id=%s AND task_id IS NULL '
+            'AND NOT (message_id=ANY(%s::uuid[]))',
+            (previous[0], owner_id, contact_id, [row[0] for row in count]),
+        )
+        connection.execute('DELETE FROM public.memory_processing_plan WHERE task_id=%s', (previous[0],))
+        connection.execute(
+            'UPDATE public.memory_extraction_schedule SET threshold=1,task_id=NULL '
+            'WHERE owner_id=%s AND contact_id=%s', (owner_id, contact_id),
+        )
     now = utcnow()
     pending = len(connection.execute(_PENDING,(owner_id,contact_id)).fetchall())
     connection.execute('UPDATE public.memory_extraction_schedule SET pending_count=%s, '
@@ -34,7 +51,7 @@ def record_messages(connection, *, owner_id, contact_id, observation_id, message
 def claim_scope(connection, repository, *, owner_id, contact_id, now=None):
     repository._lock_scope(connection,owner_id,contact_id)
     now = now or utcnow()
-    state = connection.execute('SELECT threshold,due_at,last_input_at FROM public.memory_extraction_schedule '
+    state = connection.execute('SELECT threshold,due_at,last_input_at,task_id FROM public.memory_extraction_schedule '
         'WHERE owner_id=%s AND contact_id=%s FOR UPDATE', (owner_id,contact_id)).fetchone()
     if not state or state[1] is None or state[1] > now:
         return None
@@ -47,9 +64,16 @@ def claim_scope(connection, repository, *, owner_id, contact_id, now=None):
         return None
     previous = connection.execute("SELECT status FROM public.background_task WHERE owner_id=%s AND contact_id=%s AND task_type='observation'",
                                   (owner_id,contact_id)).fetchone()
-    if previous and previous[0] == 'cancelled':
+    if previous and previous[0] == 'cancelled' and state[3] is not None:
         return None
     task = repository.create_observation_task(connection,owner_id=owner_id,contact_id=contact_id,message_count=len(rows))
+    from notalone.persistence.memory_processing import enroll_observation_targets
+    legacy_pending = previous is not None and previous[0] not in {'succeeded', 'cancelled'}
+    for observation_id in sorted({row[1] for row in rows}):
+        enroll_observation_targets(
+            connection, owner_id=owner_id, contact_id=contact_id, task_id=task,
+            observation_id=observation_id, include_legacy_pending=legacy_pending,
+        )
     connection.execute('UPDATE public.memory_extraction_receipt SET task_id=%s WHERE message_id=ANY(%s)',
                        (task,[row[0] for row in rows]))
     connection.execute('UPDATE public.local_wechat_observation SET memory_enqueued_at=%s WHERE id=ANY(%s)',
@@ -72,7 +96,7 @@ def recover_due(repository, *, owner_id, limit=32):
             "JOIN public.conversation_binding b ON b.id=o.binding_id AND b.owner_id=r.owner_id AND b.contact_id=r.contact_id "
             "WHERE r.owner_id=s.owner_id AND r.contact_id=s.contact_id AND r.task_id IS NULL AND b.status='active') "
             "AND NOT EXISTS(SELECT 1 FROM public.background_task t WHERE t.owner_id=s.owner_id AND t.contact_id=s.contact_id "
-            "AND t.task_type='observation' AND t.status='cancelled') "
+            "AND t.task_type='observation' AND t.status='cancelled' AND s.task_id IS NOT NULL) "
             "ORDER BY s.due_at,s.contact_id LIMIT %s", (owner_id,utcnow(),limit)).fetchall()
         for (contact_id,) in scopes:
             task = claim_scope(connection,repository,owner_id=owner_id,contact_id=contact_id)

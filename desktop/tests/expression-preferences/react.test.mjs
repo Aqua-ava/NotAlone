@@ -17,7 +17,7 @@ test('当前 React 面板明确区分长期保存与本次指令，并展示用�
       assert.match(markup, /本人全局/);
       assert.match(markup, /当前联系人/);
       assert.match(markup, /适用输入模式/);
-      assert.match(markup, /本次指令、选择、复制和表达样本不会自动保存为长期偏好/);
+      assert.match(markup, /本次指令、选择和复制不会自动保存为长期偏好/);
       const contactId = '11111111-1111-4111-8111-111111111111';
       const preferenceId = '22222222-2222-4222-8222-222222222222';
       const receipt = { preferenceId, text: '生成时保存的旧要求：保留称呼。',

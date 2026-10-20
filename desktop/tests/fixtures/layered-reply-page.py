@@ -49,7 +49,10 @@ def main():
                         2, 2, 3500, scenario_read=ScenarioReadBudget(3, 4, 4000))
             def combined_app(**options):
                 if hasattr(self, "service"):
-                    options["layered_memory"] = self.service
+                    from tests.integration.server.layered_manual_support import create_controlled_layered_app
+                    # 此页面显式管理目标范围；复用服务不能重新启动另一联系人的自动整理。
+                    return create_controlled_layered_app(automatic_maintenance=False,
+                        layered_memory=self.service, **options)
                 return create_app(**options)
             with patch("tests.integration.server.overview_reply_support.create_app", side_effect=combined_app):
                 return super()._backend(owner_id, **kwargs)

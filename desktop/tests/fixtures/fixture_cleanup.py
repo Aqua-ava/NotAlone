@@ -38,7 +38,7 @@ def verify_full_migrations(database_name: str, database_url: str) -> dict[str, i
     if (not expected or [name[:3] for name in expected] != [f"{n:03}" for n in range(1, len(expected) + 1)]
             or os.environ.get("NOTALONE_DATABASE_URL") != database_url
             or os.environ.get("NOTALONE_TEST_DATABASE_URL") != database_url):
-        raise RuntimeError("完整桌面夹具只接受本轮双 URL 与仓库当前完整连续迁移。")
+        raise RuntimeError("完整桌面夹具只接受本轮双 URL 与连续编号的当前正式迁移。")
     with psycopg.connect(database_url) as connection:
         if connection.execute("SELECT current_database()").fetchone()[0] != database_name:
             raise RuntimeError("完整桌面夹具数据库身份不匹配。")

@@ -64,6 +64,7 @@ def evaluate_task(
     runner = PostgresMemoryExtractionRunner(
         database_url, runtime=runtime, verification_runtime=verification_runtime,
         provider=provider, model_name=model_name, dimension_release=DimensionRelease(),
+        automatic=False,
     )
     worker = BackgroundTaskWorker(repository=repository, extraction_runner=runner)
     worker_results = []

@@ -76,10 +76,10 @@ export async function budgetPublicFixture(t, { toolHistory = false, continuous =
       if (failure) throw failure;
     } }, { label: '预算', evidence,
     matchesPreparedDatabase: (name) => !data || data.database_url === `host=/tmp dbname=${name}`,
-    cleanupConfirmed: () => process.stdout.write('budget_public_cleanup: 001–072 repeat=0 owned_database_remaining=0\n'),
+    cleanupConfirmed: () => process.stdout.write('budget_public_cleanup: 001–089 repeat=0 owned_database_remaining=0\n'),
   }));
   data = await ready;
-  assert.equal(data.migration_count, 72); assert.equal(data.migration_repeat, 0);
+  assert.equal(data.migration_count, 89); assert.equal(data.migration_repeat, 0);
   client = new ports.JsonClient(data);
   const messageObservers = new Set();
   let generation = 7; const backendListeners = new Set(), delivery = {};
@@ -138,8 +138,8 @@ export async function budgetPublicFixture(t, { toolHistory = false, continuous =
       { replies: { state, error: '' } })),
     renderCandidates: (state) => {
       const previousWindow = globalThis.window;
-      // 静态渲染不运行 effect；宿主样本订阅只作为 renderer 参数。
-      globalThis.window = { notalone: { styleSamples: {} } };
+      // 静态渲染不运行 effect；宿主偏好订阅只作为 renderer 参数。
+      globalThis.window = { notalone: { candidateProvenance: {} } };
       try { return ports.renderToStaticMarkup(ports.createElement(ports.ReplyCandidates, { replies: { state, error: '' } })); }
       finally { if (previousWindow === undefined) delete globalThis.window; else globalThis.window = previousWindow; }
     },

@@ -94,12 +94,13 @@ test('真实Skill页面等慢4秒GET结算再调度，隐藏暂停，恢复立�
     import { SkillLearningPage } from './src/renderer/SkillLearningPage';
     window.notalone = { skillLearning: { getState: () => window.learning('getState'),
       onStateChanged: listener => { window.learningChanged = listener; return () => { window.learningChanged = undefined; }; },
-      refresh: scope => window.learning('refresh', scope), configure: scope => window.learning('configure', scope) } };
+      poll: scope => window.learning('poll', scope), refresh: scope => window.learning('refresh', scope), configure: scope => window.learning('configure', scope) } };
     createRoot(document.getElementById('root')).render(<SkillLearningPage session={{ state: ${JSON.stringify(contactState)} }}/>);
   `);
+  await page.getByRole('tab', { name: '待审核' }).click();
   await expect.poll(() => requests.length).toBe(1);
   await page.clock.runFor(10_000);
-  assert.equal(commands.filter(command => command === 'refresh').length, 1, '页面等待GET结算期间不再次调用刷新');
+  assert.equal(commands.filter(command => command === 'poll').length, 1, '页面等待GET结算期间不再次调用刷新');
   assert.equal(requests[0].signal.aborted, false);
   await expect(page.getByRole('button', { name: '关闭经验整理', exact: true })).toBeEnabled({ timeout: 7000 });
   await page.clock.runFor(14_000);

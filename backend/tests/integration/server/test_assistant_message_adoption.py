@@ -22,9 +22,16 @@ class AssistantMessageAdoptionHttpTest(CoreBusinessFlowFixture, unittest.TestCas
 
     def _adopt(self, mode: str):
         requirement = "甲" * 4096
-        content = {"type": mode, "purpose": "明确拒绝合成邀请。", "user_instruction": "自然一点"}
+        # 回应由共享夹具创建真实目标消息及 direction；purpose 只属于主动联系合同。
+        workspace = mode in ("express", "suggest")
+        content = ({"type": "rewrite_draft", "input_kind": "workspace", "workspace_action": mode,
+                    "draft_text": "明确拒绝合成邀请。" if mode == "express" else "",
+                    "context_text": "用户补充：这次只聊今天。", "excluded_message_ids": [str(uuid4())],
+                    "include_relationship_context": True, "user_instruction": "自然一点"}
+                   if workspace else None if mode == "reply_to_message" else {
+                       "type": mode, "purpose": "明确拒绝合成邀请。", "user_instruction": "自然一点"})
         path, initial, frame = self._display_edited_second(
-            requirement, content=content, with_source=mode == "reply_to_message",
+            requirement, content=content, with_source=workspace or mode == "reply_to_message",
         )
         command = self._command(initial, frame, instruction="第二条简短一点", requirement_changes=[
             {"action": "keep", "previous": requirement},
@@ -82,8 +89,15 @@ class AssistantMessageAdoptionHttpTest(CoreBusinessFlowFixture, unittest.TestCas
         payload = next(json.loads(message.content) for message in self.reply_model.seen_calls[-1]
                        if isinstance(message, HumanMessage))
         self.assertEqual(payload["user_instruction"], full)
-        self.assertEqual(payload["confirmed_direction" if mode == "reply_to_message" else "confirmed_purpose"],
-                         continued["effective_input"]["direction" if mode == "reply_to_message" else "purpose"])
+        if workspace:
+            self.assertEqual(payload["input_mode"], "workspace")
+            self.assertEqual(payload["workspace_action"], mode)
+            self.assertEqual(payload["context_text"], content["context_text"])
+            self.assertEqual(claimed["turns"][-1]["input"]["content"], continued["effective_input"])
+            self.assertIn(str(message_id), json.dumps(payload))
+        else:
+            self.assertEqual(payload["confirmed_direction" if mode == "reply_to_message" else "confirmed_purpose"],
+                             continued["effective_input"]["direction" if mode == "reply_to_message" else "purpose"])
         budget = completed["input_budget"]
         self.assertTrue(budget["allowed"])
         self.assertEqual(budget["total_tokens"], budget["input_tokens"] + budget["output_reserve_tokens"])
@@ -132,3 +146,9 @@ class AssistantMessageAdoptionHttpTest(CoreBusinessFlowFixture, unittest.TestCas
 
     def test_proactive_adopts_new_message_with_full_current_requirements(self):
         self._adopt("initiate_conversation")
+
+    def test_workspace_express_adopts_new_message_with_full_current_requirements(self):
+        self._adopt("express")
+
+    def test_workspace_suggest_adopts_new_message_with_full_current_requirements(self):
+        self._adopt("suggest")

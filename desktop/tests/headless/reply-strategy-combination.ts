@@ -9,7 +9,7 @@ import { replyStrategyConfirmedLifecycle } from './reply-strategy-lifecycle';
 import { replyStrategyContinuation } from './reply-strategy-continuation';
 import { authenticExpressionTyped } from './authentic-expression-typed';
 
-// 只顺序复用原具名producer；运行仍由唯一受限入口和单Chrome租约管理。
+// 具名入口保留，场景统一经工作区直接生成；运行仍由唯一受限入口和单 Chrome 租约管理。
 export async function replyStrategyCombination(browser: Browser, origin: string) {
   await replyStrategyOptions(browser, origin);
   await replyStrategyDialogue(browser, origin);

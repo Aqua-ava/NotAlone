@@ -17,6 +17,9 @@ from notalone.conversation.matcher import (
     normalize_display_text,
 )
 from notalone.front_sync.foreground_observation import FreshForegroundObservation
+from notalone.front_sync.name_matching import (
+    SessionNameCandidate, canonical_session_name, match_session_names,
+)
 from notalone.front_sync.observation_budget import FRESH_PROBE_SECONDS
 from notalone.front_sync.probe_adapter import (
     FrontSessionProbeObservation,
@@ -74,10 +77,36 @@ class ForegroundLocator:
         self._cli = cli
         self._bindings = bindings
 
+    def close(self) -> None:
+        """停止原生定位资源；不修改绑定或后台授权。"""
+
+        close_probe = getattr(self._probe, "close", None)
+        if callable(close_probe):
+            close_probe()
+
     def observe_fresh(
         self, *, enabled: bool, deadline: float, check_current: Callable[[], None] | None = None,
     ) -> FreshForegroundObservation:
-        """独立一次定位与元数据消歧，不读正文、不消费历史或写绑定。"""
+        """独立一次定位；取消、错误及超时回收本轮原生资源。"""
+
+        try:
+            result = self._observe_fresh(
+                enabled=enabled, deadline=deadline, check_current=check_current,
+            )
+            # 包括非前台、质量不合格等早退；不能留下已被撤销的热进程。
+            if check_current is not None:
+                check_current()
+        except BaseException:
+            self.close()
+            raise
+        if not enabled or result.phase == "unavailable" or monotonic() >= deadline:
+            self.close()
+        return result
+
+    def _observe_fresh(
+        self, *, enabled: bool, deadline: float, check_current: Callable[[], None] | None,
+    ) -> FreshForegroundObservation:
+        """只读观察及名单核验；清理由公开入口统一收尾。"""
 
         if check_current is not None:
             check_current()
@@ -140,17 +169,23 @@ class ForegroundLocator:
 
         recognized = {}
         if (observation.quality is not None
-                and observation.quality.capture_version == "automatic-header-v3"
+                and observation.quality.capture_version in ("automatic-header-v3", "automatic-header-v4")
                 and observation.captured_at is not None and observation.evidence is not None):
             raw_name = observation.evidence.display_name
             if (isinstance(raw_name, str) and raw_name.strip() and len(raw_name) <= 256
                     and "\n" not in raw_name and "\r" not in raw_name):
                 recognized = {"recognized_name": raw_name,
                               "recognition_confidence": observation.quality.display_name_confidence}
+        if (observation.text_fallback is not None or observation.quality is not None
+                and observation.quality.capture_version in ("automatic-header-v3", "automatic-header-v4")):
+            return self._observe_header_name_match(
+                observation, deadline=deadline, check_current=check_current,
+                recognized=recognized, member_suffix=bool(member_suffix),
+            )
         evidence = observation.qualified_evidence
         quality_failure = None
         if (evidence is None or observation.quality is None
-                or observation.quality.capture_version not in ("automatic-window-v2", "automatic-header-v3")
+                or observation.quality.capture_version not in ("automatic-window-v2", "automatic-header-v3", "automatic-header-v4")
                 or observation.captured_at is None):
             if member_suffix:
                 return pause_group()
@@ -222,6 +257,7 @@ class ForegroundLocator:
             if monotonic() >= deadline:
                 raise TimeoutError
         except TimeoutError:
+            self.close()
             if member_suffix:
                 return pause_group()
             if quality_failure is not None:
@@ -232,6 +268,7 @@ class ForegroundLocator:
                 observed_at=observation.captured_at,
             )
         except (CliAdapterError, ConversationBindingPersistenceError):
+            self.close()
             if member_suffix:
                 return pause_group()
             if quality_failure is not None:
@@ -261,6 +298,125 @@ class ForegroundLocator:
             observed_at=observation.captured_at,
             **recognized,
         )
+
+    def _observe_header_name_match(
+        self, observation: FrontSessionProbeObservation, *, deadline: float,
+        check_current: Callable[[], None] | None, recognized: dict, member_suffix: bool,
+    ) -> FreshForegroundObservation:
+        """以完整会话名单核验文字，唯一结果再核验稳定绑定；不读取正文。"""
+
+        def result(phase: str, reason: str) -> FreshForegroundObservation:
+            if member_suffix and phase != "paused":
+                phase, reason = "paused", "group_chat_suspected"
+            return FreshForegroundObservation.create(
+                phase=phase, reason=reason, probe_available=phase != "unavailable",
+                wechat_in_front=True, observed_at=observation.captured_at,
+                **(recognized if phase == "manual-required" else {}),
+            )
+
+        def current() -> None:
+            if check_current is not None:
+                check_current()
+            if monotonic() >= deadline:
+                raise TimeoutError
+
+        fallback = observation.text_fallback
+        if member_suffix and fallback is not None:
+            return result("paused", "group_chat_suspected")
+        quality = observation.quality
+        if (quality is None or quality.capture_version not in ("automatic-header-v3", "automatic-header-v4")
+                or observation.captured_at is None or observation.evidence is None or not recognized):
+            return result("manual-required", "quality_unverified")
+        quality_failure = (quality.name_complete is not True
+                           or any(part in observation.evidence.display_name for part in ("…", "⋯", "...")))
+        if fallback is not None:
+            if (quality.capture_version != "automatic-header-v4" or fallback.text_complete is not True
+                    or fallback.mask_verified is not True or fallback.confidence < 0.90):
+                return result("manual-required", "quality_unverified")
+            if re.search(r"[（(]\s*[0-9０-９]+\s*[）)]\s*$", fallback.text):
+                return result("paused", "group_chat_suspected")
+        elif quality.display_name_confidence < 0.30:
+            quality_failure = True
+        try:
+            current()
+            # 先包含未绑定及非私聊的全部记录；上限不能证明名单完整。
+            remaining = deadline - monotonic()
+            if remaining <= 0:
+                raise TimeoutError
+            candidates = self._cli.sessions(
+                keyword=None, type_filter="all", limit=5000,
+                timeout_seconds=min(0.25, remaining),
+            )
+            current()
+            if len(candidates) >= 5000:
+                return result("manual-required", "session_candidates_truncated")
+            # 不完整/低分名称只可保守判群，不能授予私聊身份。
+            if quality_failure:
+                groups = tuple(item for item in candidates if item.chat_type == "group"
+                               and normalize_display_text(item.display_name)
+                               == normalize_display_text(observation.evidence.display_name))
+                if groups:
+                    return result("paused", "group_chat_unsupported")
+                return result("manual-required", "quality_unverified")
+            if member_suffix:
+                title = observation.evidence.display_name
+                suffix = re.search(r"[（(]\s*[0-9０-９]+\s*[）)]\s*$", title)
+                group_name = canonical_session_name(title[:suffix.start()]) if suffix else ""
+                if any(item.chat_type == "group" and canonical_session_name(item.display_name)
+                       in (group_name, canonical_session_name(title)) for item in candidates):
+                    return result("paused", "group_chat_suspected")
+            decision = match_session_names(
+                observation.evidence.display_name, quality.display_name_confidence,
+                tuple(SessionNameCandidate(item.display_name, item.chat_type) for item in candidates),
+                tail_text=fallback.text if fallback is not None else None,
+                tail_confidence=fallback.confidence if fallback is not None else None,
+                check_current=current,
+            )
+            current()
+            if decision.kind == "group":
+                private_collision = any(candidates[index].chat_type == "private"
+                                        for index in decision.plausible_indices)
+                return result("paused", "group_chat_suspected" if private_collision else "group_chat_unsupported")
+            if decision.kind == "quality-unverified":
+                return result("manual-required", "quality_unverified")
+            if decision.kind != "unique" or decision.candidate_index is None:
+                return result("manual-required", "ambiguous_requires_selection")
+            if member_suffix and (decision.method != "exact" or quality.display_name_confidence < 0.90):
+                return result("paused", "group_chat_suspected")
+            candidate = candidates[decision.candidate_index]
+            full_name = normalize_display_text(candidate.display_name)
+            if (candidate.chat_type != "private" or not isinstance(candidate.username, str)
+                    or not candidate.username.strip()
+                    or sum(item.username == candidate.username for item in candidates) != 1
+                    or candidate.display_name != candidate.display_name.rstrip()):
+                return result("manual-required", "unmatched_requires_selection")
+            current()
+            bindings = self._bindings.list_active_bindings(
+                owner_id=self._owner_id, channel=self._channel,
+                account_scope=self._account_scope, bounded=True,
+            )
+            current()
+        except TimeoutError:
+            self.close()
+            return result("unavailable", "observation_timeout")
+        except (CliAdapterError, ConversationBindingPersistenceError):
+            self.close()
+            return result("unavailable", "binding_verification_unavailable")
+        active = tuple(item for item in bindings if item.conversation_locator == candidate.username)
+        if len(active) == 1:
+            binding = active[0]
+            if (binding.scope.owner_id == self._owner_id and binding.channel == self._channel
+                    and binding.account_scope == self._account_scope and binding.status == "active"
+                    and normalize_display_text(binding.display_name) == full_name):
+                return FreshForegroundObservation.create(
+                    phase="confirmed", reason=("confirmed_active_binding" if decision.method == "exact"
+                                               and quality.display_name_confidence >= 0.90
+                                               else "confirmed_active_binding_name_match"),
+                    probe_available=True, wechat_in_front=True,
+                    binding_id=binding.binding_id, contact_id=binding.scope.contact_id,
+                    observed_at=observation.captured_at, **recognized,
+                )
+        return result("manual-required", "unmatched_requires_selection")
 
     def observe(self, *, enabled: bool) -> ForegroundLocatorStatus:
         """观察一次前台状态；禁用时不启动探针。"""

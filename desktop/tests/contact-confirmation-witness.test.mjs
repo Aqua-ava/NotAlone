@@ -1,13 +1,33 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import { build } from 'esbuild';
 
-const output = await build({ entryPoints: ['tests/contact-confirmation-witness.ts'], bundle: true,
-  platform: 'node', format: 'esm', write: false });
+const options = { entryPoints: ['tests/contact-confirmation-witness.ts'], bundle: true,
+  platform: 'node', format: 'esm', write: false };
+const original = await build(options);
+const productionWitness = await import(`data:text/javascript;base64,${Buffer.from(original.outputFiles[0].text).toString('base64')}`);
+const disk = '// 合成 Main 源码，仅供协议单元测试，不认证实际 C 构建或断点。\nvoid 0;\n';
+const fingerprint = createHash('sha256').update(disk).digest('hex');
+// 只替换测试编译副本的期望指纹；正式源码、默认固定 C 校验和断点不变。
+const output = await build({ ...options, plugins: [{ name: 'synthetic-witness-fingerprint', setup(builder) {
+  builder.onLoad({ filter: /contact-confirmation-witness\.ts$/ }, async ({ path }) => {
+    const source = await readFile(path, 'utf8');
+    const declaration = /export const C_MAIN_SHA256 = '[0-9a-f]{64}';/g;
+    assert.equal([...source.matchAll(declaration)].length, 1);
+    return { contents: source.replace(declaration, `export const C_MAIN_SHA256 = '${fingerprint}';`), loader: 'ts' };
+  });
+} }] });
 const witness = await import(`data:text/javascript;base64,${Buffer.from(output.outputFiles[0].text).toString('base64')}`);
-const disk = await readFile('dist/main/index.cjs', 'utf8');
 const versions = { electron: '44.7.0', chrome: '152.0.7977.130', node: '24.21.0', v8: '15.2.124.28-electron.0' };
+
+test('正式默认见证仍拒绝合成源码，不因协议单元测试改变固定 C 契约', () => {
+  assert.notEqual(productionWitness.C_MAIN_SHA256, fingerprint);
+  assert.throws(() => productionWitness.verifyWitnessSource(disk, disk, versions), /source/);
+  assert.throws(() => productionWitness.verifyWitnessSource(disk,
+    productionWitness.NODE_WRAPPER[0] + disk + productionWitness.NODE_WRAPPER[1], versions), /source/);
+});
 
 test('来源或实际版本漂移时拒绝诊断，不把相近版本当作C', () => {
   assert.throws(() => witness.verifyWitnessSource(`${disk}\n`, `${disk}\n`, versions), /source/);

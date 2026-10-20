@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from tests.unit.memory_extraction.verification_helpers import failed_automatic_candidate
-
 from contextlib import ExitStack
 from copy import deepcopy
 from dataclasses import replace
@@ -17,6 +15,7 @@ from uuid import uuid4
 import httpx
 
 from notalone.memory.adapters import InMemoryMemoryStore
+from tests.unit.memory_extraction.automatic_result_helpers import failed_automatic_candidate
 from notalone.memory_extraction.command import run_extraction
 from notalone.memory_extraction.grounded import (
     compile_draft, compile_labels, compile_labels_v3, compile_labels_v4, source_units,
@@ -136,7 +135,7 @@ class GroundedQuoteAlternativesTest(unittest.TestCase):
                 self.assertEqual(events["grounded_draft"]["draft"], original)
                 self.assertEqual(draft, original)
                 self.assertEqual((stats.adopted, stats.pending, stats.rejected_by_contract), (0, 0, 1))
-                saved = failed_automatic_candidate(memories, traces, scope)
+                saved = failed_automatic_candidate(self, memories, scope, traces)
                 self.assertEqual(saved.interpretation_reason, fact["interpretation_reason"])
                 self.assertEqual(saved.alternatives, (note,))
                 self.assertIsNone(saved.event)

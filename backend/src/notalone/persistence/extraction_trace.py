@@ -364,6 +364,9 @@ class PostgresExtractionTraceStore:
                         failure_state=failure_state,
                         skipped_range=skipped_range,
                     )
+                if status == "succeeded" or (status == "skipped" and skipped_range is not None):
+                    from notalone.persistence.memory_processing import complete_processing_batch
+                    complete_processing_batch(connection, scope, trace_id, outcome=status)
                 self._append(
                     connection,
                     scope,

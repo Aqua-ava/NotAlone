@@ -240,6 +240,42 @@ test('后台删除待回复来源后只清除失效引用，保留独立草稿�
   assert.match(after.contentRestoreNotice, /待回复对象/);
 });
 
+for (const switchToRewrite of [false, true]) test(`统一混合补充在非当前联系人来源删除后不再恢复（切改写：${switchToRewrite}）`, async (t) => {
+  const f = await budgetPublicFixture(t); const [a, b] = f.data.contact_ids;
+  const scope = await f.connect(a);
+  await f.bridge.setMode({ ...scope, mode: 'reply_to_message' });
+  const target = (await f.bridge.getState()).messages.items[0];
+  await f.bridge.selectMessage({ ...scope, messageId: target.messageId });
+  const supplement = '这只是合成问候，不是邀约；回复简短自然。';
+  await f.bridge.updateSupplement({ ...scope, supplement });
+  await f.connect(b); await f.connect(a);
+  assert.equal((await f.bridge.getState()).requirements, supplement);
+  if (switchToRewrite) await f.bridge.setMode({ contactId: a, scopeRevision: f.contacts.getState().scopeRevision, mode: 'rewrite_draft' });
+  await f.connect(b);
+  const sources = await f.request(`/api/contacts/${a}/sources`);
+  const sourceId = sources.sources[0].source_id;
+  await f.request(`/api/contacts/${a}/sources/${sourceId}`, undefined, 'DELETE');
+  const deadline = Date.now() + 10000;
+  let deleted = false;
+  while (Date.now() < deadline) {
+    const source = (await f.request(`/api/contacts/${a}/sources`)).sources.find((item) => item.source_id === sourceId);
+    if (source.status === 'deleted' && source.task_status === 'succeeded') { deleted = true; break; }
+    assert.notEqual(source.task_status, 'failed');
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  assert.ok(deleted);
+  await f.replies.revalidateDeletedSource(a);
+  await f.connect(a);
+  const after = await f.bridge.getState();
+  assert.equal(after.targetMessageId, null);
+  assert.equal(after.correction, '');
+  assert.equal(after.requirements, '');
+  assert.equal(JSON.stringify(after).includes(supplement), false);
+  await f.connect(b); await f.connect(a);
+  assert.equal((await f.bridge.getState()).requirements, '');
+  assert.equal((await f.command('metrics')).model_calls, 0);
+});
+
 test('同名联系人保持独立，Skill 只恢复当前联系人仍启用的版本', async (t) => {
   const f = await budgetPublicFixture(t); const [a, b] = f.data.contact_ids;
   await f.command('same_names');
@@ -338,7 +374,7 @@ test('切换联系人保留有效的原生成，恢复输入不会再次提交',
   assert.equal((await f.command('metrics')).model_calls, 1);
 });
 
-test('编号继续后的草稿分组编辑恢复仍使用分组版本编辑器', async (t) => {
+test('编号继续后恢复分组正文与历史要求，界面不恢复旧要求输入框', async (t) => {
   const f = await budgetPublicFixture(t); const [a, b] = f.data.contact_ids;
   const scope = await f.connect(a);
   f.contacts.setDraft({ ...scope, text: '编号继续的合成草稿。' });
@@ -360,8 +396,13 @@ test('编号继续后的草稿分组编辑恢复仍使用分组版本编辑器',
   await f.connect(b); await f.connect(a);
   const after = await f.bridge.getState();
   assert.deepEqual(after.result.continuation, before.result.continuation);
-  assert.match(f.renderCandidates(after), /编号继续的未保存分组编辑/);
-  assert.match(f.renderCandidates(after), /继续分组临时要求/);
+  assert.deepEqual(after.candidateDrafts, [{ candidateId: view.candidateId, versionId: version.versionId,
+    messages, requirements: '继续分组临时要求' }]);
+  const html = f.renderCandidates(after);
+  assert.match(html, /编号继续的未保存分组编辑/);
+  assert.match(html, /说法1第1条编辑文本/);
+  assert.match(html, /说法1第2条编辑文本/);
+  assert.doesNotMatch(html, /本组修改要求|说法1修改要求|继续分组临时要求/);
   assert.equal((await f.command('metrics')).model_calls, callsBeforeEdit);
 });
 

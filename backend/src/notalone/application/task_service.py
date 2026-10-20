@@ -11,6 +11,18 @@ class TaskService:
     def __init__(self, *, repository: PostgresBackgroundTaskRepository) -> None:
         self._repository = repository
 
+    def memory_processing(self, *, owner_id, contact_id=None, host=None):
+        from notalone.persistence.memory_processing import PostgresMemoryProcessingStore
+        return PostgresMemoryProcessingStore(self._repository.database_url).read(
+            owner_id=owner_id, contact_id=contact_id, host=host,
+        )
+
+    def resume_memory_processing(self, *, owner_id, contact_id, task_id, action, host):
+        from notalone.persistence.memory_processing import PostgresMemoryProcessingStore
+        return PostgresMemoryProcessingStore(self._repository.database_url).resume(
+            owner_id=owner_id, contact_id=contact_id, task_id=task_id, action=action, host=host,
+        )
+
     def status(
         self, *, owner_id: UUID, contact_id: UUID, task_id: UUID,
     ) -> dict[str, object]:

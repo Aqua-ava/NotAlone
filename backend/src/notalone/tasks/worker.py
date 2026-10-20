@@ -34,6 +34,7 @@ from notalone.memory_extraction.runtime import MemoryExtractionRuntime
 from notalone.memory_extraction.verification import SourceVerificationRuntime
 from notalone.memory_trace import TracePort, TraceWriteError
 from notalone.persistence.background_tasks import (
+    BackgroundTaskStateError,
     BackgroundTaskLeaseError,
     BackgroundTaskPersistenceError,
     PostgresBackgroundTaskRepository,
@@ -190,6 +191,7 @@ class PostgresMemoryExtractionRunner:
 
     __slots__ = (
         "_adjudication_runtime",
+        "_automatic",
         "_batch_size",
         "_database_url",
         "_dimension_release",
@@ -220,6 +222,7 @@ class PostgresMemoryExtractionRunner:
         model_name: str | None = None,
         dimension_release: DimensionRelease | None = None,
         trace_store: TracePort | None = None,
+        automatic: bool = True,
     ) -> None:
         if not isinstance(database_url, str) or not database_url.strip():
             raise ValueError("database_url 不能为空。")
@@ -233,6 +236,7 @@ class PostgresMemoryExtractionRunner:
         # None 表示沿用运维开关与默认空放行表（ADR-036），不是"全部放行"。
         dimension_release = DimensionRelease.resolve(dimension_release)
         self._dimension_release = dimension_release
+        self._automatic = automatic
         self._database_url = database_url
         if runtime is None:
             from notalone.memory_extraction.direct_adapter import (
@@ -301,9 +305,20 @@ class PostgresMemoryExtractionRunner:
         verification_runtime = verification_runtime_for_config(self._verification_runtime, extraction_runtime_config)
         runtime = extraction_runtime_for_config(self._runtime, extraction_runtime_config)
         selection_receipts: list[dict[str, Any]] = []
+        selected_ids = None
+        task_lease_generation = None
+        context_ids = None
+        if task_id is not None:
+            from notalone.persistence.memory_processing import PostgresMemoryProcessingStore
+            selected_ids, context_ids, task_lease_generation = PostgresMemoryProcessingStore(self._database_url).targets(
+                owner_id=scope.owner_id, contact_id=scope.contact_id, task_id=task_id,
+            )
         messages = load_contact_messages(
-            scope, self._database_url, selection_receipts=selection_receipts
+            scope, self._database_url, selection_receipts=selection_receipts,
+            message_ids=context_ids,
         )
+        if selected_ids is not None and not set(selected_ids).issubset({message.message_id for message in messages}):
+            raise BackgroundTaskStateError("记忆任务的目标来源已不可用。")
         if (extraction_runtime_config is not None
                 and extraction_runtime_config.mode is ExtractionRuntimeMode.BOUNDED_RUNTIME_V1):
             from notalone.memory_extraction.source_proof import bounded_source_occurred_at
@@ -312,14 +327,21 @@ class PostgresMemoryExtractionRunner:
         task_options: dict[str, Any] = {}
         if task_id is not None or extraction_runtime_config is not None:
             task_options = {"task_id": task_id, "extraction_runtime_config": extraction_runtime_config}
+        memory_port = self._memory_port
+        owner_memory_port = self._owner_memory_port
+        if task_id is not None and task_lease_generation is not None:
+            from notalone.persistence.memory_processing_lease import fenced_memory_store
+            fence = dict(scope=scope, task_id=task_id, generation=task_lease_generation)
+            memory_port = fenced_memory_store(memory_port, **fence)
+            owner_memory_port = fenced_memory_store(owner_memory_port, **fence)
         return run_extraction(
             scope=scope,
             messages=messages,
-            watermark_message_id=self._watermark_port.get(scope),
+            watermark_message_id=(self._watermark_port.get(scope) if task_id is None else None),
             runtime=runtime,
             verification_runtime=verification_runtime,
-            memory_port=self._memory_port,
-            owner_memory_port=self._owner_memory_port,
+            memory_port=memory_port,
+            owner_memory_port=owner_memory_port,
             adjudication_runtime=self._adjudication_runtime,
             ledger=self._ledger,
             watermark_port=self._watermark_port,
@@ -329,6 +351,13 @@ class PostgresMemoryExtractionRunner:
             dimension_release=self._dimension_release,
             trace_store=self._trace_store,
             selection_receipts=tuple(selection_receipts),
+            # 显式历史 bounded 任务保留冻结采纳合同（ADR-069）。
+            automatic=self._automatic and not (
+                extraction_runtime_config is not None
+                and extraction_runtime_config.mode is ExtractionRuntimeMode.BOUNDED_RUNTIME_V1
+            ),
+            task_lease_generation=task_lease_generation,
+            target_message_ids=selected_ids,
             **task_options,
         )
 

@@ -41,7 +41,7 @@ test('空目录首启后可明确创建手动联系人，不要求微信身份�
   if (process.env.NOTALONE_TEST_MANUAL_MODEL_FIXTURE === '1') expect(JSON.parse(await readFile(path.join(userData, 'synthetic-model-audit.json'), 'utf8')).network_guard).toBe(true);
   await manager.getByLabel('本人展示名称', { exact: true }).fill('合成手动使用者');
   await manager.getByRole('button', { name: '初始化本人', exact: true }).click();
-  await expect(manager.getByText('本次运行的本人身份已就绪', { exact: true })).toBeVisible({ timeout: 30_000 });
+  await expect(manager.getByText('本次运行的本人身份已就绪', { exact: true })).toBeAttached({ timeout: 30_000 });
   await expect(manager.getByRole('heading', { name: '还没有联系人', exact: true })).toBeVisible();
   await expect(manager.getByRole('button', { name: '创建联系人', exact: true })).toBeVisible({ timeout: 1000 });
   await manager.getByLabel('联系人展示名称', { exact: true }).fill('合成联系人甲');
@@ -54,7 +54,7 @@ test('空目录首启后可明确创建手动联系人，不要求微信身份�
   await manager.getByRole('button', { name: '手动输入本次聊天', exact: true }).click();
   const helper = await opened;
   await expect(helper).toHaveURL(/#helper$/);
-  await expect(helper.getByRole('button', { name: '回应粘贴文字', exact: true })).toBeVisible({ timeout: 1000 });
+  await expect(helper.getByRole('button', { name: '回应消息', exact: true })).toBeVisible({ timeout: 1000 });
   const databasePid = Number((await readFile(path.join(userData, 'managed/postgres/postmaster.pid'), 'utf8')).split('\n')[0]);
   await selectMenu(app, 'NotAlone', '退出 NotAlone');
   await expect.poll(() => appProcess.exitCode).toBe(0);
@@ -70,7 +70,7 @@ test('公开手动输入完成模型设置、依据和编辑，切换隔离、�
   if (process.env.NOTALONE_TEST_MANUAL_MODEL_FIXTURE === '1') expect(JSON.parse(await readFile(path.join(userData, 'synthetic-model-audit.json'), 'utf8')).network_guard).toBe(true);
   await manager.getByLabel('本人展示名称', { exact: true }).fill('合成手动使用者');
   await manager.getByRole('button', { name: '初始化本人', exact: true }).click();
-  await expect(manager.getByText('本次运行的本人身份已就绪', { exact: true })).toBeVisible({ timeout: 30_000 });
+  await expect(manager.getByText('本次运行的本人身份已就绪', { exact: true })).toBeAttached({ timeout: 30_000 });
   const opening = app.waitForEvent('window');
   await manager.getByRole('button', { name: '打开输入小窗', exact: true }).click();
   const helper = await opening;
@@ -92,7 +92,7 @@ test('公开手动输入完成模型设置、依据和编辑，切换隔离、�
   await helper.getByRole('button', { name: '打开本人和模型设置', exact: true }).click();
   await manager.getByLabel('DeepSeek API Key', { exact: true }).fill('synthetic-manual-package-not-a-real-key');
   await manager.getByRole('button', { name: '保存 DeepSeek 密钥', exact: true }).click();
-  await expect(manager.getByText('DeepSeek 已配置', { exact: true })).toBeVisible({ timeout: 30_000 });
+  await expect(manager.getByText('DeepSeek · 已配置', { exact: true })).toBeVisible({ timeout: 30_000 });
   await expect(manager.getByText('本次联系人：未确认', { exact: true })).toBeVisible();
   await create('合成联系人乙');
   await manager.getByRole('button', { name: '同步设置', exact: true }).click();
@@ -101,7 +101,8 @@ test('公开手动输入完成模型设置、依据和编辑，切换隔离、�
   await manager.getByRole('button', { name: '选择联系人并手动输入', exact: true }).click();
   await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
   await manager.getByRole('button', { name: '手动输入本次聊天', exact: true }).click();
-  await helper.getByRole('button', { name: '回应粘贴文字', exact: true }).click();
+  await helper.getByRole('button', { name: '回应消息', exact: true }).click();
+  await helper.getByRole('button', { name: '粘贴文字', exact: true }).click();
   await helper.getByLabel('当前聊天文字', { exact: true }).fill('合成甲：今晚要一起去吗？');
   await expect(helper.getByRole('button', { name: '生成候选', exact: true })).toBeDisabled();
   await helper.getByLabel('粘贴文字的表达方向', { exact: true }).fill('今天不去，简短婉拒，不增加承诺');
@@ -111,14 +112,15 @@ test('公开手动输入完成模型设置、依据和编辑，切换隔离、�
   const audit = JSON.parse(await readFile(path.join(userData, 'synthetic-model-audit.json'), 'utf8'));
   expect(audit).toMatchObject({ calls: 1, network: 'mock-only', last_mode: 'reply_to_pasted_text', last_evidence_kind: 'user_current_chat' });
   await candidate.fill('合成甲，改成我自己的说法。');
-  await helper.getByRole('button', { name: '展开候选1依据', exact: true }).click();
-  await expect(helper.getByRole('region', { name: '候选1依据', exact: true }).getByText('本次粘贴的对方文字（未经渠道核验）', { exact: true })).toBeVisible();
+  await helper.getByRole('button', { name: '本次参考', exact: true }).click();
+  await expect(helper.getByRole('region', { name: '本次参考内容', exact: true }).getByText('你补充的聊天（未经渠道核验）', { exact: true })).toBeVisible();
   await manager.bringToFront();
   await manager.getByRole('button', { name: '选择合成联系人乙', exact: true }).click();
   await manager.getByRole('button', { name: '手动输入本次聊天', exact: true }).click();
   await expect(helper.getByLabel('草稿', { exact: true })).toHaveValue('');
   await expect(helper.getByLabel('候选1编辑文本', { exact: true })).toHaveCount(0);
-  await helper.getByRole('button', { name: '回应粘贴文字', exact: true }).click();
+  await helper.getByRole('button', { name: '回应消息', exact: true }).click();
+  await helper.getByRole('button', { name: '粘贴文字', exact: true }).click();
   await helper.getByLabel('当前聊天文字', { exact: true }).fill('合成乙：明天再确认时间。');
   await helper.getByLabel('粘贴文字的表达方向', { exact: true }).fill('表示收到，暂不承诺时间');
   await helper.getByRole('button', { name: '生成候选', exact: true }).click();
@@ -140,7 +142,8 @@ test('公开手动输入完成模型设置、依据和编辑，切换隔离、�
   await helper.getByRole('button', { name: '确认删除会话', exact: true }).click();
   await expect(helper.getByText('当前助手会话已删除。', { exact: true })).toBeVisible();
   await expect(candidate).toHaveCount(0);
-  await helper.getByRole('button', { name: '回应粘贴文字', exact: true }).click();
+  await helper.getByRole('button', { name: '回应消息', exact: true }).click();
+  await helper.getByRole('button', { name: '粘贴文字', exact: true }).click();
   await expect(helper.getByLabel('当前聊天文字', { exact: true })).toHaveValue('');
   await helper.getByLabel('当前聊天文字', { exact: true }).fill('合成模型故障：请稍后再联系。');
   await helper.getByLabel('粘贴文字的表达方向', { exact: true }).fill('表示收到');
@@ -172,7 +175,7 @@ test('公开手动输入完成模型设置、依据和编辑，切换隔离、�
     await writeFile(test.info().outputPath('reopened-app-owned.json'), JSON.stringify({ pid: reopenedProcess.pid, userData, executable: path.join(movedApp, 'Contents/MacOS/NotAlone') }));
     const next = await reopened.firstWindow();
     await expect(next.getByText('已连接', { exact: true })).toBeVisible({ timeout: 30_000 });
-    await expect(next.getByText('DeepSeek 已配置', { exact: true })).toBeVisible();
+    await expect(next.getByText('DeepSeek · 已配置', { exact: true })).toBeVisible();
     await expect(next.getByText('本次联系人：未确认', { exact: true })).toBeVisible();
     await expect(next.getByRole('button', { name: '选择合成联系人甲', exact: true })).toBeVisible();
     await expect(next.getByRole('button', { name: '选择合成联系人乙', exact: true })).toBeVisible();
@@ -192,6 +195,8 @@ test('公开手动输入完成模型设置、依据和编辑，切换隔离、�
     await expect(next.getByRole('button', { name: '保存官方模型与新密钥', exact: true })).toBeDisabled();
     await next.getByLabel('我确认改用上述官方接收方，并为它重新输入密钥', { exact: true }).check();
     await next.getByRole('button', { name: '保存官方模型与新密钥', exact: true }).click();
+    await expect(next.getByText('模型接收方：DeepSeek 官方（https://api.deepseek.com），模型 deepseek-flash。', { exact: true })).toBeAttached({ timeout: 30_000 });
+    await next.locator('summary', { hasText: '数据存储与隐私' }).click();
     await expect(next.getByText('模型接收方：DeepSeek 官方（https://api.deepseek.com），模型 deepseek-flash。', { exact: true })).toBeVisible({ timeout: 30_000 });
     await expect(next.getByText('本次联系人：未确认', { exact: true })).toBeVisible();
     await next.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();

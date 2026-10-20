@@ -127,6 +127,33 @@ class HindsightContextTest(unittest.TestCase):
         self.assertEqual(memories[0].source_ids, (self.source_id,))
         self.assertEqual(adapter.last_attempt.status, "success")
 
+    def test_bulk_message_reread_keeps_ids_and_local_scope(self) -> None:
+        message = self.local.messages[0]
+        outside = replace(message, message_id=uuid4(),
+                          scope=ContactScope(uuid4(), self.scope.contact_id))
+        unselected = replace(message, message_id=uuid4())
+        self.local.messages = (message, outside, unselected)
+        adapter = HindsightRetrieval(local=self.local, client=SyntheticRecall(()), tau=.5)
+        selected = adapter.search_messages(scope=self.scope,
+            message_ids=(message.message_id, outside.message_id), query=None, limit=2)
+        self.assertEqual(tuple(item.message_id for item in selected), (message.message_id,))
+
+    def test_explicit_history_is_checked_by_local_authority(self) -> None:
+        class ForbiddenRecall:
+            def recall(self, **kwargs):
+                raise AssertionError("历史复验不调用外部召回。")
+
+        self.store.invalidate(scope=self.scope, memory_id=self.memory.memory_id)
+        adapter = HindsightRetrieval(local=self.local, client=ForbiddenRecall(), tau=.5)
+        self.assertEqual(adapter.search_confirmed_memories(scope=self.scope, query=None), ())
+        versions = adapter.search_confirmed_memories(scope=self.scope, query=None,
+            memory_ids=(self.memory.memory_id,), include_historical=True)
+        # ADR-080 的失效禁用优先，显式历史参数也不能恢复为生成依据。
+        self.assertEqual(versions, ())
+        with self.assertRaises(ValueError):
+            adapter.search_confirmed_memories(scope=self.scope, query=self.query,
+                                              include_historical=True)
+
     def test_low_score_does_not_use_empty_local_score_to_inject(self) -> None:
         context, adapter = self._context((self._hit(reranker=0.2),))
         self.assertEqual(

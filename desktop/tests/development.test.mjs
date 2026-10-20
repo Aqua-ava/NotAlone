@@ -98,7 +98,10 @@ test('开发模式固定当前仓库源码，同时沿用既有解释器和资�
 test('开发命令提供受认证的本机 Vite，限制文件范围并为热更新生成 CSP nonce', async () => {
   const { createDevelopmentServer } = await import('../scripts/development-server.mjs');
   const running = await createDevelopmentServer(process.cwd());
+  const forbidden = await mkdtemp(path.join(tmpdir(), 'notalone-dev-forbidden-'));
   try {
+    await writeFile(path.join(forbidden, '.env.synthetic'), 'SYNTHETIC_TEST_ONLY');
+    await writeFile(path.join(forbidden, 'outside.txt'), 'SYNTHETIC_TEST_ONLY');
     assert.match(running.origin, /^http:\/\/127\.0\.0\.1:\d+$/);
     assert.equal((await fetch(running.origin + '/index.html')).status, 403);
     const options = { headers: { 'x-notalone-dev-token': running.token } };
@@ -108,12 +111,26 @@ test('开发命令提供受认证的本机 Vite，限制文件范围并为热更
     assert.match(html, /script-src 'self' 'nonce-[a-f0-9]+'/);
     assert.ok(html.includes(running.origin.replace('http:', 'ws:')));
     assert.doesNotMatch(html, /unsafe-inline|unsafe-eval/);
-    assert.equal((await fetch(running.origin + '/@fs' + path.resolve('../.env'), options)).status, 403);
+    for (const resource of [
+      '/@fs' + path.resolve('../.env'),
+      '/@fs' + path.join(forbidden, '.env.synthetic'),
+      '/@fs' + path.join(forbidden, 'outside.txt'),
+      '/@fs' + path.join(forbidden, 'missing.txt'),
+      '/%2Eenv.synthetic?import',
+      '/%00',
+      '//.env.synthetic',
+    ]) {
+      assert.equal((await fetch(running.origin + resource, options)).status, 403, '受限路径不因文件缺失而回退到首页');
+      assert.equal((await fetch(running.origin + resource, { ...options, method: 'HEAD' })).status, 403);
+    }
+    assert.equal((await fetch(running.origin + '/index.html', { ...options, method: 'POST' })).status, 403);
+    assert.equal((await fetch(running.origin + '/@fs' + path.resolve('src/shared/contact-session-bridge.ts'), options)).status, 200);
+    assert.equal((await fetch(running.origin + '/@fs' + path.resolve('node_modules/react/package.json'), options)).status, 200);
     const client = await (await fetch(running.origin + '/@vite/client', options)).text();
     assert.ok(client.includes(new URL(running.origin).port));
     const source = await (await fetch(running.origin + '/ContactsPage.tsx', options)).text();
     assert.match(source, /import\.meta\.hot/);
-  } finally { await running.server.close(); }
+  } finally { await running.server.close(); await rm(forbidden, { recursive: true, force: true }); }
 });
 
 test('保存多次只在旧进程正常退出后重启，退出未确认时保留现场', async () => {

@@ -1,5 +1,5 @@
 import { isUuid } from '../uuid';
-import type { ActiveMemory, MemoryContent, MemoryCorrectionReview, MemoryEvent, MemoryEventEvidence, MemorySource, MemoryVersion, PendingMemoryCandidate } from '../../shared/memory-bridge';
+import type { MemoryEvolution, MemoryConditions, MemoryContent, MemoryCorrectionReview, MemoryEvent, MemoryEventEvidence, MemorySource, MemoryVersion, PendingMemoryCandidate } from '../../shared/memory-bridge';
 import { readCurrentStatus } from './current-status';
 
 const categories = ['common_fact', 'preference', 'taboo', 'recent_state', 'relationship_note'] as const;
@@ -54,8 +54,9 @@ function memoryEvent(value: unknown): MemoryEvent | null {
   if (value == null) return null;
   const keys = ['version', 'stage', 'stage_verified', 'stage_evidence', 'occurrence_start', 'occurrence_end',
     'occurrence_verified', 'occurrence_evidence'];
+  if (record(value) && value.version === 2) keys.push('occurrence_precision', 'occurrence_expression', 'anchor_message_id');
   if (!record(value) || Object.keys(value).length !== keys.length || !Object.keys(value).every((key) => keys.includes(key))
-    || value.version !== 1 || typeof value.stage_verified !== 'boolean' || typeof value.occurrence_verified !== 'boolean') throw invalid();
+    || ![1, 2].includes(value.version as number) || typeof value.stage_verified !== 'boolean' || typeof value.occurrence_verified !== 'boolean') throw invalid();
   const stage = enumeration(value.stage, ['planned', 'agreed', 'rescheduled', 'cancelled', 'occurred', 'unknown'] as const);
   const stageEvidence = eventEvidence(value.stage_evidence), occurrenceEvidence = eventEvidence(value.occurrence_evidence);
   const occurrenceStart = date(value.occurrence_start), occurrenceEnd = date(value.occurrence_end);
@@ -63,8 +64,57 @@ function memoryEvent(value: unknown): MemoryEvent | null {
     || (occurrenceStart && occurrenceEnd && Date.parse(occurrenceEnd) < Date.parse(occurrenceStart))
     || (value.stage_verified && (stage === 'unknown' || stageEvidence.length === 0))
     || (value.occurrence_verified && (occurrenceStart === null || occurrenceEvidence.length === 0))) throw invalid();
-  return { version: 1, stage, stageVerified: value.stage_verified, stageEvidence, occurrenceStart, occurrenceEnd,
+  const precision = value.version === 2 ? enumeration(value.occurrence_precision, ['year', 'month', 'day', 'instant', 'unknown'] as const) : undefined;
+  if (value.version === 2 && (precision === 'unknown' && occurrenceStart !== null
+    || value.occurrence_expression !== null && (typeof value.occurrence_expression !== 'string'
+      || !value.occurrence_expression.trim() || value.occurrence_expression.length > 256))) throw invalid();
+  return { version: value.version as 1 | 2,
+    ...(value.version === 2 ? { occurrencePrecision: precision, occurrenceExpression: value.occurrence_expression as string | null,
+      anchorMessageId: optionalIdentifier(value.anchor_message_id) } : {}), stage, stageVerified: value.stage_verified, stageEvidence, occurrenceStart, occurrenceEnd,
     occurrenceVerified: value.occurrence_verified, occurrenceEvidence };
+}
+function memoryConditions(value: unknown): MemoryConditions | null {
+  if (value == null) return null;
+  if (!record(value) || Object.keys(value).length !== 2 || value.version !== 1
+    || !Array.isArray(value.items) || value.items.length === 0 || value.items.length > 8) throw invalid();
+  return { version: 1, items: value.items.map(item => {
+    if (!record(item) || Object.keys(item).length !== 3 || typeof item.source_supported !== 'boolean'
+      || !Object.keys(item).every(key => ['text', 'evidence', 'source_supported'].includes(key))) throw invalid();
+    const conditionText = text(item.text), evidence = eventEvidence(item.evidence);
+    if (evidence.length > 8) throw invalid();
+    if (conditionText.length > 1000 || (item.source_supported && evidence.length === 0)) throw invalid();
+    return { text: conditionText, evidence, sourceSupported: item.source_supported };
+  }) };
+}
+function memoryEvolution(value: unknown): MemoryEvolution | null {
+  if (value == null) return null;
+  const keys = ['version', 'kind', 'explanation', 'related_versions', 'evidence_message_ids',
+    'source_supported', 'claim_changed', 'condition_changed'];
+  if (!record(value) || value.version !== 1 || Object.keys(value).length !== keys.length
+    || !Object.keys(value).every(key => keys.includes(key))
+    || !Array.isArray(value.related_versions) || value.related_versions.length < 1 || value.related_versions.length > 8
+    || !Array.isArray(value.evidence_message_ids) || value.evidence_message_ids.length > 60
+    || typeof value.source_supported !== 'boolean' || typeof value.claim_changed !== 'boolean'
+    || typeof value.condition_changed !== 'boolean') throw invalid();
+  const relatedVersions = value.related_versions.map(ref => {
+    if (!record(ref) || Object.keys(ref).length !== 2
+      || !Object.keys(ref).every(key => ['memory_id', 'revision'].includes(key))) throw invalid();
+    return { memoryId: identifier(ref.memory_id), revision: integer(ref.revision, 1) };
+  });
+  const evidenceMessageIds = value.evidence_message_ids.map(identifier);
+  const explanation = text(value.explanation);
+  if (explanation.length > 1000 || (value.source_supported && !evidenceMessageIds.length)
+    || new Set(evidenceMessageIds).size !== evidenceMessageIds.length
+    || new Set(relatedVersions.map(ref => ref.memoryId)).size !== relatedVersions.length) throw invalid();
+  return { version: 1, kind: enumeration(value.kind, ['supplement', 'state_change', 'error_correction', 'historical_supplement', 'unresolved_conflict', 'independent'] as const),
+    explanation, relatedVersions, evidenceMessageIds,
+    sourceSupported: value.source_supported, claimChanged: value.claim_changed, conditionChanged: value.condition_changed };
+}
+export function memoryTemporalFields(entry: Record<string, unknown>) {
+  const validAt = date(entry.valid_at === undefined ? null : entry.valid_at);
+  const invalidAt = date(entry.invalid_at === undefined ? null : entry.invalid_at);
+  if (validAt && invalidAt && Date.parse(invalidAt) < Date.parse(validAt)) throw invalid();
+  return { validAt, invalidAt, event: memoryEvent(entry.event), conditions: memoryConditions(entry.conditions), evolution: memoryEvolution(entry.evolution) };
 }
 function content(entry: Record<string, unknown>): MemoryContent {
   const timing = entry.timing;
@@ -83,7 +133,7 @@ function content(entry: Record<string, unknown>): MemoryContent {
     timing: { recordedAt: date(timing.recorded_at), sourceStartedAt, sourceEndedAt, sourceTimeComplete: timing.source_time_complete,
       ...readCurrentStatus(timing) },
     validAt: date(entry.valid_at), invalidAt: date(entry.invalid_at),
-    event: memoryEvent(entry.event),
+    event: memoryEvent(entry.event), conditions: memoryConditions(entry.conditions), evolution: memoryEvolution(entry.evolution),
   };
 }
 function entries(value: unknown, key: string): Record<string, unknown>[] {
@@ -97,13 +147,13 @@ function distinct<T>(items: T[], id: (item: T) => string): T[] {
   return items;
 }
 
-// 当前列表与主动打开的历史分别读取；来源 UUID 不解释为文件路径。
-export function activeMemories(value: unknown, level: 'contact' | 'owner', contactId: string | null): ActiveMemory[] {
+// 管理列表包含仍有合法来源的当前与失效记忆；不代表生成资格。
+export function listedMemories(value: unknown, level: 'contact' | 'owner', contactId: string | null): MemoryVersion[] {
   return distinct(entries(value, 'memories').map((entry) => {
-    if (entry.level !== level || entry.status !== 'active'
+    if (entry.level !== level || !['active', 'invalidated'].includes(String(entry.status))
       || (level === 'contact' && identifier(entry.contact_id) !== contactId)) throw invalid();
     return {
-      ...content(entry), memoryId: identifier(entry.memory_id), level, status: 'active' as const,
+      ...content(entry), memoryId: identifier(entry.memory_id), level, status: enumeration(entry.status, ['active', 'invalidated'] as const),
       adoptionMethod: enumeration(entry.adoption_method, ['auto', 'manual'] as const), revision: integer(entry.revision, 1),
       supersedesMemoryId: optionalIdentifier(entry.supersedes_memory_id),
       sourceCandidateId: optionalIdentifier(entry.source_candidate_id),

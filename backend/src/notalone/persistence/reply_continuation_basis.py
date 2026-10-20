@@ -9,7 +9,7 @@ from notalone.persistence.reply_basis_changes import (
     historical_basis_revision_sha256, read_reply_basis_changes, require_current_reply_memory,
     require_generation_memory_dependencies,
 )
-from notalone.persistence.style_sample_store import require_reply_sources_current
+from notalone.persistence.reply_sources import require_reply_sources_current
 from notalone.reply.context import ContinuedReplyCandidate, ReplyContext
 from notalone.reply.errors import ReplyStoreInvariantError
 from notalone.reply.store import ReplyRequest

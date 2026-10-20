@@ -89,8 +89,8 @@ test('B10主动路径的冲突先澄清且零候选调用，明确替换后仍�
   assert.equal(after.purpose, '拒绝本次邀约。');
   assert.equal(after.candidateVersions.items.at(-1).history.versions[0].messages.length, 2);
   const markup = f.renderCandidates(after);
-  assert.match(markup, /本组版本/);
-  assert.match(markup, /原始版本/);
+  assert.doesNotMatch(markup, /aria-label="说法1版本历史"/);
+  assert.doesNotMatch(markup, /原始版本/);
   assert.doesNotMatch(markup, /正在读取本组版本/);
   assert.match(markup, /本次无法参加。/);
   assert.match(markup, /没有未来承诺。/);

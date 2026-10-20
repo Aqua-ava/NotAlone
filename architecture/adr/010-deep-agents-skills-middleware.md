@@ -14,6 +14,8 @@ LangChain 文档把这种 progressive disclosure 描述为一种可自行实现�
 
 ## 决策
 
+> 2026-10-19 后续修订：[ADR-074](074-automatic-conversation-skill-loading.md) 将回复区改为自动加载及只读实际策略；原显式版本 API 保留兼容，不再作为回复区手选入口。
+
 ### 1. 在 create_agent 中组合 SkillsMiddleware
 
 候选回复继续使用 LangChain `create_agent` 作为有界 Agent Loop，并在其 middleware 列表中组合 `deepagents.middleware.skills.SkillsMiddleware`。不改用完整 `create_deep_agent`，也不因采用该 middleware 自动启用 Deep Agents 的 Todo、通用文件系统、Shell、Subagent、Memory 或长任务能力。

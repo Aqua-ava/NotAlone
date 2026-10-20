@@ -70,8 +70,8 @@ test('待审核目录拒绝缺失私人来源列表及跨联系人范围建议�
     let release;
     backend.requestJson=()=>new Promise(resolve=>{release=resolve;});
     const priorDrafts=controller.getState().drafts;
-    const polling=controller.refresh(scope);
-    assert.equal(controller.getState().phase,'loading');
+    const polling=controller.poll(scope);
+    assert.equal(controller.getState().phase,'ready','后台核验保留已就绪状态，不让开关周期性变灰');
     assert.deepEqual(controller.getState().drafts,priorDrafts,'同修订轮询不能卸载已展开的私人依据卡片');
     release({generation:1,data:structuredClone(valid)});
     await polling;
@@ -134,13 +134,14 @@ test('待审核桥接只接受当前联系人操作，不提供模型发布或�
       scopeRevision: 1, directoryPhase: 'ready', contacts: [{ contactId }] }) };
     const backend = { getConnectionGeneration: () => 1, onStateChanged: () => () => {} };
     installSkillLearningBridge({ handle: (channel, handler, role) => { assert.equal(role, 'manager'); handlers.set(channel, handler); }, publish: () => {} }, backend, contacts);
-    assert.deepEqual([...handlers.keys()], ['skill-learning:get-state', 'skill-learning:refresh', 'skill-learning:configure', 'skill-learning:resume',
+    assert.deepEqual([...handlers.keys()], ['skill-learning:get-state', 'skill-learning:refresh', 'skill-learning:poll', 'skill-learning:configure', 'skill-learning:resume',
       'skill-learning:open-review', 'skill-learning:update-review', 'skill-learning:save-review', 'skill-learning:compare-review',
       'skill-learning:approve-review', 'skill-learning:decide-review', 'skill-learning:retry-review', 'skill-learning:close-review',
       'skill-learning:open-history', 'skill-learning:close-history', 'skill-learning:rollback-history', 'skill-learning:retry-history',
       'skill-learning:open-policies', 'skill-learning:close-policies', 'skill-learning:change-policy', 'skill-learning:undo-policy', 'skill-learning:retry-policy']);
     assert.throws(() => handlers.get('skill-learning:configure')({ contactId, scopeRevision: 1, enabled: true, confirmed: true, owner_id: contactId }));
     assert.throws(() => handlers.get('skill-learning:refresh')({ contactId, scopeRevision: 1, path: '/api/skills/publish' }));
+    assert.throws(() => handlers.get('skill-learning:poll')({ contactId, scopeRevision: 1, path: '/api/skills/publish' }));
   } finally { await rm(owned, { recursive: true, force: true }); }
 });
 
@@ -154,7 +155,6 @@ async function deletionFixture() {
     `export { MemoryReadingController } from ${JSON.stringify(path.resolve('src/main/memory/controller.ts'))};`,
     `export { ReplySession } from ${JSON.stringify(path.resolve('src/main/reply/session.ts'))};`,
     `export { SourceDeletionController } from ${JSON.stringify(path.resolve('src/main/sources/controller.ts'))};`,
-    `export { StyleSampleController } from ${JSON.stringify(path.resolve('src/main/style-samples/controller.ts'))};`,
     `export { ContactSession } from ${JSON.stringify(path.resolve('src/main/contacts/session.ts'))};`,
     `export { BackendRequestFailure } from ${JSON.stringify(path.resolve('src/main/backend/json-client.ts'))};`,
   ].join('\n'));
@@ -162,11 +162,11 @@ async function deletionFixture() {
   await build({ entryPoints: [entry], outfile: output, bundle: true, platform: 'node', format: 'esm', logLevel: 'silent' });
   const ports = await import(pathToFileURL(output).href);
   const contactId = randomUUID(), otherContactId = randomUUID(), preferenceId = randomUUID(), logicalId = randomUUID();
-  const memoryId = randomUUID(), sourceId = randomUUID(), sessionId = randomUUID(), taskId = randomUUID(), sampleId = randomUUID();
+  const memoryId = randomUUID(), sourceId = randomUUID(), sessionId = randomUUID(), taskId = randomUUID();
   const draftId = randomUUID();
   const comparisonId = randomUUID();
   const backendListeners = new Set();
-  const kinds = ['preference', 'memory', 'session', 'source', 'sample'];
+  const kinds = ['preference', 'memory', 'session', 'source'];
   const deletions = Object.fromEntries(kinds.map(kind => [kind, Promise.withResolvers()]));
   const records = { generation: 1, calls: [], deleted: new Set(), failure: null, failAfterCommit: false,
     verificationBarrier: null, verificationEntered: null, learningBarrier: null,
@@ -209,7 +209,7 @@ async function deletionFixture() {
     if (deleting) {
       const kind = request.path.includes('/expression-preferences/') ? 'preference'
         : request.path.includes('/memories/') ? 'memory'
-          : request.path.includes('/assistant-sessions/') ? 'session' : request.path.includes('/style-samples/') ? 'sample' : 'source';
+          : request.path.includes('/assistant-sessions/') ? 'session' : 'source';
       await deletions[kind].promise;
       if (records.failure === kind) {
         if (records.failAfterCommit) records.deleted.add(kind);
@@ -235,9 +235,6 @@ async function deletionFixture() {
       timing: { recorded_at: null, source_started_at: null, source_ended_at: null, source_time_complete: false },
       supersedes_memory_id: null, source_candidate_id: null,
     }] } };
-    if (request.path.endsWith('/style-samples')) return { generation, data: { samples: records.deleted.has('sample') ? [] : [{
-      sample_id: sampleId, text: '合成待删除样本', origin_kind: 'manual', origin_id: null, source_ids: [], saved_at: '2026-10-15T01:00:00Z', sending_status: 'unknown',
-    }] } };
     if (request.path.endsWith('/memory-candidates')) return { generation, data: { candidates: [] } };
     if (request.path.endsWith('/sources')) return { generation, data: { sources: [{ source_id: sourceId,
       file_name: null, record_count: 1, status: records.deleted.has('source') ? 'deleted' : 'active',
@@ -259,7 +256,6 @@ async function deletionFixture() {
   const coordinator = ports.coordinateSkillLearningDeletion(learning, memory, replies,
     { started: () => records.phases.preference.push('started'), settled: async () => records.phases.preference.push('settled') });
   const preferences = new ports.ExpressionPreferenceController(backend, contacts, coordinator);
-  const samples = new ports.StyleSampleController(backend, contacts, replies);
   const sources = new ports.SourceDeletionController(backend, contacts, async () => {
     records.sourceAcknowledgments += 1;
     learning.invalidate();
@@ -274,11 +270,9 @@ async function deletionFixture() {
   await replies.readSavedSession(scope());
   await preferences.refresh(scope());
   await learning.refresh(scope());
-  await samples.refresh(scope());
   const remove = kind => kind === 'preference' ? preferences.remove({ ...scope(), preferenceId, expectedRevision: 1 })
     : kind === 'memory' ? memory.remove({ ...scope(), memoryId, level: 'contact', revision: 1 })
       : kind === 'session' ? replies.deleteSavedSession({ ...scope(), sessionId, confirmed: true })
-        : kind === 'sample' ? samples.deleteSample({ ...scope(), sampleId })
         : sources.delete({ ...scope(), sourceId });
   const reconnect = async () => {
     records.generation += 1;
@@ -286,28 +280,9 @@ async function deletionFixture() {
     contacts.setConnection(records.generation);
     await contacts.refreshContacts(); select(otherContactId);
   };
-  return { owned, records, contacts, backend, deletions, learning, preferences, memory, replies, sources, samples, ports, scope,
+  return { owned, records, contacts, backend, deletions, learning, preferences, memory, replies, sources, ports, scope,
     select, reconnect, otherContactId, remove, sessionId };
 }
-
-test('真实样本删除开始即撤下已打开对照，轮询及重连等待实际删除结算', async () => {
-  const f = await deletionFixture();
-  try {
-    f.ports.coordinateSkillLearningSampleDeletion(f.learning, f.samples);
-    await f.learning.openReview({ ...f.scope(), draftId: f.learning.getState().drafts[0].draft_id });
-    assert.equal(f.learning.getState().review.comparison.after.candidates[0].text, '合成待删新结果');
-    const removing = f.remove('sample');
-    assert.equal(f.learning.getState().review, null, '样本DELETE尚未结算即清除私人对照及表单');
-    await f.learning.refresh(f.scope());
-    assert.deepEqual(f.learning.getState().drafts, []);
-    await f.reconnect();
-    await f.learning.refresh(f.scope());
-    assert.equal(f.learning.getState().review, null);
-    f.deletions.sample.resolve(); await removing;
-    await f.learning.refresh(f.scope());
-    assert.deepEqual(f.learning.getState().drafts, []);
-  } finally { f.deletions.sample.resolve(); await rm(f.owned, { recursive: true, force: true }); }
-});
 
 for (const [kind, label] of [['preference', '偏好'], ['memory', '记忆'], ['session', '助手会话'], ['source', '来源']]) {
 test(`真实${label}删除未结算时迟到GET、轮询、范围切换和重连不能恢复私人草稿`, async () => {

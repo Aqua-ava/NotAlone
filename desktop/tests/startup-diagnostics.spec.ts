@@ -4,14 +4,15 @@ import { access, chmod, readFile, rm, writeFile } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import path from 'node:path';
 import { selectMenu } from './app-fixture';
-import { prepareDatabase, projectDirectory, pythonExecutable, test } from './startup-fixture';
+import { openStartupDiagnostics, prepareDatabase, projectDirectory, pythonExecutable, test } from './startup-fixture';
 
 test('空库在原连接内正常初始化，不要求备份或切换数据库，无需终端 PATH', async ({ runningApp: { app, appProcess, userData } }) => {
   const manager = await app.firstWindow();
   const original = await readFile(path.join(userData, 'backend-launch.json'));
-  await manager.getByRole('button', { name: '应用配置', exact: true }).click();
-  await expect(manager.getByText('机器环境已就绪。', { exact: true })).toBeVisible({ timeout: 30_000 });
-  await expect(manager.getByText('已连接', { exact: true })).toBeVisible({ timeout: 15_000 });
+  await manager.getByRole('button', { name: '设置', exact: true }).click();
+  await expect(manager.getByText('已连接', { exact: true })).toBeVisible({ timeout: 30_000 });
+  await expect(manager.getByRole('heading', { name: '机器环境', exact: true })).toHaveCount(0);
+  await expect(manager.getByRole('heading', { name: '本机启动路径', exact: true })).toHaveCount(0);
   await expect(manager.getByRole('region', { name: '保留资料更新' })).toHaveCount(0);
   await expect(manager.getByRole('button', { name: '备份并完成更新', exact: true })).toHaveCount(0);
   expect((await readFile(path.join(userData, 'backend-launch.json'))).equals(original)).toBe(true);
@@ -27,7 +28,8 @@ const invalidConfigurationTest = test.extend({
 });
 invalidConfigurationTest('无效启动配置提供机器诊断，用户在 App 修正绝对路径后恢复并保存', async ({ runningApp: { app, userData }, startupDatabase }) => {
   const manager = await app.firstWindow();
-  await manager.getByRole('button', { name: '应用配置', exact: true }).click();
+  await expect(manager.getByRole('button', { name: '重试连接', exact: true })).toBeEnabled();
+  await manager.getByRole('button', { name: '查看诊断', exact: true }).click();
   await expect(manager.getByText('本机启动路径配置无效。', { exact: true })).toBeVisible();
   await prepareDatabase('migrate', startupDatabase.database);
   await manager.getByLabel('Python 可执行文件', { exact: true }).fill(pythonExecutable);
@@ -49,7 +51,7 @@ for (const [databaseState, message] of [
   const stateTest = test.extend({ databaseState });
   stateTest(`App 对 ${databaseState} 显示恢复说明，并阻止新后端启动`, async ({ runningApp: { app, userData } }) => {
     const manager = await app.firstWindow();
-    await manager.getByRole('button', { name: '应用配置', exact: true }).click();
+    await openStartupDiagnostics(manager);
     await expect(manager.getByText(message, { exact: true })).toBeVisible();
     await manager.getByRole('button', { name: '重新检查并连接', exact: true }).click();
     await expect(manager.getByText(message, { exact: true })).toBeVisible();
@@ -61,7 +63,7 @@ const pythonMissingTest = test.extend({ databaseState: 'ready',
   launchConfiguration: [{ pythonExecutable: '/synthetic/unavailable-python', projectDirectory }, { option: true }] });
 pythonMissingTest('Python 缺失可在 App 修正，重试只创建一个真实后端', async ({ runningApp: { app } }) => {
   const manager = await app.firstWindow();
-  await manager.getByRole('button', { name: '应用配置', exact: true }).click();
+  await openStartupDiagnostics(manager);
   await expect(manager.getByText('Python 可执行文件不可用。', { exact: true })).toBeVisible();
   await manager.getByLabel('Python 可执行文件', { exact: true }).fill(pythonExecutable);
   await manager.getByRole('button', { name: '保存启动路径', exact: true }).click();
@@ -91,7 +93,7 @@ invalidConfigurationTest('无写端 FIFO 启动配置不阻塞重试与明确退
 });
 databaseUnavailableTest('数据库连接失败不回显凭据，修正独立配置后从 App 重试恢复', async ({ runningApp: { app }, startupDatabase }) => {
   const manager = await app.firstWindow();
-  await manager.getByRole('button', { name: '应用配置', exact: true }).click();
+  await openStartupDiagnostics(manager);
   await expect(manager.getByText('数据库暂时不可连接。', { exact: true })).toBeVisible();
   expect(await manager.locator('body').innerText()).not.toContain('synthetic-secret');
   await writeFile(path.join(startupDatabase.directory, 'synthetic.env'), `NOTALONE_DATABASE_URL='${startupDatabase.database_url}'\n`, { mode: 0o600 });
@@ -109,7 +111,7 @@ const packageMissingTest = test.extend({ databaseState: 'ready',
 });
 packageMissingTest('必要 Python 包缺失与数据库错误分别显示，修正 Python 环境后恢复', async ({ runningApp: { app, userData } }) => {
   const manager = await app.firstWindow();
-  await manager.getByRole('button', { name: '应用配置', exact: true }).click();
+  await openStartupDiagnostics(manager);
   await expect(manager.getByText('后端包或必要依赖缺失。', { exact: true })).toBeVisible();
   expect(await access(path.join(userData, 'backend.info')).then(() => true, () => false)).toBe(false);
   await manager.getByLabel('Python 可执行文件', { exact: true }).fill(pythonExecutable);
@@ -123,21 +125,21 @@ const readyTest = test.extend({ databaseState: 'ready' });
 const ownerIncompleteTest = test.extend({ databaseState: 'owner-incomplete' });
 ownerIncompleteTest('setup 必需的本人创建时间缺失会阻止启动，测试库恢复后可重试并读取真实首启状态', async ({ runningApp: { app, userData }, startupDatabase }) => {
   const manager = await app.firstWindow();
-  await manager.getByRole('button', { name: '应用配置', exact: true }).click();
+  await openStartupDiagnostics(manager);
   await expect(manager.getByText('数据库必要结构不完整。', { exact: true })).toBeVisible();
   expect(await access(path.join(userData, 'backend.info')).then(() => true, () => false)).toBe(false);
   await prepareDatabase('restore-owner-timestamp', startupDatabase.database);
   await manager.getByRole('button', { name: '重新检查并连接', exact: true }).click();
   await expect(manager.getByText('机器环境已就绪。', { exact: true })).toBeVisible();
   await expect(manager.getByText('已连接', { exact: true })).toBeVisible({ timeout: 15_000 });
-  await expect(manager.getByRole('region', { name: '本人身份与模型' }).getByText('本人身份尚未初始化', { exact: true })).toBeVisible();
+  await expect(manager.getByRole('region', { name: 'AI 服务' }).getByText('本人身份尚未初始化', { exact: true })).toBeVisible();
   await manager.screenshot({ path: test.info().outputPath('owner-timestamp-restored.png') });
 });
 
 readyTest('已连接时明确停服务后可修改路径，保存不会自动启动，公开重试重新连接', async ({ runningApp: { app, userData } }) => {
   const manager = await app.firstWindow();
   await expect(manager.getByText('已连接', { exact: true })).toBeVisible({ timeout: 15_000 });
-  await manager.getByRole('button', { name: '应用配置', exact: true }).click();
+  await openStartupDiagnostics(manager);
   await expect(manager.getByLabel('后端握手文件', { exact: true })).toBeDisabled();
   await manager.getByRole('button', { name: '停止服务以修改路径', exact: true }).click();
   await expect(manager.getByLabel('后端握手文件', { exact: true })).toBeEnabled();
@@ -157,7 +159,7 @@ readyTest('已连接时明确停服务后可修改路径，保存不会自动启
 const saveRaceTest = test.extend({ databaseState: 'drift' });
 saveRaceTest('保存路径与连接重试并发时，旧路径不得启动后端或覆盖新诊断', async ({ runningApp: { app, userData }, startupDatabase }) => {
   const manager = await app.firstWindow();
-  await manager.getByRole('button', { name: '应用配置', exact: true }).click();
+  await openStartupDiagnostics(manager);
   await expect(manager.getByText('数据库迁移账本或基线发生漂移。', { exact: true })).toBeVisible();
   await prepareDatabase('restore-drift', startupDatabase.database);
   const result = await manager.evaluate(async () => {

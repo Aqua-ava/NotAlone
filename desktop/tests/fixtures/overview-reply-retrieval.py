@@ -130,9 +130,9 @@ def main() -> None:
             applied = migrate(database_url, ROOT / "backend/database/migrations")
             official = sorted(path.name for path in (ROOT / "backend/database/migrations").glob("[0-9][0-9][0-9]_*.sql"))
             if ([int(name[:3]) for name in official] != list(range(1, len(official) + 1))
-                    or len(applied) != 65 or len(official) != 65
-                    or official[-1] != "065_memory_upgrade_batches.sql"):
-                raise RuntimeError("概览回复夹具须使用正式连续001–当前迁移，精确到065。")
+                    or len(applied) != 91 or len(official) != 91
+                    or official[-1] != "091_memory_processing_scope_receipts.sql"):
+                raise RuntimeError("概览回复夹具须使用正式连续001–当前迁移，精确到091。")
             if migrate(database_url, ROOT / "backend/database/migrations"):
                 raise RuntimeError("概览回复迁移重复执行不应新增迁移。")
             with psycopg.connect(database_url) as connection:
@@ -174,8 +174,19 @@ def main() -> None:
                                        if item["speaker"] == "user")
             other_self = fixture.confirm(other_contact, "本人散步时喜欢带水。", UUID(other_owner_message["message_id"]),
                                          subject=FactSubject.SELF, category="preference")
+            # 空召回场景使用真实无聊天联系人，避免其他相关聊天构成合法的第二路召回。
+            empty_contact = uuid4()
+            with psycopg.connect(database_url) as connection:
+                connection.execute("INSERT INTO public.contact (owner_id, id, display_name) VALUES (%s,%s,%s)",
+                                   (fixture.owner_id, empty_contact, "无历史召回的合成联系人"))
+            from notalone.persistence.conversation_repository import PostgresConversationBindingRepository
+            PostgresConversationBindingRepository(database_url).create_binding(
+                owner_id=fixture.owner_id, contact_id=empty_contact, channel="wechat",
+                account_scope=f"synthetic-overview-reply-{fixture.owner_id}",
+                conversation_locator=f"wxid_empty_overview_{empty_contact.hex}",
+            )
             fixture.activate_replies(contact)
-            prepared = {"contactId": contact, "otherContactId": other_contact, "sourceToDelete": source,
+            prepared = {"contactId": contact, "otherContactId": other_contact, "emptyContactId": str(empty_contact), "sourceToDelete": source,
                         "draft": "想聊散步，先问安排。", "rawText": raw,
                         "otherPrivateText": other_private, "history": history, "unknown": unknown,
                         "manualContact": manual_contact, "manualOwner": manual_owner,

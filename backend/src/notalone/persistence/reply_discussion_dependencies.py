@@ -15,39 +15,32 @@ from notalone.reply.assistant_discussion import (
 )
 from notalone.reply.errors import ReplyStoreInvariantError
 from notalone.reply.store import ReplyRequest
-from notalone.persistence.style_sample_store import _with_reply_source_validation
+from notalone.persistence.reply_sources import _with_reply_source_validation
 from notalone.scopes import ContactScope
 
 
 _SNAPSHOT = "assistant_discussion_snapshot"
-_SAMPLES = "assistant_discussion_style_sample_ids"
 
 
 def _connection(connection: Any) -> Any:
     return getattr(connection, "connection", connection)
 
 
-def _metadata(row: dict[str, Any], scope: ContactScope) -> tuple[DiscussionSnapshot, tuple[UUID, ...]] | None:
+def _metadata(row: dict[str, Any], scope: ContactScope) -> tuple[DiscussionSnapshot] | None:
     payload = row["context_snapshot"]
     if payload is None:
         return None
     if not isinstance(payload, dict):
         raise ReplyStoreInvariantError("历史依赖记录结构无效。")
-    if _SNAPSHOT not in payload and _SAMPLES not in payload:
+    if _SNAPSHOT not in payload:
         return None
     try:
         snapshot = discussion_snapshot_from_payload(payload[_SNAPSHOT])
-        values = payload[_SAMPLES]
-        if not isinstance(values, list):
-            raise ValueError
-        samples = tuple(UUID(value) for value in values)
-        if values != [str(value) for value in sorted(set(samples))]:
-            raise ValueError
         if snapshot.scope != scope or snapshot.request_key != row["idempotency_key"]:
             raise ValueError
     except (KeyError, TypeError, ValueError, AttributeError):
         raise ReplyStoreInvariantError("历史依赖记录结构无效。") from None
-    return snapshot, samples
+    return (snapshot,)
 
 
 def _request_row(cursor: Any, scope: ContactScope, request_id: UUID) -> dict[str, Any]:
@@ -61,25 +54,12 @@ def _request_row(cursor: Any, scope: ContactScope, request_id: UUID) -> dict[str
     return row
 
 
-def _require_samples(cursor: Any, scope: ContactScope, identifiers: tuple[UUID, ...]) -> None:
-    from notalone.application.style_sample_service import StyleSampleError
-    from notalone.persistence.style_sample_store import _current_sample
-
-    rows = cursor.execute(
-        "SELECT * FROM public.style_sample WHERE owner_id=%s AND contact_id=%s AND id=ANY(%s::uuid[])",
-        (scope.owner_id, scope.contact_id, list(identifiers)),
-    ).fetchall()
-    if len(rows) != len(identifiers):
-        raise ReplyStoreInvariantError("历史使用的表达样本已失效。")
-    try:
-        for row in rows:
-            _current_sample(cursor, row)
-    except StyleSampleError:
-        raise ReplyStoreInvariantError("历史使用的表达样本已失效。") from None
 
 
 def _raw_sources(cursor: Any, scope: ContactScope, identifiers: tuple[UUID, ...]) -> set[UUID]:
     # A已核验并捕获消息/记忆的raw根；这里仅取实际raw ID，不在保存或读取时重新展开ref。
+    if not identifiers:
+        return set()
     rows = cursor.execute(
         "SELECT id FROM public.source_document WHERE owner_id=%s AND id=ANY(%s::uuid[]) "
         "UNION SELECT id FROM public.local_wechat_observation WHERE owner_id=%s AND id=ANY(%s::uuid[])",
@@ -91,7 +71,7 @@ def _raw_sources(cursor: Any, scope: ContactScope, identifiers: tuple[UUID, ...]
 def capture_reply_discussion_dependencies(
     connection: Any, request: ReplyRequest, snapshot: DiscussionSnapshot | None,
 ) -> DiscussionDependencies | None:
-    """调用方持有owner锁及当前租约；只记录实际交给模型的A快照身份与独立样本IDs。"""
+    """调用方持有owner锁及当前租约；只记录实际交给模型的 A 快照身份。"""
 
     from notalone.persistence.assistant_discussion_context import require_assistant_discussion_current
 
@@ -109,11 +89,8 @@ def capture_reply_discussion_dependencies(
         if existing is not None and existing[0] != snapshot:
             raise ReplyStoreInvariantError("模型上下文不能更换已捕获的助手讨论。")
         dependencies = require_assistant_discussion_current(raw, request.scope, snapshot)
-        samples = tuple(sorted(set(dependencies.style_sample_ids)))
-        _require_samples(cursor, request.scope, samples)
         payload = dict(row["context_snapshot"] or {})
-        payload.update({_SNAPSHOT: discussion_snapshot_to_payload(snapshot),
-                        _SAMPLES: [str(value) for value in samples]})
+        payload.update({_SNAPSHOT: discussion_snapshot_to_payload(snapshot)})
         cursor.execute("UPDATE public.reply_request SET context_snapshot=%s WHERE id=%s",
                        (Jsonb(payload), request.request_id))
         for source_id in _raw_sources(cursor, request.scope, dependencies.source_ids):
@@ -143,14 +120,11 @@ def require_reply_discussion_dependencies(
             if expected_snapshot is not None:
                 raise ReplyStoreInvariantError("助手讨论缺少模型调用前的捕获记录。")
             return None
-        snapshot, samples = metadata
+        (snapshot,) = metadata
         if (current or expected_snapshot is not None) and snapshot != expected_snapshot:
             raise ReplyStoreInvariantError("助手讨论与模型调用前的快照不一致。")
         guard = require_assistant_discussion_current if current else require_assistant_discussion_available
         dependencies = guard(raw, scope, snapshot)
-        if tuple(sorted(set(dependencies.style_sample_ids))) != samples:
-            raise ReplyStoreInvariantError("历史样本与模型调用前的依赖记录不一致。")
-        _require_samples(cursor, scope, samples)
         captured = {row["source_id"] for row in cursor.execute(
             "SELECT source_id FROM public.reply_original_source_use "
             "WHERE owner_id=%s AND contact_id=%s AND reply_request_id=%s",
@@ -161,56 +135,6 @@ def require_reply_discussion_dependencies(
         return dependencies
 
 
-def reply_style_sample_dependencies(
-    connection: Any, scope: ContactScope, request_id: UUID, *, require_available: bool = True,
-) -> tuple[UUID, ...]:
-    """返回真实请求/祖先样本身份；删除预捕获可关闭末尾可用性复验。
-
-    调用方持有owner锁。False仅用于父来源和快照清除前的删除依赖捕获，
-    仍保留原范围、codec和样本图；生成、保存及普通读取默认复验可用性。
-    """
-
-    from notalone.persistence.style_sample_store import _reply_ancestor_ids
-
-    if type(require_available) is not bool:
-        raise ReplyStoreInvariantError("历史依赖读取模式无效。")
-    with _connection(connection).cursor(row_factory=dict_row) as cursor:
-        _request_row(cursor, scope, request_id)
-        requests = _reply_ancestor_ids(cursor, owner_id=scope.owner_id, request_id=request_id)
-        rows = cursor.execute(
-            "SELECT idempotency_key,context_snapshot FROM public.reply_request "
-            "WHERE owner_id=%s AND contact_id=%s AND id=ANY(%s::uuid[])",
-            (scope.owner_id, scope.contact_id, requests),
-        ).fetchall()
-        identifiers = {row["sample_id"] for row in cursor.execute(
-            "SELECT sample_id FROM public.reply_style_sample_use "
-            "WHERE owner_id=%s AND contact_id=%s AND reply_request_id=ANY(%s::uuid[])",
-            (scope.owner_id, scope.contact_id, requests),
-        ).fetchall()}
-        for row in rows:
-            metadata = _metadata(row, scope)
-            if metadata is not None:
-                identifiers.update(metadata[1])
-        dependencies = cursor.execute(
-            "WITH RECURSIVE samples(id) AS (SELECT unnest(%s::uuid[]) UNION "
-            "SELECT dependency.id FROM samples JOIN public.style_sample AS sample ON sample.id=samples.id "
-            "AND sample.owner_id=%s AND sample.contact_id=%s "
-            "CROSS JOIN LATERAL unnest(sample.dependency_sample_ids) AS dependency(id)) "
-            "SELECT id FROM samples ORDER BY id",
-            (list(identifiers), scope.owner_id, scope.contact_id),
-        ).fetchall()
-        result = tuple(row["id"] for row in dependencies)
-        if require_available:
-            _require_samples(cursor, scope, result)
-        elif result:
-            row = cursor.execute(
-                "SELECT count(*) AS count FROM public.style_sample "
-                "WHERE owner_id=%s AND contact_id=%s AND id=ANY(%s::uuid[])",
-                (scope.owner_id, scope.contact_id, list(result)),
-            ).fetchone()
-            if row["count"] != len(result):
-                raise ReplyStoreInvariantError("历史样本编号不属于当前联系人。")
-        return result
 
 
 def reply_discussion_request_dependencies(
@@ -246,8 +170,8 @@ def reply_discussion_metadata(connection: Any, scope: ContactScope, request_id: 
         metadata = _metadata(_request_row(cursor, scope, request_id), scope)
     if metadata is None:
         return {}
-    snapshot, samples = metadata
-    return {_SNAPSHOT: discussion_snapshot_to_payload(snapshot), _SAMPLES: [str(value) for value in samples]}
+    (snapshot,) = metadata
+    return {_SNAPSHOT: discussion_snapshot_to_payload(snapshot)}
 
 
 @dataclass(frozen=True, slots=True)
@@ -298,8 +222,8 @@ def captured_owner_reply_discussion_uses(
     with _connection(connection).cursor(row_factory=dict_row) as cursor:
         rows = cursor.execute(
             "SELECT DISTINCT contact_id FROM public.reply_request "
-            "WHERE owner_id=%s AND (context_snapshot ? %s OR context_snapshot ? %s) "
-            "ORDER BY contact_id", (owner_id, _SNAPSHOT, _SAMPLES),
+            "WHERE owner_id=%s AND context_snapshot ? %s "
+            "ORDER BY contact_id", (owner_id, _SNAPSHOT),
         ).fetchall()
     return tuple(use for row in rows for use in captured_reply_discussion_uses(
         connection, ContactScope(owner_id, row["contact_id"]),

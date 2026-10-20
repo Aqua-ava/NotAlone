@@ -116,6 +116,7 @@ def project_current_status(
     timing: MemoryTiming, *, category: str, text: str,
     valid_at: datetime | None = None, invalid_at: datetime | None = None,
     source_statements: Sequence[tuple[str, datetime | None]] = (),
+    has_conditions: bool = False,
 ) -> MemoryTiming:
     """只保留可判定的稳定主张；分类或词表未命中不证明持续性。"""
     unfinished = category == "common_fact" and _UNFINISHED_FACT.search(text)
@@ -129,6 +130,8 @@ def project_current_status(
         return replace(timing, current_status="historical", current_status_reason=(
             "已离开资料声明的可引用区间；只保留历史，不据此认定约定完成或现实状态结束。"
         ))
+    if has_conditions:
+        return replace(timing, current_status="current_unverified", current_status_reason="附适用条件；来源只支持当时的条件表达，当前是否满足未知。")
     if valid_at is not None and current < valid_at:
         return replace(timing, current_status="current_unverified", current_status_reason="声明区间尚未开始；当前未核实。")
     intervals = tuple(_source_interval(*item) for item in source_statements)

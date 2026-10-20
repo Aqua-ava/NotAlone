@@ -560,7 +560,18 @@ public enum LocalOcr {
     }
 
     static func recognizeHeader(_ image: CGImage) throws -> HeaderOcrResult {
-        HeaderOcrResult(fragments: try recognizeFragments(image))
+        let fragments = try recognizeFragments(image)
+        let raw = HeaderOcrResult(fragments: fragments)
+        // 单行证据与同图几何检查均通过才增加一次本地OCR；原始识别值始终保留。
+        let centers = fragments.map { $0.1.midY }
+        guard let low = centers.min(), let high = centers.max(), high - low <= 0.18,
+              let masked = HeaderTextFallbackGeometry.maskedImage(image, raw: raw) else { return raw }
+        guard let maskedFragments = try? recognizeFragments(masked) else { return raw }
+        let text = HeaderOcrResult(fragments: maskedFragments)
+        // 连续双点也可能是被误读的省略号，保留原始值但不为其增加回退证据。
+        guard !raw.text.contains(".."), !text.text.contains(".."), !text.text.isEmpty,
+              text.confidence.isFinite, (0...1).contains(text.confidence) else { return raw }
+        return HeaderOcrResult(fragments: fragments, textFallback: HeaderTextFallback(text))
     }
 
     private static func recognizeFragments(_ image: CGImage) throws -> [(RecognizedLine, CGRect)] {

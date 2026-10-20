@@ -1,3 +1,4 @@
+import { openFileImport } from './file-import-navigation';
 import { confirmHelperContact } from './foreground-confirmation-actions';
 import { expect, type Page } from '@playwright/test';
 import { readFile, writeFile } from 'node:fs/promises';
@@ -15,7 +16,7 @@ export type ImportPages = {
 
 // 文件输入由测试宿主拥有，页面仅使用生产具名选择和预览确认入口。
 export async function confirmImportPage(manager: Page, target?: string): Promise<void> {
-  await manager.getByRole('button', { name: '历史导入', exact: true }).click();
+  await openFileImport(manager);
   await manager.getByRole('button', { name: '选择历史文件', exact: true }).click();
   await manager.getByRole('combobox', { name: '资料归属联系人' }).selectOption(target ?? 'new');
   if (!target) await manager.getByRole('textbox', { name: '新联系人名称' }).fill('合成导入联系人');
@@ -45,11 +46,16 @@ export async function savedImport(pages: ImportPages): Promise<void> {
   const progress = manager.getByRole('region', { name: '本次导入处理', exact: true });
   await expect(progress.getByText('新增 6 条消息，已存在 0 条消息。', { exact: true })).toBeVisible();
   await expect(progress.getByText('原任务全部步骤和最终核验已成功。', { exact: true })).toBeVisible({ timeout: 20_000 });
-  await expect(progress.getByRole('region', { name: '归属联系人来源', exact: true })).toContainText('synthetic-import.jsonl · 6 条 · 有效来源');
+  await progress.getByRole('button', { name: '查看本次导入资料', exact: true }).click();
+  const sources = manager.getByRole('region', { name: '已导入资料', exact: true });
+  await expect(sources.getByRole('listitem')).toHaveCount(1);
+  await expect(sources.getByRole('listitem')).toContainText('synthetic-import.jsonl');
+  await expect(sources.getByRole('listitem')).toContainText('6 条记录');
+  await expect(sources.getByRole('status')).toHaveText('有效来源');
   const original = await originalImport(importBackend);
   const first = await importBackend.task(original);
   expect((first.data.steps as Array<{ status: string }>).map((step) => step.status)).toEqual(['succeeded', 'succeeded', 'succeeded', 'succeeded', 'succeeded']);
-  await manager.getByRole('button', { name: '联系人与绑定', exact: true }).click();
+  await manager.getByRole('button', { name: '联系人', exact: true }).click();
   await expect(manager.getByRole('button', { name: '选择合成导入联系人', exact: true })).toBeVisible();
   await confirm(pages, importBackend.data.file_path, original.contact_id);
   await manager.getByRole('button', { name: '正式导入这份资料', exact: true }).click();
@@ -135,8 +141,8 @@ export async function priorityImport(pages: ImportPages): Promise<void> {
   await confirm(pages, prepared.file_path as string);
   await manager.getByRole('button', { name: '正式导入这份资料', exact: true }).click();
   await expect.poll(async () => (await importBackend.command('observations')).extraction_entered).toBe(true);
-  await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('我会晚一点回复你。');
-  await helper.getByRole('button', { name: '生成候选', exact: true }).click();
+  await helper.getByRole('textbox', { name: '有什么想说的', exact: true }).fill('我会晚一点回复你。');
+  await helper.getByRole('button', { name: '帮我表达', exact: true }).click();
   await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveCount(0);
   // 点击完成不证明 HTTP 已进入优先级等待；逐个释放已开始的模型调用，
   // 直到真实回复模型进入。最多释放三次，始终留下至少一次后续模型工作。
@@ -224,7 +230,7 @@ export async function staleImportConnection(pages: ImportStalePages, failure: bo
   await expect(manager.getByText('本机服务尚未连接', { exact: true })).toBeVisible();
   await importBackend.command('restart');
   await manager.getByRole('button', { name: '重试连接', exact: true }).click();
-  await expect(manager.getByText('本机服务已连接', { exact: true })).toBeVisible();
+  await expect(manager.getByText('已连接', { exact: true })).toBeVisible();
   importProxy.release(failure);
   expect(await latePromise).toBe('completed');
   await expect(manager.getByText('尚未选择文件', { exact: true })).toBeVisible();
@@ -254,7 +260,7 @@ export async function lostImportResponse(pages: ImportStalePages): Promise<void>
 
 export async function firstImportBootstrap(manager: Page, contactBackend: ContactFixture,
   chooseFile: (filePath: string) => Promise<void>): Promise<void> {
-  await expect(manager.getByText('本机服务已连接', { exact: true })).toBeVisible({ timeout: 20_000 });
+  await expect(manager.getByText('已连接', { exact: true })).toBeVisible({ timeout: 20_000 });
   const request = (endpoint: string) => requestFixtureHttp(contactBackend.infoPath, endpoint);
   expect((await request('/api/sync/status')).status).toBe(503);
   const filePath = path.join(contactBackend.directory, 'first-owner.jsonl');

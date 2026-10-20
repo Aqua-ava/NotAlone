@@ -1,6 +1,7 @@
 import { readPersonalBackground } from '../personal-background';
 import type { LayeredMemory, LayeredMemoryProfile, LayeredMemoryQuality, LayeredMemoryQualityStage, LayeredMemoryReference, LayeredMemoryScenario } from '../../shared/memory-bridge';
 import { isUuid } from '../uuid';
+import { memoryTemporalFields } from './read';
 import { readCurrentStatus } from './current-status';
 
 const invalid = () => new Error('主题资料响应不可用。');
@@ -37,7 +38,7 @@ function reference(value: unknown): LayeredMemoryReference {
   if (typeof timing.source_time_complete !== 'boolean' || (sourceStartedAt === null) !== (sourceEndedAt === null)
     || (timing.source_time_complete && sourceStartedAt === null)
     || (sourceStartedAt && sourceEndedAt && Date.parse(sourceStartedAt) > Date.parse(sourceEndedAt))) throw invalid();
-  return { memoryId: identifier(entry.memory_id), revision: integer(entry.revision, 1),
+  return { ...memoryTemporalFields(entry), memoryId: identifier(entry.memory_id), revision: integer(entry.revision, 1),
     provenanceKind: enumeration(entry.provenance_kind, ['manual_entry', 'source_supported']),
     timing: { recordedAt: date(timing.recorded_at), sourceStartedAt, sourceEndedAt,
       sourceTimeComplete: timing.source_time_complete, ...readCurrentStatus(timing) } };

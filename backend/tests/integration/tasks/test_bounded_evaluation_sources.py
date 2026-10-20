@@ -65,6 +65,32 @@ class BoundedEvaluationSourcesTest(unittest.TestCase):
         self.assertEqual(len(json.loads(Path(close["archive_path"]).read_bytes())["snapshot"]["cases"]), 15)
         self.receipt = None
 
+    def test_migration_receipt_drift_blocks_runtime_but_preserves_explicit_cleanup(self):
+        self.receipt = prepare_bounded_sources(self.directory)
+        sources = load_bounded_sources(self.receipt)
+        self.assertEqual(self.receipt["format_version"], 2)
+        self.assertEqual(list(self.receipt["migration_checksums"]), self.receipt["migrations"])
+        self.assertGreaterEqual(len(self.receipt["migrations"]), 89)
+        with psycopg.connect(sources.database_url) as connection:
+            connection.execute("UPDATE public.notalone_schema_migration SET checksum='synthetic-drift' WHERE name=%s",
+                               (self.receipt["migrations"][-1],))
+        with self.assertRaisesRegex(BoundedSourcesError, "migration_set_changed"):
+            load_bounded_sources(self.receipt)
+        close = cleanup_bounded_sources(self.receipt, archive_directory=self.archive)
+        self.assertEqual(close["database_residual"], 0)
+        self.receipt = None
+
+    def test_legacy_receipt_can_only_clean_up_without_running_new_runtime(self):
+        self.receipt = prepare_bounded_sources(self.directory)
+        self.receipt["format_version"] = 1
+        self.receipt.pop("migration_checksums")
+        Path(self.receipt["receipt_path"]).write_text(json.dumps(self.receipt))
+        with self.assertRaisesRegex(BoundedSourcesError, "migration_set_changed"):
+            load_bounded_sources(self.receipt)
+        close = cleanup_bounded_sources(self.receipt, archive_directory=self.archive)
+        self.assertEqual(close["database_residual"], 0)
+        self.receipt = None
+
     def test_receipt_type_change_is_not_equivalent_to_original_numeric_version(self):
         self.receipt = prepare_bounded_sources(self.directory)
         changed = copy.deepcopy(self.receipt)

@@ -51,7 +51,7 @@ def reserve_interrupted_generation_in_transaction(
     )
     if terminal.state != "failed" or terminal.interruption_reason != original["interruption_reason"]:
         raise AssistantSessionRejected("generation_not_interrupted")
-    # 原失败 turn 尚未填回 C 结果时，仍继承 C 模型前实际捕获的资料和样本。
+    # 原失败 turn 尚未填回 C 结果时，仍继承 C 模型前实际捕获的资料。
     try:
         dependencies = set(original["dependency_ids"]) | captured_generation_dependencies(
             connection, scope, original["idempotency_key"], binding_id, original["reply_request_id"],

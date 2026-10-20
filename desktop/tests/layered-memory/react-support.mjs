@@ -1,7 +1,7 @@
 import { build } from 'esbuild';
 import { chromium } from '@playwright/test';
 
-export async function withMemoryPage(f, signal, run) {
+export async function withMemoryPage(f, signal, run, { ownerPanel = false } = {}) {
   const browser = await chromium.launch({ channel: 'chrome', headless: true, timeout: 10000 });
   const cancel = () => { void browser.close().catch(() => {}); };
   signal.addEventListener('abort', cancel, { once: true });
@@ -13,6 +13,7 @@ export async function withMemoryPage(f, signal, run) {
     const compiled = await build({ stdin: { contents: `
       import React from 'react'; import { createRoot } from 'react-dom/client';
       import { MemoryPage } from './src/renderer/MemoryPage';
+      import { OwnerLayeredMemoryPanel } from './src/renderer/OwnerLayeredMemoryPanel';
       const listeners = new Set(), ownerListeners = new Set();
       window.deliverOwnerMemory = state => { for (const listener of ownerListeners) listener(state); };
       window.deliverMemory = (state) => { for (const listener of listeners) listener(state); };
@@ -21,7 +22,7 @@ export async function withMemoryPage(f, signal, run) {
         : method === 'onOwnerLayeredMemoryChanged' ? (listener) => { ownerListeners.add(listener); return () => ownerListeners.delete(listener); }
         : (...args) => window.memoryCommand(method, ...args) }),
         traces: { onStateChanged: () => () => {}, getState: async () => ({ revision: 0, contactId: null, scopeRevision: 0 }) } };
-      createRoot(document.getElementById('root')).render(<MemoryPage session={{ state: ${JSON.stringify(f.contacts.getState())}, error: '', selectContact: async () => {} }} navigate={() => {}} />);
+      createRoot(document.getElementById('root')).render(${ownerPanel ? '<OwnerLayeredMemoryPanel />' : `<MemoryPage session={{ state: ${JSON.stringify(f.contacts.getState())}, error: '', selectContact: async () => {} }} navigate={() => {}} />`});
     `, resolveDir: process.cwd(), loader: 'tsx' }, bundle: true, platform: 'browser', format: 'iife', jsx: 'automatic', loader: { '.css': 'empty' }, write: false });
     // localhost 与实际开发页面同为可信来源，保留浏览器原生 UUID，不注入替代实现。
     await page.route('http://127.0.0.1/notalone-memory-test', route => route.fulfill({ contentType: 'text/html', body: '<div id="root"></div>' }));

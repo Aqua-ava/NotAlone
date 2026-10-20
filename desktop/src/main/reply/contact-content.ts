@@ -6,27 +6,52 @@ import { interruptedReplyInput } from './assistant-interrupted-retry';
 import { isUuid } from '../uuid';
 import type { ReplySessionState } from '../../shared/reply-bridge';
 
+// 两个模式的输入分别保留来历，切换模式不能让独立输入继承另一字段的来源依赖。
+export type DerivedIntent = { direction: boolean; purpose: boolean };
+export function invalidatedIntent(derived: DerivedIntent): Partial<ReplySessionState> {
+  return { ...(derived.direction ? { direction: '' } : {}), ...(derived.purpose ? { purpose: '' } : {}) };
+}
+
 // 仅保留本次输入；权限、请求状态、消息正文和已保存讨论必须重新读取。
 export type RetainedContactContent = {
   sessionId: string | null;
   draft: string;
   notice?: string;
   result?: { continuation?: NonNullable<ReplySessionState['result']>['continuation']; replyRequestId: string; selectedCandidateId: string | null; edits: { candidateId: string; text: string }[] };
-  directionDerived: boolean;
+  derivedIntent: DerivedIntent;
   inputVersionId: string | null;
+  workspaceRequirementInputVersion?: string;
   candidateDrafts: NonNullable<ReplySessionState['candidateDrafts']>;
   input: Pick<ReplySessionState, 'options' | 'mode' | 'targetMessageId' | 'direction' | 'purpose'
-    | 'correction' | 'requirements' | 'clarificationAnswer' | 'skillChoice' | 'scene'>;
+    | 'correction' | 'requirements' | 'supplementInput' | 'clarificationAnswer' | 'skillChoice' | 'scene' | 'workspaceMigrationNotice'>;
 };
 
-export function retainContactContent(state: ReplySessionState, directionDerived: boolean, draft: string): RetainedContactContent | undefined {
+export function retainContactContent(state: ReplySessionState, derivedIntent: DerivedIntent, draft: string,
+  workspaceRequirementInputVersion?: string): RetainedContactContent | undefined {
   if (state.sessionDeletion === 'deleting' || state.sessionDeletion === 'failed'
     || state.sessionCatalog?.selectionPending || state.sourceAvailability) return;
-  const { options, mode, targetMessageId, direction, purpose, correction, requirements, clarificationAnswer, skillChoice, scene } = state;
-  return structuredClone({ sessionId: state.savedSession?.sessionId ?? null, draft, directionDerived, inputVersionId: state.savedSession?.currentInputVersionId ?? state.result?.inputVersionId ?? null, candidateDrafts: state.candidateDrafts ?? [],
+  const { options, mode, targetMessageId, direction, purpose, correction, requirements, supplementInput, clarificationAnswer, skillChoice, scene, workspaceMigrationNotice } = state;
+  return structuredClone({ sessionId: state.savedSession?.sessionId ?? null, draft, derivedIntent, workspaceRequirementInputVersion, inputVersionId: state.savedSession?.currentInputVersionId ?? state.result?.inputVersionId ?? null, candidateDrafts: state.candidateDrafts ?? [],
     result: state.result ? { continuation: state.result.continuation, replyRequestId: state.result.replyRequestId, selectedCandidateId: state.selectedCandidateId,
       edits: state.result.candidates.map((candidate) => ({ candidateId: candidate.original.candidateId, text: candidate.editedText })) } : undefined,
-    input: { options, mode, targetMessageId, direction, purpose, correction, requirements, clarificationAnswer, skillChoice, scene } });
+    input: { options, mode, targetMessageId, direction, purpose, correction, requirements, supplementInput, clarificationAnswer, skillChoice, scene, workspaceMigrationNotice } });
+}
+
+// 临时关联只含版本身份；切回联系人后必须重新核对当前讨论、有效输入和恢复结果。
+export function restoredWorkspaceRequirementVersion(content: RetainedContactContent, saved: SavedAssistantSession,
+  result: ReplySessionState['result'] | undefined): string | undefined {
+  const version = content.workspaceRequirementInputVersion;
+  return version && content.input.mode === 'rewrite_draft' && content.input.options.inputKind === 'workspace'
+    && version === content.inputVersionId && content.sessionId === saved.sessionId
+    && version === saved.currentInputVersionId
+    && saved.inputs.some((input) => input.inputVersionId === version && input.state === 'active')
+    && result?.assistantSessionId === saved.sessionId && result.inputVersionId === version
+    && result.input.mode === 'rewrite_draft' && result.input.inputKind === 'workspace' ? version : undefined;
+}
+
+// 混合补充可能含来源派生理解；只有明确来自旧独立要求入口的内容可继续保留。
+export function invalidatedSupplement(input: RetainedContactContent['input']): Partial<RetainedContactContent['input']> {
+  return input.supplementInput === true || input.mode !== 'rewrite_draft' && input.supplementInput !== false ? { requirements: '', supplementInput: false } : {};
 }
 
 // 只有权威读取确认后的字段可以回到视图；失效引用只清理相关输入。
@@ -38,7 +63,8 @@ export async function validateContactInput(backend: BackendHost, contactId: stri
   const notices: string[] = content.notice ? [content.notice] : [];
   if (content.inputVersionId && !saved.inputs.some((input) => input.inputVersionId === content.inputVersionId && input.state === 'active')) {
     update.correction = ''; update.clarificationAnswer = '';
-    if (content.directionDerived) { update.direction = ''; update.purpose = ''; }
+    Object.assign(update, invalidatedSupplement(content.input));
+    Object.assign(update, invalidatedIntent(content.derivedIntent));
     notices.push('原讨论来源已失效，相关理解已清除。');
   }
   if (content.input.targetMessageId) {
@@ -54,7 +80,8 @@ export async function validateContactInput(backend: BackendHost, contactId: stri
     } while (cursor);
     if (!update.messages) {
       update.targetMessageId = null; update.correction = ''; update.clarificationAnswer = '';
-      if (content.directionDerived) update.direction = '';
+      Object.assign(update, invalidatedSupplement(content.input));
+      if (content.derivedIntent.direction) update.direction = '';
       notices.push('待回复对象已不可用，请重新选择。');
     }
   }
@@ -85,8 +112,7 @@ export async function validateContactInput(backend: BackendHost, contactId: stri
       const input = await interruptedReplyInput(backend, turn, { contactId, displayName: contactDisplayName }, signal, current);
       if (!current()) throw new Error('恢复范围已变化。');
       update.result = { replyRequestId: turn.reply.replyRequestId, assistantSessionId: saved.sessionId!,
-        inputVersionId: turn.inputVersionId, input, continuation: content.result.continuation, contextEvidenceIds: turn.reply.contextEvidenceIds,
-        styleSampleIds: turn.reply.styleSampleIds, expressionPreferenceIds: turn.reply.expressionPreferenceIds,
+        inputVersionId: turn.inputVersionId, input, continuation: content.result.continuation, contextEvidenceIds: turn.reply.contextEvidenceIds, expressionPreferenceIds: turn.reply.expressionPreferenceIds,
         expressionPreferences: turn.reply.expressionPreferences,
         usedSkill: turn.reply.usedSkill, inputBudget: turn.reply.inputBudget,
         basisChanges: turn.basisChanges ?? turn.reply.basisChanges,
@@ -102,9 +128,10 @@ export async function validateContactInput(backend: BackendHost, contactId: stri
 }
 
 export function removeDependentContent(content: RetainedContactContent): RetainedContactContent {
-  return { ...content, notice: '部分来源尚未核对，相关派生内容已清除，独立输入仍保留。', result: undefined, candidateDrafts: [], inputVersionId: null,
+  return { ...content, notice: '部分来源尚未核对，相关派生内容已清除，独立输入仍保留。', result: undefined, candidateDrafts: [], inputVersionId: null, workspaceRequirementInputVersion: undefined,
     input: { ...content.input, targetMessageId: null, correction: '', clarificationAnswer: '',
-      ...(content.directionDerived ? { direction: '', purpose: '' } : {}) } };
+      ...invalidatedSupplement(content.input),
+      ...invalidatedIntent(content.derivedIntent) } };
 }
 
 // 删除检查点同样清洗非当前联系人；只把权威读取仍认可的依赖留在内存。
@@ -115,8 +142,9 @@ export async function revalidateRetainedContent(backend: BackendHost, contactId:
   if (!current() || saved.generation !== backend.getConnectionGeneration()) throw new Error('删除复验范围已变化。');
   const update = await validateContactInput(backend, contactId, content, '', { ...saved, phase: 'ready' }, signal, current);
   const valid = new Set(saved.turns.flatMap((turn) => turn.reply?.candidates.map((candidate) => candidate.candidateId) ?? []));
-  const { options, mode, targetMessageId, direction, purpose, correction, requirements, clarificationAnswer, skillChoice, scene } = { ...content.input, ...update };
+  const { options, mode, targetMessageId, direction, purpose, correction, requirements, supplementInput, clarificationAnswer, skillChoice, scene, workspaceMigrationNotice } = { ...content.input, ...update };
   return { ...content, notice: update.contentRestoreNotice, result: update.result ? content.result : undefined,
+    workspaceRequirementInputVersion: restoredWorkspaceRequirementVersion(content, { ...saved, phase: 'ready' }, update.result),
     candidateDrafts: content.candidateDrafts.filter((draft) => valid.has(draft.candidateId)),
-    input: { options, mode, targetMessageId, direction, purpose, correction, requirements, clarificationAnswer, skillChoice, scene } };
+    input: { options, mode, targetMessageId, direction, purpose, correction, requirements, supplementInput, clarificationAnswer, skillChoice, scene, workspaceMigrationNotice } };
 }

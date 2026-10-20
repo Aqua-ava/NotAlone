@@ -41,8 +41,6 @@ class AuthenticExpressionInterruptedAuthoritativeRetryTests(FidelityHttpFixture,
     def test_numbered_proactive_restores_more_than_4096_accumulated_requirements(self):
         self._exercise("proactive", large=True)
 
-    def test_manual_sample_only_delete_erases_authoritative_retry_before_model(self):
-        self._exercise("draft", large=False, removal="sample")
 
     def test_raw_source_delete_erases_authoritative_numbered_retry_before_model(self):
         self._exercise("response", large=True, removal="source")
@@ -54,10 +52,6 @@ class AuthenticExpressionInterruptedAuthoritativeRetryTests(FidelityHttpFixture,
             {"type": "initiate_conversation", "purpose": intent} if mode == "proactive" else
             {"type": "rewrite_draft", "draft_text": intent, "include_relationship_context": True})
         content["user_instruction"] = "自然一点"
-        samples_path = f"/api/contacts/{contact}/style-samples"
-        sample = self._save_sample(samples_path, "合成旧表达：我会参加，但只供说法参考。")
-        self.assertEqual(sample["origin_kind"], "manual")
-        self.assertEqual(sample["source_ids"], [])
         session = self._post(f"/api/contacts/{contact}/assistant-session/default", {})
         path = f"/api/contacts/{contact}/assistant-sessions/{session['session_id']}"
         self.reply_model.plans.append({
@@ -69,10 +63,6 @@ class AuthenticExpressionInterruptedAuthoritativeRetryTests(FidelityHttpFixture,
             "contact_id": contact, "idempotency_key": str(uuid4()), "skill_disabled": True, "content": content,
         })
         self.assertEqual(len(self.reply_model.payloads), 1)
-        original_payload = self.reply_model.payloads[0]
-        self.assertEqual([item["sample_id"] for item in original_payload["style_references"]], [sample["sample_id"]])
-        self.assertTrue(all(item["weight"] == "low" and item["factual_role"] == "expression_reference"
-                            for item in original_payload["style_references"]))
         if mode == "draft":
             self.assertEqual(self._get(self.backend, f"/api/contacts/{contact}/sources")["sources"], [])
 
@@ -156,11 +146,7 @@ class AuthenticExpressionInterruptedAuthoritativeRetryTests(FidelityHttpFixture,
         capture.update(copy_receipt=copied, copy_projection=after)
 
         if removal:
-            independent_sample = self._save_sample(samples_path, "中断之后另行主动保存的合成独立文字。")
-            if removal == "sample":
-                self.assertEqual(self.backend.request(samples_path + "/" + sample["sample_id"], method="DELETE")[0], 200)
-            else:
-                self._delete_source(contact, source)
+            self._delete_source(contact, source)
             redacted = self._get(self._backend(self.owner_id), path)
             self.assertIsNone(redacted["current_input_version_id"])
             for turn in redacted["turns"]:
@@ -171,8 +157,6 @@ class AuthenticExpressionInterruptedAuthoritativeRetryTests(FidelityHttpFixture,
             self.assertNotEqual(self.backend.request(retry_path, retry)[0], 200)
             self.assertNotEqual(self.backend.request(path + "/continue", command)[0], 200)
             self.assertEqual(self.backend.request(versions_path)[0], 404)
-            self.assertEqual(self._get(self.backend, samples_path + "/" + independent_sample["sample_id"])["sample"],
-                             independent_sample)
             self.assertEqual(len(self.reply_model.payloads), 1, "删除、重建及拒绝不能调用模型。")
             capture.update(deleted_projection=redacted, actual_calls=1, prepare_model_delta=0, deletion_model_delta=0,
                            control_contract_completed=True)
@@ -210,8 +194,6 @@ class AuthenticExpressionInterruptedAuthoritativeRetryTests(FidelityHttpFixture,
         self.assertEqual(status, 200, {"path": path, "actual": result})
         return result
 
-    def _save_sample(self, path: str, text: str) -> dict:
-        return self._post(path, {"idempotency_key": str(uuid4()), "text": text, "origin": {"kind": "manual"}})["sample"]
 
     def _assert_receipt(self, receipt: dict, session_id: str, key: str) -> None:
         self.assertEqual(set(receipt), {"session_id", "turn_id", "input_version_id", "request_key", "state"})

@@ -20,7 +20,6 @@
 2. 按任务读取一份或多份现行规格：[`domain-data.md`](current/domain-data.md)、[`core-flows.md`](current/core-flows.md)、[`privacy-deletion.md`](current/privacy-deletion.md)、[`skill-library.md`](current/skill-library.md)。涉及记忆提取溯源时，再读 [`memory-extraction-trace.md`](current/memory-extraction-trace.md)；全过程后端与 React 查看入口已实现并经合成验证，最终原生 App/渠道验收另按原任务推进。
 3. 只有涉及云端部署、回复运行时或真实表达质量时，才读取对应草案：[`cloud-engineering.md`](drafts/cloud-engineering.md)、[`agent-runtime.md`](drafts/agent-runtime.md)、[`authentic-expression.md`](drafts/authentic-expression.md)。
 4. 当现行规格或草案引用 ADR 时，再读取对应决策；复审既有决定时必须新增 ADR 修订或替代，不能覆盖历史原因。
-5. 整体关系可查看 [NotAlone 架构图](notalone-system-architecture.drawio)；架构图同样不代表运行时验证。
 
 聊天辅助产品讨论分别记录在[聊天回复策略草图](drafts/conversation-reply-strategy.md)和[持续会话与上下文管理草图](drafts/assistant-session-context.md)：前者讨论回应与主动联系两条路径，后者从 Q1 独立记录助手会话连续性及新开边界，均未替代现行规格。
 
@@ -75,7 +74,7 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 41. [ADR-041：观察提交后唤醒联系人记忆任务](adr/041-observation-triggered-memory-work.md)
 42. [ADR-042：持续助手会话与单次运行上下文分界](adr/042-assistant-session-context-boundary.md)
 43. [ADR-043：聊天场景与有界方向探索](adr/043-conversation-scenarios-and-direction-exploration.md)
-44. [ADR-044：主动保存的表达样本独立于助手会话留存](adr/044-explicit-style-sample-retention.md)
+44. [ADR-044：主动保存的表达样本独立于助手会话留存](adr/044-explicit-style-sample-retention.md)（历史，已由 ADR-082 整体替代）
 45. [ADR-045：ECNU 回复输入预算采用明确标注的估算与余量](adr/045-explicit-estimated-ecnu-input-budget.md)
 46. [ADR-046：维度依据绑定当前来源，第四门采用合取](adr/046-source-bound-dimension-evidence.md)
 47. [ADR-047：同次来源核验的有界提案与版本二语义依据](adr/047-bounded-source-semantic-proof.md)
@@ -109,14 +108,29 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 73. [ADR-073：前台观察与后台同步独立执行](adr/073-foreground-observation-independent-of-background-sync.md)
 74. [ADR-074：参考腾讯源码自行实现自动记忆](adr/074-tencent-reference-python-memory.md)
 
+74. [ADR-074：当前对话自动判断并加载回复 Skill](adr/074-automatic-conversation-skill-loading.md)
+75. [ADR-075：孤立尾部表情的独立文字证据](adr/075-isolated-emoji-tail-text-evidence.md)
+76. [ADR-076：结合完整会话名单核验标题 OCR](adr/076-session-list-assisted-name-matching.md)
+77. [ADR-077：完整名称命中优先于编辑近邻](adr/077-exact-session-name-before-edit-neighbors.md)
+78. [ADR-078：按请求复用原生前台观察进程](adr/078-request-driven-native-observation-worker.md)
+
+79. [ADR-079：统一表达工作区与直接建议候选](adr/079-unified-expression-workspace.md)
+
+80. [ADR-080：统一记忆列表与失效记忆禁用](adr/080-unified-memory-list-and-retired-exclusion.md)
+81. [ADR-081：来源锚点、日期精度与条件性记忆](adr/081-source-grounded-memory-time-and-conditions.md)
+
+82. [ADR-082：退役主动收藏表达样本](adr/082-retire-explicit-style-samples.md)
+
 ## 当前架构决策
+
+- 主动收藏表达样本按 [ADR-082](adr/082-retire-explicit-style-samples.md)退役；删除独立样本库、入口和生成参考，清理遗留依赖及可重放副本。普通候选编辑复制与用户明确管理的长期表达偏好保留，历史样本验收不代表本次退役验证。
 
 - 旧 Swift 主界面已按 ADR-039 退役；共享前端采用 TypeScript + React，由 ADR-040 的 Electron 双窗口宿主承载；已接通业务页面，完整原生验收仍未完成。Python 后台与 Mac 原生探针保留。
 - 独立桌面版按 ADR-061 采用本机受管后台与 PostgreSQL，资料保存在本机；新装交付与最终验收状态分别核验。按 ADR-066，已有安装保留原数据库连接与资料位置，仅原地执行缺少的版本化 SQL，取消普通启动中的强制备份与复制切换；没有既有配置的新安装正常初始化空受管库。旧云端模块化单体目标不作为独立版的默认数据去向，PostgreSQL 仍是联系人、消息、关系资料、任务和删除状态的权威业务库。
 - 首版范围按 ADR-065 先交付手动粘贴聊天文字或单联系人导入的完整使用路径，明确创建／选择联系人后生成、查看依据及编辑候选。微信自动初始化与渠道验收保留未完成，不作为本次首版前提；资料更新按 ADR-066 原地补齐，历史副本删除清理、隐私与人工发送要求保持。
 - 数据隔离键为 `owner_id + contact_id`；`contact_id` 由 NotAlone 创建，昵称、备注和微信来源标识不能替代它。
 - 文字是统一的检索与生成表示；前台 display name OCR、本地微信 CLI、截图和语音都是输入适配器。
-- Mac 前台 OCR 按 ADR-052 仅识别顶部 display name，再由唯一私聊元数据及已确认绑定定位联系人；CLI 独立同步用户主动选择并确认的联系人及我方文字增量，首次不预选会话。CLI 的外部会话标识不能替代 `contact_id`，同步范围与停止/恢复规则见 ADR-030。
+- Mac 前台 OCR 按 ADR-052 仅识别顶部 display name，再按 ADR-076 结合完整会话名单、唯一私聊及已确认绑定定位联系人；CLI 独立同步用户主动选择并确认的联系人及我方文字增量，首次不预选会话。CLI 的外部会话标识不能替代 `contact_id`，同步范围与停止/恢复规则见 ADR-030。
 - 持续前台定位按 ADR-050 采用每轮单帧，进入助手或其他 App 后暂停；一个助手窗口按联系人恢复输入和编辑，切换不取消原生成。约束见[正式规格](../.scratch/foreground-contact-follow/spec.md)，实施进度统一见[任务索引](../.scratch/foreground-contact-follow/planning.md)，验证范围与剩余缺口见各任务的结果记录；任务关闭不表示其他渠道或交付任务已通过验收。ADR-049 的双帧复查仅保留为历史决定。
 - 生成只使用已选联系人及用户本人范围内的有界上下文；模型提取的记忆必须带来源、标记 `auto` 且可撤销。
 - 正常自动记忆按 [ADR-070](adr/070-automatic-memory-maintenance.md) 使用逐项来源核验，保留语用、置信度、风险及人工纠错保护；不再因旧空放行表而一律待确认。未知或核验不足仍不自动采纳，旧评测结果不因此变成达标。
@@ -138,3 +152,5 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 [ADR-069](adr/069-direct-scene-memory-and-isolated-publication.md) 记录参考腾讯的直接记忆生成、合并和逐项隔离；[规格](../.scratch/tencent-memory-alignment/spec.md) 区分工程实现、适配差异与真实质量。
 
 [ADR-070](adr/070-automatic-memory-maintenance.md) 记录默认自动维护记忆与旧资料升级退役；实现与验证见[本次规格](../.scratch/automatic-memory-maintenance/spec.md)。
+
+[ADR-081](adr/081-source-grounded-memory-time-and-conditions.md) 记录来源锚点、日期精度、适用条件与有据时间线；[规格与实现索引](../.scratch/memory-temporal-semantics/planning.md) 分别记录目标、工程验证和质量限制。

@@ -98,7 +98,7 @@ test('用户从生产控制器查看版本历史并撤销自动更新，React �
   });
 });
 
-test('默认质量门保留待确认的新进展，用户可选择旧计划并明确应用手动版本', { timeout: 30_000 }, async () => {
+test('历史人工审核保留待确认的新进展，用户可选择旧计划并明确应用手动版本', { timeout: 30_000 }, async () => {
   await withEventFixture(['--default'], async ({ fixture, memory, selection }) => {
     const before = memory.getState();
     assert.equal(before.contact.items.length, 1);

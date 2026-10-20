@@ -44,6 +44,6 @@ test('资源缺失时显示安全中文说明，修复资源后可从公开菜�
   const reopened = app.waitForEvent('window');
   await selectMenu(app, '窗口', '管理后台');
   const manager = await reopened;
-  await expect(manager.getByRole('heading', { name: '联系人与绑定' })).toBeVisible();
+  await expect(manager.getByRole('heading', { name: '联系人' })).toBeVisible();
   await expect.poll(() => failedWindow!.isClosed()).toBe(true);
 });

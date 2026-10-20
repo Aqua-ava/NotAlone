@@ -48,7 +48,7 @@ test('顶部识别准确但尚未绑定时按正常间隔刷新，不退避八�
    foreground.startContinuous();
    for (let sample = 0; sample < 3; sample++) {
     await next();
-    assert.equal(foreground.getState().recognizedName, '准确合成会话');
+    assert.equal(foreground.getState().recognizedName, '准确合成会话', JSON.stringify(foreground.getState()));
     assert.equal(foreground.getGenerationBlock(), 'foreground-confirmation-required');
     assert.equal(scheduled.values().next().value.delay, 2000, '识别成功不应因尚未绑定而退避');
    }
@@ -124,7 +124,7 @@ test('窗口上下文变化拒绝当前帧，新鲜已有绑定可自动恢复�
    assert.equal(contacts.getState().selectedContactId,b,'恢复须使用新观察对应的已有绑定');
    assert.equal(foreground.getState().confirmation,'verified-binding');
    await observe({display_name:names[0]});
-   for (const failure of [{display_name_confidence:0.5},{name_complete:false},
+   for (const failure of [{display_name_confidence:0.2},{name_complete:false},
     {display_name:'未绑定合成窗口'},{error:'automatic_layout_header_boundary'},
     {error:'minimal_region_layout_changed'}]) {
     await observe(failure);
@@ -214,7 +214,7 @@ test('持续观察自动 A → B → A，保留输入且不生成；同联系人
    await observe(names[1], { wechat_in_front: false });
    assert.equal(foreground.getState().phase, 'paused');
    assert.equal(foreground.getGenerationBlock(), null, '其他 App 前台正常暂停保留确认');
-   await observe(names[1], { display_name_confidence: 0.5 });
+   await observe(names[1], { display_name_confidence: 0.2 });
    assert.equal(foreground.getState().phase, 'manual-required');
    assert.equal(foreground.getGenerationBlock(), 'foreground-confirmation-required');
    assert.equal(contacts.getState().draft, '乙未提交草稿');
@@ -224,7 +224,7 @@ test('持续观察自动 A → B → A，保留输入且不生成；同联系人
    const stale = { contactId:b, contactScopeRevision:contacts.getState().scopeRevision,
     foregroundRevision:foreground.getState().foregroundRevision };
    foreground.confirm(stale);
-   await observe(names[1], { display_name_confidence: 0.5 });
+   await observe(names[1], { display_name_confidence: 0.2 });
    assert.equal(foreground.getGenerationBlock(), 'foreground-confirmation-required');
    assert.throws(() => foreground.confirm(stale));
    assert.equal(scheduled.values().next().value.delay, 8000, '重复失败有界退避');

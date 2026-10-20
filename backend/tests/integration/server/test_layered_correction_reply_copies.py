@@ -29,6 +29,7 @@ class LayeredCorrectionReplyCopiesHttpTest(OverviewReplyHttpFixture, unittest.Te
             profile_verifier=corrections.CorrectionProfileVerification(),
             budget=OrganizationBudget(max_model_calls=4, max_characters=12000))
         ready = self.enable(management, contact)
+        self.assertTrue(ready['scenarios'], ready)
         contact_ready = ready
         management_path = f'/api/contacts/{contact}/layered-memory'
         if scope_kind == 'owner':

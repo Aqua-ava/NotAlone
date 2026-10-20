@@ -1,4 +1,4 @@
-import { selectMemoryCategory } from '../memory-page-actions';
+import { openImportManagement, selectMemoryCategory } from '../memory-page-actions';
 import { expect, type Browser } from '@playwright/test';
 import path from 'node:path';
 import { withRewriteFixture } from '../rewrite-backend-fixture';
@@ -25,7 +25,8 @@ export async function memorySkillEvolution(browser: Browser, origin: string) {
       await selectMemoryCategory(manager, '本人概览');
       await expect(manager.getByRole('region', { name: '本人事实与偏好概览', exact: true })
         .getByText(prepared.owner_text, { exact: true })).toBeVisible();
-      await manager.getByRole('button', { name: 'Skill 待审核', exact: true }).click();
+      await manager.getByRole('button', { name: 'Skill', exact: true }).click();
+      await manager.getByRole('tab', { name: /^待审核/ }).click();
       const learning = manager.getByRole('region', { name: 'Skill待审核', exact: true });
       await expect(learning.getByRole('article')).toHaveCount(1);
       await learning.getByRole('button', { name: '关闭经验整理', exact: true }).click();
@@ -46,7 +47,7 @@ export async function memorySkillEvolution(browser: Browser, origin: string) {
       await expect(review.getByRole('heading', { name: '已发布 careful-response · 版本 1', exact: true })).toBeVisible();
       await fixture.command('observations');
 
-      await manager.getByRole('button', { name: '查看已发布版本', exact: true }).click();
+      await manager.getByRole('tab', { name: '已有 Skill', exact: true }).click();
       await manager.getByRole('button', { name: '管理方法停用', exact: true }).click();
       const feedback = manager.getByRole('region', { name: '方法与Skill反馈', exact: true });
       await feedback.getByRole('combobox', { name: '明确停用目标', exact: true })
@@ -71,9 +72,8 @@ export async function memorySkillEvolution(browser: Browser, origin: string) {
       await manager.getByRole('button', { name: '选择合成演进甲联系人', exact: true }).click();
       expect((await fixture.command('feedback_reply')).excluded_text_present).toBe(false);
       await manager.getByRole('button', { name: '记忆', exact: true }).click();
-      await selectMemoryCategory(manager, '来源与过程');
-      const source = manager.getByRole('region', { name: '来源删除管理', exact: true }).getByRole('listitem')
-        .filter({ hasText: `来源标识：${prepared.source_id}` });
+      await openImportManagement(manager);
+      const source = manager.getByRole('region', { name: '已导入资料', exact: true }).locator(`[data-source-id="${prepared.source_id}"]`);
       await source.getByRole('button', { name: '删除来源', exact: true }).click();
       await manager.getByRole('button', { name: '确认删除来源', exact: true }).click();
       let queuedTask: string | undefined;
@@ -93,8 +93,8 @@ export async function memorySkillEvolution(browser: Browser, origin: string) {
       await selectMemoryCategory(manager, '本人概览');
       await expect(manager.getByRole('region', { name: '本人事实与偏好概览', exact: true })
         .getByText(prepared.owner_text, { exact: true })).toHaveCount(0);
-      await manager.getByRole('button', { name: 'Skill 待审核', exact: true }).click();
-      await manager.getByRole('button', { name: '查看已发布版本', exact: true }).click();
+      await manager.getByRole('button', { name: 'Skill', exact: true }).click();
+      await manager.getByRole('tab', { name: '已有 Skill', exact: true }).click();
       const history = manager.getByRole('region', { name: 'Skill版本历史', exact: true });
       await expect(history.getByRole('article', { name: '版本历史 careful-response', exact: true })).toHaveCount(0);
       await expect(history).toContainText('evolution-independent');

@@ -14,7 +14,7 @@ from psycopg.types.json import Jsonb
 
 from notalone.persistence.assistant_session_store import _dependencies_available
 from notalone.persistence.locks import lock_owner_scope
-from notalone.persistence.style_sample_store import require_reply_sources_current
+from notalone.persistence.reply_sources import require_reply_sources_current
 from notalone.reply.errors import ReplyStoreInvariantError
 from notalone.reply.interface import CandidateMessage, ReplyBasisChange
 from notalone.scopes import ContactScope

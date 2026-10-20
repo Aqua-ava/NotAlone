@@ -1,10 +1,11 @@
+import { openFileImport } from './file-import-navigation';
 import { expect, type ElectronApplication, type Page } from '@playwright/test';
 import { test, selectMenu } from './app-fixture';
 
 // 接缝是公开按钮、原生窗口/菜单和可见结果，不读取界面的私有状态。
 test('管理后台和输入小窗可独立打开、关闭隐藏并恢复，退出回收进程', async ({ runningApp: { app, appProcess } }) => {
   const manager = await app.firstWindow();
-  await expect(manager.getByRole('heading', { name: '联系人与绑定' })).toBeVisible();
+  await expect(manager.getByRole('heading', { name: '联系人' })).toBeVisible();
   const helperOpened = app.waitForEvent('window');
   await manager.getByRole('button', { name: '打开输入小窗' }).click();
   const helper = await helperOpened;
@@ -72,12 +73,12 @@ test('界面显示品牌资源和真实未就绪状态，不提供假联系人�
   await expect.poll(() => manager.getByRole('img', { name: 'NotAlone', exact: true })
     .evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth > 0)).toBe(true);
   await expect(manager.getByText('联系人暂不可用', { exact: true })).toBeVisible();
-  for (const page of ['历史导入', '记忆', '同步设置', '应用配置']) {
+  for (const page of ['记忆', '同步设置', '设置']) {
     await manager.getByRole('button', { name: page, exact: true }).click();
     await expect(manager.getByRole('heading', { name: page, exact: true })).toBeVisible();
     await expect(manager.getByRole('status').filter({ hasText: '尚未连接' })).toBeVisible();
   }
-  await manager.getByRole('button', { name: '历史导入', exact: true }).click();
+  await openFileImport(manager);
   await expect(manager.getByRole('button', { name: '选择历史文件' })).toBeDisabled();
   const helperOpened = app.waitForEvent('window');
   await manager.getByRole('button', { name: '打开输入小窗' }).click();

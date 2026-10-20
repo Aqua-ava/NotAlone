@@ -19,6 +19,10 @@ from notalone.memory.dimension_evidence import (
 )
 from notalone.memory.correction import MemoryCorrectionConflictError
 from notalone.memory.events import MemoryEvent
+from notalone.memory.evolution import MemoryEvolution
+from notalone.persistence.memory_evolution import bind_memory_evolution, validate_evolution, require_replacement_evolution
+from notalone.memory.conditions import MemoryConditions
+from notalone.persistence.memory_conditions import bind_memory_conditions, manual_conditions
 from notalone.persistence.memory_events import bind_memory_event
 from notalone.memory.versions import (
     MemoryVersionConflict, require_auto_previous, require_auto_update_previous,
@@ -74,6 +78,8 @@ _OWNER_MEMORY_COLUMNS = """
     source_candidate_id,
     supersedes_memory_id,
     to_jsonb(owner_memory)->'event' AS memory_event,
+    to_jsonb(owner_memory)->'conditions' AS memory_conditions,
+    to_jsonb(owner_memory)->'evolution' AS memory_evolution,
     to_jsonb(owner_memory)->'version_evidence' AS version_evidence,
     to_jsonb(owner_memory)->>'retirement_reason' AS retirement_reason,
     (to_jsonb(owner_memory)->>'retired_at')::timestamptz AS retired_at,
@@ -196,6 +202,8 @@ class PostgresOwnerMemoryStore:
                            to_jsonb(memory_candidate)->'dimension_evidence'
                                AS dimension_evidence,
                            to_jsonb(memory_candidate)->'event' AS event,
+                           to_jsonb(memory_candidate)->'conditions' AS conditions,
+                           to_jsonb(memory_candidate)->'evolution' AS evolution,
                            to_jsonb(memory_candidate)->>'source_dependency_mode'
                                AS dependency_mode, to_jsonb(memory_candidate)->'requires_all_sources' AS requires_all_sources
                     FROM public.memory_candidate
@@ -322,7 +330,7 @@ class PostgresOwnerMemoryStore:
                             DimensionEvidence.from_payload(raw)
                             if raw is not None else None
                         ),
-                        event=MemoryEvent.from_payload(candidate_row.get("event")),
+                        event=MemoryEvent.from_payload(candidate_row.get("event")), conditions=MemoryConditions.from_payload(candidate_row.get("conditions")), evolution=MemoryEvolution.from_payload(candidate_row.get("evolution")),
                     )
                     current = bind_stored_dimension_evidence(
                         connection, stored, lock_sources=True
@@ -349,10 +357,19 @@ class PostgresOwnerMemoryStore:
                     risk_flags=tuple(candidate_row["risk_flags"] or ()),
                     revision=expected_previous.revision + 1 if expected_previous else 1,
                     supersedes_memory_id=expected_previous.memory_id if expected_previous else None,
-                    event=MemoryEvent.from_payload(candidate_row.get("event")),
+                    event=MemoryEvent.from_payload(candidate_row.get("event")), conditions=MemoryConditions.from_payload(candidate_row.get("conditions")), evolution=MemoryEvolution.from_payload(candidate_row.get("evolution")),
                 )
                 event_column = ", event" if memory.event is not None else ""
                 event_value = ", %(event)s" if memory.event is not None else ""
+                if adoption_method is AdoptionMethod.AUTO and expected_previous is not None:
+                    require_replacement_evolution(connection, candidate, (expected_previous,))
+                if memory.evolution is not None:
+                    validate_evolution(connection, owner_id=scope.owner_id, evolution=memory.evolution, candidate=candidate, lock=True)
+                    event_column += ", evolution"
+                    event_value += ", %(evolution)s"
+                if memory.conditions is not None:
+                    event_column += ", conditions"
+                    event_value += ", %(conditions)s"
                 if expected_previous is not None:
                     proof = create_version_evidence(connection, previous=expected_previous, current=memory)
                     if adoption_method is AdoptionMethod.AUTO:
@@ -384,10 +401,10 @@ class PostgresOwnerMemoryStore:
                         (expected_previous.memory_id,))
                     invalidated = connection.execute(
                         "UPDATE public.owner_memory SET status='invalidated', "
-                        "revision=revision+1, updated_at=now() "
+                        "revision=revision+1, retirement_reason=%s, retired_at=now(), updated_at=now() "
                         "WHERE owner_id=%s AND id=%s AND status='active' "
                         "AND revision=%s AND adoption_method=%s",
-                        (scope.owner_id,
+                        (("error_correction" if candidate.evolution and candidate.evolution.kind == "error_correction" else "state_changed"), scope.owner_id,
                          expected_previous.memory_id, expected_previous.revision,
                          expected_previous.adoption_method.value),
                     ).rowcount
@@ -413,10 +430,11 @@ class PostgresOwnerMemoryStore:
             raise OwnerMemoryPersistenceError(_OWNER_MEMORY_UNAVAILABLE) from error
 
     def list_active(self, owner_id: UUID, *, include_expired: bool = False,
+                    include_invalidated: bool = False, contact_id: UUID | None = None,
                     memory_ids: tuple[UUID, ...] | None = None,
                     include_historical: bool = False) -> tuple[OwnerMemory, ...]:
         _validate_owner_id(owner_id)
-        if type(include_expired) is not bool:
+        if type(include_expired) is not bool or type(include_invalidated) is not bool:
             raise TypeError("历史回看标记必须是 bool。")
         if memory_ids is not None and (not isinstance(memory_ids, tuple)
                 or any(not isinstance(identifier, UUID) for identifier in memory_ids)):
@@ -452,7 +470,8 @@ class PostgresOwnerMemoryStore:
                       ))
                     ORDER BY memory.created_at, memory.id
                     """,
-                    (owner_id, include_historical, *((list(memory_ids),) if memory_ids is not None else ())),
+                    (owner_id, include_invalidated or include_historical,
+                     *((list(memory_ids),) if memory_ids is not None else ())),
                 ).fetchall()
                 if include_historical:
                     for row in rows:
@@ -460,6 +479,21 @@ class PostgresOwnerMemoryStore:
                 rows = available_correction_memories(
                     connection, owner_id=owner_id, record_kind="owner_memory", rows=rows,
                 )
+                visible = []
+                for row in rows:
+                    if row["status"] == "invalidated":
+                        # owner_id 仅表示本人手录来历，其余旧版来源必须全部可用。
+                        try:
+                            _ensure_active_sources(
+                                connection, owner_id=owner_id,
+                                source_ids=tuple(source for source in row["source_ids"] if source != owner_id),
+                            )
+                        except PermissionError:
+                            continue
+                    visible.append(row)
+                rows = visible
+                if contact_id is not None:
+                    rows = _contact_view_rows(connection, owner_id, contact_id, rows)
                 rows = _timed_rows(connection, rows)
         except Exception as error:
             raise OwnerMemoryPersistenceError(
@@ -473,7 +507,7 @@ class PostgresOwnerMemoryStore:
                 and (include_expired or _is_effective(_from_row(row), now)))
         )
 
-    def list_versions(self, *, owner_id: UUID, memory_id: UUID) -> tuple[OwnerMemory, ...]:
+    def list_versions(self, *, owner_id: UUID, memory_id: UUID, contact_id: UUID | None = None) -> tuple[OwnerMemory, ...]:
         _validate_owner_id(owner_id)
         if not isinstance(memory_id, UUID):
             raise ValueError("本人资料标识无效。")
@@ -486,6 +520,17 @@ class PostgresOwnerMemoryStore:
                 "WHERE owner_id=%s AND id=ANY(%s) ORDER BY array_position(%s::uuid[],id)",
                 (owner_id, list(ids), list(ids)),
             ).fetchall()
+            if contact_id is not None:
+                allowed = {row["memory_id"]: row for row in _contact_view_rows(connection, owner_id, contact_id, rows)}
+                visible = []
+                for row in rows:
+                    if row["memory_id"] not in allowed:
+                        break
+                    visible.append(allowed[row["memory_id"]])
+                if not visible or memory_id not in {row["memory_id"] for row in visible}:
+                    raise LookupError("当前联系人没有这条本人记忆。")
+                rows = visible
+                rows[-1] = {**rows[-1], "supersedes_memory_id": None}
             for row in rows:
                 _ensure_memory_sources(connection, owner_id=owner_id, row=row)
             return tuple(_from_row(row) for row in _timed_rows(connection, rows))
@@ -517,6 +562,7 @@ class PostgresOwnerMemoryStore:
         self, *, owner_id: UUID, memory_id: UUID, text: str,
         category: MemoryCategory | None = None,
         change_kind: MemoryChangeKind = MemoryChangeKind.ERROR_CORRECTION,
+        conditions: object = ...,
     ) -> OwnerMemory:
         """原子替换当前有效本人资料；旧版与候选链留作审计。"""
         _validate_owner_id(owner_id)
@@ -558,8 +604,12 @@ class PostgresOwnerMemoryStore:
                     revision=previous["revision"] + 1,
                     confidence=previous["confidence"],
                     risk_flags=tuple(previous["risk_flags"] or ()),
+                    conditions=manual_conditions(connection, owner_id=owner_id, previous=previous.get("memory_conditions"), proposed=conditions, source_ids=sources),
                 )
                 mode_column, mode_value = _insert_mode(corrected, connection)
+                if corrected.conditions is not None:
+                    mode_column += ", conditions"
+                    mode_value += ", %(conditions)s"
                 row = connection.execute(
                     f"""INSERT INTO public.owner_memory (
                         id, owner_id, text_content, category, topic, source_ids,
@@ -864,6 +914,8 @@ def _to_row(memory: OwnerMemory) -> dict[str, Any]:
         "source_candidate_id": memory.source_candidate_id,
         "supersedes_memory_id": memory.supersedes_memory_id,
         "event": Jsonb(memory.event.to_payload()) if memory.event is not None else None,
+        "conditions": Jsonb(memory.conditions.to_payload()) if memory.conditions else None,
+        "evolution": Jsonb(memory.evolution.to_payload(include_proof=True)) if memory.evolution else None,
         "version_evidence": Jsonb(memory.version_evidence.to_payload()) if memory.version_evidence else None,
         "source_dependency_mode": memory.source_dependency_mode.value,
         "requires_all_sources": memory.requires_all_sources,
@@ -888,6 +940,8 @@ def _from_row(row: dict[str, Any]) -> OwnerMemory:
         source_candidate_id=row["source_candidate_id"],
         supersedes_memory_id=row["supersedes_memory_id"],
         timing=row["timing"], event=row.get("_bound_event", MemoryEvent.from_payload(row.get("memory_event"))),
+        evolution=row.get("_bound_evolution", MemoryEvolution.from_payload(row.get("memory_evolution"))),
+        conditions=row.get("_bound_conditions", MemoryConditions.from_payload(row.get("memory_conditions"))),
         version_evidence=row.get("_bound_version_evidence", VersionEvidence.from_payload(row.get("version_evidence"))),
         can_revert_auto_update=row.get("_can_revert_auto_update", False),
         retirement_reason=MemoryRetirementReason(row.get("retirement_reason") or "unknown"),
@@ -902,6 +956,8 @@ def _timed_rows(
 ) -> list[dict[str, Any]]:
     timed = timed_memory_rows(connection, rows, source_ids_key="source_ids", contact_scoped=False)
     for row in timed:
+        row["_bound_evolution"] = bind_memory_evolution(connection, owner_id=row["owner_id"], raw=row.get("memory_evolution"), memory_id=row["memory_id"], revision=row["revision"])
+        row["_bound_conditions"] = bind_memory_conditions(connection, owner_id=row["owner_id"], candidate_id=row["source_candidate_id"], raw=row.get("memory_conditions"), text=row["text_content"])
         row["_bound_event"] = bind_memory_event(connection, owner_id=row["owner_id"],
             candidate_id=row["source_candidate_id"], raw=row.get("memory_event"))
         row["_bound_version_evidence"], row["_can_revert_auto_update"] = bind_version_evidence(
@@ -919,3 +975,47 @@ def _insert_mode(memory: OwnerMemory, connection) -> tuple[str, str]:
         columns += ', requires_all_sources'
         values += ', %(requires_all_sources)s'
     return columns, values
+
+
+def _contact_view_rows(
+    connection: psycopg.Connection[Any], owner_id: UUID, contact_id: UUID,
+    rows: Sequence[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """联系人视图只接受全部直接来源仍属于当前联系人的资料。"""
+    previous_ids = [row["supersedes_memory_id"] for row in rows if row["supersedes_memory_id"]]
+    parents = connection.execute(
+        "SELECT id AS memory_id, source_ids FROM public.owner_memory "
+        "WHERE owner_id=%s AND id=ANY(%s) AND status <> 'deleted'",
+        (owner_id, previous_ids),
+    ).fetchall() if previous_ids else []
+    source_ids = list({source for row in [*rows, *parents] for source in row["source_ids"]})
+    if not source_ids:
+        return []
+    available = connection.execute(
+        f"""SELECT id FROM public.source_document
+        WHERE owner_id=%s AND contact_id=%s AND id=ANY(%s) AND status='active'
+        UNION SELECT id FROM public.local_wechat_observation
+        WHERE owner_id=%s AND contact_id=%s AND id=ANY(%s)
+        UNION SELECT message.id FROM public.message AS message
+        WHERE message.owner_id=%s AND message.contact_id=%s AND message.id=ANY(%s)
+          AND {valid_source_ref_exists_sql('message')}""",
+        (owner_id, contact_id, source_ids) * 3,
+    ).fetchall()
+    allowed = {row["id"] for row in available}
+    visible_ids = {row["memory_id"] for row in [*rows, *parents]
+                   if row["source_ids"] and set(row["source_ids"]) <= allowed}
+    result = []
+    for row in rows:
+        if row["memory_id"] not in visible_ids:
+            continue
+        projected = dict(row)
+        if row["supersedes_memory_id"] is not None and row["supersedes_memory_id"] not in visible_ids:
+            projected.update(supersedes_memory_id=None, version_evidence=None)
+        proof = projected.get("version_evidence")
+        if proof and any(
+            window and any(scope != str(contact_id) for scope in window["message_scopes"].values())
+            for window in (proof.get("previous_window"), proof.get("current_window"))
+        ):
+            projected["version_evidence"] = None
+        result.append(projected)
+    return result

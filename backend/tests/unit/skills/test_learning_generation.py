@@ -30,7 +30,6 @@ class GenerationQueries:
         if any(fragment in query for fragment in (
             'FROM public.message WHERE', 'FROM public.source_document',
             'FROM public.confirmed_memory AS memory',
-            'FROM public.style_sample AS sample',
             'FROM public.expression_preference AS preference',
         )):
             return MaterialRows([])

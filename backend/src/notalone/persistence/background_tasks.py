@@ -57,6 +57,10 @@ class PostgresBackgroundTaskRepository:
             raise ValueError("database_url 不能为空。")
         self._database_url = database_url
 
+    @property
+    def database_url(self) -> str:
+        return self._database_url
+
     @staticmethod
     def create_import_task(
         connection: psycopg.Connection[Any],
@@ -273,7 +277,17 @@ class PostgresBackgroundTaskRepository:
                 if observation is None:
                     return None
                 from notalone.persistence.extraction_schedule import claim_scope
-                return claim_scope(connection,self,owner_id=owner_id,contact_id=contact_id)
+                task_id = claim_scope(connection, self, owner_id=owner_id, contact_id=contact_id)
+                if task_id is not None:
+                    return task_id
+                if observation[2] is not None:
+                    task = connection.execute(
+                        "SELECT id FROM public.background_task WHERE owner_id=%s AND contact_id=%s "
+                        "AND task_type='observation' AND status IN ('queued','running','verifying')",
+                        (owner_id, contact_id),
+                    ).fetchone()
+                    return task[0] if task else None
+                return None
         except psycopg.Error:
             raise BackgroundTaskPersistenceError("观察记忆任务排队失败。") from None
 

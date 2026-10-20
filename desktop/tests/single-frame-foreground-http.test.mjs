@@ -91,7 +91,7 @@ test('群聊暂停撤销生成资格且不能手动绕过，返回私聊恢复�
       assert.ok(after.every(locator => ['wxid_synthetic_a', 'wxid_synthetic_b'].includes(locator)));
       assert.equal(requests.some(value => /\/(generate|prepare|rewrite)$/.test(value)), false);
       await observe('合成私聊甲');
-      await observe('合成私聊甲', { display_name_confidence: 0.5 });
+      await observe('合成私聊甲', { display_name_confidence: 0.2 });
       await observe('合成讨论 (23)');
       await observe('合成私聊甲');
       assert.equal(foreground.getState().reason, 'manual_confirmation_required', '群聊往返不能解除既有低分人工门');
@@ -132,7 +132,7 @@ test('首次无人数群标题即使候选截断或识别低分也按群元数�
   });
 });
 
-test('顶部单名称经正式HTTP自动跟随已确认A与B，低分或截断不能获得生成资格', async () => {
+test('顶部单名称经正式HTTP自动跟随已确认A与B，极低分或截断不能获得生成资格', async () => {
   await ports.withVerifiedForegroundFixture(async fixture => {
     const [a, b] = fixture.data.contact_ids;
     const names = ['唯一合成会话', '另一合成会话'];
@@ -162,7 +162,15 @@ test('顶部单名称经正式HTTP自动跟随已确认A与B，低分或截断�
       return foreground.getState();
     };
     try {
-      const tails = await fixture.tails();
+      // 开启同步会异步读取两位已授权联系人；等首轮实际完成后再观察前台探针的额外读取。
+      let tails = [];
+      const initialSyncDeadline = performance.now() + 5000;
+      do {
+        tails = await fixture.tails();
+        if (tails.includes('wxid_synthetic_a') && tails.includes('wxid_synthetic_b')) break;
+        await new Promise(resolve => setTimeout(resolve, 25));
+      } while (performance.now() < initialSyncDeadline);
+      assert.deepEqual([...tails].sort(), ['wxid_synthetic_a', 'wxid_synthetic_b']);
       let state = await observe(names[0]);
       assert.equal(state.confirmation, 'verified-binding');
       assert.equal(state.confirmedContactId, a);
@@ -174,7 +182,7 @@ test('顶部单名称经正式HTTP自动跟随已确认A与B，低分或截断�
       assert.equal(state.generationBlock, null);
       assert.deepEqual(await fixture.tails(), tails);
       assert.equal(requests.some(value => /\/(generate|prepare|rewrite)$/.test(value)), false);
-      for (const extra of [{ display_name_confidence: 0.65 }, { name_complete: false }]) {
+      for (const extra of [{ display_name_confidence: 0.2 }, { name_complete: false }]) {
         state = await observe(names[0], extra);
         assert.equal(state.phase, 'manual-required');
         assert.equal(state.confirmedContactId, null);
@@ -182,7 +190,7 @@ test('顶部单名称经正式HTTP自动跟随已确认A与B，低分或截断�
         assert.equal(state.recognizedName, names[0], '未确认身份时也显示实际顶部OCR文字');
         const html = ports.renderToStaticMarkup(ports.createElement(ports.ForegroundPanel, { state }));
         assert.ok(html.includes(names[0]));
-        if (extra.display_name_confidence) assert.ok(html.includes('65%'));
+        if (extra.display_name_confidence) assert.ok(html.includes('20%'));
       }
       state = await observe('尚未绑定的合成会话');
       assert.equal(state.recognizedName, '尚未绑定的合成会话');

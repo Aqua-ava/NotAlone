@@ -1,5 +1,6 @@
-import { ensureReplySettingsOpen } from '../reply-settings-actions';
-import { selectMemoryCategory } from '../memory-page-actions';
+import { setWorkspaceContext } from '../workspace-actions';
+import { declareReplyScene } from '../reply-settings-actions';
+import { openImportManagement } from '../memory-page-actions';
 import { expect, type Browser } from '@playwright/test';
 import path from 'node:path';
 import type { ChildProcess } from 'node:child_process';
@@ -58,7 +59,8 @@ export async function skillLearning(browser: Browser, origin: string, reviewMode
         }, { contactId, afterRevision })).toBe(true);
       };
       await manager.getByRole('button', { name: '选择合成学习甲联系人', exact: true }).click();
-      await manager.getByRole('button', { name: 'Skill 待审核', exact: true }).click();
+      await manager.getByRole('button', { name: 'Skill', exact: true }).click();
+      await manager.getByRole('tab', { name: /^待审核/ }).click();
       let panel = manager.getByRole('region', { name: 'Skill待审核', exact: true });
       await expect(panel.getByRole('button', { name: '开启此联系人的经验整理', exact: true })).toBeEnabled();
       await panel.getByRole('button', { name: '开启此联系人的经验整理', exact: true }).click();
@@ -75,7 +77,7 @@ export async function skillLearning(browser: Browser, origin: string, reviewMode
         return state.phase === 'ready' && state.revision > beforePoll.revision + 1;
       }).toBe(true);
       await expect(panel.getByText('合成私密来话：先核对安排，再说明原因。', { exact: true })).toBeVisible();
-      await expect(panel.getByRole('button', { name: /发布/ })).toHaveCount(0);
+      await expect(panel.getByRole('button', { name: '批准并发布', exact: true })).toHaveCount(0);
       expect((await fixture.command('observations')).skills).toEqual([]);
       if (reviewMode) {
         await panel.getByRole('button', { name: '打开对照审核', exact: true }).click();
@@ -130,31 +132,28 @@ export async function skillLearning(browser: Browser, origin: string, reviewMode
         await manager.getByRole('button', { name: '选择合成学习甲联系人', exact: true }).click();
         const helper = await host.open('helper');
         await confirmHelperContact(helper, fixture.data.contact_ids[0]);
-        await helper.getByRole('button', { name: '主动聊聊', exact: true }).click();
-        await helper.getByRole('textbox', { name: '主动目的', exact: true }).fill('说明想法，不作额外承诺');
-        await ensureReplySettingsOpen(helper, '本次精确场景');
-        await helper.getByRole('textbox', { name: '本次精确场景', exact: true }).fill('核对安排');
+        await setWorkspaceContext(helper, true);
+        await helper.getByRole('textbox', { name: '有什么想说的', exact: true }).fill('说明想法，不作额外承诺');
+        await declareReplyScene(helper, '核对安排');
         await helper.evaluate(async versionId => {
           const contact = await window.notalone.contacts.getState();
           await window.notalone.replies.updateSkill({ contactId: contact.selectedContactId!, scopeRevision: contact.scopeRevision,
             skill: { mode: 'user', versionId } });
         }, published.version_id);
-        await helper.getByRole('button', { name: '生成候选', exact: true }).click();
+        await helper.getByRole('button', { name: '帮我表达', exact: true }).click();
         await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveValue('先核对一下，再说明我的想法。');
         let actual = await helper.evaluate(async () => (await window.notalone.replies.getState()).result!);
         expect(actual.usedSkill).toMatchObject({ versionId: published.version_id, versionNumber: 1, scope: published.scope });
         expect(actual.input.scene).toBe('核对安排');
         await expect(helper.getByRole('region', { name: '候选回复', exact: true })).toContainText('范围：精确场景「核对安排」');
-        await ensureReplySettingsOpen(helper, '本次精确场景');
-        await helper.getByRole('textbox', { name: '本次精确场景', exact: true }).fill('其他场景');
-        await helper.getByRole('button', { name: '生成候选', exact: true }).click();
+        await declareReplyScene(helper, '其他场景');
+        await helper.getByRole('button', { name: '帮我表达', exact: true }).click();
         await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveValue('我先说明一下想法。');
         actual = await helper.evaluate(async () => (await window.notalone.replies.getState()).result!);
         expect(actual.usedSkill).toBeNull();
         await manager.getByRole('button', { name: '记忆', exact: true }).click();
-        await selectMemoryCategory(manager, '来源与过程');
-        const source = manager.getByRole('region', { name: '来源删除管理', exact: true }).getByRole('listitem')
-          .filter({ hasText: `来源标识：${prepared.source_id}` });
+        await openImportManagement(manager);
+        const source = manager.getByRole('region', { name: '已导入资料', exact: true }).locator(`[data-source-id="${prepared.source_id}"]`);
         await source.getByRole('button', { name: '删除来源', exact: true }).click();
         await manager.getByRole('button', { name: '确认删除来源', exact: true }).click();
         let queuedTaskId: string | undefined;
@@ -172,20 +171,23 @@ export async function skillLearning(browser: Browser, origin: string, reviewMode
         await expect(source.getByText('已删除，已通过不可检索校验', { exact: true })).toBeVisible();
         if (queuedTaskId) expect((await manager.evaluate(() => window.notalone.sources.getState()))
           .sources.find(item => item.sourceId === prepared.source_id)!.task!.taskId).toBe(queuedTaskId);
-        await manager.getByRole('button', { name: 'Skill 待审核', exact: true }).click();
+        await manager.getByRole('button', { name: 'Skill', exact: true }).click();
+        await manager.getByRole('tab', { name: /^待审核/ }).click();
         await expectLearningReady(fixture.data.contact_ids[0]);
         expect((await manager.evaluate(() => window.notalone.skillLearning.getState())).review).toBeNull();
         await expect(manager.getByRole('region', { name: 'Skill待审核', exact: true }).getByRole('article')).toHaveCount(0);
         return;
       }
-      await manager.getByRole('button', { name: '联系人与绑定', exact: true }).click();
+      await manager.getByRole('button', { name: '联系人', exact: true }).click();
       await manager.getByRole('button', { name: '选择合成学习乙联系人', exact: true }).click();
-      await manager.getByRole('button', { name: 'Skill 待审核', exact: true }).click();
+      await manager.getByRole('button', { name: 'Skill', exact: true }).click();
+      await manager.getByRole('tab', { name: /^待审核/ }).click();
       await expectLearningReady(fixture.data.contact_ids[1]);
       await expect(panel.getByRole('article')).toHaveCount(0);
-      await manager.getByRole('button', { name: '联系人与绑定', exact: true }).click();
+      await manager.getByRole('button', { name: '联系人', exact: true }).click();
       await manager.getByRole('button', { name: '选择合成学习甲联系人', exact: true }).click();
-      await manager.getByRole('button', { name: 'Skill 待审核', exact: true }).click();
+      await manager.getByRole('button', { name: 'Skill', exact: true }).click();
+      await manager.getByRole('tab', { name: /^待审核/ }).click();
       await expectLearningReady(fixture.data.contact_ids[0]);
       await expect(panel.getByRole('article')).toHaveCount(1);
 
@@ -195,21 +197,22 @@ export async function skillLearning(browser: Browser, origin: string, reviewMode
       await host.backend.connect();
       manager = await host.open('manager');
       await manager.getByRole('button', { name: '选择合成学习甲联系人', exact: true }).click();
-      await manager.getByRole('button', { name: 'Skill 待审核', exact: true }).click();
+      await manager.getByRole('button', { name: 'Skill', exact: true }).click();
+      await manager.getByRole('tab', { name: /^待审核/ }).click();
       panel = manager.getByRole('region', { name: 'Skill待审核', exact: true });
       await expectLearningReady(fixture.data.contact_ids[0]);
       await expect(panel.getByRole('article')).toHaveCount(1);
       await panel.getByRole('button', { name: '关闭经验整理', exact: true }).click();
       await expect(panel.getByRole('button', { name: '开启此联系人的经验整理', exact: true })).toBeEnabled();
       await manager.getByRole('button', { name: '记忆', exact: true }).click();
-      await selectMemoryCategory(manager, '来源与过程');
-      const source = manager.getByRole('region', { name: '来源删除管理', exact: true }).getByRole('listitem')
-        .filter({ hasText: `来源标识：${prepared.source_id}` });
+      await openImportManagement(manager);
+      const source = manager.getByRole('region', { name: '已导入资料', exact: true }).locator(`[data-source-id="${prepared.source_id}"]`);
       await source.getByRole('button', { name: '删除来源', exact: true }).click();
       await manager.getByRole('button', { name: '确认删除来源', exact: true }).click();
       await expect(source.getByText('已删除，已通过不可检索校验', { exact: true })).toBeVisible();
       const beforeDeletedRead = await manager.evaluate(() => window.notalone.skillLearning.getState());
-      await manager.getByRole('button', { name: 'Skill 待审核', exact: true }).click();
+      await manager.getByRole('button', { name: 'Skill', exact: true }).click();
+      await manager.getByRole('tab', { name: /^待审核/ }).click();
       await expectLearningReady(fixture.data.contact_ids[0], beforeDeletedRead.revision);
       await expect(panel.getByRole('article')).toHaveCount(0);
       const beforeRefresh = await manager.evaluate(() => window.notalone.skillLearning.getState());

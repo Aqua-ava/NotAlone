@@ -75,6 +75,73 @@ class ReplyExplorationPersistenceTest(unittest.TestCase):
     def _current(self):
         return self.fixture.backend.request(self.fixture._path(self.session_id))[1]["current_input_version_id"]
 
+    def _pending_skill_choice(self):
+        skill, version = uuid4(), uuid4()
+        name = "synthetic-auto-pin-" + skill.hex[:8]
+        with psycopg.connect(fixture.DATABASE_URL) as connection:
+            connection.execute("UPDATE public.skill_library SET revision=revision+1 WHERE owner_id=%s", (self.scope.owner_id,))
+            connection.execute("INSERT INTO public.reply_skill(id,owner_id,contact_id,name,description) "
+                               "VALUES (%s,%s,%s,%s,'合成自动策略')", (skill, self.scope.owner_id, self.scope.contact_id, name))
+            connection.execute("INSERT INTO public.reply_skill_version"
+                "(id,skill_id,version_number,name,description,content,enabled,is_current,status) "
+                "VALUES (%s,%s,1,%s,'合成自动策略','合成受控正文',true,true,'active')", (version, skill, name))
+        task = self._begin()
+        self.assertFalse(task.skill_selection_complete)
+        return task, version
+
+    def test_auto_none_choice_is_persisted_across_retry_and_cannot_select_again(self):
+        task, version = self._pending_skill_choice()
+        pinned = self.store.pin_skill(task, None)
+        self.store.fail(pinned)
+        restored = PostgresExplorationStore(fixture.DATABASE_URL, evidence=self.evidence)
+        failed = restored.replay(self.scope, self.request)
+        self.assertTrue(failed.skill_selection_complete)
+        self.assertIsNone(failed.skill_version_id)
+        running = restored.retry(failed)
+        self.assertEqual(running.input_version_id, task.input_version_id)
+        with self.assertRaises(ExplorationStale):
+            restored.pin_skill(running, version)
+        self.assertIsNone(restored.complete(running, result()).skill_version_id)
+
+    def test_concurrent_auto_choice_pins_only_one_result(self):
+        task, version = self._pending_skill_choice()
+
+        def pin(selected):
+            try:
+                return PostgresExplorationStore(fixture.DATABASE_URL, evidence=self.evidence).pin_skill(task, selected)
+            except ExplorationStale:
+                return None
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            attempts = list(pool.map(pin, (version, None)))
+        self.assertEqual(sum(item is not None for item in attempts), 1)
+        actual = self.store.read(self.scope, task.exploration_id)
+        self.assertTrue(actual.skill_selection_complete)
+        self.assertEqual(actual, next(item for item in attempts if item is not None))
+
+    def test_auto_choice_checks_stop_expiry_and_library_revision_before_pinning(self):
+        for mutation in ("stop", "expiry", "revision"):
+            with self.subTest(mutation=mutation):
+                self.request = replace(self.request, operation_key=uuid4())
+                task, version = self._pending_skill_choice()
+                if mutation == "stop":
+                    self.store.stop(self.scope, task.exploration_id, task.input_version_id)
+                else:
+                    with psycopg.connect(fixture.DATABASE_URL) as connection:
+                        if mutation == "expiry":
+                            connection.execute("UPDATE public.reply_exploration SET root_created_at=clock_timestamp()-interval '16 minutes' WHERE id=%s",
+                                               (task.exploration_id,))
+                        else:
+                            connection.execute("UPDATE public.skill_library SET revision=revision+1 WHERE owner_id=%s", (self.scope.owner_id,))
+                with self.assertRaises(ExplorationStale):
+                    self.store.pin_skill(task, version)
+
+    def test_auto_choice_cannot_pin_a_version_outside_the_contact_catalog(self):
+        task, _ = self._pending_skill_choice()
+        with self.assertRaises(ExplorationStale):
+            self.store.pin_skill(task, uuid4())
+        self.assertFalse(self.store.read(self.scope, task.exploration_id).skill_selection_complete)
+
     def test_reassembled_store_replays_same_operation_before_advancing_a_input(self):
         task = self._ready()
         reopened = PostgresExplorationStore(fixture.DATABASE_URL, evidence=self.evidence)

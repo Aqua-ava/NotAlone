@@ -60,6 +60,7 @@ class MemoryPort(Protocol):
         text: str,
         category: MemoryCategory | None = None,
         change_kind: MemoryChangeKind = MemoryChangeKind.ERROR_CORRECTION,
+        conditions: object = ...,
     ) -> ConfirmedMemory:
         """修正现有记忆并保留其来源链。"""
 
@@ -98,9 +99,10 @@ class MemoryPort(Protocol):
         """标记记忆删除，使其不再进入检索。"""
 
     def list_confirmed(self, scope: ContactScope, *, include_expired: bool = False,
+                       include_invalidated: bool = False,
                        memory_ids: tuple[UUID, ...] | None = None,
                        include_historical: bool = False) -> tuple[ConfirmedMemory, ...]:
-        """读取当前有效记忆；指定 ID 时限定集合，历史模式仍核验完整来源。"""
+        """读取当前资料；管理列表可含失效资料，历史批读必须限定 ID 并核验完整来源。"""
 
     def list_versions(self, *, scope: ContactScope, memory_id: UUID) -> tuple[ConfirmedMemory, ...]:
         """读取指定资料的新旧版本、状态、修订及仍合法的来源。"""
@@ -129,12 +131,13 @@ class OwnerMemoryPort(Protocol):
         """原子确认 self 候选；自动替代只操作复验通过的原版本。"""
 
     def list_active(self, owner_id: UUID, *, include_expired: bool = False,
+                    include_invalidated: bool = False, contact_id: UUID | None = None,
                     memory_ids: tuple[UUID, ...] | None = None,
                     include_historical: bool = False) -> tuple[OwnerMemory, ...]:
-        """读取当前有效本人资料；指定 ID 时限定集合，历史模式仍核验完整来源。"""
+        """读取本人资料；支持管理列表、联系人合法来源投影与限定 ID 的历史批读。"""
 
-    def list_versions(self, *, owner_id: UUID, memory_id: UUID) -> tuple[OwnerMemory, ...]:
-        """读取本人资料的版本链，保留原联系人来源依赖。"""
+    def list_versions(self, *, owner_id: UUID, memory_id: UUID, contact_id: UUID | None = None) -> tuple[OwnerMemory, ...]:
+        """读取本人版本链；指定 contact_id 时遇其他联系人来源即截断。"""
 
     def revert_auto_update(self, *, owner_id: UUID, memory_id: UUID, expected_revision: int) -> OwnerMemory:
         """撤销本人自动更新前复验完整参与来源及旧版。"""
@@ -143,6 +146,7 @@ class OwnerMemoryPort(Protocol):
         self, *, owner_id: UUID, memory_id: UUID, text: str,
         category: MemoryCategory | None = None,
         change_kind: MemoryChangeKind = MemoryChangeKind.ERROR_CORRECTION,
+        conditions: object = ...,
     ) -> OwnerMemory:
         """在同一事务创建手动新版本并使原本人资料失效。"""
 

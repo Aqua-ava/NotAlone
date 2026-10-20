@@ -17,6 +17,7 @@ from notalone.memory_extraction.evaluation_bounded_cases import (
 )
 from notalone.memory_extraction.evaluation_http_budget import EvaluationBudget
 from notalone.memory_extraction.evaluation_offline import _run_evaluation_batch
+from notalone.memory_extraction.grounded_adapter import BOUNDED_DEPENDENCY_PROMPT_PROFILE
 from notalone.memory_extraction.evaluation_phased_audit import PhasedEvaluationAudit
 from notalone.memory_extraction.evaluation_records import EvaluationRecordStore, canonical_sha256
 from notalone.memory_extraction.models import ExtractionWindow
@@ -132,6 +133,7 @@ class FormalEvaluationBatchTest(unittest.TestCase):
             verification_mode="nullable-proof-v3", verification_tool_choice="forced",
             extraction_tool_choice="omitted", extraction_mode="grounded-v2",
             reference_version="bounded-runtime15-v1", execution_plan="bounded-runtime15-v1",
+            extraction_prompt_profile=BOUNDED_DEPENDENCY_PROMPT_PROFILE,
         )
 
         requests = []
@@ -184,6 +186,7 @@ class FormalEvaluationBatchTest(unittest.TestCase):
                 synthetic_transport=httpx.MockTransport(respond), provider="deepseek", request_timeout_seconds=300,
                 max_retries=0, verification_mode="nullable-proof-v3", verification_tool_choice="forced",
                 extraction_tool_choice="omitted", extraction_mode="grounded-v2", execution_plan="bounded-runtime15-v1",
+                extraction_prompt_profile=BOUNDED_DEPENDENCY_PROMPT_PROFILE,
                 semantic_audit=audit, gold_reference={"criteria_sha256": "c" * 64},
                 formal_task_ids=task_ids, database_url=self.database_url,
             )

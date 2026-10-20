@@ -123,7 +123,8 @@ test('同E真实探针单联系人定位，撤销保护与焦点独立停读，�
     });
     report.existingDraftPreserved = true;
     await helper.getByRole('button', { name: '打开管理后台', exact: true }).click();
-    await manager.getByRole('button', { name: '刷新会话与授权', exact: true }).click();
+    await manager.getByRole('button', { name: '联系人', exact: true }).click();
+    await manager.getByRole('button', { name: '刷新联系人', exact: true }).click();
     await expect.poll(() => manager.evaluate(async () => (await window.notalone.bindings.getState()).phase)).toBe('ready');
     await manager.evaluate(async expected => {
       const state = await window.notalone.bindings.getState();

@@ -69,6 +69,11 @@ class DesktopRewriteModel(ScriptedCoreModel):
         if not self.plans:
             raise AssertionError("桌面模型脚本耗尽，禁止外部调用。")
         plan = self.plans.pop(0)
+        if payload["input_mode"] == "exploration_skill_selection":
+            if "select_skill" not in plan:
+                raise AssertionError("桌面自动策略选择脚本耗尽，禁止额外模型调用。")
+            self.responses.append(tool_response("ExplorationSkillSelection", {"version_id": plan["select_skill"]}))
+            return super()._generate(messages, stop, run_manager, **kwargs)
         if plan.get("provider_context_limit"):
             self.record_model_payload(messages, kwargs)
             self.seen_calls.append(messages)
@@ -119,11 +124,18 @@ class DesktopRewriteModel(ScriptedCoreModel):
                 "current_step": "本次只说明意愿，不推进其他安排。", "tradeoffs": ["简短表达可能只推进当前一步。"],
             }))
             return super()._generate(messages, stop, run_manager, **kwargs)
-        primary = next(item for item in payload["evidence"]
-                       if (item["kind"] == "user_draft" if payload["input_mode"] == "rewrite_draft"
-                           else item["kind"] == "user_purpose" if payload["input_mode"] == "initiate_conversation"
-                           else item["kind"] == "message" and item["text"] == payload["current_text"]))
-        citations = [primary["evidence_id"]]
+        if payload["input_mode"] == "workspace":
+            # 有想法时引用实际草稿；空建议可引用实际点击动作，不制造用户输入。
+            preferred = ("user_draft", "user_current_chat", "message", "user_purpose")
+            primary = next((item for kind in preferred for item in payload["evidence"]
+                            if item["kind"] == kind), None)
+        else:
+            primary = next(item for item in payload["evidence"]
+                           if (item["kind"] == "user_draft" if payload["input_mode"] == "rewrite_draft"
+                               else item["kind"] == "user_current_chat" if payload["input_mode"] == "reply_to_pasted_text"
+                               else item["kind"] == "user_purpose" if payload["input_mode"] == "initiate_conversation"
+                               else item["kind"] == "message" and item["text"] == payload["current_text"]))
+        citations = [primary["evidence_id"]] if primary is not None else []
         if plan.get("cite_pending"):
             citations.extend(item["evidence_id"] for item in payload["evidence"] if item["kind"] == "pending_candidate")
         if plan.get("cite_history"):
@@ -388,16 +400,21 @@ def main() -> None:
                 fixture._release_response_gates()
                 result = {}
             elif operation == "observations":
-                result = {"payloads": fixture.reply_model.payloads,
+                # 长场景只读取本次模型输入，避免重复传输累计历史；总调用数仍可验证重放。
+                latest = command.get("latest", False)
+                payloads = fixture.reply_model.payloads
+                calls = fixture.reply_model.seen_calls
+                result = {"payloads": payloads[-1:] if latest else payloads,
+                          "model_calls": len(payloads),
                           "skill_reads": [[str(message.content) for message in messages
                                            if isinstance(message, ToolMessage) and message.name == "read_file"]
-                                          for messages in fixture.reply_model.seen_calls],
+                                          for messages in (calls[-1:] if latest else calls)],
                           "model_entered": fixture.reply_model.entered.is_set(),
                           "tool_names": fixture.reply_model.bound_tool_names,
-                          "outbound": [str(message.content) for messages in fixture.reply_model.seen_calls
+                          "outbound": [str(message.content) for messages in (calls[-1:] if latest else calls)
                                        for message in messages],
                           "outbound_calls": [[str(message.content) for message in messages]
-                                             for messages in fixture.reply_model.seen_calls]}
+                                             for messages in (calls[-1:] if latest else calls)]}
             elif operation == "read_group_as_other_owner":
                 # 同一实际组路径，仅更换为夹具已有的另一owner认证，不拼接错误联系人。
                 session_id, candidate_id = UUID(command["session_id"]), UUID(command["candidate_id"])

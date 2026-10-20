@@ -2,7 +2,7 @@ import { expect } from '@playwright/test';
 import { chmod, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { selectMenu } from './app-fixture';
-import { projectDirectory, pythonExecutable, test as startupTest } from './startup-fixture';
+import { openStartupDiagnostics, projectDirectory, pythonExecutable, test as startupTest } from './startup-fixture';
 
 const test = startupTest.extend({
   databaseState: 'ready',
@@ -24,8 +24,8 @@ test('检查中退出有界回收本轮诊断子进程，迟到诊断不能启�
   try {
     await expect.poll(async () => readFile(marker, 'utf8').then((value) => Number(value), () => 0)).toBeGreaterThan(0);
     pid = Number(await readFile(marker, 'utf8'));
-    await expect(manager.getByText('正在只读检查机器环境…', { exact: true })).toBeVisible();
-    await manager.getByRole('button', { name: '应用配置', exact: true }).click();
+    await expect(manager.getByText('正在连接本机服务…', { exact: true })).toBeVisible();
+    await openStartupDiagnostics(manager);
     await expect(manager.getByLabel('后端握手文件', { exact: true })).toBeDisabled();
     const configuration = await readFile(path.join(userData, 'backend-launch.json'));
     expect(await manager.evaluate(async () => {
@@ -52,7 +52,7 @@ test('只读诊断超时后明确重试可恢复，旧诊断结果不能覆盖�
   try {
     await expect.poll(async () => readFile(marker, 'utf8').then((value) => Number(value), () => 0)).toBeGreaterThan(0);
     pid = Number(await readFile(marker, 'utf8'));
-    await manager.getByRole('button', { name: '应用配置', exact: true }).click();
+    await openStartupDiagnostics(manager);
     await expect(manager.getByText('机器环境检查超时。', { exact: true })).toBeVisible({ timeout: 15_000 });
     expect(await readFile(path.join(userData, 'backend.info'), 'utf8').then(() => true, () => false)).toBe(false);
     await expect.poll(() => { try { process.kill(pid!, 0); return true; } catch { return false; } }).toBe(false);

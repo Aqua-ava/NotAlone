@@ -1,4 +1,4 @@
-import type { Browser, Page } from '@playwright/test';
+import { expect, type Browser, type Page } from '@playwright/test';
 import { withSourceDeletionFixture, type SourceDeletionFixture } from '../source-deletion-fixture';
 import { sourceDeletionBasic, sourceDeletionVerification, sourceDeletionUnknown, sourceDeletionArguments, sourceDeletionReplies, sourceDeletionUnrelated } from '../source-deletion-page-scenarios';
 import { MemoryHttpProxy } from '../memory-http-proxy';
@@ -39,10 +39,15 @@ export async function sourceDeletionArgumentsAcceptance(browser: Browser, origin
 async function runReplySourceDeletion(browser: Browser, origin: string, scenario: typeof sourceDeletionReplies) {
   await withSourceDeletionFixture(async (fixture) => withControllerEnvironment(fixture, async (userData) => {
     const released = ownResource();
-    const host = new PageHost(await browser.newContext(), origin, userData);
+    const copiedTexts: string[] = [];
+    const host = new PageHost(await browser.newContext(), origin, userData, {
+      copySurface: { async writeText(text) { copiedTexts.push(text); }, hideWindow() { throw new Error('来源删除校验不得收起小窗。'); } },
+    });
     try {
       await host.backend.connect();
       await scenario(await host.open('manager'), await host.open('helper'), fixture);
+      // 仅删除前的有效版本对照写入一次；删除后所有公开复制请求必须零新增写入。
+      expect(copiedTexts).toHaveLength(1);
     } finally { await host.close(); fixture.confirmControllerStopped(); released(); }
   }), 'reply');
   process.stdout.write(`page_test_scenario_passed: ${scenario.name}\n`);
@@ -58,10 +63,15 @@ async function runSourceDeletionWithProxy<Proxy extends Pick<MemoryHttpProxy, 'r
     const proxy = await proxyFactory(fixture.infoPath);
     let controllerStopped = false;
     try { await withControllerEnvironment(fixture, async (userData) => {
-      const host = new PageHost(await browser.newContext(), origin, userData);
+      const copiedTexts: string[] = [];
+      const host = new PageHost(await browser.newContext(), origin, userData, {
+        copySurface: { async writeText(text) { copiedTexts.push(text); }, hideWindow() { throw new Error('来源删除校验不得收起小窗。'); } },
+      });
       try {
         await host.backend.connect();
         await scenario(await host.open('manager'), await host.open('helper'), fixture, proxy);
+        // 仅删除前的有效版本对照写入一次；删除后所有公开复制请求必须零新增写入。
+        expect(copiedTexts).toHaveLength(1);
       } finally { proxy.release(); await host.close(); fixture.confirmControllerStopped(); controllerStopped = true; }
     }); } finally { await proxy.close(); if (controllerStopped) released(); }
   }, mode);

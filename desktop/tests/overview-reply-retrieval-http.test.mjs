@@ -148,7 +148,7 @@ test('真实HTTP与生产桥展开实际概览定位、同关系原话、SELF手
     assert.ok(!state.result.contextEvidenceIds.some((id) => !byId.has(id)));
     const html = await renderEvidence(f, selection);
     for (const text of [f.prepared.rawText, f.prepared.history.text, f.prepared.unknown.text, f.prepared.pending.text,
-      '由联系人概览定位', '由本人概览定位', '历史资料', '当前未核实', '未确认记忆候选', '估算 token']) assert.ok(html.includes(text), text);
+      '由联系人概览定位', '由本人概览定位', '历史资料', '是否仍适用，尚不确定', '未确认记忆候选', '估算 token']) assert.ok(html.includes(text), text);
     assert.ok(!html.includes(f.prepared.otherPrivateText));
     assert.ok(f.calls.every((call) => !call.path.endsWith('/relationship-overview') && !call.path.endsWith('/owner/overview')));
   });
@@ -218,7 +218,7 @@ test('概览修订保留合法编辑和原导航，两种真实来源通知次�
     await f.bridge.readSavedSession(f.scope()); await f.bridge.loadEvidence(selection);
     assert.equal((await f.bridge.getState()).result.candidates[0].editedText, edit);
     assert.equal((await f.bridge.getEvidenceState()).retrieval.overviewRevisions.contact.projectionRevision, evidence.retrieval.overviewRevisions.contact.projectionRevision);
-    assert.ok((await f.bridge.getEvidenceState()).basisChanges.some((change) => change.reason === 'memory_revised'));
+    assert.ok((await f.bridge.getEvidenceState()).basisChanges.some((change) => change.reason === 'memory_generation_forbidden'));
     let release, reached, held = false, pending;
     const atResponse = new Promise((resolve) => { reached = resolve; });
     if (order === 'inflight') {

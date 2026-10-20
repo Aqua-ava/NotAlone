@@ -1,4 +1,4 @@
-"""089 从真实 088/063 旧触发器升级，失败回滚且不改写已有资料。"""
+"""098 从真实 097/063 旧触发器升级，失败回滚且不改写已有资料。"""
 
 import os
 from pathlib import Path
@@ -18,7 +18,7 @@ from notalone.scopes import ContactScope
 
 
 class ImportStatementMigrationTest(unittest.TestCase):
-    def test_real_088_upgrade_preserves_data_failure_rolls_back_and_repeat_is_noop(self):
+    def test_real_097_upgrade_preserves_data_failure_rolls_back_and_repeat_is_noop(self):
         instance = os.environ.get("NOTALONE_TEST_DATABASE_URL")
         if not instance:
             self.skipTest("必须显式提供隔离测试库。")
@@ -33,9 +33,9 @@ class ImportStatementMigrationTest(unittest.TestCase):
                 with tempfile.TemporaryDirectory() as directory:
                     prefix = Path(directory)
                     for path in migrations.glob("*.sql"):
-                        if int(path.name[:3]) <= 88:
+                        if int(path.name[:3]) <= 97:
                             shutil.copyfile(path, prefix / path.name)
-                    self.assertEqual(len(migrate(database, prefix)), 88)
+                    self.assertEqual(len(migrate(database, prefix)), 97)
                     with psycopg.connect(database) as connection:
                         connection.execute("INSERT INTO public.owner(id,display_name) VALUES (%s,'合成用户')", (scope.owner_id,))
                         connection.execute("INSERT INTO public.contact(owner_id,id,display_name) VALUES (%s,%s,'合成联系人')",
@@ -50,13 +50,13 @@ class ImportStatementMigrationTest(unittest.TestCase):
                             (message, scope.owner_id, scope.contact_id, source))
                     before = load_contact_messages(scope, database)
                     overview = PostgresRelationshipOverviewStore(database).read_contact(scope)
-                    current = migrations / "089_import_statement_overview_invalidation.sql"
+                    current = migrations / "098_import_statement_overview_invalidation.sql"
                     (prefix / current.name).write_text(current.read_text().replace(
                         "COMMIT;", "SELECT synthetic_business_migration_failure();\nCOMMIT;"))
                     with self.assertRaises(MigrationError):
                         migrate(database, prefix)
                     with psycopg.connect(database) as connection:
-                        self.assertEqual(connection.execute("SELECT count(*) FROM public.notalone_schema_migration").fetchone()[0], 88)
+                        self.assertEqual(connection.execute("SELECT count(*) FROM public.notalone_schema_migration").fetchone()[0], 97)
                         # 失败时仍保留 063 的 INSERT/UPDATE/DELETE 逐行触发器。
                         self.assertEqual(connection.execute("SELECT tgtype FROM pg_trigger WHERE tgrelid='public.message'::regclass "
                             "AND tgname='relationship_overview_message'").fetchone()[0], 29)

@@ -6,4 +6,5 @@
 .setup-panel input { font: inherit; color: inherit; min-width: 180px; padding: 8px 10px; border: 1px solid #c6cfcd; border-radius: 3px; background: #fffdf6; }
 .setup-panel [role="alert"] { color: #99594e; }
 .setup-privacy { margin-top: 22px; padding-top: 16px; border-top: 1px dashed #d5cbb9; }
-.setup-privacy h3 { font-size: 13px; font-weight: 500; color: #496e88; }
+.setup-privacy summary { cursor: pointer; font-size: 13px; font-weight: 500; color: #496e88; }
+.setup-privacy summary:focus-visible { outline: 2px solid #527b94; outline-offset: 4px; }

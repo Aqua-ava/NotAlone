@@ -84,8 +84,8 @@ class MemoryOverviewHttpFixture:
         self.assertEqual(status, 200, result)
         return result
 
-    def activate_event_worker(self) -> None:
-        """沿生产 Worker 装配只替换外部模型，默认空放行表保持。"""
+    def activate_historical_review_worker(self) -> None:
+        """显式重放旧人工审核记录；保留真实 Worker、来源核验及存储链路。"""
         from unittest.mock import patch
         from notalone.application.model_priority import ModelPriorityControl
         from notalone.server.command import _build_task_host
@@ -97,9 +97,20 @@ class MemoryOverviewHttpFixture:
                             return_value=self.extraction_model)
         model_patch.start()
         self.addCleanup(model_patch.stop)
+        from notalone.memory_extraction.dimensions import DimensionRelease
+        from notalone.tasks.worker import PostgresMemoryExtractionRunner
+
+        def historical_review_runner(database_url, **kwargs):
+            self.assertEqual(database_url, self.database_url)
+            # 仅此历史夹具显式选择旧协议和人工待确认合同，不改变默认正式提取。
+            # for_prompt_profile 保留实际优先级及调用记账，后续采纳使用真实实现。
+            kwargs['runtime'] = kwargs['runtime'].for_prompt_profile('default')
+            return PostgresMemoryExtractionRunner(database_url, **kwargs, automatic=False)
+
         priority = ModelPriorityControl()
-        task_host = _build_task_host(self.database_url, EventBus(), model_priority=priority,
-                                     dimension_release=None)
+        with patch('notalone.tasks.worker.PostgresMemoryExtractionRunner', historical_review_runner):
+            task_host = _build_task_host(self.database_url, EventBus(), model_priority=priority,
+                                         dimension_release=DimensionRelease())
         self.backend = self._backend(self.owner_id, task_host=task_host, runtime_shutdown=priority.stop)
         self.addCleanup(lambda: [gate.set() for gate in self.extraction_model.response_gates.values()])
 

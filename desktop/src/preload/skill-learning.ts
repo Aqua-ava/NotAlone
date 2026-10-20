@@ -5,6 +5,7 @@ export function createSkillLearningBridge(transport: PageTransport): SkillLearni
   return Object.freeze({
     getState: (...args: unknown[]) => args.length ? Promise.reject(new Error('经验整理操作无效。')) : transport.invoke('skill-learning:get-state'),
     refresh: (...args: unknown[]) => transport.invoke('skill-learning:refresh', ...args),
+    poll: (...args: unknown[]) => transport.invoke('skill-learning:poll', ...args),
     configure: (...args: unknown[]) => transport.invoke('skill-learning:configure', ...args),
     resume: (...args: unknown[]) => transport.invoke('skill-learning:resume', ...args),
     openReview: (...args: unknown[]) => transport.invoke('skill-learning:open-review', ...args),

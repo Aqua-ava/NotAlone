@@ -12,7 +12,6 @@ import psycopg
 from psycopg.types.json import Jsonb
 
 from notalone.application.reply_service import ReplyServiceRequest
-from notalone.application.style_sample_service import SaveStyleSample
 from notalone.persistence.assistant_discussion_context import (
     read_assistant_discussion_in_transaction,
     require_assistant_discussion_current,
@@ -25,7 +24,6 @@ from notalone.persistence.conversation_repository import PostgresConversationBin
 from notalone.persistence.locks import lock_owner_scope
 from notalone.persistence.reply_store import PostgresReplyStore
 from notalone.persistence.source_deletion import PostgresSourceDeletionRepository
-from notalone.persistence.style_sample_store import PostgresStyleSampleStore
 from notalone.reply.context import ContextEvidence, ReplyContext
 from notalone.reply.errors import ReplyStoreInvariantError
 from notalone.reply.assistant_discussion import DiscussionDependencies
@@ -124,8 +122,8 @@ class AssistantDiscussionContextTest(unittest.TestCase):
         )
 
     def _complete(self, draft="旧轮用户意愿。", *, parts=("明天见。", "路上注意安全。"),
-                  source=None, style_references=()):
-        request, turn_id = self._reserve(draft, relationship=bool(source or style_references))
+                  source=None):
+        request, turn_id = self._reserve(draft, relationship=bool(source))
         command = request.build_command(owner_id=self.owner_id, contact_id=self.contact_id,
                                         binding_id=self.binding_id)
         store = PostgresReplyStore(DATABASE_URL)
@@ -143,7 +141,7 @@ class AssistantDiscussionContextTest(unittest.TestCase):
         context = ReplyContext(
             reply_request_id=started.request.request_id, command=command, scope=self.scope,
             current_text=draft, direction=None, skill_library_revision=0,
-            evidence=evidence, style_references=style_references,
+            evidence=evidence,
         )
         store.prepare_context(started.request, context)
         result = store.save(started.request, context, ValidatedReply(
@@ -169,7 +167,6 @@ class AssistantDiscussionContextTest(unittest.TestCase):
         self.assertEqual(context.snapshot.current_turn_id, turn_id)
         dependencies = self._require(context)
         self.assertEqual(dependencies.source_ids, ())
-        self.assertEqual(dependencies.style_sample_ids, ())
 
     def test_completed_generation_keeps_all_candidate_versions_and_explicit_choice_separate(self):
         candidate, reply_request_id, turn_id = self._complete()
@@ -209,7 +206,6 @@ class AssistantDiscussionContextTest(unittest.TestCase):
         context = self._read(request)
         dependencies = self._require(context)
         self.assertEqual(set(dependencies.source_ids), {source_id, message_id})
-        self.assertEqual(dependencies.style_sample_ids, ())
 
     def test_source_deleted_before_read_omits_affected_history_and_keeps_unrelated_discussion(self):
         source_id, message_id = self._source()
@@ -234,27 +230,7 @@ class AssistantDiscussionContextTest(unittest.TestCase):
         with self.assertRaises(ReplyStoreInvariantError):
             self._require(context)
 
-    def test_manual_sample_dependency_is_returned_without_copying_sample_body(self):
-        samples = PostgresStyleSampleStore(DATABASE_URL)
-        sample = samples.save(self.scope, SaveStyleSample(uuid4(), "只属于合成样本的独立说法。", "manual"))
-        self._complete(style_references=samples.select_references(self.scope))
-        request, _ = self._reserve()
-        context = self._read(request)
-        dependencies = self._require(context)
-        self.assertEqual(dependencies.source_ids, ())
-        self.assertEqual(dependencies.style_sample_ids, (sample.sample_id,))
-        self.assertNotIn(sample.text, "".join(item.text for item in context.items))
 
-    def test_manual_sample_deleted_after_read_rejects_snapshot_even_without_raw_sources(self):
-        samples = PostgresStyleSampleStore(DATABASE_URL)
-        sample = samples.save(self.scope, SaveStyleSample(uuid4(), "合成轻松说法。", "manual"))
-        self._complete(style_references=samples.select_references(self.scope))
-        request, _ = self._reserve()
-        context = self._read(request)
-        samples.delete(self.scope, sample.sample_id)
-        with self.assertRaises(ReplyStoreInvariantError):
-            self._require(context)
-        self.assertEqual(self._read(request).items, ())
 
     def test_owner_contact_and_same_contact_session_boundaries_do_not_inherit_other_discussion(self):
         self._discussion("原会话独立要求。")
@@ -462,7 +438,6 @@ class AssistantDiscussionContextTest(unittest.TestCase):
             lambda: replace(context, items=list(context.items)),
             lambda: replace(context.snapshot, records=list(context.snapshot.records)),
             lambda: DiscussionDependencies(source_ids=[uuid4()]),
-            lambda: DiscussionDependencies(style_sample_ids=[uuid4()]),
         ):
             with self.subTest(construction=construction):
                 with self.assertRaises(TypeError):
@@ -546,16 +521,12 @@ class AssistantDiscussionContextTest(unittest.TestCase):
                         guard(connection, selected_scope, snapshot)
                     self.assertEqual(connection.execute("SELECT 1").fetchone(), (1,))
 
-    def test_available_and_current_both_reject_deleted_captured_raw_sample_input_and_version(self):
-        for removed_kind in ("raw", "sample", "input", "version"):
+    def test_available_and_current_both_reject_deleted_captured_raw_input_and_version(self):
+        for removed_kind in ("raw", "input", "version"):
             with self.subTest(removed_kind=removed_kind):
                 if removed_kind == "raw":
                     source_id, message_id = self._source()
                     self._complete(source=(source_id, message_id))
-                elif removed_kind == "sample":
-                    samples = PostgresStyleSampleStore(DATABASE_URL)
-                    sample = samples.save(self.scope, SaveStyleSample(uuid4(), "单独可删除的合成样本。", "manual"))
-                    self._complete(style_references=samples.select_references(self.scope))
                 elif removed_kind == "input":
                     input_id = self._discussion("单独删除的历史输入。")
                 else:
@@ -573,8 +544,6 @@ class AssistantDiscussionContextTest(unittest.TestCase):
                 self._available_snapshot(capture.snapshot)
                 if removed_kind == "raw":
                     self._delete_source(source_id)
-                elif removed_kind == "sample":
-                    samples.delete(self.scope, sample.sample_id)
                 else:
                     with psycopg.connect(DATABASE_URL) as connection:
                         if removed_kind == "input":
@@ -679,9 +648,9 @@ class AssistantDiscussionContextTest(unittest.TestCase):
                 (self.owner_id, self.contact_id),
             ).fetchone()[0], 0)
 
-    def _prepare_uncompleted_generation(self, *, source=None, style_references=()):
+    def _prepare_uncompleted_generation(self, *, source=None):
         draft = "失败后仍有效的合成用户要求。"
-        request, turn_id = self._reserve(draft, relationship=bool(source or style_references))
+        request, turn_id = self._reserve(draft, relationship=bool(source))
         command = request.build_command(owner_id=self.owner_id, contact_id=self.contact_id,
                                         binding_id=self.binding_id)
         store = PostgresReplyStore(DATABASE_URL)
@@ -694,7 +663,7 @@ class AssistantDiscussionContextTest(unittest.TestCase):
                                          source_ids=(source_id,), selection_reason="本次实际合成来源"),)
         context = ReplyContext(reply_request_id=started.request.request_id, command=command, scope=self.scope,
                                current_text=draft, direction=None, skill_library_revision=0,
-                               evidence=evidence, style_references=style_references)
+                               evidence=evidence)
         store.prepare_context(started.request, context)
         return request, turn_id, store, started.request, context
 
@@ -714,23 +683,6 @@ class AssistantDiscussionContextTest(unittest.TestCase):
         self._assert_snapshot_rejected_by_both(capture.snapshot)
         self.assertEqual(self._read(request).items, ())
 
-    def test_failed_user_input_returns_manual_sample_without_raw_roots_and_rejects_deleted_capture(self):
-        samples = PostgresStyleSampleStore(DATABASE_URL)
-        sample = samples.save(self.scope, SaveStyleSample(uuid4(), "失败前实际使用的独立合成样本。", "manual"))
-        _, turn_id, store, lease, _ = self._prepare_uncompleted_generation(
-            style_references=samples.select_references(self.scope),
-        )
-        store.fail(lease, reason="synthetic_failed_generation")
-        self.sessions.fail(self.scope, turn_id)
-        request, _ = self._reserve()
-        capture = self._read(request)
-        self.assertEqual([(item.kind, item.turn_id) for item in capture.items], [("generation_input", turn_id)])
-        dependencies = DiscussionDependencies(style_sample_ids=(sample.sample_id,))
-        self.assertEqual(self._require(capture), dependencies)
-        self.assertEqual(self._available_snapshot(capture.snapshot), dependencies)
-        self.assertNotIn(sample.text, capture.items[0].text)
-        samples.delete(self.scope, sample.sample_id)
-        self._assert_snapshot_rejected_by_both(capture.snapshot)
 
     def test_reserve_only_message_input_keeps_actual_turn_sources_and_deleted_body_is_omitted(self):
         from notalone.reply.interface import ConfirmedDirection, DirectionSource, ReplyToMessage
@@ -760,7 +712,7 @@ class AssistantDiscussionContextTest(unittest.TestCase):
         self.assertEqual(self._read(request).items, ())
 
     def test_replaced_failed_terminal_keeps_user_input_without_reviving_old_key_or_candidates(self):
-        from notalone.persistence.style_sample_store import invalidate_reply_keys
+        from notalone.persistence.reply_sources import invalidate_reply_keys
 
         previous, turn_id, store, lease, _ = self._prepare_uncompleted_generation()
         store.fail(lease, reason="generation_replaced")

@@ -1,69 +1,72 @@
 import { expect, type Browser } from '@playwright/test';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
+import { fillWorkspaceThought, generateWorkspace } from '../workspace-actions';
 import { withRewritePages } from './rewrite-acceptance';
-import { pendingCleanup } from './cleanup';
 
 export async function replyStrategyTransition(browser: Browser, origin: string) {
-  const failures: string[] = [];
-  for (const scene of ['回应消息', '主动聊聊']) {
-    process.stdout.write(`page_test_scenario: ${scene}普通生成后确认新意愿并再次普通生成\n`);
-    let scenarioFailure: unknown;
+  for (const firstAction of ['express', 'suggest'] as const) {
+    const nextAction = firstAction === 'express' ? 'suggest' : 'express';
+    const name = `${firstAction}切换${nextAction}直接生成并幂等重试`;
+    process.stdout.write(`page_test_scenario: ${name}\n`);
     await withRewritePages(browser, origin, async ({ manager, helper, rewriteBackend, replyTransport }) => {
+      await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+      await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
+      const firstThought = firstAction === 'express' ? '只说明本次收到消息，不继续等待。' : '';
+      await fillWorkspaceThought(helper, firstThought);
+      await rewriteBackend.plan({ count: 1, prefix: '第一次直接候选' });
+      await generateWorkspace(helper, firstAction);
+      const editor = helper.getByRole('textbox', { name: /^(候选1|说法1第1条)编辑文本$/ });
+      await expect(editor).toHaveValue('第一次直接候选（说法1）。');
+      const firstRequest = replyTransport.requests.at(-1)!;
+      const firstResult = replyTransport.results.at(-1)!;
+      expect(firstRequest).toMatchObject({ content: { type: 'rewrite_draft', input_kind: 'workspace',
+        workspace_action: firstAction, draft_text: firstThought, include_relationship_context: true } });
+
+      const nextThought = '表示愿意等待，但不增加承诺。';
+      await fillWorkspaceThought(helper, nextThought);
+      await rewriteBackend.plan({ count: 1, prefix: '切换动作后的候选' });
+      replyTransport.nextReply = 'drop';
+      await generateWorkspace(helper, nextAction);
+      await expect(helper.getByRole('alert').filter({ hasText: '未收到生成结果' })).toBeVisible();
+      const nextRequest = replyTransport.requests.at(-1)!;
+      const nextResult = replyTransport.results.at(-1)!;
+      expect(nextRequest.idempotency_key).not.toBe(firstRequest.idempotency_key);
+      expect(nextRequest).toMatchObject({ content: { type: 'rewrite_draft', input_kind: 'workspace',
+        workspace_action: nextAction, draft_text: nextThought } });
+      expect(nextResult.data.reply_request_id).not.toBe(firstResult.data.reply_request_id);
+      const beforeRetry = await rewriteBackend.command('observations');
+      expect(beforeRetry.payloads).toHaveLength(2);
+      expect((beforeRetry.payloads as object[]).at(-1)).toMatchObject({ input_mode: 'workspace',
+        fidelity_contract: { current_intent: nextAction === 'express' ? { text: nextThought } : null } });
+      await helper.getByRole('button', { name: '重试同一次生成', exact: true }).click();
+      await expect(editor).toHaveValue('切换动作后的候选（说法1）。');
+      expect(replyTransport.requests.at(-1)).toEqual(nextRequest);
+      expect(replyTransport.results.at(-1)).toEqual(nextResult);
+      expect((await rewriteBackend.command('observations')).payloads).toEqual(beforeRetry.payloads);
+      expect(replyTransport.explorationRequests).toEqual([]);
+      await expect(helper.getByRole('region', { name: '理解与方向', exact: true })).toHaveCount(0);
+
+      // 即使没有修改输入，明确再次点击动作也必须创建新请求；只有重试复用旧请求。
+      await rewriteBackend.plan({ count: 1, prefix: '再次明确请求候选' });
+      await generateWorkspace(helper, nextAction);
       try {
-        const contactId = rewriteBackend.data.contact_ids[0];
-        await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
-        await confirmHelperContact(helper, contactId);
-        await helper.getByRole('button', { name: scene, exact: true }).click();
-        if (scene === '回应消息') await helper.getByRole('radio', { name: /甲的私密合成历史/ }).click();
-        await helper.getByRole('textbox', { name: scene === '回应消息' ? '表达方向' : '主动目的', exact: true })
-          .fill('只说明本次收到消息，不继续等待。');
-        await rewriteBackend.plan({ count: 1, prefix: '普通生成意愿A' });
-        await helper.getByRole('button', { name: '生成候选', exact: true }).click();
-        await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveValue('普通生成意愿A（说法1）。');
-        const oldRequest = replyTransport.requests.at(-1)!;
-        const oldResult = replyTransport.results.at(-1)!;
-        await rewriteBackend.plan({ explore: {} });
-        await helper.getByRole('button', { name: '帮我理清方向', exact: true }).click();
-        await expect(helper.getByRole('button', { name: '确认方向：愿意等待', exact: true })).toBeVisible();
-        await rewriteBackend.plan({ count: 1, prefix: '探索确认意愿B' });
-        await helper.getByRole('button', { name: '确认方向：愿意等待', exact: true }).click();
-        await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveValue('探索确认意愿B（说法1）。');
-        await expect(helper.getByRole('textbox', { name: scene === '回应消息' ? '表达方向' : '主动目的', exact: true }))
-          .toHaveValue('表示愿意等待，但不增加承诺。');
-        expect((await rewriteBackend.command('observations')).payloads).toHaveLength(3);
-        const confirmed = replyTransport.explorationResults.at(-1)!;
-        const confirmRequest = replyTransport.explorationRequests.at(-1);
-        const confirmCount = replyTransport.explorationResults.length;
-        await helper.getByRole('button', { name: '重试策略操作', exact: true }).click();
-        await expect.poll(() => replyTransport.explorationResults.length).toBe(confirmCount + 1);
-        expect(replyTransport.explorationRequests.at(-1)).toEqual(confirmRequest);
-        expect(replyTransport.explorationResults.at(-1)).toEqual(confirmed);
-        expect((await rewriteBackend.command('observations')).payloads).toHaveLength(3);
-        // 此间不编辑任何输入，避免已有输入失效回调掩盖旧普通attempt复活。
-        await rewriteBackend.plan({ count: 1, prefix: '普通生成继续意愿B' });
-        await helper.getByRole('button', { name: '生成候选', exact: true }).click();
-        await expect.poll(() => replyTransport.requests.length).toBe(2);
-        const nextRequest = replyTransport.requests.at(-1)!;
-        expect(nextRequest.idempotency_key).not.toBe(oldRequest.idempotency_key);
-        expect(nextRequest).toMatchObject({ skill_disabled: true, content: scene === '回应消息'
-          ? { direction: '表示愿意等待，但不增加承诺。' } : { purpose: '表示愿意等待，但不增加承诺。' } });
-        await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveValue('普通生成继续意愿B（说法1）。');
-        const nextResult = replyTransport.results.at(-1)!;
-        expect(nextResult.data.reply_request_id).not.toBe(oldResult.data.reply_request_id);
-        const payloads = (await rewriteBackend.command('observations')).payloads as Array<Record<string, unknown>>;
-        expect(payloads).toHaveLength(4);
-        expect(payloads.at(-1)).toMatchObject({ fidelity_contract: { current_intent: { text: '表示愿意等待，但不增加承诺。' } } });
-        await helper.getByRole('button', { name: scene === '回应消息' ? '重试同一次生成' : '生成候选', exact: true }).click();
-        await expect.poll(() => replyTransport.results.length).toBe(3);
-        expect(replyTransport.requests.at(-1)).toEqual(nextRequest);
-        expect(replyTransport.results.at(-1)).toEqual(nextResult);
-        expect((await rewriteBackend.command('observations')).payloads).toHaveLength(4);
-      } catch (error) { scenarioFailure = error; }
+        await expect.poll(() => replyTransport.results.length, { timeout: 15_000 }).toBe(4);
+        expect(replyTransport.results[3].status, JSON.stringify(replyTransport.results[3].data)).toBe(200);
+        await expect(editor).toHaveValue('再次明确请求候选（说法1）。');
+      } catch (error) {
+        const observed = await helper.evaluate(async () => {
+          const state = await window.notalone.replies.getState();
+          return { phase: state.phase, errorCode: state.errorCode, canRetry: state.canRetry,
+            savedPhase: state.savedSession?.phase, generationJobs: state.generationJobs?.map(job => ({ phase: job.phase })) };
+        });
+        process.stdout.write(`page_test_transition_failure: ${JSON.stringify({ ...observed,
+          http: replyTransport.results.map(item => ({ status: item.status, error: item.data.error, reason: item.data.reason })),
+          preparation: replyTransport.replyPreparations })}\n`);
+        throw error;
+      }
+      expect(replyTransport.requests.at(-1)!.idempotency_key).not.toBe(nextRequest.idempotency_key);
+      expect((await rewriteBackend.command('observations')).payloads).toHaveLength(3);
     });
-    // 夹具收尾错误在上方直接透传；只有已完整收尾的页面断言才允许汇总。
-    if (pendingCleanup.size) throw new Error('本场收尾尚未确认，停止后续场景。');
-    if (scenarioFailure) failures.push(`${scene}: ${scenarioFailure instanceof Error ? scenarioFailure.message : String(scenarioFailure)}`);
-    else process.stdout.write(`page_test_scenario_passed: ${scene}普通与探索请求边界\n`);
+    process.stdout.write(`page_test_scenario_passed: ${name}\n`);
   }
-  if (failures.length) throw new Error(failures.join('\n'));
 }

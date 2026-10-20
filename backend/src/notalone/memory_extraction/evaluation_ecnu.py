@@ -288,8 +288,7 @@ def _bounded_source_inventory(repo_root: Path, source_hashes: dict[str, str]) ->
     actual = frozenset(f"backend/{path.relative_to(repo_root / 'backend').as_posix()}"
                        for path in (repo_root / "backend/src/notalone").rglob("*.py"))
     migrations = frozenset(f"backend/database/migrations/{path.name}"
-                          for path in (repo_root / "backend/database/migrations").glob("*.sql")
-                          if re.fullmatch(r"(?:00[1-9]|0[1-6][0-9]|07[0-2])_.+\.sql", path.name))
+                          for path in (repo_root / "backend/database/migrations").glob("*.sql"))
     if (actual != _BOUNDED_BACKEND_SOURCES or migrations != _BOUNDED_MIGRATION_SOURCES
             or not _BOUNDED_RUNTIME_REQUIRED_SOURCES <= set(source_hashes)):
         raise EvaluationBudgetAbort("evaluation_bounded_source_inventory_changed")
@@ -677,11 +676,11 @@ def run_ecnu_evaluation(
         (full140_v4_deadline, fixed_full140, Full140V4Deadline, True, "full140_v4"),
         (reference21_v4_deadline, reference21_v4, Reference21V4Deadline, True, "reference21_v4"),
     )
-    for deadline, selected, expected_type, required_for_synthetic, code_prefix in deadline_contracts:
-        if (deadline is not None and (not selected or type(deadline) is not expected_type)
+    for phase_deadline, selected, expected_type, required_for_synthetic, code_prefix in deadline_contracts:
+        if (phase_deadline is not None and (not selected or type(phase_deadline) is not expected_type)
                 or selected and (required_for_synthetic or synthetic_transport is None) and (
-                    type(deadline) is not expected_type
-                    or synthetic_transport is None and not deadline.live_worker)):
+                    type(phase_deadline) is not expected_type
+                    or synthetic_transport is None and not phase_deadline.live_worker)):
             raise EvaluationBudgetAbort(code_prefix + "_owned_deadline_required")
     bounded = cast(Remaining8Deadline | Ambiguity2Deadline | Main16Deadline | Full140V4Deadline | Reference21V4Deadline | None,
                    remaining8_deadline or ambiguity2_deadline or main16_deadline or full140_v4_deadline or reference21_v4_deadline)

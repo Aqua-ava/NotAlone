@@ -9,7 +9,7 @@ from notalone.application.assistant_session_service import (
     AssistantSessionNotFound,
     AssistantSessionPersistenceError,
 )
-from notalone.persistence.style_sample_store import invalidate_reply_keys
+from notalone.persistence.reply_sources import invalidate_reply_keys
 from notalone.scopes import ContactScope
 
 
@@ -20,7 +20,7 @@ def delete_assistant_session(
 
     请求键是尚未提交候选时的关联依据；仅按 reply_request_id 清理会遗留
     running/failed 请求，或让 reserve 后迟到的 start 重新写入旧正文。
-    表达样本按 ADR-044 独立留存，不沿会话关联删除来源与关系资料。
+    不沿会话关联删除来源与关系资料。
     """
 
     parameters = {

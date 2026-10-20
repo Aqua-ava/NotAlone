@@ -28,7 +28,8 @@ export function foregroundObservation(value: unknown): Observation {
     || typeof result.probe_available !== 'boolean' || typeof result.wechat_in_front !== 'boolean'
     || (result.phase === 'confirmed'
       ? (!isUuid(result.binding_id) || !isUuid(result.contact_id) || !result.probe_available
-        || !result.wechat_in_front || result.reason !== 'confirmed_active_binding')
+        || !result.wechat_in_front || !['confirmed_active_binding', 'confirmed_active_binding_name_match',
+          'confirmed_active_binding_emoji_fallback'].includes(result.reason as string))
       : (result.binding_id !== null || result.contact_id !== null))
     || (result.phase === 'manual-required' && (!result.probe_available || !result.wechat_in_front))
     || (result.phase === 'unavailable' && result.probe_available)

@@ -11,9 +11,11 @@ from __future__ import annotations
 
 from collections import deque
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from enum import StrEnum
+from math import isfinite
+from time import monotonic
 from typing import Protocol
 from uuid import UUID
 
@@ -42,6 +44,7 @@ from notalone.persistence.source_processing import SourceProcessingWriteError
 from notalone.source_processing.models import ProcessingRecord
 from notalone.wechat_cli import (
     CliAdapterError,
+    CliCommandError,
     CliOutputError,
     LocalWechatCli,
     SessionEventStream,
@@ -72,6 +75,14 @@ class CliSyncStatus:
     failure_code: str | None
     bound_count: int
     pending_count: int = 0
+    priority_contact_id: UUID | None = None
+    priority_last_success_at: datetime | None = None
+    priority_last_duration_ms: int | None = None
+    priority_last_cli_duration_ms: int | None = None
+    priority_last_store_duration_ms: int | None = None
+    priority_last_failure_code: str | None = None
+    priority_local_history_state: str | None = None
+    priority_queue_wait_ms: int | None = None
     backfill_phase: str = "not_required"
     backfill_contact_id: UUID | None = None
     backfill_message_count: int = 0
@@ -95,6 +106,22 @@ class CliSyncCycleResult:
 
     status: CliSyncStatus
     batch_message_count: int
+    cli_available: bool | None = None
+    cli_failure_code: str | None = None
+
+
+@dataclass(slots=True)
+class _PriorityReadTiming:
+    contact_id: UUID | None = None
+    requested_at: float | None = None
+    pending_requested_at: float | None = None
+    last_success_at: datetime | None = None
+    last_duration_ms: int | None = None
+    last_cli_duration_ms: int | None = None
+    last_store_duration_ms: int | None = None
+    last_failure_code: str | None = None
+    local_history_state: str | None = None
+    queue_wait_ms: int | None = None
 
 
 class BindingSourcePort(Protocol):
@@ -144,6 +171,9 @@ class BackfillStatePort(Protocol):
     def mark_running(self, **kwargs: object) -> object:
         """记录补齐进入执行状态。"""
 
+    def mark_progress(self, **kwargs: object) -> object:
+        """在来源页成功后记录累计进度，保持补齐进行中。"""
+
     def mark_complete(self, **kwargs: object) -> object:
         """在来源批次成功后记录完成状态。"""
 
@@ -170,8 +200,10 @@ class SyncStatePort(Protocol):
 _MAX_EVENTS_PER_CYCLE = 128
 _MAX_BINDINGS_PER_CYCLE = 32
 _PRIORITY_READ_INTERVAL = timedelta(seconds=3)
+CLI_TASK_TIMEOUT_SECONDS = 3.0
 _SAFETY_SWEEP_INTERVAL = timedelta(seconds=15)
 _SAFETY_SWEEP_BINDINGS_PER_CYCLE = 8
+_LOCAL_HISTORY_CODES = frozenset({"local_history_deleted", "local_history_empty"})
 _INCOMPLETE_CLI_FAILURE_CODES = frozenset(
     {
         "cli_unavailable",
@@ -223,6 +255,10 @@ class CliBackgroundSync:
         "_backfill_trigger_at",
         "_backfill_pending_locators",
         "_backfill_paused",
+        "_cli_timeout_seconds",
+        "_monotonic_clock",
+        "_priority_timing",
+        "_last_cli_result",
     )
 
     def __init__(
@@ -240,9 +276,15 @@ class CliBackgroundSync:
         sync_state: SyncStatePort | None = None,
         message_events: MessageEventPublisher | None = None,
         clock: Callable[[], datetime] | None = None,
+        monotonic_clock: Callable[[], float] | None = None,
+        cli_timeout_seconds: float = CLI_TASK_TIMEOUT_SECONDS,
     ) -> None:
         if not isinstance(owner_id, UUID):
             raise TypeError("owner_id 必须是 UUID。")
+        if (isinstance(cli_timeout_seconds, bool)
+                or not isinstance(cli_timeout_seconds, (int, float))
+                or not isfinite(cli_timeout_seconds) or cli_timeout_seconds <= 0):
+            raise ValueError("CLI 命令预算必须是有限正数。")
         if not isinstance(cli, LocalWechatCli) and not hasattr(cli, "tail"):
             raise TypeError("cli 必须提供 tail 接口。")
         self._owner_id = owner_id
@@ -255,6 +297,10 @@ class CliBackgroundSync:
         self._sync_state = sync_state
         self._message_events = message_events or NullMessageEventPublisher()
         self._clock = clock or (lambda: datetime.now(timezone.utc))
+        self._monotonic_clock = monotonic_clock or monotonic
+        self._cli_timeout_seconds = float(cli_timeout_seconds)
+        self._priority_timing = _PriorityReadTiming()
+        self._last_cli_result: tuple[bool, str | None] | None = None
         self._stream: SessionEventStream | object | None = None
         self._stream_supported = True
         self._stream_retry_at: datetime | None = None
@@ -291,11 +337,19 @@ class CliBackgroundSync:
         *,
         enabled: bool,
         priority_contact_id: UUID | None = None,
+        max_bindings: int | None = None,
+        priority_requested_at: float | None = None,
+        cli_deadline: float | None = None,
     ) -> CliSyncCycleResult:
         """执行一次后台同步心跳；关闭时立即关闭唯一全局流。"""
 
         if not isinstance(enabled, bool):
             raise TypeError("enabled 必须是 bool。")
+        if max_bindings is not None and (
+            isinstance(max_bindings, bool) or not isinstance(max_bindings, int)
+            or not 1 <= max_bindings <= 32
+        ):
+            raise ValueError("单次读取绑定预算必须在 1 到 32 之间。")
         if priority_contact_id is not None and not isinstance(
             priority_contact_id, UUID
         ):
@@ -355,6 +409,10 @@ class CliBackgroundSync:
         }
         priority_binding = self._priority_binding(
             bindings, priority_contact_id
+        )
+        self._set_priority_timing(
+            None if priority_binding is None else priority_binding.scope.contact_id,
+            priority_requested_at,
         )
         priority_locator = (
             None
@@ -422,7 +480,9 @@ class CliBackgroundSync:
 
         written = 0
         processed = 0
-        while self._pending_locators and processed < _MAX_BINDINGS_PER_CYCLE:
+        continuations: list[tuple[str, bool]] = []
+        budget = _MAX_BINDINGS_PER_CYCLE if max_bindings is None else max_bindings
+        while self._pending_locators and processed < budget:
             locator = self._pending_locators.popleft()
             self._pending_locator_set.discard(locator)
             live_read = locator in self._live_pending_locators
@@ -435,35 +495,73 @@ class CliBackgroundSync:
                 self._backfill_check_requested
                 and locator in self._backfill_pending_locators
             )
+            timing = (
+                replace(self._priority_timing)
+                if binding.scope.contact_id == self._priority_timing.contact_id else None
+            )
+            started = self._monotonic_clock()
+            if timing is not None:
+                timing.last_cli_duration_ms = None
+                timing.last_store_duration_ms = None
+                timing.local_history_state = None
+            completed = False
+            has_more = False
+            task_failure: str | None = None
             try:
-                written += self._read_binding(
+                page_count, has_more = self._read_binding(
                     binding,
                     disabled_window=disabled_window,
                     backfill_trigger_at=(
                         self._backfill_trigger_at if backfill_read else None
                     ),
                     live_read=live_read,
+                    timing=timing,
+                    cli_deadline=min(started + self._cli_timeout_seconds, cli_deadline)
+                    if cli_deadline is not None else started + self._cli_timeout_seconds,
                 )
-                # 同一 locator 的补齐队列可以被本轮独立 live 请求升级；
-                # 只有确实带有 live 标记的读取才更新独立节奏。
-                if locator == priority_locator and live_read:
-                    self._last_priority_read_at = self._clock()
+                written += page_count
+                completed = True
+                if has_more:
+                    continuations.append((locator, live_read))
             except CliNormalizationError:
                 self._failure_code = "cli_normalization_failed"
+                task_failure = self._failure_code
             except CliAdapterError as error:
                 self._failure_code = error.code
+                task_failure = self._failure_code
                 # 不在当前轮立刻回队；否则一个持续失败的会话会占满队列。
                 # 全局流的安全轮询或降级轮询会在后续心跳重试它。
             except ObservationPersistenceError:
                 self._failure_code = "observation_persistence_failed"
+                task_failure = self._failure_code
                 # 与 CLI 错误相同，延后到后续有界轮询，保证其他联系人公平。
             except SourceProcessingWriteError:
                 self._failure_code = "source_processing_write_failed"
+                task_failure = self._failure_code
             except BackfillStatePersistenceError:
                 self._failure_code = "backfill_state_unavailable"
+                task_failure = self._failure_code
                 # 补齐状态无法写入时不能把本轮显示为完成；后续心跳重试。
             finally:
-                self._backfill_pending_locators.discard(locator)
+                if locator == priority_locator and live_read:
+                    # 失败同样消耗本次读取机会，避免立即续跑时反复抢占其他绑定。
+                    self._last_priority_read_at = self._clock()
+                if timing is not None and (not completed or timing.last_cli_duration_ms is not None):
+                    timing.last_duration_ms = self._elapsed_ms(started)
+                    timing.last_failure_code = None if completed else (task_failure or "cli_sync_failed")
+                    if completed:
+                        timing.last_success_at = self._clock().astimezone(timezone.utc)
+                    self._priority_timing = timing
+                if not completed or not has_more:
+                    self._backfill_pending_locators.discard(locator)
+
+        # 每个联系人每轮最多一页，续页排在本轮未处理联系人之后。
+        # 下一轮会重新核验开关和 active 绑定，不能在这里连续读完历史。
+        for locator, live_read in continuations:
+            if live_read:
+                self._enqueue_live(locator)
+            else:
+                self._enqueue(locator)
 
         if (
             self._backfill_check_requested
@@ -504,6 +602,7 @@ class CliBackgroundSync:
                 failure_code=self._failure_code,
                 bound_count=len(bindings),
                 pending_count=len(self._pending_locators),
+                **self._priority_status_fields(),
                 **self._backfill_status_fields(
                     bindings=bindings,
                     states=backfill_states,
@@ -516,6 +615,8 @@ class CliBackgroundSync:
                 ),
             ),
             batch_message_count=written,
+            cli_available=None if self._last_cli_result is None else self._last_cli_result[0],
+            cli_failure_code=None if self._last_cli_result is None else self._last_cli_result[1],
         )
 
     def _failure_result(
@@ -563,6 +664,37 @@ class CliBackgroundSync:
         self._stream_failures = 0
         self._follow_smoke_enabled = False
         self._failure_code = None
+        self._priority_timing = _PriorityReadTiming()
+
+    def _elapsed_ms(self, started: float) -> int:
+        return max(0, round((self._monotonic_clock() - started) * 1000))
+
+    def _remaining_cli_timeout(self, deadline: float | None) -> float:
+        remaining = self._cli_timeout_seconds if deadline is None else deadline - self._monotonic_clock()
+        if remaining <= 0:
+            raise CliCommandError("cli_timeout", "本次后台读取的 CLI 总预算已耗尽。")
+        return min(self._cli_timeout_seconds, remaining)
+
+    def _set_priority_timing(self, contact_id: UUID | None, requested_at: float | None) -> None:
+        if contact_id != self._priority_timing.contact_id:
+            self._priority_timing = _PriorityReadTiming(contact_id=contact_id)
+        timing = self._priority_timing
+        if contact_id is not None and requested_at is not None and requested_at != timing.requested_at:
+            timing.requested_at = requested_at
+            timing.pending_requested_at = requested_at
+
+    def _priority_status_fields(self) -> dict[str, object]:
+        timing = self._priority_timing
+        return {
+            "priority_contact_id": timing.contact_id,
+            "priority_last_success_at": timing.last_success_at,
+            "priority_last_duration_ms": timing.last_duration_ms,
+            "priority_last_cli_duration_ms": timing.last_cli_duration_ms,
+            "priority_last_store_duration_ms": timing.last_store_duration_ms,
+            "priority_last_failure_code": timing.last_failure_code,
+            "priority_local_history_state": timing.local_history_state,
+            "priority_queue_wait_ms": timing.queue_wait_ms,
+        }
 
     def enable_follow_smoke(self) -> None:
         """开始观察当前全局流，不启动兼容前台读取。"""
@@ -977,7 +1109,9 @@ class CliBackgroundSync:
         disabled_window: tuple[float, float] | None,
         backfill_trigger_at: datetime | None,
         live_read: bool,
-    ) -> int:
+        timing: _PriorityReadTiming | None = None,
+        cli_deadline: float | None = None,
+    ) -> tuple[int, bool]:
         contact_id = binding.scope.contact_id
         backfill_state = self._prepare_backfill_state(
             binding,
@@ -994,7 +1128,7 @@ class CliBackgroundSync:
         )
         if backfill_suppressed:
             if not live_read:
-                return 0
+                return 0, False
             # “暂停补齐”不应关闭已开启的实时同步；这次读取只推进
             # 普通联系人 cursor，不改变 paused/failed 的补齐生命周期。
             backfill_state = None
@@ -1025,12 +1159,21 @@ class CliBackgroundSync:
                 .replace(tzinfo=None)
                 .isoformat(timespec="seconds")
             )
+        cli_started: float | None = None
         try:
+            timeout = self._remaining_cli_timeout(cli_deadline)
+            cli_started = self._monotonic_clock()
+            if timing is not None and timing.pending_requested_at is not None:
+                timing.queue_wait_ms = max(0, round((cli_started - timing.pending_requested_at) * 1000))
+                timing.pending_requested_at = None
             result: TailResult = self._cli.tail(
                 binding.conversation_locator,
+                timeout_seconds=timeout,
                 **kwargs,
             )
+            self._last_cli_result = (True, None)
         except CliAdapterError as error:
+            self._last_cli_result = (False, error.code)
             self._record_input_failure(binding, error, backfill_state)
             self._fail_backfill(
                 binding,
@@ -1039,6 +1182,27 @@ class CliBackgroundSync:
                 incomplete=_is_incomplete_cli_failure(error.code),
             )
             raise
+        finally:
+            if timing is not None and cli_started is not None:
+                timing.last_cli_duration_ms = self._elapsed_ms(cli_started)
+        if result.local_history_state in {"deleted", "empty"}:
+            if timing is not None:
+                timing.local_history_state = result.local_history_state
+            # 本地没有可读历史不等于覆盖完整；仍保留原游标及未来轮询。
+            # 修正此前缺表错误的分类，但不改变用户暂停的补齐任务。
+            unavailable_state = backfill_state
+            if unavailable_state is None and self._backfill_state is not None:
+                previous = self._backfill_state.read(
+                    owner_id=self._owner_id, contact_id=contact_id,
+                    binding_id=binding.binding_id,
+                )
+                if _backfill_phase_value(getattr(previous, "phase", None)) == BackfillPhase.INCOMPLETE.value:
+                    unavailable_state = previous
+            self._fail_backfill(
+                binding, f"local_history_{result.local_history_state}",
+                unavailable_state, incomplete=True,
+            )
+            return 0, False
         # 真实适配器对"没有新消息"的一次性 tail 输出为空，且
         # freshness_confirmed=False（wechat_cli/models.TailResult 契约）。
         # 常规 live 轮询的空结果是正常稳态：保持既有水位直接返回 0。
@@ -1063,6 +1227,16 @@ class CliBackgroundSync:
                 incomplete=True,
             )
             raise error
+        if result.has_more and (
+            result.last_local_id is None
+            or result.cursor is None
+            or (cursor is not None and (
+                result.cursor == cursor.last_cursor
+            ))
+        ):
+            error = CliOutputError("cli_output_invalid", "微信 CLI 后续页水位没有前进。")
+            self._fail_backfill(binding, error.code, backfill_state, incomplete=True)
+            raise error
         if result.last_local_id is None or result.cursor is None:
             if result.last_local_id is not None or result.cursor is not None:
                 error = CliOutputError(
@@ -1077,8 +1251,9 @@ class CliBackgroundSync:
                 )
                 raise error
             if backfill_state is not None:
-                self._complete_backfill(
+                self._save_backfill_progress(
                     binding,
+                    previous_state=backfill_state,
                     message_count=0,
                     last_local_id=(
                         None if cursor is None else cursor.last_local_id
@@ -1087,7 +1262,7 @@ class CliBackgroundSync:
                         None if cursor is None else cursor.last_cursor
                     ),
                 )
-            return 0
+            return 0, False
         try:
             processing_receipts: list[ProcessingRecord] = []
             messages = normalize_cli_events(
@@ -1099,7 +1274,9 @@ class CliBackgroundSync:
                 binding, "cli_normalization_failed", backfill_state
             )
             raise
+        store_started: float | None = None
         try:
+            cli_version = self._cli_version_value(timing=timing, cli_deadline=cli_deadline)
             event_count = (
                 len(result.events)
                 if result.event_count is None
@@ -1110,12 +1287,13 @@ class CliBackgroundSync:
                 if result.event_count is None
                 else result.non_text_count
             )
+            store_started = self._monotonic_clock()
             batch = self._observation_store.record_batch_with_messages(
                 owner_id=self._owner_id,
                 contact_id=contact_id,
                 binding_id=binding.binding_id,
                 mode=ObservationMode.CLI_BACKGROUND,
-                cli_version=self._cli_version_value(),
+                cli_version=cli_version,
                 conversation_locator=binding.conversation_locator,
                 since_local_id=(
                     None if cursor is None else cursor.last_local_id
@@ -1123,6 +1301,7 @@ class CliBackgroundSync:
                 since_cursor=None if cursor is None else cursor.last_cursor,
                 last_local_id=result.last_local_id,
                 last_cursor=result.cursor,
+                cursor_ordered=True,
                 record_count=len(messages),
                 event_count=event_count,
                 non_text_count=non_text_count,
@@ -1155,9 +1334,14 @@ class CliBackgroundSync:
                 binding, "source_processing_write_failed", backfill_state
             )
             raise
+        finally:
+            if timing is not None and store_started is not None:
+                timing.last_store_duration_ms = self._elapsed_ms(store_started)
         if backfill_state is not None:
-            self._complete_backfill(
+            self._save_backfill_progress(
                 binding,
+                previous_state=backfill_state,
+                has_more=result.has_more,
                 message_count=len(messages),
                 last_local_id=result.last_local_id,
                 last_cursor=result.cursor,
@@ -1168,7 +1352,7 @@ class CliBackgroundSync:
             messages=messages,
             message_ids=getattr(batch, "created_message_ids", ()),
         )
-        return len(messages)
+        return len(messages), result.has_more
 
     def _record_input_failure(
         self,
@@ -1241,8 +1425,8 @@ class CliBackgroundSync:
             == binding.conversation_locator
         )
         cursor_is_ahead = reliable is None or (
-            getattr(cursor, "last_local_id", 0)
-            > getattr(reliable, "last_local_id", 0)
+            getattr(cursor, "last_cursor", None)
+            != getattr(reliable, "last_cursor", None)
         )
         if not cursor_matches_binding or cursor_is_ahead:
             rewind(
@@ -1250,6 +1434,7 @@ class CliBackgroundSync:
                 contact_id=contact_id,
                 binding_id=binding.binding_id,
                 target=reliable,
+                expected_cursor=cursor.last_cursor,
             )
             return reliable
         return cursor
@@ -1336,6 +1521,20 @@ class CliBackgroundSync:
             )
             self._last_backfill_state = existing
 
+        # 进程重启或新检查不能清空仍在逐页推进的任务计数。
+        # 保留其原触发时间，只有显式 retry 或新的已完成任务才重置。
+        if _backfill_phase_value(getattr(existing, "phase", None)) in {
+            BackfillPhase.GAP_DETECTED.value,
+            BackfillPhase.BACKFILLING.value,
+        }:
+            running = store.mark_running(
+                owner_id=self._owner_id,
+                contact_id=contact_id,
+                binding_id=binding.binding_id,
+            )
+            self._last_backfill_state = running
+            return running
+
         selected_trigger_at = trigger_at
         if selected_trigger_at is None:
             assert disabled_window is not None
@@ -1363,26 +1562,29 @@ class CliBackgroundSync:
         self._last_backfill_state = running
         return running
 
-    def _complete_backfill(
+    def _save_backfill_progress(
         self,
         binding: object,
         *,
+        previous_state: object,
         message_count: int,
         last_local_id: int | None,
         last_cursor: str | None,
         non_text_count: int = 0,
+        has_more: bool = False,
     ) -> None:
         store = self._backfill_state
         if store is None:
             return
-        state = store.mark_complete(
+        mark = store.mark_progress if has_more else store.mark_complete
+        state = mark(
             owner_id=self._owner_id,
             contact_id=binding.scope.contact_id,
             binding_id=binding.binding_id,
-            message_count=message_count,
+            message_count=getattr(previous_state, "message_count", 0) + message_count,
             last_local_id=last_local_id,
             last_cursor=last_cursor,
-            non_text_count=non_text_count,
+            non_text_count=getattr(previous_state, "non_text_count", 0) + non_text_count,
         )
         self._last_backfill_state = state
 
@@ -1523,12 +1725,18 @@ class CliBackgroundSync:
                 ),
                 None,
             )
+        actual_incomplete = [
+            state for state in incomplete_states
+            if getattr(state, "failure_code", None) not in _LOCAL_HISTORY_CODES
+        ]
         if active_states:
             phase = BackfillPhase.BACKFILLING.value
-        elif incomplete_states:
+        elif actual_incomplete:
             phase = BackfillPhase.INCOMPLETE.value
         elif failed_states:
             phase = BackfillPhase.FAILED.value
+        elif incomplete_states:
+            phase = BackfillPhase.INCOMPLETE.value
         elif paused_states:
             phase = BackfillPhase.PAUSED.value
         elif states and completed_contacts == total_contacts:
@@ -1536,7 +1744,8 @@ class CliBackgroundSync:
         else:
             phase = BackfillPhase.GAP_DETECTED.value
 
-        failure_state = next(iter(incomplete_states or failed_states), None)
+        # 本地无记录是覆盖说明，不能遮住其他会话真正的读取故障。
+        failure_state = next(iter(actual_incomplete or failed_states or incomplete_states), None)
         scope = getattr(current, "scope", None)
         contact_id = getattr(scope, "contact_id", None)
         return {
@@ -1582,9 +1791,19 @@ class CliBackgroundSync:
             ),
         }
 
-    def _cli_version_value(self) -> str:
+    def _cli_version_value(self, *, timing: _PriorityReadTiming | None = None,
+                           cli_deadline: float | None = None) -> str:
         if self._cli_version is None:
-            self._cli_version = self._cli.version()
+            started = self._monotonic_clock()
+            try:
+                self._cli_version = self._cli.version(timeout_seconds=self._remaining_cli_timeout(cli_deadline))
+                self._last_cli_result = (True, None)
+            except CliAdapterError as error:
+                self._last_cli_result = (False, error.code)
+                raise
+            finally:
+                if timing is not None:
+                    timing.last_cli_duration_ms = (timing.last_cli_duration_ms or 0) + self._elapsed_ms(started)
         return self._cli_version
 
     def _publish_message_events(

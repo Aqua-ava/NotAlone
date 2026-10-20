@@ -95,6 +95,8 @@ class AssistantSessionStore(Protocol):
 
     def default(self, scope: ContactScope) -> UUID: ...
 
+    def require_conversation_binding(self, scope: ContactScope) -> None: ...
+
     def read(self, scope: ContactScope, session_id: UUID) -> tuple[AssistantTurn, ...]: ...
 
     def read_session(self, scope: ContactScope, session_id: UUID) -> AssistantSessionSnapshot: ...
@@ -169,6 +171,9 @@ class AssistantSessionService:
         self._reply = reply
         self._catalog = catalog
         self._continuation_store = continuation_store
+
+    def require_conversation_binding(self, *, owner_id: UUID, contact_id: UUID) -> None:
+        self._store.require_conversation_binding(ContactScope(owner_id, contact_id))
 
     def default(self, *, owner_id: UUID, contact_id: UUID) -> UUID:
         return self._store.default(ContactScope(owner_id, contact_id))

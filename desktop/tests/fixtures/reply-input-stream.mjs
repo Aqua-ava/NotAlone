@@ -5,10 +5,9 @@ import { build } from 'esbuild';
 const output = await build({ stdin: { contents: `
   export { ContactSession } from './src/main/contacts/session';
   export { installReplyBridge } from './src/main/reply/bridge';
-  export { StyleSampleController } from './src/main/style-samples/controller';
   export { createReplyBridge } from './src/preload/reply';
 `, resolveDir: process.cwd() }, bundle: true, platform: 'node', format: 'esm', write: false });
-const { ContactSession, installReplyBridge, createReplyBridge, StyleSampleController } = await import(`data:text/javascript;base64,${Buffer.from(output.outputFiles[0].text).toString('base64')}`);
+const { ContactSession, installReplyBridge, createReplyBridge } = await import(`data:text/javascript;base64,${Buffer.from(output.outputFiles[0].text).toString('base64')}`);
 
 export async function replyInputFixture(rounds) {
   const contactId = randomUUID(), otherContactId = randomUUID(), sessionId = randomUUID();
@@ -41,7 +40,6 @@ export async function replyInputFixture(rounds) {
   }, on: (channel, listener) => { const set = listeners.get(channel) ?? new Set(); set.add(listener); listeners.set(channel, set); },
   removeListener: (channel, listener) => listeners.get(channel)?.delete(listener) });
   contacts.selectContact({ contactId, scopeRevision: contacts.getState().scopeRevision });
-  new StyleSampleController(backend, contacts, replies);
   const scope = () => ({ contactId: contacts.getState().selectedContactId, scopeRevision: contacts.getState().scopeRevision });
   await bridge.readSavedSession(scope());
   assert.equal(replies.getState().savedSession?.turns.length, rounds);

@@ -1,4 +1,4 @@
-"""真实SDK本地传输、结构编译、追踪和默认待确认路径。"""
+"""真实SDK本地传输、结构编译、追踪和自动失败终结路径。"""
 from __future__ import annotations
 import json
 import unittest

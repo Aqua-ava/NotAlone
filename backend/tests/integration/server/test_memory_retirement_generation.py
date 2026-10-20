@@ -49,17 +49,25 @@ class MemoryRetirementGenerationHttpTest(unittest.TestCase):
         self.assertNotEqual(status, 200, result)
         self.assertEqual(len(self.fixture.model.seen_calls), calls)
 
-    def test_state_change_keeps_old_candidate_eligible_as_labeled_history(self):
-        memory_id, _, generated = self._generate("contact")
-        self._correct("contact", memory_id, change_kind="state_changed")
+    def test_contact_state_change_preserves_audit_but_blocks_continuation(self):
+        self._state_change_blocks_continuation("contact")
+
+    def test_owner_state_change_preserves_audit_but_blocks_continuation(self):
+        self._state_change_blocks_continuation("owner")
+
+    def _state_change_blocks_continuation(self, kind):
+        memory_id, _, generated = self._generate(kind)
+        self._correct(kind, memory_id, change_kind="state_changed")
+        calls = len(self.fixture.model.seen_calls)
         body = self.fixture._body(draft="这次先轻松问候")
         body["continued_from_candidate_id"] = generated["candidates"][0]["candidate_id"]
-        self.fixture.model.responses.append(self.fixture._candidate(str(self.fixture.draft_id)))
         status, result = self.fixture.backend.request(self.path + "/replies", body)
-        self.assertEqual(status, 200, result)
-        payload = next(json.loads(item.content) for item in self.fixture.model.seen_calls[-1]
-                       if isinstance(item, HumanMessage))
-        self.assertTrue(any(item["kind"] == "continued_candidate" for item in payload["evidence"]))
+        self.assertNotEqual(status, 200, result)
+        self.assertEqual(len(self.fixture.model.seen_calls), calls)
+        status, saved = self.fixture.backend.request(self.path)
+        self.assertEqual(status, 200, saved)
+        self.assertIn("memory_generation_forbidden", [
+            item["reason"] for turn in saved["turns"] for item in turn["basis_changes"]])
 
     def test_fresh_generation_does_not_restore_corrected_candidate_from_discussion(self):
         memory_id, _, generated = self._generate("contact")
@@ -117,65 +125,3 @@ class MemoryRetirementGenerationHttpTest(unittest.TestCase):
         status, result = self.fixture.backend.request(self.path + "/replies", body)
         self.assertNotEqual(status, 200, result)
         self.assertEqual(len(self.fixture.model.seen_calls), 1)
-
-    def test_corrected_candidate_cannot_reenter_through_saved_style_sample(self):
-        memory_id, _, generated = self._generate("contact")
-        samples = f"/api/contacts/{self.fixture.contact_id}/style-samples"
-        body = {"idempotency_key": str(uuid4()), "text": "合成错误记忆影响过的表达样本。",
-            "origin": {"kind": "candidate", "id": generated["candidates"][0]["candidate_id"]}}
-        status, saved = self.fixture.backend.request(samples, body)
-        self.assertEqual(status, 200, saved)
-        self._correct("contact", memory_id)
-        self.assertEqual(self.fixture.backend.request(samples + "/" + saved["sample"]["sample_id"])[0], 200)
-        body["idempotency_key"] = str(uuid4())
-        self.assertNotEqual(self.fixture.backend.request(samples, body)[0], 200)
-        from tests.integration.server.overview_reply_support import OverviewReplyControlledModel
-        self.fixture.model = OverviewReplyControlledModel()
-        self.fixture.model.plans.append({"text": "全新问候。", "basis": "沿用当前草稿。", "cite_kinds": ["user_draft"]})
-        restarted = self._restart_backend()
-        status, generated = restarted.request(self.path + "/replies", self.fixture._body(draft="全新问候"))
-        self.assertEqual(status, 200, generated)
-        payload = next(json.loads(item.content) for item in self.fixture.model.seen_calls[-1]
-                       if isinstance(item, HumanMessage))
-        self.assertEqual(payload["style_references"], [])
-
-    def test_sample_only_candidate_blocks_continuation_after_origin_memory_correction(self):
-        memory_id, _, original = self._generate("contact")
-        samples = f"/api/contacts/{self.fixture.contact_id}/style-samples"
-        status, saved = self.fixture.backend.request(samples, {
-            "idempotency_key": str(uuid4()), "text": "合成表达样本，句子简短。",
-            "origin": {"kind": "candidate", "id": original["candidates"][0]["candidate_id"]}})
-        self.assertEqual(status, 200, saved)
-        status, session = self.fixture.backend.request(
-            f"/api/contacts/{self.fixture.contact_id}/assistant-sessions", {})
-        self.assertEqual(status, 200, session)
-        path = self.fixture._path(session["session_id"])
-        from tests.integration.server.overview_reply_support import OverviewReplyControlledModel
-        self.fixture.model = OverviewReplyControlledModel()
-        self.fixture.model.plans.append({"text": "天气不错。", "basis": "按当前草稿。", "cite_kinds": ["user_draft"]})
-        restarted = self._restart_backend()
-        body = self.fixture._body(draft="天气不错")
-        body["content"]["include_relationship_context"] = True
-        status, generated = restarted.request(path + "/replies", body)
-        self.assertEqual(status, 200, generated)
-        payload = next(json.loads(item.content) for item in self.fixture.model.seen_calls[-1]
-                       if isinstance(item, HumanMessage))
-        self.assertTrue(payload["style_references"])
-        self.assertNotIn(memory_id, [item["evidence_id"] for item in payload["evidence"]])
-        self._correct("contact", memory_id)
-        calls = len(self.fixture.model.seen_calls)
-        self.fixture.model.plans.append({"text": "继续问候。", "basis": "按当前草稿。", "cite_kinds": ["user_draft"]})
-        body = self.fixture._body(draft="继续问候")
-        body["continued_from_candidate_id"] = generated["candidates"][0]["candidate_id"]
-        status, result = restarted.request(path + "/replies", body)
-        self.assertNotEqual(status, 200, result)
-        self.assertEqual(len(self.fixture.model.seen_calls), calls)
-        status, audit = restarted.request(path)
-        self.assertEqual(status, 200, audit)
-        self.assertIn("memory_generation_forbidden",
-                      [change["reason"] for change in audit["turns"][0]["basis_changes"]])
-        status, fresh = restarted.request(path + "/replies", self.fixture._body(draft="全新问候"))
-        self.assertEqual(status, 200, fresh)
-        payload = next(json.loads(item.content) for item in self.fixture.model.seen_calls[-1]
-                       if isinstance(item, HumanMessage))
-        self.assertNotIn(generated["candidates"][0]["candidate_id"], json.dumps(payload))

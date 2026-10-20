@@ -29,7 +29,7 @@ const modules = {
 };
 
 // 页面和实际 Electron 共用同一生产 HTTP 与精确自有测试库。
-export async function withLayeredMemoryFixture(use: (fixture: RewriteFixture) => Promise<void>, cleanupConfirmed?: () => void, options: { ownerOnly?: boolean; maxMemories?: number; separateTopics?: boolean } = {}) {
+export async function withLayeredMemoryFixture(use: (fixture: RewriteFixture) => Promise<void>, cleanupConfirmed?: () => void, options: { ownerOnly?: boolean; maxMemories?: number; separateTopics?: boolean; initiallyDisabled?: boolean } = {}) {
   const requested = process.env.NOTALONE_LAYERED_TEST_EVIDENCE_DIR;
   if (!requested || !path.isAbsolute(requested)) throw new Error('主题资料验收须指定仓库外证据目录。');
   const directory = await realpath(requested);
@@ -42,7 +42,8 @@ export async function withLayeredMemoryFixture(use: (fixture: RewriteFixture) =>
   const previousOwnerOnly = process.env.NOTALONE_LAYERED_OWNER_ONLY;
   const previousFixtureOptions = process.env.NOTALONE_LAYERED_FIXTURE_OPTIONS;
   process.env.NOTALONE_LAYERED_OWNER_ONLY = options.ownerOnly ? '1' : '0';
-  process.env.NOTALONE_LAYERED_FIXTURE_OPTIONS = JSON.stringify({ max_memories: options.maxMemories ?? 1, separate_topics: options.separateTopics ?? false });
+  process.env.NOTALONE_LAYERED_FIXTURE_OPTIONS = JSON.stringify({ max_memories: options.maxMemories ?? 1,
+    separate_topics: options.separateTopics ?? false, initially_disabled: options.initiallyDisabled ?? false });
   const previous = process.env.NOTALONE_LAYERED_EXPECTED_MODULES;
   process.env.NOTALONE_LAYERED_EXPECTED_MODULES = JSON.stringify(expected);
   try {

@@ -17,7 +17,7 @@ from psycopg import sql
 
 from notalone.application.import_service import ImportService
 from notalone.memory_extraction.command import extract_main
-from notalone.memory_extraction.dimensions import RELEASE_ALL_DIMENSIONS
+from notalone.memory_extraction.dimensions import DimensionRelease, RELEASE_ALL_DIMENSIONS
 from notalone.memory_trace.command import memory_trace_main, source_trace_main
 from notalone.persistence.background_tasks import (
     BackgroundTaskPersistenceError,
@@ -176,12 +176,6 @@ class MemoryTraceApiTest(CoreBusinessFlowFixture, unittest.TestCase):
 
         def local_http(request):
             observed.append(request.content.decode())
-            wire = json.loads(request.content)
-            schema = wire["tools"][0]["function"]["parameters"]["properties"]["units"]["properties"]
-            labels = {unit: {"kind": "not_memory", "subject": "contact", "topic": "other",
-                "dependency": None, "unresolved": False, "confidence": 0.95, "sensitivity": "none",
-                **({"event": None} if "event" in item["properties"] else {})}
-                for unit, item in schema.items()}
             return httpx.Response(
                 200,
                 json={
@@ -200,8 +194,8 @@ class MemoryTraceApiTest(CoreBusinessFlowFixture, unittest.TestCase):
                                         "id": "synthetic-zero",
                                         "type": "function",
                                         "function": {
-                                            "name": "GroundedMemoryLabels",
-                                            "arguments": json.dumps({"units": labels}),
+                                            "name": "DirectMemoryExtractionOutput",
+                                            "arguments": json.dumps({"scenes": []}),
                                         },
                                     }
                                 ],
@@ -233,6 +227,7 @@ class MemoryTraceApiTest(CoreBusinessFlowFixture, unittest.TestCase):
                 base_url="http://127.0.0.1/synthetic/v1",
                 http_client=client,
                 extra_body=options["extra_body"],
+                max_retries=options["max_retries"],
             )
 
         with patch(
@@ -264,7 +259,7 @@ class MemoryTraceApiTest(CoreBusinessFlowFixture, unittest.TestCase):
         )
         self.assertEqual(
             provider["parsed_body"]["tools"][0]["function"]["name"],
-            "GroundedMemoryLabels",
+            "DirectMemoryExtractionOutput",
         )
         response = next(
             event["payload"]
@@ -705,8 +700,16 @@ class MemoryTraceApiTest(CoreBusinessFlowFixture, unittest.TestCase):
             )
 
     def test_confirmed_model_candidate_retains_its_original_trace(self):
-        self.dimension_release = None
-        backend = self._backend(self.owner_id)
+        from notalone.tasks.worker import PostgresMemoryExtractionRunner
+
+        def historical_review_runner(database_url, **kwargs):
+            # 本例重放历史人工审核，确认后的原追踪必须仍可查询。
+            kwargs["runtime"] = kwargs["runtime"].for_prompt_profile("default")
+            return PostgresMemoryExtractionRunner(database_url, **kwargs, automatic=False)
+
+        self.dimension_release = DimensionRelease()
+        with patch("notalone.tasks.worker.PostgresMemoryExtractionRunner", historical_review_runner):
+            backend = self._backend(self.owner_id)
         imported = self._import_auto(backend, "人工确认模型候选", "茉莉茶")
         self._wait_task(backend, imported, "succeeded")
         prefix = f"/api/contacts/{imported['contact_id']}"

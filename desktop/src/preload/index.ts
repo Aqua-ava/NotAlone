@@ -10,7 +10,7 @@ import { createScreenPermissionBridge } from './screen-permission';
 import { createContactSessionBridge } from './contact-session';
 import { createImportBridge } from './imports';
 import { createReplyBridge } from './reply';
-import { createStyleSampleBridge } from './style-samples';
+import { createCandidateProvenanceBridge } from './candidate-provenance';
 import { createExpressionPreferenceBridge } from './expression-preferences';
 import { createSkillLearningBridge } from './skill-learning';
 import { createMemoryBridge } from './memory';
@@ -26,7 +26,7 @@ const bridge: AppBridge = {
   contacts: createContactSessionBridge(ipcRenderer),
   imports: createImportBridge(ipcRenderer),
   replies: createReplyBridge(ipcRenderer),
-  styleSamples: createStyleSampleBridge(ipcRenderer),
+  candidateProvenance: createCandidateProvenanceBridge(ipcRenderer),
   expressionPreferences: createExpressionPreferenceBridge(ipcRenderer),
   skillLearning: createSkillLearningBridge(ipcRenderer),
   candidateCopy: createCandidateCopyBridge(ipcRenderer),

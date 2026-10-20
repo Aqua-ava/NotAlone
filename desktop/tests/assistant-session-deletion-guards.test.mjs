@@ -101,3 +101,28 @@ test('删除失败仍允许精确重试和读取，确认旧 SID 不存在后新
   assert(f.generationCalls()[0].path.includes(f.controls.sessionId));
   assert(!f.generationCalls()[0].path.includes(f.sessionId));
 });
+
+test('删除工作区讨论后保留空白输入入口，不自动重建会话或保留上下文', async () => {
+  const f = await fixture();
+  await f.bridge.enterWorkspace(f.scope);
+  const before = await f.bridge.getState();
+  await f.bridge.updateOptions({ ...f.scope, options: { ...before.options,
+    tone: 'polite', instruction: '删除时清除的合成要求。', includeRelationshipContext: true,
+    contextText: '删除时清除的合成聊天。' } });
+  const readsBefore = f.calls.filter(request => request.path.endsWith('/assistant-session/default')).length;
+  f.controls.deleteFailure = false;
+  await f.remove();
+  const state = await f.bridge.getState();
+  assert.equal(state.sessionDeletion, 'deleted');
+  assert.equal(state.mode, 'rewrite_draft');
+  assert.equal(state.options.inputKind, 'workspace');
+  assert.equal(state.options.tone, 'original');
+  assert.equal(state.options.instruction, '');
+  assert.equal(state.options.includeRelationshipContext, false);
+  assert.equal(state.options.contextText, undefined);
+  assert.equal(state.savedSession.sessionId, null);
+  assert.deepEqual(state.savedSession.turns, []);
+  assert.equal(state.result, null);
+  assert.equal(f.calls.filter(request => request.path.endsWith('/assistant-session/default')).length, readsBefore);
+  assert.equal(f.generationCalls().length, 0);
+});

@@ -301,6 +301,10 @@ class PriorityVerificationRuntime:
 
 
 class PriorityAdjudicationRuntime:
+    @property
+    def supports_evidence(self):
+        return getattr(self._runtime, "supports_evidence", False)
+
     def __init__(
         self, runtime: AdjudicationRuntime, control: ModelPriorityControl, *,
         accounting: MemoryCallAccounting | None = None,
@@ -309,9 +313,9 @@ class PriorityAdjudicationRuntime:
         self._accounting = accounting
 
     def adjudicate(
-        self, *, candidate_text: str, similar: tuple[SimilarMemory, ...],
+        self, *, candidate_text: str, similar: tuple[SimilarMemory, ...], candidate=None,
     ) -> AdjudicationDecision:
-        return self._invoke(lambda: self._runtime.adjudicate(candidate_text=candidate_text, similar=similar))
+        return self._invoke(lambda: self._runtime.adjudicate(candidate_text=candidate_text, similar=similar, **({"candidate": candidate} if self.supports_evidence else {})))
 
     def adjudicate_batch(self, *, candidates=None, memories=None, pool=None):
         batch = getattr(self._runtime, "adjudicate_batch", None)

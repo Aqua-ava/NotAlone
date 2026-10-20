@@ -19,6 +19,10 @@ function SavedTurn({ turn, index, retry, busy, showPreferences }: {
         : typeof turn.input?.content.direction === 'string' ? turn.input.content.direction
         : typeof turn.input?.content.purpose === 'string' ? turn.input.content.purpose : '本轮回复输入'}</p>
       {turn.input?.content.input_kind === 'current_chat' && <p>本次粘贴的对方文字，未经渠道核验。表达方向：{String(turn.input.content.pasted_direction ?? '')}</p>}
+      {turn.input?.content.input_kind === 'workspace' && <>
+        <p>{turn.input.content.workspace_action === 'suggest' ? '帮我想想 · 建议不代表已确认立场' : '帮我表达'}</p>
+        {typeof turn.input.content.context_text === 'string' && <p>补充聊天：{turn.input.content.context_text}</p>}
+      </>}
       {typeof turn.input?.content.user_instruction === 'string' && <p>{turn.input.content.user_instruction}</p>}
       <p>原精确场景：{turn.input?.scene ?? '未声明'}</p>
       {turn.reply?.usedSkill && <p>本轮实际 Skill：{turn.reply.usedSkill.name} · 版本 {turn.reply.usedSkill.versionNumber ?? turn.reply.usedSkill.versionId}
@@ -51,8 +55,8 @@ function SavedDiscussion({ input }: { input: SavedAssistantInput }) {
     {input.placeholder ? <p>{input.placeholder}</p> : content && <dl>
       {content.type === 'purpose_exploration' ? <><dt>当时的主动目的</dt><dd>{content.purposeHint}</dd></>
         : <><dt>当时选择的消息</dt><dd>{content.targetMessageId}</dd></>}
-      {content.correction && <><dt>纠正理解</dt><dd>{content.correction}</dd></>}
-      {content.requirements && <><dt>本次要求</dt><dd>{content.requirements}</dd></>}
+      {(content.correction || content.requirements) && <><dt>补充你的想法或要求</dt>
+        <dd>{[content.correction, content.requirements].filter(Boolean).join('\n')}</dd></>}
       {content.answer && <><dt>关键问题回答</dt><dd>{content.answer}</dd></>}
       {content.confirmedIntent && <><dt>已确认的本次意愿</dt><dd>{content.confirmedIntent}</dd></>}
       <dt>当时的策略选择</dt><dd>{content.skillMode === 'disabled' ? '使用通用流程'
@@ -68,7 +72,10 @@ export function AssistantSessionBudgetNotice({ replies }: { replies: ReplySessio
   const notice = state.inputBudgetNotice;
   const budget = notice?.contactId === state.contactId && notice.scopeRevision === state.scopeRevision
     && notice.sessionId === state.savedSession?.sessionId && !state.sourceAvailability ? notice.decision : undefined;
-  return budget ? <AssistantInputBudgetNotice budget={budget} /> : null;
+  if (!budget || budget.state === 'ready' && budget.measurementKind !== 'approximate') return null;
+  return budget.state === 'ready'
+    ? <details className="reply-budget-details"><summary>输入长度说明</summary><AssistantInputBudgetNotice budget={budget} /></details>
+    : <AssistantInputBudgetNotice budget={budget} />;
 }
 
 export function AssistantSessionPanel({ replies }: { replies: ReplySessionView }) {
@@ -88,11 +95,6 @@ export function AssistantSessionPanel({ replies }: { replies: ReplySessionView }
     const command = confirmation; setConfirmation(null);
     void replies.deleteSavedSession(command);
   }
-  function manageSamples() {
-    const samples = document.getElementById('assistant-expression-samples');
-    if (samples instanceof HTMLDetailsElement) samples.open = true;
-    samples?.scrollIntoView({ block: 'nearest' });
-  }
   function noteHistoricalCopy(event: ClipboardEvent<HTMLElement>) {
     const selection = window.getSelection(); const text = selection?.toString() ?? '';
     if (!selection || !text.trim() || !replies.state.contactId) return;
@@ -102,8 +104,8 @@ export function AssistantSessionPanel({ replies }: { replies: ReplySessionView }
     const candidateId = candidate?.getAttribute('data-assistant-candidate-id');
     const replyRequestId = candidate?.getAttribute('data-assistant-reply-request-id');
     if (!candidateId || !replyRequestId) return;
-    // 混合或超长选区仍交给唯一来源控制器核验，拒绝后不能成为无来源手工样本。
-    void window.notalone.styleSamples.noteCandidateCopy({ contactId: replies.state.contactId,
+    // 混合或超长选区仍交给唯一来源控制器核验，拒绝后不能粘贴回其他候选。
+    void window.notalone.candidateProvenance.noteCandidateCopy({ contactId: replies.state.contactId,
       scopeRevision: replies.state.scopeRevision, replyRequestId, candidateId, text: text.slice(0, 65_536),
       ...(text.length > 65_536 ? { invalidSelection: true as const } : {}) })
       .then(() => { if (currentCopyScope.current === copyScopeKey) setCopyError(false); })
@@ -115,8 +117,6 @@ export function AssistantSessionPanel({ replies }: { replies: ReplySessionView }
     {catalog?.phase === 'failed' && !catalog.selectionPending && <p role="alert">助手会话列表暂不可用，请刷新重试。</p>}
     {confirmation && <div className="session-confirmation" role="group" aria-label="确认删除助手会话">
       <p>删除这段助手讨论、候选和使用痕迹后无法恢复。独立聊天来源、联系人关系记忆和本人记忆仍会保留。</p>
-      <p>已主动保存的表达样本仍会保留，可在表达样本管理中单独删除。</p>
-      <button onClick={manageSamples}>管理表达样本</button>
       <button disabled={catalog?.phase === 'loading' || catalog?.selectionPending} onClick={confirmDelete}>确认删除会话</button>
       <button onClick={() => setConfirmation(null)}>取消删除会话</button>
     </div>}

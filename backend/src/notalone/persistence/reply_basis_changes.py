@@ -10,6 +10,9 @@ from uuid import UUID
 from psycopg import sql
 
 from notalone.persistence.memory_timing import timed_memory_rows
+from notalone.persistence.memory_events import bind_memory_event
+from notalone.persistence.memory_conditions import bind_memory_conditions
+from notalone.persistence.memory_evolution import bind_memory_evolution
 from notalone.memory.retirement import is_generation_status_eligible
 from notalone.reply.context import ContextEvidence
 from notalone.retrieval.models import history_timing
@@ -29,6 +32,10 @@ def read_reply_basis_changes(
           coalesce(memory.retirement_reason, own.retirement_reason, 'unknown') AS retirement_reason,
           coalesce(memory.revision, own.revision) AS revision,
           coalesce(memory.category, own.category, candidate.category) AS category,
+          coalesce(memory.event, own.event, candidate.event) AS event,
+          coalesce(to_jsonb(memory)->'conditions', to_jsonb(own)->'conditions', to_jsonb(candidate)->'conditions') AS conditions,
+          coalesce(to_jsonb(memory)->'evolution', to_jsonb(own)->'evolution', to_jsonb(candidate)->'evolution') AS evolution,
+          coalesce(memory.source_candidate_id, own.source_candidate_id, candidate.id) AS event_candidate_id,
           coalesce(memory.text_content, own.text_content, candidate.text_content) AS text_content,
           coalesce(memory.source_ids, own.source_ids, candidate.source_ids) AS source_ids,
           coalesce(memory.created_at, own.created_at, candidate.created_at) AS recorded_at,
@@ -72,15 +79,18 @@ def read_reply_basis_changes(
             row["timing"] = history_timing(row["timing"], row["current_status"], row["invalid_at"])
         time_status_changed = (isinstance(timing, dict) and isinstance(timing.get("current_status"), str)
                                and row["timing"].current_status != timing["current_status"])
-        reason = ("memory_generation_forbidden" if (row["current_status"] in ("invalidated", "rejected")
-                  and not is_generation_status_eligible(row["current_status"], row.get("retirement_reason"), include_historical=True))
+        reason = ("memory_generation_forbidden" if ((row["current_status"] in ("invalidated", "rejected") or row["expired"])
+                  and not is_generation_status_eligible(row["current_status"], row.get("retirement_reason"), include_historical=True, invalid_at=row["invalid_at"]))
                   else "memory_revised" if ((row["current_status"] in ("invalidated", "rejected") and row["original_status"] != row["current_status"])
                   or row["current_status"] != row["original_status"]
-                  or (row["original_revision"] is not None and row["revision"] != row["original_revision"]))
+                  or (row["original_revision"] is not None and row["revision"] != row["original_revision"])
+                  or ("evolution" in original and original["evolution"] != _current_evolution(connection, row)))
                   else "memory_not_yet_valid" if row["future"]
                   else "memory_expired" if row["expired"] and not was_historical
                   else "memory_time_changed" if (
                       _period_changed(row, original) or time_status_changed
+                      or ("event" in original and original["event"] != _current_event(connection, row))
+                      or ("conditions" in original and original["conditions"] != _current_conditions(connection, row))
                   ) else None)
         if reason is not None:
             key = row["evidence_id"], row["kind"]
@@ -116,6 +126,12 @@ def _current_timed_rows(connection: Any, rows: list[dict[str, Any]]) -> list[dic
     )]
 
 
+def _current_event(connection: Any, row: dict) -> dict | None:
+    event = bind_memory_event(connection, owner_id=row["owner_id"],
+        candidate_id=row.get("event_candidate_id"), raw=row.get("event"))
+    return event.to_payload(current=True) if event else None
+
+
 def require_current_reply_memory(
     connection: Any, scope: ContactScope, evidence: tuple[ContextEvidence, ...],
 ) -> None:
@@ -127,13 +143,15 @@ def require_current_reply_memory(
             continue
         contact_clause = sql.SQL("") if kind == "owner_memory" else sql.SQL("AND contact_id=%(contact_id)s")
         revision = sql.SQL("NULL::integer") if kind == "pending_candidate" else sql.SQL("revision")
+        event_candidate = sql.SQL("id" if kind == "pending_candidate" else "source_candidate_id")
         retirement = sql.SQL("'unknown'") if kind == "pending_candidate" else sql.SQL("retirement_reason")
         rows = connection.execute(sql.SQL(
             "SELECT id AS evidence_id,%(kind)s AS kind,owner_id,%(contact_id)s::uuid AS contact_id,"
-            "status,text_content,source_ids,valid_at,invalid_at,category,created_at AS recorded_at,"
+            "status,text_content,source_ids,valid_at,invalid_at,category,created_at AS recorded_at,event,to_jsonb(" + table + ")->'conditions' AS conditions,"
+            "to_jsonb(" + table + ")->'evolution' AS evolution,{} AS event_candidate_id,"
             "{} AS retirement_reason,{} AS revision,valid_at>now() AS future,invalid_at<=now() AS expired "
             "FROM public.{} WHERE owner_id=%(owner_id)s AND id=ANY(%(ids)s::uuid[]) {}"
-        ).format(retirement, revision, sql.Identifier(table), contact_clause),
+        ).format(event_candidate, retirement, revision, sql.Identifier(table), contact_clause),
             {"owner_id": scope.owner_id, "contact_id": scope.contact_id, "kind": kind, "ids": list(expected)},
         ).fetchall()
         if len(rows) != len(expected):
@@ -144,11 +162,14 @@ def require_current_reply_memory(
             current_timing = history_timing(row["timing"], row["status"], row["invalid_at"]) if item.navigation else row["timing"]
             eligible = (row["status"] in ("pending", "confirmed") if kind == "pending_candidate" else
                         is_generation_status_eligible(row["status"], row.get("retirement_reason"), include_historical=historical))
-            if (not eligible or row["status"] != item.status or row["future"] or (row["expired"] and not historical)
+            if (not eligible or row["status"] != item.status or row["future"] or row["expired"]
                     or row["text_content"] != item.text or row["revision"] != item.revision
                     or len(row["source_ids"]) != len(item.source_ids) or set(row["source_ids"]) != set(item.source_ids)
                     or row["valid_at"] != item.valid_at or row["invalid_at"] != item.invalid_at
-                    or current_timing != item.timing):
+                    or current_timing != item.timing
+                    or _current_event(connection, row) != (item.event.to_payload(current=True) if item.event else None)
+                    or _current_conditions(connection, row) != (item.conditions.to_payload(current=True) if item.conditions else None)
+                    or _current_evolution(connection, row) != (item.evolution.to_payload(current=True) if item.evolution else None)):
                 raise ReplyStoreInvariantError("本次新候选的记忆依据版本已变化。")
 
 
@@ -161,15 +182,15 @@ def historical_basis_revision_sha256(
         """
         WITH RECURSIVE nodes AS (
           SELECT id, 'confirmed_memory' AS kind, supersedes_memory_id AS previous,
-            revision, status, retirement_reason, text_content, source_ids, valid_at, invalid_at, category, created_at AS recorded_at, owner_id, contact_id
+            revision, status, retirement_reason, text_content, source_ids, valid_at, invalid_at, category, created_at AS recorded_at, owner_id, contact_id, event, to_jsonb(confirmed_memory)->'conditions' AS conditions, to_jsonb(confirmed_memory)->'evolution' AS evolution
           FROM public.confirmed_memory WHERE owner_id=%s AND contact_id=%s
           UNION ALL
           SELECT id, 'owner_memory', supersedes_memory_id, revision, status, retirement_reason,
-            text_content, source_ids, valid_at, invalid_at, category, created_at, owner_id, NULL::uuid
+            text_content, source_ids, valid_at, invalid_at, category, created_at, owner_id, NULL::uuid, event, to_jsonb(owner_memory)->'conditions', to_jsonb(owner_memory)->'evolution'
           FROM public.owner_memory WHERE owner_id=%s
           UNION ALL
           SELECT id, 'pending_candidate', NULL::uuid, 0, status, 'unknown',
-            text_content, source_ids, valid_at, invalid_at, category, created_at, owner_id, contact_id
+            text_content, source_ids, valid_at, invalid_at, category, created_at, owner_id, contact_id, event, to_jsonb(memory_candidate)->'conditions', to_jsonb(memory_candidate)->'evolution'
           FROM public.memory_candidate WHERE owner_id=%s AND contact_id=%s
         ), used AS (
           SELECT * FROM nodes WHERE id=ANY(%s::uuid[])
@@ -183,6 +204,7 @@ def historical_basis_revision_sha256(
     ).fetchall()
     rows = sorted(_current_timed_rows(connection, rows), key=lambda row: (row["kind"], row["id"]))
     for row in rows:
+        row["evolution"] = _current_evolution(connection, row)
         row["text_digest"] = hashlib.sha256(row.pop("text_content").encode("utf-8")).hexdigest()
         row["timing"] = row["timing"].to_payload()
     payload = json.dumps(rows, sort_keys=True, separators=(",", ":"), default=str)
@@ -192,48 +214,23 @@ def historical_basis_revision_sha256(
 def require_generation_memory_dependencies(
     connection: Any, scope: ContactScope, dependencies: Iterable[UUID],
 ) -> None:
-    """生成专用门：审计来源仍可回看，错误和原因不明的旧事实不能携入模型。
+    """生成专用门：审计来源仍可回看，失效或过期记忆不能携入模型。
 
     调用方负责已有来源、范围和删除校验；此处沿同一依赖集合补充失效原因，
     并展开已捕获的整理版本，避免只引用派生文档时绕过底层事实。
     """
-    if forbidden_generation_memory_dependencies(connection, scope, dependencies, require_sample_origins=True):
-        raise ReplyStoreInvariantError("历史依据已纠错或失效原因不明，只能回看，请重新生成。")
+    if forbidden_generation_memory_dependencies(connection, scope, dependencies):
+        raise ReplyStoreInvariantError("原记忆依据已失效或过期，只能回看，请重新生成。")
 
 
 def forbidden_generation_memory_dependencies(
-    connection: Any, scope: ContactScope, dependencies: Iterable[UUID], *,
-    require_sample_origins: bool = False,
+    connection: Any, scope: ContactScope, dependencies: Iterable[UUID],
 ) -> tuple[tuple[UUID, str], ...]:
     dependencies = set(dependencies)
     if not dependencies:
         return ()
-    # 样本可能由旧候选加工而来。沿实际保存的来源递归展开；同一编号仅处理一次，
-    # 防止样本互相引用或候选再次使用祖先样本时形成循环。
-    from notalone.persistence.assistant_session_store import _reply_dependencies
-    pending = set(dependencies)
-    visited: set[UUID] = set()
-    while pending:
-        current = pending - visited
-        if not current:
-            break
-        visited.update(current)
-        samples = connection.execute(
-            "SELECT sample.origin_kind, sample.dependency_sample_ids, candidate.reply_request_id "
-            "FROM public.style_sample AS sample LEFT JOIN public.reply_candidate AS candidate "
-            "ON sample.origin_kind='candidate' AND candidate.id=sample.origin_id "
-            "AND candidate.owner_id=sample.owner_id AND candidate.contact_id=sample.contact_id "
-            "WHERE sample.owner_id=%s AND sample.contact_id=%s AND sample.id=ANY(%s::uuid[])",
-            (scope.owner_id, scope.contact_id, list(current)),
-        ).fetchall()
-        pending = set()
-        for sample in samples:
-            if require_sample_origins and sample["origin_kind"] == "candidate" and sample["reply_request_id"] is None:
-                raise ReplyStoreInvariantError("表达样本的候选依据不可用，只能回看，请重新生成。")
-            pending.update(sample["dependency_sample_ids"] or ())
-            if sample["reply_request_id"] is not None:
-                pending.update(_reply_dependencies(connection, scope, sample["reply_request_id"]))
-        dependencies.update(pending)
+    # 候选依赖沿派生记忆检查状态；只报告实际使用的身份。
+    # 同一已使用记忆的内部候选不重复投影，未使用的删除指纹也不能冒充另一条记忆。
     rows = connection.execute("""
         WITH RECURSIVE used(id) AS (
           SELECT unnest(%(ids)s::uuid[])
@@ -251,21 +248,34 @@ def forbidden_generation_memory_dependencies(
           ) AS batch ON batch.id=used.id
         )
         SELECT DISTINCT memory.id,memory.kind FROM used JOIN (
-          SELECT id,id AS match_id,'confirmed_memory' AS kind,status,retirement_reason FROM public.confirmed_memory
+          SELECT id,id AS match_id,'confirmed_memory' AS kind,status,retirement_reason,invalid_at FROM public.confirmed_memory
           WHERE owner_id=%(owner_id)s
           UNION ALL
-          SELECT id,source_candidate_id,'confirmed_memory',status,retirement_reason FROM public.confirmed_memory
+          SELECT CASE WHEN id IN (SELECT id FROM used) THEN id ELSE source_candidate_id END,source_candidate_id,
+            CASE WHEN id IN (SELECT id FROM used) THEN 'confirmed_memory' ELSE 'pending_candidate' END,status,retirement_reason,invalid_at FROM public.confirmed_memory
           WHERE owner_id=%(owner_id)s AND source_candidate_id IS NOT NULL
           UNION ALL
-          SELECT id,id,'owner_memory',status,retirement_reason FROM public.owner_memory WHERE owner_id=%(owner_id)s
+          SELECT id,id,'owner_memory',status,retirement_reason,invalid_at FROM public.owner_memory WHERE owner_id=%(owner_id)s
           UNION ALL
-          SELECT id,source_candidate_id,'owner_memory',status,retirement_reason FROM public.owner_memory
+          SELECT CASE WHEN id IN (SELECT id FROM used) THEN id ELSE source_candidate_id END,source_candidate_id,
+            CASE WHEN id IN (SELECT id FROM used) THEN 'owner_memory' ELSE 'pending_candidate' END,status,retirement_reason,invalid_at FROM public.owner_memory
           WHERE owner_id=%(owner_id)s AND source_candidate_id IS NOT NULL
           UNION ALL
-          SELECT id,id,'pending_candidate',status,'unknown' FROM public.memory_candidate WHERE owner_id=%(owner_id)s
+          SELECT id,id,'pending_candidate',status,'unknown',invalid_at FROM public.memory_candidate WHERE owner_id=%(owner_id)s
         ) AS memory ON memory.match_id=used.id
-        WHERE memory.status NOT IN ('active','pending','confirmed')
-          AND NOT (memory.status='invalidated' AND memory.retirement_reason='state_changed')
+        WHERE memory.status NOT IN ('active','pending','confirmed') OR memory.invalid_at<=now()
         ORDER BY memory.kind,memory.id
     """, {"ids": list(dependencies), "owner_id": scope.owner_id}).fetchall()
     return tuple((row["id"], row["kind"]) for row in rows)
+
+
+def _current_conditions(connection: Any, row: dict) -> dict | None:
+    value = bind_memory_conditions(connection, owner_id=row["owner_id"], candidate_id=row.get("event_candidate_id"), raw=row.get("conditions"), text=row["text_content"])
+    return value.to_payload(current=True) if value else None
+
+
+def _current_evolution(connection: Any, row: dict) -> dict | None:
+    value = bind_memory_evolution(connection, owner_id=row["owner_id"], raw=row.get("evolution"),
+        memory_id=(row.get("evidence_id", row.get("id")) if row["kind"] != "pending_candidate" else None),
+        revision=row.get("revision"))
+    return value.to_payload(current=True) if value else None

@@ -92,7 +92,7 @@ test('用户查看一位联系人的经历变化，历史与当前未知、真�
   assert.match(html, /联系人经历与关系变化/);
   assert.match(html, /过去计划参加合成读书会/);
   assert.match(html, /历史版本/);
-  assert.match(html, /当前未核实/);
+  assert.match(html, /是否仍适用，尚不确定/);
   assert.match(html, /当时的安排，当前状态未核实/);
   assert.match(html, /用户手动录入/);
   assert.match(html, /2026年8月1日/);
@@ -101,8 +101,48 @@ test('用户查看一位联系人的经历变化，历史与当前未知、真�
   assert.ok(html.includes(ids.manualSource));
   assert.match(html, /已采纳资料的投影/);
   assert.match(html, /不包含未确认推断/);
+  assert.doesNotMatch(html, /刷新联系人概览|>重试<\/button>/);
   assert.equal(state.overview.value.entries[0].currentLeaf.memoryId, ids.current);
   assert.equal(f.handlers.get('memory:refresh-overview').role, 'manager');
+});
+
+test('后台记忆处理进度变化后自动更新概览，加载失败仅显示重试并可恢复', async () => {
+  let current = memory(), failed = false;
+  const f = await fixture(async (request) => {
+    if (request.path.endsWith('/relationship-overview')) {
+      if (failed) throw new Error('合成概览读取失败');
+      return { generation: 1, data: overview([sourceEntry(current)]) };
+    }
+    return { generation: 1, data: { memories: [current] } };
+  });
+  const render = () => {
+    const state = f.controller.getState();
+    return ports.renderToStaticMarkup(ports.createElement(ports.ContactRelationshipOverview, {
+      overview: state.overview, memories: state.contact, refresh: async () => {}, openVersions: async () => {},
+    }));
+  };
+  await f.bridge.refresh({ ...f.selection(), section: 'contact' });
+  await f.bridge.refreshOverview(f.selection());
+  current = memory({ text: '后台整理后新增的合成经历。' });
+  const refreshingStates = [];
+  const unsubscribe = f.bridge.onStateChanged(state => refreshingStates.push(state.overview));
+  await f.bridge.refreshProcessingResults({ scope: 'contact', ...f.selection() });
+  unsubscribe();
+  assert.ok(refreshingStates.length > 0);
+  assert.ok(refreshingStates.every(state => state.phase === 'ready' && state.value !== null),
+    '后台刷新过程中概览和其中的按钮持续存在，不退回首次加载状态');
+  assert.match(render(), /后台整理后新增的合成经历/);
+  assert.doesNotMatch(render(), /刷新联系人概览|>重试<\/button>/);
+
+  failed = true;
+  await assert.rejects(f.bridge.refreshProcessingResults({ scope: 'contact', ...f.selection() }));
+  assert.match(render(), /概览加载失败/);
+  assert.match(render(), /<button class="button">重试<\/button>/);
+  assert.doesNotMatch(render(), /后台整理后新增的合成经历/);
+  failed = false;
+  await f.bridge.refreshOverview(f.selection());
+  assert.match(render(), /后台整理后新增的合成经历/);
+  assert.doesNotMatch(render(), />重试<\/button>/);
 });
 
 test('用户修正底层资料时撤下旧概览，核对完成后呈现新的人工版本', async () => {
@@ -160,7 +200,7 @@ test('参与概览的本人资料被修正或删除时撤缓存，来源事件�
       }
       return { generation: 1, data: request.path.endsWith('/memory-candidates') ? { candidates: [] }
         : request.path.endsWith('/sources') ? { sources: [] }
-          : { memories: request.path === '/api/memories/owner' ? (committed && action === 'remove' ? [] : [owner]) : [memory()] } };
+          : { memories: request.path.endsWith('/owner-memories') ? (committed && action === 'remove' ? [] : [owner]) : [memory()] } };
     });
     await f.bridge.refresh(f.selection()); await f.bridge.refreshOverview(f.selection());
     const request = { ...f.selection(), level: 'owner', memoryId: owner.memory_id, revision: 1 };
@@ -280,7 +320,7 @@ test('资料删除与来源事件交错时保持提交复验门，成功或响�
         ? overview(items.map((item) => sourceEntry(item)))
         : request.path.endsWith('/memory-candidates') ? { candidates: [] }
           : request.path.endsWith('/sources') ? { sources: [] }
-            : request.path === '/api/memories/owner' ? { memories: [] } : { memories: items } };
+            : request.path.endsWith('/owner-memories') ? { memories: [] } : { memories: items } };
     });
     await f.bridge.refresh({ ...f.selection(), section: 'contact' });
     await f.bridge.refreshOverview(f.selection());
@@ -328,7 +368,7 @@ test('提交后的概览核对被来源事件取消时结束等待，专用刷�
       }
       return { generation: 1, data: request.path.endsWith('/memory-candidates') ? { candidates: [] }
         : request.path.endsWith('/sources') ? { sources: [] }
-          : { memories: sourceChanged ? [] : request.path === '/api/memories/owner' ? [owner] : [committed ? corrected : memory()] } };
+          : { memories: sourceChanged ? [] : request.path.endsWith('/owner-memories') ? [owner] : [committed ? corrected : memory()] } };
     });
     await f.bridge.refresh(f.selection()); await f.bridge.refreshOverview(f.selection());
     const previous = level === 'owner' ? owner : memory();
@@ -348,8 +388,9 @@ test('提交后的概览核对被来源事件取消时结束等待，专用刷�
       overview: settled.overview, memories: settled.contact, refresh: async () => {}, openVersions: async () => {},
       busy: settled.mutation.phase === 'working',
     }));
-    assert.ok(!/<button[^>]*disabled=""[^>]*>刷新联系人概览<\/button>/.test(html));
-    assert.match(html, /概览读取失败/);
+    assert.match(html, /<button class="button">重试<\/button>/);
+    assert.doesNotMatch(html, /刷新联系人概览/);
+    assert.match(html, /概览加载失败/);
     assert.ok(!html.includes('正在核对概览与来源'));
     assert.ok(!html.includes(memory().text));
     assert.ok(!html.includes(corrected.text));

@@ -61,8 +61,8 @@ class TailResult:
 
     轮询没有新消息时返回空结果：``events`` 为空且 ``cursor`` 与
     ``last_local_id`` 均为 None，调用方保持既有水位不变。
-    ``last_local_id`` 统计批次内全部事件（含被跳过的非文字事件），
-    保证非文字消息也能前移增量水位。
+    ``last_local_id`` 对应实时页最后的排序位置（含非文字事件），
+    不是批次内最大的编号；后续读取使用不透明的 ``cursor``。
     """
 
     events: tuple[CliMessageEvent, ...]
@@ -72,10 +72,14 @@ class TailResult:
     # 消息的文字事件，避免把媒体等非文字事件伪造成正文。
     event_count: int | None = None
     non_text_count: int = 0
-    # 没有完整水位的空输出不能证明来源已经追到当前；后台补齐会将其
-    # 标记为 incomplete，而不是把未知 freshness 当作完成。
+    # 只证明本页来自可验证的实时读取；是否追平还须检查 has_more。
+    # 没有完整水位的空输出无法证明来源，后台补齐将其标记为 incomplete。
     freshness_confirmed: bool = False
     filtered_records: tuple[ProcessingRecord, ...] = ()
+    # 本页来源可信不等于已追平；有后续页时由调用方继续有界调度。
+    has_more: bool = False
+    # 元数据确认的本地历史不可读原因；不是读取故障，也不证明覆盖完整。
+    local_history_state: str | None = None
 
 
 @dataclass(frozen=True, slots=True, repr=False)

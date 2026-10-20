@@ -11,6 +11,7 @@ import threading
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from time import monotonic
 from typing import Any, Protocol
 
 from notalone.source_processing.models import ProcessingRecord
@@ -28,6 +29,11 @@ from notalone.wechat_cli.models import (
     MessageIdentifier,
     TailFollowItem,
     TailResult,
+)
+from notalone.wechat_cli.local_availability import (
+    classify_local_history_probe,
+    is_exact_missing_message_table,
+    local_history_probe_sql,
 )
 
 
@@ -326,12 +332,15 @@ class LocalWechatCli:
         cursor: str | None = None,
         since_time: str | None = None,
         limit: int | None = None,
+        timeout_seconds: float | None = None,
     ) -> TailResult:
         """读取一次会话文字增量；不传 cursor 表示首次读取。
 
         没有新消息时返回空结果而不是错误；调用方保持既有水位。
+        显式预算只作用于本次读取，None 沿用实例默认预算。
         """
 
+        _validate_command_timeout(timeout_seconds)
         talker = _require_text(talker, "talker")
         if cursor is not None and since_time is not None:
             raise ValueError("cursor 与 since_time 不能同时提供。")
@@ -349,8 +358,28 @@ class LocalWechatCli:
         command.extend(
             ["--include-media-paths", "false", "--strict-read-only"]
         )
-        result = self._invoke(tuple(command))
-        return _parse_tail_output(result.stdout, expected_talker=talker)
+        deadline = monotonic() + (self._timeout_seconds if timeout_seconds is None else timeout_seconds)
+        result = self._invoke(tuple(command), timeout_seconds=timeout_seconds, allow_failure=True)
+        if result.returncode != 0:
+            if is_exact_missing_message_table(result.stdout):
+                remaining = deadline - monotonic()
+                if remaining <= 0:
+                    raise CliCommandError("cli_timeout", "微信 CLI 命令超时。")
+                probe = self._invoke((
+                    self._executable, "sql", local_history_probe_sql(talker),
+                    "--subdir", "session", "--file", "session.db", "--strict-read-only",
+                ), timeout_seconds=remaining)
+                availability = classify_local_history_probe(probe.stdout)
+                if availability is not None:
+                    return TailResult(
+                        events=(), cursor=None, freshness_confirmed=True,
+                        local_history_state=availability.removeprefix("local_history_"),
+                    )
+            raise _command_failure(result)
+        page = _parse_tail_output(result.stdout, expected_talker=talker)
+        if page.has_more and page.cursor == cursor:
+            raise CliOutputError("cli_output_invalid", "微信 CLI 后续页游标没有前进。")
+        return page
 
     def tail_follow(
         self,
@@ -374,7 +403,7 @@ class LocalWechatCli:
             ]
         )
         try:
-            process = self._follow_runner(tuple(command))
+            process = self._start_follow(tuple(command))
         except FileNotFoundError as error:
             raise CliCommandError(
                 "cli_not_found", "微信 CLI 不可用。"
@@ -423,7 +452,7 @@ class LocalWechatCli:
             ]
         )
         try:
-            process = self._follow_runner(tuple(command))
+            process = self._start_follow(tuple(command))
         except FileNotFoundError as error:
             raise CliCommandError(
                 "cli_not_found", "微信 CLI 不可用。"
@@ -434,15 +463,18 @@ class LocalWechatCli:
             ) from error
         return SessionEventStream(process)
 
-    def version(self) -> str:
+    def version(self, *, timeout_seconds: float | None = None) -> str:
         """读取 CLI 版本标识，用于观察来源元数据。"""
 
-        envelope = self._run_json((self._executable, "--version"))
+        _validate_command_timeout(timeout_seconds)
+        envelope = self._run_json(
+            (self._executable, "--version"), timeout_seconds=timeout_seconds
+        )
         data = _object_field(envelope, "data")
         return _require_text(data.get("version"), "data.version")
 
     def close(self) -> None:
-        """终止正在执行的一次性命令；已完成命令不受影响。"""
+        """回收一次性命令与监听进程，不依赖同步引擎先取得关闭锁。"""
 
         with self._process_lock:
             processes = tuple(self._active_processes)
@@ -467,6 +499,20 @@ class LocalWechatCli:
                     wait(timeout=1.0)
                 except (TimeoutError, subprocess.TimeoutExpired):
                     pass
+            if _poll_process(process) is not None:
+                with self._process_lock:
+                    self._active_processes.discard(process)
+
+    def _start_follow(self, command: tuple[str, ...]) -> object:
+        # 创建与登记共用关闭锁，避免取消恰好遗漏刚启动的监听进程。
+        with self._process_lock:
+            self._active_processes = {
+                process for process in self._active_processes
+                if _poll_process(process) is None
+            }
+            process = self._follow_runner(command)
+            self._active_processes.add(process)
+            return process
 
     def _run_json(self, command: tuple[str, ...], *, timeout_seconds: float | None = None) -> dict[str, Any]:
         result = self._invoke(command, timeout_seconds=timeout_seconds)
@@ -482,7 +528,8 @@ class LocalWechatCli:
             )
         return value
 
-    def _invoke(self, command: tuple[str, ...], *, timeout_seconds: float | None = None) -> CommandResult:
+    def _invoke(self, command: tuple[str, ...], *, timeout_seconds: float | None = None,
+                allow_failure: bool = False) -> CommandResult:
         try:
             result = (self._run_command(command, timeout_seconds=timeout_seconds)
                       if self._default_runner and timeout_seconds is not None else self._runner(command))
@@ -494,7 +541,7 @@ class LocalWechatCli:
             raise CliCommandError(
                 "cli_timeout", "微信 CLI 命令超时。"
             ) from error
-        if result.returncode != 0:
+        if result.returncode != 0 and not allow_failure:
             raise _command_failure(result)
         return result
 
@@ -607,6 +654,9 @@ def _message_table_missing(message: str | None) -> bool:
 
 
 def _parse_tail_output(stdout: str, *, expected_talker: str) -> TailResult:
+    has_more = False
+    ordered_page = False
+    page_cursor = None
     # 单次查询保留 envelope：JSONL 空输出会丢失实时来源证明。
     try:
         envelope = json.loads(stdout)
@@ -626,14 +676,18 @@ def _parse_tail_output(stdout: str, *, expected_talker: str) -> TailResult:
             or freshness.get("message_source") != "live_message_db"
             or not isinstance(query, dict)
             or query.get("chat") != expected_talker
-            # 当前调用方只完成单批补齐；有后续页不能报告已补齐。
-            or query.get("has_more") is not False
+            or not isinstance(query.get("has_more"), bool)
             or envelope.get("warnings")
             or envelope.get("error")
             or data.get("warnings")
             or data.get("error")
         ):
             raise CliOutputError("cli_freshness_unknown", "微信 CLI 未确认当前会话的实时读取结果。")
+        has_more = query["has_more"]
+        ordered_page = True
+        page_cursor = data.get("cursor")
+        if not raw_events and has_more:
+            raise CliOutputError("cli_output_invalid", "微信 CLI 后续页没有可推进的事件。")
         if not raw_events:
             # 空查询只证明检查完成，不用 envelope cursor 推进消息水位。
             return TailResult(events=(), cursor=None, last_local_id=None, freshness_confirmed=True)
@@ -676,9 +730,9 @@ def _parse_tail_output(stdout: str, *, expected_talker: str) -> TailResult:
             raise unsupported_error
         event_count += 1
         local_id = item.local_id
-        # 文字与非文字事件都参与水位推进；cursor 必须和选出的最大
-        # local_id 来自同一条事件，不能在 JSONL 乱序时取最后一行。
-        if last_local_id is None or local_id > last_local_id:
+        # 实时 tail 页按微信排序位置排列，local_id 并不单调。
+        # 旧 JSONL 输入没有分页顺序保证，保留其原有兼容行为。
+        if ordered_page or last_local_id is None or local_id > last_local_id:
             last_local_id = local_id
             last_cursor = item.cursor
         if item.event is None:
@@ -688,6 +742,8 @@ def _parse_tail_output(stdout: str, *, expected_talker: str) -> TailResult:
                 filtered_records.append(item.processing_record)
             continue
         events.append(item.event)
+    if ordered_page and page_cursor is not None and page_cursor != last_cursor:
+        raise CliOutputError("cli_output_invalid", "微信 CLI 页游标与最后事件不一致。")
     return TailResult(
         events=tuple(events),
         cursor=last_cursor,
@@ -696,6 +752,7 @@ def _parse_tail_output(stdout: str, *, expected_talker: str) -> TailResult:
         non_text_count=non_text_count,
         freshness_confirmed=True,
         filtered_records=tuple(filtered_records),
+        has_more=has_more,
     )
 
 
@@ -874,11 +931,13 @@ def _poll_process(process: object) -> int | None:
 def _parse_candidate(value: object) -> ChatCandidate:
     if not isinstance(value, dict):
         raise CliOutputError("cli_output_invalid", "微信 CLI 会话候选无效。")
+    username = _require_text(value.get("username"), "candidate.username")
+    display_name = value.get("display_name")
+    if isinstance(display_name, str) and not display_name.strip():
+        display_name = username
     return ChatCandidate(
-        username=_require_text(value.get("username"), "candidate.username"),
-        display_name=_require_text(
-            value.get("display_name"), "candidate.display_name"
-        ),
+        username=username,
+        display_name=_require_text(display_name, "candidate.display_name"),
         match=_optional_text(value.get("match")),
         chat_type=_require_text(value.get("chat_type"), "candidate.chat_type"),
         last_timestamp=_optional_int(value.get("last_timestamp")),
@@ -897,6 +956,15 @@ def _object_field(value: object, field: str) -> dict[str, Any]:
             "cli_output_invalid", f"微信 CLI 字段 {field} 无效。"
         )
     return value[field]
+
+
+def _validate_command_timeout(timeout_seconds: float | None) -> None:
+    if timeout_seconds is not None and (
+        isinstance(timeout_seconds, bool)
+        or not math.isfinite(timeout_seconds)
+        or timeout_seconds <= 0
+    ):
+        raise ValueError("CLI 单次命令预算必须为有限正数。")
 
 
 def _require_text(value: object, field: str) -> str:

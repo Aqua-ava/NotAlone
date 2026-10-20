@@ -53,7 +53,8 @@ def _generation_input(request):
         if isinstance(value, dict) and 'input_mode' in value:
             inputs = {key: value.get(key) for key in ('input_mode', 'draft_text', 'current_text',
                 'confirmed_direction', 'direction_source', 'confirmed_purpose', 'purpose_source',
-                'user_instruction', 'include_relationship_context', 'understanding_correction', 'clarification_answer')}
+                'user_instruction', 'include_relationship_context', 'understanding_correction', 'clarification_answer',
+                'workspace_action', 'context_text')}
             inputs['l1'] = [item for item in value.get('evidence', [])
                 if item.get('kind') not in {'user_draft', 'user_current_chat', 'user_purpose'}]
             return inputs
@@ -124,11 +125,14 @@ def _captured_output_matches(arm, calls):
         content = evidence['input_package']['request'].get('content') or {}
         if content.get('type') == 'rewrite_draft':
             pasted = content.get('input_kind') == 'current_chat'
-            if (actual_input is None or actual_input['input_mode'] != ('reply_to_pasted_text' if pasted else 'rewrite_draft')
+            workspace = content.get('input_kind') == 'workspace'
+            if (actual_input is None or actual_input['input_mode'] != ('workspace' if workspace else 'reply_to_pasted_text' if pasted else 'rewrite_draft')
                     or actual_input['current_text' if pasted else 'draft_text'] != content.get('draft_text')
                     or actual_input['user_instruction'] != content.get('user_instruction')
                     or actual_input['include_relationship_context'] != content.get('include_relationship_context', False)
-                    or pasted and actual_input['confirmed_direction'] != content.get('pasted_direction')):
+                    or pasted and actual_input['confirmed_direction'] != content.get('pasted_direction')
+                    or workspace and any(actual_input[key] != content.get(key)
+                                         for key in ('workspace_action', 'context_text'))):
                 return False
         saved_l1 = {item['evidence_id']: item for item in persisted.get('evidence', [])}
         for item in (actual_input or {}).get('l1', []):

@@ -11,7 +11,7 @@ export interface SavedAssistantTurn {
   input: { content: Record<string, unknown>; continued_from_candidate_id?: string | null;
     skill_version_id?: string | null; skill_disabled?: boolean; scene?: string | null } | null;
   reply: { replyRequestId: string; candidates: ReplyCandidate[]; contextEvidenceIds: string[];
-    styleSampleIds?: string[]; expressionPreferenceIds?: string[]; expressionPreferences?: ExpressionPreferenceReceipt[]; usedSkill?: ReplyUsedSkill | null; inputBudget?: AssistantInputBudget; basisChanges?: ReplyBasisChange[] } | null;
+    expressionPreferenceIds?: string[]; expressionPreferences?: ExpressionPreferenceReceipt[]; usedSkill?: ReplyUsedSkill | null; inputBudget?: AssistantInputBudget; basisChanges?: ReplyBasisChange[] } | null;
   placeholder: string | null;
   interruptionReason: 'app_quit' | 'configuration_reload' | null;
   basisChanges?: ReplyBasisChange[];

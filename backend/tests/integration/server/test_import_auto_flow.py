@@ -68,7 +68,23 @@ class AutoMemoryModel(ScriptedCoreModel):
         if index in self.errors:
             raise self.errors[index]
         content = str(messages[-1].content)
-        if requested == ("GroundedMemoryLabels",):
+        if requested == ("DirectMemoryExtractionOutput",):
+            facts = []
+            for identifier, sender, raw in re.findall(
+                r"\[target\] \[message_id=([^]]+)\] occurred_at=\S+ sender=(contact|self): (.*)$", content, re.MULTILINE):
+                if not re.fullmatch(r"(?:核心验收[^：\n]+：)?我平时喜欢[^。！？!?]+。?", raw):
+                    continue
+                facts.append({"text": ("联系人" if sender == "contact" else "本人") + "原话：“" + raw + "”",
+                    "category": "preference", "subject": sender, "topic": "other", "source_message_ids": [identifier],
+                    "confidence": 0.95, "risk_flags": [], "valid_at": None, "invalid_at": None,
+                    "speech_act": "assertion", "assertion_status": "asserted", "figurative_type": "literal",
+                    "alternatives": [], "interpretation_reason": "合成来源中的直接偏好陈述。"})
+            response = tool_response("DirectMemoryExtractionOutput", {"scenes": [{"scene_name": "合成偏好", "memories": facts}]})
+        elif requested == ("BatchMemoryAdjudicationOutput",):
+            response = tool_response("BatchMemoryAdjudicationOutput", {"decisions": [
+                {"candidate_index": item["candidate_index"], "action": "add", "replaced_memory_id": None}
+                for item in json.loads(content)]})
+        elif requested == ("GroundedMemoryLabels",):
             labels = {}
             unit_schemas = kwargs["tools"][0]["function"]["parameters"]["properties"]["units"]["properties"]
             for unit, sender, raw in re.findall(
@@ -131,7 +147,7 @@ class AutoMemoryModel(ScriptedCoreModel):
 class ImportAutoFlowHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
     extraction_model_factory = AutoMemoryModel
     production_model_wiring = True
-    # 本组合核对自动写入后的事务与调度；默认门另沿None装配验证待确认。
+    # 本组合核对自动写入后的事务与调度；默认装配另验证逐条来源核验采纳。
     dimension_release = DimensionRelease(gate_enabled=False)
 
     def setUp(self):
@@ -210,26 +226,20 @@ class ImportAutoFlowHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self._memory(self.backend, imported)
         self._reply(self.backend, imported)
 
-    def test_default_dimension_release_keeps_automatic_import_candidates_pending(self):
+    def test_default_dimension_release_adopts_source_verified_automatic_import(self):
         # 与生产 main 一样不注入维度放行表，仍经相同优先级与追踪装配。
         self.dimension_release = None
         backend = self._backend(self.owner_id)
-        imported = self._import_auto(backend, "默认空放行", "茉莉茶")
+        imported = self._import_auto(backend, "默认逐条核验", "茉莉茶")
         self._wait_task(backend, imported, "succeeded")
         contact_id = imported["contact_id"]
-        self.assertEqual(
-            self._get(backend, f"/api/contacts/{contact_id}/memories")["memories"],
-            [],
-        )
-        candidates = self._get(
-            backend, f"/api/contacts/{contact_id}/memory-candidates",
-        )["candidates"]
-        self.assertEqual(len(candidates), 1)
-        self.assertEqual(candidates[0]["text"], f"联系人原话：“{imported['fact_message']['text']}”")
-        self.assertEqual(candidates[0]["status"], "pending")
-        self.assertEqual(
-            candidates[0]["source_ids"], [imported["fact_message"]["message_id"]],
-        )
+        self.assertEqual(self._get(backend, f"/api/contacts/{contact_id}/memory-candidates")["candidates"], [])
+        saved = self._get(backend, f"/api/contacts/{contact_id}/memories")["memories"]
+        self.assertEqual(len(saved), 1, {"pending": self._get(backend, f"/api/contacts/{contact_id}/memory-candidates"),
+            "calls": [str(call[-1].content) for call in self.extraction_model.seen_calls]})
+        self.assertEqual(saved[0]["text"], f"联系人原话：“{imported['fact_message']['text']}”")
+        self.assertEqual(saved[0]["adoption_method"], "auto")
+        self.assertEqual(saved[0]["source_ids"], [imported["fact_message"]["message_id"]])
 
     def test_new_import_while_same_contact_is_active_is_not_lost(self):
         active = self.extraction_model.block_call(0)

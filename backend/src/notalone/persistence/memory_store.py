@@ -19,6 +19,10 @@ from notalone.memory.dimension_evidence import (
 from notalone.memory.correction import MemoryCorrectionConflictError
 from notalone.persistence.reply_layered_cleanup import erase_layered_reply_dependencies
 from notalone.memory.events import MemoryEvent
+from notalone.memory.evolution import MemoryEvolution
+from notalone.persistence.memory_evolution import bind_memory_evolution, evolution_snapshot, validate_evolution, require_replacement_evolution
+from notalone.memory.conditions import MemoryConditions
+from notalone.persistence.memory_conditions import bind_memory_conditions, manual_conditions
 from notalone.persistence.memory_events import bind_memory_event, has_event_schema
 from notalone.memory.versions import (
     MemoryVersionConflict, require_auto_previous, require_auto_update_previous,
@@ -94,6 +98,8 @@ _CANDIDATE_COLUMNS = """
     failure_reason AS candidate_failure_reason,
     to_jsonb(memory_candidate)->'dimension_evidence' AS candidate_dimension_evidence,
     to_jsonb(memory_candidate)->'event' AS candidate_event,
+    to_jsonb(memory_candidate)->'conditions' AS candidate_conditions,
+    to_jsonb(memory_candidate)->'evolution' AS candidate_evolution,
     to_jsonb(memory_candidate)->>'source_dependency_mode' AS candidate_dependency_mode,
     to_jsonb(memory_candidate)->'requires_all_sources' AS candidate_requires_all_sources,
     created_at AS recorded_at
@@ -117,6 +123,8 @@ _MEMORY_COLUMNS = """
     risk_flags AS memory_risk_flags,
     supersedes_memory_id,
     to_jsonb(confirmed_memory)->'event' AS memory_event,
+    to_jsonb(confirmed_memory)->'conditions' AS memory_conditions,
+    to_jsonb(confirmed_memory)->'evolution' AS memory_evolution,
     to_jsonb(confirmed_memory)->'version_evidence' AS version_evidence,
     to_jsonb(confirmed_memory)->>'retirement_reason' AS retirement_reason,
     (to_jsonb(confirmed_memory)->>'retired_at')::timestamptz AS retired_at,
@@ -230,6 +238,15 @@ class PostgresMemoryStore:
                     evidence_column += ", event"
                     evidence_value += ", %s"
                     evidence_params += (Jsonb(candidate.event.to_payload()),)
+                if candidate.conditions is not None:
+                    evidence_column += ", conditions"
+                    evidence_value += ", %s"
+                    evidence_params += (Jsonb(candidate.conditions.to_payload()),)
+                if candidate.evolution is not None:
+                    correction_evidence = evolution_snapshot(connection, candidate, correction_evidence)
+                    evidence_column += ", evolution"
+                    evidence_value += ", %s"
+                    evidence_params += (Jsonb(candidate.evolution.to_payload(include_proof=True)),)
                 if correction_evidence is not None:
                     evidence_column += ", correction_evidence"
                     evidence_value += ", %s"
@@ -571,6 +588,8 @@ class PostgresMemoryStore:
                     connection, [candidate_row], lock_sources=True
                 )[0])
                 if adoption_method is AdoptionMethod.AUTO:
+                    if expected_previous is not None:
+                        require_replacement_evolution(connection, candidate, (expected_previous,))
                     require_current_dimension_evidence(
                         candidate.dimension_evidence, expected_dimension_evidence
                     )
@@ -579,6 +598,15 @@ class PostgresMemoryStore:
                 event_column = ", event" if candidate.event is not None else ""
                 event_value = ", %s" if candidate.event is not None else ""
                 event_params = (Jsonb(candidate.event.to_payload()),) if candidate.event is not None else ()
+                if candidate.conditions is not None:
+                    event_column += ", conditions"
+                    event_value += ", %s"
+                    event_params += (Jsonb(candidate.conditions.to_payload()),)
+                if candidate.evolution is not None:
+                    validate_evolution(connection, owner_id=scope.owner_id, evolution=candidate.evolution, candidate=candidate, lock=True)
+                    event_column += ", evolution"
+                    event_value += ", %s"
+                    event_params += (Jsonb(candidate.evolution.to_payload(include_proof=True)),)
                 if expected_previous is not None:
                     proposed = ConfirmedMemory(
                         memory_id=memory_id, scope=scope, text=candidate.text,
@@ -587,7 +615,7 @@ class PostgresMemoryStore:
                         valid_at=candidate.valid_at, invalid_at=candidate.invalid_at,
                         confidence=candidate.confidence, risk_flags=candidate.risk_flags,
                         revision=expected_previous.revision + 1,
-                        supersedes_memory_id=expected_previous.memory_id, event=candidate.event,
+                        supersedes_memory_id=expected_previous.memory_id, event=candidate.event, conditions=candidate.conditions, evolution=candidate.evolution,
                         source_dependency_mode=mode, requires_all_sources=requires_all_sources,
                     )
                     proof = create_version_evidence(connection, previous=expected_previous, current=proposed)
@@ -637,10 +665,10 @@ class PostgresMemoryStore:
                         {expected_previous.memory_id, *expected_previous.source_ids})
                     invalidated = connection.execute(
                         "UPDATE public.confirmed_memory SET status='invalidated', "
-                        "revision=revision+1, updated_at=now() "
+                        "revision=revision+1, retirement_reason=%s, retired_at=now(), updated_at=now() "
                         "WHERE owner_id=%s AND contact_id=%s AND id=%s "
                         "AND status='active' AND revision=%s AND adoption_method=%s",
-                        (scope.owner_id, scope.contact_id,
+                        (("error_correction" if candidate.evolution and candidate.evolution.kind == "error_correction" else "state_changed"), scope.owner_id, scope.contact_id,
                          expected_previous.memory_id, expected_previous.revision,
                          expected_previous.adoption_method.value),
                     ).rowcount
@@ -684,6 +712,7 @@ class PostgresMemoryStore:
         text: str,
         category: MemoryCategory | None = None,
         change_kind: MemoryChangeKind = MemoryChangeKind.ERROR_CORRECTION,
+        conditions: object = ...,
     ) -> ConfirmedMemory:
         """修正 active 记忆并递增 revision。"""
 
@@ -746,7 +775,23 @@ class PostgresMemoryStore:
                     self._ensure_active_sources(connection, scope, source_ids)
                 requires_all_sources = bool(memory_row.get('memory_requires_all_sources'))
                 mode_column, mode_value, mode_params = insert_dependency(mode, requires_all_sources=requires_all_sources, connection=connection, table='confirmed_memory')
+                next_conditions = manual_conditions(connection, owner_id=scope.owner_id, previous=memory_row.get("memory_conditions"), proposed=conditions, source_ids=source_ids)
+                if next_conditions is not None:
+                    mode_column += ", conditions"
+                    mode_value += ", %s"
+                    mode_params += (Jsonb(next_conditions.to_payload()),)
                 next_revision = memory_row["revision"] + 1
+                retirement_columns = connection.execute(
+                    "SELECT count(*) AS count FROM pg_attribute "
+                    "WHERE attrelid = 'public.confirmed_memory'::regclass AND NOT attisdropped "
+                    "AND attname IN ('retirement_reason', 'retired_at')"
+                ).fetchone()["count"]
+                if retirement_columns == 1 or (retirement_columns == 0
+                        and change_kind is not MemoryChangeKind.ERROR_CORRECTION):
+                    raise MemoryPersistenceError("关系记忆结构尚不支持本次修正。")
+                # 旧库纠错仍使原版失效，读回保持unknown；不能把缺少退役记录的旧版当作合法历史。
+                retirement_update = "retirement_reason = %s, retired_at = %s," if retirement_columns == 2 else ""
+                retirement_params = (change_kind.value, self._now()) if retirement_columns == 2 else ()
                 updated = connection.execute(
                     f"""
                     INSERT INTO public.confirmed_memory (
@@ -781,17 +826,15 @@ class PostgresMemoryStore:
                     raise MemoryInvariantError("关系记忆新版本写入结果为空。")
                 # 同事务先保存合法后继，避免旧叶失效触发器误判整条手录链已删除。
                 invalidated = connection.execute(
-                    """
+                    f"""
                     UPDATE public.confirmed_memory
                     SET status = 'invalidated',
-                        retirement_reason = %s, retired_at = %s,
+                        {retirement_update}
                         revision = %s,
                         updated_at = now()
                     WHERE owner_id = %s AND contact_id = %s AND id = %s
                     """,
-                    (
-                        change_kind.value,
-                        self._now(),
+                    retirement_params + (
                         next_revision,
                         scope.owner_id,
                         scope.contact_id,
@@ -996,12 +1039,13 @@ class PostgresMemoryStore:
         )
 
     def list_confirmed(self, scope: ContactScope, *, include_expired: bool = False,
+                       include_invalidated: bool = False,
                        memory_ids: tuple[UUID, ...] | None = None,
                        include_historical: bool = False) -> tuple[ConfirmedMemory, ...]:
         """默认读取当前有效资料；历史模式只读指定版本并核验完整来源。"""
 
         self._validate_scope(scope)
-        if type(include_expired) is not bool:
+        if type(include_expired) is not bool or type(include_invalidated) is not bool:
             raise TypeError("历史回看标记必须是 bool。")
         if memory_ids is not None and (not isinstance(memory_ids, tuple)
                 or any(not isinstance(identifier, UUID) for identifier in memory_ids)):
@@ -1061,7 +1105,8 @@ class PostgresMemoryStore:
                     """,
                     (scope.owner_id, scope.contact_id,
                      *((list(memory_ids),) if memory_ids is not None else ()),
-                     include_historical, include_historical, current, include_expired or include_historical, current),
+                     include_invalidated or include_historical, include_historical, current,
+                     include_expired or include_historical, current),
                 ).fetchall()
                 if include_historical and rows:
                     self._ensure_active_sources(connection, scope, tuple(dict.fromkeys(
@@ -1069,8 +1114,17 @@ class PostgresMemoryStore:
                 rows = available_correction_memories(
                     connection, owner_id=scope.owner_id, record_kind="contact_memory", rows=rows,
                 )
+                visible = []
+                for row in rows:
+                    if row["memory_status"] == "invalidated":
+                        # 旧版回看沿用版本详情的完整来源门槛，不能恢复已删来源的正文。
+                        try:
+                            self._ensure_active_sources(connection, scope, tuple(row["memory_source_ids"]))
+                        except PermissionError:
+                            continue
+                    visible.append(row)
                 return tuple(self._memory_from_row(row)
-                             for row in self._timed_memories(connection, rows))
+                             for row in self._timed_memories(connection, visible))
         except MemoryPersistenceError:
             raise
         except psycopg.Error:
@@ -1512,6 +1566,14 @@ class PostgresMemoryStore:
             (scope.owner_id, scope.contact_id),
         )
 
+    def capture_adjudication_sources(self, scope, identifiers):
+        from notalone.persistence.correction_evidence import capture_message_snapshot
+        if not identifiers or len(identifiers) > 60:
+            return None
+        with self._connect() as connection:
+            return capture_message_snapshot(connection, owner_id=scope.owner_id,
+                contact_id=scope.contact_id, message_ids=set(identifiers))
+
     def _connect(self) -> Any:
         return (self._connection_factory() if self._connection_factory is not None
                 else psycopg.connect(self._database_url, row_factory=dict_row))
@@ -1571,6 +1633,8 @@ class PostgresMemoryStore:
             timing=row["timing"],
             dimension_evidence=evidence,
             correction_review=row.get("_correction_review", ()),
+            evolution=MemoryEvolution.from_payload(row.get("candidate_evolution")),
+            conditions=(MemoryConditions.from_payload(row.get("candidate_conditions")).with_current_sources(evidence is not None and evidence.source_bound) if row.get("candidate_conditions") is not None and "_bound_dimension_evidence" in row else MemoryConditions.from_payload(row.get("candidate_conditions"))),
             event=(MemoryEvent.from_payload(row.get("candidate_event")).with_current_sources(
                 evidence is not None and evidence.source_bound
             ) if row.get("candidate_event") is not None and "_bound_dimension_evidence" in row
@@ -1598,6 +1662,8 @@ class PostgresMemoryStore:
             risk_flags=tuple(row["memory_risk_flags"] or ()),
             supersedes_memory_id=row["supersedes_memory_id"],
             timing=row["timing"], event=row.get("_bound_event", MemoryEvent.from_payload(row.get("memory_event"))),
+            evolution=row.get("_bound_evolution", MemoryEvolution.from_payload(row.get("memory_evolution"))),
+            conditions=row.get("_bound_conditions", MemoryConditions.from_payload(row.get("memory_conditions"))),
             version_evidence=row.get("_bound_version_evidence", VersionEvidence.from_payload(row.get("version_evidence"))),
             can_revert_auto_update=row.get("_can_revert_auto_update", False),
             retirement_reason=MemoryRetirementReason(row.get("retirement_reason") or "unknown"),
@@ -1628,6 +1694,8 @@ class PostgresMemoryStore:
     ) -> list[dict[str, Any]]:
         timed = timed_memory_rows(connection, rows, source_ids_key="memory_source_ids")
         for row in timed:
+            row["_bound_evolution"] = bind_memory_evolution(connection, owner_id=row["owner_id"], raw=row.get("memory_evolution"), memory_id=row["memory_id"], revision=row["revision"])
+            row["_bound_conditions"] = bind_memory_conditions(connection, owner_id=row["owner_id"], candidate_id=row["source_candidate_id"], raw=row.get("memory_conditions"), text=row["memory_text"])
             row["_bound_event"] = bind_memory_event(connection, owner_id=row["owner_id"],
                 candidate_id=row["source_candidate_id"], raw=row.get("memory_event"))
             row["_bound_version_evidence"], row["_can_revert_auto_update"] = bind_version_evidence(

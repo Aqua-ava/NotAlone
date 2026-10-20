@@ -1,3 +1,4 @@
+import { openFileImport } from './file-import-navigation';
 import { expect } from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
 import { test } from './import-fixture';
@@ -21,7 +22,7 @@ test('签名包使用真实文件选择器导入合成资料，系统快捷键�
     fixtureDirectory: importBackend.directory, filePath: importBackend.data.file_path,
   }), { mode: 0o600 });
 
-  await manager.getByRole('button', { name: '历史导入', exact: true }).click();
+  await openFileImport(manager);
   console.log(`native_acceptance_file: ${importBackend.data.file_path}`);
   await manager.getByRole('button', { name: '选择历史文件', exact: true }).click();
   console.log('native_acceptance_stage: 等待真实系统文件选择器选择本轮合成文件。');
@@ -37,7 +38,7 @@ test('签名包使用真实文件选择器导入合成资料，系统快捷键�
   await expect(progress.getByText('新增 6 条消息，已存在 0 条消息。', { exact: true })).toBeVisible();
   await expect(progress.getByText('原任务全部步骤和最终核验已成功。', { exact: true })).toBeVisible({ timeout: 20_000 });
 
-  await manager.getByRole('button', { name: '应用配置', exact: true }).click();
+  await manager.getByRole('button', { name: '设置', exact: true }).click();
   const controls = manager.getByRole('region', { name: '桌面操作' });
   await controls.getByRole('textbox', { name: '小窗快捷键' }).fill('Command+Shift+Y');
   await controls.getByRole('button', { name: '保存快捷键' }).click();

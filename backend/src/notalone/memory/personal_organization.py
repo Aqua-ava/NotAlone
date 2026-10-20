@@ -31,6 +31,7 @@ corrections非空时每个target还须输出correction_respected布尔值，逐�
 kind只能是fact/preference/inference/contradiction，复制对应proposal statement的实际kind，不能输出“与原文一致”等说明文字。
 每个target和statement各出现一次。L2每段一个statement；L3每entry一个statement且index=0。fact/preference的support_type为direct，inference为inference，contradiction为contradiction。
 L3每个statement还须包含temporal_basis（static_fact/current_verified/historical/current_unverified）和temporal_references（memory_id/revision数组）。稳定的临时现状只可用current_verified且引用timing.current_status实际为current_verified的来源；未知现状仅uncertain，历史仅historical。静态事实可用static_fact且temporal_references为空。推断仅用current_unverified且为空。
+temporal_references不是普通来源引用：仅current_verified必须非空，且只能引用直接来源中timing.current_status实际为current_verified的版本；current_unverified/static_fact/historical一律为[]，同样适用于fact/preference/contradiction。普通来源引用仍放在sources，未核实现状的说明放在basis，不得用普通来源充当当前状态的核实证明。
 sources不为空，只引用对应条目的references，quote须为实际来源片段；引用存在不证明推理正确。无法核验则supported=false，不能凑合通过。'''
 
 
@@ -38,57 +39,134 @@ def targets(proposal, layer):
     return [{'index': i, 'sha256': content_digest(item)} for i, item in enumerate(proposal['scenarios' if layer == 'l2' else 'entries'])]
 
 
+_REJECTION_REASONS = {
+    'target_identity_invalid': '核验条目缺失、重复或索引未绑定当前条目。',
+    'target_digest_mismatch': '核验摘要未绑定当前条目。',
+    'verification_field_missing': '核验缺少必需字段，无法确认内容。',
+    'verification_structure_invalid': '核验字段类型或命题数量不符合合同。',
+    'model_unsupported': '独立核验未明确支持该条目或命题。',
+    'action_guidance_detected': '独立核验发现行动指导，不属于人物背景资料。',
+    'action_guidance_unconfirmed': '独立核验未明确排除行动指导。',
+    'correction_unconfirmed': '独立核验未确认遵守本次用户纠错。',
+    'statement_identity_invalid': '命题核验索引缺失或重复。',
+    'kind_mismatch': '核验命题类别与候选类别不一致。',
+    'support_type_mismatch': '核验支持类型与命题类别不一致。',
+    'uncertainty_unconfirmed': '独立核验未确认保留不确定性。',
+    'verification_basis_invalid': '核验依据为空、类型无效或超出长度限制。',
+    'source_evidence_invalid': '核验缺少有效来源片段或来源字段不完整。',
+    'source_reference_mismatch': '核验来源未绑定候选直接引用的实际资料版本。',
+    'source_quote_mismatch': '核验引用片段不在对应版本的来源原文中。',
+    'temporal_fields_missing': '画像核验缺少时间类别或时间引用字段。',
+    'temporal_basis_mismatch': '画像时间证明与候选时态或命题类别不一致。',
+    'temporal_reference_invalid': '画像时间证明未绑定已核实当前状态的直接来源。',
+    'temporal_references_not_empty': '非当前已核实的时间类别必须使用空时间引用；普通来源应放在来源证据中。',
+}
+
+
+def _temporal_rejection(verdict, item, inputs, refs):
+    if not {'temporal_basis', 'temporal_references'} <= verdict.keys():
+        return 'temporal_fields_missing'
+    temporal = verdict['temporal_basis']
+    temporal_refs = verdict['temporal_references']
+    if not isinstance(temporal_refs, list):
+        return 'temporal_reference_invalid'
+    if item.get('kind') == 'inference' and temporal != 'current_unverified':
+        return 'temporal_basis_mismatch'
+    if temporal == 'current_verified':
+        valid = bool(temporal_refs) and all(isinstance(ref, dict)
+            and isinstance(ref.get('memory_id'), str) and type(ref.get('revision')) is int
+            and (ref['memory_id'], ref['revision']) in refs
+            and (inputs.get((ref['memory_id'], ref['revision']), {}).get('timing') or {}).get('current_status') == 'current_verified'
+            for ref in temporal_refs)
+        return None if valid else 'temporal_reference_invalid'
+    if temporal_refs:
+        return 'temporal_references_not_empty'
+    valid = (temporal == 'static_fact' and item.get('kind') in {'fact', 'preference'}
+        or temporal == 'historical' and item['temporal_status'] == 'historical'
+        or temporal == 'current_unverified' and item['temporal_status'] == 'uncertain')
+    return None if valid else 'temporal_basis_mismatch'
+
+
+def _statement_rejection(verdict, statement, inputs):
+    required = {'kind', 'support_type', 'supported', 'uncertainty_preserved', 'basis', 'sources'}
+    if not required <= verdict.keys():
+        return 'verification_field_missing'
+    kind = statement.get('kind')
+    # 旧提示占位值只在摘要和命题索引已绑定后解释；其余证据门保持不变。
+    verdict_kind = kind if verdict['kind'] == '与原文一致' else verdict['kind']
+    if kind not in {'fact', 'preference', 'inference', 'contradiction'} or verdict_kind != kind:
+        return 'kind_mismatch'
+    if verdict['support_type'] != ('direct' if kind in {'fact', 'preference'} else kind):
+        return 'support_type_mismatch'
+    if verdict['supported'] is not True:
+        return 'model_unsupported'
+    if verdict['uncertainty_preserved'] is not True:
+        return 'uncertainty_unconfirmed'
+    if not isinstance(verdict['basis'], str) or not 0 < len(verdict['basis'].strip()) <= 1000:
+        return 'verification_basis_invalid'
+    sources = verdict['sources']
+    if not isinstance(sources, list) or not sources:
+        return 'source_evidence_invalid'
+    refs = {(ref['memory_id'], ref['revision']) for ref in statement['references']}
+    for source in sources:
+        if (not isinstance(source, dict) or type(source.get('revision')) is not int
+                or not isinstance(source.get('memory_id'), str) or not isinstance(source.get('quote'), str)
+                or not source['quote'].strip()):
+            return 'source_evidence_invalid'
+        ref = (source['memory_id'], source['revision'])
+        if ref not in refs or ref not in inputs:
+            return 'source_reference_mismatch'
+        if source['quote'] not in inputs[ref]['text']:
+            return 'source_quote_mismatch'
+    return None
+
+
+def _item_rejection(audit, item, inputs, layer, corrections):
+    if not {'sha256', 'supported', 'contains_action_guidance', 'reasons', 'statements'} <= audit.keys():
+        return 'verification_field_missing'
+    if audit['sha256'] != content_digest(item):
+        return 'target_digest_mismatch'
+    if audit['supported'] is not True:
+        return 'model_unsupported'
+    if audit['contains_action_guidance'] is not False:
+        return ('action_guidance_detected' if audit['contains_action_guidance'] is True
+                else 'action_guidance_unconfirmed')
+    if corrections and audit.get('correction_respected') is not True:
+        return 'correction_unconfirmed'
+    statements = item['paragraphs'] if layer == 'l2' else [item]
+    if (not isinstance(audit['reasons'], list) or not all(isinstance(reason, str) for reason in audit['reasons'])
+            or not isinstance(audit['statements'], list) or len(audit['statements']) != len(statements)):
+        return 'verification_structure_invalid'
+    for index, statement in enumerate(statements):
+        matches = [value for value in audit['statements'] if isinstance(value, dict)
+                   and type(value.get('index')) is int and value['index'] == index]
+        if len(matches) != 1:
+            return 'statement_identity_invalid'
+        verdict = matches[0]
+        code = _statement_rejection(verdict, statement, inputs)
+        if code is not None:
+            return code
+        if layer == 'l3':
+            refs = {(ref['memory_id'], ref['revision']) for ref in statement['references']}
+            code = _temporal_rejection(verdict, item, inputs, refs)
+            if code is not None:
+                return code
+    return None
+
+
 def verify_result(result, proposal, memories, layer, corrections=()):
+    """逐条失败关闭，仅返回固定诊断，不复制核验原文或联系人资料。"""
     if not isinstance(result, dict) or set(result) != {'items'} or not isinstance(result['items'], list):
         raise ValueError('个人资料核验输出结构无效。')
-    by_ref = {(m['memory_id'], m['revision']): m['text'] for m in memories}
+    inputs = {(memory['memory_id'], memory['revision']): memory for memory in memories}
     accepted, rejected = [], []
     for index, item in enumerate(proposal['scenarios' if layer == 'l2' else 'entries']):
-        audits = [v for v in result['items'] if isinstance(v, dict) and type(v.get('index')) is int and v['index'] == index]
-        audit = audits[0] if len(audits) == 1 else {}
-        statements = item['paragraphs'] if layer == 'l2' else [item]
-        valid = (audit.get('sha256') == content_digest(item) and audit.get('supported') is True
-            and audit.get('contains_action_guidance') is False
-            and (not corrections or audit.get('correction_respected') is True) and isinstance(audit.get('reasons'), list)
-            and all(isinstance(x, str) for x in audit.get('reasons', []))
-            and isinstance(audit.get('statements'), list) and len(audit['statements']) == len(statements))
-        for si, statement in enumerate(statements):
-            matches = [a for a in audit.get('statements', []) if isinstance(a, dict) and type(a.get('index')) is int and a['index'] == si] if valid else []
-            verdict = matches[0] if len(matches) == 1 else {}
-            kind = statement.get('kind')
-            # 兼容旧提示的说明占位值；仅绑定当前摘要/索引后沿用原类别，后续support_type与全部证据门仍必验。
-            verdict_kind = kind if verdict.get('kind') == '与原文一致' and valid and len(matches) == 1 else verdict.get('kind')
-            sources = verdict.get('sources')
-            refs = {(r['memory_id'], r['revision']) for r in statement['references']}
-            valid = valid and (kind in {'fact', 'preference', 'inference', 'contradiction'} and verdict_kind == kind
-                and verdict.get('support_type') == ('direct' if kind in {'fact', 'preference'} else kind)
-                and verdict.get('supported') is True and verdict.get('uncertainty_preserved') is True
-                and isinstance(verdict.get('basis'), str) and 0 < len(verdict['basis'].strip()) <= 1000
-                and isinstance(sources, list) and bool(sources))
-            if valid:
-                for source in sources:
-                    if (not isinstance(source, dict) or type(source.get('revision')) is not int
-                            or not isinstance(source.get('memory_id'), str) or not isinstance(source.get('quote'), str)
-                            or not source['quote'].strip()):
-                        valid = False; break
-                    ref = (source['memory_id'], source['revision'])
-                    if ref not in refs or ref not in by_ref or source['quote'] not in by_ref[ref]:
-                        valid = False; break
-        if valid and layer == 'l3':
-            temporal = verdict.get('temporal_basis')
-            temporal_refs = verdict.get('temporal_references')
-            valid = isinstance(temporal_refs, list)
-            if valid and temporal == 'current_verified':
-                inputs = {(m['memory_id'], m['revision']): m for m in memories}
-                valid = bool(temporal_refs) and all(isinstance(r, dict)
-                    and isinstance(r.get('memory_id'), str) and type(r.get('revision')) is int
-                    and (r['memory_id'], r['revision']) in refs
-                    and (inputs.get((r['memory_id'], r['revision']), {}).get('timing') or {}).get('current_status') == 'current_verified'
-                    for r in temporal_refs)
-            else:
-                valid = valid and not temporal_refs and (temporal == 'static_fact' and item.get('kind') in {'fact', 'preference'}
-                    or temporal == 'historical' and item['temporal_status'] == 'historical'
-                    or temporal == 'current_unverified' and item['temporal_status'] == 'uncertain')
-        if valid: accepted.append(index)
-        else: rejected.append({'index': index, 'reason': '个人资料核验未支持内容、推断限定或排除行动指导，或实际来源绑定不完整。'})
+        audits = [value for value in result['items'] if isinstance(value, dict)
+                  and type(value.get('index')) is int and value['index'] == index]
+        code = ('target_identity_invalid' if len(audits) != 1 else
+                _item_rejection(audits[0], item, inputs, layer, corrections))
+        if code is None:
+            accepted.append(index)
+        else:
+            rejected.append({'index': index, 'code': code, 'reason': _REJECTION_REASONS[code]})
     return {'accepted_indices': accepted, 'rejected': rejected}

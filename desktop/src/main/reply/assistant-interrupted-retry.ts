@@ -9,29 +9,36 @@ import { pastedInputFields } from './pasted-input';
 const text = (value: unknown, limit = 4096): value is string => typeof value === 'string' && Boolean(value.trim()) && Array.from(value).length <= limit;
 const optional = (value: unknown): value is string | null | undefined => value == null || typeof value === 'string' && Array.from(value).length <= 4096;
 
+export function savedReplySkillChoice(turn: SavedAssistantTurn): ReplySkillChoice {
+  let skillChoice: ReplySkillChoice;
+  if (turn.input?.skill_disabled === true && turn.input.skill_version_id === null) skillChoice = { mode: 'disabled', versionId: null };
+  else if (turn.input?.skill_disabled === false && turn.input.skill_version_id === null) skillChoice = { mode: 'auto', versionId: null };
+  else if (turn.input?.skill_disabled === false && isUuid(turn.input.skill_version_id)) {
+    skillChoice = { mode: 'user', versionId: turn.input.skill_version_id.toLowerCase() };
+  } else throw new Error('保存的Skill选择暂不可确认。');
+  return skillChoice;
+}
+
 // 只在用户明确重试后读取权威输入；不回填或覆盖当前草稿、临时选项及候选编辑。
 export async function interruptedReplyInput(backend: BackendHost, turn: SavedAssistantTurn,
   contact: { contactId: string; displayName: string }, signal: AbortSignal, current: () => boolean): Promise<ReplyInputSnapshot> {
   const content = turn.input?.content;
   const common = { contactId: contact.contactId, contactDisplayName: contact.displayName, ...sceneSnapshot(turn.input?.scene) };
   if (!content) throw new Error('中断生成输入暂不可重试。');
-  if (content.type === 'rewrite_draft' && text(content.draft_text, Infinity)
+  if (content.type === 'rewrite_draft' && (text(content.draft_text, Infinity)
+      || content.draft_text === '' && content.input_kind === 'workspace' && content.workspace_action === 'suggest')
     && (content.user_instruction == null || typeof content.user_instruction === 'string')
     && typeof content.include_relationship_context === 'boolean') {
     return { ...common, mode: 'rewrite_draft', draftText: content.draft_text,
       userInstruction: content.user_instruction ?? null, includeRelationshipContext: content.include_relationship_context,
-      ...pastedInputFields(content) };
+      ...pastedInputFields(content),
+      ...(content.input_kind === 'workspace' ? { skillChoice: savedReplySkillChoice(turn) } : {}) };
   }
   if (!['understanding_correction', 'clarification_answer'].every((field) => optional(content[field]))
     || !(content.user_instruction == null || typeof content.user_instruction === 'string')) {
     throw new Error('中断生成输入暂不可重试。');
   }
-  let skillChoice: ReplySkillChoice;
-  if (turn.input?.skill_disabled === true && turn.input.skill_version_id === null) skillChoice = { mode: 'disabled', versionId: null };
-  else if (turn.input?.skill_disabled === false && turn.input.skill_version_id === null) skillChoice = { mode: 'auto', versionId: null };
-  else if (turn.input?.skill_disabled === false && isUuid(turn.input.skill_version_id)) {
-    skillChoice = { mode: 'user', versionId: turn.input.skill_version_id.toLowerCase() };
-  } else throw new Error('中断生成输入暂不可重试。');
+  const skillChoice = savedReplySkillChoice(turn);
   const scenario = { ...common, correction: content.understanding_correction as string | undefined ?? '',
     userInstruction: content.user_instruction as string | undefined ?? '',
     clarificationAnswer: content.clarification_answer as string | undefined ?? '', skillChoice };

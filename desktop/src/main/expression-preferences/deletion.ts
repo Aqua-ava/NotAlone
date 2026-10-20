@@ -1,18 +1,18 @@
 import type { ReplySession } from '../reply/session';
-import type { StyleSampleController } from '../style-samples/controller';
+import type { CandidateProvenanceController } from '../candidate-provenance/controller';
 import type { TraceController } from '../traces/controller';
 
 export function expressionPreferenceDeletion(traces: TraceController, replies: ReplySession,
-  styleSamples: StyleSampleController) {
+  provenance?: Pick<CandidateProvenanceController, 'invalidateSource'>) {
   return {
     started: () => {
-      styleSamples.beginExpressionPreferenceDeletion();
+      provenance?.invalidateSource();
       traces.recordDeletionChanged('started');
       replies.beginExpressionPreferenceDeletion();
     },
     settled: async () => {
       traces.recordDeletionChanged('settled');
-      await Promise.all([replies.revalidateExpressionPreferences(), styleSamples.revalidateExpressionPreferences()]);
+      await replies.revalidateExpressionPreferences();
     },
   };
 }

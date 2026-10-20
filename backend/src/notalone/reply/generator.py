@@ -355,7 +355,9 @@ class ReplyGenerator:
         if (
             not isinstance(context.reply_request_id, UUID)
             or not isinstance(context.current_text, str)
-            or not context.current_text.strip()
+            or (not context.current_text.strip() and not (
+                isinstance(command.content, RewriteDraft) and command.content.input_kind == "workspace"
+                and command.content.workspace_action == "suggest"))
             or not isinstance(context.evidence, tuple)
             or not context.evidence
             or not isinstance(context.skill_library_revision, int)
@@ -491,7 +493,8 @@ class ReplyGenerator:
             if (
                 context.direction is not None
                 or context.current_text != command.content.draft_text
-                or len(draft_evidence) != 1
+                or len(draft_evidence) != (0 if command.content.input_kind == "workspace"
+                    and not command.content.draft_text.strip() else 1)
             ):
                 raise ReplyInvariantError("改写草稿与回复上下文不一致。")
             return

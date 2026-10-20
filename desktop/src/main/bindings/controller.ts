@@ -26,6 +26,14 @@ function bindings(value: unknown): BindingSummary[] {
   if (items.some((item) => item.status !== 'active') || new Set(items.map((item) => item.locator)).size !== items.length) throw new Error('授权目录不可用。');
   return items;
 }
+function knownBindings(value: unknown, active: BindingSummary[]): BindingSummary[] {
+  if (!record(value) || (value.revoked_bindings !== undefined && !Array.isArray(value.revoked_bindings))) throw new Error('关联目录不可用。');
+  const revoked = (value.revoked_bindings as unknown[] | undefined ?? []).map(bindingSummary);
+  const items = [...active, ...revoked];
+  if (revoked.some((item) => item.status !== 'revoked')
+    || new Set(items.map((item) => item.bindingId)).size !== items.length) throw new Error('关联目录不可用。');
+  return items;
+}
 function sessions(value: unknown): CliSessionSummary[] {
   if (!record(value) || !Array.isArray(value.sessions)) throw new Error('会话元数据不可用。');
   const items = value.sessions.map((entry): CliSessionSummary => {
@@ -43,7 +51,7 @@ class SelectionStale extends Error {}
 // 认证传输复用 BackendHost，读取范围始终由服务端的运行身份决定。
 export class BindingConsentController {
   private state: BindingConsentState = { revision: 0, scopeRevision: 0, phase: 'offline',
-    sessions: [], bindings: [], syncEnabled: null, sessionIssue: null, busy: null, errorCode: null, notice: null };
+    sessions: [], bindings: [], knownBindings: [], syncEnabled: null, sessionIssue: 'not-requested', busy: null, errorCode: null, notice: null };
   private generation: number | undefined;
   private epoch = 0;
   private readonly listeners = new Set<(state: BindingConsentState) => void>();
@@ -53,39 +61,44 @@ export class BindingConsentController {
       const generation = backend.getConnectionGeneration();
       if (generation === this.generation) return;
       this.generation = generation; ++this.epoch;
-      this.publish({ phase: 'offline', sessions: [], bindings: [], syncEnabled: null, sessionIssue: null,
+      this.publish({ phase: 'offline', sessions: [], bindings: [], knownBindings: [], syncEnabled: null, sessionIssue: 'not-requested',
         busy: null, errorCode: null, notice: null,
         scopeRevision: this.state.scopeRevision + 1 });
       if (generation !== undefined) void this.refreshState(false);
     });
   }
   getState(): BindingConsentState { return { ...this.state, sessions: this.state.sessions.map((item) => ({ ...item })),
-    bindings: this.state.bindings.map((item) => ({ ...item })) }; }
+    bindings: this.state.bindings.map((item) => ({ ...item })),
+    knownBindings: this.state.knownBindings?.map((item) => ({ ...item })) }; }
   onStateChanged(listener: (state: BindingConsentState) => void): () => void {
     this.listeners.add(listener); return () => this.listeners.delete(listener);
   }
   async refresh(): Promise<void> {
     await this.refreshState(true);
   }
-  private async refreshState(readSessions: boolean): Promise<void> {
+  async refreshSaved(): Promise<void> {
+    await this.refreshState(false, true);
+  }
+  private async refreshState(readSessions: boolean, preserveSessions = false): Promise<void> {
     if (this.state.busy) return;
     const generation = this.backend.getConnectionGeneration();
     if (generation === undefined) return;
     const operation = { generation, epoch: ++this.epoch };
     this.publish({ errorCode: null, notice: null });
-    await this.load(operation, readSessions);
+    await this.load(operation, readSessions, preserveSessions);
   }
-  private async load(operation: Operation, readSessions = this.state.sessionIssue !== 'not-requested'): Promise<void> {
+  private async load(operation: Operation, readSessions = this.state.sessionIssue !== 'not-requested', preserveSessions = false): Promise<void> {
     this.publish({ phase: 'loading' });
     try {
       const setup = await this.backend.requestJson({ method: 'GET', path: '/api/setup/status', maxResponseBytes: 4096 });
       if (!this.current(operation)) return;
       if (!runtimeOwnerConfigured(setup.data)) {
-        this.publish({ phase: 'owner-unconfigured', sessions: [], bindings: [], syncEnabled: null }); return;
+        this.publish({ phase: 'owner-unconfigured', sessions: [], bindings: [], knownBindings: [], syncEnabled: null }); return;
       }
       const directory = await this.backend.requestJson({ method: 'GET', path: '/api/sync/cli-bindings' });
       if (!this.current(operation)) return;
       const active = bindings(directory.data);
+      const known = knownBindings(directory.data, active);
       const list = await Promise.allSettled([
         // 启动和重连只读本机已保存状态；微信元数据须由用户明确刷新。
         readSessions ? this.backend.requestJson({ method: 'GET', path: '/api/sync/cli-sessions' })
@@ -93,17 +106,17 @@ export class BindingConsentController {
         this.backend.requestJson({ method: 'GET', path: '/api/sync/status' }),
       ]);
       if (!this.current(operation)) return;
-      let sessionList: CliSessionSummary[] = [];
-      let sessionIssue: BindingConsentState['sessionIssue'] = readSessions ? null : 'not-requested';
-      if (list[0].status === 'fulfilled') sessionList = sessions(list[0].value.data);
-      else sessionIssue = list[0].reason instanceof BackendRequestFailure && list[0].reason.status === 503 ? 'unavailable' : 'failed';
+      let sessionList: CliSessionSummary[] = preserveSessions ? this.state.sessions : [];
+      let sessionIssue: BindingConsentState['sessionIssue'] = preserveSessions ? this.state.sessionIssue : readSessions ? null : 'not-requested';
+      if (readSessions && list[0].status === 'fulfilled') sessionList = sessions(list[0].value.data);
+      else if (list[0].status === 'rejected') sessionIssue = list[0].reason instanceof BackendRequestFailure && list[0].reason.status === 503 ? 'unavailable' : 'failed';
       const status = list[1].status === 'fulfilled' ? list[1].value.data : null;
-      this.publish({ phase: 'ready', bindings: active, sessions: sessionList, sessionIssue,
+      this.publish({ phase: 'ready', bindings: active, knownBindings: known, sessions: sessionList, sessionIssue,
         syncEnabled: record(status) && typeof status.sync_enabled === 'boolean' ? status.sync_enabled : null });
     } catch (error) {
       if (!this.current(operation)) return;
       const unavailable = error instanceof BackendRequestFailure && error.code === 'sync_unavailable';
-      this.publish({ phase: unavailable ? 'unavailable' : 'failed', sessions: [], bindings: [], syncEnabled: null });
+      this.publish({ phase: unavailable ? 'unavailable' : 'failed', sessions: [], bindings: [], knownBindings: [], syncEnabled: null });
     }
   }
   async confirmSelections(confirmation: BindingConfirmation): Promise<void> {
@@ -167,7 +180,9 @@ export class BindingConsentController {
       if (!this.current(operation)) return;
       const result = bindingSummary(response.data);
       if (result.status !== 'revoked' || result.bindingId !== revocation.bindingId || result.contactId !== revocation.contactId) throw new Error('撤销结果尚未确认。');
-      this.publish({ notice: 'revoked', bindings: this.state.bindings.filter((item) => item.bindingId !== result.bindingId),
+      this.publish({ notice: 'revoked',
+        knownBindings: [...(this.state.knownBindings ?? this.state.bindings).filter((item) => item.bindingId !== result.bindingId), result],
+        bindings: this.state.bindings.filter((item) => item.bindingId !== result.bindingId),
         scopeRevision: this.state.scopeRevision + 1 });
       await this.load(operation);
     } catch (error) {

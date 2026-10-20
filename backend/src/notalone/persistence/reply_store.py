@@ -1,6 +1,7 @@
 """候选回复 ReplyStore 的 PostgreSQL 持久化适配器。"""
 
 from __future__ import annotations
+from notalone.memory.evolution import MemoryEvolution
 
 from collections.abc import Callable
 from contextlib import nullcontext
@@ -15,7 +16,7 @@ from notalone.persistence.memory_overview import PostgresRelationshipOverviewSto
 from notalone.persistence.reply_overview_navigation import require_current_overview_navigation, navigation_dependency_ids
 from notalone.reply.retrieval_receipt import MemoryNavigation, ReplyRetrievalReceipt, require_receipt_evidence
 
-from notalone.reply.errors import ReplyInputInvalidatedError
+from notalone.reply.errors import ReplyInputInvalidatedError, ReplyContextInvariantError
 from notalone.persistence.expression_preferences import (
     capture_reply_expression_preferences, require_captured_reply_expression_preferences,
 )
@@ -29,11 +30,12 @@ from notalone.persistence.reply_basis_changes import require_current_reply_memor
 from notalone.persistence.reply_continuation_basis import (
     capture_reply_continuation_basis, read_continuation_basis, require_reply_continuation_basis,
 )
-from notalone.persistence.style_sample_store import (
+from notalone.persistence.reply_sources import (
     capture_reply_original_sources, capture_declared_reply_sources, require_reply_sources_current,
-    capture_reply_style_references, require_context_style_references,
 )
 from notalone.memory.timing import MemoryTiming
+from notalone.memory.events import MemoryEvent
+from notalone.memory.conditions import MemoryConditions
 
 from notalone.reply.context import (
     ContextEvidence,
@@ -52,6 +54,7 @@ from notalone.reply.errors import (
 )
 from notalone.reply.exploration import ExplorationExpired
 from notalone.reply.interface import (
+    RewriteDraft,
     ContextReceipt,
     GenerateReply,
     CandidateMessage,
@@ -388,7 +391,6 @@ class PostgresReplyStore:
                 require_current_reply_memory(connection, request.scope, context.evidence)
                 require_reply_continuation_basis(connection, request, context)
                 capture_reply_expression_preferences(connection, request, context)
-                capture_reply_style_references(connection, request, context)
                 connection.execute("DELETE FROM public.reply_original_source_use WHERE reply_request_id=%s", (request.request_id,))
                 capture_reply_original_sources(connection, request, context)
                 capture_reply_discussion_dependencies(
@@ -470,12 +472,6 @@ class PostgresReplyStore:
                         context,
                     )
                     require_captured_reply_expression_preferences(connection, request, context)
-                    captured_samples = {row["sample_id"] for row in connection.execute(
-                        "SELECT sample_id FROM public.reply_style_sample_use WHERE owner_id=%s AND contact_id=%s AND reply_request_id=%s",
-                        (request.scope.owner_id, request.scope.contact_id, request.request_id),
-                    ).fetchall()}
-                    if captured_samples != {item.sample_id for item in context.style_references}:
-                        raise ReplyStoreInvariantError("表达参考不符合模型调用前的实际使用记录。")
                     require_reply_discussion_dependencies(
                         connection, request.scope, request.request_id, current=True,
                         expected_snapshot=context.assistant_discussion.snapshot if context.assistant_discussion else None,
@@ -530,7 +526,6 @@ class PostgresReplyStore:
                         candidates=tuple(candidates),
                         context_receipt=ContextReceipt(
                             evidence_ids=evidence_ids,
-                            style_sample_ids=tuple(sorted(item.sample_id for item in context.style_references)),
                             expression_preference_ids=tuple(sorted(item.preference_id for item in context.expression_preferences)),
                             expression_preferences=preference_receipts(context.expression_preferences),
                         ),
@@ -924,7 +919,10 @@ class PostgresReplyStore:
             == request.continued_from_candidate_id
             and _normalize_input(context.command) == request.normalized_input
             and isinstance(context.current_text, str)
-            and bool(context.current_text.strip())
+            and (bool(context.current_text.strip()) or (
+                isinstance(context.command.content, RewriteDraft)
+                and context.command.content.input_kind == "workspace"
+                and context.command.content.workspace_action == "suggest"))
             and isinstance(context.evidence, tuple)
             and context.evidence
             and isinstance(context.skill_library_revision, int)
@@ -962,7 +960,6 @@ class PostgresReplyStore:
         ):
             raise ReplyStoreInvariantError("助手讨论不属于当前持久化请求。")
         evidence_ids: set[UUID] = set()
-        require_context_style_references(connection, request.scope, context.style_references)
         for item in context.evidence:
             if (
                 not isinstance(item, ContextEvidence)
@@ -1108,6 +1105,7 @@ class PostgresReplyStore:
         ):
             raise ReplyStoreInvariantError("Skill 使用摘要结构无效。")
 
+
     @staticmethod
     def _context_snapshot(
         context: ReplyContext, *, input_budget: InputBudgetDecision | None = None,
@@ -1138,7 +1136,6 @@ class PostgresReplyStore:
             "skill_library_revision": context.skill_library_revision,
             "memory_revision": context.memory_revision,
             "index_revision": context.index_revision,
-            "style_sample_ids": [str(item.sample_id) for item in context.style_references],
             "expression_preferences": [
                 preference_receipt_payload(item) for item in preference_receipts(context.expression_preferences)
             ],
@@ -1178,6 +1175,9 @@ class PostgresReplyStore:
                     ),
                     "revision": item.revision,
                     "timing": item.timing.to_payload(),
+                    "event": item.event.to_payload(current=True) if item.event else None,
+                    "conditions": item.conditions.to_payload(current=True) if item.conditions else None,
+                    "evolution": item.evolution.to_payload(current=True) if item.evolution else None,
                 }
                 for item in context.evidence
             ],
@@ -1381,6 +1381,9 @@ class PostgresReplyStore:
                         invalid_at=row["evidence_invalid_at"],
                         revision=row["evidence_revision"],
                         timing=timings.get(row["evidence_id"], MemoryTiming()),
+                        event=MemoryEvent.from_payload(metadata.get(str(row["evidence_id"]), {}).get("event")),
+                        conditions=MemoryConditions.from_payload(metadata.get(str(row["evidence_id"]), {}).get("conditions")),
+                        evolution=MemoryEvolution.from_payload(metadata.get(str(row["evidence_id"]), {}).get("evolution")),
                         model_visible=metadata.get(str(row["evidence_id"]), {}).get("model_visible", True),
                         navigation=MemoryNavigation.from_snapshot(metadata.get(str(row["evidence_id"]), {}).get("navigation")),
                     )
@@ -1597,12 +1600,7 @@ class PostgresReplyStore:
         return ReplyGenerated(
             reply_request_id=request_row["id"],
             candidates=tuple(candidates),
-            context_receipt=ContextReceipt(evidence_ids=tuple(evidence_ids), style_sample_ids=tuple(
-                row["sample_id"] for row in connection.execute(
-                    "SELECT sample_id FROM public.reply_style_sample_use WHERE owner_id=%s AND contact_id=%s AND reply_request_id=%s ORDER BY sample_id",
-                    (request_row["owner_id"], request_row["contact_id"], request_row["id"]),
-                ).fetchall()
-            ), expression_preference_ids=tuple(item.preference_id for item in preferences), expression_preferences=preferences),
+            context_receipt=ContextReceipt(evidence_ids=tuple(evidence_ids), expression_preference_ids=tuple(item.preference_id for item in preferences), expression_preferences=preferences),
             used_skill=used_skill,
             input_budget=input_budget,
             basis_changes=read_reply_basis_changes(

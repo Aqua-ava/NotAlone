@@ -14,6 +14,11 @@ export function CandidateCopyControls({ state, candidateId }: { state: ReplySess
   const [error, setError] = useState('');
   useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
   useEffect(() => { setNotice(''); setError(''); }, [identity]);
+  useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => setNotice(''), 1400);
+    return () => clearTimeout(timer);
+  }, [notice]);
   const enabled = Boolean(state.contactId && state.result?.input.mode === 'rewrite_draft'
     && candidate?.editedText.trim() && state.phase !== 'waiting' && !busy);
   async function copy(hideAfterCopy: boolean) {
@@ -29,10 +34,10 @@ export function CandidateCopyControls({ state, candidateId }: { state: ReplySess
     } finally { if (active.current) setBusy(false); }
   }
   return <>
-    <button disabled={!enabled} onClick={() => void copy(false)}><Icon name="copy" size={13} />复制</button>
+    <button className="candidate-copy-icon" aria-label="复制" title={notice ? '已复制' : '复制'} disabled={!enabled} onClick={() => void copy(false)}><Icon name={notice ? 'check' : 'copy'} size={15} /></button>
     <button className="copy-hide" disabled={!enabled} onClick={() => void copy(true)}>复制并收起</button>
     {busy && <span role="status">正在复制…</span>}
-    {notice && <span role="status">{notice}</span>}
+    {notice && <span className="candidate-copy-notice" role="status">{notice}</span>}
     {error && <span role="alert">{error}</span>}
   </>;
 }

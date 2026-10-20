@@ -17,6 +17,21 @@ from notalone.reply.interface import GenerateReply, InitiateConversation, NoSkil
 from notalone.scopes import ContactScope
 
 
+def explored_skill_selection_method(database_url: str, context: ReplyContext) -> str | None:
+    """内部固定版本保留探索的真实自动来源，不由公开请求声明选择方式。"""
+
+    if exploration_reference(context.command) is None:
+        return None
+    import psycopg
+    from psycopg.rows import dict_row
+    from notalone.persistence.locks import lock_owner_scope
+
+    with psycopg.connect(database_url, row_factory=dict_row) as connection:
+        lock_owner_scope(connection, owner_id=context.scope.owner_id)
+        task = read_explored_generation(connection, context.scope, None, context.command, generation_required=True)
+    return "auto" if task is not None and task.content.skill_mode == "auto" else "user"
+
+
 def exploration_reference(command: GenerateReply) -> SuggestionReference | None:
     content = command.content
     direction = (content.direction if isinstance(content, ReplyToMessage)

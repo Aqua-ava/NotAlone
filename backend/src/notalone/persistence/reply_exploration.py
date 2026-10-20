@@ -64,6 +64,9 @@ def _content(payload: dict[str, Any]) -> ExplorationInput:
 
 
 def _task(scope: ContactScope, row: dict[str, Any]) -> ExplorationTask:
+    complete = row["input_payload"].get("skill_selection_complete", True)
+    if not isinstance(complete, bool):
+        raise ExplorationStale("探索策略选择记录无效。")
     return ExplorationTask(
         row["id"], scope, row["session_id"], row["input_version_id"], row["operation_key"],
         row["request_key"], _content(row["input_payload"]),
@@ -72,6 +75,7 @@ def _task(scope: ContactScope, row: dict[str, Any]) -> ExplorationTask:
         row["skill_library_revision"], row["skill_version_id"], row["root_created_at"],
         row["automatic_call_count"], row["state"], row["result_payload"], row["selected_intent"],
         row["selection_id"], DirectionSource(row["selection_source"]) if row["selection_source"] else None,
+        complete,
     )
 
 
@@ -343,6 +347,8 @@ class PostgresExplorationStore:
                 selected_intent=previous.selected_intent if previous and previous.has_confirmed_intent else None,
                 selection_id=previous.selection_id if previous and previous.has_confirmed_intent else None,
                 selection_source=previous.selection_source if previous and previous.has_confirmed_intent else None,
+                skill_selection_complete=(request.content.skill_mode != "auto" or skill.entry is not None
+                                          or not skill.catalog.entries),
             )
             connection.execute(
                 "UPDATE public.reply_exploration SET state='stale', updated_at=now() "
@@ -361,7 +367,8 @@ class PostgresExplorationStore:
             "root_created_at,automatic_call_count,selected_intent,selection_id,selection_source,result_payload) "
             "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
             (task.exploration_id, task.scope.owner_id, task.scope.contact_id, task.session_id, task.input_version_id,
-             task.operation_key, operation_digest, task.request_key, Jsonb(task.content.payload()),
+             task.operation_key, operation_digest, task.request_key,
+             Jsonb({**task.content.payload(), "skill_selection_complete": task.skill_selection_complete}),
              Jsonb([item.storage_payload for item in task.snapshots]),
              Jsonb([item.storage_payload for item in task.intent_snapshots]), list(dependencies),
              task.skill_library_revision, task.skill_version_id, task.state, task.root_created_at,
@@ -460,12 +467,46 @@ class PostgresExplorationStore:
         self._insert(connection, task, digest, dependencies)
         return task
 
+    def pin_skill(self, task: ExplorationTask, version_id: UUID | None) -> ExplorationTask:
+        """在当前输入事务内固定自动选择，明确不用策略同样不可在重试时改选。"""
+
+        if version_id is not None and not isinstance(version_id, UUID):
+            raise ExplorationStale("自动选择的策略版本无效。")
+        self._prune(task.scope)
+        with self._transaction(task.scope) as connection:
+            row = self._read(connection, task.scope, task.exploration_id)
+            current = self._validate(connection, task.scope, row, ExplorationReadPurpose.CURRENT)
+            if (current != task or current.state != "running" or current.skill_selection_complete
+                    or current.content.skill_mode != "auto"):
+                raise ExplorationStale("探索策略选择已完成或任务已被替换。")
+            self._require_skill(connection, task.scope, task.skill_library_revision, version_id)
+            if version_id is not None:
+                from notalone.persistence.skill_port import _VERSION_QUERY, require_review_publication
+                from notalone.persistence.skill_execution_view import project_skill_metadata
+
+                scope, scene = task.scope, task.content.skill_scene
+                selected = connection.execute(_VERSION_QUERY + ' AND version.id=%s',
+                    (scope.owner_id, scope.contact_id, scope.contact_id, scene, version_id)).fetchone()
+                if selected is None:
+                    raise ExplorationStale("自动选择的策略不属于当前许可范围。")
+                try:
+                    require_review_publication(connection, scope, selected, scene)
+                    project_skill_metadata(connection, scope, selected, scene)
+                except PermissionError:
+                    raise ExplorationStale("自动选择的策略来源或许可已变化。") from None
+            connection.execute(
+                "UPDATE public.reply_exploration SET skill_version_id=%s, "
+                "input_payload=jsonb_set(input_payload,'{skill_selection_complete}','true'::jsonb), "
+                "updated_at=now() WHERE id=%s", (version_id, task.exploration_id),
+            )
+            return replace(task, skill_version_id=version_id, skill_selection_complete=True)
+
     def complete(self, task: ExplorationTask, result: dict[str, Any]) -> ExplorationTask:
         self._prune(task.scope)
         with self._transaction(task.scope) as connection:
             row = self._read(connection, task.scope, task.exploration_id)
             current = self._validate(connection, task.scope, row, ExplorationReadPurpose.CURRENT)
-            if current.state != "running" or current != task:
+            if current.state != "running" or current != task or not current.skill_selection_complete:
                 raise ExplorationStale("探索任务已停止或替换，迟到结果不能生效。")
             result = {**result, "options": [{**option, "suggestion_id": str(uuid4())} for option in result["options"]],
                       "question_id": str(uuid4()) if result["question"] else None}

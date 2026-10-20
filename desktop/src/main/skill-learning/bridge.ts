@@ -58,6 +58,7 @@ export function installSkillLearningBridge(commands: PageCommands, backend: Back
   controller.onStateChanged((state) => commands.publish('skill-learning:state-changed', state, 'manager'));
   commands.handle('skill-learning:get-state', (...args) => { noArguments(args); return controller.getState(); }, 'manager');
   commands.handle('skill-learning:refresh', (...args) => controller.refresh(selection(args)), 'manager');
+  commands.handle('skill-learning:poll', (...args) => controller.poll(selection(args)), 'manager');
   commands.handle('skill-learning:configure', (...args) => controller.configure(selection(args, true)), 'manager');
   commands.handle('skill-learning:resume', (...args) => controller.resume(selection(args)), 'manager');
   commands.handle('skill-learning:open-review', (...args) => controller.openReview(reviewSelection(args, 'open')), 'manager');

@@ -14,7 +14,7 @@ from notalone.reply.errors import ReplyStoreInvariantError
 def expand_learning_provenance(connection, scope, dependencies) -> set[UUID] | None:
     """沿实际历史身份继承来源；停用目录不改变已经使用过的Skill来历。"""
     from notalone.persistence.reply_discussion_dependencies import (
-        reply_discussion_request_dependencies, reply_style_sample_dependencies,
+        reply_discussion_request_dependencies,
     )
 
     refs, checked = set(dependencies), set()
@@ -58,39 +58,28 @@ def expand_learning_provenance(connection, scope, dependencies) -> set[UUID] | N
                       AND evidence.kind NOT IN ('user_draft','user_purpose','continued_candidate')
                     UNION ALL SELECT use.source_id FROM public.reply_original_source_use AS use
                     WHERE use.owner_id=%(owner_id)s AND use.contact_id=%(contact_id)s AND use.reply_request_id=origin.id
-                    UNION ALL SELECT use.sample_id FROM public.reply_style_sample_use AS use
-                    WHERE use.owner_id=%(owner_id)s AND use.contact_id=%(contact_id)s AND use.reply_request_id=origin.id
                     UNION ALL SELECT use.preference_id FROM public.reply_expression_preference_use AS use
                     WHERE use.owner_id=%(owner_id)s AND use.contact_id=%(contact_id)s AND use.reply_request_id=origin.id
-                    UNION ALL SELECT use.preference_id FROM public.style_sample_expression_preference_use AS use
-                    WHERE use.owner_id=%(owner_id)s AND use.contact_id=%(contact_id)s AND use.sample_id=origin.id
                     UNION ALL SELECT unnest(preference.source_ids) FROM public.expression_preference AS preference
                     WHERE preference.owner_id=%(owner_id)s
                       AND (preference.contact_id IS NULL OR preference.contact_id=%(contact_id)s)
                       AND preference.id=origin.id AND preference.status='active'
-                    UNION ALL SELECT sample.origin_id FROM public.style_sample AS sample
-                    WHERE sample.owner_id=%(owner_id)s AND sample.contact_id=%(contact_id)s
-                      AND sample.id=origin.id AND sample.origin_kind IN ('candidate','message')
-                    UNION ALL SELECT unnest(sample.source_ids || sample.dependency_sample_ids) FROM public.style_sample AS sample
-                    WHERE sample.owner_id=%(owner_id)s AND sample.contact_id=%(contact_id)s AND sample.id=origin.id
                     UNION ALL SELECT unnest(draft.dependency_ids) FROM public.skill_draft AS draft
                     WHERE draft.owner_id=%(owner_id)s AND draft.published_version_id=origin.id AND draft.status='published'
                 ) AS edge WHERE edge.id IS NOT NULL
             ) SELECT id FROM material_provenance
         """, {'owner_id': scope.owner_id, 'contact_id': scope.contact_id, 'dependencies': list(refs)}).fetchall()
         refs.update(row[0] for row in rows)
-        # C快照仍由唯一已有codec解码，不能从JSON自行推断助手讨论或样本身份。
+        # C快照仍由唯一已有codec解码，不能从JSON自行推断助手讨论身份。
         requests = connection.execute(
             "SELECT id FROM public.reply_request WHERE owner_id=%s AND contact_id=%s AND id=ANY(%s::uuid[]) "
-            "AND (context_snapshot ? 'assistant_discussion_snapshot' "
-            "OR context_snapshot ? 'assistant_discussion_style_sample_ids')",
+            "AND context_snapshot ? 'assistant_discussion_snapshot'",
             (scope.owner_id, scope.contact_id, list(refs - checked)),
         ).fetchall()
         if not requests:
             return refs
         try:
             for (request_id,) in requests:
-                refs.update(reply_style_sample_dependencies(connection, scope, request_id))
                 refs.update(reply_discussion_request_dependencies(connection, scope, request_id))
                 checked.add(request_id)
         except ReplyStoreInvariantError:

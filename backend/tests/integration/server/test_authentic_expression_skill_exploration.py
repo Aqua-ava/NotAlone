@@ -1,4 +1,4 @@
-"""存在表达样本时沿唯一UUID探索、真实Skill Tool及生成删除链验证。"""
+"""沿唯一UUID探索、真实Skill Tool与完整生成请求预算验证。"""
 
 from __future__ import annotations
 
@@ -33,22 +33,14 @@ class AuthenticExpressionSkillExplorationTests(FidelityHttpFixture, unittest.Tes
                    side_effect=configured):
             return super()._backend(owner_id)
 
-    def test_response_exploration_excludes_samples_and_actual_skill_generation_deletion_is_bounded(self):
+    def test_response_exploration_uses_selected_version_and_actual_generation_budget(self):
         self._exercise("reply_to_message")
 
-    def test_proactive_exploration_excludes_samples_and_actual_skill_generation_deletion_is_bounded(self):
+    def test_proactive_exploration_uses_selected_version_and_actual_generation_budget(self):
         self._exercise("initiate_conversation")
 
     def _exercise(self, scene: str) -> None:
         contact, target, source = self.prepare_contact(self.owner_id)
-        samples = {}
-        for index in range(7):
-            text = f"合成旧表达{index}：当然答应，明晚七点陪你去合成海边。"
-            status, saved = self.backend.request(f"/api/contacts/{contact}/style-samples", {
-                "idempotency_key": str(uuid4()), "text": text, "origin": {"kind": "manual"},
-            })
-            self.assertEqual(status, 200, saved)
-            samples[saved["sample"]["sample_id"]] = text
         skill, version = uuid4(), uuid4()
         name = f"synthetic-fidelity-{skill.hex[:8]}"
         skill_text = "合成Skill专用标记：只辅助简短说法，当前拒绝优先，不新增约定。"
@@ -81,7 +73,7 @@ class AuthenticExpressionSkillExplorationTests(FidelityHttpFixture, unittest.Tes
             {"explore": {"options": options}},
             {"read_skill": name},
             {"text": "这次不参加。\n\n谢谢你邀请。", "messages": ["这次不参加。", "谢谢你邀请。"],
-             "basis": "当前拒绝优先，只参考说法，不承接旧样本的约定。"},
+             "basis": "当前拒绝优先，不新增约定。"},
         ])
         status, opened = self.backend.request(path + "/explorations", body)
         self.assertEqual(status, 200, opened)
@@ -110,11 +102,6 @@ class AuthenticExpressionSkillExplorationTests(FidelityHttpFixture, unittest.Tes
         for payload in exploration:
             self.assertFalse(payload.get("style_references"))
             self.assertEqual(payload["skill"]["version_id"], str(version))
-            encoded = json.dumps(payload, ensure_ascii=False)
-            self.assertTrue(all(sample_id not in encoded and text not in encoded for sample_id, text in samples.items()))
-        for actual_request in self.reply_model.seen_model_payloads[:2]:
-            encoded = json.dumps(actual_request, ensure_ascii=False)
-            self.assertTrue(all(sample_id not in encoded and text not in encoded for sample_id, text in samples.items()))
         turn = generated["turn"]
         self.assertEqual(turn["state"], "completed")
         self.assertEqual(turn["used_skill"]["version_id"], str(version))
@@ -125,17 +112,6 @@ class AuthenticExpressionSkillExplorationTests(FidelityHttpFixture, unittest.Tes
         self.assertEqual(final["user_instruction"], requirements)
         self.assertEqual(final["clarification_answer"], answer["answer"])
         self.assertEqual(final["skill_selection"], {"mode": "user", "version_id": str(version)})
-        references = final["style_references"]
-        self.assertEqual(len(references), 5)
-        self.assertLessEqual(sum(len(reference["text"]) for reference in references), 600)
-        used = {reference["sample_id"] for reference in references}
-        self.assertLessEqual(used, samples.keys())
-        for reference in references:
-            self.assertEqual(reference["text"], samples[reference["sample_id"]])
-            self.assertEqual((reference["factual_role"], reference["weight"]), ("expression_reference", "low"))
-        self.assertEqual(set(turn["context_receipt"]["style_sample_ids"]), used)
-        self.assertTrue(used.isdisjoint(turn["context_receipt"]["evidence_ids"]))
-        self.assertTrue(all(item["text"] not in samples.values() for item in final["evidence"]))
         messages = turn["candidates"][0]["messages"]
         self.assertEqual([message["text"] for message in messages], ["这次不参加。", "谢谢你邀请。"])
         self.assertEqual(len({UUID(message["message_id"]) for message in messages}), 2)
@@ -156,19 +132,6 @@ class AuthenticExpressionSkillExplorationTests(FidelityHttpFixture, unittest.Tes
         self.assertEqual(len(current["turns"]), 1)
         self.assertEqual(current["turns"][0]["reply"]["candidates"][0]["messages"], messages)
 
-        removed = sorted(used)[0]
-        self.assertEqual(reopened.request(f"/api/contacts/{contact}/style-samples/{removed}", method="DELETE")[0], 200)
-        after = self._get(self._backend(self.owner_id), path)
-        self.assertEqual(after["turns"][0]["state"], "redacted")
-        self.assertIsNone(after["turns"][0]["input"])
-        self.assertIsNone(after["turns"][0]["reply"])
-        self.assertNotEqual(reopened.request(answer_path, answer)[0], 200)
-        self.assertNotEqual(reopened.request(f"/api/contacts/{contact}/replies/{turn['reply_request_id']}/evidence")[0], 200)
-        self.assertEqual({item["sample_id"] for item in self._get(reopened, f"/api/contacts/{contact}/style-samples")["samples"]},
-                         samples.keys() - {removed})
-        raw = next(item for item in self._get(reopened, f"/api/contacts/{contact}/sources")["sources"] if item["source_id"] == source)
-        self.assertEqual(raw["status"], "active")
-        self.assertEqual(len(self.reply_model.payloads), 4)
 
 
 if __name__ == "__main__":

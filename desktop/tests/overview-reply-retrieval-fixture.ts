@@ -29,7 +29,7 @@ export const replyOverviewModules = {
   'tests.integration.server.overview_reply_support': 'backend/tests/integration/server/overview_reply_support.py',
 };
 export type ReplyOverviewPrepared = {
-  contactId: string; otherContactId: string; sourceToDelete: string;
+  contactId: string; otherContactId: string; emptyContactId: string; sourceToDelete: string;
   draft: string; rawText: string; otherPrivateText: string;
   history: { memory_id: string; text: string }; unknown: { memory_id: string; text: string };
   manualContact: { memory_id: string; text: string }; manualOwner: { memory_id: string; text: string };

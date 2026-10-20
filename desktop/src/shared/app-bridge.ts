@@ -10,7 +10,7 @@ import type { ScreenPermissionBridge } from './screen-permission-bridge';
 import type { ContactSessionBridge } from './contact-session-bridge';
 import type { ImportBridge } from './import-bridge';
 import type { ReplyBridge } from './reply-bridge';
-import type { StyleSampleBridge } from './style-sample-bridge';
+import type { CandidateProvenanceBridge } from './candidate-provenance-bridge';
 import type { ExpressionPreferenceBridge } from './expression-preference-bridge';
 import type { MemoryBridge } from './memory-bridge';
 import type { BindingConsentBridge } from './binding-consent-bridge';
@@ -21,7 +21,7 @@ export type AppBridge = WindowBridge & DesktopBridge & {
   backend: BackendBridge; setup: SetupBridge; startup: StartupBridge;
   screenPermission: ScreenPermissionBridge;
   contacts: ContactSessionBridge; imports: ImportBridge; bindings: BindingConsentBridge; replies: ReplyBridge;
-  styleSamples: StyleSampleBridge;
+  candidateProvenance: CandidateProvenanceBridge;
   expressionPreferences: ExpressionPreferenceBridge;
   skillLearning: SkillLearningBridge;
   memory: MemoryBridge; traces: TraceBridge; candidateCopy: CandidateCopyBridge; sources: SourceDeletionBridge; syncControl: SyncControlBridge; foreground: ForegroundBridge;

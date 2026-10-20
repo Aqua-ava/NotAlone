@@ -248,7 +248,8 @@ class ScenarioReadHttpTest(OverviewReplyHttpFixture, unittest.TestCase):
         self.assertEqual(receipt["status"], "stale")
         self.assertNotIn("document", receipt)
 
-    def test_independent_review_receives_the_exact_actual_tool_body(self):
+    def test_historical_independent_review_receives_the_exact_actual_tool_body(self):
+        self.historical_constraint_review = True
         from langchain_core.messages import HumanMessage
         contact, _, _, ready, path = self.prepare_layered_reply()
         self.use_tools()
@@ -273,7 +274,8 @@ class ScenarioReadHttpTest(OverviewReplyHttpFixture, unittest.TestCase):
         saved = self._get(self.backend, self.evidence_path(contact, turn))
         self.assertEqual(saved["layered_scenario_reads"], actual)
 
-    def test_review_can_locate_only_read_body_facts_and_does_not_authorize_intent(self):
+    def test_historical_review_can_locate_only_read_body_facts_and_does_not_authorize_intent(self):
+        self.historical_constraint_review = True
         contact, _, _, ready, path = self.prepare_layered_reply()
         self.use_tools()
         source = "/layered_scenario_reads/0/document/paragraphs/0/text"
@@ -292,9 +294,9 @@ class ScenarioReadHttpTest(OverviewReplyHttpFixture, unittest.TestCase):
                 body["content"]["user_instruction"] = "自然表达。"
                 status, result = self.backend.request(path + "/replies", body, timeout=30)
 
-                # 非法复核source_path沿原协议失败闭合；500不交付候选，也不降级接受。
-                self.assertEqual(status, 409 if category == "facts" else 500, result)
-                self.assertEqual(result["error"], "reply_candidates_rejected" if category == "facts" else "reply_generation_failed")
+                # 非法复核source_path按明确复核错误失败闭合，不交付候选。
+                self.assertEqual(status, 409 if category == "facts" else 502, result)
+                self.assertEqual(result["error"], "reply_candidates_rejected" if category == "facts" else "reply_review_invalid")
 
     def test_saved_body_is_not_rebuilt_after_disable_and_backend_restart(self):
         contact, _, management, ready, path = self.prepare_layered_reply()

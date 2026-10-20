@@ -59,6 +59,16 @@ test('公开新开会话、刷新目录、返回旧会话后仍能展开原候�
   assert.equal((await f.bridge.getEvidenceState()).phase, 'idle');
 });
 
+test('本轮参考忽略历史遗留样本字段，不恢复已退役正文', async () => {
+  const f = await fixture(); await f.restore();
+  f.records.evidence.style_references = [{ sample_id: randomUUID(), text: '已退役的合成样本文字。' }];
+  await f.bridge.loadEvidence(f.selection);
+  const state = await f.bridge.getEvidenceState();
+  assert.equal(state.phase, 'ready');
+  assert.equal(Object.hasOwn(state, 'styleReferences'), false);
+  assert.doesNotMatch(JSON.stringify(state), /已退役的合成样本文字/);
+});
+
 test('恢复依据仍拒绝其他联系人、过期范围、请求和候选；失败仅读取原快照', async () => {
   const f = await fixture(); await f.restore();
   const count = f.calls.length;
@@ -92,13 +102,45 @@ test('恢复依据在切换会话或连接代际后丢弃迟到响应', async ()
   }
 });
 
-test('公开依据按钮的守卫拒绝显示错误，恢复候选可展开与收起原快照', async t => {
+test('本次参考默认收起，展示冻结材料与来源，切换请求后清除旧内容', async t => {
   const { build } = await import('esbuild');
-  const { chromium } = await import('@playwright/test');
+  const { chromium, expect } = await import('@playwright/test');
   const browser = await chromium.launch({ headless: true, executablePath: process.env.NOTALONE_TEST_CHROMIUM_PATH });
   t.after(() => browser.close());
   const page = await browser.newPage();
   const f = await fixture(); await f.restore();
+  const position = { message_id: f.messageId, char_start: 0, char_end: 4 };
+  const temporal = {
+    valid_at: '2026-08-01T00:00:00+08:00', invalid_at: '2026-09-01T00:00:00+08:00',
+    event: { version: 2, stage: 'planned', stage_verified: true, stage_evidence: [position],
+      occurrence_start: '2026-08-01T00:00:00+08:00', occurrence_end: '2026-09-01T00:00:00+08:00',
+      occurrence_verified: true, occurrence_evidence: [position], occurrence_precision: 'month',
+      occurrence_expression: '八月', anchor_message_id: f.messageId },
+    conditions: { version: 1, items: [{ text: '出差期间', source_supported: true, evidence: [position] }] },
+    evolution: { version: 1, kind: 'unresolved_conflict', explanation: '两条来源对安排的描述尚未一致。',
+      related_versions: [{ memory_id: f.memoryId, revision: 1 }], evidence_message_ids: [f.messageId],
+      source_supported: true, claim_changed: false, condition_changed: false },
+  };
+  const item = f.records.evidence.evidence[0];
+  Object.assign(item, temporal);
+  item.timing = { ...item.timing, recorded_at: '2026-10-20T01:00:00Z',
+    source_started_at: '2026-08-01T00:15:00+08:00', source_ended_at: '2026-08-01T00:15:00+08:00', source_time_complete: true };
+  const context = f.records.evidence.layered_context;
+  const reference = { ...context.profile_entries[0].references[0], ...temporal, timing: item.timing };
+  context.profile_entries[0].references = [reference];
+  const scenarioId = randomUUID(), versionId = randomUUID();
+  context.directory = [{ scenario_id: scenarioId, version_id: versionId, title: '合成冻结安排', hint: '只反映当时安排',
+    paragraph_count: 1, paragraph_range: [0, 1] }];
+  context.scenario_read_budget = { call_limit: 3, paragraph_limit: 4, character_limit: 1800 };
+  f.records.evidence.layered_scenario_reads = [{ schema_version: 1, status: 'succeeded', reason: '已读取冻结正文。',
+    scenario_id: scenarioId, paragraph_range: [0, 1],
+    budget: { ...context.scenario_read_budget, used_calls: 1, used_paragraphs: 1, used_characters: 16 },
+    document: { scenario_id: scenarioId, version_id: versionId, title: '合成冻结安排', hint: '只反映当时安排',
+      system_generated: true, updated_at: '2026-10-20T01:00:00Z', organization_generation: 3, paragraph_range: [0, 1],
+      paragraphs: [{ text: '合成冻结主题正文。', references: [reference] }] } }];
+  for (const text of ['合成其他候选的参考消息。', '合成未引用的背景消息。']) {
+    f.records.evidence.evidence.push({ ...f.records.evidence.evidence[0], evidence_id: randomUUID(), kind: 'message', text, cited: false });
+  }
   await page.exposeFunction('evidenceCommand', async (name, selection) => {
     if (name === 'getEvidenceState') return f.bridge.getEvidenceState();
     assert(['loadEvidence', 'closeEvidence'].includes(name));
@@ -107,34 +149,66 @@ test('公开依据按钮的守卫拒绝显示错误，恢复候选可展开与�
   });
   const bundled = await build({ stdin: { contents: `
     import React from 'react'; import { createRoot } from 'react-dom/client';
-    import { ReplyEvidence, useReplyEvidence } from './src/renderer/ReplyEvidence';
+    import { useReplyEvidence } from './src/renderer/ReplyEvidence';
+    import { ReplyReferences } from './src/renderer/ReplyReferences';
     const listeners = new Set();
     window.notalone = { replies: {
       getEvidenceState: () => window.evidenceCommand('getEvidenceState'),
       onEvidenceChanged: listener => { listeners.add(listener); return () => listeners.delete(listener); },
-      loadEvidence: async selection => { const state = await window.evidenceCommand('loadEvidence', selection); for (const l of listeners) l(state); },
-      closeEvidence: async selection => { const state = await window.evidenceCommand('closeEvidence', selection); for (const l of listeners) l(state); }
+      loadEvidence: async selection => { const state = await window.evidenceCommand('loadEvidence', selection); for (const l of listeners) l(state); }
     } };
-    function View(props) { const evidence = useReplyEvidence(); return React.createElement(ReplyEvidence, { ...props, evidence }); }
+    function View(props) { const evidence = useReplyEvidence(); return React.createElement(ReplyReferences, { ...props, evidence }); }
     const root = createRoot(document.getElementById('root'));
     window.renderEvidence = props => root.render(React.createElement(View, props));
-  `, resolveDir: process.cwd(), loader: 'tsx' }, bundle: true, platform: 'browser', format: 'iife', write: false });
+  `, resolveDir: process.cwd(), loader: 'tsx' }, bundle: true, platform: 'browser', format: 'iife', write: false,
+    loader: { '.css': 'empty' } });
   await page.setContent('<div id="root"></div>');
   await page.addScriptTag({ content: bundled.outputFiles[0].text });
   const candidate = (await f.bridge.getState()).savedSession.turns[0].reply.candidates[0];
-  await page.evaluate(props => window.renderEvidence(props), { selection: { ...f.selection, candidateId: randomUUID() }, candidate, number: 1, waiting: false });
-  await page.getByRole('button', { name: '展开候选1依据' }).click();
-  await page.getByRole('alert').waitFor({ timeout: 2000 });
-  assert.match(await page.getByRole('alert').textContent(), /候选依据暂不可用/);
-  await page.evaluate(props => window.renderEvidence(props), { selection: f.selection, candidate, number: 1, waiting: false });
-  await page.getByRole('button', { name: '展开候选1依据' }).click();
-  await page.getByText('合成当时资料：周末有空。', { exact: true }).waitFor();
-  await page.getByText('合成生成时L1背景。', { exact: true }).waitFor();
+  const props = { selection: f.selection, candidates: [candidate], waiting: false };
+  await page.evaluate(props => window.renderEvidence(props), { ...props, waiting: true });
+  await expect(page.getByRole('button', { name: '本次参考', exact: true })).toHaveAttribute('aria-expanded', 'false');
+  await page.evaluate(props => window.renderEvidence(props), props);
+  const toggle = page.getByRole('button', { name: '本次参考', exact: true });
+  await expect(toggle).toContainText('聊天 2 条');
+  await expect(toggle).toContainText('关系资料 3 条');
+  await expect(page.getByRole('region', { name: '本次参考内容' })).toHaveCount(0);
+  await toggle.click();
+  const evidence = page.getByRole('region', { name: '本次参考内容', exact: true });
+  await expect(evidence.getByText('合成未引用的背景消息。', { exact: true })).toBeVisible();
+  await expect(evidence.getByText('合成生成时L1背景。', { exact: true }).first()).toBeVisible();
+  await expect(evidence.getByText('以下材料实际提供给了模型，不代表每条候选都引用了每一项。')).toBeVisible();
+  const source = evidence.getByRole('region', { name: '关系资料', exact: true }).locator('.record-metadata').first();
+  await expect(source.getByText('入选原因：与本次合成安排相关。', { exact: true })).toBeHidden();
+  await source.locator(':scope > summary').click();
+  await expect(source.getByText('入选原因：与本次合成安排相关。', { exact: true })).toBeVisible();
+  for (const text of ['合成当时资料：周末有空。', '合成生成时L1背景。', '合成冻结主题正文。']) {
+    const card = evidence.getByRole('article').filter({ has: page.getByText(text, { exact: true }) });
+    const metadata = card.locator('.record-metadata');
+    if (await metadata.getAttribute('open') === null) await metadata.locator(':scope > summary').click();
+    await expect(card.getByText('来源日期：2026年8月1日（UTC+08:00）', { exact: true })).toBeVisible();
+    await expect(card.getByText('适用期间：2026年8月1日 00:00:00（UTC+8） 至 2026年9月1日 00:00:00（UTC+8）之前', { exact: true })).toBeVisible();
+    await expect(metadata.getByText('事件阶段：计划（来源已核验）', { exact: true })).toBeVisible();
+    await expect(metadata.getByText('事件发生时段：2026年8月（来源已核验）', { exact: true })).toBeVisible();
+    await expect(metadata.getByText('时间精度：月；原话：八月', { exact: true })).toBeVisible();
+    await expect(metadata.getByText('适用条件：出差期间', { exact: true })).toBeVisible();
+    await expect(metadata.getByText('来源支持限定，当前是否满足未知', { exact: true })).toBeVisible();
+    await expect(metadata.getByText('变化类型：未解决矛盾', { exact: true })).toBeVisible();
+    await expect(metadata.getByText('相关来源存在未解决矛盾，当前主张仍有不确定性，不能当作已确认现状。', { exact: true })).toBeVisible();
+  }
+  await expect(evidence.getByRole('button', { name: /排除|重新生成|调整/ })).toHaveCount(0);
   assert.equal(f.calls.some(r => r.path.includes('/layered-context')), false);
-  assert.equal(await page.getByRole('alert').count(), 0);
-  await page.getByRole('button', { name: '收起候选1依据' }).click();
-  await page.getByRole('region', { name: '候选1依据' }).waitFor({ state: 'hidden' });
-  assert.equal(await page.getByRole('region', { name: '候选1依据' }).count(), 0);
+  await toggle.click();
+  await expect(evidence).toHaveCount(0);
+  await page.evaluate(props => window.renderEvidence(props), { ...props, waiting: true });
+  await expect(toggle).toContainText('正在读取本次参考');
+  await page.evaluate(props => window.renderEvidence(props), props);
+  await toggle.click();
+  await page.evaluate(props => window.renderEvidence(props), { ...props, selection: { ...f.selection, replyRequestId: randomUUID() } });
+  await expect(toggle).toContainText('本次参考读取失败');
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await toggle.click();
+  await expect(page.getByRole('alert')).toContainText('本次参考读取失败');
 });
 
 

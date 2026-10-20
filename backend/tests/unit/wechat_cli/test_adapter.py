@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 import json
+import os
+import shlex
 import subprocess
+import tempfile
 import threading
+import time
 import unittest
 from dataclasses import dataclass
+from pathlib import Path
 from unittest.mock import patch
 
 from notalone.wechat_cli import (
@@ -119,6 +124,115 @@ class BlockingCommandProcess:
 
 
 class LocalWechatCliAdapterTest(unittest.TestCase):
+    def test_adapter_close_reaps_follow_process_before_stream_owner_closes(self) -> None:
+        real_popen = subprocess.Popen
+        for mode in ("sessions", "talker"):
+            with self.subTest(mode=mode):
+                processes = []
+
+                def controlled_process(command, **options):
+                    del command
+                    process = real_popen(("/bin/sleep", "30"), **options)
+                    processes.append(process)
+                    return process
+
+                cli = LocalWechatCli(executable="synthetic-follow-cli")
+                stream = None
+                try:
+                    with patch("notalone.wechat_cli.adapter.subprocess.Popen", side_effect=controlled_process):
+                        stream = (cli.session_events_follow() if mode == "sessions"
+                                  else cli.tail_follow("wxid_synthetic"))
+                    cli.close()
+                    self.assertIsNotNone(processes[0].poll(), "适配器关闭后监听进程仍在读取")
+                    with self.assertRaises(ProcessLookupError):
+                        os.kill(processes[0].pid, 0)
+                    cli.close()
+                finally:
+                    for process in processes:
+                        if process.poll() is None:
+                            process.kill()
+                        process.wait(timeout=2)
+                    if stream is not None:
+                        stream.close()
+                    for process in processes:
+                        if process.stdout is not None:
+                            process.stdout.close()
+
+    def test_tail_explicit_budget_reaps_process_without_accepting_partial_success(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="notalone-tail-budget-") as directory:
+            root = Path(directory)
+            pid_path = root / "child.pid"
+            executable = root / "synthetic-cli"
+            partial = json.dumps({"ok": True, "data": {
+                "events": [], "cursor": "synthetic-cursor",
+                "freshness": {"message_source": "live_message_db"},
+                "query": {"chat": "wxid_1", "has_more": False},
+            }})
+            executable.write_text(
+                "#!/bin/sh\n"
+                f"printf '%s\\n' {shlex.quote(partial)}\n"
+                f"printf '%s' \"$$\" > {shlex.quote(str(pid_path))}\n"
+                "exec /bin/sleep 5\n",
+                encoding="utf-8",
+            )
+            executable.chmod(0o700)
+            cli = LocalWechatCli(executable=str(executable))
+            started = time.monotonic()
+            try:
+                with self.assertRaises(CliCommandError) as raised:
+                    cli.tail("wxid_1", timeout_seconds=1.0)
+                elapsed = time.monotonic() - started
+                self.assertEqual(raised.exception.code, "cli_timeout")
+                self.assertLess(elapsed, 2.5)
+                pid = int(pid_path.read_text(encoding="utf-8"))
+                with self.assertRaises(ProcessLookupError):
+                    os.kill(pid, 0)
+            finally:
+                cli.close()
+
+    def test_tail_rejects_invalid_explicit_budgets_before_running(self) -> None:
+        for budget in (0, -0.1, float("nan"), float("inf"), -float("inf"), True, False):
+            with self.subTest(budget=budget):
+                runner = RecordingRunner(FakeCommandResult(returncode=0, stdout=""))
+                with self.assertRaises(ValueError):
+                    LocalWechatCli(runner=runner).tail("wxid_1", timeout_seconds=budget)
+                self.assertEqual(runner.calls, [])
+
+    def test_version_explicit_budget_times_out_and_reaps_real_process(self) -> None:
+        real_popen = subprocess.Popen
+        processes = []
+
+        def controlled_process(command, **options):
+            del command
+            process = real_popen(("/bin/sleep", "5"), **options)
+            processes.append(process)
+            return process
+
+        cli = LocalWechatCli(executable="synthetic-version-cli")
+        started = time.monotonic()
+        try:
+            with patch("notalone.wechat_cli.adapter.subprocess.Popen", side_effect=controlled_process):
+                with self.assertRaises(CliCommandError) as raised:
+                    cli.version(timeout_seconds=0.05)
+            self.assertEqual(raised.exception.code, "cli_timeout")
+            self.assertLess(time.monotonic() - started, 1.5)
+            self.assertEqual(len(processes), 1)
+            self.assertIsNotNone(processes[0].returncode)
+            with self.assertRaises(ProcessLookupError):
+                os.kill(processes[0].pid, 0)
+        finally:
+            cli.close()
+
+    def test_version_rejects_invalid_explicit_budgets_before_running(self) -> None:
+        for budget in (0, -0.1, float("nan"), float("inf"), -float("inf"), True, False):
+            with self.subTest(budget=budget):
+                runner = RecordingRunner(FakeCommandResult(returncode=0, stdout=json.dumps({
+                    "ok": True, "data": {"version": "1.6.20"},
+                })))
+                with self.assertRaises(ValueError):
+                    LocalWechatCli(runner=runner).version(timeout_seconds=budget)
+                self.assertEqual(runner.calls, [])
+
     def test_empty_live_tail_envelope_confirms_freshness_without_advancing(self) -> None:
         runner = RecordingRunner(FakeCommandResult(returncode=0, stdout=json.dumps({
             "ok": True,
@@ -143,7 +257,7 @@ class LocalWechatCliAdapterTest(unittest.TestCase):
             {"freshness": {"message_source": "cache"}},
             {"query": {"chat": "wxid_other", "has_more": False}},
             {"query": {"chat": "wxid_1"}},
-            {"query": {"chat": "wxid_1", "has_more": True}},
+            {"query": {"chat": "wxid_1", "has_more": 1}},
             {"warnings": ["合成降级警告"]},
             {"error": {"message": "合成错误"}},
         ]
@@ -203,9 +317,10 @@ class LocalWechatCliAdapterTest(unittest.TestCase):
                 "query": {"chat": "wxid_1", "has_more": True},
             },
         })))
-        with self.assertRaises(CliOutputError) as raised:
-            LocalWechatCli(runner=runner).tail("wxid_1")
-        self.assertEqual(raised.exception.code, "cli_freshness_unknown")
+        result = LocalWechatCli(runner=runner).tail("wxid_1")
+        self.assertTrue(result.freshness_confirmed)
+        self.assertTrue(result.has_more)
+        self.assertEqual(result.last_local_id, 43)
 
     def test_close_terminates_inflight_one_shot_command(self) -> None:
         process = BlockingCommandProcess()
@@ -551,6 +666,92 @@ class LocalWechatCliAdapterTest(unittest.TestCase):
                 "--strict-read-only",
             ),
         )
+
+    def test_sessions_preserves_named_candidates_when_another_name_is_blank(self) -> None:
+        for display_name in ("", " \t\n\u3000"):
+            with self.subTest(display_name=display_name):
+                runner = RecordingRunner(FakeCommandResult(
+                    returncode=0,
+                    stdout=json.dumps({
+                        "ok": True,
+                        "data": {
+                            "sessions": [
+                                {
+                                    "username": "wxid_unnamed",
+                                    "display_name": display_name,
+                                    "chat_type": "private",
+                                },
+                                {
+                                    "username": "wxid_named",
+                                    "display_name": "合成联系人",
+                                    "chat_type": "private",
+                                },
+                            ],
+                        },
+                    }),
+                ))
+
+                sessions = LocalWechatCli(runner=runner).sessions(
+                    type_filter="private", limit=5000,
+                )
+
+                self.assertEqual(
+                    [(item.username, item.display_name) for item in sessions],
+                    [
+                        ("wxid_unnamed", "wxid_unnamed"),
+                        ("wxid_named", "合成联系人"),
+                    ],
+                )
+
+    def test_sessions_rejects_missing_or_non_string_display_names(self) -> None:
+        for fields in (
+            {},
+            {"display_name": None},
+            {"display_name": False},
+            {"display_name": 42},
+            {"display_name": []},
+            {"display_name": {}},
+        ):
+            with self.subTest(fields=fields):
+                candidate = {"username": "wxid_1", "chat_type": "private"}
+                candidate.update(fields)
+                runner = RecordingRunner(FakeCommandResult(
+                    returncode=0,
+                    stdout=json.dumps({
+                        "ok": True, "data": {"sessions": [candidate]},
+                    }),
+                ))
+
+                with self.assertRaises(CliOutputError) as raised:
+                    LocalWechatCli(runner=runner).sessions()
+
+                self.assertEqual(raised.exception.code, "cli_output_invalid")
+
+    def test_sessions_requires_valid_username_before_name_fallback(self) -> None:
+        for fields in (
+            {},
+            {"username": None},
+            {"username": False},
+            {"username": 42},
+            {"username": []},
+            {"username": {}},
+            {"username": ""},
+            {"username": " \t\u3000"},
+        ):
+            with self.subTest(fields=fields):
+                candidate = {"display_name": "", "chat_type": "private"}
+                candidate.update(fields)
+                runner = RecordingRunner(FakeCommandResult(
+                    returncode=0,
+                    stdout=json.dumps({
+                        "ok": True, "data": {"sessions": [candidate]},
+                    }),
+                ))
+
+                with self.assertRaises(CliOutputError) as raised:
+                    LocalWechatCli(runner=runner).sessions()
+
+                self.assertEqual(raised.exception.code, "cli_output_invalid")
 
     def test_tail_uses_cursor_for_incremental_read(self) -> None:
         runner = RecordingRunner(

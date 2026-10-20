@@ -1,3 +1,4 @@
+import { setWorkspaceContext } from '../workspace-actions';
 import { selectMemoryCategory } from '../memory-page-actions';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
 import { expect, type Browser } from '@playwright/test';
@@ -13,27 +14,36 @@ export async function memoryReading(browser: Browser, origin: string) {
       const manager = await host.open('manager');
       await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
       await manager.getByRole('button', { name: '记忆', exact: true }).click();
+      await selectMemoryCategory(manager, '联系人记忆');
       const contact = manager.getByRole('region', { name: '联系人记忆' });
       const automatic = contact.getByRole('article').filter({ has: manager.getByText('甲喜欢合成茉莉茶。', { exact: true }) });
       await expect(automatic.getByText('甲喜欢合成茉莉茶。', { exact: true })).toBeVisible();
-      await expect(automatic.getByText('自动采纳（可撤销）', { exact: true })).toBeVisible();
+      await expect(automatic.getByText('系统记下 · 可移除', { exact: true })).toBeVisible();
       await expect(contact.getByText('甲的新版本关系备注。', { exact: true })).toBeVisible();
       await expect(contact.getByText('旧版关系备注。', { exact: true })).toHaveCount(0);
       await expect(manager.getByText('另一用户的本人资料。', { exact: true })).toHaveCount(0);
+      await expect(manager.getByText('查看摘要', { exact: true })).toHaveCount(0);
+      await expect(manager.getByRole('region', { name: '主题资料', exact: true })).toHaveCount(0);
+      await manager.screenshot({ path: 'artifacts/headless-pages/memory-reading.png' });
       await selectMemoryCategory(manager, '待确认候选');
-      await expect(manager.getByText('待确认 · 不是已确认事实', { exact: true })).toHaveCount(3);
+      await expect(manager.getByText('尚未记住', { exact: true })).toHaveCount(3);
+      await expect(manager.getByRole('region', { name: '记忆处理状态', exact: true })).toHaveCount(0);
+      await manager.screenshot({ path: 'artifacts/headless-pages/memory-pending.png' });
       await selectMemoryCategory(manager, '联系人记忆');
       await automatic.getByRole('button', { name: '查看来源与版本：甲喜欢合成茉莉茶。' }).click();
       await expect(automatic.getByText(`来源引用：${fixture.data.direct_message_id}`, { exact: true })).toBeVisible();
-      await manager.screenshot({ path: 'artifacts/headless-pages/memory-reading.png' });
       await manager.getByRole('combobox', { name: '资料联系人' }).selectOption(fixture.data.contact_ids[1]);
+      await selectMemoryCategory(manager, '联系人记忆');
       await expect(manager.getByText('乙喜欢合成乌龙茶。', { exact: true })).toBeVisible();
       await expect(manager.getByText('甲喜欢合成茉莉茶。', { exact: true })).toHaveCount(0);
       await selectMemoryCategory(manager, '本人记忆');
-      await expect(manager.getByText('本人喜欢合成绿茶。', { exact: true })).toBeVisible();
+      await expect(manager.getByText('还没有记住你和这位联系人交流中的事。', { exact: true })).toBeVisible();
+      await expect(manager.getByText('本人喜欢合成绿茶。', { exact: true })).toHaveCount(0);
+      await expect(manager.getByRole('combobox', { name: '资料联系人', exact: true })).toBeVisible();
       await selectMemoryCategory(manager, '联系人记忆');
       await manager.getByRole('combobox', { name: '资料联系人' }).selectOption(fixture.data.empty_contact_id);
-      await expect(manager.getByText('这位联系人暂无可查看记忆。', { exact: true })).toBeVisible();
+      await selectMemoryCategory(manager, '联系人记忆');
+      await expect(manager.getByText('还没有记住关于对方的事。', { exact: true })).toBeVisible();
       const denied = await manager.evaluate(async (outsideContactId) => {
         const current = await window.notalone.contacts.getState();
         const invalid = [
@@ -47,7 +57,7 @@ export async function memoryReading(browser: Browser, origin: string) {
         }));
       }, fixture.data.other_contact_id);
       expect(denied).toEqual([true, true, true, true]);
-      expect(await manager.evaluate(() => Object.keys(window.notalone.memory).sort())).toEqual(['add', 'applyCandidateUpdate', 'confirmCandidate', 'correct', 'discardCandidate', 'getState', 'onStateChanged', 'openVersions', 'refresh', 'refreshOverview', 'refreshOwnerOverview', 'remove', 'revertAutoUpdate']);
+      expect(await manager.evaluate(() => Object.keys(window.notalone.memory).sort())).toEqual(['add', 'addOwnerMemory', 'applyCandidateUpdate', 'cancelProcessingRead', 'confirmCandidate', 'correct', 'correctOwnerMemory', 'deleteOwnerMemory', 'discardCandidate', 'getOwnerLayeredMemoryState', 'getState', 'manageLayeredMemory', 'manageOwnerLayeredMemory', 'onOwnerLayeredMemoryChanged', 'onStateChanged', 'openVersions', 'readLayeredMemory', 'readOwnerLayeredMemory', 'readOwnerMemories', 'readProcessing', 'refresh', 'refreshOverview', 'refreshOwnerOverview', 'refreshProcessingResults', 'remove', 'resumeProcessing', 'revertAutoUpdate']);
       expect(await manager.evaluate(async () => {
         const current = await window.notalone.contacts.getState();
         try { await window.notalone.replies.generate({ contactId: current.selectedContactId!, scopeRevision: current.scopeRevision, newRequest: true }); return false; }
@@ -73,18 +83,21 @@ export async function draftRewrite(browser: Browser, origin: string) {
         const nextPage = manager.context().waitForEvent('page');
         await manager.getByRole('button', { name: '打开输入小窗', exact: true }).click();
         const helper = await nextPage;
-        await expect(helper.getByRole('button', { name: '生成候选', exact: true })).toBeDisabled();
+        await expect(helper.getByRole('button', { name: '帮我表达', exact: true })).toBeDisabled();
         await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
         await confirmHelperContact(helper, fixture.data.contact_ids[0]);
-        await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('今晚我会晚一点回复你。');
+        await setWorkspaceContext(helper, false);
+        await helper.getByRole('textbox', { name: '有什么想说的', exact: true }).fill('今晚我会晚一点回复你。');
         await fixture.plan({ count: 2 });
-        await helper.getByRole('button', { name: '生成候选', exact: true }).click();
+        await helper.getByRole('button', { name: '帮我表达', exact: true }).click();
         await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveValue('我会晚一点回复你（说法1）。');
         await helper.getByRole('textbox', { name: '候选1编辑文本', exact: true }).fill('我今晚忙完再回复你。');
-        await helper.getByText('查看原候选', { exact: true }).first().click();
-        await expect(helper.getByText('我会晚一点回复你（说法1）。', { exact: true })).toBeVisible();
-        await helper.getByRole('radio', { name: '说法 2', exact: true }).click();
-        await expect(helper.getByRole('radio', { name: '说法 2', exact: true })).toBeChecked();
+        await helper.getByRole('textbox', { name: '候选1编辑文本', exact: true }).blur();
+        await helper.getByRole('button', { name: '查看说法1上一版', exact: true }).click();
+        await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveValue('我会晚一点回复你（说法1）。');
+        await helper.getByRole('button', { name: '查看说法1下一版', exact: true }).click();
+        await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveValue('我今晚忙完再回复你。');
+        await expect(helper.getByRole('textbox', { name: '候选2编辑文本', exact: true })).toHaveValue('我会晚一点回复你（说法2）。');
         await helper.screenshot({ path: 'artifacts/headless-pages/draft-candidates.png' });
         const observations = await fixture.command('observations');
         expect(observations.payloads).toHaveLength(1);
@@ -104,7 +117,7 @@ export async function draftRewrite(browser: Browser, origin: string) {
         await manager.getByRole('button', { name: '选择合成联系人乙', exact: true }).click();
         proxy.release();
         expect(await pendingGeneration).toBe('completed');
-        await expect(helper.getByRole('textbox', { name: '草稿', exact: true })).toHaveValue('');
+        await expect(helper.getByRole('textbox', { name: '有什么想说的', exact: true })).toHaveValue('');
         await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveCount(0);
         await expect(helper.getByText('迟到的甲候选（说法1）。', { exact: true })).toHaveCount(0);
         await helper.screenshot({ path: 'artifacts/headless-pages/draft-scope.png' });

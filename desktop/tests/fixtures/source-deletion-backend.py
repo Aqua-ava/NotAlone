@@ -6,6 +6,8 @@ from unittest.mock import patch
 from langchain_core.messages import HumanMessage
 
 from notalone.server.command import main
+from notalone.server.reply_wiring import build_reply_service
+from tests.input_budget_support import synthetic_budget_kwargs
 from tests.integration.server.core_business_flow_support import ScriptedCoreModel, tool_response
 
 
@@ -27,5 +29,12 @@ class SourceDeletionModel(ScriptedCoreModel):
 
 
 if __name__ == "__main__":
-    with patch("notalone.server.reply_wiring.build_deepseek_model", return_value=SourceDeletionModel()):
+    model = SourceDeletionModel()
+
+    def build_synthetic_reply_service(**kwargs):
+        # 显式声明此合成模型的计量协议，不套用真实供应商的预算配置。
+        return build_reply_service(**kwargs, **synthetic_budget_kwargs(model))
+
+    with patch("notalone.server.reply_wiring.build_deepseek_model", return_value=model), \
+            patch("notalone.server.command.build_reply_service", side_effect=build_synthetic_reply_service):
         raise SystemExit(main())

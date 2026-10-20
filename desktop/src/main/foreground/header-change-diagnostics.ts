@@ -2,6 +2,7 @@ import { constants, closeSync, fstatSync, openSync, realpathSync, statSync, writ
 import path from 'node:path';
 
 const hostEvents = ['permit', 'reconcile', 'launch', 'changed', 'paused', 'stop', 'close', 'dispose'] as const;
+const observationEvents = ['change_received', 'change_queued', 'poll_scheduled', 'request_started', 'request_settled', 'result_published'] as const;
 const hostReasons = ['permit_present', 'permit_absent', 'disposed', 'no_permit', 'child_running',
   'resolving', 'scope_blocked', 'proof_reused', 'resolve', 'resolve_stale', 'executable_unavailable',
   'resolve_failed', 'started', 'stdout_changed', 'stdout_paused', 'scope_changed', 'watchdog',
@@ -40,6 +41,9 @@ export type HeaderChangeDiagnosticRecord = {
   ordinal: number; elapsedMs: number; leaseElapsedMs: number | null; permitPresent: boolean; childPresent: boolean;
   resolving: boolean; blocked: boolean; freshProof: boolean; epochCurrent: boolean;
   paused: boolean; stopping: boolean; renewalEligible: boolean; code: number | null; signal: HeaderChangeDiagnosticSignal;
+} | { kind: 'observation'; ordinal: number; elapsedMs: number; event: typeof observationEvents[number];
+  durationMs: number; changedContact: boolean; confirmed: boolean;
+  phase: 'idle' | 'observing' | 'confirmed' | 'manual-required' | 'unavailable' | 'paused';
 } | { kind: 'native'; ordinal: number; elapsedMs: number; stage: typeof nativeStages[number];
   reason: typeof nativeReasons[number]; nativeElapsedMs: number } | NativeContextDiagnosticRecord | NativeCountsDiagnosticRecord;
 export interface HeaderChangeDiagnosticSink {
@@ -68,6 +72,10 @@ function validRecord(record: HeaderChangeDiagnosticRecord): boolean {
     && Number.isSafeInteger(record.epochMs) && record.epochMs >= 0 && elapsed(record.sampleSpanMs)
     && record.sampleSpanMs / 2 <= record.elapsedMs;
   if (!ordinal(record.ordinal)) return false;
+  if (record.kind === 'observation') return keys === 'changedContact,confirmed,durationMs,elapsedMs,event,kind,ordinal,phase'
+    && includes(observationEvents, record.event) && elapsed(record.durationMs)
+    && includes(['idle', 'observing', 'confirmed', 'manual-required', 'unavailable', 'paused'], record.phase)
+    && typeof record.changedContact === 'boolean' && typeof record.confirmed === 'boolean';
   if (record.kind === 'native-counts') return keys === 'elapsedMs,initialImages,kind,nativeElapsedMs,ordinal,processedFrames,screenCallbacks,status'
     && elapsed(record.nativeElapsedMs) && countsValid(record.status, record.initialImages, record.screenCallbacks, record.processedFrames);
   if (record.kind === 'native') return keys === 'elapsedMs,kind,nativeElapsedMs,ordinal,reason,stage'
@@ -107,7 +115,7 @@ export function openHeaderChangeDiagnostics(environment: NodeJS.ProcessEnv): Hea
       if (!validRecord(record)) return;
       if (record.kind === 'clock-anchor' && anchored) return;
       const line = Buffer.from(`${JSON.stringify(record)}\n`);
-      if (records >= 512 || bytes + line.length > 256 * 1024) { close(); return; }
+      if (records >= 4096 || bytes + line.length > 2 * 1024 * 1024) { close(); return; }
       if (record.kind === 'clock-anchor') anchored = true;
       ++records; bytes += line.length;
       let written = 0;

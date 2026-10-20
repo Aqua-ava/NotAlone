@@ -49,7 +49,9 @@ test('仓库探针公开准备入口仅构建搬运，现场隔离配置沿包�
     const manifest = JSON.parse(await readFile(path.join(destination, 'manifest.json'), 'utf8'));
     assert.match(manifest.buildSourceDigest, /^[a-f0-9]{64}$/);
     assert.equal(manifest.sourceDeclaration, `repository:${manifest.buildSourceDigest}`);
-    assert.equal(manifest.buildSources.length, 18);
+    assert.equal(manifest.buildSources.length, 20);
+    assert.ok(manifest.buildSources.some((source) => source.name === 'Sources/NotAloneSyncCore/SessionObservationWorker.swift'));
+    assert.ok(manifest.buildSources.some((source) => source.name === 'Sources/NotAloneSyncCore/HeaderTextFallback.swift'));
     assert.ok(manifest.buildSources.some((source) => source.name === 'Sources/NotAloneSyncCore/RegionCalibration.swift'));
     assert.ok(manifest.buildSources.some((source) => source.name === 'Sources/NotAloneSyncCore/ForegroundStatusPreview.swift'));
     assert.ok(manifest.buildSources.some((source) => source.name === 'Sources/NotAloneSyncCore/HeaderChangeDiagnostics.swift'));

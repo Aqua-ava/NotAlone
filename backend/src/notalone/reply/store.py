@@ -383,7 +383,6 @@ class InMemoryReplyStore:
                 reply_request_id=request.request_id,
                 candidates=tuple(candidates),
                 context_receipt=ContextReceipt(evidence_ids=evidence_ids,
-                                               style_sample_ids=tuple(sorted(item.sample_id for item in context.style_references)),
                                                expression_preference_ids=tuple(sorted(item.preference_id for item in context.expression_preferences)),
                                                expression_preferences=preference_receipts(context.expression_preferences)),
                 used_skill=reply.used_skill,
@@ -570,7 +569,10 @@ class InMemoryReplyStore:
             == request.continued_from_candidate_id
             and _normalize_input(context.command) == request.normalized_input
             and isinstance(context.current_text, str)
-            and bool(context.current_text.strip())
+            and (bool(context.current_text.strip()) or (
+                isinstance(context.command.content, RewriteDraft)
+                and context.command.content.input_kind == "workspace"
+                and context.command.content.workspace_action == "suggest"))
             and isinstance(context.skill_library_revision, int)
             and context.skill_library_revision >= 0
             and isinstance(context.risk_notes, tuple)
@@ -751,6 +753,10 @@ def canonical_reply_input(command: GenerateReply) -> str:
             ),
             "include_relationship_context": content.include_relationship_context,
         }
+        if content.input_kind == "workspace":
+            payload.update(input_kind="workspace", workspace_action=content.workspace_action,
+                           context_text=content.context_text,
+                           excluded_message_ids=sorted(str(item) for item in set(content.excluded_message_ids)))
         if content.input_kind == "current_chat":
             payload["input_kind"] = "current_chat"
             payload["pasted_direction"] = content.pasted_direction.strip()

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ImportState, ImportTarget } from '../shared/import-bridge';
 import type { ContactSessionView } from './contact-session';
+import { SourceDeletionPanel } from './SourceDeletionPanel';
 import './imports.css';
 
 const initial: ImportState = { revision: -1, selectionRevision: 0, phase: 'unavailable', fileName: null, target: null, preview: null, error: null,
@@ -46,10 +47,14 @@ export function ImportPage({ session }: { session: ContactSessionView }) {
   }
   const setTarget = (target: ImportTarget) => void operate(() => window.notalone.imports.setTarget(target));
   const preview = state.preview;
+  const importedContactId = state.submission?.receipt?.contactId;
+  const managedContact = session.state.contacts.find((entry) => entry.contactId === session.state.selectedContactId);
+  const sourceRefreshKey = state.submission?.receipt
+    ? `${state.selectionRevision}:${state.submission.receipt.taskId}:${state.submission.task?.status ?? ''}` : '';
   return <section className="import-panel" aria-label="历史文件导入">
     <div className="import-intro"><h2>先核对，再保存</h2>
       <p>仅接受单联系人 JSONL；本次选择只用于预览，确认后再进行导入。NotAlone 不运行导出工具，也不读取其他文件。</p>
-      <p>这里只导入你已持有的单联系人文件。微信自动接入尚未提供；没有文件时可返回联系人目录，选择联系人后手动粘贴文字。</p></div>
+      <p>仅在需要补充自动同步未覆盖的旧记录、且你已持有单联系人 JSONL 文件时使用。已同步的记录无需重复导入；没有文件时，可返回联系人目录手动输入文字。</p></div>
     {!available && <p className="import-note">请先连接本机服务并完成本次运行的本人配置，再选择历史文件。</p>}
     <div className="import-file"><button className="button" disabled={!available || busy}
       onClick={() => void operate(() => window.notalone.imports.chooseFile())}>选择历史文件</button>
@@ -107,15 +112,29 @@ export function ImportPage({ session }: { session: ContactSessionView }) {
         {state.submission.task.status === 'cancelled' && <p>后端已停止此任务；请查看对应来源状态，不能将它视为处理完成。</p>}
       </>}
       {state.submission.taskError && <p role="alert">{state.submission.taskError}</p>}
-      <section aria-label="归属联系人来源"><h4>这位联系人的来源资料</h4>
-        {state.submission.sources === null ? <p>{state.submission.sourcesError ? '来源状态暂时无法核验，请刷新处理状态。' : '正在读取来源资料…'}</p>
-          : <ul className="import-sources">{state.submission.sources.map((source) => <li key={source.sourceId}>{source.fileName} · {source.recordCount} 条 · {source.status === 'active' ? '有效来源' : '来源正在或已经清除，请在来源管理核验结果'}</li>)}</ul>}</section>
+      <p>已保存的资料可在下方“导入资料管理”中查看和删除。</p>
+      {importedContactId && importedContactId !== session.state.selectedContactId && <button className="button"
+        disabled={!session.state.contacts.some((entry) => entry.contactId === importedContactId)}
+        onClick={() => void session.selectContact(importedContactId)}>查看本次导入资料</button>}
       {state.submission.syncReloadNeeded && <div className="import-sync-reload"><p>同步宿主尚未装配。首份导入确认的本人渠道身份须重新加载服务后才能用于同步。导入不会自动授权会话；重启只沿用既有确认范围和总开关，旧排队任务须重新查看并明确继续。</p>
         <button className="button" disabled={!available || !!state.submission.taskBusy} onClick={() => void operate(() => window.notalone.imports.reloadSyncHost({ selectionRevision: latest.current.selectionRevision }))}>认证停读并重新加载同步服务</button></div>}
     </section>}
-    {state.syncReloadPhase === 'ready' && <p className="import-confirmed" role="status">同步服务已重新加载。请在同步设置中主动选择并确认会话授权；如需查看原导入任务，请重新预览确认同一份文件。</p>}
+    {state.syncReloadPhase === 'ready' && <p className="import-confirmed" role="status">同步服务已重新加载。请在“联系人 → 添加微信联系人”中主动选择并确认会话授权；如需查看原导入任务，请重新预览确认同一份文件。</p>}
     {state.syncReloadPhase === 'failed' && <div className="import-note"><p role="alert">同步服务重新加载结果尚未确认。停读未确认时不会另起实例；请检查连接或配置后重试。</p>
       <button className="button" onClick={() => void operate(() => window.notalone.imports.reloadSyncHost({ selectionRevision: latest.current.selectionRevision }))}>重试重新加载同步服务</button></div>}
     {(state.error || error) && <p className="import-note" role="alert">{state.error ?? error}</p>}
+    <section className="import-management" aria-label="导入资料管理">
+      <h2>导入资料管理</h2>
+      <p>按联系人查看已保存的来源文件、记录数量和删除状态。</p>
+      <div className="import-target"><label>管理资料的联系人<select aria-label="管理资料的联系人"
+        value={session.state.selectedContactId ?? ''} disabled={session.state.directoryPhase !== 'ready' || session.state.contacts.length === 0}
+        onChange={(event) => void session.selectContact(event.target.value)}>
+        <option value="" disabled>选择要管理的联系人</option>
+        {session.state.contacts.map((entry) => <option key={entry.contactId} value={entry.contactId}>{entry.displayName}</option>)}
+      </select></label></div>
+      <p>{managedContact ? `当前只展示 ${managedContact.displayName} 的资料。` : '先选择一位联系人，再查看其来源资料。'}上方“资料归属联系人”仅决定本次文件导入到谁名下。</p>
+      {session.error && <p role="alert">{session.error}</p>}
+      <SourceDeletionPanel session={session} refreshKey={sourceRefreshKey} />
+    </section>
   </section>;
 }

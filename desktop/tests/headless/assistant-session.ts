@@ -1,5 +1,6 @@
+import { fillWorkspaceThought, generateWorkspace, setWorkspaceContext } from '../workspace-actions';
 import { openAssistantHistory, expandSavedDiscussion } from '../assistant-history-actions';
-import { selectMemoryCategory } from '../memory-page-actions';
+import { openImportManagement } from '../memory-page-actions';
 import { expect, type Browser } from '@playwright/test';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
 import { withRewritePages } from './rewrite-acceptance';
@@ -7,12 +8,12 @@ import { withRewritePages } from './rewrite-acceptance';
 // 公开页面与真实 HTTP/PG；模型仅返回固定合成候选。
 export async function assistantSessionPersistence(browser: Browser, origin: string) {
   process.stdout.write('page_test_scenario: 默认保存与同键重放\n');
-  await withRewritePages(browser, origin, async ({ manager, helper, rewriteBackend }) => {
+  await withRewritePages(browser, origin, async ({ manager, helper, rewriteBackend, replyTransport }) => {
     await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
     await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
-    await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('合成讨论：明天再确认时间。');
+    await helper.getByRole('textbox', { name: '有什么想说的', exact: true }).fill('合成讨论：明天再确认时间。');
     await rewriteBackend.plan({ count: 2, prefix: '可靠保存的合成候选' });
-    await helper.getByRole('button', { name: '生成候选', exact: true }).click();
+    await generateWorkspace(helper, 'express');
     await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true }))
       .toHaveValue('可靠保存的合成候选（说法1）。');
     await openAssistantHistory(helper);
@@ -21,7 +22,15 @@ export async function assistantSessionPersistence(browser: Browser, origin: stri
     const discussion = helper.getByRole('region', { name: '已保存的讨论', exact: true });
     await expect(discussion.getByText('合成讨论：明天再确认时间。', { exact: true })).toBeVisible();
     await expect(discussion.getByText('可靠保存的合成候选（说法1）。', { exact: true })).toBeVisible();
-    await helper.getByRole('button', { name: '重试同一次生成', exact: true }).click();
+    // 成功后不展示失败重试按钮；公开生成命令仍须按同输入、同键重放。
+    await helper.evaluate(async () => {
+      const state = await window.notalone.replies.getState();
+      await window.notalone.replies.generate({ contactId: state.contactId!, scopeRevision: state.scopeRevision,
+        newRequest: false, workspaceAction: 'express' });
+    });
+    expect(replyTransport.requests).toHaveLength(2);
+    expect(replyTransport.requests[1].idempotency_key).toBe(replyTransport.requests[0].idempotency_key);
+    expect(replyTransport.results[1].data.reply_request_id).toBe(replyTransport.results[0].data.reply_request_id);
     await openAssistantHistory(helper);
     await helper.getByRole('button', { name: '查看已保存讨论', exact: true }).click();
     await expandSavedDiscussion(helper);
@@ -33,11 +42,10 @@ export async function assistantSessionPersistence(browser: Browser, origin: stri
   await withRewritePages(browser, origin, async ({ manager, helper, rewriteBackend }) => {
     await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
     await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
-    await helper.getByRole('button', { name: '回应消息', exact: true }).click();
-    await helper.getByRole('radio', { name: /甲的私密合成历史/ }).click();
-    await helper.getByRole('textbox', { name: '表达方向', exact: true }).fill('依赖来源的合成讨论。');
+    await fillWorkspaceThought(helper, '依赖来源的合成讨论。');
+    await setWorkspaceContext(helper, true);
     await rewriteBackend.plan({ count: 1, prefix: '依赖来源的合成候选' });
-    await helper.getByRole('button', { name: '生成候选', exact: true }).click();
+    await generateWorkspace(helper, 'express');
     await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true }))
       .toHaveValue('依赖来源的合成候选（说法1）。');
     // 控制输入只改变合成来源状态；尚未清理时也不能重新读出正文。
@@ -51,10 +59,10 @@ export async function assistantSessionPersistence(browser: Browser, origin: stri
     await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveCount(0);
     expect((await rewriteBackend.command('observations')).payloads).toHaveLength(1);
 
-    await helper.getByRole('button', { name: '改写', exact: true }).click();
-    await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('与来源无关的合成讨论。');
+    await setWorkspaceContext(helper, false);
+    await helper.getByRole('textbox', { name: '有什么想说的', exact: true }).fill('与来源无关的合成讨论。');
     await rewriteBackend.plan({ count: 1, prefix: '与来源无关的合成候选' });
-    await helper.getByRole('button', { name: '生成候选', exact: true }).click();
+    await generateWorkspace(helper, 'express');
     await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true }))
       .toHaveValue('与来源无关的合成候选（说法1）。');
     await openAssistantHistory(helper);
@@ -71,17 +79,16 @@ export async function assistantSessionPersistence(browser: Browser, origin: stri
     const unrelated = await rewriteBackend.command('unrelated_source');
     await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
     await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
-    await helper.getByRole('button', { name: '回应消息', exact: true }).click();
-    await helper.getByRole('radio', { name: /甲的私密合成历史/ }).click();
-    await helper.getByRole('textbox', { name: '表达方向', exact: true }).fill('迟到核验不得恢复合成候选。');
+    await fillWorkspaceThought(helper, '迟到核验不得恢复合成候选。');
+    await setWorkspaceContext(helper, true);
     await rewriteBackend.plan({ count: 1, prefix: '不可复活的合成候选' });
-    await helper.getByRole('button', { name: '生成候选', exact: true }).click();
+    await generateWorkspace(helper, 'express');
     const editor = helper.getByRole('textbox', { name: '候选1编辑文本', exact: true });
     await expect(editor).toHaveValue('不可复活的合成候选（说法1）。');
     await manager.getByRole('button', { name: '记忆', exact: true }).click();
-    await selectMemoryCategory(manager, '来源与过程');
-    const card = manager.getByRole('region', { name: '来源删除管理', exact: true })
-      .getByRole('listitem').filter({ hasText: `来源标识：${unrelated.source_id}` });
+    await openImportManagement(manager);
+    const card = manager.getByRole('region', { name: '已导入资料', exact: true })
+      .locator(`[data-source-id="${unrelated.source_id}"]`);
     // 删除无关来源触发生产核验；暂停真实200响应，再让实际依赖来源失效。
     replyTransport.nextEvidence = 'hold';
     await card.getByRole('button', { name: '删除来源', exact: true }).click();
