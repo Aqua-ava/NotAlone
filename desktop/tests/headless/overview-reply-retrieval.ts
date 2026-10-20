@@ -62,8 +62,8 @@ export async function overviewReplyRetrieval(browser: Browser, origin: string) {
       for (const memory of [prepared.manualOwner, prepared.self, prepared.otherSelf]) {
         await expectEvidenceArticle('本人资料', memory.text);
       }
-      await expect(history.getByText('生成时核实状态：历史资料（已过期）', { exact: true })).toBeVisible();
-      await expect(unknown.getByText('生成时核实状态：当前未核实', { exact: true })).toBeVisible();
+      await expect(history.getByText('生成时适用性：历史资料；不能据此认定当前情况', { exact: true })).toBeVisible();
+      await expect(unknown.getByText('生成时适用性：是否仍适用，尚不确定', { exact: true })).toBeVisible();
       const pending = await expectEvidenceArticle('未确认记忆候选', prepared.pending.text);
       await expect(pending.getByText('未确认参考，不作为确定事实', { exact: true })).toBeVisible();
       await expect(evidence.getByText('由联系人概览定位，底层资料来历：手动录入。', { exact: true })).toBeVisible();

@@ -1,3 +1,6 @@
+import { MemoryEvolutionDetails } from './MemoryEvolutionDetails';
+import { MemoryConditionsDetails } from './MemoryConditionsDetails';
+import { MemoryEventDetails } from './MemoryEventDetails';
 import { PersonalBackgroundDetails } from './PersonalBackgroundDetails';
 import { useState } from 'react';
 import type { ReplyCandidate, ReplyCandidateSelection } from '../shared/reply-bridge';
@@ -53,7 +56,10 @@ function LayeredSummary({ context, status, receipts, owner = false }: { context?
       {entry.uncertainty && <p>不确定性：{entry.uncertainty}</p>}
       {entry.references.map((ref) => <div key={`${ref.memoryId}:${ref.revision}`}>
         <p>底层资料：{ref.memoryId}；版本：{ref.revision}；{ref.provenanceKind === 'manual_entry' ? '手动录入' : '来源支持'}。</p>
-        <MemoryTemporalStatus timing={ref.timing} snapshot />
+        <MemoryTemporalStatus timing={ref.timing} validAt={ref.validAt} invalidAt={ref.invalidAt} snapshot />
+        <MemoryEventDetails event={ref.event} />
+        <MemoryConditionsDetails conditions={ref.conditions} />
+        <MemoryEvolutionDetails evolution={ref.evolution} />
         <p>保存时间：{ref.timing.recordedAt ?? '未知'}；来源时间：{ref.timing.sourceStartedAt ?? '未知'} 至 {ref.timing.sourceEndedAt ?? '未知'}{ref.timing.sourceTimeComplete ? '' : '（不完整）'}。</p>
       </div>)}
     </article>)}
@@ -100,9 +106,12 @@ function ScenarioReadSummary({ receipts, owner = false }: { receipts?: ReplyLaye
             <p>底层资料：{ref.memoryId}；版本：{ref.revision}；
               {ref.provenanceKind === 'manual_entry' ? '手动录入' : ref.provenanceKind === 'source_supported' ? '来源支持' : '本次快照未记录来历'}。</p>
             {ref.timing ? <>
-              <MemoryTemporalStatus timing={ref.timing} snapshot />
+              <MemoryTemporalStatus timing={ref.timing} validAt={ref.validAt} invalidAt={ref.invalidAt} snapshot />
+              <MemoryEventDetails event={ref.event} />
               <p>保存时间：{ref.timing.recordedAt ?? '未知'}；来源时间：{ref.timing.sourceStartedAt ?? '未知'} 至 {ref.timing.sourceEndedAt ?? '未知'}{ref.timing.sourceTimeComplete ? '' : '（不完整）'}。</p>
-            </> : <p>本次快照未记录来源时间与核实状态。</p>}
+            </> : <p>本次快照未记录来源日期与适用性。</p>}
+            <MemoryConditionsDetails conditions={ref.conditions} />
+            <MemoryEvolutionDetails evolution={ref.evolution} />
           </div>)}
         </div>)}
       </>}
@@ -120,7 +129,7 @@ function EvidenceItem({ item, cited, changes }: {
     </div>
     <ReplyBasisChangeNotice changes={changes?.filter((change) => change.evidenceId === item.evidenceId && change.kind === item.kind)} />
     <p className="evidence-quote">{item.text}</p>
-    {['confirmed_memory', 'owner_memory', 'pending_candidate'].includes(item.kind) && <MemoryTemporalStatus timing={item.timing} snapshot />}
+    {['confirmed_memory', 'owner_memory', 'pending_candidate'].includes(item.kind) && <MemoryTemporalStatus timing={item.timing} validAt={item.validAt} invalidAt={item.invalidAt} snapshot />}
     {['deleted', 'invalidated'].includes(item.snapshotStatus) && <p>生成时状态：{statusNames[item.snapshotStatus]}</p>}
     <details className="record-metadata"><summary>来源时间详情</summary>
       {item.navigation && <p>{item.navigation.scopeKind === 'contact' ? '由联系人概览定位' : '由本人概览定位'}，底层资料来历：{item.navigation.provenanceKind === 'manual_entry' ? '手动录入' : '来源支持'}。</p>}
@@ -130,6 +139,7 @@ function EvidenceItem({ item, cited, changes }: {
       {item.timing.sourceStartedAt && item.timing.sourceEndedAt
         ? <p>来源时间：{item.timing.sourceStartedAt} 至 {item.timing.sourceEndedAt}{item.timing.sourceTimeComplete ? '' : '（不完整）'}</p>
         : <p>来源时间未知</p>}
+      {['confirmed_memory', 'owner_memory', 'pending_candidate'].includes(item.kind) && <><MemoryEventDetails event={item.event} /><MemoryConditionsDetails conditions={item.conditions} /><MemoryEvolutionDetails evolution={item.evolution} /></>}
       <p>有效起点：{item.validAt ?? '未知'}；失效时间：{item.invalidAt ?? '未知'}</p>
     </details>
   </article>;

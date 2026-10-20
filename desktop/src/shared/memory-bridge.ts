@@ -8,7 +8,10 @@ export type MemoryCurrentStatus = 'current_verified' | 'current_unverified' | 'h
 export type MemoryEventStage = 'planned' | 'agreed' | 'rescheduled' | 'cancelled' | 'occurred' | 'unknown';
 export interface MemoryEventEvidence { messageId: string; charStart: number; charEnd: number; }
 export interface MemoryEvent {
-  version: 1;
+  version: 1 | 2;
+  occurrencePrecision?: 'year' | 'month' | 'day' | 'instant' | 'unknown';
+  occurrenceExpression?: string | null;
+  anchorMessageId?: string | null;
   stage: MemoryEventStage;
   stageVerified: boolean;
   stageEvidence: MemoryEventEvidence[];
@@ -16,6 +19,24 @@ export interface MemoryEvent {
   occurrenceEnd: string | null;
   occurrenceVerified: boolean;
   occurrenceEvidence: MemoryEventEvidence[];
+}
+export interface MemoryEvolution {
+  version: 1;
+  kind: 'supplement' | 'state_change' | 'error_correction' | 'historical_supplement' | 'unresolved_conflict' | 'independent';
+  explanation: string;
+  relatedVersions: Array<{ memoryId: string; revision: number }>;
+  evidenceMessageIds: string[];
+  sourceSupported: boolean;
+  claimChanged: boolean;
+  conditionChanged: boolean;
+}
+export interface MemoryConditions {
+  version: 1;
+  items: Array<{ text: string; evidence: MemoryEventEvidence[]; sourceSupported: boolean }>;
+}
+export interface MemoryConditionsProposal {
+  version: 1;
+  items: Array<{ text: string; evidence: MemoryEventEvidence[] }>;
 }
 export interface MemoryTiming {
   recordedAt: string | null;
@@ -36,6 +57,8 @@ export interface MemoryContent {
   validAt: string | null;
   invalidAt: string | null;
   event?: MemoryEvent | null;
+  conditions?: MemoryConditions | null;
+  evolution?: MemoryEvolution | null;
 }
 export interface ActiveMemory extends MemoryContent {
   memoryId: string;
@@ -114,6 +137,11 @@ export interface MemorySection<T> {
 }
 export type MemorySectionName = 'contact' | 'owner' | 'pending' | 'sources';
 export interface LayeredMemoryReference {
+  event?: MemoryEvent | null;
+  conditions?: MemoryConditions | null;
+  evolution?: MemoryEvolution | null;
+  validAt?: string | null;
+  invalidAt?: string | null;
   memoryId: string;
   revision: number;
   provenanceKind: 'manual_entry' | 'source_supported';
@@ -229,6 +257,7 @@ export type MemoryChangeKind = 'error_correction' | 'state_changed';
 export interface MemoryCorrectionRequest extends ContactSelection {
   level: 'owner' | 'contact'; memoryId: string; revision: number; text: string; category: MemoryCategory;
   changeKind?: MemoryChangeKind;
+  conditions?: MemoryConditionsProposal | null;
 }
 export type OwnerLayeredMemoryManagementRequest = Omit<LayeredMemoryManagementRequest, 'contactId' | 'scopeRevision'>;
 export interface OwnerLayeredMemoryState extends MemoryOverviewState<LayeredMemory> {
@@ -242,7 +271,7 @@ export interface MemoryBridge {
   readProcessing(request: MemoryProcessingRequest): Promise<MemoryProcessing>;
   cancelProcessingRead(request: MemoryProcessingRequest): Promise<void>;
   readOwnerMemories(): Promise<void>;
-  correctOwnerMemory(request: Pick<MemoryCorrectionRequest, 'memoryId' | 'revision' | 'text' | 'category' | 'changeKind'>): Promise<void>;
+  correctOwnerMemory(request: Pick<MemoryCorrectionRequest, 'memoryId' | 'revision' | 'text' | 'category' | 'changeKind' | 'conditions'>): Promise<void>;
   deleteOwnerMemory(request: Pick<MemoryRemovalRequest, 'memoryId' | 'revision'>): Promise<void>;
   addOwnerMemory(request: Pick<MemoryAdditionRequest, 'text' | 'category'>): Promise<void>;
   getOwnerLayeredMemoryState(): Promise<OwnerLayeredMemoryState>;

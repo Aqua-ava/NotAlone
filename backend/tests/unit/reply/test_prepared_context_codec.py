@@ -13,6 +13,7 @@ from notalone.reply.assistant_discussion import DiscussionContext, DiscussionSna
 from notalone.scopes import ContactScope
 
 from notalone.memory.timing import MemoryTiming
+from notalone.memory.events import MemoryEvent, EventStage, EventEvidence
 from notalone.reply.prepared_context_codec import decode_context, encode_context
 from tests.unit.reply.test_input_budget_runtime import prepared_context
 
@@ -34,12 +35,15 @@ class PreparedContextCodecTest(unittest.TestCase):
             recorded_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
             current_status="historical", current_status_reason="合成资料只证明过去。",
         )
-        original = replace(original, evidence=(replace(original.evidence[0], timing=timing),),
+        event = MemoryEvent(stage=EventStage.PLANNED,
+            stage_evidence=(EventEvidence(original.evidence[0].evidence_id, 0, 2),), stage_verified=True,
+            occurrence_start=datetime(2020, 1, 1, tzinfo=timezone.utc))
+        original = replace(original, evidence=(replace(original.evidence[0], timing=timing, event=event),),
                            history_message_ids=(original.evidence[0].evidence_id,))
 
         payload = encode_context(original)
 
-        self.assertEqual((payload["version"], payload.get("schema_revision")), (2, 9))
+        self.assertEqual((payload["version"], payload.get("schema_revision")), (2, 12))
         self.assertEqual(decode_context(payload, original.command), original)
 
     def test_old_revision_unknown_fields_and_damaged_values_require_reprepare(self):
@@ -55,6 +59,9 @@ class PreparedContextCodecTest(unittest.TestCase):
             {**payload, "schema_revision": 5},
             {**payload, "schema_revision": 6},
             {**payload, "schema_revision": 8},
+            {**payload, "schema_revision": 9},
+            {**payload, "schema_revision": 10},
+            {**payload, "schema_revision": 11},
             {**payload, "schema_revision": True},
             {**payload, "context": {**payload["context"], "future_field": None}},
             {**payload, "context": None},
@@ -112,7 +119,7 @@ class PreparedContextCodecTest(unittest.TestCase):
                 command.conversation_binding_id, "合成旧候选。", (change,), "3" * 64),
             assistant_discussion=discussion)
         payload = encode_context(original)
-        self.assertEqual((payload["version"], payload["schema_revision"]), (2, 9))
+        self.assertEqual((payload["version"], payload["schema_revision"]), (2, 12))
         self.assertEqual(decode_context(payload, command), original)
         with self.assertRaises(ValueError):
             decode_context({**payload, "schema_revision": 6}, command)

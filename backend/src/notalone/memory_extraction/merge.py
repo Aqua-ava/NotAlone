@@ -16,8 +16,9 @@ class _ProposedMemory:
 class MemoryMergeVerifier:
     """仅使用本次已获准读取的同联系人消息，不另行跨联系人读取。"""
 
-    def __init__(self, *, messages, verification_runtime):
+    def __init__(self, *, messages, verification_runtime, source_loader=None):
         self._messages = tuple(messages)
+        self._source_loader = source_loader
         self._verification = verification_runtime
 
     def verify(self, *, scope, fact, parents, text):
@@ -25,20 +26,26 @@ class MemoryMergeVerifier:
                 or not isinstance(text, str) or not 1 <= len(text.strip()) <= 4096):
             raise ValueError('合并缺少有界正文、旧版本或独立核验。')
         # 不把多个事件阶段、有效期或人工决定压成新候选的一套字段。
-        if fact.event is not None or any(
+        if fact.event is not None or fact.conditions is not None or any(
             parent.adoption_method is not AdoptionMethod.AUTO
             or parent.category != fact.category or parent.topic != fact.topic
             or parent.valid_at != fact.valid_at or parent.invalid_at != fact.invalid_at
-            or parent.event is not None for parent in parents
+            or parent.event is not None or parent.conditions is not None for parent in parents
         ):
             raise ValueError('不同类别、期限、事件或人工记忆不自动合并。')
         sources = tuple(dict.fromkeys((*fact.source_message_ids,
             *(source for parent in parents for source in parent.source_ids))))
         messages = tuple(item for item in self._messages if item.message_id in sources)
+        missing = tuple(source for source in sources if source not in {item.message_id for item in messages})
+        if missing and len(sources) <= 60 and self._source_loader is not None:
+            messages += tuple(self._source_loader(scope, missing))
         if (not sources or len(sources) > 60
                 or set(sources) != {item.message_id for item in messages}
                 or sum(len(item.text) for item in messages) + len(text) > 16000):
             raise ValueError('合并原始依据缺失或超出本次有界范围。')
+        # 补取的父版本通常更早；未知日期只决定稳定排列，不补造事实时间。
+        messages = tuple(sorted(messages, key=lambda item: (
+            item.occurred_at is None, item.occurred_at, str(item.message_id))))
         payload = {
             'text': text, 'category': fact.category.value, 'topic': fact.topic.value,
             'subject': fact.subject.value, 'source_message_ids': [str(item) for item in sources],

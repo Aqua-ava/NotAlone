@@ -117,6 +117,35 @@ test('本次参考默认收起，展示冻结材料与来源，切换请求后�
   t.after(() => browser.close());
   const page = await browser.newPage();
   const f = await fixture(); await f.restore();
+  const position = { message_id: f.messageId, char_start: 0, char_end: 4 };
+  const temporal = {
+    valid_at: '2026-08-01T00:00:00+08:00', invalid_at: '2026-09-01T00:00:00+08:00',
+    event: { version: 2, stage: 'planned', stage_verified: true, stage_evidence: [position],
+      occurrence_start: '2026-08-01T00:00:00+08:00', occurrence_end: '2026-09-01T00:00:00+08:00',
+      occurrence_verified: true, occurrence_evidence: [position], occurrence_precision: 'month',
+      occurrence_expression: '八月', anchor_message_id: f.messageId },
+    conditions: { version: 1, items: [{ text: '出差期间', source_supported: true, evidence: [position] }] },
+    evolution: { version: 1, kind: 'unresolved_conflict', explanation: '两条来源对安排的描述尚未一致。',
+      related_versions: [{ memory_id: f.memoryId, revision: 1 }], evidence_message_ids: [f.messageId],
+      source_supported: true, claim_changed: false, condition_changed: false },
+  };
+  const item = f.records.evidence.evidence[0];
+  Object.assign(item, temporal);
+  item.timing = { ...item.timing, recorded_at: '2026-10-20T01:00:00Z',
+    source_started_at: '2026-08-01T00:15:00+08:00', source_ended_at: '2026-08-01T00:15:00+08:00', source_time_complete: true };
+  const context = f.records.evidence.layered_context;
+  const reference = { ...context.profile_entries[0].references[0], ...temporal, timing: item.timing };
+  context.profile_entries[0].references = [reference];
+  const scenarioId = randomUUID(), versionId = randomUUID();
+  context.directory = [{ scenario_id: scenarioId, version_id: versionId, title: '合成冻结安排', hint: '只反映当时安排',
+    paragraph_count: 1, paragraph_range: [0, 1] }];
+  context.scenario_read_budget = { call_limit: 3, paragraph_limit: 4, character_limit: 1800 };
+  f.records.evidence.layered_scenario_reads = [{ schema_version: 1, status: 'succeeded', reason: '已读取冻结正文。',
+    scenario_id: scenarioId, paragraph_range: [0, 1],
+    budget: { ...context.scenario_read_budget, used_calls: 1, used_paragraphs: 1, used_characters: 16 },
+    document: { scenario_id: scenarioId, version_id: versionId, title: '合成冻结安排', hint: '只反映当时安排',
+      system_generated: true, updated_at: '2026-10-20T01:00:00Z', organization_generation: 3, paragraph_range: [0, 1],
+      paragraphs: [{ text: '合成冻结主题正文。', references: [reference] }] } }];
   const styleSampleId = randomUUID();
   f.records.evidence.style_references = [{ sample_id: styleSampleId, text: '合成冻结说法：好呀，晚点聊。' }];
   for (const text of ['合成其他候选的参考消息。', '合成未引用的背景消息。']) {
@@ -152,7 +181,7 @@ test('本次参考默认收起，展示冻结材料与来源，切换请求后�
   await page.evaluate(props => window.renderEvidence(props), props);
   const toggle = page.getByRole('button', { name: '本次参考', exact: true });
   await expect(toggle).toContainText('聊天 2 条');
-  await expect(toggle).toContainText('关系资料 2 条');
+  await expect(toggle).toContainText('关系资料 3 条');
   await expect(toggle).toContainText('表达样本 1 条');
   await expect(page.getByRole('region', { name: '本次参考内容' })).toHaveCount(0);
   await toggle.click();
@@ -163,8 +192,22 @@ test('本次参考默认收起，展示冻结材料与来源，切换请求后�
   await expect(evidence.getByText('以下材料实际提供给了模型，不代表每条候选都引用了每一项。')).toBeVisible();
   const source = evidence.getByRole('region', { name: '关系资料', exact: true }).locator('.record-metadata').first();
   await expect(source.getByText('入选原因：与本次合成安排相关。', { exact: true })).toBeHidden();
-  await source.locator('summary').click();
+  await source.locator(':scope > summary').click();
   await expect(source.getByText('入选原因：与本次合成安排相关。', { exact: true })).toBeVisible();
+  for (const text of ['合成当时资料：周末有空。', '合成生成时L1背景。', '合成冻结主题正文。']) {
+    const card = evidence.getByRole('article').filter({ has: page.getByText(text, { exact: true }) });
+    const metadata = card.locator('.record-metadata');
+    if (await metadata.getAttribute('open') === null) await metadata.locator(':scope > summary').click();
+    await expect(card.getByText('来源日期：2026年8月1日（UTC+08:00）', { exact: true })).toBeVisible();
+    await expect(card.getByText('适用期间：2026年8月1日 00:00:00（UTC+8） 至 2026年9月1日 00:00:00（UTC+8）之前', { exact: true })).toBeVisible();
+    await expect(metadata.getByText('事件阶段：计划（来源已核验）', { exact: true })).toBeVisible();
+    await expect(metadata.getByText('事件发生时段：2026年8月（来源已核验）', { exact: true })).toBeVisible();
+    await expect(metadata.getByText('时间精度：月；原话：八月', { exact: true })).toBeVisible();
+    await expect(metadata.getByText('适用条件：出差期间', { exact: true })).toBeVisible();
+    await expect(metadata.getByText('来源支持限定，当前是否满足未知', { exact: true })).toBeVisible();
+    await expect(metadata.getByText('变化类型：未解决矛盾', { exact: true })).toBeVisible();
+    await expect(metadata.getByText('相关来源存在未解决矛盾，当前主张仍有不确定性，不能当作已确认现状。', { exact: true })).toBeVisible();
+  }
   await expect(evidence.getByRole('button', { name: /排除|重新生成|调整/ })).toHaveCount(0);
   assert.equal(f.calls.some(r => r.path.includes('/layered-context') || r.path.includes('/style-samples')), false);
   await toggle.click();

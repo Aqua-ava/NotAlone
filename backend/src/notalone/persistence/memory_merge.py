@@ -50,6 +50,9 @@ def confirm_merge(store, *, scope, candidate_id, expected_parents, expected_dime
             if actual is None:
                 raise MemoryVersionConflict('合并父版本已不存在。')
             (require_auto_update_previous if receipt else require_auto_previous)(actual, parent)
+        if not receipt:
+            from notalone.persistence.memory_evolution import require_replacement_evolution
+            require_replacement_evolution(connection, candidate, parents, merge=True)
         if not receipt and connection.execute(f'SELECT 1 FROM public.{table} WHERE owner_id=%s AND status=\'active\' AND (supersedes_memory_id=ANY(%s) OR merge_parent_ids && %s::uuid[]) LIMIT 1',
                                                (scope.owner_id, ids, ids)).fetchone():
             raise MemoryVersionConflict('合并父版本已存在新版本。')

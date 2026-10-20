@@ -25,6 +25,7 @@ class SimilarMemory:
     memory_id: UUID
     text: str
     topic: str
+    evidence: dict | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,6 +40,10 @@ class AdjudicationDecision:
     merged_memory_ids: tuple[UUID, ...] = ()
     merged_text: str | None = None
     duplicate_memory_id: UUID | None = None
+    relation: dict | None = None
+    relation_supported: bool = False
+    relation_usage: dict | None = None
+    evolution: object = None
 
 
 class AdjudicationRuntime(Protocol):
@@ -66,3 +71,11 @@ def _bigrams(text: str) -> frozenset[str]:
     return frozenset(
         normalized[index : index + 2] for index in range(len(normalized) - 1)
     )
+
+
+def adjudication_payload(candidate, similar):
+    """单条与批量共用最小模型投影；内部范围与世代摘要不外发。"""
+    return {"version": 2, "candidate_text": candidate["text"] if isinstance(candidate, dict) else candidate,
+            "candidate": {key: value for key, value in candidate.items() if not key.startswith("_")} if isinstance(candidate, dict) else {"text": candidate},
+            "similar": [{"memory_id": str(item.memory_id), "text": item.text, "topic": item.topic,
+                         **(item.evidence or {})} for item in similar]}

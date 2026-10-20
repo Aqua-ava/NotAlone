@@ -1,3 +1,6 @@
+import { MemoryEvolutionDetails } from './MemoryEvolutionDetails';
+import { MemoryConditionsDetails } from './MemoryConditionsDetails';
+import { MemoryEventDetails } from './MemoryEventDetails';
 import { PersonalBackgroundDetails } from './PersonalBackgroundDetails';
 import { useEffect, useState } from 'react';
 import type { LayeredMemory, LayeredMemoryManagementRequest, LayeredMemoryManagementOptions, LayeredMemoryQualityStage, MemoryOverviewState } from '../shared/memory-bridge';
@@ -120,7 +123,10 @@ export function LayeredMemoryPanel({ state, contactName, busy, read, manage, fac
             <details className="memory-details"><summary>查看第 {index + 1} 项依据与时间</summary>
               {entry.references.map((reference) => <div key={`${reference.memoryId}:${reference.revision}`}>
                 <p>底层记忆：{reference.memoryId} · 版本 {reference.revision} · {reference.provenanceKind === 'manual_entry' ? '用户手动录入' : '来源支持'}</p>
-                <MemoryTemporalStatus timing={reference.timing} snapshot />
+                <MemoryTemporalStatus timing={reference.timing} validAt={reference.validAt} invalidAt={reference.invalidAt} snapshot />
+              <MemoryEventDetails event={reference.event} />
+              <MemoryConditionsDetails conditions={reference.conditions} />
+              <MemoryEvolutionDetails evolution={reference.evolution} />
                 <p>来源聊天时间：{time(reference.timing.sourceStartedAt)}{reference.timing.sourceEndedAt !== reference.timing.sourceStartedAt ? ` 至 ${time(reference.timing.sourceEndedAt)}` : ''}
                   {!reference.timing.sourceTimeComplete ? '（来源时间不完整）' : ''}</p>
                 <p>记忆保存时间：{time(reference.timing.recordedAt)}</p>
@@ -162,7 +168,10 @@ export function LayeredMemoryPanel({ state, contactName, busy, read, manage, fac
           <details className="memory-details"><summary>查看第 {index + 1} 段依据与时间</summary>
             {paragraph.references.map((reference) => <div key={`${reference.memoryId}:${reference.revision}`}>
               <p>底层记忆：{reference.memoryId} · 版本 {reference.revision} · {reference.provenanceKind === 'manual_entry' ? '用户手动录入' : '来源支持'}</p>
-              <MemoryTemporalStatus timing={reference.timing} snapshot />
+              <MemoryTemporalStatus timing={reference.timing} validAt={reference.validAt} invalidAt={reference.invalidAt} snapshot />
+              <MemoryEventDetails event={reference.event} />
+              <MemoryConditionsDetails conditions={reference.conditions} />
+              <MemoryEvolutionDetails evolution={reference.evolution} />
               <p>来源聊天时间：{time(reference.timing.sourceStartedAt)}{reference.timing.sourceEndedAt !== reference.timing.sourceStartedAt ? ` 至 ${time(reference.timing.sourceEndedAt)}` : ''}
                 {!reference.timing.sourceTimeComplete ? '（来源时间不完整）' : ''}</p>
               <p>记忆保存时间：{time(reference.timing.recordedAt)}</p>

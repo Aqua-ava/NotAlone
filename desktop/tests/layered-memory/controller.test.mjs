@@ -421,3 +421,34 @@ test('没有覆盖工作时保留当前配置额度，顶层与嵌套预算仍�
   assert.equal(value.modelCallLimit, 4);
   assert.equal(value.budget.modelCallsRemaining, 4);
 });
+
+test('本人及联系人分层引用保留事件和适用期，旧引用缺失字段保持未知', async () => {
+  for (const scope of ['contact', 'owner']) {
+    const raw = profilePayload({ scope_kind: scope, contact_id: scope === 'owner' ? null : ids.contact });
+    const event = { version: 1, stage: 'planned', stage_verified: false, stage_evidence: [],
+      occurrence_start: '2020-06-02T09:00:00+08:00', occurrence_end: null, occurrence_verified: false, occurrence_evidence: [] };
+    Object.assign(raw.layered_memory.profile.entries[0].references[0], { evolution: { version: 1, kind: 'historical_supplement', explanation: '补导入的旧资料只补充历史。', related_versions: [{ memory_id: ids.memory, revision: 1 }], evidence_message_ids: [ids.version], source_supported: true, claim_changed: false, condition_changed: false }, conditions: { version: 1, items: [{ text: '出差期间', evidence: [{ message_id: ids.memory, char_start: 0, char_end: 4 }], source_supported: true }] }, event, valid_at: '2020-06-01T00:00:00+08:00', invalid_at: '2020-06-03T00:00:00+08:00' });
+    const f = await fixture(async () => ({ generation: 1, data: raw }));
+    try {
+      await (scope === 'owner' ? f.bridge.readOwnerLayeredMemory({}) : f.bridge.readLayeredMemory(f.selection()));
+      const state = scope === 'owner' ? await f.bridge.getOwnerLayeredMemoryState() : (await f.bridge.getState()).layeredMemory;
+      assert.equal(state.phase, 'ready');
+      const reference = state.value.profile.entries[0].references[0];
+      assert.equal(reference.evolution.kind, 'historical_supplement');
+      assert.equal(reference.evolution.relatedVersions[0].revision, 1);
+      assert.equal(reference.evolution.sourceSupported, true);
+      assert.equal(reference.conditions.items[0].text, '出差期间');
+      assert.equal(reference.conditions.items[0].sourceSupported, true);
+      assert.equal(reference.event.stage, 'planned');
+      assert.equal(reference.event.occurrenceStart, '2020-06-02T09:00:00+08:00');
+      assert.equal(reference.validAt, '2020-06-01T00:00:00+08:00');
+      assert.equal(reference.invalidAt, '2020-06-03T00:00:00+08:00');
+      const oldReference = state.value.scenarios[0].paragraphs[0].references[0];
+      assert.equal(oldReference.evolution, null);
+      assert.equal(oldReference.conditions, null);
+      assert.equal(oldReference.event, null);
+      assert.equal(oldReference.validAt, null);
+      assert.equal(oldReference.invalidAt, null);
+    } finally { f.disconnect(); }
+  }
+});

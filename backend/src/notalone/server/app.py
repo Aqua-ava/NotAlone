@@ -1781,7 +1781,7 @@ class BackendApp:
             memory = service.correct_owner_memory(
                 owner_id=owner_id, memory_id=memory_id, text=text,
                 category=_optional_category(payload.get("category")),
-                change_kind=_memory_change_kind(payload),
+                change_kind=_memory_change_kind(payload), conditions=_manual_conditions_payload(payload),
             )
             return _json_response(
                 HTTPStatus.OK, {"memory": _owner_memory_payload(memory)}
@@ -1825,7 +1825,7 @@ class BackendApp:
                     memory = service.correct_owner_memory(
                         owner_id=owner_id, contact_id=contact_id, memory_id=memory_id,
                         text=text, category=_optional_category(payload.get("category")),
-                        change_kind=_memory_change_kind(payload),
+                        change_kind=_memory_change_kind(payload), conditions=_manual_conditions_payload(payload),
                     )
                     return _json_response(HTTPStatus.OK, {"memory": _owner_memory_payload(memory)})
                 if method == "POST" and parts[3] == "revert-auto-update":
@@ -1960,7 +1960,7 @@ class BackendApp:
                     memory_id=memory_id,
                     text=text,
                     category=category,
-                    change_kind=_memory_change_kind(payload),
+                    change_kind=_memory_change_kind(payload), conditions=_manual_conditions_payload(payload),
                 )
                 return _json_response(
                     HTTPStatus.OK, {"memory": _memory_payload(memory)}
@@ -3515,6 +3515,8 @@ def _owner_memory_payload(memory: OwnerMemory) -> dict[str, object]:
         "risk_flags": list(memory.risk_flags),
         "timing": memory.timing.to_payload(),
         "event": memory.event.to_payload(current=True) if memory.event is not None else None,
+        "conditions": memory.conditions.to_payload(current=True) if memory.conditions else None,
+        "evolution": memory.evolution.to_payload(current=True) if memory.evolution else None,
         "version_evidence": memory.version_evidence.to_payload() if memory.version_evidence else None,
         "version_evidence_source_current": bool(memory.version_evidence and memory.version_evidence.source_current),
         "can_revert_auto_update": memory.can_revert_auto_update,
@@ -3549,6 +3551,8 @@ def _memory_payload(memory: ConfirmedMemory) -> dict[str, object]:
         ),
         "timing": memory.timing.to_payload(),
         "event": memory.event.to_payload(current=True) if memory.event is not None else None,
+        "conditions": memory.conditions.to_payload(current=True) if memory.conditions else None,
+        "evolution": memory.evolution.to_payload(current=True) if memory.evolution else None,
         "version_evidence": memory.version_evidence.to_payload() if memory.version_evidence else None,
         "version_evidence_source_current": bool(memory.version_evidence and memory.version_evidence.source_current),
         "can_revert_auto_update": memory.can_revert_auto_update,
@@ -3580,6 +3584,8 @@ def _memory_candidate_payload(candidate: MemoryCandidate) -> dict[str, object]:
         "failure_reason": candidate.failure_reason,
         "timing": candidate.timing.to_payload(),
         "event": candidate.event.to_payload(current=True) if candidate.event is not None else None,
+        "conditions": candidate.conditions.to_payload(current=True) if candidate.conditions else None,
+        "evolution": candidate.evolution.to_payload(current=True) if candidate.evolution else None,
         "valid_at": _iso_or_none(candidate.valid_at),
         "invalid_at": _iso_or_none(candidate.invalid_at),
     }
@@ -3597,3 +3603,11 @@ def _memory_candidate_payload(candidate: MemoryCandidate) -> dict[str, object]:
     if "source_dependency_mode" in payload:
         payload["dimension_evidence_dimensions"] = bounded_dimension_states(candidate)
     return payload
+
+
+def _manual_conditions_payload(payload):
+    from notalone.memory.conditions import MemoryConditions
+    try:
+        return MemoryConditions.from_payload(payload["conditions"], proposal=True) if "conditions" in payload else ...
+    except (TypeError, ValueError):
+        raise MemoryRequestInvalid() from None

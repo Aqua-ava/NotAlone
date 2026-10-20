@@ -1,3 +1,7 @@
+import { MemoryEvolutionDetails } from './MemoryEvolutionDetails';
+import { MemoryConditionsDetails, MemoryConditionsEditor, conditionEditorText, conditionEditProposal, conditionEditorValid } from './MemoryConditionsDetails';
+import { memoryTimeText as timeText } from './memory-time-format';
+import { MemoryEventDetails } from './MemoryEventDetails';
 import { useEffect, useRef, useState } from 'react';
 import type { MemoryVersion, MemoryCategory, MemoryChangeKind, OwnerLayeredMemoryState } from '../shared/memory-bridge';
 import { MemoryTemporalStatus } from './MemoryTemporalStatus';
@@ -6,13 +10,7 @@ import { memoryAvailability, memoryRemovalTarget } from './memory-availability';
 
 const categoryNames = { common_fact: '共同事实', preference: '偏好', taboo: '禁忌', recent_state: '近期状态', relationship_note: '关系备注' };
 
-function timeText(value: string | null): string {
-  if (!value) return '未知';
-  const parts = new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Taipei', year: 'numeric', month: 'numeric', day: 'numeric',
-    hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' }).formatToParts(new Date(value));
-  const field = (name: string) => parts.find(part => part.type === name)?.value;
-  return `${field('year')}年${field('month')}月${field('day')}日 ${field('hour')}:${field('minute')}:${field('second')}（UTC+8）`;
-}
+
 
 function sourceTime(memory: MemoryVersion): string {
   const { sourceStartedAt: start, sourceEndedAt: end, sourceTimeComplete: complete } = memory.timing;
@@ -100,6 +98,7 @@ function OwnerFactCard({ memory, removalTarget = memory, busy, run, initiallyEdi
   const [deleting, setDeleting] = useState(false);
   const [text, setText] = useState(memory.text);
   const [category, setCategory] = useState(memory.category);
+  const [conditionText, setConditionText] = useState(conditionEditorText(memory.conditions));
   const [changeKind, setChangeKind] = useState<MemoryChangeKind>('error_correction');
   const editor = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
@@ -110,12 +109,15 @@ function OwnerFactCard({ memory, removalTarget = memory, busy, run, initiallyEdi
     <p className="memory-text">{availability.excluded ? <s>{memory.text}</s> : memory.text}</p>
     <p className="memory-availability">{availability.label}</p>
     <p className="memory-section-note">{memory.adoptionMethod === 'auto' ? '自动记下 · 未经你确认' : '手动记下'}</p>
-    {memory.timing.currentStatus !== 'stable' && <p className="memory-section-note">{({ current_verified: '时间已核实', current_unverified: '时间待核实', historical: '过去的信息' } as const)[memory.timing.currentStatus]}</p>}
+    <MemoryConditionsDetails conditions={memory.conditions} />
+    <MemoryEvolutionDetails evolution={memory.evolution} />
+    <MemoryTemporalStatus timing={memory.timing} validAt={memory.validAt} invalidAt={memory.invalidAt} compact />
     <details className="memory-details"><summary>查看详情</summary>
-      <p>版本 {memory.revision}</p><MemoryTemporalStatus timing={memory.timing} />
+      <p>版本 {memory.revision}</p><p>{memory.timing.currentStatusReason}</p>
       <p>分类：{categoryNames[memory.category]}</p>
       <p>来源聊天时间：{sourceTime(memory)}</p><p>保存时间：{timeText(memory.timing.recordedAt)}</p>
       <p>来源聊天时间表示当时说过，不保证事件在当天发生。</p>
+      <MemoryEventDetails event={memory.event} />
       <p>生效时间：{memory.validAt ? timeText(memory.validAt) : '未指定'}</p>
       <p>失效时间：{memory.invalidAt ? timeText(memory.invalidAt) : '未指定'}</p>
       <p>记忆标识：{memory.memoryId}</p>
@@ -126,17 +128,20 @@ function OwnerFactCard({ memory, removalTarget = memory, busy, run, initiallyEdi
     </details>
     {memory.status === 'active' && <button className="button" aria-label="修正本人记忆" disabled={busy} onClick={() => setEditing(!editing)}>修改</button>}
     <button className="button" aria-label="删除本人记忆" disabled={busy} onClick={() => setDeleting(true)}>删除</button>
-    {editing && memory.status === 'active' && <form className="memory-edit-form" onSubmit={event => { event.preventDefault(); void run(() => window.notalone.memory.correctOwnerMemory({ memoryId: memory.memoryId, revision: memory.revision, text: text.trim(), category, changeKind })); }}>
+    {editing && memory.status === 'active' && <form className="memory-edit-form" onSubmit={event => { event.preventDefault();
+      const conditions = conditionEditProposal(conditionText, memory.conditions);
+      void run(() => window.notalone.memory.correctOwnerMemory({ memoryId: memory.memoryId, revision: memory.revision, text: text.trim(), category, changeKind, ...(conditions === undefined ? {} : { conditions }) })); }}>
       <label>修正本人记忆内容<textarea ref={editor} value={text} maxLength={4000} onChange={event => setText(event.target.value)} /></label>
       <label>资料分类<select aria-label="资料分类" value={category} disabled={busy} onChange={event => setCategory(event.target.value as MemoryCategory)}>
         {Object.entries(categoryNames).map(([value, name]) => <option key={value} value={value}>{name}</option>)}</select></label>
+      <MemoryConditionsEditor value={conditionText} onChange={setConditionText} disabled={busy} />
       <label>修改原因<select aria-label="修改原因" value={changeKind} disabled={busy}
         onChange={event => setChangeKind(event.target.value as MemoryChangeKind)}>
         <option value="error_correction">纠正错误</option><option value="state_changed">记录变化</option></select></label>
       <p>{changeKind === 'error_correction' ? '原来的内容记错了。旧版只保留供查看，不再用于生成。'
         : '原来的内容曾经成立，后来发生变化。旧版将划线保留，不再引用。'}</p>
       <p>保存新的手动版本并保留来源；本次保存时间不代表变化发生时间。</p>
-      <button className="button" disabled={busy || !text.trim()}>保存本人记忆修正</button>
+      <button className="button" disabled={busy || !text.trim() || !conditionEditorValid(conditionText)}>保存本人记忆修正</button>
     </form>}
     {deleting && <div role="group" aria-label="确认删除本人记忆"><p>删除这条记忆后，相关摘要也会失效。若旧条目已有替代记忆，请删除对应的当前条目以清除旧记录。此操作无法撤销。</p>
       {removalTarget.memoryId !== memory.memoryId && <p>将删除当前记忆「{removalTarget.text}」及相关旧条目。</p>}

@@ -53,7 +53,10 @@ def navigation_dependency_ids(context: ReplyContext) -> list[str]:
                      *(item.version_id for item in material.snapshot.scenarios),
                      *((material.snapshot.profile_version_id,) if material.snapshot.profile_version_id else ()))} |
                   {str(identifier) for item in context.evidence if item.model_visible and item.navigation
-                   for identifier in item.navigation.dependency_ids})
+                   for identifier in item.navigation.dependency_ids} |
+                  {str(identifier) for item in context.evidence if item.evolution is not None
+                   for identifier in (*item.evolution.evidence_message_ids,
+                       *(ref[0] for ref in item.evolution.related_versions))})
 
 
 def registered_navigation_dependencies(connection: Any, scope: ContactScope) -> set[UUID]:

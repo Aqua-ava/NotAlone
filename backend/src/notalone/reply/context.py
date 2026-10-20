@@ -12,6 +12,9 @@ from notalone.reply.assistant_discussion import DiscussionContext
 from notalone.reply.layered_context import LayeredReplyMaterial, LayeredReplyBudget, select_material, require_material
 from notalone.memory.layered import LayeredMemoryPort
 from notalone.memory.timing import MemoryTiming
+from notalone.memory.events import MemoryEvent
+from notalone.memory.conditions import MemoryConditions
+from notalone.memory.evolution import MemoryEvolution
 from notalone.memory.models import ConfirmedMemory, OwnerMemory
 from notalone.memory.retirement import is_generation_eligible
 from notalone.memory.overview import OverviewEntry, RelationshipOverview, RelationshipOverviewPort
@@ -189,8 +192,17 @@ class ContextEvidence:
     timing: MemoryTiming = MemoryTiming()
     model_visible: bool = True
     navigation: MemoryNavigation | None = None
+    event: MemoryEvent | None = None
+    conditions: MemoryConditions | None = None
+    evolution: MemoryEvolution | None = None
 
     def __post_init__(self) -> None:
+        if self.evolution is not None and not isinstance(self.evolution, MemoryEvolution):
+            raise ValueError("回复变化依据结构无效。")
+        if self.conditions is not None and not isinstance(self.conditions, MemoryConditions):
+            raise ValueError("回复适用条件结构无效。")
+        if self.event is not None and not isinstance(self.event, MemoryEvent):
+            raise TypeError("回复依据事件结构无效。")
         if not isinstance(self.timing, MemoryTiming):
             raise TypeError("回复依据时间结构无效。")
         if type(self.model_visible) is not bool:
@@ -952,6 +964,10 @@ class RetrievalReplyContext:
             or memory.valid_at != evidence.valid_at
             or memory.invalid_at != evidence.invalid_at
             or memory.status != evidence.status
+            or memory.event != evidence.event
+            or memory.conditions != evidence.conditions
+            or (memory.evolution.to_payload(current=True) if memory.evolution else None)
+               != (evidence.evolution.to_payload(current=True) if evidence.evolution else None)
             or memory.timing != evidence.timing
         ):
             raise ReplyContextInvariantError("关系记忆依据已失效或版本不一致。")
@@ -993,6 +1009,10 @@ class RetrievalReplyContext:
             or memory.valid_at != evidence.valid_at
             or memory.invalid_at != evidence.invalid_at
             or memory.status != evidence.status
+            or memory.event != evidence.event
+            or memory.conditions != evidence.conditions
+            or (memory.evolution.to_payload(current=True) if memory.evolution else None)
+               != (evidence.evolution.to_payload(current=True) if evidence.evolution else None)
             or memory.timing != evidence.timing
         ):
             raise ReplyContextInvariantError("本人记忆依据已失效或版本不一致。")
@@ -1078,6 +1098,10 @@ class RetrievalReplyContext:
             or candidate.valid_at != evidence.valid_at
             or candidate.invalid_at != evidence.invalid_at
             or candidate.status != evidence.status
+            or candidate.event != evidence.event
+            or candidate.conditions != evidence.conditions
+            or (candidate.evolution.to_payload(current=True) if candidate.evolution else None)
+               != (evidence.evolution.to_payload(current=True) if evidence.evolution else None)
             or candidate.timing != evidence.timing
             or not evidence.selection_reason.startswith(expected_reason)
         ):
@@ -1505,6 +1529,7 @@ class RetrievalReplyContext:
             invalid_at=memory.invalid_at,
             revision=memory.revision,
             timing=memory.timing,
+            event=memory.event, conditions=memory.conditions, evolution=memory.evolution,
         )
 
     @staticmethod
@@ -1534,6 +1559,7 @@ class RetrievalReplyContext:
             invalid_at=memory.invalid_at,
             revision=memory.revision,
             timing=memory.timing,
+            event=memory.event, conditions=memory.conditions, evolution=memory.evolution,
         )
 
     @staticmethod
@@ -1562,4 +1588,5 @@ class RetrievalReplyContext:
             valid_at=candidate.valid_at,
             invalid_at=candidate.invalid_at,
             timing=candidate.timing,
+            event=candidate.event, conditions=candidate.conditions, evolution=candidate.evolution,
         )

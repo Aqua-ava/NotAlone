@@ -59,6 +59,7 @@ class MemoryPort(Protocol):
         text: str,
         category: MemoryCategory | None = None,
         change_kind: MemoryChangeKind = MemoryChangeKind.ERROR_CORRECTION,
+        conditions: object = ...,
     ) -> ConfirmedMemory:
         """修正现有记忆并保留其来源链。"""
 
@@ -138,6 +139,7 @@ class OwnerMemoryPort(Protocol):
         self, *, owner_id: UUID, memory_id: UUID, text: str,
         category: MemoryCategory | None = None,
         change_kind: MemoryChangeKind = MemoryChangeKind.ERROR_CORRECTION,
+        conditions: object = ...,
     ) -> OwnerMemory:
         """在同一事务创建手动新版本并使原本人资料失效。"""
 

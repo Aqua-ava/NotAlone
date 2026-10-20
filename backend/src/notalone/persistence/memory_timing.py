@@ -52,7 +52,7 @@ def timed_memory_rows(
             ") AS source_times FROM public.message AS message "
             "WHERE " + " AND ".join(conditions), params,
         ).fetchall()
-        times = {row["id"]: row["occurred_at"] for row in known}
+        times = {row["id"]: _source_anchor(row) or row["occurred_at"] for row in known}
         statements = {row["id"]: (row["text_content"], _source_anchor(row)) for row in known}
         for row in group:
             row["timing"] = MemoryTiming.from_source_times(
@@ -65,6 +65,7 @@ def timed_memory_rows(
                 text=row[f"{prefix}text"] if prefix else row["text_content"],
                 valid_at=row["candidate_valid_at" if prefix == "candidate_" else "valid_at"],
                 invalid_at=row["candidate_invalid_at" if prefix == "candidate_" else "invalid_at"],
+                has_conditions=bool(row.get(f"{prefix}conditions") or row.get("conditions") or row.get("memory_conditions")),
                 source_statements=tuple(statements[source_id] for source_id in row[source_ids_key] if source_id in statements),
             )
     return result

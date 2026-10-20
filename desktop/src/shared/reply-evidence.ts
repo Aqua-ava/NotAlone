@@ -1,6 +1,6 @@
 import type { PersonalBackground } from './personal-background';
 import type { ReplyCandidateSelection } from './reply-bridge';
-import type { MemoryTiming } from './memory-bridge';
+import type { MemoryTiming, MemoryEvent, MemoryConditions, MemoryEvolution } from './memory-bridge';
 import type { ReplyBasisChange } from './reply-basis-change';
 
 export interface ReplyEvidenceNavigation {
@@ -40,6 +40,7 @@ export interface ReplyEvidenceItem {
   snapshotStatus: string;
   cited: boolean;
   timing: MemoryTiming;
+  event?: MemoryEvent | null; conditions?: MemoryConditions | null; evolution?: MemoryEvolution | null;
   validAt: string | null;
   invalidAt: string | null;
   navigation?: ReplyEvidenceNavigation;
@@ -52,7 +53,7 @@ export interface ReplyLayeredContext {
   organizationGeneration: number;
   profileVersionId: string | null;
   profileEntries: Array<PersonalBackground & { text: string; temporalStatus: 'stable' | 'historical' | 'uncertain'; uncertainty: string;
-    references: Array<{ memoryId: string; revision: number; provenanceKind: 'manual_entry' | 'source_supported'; timing: MemoryTiming }> }>;
+    references: Array<{ memoryId: string; revision: number; provenanceKind: 'manual_entry' | 'source_supported'; timing: MemoryTiming; event?: MemoryEvent | null; conditions?: MemoryConditions | null; evolution?: MemoryEvolution | null; validAt?: string | null; invalidAt?: string | null }> }>;
   directory: Array<{ scenarioId: string; versionId: string; title: string; hint: string; paragraphCount: number; paragraphRange?: [number, number] }>;
   readPolicy: 'synthetic-contact-layered-v1' | 'synthetic-contact-layered-v2' | 'synthetic-scoped-layered-v3' | 'verified-items-scoped-layered-v1';
   scenarioReadBudget?: { callLimit: number; paragraphLimit: number; characterLimit: number } | null;
@@ -67,7 +68,7 @@ export interface ReplyLayeredScenarioDocument {
   organizationGeneration: number; paragraphRange: [number, number];
   systemGenerated: true; updatedAt: string;
   paragraphs: Array<PersonalBackground & { text: string; references: Array<{ memoryId: string; revision: number;
-    provenanceKind?: 'manual_entry' | 'source_supported'; timing?: MemoryTiming }> }>;
+    provenanceKind?: 'manual_entry' | 'source_supported'; timing?: MemoryTiming; event?: MemoryEvent | null; conditions?: MemoryConditions | null; evolution?: MemoryEvolution | null; validAt?: string | null; invalidAt?: string | null }> }>;
 }
 interface ReplyLayeredScenarioReadBase {
   schemaVersion: 1; reason: string; scenarioId: string | null; paragraphRange: [number, number] | null;

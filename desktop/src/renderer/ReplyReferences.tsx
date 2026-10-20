@@ -5,19 +5,22 @@ import type { MemoryTiming } from '../shared/memory-bridge';
 import type { ReplyEvidenceItem, ReplyLayeredContext, ReplyLayeredScenarioRead } from '../shared/reply-evidence';
 import { ReplyEvidenceTechnicalDetails, type useReplyEvidence } from './ReplyEvidence';
 import { MemoryTemporalStatus } from './MemoryTemporalStatus';
+import { MemoryEventDetails } from './MemoryEventDetails';
+import { MemoryConditionsDetails } from './MemoryConditionsDetails';
+import { MemoryEvolutionDetails } from './MemoryEvolutionDetails';
+import { memoryTimeText } from './memory-time-format';
 import { PersonalBackgroundDetails } from './PersonalBackgroundDetails';
 import { ReplyBasisChangeNotice } from './ReplyBasisChangeNotice';
 import './reply-references.css';
 
-function readableTime(value: string | null | undefined) {
-  if (!value) return '未知';
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? '时间格式未知' : date.toLocaleString('zh-CN', { hour12: false });
-}
 function SourceTime({ timing }: { timing?: MemoryTiming }) {
   if (!timing) return <p>本次快照未记录来源时间。</p>;
-  return <><p>来源时间：{readableTime(timing.sourceStartedAt)}{timing.sourceEndedAt && timing.sourceEndedAt !== timing.sourceStartedAt ? ` 至 ${readableTime(timing.sourceEndedAt)}` : ''}{timing.sourceTimeComplete ? '' : '（不完整）'}</p>
-    <p>保存时间：{readableTime(timing.recordedAt)}</p></>;
+  return <><p>来源时间：{memoryTimeText(timing.sourceStartedAt)}{timing.sourceEndedAt && timing.sourceEndedAt !== timing.sourceStartedAt ? ` 至 ${memoryTimeText(timing.sourceEndedAt)}` : ''}{timing.sourceTimeComplete ? '' : '（不完整）'}</p>
+    <p>保存时间：{memoryTimeText(timing.recordedAt)}</p></>;
+}
+function TemporalDetails({ material }: { material: Pick<ReplyEvidenceItem, 'event' | 'conditions' | 'evolution'> }) {
+  return <><MemoryEventDetails event={material.event} /><MemoryConditionsDetails conditions={material.conditions} />
+    <MemoryEvolutionDetails evolution={material.evolution} /></>;
 }
 const inputNames = { user_draft: '你的草稿', user_current_chat: '你补充的聊天（未经渠道核验）', user_purpose: '本次表达目的', continued_candidate: '继续修改的候选' };
 function Material({ item }: { item: ReplyEvidenceItem }) {
@@ -25,9 +28,9 @@ function Material({ item }: { item: ReplyEvidenceItem }) {
     {item.kind in inputNames && <strong>{inputNames[item.kind as keyof typeof inputNames]}</strong>}
     {item.kind === 'pending_candidate' && <strong className="reference-caution">未确认参考，不作为确定事实</strong>}
     <p className="reference-text">{item.text}</p>
-    {['confirmed_memory', 'owner_memory', 'pending_candidate'].includes(item.kind) && <MemoryTemporalStatus timing={item.timing} snapshot compact />}
+    {['confirmed_memory', 'owner_memory', 'pending_candidate'].includes(item.kind) && <MemoryTemporalStatus timing={item.timing} validAt={item.validAt} invalidAt={item.invalidAt} snapshot compact />}
     <details className="record-metadata"><summary>来源与时间</summary>{item.navigation && <p>{item.navigation.scopeKind === 'contact' ? '由联系人概览定位' : '由本人概览定位'}，底层资料来历：{item.navigation.provenanceKind === 'manual_entry' ? '手动录入' : '来源支持'}。</p>}<p>入选原因：{item.selectionReason}</p><SourceTime timing={item.timing} />
-      {['confirmed_memory', 'owner_memory', 'pending_candidate'].includes(item.kind) && item.timing.currentStatusReason && <p>{item.timing.currentStatusReason}</p>}
+      {['confirmed_memory', 'owner_memory', 'pending_candidate'].includes(item.kind) && <><TemporalDetails material={item} />{item.timing.currentStatusReason && <p>{item.timing.currentStatusReason}</p>}</>}
     </details>
   </article>;
 }
@@ -43,12 +46,12 @@ function LayeredMaterials({ context, reads }: { context?: ReplyLayeredContext | 
       <strong>长期背景</strong><PersonalBackgroundDetails item={entry} /><p className="reference-text">{entry.text}</p>
       <p>{({ stable: '稳定事实或明确偏好', historical: '历史资料', uncertain: '不确定' })[entry.temporalStatus]}</p>
       {entry.uncertainty && <p className="reference-caution">{entry.uncertainty}</p>}
-      <details className="record-metadata"><summary>来源与时间</summary>{entry.references.map((ref, i) => <div key={i}><p>{ref.provenanceKind === 'manual_entry' ? '手动录入' : '来源支持'}</p><SourceTime timing={ref.timing} /><MemoryTemporalStatus timing={ref.timing} snapshot compact /></div>)}</details>
+      <details className="record-metadata"><summary>来源与时间</summary>{entry.references.map((ref, i) => <div key={i}><p>{ref.provenanceKind === 'manual_entry' ? '手动录入' : '来源支持'}</p><SourceTime timing={ref.timing} /><MemoryTemporalStatus timing={ref.timing} validAt={ref.validAt} invalidAt={ref.invalidAt} snapshot compact /><TemporalDetails material={ref} /></div>)}</details>
     </article>)}
     {successfulReads(reads).flatMap((read, index) => read.document.paragraphs.map((paragraph, paragraphIndex) => <article className="reference-card" key={`read-${index}-${paragraphIndex}`}>
       <strong>{read.document.title} · 已读正文</strong><PersonalBackgroundDetails item={paragraph} /><p className="reference-text">{paragraph.text}</p>
       {paragraph.uncertainty && <p className="reference-caution">{paragraph.uncertainty}</p>}
-      <details className="record-metadata"><summary>来源与时间</summary>{paragraph.references.map((ref, i) => <div key={i}><p>{ref.provenanceKind === 'manual_entry' ? '手动录入' : ref.provenanceKind === 'source_supported' ? '来源支持' : '来源来历未记录'}</p><SourceTime timing={ref.timing} />{ref.timing && <MemoryTemporalStatus timing={ref.timing} snapshot compact />}</div>)}</details>
+      <details className="record-metadata"><summary>来源与时间</summary>{paragraph.references.map((ref, i) => <div key={i}><p>{ref.provenanceKind === 'manual_entry' ? '手动录入' : ref.provenanceKind === 'source_supported' ? '来源支持' : '来源来历未记录'}</p><SourceTime timing={ref.timing} />{ref.timing && <MemoryTemporalStatus timing={ref.timing} validAt={ref.validAt} invalidAt={ref.invalidAt} snapshot compact />}<TemporalDetails material={ref} /></div>)}</details>
     </article>))}
   </>;
 }

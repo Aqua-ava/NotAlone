@@ -24,6 +24,11 @@ from tests.integration.server.core_business_flow_support import (
 )
 
 
+def _active_memories(rows):
+    """统一列表包含失效版本；这些生命周期用例显式检查当前有效集合。"""
+    return [item for item in rows if item["status"] == "active"]
+
+
 class EventScriptedModel(ScriptedCoreModel):
     """按真实批量裁决请求封装预先指定动作；不改变裁决或采纳结果。"""
 
@@ -31,14 +36,35 @@ class EventScriptedModel(ScriptedCoreModel):
         self.wait_for_response()
         names = [item.get('function', {}).get('name') for item in kwargs.get('tools', [])]
         index = len(self.seen_calls)
-        if names == ['BatchMemoryAdjudicationOutput'] and index < len(self.responses):
+        if names in (['BatchMemoryAdjudicationOutput'], ['MemoryAdjudicationOutput']) and index < len(self.responses):
             calls = self.responses[index].tool_calls
             if len(calls) == 1 and calls[0]['name'] == 'MemoryAdjudicationOutput':
-                candidates = json.loads(str(messages[-1].content))
-                self.responses[index] = tool_response('BatchMemoryAdjudicationOutput', {
-                    'decisions': [{**calls[0]['args'], 'candidate_index': item['candidate_index']}
-                                  for item in candidates],
-                })
+                payload = json.loads(str(messages[-1].content))
+                candidates = payload if isinstance(payload, list) else [{**payload, 'candidate_index': 0}]
+                decisions = []
+                for item in candidates:
+                    decision = deepcopy(calls[0]['args'])
+                    relation = decision.get('relation')
+                    if relation is not None:
+                        if relation['kind'] == 'independent':
+                            relation['related_memory_ids'] = [old['memory_id'] for old in item['similar']
+                                                              if old['sources']]
+                        targets = set(relation['related_memory_ids'])
+                        values = [item['candidate'], *(old for old in item['similar']
+                                  if old['memory_id'] in targets)]
+                        relation['evidence'] = [{"message_id": source['message_id'], "quote": source['text']}
+                                                for value in values for source in value['sources']]
+                    decisions.append({**decision, 'candidate_index': item['candidate_index']})
+                self.responses[index] = (tool_response('BatchMemoryAdjudicationOutput', {'decisions': decisions})
+                    if names == ['BatchMemoryAdjudicationOutput'] else tool_response('MemoryAdjudicationOutput',
+                        {key: value for key, value in decisions[0].items() if key != 'candidate_index'}))
+                if any(item.get('relation') for item in decisions):
+                    self.responses[index + 1] = tool_response('MemoryRelationVerificationOutput', {'results': [
+                        {'candidate_index': item['candidate_index'], 'verdict': 'supported',
+                         'same_subject_and_matter': item['relation']['kind'] != 'independent',
+                         'claim_changed': item['relation']['claim_changed'],
+                         'condition_changed': item['relation']['condition_changed'],
+                         'evidence': item['relation']['evidence']} for item in decisions if item.get('relation')]})
         return super()._generate(messages, stop, run_manager, **kwargs)
 
 
@@ -60,6 +86,7 @@ class MemoryEventUpdatesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self, *, original: str, claim: str, when: str,
         contact_id: str | None = None, subject: str = "contact",
         action: str = "keep", replaced_id: str | None = None,
+        relation_kind: str | None = None,
         expect_failure: bool = False,
         fact_overrides: dict | None = None, additional_fact_overrides: tuple[dict, ...] = (),
         acknowledgement: str = "合成记录：已收到。",
@@ -116,7 +143,10 @@ class MemoryEventUpdatesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
             position = {"message_id": message["message_id"], "char_start": 0,
                         "char_end": len(original)}
             fact["event"] = {
-                "version": 1, "stage": event_spec["stage"],
+                "version": event_spec.get("version", 1), "stage": event_spec["stage"],
+                **({"occurrence_precision": event_spec["occurrence_precision"],
+                    "occurrence_expression": event_spec["occurrence_expression"],
+                    "anchor_message_id": message["message_id"]} if event_spec.get("version") == 2 else {}),
                 "stage_evidence": [position],
                 "occurrence_start": event_spec.get("occurrence_start"),
                 "occurrence_end": event_spec.get("occurrence_end"),
@@ -139,10 +169,30 @@ class MemoryEventUpdatesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
             } for index in range(len(facts))]}),
         ]
         if (len(messages) > 2 or len(facts) > 1
-                or subject == "self" and self._get(self.backend, "/api/memories/owner")["memories"]):
+                or subject == "self" and _active_memories(self._get(self.backend, "/api/memories/owner")["memories"])):
+            relation = None
+            if relation_kind is not None:
+                self.assertIn(relation_kind, {"independent", "supplement", "state_change"})
+                if relation_kind != "independent":
+                    self.assertEqual(len(facts), 1, "同事项关系脚本必须逐候选明确声明。")
+                    self.assertIsNotNone(replaced_id)
+                # 具体旧资料及引句由模型边界按实际有界 DTO 填入，不能引用未展示的祖先。
+                relation = {"kind": relation_kind, "explanation": {
+                    "independent": "来源明确描述不同场次或独立事项。",
+                    "supplement": "来源补充同一事项，原主张和条件未改变。",
+                    "state_change": "同一场读书会明确更改会议室。",
+                }[relation_kind], "related_memory_ids": [replaced_id] if replaced_id else [],
+                    "evidence": [], "claim_changed": relation_kind == "state_change",
+                    "condition_changed": False}
             scripts.append(tool_response("MemoryAdjudicationOutput", {
                 "action": action, "replaced_memory_id": replaced_id,
+                **({"relation": relation} if relation is not None else {}),
             }))
+            if relation is not None:
+                scripts.append(tool_response("MemoryRelationVerificationOutput", {"results": [{
+                    "candidate_index": 0, "verdict": "supported", "same_subject_and_matter": relation_kind != "independent",
+                    "claim_changed": relation_kind == "state_change", "condition_changed": False, "evidence": relation["evidence"],
+                }]}))
         self.extraction_model.responses.extend(scripts)
         gate.set()
         if expect_failure:
@@ -191,7 +241,7 @@ class MemoryEventUpdatesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
             when="2026-08-01T10:00:00+08:00", event_spec={"stage": "occurred"},
         )
         prefix = f"/api/contacts/{imported['contact_id']}"
-        self.assertEqual(self._get(self.backend, prefix + "/memories")["memories"], [])
+        self.assertEqual(_active_memories(self._get(self.backend, prefix + "/memories")["memories"]), [])
         rows = self.assert_automatic_candidate_terminated(imported['contact_id'], '已参加完读书会。',
             source_id=imported['message']['message_id'])
         self.assertEqual((rows[0][3]['stage_verified'], rows[0][3]['occurrence_verified']), (False, False))
@@ -204,7 +254,7 @@ class MemoryEventUpdatesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
             event_verification={"stage_verdict": "supported", "occurrence_verdict": "supported"},
         )
         prefix = f"/api/contacts/{first['contact_id']}"
-        old = self._get(self.backend, prefix + "/memories")["memories"][0]
+        old = _active_memories(self._get(self.backend, prefix + "/memories")["memories"])[0]
         self.assertEqual(old["adoption_method"], "auto")
         second = self.import_event(
             original="合成另一事件：已参加2026-08-07T09:00:00+08:00的读书会。", claim="已参加读书会。",
@@ -212,15 +262,18 @@ class MemoryEventUpdatesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
             event_spec={"stage": "occurred", "occurrence_start": "2026-08-07T09:00:00+08:00"},
             event_verification={"stage_verdict": "supported", "occurrence_verdict": "supported"},
         )
-        self.assertEqual(self._get(self.backend, prefix + "/memories")["memories"], [old])
-        self.assert_automatic_candidate_terminated(first["contact_id"], "已参加读书会。",
-            source_id=second["message"]["message_id"])
+        self.assertEqual(_active_memories(self._get(self.backend, prefix + "/memories")["memories"]), [old])
+        pending = self._get(self.backend, prefix + "/memory-candidates")["candidates"]
+        self.assertEqual(len(pending), 1)
+        self.assertEqual(pending[0]["status"], "pending")
+        self.assertEqual(pending[0]["source_ids"], [second["message"]["message_id"]])
+        self.assertIsNone(pending[0]["evolution"])
 
     def _undo_before_retry_with_lost_receipt(self, *, subject: str) -> None:
         first = self.import_event(original="合成旧依据：读书会在一号会议室举行。", claim="读书会在一号会议室举行。",
                                   when="2026-08-01T10:00:00+08:00", subject=subject)
         path = "/api/memories/owner" if subject == "self" else f"/api/contacts/{first['contact_id']}/memories"
-        old = self._get(self.backend, path)["memories"][0]
+        old = _active_memories(self._get(self.backend, path)["memories"])[0]
         function = f"synthetic_undo_receipt_{uuid4().hex}"
         with psycopg.connect(self.database_url) as connection:
             connection.execute(sql.SQL("CREATE FUNCTION {}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION '合成提交回执故障'; END $$").format(sql.Identifier(function)))
@@ -230,13 +283,14 @@ class MemoryEventUpdatesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
             ).format(sql.Identifier(function), sql.Literal(str(self.owner_id)), sql.Identifier(function)))
         try:
             second = self.import_event(original="合成新依据：读书会改到二号会议室举行。", claim="读书会改到二号会议室举行。",
+                                       relation_kind="state_change",
                                        when="2026-08-01T11:00:00+08:00", subject=subject, contact_id=first["contact_id"],
                                        action="update", replaced_id=old["memory_id"], expect_failure=True)
         finally:
             with psycopg.connect(self.database_url) as connection:
                 connection.execute(sql.SQL("DROP TRIGGER {} ON public.memory_extraction_trace_event").format(sql.Identifier(function)))
                 connection.execute(sql.SQL("DROP FUNCTION {}()").format(sql.Identifier(function)))
-        current = self._get(self.backend, path)["memories"][0]
+        current = _active_memories(self._get(self.backend, path)["memories"])[0]
         status, reverted = self.backend.request(path + f"/{current['memory_id']}/revert-auto-update", {"expected_revision": current["revision"]})
         self.assertEqual(status, 200, reverted)
         self.extraction_model.responses.extend(second["scripts"][:2])
@@ -245,11 +299,11 @@ class MemoryEventUpdatesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self.assertEqual(self.backend.request("/api/tasks/run", task)[0], 200)
         self._wait_finished(self.backend, first["contact_id"])
         reopened = self._backend(self.owner_id)
-        self.assertEqual(self._get(reopened, path)["memories"], [reverted["memory"]])
+        self.assertEqual(_active_memories(self._get(reopened, path)["memories"]), [reverted["memory"]])
         self.assertEqual(self._get(reopened, f"/api/contacts/{first['contact_id']}/memory-candidates")["candidates"], [])
         self.assertEqual(reopened.request(path + f"/{current['memory_id']}/versions")[0], 404)
         self.delete_source(first["contact_id"], first["source"]["source_id"])
-        self.assertEqual(self._get(reopened, path)["memories"], [])
+        self.assertEqual(_active_memories(self._get(reopened, path)["memories"]), [])
 
     def test_contact_undo_before_retry_of_lost_receipt_does_not_republish_the_revoked_version(self):
         self._undo_before_retry_with_lost_receipt(subject="contact")
@@ -261,12 +315,19 @@ class MemoryEventUpdatesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         first = self.import_event(original="合成初始安排：读书会在一号会议室举行。", claim="读书会在一号会议室举行。",
                                   when="2026-08-01T10:00:00+08:00", subject=subject)
         path = "/api/memories/owner" if subject == "self" else f"/api/contacts/{first['contact_id']}/memories"
-        original = previous = self._get(self.backend, path)["memories"][0]
+        original = previous = _active_memories(self._get(self.backend, path)["memories"])[0]
         for hour, room in ((11, "二"), (12, "三")):
             self.import_event(original=f"合成新安排：读书会改到{room}号会议室举行。", claim=f"读书会改到{room}号会议室举行。",
+                              relation_kind="state_change",
                               when=f"2026-08-01T{hour}:00:00+08:00", subject=subject, contact_id=first["contact_id"],
                               action="update", replaced_id=previous["memory_id"])
-            previous = self._get(self.backend, path)["memories"][0]
+            versions = self._get(self.backend, path)["memories"]
+            current = _active_memories(versions)
+            self.assertEqual(len(current), 1)
+            self.assertNotEqual(current[0]["memory_id"], previous["memory_id"])
+            self.assertEqual(current[0]["text"], f"读书会改到{room}号会议室举行。")
+            self.assertEqual(len(versions), hour - 9)
+            previous = current[0]
         self.assertTrue(previous["can_revert_auto_update"])
         status, first_undo = self.backend.request(path + f"/{previous['memory_id']}/revert-auto-update", {"expected_revision": previous["revision"]})
         self.assertEqual(status, 200, first_undo)
@@ -279,7 +340,7 @@ class MemoryEventUpdatesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self.assertFalse(second_undo["memory"]["can_revert_auto_update"])
         self.assertEqual(self.backend.request(path + f"/{previous['memory_id']}/revert-auto-update", {"expected_revision": previous["revision"]})[0], 409)
         self.delete_source(first["contact_id"], first["source"]["source_id"])
-        self.assertEqual(self._get(self.backend, path)["memories"], [])
+        self.assertEqual(_active_memories(self._get(self.backend, path)["memories"]), [])
 
     def test_contact_can_undo_each_still_legal_auto_version_after_restart(self):
         self._undo_two_legal_updates(subject="contact")
@@ -295,10 +356,11 @@ class MemoryEventUpdatesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         second = self.import_event(
             original="合成记录二：今天参加了读书会。", claim="联系人参加了读书会。",
             when="2026-09-01T10:00:00+08:00", contact_id=first["contact_id"],
+            relation_kind="independent",
         )
-        memories = self._get(
+        memories = _active_memories(self._get(
             self.backend, f"/api/contacts/{first['contact_id']}/memories",
-        )["memories"]
+        )["memories"])
         self.assertEqual(len(memories), 2)
         self.assertEqual({datetime.fromisoformat(item["timing"]["source_started_at"])
                           for item in memories}, {
@@ -315,15 +377,28 @@ class MemoryEventUpdatesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
             when="2026-08-01T10:00:00+08:00",
         )
         path = f"/api/contacts/{first['contact_id']}/memories"
-        old = self._get(self.backend, path)["memories"][0]
+        old = _active_memories(self._get(self.backend, path)["memories"])[0]
         second = self.import_event(
+            relation_kind="state_change",
             original="合成活动：刚才那场读书会改到二号会议室举行。",
             claim="读书会改到二号会议室举行。", when="2026-08-01T11:00:00+08:00",
             contact_id=first["contact_id"], action="update", replaced_id=old["memory_id"],
         )
-        current = self._get(self.backend, path)["memories"]
+        current = _active_memories(self._get(self.backend, path)["memories"])
         self.assertEqual(len(current), 1)
         self.assertEqual(current[0]["text"], "读书会改到二号会议室举行。")
+        all_versions = self._get(self.backend, path)["memories"]
+        self.assertEqual({item["memory_id"]: item["status"] for item in all_versions},
+                         {old["memory_id"]: "invalidated", current[0]["memory_id"]: "active"})
+        relation_calls = [json.loads(str(call[-1].content)) for call in self.extraction_model.seen_calls
+                          if str(call[-1].content).startswith("[") and '"relation"' in str(call[-1].content)]
+        self.assertEqual(len(relation_calls), 1)
+        proposal = relation_calls[0][0]
+        self.assertLessEqual(len(proposal["similar"]), 8)
+        source_texts = {item["message_id"]: item["text"] for item in proposal["candidate"]["sources"]}
+        source_texts.update({item["message_id"]: item["text"] for previous in proposal["similar"] for item in previous["sources"]})
+        self.assertEqual(source_texts[first["message"]["message_id"]], first["message"]["text"])
+        self.assertEqual(source_texts[second["message"]["message_id"]], second["message"]["text"])
         self.assertEqual(current[0]["adoption_method"], "auto")
         self.assertEqual(current[0]["supersedes_memory_id"], old["memory_id"])
         self.assertEqual(current[0]["revision"], old["revision"] + 1)
@@ -336,21 +411,22 @@ class MemoryEventUpdatesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
             original="合成本人活动：我的读书会在一号会议室举行。", claim="我的读书会在一号会议室举行。",
             when="2026-08-01T10:00:00+08:00", subject="self",
         )
-        old = self._get(self.backend, "/api/memories/owner")["memories"][0]
+        old = _active_memories(self._get(self.backend, "/api/memories/owner")["memories"])[0]
         second = self.import_event(
+            relation_kind="state_change",
             original="合成本人活动：我的同一场读书会改到二号会议室举行。",
             claim="我的读书会改到二号会议室举行。", when="2026-08-01T11:00:00+08:00",
             contact_id=first["contact_id"], subject="self", action="update", replaced_id=old["memory_id"],
         )
-        current = self._get(self.backend, "/api/memories/owner")["memories"]
+        current = _active_memories(self._get(self.backend, "/api/memories/owner")["memories"])
         self.assertEqual(len(current), 1)
         self.assertEqual(current[0]["supersedes_memory_id"], old["memory_id"])
         self.assertEqual(current[0]["revision"], old["revision"] + 1)
         self.assertEqual(set(current[0]["source_ids"]), {
             first["message"]["message_id"], second["message"]["message_id"],
         })
-        self.assertEqual(self._get(self.backend, f"/api/contacts/{first['contact_id']}/memories")["memories"], [])
-        self.assertEqual(self._get(self.other_backend, "/api/memories/owner")["memories"], [])
+        self.assertEqual(_active_memories(self._get(self.backend, f"/api/contacts/{first['contact_id']}/memories")["memories"]), [])
+        self.assertEqual(_active_memories(self._get(self.other_backend, "/api/memories/owner")["memories"]), [])
 
     def test_failed_version_change_rolls_back_both_sides_and_retry_applies_once(self):
         first = self.import_event(
@@ -358,7 +434,7 @@ class MemoryEventUpdatesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
             when="2026-08-01T10:00:00+08:00",
         )
         path = f"/api/contacts/{first['contact_id']}/memories"
-        old = self._get(self.backend, path)["memories"][0]
+        old = _active_memories(self._get(self.backend, path)["memories"])[0]
         function = f"synthetic_version_fault_{uuid4().hex}"
         with psycopg.connect(self.database_url) as connection:
             connection.execute(sql.SQL(
@@ -372,12 +448,13 @@ class MemoryEventUpdatesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
             ).format(sql.Identifier(function), sql.Literal(old["memory_id"]), sql.Identifier(function)))
         try:
             second = self.import_event(
+                relation_kind="state_change",
                 original="合成活动：刚才那场读书会改到二号会议室举行。",
                 claim="读书会改到二号会议室举行。", when="2026-08-01T11:00:00+08:00",
                 contact_id=first["contact_id"], action="update", replaced_id=old["memory_id"],
                 expect_failure=True,
             )
-            self.assertEqual(self._get(self.backend, path)["memories"], [old])
+            self.assertEqual(_active_memories(self._get(self.backend, path)["memories"]), [old])
         finally:
             with psycopg.connect(self.database_url) as connection:
                 connection.execute(sql.SQL("DROP TRIGGER {} ON public.confirmed_memory").format(sql.Identifier(function)))
@@ -387,7 +464,7 @@ class MemoryEventUpdatesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self.assertEqual(self.backend.request("/api/tasks/retry", task)[0], 200)
         self.assertEqual(self.backend.request("/api/tasks/run", task)[0], 200)
         self._wait_finished(self.backend, first["contact_id"])
-        current = self._get(self.backend, path)["memories"]
+        current = _active_memories(self._get(self.backend, path)["memories"])
         self.assertEqual(len(current), 1)
         self.assertEqual(current[0]["text"], "读书会改到二号会议室举行。")
         self.assertEqual(current[0]["supersedes_memory_id"], old["memory_id"])
@@ -395,7 +472,7 @@ class MemoryEventUpdatesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         persisted = self._get(self.backend, f"/api/tasks/status?contact_id={first['contact_id']}"
                               f"&task_id={second['task_id']}")
         self.assertEqual(persisted["status"], "succeeded")
-        self.assertEqual(self._get(self.backend, path)["memories"], current)
+        self.assertEqual(_active_memories(self._get(self.backend, path)["memories"]), current)
 
     def test_version_history_is_viewable_after_restart_and_is_scoped(self):
         first = self.import_event(
@@ -403,13 +480,14 @@ class MemoryEventUpdatesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
             when="2026-08-01T10:00:00+08:00",
         )
         path = f"/api/contacts/{first['contact_id']}/memories"
-        old = self._get(self.backend, path)["memories"][0]
+        old = _active_memories(self._get(self.backend, path)["memories"])[0]
         self.import_event(
+            relation_kind="state_change",
             original="合成活动：刚才那场读书会改到二号会议室举行。",
             claim="读书会改到二号会议室举行。", when="2026-08-01T11:00:00+08:00",
             contact_id=first["contact_id"], action="update", replaced_id=old["memory_id"],
         )
-        current = self._get(self.backend, path)["memories"][0]
+        current = _active_memories(self._get(self.backend, path)["memories"])[0]
         reopened = self._backend(self.owner_id)
         history = self._get(reopened, f"{path}/{current['memory_id']}/versions")["versions"]
         self.assertEqual([item["text"] for item in history], [current["text"], old["text"]])
@@ -424,13 +502,14 @@ class MemoryEventUpdatesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
             when="2026-08-01T10:00:00+08:00",
         )
         path = f"/api/contacts/{first['contact_id']}/memories"
-        old = self._get(self.backend, path)["memories"][0]
+        old = _active_memories(self._get(self.backend, path)["memories"])[0]
         self.import_event(
+            relation_kind="state_change",
             original="合成活动：刚才那场读书会改到二号会议室举行。",
             claim="读书会改到二号会议室举行。", when="2026-08-01T11:00:00+08:00",
             contact_id=first["contact_id"], action="update", replaced_id=old["memory_id"],
         )
-        current = self._get(self.backend, path)["memories"][0]
+        current = _active_memories(self._get(self.backend, path)["memories"])[0]
         self.assertTrue(current["can_revert_auto_update"])
         proof = current["version_evidence"]
         self.assertEqual((proof["version"], proof["previous"]["memory_id"],
@@ -447,9 +526,9 @@ class MemoryEventUpdatesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
                          (old["memory_id"], old["text"], old["source_ids"]))
         self.assertEqual(restored["adoption_method"], "auto")
         self.assertGreater(restored["revision"], current["revision"])
-        self.assertEqual(self._get(self.backend, path)["memories"], [restored])
+        self.assertEqual(_active_memories(self._get(self.backend, path)["memories"]), [restored])
         self.assertEqual(self.backend.request(operation, {"expected_revision": current["revision"]})[0], 409)
-        self.assertEqual(self._get(self.backend, path)["memories"], [restored])
+        self.assertEqual(_active_memories(self._get(self.backend, path)["memories"]), [restored])
         self.assertEqual(self.backend.request(f"{path}/{current['memory_id']}/versions")[0], 404)
         with psycopg.connect(self.database_url) as connection:
             retained = connection.execute(
@@ -467,15 +546,16 @@ class MemoryEventUpdatesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
             when="2026-08-01T10:00:00+08:00",
         )
         path = f"/api/contacts/{first['contact_id']}/memories"
-        old = self._get(self.backend, path)["memories"][0]
+        old = _active_memories(self._get(self.backend, path)["memories"])[0]
         second = self.import_event(
+            relation_kind="state_change",
             original="合成活动：刚才那场读书会改到二号会议室举行。",
             claim="读书会改到二号会议室举行。", when="2026-08-01T11:00:00+08:00",
             contact_id=first["contact_id"], action="update", replaced_id=old["memory_id"],
         )
-        current = self._get(self.backend, path)["memories"][0]
+        current = _active_memories(self._get(self.backend, path)["memories"])[0]
         self.delete_source(first["contact_id"], first["source"]["source_id"])
-        self.assertEqual(self._get(self.backend, path)["memories"], [])
+        self.assertEqual(_active_memories(self._get(self.backend, path)["memories"]), [])
         self.assertEqual(self.backend.request(f"{path}/{current['memory_id']}/versions")[0], 404)
         self.assertEqual(self.backend.request(f"{path}/{current['memory_id']}/revert-auto-update",
                                               {"expected_revision": current["revision"]})[0], 404)
@@ -487,13 +567,14 @@ class MemoryEventUpdatesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
             original="合成本人活动：我的读书会在一号会议室举行。", claim="我的读书会在一号会议室举行。",
             when="2026-08-01T10:00:00+08:00", subject="self",
         )
-        old = self._get(self.backend, "/api/memories/owner")["memories"][0]
+        old = _active_memories(self._get(self.backend, "/api/memories/owner")["memories"])[0]
         self.import_event(
+            relation_kind="state_change",
             original="合成本人活动：我的同一场读书会改到二号会议室举行。",
             claim="我的读书会改到二号会议室举行。", when="2026-08-01T11:00:00+08:00",
             contact_id=first["contact_id"], subject="self", action="update", replaced_id=old["memory_id"],
         )
-        current = self._get(self.backend, "/api/memories/owner")["memories"][0]
+        current = _active_memories(self._get(self.backend, "/api/memories/owner")["memories"])[0]
         operation = f"/api/memories/owner/{current['memory_id']}/revert-auto-update"
         body = {"expected_revision": current["revision"]}
         self.assertEqual(self.other_backend.request(operation, body)[0], 404)
@@ -502,7 +583,7 @@ class MemoryEventUpdatesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self.assertEqual(restored[1]["memory"]["source_ids"], old["source_ids"])
         self.assertEqual(restored[1]["memory"]["adoption_method"], "auto")
         self.delete_source(first["contact_id"], first["source"]["source_id"])
-        self.assertEqual(self._get(self.backend, "/api/memories/owner")["memories"], [])
+        self.assertEqual(_active_memories(self._get(self.backend, "/api/memories/owner")["memories"]), [])
         self.assertEqual(self.backend.request(operation, body)[0], 404)
 
     def test_auto_update_with_missing_original_window_terminates_without_refilling_it(self):
@@ -511,17 +592,18 @@ class MemoryEventUpdatesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
             when="2026-08-01T10:00:00+08:00",
         )
         path = f"/api/contacts/{first['contact_id']}/memories"
-        old = self._get(self.backend, path)["memories"][0]
+        old = _active_memories(self._get(self.backend, path)["memories"])[0]
         with psycopg.connect(self.database_url) as connection:
             candidate_id = connection.execute("SELECT source_candidate_id FROM public.confirmed_memory WHERE owner_id=%s AND id=%s",
                                               (self.owner_id, old["memory_id"])).fetchone()[0]
             connection.execute("UPDATE public.memory_candidate SET dimension_evidence=NULL, correction_evidence=NULL WHERE owner_id=%s AND id=%s",
                                (self.owner_id, candidate_id))
         self.import_event(
+            relation_kind="state_change",
             original="合成新资料：读书会改到二号会议室举行。", claim="读书会改到二号会议室举行。",
             when="2026-08-01T11:00:00+08:00", contact_id=first["contact_id"], action="update", replaced_id=old["memory_id"],
         )
-        self.assertEqual([item["memory_id"] for item in self._get(self.backend, path)["memories"]], [old["memory_id"]])
+        self.assertEqual([item["memory_id"] for item in _active_memories(self._get(self.backend, path)["memories"])], [old["memory_id"]])
         self.assert_automatic_candidate_terminated(first['contact_id'], '读书会改到二号会议室举行。')
         with psycopg.connect(self.database_url) as connection:
             self.assertEqual(connection.execute("SELECT dimension_evidence, correction_evidence FROM public.memory_candidate WHERE owner_id=%s AND id=%s",
@@ -533,22 +615,23 @@ class MemoryEventUpdatesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
             when="2026-08-01T10:00:00+08:00",
         )
         path = f"/api/contacts/{first['contact_id']}/memories"
-        old = self._get(self.backend, path)["memories"][0]
+        old = _active_memories(self._get(self.backend, path)["memories"])[0]
         self.import_event(
+            relation_kind="state_change",
             original="合成新资料：读书会改到二号会议室举行。", claim="读书会改到二号会议室举行。",
             when="2026-08-01T11:00:00+08:00", contact_id=first["contact_id"], action="update", replaced_id=old["memory_id"],
         )
-        current = self._get(self.backend, path)["memories"][0]
+        current = _active_memories(self._get(self.backend, path)["memories"])[0]
         self.assertTrue(current["can_revert_auto_update"])
         with psycopg.connect(self.database_url) as connection:
             connection.execute("UPDATE public.message_source_ref SET raw_payload=raw_payload||'{\"synthetic_generation\":2}'::jsonb WHERE owner_id=%s AND message_id=%s",
                                (self.owner_id, first["message"]["message_id"]))
         reopened = self._backend(self.owner_id)
-        changed = self._get(reopened, path)["memories"][0]
+        changed = _active_memories(self._get(reopened, path)["memories"])[0]
         self.assertFalse(changed["can_revert_auto_update"])
         self.assertFalse(changed["version_evidence_source_current"])
         self.assertEqual(reopened.request(path + f"/{current['memory_id']}/revert-auto-update", {"expected_revision": current["revision"]})[0], 409)
-        self.assertEqual(self._get(reopened, path)["memories"], [changed])
+        self.assertEqual(_active_memories(self._get(reopened, path)["memories"]), [changed])
 
     def _manual_successor_erasure(self, *, subject: str, removed: str, deletion_first: bool) -> None:
         first = self.import_event(
@@ -557,14 +640,15 @@ class MemoryEventUpdatesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         )
         path = ("/api/memories/owner" if subject == "self" else
                 f"/api/contacts/{first['contact_id']}/memories")
-        old = next(item for item in self._get(self.backend, path)["memories"]
+        old = next(item for item in _active_memories(self._get(self.backend, path)["memories"])
                    if first["message"]["message_id"] in item["source_ids"])
         second = self.import_event(
+            relation_kind="state_change",
             original="合成活动：刚才那场读书会改到二号会议室举行。",
             claim="读书会改到二号会议室举行。", when="2026-08-01T11:00:00+08:00",
             contact_id=first["contact_id"], subject=subject, action="update", replaced_id=old["memory_id"],
         )
-        current = next(item for item in self._get(self.backend, path)["memories"]
+        current = next(item for item in _active_memories(self._get(self.backend, path)["memories"])
                        if item["supersedes_memory_id"] == old["memory_id"])
         source = first["source"] if removed == "old" else second["source"]
         if deletion_first:
@@ -583,7 +667,7 @@ class MemoryEventUpdatesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
             self.delete_source(first["contact_id"], source["source_id"])
             reopened = self._backend(self.owner_id)
             self.assertNotIn(successor["memory_id"], {
-                item["memory_id"] for item in self._get(reopened, path)["memories"]
+                item["memory_id"] for item in _active_memories(self._get(reopened, path)["memories"])
             })
             self.assertEqual(reopened.request(f"{path}/{successor['memory_id']}/versions")[0], 404)
             self.assertEqual(reopened.request(f"{path}/{successor['memory_id']}/revert-auto-update", {
@@ -625,13 +709,14 @@ class MemoryEventUpdatesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
             when="2026-08-01T10:00:00+08:00",
         )
         path = f"/api/contacts/{first['contact_id']}/memories"
-        old = self._get(self.backend, path)["memories"][0]
+        old = _active_memories(self._get(self.backend, path)["memories"])[0]
         self.import_event(
+            relation_kind="state_change",
             original="合成活动：刚才那场读书会改到二号会议室举行。",
             claim="读书会改到二号会议室举行。", when="2026-08-01T11:00:00+08:00",
             contact_id=first["contact_id"], action="update", replaced_id=old["memory_id"],
         )
-        current = self._get(self.backend, path)["memories"][0]
+        current = _active_memories(self._get(self.backend, path)["memories"])[0]
         operation = f"{path}/{current['memory_id']}/revert-auto-update"
         body = {"expected_revision": current["revision"]}
         function = f"synthetic_restore_fault_{uuid4().hex}"
@@ -647,13 +732,13 @@ class MemoryEventUpdatesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
             ).format(sql.Identifier(function), sql.Literal(old["memory_id"]), sql.Identifier(function)))
         try:
             self.assertEqual(self.backend.request(operation, body)[0], 500)
-            self.assertEqual(self._get(self.backend, path)["memories"], [current])
+            self.assertEqual(_active_memories(self._get(self.backend, path)["memories"]), [current])
         finally:
             with psycopg.connect(self.database_url) as connection:
                 connection.execute(sql.SQL("DROP TRIGGER {} ON public.confirmed_memory").format(sql.Identifier(function)))
                 connection.execute(sql.SQL("DROP FUNCTION {}()").format(sql.Identifier(function)))
         self.assertEqual(self.backend.request(operation, body)[0], 200)
-        self.assertEqual(self._get(self.backend, path)["memories"][0]["memory_id"], old["memory_id"])
+        self.assertEqual(_active_memories(self._get(self.backend, path)["memories"])[0]["memory_id"], old["memory_id"])
 
     def test_auto_update_never_replaces_a_user_corrected_version(self):
         first = self.import_event(
@@ -661,7 +746,7 @@ class MemoryEventUpdatesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
             when="2026-08-01T10:00:00+08:00",
         )
         path = f"/api/contacts/{first['contact_id']}/memories"
-        old = self._get(self.backend, path)["memories"][0]
+        old = _active_memories(self._get(self.backend, path)["memories"])[0]
         status, corrected = self.backend.request(f"{path}/{old['memory_id']}/correct", {"text": "用户已核对：读书会在三号会议室举行。"})
         self.assertEqual(status, 200, corrected)
         self.import_event(
@@ -669,7 +754,7 @@ class MemoryEventUpdatesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
             claim="读书会改到二号会议室举行。", when="2026-08-01T11:00:00+08:00",
             contact_id=first["contact_id"], action="update", replaced_id=corrected["memory"]["memory_id"],
         )
-        self.assertEqual(self._get(self.backend, path)["memories"], [corrected["memory"]])
+        self.assertEqual(_active_memories(self._get(self.backend, path)["memories"]), [corrected["memory"]])
         self.assert_automatic_candidate_terminated(first['contact_id'], '读书会改到二号会议室举行。')
 
     def test_retry_after_committed_version_and_lost_trace_receipt_does_not_publish_it_twice(self):
@@ -678,7 +763,7 @@ class MemoryEventUpdatesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
             when="2026-08-01T10:00:00+08:00",
         )
         path = f"/api/contacts/{first['contact_id']}/memories"
-        old = self._get(self.backend, path)["memories"][0]
+        old = _active_memories(self._get(self.backend, path)["memories"])[0]
         function = f"synthetic_receipt_fault_{uuid4().hex}"
         with psycopg.connect(self.database_url) as connection:
             connection.execute(sql.SQL(
@@ -692,12 +777,13 @@ class MemoryEventUpdatesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
             ).format(sql.Identifier(function), sql.Literal(str(self.owner_id)), sql.Identifier(function)))
         try:
             second = self.import_event(
+                relation_kind="state_change",
                 original="合成活动：刚才那场读书会改到二号会议室举行。",
                 claim="读书会改到二号会议室举行。", when="2026-08-01T11:00:00+08:00",
                 contact_id=first["contact_id"], action="update", replaced_id=old["memory_id"],
                 expect_failure=True,
             )
-            committed = self._get(self.backend, path)["memories"]
+            committed = _active_memories(self._get(self.backend, path)["memories"])
             self.assertEqual(len(committed), 1)
             self.assertEqual(committed[0]["text"], "读书会改到二号会议室举行。")
         finally:
@@ -712,7 +798,7 @@ class MemoryEventUpdatesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self.assertEqual(self.backend.request("/api/tasks/retry", task)[0], 200)
         self.assertEqual(self.backend.request("/api/tasks/run", task)[0], 200)
         self._wait_finished(self.backend, first["contact_id"])
-        self.assertEqual(self._get(self.backend, path)["memories"], committed)
+        self.assertEqual(_active_memories(self._get(self.backend, path)["memories"]), committed)
 
     def test_add_or_keep_with_a_replaced_id_cannot_replace_the_old_fact(self):
         for action in ("keep", "add"):
@@ -722,13 +808,13 @@ class MemoryEventUpdatesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
                     when="2026-08-01T10:00:00+08:00",
                 )
                 path = f"/api/contacts/{first['contact_id']}/memories"
-                old = self._get(self.backend, path)["memories"][0]
+                old = _active_memories(self._get(self.backend, path)["memories"])[0]
                 self.import_event(
                     original="合成活动：另外一次读书会在二号会议室举行。",
                     claim="读书会在二号会议室举行。", when="2026-09-01T11:00:00+08:00",
                     contact_id=first["contact_id"], action=action, replaced_id=old["memory_id"],
                 )
-                self.assertEqual(self._get(self.backend, path)["memories"], [old])
+                self.assertEqual(_active_memories(self._get(self.backend, path)["memories"]), [old])
                 self.assert_automatic_candidate_terminated(first['contact_id'], '读书会在二号会议室举行。')
 
     def test_text_only_noop_cannot_silently_drop_a_new_event_source(self):
@@ -737,16 +823,16 @@ class MemoryEventUpdatesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
             when="2026-08-01T10:00:00+08:00",
         )
         prefix = f"/api/contacts/{first['contact_id']}"
-        old = self._get(self.backend, prefix + "/memories")["memories"][0]
+        old = _active_memories(self._get(self.backend, prefix + "/memories")["memories"])[0]
         second = self.import_event(
             original="合成记录二：今天参加了读书会。", claim="联系人参加了读书会。",
             when="2026-08-02T10:00:00+08:00", contact_id=first["contact_id"], action="noop",
         )
-        self.assertEqual(self._get(self.backend, prefix + "/memories")["memories"], [old])
+        self.assertEqual(_active_memories(self._get(self.backend, prefix + "/memories")["memories"]), [old])
         self.assert_automatic_candidate_terminated(first['contact_id'], '联系人参加了读书会。',
             source_id=second['message']['message_id'])
 
-    def test_many_similar_manual_records_keep_a_new_claim_within_the_adjudication_budget(self):
+    def test_many_similar_manual_records_keep_unbound_relation_pending_within_adjudication_budget(self):
         imported = self.import_event(
             original="合成活动：读书会在一号会议室举行。", claim="读书会在一号会议室举行。",
             when="2026-08-01T10:00:00+08:00",
@@ -758,7 +844,7 @@ class MemoryEventUpdatesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
                 "text": f"读书会在一号会议室举行，合成手录补充{index}。",
             })
             self.assertEqual(status, 200, saved)
-        before = self._get(self.backend, prefix + "/memories")["memories"]
+        before = _active_memories(self._get(self.backend, prefix + "/memories")["memories"])
         self.assertEqual(len(before), 10)
         original_generate = self.extraction_model._generate
 
@@ -778,25 +864,31 @@ class MemoryEventUpdatesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
             second = self.import_event(
                 original="合成新活动：另外一场读书会也在一号会议室举行。",
                 claim="另外一场读书会在一号会议室举行。", when="2026-09-01T10:00:00+08:00",
-                contact_id=imported["contact_id"], action="add",
+                contact_id=imported["contact_id"], action="add", relation_kind="independent",
             )
-        current = self._get(self.backend, prefix + "/memories")["memories"]
+        current = _active_memories(self._get(self.backend, prefix + "/memories")["memories"])
         self.assertEqual({item['memory_id'] for item in before},
             {item['memory_id'] for item in current if item['memory_id'] in {old['memory_id'] for old in before}})
-        added = [item for item in current if item['memory_id'] not in {old['memory_id'] for old in before}]
-        self.assertEqual(len(added), 1)
-        self.assertEqual((added[0]['text'], added[0]['adoption_method'], added[0]['source_ids']),
-            ('另外一场读书会在一号会议室举行。', 'auto', [second['message']['message_id']]))
-        self.assertEqual(self._get(self.backend, prefix + '/memory-candidates')['candidates'], [])
+        self.assertEqual(current, before)
+        pending = self._get(self.backend, prefix + '/memory-candidates')['candidates']
+        self.assertEqual(len(pending), 1)
+        self.assertEqual((pending[0]['text'], pending[0]['status'], pending[0]['source_ids']),
+            ('另外一场读书会在一号会议室举行。', 'pending', [second['message']['message_id']]))
+        self.assertIsNone(pending[0]['evolution'])
+        adjudication = [json.loads(str(call[-1].content)) for call in self.extraction_model.seen_calls
+                        if str(call[-1].content).startswith('[{"candidate_index"')]
+        self.assertTrue(adjudication)
+        self.assertTrue(all(len(item['similar']) <= 8 for batch in adjudication for item in batch))
 
     def test_same_source_and_words_with_distinct_verified_time_bounds_are_not_one_version(self):
         imported = self.import_event(
             original="合成回顾：八月一日和九月一日各参加了一次读书会。",
             claim="联系人参加了读书会。", when="2026-09-15T10:00:00+08:00",
+            relation_kind="independent",
             fact_overrides={"valid_at": "2026-08-01T00:00:00+08:00", "invalid_at": "2026-08-02T00:00:00+08:00"},
             additional_fact_overrides=({"valid_at": "2026-09-01T00:00:00+08:00", "invalid_at": "2026-09-02T00:00:00+08:00"},),
         )
-        memories = self._get(self.backend, f"/api/contacts/{imported['contact_id']}/memories")["memories"]
+        memories = _active_memories(self._get(self.backend, f"/api/contacts/{imported['contact_id']}/memories")["memories"])
         self.assertEqual(len(memories), 2)
         self.assertEqual({datetime.fromisoformat(item["valid_at"]) for item in memories}, {
             datetime.fromisoformat("2026-08-01T00:00:00+08:00"),
@@ -811,7 +903,7 @@ class MemoryEventUpdatesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
             additional_fact_overrides=({"confidence": 0.95},),
         )
         prefix = f"/api/contacts/{imported['contact_id']}"
-        memories = self._get(self.backend, prefix + '/memories')['memories']
+        memories = _active_memories(self._get(self.backend, prefix + '/memories')['memories'])
         self.assertEqual(len(memories), 1)
         self.assertEqual((memories[0]['text'], memories[0]['adoption_method'], memories[0]['source_ids']),
             ('读书会在一号会议室举行。', 'auto', [imported['message']['message_id']]))
@@ -823,7 +915,7 @@ class MemoryEventUpdatesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
             when="2026-08-01T10:00:00+08:00",
         )
         prefix = f"/api/contacts/{first['contact_id']}"
-        old = self._get(self.backend, prefix + "/memories")["memories"][0]
+        old = _active_memories(self._get(self.backend, prefix + "/memories")["memories"])[0]
         connect = psycopg.connect
         entered, release = threading.Event(), threading.Event()
 
@@ -847,6 +939,7 @@ class MemoryEventUpdatesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         with patch("psycopg.connect", side_effect=controlled_connection), ThreadPoolExecutor(max_workers=1) as executor:
             future = executor.submit(
                 self.import_event, original="合成活动：刚才那场读书会改到二号会议室举行。",
+                relation_kind="state_change",
                 claim="读书会改到二号会议室举行。", when="2026-08-01T11:00:00+08:00",
                 contact_id=first["contact_id"], action="update", replaced_id=old["memory_id"],
             )
@@ -859,7 +952,7 @@ class MemoryEventUpdatesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
             finally:
                 release.set()
             future.result(timeout=10)
-        current = self._get(self.backend, prefix + "/memories")["memories"]
+        current = _active_memories(self._get(self.backend, prefix + "/memories")["memories"])
         self.assertEqual({item["memory_id"] for item in current}, {old["memory_id"], manual["memory"]["memory_id"]})
         trace = self._get(self.backend, prefix + "/memory-traces")["batches"][0]
         detail = self._get(self.backend, prefix + f"/memory-traces/{trace['trace_id']}")
@@ -892,7 +985,7 @@ class MemoryEventHistoricalReviewHttpTest(CoreBusinessFlowFixture, unittest.Test
             additional_fact_overrides=({"confidence": 0.95},),
         )
         path = f"/api/contacts/{imported['contact_id']}"
-        self.assertEqual(self._get(self.backend, f"{path}/memories")["memories"], [])
+        self.assertEqual(_active_memories(self._get(self.backend, f"{path}/memories")["memories"]), [])
         pending = self._get(self.backend, f"{path}/memory-candidates")["candidates"]
         self.assertEqual(len(pending), 1)
         self.assertEqual(pending[0]["confidence"], 0.1)
@@ -921,10 +1014,37 @@ class MemoryEventHistoricalReviewHttpTest(CoreBusinessFlowFixture, unittest.Test
         )
         self.assertEqual(status, 200, confirmed)
         reopened = self._backend(self.owner_id)
-        saved = self._get(reopened, prefix + "/memories")["memories"][0]
+        saved = _active_memories(self._get(reopened, prefix + "/memories")["memories"])[0]
         self.assertEqual(saved["event"], event)
         self.assertEqual(saved["adoption_method"], "manual")
         self.assertFalse(saved["can_revert_auto_update"])
+
+        self.bindings.create_binding(owner_id=self.owner_id, contact_id=UUID(imported["contact_id"]),
+                                     channel="wechat", account_scope=f"synthetic-{self.owner_id}",
+                                     conversation_locator=f"synthetic-{imported['contact_id']}")
+        self.reply_model.plans.append({"text": "读书会后来怎么样？", "basis": "只有计划依据，不推断已发生。"})
+        status, reply = reopened.request("/api/reply/generate", {
+            "contact_id": imported["contact_id"], "idempotency_key": str(uuid4()),
+            "content": {"type": "rewrite_draft", "draft_text": "计划参加读书会。", "include_relationship_context": True},
+        })
+        self.assertEqual(status, 200, reply)
+        evidence = next(item for item in self.reply_model.payloads[-1]["evidence"]
+                        if item["evidence_id"] == saved["memory_id"])
+        self.assertEqual(evidence["event"], event)
+        path = prefix + f"/replies/{reply['reply_request_id']}/evidence"
+        frozen = self._get(self._backend(self.owner_id), path)["evidence"]
+        self.assertEqual(next(item for item in frozen if item["evidence_id"] == saved["memory_id"])["event"], event)
+
+        from tests.integration.server.test_layered_profile_management import LayeredProfileHttpTest
+        from tests.integration.server.test_layered_memory_management import LayeredMemoryManagementHttpTest
+        layered_backend = LayeredProfileHttpTest.controlled(self)
+        layered = LayeredMemoryManagementHttpTest.enable(self, layered_backend, imported["contact_id"])
+        self.assertEqual(layered["status"], "ready")
+        for reference in (layered["scenarios"][0]["paragraphs"][0]["references"][0],
+                          layered["profile"]["entries"][0]["references"][0]):
+            self.assertEqual(reference["event"], event)
+            self.assertIsNone(reference["valid_at"])
+            self.assertIsNone(reference["invalid_at"])
 
     def test_same_message_supporting_distinct_occurrences_keeps_two_pending_claims(self):
         imported = self.import_event(
@@ -958,7 +1078,7 @@ class MemoryEventHistoricalReviewHttpTest(CoreBusinessFlowFixture, unittest.Test
         self.assertEqual(len(pending), 1)
         self.assertEqual(pending[0]["source_ids"], [imported["message"]["message_id"]])
         self.assertTrue(pending[0]["event"]["stage_verified"])
-        self.assertEqual(self._get(self.backend, prefix + "/memories")["memories"], [])
+        self.assertEqual(_active_memories(self._get(self.backend, prefix + "/memories")["memories"]), [])
 
     def test_deleting_one_original_event_source_erases_proof_even_when_a_canonical_duplicate_survives(self):
         first = self.import_event(
@@ -1007,7 +1127,7 @@ class MemoryEventHistoricalReviewHttpTest(CoreBusinessFlowFixture, unittest.Test
         with psycopg.connect(self.database_url) as connection:
             connection.execute("UPDATE public.message_source_ref SET raw_payload=raw_payload||'{\"synthetic_generation\":2}'::jsonb WHERE owner_id=%s AND message_id=%s",
                                (self.owner_id, imported["message"]["message_id"]))
-        event = self._get(self._backend(self.owner_id), prefix + "/memories")["memories"][0]["event"]
+        event = _active_memories(self._get(self._backend(self.owner_id), prefix + "/memories")["memories"])[0]["event"]
         self.assertEqual(event["stage"], "occurred")
         self.assertFalse(event["stage_verified"])
         self.assertFalse(event["occurrence_verified"])
@@ -1085,7 +1205,7 @@ class MemoryEventHistoricalReviewHttpTest(CoreBusinessFlowFixture, unittest.Test
         self._wait_finished(self.backend, imported["contact_id"])
         memories = "/api/memories/owner" if subject == "self" else prefix + "/memories"
         reopened = self._backend(self.owner_id)
-        current = self._get(reopened, memories)["memories"]
+        current = _active_memories(self._get(reopened, memories)["memories"])
         if change in {"source_ref", "missing_proof"}:
             self.assertEqual(len(current), 1)
             for field in ("memory_id", "text", "source_ids", "adoption_method", "revision", "valid_at", "invalid_at"):
@@ -1173,7 +1293,7 @@ class MemoryEventHistoricalReviewHttpTest(CoreBusinessFlowFixture, unittest.Test
         pending = self._get(self.backend, prefix + "/memory-candidates")["candidates"]
         self.assertEqual(len(pending), 1)
         self.assertEqual(pending[0]["event"]["occurrence_start"], "2026-08-06T09:00:00+08:00")
-        self.assertEqual(len(self._get(self.backend, prefix + "/memories")["memories"]), 1)
+        self.assertEqual(len(_active_memories(self._get(self.backend, prefix + "/memories")["memories"])), 1)
     delete_source = MemoryEventUpdatesHttpTest.delete_source
 
     @classmethod
@@ -1199,20 +1319,20 @@ class MemoryEventHistoricalReviewHttpTest(CoreBusinessFlowFixture, unittest.Test
             original="合成新依据：刚才参加完之前计划的那次读书会。", claim="已参加完这次读书会。",
             when="2026-08-02T10:00:00+08:00", contact_id=first["contact_id"],
         )
-        self.assertEqual(self._get(self.backend, prefix + "/memories")["memories"], [old])
+        self.assertEqual(_active_memories(self._get(self.backend, prefix + "/memories")["memories"]), [old])
         pending = self._get(self.backend, prefix + "/memory-candidates")["candidates"]
         self.assertEqual([item["text"] for item in pending], ["已参加完这次读书会。"])
         operation = prefix + f"/memory-candidates/{pending[0]['candidate_id']}/apply-update"
         body = {"previous_memory_id": old["memory_id"], "expected_revision": old["revision"]}
         status, result = self.backend.request(operation, body)
         self.assertEqual(status, 200, result)
-        current = self._get(self.backend, prefix + "/memories")["memories"]
+        current = _active_memories(self._get(self.backend, prefix + "/memories")["memories"])
         self.assertEqual([item["text"] for item in current], ["已参加完这次读书会。"])
         self.assertEqual(current[0]["adoption_method"], "manual")
         self.assertEqual(current[0]["supersedes_memory_id"], old["memory_id"])
         self.assertEqual(self.backend.request(operation, body), (200, result))
         self.assertEqual(self.backend.request(operation, {**body, "expected_revision": old["revision"] + 1})[0], 409)
-        self.assertEqual(self._get(self.backend, prefix + "/memories")["memories"], current)
+        self.assertEqual(_active_memories(self._get(self.backend, prefix + "/memories")["memories"]), current)
         history = self._get(self.backend, prefix + f"/memories/{current[0]['memory_id']}/versions")["versions"]
         self.assertEqual([item["text"] for item in history], ["已参加完这次读书会。", "计划参加这次读书会。"])
 
@@ -1348,7 +1468,7 @@ class MemoryEventHistoricalReviewHttpTest(CoreBusinessFlowFixture, unittest.Test
         self.delete_source(first["contact_id"], source["source_id"])
         path = "/api/memories/owner" if subject == "self" else prefix + "/memories"
         reopened = self._backend(self.owner_id)
-        self.assertEqual(self._get(reopened, path)["memories"], [])
+        self.assertEqual(_active_memories(self._get(reopened, path)["memories"]), [])
         self.assertEqual(reopened.request(f"{path}/{current['memory_id']}/versions")[0], 404)
         self.assertEqual(reopened.request(f"{path}/{current['memory_id']}/revert-auto-update", {
             "expected_revision": current["revision"],
@@ -1392,7 +1512,7 @@ class MemoryEventHistoricalReviewHttpTest(CoreBusinessFlowFixture, unittest.Test
                         (forged_id, candidate["candidate_id"]),
                     )
                 self.assertEqual(self.backend.request(operation, body)[0], 404)
-                self.assertEqual(self._get(self.backend, "/api/memories/owner")["memories"], [old])
+                self.assertEqual(_active_memories(self._get(self.backend, "/api/memories/owner")["memories"]), [old])
         finally:
             with psycopg.connect(self.database_url) as connection:
                 connection.execute("UPDATE public.memory_candidate SET source_ids=%s::uuid[] WHERE id=%s",
@@ -1402,13 +1522,13 @@ class MemoryEventHistoricalReviewHttpTest(CoreBusinessFlowFixture, unittest.Test
         self.assertEqual(self.backend.request(operation, body), (200, result))
         current = result["memory"]
         self.assertEqual(current["adoption_method"], "manual")
-        self.assertEqual(self._get(self.backend, "/api/memories/owner")["memories"], [current])
+        self.assertEqual(_active_memories(self._get(self.backend, "/api/memories/owner")["memories"]), [current])
         history_path = f"/api/memories/owner/{current['memory_id']}/versions"
         history = self._get(self.backend, history_path)["versions"]
         self.assertEqual([item["text"] for item in history], [current["text"], old["text"]])
         self.delete_source(imported["contact_id"], imported["source"]["source_id"])
         reopened = self._backend(self.owner_id)
-        self.assertEqual(self._get(reopened, "/api/memories/owner")["memories"], [])
+        self.assertEqual(_active_memories(self._get(reopened, "/api/memories/owner")["memories"]), [])
         self.assertEqual(reopened.request(history_path)[0], 404)
         self.assertEqual(reopened.request(f"/api/memories/owner/{current['memory_id']}/revert-auto-update", {
             "expected_revision": current["revision"],
@@ -1488,7 +1608,7 @@ class MemoryEventHistoricalReviewHttpTest(CoreBusinessFlowFixture, unittest.Test
                 self.assertTrue(self.reply_model.entered.wait(5))
                 self.assertEqual(self.backend.request(f"/api/memories/owner/{old['memory_id']}/delete", {})[0], 409)
                 self.assertEqual(self.backend.request(f"/api/memories/owner/{current['memory_id']}/delete", {})[0], 200)
-                listed = self._get(self.backend, "/api/memories/owner")["memories"]
+                listed = _active_memories(self._get(self.backend, "/api/memories/owner")["memories"])
                 history_status = self.backend.request(f"/api/memories/owner/{current['memory_id']}/versions")[0]
             finally:
                 gate.set()
@@ -1510,7 +1630,7 @@ class MemoryEventHistoricalReviewHttpTest(CoreBusinessFlowFixture, unittest.Test
         self.assertIsNone(saved_session["inputs"][-1]["content"])
         self.assertNotEqual(self.backend.request(session_path + "/replies", session_body)[0], 200)
         reopened = self._backend(self.owner_id)
-        self.assertEqual(self._get(reopened, "/api/memories/owner")["memories"], [])
+        self.assertEqual(_active_memories(self._get(reopened, "/api/memories/owner")["memories"]), [])
         self.reply_model.plans.append(plan)
         status, rejected = reopened.request("/api/reply/generate", {**body, "idempotency_key": str(uuid4())})
         self.assertNotEqual(status, 200, rejected)
@@ -1574,7 +1694,7 @@ class MemoryEventHistoricalReviewHttpTest(CoreBusinessFlowFixture, unittest.Test
         self.assertNotEqual(late_status, 200, late)
         self.delete_source(imported["contact_id"], imported["source"]["source_id"])
         reopened = self._backend(self.owner_id)
-        self.assertEqual(self._get(reopened, "/api/memories/owner")["memories"], [])
+        self.assertEqual(_active_memories(self._get(reopened, "/api/memories/owner")["memories"]), [])
         self.assertEqual(reopened.request(f"/api/memories/owner/{current['memory_id']}/versions")[0], 404)
         self.assertEqual(self._get(reopened, style_path)["samples"], [])
         self.assertNotEqual(reopened.request(session_path + "/replies", body)[0], 200)
@@ -1602,9 +1722,9 @@ class MemoryEventHistoricalReviewHttpTest(CoreBusinessFlowFixture, unittest.Test
         current = applied["memory"]
         self.assertEqual(self.backend.request(f"/api/memories/owner/{old['memory_id']}/delete", {})[0], 409)
         self.assertEqual(self.backend.request(f"/api/memories/owner/{current['memory_id']}/delete", {})[0], 200)
-        self.assertEqual(self._get(self.backend, "/api/memories/owner")["memories"], [])
+        self.assertEqual(_active_memories(self._get(self.backend, "/api/memories/owner")["memories"]), [])
         reopened = self._backend(self.owner_id)
-        self.assertEqual(self._get(reopened, "/api/memories/owner")["memories"], [])
+        self.assertEqual(_active_memories(self._get(reopened, "/api/memories/owner")["memories"]), [])
         self.assertEqual(reopened.request(f"/api/memories/owner/{current['memory_id']}/versions")[0], 404)
 
 

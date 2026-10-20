@@ -1,3 +1,4 @@
+import { conditionCorrectionFields } from './condition-proposal';
 import type { LayeredMemoryReadRequest, LayeredMemoryManagementRequest, MemoryAdditionRequest, MemoryCandidateRequest, MemoryCandidateUpdateRequest, MemoryCorrectionRequest, MemoryReadingState, MemoryReadRequest, MemoryRemovalRequest, MemorySectionName } from '../../shared/memory-bridge';
 import type { BackendHost } from '../backend/host';
 import { BackendRequestFailure } from '../backend/json-client';
@@ -440,7 +441,7 @@ export class MemoryReadingController {
       : `/api/contacts/${scope.contactId}/memories/${request.memoryId}/correct`;
     const reading = this.protectReads(scope, [request.level, 'pending']);
     try {
-      await this.writeAndRefresh(scope, path, { text: request.text, category: request.category, change_kind: request.changeKind ?? 'error_correction' }, [request.level, 'pending']);
+      await this.writeAndRefresh(scope, path, { text: request.text, category: request.category, change_kind: request.changeKind ?? 'error_correction', ...conditionCorrectionFields(request.conditions) }, [request.level, 'pending']);
     } finally { this.settleProtectedReads(reading); }
   }
   async add(request: MemoryAdditionRequest): Promise<void> {

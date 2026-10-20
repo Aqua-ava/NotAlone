@@ -34,7 +34,7 @@ export async function contactRelationshipOverview(browser: Browser, origin: stri
       await expandMemoryDetails(current);
       await expect(old.getByText('事件阶段：计划（来源已核验）', { exact: true })).toBeVisible();
       await expect(current.getByText('事件阶段：已发生（来源已核验）', { exact: true })).toBeVisible();
-      await expect(old.getByText('当前核实状态：历史资料（已过期）', { exact: true })).toBeVisible();
+      await expect(old.getByText('适用性：历史资料；不能据此认定当前情况', { exact: true })).toBeVisible();
       await expect(current.getByText('来源聊天时间：2026年8月4日 10:00:00（UTC+8） 至 2026年8月5日 12:00:00（UTC+8）', { exact: true })).toBeVisible();
       await expect(current.getByText('事件发生时段：2026年8月5日 00:00:00（UTC+8） 至 2026年8月6日 00:00:00（UTC+8）（来源已核验）', { exact: true })).toBeVisible();
       await expandMemoryDetails(current);

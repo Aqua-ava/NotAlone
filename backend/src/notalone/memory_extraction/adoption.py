@@ -25,7 +25,7 @@ from notalone.memory.models import (
 from notalone.memory.ports import MemoryPort, OwnerMemoryPort
 from notalone.memory.versions import MemoryVersionConflict
 from notalone.memory.candidates import same_pending_identity
-from notalone.memory.events import same_verified_event_claim, same_verified_occurrence
+from notalone.memory.events import EventStage, same_verified_event_claim, same_verified_occurrence
 from notalone.memory.dimension_evidence import DimensionEvidenceChangedError
 from notalone.memory.correction import MemoryCorrectionConflictError
 from notalone.memory_extraction.adjudication import (
@@ -109,6 +109,7 @@ class MemoryAdoption:
         "_automatic",
         "_staged_candidates",
         "_existing_candidates",
+        "_source_messages", "_source_loader", "_timeline_pending", "_timeline_bindings",
     )
 
     def __init__(
@@ -125,6 +126,7 @@ class MemoryAdoption:
         candidate_namespace: UUID | None = None,
         merge_verifier=None,
         automatic: bool = False,
+        source_messages=(), source_loader=None,
     ) -> None:
         if memory_port is None:
             raise TypeError("必须显式注入联系人级记忆 port。")
@@ -132,6 +134,10 @@ class MemoryAdoption:
             raise ValueError("置信度门槛必须在 0 到 1 之间。")
         # None 表示沿用台账默认放行表与运维开关（ADR-036），不是"全部放行"。
         dimension_release = DimensionRelease.resolve(dimension_release)
+        self._timeline_bindings = {}
+        self._timeline_pending = set()
+        self._source_messages = {item.message_id: item for item in source_messages}
+        self._source_loader = source_loader
         self._memory_port = memory_port
         self._owner_memory_port = owner_memory_port
         self._adjudication_runtime = adjudication_runtime
@@ -153,17 +159,18 @@ class MemoryAdoption:
     def adopt(self, scope: ContactScope, outcome: ExtractionOutcome) -> AdoptionStats:
         """自动流程只留下成功或失败；临时写入候选不成为人工确认任务。"""
         self._staged_candidates.clear()
+        self._timeline_pending.clear()
         self._existing_candidates = {item.candidate_id for item in self._memory_port.list_pending_candidates(scope)} if self._automatic else set()
         try:
             stats = self._adopt(scope, outcome)
         finally:
             if self._automatic:
                 for candidate in self._memory_port.list_pending_candidates(scope):
-                    if candidate.candidate_id in self._staged_candidates:
+                    if candidate.candidate_id in self._staged_candidates and candidate.candidate_id not in self._timeline_pending:
                         self._memory_port.fail_automatic_candidate(scope=scope, candidate_id=candidate.candidate_id)
                         record("candidate_result", {"disposition": "automatic_write_failed",
                             "candidate_id": candidate.candidate_id, "reason": "see_preceding_adjudication_or_write_result"})
-        return replace(stats, pending=0, rejected_by_contract=stats.rejected_by_contract + stats.pending) if self._automatic else stats
+        return replace(stats, pending=len(self._timeline_pending), rejected_by_contract=stats.rejected_by_contract + max(0, stats.pending - len(self._timeline_pending))) if self._automatic else stats
 
     def _persist_candidate(self, candidate):
         actual = self._memory_port.create_candidate(candidate)
@@ -317,6 +324,7 @@ class MemoryAdoption:
                      and same_verified_event_claim(item.version.event, fact.event))
                 and item.version.valid_at == fact.valid_at
                 and item.version.invalid_at == fact.invalid_at
+                and item.version.conditions == fact.conditions
                 and (same_verified_event_claim(item.version.event, fact.event)
                      or self._is_exact_event_claim_replay(scope, item.version, fact))
                 and self._same_dependencies(scope, fact, item.version)
@@ -430,6 +438,8 @@ class MemoryAdoption:
                 decision = None
             else:
                 decision = self._adjudicate(fact, similar, scope, batch_decisions)
+            if decision is not None and decision.evolution is not None:
+                fact = replace(fact, evolution=decision.evolution)
             action = decision.action if decision else None
             replaced_id = decision.replaced_memory_id if decision else None
             if action is AdjudicationAction.MERGE:
@@ -453,7 +463,12 @@ class MemoryAdoption:
                 # 段或指向范围外）：不能静默按 ADD 落库，否则被取代的
                 # 旧记忆保持 active，与新事实并存。降级为待定候选，
                 # 由用户确认。
-                self._create_pending_candidate(scope, fact)
+                timeline_pending = decision is not None
+                candidate = self._create_pending_candidate(scope, fact, reason=(
+                    "timeline:unresolved_conflict" if fact.evolution and fact.evolution.kind == "unresolved_conflict"
+                    else "timeline:relation_unknown") if timeline_pending else None)
+                if timeline_pending:
+                    self._timeline_pending.add(candidate.candidate_id)
                 if shortlist_truncated:
                     disposition = "pending_incomplete_shortlist"
                 elif action:
@@ -472,8 +487,7 @@ class MemoryAdoption:
             previous = previous_item.version if previous_item is not None else None
             if action is AdjudicationAction.UPDATE and (
                 previous is None or previous.adoption_method is AdoptionMethod.MANUAL
-                or (previous.event is not None or fact.event is not None)
-                and not same_verified_occurrence(previous.event, fact.event)
+                or decision.evolution is None or not decision.evolution.source_supported
             ):
                 self._create_pending_candidate(scope, fact)
                 record("candidate_result", {"disposition": "pending_manual_or_changed_previous"})
@@ -561,11 +575,61 @@ class MemoryAdoption:
             skipped_changed=skipped_changed,
         )
 
+    def _adjudication_input(self, scope, fact, similar):
+        identifiers = tuple(dict.fromkeys((*fact.source_message_ids,
+            *(source for item in similar for source in item.claim_source_ids))))
+        if len(identifiers) <= 60 and self._source_loader is not None:
+            missing = tuple(item for item in identifiers if item not in self._source_messages)
+            if missing:
+                self._source_messages.update({item.message_id: item for item in self._source_loader(scope, missing)})
+        selected = {identifier: self._source_messages[identifier] for identifier in identifiers
+                    if identifier in self._source_messages} if len(identifiers) <= 60 else {}
+        if sum(len(item.text) for item in selected.values()) > 16000:
+            selected = {}
+        from notalone.memory_extraction.source_proof import bounded_source_occurred_at
+        def project(value, source_ids):
+            return {"text": value.text, "category": value.category.value, "topic": value.topic.value,
+                    "valid_at": value.valid_at.isoformat() if value.valid_at else None,
+                    "invalid_at": value.invalid_at.isoformat() if value.invalid_at else None,
+                    "event": value.event.to_payload() if value.event else None,
+                    "conditions": value.conditions.to_payload() if value.conditions else None,
+                    "source_message_ids": [str(item) for item in source_ids],
+                    "sources_complete": bool(source_ids) and all(item in selected for item in source_ids),
+                    "sources": [{"message_id": str(item), "text": selected[item].text,
+                                 "sender": selected[item].sender.value,
+                                 "occurred_at": (date.isoformat() if (date := bounded_source_occurred_at(selected[item])) is not None else None)}
+                                for item in source_ids if item in selected]}
+        candidate = project(fact, fact.source_message_ids)
+        key = self._decision_key(fact, similar)
+        if key not in self._timeline_bindings:
+            from notalone.memory.evidence_binding import candidate_digest, source_state_digest, content_digest
+            from notalone.persistence.memory_versions import version_record_digest
+            capture = getattr(self._memory_port, "capture_adjudication_sources", None)
+            frozen = capture(scope, identifiers) if callable(capture) and selected else None
+            if frozen is not None and (set(frozen["message_ids"]) != {str(item) for item in identifiers}
+                    or any(frozen["message_digests"].get(str(identifier)) != content_digest(message.text)
+                           or frozen["message_snapshots"][str(identifier)]["source_state_sha256"] != source_state_digest(message.source_snapshots)
+                           for identifier, message in selected.items())):
+                frozen = None
+            self._timeline_bindings[key] = {"scope": {"owner_id": str(scope.owner_id), "contact_id": str(scope.contact_id)},
+                "candidate_sha256": candidate_digest(fact), "sources": frozen,
+                "parents": [{"memory_id": str(item.memory_id), "revision": item.version.revision,
+                             "record_sha256": version_record_digest(item.version),
+                             "subject": fact.subject.value, "claim_source_ids": [str(source) for source in item.claim_source_ids],
+                             "invalid_at": item.version.invalid_at.isoformat() if item.version.invalid_at else None}
+                            for item in similar]}
+        memories = tuple(SimilarMemory(item.memory_id, item.text, item.topic.value,
+                         {**project(item.version, item.claim_source_ids), "revision": item.version.revision})
+                         for item in similar)
+        return candidate, memories
+
     @staticmethod
     def _decision_key(fact, similar):
         return (fact.subject, fact.category, fact.topic, fact.text, fact.valid_at, fact.invalid_at,
-                repr(fact.event), tuple(fact.source_message_ids),
-                tuple((item.memory_id, item.version.revision) for item in similar))
+                repr(fact.event), repr(fact.conditions), tuple(fact.source_message_ids),
+                tuple((item.memory_id, item.version.revision, item.version.text, repr(item.version.event),
+                       repr(item.version.conditions), item.version.valid_at, item.version.invalid_at,
+                       tuple(item.claim_source_ids)) for item in similar))
 
     def _batch_decisions(self, scope, outcome, contact_pool, owner_pool, deleted):
         """冻结合格候选与旧池；后续池改变时不得复用过期裁决。"""
@@ -588,14 +652,14 @@ class MemoryAdoption:
             if any(_normalize(item.text) == _normalize(fact.text)
                    and set(item.source_ids) == set(fact.source_message_ids)
                    and item.version.valid_at == fact.valid_at and item.version.invalid_at == fact.invalid_at
-                   and item.version.event == fact.event for item in pool):
+                   and item.version.event == fact.event and item.version.conditions == fact.conditions for item in pool):
                 continue
             similar, truncated = self._similar_memories(scope, fact, pool)
             if not similar or truncated:
                 continue
             keys.append(self._decision_key(fact, similar))
-            inputs.append((fact.text, tuple(SimilarMemory(item.memory_id, item.text, item.topic.value)
-                                           for item in similar)))
+            candidate, memories = self._adjudication_input(scope, fact, similar)
+            inputs.append((candidate if getattr(self._adjudication_runtime, "supports_evidence", False) else fact.text, memories))
         if not inputs:
             return {}
         started = time.perf_counter()
@@ -614,6 +678,7 @@ class MemoryAdoption:
             model_name=usage.model_name if usage else None,
             input_tokens=usage.input_tokens if usage else None,
             output_tokens=usage.output_tokens if usage else None)
+        self._record_relation_usage(scope, usage.relation_usage if usage else None)
         return dict(zip(keys, decisions))
 
     def _adjudicate(self, fact, similar, scope: ContactScope, batch_decisions=None):
@@ -646,14 +711,9 @@ class MemoryAdoption:
             cached = batch_decisions is not None and key in batch_decisions
             decision = batch_decisions[key] if cached else self._adjudication_runtime.adjudicate(
                 candidate_text=fact.text,
-                similar=tuple(
-                    SimilarMemory(
-                        memory_id=item.memory_id,
-                        text=item.text,
-                        topic=item.topic.value,
-                    )
-                    for item in similar
-                ),
+                similar=self._adjudication_input(scope, fact, similar)[1],
+                **({"candidate": self._adjudication_input(scope, fact, similar)[0]}
+                   if getattr(self._adjudication_runtime, "supports_evidence", False) else {}),
             )
         except ExtractionInvalidOutputError:
             record("adjudication_failure", {"status": "rejected", "reason": "invalid_item_contract"},
@@ -673,17 +733,50 @@ class MemoryAdoption:
             return None
         outcome = LedgerOutcome.SUCCEEDED
         actual_action = decision.action
+        timeline_pending = False
+        if decision.relation is not None:
+            from notalone.memory.evolution import MemoryEvolution
+            relation = decision.relation
+            ids = set(relation["related_memory_ids"])
+            binding = self._timeline_bindings.get(self._decision_key(fact, similar))
+            supported = decision.relation_supported and binding is not None and binding["sources"] is not None
+            evolution = MemoryEvolution(relation["kind"], relation["explanation"],
+                tuple((item.memory_id, item.version.revision) for item in similar if str(item.memory_id) in ids),
+                tuple(dict.fromkeys(UUID(ref["message_id"]) for ref in relation["evidence"])),
+                supported, relation["claim_changed"], relation["condition_changed"], binding)
+            # 未冻结的关系只能保留未知，不能写入一份无法复验的变化依据。
+            decision = replace(decision, evolution=evolution if binding and binding["sources"] is not None else None)
+            if relation["kind"] == "unresolved_conflict" or not supported:
+                actual_action = None
+                timeline_pending = True
+                outcome = LedgerOutcome.REJECTED_BY_VALIDATION
+        if decision.action in {AdjudicationAction.ADD, AdjudicationAction.KEEP} and similar:
+            if (decision.relation is None or decision.evolution is None or not decision.evolution.source_supported
+                    or decision.relation["kind"] == "independent" and (decision.relation["claim_changed"] or decision.relation["condition_changed"])):
+                actual_action = None
+                timeline_pending = True
+                outcome = LedgerOutcome.REJECTED_BY_VALIDATION
+        if decision.action in {AdjudicationAction.UPDATE, AdjudicationAction.MERGE}:
+            from notalone.memory_extraction.timeline import replacement_supported
+            if not replacement_supported(fact, similar, decision):
+                decision = replace(decision, evolution=(replace(decision.evolution,
+                    source_supported=False, explanation="新旧来源、发生时间或主张变化不足以支持自动替代；保留待确认。")
+                    if decision.evolution is not None else None))
+                actual_action = None
+                timeline_pending = True
+                outcome = LedgerOutcome.REJECTED_BY_VALIDATION
         # 等价改写只允许同一来源、时态和事件；不能吞掉另一来源的新主张。
         if decision.action is AdjudicationAction.NOOP and not any(
                 item.memory_id == decision.duplicate_memory_id
                 and set(item.source_ids) == set(fact.source_message_ids)
                 and item.version.valid_at == fact.valid_at and item.version.invalid_at == fact.invalid_at
-                and item.version.event == fact.event
+                and item.version.event == fact.event and item.version.conditions == fact.conditions
                 and self._same_dependencies(scope, fact, item.version) for item in similar):
             actual_action = None
             outcome = LedgerOutcome.REJECTED_BY_VALIDATION
         if decision.action is not AdjudicationAction.UPDATE and decision.replaced_memory_id is not None:
             actual_action = None
+            timeline_pending = False
             outcome = LedgerOutcome.REJECTED_BY_VALIDATION
         if (
             decision.action is AdjudicationAction.UPDATE
@@ -691,6 +784,8 @@ class MemoryAdoption:
             not in {item.memory_id for item in similar}
         ):
             decision_replaced = None
+            actual_action = None
+            timeline_pending = False
             outcome = LedgerOutcome.REJECTED_BY_VALIDATION
         else:
             decision_replaced = decision.replaced_memory_id
@@ -711,10 +806,11 @@ class MemoryAdoption:
         if not cached:
             self._record_ledger(scope, outcome, started_ns, model_name=decision.model_name,
                 input_tokens=decision.input_tokens, output_tokens=decision.output_tokens)
+            self._record_relation_usage(scope, decision.relation_usage)
         # 裁决要求更新但缺少有效被取代 id 时保留 UPDATE 与空 ID：
         # adopt 会把它降级为待定候选，而不是静默按 ADD 落库让被取代
         # 的旧记忆保持 active。
-        return replace(decision, action=actual_action, replaced_memory_id=decision_replaced) if actual_action else None
+        return replace(decision, action=actual_action, replaced_memory_id=decision_replaced) if actual_action or timeline_pending else None
 
     def _merge(self, scope, fact, similar, decision):
         port = self._owner_memory_port if fact.subject is FactSubject.SELF else self._memory_port
@@ -728,6 +824,11 @@ class MemoryAdoption:
             if any(parent is None for parent in parents):
                 raise ValueError("合并旧版本缺失。")
             merged = self._merge_verifier.verify(scope=scope, fact=fact, parents=parents, text=decision.merged_text)
+            from notalone.memory.evidence_binding import candidate_digest
+            if decision.evolution is None or decision.evolution.proof is None:
+                raise ValueError("合并缺少关系依据。")
+            merged = replace(merged, evolution=replace(decision.evolution,
+                proof={**decision.evolution.proof, "candidate_sha256": candidate_digest(merged)}))
             if _normalize(merged.text) in self._deleted_texts(scope):
                 raise ValueError("合并正文匹配用户删除记录。")
         except (ValueError, ExtractionRuntimeError):
@@ -816,6 +917,12 @@ class MemoryAdoption:
         return (candidates[:MAX_SIMILAR_MEMORY_CANDIDATES],
                 verified_correction and len(candidates) > MAX_SIMILAR_MEMORY_CANDIDATES)
 
+    def _record_relation_usage(self, scope, usage):
+        if usage is not None:
+            self._record_ledger(scope, LedgerOutcome.SUCCEEDED, usage["started_ns"],
+                model_name=usage["model_name"], input_tokens=usage["input_tokens"],
+                output_tokens=usage["output_tokens"], purpose="relation_verification")
+
     def _record_ledger(
         self,
         scope: ContactScope,
@@ -825,6 +932,7 @@ class MemoryAdoption:
         model_name: str | None = None,
         input_tokens: int | None = None,
         output_tokens: int | None = None,
+        purpose: str = "adjudication",
     ) -> None:
         if self._ledger is None:
             return
@@ -843,7 +951,7 @@ class MemoryAdoption:
         started_at = datetime.now(timezone.utc)
         try:
             record_ledger_entry(
-                "adjudication", self._ledger, entry, started_at=started_at
+                purpose, self._ledger, entry, started_at=started_at
             )
         except TraceWriteError:
             raise
@@ -970,16 +1078,18 @@ class MemoryAdoption:
     ) -> bool:
         """语用、置信度、风险及当前来源核验共同决定采纳；显式旧策略保留逐维门。"""
 
+        if fact.conditions is not None and not fact.conditions.supported:
+            return False
         decision = pragmatic_decision or self._interpret_for_adoption(fact, scope)
         if self._automatic:
             # 逐条来源核验仍为准入；置信度/语用/风险字段只保留描述，不增设人工门。
             return self._dimension_release.allows(fact, scope=scope) and (
-                fact.event is None or fact.event.source_current and fact.event.stage_verified and fact.event.occurrence_verified)
+                fact.event is None or fact.event.source_current and fact.event.stage_verified and (fact.event.occurrence_verified or fact.event.stage is EventStage.CANCELLED))
         return can_auto_adopt(
             fact, decision, confidence_threshold=self._threshold
         ) and self._dimension_release.allows(fact, scope=scope) and (
             fact.event is None
-            or fact.event.source_current and fact.event.stage_verified and fact.event.occurrence_verified
+            or fact.event.source_current and fact.event.stage_verified and (fact.event.occurrence_verified or fact.event.stage is EventStage.CANCELLED)
         )
 
     def _pending_exists(self, scope: ContactScope, fact) -> bool:
@@ -1036,9 +1146,11 @@ class MemoryAdoption:
         return bool(matches)
 
     def _create_pending_candidate(
-        self, scope: ContactScope, fact: ExtractedFact
+        self, scope: ContactScope, fact: ExtractedFact, *, reason=None,
     ) -> MemoryCandidate:
         candidate = _candidate_from_fact(scope, fact, namespace=self._candidate_namespace)
+        if reason is not None:
+            candidate = replace(candidate, failure_reason=reason)
         for existing in self._memory_port.list_pending_candidates(scope):
             if same_pending_identity(existing, candidate):
                 record("write_result", {"operation": "reuse_pending", "actual": existing,
@@ -1236,7 +1348,7 @@ def _candidate_from_fact(
         confidence=fact.confidence, risk_flags=fact.risk_flags,
         alternatives=fact.alternatives,
         interpretation_reason=fact.interpretation_reason,
-        timing=fact.timing, dimension_evidence=fact.dimension_evidence, event=fact.event,
+        timing=fact.timing, dimension_evidence=fact.dimension_evidence, event=fact.event, conditions=fact.conditions, evolution=fact.evolution,
         source_dependency_mode=fact.source_dependency_mode,
         requires_all_sources=fact.requires_all_sources,
     )
@@ -1250,7 +1362,7 @@ def _stored_candidate_fact(fact: ExtractedFact, candidate: MemoryCandidate) -> E
                    confidence=candidate.confidence, risk_flags=candidate.risk_flags,
                    alternatives=candidate.alternatives, interpretation_reason=candidate.interpretation_reason,
                    valid_at=candidate.valid_at, invalid_at=candidate.invalid_at,
-                   dimension_evidence=candidate.dimension_evidence, event=candidate.event,
+                   dimension_evidence=candidate.dimension_evidence, event=candidate.event, conditions=candidate.conditions, evolution=candidate.evolution,
                    requires_all_sources=candidate.requires_all_sources)
 
 

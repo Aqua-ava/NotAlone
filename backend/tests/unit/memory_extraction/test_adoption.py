@@ -171,7 +171,7 @@ class MemoryAdoptionTest(unittest.TestCase):
         adoption = MemoryAdoption(memory_port=self.store, dimension_release=RELEASE_ALL_DIMENSIONS,
                                   adjudication_runtime=runtime)
         result = adoption.adopt(self.scope, ExtractionOutcome(accepted=(self._fact(text='对方喜欢书法'),)))
-        self.assertEqual(result.adopted, 1)
+        self.assertEqual((result.adopted, result.pending), (0, 1))
         self.assertEqual(len(runtime.seen), 8)
 
     def test_sensitive_fact_keeps_provenance_in_pending_candidate(self) -> None:

@@ -121,7 +121,7 @@ class InMemoryMemoryStore:
             timing=replace(candidate.timing, recorded_at=datetime.now(timezone.utc)),
             revision=expected_previous.revision + 1 if expected_previous else 1,
             supersedes_memory_id=expected_previous.memory_id if expected_previous else None,
-            event=candidate.event,
+            event=candidate.event, conditions=candidate.conditions, evolution=candidate.evolution,
         )
         if expected_previous is not None:
             self._memories[expected_previous.memory_id] = replace(

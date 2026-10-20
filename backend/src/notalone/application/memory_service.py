@@ -270,13 +270,14 @@ class MemoryService:
         text: str,
         category: MemoryCategory | None = None,
         change_kind: MemoryChangeKind = MemoryChangeKind.ERROR_CORRECTION,
+        conditions: object = ...,
     ) -> ConfirmedMemory:
         return self._contact_memory.correct(
             scope=ContactScope(owner_id=owner_id, contact_id=contact_id),
             memory_id=memory_id,
             text=text,
             category=category,
-            change_kind=change_kind,
+            change_kind=change_kind, **({"conditions": conditions} if conditions is not ... else {}),
         )
 
     def delete_contact_memory(
@@ -301,10 +302,11 @@ class MemoryService:
         category: MemoryCategory | None = None,
         contact_id: UUID | None = None,
         change_kind: MemoryChangeKind = MemoryChangeKind.ERROR_CORRECTION,
+        conditions: object = ...,
     ) -> OwnerMemory:
         if contact_id is not None:
             self.list_contact_owner_versions(owner_id=owner_id, contact_id=contact_id, memory_id=memory_id)
         return self._owner_memory.correct(
             owner_id=owner_id, memory_id=memory_id, text=text, category=category,
-            change_kind=change_kind,
+            change_kind=change_kind, **({"conditions": conditions} if conditions is not ... else {}),
         )

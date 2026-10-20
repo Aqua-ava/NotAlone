@@ -1,12 +1,39 @@
 """隔离测试库验证多父合并、重放、删除和原子拒绝。"""
 from dataclasses import replace
 from notalone.memory import AdoptionMethod, FactSubject, SourceDependencyMode
+from notalone.memory.evidence_binding import candidate_digest
+from notalone.memory.evolution import MemoryEvolution
+from notalone.memory.correction import MemoryCorrectionConflictError
+from notalone.persistence.memory_versions import version_record_digest
 from notalone.persistence.owner_memory_store import PostgresOwnerMemoryStore
 from tests.integration.persistence.test_memory_timing import PostgresMemoryTimingTest
 
 
 class MemoryMergeTest(PostgresMemoryTimingTest):
-    def _parents_and_candidate(self, owner=False, manual=False):
+    def _merge_evidence(self, candidate, parents):
+        """只构造存储合同夹具；真实来源与版本摘要不代表模型语义质量。"""
+        source_ids = tuple(dict.fromkeys((*candidate.source_ids,
+            *(source for parent in parents for source in parent.source_ids))))
+        snapshot = self.store.capture_adjudication_sources(self.scope, source_ids)
+        self.assertIsNotNone(snapshot)
+        proof = {
+            "scope": {"owner_id": str(self.scope.owner_id), "contact_id": str(self.scope.contact_id)},
+            "candidate_sha256": candidate_digest(candidate),
+            "sources": snapshot,
+            "parents": [{
+                "memory_id": str(parent.memory_id), "revision": parent.revision,
+                "record_sha256": version_record_digest(parent),
+                "subject": candidate.subject.value,
+                "invalid_at": parent.invalid_at.isoformat() if parent.invalid_at else None,
+            } for parent in parents],
+        }
+        return replace(candidate, evolution=MemoryEvolution(
+            kind="supplement", explanation="合成存储合同：两条来源合并保存，未声明状态改变。",
+            related_versions=tuple((parent.memory_id, parent.revision) for parent in parents),
+            evidence_message_ids=source_ids, source_supported=True,
+            claim_changed=False, condition_changed=False, proof=proof))
+
+    def _parents_and_candidate(self, owner=False, manual=False, proof=True):
         store = PostgresOwnerMemoryStore(self.database_url) if owner else self.store
         parents = []
         for source in (self.first, self.second):
@@ -17,8 +44,25 @@ class MemoryMergeTest(PostgresMemoryTimingTest):
                       store.confirm(scope=self.scope, candidate_id=candidate.candidate_id, adoption_method=method))
             parents.append(parent)
         candidate = self._candidate((self.first, self.second), subject=FactSubject.SELF if owner else FactSubject.CONTACT)
+        if proof:
+            candidate = self._merge_evidence(candidate, parents)
         candidate = self.store.create_candidate(candidate)
         return store, tuple(parents), candidate
+
+    def test_direct_merge_without_relation_proof_is_rejected_atomically(self):
+        for owner in (False, True):
+            with self.subTest(owner=owner):
+                store, parents, candidate = self._parents_and_candidate(owner=owner, proof=False)
+                with self.assertRaises(MemoryCorrectionConflictError):
+                    store.confirm_merge(scope=self.scope, candidate_id=candidate.candidate_id,
+                                        expected_parents=parents)
+                saved = self.store.get_candidate(scope=self.scope, candidate_id=candidate.candidate_id)
+                self.assertEqual(saved.status.value, "pending")
+                current = (store.list_active(self.scope.owner_id) if owner
+                           else store.list_confirmed(self.scope))
+                self.assertTrue({parent.memory_id for parent in parents} <=
+                                {memory.memory_id for memory in current if memory.status.value == "active"})
+                self.assertFalse(any(memory.source_candidate_id == candidate.candidate_id for memory in current))
 
     def test_contact_merge_is_replayable_and_lists_both_parents(self):
         store, parents, candidate = self._parents_and_candidate()
@@ -117,7 +161,8 @@ class MemoryMergeTest(PostgresMemoryTimingTest):
         for index, source in enumerate((self.first, extra[0])):
             candidate = self.store.create_candidate(replace(self._candidate((source,)), text=f'独立父事实{index}'))
             parents.append(self.store.confirm(scope=self.scope, candidate_id=candidate.candidate_id))
-        candidate = self.store.create_candidate(replace(self._candidate((self.first, extra[0])), text='合并两个不同来源的完整事实'))
+        candidate = self.store.create_candidate(self._merge_evidence(
+            replace(self._candidate((self.first, extra[0])), text='合并两个不同来源的完整事实'), parents))
         result = self.store.confirm_merge(scope=self.scope, candidate_id=candidate.candidate_id, expected_parents=tuple(parents))
         PostgresSourceDeletionRepository(self.database_url).delete_source(owner_id=self.scope.owner_id,
             contact_id=self.scope.contact_id, source_document_id=self.source_id)

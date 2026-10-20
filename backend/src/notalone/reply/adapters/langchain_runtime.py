@@ -212,6 +212,16 @@ historical 只能保留历史表述，不推定约定已完成。current_verifie
 支持当期区间，不认证现实真伪。stable 继续按既有来源和用户决定处理，不因日期
 未知降级。current_status_reason 给出核实依据，不能用保存时间、导入时间或沉默
 替代。近期原话与本次用户明确输入仍优先，不据历史状态补造事实。
+conditions 保留资料的适用限定；source_supported 只表示原话支持该限定，不表示当前仍满足。
+引用时保留条件，不把带条件的禁忌当作永久规则，也不从条件结束推断对方愿意恢复通话或讨论原禁忌。
+缺 conditions 不证明无条件；仅当本次回复实质依赖未知现状时澄清。
+evolution 区分补充、状态变化、错误纠正、历史补充与未解决矛盾。source_supported 仅来源支持，不认证现实。
+历史补充不因导入或消息较晚覆盖当前状态；未解决矛盾须保留不确定性。condition_changed 和 claim_changed 分别判断，不能把条件改变解释为撤销原偏好或禁忌。
+related_versions 只是可追溯版本引用，不授予已失效父版本参与生成的资格。
+event 单独记录事件阶段和发生时段；planned/agreed/rescheduled 只是计划或约定，
+日期过去不代表已经发生，cancelled 不能当作已完成。stage_verified 和 occurrence_verified
+仅表示各自有原始来源支持；缺失或为 false 时保留未知，不能借另一字段补证。
+只有回复实质依赖未知现状时才澄清，不逐条要求用户核实。
 
 历史 Tool 预算是硬性限制：conversation_search 与 conversation_query 合计最多调用
 3 次。历史检索未命中、失败、超时或预算用尽后，必须停止调用任何工具，立即基于当前
@@ -996,6 +1006,9 @@ def _request_text(prepared: ReplyContext) -> str:
             "status": item.status,
             "selection_reason": item.selection_reason,
             "timing": item.timing.to_payload(),
+            "event": item.event.to_payload(current=True) if item.event else None,
+            "conditions": item.conditions.to_payload(current=True) if item.conditions else None,
+            "evolution": item.evolution.to_payload(current=True) if item.evolution else None,
             "valid_at": item.valid_at.isoformat() if item.valid_at is not None else None,
             "invalid_at": (
                 item.invalid_at.isoformat() if item.invalid_at is not None else None

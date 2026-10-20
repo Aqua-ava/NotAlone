@@ -21,7 +21,7 @@ def require_auto_previous(
     fields = (
         "memory_id", "text", "category", "topic", "source_ids",
         "source_candidate_id", "adoption_method", "revision", "valid_at",
-        "invalid_at", "confidence", "risk_flags", "supersedes_memory_id", "event",
+        "invalid_at", "confidence", "risk_flags", "supersedes_memory_id", "event", "conditions", "evolution",
         "source_dependency_mode", "requires_all_sources",
     )
     if (type(actual) is not type(expected)

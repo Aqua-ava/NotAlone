@@ -1,5 +1,6 @@
 """事件阶段与发生时段；来源判断分别取得，不由时钟补完成。"""
 
+from copy import deepcopy
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from enum import StrEnum
@@ -49,9 +50,24 @@ class MemoryEvent:
     occurrence_evidence: tuple[EventEvidence, ...] = ()
     stage_verified: bool = False
     occurrence_verified: bool = False
+    version: int = 1
+    occurrence_precision: str = "unknown"
+    occurrence_expression: str | None = None
+    anchor_message_id: UUID | None = None
     source_current: bool = field(default=True, init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
+        if type(self.version) is not int or self.version not in (1, 2):
+            raise ValueError("事件版本无效。")
+        if self.occurrence_precision not in {"year", "month", "day", "instant", "unknown"}:
+            raise ValueError("事件日期精度无效。")
+        if self.occurrence_expression is not None and (not isinstance(self.occurrence_expression, str)
+                or not 0 < len(self.occurrence_expression.strip()) <= 256):
+            raise ValueError("事件原始时间表达无效。")
+        if self.anchor_message_id is not None and not isinstance(self.anchor_message_id, UUID):
+            raise ValueError("事件时间锚点无效。")
+        if self.version == 2 and self.occurrence_precision == "unknown" and self.occurrence_start is not None:
+            raise ValueError("未知日期精度不能携带推测日期。")
         if not isinstance(self.stage, EventStage):
             raise ValueError("事件阶段无效。")
         for items in (self.stage_evidence, self.occurrence_evidence):
@@ -73,7 +89,10 @@ class MemoryEvent:
             raise ValueError("发生时间核验缺少独立来源。")
 
     def to_payload(self, *, current: bool = False) -> dict:
-        return {"version": 1, "stage": self.stage.value,
+        return {"version": self.version, "stage": self.stage.value,
+                **({"occurrence_precision": self.occurrence_precision,
+                    "occurrence_expression": self.occurrence_expression,
+                    "anchor_message_id": str(self.anchor_message_id) if self.anchor_message_id else None} if self.version == 2 else {}),
                 "stage_evidence": [item.to_payload() for item in self.stage_evidence],
                 "stage_verified": self.stage_verified and (self.source_current or not current),
                 "occurrence_start": self.occurrence_start.isoformat() if self.occurrence_start else None,
@@ -87,11 +106,13 @@ class MemoryEvent:
             return None
         fields = {"version", "stage", "stage_evidence", "occurrence_start",
                   "occurrence_end", "occurrence_evidence"}
+        if isinstance(value, dict) and value.get("version") == 2:
+            fields |= {"occurrence_precision", "occurrence_expression", "anchor_message_id"}
         if not proposal:
             fields |= {"stage_verified", "occurrence_verified"}
         if (not isinstance(value, dict) or set(value) != fields
-                or type(value["version"]) is not int or value["version"] != 1):
-            raise ValueError("事件字段不符合版本一合同。")
+                or type(value["version"]) is not int or value["version"] not in (1, 2)):
+            raise ValueError("事件字段不符合版本合同。")
         def when(key: str) -> datetime | None:
             raw = value[key]
             if raw is None:
@@ -103,7 +124,14 @@ class MemoryEvent:
             if not isinstance(value[key], list):
                 raise ValueError("事件依据必须是数组。")
             return tuple(EventEvidence.from_payload(item) for item in value[key])
-        return cls(stage=EventStage(value["stage"]), stage_evidence=positions("stage_evidence"),
+        anchor = value.get("anchor_message_id")
+        if anchor is not None and not isinstance(anchor, str):
+            raise ValueError("事件时间锚点标识无效。")
+        return cls(version=value["version"],
+                   occurrence_precision=value.get("occurrence_precision", "unknown"),
+                   occurrence_expression=value.get("occurrence_expression"),
+                   anchor_message_id=UUID(anchor) if anchor is not None else None,
+                   stage=EventStage(value["stage"]), stage_evidence=positions("stage_evidence"),
                    occurrence_start=when("occurrence_start"), occurrence_end=when("occurrence_end"),
                    occurrence_evidence=positions("occurrence_evidence"),
                    stage_verified=False if proposal else value["stage_verified"],
@@ -119,7 +147,8 @@ def event_meaning(event: MemoryEvent | None) -> tuple:
     """只有独立核验的阶段和发生时段区分主张，结构刷新不产生新事件。"""
     return (event.stage if event and event.stage_verified else EventStage.UNKNOWN,
             event.occurrence_start if event and event.occurrence_verified else None,
-            event.occurrence_end if event and event.occurrence_verified else None)
+            event.occurrence_end if event and event.occurrence_verified else None,
+            event.occurrence_precision if event and event.occurrence_verified else "unknown")
 
 
 def _overlapping_positions(left: tuple[EventEvidence, ...], right: tuple[EventEvidence, ...]) -> bool:
@@ -133,6 +162,7 @@ def same_verified_occurrence(left: MemoryEvent | None, right: MemoryEvent | None
                 and left.occurrence_verified and right.occurrence_verified
                 and left.occurrence_start == right.occurrence_start
                 and left.occurrence_end == right.occurrence_end
+                and left.occurrence_precision == right.occurrence_precision
                 and _overlapping_positions(left.occurrence_evidence, right.occurrence_evidence))
 
 
@@ -162,3 +192,13 @@ EVENT_PROPOSAL_SCHEMA = {
     "required": ["version", "stage", "stage_evidence", "occurrence_start",
                  "occurrence_end", "occurrence_evidence"],
 }
+
+# 新直接提取合同独立扩展；历史 grounded 协议继续使用版本一。
+EVENT_PROPOSAL_V2_SCHEMA = deepcopy(EVENT_PROPOSAL_SCHEMA)
+EVENT_PROPOSAL_V2_SCHEMA["properties"].update({
+    "version": {"type": "integer", "const": 2},
+    "occurrence_precision": {"type": "string", "enum": ["year", "month", "day", "instant", "unknown"]},
+    "occurrence_expression": {"type": ["string", "null"], "maxLength": 256},
+    "anchor_message_id": {"type": ["string", "null"], "format": "uuid"},
+})
+EVENT_PROPOSAL_V2_SCHEMA["required"] += ["occurrence_precision", "occurrence_expression", "anchor_message_id"]

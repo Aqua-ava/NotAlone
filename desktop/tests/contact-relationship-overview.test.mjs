@@ -92,7 +92,7 @@ test('用户查看一位联系人的经历变化，历史与当前未知、真�
   assert.match(html, /联系人经历与关系变化/);
   assert.match(html, /过去计划参加合成读书会/);
   assert.match(html, /历史版本/);
-  assert.match(html, /当前未核实/);
+  assert.match(html, /是否仍适用，尚不确定/);
   assert.match(html, /当时的安排，当前状态未核实/);
   assert.match(html, /用户手动录入/);
   assert.match(html, /2026年8月1日/);
