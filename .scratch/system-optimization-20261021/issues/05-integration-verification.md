@@ -1,7 +1,7 @@
 # 整体集成与验证入口
 
 Triage: ready-for-agent
-State: open
+State: claimed
 Blocked by: 01, 02, 03, 04
 
 ## 来源
@@ -19,4 +19,10 @@ Blocked by: 01, 02, 03, 04
 必须先核当前main、读对应架构与仓库工程规范；先复现再实现，完成目标而非只写计划。每个聊天开始先调用create_goal，不设预算；本issue改claimed，实际完成并写Answer后改resolved。结果写本目录../05-integration-verification-result.md。不直接修改共享root产品代码，不push、不打包、不迁移业务库、不发外部消息。
 
 ## Comments
+
+## Answer
+
+四路本地提交已在独立受管工作树集成，无冲突；默认入口补齐266文件分类、防漏登记及安全Node显式执行，历史夹具按真实合同修正并保留来源和内容断言。独立Standards/Spec及测试夹具增量复核均0项。typecheck、默认947通过/1显式前置跳过、headless50通过、Swift132项/4跳过/0失败及诊断CLI4通过；后端unit2411全通过。有界全量4374已结算为4323通过/42失败/6错误/3跳过，517未完成；59个候选失败逐项基线核对后无current-only候选，仍保留48项既有同类失败，不能宣称全量绿色。
+
+实际单一`npm run dev`合成App完成联系人草稿隔离、候选编辑保存/复制、记忆页切换重入；微信正式标题路径成功但置信0.5，不证明身份绑定。无外部模型、消息、业务迁移或发布。普通测试退出后串行复测四路收益及写入/吞吐成本，资源按记录精确清理；随后仅本地快进main和归档本聊天工作树。详见[完整结果与限制](../05-integration-verification-result.md)。
 

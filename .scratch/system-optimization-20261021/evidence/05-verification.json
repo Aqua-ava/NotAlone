@@ -1,0 +1,2334 @@
+{
+  "candidateRevision": "2af92790b209f2924343c0d55b4c8792682e5324",
+  "safeNode": {
+    "entryFiles": 119,
+    "tests": 948,
+    "pass": 947,
+    "skip": 1,
+    "fail": 0,
+    "typecheck": true,
+    "skipReason": "缺少显式NOTALONE_STATIC_E_APP前置"
+  },
+  "headless": {
+    "entryFiles": 15,
+    "tests": 50,
+    "pass": 50,
+    "skip": 0,
+    "fail": 0
+  },
+  "native": {
+    "swiftTests": 132,
+    "swiftSkips": 4,
+    "swiftFailures": 0,
+    "diagnosticNodeTests": 4,
+    "diagnosticNodePass": 4
+  },
+  "unit": {
+    "tests": 2411,
+    "pass": 2411,
+    "skip": 0,
+    "fail": 0
+  },
+  "isolatedHttp": {
+    "entryCount": 56,
+    "counts": {
+      "pass": 17,
+      "reused-pass": 4,
+      "fail": 8,
+      "not-started-budget": 27
+    },
+    "newTestCounts": {
+      "tests": 166,
+      "pass": 150,
+      "fail": 16
+    },
+    "reusedPassTests": 49,
+    "dispatchBudgetSeconds": 600,
+    "entries": [
+      {
+        "path": "tests/assistant-candidate-carry-public-http.test.mjs",
+        "sha256": "1338ebc3ae7d4938703460451bf661ea5ac45567a353068e60fefff3a43aaa10",
+        "status": "pass",
+        "exitCode": 0,
+        "counts": {
+          "tests": 3,
+          "pass": 3,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 0,
+          "todo": 0
+        },
+        "harnessRetry": true
+      },
+      {
+        "path": "tests/assistant-generation-ownership-http.test.mjs",
+        "sha256": "0416918148c1a53901198bd8b7161b1ff775bc8f8898e0b5187cf46a96873d3d",
+        "status": "pass",
+        "exitCode": 0,
+        "counts": {
+          "tests": 31,
+          "pass": 31,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 0,
+          "todo": 0
+        }
+      },
+      {
+        "path": "tests/assistant-generation-quit-http.test.mjs",
+        "sha256": "5b7d66173fc04423c6e9688466a35a68a9f50627ca1cf01e750a30ec56d88ed0",
+        "status": "pass",
+        "exitCode": 0,
+        "counts": {
+          "tests": 42,
+          "pass": 42,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 0,
+          "todo": 0
+        }
+      },
+      {
+        "path": "tests/assistant-input-budget-approximate-public.test.mjs",
+        "sha256": "536bcecf1fd3f9fb1dce1bd4368163615e1a9b17d0ce6220167b95c36a914630",
+        "status": "pass",
+        "exitCode": 0,
+        "counts": {
+          "tests": 1,
+          "pass": 1,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 0,
+          "todo": 0
+        }
+      },
+      {
+        "path": "tests/assistant-input-budget-public.test.mjs",
+        "sha256": "eb51f55787defa1ef7a7d697b9d400b659de017eddebcc3a2733d5002d2e2370",
+        "status": "pass",
+        "exitCode": 0,
+        "counts": {
+          "tests": 30,
+          "pass": 30,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 0,
+          "todo": 0
+        }
+      },
+      {
+        "path": "tests/assistant-interrupted-authoritative-retry-http.test.mjs",
+        "sha256": "7bf0e049cb5eca1caccff3611332e7246f74ac0ac3ed63a65c6eac1cfc7194c6",
+        "status": "pass",
+        "exitCode": 0,
+        "counts": {
+          "tests": 3,
+          "pass": 3,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 0,
+          "todo": 0
+        }
+      },
+      {
+        "path": "tests/assistant-lifecycle-fixture-http.test.mjs",
+        "sha256": "ceae802788aa05c8986b80d4029fca69499622c570473f69edbb82c4e56349e1",
+        "status": "pass",
+        "exitCode": 0,
+        "counts": {
+          "tests": 1,
+          "pass": 1,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 0,
+          "todo": 0
+        }
+      },
+      {
+        "path": "tests/assistant-provider-context-public.test.mjs",
+        "sha256": "155db183c4395e8b689904b06292b55773e2794c90c87b7682da03bd9d9e1529",
+        "status": "pass",
+        "exitCode": 0,
+        "counts": {
+          "tests": 3,
+          "pass": 3,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 0,
+          "todo": 0
+        }
+      },
+      {
+        "path": "tests/assistant-session-projection-http.test.mjs",
+        "sha256": "aa8cc9d5450d94d86104c6bf19f03da53feedbec45cd21a0be20cee9a0974884",
+        "status": "pass",
+        "exitCode": 0,
+        "counts": {
+          "tests": 4,
+          "pass": 4,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 0,
+          "todo": 0
+        }
+      },
+      {
+        "path": "tests/authentic-expression-accumulated-message-opt-in-http.test.mjs",
+        "sha256": "9b6593719ecd2493e431c39b066953541f78a2f672c3efe31ad47275227461f0",
+        "status": "pass",
+        "exitCode": 0,
+        "counts": {
+          "tests": 2,
+          "pass": 2,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 0,
+          "todo": 0
+        }
+      },
+      {
+        "path": "tests/authentic-expression-message-opt-in-http.test.mjs",
+        "sha256": "f51f0189506f066546acf74ae0ac27d3bd335f685aa594cc1057769ae996e095",
+        "status": "pass",
+        "exitCode": 0,
+        "counts": {
+          "tests": 2,
+          "pass": 2,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 0,
+          "todo": 0
+        }
+      },
+      {
+        "path": "tests/contact-content-restore-http.test.mjs",
+        "sha256": "b25305743aba360286d07ddad6b0752db6b512c00f7648cc11cbc51780f872e0",
+        "status": "reused-pass"
+      },
+      {
+        "path": "tests/contact-generation-jobs-http.test.mjs",
+        "sha256": "3c065305431506d8f0fd784ae452746d9ad5635c85c50e0527e8be1a085c083c",
+        "status": "reused-pass"
+      },
+      {
+        "path": "tests/contact-relationship-overview-http.test.mjs",
+        "sha256": "20e4cae17746c7dc7e9975790d6c844b901a23e19da8b2573f8616cc6dd3430c",
+        "status": "fail",
+        "exitCode": 1,
+        "counts": {
+          "tests": 3,
+          "pass": 0,
+          "fail": 3,
+          "cancelled": 0,
+          "skipped": 0,
+          "todo": 0
+        }
+      },
+      {
+        "path": "tests/continuous-contact-follow-http.test.mjs",
+        "sha256": "7c33024990068fc306292e0709a7b22d68a6906120365b0e216956df0b5ae71f",
+        "status": "fail",
+        "exitCode": 1,
+        "counts": {
+          "tests": 3,
+          "pass": 2,
+          "fail": 1,
+          "cancelled": 0,
+          "skipped": 0,
+          "todo": 0
+        }
+      },
+      {
+        "path": "tests/continuous-generation-combination-http.test.mjs",
+        "sha256": "e954d93caab42961c8c441ac2649d464282a7d55bed1b6bb14f81e9f648365b9",
+        "status": "pass",
+        "exitCode": 0,
+        "counts": {
+          "tests": 1,
+          "pass": 1,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 0,
+          "todo": 0
+        }
+      },
+      {
+        "path": "tests/direction-source-deletion-http.test.mjs",
+        "sha256": "7132dacebd723e1898a3c1fbdea3339f12042dae15838b9988cbe02d8da92bbd",
+        "status": "pass",
+        "exitCode": 0,
+        "counts": {
+          "tests": 8,
+          "pass": 8,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 0,
+          "todo": 0
+        }
+      },
+      {
+        "path": "tests/emoji-foreground-http.test.mjs",
+        "sha256": "01cbbebeb1c83a8d73e6c7498e26583ab9a740b92eb72a7c1339965e11e44aaf",
+        "status": "pass",
+        "exitCode": 0,
+        "counts": {
+          "tests": 2,
+          "pass": 2,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 0,
+          "todo": 0
+        }
+      },
+      {
+        "path": "tests/explicit-generation-context-http.test.mjs",
+        "sha256": "07e5bd51511ab8226b908b2b6f88be5639989638b06a23d30e45b52313a6b82f",
+        "status": "pass",
+        "exitCode": 0,
+        "counts": {
+          "tests": 8,
+          "pass": 8,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 0,
+          "todo": 0
+        }
+      },
+      {
+        "path": "tests/expression-preferences/bridge.test.mjs",
+        "sha256": "5a54643b4c0c13e9ec5a18f27c4fd0a14754677215e95f1cc05cfbfeb2a2f756",
+        "status": "fail",
+        "exitCode": 1,
+        "counts": {
+          "tests": 1,
+          "pass": 0,
+          "fail": 1,
+          "cancelled": 0,
+          "skipped": 0,
+          "todo": 0
+        }
+      },
+      {
+        "path": "tests/expression-preferences/http-controller.test.mjs",
+        "sha256": "350a1c2247c3b185db35367aa97fbc9aaffaadffd534bbfd15e4a5923e229726",
+        "status": "fail",
+        "exitCode": 1,
+        "counts": {
+          "tests": 4,
+          "pass": 0,
+          "fail": 4,
+          "cancelled": 0,
+          "skipped": 0,
+          "todo": 0
+        }
+      },
+      {
+        "path": "tests/expression-preferences/reply-session.test.mjs",
+        "sha256": "9e14ad64eca0f86573ef8ad2e89bcad80ea773721b18c87cf58c7fec11e1da9f",
+        "status": "fail",
+        "exitCode": 1,
+        "counts": {
+          "tests": 4,
+          "pass": 0,
+          "fail": 4,
+          "cancelled": 0,
+          "skipped": 0,
+          "todo": 0
+        }
+      },
+      {
+        "path": "tests/expression-preferences/reprepare-http.test.mjs",
+        "sha256": "78121d3af7a4bdaae53e818ad2cf4984b59ea2c4f73255f92d152b683213f238",
+        "status": "fail",
+        "exitCode": 1,
+        "counts": {
+          "tests": 1,
+          "pass": 0,
+          "fail": 1,
+          "cancelled": 0,
+          "skipped": 0,
+          "todo": 0
+        }
+      },
+      {
+        "path": "tests/external-manual-confirmation-http.test.mjs",
+        "sha256": "12b6ffb4842c908d996dd8be6439dbee607e8344e76fd58d739d2e9606b1b2bc",
+        "status": "fail",
+        "exitCode": 1,
+        "counts": {
+          "tests": 1,
+          "pass": 0,
+          "fail": 1,
+          "cancelled": 0,
+          "skipped": 0,
+          "todo": 0
+        }
+      },
+      {
+        "path": "tests/finder-native-permission.test.mjs",
+        "sha256": "25c34fd3580fdede5928de3a485de21e0e47e881aeaf0b33430bdc14569b1f10",
+        "status": "reused-pass"
+      },
+      {
+        "path": "tests/fixture-database-ownership.test.mjs",
+        "sha256": "ea977424836e2f88f7c3007a8edd7e54febc919c0a16c3b42faf75605307264b",
+        "status": "pass",
+        "counts": {
+          "tests": 4,
+          "pass": 4,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 0,
+          "todo": 0
+        }
+      },
+      {
+        "path": "tests/foreground-change-source-http.test.mjs",
+        "sha256": "bb05039ef781fd2f00f59de4b0d10c7bef72c5e70a26d90888b15a9fdb22c8cc",
+        "status": "fail",
+        "exitCode": 1,
+        "counts": {
+          "tests": 3,
+          "pass": 2,
+          "fail": 1,
+          "cancelled": 0,
+          "skipped": 0,
+          "todo": 0
+        }
+      },
+      {
+        "path": "tests/foreground-observation-budget-http.test.mjs",
+        "sha256": "d2a03e12e64c2b403e286f9b0ec2e5bd26a48300a51e0c2c98e42f66003f79e5",
+        "status": "pass",
+        "counts": {
+          "tests": 1,
+          "pass": 1,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 0,
+          "todo": 0
+        }
+      },
+      {
+        "path": "tests/group-foreground-pause-http.test.mjs",
+        "sha256": "69adade69a4d2d0cf2087f395cfd971c0e0d797dfb160d921d9a5980d9f84b75",
+        "status": "not-started-budget",
+        "reason": "总体600秒停止派发；已有前置条件可用，无额外权限或环境缺口。"
+      },
+      {
+        "path": "tests/historical-reply-basis-http.test.mjs",
+        "sha256": "230400ca3108cf8fe98fc2639297d409ec1619cffe57f25bf0835d8756fa10e0",
+        "status": "not-started-budget",
+        "reason": "总体600秒停止派发；已有前置条件可用，无额外权限或环境缺口。"
+      },
+      {
+        "path": "tests/layered-memory/correction-native-preflight.test.mjs",
+        "sha256": "258f8e7fe243d00cbde4912c6a5ea16c078259d8de47a39c7ba71026bc82bb5d",
+        "status": "not-started-budget",
+        "reason": "总体600秒停止派发；已有前置条件可用，无额外权限或环境缺口。"
+      },
+      {
+        "path": "tests/layered-memory/fixture-http.test.mjs",
+        "sha256": "cfdbd76e92d5cfbd978e6946328a4a134526976ef0d2aa54f05c71844ddae596",
+        "status": "not-started-budget",
+        "reason": "总体600秒停止派发；已有前置条件可用，无额外权限或环境缺口。"
+      },
+      {
+        "path": "tests/manual-connection-change-http.test.mjs",
+        "sha256": "9508f23bdd638d8b0be6e7d8373f6e5043dadfe7f164a29cee9caa87269f241c",
+        "status": "not-started-budget",
+        "reason": "总体600秒停止派发；已有前置条件可用，无额外权限或环境缺口。"
+      },
+      {
+        "path": "tests/memory-event-updates-http.test.mjs",
+        "sha256": "84a2750cf82940cb6ff8ac071fe0f9330b46039135b8c0518445c8c2d82a8632",
+        "status": "not-started-budget",
+        "reason": "总体600秒停止派发；已有前置条件可用，无额外权限或环境缺口。"
+      },
+      {
+        "path": "tests/name-matching-foreground-http.test.mjs",
+        "sha256": "4190ef3bd0f0dbc53d60583e00d0af91bcbbf6580ddcee61a2d71b746cae54d5",
+        "status": "not-started-budget",
+        "reason": "总体600秒停止派发；已有前置条件可用，无额外权限或环境缺口。"
+      },
+      {
+        "path": "tests/observation-measurements-http.test.mjs",
+        "sha256": "b903fd04b84267875d8984b0385ff1c298867d8dac4d0f2e1cc9c815e1445601",
+        "status": "not-started-budget",
+        "reason": "总体600秒停止派发；已有前置条件可用，无额外权限或环境缺口。"
+      },
+      {
+        "path": "tests/overview-reply-retrieval-http.test.mjs",
+        "sha256": "489dbf093d0fa91059e21ac9354bbd6bf9b84401a566ac27a7de03bbf1b3ab90",
+        "status": "not-started-budget",
+        "reason": "总体600秒停止派发；已有前置条件可用，无额外权限或环境缺口。"
+      },
+      {
+        "path": "tests/overview-reply-retrieval.test.mjs",
+        "sha256": "d8234485ad77e5bc505451ed963435d16078ab2c02a992195bfb3e1dad87de26",
+        "status": "not-started-budget",
+        "reason": "总体600秒停止派发；已有前置条件可用，无额外权限或环境缺口。"
+      },
+      {
+        "path": "tests/owner-facts-overview-http.test.mjs",
+        "sha256": "08f8b2e593a07372bd78c556d090b49d2e87eb6c60c0e5ee1a5917e1729b3a00",
+        "status": "not-started-budget",
+        "reason": "总体600秒停止派发；已有前置条件可用，无额外权限或环境缺口。"
+      },
+      {
+        "path": "tests/prepared-format-http.test.mjs",
+        "sha256": "3a44a680659b64e9dd95c28ce5a96137beb4e8e4f494a3b98072b32bcf43b6a1",
+        "status": "not-started-budget",
+        "reason": "总体600秒停止派发；已有前置条件可用，无额外权限或环境缺口。"
+      },
+      {
+        "path": "tests/real-sync-visual-independence.test.mjs",
+        "sha256": "b6fcaca511d5cf8aa59ee477445fddd369a9f704aff1759ef792db1f34b8ab40",
+        "status": "reused-pass"
+      },
+      {
+        "path": "tests/reply-continuation-codepoint-http.test.mjs",
+        "sha256": "8cc8c4a1a5f1c1dea2921e7eda8eb24eb5d60b5761d4dc383881d7124a059210",
+        "status": "not-started-budget",
+        "reason": "总体600秒停止派发；已有前置条件可用，无额外权限或环境缺口。"
+      },
+      {
+        "path": "tests/reply-continuation-effective-intent-http.test.mjs",
+        "sha256": "2b7eb4dbd5cbc9f61874cef02d62c7ae37cebf016ad3322fc4274b00c2de6836",
+        "status": "not-started-budget",
+        "reason": "总体600秒停止派发；已有前置条件可用，无额外权限或环境缺口。"
+      },
+      {
+        "path": "tests/reply-continuation-preparation-proof-http.test.mjs",
+        "sha256": "b8ea44da679f901381d9e74b97928d43c63426a952b33b4c42b6de5979852444",
+        "status": "not-started-budget",
+        "reason": "总体600秒停止派发；已有前置条件可用，无额外权限或环境缺口。"
+      },
+      {
+        "path": "tests/reply-continuation-public-http.test.mjs",
+        "sha256": "913f3a0aac296470a6fc31df199efed91583783538fbe549990a1b36e536dc6d",
+        "status": "not-started-budget",
+        "reason": "总体600秒停止派发；已有前置条件可用，无额外权限或环境缺口。"
+      },
+      {
+        "path": "tests/reply-continuation-stopping-http.test.mjs",
+        "sha256": "eb59b2f4c201d3d213960612164e9adaebd635bfbbb206324c7e29649c77c1bc",
+        "status": "not-started-budget",
+        "reason": "总体600秒停止派发；已有前置条件可用，无额外权限或环境缺口。"
+      },
+      {
+        "path": "tests/reply-failed-generation-followup-http.test.mjs",
+        "sha256": "8e256c062f507d67639b46ed49046c27299806f3e8606796df82e21d52916dd5",
+        "status": "not-started-budget",
+        "reason": "总体600秒停止派发；已有前置条件可用，无额外权限或环境缺口。"
+      },
+      {
+        "path": "tests/reply-message-opt-in-http.test.mjs",
+        "sha256": "8583762fe42c11fedb97b61318af99e56e87882d032cb7ba5e11a154daba7fe3",
+        "status": "not-started-budget",
+        "reason": "总体600秒停止派发；已有前置条件可用，无额外权限或环境缺口。"
+      },
+      {
+        "path": "tests/reply-strategy-clarification-confirm-http.test.mjs",
+        "sha256": "a2b9aa1c6a03a76733a468b83b6904f9239870f39f78190137b69516104a612a",
+        "status": "not-started-budget",
+        "reason": "总体600秒停止派发；已有前置条件可用，无额外权限或环境缺口。"
+      },
+      {
+        "path": "tests/reply-strategy-preparation-proof-http.test.mjs",
+        "sha256": "0a7ec4d2fed85444a43741944febb65faf8c28abaacaa6ba41131e823f2e0441",
+        "status": "not-started-budget",
+        "reason": "总体600秒停止派发；已有前置条件可用，无额外权限或环境缺口。"
+      },
+      {
+        "path": "tests/reply-strategy-preparation-retry-ack-http.test.mjs",
+        "sha256": "b92b461c887bd566ac9b81b297cce77793a009ea5b897472f133767efad6004c",
+        "status": "not-started-budget",
+        "reason": "总体600秒停止派发；已有前置条件可用，无额外权限或环境缺口。"
+      },
+      {
+        "path": "tests/reply-strategy-skill-switch-http.test.mjs",
+        "sha256": "1586ecf2df77c02d554a8a472bac4cf898138e0f3963f6d4dd0bb10f0d1bdc0b",
+        "status": "not-started-budget",
+        "reason": "总体600秒停止派发；已有前置条件可用，无额外权限或环境缺口。"
+      },
+      {
+        "path": "tests/reply-supplement-http.test.mjs",
+        "sha256": "9c050894ac04e6cf8c0406800b53b233738dc5cd3d2cf60fdc9bd0df965119c8",
+        "status": "not-started-budget",
+        "reason": "总体600秒停止派发；已有前置条件可用，无额外权限或环境缺口。"
+      },
+      {
+        "path": "tests/single-frame-foreground-http.test.mjs",
+        "sha256": "77cd3c4f3a2553b4e7916397387f96c68411ebb3d6f993c9c6a43de7f9c06958",
+        "status": "not-started-budget",
+        "reason": "总体600秒停止派发；已有前置条件可用，无额外权限或环境缺口。"
+      },
+      {
+        "path": "tests/trace-fixture-ownership.test.mjs",
+        "sha256": "0bd49da1843369b1ac5fa629d7b081b8c20fe98b188f417136f0baa939bea5df",
+        "status": "not-started-budget",
+        "reason": "总体600秒停止派发；已有前置条件可用，无额外权限或环境缺口。"
+      },
+      {
+        "path": "tests/workspace-message-opt-in-http.test.mjs",
+        "sha256": "94c6a4fa2ddfd4b35975a4270025194929d175013289c5d6b6fdf1065f95b8d3",
+        "status": "not-started-budget",
+        "reason": "总体600秒停止派发；已有前置条件可用，无额外权限或环境缺口。"
+      }
+    ],
+    "failureAttribution": "8失败文件共5种症状，各用固定681fcc38精确单例复现；不证明未执行到的业务断言通过。",
+    "syntheticDatabasesChecked": 171,
+    "remainingOwnedDatabases": 0,
+    "remainingOwnedProcesses": 0
+  },
+  "backendFull": {
+    "fixedBaseline": "681fcc38eab77c8fe149b76705419971f3750a86",
+    "summary": {
+      "first_settled_outcomes": {
+        "skipped": 3,
+        "passed": 4307,
+        "failed": 47,
+        "error": 17
+      },
+      "discovery_occurrences": 4984,
+      "unique_test_ids": 4891,
+      "duplicate_occurrences": 93,
+      "loader_error_count": 0,
+      "settled_unique_ids": 4374,
+      "outcomes": {
+        "skipped": 3,
+        "passed": 4323,
+        "failed": 42,
+        "error": 6
+      },
+      "remaining_ids": [
+        "tests.integration.server.test_memory_evolution_reply.MemoryEvolutionReplyHttpTest.test_legacy_memory_and_frozen_reply_keep_evolution_unknown",
+        "tests.integration.server.test_memory_evolution_reply.MemoryEvolutionTimelineReplyHttpTest.test_historical_evolution_reaches_model_freeze_restore_and_source_deletion",
+        "tests.integration.server.test_memory_evolution_reply.MemoryEvolutionTimelineReplyHttpTest.test_later_conflict_changes_basis_notice_without_rewriting_frozen_evolution",
+        "tests.integration.server.test_memory_evolution_reply.MemoryEvolutionTimelineReplyHttpTest.test_new_conflict_prevents_reusing_old_layered_summary_but_keeps_bounded_l1",
+        "tests.integration.server.test_memory_evolution_reply.MemoryEvolutionTimelineReplyHttpTest.test_new_state_reply_does_not_treat_retired_relation_parent_as_used_fact",
+        "tests.integration.server.test_memory_evolution_reply.MemoryEvolutionTimelineReplyHttpTest.test_selected_old_fact_carries_conflict_and_counterevidence_deletion_retires_reply",
+        "tests.integration.server.test_memory_temporal_evidence.MemoryTemporalEvidenceHttpTest.test_event_changed_during_generation_rejects_late_candidate",
+        "tests.integration.server.test_memory_temporal_evidence.MemoryTemporalEvidenceHttpTest.test_owner_and_pending_events_keep_original_times_and_legacy_reply_keeps_unknown",
+        "tests.integration.server.test_memory_timeline_merge.MemoryTimelineMergeHttpTest.test_merge_without_relation_proof_stays_pending_and_preserves_both_active_parents",
+        "tests.integration.server.test_memory_timeline_merge.MemoryTimelineMergeHttpTest.test_supported_error_correction_update_exposes_retirement_reason_and_version_evidence",
+        "tests.integration.server.test_memory_timeline_merge.MemoryTimelineMergeHttpTest.test_supported_supplement_merge_reverifies_combined_text_and_preserves_two_parent_versions",
+        "tests.integration.server.test_model_priority_lifecycle.ModelPriorityLifecycleHttpTest.test_foreground_wait_longer_than_runtime_and_request_lease_still_succeeds",
+        "tests.integration.server.test_model_priority_lifecycle.ModelPriorityLifecycleHttpTest.test_model_error_returning_after_shutdown_still_consumes_failure_budget",
+        "tests.integration.server.test_model_priority_lifecycle.ModelPriorityLifecycleHttpTest.test_rejected_foreground_context_releases_priority_without_model_call",
+        "tests.integration.server.test_model_priority_lifecycle.ModelPriorityLifecycleHttpTest.test_reply_has_priority_after_source_verification",
+        "tests.integration.server.test_model_priority_lifecycle.ModelPriorityLifecycleHttpTest.test_reply_has_priority_between_historical_single_item_adjudication_calls",
+        "tests.integration.server.test_model_priority_lifecycle.ModelPriorityLifecycleHttpTest.test_reply_waits_for_active_extraction_then_holds_priority_until_complete",
+        "tests.integration.server.test_model_priority_lifecycle.ModelPriorityLifecycleHttpTest.test_shutdown_releases_global_lock_and_lease_recovery_keeps_three_failures",
+        "tests.integration.server.test_model_priority_lifecycle.ModelPriorityLifecycleHttpTest.test_shutdown_wakes_waiting_reply_and_discards_late_background_result",
+        "tests.integration.server.test_model_priority_lifecycle.ModelPriorityLifecycleHttpTest.test_source_deleted_while_background_waits_prevents_next_model_call",
+        "tests.integration.server.test_model_priority_lifecycle.ModelPriorityLifecycleHttpTest.test_stopped_late_adjudication_retains_all_actual_call_records",
+        "tests.integration.server.test_model_priority_lifecycle.ModelPriorityLifecycleHttpTest.test_stopped_late_extraction_retains_one_minimal_outbound_record",
+        "tests.integration.server.test_model_priority_lifecycle.ModelPriorityLifecycleHttpTest.test_watermark_failure_after_model_ledger_does_not_count_extraction_twice",
+        "tests.integration.server.test_observation_auto_flow.ObservationAutoFlowTest.test_committed_observation_automatically_processes_original_task",
+        "tests.integration.server.test_observation_auto_flow.ObservationAutoFlowTest.test_configuration_failure_stays_queued_and_new_batch_recovers",
+        "tests.integration.server.test_observation_auto_flow.ObservationAutoFlowTest.test_deleted_pending_batch_after_successful_round_does_not_restore_failure",
+        "tests.integration.server.test_observation_auto_flow.ObservationAutoFlowTest.test_deleted_pending_batch_does_not_reopen_failed_round",
+        "tests.integration.server.test_observation_auto_flow.ObservationAutoFlowTest.test_deleted_source_or_revoked_binding_late_event_is_ignored",
+        "tests.integration.server.test_observation_auto_flow.ObservationAutoFlowTest.test_failed_task_only_requeues_on_new_batch_and_keeps_retry_budget",
+        "tests.integration.server.test_observation_auto_flow.ObservationAutoFlowTest.test_global_lock_busy_retains_wakeup_until_released",
+        "tests.integration.server.test_observation_auto_flow.ObservationAutoFlowTest.test_new_authorized_observation_with_unknown_date_is_processed_once",
+        "tests.integration.server.test_observation_auto_flow.ObservationAutoFlowTest.test_new_batch_during_failed_round_is_not_lost",
+        "tests.integration.server.test_observation_auto_flow.ObservationAutoFlowTest.test_observation_does_not_run_an_older_import_task",
+        "tests.integration.server.test_observation_auto_flow.ObservationAutoFlowTest.test_replayed_batch_does_not_reset_completed_task",
+        "tests.integration.server.test_observation_auto_flow.ObservationAutoFlowTest.test_revocation_during_lock_wait_ends_pending_execution",
+        "tests.integration.server.test_observation_auto_flow.ObservationAutoFlowTest.test_round_start_uses_time_after_contact_lock_wait",
+        "tests.integration.server.test_observation_auto_flow.ObservationAutoFlowTest.test_running_duplicate_events_do_not_add_an_execution_round",
+        "tests.integration.server.test_observation_auto_flow.ObservationAutoFlowTest.test_same_second_batch_during_run_keeps_next_round",
+        "tests.integration.server.test_observation_auto_flow.ObservationAutoFlowTest.test_schedule_failure_preserves_observation_and_cursor_then_retries",
+        "tests.integration.server.test_observation_auto_flow.ObservationAutoFlowTest.test_shutdown_ignores_late_observation_event",
+        "tests.integration.server.test_observation_auto_flow.ObservationAutoFlowTest.test_shutdown_signal_before_host_teardown_does_not_create_task",
+        "tests.integration.server.test_observation_auto_flow.ObservationAutoFlowTest.test_unknown_date_receipt_preserves_existing_legacy_watermark",
+        "tests.integration.server.test_observation_auto_flow.ObservationAutoFlowTest.test_unknown_message_wrong_contact_and_other_owner_do_not_schedule",
+        "tests.integration.server.test_observation_model_smoke.ObservationModelRehearsalTest.test_observation_automatic_evidence_replay_delete_and_shutdown",
+        "tests.integration.server.test_observation_model_smoke.RealObservationModelSmokeTest.test_observation_automatic_evidence_replay_delete_and_shutdown",
+        "tests.integration.server.test_organization_quality_construct_cli.OrganizationQualityConstructionCliHttpTest.test_cli_plan_and_apply_bind_both_scopes_with_production_time_projection",
+        "tests.integration.server.test_organization_quality_construct_cli.OrganizationQualityConstructionCliHttpTest.test_contact_per_case_defers_quality_input_until_scope_feedback_is_stable",
+        "tests.integration.server.test_organization_quality_construct_cli.OrganizationQualityConstructionCliHttpTest.test_public_source_import_worker_and_confirmation_retain_real_provenance",
+        "tests.integration.server.test_overview_prepared_context.OverviewPreparedContextHttpTest.test_corrected_navigation_requires_complete_window_and_active_sources_without_kind_discriminator",
+        "tests.integration.server.test_overview_prepared_context.OverviewPreparedContextHttpTest.test_foreign_or_wrong_type_navigation_dependency_is_rejected_before_model",
+        "tests.integration.server.test_overview_prepared_context.OverviewPreparedContextHttpTest.test_owner_other_contact_navigation_is_frozen_without_reading_other_raw_messages",
+        "tests.integration.server.test_overview_prepared_context.OverviewPreparedContextHttpTest.test_prepare_without_reply_request_registers_complete_other_contact_navigation_then_delete_erases_sql",
+        "tests.integration.server.test_overview_prepared_context.OverviewPreparedContextHttpTest.test_prepared_ref_or_decision_generation_changes_reject_before_model_and_at_actual_writer",
+        "tests.integration.server.test_overview_prepared_context.OverviewPreparedContextHttpTest.test_prepared_source_window_and_tools_exclude_501st_and_later_message_ids_after_restart",
+        "tests.integration.server.test_overview_prepared_context.OverviewPreparedContextHttpTest.test_schema_two_is_sealed_on_original_identity_and_keeps_input_without_model",
+        "tests.integration.server.test_overview_reply_budgets.OverviewReplyBudgetsHttpTest.test_contact_owner_and_unconfirmed_references_have_independent_final_input_budgets",
+        "tests.integration.server.test_overview_reply_budgets.OverviewReplyBudgetsHttpTest.test_empty_recall_does_not_claim_nonexistence_and_rewrite_without_background_has_no_receipt",
+        "tests.integration.server.test_overview_reply_budgets.OverviewReplyBudgetsHttpTest.test_null_original_proof_stays_unknown_and_is_not_rebuilt_from_current_references",
+        "tests.integration.server.test_overview_reply_budgets.OverviewReplyBudgetsHttpTest.test_original_window_and_empty_runtime_queries_share_three_calls_and_keep_actual_raw_evidence",
+        "tests.integration.server.test_overview_reply_budgets.OverviewReplyBudgetsHttpTest.test_unavailable_projection_allows_generic_reply_and_does_not_backfill_saved_evidence_after_recovery",
+        "tests.integration.server.test_overview_reply_races.OverviewReplyRacesHttpTest.test_interrupted_generation_cannot_commit_late_and_explicit_recovery_saves_a_fresh_receipt",
+        "tests.integration.server.test_overview_reply_races.OverviewReplyRacesHttpTest.test_last_writer_owner_lock_serializes_contact_correction_and_keeps_the_saved_snapshot",
+        "tests.integration.server.test_overview_reply_races.OverviewReplyRacesHttpTest.test_owner_fact_from_another_relationship_never_reads_its_raw_window_and_source_deletion_erases_the_reply",
+        "tests.integration.server.test_overview_reply_races.OverviewReplyRacesHttpTest.test_queued_source_deletion_erases_prepared_input_and_rejects_late_and_duplicate_same_key_results",
+        "tests.integration.server.test_overview_reply_races.OverviewReplyRacesHttpTest.test_real_candidate_insert_failure_retries_the_same_key_and_restores_navigation_after_reassembly",
+        "tests.integration.server.test_overview_reply_retrieval.OverviewReplyRetrievalHttpTest.test_confirmed_relationship_and_owner_facts_have_actual_saved_navigation_and_replay",
+        "tests.integration.server.test_overview_reply_snapshot_compat.OverviewReplySnapshotCompatibilityHttpTest.test_absent_or_null_legacy_receipt_stays_unknown_after_current_overview_changes_and_restart",
+        "tests.integration.server.test_overview_reply_source_generations.OverviewReplySourceGenerationHttpTest.test_changed_original_generation_is_not_injected_before_model_or_committed_after_last_validation",
+        "tests.integration.server.test_owner_contact_layered_reply.OwnerContactLayeredReplyHttpTest.test_both_scopes_freeze_independent_actual_materials",
+        "tests.integration.server.test_owner_contact_layered_reply.OwnerContactLayeredReplyHttpTest.test_codec7_cannot_gain_owner_authorization_on_reconnect",
+        "tests.integration.server.test_owner_contact_layered_reply.OwnerContactLayeredReplyHttpTest.test_contact_disabled_does_not_hide_owner_or_cut_user_and_original_l1_budgets",
+        "tests.integration.server.test_owner_contact_layered_reply.OwnerContactLayeredReplyHttpTest.test_owner_actual_profile_and_tool_text_reach_generation_and_saved_basis",
+        "tests.integration.server.test_owner_contact_layered_reply.OwnerContactLayeredReplyHttpTest.test_owner_background_remains_separate_from_current_user_instruction",
+        "tests.integration.server.test_owner_contact_layered_reply.OwnerContactLayeredReplyHttpTest.test_owner_correction_keeps_audit_but_disables_all_affected_generation",
+        "tests.integration.server.test_owner_contact_layered_reply.OwnerContactLayeredReplyHttpTest.test_owner_disable_preserves_history_and_reconnect_never_resigns_old_prepare",
+        "tests.integration.server.test_owner_contact_layered_reply.OwnerContactLayeredReplyHttpTest.test_owner_generation_is_rechecked_in_final_writer_transaction",
+        "tests.integration.server.test_owner_contact_layered_reply.OwnerContactLayeredReplyHttpTest.test_owner_hidden_collection_and_framework_identity_arguments_are_refused",
+        "tests.integration.server.test_owner_contact_layered_reply.OwnerContactLayeredReplyHttpTest.test_owner_only_omission_cannot_freeze_a_still_over_capacity_prepare",
+        "tests.integration.server.test_owner_contact_layered_reply.OwnerContactLayeredReplyHttpTest.test_owner_origin_is_backend_only_and_source_delete_clears_tool_edit_carry_and_descendant",
+        "tests.integration.server.test_owner_contact_layered_reply.OwnerContactLayeredReplyHttpTest.test_owner_profile_withdraw_cleans_both_contacts_and_prepared",
+        "tests.integration.server.test_owner_contact_layered_reply.OwnerContactLayeredReplyHttpTest.test_owner_read_then_disable_blocks_next_actual_send",
+        "tests.integration.server.test_owner_contact_layered_reply.OwnerContactLayeredReplyHttpTest.test_owner_result_delete_cleans_both_contacts_and_preserves_contact_layers",
+        "tests.integration.server.test_owner_contact_layered_reply.OwnerContactLayeredReplyHttpTest.test_owner_scenario_withdraw_cleans_both_contacts_and_prepared",
+        "tests.integration.server.test_owner_contact_layered_reply.OwnerContactLayeredReplyHttpTest.test_owner_source_delete_before_late_result_cannot_commit_or_restore",
+        "tests.integration.server.test_owner_contact_layered_reply.OwnerContactLayeredReplyHttpTest.test_owner_without_explicit_read_budget_stays_closed_in_saved_basis",
+        "tests.integration.server.test_owner_contact_layered_reply.OwnerContactLayeredReplyHttpTest.test_queued_owner_origin_after_tool_read_blocks_next_actual_send",
+        "tests.integration.server.test_owner_contact_layered_reply.OwnerContactLayeredReplyHttpTest.test_queued_owner_origin_blocks_candidate_save_after_generation",
+        "tests.integration.server.test_owner_contact_layered_reply.OwnerContactLayeredReplyHttpTest.test_queued_owner_origin_blocks_final_writer_before_physical_cleanup",
+        "tests.integration.server.test_owner_contact_layered_reply.OwnerContactLayeredReplyHttpTest.test_queued_owner_origin_blocks_historical_basis_before_physical_cleanup",
+        "tests.integration.server.test_owner_contact_layered_reply.OwnerContactLayeredReplyHttpTest.test_tool_routes_only_actual_directories_and_keeps_side_budgets_independent",
+        "tests.integration.server.test_owner_layered_constraints.OwnerLayeredConstraintTest.test_owner_unique_scope_and_cross_scope_foreign_keys_are_enforced",
+        "tests.integration.server.test_owner_layered_correction_reply_copies.OwnerLayeredCorrectionReplyCopiesHttpTest.test_owner_profile_fact_correction_after_tool_read_blocks_next_actual_send",
+        "tests.integration.server.test_owner_layered_correction_reply_copies.OwnerLayeredCorrectionReplyCopiesHttpTest.test_owner_profile_fact_correction_before_writer_blocks_late_commit",
+        "tests.integration.server.test_owner_layered_correction_reply_copies.OwnerLayeredCorrectionReplyCopiesHttpTest.test_owner_profile_fact_error_cleans_usage_before_exact_l1_save_and_rebuilds_legally",
+        "tests.integration.server.test_owner_layered_correction_reply_copies.OwnerLayeredCorrectionReplyCopiesHttpTest.test_owner_profile_summary_after_tool_read_blocks_next_actual_send",
+        "tests.integration.server.test_owner_layered_correction_reply_copies.OwnerLayeredCorrectionReplyCopiesHttpTest.test_owner_profile_summary_before_writer_blocks_late_commit",
+        "tests.integration.server.test_owner_layered_correction_reply_copies.OwnerLayeredCorrectionReplyCopiesHttpTest.test_owner_profile_summary_error_cleans_both_contacts_and_preserves_scenarios",
+        "tests.integration.server.test_owner_layered_correction_reply_copies.OwnerLayeredCorrectionReplyCopiesHttpTest.test_owner_scenario_fact_correction_after_tool_read_blocks_next_actual_send",
+        "tests.integration.server.test_owner_layered_correction_reply_copies.OwnerLayeredCorrectionReplyCopiesHttpTest.test_owner_scenario_fact_correction_before_writer_blocks_late_commit",
+        "tests.integration.server.test_owner_layered_correction_reply_copies.OwnerLayeredCorrectionReplyCopiesHttpTest.test_owner_scenario_fact_error_cleans_usage_before_exact_l1_save_and_rebuilds_legally",
+        "tests.integration.server.test_owner_layered_correction_reply_copies.OwnerLayeredCorrectionReplyCopiesHttpTest.test_owner_scenario_summary_after_tool_read_blocks_next_actual_send",
+        "tests.integration.server.test_owner_layered_correction_reply_copies.OwnerLayeredCorrectionReplyCopiesHttpTest.test_owner_scenario_summary_before_writer_blocks_late_commit",
+        "tests.integration.server.test_owner_layered_correction_reply_copies.OwnerLayeredCorrectionReplyCopiesHttpTest.test_owner_scenario_summary_error_cleans_both_contacts_and_preserves_independent_content",
+        "tests.integration.server.test_owner_layered_memory.OwnerLayeredMemoryHttpTest.test_owner_generates_both_layers_and_deletes_without_contact",
+        "tests.integration.server.test_owner_layered_memory.OwnerLayeredMemoryHttpTest.test_owner_management_without_any_contact_keeps_unknown_quality_closed",
+        "tests.integration.server.test_owner_layered_memory.OwnerLayeredMemoryHttpTest.test_owner_model_input_is_whitelisted_and_unreferenced_input_deletion_erases_both_layers",
+        "tests.integration.server.test_owner_layered_memory.OwnerLayeredMemoryHttpTest.test_owner_recent_state_and_relationship_note_are_eligible",
+        "tests.integration.server.test_owner_layered_memory.OwnerLayeredMemoryHttpTest.test_withdraw_owner_scenario_revokes_profile_and_frozen_snapshot",
+        "tests.integration.server.test_owner_layered_safety.OwnerLayeredSafetyHttpTest.test_deleting_uncited_self_source_erases_both_layers",
+        "tests.integration.server.test_owner_layered_safety.OwnerLayeredSafetyHttpTest.test_disabled_generation_rejects_late_profile_response",
+        "tests.integration.server.test_owner_layered_safety.OwnerLayeredSafetyHttpTest.test_other_owner_cannot_read_or_delete_source_owner_artifacts",
+        "tests.integration.server.test_owner_layered_safety.OwnerLayeredSafetyHttpTest.test_owner_scope_completes_while_contact_lock_is_held",
+        "tests.integration.server.test_owner_layered_safety.OwnerLayeredSafetyHttpTest.test_real_worker_owner_auto_maintenance_and_restart_dirty_scope",
+        "tests.integration.server.test_owner_layered_safety.OwnerLayeredSafetyHttpTest.test_real_worker_restart_recovers_owner_queued_task_and_expired_lease",
+        "tests.integration.server.test_owner_layered_safety.OwnerLayeredSafetyHttpTest.test_restart_after_l2_commit_recovers_owner_profile_without_repeating_l2",
+        "tests.integration.server.test_owner_layered_safety.OwnerLayeredSafetyHttpTest.test_source_erased_during_profile_call_cannot_return_as_late_artifact",
+        "tests.integration.server.test_owner_layered_safety.OwnerLayeredSafetyHttpTest.test_two_contact_self_sources_share_one_owner_input_and_all_four_boundaries",
+        "tests.integration.server.test_owner_memory_overview.OwnerMemoryOverviewHttpTest.test_collection_revision_counts_filtered_owner_changes_while_source_changes_only_projection",
+        "tests.integration.server.test_owner_memory_overview.OwnerMemoryOverviewHttpTest.test_confirmed_self_claim_uses_its_real_source_without_contact_body_or_locator",
+        "tests.integration.server.test_owner_memory_overview.OwnerMemoryOverviewHttpTest.test_conflicting_saved_preferences_and_taboo_remain_separate_without_inference",
+        "tests.integration.server.test_owner_memory_overview.OwnerMemoryOverviewHttpTest.test_owner_can_view_stable_manual_facts_and_explicit_preferences_without_contact_facts",
+        "tests.integration.server.test_owner_overview_extraction.OwnerOverviewExtractionHttpTest.test_explicit_self_update_preserves_original_versions_and_source_deletion_beats_recovery",
+        "tests.integration.server.test_owner_overview_extraction.OwnerOverviewExtractionHttpTest.test_full_original_worker_window_is_checked_without_exposing_contact_context",
+        "tests.integration.server.test_owner_overview_lifecycle.OwnerOverviewLifecycleHttpTest.test_build_that_commits_before_waiting_delete_is_invalidated_and_cannot_restore_the_body",
+        "tests.integration.server.test_owner_overview_lifecycle.OwnerOverviewLifecycleHttpTest.test_deleted_body_does_not_reappear_after_interrupted_receipt_and_persistent_lease_recovery",
+        "tests.integration.server.test_owner_overview_lifecycle.OwnerOverviewLifecycleHttpTest.test_empty_owner_scope_and_authentication_do_not_read_another_owner",
+        "tests.integration.server.test_owner_overview_lifecycle.OwnerOverviewLifecycleHttpTest.test_projection_write_failure_returns_safe_error_and_recovers_from_authoritative_storage",
+        "tests.integration.server.test_owner_overview_lifecycle.OwnerOverviewLifecycleHttpTest.test_queued_delete_failed_cleanup_and_same_task_retry_never_restore_owner_projection",
+        "tests.integration.server.test_owner_overview_lifecycle.OwnerOverviewLifecycleHttpTest.test_source_delete_in_both_orders_and_replay_preserve_independent_owner_and_other_relationship",
+        "tests.integration.server.test_owner_overview_lifecycle.OwnerOverviewLifecycleHttpTest.test_underlying_owner_correction_rebuilds_traceable_history_and_delete_clears_the_chain",
+        "tests.integration.server.test_owner_overview_lifecycle.OwnerOverviewLifecycleHttpTest.test_unexpected_build_failure_is_safe_no_store_and_does_not_keep_old_body",
+        "tests.integration.server.test_owner_overview_source_generation.OwnerOverviewSourceGenerationHttpTest.test_changed_candidate_subject_cannot_move_contact_facts_into_owner_overview",
+        "tests.integration.server.test_owner_overview_source_generation.OwnerOverviewSourceGenerationHttpTest.test_corrected_owner_leaf_does_not_bypass_the_original_self_subject",
+        "tests.integration.server.test_owner_overview_source_generation.OwnerOverviewSourceGenerationHttpTest.test_original_ref_message_body_and_source_fingerprint_changes_withdraw_old_self_claim",
+        "tests.integration.server.test_owner_overview_source_generation.OwnerOverviewSourceGenerationHttpTest.test_unknown_original_window_remains_unknown_without_filling_nullable_fields",
+        "tests.integration.server.test_owner_overview_upgrade.OwnerOverviewForwardUpgradeHttpTest.test_064_failure_is_atomic_and_both_projection_and_collection_triggers_survive_recovery",
+        "tests.integration.server.test_owner_overview_upgrade.OwnerOverviewForwardUpgradeHttpTest.test_actual_063_owner_rows_upgrade_without_rewriting_proof_and_revision_changes_transactionally",
+        "tests.integration.server.test_persistent_extraction_schedule.PersistentExtractionScheduleHttpTest.test_after_first_warmup_message_second_waits_for_threshold",
+        "tests.integration.server.test_persistent_extraction_schedule.PersistentExtractionScheduleHttpTest.test_deleted_pending_source_does_not_count_toward_next_threshold",
+        "tests.integration.server.test_persistent_extraction_schedule.PersistentExtractionScheduleHttpTest.test_idle_tail_survives_host_restart_without_new_notification",
+        "tests.integration.server.test_persistent_extraction_schedule.PersistentExtractionScheduleHttpTest.test_replayed_observation_does_not_count_twice",
+        "tests.integration.server.test_persistent_extraction_schedule.PersistentExtractionScheduleHttpTest.test_revoked_contact_is_not_claimed_by_startup_scan",
+        "tests.integration.server.test_persistent_extraction_schedule.PersistentExtractionScheduleHttpTest.test_scanner_preserves_failure_until_new_source_becomes_due",
+        "tests.integration.server.test_persistent_extraction_schedule.PersistentExtractionScheduleHttpTest.test_startup_recovers_committed_observation_without_notification",
+        "tests.integration.server.test_persistent_extraction_schedule.PersistentExtractionScheduleHttpTest.test_stopped_host_does_not_dispatch_new_persisted_messages",
+        "tests.integration.server.test_persistent_reply_exploration.PersistentExplorationHttpTest.test_answer_continues_only_actual_selection_and_keeps_same_generation_after_lost_response",
+        "tests.integration.server.test_persistent_reply_exploration.PersistentExplorationHttpTest.test_answer_with_remaining_ambiguity_does_not_generate_even_after_selection",
+        "tests.integration.server.test_persistent_reply_exploration.PersistentExplorationHttpTest.test_answer_without_selected_intent_stays_in_exploration_for_both_scenes",
+        "tests.integration.server.test_persistent_reply_exploration.PersistentExplorationHttpTest.test_automatic_updates_are_bounded_and_cannot_resume_after_stop",
+        "tests.integration.server.test_persistent_reply_exploration.PersistentExplorationHttpTest.test_both_scenes_correct_without_confirming_then_generate_once_and_replay_across_reassembly",
+        "tests.integration.server.test_persistent_reply_exploration.PersistentExplorationHttpTest.test_change_group_is_unselected_and_requires_distinct_intents",
+        "tests.integration.server.test_persistent_reply_exploration.PersistentExplorationHttpTest.test_changed_current_input_and_late_model_cannot_publish_or_generate",
+        "tests.integration.server.test_persistent_reply_exploration.PersistentExplorationHttpTest.test_completed_confirmation_and_answer_replay_after_current_revision_and_ttl_change",
+        "tests.integration.server.test_persistent_reply_exploration.PersistentExplorationHttpTest.test_direct_intent_after_exploration_preserves_user_text_and_actual_reference",
+        "tests.integration.server.test_persistent_reply_exploration.PersistentExplorationHttpTest.test_failed_open_explicit_retry_reuses_actual_input_and_rejects_changed_same_key",
+        "tests.integration.server.test_persistent_reply_exploration.PersistentExplorationHttpTest.test_initiate_confirmed_suggestion_without_server_reference_is_rejected",
+        "tests.integration.server.test_persistent_reply_exploration.PersistentExplorationHttpTest.test_integer_suggestion_for_both_scenes_is_rejected_without_advancing_live_input",
+        "tests.integration.server.test_persistent_reply_exploration.PersistentExplorationHttpTest.test_multi_source_memory_outside_generation_window_has_one_complete_dependency",
+        "tests.integration.server.test_persistent_reply_exploration.PersistentExplorationHttpTest.test_old_integer_endpoint_rejects_protocol_without_model_or_new_input",
+        "tests.integration.server.test_persistent_reply_exploration.PersistentExplorationHttpTest.test_pause_and_stop_reject_old_questions_and_confirmation_without_generation",
+        "tests.integration.server.test_persistent_reply_exploration.PersistentExplorationHttpTest.test_public_body_and_cross_session_references_fail_before_model",
+        "tests.integration.server.test_persistent_reply_exploration.PersistentExplorationHttpTest.test_revision_change_after_model_before_actual_candidate_commit_saves_no_candidate",
+        "tests.integration.server.test_persistent_reply_exploration.PersistentExplorationHttpTest.test_revision_change_between_exploration_guard_and_base_context_never_calls_generation_model",
+        "tests.integration.server.test_persistent_reply_exploration.PersistentExplorationHttpTest.test_skill_revision_invalidates_old_options_but_explicit_disabled_refresh_keeps_actual_selection",
+        "tests.integration.server.test_persistent_reply_exploration.PersistentExplorationHttpTest.test_source_revocation_and_cross_owner_refuse_old_result_without_new_model_or_derived_turn",
+        "tests.integration.server.test_persistent_reply_exploration.PersistentExplorationHttpTest.test_ttl_crossing_at_actual_save_erases_exploration_body_after_owner_transaction",
+        "tests.integration.server.test_persistent_reply_exploration.PersistentExplorationHttpTest.test_user_skill_is_actually_loaded_as_same_version_and_disabled_never_autoloads",
+        "tests.integration.server.test_provider_context_limit.OfficialFlashSdkContextLimitHttpTest.test_offline_sdk_context_error_is_public_without_counter_forgery",
+        "tests.integration.server.test_provider_context_limit.ProviderContextLimitHttpTest.test_exploration_context_limit_keeps_discussion_without_extra_generation",
+        "tests.integration.server.test_provider_context_limit.ProviderContextLimitHttpTest.test_provider_context_limit_is_explicit_and_keeps_saved_history",
+        "tests.integration.server.test_provider_context_limit.ProviderContextLimitHttpTest.test_unknown_provider_code_does_not_guess_from_error_message",
+        "tests.integration.server.test_real_memory_observation_entry.RealMemoryObservationEntryTest.test_confirmed_observation_uses_existing_task_and_new_message_identity",
+        "tests.integration.server.test_relationship_overview_events.RelationshipOverviewEventsHttpTest.test_plan_and_source_verified_completion_form_traceable_manual_versions_without_time_inference",
+        "tests.integration.server.test_relationship_overview_events.RelationshipOverviewEventsHttpTest.test_used_owner_context_revision_changes_projection_without_creating_owner_overview",
+        "tests.integration.server.test_relationship_overview_index_rebuild.RelationshipOverviewIndexRebuildHttpTest.test_delete_rebuilds_a_cleared_stale_index_and_retains_only_the_independent_memory",
+        "tests.integration.server.test_relationship_overview_lifecycle.RelationshipOverviewLifecycleHttpTest.test_a_build_already_in_progress_is_invalidated_when_delete_commits",
+        "tests.integration.server.test_relationship_overview_lifecycle.RelationshipOverviewLifecycleHttpTest.test_all_failure_responses_are_no_store_without_recoverable_body",
+        "tests.integration.server.test_relationship_overview_lifecycle.RelationshipOverviewLifecycleHttpTest.test_contact_fk_removal_clears_metadata_and_directory_without_touching_another_contact",
+        "tests.integration.server.test_relationship_overview_lifecycle.RelationshipOverviewLifecycleHttpTest.test_empty_snapshot_scope_authentication_and_errors_do_not_return_private_body",
+        "tests.integration.server.test_relationship_overview_lifecycle.RelationshipOverviewLifecycleHttpTest.test_expired_and_future_records_remain_visible_and_a_leaf_is_not_invented",
+        "tests.integration.server.test_relationship_overview_lifecycle.RelationshipOverviewLifecycleHttpTest.test_failed_projection_write_returns_safe_error_then_rebuilds_after_restart",
+        "tests.integration.server.test_relationship_overview_lifecycle.RelationshipOverviewLifecycleHttpTest.test_missing_legacy_generation_remains_unknown_and_manifest_has_no_body",
+        "tests.integration.server.test_relationship_overview_lifecycle.RelationshipOverviewLifecycleHttpTest.test_noop_and_rolled_back_source_mutation_preserve_the_authoritative_snapshot",
+        "tests.integration.server.test_relationship_overview_lifecycle.RelationshipOverviewLifecycleHttpTest.test_period_update_and_old_new_source_scope_both_invalidate_inside_transaction",
+        "tests.integration.server.test_relationship_overview_lifecycle.RelationshipOverviewLifecycleHttpTest.test_projection_metadata_rejects_body_copies_at_every_saved_level",
+        "tests.integration.server.test_relationship_overview_lifecycle.RelationshipOverviewLifecycleHttpTest.test_queued_delete_failed_cleanup_and_explicit_retry_never_restore_old_projection",
+        "tests.integration.server.test_relationship_overview_lifecycle.RelationshipOverviewLifecycleHttpTest.test_restart_after_delete_commit_before_worker_receipt_cannot_recover_old_contents",
+        "tests.integration.server.test_relationship_overview_upgrade.RelationshipOverviewForwardUpgradeHttpTest.test_063_failure_rolls_back_schema_and_ledger_then_recovers",
+        "tests.integration.server.test_relationship_overview_upgrade.RelationshipOverviewForwardUpgradeHttpTest.test_063_has_exact_invalidation_closure_and_scope_foreign_keys",
+        "tests.integration.server.test_relationship_overview_upgrade.RelationshipOverviewForwardUpgradeHttpTest.test_actual_062_memory_and_unknown_event_survive_upgrade_and_repeat_without_rewrites",
+        "tests.integration.server.test_reply_api.ReplyApiContractTest.test_reply_passes_user_skill_version",
+        "tests.integration.server.test_reply_api.ReplyApiContractTest.test_reply_rejected_when_conversation_unverified",
+        "tests.integration.server.test_reply_api.ReplyApiContractTest.test_reply_rejects_invalid_request_body",
+        "tests.integration.server.test_reply_api.ReplyApiContractTest.test_reply_rejects_invalid_skill_version",
+        "tests.integration.server.test_reply_api.ReplyApiContractTest.test_reply_requires_post_method",
+        "tests.integration.server.test_reply_api.ReplyApiContractTest.test_reply_requires_token",
+        "tests.integration.server.test_reply_api.ReplyApiContractTest.test_reply_to_message_shape",
+        "tests.integration.server.test_reply_api.ReplyApiContractTest.test_reply_unavailable_without_service",
+        "tests.integration.server.test_reply_api.ReplyApiContractTest.test_rewrite_draft_shape",
+        "tests.integration.server.test_reply_api.ReplyApiContractTest.test_runtime_limits_return_stable_errors",
+        "tests.integration.server.test_reply_current_constraints.ReplyCurrentConstraintsHttpTest.test_cached_model_is_rejected_without_a_fake_outbound_record",
+        "tests.integration.server.test_reply_current_constraints.ReplyCurrentConstraintsHttpTest.test_candidates_are_returned_for_user_selection_without_model_review",
+        "tests.integration.server.test_reply_current_constraints.ReplyCurrentConstraintsHttpTest.test_deleted_preference_during_generation_prevents_candidate_persistence",
+        "tests.integration.server.test_reply_current_constraints.ReplyCurrentConstraintsHttpTest.test_pasted_contact_text_uses_confirmed_direction_without_draft_review",
+        "tests.integration.server.test_reply_current_constraints.ReplyCurrentConstraintsHttpTest.test_unknown_citation_is_still_rejected_without_model_review",
+        "tests.integration.server.test_reply_evidence_api.ReplyEvidenceApiTest.test_completed_snapshot_distinguishes_context_from_citations",
+        "tests.integration.server.test_reply_evidence_api.ReplyEvidenceApiTest.test_incomplete_snapshot_and_unauthorized_request_are_not_exposed",
+        "tests.integration.server.test_reply_evidence_api.ReplyEvidenceApiTest.test_invalid_identifiers_are_rejected",
+        "tests.integration.server.test_reply_evidence_api.ReplyEvidenceApiTest.test_memory_snapshot_keeps_source_save_time_and_validity_separate",
+        "tests.integration.server.test_reply_evidence_api.ReplyEvidenceApiTest.test_other_contact_owner_and_missing_request_are_not_found",
+        "tests.integration.server.test_reply_message_groups.ReplyMessageGroupHttpTest.test_group_text_cannot_add_content_outside_its_messages",
+        "tests.integration.server.test_reply_message_groups.ReplyMessageGroupHttpTest.test_groups_replay_with_stable_message_identity_in_both_scenes",
+        "tests.integration.server.test_reply_message_groups.ReplyMessageGroupHttpTest.test_lossless_group_separator_is_normalized_without_changing_words",
+        "tests.integration.server.test_reply_quality_release.ReplyQualityReleaseHttpTest.test_actual_operator_reply_contract_is_visible_and_unknown_keeps_original_l1",
+        "tests.integration.server.test_reply_quality_release.ReplyQualityReleaseHttpTest.test_installed_pair_runs_same_l1_through_public_http_and_actual_sdk_capture",
+        "tests.integration.server.test_reply_quality_release.ReplyQualityReleaseHttpTest.test_owner_only_installed_pair_does_not_require_contact_material",
+        "tests.integration.server.test_reply_quality_release.ReplyQualityReleaseHttpTest.test_replaced_installed_candidate_blocks_layered_arm_before_provider_call",
+        "tests.integration.server.test_reply_quality_release.ReplyQualityReleaseHttpTest.test_replaced_qualification_invalidates_prepare_and_model_result_before_commit",
+        "tests.integration.server.test_reply_quality_release.ReplyQualityReleaseHttpTest.test_unapproved_other_scope_blocks_layered_arm_before_provider_call",
+        "tests.integration.server.test_rewrite_history_permissions.RewriteHistoryPermissionHttpTest.test_authorized_rewrite_can_cite_only_current_scope_history",
+        "tests.integration.server.test_rewrite_history_permissions.RewriteHistoryPermissionHttpTest.test_plain_rewrite_cannot_read_history_even_when_model_calls_tools",
+        "tests.integration.server.test_rewrite_history_permissions.RewriteHistoryPermissionHttpTest.test_plain_rewrite_keeps_user_selected_candidate_continuation",
+        "tests.integration.server.test_rewrite_history_permissions.RewriteHistoryPermissionHttpTest.test_plain_rewrite_rejects_citation_to_unavailable_history",
+        "tests.integration.server.test_scenario_read_tool.ScenarioReadHttpTest.test_actual_tool_paragraphs_are_sent_and_saved_for_evidence",
+        "tests.integration.server.test_scenario_read_tool.ScenarioReadHttpTest.test_complete_request_capacity_stops_before_second_send_without_cutting_user_input",
+        "tests.integration.server.test_scenario_read_tool.ScenarioReadHttpTest.test_disabling_after_body_read_blocks_the_next_actual_model_send",
+        "tests.integration.server.test_scenario_read_tool.ScenarioReadHttpTest.test_duplicate_and_call_exhaustion_do_not_return_the_body_again",
+        "tests.integration.server.test_scenario_read_tool.ScenarioReadHttpTest.test_final_writer_revalidates_the_tool_body_after_model_validation",
+        "tests.integration.server.test_scenario_read_tool.ScenarioReadHttpTest.test_hidden_generation_source_erases_saved_body_and_blocks_replay",
+        "tests.integration.server.test_scenario_read_tool.ScenarioReadHttpTest.test_historical_independent_review_receives_the_exact_actual_tool_body",
+        "tests.integration.server.test_scenario_read_tool.ScenarioReadHttpTest.test_historical_review_can_locate_only_read_body_facts_and_does_not_authorize_intent",
+        "tests.integration.server.test_scenario_read_tool.ScenarioReadHttpTest.test_missing_explicit_tool_budget_does_not_register_new_reading_capability",
+        "tests.integration.server.test_scenario_read_tool.ScenarioReadHttpTest.test_model_cannot_hide_an_extra_argument_behind_framework_runtime_injection",
+        "tests.integration.server.test_scenario_read_tool.ScenarioReadHttpTest.test_model_cannot_turn_a_scenario_version_into_a_citation_identity",
+        "tests.integration.server.test_scenario_read_tool.ScenarioReadHttpTest.test_paragraph_and_character_limits_reject_whole_body_without_borrowing_history",
+        "tests.integration.server.test_scenario_read_tool.ScenarioReadHttpTest.test_parallel_calls_atomically_share_call_capacity_and_deduplicate_paragraphs",
+        "tests.integration.server.test_scenario_read_tool.ScenarioReadHttpTest.test_raw_extra_and_wrong_types_get_deterministic_bounded_receipts",
+        "tests.integration.server.test_scenario_read_tool.ScenarioReadHttpTest.test_saved_body_is_not_rebuilt_after_disable_and_backend_restart",
+        "tests.integration.server.test_scenario_read_tool.ScenarioReadHttpTest.test_source_deletion_after_body_read_blocks_the_next_actual_model_send",
+        "tests.integration.server.test_scenario_read_tool.ScenarioReadHttpTest.test_stale_body_read_returns_no_document_and_cannot_send_the_receipt",
+        "tests.integration.server.test_scenario_read_tool.ScenarioReadHttpTest.test_success_and_rejections_count_the_complete_real_model_requests",
+        "tests.integration.server.test_scenario_read_tool.ScenarioReadHttpTest.test_tool_cannot_read_an_unexposed_entry_from_the_larger_frozen_collection",
+        "tests.integration.server.test_scenario_read_tool.ScenarioReadHttpTest.test_withdrawing_after_body_read_blocks_the_next_actual_model_send",
+        "tests.integration.server.test_scenario_read_tool.ScenarioReadHttpTest.test_withdrawing_scenario_erases_saved_tool_body_and_blocks_replay",
+        "tests.integration.server.test_server_command.ServerCommandProcessTest.test_authenticated_runtime_shutdown_exits_and_removes_info",
+        "tests.integration.server.test_server_command.ServerCommandProcessTest.test_confirm_body_reaches_real_http_handler",
+        "tests.integration.server.test_server_command.ServerCommandProcessTest.test_owner_uninitialized_starts_for_setup",
+        "tests.integration.server.test_server_command.ServerCommandProcessTest.test_sync_requires_token_and_unavailable_without_identity",
+        "tests.integration.server.test_server_command.ServerCommandProcessTest.test_writes_info_file_then_removes_on_sigterm",
+        "tests.integration.server.test_setup_api.SetupApiContractTest.test_initialize_owner_creates",
+        "tests.integration.server.test_setup_api.SetupApiContractTest.test_initialize_owner_is_idempotent",
+        "tests.integration.server.test_setup_api.SetupApiContractTest.test_initialize_owner_rejects_invalid_body",
+        "tests.integration.server.test_setup_api.SetupApiContractTest.test_owner_uninitialized_allows_credentials_status",
+        "tests.integration.server.test_setup_api.SetupApiContractTest.test_owner_uninitialized_allows_setup_endpoints",
+        "tests.integration.server.test_setup_api.SetupApiContractTest.test_owner_uninitialized_blocks_non_setup_endpoints",
+        "tests.integration.server.test_setup_api.SetupApiContractTest.test_setup_endpoints_require_token",
+        "tests.integration.server.test_setup_api.SetupApiContractTest.test_setup_unavailable_without_service",
+        "tests.integration.server.test_setup_api.SetupApiContractTest.test_status_returns_initialization_state",
+        "tests.integration.server.test_setup_api.SetupApiContractTest.test_write_credentials_rejects_invalid_body",
+        "tests.integration.server.test_setup_api.SetupApiContractTest.test_write_credentials_saves_and_never_echoes",
+        "tests.integration.server.test_shared_review_claims_http.SharedReviewClaimsHttpTest.test_current_direction_candidate_persists_without_a_review_call",
+        "tests.integration.server.test_skill_api.SkillApiContractTest.test_credentials_status_never_exposes_key",
+        "tests.integration.server.test_skill_api.SkillApiContractTest.test_enable_disable_delete_rollback",
+        "tests.integration.server.test_skill_api.SkillApiContractTest.test_import_rejection_returns_stable_reason",
+        "tests.integration.server.test_skill_api.SkillApiContractTest.test_import_rejects_invalid_body",
+        "tests.integration.server.test_skill_api.SkillApiContractTest.test_imports_skill",
+        "tests.integration.server.test_skill_api.SkillApiContractTest.test_ledger_summary_contains_metadata_only",
+        "tests.integration.server.test_skill_api.SkillApiContractTest.test_lifecycle_rejects_invalid_skill_id",
+        "tests.integration.server.test_skill_api.SkillApiContractTest.test_list_skill_versions",
+        "tests.integration.server.test_skill_api.SkillApiContractTest.test_lists_skills",
+        "tests.integration.server.test_skill_api.SkillApiContractTest.test_preview_skill_version",
+        "tests.integration.server.test_skill_api.SkillApiContractTest.test_skill_endpoints_require_token",
+        "tests.integration.server.test_skill_api.SkillApiContractTest.test_skill_unavailable_without_service",
+        "tests.integration.server.test_skill_feedback.SkillFeedbackHttpTest.test_all_blocked_update_preview_is_rejected_before_any_model_call",
+        "tests.integration.server.test_skill_feedback.SkillFeedbackHttpTest.test_carry_created_before_stop_cannot_restore_old_candidate_and_stop_prevents_new_carry",
+        "tests.integration.server.test_skill_feedback.SkillFeedbackHttpTest.test_existing_global_disable_also_rejects_old_candidate_replay",
+        "tests.integration.server.test_skill_feedback.SkillFeedbackHttpTest.test_explicit_contact_skill_disable_is_immediate_durable_isolated_and_explicitly_reversible",
+        "tests.integration.server.test_skill_feedback.SkillFeedbackHttpTest.test_explicit_null_execution_receipt_cannot_enter_continuation_or_candidate_carry",
+        "tests.integration.server.test_skill_feedback.SkillFeedbackHttpTest.test_explicit_policy_can_be_removed_after_source_erasure_without_restoring_deleted_strategy",
+        "tests.integration.server.test_skill_feedback.SkillFeedbackHttpTest.test_generic_descendant_that_actually_read_old_candidate_keeps_the_policy_edge",
+        "tests.integration.server.test_skill_feedback.SkillFeedbackHttpTest.test_method_stop_filters_actual_body_and_receipt_only_in_explicit_contact_scene",
+        "tests.integration.server.test_skill_feedback.SkillFeedbackHttpTest.test_owner_scene_stop_reaches_same_owner_contacts_and_preserves_other_owner",
+        "tests.integration.server.test_skill_feedback.SkillFeedbackHttpTest.test_partial_policy_catalog_resource_and_selected_body_never_materialize_stopped_instruction",
+        "tests.integration.server.test_skill_feedback.SkillFeedbackHttpTest.test_plain_candidate_edit_and_explicit_long_term_draft_do_not_create_policy",
+        "tests.integration.server.test_skill_feedback.SkillFeedbackHttpTest.test_policy_change_between_saved_reply_and_assistant_completion_rejects_late_result",
+        "tests.integration.server.test_skill_feedback.SkillFeedbackHttpTest.test_policy_change_between_saved_reply_and_interrupt_cannot_complete_the_old_result",
+        "tests.integration.server.test_skill_feedback.SkillFeedbackHttpTest.test_policy_change_rejects_completed_replay_and_continuation_but_keeps_user_edits_on_restore",
+        "tests.integration.server.test_skill_feedback.SkillFeedbackHttpTest.test_policy_posts_validate_target_metadata_without_projecting_any_history_body",
+        "tests.integration.server.test_skill_feedback.SkillFeedbackHttpTest.test_prepared_policy_change_seals_old_permission_and_allows_explicit_reprepare_without_losing_edit",
+        "tests.integration.server.test_skill_feedback.SkillFeedbackHttpTest.test_prepared_unnumbered_continuation_and_interrupted_retry_revalidate_parent_policy",
+        "tests.integration.server.test_skill_feedback.SkillFeedbackHttpTest.test_review_preview_and_updated_version_filter_proposed_method_replacements_before_any_model_read",
+        "tests.integration.server.test_skill_feedback.SkillFeedbackHttpTest.test_saved_execution_receipt_rejects_wrong_scene_and_damage_and_legacy_only_before_relevant_stop",
+        "tests.integration.server.test_skill_feedback.SkillFeedbackHttpTest.test_source_erasure_clears_cross_contact_policy_execution_prepared_edit_and_carry_before_any_get",
+        "tests.integration.server.test_skill_feedback.SkillFeedbackHttpTest.test_stop_after_last_actual_read_rejects_late_commit_and_same_key_retry_reads_current_policy",
+        "tests.integration.server.test_skill_feedback.SkillFeedbackHttpTest.test_stop_commits_before_independent_backend_waiting_writer",
+        "tests.integration.server.test_skill_feedback.SkillFeedbackHttpTest.test_unknown_policy_targets_scopes_and_changed_receipts_never_change_permission",
+        "tests.integration.server.test_skill_feedback.SkillFeedbackHttpTest.test_unmapped_local_update_cannot_bypass_method_stop_and_rollback_keeps_the_stop",
+        "tests.integration.server.test_skill_feedback.SkillFeedbackHttpTest.test_unmapped_package_update_keeps_method_stop_from_merged_ancestor",
+        "tests.integration.server.test_skill_feedback.SkillFeedbackHttpTest.test_unmapped_package_update_keeps_whole_skill_stop_from_merged_ancestor",
+        "tests.integration.server.test_skill_feedback.SkillFeedbackHttpTest.test_writer_commits_before_independent_backend_waiting_stop",
+        "tests.integration.server.test_skill_learning.SkillLearningHttpTest.test_actual_draft_insert_failure_rolls_back_receipts_and_explicit_resume",
+        "tests.integration.server.test_skill_learning.SkillLearningHttpTest.test_actual_preference_use_is_learning_source_and_delete_erases_before_any_read",
+        "tests.integration.server.test_skill_learning.SkillLearningHttpTest.test_actual_usage_edits_and_selection_are_bounded_material_without_sending_claim",
+        "tests.integration.server.test_skill_learning.SkillLearningHttpTest.test_corrected_memory_keeps_legal_historical_edit_as_learning_material",
+        "tests.integration.server.test_skill_learning.SkillLearningHttpTest.test_correction_first_bounded_ordinary_batches_no_change_and_repeated_reads",
+        "tests.integration.server.test_skill_learning.SkillLearningHttpTest.test_disable_enable_aba_rejects_old_generation_and_stale_authorization",
+        "tests.integration.server.test_skill_learning.SkillLearningHttpTest.test_disabled_used_skill_delete_during_model_discards_late_save_and_repeat_restart",
+        "tests.integration.server.test_skill_learning.SkillLearningHttpTest.test_disabled_used_skill_delete_erases_saved_usage_edit_selection_and_restart_copies",
+        "tests.integration.server.test_skill_learning.SkillLearningHttpTest.test_empty_proposal_after_material_redaction_can_resume_failed_verification_without_batch",
+        "tests.integration.server.test_skill_learning.SkillLearningHttpTest.test_existing_same_name_outside_bounded_target_catalog_cannot_create_duplicate_identity",
+        "tests.integration.server.test_skill_learning.SkillLearningHttpTest.test_existing_skill_update_merge_and_reuse_keep_version_and_method_provenance",
+        "tests.integration.server.test_skill_learning.SkillLearningHttpTest.test_explicit_contact_learning_automatically_forms_durable_non_running_draft",
+        "tests.integration.server.test_skill_learning.SkillLearningHttpTest.test_invalid_proposal_stops_once_until_explicit_resume",
+        "tests.integration.server.test_skill_learning.SkillLearningHttpTest.test_new_capture_failure_does_not_reuse_old_batch_or_restart_from_authority_reads",
+        "tests.integration.server.test_skill_learning.SkillLearningHttpTest.test_oversized_32_material_prefix_does_not_block_later_valid_correction",
+        "tests.integration.server.test_skill_learning.SkillLearningHttpTest.test_pending_review_entry_starts_empty_and_rejects_other_owner",
+        "tests.integration.server.test_skill_learning.SkillLearningHttpTest.test_preference_revision_changed_during_proposal_rejects_late_draft",
+        "tests.integration.server.test_skill_learning.SkillLearningHttpTest.test_quoted_ordinary_materials_and_target_metadata_fit_actual_json_without_livelock",
+        "tests.integration.server.test_skill_learning.SkillLearningHttpTest.test_reliable_same_binding_followups_auto_notify_and_metadata_change_erases_draft",
+        "tests.integration.server.test_skill_learning.SkillLearningHttpTest.test_saved_draft_verification_failure_resumes_without_second_model_or_duplicate_draft",
+        "tests.integration.server.test_skill_learning.SkillLearningHttpTest.test_saved_proposal_before_last_step_receipt_recovers_from_committed_batch_without_model",
+        "tests.integration.server.test_skill_learning.SkillLearningHttpTest.test_session_and_raw_source_deletion_both_orders_erase_workflow_copies",
+        "tests.integration.server.test_skill_learning.SkillLearningHttpTest.test_source_deleted_during_model_call_discards_late_proposal_and_cannot_restore",
+        "tests.integration.server.test_skill_learning.SkillLearningHttpTest.test_source_removed_while_waiting_for_foreground_never_enters_model",
+        "tests.integration.server.test_skill_learning.SkillLearningHttpTest.test_temporary_model_failure_retries_are_bounded_and_explicit_resume_keeps_task",
+        "tests.integration.server.test_skill_lifecycle.SkillLifecycleHttpTest.test_contact_history_and_learning_targets_are_isolated_from_other_contact_and_owner",
+        "tests.integration.server.test_skill_lifecycle.SkillLifecycleHttpTest.test_deleted_current_can_choose_independent_old_version_while_remaining_disabled",
+        "tests.integration.server.test_skill_lifecycle.SkillLifecycleHttpTest.test_explicitly_widened_parent_keeps_private_ancestor_scoped_while_allowing_another_contact_merge",
+        "tests.integration.server.test_skill_lifecycle.SkillLifecycleHttpTest.test_history_rejects_other_contact_before_materializing_private_version_body",
+        "tests.integration.server.test_skill_lifecycle.SkillLifecycleHttpTest.test_merge_preserves_exact_targets_mapping_and_rollback_does_not_enable_other_target",
+        "tests.integration.server.test_skill_lifecycle.SkillLifecycleHttpTest.test_mixed_target_scopes_are_shown_but_not_automatically_merged",
+        "tests.integration.server.test_skill_lifecycle.SkillLifecycleHttpTest.test_owner_parent_can_be_merged_from_another_contact_without_reading_origin_materials",
+        "tests.integration.server.test_skill_lifecycle.SkillLifecycleHttpTest.test_reviewed_rollback_and_original_receipt_fail_closed_after_source_is_queued_and_deleted",
+        "tests.integration.server.test_skill_lifecycle.SkillLifecycleHttpTest.test_rollback_commits_before_second_backend_waiting_source_delete",
+        "tests.integration.server.test_skill_lifecycle.SkillLifecycleHttpTest.test_scene_parent_can_be_updated_from_another_contact_without_reading_origin_materials",
+        "tests.integration.server.test_skill_lifecycle.SkillLifecycleHttpTest.test_source_delete_commits_before_second_backend_waiting_fresh_rollback",
+        "tests.integration.server.test_skill_lifecycle.SkillLifecycleHttpTest.test_update_history_rollback_is_scoped_idempotent_and_cannot_enable_disabled_skill",
+        "tests.integration.server.test_skill_lifecycle.SkillLifecycleHttpTest.test_update_inherits_target_extra_review_sources_before_any_read",
+        "tests.integration.server.test_skill_review.SkillReviewHttpTest.test_busy_source_delete_keeps_original_task_for_explicit_retry",
+        "tests.integration.server.test_skill_review.SkillReviewHttpTest.test_changed_input_and_library_revision_invalidate_old_approval",
+        "tests.integration.server.test_skill_review.SkillReviewHttpTest.test_competing_target_update_invalidates_old_update_and_merge_approvals_after_restore",
+        "tests.integration.server.test_skill_review.SkillReviewHttpTest.test_contact_navigation_only_source_erases_comparison_and_publication_before_read",
+        "tests.integration.server.test_skill_review.SkillReviewHttpTest.test_cross_scope_and_changed_approval_are_rejected_and_concurrent_approval_publishes_once",
+        "tests.integration.server.test_skill_review.SkillReviewHttpTest.test_delete_after_completed_comparison_blocks_approval_replay_and_restore",
+        "tests.integration.server.test_skill_review.SkillReviewHttpTest.test_edit_cannot_publish_contact_identity_or_private_source_quote",
+        "tests.integration.server.test_skill_review.SkillReviewHttpTest.test_edit_invalidates_old_comparison_and_defer_or_reject_persist",
+        "tests.integration.server.test_skill_review.SkillReviewHttpTest.test_every_provider_round_is_accounted_and_local_rejection_has_no_fake_call",
+        "tests.integration.server.test_skill_review.SkillReviewHttpTest.test_expired_comparison_rejects_late_provider_result_without_new_lease_holder",
+        "tests.integration.server.test_skill_review.SkillReviewHttpTest.test_extra_preview_source_erases_wide_publication_and_other_contact_reply_before_get",
+        "tests.integration.server.test_skill_review.SkillReviewHttpTest.test_legacy_input_without_scene_stays_unscoped_after_interrupt_restore",
+        "tests.integration.server.test_skill_review.SkillReviewHttpTest.test_missing_publication_after_physical_origin_contact_delete_cannot_load_as_import",
+        "tests.integration.server.test_skill_review.SkillReviewHttpTest.test_owner_navigation_from_another_contact_keeps_private_window_out_and_erases_publication",
+        "tests.integration.server.test_skill_review.SkillReviewHttpTest.test_owner_navigation_only_source_erases_comparison_and_publication_before_read",
+        "tests.integration.server.test_skill_review.SkillReviewHttpTest.test_preference_scope_and_revision_change_during_comparison_rejects_late_result",
+        "tests.integration.server.test_skill_review.SkillReviewHttpTest.test_prepared_wide_skill_without_reply_request_is_erased_before_read_and_scene_cannot_change",
+        "tests.integration.server.test_skill_review.SkillReviewHttpTest.test_published_content_and_preview_are_erased_when_original_source_is_deleted",
+        "tests.integration.server.test_skill_review.SkillReviewHttpTest.test_review_compares_identical_input_without_publishing_then_approves_once",
+        "tests.integration.server.test_skill_review.SkillReviewHttpTest.test_review_with_captured_candidate_history_loads_read_only_and_remains_source_deletable",
+        "tests.integration.server.test_skill_review.SkillReviewHttpTest.test_scene_publication_requires_explicit_exact_scene_in_actual_candidates",
+        "tests.integration.server.test_skill_review.SkillReviewHttpTest.test_scene_publication_used_in_same_contact_after_restart_is_source_deletable",
+        "tests.integration.server.test_skill_review.SkillReviewHttpTest.test_session_delete_during_provider_discards_late_comparison_and_stops_next_call",
+        "tests.integration.server.test_skill_review.SkillReviewHttpTest.test_source_delete_during_provider_discards_late_comparison_and_stops_next_call",
+        "tests.integration.server.test_skill_review.SkillReviewHttpTest.test_source_delete_erases_review_descriptions_before_get_and_preserves_independent_package",
+        "tests.integration.server.test_skill_review.SkillReviewHttpTest.test_source_delete_preserves_new_independent_current_version_and_catalog_description",
+        "tests.integration.server.test_strategy_context_review.StrategyContextReviewHttpTests.test_same_quote_contexts_capture_actual_inputs_and_keep_failure_unknown_visible",
+        "tests.integration.server.test_strategy_flow.StrategyHttpFlowTest.test_explicit_purpose_generates_without_fabricating_target",
+        "tests.integration.server.test_strategy_flow.StrategyHttpFlowTest.test_purpose_pending_evidence_reread_and_source_deletion",
+        "tests.integration.server.test_style_sample_retirement.StyleSampleRetirementHttpTest.test_retired_routes_are_unavailable_and_generation_uses_no_samples",
+        "tests.integration.server.test_sync_api.SyncApiContractTest.test_backfill_pause_and_retry_control_lifecycle",
+        "tests.integration.server.test_sync_api.SyncApiContractTest.test_check_delegates",
+        "tests.integration.server.test_sync_api.SyncApiContractTest.test_cli_batch_confirm_delegates_all_selections_once",
+        "tests.integration.server.test_sync_api.SyncApiContractTest.test_cli_batch_confirm_rejects_invalid_request",
+        "tests.integration.server.test_sync_api.SyncApiContractTest.test_cli_sessions_returns_metadata_only",
+        "tests.integration.server.test_sync_api.SyncApiContractTest.test_confirm_delegates_and_returns_fresh_status",
+        "tests.integration.server.test_sync_api.SyncApiContractTest.test_confirm_pending_delegates_and_returns_fresh_status",
+        "tests.integration.server.test_sync_api.SyncApiContractTest.test_confirm_rejection_is_reported_with_stable_code",
+        "tests.integration.server.test_sync_api.SyncApiContractTest.test_confirm_rejects_invalid_request_body",
+        "tests.integration.server.test_sync_api.SyncApiContractTest.test_disable_delegates_and_returns_fresh_status",
+        "tests.integration.server.test_sync_api.SyncApiContractTest.test_enable_delegates_and_returns_fresh_status",
+        "tests.integration.server.test_sync_api.SyncApiContractTest.test_priority_contact_delegates",
+        "tests.integration.server.test_sync_api.SyncApiContractTest.test_priority_contact_rejects_invalid_payload",
+        "tests.integration.server.test_sync_api.SyncApiContractTest.test_status_calls_port_once",
+        "tests.integration.server.test_sync_api.SyncApiContractTest.test_status_includes_cli_backfill_metadata_without_message_body",
+        "tests.integration.server.test_sync_api.SyncApiContractTest.test_status_includes_independent_cli_and_foreground_channels",
+        "tests.integration.server.test_sync_api.SyncApiContractTest.test_status_includes_priority_read_timing_without_message_body",
+        "tests.integration.server.test_sync_api.SyncApiContractTest.test_status_returns_candidates_when_awaiting_selection",
+        "tests.integration.server.test_sync_api.SyncApiContractTest.test_status_returns_pinned_json_structure",
+        "tests.integration.server.test_sync_api.SyncApiContractTest.test_status_serialized_body_has_no_message_content",
+        "tests.integration.server.test_sync_api.SyncApiContractTest.test_sync_endpoints_fail_closed_without_control",
+        "tests.integration.server.test_sync_api.SyncApiContractTest.test_sync_endpoints_require_token",
+        "tests.integration.server.test_sync_api.SyncApiContractTest.test_sync_post_requires_post_method",
+        "tests.integration.server.test_task_runtime_config_api.TaskRuntimeConfigApiTest.test_absent_mode_keeps_existing_start_contract",
+        "tests.integration.server.test_task_runtime_config_api.TaskRuntimeConfigApiTest.test_configuration_conflict_does_not_queue_task",
+        "tests.integration.server.test_task_runtime_config_api.TaskRuntimeConfigApiTest.test_duplicate_keys_and_nonfinite_json_are_rejected_before_status_or_start",
+        "tests.integration.server.test_task_runtime_config_api.TaskRuntimeConfigApiTest.test_explicit_modes_are_configured_before_start_without_forwarding_free_config",
+        "tests.integration.server.test_task_runtime_config_api.TaskRuntimeConfigApiTest.test_mode_requires_task_id_and_closed_string",
+        "tests.integration.server.test_task_runtime_config_api.TaskRuntimeConfigApiTest.test_retry_rejects_runtime_mode_and_free_configuration",
+        "tests.integration.server.test_task_runtime_config_api.TaskRuntimeConfigApiTest.test_unknown_config_hash_proof_and_model_fields_are_rejected",
+        "tests.integration.server.test_tencent_l1_flow.TencentL1HttpTest.test_chat_merges_multiple_cross_category_memories_with_all_sources",
+        "tests.integration.server.test_tencent_l1_flow.TencentL1HttpTest.test_deleting_one_required_parent_source_removes_merged_current_memory",
+        "tests.integration.server.test_tencent_l1_flow.TencentL1HttpTest.test_first_batch_all_skip_records_failure_without_carrier",
+        "tests.integration.server.test_tencent_l1_flow.TencentL1HttpTest.test_first_batch_semantic_duplicates_keep_one_fact",
+        "tests.integration.server.test_tencent_l1_flow.TencentL1HttpTest.test_http_batch_content_json_does_not_downgrade_to_skip",
+        "tests.integration.server.test_tencent_l1_flow.TencentL1HttpTest.test_http_batch_forces_tool_without_thinking_and_skip_leaves_no_pending",
+        "tests.integration.server.test_tencent_l1_flow.TencentL1HttpTest.test_invalid_batch_candidate_does_not_block_valid_update_or_lose_sources",
+        "tests.integration.server.test_tencent_l1_flow.TencentL1HttpTest.test_missing_embedding_records_failure_with_public_preparation_diagnostic",
+        "tests.integration.server.test_tencent_l1_flow.TencentL1HttpTest.test_multi_target_update_retires_all_old_current_facts",
+        "tests.integration.server.test_tencent_l1_flow.TencentL1HttpTest.test_new_chat_updates_old_memory_across_category_and_topic",
+        "tests.integration.server.test_tencent_l1_flow.TencentL1HttpTest.test_out_of_scope_target_records_failure_and_does_not_add_conflict",
+        "tests.integration.server.test_tencent_l1_flow.TencentL1HttpTest.test_owner_updates_remain_separate_from_contact_and_other_owner",
+        "tests.integration.server.test_tencent_l1_flow.TencentL1HttpTest.test_single_old_memory_can_merge_new_details_without_losing_source",
+        "tests.integration.server.test_tencent_l1_flow.TencentL1HttpTest.test_skip_different_time_interval_records_failure",
+        "tests.integration.server.test_tencent_l1_flow.TencentL1HttpTest.test_skip_repeated_fact_preserves_current_memory",
+        "tests.integration.server.test_tencent_l1_flow.TencentL1HttpTest.test_two_new_memories_update_separate_old_facts_in_one_import",
+        "tests.integration.server.test_tencent_l1_flow.TencentL1HttpTest.test_user_corrected_memory_is_not_replaced_by_batch_decision",
+        "tests.integration.server.test_tencent_profile_tools.ProfileToolsHttpTest.test_all_bad_profile_entries_fail_without_publishing_profile",
+        "tests.integration.server.test_tencent_profile_tools.ProfileToolsHttpTest.test_bad_profile_entry_does_not_reject_valid_sibling",
+        "tests.integration.server.test_tencent_profile_tools.ProfileToolsHttpTest.test_bad_profile_tool_path_can_be_corrected_before_publication",
+        "tests.integration.server.test_tencent_profile_tools.ProfileToolsHttpTest.test_deleting_source_erases_profile_and_prevents_old_basis_reuse",
+        "tests.integration.server.test_tencent_profile_tools.ProfileToolsHttpTest.test_fact_correction_rebuilds_without_invalid_old_profile_text",
+        "tests.integration.server.test_tencent_profile_tools.ProfileToolsHttpTest.test_foreground_runs_between_profile_document_requests",
+        "tests.integration.server.test_tencent_profile_tools.ProfileToolsHttpTest.test_incremental_writer_cannot_drop_unaffected_profile_entry",
+        "tests.integration.server.test_tencent_profile_tools.ProfileToolsHttpTest.test_new_chat_updates_existing_profile_using_changed_scenes",
+        "tests.integration.server.test_tencent_profile_tools.ProfileToolsHttpTest.test_unchanged_scene_keeps_profile_version_without_profile_tool_calls",
+        "tests.integration.server.test_tencent_profile_tools.ProfileToolsHttpTest.test_uncorrected_profile_path_exhausts_bounded_rounds_without_publication",
+        "tests.integration.server.test_tencent_scene_tools.SceneToolsHttpTest.test_all_bad_documents_fail_without_claiming_coverage",
+        "tests.integration.server.test_tencent_scene_tools.SceneToolsHttpTest.test_bad_document_does_not_reject_valid_sibling",
+        "tests.integration.server.test_tencent_scene_tools.SceneToolsHttpTest.test_bad_tool_path_can_be_corrected_before_publication",
+        "tests.integration.server.test_tencent_scene_tools.SceneToolsHttpTest.test_deleted_no_change_source_is_not_reused_by_a_later_task",
+        "tests.integration.server.test_tencent_scene_tools.SceneToolsHttpTest.test_exact_edit_updates_same_document_with_both_sources",
+        "tests.integration.server.test_tencent_scene_tools.SceneToolsHttpTest.test_foreground_runs_between_document_model_requests",
+        "tests.integration.server.test_tencent_scene_tools.SceneToolsHttpTest.test_imported_chat_becomes_scene_through_document_tools",
+        "tests.integration.server.test_tencent_scene_tools.SceneToolsHttpTest.test_merge_cannot_silently_drop_a_previous_source",
+        "tests.integration.server.test_tencent_scene_tools.SceneToolsHttpTest.test_new_chat_merges_documents_and_deleting_source_removes_derived_scene",
+        "tests.integration.server.test_tencent_scene_tools.SceneToolsHttpTest.test_personal_document_tools_keep_metadata_and_no_change_receipt",
+        "tests.integration.server.test_tencent_scene_tools.SceneToolsHttpTest.test_tool_cannot_access_outside_scope_and_keeps_old_scene",
+        "tests.integration.server.test_tencent_scene_tools.SceneToolsHttpTest.test_tool_loop_exhaustion_keeps_old_scene_and_finite_physical_budget",
+        "tests.integration.server.test_tencent_scene_tools.SceneToolsHttpTest.test_unchanged_documents_acknowledge_new_input_without_new_scene_version",
+        "tests.integration.tasks.test_bounded_evaluation_sources.BoundedEvaluationSourcesTest.test_actual_extra_candidate_keeps_body_and_all_but_correction_guard_withdraws_old_window",
+        "tests.integration.tasks.test_bounded_evaluation_sources.BoundedEvaluationSourcesTest.test_actual_sdk_outputs_confirm_correct_reject_and_rebind_without_new_model_call",
+        "tests.integration.tasks.test_bounded_evaluation_sources.BoundedEvaluationSourcesTest.test_changed_actual_source_fails_lifecycle_rebind_before_manual_mutation",
+        "tests.integration.tasks.test_bounded_evaluation_sources.BoundedEvaluationSourcesTest.test_changed_actual_source_locator_is_rejected_without_reconstructing_saved_window",
+        "tests.integration.tasks.test_bounded_evaluation_sources.BoundedEvaluationSourcesTest.test_changed_actual_task_config_is_rejected",
+        "tests.integration.tasks.test_bounded_evaluation_sources.BoundedEvaluationSourcesTest.test_changed_database_marker_rejects_cleanup_before_any_source_is_deleted",
+        "tests.integration.tasks.test_bounded_evaluation_sources.BoundedEvaluationSourcesTest.test_changed_receipt_ownership_rejects_cleanup_and_keeps_original_database",
+        "tests.integration.tasks.test_bounded_evaluation_sources.BoundedEvaluationSourcesTest.test_cleanup_archives_redacted_trace_and_erases_all_body_records_without_positive_proof",
+        "tests.integration.tasks.test_bounded_evaluation_sources.BoundedEvaluationSourcesTest.test_fifteen_formal_sources_load_as_exact_single_windows_and_delete_cleanly",
+        "tests.integration.tasks.test_bounded_evaluation_sources.BoundedEvaluationSourcesTest.test_legacy_receipt_can_only_clean_up_without_running_new_runtime",
+        "tests.integration.tasks.test_bounded_evaluation_sources.BoundedEvaluationSourcesTest.test_lifecycle_missing_actual_representative_is_unrun_after_independent_archive",
+        "tests.integration.tasks.test_bounded_evaluation_sources.BoundedEvaluationSourcesTest.test_migration_receipt_drift_blocks_runtime_but_preserves_explicit_cleanup",
+        "tests.integration.tasks.test_bounded_evaluation_sources.BoundedEvaluationSourcesTest.test_missing_actual_owner_basis_does_not_get_lifecycle_credit_or_manual_mutation",
+        "tests.integration.tasks.test_bounded_evaluation_sources.BoundedEvaluationSourcesTest.test_partial_prepare_failure_preserves_existing_file_and_drops_only_created_database",
+        "tests.integration.tasks.test_bounded_evaluation_sources.BoundedEvaluationSourcesTest.test_receipt_permissions_are_checked_and_prepare_does_not_overwrite",
+        "tests.integration.tasks.test_bounded_evaluation_sources.BoundedEvaluationSourcesTest.test_receipt_type_change_is_not_equivalent_to_original_numeric_version",
+        "tests.integration.tasks.test_bounded_runtime_acceptance.BoundedRuntimeAcceptanceTest.test_4097_message_codepoints_keep_entire_body_without_a_v4_snapshot",
+        "tests.integration.tasks.test_bounded_runtime_acceptance.BoundedRuntimeAcceptanceTest.test_competing_identity_is_not_hidden_by_a_single_selected_proposal",
+        "tests.integration.tasks.test_bounded_runtime_acceptance.BoundedRuntimeAcceptanceTest.test_completed_answer_preserves_opposite_authors_destination_and_current_api",
+        "tests.integration.tasks.test_bounded_runtime_acceptance.BoundedRuntimeAcceptanceTest.test_cross_author_identity_cannot_bind_the_speakers_relation",
+        "tests.integration.tasks.test_bounded_runtime_acceptance.BoundedRuntimeAcceptanceTest.test_different_pronoun_cannot_borrow_an_explicit_identity",
+        "tests.integration.tasks.test_bounded_runtime_acceptance.BoundedRuntimeAcceptanceTest.test_five_actual_messages_keep_all_without_cropping_snapshot_or_targets",
+        "tests.integration.tasks.test_bounded_runtime_acceptance.BoundedRuntimeAcceptanceTest.test_invalid_proof_stops_the_actual_batch_without_an_extra_model_call",
+        "tests.integration.tasks.test_bounded_runtime_acceptance.BoundedRuntimeAcceptanceTest.test_later_identity_does_not_retroactively_resolve_an_earlier_event",
+        "tests.integration.tasks.test_bounded_runtime_acceptance.BoundedRuntimeAcceptanceTest.test_model_role_anchor_does_not_replace_the_actual_identity_target",
+        "tests.integration.tasks.test_bounded_runtime_acceptance.BoundedRuntimeAcceptanceTest.test_observed_author_arrival_has_current_six_dimension_evidence_but_stays_pending",
+        "tests.integration.tasks.test_bounded_runtime_acceptance.BoundedRuntimeAcceptanceTest.test_observed_condition_quantity_plan_roundtrips_non_utc_calendar_interval",
+        "tests.integration.tasks.test_bounded_runtime_acceptance.BoundedRuntimeAcceptanceTest.test_observed_cross_message_lend_keeps_explicit_property_owner",
+        "tests.integration.tasks.test_bounded_runtime_acceptance.BoundedRuntimeAcceptanceTest.test_observed_received_request_does_not_invent_acceptance_or_performance",
+        "tests.integration.tasks.test_bounded_runtime_acceptance.BoundedRuntimeAcceptanceTest.test_observed_reported_request_keeps_outer_history_and_inner_requested_action",
+        "tests.integration.tasks.test_bounded_runtime_acceptance.BoundedRuntimeAcceptanceTest.test_observed_two_roles_keep_competition_catalog_in_complete_window",
+        "tests.integration.tasks.test_bounded_runtime_acceptance.BoundedRuntimeAcceptanceTest.test_only_candidate_wrapper_over_limit_also_keeps_whole_evidence_null",
+        "tests.integration.tasks.test_bounded_runtime_acceptance.BoundedRuntimeAcceptanceTest.test_oversize_unknown_branch_cannot_swallow_an_invalid_proof",
+        "tests.integration.tasks.test_bounded_runtime_acceptance.BoundedRuntimeAcceptanceTest.test_supported_without_proposal_does_not_grant_five_semantic_dimensions",
+        "tests.integration.tasks.test_bounded_runtime_acceptance.BoundedRuntimeAcceptanceTest.test_uncovered_tail_is_not_dropped_from_the_actual_window",
+        "tests.integration.tasks.test_bounded_task_evaluation.BoundedTaskEvaluationTest.test_duplicate_actual_draft_is_not_selected_arbitrarily",
+        "tests.integration.tasks.test_bounded_task_evaluation.BoundedTaskEvaluationTest.test_evaluation_keeps_empty_release_when_external_environment_disables_dimension_gate",
+        "tests.integration.tasks.test_bounded_task_evaluation.BoundedTaskEvaluationTest.test_five_message_frozen_window_is_rejected_before_the_first_model_request",
+        "tests.integration.tasks.test_bounded_task_evaluation.BoundedTaskEvaluationTest.test_import_task_advances_parse_and_normalize_then_extracts_only_once",
+        "tests.integration.tasks.test_bounded_task_evaluation.BoundedTaskEvaluationTest.test_invalid_proof_stops_after_first_extract_attempt_and_preserves_failed_trace",
+        "tests.integration.tasks.test_bounded_task_evaluation.BoundedTaskEvaluationTest.test_legal_empty_extraction_returns_matcher_general_without_inventing_verification",
+        "tests.integration.tasks.test_bounded_task_evaluation.BoundedTaskEvaluationTest.test_missing_actual_draft_is_a_hard_failure_instead_of_a_reconstructed_matcher_result",
+        "tests.integration.tasks.test_bounded_task_evaluation.BoundedTaskEvaluationTest.test_observed_task_scores_the_committed_trace_without_running_a_second_flow",
+        "tests.integration.tasks.test_bounded_task_evaluation.BoundedTaskEvaluationTest.test_wrong_config_and_changed_frozen_window_reject_before_any_model_request",
+        "tests.integration.tasks.test_observation_task.ObservationTaskPersistenceTest.test_concurrent_creation_reuses_one_task_and_running_lease",
+        "tests.integration.tasks.test_observation_task.ObservationTaskPersistenceTest.test_contact_deletion_and_foreign_scope_cannot_recover_task",
+        "tests.integration.tasks.test_observation_task.ObservationTaskPersistenceTest.test_expired_claim_cannot_write_after_same_worker_takes_over",
+        "tests.integration.tasks.test_observation_task.ObservationTaskPersistenceTest.test_failed_observation_recovery_preserves_success_and_rejects_revocation",
+        "tests.integration.tasks.test_observation_task.ObservationTaskPersistenceTest.test_new_observation_during_run_is_requeued_after_verify",
+        "tests.integration.tasks.test_observation_task.ObservationTaskPersistenceTest.test_observation_task_can_be_claimed_without_source_document",
+        "tests.integration.tasks.test_observation_task.ObservationTaskPersistenceTest.test_observation_task_is_contact_scoped_and_idempotent",
+        "tests.integration.tasks.test_observation_task.ObservationTaskPersistenceTest.test_previous_round_claim_cannot_complete_new_round_for_same_worker",
+        "tests.integration.tasks.test_observation_task.ObservationTaskPersistenceTest.test_queued_observation_exposes_configuration_failure",
+        "tests.integration.tasks.test_observation_task.ObservationTaskPersistenceTest.test_real_runner_uses_observation_watermark_and_source_deletion",
+        "tests.integration.tasks.test_observation_task.ObservationTaskPersistenceTest.test_revocation_rejects_running_result_and_renewal",
+        "tests.integration.tasks.test_observation_task.ObservationTaskPersistenceTest.test_revoked_binding_cannot_claim_observation_task",
+        "tests.integration.tasks.test_observation_task.ObservationTaskPersistenceTest.test_terminal_observation_task_is_requeued_for_new_observation",
+        "tests.integration.tasks.test_observation_task.ObservationTaskPersistenceTest.test_worker_reuses_extraction_index_and_verify_for_observation",
+        "tests.integration.tasks.test_runtime_config.RuntimeConfigPersistenceTest.test_concurrent_incompatible_initialization_has_exactly_one_winner",
+        "tests.integration.tasks.test_runtime_config.RuntimeConfigPersistenceTest.test_initialization_is_scoped_idempotent_and_does_not_claim",
+        "tests.integration.tasks.test_runtime_config.RuntimeConfigPersistenceTest.test_missing_column_keeps_legacy_read_and_rejects_explicit_write",
+        "tests.integration.tasks.test_runtime_config.RuntimeConfigPersistenceTest.test_missing_memory_capability_refuses_bounded_before_config_write",
+        "tests.integration.tasks.test_runtime_config.RuntimeConfigPersistenceTest.test_requeued_legacy_snapshot_cannot_initialize_after_first_generation",
+        "tests.integration.tasks.test_runtime_config.RuntimeConfigPersistenceTest.test_retry_cannot_reinitialize_configuration_after_attempt_reset",
+        "tests.integration.tasks.test_runtime_config.RuntimeConfigPersistenceTest.test_rule_mismatch_rejects_before_extract_lease_and_claim_carries_saved_value",
+        "tests.integration.tasks.test_runtime_config.RuntimeConfigPersistenceTest.test_task_without_extract_step_cannot_select_mode",
+        "tests.integration.tasks.test_runtime_execution.RuntimeExecutionCliTest.test_actual_cli_commits_explicit_legacy_and_preserves_utc_loader_time",
+        "tests.integration.tasks.test_runtime_execution.RuntimeExecutionCliTest.test_actual_cli_uses_saved_bounded_mode_and_recovers_source_local_offset",
+        "tests.integration.tasks.test_task_retention.BackgroundTaskRetentionTest.test_cleanup_deletes_only_old_terminal_task_metadata",
+        "tests.integration.tasks.test_worker.BackgroundTaskWorkerTest.test_active_lease_blocks_second_worker_and_expiry_allows_takeover",
+        "tests.integration.tasks.test_worker.BackgroundTaskWorkerTest.test_global_worker_lock_is_exclusive_across_sessions",
+        "tests.integration.tasks.test_worker.BackgroundTaskWorkerTest.test_lease_loss_during_extraction_is_reported_not_raised",
+        "tests.integration.tasks.test_worker.BackgroundTaskWorkerTest.test_permanent_worker_error_does_not_auto_retry",
+        "tests.integration.tasks.test_worker.BackgroundTaskWorkerTest.test_postgres_runner_reuses_extraction_and_watermark_boundaries",
+        "tests.integration.tasks.test_worker.BackgroundTaskWorkerTest.test_step_lease_can_be_renewed_before_completion",
+        "tests.integration.tasks.test_worker.BackgroundTaskWorkerTest.test_three_failures_terminally_fail_and_manual_retry_reuses_task",
+        "tests.integration.tasks.test_worker.BackgroundTaskWorkerTest.test_worker_renews_lease_while_extraction_runs",
+        "tests.integration.tasks.test_worker.BackgroundTaskWorkerTest.test_worker_runs_index_and_verify_after_extraction",
+        "tests.integration.tasks.test_worker.BackgroundTaskWorkerTest.test_worker_runs_steps_in_order_and_extracts_once"
+      ],
+      "failure_ids": [
+        "tests.integration.memory_extraction.test_extraction_trace.ExtractionTraceTest.test_committed_invalidation_is_reconciled_after_receipt_fault_and_retry",
+        "tests.integration.memory_extraction.test_extraction_trace.ExtractionTraceTest.test_invalidation_plan_does_not_claim_commit_just_because_old_row_exists",
+        "tests.integration.memory_extraction.test_extraction_trace.ExtractionTraceTest.test_source_of_old_memory_used_by_update_erases_trace_even_outside_new_window",
+        "tests.integration.persistence.test_reply_revalidation_batches.ReplyRevalidationBatchTest.test_eleven_evidence_rows_have_constant_read_budget_as_pools_grow",
+        "tests.integration.persistence.test_reply_revalidation_batches.ReplyRevalidationBatchTest.test_historical_id_reads_exact_version_without_ancestor_rows",
+        "tests.integration.server.test_assistant_session_memory_dependencies.AssistantSessionMemoryDependencyHttpTest.test_memory_expiration_keeps_completed_body_with_changed_basis_and_replays_without_generation",
+        "tests.integration.server.test_grounded_memory_events.GroundedMemoryEventsHttpTest.test_default_builder_verifies_planned_event_without_turning_elapsed_time_into_occurrence",
+        "tests.integration.server.test_import_auto_flow.ImportAutoFlowHttpTest.test_new_import_while_same_contact_is_active_is_not_lost",
+        "tests.integration.server.test_import_auto_flow.ImportAutoFlowHttpTest.test_new_task_skips_older_queue_and_restart_only_queries_persistent_status",
+        "tests.integration.memory_extraction.test_bounded_public_fixture.BoundedPublicFixtureTest.test_owned_entry_closes_first_failed_positive_and_erases_formal_sources",
+        "tests.integration.memory_extraction.test_bounded_public_fixture.BoundedPublicFixtureTest.test_pro_owned_worker_uses_real_e_v_sdk_and_archives_actual_pro_task_before_cleanup",
+        "tests.integration.memory_extraction.test_bounded_public_fixture.BoundedPublicFixtureTest.test_thinking_owned_worker_uses_both_max_and_stops_without_forced_retry",
+        "tests.integration.memory_extraction.test_evaluation_formal_batch.FormalEvaluationBatchTest.test_actual_proof3_and_forced_verification_are_saved_before_unresolved_axis_stops",
+        "tests.integration.memory_extraction.test_evaluation_formal_batch.FormalEvaluationBatchTest.test_completed_first_case_is_retained_when_next_extraction_times_out",
+        "tests.integration.memory_extraction.test_evaluation_formal_batch.FormalEvaluationBatchTest.test_duplicate_raw_proof_key_is_saved_and_stops_without_retry_or_audit_credit",
+        "tests.integration.memory_extraction.test_evaluation_formal_batch.FormalEvaluationBatchTest.test_empty_first_positive_is_audited_and_closes_without_running_other_fourteen_tasks",
+        "tests.integration.memory_extraction.test_evaluation_formal_batch.FormalEvaluationBatchTest.test_sealed_raw_safety_is_retained_when_full_review_fails_without_axis_credit",
+        "tests.integration.persistence.test_write_adjudication.WriteAdjudicationTest.test_keep_stores_both",
+        "tests.integration.server.test_layered_profile_management.LayeredProfileHttpTest.test_source_erasure_and_error_retirement_keep_distinct_profile_lifecycles",
+        "tests.integration.server.test_memory_event_updates.MemoryEventHistoricalReviewHttpTest.test_contact_same_claim_with_changed_window_is_not_an_original_claim_replay",
+        "tests.integration.server.test_memory_event_updates.MemoryEventHistoricalReviewHttpTest.test_self_same_claim_with_changed_window_is_not_an_original_claim_replay",
+        "tests.integration.server.test_layered_memory_corrections.LayeredMemoryCorrectionHttpTest.test_feedback_keeps_an_independent_topic_in_the_same_generation_batch_readable",
+        "tests.integration.server.test_layered_memory_management.LayeredMemoryManagementHttpTest.test_clock_boundary_invalidates_a_frozen_current_paragraph_and_refresh_preserves_history",
+        "tests.integration.server.test_memory_correction_grounded.GroundedCorrectionAutomaticHttpTest.test_failed_automatic_update_rolls_back_new_memory_and_retry_preserves_manual",
+        "tests.integration.server.test_memory_correction_grounded.GroundedCorrectionAutomaticHttpTest.test_manual_decision_after_automatic_update_commit_survives_late_steps",
+        "tests.integration.server.test_memory_correction_grounded.GroundedCorrectionAutomaticHttpTest.test_manual_decision_before_atomic_update_refuses_stale_automatic_write",
+        "tests.integration.server.test_memory_correction_grounded.GroundedCorrectionAutomaticHttpTest.test_new_grounded_evidence_requires_review_after_user_correction",
+        "tests.integration.server.test_memory_correction_grounded.SelfGroundedCorrectionAutomaticHttpTest.test_failed_automatic_update_rolls_back_new_memory_and_retry_preserves_manual",
+        "tests.integration.server.test_memory_correction_grounded.SelfGroundedCorrectionAutomaticHttpTest.test_manual_decision_after_automatic_update_commit_survives_late_steps",
+        "tests.integration.server.test_memory_correction_grounded.SelfGroundedCorrectionAutomaticHttpTest.test_manual_decision_before_atomic_update_refuses_stale_automatic_write",
+        "tests.integration.server.test_memory_correction_grounded.SelfGroundedCorrectionAutomaticHttpTest.test_new_grounded_evidence_requires_review_after_user_correction",
+        "tests.integration.server.test_memory_skill_evolution.MemorySkillEvolutionHttpTest.test_method_stop_after_actual_skill_read_rejects_late_candidate_and_retry_uses_filtered_view",
+        "tests.integration.server.test_memory_skill_evolution.MemorySkillEvolutionHttpTest.test_rollback_commits_before_waiting_source_deletion_without_restoring_erased_versions",
+        "tests.integration.server.test_memory_skill_evolution.MemorySkillEvolutionHttpTest.test_same_material_failure_retry_restart_keeps_task_identity_without_duplicate_draft",
+        "tests.integration.server.test_memory_skill_evolution.MemorySkillEvolutionHttpTest.test_same_task_reviewed_update_conflict_and_rollback_preserve_method_stop_then_delete",
+        "tests.integration.server.test_memory_skill_evolution.MemorySkillEvolutionHttpTest.test_shared_source_publication_feedback_restart_and_physical_deletion",
+        "tests.integration.server.test_memory_skill_evolution.MemorySkillEvolutionHttpTest.test_shared_source_reaches_updated_memories_actual_reply_and_pending_skill",
+        "tests.integration.server.test_memory_skill_evolution.MemorySkillEvolutionHttpTest.test_source_deletion_commits_before_waiting_fresh_rollback_with_valid_version_parameters",
+        "tests.integration.server.test_memory_skill_evolution.MemorySkillEvolutionHttpTest.test_source_queued_during_new_learning_erases_old_draft_and_discards_late_proposal",
+        "tests.integration.server.test_memory_skill_evolution.MemorySkillEvolutionHttpTest.test_source_queued_during_review_cannot_save_late_comparison_or_publish_after_restart",
+        "tests.integration.server.test_model_priority_lifecycle.ModelPriorityLifecycleHttpTest.test_adjudication_result_waits_for_reply_before_changing_memory",
+        "tests.integration.server.test_layered_correction_matrix.LayeredCorrectionMatrixHttpTest.test_contact_profile_fact_error_rejects_uncited_memory_and_corrects_current_leaf",
+        "tests.integration.server.test_layered_correction_matrix.LayeredCorrectionMatrixHttpTest.test_contact_scenario_fact_error_rejects_uncited_memory_and_corrects_current_leaf",
+        "tests.integration.server.test_layered_correction_matrix.LayeredCorrectionMatrixHttpTest.test_owner_profile_fact_error_rejects_uncited_memory_and_corrects_current_leaf",
+        "tests.integration.server.test_layered_correction_matrix.LayeredCorrectionMatrixHttpTest.test_owner_scenario_fact_error_rejects_uncited_memory_and_corrects_current_leaf",
+        "tests.integration.server.test_organization_quality.OrganizationQualityHttpTest.test_attempts_measure_complete_entities_and_rejected_request_has_no_physical_send",
+        "tests.integration.server.test_organization_quality.OrganizationQualityHttpTest.test_contact_model_boundary_preserves_its_distinct_allowlist_and_actual_provenance",
+        "tests.integration.server.test_organization_quality.OrganizationQualityHttpTest.test_temporary_information_can_leave_profile_empty_without_becoming_long_term_fact"
+      ],
+      "unit_outcomes": {
+        "passed": 2411
+      },
+      "nonunit_outcomes": {
+        "skipped": 3,
+        "passed": 1912,
+        "failed": 42,
+        "error": 6
+      },
+      "unittest_test_settled_occurrences": 4416,
+      "failure_comparison_counts": {
+        "same_failure_on_fixed_baseline": 47,
+        "same_failure_class_with_dynamic_fixture_value_difference": 1,
+        "quiet_both_versions_passed_after_prior_failure": 2,
+        "private_driver_environment_corrected": 6,
+        "current_passed_baseline_failed": 1,
+        "not_reproduced_in_isolated_runs": 1,
+        "shared_group_statistics_pollution_fixture_interference": 1
+      },
+      "baseline_unknown_candidate_ids": [],
+      "ordinary_testing_settled": true
+    },
+    "candidateFailureComparisons": [
+      {
+        "test_id": "tests.integration.memory_extraction.test_bounded_public_fixture.BoundedPublicFixtureTest.test_owned_entry_closes_first_failed_positive_and_erases_formal_sources",
+        "initial_outcome": "error",
+        "current": {
+          "outcome": "error",
+          "symptoms": [
+            "notalone.memory_extraction.evaluation_bounded_sources.BoundedSourcesError: bounded_sources_cleanup_residual",
+            "notalone.persistence.observation_store.ObservationNotFoundError: 指定范围内不存在该观察来源。"
+          ],
+          "timed_out": false
+        },
+        "baseline": {
+          "outcome": "error",
+          "symptoms": [
+            "notalone.memory_extraction.evaluation_bounded_sources.BoundedSourcesError: bounded_sources_cleanup_residual",
+            "notalone.persistence.observation_store.ObservationNotFoundError: 指定范围内不存在该观察来源。"
+          ],
+          "timed_out": false
+        },
+        "classification": "same_failure_on_fixed_baseline"
+      },
+      {
+        "test_id": "tests.integration.memory_extraction.test_bounded_public_fixture.BoundedPublicFixtureTest.test_pro_owned_worker_uses_real_e_v_sdk_and_archives_actual_pro_task_before_cleanup",
+        "initial_outcome": "error",
+        "current": {
+          "outcome": "error",
+          "symptoms": [
+            "notalone.memory_extraction.evaluation_bounded_sources.BoundedSourcesError: bounded_sources_cleanup_residual",
+            "notalone.persistence.observation_store.ObservationNotFoundError: 指定范围内不存在该观察来源。"
+          ],
+          "timed_out": false
+        },
+        "baseline": {
+          "outcome": "error",
+          "symptoms": [
+            "notalone.memory_extraction.evaluation_bounded_sources.BoundedSourcesError: bounded_sources_cleanup_residual",
+            "notalone.persistence.observation_store.ObservationNotFoundError: 指定范围内不存在该观察来源。"
+          ],
+          "timed_out": false
+        },
+        "classification": "same_failure_on_fixed_baseline"
+      },
+      {
+        "test_id": "tests.integration.memory_extraction.test_bounded_public_fixture.BoundedPublicFixtureTest.test_thinking_owned_worker_uses_both_max_and_stops_without_forced_retry",
+        "initial_outcome": "error",
+        "current": {
+          "outcome": "error",
+          "symptoms": [
+            "notalone.memory_extraction.evaluation_bounded_sources.BoundedSourcesError: bounded_sources_cleanup_residual",
+            "notalone.persistence.observation_store.ObservationNotFoundError: 指定范围内不存在该观察来源。"
+          ],
+          "timed_out": false
+        },
+        "baseline": {
+          "outcome": "error",
+          "symptoms": [
+            "notalone.memory_extraction.evaluation_bounded_sources.BoundedSourcesError: bounded_sources_cleanup_residual",
+            "notalone.persistence.observation_store.ObservationNotFoundError: 指定范围内不存在该观察来源。"
+          ],
+          "timed_out": false
+        },
+        "classification": "same_failure_on_fixed_baseline"
+      },
+      {
+        "test_id": "tests.integration.memory_extraction.test_evaluation_formal_batch.FormalEvaluationBatchTest.test_actual_proof3_and_forced_verification_are_saved_before_unresolved_axis_stops",
+        "initial_outcome": "failed",
+        "current": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: Lists differ: [] != ['raw', 'full']"
+          ],
+          "timed_out": false
+        },
+        "baseline": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: Lists differ: [] != ['raw', 'full']"
+          ],
+          "timed_out": false
+        },
+        "classification": "same_failure_on_fixed_baseline"
+      },
+      {
+        "test_id": "tests.integration.memory_extraction.test_evaluation_formal_batch.FormalEvaluationBatchTest.test_completed_first_case_is_retained_when_next_extraction_times_out",
+        "initial_outcome": "failed",
+        "current": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: Lists differ: [] != ['raw', 'full']"
+          ],
+          "timed_out": false
+        },
+        "baseline": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: Lists differ: [] != ['raw', 'full']"
+          ],
+          "timed_out": false
+        },
+        "classification": "same_failure_on_fixed_baseline"
+      },
+      {
+        "test_id": "tests.integration.memory_extraction.test_evaluation_formal_batch.FormalEvaluationBatchTest.test_duplicate_raw_proof_key_is_saved_and_stops_without_retry_or_audit_credit",
+        "initial_outcome": "failed",
+        "current": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: 0 != 2"
+          ],
+          "timed_out": false
+        },
+        "baseline": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: 0 != 2"
+          ],
+          "timed_out": false
+        },
+        "classification": "same_failure_on_fixed_baseline"
+      },
+      {
+        "test_id": "tests.integration.memory_extraction.test_evaluation_formal_batch.FormalEvaluationBatchTest.test_empty_first_positive_is_audited_and_closes_without_running_other_fourteen_tasks",
+        "initial_outcome": "failed",
+        "current": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: Lists differ: [] != ['raw', 'full']"
+          ],
+          "timed_out": false
+        },
+        "baseline": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: Lists differ: [] != ['raw', 'full']"
+          ],
+          "timed_out": false
+        },
+        "classification": "same_failure_on_fixed_baseline"
+      },
+      {
+        "test_id": "tests.integration.memory_extraction.test_evaluation_formal_batch.FormalEvaluationBatchTest.test_sealed_raw_safety_is_retained_when_full_review_fails_without_axis_credit",
+        "initial_outcome": "failed",
+        "current": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: Lists differ: [] != ['raw', 'full']"
+          ],
+          "timed_out": false
+        },
+        "baseline": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: Lists differ: [] != ['raw', 'full']"
+          ],
+          "timed_out": false
+        },
+        "classification": "same_failure_on_fixed_baseline"
+      },
+      {
+        "test_id": "tests.integration.memory_extraction.test_extraction_trace.ExtractionTraceTest.test_committed_invalidation_is_reconciled_after_receipt_fault_and_retry",
+        "initial_outcome": "failed",
+        "current": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: TraceWriteError not raised"
+          ],
+          "timed_out": false
+        },
+        "baseline": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: TraceWriteError not raised"
+          ],
+          "timed_out": false
+        },
+        "classification": "same_failure_on_fixed_baseline"
+      },
+      {
+        "test_id": "tests.integration.memory_extraction.test_extraction_trace.ExtractionTraceTest.test_invalidation_plan_does_not_claim_commit_just_because_old_row_exists",
+        "initial_outcome": "failed",
+        "current": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: RuntimeError not raised"
+          ],
+          "timed_out": false
+        },
+        "baseline": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: RuntimeError not raised"
+          ],
+          "timed_out": false
+        },
+        "classification": "same_failure_on_fixed_baseline"
+      },
+      {
+        "test_id": "tests.integration.memory_extraction.test_extraction_trace.ExtractionTraceTest.test_source_of_old_memory_used_by_update_erases_trace_even_outside_new_window",
+        "initial_outcome": "failed",
+        "current": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: 0 != 1"
+          ],
+          "timed_out": false
+        },
+        "baseline": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: 0 != 1"
+          ],
+          "timed_out": false
+        },
+        "classification": "same_failure_on_fixed_baseline"
+      },
+      {
+        "test_id": "tests.integration.persistence.test_memory_retirement.MemoryRetirementPersistenceTest.test_correction_keeps_audit_and_blocks_error_from_current_and_history",
+        "initial_outcome": "error",
+        "current": {
+          "outcome": "passed",
+          "symptoms": [
+            "passed"
+          ],
+          "timed_out": false
+        },
+        "baseline": {
+          "outcome": "passed",
+          "symptoms": [
+            "passed"
+          ],
+          "timed_out": false
+        },
+        "classification": "private_driver_environment_corrected"
+      },
+      {
+        "test_id": "tests.integration.persistence.test_memory_retirement.MemoryRetirementPersistenceTest.test_deleting_current_leaf_removes_historical_change_from_retrieval",
+        "initial_outcome": "error",
+        "current": {
+          "outcome": "passed",
+          "symptoms": [
+            "passed"
+          ],
+          "timed_out": false
+        },
+        "baseline": {
+          "outcome": "passed",
+          "symptoms": [
+            "passed"
+          ],
+          "timed_out": false
+        },
+        "classification": "private_driver_environment_corrected"
+      },
+      {
+        "test_id": "tests.integration.persistence.test_memory_retirement.MemoryRetirementPersistenceTest.test_expired_active_memory_remains_auditable_but_not_retrievable",
+        "initial_outcome": "error",
+        "current": {
+          "outcome": "passed",
+          "symptoms": [
+            "passed"
+          ],
+          "timed_out": false
+        },
+        "baseline": {
+          "outcome": "passed",
+          "symptoms": [
+            "passed"
+          ],
+          "timed_out": false
+        },
+        "classification": "private_driver_environment_corrected"
+      },
+      {
+        "test_id": "tests.integration.persistence.test_memory_retirement.MemoryRetirementPersistenceTest.test_explicit_change_is_auditable_but_not_retrievable",
+        "initial_outcome": "error",
+        "current": {
+          "outcome": "passed",
+          "symptoms": [
+            "passed"
+          ],
+          "timed_out": false
+        },
+        "baseline": {
+          "outcome": "passed",
+          "symptoms": [
+            "passed"
+          ],
+          "timed_out": false
+        },
+        "classification": "private_driver_environment_corrected"
+      },
+      {
+        "test_id": "tests.integration.persistence.test_memory_retirement.MemoryRetirementPersistenceTest.test_foreign_scope_cannot_retrieve_historical_change",
+        "initial_outcome": "error",
+        "current": {
+          "outcome": "passed",
+          "symptoms": [
+            "passed"
+          ],
+          "timed_out": false
+        },
+        "baseline": {
+          "outcome": "passed",
+          "symptoms": [
+            "passed"
+          ],
+          "timed_out": false
+        },
+        "classification": "private_driver_environment_corrected"
+      },
+      {
+        "test_id": "tests.integration.persistence.test_memory_retirement.MemoryRetirementPersistenceTest.test_unspecified_invalidation_is_not_historical",
+        "initial_outcome": "error",
+        "current": {
+          "outcome": "passed",
+          "symptoms": [
+            "passed"
+          ],
+          "timed_out": false
+        },
+        "baseline": {
+          "outcome": "passed",
+          "symptoms": [
+            "passed"
+          ],
+          "timed_out": false
+        },
+        "classification": "private_driver_environment_corrected"
+      },
+      {
+        "test_id": "tests.integration.persistence.test_reply_revalidation_batches.ReplyRevalidationBatchTest.test_eleven_evidence_rows_have_constant_read_budget_as_pools_grow",
+        "initial_outcome": "failed",
+        "current": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: 48 not less than or equal to 35"
+          ],
+          "timed_out": false
+        },
+        "baseline": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: 48 not less than or equal to 35"
+          ],
+          "timed_out": false
+        },
+        "classification": "same_failure_on_fixed_baseline"
+      },
+      {
+        "test_id": "tests.integration.persistence.test_reply_revalidation_batches.ReplyRevalidationBatchTest.test_historical_id_reads_exact_version_without_ancestor_rows",
+        "initial_outcome": "failed",
+        "current": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: Lists differ: [] != [(UUID('<uuid>'), '合成偏好4', 'invalidated')]"
+          ],
+          "timed_out": false
+        },
+        "baseline": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: Lists differ: [] != [(UUID('<uuid>'), '合成偏好2', 'invalidated')]"
+          ],
+          "timed_out": false
+        },
+        "classification": "same_failure_class_with_dynamic_fixture_value_difference"
+      },
+      {
+        "test_id": "tests.integration.persistence.test_write_adjudication.WriteAdjudicationTest.test_keep_stores_both",
+        "initial_outcome": "failed",
+        "current": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: 0 != 1"
+          ],
+          "timed_out": false
+        },
+        "baseline": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: 0 != 1"
+          ],
+          "timed_out": false
+        },
+        "classification": "same_failure_on_fixed_baseline"
+      },
+      {
+        "test_id": "tests.integration.server.test_assistant_session_memory_dependencies.AssistantSessionMemoryDependencyHttpTest.test_memory_expiration_keeps_completed_body_with_changed_basis_and_replays_without_generation",
+        "initial_outcome": "failed",
+        "current": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: Lists differ: [{'ev[58 chars]: 'confirmed_memory', 'reason': 'memory_generation_forbidden'}] != [{'ev[58 chars]: 'confirmed_memory', 'reason': 'memory_expired'}]",
+            "AssertionError: Lists differ: [{'ev[54 chars]ind': 'owner_memory', 'reason': 'memory_generation_forbidden'}] != [{'ev[54 chars]ind': 'owner_memory', 'reason': 'memory_expired'}]"
+          ],
+          "timed_out": false
+        },
+        "baseline": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: Lists differ: [{'ev[58 chars]: 'confirmed_memory', 'reason': 'memory_generation_forbidden'}] != [{'ev[58 chars]: 'confirmed_memory', 'reason': 'memory_expired'}]",
+            "AssertionError: Lists differ: [{'ev[54 chars]ind': 'owner_memory', 'reason': 'memory_generation_forbidden'}] != [{'ev[54 chars]ind': 'owner_memory', 'reason': 'memory_expired'}]"
+          ],
+          "timed_out": false
+        },
+        "classification": "same_failure_on_fixed_baseline"
+      },
+      {
+        "test_id": "tests.integration.server.test_grounded_memory_events.GroundedMemoryEventsHttpTest.test_default_builder_verifies_planned_event_without_turning_elapsed_time_into_occurrence",
+        "initial_outcome": "failed",
+        "current": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: 3 != 2"
+          ],
+          "timed_out": false
+        },
+        "baseline": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: 3 != 2"
+          ],
+          "timed_out": false
+        },
+        "classification": "same_failure_on_fixed_baseline"
+      },
+      {
+        "test_id": "tests.integration.server.test_import_auto_flow.ImportAutoFlowHttpTest.test_new_import_while_same_contact_is_active_is_not_lost",
+        "initial_outcome": "error",
+        "current": {
+          "outcome": "error",
+          "symptoms": [
+            "StopIteration"
+          ],
+          "timed_out": false
+        },
+        "baseline": {
+          "outcome": "error",
+          "symptoms": [
+            "StopIteration"
+          ],
+          "timed_out": false
+        },
+        "classification": "same_failure_on_fixed_baseline"
+      },
+      {
+        "test_id": "tests.integration.server.test_import_auto_flow.ImportAutoFlowHttpTest.test_new_task_skips_older_queue_and_restart_only_queries_persistent_status",
+        "initial_outcome": "failed",
+        "current": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: Items in the second set but not the first:"
+          ],
+          "timed_out": false
+        },
+        "baseline": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: Items in the second set but not the first:"
+          ],
+          "timed_out": false
+        },
+        "classification": "same_failure_on_fixed_baseline"
+      },
+      {
+        "test_id": "tests.integration.server.test_layered_correction_matrix.LayeredCorrectionMatrixHttpTest.test_contact_profile_fact_error_rejects_uncited_memory_and_corrects_current_leaf",
+        "initial_outcome": "failed",
+        "current": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: Items in the first set but not the second:"
+          ],
+          "timed_out": false
+        },
+        "baseline": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: Items in the first set but not the second:"
+          ],
+          "timed_out": false
+        },
+        "classification": "same_failure_on_fixed_baseline"
+      },
+      {
+        "test_id": "tests.integration.server.test_layered_correction_matrix.LayeredCorrectionMatrixHttpTest.test_contact_scenario_fact_error_rejects_uncited_memory_and_corrects_current_leaf",
+        "initial_outcome": "failed",
+        "current": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: Items in the first set but not the second:"
+          ],
+          "timed_out": false
+        },
+        "baseline": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: Items in the first set but not the second:"
+          ],
+          "timed_out": false
+        },
+        "classification": "same_failure_on_fixed_baseline"
+      },
+      {
+        "test_id": "tests.integration.server.test_layered_correction_matrix.LayeredCorrectionMatrixHttpTest.test_owner_profile_fact_error_rejects_uncited_memory_and_corrects_current_leaf",
+        "initial_outcome": "failed",
+        "current": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: Items in the first set but not the second:"
+          ],
+          "timed_out": false
+        },
+        "baseline": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: Items in the first set but not the second:"
+          ],
+          "timed_out": false
+        },
+        "classification": "same_failure_on_fixed_baseline"
+      },
+      {
+        "test_id": "tests.integration.server.test_layered_correction_matrix.LayeredCorrectionMatrixHttpTest.test_owner_scenario_fact_error_rejects_uncited_memory_and_corrects_current_leaf",
+        "initial_outcome": "failed",
+        "current": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: Items in the first set but not the second:"
+          ],
+          "timed_out": false
+        },
+        "baseline": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: Items in the first set but not the second:"
+          ],
+          "timed_out": false
+        },
+        "classification": "same_failure_on_fixed_baseline"
+      },
+      {
+        "test_id": "tests.integration.server.test_layered_memory_corrections.LayeredMemoryCorrectionHttpTest.test_feedback_keeps_an_independent_topic_in_the_same_generation_batch_readable",
+        "initial_outcome": "error",
+        "current": {
+          "outcome": "error",
+          "symptoms": [
+            "AttributeError: 'NoneType' object has no attribute 'quality_receipt'"
+          ],
+          "timed_out": false
+        },
+        "baseline": {
+          "outcome": "error",
+          "symptoms": [
+            "AttributeError: 'NoneType' object has no attribute 'quality_receipt'"
+          ],
+          "timed_out": false
+        },
+        "classification": "same_failure_on_fixed_baseline"
+      },
+      {
+        "test_id": "tests.integration.server.test_layered_memory_management.LayeredMemoryManagementHttpTest.test_adapter_transport_deadlines_release_shared_foreground_without_opening_the_gate",
+        "initial_outcome": "failed",
+        "current": {
+          "outcome": "passed",
+          "symptoms": [
+            "passed"
+          ],
+          "timed_out": false
+        },
+        "baseline": {
+          "outcome": "passed",
+          "symptoms": [
+            "passed"
+          ],
+          "timed_out": false
+        },
+        "classification": "quiet_both_versions_passed_after_prior_failure"
+      },
+      {
+        "test_id": "tests.integration.server.test_layered_memory_management.LayeredMemoryManagementHttpTest.test_clock_boundary_invalidates_a_frozen_current_paragraph_and_refresh_preserves_history",
+        "initial_outcome": "failed",
+        "current": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: 'stale' != 'ready'"
+          ],
+          "timed_out": false
+        },
+        "baseline": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: 'stale' != 'ready'"
+          ],
+          "timed_out": false
+        },
+        "classification": "same_failure_on_fixed_baseline"
+      },
+      {
+        "test_id": "tests.integration.server.test_layered_profile_management.LayeredProfileHttpTest.test_profile_actual_transport_timeout_releases_foreground_for_each_semantic_step",
+        "initial_outcome": "failed",
+        "current": {
+          "outcome": "passed",
+          "symptoms": [
+            "passed"
+          ],
+          "timed_out": false
+        },
+        "baseline": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: False is not true"
+          ],
+          "timed_out": false
+        },
+        "classification": "current_passed_baseline_failed"
+      },
+      {
+        "test_id": "tests.integration.server.test_layered_profile_management.LayeredProfileHttpTest.test_queued_l2_set_change_revokes_profile_before_next_worker_publishes",
+        "initial_outcome": "failed",
+        "current": {
+          "outcome": "passed",
+          "symptoms": [
+            "passed"
+          ],
+          "timed_out": false
+        },
+        "baseline": {
+          "outcome": "passed",
+          "symptoms": [
+            "passed"
+          ],
+          "timed_out": false
+        },
+        "classification": "not_reproduced_in_isolated_runs"
+      },
+      {
+        "test_id": "tests.integration.server.test_layered_profile_management.LayeredProfileHttpTest.test_source_erasure_and_error_retirement_keep_distinct_profile_lifecycles",
+        "initial_outcome": "error",
+        "current": {
+          "outcome": "error",
+          "symptoms": [
+            "TimeoutError: timed out"
+          ],
+          "timed_out": false
+        },
+        "baseline": {
+          "outcome": "error",
+          "symptoms": [
+            "TimeoutError: timed out"
+          ],
+          "timed_out": false
+        },
+        "classification": "same_failure_on_fixed_baseline"
+      },
+      {
+        "test_id": "tests.integration.server.test_manual_input.ManualInputHttpTest.test_new_internal_contact_accepts_only_confirmed_single_contact_import_and_source_deletion",
+        "initial_outcome": "failed",
+        "current": {
+          "outcome": "passed",
+          "symptoms": [
+            "passed"
+          ],
+          "timed_out": false
+        },
+        "baseline": {
+          "outcome": "passed",
+          "symptoms": [
+            "passed"
+          ],
+          "timed_out": false
+        },
+        "classification": "quiet_both_versions_passed_after_prior_failure"
+      },
+      {
+        "test_id": "tests.integration.server.test_memory_correction_grounded.GroundedCorrectionAutomaticHttpTest.test_failed_automatic_update_rolls_back_new_memory_and_retry_preserves_manual",
+        "initial_outcome": "failed",
+        "current": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: False is not true : 实际失效 SQL 没有遇到合成事务失败。"
+          ],
+          "timed_out": false
+        },
+        "baseline": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: False is not true : 实际失效 SQL 没有遇到合成事务失败。"
+          ],
+          "timed_out": false
+        },
+        "classification": "same_failure_on_fixed_baseline"
+      },
+      {
+        "test_id": "tests.integration.server.test_memory_correction_grounded.GroundedCorrectionAutomaticHttpTest.test_manual_decision_after_automatic_update_commit_survives_late_steps",
+        "initial_outcome": "failed",
+        "current": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: False is not true : 自动更新没有提交新资料。"
+          ]
+        },
+        "baseline": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: False is not true : 自动更新没有提交新资料。"
+          ],
+          "timed_out": false
+        },
+        "classification": "same_failure_on_fixed_baseline"
+      },
+      {
+        "test_id": "tests.integration.server.test_memory_correction_grounded.GroundedCorrectionAutomaticHttpTest.test_manual_decision_before_atomic_update_refuses_stale_automatic_write",
+        "initial_outcome": "failed",
+        "current": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: False is not true : 实际自动确认没有到达持久化入口。"
+          ]
+        },
+        "baseline": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: False is not true : 实际自动确认没有到达持久化入口。"
+          ],
+          "timed_out": false
+        },
+        "classification": "same_failure_on_fixed_baseline"
+      },
+      {
+        "test_id": "tests.integration.server.test_memory_correction_grounded.GroundedCorrectionAutomaticHttpTest.test_new_grounded_evidence_requires_review_after_user_correction",
+        "initial_outcome": "failed",
+        "current": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: Lists differ: ['<uuid>', '<uuid>'] != ['<uuid>']"
+          ]
+        },
+        "baseline": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: Lists differ: ['<uuid>', '<uuid>'] != ['<uuid>']"
+          ],
+          "timed_out": false
+        },
+        "classification": "same_failure_on_fixed_baseline"
+      },
+      {
+        "test_id": "tests.integration.server.test_memory_correction_grounded.SelfGroundedCorrectionAutomaticHttpTest.test_failed_automatic_update_rolls_back_new_memory_and_retry_preserves_manual",
+        "initial_outcome": "failed",
+        "current": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: False is not true : 实际失效 SQL 没有遇到合成事务失败。"
+          ]
+        },
+        "baseline": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: False is not true : 实际失效 SQL 没有遇到合成事务失败。"
+          ],
+          "timed_out": false
+        },
+        "classification": "same_failure_on_fixed_baseline"
+      },
+      {
+        "test_id": "tests.integration.server.test_memory_correction_grounded.SelfGroundedCorrectionAutomaticHttpTest.test_manual_decision_after_automatic_update_commit_survives_late_steps",
+        "initial_outcome": "failed",
+        "current": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: False is not true : 自动更新没有提交新资料。"
+          ]
+        },
+        "baseline": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: False is not true : 自动更新没有提交新资料。"
+          ],
+          "timed_out": false
+        },
+        "classification": "same_failure_on_fixed_baseline"
+      },
+      {
+        "test_id": "tests.integration.server.test_memory_correction_grounded.SelfGroundedCorrectionAutomaticHttpTest.test_manual_decision_before_atomic_update_refuses_stale_automatic_write",
+        "initial_outcome": "failed",
+        "current": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: False is not true : 实际自动确认没有到达持久化入口。"
+          ]
+        },
+        "baseline": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: False is not true : 实际自动确认没有到达持久化入口。"
+          ],
+          "timed_out": false
+        },
+        "classification": "same_failure_on_fixed_baseline"
+      },
+      {
+        "test_id": "tests.integration.server.test_memory_correction_grounded.SelfGroundedCorrectionAutomaticHttpTest.test_new_grounded_evidence_requires_review_after_user_correction",
+        "initial_outcome": "failed",
+        "current": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: Lists differ: ['<uuid>', '<uuid>'] != ['<uuid>']"
+          ]
+        },
+        "baseline": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: Lists differ: ['<uuid>', '<uuid>'] != ['<uuid>']"
+          ],
+          "timed_out": false
+        },
+        "classification": "same_failure_on_fixed_baseline"
+      },
+      {
+        "test_id": "tests.integration.server.test_memory_event_updates.MemoryEventHistoricalReviewHttpTest.test_contact_same_claim_with_changed_window_is_not_an_original_claim_replay",
+        "initial_outcome": "failed",
+        "current": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: 0 != 1"
+          ]
+        },
+        "baseline": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: 0 != 1"
+          ],
+          "timed_out": false
+        },
+        "classification": "same_failure_on_fixed_baseline"
+      },
+      {
+        "test_id": "tests.integration.server.test_memory_event_updates.MemoryEventHistoricalReviewHttpTest.test_self_same_claim_with_changed_window_is_not_an_original_claim_replay",
+        "initial_outcome": "failed",
+        "current": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: 0 != 1"
+          ]
+        },
+        "baseline": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: 0 != 1"
+          ],
+          "timed_out": false
+        },
+        "classification": "same_failure_on_fixed_baseline"
+      },
+      {
+        "test_id": "tests.integration.server.test_memory_skill_evolution.MemorySkillEvolutionHttpTest.test_method_stop_after_actual_skill_read_rejects_late_candidate_and_retry_uses_filtered_view",
+        "initial_outcome": "failed",
+        "current": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: 0 != 1 : []"
+          ]
+        },
+        "baseline": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: 0 != 1 : []"
+          ],
+          "timed_out": false
+        },
+        "classification": "same_failure_on_fixed_baseline"
+      },
+      {
+        "test_id": "tests.integration.server.test_memory_skill_evolution.MemorySkillEvolutionHttpTest.test_rollback_commits_before_waiting_source_deletion_without_restoring_erased_versions",
+        "initial_outcome": "failed",
+        "current": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: 0 != 1 : []"
+          ]
+        },
+        "baseline": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: 0 != 1 : []"
+          ],
+          "timed_out": false
+        },
+        "classification": "same_failure_on_fixed_baseline"
+      },
+      {
+        "test_id": "tests.integration.server.test_memory_skill_evolution.MemorySkillEvolutionHttpTest.test_same_material_failure_retry_restart_keeps_task_identity_without_duplicate_draft",
+        "initial_outcome": "failed",
+        "current": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: 0 != 1 : []"
+          ]
+        },
+        "baseline": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: 0 != 1 : []"
+          ],
+          "timed_out": false
+        },
+        "classification": "same_failure_on_fixed_baseline"
+      },
+      {
+        "test_id": "tests.integration.server.test_memory_skill_evolution.MemorySkillEvolutionHttpTest.test_same_task_reviewed_update_conflict_and_rollback_preserve_method_stop_then_delete",
+        "initial_outcome": "failed",
+        "current": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: 0 != 1 : []"
+          ]
+        },
+        "baseline": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: 0 != 1 : []"
+          ],
+          "timed_out": false
+        },
+        "classification": "same_failure_on_fixed_baseline"
+      },
+      {
+        "test_id": "tests.integration.server.test_memory_skill_evolution.MemorySkillEvolutionHttpTest.test_shared_source_publication_feedback_restart_and_physical_deletion",
+        "initial_outcome": "failed",
+        "current": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: 0 != 1 : []"
+          ]
+        },
+        "baseline": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: 0 != 1 : []"
+          ],
+          "timed_out": false
+        },
+        "classification": "same_failure_on_fixed_baseline"
+      },
+      {
+        "test_id": "tests.integration.server.test_memory_skill_evolution.MemorySkillEvolutionHttpTest.test_shared_source_reaches_updated_memories_actual_reply_and_pending_skill",
+        "initial_outcome": "failed",
+        "current": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: 0 != 1 : []"
+          ]
+        },
+        "baseline": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: 0 != 1 : []"
+          ],
+          "timed_out": false
+        },
+        "classification": "same_failure_on_fixed_baseline"
+      },
+      {
+        "test_id": "tests.integration.server.test_memory_skill_evolution.MemorySkillEvolutionHttpTest.test_source_deletion_commits_before_waiting_fresh_rollback_with_valid_version_parameters",
+        "initial_outcome": "failed",
+        "current": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: 0 != 1 : []"
+          ]
+        },
+        "baseline": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: 0 != 1 : []"
+          ],
+          "timed_out": false
+        },
+        "classification": "same_failure_on_fixed_baseline"
+      },
+      {
+        "test_id": "tests.integration.server.test_memory_skill_evolution.MemorySkillEvolutionHttpTest.test_source_queued_during_new_learning_erases_old_draft_and_discards_late_proposal",
+        "initial_outcome": "failed",
+        "current": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: 0 != 1 : []"
+          ]
+        },
+        "baseline": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: 0 != 1 : []"
+          ],
+          "timed_out": false
+        },
+        "classification": "same_failure_on_fixed_baseline"
+      },
+      {
+        "test_id": "tests.integration.server.test_memory_skill_evolution.MemorySkillEvolutionHttpTest.test_source_queued_during_review_cannot_save_late_comparison_or_publish_after_restart",
+        "initial_outcome": "failed",
+        "current": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: 0 != 1 : []"
+          ]
+        },
+        "baseline": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: 0 != 1 : []"
+          ],
+          "timed_out": false
+        },
+        "classification": "same_failure_on_fixed_baseline"
+      },
+      {
+        "test_id": "tests.integration.server.test_message_api.MessageStreamApiTest.test_bounded_page_enrichment_finishes_without_message_statistics",
+        "initial_outcome": "failed",
+        "current": {
+          "outcome": "passed",
+          "symptoms": [
+            "passed"
+          ],
+          "timed_out": false
+        },
+        "baseline": {
+          "outcome": "passed",
+          "symptoms": [
+            "passed"
+          ],
+          "timed_out": false
+        },
+        "classification": "shared_group_statistics_pollution_fixture_interference"
+      },
+      {
+        "test_id": "tests.integration.server.test_model_priority_lifecycle.ModelPriorityLifecycleHttpTest.test_adjudication_result_waits_for_reply_before_changing_memory",
+        "initial_outcome": "failed",
+        "current": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: Items in the second set but not the first:"
+          ]
+        },
+        "baseline": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: Items in the second set but not the first:"
+          ],
+          "timed_out": false
+        },
+        "classification": "same_failure_on_fixed_baseline"
+      },
+      {
+        "test_id": "tests.integration.server.test_organization_quality.OrganizationQualityHttpTest.test_attempts_measure_complete_entities_and_rejected_request_has_no_physical_send",
+        "initial_outcome": "failed",
+        "current": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: 1 != 0 : [{'case_id': '<uuid>', 'error_code': 'actual_request_budget_exceeded'}]"
+          ]
+        },
+        "baseline": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: 1 != 0 : [{'case_id': '<uuid>', 'error_code': 'actual_request_budget_exceeded'}]"
+          ],
+          "timed_out": false
+        },
+        "classification": "same_failure_on_fixed_baseline"
+      },
+      {
+        "test_id": "tests.integration.server.test_organization_quality.OrganizationQualityHttpTest.test_contact_model_boundary_preserves_its_distinct_allowlist_and_actual_provenance",
+        "initial_outcome": "failed",
+        "current": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: Items in the first set but not the second:"
+          ]
+        },
+        "baseline": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: Items in the first set but not the second:"
+          ],
+          "timed_out": false
+        },
+        "classification": "same_failure_on_fixed_baseline"
+      },
+      {
+        "test_id": "tests.integration.server.test_organization_quality.OrganizationQualityHttpTest.test_temporary_information_can_leave_profile_empty_without_becoming_long_term_fact",
+        "initial_outcome": "failed",
+        "current": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: 1 != 0 : [{'case_id': '<uuid>', 'error_code': 'actual_request_budget_exceeded'}]"
+          ]
+        },
+        "baseline": {
+          "outcome": "failed",
+          "symptoms": [
+            "AssertionError: 1 != 0 : [{'case_id': '<uuid>', 'error_code': 'actual_request_budget_exceeded'}]"
+          ],
+          "timed_out": false
+        },
+        "classification": "same_failure_on_fixed_baseline"
+      }
+    ],
+    "classificationCounts": {
+      "same_failure_on_fixed_baseline": 47,
+      "private_driver_environment_corrected": 6,
+      "same_failure_class_with_dynamic_fixture_value_difference": 1,
+      "quiet_both_versions_passed_after_prior_failure": 2,
+      "current_passed_baseline_failed": 1,
+      "not_reproduced_in_isolated_runs": 1,
+      "shared_group_statistics_pollution_fixture_interference": 1
+    },
+    "limits": "最终一次续跑仍未结算者不再派发；517个未完成ID见summary.remaining_ids；不宣称全量绿色或全产品零回归。",
+    "resources": {
+      "backendEffectiveDatabasesChecked": 326,
+      "backendRecordedPids": 616,
+      "backendTemporaryDirectories": 1896,
+      "reviewDatabasesChecked": 66,
+      "remainingOwnedResources": 0,
+      "preexistingProtectedDatabases": 44,
+      "postgresIdentifierAudit": "成功CREATE请求按实际63字节标识符精确核验，不以前缀批量清理。"
+    }
+  },
+  "realAcceptance": {
+    "developmentApp": true,
+    "externalModelCalls": false,
+    "messagesSent": 0,
+    "foregroundTitleCapture": true,
+    "titleConfidence": 0.5,
+    "automaticContactIdentityVerified": false,
+    "rawTitleOrFramePersisted": false
+  }
+}
