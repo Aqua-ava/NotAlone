@@ -42,6 +42,7 @@ class AdjudicationDecision:
     duplicate_memory_id: UUID | None = None
     relation: dict | None = None
     relation_supported: bool = False
+    relation_usage: dict | None = None
     evolution: object = None
 
 

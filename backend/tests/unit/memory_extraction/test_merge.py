@@ -103,7 +103,7 @@ class MergeTests(unittest.TestCase):
         stats = MemoryAdoption(memory_port=store, adjudication_runtime=adjudicator,
             merge_verifier=object(), dimension_release=DimensionRelease(gate_enabled=False),
             similarity_threshold=0).adopt(self.scope, ExtractionOutcome((replace(self.fact, text='联系人现在喜欢文字沟通和电话说明。'),)))
-        self.assertEqual(stats.adopted, 1)
+        self.assertEqual((stats.adopted, stats.pending), (0, 1))
         self.assertEqual(len(adjudicator.seen), 1)
 
     def test_invalid_first_adjudication_does_not_block_next_candidate(self):
@@ -124,10 +124,12 @@ class MergeTests(unittest.TestCase):
                 if inner.count == 1:
                     raise ExtractionInvalidOutputError('非法合并父版本')
                 return AdjudicationDecision(AdjudicationAction.KEEP)
-        stats = MemoryAdoption(memory_port=store, adjudication_runtime=Adjudicator(),
+        adjudicator = Adjudicator()
+        stats = MemoryAdoption(memory_port=store, adjudication_runtime=adjudicator,
             dimension_release=DimensionRelease(gate_enabled=False), similarity_threshold=0).adopt(self.scope,
             ExtractionOutcome((replace(self.fact, text='联系人喜欢第一类说明。'), replace(self.fact, text='联系人喜欢第二类说明。'))))
-        self.assertEqual((stats.pending, stats.adopted), (1, 1))
+        self.assertEqual(adjudicator.count, 2)
+        self.assertEqual((stats.pending, stats.adopted), (2, 0))
 
 
 class MergeDecisionTests(unittest.TestCase):

@@ -25,7 +25,7 @@ from notalone.memory.models import (
 from notalone.memory.ports import MemoryPort, OwnerMemoryPort
 from notalone.memory.versions import MemoryVersionConflict
 from notalone.memory.candidates import same_pending_identity
-from notalone.memory.events import same_verified_event_claim, same_verified_occurrence
+from notalone.memory.events import EventStage, same_verified_event_claim, same_verified_occurrence
 from notalone.memory.dimension_evidence import DimensionEvidenceChangedError
 from notalone.memory.correction import MemoryCorrectionConflictError
 from notalone.memory_extraction.adjudication import (
@@ -678,6 +678,7 @@ class MemoryAdoption:
             model_name=usage.model_name if usage else None,
             input_tokens=usage.input_tokens if usage else None,
             output_tokens=usage.output_tokens if usage else None)
+        self._record_relation_usage(scope, usage.relation_usage if usage else None)
         return dict(zip(keys, decisions))
 
     def _adjudicate(self, fact, similar, scope: ContactScope, batch_decisions=None):
@@ -743,8 +744,15 @@ class MemoryAdoption:
                 tuple((item.memory_id, item.version.revision) for item in similar if str(item.memory_id) in ids),
                 tuple(dict.fromkeys(UUID(ref["message_id"]) for ref in relation["evidence"])),
                 supported, relation["claim_changed"], relation["condition_changed"], binding)
-            decision = replace(decision, evolution=evolution)
+            # 未冻结的关系只能保留未知，不能写入一份无法复验的变化依据。
+            decision = replace(decision, evolution=evolution if binding and binding["sources"] is not None else None)
             if relation["kind"] == "unresolved_conflict" or not supported:
+                actual_action = None
+                timeline_pending = True
+                outcome = LedgerOutcome.REJECTED_BY_VALIDATION
+        if decision.action in {AdjudicationAction.ADD, AdjudicationAction.KEEP} and similar:
+            if (decision.relation is None or decision.evolution is None or not decision.evolution.source_supported
+                    or decision.relation["kind"] == "independent" and (decision.relation["claim_changed"] or decision.relation["condition_changed"])):
                 actual_action = None
                 timeline_pending = True
                 outcome = LedgerOutcome.REJECTED_BY_VALIDATION
@@ -768,6 +776,7 @@ class MemoryAdoption:
             outcome = LedgerOutcome.REJECTED_BY_VALIDATION
         if decision.action is not AdjudicationAction.UPDATE and decision.replaced_memory_id is not None:
             actual_action = None
+            timeline_pending = False
             outcome = LedgerOutcome.REJECTED_BY_VALIDATION
         if (
             decision.action is AdjudicationAction.UPDATE
@@ -797,6 +806,7 @@ class MemoryAdoption:
         if not cached:
             self._record_ledger(scope, outcome, started_ns, model_name=decision.model_name,
                 input_tokens=decision.input_tokens, output_tokens=decision.output_tokens)
+            self._record_relation_usage(scope, decision.relation_usage)
         # 裁决要求更新但缺少有效被取代 id 时保留 UPDATE 与空 ID：
         # adopt 会把它降级为待定候选，而不是静默按 ADD 落库让被取代
         # 的旧记忆保持 active。
@@ -907,6 +917,12 @@ class MemoryAdoption:
         return (candidates[:MAX_SIMILAR_MEMORY_CANDIDATES],
                 verified_correction and len(candidates) > MAX_SIMILAR_MEMORY_CANDIDATES)
 
+    def _record_relation_usage(self, scope, usage):
+        if usage is not None:
+            self._record_ledger(scope, LedgerOutcome.SUCCEEDED, usage["started_ns"],
+                model_name=usage["model_name"], input_tokens=usage["input_tokens"],
+                output_tokens=usage["output_tokens"], purpose="relation_verification")
+
     def _record_ledger(
         self,
         scope: ContactScope,
@@ -916,6 +932,7 @@ class MemoryAdoption:
         model_name: str | None = None,
         input_tokens: int | None = None,
         output_tokens: int | None = None,
+        purpose: str = "adjudication",
     ) -> None:
         if self._ledger is None:
             return
@@ -934,7 +951,7 @@ class MemoryAdoption:
         started_at = datetime.now(timezone.utc)
         try:
             record_ledger_entry(
-                "adjudication", self._ledger, entry, started_at=started_at
+                purpose, self._ledger, entry, started_at=started_at
             )
         except TraceWriteError:
             raise
@@ -1067,12 +1084,12 @@ class MemoryAdoption:
         if self._automatic:
             # 逐条来源核验仍为准入；置信度/语用/风险字段只保留描述，不增设人工门。
             return self._dimension_release.allows(fact, scope=scope) and (
-                fact.event is None or fact.event.source_current and fact.event.stage_verified and fact.event.occurrence_verified)
+                fact.event is None or fact.event.source_current and fact.event.stage_verified and (fact.event.occurrence_verified or fact.event.stage is EventStage.CANCELLED))
         return can_auto_adopt(
             fact, decision, confidence_threshold=self._threshold
         ) and self._dimension_release.allows(fact, scope=scope) and (
             fact.event is None
-            or fact.event.source_current and fact.event.stage_verified and fact.event.occurrence_verified
+            or fact.event.source_current and fact.event.stage_verified and (fact.event.occurrence_verified or fact.event.stage is EventStage.CANCELLED)
         )
 
     def _pending_exists(self, scope: ContactScope, fact) -> bool:

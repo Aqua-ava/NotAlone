@@ -2,7 +2,7 @@
 from dataclasses import dataclass, field, replace
 from uuid import UUID
 
-KINDS = frozenset({"supplement", "state_change", "error_correction", "historical_supplement", "unresolved_conflict"})
+KINDS = frozenset({"supplement", "state_change", "error_correction", "historical_supplement", "unresolved_conflict", "independent"})
 FIELDS = {"version", "kind", "explanation", "related_versions", "evidence_message_ids", "source_supported", "claim_changed", "condition_changed"}
 
 @dataclass(frozen=True, slots=True)
@@ -16,6 +16,8 @@ class MemoryEvolution:
     condition_changed: bool = False
     proof: dict | None = field(default=None, repr=False, compare=False)
     source_current: bool = field(default=True, init=False, compare=False, repr=False)
+    projected: bool = field(default=False, compare=False, repr=False)
+    stored_evolution: object = field(default=None, compare=False, repr=False)
 
     def __post_init__(self):
         if self.kind not in KINDS or not isinstance(self.explanation, str) or not 1 <= len(self.explanation.strip()) <= 1000:
@@ -54,3 +56,7 @@ class MemoryEvolution:
         result = replace(self)
         object.__setattr__(result, "source_current", current)
         return result
+
+    def as_projection(self, stored):
+        """读取时反证不改写持久版本；版本校验仍绑定原记录。"""
+        return replace(self, projected=True, stored_evolution=stored)

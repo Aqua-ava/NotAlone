@@ -50,6 +50,7 @@ def evolution_snapshot(connection, candidate, correction_evidence):
 
 def bind_memory_evolution(connection, *, owner_id, raw, memory_id=None, revision=None):
     value = MemoryEvolution.from_payload(raw)
+    stored = value
     if value is not None:
         try:
             validate_evolution(connection, owner_id=owner_id, evolution=value, allow_retired=True)
@@ -67,7 +68,7 @@ def bind_memory_evolution(connection, *, owner_id, raw, memory_id=None, revision
             conflict = MemoryEvolution.from_payload(row["evolution"])
             try:
                 validate_evolution(connection, owner_id=owner_id, evolution=conflict)
-                return conflict
+                return conflict.as_projection(stored)
             except (MemoryCorrectionConflictError, KeyError, TypeError, ValueError):
                 continue
     return value

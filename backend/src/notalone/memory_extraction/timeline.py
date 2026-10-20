@@ -1,5 +1,6 @@
 """关系核验之外的确定性替代约束，不以保存时刻认证现状。"""
 from notalone.memory.models import AdoptionMethod
+from notalone.memory.events import EventStage
 from datetime import datetime
 from notalone.memory_extraction.adjudication import AdjudicationAction
 
@@ -21,10 +22,16 @@ def replacement_supported(fact, similar, decision):
         return False
     previous = parents[0]
     # 条件改变本身不能撤销主张，二者必须经独立核验明确区分。
-    if previous.conditions != fact.conditions and not evidence.condition_changed:
+    old_conditions = tuple(item.text for item in previous.conditions.items) if previous.conditions else ()
+    new_conditions = tuple(item.text for item in fact.conditions.items) if fact.conditions else ()
+    if old_conditions != new_conditions and not evidence.condition_changed:
         return False
     old, new = previous.event, fact.event
-    if old is None and new is None:
+    schedule_stages = {EventStage.PLANNED, EventStage.AGREED, EventStage.RESCHEDULED, EventStage.CANCELLED}
+    schedule_revision = bool(old and new and old.source_current and new.source_current
+                             and old.stage_verified and new.stage_verified
+                             and old.stage in schedule_stages and new.stage in schedule_stages)
+    if old is None and new is None or schedule_revision:
         snapshots = evidence.proof["sources"]["message_snapshots"]
         parent = next(item for item in evidence.proof["parents"] if item["memory_id"] == str(previous.memory_id))
         old_dates = [snapshots.get(identifier, {}).get("occurred_at") for identifier in parent.get("claim_source_ids", [])]
@@ -32,7 +39,7 @@ def replacement_supported(fact, similar, decision):
         if (not old_dates or not new_dates or any(value is None for value in (*old_dates, *new_dates))
                 or max(datetime.fromisoformat(value) for value in new_dates) <= max(datetime.fromisoformat(value) for value in old_dates)):
             return False
-    if evidence.kind == "state_change":
+    if evidence.kind == "state_change" and not schedule_revision:
         if old is not None and new is not None:
             if not old.occurrence_verified or not new.occurrence_verified:
                 return False
