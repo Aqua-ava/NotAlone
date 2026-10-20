@@ -18,6 +18,7 @@ export async function syncSwitchStopsReading({ manager, syncBackend }: SyncPage)
   expect(await syncBackend.tails()).toEqual([]);
 
   await manager.getByRole('button', { name: '同步设置', exact: true }).click();
+  await expect(manager.getByRole('region', { name: '前台定位最近报告', exact: true })).toHaveCount(0);
   const background = manager.getByRole('region', { name: '后台 CLI 同步', exact: true });
   await expect(background.getByRole('button', { name: '开启后台同步', exact: true })).toBeVisible();
   const readPublicStatus = () => manager.evaluate(async () => {

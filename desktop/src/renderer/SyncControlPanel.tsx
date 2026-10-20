@@ -1,14 +1,11 @@
 import { useEffect } from 'react';
-import type { BackgroundSyncPhase, ForegroundReportPhase, SyncBackfillPhase, SyncControlBridge, SyncControlState } from '../shared/sync-control-bridge';
+import type { BackgroundSyncPhase, SyncBackfillPhase, SyncControlBridge, SyncControlState } from '../shared/sync-control-bridge';
 import { useRevisionedSession } from './use-revisioned-session';
 import './bindings.css';
 
 const initial: SyncControlState = { revision: -1, scopeRevision: 0, phase: 'offline', report: null, busy: null, errorCode: null };
 const backgroundLabels: Record<BackgroundSyncPhase, string> = { disabled: '后台读取已关闭', waiting_bindings: '等待确认会话授权',
   active: '后台读取运行中', degraded: '后台读取已降级，请检查 CLI 后刷新状态' };
-const foregroundLabels: Record<ForegroundReportPhase, string> = { sync_disabled: '最近报告：前台定位暂停',
-  waiting_foreground: '最近报告：等待微信前台', unavailable: '最近报告：前台定位不可用',
-  active: '最近报告：已取得定位结果', failed: '最近报告：前台定位失败' };
 const backfillLabels: Record<SyncBackfillPhase, string> = { not_required: '当前没有补齐任务', gap_detected: '已检测到待补齐缺口',
   backfilling: '正在补齐历史消息', complete: '补齐已完成', failed: '补齐失败', incomplete: '无法确认补齐完整性', paused: '补齐已暂停' };
 const backfillFailures: Record<string, string> = { cli_freshness_unknown: 'CLI未能确认覆盖到当前水位，请检查后显式重试。',
@@ -80,10 +77,6 @@ export function SyncControlPanel({ bridge, manualRelease = false }: { bridge: Sy
           onClick={() => void operate(() => bridge.retry({ scopeRevision: state.scopeRevision }))}>
           {state.busy === 'retry' ? '正在重试补齐…' : '重试补齐'}</button></div>
       <p>暂停只针对历史补齐；后台总开关开启时，已确认范围的实时增量仍可读取。关闭后台同步会停止全部新增正文读取。</p>
-    </section>
-    <section className="bindings-explanation" aria-label="前台定位最近报告"><h2>前台定位</h2>
-      <p>{report ? foregroundLabels[report.foregroundPhase] : '最近同步报告尚不可用。'}</p>
-      <p>这里只展示最近报告；当前联系人仍需确认。前台定位暂停或失败不改变已确认范围的后台同步。</p>
     </section>
   </div>;
 }

@@ -27,7 +27,7 @@ export const managerPages = {
   },
   sync: {
     title: '同步设置', icon: 'sync',
-    description: '后台文字同步与前台会话定位分别显示，只处理你已确认的范围。',
+    description: '管理后台文字同步、历史补齐与会话授权，只处理你已确认的范围。',
     emptyTitle: '同步尚未就绪',
     emptyDescription: '尚未连接，无法查询读取状态。连接完成后，由你确认会话范围。',
     action: '确认同步范围',
