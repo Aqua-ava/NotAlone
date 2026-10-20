@@ -43,7 +43,7 @@ class PreparedContextCodecTest(unittest.TestCase):
 
         payload = encode_context(original)
 
-        self.assertEqual((payload["version"], payload.get("schema_revision")), (2, 11))
+        self.assertEqual((payload["version"], payload.get("schema_revision")), (2, 12))
         self.assertEqual(decode_context(payload, original.command), original)
 
     def test_old_revision_unknown_fields_and_damaged_values_require_reprepare(self):
@@ -61,6 +61,7 @@ class PreparedContextCodecTest(unittest.TestCase):
             {**payload, "schema_revision": 8},
             {**payload, "schema_revision": 9},
             {**payload, "schema_revision": 10},
+            {**payload, "schema_revision": 11},
             {**payload, "schema_revision": True},
             {**payload, "context": {**payload["context"], "future_field": None}},
             {**payload, "context": None},
@@ -118,7 +119,7 @@ class PreparedContextCodecTest(unittest.TestCase):
                 command.conversation_binding_id, "合成旧候选。", (change,), "3" * 64),
             assistant_discussion=discussion)
         payload = encode_context(original)
-        self.assertEqual((payload["version"], payload["schema_revision"]), (2, 11))
+        self.assertEqual((payload["version"], payload["schema_revision"]), (2, 12))
         self.assertEqual(decode_context(payload, command), original)
         with self.assertRaises(ValueError):
             decode_context({**payload, "schema_revision": 6}, command)

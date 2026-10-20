@@ -132,11 +132,36 @@ def _reply_dependencies(connection: Any, scope: ContactScope, request_id: UUID) 
          scope.owner_id, scope.contact_id),
     ).fetchall()
     dependencies: set[UUID] = set()
+    # 变化关系父版本属于删除审计，不自动成为实际生成事实；真正用过的父版本仍受退役门禁。
+    used = {row["evidence_id"] for row in rows}
+    used.update(identifier for row in rows for identifier in (row["dependency_ids"] or ()))
+    def actual_references(value):
+        if isinstance(value, dict):
+            for key, item in value.items():
+                if key == "evolution":
+                    continue
+                if key in {"memory_id", "evidence_id"} and isinstance(item, str):
+                    try:
+                        used.add(UUID(item))
+                    except ValueError:
+                        pass
+                actual_references(item)
+        elif isinstance(value, list):
+            for item in value:
+                actual_references(item)
+    for row in rows:
+        actual_references(row["context_snapshot"] or {})
     for row in rows:
         dependencies.update(row["dependency_ids"] or ())
         snapshot = row["context_snapshot"] or {}
         try:
-            dependencies.update(UUID(value) for value in snapshot.get("navigation_dependency_ids", ()))
+            provenance = set()
+            for item in snapshot.get("evidence", ()):
+                evolution = item.get("evolution") or {}
+                provenance.update(UUID(ref["memory_id"]) for ref in evolution.get("related_versions", ()))
+                dependencies.update(UUID(value) for value in evolution.get("evidence_message_ids", ()))
+            dependencies.update(UUID(value) for value in snapshot.get("navigation_dependency_ids", ())
+                                if UUID(value) not in provenance - used)
         except (TypeError, ValueError, AttributeError):
             raise ReplyStoreInvariantError("旧回复导航依赖结构无效。") from None
         dependencies.update(_evidence_dependencies(

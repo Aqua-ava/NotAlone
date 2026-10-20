@@ -20,6 +20,7 @@ from notalone.memory.models import (
     MemoryTopic,
 )
 from notalone.memory.timing import MemoryTiming
+from notalone.memory.evolution import MemoryEvolution
 from notalone.memory.conditions import MemoryConditions
 from notalone.memory.events import MemoryEvent
 
@@ -84,6 +85,7 @@ class ExtractedFact:
     dimension_evidence: DimensionEvidence | None = None
     event: MemoryEvent | None = None
     conditions: MemoryConditions | None = None
+    evolution: MemoryEvolution | None = None
     # 同次独立核验的临时回执，仅绑定候选和窗口摘要，不从持久候选恢复。
     verified_source_receipt: tuple[str, str, str, bool] | None = None
 

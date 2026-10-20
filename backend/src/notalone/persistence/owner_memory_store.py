@@ -19,6 +19,8 @@ from notalone.memory.dimension_evidence import (
 )
 from notalone.memory.correction import MemoryCorrectionConflictError
 from notalone.memory.events import MemoryEvent
+from notalone.memory.evolution import MemoryEvolution
+from notalone.persistence.memory_evolution import bind_memory_evolution, validate_evolution, require_replacement_evolution
 from notalone.memory.conditions import MemoryConditions
 from notalone.persistence.memory_conditions import bind_memory_conditions, manual_conditions
 from notalone.persistence.memory_events import bind_memory_event
@@ -77,6 +79,7 @@ _OWNER_MEMORY_COLUMNS = """
     supersedes_memory_id,
     to_jsonb(owner_memory)->'event' AS memory_event,
     to_jsonb(owner_memory)->'conditions' AS memory_conditions,
+    to_jsonb(owner_memory)->'evolution' AS memory_evolution,
     to_jsonb(owner_memory)->'version_evidence' AS version_evidence,
     to_jsonb(owner_memory)->>'retirement_reason' AS retirement_reason,
     (to_jsonb(owner_memory)->>'retired_at')::timestamptz AS retired_at,
@@ -200,6 +203,7 @@ class PostgresOwnerMemoryStore:
                                AS dimension_evidence,
                            to_jsonb(memory_candidate)->'event' AS event,
                            to_jsonb(memory_candidate)->'conditions' AS conditions,
+                           to_jsonb(memory_candidate)->'evolution' AS evolution,
                            to_jsonb(memory_candidate)->>'source_dependency_mode'
                                AS dependency_mode, to_jsonb(memory_candidate)->'requires_all_sources' AS requires_all_sources
                     FROM public.memory_candidate
@@ -326,7 +330,7 @@ class PostgresOwnerMemoryStore:
                             DimensionEvidence.from_payload(raw)
                             if raw is not None else None
                         ),
-                        event=MemoryEvent.from_payload(candidate_row.get("event")), conditions=MemoryConditions.from_payload(candidate_row.get("conditions")),
+                        event=MemoryEvent.from_payload(candidate_row.get("event")), conditions=MemoryConditions.from_payload(candidate_row.get("conditions")), evolution=MemoryEvolution.from_payload(candidate_row.get("evolution")),
                     )
                     current = bind_stored_dimension_evidence(
                         connection, stored, lock_sources=True
@@ -353,10 +357,16 @@ class PostgresOwnerMemoryStore:
                     risk_flags=tuple(candidate_row["risk_flags"] or ()),
                     revision=expected_previous.revision + 1 if expected_previous else 1,
                     supersedes_memory_id=expected_previous.memory_id if expected_previous else None,
-                    event=MemoryEvent.from_payload(candidate_row.get("event")), conditions=MemoryConditions.from_payload(candidate_row.get("conditions")),
+                    event=MemoryEvent.from_payload(candidate_row.get("event")), conditions=MemoryConditions.from_payload(candidate_row.get("conditions")), evolution=MemoryEvolution.from_payload(candidate_row.get("evolution")),
                 )
                 event_column = ", event" if memory.event is not None else ""
                 event_value = ", %(event)s" if memory.event is not None else ""
+                if adoption_method is AdoptionMethod.AUTO and expected_previous is not None:
+                    require_replacement_evolution(connection, candidate, (expected_previous,))
+                if memory.evolution is not None:
+                    validate_evolution(connection, owner_id=scope.owner_id, evolution=memory.evolution, candidate=candidate, lock=True)
+                    event_column += ", evolution"
+                    event_value += ", %(evolution)s"
                 if memory.conditions is not None:
                     event_column += ", conditions"
                     event_value += ", %(conditions)s"
@@ -391,10 +401,10 @@ class PostgresOwnerMemoryStore:
                         (expected_previous.memory_id,))
                     invalidated = connection.execute(
                         "UPDATE public.owner_memory SET status='invalidated', "
-                        "revision=revision+1, updated_at=now() "
+                        "revision=revision+1, retirement_reason=%s, retired_at=now(), updated_at=now() "
                         "WHERE owner_id=%s AND id=%s AND status='active' "
                         "AND revision=%s AND adoption_method=%s",
-                        (scope.owner_id,
+                        (("error_correction" if candidate.evolution and candidate.evolution.kind == "error_correction" else "state_changed"), scope.owner_id,
                          expected_previous.memory_id, expected_previous.revision,
                          expected_previous.adoption_method.value),
                     ).rowcount
@@ -891,6 +901,7 @@ def _to_row(memory: OwnerMemory) -> dict[str, Any]:
         "supersedes_memory_id": memory.supersedes_memory_id,
         "event": Jsonb(memory.event.to_payload()) if memory.event is not None else None,
         "conditions": Jsonb(memory.conditions.to_payload()) if memory.conditions else None,
+        "evolution": Jsonb(memory.evolution.to_payload(include_proof=True)) if memory.evolution else None,
         "version_evidence": Jsonb(memory.version_evidence.to_payload()) if memory.version_evidence else None,
         "source_dependency_mode": memory.source_dependency_mode.value,
         "requires_all_sources": memory.requires_all_sources,
@@ -915,6 +926,7 @@ def _from_row(row: dict[str, Any]) -> OwnerMemory:
         source_candidate_id=row["source_candidate_id"],
         supersedes_memory_id=row["supersedes_memory_id"],
         timing=row["timing"], event=row.get("_bound_event", MemoryEvent.from_payload(row.get("memory_event"))),
+        evolution=row.get("_bound_evolution", MemoryEvolution.from_payload(row.get("memory_evolution"))),
         conditions=row.get("_bound_conditions", MemoryConditions.from_payload(row.get("memory_conditions"))),
         version_evidence=row.get("_bound_version_evidence", VersionEvidence.from_payload(row.get("version_evidence"))),
         can_revert_auto_update=row.get("_can_revert_auto_update", False),
@@ -930,6 +942,7 @@ def _timed_rows(
 ) -> list[dict[str, Any]]:
     timed = timed_memory_rows(connection, rows, source_ids_key="source_ids", contact_scoped=False)
     for row in timed:
+        row["_bound_evolution"] = bind_memory_evolution(connection, owner_id=row["owner_id"], raw=row.get("memory_evolution"), memory_id=row["memory_id"], revision=row["revision"])
         row["_bound_conditions"] = bind_memory_conditions(connection, owner_id=row["owner_id"], candidate_id=row["source_candidate_id"], raw=row.get("memory_conditions"), text=row["text_content"])
         row["_bound_event"] = bind_memory_event(connection, owner_id=row["owner_id"],
             candidate_id=row["source_candidate_id"], raw=row.get("memory_event"))

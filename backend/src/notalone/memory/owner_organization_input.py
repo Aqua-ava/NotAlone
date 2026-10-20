@@ -15,11 +15,12 @@ class OwnerOrganizationInput:
                 'text': self.text, 'timing': self.timing}
 
 
-def owner_temporal_payload(timing, event, valid_at, invalid_at, conditions=None):
+def owner_temporal_payload(timing, event, valid_at, invalid_at, conditions=None, evolution=None):
     """本人外发时间保留含义，不携带原消息位置。"""
     return {**{key: timing.get(key) for key in ('recorded_at', 'source_started_at',
         'source_ended_at', 'source_time_complete', 'current_status')},
         'valid_at': valid_at, 'invalid_at': invalid_at,
+        'evolution': evolution,
         'conditions': ({'version': 1, 'items': [{'text': item['text'], 'source_supported': item['source_supported']} for item in conditions['items']]} if conditions else None),
         'event': ({key: event[key] for key in ('stage', 'occurrence_start',
             'occurrence_end', 'stage_verified', 'occurrence_verified', 'occurrence_precision', 'occurrence_expression') if key in event} if event else None)}
@@ -27,7 +28,7 @@ def owner_temporal_payload(timing, event, valid_at, invalid_at, conditions=None)
 
 def owner_model_memories(memories):
     return tuple(OwnerOrganizationInput(item.memory_id, item.revision, item.text,
-        owner_temporal_payload(item.timing, item.event, item.valid_at, item.invalid_at, item.conditions))
+        owner_temporal_payload(item.timing, item.event, item.valid_at, item.invalid_at, item.conditions, item.evolution))
         for item in memories)
 
 
@@ -37,7 +38,7 @@ def owner_model_scenarios(scenarios):
         | {'paragraphs': [{**{key: paragraph[key] for key in ('kind', 'section', 'basis', 'uncertainty') if key in paragraph}, 'text': paragraph['text'], 'references': [
             {**{key: ref[key] for key in ('memory_id', 'revision')},
              'timing': owner_temporal_payload(ref.get('timing', {}), ref.get('event'),
-                                               ref.get('valid_at'), ref.get('invalid_at'), ref.get('conditions'))}
+                                               ref.get('valid_at'), ref.get('invalid_at'), ref.get('conditions'), ref.get('evolution'))}
             for ref in paragraph['references']]}
             for paragraph in item['paragraphs']]} for item in scenarios)
 

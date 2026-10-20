@@ -3516,6 +3516,7 @@ def _owner_memory_payload(memory: OwnerMemory) -> dict[str, object]:
         "timing": memory.timing.to_payload(),
         "event": memory.event.to_payload(current=True) if memory.event is not None else None,
         "conditions": memory.conditions.to_payload(current=True) if memory.conditions else None,
+        "evolution": memory.evolution.to_payload(current=True) if memory.evolution else None,
         "version_evidence": memory.version_evidence.to_payload() if memory.version_evidence else None,
         "version_evidence_source_current": bool(memory.version_evidence and memory.version_evidence.source_current),
         "can_revert_auto_update": memory.can_revert_auto_update,
@@ -3551,6 +3552,7 @@ def _memory_payload(memory: ConfirmedMemory) -> dict[str, object]:
         "timing": memory.timing.to_payload(),
         "event": memory.event.to_payload(current=True) if memory.event is not None else None,
         "conditions": memory.conditions.to_payload(current=True) if memory.conditions else None,
+        "evolution": memory.evolution.to_payload(current=True) if memory.evolution else None,
         "version_evidence": memory.version_evidence.to_payload() if memory.version_evidence else None,
         "version_evidence_source_current": bool(memory.version_evidence and memory.version_evidence.source_current),
         "can_revert_auto_update": memory.can_revert_auto_update,
@@ -3583,6 +3585,7 @@ def _memory_candidate_payload(candidate: MemoryCandidate) -> dict[str, object]:
         "timing": candidate.timing.to_payload(),
         "event": candidate.event.to_payload(current=True) if candidate.event is not None else None,
         "conditions": candidate.conditions.to_payload(current=True) if candidate.conditions else None,
+        "evolution": candidate.evolution.to_payload(current=True) if candidate.evolution else None,
         "valid_at": _iso_or_none(candidate.valid_at),
         "invalid_at": _iso_or_none(candidate.invalid_at),
     }

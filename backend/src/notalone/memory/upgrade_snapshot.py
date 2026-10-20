@@ -1,3 +1,4 @@
+from notalone.memory.evolution import MemoryEvolution
 """升级暂存结果的版本化表示；恢复不查询当前资料补造旧证明。"""
 
 from datetime import datetime

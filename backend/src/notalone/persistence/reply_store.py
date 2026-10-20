@@ -1,6 +1,7 @@
 """候选回复 ReplyStore 的 PostgreSQL 持久化适配器。"""
 
 from __future__ import annotations
+from notalone.memory.evolution import MemoryEvolution
 
 from collections.abc import Callable
 from contextlib import nullcontext
@@ -1186,6 +1187,7 @@ class PostgresReplyStore:
                     "timing": item.timing.to_payload(),
                     "event": item.event.to_payload(current=True) if item.event else None,
                     "conditions": item.conditions.to_payload(current=True) if item.conditions else None,
+                    "evolution": item.evolution.to_payload(current=True) if item.evolution else None,
                 }
                 for item in context.evidence
             ],
@@ -1391,6 +1393,7 @@ class PostgresReplyStore:
                         timing=timings.get(row["evidence_id"], MemoryTiming()),
                         event=MemoryEvent.from_payload(metadata.get(str(row["evidence_id"]), {}).get("event")),
                         conditions=MemoryConditions.from_payload(metadata.get(str(row["evidence_id"]), {}).get("conditions")),
+                        evolution=MemoryEvolution.from_payload(metadata.get(str(row["evidence_id"]), {}).get("evolution")),
                         model_visible=metadata.get(str(row["evidence_id"]), {}).get("model_visible", True),
                         navigation=MemoryNavigation.from_snapshot(metadata.get(str(row["evidence_id"]), {}).get("navigation")),
                     )

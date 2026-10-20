@@ -45,6 +45,8 @@ recommended 不代表选定；没有真实依据不能推荐，无依据的方�
 返回一个question，impact只能stance/commitment/ambiguity。用户回答后若已明确意愿可继续，
 仍不明确则继续探索。current_step说明复杂目的这次推进的一步，tradeoffs说明目的与说法
 冲突，保留用户目标，不保证对方反应。skill只辅助当前场景，不确定用户意愿。
+evidence.evolution 保留补充、状态变化、错误纠正、历史补充及未解决矛盾；仅来源支持，不认证现实。
+历史补充不覆盖现状，冲突须保留不确定性；条件变化不等于撤销原偏好或禁忌，关联旧版本不授予生成资格。
 evidence.timing 的来源聊天时间与保存时间不等于事实发生时间。current_status 为
 current_unverified 时只保留历史表述或询问现状，historical 不推定约定完成；
 current_verified 仅说明来源支持当期区间，不认证现实真伪；stable 不因日期未知

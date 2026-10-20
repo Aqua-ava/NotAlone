@@ -13,6 +13,7 @@ from psycopg import sql
 from notalone.memory.versions import MemoryVersionConflict
 from notalone.memory.version_evidence import VersionEvidence
 from notalone.memory.events import MemoryEvent
+from notalone.memory.evolution import MemoryEvolution
 from notalone.memory.conditions import MemoryConditions
 from notalone.persistence.memory_conditions import conditions_clear_sql
 from notalone.memory.models import AdoptionMethod, ConfirmedMemory, ConfirmedMemoryStatus, MemoryCategory, MemoryTopic, OwnerMemory, SourceDependencyMode
@@ -42,6 +43,8 @@ def version_record_digest(memory: ConfirmedMemory | OwnerMemory, *, revision: in
             "confidence": memory.confidence, "risk_flags": list(memory.risk_flags),
             "supersedes_memory_id": str(memory.supersedes_memory_id) if memory.supersedes_memory_id else None,
             "event": memory.event.to_payload() if memory.event else None}
+    if memory.evolution is not None:
+        body["evolution"] = memory.evolution.to_payload(include_proof=True)
     if memory.conditions is not None:
         body["conditions"] = memory.conditions.to_payload()
     if memory.requires_all_sources:
@@ -117,7 +120,7 @@ def raw_memory(row: dict) -> ConfirmedMemory | OwnerMemory:
                   status=ConfirmedMemoryStatus(row["status"]), valid_at=row["valid_at"],
                   invalid_at=row["invalid_at"], revision=row["revision"], confidence=row["confidence"],
                   risk_flags=tuple(row["risk_flags"] or ()), supersedes_memory_id=row["supersedes_memory_id"],
-                  event=MemoryEvent.from_payload(row.get("event")), conditions=MemoryConditions.from_payload(row.get("conditions")),
+                  event=MemoryEvent.from_payload(row.get("event")), conditions=MemoryConditions.from_payload(row.get("conditions")), evolution=MemoryEvolution.from_payload(row.get("evolution")),
                   source_dependency_mode=dependency_mode(row.get("source_dependency_mode")),
                   requires_all_sources=bool(row.get("requires_all_sources")))
     return (ConfirmedMemory(scope=ContactScope(row["owner_id"], row["contact_id"]), **fields)

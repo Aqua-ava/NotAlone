@@ -53,5 +53,6 @@ def manual_conditions(connection, *, owner_id, previous, proposed, source_ids):
 
 
 def conditions_clear_sql(connection):
-    row = connection.execute("SELECT EXISTS(SELECT 1 FROM pg_attribute WHERE attrelid='public.memory_candidate'::regclass AND attname='conditions' AND NOT attisdropped) AS present").fetchone()
-    return ", conditions=NULL" if (row["present"] if isinstance(row, dict) else row[0]) else ""
+    rows = connection.execute("SELECT attname FROM pg_attribute WHERE attrelid='public.memory_candidate'::regclass AND attname IN ('conditions','evolution') AND NOT attisdropped").fetchall()
+    names = {row["attname"] if isinstance(row, dict) else row[0] for row in rows}
+    return "".join(", " + name + "=NULL" for name in ("conditions", "evolution") if name in names)

@@ -1,3 +1,4 @@
+import { MemoryEvolutionDetails } from './MemoryEvolutionDetails';
 import { MemoryConditionsDetails, MemoryConditionsEditor, conditionEditorText, conditionEditProposal, conditionEditorValid } from './MemoryConditionsDetails';
 import { memoryTimeText as timeText } from './memory-time-format';
 import { MemoryEventDetails } from './MemoryEventDetails';
@@ -109,6 +110,7 @@ function OwnerFactCard({ memory, removalTarget = memory, busy, run, initiallyEdi
     <p className="memory-availability">{availability.label}</p>
     <p className="memory-section-note">{memory.adoptionMethod === 'auto' ? '自动记下 · 未经你确认' : '手动记下'}</p>
     <MemoryConditionsDetails conditions={memory.conditions} />
+    <MemoryEvolutionDetails evolution={memory.evolution} />
     <MemoryTemporalStatus timing={memory.timing} validAt={memory.validAt} invalidAt={memory.invalidAt} compact />
     <details className="memory-details"><summary>查看详情</summary>
       <p>版本 {memory.revision}</p><p>{memory.timing.currentStatusReason}</p>

@@ -534,7 +534,7 @@ class PostgresLayeredMemoryStore(LayeredProfileStore, LayeredCorrectionStore):
         return OrganizationInput(memory.memory_id,memory.revision,memory.text,entry.provenance_kind,
             memory.timing.to_payload(),memory.event.to_payload(current=True) if memory.event else None,
             memory.category.value,memory.valid_at.isoformat() if memory.valid_at else None,
-            memory.invalid_at.isoformat() if memory.invalid_at else None, memory.conditions.to_payload(current=True) if memory.conditions else None)
+            memory.invalid_at.isoformat() if memory.invalid_at else None, memory.conditions.to_payload(current=True) if memory.conditions else None, memory.evolution.to_payload(current=True) if memory.evolution else None)
 
     @staticmethod
     def _assert_claim(connection, claim):
