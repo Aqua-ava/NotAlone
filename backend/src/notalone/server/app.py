@@ -3347,7 +3347,7 @@ def _parse_memory_json(body: bytes) -> dict[str, object]:
 
 
 def _memory_change_kind(payload: dict[str, object]) -> MemoryChangeKind:
-    """旧修正入口默认纠错；只有明确选择变化才能保留历史生成资格。"""
+    """旧修正入口默认纠错；选择变化只记录退役原因，旧版本均不再用于生成。"""
     value = payload.get("change_kind", MemoryChangeKind.ERROR_CORRECTION.value)
     if not isinstance(value, str):
         raise MemoryRequestInvalid()

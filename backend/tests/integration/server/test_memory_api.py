@@ -108,11 +108,13 @@ class FakeContactMemory:
             if candidate.scope == scope and candidate.candidate_id == candidate_id
         )
 
-    def list_confirmed(self, scope: ContactScope, *, include_expired: bool = False) -> tuple[ConfirmedMemory, ...]:
+    def list_confirmed(self, scope: ContactScope, *, include_expired: bool = False, include_invalidated: bool = False) -> tuple[ConfirmedMemory, ...]:
         return tuple(
             memory
             for memory in self.memories
-            if memory.scope == scope and memory.status is ConfirmedMemoryStatus.ACTIVE
+            if memory.scope == scope
+            and (memory.status is ConfirmedMemoryStatus.ACTIVE
+                 or (include_invalidated and memory.status is ConfirmedMemoryStatus.INVALIDATED))
         )
 
     def confirm(
@@ -187,11 +189,13 @@ class FakeOwnerMemory:
         self.memories.append(memory)
         return memory
 
-    def list_active(self, owner_id: UUID, *, include_expired: bool = False) -> tuple[OwnerMemory, ...]:
+    def list_active(self, owner_id: UUID, *, include_invalidated: bool = False, include_expired: bool = False) -> tuple[OwnerMemory, ...]:
         return tuple(
             memory
             for memory in self.memories
-            if memory.owner_id == owner_id and memory.status is ConfirmedMemoryStatus.ACTIVE
+            if memory.owner_id == owner_id
+            and (memory.status is ConfirmedMemoryStatus.ACTIVE
+                 or (include_invalidated and memory.status is ConfirmedMemoryStatus.INVALIDATED))
         )
 
     def delete(self, owner_id: UUID, memory_id: UUID) -> OwnerMemory:
@@ -211,7 +215,7 @@ class FakeOwnerMemory:
 class FailingContactMemory(FakeContactMemory):
     """模拟持久化层故障，验证 HTTP 层不会直接断开连接。"""
 
-    def list_confirmed(self, scope: ContactScope, *, include_expired: bool = False) -> tuple[ConfirmedMemory, ...]:
+    def list_confirmed(self, scope: ContactScope, *, include_expired: bool = False, include_invalidated: bool = False) -> tuple[ConfirmedMemory, ...]:
         raise RuntimeError("synthetic persistence detail")
 
 

@@ -63,8 +63,10 @@ class MemoryStoreTest(unittest.TestCase):
         current = self.store.correct(scope=self.scope, memory_id=original.memory_id,
                                      text="对方后来不喜欢徒步", change_kind="state_changed")
         retrieval = InMemoryRetrieval(memory_store=self.store)
-        self.assertEqual(len(retrieval.search_confirmed_memories(
-            scope=self.scope, memory_ids=(original.memory_id,), include_historical=True)), 1)
+        self.assertEqual(retrieval.search_confirmed_memories(
+            scope=self.scope, memory_ids=(original.memory_id,), include_historical=True), ())
+        self.assertIn(original.text, [item.text for item in self.store.list_versions(
+            scope=self.scope, memory_id=current.memory_id)])
         with self.assertRaises(MemoryVersionConflict):
             self.store.delete(scope=self.scope, memory_id=original.memory_id)
         self.store.delete(scope=self.scope, memory_id=current.memory_id)

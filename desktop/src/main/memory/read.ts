@@ -1,5 +1,5 @@
 import { isUuid } from '../uuid';
-import type { ActiveMemory, MemoryContent, MemoryCorrectionReview, MemoryEvent, MemoryEventEvidence, MemorySource, MemoryVersion, PendingMemoryCandidate } from '../../shared/memory-bridge';
+import type { MemoryContent, MemoryCorrectionReview, MemoryEvent, MemoryEventEvidence, MemorySource, MemoryVersion, PendingMemoryCandidate } from '../../shared/memory-bridge';
 import { readCurrentStatus } from './current-status';
 
 const categories = ['common_fact', 'preference', 'taboo', 'recent_state', 'relationship_note'] as const;
@@ -103,13 +103,13 @@ function distinct<T>(items: T[], id: (item: T) => string): T[] {
   return items;
 }
 
-// 当前列表与主动打开的历史分别读取；来源 UUID 不解释为文件路径。
-export function activeMemories(value: unknown, level: 'contact' | 'owner', contactId: string | null): ActiveMemory[] {
+// 管理列表包含仍有合法来源的当前与失效记忆；不代表生成资格。
+export function listedMemories(value: unknown, level: 'contact' | 'owner', contactId: string | null): MemoryVersion[] {
   return distinct(entries(value, 'memories').map((entry) => {
-    if (entry.level !== level || entry.status !== 'active'
+    if (entry.level !== level || !['active', 'invalidated'].includes(String(entry.status))
       || (level === 'contact' && identifier(entry.contact_id) !== contactId)) throw invalid();
     return {
-      ...content(entry), memoryId: identifier(entry.memory_id), level, status: 'active' as const,
+      ...content(entry), memoryId: identifier(entry.memory_id), level, status: enumeration(entry.status, ['active', 'invalidated'] as const),
       adoptionMethod: enumeration(entry.adoption_method, ['auto', 'manual'] as const), revision: integer(entry.revision, 1),
       supersedesMemoryId: optionalIdentifier(entry.supersedes_memory_id),
       sourceCandidateId: optionalIdentifier(entry.source_candidate_id),

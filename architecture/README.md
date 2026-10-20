@@ -115,6 +115,9 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 
 79. [ADR-079：统一表达工作区与直接建议候选](adr/079-unified-expression-workspace.md)
 
+80. [ADR-080：统一记忆列表与失效记忆禁用](adr/080-unified-memory-list-and-retired-exclusion.md)
+81. [ADR-081：来源锚点、日期精度与条件性记忆](adr/081-source-grounded-memory-time-and-conditions.md)
+
 ## 当前架构决策
 
 - 旧 Swift 主界面已按 ADR-039 退役；共享前端采用 TypeScript + React，由 ADR-040 的 Electron 双窗口宿主承载；已接通业务页面，完整原生验收仍未完成。Python 后台与 Mac 原生探针保留。
@@ -145,4 +148,4 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 
 [ADR-070](adr/070-automatic-memory-maintenance.md) 记录默认自动维护记忆与旧资料升级退役；实现与验证见[本次规格](../.scratch/automatic-memory-maintenance/spec.md)。
 
-[ADR-080](adr/080-source-grounded-memory-time-and-conditions.md) 记录来源锚点、日期精度、适用条件与有据时间线；[规格与实现索引](../.scratch/memory-temporal-semantics/planning.md) 分别记录目标、工程验证和质量限制。
+[ADR-081](adr/081-source-grounded-memory-time-and-conditions.md) 记录来源锚点、日期精度、适用条件与有据时间线；[规格与实现索引](../.scratch/memory-temporal-semantics/planning.md) 分别记录目标、工程验证和质量限制。

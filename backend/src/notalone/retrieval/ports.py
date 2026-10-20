@@ -69,8 +69,8 @@ class RetrievalPort(Protocol):
 
         ``memory_ids`` 只接受来自 L2 目录的导航结果；返回值仍必须重新
         从 L1 权威存储读取并完成状态、来源和范围校验。
-        ``include_historical`` 只用于合法概览导航及其复验，必须同时限定 ID；
-        返回实际旧版本，不能解析成当前叶或把历史内容当作当前事实。
+        ``include_historical`` 为既有概览导航保留的兼容字段，必须同时限定 ID；
+        不赋予失效或过期条目生成资格，也不能把旧版本解析成当前叶。
         """
 
     def search_pending_candidates(

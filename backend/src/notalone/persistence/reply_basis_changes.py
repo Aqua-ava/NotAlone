@@ -75,8 +75,8 @@ def read_reply_basis_changes(
             row["timing"] = history_timing(row["timing"], row["current_status"], row["invalid_at"])
         time_status_changed = (isinstance(timing, dict) and isinstance(timing.get("current_status"), str)
                                and row["timing"].current_status != timing["current_status"])
-        reason = ("memory_generation_forbidden" if (row["current_status"] in ("invalidated", "rejected")
-                  and not is_generation_status_eligible(row["current_status"], row.get("retirement_reason"), include_historical=True))
+        reason = ("memory_generation_forbidden" if ((row["current_status"] in ("invalidated", "rejected") or row["expired"])
+                  and not is_generation_status_eligible(row["current_status"], row.get("retirement_reason"), include_historical=True, invalid_at=row["invalid_at"]))
                   else "memory_revised" if ((row["current_status"] in ("invalidated", "rejected") and row["original_status"] != row["current_status"])
                   or row["current_status"] != row["original_status"]
                   or (row["original_revision"] is not None and row["revision"] != row["original_revision"]))
@@ -156,7 +156,7 @@ def require_current_reply_memory(
             current_timing = history_timing(row["timing"], row["status"], row["invalid_at"]) if item.navigation else row["timing"]
             eligible = (row["status"] in ("pending", "confirmed") if kind == "pending_candidate" else
                         is_generation_status_eligible(row["status"], row.get("retirement_reason"), include_historical=historical))
-            if (not eligible or row["status"] != item.status or row["future"] or (row["expired"] and not historical)
+            if (not eligible or row["status"] != item.status or row["future"] or row["expired"]
                     or row["text_content"] != item.text or row["revision"] != item.revision
                     or len(row["source_ids"]) != len(item.source_ids) or set(row["source_ids"]) != set(item.source_ids)
                     or row["valid_at"] != item.valid_at or row["invalid_at"] != item.invalid_at
@@ -205,13 +205,13 @@ def historical_basis_revision_sha256(
 def require_generation_memory_dependencies(
     connection: Any, scope: ContactScope, dependencies: Iterable[UUID],
 ) -> None:
-    """生成专用门：审计来源仍可回看，错误和原因不明的旧事实不能携入模型。
+    """生成专用门：审计来源仍可回看，失效或过期记忆不能携入模型。
 
     调用方负责已有来源、范围和删除校验；此处沿同一依赖集合补充失效原因，
     并展开已捕获的整理版本，避免只引用派生文档时绕过底层事实。
     """
     if forbidden_generation_memory_dependencies(connection, scope, dependencies, require_sample_origins=True):
-        raise ReplyStoreInvariantError("历史依据已纠错或失效原因不明，只能回看，请重新生成。")
+        raise ReplyStoreInvariantError("原记忆依据已失效或过期，只能回看，请重新生成。")
 
 
 def forbidden_generation_memory_dependencies(
@@ -271,23 +271,22 @@ def forbidden_generation_memory_dependencies(
           ) AS batch ON batch.id=used.id
         )
         SELECT DISTINCT memory.id,memory.kind FROM used JOIN (
-          SELECT id,id AS match_id,'confirmed_memory' AS kind,status,retirement_reason FROM public.confirmed_memory
+          SELECT id,id AS match_id,'confirmed_memory' AS kind,status,retirement_reason,invalid_at FROM public.confirmed_memory
           WHERE owner_id=%(owner_id)s
           UNION ALL
           SELECT CASE WHEN id IN (SELECT id FROM used) THEN id ELSE source_candidate_id END,source_candidate_id,
-            CASE WHEN id IN (SELECT id FROM used) THEN 'confirmed_memory' ELSE 'pending_candidate' END,status,retirement_reason FROM public.confirmed_memory
+            CASE WHEN id IN (SELECT id FROM used) THEN 'confirmed_memory' ELSE 'pending_candidate' END,status,retirement_reason,invalid_at FROM public.confirmed_memory
           WHERE owner_id=%(owner_id)s AND source_candidate_id IS NOT NULL
           UNION ALL
-          SELECT id,id,'owner_memory',status,retirement_reason FROM public.owner_memory WHERE owner_id=%(owner_id)s
+          SELECT id,id,'owner_memory',status,retirement_reason,invalid_at FROM public.owner_memory WHERE owner_id=%(owner_id)s
           UNION ALL
           SELECT CASE WHEN id IN (SELECT id FROM used) THEN id ELSE source_candidate_id END,source_candidate_id,
-            CASE WHEN id IN (SELECT id FROM used) THEN 'owner_memory' ELSE 'pending_candidate' END,status,retirement_reason FROM public.owner_memory
+            CASE WHEN id IN (SELECT id FROM used) THEN 'owner_memory' ELSE 'pending_candidate' END,status,retirement_reason,invalid_at FROM public.owner_memory
           WHERE owner_id=%(owner_id)s AND source_candidate_id IS NOT NULL
           UNION ALL
-          SELECT id,id,'pending_candidate',status,'unknown' FROM public.memory_candidate WHERE owner_id=%(owner_id)s
+          SELECT id,id,'pending_candidate',status,'unknown',invalid_at FROM public.memory_candidate WHERE owner_id=%(owner_id)s
         ) AS memory ON memory.match_id=used.id
-        WHERE memory.status NOT IN ('active','pending','confirmed')
-          AND NOT (memory.status='invalidated' AND memory.retirement_reason='state_changed')
+        WHERE memory.status NOT IN ('active','pending','confirmed') OR memory.invalid_at<=now()
         ORDER BY memory.kind,memory.id
     """, {"ids": list(dependencies), "owner_id": scope.owner_id}).fetchall()
     return tuple((row["id"], row["kind"]) for row in rows)

@@ -74,6 +74,7 @@ test('回复冻结依据保留过去计划的来源、事件和适用期间，�
   assert.match(html, /来源日期：2020年6月1日/);
   assert.match(html, /来源日期不完整/);
   assert.match(html, /适用期间/);
+  assert.doesNotMatch(html, /结束时刻不含在内/);
   assert.match(html, /事件阶段：计划/);
   assert.match(html, /保存时间：2026-10-20/);
   assert.doesNotMatch(html, /时间待核实|时间已核实|事件阶段：已发生/);

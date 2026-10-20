@@ -203,7 +203,7 @@ class HistoricalReplyBasisHttpTest(unittest.TestCase):
         self.assertEqual(saved["turns"][0]["state"], "completed")
         self.assertEqual(saved["turns"][0]["reply"]["candidates"], generated["candidates"])
         self.assertEqual(saved["turns"][0]["basis_changes"], [{
-            "evidence_id": str(memory_id), "kind": "confirmed_memory", "reason": "memory_revised",
+            "evidence_id": str(memory_id), "kind": "confirmed_memory", "reason": "memory_generation_forbidden",
         }])
         self.assertEqual(len(self.fixture.model.seen_calls), 1)
 
@@ -236,44 +236,27 @@ class HistoricalReplyBasisHttpTest(unittest.TestCase):
         self.addCleanup(backend.close)
         return backend
 
-    def test_prepared_ordinary_continue_restarts_with_frozen_historical_and_current_groups(self) -> None:
+    def test_retired_basis_blocks_ordinary_prepare_and_continue_after_restart(self) -> None:
         old_id, _, original = self._generate("contact")
         status, corrected = self.fixture.backend.request(
             f"/api/contacts/{self.fixture.contact_id}/memories/{old_id}/correct", {"change_kind": "state_changed", "text": "我喜欢慢慢散步，希望表达轻松自然。"})
         self.assertEqual(status, 200, corrected)
-        new_id = corrected["memory"]["memory_id"]
         body = self.fixture._body(draft="我愿意聊聊散步，先不作承诺。")
         body["continued_from_candidate_id"] = original["candidates"][0]["candidate_id"]
-        body["content"]["include_relationship_context"] = True
-        status, receipt = self.fixture.backend.request(self.path + "/replies/prepare", body)
-        self.assertEqual(status, 200, receipt)
+        for backend in (self.fixture.backend, self._restart_backend()):
+            for suffix in ("/replies/prepare", "/replies"):
+                self.assertNotEqual(backend.request(self.path + suffix, body)[0], 200)
         self.assertEqual(len(self.fixture.model.seen_calls), 1)
-        self.fixture._source("准备之后才出现的合成消息不能进入固定历史。")
-        self.fixture.model.responses.append(self.fixture._candidate(new_id))
-        restarted = self._restart_backend()
-        status, result = restarted.request(self.path + "/replies", body)
-        self.assertEqual(status, 200, result)
-        self.assertEqual((result["turn_id"], result["input_version_id"]), (receipt["turn_id"], receipt["input_version_id"]))
-        payload = next(json.loads(message.content) for message in self.fixture.model.seen_calls[-1] if isinstance(message, HumanMessage))
-        self.assertNotIn("准备之后才出现", json.dumps(payload, ensure_ascii=False))
-        memory_ids = [item["evidence_id"] for item in payload["evidence"] if item["kind"] == "confirmed_memory"]
-        self.assertEqual(memory_ids, [new_id])
-        continued = next(item for item in payload["evidence"] if item["kind"] == "continued_candidate")
-        self.assertEqual(continued["basis_changes"], [{"evidence_id": str(old_id), "kind": "confirmed_memory", "reason": "memory_revised"}])
-        self.assertEqual(restarted.request(self.path + "/replies", body), (status, result))
-        self.assertEqual(len(self.fixture.model.seen_calls), 2)
+        self.assertEqual(self.fixture.backend.request(self.path)[1]["turns"][0]["reply"]["candidates"], original["candidates"])
 
-    def test_prepared_historical_continue_rejects_second_correction_before_model_after_restart(self) -> None:
+    def test_prepared_continue_rejects_retirement_before_model_after_restart(self) -> None:
         old_id, _, original = self._generate("owner")
-        status, corrected = self.fixture.backend.request(f"/api/memories/owner/{old_id}/correct",
-            {"change_kind": "state_changed", "text": "我喜欢慢慢散步，希望表达轻松自然。"})
-        self.assertEqual(status, 200, corrected)
         command = self._continue_command(original, intent="愿意聊聊散步，先不承诺安排。")
         status, receipt = self.fixture.backend.request(self.path + "/continue/prepare", command)
         self.assertEqual(status, 200, receipt)
-        status, changed = self.fixture.backend.request(f"/api/memories/owner/{corrected['memory']['memory_id']}/correct",
-            {"change_kind": "state_changed", "text": "我喜欢偶尔散步，希望表达轻松自然。"})
-        self.assertEqual(status, 200, changed)
+        status, corrected = self.fixture.backend.request(f"/api/memories/owner/{old_id}/correct",
+            {"change_kind": "state_changed", "text": "我喜欢慢慢散步，希望表达轻松自然。"})
+        self.assertEqual(status, 200, corrected)
         restarted = self._restart_backend()
         self.assertNotEqual(restarted.request(self.path + "/continue", command)[0], 200)
         saved = restarted.request(self.path)[1]
@@ -328,7 +311,7 @@ class HistoricalReplyBasisHttpTest(unittest.TestCase):
         status, replay = restarted.request(self.path + "/replies", body)
         self.assertEqual(status, 200, replay)
         self.assertEqual(replay["candidates"], generated["candidates"])
-        self.assertEqual(replay["basis_changes"], [{"evidence_id": str(old_id), "kind": "confirmed_memory", "reason": "memory_revised"}])
+        self.assertEqual(replay["basis_changes"], [{"evidence_id": str(old_id), "kind": "confirmed_memory", "reason": "memory_generation_forbidden"}])
         self.assertEqual(len(self.fixture.model.seen_calls), 1)
 
     def test_original_reply_continue_rechecks_basis_at_commit_and_retry_captures_fresh_basis(self) -> None:
@@ -363,20 +346,11 @@ class HistoricalReplyBasisHttpTest(unittest.TestCase):
                 (self.fixture.owner_id, command["idempotency_key"]),
             ).fetchone()[0], 0)
         new_memory_id = corrected["memory"]["memory_id"]
-        self.fixture.model.responses.append(self.fixture._candidate(str(self.fixture.draft_id)))
-        status, retried = self.fixture.backend.request("/api/reply/generate", command)
-        self.assertEqual(status, 200, retried)
-        payload = next(json.loads(message.content) for message in self.fixture.model.seen_calls[-1]
-                       if isinstance(message, HumanMessage))
-        self.assertEqual(payload["draft_text"], command["content"]["draft_text"])
-        old_reference = next(item for item in payload["evidence"] if item["kind"] == "continued_candidate")
-        self.assertEqual(old_reference["basis_changes"], [{
-            "evidence_id": memory_id, "kind": "confirmed_memory", "reason": "memory_revised",
-        }])
-        self.assertEqual(old_reference["factual_role"], "previous_assistant_candidate")
+        calls = len(self.fixture.model.seen_calls)
+        self.assertNotEqual(self.fixture.backend.request("/api/reply/generate", command)[0], 200)
+        self.assertEqual(len(self.fixture.model.seen_calls), calls)
         fresh = self.fixture._body(draft="我喜欢慢慢散步，希望表达轻松自然，这次先问候。")
         fresh["content"]["include_relationship_context"] = True
-        fresh["continued_from_candidate_id"] = candidate_id
         self.fixture.model.responses.append(self.fixture._candidate(new_memory_id))
         status, current = self.fixture.backend.request("/api/reply/generate", fresh)
         self.assertEqual(status, 200, current)
@@ -384,7 +358,7 @@ class HistoricalReplyBasisHttpTest(unittest.TestCase):
         self.assertNotIn(memory_id, current["context_receipt"]["evidence_ids"])
         calls = len(self.fixture.model.seen_calls)
         self.fixture._delete_source(source_id)
-        for saved in (generated, retried, current):
+        for saved in (generated, current):
             status, evidence = self.fixture.backend.request(
                 f"/api/contacts/{self.fixture.contact_id}/replies/{saved['reply_request_id']}/evidence",
             )
@@ -478,7 +452,7 @@ class HistoricalReplyBasisHttpTest(unittest.TestCase):
         })
         self.assertEqual(status, 200, corrected)
         self.assertEqual(self.fixture.backend.request(other_path)[1]["turns"][0]["basis_changes"], [{
-            "evidence_id": memory_id, "kind": "owner_memory", "reason": "memory_revised",
+            "evidence_id": memory_id, "kind": "owner_memory", "reason": "memory_generation_forbidden",
         }])
         foreign = self.fixture._backend(owner_id=uuid4())
         self.addCleanup(foreign.close)
@@ -491,18 +465,14 @@ class HistoricalReplyBasisHttpTest(unittest.TestCase):
             self.assertEqual(backend.request(path + "/continue", command), (404, {"error": "not_found"}))
         self.assertEqual(foreign.request(evidence_path), (404, {"error": "not_found"}))
         self.assertEqual(self.fixture.backend.request(self.path)[1]["turns"], [])
-        self.fixture.model.responses.append(self.fixture._candidate(corrected["memory"]["memory_id"]))
-        status, prepared = self.fixture.backend.request(other_path + "/continue/prepare", command)
-        self.assertEqual(status, 200, prepared)
-        restarted = self._restart_backend()
-        status, continued = restarted.request(other_path + "/continue", command)
-        self.assertEqual(status, 200, continued)
-        self.assertIn(corrected["memory"]["memory_id"], continued["context_receipt"]["evidence_ids"])
+        for backend in (self.fixture.backend, self._restart_backend()):
+            for suffix in ("/continue/prepare", "/continue"):
+                self.assertNotEqual(backend.request(other_path + suffix, command)[0], 200)
         self.fixture._delete_source(source_id)
         self.assertTrue(all(turn["state"] == "redacted" for turn in self.fixture.backend.request(other_path)[1]["turns"]))
         self.assertEqual(self.fixture.backend.request(versions_path), (404, {"error": "not_found"}))
         self.assertEqual(self.fixture.model.review_calls, 0)
-        self.assertEqual(len(self.fixture.model.seen_calls), 2)
+        self.assertEqual(len(self.fixture.model.seen_calls), 1)
 
     def test_legacy_missing_time_and_revision_metadata_stays_unknown_and_is_not_backfilled(self) -> None:
         memory_id, _, generated = self._generate("owner")
@@ -581,7 +551,7 @@ class HistoricalReplyBasisHttpTest(unittest.TestCase):
         self.assertEqual(len(self.fixture.model.seen_calls), 2)
 
 
-    def test_corrected_manual_owner_root_remains_legal_when_unrelated_chat_source_is_erased(self) -> None:
+    def test_retired_manual_owner_root_stays_auditable_when_unrelated_source_is_erased(self) -> None:
         text = "本人手录偏好：喜欢散步，希望表达轻松自然。"
         root_id = self._memory("owner", text)
         body = self.fixture._body(draft=text)
@@ -594,18 +564,15 @@ class HistoricalReplyBasisHttpTest(unittest.TestCase):
             f"/api/memories/owner/{root_id}/correct", {"change_kind": "state_changed", "text": "本人手录偏好：喜欢慢慢散步，希望表达轻松自然。"})
         self.assertEqual(status, 200, corrected)
         replacement_id = corrected["memory"]["memory_id"]
-        self.fixture.model.responses.append(self.fixture._candidate(replacement_id))
-        status, continued = self.fixture.backend.request(self.path + "/continue", self._continue_command(original, intent=text))
-        self.assertEqual(status, 200, continued)
+        calls = len(self.fixture.model.seen_calls)
+        self.assertNotEqual(self.fixture.backend.request(self.path + "/continue", self._continue_command(original, intent=text))[0], 200)
         self.fixture._delete_source(source_id)
         saved = self.fixture.backend.request(self.path)[1]
-        self.assertEqual([turn["state"] for turn in saved["turns"]], ["completed", "completed"])
         self.assertEqual(saved["turns"][0]["reply"]["candidates"], original["candidates"])
         self.assertEqual(saved["turns"][0]["basis_changes"], [{
-            "evidence_id": str(root_id), "kind": "owner_memory", "reason": "memory_revised",
+            "evidence_id": str(root_id), "kind": "owner_memory", "reason": "memory_generation_forbidden",
         }])
-        self.assertEqual(saved["turns"][1]["reply"]["candidates"], continued["candidates"])
-        self.assertEqual(len(self.fixture.model.seen_calls), 2)
+        self.assertEqual(len(self.fixture.model.seen_calls), calls)
 
     def test_discarded_pending_basis_keeps_audit_but_cannot_continue(self) -> None:
         text = "合成未确认偏好：喜欢散步，希望表达轻松自然。"
@@ -683,7 +650,7 @@ class HistoricalReplyBasisHttpTest(unittest.TestCase):
         self.fixture._delete_source(source_id)
         self.assertTrue(all(turn["reply"] is None for turn in self.fixture.backend.request(self.path)[1]["turns"]))
 
-    def test_interrupted_continue_restores_saved_intent_with_fresh_basis_and_source_delete_blocks_recovery(self) -> None:
+    def test_interrupted_continue_rejects_retired_basis_and_source_delete_erases_recovery(self) -> None:
         text = "喜欢散步，希望表达轻松自然。"
         source_id, _, memory_id = self._source_memory(text)
         self.fixture.model.responses = [self.fixture._candidate(memory_id)]
@@ -719,35 +686,21 @@ class HistoricalReplyBasisHttpTest(unittest.TestCase):
         retry = {"original_turn_id": prepared["turn_id"], "original_input_version_id": prepared["input_version_id"],
                  "request_key": str(uuid4())}
         calls = len(self.fixture.model.seen_calls)
-        status, retry_prepared = self.fixture.backend.request(self.path + "/retry-interrupted/prepare", retry)
-        self.assertEqual(status, 200, retry_prepared)
+        for suffix in ("/retry-interrupted/prepare", "/retry-interrupted"):
+            self.assertNotEqual(self.fixture.backend.request(self.path + suffix, retry)[0], 200)
         self.assertEqual(len(self.fixture.model.seen_calls), calls)
-        self.fixture.model.responses.append(self.fixture._candidate(corrected["memory"]["memory_id"]))
-        status, recovered = self.fixture.backend.request(self.path + "/retry-interrupted", retry)
-        self.assertEqual(status, 200, recovered)
-        self.assertEqual(recovered["turn_id"], retry_prepared["turn_id"])
-        self.assertEqual(recovered["restored_input"]["content"], original["input"]["content"])
-        payload = next(json.loads(message.content) for message in self.fixture.model.seen_calls[-1]
-                       if isinstance(message, HumanMessage))
-        self.assertEqual(payload["draft_text"], command["intention_update"])
-        self.assertEqual(payload["continuation_reference"]["basis_changes"], [{
-            "evidence_id": memory_id, "kind": "confirmed_memory", "reason": "memory_revised",
-        }])
-        self.assertIn(corrected["memory"]["memory_id"], recovered["context_receipt"]["evidence_ids"])
-        self.assertEqual(self.fixture.backend.request(self.path + "/retry-interrupted", retry), (200, recovered))
-        self.assertEqual(len(self.fixture.model.seen_calls), calls + 1)
         self.fixture._delete_source(source_id)
         for payload in (retry, {**retry, "request_key": str(uuid4())}):
             for suffix in ("/retry-interrupted/prepare", "/retry-interrupted"):
                 self.assertNotEqual(self.fixture.backend.request(self.path + suffix, payload)[0], 200)
-        self.assertEqual(len(self.fixture.model.seen_calls), calls + 1)
+        self.assertEqual(len(self.fixture.model.seen_calls), calls)
         self.assertTrue(all(turn["state"] == "redacted" and turn["reply"] is None and turn["input"] is None
                             for turn in self.fixture.backend.request(self.path)[1]["turns"]))
 
-    def test_corrected_contact_memory_keeps_edited_history_and_explicit_continue_uses_new_basis(self) -> None:
+    def test_corrected_contact_memory_keeps_edited_history_but_blocks_explicit_continue(self) -> None:
         self._corrected_memory_keeps_history_and_continues("contact")
 
-    def test_corrected_owner_memory_keeps_edited_history_and_explicit_continue_uses_new_basis(self) -> None:
+    def test_corrected_owner_memory_keeps_edited_history_but_blocks_explicit_continue(self) -> None:
         self._corrected_memory_keeps_history_and_continues("owner")
 
     def _corrected_memory_keeps_history_and_continues(self, kind: str) -> None:
@@ -773,7 +726,7 @@ class HistoricalReplyBasisHttpTest(unittest.TestCase):
         self.assertEqual(saved["turns"][-1]["state"], "completed")
         expected_change = [{"evidence_id": str(memory_id),
                             "kind": "confirmed_memory" if kind == "contact" else "owner_memory",
-                            "reason": "memory_revised"}]
+                            "reason": "memory_generation_forbidden"}]
         self.assertEqual(saved["turns"][-1]["basis_changes"], expected_change)
         status, history = self.fixture.backend.request(versions_path)
         self.assertEqual(status, 200, history)
@@ -794,25 +747,12 @@ class HistoricalReplyBasisHttpTest(unittest.TestCase):
                                 "candidates": [{"number": 1, "candidate_id": candidate_id,
                                                 "version_id": edited_version["version_id"]}]},
         }
-        status, preparation = self.fixture.backend.request(self.path + "/continue/prepare", command)
-        self.assertEqual(status, 200, preparation)
+        for suffix in ("/continue/prepare", "/continue"):
+            self.assertNotEqual(self.fixture.backend.request(self.path + suffix, command)[0], 200)
         self.assertEqual(len(self.fixture.model.seen_calls), calls)
-        status, continued = self.fixture.backend.request(self.path + "/continue", command)
-        self.assertEqual(status, 200, continued)
-        self.assertNotEqual(continued["reply_request_id"], generated["reply_request_id"])
-        self.assertIn(new_memory_id, continued["context_receipt"]["evidence_ids"])
-        payload = next(json.loads(message.content) for message in self.fixture.model.seen_calls[-1]
-                       if isinstance(message, HumanMessage))
-        self.assertEqual(payload["draft_text"], "愿意聊聊散步，希望轻松自然，先不作承诺")
-        self.assertEqual(payload["continuation_reference"]["basis_changes"], expected_change)
-        self.assertEqual(payload["continuation_reference"]["messages"], edited_version["messages"])
-        memory_evidence = [item for item in payload["evidence"]
-                           if item["kind"] in ("confirmed_memory", "owner_memory")]
-        self.assertNotIn(str(memory_id), [item["evidence_id"] for item in memory_evidence])
-        self.assertIn(new_memory_id, [item["evidence_id"] for item in memory_evidence])
         self.assertEqual(self.fixture.backend.request(versions_path)[1]["versions"], edited["versions"])
 
-    def test_expired_candidate_can_be_carried_explicitly_and_new_reply_retrieves_fresh_basis(self) -> None:
+    def test_expired_candidate_stays_auditable_but_cannot_be_carried(self) -> None:
         memory_id, _, generated = self._generate("contact")
         candidate_id = generated["candidates"][0]["candidate_id"]
         self._set_period("contact", memory_id, expired=True)
@@ -825,29 +765,15 @@ class HistoricalReplyBasisHttpTest(unittest.TestCase):
             "expected_selection_id": selected["selection_id"], "candidate_id": candidate_id,
             "version_id": candidate_id,
         })
-        self.assertEqual(status, 200, carried)
-        child_path = self.fixture._path(carried["session_id"])
-        status, saved = self.fixture.backend.request(child_path)
-        self.assertEqual(status, 200, saved)
-        self.assertEqual(saved["inputs"][0]["content"]["messages"], generated["candidates"][0]["messages"])
-        self.assertEqual(saved["inputs"][0]["basis_changes"], [{
-            "evidence_id": str(memory_id), "kind": "confirmed_memory", "reason": "memory_expired",
-        }])
-        self.assertEqual(saved["turns"], [])
+        self.assertNotEqual(status, 200, carried)
         self.assertEqual(len(self.fixture.model.seen_calls), calls)
-        body = self.fixture._body(draft="本次愿意聊聊散步，保持轻松自然。")
-        body["content"]["include_relationship_context"] = True
-        body["expected_input_version_id"] = carried["input_version_id"]
-        self.fixture.model.responses.append(self.fixture._candidate(str(self.fixture.draft_id)))
-        status, continued = self.fixture.backend.request(child_path + "/replies", body)
-        self.assertEqual(status, 200, continued)
-        payload = next(json.loads(message.content) for message in self.fixture.model.seen_calls[-1]
-                       if isinstance(message, HumanMessage))
-        self.assertNotIn(str(memory_id), [item["evidence_id"] for item in payload["evidence"]])
-        self.assertEqual(payload["assistant_discussion"]["items"][0]["basis_changes"],
-                         saved["inputs"][0]["basis_changes"])
+        saved = self.fixture.backend.request(self.path)[1]
+        self.assertEqual(saved["turns"][0]["reply"]["candidates"], generated["candidates"])
+        self.assertEqual(saved["turns"][0]["basis_changes"], [{
+            "evidence_id": str(memory_id), "kind": "confirmed_memory", "reason": "memory_generation_forbidden",
+        }])
 
-    def test_basis_change_after_historical_reference_read_rejects_late_result_and_retry_recaptures(self) -> None:
+    def test_basis_retirement_during_continue_rejects_late_result_and_retry(self) -> None:
         memory_id, _, generated = self._generate("contact")
         candidate_id = generated["candidates"][0]["candidate_id"]
         command = {"idempotency_key": str(uuid4()), "expected_input_version_id": generated["input_version_id"],
@@ -875,15 +801,9 @@ class HistoricalReplyBasisHttpTest(unittest.TestCase):
         self.assertEqual(saved["turns"][0]["state"], "completed")
         self.assertEqual(saved["turns"][-1]["state"], "failed")
         self.assertIsNone(saved["turns"][-1]["reply"])
-        self.fixture.model.responses.append(self.fixture._candidate(str(self.fixture.draft_id)))
-        status, retried = self.fixture.backend.request(self.path + "/continue", command)
-        self.assertEqual(status, 200, retried)
-        payload = next(json.loads(message.content) for message in self.fixture.model.seen_calls[-1]
-                       if isinstance(message, HumanMessage))
-        self.assertEqual(payload["draft_text"], command["intention_update"])
-        self.assertEqual(payload["continuation_reference"]["basis_changes"], [{
-            "evidence_id": str(memory_id), "kind": "confirmed_memory", "reason": "memory_revised",
-        }])
+        calls = len(self.fixture.model.seen_calls)
+        self.assertNotEqual(self.fixture.backend.request(self.path + "/continue", command)[0], 200)
+        self.assertEqual(len(self.fixture.model.seen_calls), calls)
         self.assertEqual(len(self.fixture.backend.request(self.path)[1]["turns"]), 2)
 
 
@@ -906,8 +826,6 @@ class HistoricalReplyBasisHttpTest(unittest.TestCase):
         version_id = edited["versions"][-1]["version_id"]
         correction_path = (f"/api/memories/owner/{memory_id}/correct" if subject == FactSubject.SELF
                            else f"/api/contacts/{self.fixture.contact_id}/memories/{memory_id}/correct")
-        status, corrected = self.fixture.backend.request(correction_path, {"change_kind": "state_changed", "text": "合成修正偏好：喜欢慢慢散步，保持轻松自然。"})
-        self.assertEqual(status, 200, corrected)
         self.assertEqual(self.fixture.backend.request(versions_path)[1]["versions"], edited["versions"])
         status, selection = self.fixture.backend.request(self.path + "/selections", {
             "selection_key": str(uuid4()), "candidate_id": candidate_id, "version_id": version_id,
@@ -926,6 +844,8 @@ class HistoricalReplyBasisHttpTest(unittest.TestCase):
             request = pool.submit(self.fixture.backend.request, self.path + "/continue", command)
             try:
                 self.assertTrue(self.fixture.model.response_entered.wait(5))
+                status, corrected = self.fixture.backend.request(correction_path, {"change_kind": "state_changed", "text": "合成修正偏好：喜欢慢慢散步，保持轻松自然。"})
+                self.assertEqual(status, 200, corrected)
                 if source_first:
                     self.fixture._delete_source(source_id)
             finally:
@@ -934,7 +854,7 @@ class HistoricalReplyBasisHttpTest(unittest.TestCase):
         if source_first:
             self.assertNotEqual(status, 200, continued)
         else:
-            self.assertEqual(status, 200, continued)
+            self.assertNotEqual(status, 200, continued)
             self.fixture._delete_source(source_id)
         calls = len(self.fixture.model.seen_calls)
         status, erased = self.fixture.backend.request(self.path)

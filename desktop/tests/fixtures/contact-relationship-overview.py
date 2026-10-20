@@ -123,9 +123,9 @@ def main() -> None:
 
         applied = migrate(database_url, ROOT / "backend/database/migrations")
         official = sorted(path.name for path in (ROOT / "backend/database/migrations").glob("[0-9][0-9][0-9]_*.sql"))
-        if (len(applied) != 89 or list(applied) != official
-                or [int(name[:3]) for name in official] != list(range(1, 90))
-                or official[-1] != "089_style_sample_generation_dependencies.sql"):
+        if (len(applied) != len(official) or list(applied) != official
+                or [int(name[:3]) for name in official] != list(range(1, len(official) + 1))
+                or "089_style_sample_generation_dependencies.sql" not in official):
             raise RuntimeError("概览夹具须使用正式连续001–当前迁移，包含089。")
         if migrate(database_url, ROOT / "backend/database/migrations"):
             raise RuntimeError("概览迁移重复执行不应新增迁移。")

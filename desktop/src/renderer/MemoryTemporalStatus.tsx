@@ -1,4 +1,4 @@
-import { memoryDateText as dateText } from './memory-time-format';
+import { memoryDateText as dateText, memoryTimeText as timeText } from './memory-time-format';
 import type { MemoryTiming } from '../shared/memory-bridge';
 
 
@@ -11,7 +11,7 @@ export function MemoryTemporalStatus({ timing, validAt, invalidAt, snapshot = fa
   return <div className="memory-temporal-status">
     <p>来源日期：{start && end ? `${dateText(start)}${dateText(start) === dateText(end) ? '' : ` 至 ${dateText(end)}`}` : '未知'}
       {!timing.sourceTimeComplete && '（来源日期不完整）'}</p>
-    {(validAt || invalidAt) && <p>适用期间：{validAt ?? '起点未指定'} 至 {invalidAt ?? '终点未指定'}（结束时刻不含在内）</p>}
+    {(validAt || invalidAt) && <p>适用期间：{validAt ? timeText(validAt) : '起点未知'} 至 {invalidAt ? `${timeText(invalidAt)}之前` : '终点未知'}</p>}
     <p>{snapshot ? '生成时适用性' : '适用性'}：{labels[timing.currentStatus]}</p>
     {!compact && <p>{timing.currentStatusReason}</p>}
   </div>;

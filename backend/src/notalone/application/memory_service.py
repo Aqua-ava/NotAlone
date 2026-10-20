@@ -66,7 +66,7 @@ class MemoryService:
         contact_id: UUID,
     ) -> tuple[ConfirmedMemory, ...]:
         return self._contact_memory.list_confirmed(
-            ContactScope(owner_id=owner_id, contact_id=contact_id), include_expired=True,
+            ContactScope(owner_id=owner_id, contact_id=contact_id), include_expired=True, include_invalidated=True,
         )
 
     def list_pending(
@@ -81,7 +81,7 @@ class MemoryService:
 
     def list_owner_memories(self, *, owner_id: UUID, contact_id: UUID | None = None) -> tuple[OwnerMemory, ...]:
         return self._owner_memory.list_active(
-            owner_id, include_expired=True, **({"contact_id": contact_id} if contact_id is not None else {}),
+            owner_id, include_expired=True, include_invalidated=True, **({"contact_id": contact_id} if contact_id is not None else {}),
         )
 
     def list_contact_owner_versions(

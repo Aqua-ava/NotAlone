@@ -1004,11 +1004,11 @@ class PostgresMemoryStore:
             error_message="关系记忆删除失败。",
         )
 
-    def list_confirmed(self, scope: ContactScope, *, include_expired: bool = False) -> tuple[ConfirmedMemory, ...]:
-        """检索默认排除过期；管理回看仍须有活动来源且状态为 active。"""
+    def list_confirmed(self, scope: ContactScope, *, include_expired: bool = False, include_invalidated: bool = False) -> tuple[ConfirmedMemory, ...]:
+        """检索默认排除过期；管理列表可包含失效记录，但仍须有合法来源。"""
 
         self._validate_scope(scope)
-        if type(include_expired) is not bool:
+        if type(include_expired) is not bool or type(include_invalidated) is not bool:
             raise TypeError("历史回看标记必须是 bool。")
         current = self._now()
         try:
@@ -1024,7 +1024,7 @@ class PostgresMemoryStore:
                     FROM public.confirmed_memory AS memory
                     WHERE memory.owner_id = %s
                       AND memory.contact_id = %s
-                      AND memory.status = 'active'
+                      AND (memory.status = 'active' OR (%s AND memory.status = 'invalidated'))
                       AND (
                           memory.valid_at IS NULL OR memory.valid_at <= %s
                       )
@@ -1058,13 +1058,22 @@ class PostgresMemoryStore:
                       )
                     ORDER BY memory.created_at, memory.id
                     """,
-                    (scope.owner_id, scope.contact_id, current, include_expired, current),
+                    (scope.owner_id, scope.contact_id, include_invalidated, current, include_expired, current),
                 ).fetchall()
                 rows = available_correction_memories(
                     connection, owner_id=scope.owner_id, record_kind="contact_memory", rows=rows,
                 )
+                visible = []
+                for row in rows:
+                    if row["memory_status"] == "invalidated":
+                        # 旧版回看沿用版本详情的完整来源门槛，不能恢复已删来源的正文。
+                        try:
+                            self._ensure_active_sources(connection, scope, tuple(row["memory_source_ids"]))
+                        except PermissionError:
+                            continue
+                    visible.append(row)
                 return tuple(self._memory_from_row(row)
-                             for row in self._timed_memories(connection, rows))
+                             for row in self._timed_memories(connection, visible))
         except MemoryPersistenceError:
             raise
         except psycopg.Error:

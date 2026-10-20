@@ -96,8 +96,8 @@ class MemoryPort(Protocol):
     def delete(self, *, scope: ContactScope, memory_id: UUID) -> ConfirmedMemory:
         """标记记忆删除，使其不再进入检索。"""
 
-    def list_confirmed(self, scope: ContactScope, *, include_expired: bool = False) -> tuple[ConfirmedMemory, ...]:
-        """读取当前有效记忆；管理回看可包含已过期、仍有活动来源的 active 资料。"""
+    def list_confirmed(self, scope: ContactScope, *, include_expired: bool = False, include_invalidated: bool = False) -> tuple[ConfirmedMemory, ...]:
+        """读取当前有效记忆；管理列表可包含已过期和失效资料，始终排除已删除或来源不可用的资料。"""
 
     def list_versions(self, *, scope: ContactScope, memory_id: UUID) -> tuple[ConfirmedMemory, ...]:
         """读取指定资料的新旧版本、状态、修订及仍合法的来源。"""
@@ -125,8 +125,8 @@ class OwnerMemoryPort(Protocol):
     ) -> OwnerMemory:
         """原子确认 self 候选；自动替代只操作复验通过的原版本。"""
 
-    def list_active(self, owner_id: UUID, *, include_expired: bool = False, contact_id: UUID | None = None) -> tuple[OwnerMemory, ...]:
-        """读取当前本人资料；contact_id 仅按全部有效来源限制管理视图，不改变归属。"""
+    def list_active(self, owner_id: UUID, *, include_invalidated: bool = False, include_expired: bool = False, contact_id: UUID | None = None) -> tuple[OwnerMemory, ...]:
+        """默认读取有效本人资料；管理列表可包含失效资料，contact_id 按合法来源限制范围。"""
 
     def list_versions(self, *, owner_id: UUID, memory_id: UUID, contact_id: UUID | None = None) -> tuple[OwnerMemory, ...]:
         """读取本人版本链；指定 contact_id 时遇其他联系人来源即截断。"""

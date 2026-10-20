@@ -1,4 +1,4 @@
-"""存储与检索边界：错误和未知旧版不生成，明确变化允许历史且保留审计。"""
+"""存储与检索边界：所有失效旧版不生成，保留审计。"""
 
 import os
 import unittest
@@ -81,17 +81,17 @@ class MemoryRetirementPersistenceTest(unittest.TestCase):
                 self.assertEqual(self.search(kind, old, historical=False), ())
                 self.assertEqual(self.search(kind, current)[0].text, '现在不喝咖啡')
 
-    def test_explicit_change_is_historical_with_original_source_times(self):
+    def test_explicit_change_is_auditable_but_not_retrievable(self):
         for kind in ('contact', 'owner'):
             with self.subTest(kind=kind):
                 old = self.create(kind)
                 current = self.correct(kind, old, MemoryChangeKind.STATE_CHANGED)
                 history = self.search(kind, old)
-                self.assertEqual(len(history), 1)
-                self.assertEqual(history[0].text, old.text)
-                self.assertEqual(history[0].retirement_reason, 'state_changed')
-                self.assertEqual(history[0].timing.current_status, 'historical')
-                self.assertEqual(history[0].source_ids, old.source_ids)
+                self.assertEqual(history, ())
+                retired = next(item for item in self.versions(kind, current) if item.memory_id == old.memory_id)
+                self.assertEqual(retired.text, old.text)
+                self.assertEqual(retired.retirement_reason, MemoryRetirementReason.STATE_CHANGED)
+                self.assertEqual(retired.source_ids, old.source_ids)
                 self.assertEqual(self.search(kind, old, historical=False), ())
                 self.assertEqual(self.search(kind, current)[0].text, '现在不喝咖啡')
 
@@ -100,7 +100,7 @@ class MemoryRetirementPersistenceTest(unittest.TestCase):
             with self.subTest(kind=kind):
                 old = self.create(kind)
                 current = self.correct(kind, old, MemoryChangeKind.STATE_CHANGED)
-                self.assertEqual(len(self.search(kind, old)), 1)
+                self.assertEqual(self.search(kind, old), ())
                 if kind == 'owner':
                     self.owners.delete(self.owner_id, current.memory_id)
                 else:
@@ -118,6 +118,19 @@ class MemoryRetirementPersistenceTest(unittest.TestCase):
                 retired = self.versions(kind, old)[0]
                 self.assertEqual(retired.retirement_reason, MemoryRetirementReason.UNKNOWN)
                 self.assertEqual(self.search(kind, old), ())
+
+    def test_expired_active_memory_remains_auditable_but_not_retrievable(self):
+        from psycopg import sql
+        for kind, table in (("contact", "confirmed_memory"), ("owner", "owner_memory")):
+            with self.subTest(kind=kind):
+                old = self.create(kind)
+                with psycopg.connect(self.database_url) as connection:
+                    connection.execute(sql.SQL("UPDATE public.{} SET invalid_at=now()-interval '1 second' "
+                        "WHERE owner_id=%s AND id=%s").format(sql.Identifier(table)),
+                        (self.owner_id, old.memory_id))
+                self.assertEqual(self.search(kind, old), ())
+                self.assertEqual(self.search(kind, old, historical=False), ())
+                self.assertEqual(self.versions(kind, old)[0].text, old.text)
 
     def test_foreign_scope_cannot_retrieve_historical_change(self):
         old = self.create('contact')

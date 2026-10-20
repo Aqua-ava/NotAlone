@@ -284,15 +284,17 @@ class InMemoryMemoryStore:
             )
         return self._memories[memory.memory_id]
 
-    def list_confirmed(self, scope: ContactScope, *, include_expired: bool = False) -> tuple[ConfirmedMemory, ...]:
+    def list_confirmed(self, scope: ContactScope, *, include_expired: bool = False, include_invalidated: bool = False) -> tuple[ConfirmedMemory, ...]:
         if not isinstance(scope, ContactScope):
             raise TypeError("关系记忆查询范围无效。")
         return tuple(
             memory
             for memory in self._memories.values()
-            if memory.scope == scope and memory.status is ConfirmedMemoryStatus.ACTIVE
+            if memory.scope == scope
+            and (memory.status is ConfirmedMemoryStatus.ACTIVE
+                 or (include_invalidated and memory.status is ConfirmedMemoryStatus.INVALIDATED))
             and (memory.valid_at is None or memory.valid_at <= datetime.now(timezone.utc))
-            and (include_expired or memory.is_retrievable())
+            and (include_expired or memory.invalid_at is None or datetime.now(timezone.utc) < memory.invalid_at)
         )
 
     def list_versions(self, *, scope: ContactScope, memory_id: UUID) -> tuple[ConfirmedMemory, ...]:

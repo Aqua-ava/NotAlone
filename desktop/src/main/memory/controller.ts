@@ -2,7 +2,7 @@ import type { LayeredMemoryReadRequest, LayeredMemoryManagementRequest, MemoryAd
 import type { BackendHost } from '../backend/host';
 import { BackendRequestFailure } from '../backend/json-client';
 import type { ContactSession } from '../contacts/session';
-import { activeMemories, memorySources, memoryVersions, pendingCandidates } from './read';
+import { listedMemories, memorySources, memoryVersions, pendingCandidates } from './read';
 import type { ContactSelection } from '../../shared/contact-session-bridge';
 import { contactRelationshipOverview, ownerFactsPreferencesOverview } from './overview-read';
 import { layeredMemory } from './layered-read';
@@ -435,7 +435,7 @@ export class MemoryReadingController {
     const previous = this.state[request.level].items.find((item) => item.memoryId === request.memoryId);
     if (!scope || request.contactId !== scope.contactId || request.scopeRevision !== scope.scopeRevision
       || !['owner', 'contact'].includes(request.level) || this.state[request.level].phase !== 'ready' || !previous
-      || previous.revision !== request.revision || this.mutation) throw new Error('资料范围或版本已失效，请刷新后再修正。');
+      || previous.status !== 'active' || previous.revision !== request.revision || this.mutation) throw new Error('资料范围或版本已失效，请刷新后再修正。');
     const path = request.level === 'owner' ? `/api/contacts/${scope.contactId}/owner-memories/${request.memoryId}/correct`
       : `/api/contacts/${scope.contactId}/memories/${request.memoryId}/correct`;
     const reading = this.protectReads(scope, [request.level, 'pending']);
@@ -492,7 +492,7 @@ export class MemoryReadingController {
     const previous = this.state[level].items.find((item) => item.memoryId === request.previousMemoryId);
     if (!scope || request.contactId !== scope.contactId || request.scopeRevision !== scope.scopeRevision
       || this.state.pending.phase !== 'ready' || !candidate || this.state[level].phase !== 'ready'
-      || !previous || previous.revision !== request.expectedRevision || this.mutation) {
+      || !previous || previous.status !== 'active' || previous.revision !== request.expectedRevision || this.mutation) {
       throw new Error('所选候选或旧版已变化，请刷新后再应用。');
     }
     await this.deleteAndRefresh(scope, `/api/contacts/${scope.contactId}/memory-candidates/${candidate.candidateId}/apply-update`,
@@ -600,8 +600,8 @@ export class MemoryReadingController {
       const result = await this.backend.requestJson({ method: 'GET', path: paths[section], signal: operation.abort.signal });
       if (!current() || result.generation !== scope.generation) return false;
       switch (section) {
-        case 'contact': this.publish({ contact: { phase: 'ready', items: activeMemories(result.data, 'contact', scope.contactId) } }); break;
-        case 'owner': this.publish({ owner: { phase: 'ready', items: activeMemories(result.data, 'owner', scope.contactId) } }); break;
+        case 'contact': this.publish({ contact: { phase: 'ready', items: listedMemories(result.data, 'contact', scope.contactId) } }); break;
+        case 'owner': this.publish({ owner: { phase: 'ready', items: listedMemories(result.data, 'owner', scope.contactId) } }); break;
         case 'pending': this.publish({ pending: { phase: 'ready', items: pendingCandidates(result.data) } }); break;
         case 'sources': this.publish({ sources: { phase: 'ready', items: memorySources(result.data) } }); break;
       }

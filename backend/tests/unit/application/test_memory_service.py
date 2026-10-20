@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import unittest
-from datetime import datetime, timezone
+from dataclasses import replace
+from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
 from notalone.application.memory_service import (
@@ -78,11 +79,13 @@ class FakeContactMemory:
             if candidate.scope == scope and candidate.candidate_id == candidate_id
         )
 
-    def list_confirmed(self, scope: ContactScope, *, include_expired: bool = False) -> tuple[ConfirmedMemory, ...]:
+    def list_confirmed(self, scope: ContactScope, *, include_expired: bool = False, include_invalidated: bool = False) -> tuple[ConfirmedMemory, ...]:
         return tuple(
             memory
             for memory in self.memories
-            if memory.scope == scope and memory.status is ConfirmedMemoryStatus.ACTIVE
+            if memory.scope == scope
+            and (memory.status is ConfirmedMemoryStatus.ACTIVE
+                 or (include_invalidated and memory.status is ConfirmedMemoryStatus.INVALIDATED))
         )
 
     def confirm(
@@ -193,11 +196,13 @@ class FakeOwnerMemory:
         self.memories.append(memory)
         return memory
 
-    def list_active(self, owner_id: UUID, *, include_expired: bool = False) -> tuple[OwnerMemory, ...]:
+    def list_active(self, owner_id: UUID, *, include_invalidated: bool = False, include_expired: bool = False) -> tuple[OwnerMemory, ...]:
         return tuple(
             memory
             for memory in self.memories
-            if memory.owner_id == owner_id and memory.status is ConfirmedMemoryStatus.ACTIVE
+            if memory.owner_id == owner_id
+            and (memory.status is ConfirmedMemoryStatus.ACTIVE
+                 or (include_invalidated and memory.status is ConfirmedMemoryStatus.INVALIDATED))
         )
 
     def delete(self, owner_id: UUID, memory_id: UUID) -> OwnerMemory:
@@ -242,6 +247,53 @@ class MemoryServiceTest(unittest.TestCase):
         )
 
         self.assertEqual(result, (memory,))
+
+    def test_management_list_includes_invalidated_and_expired_but_not_deleted(self) -> None:
+        contact = InMemoryMemoryStore()
+        candidate = MemoryCandidate(
+            candidate_id=uuid4(), scope=_scope(), text="过去喜欢散步",
+            category=MemoryCategory.PREFERENCE, source_ids=(CONTACT_ID,),
+        )
+        contact.create_candidate(candidate)
+        old = contact.confirm(scope=_scope(), candidate_id=candidate.candidate_id)
+        retired = contact.invalidate(scope=_scope(), memory_id=old.memory_id)
+        service = MemoryService(contact_memory=contact, owner_memory=self.owner)
+        self.assertEqual(contact.list_confirmed(_scope()), ())
+        self.assertEqual(service.list_contact_memories(
+            owner_id=OWNER_ID, contact_id=CONTACT_ID,
+        ), (retired,))
+        self.assertEqual(service.list_contact_memories(
+            owner_id=OWNER_ID, contact_id=uuid4(),
+        ), ())
+        contact.delete(scope=_scope(), memory_id=old.memory_id)
+        self.assertEqual(service.list_contact_memories(
+            owner_id=OWNER_ID, contact_id=CONTACT_ID,
+        ), ())
+        expired_candidate = replace(
+            candidate, candidate_id=uuid4(), text="过去的临时安排",
+            invalid_at=datetime.now(timezone.utc) - timedelta(days=1),
+        )
+        contact.create_candidate(expired_candidate)
+        expired = contact.confirm(scope=_scope(), candidate_id=expired_candidate.candidate_id)
+        self.assertEqual(contact.list_confirmed(_scope()), ())
+        self.assertEqual(service.list_contact_memories(
+            owner_id=OWNER_ID, contact_id=CONTACT_ID,
+        ), (expired,))
+
+    def test_owner_management_list_includes_invalidated_but_not_deleted_or_other_owner(self) -> None:
+        memory = OwnerMemory(
+            memory_id=uuid4(), owner_id=OWNER_ID, text="本人以前喜欢散步",
+            category=MemoryCategory.PREFERENCE, topic=MemoryTopic.OTHER,
+            source_ids=(OWNER_ID,), adoption_method=AdoptionMethod.MANUAL,
+            status=ConfirmedMemoryStatus.INVALIDATED,
+        )
+        self.owner.memories.extend((
+            memory,
+            replace(memory, memory_id=uuid4(), status=ConfirmedMemoryStatus.DELETED),
+            replace(memory, memory_id=uuid4(), owner_id=uuid4()),
+        ))
+        self.assertEqual(self.owner.list_active(OWNER_ID), ())
+        self.assertEqual(self.service.list_owner_memories(owner_id=OWNER_ID), (memory,))
 
     def test_confirms_pending_candidate_as_manual(self) -> None:
         candidate = MemoryCandidate(
