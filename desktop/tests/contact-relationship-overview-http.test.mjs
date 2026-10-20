@@ -101,7 +101,7 @@ test('真实HTTP与生产桥呈现计划、经历、来源范围和手录；逐�
       new Set([prepared.sourceToDelete, prepared.newSourceId]));
     assert.equal(manual.provenance.kind, 'manual_entry');
     const html = render(state);
-    assert.match(html, /当前未核实/);
+    assert.match(html, /是否仍适用，尚不确定/);
     assert.match(html, /事件阶段：计划/);
     assert.match(html, /事件阶段：已发生/);
     assert.match(html, /用户手动录入/);

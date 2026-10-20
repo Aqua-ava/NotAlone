@@ -926,6 +926,33 @@ class MemoryEventHistoricalReviewHttpTest(CoreBusinessFlowFixture, unittest.Test
         self.assertEqual(saved["adoption_method"], "manual")
         self.assertFalse(saved["can_revert_auto_update"])
 
+        self.bindings.create_binding(owner_id=self.owner_id, contact_id=UUID(imported["contact_id"]),
+                                     channel="wechat", account_scope=f"synthetic-{self.owner_id}",
+                                     conversation_locator=f"synthetic-{imported['contact_id']}")
+        self.reply_model.plans.append({"text": "读书会后来怎么样？", "basis": "只有计划依据，不推断已发生。"})
+        status, reply = reopened.request("/api/reply/generate", {
+            "contact_id": imported["contact_id"], "idempotency_key": str(uuid4()),
+            "content": {"type": "rewrite_draft", "draft_text": "计划参加读书会。", "include_relationship_context": True},
+        })
+        self.assertEqual(status, 200, reply)
+        evidence = next(item for item in self.reply_model.payloads[-1]["evidence"]
+                        if item["evidence_id"] == saved["memory_id"])
+        self.assertEqual(evidence["event"], event)
+        path = prefix + f"/replies/{reply['reply_request_id']}/evidence"
+        frozen = self._get(self._backend(self.owner_id), path)["evidence"]
+        self.assertEqual(next(item for item in frozen if item["evidence_id"] == saved["memory_id"])["event"], event)
+
+        from tests.integration.server.test_layered_profile_management import LayeredProfileHttpTest
+        from tests.integration.server.test_layered_memory_management import LayeredMemoryManagementHttpTest
+        layered_backend = LayeredProfileHttpTest.controlled(self)
+        layered = LayeredMemoryManagementHttpTest.enable(self, layered_backend, imported["contact_id"])
+        self.assertEqual(layered["status"], "ready")
+        for reference in (layered["scenarios"][0]["paragraphs"][0]["references"][0],
+                          layered["profile"]["entries"][0]["references"][0]):
+            self.assertEqual(reference["event"], event)
+            self.assertIsNone(reference["valid_at"])
+            self.assertIsNone(reference["invalid_at"])
+
     def test_same_message_supporting_distinct_occurrences_keeps_two_pending_claims(self):
         imported = self.import_event(
             original="合成记录：在2026-08-05T09:00:00+08:00至2026-08-05T11:00:00+08:00和"

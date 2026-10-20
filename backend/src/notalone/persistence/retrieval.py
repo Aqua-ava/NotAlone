@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from notalone.memory.events import MemoryEvent
+
 from notalone.memory.retirement import is_generation_eligible, is_generation_status_eligible
 
 from datetime import datetime, timezone
@@ -252,6 +254,7 @@ class PostgresRetrieval:
                 timing=(history_timing(memory.timing, memory.status.value, memory.invalid_at)
                         if include_historical else memory.timing),
                 confidence=memory.confidence,
+                event=MemoryEvent.from_payload(memory.event.to_payload(current=True)) if memory.event else None,
             )
             for memory in memories
             if (memory_ids is None or memory.memory_id in memory_ids)
@@ -399,6 +402,7 @@ class PostgresRetrieval:
             valid_at=candidate.valid_at,
             invalid_at=candidate.invalid_at,
             timing=candidate.timing,
+            event=MemoryEvent.from_payload(candidate.event.to_payload(current=True)) if candidate.event else None,
         )
 
     def search_owner_memories(
@@ -461,6 +465,7 @@ class PostgresRetrieval:
                 timing=(history_timing(memory.timing, memory.status.value, memory.invalid_at)
                         if include_historical else memory.timing),
                 confidence=memory.confidence,
+                event=MemoryEvent.from_payload(memory.event.to_payload(current=True)) if memory.event else None,
             )
             for memory in memories
             if (memory_ids is None or memory.memory_id in memory_ids)

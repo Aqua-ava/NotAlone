@@ -12,6 +12,7 @@ from notalone.reply.assistant_discussion import DiscussionContext
 from notalone.reply.layered_context import LayeredReplyMaterial, LayeredReplyBudget, select_material, require_material
 from notalone.memory.layered import LayeredMemoryPort
 from notalone.memory.timing import MemoryTiming
+from notalone.memory.events import MemoryEvent
 from notalone.memory.models import ConfirmedMemory, OwnerMemory
 from notalone.memory.retirement import is_generation_eligible, is_generation_status_eligible
 from notalone.memory.overview import OverviewEntry, RelationshipOverview, RelationshipOverviewPort
@@ -189,8 +190,11 @@ class ContextEvidence:
     timing: MemoryTiming = MemoryTiming()
     model_visible: bool = True
     navigation: MemoryNavigation | None = None
+    event: MemoryEvent | None = None
 
     def __post_init__(self) -> None:
+        if self.event is not None and not isinstance(self.event, MemoryEvent):
+            raise TypeError("回复依据事件结构无效。")
         if not isinstance(self.timing, MemoryTiming):
             raise TypeError("回复依据时间结构无效。")
         if type(self.model_visible) is not bool:
@@ -952,6 +956,7 @@ class RetrievalReplyContext:
             or memory.valid_at != evidence.valid_at
             or memory.invalid_at != evidence.invalid_at
             or memory.status != evidence.status
+            or memory.event != evidence.event
             or memory.timing != evidence.timing
         ):
             raise ReplyContextInvariantError("关系记忆依据已失效或版本不一致。")
@@ -993,6 +998,7 @@ class RetrievalReplyContext:
             or memory.valid_at != evidence.valid_at
             or memory.invalid_at != evidence.invalid_at
             or memory.status != evidence.status
+            or memory.event != evidence.event
             or memory.timing != evidence.timing
         ):
             raise ReplyContextInvariantError("本人记忆依据已失效或版本不一致。")
@@ -1081,6 +1087,7 @@ class RetrievalReplyContext:
             or candidate.valid_at != evidence.valid_at
             or candidate.invalid_at != evidence.invalid_at
             or candidate.status != evidence.status
+            or candidate.event != evidence.event
             or candidate.timing != evidence.timing
             or not evidence.selection_reason.startswith(expected_reason)
         ):
@@ -1508,6 +1515,7 @@ class RetrievalReplyContext:
             invalid_at=memory.invalid_at,
             revision=memory.revision,
             timing=memory.timing,
+            event=memory.event,
         )
 
     @staticmethod
@@ -1537,6 +1545,7 @@ class RetrievalReplyContext:
             invalid_at=memory.invalid_at,
             revision=memory.revision,
             timing=memory.timing,
+            event=memory.event,
         )
 
     @staticmethod
@@ -1565,4 +1574,5 @@ class RetrievalReplyContext:
             valid_at=candidate.valid_at,
             invalid_at=candidate.invalid_at,
             timing=candidate.timing,
+            event=candidate.event,
         )

@@ -66,6 +66,12 @@ function memoryEvent(value: unknown): MemoryEvent | null {
   return { version: 1, stage, stageVerified: value.stage_verified, stageEvidence, occurrenceStart, occurrenceEnd,
     occurrenceVerified: value.occurrence_verified, occurrenceEvidence };
 }
+export function memoryTemporalFields(entry: Record<string, unknown>) {
+  const validAt = date(entry.valid_at === undefined ? null : entry.valid_at);
+  const invalidAt = date(entry.invalid_at === undefined ? null : entry.invalid_at);
+  if (validAt && invalidAt && Date.parse(invalidAt) < Date.parse(validAt)) throw invalid();
+  return { validAt, invalidAt, event: memoryEvent(entry.event) };
+}
 function content(entry: Record<string, unknown>): MemoryContent {
   const timing = entry.timing;
   if (!record(timing) || typeof timing.source_time_complete !== 'boolean'

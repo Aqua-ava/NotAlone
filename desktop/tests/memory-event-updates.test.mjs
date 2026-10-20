@@ -102,7 +102,7 @@ test('用户主动查看变化历史，旧版保留原采纳身份和独立来�
   const html = ports.renderToStaticMarkup(ports.createElement(ports.MemoryVersionHistory, { history }));
   assert.match(html, /旧版本/);
   assert.match(html, /自动采纳/);
-  assert.match(html, /当前未核实/);
+  assert.match(html, /是否仍适用，尚不确定/);
   assert.match(html, /来源聊天时间/);
   assert.match(html, /保存时间/);
   assert.ok(html.includes(ids.message));
@@ -551,4 +551,15 @@ test('人工修正优先于旧历史的迟到404或409，不撤下新的人工�
     assert.equal(state.history.phase, 'idle');
     assert.equal(state.mutation.phase, 'success');
   }
+});
+
+
+test('事件详情沿来源时区显示跨日时段，不硬编码为本机或东八区日期', async () => {
+  const { controller, selection } = await controllerFixture(async () => ({ generation: 1,
+    data: { memories: [memoryDto('contact', { event: { ...event,
+      occurrence_start: '2026-10-20T23:30:00-07:00', occurrence_end: '2026-10-21T00:30:00-07:00' } })] } }));
+  await controller.refresh({ ...selection(), section: 'contact' });
+  const html = ports.renderToStaticMarkup(ports.createElement(ports.MemoryEventDetails, { event: controller.getState().contact.items[0].event }));
+  assert.match(html, /2026年10月20日 23:30:00（UTC-7）/);
+  assert.match(html, /2026年10月21日 00:30:00（UTC-7）/);
 });

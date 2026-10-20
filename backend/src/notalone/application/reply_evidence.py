@@ -56,6 +56,7 @@ class ReplyEvidenceService:
                     "cited": entry.evidence_id in cited_ids,
                     **({"navigation": entry.navigation.to_payload()} if entry.navigation else {}),
                     "timing": entry.timing.to_payload(),
+                    "event": entry.event.to_payload() if entry.event else None,
                     "valid_at": entry.valid_at.isoformat() if entry.valid_at else None,
                     "invalid_at": entry.invalid_at.isoformat() if entry.invalid_at else None,
                 }

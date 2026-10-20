@@ -106,7 +106,7 @@ class OwnerLayeredSafetyHttpTest(MemoryOverviewHttpFixture, unittest.TestCase):
                 self.assertFalse(forbidden_keys.intersection(value), value)
                 if 'references' in value:
                     for reference in value['references']:
-                        self.assertEqual(set(reference), {'memory_id', 'revision'})
+                        self.assertIn(set(reference), ({'memory_id', 'revision'}, {'memory_id', 'revision', 'timing'}))
                 for child in value.values():
                     assert_clean(child)
             elif isinstance(value, (list, tuple)):
@@ -122,6 +122,7 @@ class OwnerLayeredSafetyHttpTest(MemoryOverviewHttpFixture, unittest.TestCase):
             self.profile_proposer.inputs[0], self.profile_verifier.inputs[0],
         ]
         self.assertTrue(self.profile_proposer.inputs[0][0], 'L3 须实际接收非空 L2 上下文')
+        self.assertIn('event', self.profile_proposer.inputs[0][0][0]['paragraphs'][0]['references'][0]['timing'])
         for actual in actual_inputs:
             assert_clean(actual)
         with psycopg.connect(self.database_url) as db:

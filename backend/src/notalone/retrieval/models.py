@@ -8,6 +8,7 @@ from uuid import UUID
 
 from notalone.memory.models import MemoryCandidateStatus
 from notalone.memory.timing import MemoryTiming
+from notalone.memory.events import MemoryEvent
 from notalone.scopes import ContactScope
 
 
@@ -94,6 +95,7 @@ class RetrievedMemory:
     relevance_score: float | None = None
     matched_terms: tuple[str, ...] = ()
     timing: MemoryTiming = MemoryTiming()
+    event: MemoryEvent | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.timing, MemoryTiming):
@@ -162,6 +164,7 @@ class RetrievedPendingCandidate:
     relevance_score: float | None = None
     matched_terms: tuple[str, ...] = ()
     timing: MemoryTiming = MemoryTiming()
+    event: MemoryEvent | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.timing, MemoryTiming):
@@ -228,6 +231,7 @@ class RetrievedOwnerMemory:
     relevance_score: float | None = None
     matched_terms: tuple[str, ...] = ()
     timing: MemoryTiming = MemoryTiming()
+    event: MemoryEvent | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.timing, MemoryTiming):

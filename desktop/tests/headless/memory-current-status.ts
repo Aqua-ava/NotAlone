@@ -13,15 +13,15 @@ export async function memoryCurrentStatus(browser: Browser, origin: string) {
     await selectMemoryCategory(manager, '联系人记忆');
     const contact = manager.getByRole('region', { name: '联系人记忆', exact: true });
     const card = (text: string) => contact.getByRole('article').filter({ has: manager.getByText(text, { exact: true }) });
-    await expect(card('合成旧近况：最近在加班。').getByText('当前核实状态：当前未核实', { exact: true })).toBeVisible();
-    await expect(card('合成当期近况：这个月在加班。').getByText('当前核实状态：当前已核实（来源支持当期区间）', { exact: true })).toBeVisible();
-    await expect(card('合成历史近况：这个月在加班。').getByText('当前核实状态：历史资料（已过期）', { exact: true })).toBeVisible();
-    await expect(card('合成稳定偏好：一直喜欢咖啡。').getByText('当前核实状态：稳定事实或明确偏好', { exact: true })).toBeVisible();
-    await expect(card('合成职业近况：对方是建筑师。').getByText('当前核实状态：当前未核实', { exact: true })).toBeVisible();
-    await expect(card('合成窄时段：这个月仅晚上在加班。').getByText('当前核实状态：当前未核实', { exact: true })).toBeVisible();
+    await expect(card('合成旧近况：最近在加班。').getByText('适用性：是否仍适用，尚不确定', { exact: true })).toBeVisible();
+    await expect(card('合成当期近况：这个月在加班。').getByText('适用性：来源支持明确适用期间', { exact: true })).toBeVisible();
+    await expect(card('合成历史近况：这个月在加班。').getByText('适用性：历史资料；不能据此认定当前情况', { exact: true })).toBeVisible();
+    await expect(card('合成稳定偏好：一直喜欢咖啡。').getByText('适用性：未指定期限的事实或偏好', { exact: true })).toBeVisible();
+    await expect(card('合成职业近况：对方是建筑师。').getByText('适用性：是否仍适用，尚不确定', { exact: true })).toBeVisible();
+    await expect(card('合成窄时段：这个月仅晚上在加班。').getByText('适用性：是否仍适用，尚不确定', { exact: true })).toBeVisible();
     await selectMemoryCategory(manager, '本人记忆');
     await expect(manager.getByRole('region', { name: '本人记忆', exact: true })
-      .getByText('当前核实状态：稳定事实或明确偏好', { exact: true })).toBeVisible();
+      .getByText('适用性：未指定期限的事实或偏好', { exact: true })).toBeVisible();
     await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
     await helper.getByRole('textbox', { name: '有什么想说的', exact: true }).fill('最近在加班忙吗？这个月仅晚上在加班吗？对方是建筑师，现在还成立吗？');
     await setWorkspaceContext(helper, true);
@@ -33,11 +33,11 @@ export async function memoryCurrentStatus(browser: Browser, origin: string) {
     const evidence = helper.getByRole('region', { name: '候选1依据', exact: true });
     const cited = evidence.getByRole('article').filter({ has: helper.getByText('合成旧近况：最近在加班。', { exact: true }) });
     await expect(cited.getByText('本候选已引用', { exact: true })).toBeVisible();
-    await expect(cited.getByText('生成时核实状态：当前未核实', { exact: true })).toBeVisible();
+    await expect(cited.getByText('生成时适用性：是否仍适用，尚不确定', { exact: true })).toBeVisible();
     for (const text of ['合成职业近况：对方是建筑师。', '合成窄时段：这个月仅晚上在加班。']) {
       const item = evidence.getByRole('article').filter({ has: helper.getByText(text, { exact: true }) });
       await expect(item.getByText('本候选已引用', { exact: true })).toBeVisible();
-      await expect(item.getByText('生成时核实状态：当前未核实', { exact: true })).toBeVisible();
+      await expect(item.getByText('生成时适用性：是否仍适用，尚不确定', { exact: true })).toBeVisible();
     }
     await expect(evidence.locator('.evidence-context')).not.toHaveAttribute('open');
     await evidence.locator('.evidence-context > summary').click();
@@ -46,7 +46,7 @@ export async function memoryCurrentStatus(browser: Browser, origin: string) {
       .filter({ has: helper.getByText('关系资料', { exact: true }) })
       .filter({ has: helper.getByText('合成历史近况：这个月在加班。', { exact: true }) });
     await expect(historical).toHaveCount(1);
-    await expect(historical.getByText('生成时核实状态：历史资料（已过期）', { exact: true })).toBeVisible();
+    await expect(historical.getByText('生成时适用性：历史资料；不能据此认定当前情况', { exact: true })).toBeVisible();
     await historical.locator('.record-metadata > summary').click();
     await expect(historical.getByText('由联系人概览定位，底层资料来历：来源支持。', { exact: true })).toBeVisible();
     await expect(historical.getByText('生成上下文，未被候选引用', { exact: true })).toBeVisible();

@@ -1,3 +1,5 @@
+import { memoryTimeText as timeText } from './memory-time-format';
+import { MemoryEventDetails } from './MemoryEventDetails';
 import { useEffect, useRef, useState } from 'react';
 import type { ActiveMemory, MemoryCategory, MemoryChangeKind, OwnerLayeredMemoryManagementRequest, OwnerLayeredMemoryState } from '../shared/memory-bridge';
 import { MemoryTemporalStatus } from './MemoryTemporalStatus';
@@ -6,13 +8,7 @@ import { MemoryList } from './MemoryList';
 
 const categoryNames = { common_fact: '共同事实', preference: '偏好', taboo: '禁忌', recent_state: '近期状态', relationship_note: '关系备注' };
 
-function timeText(value: string | null): string {
-  if (!value) return '未知';
-  const parts = new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Taipei', year: 'numeric', month: 'numeric', day: 'numeric',
-    hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' }).formatToParts(new Date(value));
-  const field = (name: string) => parts.find(part => part.type === name)?.value;
-  return `${field('year')}年${field('month')}月${field('day')}日 ${field('hour')}:${field('minute')}:${field('second')}（UTC+8）`;
-}
+
 
 function sourceTime(memory: ActiveMemory): string {
   const { sourceStartedAt: start, sourceEndedAt: end, sourceTimeComplete: complete } = memory.timing;
@@ -120,12 +116,13 @@ function OwnerFactCard({ memory, busy, run, initiallyEditing = false, onVersions
   return <article className="memory-card">
     <p className="memory-text">{memory.text}</p>
     <p className="memory-section-note">{memory.adoptionMethod === 'auto' ? '自动记下 · 未经你确认' : '手动记下'}</p>
-    {memory.timing.currentStatus !== 'stable' && <p className="memory-section-note">{({ current_verified: '时间已核实', current_unverified: '时间待核实', historical: '过去的信息' } as const)[memory.timing.currentStatus]}</p>}
+    <MemoryTemporalStatus timing={memory.timing} validAt={memory.validAt} invalidAt={memory.invalidAt} compact />
     <details className="memory-details"><summary>查看详情</summary>
-      <p>版本 {memory.revision}</p><MemoryTemporalStatus timing={memory.timing} />
+      <p>版本 {memory.revision}</p><p>{memory.timing.currentStatusReason}</p>
       <p>分类：{categoryNames[memory.category]}</p>
       <p>来源聊天时间：{sourceTime(memory)}</p><p>保存时间：{timeText(memory.timing.recordedAt)}</p>
       <p>来源聊天时间表示当时说过，不保证事件在当天发生。</p>
+      <MemoryEventDetails event={memory.event} />
       <p>生效时间：{memory.validAt ? timeText(memory.validAt) : '未指定'}</p>
       <p>失效时间：{memory.invalidAt ? timeText(memory.invalidAt) : '未指定'}</p>
       <p>记忆标识：{memory.memoryId}</p>

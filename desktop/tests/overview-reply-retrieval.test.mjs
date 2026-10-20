@@ -152,8 +152,8 @@ test('展开候选依据显示概览定位后的实际原话与事实，历史�
   assert.equal((await f.bridge.getEvidenceState()).phase, 'ready');
   const html = await renderEvidence(f);
   for (const phrase of ['本次已完成有界检索', '由联系人概览定位', '由本人概览定位', '来源支持', '手动录入',
-    '合成来源原话：那时周末有空。', '合成当时资料：过去周末有空。', '生成时核实状态', '历史资料',
-    '未确认记忆候选', '当前未核实', '稳定事实或明确偏好', '本候选已引用', '生成上下文，未被候选引用']) {
+    '合成来源原话：那时周末有空。', '合成当时资料：过去周末有空。', '生成时适用性', '历史资料',
+    '未确认记忆候选', '是否仍适用，尚不确定', '未指定期限的事实或偏好', '本候选已引用', '生成上下文，未被候选引用']) {
     assert(html.includes(phrase), phrase);
   }
   assert(f.calls.every((request) => !request.path.endsWith('/relationship-overview') && !request.path.endsWith('/owner/overview')));
@@ -286,7 +286,7 @@ test('旧缺失或null检索回执保留未知，重读不沿用缓存导航也�
     assert.equal((await f.bridge.getEvidenceState()).retrieval, null);
     const html = await renderEvidence(f);
     assert(html.includes('本次快照未记录检索过程，不能据此判断是否查空或耗尽。'));
-    assert(html.includes('旧快照未记录当前核实状态'));
+    assert(html.includes('旧快照未记录当时适用性'));
     assert(!html.includes('本次已完成有界检索'));
     assert(!html.includes('由联系人概览定位'));
     assert.equal((await f.bridge.getState()).result.candidates[0].editedText, '旧快照仍合法的合成用户编辑。');
@@ -904,4 +904,37 @@ test('来源删除或联系人切换撤下已读主题正文，迟到读取不�
     assert.equal(state.layeredScenarioReads, undefined);
     assert(!JSON.stringify(state).includes('合成冻结正文'));
   }
+});
+
+test('联系人与本人冻结分层依据保留各自计划和适用期，旧引用不从当前资料补填', async () => {
+  const f = await generatedFixture((f) => {
+    const scopes = scopedScenarioSnapshots(f);
+    for (const [index, scoped] of Object.values(scopes).entries()) {
+      const ref = scoped.receipt.document.paragraphs[0].references[0];
+      Object.assign(ref, { valid_at: '2020-06-01T00:00:00+08:00', invalid_at: '2020-06-03T00:00:00+08:00',
+        event: { version: 1, stage: index === 0 ? 'planned' : 'cancelled', stage_verified: false, stage_evidence: [],
+          occurrence_start: '2020-06-02T09:00:00+08:00', occurrence_end: null, occurrence_verified: false, occurrence_evidence: [] } });
+      scoped.context.profile_version_id = randomUUID();
+      scoped.context.profile_entries = [{ text: '合成冻结背景。', temporal_status: 'historical', uncertainty: '只作历史参考。',
+        references: [structuredClone(ref), { memory_id: randomUUID(), revision: 1, provenance_kind: 'manual_entry', timing: ref.timing }] }];
+    }
+  });
+  await f.bridge.loadEvidence(f.selection);
+  const state = await f.bridge.getEvidenceState();
+  assert.equal(state.phase, 'ready');
+  for (const [context, reads, expectedStage] of [[state.layeredContext, state.layeredScenarioReads, 'planned'],
+    [state.ownerLayeredContext, state.ownerLayeredScenarioReads, 'cancelled']]) {
+    for (const ref of [context.profileEntries[0].references[0], reads[0].document.paragraphs[0].references[0]]) {
+      assert.equal(ref.event.stage, expectedStage);
+      assert.equal(ref.event.occurrenceStart, '2020-06-02T09:00:00+08:00');
+      assert.equal(ref.validAt, '2020-06-01T00:00:00+08:00');
+      assert.equal(ref.invalidAt, '2020-06-03T00:00:00+08:00');
+    }
+    const legacy = context.profileEntries[0].references[1];
+    assert.equal(legacy.event, null); assert.equal(legacy.validAt, null); assert.equal(legacy.invalidAt, null);
+  }
+  const html = await renderEvidence(f);
+  assert.match(html, /事件阶段：计划/); assert.match(html, /事件阶段：取消/);
+  assert.match(html, /事件阶段：未知/); assert.match(html, /适用期间：2020-06-01/);
+  assert.doesNotMatch(html, /事件阶段：已发生/);
 });

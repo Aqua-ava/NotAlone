@@ -303,7 +303,7 @@ test('本人来源只显示真实标识，原关系全部吻合才开放依据�
     })]) }));
     await f.bridge.refreshOwnerOverview(f.selection());
     const html = render(await f.bridge.getState());
-    assert.match(html, /当前未核实/);
+    assert.match(html, /是否仍适用，尚不确定/);
     assert.match(html, /当前情况尚未知/);
     assert.equal(html.includes('查看本人概览依据：'), sourceContacts.every((contact) => contact === ids.contact));
     assert.match(html, /请先明确选择该联系人/);

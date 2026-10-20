@@ -111,7 +111,7 @@ test('用户查看系统整理的部分覆盖与段落时间依据，停用回�
     await page.getByText('查看第 1 段依据与时间', { exact: true }).click();
     const reference = page.getByText(`底层记忆：${ids.memory} · 版本 1 · 用户手动录入`, { exact: true });
     await reference.waitFor();
-    await page.getByText('生成时核实状态：当前未核实', { exact: true }).waitFor();
+    await page.getByText('生成时适用性：是否仍适用，尚不确定', { exact: true }).waitFor();
     await page.getByText('来源聊天时间：未知（来源时间不完整）', { exact: true }).waitFor();
     await page.getByRole('button', { name: '停用' }).click();
     await page.getByText('已停止整理及回复加载；下方仅供回看来源仍有效的现有文档。', { exact: true }).waitFor();
@@ -172,7 +172,7 @@ test('用户逐项查看长期背景与依据，停用仍可回看，并可撤�
     await profile.getByText('不确定性：没有新的来源核实持续状态。', { exact: true }).waitFor();
     await profile.getByText('查看第 1 项依据与时间', { exact: true }).click();
     await profile.getByText(`底层记忆：${ids.memory} · 版本 1 · 用户手动录入`, { exact: true }).waitFor();
-    await profile.getByText('生成时核实状态：当前未核实', { exact: true }).waitFor();
+    await profile.getByText('生成时适用性：是否仍适用，尚不确定', { exact: true }).waitFor();
     await profile.getByText('查看长期背景版本', { exact: true }).click();
     await profile.getByText(`版本标识：${ids.profile}`, { exact: true }).waitFor();
     await page.getByRole('button', { name: '停用', exact: true }).click();

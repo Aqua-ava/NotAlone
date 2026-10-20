@@ -10,6 +10,7 @@ from typing import Any, Literal
 from uuid import UUID
 
 from notalone.memory.timing import MemoryTiming
+from notalone.memory.events import MemoryEvent
 from notalone.reply.context import ContextEvidence
 from notalone.reply.exploration import ExplorationInput, ExplorationStale
 from notalone.retrieval.models import RetrievedMemory, RetrievedMessage
@@ -21,7 +22,7 @@ def _fingerprint(item: RetrievedMessage | RetrievedMemory) -> str:
     # 查询相关度不是原始资料；按ID复验时只比较正文、身份、版本与来源事实。
     fields = ("scope", "text", "source_ids", "status", "valid_at", "invalid_at")
     fields += (("role", "occurred_at", "session_id") if isinstance(item, RetrievedMessage)
-               else ("revision", "adoption_method", "category", "topic", "timing"))
+               else ("revision", "adoption_method", "category", "topic", "timing", "event"))
     source = asdict(item)
     payload = {key: source[key] for key in fields}
     return sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str).encode()).hexdigest()
@@ -39,12 +40,14 @@ class EvidenceSnapshot:
     timing: MemoryTiming = MemoryTiming()
     valid_at: datetime | None = None
     invalid_at: datetime | None = None
+    event: MemoryEvent | None = None
 
     @property
     def model_payload(self) -> dict[str, Any]:
         return {"evidence_id": str(self.evidence_id), "kind": self.kind, "text": self.text,
                 "source_ids": [str(source) for source in self.source_ids],
                 "timing": self.timing.to_payload(),
+                "event": self.event.to_payload(current=True) if self.event else None,
                 "valid_at": self.valid_at.isoformat() if self.valid_at else None,
                 "invalid_at": self.invalid_at.isoformat() if self.invalid_at else None}
 
@@ -104,6 +107,7 @@ class ExplorationEvidence:
             manual_contact=not message and item.adoption_method == "manual",
             timing=MemoryTiming.from_source_times((item.occurred_at,)) if message else item.timing,
             valid_at=item.valid_at, invalid_at=item.invalid_at,
+            event=None if message else item.event,
         )
 
     @staticmethod
@@ -139,7 +143,8 @@ class ExplorationEvidence:
             snapshots = []
             for item in values:
                 legacy = {"evidence_id", "kind", "text", "source_ids", "fingerprint", "manual_contact"}
-                if (set(item) not in (legacy, legacy | {"timing", "valid_at", "invalid_at"})
+                if (set(item) not in (legacy, legacy | {"timing", "valid_at", "invalid_at"},
+                                           legacy | {"timing", "valid_at", "invalid_at", "event"})
                     or item["kind"] not in ("message", "confirmed_memory")
                     or not isinstance(item["text"], str) or not item["text"].strip()
                     or len(item["text"]) > (1500 if item["kind"] == "message" else 300)
@@ -153,7 +158,8 @@ class ExplorationEvidence:
                                                   item["fingerprint"], item["manual_contact"],
                                                   MemoryTiming.from_payload(item.get("timing")),
                                                   _restore_time(item.get("valid_at")),
-                                                  _restore_time(item.get("invalid_at"))))
+                                                  _restore_time(item.get("invalid_at")),
+                                                  MemoryEvent.from_payload(item.get("event"))))
             if len({item.evidence_id for item in snapshots}) != len(snapshots):
                 raise ValueError()
             return tuple(snapshots)
@@ -171,6 +177,7 @@ class ExplorationEvidence:
                 source_ids=item.source_ids, selection_reason="本次意愿的实际删除依赖，不扩展生成模型材料。",
                 status=item.status, valid_at=item.valid_at, invalid_at=item.invalid_at,
                 revision=getattr(item, "revision", None),
+                event=getattr(item, "event", None),
                 timing=(MemoryTiming.from_source_times((item.occurred_at,))
                         if isinstance(item, RetrievedMessage) else item.timing), model_visible=False,
             ))
