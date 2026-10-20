@@ -30,12 +30,12 @@ export function ContactsPage({ session, navigate, manualRelease = false }: { ses
         <button className="contact-row" aria-label={`选择${contact.displayName}`} aria-pressed={state.selectedContactId === contact.contactId}
           onClick={() => void (manualRelease ? session.confirmManualContact(contact.contactId) : session.selectContact(contact.contactId))}>
           <span className="contact-avatar" aria-hidden="true">{contact.displayName.slice(0, 1)}</span>
-          <span className="contact-row-copy"><b>{contact.displayName}</b><small>{contact.messageCount} 条消息 · {contact.sourceCount} 份来源</small></span>
+          <span className="contact-row-copy"><b>{contact.displayName}</b><small>{contact.messageCount} 条消息</small></span>
           <span className="contact-row-choice">{state.selectedContactId === contact.contactId ? '已选择' : '选择'}</span>
         </button></li>)}
     </ul><aside className="contact-summary" aria-label="本次联系人资料摘要">
       <h3>{selected ? selected.displayName : '等待你确认联系人'}</h3>
-      {selected ? <><dl><div><dt>消息</dt><dd>{selected.messageCount} 条</dd></div><div><dt>来源</dt><dd>{selected.sourceCount} 份</dd></div></dl>
+      {selected ? <><dl><div><dt>消息</dt><dd>{selected.messageCount} 条</dd></div></dl>
         <p>本次文字和候选对应这位联系人。切换后清空编辑输入，已生成候选与编辑按联系人保留。</p>
         <button className="button primary" onClick={() => { void session.confirmManualContact(selected.contactId).then((confirmed) => { if (confirmed) return window.notalone.openHelper(); }); }}>手动输入本次聊天</button>
         <button className="button" onClick={() => navigate('import')}>导入单联系人资料</button></>

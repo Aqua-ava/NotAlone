@@ -4,7 +4,7 @@ import { readContactHttp, test } from './contact-fixture';
 import { writeFile } from 'node:fs/promises';
 import { startContactConfirmationWitness, witnessFailureCode, WitnessSetupFailure } from './contact-confirmation-witness';
 
-test('真实目录只显示当前用户的联系人及消息与来源摘要', async ({ runningApp: { app }, contactBackend }) => {
+test('真实目录只显示当前用户的联系人及消息摘要', async ({ runningApp: { app }, contactBackend }) => {
   const manager = await app.firstWindow();
   await expect(manager.getByRole('status').filter({ hasText: '已连接' })).toBeVisible({ timeout: 15_000 });
   expect(await readContactHttp(contactBackend)).toEqual({ contacts: [
@@ -15,8 +15,8 @@ test('真实目录只显示当前用户的联系人及消息与来源摘要', as
   await expect(contacts.getByText('合成联系人甲', { exact: true })).toBeVisible();
   await expect(contacts.getByText('合成联系人乙', { exact: true })).toBeVisible();
   await expect(contacts.getByText('另一用户的联系人', { exact: true })).toHaveCount(0);
-  await expect(contacts.getByText('2 条消息 · 1 份来源', { exact: true })).toBeVisible();
-  await expect(contacts.getByText('1 条消息 · 1 份来源', { exact: true })).toBeVisible();
+  await expect(contacts.getByText('2 条消息', { exact: true })).toBeVisible();
+  await expect(contacts.getByText('1 条消息', { exact: true })).toBeVisible();
   await expect(manager.getByText('本次联系人：未确认', { exact: true })).toBeVisible();
 });
 
