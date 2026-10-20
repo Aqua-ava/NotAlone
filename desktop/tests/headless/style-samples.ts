@@ -1,4 +1,4 @@
-import { setWorkspaceContext } from '../workspace-actions';
+import { openCandidateMoreActions, setWorkspaceContext } from '../workspace-actions';
 import { selectMemoryCategory } from '../memory-page-actions';
 import { expect, type Browser } from '@playwright/test';
 import { withRewritePages } from './rewrite-acceptance';
@@ -22,6 +22,7 @@ export async function styleSamples(browser: Browser, origin: string) {
     await expect.poll(() => copies.length).toBe(1);
     await helper.getByRole('button', { name: '刷新表达样本', exact: true }).click();
     await expect.poll(() => helper.evaluate(async () => (await window.notalone.styleSamples.getState()).samples.length)).toBe(0);
+    await openCandidateMoreActions(helper);
     await helper.getByRole('button', { name: '主动保存说法1为样本', exact: true }).click();
     await expect(helper.getByText('用户主动选定的合成最终表达。', { exact: true })).toBeVisible();
     await expect(helper.getByText('候选衍生，保留来源依赖 · 发送状态未知', { exact: true })).toBeVisible();
@@ -130,6 +131,7 @@ export async function styleSamples(browser: Browser, origin: string) {
     await helper.getByRole('button', { name: '刷新表达样本', exact: true }).click();
     await expect.poll(() => helper.evaluate(async () => (await window.notalone.styleSamples.getState()).samples.length)).toBe(0);
     // 已实际复制的旧候选来历不能仅凭当前保存入口改归新候选。
+    await openCandidateMoreActions(helper);
     await helper.getByRole('button', { name: '主动保存说法1为样本', exact: true }).click();
     await expect(helper.getByRole('alert').filter({ hasText: '样本尚未保存，请核对当前版本后重试。' })).toBeVisible();
     await expect.poll(() => helper.evaluate(async () => (await window.notalone.styleSamples.getState()).samples.length)).toBe(0);
@@ -143,6 +145,7 @@ export async function styleSamples(browser: Browser, origin: string) {
     await helper.getByRole('button', { name: '主动保存手工文字', exact: true }).click();
     await expect(helper.getByRole('alert').filter({ hasText: '样本操作暂时不可用' })).toBeVisible();
     await expect.poll(() => helper.evaluate(async () => (await window.notalone.styleSamples.getState()).samples.length)).toBe(0);
+    await openCandidateMoreActions(helper);
     await helper.getByRole('button', { name: '主动保存说法1为样本', exact: true }).click();
     const list = helper.getByRole('list', { name: '表达样本目录', exact: true });
     await expect(list.getByText(sameText, { exact: true })).toBeVisible();

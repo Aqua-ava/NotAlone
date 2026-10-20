@@ -1,4 +1,4 @@
-import { fillWorkspaceThought, fillWorkspaceInstruction, setWorkspaceContext } from '../workspace-actions';
+import { openCandidateMoreActions, fillWorkspaceThought, fillWorkspaceInstruction, setWorkspaceContext } from '../workspace-actions';
 import { openAssistantHistory, expandSavedDiscussion } from '../assistant-history-actions';
 import { selectMemoryCategory } from '../memory-page-actions';
 import { writeFile } from 'node:fs/promises';
@@ -218,6 +218,7 @@ export async function authenticExpressionGroups(browser: Browser, origin: string
           const previousVersion = group.getByRole('button', { name: '查看说法1上一版', exact: true });
           await previousVersion.click();
           await expect(group.getByRole('textbox', { name: '说法1第1条编辑文本', exact: true })).toHaveValue(stage.messages[0]);
+          await openCandidateMoreActions(group);
           await group.getByRole('button', { name: '主动保存说法1为样本', exact: true }).click();
           await expect.poll(async () => (await helper.evaluate(async () => window.notalone.styleSamples.getState())).samples.length,
             { message: `${mode}：切回原版主动保存后，目录应有原手工样本和该候选样本` }).toBe(2);
@@ -244,6 +245,7 @@ export async function authenticExpressionGroups(browser: Browser, origin: string
           await finalEditor.fill(finalDraft[1]);
           await finalEditor.blur();
           await expect(group.getByText('修改版本 2', { exact: true })).toBeVisible();
+          await openCandidateMoreActions(group);
           await group.getByRole('button', { name: '主动保存说法1为样本', exact: true }).click();
           await expect.poll(async () => (await helper.evaluate(async () => window.notalone.styleSamples.getState())).samples.length).toBe(3);
           const derived = (await helper.evaluate(async () => window.notalone.styleSamples.getState())).samples

@@ -1,4 +1,4 @@
-import { fillWorkspaceThought, setWorkspaceContext } from '../workspace-actions';
+import { openCandidateMoreActions, fillWorkspaceThought, setWorkspaceContext } from '../workspace-actions';
 import { openAssistantHistory, expandSavedDiscussion } from '../assistant-history-actions';
 import { selectMemoryCategory } from '../memory-page-actions';
 import { randomUUID } from 'node:crypto';
@@ -81,6 +81,7 @@ async function deletionRecovery(pages: RewritePages, host: PageHost, userData: s
     await setWorkspaceContext(helper, true);
     await fillWorkspaceThought(helper, sourceDirection);
     await generate(pages, sourceReply);
+    await openCandidateMoreActions(helper.getByRole('group', { name: '说法1消息组', exact: true }));
     await helper.getByRole('group', { name: '说法1消息组', exact: true }).getByRole('button', { name: '主动保存说法1为样本', exact: true }).click();
   }
   await expect.poll(async () => (await helper.evaluate(async () => window.notalone.styleSamples.getState())).samples.length).toBe(1);
@@ -174,6 +175,7 @@ export async function authenticExpressionSessionRetention(browser: Browser, orig
       await fillWorkspaceThought(helper, sourceDirection);
       const first = await generate(pages, sourceReply);
       await helper.getByText('我的表达样本', { exact: true }).click();
+      await openCandidateMoreActions(helper.getByRole('group', { name: '说法1消息组', exact: true }));
       await helper.getByRole('group', { name: '说法1消息组', exact: true }).getByRole('button', { name: '主动保存说法1为样本', exact: true }).click();
       const list = helper.getByRole('list', { name: '表达样本目录', exact: true });
       await expect(list.getByText(sourceReply, { exact: true })).toBeVisible();

@@ -56,6 +56,8 @@ export async function conversationStrategyEntry(browser: Browser, origin: string
     await helper.getByRole('button', { name: '展开候选1依据', exact: true }).click();
     const evidence = helper.getByRole('region', { name: '候选1依据', exact: true });
     await expect(evidence.getByText('未确认记忆候选', { exact: true })).toBeVisible();
+    await evidence.getByRole('article').filter({ has: helper.getByText('未确认记忆候选', { exact: true }) })
+      .locator('.record-metadata > summary').click();
     await expect(evidence.getByText('生成时状态：待确认', { exact: true })).toBeVisible();
     await expect(evidence.getByText(/入选原因：未确认候选、仅供参考、不得当作事实/)).toBeVisible();
   });

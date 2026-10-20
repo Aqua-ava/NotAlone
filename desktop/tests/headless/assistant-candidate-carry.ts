@@ -1,4 +1,4 @@
-import { fillWorkspaceInstruction, openWorkspaceSettings } from '../workspace-actions';
+import { openCandidateMoreActions, fillWorkspaceInstruction, openWorkspaceSettings } from '../workspace-actions';
 import { openAssistantHistory, expandSavedDiscussion } from '../assistant-history-actions';
 import path from 'node:path';
 import { readdir } from 'node:fs/promises';
@@ -42,6 +42,7 @@ async function exerciseFork(pages: RewritePages, originalId: string, expectedTex
     .toBe(originalId);
   await expandSavedDiscussion(helper);
   await openAssistantHistory(helper);
+  await openCandidateMoreActions(group);
   await expect(group.getByRole('button', { name: '用这组回复新开会话', exact: true })).toBeEnabled();
   await helper.getByRole('textbox', { name: '有什么想说的', exact: true }).fill('未提交的旧会话合成草稿不得携入。');
   await fillWorkspaceInstruction(helper, '未提交的旧会话临时要求不得携入。');
@@ -51,6 +52,7 @@ async function exerciseFork(pages: RewritePages, originalId: string, expectedTex
     const candidate = state.candidateVersions!.items.find(item => item.history!.candidateNumber === 2)!;
     return { candidateId: candidate.candidateId, versionId: candidate.displayVersionId };
   });
+  await openCandidateMoreActions(group);
   await group.getByRole('button', { name: '用这组回复新开会话', exact: true }).click();
   // 携入命令异步切换会话，须等新记录就绪后展开，不能扫描仍在显示的旧讨论。
   await expect.poll(() => helper.evaluate(async (previousId) => {
@@ -191,10 +193,12 @@ async function selectedVersion(pages: RewritePages): Promise<string> {
   await expect(group.getByRole('textbox', { name: '说法2第1条编辑文本', exact: true })).toBeVisible();
   expect(await rewriteBackend.command('metrics')).toEqual(generatedMetrics);
   await openAssistantHistory(helper);
+  await openCandidateMoreActions(group);
   await expect(group.getByRole('button', { name: '用这组回复新开会话', exact: true })).toBeEnabled();
   await saveGroupMessage(pages, 1, '明确选用的合成编辑第一条。', 1);
   await saveGroupMessage(pages, 2, '明确选用的合成编辑第二条。', 2);
   await openAssistantHistory(helper);
+  await openCandidateMoreActions(group);
   await expect(group.getByRole('button', { name: '用这组回复新开会话', exact: true })).toBeEnabled();
   return (await helper.evaluate(async () => window.notalone.replies.getState())).savedSession!.sessionId!;
 }

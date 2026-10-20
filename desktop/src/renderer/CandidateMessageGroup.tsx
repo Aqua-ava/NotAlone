@@ -81,10 +81,9 @@ export function CandidateMessageGroup({ identity, number, messages, controls, di
     } finally { pendingPaste.current = false; if (active.current) setPasting(false); }
   }
   return <fieldset className="candidate-message-group" aria-label={`说法${number}消息组`} disabled={disabled || saving || pasting || copying}>
-    <legend>{messages.length > 1 ? `这组共${messages.length}条，按顺序表达` : '这组有1条消息'}</legend>
-    {controls}
+    {messages.length > 1 && <legend>共{messages.length}条，按顺序发送</legend>}
     {messages.map((message, index) => <div className="candidate-message" key={message.messageId}>
-      <label>第{index + 1}条<textarea
+      <label>{messages.length > 1 && <span>第{index + 1}条</span>}<textarea
         aria-label={messages.length === 1 && !restored ? `候选${number}编辑文本` : `说法${number}第${index + 1}条编辑文本`}
         value={message.text} maxLength={messages.length > 1 ? 8192 : 65_536}
         onChange={(event) => edit(message.messageId, event.target.value)}
@@ -93,8 +92,9 @@ export function CandidateMessageGroup({ identity, number, messages, controls, di
         onCopy={(event) => { const input = event.currentTarget; noteTextCopy(input.value.slice(input.selectionStart, input.selectionEnd)); }}
         onCut={(event) => { const input = event.currentTarget; noteTextCopy(input.value.slice(input.selectionStart, input.selectionEnd)); }}
       /></label>
-      <button disabled={copying || dirty || !message.text.trim()} onClick={() => void copyMessage(message.messageId, index)}>复制第{index + 1}条</button>
+      <button aria-label={`复制第${index + 1}条`} disabled={copying || dirty || !message.text.trim()} onClick={() => void copyMessage(message.messageId, index)}>{messages.length > 1 ? `复制第${index + 1}条` : '复制'}</button>
     </div>)}
+    {controls}
     {(saveFailed || retrySave) && dirty && <button onClick={() => void saveGroup()}>重试保存修改</button>}
     {saving && <p role="status">正在自动保存修改…</p>}
     {!saving && dirty && <p>结束编辑后自动保存，保存完成即可复制。</p>}

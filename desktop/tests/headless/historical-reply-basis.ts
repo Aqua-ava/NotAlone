@@ -1,4 +1,4 @@
-import { fillWorkspaceThought, setWorkspaceContext } from '../workspace-actions';
+import { openCandidateMoreActions, fillWorkspaceThought, setWorkspaceContext } from '../workspace-actions';
 import { openAssistantHistory, expandSavedDiscussion } from '../assistant-history-actions';
 import { selectMemoryCategory } from '../memory-page-actions';
 import path from 'node:path';
@@ -28,7 +28,7 @@ export async function historicalReplyBasis(browser: Browser, origin: string) {
     await openAssistantHistory(helper);
     await helper.getByRole('button', { name: '查看已保存讨论', exact: true }).click();
     await expandSavedDiscussion(helper);
-    await expect(group.getByRole('button', { name: '查看说法1上一版', exact: true })).toBeDisabled();
+    await expect(group.getByRole('button', { name: '查看说法1上一版', exact: true })).toHaveCount(0);
     await editor.fill('用户已保存的合成编辑：愿意聊聊，先不作承诺。');
     await expect(helper.getByRole('button', { name: '继续修改', exact: true })).toBeDisabled();
     await editor.blur();
@@ -135,7 +135,7 @@ export async function historicalReplyBasis(browser: Browser, origin: string) {
     await openAssistantHistory(helper);
     await helper.getByRole('button', { name: '查看已保存讨论', exact: true }).click();
     await expandSavedDiscussion(helper);
-    await expect(group.getByRole('button', { name: '查看说法1上一版', exact: true })).toBeDisabled();
+    await expect(group.getByRole('button', { name: '查看说法1上一版', exact: true })).toHaveCount(0);
     await editor.fill('本人依据过期后仍保留的合成编辑。');
     await rewriteBackend.command('historical_basis_expire');
     await expect(helper.getByRole('button', { name: '继续修改', exact: true })).toBeDisabled();
@@ -150,9 +150,11 @@ export async function historicalReplyBasis(browser: Browser, origin: string) {
     await expect(group.getByText('修改版本 1', { exact: true })).toBeVisible();
     await expect(group.getByRole('button', { name: '复制第1条', exact: true })).toBeEnabled();
     await openAssistantHistory(helper);
+    await openCandidateMoreActions(group);
     await expect(group.getByRole('button', { name: '用这组回复新开会话', exact: true })).toBeEnabled();
     const calls = ((await rewriteBackend.command('observations')).payloads as unknown[]).length;
     await openAssistantHistory(helper);
+    await openCandidateMoreActions(group);
     await group.getByRole('button', { name: '用这组回复新开会话', exact: true }).click();
     const carried = helper.getByRole('article', { name: '携入的已选版本', exact: true });
     // 新会话回读完成后再展开，避免只展开切换前仍在页面上的旧讨论。

@@ -37,6 +37,8 @@ export async function overviewReplyRetrieval(browser: Browser, origin: string) {
         const body = article.getByText(text, { exact: true });
         await expect(body).toHaveCount(1);
         await expect(body).toBeVisible();
+        const metadata = article.locator('.record-metadata');
+        if (await metadata.getAttribute('open') === null) await metadata.locator('summary').click();
         return article;
       }
       async function generate(draft: string, text: string, background: boolean, kinds?: string[]) {

@@ -1,4 +1,4 @@
-import { setWorkspaceContext, fillWorkspaceInstruction, continueWorkspace } from '../workspace-actions';
+import { openCandidateMoreActions, setWorkspaceContext, fillWorkspaceInstruction, continueWorkspace } from '../workspace-actions';
 import { openAssistantHistory, expandSavedDiscussion } from '../assistant-history-actions';
 import { selectMemoryCategory } from '../memory-page-actions';
 import { writeFile } from 'node:fs/promises';
@@ -215,6 +215,7 @@ export async function authenticExpressionTyped(browser: Browser, origin: string)
           expect(references.every((reference) => reference.factual_role === 'expression_reference' && reference.weight === 'low')).toBe(true);
           expect((row.output.context_receipt as { style_sample_ids: string[] }).style_sample_ids).toEqual([sample.sampleId]);
         }
+        await openCandidateMoreActions(group);
         await group.getByRole('button', { name: '主动保存说法1为样本', exact: true }).click();
         await expect.poll(async () => (await helper.evaluate(async () => window.notalone.styleSamples.getState())).samples.length).toBe(2);
         const derived = (await helper.evaluate(async () => window.notalone.styleSamples.getState())).samples

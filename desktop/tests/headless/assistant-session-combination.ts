@@ -1,6 +1,6 @@
 import { openAssistantHistory, expandSavedDiscussion } from '../assistant-history-actions';
 import { expect, type Browser, type Page } from '@playwright/test';
-import { fillWorkspaceThought, fillWorkspaceInstruction, generateWorkspace, setWorkspaceContext } from '../workspace-actions';
+import { openCandidateMoreActions, fillWorkspaceThought, fillWorkspaceInstruction, generateWorkspace, setWorkspaceContext } from '../workspace-actions';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
 import { withEventPages, type EventPages } from './message-events';
 
@@ -106,6 +106,7 @@ export async function assistantSessionCombination(browser: Browser, origin: stri
     expect(adoptedEvidence.status).toBe(200);
     expect(adoptedEvidence.data.evidence).toEqual(expect.arrayContaining([expect.objectContaining({ evidence_id: arrived.message_id, kind: 'message' })]));
     await openAssistantHistory(helper);
+    await openCandidateMoreActions(group);
     await expect(group.getByRole('button', { name: '用这组回复新开会话', exact: true })).toBeEnabled();
     await expect(group.getByRole('button', { name: '复制第1条', exact: true })).toBeEnabled();
 
@@ -187,6 +188,7 @@ export async function assistantSessionCombination(browser: Browser, origin: stri
     expect(((await fixture.request(pathA)).data.inputs as Array<{ content: { purpose_hint?: string } }>)
       .some((item) => item.content?.purpose_hint === large)).toBe(true);
     await openAssistantHistory(helper);
+    await openCandidateMoreActions(helper.getByRole('group', { name: '说法1消息组', exact: true }));
     await helper.getByRole('group', { name: '说法1消息组', exact: true })
       .getByRole('button', { name: '用这组回复新开会话', exact: true }).click();
     await expandSavedDiscussion(helper);

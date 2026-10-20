@@ -140,17 +140,19 @@ export function CandidateVersionEditor({ replies, view, candidateId, replyReques
       copy={(messageId) => window.notalone.candidateCopy.copy({ contactId: scope.contactId, scopeRevision: scope.scopeRevision,
         replyRequestId, candidateId, versionId: version.versionId, messageId, hideAfterCopy: false })}
       controls={<>
-        <div className="candidate-version-navigation" role="group" aria-label={`说法${number}版本历史`}>
+        {orderedVersions.length > 1 && <div className="candidate-version-navigation" role="group" aria-label={`说法${number}版本历史`}>
           <button aria-label={`查看说法${number}上一版`} disabled={dirty || disabled || versionIndex <= 0}
             onClick={() => showVersion(versionIndex - 1)}>← 上一版</button>
           <span>{version.versionNumber === 0 ? '原始版本' : `修改版本 ${version.versionNumber}`}</span>
           <button aria-label={`查看说法${number}下一版`} disabled={dirty || disabled || versionIndex >= orderedVersions.length - 1}
             onClick={() => showVersion(versionIndex + 1)}>下一版 →</button>
-        </div>
+        </div>}
+        <details className="candidate-more-actions" key={identity}><summary>更多操作</summary>
         <button disabled={sampleSaving || messages.some((message) => !message.text.trim())
           || messages.map((message) => message.text).join('\n\n').length > 4096}
-          onClick={() => void saveSample()}>主动保存说法{number}为样本</button>
+          aria-label={`主动保存说法${number}为样本`} onClick={() => void saveSample()}>保存为表达样本</button>
         <button disabled={dirty || disabled || carrying} onClick={() => void carry()}>用这组回复新开会话</button>
+        </details>
       </>} />
     {view?.phase === 'failed' && <button onClick={retryRead}>重新读取本组版本</button>}
     {error && <p role="alert">{error}</p>}

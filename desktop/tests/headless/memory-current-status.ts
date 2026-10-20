@@ -38,12 +38,15 @@ export async function memoryCurrentStatus(browser: Browser, origin: string) {
       await expect(item.getByText('本候选已引用', { exact: true })).toBeVisible();
       await expect(item.getByText('生成时核实状态：当前未核实', { exact: true })).toBeVisible();
     }
+    await expect(evidence.locator('.evidence-context')).not.toHaveAttribute('open');
+    await evidence.locator('.evidence-context > summary').click();
     // 概览导航允许带历史标注回读过期资料；它不能冒充当期事实或本候选引用。
     const historical = evidence.getByRole('article')
       .filter({ has: helper.getByText('关系资料', { exact: true }) })
       .filter({ has: helper.getByText('合成历史近况：这个月在加班。', { exact: true }) });
     await expect(historical).toHaveCount(1);
     await expect(historical.getByText('生成时核实状态：历史资料（已过期）', { exact: true })).toBeVisible();
+    await historical.locator('.record-metadata > summary').click();
     await expect(historical.getByText('由联系人概览定位，底层资料来历：来源支持。', { exact: true })).toBeVisible();
     await expect(historical.getByText('生成上下文，未被候选引用', { exact: true })).toBeVisible();
     await expect(historical.getByText(/入选原因：历史资料，仅用于追溯；当前未核实，不得当作当前事实。/)).toBeVisible();

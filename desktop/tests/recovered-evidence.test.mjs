@@ -94,11 +94,15 @@ test('恢复依据在切换会话或连接代际后丢弃迟到响应', async ()
 
 test('公开依据按钮的守卫拒绝显示错误，恢复候选可展开与收起原快照', async t => {
   const { build } = await import('esbuild');
-  const { chromium } = await import('@playwright/test');
+  const { chromium, expect } = await import('@playwright/test');
   const browser = await chromium.launch({ headless: true, executablePath: process.env.NOTALONE_TEST_CHROMIUM_PATH });
   t.after(() => browser.close());
   const page = await browser.newPage();
   const f = await fixture(); await f.restore();
+  for (const [text, cited] of [['合成其他候选的参考消息。', true], ['合成未引用的背景消息。', false]]) {
+    f.records.evidence.evidence.push({ ...f.records.evidence.evidence[0], evidence_id: randomUUID(),
+      kind: 'message', text, cited });
+  }
   await page.exposeFunction('evidenceCommand', async (name, selection) => {
     if (name === 'getEvidenceState') return f.bridge.getEvidenceState();
     assert(['loadEvidence', 'closeEvidence'].includes(name));
@@ -129,6 +133,19 @@ test('公开依据按钮的守卫拒绝显示错误，恢复候选可展开与�
   await page.evaluate(props => window.renderEvidence(props), { selection: f.selection, candidate, number: 1, waiting: false });
   await page.getByRole('button', { name: '展开候选1依据' }).click();
   await page.getByText('合成当时资料：周末有空。', { exact: true }).waitFor();
+  const evidence = page.getByRole('region', { name: '候选1依据', exact: true });
+  await expect(evidence.getByText('本候选已引用', { exact: true })).toBeVisible();
+  await expect(evidence.getByText('合成其他候选的参考消息。', { exact: true })).toBeHidden();
+  await expect(evidence.getByText('合成未引用的背景消息。', { exact: true })).toBeHidden();
+  await expect(evidence.getByText('入选原因：与本次合成安排相关。', { exact: true }).first()).toBeHidden();
+  await evidence.getByText('其他上下文（2条）', { exact: true }).click();
+  await expect(evidence.getByText('合成其他候选的参考消息。', { exact: true })).toBeVisible();
+  await expect(evidence.getByText('同组其他候选已引用', { exact: true })).toBeVisible();
+  await expect(evidence.getByText('合成未引用的背景消息。', { exact: true })).toBeVisible();
+  await expect(evidence.getByText('生成上下文，未被候选引用', { exact: true })).toBeVisible();
+  await evidence.getByText('其他上下文（2条）', { exact: true }).click();
+  await expect(evidence.getByText('合成未引用的背景消息。', { exact: true })).toBeHidden();
+  await expect(evidence.getByText('合成当时资料：周末有空。', { exact: true })).toBeVisible();
   await page.getByText('检索过程与技术详情', { exact: true }).click();
   await page.getByText('合成生成时L1背景。', { exact: true }).waitFor();
   assert.equal(f.calls.some(r => r.path.includes('/layered-context')), false);

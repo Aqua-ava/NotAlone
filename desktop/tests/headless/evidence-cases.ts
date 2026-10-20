@@ -99,16 +99,26 @@ async function draftEvidence({ manager, helper, rewriteBackend }: RewritePages) 
   await expect(evidence.getByText('本候选已引用', { exact: true })).toBeVisible();
   await expect(evidence.locator('.evidence-technical')).not.toHaveAttribute('open');
   const draft = evidence.getByRole('article').filter({ has: helper.getByText('用户草稿', { exact: true }) });
-  const purpose = evidence.getByRole('article').filter({ has: helper.getByText('本次主动目的', { exact: true }) });
+  const purpose = evidence.getByRole('article', { includeHidden: true }).filter({ has: helper.getByText('本次主动目的', { exact: true }) });
+  await expect(evidence.getByRole('article')).toHaveCount(1);
+  await expect(evidence.locator('.evidence-citations').getByRole('article')).toHaveCount(1);
+  await expect(evidence.locator('.evidence-context')).not.toHaveAttribute('open');
+  await expect(purpose).toBeHidden();
+  await evidence.getByText('其他上下文（1条）', { exact: true }).click();
+  await expect(purpose).toBeVisible();
   await expect(evidence.getByRole('article')).toHaveCount(2);
   await expect(draft).toHaveCount(1);
   await expect(purpose).toHaveCount(1);
   for (const item of [draft, purpose]) {
     await expect(item.locator('.record-metadata')).not.toHaveAttribute('open');
     await expect(item.getByText('来源时间未知', { exact: true })).toBeHidden();
+    await expect(item.getByText(/^入选原因：/)).toBeHidden();
+    await expect(item.getByText(/^生成时状态：/)).toBeHidden();
   }
   await draft.locator('.record-metadata > summary').click();
   await expect(draft.getByText('来源时间未知', { exact: true })).toBeVisible();
+  await expect(draft.getByText(/^入选原因：/)).toBeVisible();
+  await expect(draft.getByText(/^生成时状态：/)).toBeVisible();
   await expect(purpose.getByText('来源时间未知', { exact: true })).toBeHidden();
   await purpose.locator('.record-metadata > summary').click();
   for (const item of [draft, purpose]) await expect(item.getByText('来源时间未知', { exact: true })).toBeVisible();
@@ -273,6 +283,7 @@ async function legacySnapshot(pages: EvidencePages) {
   await arrangeSnapshot(pages, 'legacy_timing', requestId);
   await pages.helper.getByRole('button', { name: '展开候选1依据', exact: true }).click();
   const region = pages.helper.getByRole('region', { name: '候选1依据', exact: true });
+  await region.locator('.evidence-context > summary').click();
   await expect(region.getByText('甲的私密合成历史：今晚我会晚一点回复你。', { exact: true })).toBeVisible();
   const history = region.getByRole('article').filter({ hasText: '甲的私密合成历史：今晚我会晚一点回复你。' });
   await expect(history).toHaveCount(1);

@@ -1,4 +1,4 @@
-import { expect, type Page } from '@playwright/test';
+import { expect, type Locator, type Page } from '@playwright/test';
 import type { PageHost } from './headless/page-host';
 import type { ReplyGenerationJobState } from '../src/shared/reply-bridge';
 
@@ -81,4 +81,11 @@ export async function openWorkspaceSettings(page: Page): Promise<void> {
 export async function setWorkspaceTone(page: Page, tone: string): Promise<void> {
   await openWorkspaceSettings(page);
   await page.getByRole('combobox', { name: '本次语气', exact: true }).selectOption(tone);
+}
+
+// 候选的次要操作默认折叠；通过可见入口展开，再继续原业务操作。
+export async function openCandidateMoreActions(scope: Page | Locator): Promise<void> {
+  const actions = scope.locator('details.candidate-more-actions').first();
+  await expect(actions).toBeVisible();
+  if (await actions.getAttribute('open') === null) await actions.locator('summary').click();
 }

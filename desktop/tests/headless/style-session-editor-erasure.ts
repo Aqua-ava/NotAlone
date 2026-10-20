@@ -1,3 +1,4 @@
+import { openCandidateMoreActions } from '../workspace-actions';
 import { openAssistantHistory } from '../assistant-history-actions';
 import { expect, type Browser, type Locator } from '@playwright/test';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
@@ -51,6 +52,7 @@ async function editorAfterSessionDeletion(pages: RewritePages, kind: 'candidate'
   await manual.fill(savedManual);
   await helper.getByRole('button', { name: '主动保存手工文字', exact: true }).click();
   await expect(list.getByText(savedManual, { exact: true })).toBeVisible();
+  await openCandidateMoreActions(helper);
   await helper.getByRole('button', { name: '主动保存说法1为样本', exact: true }).click();
   await expect(list.getByText(replyText, { exact: true })).toBeVisible();
   const samplePath = `/api/contacts/${contactId}/style-samples`;

@@ -76,7 +76,7 @@
 .ime-pane .reply-results-heading { margin-bottom: 18px; flex-wrap: wrap; }
 .ime-pane .reply-results-heading h2 { font-size: 19px; }
 .ime-pane .reply-results-heading span { font-size: 12px; }
-.ime-pane .reply-candidate-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 270px), 1fr)); gap: 16px; }
+.ime-pane .reply-candidate-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 400px), 1fr)); gap: 16px; align-items: start; }
 .ime-pane .reply-candidate { padding: 18px; border: 1px solid #dbe4e9; border-radius: 10px; background: #fbfcfd; }
 .ime-pane .reply-candidate:has(input[type=radio]:checked) { border-color: #7faccc; box-shadow: 0 0 0 1px #7faccc; }
 .reply-candidate h3 { font-size: 16px; margin: 0 0 16px; }
@@ -84,7 +84,7 @@
 .ime-pane .candidate-message-group > label { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; }
 .ime-pane .candidate-message-group > label:has(textarea) { display: grid; }
 .ime-pane .candidate-message-group legend, .ime-pane .candidate-message label { font-size: 12px; }
-.ime-pane .reply-candidate textarea { background: #fff; font-size: 14px; min-height: 120px; }
+.ime-pane .reply-candidate textarea { background: #fff; font-size: 15px; min-height: 76px; }
 .ime-pane .reply-choice { font-size: 15px; font-weight: 600; }
 .ime-pane .reply-generation-guidance { border-radius: 8px; padding: 12px 16px; margin: 12px 0 18px; }
 .ime-pane .ime-footer { min-height: 54px; height: auto; padding: 10px 20px; background: #fff; border-top: 1px solid #dfe6ea; font-size: 12px; flex-wrap: wrap; }
@@ -169,3 +169,20 @@
 .session-browser > summary > span:first-child { display: inline; margin: 0; font-size: 17px; font-weight: 600; color: #2d4657; }
 .session-browser > summary > small { display: block; margin: 6px 0 0 18px; font-size: 12px; font-weight: 400; color: #748590; }
 .session-browser > summary > .session-attention { color: #956238; }
+
+/* 回复正文优先；引用、上下文与技术记录逐层展开。 */
+.evidence-heading, .evidence-item-heading { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
+.evidence-heading > span, .evidence-item-heading > span { color: #526c7d; font-size: 12px; }
+.reply-evidence .evidence-heading h4 { margin: 0; }
+.ime-pane .reply-evidence .evidence-citations article { margin-top: 8px; border: 0; border-left: 3px solid #9ebfcb; border-radius: 0 6px 6px 0; padding: 10px 12px; }
+.ime-pane .reply-evidence .evidence-quote { color: #283f4e; font-size: 14px; line-height: 1.7; overflow-wrap: anywhere; }
+.reply-evidence .record-metadata { padding: 0; margin: 8px 0 0; background: transparent; border: 0; }
+.reply-evidence summary, .candidate-more-actions summary { cursor: pointer; color: #526c7d; line-height: 1.7; font-size: 12px; }
+.evidence-context, .reply-evidence .evidence-technical { margin: 12px 0 0; padding: 10px 0 0; border: 0; border-top: 1px solid #e3e9ed; background: transparent; border-radius: 0; }
+.evidence-citations { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 8px; align-items: start; }
+.evidence-context-list, .evidence-technical-content { max-height: min(360px, 55vh); overflow-y: auto; overscroll-behavior: contain; padding-right: 6px; }
+.evidence-context-list:focus-visible, .evidence-technical-content:focus-visible { outline: 2px solid #669ab6; outline-offset: 2px; }
+.ime-pane .reply-evidence .evidence-context-list article { margin-top: 8px; padding: 10px; }
+.candidate-more-actions { justify-self: start; }
+.candidate-more-actions[open] { width: 100%; }
+.ime-pane .candidate-more-actions button { margin: 8px 8px 0 0; }
