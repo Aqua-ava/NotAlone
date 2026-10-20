@@ -8,6 +8,7 @@ from notalone.reply.errors import (
 from notalone.reply.input_budget import InputBudgetExceededError, InputBudgetUnavailableError
 
 import json
+import psycopg
 import logging
 import secrets
 import threading
@@ -486,6 +487,8 @@ class BackendApp:
                 HTTPStatus.OK,
                 {"contacts": [_contact_payload(contact) for contact in contacts]},
             )
+        if (path_value.startswith("/api/contacts/") or path_value.startswith("/api/owner/")) and "/memory-processing" in path_value:
+            return self._handle_memory_processing(method_upper, path_value, request_body)
         if _is_trace_path(path_value):
             return self._handle_trace(
                 method=method_upper,
@@ -1921,6 +1924,40 @@ class BackendApp:
                 )
             raise MemoryRequestInvalid()
         raise MemoryRequestInvalid()
+
+    def _handle_memory_processing(self, method: str, path: str, body: bytes) -> Response:
+        """仅 GET 投影持久状态；模型处理必须由显式恢复命令唤醒。"""
+        if self._task_service is None:
+            return _json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "memory_processing_unavailable"})
+        try:
+            parts = path.strip("/").split("/")
+            if parts[:2] == ["api", "owner"]:
+                contact_id = None
+                tail = parts[2:]
+            elif parts[:2] == ["api", "contacts"] and len(parts) >= 4:
+                contact_id = UUID(parts[2])
+                tail = parts[3:]
+            else:
+                raise ValueError()
+            if method == "GET" and tail == ["memory-processing"]:
+                result = self._task_service.memory_processing(owner_id=self._owner_id, contact_id=contact_id, host=self._task_host)
+            elif method == "POST" and tail == ["memory-processing", "resume"]:
+                payload = json.loads(body)
+                if not isinstance(payload, dict) or set(payload) != {"task_id", "action"} or payload["action"] not in ("resume", "restart"):
+                    raise ValueError()
+                result = self._task_service.resume_memory_processing(owner_id=self._owner_id, contact_id=contact_id,
+                    task_id=UUID(payload["task_id"]), action=payload["action"], host=self._task_host)
+            else:
+                raise ValueError()
+            return _json_response(HTTPStatus.OK, result)
+        except BackgroundTaskNotFoundError:
+            return _json_response(HTTPStatus.NOT_FOUND, {"error": "memory_processing_not_found"})
+        except BackgroundTaskStateError:
+            return _json_response(HTTPStatus.CONFLICT, {"error": "memory_processing_state_conflict"})
+        except (ValueError, TypeError, AttributeError):
+            return _json_response(HTTPStatus.BAD_REQUEST, {"error": "memory_processing_request_invalid"})
+        except (BackgroundTaskPersistenceError, psycopg.Error, ModelWorkStopped):
+            return _json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "memory_processing_unavailable"})
 
     def _handle_import_task(
         self,

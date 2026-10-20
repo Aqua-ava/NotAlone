@@ -214,11 +214,14 @@ npm run test:pages -- --case memory-reading --case draft-rewrite --timeout-secon
 npm run test:pages -- --case draft-rewrite-acceptance --timeout-seconds 180
 npm run test:pages -- --case draft-rewrite-session --timeout-seconds 120
 npm run test:pages -- --case memory-reading-full --case memory-stale-full --timeout-seconds 240
+npm run test:pages -- --case memory-processing --case memory-reading --timeout-seconds 180
 npm run test:pages -- --case memory-traces-full --case memory-traces-lifecycle --timeout-seconds 180
 npm run test:pages -- --case directed-reply --case draft-rewrite-acceptance --timeout-seconds 300
 npm run test:pages -- --case message-events --timeout-seconds 300
 npm run test:pages -- --status  # 只读租约，不启动浏览器或 Electron
 ```
+
+`memory-processing` 使用隔离 PostgreSQL 与真实任务接口，验证记忆页的中断状态、显式继续、完成计数、刷新后保留结果和联系人切换；模型使用合成响应，不处理用户的真实历史记录。
 
 08 的 `expression-preferences` 页面组验证明确长期保存、当次意图优先、范围切换、同库服务恢复和偏好/来源删除。先指定仓库外700目录 `NOTALONE_PREFERENCE_EVIDENCE_DIR`，执行 `npm run test:pages -- --case expression-preferences --timeout-seconds 180`；runner固定关键模块摘要并核对真实加载来源。本轮页面、Electron与真实模型验证按[08集成任务](../.scratch/memory-skill-integration-preparation/issues/08-expression-preferences.md)分别记录；脚本模型不代表语义质量放行。
 

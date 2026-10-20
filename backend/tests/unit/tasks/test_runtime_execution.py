@@ -125,8 +125,11 @@ class RuntimeExecutionTest(unittest.TestCase):
             memory_port=InMemoryMemoryStore(), owner_memory_port=RecordingOwnerPort(),
             ledger=InMemoryOutboundLedger(), watermark_port=RecordingWatermark(), trace_store=traces,
         )
-        with patch("notalone.memory_extraction.cli_support.load_contact_messages", return_value=(message,)):
+        with patch("notalone.memory_extraction.cli_support.load_contact_messages", return_value=(message,)), \
+                patch("notalone.persistence.memory_processing.PostgresMemoryProcessingStore.targets",
+                      return_value=((message.message_id,), (message.message_id,), 1)) as targets:
             result = runner.run(scope=scope, task_id=task_id, extraction_runtime_config=config)
+        targets.assert_called_once_with(owner_id=scope.owner_id, contact_id=scope.contact_id, task_id=task_id)
 
         self.assertEqual(result.processed_messages, 1)
         self.assertEqual(windows[0].messages, (message,))
@@ -135,7 +138,7 @@ class RuntimeExecutionTest(unittest.TestCase):
                     if "task_runtime" in event["payload"]]
         self.assertTrue(metadata)
         self.assertTrue(all(item == {"task_id": str(task_id), "mode": "legacy", "config_version": 1,
-                                    "rule_set_sha256": None} for item in metadata))
+                                    "rule_set_sha256": None, "lease_generation": 1} for item in metadata))
 
     def test_worker_command_commits_selected_config_inside_global_lock_before_claim(self) -> None:
         events = []

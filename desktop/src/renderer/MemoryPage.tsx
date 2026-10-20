@@ -1,3 +1,4 @@
+import { MemoryProcessingCard } from './MemoryProcessingCard';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { ActiveMemory, MemoryAdditionRequest, MemoryContent, MemoryCorrectionRequest, MemoryEvent, MemoryHistoryState, MemoryOverviewState, MemoryReadingState, MemorySection, MemorySectionName, MemorySource, MemoryVersion, OwnerFactsPreferencesOverview, PendingMemoryCandidate } from '../shared/memory-bridge';
 import type { ContactSessionView } from './contact-session';
@@ -604,6 +605,11 @@ export function MemoryPage({ session, navigate }: { session: ContactSessionView;
         onClick={() => void memory.refresh()}>刷新记忆</button></div>}
     </div>
     <div className="memory-view-content" key={`${scopeKey}:${view}`}>
+    {(view === 'owner' || contact) && <MemoryProcessingCard request={view === 'owner' ? { scope: 'owner' }
+      : { scope: 'contact', contactId: contact!.contactId, scopeRevision: session.state.scopeRevision }}
+      contactNames={Object.fromEntries(session.state.contacts.map(contact => [contact.contactId, contact.displayName]))} organization={state.layeredMemory}
+      onProgress={() => window.notalone.memory.refreshProcessingResults(view === 'owner' ? { scope: 'owner' }
+        : { scope: 'contact', contactId: contact!.contactId, scopeRevision: session.state.scopeRevision })} />}
     {view === 'owner' && <OwnerLayeredMemoryPanel onFacts={contact ? revealFacts : undefined} />}
     {!contact ? view === 'owner' ? null : <section className="memory-no-contact" aria-label="资料范围未确认"><h2>先确认本次联系人</h2>
       <p>选择联系人后，查看该范围的关系记忆、待确认候选与来源，以及当前本人的共享资料。</p>

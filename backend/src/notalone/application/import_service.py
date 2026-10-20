@@ -295,6 +295,19 @@ class TaskHost:
                 self._connections.pop(id(connection), None)
         self._stop_complete.set()
 
+    def processing_state(self, *, owner_id: UUID, contact_id: UUID, task_id: UUID) -> str | None:
+        """只读当前进程确实持有的任务登记，不用历史进度冒充执行者。"""
+        with self._lock:
+            scope = (owner_id, contact_id)
+            thread = self._threads.get(scope)
+            if thread is None or not thread.is_alive():
+                return None
+            if scope in self._active and self._active[scope] in (None, task_id):
+                return "active"
+            if task_id in self._pending.get(scope, {}) or None in self._pending.get(scope, {}):
+                return "queued"
+            return None
+
     def current(self, *, owner_id: UUID, contact_id: UUID) -> dict[str, object]:
         """返回当前进度快照；无任务时返回 idle。"""
 

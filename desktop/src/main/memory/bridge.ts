@@ -1,3 +1,4 @@
+import { MemoryProcessingController, processingArguments, processingResumeArguments } from './processing';
 import { OwnerLayeredMemoryController } from './owner-layered';
 import { noArguments, type PageCommands } from '../page-commands';
 import type { LayeredMemoryManagementRequest, OwnerLayeredMemoryManagementRequest, MemoryAdditionRequest, MemoryCandidateRequest, MemoryCandidateUpdateRequest, MemoryCorrectionRequest, MemoryReadRequest, MemoryRemovalRequest, MemorySectionName } from '../../shared/memory-bridge';
@@ -23,7 +24,20 @@ function requestArguments(args: unknown[]): MemoryReadRequest {
 }
 export function installMemoryBridge(commands: PageCommands, backend: BackendHost, contacts: ContactSession): MemoryReadingController {
   const memory = new MemoryReadingController(backend, contacts);
+  const processing = new MemoryProcessingController(backend, contacts);
+  backend.onStateChanged(() => processing.synchronize());
+  let processingScopeRevision = contacts.getState().scopeRevision;
+  contacts.onStateChanged(state => {
+    if (state.scopeRevision !== processingScopeRevision) { processingScopeRevision = state.scopeRevision; processing.synchronize(true); }
+  });
+  commands.handle('memory:resume-processing', (...args: unknown[]) => processing.resume(processingResumeArguments(args)), 'manager');
+  commands.handle('memory:read-processing', (...args: unknown[]) => processing.read(processingArguments(args)), 'manager');
+  commands.handle('memory:cancel-processing-read', (...args: unknown[]) => processing.cancel(processingArguments(args)), 'manager');
   const owner = new OwnerLayeredMemoryController(backend, state => commands.publish('memory:owner-layered-changed', state, 'manager'), phase => memory.ownerFactsChanged(phase), phase => memory.ownerLayeredContextChanged(phase));
+  commands.handle('memory:refresh-processing-results', (...args: unknown[]) => {
+    const request = processingArguments(args);
+    return request.scope === 'owner' ? Promise.all([owner.refreshProcessingResults(), memory.refreshOwnerProcessingResults()]).then(() => {}) : memory.refreshProcessingResults(request);
+  }, 'manager');
   backend.onStateChanged(() => owner.synchronize());
   memory.onRecordDeletion((phase, origin) => {
     if (origin !== 'owner-facts') owner.sourceDeletionChanged(phase);

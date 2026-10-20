@@ -120,12 +120,16 @@ def run_extraction(
     task_id: UUID | None = None,
     extraction_runtime_config: ExtractionRuntimeConfig | None = None,
     automatic: bool = True,
+    task_lease_generation: int | None = None,
+    target_message_ids: tuple[UUID, ...] | None = None,
 ) -> ExtractionRunStats:
     """按水位分批串行提取并采纳；输出不可用的批次连续失败后跳过。"""
 
     task_metadata = _task_runtime_metadata(
         task_id, extraction_runtime_config, verification_runtime,
     )
+    if task_lease_generation is not None and task_id is not None:
+        task_metadata["task_runtime"]["lease_generation"] = task_lease_generation
     if (
         not isinstance(batch_size, int)
         or not 0 < batch_size <= EXTRACTION_BATCH_SIZE
@@ -160,6 +164,10 @@ def run_extraction(
     else:
         start = 0
     pending_messages = messages[start:]
+    if target_message_ids is not None:
+        target_set = frozenset(target_message_ids)
+        pending_messages = tuple(message for message in messages if message.message_id in target_set)
+    message_positions = {message.message_id: index for index, message in enumerate(messages)}
 
     if trace_store is None:
         from notalone.memory.adapters import InMemoryMemoryStore
@@ -245,14 +253,15 @@ def run_extraction(
         window_started_at = datetime.now(timezone.utc)
         batch = pending_messages[offset : offset + batch_size]
         processed_messages += len(batch)
-        absolute_start = start + offset
-        absolute_end = absolute_start + len(batch)
+        absolute_start = message_positions[batch[0].message_id]
+        absolute_end = message_positions[batch[-1].message_id] + 1
         context_start = max(0, absolute_start - context_before)
         context_end = min(len(messages), absolute_end + context_after)
         window = ExtractionWindow(
             owner_id=scope.owner_id,
             contact_id=scope.contact_id,
-            messages=tuple(messages[context_start:context_end]),
+            messages=(tuple(messages[context_start:absolute_start]) + tuple(batch)
+                      + tuple(messages[absolute_end:context_end])),
             target_message_ids=tuple(message.message_id for message in batch),
         )
         window_payload = {
@@ -265,7 +274,7 @@ def run_extraction(
                         if message.message_id in window.target_message_id_set
                         else (
                             "context_before"
-                            if context_start + index < absolute_start
+                            if index < absolute_start - context_start
                             else "context_after"
                         )
                     ),

@@ -63,7 +63,7 @@ class RecoverableModel(ScriptedCoreModel):
         return super()._generate(messages, stop, run_manager, **kwargs)
 
 
-class FailedTaskRecoveryHttpTest(unittest.TestCase):
+class TaskRecoveryHttpFixture(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.database_name = f"notalone_task_recovery_{uuid4().hex}_test"
@@ -79,7 +79,7 @@ class FailedTaskRecoveryHttpTest(unittest.TestCase):
                     "NOTALONE_DATABASE_URL": cls.database_url})
         migration = subprocess.run(
             [sys.executable, "-m", "notalone.database_migrations", "--migrations",
-             str(ROOT / "database/migrations")],
+             str(getattr(cls, "migrations_directory", ROOT / "database/migrations"))],
             cwd=ROOT, env=env, text=True, capture_output=True, timeout=60,
         )
         if migration.returncode:
@@ -233,6 +233,7 @@ class FailedTaskRecoveryHttpTest(unittest.TestCase):
         self.assertEqual(host["status"], "finished", host)
         return imported
 
+class FailedTaskRecoveryHttpTest(TaskRecoveryHttpFixture):
     def test_http_recovers_original_failed_task_and_skips_successful_steps(self) -> None:
         imported = self._fail_import()
         original = self._task(imported)

@@ -57,6 +57,10 @@ class PostgresBackgroundTaskRepository:
             raise ValueError("database_url 不能为空。")
         self._database_url = database_url
 
+    @property
+    def database_url(self) -> str:
+        return self._database_url
+
     @staticmethod
     def create_import_task(
         connection: psycopg.Connection[Any],
@@ -284,9 +288,28 @@ class PostgresBackgroundTaskRepository:
                         (owner_id, contact_id),
                     ).fetchone()
                     return task[0] if task else None
+                previous_task = connection.execute(
+                    "SELECT status FROM public.background_task WHERE owner_id=%s AND contact_id=%s AND task_type='observation'",
+                    (owner_id, contact_id),
+                ).fetchone()
+                legacy_pending = previous_task is not None and previous_task[0] not in {"succeeded", "cancelled"}
+                if previous_task is not None and previous_task[0] == "cancelled":
+                    # 新观察建立新一轮；已主动取消的旧目标不随新消息重新开启。
+                    connection.execute(
+                        "DELETE FROM public.memory_processing_plan p USING public.background_task t "
+                        "WHERE p.task_id=t.id AND t.owner_id=%s AND t.contact_id=%s "
+                        "AND t.task_type='observation' AND t.status='cancelled'",
+                        (owner_id, contact_id),
+                    )
                 task_id = self.create_observation_task(
                     connection, owner_id=owner_id, contact_id=contact_id,
                     message_count=observation[1],
+                )
+                from notalone.persistence.memory_processing import enroll_observation_targets
+                enroll_observation_targets(
+                    connection, owner_id=owner_id, contact_id=contact_id,
+                    task_id=task_id, observation_id=observation[0],
+                    include_legacy_pending=legacy_pending,
                 )
                 connection.execute(
                     # 取实际登记时刻；事务可能在等待联系人锁之前已经开始。

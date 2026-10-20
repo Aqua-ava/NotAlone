@@ -51,18 +51,24 @@ export class OwnerLayeredMemoryController {
     } catch { if (this.operation === operation) this.update({ phase: 'error', value: null }); }
     finally { if (this.operation === operation) this.operation = undefined; }
   }
-  async readFacts() {
+  async refreshProcessingResults() {
+    if (this.factsRequested && this.state.memories?.phase === 'ready' && !this.factsOperation && this.state.mutation.phase !== 'working' && !this.deleting) await this.readFacts(true);
+  }
+  async readFacts(background = false) {
     this.synchronize();
     if (this.generation === undefined || this.deleting || this.state.mutation.phase === 'working') throw new Error('本人底层资料暂不可读取。');
     this.factsRequested = true; this.factsOperation?.abort();
     const operation = new AbortController(), generation = this.generation; this.factsOperation = operation;
-    this.update({ memories: { phase: 'loading', items: [] } });
+    if (!background) this.update({ memories: { phase: 'loading', items: [] } });
     try {
       const result = await this.backend.requestJson({ method: 'GET', path: '/api/memories/owner', signal: operation.signal });
       this.synchronize();
       if (this.factsOperation !== operation || result.generation !== generation) return;
       this.update({ memories: { phase: 'ready', items: activeMemories(result.data, 'owner', null) } });
-    } catch { if (this.factsOperation === operation) this.update({ memories: { phase: 'error', items: [] } }); }
+    } catch {
+      if (background) throw new Error('本人记忆内容暂未刷新。');
+      if (this.factsOperation === operation) this.update({ memories: { phase: 'error', items: [] } });
+    }
     finally { if (this.factsOperation === operation) this.factsOperation = undefined; }
   }
   async changeFact(action: 'correct' | 'delete', request: { memoryId: string; revision: number; text?: string; category?: MemoryAdditionRequest['category']; changeKind?: 'error_correction' | 'state_changed' }) {

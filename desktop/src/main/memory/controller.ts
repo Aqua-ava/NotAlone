@@ -123,6 +123,22 @@ export class MemoryReadingController {
     this.scope = next;
     this.publish({ contactId: next?.contactId ?? null, scopeRevision: contact.scopeRevision, mutation: { phase: 'idle', message: '' }, ...empty() });
   }
+  async refreshOwnerProcessingResults(): Promise<void> {
+    this.synchronizeScope();
+    const scope = this.scope;
+    if (scope && !this.mutation && !this.sourceDeletionDepth && this.state.owner.phase === 'ready' && !this.operations.has('owner')) {
+      if (!await this.readSection('owner', scope, false, true)) throw new Error('本人记忆内容暂未刷新。');
+    }
+  }
+  async refreshProcessingResults(request: ContactSelection): Promise<void> {
+    this.synchronizeScope();
+    const scope = this.scope;
+    if (!scope || request.contactId !== scope.contactId || request.scopeRevision !== scope.scopeRevision) throw new Error('资料范围已变化。');
+    if (this.mutation || this.sourceDeletionDepth) return;
+    const refreshed = await Promise.all(sections.filter(section => this.state[section].phase === 'ready' && !this.operations.has(section))
+      .map(section => this.readSection(section, scope, false, true)));
+    if (refreshed.some(success => !success)) throw new Error('记忆内容暂未刷新。');
+  }
   async refresh(request: MemoryReadRequest): Promise<void> {
     this.synchronizeScope();
     const scope = this.scope;
@@ -562,14 +578,14 @@ export class MemoryReadingController {
       if (sections.includes('owner')) await this.ownerLayeredContextChanged('settled');
     }
   }
-  private async readSection(section: MemorySectionName, scope: Scope, afterWrite = false): Promise<boolean> {
+  private async readSection(section: MemorySectionName, scope: Scope, afterWrite = false, background = false): Promise<boolean> {
     if (section === 'owner') this.ownerRequested = true;
     if (section === 'owner' && this.ownerFactsWriteDepth) return false;
     if (!afterWrite && this.protectedReads?.scope === scope && this.protectedReads.sections.has(section)) return false;
     this.operations.get(section)?.abort.abort();
     const operation = { revision: ++this.operationRevision, abort: new AbortController() };
     this.operations.set(section, operation);
-    this.publish({ [section]: { phase: 'loading', items: [] } });
+    if (!background) this.publish({ [section]: { phase: 'loading', items: [] } });
     const current = () => {
       this.synchronizeScope();
       return this.scope === scope && this.operations.get(section)?.revision === operation.revision;
@@ -588,7 +604,7 @@ export class MemoryReadingController {
       }
       return true;
     } catch {
-      if (current()) this.publish({ [section]: { phase: 'error', items: [] } });
+      if (current() && !background) this.publish({ [section]: { phase: 'error', items: [] } });
       return false;
     } finally {
       if (this.operations.get(section)?.revision === operation.revision) this.operations.delete(section);

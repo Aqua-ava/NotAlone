@@ -1,9 +1,14 @@
+import type { MemoryProcessingRequest, MemoryProcessingResumeRequest } from '../shared/memory-processing';
 import type { PageTransport } from './transport';
 import type { ContactSelection } from '../shared/contact-session-bridge';
 import type { LayeredMemoryReadRequest, LayeredMemoryManagementRequest, MemoryAdditionRequest, MemoryCandidateRequest, MemoryCandidateUpdateRequest, MemoryBridge, OwnerLayeredMemoryManagementRequest, OwnerLayeredMemoryState, MemoryCorrectionRequest, MemoryReadRequest, MemoryReadingState, MemoryRemovalRequest } from '../shared/memory-bridge';
 
 export function createMemoryBridge(ipcRenderer: PageTransport): MemoryBridge {
   return Object.freeze({
+    refreshProcessingResults: (...args: [MemoryProcessingRequest]) => args.length === 1 ? ipcRenderer.invoke('memory:refresh-processing-results', args[0]) : Promise.reject(new Error('记忆结果读取不可用。')),
+    resumeProcessing: (...args: [MemoryProcessingResumeRequest]) => args.length === 1 ? ipcRenderer.invoke('memory:resume-processing', args[0]) : Promise.reject(new Error('记忆任务操作不可用。')),
+    readProcessing: (...args: [MemoryProcessingRequest]) => args.length === 1 ? ipcRenderer.invoke('memory:read-processing', args[0]) : Promise.reject(new Error('记忆进度读取不可用。')),
+    cancelProcessingRead: (...args: [MemoryProcessingRequest]) => args.length === 1 ? ipcRenderer.invoke('memory:cancel-processing-read', args[0]) : Promise.reject(new Error('记忆进度读取不可用。')),
     readOwnerMemories: (...args: unknown[]) => args.length === 0 ? ipcRenderer.invoke('memory:read-owner-facts') : Promise.reject(new Error('本人资料读取不可用。')),
     correctOwnerMemory: (...args: [Pick<MemoryCorrectionRequest, 'memoryId' | 'revision' | 'text' | 'category'>]) => args.length === 1 ? ipcRenderer.invoke('memory:correct-owner-fact', args[0]) : Promise.reject(new Error('本人资料修正不可用。')),
     deleteOwnerMemory: (...args: [Pick<MemoryRemovalRequest, 'memoryId' | 'revision'>]) => args.length === 1 ? ipcRenderer.invoke('memory:delete-owner-fact', args[0]) : Promise.reject(new Error('本人资料删除不可用。')),

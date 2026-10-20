@@ -194,6 +194,7 @@ class BoundedStageProfileTest(unittest.TestCase):
         runner._runtime = priority
         runner._verification_runtime.for_mode.return_value.verification_mode = "nullable-proof-v3"
         with patch("notalone.memory_extraction.cli_support.load_contact_messages", return_value=()), \
+                patch("notalone.persistence.memory_processing.PostgresMemoryProcessingStore.targets", return_value=((), (), 1)), \
                 patch("notalone.tasks.worker.run_extraction") as run:
             runner.run(scope=ContactScope(uuid4(), uuid4()), task_id=uuid4(), extraction_runtime_config=config)
         selected = run.call_args.kwargs["runtime"]
