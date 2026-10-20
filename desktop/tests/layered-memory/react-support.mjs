@@ -41,6 +41,6 @@ export async function selectLayeredMemory(page, owner = false) {
     .getByRole('button', { name: owner ? '我' : '对方', exact: true }).click();
   const overview = page.locator('summary').filter({ hasText: /^查看摘要$/ });
   if (await overview.locator('..').getAttribute('open') === null) await overview.click();
-  const summary = page.locator('summary').filter({ hasText: /^整理设置与状态$/ });
+  const summary = page.locator('summary').filter({ hasText: /^整理管理$/ });
   if (await summary.locator('..').getAttribute('open') === null) await summary.click();
 }

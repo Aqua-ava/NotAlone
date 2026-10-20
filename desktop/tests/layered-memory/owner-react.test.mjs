@@ -35,7 +35,7 @@ test('本人入口直接展示实际记忆，摘要与技术详情按需读取�
     await page.getByText('本人资料已保存，请核对整理状态。', { exact: true }).waitFor();
     assert.equal(requests.find(request => request.path.endsWith('/correct')).body.category, 'preference');
     await page.getByText('查看摘要', { exact: true }).click();
-    await page.getByText('整理设置与状态', { exact: true }).waitFor();
+    await page.getByText('整理管理', { exact: true }).waitFor();
     assert.equal(requests.some(request => request.path === '/api/memories/owner/layered-memory'), true);
   });
 });
@@ -51,7 +51,7 @@ test('无联系人也可读取本人的空记忆列表，默认不展示摘要�
     await page.getByRole('navigation', { name: '记忆分类' }).getByRole('button', { name: '我', exact: true }).click();
     await page.getByText('还没有记住关于你的事。', { exact: true }).waitFor();
     assert.equal(await page.getByRole('heading', { name: '我的记忆', exact: true }).count(), 1);
-    assert.equal(await page.getByText('整理设置与状态', { exact: true }).count(), 0);
+    assert.equal(await page.getByText('整理管理', { exact: true }).count(), 0);
     assert.equal(requests.filter(request => request.path === '/api/memories/owner').length, 1);
     assert.equal(requests.some(request => request.path.includes('/layered-memory')), false);
     await page.locator('summary').filter({ hasText: /^＋ 补充一条$/ }).click();
@@ -78,7 +78,7 @@ test('无联系人可通过当前React页面确认本人范围、停用及删除
     await page.getByRole('checkbox', { name: /确认仅整理本人的/ }).check();
     await page.getByRole('button', { name: '确认范围并开启' }).click();
     await page.getByText('已开启范围，质量资格待核验', { exact: true }).waitFor();
-    await page.getByRole('button', { name: '停用主题资料' }).click();
+    await page.getByRole('button', { name: '停用' }).click();
     await page.getByRole('checkbox', { name: /确认仅整理本人的/ }).waitFor();
     await page.getByRole('button', { name: '删除整理结果', exact: true }).click();
     await page.getByRole('button', { name: '确认删除整理结果' }).click();

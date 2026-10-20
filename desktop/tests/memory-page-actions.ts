@@ -12,7 +12,7 @@ export async function selectMemoryCategory(page: Page, category: MemoryCategory)
   await button.click();
   await expect(button).toHaveAttribute('aria-pressed', 'true');
   const detail = ['联系人概览', '本人概览'].includes(category) ? '版本历史'
-      : ['主题资料', '本人主题资料'].includes(category) ? '整理设置与状态' : null;
+      : ['主题资料', '本人主题资料'].includes(category) ? '整理管理' : null;
   if (['主题资料', '本人主题资料'].includes(category)) await expandMemorySection(page, '查看摘要');
   if (detail) await expandMemorySection(page, detail);
 }

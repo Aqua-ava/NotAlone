@@ -74,6 +74,7 @@
 .memory-disclosure[open] > summary { border-bottom: 1px solid #dce1d8; }
 .memory-disclosure > .memory-section { border: 0; background: transparent; }
 .memory-disclosure > .memory-section-note { margin: 16px 20px; }
+.memory-organization-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .memory-organization-settings { margin: 14px 0 20px; }
 .memory-empty { padding: 22px 0; color: #737e80; font-size: 13px; line-height: 1.9; }
 

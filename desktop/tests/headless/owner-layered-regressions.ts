@@ -53,7 +53,7 @@ export async function ownerLayeredRegressions(browser: Browser, origin: string) 
       await layered.getByRole('checkbox', { name: /确认仅整理本人的/ }).check();
       await layered.getByRole('button', { name: '确认范围并开启', exact: true }).click();
       await expect(layered.locator('.memory-overview-entries').getByText(recentText, { exact: true })).toBeVisible({ timeout: 20000 });
-      await expect(layered.getByText('合格资料 1 条 · 已覆盖 1 条 · 剩余 0 条', { exact: true })).toBeVisible();
+      await expect(layered.getByText('已整理 1 / 1 条记忆', { exact: true })).toBeVisible();
       const current = await fixture.request('/api/memories/owner/layered-memory');
       expect(current.status).toBe(200);
       expect(current.data.layered_memory).toMatchObject({ scope_kind: 'owner', contact_id: null, eligible_count: 1, covered_count: 1, remaining_count: 0 });

@@ -33,9 +33,9 @@ export async function ownerLayeredMemory(browser: Browser, origin: string) {
       await panel.getByRole('button', { name: '撤回本版主题资料：合成学习记录', exact: true }).click();
       await expect(panel.locator('.memory-overview-entries .memory-text')).toHaveCount(0);
       await expect(profile.getByText('暂无可展示的长期背景。', { exact: true })).toBeVisible();
-      await panel.getByRole('button', { name: '重新读取主题资料', exact: true }).click();
+      await panel.getByRole('button', { name: '更新状态', exact: true }).click();
       await expect(panel.locator('.memory-overview-entries .memory-text')).toHaveCount(0);
-      await panel.getByRole('button', { name: '停用主题资料', exact: true }).click();
+      await panel.getByRole('button', { name: '停用', exact: true }).click();
       await panel.getByRole('button', { name: '删除整理结果', exact: true }).click();
       await panel.getByRole('button', { name: '确认删除整理结果', exact: true }).click();
       await expect(panel.getByText('本范围已关闭', { exact: false })).toBeVisible();
