@@ -30,7 +30,7 @@ class EventBackpressureTest(unittest.TestCase):
         reconnected = bus.subscribe(owner_id=SCOPE.owner_id)
         self.assertIsNone(reconnected.read(timeout=0))
 
-    def test_reconnect_preserves_each_task_latest_state_and_publish_order(self) -> None:
+    def test_bounded_replay_keeps_distinct_task_states_in_order_and_owner_scope(self) -> None:
         bus = EventBus()
         self.addCleanup(bus.close)
         expected = []
@@ -49,8 +49,9 @@ class EventBackpressureTest(unittest.TestCase):
         stream = bus.subscribe(owner_id=SCOPE.owner_id, last_event_id=expected[0].event_id)
         live = BackendEvent.message_created(scope=SCOPE, occurred_at=NOW, message_id=UUID(int=500))
         bus.publish(live)
-        self.assertEqual([stream.read(timeout=0) for _ in expected], expected)
+        self.assertEqual([stream.read(timeout=0) for _ in range(256)], expected[-256:])
         self.assertIs(stream.read(timeout=0), live)
+        self.assertIsNone(stream.read(timeout=0))
         self.assertFalse(stream.closed)
 
     def test_close_releases_backlog_and_wakes_blocked_reader(self) -> None:

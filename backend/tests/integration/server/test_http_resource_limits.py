@@ -17,10 +17,23 @@ from notalone.server.event_models import BackendEvent
 from notalone.server.sse import encode_sse_frame
 
 
+class SyntheticTasks:
+    def __init__(self) -> None:
+        self.states = {}
+        self.read_ids = set()
+
+    def status(self, *, owner_id, contact_id, task_id):
+        if owner_id != UUID(int=1) or contact_id != UUID(int=2):
+            raise AssertionError("任务只能在合成 owner/contact 范围读取")
+        self.read_ids.add(task_id)
+        return self.states[task_id]
+
+
 class HttpResourceLimitsTest(unittest.TestCase):
     def setUp(self) -> None:
+        self.tasks = SyntheticTasks()
         self.app = BackendApp(contact_directory=None, events=EventBus(),
-                              owner_id=UUID(int=1), token="synthetic-token")
+                              owner_id=UUID(int=1), token="synthetic-token", task_service=self.tasks)
         self.server = BackendServer(self.app, port=0, request_limits=HttpRequestLimits(
             header_seconds=0.2, body_seconds=0.2, write_seconds=1, max_connections=4))
         self.address = self.server.start()
@@ -117,6 +130,16 @@ class HttpResourceLimitsTest(unittest.TestCase):
         self.assertEqual(response.status, 404)
 
     def test_shutdown_closes_partial_header_body_and_idle_sse_connections(self) -> None:
+        # 用长预算排除“刚好靠超时退出”的假阳性，验证主动关闭活动连接。
+        self.server.shutdown()
+        self.thread.join(timeout=2)
+        self.app = BackendApp(contact_directory=None, events=EventBus(),
+                              owner_id=UUID(int=1), token="synthetic-token")
+        self.server = BackendServer(self.app, port=0, request_limits=HttpRequestLimits(
+            header_seconds=10, body_seconds=10, write_seconds=1, max_connections=4))
+        self.address = self.server.start()
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
         header = self.connect()
         header.sendall(b"GET /api/events HTTP/1.0\r\nX-Synthetic: ")
         body = self.connect()
@@ -188,4 +211,31 @@ class HttpResourceLimitsTest(unittest.TestCase):
                 release.set()
             data = response.read()
         self.assertEqual(data, encode_sse_frame(first))
+
+    def test_bounded_replay_does_not_replace_authoritative_individual_task_reads(self) -> None:
+        scope = ContactScope(UUID(int=1), UUID(int=2))
+        for index in range(300):
+            task_id = UUID(int=index + 3)
+            self.tasks.states[task_id] = {"task_id": str(task_id), "status": "failed"}
+            self.app.events.publish(BackendEvent.task_progress(
+                scope=scope, occurred_at=datetime(2026, 10, 21, tzinfo=timezone.utc),
+                task_id=task_id, step="extract_memory", status="failed", processed_count=index,
+                attempt_count=1, retry_count=0, error_code="synthetic_failure"))
+        stream = self.app.events.subscribe(owner_id=scope.owner_id)
+        snapshots = []
+        while (event := stream.read(timeout=0)) is not None:
+            snapshots.append(event)
+        stream.close()
+        self.assertEqual(len(snapshots), 256)
+        self.assertEqual(len({event.payload.task_id for event in snapshots}), 256)
+        # 即使某任务已不在 SSE 提示缓存，其原状态接口仍逐项返回权威值。
+        connection = http.client.HTTPConnection(*self.address, timeout=0.5)
+        self.addCleanup(connection.close)
+        for task_id, expected in self.tasks.states.items():
+            connection.request("GET", f"/api/tasks/status?contact_id={scope.contact_id}&task_id={task_id}",
+                               headers={"Authorization": "Bearer synthetic-token"})
+            response = connection.getresponse()
+            self.assertEqual(response.status, 200)
+            self.assertEqual(json.loads(response.read()), expected)
+        self.assertEqual(self.tasks.read_ids, set(self.tasks.states))
 

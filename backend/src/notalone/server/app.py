@@ -2528,6 +2528,7 @@ class BackendApp:
                 "Content-Type": "text/event-stream",
                 "Cache-Control": "no-cache",
                 "Connection": "keep-alive",
+                "X-NotAlone-Event-Replay": "bounded-hints",
             },
             subscription=self._events.subscribe(
                 owner_id=self._owner_id,
