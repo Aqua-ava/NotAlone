@@ -9,6 +9,52 @@ function otherResponse(request) {
     : request.path.endsWith('/memory-candidates') ? { candidates: [] } : { memories: [] };
 }
 
+test('自动查询期间按钮保持稳定，继续等待当前查询结束且不重复提交', { timeout: 20000 }, async t => {
+  const pollStarted = Promise.withResolvers(), pollResult = Promise.withResolvers();
+  const resumeStarted = Promise.withResolvers(), resumeResult = Promise.withResolvers();
+  const writes = []; let reads = 0, resumed = false;
+  const f = await fixture(async request => {
+    if (request.path.includes('/memory-processing')) {
+      if (request.method === 'POST') {
+        writes.push(request.body); resumeStarted.resolve();
+        await resumeResult.promise; resumed = true;
+        return { generation: 1, data: { task_id: ids.other, status: 'queued' } };
+      }
+      if (++reads === 2) { pollStarted.resolve(); await pollResult.promise; }
+      const result = processingPayload({ status: 'extracting', action: null, reason_code: null, processed_count: reads > 1 ? 40 : 20 });
+      result.tasks.push({ ...result.tasks[0], task_id: ids.other, task_type: 'observation',
+        status: resumed ? 'queued' : 'interrupted', action: resumed ? null : 'resume',
+        reason_code: resumed ? null : 'execution_interrupted' });
+      return { generation: 1, data: result };
+    }
+    return { generation: 1, data: otherResponse(request) };
+  });
+  try {
+    await withMemoryPage(f, t.signal, async page => {
+      const card = page.getByRole('region', { name: '记忆处理状态' });
+      await card.getByText('已处理 20 / 53 条聊天', { exact: true }).waitFor();
+      await card.getByRole('button', { name: '详情', exact: true }).click();
+      await pollStarted.promise;
+      const refresh = card.getByRole('button', { name: '刷新进度', exact: true });
+      const resume = card.getByRole('button', { name: '继续', exact: true });
+      assert.equal(await refresh.isEnabled(), true, '后台查询不应让刷新进度变灰');
+      assert.equal(await resume.isEnabled(), true, '后台查询不应让继续变灰');
+      assert.equal(writes.length, 0);
+      await resume.click();
+      assert.equal(await card.getAttribute('aria-busy'), 'true');
+      assert.equal(await refresh.isEnabled(), false);
+      assert.equal(writes.length, 0, '继续应先等待在途查询，避免旧响应覆盖恢复后的状态');
+      pollResult.resolve();
+      await resumeStarted.promise;
+      assert.equal(await card.getByRole('button', { name: '提交中…', exact: true }).isEnabled(), false);
+      resumeResult.resolve();
+      await card.getByRole('heading', { name: '新聊天 · 等待生成记忆', exact: true }).waitFor();
+      await card.getByText('已处理 40 / 53 条聊天', { exact: true }).first().waitFor();
+      assert.deepEqual(writes, [{ task_id: ids.other, action: 'resume' }]);
+    });
+  } finally { pollResult.resolve(); resumeResult.resolve(); }
+});
+
 test('记忆页默认展示真实中断进度，显式继续并回读，版本历史保持折叠', { timeout: 20000 }, async t => {
   const writes = []; let resumed = false;
   const f = await fixture(async request => {

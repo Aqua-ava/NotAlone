@@ -67,12 +67,12 @@ function MemoryProcessingContent({ request, contactNames, onProgress, children }
     alive.current = true;
     const schedule = () => {
       clearTimeout(timer);
-      if (active && !document.hidden && !busy.current) timer = setTimeout(() => void read(), 2000);
+      if (active && !document.hidden && !busy.current) timer = setTimeout(() => void read(true), 2000);
     };
-    const read = (): Promise<void> => {
+    const read = (silent = false): Promise<void> => {
       if (inFlight) return inFlight;
       if (!active || document.hidden || busy.current) return Promise.resolve();
-      setLoading(true);
+      if (!silent) setLoading(true);
       const operation = (async () => {
         try {
           const next = await window.notalone.memory.readProcessing(request);
@@ -95,7 +95,7 @@ function MemoryProcessingContent({ request, contactNames, onProgress, children }
     const visibility = () => {
       clearTimeout(timer);
       if (document.hidden) void window.notalone.memory.cancelProcessingRead(request).catch(() => {});
-      else void read();
+      else void read(true);
     };
     document.addEventListener('visibilitychange', visibility);
     void read();
@@ -108,6 +108,9 @@ function MemoryProcessingContent({ request, contactNames, onProgress, children }
     if (busy.current || !task.action) return;
     busy.current = true; setWorking(true); setActionError('');
     try {
+      // busy 阻止新查询；先等待已有查询完成，避免旧响应覆盖恢复后的状态。
+      await refresh.current();
+      if (!alive.current) return;
       await window.notalone.memory.resumeProcessing({ ...request, taskId: task.taskId, action: task.action });
     } catch { if (alive.current) setActionError('操作结果未确认，已重新读取状态；请核对后再试。'); }
     finally {
