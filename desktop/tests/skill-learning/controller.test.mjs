@@ -70,8 +70,8 @@ test('待审核目录拒绝缺失私人来源列表及跨联系人范围建议�
     let release;
     backend.requestJson=()=>new Promise(resolve=>{release=resolve;});
     const priorDrafts=controller.getState().drafts;
-    const polling=controller.refresh(scope);
-    assert.equal(controller.getState().phase,'loading');
+    const polling=controller.poll(scope);
+    assert.equal(controller.getState().phase,'ready','后台核验保留已就绪状态，不让开关周期性变灰');
     assert.deepEqual(controller.getState().drafts,priorDrafts,'同修订轮询不能卸载已展开的私人依据卡片');
     release({generation:1,data:structuredClone(valid)});
     await polling;
@@ -134,13 +134,14 @@ test('待审核桥接只接受当前联系人操作，不提供模型发布或�
       scopeRevision: 1, directoryPhase: 'ready', contacts: [{ contactId }] }) };
     const backend = { getConnectionGeneration: () => 1, onStateChanged: () => () => {} };
     installSkillLearningBridge({ handle: (channel, handler, role) => { assert.equal(role, 'manager'); handlers.set(channel, handler); }, publish: () => {} }, backend, contacts);
-    assert.deepEqual([...handlers.keys()], ['skill-learning:get-state', 'skill-learning:refresh', 'skill-learning:configure', 'skill-learning:resume',
+    assert.deepEqual([...handlers.keys()], ['skill-learning:get-state', 'skill-learning:refresh', 'skill-learning:poll', 'skill-learning:configure', 'skill-learning:resume',
       'skill-learning:open-review', 'skill-learning:update-review', 'skill-learning:save-review', 'skill-learning:compare-review',
       'skill-learning:approve-review', 'skill-learning:decide-review', 'skill-learning:retry-review', 'skill-learning:close-review',
       'skill-learning:open-history', 'skill-learning:close-history', 'skill-learning:rollback-history', 'skill-learning:retry-history',
       'skill-learning:open-policies', 'skill-learning:close-policies', 'skill-learning:change-policy', 'skill-learning:undo-policy', 'skill-learning:retry-policy']);
     assert.throws(() => handlers.get('skill-learning:configure')({ contactId, scopeRevision: 1, enabled: true, confirmed: true, owner_id: contactId }));
     assert.throws(() => handlers.get('skill-learning:refresh')({ contactId, scopeRevision: 1, path: '/api/skills/publish' }));
+    assert.throws(() => handlers.get('skill-learning:poll')({ contactId, scopeRevision: 1, path: '/api/skills/publish' }));
   } finally { await rm(owned, { recursive: true, force: true }); }
 });
 

@@ -4,6 +4,7 @@ import type { SkillComparisonSide, SkillDraft, SkillDraftReview, SkillLearningSt
 import { useRevisionedSession } from './use-revisioned-session';
 import { SkillHistoryPanel } from './SkillHistoryPanel';
 import { SkillPolicyPanel } from './SkillPolicyPanel';
+import './skill.css';
 
 const initial: SkillLearningState = { revision: -1, contactId: null, scopeRevision: 0, phase: 'idle', enabled: false, settingRevision: 0,
   drafts: [], task: null, recentOutcomes: [], error: null, review: null, history: null, policies: null };
@@ -16,51 +17,85 @@ export function SkillLearningPage({ session }: { session: ContactSessionView }) 
   const bridge = window.notalone.skillLearning;
   const { state, error, setError } = useRevisionedSession(initial, bridge);
   const { selectedContactId: contactId, scopeRevision } = session.state;
+  const [selection, setSelection] = useState<{ contactId: string; scopeRevision: number; tab: 'installed' | 'pending' } | null>(null);
+  const tab = selection?.contactId === contactId && selection.scopeRevision === scopeRevision ? selection.tab : 'installed';
   const current = contactId !== null && state.contactId === contactId && state.scopeRevision === scopeRevision;
   useEffect(() => {
     if (!contactId) return;
-    const refresh = () => { void bridge.refresh({ contactId, scopeRevision }).catch(() => {}); };
+    const refresh = () => { void bridge.poll({ contactId, scopeRevision }).catch(() => {}); };
     refresh();
     const timer = setInterval(refresh, 3000);
     return () => clearInterval(timer);
   }, [bridge, contactId, scopeRevision]);
-  if (!contactId) return <section className="empty-panel"><h2>请选择联系人</h2><p>经验整理只处理已确认联系人的授权资料。</p></section>;
-  const run = (operation: Promise<void>) => { setError(''); void operation.catch(reason => setError(reason instanceof Error ? reason.message : '审核操作暂不可用。')); };
+  useEffect(() => {
+    if (contactId && current && tab === 'installed' && state.phase === 'ready' && !state.history) {
+      void bridge.openHistory({ contactId, scopeRevision }).catch(() => {});
+    }
+  }, [bridge, contactId, scopeRevision, current, tab, state.phase, state.history, state.review?.phase]);
+  if (!contactId) return <section className="empty-panel"><h2>请选择联系人</h2><p>选择联系人后，可查看适用的已有 Skill 和待审核建议。</p></section>;
+  const run = (operation: Promise<void>) => { setError(''); void operation.catch(reason => setError(reason instanceof Error ? reason.message : 'Skill 操作暂不可用。')); };
   const configure = (enabled: boolean) => bridge.configure({ contactId, scopeRevision, enabled, confirmed: true });
   const review = current ? state.review : null;
   const selected = review && { contactId, scopeRevision, draftId: review.draft.draft_id, expectedRevision: review.draft.revision };
-  return <section aria-label="Skill待审核">
-    <p>开启后，使用已配置模型整理此联系人的助手讨论、使用痕迹、修改及任务相关聊天。纠正优先，普通经验合批；可以没有新方法。</p>
-    <p>后续聊天仅沿实际任务的外部消息锚点，使用同一已确认绑定24小时内的有限观察；时间相邻不证明方法有效或用户已发送。</p>
-    <p>建议保存为独立草稿，尚未审核的内容不会影响回复。方法与私人审核依据分别保存，可随来源或助手会话删除。</p>
-    <div className="button-row">
-      <button className="button" disabled={!current || state.phase !== 'ready'} onClick={() => void configure(!state.enabled).catch(() => {})}>{state.enabled ? '关闭经验整理' : '开启此联系人的经验整理'}</button>
-      <button className="button" onClick={() => void bridge.refresh({ contactId, scopeRevision }).catch(() => {})}>刷新待审核</button>
-      <button className="button" onClick={() => run(bridge.openHistory({ contactId, scopeRevision }))}>查看已发布版本</button>
-      {current && state.enabled && state.task && ['queued', 'failed', 'running', 'verifying'].includes(state.task.status)
-        && <button className="button" onClick={() => void bridge.resume({ contactId, scopeRevision }).catch(() => {})}>继续整理</button>}
+  const selectTab = (next: 'installed' | 'pending') => {
+    setSelection({ contactId, scopeRevision, tab: next });
+    if (next === 'installed' && current) run(bridge.openHistory({ contactId, scopeRevision }));
+  };
+  const pendingCount = current ? state.drafts.length : 0;
+  return <section aria-label="Skill管理">
+    <div className="skill-tabs" role="tablist" aria-label="Skill 分类" onKeyDown={event => {
+      if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+      event.preventDefault();
+      const next = event.key === 'Home' ? 'installed' : event.key === 'End' ? 'pending' : tab === 'installed' ? 'pending' : 'installed';
+      selectTab(next);
+      event.currentTarget.querySelector<HTMLButtonElement>(`#skill-tab-${next}`)?.focus();
+    }}>
+      <button type="button" role="tab" id="skill-tab-installed" aria-controls="skill-panel-installed" aria-selected={tab === 'installed'}
+        tabIndex={tab === 'installed' ? 0 : -1} onClick={() => selectTab('installed')}>已有 Skill</button>
+      <button type="button" role="tab" id="skill-tab-pending" aria-controls="skill-panel-pending" aria-selected={tab === 'pending'}
+        tabIndex={tab === 'pending' ? 0 : -1} onClick={() => selectTab('pending')}>待审核{pendingCount > 0 && ` · ${pendingCount}`}</button>
     </div>
-    {current && <>
-      <p role="status">待审核 {state.drafts.length} 项{state.task && ` · 整理状态：${({ queued: '等待', running: '整理中', verifying: '复核中', succeeded: '已完成', failed: '失败，可重试', cancelled: '已停止' } as Record<string, string>)[state.task.status]}`}</p>
-      {state.recentOutcomes[0] === 'reuse' && <p>本批建议复用已有方法，没有新增草稿。</p>}
-      {state.recentOutcomes[0] === 'no_change' && <p>本批没有值得保存的新方法。</p>}
-      {state.history && <SkillHistoryPanel state={state.history} rollback={(skillId, versionId) => run(bridge.rollbackHistory({ contactId, scopeRevision, skillId, versionId }))}
-        retry={() => run(bridge.retryHistory({ contactId, scopeRevision }))} close={() => run(bridge.closeHistory({ contactId, scopeRevision }))} />}
-      {state.history && <button className="button" onClick={() => run(bridge.openPolicies({ contactId, scopeRevision }))}>管理方法停用</button>}
-      {state.policies && <SkillPolicyPanel key={`${contactId}:${scopeRevision}`} state={state.policies} skills={state.history?.skills ?? []} contactId={contactId}
+    {tab === 'installed' ? <div role="tabpanel" id="skill-panel-installed" aria-labelledby="skill-tab-installed">
+      <p>查看当前联系人适用的已有 Skill、启用状态与版本内容。</p>
+      <div className="button-row">
+        <button className="button" disabled={!current || state.history?.phase === 'loading' || state.history?.phase === 'writing'}
+          onClick={() => run(bridge.openHistory({ contactId, scopeRevision }))}>刷新已有 Skill</button>
+        {current && state.history?.phase === 'ready' && <button className="button"
+          onClick={() => run(bridge.openPolicies({ contactId, scopeRevision }))}>管理方法停用</button>}
+      </div>
+      {current && state.history ? <SkillHistoryPanel state={state.history}
+        rollback={(skillId, versionId) => run(bridge.rollbackHistory({ contactId, scopeRevision, skillId, versionId }))}
+        retry={() => run(bridge.retryHistory({ contactId, scopeRevision }))} /> : <p role="status">正在读取已有 Skill…</p>}
+      {current && state.policies && <SkillPolicyPanel key={`${contactId}:${scopeRevision}`} state={state.policies} skills={state.history?.skills ?? []} contactId={contactId}
         change={target => run(bridge.changePolicy({ contactId, scopeRevision, ...target }))} undo={policyId => run(bridge.undoPolicy({ contactId, scopeRevision, policyId }))}
         retry={() => run(bridge.retryPolicy({ contactId, scopeRevision }))} close={() => run(bridge.closePolicies({ contactId, scopeRevision }))} />}
-      {!review && !state.history && state.drafts.map((draft) => <SkillDraftCard key={draft.draft_id} draft={draft}
-        onReview={() => run(bridge.openReview({ contactId, scopeRevision, draftId: draft.draft_id }))} />)}
-      {review && selected && <SkillReviewPanel key={`${contactId}:${scopeRevision}:${review.draft.draft_id}`} review={review} actions={{
-        update: form => run(bridge.updateReview({ ...selected, form })), save: () => run(bridge.saveReview(selected)),
-        compare: () => run(bridge.compareReview(selected)),
-        approve: () => { if (review.comparison) run(bridge.approveReview({ ...selected, comparisonId: review.comparison.comparison_id, confirmed: true, replacementsConfirmed: true })); },
-        decide: decision => run(bridge.decideReview({ ...selected, decision })), retry: () => run(bridge.retryReview(selected)),
-        close: () => run(bridge.closeReview({ contactId, scopeRevision })),
-        reopen: () => run(bridge.openReview({ contactId, scopeRevision, draftId: review.draft.draft_id })),
-      }} />}
-    </>}
+    </div> : <div role="tabpanel" id="skill-panel-pending" aria-labelledby="skill-tab-pending"><section aria-label="Skill待审核">
+      <p>开启后，使用已配置模型整理此联系人的助手讨论、使用痕迹、修改及任务相关聊天。纠正优先，普通经验合批；可以没有新方法。</p>
+      <p>后续聊天仅沿实际任务的外部消息锚点，使用同一已确认绑定24小时内的有限观察；时间相邻不证明方法有效或用户已发送。</p>
+      <p>建议保存为独立草稿，尚未审核的内容不会影响回复。方法与私人审核依据分别保存，可随来源或助手会话删除。</p>
+      <div className="button-row">
+        <button className="button" disabled={!current || state.phase !== 'ready'} onClick={() => void configure(!state.enabled).catch(() => {})}>{state.enabled ? '关闭经验整理' : '开启此联系人的经验整理'}</button>
+        <button className="button" onClick={() => void bridge.refresh({ contactId, scopeRevision }).catch(() => {})}>刷新待审核</button>
+        {current && state.enabled && state.task && ['queued', 'failed', 'running', 'verifying'].includes(state.task.status)
+          && <button className="button" onClick={() => void bridge.resume({ contactId, scopeRevision }).catch(() => {})}>继续整理</button>}
+      </div>
+      {current && <>
+        <p role="status">待审核 {state.drafts.length} 项{state.task && ` · 整理状态：${({ queued: '等待', running: '整理中', verifying: '复核中', succeeded: '已完成', failed: '失败，可重试', cancelled: '已停止' } as Record<string, string>)[state.task.status]}`}</p>
+        {state.recentOutcomes[0] === 'reuse' && <p>本批建议复用已有方法，没有新增草稿。</p>}
+        {state.recentOutcomes[0] === 'no_change' && <p>本批没有值得保存的新方法。</p>}
+        {!review && state.drafts.length === 0 && <p>暂无待审核建议。</p>}
+        {!review && state.drafts.map(draft => <SkillDraftCard key={draft.draft_id} draft={draft}
+          onReview={() => run(bridge.openReview({ contactId, scopeRevision, draftId: draft.draft_id }))} />)}
+        {review && selected && <SkillReviewPanel key={`${contactId}:${scopeRevision}:${review.draft.draft_id}`} review={review} actions={{
+          update: form => run(bridge.updateReview({ ...selected, form })), save: () => run(bridge.saveReview(selected)),
+          compare: () => run(bridge.compareReview(selected)),
+          approve: () => { if (review.comparison) run(bridge.approveReview({ ...selected, comparisonId: review.comparison.comparison_id, confirmed: true, replacementsConfirmed: true })); },
+          decide: decision => run(bridge.decideReview({ ...selected, decision })), retry: () => run(bridge.retryReview(selected)),
+          close: () => run(bridge.closeReview({ contactId, scopeRevision })),
+          reopen: () => run(bridge.openReview({ contactId, scopeRevision, draftId: review.draft.draft_id })),
+        }} />}
+      </>}
+    </section></div>}
     {state.error && <p role="alert">{state.error}</p>}
     {error && <p role="alert">{error}</p>}
   </section>;

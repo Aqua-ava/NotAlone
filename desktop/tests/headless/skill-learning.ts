@@ -59,7 +59,8 @@ export async function skillLearning(browser: Browser, origin: string, reviewMode
         }, { contactId, afterRevision })).toBe(true);
       };
       await manager.getByRole('button', { name: '选择合成学习甲联系人', exact: true }).click();
-      await manager.getByRole('button', { name: 'Skill 待审核', exact: true }).click();
+      await manager.getByRole('button', { name: 'Skill', exact: true }).click();
+      await manager.getByRole('tab', { name: /^待审核/ }).click();
       let panel = manager.getByRole('region', { name: 'Skill待审核', exact: true });
       await expect(panel.getByRole('button', { name: '开启此联系人的经验整理', exact: true })).toBeEnabled();
       await panel.getByRole('button', { name: '开启此联系人的经验整理', exact: true }).click();
@@ -170,7 +171,8 @@ export async function skillLearning(browser: Browser, origin: string, reviewMode
         await expect(source.getByText('已删除，已通过不可检索校验', { exact: true })).toBeVisible();
         if (queuedTaskId) expect((await manager.evaluate(() => window.notalone.sources.getState()))
           .sources.find(item => item.sourceId === prepared.source_id)!.task!.taskId).toBe(queuedTaskId);
-        await manager.getByRole('button', { name: 'Skill 待审核', exact: true }).click();
+        await manager.getByRole('button', { name: 'Skill', exact: true }).click();
+        await manager.getByRole('tab', { name: /^待审核/ }).click();
         await expectLearningReady(fixture.data.contact_ids[0]);
         expect((await manager.evaluate(() => window.notalone.skillLearning.getState())).review).toBeNull();
         await expect(manager.getByRole('region', { name: 'Skill待审核', exact: true }).getByRole('article')).toHaveCount(0);
@@ -178,12 +180,14 @@ export async function skillLearning(browser: Browser, origin: string, reviewMode
       }
       await manager.getByRole('button', { name: '联系人', exact: true }).click();
       await manager.getByRole('button', { name: '选择合成学习乙联系人', exact: true }).click();
-      await manager.getByRole('button', { name: 'Skill 待审核', exact: true }).click();
+      await manager.getByRole('button', { name: 'Skill', exact: true }).click();
+      await manager.getByRole('tab', { name: /^待审核/ }).click();
       await expectLearningReady(fixture.data.contact_ids[1]);
       await expect(panel.getByRole('article')).toHaveCount(0);
       await manager.getByRole('button', { name: '联系人', exact: true }).click();
       await manager.getByRole('button', { name: '选择合成学习甲联系人', exact: true }).click();
-      await manager.getByRole('button', { name: 'Skill 待审核', exact: true }).click();
+      await manager.getByRole('button', { name: 'Skill', exact: true }).click();
+      await manager.getByRole('tab', { name: /^待审核/ }).click();
       await expectLearningReady(fixture.data.contact_ids[0]);
       await expect(panel.getByRole('article')).toHaveCount(1);
 
@@ -193,7 +197,8 @@ export async function skillLearning(browser: Browser, origin: string, reviewMode
       await host.backend.connect();
       manager = await host.open('manager');
       await manager.getByRole('button', { name: '选择合成学习甲联系人', exact: true }).click();
-      await manager.getByRole('button', { name: 'Skill 待审核', exact: true }).click();
+      await manager.getByRole('button', { name: 'Skill', exact: true }).click();
+      await manager.getByRole('tab', { name: /^待审核/ }).click();
       panel = manager.getByRole('region', { name: 'Skill待审核', exact: true });
       await expectLearningReady(fixture.data.contact_ids[0]);
       await expect(panel.getByRole('article')).toHaveCount(1);
@@ -206,7 +211,8 @@ export async function skillLearning(browser: Browser, origin: string, reviewMode
       await manager.getByRole('button', { name: '确认删除来源', exact: true }).click();
       await expect(source.getByText('已删除，已通过不可检索校验', { exact: true })).toBeVisible();
       const beforeDeletedRead = await manager.evaluate(() => window.notalone.skillLearning.getState());
-      await manager.getByRole('button', { name: 'Skill 待审核', exact: true }).click();
+      await manager.getByRole('button', { name: 'Skill', exact: true }).click();
+      await manager.getByRole('tab', { name: /^待审核/ }).click();
       await expectLearningReady(fixture.data.contact_ids[0], beforeDeletedRead.revision);
       await expect(panel.getByRole('article')).toHaveCount(0);
       const beforeRefresh = await manager.evaluate(() => window.notalone.skillLearning.getState());

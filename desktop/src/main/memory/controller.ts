@@ -139,7 +139,7 @@ export class MemoryReadingController {
     const refreshed = await Promise.all([
       ...sections.filter(section => this.state[section].phase === 'ready' && !this.operations.has(section))
         .map(section => this.readSection(section, scope, false, true)),
-      ...(this.overviewRequested && !this.overviewOperation ? [this.readOverview(scope)] : []),
+      ...(this.overviewRequested && !this.overviewOperation ? [this.readOverview(scope, true)] : []),
     ]);
     if (refreshed.some(success => !success)) throw new Error('记忆内容暂未刷新。');
   }
@@ -303,11 +303,11 @@ export class MemoryReadingController {
     this.ownerOverviewOperation = undefined;
     this.publish({ ownerOverview: { phase: this.ownerOverviewRequested ? 'loading' : 'idle', value: null } });
   }
-  private async readOverview(scope: Scope): Promise<boolean> {
+  private async readOverview(scope: Scope, background = false): Promise<boolean> {
     this.overviewOperation?.abort.abort();
     const operation = { abort: new AbortController() };
     this.overviewOperation = operation;
-    this.publish({ overview: { phase: 'loading', value: null } });
+    if (!background || this.state.overview.phase !== 'ready') this.publish({ overview: { phase: 'loading', value: null } });
     const current = () => { this.synchronizeScope(); return this.scope === scope && this.overviewOperation === operation; };
     try {
       const result = await this.backend.requestJson({ method: 'GET',
