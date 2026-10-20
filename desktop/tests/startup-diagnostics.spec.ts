@@ -130,7 +130,7 @@ ownerIncompleteTest('setup 必需的本人创建时间缺失会阻止启动，�
   await manager.getByRole('button', { name: '重新检查并连接', exact: true }).click();
   await expect(manager.getByText('机器环境已就绪。', { exact: true })).toBeVisible();
   await expect(manager.getByText('已连接', { exact: true })).toBeVisible({ timeout: 15_000 });
-  await expect(manager.getByRole('region', { name: '本人身份与模型' }).getByText('本人身份尚未初始化', { exact: true })).toBeVisible();
+  await expect(manager.getByRole('region', { name: 'AI 服务' }).getByText('本人身份尚未初始化', { exact: true })).toBeVisible();
   await manager.screenshot({ path: test.info().outputPath('owner-timestamp-restored.png') });
 });
 

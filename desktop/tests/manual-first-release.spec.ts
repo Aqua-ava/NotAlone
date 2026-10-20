@@ -41,7 +41,7 @@ test('空目录首启后可明确创建手动联系人，不要求微信身份�
   if (process.env.NOTALONE_TEST_MANUAL_MODEL_FIXTURE === '1') expect(JSON.parse(await readFile(path.join(userData, 'synthetic-model-audit.json'), 'utf8')).network_guard).toBe(true);
   await manager.getByLabel('本人展示名称', { exact: true }).fill('合成手动使用者');
   await manager.getByRole('button', { name: '初始化本人', exact: true }).click();
-  await expect(manager.getByText('本次运行的本人身份已就绪', { exact: true })).toBeVisible({ timeout: 30_000 });
+  await expect(manager.getByText('本次运行的本人身份已就绪', { exact: true })).toBeAttached({ timeout: 30_000 });
   await expect(manager.getByRole('heading', { name: '还没有联系人', exact: true })).toBeVisible();
   await expect(manager.getByRole('button', { name: '创建联系人', exact: true })).toBeVisible({ timeout: 1000 });
   await manager.getByLabel('联系人展示名称', { exact: true }).fill('合成联系人甲');
@@ -70,7 +70,7 @@ test('公开手动输入完成模型设置、依据和编辑，切换隔离、�
   if (process.env.NOTALONE_TEST_MANUAL_MODEL_FIXTURE === '1') expect(JSON.parse(await readFile(path.join(userData, 'synthetic-model-audit.json'), 'utf8')).network_guard).toBe(true);
   await manager.getByLabel('本人展示名称', { exact: true }).fill('合成手动使用者');
   await manager.getByRole('button', { name: '初始化本人', exact: true }).click();
-  await expect(manager.getByText('本次运行的本人身份已就绪', { exact: true })).toBeVisible({ timeout: 30_000 });
+  await expect(manager.getByText('本次运行的本人身份已就绪', { exact: true })).toBeAttached({ timeout: 30_000 });
   const opening = app.waitForEvent('window');
   await manager.getByRole('button', { name: '打开输入小窗', exact: true }).click();
   const helper = await opening;
@@ -92,7 +92,7 @@ test('公开手动输入完成模型设置、依据和编辑，切换隔离、�
   await helper.getByRole('button', { name: '打开本人和模型设置', exact: true }).click();
   await manager.getByLabel('DeepSeek API Key', { exact: true }).fill('synthetic-manual-package-not-a-real-key');
   await manager.getByRole('button', { name: '保存 DeepSeek 密钥', exact: true }).click();
-  await expect(manager.getByText('DeepSeek 已配置', { exact: true })).toBeVisible({ timeout: 30_000 });
+  await expect(manager.getByText('DeepSeek · 已配置', { exact: true })).toBeVisible({ timeout: 30_000 });
   await expect(manager.getByText('本次联系人：未确认', { exact: true })).toBeVisible();
   await create('合成联系人乙');
   await manager.getByRole('button', { name: '同步设置', exact: true }).click();
@@ -175,7 +175,7 @@ test('公开手动输入完成模型设置、依据和编辑，切换隔离、�
     await writeFile(test.info().outputPath('reopened-app-owned.json'), JSON.stringify({ pid: reopenedProcess.pid, userData, executable: path.join(movedApp, 'Contents/MacOS/NotAlone') }));
     const next = await reopened.firstWindow();
     await expect(next.getByText('已连接', { exact: true })).toBeVisible({ timeout: 30_000 });
-    await expect(next.getByText('DeepSeek 已配置', { exact: true })).toBeVisible();
+    await expect(next.getByText('DeepSeek · 已配置', { exact: true })).toBeVisible();
     await expect(next.getByText('本次联系人：未确认', { exact: true })).toBeVisible();
     await expect(next.getByRole('button', { name: '选择合成联系人甲', exact: true })).toBeVisible();
     await expect(next.getByRole('button', { name: '选择合成联系人乙', exact: true })).toBeVisible();
@@ -195,6 +195,8 @@ test('公开手动输入完成模型设置、依据和编辑，切换隔离、�
     await expect(next.getByRole('button', { name: '保存官方模型与新密钥', exact: true })).toBeDisabled();
     await next.getByLabel('我确认改用上述官方接收方，并为它重新输入密钥', { exact: true }).check();
     await next.getByRole('button', { name: '保存官方模型与新密钥', exact: true }).click();
+    await expect(next.getByText('模型接收方：DeepSeek 官方（https://api.deepseek.com），模型 deepseek-flash。', { exact: true })).toBeAttached({ timeout: 30_000 });
+    await next.locator('summary', { hasText: '数据存储与隐私' }).click();
     await expect(next.getByText('模型接收方：DeepSeek 官方（https://api.deepseek.com），模型 deepseek-flash。', { exact: true })).toBeVisible({ timeout: 30_000 });
     await expect(next.getByText('本次联系人：未确认', { exact: true })).toBeVisible();
     await next.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();

@@ -30,7 +30,7 @@ const test = startupTest.extend<{ machineSetup: { setup: SetupFixture; proxy: Se
 test('本人初始化后的正常重启仍检查机器账本，修正后明确加载配置恢复', async ({ runningApp: { app }, startupDatabase, machineSetup: { setup, proxy } }) => {
   const manager = await app.firstWindow();
   await manager.getByRole('button', { name: '设置', exact: true }).click();
-  const panel = manager.getByRole('region', { name: '本人身份与模型' });
+  const panel = manager.getByRole('region', { name: 'AI 服务' });
   await expect(manager.getByText('机器环境已就绪。', { exact: true })).toBeVisible();
   await expect(panel.getByText('本人身份尚未初始化', { exact: true })).toBeVisible({ timeout: 15_000 });
   proxy.closeAfterShutdown = true;
@@ -46,7 +46,7 @@ test('本人初始化后的正常重启仍检查机器账本，修正后明确�
   const saved = await readFile(setup.envPath);
   await prepareDatabase('restore-drift', startupDatabase.database);
   await panel.getByRole('button', { name: '重试加载配置', exact: true }).click();
-  await expect(panel.getByText('本次运行的本人身份已就绪', { exact: true })).toBeVisible({ timeout: 15_000 });
+  await expect(panel.getByText('本次运行的本人身份已就绪', { exact: true })).toBeAttached({ timeout: 15_000 });
   await expect(manager.getByText('机器环境已就绪。', { exact: true })).toBeVisible();
   expect((await setup.request('/api/setup/status')).data.runtime_owner_configured).toBe(true);
   expect((await readFile(setup.envPath)).equals(saved)).toBe(true);

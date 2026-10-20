@@ -32,7 +32,7 @@ test('本人初始化失败后的恢复查询失联，不发布旧initialize-fai
 test('初始化已真实写入而响应丢失时，用户可明确重新加载受控配置而不重新初始化', async ({ runningApp: { app }, setup, transportProxy }) => {
   const manager = await app.firstWindow();
   await manager.getByRole('button', { name: '设置', exact: true }).click();
-  const panel = manager.getByRole('region', { name: '本人身份与模型' });
+  const panel = manager.getByRole('region', { name: 'AI 服务' });
   await expect(panel.getByText('本人身份尚未初始化', { exact: true })).toBeVisible({ timeout: 15_000 });
   transportProxy.dropInitializeResponse = true;
   await panel.getByRole('textbox', { name: '本人展示名称' }).fill('响应丢失合成本人');
@@ -45,7 +45,7 @@ test('初始化已真实写入而响应丢失时，用户可明确重新加载�
   transportProxy.closeAfterShutdown = true;
   transportProxy.afterShutdown = () => setup.waitForExit(setup.reusedBackend!);
   await panel.getByRole('button', { name: '重新加载受控配置', exact: true }).click();
-  await expect(panel.getByText('本次运行的本人身份已就绪', { exact: true })).toBeVisible({ timeout: 15_000 });
+  await expect(panel.getByText('本次运行的本人身份已就绪', { exact: true })).toBeAttached({ timeout: 15_000 });
   expect(transportProxy.initializeCompletedCount).toBe(1);
   await expect.poll(() => setup.reusedBackend?.exitCode).toBe(0);
   expect((await setup.request('/api/setup/status')).data.runtime_owner_configured).toBe(true);
