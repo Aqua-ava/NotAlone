@@ -295,7 +295,7 @@ node tests/headless/rewrite-lifecycle-check.mjs          # 实际未知命令故
 
 用户可视验收使用同一入口：先运行 `zsh -f native/macos/scripts/build_session_event_diagnostic.sh`（仓库根目录，仅编译和ad-hoc签名），再设置 `NOTALONE_SESSION_EVENT_PREVIEW=1`，通过有限 `test:app` 执行 `tests/native-session-events.spec.ts`。该模式显示非激活悬浮窗，最长90秒、最多一次启动；内部通知和进出微信分别计数，显示最近五条固定类别／启动后相对时间，并提供“这次切换有提示／无提示”和结束按钮。没有辅助功能准入、微信实例不唯一或注册失败时明确显示未验证，不申请权限；注册和反馈都不直接证明切换覆盖率，列表时间也不是实际切换延迟。不截图／OCR、不读取AX文本、CLI或业务库，不调用模型。关闭／到期注销监听并退出；生命周期用例通过与用户体验结果分开记录。
 
-`npm test` 默认执行 TypeScript 检查、测试 CLI 的合成回归（`tests/scheduling/`、`tests/headless/command.test.mjs`）及自研探针静态构建/搬运与外置 CLI 的 Node 启动配置（`tests/helpers/probe.test.mjs`、`tests/helpers/external-cli.test.mjs`）：未协调调用拒绝、跨独立命令副本/TMPDIR 互斥、启动预算、到期、Ctrl+C/SIGTERM、崩溃与损坏租约，以及 Playwright 门禁和限定文件发现。调度的合成孩子固定为 Node；自研探针核查在 macOS 只编译和 ad-hoc 签名仓库源码，检查格式、架构、依赖和签名；外置 CLI 测试只加载合成配置，不执行工具。原始 Electron API 的拒绝检查也显式使用 Node 可执行文件，避免门禁回归时打开桌面。命令明确报告真实 App 未运行。这些结果不能证明窗口、业务 UI、后端 HTTP 接线、签名包或实机验收通过；安全目录从真实 App 全量中排除。
+`npm test` 先执行 TypeScript 检查及[测试分类登记检查](tests/README.md)，再运行 `tests/inventory.json` 中全部 `safe-node` 文件。未分类的新测试会使入口失败，不会自动执行目录内其他测试。安全范围包括 Node controller/SSR/协议回归、测试 CLI 的合成回归（`tests/scheduling/`、`tests/headless/command.test.mjs`）及自研探针静态构建/搬运与外置 CLI 的 Node 启动配置（`tests/helpers/probe.test.mjs`、`tests/helpers/external-cli.test.mjs`）：未协调调用拒绝、跨独立命令副本/TMPDIR 互斥、启动预算、到期、Ctrl+C/SIGTERM、崩溃与损坏租约，以及 Playwright 门禁和限定文件发现。调度的合成孩子固定为 Node；自研探针核查在 macOS 只编译和 ad-hoc 签名仓库源码，检查格式、架构、依赖和签名；外置 CLI 测试只加载合成配置，不执行工具。原始 Electron API 的拒绝检查也显式使用 Node 可执行文件，避免门禁回归时打开桌面。命令明确报告真实 App 未运行。这些结果不能证明窗口、业务 UI、后端 HTTP 接线、签名包或实机验收通过；安全目录从真实 App 全量中排除。
 
 自动化Electron用例可使用下面的`test:app`命令，复用隔离夹具、进程追踪和互斥；Agent自行设置运行参数，无需用户批准时段或次数。Computer Use可直接操作实际App，选择启动方式时核对包与配置、隔离用户目录并记录自有实例，避免影响用户正常运行的App。
 

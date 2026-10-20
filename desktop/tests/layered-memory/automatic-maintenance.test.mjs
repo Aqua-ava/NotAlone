@@ -33,7 +33,8 @@ for (const scope of ['contact', 'owner']) test(`${scope}默认逐项核验模式
     assert.ok(reads > 1, '自动维护不应因没有旧评测报告停止读取进度');
     assert.equal(state.value.quality.organization.status, 'unknown', '不冒充质量评测已通过');
     const html = rendered.exports.render(state);
-    assert.match(html, /记忆会自动更新和整理/);
+    assert.match(html, /已整理 2 \/ 3 条记忆/);
+    assert.match(html, /自动整理记忆/);
     assert.doesNotMatch(html, /资料不会发给模型|当前不开放真实资料整理|真实资料自动加载已关闭/);
   } finally { clearTimeout(deadline); f.disconnect(); }
 });

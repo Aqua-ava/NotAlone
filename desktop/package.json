@@ -20,7 +20,8 @@
     "package": "node scripts/package.mjs",
     "prepare:runtime": "node scripts/prepare-runtime.mjs",
     "verify:runtime": "node scripts/verify-runtime.mjs",
-    "dev:status": "node scripts/development-status.mjs"
+    "dev:status": "node scripts/development-status.mjs",
+    "test:inventory": "node scripts/test-inventory.mjs"
   },
   "engines": {
     "node": ">=22.12.0"

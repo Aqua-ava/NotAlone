@@ -122,7 +122,7 @@ for (const action of ['delete', 'correct', 'uncertain']) test(`新本人${action
   const f = await fixture(async request => {
     if (request.method === 'POST') { deleted = true; if (action === 'uncertain') throw new Error('合成保存结果未确认'); return { generation: 1, data: {} }; }
     if (request.path === '/api/memories/owner/overview') return { generation: 1, data: { overview: { version: 1, scope_kind: 'owner', contact_id: null, projection_revision: 'a'.repeat(64), memory_revision: 1, built_at: '2026-10-18T00:00:00Z', entries: [] } } };
-    if (request.path === '/api/memories/owner') { if (defer) { defer = false; return new Promise(resolve => { finish = resolve; }); } return { generation: 1, data: { memories: deleted ? [] : [memory] } }; }
+    if ((request.path === '/api/memories/owner' || request.path === `/api/contacts/${ids.contact}/owner-memories`)) { if (defer) { defer = false; return new Promise(resolve => { finish = resolve; }); } return { generation: 1, data: { memories: deleted ? [] : [memory] } }; }
     return { generation: 1, data: owner() };
   });
   await f.bridge.refresh({ ...f.selection(), section: 'owner' });
@@ -193,7 +193,7 @@ test('独立本人入口保存后自动恢复已打开的本人记忆列表，�
   let saved = false, reads = 0;
   const f = await fixture(async request => {
     if (request.method === 'POST') saved = true;
-    if (request.path === '/api/memories/owner') { reads++; return { generation: 1, data: { memories: saved ? [memory] : [] } }; }
+    if (request.path === `/api/contacts/${ids.contact}/owner-memories`) { reads++; return { generation: 1, data: { memories: saved ? [memory] : [] } }; }
     return { generation: 1, data: owner() };
   });
   await f.bridge.refresh({ ...f.selection(), section: 'owner' });
@@ -212,7 +212,7 @@ test('独立本人写入不主动打开未请求列表，断连后也不恢复�
   let reads = 0, disconnectOnWrite = false, f;
   f = await fixture(async request => {
     if (request.method === 'POST' && disconnectOnWrite) f.disconnect();
-    if (request.path === '/api/memories/owner') { reads++; return { generation: 1, data: { memories: [] } }; }
+    if (request.path === `/api/contacts/${ids.contact}/owner-memories`) { reads++; return { generation: 1, data: { memories: [] } }; }
     return { generation: 1, data: owner() };
   });
   await f.bridge.addOwnerMemory({ text: '合成未打开列表的事实', category: 'common_fact' });
