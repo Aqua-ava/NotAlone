@@ -19,6 +19,7 @@ MIGRATIONS = Path(__file__).resolve().parents[3] / "database/migrations"
 MERGED_MIGRATIONS = (
     "097_persistent_extraction_schedule.sql",
     "098_import_statement_overview_invalidation.sql",
+    "099_message_page_indexes.sql",
 )
 
 
@@ -56,7 +57,7 @@ class MergedMigrationHistoryTest(unittest.TestCase):
                 "SELECT name,checksum,applied_at FROM public.notalone_schema_migration ORDER BY name",
             ).fetchall()
 
-    def test_existing_096_upgrades_to_098_without_rewriting_data_or_history(self):
+    def test_existing_096_upgrades_to_099_without_rewriting_data_or_history(self):
         self._copy_prefix(96)
         self.assertEqual(len(migrate(self.url, self.prefix)), 96)
         owner, contact, source, message = (uuid4() for _ in range(4))
@@ -86,8 +87,18 @@ class MergedMigrationHistoryTest(unittest.TestCase):
                 "AND tgname IN ('relationship_overview_message','relationship_overview_message_insert') ORDER BY tgname",
             ).fetchall(), [("relationship_overview_message", 25), ("relationship_overview_message_insert", 4)])
             self.assertIsNotNone(connection.execute("SELECT to_regclass('public.memory_extraction_schedule')").fetchone()[0])
+            definitions = dict(connection.execute(
+                "SELECT indexname,indexdef FROM pg_indexes WHERE schemaname='public' "
+                "AND indexname IN ('message_contact_time_idx','message_contact_page_idx',"
+                "'wechat_message_metadata_scope_server_idx')"
+            ).fetchall())
+            self.assertEqual(len(definitions), 3)
+            self.assertIn("(owner_id, contact_id, occurred_at DESC NULLS LAST, id DESC)",
+                          definitions["message_contact_page_idx"])
+            self.assertIn("(owner_id, contact_id, external_server_id)",
+                          definitions["wechat_message_metadata_scope_server_idx"])
         completed = self._history()
-        self.assertEqual(len(completed), 98)
+        self.assertEqual(len(completed), 99)
         self.assertEqual(migrate(self.url, MIGRATIONS), ())
         self.assertEqual(self._history(), completed)
 
