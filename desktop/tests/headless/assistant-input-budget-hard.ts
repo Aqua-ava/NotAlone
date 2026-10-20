@@ -1,3 +1,4 @@
+import { currentMigrationCount } from '../rewrite-backend-fixture';
 import { setWorkspaceContext, setWorkspaceTone, fillWorkspaceInstruction, openWorkspaceSettings } from '../workspace-actions';
 import { openAssistantHistory, expandSavedDiscussion } from '../assistant-history-actions';
 import path from 'node:path';
@@ -10,6 +11,7 @@ import { budgetDraft, budgetInstruction, prepareDraft } from './assistant-input-
 
 // 先由真实页面计量，只有合成fixture声明容量；不改变模型或产品上限。
 export async function assistantInputBudgetHard(browser: Browser, origin: string) {
+  const migrationCount = await currentMigrationCount();
   const name = '硬预算零模型，完整草稿和旧讨论可查看，明确新开后独立生成';
   process.stdout.write(`page_test_scenario: ${name}\n`);
   await withRewritePages(browser, origin, async (pages, host, userData) => {
@@ -52,7 +54,7 @@ export async function assistantInputBudgetHard(browser: Browser, origin: string)
           state: 'exceeded', allowed: false, context_window_tokens: capacity,
         });
         expect(await rewriteBackend.command('metrics')).toEqual({
-          model_calls: 1, migration_count: 89, migration_repeat: 0,
+          model_calls: 1, migration_count: migrationCount, migration_repeat: 0,
         });
         await expect(current.helper.getByRole('textbox', { name: '有什么想说的', exact: true })).toHaveValue(budgetDraft);
         await expect(current.helper.getByRole('combobox', { name: '本次语气', exact: true })).toHaveValue('polite');
@@ -86,9 +88,9 @@ export async function assistantInputBudgetHard(browser: Browser, origin: string)
           .toHaveValue('硬预算后的新会话合成候选（说法1）。');
         expect(await rewriteBackend.command('metrics')).toEqual({
           // 新会话只新增一次候选生成。
-          model_calls: 2, migration_count: 89, migration_repeat: 0,
+          model_calls: 2, migration_count: migrationCount, migration_repeat: 0,
         });
-        process.stdout.write(`page_test_budget_hard: rejected_http=409 model_delta=0 capacity=${capacity} old_history_preserved=true blank_model_delta=0 explicit_new_generation=true total_model_calls=2 migrations=89 repeat=0\n`);
+        process.stdout.write(`page_test_budget_hard: rejected_http=409 model_delta=0 capacity=${capacity} old_history_preserved=true blank_model_delta=0 explicit_new_generation=true total_model_calls=2 migrations=${migrationCount} repeat=0\n`);
       } finally { transport.release(); await next.close(); }
     } finally { await transport.close(); }
   }, undefined, path.resolve('tests/fixtures/assistant-input-budget-page-backend.py'));

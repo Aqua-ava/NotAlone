@@ -1,11 +1,21 @@
 import { spawn, type ChildProcess } from 'node:child_process';
-import { mkdtemp } from 'node:fs/promises';
+import { mkdtemp, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { FixtureTransport, requestFixtureHttp } from './fixture-transport';
 import { isolatedAppEnvironment } from './isolated-environment';
 import { cleanupCoreFixture, FixtureProcessEvidence } from './database-ownership';
 const project = path.resolve('..');
+
+export async function currentMigrationCount(): Promise<number> {
+  const names = (await readdir(path.join(project, 'backend/database/migrations')))
+    .filter(name => name.endsWith('.sql')).sort();
+  // Python 夹具另逐项核对完整账本与零重复；这里独立核验当前目录及旧覆盖下限。
+  if (names.length < 89 || names.some((name, index) => !name.startsWith(`${String(index + 1).padStart(3, '0')}_`))) {
+    throw new Error('完整桌面夹具须覆盖至少89项且连续编号的当前正式迁移。');
+  }
+  return names.length;
+}
 
 export type Prepared = { database_url: string; owner_id: string; contact_ids: string[]; other_contact_id: string; empty_contact_id: string;
   migration_count?: number; migration_repeat?: number };

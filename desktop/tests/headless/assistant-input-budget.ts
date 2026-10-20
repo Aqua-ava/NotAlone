@@ -1,3 +1,4 @@
+import { currentMigrationCount } from '../rewrite-backend-fixture';
 import { setWorkspaceContext, setWorkspaceTone, fillWorkspaceInstruction, openWorkspaceSettings } from '../workspace-actions';
 import { openAssistantHistory, expandSavedDiscussion } from '../assistant-history-actions';
 import path from 'node:path';
@@ -25,6 +26,7 @@ export async function prepareDraft({ manager, helper, rewriteBackend }: RewriteP
 
 // 校准和临界生成均由公开页面触发，容量只取真实守卫的纯元数据。
 export async function assistantInputBudget(browser: Browser, origin: string) {
+  const migrationCount = await currentMigrationCount();
   const name = '接近预算仍生成，温和提醒与历史回执保留当前草稿和临时要求';
   process.stdout.write(`page_test_scenario: ${name}\n`);
   await withRewritePages(browser, origin, async (pages, host, userData) => {
@@ -40,7 +42,7 @@ export async function assistantInputBudget(browser: Browser, origin: string) {
     const stages = await rewriteBackend.command('calibration');
     const capacity = Number(stages.maximum_stage_total) + 100;
     const initial = await rewriteBackend.command('metrics');
-    expect(initial).toEqual({ model_calls: 1, migration_count: 89, migration_repeat: 0 });
+    expect(initial).toEqual({ model_calls: 1, migration_count: migrationCount, migration_repeat: 0 });
     await host.close();
     await rewriteBackend.command('configure', { capacity });
     const transport = await RewriteHttpProxy.attach(rewriteBackend.infoPath);
@@ -68,8 +70,8 @@ export async function assistantInputBudget(browser: Browser, origin: string) {
         expect(generated.status).toBe(200);
         expect(generated.data.input_budget).toMatchObject({ state: 'warning', allowed: true, context_window_tokens: capacity });
         const metrics = await rewriteBackend.command('metrics');
-        expect(metrics).toEqual({ model_calls: 2, migration_count: 89, migration_repeat: 0 });
-        process.stdout.write(`page_test_budget_warning: http=200 state=warning model_calls=2 initial_total=${calibration.total_tokens} capacity=${capacity} migrations=89 repeat=0\n`);
+        expect(metrics).toEqual({ model_calls: 2, migration_count: migrationCount, migration_repeat: 0 });
+        process.stdout.write(`page_test_budget_warning: http=200 state=warning model_calls=2 initial_total=${calibration.total_tokens} capacity=${capacity} migrations=${migrationCount} repeat=0\n`);
         await expect(current.helper.getByRole('status', { name: '模型输入预算', exact: true }))
           .toContainText('当前讨论已接近模型输入上限');
         await expect(current.helper.getByRole('alert', { name: '模型输入预算', exact: true })).toHaveCount(0);

@@ -1,3 +1,4 @@
+import { currentMigrationCount } from '../rewrite-backend-fixture';
 import { openAssistantHistory, expandSavedDiscussion } from '../assistant-history-actions';
 import path from 'node:path';
 import { expect, type Browser } from '@playwright/test';
@@ -7,6 +8,7 @@ import { withRewritePages } from './rewrite-acceptance';
 
 // 夹具通过正式HTTP保存合法历史；页面仍经默认JsonClient与同一来源读取边界。
 export async function assistantSessionFullHistory(browser: Browser, origin: string) {
+  const migrationCount = await currentMigrationCount();
   const name = '超过1MiB完整历史可查看，硬预算零模型，明确新开保留旧讨论';
   process.stdout.write(`page_test_scenario: ${name}\n`);
   await withRewritePages(browser, origin, async ({ manager, helper, rewriteBackend, replyTransport }) => {
@@ -16,7 +18,7 @@ export async function assistantSessionFullHistory(browser: Browser, origin: stri
     expect(history.wire_bytes).toBeGreaterThan(1_048_576);
     expect(history.characters_per_input).toBe(100_000);
     const initialMetrics = await rewriteBackend.command('metrics');
-    expect(initialMetrics).toEqual({ model_calls: 0, migration_count: 89, migration_repeat: 0 });
+    expect(initialMetrics).toEqual({ model_calls: 0, migration_count: migrationCount, migration_repeat: 0 });
     await openAssistantHistory(helper);
     await helper.getByRole('button', { name: '查看已保存讨论', exact: true }).click();
     await expandSavedDiscussion(helper);

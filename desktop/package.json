@@ -21,7 +21,8 @@
     "prepare:runtime": "node scripts/prepare-runtime.mjs",
     "verify:runtime": "node scripts/verify-runtime.mjs",
     "dev:status": "node scripts/development-status.mjs",
-    "test:inventory": "node scripts/test-inventory.mjs"
+    "test:inventory": "node scripts/test-inventory.mjs",
+    "test:native": "swift test --package-path ../native/macos && node --test ../native/macos/Tests/DiagnosticEntrypoints.test.mjs"
   },
   "engines": {
     "node": ">=22.12.0"

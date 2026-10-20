@@ -22,9 +22,11 @@ export async function budgetPublicFixture(t, { toolHistory = false, continuous =
     export { createElement } from 'react';
     export { renderToStaticMarkup } from 'react-dom/server';
     export { cleanupCoreFixture, FixtureProcessEvidence } from './tests/database-ownership';
+    export { currentMigrationCount } from './tests/rewrite-backend-fixture';
   `, resolveDir: process.cwd() }, bundle: true, platform: 'node', format: 'esm', write: false, loader: { '.css': 'empty' },
     banner: { js: `import { createRequire } from 'node:module'; const require = createRequire(${JSON.stringify(path.join(process.cwd(), 'package.json'))});` } });
   const ports = await import(`data:text/javascript;base64,${Buffer.from(output.outputFiles[0].text).toString('base64')}`);
+  const migrationCount = await ports.currentMigrationCount();
   const project = path.resolve('..'), directory = await mkdtemp(path.join(tmpdir(), 'notalone-budget-public-'));
   const child = spawn(path.join(process.env.CONDA_PREFIX, 'bin/python'), ['tests/fixtures/assistant-budget-backend.py'], {
     cwd: process.cwd(), stdio: ['pipe', 'pipe', 'pipe'], env: withoutExternalTracing({ ...process.env,
@@ -76,10 +78,10 @@ export async function budgetPublicFixture(t, { toolHistory = false, continuous =
       if (failure) throw failure;
     } }, { label: '预算', evidence,
     matchesPreparedDatabase: (name) => !data || data.database_url === `host=/tmp dbname=${name}`,
-    cleanupConfirmed: () => process.stdout.write('budget_public_cleanup: 001–089 repeat=0 owned_database_remaining=0\n'),
+    cleanupConfirmed: () => process.stdout.write(`budget_public_cleanup: migrations=${migrationCount} repeat=0 owned_database_remaining=0\n`),
   }));
   data = await ready;
-  assert.equal(data.migration_count, 89); assert.equal(data.migration_repeat, 0);
+  assert.equal(data.migration_count, migrationCount); assert.equal(data.migration_repeat, 0);
   client = new ports.JsonClient(data);
   const messageObservers = new Set();
   let generation = 7; const backendListeners = new Set(), delivery = {};

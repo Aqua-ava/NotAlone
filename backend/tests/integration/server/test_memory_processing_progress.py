@@ -138,6 +138,20 @@ class MemoryProcessingProgressHttpTest(TaskRecoveryHttpFixture):
             {"path": str(path), "contact_id": original["contact_id"]},
         )
         self.assertEqual(status, 200, imported)
+        # 从原始导入来源独立确定目标，不用待测进度表构造期望。
+        with psycopg.connect(self.database_url) as connection:
+            expected_target_ids = {
+                str(row[0])
+                for row in connection.execute(
+                    "SELECT DISTINCT ref.message_id FROM public.message_source_ref ref "
+                    "JOIN public.background_task task ON "
+                    "task.source_document_id=ref.source_document_id AND "
+                    "task.owner_id=ref.owner_id AND task.contact_id=ref.contact_id "
+                    "WHERE task.id=%s AND task.owner_id=%s AND task.contact_id=%s",
+                    (imported["task_id"], self.owner_id, imported["contact_id"]),
+                ).fetchall()
+            }
+        self.assertEqual(len(expected_target_ids), 42)
         self.model.unavailable = False
         self.model.responses.extend(
             [tool_response("MemoryExtractionOutput", {"facts": []})] * 20
@@ -160,14 +174,14 @@ class MemoryProcessingProgressHttpTest(TaskRecoveryHttpFixture):
         task = next(
             item for item in payload["tasks"] if item["task_id"] == imported["task_id"]
         )
-        self.assertEqual((task["processed_count"], task["total_count"]), (20, 42))
+        self.assertEqual((task["processed_count"], task["total_count"]), (10, 42))
         # 新建宿主读取同一数据库；GET 仍显示原来的批次进度。
         restarted = self._backend(self.owner_id)
         status, payload = restarted.request(route)
         task = next(
             item for item in payload["tasks"] if item["task_id"] == imported["task_id"]
         )
-        self.assertEqual(task["processed_count"], 20)
+        self.assertEqual(task["processed_count"], 10)
         status, payload = restarted.request(
             route + "/resume", {"task_id": imported["task_id"], "action": "resume"}
         )
@@ -178,14 +192,28 @@ class MemoryProcessingProgressHttpTest(TaskRecoveryHttpFixture):
             item for item in payload["tasks"] if item["task_id"] == imported["task_id"]
         )
         self.assertEqual((task["processed_count"], task["total_count"]), (42, 42))
-        self.assertEqual(len(self.model.seen_calls), 3)
+        self.assertEqual(len(self.model.seen_calls), 5)
         with psycopg.connect(self.database_url) as connection:
             windows = connection.execute(
                 "SELECT e.payload FROM public.memory_extraction_trace_event e JOIN public.memory_extraction_trace t ON t.trace_id=e.trace_id WHERE e.owner_id=%s AND e.stage='window' AND e.payload->'task_runtime'->>'task_id'=%s AND t.status='succeeded' ORDER BY t.started_at",
                 (self.owner_id, imported["task_id"]),
             ).fetchall()
-        self.assertEqual(len(windows), 3)
-        self.assertEqual(windows[1][0]["context_before_count"], 20)
+        self.assertEqual(len(windows), 5)
+        self.assertEqual(windows[1][0]["context_before_count"], 5)
+        self.assertEqual(
+            [window[0]["target_count"] for window in windows], [10, 10, 10, 10, 2]
+        )
+        self.assertEqual(
+            [len(window[0]["target_message_ids"]) for window in windows],
+            [10, 10, 10, 10, 2],
+        )
+        target_ids = [
+            message_id
+            for window in windows
+            for message_id in window[0]["target_message_ids"]
+        ]
+        self.assertEqual(len(target_ids), 42)
+        self.assertEqual(set(target_ids), expected_target_ids)
         first_ids = set(windows[0][0]["target_message_ids"])
         self.assertFalse(first_ids.intersection(windows[1][0]["target_message_ids"]))
 

@@ -1,3 +1,4 @@
+import { currentMigrationCount } from '../rewrite-backend-fixture';
 import { setWorkspaceContext, fillWorkspaceInstruction } from '../workspace-actions';
 import { expect, type Browser } from '@playwright/test';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
@@ -7,8 +8,9 @@ type Saved = { current_input_version_id: string; turns: Array<{ state: string; i
   reply: { reply_request_id: string } | null; input: { content: { target_message_id?: string; purpose?: string } } }> };
 
 async function adoptWhileGenerating(pages: EventPages, scene: 'express' | 'suggest') {
+  const migrationCount = await currentMigrationCount();
   const { manager, helper, fixture } = pages;
-  expect(fixture.data.migration_count).toBe(89); expect(fixture.data.migration_repeat).toBe(0);
+  expect(fixture.data.migration_count).toBe(migrationCount); expect(fixture.data.migration_repeat).toBe(0);
   await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
   await confirmHelperContact(helper, fixture.data.contact_ids[0]);
   await setWorkspaceContext(helper, true);
