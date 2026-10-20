@@ -9,7 +9,7 @@ for (const ownerPanel of [false, true]) test(`${ownerPanel ? '本人' : '联系�
   const f = await fixture(async request => {
     if (request.method === 'GET') reads++;
     return { generation: 1, data: request.path.includes('/layered-memory') ? payload()
-      : request.path.endsWith('/pending-candidates') ? { candidates: [] }
+      : request.path.endsWith('/memory-candidates') ? { candidates: [] }
       : request.path.endsWith('/sources') ? { sources: [] } : { memories: [] } };
   });
   const name = ownerPanel ? 'releaseOwnerLayeredMemory' : 'releaseLayeredMemory';

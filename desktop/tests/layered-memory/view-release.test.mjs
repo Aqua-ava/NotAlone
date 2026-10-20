@@ -50,6 +50,99 @@ test('记忆页释放停止轮询，来源删除仍清空资料，重入重新�
   } finally { off(); f.disconnect(); }
 }));
 
+for (const action of ['add', 'manage']) test(`本人${action}写入期间离页再重入，结算后权威刷新底层资料`, () => timers(async ({ pending, settle }) => {
+  let finishWrite, factsReads = 0;
+  const data = readyPayload({ scope_kind: 'owner', contact_id: null });
+  const f = await fixture(async request => {
+    if (request.method === 'POST') return await new Promise(resolve => { finishWrite = resolve; });
+    if (request.path === '/api/memories/owner') { ++factsReads; return { generation: 1, data: { memories: [] } }; }
+    return { generation: 1, data };
+  });
+  try {
+    await f.bridge.readOwnerMemories();
+    await f.bridge.readOwnerLayeredMemory({});
+    const writing = action === 'add' ? f.bridge.addOwnerMemory({ text: '合成补充', category: 'common_fact' })
+      : f.bridge.manageOwnerLayeredMemory({ action: 'pause', settingsGeneration: 1, workRevision: 1 });
+    await settle();
+    await f.bridge.releaseOwnerLayeredMemory();
+    await assert.rejects(f.bridge.readOwnerMemories());
+    assert.equal(factsReads, 1, '写入尚未结算时登记读取意图');
+    finishWrite({ generation: 1, data });
+    await writing;
+    assert.equal(factsReads, 2);
+    assert.equal((await f.bridge.getOwnerLayeredMemoryState()).memories.phase, 'ready');
+    await f.bridge.releaseOwnerLayeredMemory();
+    assert.equal(pending.size, 0);
+  } finally { f.disconnect(); }
+}));
+
+for (const action of ['add', 'manage']) test(`联系人${action}写入期间离页再重入，结算后恢复资料复验`, () => timers(async ({ pending, settle }) => {
+  let finishWrite, layeredReads = 0;
+  const f = await fixture(async request => {
+    if (request.method === 'POST') return await new Promise(resolve => { finishWrite = resolve; });
+    if (request.path.includes('/layered-memory')) { ++layeredReads; return { generation: 1, data: readyPayload() }; }
+    return { generation: 1, data: request.path.endsWith('/memory-candidates') ? { candidates: [] } : request.path.endsWith('/sources') ? { sources: [] } : { memories: [] } };
+  });
+  try {
+    const selection = f.selection();
+    await f.bridge.readLayeredMemory(selection);
+    const writing = action === 'add' ? f.bridge.add({ ...selection, level: 'contact', text: '合成补充', category: 'common_fact' })
+      : f.bridge.manageLayeredMemory({ ...selection, action: 'pause', settingsGeneration: 1, workRevision: 1 });
+    await settle();
+    await f.bridge.releaseLayeredMemory(selection);
+    await assert.rejects(f.bridge.readLayeredMemory(selection));
+    finishWrite({ generation: 1, data: readyPayload() });
+    await writing;
+    assert.equal(f.controller.getState().mutation.phase, 'success');
+    assert.equal(layeredReads, 2);
+    assert.equal(f.controller.getState().layeredMemory.phase, 'ready');
+    assert.equal(pending.size, 1);
+  } finally { f.disconnect(); }
+}));
+
+for (const scope of ['contact', 'owner']) test(`${scope}删除期间重入保留意图，结算后才权威读取`, () => timers(async ({ pending, settle }) => {
+  let calls = 0;
+  const f = await fixture(async () => { ++calls; return { generation: 1, data: readyPayload({ scope_kind: scope, contact_id: scope === 'owner' ? null : ids.contact }) }; });
+  const read = () => scope === 'owner' ? f.bridge.readOwnerLayeredMemory({}) : f.bridge.readLayeredMemory(f.selection());
+  try {
+    await read();
+    if (scope === 'owner') await f.bridge.releaseOwnerLayeredMemory(); else await f.bridge.releaseLayeredMemory(f.selection());
+    f.controller.sourceDeletionChanged('started');
+    await assert.rejects(read());
+    assert.equal(calls, 1, '删除门禁未解除时不能读取');
+    f.controller.sourceDeletionChanged('settled');
+    await settle();
+    assert.equal(calls, 2);
+    assert.equal(pending.size, 1);
+  } finally { f.disconnect(); }
+}));
+
+for (const scope of ['contact', 'owner']) test(`${scope}离页保留已提交写入的权威复读`, () => timers(async ({ pending, settle }) => {
+  let writing = false, finishRead, verifyingSignal;
+  const data = readyPayload({ scope_kind: scope, contact_id: scope === 'owner' ? null : ids.contact });
+  const f = await fixture(async request => {
+    if (request.method === 'POST') { writing = true; return { generation: 1, data: {} }; }
+    const verifying = scope === 'contact' ? request.path.includes('/layered-memory') : request.path === '/api/memories/owner';
+    if (writing && verifying) { verifyingSignal = request.signal; return await new Promise(resolve => { finishRead = resolve; }); }
+    return { generation: 1, data: request.path.includes('/layered-memory') ? data
+      : request.path.endsWith('/memory-candidates') ? { candidates: [] } : request.path.endsWith('/sources') ? { sources: [] } : { memories: [] } };
+  });
+  try {
+    if (scope === 'owner') await f.bridge.readOwnerMemories(); else await f.bridge.readLayeredMemory(f.selection());
+    const saving = scope === 'owner' ? f.bridge.addOwnerMemory({ text: '合成写入', category: 'common_fact' })
+      : f.bridge.add({ ...f.selection(), level: 'contact', text: '合成写入', category: 'common_fact' });
+    await settle();
+    assert.equal(typeof finishRead, 'function');
+    if (scope === 'owner') await f.bridge.releaseOwnerLayeredMemory(); else await f.bridge.releaseLayeredMemory(f.selection());
+    assert.equal(verifyingSignal.aborted, false);
+    finishRead({ generation: 1, data: scope === 'contact' ? data : { memories: [] } });
+    await saving;
+    const state = scope === 'contact' ? f.controller.getState() : await f.bridge.getOwnerLayeredMemoryState();
+    assert.equal(state.mutation.phase, 'success');
+    assert.equal(pending.size, 0);
+  } finally { f.disconnect(); }
+}));
+
 test('旧联系人释放不会停掉新范围轮询，停用及断连仍按原规则停止', () => timers(async ({ pending, tick }) => {
   let enabled = true, calls = 0;
   const f = await fixture(async request => {

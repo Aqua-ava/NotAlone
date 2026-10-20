@@ -35,6 +35,7 @@ export class MemoryReadingController {
   private ownerOverviewRequested = false;
   private layeredOperation: { abort: AbortController } | undefined;
   private layeredRequested = false;
+  private layeredReadDeferred = false;
   private layeredTimer: ReturnType<typeof setTimeout> | undefined;
   private sourceDeletionDepth = 0;
   private sourceDeletionRevision = 0;
@@ -116,6 +117,7 @@ export class MemoryReadingController {
     this.layeredOperation?.abort.abort();
     this.layeredOperation = undefined;
     this.layeredRequested = false;
+    this.layeredReadDeferred = false;
     clearTimeout(this.layeredTimer);
     this.layeredTimer = undefined;
     this.mutation?.abort.abort();
@@ -176,7 +178,9 @@ export class MemoryReadingController {
     this.synchronizeScope();
     if (request.contactId !== this.scope?.contactId || request.scopeRevision !== this.scope?.scopeRevision) return;
     this.layeredRequested = false;
-    this.clearLayered();
+    this.layeredReadDeferred = false;
+    clearTimeout(this.layeredTimer); this.layeredTimer = undefined;
+    if (!this.mutation) this.clearLayered();
   }
   async readLayeredMemory(request: LayeredMemoryReadRequest): Promise<void> {
     this.synchronizeScope();
@@ -184,9 +188,10 @@ export class MemoryReadingController {
     if (!scope || request.contactId !== scope.contactId || request.scopeRevision !== scope.scopeRevision) {
       throw new Error('主题资料范围已失效，请重新确认联系人。');
     }
-    if (this.sourceDeletionDepth) throw new Error('来源正在删除，请完成核对后再读取主题资料。');
-    if (this.mutation) throw new Error('资料正在处理，请完成核对后再读取主题资料。');
     this.layeredRequested = true;
+    if (this.sourceDeletionDepth) throw new Error('来源正在删除，请完成核对后再读取主题资料。');
+    // 重入只登记查看意图；写入结算后再读取，不能以取消写入换取刷新。
+    if (this.mutation) { this.layeredReadDeferred = true; throw new Error('资料正在处理，请完成核对后再读取主题资料。'); }
     await this.readLayered(scope, false, request.mappingCursor ?? null);
   }
   async manageLayeredMemory(request: LayeredMemoryManagementRequest): Promise<void> {
@@ -240,7 +245,7 @@ export class MemoryReadingController {
           this.publish({ mutation: { phase: 'idle', message: '' } });
         }
         if (this.scope === scope && !this.sourceDeletionDepth && this.layeredRequested
-          && this.sourceDeletionRevision !== sourceDeletionRevision) await this.readLayered(scope);
+          && (this.sourceDeletionRevision !== sourceDeletionRevision || this.layeredReadDeferred)) await this.readLayered(scope);
       }
     }
   }
@@ -267,6 +272,7 @@ export class MemoryReadingController {
   private async readLayered(scope: Scope, background = false, mappingCursor: string | null = null): Promise<boolean> {
     if (!background) this.clearLayered();
     if (this.sourceDeletionDepth) return false;
+    this.layeredReadDeferred = false;
     const operation = { abort: new AbortController() };
     this.layeredOperation = operation;
     if (!background) this.publish({ layeredMemory: { phase: 'loading', value: null } });
@@ -586,6 +592,7 @@ export class MemoryReadingController {
       this.settleProtectedReads(reading);
       if (changesOverviewDependencies) for (const listener of this.ownerDependencyListeners) listener('settled');
       if (sections.includes('owner')) await this.ownerLayeredContextChanged('settled');
+      if (this.scope === scope && !this.mutation && !this.sourceDeletionDepth && this.layeredRequested && this.layeredReadDeferred) await this.readLayered(scope);
     }
   }
   private async readSection(section: MemorySectionName, scope: Scope, afterWrite = false, background = false): Promise<boolean> {
