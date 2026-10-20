@@ -1,7 +1,7 @@
 # 原生定位开销与旧诊断入口
 
 Triage: ready-for-agent
-State: open
+State: claimed
 Blocked by: None
 
 ## 来源

@@ -89,83 +89,16 @@ zsh scripts/build_cli.sh
 
 Python 侧的探针适配器（`src/notalone/front_sync/probe_adapter.py`）就是这样判定的：先解析 stdout，再检查 `ok`，因此权限缺失与定位失败也能带着结构化原因返回给调用方。不带 `--json` 的纯文本模式仍按命令行惯例返回非零退出码。
 
-## 菜单栏 App 验证
+## 已退役的正文 OCR 诊断
 
-菜单栏 App 已降级为轻量状态入口：不再每 3 秒拉起 `notalone-front-sync`
-子进程轮询，而是查询常驻后端（`notalone-server`）的 `/api/sync/*` HTTP
-端点；同步开关与“立即检查一次”同样经后端 API 生效。旧 Swift 主窗口已退役，
-当前调试需要在仓库根目录激活 `NotAlone` conda 环境后手动运行
-`notalone-server`；关闭调试时在该终端按 Ctrl-C 停止后台，退出菜单栏程序
-不代替停止这个独立后台。连接信息经握手文件（`~/.notalone/backend.info`，可用
-`NOTALONE_BACKEND_INFO` 覆盖）发现；后端不可用时菜单栏标题给出清晰
-提示。绑定候选只在菜单中展示计数；当前确认入口使用 CLI
-`notalone-front-sync confirm-binding`，新主界面后续另行设计。
+旧默认采集、`--watch`、`--crop`、`--interval`、独立 `--show-text` 和历史 Swift 菜单栏正文诊断已退役；不再查询权限、捕获窗口或执行正文 OCR。无参数只展示帮助，`--self-test` 仅使用合成图片，不采屏或调用 OCR。`--session --show-text` 仅保留历史参数兼容，和 `--session` 一样不向终端输出名称。
 
-自动状态查询仍每 3 秒触发，同一连接同时最多一个请求；上一轮未结束时
-跳过本轮，不积累等待任务。每轮检查握手，后端换代、握手缺失或退出时取消
-旧查询并忽略其晚返回结果。状态 GET 的请求与资源超时均为 5 秒，超时沿用
-“后端不可用”提示，下一轮可重试；手动开关和“立即检查一次”保留原等待方式，
-其结果不会被更早的自动查询覆盖。此查询只访问本机后端，不采集消息正文。
+正式定位使用顶部名称入口；微信不在前台、窗口不唯一或布局未知时拒绝该轮。日常开发和实际验收使用 `desktop/` 的 `npm run dev`，先执行 `npm run dev:status` 并复用已有实例。旧菜单栏目标只返回退役说明，不启动 App 或请求权限。
 
-命令行进程在当前 Codex 运行环境中无法稳定收到 ScreenCaptureKit 的截窗回调，不能作为真实采集验证的载体。真实权限验证应从 Xcode 启动已签名的独立 App：
+布局按需计算采样亮度，保持原有 DeviceRGB、预乘 RGBA、copy 绘制和整数公式。仅返回矩形的路径在返回前释放整帧像素，不跨轮缓存。合成基准只度量绘制及布局，不含捕获、OCR、IPC 或真实微信延迟，也不是 RSS 测量。
 
-1. 在 Xcode 打开 `Xcode/NotAloneSyncProbe/NotAloneSyncProbe.xcodeproj`。
-2. 选择 `NotAloneSyncProbe > My Mac`，按 `Cmd-R` 运行。
-3. 菜单栏出现 NotAlone 后，点击“请求屏幕录制权限”。
+## 合成验证与计时
 
-此工程使用 `com.javahello.notalone.NotAloneSyncProbe` 作为稳定的 bundle id，并以当前 Personal Team 的 `Apple Development` 证书签名。首次获准后，后续在同一工程内修改、重新构建和运行，不应再被 macOS 当作临时 adhoc App。
+在仓库根目录先运行 `swift test --package-path native/macos`，再运行 `node --test native/macos/Tests/DiagnosticEntrypoints.test.mjs` 检查旧 CLI 入口拒绝及合成自检。入口测试不会运行正式观察或旧菜单栏 App。
 
-以下脚本仍可用于离线编译检查，但它会生成 adhoc 签名的 App，因此不要拿它验证屏幕录制权限持久性：
-
-```bash
-zsh scripts/build_app.sh
-open build/NotAloneSyncProbe.app
-```
-
-首次启动时，若尚未获得授权，菜单栏会显示“需要屏幕录制权限”。用户可点击“请求屏幕录制权限”触发 macOS 的授权流程；在系统设置中允许后，点击“重新检测权限”即可启动观察，无需重启 App。
-
-- `等待微信前台`：未采集；切换到其他 App 时也会回到这个状态。
-- `微信画面未变化`：仍在当前微信会话，但不会再次运行 OCR。
-- `无法确定聊天区域`：没有可靠找到左侧会话列表、顶部标题栏或底部输入栏的边界；本轮不会猜测范围或运行 OCR。
-- `识别 N 行，新增 M 行`：仅显示计数，聊天正文不会出现于界面、日志或磁盘。
-
-菜单中的“查看本次 OCR 文本”由用户主动打开。它会显示最近一次 OCR 的原始文本片段、临时说话人判断和置信度，方便逐项和微信画面对照；结果只保留在 App 内存中，退出 App 后清空。打开该窗口会让 NotAlone 成为前台应用，因此同步会暂停，直到你切回微信。
-
-菜单中的“查看本次裁剪范围”同样由用户主动打开。它在最近一次内存画面上以红线标出左侧会话列表、顶部标题栏和底部输入栏三条边界，并以红框标出实际 OCR 区域，便于验证只有中间的消息内容被识别；预览不会保存为图片文件。
-
-App 运行期间，你可以切到微信的无敏感测试会话。它不会切换会话、滚动、输入、点击或发送微信消息。菜单栏的“退出验证”会停止观察。
-
-单次、默认不显示 OCR 正文的检查：
-
-```bash
-swift run notalone-sync-probe
-```
-
-持续观察并明确要求在终端显示 OCR 结果：
-
-```bash
-swift run notalone-sync-probe --watch --show-text
-```
-
-使用上方临时编译方式时，将命令中的 `swift run notalone-sync-probe` 替换为
-`./build/cli/notalone-sync-probe`。
-
-菜单栏 App 首次捕获时会动态定位左侧会话列表、顶部标题栏和底部输入栏三条边界，随后复用它们的位置；只有窗口尺寸变化或任一边界被拖动时才重新扫描。它不使用固定比例。命令行工具保留 `--crop x,y,width,height`，仅用于显式的算法诊断，例如：
-
-```bash
-swift run notalone-sync-probe --watch --crop 0.38,0.16,0.58,0.70
-```
-
-## 当前验证目标
-
-1. 微信前台时能捕获窗口；切换到其他 App 后不采集。
-2. 能动态定位左侧会话列表、顶部标题栏和底部输入栏三条边界；任一边界移动后重新定位。
-3. 无法可靠定位时不运行 OCR，也不读取会话列表、标题栏或输入栏。
-4. 画面变化后，本地识别可见文本，并按左右位置给出临时说话人分类。
-5. 同一段 OCR 文本不在同一次探针运行中重复报告。
-
-这只是视觉能力验证。它尚未处理多行气泡聚合、可靠时间戳、会话标题匹配、正式持久化或联系人绑定。
-
-候选公开菜单“校验微信最小定位区域…”仅静默预检权限，最多等待60秒微信回到前台。校验已选五处区域后写入0600 profile；新选区或重校验先撤销旧profile。原始小帧仅内存，后端质量解析已准备，自动绑定及小窗自动采用仍未完成。纯布局3项、session参数4项通过不等于真实裁剪通过。ScreenCaptureKit接口已与本机SDK及[Apple sourceRect](https://developer.apple.com/documentation/screencapturekit/scstreamconfiguration/sourcerect)、[SCContentFilter](https://developer.apple.com/documentation/screencapturekit/sccontentfilter)、[captureImage](https://developer.apple.com/documentation/ScreenCaptureKit/SCScreenshotManager/captureImage%28contentFilter%3Aconfiguration%3AcompletionHandler%3A%29)核对；文档不能代替实机。
-
-现场失败后补充 `verification_stage` 固定阶段，并在主进程保存0600 `foreground-layout-verification.json`：只含状态、安全错误码与固定阶段，不能携带原生输出、名称或图像。窗口未取得前台、几何变化、权限缺失、OCR质量和采集失败分别说明；结果不授予采集资格。公开App用例等待该结果后立即核对成功或失败，不以等待profile超时替代原因。此诊断补丁已通过类型、构建与纯测试，尚未新跑真实校验。
+使用 `$HOME/miniconda3/envs/NotAlone/bin/python native/macos/scripts/benchmark_layout.py --baseline <commit> --output <结果.json>` 对照指定基线与当前生产纯函数。驱动只构造合成 CGImage，以共享文件锁串行执行31组交错样本，保留源码摘要、原始样本、p50/p95和等价断言；临时可执行文件自动删除。调用前检查卷可用空间至少15 GiB，不把合成布局耗时或缓冲区推导解释成真实App延迟或RSS。

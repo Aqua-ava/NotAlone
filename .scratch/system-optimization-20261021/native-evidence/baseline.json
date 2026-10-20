@@ -1,0 +1,9 @@
+{
+  "commit": "681fcc38eab77c8fe149b76705419971f3750a86",
+  "sources": {
+    "native/macos/Sources/NotAloneSyncCore/CaptureSupport.swift": "77bedae21c4bf875dc7c2679e55882ef6579bbdae2cde8a683100386ae447048",
+    "native/macos/Sources/NotAloneSyncCore/AutomaticSessionCapture.swift": "dc5e519cc16fb275ada7128467ce9054b350fbad152ba649fdbbbf45a5062865",
+    "native/macos/Sources/NotAloneSyncCLI/main.swift": "e9a7ffb91683937db2f0568f429d07c19f6f9a971a6993ffa0e539958405546c"
+  },
+  "input": "仅合成CGImage；不采屏、不调用OCR、不连接数据库或模型"
+}

@@ -219,61 +219,68 @@ struct AutomaticSessionRegions {
     let row: CGRect
 
     static func detect(_ image: CGImage, windowSize: CGSize) throws -> Self {
-        let geometry = try headerLayout(image, windowSize: windowSize)
-        let scale = geometry.scale, pixels = geometry.pixels
-        let divider = geometry.divider, headerY = geometry.headerY
-        let w = image.width, h = image.height
-        func px(_ points: CGFloat) -> Int { Int((points * scale).rounded()) }
-        func median(_ values: [Int]) -> Int { ChatRegionDetector.medianOf(values) }
-        // 左边无文字窄条只用于找唯一高亮行，避免头像、时间、预览污染均值。
-        let stripe = divider - px(5)
-        let start = headerY + px(2), end = h - px(12)
-        let values = (start..<end).map { y in median((0..<px(3)).map { Int(pixels[y*w+stripe+$0]) }) }
-        let background = median(values)
-        var bands: [Range<Int>] = [], begin: Int?
-        for (offset, value) in values.enumerated() {
-            if abs(value-background) >= 10 {
-                if begin == nil { begin = offset }
-            } else if let first = begin { bands.append((start+first)..<(start+offset)); begin = nil }
-        }
-        if let begin { bands.append((start+begin)..<end) }
-        let candidates = bands.filter { (px(40)...px(100)).contains($0.count) }
-        guard candidates.count == 1, let selected = candidates.first,
-              bands.allSatisfy({ $0.count < px(4) || $0 == selected }) else { throw AutomaticLayoutFailure.selection }
-        // 高亮的左边界从该行与其他行的差异取得；侧栏不要求有可见竖线。
-        let leftCandidates = (px(40)...px(100)).filter { x in
-            let base = median((0..<31).map { i in Int(pixels[(start+(end-start-1)*i/30)*w+x]) })
-            return [selected.lowerBound+px(4), selected.lowerBound+px(30)].allSatisfy {
-                abs(Int(pixels[$0*w+x])-base) >= 10
+        try withHeaderLayout(image, windowSize: windowSize) { geometry, pixels in
+            let scale = geometry.scale
+            let divider = geometry.divider, headerY = geometry.headerY
+            let w = image.width, h = image.height
+            func px(_ points: CGFloat) -> Int { Int((points * scale).rounded()) }
+            func median(_ values: [Int]) -> Int { ChatRegionDetector.medianOf(values) }
+            // 左边无文字窄条只用于找唯一高亮行，避免头像、时间、预览污染均值。
+            let stripe = divider - px(5)
+            let start = headerY + px(2), end = h - px(12)
+            let values = (start..<end).map { y in median((0..<px(3)).map { Int(pixels[y*w+stripe+$0]) }) }
+            let background = median(values)
+            var bands: [Range<Int>] = [], begin: Int?
+            for (offset, value) in values.enumerated() {
+                if abs(value-background) >= 10 {
+                    if begin == nil { begin = offset }
+                } else if let first = begin { bands.append((start+first)..<(start+offset)); begin = nil }
             }
+            if let begin { bands.append((start+begin)..<end) }
+            let candidates = bands.filter { (px(40)...px(100)).contains($0.count) }
+            guard candidates.count == 1, let selected = candidates.first,
+                  bands.allSatisfy({ $0.count < px(4) || $0 == selected }) else { throw AutomaticLayoutFailure.selection }
+            // 高亮的左边界从该行与其他行的差异取得；侧栏不要求有可见竖线。
+            let leftCandidates = (px(40)...px(100)).filter { x in
+                let base = median((0..<31).map { i in Int(pixels[(start+(end-start-1)*i/30)*w+x]) })
+                return [selected.lowerBound+px(4), selected.lowerBound+px(30)].allSatisfy {
+                    abs(Int(pixels[$0*w+x])-base) >= 10
+                }
+            }
+            guard let rail = leftCandidates.first, leftCandidates.last! - rail >= px(15) else {
+                throw AutomaticLayoutFailure.rail
+            }
+            let title = geometry.rectangle
+            let name = CGRect(x: rail+px(54), y: selected.lowerBound+px(6),
+                              width: divider-rail-px(118), height: px(25))
+            guard title.width >= CGFloat(px(30)), name.width >= CGFloat(px(25)), title.height >= CGFloat(px(18)),
+                  name.maxY < CGFloat(selected.upperBound),
+                  CGRect(x: 0, y: 0, width: w, height: h).contains(title),
+                  CGRect(x: 0, y: 0, width: w, height: h).contains(name) else { throw MinimalSessionError.layoutUnverified }
+            return Self(header: title, row: name)
         }
-        guard let rail = leftCandidates.first, leftCandidates.last! - rail >= px(15) else {
-            throw AutomaticLayoutFailure.rail
-        }
-        let title = geometry.rectangle
-        let name = CGRect(x: rail+px(54), y: selected.lowerBound+px(6),
-                          width: divider-rail-px(118), height: px(25))
-        guard title.width >= CGFloat(px(30)), name.width >= CGFloat(px(25)), title.height >= CGFloat(px(18)),
-              name.maxY < CGFloat(selected.upperBound),
-              CGRect(x: 0, y: 0, width: w, height: h).contains(title),
-              CGRect(x: 0, y: 0, width: w, height: h).contains(name) else { throw MinimalSessionError.layoutUnverified }
-        return Self(header: title, row: name)
     }
 
     struct HeaderLayout {
         let rectangle: CGRect
-        let pixels: [UInt8]
         let scale: CGFloat
         let divider: Int
         let headerY: Int
     }
 
     static func headerLayout(_ image: CGImage, windowSize: CGSize) throws -> HeaderLayout {
+        try withHeaderLayout(image, windowSize: windowSize) { geometry, _ in geometry }
+    }
+
+    private static func withHeaderLayout<Result>(
+        _ image: CGImage, windowSize: CGSize,
+        use: (HeaderLayout, LuminanceSampler) throws -> Result
+    ) throws -> Result {
         guard windowSize.width >= 600, windowSize.height >= 400,
               image.width * image.height <= 24_000_000 else { throw MinimalSessionError.layoutUnverified }
         let scale = CGFloat(image.width) / windowSize.width
         guard (1...3).contains(scale), abs(CGFloat(image.height) / windowSize.height - scale) < 0.001,
-              let pixels = ChatRegionDetector.luminancePixels(from: image) else { throw MinimalSessionError.layoutUnverified }
+              let pixels = LuminanceSampler.create(from: image) else { throw MinimalSessionError.layoutUnverified }
         let w = image.width, h = image.height
         func px(_ points: CGFloat) -> Int { Int((points * scale).rounded()) }
         func median(_ values: [Int]) -> Int { ChatRegionDetector.medianOf(values) }
@@ -299,7 +306,7 @@ struct AutomaticSessionRegions {
               CGRect(x: 0, y: 0, width: w, height: h).contains(title) else {
             throw MinimalSessionError.layoutUnverified
         }
-        return HeaderLayout(rectangle: title, pixels: pixels, scale: scale, divider: divider, headerY: headerY)
+        return try use(HeaderLayout(rectangle: title, scale: scale, divider: divider, headerY: headerY), pixels)
     }
 
     private static func uniqueBoundary(range: ClosedRange<Int>, score: (Int) -> Int, tolerance: Int, failure: AutomaticLayoutFailure) throws -> Int {
