@@ -1,7 +1,7 @@
 import { fillWorkspaceThought, setWorkspaceContext, generateWorkspace } from '../workspace-actions';
 import { expect, type Browser } from '@playwright/test';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
-import { selectMemoryCategory } from '../memory-page-actions';
+import { openImportManagement } from '../memory-page-actions';
 import { withLayeredReplyFixture } from '../layered-reply-fixture';
 import { withControllerEnvironment } from './backend-fixture';
 import { ownResource } from './cleanup';
@@ -134,9 +134,8 @@ export async function layeredReply(browser: Browser, origin: string) {
       await generate(String(prepared.contact_id), true, '删除来源前保留本次合法课程依据。', true);
       await expect(contactReads.getByText(`第 1 段：${prepared.scenario_text}`, { exact: true })).toBeVisible();
       await manager.getByRole('button', { name: '记忆', exact: true }).click();
-      await selectMemoryCategory(manager, '来源与过程');
-      const source = manager.getByRole('region', { name: '来源删除管理', exact: true }).getByRole('listitem')
-        .filter({ hasText: `来源标识：${prepared.source_id}` });
+      await openImportManagement(manager);
+      const source = manager.getByRole('region', { name: '已导入资料', exact: true }).locator(`[data-source-id="${prepared.source_id}"]`);
       await source.getByRole('button', { name: '删除来源', exact: true }).click();
       await manager.getByRole('button', { name: '确认删除来源', exact: true }).click();
       await expect(source.getByText('已删除，已通过不可检索校验', { exact: true })).toBeVisible({ timeout: 15_000 });

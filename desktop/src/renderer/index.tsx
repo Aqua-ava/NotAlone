@@ -20,6 +20,7 @@ import { MemoryPage } from './MemoryPage';
 import { SyncControlPanel } from './SyncControlPanel';
 import { SkillLearningPage } from './SkillLearningPage';
 import { PrioritySyncStatus } from './PrioritySyncStatus';
+import { DeveloperTraces } from './DeveloperTraces';
 
 const helper = window.location.hash === '#helper';
 document.title = helper ? 'NotAlone · 输入小窗' : 'NotAlone · 管理后台';
@@ -115,9 +116,10 @@ export function App() {
         {page === 'config' && <><ScreenPermissionPanel view={permission} /><DesktopControls />
           <details className="startup-settings" open={advancedOpen} onToggle={(event) => setAdvancedOpen(event.currentTarget.open)}>
             <summary>高级</summary>
-            <p>从文件补充旧记录。已通过自动同步获取的记录，无需重复导入。</p>
+            <p>从文件补充旧记录，或管理已导入资料。已通过自动同步获取的记录，无需重复导入。</p>
             <button className="button" onClick={() => setPage('import')}>从文件导入</button>
             <div ref={diagnostics}><StartupSettings state={startup} backend={backend} open={diagnosticsOpen} onOpenChange={setDiagnosticsOpen} /></div>
+            {advancedOpen && <DeveloperTraces session={contactSession} />}
           </details></>}
         {page === 'contacts' && <ContactsPage session={contactSession} navigate={setPage} manualRelease={startup.mode === 'managed'} />}
         {page === 'import' && <ImportPage session={contactSession} />}

@@ -1,6 +1,6 @@
 import { fillWorkspaceThought, generateWorkspace, setWorkspaceContext } from '../workspace-actions';
 import { openAssistantHistory, expandSavedDiscussion } from '../assistant-history-actions';
-import { selectMemoryCategory } from '../memory-page-actions';
+import { openImportManagement } from '../memory-page-actions';
 import { expect, type Browser } from '@playwright/test';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
 import { withRewritePages } from './rewrite-acceptance';
@@ -86,9 +86,9 @@ export async function assistantSessionPersistence(browser: Browser, origin: stri
     const editor = helper.getByRole('textbox', { name: '候选1编辑文本', exact: true });
     await expect(editor).toHaveValue('不可复活的合成候选（说法1）。');
     await manager.getByRole('button', { name: '记忆', exact: true }).click();
-    await selectMemoryCategory(manager, '来源与过程');
-    const card = manager.getByRole('region', { name: '来源删除管理', exact: true })
-      .getByRole('listitem').filter({ hasText: `来源标识：${unrelated.source_id}` });
+    await openImportManagement(manager);
+    const card = manager.getByRole('region', { name: '已导入资料', exact: true })
+      .locator(`[data-source-id="${unrelated.source_id}"]`);
     // 删除无关来源触发生产核验；暂停真实200响应，再让实际依赖来源失效。
     replyTransport.nextEvidence = 'hold';
     await card.getByRole('button', { name: '删除来源', exact: true }).click();

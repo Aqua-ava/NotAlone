@@ -293,7 +293,7 @@ test('联系人切换、断连恢复及目录移除清本人缓存与迟到结�
   }
 });
 
-test('本人来源只显示真实标识，原关系全部吻合才开放过程；未知状态与历史原样显示', async () => {
+test('本人来源只显示真实标识，原关系全部吻合才开放依据；未知状态与历史原样显示', async () => {
   for (const sourceContacts of [[ids.contact], [ids.other], [ids.contact, ids.other]]) {
     const item = memory({ source_ids: [ids.message], revision: 2,
       timing: { ...memory().timing, current_status: 'current_unverified', current_status_reason: '当前情况尚未知。' } });
@@ -305,7 +305,7 @@ test('本人来源只显示真实标识，原关系全部吻合才开放过程�
     const html = render(await f.bridge.getState());
     assert.match(html, /当前未核实/);
     assert.match(html, /当前情况尚未知/);
-    assert.equal(html.includes('查看本人概览提取过程：'), sourceContacts.every((contact) => contact === ids.contact));
+    assert.equal(html.includes('查看本人概览依据：'), sourceContacts.every((contact) => contact === ids.contact));
     assert.match(html, /请先明确选择该联系人/);
     assert.ok(!html.includes('合成本人概览联系人'));
   }

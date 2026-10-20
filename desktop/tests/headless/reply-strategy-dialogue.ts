@@ -1,4 +1,4 @@
-import { selectMemoryCategory } from '../memory-page-actions';
+import { openImportManagement } from '../memory-page-actions';
 import { expect, type Browser } from '@playwright/test';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
 import { withRewritePages } from './rewrite-acceptance';
@@ -46,17 +46,17 @@ export async function replyStrategyDialogue(browser: Browser, origin: string) {
       // 删除实际被这组建议使用的背景来源；独立想法仍由用户持有。
       const sourceId = (material.source_ids as string[])[0];
       await manager.getByRole('button', { name: '记忆', exact: true }).click();
-      await selectMemoryCategory(manager, '来源与过程');
-      const sources = manager.getByRole('region', { name: '来源删除管理', exact: true });
+      await openImportManagement(manager);
+      const sources = manager.getByRole('region', { name: '已导入资料', exact: true });
       await expect.poll(() => manager.evaluate(async expected => {
         const state = await window.notalone.sources.getState();
         return state.contactId === expected.contactId && state.phase === 'ready'
           && expected.sourceIds.every(id => state.sources.some(source => source.sourceId === id));
       }, { contactId, sourceIds: material.source_ids as string[] })).toBe(true);
-      const pagination = sources.getByRole('navigation', { name: '来源删除管理分页', exact: true });
+      const pagination = sources.getByRole('navigation', { name: '已导入资料分页', exact: true });
       const pageStatus = pagination.getByRole('status');
       await expect(pageStatus).toHaveText(/^共 \d+ 条 · 第 1 \/ \d+ 页$/);
-      const source = sources.getByRole('listitem').filter({ hasText: `来源标识：${sourceId}` });
+      const source = sources.locator(`[data-source-id="${sourceId}"]`);
       // 合成来源的生成顺序不等于目录顺序；通过公开分页找到原定来源，不能只查第一页。
       async function revealOriginalSource(deadline?: number) {
         const wait = () => deadline === undefined ? {} : { timeout: Math.max(1, deadline - Date.now()) };

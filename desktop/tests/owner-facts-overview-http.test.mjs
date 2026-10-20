@@ -87,8 +87,8 @@ test('真实HTTP与生产桥只汇集SELF和独立本人手录，逐项原关系
     assert.equal(otherSelf.provenance.references[0].contactId, prepared.otherContactId);
     const html = render(state, prepared.contactId);
     assert.ok(!html.includes(prepared.privateContactText)); assert.ok(!html.includes(prepared.excludedText));
-    assert.ok(html.includes(`查看本人概览提取过程：${prepared.self.text}`));
-    assert.ok(!html.includes(`查看本人概览提取过程：${prepared.otherSelf.text}`));
+    assert.ok(html.includes(`查看本人概览依据：${prepared.self.text}`));
+    assert.ok(!html.includes(`查看本人概览依据：${prepared.otherSelf.text}`));
     await source.refresh(selection());
     assert.ok((await source.getState()).sources.some((entry) => entry.sourceId === prepared.sourceToDelete));
     assert.ok(!(await source.getState()).sources.some((entry) => entry.sourceId === prepared.otherSourceId));
@@ -96,8 +96,8 @@ test('真实HTTP与生产桥只汇集SELF和独立本人手录，逐项原关系
     await memory.refresh(selection()); await memory.refreshOwnerOverview(selection()); await source.refresh(selection());
     assert.ok((await source.getState()).sources.some((entry) => entry.sourceId === prepared.otherSourceId));
     const after = render(await memory.getState(), prepared.otherContactId);
-    assert.ok(!after.includes(`查看本人概览提取过程：${prepared.self.text}`));
-    assert.ok(after.includes(`查看本人概览提取过程：${prepared.otherSelf.text}`));
+    assert.ok(!after.includes(`查看本人概览依据：${prepared.self.text}`));
+    assert.ok(after.includes(`查看本人概览依据：${prepared.otherSelf.text}`));
     await memory.openVersions({ ...selection(), level: 'owner', memoryId: prepared.self.memory_id, revision: prepared.self.revision });
     assert.equal((await memory.getState()).history.items[0].memoryId, prepared.self.memory_id);
   });

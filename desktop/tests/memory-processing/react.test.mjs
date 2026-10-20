@@ -9,7 +9,7 @@ function otherResponse(request) {
     : request.path.endsWith('/memory-candidates') ? { candidates: [] } : { memories: [] };
 }
 
-test('记忆页默认展示真实中断进度，显式继续并回读，来源历史保持折叠', { timeout: 20000 }, async t => {
+test('记忆页默认展示真实中断进度，显式继续并回读，版本历史保持折叠', { timeout: 20000 }, async t => {
   const writes = []; let resumed = false;
   const f = await fixture(async request => {
     if (request.path.includes('/memory-processing')) {
@@ -29,7 +29,7 @@ test('记忆页默认展示真实中断进度，显式继续并回读，来源�
     await card.getByRole('button', { name: '详情', exact: true }).click();
     assert.equal(await card.getByRole('progressbar').getAttribute('value'), '20');
     await card.getByRole('button', { name: '收起', exact: true }).click();
-    assert.equal(await page.locator('summary').filter({ hasText: /^历史与来源$/ }).locator('..').getAttribute('open'), null);
+    assert.equal(await page.locator('summary').filter({ hasText: /^版本历史$/ }).locator('..').getAttribute('open'), null);
     assert.equal(writes.length, 0);
     await card.getByRole('button', { name: '继续', exact: true }).click();
     await card.getByText('等待生成记忆', { exact: true }).waitFor();
@@ -94,11 +94,12 @@ test('可见页面按真实进展更新记忆，新增结果不清空正在编�
   });
 });
 
-test('本人当前任务标明聊天归属和中文失败原因，读取失败不冒充无任务', { timeout: 20000 }, async t => {
-  let fail = false; const writes = [];
+test('本人分类仍限定当前联系人任务并显示中文失败原因，读取失败不冒充无任务', { timeout: 20000 }, async t => {
+  let fail = false; const writes = [], processingPaths = [];
   const f = await fixture(async request => {
     if (request.method !== 'GET') writes.push(request);
     if (request.path.includes('/memory-processing')) {
+      processingPaths.push(request.path);
       if (fail) throw new Error('synthetic unavailable');
       const result = processingPayload({ status: 'failed', reason_code: 'memory_extraction_failed', processed_count: null, total_count: null });
       result.tasks.push({ ...result.tasks[0], task_id: ids.other, status: 'stopped', action: 'restart', reason_code: 'task_cancelled' });
@@ -110,7 +111,7 @@ test('本人当前任务标明聊天归属和中文失败原因，读取失败�
   await withMemoryPage(f, t.signal, async page => {
     await page.getByRole('navigation', { name: '记忆分类' }).getByRole('button', { name: '我', exact: true }).click();
     const card = page.getByRole('region', { name: '记忆处理状态' });
-    await card.getByRole('status').filter({ hasText: '合成主题联系人的聊天 · 记忆生成失败' }).waitFor();
+    await card.getByRole('status').filter({ hasText: /^记忆生成失败$/ }).waitFor();
     await card.getByText('上次未能从聊天中生成记忆，具体原因未记录。', { exact: true }).waitFor();
     await card.getByRole('button', { name: '详情', exact: true }).click();
     assert.equal(await card.getByRole('heading').count(), 1);
@@ -121,6 +122,8 @@ test('本人当前任务标明聊天归属和中文失败原因，读取失败�
     await card.getByText('处理状态暂时读取失败，请刷新重试。', { exact: true }).waitFor();
     assert.equal(await card.getByText('本次处理完成', { exact: true }).count(), 0);
     assert.equal(writes.length, 0);
+    assert.ok(processingPaths.length > 0);
+    assert.ok(processingPaths.every(path => path.startsWith(`/api/contacts/${ids.contact}/`)));
   });
 });
 

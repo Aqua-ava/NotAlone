@@ -4,12 +4,11 @@ import type { ActiveMemory, MemoryAdditionRequest, MemoryContent, MemoryCorrecti
 import type { ContactSessionView } from './contact-session';
 import type { ManagerPage } from './pages';
 import './memory.css';
-import { SourceDeletionPanel } from './SourceDeletionPanel';
 import { MemoryTemporalStatus } from './MemoryTemporalStatus';
 import { MemoryList } from './MemoryList';
 import { LayeredMemoryPanel } from './LayeredMemoryPanel';
 import type { LayeredMemoryManagementRequest, LayeredMemoryManagementOptions } from '../shared/memory-bridge';
-import { TracePanel, useTraceReading } from './TracePanel';
+import { MemoryEvidence } from './MemoryEvidence';
 import type { TraceRecordKind } from '../shared/trace-bridge';
 import { UpdateBackupCleanupRecovery } from './UpdateBackupDeletionNotice';
 
@@ -245,7 +244,7 @@ function SourceReference({ id, sources }: { id: string; sources: MemorySection<M
 function MemoryCard({ content, memory, candidate, sources, correct, remove, openVersions, confirmCandidate, discardCandidate, updateMemories, applyCandidateUpdate, busy, trace, initiallyEditing = false }: {
   content: MemoryContent; memory?: ActiveMemory; candidate?: PendingMemoryCandidate; sources: MemorySection<MemorySource>;
   correct?: (entry: ActiveMemory, text: string, category: MemoryCorrectionRequest['category'], changeKind: MemoryCorrectionRequest['changeKind']) => Promise<void>; remove?: (entry: ActiveMemory) => Promise<void>; confirmCandidate?: (entry: PendingMemoryCandidate) => Promise<void>; discardCandidate?: (entry: PendingMemoryCandidate) => Promise<void>; busy?: boolean;
-  trace: (kind: TraceRecordKind, id: string) => void;
+  trace: (kind: TraceRecordKind, id: string, text: string) => void;
   openVersions?: (entry: ActiveMemory) => Promise<void>;
   updateMemories?: MemorySection<ActiveMemory>;
   applyCandidateUpdate?: (entry: PendingMemoryCandidate, previous: ActiveMemory) => Promise<void>;
@@ -272,6 +271,10 @@ function MemoryCard({ content, memory, candidate, sources, correct, remove, open
       <ul className="memory-source-references" aria-label="新增证据来源">{review.newSourceIds.map((id) => <SourceReference key={id} id={id} sources={sources} />)}</ul>
     </div>)}
     {content.timing.currentStatus !== 'stable' && <p className="memory-section-note">{({ current_verified: '时间已核实', current_unverified: '时间待核实', historical: '过去的信息' } as const)[content.timing.currentStatus]}</p>}
+      <button className="button" aria-label={`查看依据：${content.text}`} onClick={() => {
+        if (candidate) trace('candidate', candidate.candidateId, content.text);
+        else if (memory) trace(memory.level === 'owner' ? 'owner_memory' : 'contact_memory', memory.memoryId, content.text);
+      }}>查看依据</button>
     <button className="memory-details-button" aria-label={`查看来源与版本：${content.text}`} aria-expanded={expanded}
       onClick={() => setExpanded((value) => !value)}>{expanded ? '收起详情' : '详情'}</button>
     {memory && correct && <button className="button" disabled={busy}
@@ -317,10 +320,6 @@ function MemoryCard({ content, memory, candidate, sources, correct, remove, open
       <MemoryTemporalStatus timing={content.timing} /><p>分类：{categoryNames[content.category]} · {topicNames[content.topic]}</p>
       <div className="memory-times"><p>来源聊天时间：{sourceTime(content)}</p><p>保存时间：{timeText(content.timing.recordedAt)}</p></div>
       <MemoryEventDetails event={content.event} />
-      <button className="button" aria-label={`查看提取过程：${content.text}`} onClick={() => {
-        if (candidate) trace('candidate', candidate.candidateId);
-        else if (memory) trace(memory.level === 'owner' ? 'owner_memory' : 'contact_memory', memory.memoryId);
-      }}>查看提取过程</button>
       <p>来源聊天时间表示当时说过，不保证事件在当天发生。</p>
       <p>生效时间：{content.validAt ? timeText(content.validAt) : '未指定'}</p>
       <p>失效时间：{content.invalidAt ? timeText(content.invalidAt) : '未指定'}</p>
@@ -436,7 +435,7 @@ function ReadingSection<T>({ title, note, empty, state, retry, children }: {
 
 export function ContactRelationshipOverview({ overview, memories, refresh, openVersions, trace, busy = false }: {
   overview: MemoryOverviewState; memories: MemorySection<ActiveMemory>; refresh: () => Promise<void>;
-  openVersions: (entry: ActiveMemory) => Promise<void>; trace?: (kind: TraceRecordKind, id: string) => void; busy?: boolean;
+  openVersions: (entry: ActiveMemory) => Promise<void>; trace?: (kind: TraceRecordKind, id: string, text: string) => void; busy?: boolean;
 }) {
   return <section className="memory-section memory-overview" aria-label="联系人经历与关系变化">
     <header><div><h2>联系人经历与关系变化</h2>
@@ -472,8 +471,8 @@ export function ContactRelationshipOverview({ overview, memories, refresh, openV
               {reference.sourceRefId && <p>来源片段引用：{reference.sourceRefId}</p>}
               <p>来源定位：{reference.locator ?? '未知'}</p>
             </li>)}</ul>
-          {trace && <button className="button" disabled={busy} onClick={() => trace('contact_memory', item.memoryId)}
-            aria-label={`查看概览提取过程：${item.text}`}>查看提取过程</button>}
+          {trace && <button className="button" disabled={busy} onClick={() => trace('contact_memory', item.memoryId, item.text)}
+            aria-label={`查看概览依据：${item.text}`}>查看依据</button>}
           {leaf ? <button className="button" disabled={busy} onClick={() => void openVersions(leaf)}
             aria-label={`查看变化依据：${item.text}`}>查看底层资料与版本历史</button>
             : <p className="memory-section-note">当前底层版本暂不可核对；此项只供回看，请刷新资料后再修正。</p>}
@@ -489,7 +488,7 @@ export function ContactRelationshipOverview({ overview, memories, refresh, openV
 export function OwnerFactsOverview({ overview, memories, contactId, refresh, openVersions, trace, busy = false }: {
   overview: MemoryOverviewState<OwnerFactsPreferencesOverview>; memories: MemorySection<ActiveMemory>; contactId: string;
   refresh: () => Promise<void>; openVersions: (entry: ActiveMemory) => Promise<void>;
-  trace?: (kind: TraceRecordKind, id: string) => void; busy?: boolean;
+  trace?: (kind: TraceRecordKind, id: string, text: string) => void; busy?: boolean;
 }) {
   return <section className="memory-section memory-overview" aria-label="本人事实与偏好概览">
     <header><div><h2>本人事实与偏好概览</h2>
@@ -525,10 +524,10 @@ export function OwnerFactsOverview({ overview, memories, contactId, refresh, ope
               {reference.sourceRefId && <p>来源片段引用：{reference.sourceRefId}</p>}
               {reference.contactId && <p>原来源联系人标识：{reference.contactId}。请先明确选择该联系人，再核对其来源与消息。</p>}
             </li>)}</ul>
-          {trace && traceAvailable && <button className="button" disabled={busy} onClick={() => trace('owner_memory', item.memoryId)}
-            aria-label={`查看本人概览提取过程：${item.text}`}>查看提取过程</button>}
+          {trace && traceAvailable && <button className="button" disabled={busy} onClick={() => trace('owner_memory', item.memoryId, item.text)}
+            aria-label={`查看本人概览依据：${item.text}`}>查看依据</button>}
           {!traceAvailable && <p className="memory-section-note">{provenance.kind === 'manual_entry'
-            ? '本人手录资料不适用模型提取过程。' : '完整来源范围尚未与当前联系人核对，暂不读取提取过程；可按逐项原来源标识核对。'}</p>}
+            ? '这条资料由你手动录入。' : '这条资料的完整来源尚未与当前联系人核对。'}</p>}
           {leaf ? <button className="button" disabled={busy} onClick={() => void openVersions(leaf)}
             aria-label={`查看本人变化依据：${item.text}`}>查看本人底层资料与版本历史</button>
             : <p className="memory-section-note">当前本人底层版本暂不可核对；此项只供回看，请刷新资料后再修正。</p>}
@@ -546,16 +545,17 @@ type MemoryView = keyof typeof memoryViews;
 
 export function MemoryPage({ session, navigate }: { session: ContactSessionView; navigate: (page: ManagerPage) => void }) {
   const memory = useMemoryReading(session);
-  const traces = useTraceReading(session);
   const scopeKey = `${session.state.selectedContactId}:${session.state.scopeRevision}`;
-  const activeScope = useRef(scopeKey);
-  activeScope.current = scopeKey;
   const [view, selectView] = useState<MemoryView>('contact');
   const [factTarget, setFactTarget] = useState<{ scope: string; memoryId: string; revision: number; editing: boolean } | null>(null);
   const detailKey = `${scopeKey}:${view}`;
   const [historySelection, setHistorySelection] = useState<{ key: string; open: boolean } | null>(null);
   const historyOpen = historySelection?.key === detailKey && historySelection.open;
-  const tracePanel = useRef<HTMLDivElement>(null);
+  const [evidenceTarget, setEvidenceTarget] = useState<{ scope: string; kind: TraceRecordKind; id: string; text: string } | null>(null);
+  const evidencePanel = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (evidenceTarget?.scope === detailKey) evidencePanel.current?.scrollIntoView({ block: 'nearest' });
+  }, [evidenceTarget, detailKey]);
   const factsDetails = useRef<HTMLDivElement>(null);
   const historyDetails = useRef<HTMLDetailsElement>(null);
   const revealFacts = () => {
@@ -581,13 +581,7 @@ export function MemoryPage({ session, navigate }: { session: ContactSessionView;
   useEffect(() => {
     if (correctionTarget && memory.state.contactId === session.state.selectedContactId) openFact(correctionTarget, true);
   }, [correctionTarget?.memoryId, correctionTarget?.revision, scopeKey]);
-  const trace = (kind: TraceRecordKind, id: string) => {
-    setHistorySelection({ key: detailKey, open: true });
-    if (historyDetails.current) historyDetails.current.open = true;
-    void traces.find('memory-traces', kind, id).then(() => {
-      if (activeScope.current === scopeKey) tracePanel.current?.scrollIntoView({ block: 'start' });
-    });
-  };
+  const trace = (kind: TraceRecordKind, id: string, text: string) => setEvidenceTarget({ scope: detailKey, kind, id, text });
   const contact = session.state.contacts.find((entry) => entry.contactId === session.state.selectedContactId);
   const { state } = memory;
   return <div className="memory-page">
@@ -640,22 +634,17 @@ export function MemoryPage({ session, navigate }: { session: ContactSessionView;
           <LayeredMemoryPanel key={scopeKey} state={state.layeredMemory} contactName={contact.displayName}
             busy={state.mutation.phase === 'working'} read={memory.readLayeredMemory} manage={memory.manageLayeredMemory} facts={openFact} />
         </details>}
+        {evidenceTarget?.scope === detailKey && <div ref={evidencePanel}>
+          <MemoryEvidence key={`${scopeKey}:${evidenceTarget.kind}:${evidenceTarget.id}`} session={session}
+            kind={evidenceTarget.kind} recordId={evidenceTarget.id} text={evidenceTarget.text} onClose={() => setEvidenceTarget(null)} />
+        </div>}
         <details ref={historyDetails} className="memory-disclosure memory-secondary" open={historyOpen}
-          onToggle={event => setHistorySelection({ key: detailKey, open: event.currentTarget.open })}><summary>历史与来源</summary>
+          onToggle={event => setHistorySelection({ key: detailKey, open: event.currentTarget.open })}><summary>版本历史</summary>
         {historyOpen && <>
         {view === 'contact' && <ContactRelationshipOverview overview={state.overview} memories={state.contact} refresh={memory.refreshOverview}
           openVersions={openVersions} trace={trace} busy={state.mutation.phase === 'working'} />}
         {(view === 'owner' ? state.history.level === 'owner' : state.history.level === 'contact') &&
           <MemoryVersionHistory history={state.history} revert={memory.revertAutoUpdate} busy={state.mutation.phase === 'working'} />}
-        {view === 'owner' && <p className="memory-section-note">这里只显示与{contact.displayName}相关的来源与提取过程。</p>}
-        <ReadingSection title="当前联系人来源" note="来源目录不能解析所有消息、观察或人工引用；无法核对的引用会保留未知说明。" empty="这位联系人暂无来源记录。"
-          state={state.sources} retry={() => void memory.refresh('sources')}>
-          <MemoryList key={scopeKey} items={state.sources.items} label="当前联系人来源" className="memory-source-list" list>{(entry) => <li key={entry.sourceId}>
-            <b>{entry.fileName ?? '文件名不可用'}</b><p>来源标识：{entry.sourceId}</p><p>{entry.recordCount} 条记录 · {sourceNames[entry.status]}</p>
-          </li>}</MemoryList>
-        </ReadingSection>
-        <SourceDeletionPanel session={session} />
-        <div ref={tracePanel} className="memory-trace-target"><TracePanel key={session.state.scopeRevision} traces={traces} /></div>
         </>}
         </details>
       </>}

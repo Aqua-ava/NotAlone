@@ -1,5 +1,5 @@
 import { setWorkspaceContext } from '../workspace-actions';
-import { selectMemoryCategory } from '../memory-page-actions';
+import { openImportManagement } from '../memory-page-actions';
 import { expect, type Browser, type Locator, type Page } from '@playwright/test';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
 import { withRewritePages } from './rewrite-acceptance';
@@ -97,8 +97,8 @@ export async function styleCopyOrigin(browser: Browser, origin: string) {
     await confirmHelperContact(helper, contactId);
     await expect(list.getByText(finalText, { exact: true })).toBeVisible();
     await manager.getByRole('button', { name: '记忆', exact: true }).click();
-    await selectMemoryCategory(manager, '来源与过程');
-    await manager.getByRole('region', { name: '来源删除管理', exact: true }).getByRole('button', { name: '删除来源', exact: true }).click();
+    await openImportManagement(manager);
+    await manager.getByRole('region', { name: '已导入资料', exact: true }).getByRole('button', { name: '删除来源', exact: true }).click();
     await manager.getByRole('button', { name: '确认删除来源', exact: true }).click();
     await expect(manager.getByText('已删除，已通过不可检索校验', { exact: true })).toBeVisible({ timeout: 15000 });
     await expect(list.getByText(finalText, { exact: true })).toHaveCount(0);

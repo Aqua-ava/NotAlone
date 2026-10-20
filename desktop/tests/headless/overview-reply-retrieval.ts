@@ -1,6 +1,6 @@
 import { setWorkspaceContext } from '../workspace-actions';
 import { openAssistantHistory, expandSavedDiscussion } from '../assistant-history-actions';
-import { selectMemoryCategory } from '../memory-page-actions';
+import { openImportManagement } from '../memory-page-actions';
 import { expect, type Browser } from '@playwright/test';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
 import { withReplyOverviewFixture, replyOverviewModules, type ReplyOverviewPrepared } from '../overview-reply-retrieval-fixture';
@@ -107,9 +107,8 @@ export async function overviewReplyRetrieval(browser: Browser, origin: string) {
         .toBe(originalReceipt.retrieval?.overviewRevisions.contact?.projectionRevision);
       expect((await fixture.command('observations')).model_calls).toBe(1);
 
-      await selectMemoryCategory(manager, '来源与过程');
-      const source = manager.getByRole('region', { name: '来源删除管理', exact: true }).getByRole('listitem')
-        .filter({ hasText: `来源标识：${prepared.sourceToDelete}` });
+      await openImportManagement(manager);
+      const source = manager.getByRole('region', { name: '已导入资料', exact: true }).locator(`[data-source-id="${prepared.sourceToDelete}"]`);
       await source.getByRole('button', { name: '删除来源', exact: true }).click();
       await manager.getByRole('button', { name: '确认删除来源', exact: true }).click();
       await expect(source.getByText('已删除，已通过不可检索校验', { exact: true })).toBeVisible({ timeout: 15_000 });

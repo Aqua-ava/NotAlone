@@ -13,7 +13,7 @@ export const managerPages = {
   },
   import: {
     title: '从文件导入', icon: 'import',
-    description: '备用入口：补充自动同步未覆盖的旧记录。每次仅归属于一位联系人，确认预览后才会保存。',
+    description: '补充旧记录，查看或删除已导入资料。每次导入仅归属于一位联系人，确认预览后才会保存。',
     emptyTitle: '请先连接本机服务',
     emptyDescription: '连接完成后，选择一份单联系人历史文件并核对资料范围。',
     action: '选择历史文件',

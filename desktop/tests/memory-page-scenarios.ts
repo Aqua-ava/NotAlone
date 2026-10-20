@@ -1,7 +1,7 @@
 import { expect, type Page } from '@playwright/test';
 import type { MemoryFixture } from './memory-backend-fixture';
 import type { MemoryHttpProxy } from './memory-http-proxy';
-import { expandMemoryDetails, selectMemoryCategory } from './memory-page-actions';
+import { expandMemoryDetails, openImportManagement, selectMemoryCategory } from './memory-page-actions';
 import type { MemorySectionName } from '../src/shared/memory-bridge';
 
 export async function memoryDetails(manager: Page, memoryBackend: MemoryFixture) {
@@ -13,6 +13,8 @@ export async function memoryDetails(manager: Page, memoryBackend: MemoryFixture)
   await expect(manager.getByRole('region', { name: '我的记忆', exact: true })).toHaveCount(0);
   await expect(manager.getByRole('region', { name: '联系人经历与关系变化', exact: true })).toHaveCount(0);
   await expect(manager.getByRole('region', { name: '联系人记忆', exact: true })).toBeVisible();
+  await expect(manager.getByRole('region', { name: '提取与来源处理过程', exact: true })).toHaveCount(0);
+  await expect(manager.getByRole('region', { name: '已导入资料', exact: true })).toHaveCount(0);
   await selectMemoryCategory(manager, '联系人记忆');
   const contact = manager.getByRole('region', { name: '联系人记忆' });
   const owner = manager.getByRole('region', { name: '我的记忆' });
@@ -23,6 +25,12 @@ export async function memoryDetails(manager: Page, memoryBackend: MemoryFixture)
   const ownerCandidate = owner.getByRole('article').filter({ has: manager.getByText('本人喜欢合成绿茶。', { exact: true }) });
   await expect(automatic.getByText('甲喜欢合成茉莉茶。', { exact: true })).toBeVisible();
   await expect(automatic.getByText('系统记下 · 可移除', { exact: true })).toBeVisible();
+  await automatic.getByRole('button', { name: '查看依据：甲喜欢合成茉莉茶。', exact: true }).click();
+  const evidence = manager.getByRole('region', { name: '记忆依据', exact: true });
+  await expect(evidence.getByText('这条记忆未保存可查看的来源原话。', { exact: true })).toBeVisible();
+  await expect(evidence.getByRole('textbox', { name: '记录标识' })).toHaveCount(0);
+  await evidence.getByRole('button', { name: '收起依据', exact: true }).click();
+  await expect(evidence).toHaveCount(0);
   await expect(corrected.getByText('甲的新版本关系备注。', { exact: true })).toBeVisible();
   await expect(corrected.getByText('手动保存', { exact: true })).toBeVisible();
   await expect(contact.getByText('旧版关系备注。', { exact: true })).toHaveCount(0);
@@ -60,10 +68,10 @@ export async function memoryDetails(manager: Page, memoryBackend: MemoryFixture)
   for (const subject of ['我', '对方', '我们']) await expect(pending.getByText(`关于${subject}`, { exact: true })).toBeVisible();
   for (const card of await pending.getByRole('article').all()) await expandMemoryDetails(card);
   await expect(pending.getByText(/来源时间不完整/)).toHaveCount(3);
-  await selectMemoryCategory(manager, '来源与过程');
-  const sources = manager.getByRole('region', { name: '当前联系人来源' });
-  await expect(sources.getByText(`来源标识：${memoryBackend.data.source_document_id}`, { exact: true })).toBeVisible();
-  await expect(sources.getByText('2 条记录 · 有效', { exact: true })).toBeVisible();
+  await openImportManagement(manager);
+  const source = manager.getByRole('region', { name: '已导入资料', exact: true }).locator(`[data-source-id="${memoryBackend.data.source_document_id}"]`);
+  await expect(source.getByText('2 条记录', { exact: true })).toBeVisible();
+  await expect(source.getByRole('status')).toHaveText('有效来源');
   await memoryHttpIsolation(memoryBackend);
 }
 
@@ -84,7 +92,10 @@ export async function memoryScopeAndEmpty(manager: Page, memoryBackend: MemoryFi
   await expandMemoryDetails(card);
   await card.getByRole('button', { name: '修正资料：本人喜欢合成绿茶。', exact: true }).click();
   await card.getByRole('textbox', { name: '资料正文', exact: true }).fill('不应带到另一个联系人的未保存草稿');
+  await card.getByRole('button', { name: '查看依据：本人喜欢合成绿茶。', exact: true }).click();
+  await expect(manager.getByRole('region', { name: '记忆依据', exact: true })).toBeVisible();
   await selector.selectOption(memoryBackend.data.contact_ids[1]);
+  await expect(manager.getByRole('region', { name: '记忆依据', exact: true })).toHaveCount(0);
   await expect(owner.getByText('本人和乙讨论过合成登山计划。', { exact: true })).toBeVisible();
   await expect(owner.getByText('本人喜欢合成绿茶。', { exact: true })).toHaveCount(0);
   await expect(manager.getByRole('textbox', { name: '资料正文', exact: true })).toHaveCount(0);
@@ -102,8 +113,8 @@ export async function memoryScopeAndEmpty(manager: Page, memoryBackend: MemoryFi
   await expect(manager.getByText('甲喜欢合成茉莉茶。', { exact: true })).toHaveCount(0);
   await selector.selectOption(memoryBackend.data.empty_contact_id);
   await expect(manager.getByText('还没有记住关于对方的事。', { exact: true })).toBeVisible();
-  await selectMemoryCategory(manager, '来源与过程');
-  await expect(manager.getByText('这位联系人暂无来源记录。', { exact: true })).toBeVisible();
+  await openImportManagement(manager);
+  await expect(manager.getByText('这位联系人还没有可管理的来源资料。', { exact: true })).toBeVisible();
   await selectMemoryCategory(manager, '本人记忆');
   await expect(owner.getByText('还没有记住你和这位联系人交流中的事。', { exact: true })).toBeVisible();
   await expect(manager.getByRole('alert')).toHaveCount(0);
@@ -206,7 +217,7 @@ const sections = {
   contact: { title: '联系人记忆', text: '甲喜欢合成茉莉茶。', empty: '还没有记住关于对方的事。', suffix: 'memories' },
   owner: { title: '我的记忆', text: '本人喜欢合成绿茶。', empty: '还没有记住你和这位联系人交流中的事。', suffix: 'owner-memories' },
   pending: { title: '待确认候选', text: '甲可能参加合成旅行计划。', empty: '暂时没有需要确认的内容。', suffix: 'memory-candidates' },
-  sources: { title: '当前联系人来源', text: 'synthetic.jsonl', empty: '这位联系人暂无来源记录。', suffix: 'sources' },
+  sources: { title: '已导入资料', text: 'synthetic.jsonl', empty: '这位联系人还没有可管理的来源资料。', suffix: 'sources' },
 } as const;
 
 // 每栏通过真实传输挂起、失败、重读；仅记录方法/路径，不记录认证或正文。
@@ -214,20 +225,24 @@ export async function memorySectionFailure(manager: Page, fixture: MemoryFixture
   await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
   await manager.getByRole('button', { name: '记忆', exact: true }).click();
   for (const value of Object.values(sections)) {
-    await selectMemoryCategory(manager, value.title === '当前联系人来源' ? '来源与过程' : value.title === '我的记忆' ? '本人记忆' : value.title);
+    if (value.title === '已导入资料') await openImportManagement(manager);
+    else await selectMemoryCategory(manager, value.title === '我的记忆' ? '本人记忆' : value.title);
     await expect(manager.getByRole('region', { name: value.title }).getByText(value.text, { exact: true })).toBeVisible();
   }
-  await selectMemoryCategory(manager, sections[section].title === '当前联系人来源' ? '来源与过程' : sections[section].title === '我的记忆' ? '本人记忆' : sections[section].title);
+  const title = sections[section].title;
+  if (title === '已导入资料') await openImportManagement(manager);
+  else await selectMemoryCategory(manager, title === '我的记忆' ? '本人记忆' : title);
   await expect(manager.getByRole('region', { name: section === 'owner' ? '我的记忆' : sections[section].title }).getByText(sections[section].text, { exact: true })).toBeVisible();
   const path = `/api/contacts/${fixture.data.contact_ids[0]}/${sections[section].suffix}`;
   proxy.holdPath = path;
   const refresh = manager.evaluate(async (selectedSection) => {
     const state = await window.notalone.contacts.getState();
-    await window.notalone.memory.refresh({ contactId: state.selectedContactId!, scopeRevision: state.scopeRevision, section: selectedSection });
+    if (selectedSection === 'sources') await window.notalone.sources.refresh({ contactId: state.selectedContactId!, scopeRevision: state.scopeRevision });
+    else await window.notalone.memory.refresh({ contactId: state.selectedContactId!, scopeRevision: state.scopeRevision, section: selectedSection });
   }, section);
   await expect.poll(() => proxy.heldCount).toBe(1);
   const selected = manager.getByRole('region', { name: section === 'owner' ? '我的记忆' : sections[section].title });
-  await expect(selected.getByText(`正在读取${sections[section].title}…`, { exact: true })).toBeVisible();
+  await expect(selected.getByText(section === 'sources' ? '正在核对来源与删除任务…' : `正在读取${sections[section].title}…`, { exact: true })).toBeVisible();
   // 挂起期间通过公开状态核对同一联系人其他资料未受影响。
   const unaffected = await manager.evaluate(() => window.notalone.memory.getState());
   for (const [key, value] of Object.entries(sections)) if (key !== section) {
@@ -237,15 +252,16 @@ export async function memorySectionFailure(manager: Page, fixture: MemoryFixture
   }
   proxy.release(true);
   await refresh;
-  await expect(selected.getByRole('alert')).toHaveText(`${sections[section].title}读取失败，请重试。`);
+  await expect(selected.getByRole('alert')).toHaveText(section === 'sources' ? '来源或删除任务读取失败，尚不能确认已删除，请重试刷新。' : `${sections[section].title}读取失败，请重试。`);
   await expect(selected.getByText(sections[section].empty, { exact: true })).toHaveCount(0);
   const before = proxy.requests.length;
   proxy.holdPath = null;
-  await selected.getByRole('button', { name: `重新读取${sections[section].title}`, exact: true }).click();
+  await selected.getByRole('button', { name: section === 'sources' ? '刷新资料与删除状态' : `重新读取${sections[section].title}`, exact: true }).click();
   await expect(selected.getByText(sections[section].text, { exact: true })).toBeVisible();
   expect(proxy.requests.slice(before).filter((request) => request.method === 'GET' && (request.path.includes('/memories') || request.path.endsWith('/owner-memories') || request.path.endsWith('/memory-candidates') || request.path.endsWith('/sources')))).toEqual([{ method: 'GET', path }]);
   for (const [key, value] of Object.entries(sections)) if (key !== section) {
-    await selectMemoryCategory(manager, value.title === '当前联系人来源' ? '来源与过程' : value.title === '我的记忆' ? '本人记忆' : value.title);
+    if (value.title === '已导入资料') await openImportManagement(manager);
+    else await selectMemoryCategory(manager, value.title === '我的记忆' ? '本人记忆' : value.title);
     await expect(manager.getByRole('region', { name: value.title }).getByText(value.text, { exact: true })).toBeVisible();
   }
   await expect(manager.getByRole('alert')).toHaveCount(0);
@@ -255,7 +271,8 @@ export async function memoryAllEmpty(manager: Page, fixture: MemoryFixture) {
   await manager.getByRole('button', { name: '记忆', exact: true }).click();
   await manager.getByRole('combobox', { name: '资料联系人' }).selectOption(fixture.data.empty_contact_id);
   for (const [key, value] of Object.entries(sections)) {
-    await selectMemoryCategory(manager, value.title === '当前联系人来源' ? '来源与过程' : value.title === '我的记忆' ? '本人记忆' : value.title);
+    if (value.title === '已导入资料') await openImportManagement(manager);
+    else await selectMemoryCategory(manager, value.title === '我的记忆' ? '本人记忆' : value.title);
     await expect(manager.getByRole('region', { name: value.title }).getByText(value.empty, { exact: true })).toBeVisible();
     const result = await fixture.readMemorySection(fixture.data.empty_contact_id, key as MemorySectionName);
     expect(result.status).toBe(200);
@@ -358,19 +375,18 @@ export async function memoryIndependentFailures(manager: Page, memoryBackend: Me
   await selectMemoryCategory(manager, '本人记忆');
   await expect(manager.getByRole('region', { name: '我的记忆', exact: true }).getByText('我的记忆读取失败，请重试。', { exact: true })).toBeVisible();
   await expect(manager.getByText('还没有记住你和这位联系人交流中的事。', { exact: true })).toHaveCount(0);
-  await selectMemoryCategory(manager, '来源与过程');
-  await expect(manager.getByText('当前联系人来源读取失败，请重试。', { exact: true })).toBeVisible();
-  await expect(manager.getByText('这位联系人暂无来源记录。', { exact: true })).toHaveCount(0);
+  await openImportManagement(manager);
+  await expect(manager.getByText('来源或删除任务读取失败，尚不能确认已删除，请重试刷新。', { exact: true })).toBeVisible();
+  await expect(manager.getByText('这位联系人还没有可管理的来源资料。', { exact: true })).toHaveCount(0);
   memoryProxy.failurePaths.clear();
   await selectMemoryCategory(manager, '本人记忆');
   await manager.getByRole('button', { name: '重新读取我的记忆', exact: true }).click();
   await expect(manager.getByText('本人喜欢合成绿茶。', { exact: true })).toBeVisible();
-  await selectMemoryCategory(manager, '来源与过程');
-  await expect(manager.getByText('当前联系人来源读取失败，请重试。', { exact: true })).toBeVisible();
-  await manager.getByRole('button', { name: '重新读取当前联系人来源', exact: true }).click();
-  await expect(manager.getByRole('region', { name: '当前联系人来源' }).getByText('synthetic.jsonl', { exact: true })).toBeVisible();
-  const deletion = manager.getByRole('region', { name: '来源删除管理', exact: true });
-  await deletion.getByRole('button', { name: '刷新删除状态', exact: true }).click();
+  await openImportManagement(manager);
+  await manager.getByRole('button', { name: '刷新资料与删除状态', exact: true }).click();
+  await expect(manager.getByRole('region', { name: '已导入资料', exact: true }).getByText('synthetic.jsonl', { exact: true })).toBeVisible();
+  const deletion = manager.getByRole('region', { name: '已导入资料', exact: true });
+  await deletion.getByRole('button', { name: '刷新资料与删除状态', exact: true }).click();
   const source = deletion.getByRole('listitem').filter({ hasText: 'synthetic.jsonl' });
   await expect(source.getByText('synthetic.jsonl', { exact: true })).toBeVisible();
   await expect(source.getByRole('status')).toHaveText('有效来源');

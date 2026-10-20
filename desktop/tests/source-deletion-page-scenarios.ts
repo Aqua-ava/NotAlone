@@ -1,5 +1,5 @@
 import { setWorkspaceContext, setWorkspaceTone, fillWorkspaceInstruction, openWorkspaceSettings } from './workspace-actions';
-import { selectMemoryCategory } from './memory-page-actions';
+import { openImportManagement, selectMemoryCategory } from './memory-page-actions';
 import { expect, type Page } from '@playwright/test';
 import type { SourceDeletionFixture } from './source-deletion-fixture';
 import type { MemoryHttpProxy } from './memory-http-proxy';
@@ -48,12 +48,12 @@ export async function sourceDeletionBasic(manager: Page, fixture: SourceDeletion
   const sourceId = (before.data.sources as { source_id: string }[])[0].source_id;
   await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
   await manager.getByRole('button', { name: '记忆', exact: true }).click();
-  await selectMemoryCategory(manager, '来源与过程');
-  const source = manager.getByRole('region', { name: '来源删除管理', exact: true }).getByRole('listitem').filter({ hasText: `来源标识：${sourceId}` });
+  await openImportManagement(manager);
+  const source = manager.getByRole('region', { name: '已导入资料', exact: true }).locator(`[data-source-id="${sourceId}"]`);
   await expect(source).toBeVisible();
   await source.getByRole('button', { name: '删除来源', exact: true }).click();
   const confirmation = manager.getByRole('dialog', { name: '确认来源删除', exact: true });
-  await expect(confirmation.getByText('删除这份来源及失去有效来源支持的资料；其他有效来源支持的内容保留。', { exact: true })).toBeVisible();
+  await expect(confirmation.getByText(/删除 合成联系人甲 的「.+」及失去有效来源支持的资料；其他有效来源支持的内容保留。/)).toBeVisible();
   await confirmation.getByRole('button', { name: '确认删除来源', exact: true }).click();
   await expect(source.getByText('已删除，已通过不可检索校验', { exact: true })).toBeVisible({ timeout: 15_000 });
   const after = await fixture.http(`/api/contacts/${contactId}/sources`);
@@ -75,9 +75,9 @@ export async function sourceDeletionVerification(manager: Page, fixture: SourceD
   const sources = await fixture.http(`/api/contacts/${contactId}/sources`);
   const deleted = (sources.data.sources as { source_id: string; task_id: string }[])[0];
   await fixture.failFinalVerification(contactId, deleted.task_id);
-  await manager.getByRole('button', { name: '刷新删除状态', exact: true }).click();
-  await selectMemoryCategory(manager, '来源与过程');
-  const source = manager.getByRole('region', { name: '来源删除管理', exact: true }).getByRole('listitem').filter({ hasText: `来源标识：${deleted.source_id}` });
+  await manager.getByRole('button', { name: '刷新资料与删除状态', exact: true }).click();
+  await openImportManagement(manager);
+  const source = manager.getByRole('region', { name: '已导入资料', exact: true }).locator(`[data-source-id="${deleted.source_id}"]`);
   await expect(source.getByText('删除失败：不可检索校验，可重试原任务', { exact: true })).toBeVisible();
   await expect(source.getByText('已删除，已通过不可检索校验', { exact: true })).toHaveCount(0);
   const failed = await fixture.http(`/api/tasks/status?contact_id=${contactId}&task_id=${deleted.task_id}`);
@@ -96,8 +96,8 @@ export async function sourceDeletionUnknown(manager: Page, fixture: SourceDeleti
   const contactId = fixture.data.contact_ids[0];
   await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
   await manager.getByRole('button', { name: '记忆', exact: true }).click();
-  await selectMemoryCategory(manager, '来源与过程');
-  const panel = manager.getByRole('region', { name: '来源删除管理', exact: true });
+  await openImportManagement(manager);
+  const panel = manager.getByRole('region', { name: '已导入资料', exact: true });
   await expect(panel.getByRole('button', { name: '删除来源', exact: true })).toBeVisible();
   proxy.failurePaths.add(`/api/contacts/${contactId}/sources`);
   await panel.getByRole('button', { name: '删除来源', exact: true }).click();
@@ -106,7 +106,7 @@ export async function sourceDeletionUnknown(manager: Page, fixture: SourceDeleti
   await expect(panel.getByText('已删除，已通过不可检索校验', { exact: true })).toHaveCount(0);
   expect(proxy.requests.some((request) => request.method === 'DELETE' && request.path.startsWith(`/api/contacts/${contactId}/sources/`))).toBe(true);
   proxy.failurePaths.clear();
-  await panel.getByRole('button', { name: '刷新删除状态', exact: true }).click();
+  await panel.getByRole('button', { name: '刷新资料与删除状态', exact: true }).click();
   await expect(panel.getByText('已删除，已通过不可检索校验', { exact: true })).toBeVisible({ timeout: 15_000 });
   const result = await fixture.http(`/api/contacts/${contactId}/sources`);
   const taskId = (result.data.sources as { task_id: string }[])[0].task_id;
@@ -117,8 +117,8 @@ export async function sourceDeletionUnknown(manager: Page, fixture: SourceDeleti
 export async function sourceDeletionArguments(manager: Page, helper: Page, fixture: SourceDeletionFixture, proxy: MemoryHttpProxy) {
   await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
   await manager.getByRole('button', { name: '记忆', exact: true }).click();
-  await selectMemoryCategory(manager, '来源与过程');
-  await expect(manager.getByRole('region', { name: '来源删除管理', exact: true }).getByRole('button', { name: '删除来源', exact: true })).toBeVisible();
+  await openImportManagement(manager);
+  await expect(manager.getByRole('region', { name: '已导入资料', exact: true }).getByRole('button', { name: '删除来源', exact: true })).toBeVisible();
   const state = await manager.evaluate(() => window.notalone.sources.getState());
   const request = { contactId: state.contactId!, scopeRevision: state.scopeRevision, sourceId: state.sources[0].sourceId };
   const before = proxy.requests.filter((request) => request.method === 'DELETE').length;
@@ -155,8 +155,8 @@ export async function sourceDeletionReplies(manager: Page, helper: Page, fixture
   const copy = await currentCopyRequest(helper);
   const state = await helper.evaluate(() => window.notalone.replies.getState());
   await manager.getByRole('button', { name: '记忆', exact: true }).click();
-  await selectMemoryCategory(manager, '来源与过程');
-  const sourcePanel = manager.getByRole('region', { name: '来源删除管理', exact: true });
+  await openImportManagement(manager);
+  const sourcePanel = manager.getByRole('region', { name: '已导入资料', exact: true });
   await sourcePanel.getByRole('button', { name: '删除来源', exact: true }).click();
   await manager.getByRole('button', { name: '确认删除来源', exact: true }).click();
   await expect(sourcePanel.getByText('已删除，已通过不可检索校验', { exact: true })).toBeVisible({ timeout: 15_000 });
@@ -175,15 +175,15 @@ export async function sourceDeletionCrossContact(manager: Page, helper: Page, fi
   proxy: import('./source-deletion-proxy').SourceDeletionProxy) {
   await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
   await manager.getByRole('button', { name: '记忆', exact: true }).click();
-  await selectMemoryCategory(manager, '来源与过程');
-  const panel = manager.getByRole('region', { name: '来源删除管理', exact: true });
+  await openImportManagement(manager);
+  const panel = manager.getByRole('region', { name: '已导入资料', exact: true });
   await expect(panel.getByRole('button', { name: '删除来源', exact: true })).toBeVisible();
   const source = await manager.evaluate(() => window.notalone.sources.getState());
   proxy.holdDelete = true;
   await panel.getByRole('button', { name: '删除来源', exact: true }).click();
   await manager.getByRole('button', { name: '确认删除来源', exact: true }).click();
   await expect.poll(() => proxy.heldCount, { timeout: 1500 }).toBe(1);
-  await manager.getByRole('combobox', { name: '资料联系人', exact: true }).selectOption(fixture.data.contact_ids[1]);
+  await manager.getByRole('combobox', { name: '管理资料的联系人', exact: true }).selectOption(fixture.data.contact_ids[1]);
   await confirmHelperContact(helper);
   await helper.getByRole('textbox', { name: '有什么想说的', exact: true }).fill('说明本人喜欢合成绿茶。');
   await setWorkspaceContext(helper, true);
@@ -224,8 +224,8 @@ export async function sourceDeletionUnrelated(manager: Page, helper: Page, fixtu
   const evidencePath = `/api/contacts/${before.contactId}/replies/${before.result!.replyRequestId}/evidence`;
   if (proxy) proxy.failurePaths.add(evidencePath);
   await manager.getByRole('button', { name: '记忆', exact: true }).click();
-  await selectMemoryCategory(manager, '来源与过程');
-  const panel = manager.getByRole('region', { name: '来源删除管理', exact: true });
+  await openImportManagement(manager);
+  const panel = manager.getByRole('region', { name: '已导入资料', exact: true });
   await panel.getByRole('button', { name: '删除来源', exact: true }).click();
   await manager.getByRole('button', { name: '确认删除来源', exact: true }).click();
   await expect(panel.getByText('已删除，已通过不可检索校验', { exact: true })).toBeVisible({ timeout: 15_000 });
@@ -265,11 +265,11 @@ export async function sourceDeletionMultiSource(manager: Page, fixture: SourceDe
   await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
   await manager.getByRole('button', { name: '记忆', exact: true }).click();
   await expect(manager.getByText(memory.text, { exact: true })).toBeVisible();
-  await selectMemoryCategory(manager, '来源与过程');
-  const panel = manager.getByRole('region', { name: '来源删除管理', exact: true });
+  await openImportManagement(manager);
+  const panel = manager.getByRole('region', { name: '已导入资料', exact: true });
   const ordered = [...entries].sort((a, b) => a.file_name.localeCompare(b.file_name));
   for (const [index, source] of ordered.entries()) {
-    const card = panel.getByRole('listitem').filter({ hasText: `来源标识：${source.source_id}` });
+    const card = panel.locator(`[data-source-id="${source.source_id}"]`);
     await card.getByRole('button', { name: '删除来源', exact: true }).click();
     await manager.getByRole('button', { name: '确认删除来源', exact: true }).click();
     await expect(card.getByText('已删除，已通过不可检索校验', { exact: true })).toBeVisible({ timeout: 15_000 });
@@ -286,13 +286,13 @@ export async function sourceDeletionMultiSource(manager: Page, fixture: SourceDe
       expect(supported?.source_ids).toEqual([messageId]);
       await selectMemoryCategory(manager, '联系人记忆');
       await expect(manager.getByText(memory.text, { exact: true })).toBeVisible();
-      await selectMemoryCategory(manager, '来源与过程');
+      await openImportManagement(manager);
     } else {
       expect((messages.data.messages as { message_id: string }[]).some((entry) => entry.message_id === messageId)).toBe(false);
       expect(supported).toBeUndefined();
       await selectMemoryCategory(manager, '联系人记忆');
       await expect(manager.getByText(memory.text, { exact: true })).toHaveCount(0);
-      await selectMemoryCategory(manager, '来源与过程');
+      await openImportManagement(manager);
     }
   }
   const other = await fixture.http(`/api/contacts/${fixture.data.contact_ids[1]}/messages`);
@@ -316,8 +316,8 @@ export async function sourceDeletionStaleRequest(manager: Page, helper: Page, fi
   const old = await helper.evaluate(() => window.notalone.replies.getState());
   proxy.holdEvidencePath = `/api/contacts/${old.contactId}/replies/${old.result!.replyRequestId}/evidence`;
   await manager.getByRole('button', { name: '记忆', exact: true }).click();
-  await selectMemoryCategory(manager, '来源与过程');
-  const panel = manager.getByRole('region', { name: '来源删除管理', exact: true });
+  await openImportManagement(manager);
+  const panel = manager.getByRole('region', { name: '已导入资料', exact: true });
   await panel.getByRole('button', { name: '删除来源', exact: true }).click();
   await manager.getByRole('button', { name: '确认删除来源', exact: true }).click();
   try {
@@ -342,7 +342,7 @@ export async function sourceDeletionStaleRequest(manager: Page, helper: Page, fi
   await expect(helper.getByRole('button', { name: '帮我想想', exact: true })).toBeDisabled();
   // 复验期间不能在原范围继续编辑；通过真实联系人往返开启新范围，旧响应仍未释放。
   const picker = helper.getByRole('combobox', { name: '本次联系人', exact: true });
-  const contacts = manager.getByRole('combobox', { name: '资料联系人', exact: true });
+  const contacts = manager.getByRole('combobox', { name: '管理资料的联系人', exact: true });
   await contacts.selectOption(fixture.data.contact_ids[1]);
   await expect(picker).toHaveValue(fixture.data.contact_ids[1]);
   await contacts.selectOption(fixture.data.contact_ids[0]);
@@ -364,7 +364,7 @@ export async function sourceDeletionStaleRequest(manager: Page, helper: Page, fi
   proxy.holdEvidencePath = null;
   proxy.release();
   // 联系人范围变化会回到“联系人记忆”；重新打开来源分类，由当前范围读取原删除任务。
-  await selectMemoryCategory(manager, '来源与过程');
+  await openImportManagement(manager);
   await expect(panel.getByText('已删除，已通过不可检索校验', { exact: true })).toBeVisible({ timeout: 15_000 });
   await expect(editor).toHaveValue('新请求的本轮编辑稿。');
   await expect(draft).toHaveValue('新请求的独立合成草稿。');

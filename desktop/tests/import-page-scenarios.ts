@@ -46,7 +46,12 @@ export async function savedImport(pages: ImportPages): Promise<void> {
   const progress = manager.getByRole('region', { name: '本次导入处理', exact: true });
   await expect(progress.getByText('新增 6 条消息，已存在 0 条消息。', { exact: true })).toBeVisible();
   await expect(progress.getByText('原任务全部步骤和最终核验已成功。', { exact: true })).toBeVisible({ timeout: 20_000 });
-  await expect(progress.getByRole('region', { name: '归属联系人来源', exact: true })).toContainText('synthetic-import.jsonl · 6 条 · 有效来源');
+  await progress.getByRole('button', { name: '查看本次导入资料', exact: true }).click();
+  const sources = manager.getByRole('region', { name: '已导入资料', exact: true });
+  await expect(sources.getByRole('listitem')).toHaveCount(1);
+  await expect(sources.getByRole('listitem')).toContainText('synthetic-import.jsonl');
+  await expect(sources.getByRole('listitem')).toContainText('6 条记录');
+  await expect(sources.getByRole('status')).toHaveText('有效来源');
   const original = await originalImport(importBackend);
   const first = await importBackend.task(original);
   expect((first.data.steps as Array<{ status: string }>).map((step) => step.status)).toEqual(['succeeded', 'succeeded', 'succeeded', 'succeeded', 'succeeded']);

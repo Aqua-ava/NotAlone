@@ -1,4 +1,4 @@
-import { openMemoryTrace, selectMemoryCategory } from '../memory-page-actions';
+import { openDeveloperTraces, openImportManagement, openMemoryTrace, selectMemoryCategory } from '../memory-page-actions';
 import { expect, type Browser, type Page } from '@playwright/test';
 import { PageHost } from './page-host';
 import { withControllerEnvironment, withMemoryBackend, withTraceBackend, type TraceData } from './backend-fixture';
@@ -41,7 +41,14 @@ export async function memoryTracesFull(browser: Browser, origin: string) {
         await host.backend.connect();
         const page = await host.open('manager'); await openMemory(page);
         const panel = page.getByRole('region', { name: '提取与来源处理过程', exact: true });
-        await openMemoryTrace(page, '本人手动录入的合成资料。', '本人记忆');
+        await page.getByRole('button', { name: '查看依据：甲参加合成追踪活动。', exact: true }).click();
+        const evidence = page.getByRole('region', { name: '记忆依据', exact: true });
+        await expect(evidence.locator('blockquote').first()).toContainText('桌面验收合成文字');
+        await expect(panel).toHaveCount(0);
+        await expect(evidence.getByRole('textbox', { name: '记录标识' })).toHaveCount(0);
+        await evidence.getByRole('button', { name: '收起依据', exact: true }).click();
+        // 全局本人手录不属于当前联系人；用当前联系人手录资料核对不适用提取过程。
+        await openMemoryTrace(page, '甲的新版本关系备注。');
         await expect(panel.getByText('手动录入资料不适用模型提取过程。', { exact: true })).toBeVisible();
         await panel.getByRole('button', { name: '查看批次列表', exact: true }).click();
         await expect(panel.getByRole('list', { name: '过程批次' }).getByRole('listitem')).toHaveCount(20);
@@ -89,8 +96,8 @@ export async function memoryTracesFull(browser: Browser, origin: string) {
         await panel.getByRole('textbox', { name: '记录标识' }).fill(data.source_document_id);
         await panel.getByRole('button', { name: '查找记录过程' }).click();
         await expect(panel.getByRole('button', { name: `查看批次：${data.processing_id}`, exact: true })).toBeVisible();
-        await page.getByRole('combobox', { name: '资料联系人' }).selectOption(data.empty_contact_id);
-        await selectMemoryCategory(page, '来源与过程');
+        await page.getByRole('combobox', { name: '调试联系人' }).selectOption(data.empty_contact_id);
+        await openDeveloperTraces(page);
         await panel.getByRole('button', { name: '查看批次列表', exact: true }).click();
         await expect(panel.getByText('当前联系人没有已保存的批次。', { exact: true })).toBeVisible();
       } finally { await host.close(); }
@@ -134,32 +141,33 @@ export async function memoryTracesLifecycle(browser: Browser, origin: string) {
             void window.notalone.contacts.getState().then((scope) => window.notalone.traces.show({ contactId: scope.selectedContactId!, scopeRevision: scope.scopeRevision, resource: 'memory-traces', batchId: id }));
           }, data.trace_id);
           await expect.poll(() => proxy.heldCount).toBe(1);
-          await page.getByRole('combobox', { name: '资料联系人' }).selectOption(data.contact_ids[1]);
+          await page.getByRole('combobox', { name: '调试联系人' }).selectOption(data.contact_ids[1]);
           proxy.holdPath = null; proxy.release();
           expect(await page.evaluate(async () => (await window.notalone.traces.getState()).detail)).toBeNull();
-          await selectMemoryCategory(page, '来源与过程');
+          await openDeveloperTraces(page);
           await expect(panel.getByRole('group', { name: '过程详情', exact: true })).toHaveCount(0);
-          await page.getByRole('combobox', { name: '资料联系人' }).selectOption(data.contact_ids[0]);
+          await page.getByRole('combobox', { name: '调试联系人' }).selectOption(data.contact_ids[0]);
           await showTrace(page, data);
           proxy.failRuntimeStatus = true;
-          await expect(page.getByRole('region', { name: '资料范围未确认' })).toBeVisible();
+          await expect(page.getByRole('combobox', { name: '调试联系人' })).toBeDisabled();
           await expect(page.getByRole('group', { name: '过程详情', exact: true })).toHaveCount(0);
           proxy.failRuntimeStatus = false;
           await page.getByRole('button', { name: '重试连接', exact: true }).click();
-          await page.getByRole('combobox', { name: '资料联系人' }).selectOption(data.contact_ids[0]);
+          await page.getByRole('combobox', { name: '调试联系人' }).selectOption(data.contact_ids[0]);
           await showTrace(page, data);
           proxy.holdPath = path;
           await page.evaluate((id) => {
             void window.notalone.contacts.getState().then((scope) => window.notalone.traces.show({ contactId: scope.selectedContactId!, scopeRevision: scope.scopeRevision, resource: 'memory-traces', batchId: id }));
           }, data.trace_id);
           await expect.poll(() => proxy.heldCount).toBe(1);
-          await page.getByRole('region', { name: '来源删除管理', exact: true }).getByRole('listitem')
-            .filter({ hasText: `来源标识：${data.source_document_id}` }).getByRole('button', { name: '删除来源', exact: true }).click();
+          await openImportManagement(page);
+          await page.getByRole('region', { name: '已导入资料', exact: true }).locator(`[data-source-id="${data.source_document_id}"]`).getByRole('button', { name: '删除来源', exact: true }).click();
           await page.getByRole('button', { name: '确认删除来源', exact: true }).click();
           await expect(panel.getByRole('group', { name: '过程详情', exact: true })).toHaveCount(0);
           await expect(page.getByText('已删除，已通过不可检索校验', { exact: true })).toBeVisible();
           proxy.holdPath = null; proxy.release();
           expect(await page.evaluate(async () => (await window.notalone.traces.getState()).detail)).toBeNull();
+          await openDeveloperTraces(page);
           await panel.getByRole('button', { name: '查看批次列表', exact: true }).click();
           await panel.getByRole('button', { name: `查看批次：${data.trace_id}`, exact: true }).click();
           await expect(panel.getByText('1. 实际输入窗口', { exact: true })).toHaveCount(0);
@@ -204,6 +212,10 @@ export async function memoryTracesRecordDeletion(browser: Browser, origin: strin
             }
             await selectMemoryCategory(page, category);
             const card = page.getByRole('article').filter({ has: page.getByText(data.trace_text, { exact: true }) });
+            if (!late && !unknown) {
+              await card.getByRole('button', { name: `查看依据：${data.trace_text}`, exact: true }).click();
+              await expect(page.getByRole('region', { name: '记忆依据', exact: true }).locator('blockquote').first()).toBeVisible();
+            }
             await card.getByRole('button', { name: `${candidate ? '丢弃候选' : '删除资料'}：${data.trace_text}`, exact: true }).click();
             await card.getByRole('button', { name: candidate ? '确认丢弃' : '确认删除', exact: true }).click();
             if (unknown) {
@@ -215,8 +227,13 @@ export async function memoryTracesRecordDeletion(browser: Browser, origin: strin
               }, data.trace_id)).toBe(true);
               proxy.holdPath = null; proxy.release(true);
               await expect(page.getByText('未能完成资料操作与核对，请刷新确认后重试。', { exact: true })).toBeVisible();
-            } else await expect(card).toHaveCount(0);
-            await selectMemoryCategory(page, '来源与过程');
+            } else {
+              await expect(card).toHaveCount(0);
+              const evidence = page.getByRole('region', { name: '记忆依据', exact: true });
+              await expect(evidence.getByText(data.trace_text, { exact: true })).toHaveCount(0);
+              await expect(evidence.locator('blockquote')).toHaveCount(0);
+            }
+            await openDeveloperTraces(page);
             await expect(panel.getByRole('group', { name: '过程详情', exact: true })).toHaveCount(0);
             if (late) { proxy.holdPath = null; proxy.release(); }
             expect(await page.evaluate(async () => (await window.notalone.traces.getState()).detail)).toBeNull();

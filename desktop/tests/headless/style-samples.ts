@@ -1,5 +1,5 @@
 import { openCandidateMoreActions, setWorkspaceContext } from '../workspace-actions';
-import { selectMemoryCategory } from '../memory-page-actions';
+import { openImportManagement } from '../memory-page-actions';
 import { expect, type Browser } from '@playwright/test';
 import { withRewritePages } from './rewrite-acceptance';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
@@ -58,8 +58,8 @@ export async function styleSamples(browser: Browser, origin: string) {
     expect(sample?.sourceIds.length).toBeGreaterThan(0);
     await helper.getByRole('textbox', { name: '手工表达样本', exact: true }).fill(derived);
     await manager.getByRole('button', { name: '记忆', exact: true }).click();
-    await selectMemoryCategory(manager, '来源与过程');
-    await manager.getByRole('region', { name: '来源删除管理', exact: true }).getByRole('button', { name: '删除来源', exact: true }).click();
+    await openImportManagement(manager);
+    await manager.getByRole('region', { name: '已导入资料', exact: true }).getByRole('button', { name: '删除来源', exact: true }).click();
     await manager.getByRole('button', { name: '确认删除来源', exact: true }).click();
     await expect(helper.getByRole('textbox', { name: '手工表达样本', exact: true })).toHaveValue('');
     try {
@@ -158,8 +158,8 @@ export async function styleSamples(browser: Browser, origin: string) {
     expect(discussion.items.some(item => item.reply_request_id === oldRequestId)).toBe(true);
     expect([...sample.sourceIds].sort()).toEqual(sourceIds);
     await manager.getByRole('button', { name: '记忆', exact: true }).click();
-    await selectMemoryCategory(manager, '来源与过程');
-    await manager.getByRole('region', { name: '来源删除管理', exact: true }).getByRole('button', { name: '删除来源', exact: true }).click();
+    await openImportManagement(manager);
+    await manager.getByRole('region', { name: '已导入资料', exact: true }).getByRole('button', { name: '删除来源', exact: true }).click();
     await manager.getByRole('button', { name: '确认删除来源', exact: true }).click();
     await expect(manager.getByText('已删除，已通过不可检索校验', { exact: true })).toBeVisible({ timeout: 15000 });
     await helper.getByRole('button', { name: '刷新表达样本', exact: true }).click();

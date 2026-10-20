@@ -1,4 +1,4 @@
-import { expandOverviewDetails, selectMemoryCategory } from '../memory-page-actions';
+import { expandOverviewDetails, openImportManagement, selectMemoryCategory } from '../memory-page-actions';
 import { expect, type Browser } from '@playwright/test';
 import { withRelationshipOverviewFixture } from '../contact-relationship-overview-fixture';
 import { withControllerEnvironment } from './backend-fixture';
@@ -42,14 +42,15 @@ export async function contactRelationshipOverview(browser: Browser, origin: stri
       await expect(current.getByText(`来源引用：${prepared.newSourceId} · 导入来源`, { exact: true })).toBeVisible();
       await current.getByRole('button', { name: `查看变化依据：${prepared.current.text}`, exact: true }).click();
       await expect(manager.getByRole('region', { name: '资料版本历史', exact: true }).getByText(prepared.old.text, { exact: true })).toBeVisible();
-      await current.getByRole('button', { name: `查看概览提取过程：${prepared.current.text}`, exact: true }).click();
-      const traces = manager.getByRole('region', { name: '提取与来源处理过程', exact: true });
-      await expect(traces.getByRole('list', { name: '过程批次', exact: true }).getByRole('listitem').first()).toBeVisible();
+      await current.getByRole('button', { name: `查看概览依据：${prepared.current.text}`, exact: true }).click();
+      const traces = manager.getByRole('region', { name: '记忆依据', exact: true });
+      await expect(traces).toBeVisible();
+      await expect(traces.getByRole('textbox', { name: '记录标识' })).toHaveCount(0);
       await selectMemoryCategory(manager, '联系人概览');
       await expandOverviewDetails(manual);
       await expect(manual.getByText('用户手动录入（来源为手录资料）。', { exact: true })).toBeVisible();
-      await manual.getByRole('button', { name: `查看概览提取过程：${prepared.manual.text}`, exact: true }).click();
-      await expect(traces.getByText('手动录入资料不适用模型提取过程。', { exact: true })).toBeVisible();
+      await manual.getByRole('button', { name: `查看概览依据：${prepared.manual.text}`, exact: true }).click();
+      await expect(traces.getByText('这条资料由手动录入，没有模型提取的聊天依据。', { exact: true })).toBeVisible();
       await selectMemoryCategory(manager, '联系人概览');
       await expect(overview.getByText(prepared.other.text, { exact: true })).toHaveCount(0);
 
@@ -64,9 +65,8 @@ export async function contactRelationshipOverview(browser: Browser, origin: stri
       await selectMemoryCategory(manager, '联系人概览');
       await expect(overview.getByText(correctedText, { exact: true })).toBeVisible();
 
-      await selectMemoryCategory(manager, '来源与过程');
-      const source = manager.getByRole('region', { name: '来源删除管理', exact: true }).getByRole('listitem')
-        .filter({ hasText: `来源标识：${prepared.sourceToDelete}` });
+      await openImportManagement(manager);
+      const source = manager.getByRole('region', { name: '已导入资料', exact: true }).locator(`[data-source-id="${prepared.sourceToDelete}"]`);
       await source.getByRole('button', { name: '删除来源', exact: true }).click();
       await manager.getByRole('button', { name: '确认删除来源', exact: true }).click();
       await expect(source.getByText('已删除，已通过不可检索校验', { exact: true })).toBeVisible({ timeout: 15_000 });

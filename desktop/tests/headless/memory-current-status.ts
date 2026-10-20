@@ -1,5 +1,5 @@
 import { setWorkspaceContext } from '../workspace-actions';
-import { selectMemoryCategory } from '../memory-page-actions';
+import { openImportManagement, selectMemoryCategory } from '../memory-page-actions';
 import { expect, type Browser } from '@playwright/test';
 import { withRewritePages } from './rewrite-acceptance';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
@@ -52,9 +52,8 @@ export async function memoryCurrentStatus(browser: Browser, origin: string) {
     await expect(historical.getByText('生成上下文，未被候选引用', { exact: true })).toBeVisible();
     await expect(historical.getByText(/入选原因：历史资料，仅用于追溯；当前未核实，不得当作当前事实。/)).toBeVisible();
     await expect(historical.getByText('本候选已引用', { exact: true })).toHaveCount(0);
-    await selectMemoryCategory(manager, '来源与过程');
-    const source = manager.getByRole('region', { name: '来源删除管理', exact: true }).getByRole('listitem')
-      .filter({ hasText: `来源标识：${prepared.source_id}` });
+    await openImportManagement(manager);
+    const source = manager.getByRole('region', { name: '已导入资料', exact: true }).locator(`[data-source-id="${prepared.source_id}"]`);
     await source.getByRole('button', { name: '删除来源', exact: true }).click();
     await manager.getByRole('button', { name: '确认删除来源', exact: true }).click();
     await expect(source.getByText('已删除，已通过不可检索校验', { exact: true })).toBeVisible({ timeout: 15_000 });

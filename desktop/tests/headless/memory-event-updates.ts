@@ -1,4 +1,4 @@
-import { expandMemoryDetails, selectMemoryCategory } from '../memory-page-actions';
+import { expandMemoryDetails, openImportManagement, selectMemoryCategory } from '../memory-page-actions';
 import path from 'node:path';
 import { expect, type Browser, type Page } from '@playwright/test';
 import { withRewritePages } from './rewrite-acceptance';
@@ -29,9 +29,8 @@ export async function memoryEventUpdates(browser: Browser, origin: string) {
     await expect(contact.getByText(prepared.old.text, { exact: true })).toBeVisible();
     await expect(contact.getByText(prepared.current.text, { exact: true })).toHaveCount(0);
     await expect(history).toHaveCount(0);
-    await selectMemoryCategory(manager, '来源与过程');
-    const source = manager.getByRole('region', { name: '来源删除管理', exact: true }).getByRole('listitem')
-      .filter({ hasText: `来源标识：${prepared.sourceToDelete}` });
+    await openImportManagement(manager);
+    const source = manager.getByRole('region', { name: '已导入资料', exact: true }).locator(`[data-source-id="${prepared.sourceToDelete}"]`);
     await source.getByRole('button', { name: '删除来源', exact: true }).click();
     await manager.getByRole('button', { name: '确认删除来源', exact: true }).click();
     await expect(source.getByText('已删除，已通过不可检索校验', { exact: true })).toBeVisible({ timeout: 15_000 });
@@ -82,9 +81,8 @@ export async function memoryEventUpdates(browser: Browser, origin: string) {
     await expect(history.getByText('事件阶段：计划（来源已核验）', { exact: true })).toBeVisible();
     await expect(history.getByText('事件阶段：已发生（来源已核验）', { exact: true })).toBeVisible();
     await expect(history.getByRole('button', { name: '撤销本次自动更新', exact: true })).toHaveCount(0);
-    await selectMemoryCategory(manager, '来源与过程');
-    const source = manager.getByRole('region', { name: '来源删除管理', exact: true }).getByRole('listitem')
-      .filter({ hasText: `来源标识：${prepared.sourceToDelete}` });
+    await openImportManagement(manager);
+    const source = manager.getByRole('region', { name: '已导入资料', exact: true }).locator(`[data-source-id="${prepared.sourceToDelete}"]`);
     await source.getByRole('button', { name: '删除来源', exact: true }).click();
     await manager.getByRole('button', { name: '确认删除来源', exact: true }).click();
     await expect(source.getByText('已删除，已通过不可检索校验', { exact: true })).toBeVisible({ timeout: 15_000 });

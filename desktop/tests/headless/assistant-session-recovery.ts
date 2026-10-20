@@ -1,6 +1,6 @@
 import { fillWorkspaceThought, fillWorkspaceInstruction, generateWorkspace, openWorkspaceSettings, setWorkspaceContext } from '../workspace-actions';
 import { openAssistantHistory, expandSavedDiscussion } from '../assistant-history-actions';
-import { selectMemoryCategory } from '../memory-page-actions';
+import { openImportManagement } from '../memory-page-actions';
 import { expect, type Browser, type Page } from '@playwright/test';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
 import { PageHost } from './page-host';
@@ -224,8 +224,8 @@ async function deletedSource(pages: RewritePages, host: PageHost, userData: stri
     await expect.poll(() => replyTransport.heldCount).toBe(heldBefore + 1);
     expect(replyTransport.sessionReads.at(-1)).toEqual({ status: 200, states: ['completed', 'completed'] });
     await manager.getByRole('button', { name: '记忆', exact: true }).click();
-    await selectMemoryCategory(manager, '来源与过程');
-    const sources = manager.getByRole('region', { name: '来源删除管理', exact: true });
+    await openImportManagement(manager);
+    const sources = manager.getByRole('region', { name: '已导入资料', exact: true });
     await sources.getByRole('button', { name: '删除来源', exact: true }).click();
     await manager.getByRole('button', { name: '确认删除来源', exact: true }).click();
     await expect(sources.getByText('已删除，已通过不可检索校验', { exact: true })).toBeVisible();
