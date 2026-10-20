@@ -1,0 +1,86 @@
+{
+  "rawTestLogDirectory": "/tmp/notalone-desktop-state-evidence-m4wqetwe",
+  "logs": [
+    {
+      "name": "02-baseline-contact-fixture.log",
+      "bytes": 1472
+    },
+    {
+      "name": "02-baseline-existing-failures.log",
+      "bytes": 18494
+    },
+    {
+      "name": "02-contact-regression.log",
+      "bytes": 43479
+    },
+    {
+      "name": "02-final-related.log",
+      "bytes": 12994
+    },
+    {
+      "name": "02-public-history.log",
+      "bytes": 8378
+    },
+    {
+      "name": "02-react-input.log",
+      "bytes": 343
+    },
+    {
+      "name": "02-react-lifecycle.log",
+      "bytes": 284
+    },
+    {
+      "name": "02-related-tests.log",
+      "bytes": 69712
+    }
+  ],
+  "relatedTests": {
+    "tests": 125,
+    "passed": 125,
+    "failed": 0,
+    "skipped": 0
+  },
+  "reactInteractionTests": {
+    "tests": 2,
+    "passed": 2,
+    "notes": "随后将草稿事件改为生产delta再次单跑React输入1项通过"
+  },
+  "baselineExistingFailures": {
+    "memoryAndCopy": {
+      "tests": 20,
+      "passed": 13,
+      "failed": 7,
+      "causes": [
+        "5份旧本人夹具只匹配 /api/memories/owner；生产联系人范围走 /api/contacts/<id>/owner-memories 时错回分层资料，列表解析失败",
+        "2份旧文案正则不匹配当前产品文案"
+      ]
+    },
+    "contactHttp": {
+      "tests": 34,
+      "passed": 0,
+      "failed": 34,
+      "cause": "共享夹具固定迁移数89，而基线真实迁移数98；基线单例同样失败，未进入业务断言"
+    }
+  },
+  "cleanup": {
+    "ownedDatabaseCleanupConfirmations": 34,
+    "baselineDatabaseCleanupConfirmations": 1,
+    "temporaryBaselineTreesRemoved": 2,
+    "appInstancesStarted": 0,
+    "persistentServersStarted": 0,
+    "externalModelsCalled": 0,
+    "publicHistoryInitialFailure": "原始测试日志含本机路径，已移至仓库外，未提交"
+  },
+  "validationLimits": [
+    "未运行实际dev App或微信；由issue05统一集成验收",
+    "未修改默认测试清单、业务库、来源检查、旧文案或迁移计数夹具",
+    "JSON计数不作为延迟、CPU、RSS或整App性能证据"
+  ],
+  "publicHistoryBeforeDocumentationCommit": {
+    "commit": "cf08f92f",
+    "historicalBlobs": 12325,
+    "historicalCommits": 1974,
+    "currentFiles": 3224,
+    "issues": 0
+  }
+}
