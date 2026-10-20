@@ -144,3 +144,5 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 [ADR-069](adr/069-direct-scene-memory-and-isolated-publication.md) 记录参考腾讯的直接记忆生成、合并和逐项隔离；[规格](../.scratch/tencent-memory-alignment/spec.md) 区分工程实现、适配差异与真实质量。
 
 [ADR-070](adr/070-automatic-memory-maintenance.md) 记录默认自动维护记忆与旧资料升级退役；实现与验证见[本次规格](../.scratch/automatic-memory-maintenance/spec.md)。
+
+[ADR-080](adr/080-source-grounded-memory-time-and-conditions.md) 记录来源锚点、日期精度、适用条件与有据时间线；[规格与实现索引](../.scratch/memory-temporal-semantics/planning.md) 分别记录目标、工程验证和质量限制。
