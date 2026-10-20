@@ -61,7 +61,7 @@ def validate_proposal(proposal: object, memories: tuple[OrganizationInput, ...],
                 memory = inputs[identity]
                 references.append({"memory_id": identity[0], "revision": identity[1],
                     "provenance_kind": memory.provenance_kind, "timing": memory.timing,
-                    "event": memory.event, "valid_at": memory.valid_at, "invalid_at": memory.invalid_at})
+                    "event": memory.event, "conditions": memory.conditions, "valid_at": memory.valid_at, "invalid_at": memory.invalid_at})
             normalized.append({"text": paragraph["text"], "references": references, **metadata})
         if any("kind" in p for p in normalized) and sum(len(p["text"]) for p in normalized) > 1500:
             raise ValueError("个人主题正文超过1500字。")

@@ -1,5 +1,5 @@
 import { isUuid } from '../uuid';
-import type { MemoryContent, MemoryCorrectionReview, MemoryEvent, MemoryEventEvidence, MemorySource, MemoryVersion, PendingMemoryCandidate } from '../../shared/memory-bridge';
+import type { MemoryConditions, MemoryContent, MemoryCorrectionReview, MemoryEvent, MemoryEventEvidence, MemorySource, MemoryVersion, PendingMemoryCandidate } from '../../shared/memory-bridge';
 import { readCurrentStatus } from './current-status';
 
 const categories = ['common_fact', 'preference', 'taboo', 'recent_state', 'relationship_note'] as const;
@@ -66,11 +66,24 @@ function memoryEvent(value: unknown): MemoryEvent | null {
   return { version: 1, stage, stageVerified: value.stage_verified, stageEvidence, occurrenceStart, occurrenceEnd,
     occurrenceVerified: value.occurrence_verified, occurrenceEvidence };
 }
+function memoryConditions(value: unknown): MemoryConditions | null {
+  if (value == null) return null;
+  if (!record(value) || Object.keys(value).length !== 2 || value.version !== 1
+    || !Array.isArray(value.items) || value.items.length === 0 || value.items.length > 8) throw invalid();
+  return { version: 1, items: value.items.map(item => {
+    if (!record(item) || Object.keys(item).length !== 3 || typeof item.source_supported !== 'boolean'
+      || !Object.keys(item).every(key => ['text', 'evidence', 'source_supported'].includes(key))) throw invalid();
+    const conditionText = text(item.text), evidence = eventEvidence(item.evidence);
+    if (evidence.length > 8) throw invalid();
+    if (conditionText.length > 1000 || (item.source_supported && evidence.length === 0)) throw invalid();
+    return { text: conditionText, evidence, sourceSupported: item.source_supported };
+  }) };
+}
 export function memoryTemporalFields(entry: Record<string, unknown>) {
   const validAt = date(entry.valid_at === undefined ? null : entry.valid_at);
   const invalidAt = date(entry.invalid_at === undefined ? null : entry.invalid_at);
   if (validAt && invalidAt && Date.parse(invalidAt) < Date.parse(validAt)) throw invalid();
-  return { validAt, invalidAt, event: memoryEvent(entry.event) };
+  return { validAt, invalidAt, event: memoryEvent(entry.event), conditions: memoryConditions(entry.conditions) };
 }
 function content(entry: Record<string, unknown>): MemoryContent {
   const timing = entry.timing;
@@ -89,7 +102,7 @@ function content(entry: Record<string, unknown>): MemoryContent {
     timing: { recordedAt: date(timing.recorded_at), sourceStartedAt, sourceEndedAt, sourceTimeComplete: timing.source_time_complete,
       ...readCurrentStatus(timing) },
     validAt: date(entry.valid_at), invalidAt: date(entry.invalid_at),
-    event: memoryEvent(entry.event),
+    event: memoryEvent(entry.event), conditions: memoryConditions(entry.conditions),
   };
 }
 function entries(value: unknown, key: string): Record<string, unknown>[] {

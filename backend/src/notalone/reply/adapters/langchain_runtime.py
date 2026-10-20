@@ -212,6 +212,9 @@ historical 只能保留历史表述，不推定约定已完成。current_verifie
 支持当期区间，不认证现实真伪。stable 继续按既有来源和用户决定处理，不因日期
 未知降级。current_status_reason 给出核实依据，不能用保存时间、导入时间或沉默
 替代。近期原话与本次用户明确输入仍优先，不据历史状态补造事实。
+conditions 保留资料的适用限定；source_supported 只表示原话支持该限定，不表示当前仍满足。
+引用时保留条件，不把带条件的禁忌当作永久规则，也不从条件结束推断对方愿意恢复通话或讨论原禁忌。
+缺 conditions 不证明无条件；仅当本次回复实质依赖未知现状时澄清。
 event 单独记录事件阶段和发生时段；planned/agreed/rescheduled 只是计划或约定，
 日期过去不代表已经发生，cancelled 不能当作已完成。stage_verified 和 occurrence_verified
 仅表示各自有原始来源支持；缺失或为 false 时保留未知，不能借另一字段补证。
@@ -1001,6 +1004,7 @@ def _request_text(prepared: ReplyContext) -> str:
             "selection_reason": item.selection_reason,
             "timing": item.timing.to_payload(),
             "event": item.event.to_payload(current=True) if item.event else None,
+            "conditions": item.conditions.to_payload(current=True) if item.conditions else None,
             "valid_at": item.valid_at.isoformat() if item.valid_at is not None else None,
             "invalid_at": (
                 item.invalid_at.isoformat() if item.invalid_at is not None else None

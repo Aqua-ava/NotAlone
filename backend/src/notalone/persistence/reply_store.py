@@ -35,6 +35,7 @@ from notalone.persistence.style_sample_store import (
 )
 from notalone.memory.timing import MemoryTiming
 from notalone.memory.events import MemoryEvent
+from notalone.memory.conditions import MemoryConditions
 
 from notalone.reply.context import (
     ContextEvidence,
@@ -1184,6 +1185,7 @@ class PostgresReplyStore:
                     "revision": item.revision,
                     "timing": item.timing.to_payload(),
                     "event": item.event.to_payload(current=True) if item.event else None,
+                    "conditions": item.conditions.to_payload(current=True) if item.conditions else None,
                 }
                 for item in context.evidence
             ],
@@ -1388,6 +1390,7 @@ class PostgresReplyStore:
                         revision=row["evidence_revision"],
                         timing=timings.get(row["evidence_id"], MemoryTiming()),
                         event=MemoryEvent.from_payload(metadata.get(str(row["evidence_id"]), {}).get("event")),
+                        conditions=MemoryConditions.from_payload(metadata.get(str(row["evidence_id"]), {}).get("conditions")),
                         model_visible=metadata.get(str(row["evidence_id"]), {}).get("model_visible", True),
                         navigation=MemoryNavigation.from_snapshot(metadata.get(str(row["evidence_id"]), {}).get("navigation")),
                     )

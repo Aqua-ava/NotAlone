@@ -36,5 +36,6 @@ def same_pending_identity(left: MemoryCandidate, right: MemoryCandidate) -> bool
              or bool(set(left.source_ids) & set(right.source_ids))
              and same_verified_event_claim(left.event, right.event))
         and left.valid_at == right.valid_at and left.invalid_at == right.invalid_at
+        and left.conditions == right.conditions
         and _same_event_meaning(left.event, right.event)
     )

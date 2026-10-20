@@ -54,6 +54,7 @@ def candidate_digest(value: MemoryCandidate | ExtractedFact, *, version: int = 1
         "risk_flags": list(value.risk_flags), "alternatives": list(value.alternatives),
         "interpretation_reason": value.interpretation_reason,
         **({"event": value.event.to_payload()} if value.event is not None else {}),
+        **({"conditions": value.conditions.to_payload()} if value.conditions is not None else {}),
     })
 
 
@@ -232,7 +233,7 @@ def bind_dimension_evidence(
                 speech_act=evidence.pragmatics.speech_act,
                 assertion_status=evidence.pragmatics.assertion_status,
                 figurative_type=evidence.pragmatics.figurative_type,
-                event=candidate.event,
+                event=candidate.event, conditions=candidate.conditions,
                 source_dependency_mode=candidate.source_dependency_mode,
             )
             if evidence.version == 4:

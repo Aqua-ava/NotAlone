@@ -16,6 +16,7 @@ from notalone.memory.models import (
 )
 from notalone.memory.correction import CorrectionReview, MemoryCorrectionConflictError
 from notalone.memory.events import MemoryEvent
+from notalone.memory.conditions import MemoryConditions
 from notalone.persistence.message_sources import active_source_ref_sql
 from notalone.persistence.correction_evidence import (
     capture_message_snapshot, merge_frozen_snapshot, validate_frozen_snapshot,
@@ -559,7 +560,7 @@ def candidate_from_row(row: dict[str, Any]) -> MemoryCandidate:
         interpretation_reason=row["interpretation_reason"] or "",
         valid_at=row["valid_at"], invalid_at=row["invalid_at"],
         dimension_evidence=DimensionEvidence.from_payload(raw) if raw is not None else None,
-        event=MemoryEvent.from_payload(row.get("event")),
+        event=MemoryEvent.from_payload(row.get("event")), conditions=MemoryConditions.from_payload(row.get("conditions")),
         source_dependency_mode=dependency_mode(row.get("source_dependency_mode")),
         requires_all_sources=bool(row.get("requires_all_sources")),
     )
@@ -758,8 +759,10 @@ def erase_deleted_memory_bodies(
     for decision in decisions:
         erase_decision_body(connection, decision)
     from notalone.persistence.memory_events import has_event_schema
-    memory_event_fields = ", event=NULL, version_evidence=NULL" if has_event_schema(connection) else ""
-    candidate_event_fields = ", event=NULL" if has_event_schema(connection) else ""
+    from notalone.persistence.memory_conditions import conditions_clear_sql
+    clear_conditions = conditions_clear_sql(connection)
+    memory_event_fields = (", event=NULL, version_evidence=NULL" if has_event_schema(connection) else "") + clear_conditions
+    candidate_event_fields = (", event=NULL" if has_event_schema(connection) else "") + clear_conditions
     connection.execute(
         f"UPDATE public.{table} SET text_content='已删除的资料', status='deleted', risk_flags='{{}}'::text[], "
         f"updated_at=now(){memory_event_fields} WHERE owner_id=%s AND id=ANY(%s::uuid[])",

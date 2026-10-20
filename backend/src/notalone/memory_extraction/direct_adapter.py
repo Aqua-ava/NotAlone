@@ -9,6 +9,7 @@ from notalone.memory_trace.context import record
 
 from langchain_core.language_models import BaseChatModel
 
+from notalone.memory.conditions import CONDITIONS_PROPOSAL_SCHEMA
 from notalone.memory_extraction.adapters import EXTRACTION_SCHEMA, _window_text
 from notalone.memory_extraction.errors import ExtractionInvalidOutputError, ExtractionRuntimeError
 from notalone.memory_extraction.models import ExtractionWindow
@@ -59,6 +60,10 @@ DIRECT_EXTRACTION_SCHEMA = {
     },
     "required": ["scenes"],
 }
+
+
+DIRECT_EXTRACTION_SCHEMA["properties"]["scenes"]["items"]["properties"]["memories"]["items"]["properties"]["conditions"] = CONDITIONS_PROPOSAL_SCHEMA
+DIRECT_EXTRACTION_PROMPT += "\n有适用限定时填写conditions，保留条件原文与各自来源位置；无来源不推断。出差结束、离职等条件变化不等于撤销不愿通话、工资禁忌等原主张；缺条件不表示永久适用。"
 
 
 class DirectExtractionRuntime:

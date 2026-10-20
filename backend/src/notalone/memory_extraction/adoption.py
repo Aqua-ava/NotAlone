@@ -317,6 +317,7 @@ class MemoryAdoption:
                      and same_verified_event_claim(item.version.event, fact.event))
                 and item.version.valid_at == fact.valid_at
                 and item.version.invalid_at == fact.invalid_at
+                and item.version.conditions == fact.conditions
                 and (same_verified_event_claim(item.version.event, fact.event)
                      or self._is_exact_event_claim_replay(scope, item.version, fact))
                 and self._same_dependencies(scope, fact, item.version)
@@ -472,6 +473,7 @@ class MemoryAdoption:
             previous = previous_item.version if previous_item is not None else None
             if action is AdjudicationAction.UPDATE and (
                 previous is None or previous.adoption_method is AdoptionMethod.MANUAL
+                or previous.conditions != fact.conditions
                 or (previous.event is not None or fact.event is not None)
                 and not same_verified_occurrence(previous.event, fact.event)
             ):
@@ -564,7 +566,7 @@ class MemoryAdoption:
     @staticmethod
     def _decision_key(fact, similar):
         return (fact.subject, fact.category, fact.topic, fact.text, fact.valid_at, fact.invalid_at,
-                repr(fact.event), tuple(fact.source_message_ids),
+                repr(fact.event), repr(fact.conditions), tuple(fact.source_message_ids),
                 tuple((item.memory_id, item.version.revision) for item in similar))
 
     def _batch_decisions(self, scope, outcome, contact_pool, owner_pool, deleted):
@@ -588,7 +590,7 @@ class MemoryAdoption:
             if any(_normalize(item.text) == _normalize(fact.text)
                    and set(item.source_ids) == set(fact.source_message_ids)
                    and item.version.valid_at == fact.valid_at and item.version.invalid_at == fact.invalid_at
-                   and item.version.event == fact.event for item in pool):
+                   and item.version.event == fact.event and item.version.conditions == fact.conditions for item in pool):
                 continue
             similar, truncated = self._similar_memories(scope, fact, pool)
             if not similar or truncated:
@@ -678,7 +680,7 @@ class MemoryAdoption:
                 item.memory_id == decision.duplicate_memory_id
                 and set(item.source_ids) == set(fact.source_message_ids)
                 and item.version.valid_at == fact.valid_at and item.version.invalid_at == fact.invalid_at
-                and item.version.event == fact.event
+                and item.version.event == fact.event and item.version.conditions == fact.conditions
                 and self._same_dependencies(scope, fact, item.version) for item in similar):
             actual_action = None
             outcome = LedgerOutcome.REJECTED_BY_VALIDATION
@@ -970,6 +972,8 @@ class MemoryAdoption:
     ) -> bool:
         """语用、置信度、风险及当前来源核验共同决定采纳；显式旧策略保留逐维门。"""
 
+        if fact.conditions is not None and not fact.conditions.supported:
+            return False
         decision = pragmatic_decision or self._interpret_for_adoption(fact, scope)
         if self._automatic:
             # 逐条来源核验仍为准入；置信度/语用/风险字段只保留描述，不增设人工门。
@@ -1236,7 +1240,7 @@ def _candidate_from_fact(
         confidence=fact.confidence, risk_flags=fact.risk_flags,
         alternatives=fact.alternatives,
         interpretation_reason=fact.interpretation_reason,
-        timing=fact.timing, dimension_evidence=fact.dimension_evidence, event=fact.event,
+        timing=fact.timing, dimension_evidence=fact.dimension_evidence, event=fact.event, conditions=fact.conditions,
         source_dependency_mode=fact.source_dependency_mode,
         requires_all_sources=fact.requires_all_sources,
     )
@@ -1250,7 +1254,7 @@ def _stored_candidate_fact(fact: ExtractedFact, candidate: MemoryCandidate) -> E
                    confidence=candidate.confidence, risk_flags=candidate.risk_flags,
                    alternatives=candidate.alternatives, interpretation_reason=candidate.interpretation_reason,
                    valid_at=candidate.valid_at, invalid_at=candidate.invalid_at,
-                   dimension_evidence=candidate.dimension_evidence, event=candidate.event,
+                   dimension_evidence=candidate.dimension_evidence, event=candidate.event, conditions=candidate.conditions,
                    requires_all_sources=candidate.requires_all_sources)
 
 

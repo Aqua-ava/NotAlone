@@ -7,6 +7,7 @@ from uuid import UUID
 
 from notalone.memory.dimension_evidence import DimensionEvidence
 from notalone.memory.events import MemoryEvent
+from notalone.memory.conditions import MemoryConditions
 from notalone.memory.models import MemoryCategory, MemoryTopic, SourceDependencyMode
 from notalone.memory.timing import MemoryTiming
 from notalone.memory_extraction.flow import ExtractionOutcome
@@ -30,7 +31,7 @@ def outcome_payload(outcome: ExtractionOutcome) -> dict:
 def _fact_payload(fact: ExtractedFact) -> dict:
     return {**snapshot(fact), 'timing': fact.timing.to_payload(),
             'dimension_evidence': fact.dimension_evidence.to_payload() if fact.dimension_evidence else None,
-            'event': fact.event.to_payload() if fact.event else None}
+            'event': fact.event.to_payload() if fact.event else None, 'conditions': fact.conditions.to_payload() if fact.conditions else None}
 
 
 def restore_outcome(value: dict) -> ExtractionOutcome:
@@ -57,7 +58,7 @@ def restore_outcome(value: dict) -> ExtractionOutcome:
             figurative_type=FigurativeType(row['figurative_type']), alternatives=tuple(row['alternatives']),
             interpretation_reason=row['interpretation_reason'], timing=MemoryTiming.from_payload(row['timing']),
             dimension_evidence=DimensionEvidence.from_payload(row['dimension_evidence']) if row.get('dimension_evidence') else None,
-            event=MemoryEvent.from_payload(row.get('event')),
+            event=MemoryEvent.from_payload(row.get('event')), conditions=MemoryConditions.from_payload(row.get('conditions')),
             source_dependency_mode=SourceDependencyMode(row.get('source_dependency_mode', 'any')),
             requires_all_sources=row.get('requires_all_sources', False),
         ))
@@ -80,7 +81,7 @@ def comparison_payload(compared) -> dict:
                     'subject': candidate.subject.value, 'source_ids': [str(item) for item in candidate.source_ids],
                     'source_dependency_mode': candidate.source_dependency_mode.value,
                     'requires_all_sources': candidate.requires_all_sources,
-                    'timing': candidate.timing.to_payload(), 'event': candidate.event.to_payload() if candidate.event else None,
+                    'timing': candidate.timing.to_payload(), 'event': candidate.event.to_payload() if candidate.event else None, 'conditions': candidate.conditions.to_payload() if candidate.conditions else None,
                     'correction_review': [item.to_payload() for item in candidate.correction_review],
                     'has_new_proof': candidate.dimension_evidence is not None},
             'previous': _memory_payload(previous) if previous else None,
@@ -101,5 +102,5 @@ def _memory_payload(memory):
             'source_ids': [str(item) for item in memory.source_ids],
             'source_dependency_mode': memory.source_dependency_mode.value,
             'requires_all_sources': memory.requires_all_sources,
-            'timing': memory.timing.to_payload(), 'event': memory.event.to_payload() if memory.event else None,
+            'timing': memory.timing.to_payload(), 'event': memory.event.to_payload() if memory.event else None, 'conditions': memory.conditions.to_payload() if memory.conditions else None,
             'proof_kind': 'version_receipt' if memory.version_evidence else 'unknown'}

@@ -911,7 +911,7 @@ test('联系人与本人冻结分层依据保留各自计划和适用期，旧�
     const scopes = scopedScenarioSnapshots(f);
     for (const [index, scoped] of Object.values(scopes).entries()) {
       const ref = scoped.receipt.document.paragraphs[0].references[0];
-      Object.assign(ref, { valid_at: '2020-06-01T00:00:00+08:00', invalid_at: '2020-06-03T00:00:00+08:00',
+      Object.assign(ref, { conditions: { version: 1, items: [{ text: index === 0 ? '出差期间' : '旅行期间', evidence: [{ message_id: ref.memory_id, char_start: 0, char_end: 4 }], source_supported: true }] }, valid_at: '2020-06-01T00:00:00+08:00', invalid_at: '2020-06-03T00:00:00+08:00',
         event: { version: 1, stage: index === 0 ? 'planned' : 'cancelled', stage_verified: false, stage_evidence: [],
           occurrence_start: '2020-06-02T09:00:00+08:00', occurrence_end: null, occurrence_verified: false, occurrence_evidence: [] } });
       scoped.context.profile_version_id = randomUUID();
@@ -925,16 +925,20 @@ test('联系人与本人冻结分层依据保留各自计划和适用期，旧�
   for (const [context, reads, expectedStage] of [[state.layeredContext, state.layeredScenarioReads, 'planned'],
     [state.ownerLayeredContext, state.ownerLayeredScenarioReads, 'cancelled']]) {
     for (const ref of [context.profileEntries[0].references[0], reads[0].document.paragraphs[0].references[0]]) {
+      assert.equal(ref.conditions.items[0].text, expectedStage === 'planned' ? '出差期间' : '旅行期间');
+      assert.equal(ref.conditions.items[0].sourceSupported, true);
       assert.equal(ref.event.stage, expectedStage);
       assert.equal(ref.event.occurrenceStart, '2020-06-02T09:00:00+08:00');
       assert.equal(ref.validAt, '2020-06-01T00:00:00+08:00');
       assert.equal(ref.invalidAt, '2020-06-03T00:00:00+08:00');
     }
     const legacy = context.profileEntries[0].references[1];
-    assert.equal(legacy.event, null); assert.equal(legacy.validAt, null); assert.equal(legacy.invalidAt, null);
+    assert.equal(legacy.conditions, null); assert.equal(legacy.event, null); assert.equal(legacy.validAt, null); assert.equal(legacy.invalidAt, null);
   }
   const html = await renderEvidence(f);
+  assert.match(html, /适用条件：出差期间/); assert.match(html, /适用条件：旅行期间/);
+  assert.match(html, /来源支持限定，当前是否满足未知/);
   assert.match(html, /事件阶段：计划/); assert.match(html, /事件阶段：取消/);
-  assert.match(html, /事件阶段：未知/); assert.match(html, /适用期间：2020-06-01/);
+  assert.match(html, /事件阶段：未知/); assert.match(html, /适用期间：2020年6月1日/);
   assert.doesNotMatch(html, /事件阶段：已发生/);
 });

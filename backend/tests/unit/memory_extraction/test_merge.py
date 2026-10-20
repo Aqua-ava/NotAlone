@@ -19,7 +19,7 @@ class MergeTests(unittest.TestCase):
         self.scope = ContactScope(self.window.owner_id, self.window.contact_id)
         self.fact = _to_fact(_payload(ids[2]))
         self.parents = tuple(SimpleNamespace(memory_id=uuid4(), adoption_method=AdoptionMethod.AUTO,
-            category=self.fact.category, topic=self.fact.topic, event=None, valid_at=None, invalid_at=None,
+            category=self.fact.category, topic=self.fact.topic, event=None, conditions=None, valid_at=None, invalid_at=None,
             source_ids=(identifier,)) for identifier in ids[:2])
 
     def test_merged_text_is_reverified_with_all_source_messages(self):
