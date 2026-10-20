@@ -15,7 +15,7 @@
 .input-preview{border-left:2px solid #d9e5eb;padding:0 0 0 12px;margin-bottom:22px}.input-preview small{font-size:11px;color:#86949d}.input-preview p{margin:6px 0 0;font-size:13px;color:#59707f;line-height:1.6}
 .candidates{border:1px solid #d9e3e9;border-radius:12px;background:white;overflow:hidden}
 .heading{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 20px 12px}.heading h2{font-size:16px;margin:0;font-weight:600}.count{font-size:11px;color:#84939c;font-weight:400;margin-left:8px}.hint{font-size:11px;color:#97a2a9;white-space:nowrap}
-.rows{padding:0 20px}.reply{position:relative;padding:17px 0}.reply+.reply{border-top:1px solid #e7edf0}.reply-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;gap:10px}.label{display:flex;align-items:center;gap:8px;font-size:11px;color:#83949f}.num{font-variant-numeric:tabular-nums;color:#a1b0b9;font-size:10px}.copy{background:white;border:1px solid #dbe5ea;border-radius:5px;font-size:12px;line-height:1;padding:6px 9px;white-space:nowrap;color:#446f8a;min-width:44px}.copy:hover{background:#eef5f9;border-color:#b7ccda}
+.rows{padding:0 20px}.reply{position:relative;padding:17px 0}.reply+.reply{border-top:1px solid #e7edf0}.reply-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;gap:10px}.label{display:flex;align-items:center;gap:8px;font-size:11px;color:#83949f}.num{font-variant-numeric:tabular-nums;color:#a1b0b9;font-size:10px}.copy{background:white;border:1px solid #dbe5ea;border-radius:5px;font-size:12px;line-height:1;padding:5px;white-space:nowrap;color:#446f8a;width:28px;height:28px;display:inline-grid;place-items:center;flex-shrink:0}.copy:hover{background:#eef5f9;border-color:#b7ccda}
 textarea{display:block;width:100%;background:transparent;border:1px solid transparent;border-radius:5px;resize:none;overflow:hidden;line-height:1.7;font-size:15px;margin:0;padding:3px 5px 3px 0;min-height:36px;outline:none}textarea:hover{background:#f7fafb}textarea:focus{border-color:#b2cddc;background:#f7fafb;padding-left:5px}
 .row-bottom{display:flex;align-items:flex-start;gap:12px;margin-top:5px}.basis{font-size:11px;color:#8595a0;flex:1}.basis summary{cursor:pointer;list-style:none;display:inline-block}.basis summary::after{content:"⌄";margin-left:5px}.basis[open] summary::after{content:"⌃"}.basis p{font-size:12px;line-height:1.7;color:#697e8c;margin:9px 0 0;padding:10px;background:#f5f8fa;border-radius:6px}.risk{font-size:10px;color:#a47e43;line-height:1.6}
 .foot{border-top:1px solid #e9eef1;padding:11px 20px;background:#fcfdfe;font-size:11px;color:#8a99a3}.foot summary{cursor:pointer;list-style:none;display:flex;justify-content:space-between}.foot p{line-height:1.8;margin-bottom:2px}
@@ -24,7 +24,7 @@ textarea{display:block;width:100%;background:transparent;border:1px solid transp
 .after{display:flex;align-items:center;justify-content:space-between;margin-top:18px;color:#98a4ab;font-size:11px}.after span:last-child{color:#6f8796}
 .caption{max-width:760px;margin:22px auto 0;text-align:center;font-size:12px;line-height:1.8;color:#778b98}.caption strong{color:#4e6d81;font-weight:500}
 .switcher{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:4px;border-radius:12px;padding:6px;background:#263d4c;box-shadow:0 8px 28px #182b4530;z-index:5;white-space:nowrap}.switcher button{border:0;background:transparent;color:#b7c8d3;border-radius:7px;padding:10px 16px;font-size:12px}.switcher button.active{background:#fff;color:#294d65}.switcher .arrow{padding:10px;color:#d5e0e7}.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
-@media(max-width:650px){.toolbar{margin-top:22px;align-items:flex-start}.toolbar h1{font-size:20px}.toolbar p{max-width:250px;line-height:1.6}.workspace{padding:16px}.window{width:calc(100% - 24px)}.sizes{display:none}.heading{padding:16px 16px 10px}.rows{padding:0 16px}.B .reply{padding:0 10px}.B textarea{font-size:13px;min-height:140px}.B .label{gap:3px;font-size:10px}.B .copy{padding:5px;font-size:11px;min-width:34px}.hint{display:none}.switcher button{padding:10px}.caption{padding:0 8px}.risk{max-width:160px}}
+@media(max-width:650px){.toolbar{margin-top:22px;align-items:flex-start}.toolbar h1{font-size:20px}.toolbar p{max-width:250px;line-height:1.6}.workspace{padding:16px}.window{width:calc(100% - 24px)}.sizes{display:none}.heading{padding:16px 16px 10px}.rows{padding:0 16px}.B .reply{padding:0 10px}.B textarea{font-size:13px;min-height:140px}.B .label{gap:3px;font-size:10px}.B .copy{padding:5px}.hint{display:none}.switcher button{padding:10px}.caption{padding:0 8px}.risk{max-width:160px}}
 </style>
 <header class="toolbar">
   <div><div class="eyebrow">NOTALONE / DESIGN PREVIEW</div><h1>三个回复，一眼看完。</h1><p>同一组示例内容，比较三种排版；点击正文可修改。</p></div>
@@ -51,6 +51,8 @@ textarea{display:block;width:100%;background:transparent;border:1px solid transp
 </nav>
 <div class="sr" role="status" id="status"></div>
 <script>
+const copyIcon='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V4a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h4"/></svg>';
+const copiedIcon='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>';
 const samples=[
   {name:'自然',text:'这家看起来不错，谢谢推荐！周末有空我去看看。',basis:'保留感谢和周末有空再去的意思，语气平实，没有增加新的安排。'},
   {name:'简短',text:'收到，谢谢推荐，周末有空去看看～',basis:'省去评价，直接回应推荐；保留“有空”这个前提。'},
@@ -62,13 +64,13 @@ if(!['A','B','C'].includes(current))current='A';
 const rows=document.getElementById('rows');
 samples.forEach((sample,index)=>{
   const article=document.createElement('article');article.className='reply';
-  article.innerHTML=`<div class="reply-top"><span class="label"><span class="num">0${index+1}</span>${sample.name}</span><button class="copy" aria-label="复制第${index+1}条回复">复制</button></div><textarea rows="1" aria-label="第${index+1}条回复" spellcheck="false"></textarea><div class="row-bottom"><details class="basis"><summary>依据</summary><p>${sample.basis}</p></details>${sample.risk?`<span class="risk">${sample.risk}</span>`:''}</div>`;
+  article.innerHTML=`<div class="reply-top"><span class="label"><span class="num">0${index+1}</span>${sample.name}</span><button class="copy" aria-label="复制第${index+1}条回复" title="复制">${copyIcon}</button></div><textarea rows="1" aria-label="第${index+1}条回复" spellcheck="false"></textarea><div class="row-bottom"><details class="basis"><summary>依据</summary><p>${sample.basis}</p></details>${sample.risk?`<span class="risk">${sample.risk}</span>`:''}</div>`;
   const editor=article.querySelector('textarea');editor.value=sample.text;
   editor.addEventListener('input',()=>{sample.text=editor.value;fit(editor)});
   article.querySelector('.copy').addEventListener('click',async(event)=>{
     const button=event.currentTarget;
-    try{await navigator.clipboard.writeText(editor.value);button.textContent='已复制';document.getElementById('status').textContent=`已复制第${index+1}条回复`;setTimeout(()=>button.textContent='复制',1200)}
-    catch{button.textContent='请选中';document.getElementById('status').textContent='请选中文字手动复制'}
+    try{await navigator.clipboard.writeText(editor.value);button.innerHTML=copiedIcon;button.title='已复制';document.getElementById('status').textContent=`已复制第${index+1}条回复`;setTimeout(()=>{button.innerHTML=copyIcon;button.title='复制'},1200)}
+    catch{button.title='请选中文字手动复制';editor.focus();editor.select();document.getElementById('status').textContent='请选中文字手动复制'}
   });
   rows.append(article);
 });
