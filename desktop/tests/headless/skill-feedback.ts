@@ -22,13 +22,14 @@ export async function skillFeedback(browser: Browser, origin: string) {
       const open = async () => {
         await manager.getByRole('button', { name: '联系人', exact: true }).click();
         await manager.getByRole('button', { name: '选择合成学习甲联系人', exact: true }).click();
-        await manager.getByRole('button', { name: 'Skill 待审核', exact: true }).click();
-        await manager.getByRole('button', { name: '查看已发布版本', exact: true }).click();
+        await manager.getByRole('button', { name: 'Skill', exact: true }).click();
+        await manager.getByRole('tab', { name: '已有 Skill', exact: true }).click();
         await manager.getByRole('button', { name: '管理方法停用', exact: true }).click();
         return manager.getByRole('region', { name: '方法与Skill反馈', exact: true });
       };
       await manager.getByRole('button', { name: '选择合成学习甲联系人', exact: true }).click();
-      await manager.getByRole('button', { name: 'Skill 待审核', exact: true }).click();
+      await manager.getByRole('button', { name: 'Skill', exact: true }).click();
+      await manager.getByRole('tab', { name: /^待审核/ }).click();
       await manager.getByRole('button', { name: '开启此联系人的经验整理', exact: true }).click();
       await expect(manager.getByRole('button', { name: '关闭经验整理', exact: true })).toBeEnabled();
       const prepared = await fixture.command('prepare_feedback');
@@ -191,8 +192,8 @@ export async function skillFeedback(browser: Browser, origin: string) {
         await manager.getByRole('button', { name: '确认删除来源', exact: true }).click();
         await expect(source.getByText('已删除，已通过不可检索校验', { exact: true })).toBeVisible();
       }
-      await manager.getByRole('button', { name: 'Skill 待审核', exact: true }).click();
-      await manager.getByRole('button', { name: '查看已发布版本', exact: true }).click();
+      await manager.getByRole('button', { name: 'Skill', exact: true }).click();
+      await manager.getByRole('tab', { name: '已有 Skill', exact: true }).click();
       await expect(manager.getByRole('region', { name: 'Skill版本历史', exact: true })).toContainText('当前没有可查看的有效发布版本。');
       await manager.getByRole('button', { name: '管理方法停用', exact: true }).click();
       panel = manager.getByRole('region', { name: '方法与Skill反馈', exact: true });

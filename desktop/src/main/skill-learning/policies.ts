@@ -37,7 +37,10 @@ export class SkillPolicySession {
   constructor(private readonly backend: BackendHost, private readonly scope: () => Scope | undefined,
     private readonly changed: (state: SkillPolicyState | null) => void) {}
   clear() { ++this.operation; this.pending?.abort(); this.pending = undefined; this.retry = undefined; this.state = null; this.changed(null); }
-  async open(scope: Scope) { if (this.state?.phase !== 'writing' && !this.retry) await this.perform(scope); }
+  async open(scope: Scope, background = false) {
+    if (this.state?.phase === 'writing' || this.retry || background && this.pending) return;
+    await this.perform(scope, undefined, '', background);
+  }
   async change(scope: Scope, command: Record<string, unknown>) {
     if (this.state?.phase !== 'ready' || this.retry) throw new Error('请先核验当前停用范围。');
     await this.perform(scope, { ...command, expected_revision: this.state.revision, operation_key: randomUUID() });
@@ -50,10 +53,12 @@ export class SkillPolicySession {
     if (this.state?.phase !== 'ready' || this.retry || !this.state.policies.some(item => item.policy_id === policyId)) throw new Error('请先核验要撤销的明确停用。');
     await this.perform(scope, { expected_revision: this.state.revision, operation_key: randomUUID() }, `/${policyId}/undo`);
   }
-  private async perform(scope: Scope, body?: Record<string, unknown>, suffix = '') {
+  private async perform(scope: Scope, body?: Record<string, unknown>, suffix = '', background = false) {
     const operation = ++this.operation; this.pending?.abort(); const pending = this.pending = new AbortController();
     const current = () => this.scope() === scope && operation === this.operation && scope.generation === this.backend.getConnectionGeneration();
-    this.publish({ phase: body ? 'writing' : 'loading', revision: this.state?.revision ?? 0, policies: [], error: null, retry: false });
+    if (!(background && this.state?.phase === 'ready')) {
+      this.publish({ phase: body ? 'writing' : 'loading', revision: this.state?.revision ?? 0, policies: [], error: null, retry: false });
+    }
     if (body) this.retry = { scope, body, suffix };
     try {
       const result = await this.backend.requestJson({ method: body ? 'POST' : 'GET',

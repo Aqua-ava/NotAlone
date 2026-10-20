@@ -1,11 +1,11 @@
 import type { SkillHistoryState } from '../shared/skill-learning-bridge';
 
 export function SkillHistoryPanel({ state, rollback, retry, close }: {
-  state: SkillHistoryState; rollback(skillId: string, versionId: string): void; retry(): void; close(): void;
+  state: SkillHistoryState; rollback(skillId: string, versionId: string): void; retry(): void; close?(): void;
 }) {
-  return <section aria-label="Skill版本历史"><h2>已发布方法与历史版本</h2>
+  return <section aria-label="Skill版本历史"><h2>已有 Skill</h2>
     <p>回滚只切换仍有合法来源的版本，保留 Skill 当前的启用或停用状态；范围和来源删除继续有效。</p>
-    <button className="button" onClick={close}>返回草稿</button>
+    {close && <button className="button" onClick={close}>返回草稿</button>}
     {state.skills.map(skill => <article className="memory-card" key={skill.skill_id} aria-label={`版本历史 ${skill.name}`}>
       <h3>{skill.name} · {skill.status === 'active' ? '已启用' : '已停用'}</h3>
       {skill.versions.map(version => <section key={version.version_id} aria-label={`版本 ${version.version_number}`}>

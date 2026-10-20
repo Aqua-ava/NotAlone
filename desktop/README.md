@@ -130,10 +130,13 @@ npm ci
 npx install-electron     # 首次显式准备锁定版本的 Electron 运行时
 npm run typecheck
 npm test                # 类型检查、安全调度、自研探针及外置路径配置，真实 App 不运行
+npm run test:polling     # 后台刷新稳定性回归，含无头 Chrome 页面；不启动 Electron
 npm run dev             # 日常开发
 npm start               # 一次性编译启动
 npm run package
 ```
+
+修改自动刷新页面后运行 `npm run test:polling`：用合成响应和可控慢请求检查刷新进行中的按钮、焦点及内容，不只检查请求完成后的画面。后台核验保留同范围已就绪视图，首次加载、手动刷新及写入仍有反馈；读取失败、来源删除、切换联系人和重连继续撤下失效内容。该命令使用本机已有 Chrome，不下载浏览器、不读取真实聊天或调用模型。
 
 本机 arm64 产物为 `out/NotAlone-darwin-arm64/NotAlone.app`。可在 Finder 双击打开；包只包含编译后的本地资源和最小启动清单，不依赖开发服务器、原型目录或仓库绝对路径。打包只替换本目录的 `out/` 产物，不覆盖历史 App。当前为 ad-hoc 本机签名，未做 Developer ID 分发、公证或 DMG；权限与签名边界见[台账](../docs/macos-app-permissions-and-errors.md)。
 
@@ -259,7 +262,7 @@ node tests/headless/rewrite-lifecycle-check.mjs          # 实际未知命令故
 
 ### 授权经验草稿页面（09）
 
-管理页“Skill 待审核”按当前已确认联系人显示独立草稿。用户明确开启此联系人的经验整理后，才使用该模型用途；页面可核对私人依据、实际候选措辞、方法映射和范围建议，未审核草稿不进入回复。选择与复制不证明已发送。切换联系人、连接代际或发生来源／偏好／记忆／助手会话删除时先隔离旧状态，再从权威目录复验。
+管理页“Skill”默认显示当前已确认联系人可用的已有 Skill；“待审核”单独成页签，有草稿时显示数量。用户明确开启此联系人的经验整理后，才使用该模型用途；待审核页签可核对私人依据、实际候选措辞、方法映射和范围建议，未审核草稿不进入回复。选择与复制不证明已发送。切换联系人、连接代际或发生来源／偏好／记忆／助手会话删除时先隔离旧状态，再从权威目录复验。
 
 有限合成入口要求 `NOTALONE_LEARNING_EVIDENCE_DIR` 指向仓库外700目录，再执行 `npm run test:pages -- --case skill-learning --timeout-seconds 240`。父进程固定关键模块路径与SHA，隔离Python夹具核对实际加载路径、当前连续迁移和重复0；页面保留实际执行artifact与浏览器响应原字节。09本票运行的001–064结果、模型调用数与资源收尾见[09集成任务](../.scratch/memory-skill-integration-preparation/issues/09-learning-drafts.md)。脚本模型验证不证明真实模型质量、Electron或微信验收。
 

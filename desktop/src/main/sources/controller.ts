@@ -71,10 +71,11 @@ export class SourceDeletionController {
       for (const listener of this.deletionListeners) listener('settled');
     }
   }
-  private async read(scope: Scope) {
+  private async read(scope: Scope, background = false) {
     this.cancel(); const revision = this.revision; const pending = new AbortController(); this.pending = pending;
     const current = () => this.scope === scope && revision === this.revision && scope.generation === this.backend.getConnectionGeneration();
-    this.publish({ phase: 'loading', sources: [], error: null });
+    // 后台核对保留已确认目录；显式刷新、删除和范围失效仍沿原门禁处理。
+    if (!background) this.publish({ phase: 'loading', sources: [], error: null });
     try {
       const response = await this.backend.requestJson({ method: 'GET', path: `/api/contacts/${scope.contactId}/sources`, signal: pending.signal });
       if (!current() || response.generation !== scope.generation) return;
@@ -91,9 +92,9 @@ export class SourceDeletionController {
         if (!current()) return;
         this.verified.add(source.task.taskId);
       }
-      this.publish({ phase: 'ready', sources, busySourceId: null });
+      this.publish({ phase: 'ready', sources, busySourceId: null, error: null });
       if (sources.some((source) => source.task && ['queued', 'running', 'verifying'].includes(source.task.status))) {
-        if (++this.pollCount <= 30) this.poll = setTimeout(() => { if (current()) void this.read(scope); }, 500);
+        if (++this.pollCount <= 30) this.poll = setTimeout(() => { if (current()) void this.read(scope, true); }, 500);
         else this.publish({ error: '删除仍未确认完成，请稍后刷新原任务。' });
       }
     } catch { if (current()) this.publish({ phase: 'failed', sources: [], busySourceId: null, error: '来源或删除任务读取失败，尚不能确认已删除，请重试刷新。' }); }

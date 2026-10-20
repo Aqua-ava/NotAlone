@@ -23,6 +23,8 @@ export class SkillLearningController {
   private reviewOperation = 0;
   private reviewPending: AbortController | undefined;
   private reviewBusy = false;
+  private reviewBackground = false;
+  private refreshing: object | undefined;
   private readonly reviewKeys = new Map<string, string>();
   private reviewRetry: { scope: Scope; draftId: string; action: ReviewAction; body: Record<string, unknown> } | undefined;
   private readonly deletions = new Set<object>();
@@ -48,10 +50,11 @@ export class SkillLearningController {
     this.publish({ contactId: next?.contactId ?? null, scopeRevision: contacts.scopeRevision });
   }
   private clear() {
+    this.refreshing = undefined;
     this.history.clear();
     this.policies.clear();
     ++this.operation; this.pending?.abort(); this.pending = undefined; this.mutating = false;
-    ++this.reviewOperation; this.reviewPending?.abort(); this.reviewPending = undefined; this.reviewBusy = false; this.reviewKeys.clear(); this.reviewRetry = undefined;
+    ++this.reviewOperation; this.reviewPending?.abort(); this.reviewPending = undefined; this.reviewBusy = false; this.reviewBackground = false; this.reviewKeys.clear(); this.reviewRetry = undefined;
     this.publish({ drafts: [], task: null, recentOutcomes: [], enabled: false, settingRevision: 0, phase: 'idle', error: null, review: null });
   }
   invalidate() { this.clear(); }
@@ -62,25 +65,31 @@ export class SkillLearningController {
     this.clear();
     return () => { if (this.deletions.delete(operation)) this.clear(); };
   }
-  private assertScope(selection: ContactSelection): Scope {
+  private assertScope(selection: ContactSelection, background = false): Scope {
     this.synchronize();
     if (!this.scope || selection.contactId !== this.scope.contactId || selection.scopeRevision !== this.scope.scopeRevision) throw new Error('学习联系人已变化，请重新选择。');
+    // 前台动作可抢占只读核验；已经提交的写入仍由原操作结算。
+    if (!background && this.reviewBackground) {
+      ++this.reviewOperation; this.reviewPending?.abort(); this.reviewPending = undefined;
+      this.reviewBusy = false; this.reviewBackground = false;
+    }
     return this.scope;
   }
-  async refresh(selection: ContactSelection) {
-    const scope = this.assertScope(selection);
-    if (this.deletions.size || this.reviewBusy) return;
-    if (this.state.policies) {
-      const policies = this.state.policies;
-      await this.history.open(scope);
-      if (this.scope === scope && this.state.policies === policies && !this.deletions.size) await this.policies.open(scope);
-      return;
-    }
-    if (this.state.history) { await this.history.open(scope); return; }
-    if (this.reviewRetry && this.state.review) {
-      await this.retryReview({ ...selection, draftId: this.reviewRetry.draftId, expectedRevision: this.state.review.draft.revision });
-    } else if (this.state.review?.published) await this.performReview(scope, this.state.review.draft.draft_id);
-    else await this.perform(scope, 'GET');
+  async poll(selection: ContactSelection) { await this.refresh(selection, true); }
+  async refresh(selection: ContactSelection, background = false) {
+    const scope = this.assertScope(selection, background);
+    if (this.deletions.size || this.reviewBusy || background && this.refreshing) return;
+    const refreshing = this.refreshing = {};
+    const current = () => this.refreshing === refreshing && this.scope === scope && !this.deletions.size;
+    try {
+      if (this.reviewRetry && this.state.review) {
+        await this.retryReview({ ...selection, draftId: this.reviewRetry.draftId, expectedRevision: this.state.review.draft.revision });
+      } else if (this.state.review?.published) await this.performReview(scope, this.state.review.draft.draft_id, undefined, undefined, background);
+      else await this.perform(scope, 'GET', undefined, background);
+      if (!current()) return;
+      if (this.state.history) await this.history.open(scope, background);
+      if (current() && this.state.policies) await this.policies.open(scope, background);
+    } finally { if (this.refreshing === refreshing) this.refreshing = undefined; }
   }
   async configure(selection: ContactSelection & { enabled: boolean; confirmed: true }) {
     const scope = this.assertScope(selection);
@@ -99,7 +108,6 @@ export class SkillLearningController {
   async openHistory(selection: ContactSelection) {
     const scope = this.assertScope(selection);
     if (this.deletions.size || this.reviewBusy) return;
-    this.publish({ review: null });
     await this.history.open(scope);
   }
   async closeHistory(selection: ContactSelection) { this.assertScope(selection); this.history.clear(); this.policies.clear(); }
@@ -177,7 +185,7 @@ export class SkillLearningController {
   }
   closeReview(selection: ContactSelection) {
     this.assertScope(selection);
-    ++this.reviewOperation; this.reviewPending?.abort(); this.reviewPending = undefined; this.reviewBusy = false;
+    ++this.reviewOperation; this.reviewPending?.abort(); this.reviewPending = undefined; this.reviewBusy = false; this.reviewBackground = false;
     this.reviewRetry = undefined;
     this.publish({ review: null, phase: 'ready', error: null });
   }
@@ -200,15 +208,16 @@ export class SkillLearningController {
     }
     return key;
   }
-  private async performReview(scope: Scope, draftId: string, action?: ReviewAction, body?: Record<string, unknown>) {
+  private async performReview(scope: Scope, draftId: string, action?: ReviewAction, body?: Record<string, unknown>, background = false) {
     const previous = this.state.review;
     const operation = ++this.reviewOperation;
     ++this.operation; this.pending?.abort(); this.pending = undefined; this.mutating = false;
     this.reviewPending?.abort(); const pending = this.reviewPending = new AbortController(); this.reviewBusy = true;
+    this.reviewBackground = background;
     const phase = action === 'edit' ? 'saving' : action === 'compare' ? 'comparing' : action === 'approve' ? 'publishing' : 'deciding';
     if (!action) this.reviewRetry = undefined;
     else this.reviewRetry = { scope, draftId, action, body: body! };
-    this.publish({ phase: action ? this.state.phase : 'loading', error: null,
+    this.publish({ phase: action || background && this.state.phase === 'ready' ? this.state.phase : 'loading', error: null,
       review: action && previous ? { ...previous, phase, error: null, ...(action === 'approve' ? {} : { comparison: null }) } : previous?.published ? previous : null });
     const requestBody = action ? { ...body, operation_key: this.operationKey(JSON.stringify({ draftId, action, body })) } : undefined;
     try {
@@ -230,6 +239,7 @@ export class SkillLearningController {
       if (action === 'approve' && (draft.status !== 'published' || published?.name !== draft.sanitized_strategy.name)) throw new Error('发布回执与草稿不一致。');
       const drafts = this.state.drafts.filter(item => item.draft_id !== draftId);
       if (draft.status === 'pending') drafts.push(draft);
+      if (action === 'approve') this.history.clear();
       if (action) this.reviewKeys.clear();
       this.reviewRetry = undefined;
       this.publish({ phase: 'ready', drafts, review: action === 'decision' ? null : {
@@ -243,15 +253,17 @@ export class SkillLearningController {
             comparison: null, retry: rejected ? null : action, stale: rejected && error.status === 409,
             phase: 'failed', error: rejected ? '草稿、来源或对照已变化，请重新打开核验。' : '操作未确认完成；请重试原操作，或重新打开核验。' } : null });
       }
-    } finally { if (this.reviewPending === pending) { this.reviewPending = undefined; this.reviewBusy = false; } }
+    } finally { if (this.reviewPending === pending) { this.reviewPending = undefined; this.reviewBusy = false; this.reviewBackground = false; } }
   }
-  private async perform(scope: Scope, method: 'GET' | 'POST', body?: unknown) {
+  private async perform(scope: Scope, method: 'GET' | 'POST', body?: unknown, background = false) {
     if (this.deletions.size || this.reviewBusy) return;
     if (this.mutating && this.scope === scope) return;
     const operation = ++this.operation; this.pending?.abort(); const pending = this.pending = new AbortController();
     this.mutating = method === 'POST';
     if (method === 'POST') this.reviewRetry = undefined;
-    this.publish({ phase: 'loading', ...(method === 'POST' ? { drafts: [], review: null } : {}), error: null });
+    if (!background || this.state.phase !== 'ready') {
+      this.publish({ phase: 'loading', ...(method === 'POST' ? { drafts: [], review: null } : {}), error: null });
+    }
     try {
       const result = await this.backend.requestJson({ method, path: `/api/contacts/${scope.contactId}/skill-learning`, body, signal: pending.signal });
       if (operation !== this.operation || this.scope !== scope || result.generation !== scope.generation) return;

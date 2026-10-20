@@ -72,6 +72,7 @@ export interface SkillLearningState {
 export interface SkillLearningBridge {
   getState(): Promise<SkillLearningState>;
   refresh(selection: ContactSelection): Promise<void>;
+  poll(selection: ContactSelection): Promise<void>;
   configure(selection: ContactSelection & { enabled: boolean; confirmed: true }): Promise<void>;
   resume(selection: ContactSelection): Promise<void>;
   openReview(selection: ContactSelection & { draftId: string }): Promise<void>;
