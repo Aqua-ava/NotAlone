@@ -44,7 +44,7 @@ for (const scope of ['contact', 'owner']) for (const kind of ['scenario', 'profi
         assert.equal(posts[0].body.reason, '总结把计划写成事实。');
         await page.getByRole('button', { name: scope === 'owner' ? '管理底层本人记忆' : '管理底层联系人记忆' }).click();
         if (scope === 'contact') await page.getByRole('button', { name: '补充联系人资料', exact: true }).click();
-        else await page.locator('summary').filter({ hasText: /^补充本人资料$/ }).click();
+        else await page.locator('summary').filter({ hasText: /^＋ 补充一条$/ }).click();
         await page.getByRole('button', { name: scope === 'owner' ? '保存本人资料' : '保存资料', exact: true }).waitFor();
       } else {
         await item.getByText(kind === 'profile' ? '查看第 1 项依据与时间' : '查看第 1 段依据与时间', { exact: true }).click();
@@ -53,6 +53,7 @@ for (const scope of ['contact', 'owner']) for (const kind of ['scenario', 'profi
         await target.locator('p.memory-text').getByText(memory.text, { exact: true }).waitFor();
         assert.equal(await target.getByRole('textbox').inputValue(), memory.text);
         assert.equal(await target.getByText('无关底层资料0。', { exact: true }).count(), 0);
+        if (scope === 'owner') assert.equal(await page.locator('p.memory-text').getByText(memory.text, { exact: true }).count(), 1);
         assert.equal(posts[0].body.memory_id, ids.memory);
       }
       assert.equal(posts[0].body.target_kind, kind);

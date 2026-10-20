@@ -16,7 +16,7 @@ export async function ownerLayeredMemory(browser: Browser, origin: string) {
       const manager = await host.open('manager');
       await manager.getByRole('button', { name: '记忆', exact: true }).click();
       await selectMemoryCategory(manager, '本人主题资料');
-      await expandMemorySection(manager, '补充本人资料');
+      await expandMemorySection(manager, '＋ 补充一条');
       await manager.getByLabel('本人资料内容', { exact: true }).fill('本人喜欢合成读书活动。');
       await manager.getByRole('button', { name: '保存本人资料', exact: true }).click();
       await expect(manager.getByText('本人资料已保存，请核对整理状态。', { exact: true })).toBeVisible();
@@ -42,7 +42,7 @@ export async function ownerLayeredMemory(browser: Browser, origin: string) {
       const final = await fixture.request(endpoint);
       expect(final.data.layered_memory).toMatchObject({ enabled: false, scenarios: [], profile: null });
       await panel.getByRole('button', { name: '管理底层本人记忆', exact: true }).click();
-      const facts = manager.getByRole('region', { name: '本人底层记忆', exact: true });
+      const facts = manager.getByRole('region', { name: '我的记忆', exact: true });
       await expect(facts.getByText('本人喜欢合成读书活动。', { exact: true })).toBeVisible();
       await facts.getByRole('button', { name: '修正本人记忆', exact: true }).click();
       await facts.getByRole('textbox', { name: '修正本人记忆内容', exact: true }).fill('本人偏好合成阅读练习。');
@@ -50,7 +50,7 @@ export async function ownerLayeredMemory(browser: Browser, origin: string) {
       await expect(facts.getByText('本人偏好合成阅读练习。', { exact: true })).toBeVisible();
       await facts.getByRole('button', { name: '删除本人记忆', exact: true }).click();
       await facts.getByRole('button', { name: '确认删除本人记忆', exact: true }).click();
-      await expect(facts.getByText('暂无本人底层记忆。', { exact: true })).toBeVisible();
+      await expect(facts.getByText('还没有记住关于你的事。', { exact: true })).toBeVisible();
       const proof = await fixture.command('runtime_proof');
       expect(proof.external_model_calls).toBe(0);
       expect(proof.proposal_calls).toBeGreaterThan(0);

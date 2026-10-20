@@ -2,8 +2,17 @@ import { useEffect, useRef, useState } from 'react';
 import type { LayeredMemory, MemoryOverviewState, OwnerLayeredMemoryState } from '../shared/memory-bridge';
 import type { MemoryProcessing, MemoryProcessingRequest, MemoryProcessingTask } from '../shared/memory-processing';
 
-const names = { queued: '等待处理', extracting: '正在从聊天中提取记忆', organizing: '正在整理背景资料', completed: '本次提取完成',
-  interrupted: '处理已中断', failed: '处理失败', stopped: '已停止' };
+const names = { queued: '等待生成记忆', extracting: '正在生成记忆', organizing: '正在整理记忆', completed: '本次处理完成',
+  interrupted: '记忆生成已中断', failed: '记忆生成失败', stopped: '记忆生成已停止' };
+function shortStatus(task: MemoryProcessingTask) {
+  if (task.reasonCode === 'model_configuration_unavailable') return '请先检查模型设置';
+  if (task.reasonCode === 'execution_resources_unavailable') return '暂时无法处理，请稍后重试';
+  if (task.reasonCode === 'source_unavailable') return '资料暂不可用，无法继续';
+  if (task.reasonCode === 'batches_skipped') return '部分聊天未能生成记忆';
+  if (task.reasonCode === 'processing_outcome_unknown') return '历史处理结果待核实';
+  if (task.status === 'completed' && ((task.createdCount ?? 0) > 0 || (task.updatedCount ?? 0) > 0)) return '记忆已更新';
+  return names[task.status];
+}
 const organizationNames = { disabled: '未开启', ready: '已整理', empty: '暂无可整理资料', failed: '整理失败', updating: '正在整理',
   stale: '等待更新', blocked: '暂不可整理', paused: '已暂停' };
 function reason(task: MemoryProcessingTask) {
@@ -18,19 +27,18 @@ function reason(task: MemoryProcessingTask) {
   return '';
 }
 function timestamp(value: string) { return new Date(value).toLocaleString('zh-CN', { hour12: false }); }
-function TaskProgress({ task, compact = false }: { task: MemoryProcessingTask; compact?: boolean }) {
+function TaskProgress({ task }: { task: MemoryProcessingTask }) {
   return <>
-    <div className={compact ? 'memory-processing-metrics' : undefined}><p className="memory-processing-count">{task.processedCount === null ? '该任务没有可靠的历史进度统计'
+    <p className="memory-processing-count">{task.processedCount === null ? '该任务没有可靠的历史进度统计'
       : task.totalCount === null ? `已处理 ${task.processedCount} 条聊天 · 总量暂不可用`
         : `已处理 ${task.processedCount} / ${task.totalCount} 条聊天`}</p>
-    {compact && <p className="memory-section-note">最近进展：{timestamp(task.updatedAt)}</p>}</div>
     {task.processedCount !== null && task.totalCount !== null && task.totalCount > 0 &&
       <progress aria-label="聊天处理进度" value={task.processedCount} max={task.totalCount} />}
     {(task.createdCount !== null || task.updatedCount !== null) && <p>{[
       task.createdCount !== null ? `新增 ${task.createdCount} 条记忆` : null,
       task.updatedCount !== null ? `更新 ${task.updatedCount} 条记忆` : null,
     ].filter(Boolean).join(' · ')}</p>}
-    {!compact && <p className="memory-section-note">最近进展：{timestamp(task.updatedAt)}</p>}
+    <p className="memory-section-note">最近进展：{timestamp(task.updatedAt)}</p>
   </>;
 }
 
@@ -39,6 +47,7 @@ export function MemoryProcessingCard({ request, contactNames, organization, onPr
   onProgress?: () => Promise<void>;
 }) {
   const [value, setValue] = useState<MemoryProcessing | null>(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [error, setError] = useState('');
   const [actionError, setActionError] = useState('');
   const [resultError, setResultError] = useState('');
@@ -115,29 +124,34 @@ export function MemoryProcessingCard({ request, contactNames, organization, onPr
     ?? tasks.find(task => task.action !== null) ?? tasks[0];
   const layered = request.scope === 'owner' ? owner : organization;
   const organizationStatus = <span className="memory-section-note">{request.scope === 'owner' ? '本人背景整理' : '背景整理'}：{layered?.phase === 'ready' && layered.value
-    ? organizationNames[layered.value.status] : layered?.phase === 'error' ? '状态读取失败' : '正在读取状态'}</span>;
+    ? organizationNames[layered.value.status] : layered?.phase === 'error' ? '状态读取失败' : layered?.phase === 'loading' ? '正在读取状态' : '展开摘要查看状态'}</span>;
   const button = (task: MemoryProcessingTask) => task.action && <button className="button" disabled={working || loading}
-    onClick={() => void resume(task)}>{working ? '正在提交…' : task.action === 'restart' ? task.taskType === 'import' ? '重新处理历史' : '重新处理' : '继续处理'}</button>;
+    onClick={() => void resume(task)}>{working ? '提交中…' : task.action === 'restart' ? '重新开始' : '继续'}</button>;
+  const summary = error ? '状态读取失败，请查看详情重试' : !value ? '正在读取状态…' : focus ? shortStatus(focus) : '暂无生成任务';
   return <section className="memory-processing-card" aria-label="记忆处理状态" aria-busy={working}>
-    <header><div><h2>记忆处理状态</h2>{request.scope === 'owner' && <p className="memory-section-note">全部联系人任务（可能含本人信息），非本人专属。</p>}</div>
-      <button className="button" disabled={loading || working} onClick={() => void refresh.current()}>刷新进度</button></header>
-    {error ? <p role="alert">{error}</p> : !value ? <p role="status">正在读取处理状态…</p> : focus ? <>
-      <div className="memory-processing-status"><strong role="status">{names[focus.status]}</strong>
-        {request.scope === 'owner' && <span className="memory-section-note">资料联系人：{contactNames[focus.contactId] ?? '其他联系人'}</span>}{button(focus)}</div>
-      <TaskProgress task={focus} compact />
-      {reason(focus) && <p className="memory-section-note">{reason(focus)}</p>}
-    </> : <p>暂无记忆提取任务</p>}
-    {actionError && <p role="alert">{actionError}</p>}
-    {resultError && <p role="alert">{resultError}</p>}
-    {value && tasks.length > 0 ? <details className="memory-processing-details"><summary>{organizationStatus}
-      <span className="memory-processing-disclosure-label">查看处理详情{tasks.length > 1 ? `（${value.hasMore ? '至少 ' : ''}${tasks.length} 项）` : ''}</span></summary>
-      <p>显示一项任务的进度，{value.hasMore ? `当前仅列出 ${tasks.length} 项，未完成优先；更早记录未列出。` : `共 ${tasks.length} 项。`}处理过的聊天不一定产生记忆。</p>
-      <p>以下各任务独立计数，历史重试可能涉及相同聊天，不累加为全部聊天总量。</p>
-      {tasks.map(task => <article key={task.taskId}><h3>{task.taskType === 'import' ? '历史导入' : '新聊天提取'} · {names[task.status]}</h3>
+    <div className="memory-processing-bar">
+      <div className="memory-processing-brief"><strong role={error ? 'alert' : 'status'}>{request.scope === 'owner' && <span>{focus ? `${contactNames[focus.contactId] ?? '其他联系人'}的聊天` : '全部联系人'} · </span>}{summary}</strong>
+        {!error && focus?.processedCount !== null && focus?.processedCount !== undefined && <span className="memory-processing-count">
+          {focus.totalCount === null ? `已处理 ${focus.processedCount} 条聊天` : `已处理 ${focus.processedCount} / ${focus.totalCount} 条聊天`}</span>}
+      </div>
+      <div className="memory-processing-actions">{!error && focus && button(focus)}
+        <button className="memory-processing-details-toggle" aria-expanded={detailsOpen} onClick={() => setDetailsOpen(!detailsOpen)}>{detailsOpen ? '收起' : '详情'}</button>
+      </div>
+    </div>
+    {actionError && <p role="alert">操作未确认，请查看详情。</p>}
+    {resultError && <p role="alert">内容暂未刷新，请查看详情。</p>}
+    {detailsOpen && <div className="memory-processing-details">
+      <div className="memory-processing-detail-heading">{organizationStatus}
+        <button className="button" disabled={loading || working} onClick={() => void refresh.current()}>刷新进度</button></div>
+      {request.scope === 'owner' && <p className="memory-section-note">全部联系人任务（可能含本人信息），非本人专属。</p>}
+      {error && <p role="alert">{error}</p>}{actionError && <p>{actionError}</p>}{resultError && <p>{resultError}</p>}
+      {value && <p>{value.hasMore ? `当前仅列出 ${tasks.length} 项，未完成优先；更早记录未列出。` : `共 ${tasks.length} 项任务。`}处理过的聊天不一定产生记忆。</p>}
+      {tasks.length > 1 && <p>各任务独立计数，历史重试可能涉及相同聊天，不累加为全部聊天总量。</p>}
+      {tasks.map(task => <article key={task.taskId}><h3>{task.taskType === 'import' ? '历史导入' : '新聊天'} · {names[task.status]}</h3>
         {request.scope === 'owner' && <p>资料联系人：{contactNames[task.contactId] ?? '其他联系人'}</p>}
         <TaskProgress task={task} />{task.createdCount === null && task.updatedCount === null && <p>该任务暂无可靠的新增、更新记忆统计。</p>}
         {reason(task) && <p>{reason(task)}</p>}{task.reasonCode && <p>状态原因：{task.reasonCode}</p>}
         <p>任务标识：{task.taskId}</p>{button(task)}</article>)}
-    </details> : <div className="memory-processing-footer">{organizationStatus}</div>}
+    </div>}
   </section>;
 }

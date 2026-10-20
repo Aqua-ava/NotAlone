@@ -17,7 +17,7 @@ export function MemoryList<T>({ items, label, children, className = 'memory-card
     controls.current?.scrollIntoView({ block: 'nearest' });
   }
   return <div className="memory-list">
-    {items.length > 0 && <nav className="memory-pagination" aria-label={`${label}分页`} ref={controls}>
+    {pages > 1 && <nav className="memory-pagination" aria-label={`${label}分页`} ref={controls}>
       <span role="status">共 {items.length} 条 · 第 {page + 1} / {pages} 页</span>
       <div><button className="button" disabled={page === 0} onClick={() => changePage(page - 1)}>上一页</button>
         <button className="button" disabled={page === pages - 1} onClick={() => changePage(page + 1)}>下一页</button></div>

@@ -20,10 +20,10 @@ export async function ownerLayeredRegressions(browser: Browser, origin: string) 
       await manager.getByRole('button', { name: '选择本人隔离合成联系人', exact: true }).click();
       await manager.getByRole('button', { name: '记忆', exact: true }).click();
       await selectMemoryCategory(manager, '本人记忆');
-      const oldOwner = manager.getByRole('region', { name: '本人记忆', exact: true });
+      const oldOwner = manager.getByRole('region', { name: '我的记忆', exact: true });
       await expect(oldOwner.getByText(oldText, { exact: true })).toBeVisible();
       await expandMemoryDetails(oldOwner.getByRole('article').filter({ has: manager.getByText(oldText, { exact: true }) }));
-      await oldOwner.getByRole('button', { name: `查看版本历史：${oldText}`, exact: true }).click();
+      await oldOwner.getByRole('button', { name: '版本历史', exact: true }).click();
       await expect(manager.getByRole('region', { name: '资料版本历史', exact: true }).getByText(oldText, { exact: true })).toBeVisible();
       await selectMemoryCategory(manager, '本人概览');
       const overview = manager.getByRole('region', { name: '本人事实与偏好概览', exact: true });
@@ -32,11 +32,11 @@ export async function ownerLayeredRegressions(browser: Browser, origin: string) 
       await selectMemoryCategory(manager, '本人主题资料');
       const layered = manager.getByRole('region', { name: '主题资料', exact: true });
       await layered.getByRole('button', { name: '管理底层本人记忆', exact: true }).click();
-      const facts = manager.getByRole('region', { name: '本人记忆', exact: true });
+      const facts = manager.getByRole('region', { name: '我的记忆', exact: true });
       await expect(facts.getByText(oldText, { exact: true })).toBeVisible();
-      await facts.getByRole('button', { name: `删除资料：${oldText}`, exact: true }).click();
-      await facts.getByRole('button', { name: '确认删除', exact: true }).click();
-      await expect(facts.getByText('当前本人暂无可查看记忆。', { exact: true })).toBeVisible();
+      await facts.getByRole('button', { name: '删除本人记忆', exact: true }).click();
+      await facts.getByRole('button', { name: '确认删除本人记忆', exact: true }).click();
+      await expect(facts.getByText('还没有记住关于你的事。', { exact: true })).toBeVisible();
       await selectMemoryCategory(manager, '本人记忆');
       // 不先刷新，删除后逐条记忆和已打开历史均不得遗留旧正文。
       await expect(oldOwner.getByText(oldText, { exact: true })).toHaveCount(0);

@@ -20,19 +20,24 @@ test('记忆页默认展示真实中断进度，显式继续并回读，来源�
   });
   await withMemoryPage(f, t.signal, async page => {
     const card = page.getByRole('region', { name: '记忆处理状态' });
-    await card.getByText('处理已中断', { exact: true }).waitFor();
+    await card.getByText('记忆生成已中断', { exact: true }).waitFor();
     await card.getByText('已处理 20 / 53 条聊天', { exact: true }).first().waitFor();
     assert.equal(await card.getByText('新增 0 条记忆').count(), 0);
+    assert.equal(await card.getByRole('progressbar').count(), 0);
+    assert.equal(await card.getByRole('heading').count(), 0);
+    assert.equal(await card.getByRole('button', { name: '刷新进度' }).count(), 0);
+    await card.getByRole('button', { name: '详情', exact: true }).click();
     assert.equal(await card.getByRole('progressbar').getAttribute('value'), '20');
+    await card.getByRole('button', { name: '收起', exact: true }).click();
     assert.equal(await page.locator('summary').filter({ hasText: /^历史与来源$/ }).locator('..').getAttribute('open'), null);
     assert.equal(writes.length, 0);
-    await card.getByRole('button', { name: '继续处理', exact: true }).click();
-    await card.getByText('等待处理', { exact: true }).waitFor();
+    await card.getByRole('button', { name: '继续', exact: true }).click();
+    await card.getByText('等待生成记忆', { exact: true }).waitFor();
     assert.deepEqual(writes, [{ task_id: ids.work, action: 'resume' }]);
   });
 });
 
-test('无可靠总量不画百分比，读取失败不能显示完成，本人入口明确全部联系人范围', { timeout: 20000 }, async t => {
+test('无可靠总量不画百分比，读取失败不能显示完成，本人入口明确当前任务的联系人', { timeout: 20000 }, async t => {
   let fail = false;
   const writes = [];
   const f = await fixture(async request => {
@@ -48,16 +53,19 @@ test('无可靠总量不画百分比，读取失败不能显示完成，本人�
   });
   await withMemoryPage(f, t.signal, async page => {
     const card = page.getByRole('region', { name: '记忆处理状态' });
-    await card.getByText('已停止', { exact: true }).waitFor();
+    await card.getByText('记忆生成已停止', { exact: true }).waitFor();
     assert.equal(await card.getByRole('progressbar').count(), 0);
-    await card.getByRole('button', { name: '重新处理历史', exact: true }).waitFor();
+    await card.getByRole('button', { name: '重新开始', exact: true }).waitFor();
     await page.getByRole('navigation', { name: '记忆分类' }).getByRole('button', { name: '我', exact: true }).click();
+    await card.getByRole('status').filter({ hasText: '合成主题联系人的聊天 · 记忆生成已停止' }).waitFor();
+    assert.equal(await card.getByText('该任务没有可靠的历史进度统计', { exact: true }).count(), 0);
+    await card.getByRole('button', { name: '详情', exact: true }).click();
     await card.getByText('全部联系人任务（可能含本人信息），非本人专属。', { exact: true }).waitFor();
     await card.getByText('资料联系人：合成主题联系人', { exact: true }).first().waitFor();
     fail = true;
     await card.getByRole('button', { name: '刷新进度' }).click();
-    await card.getByRole('alert').getByText('处理状态暂时读取失败，请刷新重试。', { exact: true }).waitFor();
-    assert.equal(await card.getByText('本次提取完成', { exact: true }).count(), 0);
+    await card.getByText('处理状态暂时读取失败，请刷新重试。', { exact: true }).waitFor();
+    assert.equal(await card.getByText('本次处理完成', { exact: true }).count(), 0);
     assert.equal(writes.length, 0);
   });
 });
@@ -78,7 +86,6 @@ test('可见页面按真实进展更新记忆，新增结果不清空正在编�
   await withMemoryPage(f, t.signal, async page => {
     const card = page.getByRole('region', { name: '记忆处理状态' });
     await card.getByText('已处理 20 / 53 条聊天', { exact: true }).first().waitFor();
-    await page.locator('summary').filter({ hasText: /^逐条记忆$/ }).click();
     await page.getByRole('button', { name: '修正资料：原有合成偏好。', exact: true }).click();
     const input = page.getByRole('textbox', { name: '资料正文', exact: true });
     await input.fill('尚未保存的人工草稿。');

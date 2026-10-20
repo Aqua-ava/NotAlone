@@ -20,19 +20,18 @@ for (const level of ['contact', 'owner']) test(`实际资料页面明确区分 $
     if (level === 'owner') {
       await selectLayeredMemory(page, true);
       await page.getByRole('button', { name: '管理底层本人记忆', exact: true }).click();
-      await page.getByRole('button', { name: `修正资料：${memory.text}`, exact: true }).click();
+      await page.getByRole('button', { name: level === 'owner' ? '修正本人记忆' : `修正资料：${memory.text}`, exact: true }).click();
     } else {
       await page.getByRole('button', { name: '对方', exact: true }).click();
-      await page.locator('summary').filter({ hasText: /^逐条记忆$/ }).click();
-      await page.getByRole('button', { name: `修正资料：${memory.text}`, exact: true }).click();
+      await page.getByRole('button', { name: level === 'owner' ? '修正本人记忆' : `修正资料：${memory.text}`, exact: true }).click();
     }
     const kind = page.getByLabel('修改原因', { exact: true });
     assert.equal(await kind.inputValue(), 'error_correction');
     await page.getByText('原来的内容记错了。旧版只保留供查看，不再用于生成。', { exact: true }).waitFor();
     await kind.selectOption('state_changed');
     await page.getByText('原来的内容曾经成立，后来发生变化。旧版可作为历史参考。', { exact: true }).waitFor();
-    await page.getByRole('button', { name: '保存修正', exact: true }).click();
-    await page.getByRole('button', { name: `修正资料：${memory.text}`, exact: true }).waitFor();
+    await page.getByRole('button', { name: level === 'owner' ? '保存本人记忆修正' : '保存修正', exact: true }).click();
+    await page.getByRole('button', { name: level === 'owner' ? '修正本人记忆' : `修正资料：${memory.text}`, exact: true }).waitFor();
     assert.equal(posts.at(-1).body.change_kind, 'state_changed');
   });
 });

@@ -18,7 +18,7 @@ export async function memoryEventUpdates(browser: Browser, origin: string) {
     };
     const contact = await openMemoryPage(manager);
     const current = contact.getByRole('article').filter({ has: manager.getByText(prepared.current.text, { exact: true }) });
-    await expect(current.getByText('自动采纳（可撤销）', { exact: true })).toBeVisible();
+    await expect(current.getByText('系统记下 · 可移除', { exact: true })).toBeVisible();
     await expandMemoryDetails(current);
     await current.getByRole('button', { name: `查看版本历史：${prepared.current.text}`, exact: true }).click();
     const history = manager.getByRole('region', { name: '资料版本历史', exact: true });
@@ -52,17 +52,19 @@ export async function memoryEventUpdates(browser: Browser, origin: string) {
     await selectMemoryCategory(manager, '待确认候选');
     const pending = manager.getByRole('region', { name: '待确认候选', exact: true });
     const candidate = pending.getByRole('article').filter({ has: manager.getByText(prepared.pending[0].text, { exact: true }) });
-    await expect(candidate.getByText('待确认 · 不是已确认事实', { exact: true })).toBeVisible();
+    await expect(candidate.getByText('尚未记住', { exact: true })).toBeVisible();
     await expandMemoryDetails(candidate);
     await expect(candidate.getByText('事件阶段：已发生（来源已核验）', { exact: true })).toBeVisible();
     await expect(candidate.getByText('事件发生时段：2026年8月5日 09:00:00（UTC+8） 至 2026年8月5日 11:00:00（UTC+8）（来源已核验）', { exact: true })).toBeVisible();
     await expect(candidate.getByText('来源聊天时间：2026年8月5日 12:00:00（UTC+8）', { exact: true })).toBeVisible();
+    await candidate.locator('summary').filter({ hasText: /^更新已有记忆$/ }).click();
     const form = candidate.getByRole('form', { name: `应用候选更新：${prepared.pending[0].text}`, exact: true });
     await expect(form.getByRole('button', { name: '确认应用为新版本', exact: true })).toBeDisabled();
     const selection = form.getByRole('combobox', { name: '选择要更新的当前资料', exact: true });
     const previousVersion = `${prepared.old.memory_id}:${prepared.old.revision}`;
     await selection.selectOption(previousVersion);
     await manager.getByRole('button', { name: '刷新记忆', exact: true }).click();
+    await candidate.locator('summary').filter({ hasText: /^更新已有记忆$/ }).click();
     await expect(selection).toHaveValue('');
     await expect(form.getByRole('button', { name: '确认应用为新版本', exact: true })).toBeDisabled();
     await selection.selectOption(previousVersion);
@@ -71,7 +73,7 @@ export async function memoryEventUpdates(browser: Browser, origin: string) {
     await selectMemoryCategory(manager, '联系人记忆');
     const current = contact.getByRole('article').filter({ has: manager.getByText(prepared.pending[0].text, { exact: true }) });
     await expandMemoryDetails(current);
-    await expect(current.getByText('手动采纳', { exact: true })).toBeVisible();
+    await expect(current.getByText('手动保存', { exact: true })).toBeVisible();
     await expect(current.getByText('事件阶段：已发生（来源已核验）', { exact: true })).toBeVisible();
     await expandMemoryDetails(current);
     await current.getByRole('button', { name: `查看版本历史：${prepared.pending[0].text}`, exact: true }).click();

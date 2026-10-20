@@ -13,6 +13,7 @@ export class OwnerLayeredMemoryController {
   private requested = false;
   private factsRequested = false;
   private factsOperation: AbortController | undefined;
+  private factWriteOperation: AbortController | undefined;
   private deleting = 0;
   constructor(private backend: BackendHost, private publish: (state: OwnerLayeredMemoryState) => void, private factsChanged: (phase: 'started' | 'settled') => void | Promise<void>,
     private contextChanged: (phase: 'started' | 'settled') => void | Promise<void> = () => {}) { this.generation = backend.getConnectionGeneration(); }
@@ -22,11 +23,12 @@ export class OwnerLayeredMemoryController {
     const generation = this.backend.getConnectionGeneration();
     if (this.generation === generation) return;
     this.generation = generation; this.requested = false; this.clear();
+    this.factWriteOperation?.abort(); this.factWriteOperation = undefined;
     this.factsRequested = false; this.factsOperation?.abort(); this.factsOperation = undefined;
     this.update({ memories: { phase: 'idle', items: [] }, phase: 'idle', value: null, mutation: { phase: 'idle', message: '' } });
   }
   sourceDeletionChanged(phase: 'started' | 'settled') {
-    if (phase === 'started') { this.deleting++; this.clear(); this.factsOperation?.abort(); this.factsOperation = undefined; this.update({ memories: { phase: 'idle', items: [] }, phase: 'idle', value: null, mutation: { phase: 'idle', message: '' } }); }
+    if (phase === 'started') { this.deleting++; this.clear(); this.factWriteOperation?.abort(); this.factWriteOperation = undefined; this.factsOperation?.abort(); this.factsOperation = undefined; this.update({ memories: { phase: 'idle', items: [] }, phase: 'idle', value: null, mutation: { phase: 'idle', message: '' } }); }
     else { this.deleting = Math.max(0, this.deleting - 1); if (!this.deleting && this.requested) void this.read({}).catch(() => {}); if (!this.deleting && this.factsRequested) void this.readFacts().catch(() => {}); }
   }
   private clear() { clearTimeout(this.timer); this.timer = undefined; this.operation?.abort(); this.operation = undefined; }
@@ -37,9 +39,9 @@ export class OwnerLayeredMemoryController {
       this.timer = setTimeout(() => void this.read({ mappingCursor }, true).catch(() => {}), 1000); this.timer.unref();
     }
   }
-  async read(request: { mappingCursor?: string | null }, background = false) {
+  async read(request: { mappingCursor?: string | null }, background = false, verifyingWrite = false) {
     this.synchronize();
-    if (this.generation === undefined || this.deleting || this.state.mutation.phase === 'working') throw new Error('本人资料暂不可读取。');
+    if (this.generation === undefined || this.deleting || (this.state.mutation.phase === 'working' && !verifyingWrite)) throw new Error('本人资料暂不可读取。');
     this.requested = true; this.clear();
     const operation = new AbortController(), generation = this.generation; this.operation = operation;
     if (!background) this.update({ phase: 'loading', value: null });
@@ -54,10 +56,13 @@ export class OwnerLayeredMemoryController {
   async refreshProcessingResults() {
     if (this.factsRequested && this.state.memories?.phase === 'ready' && !this.factsOperation && this.state.mutation.phase !== 'working' && !this.deleting) await this.readFacts(true);
   }
-  async readFacts(background = false) {
+  async readFacts(background = false, verifyingWrite = false) {
     this.synchronize();
-    if (this.generation === undefined || this.deleting || this.state.mutation.phase === 'working') throw new Error('本人底层资料暂不可读取。');
-    this.factsRequested = true; this.factsOperation?.abort();
+    if (this.generation === undefined || (this.state.mutation.phase === 'working' && !verifyingWrite)) throw new Error('本人底层资料暂不可读取。');
+    this.factsRequested = true;
+    // 删除期间也保留用户的查看意图，待来源门禁解除后再读取最新资料。
+    if (this.deleting) return;
+    this.factsOperation?.abort();
     const operation = new AbortController(), generation = this.generation; this.factsOperation = operation;
     if (!background) this.update({ memories: { phase: 'loading', items: [] } });
     try {
@@ -82,23 +87,34 @@ export class OwnerLayeredMemoryController {
     if (this.generation === undefined || this.deleting || this.state.mutation.phase === 'working') throw new Error('本人资料暂不可补充。');
     this.clear(); this.factsOperation?.abort(); this.factsOperation = undefined;
     const operation = new AbortController(), generation = this.generation; this.operation = operation;
+    this.factWriteOperation = operation;
     this.update({ memories: { phase: 'loading', items: [] }, phase: 'loading', value: null, mutation: { phase: 'working', message: '正在保存本人资料…' } });
     try {
       await this.factsChanged('started');
       const result = await this.backend.requestJson({ method: 'POST', path, body, signal: operation.signal });
       this.synchronize();
       if (this.operation !== operation || result.generation !== generation) throw new Error('本人连接已变化，请核对是否保存。');
+      await this.read({}, false, true);
+      if (this.factsRequested) await this.readFacts(false, true);
+      this.synchronize();
+      if (this.factWriteOperation !== operation || this.generation !== generation) throw new Error('本人连接已变化，请核对是否保存。');
+      if (this.state.phase !== 'ready' || (this.factsRequested && this.state.memories?.phase !== 'ready')) {
+        throw new Error('本人资料保存后的复读未完成。');
+      }
       this.update({ mutation: { phase: 'success', message: '本人资料已保存，请核对整理状态。' } });
-      await this.read({});
-      if (this.factsRequested) await this.readFacts();
+      this.schedule();
     } catch (error) {
-      if (this.operation === operation) {
+      if (this.factWriteOperation === operation) {
         this.update({ phase: 'error', value: null, mutation: { phase: 'error', message: '本人资料保存结果未确认，请核对后再重试。' } });
         await this.read({});
         if (this.factsRequested) await this.readFacts();
       }
       throw error;
-    } finally { await this.factsChanged('settled'); if (this.operation === operation) this.operation = undefined; }
+    } finally {
+      await this.factsChanged('settled');
+      if (this.operation === operation) this.operation = undefined;
+      if (this.factWriteOperation === operation) this.factWriteOperation = undefined;
+    }
   }
   async manage(request: OwnerLayeredMemoryManagementRequest) {
     this.synchronize();

@@ -39,6 +39,8 @@ export async function withMemoryPage(f, signal, run) {
 export async function selectLayeredMemory(page, owner = false) {
   await page.getByRole('navigation', { name: '记忆分类', exact: true })
     .getByRole('button', { name: owner ? '我' : '对方', exact: true }).click();
+  const overview = page.locator('summary').filter({ hasText: /^查看摘要$/ });
+  if (await overview.locator('..').getAttribute('open') === null) await overview.click();
   const summary = page.locator('summary').filter({ hasText: /^整理设置与状态$/ });
   if (await summary.locator('..').getAttribute('open') === null) await summary.click();
 }
