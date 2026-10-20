@@ -20,31 +20,37 @@ from notalone.persistence.locks import lock_contact_scope
 from notalone.persistence.message_sources import active_source_ref_sql
 
 
+def _source_allowed_sql() -> str:
+    """读取投影和恢复操作共用来源规则；t 始终是待核验任务的范围。"""
+    return """
+        CASE WHEN t.task_type='import' THEN EXISTS (
+            SELECT 1 FROM public.source_document d
+            WHERE d.id=t.source_document_id AND d.owner_id=t.owner_id
+              AND d.contact_id=t.contact_id AND d.status='active'
+        ) ELSE EXISTS (
+            SELECT 1 FROM public.local_wechat_observation o
+            JOIN public.conversation_binding b ON b.id=o.binding_id
+              AND b.owner_id=o.owner_id AND b.contact_id=o.contact_id
+            WHERE o.owner_id=t.owner_id AND o.contact_id=t.contact_id
+              AND b.status='active' AND o.memory_enqueued_at IS NOT NULL
+        ) END
+    """
+
+
 class PostgresMemoryProcessingStore:
     def __init__(self, database_url: str) -> None:
         self.database_url = database_url
 
     @staticmethod
     def _source_allowed(connection: psycopg.Connection, task: dict[str, Any]) -> bool:
-        if task["task_type"] == "import":
-            return bool(
-                connection.execute(
-                    "SELECT 1 FROM public.source_document WHERE id=%s AND owner_id=%s AND contact_id=%s AND status='active'",
-                    (task["source_document_id"], task["owner_id"], task["contact_id"]),
-                ).fetchone()
-            )
-        return bool(
-            connection.execute(
-                (
-                    "SELECT 1 FROM public.local_wechat_observation o JOIN "
-                    "public.conversation_binding b ON b.id=o.binding_id AND "
-                    "b.owner_id=o.owner_id AND b.contact_id=o.contact_id WHERE "
-                    "o.owner_id=%s AND o.contact_id=%s AND b.status='active' AND "
-                    "o.memory_enqueued_at IS NOT NULL"
-                ),
-                (task["owner_id"], task["contact_id"]),
-            ).fetchone()
-        )
+        row = connection.execute(
+            f"""SELECT {_source_allowed_sql()} AS source_allowed
+            FROM (VALUES (%s::text,%s::uuid,%s::uuid,%s::uuid))
+                AS t(task_type,source_document_id,owner_id,contact_id)""",
+            (task["task_type"], task["source_document_id"],
+             task["owner_id"], task["contact_id"]),
+        ).fetchone()
+        return row["source_allowed"]
 
     def targets(
         self, *, owner_id: UUID, contact_id: UUID, task_id: UUID
@@ -184,8 +190,9 @@ class PostgresMemoryProcessingStore:
             ):
                 raise BackgroundTaskNotFoundError("联系人不存在。")
             rows = connection.execute(
-                """
+                f"""
                 SELECT t.*,p.task_id AS planned,p.updated_at AS progress_at,
+                    {_source_allowed_sql()} AS source_allowed,
                     (SELECT count(*) FROM public.memory_processing_target x WHERE x.task_id=t.id) AS total,
                     (SELECT count(*) FROM public.memory_processing_target x WHERE x.task_id=t.id AND x.completed_at IS NOT NULL) AS processed,
                     (SELECT count(*) FROM public.memory_processing_target x WHERE x.task_id=t.id AND x.outcome='skipped') AS skipped,
@@ -200,7 +207,7 @@ class PostgresMemoryProcessingStore:
             ).fetchall()
             tasks = []
             for row in rows[:100]:
-                source_allowed = self._source_allowed(connection, row)
+                source_allowed = row["source_allowed"]
                 scheduled = (
                     host.processing_state(
                         owner_id=owner_id,

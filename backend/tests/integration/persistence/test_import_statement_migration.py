@@ -62,8 +62,10 @@ class ImportStatementMigrationTest(unittest.TestCase):
                             "AND tgname='relationship_overview_message'").fetchone()[0], 29)
                     self.assertEqual(load_contact_messages(scope, database), before)
                     self.assertEqual(PostgresRelationshipOverviewStore(database).read_contact(scope), overview)
-                    self.assertEqual(migrate(database, migrations), (current.name,))
-                    self.assertEqual(migrate(database, migrations), ())
+                    # 固定核验 098 的事务语义，不把后续独立迁移算进本用例。
+                    shutil.copyfile(current, prefix / current.name)
+                    self.assertEqual(migrate(database, prefix), (current.name,))
+                    self.assertEqual(migrate(database, prefix), ())
                     self.assertEqual(load_contact_messages(scope, database), before)
                     self.assertEqual(PostgresRelationshipOverviewStore(database).read_contact(scope), overview)
             finally:
