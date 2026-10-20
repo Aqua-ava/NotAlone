@@ -5,6 +5,7 @@
   "description": "NotAlone 本机桌面端",
   "main": "dist/main/index.cjs",
   "scripts": {
+    "prototype:replies": "node prototype/start.mjs",
     "dev": "node scripts/dev.mjs",
     "build": "node scripts/build.mjs",
     "typecheck": "tsc --noEmit",

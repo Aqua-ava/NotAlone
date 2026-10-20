@@ -8,6 +8,7 @@ if (process.env.NODE_ENV === 'production') {
   process.exit(1);
 }
 const files = {
+  '/prototype/replies/': ['replies.html', 'text/html; charset=utf-8'],
   '/prototype/notalone-windows/': ['index.html', 'text/html; charset=utf-8'],
   '/prototype/notalone-windows/index.html': ['index.html', 'text/html; charset=utf-8'],
   '/prototype/notalone-windows/style.css': ['style.css', 'text/css; charset=utf-8'],
@@ -30,6 +31,7 @@ const server = createServer(async (request, response) => {
   response.writeHead(200, { 'Content-Type': entry[1], 'Cache-Control': 'no-store' }).end(body);
 });
 server.listen(port, '127.0.0.1', () => {
+  console.log(`候选回复：http://127.0.0.1:${port}/prototype/replies/?variant=A`);
   console.log(`管理后台：http://127.0.0.1:${port}/prototype/notalone-windows/?surface=manager`);
   console.log(`输入小窗：http://127.0.0.1:${port}/prototype/notalone-windows/?surface=ime&variant=A`);
 });
