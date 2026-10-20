@@ -15,7 +15,7 @@ import threading
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from http import HTTPStatus
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler
 from typing import Any, Callable, Mapping
 from urllib.parse import parse_qs, urlsplit
 from uuid import UUID
@@ -150,6 +150,7 @@ from notalone.persistence.contact_directory import PostgresContactDirectory
 from notalone.persistence.message_stream import PostgresMessageStream
 from notalone.reply.interface import ReplyGenerated
 from notalone.server.event_bus import EventBus, EventSubscription
+from notalone.server.http_limits import HttpRequestLimits, LimitedHTTPServer, LimitedRequestHandler
 from notalone.server.follow_smoke import (
     FollowSmokeContactSnapshot,
     FollowSmokeController,
@@ -2527,6 +2528,7 @@ class BackendApp:
                 "Content-Type": "text/event-stream",
                 "Cache-Control": "no-cache",
                 "Connection": "keep-alive",
+                "X-NotAlone-Event-Replay": "bounded-hints",
             },
             subscription=self._events.subscribe(
                 owner_id=self._owner_id,
@@ -2554,7 +2556,7 @@ class BackendApp:
 class BackendServer:
     """把 BackendApp 绑定到回环地址的真实 HTTP 适配器。"""
 
-    __slots__ = ("_app", "_host", "_port", "_http_server", "_shutdown_lock")
+    __slots__ = ("_app", "_host", "_port", "_http_server", "_shutdown_lock", "_request_limits")
 
     def __init__(
         self,
@@ -2562,6 +2564,7 @@ class BackendServer:
         *,
         host: str = "127.0.0.1",
         port: int = 0,
+        request_limits: HttpRequestLimits | None = None,
     ) -> None:
         if host != "127.0.0.1":
             raise ValueError("本地后端只允许绑定回环地址。")
@@ -2570,7 +2573,8 @@ class BackendServer:
         self._app = app
         self._host = host
         self._port = port
-        self._http_server: ThreadingHTTPServer | None = None
+        self._http_server: LimitedHTTPServer | None = None
+        self._request_limits = request_limits or HttpRequestLimits()
         self._shutdown_lock = threading.Lock()
 
     @property
@@ -2588,11 +2592,8 @@ class BackendServer:
         app = self._app
         shutdown = self.request_shutdown
 
-        class RequestHandler(BaseHTTPRequestHandler):
-            # 半开连接长时间阻塞会拖住线程与事件队列。
-            # 有界 socket 超时保证写失败最终被感知；SSE keep-alive
-            # 为 15 秒，连接超时保留分钟级余量。
-            timeout = 300
+        class RequestHandler(LimitedRequestHandler):
+            limits = self._request_limits
 
             def do_GET(self) -> None:  # noqa: N802
                 if urlsplit(self.path).path == "/api/events":
@@ -2628,10 +2629,9 @@ class BackendServer:
             def log_message(self, format: str, *args: object) -> None:
                 del format, args
 
-        self._http_server = ThreadingHTTPServer(
-            (self._host, self._port), RequestHandler
+        self._http_server = LimitedHTTPServer(
+            (self._host, self._port), RequestHandler, self._request_limits
         )
-        self._http_server.daemon_threads = True
         address = self.address
         if address is None:
             raise RuntimeError("无法确认后端监听地址。")
@@ -2767,7 +2767,7 @@ def _serve_request(
     shutdown_after_response: Callable[[], None] | None = None,
 ) -> None:
     try:
-        body = _read_request_body(handler)
+        length = _request_body_length(handler)
     except _RequestLengthInvalid:
         # 畸形长度不能猜成空体继续处理，否则同一请求会得到不同结果。
         handler.close_connection = True
@@ -2782,6 +2782,7 @@ def _serve_request(
         return
     except _RequestBodyTooLarge:
         # 短时、有界排空可降低正常客户端收到 RST 的概率；随后关闭连接。
+        _drain_available_body(handler, limit=8 * 1024 * 1024)
         handler.close_connection = True
         _write_response(
             handler,
@@ -2791,6 +2792,25 @@ def _serve_request(
                 headers={"Connection": "close"},
             ),
         )
+        return
+    if not app._authorized(dict(handler.headers.items())):
+        handler.close_connection = True
+        _write_response(handler, _json_response(
+            HTTPStatus.UNAUTHORIZED, {"error": "unauthorized"},
+            headers={"Connection": "close"},
+        ))
+        return
+    try:
+        body = _read_request_body(handler, length=length)
+    except (_RequestBodyTimeout, _RequestBodyIncomplete) as error:
+        handler.close_connection = True
+        _write_response(handler, _json_response(
+            HTTPStatus.REQUEST_TIMEOUT if isinstance(error, _RequestBodyTimeout)
+            else HTTPStatus.BAD_REQUEST,
+            {"error": "request_body_timeout" if isinstance(error, _RequestBodyTimeout)
+             else "request_body_incomplete"},
+            headers={"Connection": "close"},
+        ))
         return
     response = app.handle(
         method=handler.command,
@@ -2821,18 +2841,20 @@ class _RequestLengthInvalid(Exception):
     """Content-Length 存在但不是合法的非负整数：映射为稳定 400。"""
 
 
-def _read_request_body(handler: BaseHTTPRequestHandler) -> bytes:
-    """按 Content-Length 读取请求体；异常声明映射为稳定 413。
+class _RequestBodyTimeout(Exception):
+    """已认证正文超过总读取预算：返回 408 且不分发部分正文。"""
 
-    只允许读取回环本地请求。超过 1 MiB 时短时、有界排空已到达数据，
-    再返回 413 并关闭连接；这样不会被只声明长度却不发送 body 的客户端
-    长期挂住。
-    """
 
+class _RequestBodyIncomplete(Exception):
+    """已认证正文提前结束或读取失败：返回 400。"""
+
+
+def _request_body_length(handler: BaseHTTPRequestHandler) -> int:
+    """只核验长度，不因认证失败而改变已有的 400/413 优先级。"""
     raw_length = _header_value(handler.headers, "Content-Length")
     if raw_length is None or not str(raw_length).strip():
         # 没有声明长度：按空请求体处理，交给应用层做参数校验。
-        return b""
+        return 0
     try:
         length = int(str(raw_length).strip())
     except (ValueError, TypeError):
@@ -2840,14 +2862,27 @@ def _read_request_body(handler: BaseHTTPRequestHandler) -> bytes:
     if length < 0:
         raise _RequestLengthInvalid()
     if length > 1024 * 1024:
-        _drain_available_body(handler, limit=length)
         raise _RequestBodyTooLarge()
+    return length
+
+
+def _read_request_body(handler: BaseHTTPRequestHandler, *, length: int) -> bytes:
     if length == 0:
         return b""
+    if isinstance(handler, LimitedRequestHandler):
+        handler.begin_body_read()
     try:
-        return handler.rfile.read(length) or b""
+        body = handler.rfile.read(length) or b""
+    except TimeoutError:
+        raise _RequestBodyTimeout() from None
     except OSError:
-        return b""
+        raise _RequestBodyIncomplete() from None
+    finally:
+        if isinstance(handler, LimitedRequestHandler):
+            handler.end_body_read()
+    if len(body) != length:
+        raise _RequestBodyIncomplete()
+    return body
 
 
 def _drain_available_body(
@@ -2860,6 +2895,8 @@ def _drain_available_body(
     remaining = min(limit, 8 * 1024 * 1024)
     previous_timeout = handler.connection.gettimeout()
     try:
+        if isinstance(handler, LimitedRequestHandler):
+            handler.begin_body_read(seconds=0.1)
         handler.connection.settimeout(0.1)
         while remaining > 0:
             chunk = handler.rfile.read(min(65536, remaining))

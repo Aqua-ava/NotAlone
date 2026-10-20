@@ -67,6 +67,62 @@ class GlobalFollowRunner:
 
 
 class GlobalSessionStreamTest(unittest.TestCase):
+    def test_close_cancels_full_buffer_and_reaps_reader(self) -> None:
+        saturated = threading.Event()
+
+        class FullProcess(SessionProcess):
+            count = 0
+
+            def readline(self):
+                self.count += 1
+                if self.count == 257:
+                    saturated.set()
+                return json.dumps({"type": "session", "cursor": str(self.count),
+                                   "username": "synthetic-bound"}) + "\n"
+
+        process = FullProcess([])
+        stream = LocalWechatCli(follow_runner=GlobalFollowRunner(process)).session_events_follow()
+        try:
+            self.assertTrue(saturated.wait(timeout=1))
+            stream.close()
+            stream.close()
+            stream._reader.join(timeout=1)
+            self.assertFalse(stream._reader.is_alive())
+            self.assertTrue(process.terminated)
+            self.assertIsNone(stream.read())
+        finally:
+            stream.close()
+
+    def test_slow_consumer_backpressures_upstream_and_preserves_order(self) -> None:
+        class BurstProcess(SessionProcess):
+            def __init__(self):
+                super().__init__([])
+                self.produced = 0
+                self.saturated = threading.Event()
+                self.exhausted = threading.Event()
+
+            def readline(self):
+                if self.produced == 1000:
+                    self.exhausted.set()
+                    return ""
+                self.produced += 1
+                if self.produced == 257:
+                    self.saturated.set()
+                return json.dumps({"type": "session", "cursor": str(self.produced),
+                                   "username": "synthetic-bound"}) + "\n"
+
+        process = BurstProcess()
+        stream = LocalWechatCli(follow_runner=GlobalFollowRunner(process)).session_events_follow()
+        try:
+            self.assertTrue(process.saturated.wait(timeout=1))
+            self.assertFalse(process.exhausted.wait(timeout=0.05))
+            received = [stream.read(timeout=1).cursor for _ in range(1000)]
+            self.assertEqual(received, [str(index) for index in range(1, 1001)])
+            self.assertIsNone(stream.read(timeout=1))
+            self.assertIsNone(stream.read())
+        finally:
+            stream.close()
+
     def test_structured_failure_is_reported_instead_of_idle_stream(self) -> None:
         process = SessionProcess([json.dumps({
             "ok": False,

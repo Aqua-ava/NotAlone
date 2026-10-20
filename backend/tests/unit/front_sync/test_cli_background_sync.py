@@ -14,6 +14,7 @@ from notalone.front_sync.cli_sync import CliBackgroundSync, CliSyncPhase
 from notalone.persistence.observation_store import ObservationMode
 from notalone.scopes import ContactScope
 from notalone.wechat_cli import CliCommandError, LocalWechatCli
+from notalone.wechat_cli.adapter import SessionEventStream
 from notalone.wechat_cli.models import (
     CliMessageEvent,
     MessageIdentifier,
@@ -357,6 +358,59 @@ class CliBackgroundSyncTest(unittest.TestCase):
             sync_state=self.sync_state,
             clock=lambda: self.now,
         )
+
+    def test_bounded_stream_drains_before_reconnect_and_keeps_contact_cursors(self) -> None:
+        calls = []
+
+        class BurstProcess:
+            def __init__(self, start):
+                self.index = start
+                self.stopped = False
+
+            def readline(self):
+                if self.stopped or self.index >= 1000:
+                    return ""
+                self.index += 1
+                locator = ("wxid_a", "wxid_unbound", "wxid_b")[self.index % 3]
+                return json.dumps({"type": "session", "cursor": str(self.index),
+                                   "username": locator}) + "\n"
+
+            def poll(self):
+                return 0
+
+            def terminate(self):
+                self.stopped = True
+
+            def wait(self, timeout=None):
+                return 0
+
+        processes = []
+
+        def follow(**kwargs):
+            calls.append(kwargs)
+            process = BurstProcess(int(kwargs["cursor"] or 0))
+            processes.append(process)
+            return SessionEventStream(process)
+
+        self.cli.session_events_follow = follow
+        self.addCleanup(self.sync.close)
+        for _ in range(8):
+            self.sync.cycle(enabled=True)
+        # 每轮最多消费 128 个元数据事件；EOF 后不得丢掉队尾便提前重连。
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(processes[0].index, 1000)
+        self.assertTrue(processes[0].stopped)
+        self.now += timedelta(seconds=3)
+        self.sync.cycle(enabled=True)
+        self.assertEqual(calls[1]["cursor"], "1000")
+        self.assertEqual({call["talker"] for call in self.cli.tail_calls}, {"wxid_a", "wxid_b"})
+        cursor = self.store.cursors[(OWNER_ID, self.binding_a.contact_id)]
+        self.assertEqual(cursor.last_local_id, 10)
+        self.assertEqual(cursor.last_cursor, "local_id:10")
+        self.cli.tail_calls.clear()
+        self.sync.cycle(enabled=False)
+        self.assertEqual(self.cli.tail_calls, [])
+        self.assertTrue(processes[-1].stopped)
 
     def test_one_global_stream_dispatches_only_bound_sessions(self) -> None:
         result = self.sync.cycle(enabled=True)
