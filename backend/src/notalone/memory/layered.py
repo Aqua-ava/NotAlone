@@ -52,10 +52,11 @@ class OrganizationInput:
     valid_at: str | None
     invalid_at: str | None
     conditions: dict | None = None
+    evolution: dict | None = None
 
     def to_payload(self) -> dict:
         return {"memory_id": str(self.memory_id), "revision": self.revision, "text": self.text,
-                "provenance_kind": self.provenance_kind, "timing": self.timing, "event": self.event, "conditions": self.conditions,
+                "provenance_kind": self.provenance_kind, "timing": self.timing, "event": self.event, "conditions": self.conditions, "evolution": self.evolution,
                 "category": self.category, "valid_at": self.valid_at, "invalid_at": self.invalid_at}
 
 

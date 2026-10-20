@@ -16,6 +16,7 @@ from notalone.memory.models import (
 )
 from notalone.memory.correction import CorrectionReview, MemoryCorrectionConflictError
 from notalone.memory.events import MemoryEvent
+from notalone.memory.evolution import MemoryEvolution
 from notalone.memory.conditions import MemoryConditions
 from notalone.persistence.message_sources import active_source_ref_sql
 from notalone.persistence.correction_evidence import (
@@ -560,7 +561,7 @@ def candidate_from_row(row: dict[str, Any]) -> MemoryCandidate:
         interpretation_reason=row["interpretation_reason"] or "",
         valid_at=row["valid_at"], invalid_at=row["invalid_at"],
         dimension_evidence=DimensionEvidence.from_payload(raw) if raw is not None else None,
-        event=MemoryEvent.from_payload(row.get("event")), conditions=MemoryConditions.from_payload(row.get("conditions")),
+        event=MemoryEvent.from_payload(row.get("event")), conditions=MemoryConditions.from_payload(row.get("conditions")), evolution=MemoryEvolution.from_payload(row.get("evolution")),
         source_dependency_mode=dependency_mode(row.get("source_dependency_mode")),
         requires_all_sources=bool(row.get("requires_all_sources")),
     )

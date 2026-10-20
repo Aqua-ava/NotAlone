@@ -1,3 +1,4 @@
+import { MemoryEvolutionDetails } from './MemoryEvolutionDetails';
 import { MemoryConditionsDetails } from './MemoryConditionsDetails';
 import { MemoryEventDetails } from './MemoryEventDetails';
 import { PersonalBackgroundDetails } from './PersonalBackgroundDetails';
@@ -58,6 +59,7 @@ function LayeredSummary({ context, status, receipts, owner = false }: { context?
         <MemoryTemporalStatus timing={ref.timing} validAt={ref.validAt} invalidAt={ref.invalidAt} snapshot />
         <MemoryEventDetails event={ref.event} />
         <MemoryConditionsDetails conditions={ref.conditions} />
+        <MemoryEvolutionDetails evolution={ref.evolution} />
         <p>保存时间：{ref.timing.recordedAt ?? '未知'}；来源时间：{ref.timing.sourceStartedAt ?? '未知'} 至 {ref.timing.sourceEndedAt ?? '未知'}{ref.timing.sourceTimeComplete ? '' : '（不完整）'}。</p>
       </div>)}
     </article>)}
@@ -106,9 +108,10 @@ function ScenarioReadSummary({ receipts, owner = false }: { receipts?: ReplyLaye
             {ref.timing ? <>
               <MemoryTemporalStatus timing={ref.timing} validAt={ref.validAt} invalidAt={ref.invalidAt} snapshot />
               <MemoryEventDetails event={ref.event} />
-        <MemoryConditionsDetails conditions={ref.conditions} />
               <p>保存时间：{ref.timing.recordedAt ?? '未知'}；来源时间：{ref.timing.sourceStartedAt ?? '未知'} 至 {ref.timing.sourceEndedAt ?? '未知'}{ref.timing.sourceTimeComplete ? '' : '（不完整）'}。</p>
             </> : <p>本次快照未记录来源日期与适用性。</p>}
+            <MemoryConditionsDetails conditions={ref.conditions} />
+            <MemoryEvolutionDetails evolution={ref.evolution} />
           </div>)}
         </div>)}
       </>}
@@ -136,7 +139,7 @@ function EvidenceItem({ item, cited, changes }: {
       {item.timing.sourceStartedAt && item.timing.sourceEndedAt
         ? <p>来源时间：{item.timing.sourceStartedAt} 至 {item.timing.sourceEndedAt}{item.timing.sourceTimeComplete ? '' : '（不完整）'}</p>
         : <p>来源时间未知</p>}
-      {['confirmed_memory', 'owner_memory', 'pending_candidate'].includes(item.kind) && <><MemoryEventDetails event={item.event} /><MemoryConditionsDetails conditions={item.conditions} /></>}
+      {['confirmed_memory', 'owner_memory', 'pending_candidate'].includes(item.kind) && <><MemoryEventDetails event={item.event} /><MemoryConditionsDetails conditions={item.conditions} /><MemoryEvolutionDetails evolution={item.evolution} /></>}
       <p>有效起点：{item.validAt ?? '未知'}；失效时间：{item.invalidAt ?? '未知'}</p>
     </details>
   </article>;

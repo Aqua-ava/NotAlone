@@ -54,6 +54,8 @@ def reply_original_sources(connection: Any, request: ReplyRequest, context: Repl
     """同一结果提交事务中记录全部实际原始来源，包括各类记忆的消息依赖。"""
     declared: set[UUID] = set()
     for item in context.evidence:
+        if item.evolution is not None:
+            declared.update(item.evolution.evidence_message_ids)
         declared.update(reply_evidence_sources(
             connection, owner_id=request.scope.owner_id, evidence_id=item.evidence_id,
             kind=item.kind, source_ids=item.source_ids, text=item.text,

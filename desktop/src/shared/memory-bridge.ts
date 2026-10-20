@@ -20,6 +20,16 @@ export interface MemoryEvent {
   occurrenceVerified: boolean;
   occurrenceEvidence: MemoryEventEvidence[];
 }
+export interface MemoryEvolution {
+  version: 1;
+  kind: 'supplement' | 'state_change' | 'error_correction' | 'historical_supplement' | 'unresolved_conflict';
+  explanation: string;
+  relatedVersions: Array<{ memoryId: string; revision: number }>;
+  evidenceMessageIds: string[];
+  sourceSupported: boolean;
+  claimChanged: boolean;
+  conditionChanged: boolean;
+}
 export interface MemoryConditions {
   version: 1;
   items: Array<{ text: string; evidence: MemoryEventEvidence[]; sourceSupported: boolean }>;
@@ -48,6 +58,7 @@ export interface MemoryContent {
   invalidAt: string | null;
   event?: MemoryEvent | null;
   conditions?: MemoryConditions | null;
+  evolution?: MemoryEvolution | null;
 }
 export interface ActiveMemory extends MemoryContent {
   memoryId: string;
@@ -128,6 +139,7 @@ export type MemorySectionName = 'contact' | 'owner' | 'pending' | 'sources';
 export interface LayeredMemoryReference {
   event?: MemoryEvent | null;
   conditions?: MemoryConditions | null;
+  evolution?: MemoryEvolution | null;
   validAt?: string | null;
   invalidAt?: string | null;
   memoryId: string;

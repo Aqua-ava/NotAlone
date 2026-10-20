@@ -1,3 +1,4 @@
+import { MemoryEvolutionDetails } from './MemoryEvolutionDetails';
 import { MemoryConditionsDetails } from './MemoryConditionsDetails';
 import { MemoryEventDetails } from './MemoryEventDetails';
 import { PersonalBackgroundDetails } from './PersonalBackgroundDetails';
@@ -125,6 +126,7 @@ export function LayeredMemoryPanel({ state, contactName, busy, read, manage, fac
                 <MemoryTemporalStatus timing={reference.timing} validAt={reference.validAt} invalidAt={reference.invalidAt} snapshot />
               <MemoryEventDetails event={reference.event} />
               <MemoryConditionsDetails conditions={reference.conditions} />
+              <MemoryEvolutionDetails evolution={reference.evolution} />
                 <p>来源聊天时间：{time(reference.timing.sourceStartedAt)}{reference.timing.sourceEndedAt !== reference.timing.sourceStartedAt ? ` 至 ${time(reference.timing.sourceEndedAt)}` : ''}
                   {!reference.timing.sourceTimeComplete ? '（来源时间不完整）' : ''}</p>
                 <p>记忆保存时间：{time(reference.timing.recordedAt)}</p>
@@ -169,6 +171,7 @@ export function LayeredMemoryPanel({ state, contactName, busy, read, manage, fac
               <MemoryTemporalStatus timing={reference.timing} validAt={reference.validAt} invalidAt={reference.invalidAt} snapshot />
               <MemoryEventDetails event={reference.event} />
               <MemoryConditionsDetails conditions={reference.conditions} />
+              <MemoryEvolutionDetails evolution={reference.evolution} />
               <p>来源聊天时间：{time(reference.timing.sourceStartedAt)}{reference.timing.sourceEndedAt !== reference.timing.sourceStartedAt ? ` 至 ${time(reference.timing.sourceEndedAt)}` : ''}
                 {!reference.timing.sourceTimeComplete ? '（来源时间不完整）' : ''}</p>
               <p>记忆保存时间：{time(reference.timing.recordedAt)}</p>

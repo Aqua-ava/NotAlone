@@ -1,5 +1,5 @@
 import { isUuid } from '../uuid';
-import type { MemoryConditions, MemoryContent, MemoryCorrectionReview, MemoryEvent, MemoryEventEvidence, MemorySource, MemoryVersion, PendingMemoryCandidate } from '../../shared/memory-bridge';
+import type { MemoryEvolution, MemoryConditions, MemoryContent, MemoryCorrectionReview, MemoryEvent, MemoryEventEvidence, MemorySource, MemoryVersion, PendingMemoryCandidate } from '../../shared/memory-bridge';
 import { readCurrentStatus } from './current-status';
 
 const categories = ['common_fact', 'preference', 'taboo', 'recent_state', 'relationship_note'] as const;
@@ -86,11 +86,35 @@ function memoryConditions(value: unknown): MemoryConditions | null {
     return { text: conditionText, evidence, sourceSupported: item.source_supported };
   }) };
 }
+function memoryEvolution(value: unknown): MemoryEvolution | null {
+  if (value == null) return null;
+  const keys = ['version', 'kind', 'explanation', 'related_versions', 'evidence_message_ids',
+    'source_supported', 'claim_changed', 'condition_changed'];
+  if (!record(value) || value.version !== 1 || Object.keys(value).length !== keys.length
+    || !Object.keys(value).every(key => keys.includes(key))
+    || !Array.isArray(value.related_versions) || value.related_versions.length < 1 || value.related_versions.length > 8
+    || !Array.isArray(value.evidence_message_ids) || value.evidence_message_ids.length > 60
+    || typeof value.source_supported !== 'boolean' || typeof value.claim_changed !== 'boolean'
+    || typeof value.condition_changed !== 'boolean') throw invalid();
+  const relatedVersions = value.related_versions.map(ref => {
+    if (!record(ref) || Object.keys(ref).length !== 2
+      || !Object.keys(ref).every(key => ['memory_id', 'revision'].includes(key))) throw invalid();
+    return { memoryId: identifier(ref.memory_id), revision: integer(ref.revision, 1) };
+  });
+  const evidenceMessageIds = value.evidence_message_ids.map(identifier);
+  const explanation = text(value.explanation);
+  if (explanation.length > 1000 || (value.source_supported && !evidenceMessageIds.length)
+    || new Set(evidenceMessageIds).size !== evidenceMessageIds.length
+    || new Set(relatedVersions.map(ref => ref.memoryId)).size !== relatedVersions.length) throw invalid();
+  return { version: 1, kind: enumeration(value.kind, ['supplement', 'state_change', 'error_correction', 'historical_supplement', 'unresolved_conflict'] as const),
+    explanation, relatedVersions, evidenceMessageIds,
+    sourceSupported: value.source_supported, claimChanged: value.claim_changed, conditionChanged: value.condition_changed };
+}
 export function memoryTemporalFields(entry: Record<string, unknown>) {
   const validAt = date(entry.valid_at === undefined ? null : entry.valid_at);
   const invalidAt = date(entry.invalid_at === undefined ? null : entry.invalid_at);
   if (validAt && invalidAt && Date.parse(invalidAt) < Date.parse(validAt)) throw invalid();
-  return { validAt, invalidAt, event: memoryEvent(entry.event), conditions: memoryConditions(entry.conditions) };
+  return { validAt, invalidAt, event: memoryEvent(entry.event), conditions: memoryConditions(entry.conditions), evolution: memoryEvolution(entry.evolution) };
 }
 function content(entry: Record<string, unknown>): MemoryContent {
   const timing = entry.timing;
@@ -109,7 +133,7 @@ function content(entry: Record<string, unknown>): MemoryContent {
     timing: { recordedAt: date(timing.recorded_at), sourceStartedAt, sourceEndedAt, sourceTimeComplete: timing.source_time_complete,
       ...readCurrentStatus(timing) },
     validAt: date(entry.valid_at), invalidAt: date(entry.invalid_at),
-    event: memoryEvent(entry.event), conditions: memoryConditions(entry.conditions),
+    event: memoryEvent(entry.event), conditions: memoryConditions(entry.conditions), evolution: memoryEvolution(entry.evolution),
   };
 }
 function entries(value: unknown, key: string): Record<string, unknown>[] {

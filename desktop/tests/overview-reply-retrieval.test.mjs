@@ -942,3 +942,40 @@ test('联系人与本人冻结分层依据保留各自计划和适用期，旧�
   assert.match(html, /事件阶段：未知/); assert.match(html, /适用期间：2020年6月1日/);
   assert.doesNotMatch(html, /事件阶段：已发生/);
 });
+
+test('冻结与恢复的变化依据贯穿原始资料、双范围背景及主题，缺失时间不丢失变化说明', async () => {
+  const evolution = { version: 1, kind: 'unresolved_conflict', explanation: '后续来源与已有状态冲突，尚未解决。',
+    related_versions: [{ memory_id: layeredIds.memory, revision: 2 }], evidence_message_ids: [layeredIds.version],
+    source_supported: true, claim_changed: false, condition_changed: true };
+  const f = await generatedFixture(f => {
+    f.records.evidence.evidence[0].evolution = structuredClone(evolution);
+    const scopes = scopedScenarioSnapshots(f);
+    for (const scoped of Object.values(scopes)) {
+      const ref = scoped.receipt.document.paragraphs[0].references[0];
+      ref.evolution = structuredClone(evolution);
+      scoped.context.profile_version_id = randomUUID();
+      scoped.context.profile_entries = [{ text: '合成冻结背景。', temporal_status: 'uncertain', uncertainty: '后续来源尚有冲突。', references: [structuredClone(ref)] }];
+      delete ref.timing;
+    }
+  });
+  await f.bridge.loadEvidence(f.selection);
+  let state = await f.bridge.getEvidenceState();
+  assert.equal(state.phase, 'ready');
+  const refs = [state.items[0], state.layeredContext.profileEntries[0].references[0], state.ownerLayeredContext.profileEntries[0].references[0],
+    state.layeredScenarioReads[0].document.paragraphs[0].references[0], state.ownerLayeredScenarioReads[0].document.paragraphs[0].references[0]];
+  for (const ref of refs) {
+    assert.equal(ref.evolution.kind, 'unresolved_conflict');
+    assert.equal(ref.evolution.conditionChanged, true);
+    assert.equal(ref.evolution.claimChanged, false);
+    assert.equal(ref.evolution.relatedVersions[0].revision, 2);
+    assert.deepEqual(ref.evolution.evidenceMessageIds, [layeredIds.version]);
+  }
+  const html = await renderEvidence(f);
+  assert.equal(html.match(/变化类型：未解决矛盾/g)?.length, 5);
+  assert.equal(html.match(/仅来源支持，不认证现实/g)?.length, 5);
+  assert.match(html, /当前主张仍有不确定性/);
+  await f.bridge.closeEvidence(f.selection);
+  await f.bridge.loadEvidence(f.selection);
+  state = await f.bridge.getEvidenceState();
+  assert.equal(state.items[0].evolution.explanation, '后续来源与已有状态冲突，尚未解决。');
+});

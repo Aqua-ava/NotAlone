@@ -1,3 +1,4 @@
+import { MemoryEvolutionDetails } from './MemoryEvolutionDetails';
 import { MemoryConditionsDetails, MemoryConditionsEditor, conditionEditorText, conditionEditProposal, conditionEditorValid } from './MemoryConditionsDetails';
 import { memoryTimeText as timeText } from './memory-time-format';
 import { MemoryEventDetails } from './MemoryEventDetails';
@@ -253,6 +254,7 @@ export function MemoryCard({ content, memory, removalTarget = memory, candidate,
       <ul className="memory-source-references" aria-label="新增证据来源">{review.newSourceIds.map((id) => <SourceReference key={id} id={id} sources={sources} />)}</ul>
     </div>)}
     <MemoryConditionsDetails conditions={content.conditions} />
+    <MemoryEvolutionDetails evolution={content.evolution} />
     <MemoryTemporalStatus timing={content.timing} validAt={content.validAt} invalidAt={content.invalidAt} compact />
       <button className="button" aria-label={`查看依据：${content.text}`} onClick={() => {
         if (candidate) trace('candidate', candidate.candidateId, content.text);
@@ -374,6 +376,7 @@ export function MemoryVersionHistory({ history, revert, busy }: {
       <MemoryTemporalStatus timing={entry.timing} validAt={entry.validAt} invalidAt={entry.invalidAt} />
       <MemoryEventDetails event={entry.event} />
       <MemoryConditionsDetails conditions={entry.conditions} />
+      <MemoryEvolutionDetails evolution={entry.evolution} />
       <p>记忆标识：{entry.memoryId}</p>
       {entry.supersedesMemoryId && <p>替代版本引用：{entry.supersedesMemoryId}</p>}
       {entry.supersedesMemoryId && <p>{entry.versionEvidenceSourceCurrent === true ? '原始版本依据当前有效。' : '原始版本依据未核实或已变化，不提供恢复承诺。'}</p>}
@@ -448,6 +451,7 @@ export function ContactRelationshipOverview({ overview, memories, refresh, openV
             <div className="memory-times"><p>来源聊天时间：{sourceTime(item)}</p><p>保存时间：{timeText(item.timing.recordedAt)}</p></div>
             <MemoryEventDetails event={item.event} />
             <MemoryConditionsDetails conditions={item.conditions} />
+            <MemoryEvolutionDetails evolution={item.evolution} />
             <p>底层资料版本：{item.revision} · 记忆标识：{item.memoryId}</p>
             <p>{provenance.kind === 'manual_entry' ? '用户手动录入（来源为手录资料）。'
               : provenance.kind === 'source_supported' ? '有来源支持，不表示已认证现实真伪。' : '来源来历未核实。'}</p>
@@ -503,6 +507,7 @@ export function OwnerFactsOverview({ overview, memories, contactId, refresh, ope
             <div className="memory-times"><p>来源聊天时间：{sourceTime(item)}</p><p>保存时间：{timeText(item.timing.recordedAt)}</p></div>
             <MemoryEventDetails event={item.event} />
             <MemoryConditionsDetails conditions={item.conditions} />
+            <MemoryEvolutionDetails evolution={item.evolution} />
             <p>底层资料版本：{item.revision} · 记忆标识：{item.memoryId}</p>
             <p>{provenance.kind === 'manual_entry' ? '用户手动录入（来源为手录资料）。'
               : provenance.kind === 'source_supported' ? '有来源支持，不表示已认证现实真伪。' : '来源来历未核实。'}</p>

@@ -9,6 +9,7 @@ from uuid import UUID
 
 from notalone.memory.dimension_evidence import DimensionEvidence
 from notalone.memory.correction import CorrectionReview
+from notalone.memory.evolution import MemoryEvolution
 from notalone.memory.conditions import MemoryConditions
 from notalone.memory.events import MemoryEvent
 from notalone.memory.version_evidence import VersionEvidence
@@ -133,6 +134,7 @@ class MemoryCandidate:
     timing: MemoryTiming = MemoryTiming()
     event: MemoryEvent | None = None
     conditions: MemoryConditions | None = None
+    evolution: MemoryEvolution | None = None
     dimension_evidence: DimensionEvidence | None = None
     correction_review: tuple[CorrectionReview, ...] = ()
 
@@ -222,6 +224,7 @@ class ConfirmedMemory:
     timing: MemoryTiming = MemoryTiming()
     event: MemoryEvent | None = None
     conditions: MemoryConditions | None = None
+    evolution: MemoryEvolution | None = None
     version_evidence: VersionEvidence | None = None
     can_revert_auto_update: bool = False
     retirement_reason: MemoryRetirementReason = MemoryRetirementReason.UNKNOWN
@@ -319,6 +322,7 @@ class OwnerMemory:
     timing: MemoryTiming = MemoryTiming()
     event: MemoryEvent | None = None
     conditions: MemoryConditions | None = None
+    evolution: MemoryEvolution | None = None
     version_evidence: VersionEvidence | None = None
     can_revert_auto_update: bool = False
     retirement_reason: MemoryRetirementReason = MemoryRetirementReason.UNKNOWN

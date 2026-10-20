@@ -12,6 +12,7 @@ from psycopg import sql
 from notalone.persistence.memory_timing import timed_memory_rows
 from notalone.persistence.memory_events import bind_memory_event
 from notalone.persistence.memory_conditions import bind_memory_conditions
+from notalone.persistence.memory_evolution import bind_memory_evolution
 from notalone.memory.retirement import is_generation_status_eligible
 from notalone.reply.context import ContextEvidence
 from notalone.retrieval.models import history_timing
@@ -33,6 +34,7 @@ def read_reply_basis_changes(
           coalesce(memory.category, own.category, candidate.category) AS category,
           coalesce(memory.event, own.event, candidate.event) AS event,
           coalesce(to_jsonb(memory)->'conditions', to_jsonb(own)->'conditions', to_jsonb(candidate)->'conditions') AS conditions,
+          coalesce(to_jsonb(memory)->'evolution', to_jsonb(own)->'evolution', to_jsonb(candidate)->'evolution') AS evolution,
           coalesce(memory.source_candidate_id, own.source_candidate_id, candidate.id) AS event_candidate_id,
           coalesce(memory.text_content, own.text_content, candidate.text_content) AS text_content,
           coalesce(memory.source_ids, own.source_ids, candidate.source_ids) AS source_ids,
@@ -81,7 +83,8 @@ def read_reply_basis_changes(
                   and not is_generation_status_eligible(row["current_status"], row.get("retirement_reason"), include_historical=True, invalid_at=row["invalid_at"]))
                   else "memory_revised" if ((row["current_status"] in ("invalidated", "rejected") and row["original_status"] != row["current_status"])
                   or row["current_status"] != row["original_status"]
-                  or (row["original_revision"] is not None and row["revision"] != row["original_revision"]))
+                  or (row["original_revision"] is not None and row["revision"] != row["original_revision"])
+                  or ("evolution" in original and original["evolution"] != _current_evolution(connection, row)))
                   else "memory_not_yet_valid" if row["future"]
                   else "memory_expired" if row["expired"] and not was_historical
                   else "memory_time_changed" if (
@@ -145,7 +148,7 @@ def require_current_reply_memory(
         rows = connection.execute(sql.SQL(
             "SELECT id AS evidence_id,%(kind)s AS kind,owner_id,%(contact_id)s::uuid AS contact_id,"
             "status,text_content,source_ids,valid_at,invalid_at,category,created_at AS recorded_at,event,to_jsonb(" + table + ")->'conditions' AS conditions,"
-            "{} AS event_candidate_id,"
+            "to_jsonb(" + table + ")->'evolution' AS evolution,{} AS event_candidate_id,"
             "{} AS retirement_reason,{} AS revision,valid_at>now() AS future,invalid_at<=now() AS expired "
             "FROM public.{} WHERE owner_id=%(owner_id)s AND id=ANY(%(ids)s::uuid[]) {}"
         ).format(event_candidate, retirement, revision, sql.Identifier(table), contact_clause),
@@ -165,7 +168,8 @@ def require_current_reply_memory(
                     or row["valid_at"] != item.valid_at or row["invalid_at"] != item.invalid_at
                     or current_timing != item.timing
                     or _current_event(connection, row) != (item.event.to_payload(current=True) if item.event else None)
-                    or _current_conditions(connection, row) != (item.conditions.to_payload(current=True) if item.conditions else None)):
+                    or _current_conditions(connection, row) != (item.conditions.to_payload(current=True) if item.conditions else None)
+                    or _current_evolution(connection, row) != (item.evolution.to_payload(current=True) if item.evolution else None)):
                 raise ReplyStoreInvariantError("本次新候选的记忆依据版本已变化。")
 
 
@@ -178,15 +182,15 @@ def historical_basis_revision_sha256(
         """
         WITH RECURSIVE nodes AS (
           SELECT id, 'confirmed_memory' AS kind, supersedes_memory_id AS previous,
-            revision, status, retirement_reason, text_content, source_ids, valid_at, invalid_at, category, created_at AS recorded_at, owner_id, contact_id, event, to_jsonb(confirmed_memory)->'conditions' AS conditions
+            revision, status, retirement_reason, text_content, source_ids, valid_at, invalid_at, category, created_at AS recorded_at, owner_id, contact_id, event, to_jsonb(confirmed_memory)->'conditions' AS conditions, to_jsonb(confirmed_memory)->'evolution' AS evolution
           FROM public.confirmed_memory WHERE owner_id=%s AND contact_id=%s
           UNION ALL
           SELECT id, 'owner_memory', supersedes_memory_id, revision, status, retirement_reason,
-            text_content, source_ids, valid_at, invalid_at, category, created_at, owner_id, NULL::uuid, event, to_jsonb(owner_memory)->'conditions'
+            text_content, source_ids, valid_at, invalid_at, category, created_at, owner_id, NULL::uuid, event, to_jsonb(owner_memory)->'conditions', to_jsonb(owner_memory)->'evolution'
           FROM public.owner_memory WHERE owner_id=%s
           UNION ALL
           SELECT id, 'pending_candidate', NULL::uuid, 0, status, 'unknown',
-            text_content, source_ids, valid_at, invalid_at, category, created_at, owner_id, contact_id, event, to_jsonb(memory_candidate)->'conditions'
+            text_content, source_ids, valid_at, invalid_at, category, created_at, owner_id, contact_id, event, to_jsonb(memory_candidate)->'conditions', to_jsonb(memory_candidate)->'evolution'
           FROM public.memory_candidate WHERE owner_id=%s AND contact_id=%s
         ), used AS (
           SELECT * FROM nodes WHERE id=ANY(%s::uuid[])
@@ -200,6 +204,7 @@ def historical_basis_revision_sha256(
     ).fetchall()
     rows = sorted(_current_timed_rows(connection, rows), key=lambda row: (row["kind"], row["id"]))
     for row in rows:
+        row["evolution"] = _current_evolution(connection, row)
         row["text_digest"] = hashlib.sha256(row.pop("text_content").encode("utf-8")).hexdigest()
         row["timing"] = row["timing"].to_payload()
     payload = json.dumps(rows, sort_keys=True, separators=(",", ":"), default=str)
@@ -298,4 +303,11 @@ def forbidden_generation_memory_dependencies(
 
 def _current_conditions(connection: Any, row: dict) -> dict | None:
     value = bind_memory_conditions(connection, owner_id=row["owner_id"], candidate_id=row.get("event_candidate_id"), raw=row.get("conditions"), text=row["text_content"])
+    return value.to_payload(current=True) if value else None
+
+
+def _current_evolution(connection: Any, row: dict) -> dict | None:
+    value = bind_memory_evolution(connection, owner_id=row["owner_id"], raw=row.get("evolution"),
+        memory_id=(row.get("evidence_id", row.get("id")) if row["kind"] != "pending_candidate" else None),
+        revision=row.get("revision"))
     return value.to_payload(current=True) if value else None

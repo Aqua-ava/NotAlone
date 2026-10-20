@@ -14,6 +14,7 @@ from notalone.memory.layered import LayeredMemoryPort
 from notalone.memory.timing import MemoryTiming
 from notalone.memory.events import MemoryEvent
 from notalone.memory.conditions import MemoryConditions
+from notalone.memory.evolution import MemoryEvolution
 from notalone.memory.models import ConfirmedMemory, OwnerMemory
 from notalone.memory.retirement import is_generation_eligible
 from notalone.memory.overview import OverviewEntry, RelationshipOverview, RelationshipOverviewPort
@@ -193,8 +194,11 @@ class ContextEvidence:
     navigation: MemoryNavigation | None = None
     event: MemoryEvent | None = None
     conditions: MemoryConditions | None = None
+    evolution: MemoryEvolution | None = None
 
     def __post_init__(self) -> None:
+        if self.evolution is not None and not isinstance(self.evolution, MemoryEvolution):
+            raise ValueError("回复变化依据结构无效。")
         if self.conditions is not None and not isinstance(self.conditions, MemoryConditions):
             raise ValueError("回复适用条件结构无效。")
         if self.event is not None and not isinstance(self.event, MemoryEvent):
@@ -962,6 +966,8 @@ class RetrievalReplyContext:
             or memory.status != evidence.status
             or memory.event != evidence.event
             or memory.conditions != evidence.conditions
+            or (memory.evolution.to_payload(current=True) if memory.evolution else None)
+               != (evidence.evolution.to_payload(current=True) if evidence.evolution else None)
             or memory.timing != evidence.timing
         ):
             raise ReplyContextInvariantError("关系记忆依据已失效或版本不一致。")
@@ -1005,6 +1011,8 @@ class RetrievalReplyContext:
             or memory.status != evidence.status
             or memory.event != evidence.event
             or memory.conditions != evidence.conditions
+            or (memory.evolution.to_payload(current=True) if memory.evolution else None)
+               != (evidence.evolution.to_payload(current=True) if evidence.evolution else None)
             or memory.timing != evidence.timing
         ):
             raise ReplyContextInvariantError("本人记忆依据已失效或版本不一致。")
@@ -1092,6 +1100,8 @@ class RetrievalReplyContext:
             or candidate.status != evidence.status
             or candidate.event != evidence.event
             or candidate.conditions != evidence.conditions
+            or (candidate.evolution.to_payload(current=True) if candidate.evolution else None)
+               != (evidence.evolution.to_payload(current=True) if evidence.evolution else None)
             or candidate.timing != evidence.timing
             or not evidence.selection_reason.startswith(expected_reason)
         ):
@@ -1519,7 +1529,7 @@ class RetrievalReplyContext:
             invalid_at=memory.invalid_at,
             revision=memory.revision,
             timing=memory.timing,
-            event=memory.event, conditions=memory.conditions,
+            event=memory.event, conditions=memory.conditions, evolution=memory.evolution,
         )
 
     @staticmethod
@@ -1549,7 +1559,7 @@ class RetrievalReplyContext:
             invalid_at=memory.invalid_at,
             revision=memory.revision,
             timing=memory.timing,
-            event=memory.event, conditions=memory.conditions,
+            event=memory.event, conditions=memory.conditions, evolution=memory.evolution,
         )
 
     @staticmethod
@@ -1578,5 +1588,5 @@ class RetrievalReplyContext:
             valid_at=candidate.valid_at,
             invalid_at=candidate.invalid_at,
             timing=candidate.timing,
-            event=candidate.event, conditions=candidate.conditions,
+            event=candidate.event, conditions=candidate.conditions, evolution=candidate.evolution,
         )

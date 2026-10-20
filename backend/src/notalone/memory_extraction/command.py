@@ -189,11 +189,16 @@ def run_extraction(
     previous_watermark = (watermark_port.get(scope) if task_id is not None and watermark_port is not None
                           else watermark_message_id)
     from notalone.memory_extraction.merge import MemoryMergeVerifier
+    from notalone.memory_extraction.cli_support import load_contact_messages
+    source_database_url = getattr(memory_port, "database_url", None)
     adoption = MemoryAdoption(
         automatic=automatic,
+        source_messages=messages,
+        source_loader=(lambda scope, identifiers: load_contact_messages(scope, source_database_url, message_ids=identifiers)) if source_database_url else None,
         memory_port=memory_port,
         owner_memory_port=owner_memory_port,
-        merge_verifier=MemoryMergeVerifier(messages=messages, verification_runtime=verification_runtime),
+        merge_verifier=MemoryMergeVerifier(messages=messages, verification_runtime=verification_runtime,
+            source_loader=(lambda scope, identifiers: load_contact_messages(scope, source_database_url, message_ids=identifiers)) if source_database_url else None),
         adjudication_runtime=adjudication_runtime,
         ledger=ledger,
         dimension_release=dimension_release,

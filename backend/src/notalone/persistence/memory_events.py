@@ -67,20 +67,21 @@ def erase_event_version_dependencies(connection: Any, *, owner_id: UUID, removed
     removed = {str(item) for item in removed_ids}
     with connection.cursor(row_factory=dict_row) as cursor:
         candidates = cursor.execute(
-            "SELECT id, contact_id, source_ids, correction_evidence, dimension_evidence "
-            "FROM public.memory_candidate WHERE owner_id=%s AND (event IS NOT NULL OR jsonb_typeof(to_jsonb(memory_candidate)->'conditions')='object')", (owner_id,),
+            "SELECT id, contact_id, source_ids, correction_evidence, dimension_evidence, to_jsonb(memory_candidate)->'evolution' AS evolution "
+            "FROM public.memory_candidate WHERE owner_id=%s AND (event IS NOT NULL OR jsonb_typeof(to_jsonb(memory_candidate)->'conditions')='object' OR jsonb_typeof(to_jsonb(memory_candidate)->'evolution')='object')", (owner_id,),
         ).fetchall()
         candidate_ids = {
             row["id"] for row in candidates if removed & (
                 {str(item) for item in row["source_ids"]}
+                | {ref["memory_id"] for ref in (row.get("evolution") or {}).get("related_versions", [])}
                 | _window_ids(row["correction_evidence"]) | _window_ids(row["dimension_evidence"]))
         }
         affected = {}
         for table in ("confirmed_memory", "owner_memory"):
             rows = cursor.execute(sql.SQL(
                 "SELECT id, source_candidate_id, source_ids, version_evidence, to_jsonb({})->'conditions' AS conditions FROM public.{} "
-                "WHERE owner_id=%s AND (version_evidence IS NOT NULL OR event IS NOT NULL OR jsonb_typeof(to_jsonb({})->'conditions')='object')"
-            ).format(sql.Identifier(table), sql.Identifier(table), sql.Identifier(table)), (owner_id,)).fetchall()
+                "WHERE owner_id=%s AND (version_evidence IS NOT NULL OR event IS NOT NULL OR jsonb_typeof(to_jsonb({})->'conditions')='object' OR source_candidate_id=ANY(%s::uuid[]))"
+            ).format(sql.Identifier(table), sql.Identifier(table), sql.Identifier(table)), (owner_id, list(candidate_ids))).fetchall()
             seeds = {row["id"] for row in rows if row["source_candidate_id"] in candidate_ids or (row.get("conditions") is not None and removed & {str(item) for item in row["source_ids"]}) or (
                 row["version_evidence"] is not None and removed & (
                     _window_ids(row["version_evidence"].get("previous_window"))
