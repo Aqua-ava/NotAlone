@@ -1,7 +1,7 @@
 # 原生定位开销与旧诊断入口
 
 Triage: ready-for-agent
-State: claimed
+State: resolved
 Blocked by: None
 
 ## 来源
@@ -20,3 +20,9 @@ Blocked by: None
 
 ## Comments
 
+
+## Answer
+
+已完成按需亮度采样与旧正文诊断入口退役，实现提交 `318b8e99`，完整证据及最终状态见[结果记录](../04-native-capture-result.md)。正式顶部名称门禁、像素颜色透明度和失败回退保持，像素缓冲区不随HeaderLayout返回。
+
+两轮各4尺寸、31组交错合成布局计时保留原始样本，12图布局／失败结果等价；全原生132项中4项按既有条件跳过、0失败，相关33项和实际CLI入口4项通过。独立Standards与Spec均0发现。没有测真实识别延迟或RSS，没有运行真实App／微信、正文OCR、打包、外部模型或业务库；实机交05统一协调。仅本地提交，完整数据边界和资源清理见结果记录。
