@@ -28,3 +28,18 @@ public struct SessionInvocation: Equatable {
         return SessionInvocation(json: supplied.contains("--json"))
     }
 }
+
+// 默认入口只展示帮助；旧正文采集参数在任何权限或采集操作前拒绝。
+public enum ProbeDiagnosticInvocation: Equatable {
+    case help
+    case selfTest
+
+    public static func parse(arguments: [String]) throws -> Self {
+        switch arguments {
+        case [], ["--help"]: return .help
+        case ["--self-test"]: return .selfTest
+        default:
+            throw ProbeError.invalidArguments("诊断参数无效；旧正文 OCR 入口已退役，请使用 --help 查看名称定位入口。")
+        }
+    }
+}

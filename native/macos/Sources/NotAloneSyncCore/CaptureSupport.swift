@@ -5,9 +5,6 @@ import Foundation
 @preconcurrency import ScreenCaptureKit
 import Vision
 
-// 微信 App 的稳定系统标识，比窗口标题或联系人昵称更适合用来识别应用本身。
-private let weChatBundleIdentifier = "com.tencent.xinWeChat"
-
 // 动态检测到的聊天区域，由左侧会话列表、顶部标题栏和底部输入栏三条边界围成。
 public struct DetectedChatRegion {
     public let cropRect: CGRect
@@ -32,19 +29,6 @@ public struct DetectedChatRegion {
 }
 
 // 单次捕获的内存结果。预览仅供用户主动核对裁剪范围，退出或下一帧后会被替换。
-public struct CapturedChatRegion {
-    public let chatImage: CGImage
-    public let previewImage: CGImage?
-    public let detectedDividerX: Int?
-
-    public init(chatImage: CGImage, previewImage: CGImage?, detectedDividerX: Int?) {
-        self.chatImage = chatImage
-        self.previewImage = previewImage
-        self.detectedDividerX = detectedDividerX
-    }
-}
-
-// 从当前窗口画面的中部寻找持续贯穿的竖向颜色边界，避免依赖可拖动分隔线的固定比例。
 public enum ChatRegionDetector {
     // 只在正常微信布局可能出现分隔线的横向区间内搜索，避免把消息气泡或右侧滚动条当成分隔线。
     private static let minDividerRatio = 0.12
@@ -356,39 +340,8 @@ public enum ChatRegionDetector {
 
     // 供同包的选中会话定位器复用：把图片变成逐像素亮度数组。
     static func luminancePixels(from image: CGImage) -> [UInt8]? {
-        let width = image.width
-        let height = image.height
-        var pixels = [UInt8](repeating: 0, count: width * height * 4)
-        let didDraw = pixels.withUnsafeMutableBytes { rawBuffer -> Bool in
-            guard let baseAddress = rawBuffer.baseAddress,
-                  let context = CGContext(
-                      data: baseAddress,
-                      width: width,
-                      height: height,
-                      bitsPerComponent: 8,
-                      bytesPerRow: width * 4,
-                      space: CGColorSpaceCreateDeviceRGB(),
-                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-                  ) else {
-                return false
-            }
-            context.setBlendMode(.copy)
-            context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
-            return true
-        }
-        guard didDraw else {
-            return nil
-        }
-
-        var luminance: [UInt8] = []
-        luminance.reserveCapacity(width * height)
-        for offset in stride(from: 0, to: pixels.count, by: 4) {
-            let red = Int(pixels[offset])
-            let green = Int(pixels[offset + 1])
-            let blue = Int(pixels[offset + 2])
-            luminance.append(UInt8((54 * red + 183 * green + 19 * blue) / 256))
-        }
-        return luminance
+        guard let pixels = LuminanceSampler.create(from: image) else { return nil }
+        return (0..<(image.width * image.height)).map { pixels[$0] }
     }
 
     private static func lowerQuartile(_ values: [Int]) -> Int {
@@ -404,152 +357,6 @@ public enum ChatRegionDetector {
     static func medianOf(_ values: [Int]) -> Int {
         let sorted = values.sorted()
         return sorted[sorted.count / 2]
-    }
-}
-
-// 单次窗口捕获的完整结果。聊天区裁剪与选中会话定位必须使用同一帧图像。
-public struct WindowSnapshot {
-    public let windowImage: CGImage
-    public let region: DetectedChatRegion
-
-    public init(windowImage: CGImage, region: DetectedChatRegion) {
-        self.windowImage = windowImage
-        self.region = region
-    }
-}
-
-// 负责“仅当微信在前台时，拿到聊天区域图片”的边界层。
-@MainActor
-public final class WeChatCaptureProbe {
-    // 仅保留给命令行诊断的显式固定裁剪；菜单栏 App 默认使用动态检测。
-    private let fixedCrop: CropRect?
-    // 菜单栏 App 首次检测后缓存的分隔线；窗口尺寸改变或分隔线被拖动时才替换。
-    private var cachedDynamicRegion: (width: Int, height: Int, region: DetectedChatRegion)?
-
-    public init() {
-        fixedCrop = nil
-    }
-
-    public init(crop: CropRect) {
-        fixedCrop = crop
-    }
-
-    public func captureWindowSnapshot() async throws -> WindowSnapshot {
-        // 第一层隐私门禁：微信不是前台，就完全不查询窗口、不截图。
-        guard NSWorkspace.shared.frontmostApplication?.bundleIdentifier == weChatBundleIdentifier else {
-            throw ProbeError.weChatNotFrontmost
-        }
-
-        // 获取当前屏幕上可共享的窗口列表，只筛选属于微信的窗口。
-        let content = try await SCShareableContent.excludingDesktopWindows(
-            false,
-            onScreenWindowsOnly: true
-        )
-        guard let window = content.windows
-            .filter({ $0.owningApplication?.bundleIdentifier == weChatBundleIdentifier })
-            .max(by: { $0.frame.width * $0.frame.height < $1.frame.width * $1.frame.height }) else {
-            throw ProbeError.weChatWindowNotFound
-        }
-
-        // 选择最大的微信窗口，一般就是正在使用的主聊天窗口。
-        let filter = SCContentFilter(desktopIndependentWindow: window)
-        let configuration = SCStreamConfiguration()
-        // 使用两倍窗口尺寸，适配高分屏，给 OCR 足够清晰的像素。
-        configuration.width = max(1, Int(window.frame.width * 2))
-        configuration.height = max(1, Int(window.frame.height * 2))
-        let image = try await SCScreenshotManager.captureImage(
-            contentFilter: filter,
-            configuration: configuration
-        )
-
-        let region: DetectedChatRegion
-        if let fixedCrop {
-            // 命令行用户显式指定时才允许固定裁剪，便于隔离测试算法本身。
-            region = DetectedChatRegion(
-                cropRect: CGRect(
-                    x: CGFloat(fixedCrop.x) * CGFloat(image.width),
-                    y: CGFloat(fixedCrop.y) * CGFloat(image.height),
-                    width: CGFloat(fixedCrop.width) * CGFloat(image.width),
-                    height: CGFloat(fixedCrop.height) * CGFloat(image.height)
-                ).integral,
-                dividerX: nil,
-                headerDividerY: nil,
-                composerDividerY: nil,
-                confidence: 1
-            )
-        } else {
-            if let cached = cachedDynamicRegion,
-               cached.width == image.width,
-               cached.height == image.height,
-               ChatRegionDetector.isRegionStillValid(in: image, region: cached.region) {
-                region = cached.region
-            } else {
-                guard let detected = ChatRegionDetector.detect(in: image) else {
-                    throw ProbeError.chatRegionNotFound
-                }
-                cachedDynamicRegion = (image.width, image.height, detected)
-                region = detected
-            }
-        }
-
-        return WindowSnapshot(windowImage: image, region: region)
-    }
-
-    public func captureChatRegion() async throws -> CapturedChatRegion {
-        try chatRegionCapture(from: await captureWindowSnapshot())
-    }
-
-    // 从已捕获的同一帧快照裁剪聊天区域，供与选中会话定位共享同一张窗口图像。
-    public func chatRegionCapture(from snapshot: WindowSnapshot) throws -> CapturedChatRegion {
-        let image = snapshot.windowImage
-        let region = snapshot.region
-
-        guard let croppedImage = image.cropping(to: region.cropRect) else {
-            throw ProbeError.invalidCrop
-        }
-        return CapturedChatRegion(
-            chatImage: croppedImage,
-            previewImage: ChatRegionDetector.previewImage(for: image, region: region),
-            detectedDividerX: region.dividerX
-        )
-    }
-
-    // 从同一帧窗口图像提取顶部 display name 与左侧选中会话行的最小元数据。
-    // 找不到选中行时抛出错误；上层应暂停本轮定位，不沿用旧联系人写入。
-    public func selectedSessionMetadata(from snapshot: WindowSnapshot) throws -> SelectedSessionMetadata {
-        let image = snapshot.windowImage
-        guard let dividerX = snapshot.region.dividerX else {
-            throw ProbeError.chatRegionNotFound
-        }
-        guard let row = SelectedSessionLocator.detectSelectedRow(
-            in: image,
-            dividerX: dividerX,
-            listBottom: snapshot.region.composerDividerY
-        ) else {
-            throw ProbeError.selectedRowNotFound
-        }
-
-        let displayName: String?
-        if let headerCrop = SelectedSessionLocator.displayNameCrop(in: image, region: snapshot.region),
-           let headerImage = image.cropping(to: headerCrop) {
-            displayName = try LocalOcr.recognizePlainText(headerImage)
-        } else {
-            displayName = nil
-        }
-
-        func cropText(_ rect: CGRect) throws -> String? {
-            guard let subImage = image.cropping(to: rect.integral) else {
-                return nil
-            }
-            return try LocalOcr.recognizePlainText(subImage)
-        }
-
-        return SelectedSessionMetadata(
-            displayName: displayName,
-            selectedRowName: try cropText(row.nameRect),
-            lastTimeText: try cropText(row.timeRect),
-            previewText: try cropText(row.previewRect)
-        )
     }
 }
 
@@ -649,5 +456,44 @@ public enum ImageHasher {
         // SHA-256 只用于比较两张内存图片是否相同，不会保存原图片数据。
         let digest = SHA256.hash(data: data)
         return digest.map { String(format: "%02x", $0) }.joined()
+    }
+}
+
+// 像素只在当轮布局函数中存活；名称矩形返回后不保留整帧缓冲区。
+struct LuminanceSampler {
+    private let rgba: [UInt8]
+
+    subscript(_ index: Int) -> UInt8 {
+        let offset = index * 4
+        return UInt8((54 * Int(rgba[offset]) + 183 * Int(rgba[offset + 1])
+                      + 19 * Int(rgba[offset + 2])) / 256)
+    }
+
+    static func create(from image: CGImage) -> Self? {
+        let width = image.width
+        let height = image.height
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        let didDraw = pixels.withUnsafeMutableBytes { rawBuffer -> Bool in
+            guard let baseAddress = rawBuffer.baseAddress,
+                  let context = CGContext(
+                      data: baseAddress,
+                      width: width,
+                      height: height,
+                      bitsPerComponent: 8,
+                      bytesPerRow: width * 4,
+                      space: CGColorSpaceCreateDeviceRGB(),
+                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+                  ) else {
+                return false
+            }
+            context.setBlendMode(.copy)
+            context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+            return true
+        }
+        guard didDraw else {
+            return nil
+        }
+
+        return Self(rgba: pixels)
     }
 }
