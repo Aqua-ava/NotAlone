@@ -24,6 +24,8 @@ export async function syncBackfillRetriesConfirmedScope({ manager, syncBackend }
     failureCode: incomplete.data.cli_backfill_failure_code, completed: incomplete.data.cli_backfill_completed_contacts }));
   const backfill = manager.getByRole('region', { name: '历史补齐', exact: true });
   await expect(backfill.getByText('无法确认补齐完整性', { exact: true })).toBeVisible();
+  await expect(backfill.getByRole('button', { name: '暂停补齐', exact: true })).toBeHidden();
+  await backfill.getByText('查看补齐详情与操作', { exact: true }).click();
   await backfill.getByRole('button', { name: '暂停补齐', exact: true }).click();
   await expect(backfill.getByText('补齐已暂停', { exact: true })).toBeVisible();
   const paused = await syncBackend.request('/api/sync/status');
@@ -40,6 +42,10 @@ export async function syncBackfillRetriesConfirmedScope({ manager, syncBackend }
   await syncBackend.setCli(cli);
   await backfill.getByRole('button', { name: '重试补齐', exact: true }).click();
   await expect(backfill.getByText('补齐失败', { exact: true })).toBeVisible();
+  await backfill.getByText('查看补齐详情与操作', { exact: true }).click();
+  await expect(backfill.getByText('补齐失败', { exact: true })).toBeVisible();
+  await expect(backfill.getByText('本轮已检查0／1个会话。 1个失败。', { exact: true })).toBeVisible();
+  await backfill.getByText('查看补齐详情与操作', { exact: true }).click();
   const failed = await syncBackend.request('/api/sync/status');
   expect(failed.data).toMatchObject({ sync_enabled: true, cli_backfill_phase: 'failed',
     cli_backfill_failure_code: 'cli_output_invalid', cli_backfill_failed_contacts: 1,

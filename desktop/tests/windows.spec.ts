@@ -5,7 +5,7 @@ import { test, selectMenu } from './app-fixture';
 // 接缝是公开按钮、原生窗口/菜单和可见结果，不读取界面的私有状态。
 test('管理后台和输入小窗可独立打开、关闭隐藏并恢复，退出回收进程', async ({ runningApp: { app, appProcess } }) => {
   const manager = await app.firstWindow();
-  await expect(manager.getByRole('heading', { name: '联系人与绑定' })).toBeVisible();
+  await expect(manager.getByRole('heading', { name: '联系人' })).toBeVisible();
   const helperOpened = app.waitForEvent('window');
   await manager.getByRole('button', { name: '打开输入小窗' }).click();
   const helper = await helperOpened;

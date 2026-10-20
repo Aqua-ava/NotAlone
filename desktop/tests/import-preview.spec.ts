@@ -77,7 +77,7 @@ test('导航返回后仍准确显示本次新联系人名称，重新预览须�
   const manager = await chooseNewImport(app, filePath);
   await manager.getByRole('button', { name: '预览资料范围', exact: true }).click();
   await manager.getByRole('checkbox', { name: '我已核对本人渠道身份、联系人和这份文件的资料范围' }).check();
-  await manager.getByRole('button', { name: '联系人与绑定', exact: true }).click();
+  await manager.getByRole('button', { name: '联系人', exact: true }).click();
   await openFileImport(manager);
   await expect(manager.getByRole('textbox', { name: '新联系人名称' })).toHaveValue('预览合成联系人');
   await manager.getByRole('button', { name: '预览资料范围', exact: true }).click();

@@ -177,12 +177,12 @@ export async function skillLearning(browser: Browser, origin: string, reviewMode
         await expect(manager.getByRole('region', { name: 'Skill待审核', exact: true }).getByRole('article')).toHaveCount(0);
         return;
       }
-      await manager.getByRole('button', { name: '联系人与绑定', exact: true }).click();
+      await manager.getByRole('button', { name: '联系人', exact: true }).click();
       await manager.getByRole('button', { name: '选择合成学习乙联系人', exact: true }).click();
       await manager.getByRole('button', { name: 'Skill 待审核', exact: true }).click();
       await expectLearningReady(fixture.data.contact_ids[1]);
       await expect(panel.getByRole('article')).toHaveCount(0);
-      await manager.getByRole('button', { name: '联系人与绑定', exact: true }).click();
+      await manager.getByRole('button', { name: '联系人', exact: true }).click();
       await manager.getByRole('button', { name: '选择合成学习甲联系人', exact: true }).click();
       await manager.getByRole('button', { name: 'Skill 待审核', exact: true }).click();
       await expectLearningReady(fixture.data.contact_ids[0]);

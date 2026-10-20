@@ -113,7 +113,7 @@ export function ImportPage({ session }: { session: ContactSessionView }) {
       {state.submission.syncReloadNeeded && <div className="import-sync-reload"><p>同步宿主尚未装配。首份导入确认的本人渠道身份须重新加载服务后才能用于同步。导入不会自动授权会话；重启只沿用既有确认范围和总开关，旧排队任务须重新查看并明确继续。</p>
         <button className="button" disabled={!available || !!state.submission.taskBusy} onClick={() => void operate(() => window.notalone.imports.reloadSyncHost({ selectionRevision: latest.current.selectionRevision }))}>认证停读并重新加载同步服务</button></div>}
     </section>}
-    {state.syncReloadPhase === 'ready' && <p className="import-confirmed" role="status">同步服务已重新加载。请在同步设置中主动选择并确认会话授权；如需查看原导入任务，请重新预览确认同一份文件。</p>}
+    {state.syncReloadPhase === 'ready' && <p className="import-confirmed" role="status">同步服务已重新加载。请在“联系人 → 添加微信联系人”中主动选择并确认会话授权；如需查看原导入任务，请重新预览确认同一份文件。</p>}
     {state.syncReloadPhase === 'failed' && <div className="import-note"><p role="alert">同步服务重新加载结果尚未确认。停读未确认时不会另起实例；请检查连接或配置后重试。</p>
       <button className="button" onClick={() => void operate(() => window.notalone.imports.reloadSyncHost({ selectionRevision: latest.current.selectionRevision }))}>重试重新加载同步服务</button></div>}
     {(state.error || error) && <p className="import-note" role="alert">{state.error ?? error}</p>}

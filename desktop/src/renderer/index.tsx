@@ -17,7 +17,6 @@ import { ImportPage } from './ImportPage';
 import { ReplyCandidates, useReplySession } from './RewritePanel';
 import { UnifiedReplyWorkspace } from './UnifiedReplyWorkspace';
 import { MemoryPage } from './MemoryPage';
-import { BindingConsentPage } from './BindingConsentPage';
 import { SyncControlPanel } from './SyncControlPanel';
 import { SkillLearningPage } from './SkillLearningPage';
 import { PrioritySyncStatus } from './PrioritySyncStatus';
@@ -124,10 +123,7 @@ export function App() {
         {page === 'import' && <ImportPage session={contactSession} />}
         {page === 'memory' && <MemoryPage session={contactSession} navigate={setPage} />}
         {page === 'skillLearning' && <SkillLearningPage session={contactSession} />}
-        {page === 'sync' && <><SyncControlPanel bridge={window.notalone.syncControl} />
-          {startup.mode === 'managed' ? <div><button className="button primary" onClick={() => setPage('contacts')}>选择联系人并手动输入</button>
-            <p>如需从文件补充旧记录，可前往「设置 → 高级 → 从文件导入」。</p></div>
-            : <BindingConsentPage contacts={contactSession} navigate={setPage} />}</>}
+        {page === 'sync' && <SyncControlPanel bridge={window.notalone.syncControl} />}
         {page !== 'config' && page !== 'contacts' && page !== 'import' && page !== 'memory' && page !== 'sync' && page !== 'skillLearning' && <section className="empty-panel" aria-label={currentPage.title}>
           <div className="empty-symbol"><Icon name={currentPage.icon} size={32} /></div>
           <h2>{currentPage.emptyTitle}</h2><p>{currentPage.emptyDescription}</p>

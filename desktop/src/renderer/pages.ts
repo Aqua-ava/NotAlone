@@ -5,8 +5,8 @@ export const managerPages = {
     emptyTitle: '请先选择联系人', emptyDescription: '经验草稿只从已授权范围产生。', action: '选择联系人',
   },
   contacts: {
-    title: '联系人与绑定', icon: 'contacts',
-    description: '创建并明确选择本次联系人，再手动输入文字或导入单联系人资料。',
+    title: '联系人', icon: 'contacts',
+    description: '查看每个人的同步状态，管理微信关联与读取授权。',
     emptyTitle: '联系人暂不可用',
     emptyDescription: '连接完成后，这里会显示你的联系人与消息、来源摘要。',
     action: '选择联系人',
@@ -27,7 +27,7 @@ export const managerPages = {
   },
   sync: {
     title: '同步设置', icon: 'sync',
-    description: '管理后台文字同步、历史补齐与会话授权，只处理你已确认的范围。',
+    description: '控制自动同步总开关、查看历史补齐进度。每个人的同步授权在「联系人」中管理。',
     emptyTitle: '同步尚未就绪',
     emptyDescription: '尚未连接，无法查询读取状态。连接完成后，由你确认会话范围。',
     action: '确认同步范围',

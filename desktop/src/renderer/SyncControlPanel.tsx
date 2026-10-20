@@ -46,13 +46,14 @@ export function SyncControlPanel({ bridge, manualRelease = false }: { bridge: Sy
   </section>;
   return <div className="bindings-page">
     <section className="bindings-explanation" aria-label="后台 CLI 同步">
-      <div className="bindings-toolbar"><h2>后台文字同步</h2><button className="button"
+      <div className="bindings-toolbar"><h2>自动同步总开关</h2><button className="button"
         disabled={state.phase === 'offline' || state.phase === 'loading' || state.busy !== null}
         onClick={() => void operate(() => bridge.refresh())}>刷新同步状态</button></div>
       <p role="status">{report ? report.enabled ? '后台正文同步已开启' : '后台正文同步已关闭' : '后台正文同步状态未确认'}</p>
       <button className="button" disabled={!available} onClick={() => void switchSync()}>{state.busy === 'enable' ? '正在开启后台同步…'
         : state.busy === 'disable' ? '正在关闭后台同步…' : report?.enabled ? '关闭后台同步' : '开启后台同步'}</button>
-      <p>开启后仅读取已确认会话的文字；关闭同步或正常退出会停读，重新开启只在仍有效的确认范围内恢复。</p>
+      <p>开启后自动同步已授权联系人的文字。关闭或退出 App 会停止读取；重新开启后，在有效授权范围内补齐遗漏。</p>
+      <p>添加同步对象或停止某个人的同步，请到「联系人」管理。</p>
       {report && <p>{backgroundLabels[report.backgroundPhase]}。已确认范围：{report.confirmedBindingCount}个会话。</p>}
       {state.phase === 'loading' && <p role="status">正在确认同步状态…</p>}
       {state.phase === 'offline' && <p>连接本机服务后查看与控制后台同步。</p>}
@@ -63,8 +64,13 @@ export function SyncControlPanel({ bridge, manualRelease = false }: { bridge: Sy
       {error && <p role="alert">{error}</p>}
     </section>
     <section className="bindings-explanation" aria-label="历史补齐"><h2>历史补齐</h2>
-      <p role="status">{localHistory ? '部分会话本地无可读历史，覆盖尚未确认' : report ? backfillLabels[report.backfill.phase] : '补齐状态尚未确认'}</p>
-      {report && <><p>已完成{report.backfill.completedContacts}／{report.backfill.totalContacts}个会话，待处理{report.backfill.pendingContacts}个；
+      <p role="status">{localHistory && report?.backfill.phase === 'incomplete' ? '部分会话本地无可读历史，覆盖尚未确认'
+        : report ? backfillLabels[report.backfill.phase] : '补齐状态尚未确认'}</p>
+      {report && <p>本轮已检查{report.backfill.completedContacts}／{report.backfill.totalContacts}个会话。
+        {report.backfill.failedContacts > 0 && ` ${report.backfill.failedContacts}个失败。`}
+        {report.backfill.incompleteContacts > 0 && ` ${report.backfill.incompleteContacts}个无法确认完整。`}</p>}
+      <details className="sync-backfill-details"><summary>查看补齐详情与操作</summary>
+        {report && <><p>已完成{report.backfill.completedContacts}／{report.backfill.totalContacts}个会话，待处理{report.backfill.pendingContacts}个；
         失败{report.backfill.failedContacts}个，无法确认完整{report.backfill.incompleteContacts}个。</p>
         <p>已写入文字{report.backfill.messageCount}条，已跳过非文字{report.backfill.nonTextCount}条。</p>
         {report.backfill.failureCode && <p role={localHistory ? 'status' : 'alert'}>{localHistory ?? backfillFailures[report.backfill.failureCode]
@@ -77,6 +83,7 @@ export function SyncControlPanel({ bridge, manualRelease = false }: { bridge: Sy
           onClick={() => void operate(() => bridge.retry({ scopeRevision: state.scopeRevision }))}>
           {state.busy === 'retry' ? '正在重试补齐…' : '重试补齐'}</button></div>
       <p>暂停只针对历史补齐；后台总开关开启时，已确认范围的实时增量仍可读取。关闭后台同步会停止全部新增正文读取。</p>
+      </details>
     </section>
   </div>;
 }

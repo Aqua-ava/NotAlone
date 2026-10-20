@@ -59,7 +59,11 @@ class BindingConsentApiTests(unittest.TestCase):
         self.assertEqual(reads, ["wxid_synthetic_a"])
         self.assertEqual(backend.request("/api/sync/check", {})[0], 200)
         self.assertEqual(backend.tails(), reads)
-        self.assertEqual(backend.request("/api/sync/cli-bindings")[1], {"bindings": []})
+        directory = backend.request("/api/sync/cli-bindings")[1]
+        self.assertEqual(directory["bindings"], [])
+        self.assertEqual(directory["revoked_bindings"], [dict(active, status="revoked")])
+        self.assertEqual(backend.tails(), reads)
+        self.assertIsNone(backend.request("/api/sync/cli-sessions")[1]["sessions"][0]["bound_contact_id"])
         history = backend.request(f"/api/contacts/{contact_id}/messages")[1]
         self.assertIn("已授权合成消息", str(history))
 

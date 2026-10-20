@@ -790,16 +790,19 @@ class BackendApp:
             if method != "GET":
                 return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
             try:
-                bindings = sync.cli_bindings()
+                bindings = sync.cli_bindings(include_revoked=True)
             except Exception:
                 return _json_response(
                     HTTPStatus.INTERNAL_SERVER_ERROR,
                     {"error": "cli_bindings_failed"},
                 )
-            return _json_response(
-                HTTPStatus.OK,
-                {"bindings": [_cli_binding_payload(binding) for binding in bindings]},
-            )
+            payload = {"bindings": [_cli_binding_payload(binding) for binding in bindings
+                                    if binding.status.value == "active"]}
+            revoked = [_cli_binding_payload(binding) for binding in bindings
+                       if binding.status.value == "revoked"]
+            if revoked:
+                payload["revoked_bindings"] = revoked
+            return _json_response(HTTPStatus.OK, payload)
         if method != "POST":
             return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
         if path == "/api/sync/foreground/observe":

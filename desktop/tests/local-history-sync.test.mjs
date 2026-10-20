@@ -45,6 +45,12 @@ test('已删除与本地无记录均为中性覆盖说明，不误报同步完�
       if (!priority) {
         assert.match(html, /部分已确认会话/);
         assert.doesNotMatch(html, /此会话/);
+        const paused = state(code, historyState);
+        paused.report.backfill.phase = 'paused';
+        const pausedHtml = render(paused);
+        assert.match(pausedHtml, /补齐已暂停/);
+        assert.match(pausedHtml, /历史覆盖尚未确认/);
+        assert.doesNotMatch(pausedHtml, /role="alert"|补齐失败/);
       } else assert.doesNotMatch(html, /部分已确认会话/);
     }
   }

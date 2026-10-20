@@ -87,7 +87,7 @@ export async function styleSamples(browser: Browser, origin: string) {
     await helper.getByRole('button', { name: '主动保存手工文字', exact: true }).click();
     await expect(helper.getByRole('alert').filter({ hasText: '样本操作暂时不可用' })).toBeVisible();
     await expect(helper.getByText('独立手工合成样本。', { exact: true })).toBeVisible();
-    await manager.getByRole('button', { name: '联系人与绑定', exact: true }).click();
+    await manager.getByRole('button', { name: '联系人', exact: true }).click();
     await manager.getByRole('button', { name: '选择合成联系人乙', exact: true }).click();
     await expect(helper.getByText('独立手工合成样本。', { exact: true })).toHaveCount(0);
     const payloads = (await rewriteBackend.command('observations')).payloads as Array<Record<string, unknown>>;

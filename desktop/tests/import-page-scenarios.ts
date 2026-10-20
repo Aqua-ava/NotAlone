@@ -50,7 +50,7 @@ export async function savedImport(pages: ImportPages): Promise<void> {
   const original = await originalImport(importBackend);
   const first = await importBackend.task(original);
   expect((first.data.steps as Array<{ status: string }>).map((step) => step.status)).toEqual(['succeeded', 'succeeded', 'succeeded', 'succeeded', 'succeeded']);
-  await manager.getByRole('button', { name: '联系人与绑定', exact: true }).click();
+  await manager.getByRole('button', { name: '联系人', exact: true }).click();
   await expect(manager.getByRole('button', { name: '选择合成导入联系人', exact: true })).toBeVisible();
   await confirm(pages, importBackend.data.file_path, original.contact_id);
   await manager.getByRole('button', { name: '正式导入这份资料', exact: true }).click();

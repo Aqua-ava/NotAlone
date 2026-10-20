@@ -1,8 +1,8 @@
 import { test } from './binding-fixture';
 import { bindingInitialSelection, bindingRevokeBusy, bindingMetadataStale, bindingFinalNameStale, bindingNoChannel, bindingCliUnavailable, bindingNamedArguments, bindingStableContacts, bindingReconfirm, bindingConcurrentNew, bindingRevokeWaiting } from './binding-page-scenarios';
 
-test('首次没有选择，刷新只保留仍有效的手选，新会话不授权且不读正文', async ({ bindingPage }) => {
-  await bindingInitialSelection(bindingPage);
+test('首次没有选择，刷新只保留仍有效的手选，新会话不授权且不读正文', async ({ bindingPage, bindingProxy }) => {
+  await bindingInitialSelection(bindingPage, bindingProxy);
 });
 
 test('等待本轮超时显示未撤销并保留重试，成功响应后实际 HTTP 检查不再新增 tail', async ({ bindingPage }) => {

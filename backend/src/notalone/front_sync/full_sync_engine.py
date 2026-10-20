@@ -338,10 +338,10 @@ class CliFullSyncEngine:
 
         return self._binding_coordinator.list_candidates()
 
-    def list_cli_bindings(self) -> tuple[PersistedConversationBinding, ...]:
-        """读取当前运行范围的有效授权，不调用 CLI 或探针。"""
+    def list_cli_bindings(self, *, include_revoked: bool = False) -> tuple[PersistedConversationBinding, ...]:
+        """只读当前运行范围的保存状态，默认只含有效授权，不调用 CLI 或探针。"""
 
-        return self._binding_coordinator.list_bindings()
+        return self._binding_coordinator.list_bindings(include_revoked=include_revoked)
 
     def revoke_cli_binding(
         self, *, contact_id: UUID, binding_id: UUID,

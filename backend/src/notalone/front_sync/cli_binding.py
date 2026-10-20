@@ -213,9 +213,14 @@ class CliBindingCoordinator:
             baseline_at=self._clock(),
         )
 
-    def list_bindings(self) -> tuple[PersistedConversationBinding, ...]:
-        """列出当前运行范围的 active 绑定，包括 CLI 列表消失的会话。"""
+    def list_bindings(self, *, include_revoked: bool = False) -> tuple[PersistedConversationBinding, ...]:
+        """默认只列有效授权；显式查看关联时包含已保存的撤销记录。"""
 
+        if include_revoked:
+            return tuple(self._bindings.list_saved_bindings(
+                owner_id=self._owner_id, channel=self._channel,
+                account_scope=self._account_scope,
+            ))
         return self._active_bindings()
 
     def revoke_binding(

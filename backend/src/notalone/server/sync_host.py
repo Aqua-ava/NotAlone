@@ -78,8 +78,8 @@ class SyncEnginePort(Protocol):
     def list_cli_sessions(self) -> tuple[CliBindingCandidateView, ...]:
         """读取 CLI 可见的私聊会话候选；不要求微信在前台。"""
 
-    def list_cli_bindings(self) -> tuple[PersistedConversationBinding, ...]:
-        """读取当前运行范围的 active 绑定目录。"""
+    def list_cli_bindings(self, *, include_revoked: bool = False) -> tuple[PersistedConversationBinding, ...]:
+        """读取当前运行范围的保存状态；默认只含 active 授权。"""
 
     def revoke_cli_binding(
         self, *, contact_id: UUID, binding_id: UUID,
@@ -153,8 +153,8 @@ class SyncControlPort(Protocol):
     def cli_sessions(self) -> tuple[CliBindingCandidateView, ...]:
         """读取 CLI 可见的私聊会话候选。"""
 
-    def cli_bindings(self) -> tuple[PersistedConversationBinding, ...]:
-        """读取当前运行范围的 active 绑定目录。"""
+    def cli_bindings(self, *, include_revoked: bool = False) -> tuple[PersistedConversationBinding, ...]:
+        """读取当前运行范围的保存状态；默认只含 active 授权。"""
 
     def revoke_cli_binding(
         self, *, contact_id: UUID, binding_id: UUID,
@@ -376,9 +376,9 @@ class SyncHost:
         with self._active_engine():
             return self._engine.list_cli_sessions()
 
-    def cli_bindings(self) -> tuple[PersistedConversationBinding, ...]:
+    def cli_bindings(self, *, include_revoked: bool = False) -> tuple[PersistedConversationBinding, ...]:
         with self._active_engine():
-            return self._engine.list_cli_bindings()
+            return self._engine.list_cli_bindings(include_revoked=include_revoked)
 
     def revoke_cli_binding(
         self, *, contact_id: UUID, binding_id: UUID,

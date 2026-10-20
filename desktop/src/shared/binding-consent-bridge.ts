@@ -7,6 +7,8 @@ export interface BindingSummary {
 export interface BindingConsentState {
   revision: number; scopeRevision: number;
   phase: 'offline' | 'loading' | 'ready' | 'owner-unconfigured' | 'unavailable' | 'failed';
+  // 已保存关联仅用于展示；正文授权始终只认 bindings 的 active 集合。
+  knownBindings?: BindingSummary[];
   sessions: CliSessionSummary[]; bindings: BindingSummary[]; syncEnabled: boolean | null;
   sessionIssue: 'not-requested' | 'unavailable' | 'failed' | null;
   busy: 'confirm' | 'revoke' | null;
@@ -19,6 +21,7 @@ export interface BindingRevocation { scopeRevision: number; contactId: string; b
 export interface BindingConsentBridge {
   getState(): Promise<BindingConsentState>;
   refresh(): Promise<void>;
+  refreshSaved(): Promise<void>;
   confirmSelections(confirmation: BindingConfirmation): Promise<void>;
   revokeBinding(revocation: BindingRevocation): Promise<void>;
   onStateChanged(listener: (state: BindingConsentState) => void): () => void;

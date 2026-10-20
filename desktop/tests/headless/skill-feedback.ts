@@ -20,7 +20,7 @@ export async function skillFeedback(browser: Browser, origin: string) {
       await host.backend.connect();
       let manager = await host.open('manager');
       const open = async () => {
-        await manager.getByRole('button', { name: '联系人与绑定', exact: true }).click();
+        await manager.getByRole('button', { name: '联系人', exact: true }).click();
         await manager.getByRole('button', { name: '选择合成学习甲联系人', exact: true }).click();
         await manager.getByRole('button', { name: 'Skill 待审核', exact: true }).click();
         await manager.getByRole('button', { name: '查看已发布版本', exact: true }).click();

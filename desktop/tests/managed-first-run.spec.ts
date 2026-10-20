@@ -95,7 +95,7 @@ test('独立新安装由公开首启操作准备本机服务，确认本人后�
   await setup.getByLabel('DeepSeek API Key', { exact: true }).fill('synthetic-first-run-not-a-real-key');
   await setup.getByRole('button', { name: '保存 DeepSeek 密钥', exact: true }).click();
   await expect(setup.getByText('DeepSeek · 已配置', { exact: true })).toBeVisible({ timeout: 30_000 });
-  await manager.getByRole('button', { name: '联系人与绑定', exact: true }).click();
+  await manager.getByRole('button', { name: '联系人', exact: true }).click();
   await expect(manager.getByText('已连接', { exact: true })).toBeVisible();
   await expect(manager.getByRole('heading', { name: '还没有联系人', exact: true })).toBeVisible();
   expect((await stat(path.join(userData, 'managed/runtime.env'))).mode & 0o077).toBe(0);

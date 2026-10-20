@@ -6,6 +6,7 @@ export function createBindingConsentBridge(transport: PageTransport): BindingCon
   return Object.freeze({
     getState: (...args: unknown[]) => invoke('bindings:get-state', args),
     refresh: (...args: unknown[]) => invoke('bindings:refresh', args),
+    refreshSaved: (...args: unknown[]) => invoke('bindings:refresh-saved', args),
     confirmSelections: (...args: [BindingConfirmation]) => args.length === 1 ? transport.invoke('bindings:confirm-selections', args[0]) : Promise.reject(new Error('授权操作不可用。')),
     revokeBinding: (...args: [BindingRevocation]) => args.length === 1 ? transport.invoke('bindings:revoke-binding', args[0]) : Promise.reject(new Error('授权操作不可用。')),
     onStateChanged: (listener: (state: BindingConsentState) => void) => {

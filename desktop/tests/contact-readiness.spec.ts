@@ -1,5 +1,6 @@
 import { expect } from '@playwright/test';
 import { test } from './contact-fixture';
+import { openFileImport } from './file-import-navigation';
 
 test.describe('当前本人已就绪的空目录', () => {
   test.use({ databaseMode: 'empty' });
@@ -9,10 +10,11 @@ test.describe('当前本人已就绪的空目录', () => {
     expect((await contactBackend.request('/api/setup/status')).data).toMatchObject({ runtime_owner_configured: true, credentials_configured: false });
     expect((await contactBackend.request('/api/contacts')).data).toEqual({ contacts: [] });
     await expect(manager.getByRole('button', { name: '添加联系人', exact: true })).toHaveCount(0);
-    await manager.getByRole('button', { name: '前往从文件导入' }).click();
+    await expect(manager.getByRole('button', { name: '添加微信联系人', exact: true })).toBeVisible();
+    await openFileImport(manager);
     await expect(manager.getByRole('heading', { name: '从文件导入', exact: true })).toBeVisible();
-    await manager.getByRole('button', { name: '联系人与绑定', exact: true }).click();
-    await manager.getByRole('button', { name: '前往同步设置' }).click();
+    await manager.getByRole('button', { name: '联系人', exact: true }).click();
+    await manager.getByRole('navigation', { name: '管理导航' }).getByRole('button', { name: '同步设置', exact: true }).click();
     await expect(manager.getByRole('heading', { name: '同步设置', exact: true })).toBeVisible();
   });
 });

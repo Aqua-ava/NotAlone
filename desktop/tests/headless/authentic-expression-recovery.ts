@@ -25,7 +25,7 @@ function latestGeneration(pages: RewritePages): Generation {
 }
 
 async function chooseContact(manager: Page, helper: Page, contactId: string) {
-  await manager.getByRole('button', { name: '联系人与绑定', exact: true }).click();
+  await manager.getByRole('button', { name: '联系人', exact: true }).click();
   await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
   await confirmHelperContact(helper, contactId);
 }
