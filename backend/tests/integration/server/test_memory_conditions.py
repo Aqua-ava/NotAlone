@@ -86,6 +86,9 @@ class MemoryConditionsHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
                 "occurrence_start": event_spec.get("occurrence_start"),
                 "occurrence_end": event_spec.get("occurrence_end"),
                 "occurrence_evidence": [position] if event_spec.get("occurrence_start") else [],
+                **({"version": 2, "occurrence_precision": event_spec["occurrence_precision"],
+                    "occurrence_expression": event_spec["occurrence_expression"],
+                    "anchor_message_id": message["message_id"]} if event_spec.get("version") == 2 else {}),
             }
         fact["conditions"] = {"version": 1, "items": [{"text": "出差期间", "evidence": [{"message_id": message["message_id"], "char_start": original.index("出差期间"), "char_end": original.index("出差期间") + 4}]}]}
         facts = [{**fact, **(fact_overrides or {})}, *({**fact, **extra} for extra in additional_fact_overrides)]

@@ -17,6 +17,14 @@ const base = { version:2,stage:'occurred',stage_verified:true,stage_evidence:[po
   occurrence_start:'2029-01-01T00:00:00+08:00',occurrence_end:'2030-01-01T00:00:00+08:00',
   occurrence_verified:true,occurrence_evidence:[position],occurrence_precision:'year',
   occurrence_expression:'去年',anchor_message_id:id };
+test('同一HTTP记忆同时保留日期精度和独立条件来源', () => {
+  const conditions = { version: 1, items: [{ text: '出差期间', evidence: [position], source_supported: true }] };
+  const fields = api.memoryTemporalFields({ valid_at: null, invalid_at: null, event: base, conditions });
+  assert.equal(fields.event.occurrencePrecision, 'year');
+  assert.equal(fields.conditions.items[0].text, '出差期间');
+  assert.equal(fields.conditions.items[0].sourceSupported, true);
+  assert.equal(fields.conditions.items[0].evidence[0].messageId, id);
+});
 test('HTTP事件年/月精度在详情保留当地日历，不展示虚构的零点发生日期', () => {
   const { event } = api.memoryTemporalFields({valid_at:null,invalid_at:null,event:base});
   assert.equal(event.occurrencePrecision,'year');
