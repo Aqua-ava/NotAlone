@@ -67,7 +67,7 @@ async function changingPreference(previous = false) {
   const candidates = async () => {
     const before = globalThis.window;
     try {
-      globalThis.window = { notalone: { styleSamples: {} } };
+      globalThis.window = { notalone: { candidateProvenance: {} } };
       return ports.renderToStaticMarkup(ports.createElement(ports.ReplyCandidates, { replies: { state: await f.bridge.getState() } }));
     } finally { globalThis.window = before; }
   };

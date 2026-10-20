@@ -148,6 +148,8 @@ npm run dev
 
 自动采纳必须带来源、标记为 `auto` 且可撤销；模型置信度与来源支持不等于真实准确率。目前 [维度放行台账](docs/memory-adoption-dimension-release-ledger.md)为空，通过其他门槛的候选仍待确认。
 
+主动收藏表达样本按[ADR-082](architecture/adr/082-retire-explicit-style-samples.md)退役；候选编辑、复制及用户明确管理的长期表达偏好保留。
+
 ## 开发与文档
 
 ```text

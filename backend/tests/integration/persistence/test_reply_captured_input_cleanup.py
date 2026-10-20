@@ -1,4 +1,4 @@
-"""物理来源及样本删除消费A捕获闭包；只使用隔离PG和合成资料。"""
+"""物理来源删除消费 A 捕获闭包；只使用隔离PG和合成资料。"""
 
 from __future__ import annotations
 
@@ -8,7 +8,6 @@ from uuid import uuid4
 import psycopg
 from psycopg.types.json import Jsonb
 
-from notalone.application.style_sample_service import SaveStyleSample
 from notalone.persistence.assistant_candidate_versions import (
     EditAssistantCandidate, PostgresAssistantCandidateVersions,
 )
@@ -124,36 +123,6 @@ class ReplyCapturedInputCleanupTest(unittest.TestCase):
                 ).fetchall(),
             )
 
-    def test_sample_delete_revalidates_actual_captured_edited_version_before_any_erasure(self) -> None:
-        sample = self.fixture.samples.save(self.a.scope, SaveStyleSample(
-            uuid4(), "合成独立旧表达。", "manual",
-        ))
-        candidate, _, _ = self.a._complete(
-            style_references=self.fixture.samples.select_references(self.a.scope),
-        )
-        versions = PostgresAssistantCandidateVersions(support.support.DATABASE_URL)
-        edited = versions.edit(self.a.scope, self.a.session_id, candidate.candidate_id,
-                               EditAssistantCandidate(
-                                   uuid4(), candidate.candidate_id,
-                                   tuple(CandidateMessage(message.message_id, message.text + "合成修改。")
-                                         for message in candidate.message_group),
-                                   "合成这一版要求。",
-                               ))
-        child = self.fixture._prepare(relationship=False)
-        self.fixture._save(child)
-        self.a._discussion("后续未被捕获的独立要求。")
-        changed = [{"message_id": str(message.message_id), "text": message.text + "合成篡改。"}
-                   for message in edited.versions[-1].messages]
-        with psycopg.connect(support.support.DATABASE_URL) as connection:
-            connection.execute("UPDATE public.assistant_candidate_version SET message_group=%s WHERE id=%s",
-                               (Jsonb(changed), edited.default_display_version_id))
-        before = self._stored_bodies()
-
-        with self.assertRaises(ReplyStoreInvariantError):
-            self.fixture.samples.delete(self.a.scope, sample.sample_id)
-
-        self.assertEqual(self.fixture.samples.read(self.a.scope, sample.sample_id), sample)
-        self.assertEqual(self._stored_bodies(), before)
 
     def test_source_delete_revalidates_captured_discussion_and_rolls_back_source_and_message(self) -> None:
         source_id, message_id = self.a._source()

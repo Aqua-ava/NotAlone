@@ -23,10 +23,6 @@ for (const mode of ['reply_to_message', 'initiate_conversation']) {
   test(`C06 ${mode}合法4106码点累计要求经真实SSE明确采用完整保留并经过原预算`, async () => {
     await withMessageOptInFixture(async (f) => {
       const scope = await f.connect();
-      const samplePath = `/api/contacts/${scope.contactId}/style-samples`;
-      const sample = (await f.request(samplePath, { idempotency_key: randomUUID(),
-        text: '合成旧表达：我总是答应，明晚陪同。', origin: { kind: 'manual' } })).sample;
-      assert.deepEqual(sample.source_ids, []);
       await f.bridge.setMode({ ...scope, mode });
       let originalTarget;
       if (mode === 'reply_to_message') {
@@ -70,7 +66,7 @@ for (const mode of ['reply_to_message', 'initiate_conversation']) {
       const combined = await f.bridge.getState(), saved = await f.request(endpoint);
       const observed = await f.fixture.command('observations');
       const capture = { case_id: `${mode}-accumulated-opt-in`, session_id: sessionId,
-        sample_id: sample.sample_id, requirement_codepoints: 4106, actual_model_inputs: observed.payloads,
+        requirement_codepoints: 4106, actual_model_inputs: observed.payloads,
         actual_calls: observed.model_calls, before_notice: before, after_combine: saved,
         request_observations: f.requests, combined_phase: combined.phase, error_code: combined.errorCode,
         control_contract_completed: false, notice_model_delta: 0, deletion_model_delta: null };
@@ -88,25 +84,12 @@ for (const mode of ['reply_to_message', 'initiate_conversation']) {
       assert.equal(observed.payloads.length, 3);
       assert.equal(observed.payloads[2].user_instruction, requirements);
       assert.equal(observed.payloads[2].fidelity_contract.current_intent.text, intent);
-      assert.deepEqual(observed.payloads[2].style_references.map((item) => item.sample_id), [sample.sample_id]);
-      assert(observed.payloads[2].style_references.every((item) => item.weight === 'low' && item.factual_role === 'expression_reference'));
       const budget = saved.turns[2].reply.input_budget;
       assert.equal(budget.allowed, true); assert.equal(budget.measurement_kind, 'exact');
       assert.equal(budget.total_tokens, budget.input_tokens + budget.output_reserve_tokens);
       assert(budget.total_tokens <= budget.context_window_tokens);
-      const independent = (await f.request(samplePath, { idempotency_key: randomUUID(),
-        text: '新生成之后独立主动保存的合成表达。', origin: { kind: 'manual' } })).sample;
-      await f.request(`${samplePath}/${sample.sample_id}`, undefined, 'DELETE');
-      await f.bridge.readSavedSession(scope);
-      const erased = await f.request(endpoint);
-      assert.equal(erased.current_input_version_id, null);
-      assert(erased.turns.every((turn) => turn.state === 'redacted' && turn.input === null && turn.reply === null));
-      assert.equal((await f.bridge.getState()).result, null);
-      await assert.rejects(f.request(endpoint + '/continue', originalSubmission));
-      assert.deepEqual((await f.request(`${samplePath}/${independent.sample_id}`)).sample, independent);
-      assert.equal((await f.fixture.command('observations')).model_calls, 3);
-      capture.deletion_model_delta = 0; capture.control_contract_completed = true;
-      capture.deleted_projection = erased; capture.input_budget = budget;
+      capture.control_contract_completed = true;
+      capture.input_budget = budget;
     });
   });
 }

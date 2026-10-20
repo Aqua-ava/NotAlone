@@ -1,5 +1,7 @@
 # ADR-071：区分错误纠正与状态变化的历史生成资格
 
+> 后续局部替代（2026-10-20）：[ADR-082](082-retire-explicit-style-samples.md)取消主动收藏表达样本及其使用、独立留存和关联生命周期要求；下文涉及样本的内容仅保留为历史。其他决定及原验收范围不因此改变。
+
 > 状态：已采纳。2026-10-18 用户明确确认；实现与验收见[任务](../../.scratch/memory-history-eligibility/issues/01-history-generation-eligibility.md)。
 > 后续修订：2026-10-20 的 [ADR-080](080-unified-memory-list-and-retired-exclusion.md) 取消状态变化旧版的生成例外；全部失效记忆只供查看。下文保留原决策经过。
 > 局部修订：ADR-048 及现行规格中“修正后旧版可作历史参考”的宽泛许可；ADR-028 的当前事实检索继续保持，明确变化的历史例外须额外满足本决定。

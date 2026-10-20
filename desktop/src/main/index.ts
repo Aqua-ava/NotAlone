@@ -21,11 +21,11 @@ import { interruptAssistantGeneration, recoverAssistantGenerationReceipt } from 
 import { installDesktopControls, installWindowActivation } from './desktop-controls';
 import { installContactSessionBridge } from './contacts/bridge';
 import { installReplyBridge } from './reply/bridge';
-import { installStyleSampleBridge } from './style-samples/bridge';
+import { installCandidateProvenanceBridge } from './candidate-provenance/bridge';
 import { installExpressionPreferenceBridge } from './expression-preferences/bridge';
 import { expressionPreferenceDeletion } from './expression-preferences/deletion';
 import { installSkillLearningBridge } from './skill-learning/bridge';
-import { coordinateSkillLearningDeletion, coordinateSkillLearningSampleDeletion, coordinateSkillLearningSourceDeletion } from './skill-learning/deletion';
+import { coordinateSkillLearningDeletion, coordinateSkillLearningSourceDeletion } from './skill-learning/deletion';
 import { installMemoryBridge } from './memory/bridge';
 import { installSourceDeletionBridge } from './sources/bridge';
 import { installBindingConsentBridge } from './bindings/bridge';
@@ -111,26 +111,25 @@ void app.whenReady().then(async () => {
   foreground.setSyncControlState(sync.getState());
   const replies = installReplyBridge(commands, backend, contacts, () => foreground.getGenerationBlock());
   coordinateOwnerContextChanges(memory, replies);
-  const styleSamples = installStyleSampleBridge(commands, backend, contacts, replies);
+  const candidateProvenance = installCandidateProvenanceBridge(commands, backend, contacts, replies);
   const skillLearning = installSkillLearningBridge(commands, backend, contacts);
-  coordinateSkillLearningSampleDeletion(skillLearning, styleSamples);
   const preferences = installExpressionPreferenceBridge(commands, backend, contacts,
     coordinateSkillLearningDeletion(skillLearning, memory, replies,
-      expressionPreferenceDeletion(traces, replies, styleSamples)));
+      expressionPreferenceDeletion(traces, replies, candidateProvenance)));
   foreground.onStateChanged(() => replies.refreshGenerationEligibility());
   const sources = installSourceDeletionBridge(commands, backend, contacts, async (contactId) => {
     traces.invalidateSource();
     skillLearning.invalidate();
-    const styleChecking = styleSamples.invalidateSource(contactId);
+    candidateProvenance.invalidateSource();
     const checking = replies.revalidateDeletedSource(contactId);
     const memoryChecking = memory.revalidateDeletedSource(contactId);
     const preferenceChecking = preferences.invalidateSource(contactId);
-    await Promise.all([styleChecking, checking, memoryChecking, preferenceChecking]);
+    await Promise.all([checking, memoryChecking, preferenceChecking]);
   });
   coordinateSkillLearningSourceDeletion(skillLearning, sources);
   sources.onDeletion((phase) => memory.sourceDeletionChanged(phase));
   installElectronCandidateCopy(windows, new CandidateCopyController(backend, contacts, replies,
-    (selection, text) => styleSamples.recordCopied(selection, text)));
+    (selection, text) => candidateProvenance.recordCopied(selection, text)));
   backend.setConnectionChangePreparation(() => replies.prepareGenerationConnectionChange());
   installSetupBridge(windows, new SetupController(backend));
   installBackendBridge(windows, backend, () => app.quit());

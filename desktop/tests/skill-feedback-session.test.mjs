@@ -58,7 +58,7 @@ test('隐藏联系人恢复重新读取政策提醒与实际视图，同时保�
   assert.deepEqual(state.result.usedSkill.executionView, { policyRevision: 3, methodIds: [methodId], sha256: 'a'.repeat(64) });
   assert.deepEqual(state.result.basisChanges, [{ evidenceId: versionId, kind: 'reply_skill', reason: 'skill_policy_changed' }]);
   const previousWindow = globalThis.window;
-  globalThis.window = { notalone: { styleSamples: {}, expressionPreferences: {} } };
+  globalThis.window = { notalone: { candidateProvenance: {}, expressionPreferences: {} } };
   try {
     const html = ports.renderToStaticMarkup(ports.createElement(ports.ReplyCandidates, { replies: { state, error: '' } }));
     assert.match(html, /甲在停用前编辑的候选/);

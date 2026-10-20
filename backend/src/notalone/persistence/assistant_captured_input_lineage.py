@@ -12,9 +12,9 @@ from notalone.persistence.assistant_discussion_context import (
 )
 from notalone.persistence.assistant_session_store import _partition_assistant_dependencies, _reply_dependencies
 from notalone.persistence.reply_discussion_dependencies import (
-    CapturedReplyDiscussionUse, reply_style_sample_dependencies,
+    CapturedReplyDiscussionUse,
 )
-from notalone.persistence.style_sample_store import captured_reply_sources
+from notalone.persistence.reply_sources import captured_reply_sources
 from notalone.reply.assistant_discussion import (
     DiscussionDependencies, DiscussionIdentity, DiscussionSnapshot,
 )
@@ -76,11 +76,9 @@ def _dependencies(cursor: Any, scope: ContactScope, row: dict[str, Any]) -> Disc
         return inherited
     sources.update(_reply_dependencies(cursor, scope, request_id))
     sources.update(captured_reply_sources(cursor, owner_id=scope.owner_id, request_id=request_id))
-    # C唯一codec和样本依赖图；删除身份复验不使用样本来源可用性门禁。
+    # 删除身份复验沿唯一 codec 保留已捕获的来源依赖。
     typed = _partition_assistant_dependencies(cursor, scope, sources, require_available=False)
-    samples = (set(inherited.style_sample_ids) | set(typed.style_sample_ids)
-               | set(reply_style_sample_dependencies(cursor, scope, request_id, require_available=False)))
-    return DiscussionDependencies(typed.source_ids, tuple(sorted(samples)))
+    return DiscussionDependencies(typed.source_ids)
 
 
 def _require_candidate_identity(cursor: Any, scope: ContactScope, row: dict[str, Any],

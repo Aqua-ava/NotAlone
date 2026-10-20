@@ -59,22 +59,14 @@ test('公开新开会话、刷新目录、返回旧会话后仍能展开原候�
   assert.equal((await f.bridge.getEvidenceState()).phase, 'idle');
 });
 
-test('本轮参考读取冻结表达样本，旧快照保持未知，重新读取清除旧内容', async () => {
+test('本轮参考忽略历史遗留样本字段，不恢复已退役正文', async () => {
   const f = await fixture(); await f.restore();
-  const sampleId = randomUUID();
-  f.records.evidence.style_references = [{ sample_id: sampleId, text: '合成当时保存的简短说法。' }];
+  f.records.evidence.style_references = [{ sample_id: randomUUID(), text: '已退役的合成样本文字。' }];
   await f.bridge.loadEvidence(f.selection);
-  assert.deepEqual((await f.bridge.getEvidenceState()).styleReferences,
-    [{ sampleId, text: '合成当时保存的简短说法。' }]);
-  await f.bridge.closeEvidence(f.selection);
-  assert.equal((await f.bridge.getEvidenceState()).styleReferences, undefined);
-  delete f.records.evidence.style_references;
-  await f.bridge.loadEvidence(f.selection);
-  assert.equal((await f.bridge.getEvidenceState()).styleReferences, null);
-  f.records.evidence.style_references = [{ sample_id: sampleId, text: 'a'.repeat(601) }];
-  await f.bridge.loadEvidence(f.selection);
-  assert.equal((await f.bridge.getEvidenceState()).phase, 'failed');
-  assert.equal((await f.bridge.getEvidenceState()).styleReferences, undefined);
+  const state = await f.bridge.getEvidenceState();
+  assert.equal(state.phase, 'ready');
+  assert.equal(Object.hasOwn(state, 'styleReferences'), false);
+  assert.doesNotMatch(JSON.stringify(state), /已退役的合成样本文字/);
 });
 
 test('恢复依据仍拒绝其他联系人、过期范围、请求和候选；失败仅读取原快照', async () => {
@@ -146,8 +138,6 @@ test('本次参考默认收起，展示冻结材料与来源，切换请求后�
     document: { scenario_id: scenarioId, version_id: versionId, title: '合成冻结安排', hint: '只反映当时安排',
       system_generated: true, updated_at: '2026-10-20T01:00:00Z', organization_generation: 3, paragraph_range: [0, 1],
       paragraphs: [{ text: '合成冻结主题正文。', references: [reference] }] } }];
-  const styleSampleId = randomUUID();
-  f.records.evidence.style_references = [{ sample_id: styleSampleId, text: '合成冻结说法：好呀，晚点聊。' }];
   for (const text of ['合成其他候选的参考消息。', '合成未引用的背景消息。']) {
     f.records.evidence.evidence.push({ ...f.records.evidence.evidence[0], evidence_id: randomUUID(), kind: 'message', text, cited: false });
   }
@@ -175,18 +165,16 @@ test('本次参考默认收起，展示冻结材料与来源，切换请求后�
   await page.setContent('<div id="root"></div>');
   await page.addScriptTag({ content: bundled.outputFiles[0].text });
   const candidate = (await f.bridge.getState()).savedSession.turns[0].reply.candidates[0];
-  const props = { selection: f.selection, candidates: [candidate], styleSampleIds: [styleSampleId], waiting: false };
+  const props = { selection: f.selection, candidates: [candidate], waiting: false };
   await page.evaluate(props => window.renderEvidence(props), { ...props, waiting: true });
   await expect(page.getByRole('button', { name: '本次参考', exact: true })).toHaveAttribute('aria-expanded', 'false');
   await page.evaluate(props => window.renderEvidence(props), props);
   const toggle = page.getByRole('button', { name: '本次参考', exact: true });
   await expect(toggle).toContainText('聊天 2 条');
   await expect(toggle).toContainText('关系资料 3 条');
-  await expect(toggle).toContainText('表达样本 1 条');
   await expect(page.getByRole('region', { name: '本次参考内容' })).toHaveCount(0);
   await toggle.click();
   const evidence = page.getByRole('region', { name: '本次参考内容', exact: true });
-  await expect(evidence.getByText('合成冻结说法：好呀，晚点聊。', { exact: true })).toBeVisible();
   await expect(evidence.getByText('合成未引用的背景消息。', { exact: true })).toBeVisible();
   await expect(evidence.getByText('合成生成时L1背景。', { exact: true }).first()).toBeVisible();
   await expect(evidence.getByText('以下材料实际提供给了模型，不代表每条候选都引用了每一项。')).toBeVisible();
@@ -209,22 +197,17 @@ test('本次参考默认收起，展示冻结材料与来源，切换请求后�
     await expect(metadata.getByText('相关来源存在未解决矛盾，当前主张仍有不确定性，不能当作已确认现状。', { exact: true })).toBeVisible();
   }
   await expect(evidence.getByRole('button', { name: /排除|重新生成|调整/ })).toHaveCount(0);
-  assert.equal(f.calls.some(r => r.path.includes('/layered-context') || r.path.includes('/style-samples')), false);
+  assert.equal(f.calls.some(r => r.path.includes('/layered-context')), false);
   await toggle.click();
   await expect(evidence).toHaveCount(0);
-  delete f.records.evidence.style_references;
   await page.evaluate(props => window.renderEvidence(props), { ...props, waiting: true });
   await expect(toggle).toContainText('正在读取本次参考');
   await page.evaluate(props => window.renderEvidence(props), props);
-  await expect(toggle).toContainText('表达样本 1 条');
   await toggle.click();
-  await expect(evidence.getByText('本次使用了 1 条表达样本，旧快照未保存原文，不补填当前样本。')).toBeVisible();
-  await expect(evidence.getByText('合成冻结说法：好呀，晚点聊。', { exact: true })).toHaveCount(0);
   await page.evaluate(props => window.renderEvidence(props), { ...props, selection: { ...f.selection, replyRequestId: randomUUID() } });
   await expect(toggle).toContainText('本次参考读取失败');
   await expect(toggle).toHaveAttribute('aria-expanded', 'false');
   await toggle.click();
-  await expect(page.getByText('合成冻结说法：好呀，晚点聊。', { exact: true })).toHaveCount(0);
   await expect(page.getByRole('alert')).toContainText('本次参考读取失败');
 });
 

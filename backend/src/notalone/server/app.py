@@ -36,9 +36,6 @@ from notalone.application.reply_request import (
 )
 from notalone.application.assistant_message_adoption import parse_assistant_reply_request
 from notalone.application.source_service import SourceService
-from notalone.application.style_sample_service import StyleSampleService
-from notalone.persistence.style_sample_store import PostgresStyleSampleStore
-from notalone.server.style_samples import handle_style_samples
 from notalone.application.expression_preference_service import ExpressionPreferenceService
 from notalone.persistence.expression_preferences import PostgresExpressionPreferenceStore
 from notalone.server.expression_preferences import handle_expression_preferences
@@ -227,7 +224,6 @@ class BackendApp:
         "_setup_service",
         "_skill_service",
         "_skill_learning",
-        "_style_samples",
         "_expression_preferences",
         "_sync_control",
         "_task_host",
@@ -262,7 +258,6 @@ class BackendApp:
         skill_learning: SkillLearningService | None = None,
         ledger_service: LedgerService | None = None,
         setup_service: SetupService | None = None,
-        style_samples: StyleSampleService | None = None,
         expression_preferences: ExpressionPreferenceService | None = None,
         runtime_shutdown: Callable[[], None] | None = None,
     ) -> None:
@@ -283,7 +278,6 @@ class BackendApp:
         self._assistant_sessions = assistant_sessions
         self._candidate_versions = candidate_versions
         self._reply_evidence = reply_evidence
-        self._style_samples = style_samples
         self._expression_preferences = expression_preferences
         self._runtime_shutdown = runtime_shutdown
         self._runtime_shutdown_lock = threading.Lock()
@@ -517,12 +511,6 @@ class BackendApp:
             status, payload = handle_skill_learning(self._skill_learning, owner_id=self._owner_id,
                                                     method=method_upper, path=path_value, body=request_body)
             return _json_response(status, payload, headers={"Cache-Control": "no-store"})
-        if path_value.startswith("/api/contacts/") and "/style-samples" in path_value:
-            if self._style_samples is None:
-                return _json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "style_sample_unavailable"})
-            status, payload = handle_style_samples(self._style_samples, owner_id=self._owner_id,
-                                                   method=method_upper, path=path_value, body=request_body)
-            return _json_response(status, payload)
         if path_value.startswith("/api/contacts/") and path_value.endswith("/messages"):
             return self._handle_messages(
                 method=method_upper,
@@ -2697,7 +2685,6 @@ def create_app(
     skill_learning: SkillLearningService | None = None,
     ledger_service: LedgerService | None = None,
     setup_service: SetupService | None = None,
-    style_samples: StyleSampleService | None = None,
     expression_preferences: ExpressionPreferenceService | None = None,
     follow_smoke: FollowSmokeController | None = None,
     runtime_shutdown: Callable[[], None] | None = None,
@@ -2741,7 +2728,6 @@ def create_app(
         candidate_versions=candidate_versions or PostgresAssistantCandidateVersions(database_url),
         reply_evidence=reply_evidence
         or ReplyEvidenceService(PostgresReplyStore(database_url)),
-        style_samples=style_samples or StyleSampleService(PostgresStyleSampleStore(database_url)),
         expression_preferences=expression_preferences or ExpressionPreferenceService(
             PostgresExpressionPreferenceStore(database_url),
         ),
@@ -3176,7 +3162,6 @@ def _reply_payload(reply: ReplyGenerated) -> dict[str, object]:
             "evidence_ids": [
                 str(evidence) for evidence in reply.context_receipt.evidence_ids
             ],
-            "style_sample_ids": [str(identifier) for identifier in reply.context_receipt.style_sample_ids],
             "expression_preference_ids": [str(identifier) for identifier in reply.context_receipt.expression_preference_ids],
             "expression_preferences": [
                 preference_receipt_payload(item) for item in reply.context_receipt.expression_preferences

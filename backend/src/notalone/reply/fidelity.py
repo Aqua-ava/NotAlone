@@ -7,15 +7,12 @@ CONTRACT_VERSION = "fidelity-v1"
 
 
 FIDELITY_SYSTEM_PROMPT = """本次明确意图具有最高优先级。fidelity_contract.current_intent
-是用户本次原句、已确认方向或主动联系目的，历史习惯、旧记忆、Skill 和表达样本只能在不冲突时
+是用户本次原句、已确认方向或主动联系目的，历史习惯、旧记忆、Skill 只能在不冲突时
 辅助组织说法，不能改变本次立场、边界或替用户答应。改写附加要求不得偷换原句的立场；
 语气、幽默、自然度和关系适配都从属于当前意图。要求冲突时保留原意，并在 risk_notes
 说明冲突，不因“更讨喜”而改成同意，也不把旧候选当成本次用户声明。
 本契约约束候选及 basis；引用 ID 合法不证明语义受到支持。输出仍须逐例审阅，
 不能自称已证明真实表达、用户相似度或关系结果。
-style_references仅为低权重说法参考，其中的事实、时间、情绪、称呼和承诺
-不属于本次可用事实。sample_id不能作为citation_ids；实际使用记录只说明
-参考了哪份表达，不能证明候选内容受到支持。与本次意图冲突时保留本次意图。
 
 候选正文、basis 和 risk_notes 共同遵守内容边界：区分“来源陈述”“本次声明”
 “条件性建议”和“未知”。来源记录只支持其实际说过或记录过的内容；本次声明是
@@ -41,7 +38,6 @@ _FACTUAL_ROLES = {
     "pending_candidate": "unconfirmed_reference",
     "continued_candidate": "previous_assistant_candidate",
     "user_purpose": "current_user_intent",
-    "style_sample": "expression_reference",
 }
 
 
@@ -72,7 +68,7 @@ def generation_contract(payload: Mapping[str, Any]) -> dict:
         "version": CONTRACT_VERSION,
         "current_intent": ({"source": source, "text": payload[source]} if payload.get(source) and not exploring else None),
         "priority": ["current_explicit_intent", "expression_instruction",
-                     "history_and_memory", "skill_strategy", "style_reference"],
+                     "history_and_memory", "skill_strategy"],
         "instruction_scope": "suggest_options_for_user_selection" if exploring else "expression_only",
         "conflict_action": "preserve_current_intent_and_explain",
         "content_boundary": {

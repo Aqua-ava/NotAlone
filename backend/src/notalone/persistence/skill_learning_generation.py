@@ -36,11 +36,6 @@ def capture_generation(connection, scope: ContactScope, dependencies) -> dict:
         'WHERE owner_id=%s AND id=ANY(%s::uuid[])',
         (scope.owner_id, scope.contact_id, identifiers, scope.owner_id, identifiers),
     ).fetchall()
-    styles = connection.execute(
-        'SELECT id,to_jsonb(sample) FROM public.style_sample AS sample '
-        'WHERE owner_id=%s AND contact_id=%s AND id=ANY(%s::uuid[])',
-        (scope.owner_id, scope.contact_id, identifiers),
-    ).fetchall()
     preferences = connection.execute(
         'SELECT id,to_jsonb(preference) FROM public.expression_preference AS preference '
         'WHERE owner_id=%s AND (contact_id IS NULL OR contact_id=%s) AND id=ANY(%s::uuid[])',
@@ -50,7 +45,6 @@ def capture_generation(connection, scope: ContactScope, dependencies) -> dict:
             'messages': snapshot, 'sources': {str(row[0]): content_digest(row[1:]) for row in rows},
             'observations': {str(row[0]): content_digest(row[1:]) for row in observations},
             'memories': {str(row[0]): content_digest(row[1]) for row in memories},
-            'styles': {str(row[0]): content_digest(row[1]) for row in styles},
             'preferences': {str(row[0]): content_digest(row[1]) for row in preferences}}
 
 
@@ -61,6 +55,6 @@ def generation_current(connection, scope: ContactScope, frozen: dict) -> bool:
         with connection.cursor(row_factory=dict_row) as cursor:
             validate_frozen_snapshot(cursor, owner_id=scope.owner_id, evidence=frozen['messages'])
         current = capture_generation(connection, scope, [UUID(value) for value in frozen['dependencies']])
-        return current == frozen
+        return current == {key: value for key, value in frozen.items() if key != 'styles'} and not frozen.get('styles')
     except (KeyError, TypeError, ValueError, MemoryCorrectionConflictError):
         return False

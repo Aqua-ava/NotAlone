@@ -9,7 +9,7 @@ from notalone.application.assistant_session_service import (
     AssistantSessionNotFound,
     AssistantSessionPersistenceError,
 )
-from notalone.persistence.style_sample_store import invalidate_reply_keys
+from notalone.persistence.reply_sources import invalidate_reply_keys
 from notalone.scopes import ContactScope
 
 
@@ -20,7 +20,7 @@ def delete_assistant_session(
 
     请求键是尚未提交候选时的关联依据；仅按 reply_request_id 清理会遗留
     running/failed 请求，或让 reserve 后迟到的 start 重新写入旧正文。
-    表达样本按 ADR-044 独立留存，不沿会话关联删除来源与关系资料。
+    不沿会话关联删除来源与关系资料。
     """
 
     parameters = {
@@ -125,8 +125,6 @@ def delete_assistant_session(
         "ON CONFLICT (owner_id, contact_id, idempotency_key) DO NOTHING",
         (scope.owner_id, scope.contact_id, turn_ids),
     )
-    from notalone.persistence.style_sample_generation import preserve_sample_generation_dependencies
-    preserve_sample_generation_dependencies(connection, scope, request_ids)
     invalidate_reply_keys(connection, owner_id=scope.owner_id, request_ids=request_ids)
     from notalone.persistence.assistant_session_store import erase_assistant_source_turns
     erase_assistant_source_turns(

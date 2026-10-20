@@ -144,7 +144,6 @@ export interface ReplyResult {
   candidates: EditableReplyCandidate[];
   contextEvidenceIds: string[];
   basisChanges?: ReplyBasisChange[];
-  styleSampleIds?: string[];
   expressionPreferenceIds?: string[];
   expressionPreferences?: ExpressionPreferenceReceipt[];
   usedSkill?: ReplyUsedSkill | null;

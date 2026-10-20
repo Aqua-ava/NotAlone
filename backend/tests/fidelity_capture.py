@@ -53,7 +53,7 @@ def capture_report(capture: dict, case_spec: dict) -> dict:
             "current_message": payload.get("draft_text", payload.get("current_text")),
             "available_facts": [{key: item[key] for key in ("kind", "text", "status", "factual_role") if key in item}
                                 for item in evidence if item["kind"] not in
-                                ("user_draft", "user_purpose", "continued_candidate", "pending_candidate", "style_sample")],
+                                ("user_draft", "user_purpose", "continued_candidate", "pending_candidate")],
             "unknowns": expectation.get("unknowns", []),
             "allowed_changes": [payload["fidelity_contract"]["instruction_scope"]],
             "forbidden_additions": expectation.get("forbidden_additions", []),

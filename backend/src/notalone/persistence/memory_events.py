@@ -101,9 +101,8 @@ def erase_event_version_dependencies(connection: Any, *, owner_id: UUID, removed
         from notalone.persistence.extraction_trace import erase_record_traces, erase_source_traces
         from notalone.persistence.memory_correction import erase_correction_dependencies
         from notalone.persistence.reply_cleanup import delete_source_replies
-        from notalone.persistence.style_sample_store import erase_source_style_samples
+
         erase_source_traces(connection, owner_id=owner_id, removed_ids=affected_ids)
-        erase_source_style_samples(connection, owner_id=owner_id, removed_ids=affected_ids)
         contacts = {row["contact_id"] for row in candidates if row["id"] in candidate_ids}
         contacts.update(row["contact_id"] for row in affected["confirmed_memory"])
         for table, rows in affected.items():

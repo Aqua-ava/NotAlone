@@ -56,9 +56,9 @@ function LayeredMaterials({ context, reads }: { context?: ReplyLayeredContext | 
   </>;
 }
 
-export function ReplyReferences({ evidence, selection, candidates, styleSampleIds, expressionPreferences, usedSkill, waiting }: {
+export function ReplyReferences({ evidence, selection, candidates, expressionPreferences, usedSkill, waiting }: {
   evidence: ReturnType<typeof useReplyEvidence>; selection: ReplyCandidateSelection; candidates: ReplyCandidate[];
-  styleSampleIds?: string[]; expressionPreferences?: ExpressionPreferenceReceipt[]; usedSkill?: ReplyUsedSkill | null; waiting: boolean;
+  expressionPreferences?: ExpressionPreferenceReceipt[]; usedSkill?: ReplyUsedSkill | null; waiting: boolean;
 }) {
   const { state } = evidence;
   const identity = JSON.stringify([selection.contactId, selection.scopeRevision, selection.replyRequestId, selection.candidateId]);
@@ -88,11 +88,9 @@ export function ReplyReferences({ evidence, selection, candidates, styleSampleId
   const relationCount = relationship.length + (context?.profileEntries.length ?? 0) + successfulReads(reads).reduce((n, read) => n + read.document.paragraphs.length, 0);
   const ownerCount = owner.length + (ownerContext?.profileEntries.length ?? 0) + successfulReads(ownerReads).reduce((n, read) => n + read.document.paragraphs.length, 0);
   const directories = [...(context?.directory ?? []).map(entry => ({ ...entry, scope: '联系人', reads })), ...(ownerContext?.directory ?? []).map(entry => ({ ...entry, scope: '本人', reads: ownerReads }))];
-  const samples = ready ? state.styleReferences : undefined;
-  const sampleCount = ready ? (samples?.length ?? styleSampleIds?.length ?? 0) : 0;
   const preferences = ready ? expressionPreferences ?? [] : [];
   const skill = ready ? usedSkill : undefined;
-  const summary = [chat.length && `聊天 ${chat.length} 条`, relationCount && `关系资料 ${relationCount} 条`, ownerCount && `本人资料 ${ownerCount} 条`, directories.length && `主题目录 ${directories.length} 项`, sampleCount && `表达样本 ${sampleCount} 条`, preferences.length && `表达偏好 ${preferences.length} 条`, skill && '回复方法 1 项', inputs.length && `本次输入 ${inputs.length} 条`].filter(Boolean).join(' · ');
+  const summary = [chat.length && `聊天 ${chat.length} 条`, relationCount && `关系资料 ${relationCount} 条`, ownerCount && `本人资料 ${ownerCount} 条`, directories.length && `主题目录 ${directories.length} 项`, preferences.length && `表达偏好 ${preferences.length} 条`, skill && '回复方法 1 项', inputs.length && `本次输入 ${inputs.length} 条`].filter(Boolean).join(' · ');
   const failed = failureIdentity === identity || (matches && state.phase === 'failed');
   const missing = matches && state.phase === 'missing';
   const status = ready ? summary || '本次快照没有可展示的材料' : failed ? '本次参考读取失败' : missing ? '本次参考不存在或已删除' : '正在读取本次参考…';
@@ -110,13 +108,11 @@ export function ReplyReferences({ evidence, selection, candidates, styleSampleId
         <Group title="关系资料" count={relationCount}>{relationship.map(item => <Material key={item.evidenceId} item={item} />)}<LayeredMaterials context={context} reads={reads} /></Group>
         <Group title="本人资料" count={ownerCount}>{owner.map(item => <Material key={item.evidenceId} item={item} />)}<LayeredMaterials context={ownerContext} reads={ownerReads} /></Group>
         {directories.length > 0 && <section className="reference-group" aria-label="主题目录"><h4>主题目录<span>{directories.length} 项</span></h4>{directories.map((entry, index) => <article className="reference-card" key={index}><strong>{entry.title}</strong><p>{entry.hint}</p><p className="reference-help">{entry.scope}资料 · {successfulReads(entry.reads).some(read => read.scenarioId === entry.scenarioId) ? '本次已读正文见上方资料' : '仅提供目录，未读正文'}</p></article>)}</section>}
-        <Group title="表达样本" count={sampleCount}>{samples ? samples.map(sample => <article className="reference-card" key={sample.sampleId}><p className="reference-text">{sample.text}</p></article>) : <p>本次使用了 {sampleCount} 条表达样本，旧快照未保存原文，不补填当前样本。</p>}<p className="reference-help">只参考说法，不作为关系事实或已发送证明。</p></Group>
-        {samples == null && styleSampleIds === undefined && <p className="reference-help">本次快照未记录表达样本，无法确认是否使用。</p>}
         <Group title="表达偏好" count={preferences.length}>{preferences.map(preference => <article className="reference-card" key={preference.preferenceId}><p className="reference-text">{preference.text}</p></article>)}</Group>
         <Group title="回复方法" count={skill ? 1 : 0}>{skill && <article className="reference-card"><p>{skill.name}</p>{skill.loadState === 'resource_failed' && <p className="reference-caution">部分资源读取失败，不能视为完整加载。</p>}</article>}</Group>
         {usedSkill === undefined && <p className="reference-help">本次快照未记录回复方法，无法确认是否使用。</p>}
         <Group title="本次输入" count={inputs.length}>{inputs.map(item => <Material key={item.evidenceId} item={item} />)}</Group>
-        <details className="reference-technical evidence-technical"><summary>检索过程与技术详情</summary><p>本轮 {candidates.length} 条候选共用这份生成材料。</p><p>请求：{selection.replyRequestId}</p><p>表达样本：{samples == null ? '旧快照正文未知' : `${samples.length} 条已保存正文`}</p><p>系统整理资料：联系人 {state.layeredStatus ?? '未记录'}；本人 {state.ownerLayeredStatus ?? '未记录'}。</p><ReplyEvidenceTechnicalDetails state={state} /></details>
+        <details className="reference-technical evidence-technical"><summary>检索过程与技术详情</summary><p>本轮 {candidates.length} 条候选共用这份生成材料。</p><p>请求：{selection.replyRequestId}</p><p>系统整理资料：联系人 {state.layeredStatus ?? '未记录'}；本人 {state.ownerLayeredStatus ?? '未记录'}。</p><ReplyEvidenceTechnicalDetails state={state} /></details>
       </>}
     </section>}
   </div>;

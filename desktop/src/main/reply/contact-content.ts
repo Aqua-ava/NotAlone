@@ -112,8 +112,7 @@ export async function validateContactInput(backend: BackendHost, contactId: stri
       const input = await interruptedReplyInput(backend, turn, { contactId, displayName: contactDisplayName }, signal, current);
       if (!current()) throw new Error('恢复范围已变化。');
       update.result = { replyRequestId: turn.reply.replyRequestId, assistantSessionId: saved.sessionId!,
-        inputVersionId: turn.inputVersionId, input, continuation: content.result.continuation, contextEvidenceIds: turn.reply.contextEvidenceIds,
-        styleSampleIds: turn.reply.styleSampleIds, expressionPreferenceIds: turn.reply.expressionPreferenceIds,
+        inputVersionId: turn.inputVersionId, input, continuation: content.result.continuation, contextEvidenceIds: turn.reply.contextEvidenceIds, expressionPreferenceIds: turn.reply.expressionPreferenceIds,
         expressionPreferences: turn.reply.expressionPreferences,
         usedSkill: turn.reply.usedSkill, inputBudget: turn.reply.inputBudget,
         basisChanges: turn.basisChanges ?? turn.reply.basisChanges,

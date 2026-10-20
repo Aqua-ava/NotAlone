@@ -21,7 +21,7 @@ async function generate(usedSkill, disabled = false) {
   const result = { session_id: sessionId, state: 'completed', input_version_id: randomUUID(),
     reply_request_id: randomUUID(), candidates: [{ candidate_id: randomUUID(), text: '本次合成明确拒绝。',
       basis: '仅本次明确意图。', citation_ids: [], risk_notes: [] }],
-    context_receipt: { evidence_ids: [], style_sample_ids: [] },
+    context_receipt: { evidence_ids: [], },
     ...(usedSkill === undefined ? {} : { used_skill: usedSkill }) };
   const backend = {
     getConnectionGeneration: () => 7,

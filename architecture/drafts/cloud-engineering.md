@@ -1,5 +1,7 @@
 # 云端工程结构与认证设备（草案）
 
+> 后续修订（2026-10-20）：主动收藏表达样本及其生成参考按 [ADR-082](../adr/082-retire-explicit-style-samples.md)退役；本文相关历史方案不再构成实施要求。当前意图优先、长期表达偏好及其他已采纳约束分别保留。
+
 > 状态：草案。对应改进建议 H4（云端模块划分与客户端形态）、H5（认证与设备绑定）。其中 H4 的模块清单与端云职责、H5 的最小认证方案为云端服务落地前的必须决策；API 契约与设备流程待实现时细化。
 > 适用范围：本文保留历史云端探索，仅用于将来另行确认的云端方案。当前独立版以 [ADR-061](../adr/061-standalone-local-app-onboarding-and-updates.md)、[ADR-065](../adr/065-manual-input-standalone-first-release.md)及 [ADR-066](../adr/066-in-place-schema-updates-and-database-reuse.md)为准；下文云端 v1、端云职责及端侧不持模型密钥的设想不是本机独立版的实现要求。
 

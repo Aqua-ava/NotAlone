@@ -109,14 +109,10 @@ class ContactDeletionTest(unittest.TestCase):
         kept_manual = self._record('owner_memory', mode='any', source_ids=[self.owner])
         root, reply_binding = self._request()
         any_root, any_binding = self._request()
-        sample, independent_sample = uuid4(), uuid4()
         with psycopg.connect(self.url) as connection:
             for request, memory, binding in ((root, erased[1], reply_binding), (any_root, erased[-1], any_binding)):
                 connection.execute("INSERT INTO public.reply_context_evidence(reply_request_id,evidence_id,owner_id,contact_id,conversation_binding_id,ordinal,kind,evidence_text,source_ids) VALUES(%s,%s,%s,%s,%s,0,'owner_memory','合成本人资料副本','[]')",
                                    (request, memory, self.owner, self.other, binding))
-            for identifier, sources in ((sample, [source, self.context]), (independent_sample, [])):
-                connection.execute("INSERT INTO public.style_sample(id,owner_id,contact_id,save_key,final_text,origin_kind,source_ids) VALUES(%s,%s,%s,%s,'合成表达副本','manual',%s)",
-                                   (identifier, self.owner, self.other, uuid4(), sources))
         independent, _ = self._request()
         self.assertTrue(delete_contact(self.url, self.scope))
         with psycopg.connect(self.url) as connection:
@@ -128,8 +124,6 @@ class ContactDeletionTest(unittest.TestCase):
             self.assertIsNone(connection.execute('SELECT id FROM public.reply_request WHERE id=%s', (root,)).fetchone())
             self.assertIsNone(connection.execute('SELECT id FROM public.reply_request WHERE id=%s', (any_root,)).fetchone())
             self.assertIsNotNone(connection.execute('SELECT id FROM public.reply_request WHERE id=%s', (independent,)).fetchone())
-            self.assertEqual(connection.execute('SELECT status,final_text,source_ids FROM public.style_sample WHERE id=%s', (sample,)).fetchone(), ('deleted', None, []))
-            self.assertEqual(connection.execute('SELECT status FROM public.style_sample WHERE id=%s', (independent_sample,)).fetchone(), ('active',))
 
     def test_media_cleanup_failure_keeps_manifest_and_contact_for_explicit_retry(self):
         service = self.service(reader=SyntheticReader(self.source_file))

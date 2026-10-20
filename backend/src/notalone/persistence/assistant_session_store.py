@@ -31,7 +31,7 @@ from notalone.persistence.assistant_reply_identity import (
 )
 from notalone.persistence.locks import lock_owner_scope
 from notalone.persistence.message_sources import active_source_ref_sql, valid_source_ref_exists_sql
-from notalone.persistence.style_sample_store import (
+from notalone.persistence.reply_sources import (
     captured_reply_sources, reply_evidence_sources, require_reply_sources_current,
 )
 from notalone.reply.assistant_discussion import DiscussionDependencies
@@ -171,10 +171,6 @@ def _reply_dependencies(connection: Any, scope: ContactScope, request_id: UUID) 
         ))
     for identifier in {row["request_id"] for row in rows}:
         dependencies.update(captured_reply_sources(connection, owner_id=scope.owner_id, request_id=identifier))
-    from notalone.persistence.reply_discussion_dependencies import reply_style_sample_dependencies
-    dependencies.update(reply_style_sample_dependencies(
-        connection, scope, request_id, require_available=False,
-    ))
     # 继承当时实际捕获的依赖，不把后来挂接的来源补进旧候选的来历。
     return dependencies
 
@@ -187,7 +183,7 @@ def captured_generation_dependencies(
     """同事务沿实际C请求键复验模型前捕获；失败输入不以尚未填回的结果ID放行。"""
 
     from notalone.persistence.reply_discussion_dependencies import (
-        reply_style_sample_dependencies, require_reply_discussion_dependencies,
+        require_reply_discussion_dependencies,
     )
 
     request = connection.execute(
@@ -209,7 +205,6 @@ def captured_generation_dependencies(
     discussion = require_reply_discussion_dependencies(connection, scope, request["id"])
     if discussion is not None:
         dependencies.update(discussion.source_ids)
-    dependencies.update(reply_style_sample_dependencies(connection, scope, request["id"]))
     return dependencies
 
 
@@ -231,21 +226,8 @@ def _partition_assistant_dependencies(
     connection: Any, scope: ContactScope, dependencies: set[UUID],
     *, require_available: bool = True,
 ) -> DiscussionDependencies:
-    """既有turn依赖按实际同范围样本分型；样本仍沿C唯一可用性门禁。"""
-
-    if not dependencies:
-        return DiscussionDependencies((), ())
-    from notalone.persistence.reply_discussion_dependencies import _require_samples
-
-    rows = connection.execute(
-        "SELECT id FROM public.style_sample WHERE owner_id=%s AND contact_id=%s "
-        "AND id=ANY(%s::uuid[]) ORDER BY id",
-        (scope.owner_id, scope.contact_id, list(dependencies)),
-    ).fetchall()
-    samples = tuple(row["id"] for row in rows)
-    if require_available:
-        _require_samples(connection, scope, samples)
-    return DiscussionDependencies(tuple(sorted(dependencies - set(samples))), samples)
+    """保留实际捕获的来源身份；样本专属依赖已由退役迁移清理。"""
+    return DiscussionDependencies(tuple(sorted(dependencies)))
 
 
 def _dependencies_available(
@@ -405,8 +387,6 @@ def prepare_assistant_reply_commit(
     dependencies.update(UUID(identifier) for identifier in navigation_dependency_ids(context))
     dependencies.update(captured_reply_sources(connection, owner_id=request.scope.owner_id,
                                                request_id=request.request_id))
-    from notalone.persistence.reply_discussion_dependencies import reply_style_sample_dependencies
-    dependencies.update(reply_style_sample_dependencies(connection, request.scope, request.request_id))
     from notalone.persistence.reply_basis_changes import require_current_reply_memory
     require_current_reply_memory(connection, request.scope, context.evidence)
     current_dependencies: set[UUID] = set()

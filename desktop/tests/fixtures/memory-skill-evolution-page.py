@@ -117,7 +117,7 @@ def _run(resources):
         os.environ.update(NOTALONE_DATABASE_URL=fixture.database_url,
                           NOTALONE_TEST_DATABASE_URL=fixture.database_url)
         migration_proof = guard_test_migrations(fixture.database_url, fixture.database_name, ROOT,
-            expected_count=89, expected_tail="089_style_sample_generation_dependencies.sql")
+            expected_count=96, expected_tail="096_retire_style_samples.sql")
         fixture.setUp()
         state = fixture.prepare_evolution()
         if migrate(fixture.database_url, ROOT / "backend/database/migrations"):

@@ -1,5 +1,7 @@
 # 记忆与 Skill 演进草图
 
+> 后续修订（2026-10-20）：主动收藏表达样本及其生成参考按 [ADR-082](../adr/082-retire-explicit-style-samples.md)退役；本文相关历史方案不再构成实施要求。当前意图优先、长期表达偏好及其他已采纳约束分别保留。
+
 > 状态：草案。2026-10-14 保存已确认的产品方向；数据契约、接口、验证方案和 DSH 选型尚未定稿。本文不替代现行规格或 ADR，也不表示相关功能已经实现。
 
 > 后续状态：DSH 已搁置，已整理为[正式规格](../../.scratch/memory-skill-evolution/spec.md)和[已确认的15项拆分](../../.scratch/memory-skill-evolution/ticket-proposal.md)，独立任务已发布，实际进度见[任务索引](../../.scratch/memory-skill-evolution/planning.md)，目标约束见[ADR-048](../adr/048-memory-skill-evolution-lifecycle.md)。后续开发以正式规格和独立任务为准；下方 DSH 比较保留为搁置的设计记录。

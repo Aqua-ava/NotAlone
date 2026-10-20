@@ -7,7 +7,7 @@ import { pathToFileURL } from 'node:url';
 import { build } from 'esbuild';
 
 // SSR 只需要具名桥的存在；订阅与命令在浏览器效果中执行。
-globalThis.window = { notalone: { styleSamples: {}, expressionPreferences: {} } };
+globalThis.window = { notalone: { candidateProvenance: {}, expressionPreferences: {} } };
 const directory = await mkdtemp(path.join(tmpdir(), 'notalone-workspace-view-'));
 after(() => rm(directory, { recursive: true, force: true }));
 

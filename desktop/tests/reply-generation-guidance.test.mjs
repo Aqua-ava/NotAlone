@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { pathToFileURL } from 'node:url';
 import { build } from 'esbuild';
 
-globalThis.window = { notalone: { styleSamples: {}, expressionPreferences: {} } };
+globalThis.window = { notalone: { candidateProvenance: {}, expressionPreferences: {} } };
 const directory = await mkdtemp(path.join(tmpdir(), 'notalone-generation-guidance-'));
 after(() => rm(directory, { recursive: true, force: true }));
 const bundle = await build({ stdin: { contents: `

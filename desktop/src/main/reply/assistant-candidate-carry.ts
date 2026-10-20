@@ -23,14 +23,13 @@ export function readAssistantCarry(value: unknown, contactId: string, sessionId:
   const ids = ['origin_owner_id', 'origin_contact_id', 'origin_binding_id', 'origin_session_id',
     'origin_input_version_id', 'origin_turn_id', 'origin_reply_request_id', 'origin_candidate_id',
     'origin_version_id', 'origin_selection_id'];
-  const fields = ['type', 'metadata_version', ...ids, 'payload_sha256', 'style_sample_ids', 'messages'];
+  const fields = ['type', 'metadata_version', ...ids, 'payload_sha256', 'messages'];
   if (!isRecord(value) || Object.keys(value).length !== fields.length
     || Object.keys(value).some((key) => !fields.includes(key)) || value.type !== 'candidate_carry'
-    || value.metadata_version !== 1 || ids.some((key) => !isUuid(value[key]))
+    || value.metadata_version !== 2 || ids.some((key) => !isUuid(value[key]))
     || value.origin_contact_id !== contactId || value.origin_binding_id !== bindingId
     || value.origin_session_id === sessionId || typeof value.payload_sha256 !== 'string'
-    || !/^[0-9a-f]{64}$/.test(value.payload_sha256) || !Array.isArray(value.style_sample_ids)
-    || value.style_sample_ids.some((id) => !isUuid(id)) || new Set(value.style_sample_ids).size !== value.style_sample_ids.length
+    || !/^[0-9a-f]{64}$/.test(value.payload_sha256)
     || !Array.isArray(value.messages) || !value.messages.length) throw new Error('携入版本暂不可用。');
   const messages = value.messages.map((message: unknown) => {
     if (!isRecord(message) || Object.keys(message).length !== 2 || !isUuid(message.message_id)

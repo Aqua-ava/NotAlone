@@ -8,7 +8,6 @@ import { useReplyEvidence } from './ReplyEvidence';
 import { ReplyReferences } from './ReplyReferences';
 import { AssistantSessionBudgetNotice, AssistantSessionPanel } from './AssistantSessionPanel';
 import { hasChangedReplyInput } from './ReplyGenerationGuidance';
-import { StyleSamples } from './StyleSamples';
 import { ExpressionPreferences } from './ExpressionPreferences';
 import { CandidateCopyControls } from './CandidateCopyControls';
 import { CandidateVersionEditor } from './CandidateVersionEditor';
@@ -287,7 +286,7 @@ export function ReplyCandidates({ replies, currentDraft }: { replies: ReplySessi
   }, [state.result, state.phase, state.savedSession?.phase, state.savedSession?.sessionId, state.contactId, state.scopeRevision]);
   function noteCopy(candidateId: string, text: string) {
     if (!text.trim() || text.length > 65_536 || !state.contactId || !replyRequestId) return;
-    void window.notalone.styleSamples.noteCandidateCopy({ contactId: state.contactId, scopeRevision: state.scopeRevision,
+    void window.notalone.candidateProvenance.noteCandidateCopy({ contactId: state.contactId, scopeRevision: state.scopeRevision,
       replyRequestId, candidateId, text }).catch(() => {});
   }
   return <><section ref={resultRegion} className={`reply-candidates compact-replies${detailsOpen ? ' show-candidate-details' : ''}`} aria-label="候选回复">
@@ -330,7 +329,7 @@ export function ReplyCandidates({ replies, currentDraft }: { replies: ReplySessi
           <h3 className="candidate-strip-label" aria-label={`说法 ${index + 1}`}><span>{String(index + 1).padStart(2, '0')}</span><small>说法</small></h3>
           <div className="candidate-strip-content legacy-candidate-editor"><CandidateEditor text={editedText} candidateId={original.candidateId} number={index + 1} edit={replies.editCandidate}
             disabled={state.phase === 'waiting' || state.sourceAvailability !== undefined}
-            validatePaste={(text) => window.notalone.styleSamples.validateCandidatePaste({ contactId: state.contactId!,
+            validatePaste={(text) => window.notalone.candidateProvenance.validateCandidatePaste({ contactId: state.contactId!,
               scopeRevision: state.scopeRevision, replyRequestId: state.result!.replyRequestId, candidateId: original.candidateId, text })}
             copy={(text) => noteCopy(original.candidateId, text)} />
           <CandidateCopyControls state={state} candidateId={original.candidateId} /></div>
@@ -354,7 +353,6 @@ export function ReplyCandidates({ replies, currentDraft }: { replies: ReplySessi
       key={`${state.contactId}:${state.scopeRevision}:${state.savedSession?.sessionId}:${replyRequestId}`}
       evidence={evidence} candidates={candidates}
       selection={{ contactId: state.contactId, scopeRevision: state.scopeRevision, replyRequestId, candidateId: candidates[0].candidateId }}
-      styleSampleIds={(state.result ?? recovered?.reply)?.styleSampleIds}
       expressionPreferences={(state.result ?? recovered?.reply)?.expressionPreferences}
       usedSkill={(state.result ?? recovered?.reply)?.usedSkill}
       waiting={state.phase === 'waiting' || state.sourceAvailability === 'checking' || state.sourceAvailability === 'failed'} />}
@@ -393,8 +391,7 @@ export function ReplyCandidates({ replies, currentDraft }: { replies: ReplySessi
   </section>
     <AssistantSessionPanel replies={replies} />
     <section className="reply-expression-settings" aria-label="表达设置">
-      <header><h2>表达设置</h2><p>管理你喜欢的说法和长期偏好，不影响本次已生成的文字。</p></header>
-      <StyleSamples replies={replies} />
+      <header><h2>表达设置</h2><p>管理长期表达偏好，不影响本次已生成的文字。</p></header>
       <ExpressionPreferences replies={replies} />
     </section>
   </>;

@@ -20,7 +20,7 @@ const compiled = await build({ stdin: { contents: `
   export { createReplyBridge } from './src/preload/reply';
   export { ExpressionPreferenceController } from './src/main/expression-preferences/controller';
   export { expressionPreferenceDeletion } from './src/main/expression-preferences/deletion';
-  export { StyleSampleController } from './src/main/style-samples/controller';
+  export { CandidateProvenanceController } from './src/main/candidate-provenance/controller';
   export { TraceController } from './src/main/traces/controller';
   export { BackendRequestFailure, JsonClient } from './src/main/backend/json-client';
   export { AssistantSessionPanel } from './src/renderer/AssistantSessionPanel';

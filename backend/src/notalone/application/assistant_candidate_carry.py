@@ -27,7 +27,7 @@ class CarriedAssistantSession:
 
 @dataclass(frozen=True, slots=True)
 class CandidateCarryOrigin:
-    """仅保存真实父身份、消息组指纹与样本依赖，不保存候选正文。"""
+    """仅保存真实父身份与消息组指纹，不保存候选正文。"""
 
     origin_owner_id: UUID
     origin_contact_id: UUID
@@ -40,7 +40,6 @@ class CandidateCarryOrigin:
     origin_version_id: UUID
     origin_selection_id: UUID
     payload_sha256: str
-    style_sample_ids: tuple[UUID, ...] = ()
 
     def __post_init__(self) -> None:
         if (any(not isinstance(value, UUID) for value in (
@@ -49,10 +48,7 @@ class CandidateCarryOrigin:
                 self.origin_candidate_id, self.origin_version_id, self.origin_selection_id,
             ))
                 or not isinstance(self.payload_sha256, str) or len(self.payload_sha256) != 64
-                or any(character not in "0123456789abcdef" for character in self.payload_sha256)
-                or not isinstance(self.style_sample_ids, tuple)
-                or any(not isinstance(value, UUID) for value in self.style_sample_ids)
-                or len(set(self.style_sample_ids)) != len(self.style_sample_ids)):
+                or any(character not in "0123456789abcdef" for character in self.payload_sha256)):
             raise ValueError("携入来历记录无效。")
 
 
@@ -68,10 +64,9 @@ def carry_origin_to_payload(origin: CandidateCarryOrigin) -> dict[str, Any]:
         raise ValueError("携入来历记录无效。")
     CandidateCarryOrigin.__post_init__(origin)
     return {
-        "type": "candidate_carry", "metadata_version": 1,
+        "type": "candidate_carry", "metadata_version": 2,
         **{field: str(getattr(origin, field)) for field in _ORIGIN_IDS},
         "payload_sha256": origin.payload_sha256,
-        "style_sample_ids": [str(value) for value in origin.style_sample_ids],
     }
 
 
@@ -88,17 +83,20 @@ def carry_origin_from_payload(payload: object) -> CandidateCarryOrigin:
     """严格重建可信来历；未知字段与正文注入都返回固定错误。"""
 
     try:
+        # 旧版本仅在明确没有已退役依赖时可恢复；未知依赖不能按空集处理。
+        if (isinstance(payload, dict) and type(payload.get("metadata_version")) is int
+                and payload["metadata_version"] == 1 and payload.get("style_sample_ids") == []):
+            payload = {key: value for key, value in payload.items() if key != "style_sample_ids"}
+            payload["metadata_version"] = 2
         if (not isinstance(payload, dict)
                 or set(payload) != {"type", "metadata_version", *_ORIGIN_IDS,
-                                    "payload_sha256", "style_sample_ids"}
+                                    "payload_sha256"}
                 or payload["type"] != "candidate_carry"
-                or type(payload["metadata_version"]) is not int or payload["metadata_version"] != 1
-                or not isinstance(payload["style_sample_ids"], list)):
+                or type(payload["metadata_version"]) is not int or payload["metadata_version"] != 2):
             raise ValueError
         return CandidateCarryOrigin(
             **{field: _canonical_uuid(payload[field]) for field in _ORIGIN_IDS},
             payload_sha256=payload["payload_sha256"],
-            style_sample_ids=tuple(_canonical_uuid(value) for value in payload["style_sample_ids"]),
         )
     except (KeyError, TypeError, ValueError):
         raise ValueError("携入来历记录无效。") from None

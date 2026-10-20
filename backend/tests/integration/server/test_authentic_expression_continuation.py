@@ -1,4 +1,4 @@
-"""有界样本、真实候选版本与A唯一续写入口的组合；仅替换模型。"""
+"""真实候选版本、原始来源删除与A唯一续写入口的组合；仅替换模型。"""
 
 from __future__ import annotations
 
@@ -29,35 +29,23 @@ class AuthenticExpressionContinuationTests(FidelityHttpFixture, unittest.TestCas
                     "entry_point": "http", "rows": cls.capture_rows,
                     "coverage": {
                         "interface": "A唯一 /continue；公开版本读取、编辑和选择；真实HTTP与隔离PG",
-                        "scope": "回应与主动各覆盖样本删除和原始来源删除，不代表页面或真实App",
+                        "scope": "回应与主动各覆盖原始来源删除，不代表页面或真实App",
                         "semantic_review": "故意错误合成响应独立标注，真人审阅0",
                     },
                 }, ensure_ascii=False, indent=2) + "\n")
         finally:
             super().tearDownClass()
 
-    def test_response_typed_edited_group_is_erased_with_sample_but_independent_discussion_remains(self):
-        self._exercise("response", "sample")
 
-    def test_response_typed_edited_group_is_erased_with_raw_source_but_manual_sample_remains(self):
+    def test_response_typed_edited_group_is_erased_with_raw_source_and_independent_discussion_remains(self):
         self._exercise("response", "source")
 
-    def test_proactive_typed_edited_group_is_erased_with_sample_but_independent_discussion_remains(self):
-        self._exercise("proactive", "sample")
 
-    def test_proactive_typed_edited_group_is_erased_with_raw_source_but_manual_sample_remains(self):
+    def test_proactive_typed_edited_group_is_erased_with_raw_source_and_independent_discussion_remains(self):
         self._exercise("proactive", "source")
 
     def _exercise(self, mode: str, removal: str) -> None:
         contact, target, source = self.prepare_contact(self.owner_id)
-        samples_path = f"/api/contacts/{contact}/style-samples"
-        status, sample = self.backend.request(samples_path, {
-            "idempotency_key": str(uuid4()),
-            "text": "合成旧表达：我总是答应，明晚七点陪你去合成海边。",
-            "origin": {"kind": "manual"},
-        })
-        self.assertEqual(status, 200, sample)
-        sample_id = sample["sample"]["sample_id"]
         status, session = self.backend.request(f"/api/contacts/{contact}/assistant-session/default", {})
         self.assertEqual(status, 200, session)
         path = f"/api/contacts/{contact}/assistant-sessions/{session['session_id']}"
@@ -81,7 +69,7 @@ class AuthenticExpressionContinuationTests(FidelityHttpFixture, unittest.TestCas
                     "expected_input_version_id": discussion["input_version_id"], "content": content}
         generated = self._capture_reply(path + "/replies", ordinary, contact, mode, removal, "current", (
             "这次不参加。", "谢谢你邀请。",
-        ), "保留本次拒绝，表达样本仅供说法参考。", sample_id, intent)
+        ), "保留本次拒绝，不新增约定。", intent)
 
         candidate_id = generated["candidates"][0]["candidate_id"]
         versions_path = path + f"/candidates/{candidate_id}/versions"
@@ -102,7 +90,7 @@ class AuthenticExpressionContinuationTests(FidelityHttpFixture, unittest.TestCas
                  "instruction": "第一条自然一点", "displayed_group": frame}
         continued = self._capture_reply(path + "/continue", typed, contact, mode, removal, "edited", (
             "这次不参加。", "谢谢你。",
-        ), "保留当前明确拒绝与不要承诺，只调整说法。", sample_id, intent)
+        ), "保留当前明确拒绝与不要承诺，只调整说法。", intent)
         payload = self.reply_model.payloads[-1]
         self.assertEqual(payload["confirmed_direction" if mode == "response" else "confirmed_purpose"], intent)
         self.assertEqual(continued["effective_input"]["type"], content["type"])
@@ -124,7 +112,7 @@ class AuthenticExpressionContinuationTests(FidelityHttpFixture, unittest.TestCas
                        "displayed_group": self._frame(session["session_id"], continued, continued_history)}
         failed_semantics = self._capture_reply(path + "/continue", unsupported, contact, mode, removal, "unsupported", (
             "这次不参加。", "那就明晚七点我陪你去合成海边。",
-        ), "沿旧样本安排未来陪同。", sample_id, intent)
+        ), "故意错误地新增未来陪同。", intent)
         self.assertEqual(self.reply_model.payloads[-1]["confirmed_direction" if mode == "response" else "confirmed_purpose"], intent)
         self.assertEqual([item["text"] for item in self.reply_model.payloads[-1]["continuation_reference"]["messages"]],
                          ["这次不参加。", "谢谢你。"])
@@ -135,8 +123,8 @@ class AuthenticExpressionContinuationTests(FidelityHttpFixture, unittest.TestCas
         self.assertEqual(turns[1]["input"]["continuation"], continued["continuation"])
         self.assertEqual(turns[2]["input"]["continuation"], failed_semantics["continuation"])
 
-        # 同一联系人来源只承担这一组的真实依赖；独立手写样本保留自己的删除意图。
-        self._remove_reference(contact, source, sample_id, removal)
+        # 删除原始来源不能误删独立手写讨论。
+        self._remove_reference(contact, source)
         rebuilt = self._backend(self.owner_id)
         recovered = self._get(rebuilt, path)
         self.assertEqual(len(recovered["turns"]), 3)
@@ -167,7 +155,7 @@ class AuthenticExpressionContinuationTests(FidelityHttpFixture, unittest.TestCas
         }]}
 
     def _capture_reply(self, path: str, body: dict, contact: str, mode: str, removal: str, stage: str,
-                       messages: tuple[str, ...], basis: str, sample_id: str, intent: str) -> dict:
+                       messages: tuple[str, ...], basis: str, intent: str) -> dict:
         self.reply_model.plans.append({"text": "\n\n".join(messages), "messages": list(messages), "basis": basis})
         before = len(self.reply_model.payloads)
         started = time.perf_counter()
@@ -177,9 +165,6 @@ class AuthenticExpressionContinuationTests(FidelityHttpFixture, unittest.TestCas
         self.assertEqual(len(self.reply_model.payloads), before + 1)
         payload = self.reply_model.payloads[-1]
         self.assertEqual(payload["fidelity_contract"]["current_intent"]["text"], intent)
-        self.assertEqual([sample["sample_id"] for sample in payload["style_references"]], [sample_id])
-        self.assertEqual(result["context_receipt"]["style_sample_ids"], [sample_id])
-        self.assertNotIn(sample_id, result["context_receipt"]["evidence_ids"])
         self.assertEqual([item["text"] for item in result["candidates"][0]["messages"]], list(messages))
         self.assertEqual(self._backend(self.owner_id).request(path, body), (200, result))
         self.assertEqual(len(self.reply_model.payloads), before + 1)
@@ -191,14 +176,7 @@ class AuthenticExpressionContinuationTests(FidelityHttpFixture, unittest.TestCas
         })
         return result
 
-    def _remove_reference(self, contact: str, source: str, sample_id: str, removal: str) -> None:
-        if removal == "sample":
-            self.assertEqual(self.backend.request(f"/api/contacts/{contact}/style-samples/{sample_id}", method="DELETE")[0], 200)
-            state = next(item for item in self._get(self.backend, f"/api/contacts/{contact}/sources")["sources"]
-                         if item["source_id"] == source)
-            self.assertEqual(state["status"], "active")
-            self.assertEqual(self.backend.request(f"/api/contacts/{contact}/style-samples/{sample_id}")[0], 410)
-            return
+    def _remove_reference(self, contact: str, source: str) -> None:
         status, receipt = self.backend.request(f"/api/contacts/{contact}/sources/{source}", method="DELETE")
         self.assertEqual(status, 202, receipt)
         deadline = time.monotonic() + 10
@@ -211,7 +189,6 @@ class AuthenticExpressionContinuationTests(FidelityHttpFixture, unittest.TestCas
             time.sleep(.02)
         else:
             self.fail("合成原始来源删除尚未完成。")
-        self.assertEqual(self._get(self.backend, f"/api/contacts/{contact}/style-samples/{sample_id}")["sample"]["sample_id"], sample_id)
 
 
 if __name__ == "__main__":

@@ -12,7 +12,7 @@ from notalone.application.assistant_session_service import (
 )
 from notalone.persistence.assistant_session_inputs import require_current_input
 from notalone.persistence.locks import lock_owner_scope
-from notalone.persistence.style_sample_store import require_reply_sources_current
+from notalone.persistence.reply_sources import require_reply_sources_current
 from notalone.reply.errors import ReplyStoreInvariantError
 from notalone.scopes import ContactScope
 

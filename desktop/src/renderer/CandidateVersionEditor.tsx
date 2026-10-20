@@ -24,11 +24,10 @@ export function CandidateVersionEditor({ replies, view, candidateId, replyReques
   const messages = draft?.messages ?? [];
   const requirements = draft?.requirements ?? '';
   const [error, setError] = useState('');
-  const [sampleSaving, setSampleSaving] = useState(false);
   const [carrying, setCarrying] = useState(false);
   const [failedSaveIdentity, setFailedSaveIdentity] = useState<string | null>(null);
-  const sampleActive = useRef(true);
-  useEffect(() => { sampleActive.current = true; return () => { sampleActive.current = false; }; }, []);
+  const active = useRef(true);
+  useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
   const editRevision = useRef(0);
   const saveKey = useRef<{ revision: number; key: string } | null>(null);
   useEffect(() => {
@@ -50,8 +49,8 @@ export function CandidateVersionEditor({ replies, view, candidateId, replyReques
     || state.sessionDeletion === 'deleting' || state.sessionDeletion === 'failed'
     || state.candidateVersions?.phase !== 'ready' || view?.phase !== 'ready' || state.savedSession?.phase !== 'ready';
   const identity = `${state.contactId}:${state.scopeRevision}:${history?.sessionId}:${candidateId}:${version?.versionId}`;
-  const sampleIdentity = useRef(identity);
-  sampleIdentity.current = identity;
+  const currentIdentity = useRef(identity);
+  currentIdentity.current = identity;
   const scope = { contactId: state.contactId!, scopeRevision: state.scopeRevision,
     sessionId: state.savedSession?.sessionId ?? '', candidateId };
   const saveScope = `${scope.contactId}:${scope.scopeRevision}:${scope.sessionId}:${candidateId}`;
@@ -62,7 +61,7 @@ export function CandidateVersionEditor({ replies, view, candidateId, replyReques
     const operation = identity, revision = editRevision.current;
     void replies.updateCandidateVersionDraft({ ...scope, versionId: version.versionId, messages, requirements })
       .catch(() => {
-        if (sampleActive.current && sampleIdentity.current === operation && editRevision.current === revision) {
+        if (active.current && currentIdentity.current === operation && editRevision.current === revision) {
           setError('本组编辑暂未保留，请勿切换并重新读取版本。');
         }
       });
@@ -86,7 +85,7 @@ export function CandidateVersionEditor({ replies, view, candidateId, replyReques
         parentVersionId: version.versionId, messages, requirements: requirements.trim() || null });
     } catch (error) {
       // 历史加载会卸载消息组；重试身份保留在版本编辑器，且不跨联系人或会话。
-      if (sampleActive.current && latestSaveScope.current === operation) {
+      if (active.current && latestSaveScope.current === operation) {
         setFailedSaveIdentity(failedIdentity);
       }
       throw error;
@@ -96,23 +95,7 @@ export function CandidateVersionEditor({ replies, view, candidateId, replyReques
     if (disabled || dirty || carrying || !version) return;
     setCarrying(true);
     try { await replies.newSavedSessionWithCandidate({ sessionId: scope.sessionId, candidateId, versionId: version.versionId }); }
-    finally { if (sampleActive.current) setCarrying(false); }
-  }
-  async function saveSample() {
-    if (disabled || sampleSaving || !version || draft?.versionId !== version.versionId) return;
-    const operation = identity;
-    setSampleSaving(true); setError('');
-    try {
-      await window.notalone.styleSamples.saveCandidate({ ...scope, replyRequestId,
-        versionId: version.versionId, text: messages.map((message) => message.text).join('\n\n') });
-      const saved = await window.notalone.styleSamples.getState();
-      if (sampleActive.current && sampleIdentity.current === operation
-        && (saved.phase !== 'ready' || saved.error || saved.contactId !== scope.contactId || saved.scopeRevision !== scope.scopeRevision)) {
-        setError('保存结果尚未确认，请刷新表达样本后核对，编辑文字仍保留。');
-      }
-    } catch {
-      if (sampleActive.current && sampleIdentity.current === operation) setError('样本尚未保存，请核对当前版本后重试。');
-    } finally { if (sampleActive.current) setSampleSaving(false); }
+    finally { if (active.current) setCarrying(false); }
   }
   function retryRead() { void replies.readCandidateVersions(scope).catch(() => setError('本组版本尚未核对，请重试。')); }
   if (!history || !version || draft?.versionId !== version.versionId) return <>
@@ -131,11 +114,11 @@ export function CandidateVersionEditor({ replies, view, candidateId, replyReques
   return <>
     <ReplyBasisChangeNotice changes={history?.basisChanges} />
     <CandidateMessageGroup identity={identity} number={number} messages={messages}
-      restored={restored} disabled={disabled || sampleSaving || carrying} dirty={dirty}
+      restored={restored} disabled={disabled || carrying} dirty={dirty}
       retrySave={failedSaveIdentity === `${saveScope}:${version.versionId}`}
       edit={editMessage}
       save={save} noteTextCopy={noteCopy}
-      validatePaste={(text) => window.notalone.styleSamples.validateCandidatePaste({ ...scope, replyRequestId,
+      validatePaste={(text) => window.notalone.candidateProvenance.validateCandidatePaste({ ...scope, replyRequestId,
         versionId: version.versionId, text })}
       copy={(messageId) => window.notalone.candidateCopy.copy({ contactId: scope.contactId, scopeRevision: scope.scopeRevision,
         replyRequestId, candidateId, versionId: version.versionId, messageId, hideAfterCopy: false })}
@@ -148,9 +131,6 @@ export function CandidateVersionEditor({ replies, view, candidateId, replyReques
             onClick={() => showVersion(versionIndex + 1)}>下一版 →</button>
         </div>}
         <details className="candidate-more-actions" key={identity}><summary>更多操作</summary>
-        <button disabled={sampleSaving || messages.some((message) => !message.text.trim())
-          || messages.map((message) => message.text).join('\n\n').length > 4096}
-          aria-label={`主动保存说法${number}为样本`} onClick={() => void saveSample()}>保存为表达样本</button>
         <button disabled={dirty || disabled || carrying} onClick={() => void carry()}>用这组回复新开会话</button>
         </details>
       </>} />

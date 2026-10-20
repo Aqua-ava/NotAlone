@@ -38,7 +38,6 @@ from notalone.reply.input_budget import (
     InputBudgetProfile,
     InputTokenCounter,
 )
-from notalone.reply.style_reference import require_reference_contract
 from notalone.reply.input_budget_receipt import validate_input_budget_receipt
 from notalone.reply.assistant_continuation_reference import continuation_reference_payload
 from notalone.reply.assistant_discussion import DISCUSSION_HISTORY_NOTICE
@@ -946,7 +945,6 @@ class LangChainReplyRuntime:
 
 def _request_text(prepared: ReplyContext) -> str:
     payload: dict[str, Any]
-    require_reference_contract(prepared.scope, prepared.style_references)
     if prepared.has_unauthorized_history():
         raise ReplyInvariantError("当前改写不能使用历史资料。")
     if isinstance(prepared.command.content, ReplyToMessage):
@@ -1032,11 +1030,6 @@ def _request_text(prepared: ReplyContext) -> str:
 
         payload["expression_preferences"] = [preference_context_payload(item) for item in prepared.expression_preferences]
         payload["fidelity_contract"]["priority"].insert(2, "long_term_expression_preference")
-    payload["style_references"] = [
-        {"sample_id": str(item.sample_id), "text": item.text,
-         "factual_role": "expression_reference", "weight": "low"}
-        for item in prepared.style_references
-    ]
     reference = continuation_reference_payload(prepared)
     if reference is not None:
         payload["continuation_reference"] = reference

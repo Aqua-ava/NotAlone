@@ -16,7 +16,7 @@ from notalone.persistence.assistant_generation_replacement import invalidate_run
 from notalone.persistence.assistant_session_inputs import require_input_session
 from notalone.persistence.assistant_session_store import _dependencies_available
 from notalone.persistence.locks import lock_owner_scope
-from notalone.persistence.style_sample_store import require_reply_sources_current
+from notalone.persistence.reply_sources import require_reply_sources_current
 from notalone.reply.errors import ReplyStoreInvariantError
 from notalone.scopes import ContactScope
 

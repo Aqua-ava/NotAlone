@@ -80,7 +80,7 @@ def _erase_contact_sources(
     from notalone.persistence.source_processing import erase_source_processing
     from notalone.persistence.source_memory_erasure import collect_all_source_memory_ids, erase_source_memories
     from notalone.persistence.reply_cleanup import delete_source_replies
-    from notalone.persistence.style_sample_store import erase_source_style_samples
+
     from notalone.persistence.expression_preferences import erase_source_expression_preferences
     from notalone.persistence.message_cleanup import cleanup_derived_data
 
@@ -104,7 +104,6 @@ def _erase_contact_sources(
     dependent_ids = removed_ids | all_memory_ids | erased_owner_ids
     delete_source_replies(connection, owner_id=scope.owner_id,
                           contact_id=scope.contact_id, removed_ids=dependent_ids)
-    erase_source_style_samples(connection, owner_id=scope.owner_id, removed_ids=dependent_ids)
     erase_source_expression_preferences(connection, owner_id=scope.owner_id, removed_ids=dependent_ids)
     cleanup_derived_data(connection, owner_id=scope.owner_id,
                          contact_id=scope.contact_id, removed_ids=removed_ids)

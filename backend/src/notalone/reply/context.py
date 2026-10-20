@@ -35,7 +35,6 @@ from notalone.reply.interface import (
     RewriteDraft,
 )
 from notalone.reply.risk import DeterministicRiskHints, RiskHintPort
-from notalone.reply.style_reference import StyleReference, StyleReferencePort, require_reference_contract
 from notalone.retrieval import (
     RetrievalError,
     RetrievalPort,
@@ -263,7 +262,6 @@ class ReplyContext:
     memory_revision: int | None = None
     index_revision: int | None = None
     tool_calls: tuple[ToolCallTrace, ...] = ()
-    style_references: tuple[StyleReference, ...] = ()
     assistant_discussion: DiscussionContext | None = None
     continuation_basis: ContinuedReplyCandidate | None = None
     retrieval: ReplyRetrievalReceipt | None = None
@@ -294,7 +292,6 @@ class ReplyContext:
                 )
                 for item in self.evidence
             )
-            or (not allows_history(self.command) and bool(self.style_references))
             or (not allows_history(self.command) and (self.layered_context is not None or self.owner_layered_context is not None))
             or (not allows_history(self.command) and bool(self.layered_scenario_reads or self.owner_layered_scenario_reads))
         )
@@ -349,7 +346,6 @@ class RetrievalReplyContext:
         "_memory_index",
         "_risk_hints",
         "_skill_revision_reader",
-        "_style_references",
         "_overview",
         "_layered_memory",
         "_layered_budget",
@@ -372,7 +368,6 @@ class RetrievalReplyContext:
         memory_index: ContactMemoryIndexPort | None = None,
         risk_hints: RiskHintPort | None = None,
         skill_revision_reader: Callable[[ContactScope], int] | None = None,
-        style_references: StyleReferencePort | None = None,
         overview: RelationshipOverviewPort | None = None,
         layered_memory: LayeredMemoryPort | None = None,
         layered_budget: LayeredReplyBudget | None = None,
@@ -421,7 +416,6 @@ class RetrievalReplyContext:
         if skill_revision_reader is not None and not callable(skill_revision_reader):
             raise TypeError("Skill revision 读取器必须是 callable。")
         self._skill_revision_reader = skill_revision_reader
-        self._style_references = style_references
         self._overview = overview
         self._layered_memory, self._layered_budget = layered_memory, layered_budget
         self._owner_layered_budget = owner_layered_budget
@@ -481,7 +475,6 @@ class RetrievalReplyContext:
                 risk_notes=self._risk_notes(command, target[0].text),
                 memory_revision=memory_revision,
                 index_revision=index_revision,
-                style_references=self._select_references(command, scope),
                 continuation_basis=continued_candidate,
                 retrieval=receipt,
                 history_message_ids=history_message_ids,
@@ -510,7 +503,6 @@ class RetrievalReplyContext:
                 skill_library_revision=self._current_skill_revision(scope),
                 risk_notes=self._risk_notes(command, purpose.text),
                 memory_revision=memory_revision, index_revision=index_revision,
-                style_references=self._select_references(command, scope),
                 continuation_basis=continued_candidate,
                 retrieval=receipt,
                 history_message_ids=history_message_ids,
@@ -585,7 +577,6 @@ class RetrievalReplyContext:
                 ),
                 memory_revision=memory_revision,
                 index_revision=index_revision,
-                style_references=self._select_references(command, scope),
                 continuation_basis=continued_candidate,
                 retrieval=receipt,
                 history_message_ids=history_message_ids,
@@ -808,13 +799,6 @@ class RetrievalReplyContext:
             raise ReplyContextInvariantError("Skill revision 结构无效。")
         return revision
 
-    def _select_references(self, command: GenerateReply, scope: ContactScope) -> tuple[StyleReference, ...]:
-        if self._style_references is None or not allows_history(command) or workspace_recent_only(command):
-            return ()
-        references = self._style_references.select_references(scope)
-        require_reference_contract(scope, references)
-        return references
-
     def validate_current(self, context: ReplyContext) -> None:
         require_material(context, self._layered_memory, budget=self._layered_budget, owner_budget=self._owner_layered_budget)
         """在生成前后重新读取依据，阻止删除或 revision 变化后的旧快照继续生效。"""
@@ -842,12 +826,6 @@ class RetrievalReplyContext:
                         or current.projection_revision != expected.projection_revision
                         or current.memory_revision != expected.memory_revision)):
                     raise ReplyContextInvariantError("概览导航修订已变化。")
-        require_reference_contract(scope, context.style_references)
-        if context.style_references:
-            if self._style_references is None:
-                raise ReplyContextInvariantError("表达参考无法重新核验。")
-            self._style_references.validate_references(scope, context.style_references)
-
         memory_revision, index_revision = self._version_snapshot(scope)
         if context.memory_revision is not None and (
             memory_revision is None

@@ -219,48 +219,16 @@ def require_generation_memory_dependencies(
     调用方负责已有来源、范围和删除校验；此处沿同一依赖集合补充失效原因，
     并展开已捕获的整理版本，避免只引用派生文档时绕过底层事实。
     """
-    if forbidden_generation_memory_dependencies(connection, scope, dependencies, require_sample_origins=True):
+    if forbidden_generation_memory_dependencies(connection, scope, dependencies):
         raise ReplyStoreInvariantError("原记忆依据已失效或过期，只能回看，请重新生成。")
 
 
 def forbidden_generation_memory_dependencies(
-    connection: Any, scope: ContactScope, dependencies: Iterable[UUID], *,
-    require_sample_origins: bool = False,
+    connection: Any, scope: ContactScope, dependencies: Iterable[UUID],
 ) -> tuple[tuple[UUID, str], ...]:
     dependencies = set(dependencies)
     if not dependencies:
         return ()
-    # 样本可能由旧候选加工而来。沿实际保存的来源递归展开；同一编号仅处理一次，
-    # 防止样本互相引用或候选再次使用祖先样本时形成循环。
-    from notalone.persistence.assistant_session_store import _reply_dependencies
-    pending = set(dependencies)
-    visited: set[UUID] = set()
-    while pending:
-        current = pending - visited
-        if not current:
-            break
-        visited.update(current)
-        samples = connection.execute(
-            "SELECT sample.*, captured.dependency_ids AS generation_dependencies, candidate.reply_request_id "
-            "FROM public.style_sample AS sample LEFT JOIN public.style_sample_generation_dependency AS captured "
-            "ON captured.sample_id=sample.id AND captured.owner_id=sample.owner_id AND captured.contact_id=sample.contact_id "
-            "LEFT JOIN public.reply_candidate AS candidate "
-            "ON sample.origin_kind='candidate' AND candidate.id=sample.origin_id "
-            "AND candidate.owner_id=sample.owner_id AND candidate.contact_id=sample.contact_id "
-            "WHERE sample.owner_id=%s AND sample.contact_id=%s AND sample.id=ANY(%s::uuid[])",
-            (scope.owner_id, scope.contact_id, list(current)),
-        ).fetchall()
-        pending = set()
-        for sample in samples:
-            pending.update(sample["dependency_sample_ids"] or ())
-            if sample["generation_dependencies"] is not None:
-                pending.update(sample["generation_dependencies"])
-            elif require_sample_origins:
-                from notalone.persistence.style_sample_generation import capture_sample_generation_dependencies
-                pending.update(capture_sample_generation_dependencies(connection, scope, sample))
-            elif sample["reply_request_id"] is not None:
-                pending.update(_reply_dependencies(connection, scope, sample["reply_request_id"]))
-        dependencies.update(pending)
     # 候选依赖沿派生记忆检查状态；只报告实际使用的身份。
     # 同一已使用记忆的内部候选不重复投影，未使用的删除指纹也不能冒充另一条记忆。
     rows = connection.execute("""

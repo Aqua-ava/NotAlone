@@ -108,7 +108,7 @@ class OverviewPreparedContextHttpTest(OverviewReplyHttpFixture, unittest.TestCas
         status, receipt = self.backend.request(path + "/replies/prepare", body)
         self.assertEqual(status, 200, receipt)
         frozen = self.saved_turn(receipt)["prepared_context"]
-        self.assertEqual((frozen["version"], frozen["schema_revision"]), (2, 9))
+        self.assertEqual((frozen["version"], frozen["schema_revision"]), (2, 13))
         self.assertNotIn("另一关系私密合成原话", str(frozen))
         self.assertEqual(frozen["context"]["retrieval"]["fields"]["source_messages"]["fields"]["used_calls"], 0)
         self.reply_model.plans.append({"text": "我喜欢热茶，想听听你的偏好。", "basis": "已保存的本人资料。",

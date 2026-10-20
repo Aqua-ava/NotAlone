@@ -415,32 +415,6 @@ class ExpressionPreferencesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         for text in (preference["text"], update["text"]):
             self.assertNotIn(text, json.dumps(erased, ensure_ascii=False))
 
-    def test_candidate_style_sample_does_not_escape_preference_deletion(self) -> None:
-        self._bind(self.contact_id)
-        self._bind(self.second_contact_id)
-        preference = self._save("派生样本也必须跟随删除的长期要求。", contact_id=self.contact_id)
-        independent, _, _ = self._generate(self.second_contact_id)
-        independent_evidence = f"/api/contacts/{self.second_contact_id}/replies/{independent['reply_request_id']}/evidence"
-        reply, _, _ = self._generate(self.contact_id)
-        samples = f"/api/contacts/{self.contact_id}/style-samples"
-        status, manual = self.backend.request(samples, {
-            "idempotency_key": str(uuid4()), "text": "独立手动录入、没有候选或来源依赖的合成样本。", "origin": {"kind": "manual"},
-        })
-        self.assertEqual(status, 200, manual)
-        save = {"idempotency_key": str(uuid4()), "text": reply["candidates"][0]["text"],
-                "origin": {"kind": "candidate", "id": reply["candidates"][0]["candidate_id"]}}
-        status, saved = self.backend.request(samples, save)
-        self.assertEqual(status, 200, saved)
-        self.assertEqual(len(self._get(self.backend, self.list_path)["preferences"]), 1)
-        self.assertEqual(self.backend.request(f"{self.path}/{preference['preference_id']}?contact_id={self.contact_id}", {
-            "operation_key": str(uuid4()), "expected_revision": 1,
-        }, method="DELETE")[0], 200)
-        self.assertEqual(self._get(self.backend, samples)["samples"], [manual["sample"]])
-        self.assertEqual(self.backend.request(samples, save), (410, {"error": "style_sample_deleted"}))
-        restored = self._production_backend(self.owner_id)
-        self.assertEqual(self._get(restored, samples)["samples"], [manual["sample"]])
-        self.assertEqual(self._get(restored, self.list_path)["preferences"], [])
-        self.assertEqual(restored.request(independent_evidence)[0], 200)
 
     def test_contact_deletion_erases_cross_contact_preference_derivatives(self) -> None:
         from notalone.persistence.contact_deletion import delete_contact
@@ -456,14 +430,6 @@ class ExpressionPreferencesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self.assertEqual(status, 200, saved)
         preference = saved["preference"]
         reply, _, reply_command = self._generate(self.second_contact_id)
-        samples = f"/api/contacts/{self.second_contact_id}/style-samples"
-        status, manual = self.backend.request(samples, {
-            "idempotency_key": str(uuid4()), "text": "乙的独立手录样本。", "origin": {"kind": "manual"},
-        })
-        self.assertEqual(status, 200, manual)
-        sample_command = {"idempotency_key": str(uuid4()), "text": reply["candidates"][0]["text"],
-                          "origin": {"kind": "candidate", "id": reply["candidates"][0]["candidate_id"]}}
-        self.assertEqual(self.backend.request(samples, sample_command)[0], 200)
         item = f"{self.path}/{preference['preference_id']}?contact_id={self.contact_id}"
         self.assertEqual(self.backend.request(item, {
             "operation_key": str(uuid4()), "expected_revision": 1, "text": "现在只用于甲的合成要求。",
@@ -485,16 +451,12 @@ class ExpressionPreferencesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
             with self.assertRaises(psycopg.Error):
                 delete_contact(self.database_url, scope)
             self.assertEqual(self.backend.request(item)[0], 200)
-            self.assertEqual(len(self._get(self.backend, samples)["samples"]), 2)
-            self.assertEqual(self.backend.request(samples, sample_command)[0], 200)
         finally:
             with psycopg.connect(self.database_url) as connection:
                 connection.execute("DROP TRIGGER synthetic_contact_delete_fault ON public.contact")
         self.assertTrue(delete_contact(self.database_url, scope))
         self.assertFalse(delete_contact(self.database_url, scope))
         restored = self._production_backend(self.owner_id)
-        self.assertEqual(self._get(restored, samples)["samples"], [manual["sample"]])
-        self.assertEqual(restored.request(samples, sample_command), (410, {"error": "style_sample_deleted"}))
         self.assertEqual(restored.request("/api/reply/generate", reply_command)[0], 409)
         evidence = f"/api/contacts/{self.second_contact_id}/replies/{independent['reply_request_id']}/evidence"
         self.assertEqual(restored.request(evidence)[0], 200)
@@ -508,11 +470,7 @@ class ExpressionPreferencesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
             connection.execute("DELETE FROM public.owner WHERE id=%s", (self.owner_id,))
             self.assertEqual(connection.execute("SELECT count(*) FROM public.expression_preference WHERE owner_id=%s", (self.owner_id,)).fetchone()[0], 0)
 
-    def test_session_delete_then_preference_delete_erases_retained_candidate_sample(self) -> None:
-        self._exercise_session_sample_deletion(preference_first=False)
 
-    def test_preference_delete_then_session_delete_preserves_only_independent_samples(self) -> None:
-        self._exercise_session_sample_deletion(preference_first=True)
 
     def test_previous_candidate_keeps_preference_dependency_when_current_mode_no_longer_applies(self) -> None:
         self._bind(self.contact_id)
@@ -531,17 +489,13 @@ class ExpressionPreferencesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         payload = next(json.loads(row.content) for row in self.reply_model.seen_calls[-1] if isinstance(row, HumanMessage))
         previous = [row for row in payload["evidence"] if row["kind"] == "continued_candidate"]
         self.assertEqual([row["text"] for row in previous], [first["candidates"][0]["text"]])
-        samples = f"/api/contacts/{self.contact_id}/style-samples"
-        save = {"idempotency_key": str(uuid4()), "text": second["candidates"][0]["text"],
-                "origin": {"kind": "candidate", "id": second["candidates"][0]["candidate_id"]}}
-        self.assertEqual(self.backend.request(samples, save)[0], 200)
         self.assertEqual(self.backend.request(item, {"operation_key": str(uuid4()), "expected_revision": 2}, method="DELETE")[0], 200)
         restored = self._production_backend(self.owner_id)
-        self.assertEqual(self._get(restored, samples)["samples"], [])
-        self.assertEqual(restored.request(samples, save), (410, {"error": "style_sample_deleted"}))
         self.assertEqual(restored.request("/api/reply/generate", continuation), (409, {"error": "reply_input_invalidated"}))
 
-    def test_active_session_history_keeps_preference_dependency_after_scope_change_and_session_delete(self) -> None:
+
+
+    def test_active_session_history_keeps_preference_dependency_after_scope_change(self) -> None:
         self._bind(self.contact_id)
         preference = self._save("历史候选使用的明确长期要求。", contact_id=self.contact_id, reply_mode="rewrite_draft")
         status, session = self.backend.request(f"/api/contacts/{self.contact_id}/assistant-session/default", {})
@@ -562,82 +516,11 @@ class ExpressionPreferencesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self.assertEqual(second["context_receipt"]["expression_preference_ids"], [])
         payload = next(json.loads(row.content) for row in self.reply_model.seen_calls[-1] if isinstance(row, HumanMessage))
         self.assertIn(first["candidates"][0]["text"], json.dumps(payload["assistant_discussion"], ensure_ascii=False))
-        samples = f"/api/contacts/{self.contact_id}/style-samples"
-        save = {"idempotency_key": str(uuid4()), "text": second["candidates"][0]["text"],
-                "origin": {"kind": "candidate", "id": second["candidates"][0]["candidate_id"]}}
-        status, sample = self.backend.request(samples, save)
-        self.assertEqual(status, 200, sample)
-        self.assertEqual(self.backend.request(path, {"confirmed": True}, method="DELETE")[0], 200)
+        self.assertEqual(self.backend.request(item, {"operation_key": str(uuid4()), "expected_revision": 2}, method="DELETE")[0], 200)
         restored = self._production_backend(self.owner_id)
-        self.assertEqual(self._get(restored, samples)["samples"], [sample["sample"]])
-        self.assertEqual(restored.request(item, {"operation_key": str(uuid4()), "expected_revision": 2}, method="DELETE")[0], 200)
-        self.assertEqual(self._get(restored, samples)["samples"], [])
-        self.assertEqual(restored.request(samples, save), (410, {"error": "style_sample_deleted"}))
-
-    def _exercise_session_sample_deletion(self, *, preference_first):
-        self._bind(self.contact_id)
-        self._bind(self.second_contact_id)
-        preference = self._save("候选另存样本后仍保留删除依赖的长期要求。", contact_id=self.contact_id)
-        other, _, _ = self._generate(self.second_contact_id)
-        samples = f"/api/contacts/{self.contact_id}/style-samples"
-        other_samples = f"/api/contacts/{self.second_contact_id}/style-samples"
-        status, independent = self.backend.request(other_samples, {
-            "idempotency_key": str(uuid4()), "text": other["candidates"][0]["text"],
-            "origin": {"kind": "candidate", "id": other["candidates"][0]["candidate_id"]},
-        })
-        self.assertEqual(status, 200, independent)
-        status, manual = self.backend.request(samples, {
-            "idempotency_key": str(uuid4()), "text": "独立手工输入、没有该偏好依赖的合成样本。", "origin": {"kind": "manual"},
-        })
-        self.assertEqual(status, 200, manual)
-        status, session = self.backend.request(f"/api/contacts/{self.contact_id}/assistant-session/default", {})
-        self.assertEqual(status, 200, session)
-        path = f"/api/contacts/{self.contact_id}/assistant-sessions/{session['session_id']}"
-        body = {"contact_id": str(self.contact_id), "idempotency_key": str(uuid4()),
-                "content": {"type": "rewrite_draft", "draft_text": "合成当前草稿，不引入历史事实。"}}
-        status, generated = self.backend.request(path + "/replies", body)
-        self.assertEqual(status, 200, generated)
-        self.assertEqual(generated["context_receipt"]["expression_preference_ids"], [preference["preference_id"]])
-        save = {"idempotency_key": str(uuid4()), "text": generated["candidates"][0]["text"],
-                "origin": {"kind": "candidate", "id": generated["candidates"][0]["candidate_id"]}}
-        self.assertEqual(self.other_backend.request(samples, save), (404, {"error": "style_sample_not_found"}))
-        self.assertEqual(self.backend.request(other_samples, save), (404, {"error": "style_sample_not_found"}))
-        status, derived = self.backend.request(samples, save)
-        self.assertEqual(status, 200, derived)
-        self.assertNotIn(preference["preference_id"], derived["sample"]["source_ids"])
-        deletion = {"operation_key": str(uuid4()), "expected_revision": 1}
-        item = f"{self.path}/{preference['preference_id']}?contact_id={self.contact_id}"
-        if preference_first:
-            self.assertEqual(self.backend.request(item, deletion, method="DELETE")[0], 200)
-        self.assertEqual(self.backend.request(path, {"confirmed": True}, method="DELETE")[0], 200)
-        restored = self._production_backend(self.owner_id)
-        if not preference_first:
-            self.assertCountEqual(self._get(restored, samples)["samples"], [manual["sample"], derived["sample"]])
-            self.assertEqual(self._get(restored, self.list_path)["preferences"], [preference])
-            self.assertEqual(restored.request(item, {
-                "operation_key": str(uuid4()), "expected_revision": 1, "text": preference["text"],
-                "scope": {"contact_id": str(self.contact_id), "reply_mode": "initiate_conversation"}, "confirm_long_term": True,
-            }, method="PATCH")[0], 200)
-            reused, payload, reused_body = self._generate(self.contact_id, include_relationship_context=True)
-            self.assertEqual(reused["context_receipt"]["expression_preference_ids"], [])
-            self.assertIn(derived["sample"]["sample_id"], reused["context_receipt"]["style_sample_ids"])
-            self.assertIn(derived["sample"]["text"], json.dumps(payload["style_references"], ensure_ascii=False))
-            reused_save = {"idempotency_key": str(uuid4()), "text": reused["candidates"][0]["text"],
-                           "origin": {"kind": "candidate", "id": reused["candidates"][0]["candidate_id"]}}
-            self.assertEqual(restored.request(samples, reused_save)[0], 200)
-            deletion["expected_revision"] = 2
-            self.assertEqual(restored.request(item, deletion, method="DELETE")[0], 200)
-            self.assertEqual(restored.request(samples, reused_save), (410, {"error": "style_sample_deleted"}))
-            self.assertEqual(restored.request("/api/reply/generate", reused_body), (409, {"error": "reply_input_invalidated"}))
-        self.assertEqual(self._get(restored, samples)["samples"], [manual["sample"]])
-        self.assertEqual(self._get(restored, other_samples)["samples"], [independent["sample"]])
-        self.assertEqual(restored.request(samples, save), (410, {"error": "style_sample_deleted"}))
-        late = {**save, "idempotency_key": str(uuid4())}
-        self.assertEqual(restored.request(samples, late), (404, {"error": "style_sample_not_found"}))
-        recovered = self._production_backend(self.owner_id)
-        self.assertEqual(self._get(recovered, samples)["samples"], [manual["sample"]])
-        self.assertEqual(self._get(recovered, other_samples)["samples"], [independent["sample"]])
-        self.assertEqual(recovered.request(item), (410, {"error": "expression_preference_deleted"}))
+        remaining = self._get(restored, path)
+        self.assertTrue(all(turn["state"] == "redacted" and turn["reply"] is None for turn in remaining["turns"]))
+        self.assertNotEqual(restored.request(path + "/replies", next_body)[0], 200)
 
     def test_persistence_fault_rolls_back_save_and_delete_then_same_operation_recovers(self) -> None:
         body = {"operation_key": str(uuid4()), "text": "失败后原动作重试的合成要求。",
@@ -659,11 +542,6 @@ class ExpressionPreferencesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self._bind(self.contact_id)
         reply, _, reply_body = self._generate(self.contact_id)
         evidence = f"/api/contacts/{self.contact_id}/replies/{reply['reply_request_id']}/evidence"
-        samples = f"/api/contacts/{self.contact_id}/style-samples"
-        sample_save = {"idempotency_key": str(uuid4()), "text": reply["candidates"][0]["text"],
-                       "origin": {"kind": "candidate", "id": reply["candidates"][0]["candidate_id"]}}
-        status, sample = self.backend.request(samples, sample_save)
-        self.assertEqual(status, 200, sample)
         item = f"{self.path}/{saved['preference']['preference_id']}?contact_id={self.contact_id}"
         deletion = {"operation_key": str(uuid4()), "expected_revision": 1}
         with psycopg.connect(self.database_url) as connection:
@@ -674,8 +552,6 @@ class ExpressionPreferencesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
             self.assertEqual(self.backend.request(item), (200, saved))
             self.assertEqual(self.backend.request(evidence)[0], 200)
             self.assertEqual(self.backend.request("/api/reply/generate", reply_body), (200, reply))
-            self.assertEqual(self._get(self.backend, samples)["samples"], [sample["sample"]])
-            self.assertEqual(self.backend.request(samples, sample_save), (200, sample))
         finally:
             with psycopg.connect(self.database_url) as connection:
                 connection.execute("DROP TRIGGER synthetic_preference_delete_fault ON public.expression_preference")
@@ -683,8 +559,6 @@ class ExpressionPreferencesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self.assertEqual(self.backend.request(item, deletion, method="DELETE"), (200, {"state": "deleted"}))
         self.assertEqual(self.backend.request(item, deletion, method="DELETE"), (200, {"state": "deleted"}))
         self.assertEqual(self.backend.request(evidence)[0], 404)
-        self.assertEqual(self._get(self.backend, samples)["samples"], [])
-        self.assertEqual(self.backend.request(samples, sample_save), (410, {"error": "style_sample_deleted"}))
         self.assertEqual(self._get(self._production_backend(self.owner_id), self.list_path)["preferences"], [])
 
     def test_source_delete_during_model_response_rejects_late_result_and_same_key(self) -> None:
@@ -808,31 +682,3 @@ class ExpressionPreferencesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self.assertEqual(status, 200, fresh)
         self.assertEqual(fresh["context_receipt"]["expression_preferences"][0]["revision"], 2)
         self.assertEqual(fresh["context_receipt"]["expression_preferences"][0]["text"], update["text"])
-
-    def test_sample_deletion_erases_prepared_preference_context_before_read(self):
-        self._bind(self.contact_id)
-        self._save("主动样本使用的明确长期合成偏好。")
-        reply, _, _ = self._generate(self.contact_id)
-        calls_before_prepare = len(self.reply_model.seen_calls)
-        self.assertEqual(calls_before_prepare, 1)
-        self.assertEqual(self.reply_model.review_calls, 0)
-        samples = f"/api/contacts/{self.contact_id}/style-samples"
-        status, saved = self.backend.request(samples, {"idempotency_key": str(uuid4()),
-            "text": reply["candidates"][0]["text"],
-            "origin": {"kind": "candidate", "id": reply["candidates"][0]["candidate_id"]}})
-        self.assertEqual(status, 200, saved)
-        status, session = self.backend.request(f"/api/contacts/{self.contact_id}/assistant-session/default", {})
-        self.assertEqual(status, 200, session)
-        path = f"/api/contacts/{self.contact_id}/assistant-sessions/{session['session_id']}"
-        body = {"contact_id": str(self.contact_id), "idempotency_key": str(uuid4()),
-                "content": {"type": "rewrite_draft", "draft_text": "已明确导入资料的独立合成草稿。",
-                            "include_relationship_context": True}}
-        status, receipt = self.backend.request(path + "/replies/prepare", body)
-        self.assertEqual(status, 200, receipt)
-        with psycopg.connect(self.database_url) as connection:
-            frozen, = connection.execute("SELECT prepared_context FROM public.assistant_session_turn WHERE id=%s", (receipt['turn_id'],)).fetchone()
-            self.assertIn(saved["sample"]["sample_id"], json.dumps(frozen))
-        self.assertEqual(self.backend.request(samples + "/" + saved["sample"]["sample_id"], method="DELETE")[0], 200)
-        with psycopg.connect(self.database_url) as connection:
-            self.assertEqual(connection.execute("SELECT prepared_context,input_payload FROM public.assistant_session_turn WHERE id=%s", (receipt['turn_id'],)).fetchone(), (None, None))
-        self.assertEqual(len(self.reply_model.seen_calls), calls_before_prepare)

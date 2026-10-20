@@ -37,7 +37,7 @@ export async function replyWorkspaceFixture() {
             : records.entries.find(item => item.inputId === request.body.expected_input_version_id);
           entry = { key, turnId: randomUUID(), inputId: randomUUID(), completed: false, input: structuredClone(original.input),
             reply: { reply_request_id: randomUUID(), candidates: [{ candidate_id: randomUUID(), text: '合成继续或恢复候选',
-              basis: '原场景与明确本次意图', citation_ids: [], risk_notes: [] }], context_receipt: { evidence_ids: [], style_sample_ids: [] } } };
+              basis: '原场景与明确本次意图', citation_ids: [], risk_notes: [] }], context_receipt: { evidence_ids: [], } } };
           if (recovering) entry.input.continuation = { recovery: { original_turn_id: request.body.original_turn_id,
             original_input_version_id: request.body.original_input_version_id } };
           else entry.continuation = { candidate_group_id: request.body.displayed_group.candidate_group_id,
@@ -61,7 +61,7 @@ export async function replyWorkspaceFixture() {
             input: { ...body, content: { ...body.content, ...(body.content.type === 'initiate_conversation' ? { purpose_source: 'direct_input' } : {}) },
               skill_disabled: body.skill_disabled ?? false, skill_version_id: body.skill_version_id ?? null },
             reply: { reply_request_id: randomUUID(), candidates: [{ candidate_id: randomUUID(), text: '合成当前候选',
-              basis: '用户明确本次意图', citation_ids: [], risk_notes: [] }], context_receipt: { evidence_ids: [], style_sample_ids: [] } } };
+              basis: '用户明确本次意图', citation_ids: [], risk_notes: [] }], context_receipt: { evidence_ids: [], } } };
           records.entries.push(entry);
         }
         return { generation, data: receipt(entry) };

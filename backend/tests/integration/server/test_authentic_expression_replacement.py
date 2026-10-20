@@ -1,4 +1,4 @@
-"""当前意图替换与样本删除沿正式 HTTP 组合验证，仅替换模型。"""
+"""当前意图替换与旧结果拒绝提交沿正式 HTTP 组合验证，仅替换模型。"""
 
 import json
 import time
@@ -22,13 +22,8 @@ class AuthenticExpressionReplacementTests(FidelityHttpFixture, unittest.TestCase
         for gate in self.extraction_model.response_gates.values():
             gate.set()
 
-    def test_new_intent_replaces_pending_reply_and_sample_delete_erases_both_turns(self):
+    def test_new_intent_replaces_pending_reply_and_old_result_cannot_commit(self):
         contact, target, _ = self.prepare_contact(self.owner_id)
-        status, sample = self.backend.request(f"/api/contacts/{contact}/style-samples", {
-            "idempotency_key": str(uuid4()), "text": "合成表达参考：可以呀。", "origin": {"kind": "manual"},
-        })
-        self.assertEqual(status, 200, sample)
-        sample_id = sample["sample"]["sample_id"]
         session = self.backend.request(f"/api/contacts/{contact}/assistant-session/default", {})[1]
         path = f"/api/contacts/{contact}/assistant-sessions/{session['session_id']}"
         old = {"contact_id": contact, "idempotency_key": str(uuid4()), "skill_disabled": True,
@@ -63,12 +58,10 @@ class AuthenticExpressionReplacementTests(FidelityHttpFixture, unittest.TestCase
             status, generated = replacing.result(timeout=10)
             self.assertEqual(status, 200, generated)
         self.assertEqual(generated["candidates"][0]["text"], "这次不参加。")
-        self.assertEqual(generated["context_receipt"]["style_sample_ids"], [sample_id])
         self.assertEqual(len(self.reply_model.seen_calls), 2)
         payload = next(json.loads(message.content) for message in self.reply_model.seen_calls[1]
                        if isinstance(message, HumanMessage))
         self.assertEqual(payload["fidelity_contract"]["current_intent"]["text"], new["content"]["direction"])
-        self.assertEqual([item["sample_id"] for item in payload["style_references"]], [sample_id])
         rebuilt = self._backend(self.owner_id)
         saved = self._get(rebuilt, path)
         self.assertEqual(saved["current_input_version_id"], generated["input_version_id"])
@@ -77,15 +70,4 @@ class AuthenticExpressionReplacementTests(FidelityHttpFixture, unittest.TestCase
         self.assertIsNone(turns[old["idempotency_key"]]["reply"])
         self.assertEqual(turns[new["idempotency_key"]]["state"], "completed")
         self.assertEqual(rebuilt.request(path + "/replace", replacement), (200, generated))
-        self.assertEqual(len(self.reply_model.seen_calls), 2)
-        self.assertEqual(rebuilt.request(f"/api/contacts/{contact}/style-samples/{sample_id}", method="DELETE")[0], 200)
-        erased = self._get(self._backend(self.owner_id), path)
-        self.assertIsNone(erased["current_input_version_id"])
-        self.assertEqual(len(erased["turns"]), 2)
-        for turn in erased["turns"]:
-            self.assertEqual(turn["state"], "redacted")
-            self.assertIsNone(turn["input"])
-            self.assertIsNone(turn["reply"])
-        self.assertNotEqual(rebuilt.request(path + "/replace", replacement)[0], 200)
-        self.assertNotEqual(rebuilt.request(path + "/replies", old)[0], 200)
         self.assertEqual(len(self.reply_model.seen_calls), 2)

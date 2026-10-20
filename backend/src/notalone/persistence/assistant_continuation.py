@@ -22,7 +22,7 @@ from notalone.persistence.assistant_candidate_versions import (
 )
 from notalone.persistence.assistant_session_inputs import require_current_input
 from notalone.persistence.assistant_session_store import PostgresAssistantSessionStore
-from notalone.persistence.style_sample_store import require_reply_sources_current
+from notalone.persistence.reply_sources import require_reply_sources_current
 from notalone.reply.assistant_continuation_reference import AssistantContinuationReference
 from notalone.reply.interface import AccumulatedReplyRequirements, ConfirmedDirection, DirectionSource, InitiateConversation, ReplyInput, ReplyToMessage, RewriteDraft
 from notalone.scopes import ContactScope

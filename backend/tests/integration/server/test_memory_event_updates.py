@@ -1666,15 +1666,6 @@ class MemoryEventHistoricalReviewHttpTest(CoreBusinessFlowFixture, unittest.Test
         status, generated = self.backend.request(session_path + "/replies", body)
         self.assertEqual(status, 200, generated)
         self.assertEqual(self.backend.request(session_path + "/replies", body), (200, generated))
-        style_path = prefix + "/style-samples"
-        status, saved = self.backend.request(style_path, {
-            "idempotency_key": str(uuid4()), "text": "合成保存：想听听读书会的感受。",
-            "origin": {"kind": "candidate", "id": generated["candidates"][0]["candidate_id"]},
-        })
-        self.assertEqual(status, 200, saved)
-        self.assertEqual(set(saved["sample"]["source_ids"]), {
-            imported["message"]["message_id"], imported["source"]["source_id"],
-        })
         self.reply_model.plans.append(plan)
         self.reply_model.entered.clear()
         gate = self.reply_model.pause_next_response()
@@ -1686,7 +1677,6 @@ class MemoryEventHistoricalReviewHttpTest(CoreBusinessFlowFixture, unittest.Test
                 self.assertTrue(self.reply_model.entered.wait(5))
                 self.assertEqual(self.backend.request(prefix + f"/sources/{imported['source']['source_id']}", method="DELETE")[0], 202)
                 self.assertEqual(self.backend.request(prefix + f"/replies/{generated['reply_request_id']}/evidence")[0], 404)
-                self.assertEqual(self._get(self.backend, style_path)["samples"], [])
                 self.assertNotEqual(self.backend.request(session_path + "/replies", body)[0], 200)
             finally:
                 gate.set()
@@ -1696,7 +1686,6 @@ class MemoryEventHistoricalReviewHttpTest(CoreBusinessFlowFixture, unittest.Test
         reopened = self._backend(self.owner_id)
         self.assertEqual(_active_memories(self._get(reopened, "/api/memories/owner")["memories"]), [])
         self.assertEqual(reopened.request(f"/api/memories/owner/{current['memory_id']}/versions")[0], 404)
-        self.assertEqual(self._get(reopened, style_path)["samples"], [])
         self.assertNotEqual(reopened.request(session_path + "/replies", body)[0], 200)
         turns = self._get(reopened, session_path)["turns"]
         self.assertTrue(all(item["state"] == "redacted" and item["reply"] is None for item in turns))

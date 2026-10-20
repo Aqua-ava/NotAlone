@@ -95,11 +95,6 @@ export function AssistantSessionPanel({ replies }: { replies: ReplySessionView }
     const command = confirmation; setConfirmation(null);
     void replies.deleteSavedSession(command);
   }
-  function manageSamples() {
-    const samples = document.getElementById('assistant-expression-samples');
-    if (samples instanceof HTMLDetailsElement) samples.open = true;
-    samples?.scrollIntoView({ block: 'nearest' });
-  }
   function noteHistoricalCopy(event: ClipboardEvent<HTMLElement>) {
     const selection = window.getSelection(); const text = selection?.toString() ?? '';
     if (!selection || !text.trim() || !replies.state.contactId) return;
@@ -109,8 +104,8 @@ export function AssistantSessionPanel({ replies }: { replies: ReplySessionView }
     const candidateId = candidate?.getAttribute('data-assistant-candidate-id');
     const replyRequestId = candidate?.getAttribute('data-assistant-reply-request-id');
     if (!candidateId || !replyRequestId) return;
-    // 混合或超长选区仍交给唯一来源控制器核验，拒绝后不能成为无来源手工样本。
-    void window.notalone.styleSamples.noteCandidateCopy({ contactId: replies.state.contactId,
+    // 混合或超长选区仍交给唯一来源控制器核验，拒绝后不能粘贴回其他候选。
+    void window.notalone.candidateProvenance.noteCandidateCopy({ contactId: replies.state.contactId,
       scopeRevision: replies.state.scopeRevision, replyRequestId, candidateId, text: text.slice(0, 65_536),
       ...(text.length > 65_536 ? { invalidSelection: true as const } : {}) })
       .then(() => { if (currentCopyScope.current === copyScopeKey) setCopyError(false); })
@@ -122,8 +117,6 @@ export function AssistantSessionPanel({ replies }: { replies: ReplySessionView }
     {catalog?.phase === 'failed' && !catalog.selectionPending && <p role="alert">助手会话列表暂不可用，请刷新重试。</p>}
     {confirmation && <div className="session-confirmation" role="group" aria-label="确认删除助手会话">
       <p>删除这段助手讨论、候选和使用痕迹后无法恢复。独立聊天来源、联系人关系记忆和本人记忆仍会保留。</p>
-      <p>已主动保存的表达样本仍会保留，可在表达样本管理中单独删除。</p>
-      <button onClick={manageSamples}>管理表达样本</button>
       <button disabled={catalog?.phase === 'loading' || catalog?.selectionPending} onClick={confirmDelete}>确认删除会话</button>
       <button onClick={() => setConfirmation(null)}>取消删除会话</button>
     </div>}

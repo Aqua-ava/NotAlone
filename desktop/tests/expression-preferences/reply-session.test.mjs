@@ -101,7 +101,7 @@ test('多轮实际 HTTP 生成恢复后，每个历史轮次显示自己的偏�
 
 test('React 生产回复控制器读取偏好回执，修改偏好保留用户编辑，删除隔离候选但保留本次输入', { timeout: 30000 }, async () => {
   await withPreferenceBackend(async ({ ExpressionPreferenceController, ReplySession, ContactSession, CandidateCopyController,
-    StyleSampleController, contactSummaries, backend, contactIds }) => {
+    CandidateProvenanceController, contactSummaries, backend, contactIds }) => {
     const contacts = new ContactSession(async () => ({ generation: 1,
       contacts: contactSummaries((await backend.requestJson({ method: 'GET', path: '/api/contacts' })).data) }));
     contacts.setConnection(1);
@@ -123,12 +123,10 @@ test('React 生产回复控制器读取偏好回执，修改偏好保留用户�
       const chosen = { ...selection, replyRequestId: once.replyRequestId, candidateId: once.candidates[0].original.candidateId };
       replies.selectCandidate(chosen);
       const clipboard = [];
-      const samples = new StyleSampleController(backend, contacts, replies);
-      const copies = new CandidateCopyController(backend, contacts, replies, (request, text) => samples.recordCopied(request, text));
+      const provenance = new CandidateProvenanceController(backend, contacts, replies);
+      const copies = new CandidateCopyController(backend, contacts, replies, (request, text) => provenance.recordCopied(request, text));
       await copies.copy({ ...chosen, hideAfterCopy: false }, { writeText: async (text) => clipboard.push(text), hideWindow() {} });
       assert.deepEqual(clipboard, [once.candidates[0].editedText]);
-      await samples.saveCandidate(chosen);
-      assert.equal(samples.getState().samples.length, 1);
       await preferences.refresh(selection);
       assert.deepEqual(preferences.getState().preferences, []);
       replies.updateOptions({ ...selection, options: { tone: 'original', instruction: '', includeRelationshipContext: false } });

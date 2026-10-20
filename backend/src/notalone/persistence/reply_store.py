@@ -30,9 +30,8 @@ from notalone.persistence.reply_basis_changes import require_current_reply_memor
 from notalone.persistence.reply_continuation_basis import (
     capture_reply_continuation_basis, read_continuation_basis, require_reply_continuation_basis,
 )
-from notalone.persistence.style_sample_store import (
+from notalone.persistence.reply_sources import (
     capture_reply_original_sources, capture_declared_reply_sources, require_reply_sources_current,
-    capture_reply_style_references, require_context_style_references,
 )
 from notalone.memory.timing import MemoryTiming
 from notalone.memory.events import MemoryEvent
@@ -64,7 +63,6 @@ from notalone.reply.interface import (
     ReplyGenerated,
     SkillUse,
 )
-from notalone.reply.style_reference import StyleReference, require_reference_contract
 from notalone.reply.runtime import RuntimeCandidate
 from notalone.reply.input_budget import InputBudgetDecision
 from notalone.reply.input_budget_receipt import (
@@ -393,7 +391,6 @@ class PostgresReplyStore:
                 require_current_reply_memory(connection, request.scope, context.evidence)
                 require_reply_continuation_basis(connection, request, context)
                 capture_reply_expression_preferences(connection, request, context)
-                capture_reply_style_references(connection, request, context)
                 connection.execute("DELETE FROM public.reply_original_source_use WHERE reply_request_id=%s", (request.request_id,))
                 capture_reply_original_sources(connection, request, context)
                 capture_reply_discussion_dependencies(
@@ -475,12 +472,6 @@ class PostgresReplyStore:
                         context,
                     )
                     require_captured_reply_expression_preferences(connection, request, context)
-                    captured_samples = {row["sample_id"] for row in connection.execute(
-                        "SELECT sample_id FROM public.reply_style_sample_use WHERE owner_id=%s AND contact_id=%s AND reply_request_id=%s",
-                        (request.scope.owner_id, request.scope.contact_id, request.request_id),
-                    ).fetchall()}
-                    if captured_samples != {item.sample_id for item in context.style_references}:
-                        raise ReplyStoreInvariantError("表达参考不符合模型调用前的实际使用记录。")
                     require_reply_discussion_dependencies(
                         connection, request.scope, request.request_id, current=True,
                         expected_snapshot=context.assistant_discussion.snapshot if context.assistant_discussion else None,
@@ -535,7 +526,6 @@ class PostgresReplyStore:
                         candidates=tuple(candidates),
                         context_receipt=ContextReceipt(
                             evidence_ids=evidence_ids,
-                            style_sample_ids=tuple(sorted(item.sample_id for item in context.style_references)),
                             expression_preference_ids=tuple(sorted(item.preference_id for item in context.expression_preferences)),
                             expression_preferences=preference_receipts(context.expression_preferences),
                         ),
@@ -761,7 +751,6 @@ class PostgresReplyStore:
                         else None
                     ),
                     retrieval=self._read_retrieval_snapshot(row["context_snapshot"]),
-                    style_references=self._read_style_references(row["context_snapshot"], scope),
                     owner_layered_context=(row["context_snapshot"] or {}).get("owner_layered_context"),
                     owner_layered_status=(row["context_snapshot"] or {}).get("owner_layered_status", "quality_closed"),
                     owner_layered_scenario_reads=tuple((row["context_snapshot"] or {}).get("owner_layered_scenario_reads", [])),
@@ -971,7 +960,6 @@ class PostgresReplyStore:
         ):
             raise ReplyStoreInvariantError("助手讨论不属于当前持久化请求。")
         evidence_ids: set[UUID] = set()
-        require_context_style_references(connection, request.scope, context.style_references)
         for item in context.evidence:
             if (
                 not isinstance(item, ContextEvidence)
@@ -1117,23 +1105,6 @@ class PostgresReplyStore:
         ):
             raise ReplyStoreInvariantError("Skill 使用摘要结构无效。")
 
-    @staticmethod
-    def _read_style_references(snapshot: object, scope: ContactScope) -> tuple[StyleReference, ...] | None:
-        # 旧快照保持未知，不查询当前样本来重建当时输入。
-        if not isinstance(snapshot, dict) or snapshot.get("style_references") is None:
-            return None
-        try:
-            rows = snapshot["style_references"]
-            if not isinstance(rows, list):
-                raise ValueError()
-            references = tuple(StyleReference(sample_id=UUID(row["sample_id"]), scope=scope,
-                                              text=row["text"]) for row in rows)
-            require_reference_contract(scope, references)
-            if {str(item.sample_id) for item in references} != set(snapshot["style_sample_ids"]):
-                raise ValueError()
-            return references
-        except (KeyError, TypeError, ValueError, AttributeError, ReplyContextInvariantError):
-            raise ReplyStoreInvariantError("表达参考快照结构无效。") from None
 
     @staticmethod
     def _context_snapshot(
@@ -1165,9 +1136,6 @@ class PostgresReplyStore:
             "skill_library_revision": context.skill_library_revision,
             "memory_revision": context.memory_revision,
             "index_revision": context.index_revision,
-            "style_sample_ids": [str(item.sample_id) for item in context.style_references],
-            "style_references": [{"sample_id": str(item.sample_id), "text": item.text}
-                                 for item in context.style_references],
             "expression_preferences": [
                 preference_receipt_payload(item) for item in preference_receipts(context.expression_preferences)
             ],
@@ -1632,12 +1600,7 @@ class PostgresReplyStore:
         return ReplyGenerated(
             reply_request_id=request_row["id"],
             candidates=tuple(candidates),
-            context_receipt=ContextReceipt(evidence_ids=tuple(evidence_ids), style_sample_ids=tuple(
-                row["sample_id"] for row in connection.execute(
-                    "SELECT sample_id FROM public.reply_style_sample_use WHERE owner_id=%s AND contact_id=%s AND reply_request_id=%s ORDER BY sample_id",
-                    (request_row["owner_id"], request_row["contact_id"], request_row["id"]),
-                ).fetchall()
-            ), expression_preference_ids=tuple(item.preference_id for item in preferences), expression_preferences=preferences),
+            context_receipt=ContextReceipt(evidence_ids=tuple(evidence_ids), expression_preference_ids=tuple(item.preference_id for item in preferences), expression_preferences=preferences),
             used_skill=used_skill,
             input_budget=input_budget,
             basis_changes=read_reply_basis_changes(

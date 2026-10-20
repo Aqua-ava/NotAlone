@@ -74,7 +74,7 @@ class PreparedAssistantContext:
         self.validate_current(context)
         context = self.fit_budget(context, validate=validate)
         scope = command.scope
-        dependencies = {identifier for item in context.style_references for identifier in (*item.source_ids, item.sample_id)}
+        dependencies: set[UUID] = set()
         with psycopg.connect(self._database_url, row_factory=dict_row) as connection:
             lock_owner_scope(connection, owner_id=scope.owner_id)
             current = connection.execute(
@@ -102,7 +102,6 @@ class PreparedAssistantContext:
             if context.assistant_discussion is not None:
                 discussion = require_assistant_discussion_current(connection, scope, context.assistant_discussion.snapshot)
                 historical.update(discussion.source_ids)
-                historical.update(discussion.style_sample_ids)
             if context.continuation_basis is not None:
                 basis = read_continuation_basis(connection, scope, command.conversation_binding_id,
                                                  context.continuation_basis.candidate_id)

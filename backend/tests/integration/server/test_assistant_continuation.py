@@ -66,7 +66,7 @@ class AssistantContinuationHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         if remaining:
             raise AssertionError("持续要求测试库未回收。")
 
-    def _generated(self, *, content=None, with_source=False, with_sample=False):
+    def _generated(self, *, content=None, with_source=False):
         contact_id = uuid4()
         with psycopg.connect(self.database_url) as connection:
             connection.execute(
@@ -99,13 +99,6 @@ class AssistantContinuationHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
             owner_id=self.owner_id, contact_id=contact_id, channel="wechat",
             account_scope="synthetic-continuation", conversation_locator=f"synthetic-{contact_id}",
         )
-        if with_sample:
-            status, sample = self.backend.request(f"/api/contacts/{contact_id}/style-samples", {
-                "idempotency_key": str(uuid4()), "text": "合成手写表达样本：说话自然一点。",
-                "origin": {"kind": "manual"},
-            })
-            self.assertEqual(status, 200, sample)
-            self.sample_id = sample["sample"]["sample_id"]
         status, session = self.backend.request(
             f"/api/contacts/{contact_id}/assistant-session/default", {}, method="POST",
         )
@@ -130,7 +123,7 @@ class AssistantContinuationHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         content = {"type": "rewrite_draft", "input_kind": "workspace", "workspace_action": "suggest",
                    "draft_text": "", "context_text": "对方：最近工作很累。",
                    "excluded_message_ids": [str(uuid4())], "include_relationship_context": True}
-        path, generated, frame = self._generated(content=content, with_source=True, with_sample=True)
+        path, generated, frame = self._generated(content=content, with_source=True)
         self.assertTrue(generated["candidates"][0]["basis"])
         status, continued = self.backend.request(path + "/continue", self._command(
             generated, frame, instruction="第一条简短一点"))
@@ -143,7 +136,7 @@ class AssistantContinuationHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self.assertIsNone(payload["fidelity_contract"]["current_intent"])
         self.assertNotIn("assistant_discussion", payload)
         self.assertNotIn("expression_preferences", payload)
-        self.assertEqual(payload["style_references"], [])
+        self.assertNotIn("style_references", payload)
         self.assertNotIn("conversation_search", self.reply_model.bound_tool_names)
         self.assertNotIn("read_scenario", self.reply_model.bound_tool_names)
         self.assertTrue(any(item["kind"] == "message" for item in payload["evidence"]))
@@ -197,7 +190,7 @@ class AssistantContinuationHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self.assertEqual(len(self.reply_model.seen_calls), before)
 
     def test_workspace_excluded_recent_message_cannot_return_from_saved_discussion(self):
-        path, _, _ = self._generated(with_source=True, with_sample=True)
+        path, _, _ = self._generated(with_source=True)
         saved = self._get(self.backend, path)
         target = saved["turns"][0]["input"]["content"]["target_message_id"]
         status, generated = self.backend.request(path + "/replies", {
@@ -211,7 +204,7 @@ class AssistantContinuationHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self.assertEqual([item["kind"] for item in payload["evidence"]], ["user_purpose"])
         self.assertNotIn("合成邀约", json.dumps(payload, ensure_ascii=False))
         self.assertNotIn("assistant_discussion", payload)
-        self.assertEqual(payload["style_references"], [])
+        self.assertNotIn("style_references", payload)
         self.assertNotIn("conversation_search", self.reply_model.bound_tool_names)
 
     def test_workspace_user_intention_update_switches_to_expression_without_losing_context(self):
@@ -1272,40 +1265,6 @@ class AssistantContinuationHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self.assertEqual(reopened.request(path + "/continue", command)[0], 409)
         self.assertEqual(len(self.reply_model.seen_calls), before)
 
-    def test_no_number_c_insert_failure_follows_central_manual_sample_delete_lineage(self):
-        path, generated, frame = self._generated(with_sample=True, content={
-            "type": "initiate_conversation", "purpose": "自然地问候一下",
-        })
-        self.assertEqual(generated["context_receipt"]["style_sample_ids"], [self.sample_id])
-        status, continued = self.backend.request(path + "/continue", self._command(generated, frame))
-        self.assertEqual(status, 200, continued)
-        command = self._command(continued, self._frame(path, continued), instruction="继续")
-        before = len(self.reply_model.seen_calls)
-        with self._fail_c_request_insert(command["idempotency_key"]):
-            self.assertEqual(self.backend.request(path + "/continue", command),
-                             (503, {"error": "assistant_session_save_failed"}))
-        saved = self._get(self.backend, path)
-        self.assertEqual(saved["turns"][-1]["state"], "failed")
-        self.assertEqual(saved["turns"][-1]["input"]["content"], continued["effective_input"])
-        self.assertEqual(saved["turns"][-1]["input"]["content"]["purpose"], "自然地问候一下")
-        with psycopg.connect(self.database_url) as connection:
-            missing = connection.execute(
-                "SELECT count(*) FROM public.reply_request WHERE owner_id=%s AND idempotency_key=%s",
-                (self.owner_id, command["idempotency_key"]),
-            ).fetchone()[0]
-        self.assertEqual(missing, 0)
-        self.assertEqual(len(self.reply_model.seen_calls), before)
-        contact_id = path.split("/")[3]
-        status, deleted = self.backend.request(
-            f"/api/contacts/{contact_id}/style-samples/{self.sample_id}", method="DELETE",
-        )
-        self.assertEqual(status, 200, deleted)
-        reopened = self._backend(self.owner_id)
-        saved = self._get(reopened, path)
-        self.assertEqual((saved["turns"][-1]["state"], saved["turns"][-1]["input"] is None,
-                          saved["current_input_version_id"] is None), ("redacted", True, True))
-        self.assertEqual(reopened.request(path + "/continue", command)[0], 409)
-        self.assertEqual(len(self.reply_model.seen_calls), before)
 
     def test_compound_requirements_clarify_length_conflict_then_replace_only_length(self):
         path, generated, frame = self._generated(content={

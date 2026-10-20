@@ -160,38 +160,15 @@ async function newSessionClearsDeletionNotice(pages: RewritePages) {
 
 async function unsavedCandidateCopy(pages: RewritePages, copies: string[]) {
   const { helper, rewriteBackend } = pages;
-  const saved = await saveDeletionDiscussion(pages, '区分未保存副本和独立样本的合成讨论。', '未保存副本的合成候选');
-  await helper.getByText('我的表达样本', { exact: true }).click();
-  const manual = helper.getByRole('textbox', { name: '手工表达样本', exact: true });
-  const samples = helper.getByRole('list', { name: '表达样本目录', exact: true });
-  const independent = '用户已主动保存的独立合成文字。';
-  await manual.fill(independent);
-  await helper.getByRole('button', { name: '主动保存手工文字', exact: true }).click();
-  await expect(samples.getByText(independent, { exact: true })).toBeVisible();
-  const samplePath = `/api/contacts/${saved.contactId}/style-samples`;
-  const retained = await rewriteBackend.request(samplePath);
-  expect(retained.status).toBe(200);
+  const saved = await saveDeletionDiscussion(pages, '核对删除后旧复制来源的合成讨论。', '未保存副本的合成候选');
   await helper.getByRole('group', { name: '说法1消息组', exact: true }).getByRole('button', { name: '复制第1条', exact: true }).click();
   await expect(helper.getByRole('status').filter({ hasText: '已复制第1条' })).toBeVisible();
   expect(copies).toEqual(['未保存副本的合成候选（说法1）。']);
-  // 仅替换宿主剪贴板输入；真实 onPaste 登记合法候选来历，随后编辑没有主动保存。
-  await manual.evaluate((element, text) => {
-    const clipboardData = new DataTransfer(); clipboardData.setData('text/plain', text);
-    element.dispatchEvent(new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData }));
-  }, copies[0]);
-  await expect(manual).toHaveValue(copies[0]);
-  await manual.fill(`${copies[0]}用户未保存的合成编辑。`);
-  expect(await rewriteBackend.request(samplePath)).toEqual(retained);
   await confirmDeletion(helper);
   await expect(helper.getByRole('status').filter({ hasText: '当前助手会话已删除' })).toBeVisible();
+  await expectDeletionCleared(helper);
   expect(await rewriteBackend.request(saved.path)).toEqual({ status: 404, data: { error: 'not_found' } });
-  await expect(manual).toHaveValue('');
-  await expect(samples.getByText(independent, { exact: true })).toBeVisible();
-  expect(await rewriteBackend.request(samplePath)).toEqual(retained);
-  expect((await rewriteBackend.command('observations')).payloads).toHaveLength(1);
-
   await openAssistantHistory(helper);
-
   await helper.getByRole('button', { name: '查看已保存讨论', exact: true }).click();
 
   await expandSavedDiscussion(helper);
@@ -208,12 +185,6 @@ async function unsavedCandidateCopy(pages: RewritePages, copies: string[]) {
   await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveValue('新会话的独立合成候选（说法1）。');
   await expect(helper.getByRole('status').filter({ hasText: /当前助手会话已删除|当前助手会话已不存在/ })).toHaveCount(0);
   expect((await rewriteBackend.command('observations')).payloads).toHaveLength(2);
-  await manual.fill('另一段独立手写且尚未保存的合成文字。');
-  await confirmDeletion(helper);
-  await expect(helper.getByRole('status').filter({ hasText: '当前助手会话已删除' })).toBeVisible();
-  await expect(manual).toHaveValue('另一段独立手写且尚未保存的合成文字。');
-  expect(await rewriteBackend.request(samplePath)).toEqual(retained);
-  expect((await rewriteBackend.command('observations')).payloads).toHaveLength(2);
 }
 
 export async function assistantSessionDeletionFaults(browser: Browser, origin: string) {
@@ -228,7 +199,7 @@ export async function assistantSessionDeletionFaults(browser: Browser, origin: s
     await withRewritePages(browser, origin, scenario);
     process.stdout.write(`page_test_scenario_passed: ${name}\n`);
   }
-  const name = '删除清除未保存候选粘贴副本，保留独立样本及手写输入，新会话不显示旧删除状态';
+  const name = '删除清除候选与来源投影，新会话不显示旧删除状态';
   const copies: string[] = [];
   process.stdout.write(`page_test_scenario: ${name}\n`);
   await withRewritePages(browser, origin, (pages) => unsavedCandidateCopy(pages, copies), {

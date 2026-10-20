@@ -6,9 +6,7 @@ from typing import Any
 from uuid import UUID
 
 import psycopg
-from notalone.persistence.style_sample_store import (
-    collect_reply_style_sample_ids, erase_reply_style_samples, invalidate_reply_keys,
-)
+from notalone.persistence.reply_sources import invalidate_reply_keys
 
 from notalone.persistence.assistant_session_store import (
     erase_assistant_source_turns, select_assistant_source_input_dependents,
@@ -113,7 +111,6 @@ def delete_source_replies(
         carry_edges=carry_edges, captured_uses=captured,
     )
     request_ids = sorted(set(request_ids) | set(selected.reply_request_ids), key=str)
-    sample_ids = collect_reply_style_sample_ids(connection, owner_id=owner_id, request_ids=request_ids)
     from notalone.persistence.memory_upgrade import erase_memory_upgrades
     erase_memory_upgrades(connection, owner_id=owner_id, removed_ids=removed_ids)
     # 先使用仍完整的捕获身份选定并清除助手输入。该入口会清除学习依赖，
@@ -143,10 +140,6 @@ def delete_source_replies(
             ).rowcount
             if deleted != len(request_ids):
                 raise ReplyCleanupError("来源删除后仍存在回复副本。")
-    # A已清空后先移除对应C快照，再清预捕获的样本；嵌套删除不复验已清空的身份。
-    if sample_ids:
-        erase_reply_style_samples(connection, owner_id=owner_id, request_ids=[],
-                                  captured_sample_ids=sample_ids)
 
 
 def delete_owner_memory_replies(

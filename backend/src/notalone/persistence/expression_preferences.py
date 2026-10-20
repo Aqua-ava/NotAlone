@@ -157,14 +157,12 @@ def erase_source_expression_preferences(connection: Any, *, owner_id: UUID, remo
 def _erase_preferences(connection: Any, *, owner_id: UUID, identifiers: list[UUID]) -> None:
     """调用方持有owner锁；两个删除入口共用同一事务的完整擦除顺序。"""
     from notalone.persistence.reply_cleanup import delete_source_replies
-    from notalone.persistence.style_sample_store import erase_preference_style_samples
     from notalone.persistence.skill_learning import erase_skill_learning
 
     if not identifiers:
         return
     # 学习可能尚无reply_request；在同一owner删除事务直接擦全部参与副本。
     erase_skill_learning(connection, owner_id=owner_id, removed_ids=set(identifiers))
-    erase_preference_style_samples(connection, owner_id=owner_id, preference_ids=identifiers)
     delete_source_replies(connection, owner_id=owner_id, contact_id=None,
                           removed_ids=set(identifiers), revoke_running_scope=False)
     connection.execute(
@@ -180,50 +178,6 @@ def _erase_preferences(connection: Any, *, owner_id: UUID, identifiers: list[UUI
     _bump_revision(connection, owner_id)
 
 
-def capture_sample_expression_preferences(connection: Any, *, scope: ContactScope, sample_id: UUID,
-                                          candidate_id: UUID, dependency_sample_ids: list[UUID]) -> None:
-    """与明确保存样本同一owner事务，捕获真实候选及实际样本的偏好版本。"""
-    from notalone.application.style_sample_service import StyleSampleConflict
-    from notalone.persistence.reply_discussion_dependencies import reply_discussion_request_dependencies
-    from notalone.persistence.style_sample_store import _reply_ancestor_ids
-    from notalone.reply.errors import ReplyStoreInvariantError
-
-    candidate = connection.execute(
-        """SELECT request.id FROM public.reply_candidate AS candidate
-           JOIN public.reply_request AS request ON request.id=candidate.reply_request_id
-           WHERE candidate.owner_id=%s AND candidate.contact_id=%s AND candidate.id=%s
-             AND request.owner_id=%s AND request.contact_id=%s AND request.state='completed'""",
-        (scope.owner_id, scope.contact_id, candidate_id, scope.owner_id, scope.contact_id),
-    ).fetchone()
-    if candidate is None:
-        raise StyleSampleConflict("候选来源已变化，不能保存样本。")
-    requests = set(_reply_ancestor_ids(connection, owner_id=scope.owner_id, request_id=candidate["id"]))
-    pending = list(requests)
-    try:
-        while pending:
-            for parent in reply_discussion_request_dependencies(connection, scope, pending.pop()):
-                ancestors = set(_reply_ancestor_ids(connection, owner_id=scope.owner_id, request_id=parent))
-                pending.extend(ancestors - requests)
-                requests.update(ancestors)
-    except ReplyStoreInvariantError:
-        raise StyleSampleConflict("候选使用的助手历史已失效。") from None
-    uses = connection.execute(
-        """SELECT preference_id,preference_revision FROM public.reply_expression_preference_use
-           WHERE owner_id=%s AND contact_id=%s AND reply_request_id=ANY(%s::uuid[])
-           UNION SELECT preference_id,preference_revision FROM public.style_sample_expression_preference_use
-           WHERE owner_id=%s AND contact_id=%s AND sample_id=ANY(%s::uuid[])""",
-        (scope.owner_id, scope.contact_id, list(requests), scope.owner_id, scope.contact_id, dependency_sample_ids),
-    ).fetchall()
-    for use in uses:
-        try:
-            _current_preference(connection, _read(connection, scope.owner_id, use["preference_id"], contact_id=scope.contact_id))
-        except ExpressionPreferenceError:
-            raise StyleSampleConflict("候选使用的长期偏好或来源已失效。") from None
-        connection.execute(
-            """INSERT INTO public.style_sample_expression_preference_use(
-               sample_id,preference_id,preference_revision,owner_id,contact_id) VALUES (%s,%s,%s,%s,%s)""",
-            (sample_id, use["preference_id"], use["preference_revision"], scope.owner_id, scope.contact_id),
-        )
 
 
 class PostgresExpressionPreferenceStore:

@@ -40,7 +40,6 @@ from notalone.persistence.assistant_discussion_reply_context import PostgresAssi
 from notalone.persistence.retrieval import PostgresRetrieval
 from notalone.persistence.memory_overview import PostgresRelationshipOverviewStore
 from notalone.persistence.skill_port import PostgresSkillPort
-from notalone.persistence.style_sample_store import PostgresStyleSampleStore
 from notalone.persistence.expression_preferences import PostgresExpressionPreferenceStore
 from notalone.application.expression_preference_context import ExpressionPreferenceContext
 from notalone.reply.adapters.deepseek_provider import build_deepseek_model
@@ -109,7 +108,6 @@ def build_reply_service(
         retrieval=retrieval,
         memory_index=PostgresContactMemoryIndexRepository(database_url),
         skill_library_revision=skill_revision,
-        style_references=PostgresStyleSampleStore(database_url),
         skill_revision_reader=lambda scope: _skill_library_revision(
             database_url,
             scope.owner_id,

@@ -10,15 +10,14 @@ import { build } from 'esbuild';
 const require = createRequire(path.resolve('package.json'));
 const bundle = await build({ stdin: { contents: `
   export { CandidateVersionEditor } from './src/renderer/CandidateVersionEditor';
-  export { StyleSamples } from './src/renderer/StyleSamples';
 `, resolveDir: process.cwd() }, bundle: true, platform: 'node', format: 'esm', write: false,
   plugins: [{ name: 'shared-react', setup(builder) {
     builder.onResolve({ filter: /^react(?:\/.*)?$/ }, args => ({ path: pathToFileURL(require.resolve(args.path)).href, external: true }));
   } }] });
-const { CandidateVersionEditor, StyleSamples } = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString('base64')}`);
+const { CandidateVersionEditor } = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString('base64')}`);
 
-test('工作区只显示版本编辑器的样本保存入口，旧改写仍保留原入口', () => {
-  globalThis.window = { notalone: { styleSamples: {} } };
+test('工作区保留编辑和新开会话，不提供表达样本收藏入口', () => {
+  globalThis.window = { notalone: { candidateProvenance: {} } };
   const version = { versionId: 'v0', versionNumber: 0, messages: [{ messageId: 'm', text: '合成回复。' }], requirements: null };
   const history = { sessionId: 's', candidateId: 'c', versions: [version] };
   const view = { phase: 'ready', history, displayVersionId: 'v0' };
@@ -28,11 +27,9 @@ test('工作区只显示版本编辑器的样本保存入口，旧改写仍保�
       candidates: [{ original: { candidateId: 'c' }, editedText: '合成回复。' }] } };
   const workspace = renderToStaticMarkup(React.createElement(React.Fragment, null,
     React.createElement(CandidateVersionEditor, { replies: { state }, view, candidateId: 'c', replyRequestId: 'r',
-      number: 1, restored: false, noteCopy() {} }), React.createElement(StyleSamples, { replies: { state } })));
-  assert.equal((workspace.match(/主动保存说法1为样本/g) ?? []).length, 1);
-  const legacy = renderToStaticMarkup(React.createElement(StyleSamples, { replies: { state: { ...state,
-    result: { ...state.result, input: { mode: 'rewrite_draft' } } } } }));
-  assert.equal((legacy.match(/主动保存说法1为样本/g) ?? []).length, 1);
+      number: 1, restored: false, noteCopy() {} })));
+  assert.doesNotMatch(workspace, /保存为表达样本|主动保存说法/);
+  assert.match(workspace, /用这组回复新开会话/);
 });
 
 test('连续编辑保存使用新身份，失败重试复用本次身份，回看旧版再编辑不重放旧保存', async t => {

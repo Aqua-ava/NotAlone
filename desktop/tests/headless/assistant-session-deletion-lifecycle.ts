@@ -33,13 +33,8 @@ async function runningDeletion(pages: RewritePages, host: PageHost, userData: st
   expect((await rewriteBackend.request('/api/memories/manual-owner', {
     text: '会话清除仍保留的合成本人偏好。', category: 'preference',
   })).status).toBe(200);
-  await helper.getByText('我的表达样本', { exact: true }).click();
-  await helper.getByRole('textbox', { name: '手工表达样本', exact: true }).fill('会话清除仍独立保留的合成表达样本。');
-  await helper.getByRole('button', { name: '主动保存手工文字', exact: true }).click();
-  await expect(helper.getByRole('list', { name: '表达样本目录', exact: true })
-    .getByText('会话清除仍独立保留的合成表达样本。', { exact: true })).toBeVisible();
   const retainedPaths = [`/api/contacts/${contactId}/sources`, `/api/contacts/${contactId}/messages?limit=20`,
-    `/api/contacts/${contactId}/memories`, '/api/memories/owner', `/api/contacts/${contactId}/style-samples`];
+    `/api/contacts/${contactId}/memories`, '/api/memories/owner'];
   const retained = await Promise.all(retainedPaths.map((path) => rewriteBackend.request(path)));
   for (const read of retained) expect(read.status).toBe(200);
   const draft = '生成尚未完成也必须清除的合成讨论。';
@@ -101,9 +96,6 @@ async function runningDeletion(pages: RewritePages, host: PageHost, userData: st
       expect((await rewriteBackend.request(`/api/contacts/${contactId}/assistant-sessions/${rebuiltId}`)).data)
         .toMatchObject({ turns: [], inputs: [] });
       expect(await rewriteBackend.request(path)).toEqual({ status: 404, data: { error: 'not_found' } });
-      await nextHelper.getByText('我的表达样本', { exact: true }).click();
-      await expect(nextHelper.getByRole('list', { name: '表达样本目录', exact: true })
-        .getByText('会话清除仍独立保留的合成表达样本。', { exact: true })).toBeVisible();
       expect(await Promise.all(retainedPaths.map((endpoint) => rewriteBackend.request(endpoint)))).toEqual(retained);
       expect((await rewriteBackend.command('observations')).payloads).toHaveLength(1);
     } finally { await rebuilt.close(); }

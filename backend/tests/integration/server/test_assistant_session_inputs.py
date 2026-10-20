@@ -14,7 +14,7 @@ from notalone.memory.models import (
 from notalone.persistence.locks import lock_owner_scope
 from notalone.persistence.assistant_session_store import PostgresAssistantSessionStore
 from notalone.persistence.owner_memory_store import PostgresOwnerMemoryStore
-from notalone.persistence.style_sample_store import captured_reply_sources
+from notalone.persistence.reply_sources import captured_reply_sources
 from notalone.scopes import ContactScope
 from tests.integration.persistence.concurrency import wait_for_blocked_operations
 from tests.integration.server import test_assistant_session_api as session_fixture

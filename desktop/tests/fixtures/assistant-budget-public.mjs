@@ -138,8 +138,8 @@ export async function budgetPublicFixture(t, { toolHistory = false, continuous =
       { replies: { state, error: '' } })),
     renderCandidates: (state) => {
       const previousWindow = globalThis.window;
-      // 静态渲染不运行 effect；宿主样本订阅只作为 renderer 参数。
-      globalThis.window = { notalone: { styleSamples: {} } };
+      // 静态渲染不运行 effect；宿主偏好订阅只作为 renderer 参数。
+      globalThis.window = { notalone: { candidateProvenance: {} } };
       try { return ports.renderToStaticMarkup(ports.createElement(ports.ReplyCandidates, { replies: { state, error: '' } })); }
       finally { if (previousWindow === undefined) delete globalThis.window; else globalThis.window = previousWindow; }
     },

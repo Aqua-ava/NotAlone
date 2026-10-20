@@ -116,14 +116,13 @@ class DiscussionSnapshot:
 
 @dataclass(frozen=True, slots=True)
 class DiscussionDependencies:
-    """真实来源、消息和记忆标识与样本标识分开交给中央删除守卫。"""
+    """真实来源、消息和记忆标识交给中央删除守卫。"""
 
     source_ids: tuple[UUID, ...] = ()
-    style_sample_ids: tuple[UUID, ...] = ()
 
     def __post_init__(self) -> None:
         if any(not isinstance(values, tuple) or any(not isinstance(value, UUID) for value in values)
-               for values in (self.source_ids, self.style_sample_ids)):
+               for values in (self.source_ids,)):
             raise TypeError("助手讨论来源结构无效。")
 
 

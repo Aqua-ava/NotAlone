@@ -273,24 +273,6 @@ class AssistantCandidateCarryHttpTest(unittest.TestCase):
         self.assertIsNone(erased["inputs"][0]["content"])
         self.assertEqual(len(self.fixture.reply_model.seen_model_payloads), calls)
 
-    def test_parent_session_delete_preserves_previously_user_saved_sample_without_hidden_carry(self) -> None:
-        contact_id, path, _, selected = self._selected(history=True)
-        samples_path = f"/api/contacts/{contact_id}/style-samples"
-        self.assertEqual(self.fixture.backend.request(samples_path)[1]["samples"], [])
-        save = {"idempotency_key": str(uuid4()), "text": "合成用户明确另存的最终表达",
-                "origin": {"kind": "candidate", "id": selected["candidate_id"]}}
-        status, saved = self.fixture.backend.request(samples_path, save)
-        self.assertEqual(status, 200, saved)
-        status, carried = self.fixture.backend.request(path + "/new-with-candidate", self._carry_body(selected))
-        self.assertEqual(status, 200, carried)
-        calls = len(self.fixture.reply_model.seen_model_payloads)
-        self.assertEqual(self.fixture.backend.request(path, {"confirmed": True}, method="DELETE")[0], 200)
-        self.assertEqual(self.fixture.backend.request(samples_path)[1]["samples"], [saved["sample"]])
-        child = self.fixture.backend.request(f"/api/contacts/{contact_id}/assistant-sessions/{carried['session_id']}")[1]
-        self.assertEqual(child["inputs"][0]["state"], "redacted")
-        self.assertIsNone(child["inputs"][0]["content"])
-        self.assertEqual(self.fixture.backend.request(samples_path, {**save, "idempotency_key": str(uuid4())})[0], 404)
-        self.assertEqual(len(self.fixture.reply_model.seen_model_payloads), calls)
 
     def test_corrupted_carry_origin_refuses_delete_and_rolls_back_old_session_invalidation(self) -> None:
         contact_id, path, _, selected = self._selected()

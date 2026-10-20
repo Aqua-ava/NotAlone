@@ -31,7 +31,7 @@ export async function withPreferenceBackend(run, { bridge = false } = {}) {
     const entry = path.join(owned, 'entry.ts'), outfile = path.join(owned, 'modules.mjs');
     await writeFile(entry, ['src/main/expression-preferences/controller.ts', 'src/main/backend/json-client.ts',
       'src/main/contacts/session.ts', 'src/main/contacts/directory.ts', 'src/main/reply/session.ts',
-      'src/main/candidate-copy/controller.ts', 'src/main/style-samples/controller.ts',
+      'src/main/candidate-copy/controller.ts', 'src/main/candidate-provenance/controller.ts',
       ...(bridge ? ['src/main/expression-preferences/bridge.ts', 'src/preload/expression-preferences.ts'] : [])]
       .map((file) => `export * from ${JSON.stringify(path.resolve(file))};`).join('\n'));
     // 同一次实际编译提供生产源码内容并记录摘要，避免事后构建替代运行输入。

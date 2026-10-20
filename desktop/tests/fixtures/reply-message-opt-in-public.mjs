@@ -91,7 +91,7 @@ export async function withMessageOptInFixture(use) {
         disconnect: () => { generation += 1; runtime.cancelPending(); for (const listener of backendListeners) listener(); },
         renderCandidates: (state) => {
           const previous = globalThis.window;
-          globalThis.window = { notalone: { styleSamples: {} } };
+          globalThis.window = { notalone: { candidateProvenance: {} } };
           try { return ports.renderToStaticMarkup(ports.createElement(ports.ReplyCandidates, { replies: { state, error: '' } })); }
           finally { if (previous === undefined) delete globalThis.window; else globalThis.window = previous; }
         },

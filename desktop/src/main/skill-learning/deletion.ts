@@ -2,12 +2,6 @@ import type { SkillLearningController } from './controller';
 import type { MemoryReadingController } from '../memory/controller';
 import type { ReplySession } from '../reply/session';
 import type { SourceDeletionController } from '../sources/controller';
-import type { StyleSampleController } from '../style-samples/controller';
-
-export function coordinateSkillLearningSampleDeletion(learning: SkillLearningController,
-  samples: Pick<StyleSampleController, 'onDeletion'>) {
-  return samples.onDeletion(deletionPhases(learning));
-}
 
 export function coordinateSkillLearningSourceDeletion(learning: SkillLearningController,
   sources: Pick<SourceDeletionController, 'onDeletion'>) {

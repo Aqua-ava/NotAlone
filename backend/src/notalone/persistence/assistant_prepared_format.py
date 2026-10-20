@@ -63,7 +63,7 @@ def check_prepared_format(connection: Any, scope: ContactScope, session_id: UUID
                 or turn["reply_request_id"] not in (None, request["id"])):
             return "prepared_context_generation_unconfirmed"
         from notalone.application.assistant_session_service import AssistantSessionRejected
-        from notalone.persistence.style_sample_store import require_reply_sources_current
+        from notalone.persistence.reply_sources import require_reply_sources_current
         from notalone.reply.errors import ReplyStoreInvariantError
         try:
             require_reply_sources_current(connection, owner_id=scope.owner_id,

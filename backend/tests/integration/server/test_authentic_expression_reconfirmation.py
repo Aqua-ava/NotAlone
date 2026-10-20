@@ -1,4 +1,4 @@
-"""实际 HTTP 中断后明确重试与表达参考组合；不运行真实宿主退出。"""
+"""实际 HTTP 中断后明确重试与选定Skill组合；不运行真实宿主退出。"""
 
 import json
 import unittest
@@ -47,7 +47,6 @@ class AuthenticExpressionReconfirmationTests(FidelityHttpFixture, unittest.TestC
                 self.assertEqual(turn["input"]["content"]["suggestion"]["task_id"], parent["exploration_id"])
                 self.assertEqual(turn["state"], "running")
                 actual = self.reply_model.payloads[-1]
-                self.assertEqual([item["sample_id"] for item in actual["style_references"]], [self.sample_id])
                 interruption = {"request_key": turn["request_key"], "input_version_id": turn["input_version_id"]}
                 status, receipt = self.backend.request(path + "/interrupt", interruption)
                 self.assertEqual(status, 200, receipt)
@@ -92,27 +91,15 @@ class AuthenticExpressionReconfirmationTests(FidelityHttpFixture, unittest.TestC
         self.assertEqual(len(self.reply_model.payloads), calls, "恢复与中断重放不能调用模型。")
         return path, parent, restored["turns"][0], confirmation, source
 
-    def prepare_contact(self, owner_id, *, history=True):
-        prepared = super().prepare_contact(owner_id, history=history)
-        status, sample = self.backend.request(f"/api/contacts/{prepared[0]}/style-samples", {
-            "idempotency_key": str(uuid4()), "text": "合成独立表达参考：好呀，一定见面。",
-            "origin": {"kind": "manual"},
-        })
-        self.assertEqual(status, 200, sample)
-        self.sample_id = sample["sample"]["sample_id"]
-        return prepared
 
-    def test_reconfirmed_skill_keeps_current_intent_and_sample_deletion_blocks_recovery(self):
+    def test_reconfirmed_skill_keeps_current_intent_and_selected_version(self):
         for scene in ("reply_to_message", "initiate_conversation"):
             with self.subTest(scene=scene):
                 start = len(self.reply_model.payloads)
                 path, parent, old_turn, confirmation, _ = self._interrupted(scene)
-                sample_id = self.sample_id
                 exploration = [payload for payload in self.reply_model.payloads[start:]
                                if payload.get("input_mode") == "direction_exploration"]
                 self.assertEqual(len(exploration), 1)
-                self.assertNotIn(sample_id, json.dumps(exploration, ensure_ascii=False))
-                self.assertNotIn("合成独立表达参考", json.dumps(exploration, ensure_ascii=False))
                 calls = len(self.reply_model.payloads)
                 endpoint = path + f"/explorations/{parent['exploration_id']}/reconfirm"
                 request = {**confirmation, "request_key": str(uuid4()),
@@ -133,51 +120,10 @@ class AuthenticExpressionReconfirmationTests(FidelityHttpFixture, unittest.TestC
                     {"text": "最近还好吗？", "basis": "仅了解近况，不增加见面承诺。"}])
                 status, generated = self.backend.request(path + "/replies", body)
                 self.assertEqual(status, 200, generated)
-                self.assertEqual(generated["context_receipt"]["style_sample_ids"], [sample_id])
                 self.assertEqual(generated["used_skill"]["version_id"], receipt["skill_version_id"])
                 self.assertEqual(len(self.reply_model.payloads), calls + 2)
                 actual = self.reply_model.payloads[-1]
                 self.assertEqual(actual["fidelity_contract"]["current_intent"]["text"], "只了解近况，不承诺见面。")
-                self.assertEqual([item["sample_id"] for item in actual["style_references"]], [sample_id])
                 rebuilt = self._backend(self.owner_id)
                 self.assertEqual(rebuilt.request(path + "/replies", body), (200, generated))
-                self.assertEqual(len(self.reply_model.payloads), calls + 2)
-                self.assertEqual(rebuilt.request(f"/api/contacts/{body['contact_id']}/style-samples/{sample_id}",
-                                                 method="DELETE")[0], 200)
-                restored = self._get(self._backend(self.owner_id), path)
-                self.assertIsNone(restored["current_input_version_id"])
-                for turn in restored["turns"]:
-                    self.assertEqual(turn["state"], "redacted")
-                    self.assertIsNone(turn["input"])
-                    self.assertIsNone(turn["reply"])
-                    self.assertIsNone(turn["interruption_reason"])
-                self.assertEqual(rebuilt.request(path + "/interrupt", {
-                    "request_key": old_turn["request_key"], "input_version_id": old_turn["input_version_id"],
-                }), (409, {"error": "assistant_session_rejected", "reason": "source_deleted"}))
-                self.assertNotEqual(rebuilt.request(path + "/replies", body)[0], 200)
-                # 真实新生成键沿旧 B 引用请求；CURRENT 已清空，不能重新激活历史讨论输入。
-                fresh_generation = {**body, "idempotency_key": str(uuid4())}
-                # HTTP 的空 expected 以省略字段表示；显式 null 会在解析层拒绝。
-                fresh_generation.pop("expected_input_version_id")
-                self.assertEqual(rebuilt.request(path + "/replies", fresh_generation),
-                                 (409, {"error": "assistant_session_rejected", "reason": "input_version_stale"}))
-                # 样本只参与生成；无样本依赖的 B 讨论回执允许只读重放，不能推进当前指针。
-                self.assertEqual(rebuilt.request(endpoint, request), (200, receipt))
-                self.assertNotEqual(rebuilt.request(endpoint, {**request, "request_key": str(uuid4())})[0], 200)
-                with psycopg.connect(self.database_url) as connection:
-                    rows = connection.execute(
-                        "SELECT id,input_type,state,content FROM public.assistant_session_input "
-                        "WHERE owner_id=%s AND contact_id=%s AND session_id=%s",
-                        (self.owner_id, body["contact_id"], parent["session_id"]),
-                    ).fetchall()
-                inputs = {str(row[0]): row[1:] for row in rows}
-                for input_id in (parent["input_version_id"], receipt["input_version_id"]):
-                    kind, state, content = inputs[input_id]
-                    self.assertNotEqual(kind, "generation")
-                    self.assertEqual(state, "active")
-                    self.assertNotIn(sample_id, json.dumps(content))
-                    self.assertNotIn("合成独立表达参考", json.dumps(content, ensure_ascii=False))
-                for input_id in (old_turn["input_version_id"], generated["input_version_id"]):
-                    self.assertEqual(inputs[input_id], ("generation", "redacted", None))
-                self.assertEqual(self._get(rebuilt, path), restored)
                 self.assertEqual(len(self.reply_model.payloads), calls + 2)

@@ -259,7 +259,7 @@ def restored_version_evidence(connection: Any, *, previous: dict, revision: int)
 def erase_reverted_version(connection: Any, *, table: str, owner_id: UUID, current: dict) -> None:
     """撤销只清除所撤销版本及其依赖，不清除仍有合法依据的旧版。"""
     from notalone.persistence.memory_correction import candidate_from_row, erase_correction_dependencies, record_decision
-    from notalone.persistence.style_sample_store import erase_source_style_samples
+
     from notalone.persistence.extraction_trace import erase_record_traces
     if table not in {"confirmed_memory", "owner_memory"}:
         raise ValueError("记忆版本类型无效。")
@@ -279,7 +279,6 @@ def erase_reverted_version(connection: Any, *, table: str, owner_id: UUID, curre
         removed.add(current["source_candidate_id"])
     erase_record_traces(connection, owner_id=owner_id, record_kind=record_kind, record_id=current["id"])
     erase_correction_dependencies(connection, owner_id=owner_id, removed_ids=removed, record_deletion=True)
-    erase_source_style_samples(connection, owner_id=owner_id, removed_ids=removed)
     connection.execute(sql.SQL(
         "UPDATE public.{} SET text_content='已删除的资料', status='deleted', revision=revision+1, "
         "risk_flags='{{}}'::text[], event=NULL, version_evidence=NULL" + conditions_clear_sql(connection) + ", updated_at=now() WHERE owner_id=%s AND id=%s"

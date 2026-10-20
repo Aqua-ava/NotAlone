@@ -75,7 +75,7 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 41. [ADR-041：观察提交后唤醒联系人记忆任务](adr/041-observation-triggered-memory-work.md)
 42. [ADR-042：持续助手会话与单次运行上下文分界](adr/042-assistant-session-context-boundary.md)
 43. [ADR-043：聊天场景与有界方向探索](adr/043-conversation-scenarios-and-direction-exploration.md)
-44. [ADR-044：主动保存的表达样本独立于助手会话留存](adr/044-explicit-style-sample-retention.md)
+44. [ADR-044：主动保存的表达样本独立于助手会话留存](adr/044-explicit-style-sample-retention.md)（历史，已由 ADR-082 整体替代）
 45. [ADR-045：ECNU 回复输入预算采用明确标注的估算与余量](adr/045-explicit-estimated-ecnu-input-budget.md)
 46. [ADR-046：维度依据绑定当前来源，第四门采用合取](adr/046-source-bound-dimension-evidence.md)
 47. [ADR-047：同次来源核验的有界提案与版本二语义依据](adr/047-bounded-source-semantic-proof.md)
@@ -118,7 +118,11 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 80. [ADR-080：统一记忆列表与失效记忆禁用](adr/080-unified-memory-list-and-retired-exclusion.md)
 81. [ADR-081：来源锚点、日期精度与条件性记忆](adr/081-source-grounded-memory-time-and-conditions.md)
 
+82. [ADR-082：退役主动收藏表达样本](adr/082-retire-explicit-style-samples.md)
+
 ## 当前架构决策
+
+- 主动收藏表达样本按 [ADR-082](adr/082-retire-explicit-style-samples.md)退役；删除独立样本库、入口和生成参考，清理遗留依赖及可重放副本。普通候选编辑复制与用户明确管理的长期表达偏好保留，历史样本验收不代表本次退役验证。
 
 - 旧 Swift 主界面已按 ADR-039 退役；共享前端采用 TypeScript + React，由 ADR-040 的 Electron 双窗口宿主承载；已接通业务页面，完整原生验收仍未完成。Python 后台与 Mac 原生探针保留。
 - 独立桌面版按 ADR-061 采用本机受管后台与 PostgreSQL，资料保存在本机；新装交付与最终验收状态分别核验。按 ADR-066，已有安装保留原数据库连接与资料位置，仅原地执行缺少的版本化 SQL，取消普通启动中的强制备份与复制切换；没有既有配置的新安装正常初始化空受管库。旧云端模块化单体目标不作为独立版的默认数据去向，PostgreSQL 仍是联系人、消息、关系资料、任务和删除状态的权威业务库。
