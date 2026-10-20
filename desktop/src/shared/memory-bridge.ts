@@ -22,7 +22,7 @@ export interface MemoryEvent {
 }
 export interface MemoryEvolution {
   version: 1;
-  kind: 'supplement' | 'state_change' | 'error_correction' | 'historical_supplement' | 'unresolved_conflict';
+  kind: 'supplement' | 'state_change' | 'error_correction' | 'historical_supplement' | 'unresolved_conflict' | 'independent';
   explanation: string;
   relatedVersions: Array<{ memoryId: string; revision: number }>;
   evidenceMessageIds: string[];

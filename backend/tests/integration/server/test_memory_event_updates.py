@@ -36,26 +36,33 @@ class EventScriptedModel(ScriptedCoreModel):
         self.wait_for_response()
         names = [item.get('function', {}).get('name') for item in kwargs.get('tools', [])]
         index = len(self.seen_calls)
-        if names == ['BatchMemoryAdjudicationOutput'] and index < len(self.responses):
+        if names in (['BatchMemoryAdjudicationOutput'], ['MemoryAdjudicationOutput']) and index < len(self.responses):
             calls = self.responses[index].tool_calls
             if len(calls) == 1 and calls[0]['name'] == 'MemoryAdjudicationOutput':
-                candidates = json.loads(str(messages[-1].content))
+                payload = json.loads(str(messages[-1].content))
+                candidates = payload if isinstance(payload, list) else [{**payload, 'candidate_index': 0}]
                 decisions = []
                 for item in candidates:
                     decision = deepcopy(calls[0]['args'])
                     relation = decision.get('relation')
                     if relation is not None:
+                        if relation['kind'] == 'independent':
+                            relation['related_memory_ids'] = [old['memory_id'] for old in item['similar']
+                                                              if old['sources']]
                         targets = set(relation['related_memory_ids'])
                         values = [item['candidate'], *(old for old in item['similar']
                                   if old['memory_id'] in targets)]
                         relation['evidence'] = [{"message_id": source['message_id'], "quote": source['text']}
                                                 for value in values for source in value['sources']]
                     decisions.append({**decision, 'candidate_index': item['candidate_index']})
-                self.responses[index] = tool_response('BatchMemoryAdjudicationOutput', {'decisions': decisions})
+                self.responses[index] = (tool_response('BatchMemoryAdjudicationOutput', {'decisions': decisions})
+                    if names == ['BatchMemoryAdjudicationOutput'] else tool_response('MemoryAdjudicationOutput',
+                        {key: value for key, value in decisions[0].items() if key != 'candidate_index'}))
                 if any(item.get('relation') for item in decisions):
                     self.responses[index + 1] = tool_response('MemoryRelationVerificationOutput', {'results': [
                         {'candidate_index': item['candidate_index'], 'verdict': 'supported',
-                         'same_subject_and_matter': True, 'claim_changed': item['relation']['claim_changed'],
+                         'same_subject_and_matter': item['relation']['kind'] != 'independent',
+                         'claim_changed': item['relation']['claim_changed'],
                          'condition_changed': item['relation']['condition_changed'],
                          'evidence': item['relation']['evidence']} for item in decisions if item.get('relation')]})
         return super()._generate(messages, stop, run_manager, **kwargs)
@@ -165,26 +172,26 @@ class MemoryEventUpdatesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
                 or subject == "self" and _active_memories(self._get(self.backend, "/api/memories/owner")["memories"])):
             relation = None
             if relation_kind is not None:
-                self.assertEqual(relation_kind, "state_change", "此夹具仅声明同一读书会改场地的正例。")
-                self.assertEqual(len(facts), 1, "关系脚本必须逐候选明确声明。")
-                old_path = "/api/memories/owner" if subject == "self" else f"/api/contacts/{contact_id}/memories"
-                previous = next(item for item in self._get(self.backend, old_path)["memories"]
-                                if item["memory_id"] == replaced_id)
-                referenced = set(previous["source_ids"]) | {message["message_id"]}
-                evidence = [{"message_id": item["message_id"], "quote": item["text"]}
-                            for item in messages if item["message_id"] in referenced]
-                self.assertEqual({item["message_id"] for item in evidence}, referenced)
-                relation = {"kind": relation_kind, "explanation": "同一场读书会明确更改会议室。",
-                            "related_memory_ids": [replaced_id], "evidence": evidence,
-                            "claim_changed": True, "condition_changed": False}
+                self.assertIn(relation_kind, {"independent", "supplement", "state_change"})
+                if relation_kind != "independent":
+                    self.assertEqual(len(facts), 1, "同事项关系脚本必须逐候选明确声明。")
+                    self.assertIsNotNone(replaced_id)
+                # 具体旧资料及引句由模型边界按实际有界 DTO 填入，不能引用未展示的祖先。
+                relation = {"kind": relation_kind, "explanation": {
+                    "independent": "来源明确描述不同场次或独立事项。",
+                    "supplement": "来源补充同一事项，原主张和条件未改变。",
+                    "state_change": "同一场读书会明确更改会议室。",
+                }[relation_kind], "related_memory_ids": [replaced_id] if replaced_id else [],
+                    "evidence": [], "claim_changed": relation_kind == "state_change",
+                    "condition_changed": False}
             scripts.append(tool_response("MemoryAdjudicationOutput", {
                 "action": action, "replaced_memory_id": replaced_id,
                 **({"relation": relation} if relation is not None else {}),
             }))
             if relation is not None:
                 scripts.append(tool_response("MemoryRelationVerificationOutput", {"results": [{
-                    "candidate_index": 0, "verdict": "supported", "same_subject_and_matter": True,
-                    "claim_changed": True, "condition_changed": False, "evidence": relation["evidence"],
+                    "candidate_index": 0, "verdict": "supported", "same_subject_and_matter": relation_kind != "independent",
+                    "claim_changed": relation_kind == "state_change", "condition_changed": False, "evidence": relation["evidence"],
                 }]}))
         self.extraction_model.responses.extend(scripts)
         gate.set()
@@ -349,6 +356,7 @@ class MemoryEventUpdatesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         second = self.import_event(
             original="合成记录二：今天参加了读书会。", claim="联系人参加了读书会。",
             when="2026-09-01T10:00:00+08:00", contact_id=first["contact_id"],
+            relation_kind="independent",
         )
         memories = _active_memories(self._get(
             self.backend, f"/api/contacts/{first['contact_id']}/memories",
@@ -824,7 +832,7 @@ class MemoryEventUpdatesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self.assert_automatic_candidate_terminated(first['contact_id'], '联系人参加了读书会。',
             source_id=second['message']['message_id'])
 
-    def test_many_similar_manual_records_keep_a_new_claim_within_the_adjudication_budget(self):
+    def test_many_similar_manual_records_keep_unbound_relation_pending_within_adjudication_budget(self):
         imported = self.import_event(
             original="合成活动：读书会在一号会议室举行。", claim="读书会在一号会议室举行。",
             when="2026-08-01T10:00:00+08:00",
@@ -856,21 +864,27 @@ class MemoryEventUpdatesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
             second = self.import_event(
                 original="合成新活动：另外一场读书会也在一号会议室举行。",
                 claim="另外一场读书会在一号会议室举行。", when="2026-09-01T10:00:00+08:00",
-                contact_id=imported["contact_id"], action="add",
+                contact_id=imported["contact_id"], action="add", relation_kind="independent",
             )
         current = _active_memories(self._get(self.backend, prefix + "/memories")["memories"])
         self.assertEqual({item['memory_id'] for item in before},
             {item['memory_id'] for item in current if item['memory_id'] in {old['memory_id'] for old in before}})
-        added = [item for item in current if item['memory_id'] not in {old['memory_id'] for old in before}]
-        self.assertEqual(len(added), 1)
-        self.assertEqual((added[0]['text'], added[0]['adoption_method'], added[0]['source_ids']),
-            ('另外一场读书会在一号会议室举行。', 'auto', [second['message']['message_id']]))
-        self.assertEqual(self._get(self.backend, prefix + '/memory-candidates')['candidates'], [])
+        self.assertEqual(current, before)
+        pending = self._get(self.backend, prefix + '/memory-candidates')['candidates']
+        self.assertEqual(len(pending), 1)
+        self.assertEqual((pending[0]['text'], pending[0]['status'], pending[0]['source_ids']),
+            ('另外一场读书会在一号会议室举行。', 'pending', [second['message']['message_id']]))
+        self.assertIsNone(pending[0]['evolution'])
+        adjudication = [json.loads(str(call[-1].content)) for call in self.extraction_model.seen_calls
+                        if str(call[-1].content).startswith('[{"candidate_index"')]
+        self.assertTrue(adjudication)
+        self.assertTrue(all(len(item['similar']) <= 8 for batch in adjudication for item in batch))
 
     def test_same_source_and_words_with_distinct_verified_time_bounds_are_not_one_version(self):
         imported = self.import_event(
             original="合成回顾：八月一日和九月一日各参加了一次读书会。",
             claim="联系人参加了读书会。", when="2026-09-15T10:00:00+08:00",
+            relation_kind="independent",
             fact_overrides={"valid_at": "2026-08-01T00:00:00+08:00", "invalid_at": "2026-08-02T00:00:00+08:00"},
             additional_fact_overrides=({"valid_at": "2026-09-01T00:00:00+08:00", "invalid_at": "2026-09-02T00:00:00+08:00"},),
         )

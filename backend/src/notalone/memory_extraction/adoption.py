@@ -25,7 +25,7 @@ from notalone.memory.models import (
 from notalone.memory.ports import MemoryPort, OwnerMemoryPort
 from notalone.memory.versions import MemoryVersionConflict
 from notalone.memory.candidates import same_pending_identity
-from notalone.memory.events import same_verified_event_claim, same_verified_occurrence
+from notalone.memory.events import EventStage, same_verified_event_claim, same_verified_occurrence
 from notalone.memory.dimension_evidence import DimensionEvidenceChangedError
 from notalone.memory.correction import MemoryCorrectionConflictError
 from notalone.memory_extraction.adjudication import (
@@ -744,8 +744,15 @@ class MemoryAdoption:
                 tuple((item.memory_id, item.version.revision) for item in similar if str(item.memory_id) in ids),
                 tuple(dict.fromkeys(UUID(ref["message_id"]) for ref in relation["evidence"])),
                 supported, relation["claim_changed"], relation["condition_changed"], binding)
-            decision = replace(decision, evolution=evolution)
+            # 未冻结的关系只能保留未知，不能写入一份无法复验的变化依据。
+            decision = replace(decision, evolution=evolution if binding and binding["sources"] is not None else None)
             if relation["kind"] == "unresolved_conflict" or not supported:
+                actual_action = None
+                timeline_pending = True
+                outcome = LedgerOutcome.REJECTED_BY_VALIDATION
+        if decision.action in {AdjudicationAction.ADD, AdjudicationAction.KEEP} and similar:
+            if (decision.relation is None or decision.evolution is None or not decision.evolution.source_supported
+                    or decision.relation["kind"] == "independent" and (decision.relation["claim_changed"] or decision.relation["condition_changed"])):
                 actual_action = None
                 timeline_pending = True
                 outcome = LedgerOutcome.REJECTED_BY_VALIDATION
@@ -769,6 +776,7 @@ class MemoryAdoption:
             outcome = LedgerOutcome.REJECTED_BY_VALIDATION
         if decision.action is not AdjudicationAction.UPDATE and decision.replaced_memory_id is not None:
             actual_action = None
+            timeline_pending = False
             outcome = LedgerOutcome.REJECTED_BY_VALIDATION
         if (
             decision.action is AdjudicationAction.UPDATE
@@ -1076,12 +1084,12 @@ class MemoryAdoption:
         if self._automatic:
             # 逐条来源核验仍为准入；置信度/语用/风险字段只保留描述，不增设人工门。
             return self._dimension_release.allows(fact, scope=scope) and (
-                fact.event is None or fact.event.source_current and fact.event.stage_verified and fact.event.occurrence_verified)
+                fact.event is None or fact.event.source_current and fact.event.stage_verified and (fact.event.occurrence_verified or fact.event.stage is EventStage.CANCELLED))
         return can_auto_adopt(
             fact, decision, confidence_threshold=self._threshold
         ) and self._dimension_release.allows(fact, scope=scope) and (
             fact.event is None
-            or fact.event.source_current and fact.event.stage_verified and fact.event.occurrence_verified
+            or fact.event.source_current and fact.event.stage_verified and (fact.event.occurrence_verified or fact.event.stage is EventStage.CANCELLED)
         )
 
     def _pending_exists(self, scope: ContactScope, fact) -> bool:

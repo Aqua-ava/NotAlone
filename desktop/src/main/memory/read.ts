@@ -106,7 +106,7 @@ function memoryEvolution(value: unknown): MemoryEvolution | null {
   if (explanation.length > 1000 || (value.source_supported && !evidenceMessageIds.length)
     || new Set(evidenceMessageIds).size !== evidenceMessageIds.length
     || new Set(relatedVersions.map(ref => ref.memoryId)).size !== relatedVersions.length) throw invalid();
-  return { version: 1, kind: enumeration(value.kind, ['supplement', 'state_change', 'error_correction', 'historical_supplement', 'unresolved_conflict'] as const),
+  return { version: 1, kind: enumeration(value.kind, ['supplement', 'state_change', 'error_correction', 'historical_supplement', 'unresolved_conflict', 'independent'] as const),
     explanation, relatedVersions, evidenceMessageIds,
     sourceSupported: value.source_supported, claimChanged: value.claim_changed, conditionChanged: value.condition_changed };
 }

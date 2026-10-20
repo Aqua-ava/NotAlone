@@ -2,7 +2,7 @@ import type { MemoryEvolution } from '../shared/memory-bridge';
 
 const kindNames: Record<MemoryEvolution['kind'], string> = {
   supplement: '补充', state_change: '状态变化', error_correction: '错误纠正',
-  historical_supplement: '历史补充', unresolved_conflict: '未解决矛盾',
+  historical_supplement: '历史补充', unresolved_conflict: '未解决矛盾', independent: '独立事项',
 };
 
 export function MemoryEvolutionDetails({ evolution }: { evolution?: MemoryEvolution | null }) {

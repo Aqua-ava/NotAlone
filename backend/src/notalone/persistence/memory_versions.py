@@ -26,7 +26,7 @@ from notalone.persistence.source_dependency import dependency_mode
 
 
 def version_record_digest(memory: ConfirmedMemory | OwnerMemory, *, revision: int | None = None,
-                          invalid_at: object = ...) -> str:
+                          invalid_at: object = ..., current_projection: bool = False) -> str:
     """绑定实际版本完整采纳字段；正文只保留摘要。"""
     body = {"memory_id": str(memory.memory_id), "owner_id": str(memory.scope.owner_id
             if isinstance(memory, ConfirmedMemory) else memory.owner_id),
@@ -43,8 +43,11 @@ def version_record_digest(memory: ConfirmedMemory | OwnerMemory, *, revision: in
             "confidence": memory.confidence, "risk_flags": list(memory.risk_flags),
             "supersedes_memory_id": str(memory.supersedes_memory_id) if memory.supersedes_memory_id else None,
             "event": memory.event.to_payload() if memory.event else None}
-    if memory.evolution is not None:
-        body["evolution"] = memory.evolution.to_payload(include_proof=True)
+    evolution = memory.evolution
+    if evolution is not None and evolution.projected and not current_projection:
+        evolution = evolution.stored_evolution
+    if evolution is not None:
+        body["evolution"] = evolution.to_payload(include_proof=True)
     if memory.conditions is not None:
         body["conditions"] = memory.conditions.to_payload()
     if memory.requires_all_sources:

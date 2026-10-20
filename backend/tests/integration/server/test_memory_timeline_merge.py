@@ -40,12 +40,14 @@ class MemoryTimelineMergeHttpTest(events.CoreBusinessFlowFixture, unittest.TestC
     def two_parents(self):
         first = self.import_event(original="我喜欢喝无糖茶。", claim="联系人喜欢喝无糖茶。",
                                   when="2030-04-01T10:00:00+08:00")
+        self.extraction_model.relation_kind = "supplement"
         second = self.import_event(original="我喝茶时不加冰。", claim="联系人喝茶时不加冰。",
                                    when="2030-04-02T10:00:00+08:00", contact_id=first["contact_id"])
         path = f"/api/contacts/{first['contact_id']}/memories"
         parents = self._get(self.backend, path)["memories"]
         self.assertEqual(len(parents), 2)
         self.assertTrue(all(item["status"] == "active" for item in parents))
+        self.extraction_model.relation_kind = None
         return first, second, path, parents
 
     def test_supported_supplement_merge_reverifies_combined_text_and_preserves_two_parent_versions(self):

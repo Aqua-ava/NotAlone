@@ -4,7 +4,7 @@ import { fixture, ids, payload } from './layered-memory/support.mjs';
 import { withMemoryPage } from './layered-memory/react-support.mjs';
 
 for (const level of ['contact', 'owner', 'pending']) test(`实际 ${level} 记忆页面说明条件变化及各版本依据，不认证现实或撤销原主张`, { timeout: 20000 }, async t => {
-  const kinds = [['supplement', '补充'], ['state_change', '状态变化'], ['error_correction', '错误纠正'], ['historical_supplement', '历史补充'], ['unresolved_conflict', '未解决矛盾']];
+  const kinds = [['supplement', '补充'], ['state_change', '状态变化'], ['error_correction', '错误纠正'], ['historical_supplement', '历史补充'], ['unresolved_conflict', '未解决矛盾'], ['independent', '独立事项']];
   const memories = kinds.map(([kind], index) => ({ memory_id: `44444444-4444-4444-8444-${String(index).padStart(12, '0')}`, level,
     ...(level === 'contact' ? { contact_id: ids.contact } : {}), text: `合成条件记忆${index + 1}`, category: 'taboo', topic: 'other', source_ids: [ids.memory],
     status: index === 2 ? 'invalidated' : 'active', adoption_method: 'auto', confidence: 1, risk_flags: [], revision: 3,
@@ -17,7 +17,6 @@ for (const level of ['contact', 'owner', 'pending']) test(`实际 ${level} 记�
   await withMemoryPage(f, t.signal, async page => {
     if (level === 'contact') await page.getByRole('navigation', { name: '记忆分类' }).getByRole('button', { name: '对方', exact: true }).click();
     if (level === 'pending') await page.getByRole('navigation', { name: '记忆分类' }).getByRole('button', { name: '待确认', exact: true }).click();
-    await page.getByText('变化依据：未知', { exact: true }).waitFor();
     for (const [, label] of kinds) await page.getByText(`变化类型：${label}`, { exact: true }).waitFor();
     const details = page.getByRole('group', { name: '记忆变化依据', exact: true }).first();
     assert.match(await details.innerText(), /后续来源说明1：出差已经结束。/);
@@ -29,5 +28,7 @@ for (const level of ['contact', 'owner', 'pending']) test(`实际 ${level} 记�
     assert.match(await page.locator('body').innerText(), /当前主张仍有不确定性/);
     assert.match(await page.locator('body').innerText(), /补充的是历史信息/);
     if (level !== 'pending') assert.match(await page.locator('body').innerText(), /不再引用/);
+    await page.getByRole('button', { name: '下一页', exact: true }).click();
+    await page.getByText('变化依据：未知', { exact: true }).waitFor();
   }, { ownerPanel: level === 'owner' });
 });
