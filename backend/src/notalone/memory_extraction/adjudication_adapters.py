@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 from dataclasses import replace
 import json
+import time
 from notalone.memory_extraction.relations import RELATION_SCHEMA, VERIFICATION_SCHEMA, RELATION_PROMPT, valid_relation, validate_quotes
 
 from langchain_core.language_models import BaseChatModel
@@ -153,14 +154,19 @@ class LangChainAdjudicationRuntime:
             entries.append({"candidate_index": index, **payload, "relation": decision.relation})
         if not entries:
             return tuple(decisions)
+        started = time.perf_counter()
         try:
-            message = invoke_traced_model(self._model, purpose="adjudication", schema=VERIFICATION_SCHEMA,
+            message = invoke_traced_model(self._model, purpose="relation_verification", schema=VERIFICATION_SCHEMA,
                 messages=[{"role": "system", "content": RELATION_PROMPT},
                           {"role": "user", "content": json.dumps(entries, ensure_ascii=False)}])
         except (ExtractionRuntimeError, TraceWriteError):
             raise
         except Exception:
             raise ExtractionRuntimeError("关系核验模型调用失败。") from None
+        metadata = getattr(message, "usage_metadata", None) or {}
+        usage = {"started_ns": started, "model_name": getattr(self._model, "model_name", None),
+                 "input_tokens": metadata.get("input_tokens"), "output_tokens": metadata.get("output_tokens")}
+        decisions = tuple(replace(item, relation_usage=usage) if item is not None else None for item in decisions)
         calls = getattr(message, "tool_calls", None)
         if not isinstance(calls, list) or len(calls) != 1 or calls[0].get("name") != VERIFICATION_SCHEMA["title"]:
             return tuple(decisions)

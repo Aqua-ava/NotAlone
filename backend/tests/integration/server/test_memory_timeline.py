@@ -84,6 +84,9 @@ class MemoryTimelineHttpTest(event_support.CoreBusinessFlowFixture, unittest.Tes
     def test_historical_supplement_is_visible_with_its_actual_sources(self):
         first = self.import_event(original="我目前住在乙地。", claim="联系人目前住在乙地。",
                                   when="2030-04-01T10:00:00+08:00")
+        from notalone.persistence.outbound_ledger import PostgresOutboundLedger
+        ledger = PostgresOutboundLedger(self.database_url)
+        before_calls = ledger.summarize_by_owner(self.owner_id).total_calls
         self.extraction_model.relation_kind = "historical_supplement"
         second = self.import_event(original="我去年住在甲地。", claim="联系人去年住在甲地。",
                                   when="2030-05-01T10:00:00+08:00", contact_id=first["contact_id"])
@@ -93,6 +96,18 @@ class MemoryTimelineHttpTest(event_support.CoreBusinessFlowFixture, unittest.Tes
         self.assertTrue(history["evolution"]["source_supported"])
         self.assertIn(second["message"]["message_id"], history["evolution"]["evidence_message_ids"])
         self.assertFalse(history["evolution"]["claim_changed"])
+        self.assertEqual(ledger.summarize_by_owner(self.owner_id).total_calls - before_calls, 4)
+        from uuid import UUID
+        from notalone.scopes import ContactScope
+        from notalone.persistence.extraction_trace import PostgresExtractionTraceStore
+        traces = PostgresExtractionTraceStore(self.database_url)
+        scope = ContactScope(self.owner_id, UUID(first["contact_id"]))
+        detail = traces.get_batch(scope, UUID(traces.list_batches(scope)[0]["trace_id"]))
+        calls = detail["calls"]
+        self.assertEqual({call["purpose"] for call in calls},
+                         {"extraction", "verification", "adjudication", "relation_verification"})
+        self.assertEqual(len({call["ledger_entry_id"] for call in calls}), 4)
+        self.assertTrue(all(call["ledger_commit_status"] == "committed" for call in calls))
 
     def test_independently_supported_wrong_update_cannot_replace_newer_event_with_earlier_recollection(self):
         verification = {"stage_verdict": "supported", "occurrence_verdict": "supported"}

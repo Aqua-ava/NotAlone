@@ -678,6 +678,7 @@ class MemoryAdoption:
             model_name=usage.model_name if usage else None,
             input_tokens=usage.input_tokens if usage else None,
             output_tokens=usage.output_tokens if usage else None)
+        self._record_relation_usage(scope, usage.relation_usage if usage else None)
         return dict(zip(keys, decisions))
 
     def _adjudicate(self, fact, similar, scope: ContactScope, batch_decisions=None):
@@ -797,6 +798,7 @@ class MemoryAdoption:
         if not cached:
             self._record_ledger(scope, outcome, started_ns, model_name=decision.model_name,
                 input_tokens=decision.input_tokens, output_tokens=decision.output_tokens)
+            self._record_relation_usage(scope, decision.relation_usage)
         # 裁决要求更新但缺少有效被取代 id 时保留 UPDATE 与空 ID：
         # adopt 会把它降级为待定候选，而不是静默按 ADD 落库让被取代
         # 的旧记忆保持 active。
@@ -907,6 +909,12 @@ class MemoryAdoption:
         return (candidates[:MAX_SIMILAR_MEMORY_CANDIDATES],
                 verified_correction and len(candidates) > MAX_SIMILAR_MEMORY_CANDIDATES)
 
+    def _record_relation_usage(self, scope, usage):
+        if usage is not None:
+            self._record_ledger(scope, LedgerOutcome.SUCCEEDED, usage["started_ns"],
+                model_name=usage["model_name"], input_tokens=usage["input_tokens"],
+                output_tokens=usage["output_tokens"], purpose="relation_verification")
+
     def _record_ledger(
         self,
         scope: ContactScope,
@@ -916,6 +924,7 @@ class MemoryAdoption:
         model_name: str | None = None,
         input_tokens: int | None = None,
         output_tokens: int | None = None,
+        purpose: str = "adjudication",
     ) -> None:
         if self._ledger is None:
             return
@@ -934,7 +943,7 @@ class MemoryAdoption:
         started_at = datetime.now(timezone.utc)
         try:
             record_ledger_entry(
-                "adjudication", self._ledger, entry, started_at=started_at
+                purpose, self._ledger, entry, started_at=started_at
             )
         except TraceWriteError:
             raise
