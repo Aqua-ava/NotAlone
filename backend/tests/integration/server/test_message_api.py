@@ -674,8 +674,8 @@ class MessageStreamApiTest(unittest.TestCase):
             connection.execute("INSERT INTO public.contact(owner_id,id,display_name) VALUES (%s,%s,%s)",
                                (self.owner_id, other_contact, "另一合成引用联系人"))
             source = self._insert_stream_source(connection)
-            for number, owner, contact in ((101, self.owner_id, self.contact_id),
-                (102, self.owner_id, self.contact_id), (103, self.owner_id, self.contact_id),
+            for number, owner, contact in ((103, self.owner_id, self.contact_id),
+                (101, self.owner_id, self.contact_id), (102, self.owner_id, self.contact_id),
                 (104, self.owner_id, other_contact), (105, self.other_owner_id, self.other_contact_id)):
                 target_source = self._insert_stream_source(
                     connection, owner_id=owner, contact_id=contact,
@@ -746,12 +746,13 @@ class MessageStreamApiTest(unittest.TestCase):
         self.assertEqual(row_counts[-1], 3, "引用展开后的数据库结果也只能读取limit+1行。")
         self.assertEqual([message.message_id for message in first.messages], [UUID(int=204)] * 2)
         self.assertEqual(first.next_cursor, UUID(int=204))
-        self.assertEqual(len({message.quoted.target_message_id for message in first.messages}), 2)
-        self.assertTrue({message.quoted.target_message_id for message in first.messages} <= targets)
+        self.assertEqual([message.quoted.target_message_id for message in first.messages],
+                         [UUID(int=101), UUID(int=102)])
         all_targets = stream.page_messages(scope=scope, limit=3)
         self.assertEqual(row_counts[-1], 4)
         self.assertEqual([message.message_id for message in all_targets.messages], [UUID(int=204)] * 3)
-        self.assertEqual({message.quoted.target_message_id for message in all_targets.messages}, targets)
+        self.assertEqual([message.quoted.target_message_id for message in all_targets.messages],
+                         sorted(targets))
         self.assertTrue(all(message.quoted.text == "合成共同引用" for message in all_targets.messages))
         second = stream.page_messages(scope=scope, limit=2, before_message_id=first.next_cursor)
         self.assertEqual(row_counts[-1], 3)

@@ -410,4 +410,3 @@ class MemoryProcessingReadTest(unittest.TestCase):
         self.assertEqual(tasks[str(completed)]["reason_code"], "batches_skipped")
         self.assertEqual(tasks[str(unknown)]["reason_code"], "processing_outcome_unknown")
         self.assertEqual(datetime.fromisoformat(tasks[str(completed)]["updated_at"]), FIXED_TIME)
-

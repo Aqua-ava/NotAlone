@@ -43,12 +43,7 @@ INDEXES = (
     "message_contact_page_idx",
     "wechat_message_metadata_scope_server_idx",
 )
-DDL = (
-    "CREATE INDEX message_contact_page_idx ON public.message "
-    "(owner_id, contact_id, occurred_at DESC NULLS LAST, id DESC)",
-    "CREATE INDEX wechat_message_metadata_scope_server_idx "
-    "ON public.wechat_message_metadata (owner_id, contact_id, external_server_id)",
-)
+
 
 
 @contextmanager
@@ -84,11 +79,11 @@ def elapsed(call):
     return (time.perf_counter() - start) * 1000, result
 
 
-def indexes(connection, enabled):
+def indexes(connection, enabled, definitions):
     for name in INDEXES:
         connection.execute(f"DROP INDEX IF EXISTS public.{name}")
     if enabled:
-        for statement in DDL:
+        for statement in definitions:
             connection.execute(statement)
 
 
@@ -127,10 +122,13 @@ def seed(connection):
         connection.execute("""INSERT INTO background_task
             (owner_id,contact_id,source_document_id,task_type,current_step,message_count)
             VALUES (%s,%s,%s,'import','extract_memory',0)""", (OWNER, contact, source))
+    connection.execute("UPDATE wechat_message_metadata SET external_server_id='100' "
+                       "WHERE owner_id=%s AND contact_id=%s AND external_server_id IN ('200','300')",
+                       (OWNER, CONTACT))
     connection.execute("ANALYZE")
 
 
-def capture_page(scope, limit, cursor=None):
+def capture_page(scope, limit, cursor=None, store_class=PostgresMessageStream):
     class Capture:
         def __enter__(self):
             return self
@@ -149,8 +147,8 @@ def capture_page(scope, limit, cursor=None):
             return {"occurred_at": None}
 
     capture = Capture()
-    with patch.object(PostgresMessageStream, "_connect", return_value=capture):
-        PostgresMessageStream("synthetic").page_messages(
+    with patch.object(store_class, "_connect", return_value=capture):
+        store_class("synthetic").page_messages(
             scope=scope, limit=limit, before_message_id=cursor)
     return capture.query, capture.params
 
@@ -199,15 +197,21 @@ def run(dsn, directory, samples):
         BASELINE + ":backend/src/notalone/persistence/memory_processing.py"], text=True)
     baseline = types.ModuleType("baseline_memory_processing")
     exec(compile(baseline_source, "baseline_memory_processing.py", "exec"), baseline.__dict__)
+    legacy_stream_source = subprocess.check_output(["git", "-C", str(ROOT), "show",
+        BASELINE + ":backend/src/notalone/persistence/message_stream.py"], text=True)
+    legacy_stream = types.ModuleType("baseline_message_stream")
+    exec(compile(legacy_stream_source, "baseline_message_stream.py", "exec"), legacy_stream.__dict__)
     stores = dict(baseline=baseline.PostgresMemoryProcessingStore(dsn),
                   candidate=PostgresMemoryProcessingStore(dsn))
     page = capture_page(ContactScope(OWNER, CONTACT), 50)
     result = dict(baseline_revision=BASELINE, samples=samples,
+                  page_comparison="相同完整SQL（含重号目标UUID排序），只切换新增索引；进度使用原主线/候选源码",
                   benchmark_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
                   input=dict(messages=120000, contacts=5, tasks=101, null_every=100,
-                             timestamp_tie_every=2, import_records=1000),
+                             timestamp_tie_every=2, duplicate_quote_targets=3, import_records=1000),
                   baseline_progress_sha256=hashlib.sha256(baseline_source.encode()).hexdigest(),
                   candidate_progress_sha256=hashlib.sha256((ROOT / "backend/src/notalone/persistence/memory_processing.py").read_bytes()).hexdigest(),
+                  candidate_stream_sha256=hashlib.sha256((ROOT / "backend/src/notalone/persistence/message_stream.py").read_bytes()).hexdigest(),
                   page_sql_sha256=hashlib.sha256(page[0].encode()).hexdigest())
     raw = [dict(mode=mode, new_ms=[], repeat_ms=[], new_wal_bytes=[], repeat_wal_bytes=[],
                 page_ms=[], progress_ms=[], asc_ms=[]) for mode in ("baseline", "candidate")]
@@ -223,8 +227,21 @@ def run(dsn, directory, samples):
     with psycopg.connect(dsn, autocommit=True) as connection:
         result["postgres_version"] = connection.info.server_version
         seed(connection)
+        definitions = tuple(row[0] for row in connection.execute(
+            "SELECT indexdef FROM pg_indexes WHERE schemaname='public' "
+            "AND indexname=ANY(%s) ORDER BY indexname", (list(INDEXES),)).fetchall())
+        assert len(definitions) == 2
+        result["index_definitions"] = definitions
         expected_page = connection.execute(*page).fetchall()
         expected_progress = stores["baseline"].read(owner_id=OWNER)
+        legacy_page = capture_page(ContactScope(OWNER, CONTACT), 50,
+                                   store_class=legacy_stream.PostgresMessageStream)
+        indexes(connection, False, definitions)
+        legacy_before = connection.execute(*legacy_page).fetchall()
+        indexes(connection, True, definitions)
+        legacy_after = connection.execute(*legacy_page).fetchall()
+        result["legacy_unordered_duplicate_rows_equal"] = legacy_before == legacy_after
+        result["legacy_unordered_duplicate_target_sets_equal"] = set(legacy_before) == set(legacy_after)
         result["progress_data_queries"] = {}
         for mode, store in stores.items():
             statements = []
@@ -240,18 +257,25 @@ def run(dsn, directory, samples):
         scope = ContactScope(OWNER, CONTACT)
         cursors = [None, UUID(hashlib.md5((str(CONTACT) + "23997").encode()).hexdigest()),
                    UUID(hashlib.md5((str(CONTACT) + "24000").encode()).hexdigest())]
-        indexes(connection, False)
+        indexes(connection, False, definitions)
         before = [stream.page_messages(scope=scope, limit=50, before_message_id=cursor)
                   for cursor in cursors]
-        indexes(connection, True)
+        indexes(connection, True, definitions)
         after = [stream.page_messages(scope=scope, limit=50, before_message_id=cursor)
                  for cursor in cursors]
         assert before == after
         result["first_tied_timestamp_null_cursor_pages_equal"] = True
+        indexes(connection, False, definitions)
+        small_before = [stream.page_messages(scope=scope, limit=limit) for limit in (1, 2, 3)]
+        indexes(connection, True, definitions)
+        small_after = [stream.page_messages(scope=scope, limit=limit) for limit in (1, 2, 3)]
+        assert small_before == small_after
+        result["duplicate_quote_small_pages_equal"] = True
+        expected_asc_rows = None
         for round_number in range(samples + 1):
             for index in ((0, 1) if round_number % 2 == 0 else (1, 0)):
                 entry = raw[index]
-                indexes(connection, index == 1)
+                indexes(connection, index == 1, definitions)
                 # DDL 不在计时内；每次先预热，再采集相同 SQL 及相同结果。
                 connection.execute(*page).fetchall()
                 duration, rows = elapsed(lambda: connection.execute(*page).fetchall())
@@ -259,9 +283,9 @@ def run(dsn, directory, samples):
                 asc_ms, asc_rows = elapsed(lambda: connection.execute(
                     "SELECT id FROM message WHERE owner_id=%s AND contact_id=%s "
                     "ORDER BY occurred_at ASC NULLS LAST,id ASC LIMIT 51", (OWNER, CONTACT)).fetchall())
-                if "asc_rows" in result:
-                    assert result["asc_rows"] == [str(row[0]) for row in asc_rows]
-                result["asc_rows"] = [str(row[0]) for row in asc_rows]
+                if expected_asc_rows is None:
+                    expected_asc_rows = asc_rows
+                assert expected_asc_rows == asc_rows
                 progress_ms, progress = elapsed(lambda: stores[entry["mode"]].read(owner_id=OWNER))
                 assert progress == expected_progress
                 imported = import_measurement(connection, path)
@@ -274,16 +298,18 @@ def run(dsn, directory, samples):
                 if "import_shape" in result:
                     assert result["import_shape"] == imported["shape"]
                 result["import_shape"] = imported["shape"]
-        indexes(connection, True)
+        result["asc_rows_sha256"] = hashlib.sha256(
+            json.dumps([str(row[0]) for row in expected_asc_rows]).encode()).hexdigest()
+        indexes(connection, True, definitions)
         result["index_bytes"] = dict(connection.execute(
             "SELECT relname,pg_relation_size(oid) FROM pg_class WHERE relname=ANY(%s)", (list(INDEXES),)).fetchall())
         result["old_index_retained"] = connection.execute("SELECT to_regclass('message_contact_time_idx') IS NOT NULL").fetchone()[0]
         result["same_page_and_progress"] = True
         for mode in ("baseline", "candidate"):
-            indexes(connection, mode == "candidate")
+            indexes(connection, mode == "candidate", definitions)
             plan = connection.execute("EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON) " + page[0], page[1]).fetchone()[0]
             result[mode + "_page_plan"] = plan
-        indexes(connection, True)
+        indexes(connection, True, definitions)
     result["measurements"] = [{"mode": entry["mode"], **{key: summary(value)
         for key, value in entry.items() if key != "mode"}} for entry in raw]
     return result

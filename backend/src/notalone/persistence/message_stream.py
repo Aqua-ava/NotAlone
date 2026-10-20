@@ -142,7 +142,9 @@ class PostgresMessageStream:
                        AND target.contact_id = target_meta.contact_id
                     -- 每条基础消息经 LEFT JOIN 至少保留一行，先限制基础消息
                     -- 即可覆盖本页；引用目标可能重号，展开后仍须保留外层上限。
-                    ORDER BY m.occurred_at DESC NULLS LAST, m.id DESC
+                    -- 重号目标也按 UUID 稳定排序，索引/联接计划变化不能改变页内子集。
+                    ORDER BY m.occurred_at DESC NULLS LAST, m.id DESC,
+                             target.id ASC NULLS LAST
                     LIMIT %s
                     """,
                     parameters,

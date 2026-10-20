@@ -1,0 +1,249 @@
+{
+  "postgres_version": 160014,
+  "applied_migration_count": 99,
+  "input": {
+    "messages": 120000,
+    "contacts": 5,
+    "tasks": 101,
+    "duplicate_quote_targets": 76
+  },
+  "input_shape_sha256": "f70cb3caa6e418305403b7ccdb99fe212497b728875b10416bcf0e1f3b9a11b5",
+  "candidate": {
+    "1": {
+      "full_sql_order_equal": true,
+      "api_page_equal": true,
+      "api_target_order_equal": true,
+      "api_target_set_equal": true,
+      "sql_row_counts": [
+        2,
+        2
+      ],
+      "api_target_counts": [
+        1,
+        1
+      ],
+      "full_sql_result_sha256": [
+        "cb355e523629314b8d24943f199fa7fba966eff12e9f416143c9296c43eb873f",
+        "cb355e523629314b8d24943f199fa7fba966eff12e9f416143c9296c43eb873f"
+      ],
+      "api_page_sha256": [
+        "657ab70936042b382cc6fe84b97ba03a4eb811a945108e48d3003c39c6895c56",
+        "657ab70936042b382cc6fe84b97ba03a4eb811a945108e48d3003c39c6895c56"
+      ],
+      "stable_ascending_target_prefix": true
+    },
+    "2": {
+      "full_sql_order_equal": true,
+      "api_page_equal": true,
+      "api_target_order_equal": true,
+      "api_target_set_equal": true,
+      "sql_row_counts": [
+        3,
+        3
+      ],
+      "api_target_counts": [
+        2,
+        2
+      ],
+      "full_sql_result_sha256": [
+        "1ed5babbe49f602497799fc34d94027c1b327e6554ae1a6a796201746eb2fd4f",
+        "1ed5babbe49f602497799fc34d94027c1b327e6554ae1a6a796201746eb2fd4f"
+      ],
+      "api_page_sha256": [
+        "49fea870931688d4cc92d3d772ba2443591b97d925e7cee92d1c292dc3b92919",
+        "49fea870931688d4cc92d3d772ba2443591b97d925e7cee92d1c292dc3b92919"
+      ],
+      "stable_ascending_target_prefix": true
+    },
+    "3": {
+      "full_sql_order_equal": true,
+      "api_page_equal": true,
+      "api_target_order_equal": true,
+      "api_target_set_equal": true,
+      "sql_row_counts": [
+        4,
+        4
+      ],
+      "api_target_counts": [
+        3,
+        3
+      ],
+      "full_sql_result_sha256": [
+        "b353c8972a23122567df8064dc1e859a9b61378b3690e6f1eaaddc4eeb600478",
+        "b353c8972a23122567df8064dc1e859a9b61378b3690e6f1eaaddc4eeb600478"
+      ],
+      "api_page_sha256": [
+        "b9951708050d896ec98a93853a2f69cefb82186ea0626fb143d3332f71102d1b",
+        "b9951708050d896ec98a93853a2f69cefb82186ea0626fb143d3332f71102d1b"
+      ],
+      "stable_ascending_target_prefix": true
+    },
+    "10": {
+      "full_sql_order_equal": true,
+      "api_page_equal": true,
+      "api_target_order_equal": true,
+      "api_target_set_equal": true,
+      "sql_row_counts": [
+        11,
+        11
+      ],
+      "api_target_counts": [
+        10,
+        10
+      ],
+      "full_sql_result_sha256": [
+        "5fcef6f0126e0c44e06e3755730f309a065cfd46ad3488783aa9dc999afc101f",
+        "5fcef6f0126e0c44e06e3755730f309a065cfd46ad3488783aa9dc999afc101f"
+      ],
+      "api_page_sha256": [
+        "b24ee2a4f62c5d53231cda57b128402e775aca17a9b0e47524c8418486431a35",
+        "b24ee2a4f62c5d53231cda57b128402e775aca17a9b0e47524c8418486431a35"
+      ],
+      "stable_ascending_target_prefix": true
+    },
+    "50": {
+      "full_sql_order_equal": true,
+      "api_page_equal": true,
+      "api_target_order_equal": true,
+      "api_target_set_equal": true,
+      "sql_row_counts": [
+        51,
+        51
+      ],
+      "api_target_counts": [
+        50,
+        50
+      ],
+      "full_sql_result_sha256": [
+        "4965007c6cc8b0778a746b51f17684cb581e0f786759de7f0d2da5aaaff3f6c0",
+        "4965007c6cc8b0778a746b51f17684cb581e0f786759de7f0d2da5aaaff3f6c0"
+      ],
+      "api_page_sha256": [
+        "95c5c18adf4734c64f42805ce3cfcc31dcb0abc09cd41aa25a817ceb9134b012",
+        "95c5c18adf4734c64f42805ce3cfcc31dcb0abc09cd41aa25a817ceb9134b012"
+      ],
+      "stable_ascending_target_prefix": true
+    }
+  },
+  "legacy": {
+    "1": {
+      "full_sql_order_equal": false,
+      "api_page_equal": false,
+      "api_target_order_equal": false,
+      "api_target_set_equal": false,
+      "sql_row_counts": [
+        2,
+        2
+      ],
+      "api_target_counts": [
+        1,
+        1
+      ],
+      "full_sql_result_sha256": [
+        "0e11bee33b5b8a6a9321599a7c8aaac39c2bf458168bd0984378879ec999c0c8",
+        "eeb5e23b902052552678e39791b41d68d90d97255b5e8be1848410201400b0ac"
+      ],
+      "api_page_sha256": [
+        "d8f38758d0f2040ee680f2fdce6349a354bb391ebb9df2833d977fcb362887c6",
+        "85ae8a3798ae5c6e8833e82adc4a815df11a79deabe916c8e1b53fe26e0e6210"
+      ]
+    },
+    "2": {
+      "full_sql_order_equal": false,
+      "api_page_equal": false,
+      "api_target_order_equal": false,
+      "api_target_set_equal": false,
+      "sql_row_counts": [
+        3,
+        3
+      ],
+      "api_target_counts": [
+        2,
+        2
+      ],
+      "full_sql_result_sha256": [
+        "f5fefd3816bd40e2207f51a42f3c26e3f99eca1b02a7611fe36014e25563aa6d",
+        "43fe8deb1484f401c4eda4ad7db322588a9f848698c316361e1b60c17815f37c"
+      ],
+      "api_page_sha256": [
+        "a20bca38f5f7aee23c4f81e6f8f1f1693602b97230394a5cd4a607ad4a690c6c",
+        "69bdaae039055c3360845aa713dc23fd463b5d6b4c4a8e7811a0d1699f862a17"
+      ]
+    },
+    "3": {
+      "full_sql_order_equal": false,
+      "api_page_equal": false,
+      "api_target_order_equal": false,
+      "api_target_set_equal": false,
+      "sql_row_counts": [
+        4,
+        4
+      ],
+      "api_target_counts": [
+        3,
+        3
+      ],
+      "full_sql_result_sha256": [
+        "cde5c185f5d6d279e7afaacc023b1dd554f620d85c2eebd70602fb93bf0363a5",
+        "c72cff72159e97c5a462cd3e138594a5869e39b6a3bd312561bf7c607a57ea3e"
+      ],
+      "api_page_sha256": [
+        "05d98670fc7c7dd8ce3fb0e5e5431ddf3c825e88f1aeae54b9f01de716670e0d",
+        "2ee08d5664831ba04c2abe12dd44ef8487af1e84ad0adec05918491bc04e9787"
+      ]
+    },
+    "10": {
+      "full_sql_order_equal": false,
+      "api_page_equal": false,
+      "api_target_order_equal": false,
+      "api_target_set_equal": false,
+      "sql_row_counts": [
+        11,
+        11
+      ],
+      "api_target_counts": [
+        10,
+        10
+      ],
+      "full_sql_result_sha256": [
+        "9d2e061917bab4fbcc842e5fe73d373bc8086ba665bae0c079da1089f982fee0",
+        "3d1ef58c160f6a9f5251f18831974da3fb7bf059a6c09eac0346e224c698b879"
+      ],
+      "api_page_sha256": [
+        "40e682817d2fa48e28c1ecd4b49f9f2da8f4e5bf4ccb690251b95ed8f667acfc",
+        "a3868692bd9e0370b31e2a4564fedddbb41bf8bf20f651831b51b3edeadc8fea"
+      ]
+    },
+    "50": {
+      "full_sql_order_equal": false,
+      "api_page_equal": false,
+      "api_target_order_equal": false,
+      "api_target_set_equal": false,
+      "sql_row_counts": [
+        51,
+        51
+      ],
+      "api_target_counts": [
+        50,
+        50
+      ],
+      "full_sql_result_sha256": [
+        "93d007ee6d3dfa2131dd0ac2dfc9a4a5f75fbf45599bc6f44bee5b291ce7ba91",
+        "a2d99298a4dff6708860ac66da362bb65fcad12a0fa81c1ea798f80b53176b4e"
+      ],
+      "api_page_sha256": [
+        "53d57ad710ca2eeac49e530c1751e64e164b1459c69bd2977ad739d09248fb66",
+        "1b3e472e73d2f2dda5df4287134ac24be453dc80c6a04716aa85efc63e9f09f5"
+      ]
+    }
+  },
+  "candidate_all_checks_passed": true,
+  "temporary_instance_stopped_and_removed": true,
+  "baseline_revision": "681fcc38eab77c8fe149b76705419971f3750a86",
+  "candidate_stream_sha256": "02a66bd4951c631c4ab45e6f903e860477aeb6842de717ed1c39664e2070a68b",
+  "baseline_stream_sha256": "3774cc2146ada9066c9787e510b5ac8f49733e87d3cfc6568bd3dd67030d6273",
+  "validation_script_sha256": "736b5d5e0d50d9f9d24923e6dd941b3284dbb86f341aa51f7646c92c802a6cce",
+  "benchmark_script_sha256": "bf7eb566df2b11660fe2b71f8427f3d31ca405bfafadf8fb14a3c5bc51277871",
+  "comparison": "候选及旧主线分别执行相同完整 SQL，只切换 099 新增索引；不计时。",
+  "legacy_note": "旧主线未约定同号目标次序；保留其索引前后差异，不宣称候选保留任意旧次序。"
+}
