@@ -1,18 +1,10 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { MemoryProcessing, MemoryProcessingRequest, MemoryProcessingTask } from '../shared/memory-processing';
 import { MemoryList } from './MemoryList';
+import { needsAttention, summarizeProcessing } from './memory-processing-summary';
 
 const names = { queued: '等待生成记忆', extracting: '正在生成记忆', organizing: '正在整理记忆', completed: '本次处理完成',
   interrupted: '记忆生成已中断', failed: '记忆生成失败', stopped: '记忆生成已停止' };
-function shortStatus(task: MemoryProcessingTask) {
-  if (task.reasonCode === 'model_configuration_unavailable') return '请先检查模型设置';
-  if (task.reasonCode === 'execution_resources_unavailable') return '暂时无法处理，请稍后重试';
-  if (task.reasonCode === 'source_unavailable') return '资料暂不可用，无法继续';
-  if (task.reasonCode === 'batches_skipped') return '部分聊天未能生成记忆';
-  if (task.reasonCode === 'processing_outcome_unknown') return '历史处理结果待核实';
-  if (task.status === 'completed' && ((task.createdCount ?? 0) > 0 || (task.updatedCount ?? 0) > 0)) return '记忆已更新';
-  return names[task.status];
-}
 function reason(task: MemoryProcessingTask) {
   if (task.reasonCode === 'model_configuration_unavailable') return '模型配置不可用，请在设置中核对后继续。';
   if (task.reasonCode === 'execution_resources_unavailable') return '执行资源暂不可用，请稍后继续。';
@@ -47,7 +39,9 @@ type ProcessingProps = {
 };
 
 export function MemoryProcessingCard(props: Omit<ProcessingProps, 'request'> & { request?: MemoryProcessingRequest }) {
-  return props.request ? <MemoryProcessingContent {...props} request={props.request} /> : <>{props.children}</>;
+  const request = props.request;
+  return request ? <MemoryProcessingContent {...props} request={request}
+    key={request.scope === 'owner' ? 'owner' : `${request.contactId}:${request.scopeRevision}`} /> : <>{props.children}</>;
 }
 
 function MemoryProcessingContent({ request, contactNames, onProgress, children }: ProcessingProps) {
@@ -104,14 +98,23 @@ function MemoryProcessingContent({ request, contactNames, onProgress, children }
       void window.notalone.memory.cancelProcessingRead(request).catch(() => {});
     };
   }, [scopeKey]);
-  async function resume(task: MemoryProcessingTask) {
-    if (busy.current || !task.action) return;
+  async function resume(selected: MemoryProcessingTask[]) {
+    if (busy.current || selected.length === 0) return;
     busy.current = true; setWorking(true); setActionError('');
     try {
       // busy 阻止新查询；先等待已有查询完成，避免旧响应覆盖恢复后的状态。
       await refresh.current();
-      if (!alive.current) return;
-      await window.notalone.memory.resumeProcessing({ ...request, taskId: task.taskId, action: task.action });
+      for (const task of selected) {
+        if (!alive.current) return;
+        // 每次恢复都会使桥接层快照失效；逐项重读，且不恢复状态已变化的任务。
+        const next = await window.notalone.memory.readProcessing(request);
+        if (!alive.current) return;
+        setValue(next);
+        const current = next.tasks.find(item => item.taskId === task.taskId);
+        if (current?.action && current.action === task.action) {
+          await window.notalone.memory.resumeProcessing({ ...request, taskId: current.taskId, action: current.action });
+        }
+      }
     } catch { if (alive.current) setActionError('操作结果未确认，已重新读取状态；请核对后再试。'); }
     finally {
       busy.current = false;
@@ -119,30 +122,33 @@ function MemoryProcessingContent({ request, contactNames, onProgress, children }
     }
   }
   const tasks = value?.tasks ?? [];
-  const currentTasks = tasks.filter(task => task.status !== 'completed' && task.status !== 'stopped');
-  const history = tasks.filter(task => task.status === 'completed' || task.status === 'stopped');
-  const focus = currentTasks.find(task => ['extracting', 'organizing', 'queued'].includes(task.status)) ?? currentTasks[0];
+  const currentTasks = tasks.filter(task => (task.status !== 'completed' && task.status !== 'stopped') || needsAttention(task));
+  const history = tasks.filter(task => !currentTasks.includes(task));
+  const overall = value ? summarizeProcessing(value) : null;
+  const progress = tasks.length === 1 ? tasks[0] : null;
   const button = (task: MemoryProcessingTask) => task.action && <button className="button" disabled={working || loading}
-    onClick={() => void resume(task)}>{working ? '提交中…' : task.action === 'restart' ? '重新开始' : '继续'}</button>;
-  const summary = error ? '状态读取失败，请重试' : !value ? '正在读取状态…' : focus ? shortStatus(focus) : '处理状态已更新';
+    onClick={() => void resume([task])}>{working ? '提交中…' : task.action === 'restart' ? '重新开始' : '继续'}</button>;
+  const summary = error ? '状态读取失败，请重试' : !value ? '正在读取状态…' : overall?.title;
   const refreshButton = <button className="button" disabled={loading || working} onClick={() => void refresh.current()}>刷新进度</button>;
   const taskEntry = (task: MemoryProcessingTask, historical = false) => <article key={task.taskId}>
-    <h3>{task.taskType === 'import' ? '历史导入' : '新聊天'} · {names[task.status]}</h3>
+    <h3>{task.taskType === 'import' ? '历史导入' : '同步聊天资料'} · {names[task.status]}</h3>
     {request.scope === 'owner' && <p className="memory-section-note">{contactNames[task.contactId] ?? '其他联系人'}的聊天</p>}
     <TaskProgress task={task} historical={historical} />
     {reason(task) && <p>{reason(task)}</p>}{button(task)}
   </article>;
   return <>
-    {(focus || !value || error || actionError || resultError) && <section className="memory-processing-card" aria-label="记忆处理状态" aria-busy={working}>
+    {(tasks.length > 0 || value?.hasMore || !value || error || actionError || resultError) && <section className="memory-processing-card" aria-label="记忆处理状态" aria-busy={working}>
       <div className="memory-processing-bar">
-        <div className="memory-processing-brief"><strong role={error ? 'alert' : 'status'}>
-          {request.scope === 'owner' && focus && <span>{contactNames[focus.contactId] ?? '其他联系人'}的聊天 · </span>}{summary}</strong>
-          {!error && focus?.processedCount !== null && focus?.processedCount !== undefined && <span className="memory-processing-count">
-            {focus.totalCount === null ? `已处理 ${focus.processedCount} 条聊天` : `已处理 ${focus.processedCount} / ${focus.totalCount} 条聊天`}</span>}
-          {focus?.status === 'failed' && <span className="memory-section-note">{reason(focus)}</span>}
+        <div className="memory-processing-brief">{summary && <strong role={error || overall?.incomplete ? 'alert' : 'status'}>
+          {summary}</strong>}
+          {!error && overall && <span className="memory-section-note">{overall.note}</span>}
+          {!error && progress?.processedCount !== null && progress?.processedCount !== undefined && <span className="memory-processing-count">
+            {progress.totalCount === null ? `已处理 ${progress.processedCount} 条聊天` : `已处理 ${progress.processedCount} / ${progress.totalCount} 条聊天`}</span>}
         </div>
-        <div className="memory-processing-actions">{!error && focus && button(focus)}
-          <button className="memory-processing-details-toggle" aria-expanded={detailsOpen} onClick={() => setDetailsOpen(!detailsOpen)}>{detailsOpen ? '收起' : '详情'}</button>
+        <div className="memory-processing-actions">{!error && overall && overall.actions.length > 0 &&
+          <button className="button" disabled={working || loading} onClick={() => void resume(overall.actions)}>
+            {working ? '提交中…' : overall.actionLabel}</button>}
+          <button className="memory-processing-details-toggle" aria-expanded={detailsOpen} onClick={() => setDetailsOpen(!detailsOpen)}>{detailsOpen ? '收起' : '查看详情'}</button>
         </div>
       </div>
       {actionError && <p role="alert">操作未确认，请查看详情。</p>}
@@ -150,21 +156,20 @@ function MemoryProcessingContent({ request, contactNames, onProgress, children }
       {detailsOpen && <div className="memory-processing-details">
         {refreshButton}
         {error && <p role="alert">{error}</p>}{actionError && <p>{actionError}</p>}{resultError && <p>{resultError}</p>}
-        {currentTasks.length > 1 && <p className="memory-section-note">另有 {currentTasks.length - 1} 项待完成，各自显示进度。</p>}
+        {currentTasks.length > 1 && <p className="memory-section-note">以下是各项处理记录；聊天资料可能重叠，进度不相加。</p>}
         {currentTasks.map(task => taskEntry(task))}
+        {(history.length > 0 || value?.hasMore) && <details className="memory-disclosure memory-secondary memory-processing-history" aria-label="处理历史">
+          <summary>处理历史{history.length > 0 ? `（${history.length}）` : ''}</summary>
+          <div className="memory-processing-details">
+            <p className="memory-section-note">这里记录聊天的处理结果，记忆内容在资料列表中。</p>
+            <MemoryList items={history} label="处理历史" className="memory-processing-history-list">
+              {task => taskEntry(task, true)}
+            </MemoryList>
+            {value?.hasMore && <p className="memory-section-note">仅显示最近记录，较早记录未列出。</p>}
+          </div>
+        </details>}
       </div>}
     </section>}
     {children}
-    {(history.length > 0 || value?.hasMore) && <details className="memory-disclosure memory-secondary memory-processing-history" aria-label="处理历史">
-      <summary>处理历史{history.length > 0 ? `（${history.length}）` : ''}</summary>
-      <div className="memory-processing-details">
-        <p className="memory-section-note">这里记录聊天的处理结果，记忆内容在上方列表中。</p>
-        {refreshButton}
-        <MemoryList items={history} label="处理历史" className="memory-processing-history-list">
-          {task => taskEntry(task, true)}
-        </MemoryList>
-        {value?.hasMore && <p className="memory-section-note">仅显示最近记录，较早记录未列出。</p>}
-      </div>
-    </details>}
   </>;
 }
