@@ -22,7 +22,9 @@ export async function withMemoryPage(f, signal, run, { ownerPanel = false } = {}
         : method === 'onOwnerLayeredMemoryChanged' ? (listener) => { ownerListeners.add(listener); return () => ownerListeners.delete(listener); }
         : (...args) => window.memoryCommand(method, ...args) }),
         traces: { onStateChanged: () => () => {}, getState: async () => ({ revision: 0, contactId: null, scopeRevision: 0 }) } };
-      createRoot(document.getElementById('root')).render(${ownerPanel ? '<OwnerLayeredMemoryPanel />' : `<MemoryPage session={{ state: ${JSON.stringify(f.contacts.getState())}, error: '', selectContact: async () => {} }} navigate={() => {}} />`});
+      const root = createRoot(document.getElementById('root'));
+      window.showMemory = visible => root.render(visible ? ${ownerPanel ? '<OwnerLayeredMemoryPanel />' : `<MemoryPage session={{ state: ${JSON.stringify(f.contacts.getState())}, error: '', selectContact: async () => {} }} navigate={() => {}} />`} : null);
+      window.showMemory(true);
     `, resolveDir: process.cwd(), loader: 'tsx' }, bundle: true, platform: 'browser', format: 'iife', jsx: 'automatic', loader: { '.css': 'empty' }, write: false });
     // localhost 与实际开发页面同为可信来源，保留浏览器原生 UUID，不注入替代实现。
     await page.route('http://127.0.0.1/notalone-memory-test', route => route.fulfill({ contentType: 'text/html', body: '<div id="root"></div>' }));

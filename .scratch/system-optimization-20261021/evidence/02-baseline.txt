@@ -1,0 +1,6 @@
+681fcc38eab77c8fe149b76705419971f3750a86
+e2c6cfcb476af93a19209da6bf0193f0eed0f7db2d3339b949faf9bd1bfa90a1  desktop/src/main/contacts/session.ts
+49f2dd982ad91742938c0a3fa84ff3a3e96ccd040759055b79a34d90cf70f373  desktop/src/main/contacts/bridge.ts
+a8e5fa6892d562ebbdc570005883773fb22fdcda0c975d40f29817fa21409aa4  desktop/src/main/memory/controller.ts
+30605a2087dd7e197def0451a7b7d770dfa124929e98966901c56d7fa5d9186b  desktop/src/main/memory/owner-layered.ts
+19f6e5de51952c5a24c49e4f05e18584f2253965f79517933b3b41d4380ac1ab  desktop/src/main/skill-learning/controller.ts

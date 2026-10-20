@@ -1,23 +1,26 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 type RevisionedSession = { revision: number; scopeRevision: number };
-type SessionSubscription<State> = {
+type SessionSubscription<State, Update> = {
   getState(): Promise<State>;
-  onStateChanged(listener: (state: State) => void): () => void;
+  onStateChanged(listener: (state: Update) => void): () => void;
 };
 
 // 联系人与改写各自持有状态，只共享订阅、卸载保护和单调快照接收。
-export function useRevisionedSession<State extends RevisionedSession>(initial: State, bridge: SessionSubscription<State>, enabled = true) {
+export function useRevisionedSession<State extends RevisionedSession, Update extends RevisionedSession = State>(initial: State, bridge: SessionSubscription<State, Update>, enabled = true,
+  reduce?: (current: State, update: State | Update) => State) {
   const [state, setState] = useState(initial);
   const [error, setError] = useState('');
   const latest = useRef(state);
   const active = useRef(true);
-  const receive = useCallback((next: State) => {
+  const receive = useCallback((update: State | Update) => {
+    if (!active.current) return;
+    const next = reduce ? reduce(latest.current, update) : update as State;
     if (!active.current || next.revision <= latest.current.revision) return;
     if (next.scopeRevision !== latest.current.scopeRevision) setError('');
     latest.current = next;
     setState(next);
-  }, []);
+  }, [reduce]);
 
   useEffect(() => {
     active.current = enabled;

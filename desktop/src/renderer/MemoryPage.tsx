@@ -106,6 +106,10 @@ function useMemoryReading(session: ContactSessionView) {
   useEffect(() => {
     setError('');
     if (session.state.selectedContactId) void refresh();
+    const { selectedContactId, scopeRevision } = session.state;
+    return () => {
+      if (selectedContactId) void window.notalone.memory.releaseLayeredMemory({ contactId: selectedContactId, scopeRevision }).catch(() => {});
+    };
   }, [session.state.selectedContactId, session.state.scopeRevision]);
   async function correct(entry: MemoryVersion, text: string, category: MemoryCorrectionRequest['category'], changeKind: MemoryCorrectionRequest['changeKind'], conditions?: MemoryCorrectionRequest['conditions']) {
     const { selectedContactId, scopeRevision } = scope.current;

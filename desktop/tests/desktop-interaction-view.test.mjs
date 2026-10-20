@@ -19,7 +19,8 @@ test('真实React输入后立即生成使用最新文字，切换与迟到事件
   const page = await browser.newPage();
   const deliveries = [];
   f.setForward((channel, state) => { deliveries.push(page.evaluate(({ channel, state }) => window.pageEvent?.(channel, state), { channel, state })); });
-  f.contacts.onStateChanged(state => { deliveries.push(page.evaluate(state => window.pageEvent?.('contacts:state-changed', state), state)); });
+  f.contacts.onStateChanged((state, kind) => { deliveries.push(page.evaluate(state => window.pageEvent?.('contacts:state-changed', state),
+    kind === 'draft' ? f.contactDraftUpdate(state) : state)); });
   await page.exposeFunction('invoke', async (channel, ...args) => {
     if (channel === 'contacts:get-state') return f.contacts.getState();
     if (channel === 'contacts:set-draft') return f.contacts.setDraft(args[0]);

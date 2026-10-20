@@ -275,6 +275,7 @@ export interface MemoryBridge {
   deleteOwnerMemory(request: Pick<MemoryRemovalRequest, 'memoryId' | 'revision'>): Promise<void>;
   addOwnerMemory(request: Pick<MemoryAdditionRequest, 'text' | 'category'>): Promise<void>;
   getOwnerLayeredMemoryState(): Promise<OwnerLayeredMemoryState>;
+  releaseOwnerLayeredMemory(): Promise<void>;
   readOwnerLayeredMemory(request: { mappingCursor?: string | null }): Promise<void>;
   manageOwnerLayeredMemory(request: OwnerLayeredMemoryManagementRequest): Promise<void>;
   onOwnerLayeredMemoryChanged(listener: (state: OwnerLayeredMemoryState) => void): () => void;
@@ -283,6 +284,7 @@ export interface MemoryBridge {
   refreshOverview(request: ContactSelection): Promise<void>;
   refreshOwnerOverview(request: ContactSelection): Promise<void>;
   readLayeredMemory(request: LayeredMemoryReadRequest): Promise<void>;
+  releaseLayeredMemory(request: ContactSelection): Promise<void>;
   manageLayeredMemory(request: LayeredMemoryManagementRequest): Promise<void>;
   add(request: MemoryAdditionRequest): Promise<void>;
   remove(request: MemoryRemovalRequest): Promise<void>;

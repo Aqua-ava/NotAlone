@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { ForegroundState } from '../shared/foreground-bridge';
 import type { ContactSessionState } from '../shared/contact-session-bridge';
+import { createContactSessionReceiver } from '../shared/contact-session-bridge';
 import { useRevisionedSession } from './use-revisioned-session';
 
 const initial: ContactSessionState = {
@@ -9,7 +10,8 @@ const initial: ContactSessionState = {
 };
 
 export function useContactSession() {
-  const { state, error, setError, latest, active, receive } = useRevisionedSession(initial, window.notalone.contacts);
+  const reduce = useMemo(createContactSessionReceiver, []);
+  const { state, error, setError, latest, active, receive } = useRevisionedSession(initial, window.notalone.contacts, true, reduce);
 
   async function selectContact(contactId: string) {
     const scopeRevision = latest.current.scopeRevision;

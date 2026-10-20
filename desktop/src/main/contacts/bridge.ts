@@ -1,5 +1,6 @@
 import { noArguments, type PageCommands } from '../page-commands';
 import type { ContactDraft, ContactSelection } from '../../shared/contact-session-bridge';
+import { contactDraftUpdate } from '../../shared/contact-session-bridge';
 import type { BackendHost } from '../backend/host';
 import { normalizeUuid } from '../uuid';
 import { readContactDirectory } from './directory';
@@ -22,7 +23,7 @@ export function selectionArguments(args: unknown[], withDraft = false): ContactS
 
 export function installContactSessionBridge(commands: PageCommands, backend: BackendHost): ContactSession {
   const contacts = new ContactSession(() => readContactDirectory(backend));
-  contacts.onStateChanged((state) => commands.publish('contacts:state-changed', state));
+  contacts.onStateChanged((state, kind) => commands.publish('contacts:state-changed', kind === 'draft' ? contactDraftUpdate(state) : state));
   backend.onStateChanged(() => contacts.setConnection(backend.getConnectionGeneration()));
   contacts.setConnection(backend.getConnectionGeneration());
   commands.handle('contacts:get-state', (...args: unknown[]) => {

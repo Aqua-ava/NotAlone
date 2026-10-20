@@ -1,5 +1,5 @@
 import type { PageTransport } from './transport';
-import type { ContactCreation, ContactDraft, ContactSelection, ContactSessionBridge, ContactSessionState } from '../shared/contact-session-bridge';
+import type { ContactCreation, ContactDraft, ContactSelection, ContactSessionBridge, ContactSessionUpdate } from '../shared/contact-session-bridge';
 
 export function createContactSessionBridge(ipcRenderer: PageTransport): ContactSessionBridge {
   const withoutArguments = (channel: string, args: unknown[]) => args.length === 0
@@ -11,9 +11,9 @@ export function createContactSessionBridge(ipcRenderer: PageTransport): ContactS
     createContact: (creation: ContactCreation) => ipcRenderer.invoke('contacts:create', creation),
     confirmManualContact: (selection: ContactSelection) => ipcRenderer.invoke('contacts:confirm-manual', selection),
     setDraft: (draft: ContactDraft) => ipcRenderer.invoke('contacts:set-draft', draft),
-    onStateChanged: (listener: (state: ContactSessionState) => void) => {
+    onStateChanged: (listener: (state: ContactSessionUpdate) => void) => {
       if (typeof listener !== 'function') throw new Error('联系人操作不可用。');
-      const receive = (_event: unknown, state: ContactSessionState) => listener(state);
+      const receive = (_event: unknown, state: ContactSessionUpdate) => listener(state);
       ipcRenderer.on('contacts:state-changed', receive);
       return () => ipcRenderer.removeListener('contacts:state-changed', receive);
     },

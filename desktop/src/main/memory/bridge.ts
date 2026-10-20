@@ -65,6 +65,7 @@ export function installMemoryBridge(commands: PageCommands, backend: BackendHost
     return owner.add({ text: fields.text, category: fields.category as MemoryAdditionRequest['category'] });
   }, 'manager');
   commands.handle('memory:owner-layered-state', (...args: unknown[]) => { noArguments(args); return owner.getState(); }, 'manager');
+  commands.handle('memory:release-owner-layered', (...args: unknown[]) => { noArguments(args); owner.releaseView(); }, 'manager');
   commands.handle('memory:read-owner-layered', (...args: unknown[]) => {
     const fields = args[0] as Record<string, unknown> | undefined;
     if (args.length !== 1 || !fields || typeof fields !== 'object' || Array.isArray(fields)
@@ -98,6 +99,11 @@ export function installMemoryBridge(commands: PageCommands, backend: BackendHost
     const request = requestArguments(args);
     if (request.section !== undefined) throw new Error('本人概览读取不可用。');
     return memory.refreshOwnerOverview(request);
+  }, 'manager');
+  commands.handle('memory:release-layered-memory', (...args: unknown[]) => {
+    const request = requestArguments(args);
+    if (request.section !== undefined) throw new Error('主题资料操作不可用。');
+    memory.releaseLayeredMemory(request);
   }, 'manager');
   commands.handle('memory:read-layered-memory', (...args: unknown[]) => {
     const fields = args[0] as Record<string, unknown> | undefined;
