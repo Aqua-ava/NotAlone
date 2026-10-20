@@ -95,7 +95,7 @@ class PostgresMemoryProcessingStore:
                 JOIN public.message_source_ref ref ON ref.message_id=m.id AND ref.owner_id=m.owner_id AND ref.contact_id=m.contact_id
                 LEFT JOIN public.local_wechat_observation observation ON observation.id=ref.observation_id
                 WHERE m.owner_id=%s AND m.contact_id=%s AND m.speaker IN ('user','contact')
-                  AND m.occurred_at IS NOT NULL AND length(btrim(COALESCE(NULLIF(m.text_content,''),m.media_placeholder,'')))>0
+                  AND (m.occurred_at IS NOT NULL OR EXISTS (SELECT 1 FROM public.memory_processing_target mt WHERE mt.task_id=%s AND mt.message_id=m.id)) AND length(btrim(COALESCE(NULLIF(m.text_content,''),m.media_placeholder,'')))>0
                   AND {active_source_ref_sql()}
                   AND ((%s='import' AND ref.source_document_id=%s)
                     OR (%s='observation' AND observation.memory_enqueued_at IS NOT NULL
@@ -104,6 +104,7 @@ class PostgresMemoryProcessingStore:
                 (
                     owner_id,
                     contact_id,
+                    task_id,
                     task["task_type"],
                     task["source_document_id"],
                     task["task_type"],
@@ -444,7 +445,7 @@ def enroll_observation_targets(
         JOIN public.local_wechat_observation o ON o.id=ref.observation_id AND o.owner_id=m.owner_id AND o.contact_id=m.contact_id
         JOIN public.conversation_binding b ON b.id=o.binding_id AND b.owner_id=o.owner_id AND b.contact_id=o.contact_id
         WHERE m.owner_id=%s AND m.contact_id=%s AND o.id=%s AND b.status='active'
-          AND m.speaker IN ('user','contact') AND m.occurred_at IS NOT NULL
+          AND m.speaker IN ('user','contact')
           AND length(btrim(COALESCE(NULLIF(m.text_content,''),m.media_placeholder,'')))>0
           AND NOT EXISTS (SELECT 1 FROM public.memory_processing_receipt r WHERE r.message_id=m.id AND r.owner_id=m.owner_id AND r.contact_id=m.contact_id)
         ON CONFLICT DO NOTHING""",

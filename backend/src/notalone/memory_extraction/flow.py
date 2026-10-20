@@ -222,6 +222,8 @@ class ExtractionFlow:
                 fact,
                 timing=MemoryTiming.from_source_times(source_times),
             )
+            from .event_calendar import source_grounded_validity
+            fact = source_grounded_validity(fact, window)
             valid_at = fact.valid_at
             if valid_at is not None:
                 temporal_risk: str | None = None

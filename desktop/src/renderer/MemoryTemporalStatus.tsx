@@ -1,4 +1,4 @@
-import { memoryDateText as dateText, memoryTimeText as timeText } from './memory-time-format';
+import { memorySourceDateText as dateText, memoryTimeText as timeText } from './memory-time-format';
 import type { MemoryTiming } from '../shared/memory-bridge';
 
 

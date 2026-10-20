@@ -186,7 +186,8 @@ def run_extraction(
         else:
             raise TraceWriteError("trace_configuration")
     run_id = uuid4()
-    previous_watermark = watermark_message_id
+    previous_watermark = (watermark_port.get(scope) if task_id is not None and watermark_port is not None
+                          else watermark_message_id)
     from notalone.memory_extraction.merge import MemoryMergeVerifier
     adoption = MemoryAdoption(
         automatic=automatic,
@@ -252,6 +253,8 @@ def run_extraction(
     for offset in range(0, len(pending_messages), batch_size):
         window_started_at = datetime.now(timezone.utc)
         batch = pending_messages[offset : offset + batch_size]
+        next_watermark = next((message.message_id for message in reversed(batch)
+                               if message.occurred_at is not None), previous_watermark)
         processed_messages += len(batch)
         absolute_start = message_positions[batch[0].message_id]
         absolute_end = message_positions[batch[-1].message_id] + 1
@@ -286,7 +289,7 @@ def run_extraction(
             "context_after_count": context_end - absolute_end,
             "target_message_ids": snapshot(window.target_message_ids),
             "watermark_before": snapshot(previous_watermark),
-            "watermark_planned": str(batch[-1].message_id),
+            "watermark_planned": snapshot(next_watermark),
             "configuration": {
                 "batch_size": batch_size,
                 "context_before": context_before,
@@ -382,9 +385,9 @@ def run_extraction(
                         "extracted": batch_extracted,
                         "adoption": snapshot(adoption_stats),
                         "watermark_before": snapshot(previous_watermark),
-                        "watermark_planned": str(batch[-1].message_id),
+                        "watermark_planned": snapshot(next_watermark),
                         "watermark_after": (
-                            str(batch[-1].message_id)
+                            snapshot(next_watermark)
                             if watermark_port is not None
                             else None
                         ),
@@ -395,9 +398,9 @@ def run_extraction(
                         ),
                     },
                     watermark_port=watermark_port,
-                    watermark_message_id=batch[-1].message_id,
+                    watermark_message_id=next_watermark or batch[-1].message_id,
                 )
-                previous_watermark = batch[-1].message_id
+                previous_watermark = next_watermark
                 continue
             # 失败批次里已经通过提取或已被判定为契约拒绝的候选仍要计数，
             # 这样采纳阶段失败不会让本批统计凭空归零。
@@ -426,7 +429,7 @@ def run_extraction(
                             "extracted": batch_extracted,
                             "rejected": outcome.rejected_count,
                             "watermark_before": snapshot(previous_watermark),
-                            "watermark_after": str(batch[-1].message_id),
+                            "watermark_after": snapshot(next_watermark),
                             "watermark_commit": "committed_with_trace",
                             "skipped_range": snapshot(failure_range),
                             "not_executed": [
@@ -436,8 +439,9 @@ def run_extraction(
                         },
                         watermark_port=watermark_port,
                         skipped_range=failure_range,
+                        watermark_message_id=next_watermark or batch[-1].message_id,
                     )
-                    previous_watermark = batch[-1].message_id
+                    previous_watermark = next_watermark
                     skipped += 1
                     skipped_ranges.append(failure_range)
                     continue

@@ -116,7 +116,10 @@ class MemoryEventUpdatesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
             position = {"message_id": message["message_id"], "char_start": 0,
                         "char_end": len(original)}
             fact["event"] = {
-                "version": 1, "stage": event_spec["stage"],
+                "version": event_spec.get("version", 1), "stage": event_spec["stage"],
+                **({"occurrence_precision": event_spec["occurrence_precision"],
+                    "occurrence_expression": event_spec["occurrence_expression"],
+                    "anchor_message_id": message["message_id"]} if event_spec.get("version") == 2 else {}),
                 "stage_evidence": [position],
                 "occurrence_start": event_spec.get("occurrence_start"),
                 "occurrence_end": event_spec.get("occurrence_end"),

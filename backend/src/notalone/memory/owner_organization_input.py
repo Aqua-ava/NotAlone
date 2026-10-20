@@ -21,7 +21,7 @@ def owner_temporal_payload(timing, event, valid_at, invalid_at):
         'source_ended_at', 'source_time_complete', 'current_status')},
         'valid_at': valid_at, 'invalid_at': invalid_at,
         'event': ({key: event[key] for key in ('stage', 'occurrence_start',
-            'occurrence_end', 'stage_verified', 'occurrence_verified') if key in event} if event else None)}
+            'occurrence_end', 'stage_verified', 'occurrence_verified', 'occurrence_precision', 'occurrence_expression') if key in event} if event else None)}
 
 
 def owner_model_memories(memories):

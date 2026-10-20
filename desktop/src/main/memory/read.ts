@@ -54,8 +54,9 @@ function memoryEvent(value: unknown): MemoryEvent | null {
   if (value == null) return null;
   const keys = ['version', 'stage', 'stage_verified', 'stage_evidence', 'occurrence_start', 'occurrence_end',
     'occurrence_verified', 'occurrence_evidence'];
+  if (record(value) && value.version === 2) keys.push('occurrence_precision', 'occurrence_expression', 'anchor_message_id');
   if (!record(value) || Object.keys(value).length !== keys.length || !Object.keys(value).every((key) => keys.includes(key))
-    || value.version !== 1 || typeof value.stage_verified !== 'boolean' || typeof value.occurrence_verified !== 'boolean') throw invalid();
+    || ![1, 2].includes(value.version as number) || typeof value.stage_verified !== 'boolean' || typeof value.occurrence_verified !== 'boolean') throw invalid();
   const stage = enumeration(value.stage, ['planned', 'agreed', 'rescheduled', 'cancelled', 'occurred', 'unknown'] as const);
   const stageEvidence = eventEvidence(value.stage_evidence), occurrenceEvidence = eventEvidence(value.occurrence_evidence);
   const occurrenceStart = date(value.occurrence_start), occurrenceEnd = date(value.occurrence_end);
@@ -63,7 +64,13 @@ function memoryEvent(value: unknown): MemoryEvent | null {
     || (occurrenceStart && occurrenceEnd && Date.parse(occurrenceEnd) < Date.parse(occurrenceStart))
     || (value.stage_verified && (stage === 'unknown' || stageEvidence.length === 0))
     || (value.occurrence_verified && (occurrenceStart === null || occurrenceEvidence.length === 0))) throw invalid();
-  return { version: 1, stage, stageVerified: value.stage_verified, stageEvidence, occurrenceStart, occurrenceEnd,
+  const precision = value.version === 2 ? enumeration(value.occurrence_precision, ['year', 'month', 'day', 'instant', 'unknown'] as const) : undefined;
+  if (value.version === 2 && (precision === 'unknown' && occurrenceStart !== null
+    || value.occurrence_expression !== null && (typeof value.occurrence_expression !== 'string'
+      || !value.occurrence_expression.trim() || value.occurrence_expression.length > 256))) throw invalid();
+  return { version: value.version as 1 | 2,
+    ...(value.version === 2 ? { occurrencePrecision: precision, occurrenceExpression: value.occurrence_expression as string | null,
+      anchorMessageId: optionalIdentifier(value.anchor_message_id) } : {}), stage, stageVerified: value.stage_verified, stageEvidence, occurrenceStart, occurrenceEnd,
     occurrenceVerified: value.occurrence_verified, occurrenceEvidence };
 }
 export function memoryTemporalFields(entry: Record<string, unknown>) {
