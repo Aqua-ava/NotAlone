@@ -119,7 +119,8 @@
     "tests/workspace-message-adoption-client.test.mjs",
     "tests/workspace-session-switch.test.mjs",
     "tests/workspace-skill-choice.test.mjs",
-    "tests/sync-scope.test.mjs"
+    "tests/sync-scope.test.mjs",
+    "tests/wechat-setup.test.mjs"
   ],
   "headless": [
     "tests/candidate-manual-edit-view.test.mjs",
@@ -137,7 +138,8 @@
     "tests/workspace-candidate-save-recovery.test.mjs",
     "tests/workspace-local-draft-transition.test.mjs",
     "tests/workspace-submission.test.mjs",
-    "tests/sync-scope-view.test.mjs"
+    "tests/sync-scope-view.test.mjs",
+    "tests/wechat-setup-view.test.mjs"
   ],
   "isolated-http-pg": [
     "tests/assistant-candidate-carry-public-http.test.mjs",

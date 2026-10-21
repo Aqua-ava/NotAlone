@@ -90,6 +90,7 @@ background_task
 
 - v1 只实现单用户、单微信账号下的联系人导入，不实现跨账号或跨渠道联系人合并。即使如此，`contact_id` 仍由 NotAlone 创建；`sender_wxid` 等外部标识只作为渠道身份或来源元数据保存（见 ADR-008）。
 - `owner_id` 只能来自 NotAlone 当前运行身份：本地个人版本可读取受控配置，服务器版本必须来自已验证登录身份。首次导入可以在用户显式初始化动作中生成 owner，并把文件中的本人渠道身份保存为 `owner_channel_identity`；导入文件不能直接指定或覆盖 `owner_id`。
+- App 首次连接微信也可按 [ADR-095](../adr/095-first-wechat-connection-and-account-grant.md)从已配置工具的只读核验结果建立本人渠道身份，用户一次明确确认后与全部私聊范围和开启状态原子保存；不接受任意填写的账号，不以展示名称匹配本人，不覆盖已撤销、其他 owner 或不同账号身份。重复恢复保留授权起点、排除记录及用户后续开关决定。
 - owner 的 `sender_wxid` 必须与 active `owner_channel_identity` 一致；缺失、多个或变化的本人渠道身份必须停止导入并要求初始化、恢复或重新绑定。
 - 导入只能使用已选的已有联系人，并保存 `source_document_id`、确认的 `contact_id`、确认时间和选择确认方式（`manual_select`）；需要新增时先按 [ADR-087](../adr/087-wechat-confirmed-contact-onboarding.md)／[ADR-089](../adr/089-all-private-wechat-sync-scope.md)从授权的真实微信会话加入。历史 `manual_create` 保留溯源和删除，不再允许作为新建路径；旧接口尚待退役。新来源与已有渠道身份不一致时必须停止导入并重新确认，不新建或静默改绑。
 - 一份来源只属于一位联系人。整份文件必须先完成确定性校验，再以一个事务写入联系人、来源和全部消息；损坏、混合联系人、群聊或绑定不一致时不得部分写入。

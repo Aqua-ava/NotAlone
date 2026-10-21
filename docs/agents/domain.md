@@ -13,7 +13,7 @@
 | Mac 微信后台同步 | `current/core-flows.md`、`current/privacy-deletion.md`、ADR-023、ADR-025、ADR-030、ADR-089 |
 | 前台定位、OCR 或连续性 | `current/core-flows.md`、`current/privacy-deletion.md`、ADR-049、ADR-050、ADR-052，并沿其后续修订指针核对当前规则；追溯旧视觉方案时再读 ADR-001、ADR-003、ADR-017 |
 | 隐私、外部模型或连接器 | `current/privacy-deletion.md` 及对应接入的相关 ADR |
-| 本机交付、首启或资料更新 | `current/privacy-deletion.md`、ADR-061、ADR-065、ADR-066；开发与发布门禁见工程工作流 |
+| 本机交付、首启或资料更新 | `current/privacy-deletion.md`、ADR-061、ADR-065、ADR-066、ADR-095；开发与发布门禁见工程工作流 |
 | 云端存储或部署探索 | `current/privacy-deletion.md`、`drafts/cloud-engineering.md` 及相关 ADR；草案不改变本机独立版的数据位置 |
 | Agent、Tool、MCP、RAG 或编排框架 | `drafts/agent-runtime.md`、ADR-006、ADR-009 |
 

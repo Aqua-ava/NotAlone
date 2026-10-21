@@ -89,6 +89,7 @@ from notalone.application.trace_service import TraceService
 from notalone.managed_update_backups import ManagedUpdateBackupError
 from notalone.application.model_priority import ModelWorkStopped
 from notalone.application.setup_service import OwnerAlreadyConfigured, SetupService
+from notalone.application.wechat_setup import WechatSetupService
 from notalone.application.skill_service import (
     LedgerService,
     SkillImportRejected,
@@ -223,6 +224,7 @@ class BackendApp:
         "_runtime_stopped",
         "_source_service",
         "_setup_service",
+        "_wechat_setup_service",
         "_skill_service",
         "_skill_learning",
         "_expression_preferences",
@@ -259,6 +261,7 @@ class BackendApp:
         skill_learning: SkillLearningService | None = None,
         ledger_service: LedgerService | None = None,
         setup_service: SetupService | None = None,
+        wechat_setup_service: WechatSetupService | None = None,
         expression_preferences: ExpressionPreferenceService | None = None,
         runtime_shutdown: Callable[[], None] | None = None,
     ) -> None:
@@ -287,6 +290,7 @@ class BackendApp:
         self._source_service = source_service
         self._owner_id = owner_id
         self._setup_service = setup_service
+        self._wechat_setup_service = wechat_setup_service
         self._skill_service = skill_service
         self._skill_learning = skill_learning
         self._sync_control = sync_control
@@ -2309,9 +2313,37 @@ class BackendApp:
 
         raise ImportTaskRequestInvalid()
 
+    def _handle_wechat_setup(self, *, method: str, path: str, body: bytes) -> Response:
+        service = self._wechat_setup_service
+        if service is None:
+            return _json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "setup_unavailable"})
+        try:
+            if path == '/api/setup/wechat' and method == 'GET':
+                return _json_response(HTTPStatus.OK, service.status())
+            if path == '/api/setup/wechat/detect' and method == 'POST':
+                if _parse_setup_json(body) != {}:
+                    raise SetupRequestInvalid()
+                return _json_response(HTTPStatus.OK, service.detect())
+            if path == '/api/setup/wechat/confirm' and method == 'POST':
+                payload = _parse_setup_json(body)
+                token = payload.get('candidate_token')
+                if (set(payload) != {'candidate_token', 'confirmed'}
+                        or payload['confirmed'] is not True
+                        or not isinstance(token, str) or not 1 <= len(token) <= 128
+                        or not token.isascii()):
+                    raise SetupRequestInvalid()
+                return _json_response(HTTPStatus.OK, service.confirm(candidate_token=token))
+            raise SetupRequestInvalid()
+        except SetupRequestInvalid:
+            return _json_response(HTTPStatus.BAD_REQUEST, {"error": "setup_request_invalid"})
+        except Exception:
+            return _json_response(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "setup_operation_failed"})
+
     def _handle_setup(self, *, method: str, path: str, body: bytes) -> Response:
         """处理首启向导端点；失败关闭且不回显正文与密钥。"""
 
+        if path in ('/api/setup/wechat', '/api/setup/wechat/detect', '/api/setup/wechat/confirm'):
+            return self._handle_wechat_setup(method=method, path=path, body=body)
         service = self._setup_service
         if service is None:
             return _json_response(
@@ -2700,6 +2732,7 @@ def create_app(
     skill_learning: SkillLearningService | None = None,
     ledger_service: LedgerService | None = None,
     setup_service: SetupService | None = None,
+    wechat_setup_service: WechatSetupService | None = None,
     expression_preferences: ExpressionPreferenceService | None = None,
     follow_smoke: FollowSmokeController | None = None,
     runtime_shutdown: Callable[[], None] | None = None,
@@ -2767,6 +2800,7 @@ def create_app(
             review=reply_service.skill_review if reply_service is not None else None),
         ledger_service=ledger_service,
         setup_service=setup_service,
+        wechat_setup_service=wechat_setup_service,
         runtime_shutdown=runtime_shutdown,
     )
 
@@ -3416,10 +3450,22 @@ def _parse_skill_json(body: bytes) -> dict[str, object]:
 
 
 def _parse_setup_json(body: bytes) -> dict[str, object]:
-    """解析首启向导请求体；任何异常收敛为 SetupRequestInvalid。"""
+    """首启请求拒绝重复键与非有限值，不回显输入。"""
+
+    def unique(pairs: list[tuple[str, object]]) -> dict[str, object]:
+        result: dict[str, object] = {}
+        for key, value in pairs:
+            if key in result:
+                raise SetupRequestInvalid()
+            result[key] = value
+        return result
+
+    def nonfinite(_: str) -> object:
+        raise SetupRequestInvalid()
 
     try:
-        payload = json.loads(body.decode("utf-8")) if body.strip() else None
+        payload = json.loads(body.decode("utf-8"), object_pairs_hook=unique,
+                             parse_constant=nonfinite) if body.strip() else None
     except (UnicodeDecodeError, ValueError):
         raise SetupRequestInvalid() from None
     if not isinstance(payload, dict):

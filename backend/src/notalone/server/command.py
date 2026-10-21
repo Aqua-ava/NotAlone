@@ -109,6 +109,11 @@ def _run(args: argparse.Namespace, lifetime: ParentLifetime) -> int:
         events=events,
         task_host=task_host,
     )
+    wechat_setup_service = _build_wechat_setup_service(
+        database_url=database_url, owner_id=owner_id,
+        runtime_account=owner_wechat_account_scope(database_url, owner_id)
+        if owner_id is not None and sync_host is not None else None,
+    )
     follow_smoke = (
         FollowSmokeController(
             owner_id=owner_id,
@@ -158,6 +163,7 @@ def _run(args: argparse.Namespace, lifetime: ParentLifetime) -> int:
             skill_service=skill_service,
             ledger_service=ledger_service,
             setup_service=setup_service,
+            wechat_setup_service=wechat_setup_service,
             follow_smoke=follow_smoke,
             runtime_shutdown=stop_runtime,
         )
@@ -235,6 +241,36 @@ def _build_setup_service(database_url: str) -> SetupService | None:
         return SetupService(owner_directory=PostgresOwnerDirectory(database_url))
     except Exception:
         return None
+
+
+def _build_wechat_setup_service(*, database_url: str, owner_id: UUID | None,
+                                runtime_account: str | None):
+    """首次连接独立于同步宿主；装配不运行渠道探测。"""
+    from notalone.application.wechat_setup import WechatSetupService, WechatProbeUnavailable
+    from notalone.persistence.wechat_setup import PostgresWechatSetupStore
+    from notalone.wechat_cli import LocalWechatCli
+    from notalone.wechat_cli.errors import CliAdapterError
+
+    executable = os.environ.get('NOTALONE_WECHAT_CLI', '').strip()
+
+    def probe(expected_account: str | None = None) -> str:
+        if not executable:
+            raise WechatProbeUnavailable('wechat_tool_unavailable')
+        cli = LocalWechatCli(executable=executable)
+        try:
+            return cli.configured_account(expected_account=expected_account)
+        except CliAdapterError as error:
+            code = {
+                'cli_not_found': 'wechat_tool_unavailable',
+                'cli_account_changed': 'wechat_account_changed',
+            }.get(error.code, 'wechat_tool_not_ready')
+            raise WechatProbeUnavailable(code) from None
+        except OSError:
+            raise WechatProbeUnavailable('wechat_tool_unavailable') from None
+
+    return WechatSetupService(owner_id=owner_id, runtime_account=runtime_account,
+        store=PostgresWechatSetupStore(database_url), probe=probe,
+        confirm_probe=probe)
 
 
 def _build_sync_host(

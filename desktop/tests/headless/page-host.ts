@@ -1,3 +1,5 @@
+import { WechatSetupController } from '../../src/main/setup/wechat-controller';
+import { installWechatSetupBridge } from '../../src/main/setup/wechat-bridge';
 import { installForegroundBridge } from '../../src/main/foreground/bridge';
 import type { ForegroundController } from '../../src/main/foreground/controller';
 import { CandidateCopyController, candidateCopyRequest, type CandidateCopySurface } from '../../src/main/candidate-copy/controller';
@@ -68,6 +70,7 @@ export class PageHost implements PageCommands {
     const contacts = installContactSessionBridge(this, this.backend);
     this.foreground = installForegroundBridge(this, this.backend, contacts);
     installBindingConsentBridge(this, this.backend, contacts, () => this.foreground.beginReadingScopeChange());
+    installWechatSetupBridge(this, new WechatSetupController(this.backend));
     this.sync = installSyncControlBridge(this, this.backend, contacts, () => this.foreground.beginReadingScopeChange());
     this.syncPriority = new SyncPriorityController(this.backend, contacts, this.sync);
     const imports = new ImportController(this.backend, contacts);

@@ -1,5 +1,7 @@
 # ADR-013：Owner 渠道身份与首次导入初始化
 
+> 后续补充：[ADR-095](095-first-wechat-connection-and-account-grant.md)增加已配置工具账号的首次连接与明确范围授权，不再要求 App 先导入历史才能建立本人渠道身份；原导入一致性与内部身份分离保持。
+
 > 2026-10-21 设计审查：App 本人初始化时机由 [ADR-021](021-source-distribution-and-first-run-setup.md)提前到首启，并由 [ADR-061](061-standalone-local-app-onboarding-and-updates.md)承接本机设置；下文首次导入初始化保留为 CLI 兼容路径，不是 App 首启唯一入口。本人／联系人渠道身份分离与一致性核验保持。
 
 > 状态：已采纳

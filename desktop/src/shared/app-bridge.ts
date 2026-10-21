@@ -1,3 +1,4 @@
+import type { WechatSetupBridge } from './wechat-setup-bridge';
 import type { ForegroundBridge } from './foreground-bridge';
 import type { CandidateCopyBridge } from './candidate-copy-bridge';
 import type { SourceDeletionBridge } from './source-deletion-bridge';
@@ -18,7 +19,7 @@ import type { SyncControlBridge } from './sync-control-bridge';
 import type { SkillLearningBridge } from './skill-learning-bridge';
 
 export type AppBridge = WindowBridge & DesktopBridge & {
-  backend: BackendBridge; setup: SetupBridge; startup: StartupBridge;
+  backend: BackendBridge; setup: SetupBridge; wechatSetup: WechatSetupBridge; startup: StartupBridge;
   screenPermission: ScreenPermissionBridge;
   contacts: ContactSessionBridge; imports: ImportBridge; bindings: BindingConsentBridge; replies: ReplyBridge;
   candidateProvenance: CandidateProvenanceBridge;

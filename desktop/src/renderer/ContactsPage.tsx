@@ -57,7 +57,7 @@ export function ContactsPage({ session, navigate }: { session: ContactSessionVie
       <button className="button" onClick={() => navigate('config')}>前往设置</button></div>}
     {state.directoryPhase === 'error' && <p className="contacts-note" role="alert">联系人目录读取失败，请刷新重试。</p>}
     {state.directoryPhase === 'ready' && state.contacts.length === 0 && <div className="contacts-empty"><h3>还没有联系人</h3>
-      <p>{allPrivate ? '开启后台同步后会自动关联微信私聊；联系人出现后，可在顶部搜索本次对象。' : '点击“添加微信联系人”，选择真实会话并确认后，再在顶部选择本次对象。'}</p></div>}
+      <p>{allPrivate ? '开启后台同步后会自动关联微信私聊；联系人出现后，可在顶部搜索本次对象。' : '首次使用可到同步设置连接微信，一次授权后自动关联全部私聊。'}</p><button className="button primary" onClick={() => navigate('sync')}>前往同步设置连接微信</button></div>}
     {state.contacts.length > 0 && <div className="contacts-columns"><ul className="contact-list" aria-label="联系人同步状态">
       {state.contacts.map((contact) => <li key={contact.contactId}>
         <div className="contact-row" data-current={state.selectedContactId === contact.contactId}>

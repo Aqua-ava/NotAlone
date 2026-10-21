@@ -1,3 +1,5 @@
+import { WechatSetupController } from './setup/wechat-controller';
+import { installWechatSetupBridge } from './setup/wechat-bridge';
 import { installForegroundBridge } from './foreground/bridge';
 import { coordinateOwnerContextChanges } from './reply/owner-context-changes';
 import { NativeHeaderChangeSource } from './foreground/native-change-source';
@@ -132,6 +134,7 @@ void app.whenReady().then(async () => {
     (selection, text) => candidateProvenance.recordCopied(selection, text)));
   backend.setConnectionChangePreparation(() => replies.prepareGenerationConnectionChange());
   installSetupBridge(windows, new SetupController(backend));
+  installWechatSetupBridge(commands, new WechatSetupController(backend));
   installBackendBridge(windows, backend, () => app.quit());
   installStartupBridge(windows, diagnostics, backend, app.getPath('userData'));
   app.on('before-quit', () => { foreground.stopContinuous(); diagnostics.cancel(); });

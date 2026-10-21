@@ -1,6 +1,6 @@
 # NotAlone 架构文档
 
-> 联系人首用决定：[ADR-087](adr/087-wechat-confirmed-contact-onboarding.md)保留真实微信来源建联与导入只补充已有联系人的规则；[ADR-089](adr/089-all-private-wechat-sync-scope.md)新增当前账号全部私聊的一次授权，包括以后新增会话。旧创建接口退役及新用户交付验收尚待完成；全部私聊实现与验证见[规格](../.scratch/all-private-sync/spec.md)。
+> 联系人首用决定：[ADR-087](adr/087-wechat-confirmed-contact-onboarding.md)保留真实微信来源建联与导入只补充已有联系人的规则；[ADR-089](adr/089-all-private-wechat-sync-scope.md)新增当前账号全部私聊的一次授权，包括以后新增会话。[ADR-095](adr/095-first-wechat-connection-and-account-grant.md)补充已有可用工具的首次账号连接与一次授权；未配置机器的工具准备及新用户独立交付验收仍未完成。旧创建接口退役尚待完成；全部私聊实现与验证见[规格](../.scratch/all-private-sync/spec.md)。
 
 > 2026-10-21 设计审查：同号 ADR-074 有两份：引用时必须附“腾讯记忆”或“自动 Skill”标题及完整文件链接，不能仅凭编号推断替代。额外记忆人工门已由用户确认并通过 [ADR-085](adr/085-source-verified-automatic-adoption.md) 收敛；Runtime 按需检索已由 [ADR-090](adr/090-bounded-runtime-history-retrieval.md)确认受控只读边界；运行计划和自动过程摘要已按 [ADR-091](adr/091-retire-runtime-todos-and-auto-summary.md)取消强制接入要求；时间／日历／网络工具已按 [ADR-092](adr/092-defer-time-calendar-web-tools.md)改为未来可选方向。
 
@@ -145,13 +145,15 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 
 94. [ADR-094：按删除范围保留或清除最小调用记录](adr/094-ledger-erasure-by-deletion-scope.md)
 
+95. [ADR-095：首次连接微信与一次账号范围授权](adr/095-first-wechat-connection-and-account-grant.md)
+
 ## 当前架构决策
 
 - 主动收藏表达样本按 [ADR-082](adr/082-retire-explicit-style-samples.md)退役；删除独立样本库、入口和生成参考，清理遗留依赖及可重放副本。普通候选编辑复制与用户明确管理的长期表达偏好保留，历史样本验收不代表本次退役验证。
 
 - 旧 Swift 主界面已按 ADR-039 退役；共享前端采用 TypeScript + React，由 ADR-040 的 Electron 双窗口宿主承载；已接通业务页面，完整原生验收仍未完成。Python 后台与 Mac 原生探针保留。
 - 独立桌面版按 ADR-061 采用本机受管后台与 PostgreSQL，资料保存在本机；新装交付与最终验收状态分别核验。按 ADR-066，已有安装保留原数据库连接与资料位置，仅原地执行缺少的版本化 SQL，取消普通启动中的强制备份与复制切换；没有既有配置的新安装正常初始化空受管库。旧云端模块化单体目标不作为独立版的默认数据去向，PostgreSQL 仍是联系人、消息、关系资料、任务和删除状态的权威业务库。
-- 首版范围按 ADR-065 先交付手动粘贴聊天文字或单联系人导入的完整使用路径，明确选择联系人后生成、查看依据及编辑候选；桌面独立创建入口按 ADR-084 退役，搜索仅放在顶部选择器内。微信自动初始化与渠道验收保留未完成，不作为本次首版前提；资料更新按 ADR-066 原地补齐，历史副本删除清理、隐私与人工发送要求保持。
+- 新联系人按 ADR-087／089 从真实微信会话加入，支持逐会话确认或全部私聊范围授权；ADR-095 补充已有可用外置工具的首次账号连接，无需先导入历史。已有联系人可手动表达，顶部选择器是唯一搜索入口；未配置机器的工具初始化与独立渠道验收仍未完成，ADR-065 的空目录无需微信首用承诺已被替代。资料更新按 ADR-066 原地补齐，历史副本删除清理、隐私与人工发送要求保持。
 - 数据隔离键为 `owner_id + contact_id`；`contact_id` 由 NotAlone 创建，昵称、备注和微信来源标识不能替代它。
 - 文字是统一的检索与生成表示；前台 display name OCR、本地微信 CLI、截图和语音都是输入适配器。
 - Mac 前台 OCR 按 ADR-052 仅识别顶部 display name，再按 ADR-076 结合完整会话名单、唯一私聊及已确认绑定定位联系人；CLI 独立同步用户主动选择并确认的联系人及我方文字增量，首次不预选会话。CLI 的外部会话标识不能替代 `contact_id`，同步范围与停止/恢复规则见 ADR-030。

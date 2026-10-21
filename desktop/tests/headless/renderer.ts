@@ -1,3 +1,4 @@
+import { createWechatSetupBridge } from '../../src/preload/wechat-setup';
 import { createForegroundBridge } from '../../src/preload/foreground';
 import { createCandidateCopyBridge } from '../../src/preload/candidate-copy';
 import { createSourceDeletionBridge } from '../../src/preload/source-deletion';
@@ -59,6 +60,7 @@ const bridge: AppBridge = {
   bindings: createBindingConsentBridge(transport),
   foreground: createForegroundBridge(transport),
   syncControl: createSyncControlBridge(transport),
+  wechatSetup: createWechatSetupBridge(transport),
 };
 window.notalone = Object.freeze(bridge);
 import { createTraceBridge } from '../../src/preload/traces';

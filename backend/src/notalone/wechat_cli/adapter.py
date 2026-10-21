@@ -284,6 +284,22 @@ class LocalWechatCli:
         self._process_lock = threading.Lock()
         self._active_processes: set[object] = set()
 
+    def configured_account(self, *, expected_account: str | None = None) -> str:
+        """核验已配置且可读的账号；不是当前前台账号，不执行初始化。"""
+        # 已配置工具的状态核验实测约三秒；每次最多五秒，确认总 CLI 预算十六秒。
+        command = (self._executable, 'status', '--include-debug', '--strict-read-only')
+        before = _configured_account(self._run_json(command, timeout_seconds=5.0))
+        if expected_account is None:
+            return before
+        if before != expected_account:
+            raise CliOutputError('cli_account_changed', '微信读取账号与确认范围不一致。')
+        # sessions 的上游实现可能附带摘要，只在用户明确授权全部私聊后执行。
+        self.sessions(type_filter='private', limit=1, timeout_seconds=1.0)
+        after = _configured_account(self._run_json(command, timeout_seconds=5.0))
+        if before != after:
+            raise CliOutputError('cli_account_changed', '探测期间微信读取账号发生变化。')
+        return before
+
     def resolve_chat(
         self,
         query: str,
@@ -609,6 +625,26 @@ class LocalWechatCli:
             "cli_follow_unsupported",
             "当前 CLI 适配器不提供 follow 流能力。",
         )
+
+
+def _configured_account(envelope: dict[str, Any]) -> str:
+    """只投影稳定身份，丢弃 CLI debug 中的路径和其他敏感配置。"""
+    data = envelope.get('data')
+    status = data.get('status') if isinstance(data, dict) else None
+    if not isinstance(status, dict):
+        raise CliOutputError('cli_output_invalid', '微信读取状态无效。')
+    account = status.get('account')
+    debug = status.get('account_debug')
+    mode = status.get('mode')
+    if (not isinstance(account, dict) or account.get('identity_configured') is not True
+            or account.get('schema2_ready') is not True or status.get('live_read_ok') is not True
+            or status.get('readiness') not in ('ready', 'degraded')
+            or not isinstance(mode, dict) or mode.get('strict_read_only') is not True):
+        raise CliOutputError('cli_not_ready', '微信读取工具尚未准备好。')
+    identity = debug.get('wxid') if isinstance(debug, dict) else None
+    if (not isinstance(identity, str) or not re.fullmatch(r'[A-Za-z0-9_.@-]{1,255}', identity)):
+        raise CliOutputError('cli_output_invalid', '微信读取账号无效。')
+    return identity
 
 
 def _command_failure(result: CommandResult) -> CliCommandError:
