@@ -13,7 +13,7 @@ async function mount(page, contents) {
   await page.addScriptTag({ content: bundle.outputFiles[0].text });
 }
 
-test('顶部联系人搜索只筛选已有联系人，输入不切换且不提供创建入口', async t => {
+test('顶部联系人原位输入并全选当前名称，搜索只筛选且确认才切换', async t => {
   const browser = await chromium.launch({ headless: true, executablePath: process.env.NOTALONE_TEST_CHROMIUM_PATH });
   t.after(() => browser.close());
   const page = await browser.newPage();
@@ -29,20 +29,30 @@ test('顶部联系人搜索只筛选已有联系人，输入不切换且不提�
     }
     createRoot(document.getElementById('root')).render(<View/>);
   `);
-  await page.getByRole('combobox', { name: '本次联系人', exact: true }).click();
-  const search = page.getByRole('searchbox', { name: '搜索联系人', exact: true });
+  const search = page.getByRole('combobox', { name: '本次联系人', exact: true });
+  await expect(search).toHaveValue('合成甲');
+  await search.click();
   await expect(search).toBeFocused();
-  await search.fill('乙');
+  assert.equal(await search.evaluate(input => input.value.slice(input.selectionStart, input.selectionEnd)), '合成甲');
+  await expect(page.getByRole('searchbox')).toHaveCount(0);
+  await expect(page.getByRole('option')).toHaveCount(2);
+  await page.keyboard.insertText('乙');
+  await expect(search).toHaveValue('乙');
   await expect(page.getByLabel('已选择联系人')).toHaveText('synthetic-a');
   await expect(page.getByRole('option')).toHaveCount(1);
-  await page.getByRole('option', { name: '合成乙', exact: true }).click();
+  await search.press('Enter');
   await expect(page.getByLabel('已选择联系人')).toHaveText('synthetic-b');
-  await expect(search).toHaveCount(0);
-  await page.getByRole('combobox', { name: '本次联系人', exact: true }).click();
+  await expect(search).toHaveValue('合成乙');
+  await expect(search).toHaveAttribute('aria-expanded', 'false');
+  await search.click();
   await search.fill('不存在的合成联系人');
   await expect(page.getByText('未找到联系人', { exact: true })).toBeVisible();
+  await search.press('Enter');
+  await expect(page.getByLabel('已选择联系人')).toHaveText('synthetic-b');
   await expect(page.getByRole('option')).toHaveCount(0);
   await expect(page.getByRole('button', { name: '创建联系人', exact: true })).toHaveCount(0);
+  await search.press('Escape');
+  await expect(search).toHaveValue('合成乙');
 });
 
 test('顶部联系人搜索支持中文组合输入、键盘导航、关闭和同名独立选择', async t => {
@@ -64,7 +74,7 @@ test('顶部联系人搜索支持中文组合输入、键盘导航、关闭和�
     createRoot(document.getElementById('root')).render(<View/>);
   `);
   const picker = page.getByRole('combobox', { name: '本次联系人', exact: true });
-  const search = page.getByRole('searchbox', { name: '搜索联系人', exact: true });
+  const search = picker;
   const options = page.getByRole('listbox', { name: '联系人搜索结果', exact: true }).getByRole('option');
   await picker.click();
   await search.fill('  ALICE  ');
@@ -81,11 +91,10 @@ test('顶部联系人搜索支持中文组合输入、键盘导航、关闭和�
   await search.fill('同名');
   await expect(options).toHaveCount(2);
   await search.press('ArrowDown');
-  await search.press('ArrowDown');
   await expect(picker).toHaveAttribute('data-contact-id', 'synthetic-a');
   await search.press('Enter');
   await expect(picker).toHaveAttribute('data-contact-id', 'synthetic-c');
-  await expect(search).toHaveCount(0);
+  await expect(picker).toHaveAttribute('aria-expanded', 'false');
   await expect(picker).toBeFocused();
   await selectContact(picker, 'synthetic-b');
   await expect(picker).toHaveAttribute('data-contact-id', 'synthetic-b');
@@ -93,17 +102,20 @@ test('顶部联系人搜索支持中文组合输入、键盘导航、关闭和�
   await expect(search).toBeFocused();
   await search.fill('同名');
   await search.press('Escape');
+  await expect(search).toHaveValue('合成同名');
   await expect(picker).toBeFocused();
-  await expect(search).toHaveCount(0);
+  await expect(picker).toHaveAttribute('aria-expanded', 'false');
   await expect(picker).toHaveAttribute('data-contact-id', 'synthetic-b');
   await picker.click();
-  await expect(search).toHaveValue('');
+  await expect(search).toHaveValue('合成同名');
   await expect(options).toHaveCount(3);
+  await search.fill('未提交搜索');
   await page.getByRole('button', { name: '外部按钮', exact: true }).click();
-  await expect(search).toHaveCount(0);
+  await expect(search).toHaveValue('合成同名');
+  await expect(picker).toHaveAttribute('aria-expanded', 'false');
   await picker.click();
   await search.press('Tab');
-  await expect(search).toHaveCount(0);
+  await expect(picker).toHaveAttribute('aria-expanded', 'false');
   await expect(page.getByRole('button', { name: '外部按钮', exact: true })).toBeFocused();
 });
 
@@ -123,15 +135,15 @@ test('顶部联系人目录失效或切换范围时关闭搜索，空目录禁�
     createRoot(document.getElementById('root')).render(<View/>);
   `);
   const picker = page.getByRole('combobox', { name: '本次联系人', exact: true });
-  const search = page.getByRole('searchbox', { name: '搜索联系人', exact: true });
+  const search = picker;
   await picker.click();
   await search.fill('甲');
   await page.evaluate(() => window.fixtureUpdate({ scopeRevision: 2, selectedContactId: 'synthetic-b' }));
-  await expect(search).toHaveCount(0);
+  await expect(picker).toHaveAttribute('aria-expanded', 'false');
   await expect(picker).toHaveAttribute('data-contact-id', 'synthetic-b');
   await picker.click();
   await page.evaluate(() => window.fixtureUpdate({ directoryPhase: 'unavailable' }));
-  await expect(search).toHaveCount(0);
+  await expect(picker).toHaveAttribute('aria-expanded', 'false');
   await expect(picker).toBeDisabled();
   await page.evaluate(() => window.fixtureUpdate({ directoryPhase: 'ready', selectedContactId: null, contacts: [] }));
   await expect(picker).toBeDisabled();

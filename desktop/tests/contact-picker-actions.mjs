@@ -4,20 +4,20 @@ import { expect } from '@playwright/test';
 export async function selectContact(picker, target) {
   const page = picker.page();
   if (await picker.getAttribute('aria-expanded') !== 'true') await picker.click();
-  const search = page.getByRole('searchbox', { name: '搜索联系人', exact: true });
+  const search = picker;
   await search.fill(typeof target === 'string' ? '' : target.label);
   const results = page.getByRole('listbox', { name: '联系人搜索结果', exact: true });
   const option = typeof target === 'string'
     ? results.locator(`[role="option"][data-contact-id="${target}"]`)
     : results.getByRole('option', { name: target.label, exact: true });
   await option.click();
-  await expect(search).toHaveCount(0);
+  await expect(picker).toHaveAttribute('aria-expanded', 'false');
 }
 
 export async function expectContactOption(picker, name, options = {}) {
   if (await picker.getAttribute('aria-expanded') !== 'true') await picker.click();
   const page = picker.page();
-  const search = page.getByRole('searchbox', { name: '搜索联系人', exact: true });
+  const search = picker;
   await search.fill('');
   await expect(page.getByRole('listbox', { name: '联系人搜索结果', exact: true })
     .getByRole('option', { name, exact: true })).toHaveCount(1, options);
