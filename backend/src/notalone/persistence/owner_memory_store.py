@@ -24,10 +24,7 @@ from notalone.persistence.memory_evolution import bind_memory_evolutions, valida
 from notalone.memory.conditions import MemoryConditions
 from notalone.persistence.memory_conditions import bind_memory_conditions_rows, manual_conditions
 from notalone.persistence.memory_events import bind_memory_events_rows
-from notalone.memory.versions import (
-    MemoryVersionConflict, require_auto_previous, require_auto_update_previous,
-    require_auto_update_receipt, require_version_receipt,
-)
+from notalone.persistence.memory_confirm import confirm_candidate_in_transaction
 from notalone.persistence.dimension_evidence import bind_stored_dimension_evidence
 
 from notalone.memory.models import (
@@ -179,7 +176,6 @@ class PostgresOwnerMemoryStore:
         if not isinstance(adoption_method, AdoptionMethod):
             raise OwnerMemoryPersistenceError("owner 候选采纳方式无效。")
         scope = candidate.scope
-        candidate_id = candidate.candidate_id
         if expected_previous is not None:
             if not isinstance(expected_previous, OwnerMemory):
                 raise OwnerMemoryPersistenceError("自动替代原版本无效。")
@@ -187,243 +183,16 @@ class PostgresOwnerMemoryStore:
                 raise PermissionError("关系记忆范围校验失败。")
         try:
             with self._write_connection(scope.owner_id) as connection:
-                lock_contact_scope(
+                return confirm_candidate_in_transaction(
                     connection,
-                    owner_id=scope.owner_id,
-                    contact_id=scope.contact_id,
-                )
-                lock_owner_scope(connection, owner_id=scope.owner_id)
-                candidate_row = connection.execute(
-                    """
-                    SELECT id, owner_id, contact_id, text_content, category,
-                           topic, subject, source_ids, status, valid_at,
-                           invalid_at, confidence, risk_flags, alternatives,
-                           interpretation_reason,
-                           to_jsonb(memory_candidate)->'dimension_evidence'
-                               AS dimension_evidence,
-                           to_jsonb(memory_candidate)->'event' AS event,
-                           to_jsonb(memory_candidate)->'conditions' AS conditions,
-                           to_jsonb(memory_candidate)->'evolution' AS evolution,
-                           to_jsonb(memory_candidate)->>'source_dependency_mode'
-                               AS dependency_mode, to_jsonb(memory_candidate)->'requires_all_sources' AS requires_all_sources
-                    FROM public.memory_candidate
-                    WHERE owner_id = %s AND contact_id = %s AND id = %s
-                    FOR UPDATE
-                    """,
-                    (scope.owner_id, scope.contact_id, candidate_id),
-                ).fetchone()
-                if candidate_row is None:
-                    exists = connection.execute(
-                        "SELECT 1 FROM public.memory_candidate WHERE id=%s",
-                        (candidate_id,),
-                    ).fetchone()
-                    if exists is not None:
-                        raise PermissionError("关系记忆范围校验失败。")
-                    raise LookupError("关系记忆候选不存在。")
-                if (
-                    candidate_row["owner_id"] != scope.owner_id
-                    or candidate_row["contact_id"] != scope.contact_id
-                ):
-                    raise PermissionError("关系记忆范围校验失败。")
-                if FactSubject(candidate_row["subject"]) is not FactSubject.SELF:
-                    raise OwnerMemoryPersistenceError(
-                        "只有 self 主体候选可以确认到 owner 记忆。"
-                    )
-                protected, snapshot = protect_candidate(connection, candidate_from_row(candidate_row))
-                if (expected_dimension_evidence is not None
-                        and protected.dimension_evidence != expected_dimension_evidence):
-                    raise MemoryVersionConflict('本人候选核验依据已变化。')
-                require_reviewed_decisions(
-                    protected, adoption_method, expected_correction_decision_ids,
-                )
-                status = MemoryCandidateStatus(candidate_row["status"])
-                if status is MemoryCandidateStatus.CONFIRMED:
-                    existing = connection.execute(
-                        f"""
-                        SELECT {_OWNER_MEMORY_COLUMNS}
-                        FROM public.owner_memory
-                        WHERE owner_id = %s AND source_candidate_id = %s
-                        """,
-                        (scope.owner_id, candidate_id),
-                    ).fetchone()
-                    if existing is None:
-                        raise OwnerMemoryPersistenceError(
-                            "已确认候选缺少对应 owner 记忆。"
-                        )
-                    actual = _from_row(_timed_rows(connection, [existing])[0])
-                    if expected_previous is not None:
-                        if adoption_method is AdoptionMethod.AUTO:
-                            require_auto_update_receipt(actual, expected_previous)
-                        else:
-                            require_version_receipt(actual, expected_previous, adoption_method)
-                        previous_row = connection.execute(
-                            f"SELECT {_OWNER_MEMORY_COLUMNS} FROM public.owner_memory "
-                            "WHERE owner_id=%s AND id=%s FOR UPDATE",
-                            (scope.owner_id, expected_previous.memory_id),
-                        ).fetchone()
-                        if previous_row is None:
-                            raise MemoryCorrectionConflictError("原资料已删除，自动回执不可复用。")
-                        require_auto_update_previous(
-                            _from_row(_timed_rows(connection, [previous_row])[0]), expected_previous,
-                            allow_manual=adoption_method is AdoptionMethod.MANUAL,
-                        )
-                    return actual
-                if status is not MemoryCandidateStatus.PENDING:
-                    raise RuntimeError("关系记忆候选当前不可确认。")
-                if expected_previous is not None:
-                    previous_row = connection.execute(
-                        f"SELECT {_OWNER_MEMORY_COLUMNS} FROM public.owner_memory "
-                        "WHERE owner_id=%s AND id=%s FOR UPDATE",
-                        (scope.owner_id, expected_previous.memory_id),
-                    ).fetchone()
-                    if previous_row is None:
-                        raise MemoryCorrectionConflictError("原资料已删除，自动替代未应用。")
-                    require_auto_previous(
-                        _from_row(_timed_rows(connection, [previous_row])[0]), expected_previous,
-                        allow_manual=adoption_method is AdoptionMethod.MANUAL,
-                    )
-                    _ensure_memory_sources(connection, owner_id=scope.owner_id, row=previous_row)
-                if snapshot is not None:
-                    persist_protection(connection, protected, snapshot)
-
-                sources = tuple(candidate_row["source_ids"])
-                # 候选只能声明实际聊天依据，不能借手录旧版豁免任意 UUID。
-                _ensure_active_sources(connection, owner_id=scope.owner_id, source_ids=sources)
-                if expected_previous is not None:
-                    if (adoption_method is AdoptionMethod.AUTO and not set(sources) - set(expected_previous.source_ids)
-                            or connection.execute(
-                                "SELECT 1 FROM public.owner_memory WHERE owner_id=%s "
-                                "AND supersedes_memory_id=%s AND status='active'",
-                                (scope.owner_id, expected_previous.memory_id),
-                            ).fetchone() is not None):
-                        raise MemoryVersionConflict("自动更新需要新依据和当前叶子版本。")
-                    sources = tuple(dict.fromkeys((*expected_previous.source_ids, *sources)))
-
-                candidate_mode = dependency_mode(candidate_row.get("dependency_mode"))
-                mode = (SourceDependencyMode.ALL if expected_previous is not None
-                        and expected_previous.source_dependency_mode is SourceDependencyMode.ALL else candidate_mode)
-                if mode is SourceDependencyMode.ALL:
-                    ensure_all_sources(connection, owner_id=scope.owner_id,
-                                       contact_id=scope.contact_id,
-                                       source_ids=sources)
-                if (adoption_method is AdoptionMethod.AUTO
-                        or mode is SourceDependencyMode.ALL
-                        and candidate_row["dimension_evidence"] is not None):
-                    raw = candidate_row["dimension_evidence"]
-                    stored = replace(
-                        candidate,
-                        text=candidate_row["text_content"],
-                        category=MemoryCategory(candidate_row["category"]),
-                        topic=MemoryTopic(candidate_row["topic"]),
-                        subject=FactSubject(candidate_row["subject"]),
-                        source_ids=tuple(candidate_row["source_ids"]),
-                        valid_at=candidate_row["valid_at"],
-                        invalid_at=candidate_row["invalid_at"],
-                        confidence=candidate_row["confidence"],
-                        risk_flags=tuple(candidate_row["risk_flags"] or ()),
-                        alternatives=tuple(candidate_row["alternatives"] or ()),
-                        interpretation_reason=(
-                            candidate_row["interpretation_reason"] or ""
-                        ),
-                        source_dependency_mode=candidate_mode, requires_all_sources=bool(candidate_row.get('requires_all_sources')),
-                        dimension_evidence=(
-                            DimensionEvidence.from_payload(raw)
-                            if raw is not None else None
-                        ),
-                        event=MemoryEvent.from_payload(candidate_row.get("event")), conditions=MemoryConditions.from_payload(candidate_row.get("conditions")), evolution=MemoryEvolution.from_payload(candidate_row.get("evolution")),
-                    )
-                    current = bind_stored_dimension_evidence(
-                        connection, stored, lock_sources=True
-                    )
-                    if adoption_method is AdoptionMethod.AUTO:
-                        require_current_dimension_evidence(
-                            current, candidate.dimension_evidence
-                        )
-
-                memory = OwnerMemory(
-                    memory_id=self._id_factory(),
-                    owner_id=scope.owner_id,
-                    text=candidate_row["text_content"],
-                    category=MemoryCategory(candidate_row["category"]),
-                    topic=MemoryTopic(candidate_row["topic"]),
-                    source_ids=sources,
-                    source_candidate_id=candidate_id,
-                    source_dependency_mode=mode, requires_all_sources=bool(candidate_row.get('requires_all_sources')) or bool(expected_previous and expected_previous.requires_all_sources),
+                    flavor=_OwnerConfirmFlavor(
+                        self, scope=scope, candidate=candidate,
+                    ),
                     adoption_method=adoption_method,
-                    status=ConfirmedMemoryStatus.ACTIVE,
-                    valid_at=candidate_row["valid_at"],
-                    invalid_at=candidate_row["invalid_at"],
-                    confidence=candidate_row["confidence"],
-                    risk_flags=tuple(candidate_row["risk_flags"] or ()),
-                    revision=expected_previous.revision + 1 if expected_previous else 1,
-                    supersedes_memory_id=expected_previous.memory_id if expected_previous else None,
-                    event=MemoryEvent.from_payload(candidate_row.get("event")), conditions=MemoryConditions.from_payload(candidate_row.get("conditions")), evolution=MemoryEvolution.from_payload(candidate_row.get("evolution")),
+                    expected_correction_decision_ids=expected_correction_decision_ids,
+                    expected_previous=expected_previous,
+                    expected_dimension_evidence=expected_dimension_evidence,
                 )
-                event_column = ", event" if memory.event is not None else ""
-                event_value = ", %(event)s" if memory.event is not None else ""
-                if adoption_method is AdoptionMethod.AUTO and expected_previous is not None:
-                    require_replacement_evolution(connection, candidate, (expected_previous,))
-                if memory.evolution is not None:
-                    validate_evolution(connection, owner_id=scope.owner_id, evolution=memory.evolution, candidate=candidate, lock=True)
-                    event_column += ", evolution"
-                    event_value += ", %(evolution)s"
-                if memory.conditions is not None:
-                    event_column += ", conditions"
-                    event_value += ", %(conditions)s"
-                if expected_previous is not None:
-                    proof = create_version_evidence(connection, previous=expected_previous, current=memory)
-                    if adoption_method is AdoptionMethod.AUTO:
-                        validate_version_sources(connection, owner_id=scope.owner_id, evidence=proof)
-                    memory = replace(memory, version_evidence=proof)
-                    event_column += ", version_evidence"
-                    event_value += ", %(version_evidence)s"
-                mode_column, mode_value = _insert_mode(memory, connection)
-                row = connection.execute(
-                    f"""
-                    INSERT INTO public.owner_memory (
-                        id, owner_id, text_content, category, topic,
-                        source_ids, adoption_method, status, valid_at,
-                        invalid_at, revision, confidence, risk_flags,
-                        source_candidate_id, supersedes_memory_id{event_column}{mode_column}
-                    ) VALUES (
-                        %(memory_id)s, %(owner_id)s, %(text)s, %(category)s,
-                        %(topic)s, %(source_ids)s, %(adoption_method)s,
-                        %(status)s, %(valid_at)s, %(invalid_at)s, %(revision)s,
-                        %(confidence)s, %(risk_flags)s, %(source_candidate_id)s,
-                        %(supersedes_memory_id)s{event_value}{mode_value}
-                    )
-                    RETURNING {_OWNER_MEMORY_COLUMNS}
-                    """,
-                    _to_row(memory),
-                ).fetchone()
-                if expected_previous is not None:
-                    erase_layered_reply_dependencies(connection, OwnerScope(scope.owner_id),
-                        (expected_previous.memory_id,))
-                    invalidated = connection.execute(
-                        "UPDATE public.owner_memory SET status='invalidated', "
-                        "revision=revision+1, retirement_reason=%s, retired_at=now(), updated_at=now() "
-                        "WHERE owner_id=%s AND id=%s AND status='active' "
-                        "AND revision=%s AND adoption_method=%s",
-                        (("error_correction" if candidate.evolution and candidate.evolution.kind == "error_correction" else "state_changed"), scope.owner_id,
-                         expected_previous.memory_id, expected_previous.revision,
-                         expected_previous.adoption_method.value),
-                    ).rowcount
-                    if invalidated != 1:
-                        raise MemoryCorrectionConflictError("原资料已变化，自动替代未应用。")
-                updated = connection.execute(
-                    """
-                    UPDATE public.memory_candidate
-                    SET status = 'confirmed', updated_at = now()
-                    WHERE owner_id = %s AND contact_id = %s AND id = %s
-                      AND status = 'pending'
-                    """,
-                    (scope.owner_id, scope.contact_id, candidate_id),
-                ).rowcount
-                if row is None or updated != 1:
-                    raise OwnerMemoryPersistenceError(
-                        "owner 候选确认结果无效。"
-                    )
-                return _from_row(_timed_rows(connection, [row])[0])
         except (LookupError, PermissionError, RuntimeError, OwnerMemoryPersistenceError):
             raise
         except Exception as error:
@@ -1031,3 +800,260 @@ def _contact_view_rows(
             projected["version_evidence"] = None
         result.append(projected)
     return result
+
+class _OwnerConfirmFlavor:
+    """owner 级自我记忆确认事务的表结构与行投影适配器。"""
+
+    def __init__(
+        self, store: PostgresOwnerMemoryStore, *, scope: ContactScope,
+        candidate: MemoryCandidate,
+    ) -> None:
+        self._store = store
+        self.scope = scope
+        self._candidate = candidate
+
+    def load_candidate(self, connection: psycopg.Connection[Any]):
+        scope = self.scope
+        candidate_id = self._candidate.candidate_id
+        candidate_row = connection.execute(
+            """
+            SELECT id, owner_id, contact_id, text_content, category,
+                   topic, subject, source_ids, status, valid_at,
+                   invalid_at, confidence, risk_flags, alternatives,
+                   interpretation_reason,
+                   to_jsonb(memory_candidate)->'dimension_evidence'
+                       AS dimension_evidence,
+                   to_jsonb(memory_candidate)->'event' AS event,
+                   to_jsonb(memory_candidate)->'conditions' AS conditions,
+                   to_jsonb(memory_candidate)->'evolution' AS evolution,
+                   to_jsonb(memory_candidate)->>'source_dependency_mode'
+                       AS dependency_mode, to_jsonb(memory_candidate)->'requires_all_sources' AS requires_all_sources
+            FROM public.memory_candidate
+            WHERE owner_id = %s AND contact_id = %s AND id = %s
+            FOR UPDATE
+            """,
+            (scope.owner_id, scope.contact_id, candidate_id),
+        ).fetchone()
+        if candidate_row is None:
+            exists = connection.execute(
+                "SELECT 1 FROM public.memory_candidate WHERE id=%s",
+                (candidate_id,),
+            ).fetchone()
+            if exists is not None:
+                raise PermissionError("关系记忆范围校验失败。")
+            raise LookupError("关系记忆候选不存在。")
+        if (candidate_row["owner_id"] != scope.owner_id
+                or candidate_row["contact_id"] != scope.contact_id):
+            raise PermissionError("关系记忆范围校验失败。")
+        if FactSubject(candidate_row["subject"]) is not FactSubject.SELF:
+            raise OwnerMemoryPersistenceError(
+                "只有 self 主体候选可以确认到 owner 记忆。"
+            )
+        candidate = replace(
+            candidate_from_row(candidate_row),
+            source_dependency_mode=dependency_mode(candidate_row.get("dependency_mode")),
+            requires_all_sources=bool(candidate_row.get("requires_all_sources")),
+        )
+        # 与读取路径一致地复验当前来源，使预期依据校验看到真实绑定状态，
+        # 而不是只看 JSON 载荷是否相等。
+        candidate = replace(
+            candidate,
+            dimension_evidence=bind_stored_dimension_evidence(connection, candidate),
+        )
+        return candidate_row, candidate
+
+    def candidate_status(self, row: dict[str, Any]) -> MemoryCandidateStatus:
+        return MemoryCandidateStatus(row["status"])
+
+    def read_confirmed_memory(self, connection: psycopg.Connection[Any]) -> OwnerMemory:
+        existing = connection.execute(
+            f"""
+            SELECT {_OWNER_MEMORY_COLUMNS}
+            FROM public.owner_memory
+            WHERE owner_id = %s AND source_candidate_id = %s
+            """,
+            (self.scope.owner_id, self._candidate.candidate_id),
+        ).fetchone()
+        if existing is None:
+            raise OwnerMemoryPersistenceError("已确认候选缺少对应 owner 记忆。")
+        return _from_row(_timed_rows(connection, [existing])[0])
+
+    def load_previous_row(self, connection: psycopg.Connection[Any], memory_id: UUID):
+        return connection.execute(
+            f"SELECT {_OWNER_MEMORY_COLUMNS} FROM public.owner_memory "
+            "WHERE owner_id=%s AND id=%s FOR UPDATE",
+            (self.scope.owner_id, memory_id),
+        ).fetchone()
+
+    def ensure_previous_scope(self, row: dict[str, Any]) -> None:
+        return None
+
+    def shape_previous(self, connection: psycopg.Connection[Any], row: dict[str, Any]) -> OwnerMemory:
+        return _from_row(_timed_rows(connection, [row])[0])
+
+    def ensure_previous_sources(self, connection: psycopg.Connection[Any], row: dict[str, Any]) -> None:
+        _ensure_memory_sources(connection, owner_id=self.scope.owner_id, row=row)
+
+    def candidate_source_ids(self, row: dict[str, Any]) -> tuple[UUID, ...]:
+        return tuple(row["source_ids"])
+
+    def has_active_child(self, connection: psycopg.Connection[Any], memory_id: UUID) -> bool:
+        return connection.execute(
+            "SELECT 1 FROM public.owner_memory WHERE owner_id=%s "
+            "AND supersedes_memory_id=%s AND status='active'",
+            (self.scope.owner_id, memory_id),
+        ).fetchone() is not None
+
+    def dependency_mode(self, row: dict[str, Any]) -> SourceDependencyMode:
+        return dependency_mode(row.get("dependency_mode"))
+
+    def requires_all_sources(self, row: dict[str, Any]) -> bool:
+        return bool(row.get("requires_all_sources"))
+
+    def confirmation_candidate(self, connection: psycopg.Connection[Any], row: dict[str, Any]) -> MemoryCandidate:
+        return candidate_from_row(row)
+
+    def enforce_locked_evidence(
+        self, connection: psycopg.Connection[Any], *, row: dict[str, Any],
+        candidate: MemoryCandidate, adoption_method: AdoptionMethod,
+        mode: SourceDependencyMode, expected_dimension_evidence: Any,
+    ) -> None:
+        if not (adoption_method is AdoptionMethod.AUTO
+                or mode is SourceDependencyMode.ALL
+                and row["dimension_evidence"] is not None):
+            return
+        stored = replace(candidate, source_dependency_mode=self.dependency_mode(row))
+        current = bind_stored_dimension_evidence(
+            connection, stored, lock_sources=True,
+        )
+        if adoption_method is AdoptionMethod.AUTO:
+            require_current_dimension_evidence(
+                current, self._candidate.dimension_evidence,
+            )
+
+    def validate_sources(
+        self, connection: psycopg.Connection[Any],
+        source_ids: tuple[UUID, ...], mode: SourceDependencyMode,
+    ) -> None:
+        if mode is SourceDependencyMode.ALL:
+            ensure_all_sources(
+                connection, owner_id=self.scope.owner_id,
+                contact_id=self.scope.contact_id, source_ids=source_ids,
+            )
+        else:
+            _ensure_active_sources(
+                connection, owner_id=self.scope.owner_id, source_ids=source_ids,
+            )
+
+    def new_memory_id(self) -> UUID:
+        return self._store._id_factory()
+
+    def build_memory(
+        self, *, memory_id: UUID, candidate: MemoryCandidate,
+        source_ids: tuple[UUID, ...], adoption_method: AdoptionMethod,
+        expected_previous: OwnerMemory | None, mode: SourceDependencyMode,
+        requires_all_sources: bool,
+    ) -> OwnerMemory:
+        return OwnerMemory(
+            memory_id=memory_id, owner_id=self.scope.owner_id, text=candidate.text,
+            category=candidate.category, topic=candidate.topic, source_ids=source_ids,
+            source_candidate_id=self._candidate.candidate_id,
+            source_dependency_mode=mode, requires_all_sources=requires_all_sources,
+            adoption_method=adoption_method,
+            status=ConfirmedMemoryStatus.ACTIVE,
+            valid_at=candidate.valid_at, invalid_at=candidate.invalid_at,
+            confidence=candidate.confidence, risk_flags=candidate.risk_flags,
+            revision=expected_previous.revision + 1 if expected_previous else 1,
+            supersedes_memory_id=expected_previous.memory_id if expected_previous else None,
+            event=candidate.event, conditions=candidate.conditions,
+            evolution=candidate.evolution,
+        )
+
+    def insert_memory(
+        self, connection: psycopg.Connection[Any], *, memory: OwnerMemory,
+        candidate: MemoryCandidate, row: dict[str, Any],
+    ) -> dict[str, Any]:
+        event_column = ", event" if memory.event is not None else ""
+        event_value = ", %(event)s" if memory.event is not None else ""
+        if memory.evolution is not None:
+            event_column += ", evolution"
+            event_value += ", %(evolution)s"
+        if memory.conditions is not None:
+            event_column += ", conditions"
+            event_value += ", %(conditions)s"
+        if memory.version_evidence is not None:
+            event_column += ", version_evidence"
+            event_value += ", %(version_evidence)s"
+        mode_column, mode_value = _insert_mode(memory, connection)
+        written = connection.execute(
+            f"""
+            INSERT INTO public.owner_memory (
+                id, owner_id, text_content, category, topic,
+                source_ids, adoption_method, status, valid_at,
+                invalid_at, revision, confidence, risk_flags,
+                source_candidate_id, supersedes_memory_id{event_column}{mode_column}
+            ) VALUES (
+                %(memory_id)s, %(owner_id)s, %(text)s, %(category)s,
+                %(topic)s, %(source_ids)s, %(adoption_method)s,
+                %(status)s, %(valid_at)s, %(invalid_at)s, %(revision)s,
+                %(confidence)s, %(risk_flags)s, %(source_candidate_id)s,
+                %(supersedes_memory_id)s{event_value}{mode_value}
+            )
+            RETURNING {_OWNER_MEMORY_COLUMNS}
+            """,
+            _to_row(memory),
+        ).fetchone()
+        if written is None:
+            raise OwnerMemoryPersistenceError("owner 候选确认结果无效。")
+        return written
+
+    def erase_dependencies_after_insert(
+        self, connection: psycopg.Connection[Any], *,
+        candidate_id: UUID, source_ids: tuple[UUID, ...],
+    ) -> None:
+        return None
+
+    def erase_previous_dependencies(
+        self, connection: psycopg.Connection[Any], *, previous: OwnerMemory,
+    ) -> None:
+        erase_layered_reply_dependencies(
+            connection, OwnerScope(self.scope.owner_id), (previous.memory_id,),
+        )
+
+    def invalidate_previous(
+        self, connection: psycopg.Connection[Any], *, previous: OwnerMemory,
+        retirement_reason: str,
+    ) -> None:
+        invalidated = connection.execute(
+            "UPDATE public.owner_memory SET status='invalidated', "
+            "revision=revision+1, retirement_reason=%s, retired_at=now(), updated_at=now() "
+            "WHERE owner_id=%s AND id=%s AND status='active' "
+            "AND revision=%s AND adoption_method=%s",
+            (retirement_reason, self.scope.owner_id,
+             previous.memory_id, previous.revision,
+             previous.adoption_method.value),
+        ).rowcount
+        if invalidated != 1:
+            raise MemoryCorrectionConflictError("原资料已变化，自动替代未应用。")
+
+    def mark_candidate_confirmed(
+        self, connection: psycopg.Connection[Any], *,
+        candidate_id: UUID, row: dict[str, Any],
+    ) -> None:
+        updated = connection.execute(
+            """
+            UPDATE public.memory_candidate
+            SET status = 'confirmed', updated_at = now()
+            WHERE owner_id = %s AND contact_id = %s AND id = %s
+              AND status = 'pending'
+            """,
+            (self.scope.owner_id, self.scope.contact_id, candidate_id),
+        ).rowcount
+        if updated != 1:
+            raise OwnerMemoryPersistenceError("owner 候选确认结果无效。")
+
+    def after_confirm(self, connection: psycopg.Connection[Any]) -> None:
+        return None
+
+    def shape_memory(self, connection: psycopg.Connection[Any], row: dict[str, Any]) -> OwnerMemory:
+        return _from_row(_timed_rows(connection, [row])[0])

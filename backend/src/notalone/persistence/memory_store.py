@@ -25,11 +25,8 @@ from notalone.memory.evolution import MemoryEvolution
 from notalone.persistence.memory_evolution import bind_memory_evolutions, evolution_snapshot, validate_evolution, require_replacement_evolution
 from notalone.memory.conditions import MemoryConditions
 from notalone.persistence.memory_conditions import bind_memory_conditions_rows, manual_conditions
+from notalone.persistence.memory_confirm import confirm_candidate_in_transaction
 from notalone.persistence.memory_events import bind_memory_events_rows, has_event_schema
-from notalone.memory.versions import (
-    MemoryVersionConflict, require_auto_previous, require_auto_update_previous,
-    require_auto_update_receipt, require_version_receipt,
-)
 from notalone.persistence.dimension_evidence import (
     bind_stored_dimension_evidence, has_dimension_evidence,
     supports_dimension_evidence_version,
@@ -514,205 +511,15 @@ class PostgresMemoryStore:
                 raise PermissionError("关系记忆范围校验失败。")
         try:
             with self._write_connection(scope.owner_id) as connection:
-                lock_contact_scope(
+                return confirm_candidate_in_transaction(
                     connection,
-                    owner_id=scope.owner_id,
-                    contact_id=scope.contact_id,
-                )
-                lock_owner_scope(connection, owner_id=scope.owner_id)
-                candidate_row = self._candidate_for_update(
-                    connection, candidate_id, scope
-                )
-                if candidate_row is None:
-                    raise LookupError("关系记忆候选不存在。")
-                self._ensure_scope(candidate_row, scope)
-                current_candidate = self._candidate_from_row(
-                    self._timed_candidates(connection, [candidate_row])[0]
-                )
-                protected, snapshot = protect_candidate(connection, current_candidate)
-                require_reviewed_decisions(
-                    protected, adoption_method, expected_correction_decision_ids,
-                )
-                status = MemoryCandidateStatus(candidate_row["candidate_status"])
-                if status is MemoryCandidateStatus.CONFIRMED:
-                    memory_row = connection.execute(
-                        f"""
-                        SELECT {_MEMORY_COLUMNS}
-                        FROM public.confirmed_memory
-                        WHERE owner_id = %s
-                          AND contact_id = %s
-                          AND source_candidate_id = %s
-                        """,
-                        (scope.owner_id, scope.contact_id, candidate_id),
-                    ).fetchone()
-                    if memory_row is None:
-                        raise MemoryInvariantError(
-                            "已确认候选缺少对应关系记忆。"
-                        )
-                    actual = self._memory_from_row(
-                        self._timed_memories(connection, [memory_row])[0]
-                    )
-                    if expected_previous is not None:
-                        if adoption_method is AdoptionMethod.AUTO:
-                            require_auto_update_receipt(actual, expected_previous)
-                        else:
-                            require_version_receipt(actual, expected_previous, adoption_method)
-                        previous_row = self._memory_for_update(
-                            connection, expected_previous.memory_id, follow_current=False,
-                        )
-                        if previous_row is None:
-                            raise MemoryCorrectionConflictError("原资料已删除，自动回执不可复用。")
-                        require_auto_update_previous(
-                            self._memory_from_row(self._timed_memories(connection, [previous_row])[0]),
-                            expected_previous, allow_manual=adoption_method is AdoptionMethod.MANUAL,
-                        )
-                    return actual
-                if status is not MemoryCandidateStatus.PENDING:
-                    raise RuntimeError("关系记忆候选当前不可确认。")
-                if expected_previous is not None:
-                    previous_row = self._memory_for_update(
-                        connection, expected_previous.memory_id, follow_current=False,
-                    )
-                    if previous_row is None:
-                        raise MemoryCorrectionConflictError("原资料已删除，自动替代未应用。")
-                    self._ensure_scope(previous_row, scope)
-                    require_auto_previous(
-                        self._memory_from_row(self._timed_memories(connection, [previous_row])[0]),
-                        expected_previous, allow_manual=adoption_method is AdoptionMethod.MANUAL,
-                    )
-                    self._ensure_active_sources(connection, scope, expected_previous.source_ids)
-                if snapshot is not None:
-                    persist_protection(connection, protected, snapshot)
-                source_ids = self._source_ids(candidate_row["candidate_source_ids"])
-                if expected_previous is not None:
-                    if (adoption_method is AdoptionMethod.AUTO and not set(source_ids) - set(expected_previous.source_ids)
-                            or connection.execute(
-                                "SELECT 1 FROM public.confirmed_memory WHERE owner_id=%s "
-                                "AND contact_id=%s AND supersedes_memory_id=%s AND status='active'",
-                                (scope.owner_id, scope.contact_id, expected_previous.memory_id),
-                            ).fetchone() is not None):
-                        raise MemoryVersionConflict("自动更新需要新依据和当前叶子版本。")
-                    source_ids = tuple(dict.fromkeys((*expected_previous.source_ids, *source_ids)))
-                self._ensure_active_sources(connection, scope, source_ids)
-                mode = dependency_mode(candidate_row.get("candidate_dependency_mode"))
-                if expected_previous is not None and expected_previous.source_dependency_mode is SourceDependencyMode.ALL:
-                    mode = SourceDependencyMode.ALL
-                if mode is SourceDependencyMode.ALL:
-                    ensure_all_sources(connection, owner_id=scope.owner_id,
-                                       contact_id=scope.contact_id, source_ids=source_ids)
-                else:
-                    self._ensure_active_sources(connection, scope, source_ids)
-                requires_all_sources = bool(candidate_row.get('candidate_requires_all_sources')) or bool(expected_previous and expected_previous.requires_all_sources)
-                mode_column, mode_value, mode_params = insert_dependency(mode, requires_all_sources=requires_all_sources, connection=connection, table='confirmed_memory')
-
-                candidate = self._candidate_from_row(self._timed_candidates(
-                    connection, [candidate_row], lock_sources=True
-                )[0])
-                if adoption_method is AdoptionMethod.AUTO:
-                    if expected_previous is not None:
-                        require_replacement_evolution(connection, candidate, (expected_previous,))
-                    require_current_dimension_evidence(
-                        candidate.dimension_evidence, expected_dimension_evidence
-                    )
-
-                memory_id = self._new_uuid()
-                event_column = ", event" if candidate.event is not None else ""
-                event_value = ", %s" if candidate.event is not None else ""
-                event_params = (Jsonb(candidate.event.to_payload()),) if candidate.event is not None else ()
-                if candidate.conditions is not None:
-                    event_column += ", conditions"
-                    event_value += ", %s"
-                    event_params += (Jsonb(candidate.conditions.to_payload()),)
-                if candidate.evolution is not None:
-                    validate_evolution(connection, owner_id=scope.owner_id, evolution=candidate.evolution, candidate=candidate, lock=True)
-                    event_column += ", evolution"
-                    event_value += ", %s"
-                    event_params += (Jsonb(candidate.evolution.to_payload(include_proof=True)),)
-                if expected_previous is not None:
-                    proposed = ConfirmedMemory(
-                        memory_id=memory_id, scope=scope, text=candidate.text,
-                        category=candidate.category, topic=candidate.topic, source_ids=source_ids,
-                        source_candidate_id=candidate_id, adoption_method=adoption_method,
-                        valid_at=candidate.valid_at, invalid_at=candidate.invalid_at,
-                        confidence=candidate.confidence, risk_flags=candidate.risk_flags,
-                        revision=expected_previous.revision + 1,
-                        supersedes_memory_id=expected_previous.memory_id, event=candidate.event, conditions=candidate.conditions, evolution=candidate.evolution,
-                        source_dependency_mode=mode, requires_all_sources=requires_all_sources,
-                    )
-                    proof = create_version_evidence(connection, previous=expected_previous, current=proposed)
-                    if adoption_method is AdoptionMethod.AUTO:
-                        validate_version_sources(connection, owner_id=scope.owner_id, evidence=proof)
-                    event_column += ", version_evidence"
-                    event_value += ", %s"
-                    event_params += (Jsonb(proof.to_payload()),)
-                memory_row = connection.execute(
-                    f"""
-                    INSERT INTO public.confirmed_memory (
-                        id, owner_id, contact_id, text_content, category,
-                        topic, source_ids, source_candidate_id, adoption_method,
-                        valid_at, invalid_at, confidence, risk_flags,
-                        revision, supersedes_memory_id{event_column}{mode_column}
-                    )
-                    VALUES (
-                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                        %s, %s, %s, %s{event_value}{mode_value}
-                    )
-                    RETURNING {_MEMORY_COLUMNS}
-                    """,
-                    (
-                        memory_id,
-                        scope.owner_id,
-                        scope.contact_id,
-                        candidate_row["candidate_text"],
-                        candidate_row["candidate_category"],
-                        candidate_row["candidate_topic"],
-                        list(source_ids),
-                        candidate_id,
-                        adoption_method.value,
-                        candidate_row["candidate_valid_at"],
-                        candidate_row["candidate_invalid_at"],
-                        candidate_row["candidate_confidence"],
-                        candidate_row["candidate_risk_flags"],
-                        expected_previous.revision + 1 if expected_previous else 1,
-                        expected_previous.memory_id if expected_previous else None,
-                        *event_params,
-                    ) + mode_params,
-                ).fetchone()
-                if memory_row is None:
-                    raise MemoryInvariantError("关系记忆写入结果为空。")
-                erase_layered_reply_dependencies(connection, scope, {candidate_id, *source_ids})
-                if expected_previous is not None:
-                    erase_layered_reply_dependencies(connection, scope,
-                        {expected_previous.memory_id, *expected_previous.source_ids})
-                    invalidated = connection.execute(
-                        "UPDATE public.confirmed_memory SET status='invalidated', "
-                        "revision=revision+1, retirement_reason=%s, retired_at=now(), updated_at=now() "
-                        "WHERE owner_id=%s AND contact_id=%s AND id=%s "
-                        "AND status='active' AND revision=%s AND adoption_method=%s",
-                        (("error_correction" if candidate.evolution and candidate.evolution.kind == "error_correction" else "state_changed"), scope.owner_id, scope.contact_id,
-                         expected_previous.memory_id, expected_previous.revision,
-                         expected_previous.adoption_method.value),
-                    ).rowcount
-                    if invalidated != 1:
-                        raise MemoryCorrectionConflictError("原资料已变化，自动替代未应用。")
-                updated = connection.execute(
-                    """
-                    UPDATE public.memory_candidate
-                    SET status = 'confirmed', updated_at = now()
-                    WHERE owner_id = %s
-                      AND contact_id = %s
-                      AND id = %s
-                      AND status = 'pending'
-                    """,
-                    (scope.owner_id, scope.contact_id, candidate_id),
-                ).rowcount
-                if updated != 1:
-                    raise MemoryInvariantError(
-                        "关系记忆候选状态更新失败。"
-                    )
-                self._bump_memory_revision(connection, scope)
-                return self._memory_from_row(
-                    self._timed_memories(connection, [memory_row])[0]
+                    flavor=_ContactConfirmFlavor(
+                        self, scope=scope, candidate_id=candidate_id,
+                    ),
+                    adoption_method=adoption_method,
+                    expected_correction_decision_ids=expected_correction_decision_ids,
+                    expected_previous=expected_previous,
+                    expected_dimension_evidence=expected_dimension_evidence,
                 )
         except (LookupError, PermissionError, RuntimeError, MemoryPersistenceError):
             raise
@@ -1745,3 +1552,241 @@ class PostgresMemoryStore:
         if any(not isinstance(source_id, UUID) for source_id in value):
             raise ValueError("关系记忆来源引用结构无效。")
         return tuple(value)
+
+
+class _ContactConfirmFlavor:
+    """contact 记忆确认事务的表结构与行投影适配器。"""
+
+    def __init__(
+        self, store: PostgresMemoryStore, *, scope: ContactScope, candidate_id: UUID,
+    ) -> None:
+        self._store = store
+        self.scope = scope
+        self._candidate_id = candidate_id
+
+    def load_candidate(self, connection: psycopg.Connection[Any]):
+        store = self._store
+        row = store._candidate_for_update(connection, self._candidate_id, self.scope)
+        if row is None:
+            raise LookupError("关系记忆候选不存在。")
+        store._ensure_scope(row, self.scope)
+        return row, store._candidate_from_row(
+            store._timed_candidates(connection, [row])[0]
+        )
+
+    def candidate_status(self, row: dict[str, Any]) -> MemoryCandidateStatus:
+        return MemoryCandidateStatus(row["candidate_status"])
+
+    def read_confirmed_memory(self, connection: psycopg.Connection[Any]) -> ConfirmedMemory:
+        store = self._store
+        row = connection.execute(
+            f"""
+            SELECT {_MEMORY_COLUMNS}
+            FROM public.confirmed_memory
+            WHERE owner_id = %s
+              AND contact_id = %s
+              AND source_candidate_id = %s
+            """,
+            (self.scope.owner_id, self.scope.contact_id, self._candidate_id),
+        ).fetchone()
+        if row is None:
+            raise MemoryInvariantError("已确认候选缺少对应关系记忆。")
+        return store._memory_from_row(store._timed_memories(connection, [row])[0])
+
+    def load_previous_row(self, connection: psycopg.Connection[Any], memory_id: UUID):
+        return self._store._memory_for_update(
+            connection, memory_id, follow_current=False,
+        )
+
+    def ensure_previous_scope(self, row: dict[str, Any]) -> None:
+        self._store._ensure_scope(row, self.scope)
+
+    def shape_previous(self, connection: psycopg.Connection[Any], row: dict[str, Any]) -> ConfirmedMemory:
+        store = self._store
+        return store._memory_from_row(store._timed_memories(connection, [row])[0])
+
+    def ensure_previous_sources(self, connection: psycopg.Connection[Any], row: dict[str, Any]) -> None:
+        return None
+
+    def candidate_source_ids(self, row: dict[str, Any]) -> tuple[UUID, ...]:
+        return self._store._source_ids(row["candidate_source_ids"])
+
+    def has_active_child(self, connection: psycopg.Connection[Any], memory_id: UUID) -> bool:
+        return connection.execute(
+            "SELECT 1 FROM public.confirmed_memory WHERE owner_id=%s "
+            "AND contact_id=%s AND supersedes_memory_id=%s AND status='active'",
+            (self.scope.owner_id, self.scope.contact_id, memory_id),
+        ).fetchone() is not None
+
+    def dependency_mode(self, row: dict[str, Any]) -> SourceDependencyMode:
+        return dependency_mode(row.get("candidate_dependency_mode"))
+
+    def requires_all_sources(self, row: dict[str, Any]) -> bool:
+        return bool(row.get("candidate_requires_all_sources"))
+
+    def confirmation_candidate(self, connection: psycopg.Connection[Any], row: dict[str, Any]) -> MemoryCandidate:
+        store = self._store
+        return store._candidate_from_row(store._timed_candidates(
+            connection, [row], lock_sources=True,
+        )[0])
+
+    def enforce_locked_evidence(
+        self, connection: psycopg.Connection[Any], *, row: dict[str, Any],
+        candidate: MemoryCandidate, adoption_method: AdoptionMethod,
+        mode: SourceDependencyMode, expected_dimension_evidence: Any,
+    ) -> None:
+        if adoption_method is not AdoptionMethod.AUTO:
+            return
+        require_current_dimension_evidence(
+            candidate.dimension_evidence, expected_dimension_evidence,
+        )
+
+    def validate_sources(
+        self, connection: psycopg.Connection[Any],
+        source_ids: tuple[UUID, ...], mode: SourceDependencyMode,
+    ) -> None:
+        if mode is SourceDependencyMode.ALL:
+            ensure_all_sources(
+                connection, owner_id=self.scope.owner_id,
+                contact_id=self.scope.contact_id, source_ids=source_ids,
+            )
+        else:
+            self._store._ensure_active_sources(connection, self.scope, source_ids)
+
+    def new_memory_id(self) -> UUID:
+        return self._store._new_uuid()
+
+    def build_memory(
+        self, *, memory_id: UUID, candidate: MemoryCandidate,
+        source_ids: tuple[UUID, ...], adoption_method: AdoptionMethod,
+        expected_previous: ConfirmedMemory | None, mode: SourceDependencyMode,
+        requires_all_sources: bool,
+    ) -> ConfirmedMemory:
+        return ConfirmedMemory(
+            memory_id=memory_id, scope=self.scope, text=candidate.text,
+            category=candidate.category, topic=candidate.topic, source_ids=source_ids,
+            source_candidate_id=self._candidate_id, adoption_method=adoption_method,
+            valid_at=candidate.valid_at, invalid_at=candidate.invalid_at,
+            confidence=candidate.confidence, risk_flags=candidate.risk_flags,
+            revision=expected_previous.revision + 1 if expected_previous else 1,
+            supersedes_memory_id=expected_previous.memory_id if expected_previous else None,
+            event=candidate.event, conditions=candidate.conditions,
+            evolution=candidate.evolution, source_dependency_mode=mode,
+            requires_all_sources=requires_all_sources,
+        )
+
+    def insert_memory(
+        self, connection: psycopg.Connection[Any], *, memory: ConfirmedMemory,
+        candidate: MemoryCandidate, row: dict[str, Any],
+    ) -> dict[str, Any]:
+        event_column = ", event" if candidate.event is not None else ""
+        event_value = ", %s" if candidate.event is not None else ""
+        event_params = (Jsonb(candidate.event.to_payload()),) if candidate.event is not None else ()
+        if candidate.conditions is not None:
+            event_column += ", conditions"
+            event_value += ", %s"
+            event_params += (Jsonb(candidate.conditions.to_payload()),)
+        if candidate.evolution is not None:
+            event_column += ", evolution"
+            event_value += ", %s"
+            event_params += (Jsonb(candidate.evolution.to_payload(include_proof=True)),)
+        if memory.version_evidence is not None:
+            event_column += ", version_evidence"
+            event_value += ", %s"
+            event_params += (Jsonb(memory.version_evidence.to_payload()),)
+        mode_column, mode_value, mode_params = insert_dependency(
+            memory.source_dependency_mode,
+            requires_all_sources=memory.requires_all_sources,
+            connection=connection, table='confirmed_memory',
+        )
+        memory_row = connection.execute(
+            f"""
+            INSERT INTO public.confirmed_memory (
+                id, owner_id, contact_id, text_content, category,
+                topic, source_ids, source_candidate_id, adoption_method,
+                valid_at, invalid_at, confidence, risk_flags,
+                revision, supersedes_memory_id{event_column}{mode_column}
+            )
+            VALUES (
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                %s, %s, %s, %s{event_value}{mode_value}
+            )
+            RETURNING {_MEMORY_COLUMNS}
+            """,
+            (
+                memory.memory_id,
+                self.scope.owner_id,
+                self.scope.contact_id,
+                memory.text,
+                memory.category.value,
+                memory.topic.value,
+                list(memory.source_ids),
+                memory.source_candidate_id,
+                memory.adoption_method.value,
+                memory.valid_at,
+                memory.invalid_at,
+                memory.confidence,
+                list(memory.risk_flags),
+                memory.revision,
+                memory.supersedes_memory_id,
+                *event_params,
+            ) + mode_params,
+        ).fetchone()
+        if memory_row is None:
+            raise MemoryInvariantError("关系记忆写入结果为空。")
+        return memory_row
+
+    def erase_dependencies_after_insert(
+        self, connection: psycopg.Connection[Any], *,
+        candidate_id: UUID, source_ids: tuple[UUID, ...],
+    ) -> None:
+        erase_layered_reply_dependencies(connection, self.scope, {candidate_id, *source_ids})
+
+    def erase_previous_dependencies(
+        self, connection: psycopg.Connection[Any], *, previous: ConfirmedMemory,
+    ) -> None:
+        erase_layered_reply_dependencies(
+            connection, self.scope,
+            {previous.memory_id, *previous.source_ids},
+        )
+
+    def invalidate_previous(
+        self, connection: psycopg.Connection[Any], *, previous: ConfirmedMemory,
+        retirement_reason: str,
+    ) -> None:
+        invalidated = connection.execute(
+            "UPDATE public.confirmed_memory SET status='invalidated', "
+            "revision=revision+1, retirement_reason=%s, retired_at=now(), updated_at=now() "
+            "WHERE owner_id=%s AND contact_id=%s AND id=%s "
+            "AND status='active' AND revision=%s AND adoption_method=%s",
+            (retirement_reason, self.scope.owner_id, self.scope.contact_id,
+             previous.memory_id, previous.revision,
+             previous.adoption_method.value),
+        ).rowcount
+        if invalidated != 1:
+            raise MemoryCorrectionConflictError("原资料已变化，自动替代未应用。")
+
+    def mark_candidate_confirmed(
+        self, connection: psycopg.Connection[Any], *,
+        candidate_id: UUID, row: dict[str, Any],
+    ) -> None:
+        updated = connection.execute(
+            """
+            UPDATE public.memory_candidate
+            SET status = 'confirmed', updated_at = now()
+            WHERE owner_id = %s
+              AND contact_id = %s
+              AND id = %s
+              AND status = 'pending'
+            """,
+            (self.scope.owner_id, self.scope.contact_id, candidate_id),
+        ).rowcount
+        if updated != 1:
+            raise MemoryInvariantError("关系记忆候选状态更新失败。")
+
+    def after_confirm(self, connection: psycopg.Connection[Any]) -> None:
+        self._store._bump_memory_revision(connection, self.scope)
+
+    def shape_memory(self, connection: psycopg.Connection[Any], row: dict[str, Any]) -> ConfirmedMemory:
+        store = self._store
+        return store._memory_from_row(store._timed_memories(connection, [row])[0])
