@@ -373,11 +373,13 @@ class PostgresExpressionPreferenceStore:
 
     def delete(self, owner_id: UUID, preference_id: UUID, command: DeleteExpressionPreference, *, contact_id: UUID | None = None) -> None:
         from notalone.managed_update_backups import erase_managed_update_backups
+        from notalone.persistence.skill_file_cleanup import cleanup_skill_files_after_commit
+        from notalone.persistence.skill_files import SkillFileError
 
         digest = sha256(json.dumps({"preference_id": str(preference_id), "expected_revision": command.expected_revision},
                                   sort_keys=True).encode()).hexdigest()
         try:
-            with psycopg.connect(self._database_url, row_factory=dict_row) as connection:
+            with cleanup_skill_files_after_commit(self._database_url, owner_id), psycopg.connect(self._database_url, row_factory=dict_row) as connection:
                 lock_owner_scope(connection, owner_id=owner_id)
                 _scope_exists(connection, ExpressionPreferenceScope(owner_id, contact_id))
                 row = _read(connection, owner_id, preference_id, contact_id=contact_id)
@@ -401,5 +403,5 @@ class PostgresExpressionPreferenceStore:
                        VALUES (%s,%s,%s,'delete',%s,%s)""",
                     (owner_id, command.operation_key, preference_id, digest, current.revision + 1),
                 )
-        except psycopg.Error:
+        except (psycopg.Error, SkillFileError):
             raise ExpressionPreferenceError("长期表达偏好删除失败。") from None

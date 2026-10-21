@@ -1,5 +1,7 @@
 # ADR-010：使用 Deep Agents SkillsMiddleware 加载回复 Skill
 
+> 后续局部替代：[ADR-096](096-directory-backed-reply-skills.md)采用目录文件保存已发布正文与资源，自动发现新增和修改；数据库只管理业务元数据。本文旧存储及仅手动导入表述保留历史，范围、审核、预算、删除和权限约束继续有效。
+
 > 后续修订：[ADR-091](091-retire-runtime-todos-and-auto-summary.md)明确不增加运行计划和自动过程摘要；本文对 ADR-009 单次运行机制的保留不再包含 Todo／摘要中间件要求。框架、Skill、预算、持续讨论与删除边界保持。
 
 > 2026-10-21 设计审查：下文“自动 Skill 尚未实现”为早期阶段状态；后续授权草稿、审核与发布已出现主线装配，见 [ADR-048](048-memory-skill-evolution-lifecycle.md)及[演进任务索引](../../.scratch/memory-skill-evolution/planning.md)。模型不能自行发布、每次零或一个受控版本、Middleware 不扩大 Tool 权限等约束保持，工程接线不等于质量或 App 验收。

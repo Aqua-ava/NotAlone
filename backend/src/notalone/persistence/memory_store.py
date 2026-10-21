@@ -189,7 +189,7 @@ class PostgresMemoryStore:
         if not isinstance(candidate, MemoryCandidate):
             raise TypeError("关系记忆候选结构无效。")
         try:
-            with self._connect() as connection:
+            with self._write_connection(candidate.scope.owner_id) as connection:
                 lock_contact_scope(
                     connection,
                     owner_id=candidate.scope.owner_id,
@@ -337,7 +337,7 @@ class PostgresMemoryStore:
             digest = hashlib.sha256(
                 candidate.text.encode("utf-8")
             ).hexdigest()
-            with self._connect() as connection:
+            with self._write_connection(candidate.scope.owner_id) as connection:
                 lock_contact_scope(
                     connection,
                     owner_id=candidate.scope.owner_id,
@@ -509,7 +509,7 @@ class PostgresMemoryStore:
             if expected_previous.scope != scope:
                 raise PermissionError("关系记忆范围校验失败。")
         try:
-            with self._connect() as connection:
+            with self._write_connection(scope.owner_id) as connection:
                 lock_contact_scope(
                     connection,
                     owner_id=scope.owner_id,
@@ -741,7 +741,7 @@ class PostgresMemoryStore:
             raise TypeError("关系记忆分类无效。")
         change_kind = MemoryChangeKind(change_kind)
         try:
-            with self._connect() as connection:
+            with self._write_connection(scope.owner_id) as connection:
                 lock_contact_scope(
                     connection,
                     owner_id=scope.owner_id,
@@ -937,7 +937,7 @@ class PostgresMemoryStore:
         self._validate_scope(scope)
         self._validate_uuid(candidate_id, "candidate_id")
         try:
-            with self._connect() as connection:
+            with self._write_connection(scope.owner_id) as connection:
                 lock_contact_scope(
                     connection,
                     owner_id=scope.owner_id,
@@ -1172,7 +1172,7 @@ class PostgresMemoryStore:
     def revert_auto_update(self, *, scope: ContactScope, memory_id: UUID, expected_revision: int) -> ConfirmedMemory:
         self._validate_scope(scope)
         self._validate_uuid(memory_id, "memory_id")
-        with self._connect() as connection:
+        with self._write_connection(scope.owner_id) as connection:
             lock_contact_scope(connection, owner_id=scope.owner_id, contact_id=scope.contact_id)
             lock_owner_scope(connection, owner_id=scope.owner_id)
             current, previous = prepare_auto_revert(
@@ -1270,7 +1270,7 @@ class PostgresMemoryStore:
         """仅终结自动写入临时候选；不登记用户拒绝，也不清除其他资料依赖。"""
         self._validate_scope(scope)
         self._validate_uuid(candidate_id, "candidate_id")
-        with self._connect() as connection:
+        with self._write_connection(scope.owner_id) as connection:
             lock_contact_scope(connection, owner_id=scope.owner_id, contact_id=scope.contact_id)
             lock_owner_scope(connection, owner_id=scope.owner_id)
             connection.execute("UPDATE public.memory_candidate SET status='rejected', "
@@ -1289,7 +1289,7 @@ class PostgresMemoryStore:
         self._validate_scope(scope)
         self._validate_uuid(candidate_id, "candidate_id")
         try:
-            with self._connect() as connection:
+            with self._write_connection(scope.owner_id) as connection:
                 lock_contact_scope(
                     connection,
                     owner_id=scope.owner_id,
@@ -1363,7 +1363,7 @@ class PostgresMemoryStore:
         self._validate_uuid(memory_id, "memory_id")
         now = self._now()
         try:
-            with self._connect() as connection:
+            with self._write_connection(scope.owner_id) as connection:
                 lock_contact_scope(
                     connection,
                     owner_id=scope.owner_id,
@@ -1592,6 +1592,11 @@ class PostgresMemoryStore:
         with self._connect() as connection:
             return capture_message_snapshot(connection, owner_id=scope.owner_id,
                 contact_id=scope.contact_id, message_ids=set(identifiers))
+
+    def _write_connection(self, owner_id: UUID):
+        from notalone.persistence.skill_file_cleanup import skill_cleanup_transaction
+        return skill_cleanup_transaction(self._database_url, owner_id, self._connect(),
+            shared_transaction=self._connection_factory is not None)
 
     def _connect(self) -> Any:
         return (self._connection_factory() if self._connection_factory is not None

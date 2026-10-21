@@ -110,7 +110,7 @@ class PostgresOwnerMemoryStore:
                 "owner 记忆写入参数必须是 OwnerMemory。"
             )
         try:
-            with self._connect() as connection:
+            with self._write_connection(memory.owner_id) as connection:
                 lock_owner_scope(connection, owner_id=memory.owner_id)
                 manual_entry = (memory.adoption_method is AdoptionMethod.MANUAL
                                 and memory.source_candidate_id is None
@@ -186,7 +186,7 @@ class PostgresOwnerMemoryStore:
             if expected_previous.owner_id != scope.owner_id:
                 raise PermissionError("关系记忆范围校验失败。")
         try:
-            with self._connect() as connection:
+            with self._write_connection(scope.owner_id) as connection:
                 lock_contact_scope(
                     connection,
                     owner_id=scope.owner_id,
@@ -537,7 +537,7 @@ class PostgresOwnerMemoryStore:
 
     def revert_auto_update(self, *, owner_id: UUID, memory_id: UUID, expected_revision: int) -> OwnerMemory:
         _validate_owner_id(owner_id)
-        with self._connect() as connection:
+        with self._write_connection(owner_id) as connection:
             lock_owner_scope(connection, owner_id=owner_id)
             current, previous = prepare_auto_revert(
                 connection, table="owner_memory", owner_id=owner_id, contact_id=None,
@@ -574,7 +574,7 @@ class PostgresOwnerMemoryStore:
             raise TypeError("本人记忆分类无效。")
         change_kind = MemoryChangeKind(change_kind)
         try:
-            with self._connect() as connection:
+            with self._write_connection(owner_id) as connection:
                 lock_owner_scope(connection, owner_id=owner_id)
                 previous = connection.execute(
                     f"""SELECT {_OWNER_MEMORY_COLUMNS}
@@ -658,7 +658,7 @@ class PostgresOwnerMemoryStore:
     def delete(self, owner_id: UUID, memory_id: UUID) -> OwnerMemory:
         _validate_owner_id(owner_id)
         try:
-            with self._connect() as connection:
+            with self._write_connection(owner_id) as connection:
                 lock_owner_scope(connection, owner_id=owner_id)
                 previous = connection.execute(
                     f"SELECT {_OWNER_MEMORY_COLUMNS} FROM public.owner_memory WHERE owner_id = %s AND id = %s FOR UPDATE",
@@ -729,7 +729,7 @@ class PostgresOwnerMemoryStore:
     def invalidate(self, owner_id: UUID, memory_id: UUID) -> OwnerMemory:
         _validate_owner_id(owner_id)
         try:
-            with self._connect() as connection:
+            with self._write_connection(owner_id) as connection:
                 lock_owner_scope(connection, owner_id=owner_id)
                 erase_layered_reply_dependencies(connection, OwnerScope(owner_id), (memory_id,))
                 row = connection.execute(
@@ -768,6 +768,11 @@ class PostgresOwnerMemoryStore:
                 _OWNER_MEMORY_UNAVAILABLE
             ) from error
         return tuple(row["text_content"] for row in rows)
+
+    def _write_connection(self, owner_id: UUID):
+        from notalone.persistence.skill_file_cleanup import skill_cleanup_transaction
+        return skill_cleanup_transaction(self._database_url, owner_id, self._connect(),
+            shared_transaction=self._connection_factory is not None)
 
     def _connect(self) -> psycopg.Connection[Any]:
         return (self._connection_factory() if self._connection_factory is not None

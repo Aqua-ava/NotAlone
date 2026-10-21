@@ -33,7 +33,7 @@ def _capture_parent_publications(connection, scope, identifiers):
             'FROM public.reply_skill_version AS version JOIN public.reply_skill AS skill ON skill.id=version.skill_id '
             'LEFT JOIN public.reply_skill_publication AS publication ON publication.version_id=version.id '
             "WHERE skill.owner_id=%s AND skill.status<>'deleted' AND version.status='active' "
-            'AND version.content IS NOT NULL AND version.id=ANY(%s::uuid[]) ORDER BY version.id',
+            'AND version.content_path IS NOT NULL AND version.id=ANY(%s::uuid[]) ORDER BY version.id',
             (scope.owner_id, list(identifiers))).fetchall()
     proofs, inherited, private_ancestors = [], set(), set()
     for row in rows:

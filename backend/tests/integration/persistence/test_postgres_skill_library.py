@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from uuid import UUID, uuid4
@@ -60,6 +61,11 @@ class PostgresSkillLibraryTest(unittest.TestCase):
             )
 
     def setUp(self) -> None:
+        self.skill_root = TemporaryDirectory()
+        self.addCleanup(self.skill_root.cleanup)
+        environment = patch.dict(os.environ, {"NOTALONE_SKILLS_DIR": self.skill_root.name})
+        environment.start()
+        self.addCleanup(environment.stop)
         self.owner_id = uuid4()
         self.contact_id = uuid4()
         with psycopg.connect(TEST_DATABASE_URL) as connection:
@@ -76,6 +82,35 @@ class PostgresSkillLibraryTest(unittest.TestCase):
             )
         self.library = PostgresSkillLibrary(TEST_DATABASE_URL)
         self.skill_port = PostgresSkillPort(TEST_DATABASE_URL)
+
+    def test_import_creates_an_editable_owner_directory(self) -> None:
+        with TemporaryDirectory() as source:
+            package = Path(source) / "editable-reply"
+            package.mkdir()
+            (package / "SKILL.md").write_text(
+                "---\nname: editable-reply\ndescription: 用于温和表达。\n---\n\n先回应对方。\n",
+                encoding="utf-8",
+            )
+            result = self.library.import_package(self.owner_id, package)
+        document = Path(self.skill_root.name) / str(self.owner_id) / "editable-reply" / "SKILL.md"
+        self.assertIn("先回应对方。", document.read_text(encoding="utf-8"))
+        self.assertEqual(self.library.read_current_version(self.owner_id, result.skill_id)[0], "先回应对方。\n")
+
+    def test_repeated_delete_retries_transient_file_cleanup(self) -> None:
+        with TemporaryDirectory() as source:
+            package = Path(source) / "delete-reply"
+            package.mkdir()
+            (package / "SKILL.md").write_text(
+                "---\nname: delete-reply\ndescription: 用于温和表达。\n---\n\n先回应对方。\n",
+                encoding="utf-8",
+            )
+            result = self.library.import_package(self.owner_id, package)
+        directory = Path(self.skill_root.name) / str(self.owner_id) / "delete-reply"
+        with patch("shutil.rmtree", side_effect=PermissionError("合成文件系统暂不可用")):
+            self.library.delete(self.owner_id, result.skill_id)
+        self.assertTrue(directory.exists())
+        self.library.delete(self.owner_id, result.skill_id)
+        self.assertFalse(directory.exists())
 
     def tearDown(self) -> None:
         with psycopg.connect(TEST_DATABASE_URL) as connection:
@@ -224,7 +259,7 @@ class PostgresSkillLibraryTest(unittest.TestCase):
             "87a8784e41e6865b356f81170e7efa25756ecc2fbde9b5b85ba26c5140a93b40",
         )
         self.assertEqual(
-            bytes(resource_rows[0]["content"]),
+            self.skill_port.load_resource(ContactScope(self.owner_id, self.contact_id), result.version_id, "assets/template.txt").content,
             "我理解你的意思，也想说明一下：\n".encode("utf-8"),
         )
 

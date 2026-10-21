@@ -267,7 +267,11 @@ def _active_binding_lookup(database_url: str):
 
 
 def _skill_library_revision(database_url: str, owner_id: UUID) -> int:
+    from notalone.persistence.skill_directory import prepare_legacy_skill_directory
+    prepare_legacy_skill_directory(database_url, owner_id)
     with psycopg.connect(database_url) as connection:
+        from notalone.persistence.skill_directory import synchronize_skill_directory
+        synchronize_skill_directory(connection, owner_id)
         row = connection.execute(
             """
             SELECT revision

@@ -7,6 +7,7 @@ from psycopg.rows import dict_row
 
 from notalone.skills.learning import content_digest
 from notalone.skills.models import SkillExecutionView
+from notalone.persistence.skill_files import SkillFileError, read_version_content
 
 
 def _ancestry(cursor, owner_id, roots):
@@ -52,9 +53,10 @@ def _policy_selection(connection, scope, row, scene, *, proposed_methods=None):
             'AND (contact_id IS NULL OR contact_id=%s) AND (scene IS NULL OR scene=%s) ORDER BY id',
             (scope.owner_id, scope.contact_id, scene)).fetchall()
         methods = proposed_methods if proposed_methods is not None else cursor.execute(
-            'SELECT method_id,replaces_method_ids,mapping_state,'
-            'title IS NOT NULL AS has_title,instruction IS NOT NULL AS has_instruction '
-            'FROM public.reply_skill_method WHERE version_id=%s ORDER BY ordinal', (row['version_id'],)).fetchall()
+            'SELECT method.method_id,method.replaces_method_ids,method.mapping_state,'
+            '(version.method_manifest_path IS NOT NULL AND version.method_manifest_sha256 IS NOT NULL) AS has_content '
+            'FROM public.reply_skill_method AS method JOIN public.reply_skill_version AS version '
+            'ON version.id=method.version_id WHERE method.version_id=%s ORDER BY method.ordinal', (row['version_id'],)).fetchall()
         if not row['review_origin'] and policies:
             historical = {item['method_id'] for item in cursor.execute(
                 'SELECT method.method_id FROM public.reply_skill_method AS method '
@@ -67,7 +69,7 @@ def _policy_selection(connection, scope, row, scene, *, proposed_methods=None):
                 raise PermissionError('旧式包无法可靠排除该逻辑Skill或合并祖先已停用的方法。')
         if row['review_origin'] and (not methods or any(
                 (item.get('title') is None or item.get('instruction') is None) if proposed_methods is not None else
-                (not item['has_title'] or not item['has_instruction'])
+                not item['has_content']
                 for item in methods) or any(
                 item['mapping_state'] not in (('new', 'confirmed', 'requires_review')
                     if proposed_methods is not None else ('new', 'confirmed')) for item in methods)):
@@ -121,11 +123,13 @@ def project_skill_version(connection, scope, row, scene, *, proposed_methods=Non
     projected = _project_metadata(row, filtered)
     if filtered:
         if proposed_methods is None:
-            raw = getattr(connection, 'connection', connection)
-            with raw.cursor(row_factory=dict_row) as cursor:
-                methods = cursor.execute('SELECT method_id,title,instruction FROM public.reply_skill_method '
-                    'WHERE version_id=%s AND method_id=ANY(%s::uuid[]) ORDER BY ordinal',
-                    (row['version_id'], list(allowed))).fetchall()
+            from notalone.persistence.skill_methods import read_method_manifest
+            from notalone.persistence.skill_files import SkillFileError
+            try:
+                methods = [item for item in read_method_manifest(connection, row['version_id'])
+                           if item['method_id'] in allowed]
+            except SkillFileError:
+                raise PermissionError('允许的方法正文不可用。') from None
         else:
             methods = [item for item in proposed_methods if item['method_id'] in allowed]
         if ({item['method_id'] for item in methods} != set(allowed)
@@ -148,7 +152,7 @@ def _own_skill_policy_change(connection, scope, request_id):
     with connection.cursor(row_factory=dict_row) as cursor:
         row = cursor.execute('SELECT request.skill_version_id,request.context_snapshot,request.normalized_input,'
             'request.idempotency_key,request.conversation_binding_id,'
-            'skill.id AS skill_id,skill.status AS skill_status,version.id AS version_id,version.review_origin,version.content AS version_content,'
+            'skill.id AS skill_id,skill.status AS skill_status,version.id AS version_id,version.review_origin,version.content_path,'
             'skill.name AS skill_name,version.name AS version_name,skill.description AS skill_description,'
             'version.description AS version_description FROM public.reply_request AS request '
             'LEFT JOIN public.reply_skill AS skill ON skill.id=request.skill_id AND skill.owner_id=request.owner_id '
@@ -158,9 +162,10 @@ def _own_skill_policy_change(connection, scope, request_id):
     if row is None:
         return None
     version = row['skill_version_id']
-    if row['skill_id'] is None or row['version_content'] is None or row['skill_status'] != 'active':
+    if row['skill_id'] is None or row['content_path'] is None or row['skill_status'] != 'active':
         return version
     try:
+        row['version_content'] = read_version_content(connection, row['version_id'])
         snapshot = row['context_snapshot']
         if not isinstance(snapshot, dict) or not isinstance(row['normalized_input'], str):
             return version
@@ -189,7 +194,7 @@ def _own_skill_policy_change(connection, scope, request_id):
                 return None
         elif SkillExecutionView.from_payload(snapshot['skill_execution_view']) == current:
             return None
-    except (PermissionError, ValueError, TypeError, AttributeError):
+    except (PermissionError, ValueError, TypeError, AttributeError, SkillFileError):
         pass
     return version
 

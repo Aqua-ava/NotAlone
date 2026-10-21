@@ -57,7 +57,9 @@ class PostgresLayeredMemoryStore(LayeredProfileStore, LayeredCorrectionStore):
 
     @contextmanager
     def transaction(self, scope: ContactScope | OwnerScope):
-        with psycopg.connect(self._database_url, row_factory=dict_row) as connection:
+        from notalone.persistence.skill_file_cleanup import skill_cleanup_transaction
+        with skill_cleanup_transaction(self._database_url, scope.owner_id,
+                psycopg.connect(self._database_url, row_factory=dict_row)) as connection:
             if scope.contact_id is not None:
                 lock_contact_scope(connection, owner_id=scope.owner_id, contact_id=scope.contact_id)
             lock_owner_scope(connection, owner_id=scope.owner_id)

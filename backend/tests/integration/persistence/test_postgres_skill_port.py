@@ -286,6 +286,8 @@ class PostgresSkillPortTest(unittest.TestCase):
         self.assertTrue(loaded.enabled)
 
     def test_catalog_and_resource_permission_project_metadata_and_only_selected_version_loads_body(self):
+        # 首次刷新负责迁旧夹具并复验落盘；这里观察迁移完成后的运行目录读取。
+        self.port.catalog(self._scope())
         projections = []
         connect = self.port._connect
 
@@ -334,12 +336,12 @@ class PostgresSkillPortTest(unittest.TestCase):
             catalog = self.port.catalog(self._scope())
             self.assertEqual(len(catalog.entries), 2)
             self.assertTrue(projections)
-            self.assertFalse(any('version_content' in columns or columns == ('content',) for columns in projections))
+            self.assertFalse(any('version_content' in columns or 'content' in columns and 'document_sha256' in columns for columns in projections))
             version = self.port.load_version(self._scope(), self.global_version_id)
             self.assertEqual(version.content, '全局策略正文。')
             with self.assertRaises(PermissionError):
                 self.port.load_resource(self._scope(), self.global_version_id, 'assets/unknown.txt')
-        self.assertEqual(sum('version_content' in columns or columns == ('content',) for columns in projections), 1)
+        self.assertEqual(sum('version_content' in columns or 'content' in columns and 'document_sha256' in columns for columns in projections), 1)
 
     def test_unknown_disabled_deleted_old_or_foreign_version_fails_identically(self) -> None:
         version_ids = (

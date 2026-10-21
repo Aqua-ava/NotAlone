@@ -177,10 +177,14 @@ class PostgresExplorationStore:
             "WHERE skill.owner_id=%s AND (skill.contact_id IS NULL OR skill.contact_id=%s) "
             "AND skill.status='active' AND version.id=%s AND version.status='active' "
             "AND version.enabled AND version.is_current AND version.name=skill.name "
-            "AND version.content IS NOT NULL AND length(btrim(version.content))>0",
+            "AND version.content_path IS NOT NULL AND version.directory_available",
             (scope.owner_id, scope.contact_id, version_id),
         ).fetchone() is None:
             raise ExplorationStale("所选Skill版本已失效。")
+        if version_id is not None:
+            from notalone.persistence.skill_files import version_content_available
+            if not version_content_available(connection, version_id):
+                raise ExplorationStale("所选Skill版本已失效。")
 
     def replay(self, scope: ContactScope, request: ExplorationOpen) -> ExplorationTask | None:
         self._prune(scope)

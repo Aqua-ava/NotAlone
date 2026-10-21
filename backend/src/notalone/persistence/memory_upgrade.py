@@ -173,7 +173,8 @@ class PostgresMemoryUpgradeStore:
                 (selected.owner_id, job_id)).fetchall())
 
     def operate(self, selected, job_id, *, action, expected_revision, operation_key, batches=()):
-        with self._connect() as connection:
+        from notalone.persistence.skill_file_cleanup import skill_cleanup_transaction
+        with skill_cleanup_transaction(self.database_url, selected.owner_id, self._connect()) as connection:
             contacts = {row['contact_id'] for row in connection.execute('SELECT contact_id FROM public.memory_upgrade_batch WHERE owner_id=%s AND job_id=%s',
                                                                         (selected.owner_id, job_id)).fetchall()}
             _lock(connection, selected.owner_id, contacts)
@@ -359,7 +360,8 @@ class PostgresMemoryUpgradeStore:
 
     def apply(self, claim, *, dimension_release=None, trace_id=None):
         from notalone.persistence.memory_upgrade_apply import apply_batch
-        with self._connect() as connection:
+        from notalone.persistence.skill_file_cleanup import skill_cleanup_transaction
+        with skill_cleanup_transaction(self.database_url, claim.owner_id, self._connect()) as connection:
             row = self._claimed(connection, claim)
             if row['state'] == 'applied':
                 return len(row['message_ids'])

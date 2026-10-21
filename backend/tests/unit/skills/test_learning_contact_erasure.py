@@ -1,6 +1,6 @@
 """受控联系人清理独立擦除09学习依赖；不依赖13或连接PG。"""
 
-from contextlib import ExitStack
+from contextlib import ExitStack, nullcontext
 import unittest
 from unittest.mock import patch
 from uuid import uuid4
@@ -74,6 +74,9 @@ class LearningContactErasureTest(unittest.TestCase):
             stack.enter_context(patch(module+'psycopg.connect', return_value=connection))
             stack.enter_context(patch(module+'lock_contact_scope'))
             stack.enter_context(patch(module+'lock_owner_scope'))
+            # 文件提交后清理已有真实 PG/HTTP 验收；此夹具只观察级联前的依赖身份。
+            stack.enter_context(patch(module+'cleanup_skill_files_after_commit', return_value=nullcontext()))
+            stack.enter_context(patch('notalone.persistence.skill_files.queue_skill_file_cleanup'))
             stack.enter_context(patch(module+'_erase_preferences'))
             stack.enter_context(patch(module+'_erase_contact_sources'))
             stack.enter_context(patch('notalone.persistence.skill_learning.erase_skill_learning',

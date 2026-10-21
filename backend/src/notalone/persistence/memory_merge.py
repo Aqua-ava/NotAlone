@@ -20,7 +20,7 @@ def confirm_merge(store, *, scope, candidate_id, expected_parents, expected_dime
     if any((item.owner_id != scope.owner_id if owner else item.scope != scope) for item in parents):
         raise PermissionError('合并父版本不属于当前范围。')
     table = 'owner_memory' if owner else 'confirmed_memory'
-    with store._connect() as connection:
+    with store._write_connection(scope.owner_id) as connection:
         lock_contact_scope(connection, owner_id=scope.owner_id, contact_id=scope.contact_id)
         lock_owner_scope(connection, owner_id=scope.owner_id)
         factory = lambda: nullcontext(connection)

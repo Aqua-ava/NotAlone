@@ -1033,8 +1033,13 @@ class PostgresAssistantSessionStore:
 
     def delete(self, scope: ContactScope, session_id: UUID) -> None:
         from notalone.persistence.assistant_session_deletion import delete_assistant_session
-        with self._transaction(scope) as connection:
-            delete_assistant_session(connection, scope, session_id)
+        from notalone.persistence.skill_file_cleanup import cleanup_skill_files_after_commit
+        from notalone.persistence.skill_files import SkillFileError
+        try:
+            with cleanup_skill_files_after_commit(self._database_url, scope.owner_id), self._transaction(scope) as connection:
+                delete_assistant_session(connection, scope, session_id)
+        except SkillFileError:
+            raise AssistantSessionPersistenceError('助手会话关联的 Skill 文件尚未清理完成。') from None
 
     def read_session(self, scope: ContactScope, session_id: UUID) -> AssistantSessionSnapshot:
         from notalone.persistence.assistant_session_inputs import read_input_records, require_input_session

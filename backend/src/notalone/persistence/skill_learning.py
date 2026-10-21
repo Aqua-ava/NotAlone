@@ -388,7 +388,7 @@ def _dependencies_available_for_learning(connection, scope, dependencies) -> boo
         else:
             statement = 'SELECT id FROM public.' + table + ' WHERE owner_id=%s AND contact_id=%s AND id=ANY(%s::uuid[]) ' + predicate
         known.update(row[0] for row in connection.execute(statement, (scope.owner_id, scope.contact_id, identifiers)).fetchall())
-    known.update(row[0] for row in connection.execute("SELECT version.id FROM public.reply_skill_version AS version JOIN public.reply_skill AS skill ON skill.id=version.skill_id WHERE skill.owner_id=%s AND (skill.contact_id IS NULL OR skill.contact_id=%s) AND skill.status<>'deleted' AND version.content IS NOT NULL AND version.id=ANY(%s::uuid[])", (scope.owner_id, scope.contact_id, identifiers)).fetchall())
+    known.update(row[0] for row in connection.execute("SELECT version.id FROM public.reply_skill_version AS version JOIN public.reply_skill AS skill ON skill.id=version.skill_id WHERE skill.owner_id=%s AND (skill.contact_id IS NULL OR skill.contact_id=%s) AND skill.status<>'deleted' AND version.status='active' AND version.content_path IS NOT NULL AND version.id=ANY(%s::uuid[])", (scope.owner_id, scope.contact_id, identifiers)).fetchall())
     known.update(row[0] for row in connection.execute(
         "SELECT id FROM public.expression_preference WHERE owner_id=%s "
         "AND (contact_id IS NULL OR contact_id=%s) AND status='active' AND id=ANY(%s::uuid[])",

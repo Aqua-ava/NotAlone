@@ -295,7 +295,7 @@ Skill 采用 progressive disclosure：LangChain `create_agent` 组合 Deep Agent
 
 用户显式选择 Skill 时，应用层通过同一个 `SkillPort` 校验并预加载，不要求模型再次调用 `read_file`。按 [ADR-074](../adr/074-automatic-conversation-skill-loading.md)，正常回复入口自动判断并按需加载；可以不加载 Skill，UI 仅展示当前结果实际使用的名称和版本或通用流程，不提供手选控件。旧显式版本 API 保留管理、历史兼容与内部固定版本用途。每次最多使用一个不可变版本；Skill 及其辅助资源只提供经校验的策略文本或静态素材，其内容不能注册 Tool、MCP、Shell、文件写入、子 Agent 或外部资源访问。
 
-Skill 库管理不属于 Agent Loop。v1 用户在独立入口明确导入本地 Skill 包；安装、更新、启用和停用先校验并固化不可变版本，候选回复运行时只读取已经启用的版本。同一 owner 的 Skill 名称唯一，库使用 owner 级 `skill_library_revision`；任一 Skill 导入、更新、启用、禁用或删除时都递增该 revision，并使该 owner 所有联系人范围的旧目录失效。Skill 目录缓存仍绑定 `owner_id + contact_id + skill_library_revision`；任一项变化时，下一轮运行先清除旧目录、旧 Skill Tool 结果、辅助资源结果和包含旧 Skill 正文的摘要，或使用新的运行状态。采用 `SkillsMiddleware` 不等于采用完整 `create_deep_agent`，候选回复不启用 Deep Agents 的通用文件系统、Shell、Subagent 或长期任务 harness。
+Skill 库管理不属于 Agent Loop。按 [ADR-096](../adr/096-directory-backed-reply-skills.md)，用户可明确导入或把本地包放入本人管理目录；管理刷新和每轮运行前自动发现新增和修改，正文及资源保存为目录文件，数据库仅管理必要业务状态；安装、更新、启用和停用先校验并固化不可变版本，候选回复运行时只读取已经启用的版本。同一 owner 的 Skill 名称唯一，库使用 owner 级 `skill_library_revision`；任一 Skill 导入、更新、启用、禁用或删除时都递增该 revision，并使该 owner 所有联系人范围的旧目录失效。Skill 目录缓存仍绑定 `owner_id + contact_id + skill_library_revision`；任一项变化时，下一轮运行先清除旧目录、旧 Skill Tool 结果、辅助资源结果和包含旧 Skill 正文的摘要，或使用新的运行状态。采用 `SkillsMiddleware` 不等于采用完整 `create_deep_agent`，候选回复不启用 Deep Agents 的通用文件系统、Shell、Subagent 或长期任务 harness。
 
 消息检索和确认记忆检索 Tool 的模型参数只包含查询意图、limit 和允许的时间范围；已验证的 `owner_id + contact_id` 通过 runtime context 注入并传给 `RetrievalPort`，不能由模型提供或修改。返回携带引用标识、采纳状态、有效期、排序分数与检索器版本，用于复现与审计“本次为何返回这些结果”。
 

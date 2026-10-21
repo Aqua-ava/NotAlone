@@ -2,6 +2,7 @@
 
 import time
 import json
+import os
 import unittest
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -68,6 +69,82 @@ class SkillLifecycleHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         status, result = self.backend.request('/api/skills/import', {'package_path': str(package)})
         self.assertEqual(status, 200, result)
         return result['skill_id']
+
+    def test_file_backed_history_remains_readable_without_database_document(self):
+        self._bind(self.contact_id)
+        skill = self._import()
+        # 迁移后的数据库只保留版本身份；历史查看必须读取已发布文件。
+        with psycopg.connect(self.database_url) as connection:
+            connection.execute('UPDATE public.reply_skill_version SET content=NULL WHERE skill_id=%s', (UUID(skill),))
+        history = self._get(self.backend, self.path + '/skills/' + skill)
+        self.assertEqual(len(history['versions']), 1)
+        self.assertIn('合成旧方法：先问清楚再回应。', history['versions'][0]['document'])
+        self.assertEqual(self.other_backend.request(self.path + '/skills/' + skill)[0], 404)
+
+    def test_source_deletion_removes_published_working_directory_and_version_files_before_discovery(self):
+        root = Path(self.temporary.name) / 'published-skills'
+        with patch.dict(os.environ, {'NOTALONE_SKILLS_DIR': str(root)}):
+            path, draft, _, source = self._draft_for_review(with_source=True)
+            compared, _ = self._compare(path, draft, kind='owner')
+            published, _ = self._approve(path, compared)
+            skill = published['published']['skill_id']
+            self._get(self.backend, '/api/skills')
+            working = root / str(self.owner_id) / 'careful-response'
+            snapshots = root / '.versions' / str(self.owner_id) / skill
+            self.assertTrue((working / 'SKILL.md').is_file())
+            self.assertTrue(list(snapshots.rglob('SKILL.md')))
+            self._delete_source(source)
+            self.assertFalse(working.exists(), '删除完成前必须清理可扫描工作目录。')
+            self.assertEqual(list(snapshots.rglob('SKILL.md')), [], '不可变历史也属于删除闭包。')
+            self.assertEqual(self.backend.request(path)[0], 409)
+            # 自动扫描不会将来源删除的目录重新启用。
+            catalog = self._get(self.backend, '/api/skills')['skills']
+            self.assertFalse(any(item['skill_id'] == skill and item['status'] == 'active' for item in catalog))
+
+    def test_memory_deletion_erases_dependent_skill_files_before_returning(self):
+        root = Path(self.temporary.name) / 'memory-dependent-skills'
+        with patch.dict(os.environ, {'NOTALONE_SKILLS_DIR': str(root)}):
+            path, draft, _, _ = self._draft_for_review()
+            _, _, memory = self._extra_review_memory('对方偏好先说明自己的想法。合成 Skill 审核背景。')
+            compared, _ = self._compare(path, draft, kind='owner')
+            published, _ = self._approve(path, compared)
+            skill = published['published']['skill_id']
+            self._get(self.backend, '/api/skills')
+            working = root / str(self.owner_id) / 'careful-response'
+            snapshots = root / '.versions' / str(self.owner_id) / skill
+            self.assertTrue((working / 'SKILL.md').is_file())
+            self.assertTrue(list(snapshots.rglob('SKILL.md')))
+            status, result = self.backend.request(
+                f'/api/contacts/{self.contact_id}/memories/{memory}/delete', {})
+            self.assertEqual(status, 200, result)
+            self.assertFalse(working.exists(), '记忆删除返回前必须擦除派生 Skill 的工作目录。')
+            self.assertEqual(list(snapshots.rglob('SKILL.md')), [], '记忆删除不能留下可恢复的策略历史。')
+
+    def test_shared_memory_transaction_rollback_preserves_published_skill_files(self):
+        from contextlib import nullcontext
+        from psycopg.rows import dict_row
+        from notalone.persistence.memory_store import PostgresMemoryStore
+        from notalone.scopes import ContactScope
+
+        root = Path(self.temporary.name) / 'shared-memory-skills'
+        with patch.dict(os.environ, {'NOTALONE_SKILLS_DIR': str(root)}):
+            path, draft, _, _ = self._draft_for_review()
+            _, _, memory = self._extra_review_memory('对方偏好先说明自己的想法。合成共享事务背景。')
+            compared, _ = self._compare(path, draft, kind='owner')
+            published, _ = self._approve(path, compared)
+            self._get(self.backend, '/api/skills')
+            working = root / str(self.owner_id) / 'careful-response' / 'SKILL.md'
+            snapshots = root / '.versions' / str(self.owner_id) / published['published']['skill_id']
+            self.assertTrue(working.is_file())
+            with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
+                shared = PostgresMemoryStore(self.database_url, connection_factory=lambda: nullcontext(connection))
+                shared.delete(scope=ContactScope(self.owner_id, self.contact_id), memory_id=UUID(memory))
+                self.assertTrue(working.is_file(), '共享事务尚未提交时只能登记清理。')
+                connection.rollback()
+            self.assertTrue(working.is_file())
+            self.assertTrue(list(snapshots.rglob('SKILL.md')))
+            history = self._get(self.backend, self.path + '/skills/' + published['published']['skill_id'])
+            self.assertEqual(history['current_version_id'], published['published']['version_id'])
 
     def test_update_history_rollback_is_scoped_idempotent_and_cannot_enable_disabled_skill(self):
         self._bind(self.contact_id)
@@ -271,6 +348,7 @@ class SkillLifecycleHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self.assertEqual(payload['existing_skills'], [])
 
     def test_history_rejects_other_contact_before_materializing_private_version_body(self):
+        from notalone.skills import LocalSkillPackageReader
         path, draft, _, _ = self._draft_for_review()
         compared, _ = self._compare(path, draft)
         published, _ = self._approve(path, compared)
@@ -282,6 +360,7 @@ class SkillLifecycleHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         other_path = f'/api/contacts/{self.second_contact_id}/skill-learning'
         body_reads = []
         fetchall, fetchone = psycopg.Cursor.fetchall, psycopg.Cursor.fetchone
+        read_file = LocalSkillPackageReader._read_file
 
         def observe(cursor, rows):
             columns = tuple(column.name for column in cursor.description or ())
@@ -301,8 +380,16 @@ class SkillLifecycleHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
             observe(cursor, [] if row is None else [row])
             return row
 
-        # 观察真实PG返回的正文，不以最终404代替底层最小读取证明。
-        with patch.object(psycopg.Cursor, 'fetchall', observed_all), patch.object(psycopg.Cursor, 'fetchone', observed_one):
+        def observed_file(root, relative_path, maximum_bytes):
+            data = read_file(root, relative_path, maximum_bytes)
+            if document.encode('utf-8') in data:
+                body_reads.append((root, relative_path))
+            return data
+
+        # 观察真实文件读取及数据库返回值，拒绝范围时不能先物化正文。
+        with (patch.object(psycopg.Cursor, 'fetchall', observed_all),
+              patch.object(psycopg.Cursor, 'fetchone', observed_one),
+              patch.object(LocalSkillPackageReader, '_read_file', side_effect=observed_file)):
             self.assertEqual(self.backend.request(other_path + '/skills/' + skill)[0], 404)
             self.assertEqual(self._get(self.backend, other_path + '/skills')['skills'], [])
             self.assertEqual(self.other_backend.request(history_path)[0], 404)

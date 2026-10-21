@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import os
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from uuid import UUID, uuid4
@@ -65,6 +66,11 @@ class PostgresSkillLifecycleTest(unittest.TestCase):
             )
 
     def setUp(self) -> None:
+        self.skill_root = TemporaryDirectory()
+        self.addCleanup(self.skill_root.cleanup)
+        environment = patch.dict(os.environ, {"NOTALONE_SKILLS_DIR": self.skill_root.name})
+        environment.start()
+        self.addCleanup(environment.stop)
         self.owner_id = uuid4()
         self.contact_id = uuid4()
         with psycopg.connect(TEST_DATABASE_URL) as connection:
@@ -164,41 +170,16 @@ class PostgresSkillLifecycleTest(unittest.TestCase):
             "第二版案例。\n".encode("utf-8"),
         )
 
-        with psycopg.connect(TEST_DATABASE_URL) as connection:
-            old_row = connection.execute(
-                """
-                SELECT version_number, content, is_current, status
-                FROM public.reply_skill_version
-                WHERE id = %s
-                """,
-                (imported.version_id,),
-            ).fetchone()
-            resource_rows = connection.execute(
-                """
-                SELECT relative_path, content
-                FROM public.reply_skill_resource
-                WHERE skill_version_id = %s
-                """,
-                (imported.version_id,),
-            ).fetchall()
-            current_count = connection.execute(
-                """
-                SELECT count(*) FROM public.reply_skill_version
-                WHERE skill_id = %s AND is_current = TRUE
-                """,
-                (updated.skill_id,),
-            ).fetchone()[0]
-        self.assertEqual(
-            (old_row[0], old_row[1], old_row[2], old_row[3]),
-            (1, "第一版策略正文。\n", False, "active"),
-        )
+        versions = self.library.list_versions(self.owner_id, imported.skill_id)
+        self.assertEqual([(v.version_number, v.is_current) for v in versions], [(2, True), (1, False)])
         self.assertNotEqual(imported.version_id, updated.version_id)
-        # 旧版本资源不被新版本覆盖。
+        self.library.rollback(self.owner_id, imported.skill_id, imported.version_id)
+        old_version = self.skill_port.load_version(self._scope(), imported.version_id)
+        self.assertEqual(old_version.content, "第一版策略正文。\n")
         self.assertEqual(
-            {(row[0], bytes(row[1]).decode("utf-8")) for row in resource_rows},
-            {("references/cases.md", "第一版案例。\n")},
+            self.skill_port.load_resource(self._scope(), imported.version_id, "references/cases.md").content,
+            "第一版案例。\n".encode("utf-8"),
         )
-        self.assertEqual(current_count, 1)
 
     def test_list_versions_orders_history_and_marks_current(self) -> None:
         with TemporaryDirectory() as temporary_directory:

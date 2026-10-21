@@ -266,6 +266,8 @@ class SkillReviewHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
     def test_source_delete_preserves_new_independent_current_version_and_catalog_description(self):
         from pathlib import Path
         from notalone.persistence.skill_library import PostgresSkillLibrary
+        from notalone.persistence.skill_port import PostgresSkillPort
+        from notalone.scopes import ContactScope
         source, published = self._publish_review_with_description('合成旧审核摘要必须删除')
         package = Path(self.temporary.name) / published['name']
         package.mkdir()
@@ -278,7 +280,10 @@ class SkillReviewHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
                 self.assertEqual(connection.execute('SELECT skill.description,skill.status,version.description,version.content,'
                     'version.is_current,version.review_origin FROM public.reply_skill skill JOIN public.reply_skill_version version '
                     'ON version.skill_id=skill.id WHERE version.id=%s', (updated.version_id,)).fetchone(),
-                    ('合成新版独立摘要保留', 'active', '合成新版独立摘要保留', '合成新版独立正文保留。\n', True, False))
+                    ('合成新版独立摘要保留', 'active', '合成新版独立摘要保留', None, True, False))
+            loaded = PostgresSkillPort(self.database_url).load_version(
+                ContactScope(self.owner_id, self.contact_id), updated.version_id)
+            self.assertEqual(loaded.content, '合成新版独立正文保留。\n')
         self.assertEqual(self._get(self.backend, '/api/skills')['skills'][0]['description'], '合成新版独立摘要保留')
 
     def test_review_with_captured_candidate_history_loads_read_only_and_remains_source_deletable(self):

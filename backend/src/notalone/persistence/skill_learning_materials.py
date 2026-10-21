@@ -1,4 +1,4 @@
-"""从已授权会话选择任务相关的增量材料，不读取文件或其他App。"""
+"""从已授权会话选择任务相关的增量材料，按已发布身份读取策略文件。"""
 
 from heapq import merge
 from uuid import UUID, uuid5
@@ -9,6 +9,7 @@ from notalone.persistence.message_sources import valid_source_ref_exists_sql
 from notalone.skills.learning import LearningBatch, MAX_LEARNING_MATERIALS, MAX_LEARNING_INPUT_CHARS, content_digest, learning_input_text
 from notalone.persistence.skill_learning_generation import capture_generation
 from notalone.reply.errors import ReplyStoreInvariantError
+from notalone.persistence.skill_files import SkillFileError, read_version_content
 
 
 def expand_learning_provenance(connection, scope, dependencies) -> set[UUID] | None:
@@ -327,11 +328,11 @@ def select_learning_batch(connection, scope, *, material_ids=None) -> LearningBa
             break
     targets = []
     revision = connection.execute('SELECT revision FROM public.skill_library WHERE owner_id=%s', (scope.owner_id,)).fetchone()
-    for skill, version, name, description, number, body in connection.execute("""
-        SELECT skill.id,version.id,skill.name,skill.description,version.version_number,version.content
+    for skill, version, name, description, number in connection.execute("""
+        SELECT skill.id,version.id,skill.name,skill.description,version.version_number
         FROM public.reply_skill AS skill JOIN public.reply_skill_version AS version ON version.skill_id=skill.id
         WHERE skill.owner_id=%s AND skill.status='active' AND version.enabled AND version.is_current
-          AND version.status='active' AND version.content IS NOT NULL AND length(btrim(version.content))>0
+          AND version.status='active' AND version.content_path IS NOT NULL AND version.directory_available
           AND version.name=skill.name
           AND (skill.contact_id IS NULL OR skill.contact_id=%s)
         ORDER BY skill.name,skill.id LIMIT 8
@@ -346,6 +347,10 @@ def select_learning_batch(connection, scope, *, material_ids=None) -> LearningBa
             continue
         methods = _published_methods(connection, scope, skill, version)
         if methods is None:
+            continue
+        try:
+            body = read_version_content(connection, version)
+        except SkillFileError:
             continue
         target={"skill_id": str(skill), "version_id": str(version), "version_number": number,
                 "name": name, "description": description, "document": body, "methods": methods,

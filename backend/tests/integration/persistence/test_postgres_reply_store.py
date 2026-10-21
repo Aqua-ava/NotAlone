@@ -19,6 +19,7 @@ from notalone.reply.errors import (
     ReplyContinuationError,
     ReplyIdempotencyConflictError,
     ReplyPersistenceError,
+    ReplyInputInvalidatedError,
     ReplyStoreInvariantError,
 )
 from notalone.reply.interface import (
@@ -38,6 +39,8 @@ from notalone.scopes import ContactScope, VerifiedConversationScope
 from notalone.persistence.reply_store import PostgresReplyStore
 from notalone.persistence.memory_store import PostgresMemoryStore
 from notalone.persistence.skill_library import PostgresSkillLibrary
+from notalone.persistence.skill_port import PostgresSkillPort
+from notalone.persistence.skill_files import working_directory
 from notalone.memory import AdoptionMethod, MemoryCandidate, MemoryCategory
 from notalone.memory.timing import MemoryTiming
 
@@ -266,6 +269,36 @@ class PostgresReplyStoreTest(unittest.TestCase):
         with self.assertRaises(ReplyStoreInvariantError):
             self.store.save(started.request, context,
                 replace(reply, used_skill=replace(reply.used_skill, version_id=uuid4())))
+
+    def test_skill_directory_edit_after_prepare_rejects_late_candidate_and_next_prepare_uses_new_version(self) -> None:
+        port = PostgresSkillPort(TEST_DATABASE_URL)
+        original_catalog = port.catalog(ContactScope(self.owner_id, self.contact_id))
+        command = self._command()
+        started = self.store.start(command, self._verified_scope())
+        context = self._context(command, started.request.request_id)
+        self.store.prepare_context(started.request, context)
+        document = working_directory(self.owner_id, "warm-reply") / "SKILL.md"
+        document.write_text(document.read_text(encoding="utf-8") + "\n先给对方容易回应的选择。\n", encoding="utf-8")
+
+        with self.assertRaises(ReplyInputInvalidatedError):
+            self.store.save(started.request, context, self._reply())
+
+        refreshed = port.catalog(command.scope)
+        self.assertEqual(refreshed.revision, original_catalog.revision + 1)
+        self.assertEqual(refreshed.entries[0].version_number, 2)
+        current = port.load_version(command.scope, refreshed.entries[0].version_id)
+        self.assertIn("容易回应的选择", current.content)
+        next_command = self._command(key=uuid4())
+        next_started = self.store.start(next_command, self._verified_scope())
+        next_context = replace(self._context(next_command, next_started.request.request_id),
+                               skill_library_revision=refreshed.revision)
+        self.store.prepare_context(next_started.request, next_context)
+        reply = self._reply()
+        reply = replace(reply, used_skill=replace(reply.used_skill, version_id=current.version_id,
+                                                  version_number=current.version_number,
+                                                  execution_view=current.execution_view))
+        saved = self.store.save(next_started.request, next_context, reply)
+        self.assertEqual(saved.used_skill.version_id, current.version_id)
 
     def test_message_speaker_survives_completed_reply_store_recreation(self) -> None:
         for role in ("owner", "contact", "system", "unknown"):

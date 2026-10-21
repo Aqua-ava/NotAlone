@@ -271,9 +271,10 @@ class PostgresSkillReviewStore:
                 "SELECT version.id FROM public.reply_skill AS skill JOIN public.reply_skill_version AS version ON version.skill_id=skill.id "
                 "WHERE skill.owner_id=%s AND skill.id=%s AND (skill.contact_id IS NULL OR skill.contact_id=%s) "
                 "AND skill.status='active' AND version.id=%s AND version.version_number=%s AND version.is_current "
-                "AND version.enabled AND version.status='active' AND version.content IS NOT NULL",
+                "AND version.enabled AND version.status='active' AND version.content_path IS NOT NULL AND version.directory_available",
                 (scope.owner_id, UUID(target['skill_id']), scope.contact_id, UUID(target['version_id']), target['version_number'])).fetchone()
-            if row is None:
+            from notalone.persistence.skill_files import version_content_available
+            if row is None or not version_content_available(connection, UUID(target['version_id'])):
                 raise SkillLearningInvalid()
         if len(targets) > 1:
             from notalone.persistence.skill_version_lineage import capture_parent_publications
@@ -376,8 +377,14 @@ def erase_review_artifacts(connection, owner_id, draft_ids):
         (owner_id, draft_ids))
     if not versions:
         return
+    from notalone.persistence.skill_files import queue_skill_file_cleanup
+    skill_ids = {field(row, 'skill_id', 1) for row in rows}
+    for skill_id in skill_ids:
+        queue_skill_file_cleanup(connection, skill_id=skill_id, version_ids={
+            field(row, 'version_id', 0) for row in rows if field(row, 'skill_id', 1) == skill_id})
     connection.execute(
-        "UPDATE public.reply_skill_version SET description='来源已删除',content=NULL,content_sha256=NULL,source_locator=NULL,validation_warnings='[]',"
+        "UPDATE public.reply_skill_version SET description='来源已删除',content=NULL,content_path=NULL,document_sha256=NULL,"
+        "method_manifest_path=NULL,method_manifest_sha256=NULL,content_sha256=NULL,source_locator=NULL,validation_warnings='[]',"
         "enabled=false,is_current=false,status='deleted',deleted_at=now() WHERE id=ANY(%s::uuid[])", (versions,))
     connection.execute('DELETE FROM public.reply_skill_resource WHERE skill_version_id=ANY(%s::uuid[])', (versions,))
     connection.execute('UPDATE public.reply_skill_method SET title=NULL,instruction=NULL WHERE version_id=ANY(%s::uuid[])', (versions,))

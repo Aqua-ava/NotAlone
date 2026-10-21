@@ -147,6 +147,8 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 
 95. [ADR-095：首次连接微信与一次账号范围授权](adr/095-first-wechat-connection-and-account-grant.md)
 
+96. [ADR-096：目录保存回复 Skill，数据库只管理业务状态](adr/096-directory-backed-reply-skills.md)
+
 ## 当前架构决策
 
 - 主动收藏表达样本按 [ADR-082](adr/082-retire-explicit-style-samples.md)退役；删除独立样本库、入口和生成参考，清理遗留依赖及可重放副本。普通候选编辑复制与用户明确管理的长期表达偏好保留，历史样本验收不代表本次退役验证。

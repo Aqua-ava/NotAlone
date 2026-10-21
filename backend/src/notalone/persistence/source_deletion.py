@@ -28,6 +28,7 @@ from notalone.persistence.source_memory_erasure import (
 )
 from notalone.persistence.memory_correction import has_correction_dependencies
 from notalone.persistence.source_processing import erase_source_processing
+from notalone.persistence.skill_files import SkillFileError
 
 from notalone.persistence.expression_preferences import erase_source_expression_preferences
 from notalone.scopes import ContactScope
@@ -85,7 +86,8 @@ class PostgresSourceDeletionRepository:
     ) -> SourceDeletionResult:
         operation_id = uuid4()
         try:
-            with psycopg.connect(self._database_url) as connection:
+            from notalone.persistence.skill_file_cleanup import cleanup_skill_files_after_commit
+            with cleanup_skill_files_after_commit(self._database_url, owner_id), psycopg.connect(self._database_url) as connection:
                 lock_contact_scope(
                     connection,
                     owner_id=owner_id,
@@ -328,7 +330,7 @@ class PostgresSourceDeletionRepository:
                 source_document_id=source_document_id,
             )
             raise
-        except (psycopg.Error, ReplyCleanupError, MediaError, OSError):
+        except (psycopg.Error, ReplyCleanupError, MediaError, OSError, SkillFileError):
             self._record_failure(
                 owner_id=owner_id,
                 contact_id=contact_id,

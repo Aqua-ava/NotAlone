@@ -41,7 +41,7 @@
 | `contact_memory_index` | 当前联系人有效关系记忆的精简主题目录。 | 按 `owner_id + contact_id` 隔离，由固定主分类和系统自动生成的子主题组成；是可重建投影，不是新的事实源；召回第一期不再用它筛选候选，只提供 `memory_revision` 快照用于生成前后复验。 |
 | `relationship_overview_projection` | 联系人与本人资料的可重建依赖清单。 | 联系人按 `owner_id + contact_id`、本人按 `owner_id` 独立构建；保存底层 ID、revision、状态、摘要、来源世代与实际构建时间，不保存正文、原话或模型摘要；回复只沿清单导航到合法底层依据。 |
 | `reply_skill` | Skill 库中的一份独立回复策略目录项。 | 属于 owner；当前用户导入的 Skill 默认全局适用，名称在同一 owner 内唯一，保存简述、来源类型、状态和当前版本。一个 `reply_skill` 只代表一种策略。 |
-| `reply_skill_version` | 一次不可变的回复 Skill 正文快照。 | 发布后不可修改，保存经校验的 `SKILL.md` 正文、来源定位、内容摘要和校验结果；更新必须产生新版本。删除清除正文、来源定位和关联资源，并保留最小删除记录。Skill 声明不能扩大可执行 Tool 或权限。 |
+| `reply_skill_version` | 一次不可变的回复 Skill 正文快照。 | 按 ADR-096，发布后文件快照不可修改；数据库保存受控文件定位、来源定位、内容摘要和校验结果，正文留在目录，更新产生新版本。删除清除文件、来源定位和关联资源，并保留最小删除记录。Skill 声明不能扩大可执行 Tool 或权限。 |
 | `reply_skill_resource` | 与一个不可变 Skill 版本绑定的受控辅助资源。 | 保存包内相对路径、媒体类型、大小、内容哈希和内容定位；只允许按需只读加载，不能执行、外部下载或跨范围读取。 |
 | `reply_request` | 一次面向已确认联系人的表达生成请求。正常工作区按 ADR-079 继续使用 `RewriteDraft`／`rewrite_draft` 请求外壳，以 `input_kind=workspace` 和 `workspace_action=express|suggest` 区分输入及动作；建议候选不预设用户已经确认其意图。旧 `draft`／`current_chat` 输入分支及旧回复／主动联系页面合同保留历史与内部兼容。 | 固定所属联系人，内嵌本次实际检索到的上下文快照（`retrieved_context`），并记录幂等请求键、请求状态、输入模式、动作与本次输入来源（草稿/直接输入/模型建议，明确区分是否经用户确认）、可空的显式前序候选、实际使用的 `skill_version_id`、选择原因与置信度。 |
 | `reply_candidate` | 模型给出的可编辑候选回复及风险说明。 | 关联一次回复请求；不会自动发送。 |

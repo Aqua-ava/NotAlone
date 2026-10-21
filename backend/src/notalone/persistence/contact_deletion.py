@@ -8,12 +8,13 @@ from notalone.managed_update_backups import erase_managed_update_backups
 from notalone.persistence.expression_preferences import _erase_preferences
 from notalone.persistence.locks import lock_contact_scope, lock_owner_scope
 from notalone.persistence.media_store import erase_source_media
+from notalone.persistence.skill_file_cleanup import cleanup_skill_files_after_commit
 from notalone.scopes import ContactScope
 
 
 def delete_contact(database_url: str, scope: ContactScope) -> bool:
     """只清理显式给定范围；当前产品没有整体联系人删除 HTTP 入口。"""
-    with psycopg.connect(database_url) as connection:
+    with cleanup_skill_files_after_commit(database_url, scope.owner_id), psycopg.connect(database_url) as connection:
         lock_contact_scope(connection, owner_id=scope.owner_id, contact_id=scope.contact_id)
         lock_owner_scope(connection, owner_id=scope.owner_id)
         present = connection.execute('SELECT 1 FROM public.contact WHERE owner_id=%s AND id=%s',
@@ -30,6 +31,12 @@ def delete_contact(database_url: str, scope: ContactScope) -> bool:
             return False
         erase_managed_update_backups(connection)
         removed_ids = _contact_dependency_ids(connection, scope)
+        from notalone.persistence.skill_files import queue_skill_file_cleanup
+        for row in connection.execute(
+            'SELECT id FROM public.reply_skill WHERE owner_id=%s AND contact_id=%s',
+            (scope.owner_id, scope.contact_id),
+        ).fetchall():
+            queue_skill_file_cleanup(connection, skill_id=row['id'] if isinstance(row, dict) else row[0])
         removed_ids.update(_erase_contact_media(connection, scope, media))
         _erase_contact_sources(connection, scope, removed_ids)
         from notalone.persistence.memory_upgrade import erase_memory_upgrades

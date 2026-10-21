@@ -9,6 +9,7 @@ from notalone.persistence.locks import lock_contact_scope, lock_owner_scope
 from notalone.persistence.skill_learning import authorized_contact, SkillLearningNotFound
 from notalone.persistence.skill_library import PostgresSkillLibrary, SkillVersionNotFoundError, SkillDeletedError
 from notalone.persistence.skill_version_lineage import capture_parent_publications
+from notalone.persistence.skill_files import SkillFileError, read_version_content
 from notalone.skills.learning import SkillLearningInvalid, content_digest
 
 
@@ -17,6 +18,8 @@ class PostgresSkillHistory:
         self.database_url = database_url
 
     def read(self, scope, skill_id=None):
+        from notalone.persistence.skill_directory import prepare_skill_directory
+        prepare_skill_directory(self.database_url, scope.owner_id)
         with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
             lock_contact_scope(connection, owner_id=scope.owner_id, contact_id=scope.contact_id)
             lock_owner_scope(connection, owner_id=scope.owner_id)
@@ -83,7 +86,7 @@ class PostgresSkillHistory:
             'version.review_origin,publication.scope_kind,publication.scope_contact_id,publication.scene '
             'FROM public.reply_skill_version AS version LEFT JOIN public.reply_skill_publication AS publication '
             'ON publication.version_id=version.id WHERE version.skill_id=%s AND version.status=\'active\' '
-            'AND version.content IS NOT NULL ORDER BY version.version_number DESC', (skill_id,)).fetchall()
+            'AND version.content_path IS NOT NULL ORDER BY version.version_number DESC', (skill_id,)).fetchall()
         versions, current = [], None
         for row in rows:
             try:
@@ -95,18 +98,25 @@ class PostgresSkillHistory:
                     raise SkillLearningNotFound() from None
                 continue
             # 完整范围与来源核验通过后，才读取该合法历史版本的正文。
-            body = connection.execute(
-                'SELECT content FROM public.reply_skill_version WHERE id=%s AND skill_id=%s '
-                "AND status='active' AND content IS NOT NULL", (row['id'], skill_id)).fetchone()
-            if body is None:
+            try:
+                body = read_version_content(connection, row['id'])
+            except SkillFileError:
                 if row['is_current']:
-                    raise SkillLearningNotFound()
+                    raise SkillLearningNotFound() from None
                 continue
             methods = connection.execute(
-                'SELECT method_id,title,instruction,replaces_method_ids,mapping_state FROM public.reply_skill_method '
-                'WHERE version_id=%s AND title IS NOT NULL ORDER BY ordinal', (row['id'],)).fetchall()
+                'SELECT method_id,replaces_method_ids,mapping_state FROM public.reply_skill_method '
+                'WHERE version_id=%s ORDER BY ordinal', (row['id'],)).fetchall()
+            from notalone.persistence.skill_methods import read_method_manifest
+            try:
+                manifest = {item['method_id']: item for item in read_method_manifest(connection, row['id'])}
+                methods = [{**item, **manifest[item['method_id']]} for item in methods]
+            except (SkillFileError, KeyError):
+                if row['is_current']:
+                    raise SkillLearningNotFound() from None
+                continue
             versions.append({'version_id': str(row['id']), 'version_number': row['version_number'],
-                'document': body['content'], 'is_current': row['is_current'], 'enabled': row['enabled'],
+                'document': body, 'is_current': row['is_current'], 'enabled': row['enabled'],
                 'scope': {'kind': row['scope_kind'] or 'owner',
                           'contact_id': str(row['scope_contact_id']) if row['scope_contact_id'] else None, 'scene': row['scene']},
                 'methods': [{'method_id': str(item['method_id']), 'title': item['title'], 'instruction': item['instruction'],

@@ -9,6 +9,7 @@ from notalone.persistence.locks import lock_contact_scope, lock_owner_scope
 from notalone.persistence.skill_history import PostgresSkillHistory
 from notalone.persistence.skill_learning import SkillLearningNotFound
 from notalone.persistence.skill_version_lineage import capture_parent_publications
+from notalone.persistence.skill_files import version_content_available
 from notalone.scopes import ContactScope
 from notalone.skills.learning import SkillLearningInvalid, content_digest
 
@@ -40,9 +41,9 @@ def _require_policy_target(
         raise SkillLearningNotFound()
     version = connection.execute(
         "SELECT id,is_current FROM public.reply_skill_version WHERE skill_id=%s AND id=%s "
-        "AND status='active' AND content IS NOT NULL", (skill_id, version_id),
+        "AND status='active' AND content_path IS NOT NULL", (skill_id, version_id),
     ).fetchone()
-    if version is None:
+    if version is None or not version_content_available(connection, version_id):
         raise SkillLearningInvalid()
     try:
         proofs, _ = capture_parent_publications(connection, scope, {version_id})
@@ -56,14 +57,21 @@ def _require_policy_target(
         return
     method = connection.execute(
         'SELECT method_id FROM public.reply_skill_method '
-        'WHERE version_id=%s AND method_id=%s AND title IS NOT NULL',
+        'WHERE version_id=%s AND method_id=%s',
         (version_id, method_id),
     ).fetchone()
     if method is not None:
-        return
+        from notalone.persistence.skill_methods import read_method_manifest
+        from notalone.persistence.skill_files import SkillFileError
+        try:
+            if method_id in {item['method_id'] for item in read_method_manifest(connection, version_id)}:
+                return
+        except SkillFileError:
+            pass
+        raise SkillLearningInvalid()
     # 旧本地包只有在没有细分方法身份时，才使用既有的整个策略方法身份。
     if method_id == uuid5(skill_id, 'whole_strategy') and connection.execute(
-        'SELECT 1 FROM public.reply_skill_method WHERE version_id=%s AND title IS NOT NULL LIMIT 1',
+        'SELECT 1 FROM public.reply_skill_method WHERE version_id=%s LIMIT 1',
         (version_id,),
     ).fetchone() is None:
         return

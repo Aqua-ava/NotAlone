@@ -894,8 +894,10 @@ class PostgresObservationStore:
         self._validate_scope(owner_id=owner_id, contact_id=contact_id)
         if not isinstance(observation_id, UUID):
             raise TypeError("observation_id 必须是 UUID。")
+        from notalone.persistence.skill_file_cleanup import cleanup_skill_files_after_commit
+        from notalone.persistence.skill_files import SkillFileError
         try:
-            with self._connect() as connection:
+            with cleanup_skill_files_after_commit(self._database_url, owner_id), self._connect() as connection:
                 lock_contact_scope(
                     connection,
                     owner_id=owner_id,
@@ -988,7 +990,7 @@ class PostgresObservationStore:
                 connection.commit()
         except ObservationNotFoundError:
             raise
-        except (psycopg.Error, ReplyCleanupError):
+        except (psycopg.Error, ReplyCleanupError, SkillFileError):
             raise ObservationPersistenceError("观察来源删除失败。") from None
 
     def _validate_batch_arguments(

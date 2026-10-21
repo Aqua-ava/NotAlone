@@ -1,0 +1,168 @@
+"""把 Owner 可编辑目录投影成通过校验的不可变 Skill 版本。"""
+
+from uuid import UUID, uuid4
+
+import psycopg
+from psycopg.rows import dict_row
+
+from notalone.persistence.locks import lock_owner_scope
+from notalone.skills import LocalSkillPackageReader, SkillPackageValidator
+from notalone.skills.package import SkillPackageValidationError
+
+
+def prepare_legacy_skill_directory(database_url, owner_id: UUID) -> None:
+    """独立事务迁移旧正文，提交后调用方才能消费工作副本，不提交其业务事务。"""
+    from notalone.persistence.skill_files import migrate_legacy_packages
+    from notalone.persistence.skill_methods import migrate_legacy_method_manifests
+
+    if not isinstance(owner_id, UUID):
+        raise TypeError("owner_id 必须是 UUID。")
+    with psycopg.connect(database_url, row_factory=dict_row) as connection:
+        lock_owner_scope(connection, owner_id=owner_id)
+        migrate_legacy_packages(connection, owner_id=owner_id)
+        migrate_legacy_method_manifests(connection, owner_id=owner_id)
+
+
+def prepare_skill_directory(database_url, owner_id: UUID) -> None:
+    """供历史管理页刷新：先提交旧包迁移，再提交目录发现，最后独立读取业务视图。"""
+    prepare_legacy_skill_directory(database_url, owner_id)
+    with psycopg.connect(database_url, row_factory=dict_row) as connection:
+        synchronize_skill_directory(connection, owner_id)
+
+
+class _DictConnection:
+    """同一事务内复用管理库的字典行接口，不改变调用方 row_factory。"""
+
+    def __init__(self, connection):
+        self.connection = connection
+
+    def execute(self, query, params=None):
+        return self.connection.cursor(row_factory=dict_row).execute(query, params)
+
+    def cursor(self, **kwargs):
+        return self.connection.cursor(**kwargs)
+
+
+def _read_packages(owner_id):
+    from notalone.persistence.skill_files import SkillFileError, _checked_path
+
+    try:
+        root = _checked_path(str(owner_id))
+        if root.is_symlink() or not root.exists():
+            return {}
+        directories = tuple(root.iterdir())
+    except (OSError, SkillFileError):
+        return {}
+    reader, validator = LocalSkillPackageReader(), SkillPackageValidator()
+    packages = {}
+    for directory in directories:
+        if directory.name.startswith("."):
+            continue
+        try:
+            packages[directory.name] = validator.validate(reader.read(directory))
+        except (SkillPackageValidationError, OSError, ValueError):
+            # 非法包只影响自身；不能回退到已失效工作副本对应的旧正文。
+            continue
+    return packages
+
+
+def _matches(cursor, row, package):
+    if package is None or row["content_sha256"] != package.content_sha256:
+        return False
+    resources = cursor.execute(
+        "SELECT relative_path,resource_kind,media_type,byte_size,content_sha256 "
+        "FROM public.reply_skill_resource WHERE skill_version_id=%s ORDER BY relative_path",
+        (row["version_id"],),
+    ).fetchall()
+    # 路径是资源身份；PG collation 与 Python Unicode 排序不应影响版本判断。
+    stored = {item["relative_path"]: (item["resource_kind"], item["media_type"],
+                                     item["byte_size"], item["content_sha256"]) for item in resources}
+    proposed = {item.relative_path: (item.resource_kind, item.media_type,
+                                    len(item.content), item.content_sha256) for item in package.resources}
+    return (row["name"] == package.name and row["description"] == package.description
+            and stored == proposed)
+
+
+def synchronize_skill_directory(connection, owner_id: UUID, *, check_only=False) -> bool:
+    """发现新增与修改；检查模式只判断变化，供提交前拒绝迟到候选。"""
+    if not isinstance(owner_id, UUID):
+        raise TypeError("owner_id 必须是 UUID。")
+    from notalone.persistence.skill_library import PostgresSkillLibrary
+
+    management_connection = _DictConnection(connection)
+    if not check_only:
+        lock_owner_scope(connection, owner_id=owner_id)
+        from notalone.persistence.skill_files import (
+            cleanup_pending_files,
+            cleanup_unreferenced_snapshots,
+            synchronize_working_copies,
+        )
+        synchronize_working_copies(connection, owner_id=owner_id)
+        cleanup_unreferenced_snapshots(connection, owner_id=owner_id)
+        cleanup_pending_files(connection, owner_id=owner_id)
+    with connection.cursor(row_factory=dict_row) as cursor:
+        rows = cursor.execute(
+            "SELECT skill.id AS skill_id,skill.name,skill.description,skill.status,"
+            "skill.directory_managed,version.id AS version_id,version.content_sha256,"
+            "version.version_number,version.review_origin,version.enabled,version.directory_available "
+            "FROM public.reply_skill AS skill LEFT JOIN public.reply_skill_version AS version "
+            "ON version.skill_id=skill.id AND version.is_current AND version.status='active' "
+            "WHERE skill.owner_id=%s ORDER BY skill.id",
+            (owner_id,),
+        ).fetchall()
+        known = {row["name"]: row for row in rows}
+        packages = _read_packages(owner_id)
+        changed = False
+        library = PostgresSkillLibrary("postgresql:///directory")
+        for name, package in packages.items():
+            if name in known:
+                continue
+            changed = True
+            if check_only:
+                continue
+            library._ensure_owner(management_connection, owner_id)
+            library._ensure_library_row(management_connection, owner_id)
+            skill_id = uuid4()
+            cursor.execute(
+                "INSERT INTO public.reply_skill(id,owner_id,name,description,status,directory_managed) "
+                "VALUES (%s,%s,%s,%s,'active',true)",
+                (skill_id, owner_id, package.name, package.description),
+            )
+            library._insert_version_and_resources(management_connection, skill_id=skill_id, package=package,
+                                                 version_number=1, write_working=False)
+        for row in rows:
+            if not row["directory_managed"] or row["status"] == "deleted" or row["version_id"] is None:
+                continue
+            package = packages.get(row["name"])
+            matches = _matches(cursor, row, package)
+            available = matches or package is not None and not row["review_origin"]
+            if matches and row["directory_available"]:
+                continue
+            if not available:
+                if row["directory_available"]:
+                    changed = True
+                    if not check_only:
+                        cursor.execute("UPDATE public.reply_skill_version SET directory_available=false WHERE id=%s",
+                                       (row["version_id"],))
+                continue
+            changed = True
+            if check_only:
+                continue
+            if matches:
+                cursor.execute("UPDATE public.reply_skill_version SET directory_available=true WHERE id=%s",
+                               (row["version_id"],))
+                continue
+            # 用户停用状态、联系人身份、审核来源和政策都不由文件改变。
+            cursor.execute("UPDATE public.reply_skill_version SET is_current=false WHERE id=%s", (row["version_id"],))
+            number = cursor.execute("SELECT coalesce(max(version_number),0)+1 AS number "
+                                    "FROM public.reply_skill_version WHERE skill_id=%s", (row["skill_id"],)).fetchone()["number"]
+            version_id = library._insert_version_and_resources(
+                management_connection, skill_id=row["skill_id"], package=package, version_number=number, write_working=False)
+            if not row["enabled"]:
+                cursor.execute("UPDATE public.reply_skill_version SET enabled=false WHERE id=%s", (version_id,))
+            cursor.execute("UPDATE public.reply_skill SET description=%s,updated_at=now() WHERE id=%s",
+                           (package.description, row["skill_id"]))
+        if changed and not check_only:
+            library._ensure_library_row(management_connection, owner_id)
+            library._increment_revision(management_connection, owner_id)
+        return changed

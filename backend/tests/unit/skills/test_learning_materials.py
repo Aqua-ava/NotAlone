@@ -82,6 +82,7 @@ class LearningMaterialsTest(unittest.TestCase):
         stack.enter_context(patch(module+'_expand_message_sources', side_effect=lambda _, __, refs: refs))
         stack.enter_context(patch('notalone.persistence.skill_learning._dependencies_available_for_learning', return_value=True))
         stack.enter_context(patch(module+'capture_generation', return_value={}))
+        stack.enter_context(patch(module+'read_version_content', return_value='先明确已知，再组织表达。'))
 
     def test_target_methods_belong_to_actual_published_version_and_exclude_pending_registry(self):
         for state in ('local_package', 'published_mapping', 'wrong_logical_skill'):
@@ -185,7 +186,7 @@ class TargetQueries(MaterialQueries):
     def execute(self, query, params):
         if 'FROM public.reply_skill AS skill' in query:
             return MaterialRows([(self.skill_id, self.version_id, 'synthetic-existing',
-                                  '合成已有方法', 1, '先明确已知，再组织表达。')])
+                                  '合成已有方法', 1)])
         if 'SELECT method_id FROM public.skill_method_identity' in query:
             return MaterialRows([(self.pending_method_id,)])
         if "SELECT strategy->'methods'" in query:
