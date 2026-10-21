@@ -117,4 +117,3 @@ class MemoryReadBatchingTest(PostgresMemoryTimingTest):
         store.list_active(self.scope.owner_id)
 
         self.assertEqual([s for s in counter.statements if is_schema_probe(s)], [])
-
