@@ -568,7 +568,7 @@ class DimensionReleaseGateTest(unittest.TestCase):
 
         self.assertEqual(stats.adopted, 1)
 
-    def test_environment_rollback_switch_restores_todays_adoption(self) -> None:
+    def test_environment_rollback_keeps_source_verification(self) -> None:
         with patch.dict(
             os.environ, {"NOTALONE_MEMORY_DIMENSION_GATE": "0"}, clear=False
         ):
@@ -577,8 +577,10 @@ class DimensionReleaseGateTest(unittest.TestCase):
                 ExtractionOutcome(accepted=(_fact(),)),
             )
 
-        self.assertEqual(stats.adopted, 1)
-        self.assertEqual(len(self.store.list_confirmed(self.scope)), 1)
+        # 回退只关闭逐维白名单，不再绕过来源核验；无回执候选仍进待确认。
+        self.assertEqual(stats.adopted, 0)
+        self.assertEqual(stats.pending, 1)
+        self.assertEqual(self.store.list_confirmed(self.scope), ())
 
     def test_environment_gate_keeps_candidates_pending(self) -> None:
         with patch.dict(

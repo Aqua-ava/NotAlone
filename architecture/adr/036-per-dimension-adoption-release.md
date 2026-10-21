@@ -6,6 +6,8 @@
 
 > 后续修订：[ADR-070](070-automatic-memory-maintenance.md) 将正常记忆维护改为默认逐项核验后自动处理；原评测结论不变，旧资料升级功能退役。
 
+> 2026-10-22 运维回退语义修订：[ADR-097](097-dimension-gate-rollback-keeps-source-verification.md) 规定 `NOTALONE_MEMORY_DIMENSION_GATE=0` 只关闭逐维白名单；带 `verified_sources` 的装配仍要求同次来源核验，本文第 5 条按此解释，历史评测合同不变。
+
 > 状态：已采纳
 > 决策日期：2026-10-05
 >
@@ -53,8 +55,10 @@ ADR-027）的边界声明直接冲突；同时实现勘察发现 `summarize().me
    "台账默认值＋运维开关"，所以"忘记传参"永远不会等于"全部放行"；
    `RELEASE_ALL_DIMENSIONS` 只出现在测试与验收夹具里，并有测试断言默认构造仍收紧。
 5. **运维级回退开关**：`NOTALONE_MEMORY_DIMENSION_GATE` 只有显式 `=0` 才关闭
-   门，关闭后不按维度收紧，恢复本门启用前的行为。未设置、空值与其他值都保持
-   门开启（fail-closed）。回退不改代码、可测。
+   门，关闭后不按维度收紧，恢复本门启用前的逐维放行行为。未设置、空值与其他
+   值都保持门开启（fail-closed）。回退不改代码、可测。
+   （2026-10-22 修订：关闭后只取消逐维白名单；带 `verified_sources` 的装配仍
+   要求同次来源核验，见 [ADR-097](097-dimension-gate-rollback-keeps-source-verification.md)。）
 6. **评测门槛对齐 ADR-027 第 2 条**：`summarize().meets_gate` 判定为
    "用例数 ≥15、假事 0、记错人 0、一般错误 ≤1"；语义标注覆盖保留为**单独报告
    字段**（`semantic_cases`／`semantic_scenarios`），不再参与判定。达到门槛只是

@@ -27,7 +27,8 @@
 
 默认运行策略使用同次独立来源核验回执，不要求先获全局逐维评测资格，也不
 将supported伪装成有限语义proof。显式DimensionRelease仍采用原逐维策略；
-旧运维回退NOTALONE_MEMORY_DIMENSION_GATE=0仅作为兼容入口保留。
+旧运维回退NOTALONE_MEMORY_DIMENSION_GATE=0只关闭逐维白名单，带
+verified_sources的装配仍要求同次来源核验回执（ADR-097）。
 """
 
 from __future__ import annotations
@@ -264,9 +265,12 @@ class DimensionRelease:
     ``gate_enabled`` 记录这道门是否生效；``allowed`` 是显式放行的维度，
     默认空集。两者合起来的放行集是 :meth:`released`：
 
-    - 门开启（默认）：只有 ``allowed`` 里的维度允许自动采纳。
-    - 门关闭（运维回退，``NOTALONE_MEMORY_DIMENSION_GATE=0``）：不按维度
-      收紧，恢复今天"通过原有三道门槛即自动采纳"的行为。
+    - ``verified_sources`` 开启（默认）：只认同次来源核验回执，逐维放行表
+      不参与准入；``gate_enabled`` 不改变这条路径。
+    - 显式历史协议（``verified_sources=False``）：门开启时只有 ``allowed``
+      里的维度允许自动采纳；门关闭（运维回退
+      ``NOTALONE_MEMORY_DIMENSION_GATE=0``）只关闭逐维白名单，恢复本门启用前
+      的维度策略（ADR-097，替代 ADR-036 第 5 条的三道门槛描述）。
     """
 
     allowed: frozenset[str] = field(default_factory=frozenset)
@@ -289,7 +293,7 @@ class DimensionRelease:
 
     @property
     def released(self) -> frozenset[str]:
-        """实际生效的放行集；门关闭时不按维度收紧。"""
+        """实际生效的逐维放行集；门关闭时不再按维度收紧（不影响来源核验）。"""
 
         if not self.gate_enabled:
             return _ALL_DIMENSION_NAMES
@@ -299,12 +303,14 @@ class DimensionRelease:
         self, fact: ExtractedFact, *, scope: ContactScope | None = None,
         now: datetime | None = None,
     ) -> bool:
-        """默认核对当前核验回执；显式逐维策略仍要求全部相关依据及放行。"""
+        """核对当前来源核验回执与逐维放行；来源核验不受运维回退开关影响。"""
 
-        if self.verified_sources and self.gate_enabled:
+        if self.verified_sources:
+            # 默认自动采纳只看同次来源核验回执；运维回退开关不参与这条路径。
             return _verified_current_sources(fact, scope=scope, now=now)
         key = dimension_key(fact)
         if not self.gate_enabled:
+            # 门关闭只影响显式历史协议的逐维白名单，不改变来源核验。
             return key is not None
         evidence = fact.dimension_evidence
         if scope is not None and (evidence is None or evidence.scope != scope):
@@ -336,7 +342,12 @@ class DimensionRelease:
         *,
         default: "DimensionRelease | None" = None,
     ) -> "DimensionRelease":
-        """读取默认逐项核验策略及兼容运维开关；default仅供显式测试策略注入。"""
+        """读取默认逐项核验策略及兼容运维开关；default仅供显式测试策略注入。
+
+        运维开关只切换显式历史协议（``verified_sources=False``）的逐维白名单；
+        ``verified_sources`` 来自默认策略，不受开关影响，因此回退不会绕过同次
+        来源核验（ADR-097）。
+        """
 
         values = os.environ if environ is None else environ
         base = DEFAULT_DIMENSION_RELEASE if default is None else default

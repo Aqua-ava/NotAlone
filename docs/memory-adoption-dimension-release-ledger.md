@@ -85,18 +85,20 @@ ADR-046第四门采用保守相关超集的AND：所有必需项同时有当前�
 
 按影响面从小到大：
 
-1. **运维级全量回退（不改代码，立即生效）**：
-   设置 `NOTALONE_MEMORY_DIMENSION_GATE=0`，重启提取命令或 Worker。按维度放行
-   门关闭，恢复到本门启用前的行为（通过原有三道门槛即自动采纳）。该变量只接受
-   显式 `0` 才关闭；未设置、空值或其他值都保持门开启。
+1. **运维级解耦回退（不改代码，立即生效）**：
+   设置 `NOTALONE_MEMORY_DIMENSION_GATE=0`，重启提取命令或 Worker。该开关只关闭
+   逐维白名单；默认 `verified_sources` 的同次来源核验仍然生效，没有本轮核验回执
+   的候选进入待确认，不会自动采纳。该变量只接受显式 `0` 才关闭；未设置、空值或
+   其他值都保持门开启（[ADR-097](../architecture/adr/097-dimension-gate-rollback-keeps-source-verification.md)）。
 2. **撤销单个维度**：从 `DEFAULT_DIMENSION_RELEASE` 的放行集合里移除该维度，
    在本文第 1 张表把状态改回"未放行"，并补一条撤销记录（时间、原因、影响范围）。
    已自动采纳的记忆不因此自动删除，需要走既有的修正／失效／删除路径。
 3. **回退后的核对**：重新跑 `tests/unit/memory_extraction/test_adoption.py`
    与 `test_dimensions.py`，确认默认放行表与台账一致。
 
-回退不改变置信度 0.7、风险白名单、语用分流与来源语义核验规则；这些规则的任何
-修改必须单独立项并附评测证据（ADR-027 第 4 条）。
+回退不改变来源语义核验；显式历史协议（`verified_sources=False` 注入）的置信度
+0.7、风险白名单与语用分流也保持不变，默认 automatic 路径按 [ADR-085](../architecture/adr/085-source-verified-automatic-adoption.md) 只以来源核验准入。
+这些规则的任何修改必须单独立项并附评测证据（ADR-027 第 4 条）。
 
 ## 5. 复核节奏
 

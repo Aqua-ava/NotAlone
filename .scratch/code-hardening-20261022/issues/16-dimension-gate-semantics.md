@@ -1,7 +1,7 @@
 # 16 维度门回退语义
 
 Triage: ready-for-agent
-State: open
+State: resolved
 
 ## 目标
 
@@ -27,3 +27,10 @@ State: open
 - `tests/unit/memory_extraction/test_dimensions.py`、`test_adoption.py` + 相关模块；报告文档改动与数据影响（无 schema/数据变更）。
 
 ## Comments
+
+- 2026-10-22 完成（用户决策：保留开关，只关白名单，来源核验不可回退）：`DimensionRelease.allows()` 在 `verified_sources=True` 时只看同次来源核验回执，`gate_enabled` 不参与该路径；`gate_enabled=False` 只影响显式历史协议（`verified_sources=False`）的逐维白名单，保留原评测注入语义。
+- 文档同步：`README.md` 配置表、ADR-036 顶部回链与第 5 条、`docs/memory-adoption-dimension-release-ledger.md` 第 4 节；新增 [ADR-097](../../architecture/adr/097-dimension-gate-rollback-keeps-source-verification.md) 并登记 `architecture/README.md`。
+- 测试更新：`test_dimensions.py` 断言 gate=0 只关白名单、无回执不采纳、显式历史协议保留；`test_adoption.py` 断言 gate=0 下无回执候选仍进待确认。
+- 验证：`python -m unittest tests.unit.memory_extraction.test_dimensions tests.unit.memory_extraction.test_adoption` 56 条通过；加入 `test_automatic_memory` 共 66 条通过。`tests/unit/memory_extraction` 全量仍有 13 条失败，均为 `test_merge_batch_timeline`/`test_upgrade_transaction_ports`，与同时进行的 memory-fix 未提交改动相关（本 ticket 改动前后这些用例属于并发编辑面），留待集成后全量复核。
+- 数据影响：无 schema/数据变更；默认（门开启 + `verified_sources=True`）行为与改动前完全一致。剩余风险：显式注入 `verified_sources=False` 的历史评测装配仍可绕过来源核验，仅限测试/冻结评测，不应进入生产装配。
+- Commit：见 `git log --grep '维度门回退'`。

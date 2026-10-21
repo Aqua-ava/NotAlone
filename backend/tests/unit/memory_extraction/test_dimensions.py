@@ -242,7 +242,7 @@ class DimensionReleaseTest(unittest.TestCase):
         self.assertEqual(release.released, frozenset())
         self.assertFalse(release.allows(synthetic_fact()))
 
-    def test_explicit_zero_releases_every_dimension(self) -> None:
+    def test_explicit_zero_only_disables_dimension_whitelist(self) -> None:
         release = DimensionRelease.from_environment(
             {"NOTALONE_MEMORY_DIMENSION_GATE": "0"}
         )
@@ -252,8 +252,13 @@ class DimensionReleaseTest(unittest.TestCase):
             release.released,
             frozenset(dimension.value for dimension in MemoryDimension),
         )
-        # 关闭门后不再按维度收紧：未放行维度的候选也重新进入原有三道门槛。
-        self.assertTrue(release.allows(synthetic_fact(
+        # 回退只关闭逐维白名单；默认 verified_sources 仍要求同次来源核验回执。
+        self.assertFalse(release.allows(synthetic_fact(
+            valid_at=datetime(2026, 9, 1, tzinfo=timezone.utc),
+        )))
+        # 显式历史协议（verified_sources=False）保留原有回退语义，供旧评测注入。
+        legacy = DimensionRelease(gate_enabled=False, verified_sources=False)
+        self.assertTrue(legacy.allows(synthetic_fact(
             valid_at=datetime(2026, 9, 1, tzinfo=timezone.utc),
         )))
 

@@ -210,7 +210,7 @@ node scripts/install_git_hooks.mjs
 | `NOTALONE_DEEPSEEK_MODEL` | 模型名，默认官方 `deepseek-flash`。 |
 | `NOTALONE_DEEPSEEK_BASE_URL` | 模型服务地址；变更服务提供者前核对数据处理范围。 |
 | `NOTALONE_TEST_DATABASE_URL` | 隔离测试库，名称必须以 `_test` 结尾。 |
-| `NOTALONE_MEMORY_DIMENSION_GATE` | 默认开启维度放行门；只有显式 `0` 才回退到原有三道采纳门槛。 |
+| `NOTALONE_MEMORY_DIMENSION_GATE` | 默认开启逐维白名单；显式 `0` 只关闭白名单，来源核验仍生效（[ADR-097](architecture/adr/097-dimension-gate-rollback-keeps-source-verification.md)）。 |
 
 候选回复按 [ADR-068](architecture/adr/068-direct-reply-candidates-with-user-selection.md)在检索后直接生成，经程序检查结构、引用与当前来源后展示，由用户选择、修改并亲自发送；不再追加一次模型回复核验。记忆入库及 L2/L3 整理的核验独立保留，候选展示不代表内容已被系统证明正确。
 
