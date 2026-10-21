@@ -279,7 +279,7 @@ notalone-memory-delete --contact-id '...' --memory-id '...'
 notalone-task-cleanup  # 清理超过 90 天的终态任务元数据，不清理含正文追踪
 ```
 
-提取先做证据契约与逐条来源语义核验，再执行置信度、风险、维度放行、删除指纹与写入裁决。低于 0.7、敏感或未知风险的候选留待确认；未核验不能自动采纳。默认维度放行表为空，旧候选不会被补认证或重新自动采纳。完整规则见 [ADR-036](architecture/adr/036-per-dimension-adoption-release.md)、[ADR-046](architecture/adr/046-source-bound-dimension-evidence.md)与 [放行台账](docs/memory-adoption-dimension-release-ledger.md)。
+默认提取按 [ADR-085](architecture/adr/085-source-verified-automatic-adoption.md)通过结构、逐条来源及适用检查后自动裁决，不以额外置信度、语用或风险标签制造人工待办；按 [ADR-086](architecture/adr/086-source-meaning-without-repetition-threshold.md)不设统一重复次数门槛。来源、人工纠错与矛盾待定例外保持，旧候选不自动重采纳。固定 0.7 阈值、空维度表和对应 pending 分流仅属于显式历史协议，见 [ADR-036](architecture/adr/036-per-dimension-adoption-release.md)、[ADR-046](architecture/adr/046-source-bound-dimension-evidence.md)及 [历史放行台账](docs/memory-adoption-dimension-release-ledger.md)。
 
 提取、来源核验与写入裁决使用既有思考模式，配置的服务须支持 `thinking.type=enabled` 与结构化工具结果。模型置信度不等于实测准确率，来源支持也不证明现实真伪；来源时间不等于事件时间或状态仍有效。局部对照与残留问题见 [语义与来源复测](docs/memory-source-scope-fidelity-20261002.md)。
 
@@ -320,7 +320,7 @@ notalone-source-trace --contact-id '...' show '...'
 
 依据接口返回实际选入的上下文、选入原因和候选引用，不重新检索或调用模型。普通草稿润色使用本次草稿、指令、受控 Skill 与明确选中的续写候选；只有显式设置 `include_relationship_context=true`，才允许在已确认联系人范围内检索背景资料。
 
-来源删除清除该来源及失去支持的聊天、记忆历史正文与回复快照；共享来源支持的资料保留。不含正文的最小模型调用记录保留，它不证明外部副本已经删除。完整约束见 [隐私、模型调用与删除](architecture/current/privacy-deletion.md)，实际实现与验收以代码、测试及 [桌面端说明](desktop/README.md)为准。
+来源删除清除该来源及失去支持的聊天、记忆历史正文与回复快照；共享来源支持的资料保留。单份来源删除保留不含正文的最小模型调用记录；整联系人／账户删除按 [ADR-094](architecture/adr/094-ledger-erasure-by-deletion-scope.md)要求清除对应调用记录，该整体清理实现与验收尚待完成。本机删除不证明外部副本已经删除。完整约束见 [隐私、模型调用与删除](architecture/current/privacy-deletion.md)，实际实现与验收以代码、测试及 [桌面端说明](desktop/README.md)为准。
 
 </details>
 
