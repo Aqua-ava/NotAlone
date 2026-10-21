@@ -1,5 +1,7 @@
 # 候选回复模块结构草案
 
+> 2026-10-21 设计审查：旧两模式、先方向确认及探索不使用 Skill 的设计，分别按 [ADR-079](../adr/079-unified-expression-workspace.md)及 [ADR-043](../adr/043-conversation-scenarios-and-direction-exploration.md)解释为历史。Runtime 是否直接检索的阶段限制与现行装配不一致，见 [ADR-012](../adr/012-reply-module-boundaries.md)待复审说明；不能把旧结构图当成当前实现图。
+
 > 状态：已收束；正式决定见 ADR-012
 > 日期：2026-08-21
 >

@@ -1,5 +1,7 @@
 # 记忆与 Skill 演进：任务索引与工作流状态
 
+> 2026-10-21 设计审查：正常默认维护及旧资料升级退役由 [ADR-070](../../architecture/adr/070-automatic-memory-maintenance.md) 修订，个人 L2/L3 有据推断由 [ADR-072](../../architecture/adr/072-personal-memory-insights-without-action-guidance.md) 修订，失效版本禁止生成由 [ADR-080](../../architecture/adr/080-unified-memory-list-and-retired-exclusion.md) 修订，主动样本由 [ADR-082](../../architecture/adr/082-retire-explicit-style-samples.md) 退役。本文旧开关、空表／全局质量资格、推断禁令和升级入口不再全数作为现行产品要求；历史 qualified_suite 成绩、unknown 与原验收结论保持，不能改写为当前质量通过。当前入口为 architecture/current/，旧流程的来源／删除与人工保护仍有效。
+
 > 更新：2026-10-17。15 项交付已由记忆与 Skill 集成票签收，并随 `memory-skill-integration@2f1880ae` 集成链经本地 main 收敛进入 main；本索引按交付事实同步为 resolved，2026-10-14 的发布记录保留在各票 Comments。
 > [正式规格](spec.md)、[已确认拆分](ticket-proposal.md)、[ADR-048](../../architecture/adr/048-memory-skill-evolution-lifecycle.md)。DSH 搁置，不进入任务或阻塞关系。
 

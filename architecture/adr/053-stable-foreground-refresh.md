@@ -1,5 +1,7 @@
 # ADR-053：前台定位刷新与稳定结果展示
 
+> 2026-10-21 设计审查：不增设辅助采集的阶段限制由 [ADR-057](057-header-change-triggered-foreground-observation.md)局部替代，仅允许受控的顶部像素变化提示；变化通知到达时取消正常等待的调度后由 [ADR-078](078-request-driven-native-observation-worker.md)修订，普通周期仍按原间隔运行。名称新鲜度、失败退避与仅正式观察授予身份保持，不能扩大为正文采集。
+
 > 状态：已采纳；正式App的修复效果仍须按实际场次验证
 > 决策日期：2026-10-15
 > 后续局部修订：[ADR-054](054-foreground-context-recovery.md)细分临时采集上下文变化的恢复资格；原退避、展示时效和其余人工门保持。

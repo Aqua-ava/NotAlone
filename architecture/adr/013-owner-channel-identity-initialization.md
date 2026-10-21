@@ -1,5 +1,7 @@
 # ADR-013：Owner 渠道身份与首次导入初始化
 
+> 2026-10-21 设计审查：App 本人初始化时机由 [ADR-021](021-source-distribution-and-first-run-setup.md)提前到首启，并由 [ADR-061](061-standalone-local-app-onboarding-and-updates.md)承接本机设置；下文首次导入初始化保留为 CLI 兼容路径，不是 App 首启唯一入口。本人／联系人渠道身份分离与一致性核验保持。
+
 > 状态：已采纳
 > 决策日期：2026-08-23
 

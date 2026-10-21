@@ -1,5 +1,7 @@
 # ADR-048：记忆演进与自动 Skill 的受控生命周期
 
+> 2026-10-21 设计审查：本文“尚未实现”是方案采纳时状态；分项工程签收与主线集成见[任务索引](../../.scratch/memory-skill-evolution/planning.md)。旧资料升级、个人画像推断和失效版本资格分别由 [ADR-070](070-automatic-memory-maintenance.md)、[ADR-072](072-personal-memory-insights-without-action-guidance.md)、[ADR-080](080-unified-memory-list-and-retired-exclusion.md)局部修订。人工审核发布、来源删除和反馈不自动授予权限保持。
+
 > 后续局部替代（2026-10-20）：[ADR-082](082-retire-explicit-style-samples.md)取消主动收藏表达样本及其使用、独立留存和关联生命周期要求；下文涉及样本的内容仅保留为历史。其他决定及原验收范围不因此改变。
 
 > 状态：已采纳的目标约束，待实现；不表示代码或质量验收已经完成。

@@ -1,5 +1,7 @@
 # 本地微信 CLI 前台增量观察规格
 
+> 2026-10-21 设计审查：本票是历史前台 CLI 路径。正文后台读取见 [ADR-023](../../architecture/adr/023-global-cli-sync-and-ocr-foreground-locator.md)/030，缺口恢复见 [ADR-025](../../architecture/adr/025-cli-background-sync-gap-backfill.md)，顶部名称 OCR 见 [ADR-052](../../architecture/adr/052-header-ocr-foreground-locator.md)；旧左侧行／头像 OCR、只在前台读取和关闭后不补读不再作为现行约束。原任务签收保留，不等于后继渠道全部验收。
+
 Type: task
 State: resolved
 Triage: ready-for-agent

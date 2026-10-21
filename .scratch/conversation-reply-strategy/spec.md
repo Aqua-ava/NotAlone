@@ -1,5 +1,7 @@
 # 聊天回复策略第一版
 
+> 2026-10-21 设计审查：正常产品三入口与先确认方向门由 [ADR-079](../../architecture/adr/079-unified-expression-workspace.md) 局部替代，见 architecture/adr/079-unified-expression-workspace.md；旧探索接口保留兼容，不作为当前默认交互。自动 Skill 的受控目录、零或一个版本、明确场景权限与来源失效继续有效，主动样本按 [ADR-082](../../architecture/adr/082-retire-explicit-style-samples.md) 退役。
+
 Triage: ready-for-agent
 
 规格状态：第一版范围与测试接缝已确认，2026-10-11发布；11张独立任务已有逐票实现与合成自动证据。本轮固定源的公开策略标签实际完整通过38场，原AC与真实State逐票保留；同次命令随后A18测试前置失败使整体exit1，不宣称同次40场通过。真实App／原生与真人语义未验，不能借自动结果关闭这些验收。

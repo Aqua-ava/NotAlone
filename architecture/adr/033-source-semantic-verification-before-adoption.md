@@ -1,5 +1,7 @@
 # ADR-033：记忆采纳前核验来源语义支持
 
+> 2026-10-21 设计审查：“完整追踪尚未实现”是历史状态，当前后端和 React 工程入口见[完整追踪规格](../current/memory-extraction-trace.md)；不据此认证真实模型质量或原生 App。默认空表前置由 [ADR-070](070-automatic-memory-maintenance.md)修订，旧协议仍可显式使用；独立来源核验继续有效，额外人工门冲突见 [ADR-069](069-direct-scene-memory-and-isolated-publication.md)与 ADR-070。
+
 > 状态：已采纳
 > 决策日期：2026-10-02
 >

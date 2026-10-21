@@ -1,5 +1,7 @@
 # 记忆与 Skill 演进草图
 
+> 2026-10-21 设计审查：下文全部 open／尚未实现为当时状态，工程签收见对应正式任务索引，不等于真实质量或 App 验收。默认自动维护及升级入口退役见 [ADR-070](../adr/070-automatic-memory-maintenance.md)，个人 L2/L3 有据推断见 [ADR-072](../adr/072-personal-memory-insights-without-action-guidance.md)，失效版本禁止生成见 [ADR-080](../adr/080-unified-memory-list-and-retired-exclusion.md)。这些后继局部替代旧手动启用、推断禁令和历史版本生成条款；显式暂停、删除、来源核验、人工纠错和 Skill 审核发布保持。
+
 > 后续修订（2026-10-20）：主动收藏表达样本及其生成参考按 [ADR-082](../adr/082-retire-explicit-style-samples.md)退役；本文相关历史方案不再构成实施要求。当前意图优先、长期表达偏好及其他已采纳约束分别保留。
 
 > 状态：草案。2026-10-14 保存已确认的产品方向；数据契约、接口、验证方案和 DSH 选型尚未定稿。本文不替代现行规格或 ADR，也不表示相关功能已经实现。

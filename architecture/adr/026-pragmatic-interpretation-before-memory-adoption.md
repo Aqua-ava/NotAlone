@@ -1,5 +1,7 @@
 # ADR-026：语用解释先于关系记忆采纳
 
+> 2026-10-21 设计审查：默认直接提取及自动裁决后由 [ADR-069](069-direct-scene-memory-and-isolated-publication.md)修订；旧语用协议与冻结评测保留。额外语用人工门与 [ADR-070](070-automatic-memory-maintenance.md)的口径冲突仍待明确，不能把全部现行输入固定为本 ADR 的单一流水线。
+
 > 状态：已采纳
 > 决策日期：2026-09-09
 > 实现修订：2026-09-17，`subject` 必须跨 pending 边界持久化，避免 self

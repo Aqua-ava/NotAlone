@@ -1,5 +1,7 @@
 # ADR-004：用户自行导出的微信单联系人历史文件
 
+> 2026-10-21 设计审查：本文“不调用第三方导出工具”限定于用户自行导出历史文件的路径；运行期只读 CLI 另由 [ADR-016](016-local-wechat-cli-observation.md)、[ADR-023](023-global-cli-sync-and-ocr-foreground-locator.md)、[ADR-030](030-confirmed-contact-background-sync-consent.md)采纳。旧前台正文 OCR 不再是当前渠道；单联系人确认、导入来源和删除边界保留。
+
 > 状态：已采纳
 > 决策日期：2026-08-03
 

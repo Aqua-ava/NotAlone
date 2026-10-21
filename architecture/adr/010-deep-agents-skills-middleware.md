@@ -1,5 +1,7 @@
 # ADR-010：使用 Deep Agents SkillsMiddleware 加载回复 Skill
 
+> 2026-10-21 设计审查：下文“自动 Skill 尚未实现”为早期阶段状态；后续授权草稿、审核与发布已出现主线装配，见 [ADR-048](048-memory-skill-evolution-lifecycle.md)及[演进任务索引](../../.scratch/memory-skill-evolution/planning.md)。模型不能自行发布、每次零或一个受控版本、Middleware 不扩大 Tool 权限等约束保持，工程接线不等于质量或 App 验收。
+
 > 状态：已采纳
 > 2026-10-11 局部修订见 [ADR-043](043-conversation-scenarios-and-direction-exploration.md)；不改变既有只读、联系人隔离和禁止发送边界。
 > 日期：2026-08-16

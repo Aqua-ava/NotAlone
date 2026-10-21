@@ -1,5 +1,7 @@
 # 独立本机 App 实现索引
 
+> 2026-10-21 设计审查：强制备份、恢复校验和复制搬库由 [ADR-066](../../architecture/adr/066-in-place-schema-updates-and-database-reuse.md) 局部替代，当前要求见 architecture/adr/066-in-place-schema-updates-and-database-reuse.md 及 .scratch/in-place-database-startup/spec.md；独立桌面建联系人由 [ADR-084](../../architecture/adr/084-topbar-contact-search.md) 退役。原 State、签收及验收结果保留为历史，不证明当前更新路径或最终安装包已经验收。
+
 用户于 2026-10-16 确认五项粒度及依赖，并要求持续实现；随后明确接受先交付[手动输入首版](manual-first-release.md)，新增任务06并调整首版验收依赖。原微信任务保留后续范围。
 
 规格：[首次使用与兼容更新](spec.md)。架构：[ADR-061](../../architecture/adr/061-standalone-local-app-onboarding-and-updates.md)。

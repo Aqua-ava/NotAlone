@@ -1,5 +1,7 @@
 # ADR-042：持续助手会话与单次运行上下文分界
 
+> 2026-10-21 设计审查：关于自动 Skill 尚未实现的描述为历史阶段状态，当前工程装配见[演进任务索引](../../.scratch/memory-skill-evolution/planning.md)。主动样本按 [ADR-082](082-retire-explicit-style-samples.md)退役；持续讨论与单次运行边界、保存与删除合同继续有效。
+
 > 后续局部替代（2026-10-20）：[ADR-082](082-retire-explicit-style-samples.md)取消主动收藏表达样本及其使用、独立留存和关联生命周期要求；下文涉及样本的内容仅保留为历史。其他决定及原验收范围不因此改变。
 
 > 状态：已采纳；任务07–19均resolved，实际实现与证据见[持续会话规格及任务07–19](../../.scratch/assistant-session-context/planning.md)逐票Answer。2026-10-12有限源App生命周期通过，19合成交叉及17真实退出／重开／显式重试收口；不代签最终签名包／Finder、微信或真实模型质量，OCR继续暂停。原01–06仅拆分替代，未执行原票实现验收。

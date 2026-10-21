@@ -1,5 +1,7 @@
 # 自动定位微信窗口与会话区域
 
+> 2026-10-21 设计审查：后继 [ADR-056](../../architecture/adr/056-foreground-busy-and-observation-budget.md) 的执行超时上限和 [ADR-078](../../architecture/adr/078-request-driven-native-observation-worker.md) 的调度优化不自动取消本票一秒体验目标；目标含义与后续验收范围尚待澄清。本次不因此关闭任务，也不将旧预算用于覆盖当前安全超时。
+
 State: open
 Triage: needs-info
 

@@ -1,5 +1,7 @@
 # 聊天回复策略：工作流状态
 
+> 2026-10-21 设计审查：正常产品三入口与先确认方向门由 [ADR-079](../../architecture/adr/079-unified-expression-workspace.md) 局部替代，见 architecture/adr/079-unified-expression-workspace.md；旧探索接口保留兼容，不作为当前默认交互。自动 Skill 的受控目录、零或一个版本、明确场景权限与来源失效继续有效，主动样本按 [ADR-082](../../architecture/adr/082-retire-explicit-style-samples.md) 退役。
+
 更新：2026-10-12。[正式规格](spec.md)及[第三版拆分](ticket-proposal.md)的R01–R11现均为resolved，63条验收均勾选。R08逐消息编辑／复制、R09有界更新、R10连续场景、R11跨模块组合均已有原票Answer和公开HTTP／页面证据；R01–R07早期失败与重跑记录继续保留，完成范围以各票为准。真实模型语义质量不能由受控模型结果代签；持续会话17／19源App生命周期与最终包非OCR验收分别见[当前总览](../unfinished-work/README.md)，不扩展成全渠道或全场景验收。
 
 ## 任务索引

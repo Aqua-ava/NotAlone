@@ -1,5 +1,7 @@
 # Agent 编排与检索运行时（草案）
 
+> 2026-10-21 设计审查：正常产品入口与方向阶段按 [ADR-079](../adr/079-unified-expression-workspace.md)修订，受控 Skill 探索见 [ADR-043](../adr/043-conversation-scenarios-and-direction-exploration.md)。Todo／摘要中间件及时间、日历、网络工具尚未见生产接线，草图不证明可用；完整 Harness／DSH 未获主线采纳。自动前台画面按 [ADR-052](../adr/052-header-ocr-foreground-locator.md)只作名称定位，不能当作正文输入适配器。
+
 > 后续修订（2026-10-20）：主动收藏表达样本及其生成参考按 [ADR-082](../adr/082-retire-explicit-style-samples.md)退役；本文相关历史方案不再构成实施要求。当前意图优先、长期表达偏好及其他已采纳约束分别保留。
 
 > 状态：草案。本文定义候选回复、未来 Tool 和长任务的运行时边界；不表示任一框架方案已经完成生产集成。现行已采纳决策仍见 ADR-006、ADR-009 和 ADR-010；下方第 0 节记录 2026-08-22 提出的 DeepSeek Harness 暂定方向，尚未替代这些 ADR。
@@ -49,7 +51,7 @@ DeepSeek Harness 负责通用运行机制；NotAlone 不重新实现 Agent Loop�
 1. 两个联系人和两个 owner 的检索不会串库；模型不能通过 Tool 参数扩大范围。
 2. Harness Context Compact、Session resume 和 Skill Loading 不会恢复已删除来源或旧联系人范围。
 3. Python 领域服务与 TypeScript/JavaScript bridge 的失败、超时、重试和幂等行为可观察且不会产生未落库候选。
-4. 运行时默认不挂载 Shell、文件系统、网络搜索、Subagent 或外部发送能力；确需启用时逐项配置和审计。
+4. 运行时默认不挂载 Shell、文件系统、网络搜索或 Subagent；这些能力若需启用，须另行逐项配置和审计。外部聊天发送始终不得成为产品 Tool 或后台能力，不属于可经配置启用的集合。
 
 在上述验证完成并新增 ADR 前，ADR-009 的 LangChain `create_agent` 仍是当前已采纳的候选回复运行时决策；本节只是允许以 DeepSeek Harness 作为替代 Runtime 做隔离 POC。
 
@@ -202,7 +204,7 @@ v1 向模型注册受控 `read_file(file_path, offset=0, limit=1000)`、`search_
 ```text
 文字 -------------------------------> normalized current_message
 语音 -> ASR adapter ----------------> normalized current_message
-截图/前台画面 -> OCR adapter --------> normalized current_message
+用户主动提交的截图 -> OCR adapter --------> normalized current_message
 
 normalized current_message -> 同一条 reply workflow -> text reply_candidate
 

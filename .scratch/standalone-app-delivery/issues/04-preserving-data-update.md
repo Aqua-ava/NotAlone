@@ -1,5 +1,7 @@
 # 04：已有用户备份并完成兼容更新
 
+> 2026-10-21 设计审查：强制备份、恢复校验和复制搬库由 [ADR-066](../../../architecture/adr/066-in-place-schema-updates-and-database-reuse.md) 局部替代，当前要求见 architecture/adr/066-in-place-schema-updates-and-database-reuse.md 及 .scratch/in-place-database-startup/spec.md；独立桌面建联系人由 [ADR-084](../../../architecture/adr/084-topbar-contact-search.md) 退役。原 State、签收及验收结果保留为历史，不证明当前更新路径或最终安装包已经验收。
+
 Type: task
 State: resolved
 Triage: ready-for-agent

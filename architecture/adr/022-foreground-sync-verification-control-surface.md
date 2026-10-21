@@ -1,5 +1,7 @@
 # ADR-022：前台同步人工验证的独立控制面
 
+> 2026-10-21 设计审查：下文前台门禁属于历史 Follow 人工验证路径；正式正文同步已由 [ADR-023](023-global-cli-sync-and-ocr-foreground-locator.md)和 [ADR-030](030-confirmed-contact-background-sync-consent.md)改为已确认范围的后台读取。人工验证控制面不替代正式总开关，不授权正文 OCR 或扩大联系人范围。
+
 > 状态：已采纳
 > 决策日期：2026-09-01
 

@@ -1,5 +1,7 @@
 # ADR-050：持续单帧前台定位与联系人内容、任务归属
 
+> 2026-10-21 设计审查：下文旧超时预算和失败恢复规则分别由 [ADR-056](056-foreground-busy-and-observation-budget.md)、[ADR-073](073-foreground-observation-independent-of-background-sync.md)、[ADR-076](076-session-list-assisted-name-matching.md)及 [ADR-077](077-exact-session-name-before-edit-neighbors.md)局部修订；局部变化辅助源见 [ADR-057](057-header-change-triggered-foreground-observation.md)，进程复用与变化通知到达时取消正常等待见 [ADR-078](078-request-driven-native-observation-worker.md)。单轮新帧、联系人隔离、助手获焦暂停及任务归属继续有效。
+
 > 状态：已采纳。实施进度统一见[任务索引](../../.scratch/foreground-contact-follow/planning.md)，验证范围与剩余缺口见各任务的结果记录。
 > 决策日期：2026-10-14
 > 后续局部修订：[ADR-054](054-foreground-context-recovery.md)允许仅采集上下文变化后以新鲜可靠的已有绑定自动恢复，其他人工确认门保持。

@@ -1,5 +1,7 @@
 # 根据当前对话自动加载回复 Skill
 
+> 2026-10-21 设计审查：正常产品三入口与先确认方向门由 [ADR-079](../../architecture/adr/079-unified-expression-workspace.md) 局部替代，见 architecture/adr/079-unified-expression-workspace.md；旧探索接口保留兼容，不作为当前默认交互。自动 Skill 的受控目录、零或一个版本、明确场景权限与来源失效继续有效，主动样本按 [ADR-082](../../architecture/adr/082-retire-explicit-style-samples.md) 退役。
+
 用户于 2026-10-19 确认：按原设计根据当前对话自动判断并加载 Skill，回复区只展示本次实际策略，不提供手动选择。
 
 ## 范围

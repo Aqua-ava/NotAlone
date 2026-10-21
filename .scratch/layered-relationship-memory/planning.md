@@ -1,5 +1,7 @@
 # 分层记忆：任务索引与工作流状态
 
+> 2026-10-21 设计审查：正常默认维护及旧资料升级退役由 [ADR-070](../../architecture/adr/070-automatic-memory-maintenance.md) 修订，个人 L2/L3 有据推断由 [ADR-072](../../architecture/adr/072-personal-memory-insights-without-action-guidance.md) 修订，失效版本禁止生成由 [ADR-080](../../architecture/adr/080-unified-memory-list-and-retired-exclusion.md) 修订，主动样本由 [ADR-082](../../architecture/adr/082-retire-explicit-style-samples.md) 退役。本文旧开关、空表／全局质量资格、推断禁令和升级入口不再全数作为现行产品要求；历史 qualified_suite 成绩、unknown 与原验收结论保持，不能改写为当前质量通过。当前入口为 architecture/current/，旧流程的来源／删除与人工保护仍有效。
+
 > 更新：2026-10-18。四会话按真实依赖推进；集成分支 `codex/layered-memory-integration`，本轮固定比较基线 `0702940`。本L2/L3工作不修改主仓main；01–11均已完成工程签收与Agent快速验收；正式质量仍未知，自动使用关闭。
 > [正式规格](spec.md)、[已确认拆分](ticket-proposal.md)、[联合方案](../../architecture/drafts/layered-relationship-memory.md)、[ADR-067](../../architecture/adr/067-layered-scenario-and-profile-context.md)。
 

@@ -1,5 +1,7 @@
 # L2 场景文档与 L3 长期画像：正式规格
 
+> 2026-10-21 设计审查：正常默认维护及旧资料升级退役由 [ADR-070](../../architecture/adr/070-automatic-memory-maintenance.md) 修订，个人 L2/L3 有据推断由 [ADR-072](../../architecture/adr/072-personal-memory-insights-without-action-guidance.md) 修订，失效版本禁止生成由 [ADR-080](../../architecture/adr/080-unified-memory-list-and-retired-exclusion.md) 修订，主动样本由 [ADR-082](../../architecture/adr/082-retire-explicit-style-samples.md) 退役。本文旧开关、空表／全局质量资格、推断禁令和升级入口不再全数作为现行产品要求；历史 qualified_suite 成绩、unknown 与原验收结论保持，不能改写为当前质量通过。当前入口为 architecture/current/，旧流程的来源／删除与人工保护仍有效。
+
 Triage: ready-for-agent
 State: claimed
 日期：2026-10-17

@@ -1,5 +1,7 @@
 # 持续会话与上下文管理
 
+> 2026-10-21 设计审查：[ADR-082](../../architecture/adr/082-retire-explicit-style-samples.md) 已退役主动收藏表达样本及独立留存，见 architecture/adr/082-retire-explicit-style-samples.md；旧样本交付与测试要求仅历史。持续助手讨论、普通候选编辑、明确长期偏好和来源删除保持；原验收记录不被重写。
+
 Triage: ready-for-agent
 
 规格状态：已确认并发布；任务07–19均resolved，受控实现及分项自动验证见逐票Answer。2026-10-12在有限test:app窗口完成19合成交叉及当前源App生命周期，补齐17真实退出／同目录重开／零自动模型／显式重试；旧失败分场保留。该结果不代签最终签名包／Finder、微信或真实模型质量，OCR继续暂停。

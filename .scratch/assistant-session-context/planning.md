@@ -1,5 +1,7 @@
 # 持续会话与上下文：工作流状态
 
+> 2026-10-21 设计审查：[ADR-082](../../architecture/adr/082-retire-explicit-style-samples.md) 已退役主动收藏表达样本及独立留存，见 architecture/adr/082-retire-explicit-style-samples.md；旧样本交付与测试要求仅历史。持续助手讨论、普通候选编辑、明确长期偏好和来源删除保持；原验收记录不被重写。
+
 更新：2026-10-12。[正式规格](spec.md)及[第三版拆分](ticket-proposal.md)的13张任务07–19已全部resolved，71条验收均勾选；完成范围以各票Answer和Comments为准。[17](issues/17-quit-and-interrupted-recovery.md)／[19](issues/19-combined-native-acceptance.md)的源App退出、重开与显式重试收尾已完成，摘要见[最终收口](../unfinished-work/assistant-session-closeout-20261012.json)。完整Mac交付、真实渠道与真实模型质量仍沿各自原票处理。
 
 2026-10-17：另补记[20：整合后会话投影与生成生命周期收口](issues/20-post-integration-session-projection.md)（resolved），只追溯整合后的四个本地提交，不属于原13票范围，也不重开原票验收或改变真实质量结论。

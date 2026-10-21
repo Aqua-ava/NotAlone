@@ -1,5 +1,7 @@
 # 真实表达与关系感知第一版
 
+> 2026-10-21 设计审查：[ADR-082](../../architecture/adr/082-retire-explicit-style-samples.md) 已退役主动收藏表达样本及独立留存，见 architecture/adr/082-retire-explicit-style-samples.md；旧样本交付与测试要求仅历史。持续助手讨论、普通候选编辑、明确长期偏好和来源删除保持；原验收记录不被重写。
+
 Triage: ready-for-agent
 
 规格状态：第一版范围与测试接缝已确认，2026-10-11 发布时六张任务尚未实现；当前六票原自动范围已完成，最新公开类型化续写第二版及逐例报告见E06，真人质量与原生未验范围按各票记录。

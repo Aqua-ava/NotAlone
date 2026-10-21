@@ -1,5 +1,7 @@
 # 区分纠正错误与历史变化的生成资格
 
+> 2026-10-21 设计审查：[ADR-080](../../architecture/adr/080-unified-memory-list-and-retired-exclusion.md) 已取消 state_changed 失效旧版参与生成的例外，见 architecture/adr/080-unified-memory-list-and-retired-exclusion.md。退役原因、版本链和管理回看保持；有效的历史事实不等于失效版本，原测试结果只说明当时规则。
+
 状态：用户已确认方案，代码与隔离验证完成；真实 App 受现有数据库账本漂移阻塞。来源：本会话 2026-10-18 的明确授权。
 
 ## 用户问题与范围

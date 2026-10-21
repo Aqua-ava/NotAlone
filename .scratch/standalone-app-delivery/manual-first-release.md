@@ -1,5 +1,7 @@
 # 独立 App 手动输入首版
 
+> 2026-10-21 设计审查：强制备份、恢复校验和复制搬库由 [ADR-066](../../architecture/adr/066-in-place-schema-updates-and-database-reuse.md) 局部替代，当前要求见 architecture/adr/066-in-place-schema-updates-and-database-reuse.md 及 .scratch/in-place-database-startup/spec.md；独立桌面建联系人由 [ADR-084](../../architecture/adr/084-topbar-contact-search.md) 退役。原 State、签收及验收结果保留为历史，不证明当前更新路径或最终安装包已经验收。
+
 Triage: ready-for-agent
 
 状态：用户于2026-10-16明确接受此首版范围，持续实现中；不表示安装包已可正式分发。完整长期目标仍见[原规格](spec.md)。

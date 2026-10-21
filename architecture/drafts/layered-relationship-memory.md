@@ -1,5 +1,7 @@
 # L2 场景文档与 L3 长期画像联合设计
 
+> 2026-10-21 设计审查：下文全部 open／尚未实现为当时状态，工程签收见对应正式任务索引，不等于真实质量或 App 验收。默认自动维护及升级入口退役见 [ADR-070](../adr/070-automatic-memory-maintenance.md)，个人 L2/L3 有据推断见 [ADR-072](../adr/072-personal-memory-insights-without-action-guidance.md)，失效版本禁止生成见 [ADR-080](../adr/080-unified-memory-list-and-retired-exclusion.md)。这些后继局部替代旧手动启用、推断禁令和历史版本生成条款；显式暂停、删除、来源核验、人工纠错和 Skill 审核发布保持。
+
 > 状态：方案已确认，规格与任务已发布，待实现。2026-10-17 用户确认 Q1–Q10，并确认本文件的完整方案定稿，本轮 grilling 已结束。加载方向已独立记录为 [ADR-067](../adr/067-layered-scenario-and-profile-context.md) 的已采纳目标；本文不代表 L2/L3 已实现，也不授权执行资料整理、业务迁移或模型调用。
 
 > 后续状态：已整理为[正式规格](../../.scratch/layered-relationship-memory/spec.md)，行为与验收以后者为准；[11项任务拆分](../../.scratch/layered-relationship-memory/ticket-proposal.md)已获认可并逐张发布，全部 open、尚未领取，见[任务索引](../../.scratch/layered-relationship-memory/planning.md)。下方保留本轮决策依据。

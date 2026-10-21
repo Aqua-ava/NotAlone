@@ -1,5 +1,7 @@
 # 真实表达与关系感知：工作流状态
 
+> 2026-10-21 设计审查：[ADR-082](../../architecture/adr/082-retire-explicit-style-samples.md) 已退役主动收藏表达样本及独立留存，见 architecture/adr/082-retire-explicit-style-samples.md；旧样本交付与测试要求仅历史。持续助手讨论、普通候选编辑、明确长期偏好和来源删除保持；原验收记录不被重写。
+
 更新：2026-10-12。[正式规格](spec.md)及[第三版拆分](ticket-proposal.md)的E01–E06现均为resolved，38条验收均勾选；完成证据以各票Answer和Comments为准。公开HTTP／页面、来源短片段拒绝、明确直接输入与删除组合已记录在[04](issues/04-style-sample-lifecycle.md)／[05](issues/05-bounded-style-reference.md)／[06](issues/06-combined-fidelity-acceptance.md)，受控模型证据不代签真实语义、自然度或用户相似度。
 
 ## 任务索引

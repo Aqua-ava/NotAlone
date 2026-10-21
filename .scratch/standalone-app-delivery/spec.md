@@ -1,5 +1,7 @@
 # 独立本机 App：首次使用与兼容更新
 
+> 2026-10-21 设计审查：强制备份、恢复校验和复制搬库由 [ADR-066](../../architecture/adr/066-in-place-schema-updates-and-database-reuse.md) 局部替代，当前要求见 architecture/adr/066-in-place-schema-updates-and-database-reuse.md 及 .scratch/in-place-database-startup/spec.md；独立桌面建联系人由 [ADR-084](../../architecture/adr/084-topbar-contact-search.md) 退役。原 State、签收及验收结果保留为历史，不证明当前更新路径或最终安装包已经验收。
+
 Triage: ready-for-agent
 
 状态：用户体验、数据位置、安全边界和公开 App 验收路径已确认；用户已批准五项任务并要求持续实现，见[实现索引](planning.md)。产品尚未完成。

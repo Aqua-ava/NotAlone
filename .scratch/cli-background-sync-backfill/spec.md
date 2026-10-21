@@ -1,5 +1,7 @@
 # CLI 后台同步缺口补齐
 
+> 2026-10-21 设计审查：旧补齐暂停／重试按钮、内部计数展示及“待拆任务”属于原阶段；[ADR-083](../../architecture/adr/083-automatic-sync-recovery.md) 已采纳自动恢复与简化界面，见 architecture/adr/083-automatic-sync-recovery.md。总开关、已确认范围、停止和失败不推进游标的边界保持。
+
 > 状态：已确认，待拆分实现任务
 > 基于：`.scratch/cli-background-sync/spec.md`、ADR-003、ADR-023
 > 目标：让 CLI 后台同步在恢复运行时自动发现并补齐已确认会话的可检测消息缺口，同时保持联系人隔离、来源可追溯和用户可见的覆盖状态。

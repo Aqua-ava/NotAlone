@@ -1,5 +1,7 @@
 # 06：不依赖微信的手动输入首用闭环
 
+> 2026-10-21 设计审查：独立填写名称创建联系人的桌面入口由 [ADR-084](../../../architecture/adr/084-topbar-contact-search.md) 局部替代；粘贴、既有联系人手动确认、来源隔离及人工发送保持。统一工作区交互见 [ADR-079](../../../architecture/adr/079-unified-expression-workspace.md)；本票旧界面验收仅对应当时实现。
+
 Type: task
 State: resolved
 Triage: ready-for-agent

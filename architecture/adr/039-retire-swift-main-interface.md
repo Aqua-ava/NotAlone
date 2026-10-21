@@ -1,5 +1,7 @@
 # ADR-039：退役 Swift 主界面，重新设计共享前端
 
+> 2026-10-21 设计审查：“React 未实现／desktop 仅职责说明”是决定当日状态；后继桌面宿主见 [ADR-040](040-electron-dual-window-host.md)，本机运行时与原库更新见 [ADR-061](061-standalone-local-app-onboarding-and-updates.md)、[ADR-066](066-in-place-schema-updates-and-database-reuse.md)。Swift 主界面退役与 Python／原生探针职责保留；这些后继不证明 Windows 或最终分发已验收。
+
 > 状态：已采纳
 > 决策日期：2026-10-08
 
