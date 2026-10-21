@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
 
-from langchain_core.messages import AIMessage, BaseMessage
+from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
 from langchain_core.runnables import Runnable
 
 from notalone.reply import (
@@ -996,6 +996,11 @@ class LangChainVerticalSliceTest(unittest.TestCase):
 
         self.assertEqual(result.candidates[0].text, "可以呀，明天见。")
         self.assertEqual(result.used_skill.version_id, VERSION_ID)
+        skill_responses = [message for call in model.seen_calls for message in call
+                           if isinstance(message, ToolMessage) and message.tool_call_id == "read-skill-1"]
+        self.assertTrue(skill_responses)
+        self.assertIn(str(VERSION_ID), str(skill_responses[-1].content),
+                      "模型必须从实际读取结果取得版本身份，不能依赖夹具预先知道UUID。")
         self.assertEqual(
             set(model.bound_tool_names),
             {"read_file", "ReplyRuntimeOutput"},

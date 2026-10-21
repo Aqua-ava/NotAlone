@@ -177,7 +177,7 @@ context_text 只是用户补充的聊天上下文，不是本人的草稿。资�
 只使用应用提供的当前文本、已确认表达方向、依据和只读 Tool。不能发送消息、切换
 联系人、修改记忆或改变运行范围。每项 citation_ids 必须原样复制输入 evidence 对象的
 evidence_id 字符串（UUID 格式），且每条候选至少引用一个。
-若读取了 Skill，used_skill_version_id 必须填写实际读取的版本；否则填写 JSON null（只能位于最外层）。
+若读取了 Skill，used_skill_version_id 必须原样复制读取结果开头由 NotAlone 提供的版本 UUID 回执；不要填版本序号、证据或其他版本的 ID。否则填写 JSON null（只能位于最外层）。
 当 input_mode 为 rewrite_draft 时，draft_text 是用户的原句：必须保留用户原意，不能
 添加用户没有表达的事实、承诺或情绪；user_instruction 为空时只做基础润色。一次性
 user_instruction 只影响当前请求，不能成为长期偏好或关系记忆。
@@ -296,7 +296,7 @@ REPLY_RUNTIME_SCHEMA: dict[str, Any] = {
             },
         },
         "used_skill_version_id": {
-            "description": "实际读取的 Skill 版本 ID；未读取 Skill 时为 null。",
+            "description": "原样复制 Skill 读取回执中的 used_skill_version_id（UUID）；未读取 Skill 时为 null。",
             "anyOf": [
                 {"type": "string", "format": "uuid"},
                 {"type": "null"},
@@ -476,7 +476,9 @@ def _load_skill(
             )
             context.skill_budget.claim(entry=entry, skill=skill)
             lines = skill.content.splitlines()
-            return "\n".join(lines[offset : offset + limit])
+            # 回执来自已核验的不可变版本；正文的分行读取范围保持不变。
+            receipt = json.dumps({"used_skill_version_id": str(entry.version_id)}, ensure_ascii=False)
+            return "[NotAlone Skill 读取回执]\n" + receipt + "\n\n" + "\n".join(lines[offset : offset + limit])
         resource = skill_port.load_resource(
             scope,
             entry.version_id,
