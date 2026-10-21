@@ -88,6 +88,8 @@ class FrontSyncCycleReport:
     candidates: tuple[BindingCandidateView, ...] = ()
     batch_message_count: int = 0
     # 新的双通道状态；旧前台引擎保留默认值，供兼容和人工验证使用。
+    sync_scope: str = "selected"
+    sync_scope_failure_code: str | None = None
     sync_mode: str = "foreground"
     cli_sync_phase: str = "disabled"
     cli_sync_mode: str | None = None

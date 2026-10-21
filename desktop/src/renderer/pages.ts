@@ -27,7 +27,7 @@ export const managerPages = {
   },
   sync: {
     title: '同步设置', icon: 'sync',
-    description: '管理自动同步；遗漏消息会自动补齐。每个人的同步授权在「联系人」中管理。',
+    description: '选择微信私聊的同步范围；遗漏消息会自动补齐。单个会话的同步可在「联系人」中管理。',
     emptyTitle: '同步尚未就绪',
     emptyDescription: '尚未连接，无法查询读取状态。连接完成后，由你确认会话范围。',
     action: '确认同步范围',

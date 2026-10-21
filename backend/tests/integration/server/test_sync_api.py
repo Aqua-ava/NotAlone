@@ -201,6 +201,8 @@ class SyncApiContractTest(unittest.TestCase):
             response.json(),
             {
                 "sync_enabled": True,
+                "sync_scope": "selected",
+                "sync_scope_failure_code": None,
                 "phase": "active",
                 "probe_available": True,
                 "wechat_in_front": True,

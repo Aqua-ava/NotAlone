@@ -36,18 +36,23 @@ export class ContactSession {
     if (generation !== undefined) void this.refreshContacts();
   }
 
-  async refreshContacts(): Promise<void> {
+  async refreshContacts(): Promise<void> { await this.refreshDirectory(false); }
+
+  // 自动纳入只补充共享目录；暂时失败不清空已确认对象、草稿或可用目录。
+  refreshContactsInBackground(): Promise<boolean> { return this.refreshDirectory(true); }
+
+  private async refreshDirectory(background: boolean): Promise<boolean> {
     const generation = this.generation;
-    if (generation === undefined) return;
+    if (generation === undefined || (background && this.state.directoryPhase !== 'ready')) return false;
     const request = ++this.directoryRequest;
-    this.publish({ directoryPhase: 'loading' });
+    if (!background) this.publish({ directoryPhase: 'loading' });
     const current = () => generation === this.generation && request === this.directoryRequest;
     try {
       const directory = await this.readDirectory();
-      if (!current() || directory.generation !== generation) return;
+      if (!current() || directory.generation !== generation) return false;
       if (directory.contacts === null) {
-        this.clearDirectory('owner-unconfigured');
-        return;
+        if (!background) this.clearDirectory('owner-unconfigured');
+        return false;
       }
       const selectedStillPresent = directory.contacts.some((contact) => contact.contactId === this.state.selectedContactId);
       this.publish({ directoryPhase: 'ready', contacts: directory.contacts,
@@ -55,8 +60,10 @@ export class ContactSession {
           selectedContactId: null, draft: '', scopeRevision: this.state.scopeRevision + 1,
         } : {}),
       });
+      return true;
     } catch {
-      if (current()) this.clearDirectory('error');
+      if (current() && !background) this.clearDirectory('error');
+      return false;
     }
   }
 

@@ -1,6 +1,6 @@
 # NotAlone 架构文档
 
-> 联系人首用决定：[ADR-087](adr/087-wechat-confirmed-contact-onboarding.md)确定微信会话确认是新增联系人的唯一入口，导入只补充已有联系人；旧接口退役及新用户交付验收尚待完成。
+> 联系人首用决定：[ADR-087](adr/087-wechat-confirmed-contact-onboarding.md)保留真实微信来源建联与导入只补充已有联系人的规则；[ADR-089](adr/089-all-private-wechat-sync-scope.md)新增当前账号全部私聊的一次授权，包括以后新增会话。旧创建接口退役及新用户交付验收尚待完成；全部私聊实现与验证见[规格](../.scratch/all-private-sync/spec.md)。
 
 > 2026-10-21 设计审查：同号 ADR-074 有两份：引用时必须附“腾讯记忆”或“自动 Skill”标题及完整文件链接，不能仅凭编号推断替代。额外记忆人工门已由用户确认并通过 [ADR-085](adr/085-source-verified-automatic-adoption.md) 收敛；Runtime 按需检索已由 [ADR-090](adr/090-bounded-runtime-history-retrieval.md)确认受控只读边界；运行计划和自动过程摘要已按 [ADR-091](adr/091-retire-runtime-todos-and-auto-summary.md)取消强制接入要求；时间／日历／网络工具已按 [ADR-092](adr/092-defer-time-calendar-web-tools.md)改为未来可选方向。
 
@@ -132,6 +132,8 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 86. [ADR-086：按来源含义采纳记忆，不设统一重复次数门槛](adr/086-source-meaning-without-repetition-threshold.md)
 87. [ADR-087：新联系人只从微信会话确认加入](adr/087-wechat-confirmed-contact-onboarding.md)
 88. [ADR-088：一秒作为正常联系人切换的优化目标](adr/088-normal-switch-one-second-optimization-target.md)
+
+89. [ADR-089：一次授权同步全部微信私聊](adr/089-all-private-wechat-sync-scope.md)
 
 90. [ADR-090：回复运行时按需补查受控历史](adr/090-bounded-runtime-history-retrieval.md)
 

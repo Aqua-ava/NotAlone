@@ -60,6 +60,9 @@ class SyncEnginePort(Protocol):
     def sync_enabled(self) -> bool:
         """读取当前同步开关（不触发探针或 CLI）。"""
 
+    def set_sync_scope(self, mode: str) -> None:
+        """保存用户确认的同步范围，不改变总开关。"""
+
     def request_sync_check(self) -> None:
         """请求一次有界后台同步检查。"""
 
@@ -126,6 +129,9 @@ class SyncControlPort(Protocol):
 
     def observe_foreground(self) -> FreshForegroundObservation:
         """有界读取本次前台投影，不返回历史报告。"""
+
+    def set_sync_scope(self, mode: str) -> FrontSyncCycleReport:
+        """变更授权范围并返回最新状态。"""
 
     def status(self) -> FrontSyncCycleReport | None:
         """返回最近一次循环报告；尚未运行过循环时返回 None。"""
@@ -338,6 +344,12 @@ class SyncHost:
             request = getattr(self._engine, "request_sync_check", None)
             if callable(request):
                 request()
+            return self._run_cycle_locked()
+
+    def set_sync_scope(self, mode: str) -> FrontSyncCycleReport:
+        """与正文读取和撤销共用权限变更锁，返回新范围的缓存状态。"""
+        with self._authority_change():
+            self._engine.set_sync_scope(mode)
             return self._run_cycle_locked()
 
     def set_priority_contact(

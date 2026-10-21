@@ -734,6 +734,7 @@ class BackendApp:
             "/api/sync/check",
             "/api/sync/foreground/observe",
             "/api/sync/priority",
+            "/api/sync/scope",
             "/api/sync/backfill/pause",
             "/api/sync/backfill/retry",
             "/api/sync/confirm",
@@ -798,6 +799,20 @@ class BackendApp:
             return _json_response(HTTPStatus.OK, payload)
         if method != "POST":
             return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+        if path == "/api/sync/scope":
+            try:
+                payload = _parse_task_json(body)
+                if (not isinstance(payload, dict) or set(payload) != {"mode", "confirmed"}
+                    or payload["confirmed"] is not True
+                    or payload["mode"] not in ("selected", "all_private")):
+                    raise ValueError("无效同步范围。")
+            except (ValueError, UnicodeDecodeError):
+                return _json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid_sync_scope"})
+            try:
+                report = sync.set_sync_scope(payload["mode"])
+            except Exception:
+                return _json_response(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "sync_scope_failed"})
+            return _json_response(HTTPStatus.OK, _sync_status_payload(report))
         if path == "/api/sync/foreground/observe":
             return self._handle_foreground_observe(sync=sync, body=body)
         if path == "/api/sync/priority":
@@ -2982,6 +2997,8 @@ def _sync_status_payload(report: FrontSyncCycleReport) -> dict[str, object]:
 
     payload: dict[str, object] = {
         "sync_enabled": report.sync_enabled,
+        "sync_scope": report.sync_scope,
+        "sync_scope_failure_code": report.sync_scope_failure_code,
         "phase": report.phase.value,
         "probe_available": report.probe_available,
         "wechat_in_front": report.wechat_in_front,

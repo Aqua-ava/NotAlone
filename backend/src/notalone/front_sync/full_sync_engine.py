@@ -28,6 +28,7 @@ from notalone.front_sync.sync_engine import (
     FrontSyncCycleReport,
 )
 from notalone.front_sync.tail_lifecycle import FrontSyncPhase, FollowRuntimeStatus
+from notalone.persistence.sync_scope import PostgresSyncScopeStore, SyncScopeState
 from notalone.persistence.front_sync_state import PostgresFrontSyncStateStore
 from notalone.persistence.conversation_repository import PersistedConversationBinding
 from notalone.wechat_cli import CliAdapterError, LocalWechatCli
@@ -82,6 +83,10 @@ class CliFullSyncEngine:
         "_cli_status",
         "_cli_last_checked_at",
         "_priority_contact_id",
+        "_scope_store",
+        "_scope_state",
+        "_scope_failure",
+        "_scope_next_check",
     )
 
     def __init__(
@@ -97,6 +102,7 @@ class CliFullSyncEngine:
         binding_coordinator: CliBindingCoordinator,
         fallback: LegacyForegroundEnginePort,
         clock: Callable[[], datetime] | None = None,
+        scope_store: PostgresSyncScopeStore | None = None,
     ) -> None:
         if not isinstance(owner_id, UUID):
             raise TypeError("owner_id 必须是 UUID。")
@@ -113,9 +119,14 @@ class CliFullSyncEngine:
         self._cli_status: tuple[bool, str | None] | None = None
         self._cli_last_checked_at: datetime | None = None
         self._priority_contact_id: UUID | None = None
+        self._scope_store = scope_store
+        self._scope_state = SyncScopeState()
+        self._scope_failure: str | None = None
+        self._scope_next_check: datetime | None = None
 
     def enable_sync(self) -> None:
         self._sync_state.enable(owner_id=self._owner_id, at=self._clock())
+        self._scope_next_check = None
         self._cli_status = None
         self._cli_last_checked_at = None
         request = getattr(self._background, "request_backfill_check", None)
@@ -162,6 +173,8 @@ class CliFullSyncEngine:
 
     def request_sync_check(self) -> None:
         """让手动检查绕过安全对账的低频等待，但仍按固定预算读取。"""
+
+        self._scope_next_check = None
 
         self._cli_status = None
         self._cli_last_checked_at = None
@@ -223,6 +236,7 @@ class CliFullSyncEngine:
 
     def cycle(self) -> FrontSyncCycleReport:
         enabled = self.sync_enabled()
+        self._refresh_scope(enabled=enabled)
         background: CliSyncCycleResult = self._background.cycle(
             enabled=enabled,
             priority_contact_id=self._priority_contact_id,
@@ -243,6 +257,7 @@ class CliFullSyncEngine:
     def _background_step(self, *, priority_requested_at: float | None = None) -> FrontSyncCycleReport:
         deadline = monotonic() + CLI_TASK_TIMEOUT_SECONDS
         enabled = self.sync_enabled()
+        self._refresh_scope(enabled=enabled)
         background = self._background.cycle(
             enabled=enabled, priority_contact_id=self._priority_contact_id,
             max_bindings=1, priority_requested_at=priority_requested_at,
@@ -280,6 +295,8 @@ class CliFullSyncEngine:
             phase = FrontSyncPhase.ACTIVE
         report = FrontSyncCycleReport(
             sync_enabled=enabled,
+            sync_scope=self._scope_state.mode,
+            sync_scope_failure_code=self._scope_failure,
             phase=phase,
             probe_available=foreground.probe_available,
             wechat_in_front=foreground.wechat_in_front,
@@ -325,6 +342,52 @@ class CliFullSyncEngine:
             foreground_failure_code=foreground.failure_code,
         )
         return report
+
+    def set_sync_scope(self, mode: str) -> None:
+        """保存已明确确认的账号范围；保持总开关原值。"""
+        if mode not in ("selected", "all_private"):
+            raise ValueError("同步范围无效。")
+        if self._scope_store is None:
+            raise RuntimeError("同步范围存储不可用。")
+        self._scope_store.set_mode(
+            owner_id=self._owner_id, channel=self._channel, account_scope=self._account_scope,
+            mode=mode, at=self._clock(),
+        )
+        self._scope_state = self._scope_store.read(
+            owner_id=self._owner_id, channel=self._channel, account_scope=self._account_scope,
+        )
+        self._scope_failure = None
+        self._scope_next_check = None
+
+    def _refresh_scope(self, *, enabled: bool) -> None:
+        """元数据发现有独立一秒预算，失败不阻断已有绑定的同步。"""
+        if self._scope_store is None:
+            return
+        now = self._clock()
+        if self._scope_next_check is not None and now < self._scope_next_check:
+            return
+        self._scope_next_check = now + timedelta(seconds=60)
+        scope = dict(owner_id=self._owner_id, channel=self._channel, account_scope=self._account_scope)
+        try:
+            self._scope_state = self._scope_store.read(**scope)
+            if enabled and self._scope_state.mode == "all_private":
+                sessions = self._cli.sessions(type_filter="private", limit=5000, timeout_seconds=1.0)
+                if len(sessions) >= 5000:
+                    raise ValueError("sync_scope_session_limit")
+                created = self._scope_store.enroll(**scope, sessions=sessions)
+                if created:
+                    request = getattr(self._background, "request_backfill_check", None)
+                    if callable(request):
+                        request()
+                    else:
+                        self._background.request_safety_sweep()
+            self._scope_failure = None
+        except Exception as error:
+            # 不回显会话标识或数据库异常；只允许固定错误码。
+            code = str(error)
+            self._scope_failure = code if code in {
+                "sync_scope_identity_conflict", "sync_scope_session_limit",
+            } else "sync_scope_discovery_failed"
 
     def set_priority_contact(self, contact_id: UUID | None) -> None:
         """设置当前应用查看联系人，供后台下一轮读取时优先处理。"""

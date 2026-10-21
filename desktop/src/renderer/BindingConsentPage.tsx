@@ -3,30 +3,31 @@ import type { ContactSessionView } from './contact-session';
 import type { ManagerPage } from './pages';
 import './bindings.css';
 
-export function BindingPrivacyNotice() {
+export function BindingPrivacyNotice({ allPrivate = false }: { allPrivate?: boolean }) {
   return <details className="bindings-explanation"><summary>读取范围与隐私说明</summary>
-    <p>只有你明确确认的微信会话才能读取文字；进入联系人页面只查询已保存的关联与授权，点击添加或刷新微信会话后才读取会话名单。</p>
+    <p>{allPrivate ? '你已确认同步全部微信私聊。应用会自动发现并关联现有及新增会话；已单独停止的会话不会自动重新加入。' : '只有你明确确认的微信会话才能读取文字；进入联系人页面只查询已保存的关联与授权，点击添加或刷新微信会话后才读取会话名单。'}</p>
     <p>应用运行且总开关开启时，可以在微信不在前台时同步已授权会话。关闭总开关或正常退出会停读；重新开启只在有效授权及基线之后补齐。</p>
     <p>停止某个联系人的同步会撤销该会话的读取授权，已保存的资料仍保留。删除资料需使用独立的来源删除流程。</p>
     <p>前台识别只在本机内存分析微信窗口并识别会话名称，不读取聊天正文，画面不保存、不上传。候选由你修改并亲自发送。</p>
   </details>;
 }
 
-export function BindingConsentPage({ contacts, consent, navigate, onClose, targetContactId }: {
+export function BindingConsentPage({ contacts, consent, navigate, onClose, targetContactId, allPrivate = false }: {
   contacts: ContactSessionView; consent: BindingConsentView; navigate: (page: ManagerPage) => void;
-  onClose(): void; targetContactId?: string;
+  onClose(): void; targetContactId?: string; allPrivate?: boolean;
 }) {
   const { state, selection, setSelection } = consent;
   const unbound = state.sessions.filter((session) => session.boundContactId === null && !state.bindings.some((binding) => binding.locator === session.locator));
-  return <section className="bindings-section" aria-label="添加微信联系人">
-    <div className="bindings-toolbar"><h2>添加微信联系人</h2><div>
+  const title = allPrivate ? '管理单个微信会话' : '添加微信联系人';
+  return <section className="bindings-section" aria-label={title}>
+    <div className="bindings-toolbar"><h2>{title}</h2><div>
       <button className="button" disabled={!!state.busy || state.phase === 'offline' || state.phase === 'loading'} onClick={() => void consent.refresh()}>刷新微信会话</button>
       <button className="button" disabled={!!state.busy} onClick={onClose}>返回联系人</button>
     </div></div>
-    <p>选择要同步的微信会话，再确认新建联系人或关联已有联系人。没有勾选的会话不会获得授权。</p>
+    <p>{allPrivate ? '全部私聊已纳入自动同步范围，无需逐个添加。这里用于处理身份冲突，或重新开启你曾单独停止的会话。' : '选择要同步的微信会话，再确认新建联系人或关联已有联系人。没有勾选的会话不会获得授权。'}</p>
     <p>{state.syncEnabled === true ? '总开关已开启：确认后立即允许同步所选会话。' : state.syncEnabled === false ? '总开关已关闭：确认后保留授权，开启总开关才开始同步。' : '总开关状态尚未确认；若已开启，确认后立即允许同步所选会话。'}</p>
     {state.phase === 'ready' && <section aria-label="可添加的微信会话">
-      <div className="bindings-toolbar"><h3>可添加的微信会话</h3><span>已选 {Object.keys(selection).length} 个</span></div>
+      <div className="bindings-toolbar"><h3>{allPrivate ? '待处理或已停止同步的会话' : '可添加的微信会话'}</h3><span>已选 {Object.keys(selection).length} 个</span></div>
       {state.sessionIssue === 'not-requested' ? <p>点击“刷新微信会话”后读取列表，系统可能请求访问微信数据。</p> : unbound.length === 0 && <p>当前没有可添加的微信会话。</p>}
       <div className="binding-session-list">{unbound.map((session) => <div className="binding-row" key={session.locator}>
         <label className="binding-choice"><input type="checkbox" disabled={!!state.busy} aria-label={`选择会话 ${session.locator}`} checked={!!selection[session.locator]}
@@ -46,15 +47,15 @@ export function BindingConsentPage({ contacts, consent, navigate, onClose, targe
   </section>;
 }
 
-export function ContactSyncDetails({ contactId, consent, onConnect }: { contactId: string; consent: BindingConsentView; onConnect(): void }) {
+export function ContactSyncDetails({ contactId, consent, onConnect, allPrivate = false }: { contactId: string; consent: BindingConsentView; onConnect(): void; allPrivate?: boolean }) {
   const { state, setRevocation } = consent;
   const known = state.knownBindings?.filter((binding) => binding.contactId === contactId) ?? [];
   const active = state.bindings.filter((binding) => binding.contactId === contactId);
   if (state.phase !== 'ready' || !state.knownBindings) return <p>同步状态尚未确认，请刷新联系人后再操作。</p>;
   return <section className="contact-sync-details" aria-label="联系人自动同步"><h3>微信关联与同步</h3>
-    {active.length === 0 && <><p>{known.length ? '已停止自动同步，已有资料仍保留。重新开启前请核对微信会话。' : '尚未关联微信，当前资料来自手动输入或文件导入。'}</p>
+    {active.length === 0 && <><p>{known.length ? '已停止自动同步，已有资料仍保留。重新开启前请核对微信会话。' : allPrivate ? '尚未发现与这份资料关联的微信账号。全部私聊会按账号自动关联，不会按同名合并资料；需要时可在此核对关联。' : '尚未关联微信，当前资料来自手动输入或文件导入。'}</p>
       {known.map((binding) => <p key={binding.bindingId}>曾关联：{binding.displayName || binding.locator}</p>)}
-      <button className="button" disabled={!!state.busy || !state.knownBindings} onClick={onConnect}>{known.length ? '开启自动同步' : '关联微信并开启同步'}</button></>}
+      <button className="button" disabled={!!state.busy || !state.knownBindings} onClick={onConnect}>{known.length ? '开启自动同步' : allPrivate ? '核对微信关联' : '关联微信并开启同步'}</button></>}
     {active.map((binding) => {
       const session = state.sessions.find((item) => item.locator === binding.locator);
       return <div key={binding.bindingId} className="contact-binding"><p>已关联微信：{binding.displayName || binding.locator}</p>

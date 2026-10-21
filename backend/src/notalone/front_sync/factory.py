@@ -27,6 +27,7 @@ from notalone.front_sync.sync_engine import FrontSyncEngine
 from notalone.persistence.conversation_repository import (
     PostgresConversationBindingRepository,
 )
+from notalone.persistence.sync_scope import PostgresSyncScopeStore
 from notalone.persistence.backfill_state import PostgresBackfillStateStore
 from notalone.persistence.front_sync_state import PostgresFrontSyncStateStore
 from notalone.persistence.observation_store import PostgresObservationStore
@@ -122,6 +123,7 @@ def build_cli_full_sync_engine(
         foreground=foreground,
         binding_coordinator=binding_coordinator,
         fallback=fallback,
+        scope_store=PostgresSyncScopeStore(database_url),
         clock=clock,
     )
 

@@ -1,4 +1,4 @@
-import type { BackgroundSyncPhase, ForegroundReportPhase, SyncBackfillPhase, SyncBackfillReport, SyncPriorityReport, SyncStatusReport } from '../../shared/sync-control-bridge';
+import type { BackgroundSyncPhase, ForegroundReportPhase, SyncBackfillPhase, SyncBackfillReport, SyncPriorityReport, SyncStatusReport, SyncScope } from '../../shared/sync-control-bridge';
 import type { BackendHost } from '../backend/host';
 import { isUuid } from '../uuid';
 
@@ -57,7 +57,10 @@ function parseSyncReport(value: unknown): SyncStatusReport {
     || !foregroundPhases.includes(fields.foreground_phase as ForegroundReportPhase)
     || typeof fields.cli_bound_count !== 'number' || !Number.isSafeInteger(fields.cli_bound_count)
     || fields.cli_bound_count < 0) throw new Error('同步报告不可用。');
-  return { enabled: fields.sync_enabled, backgroundPhase: fields.cli_sync_phase as BackgroundSyncPhase,
+  if ('sync_scope' in fields && fields.sync_scope !== 'all_private' && fields.sync_scope !== 'selected') throw new Error('同步报告不可用。');
+  return { syncScope: (fields.sync_scope ?? 'selected') as SyncScope,
+    syncScopeFailureCode: 'sync_scope_failure_code' in fields ? failureCode(fields.sync_scope_failure_code) : null,
+    enabled: fields.sync_enabled, backgroundPhase: fields.cli_sync_phase as BackgroundSyncPhase,
     backgroundFailureCode: failureCode(fields.cli_failure_code), cliAvailable: fields.cli_available,
     confirmedBindingCount: fields.cli_bound_count, foregroundPhase: fields.foreground_phase as ForegroundReportPhase,
     foregroundFailureCode: failureCode(fields.foreground_failure_code), probeAvailable: fields.probe_available,
@@ -79,5 +82,11 @@ export async function setSyncEnabled(backend: BackendHost, enabled: boolean, sig
 export async function controlBackfill(backend: BackendHost, operation: 'pause' | 'retry', signal: AbortSignal) {
   const response = await backend.requestJson({ method: 'POST', path: operation === 'pause' ? '/api/sync/backfill/pause' : '/api/sync/backfill/retry',
     body: {}, timeoutMs: 12_000, maxResponseBytes: 16_384, signal });
+  return { generation: response.generation, report: parseSyncReport(response.data) };
+}
+
+export async function setSyncScope(backend: BackendHost, mode: SyncScope, signal: AbortSignal) {
+  const response = await backend.requestJson({ method: 'POST', path: '/api/sync/scope',
+    body: { mode, confirmed: true }, timeoutMs: 12_000, maxResponseBytes: 16_384, signal });
   return { generation: response.generation, report: parseSyncReport(response.data) };
 }

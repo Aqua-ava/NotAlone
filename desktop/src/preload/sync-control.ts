@@ -1,4 +1,4 @@
-import type { SyncControlBridge, SyncControlState, SyncControlRequest } from '../shared/sync-control-bridge';
+import type { SyncControlBridge, SyncControlState, SyncControlRequest, SyncScopeRequest } from '../shared/sync-control-bridge';
 import type { PageTransport } from './transport';
 
 export function createSyncControlBridge(transport: PageTransport): SyncControlBridge {
@@ -9,6 +9,7 @@ export function createSyncControlBridge(transport: PageTransport): SyncControlBr
   return Object.freeze({
     getState: (...args: unknown[]) => empty('sync-control:get-state', args),
     refresh: (...args: unknown[]) => empty('sync-control:refresh', args),
+    setScope: (...args: [SyncScopeRequest]) => single('sync-control:set-scope', args),
     enable: (...args: [SyncControlRequest]) => single('sync-control:enable', args),
     disable: (...args: [SyncControlRequest]) => single('sync-control:disable', args),
     pause: (...args: [SyncControlRequest]) => single('sync-control:pause', args),

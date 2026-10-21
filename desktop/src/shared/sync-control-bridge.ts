@@ -1,3 +1,4 @@
+export type SyncScope = 'selected' | 'all_private';
 export type BackgroundSyncPhase = 'disabled' | 'waiting_bindings' | 'active' | 'degraded';
 export type ForegroundReportPhase = 'sync_disabled' | 'waiting_foreground' | 'unavailable' | 'active' | 'failed';
 export type SyncBackfillPhase = 'not_required' | 'gap_detected' | 'backfilling' | 'complete' | 'failed' | 'incomplete' | 'paused';
@@ -30,6 +31,8 @@ export interface SyncPriorityReport {
 // 只展示最近循环的最小报告，不提供联系人定位、观察身份或正文。
 export interface SyncStatusReport {
   enabled: boolean;
+  syncScope?: SyncScope;
+  syncScopeFailureCode?: string | null;
   backgroundPhase: BackgroundSyncPhase;
   backgroundFailureCode: string | null;
   cliAvailable: boolean;
@@ -46,13 +49,15 @@ export interface SyncControlState {
   scopeRevision: number;
   phase: 'offline' | 'loading' | 'ready' | 'unavailable' | 'failed';
   report: SyncStatusReport | null;
-  busy: 'enable' | 'disable' | 'pause' | 'retry' | null;
+  busy: 'enable' | 'disable' | 'pause' | 'retry' | 'scope' | null;
   errorCode: 'status-unconfirmed' | 'operation-unconfirmed' | null;
 }
 export interface SyncControlRequest { scopeRevision: number; }
+export interface SyncScopeRequest extends SyncControlRequest { mode: SyncScope; confirmed: true; }
 export interface SyncControlBridge {
   getState(): Promise<SyncControlState>;
   refresh(): Promise<void>;
+  setScope(request: SyncScopeRequest): Promise<void>;
   enable(request: SyncControlRequest): Promise<void>;
   disable(request: SyncControlRequest): Promise<void>;
   pause(request: SyncControlRequest): Promise<void>;

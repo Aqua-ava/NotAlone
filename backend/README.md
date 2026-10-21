@@ -119,6 +119,10 @@ PYTHONPATH=backend/src python \
 
 正式 052 保存探索的有限正文、来源身份及删除依赖；原15分钟期限不因刷新重置，自动更新最多3次，暂停任务拒绝继续。实际生成在模型前及保存事务再次核对选择、A当前输入和Skill目录版本，过期后退出owner事务再独立擦除正文。探索只加载所选Skill的受控静态文件。`test_persistent_reply_exploration` 使用正式生产装配、合成受控模型和真实HTTP／随机PostgreSQL，验证这些后端边界；它不证明页面、真人模型质量、原生读取或App验收。
 
+## 微信同步范围
+
+[ADR-089](../architecture/adr/089-all-private-wechat-sync-scope.md)规定默认仅所选会话；明确授权全部私聊后，同一 owner、微信渠道和账号范围内的现有及新增私聊可自动建联。公开合同为 `POST /api/sync/scope`，请求 `{mode: "selected" | "all_private", confirmed: true}`；同步状态返回 `sync_scope` 和 `sync_scope_failure_code`。范围设置不改变总开关，后台在总开关开启时周期发现会话。稳定身份核验、幂等建联、撤销／删除排除和范围持久化由后端负责；不按名称合并，不扩大至群聊或新账号，不导入新绑定 baseline 之前历史。实现及验证记录见[规格](../.scratch/all-private-sync/spec.md)。
+
 ## 授权经验草稿（09）
 
 认证接口 `GET/POST /api/contacts/{contact_id}/skill-learning` 按宿主 owner 和已确认联系人隔离。GET 返回权威授权、独立待审草稿与原任务进度；启停严格接受 `{enabled, confirmed: true, expected_revision, operation_key}`，旧动作重放不能覆盖后来决定。明确恢复只接受 `{resume: true}`，复用原任务而不发布草稿。参数错误400，其他范围404，修订冲突409，持久化不可用503；响应不缓存。

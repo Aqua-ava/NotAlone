@@ -52,6 +52,8 @@ export function SyncControlPanel({ bridge, manualRelease = false }: { bridge: Sy
     catch { if (active.current && scopeRevision === latest.current.scopeRevision) setError('本次同步范围已变化，请刷新状态后重试。'); }
   }
   const report = state.report;
+  const allPrivate = report?.syncScope === 'all_private';
+  const changeScope = (mode: 'selected' | 'all_private') => operate(() => bridge.setScope({ scopeRevision: state.scopeRevision, mode, confirmed: true }));
   const available = state.phase === 'ready' && report !== null && state.busy === null;
   const switchSync = () => operate(() => report?.enabled
     ? bridge.disable({ scopeRevision: state.scopeRevision }) : bridge.enable({ scopeRevision: state.scopeRevision }));
@@ -75,8 +77,25 @@ export function SyncControlPanel({ bridge, manualRelease = false }: { bridge: Sy
       <p role="status">{report ? report.enabled ? '后台正文同步已开启' : '后台正文同步已关闭' : '后台正文同步状态未确认'}</p>
       <button className="button" disabled={!available} onClick={() => void switchSync()}>{state.busy === 'enable' ? '正在开启后台同步…'
         : state.busy === 'disable' ? '正在关闭后台同步…' : report?.enabled ? '关闭后台同步' : '开启后台同步'}</button>
-      <p>开启后自动同步已授权联系人的文字。关闭或退出 App 会停止读取；重新开启后，会自动同步遗漏消息。</p>
-      <p>添加同步对象或停止某个人的同步，请到「联系人」管理。</p>
+      <p>{allPrivate ? '开启后自动关联并同步全部微信私聊的文字，包括以后新增的会话；已单独停止的会话保持排除。' : '开启后自动同步已授权联系人的文字。'}关闭或退出 App 会停止读取；重新开启后，会自动同步遗漏消息。</p>
+      <section aria-label="微信私聊同步范围">
+        <h3>同步范围</h3>
+        <p role="status">{report ? allPrivate ? '当前范围：全部微信私聊（包括以后新增的会话）' : '当前范围：仅已关联并授权的会话' : '同步范围尚未确认'}</p>
+        {allPrivate ? <>
+          <p>已有和以后新增的微信私聊会自动建立对应联系人并同步，无需逐个确认。不会按同名合并不同微信账号。</p>
+          {!report?.enabled && <p>总开关已关闭；范围已保存，开启后台同步后开始自动关联并读取。</p>}
+          <p>改回仅同步已关联会话后，不再自动添加新会话；已有授权仍保留。停止某个人的同步，请到「联系人」管理。</p>
+          <button className="button" disabled={!available} onClick={() => void changeScope('selected')}>改为仅同步已关联会话</button>
+        </> : <>
+          <p><strong>同步全部微信私聊，包括以后新增的会话</strong></p>
+          <p>确认后，开启后台同步时会自动创建或复用对应联系人，读取现有及以后新增的微信私聊文字，不再逐个询问。群聊不在此范围；已单独停止的会话保持排除。</p>
+          <button className="button primary" disabled={!available} onClick={() => void changeScope('all_private')}>确认同步全部微信私聊</button>
+          <p>也可以继续到「联系人」单独添加或停止同步对象。</p>
+        </>}
+        {state.busy === 'scope' && <p role="status">正在保存同步范围…</p>}
+        {report?.syncScopeFailureCode && <div role="alert"><p>自动关联微信私聊暂时受阻。请确认微信可用后重试；存在身份冲突的会话需要到「联系人」核对，已停止的会话不会自动恢复。</p>
+          <button className="button" disabled={!available} onClick={() => void changeScope('all_private')}>重试自动关联</button></div>}
+      </section>
       {report && <p>{backgroundLabels[report.backgroundPhase]}。已确认范围：{report.confirmedBindingCount}个会话。</p>}
       {state.phase === 'loading' && <p role="status">正在确认同步状态…</p>}
       {state.phase === 'offline' && <p>连接本机服务后查看与控制后台同步。</p>}
