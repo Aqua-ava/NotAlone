@@ -15,6 +15,7 @@ from uuid import UUID
 from psycopg.rows import dict_row
 
 from notalone.reply.context import ReplyContext
+from notalone.reply.assistant_discussion import DiscussionDependencies
 from notalone.reply.errors import ReplyContextError, ReplyContextInvariantError, ReplyStoreInvariantError
 from notalone.reply.store import ReplyRequest
 from notalone.scopes import ContactScope
@@ -144,13 +145,16 @@ def _request_needs_source_snapshot(
 
 @dataclass(slots=True, repr=False)
 class _ReplySourceValidation:
-    """仅一次同步复验内的ID去重；不缓存正文、不跨事务或调用保留结论。"""
+    """仅一次同步复验内复用已读来源与不可变历史，不跨事务或调用保留。"""
 
     connection: Any
     scope: ContactScope
     execution: tuple[int, Any]
     active: set[UUID] = field(default_factory=set)
     verified: dict[tuple[UUID, bool], frozenset[UUID]] = field(default_factory=dict)
+    candidate_histories: dict[tuple[UUID, UUID], Any] = field(default_factory=dict)
+    generation_inputs: set[tuple[str, bool]] = field(default_factory=set)
+    generation_dependencies: dict[str, DiscussionDependencies] = field(default_factory=dict)
 
 
 _SOURCE_VALIDATION: ContextVar[_ReplySourceValidation | None] = ContextVar("reply_source_validation", default=None)

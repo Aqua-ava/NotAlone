@@ -71,7 +71,9 @@ class PreparedAssistantContext:
             ).fetchall()) if allows_history(command) else ()
         context = (decode_context(row["prepared_context"], command) if row["prepared_context"] is not None else self._context.build(command=command, verified_scope=verified_scope, reply_request_id=uuid4(),
                              continued_candidate=continued, history_message_ids=message_ids))
-        self.validate_current(context)
+        # 仅概览复验延后到下面最终 owner 锁事务；旧适配器保持完整校验。
+        validator = getattr(self._context, "validate_for_preparation", None)
+        (validator if callable(validator) else self.validate_current)(context)
         context = self.fit_budget(context, validate=validate)
         scope = command.scope
         dependencies: set[UUID] = set()

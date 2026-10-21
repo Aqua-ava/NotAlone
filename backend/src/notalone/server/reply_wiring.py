@@ -134,6 +134,7 @@ def build_reply_service(
         def validate():
             if validate_request is None:
                 raise ValueError('实际模型调用缺少确定性外壳的运行租约。')
+            # 外壳按同一 prepared 同时复验租约与完整来源；每轮执行一次即可。
             validate_request()
             if (model.rate_limiter is not None or model.cache is not False
                     and (model.cache is not None or get_llm_cache() is not None)):
@@ -144,7 +145,6 @@ def build_reply_service(
             if layered_memory is not None:
                 layered_memory.validate_reply_model(prepared, model, input_budget_profile,
                     layered_reply_budget, owner_layered_reply_budget)
-            reply_context.validate_current(prepared)
             if model_priority is not None:
                 model_priority.check_running()
         return ModelCallLedger(scope=prepared.scope, ledger=ledger,

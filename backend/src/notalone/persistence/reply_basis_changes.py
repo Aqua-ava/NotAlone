@@ -33,8 +33,8 @@ def read_reply_basis_changes(
           coalesce(memory.revision, own.revision) AS revision,
           coalesce(memory.category, own.category, candidate.category) AS category,
           coalesce(memory.event, own.event, candidate.event) AS event,
-          coalesce(to_jsonb(memory)->'conditions', to_jsonb(own)->'conditions', to_jsonb(candidate)->'conditions') AS conditions,
-          coalesce(to_jsonb(memory)->'evolution', to_jsonb(own)->'evolution', to_jsonb(candidate)->'evolution') AS evolution,
+          coalesce(memory.conditions, own.conditions, candidate.conditions) AS conditions,
+          coalesce(memory.evolution, own.evolution, candidate.evolution) AS evolution,
           coalesce(memory.source_candidate_id, own.source_candidate_id, candidate.id) AS event_candidate_id,
           coalesce(memory.text_content, own.text_content, candidate.text_content) AS text_content,
           coalesce(memory.source_ids, own.source_ids, candidate.source_ids) AS source_ids,
@@ -147,8 +147,8 @@ def require_current_reply_memory(
         retirement = sql.SQL("'unknown'") if kind == "pending_candidate" else sql.SQL("retirement_reason")
         rows = connection.execute(sql.SQL(
             "SELECT id AS evidence_id,%(kind)s AS kind,owner_id,%(contact_id)s::uuid AS contact_id,"
-            "status,text_content,source_ids,valid_at,invalid_at,category,created_at AS recorded_at,event,to_jsonb(" + table + ")->'conditions' AS conditions,"
-            "to_jsonb(" + table + ")->'evolution' AS evolution,{} AS event_candidate_id,"
+            "status,text_content,source_ids,valid_at,invalid_at,category,created_at AS recorded_at,event,conditions,"
+            "evolution,{} AS event_candidate_id,"
             "{} AS retirement_reason,{} AS revision,valid_at>now() AS future,invalid_at<=now() AS expired "
             "FROM public.{} WHERE owner_id=%(owner_id)s AND id=ANY(%(ids)s::uuid[]) {}"
         ).format(event_candidate, retirement, revision, sql.Identifier(table), contact_clause),
@@ -182,15 +182,15 @@ def historical_basis_revision_sha256(
         """
         WITH RECURSIVE nodes AS (
           SELECT id, 'confirmed_memory' AS kind, supersedes_memory_id AS previous,
-            revision, status, retirement_reason, text_content, source_ids, valid_at, invalid_at, category, created_at AS recorded_at, owner_id, contact_id, event, to_jsonb(confirmed_memory)->'conditions' AS conditions, to_jsonb(confirmed_memory)->'evolution' AS evolution
+            revision, status, retirement_reason, text_content, source_ids, valid_at, invalid_at, category, created_at AS recorded_at, owner_id, contact_id, event, confirmed_memory.conditions AS conditions, confirmed_memory.evolution AS evolution
           FROM public.confirmed_memory WHERE owner_id=%s AND contact_id=%s
           UNION ALL
           SELECT id, 'owner_memory', supersedes_memory_id, revision, status, retirement_reason,
-            text_content, source_ids, valid_at, invalid_at, category, created_at, owner_id, NULL::uuid, event, to_jsonb(owner_memory)->'conditions', to_jsonb(owner_memory)->'evolution'
+            text_content, source_ids, valid_at, invalid_at, category, created_at, owner_id, NULL::uuid, event, owner_memory.conditions, owner_memory.evolution
           FROM public.owner_memory WHERE owner_id=%s
           UNION ALL
           SELECT id, 'pending_candidate', NULL::uuid, 0, status, 'unknown',
-            text_content, source_ids, valid_at, invalid_at, category, created_at, owner_id, contact_id, event, to_jsonb(memory_candidate)->'conditions', to_jsonb(memory_candidate)->'evolution'
+            text_content, source_ids, valid_at, invalid_at, category, created_at, owner_id, contact_id, event, memory_candidate.conditions, memory_candidate.evolution
           FROM public.memory_candidate WHERE owner_id=%s AND contact_id=%s
         ), used AS (
           SELECT * FROM nodes WHERE id=ANY(%s::uuid[])

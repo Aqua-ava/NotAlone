@@ -33,7 +33,15 @@ class ExpressionPreferenceContext:
         return replace(context, expression_preferences=preferences, expression_preference_revision=snapshot.revision)
 
     def validate_current(self, context: ReplyContext) -> None:
-        self._context.validate_current(context)
+        self._validate_current(context, preparation=False)
+
+    def validate_for_preparation(self, context: ReplyContext) -> None:
+        """准备阶段仍核对偏好，基底只允许延后概览到保存事务。"""
+        self._validate_current(context, preparation=True)
+
+    def _validate_current(self, context: ReplyContext, *, preparation: bool) -> None:
+        validator = getattr(self._context, "validate_for_preparation", None) if preparation else None
+        (validator if callable(validator) else self._context.validate_current)(context)
         mode = expression_reply_mode(context.command)
         require_preference_contract(context.scope, mode, context.expression_preferences, context.expression_preference_revision)
         try:

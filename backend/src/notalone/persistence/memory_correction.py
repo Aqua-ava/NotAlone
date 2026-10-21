@@ -20,7 +20,7 @@ from notalone.memory.evolution import MemoryEvolution
 from notalone.memory.conditions import MemoryConditions
 from notalone.persistence.message_sources import active_source_ref_sql
 from notalone.persistence.correction_evidence import (
-    capture_message_snapshot, merge_frozen_snapshot, validate_frozen_snapshot,
+    capture_message_snapshot, merge_frozen_snapshot, read_source_availability, validate_frozen_snapshot,
 )
 from notalone.memory_trace.context import current_trace
 from notalone.scopes import ContactScope
@@ -79,12 +79,16 @@ def validate_erased_guard(
 def source_documents_available(
     connection: psycopg.Connection[Any], *, owner_id: UUID, source_ids: list[UUID] | list[str],
 ) -> bool:
-    unavailable = connection.execute(
-        "SELECT EXISTS (SELECT 1 FROM public.source_document "
-        "WHERE owner_id=%s AND id=ANY(%s::uuid[]) AND status<>'active') AS unavailable",
-        (owner_id, source_ids),
-    ).fetchone()["unavailable"]
-    return not unavailable
+    def read() -> bool:
+        unavailable = connection.execute(
+            "SELECT EXISTS (SELECT 1 FROM public.source_document "
+            "WHERE owner_id=%s AND id=ANY(%s::uuid[]) AND status<>'active') AS unavailable",
+            (owner_id, source_ids),
+        ).fetchone()["unavailable"]
+        return not unavailable
+
+    return read_source_availability(connection, owner_id=owner_id, kind="documents",
+                                    identifiers=source_ids, read=read)
 
 
 def decision_sources_available(
@@ -96,12 +100,16 @@ def decision_sources_available(
     if not source_documents_available(connection, owner_id=owner_id, source_ids=evidence["source_ids"]):
         return False
     expected = {UUID(ref["ref_id"]) for ref in evidence["source_refs"]}
-    rows = connection.execute(
-        f"SELECT ref.id FROM public.message_source_ref AS ref "
-        f"WHERE ref.owner_id=%s AND ref.id=ANY(%s::uuid[]) AND {active_source_ref_sql()}",
-        (owner_id, list(expected)),
-    ).fetchall()
-    return {row["id"] for row in rows} == expected
+    def read() -> bool:
+        rows = connection.execute(
+            f"SELECT ref.id FROM public.message_source_ref AS ref "
+            f"WHERE ref.owner_id=%s AND ref.id=ANY(%s::uuid[]) AND {active_source_ref_sql()}",
+            (owner_id, list(expected)),
+        ).fetchall()
+        return {row["id"] for row in rows} == expected
+
+    return read_source_availability(connection, owner_id=owner_id, kind="refs",
+                                    identifiers=expected, read=read)
 
 
 def decision_available(connection: psycopg.Connection[Any], *, decision: dict[str, Any]) -> bool:

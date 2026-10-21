@@ -806,8 +806,16 @@ class RetrievalReplyContext:
         return revision
 
     def validate_current(self, context: ReplyContext) -> None:
-        require_material(context, self._layered_memory, budget=self._layered_budget, owner_budget=self._owner_layered_budget)
+        """在模型调用前后完整复验，概览不得延后。"""
+        self._validate_current(context, validate_overview=True)
+
+    def validate_for_preparation(self, context: ReplyContext) -> None:
+        """仅准备保存前使用；概览由最终持 owner 锁事务完整复验。"""
+        self._validate_current(context, validate_overview=False)
+
+    def _validate_current(self, context: ReplyContext, *, validate_overview: bool) -> None:
         """在生成前后重新读取依据，阻止删除或 revision 变化后的旧快照继续生效。"""
+        require_material(context, self._layered_memory, budget=self._layered_budget, owner_budget=self._owner_layered_budget)
 
         if not isinstance(context, ReplyContext):
             raise ReplyContextInvariantError("回复上下文快照结构无效。")
@@ -815,7 +823,7 @@ class RetrievalReplyContext:
             raise ReplyContextInvariantError("当前改写不能使用历史资料。")
         scope = context.scope
         self._validate_evidence(context.evidence, scope=scope)
-        if context.retrieval is not None:
+        if validate_overview and context.retrieval is not None:
             if self._overview is None:
                 raise ReplyContextInvariantError("概览导航无法重新核验。")
             try:

@@ -122,9 +122,14 @@ def _reply_dependencies(connection: Any, scope: ContactScope, request_id: UUID) 
             JOIN public.reply_request AS parent ON parent.id = candidate.reply_request_id
             WHERE parent.owner_id = %s AND parent.contact_id = %s
         )
-        SELECT evidence.evidence_id, evidence.kind, evidence.source_ids, turn.dependency_ids,
-               lineage.id AS request_id, lineage.context_snapshot
-        FROM lineage JOIN public.reply_context_evidence AS evidence ON evidence.reply_request_id = lineage.id
+        SELECT turn.dependency_ids, lineage.id AS request_id, lineage.context_snapshot,
+               evidence.items AS evidence
+        FROM lineage JOIN LATERAL (
+            SELECT jsonb_agg(jsonb_build_object('evidence_id', item.evidence_id,
+                       'kind', item.kind, 'source_ids', item.source_ids)) AS items
+            FROM public.reply_context_evidence AS item WHERE item.reply_request_id = lineage.id
+            HAVING count(*) > 0
+        ) AS evidence ON true
         LEFT JOIN public.assistant_session_turn AS turn ON turn.reply_request_id = lineage.id
           AND turn.owner_id = %s AND turn.contact_id = %s
         """,
@@ -133,8 +138,10 @@ def _reply_dependencies(connection: Any, scope: ContactScope, request_id: UUID) 
     ).fetchall()
     dependencies: set[UUID] = set()
     # 变化关系父版本属于删除审计，不自动成为实际生成事实；真正用过的父版本仍受退役门禁。
-    used = {row["evidence_id"] for row in rows}
+    used = {UUID(item["evidence_id"]) for row in rows for item in row["evidence"]}
     used.update(identifier for row in rows for identifier in (row["dependency_ids"] or ()))
+    # 一个历史回复的快照只返回、遍历一次，不能按依据条数复制整棵 JSON。
+    snapshots = {row["request_id"]: row["context_snapshot"] or {} for row in rows}
     def actual_references(value):
         if isinstance(value, dict):
             for key, item in value.items():
@@ -149,11 +156,9 @@ def _reply_dependencies(connection: Any, scope: ContactScope, request_id: UUID) 
         elif isinstance(value, list):
             for item in value:
                 actual_references(item)
-    for row in rows:
-        actual_references(row["context_snapshot"] or {})
-    for row in rows:
-        dependencies.update(row["dependency_ids"] or ())
-        snapshot = row["context_snapshot"] or {}
+    for snapshot in snapshots.values():
+        actual_references(snapshot)
+    for snapshot in snapshots.values():
         try:
             provenance = set()
             for item in snapshot.get("evidence", ()):
@@ -164,12 +169,15 @@ def _reply_dependencies(connection: Any, scope: ContactScope, request_id: UUID) 
                                 if UUID(value) not in provenance - used)
         except (TypeError, ValueError, AttributeError):
             raise ReplyStoreInvariantError("旧回复导航依赖结构无效。") from None
-        dependencies.update(_evidence_dependencies(
-            connection, owner_id=scope.owner_id, evidence_id=row["evidence_id"],
-            kind=row["kind"], source_ids={UUID(value) for value in row["source_ids"]},
-            historical=True,
-        ))
-    for identifier in {row["request_id"] for row in rows}:
+    for row in rows:
+        dependencies.update(row["dependency_ids"] or ())
+        for item in row["evidence"]:
+            dependencies.update(_evidence_dependencies(
+                connection, owner_id=scope.owner_id, evidence_id=UUID(item["evidence_id"]),
+                kind=item["kind"], source_ids={UUID(value) for value in item["source_ids"]},
+                historical=True,
+            ))
+    for identifier in snapshots:
         dependencies.update(captured_reply_sources(connection, owner_id=scope.owner_id, request_id=identifier))
     # 继承当时实际捕获的依赖，不把后来挂接的来源补进旧候选的来历。
     return dependencies

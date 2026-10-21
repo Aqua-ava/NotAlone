@@ -38,10 +38,18 @@ class ExploredReplyContext:
         return replace(context, evidence=context.evidence + tuple(additional))
 
     def validate_current(self, context: ReplyContext) -> None:
+        self._validate_current(context, preparation=False)
+
+    def validate_for_preparation(self, context: ReplyContext) -> None:
+        """准备阶段仍核对探索原根，不把概览延后扩大为来源豁免。"""
+        self._validate_current(context, preparation=True)
+
+    def _validate_current(self, context: ReplyContext, *, preparation: bool) -> None:
         task = self._read(context.command)
         if task is not None:
             self._require_revision(context, task)
-        self._context.validate_current(context)
+        validator = getattr(self._context, "validate_for_preparation", None) if preparation else None
+        (validator if callable(validator) else self._context.validate_current)(context)
 
     @staticmethod
     def _require_revision(context: ReplyContext, task: ExplorationTask) -> None:

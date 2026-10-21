@@ -11,6 +11,7 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from notalone.memory.models import FactSubject
+from notalone.memory.correction import MemoryCorrectionConflictError
 
 from notalone.persistence import correction_evidence
 from notalone.persistence.locks import lock_owner_scope
@@ -109,13 +110,22 @@ class SnapshotReadScopeTest(MemoryOverviewHttpFixture, CoreBusinessFlowFixture, 
                     self.assertTrue(baseline["message_ids"])
                     for changed in ({"owner_id": uuid4()}, {"contact_id": uuid4()},
                                     {"message_ids": set()}, {"ref_ids": set()}):
+                        before_count = len(queries)
                         result = correction_evidence.capture_message_snapshot(first, **(args | changed))
                         self.assertEqual(result["message_ids"], [])
+                        if "ref_ids" in changed:
+                            self.assertEqual(len(queries), before_count,
+                                             "显式空引用集合必为空，不应查询数据库")
+                        else:
+                            self.assertEqual(len(queries), before_count + 1,
+                                             "不同范围不能冒用前次完整引用集合")
                     source_result = correction_evidence.capture_message_snapshot(first,
                         **(args | {"message_ids": set(), "source_ids": (UUID(source),)}))
                     self.assertIn(str(message), source_result["message_ids"])
+                    before_count = len(queries)
                     self.assertEqual(correction_evidence.capture_message_snapshot(second, **args), baseline)
-                    self.assertEqual(len(queries), 7)
+                    self.assertEqual(len(queries), before_count + 1, "另一连接必须实际读取")
+                    self.assertLessEqual(len(queries), 6, "空引用集合不应增加查询预算")
 
     def test_overview_batches_candidates_and_shared_context_for_owner_and_contact(self):
         store = PostgresRelationshipOverviewStore(self.database_url)
@@ -167,3 +177,30 @@ class SnapshotReadScopeTest(MemoryOverviewHttpFixture, CoreBusinessFlowFixture, 
                                            (self.owner_id, candidates))
                         withdrawn = read()
                         self.assertEqual(len(withdrawn.entries), 1)
+
+    def test_validation_reuses_readonly_snapshot_without_copying_or_trusting_mutated_evidence(self):
+        _, _, message = self.import_contact("只读校验的合成来源。")
+        with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
+            lock_owner_scope(connection, owner_id=self.owner_id)
+            evidence = correction_evidence.capture_message_snapshot(connection,
+                owner_id=self.owner_id, message_ids={message})
+            refs = {UUID(row["ref_id"]) for row in evidence["source_refs"]}
+            with correction_evidence.reuse_message_snapshots(connection):
+                with snapshot_queries() as queries, patch.object(correction_evidence, "deepcopy", wraps=deepcopy) as copied:
+                    correction_evidence.validate_frozen_snapshot(connection, owner_id=self.owner_id, evidence=evidence)
+                    correction_evidence.validate_frozen_snapshot(connection, owner_id=self.owner_id, evidence=evidence)
+                    self.assertEqual(len(queries), 1)
+                    self.assertEqual(copied.call_count, 0, "只读比较不应复制整份大窗口")
+                returned = correction_evidence.capture_message_snapshot(connection,
+                    owner_id=self.owner_id, message_ids={message}, ref_ids=refs)
+                returned["message_snapshots"][str(message)]["source_refs"].clear()
+                correction_evidence.validate_frozen_snapshot(connection, owner_id=self.owner_id, evidence=evidence)
+                altered = deepcopy(evidence)
+                altered["message_digests"][str(message)] = "f" * 64
+                with self.assertRaises(MemoryCorrectionConflictError):
+                    correction_evidence.validate_frozen_snapshot(connection, owner_id=self.owner_id, evidence=altered)
+            connection.execute("UPDATE public.message SET text_content='下一次已变更的合成来源' WHERE owner_id=%s AND id=%s",
+                               (self.owner_id, message))
+            with correction_evidence.reuse_message_snapshots(connection):
+                with self.assertRaises(MemoryCorrectionConflictError):
+                    correction_evidence.validate_frozen_snapshot(connection, owner_id=self.owner_id, evidence=evidence)

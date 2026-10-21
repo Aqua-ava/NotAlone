@@ -107,6 +107,21 @@ _CANDIDATE_COLUMNS = """
     created_at AS recorded_at
 """
 
+
+def _pending_candidate_columns(connection) -> str:
+    """直接投影可选列，避免为小字段序列化整行来源依据；旧结构仍返回 NULL。"""
+    available = {row["attname"] for row in connection.execute(
+        "SELECT attname FROM pg_attribute WHERE attrelid='public.memory_candidate'::regclass "
+        "AND attnum>0 AND NOT attisdropped",
+    ).fetchall()}
+    columns = _CANDIDATE_COLUMNS
+    for field in ("dimension_evidence", "event", "conditions", "evolution",
+                  "source_dependency_mode", "requires_all_sources"):
+        operator = "->>" if field == "source_dependency_mode" else "->"
+        columns = columns.replace(f"to_jsonb(memory_candidate){operator}'{field}'",
+                                  field if field in available else "NULL")
+    return columns
+
 _MEMORY_COLUMNS = """
     id AS memory_id,
     owner_id,
@@ -1200,7 +1215,7 @@ class PostgresMemoryStore:
                     )
                 rows = connection.execute(
                     f"""
-                    SELECT {_CANDIDATE_COLUMNS}
+                    SELECT {_pending_candidate_columns(connection)}
                     FROM public.memory_candidate
                     WHERE owner_id = %s
                       AND contact_id = %s

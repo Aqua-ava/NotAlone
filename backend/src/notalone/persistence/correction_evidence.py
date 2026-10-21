@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from copy import deepcopy
@@ -24,6 +24,10 @@ from notalone.persistence.message_sources import active_source_ref_sql, source_r
 class _SnapshotReadScope:
     connection: psycopg.Connection[Any]
     snapshots: dict[tuple, dict[str, Any]] = field(default_factory=dict)
+    source_availability: dict[tuple, bool] = field(default_factory=dict)
+    reference_rows: dict[tuple[UUID, UUID], dict[str, Any]] = field(default_factory=dict)
+    reference_snapshots: dict[tuple[UUID, UUID], dict[str, Any]] = field(default_factory=dict)
+    message_snapshots: dict[tuple, dict[str, Any]] = field(default_factory=dict)
 
 
 _snapshot_read_scope: ContextVar[_SnapshotReadScope | None] = ContextVar(
@@ -44,7 +48,25 @@ def reuse_message_snapshots(connection: psycopg.Connection[Any]) -> Iterator[Non
         yield
     finally:
         scope.snapshots.clear()
+        scope.source_availability.clear()
+        scope.reference_rows.clear()
+        scope.reference_snapshots.clear()
+        scope.message_snapshots.clear()
         _snapshot_read_scope.reset(token)
+
+
+def read_source_availability(
+    connection: psycopg.Connection[Any], *, owner_id: UUID, kind: str,
+    identifiers: Iterable[UUID | str], read: Callable[[], bool],
+) -> bool:
+    """来源或引用活动性沿同一只读作用域复用；作用域外始终重新查询。"""
+    scope = _snapshot_read_scope.get()
+    if scope is None or scope.connection is not connection:
+        return read()
+    key = (owner_id, kind, frozenset(str(identifier) for identifier in identifiers))
+    if key not in scope.source_availability:
+        scope.source_availability[key] = read()
+    return scope.source_availability[key]
 
 
 def capture_message_snapshot(
@@ -53,6 +75,18 @@ def capture_message_snapshot(
     ref_ids: set[UUID] | None = None,
 ) -> dict[str, Any]:
     """完整查询范围一致时复用本次读取；返回独立副本供后续合并。"""
+    current = _read_message_snapshot(connection, owner_id=owner_id, message_ids=message_ids,
+        contact_id=contact_id, source_ids=source_ids, ref_ids=ref_ids)
+    scope = _snapshot_read_scope.get()
+    return deepcopy(current) if scope is not None and scope.connection is connection else current
+
+
+def _read_message_snapshot(
+    connection: psycopg.Connection[Any], *, owner_id: UUID, message_ids: set[UUID],
+    contact_id: UUID | None = None, source_ids: tuple[UUID, ...] = (),
+    ref_ids: set[UUID] | None = None,
+) -> dict[str, Any]:
+    """内部只读视图；验证函数只比较，绝不修改或向调用者暴露缓存值。"""
     scope = _snapshot_read_scope.get()
     if scope is None or scope.connection is not connection:
         return _capture_message_snapshot(connection, owner_id=owner_id, message_ids=message_ids,
@@ -63,20 +97,16 @@ def capture_message_snapshot(
         scope.snapshots[key] = _capture_message_snapshot(connection,
             owner_id=owner_id, message_ids=message_ids, contact_id=contact_id,
             source_ids=source_ids, ref_ids=ref_ids)
-    return deepcopy(scope.snapshots[key])
+    return scope.snapshots[key]
 
 
-def _capture_message_snapshot(
-    connection: psycopg.Connection[Any], *, owner_id: UUID, message_ids: set[UUID],
-    contact_id: UUID | None = None, source_ids: tuple[UUID, ...] = (),
-    ref_ids: set[UUID] | None = None,
-) -> dict[str, Any]:
-    """新捕获限制本联系人；旧上下文仅沿冻结 UUID 读取，不扫描其他联系人。"""
-    rows = connection.execute(
+def _query_message_rows(connection, *, owner_id, contact_id, message_ids, source_ids, ref_ids):
+    return connection.execute(
         f"""SELECT message.id, message.contact_id, message.text_content, message.media_placeholder,
                    message.speaker, message.message_type, message.occurred_at, ref.id AS ref_id,
                    COALESCE(ref.source_document_id, ref.observation_id) AS source_id,
                    ref.source_kind, ref.source_locator, ref.raw_payload,
+                   ref.source_document_id, ref.observation_id,
                    ({source_ref_content_sha_sql()}) AS source_digest
         FROM public.message AS message
         JOIN public.message_source_ref AS ref ON ref.message_id=message.id
@@ -90,6 +120,42 @@ def _capture_message_snapshot(
          list(ref_ids) if ref_ids is not None else None,
          list(ref_ids) if ref_ids is not None else None),
     ).fetchall()
+
+
+def _snapshot_rows(connection, *, owner_id, contact_id, message_ids, source_ids, ref_ids):
+    scope = _snapshot_read_scope.get()
+    cache = scope.reference_rows if scope is not None and scope.connection is connection else None
+    cached = []
+    missing = ref_ids
+    if cache is not None and ref_ids is not None:
+        # 仅缓存原 SQL 实际返回的活动引用；受限查询未返回不表示全局不存在。
+        missing = {identifier for identifier in ref_ids if (owner_id, identifier) not in cache}
+        source_set = set(source_ids)
+        for identifier in ref_ids - missing:
+            row = cache[owner_id, identifier]
+            if ((contact_id is None or row["contact_id"] == contact_id)
+                    and (row["id"] in message_ids or row["source_document_id"] in source_set
+                         or row["observation_id"] in source_set)):
+                cached.append(row)
+    if missing is None or missing:
+        rows = _query_message_rows(connection, owner_id=owner_id, contact_id=contact_id,
+            message_ids=message_ids, source_ids=source_ids, ref_ids=missing)
+        if cache is not None:
+            cache.update(((owner_id, row["ref_id"]), row) for row in rows)
+        cached.extend(rows)
+    return sorted(cached, key=lambda row: (row["id"], row["ref_id"]))
+
+
+def _capture_message_snapshot(
+    connection: psycopg.Connection[Any], *, owner_id: UUID, message_ids: set[UUID],
+    contact_id: UUID | None = None, source_ids: tuple[UUID, ...] = (),
+    ref_ids: set[UUID] | None = None,
+) -> dict[str, Any]:
+    """新捕获限制本联系人；旧上下文仅沿冻结 UUID 读取，不扫描其他联系人。"""
+    rows = _snapshot_rows(connection, owner_id=owner_id, contact_id=contact_id,
+        message_ids=message_ids, source_ids=source_ids, ref_ids=ref_ids)
+    scope = _snapshot_read_scope.get()
+    shared = scope if scope is not None and scope.connection is connection else None
     messages: dict[str, list[dict[str, Any]]] = {}
     refs = []
     sources = {str(item) for item in source_ids}
@@ -97,13 +163,23 @@ def _capture_message_snapshot(
         key = str(row["id"])
         messages.setdefault(key, []).append(row)
         sources.update((key, str(row["source_id"])))
-        refs.append({"message_id": key, "ref_id": str(row["ref_id"]),
-                     "source_id": str(row["source_id"]), "digest": hashlib.sha256(json.dumps(
-                         [row["source_kind"], row["source_locator"], row["raw_payload"], row["source_digest"]],
-                         sort_keys=True, ensure_ascii=False,
-                     ).encode()).hexdigest()})
+        reference_key = (owner_id, row["ref_id"])
+        ref = shared.reference_snapshots.get(reference_key) if shared is not None else None
+        if ref is None:
+            ref = {"message_id": key, "ref_id": str(row["ref_id"]),
+                   "source_id": str(row["source_id"]), "digest": hashlib.sha256(json.dumps(
+                       [row["source_kind"], row["source_locator"], row["raw_payload"], row["source_digest"]],
+                       sort_keys=True, ensure_ascii=False,
+                   ).encode()).hexdigest()}
+            if shared is not None:
+                shared.reference_snapshots[reference_key] = ref
+        refs.append(ref)
     snapshots = {}
     for key, group in messages.items():
+        message_key = (owner_id, key, tuple(item["ref_id"] for item in group))
+        if shared is not None and message_key in shared.message_snapshots:
+            snapshots[key] = shared.message_snapshots[message_key]
+            continue
         row = group[0]
         text = row["text_content"] or row["media_placeholder"] or ""
         # 字段沿 EvidenceMessage 的摘要约定；不保存正文或来源载荷副本。
@@ -121,6 +197,8 @@ def _capture_message_snapshot(
                 "raw_payload": item["raw_payload"], "source_content_sha256": item["source_digest"],
             } for item in group)),
         }
+        if shared is not None:
+            shared.message_snapshots[message_key] = snapshots[key]
     return {"version": 1, "message_ids": sorted(messages), "source_ids": sorted(sources),
             "source_refs": refs, "message_digests": {key: value["text_sha256"] for key, value in snapshots.items()},
             "message_snapshots": snapshots,
@@ -137,7 +215,7 @@ def validate_frozen_snapshot(
     if (set(evidence.get("message_snapshots", {})) != identifiers
             or set(evidence.get("message_scopes", {})) != identifiers):
         raise MemoryCorrectionConflictError("参与提取的旧窗口世代未知，请重新取得当前依据。")
-    current = capture_message_snapshot(
+    current = _read_message_snapshot(
         connection, owner_id=owner_id, message_ids={UUID(item) for item in identifiers},
         ref_ids={UUID(item["ref_id"]) for item in evidence["source_refs"]},
     )

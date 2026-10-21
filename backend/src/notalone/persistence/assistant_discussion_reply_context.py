@@ -63,10 +63,19 @@ class PostgresAssistantDiscussionContext:
         return replace(context, assistant_discussion=discussion)
 
     def validate_current(self, context: ReplyContext) -> None:
+        self._validate_current(context, preparation=False)
+
+    def validate_for_preparation(self, context: ReplyContext) -> None:
+        """准备阶段仍核对当前输入与讨论，概览留给最终保存事务。"""
+        self._validate_current(context, preparation=True)
+
+    def _validate_current(self, context: ReplyContext, *, preparation: bool) -> None:
         if not isinstance(context, ReplyContext):
             raise ReplyContextInvariantError("回复上下文快照结构无效。")
         # 不在 A owner 锁内调用可能自开连接的基底 freshness 检查。
-        validator = getattr(self._context, "validate_current", None)
+        validator = getattr(self._context, "validate_for_preparation", None) if preparation else None
+        if not callable(validator):
+            validator = getattr(self._context, "validate_current", None)
         if callable(validator):
             validator(context)
         discussion = context.assistant_discussion

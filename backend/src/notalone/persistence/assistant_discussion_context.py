@@ -23,7 +23,7 @@ from notalone.persistence.assistant_session_store import (
     _dependencies_available, _partition_assistant_dependencies, _reply_dependencies,
 )
 from notalone.persistence.reply_sources import (
-    _with_reply_source_validation, captured_reply_sources, require_reply_sources_current,
+    _with_reply_source_validation, _reply_source_validation_scope, captured_reply_sources, require_reply_sources_current,
 )
 from notalone.persistence.reply_basis_changes import (historical_basis_revision_sha256,
     require_generation_memory_dependencies)
@@ -47,7 +47,8 @@ def _captured_anchor(connection: Any, scope: ContactScope, request_key: UUID) ->
     if not isinstance(scope, ContactScope) or not isinstance(request_key, UUID):
         raise ReplyStoreInvariantError("助手讨论请求结构无效。")
     row = connection.execute(
-        "SELECT turn.*,input.state AS anchor_input_state, "
+        "SELECT turn.id,turn.session_id,turn.input_version_id,turn.input_digest,turn.input_payload, "
+        "turn.conversation_binding_id,turn.state,turn.dependency_ids,input.state AS anchor_input_state, "
         "input.conversation_binding_id AS anchor_binding_id FROM public.assistant_session_turn AS turn "
         "JOIN public.assistant_session_input AS input ON input.id=turn.input_version_id "
         "AND input.turn_id=turn.id AND input.owner_id=turn.owner_id "
@@ -73,9 +74,18 @@ def _current_fingerprint(row: dict[str, Any]) -> str:
     return _fingerprint((row["input_digest"], row["input_payload"], row["conversation_binding_id"]))
 
 
-def _input_rows(connection: Any, scope: ContactScope, session_id: UUID) -> list[dict[str, Any]]:
+def _input_rows(connection: Any, scope: ContactScope, session_id: UUID, *,
+                input_ids: set[UUID] | None = None) -> list[dict[str, Any]]:
+    if input_ids is not None and not input_ids:
+        return []
+    selected = " AND input.id=ANY(%s::uuid[]) " if input_ids is not None else ""
+    parameters = (scope.owner_id, scope.contact_id, session_id)
+    if input_ids is not None:
+        parameters += (sorted(input_ids),)
     return connection.execute(
-        "SELECT input.*,turn.state AS turn_state,turn.input_payload,turn.input_digest, "
+        "SELECT input.id,input.session_id,input.turn_id,input.input_type,input.state,input.content, "
+        "input.conversation_binding_id,input.dependency_ids, "
+        "turn.state AS turn_state,turn.input_payload,turn.input_digest, "
         "turn.dependency_ids AS turn_dependencies,request.id AS reply_request_id,request.state AS request_state "
         "FROM public.assistant_session_input AS input "
         "LEFT JOIN public.assistant_session_turn AS turn ON turn.id=input.turn_id "
@@ -86,8 +96,8 @@ def _input_rows(connection: Any, scope: ContactScope, session_id: UUID) -> list[
         "AND request.conversation_binding_id=turn.conversation_binding_id "
         "AND request.idempotency_key=turn.idempotency_key "
         "WHERE input.owner_id=%s AND input.contact_id=%s AND input.session_id=%s "
-        "ORDER BY input.created_at,coalesce(input.turn_id,input.id)",
-        (scope.owner_id, scope.contact_id, session_id),
+        + selected + "ORDER BY input.created_at,coalesce(input.turn_id,input.id)",
+        parameters,
     ).fetchall()
 
 
@@ -117,6 +127,19 @@ def _discussion_available(connection: Any, scope: ContactScope, row: dict[str, A
 
 
 def _generation_input_available(connection: Any, scope: ContactScope, row: dict[str, Any], *, policy_current=False) -> bool:
+    # 同一稳定遍历中，多份后续快照可能引用同一旧输入；只复用成功核验。
+    with _reply_source_validation_scope(connection, scope) as validation:
+        if row["reply_request_id"] in validation.active:
+            return False
+        key = (_fingerprint(row), policy_current)
+        if key not in validation.generation_inputs:
+            if not _read_generation_input_available(connection, scope, row, policy_current=policy_current):
+                return False
+            validation.generation_inputs.add(key)
+        return True
+
+
+def _read_generation_input_available(connection: Any, scope: ContactScope, row: dict[str, Any], *, policy_current=False) -> bool:
     if (row["state"] != "active" or row["turn_state"] not in ("running", "failed", "completed")
             or row["input_payload"] is None
             or not _dependencies_available(connection, scope, set(row["turn_dependencies"] or ()), historical=True)):
@@ -149,6 +172,14 @@ def _candidate_generation_available(row: dict[str, Any]) -> bool:
 
 
 def _generation_dependencies(connection: Any, scope: ContactScope, row: dict[str, Any]) -> DiscussionDependencies:
+    with _reply_source_validation_scope(connection, scope) as validation:
+        key = _fingerprint(row)
+        if key not in validation.generation_dependencies:
+            validation.generation_dependencies[key] = _read_generation_dependencies(connection, scope, row)
+        return validation.generation_dependencies[key]
+
+
+def _read_generation_dependencies(connection: Any, scope: ContactScope, row: dict[str, Any]) -> DiscussionDependencies:
     sources = set(row["turn_dependencies"] or ())
     inherited = _partition_assistant_dependencies(connection, scope, sources)
     sources = set(inherited.source_ids)
@@ -198,7 +229,12 @@ def _candidate_records(connection: Any, scope: ContactScope, row: dict[str, Any]
 def _candidate_history(connection: Any, scope: ContactScope, session_id: UUID,
                        candidate_id: UUID) -> AssistantCandidateHistory:
     try:
-        return read_candidate_versions(connection, scope, session_id, candidate_id)
+        # 嵌套讨论常重复引用同一候选；持锁读取内只构建一次不可变历史。
+        with _reply_source_validation_scope(connection, scope) as validation:
+            key = (session_id, candidate_id)
+            if key not in validation.candidate_histories:
+                validation.candidate_histories[key] = read_candidate_versions(connection, scope, session_id, candidate_id)
+            return validation.candidate_histories[key]
     except AssistantCandidateVersionError:
         raise ReplyStoreInvariantError("本次使用的旧候选历史已失效。") from None
 
@@ -337,7 +373,9 @@ def _require_captured_records(
     *, policy_current=False,
 ) -> DiscussionDependencies:
     dependencies: set[UUID] = set()
-    input_rows = {row["id"]: row for row in _input_rows(cursor, scope, snapshot.session_id)}
+    # 只复验当时真正捕获的输入；未参与的后续历史不读取，也不影响旧身份。
+    input_rows = {row["id"]: row for row in _input_rows(cursor, scope, snapshot.session_id,
+        input_ids={identity.input_version_id for identity in snapshot.records})}
     captured_by_input: dict[UUID, DiscussionDependencies] = {}
     histories: dict[UUID, AssistantCandidateHistory] = {}
     for identity in snapshot.records:
