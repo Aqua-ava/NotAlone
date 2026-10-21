@@ -163,6 +163,9 @@ from notalone.server.follow_smoke import (
 from notalone.server.sse import encode_sse_frame
 from notalone.server.sync_host import SyncControlPort, SyncHostBusy, SyncHostStopped
 
+# 统一诊断日志出口；正文、凭据与真实路径不得写入日志。
+logger = logging.getLogger(__name__)
+
 
 @dataclass(frozen=True, slots=True)
 class Response:
@@ -415,6 +418,12 @@ class BackendApp:
                 HTTPStatus.SERVICE_UNAVAILABLE, {"error": "runtime_stopping"}
             )
         except Exception:
+            # 只记录方法、去查询串的路径和异常栈；请求正文与凭据不进入日志。
+            logger.exception(
+                "backend_request_failed method=%s path=%s",
+                method.upper(),
+                urlsplit(path).path,
+            )
             return _json_response(
                 HTTPStatus.INTERNAL_SERVER_ERROR,
                 {"error": "internal_error"},
