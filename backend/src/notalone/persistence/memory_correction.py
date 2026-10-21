@@ -260,14 +260,8 @@ def capture_evidence(
             (scope.owner_id, trace_id, candidate.candidate_id),
         ).fetchall()
         dependencies.update(row["source_id"] for row in trace_dependencies)
-        dependency_candidates = connection.execute(
-            """SELECT candidate.* FROM public.memory_candidate AS candidate
-            WHERE candidate.owner_id=%s AND candidate.id IN (
-                SELECT source_candidate_id FROM public.confirmed_memory WHERE owner_id=%s AND contact_id=%s AND id=ANY(%s)
-                UNION SELECT source_candidate_id FROM public.owner_memory WHERE owner_id=%s AND id=ANY(%s)
-            )""",
-            (scope.owner_id, scope.owner_id, scope.contact_id, list(dependencies), scope.owner_id, list(dependencies)),
-        ).fetchall()
+        from notalone.persistence.memory_context_read import read_dependency_candidates
+        dependency_candidates = read_dependency_candidates(connection, scope, dependencies)
         if dependency_candidates:
             evidence["has_memory_context"] = True
         for row in dependency_candidates:

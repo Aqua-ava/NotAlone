@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
+from copy import deepcopy
+from dataclasses import dataclass, field
 import hashlib
 import json
 from typing import Any
@@ -15,7 +20,53 @@ from notalone.memory.evidence_binding import content_digest, source_state_digest
 from notalone.persistence.message_sources import active_source_ref_sql, source_ref_content_sha_sql
 
 
+@dataclass
+class _SnapshotReadScope:
+    connection: psycopg.Connection[Any]
+    snapshots: dict[tuple, dict[str, Any]] = field(default_factory=dict)
+
+
+_snapshot_read_scope: ContextVar[_SnapshotReadScope | None] = ContextVar(
+    "message_snapshot_read_scope", default=None,
+)
+
+
+@contextmanager
+def reuse_message_snapshots(connection: psycopg.Connection[Any]) -> Iterator[None]:
+    """仅复用一次持 owner 锁或稳定只读事务中的来源读取。
+
+    调用方不得在作用域中修改来源或提交事务；每次进入独立建表，退出立即
+    丢弃。生成前、模型返回后与提交时的来源复验必须各自重新读取。
+    """
+    scope = _SnapshotReadScope(connection)
+    token = _snapshot_read_scope.set(scope)
+    try:
+        yield
+    finally:
+        scope.snapshots.clear()
+        _snapshot_read_scope.reset(token)
+
+
 def capture_message_snapshot(
+    connection: psycopg.Connection[Any], *, owner_id: UUID, message_ids: set[UUID],
+    contact_id: UUID | None = None, source_ids: tuple[UUID, ...] = (),
+    ref_ids: set[UUID] | None = None,
+) -> dict[str, Any]:
+    """完整查询范围一致时复用本次读取；返回独立副本供后续合并。"""
+    scope = _snapshot_read_scope.get()
+    if scope is None or scope.connection is not connection:
+        return _capture_message_snapshot(connection, owner_id=owner_id, message_ids=message_ids,
+            contact_id=contact_id, source_ids=source_ids, ref_ids=ref_ids)
+    key = (owner_id, contact_id, frozenset(message_ids), frozenset(source_ids),
+           None if ref_ids is None else frozenset(ref_ids))
+    if key not in scope.snapshots:
+        scope.snapshots[key] = _capture_message_snapshot(connection,
+            owner_id=owner_id, message_ids=message_ids, contact_id=contact_id,
+            source_ids=source_ids, ref_ids=ref_ids)
+    return deepcopy(scope.snapshots[key])
+
+
+def _capture_message_snapshot(
     connection: psycopg.Connection[Any], *, owner_id: UUID, message_ids: set[UUID],
     contact_id: UUID | None = None, source_ids: tuple[UUID, ...] = (),
     ref_ids: set[UUID] | None = None,
@@ -103,10 +154,11 @@ def validate_frozen_snapshot(
 
 def merge_frozen_snapshot(current: dict[str, Any], frozen: dict[str, Any]) -> None:
     """并入完整旧窗口，冻结值优先；直接证据身份由调用者单独保留。"""
+    frozen_ids = set(frozen["message_ids"])
     for key in ("message_ids", "source_ids"):
         current[key] = sorted(set(current[key]) | set(frozen[key]))
     refs = {(item["message_id"], item["ref_id"], item["source_id"]): item
-            for item in current["source_refs"] if item["message_id"] not in frozen["message_ids"]}
+            for item in current["source_refs"] if item["message_id"] not in frozen_ids}
     refs.update({(item["message_id"], item["ref_id"], item["source_id"]): item
                  for item in frozen["source_refs"]})
     current["source_refs"] = sorted(refs.values(), key=lambda item: (item["message_id"], item["ref_id"]))

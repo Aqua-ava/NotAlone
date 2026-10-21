@@ -24,6 +24,7 @@ class ReadMetrics:
 
     def __init__(self):
         self.queries = 0
+        self.message_snapshots = 0
         self.rows = Counter()
         self.connect = psycopg.connect
 
@@ -47,6 +48,8 @@ class MeasuredConnection:
 
     def execute(self, statement, *args, **kwargs):
         self.metrics.queries += 1
+        if 'SELECT message.id, message.contact_id, message.text_content' in str(statement):
+            self.metrics.message_snapshots += 1
         return MeasuredCursor(self.connection.execute(statement, *args, **kwargs),
                               self.metrics, str(statement))
 
@@ -72,6 +75,8 @@ class MeasuredCursor:
         for row in rows:
             if not isinstance(row, dict):
                 continue
+            if {'id', 'correction_evidence', 'dimension_evidence'} <= row.keys():
+                self.metrics.rows['dependency_candidate'] += 1
             for column, table in (("memory_text", "confirmed_memory"),
                                   ("text_content", "owner_memory"),
                                   ("candidate_text", "memory_candidate"),
@@ -82,6 +87,48 @@ class MeasuredCursor:
 
 
 class ReplyRevalidationBatchTest(CoreBusinessFlowFixture, unittest.TestCase):
+    def test_dependency_evidence_is_loaded_once_in_a_read_scope_and_refreshed_afterward(self):
+        from psycopg.rows import dict_row
+        from psycopg.types.json import Jsonb
+        from notalone.persistence.memory_context_read import read_dependency_candidates, reuse_memory_context
+
+        self.seed(1)
+        self.seed_other_tracks(2)
+        with psycopg.connect(self.database_url) as connection:
+            candidate = connection.execute('SELECT id FROM memory_candidate WHERE owner_id=%s LIMIT 1',
+                                           (self.owner_id,)).fetchone()[0]
+            memory = connection.execute('UPDATE confirmed_memory SET source_candidate_id=%s WHERE owner_id=%s RETURNING id',
+                                        (candidate, self.owner_id)).fetchone()[0]
+        metrics = ReadMetrics()
+        with patch('psycopg.connect', metrics), psycopg.connect(self.database_url, row_factory=dict_row) as connection:
+            connection.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY')
+            with reuse_memory_context(connection):
+                for _ in range(12):
+                    rows = read_dependency_candidates(connection, self.scope, {memory})
+                    self.assertEqual([row['id'] for row in rows], [candidate])
+        self.assertEqual(metrics.rows['dependency_candidate'], 1)
+        with psycopg.connect(self.database_url) as connection:
+            connection.execute("UPDATE memory_candidate SET correction_evidence=correction_evidence || %s WHERE id=%s",
+                               (Jsonb({'synthetic_revision': 2}), candidate))
+        with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
+            connection.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY')
+            with reuse_memory_context(connection):
+                rows = read_dependency_candidates(connection, self.scope, {memory})
+                self.assertEqual(rows[0]['correction_evidence']['synthetic_revision'], 2)
+                other = ContactScope(self.owner_id, uuid4())
+                self.assertEqual(read_dependency_candidates(connection, other, {memory}), [])
+
+    def test_pending_shared_sources_are_read_once_per_batch_and_rechecked_next_time(self):
+        self.seed_other_tracks(12)
+        metrics = ReadMetrics()
+        with patch('psycopg.connect', metrics):
+            pending = PostgresMemoryStore(self.database_url).list_pending_candidates(self.scope)
+        self.assertEqual(len(pending), 12)
+        self.assertLessEqual(metrics.message_snapshots, 2)
+        with psycopg.connect(self.database_url) as connection:
+            connection.execute("UPDATE public.source_document SET status='delete_requested' WHERE id=%s", (self.source_id,))
+        self.assertEqual(self.retrieval.search_pending_candidates(scope=self.scope), ())
+
     def setUp(self):
         self.owner_id, self.contact_id, self.source_id = uuid4(), uuid4(), uuid4()
         self.scope = ContactScope(self.owner_id, self.contact_id)

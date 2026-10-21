@@ -23,12 +23,15 @@ from notalone.persistence.locks import lock_contact_scope, lock_owner_scope
 from notalone.persistence.memory_correction import (
     available_correction_memories, decision_sources_available, source_documents_available,
 )
-from notalone.persistence.correction_evidence import capture_message_snapshot, validate_frozen_snapshot
+from notalone.persistence.correction_evidence import (
+    capture_message_snapshot, reuse_message_snapshots, validate_frozen_snapshot,
+)
 from notalone.persistence.memory_store import PostgresMemoryStore, _MEMORY_COLUMNS
 from notalone.persistence.owner_memory_store import (
     _OWNER_MEMORY_COLUMNS, _ensure_memory_sources, _from_row, _timed_rows,
 )
 from notalone.persistence.memory_versions import version_record_digest
+from notalone.persistence.memory_overview_reads import OverviewDependencyRead
 from notalone.persistence.message_sources import active_source_ref_sql
 from notalone.scopes import ContactScope
 
@@ -77,7 +80,11 @@ class PostgresRelationshipOverviewStore:
             raise OverviewUnavailable("概览暂不可用。") from None
 
     def read_owner_in_transaction(self, connection, owner_id: UUID, *, organization: bool = False) -> RelationshipOverview:
-        """调用方已经持有 owner 锁；复用当前连接，不再申请 contact 锁。"""
+        """调用方已经持有 owner 锁；单次读取内复用来源，不跨概览保留。"""
+        with reuse_message_snapshots(connection):
+            return self._read_owner_in_transaction(connection, owner_id, organization=organization)
+
+    def _read_owner_in_transaction(self, connection, owner_id: UUID, *, organization: bool = False) -> RelationshipOverview:
         if connection.execute("SELECT 1 FROM public.owner WHERE id=%s", (owner_id,)).fetchone() is None:
             raise LookupError("指定范围内的用户不存在。")
         state = connection.execute("SELECT memory_revision FROM public.owner_memory_state WHERE owner_id=%s",
@@ -93,11 +100,13 @@ class PostgresRelationshipOverviewStore:
                                              record_kind="owner_memory", rows=rows)
         entries = []
         dependencies = []
+        reads = OverviewDependencyRead(connection, owner_id=owner_id, contact_id=None,
+                                       rows=rows, digest=_digest)
         for row in _timed_rows(connection, rows):
             try:
                 _ensure_memory_sources(connection, owner_id=owner_id, row=row)
                 lineage = self._lineage(connection, owner_id,
-                    {**row, "memory_source_ids": row["source_ids"]})
+                    {**row, "memory_source_ids": row["source_ids"]}, reads=reads)
             except (PermissionError, MemoryCorrectionConflictError):
                 continue
             memory = _from_row(row)
@@ -145,7 +154,11 @@ class PostgresRelationshipOverviewStore:
             raise OverviewUnavailable("概览暂不可用。") from None
 
     def read_contact_in_transaction(self, connection, scope: ContactScope) -> RelationshipOverview:
-        """调用方已经持有 owner 锁；复用当前连接，不再申请 contact 锁。"""
+        """调用方已经持有 owner 锁；单次读取内复用来源，不跨概览保留。"""
+        with reuse_message_snapshots(connection):
+            return self._read_contact_in_transaction(connection, scope)
+
+    def _read_contact_in_transaction(self, connection, scope: ContactScope) -> RelationshipOverview:
         if connection.execute(
             "SELECT 1 FROM public.contact WHERE owner_id=%s AND id=%s",
             (scope.owner_id, scope.contact_id),
@@ -165,10 +178,12 @@ class PostgresRelationshipOverviewStore:
                                              record_kind="contact_memory", rows=rows)
         entries = []
         dependencies = []
+        reads = OverviewDependencyRead(connection, owner_id=scope.owner_id, contact_id=scope.contact_id,
+                                       rows=rows, digest=_digest)
         for row in PostgresMemoryStore._timed_memories(connection, rows):
             try:
                 PostgresMemoryStore._ensure_active_sources(connection, scope, tuple(row["memory_source_ids"]))
-                lineage = self._lineage(connection, scope, row)
+                lineage = self._lineage(connection, scope, row, reads=reads)
             except (PermissionError, MemoryCorrectionConflictError):
                 continue
             memory = PostgresMemoryStore._memory_from_row(row)
@@ -211,20 +226,19 @@ class PostgresRelationshipOverviewStore:
         return value.astimezone(timezone.utc)
 
     @staticmethod
-    def _lineage(connection, scope: ContactScope | UUID, row: dict) -> dict:
+    def _lineage(connection, scope: ContactScope | UUID, row: dict,
+                 *, reads: OverviewDependencyRead | None = None) -> dict:
         """沿当时保存的窗口复验；未知旧证明不会被当前捕获升级。"""
         owner_id = scope.owner_id if isinstance(scope, ContactScope) else scope
         contact_id = scope.contact_id if isinstance(scope, ContactScope) else None
         record_kind = "contact_memory" if contact_id else "owner_memory"
+        reads = reads or OverviewDependencyRead(connection, owner_id=owner_id, contact_id=contact_id,
+                                                rows=[row], digest=_digest)
         windows = []
         sources = {str(item) for item in row["memory_source_ids"]}
         if contact_id is None:
-            sources.update(PostgresRelationshipOverviewStore._owner_original_candidates(connection, owner_id, row))
-        candidate = connection.execute(
-            "SELECT correction_evidence,dimension_evidence,subject FROM public.memory_candidate "
-            "WHERE owner_id=%s AND (%s::uuid IS NULL OR contact_id=%s) AND id=%s",
-            (owner_id, contact_id, contact_id, row["source_candidate_id"]),
-        ).fetchone() if row["source_candidate_id"] else None
+            sources.update(PostgresRelationshipOverviewStore._owner_original_candidates(connection, owner_id, row, reads=reads))
+        candidate = reads.candidate(row["source_candidate_id"])
         if contact_id is None and row["source_candidate_id"] and (candidate is None or candidate["subject"] != "self"):
             raise MemoryCorrectionConflictError("本人资料的原主体关联已变化。")
         frozen = candidate["correction_evidence"] if candidate else None
@@ -283,22 +297,9 @@ class PostgresRelationshipOverviewStore:
             contact_id=contact_id, message_ids=set(row["memory_source_ids"]),
             source_ids=tuple(row["memory_source_ids"]), ref_ids=original_ref_ids)
         sources.update(direct["source_ids"])
-        source_rows = connection.execute(
-            "SELECT id,status,source_type,content_sha256 FROM public.source_document "
-            "WHERE owner_id=%s AND id=ANY(%s::uuid[]) ORDER BY id", (owner_id, list(sources)),
-        ).fetchall()
+        source_rows = reads.sources(sources)
         # 只绑定实际冻结窗口／追踪已登记的记忆身份，不扫描或输出本人正文。
-        context_records = []
-        for kind, table in (("contact_memory", "confirmed_memory"), ("owner_memory", "owner_memory")):
-            context = connection.execute(
-                "SELECT id,revision,status,text_content,category,topic,source_ids,source_candidate_id,"
-                "adoption_method,valid_at,invalid_at,supersedes_memory_id,event,version_evidence "
-                f"FROM public.{table} WHERE owner_id=%s AND id=ANY(%s::uuid[]) AND id<>%s ORDER BY id",
-                (owner_id, list(sources), row["memory_id"]),
-            ).fetchall()
-            context_records.extend({"record_kind": kind, "memory_id": str(item["id"]),
-                "revision": item["revision"], "status": item["status"], "record_sha256": _digest(item)}
-                for item in context)
+        context_records = reads.context_records(sources, exclude=row["memory_id"])
         return {"source_ids": sorted(sources), "source_refs": sorted(refs.values(), key=lambda item: item["ref_id"]),
                 "context_records": context_records,
                 "original_known": original_known or (
@@ -311,7 +312,8 @@ class PostgresRelationshipOverviewStore:
                     "trace_dependency_ids": sorted(str(item["source_id"]) for item in traces)})}
 
     @staticmethod
-    def _owner_original_candidates(connection, owner_id: UUID, row: dict) -> set[str]:
+    def _owner_original_candidates(connection, owner_id: UUID, row: dict,
+                                   *, reads: OverviewDependencyRead) -> set[str]:
         """修正版本仍须核对实际原 SELF 身份；不替旧 NULL 来源窗口补证。"""
         current = row
         visited = set()
@@ -323,8 +325,7 @@ class PostgresRelationshipOverviewStore:
             visited.add(identifier)
             candidate_id = current["source_candidate_id"]
             if candidate_id is not None:
-                candidate = connection.execute("SELECT subject FROM public.memory_candidate WHERE owner_id=%s AND id=%s",
-                                               (owner_id, candidate_id)).fetchone()
+                candidate = reads.candidate(candidate_id)
                 if candidate is None or candidate["subject"] != "self":
                     raise MemoryCorrectionConflictError("本人资料的原主体关联已变化。")
                 dependencies.add(str(candidate_id))

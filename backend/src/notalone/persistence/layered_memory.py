@@ -713,6 +713,21 @@ class PostgresLayeredMemoryStore(LayeredProfileStore, LayeredCorrectionStore):
                     (row['last_error_code'],scope.owner_id,scope.contact_id))
 
     def capture(self, scope):
+        # 无发布集合时不构建底层概览。这里只做拒绝路径的存在性检查；检查后
+        # 发布、停用或来源变化仍由下面持锁事务重新读取并完整复验。
+        with psycopg.connect(self._database_url) as connection:
+            available = connection.execute(
+                "SELECT 1 FROM public.layered_memory_state state "
+                "JOIN public.layered_memory_generation generation ON generation.owner_id=state.owner_id "
+                "AND generation.contact_id IS NOT DISTINCT FROM state.contact_id "
+                "AND generation.organization_generation=state.organization_generation "
+                "WHERE state.owner_id=%s AND state.contact_id IS NOT DISTINCT FROM %s "
+                "AND state.enabled AND state.status IN ('ready','paused','failed','updating','stale') "
+                "AND cardinality(generation.scenario_version_ids)>0 LIMIT 1",
+                (scope.owner_id, scope.contact_id),
+            ).fetchone()
+        if available is None:
+            return None
         with self.transaction(scope) as (connection, state, _):
             if not state["enabled"] or state["status"] not in {"ready","paused","failed","updating","stale"}:
                 return None

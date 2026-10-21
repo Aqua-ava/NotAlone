@@ -18,6 +18,8 @@ from notalone.memory.dimension_evidence import (
 )
 from notalone.memory.correction import MemoryCorrectionConflictError
 from notalone.persistence.reply_layered_cleanup import erase_layered_reply_dependencies
+from notalone.persistence.correction_evidence import reuse_message_snapshots
+from notalone.persistence.memory_context_read import reuse_memory_context
 from notalone.memory.events import MemoryEvent
 from notalone.memory.evolution import MemoryEvolution
 from notalone.persistence.memory_evolution import bind_memory_evolution, evolution_snapshot, validate_evolution, require_replacement_evolution
@@ -1209,10 +1211,12 @@ class PostgresMemoryStore:
                     (scope.owner_id, scope.contact_id,
                      *((list(candidate_ids),) if candidate_ids is not None else ())),
                 ).fetchall()
-                candidates = (
-                    self._candidate_from_row(row)
-                    for row in self._timed_candidates(connection, rows)
-                )
+                # 本次只读事务的来源窗口可以复用；下次检索仍重新取得并复验。
+                with reuse_message_snapshots(connection), reuse_memory_context(connection):
+                    candidates = tuple(
+                        self._candidate_from_row(row)
+                        for row in self._timed_candidates(connection, rows)
+                    )
                 return tuple(candidate for candidate in candidates
                              if candidate.status is MemoryCandidateStatus.PENDING)
         except MemoryPersistenceError:
