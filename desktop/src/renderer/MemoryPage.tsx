@@ -578,10 +578,7 @@ export function MemoryPage({ session, navigate }: { session: ContactSessionView;
   return <div className="memory-page">
     <div className="memory-navigation"><nav className="memory-tabs" aria-label="记忆分类">{(Object.keys(memoryViews) as MemoryView[]).map((name) =>
       <button key={name} aria-pressed={view === name} onClick={() => selectView(name)}>{memoryViews[name]}</button>)}</nav>
-    <div className="memory-toolbar"><label>联系人 <select aria-label="资料联系人" value={session.state.selectedContactId ?? ''}
-      disabled={session.state.contacts.length === 0} onChange={(event) => void session.selectContact(event.target.value)}>
-      <option value="" disabled>先确认联系人</option>{session.state.contacts.map((entry) => <option key={entry.contactId} value={entry.contactId}>{entry.displayName}</option>)}</select></label>
-      <button className="button" disabled={!contact || [state.contact, state.owner, state.pending, state.sources].some((section) => section.phase === 'loading')}
+    <div className="memory-toolbar"><button className="button" disabled={!contact || [state.contact, state.owner, state.pending, state.sources].some((section) => section.phase === 'loading')}
         onClick={() => void memory.refresh()}>刷新记忆</button></div>
     </div>
     <div className="memory-view-content" key={`${scopeKey}:${view}`}>
@@ -590,8 +587,8 @@ export function MemoryPage({ session, navigate }: { session: ContactSessionView;
       onProgress={contact ? () => window.notalone.memory.refreshProcessingResults({ scope: 'contact', contactId: contact.contactId,
         scopeRevision: session.state.scopeRevision }) : undefined}>
     {!contact ? <section className="memory-no-contact" aria-label="资料范围未确认"><h2>选择一位联系人</h2>
-      <p>查看你们之间记住的事。</p>
-      <button className="button" onClick={() => navigate('contacts')}>前往联系人目录</button></section>
+      <p>请在顶部选择联系人，再查看你们之间记住的事。</p>
+      {session.state.contacts.length === 0 && <button className="button" onClick={() => navigate('contacts')}>添加联系人</button>}</section>
       : <>
         {view === 'contact' && <div ref={factsDetails} className="memory-facts"><ReadingSection title="联系人记忆" note="" empty="还没有记住关于对方的事。"
           state={state.contact} retry={() => void memory.refresh('contact')}>

@@ -10,7 +10,7 @@ import type { RewritePages } from '../rewrite-page-scenarios';
 
 async function openWorkspace({ manager, helper, rewriteBackend }: RewritePages) {
   const contactId = rewriteBackend.data.contact_ids[0];
-  await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+  await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
   await confirmHelperContact(helper, contactId);
   await expect(helper.getByRole('textbox', { name: '有什么想说的', exact: true })).toBeEditable();
   return contactId;
@@ -134,7 +134,7 @@ export async function understandingDirection(browser: Browser, origin: string) {
     replyTransport.nextReply = 'hold';
     await generateWorkspace(helper, 'suggest');
     await expect.poll(() => replyTransport.heldCount).toBe(1);
-    await manager.getByRole('button', { name: '选择合成联系人乙', exact: true }).click();
+    await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人乙' });
     await confirmHelperContact(helper, rewriteBackend.data.contact_ids[1]);
     try {
       await fillWorkspaceThought(helper, '乙的独立想法。');

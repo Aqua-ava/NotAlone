@@ -1,4 +1,4 @@
-import { openFileImport } from './file-import-navigation';
+import { createImportContact, openFileImport } from './file-import-navigation';
 import { expect, type ElectronApplication, type Page } from '@playwright/test';
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -28,10 +28,9 @@ async function importHttp(fixture: ContactFixture, endpoint: '/api/imports/previ
 async function chooseNewImport(app: ElectronApplication, filePath: string): Promise<Page> {
   await selectedDialog(app, filePath);
   const manager = await app.firstWindow();
+  await createImportContact(manager, '预览合成联系人');
   await openFileImport(manager);
   await manager.getByRole('button', { name: '选择历史文件', exact: true }).click();
-  await manager.getByRole('combobox', { name: '资料归属联系人' }).selectOption('new');
-  await manager.getByRole('textbox', { name: '新联系人名称' }).fill('预览合成联系人');
   return manager;
 }
 
@@ -52,11 +51,10 @@ test('主动选择单联系人历史并核对预览，确认不会提前保存�
   await writeFile(filePath, await readFile(path.resolve('../backend/tests/fixtures/valid_single_contact.jsonl')));
   await selectedDialog(app, filePath);
   const manager = await app.firstWindow();
+  await createImportContact(manager, '首次预览合成联系人');
   await openFileImport(manager);
   await manager.getByRole('button', { name: '选择历史文件', exact: true }).click();
   await expect(manager.getByText('single-contact.jsonl', { exact: true })).toBeVisible();
-  await manager.getByRole('combobox', { name: '资料归属联系人' }).selectOption('new');
-  await manager.getByRole('textbox', { name: '新联系人名称' }).fill('首次预览合成联系人');
   await manager.getByRole('button', { name: '预览资料范围', exact: true }).click();
   const preview = manager.getByRole('region', { name: '单联系人资料预览' });
   await expect(preview.getByText('6 条记录', { exact: true })).toBeVisible();
@@ -67,7 +65,7 @@ test('主动选择单联系人历史并核对预览，确认不会提前保存�
   await manager.getByRole('checkbox', { name: '我已核对本人渠道身份、联系人和这份文件的资料范围' }).check();
   await manager.getByRole('button', { name: '确认本次预览', exact: true }).click();
   await expect(manager.getByText('已确认本次预览，尚未保存资料。', { exact: true })).toBeVisible();
-  expect(await readContactHttp(contactBackend)).toEqual({ contacts: [] });
+  await expectNoImportedRecords(manager, contactBackend);
   await manager.screenshot({ path: test.info().outputPath('import-preview.png') });
 });
 
@@ -79,7 +77,7 @@ test('导航返回后仍准确显示本次新联系人名称，重新预览须�
   await manager.getByRole('checkbox', { name: '我已核对本人渠道身份、联系人和这份文件的资料范围' }).check();
   await manager.getByRole('button', { name: '联系人', exact: true }).click();
   await openFileImport(manager);
-  await expect(manager.getByRole('textbox', { name: '新联系人名称' })).toHaveValue('预览合成联系人');
+  await expect(manager.getByRole('combobox', { name: '本次联系人', exact: true }).locator('option:checked')).toHaveText('预览合成联系人');
   await manager.getByRole('button', { name: '预览资料范围', exact: true }).click();
   await expect(manager.getByRole('checkbox', { name: '我已核对本人渠道身份、联系人和这份文件的资料范围' })).not.toBeChecked();
   await expect(manager.getByRole('button', { name: '确认本次预览', exact: true })).toBeDisabled();
@@ -104,7 +102,7 @@ test('文件内容变动后旧预览不能确认，重新预览才可确认新�
   }, oldRevision)).toBe('rejected');
   await manager.getByRole('button', { name: '预览资料范围', exact: true }).click();
   await confirmVisiblePreview(manager);
-  expect(await readContactHttp(contactBackend)).toEqual({ contacts: [] });
+  await expectNoImportedRecords(manager, contactBackend);
 });
 
 test('换文件或取消新的文件选择后，旧确认立即撤销', async ({ runningApp: { app }, contactBackend }) => {
@@ -145,7 +143,7 @@ test('主动取消本次确认后旧确认不能复用', async ({ runningApp: { 
   }, revision)).toBe('rejected');
 });
 
-for (const invalid of ['mixed', 'broken', 'group', 'multiple-owners'] as const) test(`${invalid} 合成资料被拒绝且不保存联系人或消息`, async ({ runningApp: { app }, contactBackend }) => {
+for (const invalid of ['mixed', 'broken', 'group', 'multiple-owners'] as const) test(`${invalid} 合成资料被拒绝且不增加联系人或消息`, async ({ runningApp: { app }, contactBackend }) => {
   const filePath = await syntheticFile(contactBackend, `${invalid}.jsonl`);
   if (invalid === 'mixed') await writeFile(filePath, await readFile(path.resolve('../backend/tests/fixtures/mixed_contacts.jsonl')));
   else if (invalid === 'broken') await writeFile(filePath, '{损坏的合成 JSONL');
@@ -167,7 +165,7 @@ for (const invalid of ['mixed', 'broken', 'group', 'multiple-owners'] as const) 
   await manager.getByRole('button', { name: '预览资料范围', exact: true }).click();
   await expect(manager.getByRole('alert')).toHaveText('预览已拒绝。请提供有效的单联系人 JSONL 文件；混合联系人、群聊、损坏或身份不明确的资料不能导入。');
   await expect(manager.getByRole('region', { name: '单联系人资料预览' })).toHaveCount(0);
-  expect(await readContactHttp(contactBackend)).toEqual({ contacts: [] });
+  await expectNoImportedRecords(manager, contactBackend);
 });
 
 test('库内本人渠道冲突在页面明确拒绝，既有资料保持原范围', async ({ runningApp: { app }, contactBackend }) => {
@@ -176,9 +174,9 @@ test('库内本人渠道冲突在页面明确拒绝，既有资料保持原范�
   await expect(manager.getByText('还没有联系人', { exact: true })).toBeVisible({ timeout: 15_000 });
   const imported = await importHttp(contactBackend, '/api/imports/commit', { path: filePath, new_contact_name: '已导入合成联系人' });
   expect(imported.status).toBe(200);
-  const before = await readContactHttp(contactBackend);
   await writeFile(filePath, (await readFile(filePath, 'utf8')).replaceAll('wxid_synthetic_owner', 'wxid_changed_owner'));
   await chooseNewImport(app, filePath);
+  const before = await readContactHttp(contactBackend);
   await manager.getByRole('button', { name: '预览资料范围', exact: true }).click();
   await expect(manager.getByRole('alert')).toHaveText('本人或联系人渠道身份不一致，预览已拒绝。请检查文件或重新选择联系人。');
   expect(await readContactHttp(contactBackend)).toEqual(before);
@@ -204,7 +202,7 @@ test('渲染层不能提供文件路径或选择目录外联系人，也不取�
   expect(JSON.stringify(state)).not.toContain(filePath);
   expect(JSON.stringify(state)).not.toContain('content_sha256');
   await expect(manager.getByRole('region', { name: '单联系人资料预览' })).toContainText('6 条记录');
-  expect(await readContactHttp(contactBackend)).toEqual({ contacts: [] });
+  await expectNoImportedRecords(manager, contactBackend);
 });
 
 test.describe('已有联系人确认', () => {
@@ -214,19 +212,21 @@ test.describe('已有联系人确认', () => {
     await selectedDialog(app, filePath);
     const manager = await app.firstWindow();
     await openFileImport(manager);
+    await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption(contactBackend.data.contact_ids[0]);
     await manager.getByRole('button', { name: '选择历史文件', exact: true }).click();
-    await manager.getByRole('combobox', { name: '资料归属联系人' }).selectOption(contactBackend.data.contact_ids[0]);
     await manager.getByRole('button', { name: '预览资料范围', exact: true }).click();
     await expect(manager.getByRole('region', { name: '单联系人资料预览' })).toContainText('合成联系人甲');
     await confirmVisiblePreview(manager);
     const revision = (await manager.evaluate(() => window.notalone.imports.getState())).selectionRevision;
-    await manager.getByRole('combobox', { name: '资料归属联系人' }).selectOption(contactBackend.data.contact_ids[1]);
+    await manager.getByRole('combobox', { name: '本次联系人' }).selectOption(contactBackend.data.contact_ids[1]);
     await expect(manager.getByRole('region', { name: '单联系人资料预览' })).toHaveCount(0);
     await expect(manager.getByText('已确认本次预览，尚未保存资料。', { exact: true })).toHaveCount(0);
     expect(await manager.evaluate(async (selectionRevision) => {
       try { await window.notalone.imports.confirmPreview({ selectionRevision }); return 'accepted'; }
       catch { return 'rejected'; }
     }, revision)).toBe('rejected');
+    await expect(manager.getByRole('button', { name: '预览资料范围', exact: true })).toBeDisabled();
+    await manager.getByRole('button', { name: '选择历史文件', exact: true }).click();
     await manager.getByRole('button', { name: '预览资料范围', exact: true }).click();
     await expect(manager.getByRole('region', { name: '单联系人资料预览' })).toContainText('合成联系人乙');
   });
@@ -260,6 +260,15 @@ staleTest.describe('双窗口预览范围失效', () => {
     await expect(manager.getByRole('region', { name: '单联系人资料预览' })).toHaveCount(0);
     await expect(manager.getByRole('button', { name: '预览资料范围', exact: true })).toBeDisabled();
     await expect(manager.getByRole('alert')).toHaveCount(0);
-    await expect(helper.getByText('本次联系人：合成联系人甲', { exact: true })).toBeVisible();
+    await expect(helper.getByRole('combobox', { name: '本次联系人', exact: true }).locator('option:checked')).toHaveText('合成联系人甲');
   });
 });
+
+async function expectNoImportedRecords(manager: Page, fixture: ContactFixture): Promise<void> {
+  const contact = await manager.evaluate(async () => {
+    const state = await window.notalone.contacts.getState();
+    return state.contacts.find(entry => entry.contactId === state.selectedContactId)!;
+  });
+  expect(await readContactHttp(fixture)).toEqual({ contacts: [{ contact_id: contact.contactId,
+    display_name: contact.displayName, data_status: { message_count: 0, source_count: 0 } }] });
+}

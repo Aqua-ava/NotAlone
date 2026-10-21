@@ -7,7 +7,7 @@ import type { RewritePages } from '../rewrite-page-scenarios';
 import { withRewritePages } from './rewrite-acceptance';
 
 async function chooseContact({ manager, helper, rewriteBackend }: RewritePages, index: 0 | 1 = 0) {
-  await manager.getByRole('button', { name: index === 0 ? '选择合成联系人甲' : '选择合成联系人乙', exact: true }).click();
+  await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: index === 0 ? '合成联系人甲' : '合成联系人乙' });
   await confirmHelperContact(helper, rewriteBackend.data.contact_ids[index]);
   await expect.poll(() => helper.evaluate(async () => (await window.notalone.replies.getState()).savedSession?.phase)).toBe('ready');
 }
@@ -167,7 +167,7 @@ export async function assistantSessionCatalogGuards(browser: Browser, origin: st
     await openAssistantHistory(helper);
     await helper.getByRole('button', { name: '新开助手会话', exact: true }).click();
     await expect.poll(() => replyTransport.heldCount).toBe(held + 1);
-    await manager.getByRole('button', { name: '选择合成联系人乙', exact: true }).click();
+    await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人乙' });
     await confirmHelperContact(helper, rewriteBackend.data.contact_ids[1]);
     await helper.getByRole('textbox', { name: '有什么想说的', exact: true }).fill('乙的新合成草稿。');
     replyTransport.release();
@@ -178,7 +178,7 @@ export async function assistantSessionCatalogGuards(browser: Browser, origin: st
   process.stdout.write('page_test_scenario: 无记录目录不隐式创建，未绑定联系人不能借新开授权生成\n');
   await withRewritePages(browser, origin, async ({ manager, helper, rewriteBackend, replyTransport }) => {
     const contactId = rewriteBackend.data.empty_contact_id;
-    await manager.getByRole('button', { name: '选择无消息的合成联系人', exact: true }).click();
+    await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '无消息的合成联系人' });
     // 本场明确检验未授权联系人，不能用人工确认帮助函数改变待验证的前提。
     const readAuthorization = () => helper.evaluate(async () => {
       const contact = await window.notalone.contacts.getState();

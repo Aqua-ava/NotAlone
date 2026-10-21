@@ -34,7 +34,7 @@ export async function replyStrategyMessageGroups(browser: Browser, origin: strin
     const copySurface = { writeText: async (text: string) => { copied.push(text); }, hideWindow: () => { hidden++; } };
     await withRewritePages(browser, origin, async ({ manager, helper, rewriteBackend, replyTransport }, host, userData) => {
       const contactId = rewriteBackend.data.contact_ids[0];
-      await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+      await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
       await confirmHelperContact(helper, contactId);
       await fillWorkspaceThought(helper, scene === '已有想法' ? '关心近况，不增加安排承诺。' : '');
       const groups = [['最近怎么样？', '方便时聊聊就好，不急着安排。'], ['想问问最近的近况。', '如果正在忙，之后再说也可以。']];
@@ -120,7 +120,7 @@ export async function replyStrategyMessageGroups(browser: Browser, origin: strin
       try {
         await restored.backend.connect();
         const nextManager = await restored.open('manager');
-        await nextManager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+        await nextManager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
         const nextHelper = await restored.open('helper');
         await confirmHelperContact(nextHelper, contactId);
         const recovered = groupOn(nextHelper, 1);
@@ -141,7 +141,7 @@ export async function replyStrategyMessageGroups(browser: Browser, origin: strin
     const scenario = `${scene}真实新消息与${scene === '空思路' ? '显式刷新' : '断流重连'}保留消息组编辑`;
     process.stdout.write(`page_test_scenario: ${scenario}\n`);
     await withEventPages(browser, origin, async ({ manager, helper, fixture }) => {
-      await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+      await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
       await confirmHelperContact(helper, fixture.data.contact_ids[0]);
       await fillWorkspaceThought(helper, scene === '已有想法' ? '只关心近况，不承诺安排。' : '');
       await fixture.plan({ count: 1, message_groups: [['最近过得怎么样？', '方便时再说就好。']] });

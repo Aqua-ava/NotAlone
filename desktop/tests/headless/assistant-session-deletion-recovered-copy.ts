@@ -20,8 +20,8 @@ export async function assistantSessionDeletionRecoveredCopy(browser: Browser, or
     try {
       await rebuilt.backend.connect();
       const nextManager = await rebuilt.open('manager');
-      await expect(nextManager.getByText('本次联系人：未确认', { exact: true })).toBeVisible();
-      await nextManager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+      await expect(nextManager.getByRole('combobox', { name: '本次联系人', exact: true })).toHaveValue('');
+      await nextManager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
       const nextHelper = await rebuilt.open('helper');
       await confirmHelperContact(nextHelper, saved.contactId);
       const discussion = nextHelper.getByRole('region', { name: '已保存的讨论', exact: true });
@@ -47,7 +47,7 @@ export async function assistantSessionDeletionRecoveredCopy(browser: Browser, or
       expect(await rewriteBackend.request(saved.path)).toEqual({ status: 404, data: { error: 'not_found' } });
       await expectDeletionCleared(nextHelper);
 
-      await nextManager.getByRole('button', { name: '选择合成联系人乙', exact: true }).click();
+      await nextManager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人乙' });
       const otherContactId = rewriteBackend.data.contact_ids[1];
       await confirmHelperContact(nextHelper, otherContactId);
       await expect(nextHelper.getByText('当前会话还没有讨论。', { exact: true })).toBeVisible();

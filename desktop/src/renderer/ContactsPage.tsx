@@ -9,7 +9,7 @@ import { BindingConsentPage, BindingFeedback, BindingPrivacyNotice, ContactSyncD
 
 const initialSync: SyncControlState = { revision: -1, scopeRevision: 0, phase: 'offline', report: null, busy: null, errorCode: null };
 
-export function ContactsPage({ session, navigate, manualRelease = false }: { session: ContactSessionView; navigate: (page: ManagerPage) => void; manualRelease?: boolean }) {
+export function ContactsPage({ session, navigate }: { session: ContactSessionView; navigate: (page: ManagerPage) => void }) {
   const { state } = session;
   const [name, setName] = useState(''), [creating, setCreating] = useState(false);
   const [addingWechat, setAddingWechat] = useState(false), [targetContactId, setTargetContactId] = useState<string>();
@@ -37,7 +37,7 @@ export function ContactsPage({ session, navigate, manualRelease = false }: { ses
   }
   const selected = state.contacts.find((contact) => contact.contactId === state.selectedContactId);
   return <section className="contacts-panel" aria-label="联系人目录">
-    <div className="contacts-toolbar"><div><h2>联系人</h2><p>在这里查看每个人的同步状态，选择联系人后管理微信关联或手动输入。</p></div><div>
+    <div className="contacts-toolbar"><div><h2>联系人</h2><p>在这里查看每个人的同步状态，在顶部切换联系人后管理微信关联或手动输入。</p></div><div>
       <button className="button primary" disabled={!!consent.state.busy || state.directoryPhase !== 'ready'} onClick={() => addWechat()}>添加微信联系人</button>
       <button className="button" disabled={state.directoryPhase === 'unavailable' || state.directoryPhase === 'loading'}
         onClick={() => void refreshContacts()}>刷新联系人</button></div></div>
@@ -52,7 +52,7 @@ export function ContactsPage({ session, navigate, manualRelease = false }: { ses
       <button className="button" onClick={() => navigate('config')}>前往设置</button></div>}
     {state.directoryPhase === 'error' && <p className="contacts-note" role="alert">联系人目录读取失败，请刷新重试。</p>}
     {state.directoryPhase === 'ready' && state.contacts.length === 0 && <div className="contacts-empty"><h3>还没有联系人</h3>
-      <p>填写下方展示名称创建联系人，创建后再明确选择本次对象。名称相同也会创建不同的联系人。</p></div>}
+      <p>填写下方展示名称创建联系人，创建后在顶部选择本次对象。名称相同也会创建不同的联系人。</p></div>}
     {state.directoryPhase === 'ready' && <form className="contact-create" aria-label="创建手动联系人" onSubmit={(event) => {
       event.preventDefault(); if (creating || !name.trim()) return; setCreating(true);
       void session.createContact(name).then((success) => { if (success) setName(''); }).finally(() => setCreating(false));
@@ -60,23 +60,22 @@ export function ContactsPage({ session, navigate, manualRelease = false }: { ses
       onChange={(event) => setName(event.target.value)} placeholder="由你确认的这位联系人" /></label>
       <button className="button primary" disabled={creating || !name.trim()}>{creating ? '正在创建…' : '创建联系人'}</button>
       <p>这只创建本机联系人，不建立微信身份或会话绑定，也不授权读取聊天。</p></form>}
-    {state.contacts.length > 0 && <div className="contacts-columns"><ul className="contact-list" aria-label="可选联系人">
+    {state.contacts.length > 0 && <div className="contacts-columns"><ul className="contact-list" aria-label="联系人同步状态">
       {state.contacts.map((contact) => <li key={contact.contactId}>
-        <button className="contact-row" aria-label={`选择${contact.displayName}`} aria-pressed={state.selectedContactId === contact.contactId}
-          onClick={() => void (manualRelease ? session.confirmManualContact(contact.contactId) : session.selectContact(contact.contactId))}>
+        <div className="contact-row" data-current={state.selectedContactId === contact.contactId}>
           <span className="contact-avatar" aria-hidden="true">{contact.displayName.slice(0, 1)}</span>
           <span className="contact-row-copy"><b>{contact.displayName}</b><small>{contact.messageCount} 条消息</small><small className="contact-sync-status">{syncLabel(contact.contactId)}</small></span>
-          <span className="contact-row-choice">{state.selectedContactId === contact.contactId ? '已选择' : '选择'}</span>
-        </button></li>)}
+          <span className="contact-row-choice">{state.selectedContactId === contact.contactId ? '当前联系人' : ''}</span>
+        </div></li>)}
     </ul><aside className="contact-summary" aria-label="本次联系人资料摘要">
-      <h3>{selected ? selected.displayName : '等待你确认联系人'}</h3>
+      <h3>{selected ? selected.displayName : '请在顶部选择联系人'}</h3>
       {selected ? <><dl><div><dt>消息</dt><dd>{selected.messageCount} 条</dd></div></dl>
         <p className="contact-sync-status" role="status">{syncLabel(selected.contactId)}</p>
         <ContactSyncDetails contactId={selected.contactId} consent={consent} onConnect={() => addWechat(selected.contactId)} />
         <p>本次文字和候选对应这位联系人。切换后清空编辑输入，已生成候选与编辑按联系人保留。</p>
         <button className="button primary" onClick={() => { void session.confirmManualContact(selected.contactId).then((confirmed) => { if (confirmed) return window.notalone.openHelper(); }); }}>手动输入本次聊天</button>
         <p>如需从文件补充旧记录，可前往「设置 → 高级 → 从文件导入」。</p></>
-        : <p>联系人不会自动选中。选择后，两个窗口会显示同一个本次对象。</p>}
+        : <p>在顶部选择后，主窗口和输入小窗会同步为同一位联系人。</p>}
     </aside></div>}
     <BindingPrivacyNotice />
     <p className="contacts-note">支持手动输入和单联系人文件导入；本机已配置微信识别时，可在输入小窗恢复微信会话识别。候选由你编辑并亲自发送。</p>

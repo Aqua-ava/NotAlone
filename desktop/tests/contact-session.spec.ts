@@ -17,13 +17,13 @@ test('真实目录只显示当前用户的联系人及消息摘要', async ({ ru
   await expect(contacts.getByText('另一用户的联系人', { exact: true })).toHaveCount(0);
   await expect(contacts.getByText('2 条消息', { exact: true })).toBeVisible();
   await expect(contacts.getByText('1 条消息', { exact: true })).toBeVisible();
-  await expect(manager.getByText('本次联系人：未确认', { exact: true })).toBeVisible();
+  await expect(manager.getByRole('combobox', { name: '本次联系人', exact: true })).toHaveValue('');
 });
 
 test('两个窗口共享本次联系人，隐藏恢复保留草稿，A→B→A 不恢复旧文本', async ({ runningApp: { app }, contactBackend }) => {
   const manager = await app.firstWindow();
-  await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
-  await expect(manager.getByRole('button', { name: '选择合成联系人甲', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
+  await expect(manager.getByRole('combobox', { name: '本次联系人', exact: true }).locator('option:checked')).toHaveText('合成联系人甲');
   const opened = app.waitForEvent('window');
   await manager.getByRole('button', { name: '打开输入小窗' }).click();
   const helper = await opened;
@@ -63,7 +63,7 @@ test('两个窗口共享本次联系人，隐藏恢复保留草稿，A→B→A �
   try {
     await recordFocus('windows-created');
     await expect(helper.getByRole('combobox', { name: '本次联系人' })).toHaveValue(contactBackend.data.contact_ids[0]);
-    await expect(helper.getByText('本次联系人：合成联系人甲', { exact: true })).toBeVisible();
+    await expect(helper.getByRole('combobox', { name: '本次联系人', exact: true }).locator('option:checked')).toHaveText('合成联系人甲');
     // 提前订阅有限状态，关键切换间隙不追加RPC；收到的版本不冒充实际提交版本。
     await helper.evaluate((contactIds) => {
       const history: Array<Record<string, unknown>> = [];
@@ -123,19 +123,19 @@ test('两个窗口共享本次联系人，隐藏恢复保留草稿，A→B→A �
     await recordFocus('helper-focus-pause-visible');
     await (await app.browserWindow(manager)).evaluate((window) => window.close());
     await helper.getByRole('button', { name: '打开管理后台' }).click();
-    await expect(manager.getByRole('button', { name: '选择合成联系人甲', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await expect(manager.getByRole('combobox', { name: '本次联系人', exact: true }).locator('option:checked')).toHaveText('合成联系人甲');
     diagnosticPhase = 'before-contact-selection';
     await expect(helperFocusPause).toHaveCount(0);
     await helper.getByRole('combobox', { name: '本次联系人' }).selectOption(contactBackend.data.contact_ids[1]);
-    await expect(manager.getByText('本次联系人：合成联系人乙', { exact: true })).toBeVisible();
+    await expect(manager.getByRole('combobox', { name: '本次联系人', exact: true }).locator('option:checked')).toHaveText('合成联系人乙');
     selectionCompleted = true;
     await expect(draft).toHaveValue('');
     await draft.fill('只给乙的本次草稿。');
-    await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+    await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
     await expect(helper.getByRole('combobox', { name: '本次联系人' })).toHaveValue(contactBackend.data.contact_ids[0]);
     await expect(draft).toHaveValue('');
     await draft.fill('甲的新草稿，继续本次编辑。');
-    await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+    await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
     await manager.getByRole('button', { name: '刷新联系人' }).click();
     await expect(manager.getByText('正在读取联系人目录…', { exact: true })).toHaveCount(0);
     await expect(draft).toHaveValue('甲的新草稿，继续本次编辑。');

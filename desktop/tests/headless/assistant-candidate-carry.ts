@@ -15,7 +15,7 @@ type CarryEditWindow = Window & { pageTransportControl?: PageTransportControl; c
   stopCarryEditObservation?: () => void };
 
 async function chooseContact(pages: RewritePages) {
-  await pages.manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+  await pages.manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
   await confirmHelperContact(pages.helper, pages.rewriteBackend.data.contact_ids[0]);
   await expect.poll(() => pages.helper.evaluate(async () => (await window.notalone.replies.getState()).savedSession?.phase))
     .toBe('ready');

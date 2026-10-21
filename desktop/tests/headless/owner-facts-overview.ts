@@ -23,7 +23,7 @@ export async function ownerFactsOverview(browser: Browser, origin: string) {
       await host.backend.connect();
       const manager = await host.open('manager');
       await manager.getByRole('button', { name: '记忆', exact: true }).click();
-      await manager.getByRole('combobox', { name: '资料联系人', exact: true }).selectOption(prepared.contactId);
+      await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption(prepared.contactId);
       await selectMemoryCategory(manager, '本人概览');
       const overview = manager.getByRole('region', { name: '本人事实与偏好概览', exact: true });
       const self = overview.getByRole('article').filter({ has: manager.getByText(prepared.self.text, { exact: true }) });
@@ -79,7 +79,7 @@ export async function ownerFactsOverview(browser: Browser, origin: string) {
       await expect(overview.getByText(prepared.manualPreference.text, { exact: true })).toHaveCount(0);
       await expect(overview.getByRole('article')).toHaveCount(2);
       await selectMemoryCategory(manager, '联系人记忆');
-      await manager.getByRole('combobox', { name: '资料联系人', exact: true }).selectOption(prepared.otherContactId);
+      await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption(prepared.otherContactId);
       await selectMemoryCategory(manager, '本人概览');
       await expect(overview.getByRole('article')).toHaveCount(2);
       await openImportManagement(manager);

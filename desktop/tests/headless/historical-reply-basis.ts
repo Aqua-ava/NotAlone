@@ -16,7 +16,7 @@ export async function historicalReplyBasis(browser: Browser, origin: string) {
     const prepared = await rewriteBackend.command('historical_basis_prepare', { kind: 'source_contact' }) as {
       memoryId: string; sourceId: string; text: string;
     };
-    await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+    await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
     await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
     await fillWorkspaceThought(helper, prepared.text);
     await setWorkspaceContext(helper, true);
@@ -122,7 +122,7 @@ export async function historicalReplyBasis(browser: Browser, origin: string) {
     const prepared = await rewriteBackend.command('historical_basis_prepare', { kind: 'owner' }) as {
       memoryId: string; text: string;
     };
-    await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+    await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
     await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
     await fillWorkspaceThought(helper, prepared.text);
     await setWorkspaceContext(helper, true);

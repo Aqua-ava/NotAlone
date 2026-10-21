@@ -21,7 +21,7 @@ const editorOn = (page: Page, number: number) => groupOn(page).getByRole('textbo
 
 async function prepare(pages: RewritePages, scene: Scene) {
   const contactId = pages.rewriteBackend.data.contact_ids[0];
-  await pages.manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+  await pages.manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
   await confirmHelperContact(pages.helper, contactId);
   await fillWorkspaceThought(pages.helper, scene === '已有想法' ? '关心近况，不增加安排承诺。' : '');
   return contactId;
@@ -148,7 +148,7 @@ async function longHistory(browser: Browser, origin: string, scene: Scene) {
     try {
       await restored.backend.connect();
       const manager = await restored.open('manager');
-      await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+      await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
       const helper = await restored.open('helper');
       await confirmHelperContact(helper, contactId);
       await expect(groupOn(helper).getByText('修改版本 24', { exact: true })).toBeVisible();
@@ -180,7 +180,7 @@ async function deletedRestoredGroup(browser: Browser, origin: string, scene: Sce
     try {
       await restored.backend.connect();
       const manager = await restored.open('manager');
-      await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+      await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
       const helper = await restored.open('helper');
       await confirmHelperContact(helper, contactId);
       await expect(editorOn(helper, 1)).toHaveValue('已保存的来源派生组修改。');
@@ -209,7 +209,7 @@ async function deletedRestoredGroup(browser: Browser, origin: string, scene: Sce
     try {
       await reopened.backend.connect();
       const manager = await reopened.open('manager');
-      await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+      await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
       const helper = await reopened.open('helper');
       await confirmHelperContact(helper, contactId);
       await expandSavedDiscussion(helper);
@@ -264,7 +264,7 @@ async function foreignIdentity(browser: Browser, origin: string) {
   }, copySurface);
 }
 async function managerSwitch(pages: RewritePages) {
-  await pages.manager.getByRole('button', { name: '选择合成联系人乙', exact: true }).click();
+  await pages.manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人乙' });
   await confirmHelperContact(pages.helper, pages.rewriteBackend.data.contact_ids[1]);
 }
 

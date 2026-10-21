@@ -12,7 +12,7 @@ export async function assistantSessionFullHistory(browser: Browser, origin: stri
   const name = '超过1MiB完整历史可查看，硬预算零模型，明确新开保留旧讨论';
   process.stdout.write(`page_test_scenario: ${name}\n`);
   await withRewritePages(browser, origin, async ({ manager, helper, rewriteBackend, replyTransport }) => {
-    await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+    await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
     await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
     const history = await rewriteBackend.command('large_history');
     expect(history.wire_bytes).toBeGreaterThan(1_048_576);

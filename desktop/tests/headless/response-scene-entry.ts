@@ -6,7 +6,7 @@ import { withRewritePages } from './rewrite-acceptance';
 export async function responseSceneEntry(browser: Browser, origin: string) {
   await withRewritePages(browser, origin, async ({ manager, helper, rewriteBackend, replyTransport }) => {
     const contactId = rewriteBackend.data.contact_ids[0];
-    await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+    await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
     await confirmHelperContact(helper, contactId);
     const idea = helper.getByRole('textbox', { name: '有什么想说的', exact: true });
     await expect(idea).toBeEditable();
@@ -53,7 +53,7 @@ export async function responseSceneEntry(browser: Browser, origin: string) {
     // 关闭自动背景不清空同一助手会话的已保存讨论；本次新选入的依据不得重新带入该消息。
     expect(JSON.stringify(payloads.at(-1)!.evidence)).not.toContain('甲的私密合成历史');
     const generatedCount = replyTransport.requests.length;
-    await manager.getByRole('button', { name: '选择无消息的合成联系人', exact: true }).click();
+    await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '无消息的合成联系人' });
     // 此联系人没有已确认的桌面会话绑定，明确进入手动输入路径。
     await helper.getByRole('button', { name: '切换为手动输入', exact: true }).click();
     await expect(helper.getByRole('region', { name: '手动输入联系人确认' }).getByRole('status'))
@@ -69,7 +69,7 @@ export async function responseSceneEntry(browser: Browser, origin: string) {
     const heldBefore = replyTransport.heldCount;
     await helper.getByRole('button', { name: '刷新最近聊天', exact: true }).click();
     await expect.poll(() => replyTransport.heldCount).toBe(heldBefore + 1);
-    await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+    await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
     await helper.getByRole('button', { name: '确认手动输入联系人', exact: true }).click();
     await expect(helper.getByRole('region', { name: '手动输入联系人确认' }).getByRole('status'))
       .toHaveText('手动输入模式 · 本次联系人已由你确认');

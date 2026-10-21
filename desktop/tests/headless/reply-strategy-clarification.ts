@@ -7,7 +7,7 @@ export async function replyStrategyConfirmedClarification(browser: Browser, orig
   for (const action of ['帮我想想', '帮我表达']) {
     process.stdout.write(`page_test_scenario: ${action}补充背景、失败重试与本次意图保真\n`);
     await withRewritePages(browser, origin, async ({ manager, helper, rewriteBackend, replyTransport }) => {
-      await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+      await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
       await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
       const idea = helper.getByRole('textbox', { name: '有什么想说的', exact: true });
       await expect(idea).toBeEnabled();

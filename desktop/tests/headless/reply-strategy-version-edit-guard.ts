@@ -12,7 +12,7 @@ export async function replyStrategyVersionEditGuard(browser: Browser, origin: st
     process.stdout.write(`page_test_scenario: ${name}\n`);
     try {
       await withEventPages(browser, origin, async ({ manager, helper, fixture }) => {
-        await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+        await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
         await confirmHelperContact(helper, fixture.data.contact_ids[0]);
         await fillWorkspaceThought(helper, '');
         await fixture.plan({ count: 1, message_groups: [['想问问最近怎么样。', '方便时再聊就好。']] });

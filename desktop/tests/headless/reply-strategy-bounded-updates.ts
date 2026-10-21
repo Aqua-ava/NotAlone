@@ -6,7 +6,7 @@ import { withEventPages, type EventPages } from './message-events';
 
 export type WorkspaceAction = 'express' | 'suggest';
 export async function prepareWorkspaceTask(pages: EventPages, action: WorkspaceAction) {
-  await pages.manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+  await pages.manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
   await confirmHelperContact(pages.helper, pages.fixture.data.contact_ids[0]);
   await fillWorkspaceThought(pages.helper, action === 'express' ? '只关心近期状态，不增加安排承诺。' : '');
   await expect(pages.helper.getByRole('status').filter({ hasText: '新消息提醒已连接' })).toBeVisible();

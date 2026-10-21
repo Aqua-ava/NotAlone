@@ -26,8 +26,8 @@ const test = rewriteTest.extend({
 test.skip(process.env.NOTALONE_ASSISTANT_LIFECYCLE_ACCEPTANCE !== '1', '仅执行已约定的A19／A17原生生命周期验收');
 
 async function chooseContact(manager: Page, helper: Page, fixture: RewriteFixture) {
-  await expect(manager.getByRole('button', { name: '选择合成联系人甲', exact: true })).toBeVisible({ timeout: 20_000 });
-  await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+  await expect(manager.getByRole('combobox', { name: '本次联系人', exact: true }).getByRole('option', { name: '合成联系人甲', exact: true })).toHaveCount(1, { timeout: 20_000 });
+  await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
   await confirmHelperContact(helper, fixture.data.contact_ids[0]);
   await expect.poll(() => helper.evaluate(async () => (await window.notalone.replies.getState()).savedSession?.phase))
     .toBe('ready');

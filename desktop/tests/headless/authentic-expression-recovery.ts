@@ -25,7 +25,7 @@ function latestGeneration(pages: RewritePages): Generation {
 
 async function chooseContact(manager: Page, helper: Page, contactId: string) {
   await manager.getByRole('button', { name: '联系人', exact: true }).click();
-  await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+  await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
   await confirmHelperContact(helper, contactId);
 }
 
@@ -120,7 +120,7 @@ async function deletionRecovery(pages: RewritePages, host: PageHost, userData: s
   try {
     await reopened.backend.connect();
     const nextManager = await reopened.open('manager');
-    await nextManager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+    await nextManager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
     const nextHelper = await reopened.open('helper');
     await confirmHelperContact(nextHelper, contactId);
     await expectSavedAfterDeletion(nextHelper, 2);

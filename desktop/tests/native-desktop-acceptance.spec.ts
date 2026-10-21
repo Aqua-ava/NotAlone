@@ -1,4 +1,4 @@
-import { openFileImport } from './file-import-navigation';
+import { createImportContact, openFileImport } from './file-import-navigation';
 import { expect } from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
 import { test } from './import-fixture';
@@ -15,20 +15,19 @@ test('签名包使用真实文件选择器导入合成资料，系统快捷键�
   // 人工两次操作及反馈共享有限交互截止，不因窗口已显示而提前缩短等待。
   const humanAcceptanceUntil = acceptanceMode === 'human' ? Date.now() + 25 * 60_000 : undefined;
   const manager = await app.firstWindow();
-  await expect(manager.getByRole('button', { name: '选择合成联系人甲', exact: true })).toBeVisible({ timeout: 20_000 });
+  await expect(manager.getByRole('combobox', { name: '本次联系人', exact: true }).getByRole('option', { name: '合成联系人甲', exact: true })).toHaveCount(1, { timeout: 20_000 });
   expect(await app.evaluate(({ app }) => app.isPackaged)).toBe(true);
   await writeFile(test.info().outputPath('owned-app.json'), JSON.stringify({
     pid: appProcess.pid, userData, databaseName: importBackend.data.database_name,
     fixtureDirectory: importBackend.directory, filePath: importBackend.data.file_path,
   }), { mode: 0o600 });
 
+  await createImportContact(manager, '合成原生验收联系人');
   await openFileImport(manager);
   console.log(`native_acceptance_file: ${importBackend.data.file_path}`);
   await manager.getByRole('button', { name: '选择历史文件', exact: true }).click();
   console.log('native_acceptance_stage: 等待真实系统文件选择器选择本轮合成文件。');
   await expect(manager.getByText('synthetic-import.jsonl', { exact: true })).toBeVisible({ timeout: 180_000 });
-  await manager.getByRole('combobox', { name: '资料归属联系人' }).selectOption('new');
-  await manager.getByRole('textbox', { name: '新联系人名称' }).fill('合成原生验收联系人');
   await manager.getByRole('button', { name: '预览资料范围', exact: true }).click();
   await expect(manager.getByRole('region', { name: '单联系人资料预览' })).toContainText('6 条记录');
   await manager.getByRole('checkbox', { name: '我已核对本人渠道身份、联系人和这份文件的资料范围' }).check();

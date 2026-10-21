@@ -15,7 +15,7 @@ export interface RewritePages {
 
 export async function defaultRewrite({ manager, helper, rewriteBackend, screenshotPath }: RewritePages) {
   await expect(helper.getByRole('button', { name: '帮我表达', exact: true })).toBeDisabled();
-  await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+  await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
   await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
   await setWorkspaceContext(helper, false);
   await helper.getByRole('textbox', { name: '有什么想说的', exact: true }).fill('今晚我会晚一点回复你。');
@@ -48,7 +48,7 @@ export async function defaultRewrite({ manager, helper, rewriteBackend, screensh
 }
 
 export async function relationshipScope({ manager, helper, rewriteBackend, replyTransport }: RewritePages) {
-  await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+  await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
   await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
   await helper.getByRole('textbox', { name: '有什么想说的', exact: true }).fill('今晚我会晚一点回复你。');
   await setWorkspaceContext(helper, true);
@@ -80,13 +80,13 @@ export async function relationshipScope({ manager, helper, rewriteBackend, reply
   expect(savedVersions![0].messages.map(message => message.text)).toEqual(['我会晚一点回复你（说法1）。']);
   await helper.getByRole('textbox', { name: '有什么想说的', exact: true }).fill('甲未提交的临时想法。');
   await helper.getByRole('textbox', { name: '候选1编辑文本', exact: true }).fill('甲的临时编辑');
-  await manager.getByRole('button', { name: '选择合成联系人乙', exact: true }).click();
+  await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人乙' });
   await expect(helper.getByRole('textbox', { name: '有什么想说的', exact: true })).toHaveValue('');
   await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveCount(0);
   // 新联系人使用工作区默认上下文设置，不继承上一个联系人的临时要求。
   await expect(helper.getByRole('checkbox', { name: '参考最近聊天和相关关系资料', exact: true })).toBeChecked();
   await expect(helper.getByRole('textbox', { name: '本次要求', exact: true })).toHaveValue('');
-  await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+  await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
   await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
   // 同一 App 内按联系人恢复临时输入；恢复前仍复验原会话与候选版本，不能越到乙的范围。
   await expect(helper.getByRole('textbox', { name: '有什么想说的', exact: true })).toHaveValue('甲未提交的临时想法。');
@@ -101,7 +101,7 @@ export async function relationshipScope({ manager, helper, rewriteBackend, reply
 export async function unboundRejection({ manager, helper, rewriteBackend, replyTransport }: RewritePages) {
   await rewriteBackend.command('revoke', { contact_id: rewriteBackend.data.contact_ids[0] });
   await expect(manager.getByRole('button', { name: '选择另一用户的联系人', exact: true })).toHaveCount(0);
-  await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+  await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
   await helper.getByRole('button', { name: '确认本次联系人', exact: true }).click();
   await expect.poll(async () => (await helper.evaluate(async () => window.notalone.replies.getState())).generationBlock)
     .toBe('foreground-confirmation-required');
@@ -126,7 +126,7 @@ export async function unboundRejection({ manager, helper, rewriteBackend, replyT
 }
 
 export async function idempotentRewrite({ manager, helper, rewriteBackend, replyTransport }: RewritePages) {
-  await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+  await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
   await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
   await setWorkspaceContext(helper, false);
   await helper.getByRole('textbox', { name: '有什么想说的', exact: true }).fill('今晚我会晚一点回复你。');
@@ -172,7 +172,7 @@ export async function idempotentRewrite({ manager, helper, rewriteBackend, reply
 }
 
 export async function rewriteFailures({ manager, helper, rewriteBackend, replyTransport }: RewritePages) {
-  await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+  await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
   await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
   await helper.getByRole('textbox', { name: '有什么想说的', exact: true }).fill('今晚我会晚一点回复你。');
   await rewriteBackend.plan({ count: 1 });
@@ -208,7 +208,7 @@ export async function rewriteSecurity({ manager, helper, rewriteBackend, replyTr
     try { await window.notalone.replies.generate({ contactId, scopeRevision: current.scopeRevision, newRequest: false }); return 'accepted'; }
     catch { return 'rejected'; }
   }, rewriteBackend.data.contact_ids[0])).toBe('rejected');
-  await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+  await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
   await helper.getByRole('textbox', { name: '有什么想说的', exact: true }).fill('本次合成草稿。');
   const scopeRevision = await helper.evaluate(async () => (await window.notalone.contacts.getState()).scopeRevision);
   const generate = { contactId: rewriteBackend.data.contact_ids[0], scopeRevision, newRequest: false };

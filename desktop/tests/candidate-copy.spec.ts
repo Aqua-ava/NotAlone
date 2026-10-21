@@ -11,7 +11,7 @@ test('原生复制取得当前编辑文本，复制并收起只隐藏本次小�
   await expect(helper.getByRole('textbox', { name: '草稿', exact: true })).toBeVisible();
   await app.evaluate(async ({ clipboard }, text) => { await clipboard.writeText(text); }, sentinel);
   try {
-    await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+    await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
     await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
     await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('只说明今天到不了，不增加其他承诺。');
     await rewriteBackend.plan({ count: 1, prefix: '原生复制原候选' });

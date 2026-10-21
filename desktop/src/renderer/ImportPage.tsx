@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { ImportState, ImportTarget } from '../shared/import-bridge';
+import type { ImportState } from '../shared/import-bridge';
 import type { ContactSessionView } from './contact-session';
 import { SourceDeletionPanel } from './SourceDeletionPanel';
 import './imports.css';
@@ -18,7 +18,6 @@ const kindLabels: Record<string, string> = {
 
 export function ImportPage({ session }: { session: ContactSessionView }) {
   const [state, setState] = useState(initial);
-  const [name, setName] = useState('');
   const [checked, setChecked] = useState(false);
   const [error, setError] = useState('');
   const latest = useRef(state);
@@ -27,8 +26,6 @@ export function ImportPage({ session }: { session: ContactSessionView }) {
     const receive = (next: ImportState) => {
       if (!active || next.revision < latest.current.revision) return;
       if (next.selectionRevision !== latest.current.selectionRevision) { setChecked(false); setError(''); }
-      if (!next.target) setName('');
-      else if (next.target.kind === 'new' && (latest.current.revision < 0 || latest.current.target?.kind !== 'new')) setName(next.target.displayName);
       latest.current = next;
       setState(next);
     };
@@ -38,35 +35,36 @@ export function ImportPage({ session }: { session: ContactSessionView }) {
   }, []);
   const busy = ['choosing', 'previewing', 'confirming', 'submitting'].includes(state.phase) || state.syncReloadPhase === 'restarting';
   const available = state.phase !== 'unavailable' && session.state.directoryPhase === 'ready';
-  const canPreview = available && !busy && !!state.fileName && !!state.target
-    && (state.target.kind !== 'new' || !!state.target.displayName.trim());
+  const contactId = session.state.selectedContactId;
+  const targetMatches = !!contactId && state.target?.kind === 'existing' && state.target.contactId === contactId;
+  const canPreview = available && !busy && !!state.fileName && targetMatches;
+  useEffect(() => {
+    if (!available || busy || !contactId || targetMatches) return;
+    let active = true;
+    void window.notalone.imports.setTarget({ kind: 'existing', contactId }).catch(() => {
+      if (active) setError('导入联系人暂时无法同步，请重新打开导入页面。');
+    });
+    return () => { active = false; };
+  }, [available, busy, contactId, targetMatches]);
   async function operate(action: () => Promise<void>) {
     const revision = latest.current.selectionRevision;
     try { await action(); }
     catch { if (revision === latest.current.selectionRevision) setError('本次文件或联系人已变化，请重新预览并确认。'); }
   }
-  const setTarget = (target: ImportTarget) => void operate(() => window.notalone.imports.setTarget(target));
-  const preview = state.preview;
+  const preview = targetMatches ? state.preview : null;
   const importedContactId = state.submission?.receipt?.contactId;
   const managedContact = session.state.contacts.find((entry) => entry.contactId === session.state.selectedContactId);
   const sourceRefreshKey = state.submission?.receipt
     ? `${state.selectionRevision}:${state.submission.receipt.taskId}:${state.submission.task?.status ?? ''}` : '';
   return <section className="import-panel" aria-label="历史文件导入">
     <div className="import-intro"><h2>先核对，再保存</h2>
-      <p>仅接受单联系人 JSONL；本次选择只用于预览，确认后再进行导入。NotAlone 不运行导出工具，也不读取其他文件。</p>
-      <p>仅在需要补充自动同步未覆盖的旧记录、且你已持有单联系人 JSONL 文件时使用。已同步的记录无需重复导入；没有文件时，可返回联系人目录手动输入文字。</p></div>
+      <p>仅接受单联系人 JSONL；资料归属顶部选中的联系人，核对预览并确认后再进行导入。NotAlone 不运行导出工具，也不读取其他文件。</p>
+      <p>仅在需要补充自动同步未覆盖的旧记录、且你已持有单联系人 JSONL 文件时使用。已同步的记录无需重复导入；需要新建联系人时，请先到“联系人”页面创建，再在顶部选择。</p></div>
     {!available && <p className="import-note">请先连接本机服务并完成本次运行的本人配置，再选择历史文件。</p>}
-    <div className="import-file"><button className="button" disabled={!available || busy}
+    <div className="import-file"><button className="button" disabled={!available || busy || !targetMatches}
       onClick={() => void operate(() => window.notalone.imports.chooseFile())}>选择历史文件</button>
       <span>{state.fileName ?? '尚未选择文件'}</span></div>
-    <div className="import-target"><label>资料归属联系人<select aria-label="资料归属联系人"
-      value={state.target?.kind === 'new' ? 'new' : state.target?.contactId ?? ''} disabled={!available || busy}
-      onChange={(event) => setTarget(event.target.value === 'new' ? { kind: 'new', displayName: name } : { kind: 'existing', contactId: event.target.value })}>
-      <option value="" disabled>由你选择，不自动匹配</option><option value="new">新建联系人</option>
-      {session.state.contacts.map((entry) => <option key={entry.contactId} value={entry.contactId}>{entry.displayName}</option>)}
-    </select></label>
-    {state.target?.kind === 'new' && <label>新联系人名称<input aria-label="新联系人名称" value={name} maxLength={100} disabled={busy}
-      onChange={(event) => { setName(event.target.value); setTarget({ kind: 'new', displayName: event.target.value }); }} /></label>}
+    <div className="import-target"><p>{managedContact ? `资料将导入给：${managedContact.displayName}` : '请在顶部选择联系人，再选择历史文件。'}</p>
     <button className="button primary" disabled={!canPreview}
       onClick={() => void operate(() => window.notalone.imports.preview({ selectionRevision: latest.current.selectionRevision }))}>预览资料范围</button></div>
     {busy && <p className="import-note" aria-live="polite">{state.syncReloadPhase === 'restarting' ? '正在认证停读并重新加载同步服务…' : state.phase === 'submitting' ? '正在原子保存本次确认的资料…' : state.phase === 'choosing' ? '等待你选择文件…' : state.phase === 'confirming' ? '正在重新核对这份文件…' : '正在校验单联系人资料…'}</p>}
@@ -83,12 +81,12 @@ export function ImportPage({ session }: { session: ContactSessionView }) {
       <button className="button primary" disabled={!checked || state.phase !== 'previewed'}
         onClick={() => void operate(() => window.notalone.imports.confirmPreview({ selectionRevision: latest.current.selectionRevision }))}>确认本次预览</button>
     </section>}
-    {state.phase === 'confirmed' && <div className="import-confirmed"><p role="status">已确认本次预览，尚未保存资料。</p>
+    {targetMatches && state.phase === 'confirmed' && <div className="import-confirmed"><p role="status">已确认本次预览，尚未保存资料。</p>
       <button className="button primary" onClick={() => void operate(() => window.notalone.imports.submit({ selectionRevision: latest.current.selectionRevision }))}>正式导入这份资料</button>
       <button className="button" onClick={() => void operate(() => window.notalone.imports.cancelConfirmation({ selectionRevision: latest.current.selectionRevision }))}>取消本次确认</button></div>}
-    {state.phase === 'submitting' && <div className="import-note"><p>停止查看或切换联系人不会撤回已交给后端的保存；再次导入必须重新预览确认。</p>
+    {targetMatches && state.phase === 'submitting' && <div className="import-note"><p>停止查看或切换联系人不会撤回已交给后端的保存；再次导入必须重新预览确认。</p>
       <button className="button" onClick={() => void operate(() => window.notalone.imports.cancelConfirmation({ selectionRevision: latest.current.selectionRevision }))}>停止查看本次提交</button></div>}
-    {state.submission?.receipt && <section className="import-progress" aria-label="本次导入处理">
+    {targetMatches && state.submission?.receipt && <section className="import-progress" aria-label="本次导入处理">
       <h3>资料已保存，处理状态另行核验</h3>
       <p>{state.submission.targetName} · {state.submission.fileName}</p>
       <p role="status">新增 {state.submission.receipt.importedCount} 条消息，已存在 {state.submission.receipt.skippedDuplicates} 条消息。</p>
@@ -113,9 +111,7 @@ export function ImportPage({ session }: { session: ContactSessionView }) {
       </>}
       {state.submission.taskError && <p role="alert">{state.submission.taskError}</p>}
       <p>已保存的资料可在下方“导入资料管理”中查看和删除。</p>
-      {importedContactId && importedContactId !== session.state.selectedContactId && <button className="button"
-        disabled={!session.state.contacts.some((entry) => entry.contactId === importedContactId)}
-        onClick={() => void session.selectContact(importedContactId)}>查看本次导入资料</button>}
+      {importedContactId && importedContactId !== session.state.selectedContactId && <p>请在顶部选择本次导入的联系人，查看其资料。</p>}
       {state.submission.syncReloadNeeded && <div className="import-sync-reload"><p>同步宿主尚未装配。首份导入确认的本人渠道身份须重新加载服务后才能用于同步。导入不会自动授权会话；重启只沿用既有确认范围和总开关，旧排队任务须重新查看并明确继续。</p>
         <button className="button" disabled={!available || !!state.submission.taskBusy} onClick={() => void operate(() => window.notalone.imports.reloadSyncHost({ selectionRevision: latest.current.selectionRevision }))}>认证停读并重新加载同步服务</button></div>}
     </section>}
@@ -126,13 +122,7 @@ export function ImportPage({ session }: { session: ContactSessionView }) {
     <section className="import-management" aria-label="导入资料管理">
       <h2>导入资料管理</h2>
       <p>按联系人查看已保存的来源文件、记录数量和删除状态。</p>
-      <div className="import-target"><label>管理资料的联系人<select aria-label="管理资料的联系人"
-        value={session.state.selectedContactId ?? ''} disabled={session.state.directoryPhase !== 'ready' || session.state.contacts.length === 0}
-        onChange={(event) => void session.selectContact(event.target.value)}>
-        <option value="" disabled>选择要管理的联系人</option>
-        {session.state.contacts.map((entry) => <option key={entry.contactId} value={entry.contactId}>{entry.displayName}</option>)}
-      </select></label></div>
-      <p>{managedContact ? `当前只展示 ${managedContact.displayName} 的资料。` : '先选择一位联系人，再查看其来源资料。'}上方“资料归属联系人”仅决定本次文件导入到谁名下。</p>
+      <p>{managedContact ? `当前只展示 ${managedContact.displayName} 的资料。` : '请在顶部选择联系人，再查看其来源资料。'}</p>
       {session.error && <p role="alert">{session.error}</p>}
       <SourceDeletionPanel session={session} refreshKey={sourceRefreshKey} />
     </section>

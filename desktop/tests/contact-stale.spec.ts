@@ -12,7 +12,7 @@ const test = contactTest.extend<{ contactProxy: ContactHttpProxy }>({
 
 for (const failure of [false, true]) test(`切换联系人后，旧目录请求的迟到${failure ? '失败' : '成功'}不覆盖新联系人草稿`, async ({ runningApp: { app }, contactBackend, contactProxy }) => {
   const manager = await app.firstWindow();
-  await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+  await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
   const opened = app.waitForEvent('window');
   await manager.getByRole('button', { name: '打开输入小窗' }).click();
   const helper = await opened;
@@ -22,7 +22,7 @@ for (const failure of [false, true]) test(`切换联系人后，旧目录请求�
   const refresh = manager.evaluate(() => window.notalone.contacts.refreshContacts());
   await expect.poll(() => contactProxy.heldCount).toBe(1);
   await helper.getByRole('combobox', { name: '本次联系人' }).selectOption(contactBackend.data.contact_ids[1]);
-  await expect(manager.getByText('本次联系人：合成联系人乙', { exact: true })).toBeVisible();
+  await expect(manager.getByRole('combobox', { name: '本次联系人', exact: true }).locator('option:checked')).toHaveText('合成联系人乙');
   await helper.getByRole('textbox', { name: '草稿' }).fill('乙的新草稿，不接受旧请求覆盖。');
   contactProxy.holdContacts = false;
   contactProxy.release(failure);
@@ -34,7 +34,7 @@ for (const failure of [false, true]) test(`切换联系人后，旧目录请求�
 
 for (const failure of [false, true]) test(`断线重连清空临时会话，旧目录的迟到${failure ? '失败' : '成功'}不覆盖新选择`, async ({ runningApp: { app }, contactBackend, contactProxy }) => {
   const manager = await app.firstWindow();
-  await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+  await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
   const opened = app.waitForEvent('window');
   await manager.getByRole('button', { name: '打开输入小窗' }).click();
   const helper = await opened;
@@ -51,9 +51,9 @@ for (const failure of [false, true]) test(`断线重连清空临时会话，旧�
   contactProxy.holdContacts = false;
   contactProxy.failRuntimeStatus = false;
   await manager.getByRole('button', { name: '重试连接', exact: true }).click();
-  await expect(manager.getByRole('button', { name: '选择合成联系人乙', exact: true })).toBeVisible();
+  await expect(manager.getByRole('combobox', { name: '本次联系人', exact: true }).getByRole('option', { name: '合成联系人乙', exact: true })).toHaveCount(1);
   await helper.getByRole('combobox', { name: '本次联系人' }).selectOption(contactBackend.data.contact_ids[1]);
-  await expect(manager.getByText('本次联系人：合成联系人乙', { exact: true })).toBeVisible();
+  await expect(manager.getByRole('combobox', { name: '本次联系人', exact: true }).locator('option:checked')).toHaveText('合成联系人乙');
   await draft.fill('重连后乙的新草稿。');
   contactProxy.release(failure);
   await refresh;

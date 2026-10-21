@@ -15,7 +15,7 @@ const instruction = '只保留当前草稿的事实与承诺。';
 export { draft as budgetDraft, instruction as budgetInstruction };
 
 export async function prepareDraft({ manager, helper, rewriteBackend }: RewritePages, prefix: string) {
-  await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+  await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
   await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
   await setWorkspaceContext(helper, false);
   await helper.getByRole('textbox', { name: '有什么想说的', exact: true }).fill(draft);

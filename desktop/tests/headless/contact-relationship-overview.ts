@@ -78,11 +78,11 @@ export async function contactRelationshipOverview(browser: Browser, origin: stri
       await expect(overview.getByRole('button', { name: '刷新联系人概览', exact: true })).toHaveCount(0);
       await expect(overview.getByRole('button', { name: '重试', exact: true })).toHaveCount(0);
       await expect(overview.getByRole('article')).toHaveCount(1);
-      await manager.getByRole('combobox', { name: '资料联系人', exact: true }).selectOption(prepared.otherContactId);
+      await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption(prepared.otherContactId);
       await selectMemoryCategory(manager, '联系人记忆');
       await expect(overview.getByText(prepared.other.text, { exact: true })).toBeVisible();
       await expect(overview.getByText(prepared.manual.text, { exact: true })).toHaveCount(0);
-      await manager.getByRole('combobox', { name: '资料联系人', exact: true }).selectOption(prepared.contactId);
+      await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption(prepared.contactId);
       await selectMemoryCategory(manager, '联系人记忆');
       await expect(overview.getByText(prepared.manual.text, { exact: true })).toBeVisible();
       await expect(overview.getByRole('article')).toHaveCount(1);

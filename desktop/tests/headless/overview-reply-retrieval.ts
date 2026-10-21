@@ -75,7 +75,7 @@ export async function overviewReplyRetrieval(browser: Browser, origin: string) {
       const edit = '用户已修改：先问安排，暂不承诺。';
       await editor.fill(edit);
       await manager.getByRole('button', { name: '记忆', exact: true }).click();
-      await manager.getByRole('combobox', { name: '资料联系人', exact: true }).selectOption(prepared.contactId);
+      await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption(prepared.contactId);
       await manager.getByRole('button', { name: '刷新记忆', exact: true }).click();
       const contact = manager.getByRole('region', { name: '联系人记忆', exact: true });
       await contact.getByRole('button', { name: `修正资料：${prepared.manualContact.text}`, exact: true }).click();

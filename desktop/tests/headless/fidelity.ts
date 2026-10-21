@@ -15,7 +15,7 @@ export async function fidelityIntent(browser: Browser, origin: string) {
   let modelCalls = 0;
   await withRewritePages(browser, origin, async ({ manager, helper, rewriteBackend, replyTransport }) => {
     const contactId = rewriteBackend.data.contact_ids[0];
-    await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+    await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
     await confirmHelperContact(helper, contactId);
     expect((await rewriteBackend.request('/api/memories/manual-owner', {
       text: '合成旧习惯：用户过去总是赞成这个方案。', category: 'preference',
@@ -108,7 +108,7 @@ export async function fidelityContent(browser: Browser, origin: string) {
     for (const testCase of plans) {
       const contact = testCase.empty_history ? rewriteBackend.data.empty_contact_id : rewriteBackend.data.contact_ids[0];
       if (contact !== selected) {
-        await manager.getByRole('button', { name: testCase.empty_history ? '选择无消息的合成联系人' : '选择合成联系人甲', exact: true }).click();
+        await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: testCase.empty_history ? '无消息的合成联系人' : '合成联系人甲' });
         await confirmHelperContact(helper, contact);
         if (testCase.empty_history) {
           await setWorkspaceContext(helper, true);
@@ -154,7 +154,7 @@ export async function fidelityContent(browser: Browser, origin: string) {
   }, null, 2) + '\n', { mode: 0o600 });
   await withRewritePages(browser, origin, async ({ manager, helper, rewriteBackend, replyTransport }) => {
     await rewriteBackend.command('fidelity_history');
-    await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+    await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
     await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
     await setWorkspaceContext(helper, true);
     await helper.getByRole('checkbox', { name: /合成当前邀请/ }).check();

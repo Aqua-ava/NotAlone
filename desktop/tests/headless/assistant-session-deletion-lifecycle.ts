@@ -88,8 +88,8 @@ async function runningDeletion(pages: RewritePages, host: PageHost, userData: st
     try {
       await rebuilt.backend.connect();
       const nextManager = await rebuilt.open('manager');
-      await expect(nextManager.getByText('本次联系人：未确认', { exact: true })).toBeVisible();
-      await nextManager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+      await expect(nextManager.getByRole('combobox', { name: '本次联系人', exact: true })).toHaveValue('');
+      await nextManager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
       const nextHelper = await rebuilt.open('helper');
       await confirmHelperContact(nextHelper, contactId);
       const rebuiltId = await expectEmptyRecovery(nextHelper, contactId, sessionId);

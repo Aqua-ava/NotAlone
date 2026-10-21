@@ -6,7 +6,7 @@ export async function candidateVisibility(browser: Browser, origin: string) {
   process.stdout.write('page_test_scenario: 默认小窗生成后直接看见当前候选，历史不会挡住结果\n');
   await withRewritePages(browser, origin, async ({ manager, helper, rewriteBackend, replyTransport }) => {
     await helper.setViewportSize({ width: 680, height: 520 });
-    await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+    await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
     await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
     const candidate = helper.getByRole('group', { name: '说法1消息组', exact: true }).getByRole('textbox');
     for (let turn = 1; turn <= 3; turn++) {

@@ -94,20 +94,14 @@ test('外置模式无桌面绑定的粘贴输入经可见联系人确认后生�
   assert.equal(result.phase, 'ready', `明确确认后的手动输入应可生成，实际错误：${result.errorCode}`);
   assert.equal(result.result.candidates[0].original.text, '今天先不去了，下次再约。');
   assert.equal(foreground.getState().manualInput, true);
-  const confirmForeground = () => session.confirmContact(contactId, foreground.getState().foregroundRevision);
-  await confirmForeground();
-  assert.equal(foreground.getState().manualInput, false, '原前台确认仍保持独立语义');
+  await assert.rejects(() => session.confirmContact(contactId, foreground.getState().foregroundRevision), /foreground_binding_required/);
+  assert.equal(foreground.getState().manualInput, true, '无绑定的前台确认不能覆盖已经确认的手动范围');
   assert.equal(foreground.getGenerationBlock(), null);
   const manualPanel = ports.ForegroundPanel({ state: foreground.getState(), session, manualInput: true });
-  assert.equal(manualPanel.props.children[0].props.children.join(''), '手动输入模式 · 请明确选择本次联系人');
-  const reconfirm = confirmationButton(manualPanel);
-  assert.ok(reconfirm, '前台已确认不能代替本次手动输入确认');
-  reconfirm.props.onClick(); await confirmation;
-  assert.equal(foreground.getState().manualInput, true);
-  await confirmForeground();
+  assert.equal(manualPanel.props.children[0].props.children.join(''), '手动输入模式 · 本次联系人已由你确认');
   const picker = ports.HelperContactPicker({ session: { ...session, state: contacts.getState() },
     foreground: foreground.getState(), manualInput: true });
-  picker.props.onChange({ target: { value: contactId } });
+  await picker.props.onSelect(contactId);
   await confirmation;
   assert.equal(foreground.getState().manualInput, true, '粘贴模式的联系人选择使用同一手动确认入口');
   assert.equal(contacts.getState().draft, '合成对方：今晚一起去吗？');

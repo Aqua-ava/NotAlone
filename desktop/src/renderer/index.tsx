@@ -11,7 +11,7 @@ import './helper-layout.css';
 import { BackendBadge, BackendConnectionNote, useBackendState } from './backend-status';
 import { SetupPanel } from './SetupPanel';
 import { StartupReadiness, StartupSettings, useStartupState } from './StartupSettings';
-import { CurrentContactLabel, HelperContactPicker, useContactSession } from './contact-session';
+import { ContactPicker, HelperContactPicker, useContactSession } from './contact-session';
 import { ContactsPage } from './ContactsPage';
 import { ImportPage } from './ImportPage';
 import { ReplyCandidates, useReplySession } from './RewritePanel';
@@ -77,8 +77,7 @@ export function App() {
     {replies.state.messageNotice.phase === 'interrupted' && <button onClick={() => void replies.reconnectMessages()}>重连消息提醒</button>}
     {replies.state.mode === 'rewrite_draft' && (replies.state.messageNotice.changed || replies.state.messageNotice.needsRefresh)
       && <button disabled={replies.state.messages.phase === 'loading'} onClick={() => void replies.loadMessages()}>刷新消息</button>}
-    <div className="ime-status-line"><BackendBadge state={backend} compact />
-      <div className="ime-contact-note"><CurrentContactLabel state={contactSession.state} /></div></div>
+    <div className="ime-status-line"><BackendBadge state={backend} compact /></div>
     <ReplyCandidates replies={replies} currentDraft={contactSession.state.draft} />
     </div>
     <footer className="ime-footer">
@@ -102,10 +101,12 @@ export function App() {
     <div className="admin-workspace">
       <header className="admin-topbar">
         <span>管理后台 <i>／</i> {page === 'import' && <>设置 <i>／</i> 高级 <i>／</i> </>}{currentPage.title}</span>
-        <div><CurrentContactLabel state={contactSession.state} /><BackendBadge state={backend} />
+        <div><ContactPicker session={contactSession}
+          onSelect={startup.mode === 'managed' ? contactSession.confirmManualContact : contactSession.selectContact} /><BackendBadge state={backend} />
           <button className="button primary" onClick={() => void operate(window.notalone.openHelper)}><Icon name="write" size={15} />打开输入小窗</button></div>
       </header>
       <ShortcutWarning />
+      {contactSession.error && <p className="operation-error" role="alert">{contactSession.error}</p>}
       <main className="manager-content">
         {page === 'import' && <button className="button" onClick={() => { setAdvancedOpen(true); setPage('config'); }}>返回设置 · 高级</button>}
         <div className="manager-title"><h1>{currentPage.title}</h1><p>{currentPage.description}</p></div>
@@ -121,7 +122,7 @@ export function App() {
             <div ref={diagnostics}><StartupSettings state={startup} backend={backend} open={diagnosticsOpen} onOpenChange={setDiagnosticsOpen} /></div>
             {advancedOpen && <DeveloperTraces session={contactSession} />}
           </details></>}
-        {page === 'contacts' && <ContactsPage session={contactSession} navigate={setPage} manualRelease={startup.mode === 'managed'} />}
+        {page === 'contacts' && <ContactsPage session={contactSession} navigate={setPage} />}
         {page === 'import' && <ImportPage session={contactSession} />}
         {page === 'memory' && <MemoryPage session={contactSession} navigate={setPage} />}
         {page === 'skillLearning' && <SkillLearningPage session={contactSession} />}

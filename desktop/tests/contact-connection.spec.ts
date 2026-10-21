@@ -5,7 +5,7 @@ test.use({ backendMode: 'reused' });
 
 test('明确重连到另一受控运行身份后，旧目录和草稿全部清空且目录按新 owner 隔离', async ({ runningApp: { app }, contactBackend }) => {
   const manager = await app.firstWindow();
-  await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+  await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
   const opened = app.waitForEvent('window');
   await manager.getByRole('button', { name: '打开输入小窗' }).click();
   const helper = await opened;

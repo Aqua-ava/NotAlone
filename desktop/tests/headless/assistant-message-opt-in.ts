@@ -11,7 +11,7 @@ async function adoptWhileGenerating(pages: EventPages, scene: 'express' | 'sugge
   const migrationCount = await currentMigrationCount();
   const { manager, helper, fixture } = pages;
   expect(fixture.data.migration_count).toBe(migrationCount); expect(fixture.data.migration_repeat).toBe(0);
-  await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+  await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
   await confirmHelperContact(helper, fixture.data.contact_ids[0]);
   await setWorkspaceContext(helper, true);
   await helper.getByRole('textbox', { name: '有什么想说的', exact: true }).fill('只说明本次立场，不作未来约定。');

@@ -1,4 +1,4 @@
-import { openFileImport } from './file-import-navigation';
+import { createImportContact, openFileImport } from './file-import-navigation';
 import { expect } from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -24,16 +24,15 @@ test('签名包通过真实系统文件选择器预览并完整导入六条合�
   }), { mode: 0o600, flag: 'wx' });
 
   const manager = await app.firstWindow();
-  await expect(manager.getByRole('button', { name: '选择合成联系人甲', exact: true })).toBeVisible({ timeout: 20_000 });
+  await expect(manager.getByRole('combobox', { name: '本次联系人', exact: true }).getByRole('option', { name: '合成联系人甲', exact: true })).toHaveCount(1, { timeout: 20_000 });
   expect(await app.evaluate(({ app }) => app.isPackaged)).toBe(true);
+  await createImportContact(manager, '合成原生导入验收联系人');
   await openFileImport(manager);
   console.log(`native_import_only_file: ${importBackend.data.file_path}`);
   await manager.getByRole('button', { name: '选择历史文件', exact: true }).click();
   console.log('native_import_only_stage: waiting-for-native-file-selection');
   await expect(manager.getByText('synthetic-import.jsonl', { exact: true })).toBeVisible({ timeout: 180_000 });
 
-  await manager.getByRole('combobox', { name: '资料归属联系人' }).selectOption('new');
-  await manager.getByRole('textbox', { name: '新联系人名称' }).fill('合成原生导入验收联系人');
   await manager.getByRole('button', { name: '预览资料范围', exact: true }).click();
   await expect(manager.getByRole('region', { name: '单联系人资料预览' })).toContainText('6 条记录');
   console.log('native_import_only_stage: six-record-preview-confirmed');

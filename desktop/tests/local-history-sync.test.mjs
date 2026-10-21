@@ -48,7 +48,7 @@ test('已删除与本地无记录均为中性覆盖说明，不误报同步完�
         const paused = state(code, historyState);
         paused.report.backfill.phase = 'paused';
         const pausedHtml = render(paused);
-        assert.match(pausedHtml, /补齐已暂停/);
+        assert.doesNotMatch(pausedHtml, /补齐已暂停|暂停补齐|重试补齐/);
         assert.match(pausedHtml, /历史覆盖尚未确认/);
         assert.doesNotMatch(pausedHtml, /role="alert"|补齐失败/);
       } else assert.doesNotMatch(html, /部分已确认会话/);
@@ -61,14 +61,30 @@ test('本地无记录与真实失败并存时，全局状态仍保留异常提�
   mixed.report.backfill.failedContacts = 1;
   mixed.report.backfill.phase = 'failed';
   const html = render(mixed);
-  assert.match(html, /role="alert"/);
-  assert.match(html, /补齐失败/);
+  assert.match(html, /正在自动重试/);
+  assert.doesNotMatch(html, /暂停补齐|重试补齐|已完成.*个会话/);
   assert.doesNotMatch(html, /部分已确认会话/);
 });
 
 test('未知CLI错误继续作为异常展示', () => {
   const html = render(state('cli_command_failed', null));
-  assert.match(html, /role="alert"/);
-  assert.match(html, /本次补齐遇到错误/);
+  assert.match(html, /正在自动重试/);
+  assert.doesNotMatch(html, /请检查本机服务与CLI后显式重试/);
   assert.doesNotMatch(html, /本地无可读历史/);
+});
+
+// 成功和关闭状态不留下独立补齐任务；进行中只保留自动恢复提示。
+test('自动补齐与总开关合并，完成或关闭后隐藏进度和手动操作', () => {
+  for (const phase of ['not_required', 'complete', 'backfilling', 'gap_detected', 'paused']) {
+    const current = state(null, null);
+    current.report.backfill.phase = phase;
+    current.report.backfill.incompleteContacts = 0;
+    const html = render(current);
+    assert.doesNotMatch(html, /历史补齐|查看补齐详情与操作|暂停补齐|重试补齐|已写入文字|本轮已检查/);
+    if (['backfilling', 'gap_detected', 'paused'].includes(phase)) {
+      assert.match(html, /正在自动同步遗漏消息/);
+    } else assert.doesNotMatch(html, /aria-label="遗漏消息同步"/);
+    current.report.enabled = false;
+    assert.doesNotMatch(render(current), /aria-label="遗漏消息同步"/);
+  }
 });

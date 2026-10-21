@@ -11,7 +11,7 @@ export async function replyStrategySkills(browser: Browser, origin: string) {
     process.stdout.write(`page_test_scenario: ${name}\n`);
     await withRewritePages(browser, origin, async ({ manager, helper, rewriteBackend, replyTransport }) => {
       const [unused, selected, otherContact, otherOwner] = (await rewriteBackend.command('strategy_skills')).skills as SyntheticSkill[];
-      await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+      await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
       await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
       await fillWorkspaceThought(helper, action === 'express' ? '想了解近况，但不增加安排承诺。' : '');
       if (match) await rewriteBackend.plan({ read_skill: selected.name });
@@ -65,7 +65,7 @@ export async function replyStrategySkillInvalidation(browser: Browser, origin: s
     process.stdout.write(`page_test_scenario: ${name}\n`);
     await withRewritePages(browser, origin, async ({ manager, helper, rewriteBackend, replyTransport }) => {
       const first = ((await rewriteBackend.command('strategy_skills')).skills as SyntheticSkill[])[0];
-      await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+      await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
       await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
       await fillWorkspaceThought(helper, workspaceAction === 'express' ? '只询问近况，不增加安排承诺。' : '');
       await rewriteBackend.plan({ read_skill: first.name });

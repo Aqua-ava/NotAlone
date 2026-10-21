@@ -1,4 +1,4 @@
-import { openFileImport } from './file-import-navigation';
+import { createImportContact, openFileImport } from './file-import-navigation';
 import { confirmHelperContact } from './foreground-confirmation-actions';
 import { expect, type Page } from '@playwright/test';
 import { readFile, writeFile } from 'node:fs/promises';
@@ -16,10 +16,12 @@ export type ImportPages = {
 
 // 文件输入由测试宿主拥有，页面仅使用生产具名选择和预览确认入口。
 export async function confirmImportPage(manager: Page, target?: string): Promise<void> {
+  const picker = manager.getByRole('combobox', { name: '本次联系人', exact: true });
+  if (target) await picker.selectOption(target);
+  else await createImportContact(manager, '合成导入联系人');
   await openFileImport(manager);
+  await expect(manager.getByRole('combobox', { name: /资料归属联系人|管理资料的联系人/ })).toHaveCount(0);
   await manager.getByRole('button', { name: '选择历史文件', exact: true }).click();
-  await manager.getByRole('combobox', { name: '资料归属联系人' }).selectOption(target ?? 'new');
-  if (!target) await manager.getByRole('textbox', { name: '新联系人名称' }).fill('合成导入联系人');
   await manager.getByRole('button', { name: '预览资料范围', exact: true }).click();
   await manager.getByRole('checkbox', { name: '我已核对本人渠道身份、联系人和这份文件的资料范围' }).check();
   await manager.getByRole('button', { name: '确认本次预览', exact: true }).click();
@@ -46,7 +48,6 @@ export async function savedImport(pages: ImportPages): Promise<void> {
   const progress = manager.getByRole('region', { name: '本次导入处理', exact: true });
   await expect(progress.getByText('新增 6 条消息，已存在 0 条消息。', { exact: true })).toBeVisible();
   await expect(progress.getByText('原任务全部步骤和最终核验已成功。', { exact: true })).toBeVisible({ timeout: 20_000 });
-  await progress.getByRole('button', { name: '查看本次导入资料', exact: true }).click();
   const sources = manager.getByRole('region', { name: '已导入资料', exact: true });
   await expect(sources.getByRole('listitem')).toHaveCount(1);
   await expect(sources.getByRole('listitem')).toContainText('synthetic-import.jsonl');
@@ -56,7 +57,7 @@ export async function savedImport(pages: ImportPages): Promise<void> {
   const first = await importBackend.task(original);
   expect((first.data.steps as Array<{ status: string }>).map((step) => step.status)).toEqual(['succeeded', 'succeeded', 'succeeded', 'succeeded', 'succeeded']);
   await manager.getByRole('button', { name: '联系人', exact: true }).click();
-  await expect(manager.getByRole('button', { name: '选择合成导入联系人', exact: true })).toBeVisible();
+  await expect(manager.getByRole('list', { name: '联系人同步状态', exact: true })).toContainText('合成导入联系人');
   await confirm(pages, importBackend.data.file_path, original.contact_id);
   await manager.getByRole('button', { name: '正式导入这份资料', exact: true }).click();
   await expect(progress.getByText('新增 0 条消息，已存在 6 条消息。', { exact: true })).toBeVisible();
@@ -95,7 +96,9 @@ export async function changedImport(pages: ImportPages): Promise<void> {
   await manager.getByRole('button', { name: '正式导入这份资料', exact: true }).click();
   await expect(manager.getByRole('alert')).toHaveText('文件内容已变化，请重新预览并确认。');
   await expect(manager.getByRole('region', { name: '本次导入处理', exact: true })).toHaveCount(0);
-  expect((await importBackend.request('/api/contacts')).data.contacts).toHaveLength(2);
+  const unchangedContacts = (await importBackend.request('/api/contacts')).data.contacts as Array<{ display_name: string; data_status: { message_count: number; source_count: number } }>;
+  expect(unchangedContacts).toHaveLength(3);
+  expect(unchangedContacts.find(contact => contact.display_name === '合成导入联系人')?.data_status).toEqual({ message_count: 0, source_count: 0 });
   expect(await manager.evaluate(async (selectionRevision) => {
     const outcomes = [];
     try { await window.notalone.imports.submit({ selectionRevision }); outcomes.push('accepted'); } catch { outcomes.push('rejected'); }
@@ -134,11 +137,15 @@ export async function failedImportRecovery(pages: ImportPages): Promise<void> {
 
 export async function priorityImport(pages: ImportPages): Promise<void> {
   const { manager, helper, importBackend } = pages;
-  await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+  await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
   await confirmHelperContact(helper, importBackend.data.contact_ids[0]);
   const prepared = await importBackend.command('prepare-priority-import');
   await importBackend.command('hold-reply');
   await confirm(pages, prepared.file_path as string);
+  const sharedContactId = await manager.getByRole('combobox', { name: '本次联系人', exact: true }).inputValue();
+  const manualEntry = helper.getByRole('button', { name: '切换为手动输入', exact: true });
+  if (await manualEntry.isVisible()) await manualEntry.click();
+  await confirmHelperContact(helper, sharedContactId);
   await manager.getByRole('button', { name: '正式导入这份资料', exact: true }).click();
   await expect.poll(async () => (await importBackend.command('observations')).extraction_entered).toBe(true);
   await helper.getByRole('textbox', { name: '有什么想说的', exact: true }).fill('我会晚一点回复你。');
@@ -206,7 +213,7 @@ export async function staleImportViewing(pages: ImportStalePages, failure: boole
 
 export async function staleImportContact(pages: ImportStalePages, failure: boolean): Promise<void> {
   const { manager, helper, importBackend, importProxy } = pages;
-  await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+  await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
   await confirm(pages, importBackend.data.file_path);
   importProxy.holdContacts = true;
   const latePromise = pendingImportSubmit(manager);
@@ -217,7 +224,7 @@ export async function staleImportContact(pages: ImportStalePages, failure: boole
   await expect(manager.getByText('尚未选择文件', { exact: true })).toBeVisible();
   await expect(manager.getByRole('region', { name: '本次导入处理', exact: true })).toHaveCount(0);
   await expect(manager.getByRole('alert')).toHaveCount(0);
-  await expect(helper.getByText('本次联系人：合成联系人乙', { exact: true })).toBeVisible();
+  await expect(helper.getByRole('combobox', { name: '本次联系人', exact: true }).locator('option:checked')).toHaveText('合成联系人乙');
 }
 
 export async function staleImportConnection(pages: ImportStalePages, failure: boolean): Promise<void> {
@@ -252,7 +259,8 @@ export async function lostImportResponse(pages: ImportStalePages): Promise<void>
   await expect(manager.getByRole('region', { name: '本次导入处理', exact: true })).toHaveCount(0);
   const before = await importBackend.request('/api/contacts');
   expect(before.data.contacts).toHaveLength(3);
-  await confirm(pages, importBackend.data.file_path);
+  const originalContactId = await manager.getByRole('combobox', { name: '本次联系人', exact: true }).inputValue();
+  await confirm(pages, importBackend.data.file_path, originalContactId);
   await manager.getByRole('button', { name: '正式导入这份资料', exact: true }).click();
   await expect(manager.getByText('新增 0 条消息，已存在 6 条消息。', { exact: true })).toBeVisible();
   expect(await importBackend.request('/api/contacts')).toEqual(before);

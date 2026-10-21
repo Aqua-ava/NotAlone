@@ -5,7 +5,7 @@ import { confirmHelperContact } from '../foreground-confirmation-actions';
 import { withEventPages, type EventPages } from './message-events';
 
 async function chooseContact(pages: EventPages, helper: Page, index: 0 | 1) {
-  await pages.manager.getByRole('button', { name: `选择合成联系人${index ? '乙' : '甲'}`, exact: true }).click();
+  await pages.manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: `合成联系人${index ? '乙' : '甲'}` });
   await confirmHelperContact(helper, pages.fixture.data.contact_ids[index]);
   await expect.poll(() => helper.evaluate(async () => (await window.notalone.replies.getState()).savedSession?.phase))
     .toBe('ready');

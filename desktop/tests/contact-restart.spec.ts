@@ -6,7 +6,7 @@ import { isolatedAppEnvironment, selectMenu } from './app-fixture';
 
 test('同一 userData 正常退出再启动时，不恢复联系人选择或未提交草稿', async ({ runningApp: { app, appProcess, userData }, appDirectory, appEnvironment, contactBackend }) => {
   const manager = await app.firstWindow();
-  await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+  await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
   const opened = app.waitForEvent('window');
   await manager.getByRole('button', { name: '打开输入小窗' }).click();
   const helper = await opened;
@@ -21,8 +21,8 @@ test('同一 userData 正常退出再启动时，不恢复联系人选择或未�
       env: isolatedAppEnvironment(userData, appEnvironment) });
     restartedProcess = restarted.process();
     const restoredManager = await restarted.firstWindow();
-    await expect(restoredManager.getByRole('button', { name: '选择合成联系人甲', exact: true })).toBeVisible({ timeout: 15_000 });
-    await expect(restoredManager.getByText('本次联系人：未确认', { exact: true })).toBeVisible();
+    await expect(restoredManager.getByRole('combobox', { name: '本次联系人', exact: true }).getByRole('option', { name: '合成联系人甲', exact: true })).toHaveCount(1, { timeout: 15_000 });
+    await expect(restoredManager.getByRole('combobox', { name: '本次联系人', exact: true })).toHaveValue('');
     const reopened = restarted.waitForEvent('window');
     await restoredManager.getByRole('button', { name: '打开输入小窗' }).click();
     const restoredHelper = await reopened;

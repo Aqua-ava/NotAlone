@@ -5,7 +5,7 @@ import { withRewritePages } from './rewrite-acceptance';
 
 export async function conversationStrategyEntry(browser: Browser, origin: string) {
   await withRewritePages(browser, origin, async ({ manager, helper, rewriteBackend, replyTransport }) => {
-    await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+    await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
     await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
     const idea = helper.getByRole('textbox', { name: '有什么想说的', exact: true });
     const firstCandidate = helper.getByRole('group', { name: '说法1消息组', exact: true }).getByRole('textbox');

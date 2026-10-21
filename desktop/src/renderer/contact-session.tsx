@@ -82,19 +82,21 @@ export function useContactSession() {
 
 export type ContactSessionView = ReturnType<typeof useContactSession>;
 
-export function CurrentContactLabel({ state }: { state: ContactSessionState }) {
-  const selected = state.contacts.find((contact) => contact.contactId === state.selectedContactId);
-  return <span className="current-contact">本次联系人：{selected?.displayName ?? '未确认'}</span>;
+export function ContactPicker({ session, disabled = false, onSelect = session.selectContact }: {
+  session: ContactSessionView; disabled?: boolean; onSelect?: (contactId: string) => Promise<unknown>;
+}) {
+  return <select className="contact-picker" aria-label="本次联系人"
+    value={session.state.selectedContactId ?? ''} disabled={disabled || session.state.directoryPhase !== 'ready' || session.state.contacts.length === 0}
+    onChange={(event) => void onSelect(event.target.value)}>
+    <option value="" disabled>选择联系人</option>
+    {session.state.contacts.map((contact) => <option key={contact.contactId} value={contact.contactId}>{contact.displayName}</option>)}
+  </select>;
 }
 
 export function HelperContactPicker({ session, foreground, manualRelease = false, manualInput = false }: { session: ContactSessionView; foreground?: ForegroundState; manualRelease?: boolean; manualInput?: boolean }) {
   const manual = manualRelease || manualInput || foreground?.manualInput;
-  return <select className="contact-picker" aria-label="本次联系人"
-    value={session.state.selectedContactId ?? ''} disabled={session.state.contacts.length === 0 || !foreground || !manual && foreground.unsupportedConversation}
-    onChange={(event) => foreground && void (manual ? session.confirmManualContact(event.target.value) : session.confirmContact(event.target.value, foreground.foregroundRevision))}>
-    <option value="" disabled>联系人未确认</option>
-    {session.state.contacts.map((contact) => <option key={contact.contactId} value={contact.contactId}>{contact.displayName}</option>)}
-  </select>;
+  return <ContactPicker session={session} disabled={!foreground || !manual && foreground.unsupportedConversation}
+    onSelect={async (contactId) => foreground && (manual ? session.confirmManualContact(contactId) : session.confirmContact(contactId, foreground.foregroundRevision))} />;
 }
 
 export function HelperDraft({ session, currentChat = false, workspace = false, disabled = false, restoreRevision }: { session: ContactSessionView; currentChat?: boolean; workspace?: boolean; disabled?: boolean; restoreRevision?: number }) {
