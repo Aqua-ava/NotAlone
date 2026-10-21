@@ -1,9 +1,9 @@
 .memory-page { display: grid; gap: 19px; }
 .memory-navigation { position: sticky; top: 0; z-index: 2; display: grid; gap: 12px; padding: 14px 0; background: #f4f1e8; border-bottom: 1px solid #c5cecb; }
 .memory-tabs { display: flex; flex-wrap: wrap; gap: 7px; }
-.memory-tabs button { min-width: 76px; padding: 9px 18px; border: 1px solid transparent; border-radius: 5px; color: #627985; font: inherit; font-size: 14px; }
-.memory-tabs button[aria-pressed="true"] { border-color: #afc4cd; background: #e1edf0; color: #355f7c; }
-.memory-tabs button:hover { background: #e8efed; }
+.memory-tabs button { min-width: 76px; padding: 9px 18px; border: 1px solid #b8c5cc; border-radius: 3px 6px 4px 5px; background: #fffdf6; color: #456b87; font: inherit; font-size: 14px; }
+.memory-tabs button[aria-pressed="true"] { border-color: #8ca5b5; color: #31495b; box-shadow: inset 0 -2px 0 #8ca5b5; }
+.memory-tabs button:hover { background: #edf3f4; }
 .memory-tabs button:focus-visible { outline: 2px solid #426f8a; outline-offset: 2px; }
 .memory-list { display: grid; gap: 14px; margin-top: 14px; }
 .memory-pagination { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; scroll-margin-top: 130px; color: #627985; font-size: 12px; }
