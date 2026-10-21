@@ -197,5 +197,32 @@ class PostgresSkillFileHealthTest(unittest.TestCase):
         })
 
 
+    def test_working_directory_cleanup_failure_keeps_skill_identity(self) -> None:
+        result = self._import()
+        blocked = self.root / str(self.owner_id) / result.name
+        blocked.mkdir(parents=True, exist_ok=True)
+        (blocked / "residual.txt").write_text("合成残留。", encoding="utf-8")
+        with psycopg.connect(self.database_url) as connection:
+            connection.execute(
+                "INSERT INTO public.reply_skill_file_cleanup(relative_path) VALUES (%s)",
+                (f"{self.owner_id}/{result.name}",),
+            )
+
+        with patch(
+            "notalone.persistence.skill_files.shutil.rmtree",
+            side_effect=PermissionError("合成权限失败"),
+        ):
+            synchronize_skill_library(
+                self.database_url, self.owner_id, migrate_legacy=False
+            )
+
+        health = self.library.skill_file_health(self.owner_id)
+        self.assertEqual(health["state"], "degraded")
+        failure = health["failures"][0]
+        self.assertEqual(failure["operation"], "cleanup")
+        self.assertEqual(failure["skill_id"], str(result.skill_id))
+        self.assertNotIn(str(self.root), json.dumps(health, ensure_ascii=False))
+
+
 if __name__ == "__main__":
     unittest.main()

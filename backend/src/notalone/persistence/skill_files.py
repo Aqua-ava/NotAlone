@@ -143,6 +143,27 @@ def _skill_id_from_relative(relative_path: Any) -> UUID | None:
         return None
 
 
+def _cleanup_skill_id(connection: Any, relative_path: Any) -> UUID | None:
+    """清理队列项可能是工作目录 `<owner>/<name>`；用库映射补回技能身份。"""
+
+    skill_id = _skill_id_from_relative(relative_path)
+    if skill_id is not None:
+        return skill_id
+    owner = _owner_from_relative(relative_path)
+    if owner is None or not isinstance(relative_path, str):
+        return None
+    parts = PurePosixPath(relative_path).parts
+    if len(parts) != 2:
+        return None
+    row = connection.execute(
+        "SELECT id FROM public.reply_skill WHERE owner_id=%s AND name=%s",
+        (owner, parts[1]),
+    ).fetchone()
+    if row is None:
+        return None
+    return row["id"] if isinstance(row, dict) else row[0]
+
+
 def skill_file_health(connection: Any, owner_id: UUID) -> dict[str, Any]:
     """可查询的目录文件健康状态：只含计数、固定错误码与不可识别 ID。"""
     if not isinstance(owner_id, UUID):
@@ -451,7 +472,7 @@ def cleanup_pending_files(connection: Any, *, owner_id: UUID | None = None) -> i
             if owner is not None:
                 _record_file_failure(
                     owner, operation="cleanup", error=error,
-                    skill_id=_skill_id_from_relative(row["relative_path"]),
+                    skill_id=_cleanup_skill_id(connection, row["relative_path"]),
                 )
             else:
                 logger.warning(
@@ -464,7 +485,7 @@ def cleanup_pending_files(connection: Any, *, owner_id: UUID | None = None) -> i
             if owner is not None:
                 _clear_file_failure(
                     owner, operation="cleanup",
-                    skill_id=_skill_id_from_relative(row["relative_path"]),
+                    skill_id=_cleanup_skill_id(connection, row["relative_path"]),
                 )
     return count
 
