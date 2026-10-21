@@ -15,21 +15,25 @@ from notalone.memory.models import MemoryCandidate
 from notalone.persistence.message_sources import (
     active_source_ref_sql, source_ref_content_sha_sql, valid_source_ref_exists_sql,
 )
+from notalone.persistence.schema_capabilities import schema_capability
 
 
 def has_dimension_evidence(connection: psycopg.Connection[Any]) -> bool:
     """旧业务结构只读保持未知；此查询不会执行迁移。"""
 
-    row = connection.execute("""
-        SELECT EXISTS (
-            SELECT 1 FROM information_schema.columns
-            WHERE table_schema='public' AND table_name='memory_candidate'
-              AND column_name='dimension_evidence'
-        ) AS present
-    """).fetchone()
-    if row is None:
-        raise ValueError("无法核对维度依据字段结构。")
-    return bool(row["present"] if isinstance(row, dict) else row[0])
+    def probe() -> bool:
+        row = connection.execute("""
+            SELECT EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_schema='public' AND table_name='memory_candidate'
+                  AND column_name='dimension_evidence'
+            ) AS present
+        """).fetchone()
+        if row is None:
+            raise ValueError("无法核对维度依据字段结构。")
+        return bool(row["present"] if isinstance(row, dict) else row[0])
+
+    return schema_capability(connection, "memory_candidate.dimension_evidence", probe)
 
 
 def supports_dimension_evidence_version(

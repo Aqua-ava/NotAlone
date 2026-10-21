@@ -1,9 +1,12 @@
 """变化依据沿原来源世代、父版本与删除事务复验。"""
 from dataclasses import replace
+from collections.abc import Mapping, Sequence
 from uuid import UUID
+
 from notalone.memory.evolution import MemoryEvolution
 from notalone.memory.correction import MemoryCorrectionConflictError
 from notalone.persistence.correction_evidence import validate_frozen_snapshot, merge_frozen_snapshot
+from notalone.persistence.schema_capabilities import schema_capability
 
 
 def validate_evolution(connection, *, owner_id, evolution, candidate=None, allow_retired=False, lock=False):
@@ -48,30 +51,95 @@ def evolution_snapshot(connection, candidate, correction_evidence):
     return correction_evidence
 
 
-def bind_memory_evolution(connection, *, owner_id, raw, memory_id=None, revision=None):
-    value = MemoryEvolution.from_payload(raw)
-    stored = value
-    if value is not None:
-        try:
-            validate_evolution(connection, owner_id=owner_id, evolution=value, allow_retired=True)
-        except (MemoryCorrectionConflictError, KeyError, TypeError, ValueError):
-            value = None
-    # 只按已用事实ID+版本检索关联反证，不扫描联系人全部历史。
-    if memory_id is not None:
-        present = connection.execute("SELECT EXISTS(SELECT 1 FROM pg_attribute WHERE attrelid='public.memory_candidate'::regclass AND attname='evolution' AND NOT attisdropped) AS present").fetchone()
-        if not (present["present"] if isinstance(present, dict) else present[0]):
-            return value
-        rows = connection.execute("SELECT evolution FROM public.memory_candidate WHERE owner_id=%s AND status='pending' "
-            "AND evolution->>'kind'='unresolved_conflict' AND evolution->'related_versions' @> %s::jsonb ORDER BY created_at DESC LIMIT 8",
-            (owner_id, __import__('json').dumps([{"memory_id": str(memory_id), "revision": revision}]))).fetchall()
-        for row in rows:
-            conflict = MemoryEvolution.from_payload(row["evolution"])
+def _evolution_column_present(connection) -> bool:
+    def probe() -> bool:
+        present = connection.execute(
+            "SELECT EXISTS(SELECT 1 FROM pg_attribute WHERE attrelid='public.memory_candidate'::regclass "
+            "AND attname='evolution' AND NOT attisdropped) AS present",
+        ).fetchone()
+        return bool(present["present"] if isinstance(present, dict) else present[0])
+
+    return schema_capability(connection, "memory_candidate.evolution", probe)
+
+
+def _related_conflict_rows(connection, *, owner_id, memory_ids) -> list[dict]:
+    """一次取回本批记忆关联的反证候选，保持既有 created_at 倒序。"""
+    identifiers = [str(identifier) for identifier in dict.fromkeys(memory_ids)]
+    if not identifiers:
+        return []
+    return connection.execute(
+        "SELECT candidate.created_at, candidate.evolution FROM public.memory_candidate AS candidate "
+        "WHERE candidate.owner_id=%s AND candidate.status='pending' "
+        "AND candidate.evolution->>'kind'='unresolved_conflict' "
+        "AND EXISTS (SELECT 1 FROM jsonb_array_elements(candidate.evolution->'related_versions') AS related "
+        "            WHERE related->>'memory_id' = ANY(%s)) "
+        "ORDER BY candidate.created_at DESC",
+        (owner_id, identifiers),
+    ).fetchall()
+
+
+def _conflict_matches(payload, memory_id, revision) -> bool:
+    """等价于 related_versions @> [{memory_id, revision}] 的当前记录匹配。"""
+    related = payload.get("related_versions") if isinstance(payload, dict) else None
+    if not isinstance(related, list):
+        return False
+    return any(
+        isinstance(item, dict)
+        and item.get("memory_id") == str(memory_id)
+        and item.get("revision") == revision
+        for item in related
+    )
+
+
+def bind_memory_evolutions(connection, rows: Sequence[Mapping]) -> list[MemoryEvolution | None]:
+    """按批绑定变化依据：列探针与本批反证候选各一次查询，逐行只做内存关联。
+
+    单行语义与 `bind_memory_evolution` 相同：先复验本行存储的变化依据，
+    再按已用事实ID+版本找待处理反证并返回首个可复验投影。
+    """
+    values: list[MemoryEvolution | None] = []
+    for row in rows:
+        value = MemoryEvolution.from_payload(row.get("memory_evolution"))
+        if value is not None:
             try:
-                validate_evolution(connection, owner_id=owner_id, evolution=conflict)
-                return conflict.as_projection(stored)
+                validate_evolution(connection, owner_id=row["owner_id"], evolution=value, allow_retired=True)
             except (MemoryCorrectionConflictError, KeyError, TypeError, ValueError):
-                continue
-    return value
+                value = None
+        values.append(value)
+    pending = [(index, row) for index, row in enumerate(rows) if row.get("memory_id") is not None]
+    if not pending or not _evolution_column_present(connection):
+        return values
+    by_owner: dict[UUID, list[tuple[int, Mapping]]] = {}
+    for index, row in pending:
+        by_owner.setdefault(row["owner_id"], []).append((index, row))
+    for owner_id, owner_rows in by_owner.items():
+        conflicts = _related_conflict_rows(
+            connection, owner_id=owner_id, memory_ids=[row["memory_id"] for _, row in owner_rows],
+        )
+        for index, row in owner_rows:
+            matched = 0
+            for conflict_row in conflicts:
+                if not _conflict_matches(conflict_row["evolution"], row["memory_id"], row["revision"]):
+                    continue
+                matched += 1
+                if matched > 8:  # 对齐原查询的 LIMIT 8
+                    break
+                conflict = MemoryEvolution.from_payload(conflict_row["evolution"])
+                try:
+                    validate_evolution(connection, owner_id=owner_id, evolution=conflict)
+                except (MemoryCorrectionConflictError, KeyError, TypeError, ValueError):
+                    continue
+                values[index] = conflict.as_projection(values[index])
+                break
+    return values
+
+
+def bind_memory_evolution(connection, *, owner_id, raw, memory_id=None, revision=None):
+    rows = [{
+        "owner_id": owner_id, "memory_evolution": raw,
+        "memory_id": memory_id, "revision": revision,
+    }]
+    return bind_memory_evolutions(connection, rows)[0]
 
 
 def require_replacement_evolution(connection, candidate, parents, *, merge=False):

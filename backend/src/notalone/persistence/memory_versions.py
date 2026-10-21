@@ -130,19 +130,12 @@ def raw_memory(row: dict) -> ConfirmedMemory | OwnerMemory:
             if "contact_id" in row else OwnerMemory(owner_id=row["owner_id"], **fields))
 
 
-def bind_version_evidence(connection: Any, *, memory: ConfirmedMemory | OwnerMemory,
-                          raw: object) -> tuple[VersionEvidence | None, bool]:
-    evidence = VersionEvidence.from_payload(raw)
-    if evidence is None:
-        return None, False
+def _evaluate_version_evidence(
+    memory: ConfirmedMemory | OwnerMemory, evidence: VersionEvidence,
+    previous: dict | None,
+) -> tuple[VersionEvidence, bool]:
+    """按已复验的来源窗口和父版本行判断版本依据当前是否仍成立。"""
     owner_id = memory.scope.owner_id if isinstance(memory, ConfirmedMemory) else memory.owner_id
-    try:
-        validate_version_sources(connection, owner_id=owner_id, evidence=evidence)
-    except (MemoryVersionConflict, MemoryCorrectionConflictError):
-        return evidence, False
-    table = "confirmed_memory" if isinstance(memory, ConfirmedMemory) else "owner_memory"
-    previous = connection.execute(sql.SQL("SELECT * FROM public.{} WHERE owner_id=%s AND id=%s").format(
-        sql.Identifier(table)), (owner_id, UUID(evidence.previous["memory_id"]))).fetchone()
     available = (previous is not None and previous["status"] == "invalidated"
                  and memory.supersedes_memory_id == UUID(evidence.previous["memory_id"])
                  and (not isinstance(memory, ConfirmedMemory) or previous["contact_id"] == memory.scope.contact_id)
@@ -158,6 +151,67 @@ def bind_version_evidence(connection: Any, *, memory: ConfirmedMemory | OwnerMem
                   and evidence.previous["adoption_method"] == "auto"
                   and memory.supersedes_memory_id == UUID(evidence.previous["memory_id"]))
     return bound, can_revert
+
+
+def bind_version_evidence(connection: Any, *, memory: ConfirmedMemory | OwnerMemory,
+                          raw: object) -> tuple[VersionEvidence | None, bool]:
+    evidence = VersionEvidence.from_payload(raw)
+    if evidence is None:
+        return None, False
+    owner_id = memory.scope.owner_id if isinstance(memory, ConfirmedMemory) else memory.owner_id
+    try:
+        validate_version_sources(connection, owner_id=owner_id, evidence=evidence)
+    except (MemoryVersionConflict, MemoryCorrectionConflictError):
+        return evidence, False
+    table = "confirmed_memory" if isinstance(memory, ConfirmedMemory) else "owner_memory"
+    previous = connection.execute(sql.SQL("SELECT * FROM public.{} WHERE owner_id=%s AND id=%s").format(
+        sql.Identifier(table)), (owner_id, UUID(evidence.previous["memory_id"]))).fetchone()
+    return _evaluate_version_evidence(memory, evidence, previous)
+
+
+def bind_version_evidence_rows(
+    connection: Any, *, rows, memory_from_row,
+) -> list[tuple[VersionEvidence | None, bool]]:
+    """按批绑定版本依据：父版本行整批读取一次，来源窗口仍逐行复验。"""
+    prepared: list[dict[str, Any] | None] = []
+    wanted: dict[tuple[str, UUID], list[UUID]] = {}
+    for row in rows:
+        evidence = VersionEvidence.from_payload(row.get("version_evidence"))
+        if evidence is None:
+            prepared.append(None)
+            continue
+        memory = memory_from_row(row)
+        owner_id = memory.scope.owner_id if isinstance(memory, ConfirmedMemory) else memory.owner_id
+        try:
+            validate_version_sources(connection, owner_id=owner_id, evidence=evidence)
+        except (MemoryVersionConflict, MemoryCorrectionConflictError):
+            prepared.append({"memory": memory, "evidence": evidence, "validated": False})
+            continue
+        table = "confirmed_memory" if isinstance(memory, ConfirmedMemory) else "owner_memory"
+        previous_id = UUID(evidence.previous["memory_id"])
+        wanted.setdefault((table, owner_id), []).append(previous_id)
+        prepared.append({
+            "memory": memory, "evidence": evidence, "validated": True,
+            "table": table, "owner_id": owner_id, "previous_id": previous_id,
+        })
+    previous_rows: dict[tuple[str, UUID, UUID], dict] = {}
+    for (table, owner_id), previous_ids in wanted.items():
+        fetched = connection.execute(sql.SQL(
+            "SELECT * FROM public.{} WHERE owner_id=%s AND id=ANY(%s)"
+        ).format(sql.Identifier(table)), (owner_id, list(dict.fromkeys(previous_ids)))).fetchall()
+        for previous in fetched:
+            previous_rows[(table, owner_id, previous["id"])] = previous
+    result: list[tuple[VersionEvidence | None, bool]] = []
+    for item in prepared:
+        if item is None:
+            result.append((None, False))
+            continue
+        if not item["validated"]:
+            result.append((item["evidence"], False))
+            continue
+        previous = previous_rows.get((item["table"], item["owner_id"], item["previous_id"]))
+        result.append(_evaluate_version_evidence(item["memory"], item["evidence"], previous))
+    return result
 
 
 def scoped_version_ids(

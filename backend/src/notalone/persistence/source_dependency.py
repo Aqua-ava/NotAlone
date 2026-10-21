@@ -9,6 +9,7 @@ import psycopg
 from notalone.memory import SourceDependencyMode
 from notalone.persistence.dimension_evidence import supports_bounded_runtime_evidence
 from notalone.persistence.message_sources import valid_source_ref_exists_sql
+from notalone.persistence.schema_capabilities import schema_capability
 
 
 def dependency_mode(value: Any) -> SourceDependencyMode:
@@ -56,6 +57,10 @@ def insert_dependency(mode: SourceDependencyMode, *, requires_all_sources=False,
 def require_lifecycle_schema(connection, table):
     if table not in {'memory_candidate', 'confirmed_memory', 'owner_memory'}:
         raise ValueError('全部来源依赖表无效。')
-    row = connection.execute("SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name=%s AND column_name='requires_all_sources') AS available", (table,)).fetchone()
-    if not (row['available'] if isinstance(row, dict) else row[0]):
+
+    def probe() -> bool:
+        row = connection.execute("SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name=%s AND column_name='requires_all_sources') AS available", (table,)).fetchone()
+        return bool(row['available'] if isinstance(row, dict) else row[0])
+
+    if not schema_capability(connection, f'{table}.requires_all_sources', probe):
         raise ValueError('数据库尚未启用完整记忆来源生命周期。')

@@ -22,10 +22,10 @@ from notalone.persistence.correction_evidence import reuse_message_snapshots
 from notalone.persistence.memory_context_read import reuse_memory_context
 from notalone.memory.events import MemoryEvent
 from notalone.memory.evolution import MemoryEvolution
-from notalone.persistence.memory_evolution import bind_memory_evolution, evolution_snapshot, validate_evolution, require_replacement_evolution
+from notalone.persistence.memory_evolution import bind_memory_evolutions, evolution_snapshot, validate_evolution, require_replacement_evolution
 from notalone.memory.conditions import MemoryConditions
-from notalone.persistence.memory_conditions import bind_memory_conditions, manual_conditions
-from notalone.persistence.memory_events import bind_memory_event, has_event_schema
+from notalone.persistence.memory_conditions import bind_memory_conditions_rows, manual_conditions
+from notalone.persistence.memory_events import bind_memory_events_rows, has_event_schema
 from notalone.memory.versions import (
     MemoryVersionConflict, require_auto_previous, require_auto_update_previous,
     require_auto_update_receipt, require_version_receipt,
@@ -55,7 +55,7 @@ from notalone.persistence.extraction_trace import erase_record_traces
 from notalone.persistence.locks import lock_contact_scope, lock_owner_scope
 from notalone.persistence.memory_timing import timed_memory_rows
 from notalone.persistence.memory_versions import (
-    bind_version_evidence, create_version_evidence, prepare_auto_revert, scoped_version_ids, validate_version_sources,
+    bind_version_evidence_rows, create_version_evidence, prepare_auto_revert, scoped_version_ids, validate_version_sources,
     erase_reverted_version,
     restored_version_evidence,
 )
@@ -109,7 +109,11 @@ _CANDIDATE_COLUMNS = """
 
 
 def _pending_candidate_columns(connection) -> str:
-    """直接投影可选列，避免为小字段序列化整行来源依据；旧结构仍返回 NULL。"""
+    """直接投影可选列，避免为小字段序列化整行来源依据；旧结构仍返回 NULL。
+
+    只读路径每次列表调用一次，不做缓存：测试会在同一连接的事务内暂时
+    改名可选列，缓存会掩盖这种结构变化。
+    """
     available = {row["attname"] for row in connection.execute(
         "SELECT attname FROM pg_attribute WHERE attrelid='public.memory_candidate'::regclass "
         "AND attnum>0 AND NOT attisdropped",
@@ -1716,15 +1720,22 @@ class PostgresMemoryStore:
     def _timed_memories(
         cls, connection: psycopg.Connection[Any], rows: Sequence[dict[str, Any]],
     ) -> list[dict[str, Any]]:
+        # 时间投影本就按批一次查询；四个依据绑定同样按批预取后内存关联。
         timed = timed_memory_rows(connection, rows, source_ids_key="memory_source_ids")
-        for row in timed:
-            row["_bound_evolution"] = bind_memory_evolution(connection, owner_id=row["owner_id"], raw=row.get("memory_evolution"), memory_id=row["memory_id"], revision=row["revision"])
-            row["_bound_conditions"] = bind_memory_conditions(connection, owner_id=row["owner_id"], candidate_id=row["source_candidate_id"], raw=row.get("memory_conditions"), text=row["memory_text"])
-            row["_bound_event"] = bind_memory_event(connection, owner_id=row["owner_id"],
-                candidate_id=row["source_candidate_id"], raw=row.get("memory_event"))
-            row["_bound_version_evidence"], row["_can_revert_auto_update"] = bind_version_evidence(
-                connection, memory=cls._memory_from_row(row), raw=row.get("version_evidence"),
-            )
+        for row, evolution in zip(timed, bind_memory_evolutions(connection, timed)):
+            row["_bound_evolution"] = evolution
+        for row, conditions in zip(timed, bind_memory_conditions_rows(
+            connection, timed, text_key="memory_text",
+        )):
+            row["_bound_conditions"] = conditions
+        for row, event in zip(timed, bind_memory_events_rows(connection, timed)):
+            row["_bound_event"] = event
+        versioned = bind_version_evidence_rows(
+            connection, rows=timed, memory_from_row=cls._memory_from_row,
+        )
+        for row, (evidence, can_revert) in zip(timed, versioned):
+            row["_bound_version_evidence"] = evidence
+            row["_can_revert_auto_update"] = can_revert
         return timed
 
     @staticmethod

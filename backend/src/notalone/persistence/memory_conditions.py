@@ -4,17 +4,26 @@ from uuid import UUID
 from notalone.memory.conditions import MemoryConditions
 from notalone.memory.correction import MemoryCorrectionConflictError
 from notalone.persistence.correction_evidence import validate_frozen_snapshot
+from notalone.persistence.schema_capabilities import schema_cached_value
 
-def bind_memory_conditions(connection: Any, *, owner_id: UUID, candidate_id: UUID | None,
-                      raw: object, text: str) -> MemoryConditions | None:
-    conditions = MemoryConditions.from_payload(raw)
-    if conditions is None:
-        return None
-    row = connection.execute(
-        "SELECT * "
-        "FROM public.memory_candidate WHERE owner_id=%s AND id=%s",
-        (owner_id, candidate_id),
-    ).fetchone() if candidate_id is not None else None
+def candidate_rows_by_id(connection, *, owner_id: UUID, candidate_ids) -> dict:
+    """批量读取候选行供证据绑定内存关联；整批一次查询，不逐行往返。"""
+    identifiers = tuple(dict.fromkeys(
+        identifier for identifier in candidate_ids if identifier is not None
+    ))
+    if not identifiers:
+        return {}
+    rows = connection.execute(
+        "SELECT * FROM public.memory_candidate WHERE owner_id=%s AND id=ANY(%s)",
+        (owner_id, list(identifiers)),
+    ).fetchall()
+    return {row["id"]: row for row in rows}
+
+
+def _bind_memory_conditions_from_row(
+    connection: Any, *, owner_id: UUID, conditions: MemoryConditions,
+    text: str, row: dict | None,
+) -> MemoryConditions | None:
     if row is None or row.get("correction_evidence") is None:
         return conditions.with_current_sources(False)
     try:
@@ -30,6 +39,50 @@ def bind_memory_conditions(connection: Any, *, owner_id: UUID, candidate_id: UUI
     except (MemoryCorrectionConflictError, KeyError, TypeError, ValueError):
         return conditions.with_current_sources(False)
     return conditions
+
+
+def bind_memory_conditions(connection: Any, *, owner_id: UUID, candidate_id: UUID | None,
+                      raw: object, text: str) -> MemoryConditions | None:
+    conditions = MemoryConditions.from_payload(raw)
+    if conditions is None:
+        return None
+    row = connection.execute(
+        "SELECT * "
+        "FROM public.memory_candidate WHERE owner_id=%s AND id=%s",
+        (owner_id, candidate_id),
+    ).fetchone() if candidate_id is not None else None
+    return _bind_memory_conditions_from_row(
+        connection, owner_id=owner_id, conditions=conditions, text=text, row=row,
+    )
+
+
+def bind_memory_conditions_rows(
+    connection: Any, rows, *, text_key: str,
+) -> list[MemoryConditions | None]:
+    """按批绑定条件：候选行整批读取一次，逐行只做内存关联。
+
+    返回顺序与输入一致；与单行 `bind_memory_conditions` 的判定相同。
+    """
+    values: list[MemoryConditions | None] = [None] * len(rows)
+    grouped: dict[UUID, list[tuple[int, UUID | None, MemoryConditions, str]]] = {}
+    for index, row in enumerate(rows):
+        conditions = MemoryConditions.from_payload(row.get("memory_conditions"))
+        if conditions is None:
+            continue
+        grouped.setdefault(row["owner_id"], []).append(
+            (index, row["source_candidate_id"], conditions, row[text_key]),
+        )
+    for owner_id, items in grouped.items():
+        fetched = candidate_rows_by_id(
+            connection, owner_id=owner_id,
+            candidate_ids=[candidate_id for _, candidate_id, _, _ in items],
+        )
+        for index, candidate_id, conditions, text in items:
+            values[index] = _bind_memory_conditions_from_row(
+                connection, owner_id=owner_id, conditions=conditions, text=text,
+                row=fetched.get(candidate_id) if candidate_id is not None else None,
+            )
+    return values
 
 
 
@@ -53,6 +106,11 @@ def manual_conditions(connection, *, owner_id, previous, proposed, source_ids):
 
 
 def conditions_clear_sql(connection):
-    rows = connection.execute("SELECT attname FROM pg_attribute WHERE attrelid='public.memory_candidate'::regclass AND attname IN ('conditions','evolution') AND NOT attisdropped").fetchall()
-    names = {row["attname"] if isinstance(row, dict) else row[0] for row in rows}
+    def probe():
+        rows = connection.execute("SELECT attname FROM pg_attribute WHERE attrelid='public.memory_candidate'::regclass AND attname IN ('conditions','evolution') AND NOT attisdropped").fetchall()
+        return frozenset(row["attname"] if isinstance(row, dict) else row[0] for row in rows)
+
+    names = schema_cached_value(
+        connection, "memory_candidate.conditions_evolution_columns", probe,
+    )
     return "".join(", " + name + "=NULL" for name in ("conditions", "evolution") if name in names)

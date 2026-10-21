@@ -6,30 +6,29 @@ from psycopg import sql
 from psycopg.rows import dict_row
 
 from notalone.memory.events import MemoryEvent
-from notalone.persistence.memory_conditions import conditions_clear_sql
+from notalone.persistence.memory_conditions import candidate_rows_by_id, conditions_clear_sql
 from notalone.memory.correction import MemoryCorrectionConflictError
 from notalone.persistence.correction_evidence import validate_frozen_snapshot
+from notalone.persistence.schema_capabilities import schema_capability
 
 
 def has_event_schema(connection: Any) -> bool:
-    row = connection.execute(
-        "SELECT EXISTS(SELECT 1 FROM pg_attribute WHERE attrelid='public.memory_candidate'::regclass "
-        "AND attname='event' AND NOT attisdropped) AS present",
-    ).fetchone()
-    return bool(row["present"] if isinstance(row, dict) else row[0])
+    def probe() -> bool:
+        row = connection.execute(
+            "SELECT EXISTS(SELECT 1 FROM pg_attribute WHERE attrelid='public.memory_candidate'::regclass "
+            "AND attname='event' AND NOT attisdropped) AS present",
+        ).fetchone()
+        return bool(row["present"] if isinstance(row, dict) else row[0])
+
+    return schema_capability(connection, "memory_candidate.event", probe)
 
 
-def bind_memory_event(connection: Any, *, owner_id: UUID, candidate_id: UUID | None,
-                      raw: object) -> MemoryEvent | None:
-    event = MemoryEvent.from_payload(raw)
-    if event is None:
-        return None
-    row = connection.execute(
-        "SELECT * "
-        "FROM public.memory_candidate WHERE owner_id=%s AND id=%s",
-        (owner_id, candidate_id),
-    ).fetchone() if candidate_id is not None else None
-    if row is None or row.get("correction_evidence") is None:
+def _bind_memory_event_from_row(
+    connection: Any, *, owner_id: UUID, event: MemoryEvent, row: dict | None,
+) -> MemoryEvent:
+    if row is None:
+        return event.with_current_sources(False)
+    if row.get("correction_evidence") is None:
         return event.with_current_sources(False)
     try:
         from notalone.persistence.memory_correction import candidate_from_row, decision_sources_available
@@ -44,6 +43,46 @@ def bind_memory_event(connection: Any, *, owner_id: UUID, candidate_id: UUID | N
     except (MemoryCorrectionConflictError, KeyError, TypeError, ValueError):
         return event.with_current_sources(False)
     return event
+
+
+def bind_memory_event(connection: Any, *, owner_id: UUID, candidate_id: UUID | None,
+                      raw: object) -> MemoryEvent | None:
+    event = MemoryEvent.from_payload(raw)
+    if event is None:
+        return None
+    row = connection.execute(
+        "SELECT * "
+        "FROM public.memory_candidate WHERE owner_id=%s AND id=%s",
+        (owner_id, candidate_id),
+    ).fetchone() if candidate_id is not None else None
+    return _bind_memory_event_from_row(connection, owner_id=owner_id, event=event, row=row)
+
+
+def bind_memory_events_rows(connection: Any, rows) -> list[MemoryEvent | None]:
+    """按批绑定事件：候选行整批读取一次，逐行只做内存关联。
+
+    返回顺序与输入一致；与单行 `bind_memory_event` 的判定相同。
+    """
+    values: list[MemoryEvent | None] = [None] * len(rows)
+    grouped: dict[UUID, list[tuple[int, UUID | None, MemoryEvent]]] = {}
+    for index, row in enumerate(rows):
+        event = MemoryEvent.from_payload(row.get("memory_event"))
+        if event is None:
+            continue
+        grouped.setdefault(row["owner_id"], []).append(
+            (index, row["source_candidate_id"], event),
+        )
+    for owner_id, items in grouped.items():
+        fetched = candidate_rows_by_id(
+            connection, owner_id=owner_id,
+            candidate_ids=[candidate_id for _, candidate_id, _ in items],
+        )
+        for index, candidate_id, event in items:
+            values[index] = _bind_memory_event_from_row(
+                connection, owner_id=owner_id, event=event,
+                row=fetched.get(candidate_id) if candidate_id is not None else None,
+            )
+    return values
 
 
 def _window_ids(window: dict | None) -> set[str]:

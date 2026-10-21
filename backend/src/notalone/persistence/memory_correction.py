@@ -23,14 +23,18 @@ from notalone.persistence.correction_evidence import (
     capture_message_snapshot, merge_frozen_snapshot, read_source_availability, validate_frozen_snapshot,
 )
 from notalone.memory_trace.context import current_trace
+from notalone.persistence.schema_capabilities import schema_capability
 from notalone.scopes import ContactScope
 
 
 def has_correction_schema(connection: psycopg.Connection[Any]) -> bool:
-    row = connection.execute(
-        "SELECT to_regclass('public.memory_correction_decision') IS NOT NULL AS present"
-    ).fetchone()
-    return bool(row["present"] if isinstance(row, dict) else row[0])
+    def probe() -> bool:
+        row = connection.execute(
+            "SELECT to_regclass('public.memory_correction_decision') IS NOT NULL AS present"
+        ).fetchone()
+        return bool(row["present"] if isinstance(row, dict) else row[0])
+
+    return schema_capability(connection, "memory_correction_decision.table", probe)
 
 
 def active_guard_messages(

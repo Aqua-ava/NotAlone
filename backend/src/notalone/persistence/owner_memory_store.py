@@ -20,10 +20,10 @@ from notalone.memory.dimension_evidence import (
 from notalone.memory.correction import MemoryCorrectionConflictError
 from notalone.memory.events import MemoryEvent
 from notalone.memory.evolution import MemoryEvolution
-from notalone.persistence.memory_evolution import bind_memory_evolution, validate_evolution, require_replacement_evolution
+from notalone.persistence.memory_evolution import bind_memory_evolutions, validate_evolution, require_replacement_evolution
 from notalone.memory.conditions import MemoryConditions
-from notalone.persistence.memory_conditions import bind_memory_conditions, manual_conditions
-from notalone.persistence.memory_events import bind_memory_event
+from notalone.persistence.memory_conditions import bind_memory_conditions_rows, manual_conditions
+from notalone.persistence.memory_events import bind_memory_events_rows
 from notalone.memory.versions import (
     MemoryVersionConflict, require_auto_previous, require_auto_update_previous,
     require_auto_update_receipt, require_version_receipt,
@@ -46,7 +46,7 @@ from notalone.persistence.source_dependency import dependency_mode, ensure_all_s
 from notalone.persistence.locks import lock_contact_scope, lock_owner_scope
 from notalone.persistence.memory_timing import timed_memory_rows
 from notalone.persistence.memory_versions import (
-    bind_version_evidence, create_version_evidence, prepare_auto_revert, scoped_version_ids, validate_version_sources,
+    bind_version_evidence_rows, create_version_evidence, prepare_auto_revert, scoped_version_ids, validate_version_sources,
     erase_reverted_version,
     restored_version_evidence,
 )
@@ -959,15 +959,22 @@ def _from_row(row: dict[str, Any]) -> OwnerMemory:
 def _timed_rows(
     connection: psycopg.Connection[Any], rows: Sequence[dict[str, Any]],
 ) -> list[dict[str, Any]]:
+    # 时间投影按批一次查询；四个依据绑定同样按批预取后内存关联。
     timed = timed_memory_rows(connection, rows, source_ids_key="source_ids", contact_scoped=False)
-    for row in timed:
-        row["_bound_evolution"] = bind_memory_evolution(connection, owner_id=row["owner_id"], raw=row.get("memory_evolution"), memory_id=row["memory_id"], revision=row["revision"])
-        row["_bound_conditions"] = bind_memory_conditions(connection, owner_id=row["owner_id"], candidate_id=row["source_candidate_id"], raw=row.get("memory_conditions"), text=row["text_content"])
-        row["_bound_event"] = bind_memory_event(connection, owner_id=row["owner_id"],
-            candidate_id=row["source_candidate_id"], raw=row.get("memory_event"))
-        row["_bound_version_evidence"], row["_can_revert_auto_update"] = bind_version_evidence(
-            connection, memory=_from_row(row), raw=row.get("version_evidence"),
-        )
+    for row, evolution in zip(timed, bind_memory_evolutions(connection, timed)):
+        row["_bound_evolution"] = evolution
+    for row, conditions in zip(timed, bind_memory_conditions_rows(
+        connection, timed, text_key="text_content",
+    )):
+        row["_bound_conditions"] = conditions
+    for row, event in zip(timed, bind_memory_events_rows(connection, timed)):
+        row["_bound_event"] = event
+    versioned = bind_version_evidence_rows(
+        connection, rows=timed, memory_from_row=_from_row,
+    )
+    for row, (evidence, can_revert) in zip(timed, versioned):
+        row["_bound_version_evidence"] = evidence
+        row["_can_revert_auto_update"] = can_revert
     return timed
 
 
