@@ -129,24 +129,3 @@ test('明确停用入口要求分别选择目标与范围，不从普通措辞�
     assert.match(html, /disabled=""[^>]*>按此范围停用/);
   } finally { await rm(owned, { recursive: true, force: true }); }
 });
-
-test('主动联系已有候选时提供明确重新生成入口，保留原次重试的独立含义', async () => {
-  const owned = await mkdtemp(path.join(tmpdir(), 'notalone-policy-regenerate-view-'));
-  try {
-    await symlink(path.resolve('node_modules'), path.join(owned, 'node_modules'), 'dir');
-    const entry = path.join(owned, 'entry.ts');
-    await writeFile(entry, `export { ProactiveReplyInput } from ${JSON.stringify(path.resolve('src/renderer/ProactiveReplyInput.tsx'))};\n`
-      + `export { createElement } from ${JSON.stringify(path.resolve('node_modules/react/index.js'))};\n`
-      + `export { renderToStaticMarkup } from ${JSON.stringify(path.resolve('node_modules/react-dom/server.node.js'))};\n`);
-    const output = path.join(owned, 'view.mjs');
-    await build({ entryPoints: [entry], outfile: output, bundle: true, platform: 'node', format: 'esm', logLevel: 'silent',
-      jsx: 'automatic', packages: 'external', banner: { js: "import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);" } });
-    const { ProactiveReplyInput, createElement, renderToStaticMarkup } = await import(pathToFileURL(output).href);
-    const replies = { state: { contactId: 'synthetic-contact', purpose: '当前意图不变', phase: 'ready',
-      generationBlock: null, exploration: { phase: 'idle' }, result: { replyRequestId: 'synthetic-request' }, canRetry: true,
-      skillChoice: { mode: 'auto', versionId: null }, skillChoices: [], correction: '', requirements: '', clarificationAnswer: '' } };
-    const html = renderToStaticMarkup(createElement(ProactiveReplyInput, { replies }));
-    assert.match(html, />重新生成<\/button>/);
-    assert.match(html, />重试同一次生成<\/button>/);
-  } finally { await rm(owned, { recursive: true, force: true }); }
-});

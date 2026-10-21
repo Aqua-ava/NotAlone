@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ClipboardEvent } from 'react';
-import type { AssistantSessionDeletion, ReplyMode, ReplySessionState, RewriteOptions, RewriteTone } from '../shared/reply-bridge';
-import { HelperDraft, type ContactSessionView } from './contact-session';
-import { Icon } from './icons';
+import type { AssistantSessionDeletion, ReplyMode, ReplySessionState, RewriteOptions } from '../shared/reply-bridge';
 import { useRevisionedSession } from './use-revisioned-session';
 import './rewrite.css';
 import { useReplyEvidence } from './ReplyEvidence';
@@ -16,7 +14,6 @@ import type { RequirementChange } from '../shared/assistant-continuation-clarifi
 import { AssistantContinuationControls } from './AssistantContinuationControls';
 import { AssistantMessageNoticeActions } from './AssistantMessageNoticeActions';
 import { ReplyBasisChangeNotice } from './ReplyBasisChangeNotice';
-import { ReplySceneInput } from './ReplySceneInput';
 
 export function useReplySession(enabled = true) {
   const { state, error, setError, latest, active, receive, retry } = useRevisionedSession<ReplySessionState>({ revision: -1, scopeRevision: 0, contactId: null, generationBlock: 'foreground-confirmation-required',
@@ -126,74 +123,6 @@ export function useReplySession(enabled = true) {
   };
 }
 export type ReplySessionView = ReturnType<typeof useReplySession>;
-
-export function ReplyModePicker({ replies, enabled }: { replies: ReplySessionView; enabled: boolean }) {
-  const responding = replies.state.mode === 'reply_to_message'
-    || replies.state.mode === 'rewrite_draft' && replies.state.options.inputKind === 'current_chat';
-  return <div className="ime-modes" role="group" aria-label="沟通场景与改写">
-    <button className={replies.state.mode === 'rewrite_draft' && replies.state.options.inputKind !== 'current_chat' ? 'active' : ''}
-      aria-pressed={replies.state.mode === 'rewrite_draft' && replies.state.options.inputKind !== 'current_chat'}
-      disabled={!enabled} onClick={() => void replies.setMode('rewrite_draft', 'draft')}>改写</button>
-    <button className={responding ? 'active' : ''} aria-pressed={responding}
-      disabled={!enabled} onClick={() => { if (!responding) void replies.setMode('reply_to_message', undefined, true); }}>回应消息</button>
-    <button className={replies.state.mode === 'initiate_conversation' ? 'active' : ''} aria-pressed={replies.state.mode === 'initiate_conversation'}
-      disabled={!enabled} onClick={() => void replies.setMode('initiate_conversation')}>主动聊聊</button>
-  </div>;
-}
-
-export function ReplySourcePicker({ replies }: { replies: ReplySessionView }) {
-  const pasted = replies.state.mode === 'rewrite_draft' && replies.state.options.inputKind === 'current_chat';
-  if (!pasted && replies.state.mode !== 'reply_to_message') return null;
-  const enabled = Boolean(replies.state.contactId);
-  return <div className="reply-source-picker" role="group" aria-label="回复消息来源">
-    <span>消息来源</span>
-    <button className={pasted ? 'active' : ''} aria-pressed={pasted} disabled={!enabled}
-      onClick={() => void replies.setMode('rewrite_draft', 'current_chat')}>粘贴文字</button>
-    <button className={!pasted ? 'active' : ''} aria-pressed={!pasted} disabled={!enabled}
-      onClick={() => void replies.setMode('reply_to_message')}>从已有消息中选择</button>
-  </div>;
-}
-
-export function RewriteInput({ contacts, replies }: { contacts: ContactSessionView; replies: ReplySessionView }) {
-  const [options, setOptions] = useState(replies.state.options);
-  useEffect(() => { setOptions(replies.state.options); }, [replies.state.scopeRevision, replies.state.inputClearRevision, replies.state.options.inputKind]);
-  const enabled = Boolean(contacts.state.selectedContactId);
-  const currentChat = replies.state.options.inputKind === 'current_chat';
-  const update = (value: Partial<RewriteOptions>) => {
-    const next = { ...options, ...value }; setOptions(next); void replies.updateOptions(next);
-  };
-  return <section className="compose-panel" aria-label={currentChat ? "回应粘贴文字输入" : "改写输入"}>
-    <header className="compose-heading"><span className="section-eyebrow">输入</span><h2>{currentChat ? "对方说了什么？你想怎么回应？" : "把你的意思，换一种说法"}</h2><p>{currentChat ? "粘贴对方的话，补充表达方向，再生成回复。" : "写下草稿，选择语气，让表达更自然。"}</p></header>
-    <div className="ime-input"><HelperDraft session={contacts} currentChat={currentChat} restoreRevision={replies.state.inputClearRevision} />
-</div>
-    {enabled && replies.state.generationBlock && <p role="status" className="rewrite-privacy">
-      生成前，请先在上方确认本次联系人。
-    </p>}
-    <div className="rewrite-options">
-      {currentChat && <label>表达方向<textarea aria-label="粘贴文字的表达方向" maxLength={4096}
-        value={options.pastedDirection ?? ''} disabled={!enabled} placeholder="明确说明你想如何回应，例如简短婉拒，不增加承诺"
-        onChange={(event) => update({ pastedDirection: event.target.value })} /></label>}
-      <label>本次语气<select aria-label="本次语气" value={options.tone} disabled={!enabled}
-        onChange={(event) => update({ tone: event.target.value as RewriteTone })}>
-        <option value="original">保留原意</option><option value="warm">自然温和</option>
-        <option value="concise">简洁直接</option><option value="polite">礼貌克制</option></select></label>
-      <label className="rewrite-context"><input type="checkbox" checked={options.includeRelationshipContext} disabled={!enabled}
-        onChange={(event) => update({ includeRelationshipContext: event.target.checked })} />结合关系语境</label>
-      <label className="rewrite-instruction">本次要求<input aria-label="本次要求" maxLength={4096}
-        value={options.instruction} disabled={!enabled} placeholder="可选，如只说明时间，不增加承诺"
-        onChange={(event) => update({ instruction: event.target.value })} /></label>
-    </div>
-    <details className="compose-settings"><summary>更多设置 · 精确场景</summary><ReplySceneInput replies={replies} /></details>
-    <div className="compose-submit"><button className="generate-button" aria-label="生成候选" title="生成候选"
-        disabled={!enabled || !contacts.state.draft.trim() || currentChat && !options.pastedDirection?.trim() || replies.state.phase === 'waiting' || Boolean(replies.state.generationBlock)}
-        onClick={() => void replies.generate()}><Icon name="sparkle" size={18} /><span>生成候选</span></button></div>
-    <p className="rewrite-privacy">{currentChat ? '本次粘贴的对方文字未经渠道核验。' : ''}{options.includeRelationshipContext ? '本次允许使用这位联系人的相关资料。' : '默认只处理本次文字，不读取关系历史。'} 表达方向、语气和要求只作用于本次生成，不自动保存为长期记忆。</p>
-    <div className="rewrite-retry">
-      {replies.state.canRetry && <button disabled={replies.state.phase === 'waiting' || Boolean(replies.state.generationBlock)} onClick={() => void replies.generate()}>重试同一次生成</button>}
-      {replies.state.result && <button disabled={!contacts.state.draft.trim() || replies.state.phase === 'waiting' || Boolean(replies.state.generationBlock)} onClick={() => void replies.generate(true)}>重新生成</button>}
-    </div>
-  </section>;
-}
 
 function CandidateEditor({ text, candidateId, number, edit, copy, validatePaste, disabled }: {
   text: string; candidateId: string; number: number; edit: ReplySessionView['editCandidate']; copy: (text: string) => void;

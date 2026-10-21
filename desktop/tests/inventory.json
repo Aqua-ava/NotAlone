@@ -95,7 +95,6 @@
     "tests/reply-used-skill.test.mjs",
     "tests/reply-workspace.test.mjs",
     "tests/rewrite-fixture-cleanup.test.mjs",
-    "tests/rewrite-generation-entry.test.mjs",
     "tests/scheduling/acceptance-coordinator.test.mjs",
     "tests/scheduling/command.test.mjs",
     "tests/scheduling/visual-acceptance.test.mjs",
@@ -122,7 +121,8 @@
     "tests/workspace-session-switch.test.mjs",
     "tests/workspace-skill-choice.test.mjs",
     "tests/sync-scope.test.mjs",
-    "tests/wechat-setup.test.mjs"
+    "tests/wechat-setup.test.mjs",
+    "tests/dead-code-removal.test.mjs"
   ],
   "headless": [
     "tests/candidate-manual-edit-view.test.mjs",

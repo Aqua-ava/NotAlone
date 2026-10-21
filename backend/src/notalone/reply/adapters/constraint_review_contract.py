@@ -84,8 +84,6 @@ def build_review_tool(candidate_count: int) -> dict[str, Any]:
     }
 
 
-REVIEW_TOOL = build_review_tool(3)
-
 
 def accepted_candidate_numbers(output: object, payload: dict[str, Any]) -> frozenset[int]:
     """校验完整响应后才筛选；引文存在不等于模型的语义比较正确。"""

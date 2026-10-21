@@ -4,7 +4,6 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { build } from 'esbuild';
 import { chromium, expect } from '@playwright/test';
-import { replyInputFixture } from './fixtures/reply-input-stream.mjs';
 
 async function mount(page, contents) {
   const bundle = await build({ stdin: { contents, resolveDir: process.cwd(), loader: 'tsx' }, bundle: true,
@@ -148,87 +147,6 @@ test('顶部联系人目录失效或切换范围时关闭搜索，空目录禁�
   await page.evaluate(() => window.fixtureUpdate({ directoryPhase: 'ready', selectedContactId: null, contacts: [] }));
   await expect(picker).toBeDisabled();
   await expect(picker).toHaveAttribute('data-contact-id', '');
-});
-
-test('真实React双窗口共用联系人，顶部与小窗双向切换且草稿和迟到事件不串范围', async t => {
-  const f = await replyInputFixture(100);
-  const browser = await chromium.launch({ headless: true, executablePath: process.env.NOTALONE_TEST_CHROMIUM_PATH });
-  t.after(() => browser.close());
-  const manager = await browser.newPage(), helper = await browser.newPage();
-  const pages = [manager, helper], deliveries = [];
-  const publish = (channel, state) => {
-    for (const page of pages) deliveries.push(page.evaluate(({ channel, state }) => window.pageEvent?.(channel, state), { channel, state }));
-  };
-  f.setForward(publish);
-  const unsubscribe = f.contacts.onStateChanged((state, kind) => publish('contacts:state-changed', kind === 'draft' ? f.contactDraftUpdate(state) : state));
-  t.after(async () => { f.setForward(() => {}); unsubscribe(); await Promise.allSettled(deliveries); });
-  for (const page of pages) {
-    await page.exposeFunction('invoke', async (channel, ...args) => {
-      if (channel === 'contacts:get-state') return f.contacts.getState();
-      if (channel === 'contacts:set-draft') return f.contacts.setDraft(args[0]);
-      if (channel === 'contacts:select' || channel === 'contacts:confirm-manual') return f.contacts.selectContact(args[0]);
-      return f.handlers.get(channel)(...args);
-    });
-    await mount(page, `
-      import React from 'react'; import { createRoot } from 'react-dom/client';
-      import { createReplyBridge } from './src/preload/reply';
-      import { createContactSessionBridge } from './src/preload/contact-session';
-      import { useContactSession, ContactPicker, HelperContactPicker } from './src/renderer/contact-session';
-      import { useReplySession, RewriteInput } from './src/renderer/RewritePanel';
-      const listeners = new Map();
-      window.pageEvent = (channel, state) => { for (const listener of listeners.get(channel) ?? []) listener(undefined, state); };
-      const transport = { invoke: (...args) => window.invoke(...args), on: (channel, listener) => {
-        const set = listeners.get(channel) ?? new Set(); set.add(listener); listeners.set(channel, set);
-      }, removeListener: (channel, listener) => listeners.get(channel)?.delete(listener) };
-      window.notalone = { replies: createReplyBridge(transport), contacts: createContactSessionBridge(transport) };
-      function View() {
-        const contacts = useContactSession(), replies = useReplySession();
-        return <><header>${page === helper ? '<HelperContactPicker session={contacts} foreground={{ manualInput: true }} manualInput/>' : '<ContactPicker session={contacts} onSelect={contacts.confirmManualContact}/>'}</header>
-          ${page === helper ? '<RewriteInput contacts={contacts} replies={replies}/>' : ''}
-          <output aria-label="当前范围">{replies.state.contactId}</output></>;
-      }
-      createRoot(document.getElementById('root')).render(<View/>);
-    `);
-  }
-  const current = page => page.getByRole('combobox', { name: '本次联系人', exact: true });
-  const draft = helper.getByRole('textbox', { name: '草稿', exact: true });
-  const instruction = helper.getByRole('textbox', { name: '本次要求', exact: true });
-  const firstContactId = f.scope().contactId;
-  await expect(current(manager)).toHaveCount(1);
-  await expect(current(helper)).toHaveAttribute('data-contact-id', firstContactId);
-  await expect(draft).toBeEnabled();
-  await draft.fill('合成刚输入的最新草稿。');
-  await instruction.fill('只说明时间，不增加承诺。');
-  await helper.getByRole('button', { name: '生成候选', exact: true }).click();
-  await expect.poll(() => f.calls.filter(call => call.path.endsWith('/replies/prepare')).length).toBe(1);
-  const submitted = f.calls.find(call => call.path.endsWith('/replies/prepare')).body;
-  assert.equal(submitted.content.draft_text, '合成刚输入的最新草稿。');
-  assert.match(submitted.content.user_instruction, /只说明时间，不增加承诺。/);
-  const oldReply = await f.bridge.getState(), oldContact = f.contacts.getState();
-  await selectContact(current(manager), f.otherContactId);
-  for (const page of pages) {
-    await expect(current(page)).toHaveAttribute('data-contact-id', f.otherContactId);
-    await expect(page.getByLabel('当前范围')).toHaveText(f.otherContactId);
-  }
-  await expect(draft).toHaveValue('');
-  await expect(instruction).toHaveValue('');
-  await draft.fill('乙的独立草稿。');
-  await instruction.fill('乙的独立新要求。');
-  for (const page of pages) await page.evaluate(({ oldReply, oldContact }) => {
-    window.pageEvent('reply:state-updated', { kind: 'snapshot', state: oldReply });
-    window.pageEvent('contacts:state-changed', oldContact);
-  }, { oldReply, oldContact });
-  for (const page of pages) {
-    await expect(current(page)).toHaveAttribute('data-contact-id', f.otherContactId);
-    await expect(page.getByLabel('当前范围')).toHaveText(f.otherContactId);
-  }
-  await expect(draft).toHaveValue('乙的独立草稿。');
-  await expect(instruction).toHaveValue('乙的独立新要求。');
-  await selectContact(current(helper), firstContactId);
-  for (const page of pages) await expect(current(page)).toHaveAttribute('data-contact-id', firstContactId);
-  await f.bridge.readSavedSession(f.scope());
-  await expect(instruction).toHaveValue('只说明时间，不增加承诺。');
-  await expect(draft).toHaveValue('合成刚输入的最新草稿。');
 });
 
 test('真实导入页面跟随顶部联系人，已确认预览和迟到预览在切换后失效', async t => {
