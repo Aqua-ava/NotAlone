@@ -131,6 +131,7 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 85. [ADR-085：以来源核验统一默认自动采纳边界](adr/085-source-verified-automatic-adoption.md)
 86. [ADR-086：按来源含义采纳记忆，不设统一重复次数门槛](adr/086-source-meaning-without-repetition-threshold.md)
 87. [ADR-087：新联系人只从微信会话确认加入](adr/087-wechat-confirmed-contact-onboarding.md)
+88. [ADR-088：一秒作为正常联系人切换的优化目标](adr/088-normal-switch-one-second-optimization-target.md)
 
 ## 当前架构决策
 

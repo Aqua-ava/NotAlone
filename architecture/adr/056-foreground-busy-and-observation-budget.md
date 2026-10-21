@@ -1,6 +1,6 @@
 # ADR-056：前台观察繁忙恢复与有限执行预算
 
-> 2026-10-21 设计审查：纯质量失败后的人工门后由 [ADR-076](076-session-list-assisted-name-matching.md)、[ADR-077](077-exact-session-name-before-edit-neighbors.md)增加窄例外；独立前台执行见 [ADR-073](073-foreground-observation-independent-of-background-sync.md)。本 ADR 的执行超时上限不等于取消旧任务中的一秒体验目标，后者是否继续作为验收目标尚待澄清。
+> 2026-10-21 设计审查：纯质量失败后的人工门后由 [ADR-076](076-session-list-assisted-name-matching.md)、[ADR-077](077-exact-session-name-before-edit-neighbors.md)增加窄例外；独立前台执行见 [ADR-073](073-foreground-observation-independent-of-background-sync.md)。[ADR-088](088-normal-switch-one-second-optimization-target.md)已明确一秒仅为正常切换的优化目标，不是所有场景的硬门；本文执行超时、身份和新鲜度边界保持。
 
 > 状态：已采纳；修复包实机结果另行记录
 > 决策日期：2026-10-15
