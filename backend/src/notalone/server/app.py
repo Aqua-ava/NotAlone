@@ -12,7 +12,7 @@ import psycopg
 import logging
 import secrets
 import threading
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler
@@ -60,6 +60,7 @@ from notalone.application.assistant_session_service import (
 )
 from notalone.application.assistant_preparation_rejection import AssistantPreparationRejected
 from notalone.server.assistant_preparation_rejection import preparation_rejection_payload
+from notalone.server.assistant_preparation_jobs import AssistantPreparationJobs, preparation_route
 from notalone.persistence.assistant_session_store import PostgresAssistantSessionStore
 from notalone.persistence.assistant_continuation import PostgresAssistantContinuationStore
 from notalone.server.assistant_continuation import handle_continuation
@@ -205,6 +206,7 @@ class BackendApp:
 
     __slots__ = (
         "_assistant_sessions",
+        "_assistant_preparations",
         "_candidate_versions",
         "_contact_directory",
         "_events",
@@ -280,6 +282,7 @@ class BackendApp:
         self._message_stream = message_stream
         self._reply_service = reply_service
         self._assistant_sessions = assistant_sessions
+        self._assistant_preparations = AssistantPreparationJobs()
         self._candidate_versions = candidate_versions
         self._reply_evidence = reply_evidence
         self._expression_preferences = expression_preferences
@@ -315,6 +318,7 @@ class BackendApp:
         """HTTP、信号与公开服务器关闭共用同一次资源收尾。"""
 
         self._runtime_stopping.set()
+        self._assistant_preparations.stop()
         with self._runtime_shutdown_lock:
             if self._runtime_stopped.is_set():
                 return
@@ -339,7 +343,8 @@ class BackendApp:
         )
         path_value = urlsplit(path).path
         if (200 <= response.status_code < 300 and method in {'POST', 'PATCH'}
-                and '/assistant-session' in path_value and self._skill_learning is not None):
+                and '/assistant-session' in path_value and self._skill_learning is not None
+                and preparation_route(path_value) is None):
             parts = path_value.strip('/').split('/')
             if len(parts) >= 4 and parts[:2] == ['api', 'contacts']:
                 try:
@@ -387,8 +392,12 @@ class BackendApp:
         try:
             manual_id = UUID(manual_value) if manual_value else None
             # 只有具名回复／助手端点使用手动范围；同步端点始终要求真实渠道绑定。
-            if manual_id is not None and not urlsplit(path).path.startswith(f"/api/contacts/{manual_id}/assistant-session"):
-                raise ValueError()
+            if manual_id is not None:
+                manual_parts = urlsplit(path).path.strip("/").split("/")
+                if (len(manual_parts) < 4 or manual_parts[:2] != ["api", "contacts"]
+                        or UUID(manual_parts[2]) != manual_id
+                        or manual_parts[3] not in ("assistant-session", "assistant-sessions")):
+                    raise ValueError()
         except (ValueError, TypeError):
             return _json_response(HTTPStatus.BAD_REQUEST, {"error": "manual_scope_invalid"})
         manual_token = manual_input_contact.set(manual_id)
@@ -525,6 +534,9 @@ class BackendApp:
         if path_value.startswith("/api/contacts/") and path_value.endswith("/evidence"):
             return self._handle_reply_evidence(method_upper, path_value)
         if path_value.startswith("/api/contacts/") and "/assistant-session" in path_value:
+            asynchronous = self._handle_async_preparation(method_upper, path_value, request_headers, request_body)
+            if asynchronous is not None:
+                return asynchronous
             return self._handle_assistant_session(method_upper, path_value, request_body, urlsplit(path).query)
         if path_value.startswith("/api/contacts/") and "/sources" in path_value:
             return self._handle_sources(method_upper, path_value)
@@ -1334,6 +1346,59 @@ class BackendApp:
                 {"error": "reply_generation_failed"},
             )
         return _json_response(HTTPStatus.OK, _reply_payload(reply))
+
+    def _handle_async_preparation(
+        self, method: str, path: str, headers: Mapping[str, str], body: bytes,
+    ) -> Response | None:
+        route = preparation_route(path)
+        if route is None:
+            return None
+        prepare_path, identifier = route
+        if identifier is None and (method != "POST" or "respond-async" not in {
+            item.strip().lower() for item in _header_value(headers, "Prefer").split(",")
+        }):
+            return None
+        from notalone.application.manual_input_scope import manual_input_contact
+        if identifier is not None:
+            if method not in ("GET", "DELETE"):
+                return _json_response(HTTPStatus.METHOD_NOT_ALLOWED, {"error": "method_not_allowed"})
+            status, payload = self._assistant_preparations.status(
+                owner_id=self._owner_id, path=prepare_path, manual_id=manual_input_contact.get(),
+                identifier=identifier, cancel=method == "DELETE",
+            )
+        else:
+            try:
+                parts = prepare_path.strip("/").split("/")
+                contact_id = UUID(parts[2])
+                if parts[5] == "retry-interrupted":
+                    from notalone.application.assistant_interrupted_recovery import parse_interrupted_recovery
+                    command = parse_interrupted_recovery(json.loads(body))
+                    request_key = command.request_key
+                    fingerprint_input = asdict(command)
+                else:
+                    if parts[5] == "replace":
+                        running_key, body_contact, request = _parse_assistant_replacement_request(body)
+                    else:
+                        body_contact, request = parse_assistant_reply_request(body)
+                    if body_contact != contact_id:
+                        raise ReplyRequestInvalid()
+                    request_key = request.idempotency_key
+                    fingerprint_input = asdict(request)
+                    # 采用命令保留原 submission；权威存储严格区分缺字段、null及原字符串。
+                    if parts[5] == "replace":
+                        fingerprint_input["running_request_key"] = running_key
+            except (ValueError, TypeError, UnicodeDecodeError):
+                return _json_response(HTTPStatus.BAD_REQUEST, {"error": "assistant_session_request_invalid"})
+
+            def prepare() -> tuple[int, dict[str, Any]]:
+                response = self._handle_assistant_session("POST", prepare_path, body)
+                return response.status_code, response.json()
+
+            status, payload = self._assistant_preparations.start(
+                owner_id=self._owner_id, path=prepare_path, manual_id=manual_input_contact.get(),
+                request_key=request_key, payload=fingerprint_input, run=prepare,
+            )
+        return _json_response(HTTPStatus(status), payload, headers={"Cache-Control": "no-store"})
 
     def _handle_assistant_session(self, method: str, path: str, body: bytes, query: str = "") -> Response:
         """默认讨论、单次提交与显式读取；不提供自动恢复或发送能力。"""

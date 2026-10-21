@@ -1790,12 +1790,12 @@ export class ReplySession {
           : providerLimit ? 'provider_context_limit'
           : formatFailure ? failure?.reason === 'prepared_context_generation_running' ? 'prepared_context_running'
             : failure?.reason === 'prepared_context_generation_unconfirmed' ? 'prepared_context_unconfirmed' : 'prepared_context_reprepare_required'
-          : failure?.code === 'reply_timeout' ? 'timeout'
+          : ['reply_timeout', 'assistant_preparation_timeout'].includes(failure?.code ?? '') ? 'timeout'
           : failure?.code === 'assistant_session_save_failed' ? 'save_failed'
           : failure?.reason === 'target_message_unavailable' ? 'target_unavailable'
           : ['source_unavailable', 'source_deleted'].includes(failure?.reason ?? '') ? 'source_unavailable'
           : ['reply_rejected', 'assistant_session_rejected'].includes(failure?.code ?? '') ? 'rejected'
-          : ['reply_unavailable', 'runtime_stopping'].includes(failure?.code ?? '') ? 'unavailable' : 'generation_failed';
+          : ['reply_unavailable', 'runtime_stopping', 'assistant_preparation_busy'].includes(failure?.code ?? '') ? 'unavailable' : 'generation_failed';
         this.publish({ phase: 'failed', errorCode, ...(budgetFailure || providerLimit || formatFailure || errorCode === 'candidates_rejected' ? { canRetry: false } : {}),
           inputBudgetNotice: budgetReceipt && failure?.inputBudget && generation !== undefined ? {
             contactId: selection.contactId, scopeRevision: selection.scopeRevision, sessionId: budgetReceipt.sessionId,

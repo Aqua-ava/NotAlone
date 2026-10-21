@@ -71,7 +71,7 @@ export async function generateReply(backend: BackendHost, input: ReplyInputSnaps
   const body = replyRequestBody(input, requestKey, { ...options,
     expectedInputVersionId: options?.expectedInputVersionId ?? expectedInputVersionId });
   const preparing = backend.requestJson({ method: 'POST',
-    path: `/api/contacts/${input.contactId}/assistant-sessions/${selected}/replies/prepare`, body, signal, acceptAssistantNoGenerationProof: true });
+    path: `/api/contacts/${input.contactId}/assistant-sessions/${selected}/replies/prepare`, body, signal, asyncPreparation: true, acceptAssistantNoGenerationProof: true });
   onPrepareRequest?.();
   const prepared = await ownedPreparation(backend, preparing, { generation, contactId: input.contactId, sessionId: selected,
     requestKey }, onNoGeneration);
@@ -90,7 +90,7 @@ export async function replaceReply(backend: BackendHost, input: ReplyInputSnapsh
   const body = replyRequestBody(input, newRequestKey, options);
   const preparing = backend.requestJson({ method: 'POST',
     path: `/api/contacts/${input.contactId}/assistant-sessions/${sessionId}/replace/prepare`,
-    body: Object.freeze({ running_request_key: runningRequestKey, replacement: body }), signal, acceptAssistantNoGenerationProof: true });
+    body: Object.freeze({ running_request_key: runningRequestKey, replacement: body }), signal, asyncPreparation: true, acceptAssistantNoGenerationProof: true });
   onPrepareRequest?.();
   const prepared = await ownedPreparation(backend, preparing, { generation, contactId: input.contactId, sessionId,
     requestKey: newRequestKey }, onNoGeneration);
@@ -113,7 +113,7 @@ export async function retryInterruptedReply(backend: BackendHost, contactId: str
   const generation = backend.getConnectionGeneration();
   const body = Object.freeze({ original_turn_id: origin.turnId, original_input_version_id: origin.inputVersionId, request_key: requestKey });
   const path = `/api/contacts/${contactId}/assistant-sessions/${sessionId}/retry-interrupted`;
-  const preparing = backend.requestJson({ method: 'POST', path: path + '/prepare', body, signal, acceptAssistantNoGenerationProof: true });
+  const preparing = backend.requestJson({ method: 'POST', path: path + '/prepare', body, signal, asyncPreparation: true, acceptAssistantNoGenerationProof: true });
   onPrepareRequest?.();
   const prepared = await ownedPreparation(backend, preparing, { generation, contactId, sessionId, requestKey }, onNoGeneration);
   if (prepared.generation !== generation || backend.getConnectionGeneration() !== generation) throw new Error('本次生成连接已变化。');

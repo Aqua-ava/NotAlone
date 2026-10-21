@@ -24,6 +24,10 @@ from notalone.reply.interface import GenerateReply
 from notalone.scopes import VerifiedConversationScope
 from notalone.reply.errors import ReplyContextInvariantError
 from notalone.reply.prepared_context_codec import encode_context, decode_context
+from notalone.application.assistant_preparation_control import (
+    assistant_preparation_write_guard, check_assistant_preparation,
+    finish_assistant_preparation_write,
+)
 
 # 只保存补查身份，不复制历史正文；模型仍受原次数、条数和字符预算约束。
 HISTORY_SCOPE_LIMIT = 500
@@ -80,10 +84,11 @@ class PreparedAssistantContext:
         with psycopg.connect(self._database_url, row_factory=dict_row) as connection:
             lock_owner_scope(connection, owner_id=scope.owner_id)
             current = connection.execute(
-                "SELECT state,input_payload,prepared_context FROM public.assistant_session_turn WHERE id=%s FOR UPDATE",
+                "SELECT state,input_payload,prepared_context,interruption_reason FROM public.assistant_session_turn WHERE id=%s FOR UPDATE",
                 (row["id"],),
             ).fetchone()
-            if current is None or current["input_payload"] != row["input_payload"] or current["state"] in ("redacted", "unavailable"):
+            if (current is None or current["input_payload"] != row["input_payload"]
+                    or current["state"] in ("redacted", "unavailable") or current["interruption_reason"] is not None):
                 raise ReplyContextInvariantError("准备输入或来源已变化。")
             historical: set[UUID] = set()
             for item in context.evidence:
@@ -117,14 +122,23 @@ class PreparedAssistantContext:
             if not _dependencies_available(connection, scope, historical, historical=True):
                 raise ReplyContextInvariantError("准备时历史来源已失效。")
             dependencies.update(historical)
+            check_assistant_preparation()
             if current["prepared_context"] is not None:
+                with assistant_preparation_write_guard():
+                    connection.commit()
+                    finish_assistant_preparation_write()
                 return
             dependencies.update(UUID(identifier) for identifier in navigation_dependency_ids(context))
-            connection.execute(
-                "UPDATE public.assistant_session_turn SET prepared_context=%s, "
-                "dependency_ids=ARRAY(SELECT DISTINCT unnest(dependency_ids || %s::uuid[])) WHERE id=%s",
-                (Jsonb(encode_context(context)), list(dependencies), row["id"]),
-            )
+            encoded_context = Jsonb(encode_context(context))
+            with assistant_preparation_write_guard():
+                connection.execute(
+                    "UPDATE public.assistant_session_turn SET prepared_context=%s, "
+                    "dependency_ids=ARRAY(SELECT DISTINCT unnest(dependency_ids || %s::uuid[])) WHERE id=%s",
+                    (encoded_context, list(dependencies), row["id"]),
+                )
+                check_assistant_preparation()
+                connection.commit()
+                finish_assistant_preparation_write()
 
     def fit_budget(self, context: ReplyContext, *, validate) -> ReplyContext:
         """仅新准备可省略新增层；已持久冻结的输入容量变化必须重新准备。"""

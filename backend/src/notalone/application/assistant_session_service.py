@@ -7,6 +7,9 @@ from typing import TYPE_CHECKING, Any, Protocol
 from uuid import UUID
 
 from notalone.application.assistant_generation_lifecycle import AssistantGenerationReceipt, AssistantPreparationFormatReceipt
+from notalone.application.assistant_preparation_control import (
+    assistant_preparation_write_guard, check_assistant_preparation, finish_assistant_preparation_write,
+)
 from notalone.application.assistant_message_adoption import AssistantMessageAdoptionRequest
 from notalone.application.reply_service import ReplyService, ReplyServiceRequest
 from notalone.reply.errors import ReplyInProgressError
@@ -238,15 +241,21 @@ class AssistantSessionService:
         return self._fixed_receipt(scope, receipt)
 
     def _fixed_receipt(self, scope: ContactScope, receipt: AssistantGenerationReceipt) -> AssistantGenerationReceipt:
-        self._store.require_prepared_format(scope, receipt.session_id, receipt.request_key)
-        # 已完成或已有固定材料的失败回执只重放身份；预检失败但无材料时仍须补齐准备。
-        if receipt.state == "completed" or (receipt.state == "failed"
-                and self._store.has_prepared_context(scope, receipt)):
-            return receipt
         try:
+            check_assistant_preparation()
+            self._store.require_prepared_format(scope, receipt.session_id, receipt.request_key)
+            if receipt.interruption_reason is not None:
+                raise AssistantSessionRejected("generation_interrupted")
+            # 已完成或已有固定材料的失败回执只重放身份；预检失败但无材料时仍须补齐准备。
+            if receipt.state == "completed" or (receipt.state == "failed"
+                    and self._store.has_prepared_context(scope, receipt)):
+                with assistant_preparation_write_guard():
+                    finish_assistant_preparation_write()
+                return receipt
             request = self._store.prepared_request(scope, receipt)
             result = self._reply.generate(owner_id=scope.owner_id, contact_id=scope.contact_id,
                                           request=request, prepare_only=True)
+            check_assistant_preparation()
             if result.reason is not None:
                 raise AssistantSessionRejected(result.reason)
         except Exception:

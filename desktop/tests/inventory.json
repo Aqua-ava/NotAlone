@@ -14,6 +14,7 @@
     "tests/assistant-session-catalog.test.mjs",
     "tests/assistant-session-deletion-guards.test.mjs",
     "tests/assistant-session-projection.test.mjs",
+    "tests/async-reply-preparation.test.mjs",
     "tests/backend-startup-budget.test.mjs",
     "tests/background-task-polling.test.mjs",
     "tests/binding-startup.test.mjs",
