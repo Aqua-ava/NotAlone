@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 import signal
 import sys
@@ -459,7 +460,12 @@ def _build_task_host(
             model_priority=model_priority,
             task_repository=PostgresBackgroundTaskRepository(database_url),
         )
-    except Exception:
+    except Exception as error:
+        # 任务宿主装配失败会让导入后的后台提取停在待执行；保留稳定告警，
+        # 但不泄露数据库地址或模型配置细节。
+        logging.getLogger(__name__).warning(
+            "task_host_unavailable error_type=%s", type(error).__name__
+        )
         return None
 
 

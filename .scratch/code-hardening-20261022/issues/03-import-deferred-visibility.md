@@ -1,7 +1,7 @@
 # 03 导入 deferred 可见
 
 Triage: ready-for-agent
-State: open
+State: resolved
 Blocked by: 01
 
 ## 目标
@@ -26,3 +26,11 @@ Blocked by: 01
 - 相关导入/服务集成测试；报告桌面端是否消费该字段（若不消费，记录后续 ticket）。
 
 ## Comments
+
+- 2026-10-22 完成：`/api/imports/commit` 在 task_host 缺失、wake 失败、任务身份非法或 defer 失败时，响应追加 `processing_deferred: true` 与稳定 `deferred_reason`（`task_host_unavailable`/`wake_failed`/`task_identity_invalid`/`defer_failed`），成功路径保持原响应形状；失败原因写入 `/api/runtime/status` 的 `degraded` 列表（只含 code/reason/at），成功 wake 后清除。
+- `server/command.py` 的 `_build_task_host` 装配失败不再静默 `return None`，改为 warning（只记异常类型名）。
+- 旧报告引用的「恢复扫描在 command.py:454-463」行号错误；实际恢复循环在 `application/import_service.py:198-221`（`extract_schedule.recover_due`，已有 warning）。
+- 桌面端目前不消费 `processing_deferred`/`degraded`；已在 ticket 15/后续 UI 范围内记录，本轮不改桌面。
+- 验证：`python -m unittest tests.unit.server.test_import_processing_visibility -v` 4 条通过；`python -m unittest discover -s tests/unit/server -t .` 101 条通过。
+- 数据影响：无 schema/数据变更；HTTP/状态 JSON 只新增字段。剩余风险：defer 成功但扫描线程未启动的装配问题仍依赖 command.py 的 warning 暴露，桌面不会主动提示。
+- Commit：见 `git log --grep '导入'`。

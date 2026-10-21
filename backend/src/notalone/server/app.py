@@ -212,6 +212,8 @@ class BackendApp:
         "_assistant_preparations",
         "_candidate_versions",
         "_contact_directory",
+        "_degraded_lock",
+        "_degraded",
         "_events",
         "_follow_smoke",
         "_import_service",
@@ -275,6 +277,9 @@ class BackendApp:
         if not token:
             raise ValueError("token 不能为空。")
         self._contact_directory = contact_directory
+        # 本次运行期内不可自愈的后台能力降级；只存稳定码、原因与时间。
+        self._degraded_lock = threading.Lock()
+        self._degraded: dict[str, dict[str, str]] = {}
         self._events = events
         self._follow_smoke = follow_smoke
         self._import_service = import_service
@@ -316,6 +321,24 @@ class BackendApp:
         """返回供同步引擎和任务执行器发布事件的总线。"""
 
         return self._events
+
+    def _mark_degraded(self, code: str, reason: str) -> None:
+        """记录本次运行期内无法自愈的后台能力降级；只存稳定码、原因与时间。"""
+
+        with self._degraded_lock:
+            self._degraded[code] = {
+                "code": code,
+                "reason": reason,
+                "at": datetime.now(timezone.utc).isoformat(),
+            }
+
+    def _clear_degraded(self, code: str) -> None:
+        with self._degraded_lock:
+            self._degraded.pop(code, None)
+
+    def _degraded_payload(self) -> list[dict[str, str]]:
+        with self._degraded_lock:
+            return [dict(value) for value in self._degraded.values()]
 
     def shutdown_runtime(self) -> None:
         """HTTP、信号与公开服务器关闭共用同一次资源收尾。"""
@@ -448,7 +471,11 @@ class BackendApp:
                 "stopped" if self._runtime_stopped.is_set()
                 else "stopping" if self._runtime_stopping.is_set() else "running"
             )
-            return _json_response(HTTPStatus.OK, {"state": state})
+            payload: dict[str, object] = {"state": state}
+            degraded = self._degraded_payload()
+            if degraded:
+                payload["degraded"] = degraded
+            return _json_response(HTTPStatus.OK, payload)
         if method_upper == "POST" and path_value == "/api/runtime/shutdown":
             if self._runtime_shutdown is None:
                 return _json_response(
@@ -2273,26 +2300,53 @@ class BackendApp:
                     {"error": "import_commit_failed"},
                 )
             task_identity: tuple[UUID, UUID] | None = None
-            should_defer = task_host is None
+            deferred_reason: str | None = None
             try:
                 task_identity = (
                     UUID(str(result["contact_id"])), UUID(str(result["task_id"])),
                 )
-                if task_host is not None:
-                    task_host.wake(
-                        owner_id=owner_id, contact_id=task_identity[0],
-                        task_id=task_identity[1],
-                    )
-            except Exception:
-                # 消息已经提交，后台执行不可用不能改变导入结果。
-                should_defer = True
-            if should_defer and task_service is not None and task_identity is not None:
-                try:
-                    task_service.defer(
-                        owner_id=owner_id, contact_id=task_identity[0], task_id=task_identity[1],
-                    )
-                except Exception:
-                    pass
+                if task_host is None:
+                    deferred_reason = "task_host_unavailable"
+                else:
+                    try:
+                        task_host.wake(
+                            owner_id=owner_id, contact_id=task_identity[0],
+                            task_id=task_identity[1],
+                        )
+                    except Exception as error:
+                        # 消息已经提交，后台执行不可用不能改变导入结果；
+                        # 用稳定原因让调用方知道提取被延后，异常正文不进响应。
+                        deferred_reason = "wake_failed"
+                        logger.warning(
+                            "import_task_wake_failed error_type=%s",
+                            type(error).__name__,
+                        )
+            except Exception as error:
+                deferred_reason = "task_identity_invalid"
+                logger.warning(
+                    "import_task_identity_invalid error_type=%s",
+                    type(error).__name__,
+                )
+            if deferred_reason is not None:
+                if task_service is not None and task_identity is not None:
+                    try:
+                        task_service.defer(
+                            owner_id=owner_id, contact_id=task_identity[0], task_id=task_identity[1],
+                        )
+                    except Exception as error:
+                        deferred_reason = "defer_failed"
+                        logger.warning(
+                            "import_task_defer_failed error_type=%s",
+                            type(error).__name__,
+                        )
+                self._mark_degraded("import_processing_deferred", deferred_reason)
+                result = {
+                    **result,
+                    "processing_deferred": True,
+                    "deferred_reason": deferred_reason,
+                }
+            else:
+                self._clear_degraded("import_processing_deferred")
             return _json_response(HTTPStatus.OK, result)
 
         if path in {"/api/tasks/run", "/api/tasks/retry"}:
