@@ -31,6 +31,30 @@ export class BackendRequestFailure extends Error {
   }
 }
 
+// 202 准备回执只允许与准备身份相关的最小字段；未来非敏感扩展字段按白名单原则忽略，
+// 正文类字段仍视为契约泄漏并拒绝，避免把后端扩展或泄漏静默带进桌面状态。
+const PREPARATION_RECEIPT_KEYS = new Set(['preparation_id', 'state', 'retry_after']);
+const PREPARATION_SENSITIVE_KEY = /text|message|content|draft|body|reply|transcript|prompt|chat/i;
+
+// 先登记合法的准备标识，再做其余字段校验：即使回执非法，调用方也能保证取消服务端任务。
+function validatePreparationReceipt(value: unknown, expectedTaskId: string | undefined, register: (taskId: string) => void): void {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new BackendRequestFailure('response');
+  const receipt = value as Record<string, unknown>;
+  const preparationId = receipt.preparation_id;
+  if (typeof preparationId === 'string' && isUuid(preparationId)
+    && (expectedTaskId === undefined || preparationId === expectedTaskId)) register(preparationId);
+  if (typeof preparationId !== 'string' || !isUuid(preparationId)
+    || expectedTaskId !== undefined && preparationId !== expectedTaskId
+    || receipt.state !== 'preparing') throw new BackendRequestFailure('response');
+  for (const key of Object.keys(receipt)) {
+    if (PREPARATION_RECEIPT_KEYS.has(key)) continue;
+    if (PREPARATION_SENSITIVE_KEY.test(key)) throw new BackendRequestFailure('response');
+    // 未来后端的非敏感附加字段（如服务端提示）按显式白名单原则忽略，不让无害扩展变成硬失败。
+  }
+  if ('retry_after' in receipt && (!Number.isSafeInteger(receipt.retry_after) || (receipt.retry_after as number) < 1))
+    throw new BackendRequestFailure('response');
+}
+
 // 主进程共用传输。所有路径由具名业务模块构造，认证信息不进入 preload。
 export class JsonClient {
   private readonly requests = new Set<ClientRequest>();
@@ -60,14 +84,11 @@ export class JsonClient {
     let expired = false;
     const deadline = setTimeout(() => { expired = true; controller.abort(); }, 130_000);
     let taskId: string | undefined;
+    let completed = false;
     try {
       let result = await this.performOne({ ...options, signal: controller.signal });
       while (result.status === 202) {
-        const value = result.data as { preparation_id?: unknown; state?: unknown } | null;
-        if (!value || typeof value !== 'object' || Object.keys(value).length !== 2
-          || !isUuid(value.preparation_id) || value.state !== 'preparing'
-          || taskId !== undefined && value.preparation_id !== taskId) throw new BackendRequestFailure('response');
-        taskId = value.preparation_id;
+        validatePreparationReceipt(result.data, taskId, (next) => { taskId = next; });
         await new Promise<void>((resolve, reject) => {
           const stopped = () => { clearTimeout(timer); reject(new BackendRequestFailure('cancelled')); };
           const timer = setTimeout(() => { controller.signal.removeEventListener('abort', stopped); resolve(); }, 250);
@@ -79,6 +100,7 @@ export class JsonClient {
           manualContactId: options.manualContactId }, options);
       }
       if (controller.signal.aborted) throw new BackendRequestFailure('cancelled');
+      completed = true;
       return result;
     } catch (error) {
       if (expired) throw new BackendRequestFailure('response', 504, 'assistant_preparation_timeout');
@@ -87,8 +109,8 @@ export class JsonClient {
       clearTimeout(deadline);
       options.signal?.removeEventListener('abort', abort);
       this.preparations.delete(controller);
-      if (controller.signal.aborted && taskId) {
-        // DELETE只表达取消意图；业务终态仍由原任务和退出时的权威回执结算。
+      if (taskId && (controller.signal.aborted || !completed)) {
+        // 取消、超时或回执异常都放弃等待；DELETE只表达取消意图，业务终态仍由原任务和退出时的权威回执结算。
         void this.performOne({ method: 'DELETE', path: `${options.path}/status/${taskId}`,
           manualContactId: options.manualContactId, maxResponseBytes: 4096 }).catch(() => {});
       }

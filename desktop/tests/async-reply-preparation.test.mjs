@@ -103,3 +103,54 @@ test('任务身份变化及多余正文拒绝继续查询，旧同步回执仍�
   assert.deepEqual((await sync.client.perform(request)).data, receipt);
   assert.equal(sync.requests.length, 1);
 });
+
+test('202 回执允许附加非敏感扩展字段，仍等候同一任务', { timeout: 12_000 }, async (t) => {
+  const extended = { ...pending, retry_after: 1, expires_at: '2026-01-01T00:00:00+08:00' };
+  let polls = 0;
+  const f = await fixture(t, (req) => {
+    if (req.method === 'POST') return { status: 202, data: extended };
+    polls += 1;
+    return polls < 2 ? { status: 202, data: pending } : { data: receipt };
+  });
+  assert.deepEqual((await f.client.perform(request)).data, receipt);
+  assert.equal(f.requests.filter((item) => item.method === 'DELETE').length, 0);
+});
+
+test('202 体校验失败但含合法准备标识时仍取消服务端任务', { timeout: 12_000 }, async (t) => {
+  for (const invalid of [{ ...pending, state: 'unexpected' }, { ...pending, retry_after: 0 },
+    { ...pending, private_text: '不得出现在回执里的合成正文' }]) {
+    const f = await fixture(t, (req) => req.method === 'DELETE'
+      ? { data: { state: 'cancelling' } }
+      : { status: 202, data: invalid });
+    await assert.rejects(f.client.perform(request), (error) => error instanceof BackendRequestFailure && error.kind === 'response');
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    const deleted = f.requests.filter((item) => item.method === 'DELETE');
+    assert.equal(deleted.length, 1, '202 体非法但已取得合法 preparation_id 时必须回收服务端准备任务');
+    assert.equal(deleted[0].path, `${path}/status/${taskId}`);
+    assert.equal(f.requests.filter((item) => item.method === 'GET').length, 0, '非法回执不得继续查询');
+  }
+});
+
+test('202 前取消返回取消错误，不遗留后续查询或可误认的删除', { timeout: 12_000 }, async (t) => {
+  const requests = [];
+  let releaseStart;
+  const started = new Promise((resolve) => { releaseStart = resolve; });
+  const server = createServer(async (req, res) => {
+    for await (const _chunk of req) { /* 只排空合成正文。 */ }
+    requests.push({ method: req.method, path: req.url });
+    if (req.method === 'POST') { releaseStart(); return; } // 保持 202 在途，首帧标识未知。
+    res.writeHead(200, { 'Content-Type': 'application/json' }); res.end('{}');
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const client = new JsonClient({ port: server.address().port, token: 'synthetic-preparation-token', pid: process.pid });
+  t.after(async () => { client.cancelPending(); await new Promise((resolve) => server.close(resolve)); });
+  const controller = new AbortController();
+  const result = client.perform({ ...request, signal: controller.signal });
+  await started;
+  controller.abort();
+  await assert.rejects(result, (error) => error instanceof BackendRequestFailure && error.kind === 'cancelled');
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  assert.equal(requests.filter((item) => item.method === 'POST').length, 1);
+  assert.equal(requests.filter((item) => item.method === 'DELETE').length, 0, '未取得准备标识时不得伪造删除');
+  assert.equal(requests.filter((item) => item.method === 'GET').length, 0);
+});
