@@ -2,7 +2,7 @@
 
 > 联系人首用决定：[ADR-087](adr/087-wechat-confirmed-contact-onboarding.md)确定微信会话确认是新增联系人的唯一入口，导入只补充已有联系人；旧接口退役及新用户交付验收尚待完成。
 
-> 2026-10-21 设计审查：同号 ADR-074 有两份：引用时必须附“腾讯记忆”或“自动 Skill”标题及完整文件链接，不能仅凭编号推断替代。额外记忆人工门已由用户确认并通过 [ADR-085](adr/085-source-verified-automatic-adoption.md) 收敛；Runtime 按需检索已由 [ADR-090](adr/090-bounded-runtime-history-retrieval.md)确认受控只读边界；运行计划和自动过程摘要已按 [ADR-091](adr/091-retire-runtime-todos-and-auto-summary.md)取消强制接入要求；时间／日历／网络工具的范围仍待复审。
+> 2026-10-21 设计审查：同号 ADR-074 有两份：引用时必须附“腾讯记忆”或“自动 Skill”标题及完整文件链接，不能仅凭编号推断替代。额外记忆人工门已由用户确认并通过 [ADR-085](adr/085-source-verified-automatic-adoption.md) 收敛；Runtime 按需检索已由 [ADR-090](adr/090-bounded-runtime-history-retrieval.md)确认受控只读边界；运行计划和自动过程摘要已按 [ADR-091](adr/091-retire-runtime-todos-and-auto-summary.md)取消强制接入要求；时间／日历／网络工具已按 [ADR-092](adr/092-defer-time-calendar-web-tools.md)改为未来可选方向。
 
 > 状态：已建立。本目录区分现行约束、设计草案与 ADR；文档不代表对应功能已经实现。
 
@@ -136,6 +136,8 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 90. [ADR-090：回复运行时按需补查受控历史](adr/090-bounded-runtime-history-retrieval.md)
 
 91. [ADR-091：不增加运行计划和自动过程摘要](adr/091-retire-runtime-todos-and-auto-summary.md)
+
+92. [ADR-092：时间、日历和网络搜索工具保留为未来可选方向](adr/092-defer-time-calendar-web-tools.md)
 
 ## 当前架构决策
 

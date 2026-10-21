@@ -1,6 +1,6 @@
 # Agent 编排与检索运行时（草案）
 
-> 2026-10-21 设计审查：正常产品入口与方向阶段按 [ADR-079](../adr/079-unified-expression-workspace.md)修订，受控 Skill 探索见 [ADR-043](../adr/043-conversation-scenarios-and-direction-exploration.md)。运行计划和自动过程摘要按 [ADR-091](../adr/091-retire-runtime-todos-and-auto-summary.md)不采用；时间、日历、网络工具尚未见生产接线，范围仍待确认，草图不证明可用；完整 Harness／DSH 未获主线采纳。自动前台画面按 [ADR-052](../adr/052-header-ocr-foreground-locator.md)只作名称定位，不能当作正文输入适配器。
+> 2026-10-21 设计审查：正常产品入口与方向阶段按 [ADR-079](../adr/079-unified-expression-workspace.md)修订，受控 Skill 探索见 [ADR-043](../adr/043-conversation-scenarios-and-direction-exploration.md)。运行计划和自动过程摘要按 [ADR-091](../adr/091-retire-runtime-todos-and-auto-summary.md)不采用；时间、日历、网络工具按 [ADR-092](../adr/092-defer-time-calendar-web-tools.md)改为未来可选方向，当前不接入；完整 Harness／DSH 未获主线采纳。自动前台画面按 [ADR-052](../adr/052-header-ocr-foreground-locator.md)只作名称定位，不能当作正文输入适配器。
 
 > 后续修订（2026-10-20）：主动收藏表达样本及其生成参考按 [ADR-082](../adr/082-retire-explicit-style-samples.md)退役；本文相关历史方案不再构成实施要求。当前意图优先、长期表达偏好及其他已采纳约束分别保留。
 
@@ -83,8 +83,8 @@ flowchart LR
     RetrievalPort --> PgRetriever["PostgreSQL 可解释检索"]
     RetrievalPort -. "量化问题后可选" .-> Ragflow["RAGFlow adapter"]
 
-    Agent --> RuntimeTools["时间 / 授权日历 / 网络搜索 Tool"]
-    RuntimeTools --> ExternalAdapters["只读 Tool adapter"]
+    Agent -. "未来另行设计与授权，当前不接入" .-> RuntimeTools["可选：时间 / 日历 / 网络搜索"]
+    RuntimeTools -.-> ExternalAdapters["未来只读 adapter"]
 
     Agent --> ModelPort["ModelPort"]
     ModelPort --> Gateway["gateway / approved model adapter"]
@@ -127,11 +127,9 @@ flowchart TD
     Agent -->|需要策略| Skill["SkillsMiddleware 目录 / 受控 read_file"]
     Agent -->|需要原始证据| Messages["search_contact_messages Tool"]
     Agent -->|需要关系资料| Memories["search_confirmed_memories Tool"]
-    Agent -->|需要当前或外部事实| External["时间 / 日历 / 网络搜索 Tool"]
     Skill --> Agent
     Messages --> Agent
     Memories --> Agent
-    External --> Agent
     Agent -->|信息足够或需要澄清| Output["结构化 ReplyCandidates / Clarification"]
     Output --> Validate["validate_agent_output"]
     Validate --> Persist["persist_trace"]
@@ -152,7 +150,7 @@ flowchart TD
 | Skill 目录与 `read_file` | middleware 只见当前范围目录；Tool 使用 `file_path/offset/limit` 且只接受目录中的 `SKILL.md` 虚拟路径 | 一个不可变 Skill 版本 | `SkillsMiddleware` + 定制提示词 + 受控只读 Tool，经 `SkillPort` 校验 |
 | `search_contact_messages` | 查询意图、允许的 limit/时间范围 | 当前联系人内带来源的规范消息 | 模型 Tool，经 `RetrievalPort` 校验 |
 | `search_confirmed_memories` | 查询意图、允许的 limit/时间范围 | 当前联系人内带来源的已采纳资料 | 模型 Tool，经 `RetrievalPort` 校验 |
-| 时间 / 日历 / 网络搜索 | 时间范围或公开查询意图 | 当前时间、授权日历结果或公开搜索结果 | 只读 adapter；执行层强制授权与出站范围 |
+| 时间 / 日历 / 网络搜索（未来可选） | 未来方案的有界查询意图 | 有来源的查询结果 | ADR-092：当前不接入，未来须独立设计、授权和验证 |
 | `validate_agent_output` | 候选或澄清需求、引用和请求风险 | 结构校验、引用校验、禁止动作检查 | 确定性代码 |
 | `persist_trace` | Tool calls、引用、模型元数据和已校验输出 | `reply_request`；有候选时再写 `reply_candidate` | 事务和幂等写入 |
 | `return_result` | 已持久化的候选或澄清需求 | UI 响应 | 不包含发送动作 |
@@ -186,13 +184,13 @@ flowchart TD
 
 | 策略 | 示例 | 执行规则 |
 | --- | --- | --- |
-| `allow` | 当前时间、已选联系人范围内的只读检索、现有授权范围内的日历读取和公开网络搜索 | 参数校验、授权范围校验和出站记录后执行 |
-| `ask` | 首次启用或扩大日历/搜索范围、向外部服务发送关系上下文 | 暂停图，展示字段、用途和范围，批准后恢复 |
+| `allow` | 当前已接入的受控 Skill 读取与已选联系人范围内的只读检索 | 参数、范围、来源和预算校验后执行；不包含尚未接入的时间／日历／网络工具 |
+| `ask`（未来方案） | 未来若接入日历／搜索，明确连接器及出站范围 | 先独立确认设计与实现；当前不注册这些工具，也不以批准提示代替接入验收 |
 | `deny` | 切换微信会话、读取其他联系人、发送消息 | 不注册 Tool，或在执行层硬拒绝 |
 
 模型提出 Tool call 不等于获准执行。Permission policy、联系人范围、数据状态、查询预算和出站数据裁剪均由应用层确定性代码处理。
 
-v1 向模型注册受控 `read_file(file_path, offset=0, limit=1000)`、`search_contact_messages`、`search_confirmed_memories` 和 `get_current_time` 四个核心只读 Tool；经过用户授权和 adapter 配置后，再注册只读 `search_calendar` 与 `web_search`。Skill 目录由 `SkillsMiddleware` 和 NotAlone 定制提示词注入，`read_file` 只能经 `SkillPort` 读取本次目录列出的策略版本，不提供任意文件读取；Skill 本身不是 Tool。两个联系人检索 Tool 经 `RetrievalPort` 执行，`owner_id + contact_id` 只从已验证的 runtime context 注入，不作为模型参数。日历 Tool 不创建、修改或删除日程；网络搜索不默认携带聊天正文、联系人身份或关系资料。具体调用次数、返回数量、token、超时和重试数是可调运行配置；联系人隔离、删除状态和禁止发送是不可调产品硬边界。
+当前只使用已接入的受控 Skill 读取与历史补查，历史工具名称及范围按 ADR-090，不把早期草案别名当作实际注册表。Skill 目录由 `SkillsMiddleware` 与定制提示词提供，`read_file` 只能经 `SkillPort` 读取当前目录列出的版本及允许资源；`owner_id + contact_id` 由应用层固定。按 [ADR-092](../adr/092-defer-time-calendar-web-tools.md)，`get_current_time`、`search_calendar` 和 `web_search` 只保留为未来可选方向，不是 v1 必备工具；未来须独立定义确定性时间、日历只读授权和网络出站范围。当前调用次数、返回量、token、超时和重试预算以及联系人隔离、删除与禁止发送边界保持。
 
 ## 6. 多模态输入与回复形态
 
@@ -276,7 +274,7 @@ Tool 的模型参数只表达查询意图、允许的 limit 和时间范围；`C
 | 课程 | 结论 | NotAlone 中的对应方式 |
 | --- | --- | --- |
 | S01 Agent Loop | 直接采用 | 候选回复在确定性外壳内使用 `create_agent` 的有界模型-Tool 循环；联系人、权限、预算、校验和持久化不交给模型。 |
-| S02 Tool Use | 直接采用 | v1 注册 Skill、联系人检索和当前时间核心 Tool；日历与网络搜索经授权后由只读 adapter 接入。Tool handler 调用框架无关的 port 或 adapter。 |
+| S02 Tool Use | 部分采用 | 当前保留受控 Skill 与历史检索；时间、日历、网络搜索按 ADR-092 为未来可选方向，当前不接入。Tool handler 调用框架无关的 port 或 adapter。 |
 | S03 Permission | 直接采用 | 使用 `allow / ask / deny`，并由应用层校验联系人范围、参数和出站字段；外部聊天发送永远是 `deny`。 |
 | S04 Hooks | 条件采用 | 只借鉴模型调用、Tool 调用、审计和指标的横切扩展点；出现多个适配器共享同一横切逻辑时再引入，不得绕过确定性外壳、事务或权限策略。 |
 | S05 TodoWrite | 当前不采用 | ADR-091 取消模型运行计划、Todo 工具及相应进度界面要求；不改变业务后台任务。 |
@@ -293,7 +291,7 @@ Tool 的模型参数只表达查询意图、允许的 limit 和时间范围；`C
 | S16 Workflow Runtime | 直接采用 | `create_agent` 使用 LangGraph runtime；v1 不直接手写 `StateGraph`。出现明确的暂停恢复或复杂固定流程时，可把 `create_agent` 作为节点放进自定义图；业务事实只保存在 PostgreSQL。 |
 | S17 Goal Loop | 条件采用 | 借鉴“停止前独立检查目标是否满足”，用于候选结构、引用和风险校验；只有确定性检查不足时才增加独立 evaluator，重试必须有上限。 |
 
-汇总：保留原直接采用分类 7 章（S01-S03、S07、S09、S11、S16），其中 S02 的时间／日历／网络能力仍待 Q07 复审；条件采用 6 章（S04、S06、S10、S14、S15、S17），远期探索 2 章（S12、S13），按 ADR-091 当前不采用 2 章（S05、S08）。分类不代表已实现；其中自动发送、跨联系人读取、自治关系任务和产品运行时 Worktree 等硬边界仍然禁止。
+汇总：直接采用 6 章（S01、S03、S07、S09、S11、S16），部分采用 1 章（S02，时间／日历／网络按 ADR-092 保留未来可选）；条件采用 6 章（S04、S06、S10、S14、S15、S17），远期探索 2 章（S12、S13），按 ADR-091 当前不采用 2 章（S05、S08）。分类不代表已实现；其中自动发送、跨联系人读取、自治关系任务和产品运行时 Worktree 等硬边界仍然禁止。
 
 ## 11. 实施顺序
 
