@@ -384,7 +384,10 @@ class InMemoryReplyStore:
                 candidates=tuple(candidates),
                 context_receipt=ContextReceipt(evidence_ids=evidence_ids,
                                                expression_preference_ids=tuple(sorted(item.preference_id for item in context.expression_preferences)),
-                                               expression_preferences=preference_receipts(context.expression_preferences)),
+                                               expression_preferences=preference_receipts(context.expression_preferences),
+                                               layered_read_failed=context.layered_read_failed,
+                                               owner_layered_read_failed=context.owner_layered_read_failed,
+                                               overview_read_failed=context.overview_read_failed),
                 used_skill=reply.used_skill,
                 input_budget=reply.input_budget,
             )

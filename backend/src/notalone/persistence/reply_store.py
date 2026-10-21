@@ -88,6 +88,15 @@ def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _snapshot_flag(snapshot: dict[str, Any], name: str) -> bool:
+    """旧快照缺少新标记时视为未读取失败；类型损坏 fail closed。"""
+
+    value = snapshot.get(name, False)
+    if type(value) is not bool:
+        raise ReplyStoreInvariantError("已完成回复的上下文读取状态无效。")
+    return value
+
+
 from notalone.reply.layered_context import require_material, material_version_ids
 
 
@@ -529,6 +538,9 @@ class PostgresReplyStore:
                             evidence_ids=evidence_ids,
                             expression_preference_ids=tuple(sorted(item.preference_id for item in context.expression_preferences)),
                             expression_preferences=preference_receipts(context.expression_preferences),
+                            layered_read_failed=context.layered_read_failed,
+                            owner_layered_read_failed=context.owner_layered_read_failed,
+                            overview_read_failed=context.overview_read_failed,
                         ),
                         used_skill=reply.used_skill,
                         input_budget=reply.input_budget,
@@ -1127,11 +1139,14 @@ class PostgresReplyStore:
             "current_text": context.current_text,
             "owner_layered_context": context.owner_layered_context.to_payload() if context.owner_layered_context else None,
             "owner_layered_status": context.owner_layered_status,
+            "owner_layered_read_failed": context.owner_layered_read_failed,
             "owner_layered_scenario_reads": list(context.owner_layered_scenario_reads),
             "layered_context": context.layered_context.to_payload() if context.layered_context else None,
             "layered_status": context.layered_status,
+            "layered_read_failed": context.layered_read_failed,
             "layered_scenario_reads": list(context.layered_scenario_reads),
             "layered_version_ids": material_version_ids(context.layered_context),
+            "overview_read_failed": context.overview_read_failed,
             "direction": direction,
             "risk_notes": list(context.risk_notes),
             "skill_library_revision": context.skill_library_revision,
@@ -1621,7 +1636,14 @@ class PostgresReplyStore:
         return ReplyGenerated(
             reply_request_id=request_row["id"],
             candidates=tuple(candidates),
-            context_receipt=ContextReceipt(evidence_ids=tuple(evidence_ids), expression_preference_ids=tuple(item.preference_id for item in preferences), expression_preferences=preferences),
+            context_receipt=ContextReceipt(
+                evidence_ids=tuple(evidence_ids),
+                expression_preference_ids=tuple(item.preference_id for item in preferences),
+                expression_preferences=preferences,
+                layered_read_failed=_snapshot_flag(snapshot, "layered_read_failed"),
+                owner_layered_read_failed=_snapshot_flag(snapshot, "owner_layered_read_failed"),
+                overview_read_failed=_snapshot_flag(snapshot, "overview_read_failed"),
+            ),
             used_skill=used_skill,
             input_budget=input_budget,
             basis_changes=read_reply_basis_changes(

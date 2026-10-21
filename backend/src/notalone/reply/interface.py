@@ -239,6 +239,10 @@ class ContextReceipt:
     evidence_ids: tuple[UUID, ...]
     expression_preference_ids: tuple[UUID, ...] = ()
     expression_preferences: tuple[ExpressionPreferenceReceipt, ...] = ()
+    # 读取失败与「确实没有资料」区分；只增字段，既有 JSON 投影不变。
+    layered_read_failed: bool = False
+    owner_layered_read_failed: bool = False
+    overview_read_failed: bool = False
 
 
 @dataclass(frozen=True, slots=True)

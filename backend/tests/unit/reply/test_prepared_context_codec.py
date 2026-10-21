@@ -43,8 +43,18 @@ class PreparedContextCodecTest(unittest.TestCase):
 
         payload = encode_context(original)
 
-        self.assertEqual((payload["version"], payload.get("schema_revision")), (2, 14))
+        self.assertEqual((payload["version"], payload.get("schema_revision")), (2, 15))
         self.assertEqual(decode_context(payload, original.command), original)
+
+    def test_read_failure_flags_round_trip_without_new_status_values(self):
+        original = prepared_context()
+        flagged = replace(original, layered_read_failed=True, overview_read_failed=True)
+
+        payload = encode_context(flagged)
+
+        self.assertEqual((payload["version"], payload["schema_revision"]), (2, 15))
+        self.assertEqual(flagged.layered_status, "quality_closed")
+        self.assertEqual(decode_context(payload, flagged.command), flagged)
 
     def test_old_revision_unknown_fields_and_damaged_values_require_reprepare(self):
         original = prepared_context()
@@ -62,6 +72,9 @@ class PreparedContextCodecTest(unittest.TestCase):
             {**payload, "schema_revision": 9},
             {**payload, "schema_revision": 10},
             {**payload, "schema_revision": 11},
+            {**payload, "schema_revision": 12},
+            {**payload, "schema_revision": 13},
+            {**payload, "schema_revision": 14},
             {**payload, "schema_revision": True},
             {**payload, "context": {**payload["context"], "future_field": None}},
             {**payload, "context": None},
@@ -119,7 +132,7 @@ class PreparedContextCodecTest(unittest.TestCase):
                 command.conversation_binding_id, "合成旧候选。", (change,), "3" * 64),
             assistant_discussion=discussion)
         payload = encode_context(original)
-        self.assertEqual((payload["version"], payload["schema_revision"]), (2, 14))
+        self.assertEqual((payload["version"], payload["schema_revision"]), (2, 15))
         self.assertEqual(decode_context(payload, command), original)
         with self.assertRaises(ValueError):
             decode_context({**payload, "schema_revision": 6}, command)

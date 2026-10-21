@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from typing import Callable, Literal, Protocol, TypeVar, get_args
@@ -47,6 +48,8 @@ from notalone.retrieval.lexical import RELEVANCE_THRESHOLD
 from notalone.retrieval.ranking import merge_memory_recalls, recall_memories, recall_owner_memories
 from notalone.scopes import ContactScope, OwnerScope, VerifiedConversationScope
 
+
+logger = logging.getLogger(__name__)
 
 CONTACT_MEMORY_LIMIT = 5
 CONTACT_MEMORY_CHAR_BUDGET = 600
@@ -273,10 +276,14 @@ class ReplyContext:
     retrieval: ReplyRetrievalReceipt | None = None
     layered_context: LayeredReplyMaterial | None = None
     layered_status: str = "quality_closed"
+    # 读取异常与「确实没有资料」区分；既有 layered_status 取值含义不变。
+    layered_read_failed: bool = False
     layered_scenario_reads: tuple[dict, ...] = ()
     owner_layered_context: LayeredReplyMaterial | None = None
     owner_layered_status: str = "quality_closed"
+    owner_layered_read_failed: bool = False
     owner_layered_scenario_reads: tuple[dict, ...] = ()
+    overview_read_failed: bool = False
 
     expression_preferences: tuple[ExpressionPreference, ...] = ()
     expression_preference_revision: int | None = None
@@ -461,7 +468,8 @@ class RetrievalReplyContext:
                 raise ReplyContextInvariantError(
                     "待回复消息未在当前联系人范围内找到。"
                 )
-            related, receipt = self._related_memory_context(scope=scope, query=target[0].text)
+            related, receipt, overview_read_failed = self._related_memory_context(
+                scope=scope, query=target[0].text)
             evidence = list(
                 self._message_evidence(message, is_target=message is target[0])
                 for message in messages
@@ -484,6 +492,7 @@ class RetrievalReplyContext:
                 continuation_basis=continued_candidate,
                 retrieval=receipt,
                 history_message_ids=history_message_ids,
+                overview_read_failed=overview_read_failed,
             ))
 
         if isinstance(command.content, InitiateConversation):
@@ -497,7 +506,8 @@ class RetrievalReplyContext:
                 self._message_evidence(message, is_target=False)
                 for message in self._search_messages(scope=scope)
             )
-            related, receipt = self._related_memory_context(scope=scope, query=purpose.text)
+            related, receipt, overview_read_failed = self._related_memory_context(
+                scope=scope, query=purpose.text)
             evidence.extend(related)
             if continuation is not None:
                 evidence.append(continuation)
@@ -512,6 +522,7 @@ class RetrievalReplyContext:
                 continuation_basis=continued_candidate,
                 retrieval=receipt,
                 history_message_ids=history_message_ids,
+                overview_read_failed=overview_read_failed,
             ))
 
         if isinstance(command.content, RewriteDraft):
@@ -554,6 +565,7 @@ class RetrievalReplyContext:
                     history_message_ids = tuple(item for item in history_message_ids
                         if item not in command.content.excluded_message_ids)
             receipt = None
+            overview_read_failed = False
             if allows_history(command) and not workspace_recent_only(command):
                 query = command.content.draft_text
                 background_query = None
@@ -562,8 +574,8 @@ class RetrievalReplyContext:
                                                    if item.kind in ("message", "user_current_chat"))
                     if not query.strip():
                         query, background_query = background_query, None
-                related, receipt = self._related_memory_context(scope=scope, query=query,
-                                                                 background_query=background_query)
+                related, receipt, overview_read_failed = self._related_memory_context(
+                    scope=scope, query=query, background_query=background_query)
                 evidence.extend(related)
             if continuation is not None:
                 evidence.append(continuation)
@@ -586,6 +598,7 @@ class RetrievalReplyContext:
                 continuation_basis=continued_candidate,
                 retrieval=receipt,
                 history_message_ids=history_message_ids,
+                overview_read_failed=overview_read_failed,
             ))
 
         raise ReplyContextInvariantError("回复输入模式无效。")
@@ -597,13 +610,19 @@ class RetrievalReplyContext:
             if not allows_history(context.command) or workspace_recent_only(context.command):
                 context = replace(context, **{prefix + "layered_status": "not_allowed"})
             elif self._layered_memory is not None and budget is not None:
+                read_failed = False
                 try:
                     snapshot = self._layered_memory.capture(scope)
                 except Exception:
+                    # 读取失败不是「没有资料」：保留既有 unavailable 语义，
+                    # 另用 read_failed 标记并记 warning；异常正文不进入日志。
+                    logger.warning("分层回复资料读取失败，按暂无资料降级", exc_info=True)
                     snapshot = None
+                    read_failed = True
                 material = select_material(snapshot, budget) if snapshot is not None else None
                 context = replace(context, **{prefix + "layered_context": material,
-                    prefix + "layered_status": "loaded" if material else "unavailable"})
+                    prefix + "layered_status": "loaded" if material else "unavailable",
+                    prefix + "layered_read_failed": read_failed})
         if context.history_message_ids is not None:
             context = replace(context, history_message_ids=tuple(sorted(set(context.history_message_ids)
                 | {item.evidence_id for item in context.evidence if item.kind == "message"})))
@@ -655,19 +674,25 @@ class RetrievalReplyContext:
 
     def _related_memory_context(
         self, *, scope: ContactScope, query: str, background_query: str | None = None,
-    ) -> tuple[list[ContextEvidence], ReplyRetrievalReceipt | None]:
+    ) -> tuple[list[ContextEvidence], ReplyRetrievalReceipt | None, bool]:
         recall_queries = tuple(dict.fromkeys(value for value in (query, background_query)
                                              if value and value.strip())) or ("",)
         if self._overview is None:
-            return self._related_memory_evidence(scope=scope, queries=recall_queries), None
+            return self._related_memory_evidence(scope=scope, queries=recall_queries), None, False
+        overview_read_failed = False
         try:
             contact = self._overview.read_contact(scope)
         except Exception:
+            # 概览读取异常与「确实没有概览」区分：回收为失败标记而非空结果。
+            logger.warning("关系概览读取失败，按暂无概览降级", exc_info=True)
             contact = None
+            overview_read_failed = True
         try:
             owner = self._overview.read_owner(scope.owner_id)
         except Exception:
+            logger.warning("关系概览读取失败，按暂无概览降级", exc_info=True)
             owner = None
+            overview_read_failed = True
         for projection, expected_scope, memory_type in (
             (contact, scope, ConfirmedMemory), (owner, scope.owner_id, OwnerMemory),
         ):
@@ -766,7 +791,7 @@ class RetrievalReplyContext:
             budget(pending, self._pending_limit, self._pending_char_budget, pending_exhausted),
             status=("unavailable" if contact is None or owner is None or pending_failed else "budget_exhausted"
                     if contact_exhausted or owner_exhausted or pending_exhausted else "succeeded" if evidence else "empty"),
-        )
+        ), overview_read_failed
 
     def _related_memory_evidence(self, *, scope: ContactScope, queries: tuple[str, ...]) -> list[ContextEvidence]:
         """共享三类有界资料召回，是否允许历史仍由各场景决定。"""

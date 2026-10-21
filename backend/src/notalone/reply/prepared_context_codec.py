@@ -30,7 +30,7 @@ _TYPES = {cls.__name__: cls for cls in (LayeredMemorySnapshot, ScenarioDirectory
 
 CONTEXT_VERSION = 2
 # 结构字段每次演进必须提升修订；不为旧快照静默补字段。
-CONTEXT_SCHEMA_REVISION = 14
+CONTEXT_SCHEMA_REVISION = 15
 
 
 class PreparedContextFormatError(ValueError):
