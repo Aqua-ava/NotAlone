@@ -1,7 +1,7 @@
 # 05 桌面首帧读取失败写 error
 
 Triage: ready-for-agent
-State: open
+State: resolved
 
 ## 目标
 
@@ -24,3 +24,12 @@ State: open
 - `cd desktop && npm run typecheck` + 相关 `node --test`；报告未做真实 App 验收。
 
 ## Comments
+
+## Comments
+
+- 实现：新增 `desktop/src/renderer/initial-read.ts` 统一首帧读取入口（失败写 `状态读取失败，请重试。`，成功后清空错误；并发只读一次；失活/卸载时不写状态），新增 `FirstFrameError` 可见提示与重试按钮。
+- 接线：`use-revisioned-session.ts`（RewritePanel/SyncControlPanel/SkillLearningPage/ExpressionPreferences/contact-session 消费方）失败写 error 并暴露 `retry`；`use-binding-consent`、`useMemoryReading`、`ImportPage`、`SetupPanel`、`WechatSetupPanel` 增加独立首帧错误通道与重试；`useForegroundState`/`useStartupState`/`useBackendState` 返回 `{state,error,retry}` 并在 `index.tsx` 展示。清理/取消类空 catch（releaseLayeredMemory、cancelProcessingRead、刷新动作、列表滚动等）保持静默不改。
+- 验证：`cd desktop && npm run typecheck` 通过；`node --test tests/first-frame-read.test.mjs` 4/4 通过（覆盖 reject→error、重试恢复、并发去重、卸载后不写状态）；相关 safe-node 10 个文件 84/84 通过；`node scripts/test-safe.mjs` 全量 safe-node 见提交正文。
+- 数据影响：不改数据通道、不新增 preload；仅 renderer 本地错误状态与提示，日志不含正文/路径。
+- 未做真实 App 验收（本轮约束不运行 `npm run dev`）。
+- 剩余风险：只覆盖首帧读取用 `getState` 的失败路径；页面若在首次 `getState` 失败前收到推送状态则错误自动清除（由 receive 覆盖）。其他 `catch(() => {})` 中仍混有刷新动作类静默，未纳入本 ticket。

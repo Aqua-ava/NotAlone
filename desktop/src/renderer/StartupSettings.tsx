@@ -1,20 +1,25 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { readInitialState } from './initial-read';
 import type { BackendState } from '../shared/backend-bridge';
 import type { StartupCode, StartupPaths, StartupState } from '../shared/startup-bridge';
 import './startup-settings.css';
 
-export function useStartupState(): StartupState {
+export function useStartupState(): { state: StartupState; error: string; retry: () => void } {
   const [state, setState] = useState<StartupState>({ phase: 'idle', revision: -1, helperWarnings: [] });
+  const [error, setError] = useState('');
+  const [readAttempt, setReadAttempt] = useState(0);
+  const reading = useRef(false);
   useEffect(() => {
     let active = true;
     const receive = (next: StartupState) => {
       if (active) setState((previous) => next.revision >= previous.revision ? next : previous);
     };
     const unsubscribe = window.notalone.startup.onStateChanged(receive);
-    void window.notalone.startup.getState().then(receive).catch(() => {});
+    void readInitialState({ read: () => window.notalone.startup.getState(), receive, reportError: setError,
+      isActive: () => active, busy: reading });
     return () => { active = false; unsubscribe(); };
-  }, []);
-  return state;
+  }, [readAttempt]);
+  return { state, error, retry: () => setReadAttempt((value) => value + 1) };
 }
 
 export function StartupReadiness({ state, backend, onConfigure }: {

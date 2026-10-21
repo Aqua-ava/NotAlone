@@ -13,7 +13,7 @@ const initial: ContactSessionState = {
 
 export function useContactSession() {
   const reduce = useMemo(createContactSessionReceiver, []);
-  const { state, error, setError, latest, active, receive } = useRevisionedSession(initial, window.notalone.contacts, true, reduce);
+  const { state, error, setError, latest, active, receive, retry } = useRevisionedSession(initial, window.notalone.contacts, true, reduce);
 
   async function selectContact(contactId: string) {
     const scopeRevision = latest.current.scopeRevision;
@@ -72,7 +72,7 @@ export function useContactSession() {
     } catch { if (active.current) setError('本次联系人未确认，请刷新目录后重新选择。'); return false; }
   }
 
-  return { state, error, selectContact, confirmContact, confirmManualContact, resumeForeground, setDraft, refreshContacts };
+  return { state, error, retryRead: retry, selectContact, confirmContact, confirmManualContact, resumeForeground, setDraft, refreshContacts };
 }
 
 export type ContactSessionView = ReturnType<typeof useContactSession>;

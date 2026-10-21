@@ -1,3 +1,4 @@
+import { FirstFrameError } from './FirstFrameError';
 import type { BindingConsentView } from './use-binding-consent';
 import type { ContactSessionView } from './contact-session';
 import type { ManagerPage } from './pages';
@@ -69,7 +70,7 @@ export function ContactSyncDetails({ contactId, consent, onConnect, allPrivate =
 }
 
 export function BindingFeedback({ consent }: { consent: BindingConsentView }) {
-  const { state, error, revocation, setRevocation } = consent;
+  const { state, error, readError, retryRead, revocation, setRevocation } = consent;
   return <>
     {state.phase === 'loading' && <p role="status">正在读取联系人同步状态…</p>}
     {state.phase === 'offline' && <p>连接本机服务后查看联系人同步状态。</p>}
@@ -91,5 +92,6 @@ export function BindingFeedback({ consent }: { consent: BindingConsentView }) {
     {state.errorCode === 'selection-stale' && <p role="alert">会话、名称或联系人归属已变化，请重新核对并选择；已有授权不会被静默修改。</p>}
     {state.errorCode === 'confirmation-failed' && <p role="alert">授权确认未完成。请核对当前已授权范围后重试。</p>}
     {error && <p role="alert">{error}</p>}
+    <FirstFrameError message={readError} retry={retryRead} />
   </>;
 }

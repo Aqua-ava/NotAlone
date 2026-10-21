@@ -19,7 +19,7 @@ import { ReplyBasisChangeNotice } from './ReplyBasisChangeNotice';
 import { ReplySceneInput } from './ReplySceneInput';
 
 export function useReplySession(enabled = true) {
-  const { state, error, setError, latest, active, receive } = useRevisionedSession<ReplySessionState>({ revision: -1, scopeRevision: 0, contactId: null, generationBlock: 'foreground-confirmation-required',
+  const { state, error, setError, latest, active, receive, retry } = useRevisionedSession<ReplySessionState>({ revision: -1, scopeRevision: 0, contactId: null, generationBlock: 'foreground-confirmation-required',
     options: { tone: 'original', instruction: '', includeRelationshipContext: false },
     mode: 'rewrite_draft', scene: '', messages: { phase: 'idle', items: [], nextCursor: null }, targetMessageId: null, direction: '', purpose: '',
     correction: '', requirements: '', clarificationAnswer: '', skillChoice: { mode: 'auto', versionId: null }, skillChoices: [], exploration: { phase: 'idle', result: null },
@@ -63,7 +63,7 @@ export function useReplySession(enabled = true) {
       }
     });
   }
-  return { state, error,
+  return { state, error, retry,
     enterWorkspace: () => operate(() => window.notalone.replies.enterWorkspace(selection())),
     updateCandidateVersionDraft: (request: ReplyCandidateDraftUpdate) => versionOperation(() => window.notalone.replies.updateInput({ type: 'candidateDraft', update: request })),
     readCandidateVersions: (request: ReplyCandidateVersionRead) => versionOperation(() => window.notalone.replies.readCandidateVersions(request)),
@@ -384,7 +384,7 @@ export function ReplyCandidates({ replies, currentDraft }: { replies: ReplySessi
           onCopy={() => noteCopy(candidate.candidateId, window.getSelection()?.toString() ?? '')}>{candidate.text}</p></details>
       </section>)}
     </details>}
-    {replies.error && <p className="reply-note" role="alert">{replies.error}</p>}
+    {replies.error && <p className="reply-note" role="alert">{replies.error}<button className="button" onClick={() => void replies.retry()}>重试读取</button></p>}
     <AssistantContinuationControls key={`${state.contactId}:${state.scopeRevision}:${state.savedSession?.sessionId}:${state.inputClearRevision ?? 0}`}
       replies={replies} hasUnsavedEdits={hasUnsavedEdits} />
     <AssistantMessageNoticeActions replies={replies} hasUnsavedEdits={hasUnsavedEdits} />

@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react';
 import type { SetupState } from '../shared/setup-bridge';
+import { FirstFrameError } from './FirstFrameError';
 import './setup.css';
 
 export function SetupPanel() {
   const [state, setState] = useState<SetupState>({ phase: 'offline', ownerReady: false, credentialsConfigured: false, revision: -1 });
   const [name, setName] = useState('');
   const [error, setError] = useState('');
+  const [readError, setReadError] = useState('');
+  const [readAttempt, setReadAttempt] = useState(0);
   const [key, setKey] = useState('');
   const [editingKey, setEditingKey] = useState(false);
   const [officialRecovery, setOfficialRecovery] = useState(false), [confirmedOfficial, setConfirmedOfficial] = useState(false);
@@ -14,13 +17,15 @@ export function SetupPanel() {
     const receive = (next: SetupState) => {
       if (active) {
         setState((previous) => next.revision >= previous.revision ? next : previous);
+        setReadError('');
         if (next.phase === 'offline') { setKey(''); setEditingKey(false); setOfficialRecovery(false); setConfirmedOfficial(false); }
       }
     };
     const unsubscribe = window.notalone.setup.onStateChanged(receive);
-    void window.notalone.setup.getState().then(receive).catch(() => {});
+    void window.notalone.setup.getState().then(receive)
+      .catch(() => { if (active) setReadError('首次配置状态暂时无法读取，请重试。'); });
     return () => { active = false; unsubscribe(); };
-  }, []);
+  }, [readAttempt]);
   return <section className="setup-panel" aria-label="AI 服务">
     <h2>AI 服务</h2>
     {state.phase === 'offline' ? <p>连接本机服务后，可查询并完成首次配置。</p>
@@ -71,6 +76,7 @@ export function SetupPanel() {
           </>}
     {(error || state.errorCode === 'initialize-failed' || state.errorCode === 'credentials-failed') && <p role="alert">{error || (state.errorCode === 'credentials-failed'
       ? 'DeepSeek 密钥未能保存，请重新输入后重试。' : '本人初始化未完成，请重试。')}</p>}
+    <FirstFrameError message={readError} retry={() => { setReadError(''); setReadAttempt((value) => value + 1); }} />
     <details className="setup-privacy">
       <summary>数据存储与隐私</summary>
       {state.phase === 'ready' && state.ownerReady && <p>本次运行的本人身份已就绪</p>}

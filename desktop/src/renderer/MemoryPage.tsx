@@ -4,6 +4,7 @@ import { memoryTimeText as timeText } from './memory-time-format';
 import { MemoryEventDetails } from './MemoryEventDetails';
 export { MemoryEventDetails } from './MemoryEventDetails';
 import { MemoryProcessingCard } from './MemoryProcessingCard';
+import { FirstFrameError } from './FirstFrameError';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { MemoryAdditionRequest, MemoryContent, MemoryCorrectionRequest, MemoryHistoryState, MemoryOverviewState, MemoryReadingState, MemorySection, MemorySectionName, MemorySource, MemoryVersion, OwnerFactsPreferencesOverview, PendingMemoryCandidate } from '../shared/memory-bridge';
 import type { ContactSessionView } from './contact-session';
@@ -29,6 +30,8 @@ const sourceNames = { active: '有效', delete_requested: '已请求删除', del
 function useMemoryReading(session: ContactSessionView) {
   const [state, setState] = useState(initial);
   const [error, setError] = useState('');
+  const [readError, setReadError] = useState('');
+  const [readAttempt, setReadAttempt] = useState(0);
   const active = useRef(true);
   const latest = useRef(initial);
   const scope = useRef(session.state);
@@ -38,12 +41,14 @@ function useMemoryReading(session: ContactSessionView) {
     const receive = (next: MemoryReadingState) => {
       if (!active.current || next.revision < latest.current.revision) return;
       latest.current = next;
+      setReadError('');
       setState(next);
     };
     const unsubscribe = window.notalone.memory.onStateChanged(receive);
-    void window.notalone.memory.getState().then(receive).catch(() => {});
+    void window.notalone.memory.getState().then(receive)
+      .catch(() => { if (active.current) setReadError('资料状态暂时无法读取，请重试。'); });
     return () => { active.current = false; unsubscribe(); };
-  }, []);
+  }, [readAttempt]);
   async function refresh(section?: MemorySectionName) {
     const { selectedContactId, scopeRevision } = scope.current;
     if (!selectedContactId) return;
@@ -205,7 +210,7 @@ function useMemoryReading(session: ContactSessionView) {
     }
   }
   const matches = state.contactId === session.state.selectedContactId && state.scopeRevision === session.state.scopeRevision;
-  return { state: matches ? state : initial, error, refresh, refreshOverview, refreshOwnerOverview, readLayeredMemory, manageLayeredMemory, correct, add, remove, openVersions, revertAutoUpdate, confirmCandidate, discardCandidate, applyCandidateUpdate };
+  return { state: matches ? state : initial, error, readError, retryRead: () => { setReadError(''); setReadAttempt((value) => value + 1); }, refresh, refreshOverview, refreshOwnerOverview, readLayeredMemory, manageLayeredMemory, correct, add, remove, openVersions, revertAutoUpdate, confirmCandidate, discardCandidate, applyCandidateUpdate };
 }
 
 
@@ -629,6 +634,7 @@ export function MemoryPage({ session, navigate }: { session: ContactSessionView;
     {state.mutation.phase !== 'idle' && <p className="memory-section-note" role={state.mutation.phase === 'error' ? 'alert' : 'status'}>{state.mutation.message}</p>}
     {state.mutation.backupCleanupRequired && <UpdateBackupCleanupRecovery />}
     {memory.error && <p className="memory-section-note" role="alert">{memory.error}</p>}
+    <FirstFrameError message={memory.readError} retry={memory.retryRead} />
     {session.error && <p className="memory-section-note" role="alert">{session.error}</p>}
   </div>;
 }

@@ -10,6 +10,7 @@ import logo from './assets/logo.png';
 import './style.css';
 import './helper-layout.css';
 import { BackendBadge, BackendConnectionNote, useBackendState } from './backend-status';
+import { FirstFrameError } from './FirstFrameError';
 import { SetupPanel } from './SetupPanel';
 import { StartupReadiness, StartupSettings, useStartupState } from './StartupSettings';
 import { ContactPicker, HelperContactPicker, useContactSession } from './contact-session';
@@ -27,14 +28,17 @@ const helper = window.location.hash === '#helper';
 document.title = helper ? 'NotAlone · 输入小窗' : 'NotAlone · 管理后台';
 
 export function App() {
-  const backend = useBackendState();
-  const startup = useStartupState();
+  const backendRead = useBackendState();
+  const backend = backendRead.state;
+  const startupRead = useStartupState();
+  const startup = startupRead.state;
   const permission = useScreenPermission();
   const contactSession = useContactSession();
   const replies = useReplySession(helper);
   const workspace = useRef<HTMLDivElement>(null);
   useEffect(() => { workspace.current?.scrollTo({ top: 0 }); }, [replies.state.mode, replies.state.options.inputKind]);
-  const foreground = useForegroundState(window.notalone.foreground, helper);
+  const foregroundRead = useForegroundState(window.notalone.foreground, helper);
+  const foreground = foregroundRead.state;
   const [error, setError] = useState('');
   const [page, setPage] = useState<ManagerPage>('contacts');
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -74,6 +78,7 @@ export function App() {
       {replies.state.messageNotice.changed && <p role="status">当前联系人有新消息，生成依据仍是原快照。由你决定是否重新生成。</p>}
       {!replies.state.messageNotice.needsRefresh && !replies.state.messageNotice.changed && <p role="status">新消息提醒已连接。</p>}
     </>}
+    <FirstFrameError message={foregroundRead.error} retry={foregroundRead.retry} />
     {replies.state.messageNotice.phase === 'interrupted' && <p role="status">消息提醒已中断，请重连消息提醒；连接恢复后会自动核对最新消息。</p>}
     {replies.state.messageNotice.phase === 'interrupted' && <button onClick={() => void replies.reconnectMessages()}>重连消息提醒</button>}
     {replies.state.mode === 'rewrite_draft' && (replies.state.messageNotice.changed || replies.state.messageNotice.needsRefresh)
@@ -87,7 +92,8 @@ export function App() {
       <span>在回复下复制，再粘贴到聊天窗口发送</span>
     </footer>
     {error && <p role="alert">{error}</p>}
-    {contactSession.error && <p role="alert">{contactSession.error}</p>}
+    <FirstFrameError message={backendRead.error} retry={backendRead.retry} />
+    {contactSession.error && <p role="alert">{contactSession.error}<button className="button" onClick={() => void contactSession.retryRead()}>重试读取</button></p>}
   </main> : <div className="admin-layout">
     <aside className="admin-sidebar">
       <div className="admin-brand"><img src={logo} alt="NotAlone" /><small>让每一次表达，更像你自己</small></div>
@@ -107,11 +113,13 @@ export function App() {
           <button className="button primary" onClick={() => void operate(window.notalone.openHelper)}><Icon name="write" size={15} />打开输入小窗</button></div>
       </header>
       <ShortcutWarning />
-      {contactSession.error && <p className="operation-error" role="alert">{contactSession.error}</p>}
+      {contactSession.error && <p className="operation-error" role="alert">{contactSession.error}<button className="button" onClick={() => void contactSession.retryRead()}>重试读取</button></p>}
       <main className="manager-content">
         {page === 'import' && <button className="button" onClick={() => { setAdvancedOpen(true); setPage('config'); }}>返回设置 · 高级</button>}
         <div className="manager-title"><h1>{currentPage.title}</h1><p>{currentPage.description}</p></div>
         <BackendConnectionNote state={backend} startup={startup} onDiagnose={showDiagnostics} />
+        <FirstFrameError message={backendRead.error} retry={backendRead.retry} />
+        <FirstFrameError message={startupRead.error} retry={startupRead.retry} />
         {!(page === 'config' && advancedOpen && diagnosticsOpen && startup.mode !== 'managed')
           && <StartupReadiness state={startup} backend={backend} onConfigure={showDiagnostics} />}
         {(page === 'config' || startup.mode === 'managed' && backend.phase === 'connected') && <SetupPanel />}

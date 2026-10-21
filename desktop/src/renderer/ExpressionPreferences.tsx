@@ -76,6 +76,6 @@ export function ExpressionPreferences({ replies }: { replies: ReplySessionView }
       <button disabled={!enabled} onClick={() => edit(item)} aria-label={`修改长期偏好：${item.text}`}>修改偏好</button>
       <button disabled={!enabled} onClick={() => void operate(() => window.notalone.expressionPreferences.remove({ ...selection,
         preferenceId: item.preferenceId, expectedRevision: item.revision }))} aria-label={`删除长期偏好：${item.text}`}>删除偏好</button></li>)}</ul>
-    {(view.state.error || view.error) && <p role="alert">{view.state.error ?? view.error}</p>}
+    {(view.state.error || view.error) && <p role="alert">{view.state.error ?? view.error}{!view.state.error && <button className="button" onClick={() => void view.retry()}>重试读取</button>}</p>}
   </details>;
 }

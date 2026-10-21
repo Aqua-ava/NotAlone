@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { readInitialState } from './initial-read';
 import type { BindingConsentState, BindingSummary } from '../shared/binding-consent-bridge';
 import type { ContactSessionView } from './contact-session';
 
@@ -11,18 +12,25 @@ export function useBindingConsent(contacts: ContactSessionView) {
   const latest = useRef(initial);
   const [selection, setSelection] = useState<Record<string, Selection>>({});
   const [error, setError] = useState('');
+  const [readError, setReadError] = useState('');
   const [revocation, setRevocation] = useState<BindingSummary | null>(null);
-  useEffect(() => {
-    let active = true;
-    const receive = (next: BindingConsentState) => {
-      if (!active || next.revision < latest.current.revision) return;
-      if (next.scopeRevision !== latest.current.scopeRevision) { setSelection({}); setRevocation(null); setError(''); }
-      latest.current = next; setState(next);
-    };
-    const unsubscribe = window.notalone.bindings.onStateChanged(receive);
-    void window.notalone.bindings.getState().then(receive).catch(() => {});
-    return () => { active = false; unsubscribe(); };
+  const active = useRef(true);
+  const reading = useRef(false);
+  const receive = useCallback((next: BindingConsentState) => {
+    if (!active.current || next.revision < latest.current.revision) return;
+    if (next.scopeRevision !== latest.current.scopeRevision) { setSelection({}); setRevocation(null); setError(''); }
+    latest.current = next; setState(next);
   }, []);
+  const retryRead = useCallback(() => readInitialState({
+    read: () => window.notalone.bindings.getState(), receive, reportError: setReadError,
+    isActive: () => active.current, busy: reading,
+  }), [receive]);
+  useEffect(() => {
+    active.current = true;
+    const unsubscribe = window.notalone.bindings.onStateChanged(receive);
+    void retryRead();
+    return () => { active.current = false; unsubscribe(); };
+  }, [receive, retryRead]);
   useEffect(() => {
     if (state.phase !== 'ready') return;
     setSelection((previous) => Object.fromEntries(Object.entries(previous).filter(([locator, item]) =>
@@ -52,6 +60,6 @@ export function useBindingConsent(contacts: ContactSessionView) {
     try { await window.notalone.bindings.refreshSaved(); setError(''); }
     catch { setError('联系人同步状态暂时无法刷新，请重试。'); }
   }
-  return { state, selection, setSelection, error, revocation, setRevocation, refresh, refreshSaved, confirm, revoke };
+  return { state, selection, setSelection, error, readError, retryRead, revocation, setRevocation, refresh, refreshSaved, confirm, revoke };
 }
 export type BindingConsentView = ReturnType<typeof useBindingConsent>;

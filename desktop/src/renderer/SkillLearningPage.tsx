@@ -15,7 +15,7 @@ const materials: Record<string, string> = { assistant_discussion: '助手讨论'
 
 export function SkillLearningPage({ session }: { session: ContactSessionView }) {
   const bridge = window.notalone.skillLearning;
-  const { state, error, setError } = useRevisionedSession(initial, bridge);
+  const { state, error, setError, retry } = useRevisionedSession(initial, bridge);
   const { selectedContactId: contactId, scopeRevision } = session.state;
   const [selection, setSelection] = useState<{ contactId: string; scopeRevision: number; tab: 'installed' | 'pending' } | null>(null);
   const tab = selection?.contactId === contactId && selection.scopeRevision === scopeRevision ? selection.tab : 'installed';
@@ -121,7 +121,7 @@ export function SkillLearningPage({ session }: { session: ContactSessionView }) 
       </>}
     </section></div>}
     {state.error && <p role="alert">{state.error}</p>}
-    {error && <p role="alert">{error}</p>}
+    {error && <p role="alert">{error}<button className="button" onClick={() => void retry()}>重试读取</button></p>}
   </section>;
 }
 

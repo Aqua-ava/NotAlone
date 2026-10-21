@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { WechatSetupBridge, WechatSetupState } from '../shared/wechat-setup-bridge';
+import { FirstFrameError } from './FirstFrameError';
 import './bindings.css';
 const initial: WechatSetupState = { phase: 'offline', accountId: null, failureCode: null, revision: -1 };
 export function WechatSetupPanel({ bridge, children }: { bridge: WechatSetupBridge; children?: ReactNode }) {
   const [state, setState] = useState(initial);
   const [error, setError] = useState('');
+  const [readError, setReadError] = useState('');
+  const [readAttempt, setReadAttempt] = useState(0);
   const active = useRef(false);
   useEffect(() => {
     active.current = true;
@@ -12,10 +15,11 @@ export function WechatSetupPanel({ bridge, children }: { bridge: WechatSetupBrid
       if (active.current) setState(previous => next.revision > previous.revision ? next : previous);
     };
     const unsubscribe = bridge.onStateChanged(receive);
-    void bridge.getState().then(receive).catch(() => {});
+    void bridge.getState().then((next) => { setReadError(''); receive(next); })
+      .catch(() => { if (active.current) setReadError('微信连接状态暂时无法读取，请重试。'); });
     void bridge.refresh().catch(() => { if (active.current) setError('微信连接状态暂时不可用，请重试。'); });
     return () => { active.current = false; unsubscribe(); };
-  }, [bridge]);
+  }, [bridge, readAttempt]);
   async function operate(action: () => Promise<void>) {
     setError('');
     try { await action(); }
@@ -51,5 +55,6 @@ export function WechatSetupPanel({ bridge, children }: { bridge: WechatSetupBrid
     {state.phase === 'offline' && <p>连接本机服务后查看微信接入状态。</p>}
     {busy && <p role="status">{state.phase === 'saving' ? '正在保存授权…' : state.phase === 'restarting' ? '授权已保存，正在重新加载连接…' : '正在核验微信连接状态…'}</p>}
     {error && <p role="alert">{error}</p>}
+    <FirstFrameError message={readError} retry={() => { setReadError(''); setReadAttempt((value) => value + 1); }} />
   </section>{state.phase === 'connected' && children}</>;
 }

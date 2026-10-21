@@ -41,7 +41,7 @@ function SyncRecoveryStatus({ report }: { report: SyncStatusReport }) {
 }
 
 export function SyncControlPanel({ bridge, manualRelease = false }: { bridge: SyncControlBridge; manualRelease?: boolean }) {
-  const { state, latest, active, error, setError } = useRevisionedSession(initial, bridge);
+  const { state, latest, active, error, setError, retry } = useRevisionedSession(initial, bridge);
   useEffect(() => {
     // 连接时报告可能还未播种；进入页面只刷新一次缓存状态，不触发正文周期。
     void bridge.refresh().catch(() => { if (active.current) setError('同步状态暂时无法刷新，请重试。'); });
@@ -67,7 +67,7 @@ export function SyncControlPanel({ bridge, manualRelease = false }: { bridge: Sy
     {report?.enabled && <button className="button" disabled={!available} onClick={() => void switchSync()}>
       {state.busy === 'disable' ? '正在关闭后台同步…' : '关闭后台同步'}</button>}
     {state.errorCode && <p role="alert">同步运行状态暂未核验。请保留当前资料，重新打开 App 后查看；此状态不影响手动输入。</p>}
-    {error && <p role="alert">{error}</p>}
+    {error && <p role="alert">{error}<button className="button" onClick={() => void retry()}>重试读取</button></p>}
   </section>;
   return <div className="bindings-page">
     <section className="bindings-explanation" aria-label="后台 CLI 同步">
@@ -103,7 +103,7 @@ export function SyncControlPanel({ bridge, manualRelease = false }: { bridge: Sy
       {state.errorCode && <p role="alert">{state.errorCode === 'operation-unconfirmed'
         ? '同步操作结果尚未确认，请刷新同步状态后再决定下一步。'
         : '同步状态读取失败，请检查本机服务与 CLI 后刷新。'}</p>}
-      {error && <p role="alert">{error}</p>}
+      {error && <p role="alert">{error}<button className="button" onClick={() => void retry()}>重试读取</button></p>}
       {report?.enabled && <SyncRecoveryStatus key={state.scopeRevision} report={report} />}
     </section>
   </div>;

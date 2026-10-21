@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { ImportState } from '../shared/import-bridge';
 import type { ContactSessionView } from './contact-session';
 import { SourceDeletionPanel } from './SourceDeletionPanel';
+import { FirstFrameError } from './FirstFrameError';
 import './imports.css';
 
 const initial: ImportState = { revision: -1, selectionRevision: 0, phase: 'unavailable', fileName: null, target: null, preview: null, error: null,
@@ -20,6 +21,8 @@ export function ImportPage({ session }: { session: ContactSessionView }) {
   const [state, setState] = useState(initial);
   const [checked, setChecked] = useState(false);
   const [error, setError] = useState('');
+  const [readError, setReadError] = useState('');
+  const [readAttempt, setReadAttempt] = useState(0);
   const latest = useRef(state);
   useEffect(() => {
     let active = true;
@@ -27,12 +30,14 @@ export function ImportPage({ session }: { session: ContactSessionView }) {
       if (!active || next.revision < latest.current.revision) return;
       if (next.selectionRevision !== latest.current.selectionRevision) { setChecked(false); setError(''); }
       latest.current = next;
+      setReadError('');
       setState(next);
     };
     const unsubscribe = window.notalone.imports.onStateChanged(receive);
-    void window.notalone.imports.getState().then(receive).catch(() => {});
+    void window.notalone.imports.getState().then(receive)
+      .catch(() => { if (active) setReadError('导入状态暂时无法读取，请重试。'); });
     return () => { active = false; unsubscribe(); };
-  }, []);
+  }, [readAttempt]);
   const busy = ['choosing', 'previewing', 'confirming', 'submitting'].includes(state.phase) || state.syncReloadPhase === 'restarting';
   const available = state.phase !== 'unavailable' && session.state.directoryPhase === 'ready';
   const contactId = session.state.selectedContactId;
@@ -119,6 +124,7 @@ export function ImportPage({ session }: { session: ContactSessionView }) {
     {state.syncReloadPhase === 'failed' && <div className="import-note"><p role="alert">同步服务重新加载结果尚未确认。停读未确认时不会另起实例；请检查连接或配置后重试。</p>
       <button className="button" onClick={() => void operate(() => window.notalone.imports.reloadSyncHost({ selectionRevision: latest.current.selectionRevision }))}>重试重新加载同步服务</button></div>}
     {(state.error || error) && <p className="import-note" role="alert">{state.error ?? error}</p>}
+    <FirstFrameError message={readError} retry={() => { setReadError(''); setReadAttempt((value) => value + 1); }} />
     <section className="import-management" aria-label="导入资料管理">
       <h2>导入资料管理</h2>
       <p>按联系人查看已保存的来源文件、记录数量和删除状态。</p>
