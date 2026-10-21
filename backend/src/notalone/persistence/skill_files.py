@@ -4,10 +4,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import shutil
 import tempfile
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
+from threading import Lock
 from typing import Any
 from uuid import UUID
 
@@ -16,8 +20,143 @@ from psycopg.rows import dict_row
 from notalone.skills import LocalSkillPackageReader, SkillPackageValidator
 
 
+logger = logging.getLogger(__name__)
+
+_MAX_FILE_FAILURES = 512
+_FILE_FAILURES: dict[tuple[UUID, str, UUID | None], "SkillFileFailure"] = {}
+_FILE_FAILURES_LOCK = Lock()
+
+
 class SkillFileError(RuntimeError):
     """文件不可用；不向调用方暴露实际路径或正文。"""
+
+
+@dataclass(frozen=True, slots=True)
+class SkillFileFailure:
+    """可查询的文件同步/清理失败；不含路径、正文或联系资料。"""
+
+    operation: str
+    code: str
+    skill_id: UUID | None
+    occurred_at: datetime
+
+    def as_payload(self) -> dict[str, Any]:
+        return {
+            "operation": self.operation,
+            "code": self.code,
+            "skill_id": str(self.skill_id) if self.skill_id is not None else None,
+            "occurred_at": self.occurred_at.isoformat(),
+        }
+
+
+def _failure_code(error: BaseException) -> str:
+    """把文件/权限/校验失败压成稳定脱敏错误码，不回传原始信息。"""
+    if isinstance(error, PermissionError):
+        return "permission_denied"
+    if isinstance(error, OSError):
+        return "filesystem_error"
+    if isinstance(error, SkillFileError):
+        return "file_unavailable"
+    return "unknown_error"
+
+
+def _record_file_failure(
+    owner_id: UUID, *, operation: str, error: BaseException, skill_id: UUID | None = None,
+) -> None:
+    code = _failure_code(error)
+    with _FILE_FAILURES_LOCK:
+        _FILE_FAILURES[(owner_id, operation, skill_id)] = SkillFileFailure(
+            operation=operation, code=code, skill_id=skill_id,
+            occurred_at=datetime.now(timezone.utc),
+        )
+        overflow = len(_FILE_FAILURES) - _MAX_FILE_FAILURES
+        for key in list(_FILE_FAILURES)[:max(overflow, 0)]:
+            _FILE_FAILURES.pop(key, None)
+    logger.warning("skill_file_sync_failed operation=%s code=%s", operation, code)
+
+
+def _clear_file_failure(
+    owner_id: UUID, *, operation: str, skill_id: UUID | None = None,
+) -> None:
+    with _FILE_FAILURES_LOCK:
+        _FILE_FAILURES.pop((owner_id, operation, skill_id), None)
+
+
+def read_skill_file_failures(owner_id: UUID) -> tuple[SkillFileFailure, ...]:
+    """返回该 owner 进程内最近的文件同步失败；状态查询用，可重试恢复。"""
+    if not isinstance(owner_id, UUID):
+        raise TypeError("owner_id 必须是 UUID。")
+    with _FILE_FAILURES_LOCK:
+        values = [
+            item for (owner, _operation, _skill), item in _FILE_FAILURES.items()
+            if owner == owner_id
+        ]
+    return tuple(sorted(values, key=lambda item: item.occurred_at))
+
+
+def _owner_from_relative(relative_path: Any) -> UUID | None:
+    """从受控相对路径解析 owner；仅用于状态归集，不接受任意真实路径。"""
+    if not isinstance(relative_path, str):
+        return None
+    parts = PurePosixPath(relative_path).parts
+    if not parts or len(parts) > 6:
+        return None
+    index = 1 if parts[0] in (".versions", ".staging") else 0
+    if len(parts) <= index:
+        return None
+    try:
+        return UUID(parts[index])
+    except (TypeError, ValueError):
+        return None
+
+
+def _skill_id_from_relative(relative_path: Any) -> UUID | None:
+    if not isinstance(relative_path, str):
+        return None
+    parts = PurePosixPath(relative_path).parts
+    if len(parts) < 3 or parts[0] not in (".versions", ".staging"):
+        return None
+    try:
+        return UUID(parts[2])
+    except (TypeError, ValueError):
+        return None
+
+
+def skill_file_health(connection: Any, owner_id: UUID) -> dict[str, Any]:
+    """可查询的目录文件健康状态：只含计数、固定错误码与不可识别 ID。"""
+    if not isinstance(owner_id, UUID):
+        raise TypeError("owner_id 必须是 UUID。")
+    relation = connection.execute(
+        "SELECT to_regclass('public.reply_skill_file_cleanup') AS relation"
+    ).fetchone()
+    if relation is None or (relation["relation"] if isinstance(relation, dict) else relation[0]) is None:
+        return {
+            "state": "ok", "pending_working_copies": 0,
+            "pending_cleanup_files": 0, "failures": [],
+        }
+    with connection.cursor(row_factory=dict_row) as cursor:
+        working_copies = cursor.execute(
+            "SELECT count(*) AS total FROM public.reply_skill_working_copy AS job "
+            "JOIN public.reply_skill AS skill ON skill.id=job.skill_id "
+            "WHERE skill.owner_id=%s",
+            (owner_id,),
+        ).fetchone()["total"]
+        cleanups = cursor.execute(
+            "SELECT count(*) AS total FROM public.reply_skill_file_cleanup "
+            "WHERE relative_path=%s OR starts_with(relative_path,%s) "
+            "OR starts_with(relative_path,%s) OR starts_with(relative_path,%s)",
+            (str(owner_id), f"{owner_id}/", f".versions/{owner_id}/", f".staging/{owner_id}/"),
+        ).fetchone()["total"]
+    failures = [item.as_payload() for item in read_skill_file_failures(owner_id)]
+    pending_working_copies = int(working_copies or 0)
+    pending_cleanup_files = int(cleanups or 0)
+    degraded = bool(pending_working_copies or pending_cleanup_files or failures)
+    return {
+        "state": "degraded" if degraded else "ok",
+        "pending_working_copies": pending_working_copies,
+        "pending_cleanup_files": pending_cleanup_files,
+        "failures": failures,
+    }
 
 
 def skills_root() -> Path:
@@ -220,8 +359,17 @@ def synchronize_working_copies(connection: Any, *, owner_id: UUID | None = None)
             connection.execute("UPDATE public.reply_skill SET directory_managed=true WHERE id=%s", (job["skill_id"],))
             connection.execute("DELETE FROM public.reply_skill_working_copy WHERE skill_id=%s", (job["skill_id"],))
             count += 1
-        except (OSError, SkillFileError):
+        except (OSError, SkillFileError) as error:
+            _record_file_failure(
+                job["owner_id"], operation="working_copy_sync", error=error,
+                skill_id=job["skill_id"],
+            )
             continue
+        else:
+            _clear_file_failure(
+                job["owner_id"], operation="working_copy_sync",
+                skill_id=job["skill_id"],
+            )
     return count
 
 
@@ -266,8 +414,26 @@ def cleanup_pending_files(connection: Any, *, owner_id: UUID | None = None) -> i
                     path.unlink()
             connection.execute("DELETE FROM public.reply_skill_file_cleanup WHERE relative_path=%s", (row["relative_path"],))
             count += 1
-        except (OSError, SkillFileError):
+        except (OSError, SkillFileError) as error:
+            owner = _owner_from_relative(row["relative_path"])
+            if owner is not None:
+                _record_file_failure(
+                    owner, operation="cleanup", error=error,
+                    skill_id=_skill_id_from_relative(row["relative_path"]),
+                )
+            else:
+                logger.warning(
+                    "skill_file_sync_failed operation=%s code=%s", "cleanup",
+                    _failure_code(error),
+                )
             continue
+        else:
+            owner = _owner_from_relative(row["relative_path"])
+            if owner is not None:
+                _clear_file_failure(
+                    owner, operation="cleanup",
+                    skill_id=_skill_id_from_relative(row["relative_path"]),
+                )
     return count
 
 

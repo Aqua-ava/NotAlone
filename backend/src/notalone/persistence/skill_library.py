@@ -1130,6 +1130,17 @@ class PostgresSkillLibrary(SkillLibraryManagementPort):
             queue_working_copy(connection, skill_id, chosen_id)
         return chosen_id
 
+    def skill_file_health(self, owner_id: UUID) -> dict[str, Any]:
+        """可查询的文件同步/清理健康状态；只含计数、固定错误码与不可识别 ID。"""
+        if not isinstance(owner_id, UUID):
+            raise TypeError("owner_id 必须是 UUID。")
+        try:
+            with self._connect() as connection:
+                from notalone.persistence.skill_files import skill_file_health
+                return skill_file_health(connection, owner_id)
+        except psycopg.Error:
+            raise SkillLibraryPersistenceError("Skill 文件健康状态读取失败。") from None
+
     def _synchronize_files(self, owner_id: UUID) -> None:
         try:
             with self._connect() as connection:

@@ -109,13 +109,19 @@ def _blocked_working_directories(cursor, owner_id):
     ).fetchall()}
     cleanups = cursor.execute(
         "SELECT relative_path FROM public.reply_skill_file_cleanup "
-        "WHERE relative_path=%s OR starts_with(relative_path,%s)", (str(owner_id), f"{owner_id}/")
+        "WHERE relative_path=%s OR starts_with(relative_path,%s)"
+        " OR starts_with(relative_path,%s) OR starts_with(relative_path,%s)",
+        (str(owner_id), f"{owner_id}/", f".versions/{owner_id}/", f".staging/{owner_id}/"),
     ).fetchall()
     for row in cleanups:
-        parts = row["relative_path"].split("/")
-        if len(parts) == 1:
+        relative = row["relative_path"]
+        if relative == str(owner_id):
             return names, True
-        names.add(parts[1])
+        # 只有可编辑工作目录的待清理副本会影响目录发现；隐藏快照/暂存不映射技能名。
+        if relative.startswith(f"{owner_id}/"):
+            parts = relative.split("/")
+            if len(parts) >= 2 and parts[1]:
+                names.add(parts[1])
     return names, False
 
 
@@ -186,6 +192,10 @@ def synchronize_skill_directory(connection, owner_id: UUID, *, check_only=False)
                                                  version_number=1, write_working=False)
         for row in rows:
             if not row["directory_managed"] or row["status"] == "deleted" or row["version_id"] is None:
+                continue
+            if all_blocked or row["name"] in blocked_names:
+                # 待重试的替换/清理任务保留上一有效目录状态；运行资格仍按查询 fail-closed，
+                # 失败原因由 skill_file_health 可查询，重试成功后自动恢复。
                 continue
             package = packages.get(row["name"])
             matches = _matches(cursor, row, package)
