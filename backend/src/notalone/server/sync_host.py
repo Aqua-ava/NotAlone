@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import logging
 import threading
 from time import monotonic
 from dataclasses import dataclass
@@ -30,6 +31,9 @@ from notalone.front_sync.sync_engine import (
 from notalone.front_sync.tail_lifecycle import FrontSyncPhase, FollowRuntimeStatus
 from notalone.persistence.conversation_repository import PersistedConversationBinding
 
+# 心跳失败只记录稳定错误码与异常类型；异常正文、路径与聊天内容不得进入日志。
+logger = logging.getLogger(__name__)
+
 
 @dataclass(frozen=True, slots=True)
 class LatestValidForegroundObservation:
@@ -40,6 +44,14 @@ class LatestValidForegroundObservation:
     display_name: str | None
     watermark: int | None
     batch_message_count: int
+
+
+@dataclass(frozen=True, slots=True)
+class SyncHeartbeatFailure:
+    """最近一次非用户原因的心跳失败；只保留稳定错误码与发生时间。"""
+
+    code: str
+    at: datetime
 
 
 class SyncEnginePort(Protocol):
@@ -136,6 +148,9 @@ class SyncControlPort(Protocol):
     def status(self) -> FrontSyncCycleReport | None:
         """返回最近一次循环报告；尚未运行过循环时返回 None。"""
 
+    def health(self) -> dict[str, object]:
+        """返回心跳健康度；只含失败码与时间，不含正文或路径。"""
+
     def enable(self) -> FrontSyncCycleReport:
         """开启同步并立即执行一轮，返回最新报告。"""
 
@@ -217,6 +232,7 @@ class SyncHost:
         "_observation_mutations",
         "_state_lock",
         "_latest",
+        "_heartbeat_failure",
         "_runtime_status",
         "_last_valid_observation",
         "_stop_event",
@@ -246,6 +262,7 @@ class SyncHost:
         self._observation_mutations = 0
         self._state_lock = threading.Lock()
         self._latest: FrontSyncCycleReport | None = None
+        self._heartbeat_failure: SyncHeartbeatFailure | None = None
         self._runtime_status = FollowRuntimeStatus(
             enabled=False,
             stream_active=False,
@@ -326,6 +343,19 @@ class SyncHost:
     def status(self) -> FrontSyncCycleReport | None:
         with self._state_lock:
             return self._latest
+
+    def health(self) -> dict[str, object]:
+        """同步循环健康度；失败只暴露稳定错误码与时间，不泄露异常细节。"""
+
+        with self._state_lock:
+            failure = self._heartbeat_failure
+        if failure is None:
+            return {"healthy": True, "failure_code": None, "failed_at": None}
+        return {
+            "healthy": False,
+            "failure_code": failure.code,
+            "failed_at": failure.at.astimezone(timezone.utc).isoformat(),
+        }
 
     def enable(self) -> FrontSyncCycleReport:
         with self._authority_change():
@@ -580,20 +610,41 @@ class SyncHost:
                     continue
                 try:
                     enabled = self._engine.sync_enabled()
-                except Exception:
-                    # 开关读取（查库）瞬时失败按关闭处理：本轮不执行
-                    # cycle，线程保持存活，下个心跳重试；不泄露细节。
-                    enabled = False
-                if enabled:
-                    self._run_cycle_guarded()
+                except Exception as error:
+                    # 读开关失败不是「用户关闭」：保留失败码供状态接口区分，
+                    # 线程保持存活并在下个心跳重试；日志不写异常正文。
+                    self._record_heartbeat_failure("sync_switch_unavailable")
+                    logger.warning(
+                        "sync_heartbeat_switch_unavailable error_type=%s",
+                        type(error).__name__,
+                    )
+                    continue
+                if not enabled:
+                    self._clear_heartbeat_failure()
+                    continue
+                self._run_cycle_guarded()
+
+    def _record_heartbeat_failure(self, code: str) -> None:
+        with self._state_lock:
+            self._heartbeat_failure = SyncHeartbeatFailure(
+                code=code, at=datetime.now(timezone.utc)
+            )
+
+    def _clear_heartbeat_failure(self) -> None:
+        with self._state_lock:
+            self._heartbeat_failure = None
 
     def _run_cycle_guarded(self) -> FrontSyncCycleReport | None:
         """执行一轮 cycle；持久化等瞬时异常只丢弃本轮，不让循环线程死亡。"""
 
         try:
             return self._run_cycle_locked()
-        except Exception:
-            # 不泄露异常细节：本轮失败按无报告处理，下个心跳重试。
+        except Exception as error:
+            # 本轮失败按无报告处理并保留失败码，下个心跳重试；不写异常正文。
+            self._record_heartbeat_failure("sync_cycle_failed")
+            logger.warning(
+                "sync_heartbeat_cycle_failed error_type=%s", type(error).__name__
+            )
             return None
 
     def _run_cycle_locked(self) -> FrontSyncCycleReport:
@@ -618,6 +669,8 @@ class SyncHost:
         runtime = self._engine.follow_runtime_status()
         with self._state_lock:
             self._latest = report
+            # 成功报告证明引擎恢复；之前的开关/循环失败码不再代表当前状态。
+            self._heartbeat_failure = None
             self._runtime_status = runtime
             if not (
                 report.sync_enabled

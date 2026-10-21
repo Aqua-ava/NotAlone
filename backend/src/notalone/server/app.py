@@ -779,12 +779,16 @@ class BackendApp:
             if method != "GET":
                 return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
             report = sync.status()
+            health = _sync_health_payload(sync)
             if report is None:
-                return _json_response(
-                    HTTPStatus.SERVICE_UNAVAILABLE,
-                    {"error": "sync_status_unavailable"},
-                )
-            return _json_response(HTTPStatus.OK, _sync_status_payload(report))
+                body: dict[str, object] = {"error": "sync_status_unavailable"}
+                if health is not None:
+                    body["health"] = health
+                return _json_response(HTTPStatus.SERVICE_UNAVAILABLE, body)
+            payload = _sync_status_payload(report)
+            if health is not None:
+                payload["health"] = health
+            return _json_response(HTTPStatus.OK, payload)
         if path == "/api/sync/cli-sessions":
             if method != "GET":
                 return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
@@ -3098,6 +3102,20 @@ def _contact_payload(contact: ContactSummary) -> dict[str, object]:
             "source_count": contact.data_status.source_count,
         },
     }
+
+
+def _sync_health_payload(sync: object) -> dict[str, object] | None:
+    """读取同步循环健康度；端口不提供或读取失败时返回 None，不拖垮状态主响应。"""
+
+    reader = getattr(sync, "health", None)
+    if not callable(reader):
+        return None
+    try:
+        value = reader()
+    except Exception:
+        logger.warning("sync_health_unavailable", exc_info=True)
+        return None
+    return value if isinstance(value, dict) else None
 
 
 def _sync_status_payload(report: FrontSyncCycleReport) -> dict[str, object]:

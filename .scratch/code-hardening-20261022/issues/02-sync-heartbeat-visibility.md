@@ -1,7 +1,7 @@
 # 02 同步心跳失败状态投影
 
 Triage: ready-for-agent
-State: open
+State: resolved
 Blocked by: 01
 
 ## 目标
@@ -26,3 +26,10 @@ SyncHost 心跳/开关心跳失败时不再「显示开着、实际停读」：�
 - 若桌面状态投影需要同步展示，拆到 05/07 或新 ticket，不扩大本 ticket。
 
 ## Comments
+
+- 2026-10-22 完成：`SyncHost` 新增 `health()` 与 `SyncHeartbeatFailure(code, at)`；读开关失败记 `sync_switch_unavailable`（不再复用「用户关闭」），cycle 失败记 `sync_cycle_failed`，成功报告（`_cache_report_locked`）清除失败；warning 只记稳定错误码 + 异常类型名，不含异常正文。
+- `/api/sync/status`：有报告时 payload 增加 `health` 字段；无报告时 503 错误体也带 `health`；不提供 `health()` 的旧端口保持原响应形状（`LegacySync` 测试）。
+- 未改桌面状态投影（桌面解析只取已知字段，忽略多余字段）；后续如需 UI 展示可另立 ticket。
+- 验证：`python -m unittest tests.unit.server.test_sync_host_health tests.unit.server.test_sync_status_health -v` 6 条通过；`python -m unittest discover -s tests/unit/server -t .` 97 条通过。
+- 数据影响：无 schema/数据变更；状态 JSON 只新增字段。剩余风险：`health` 只反映后台心跳，用户手动 enable/check 失败仍走各自接口错误；异常类型名已足够区分但更细的原因需后续扩展错误码。
+- Commit：见 `git log --grep '同步心跳失败'`。
