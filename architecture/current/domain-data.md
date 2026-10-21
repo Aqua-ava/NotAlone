@@ -1,6 +1,6 @@
 # 现行领域与数据契约
 
-> 2026-10-21 决定收敛：独立创建入口按 [ADR-084](../adr/084-topbar-contact-search.md)退役，首次导入的 `manual_create` 保留兼容合同。默认自动采纳按 [ADR-085](../adr/085-source-verified-automatic-adoption.md) 取消额外语用、置信度和风险人工门；下文标明的历史协议及评测不得当作默认流水线。
+> 2026-10-21 决定收敛：新增联系人按 [ADR-087](../adr/087-wechat-confirmed-contact-onboarding.md)仅从微信会话确认加入，独立创建与导入新建的旧接口待退役；历史 `manual_create` 记录保留读取与删除语义。默认自动采纳按 [ADR-085](../adr/085-source-verified-automatic-adoption.md) 取消额外语用、置信度和风险人工门；下文标明的历史协议及评测不得当作默认流水线。
 
 > 状态：已采纳的产品约束；当前独立版采用本机 PostgreSQL 作为权威业务库，已有资料按 ADR-066 沿用原连接和资料位置。已实现表结构以[版本化迁移](../../backend/database/migrations)为准；本文中的目标数据对象不代表都已落地，实际启用与验收分别核验。
 
@@ -27,7 +27,7 @@
 | `owner` | 资料所属用户。 | `owner_id` 是所有私密数据的第一层隔离键。 |
 | `owner_channel_identity` | owner 在外部聊天渠道中的已验证身份。 | 通过 `owner_id` 关联；`external_id` 是渠道标识，不是 `owner_id`；同一 owner/channel v1 只保留一个 active 身份。 |
 | `owner_memory` | 用户本人的长期事实资料，跨联系人范围的回复都可使用（见 `CONTEXT.md` 的“本人记忆”）。 | 属于 owner，不绑定 `contact_id`；与联系人关系记忆使用同一评分器、阈值和排序，但使用独立的 3 条/240 字符预算，不固定全量加载。 |
-| `contact` | 用户明确确认的真实关系对象；不以任意展示名称独立创建空白联系人。 | `contact_id` 是 NotAlone 创建的稳定内部身份；昵称、备注和渠道身份是可变或可重新确认的信息。 |
+| `contact` | 用户通过微信会话明确确认后加入的真实关系对象；已有历史身份保留，不以任意展示名称或文件导入新建。 | `contact_id` 是 NotAlone 创建的稳定内部身份；昵称、备注和渠道身份是可变或可重新确认的信息。 |
 | `conversation_binding` | 用户确认的桌面聊天会话与联系人的绑定。 | 保存聊天 App、账号范围、外部会话定位标识、display name 映射、绑定状态与最近验证时间；历史选中会话元数据与视觉指纹字段仅供兼容，不构成当前采集授权；已建立且唯一的映射可自动切换，不能把 display name、视觉指纹或 `talker` 当作 `contact_id`。 |
 | `source_document` | 一次原始导入的文本、截图或语音原始引用。 | 属于一个联系人；保留来源定位、导入时间、导出器名称与版本（可获取时）、用户确认范围、确认时间、确认方式和删除状态。 |
 | `FreshForegroundObservation` | 当前前台定位的一次瞬时内存结果，不是数据库实体。 | 含观察标识、时点、阶段及可选名称／置信度；仅 `confirmed` 阶段携带已核验的 `contact_id` 与 `binding_id`。owner／渠道账号范围由后端固定运行身份核验，不接受调用方注入；不保存原始帧或观察历史，不产生 CLI 消息正文。 |
@@ -90,7 +90,7 @@ background_task
 - v1 只实现单用户、单微信账号下的联系人导入，不实现跨账号或跨渠道联系人合并。即使如此，`contact_id` 仍由 NotAlone 创建；`sender_wxid` 等外部标识只作为渠道身份或来源元数据保存（见 ADR-008）。
 - `owner_id` 只能来自 NotAlone 当前运行身份：本地个人版本可读取受控配置，服务器版本必须来自已验证登录身份。首次导入可以在用户显式初始化动作中生成 owner，并把文件中的本人渠道身份保存为 `owner_channel_identity`；导入文件不能直接指定或覆盖 `owner_id`。
 - owner 的 `sender_wxid` 必须与 active `owner_channel_identity` 一致；缺失、多个或变化的本人渠道身份必须停止导入并要求初始化、恢复或重新绑定。
-- 首次导入允许用户创建联系人或选择已有联系人，并保存 `source_document_id`、确认的 `contact_id`、确认时间和确认方式（`manual_create`/`manual_select`）。新来源与已有渠道身份不一致时必须停止导入并重新确认。
+- 导入只能使用已选的已有联系人，并保存 `source_document_id`、确认的 `contact_id`、确认时间和选择确认方式（`manual_select`）；需要新增时先按 [ADR-087](../adr/087-wechat-confirmed-contact-onboarding.md)确认微信会话。历史 `manual_create` 保留溯源和删除，不再允许作为新建路径；旧接口尚待退役。新来源与已有渠道身份不一致时必须停止导入并重新确认，不新建或静默改绑。
 - 一份来源只属于一位联系人。整份文件必须先完成确定性校验，再以一个事务写入联系人、来源和全部消息；损坏、混合联系人、群聊或绑定不一致时不得部分写入。
 - 同一文件重复提交时返回原导入结果，不重复写入。新文件与已有消息部分重叠时停止导入，不自动跳过、覆盖或合并；明确的增量导入需另行定义用户工作流。
 - 规范消息的共同字段是隔离键、说话人、正文或媒体占位信息、可用时间戳和来源定位。微信的 local/server id、talker 等字段保存在来源元数据中；本地 CLI 消息可以使用它们做增量游标和去重，但不能替代 `contact_id`。

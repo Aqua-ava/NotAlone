@@ -50,7 +50,7 @@
 
 ### 使用 App
 
-以下适用于已取得受管版 `NotAlone.app` 的本机试用。受管运行时无需另装 Conda 或 PostgreSQL；已有已确认联系人的手动表达不依赖微信、CLI 或录屏权限。取消独立创建入口后，没有微信配置且目录全空的新用户首用路径尚待明确，不能据旧手动首版说明承诺已经可用。
+以下适用于已取得受管版 `NotAlone.app` 的本机试用。受管运行时无需另装 Conda 或 PostgreSQL；已有已确认联系人的手动表达不依赖微信、CLI 或录屏权限。按 [ADR-087](architecture/adr/087-wechat-confirmed-contact-onboarding.md)，空目录新用户须先配置微信、选择真实会话并确认首位联系人；旧独立创建与导入新建接口待退役，新用户微信接入及最终交付仍需验收。
 
 1. **完成本机设置。** 打开 App，点击“开始本机设置”，在“本人身份与模型”填写本人展示名称，并输入自己的模型密钥。新安装默认使用 DeepSeek 官方（`https://api.deepseek.com`）与 `deepseek-flash`。
 2. **选择本次联系人。** 点击顶部联系人下拉框，搜索并明确选择已有联系人，再进入“手动输入本次聊天”。需要添加时，在“联系人”页面通过“添加微信联系人”确认真实会话。
@@ -239,12 +239,9 @@ notalone-ingest-preview --show-identifiers chat_exports/example.jsonl
 notalone-ingest chat_exports/example.jsonl \
   --contact-id '11111111-1111-1111-1111-111111111111'
 
-# 首次显式初始化本人，并确认创建一位新联系人
-notalone-ingest chat_exports/example.jsonl \
-  --initialize-owner --new-contact-name '联系人展示名称'
 ```
 
-`--contact-id` 与 `--new-contact-name` 二选一。联系人、来源、确认记录与消息同事务写入，失败整体回滚；同一用户、联系人和文件摘要的 active 来源重复导入不重复写入。不同文件复用冲突消息身份时拒绝整批导入。普通输出只含状态与计数，不含聊天正文或各类 ID。
+当前产品规则仅允许使用已有联系人 `--contact-id`；新联系人先通过微信会话确认加入。代码仍保留 `--new-contact-name` 和初始化参数的旧组合，按 [ADR-087](architecture/adr/087-wechat-confirmed-contact-onboarding.md)待退役，不能作为新用户首用路径。来源、确认记录与消息同事务写入，失败整体回滚；同一用户、联系人和文件摘要的 active 来源重复导入不重复写入。不同文件复用冲突消息身份时拒绝整批导入。普通输出只含状态与计数，不含聊天正文或各类 ID。
 
 </details>
 

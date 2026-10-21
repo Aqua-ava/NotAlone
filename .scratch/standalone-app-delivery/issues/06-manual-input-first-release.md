@@ -1,5 +1,7 @@
 # 06：不依赖微信的手动输入首用闭环
 
+> 2026-10-21 后继决定：[ADR-087](../../../architecture/adr/087-wechat-confirmed-contact-onboarding.md)规定新联系人仅从微信会话确认加入，导入只补充已有联系人，旧独立创建与导入新建接口待退役。本文无需微信即可空目录首用或导入新建的要求不再有效；历史状态、签收与验收记录保持，不证明当前首用已交付。
+
 > 2026-10-21 设计审查：独立填写名称创建联系人的桌面入口由 [ADR-084](../../../architecture/adr/084-topbar-contact-search.md) 局部替代；粘贴、既有联系人手动确认、来源隔离及人工发送保持。统一工作区交互见 [ADR-079](../../../architecture/adr/079-unified-expression-workspace.md)；本票旧界面验收仅对应当时实现。
 
 Type: task

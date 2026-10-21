@@ -10,7 +10,7 @@
 
 点击顶部联系人下拉框，输入名称搜索并明确选择已有联系人，再点击“手动输入本次聊天”。搜索只在展开的下拉框中提供；联系人页不再提供独立创建入口，需要添加时通过“添加微信联系人”确认真实会话。统一工作区分开填写“自己的想法”和“补充聊天”，通过“帮我表达／帮我想想”主动生成可编辑候选；建议候选不要求事先确认方向。关系语境默认开启且可关闭，实际策略自动判断并展示，回复区不提供手选 Skill 控件。生成后可查看“本次参考”、修改和复制；消息由用户亲自发送，表达要求不自动成为长期记忆。已有单联系人 JSONL 可先预览并确认归属，随后查看／删除来源；混杂或损坏资料会拒绝。
 
-受管运行时不需要另装 Conda 或 PostgreSQL；已有已确认联系人的手动表达不依赖微信、CLI、终端路径或录屏权限。取消独立创建后，无微信配置且空目录的新用户首用路径尚待明确。微信自动接入尚未交付，同步页保留实际授权／暂停状态和关闭动作，不引导新用户准备未完成渠道。以下源码、原生探针与历史实机记录用于研发，不能作为手动首版的前置步骤或最终组合包的证据。当前仍待最终组合包、真正无开发环境机器及正式分发签名／公证验收。
+受管运行时不需要另装 Conda 或 PostgreSQL；已有已确认联系人的手动表达不依赖微信、CLI、终端路径或录屏权限。按 [ADR-087](../architecture/adr/087-wechat-confirmed-contact-onboarding.md)，空目录新用户必须先配置微信并确认首位联系人；文件导入只补充已有联系人。微信新用户接入与最终交付仍待验收，不能把旧手动首版验收当作当前首用可交付的证明；同步页保留实际授权／暂停状态和关闭动作。以下源码、原生探针与历史实机记录用于研发，不能作为手动首版的前置步骤或最终组合包的证据。当前仍待最终组合包、真正无开发环境机器及正式分发签名／公证验收。
 
 macOS App 图标使用独立的 `assets/app-icon.png` 母版（1024×1024、sRGB、透明通道），打包时生成 16、32、128、256、512 点的普通与 Retina `.icns` 表示。当前传统 `.icns` 为 macOS 15 显式保留圆角和透明留边：底板 824×824、每边留白 100、圆角半径 185，Logo 等比居中，避免在 Dock 中出现铺满画布、比邻近 App 更大的直角方块。这些留白数值是本项目的视觉对齐参数；Apple 的[图标规范](https://developer.apple.com/design/human-interface-guidelines/app-icons/)规定方形布局及 1024×1024 画布，[传统高分辨率规范](https://developer.apple.com/library/archive/documentation/GraphicsAnimation/Conceptual/HighResolutionOSX/Optimizing/Optimizing.html)列出 `.iconset` 尺寸。新分层图标的系统遮罩流程不直接套用到现有传统 `.icns`。
 
@@ -442,7 +442,7 @@ Root核对两场20个记录进程、隔离目录及自有Finder窗口／目录�
 | `tests/` | 实际 Electron App 公开行为自动化、统一启动门禁；`scheduling/` 只验证安全命令 |
 | `scripts/` | 本地资源编译、白名单打包、图标与 ad-hoc 签名、安全检查和预约测试租约 |
 
-历史预览的公开具名桥接为 `imports.getState()`、`chooseFile()`、`setTarget(target)`、`preview({ selectionRevision })`、`confirmPreview({ selectionRevision })`、`cancelConfirmation({ selectionRevision })` 和 `onStateChanged`。渲染层只持有展示数据与本次选择版本。任务 08 的主进程提交操作调用 `ImportController.takeConfirmedSelection(selectionRevision)`，返回 `{ generation, body }`；`body` 包含本轮系统选择的 `path`、`expected_content_sha256` 和二选一的 `contact_id`／`new_contact_name`。该方法同步核对连接 generation、两窗联系人范围及选择版本，并立即消耗确认；提交前再次核对 generation 后，以 `BackendHost.requestJson` 调用 `POST /api/imports/commit`。提交失败或取消必须重新预览确认，不能缓存 body 作为重试授权。服务器从一次读取的同一文档校验摘要、规范化并原子写入，内容不同返回 `409 / import_file_changed`，预览身份冲突返回 `422 / import_identity_conflict`；旧 HTTP 调用的摘要参数仍为可选。
+历史预览的公开具名桥接为 `imports.getState()`、`chooseFile()`、`setTarget(target)`、`preview({ selectionRevision })`、`confirmPreview({ selectionRevision })`、`cancelConfirmation({ selectionRevision })` 和 `onStateChanged`。渲染层只持有展示数据与本次选择版本。任务 08 的主进程提交操作调用 `ImportController.takeConfirmedSelection(selectionRevision)`，返回 `{ generation, body }`；`body` 包含本轮系统选择的 `path`、`expected_content_sha256` 和旧合同二选一的 `contact_id`／`new_contact_name`；按 ADR-087 当前产品只允许已有 `contact_id`，`new_contact_name` 分支及相关桥接待退役，不能作为新增联系人入口。该方法同步核对连接 generation、两窗联系人范围及选择版本，并立即消耗确认；提交前再次核对 generation 后，以 `BackendHost.requestJson` 调用 `POST /api/imports/commit`。提交失败或取消必须重新预览确认，不能缓存 body 作为重试授权。服务器从一次读取的同一文档校验摘要、规范化并原子写入，内容不同返回 `409 / import_file_changed`，预览身份冲突返回 `422 / import_identity_conflict`；旧 HTTP 调用的摘要参数仍为可选。
 
 正式导入新增 `submit`、`refreshTask`、`retryTask`、`runTask`、`reloadSyncHost`，均只接受 `{ selectionRevision }`，仅管理窗口可调用。主进程从真实 commit 取得 contact/task 后刷新目录、来源和原任务；渲染层不能传路径、body、摘要或任务 UUID。重试先恢复原失败任务，再明确启动同一任务，保留成功步骤；任务进度只按持久 status/step/count 展示，最终完成要求五步均成功。停止查看只废弃本次窗口结果，不宣称撤回已落库资料。
 
