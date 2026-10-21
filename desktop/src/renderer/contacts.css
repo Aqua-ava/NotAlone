@@ -22,14 +22,16 @@
 .contacts-empty p { margin: 13px auto 21px; max-width: 440px; }
 .contacts-empty > div { display: flex; justify-content: center; gap: 12px; }
 .contact-summary button { margin: 8px 8px 0 0; }
-.contact-picker-container { position: relative; min-width: 0; -webkit-app-region: no-drag; }
-.contact-picker { display: block; box-sizing: border-box; width: 240px; max-width: 100%; min-width: 125px; padding: 7px 10px; font: inherit; font-size: 12px; color: #496e88; background: #fffdf5; border: 1px solid #c5cfcc; border-radius: 4px; text-overflow: ellipsis; cursor: text; }
+.contact-picker-container { position: relative; width: 280px; max-width: 100%; min-width: 0; -webkit-app-region: no-drag; }
+.contact-picker { display: block; box-sizing: border-box; width: 100%; min-width: 0; padding: 9px 14px; font: inherit; font-size: 12px; line-height: 1.5; color: #456b87; background: #fffdf6; border: 1px solid #b8c5cc; border-radius: 3px 6px 4px 5px; text-overflow: ellipsis; cursor: text; }
 .contact-picker:disabled { color: #808b8b; cursor: default; }
-.contact-picker[aria-expanded="true"] { border-color: #6d9eb8; border-radius: 4px 4px 0 0; }
-.contact-picker-popup { position: absolute; box-sizing: border-box; top: calc(100% - 1px); right: 0; z-index: 30; width: 100%; max-width: calc(100vw - 32px); padding: 6px; background: #fffdf5; border: 1px solid #6d9eb8; border-radius: 0 0 8px 8px; box-shadow: 0 6px 22px #354d5926; user-select: none; }
-.contact-picker:focus-visible { outline: 2px solid #6d9eb8; outline-offset: -2px; }
-.contact-picker-results { max-height: min(300px, 50vh); overflow-y: auto; overscroll-behavior: contain; }
-.contact-picker-results > button { position: relative; display: flex; flex-direction: column; gap: 3px; width: 100%; padding: 10px 28px 10px 10px; border: 0; border-radius: 4px; background: transparent; color: #354d59; font: inherit; font-size: 13px; text-align: left; cursor: pointer; overflow-wrap: anywhere; }
+.contact-picker[aria-expanded="true"] { border-radius: 3px 6px 0 0; }
+.contact-picker-popup { position: absolute; box-sizing: border-box; top: calc(100% - 1px); right: 0; z-index: 30; width: 100%; max-width: calc(100vw - 32px); padding: 6px; background: #fffdf6; border: 1px solid #b8c5cc; border-radius: 0 0 6px 5px; box-shadow: 0 5px 16px #354d5914; user-select: none; }
+.contact-picker:focus-visible { outline: 1px solid #7fa4b9; outline-offset: -1px; }
+.contact-picker-results { max-height: min(240px, 42vh); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; }
+.contact-picker-results::-webkit-scrollbar { display: none; }
+.contact-picker-results > button { position: relative; display: flex; flex-direction: column; gap: 3px; width: 100%; padding: 9px 28px 9px 10px; border: 0; border-radius: 4px 6px 4px 5px; background: transparent; color: #354d59; font: inherit; font-size: 12px; line-height: 1.5; text-align: left; cursor: pointer; }
+.contact-picker-results > button > span:first-child { max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .contact-picker-results > button:hover, .contact-picker-results > button[data-active="true"] { background: #eaf1f0; }
 .contact-picker-results > button[aria-selected="true"] { color: #29678b; }
 .contact-picker-results small { color: #737e80; font-size: 11px; }

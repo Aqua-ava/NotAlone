@@ -91,7 +91,7 @@ export function ContactPicker({ session, disabled = false, onSelect = session.se
           type="button" role="option" tabIndex={-1} aria-selected={selectedContactId === contact.contactId}
           data-contact-id={contact.contactId} data-active={active?.contactId === contact.contactId}
           onPointerDown={event => event.preventDefault()} onClick={() => choose(contact.contactId)}>
-          <span>{contact.displayName}</span>
+          <span title={contact.displayName}>{contact.displayName}</span>
           {(sameNames.get(contact.displayName)?.length ?? 0) > 1 &&
             <small>同名联系人 {(sameNames.get(contact.displayName)?.indexOf(contact.contactId) ?? 0) + 1} · {contact.messageCount} 条消息</small>}
           {selectedContactId === contact.contactId && <span className="contact-picker-check" aria-hidden="true">✓</span>}
