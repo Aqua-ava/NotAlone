@@ -296,7 +296,12 @@ class HistoryToolAccess:
 
         evidence_ids: list[UUID] = []
         payload_messages: list[dict[str, Any]] = []
-        for message in validated:
+        # 检索排名只决定入选集合；展示给模型时统一时间顺序，未知时间不猜测。
+        ordered = sorted(validated, key=lambda item: (
+            item.occurred_at is None,
+            item.occurred_at or datetime.max.replace(tzinfo=timezone.utc),
+        ))
+        for message in ordered:
             is_new_evidence = message.message_id not in self._provided_evidence_ids
             self._known_message_ids.add(message.message_id)
             self._provided_evidence_ids.add(message.message_id)
@@ -326,6 +331,7 @@ class HistoryToolAccess:
                 "evidence_type": "raw_message_evidence",
                 "executable": False,
                 "not_found_is_not_evidence": True,
+                "message_order": "known_times_ascending_unknown_last_equal_unordered",
                 "messages": payload_messages,
             },
             ensure_ascii=False,

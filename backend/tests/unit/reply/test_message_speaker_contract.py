@@ -70,6 +70,19 @@ class MessageSpeakerContractTest(unittest.TestCase):
         self.assertEqual(result['messages'][0]['role'], 'owner')
         self.assertEqual(access.evidence[0].speaker_role, 'owner')
 
+    def test_history_search_orders_selected_messages_without_guessing_unknown_times(self):
+        contact = replace(self.message, message_id=uuid4(), role='contact',
+                          occurred_at=self.message.occurred_at - timedelta(minutes=1))
+        unknown = replace(self.message, message_id=uuid4(), role='unknown', occurred_at=None)
+        self.retrieval.messages = (unknown, self.message, contact)
+        access = HistoryToolAccess(retrieval=self.retrieval, scope=self.scope,
+                                   conversation_binding_id=self.binding)
+        result = json.loads(access.search(query='最小流程'))
+        self.assertEqual([m['message_id'] for m in result['messages']],
+                         [str(contact.message_id), str(self.message.message_id), str(unknown.message_id)])
+        self.assertEqual([m['speaker_role'] for m in result['messages']], ['contact', 'owner', 'unknown'])
+        self.assertEqual(result['message_order'], 'known_times_ascending_unknown_last_equal_unordered')
+
     def test_restored_context_preserves_author_and_old_authorless_preparation_requires_reprepare(self):
         prepared = replace(self.build(), history_message_ids=(self.message.message_id,))
         encoded = encode_context(prepared)
