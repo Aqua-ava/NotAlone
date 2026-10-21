@@ -198,7 +198,7 @@ class CliPaginationSyncTest(unittest.TestCase):
         self.assertEqual(result.status.pending_count, 0)
         self.assertEqual(len(self.store.recorded), 0)
 
-    def test_paused_backfill_stays_paused_while_live_pages_advance(self) -> None:
+    def test_legacy_paused_backfill_resumes_across_live_pages(self) -> None:
         backfill = FakeBackfillStateStore()
         scope = {
             'owner_id': OWNER_ID, 'contact_id': self.binding.contact_id,
@@ -211,5 +211,6 @@ class CliPaginationSyncTest(unittest.TestCase):
         second = self.sync.cycle(enabled=True, priority_contact_id=self.binding.contact_id)
         self.assertEqual(first.batch_message_count, 50)
         self.assertEqual(second.batch_message_count, 27)
-        self.assertEqual(backfill.read(**scope).phase, 'paused')
+        self.assertEqual(backfill.read(**scope).phase, 'complete')
+        self.assertEqual(backfill.read(**scope).message_count, 77)
         self.assertEqual(self.runner.calls[1][1], 'local_id:50')

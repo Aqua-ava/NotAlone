@@ -10,7 +10,7 @@ test.skip(process.env.NOTALONE_MAC_DELIVERY_ACCEPTANCE !== '1', '只在主Agent�
 
 const cases = [
   ['签名包同步总开关只读取确认范围，关闭后后续检查停读', syncSwitchStopsReading],
-  ['签名包补齐暂停／失败／重试保留原确认范围和游标', syncBackfillRetriesConfirmedScope],
+  ['签名包补齐失败自动恢复并保留原确认范围和游标', syncBackfillRetriesConfirmedScope],
   ['签名包真实IPC拒绝小窗／额外参数／旧范围的同步操作', syncArgumentsPreserveStoppedScope],
 ] as const;
 

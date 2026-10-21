@@ -1,19 +1,44 @@
-import { useEffect } from 'react';
-import type { BackgroundSyncPhase, SyncBackfillPhase, SyncControlBridge, SyncControlState } from '../shared/sync-control-bridge';
+import { useEffect, useState } from 'react';
+import type { BackgroundSyncPhase, SyncControlBridge, SyncControlState, SyncStatusReport } from '../shared/sync-control-bridge';
 import { useRevisionedSession } from './use-revisioned-session';
 import './bindings.css';
 
 const initial: SyncControlState = { revision: -1, scopeRevision: 0, phase: 'offline', report: null, busy: null, errorCode: null };
 const backgroundLabels: Record<BackgroundSyncPhase, string> = { disabled: '后台读取已关闭', waiting_bindings: '等待确认会话授权',
-  active: '后台读取运行中', degraded: '后台读取已降级，请检查 CLI 后刷新状态' };
-const backfillLabels: Record<SyncBackfillPhase, string> = { not_required: '当前没有补齐任务', gap_detected: '已检测到待补齐缺口',
-  backfilling: '正在补齐历史消息', complete: '补齐已完成', failed: '补齐失败', incomplete: '无法确认补齐完整性', paused: '补齐已暂停' };
-const backfillFailures: Record<string, string> = { cli_freshness_unknown: 'CLI未能确认覆盖到当前水位，请检查后显式重试。',
-  cli_output_invalid: 'CLI返回的数据无法解析，本次补齐未完成，请检查后显式重试。' };
+  active: '后台读取运行中', degraded: '自动同步暂时受阻，恢复后会继续同步' };
 const localHistoryNotices: Record<string, string> = {
   local_history_deleted: '部分已确认会话在本机微信有删除记录，当前没有可读历史。历史覆盖尚未确认；这些会话收到新消息后会再次检查。',
   local_history_empty: '部分已确认会话在本机微信暂未保存聊天记录。历史覆盖尚未确认；这些会话收到新消息后会再次检查。',
 };
+
+// 自动恢复属于总开关内部流程；只在持续异常时展开可处理的说明。
+function SyncRecoveryStatus({ report }: { report: SyncStatusReport }) {
+  const { backfill } = report;
+  const localHistory = backfill.failedContacts === 0
+    ? localHistoryNotices[backfill.failureCode ?? ''] : undefined;
+  const recovering = !localHistory && ['failed', 'incomplete'].includes(backfill.phase);
+  const [needsAttention, setNeedsAttention] = useState(false);
+  useEffect(() => {
+    setNeedsAttention(false);
+    if (!recovering) return;
+    const timer = setTimeout(() => setNeedsAttention(true), 60_000);
+    return () => clearTimeout(timer);
+  }, [recovering]);
+  if (['complete', 'not_required'].includes(backfill.phase)) return null;
+  return <div aria-label="遗漏消息同步">
+    {localHistory && ['gap_detected', 'backfilling', 'paused'].includes(backfill.phase)
+      && <p role="status">正在自动同步遗漏消息…</p>}
+    {localHistory ? <details className="sync-backfill-details">
+      <summary>部分旧消息在本机不可读取</summary><p>{localHistory}</p>
+    </details> : <>
+      <p role="status">{recovering ? '部分消息暂未同步，正在自动重试。' : '正在自动同步遗漏消息…'}</p>
+      {recovering && needsAttention && <details className="sync-backfill-details">
+        <summary>同步恢复较慢，查看说明</summary>
+        <p>请检查微信是否正常运行。应用会继续自动重试，恢复后无需手动补齐。</p>
+      </details>}
+    </>}
+  </div>;
+}
 
 export function SyncControlPanel({ bridge, manualRelease = false }: { bridge: SyncControlBridge; manualRelease?: boolean }) {
   const { state, latest, active, error, setError } = useRevisionedSession(initial, bridge);
@@ -27,8 +52,6 @@ export function SyncControlPanel({ bridge, manualRelease = false }: { bridge: Sy
     catch { if (active.current && scopeRevision === latest.current.scopeRevision) setError('本次同步范围已变化，请刷新状态后重试。'); }
   }
   const report = state.report;
-  const localHistory = report?.backfill.failedContacts === 0
-    ? localHistoryNotices[report.backfill.failureCode ?? ''] : undefined;
   const available = state.phase === 'ready' && report !== null && state.busy === null;
   const switchSync = () => operate(() => report?.enabled
     ? bridge.disable({ scopeRevision: state.scopeRevision }) : bridge.enable({ scopeRevision: state.scopeRevision }));
@@ -52,7 +75,7 @@ export function SyncControlPanel({ bridge, manualRelease = false }: { bridge: Sy
       <p role="status">{report ? report.enabled ? '后台正文同步已开启' : '后台正文同步已关闭' : '后台正文同步状态未确认'}</p>
       <button className="button" disabled={!available} onClick={() => void switchSync()}>{state.busy === 'enable' ? '正在开启后台同步…'
         : state.busy === 'disable' ? '正在关闭后台同步…' : report?.enabled ? '关闭后台同步' : '开启后台同步'}</button>
-      <p>开启后自动同步已授权联系人的文字。关闭或退出 App 会停止读取；重新开启后，在有效授权范围内补齐遗漏。</p>
+      <p>开启后自动同步已授权联系人的文字。关闭或退出 App 会停止读取；重新开启后，会自动同步遗漏消息。</p>
       <p>添加同步对象或停止某个人的同步，请到「联系人」管理。</p>
       {report && <p>{backgroundLabels[report.backgroundPhase]}。已确认范围：{report.confirmedBindingCount}个会话。</p>}
       {state.phase === 'loading' && <p role="status">正在确认同步状态…</p>}
@@ -62,28 +85,7 @@ export function SyncControlPanel({ bridge, manualRelease = false }: { bridge: Sy
         ? '同步操作结果尚未确认，请刷新同步状态后再决定下一步。'
         : '同步状态读取失败，请检查本机服务与 CLI 后刷新。'}</p>}
       {error && <p role="alert">{error}</p>}
-    </section>
-    <section className="bindings-explanation" aria-label="历史补齐"><h2>历史补齐</h2>
-      <p role="status">{localHistory && report?.backfill.phase === 'incomplete' ? '部分会话本地无可读历史，覆盖尚未确认'
-        : report ? backfillLabels[report.backfill.phase] : '补齐状态尚未确认'}</p>
-      {report && <p>本轮已检查{report.backfill.completedContacts}／{report.backfill.totalContacts}个会话。
-        {report.backfill.failedContacts > 0 && ` ${report.backfill.failedContacts}个失败。`}
-        {report.backfill.incompleteContacts > 0 && ` ${report.backfill.incompleteContacts}个无法确认完整。`}</p>}
-      <details className="sync-backfill-details"><summary>查看补齐详情与操作</summary>
-        {report && <><p>已完成{report.backfill.completedContacts}／{report.backfill.totalContacts}个会话，待处理{report.backfill.pendingContacts}个；
-        失败{report.backfill.failedContacts}个，无法确认完整{report.backfill.incompleteContacts}个。</p>
-        <p>已写入文字{report.backfill.messageCount}条，已跳过非文字{report.backfill.nonTextCount}条。</p>
-        {report.backfill.failureCode && <p role={localHistory ? 'status' : 'alert'}>{localHistory ?? backfillFailures[report.backfill.failureCode]
-          ?? '本次补齐遇到错误，请检查本机服务与CLI后显式重试。'}</p>}</>}
-      <div className="bindings-toolbar"><button className="button"
-        disabled={!available || !report?.enabled || !['gap_detected', 'backfilling', 'incomplete'].includes(report.backfill.phase)}
-        onClick={() => void operate(() => bridge.pause({ scopeRevision: state.scopeRevision }))}>
-        {state.busy === 'pause' ? '正在暂停补齐…' : '暂停补齐'}</button>
-        <button className="button" disabled={!available || !report?.enabled || !['paused', 'failed', 'incomplete'].includes(report.backfill.phase)}
-          onClick={() => void operate(() => bridge.retry({ scopeRevision: state.scopeRevision }))}>
-          {state.busy === 'retry' ? '正在重试补齐…' : '重试补齐'}</button></div>
-      <p>暂停只针对历史补齐；后台总开关开启时，已确认范围的实时增量仍可读取。关闭后台同步会停止全部新增正文读取。</p>
-      </details>
+      {report?.enabled && <SyncRecoveryStatus key={state.scopeRevision} report={report} />}
     </section>
   </div>;
 }

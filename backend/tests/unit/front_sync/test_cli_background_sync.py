@@ -1003,7 +1003,50 @@ class CliBackgroundSyncTest(unittest.TestCase):
         self.assertEqual(len(self.store.recorded), 1)
         self.assertEqual(self.store.recorded[0]["contact_id"], self.binding_b.contact_id)
 
-    def test_paused_backfill_stays_paused_after_sync_restart(self) -> None:
+    def test_unreadable_local_history_waits_for_new_event_without_idle_reads(self) -> None:
+        self.cli.tail_results["wxid_a"] = deque([
+            TailResult(events=(), cursor=None, last_local_id=None,
+                       local_history_state="deleted"),
+            TailResult(events=(_message("wxid_a", 11, "恢复后的合成消息"),),
+                       cursor="local_id:11", last_local_id=11, freshness_confirmed=True),
+        ])
+        unavailable = self.sync.cycle(enabled=True)
+        self.assertEqual(unavailable.status.backfill_failure_code, "local_history_deleted")
+        self.cli.tail_calls.clear()
+        self.now += timedelta(seconds=30)
+        idle = self.sync.cycle(enabled=True, priority_contact_id=self.binding_a.contact_id)
+        self.assertNotIn("wxid_a", [call["talker"] for call in self.cli.tail_calls])
+        self.assertEqual(idle.status.backfill_phase, "incomplete")
+        self.now += timedelta(seconds=3)
+        self.cli.stream.events.append(("session:history-returned", "wxid_a"))
+        recovered = self.sync.cycle(enabled=True)
+        self.assertEqual(recovered.batch_message_count, 1)
+        self.assertEqual(recovered.status.backfill_phase, "complete")
+
+    def test_unreadable_history_has_low_frequency_fallback_without_session_events(self) -> None:
+        def unsupported(**kwargs):
+            raise CliCommandError("cli_follow_unsupported", "合成不支持事件流")
+
+        self.cli.session_events_follow = unsupported
+        self.cli.tail_results["wxid_a"] = deque([
+            TailResult(events=(), cursor=None, last_local_id=None,
+                       local_history_state="empty"),
+            TailResult(events=(_message("wxid_a", 11, "无事件流恢复消息"),),
+                       cursor="local_id:11", last_local_id=11, freshness_confirmed=True),
+        ])
+        self.sync.cycle(enabled=True)
+        self.cli.tail_calls.clear()
+        for _ in range(19):
+            self.now += timedelta(seconds=15)
+            self.sync.cycle(enabled=True)
+        self.assertNotIn("wxid_a", [call["talker"] for call in self.cli.tail_calls])
+        self.now += timedelta(seconds=15)
+        recovered = self.sync.cycle(enabled=True)
+        self.assertEqual(recovered.batch_message_count, 1)
+        self.assertEqual(recovered.status.backfill_phase, "complete")
+        self.assertEqual(sum(call["talker"] == "wxid_a" for call in self.cli.tail_calls), 1)
+
+    def test_legacy_paused_backfill_resumes_only_when_sync_enabled_after_restart(self) -> None:
         self.sync.cycle(enabled=True)
         self.sync.request_backfill_check()
         self.sync.pause_backfill()
@@ -1021,10 +1064,11 @@ class CliBackgroundSyncTest(unittest.TestCase):
         )
         self.cli.tail_calls.clear()
 
-        result = restarted.cycle(enabled=True)
-
-        self.assertEqual(result.status.backfill_phase, "paused")
+        restarted.cycle(enabled=False)
         self.assertEqual(self.cli.tail_calls, [])
+        result = restarted.cycle(enabled=True)
+        self.assertEqual(result.status.backfill_phase, "complete")
+        self.assertEqual(len(self.cli.tail_calls), 2)
 
     def test_paused_backfill_still_reads_a_live_session_event(self) -> None:
         self.sync.cycle(enabled=True)
@@ -1171,7 +1215,7 @@ class CliBackgroundSyncTest(unittest.TestCase):
         )
         self.assertEqual(
             backfill_store.states[(OWNER_ID, priority.contact_id)].phase,
-            "paused",
+            "complete",
         )
 
     def test_priority_contact_is_polled_every_three_seconds_without_round_robin_wait(
@@ -1400,40 +1444,70 @@ class CliBackgroundSyncTest(unittest.TestCase):
         )
         self.assertEqual(result.status.backfill_phase, "failed")
 
-    def test_failed_backfill_state_is_not_reopened_by_a_live_read(self) -> None:
+    def test_failed_backfill_automatically_retries_after_backoff(self) -> None:
+        original_tail = self.cli.tail
+        attempts = []
+
+        def fail_twice(talker: str, **kwargs: object) -> TailResult:
+            if talker == "wxid_a":
+                attempts.append(self.now)
+                if len(attempts) <= 2:
+                    raise CliCommandError("cli_command_failed", "合成暂时失败")
+            return original_tail(talker, **kwargs)
+
+        self.cli.tail = fail_twice
+        first = self.sync.cycle(enabled=True)
+        self.assertEqual(first.status.backfill_phase, "failed")
+        self.assertEqual(len(attempts), 1)
+        self.now += timedelta(seconds=4)
+        self.sync.cycle(enabled=True, priority_contact_id=self.binding_a.contact_id)
+        self.assertEqual(len(attempts), 1)
+        self.now += timedelta(seconds=1)
         self.sync.cycle(enabled=True)
-        failed_contact = self.bindings[0].contact_id
-        self.backfill_store.states[(OWNER_ID, failed_contact)] = _BackfillState(
-            failed_contact,
-            "failed",
-            self.now,
-            failure_code="cli_command_failed",
-        )
-        self.cli.tail_results["wxid_a"] = deque(
-            [
-                TailResult(
-                    events=(_message("wxid_a", 11, "失败状态下的实时消息"),),
-                    cursor="local_id:11",
-                    last_local_id=11,
-                    freshness_confirmed=True,
-                )
-            ]
-        )
-        assert self.cli.stream is not None
-        self.cli.stream.events.append(("session:live-after-failure", "wxid_a"))
+        self.assertEqual(len(attempts), 2)
+        self.now += timedelta(seconds=9)
+        self.sync.cycle(enabled=True)
+        self.assertEqual(len(attempts), 2)
+        self.now += timedelta(seconds=1)
+        recovered = self.sync.cycle(enabled=True)
+        self.assertEqual(len(attempts), 3)
+        self.assertEqual(recovered.status.backfill_phase, "complete")
+        self.assertEqual(recovered.batch_message_count, 1)
+        self.assertEqual(len(self.store.recorded), 1)
 
-        result = self.sync.cycle(enabled=True)
+    def test_retry_backoff_caps_at_five_minutes_and_disabled_sync_stops_reads(self) -> None:
+        attempts = []
+        original_tail = self.cli.tail
 
-        self.assertEqual(result.batch_message_count, 1)
-        self.assertEqual(
-            self.backfill_store.states[(OWNER_ID, failed_contact)].phase,
-            "failed",
-        )
+        def unavailable(talker: str, **kwargs: object) -> TailResult:
+            if talker == "wxid_a":
+                attempts.append(self.now)
+                raise CliCommandError("cli_not_found", "合成不可用")
+            return original_tail(talker, **kwargs)
 
-    def test_failed_backfill_survives_sweep_when_disabled_window_present(self) -> None:
-        # disable→enable 之后关闭窗口在本进程生命周期恒存在；安全对账
-        # 不能因为它反复把失败补齐重置重试（旧状态会每轮
-        # GAP→BACKFILLING→失败/完成 震荡，审计计数不断被清零）。
+        self.cli.tail = unavailable
+        first = self.sync.cycle(enabled=True)
+        self.assertEqual(first.status.backfill_phase, "incomplete")
+        for interval in (5, 10, 20, 40, 80, 160, 300, 300):
+            with self.subTest(interval=interval, attempts=len(attempts)):
+                count = len(attempts)
+                self.now += timedelta(seconds=interval - 1)
+                self.sync.cycle(enabled=True)
+                self.assertEqual(len(attempts), count)
+                self.now += timedelta(seconds=1)
+                self.sync.cycle(enabled=True)
+                self.assertEqual(len(attempts), count + 1)
+        count = len(attempts)
+        self.now += timedelta(minutes=10)
+        self.sync.cycle(enabled=False)
+        self.assertEqual(len(attempts), count)
+        self.assertTrue(self.cli.stream.closed)
+        self.bindings.remove(self.binding_a)
+        self.sync.cycle(enabled=True)
+        self.assertEqual(len(attempts), count)
+
+    def test_failed_backfill_resumes_without_resetting_counts_when_disabled_window_present(self) -> None:
+        # 重新开启后的自动恢复保留同一次任务的计数和触发时间。
         clock_value = [self.now]
         sync = CliBackgroundSync(
             owner_id=OWNER_ID,
@@ -1453,6 +1527,7 @@ class CliBackgroundSyncTest(unittest.TestCase):
             "failed",
             self.now,
             failure_code="cli_command_failed",
+            message_count=7,
         )
         self.sync_state.disabled_at = datetime.fromtimestamp(
             2_000_000_010,
@@ -1470,8 +1545,10 @@ class CliBackgroundSyncTest(unittest.TestCase):
         failed_state = self.backfill_store.states[
             (OWNER_ID, failed_contact)
         ]
-        self.assertEqual(failed_state.phase, "failed")
-        self.assertEqual(failed_state.failure_code, "cli_command_failed")
+        self.assertEqual(failed_state.phase, "complete")
+        self.assertIsNone(failed_state.failure_code)
+        self.assertEqual(failed_state.message_count, 7)
+        self.assertEqual(failed_state.trigger_at, self.now)
         self.assertIn("wxid_a", [call["talker"] for call in self.cli.tail_calls])
 
     def test_recreated_binding_keeps_cursor_for_same_locator(self) -> None:

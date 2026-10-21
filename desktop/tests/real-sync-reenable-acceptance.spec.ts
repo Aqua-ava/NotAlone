@@ -151,8 +151,7 @@ test('当前签名包单联系人关闭总开关后零新读取，重新开启�
       await background.getByRole('button', { name: '开启后台同步', exact: true }).click();
       await expect(background.getByText('后台正文同步已开启', { exact: true })).toBeVisible();
       await waitTail(reenableCheckpoint); await complete();
-      await expect(manager.getByRole('region', { name: '历史补齐', exact: true })
-        .getByText('补齐已完成', { exact: true })).toBeVisible();
+      await expect(background.locator('[aria-label="遗漏消息同步"]')).toHaveCount(0);
       expect(await snapshot()).toEqual(before);
       const reopenedStreams = starts(await realSyncBackend.audit()).filter(row => row.kind === 'sessions_follow').map(row => row.pid!);
       expect(reopenedStreams.some(pid => !previousStreams.includes(pid))).toBe(true);

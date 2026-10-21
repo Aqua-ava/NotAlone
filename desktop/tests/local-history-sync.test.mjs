@@ -88,3 +88,14 @@ test('自动补齐与总开关合并，完成或关闭后隐藏进度和手动�
     assert.doesNotMatch(render(current), /aria-label="遗漏消息同步"/);
   }
 });
+
+
+test('部分会话本机无历史时，其他会话仍在恢复的提示不能被隐藏', () => {
+  const current = state('local_history_empty', 'empty');
+  current.report.backfill.phase = 'backfilling';
+  current.report.backfill.totalContacts = 2;
+  current.report.backfill.pendingContacts = 2;
+  const html = render(current);
+  assert.match(html, /正在自动同步遗漏消息/);
+  assert.match(html, /部分旧消息在本机不可读取/);
+});

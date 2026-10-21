@@ -121,6 +121,8 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 
 82. [ADR-082：退役主动收藏表达样本](adr/082-retire-explicit-style-samples.md)
 
+83. [ADR-083：遗漏消息自动恢复与简化同步界面](adr/083-automatic-sync-recovery.md)
+
 ## 当前架构决策
 
 - 主动收藏表达样本按 [ADR-082](adr/082-retire-explicit-style-samples.md)退役；删除独立样本库、入口和生成参考，清理遗留依赖及可重放副本。普通候选编辑复制与用户明确管理的长期表达偏好保留，历史样本验收不代表本次退役验证。

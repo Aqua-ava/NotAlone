@@ -8,10 +8,10 @@ import { ownResource } from './cleanup';
 import { PageHost } from './page-host';
 
 // 复用已验证的合成CLI／真实后端归属与认证收尾，不复制建库或停读逻辑。
-async function withSyncPage(browser: Browser, origin: string, scenario: string, use: typeof syncSwitchStopsReading): Promise<void> {
+async function withSyncPage(browser: Browser, origin: string, scenario: string, use: typeof syncSwitchStopsReading, syncInterval = 60): Promise<void> {
   const released = ownResource();
   await withBindingFixture('notalone-headless-sync-', 'ready', async (fixture) => {
-    await fixture.startBackend();
+    await fixture.startBackend(undefined, syncInterval);
     await withControllerEnvironment(fixture, async (userData) => {
       const host = new PageHost(await browser.newContext(), origin, userData);
       try {
@@ -31,7 +31,7 @@ export async function syncSwitch(browser: Browser, origin: string): Promise<void
 }
 
 export async function syncBackfillRetry(browser: Browser, origin: string): Promise<void> {
-  await withSyncPage(browser, origin, 'sync-backfill-retries-confirmed-scope', syncBackfillRetriesConfirmedScope);
+  await withSyncPage(browser, origin, 'sync-backfill-retries-confirmed-scope', syncBackfillRetriesConfirmedScope, 3);
 }
 
 export async function syncArguments(browser: Browser, origin: string): Promise<void> {

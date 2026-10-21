@@ -246,6 +246,7 @@ class CliBackgroundSync:
         "_pending_locators",
         "_pending_locator_set",
         "_live_pending_locators",
+        "_session_changed_locators",
         "_baseline_ready_bindings",
         "_failure_code",
         "_last_bound_count",
@@ -255,6 +256,8 @@ class CliBackgroundSync:
         "_backfill_trigger_at",
         "_backfill_pending_locators",
         "_backfill_paused",
+        "_backfill_retries",
+        "_history_recheck_at",
         "_cli_timeout_seconds",
         "_monotonic_clock",
         "_priority_timing",
@@ -317,6 +320,7 @@ class CliBackgroundSync:
         # 同一联系人可能同时有补齐任务和实时事件；实时事件优先读取，
         # 但不能因此丢掉尚未完成的补齐任务。
         self._live_pending_locators: set[str] = set()
+        self._session_changed_locators: set[str] = set()
         # baseline 只需要在绑定首次出现或绑定定位发生变化时确认一次。
         # 每个心跳重复执行 INSERT ... ON CONFLICT DO NOTHING 会为每个
         # active 会话打开数据库连接，即使没有任何新消息也会持续制造事务。
@@ -331,6 +335,8 @@ class CliBackgroundSync:
         self._backfill_trigger_at: datetime | None = self._clock()
         self._backfill_pending_locators: set[str] = set()
         self._backfill_paused = False
+        self._backfill_retries: dict[UUID, tuple[int, datetime]] = {}
+        self._history_recheck_at: dict[UUID, datetime] = {}
 
     def cycle(
         self,
@@ -428,6 +434,7 @@ class CliBackgroundSync:
             for binding_id, locator in self._baseline_ready_bindings.items()
             if active_binding_locators.get(binding_id) == locator
         }
+        self._session_changed_locators.intersection_update(by_locator)
         if self._backfill_check_requested:
             # 只有新请求才初始化整批联系人。大于单轮预算时，后续心跳
             # 必须保留尚未处理的集合，不能把已完成联系人重新加入。
@@ -472,6 +479,21 @@ class CliBackgroundSync:
                 bindings,
                 priority_contact_id=priority_contact_id,
             )
+
+        # 自动恢复仍走每轮联系人预算，失败不会立即回队抢占其他会话。
+        self._backfill_retries = {
+            binding_id: retry for binding_id, retry in self._backfill_retries.items()
+            if binding_id in active_binding_locators
+        }
+        self._history_recheck_at = {
+            binding_id: due_at for binding_id, due_at in self._history_recheck_at.items()
+            if binding_id in active_binding_locators
+        }
+        if not self._backfill_paused:
+            for binding in bindings:
+                retry = self._backfill_retries.get(binding.binding_id)
+                if retry is not None and self._clock() >= retry[1]:
+                    self._enqueue(binding.conversation_locator)
 
         self._enqueue_priority_live_read(
             priority_locator,
@@ -543,6 +565,7 @@ class CliBackgroundSync:
                 task_failure = self._failure_code
                 # 补齐状态无法写入时不能把本轮显示为完成；后续心跳重试。
             finally:
+                self._session_changed_locators.discard(locator)
                 if locator == priority_locator and live_read:
                     # 失败同样消耗本次读取机会，避免立即续跑时反复抢占其他绑定。
                     self._last_priority_read_at = self._clock()
@@ -654,6 +677,7 @@ class CliBackgroundSync:
         self._pending_locators.clear()
         self._pending_locator_set.clear()
         self._live_pending_locators.clear()
+        self._session_changed_locators.clear()
         self._initial_scan_done = False
         self._sweep_index = 0
         self._last_sweep_at = None
@@ -743,6 +767,7 @@ class CliBackgroundSync:
         self._backfill_check_requested = True
         self._backfill_trigger_at = self._clock()
         self._backfill_pending_locators.clear()
+        self._backfill_retries.clear()
         self._stream_supported = True
         self._last_sweep_at = None
 
@@ -881,6 +906,8 @@ class CliBackgroundSync:
                 self._global_cursor = event.cursor
                 self._stream_failures = 0
                 if event.conversation_locator in by_locator:
+                    if live_events:
+                        self._session_changed_locators.add(event.conversation_locator)
                     if (
                         event.conversation_locator == priority_locator
                         and not self._priority_read_due(priority_locator)
@@ -1113,6 +1140,9 @@ class CliBackgroundSync:
         cli_deadline: float | None = None,
     ) -> tuple[int, bool]:
         contact_id = binding.scope.contact_id
+        retry = self._backfill_retries.get(binding.binding_id)
+        if retry is not None and self._clock() < retry[1]:
+            return 0, False
         backfill_state = self._prepare_backfill_state(
             binding,
             disabled_window=disabled_window,
@@ -1122,6 +1152,10 @@ class CliBackgroundSync:
         backfill_phase = _backfill_phase_value(
             getattr(backfill_state, "phase", None)
         )
+        if (backfill_phase == BackfillPhase.INCOMPLETE.value and
+                getattr(backfill_state, "failure_code", None)
+                in {"local_history_deleted", "local_history_empty"}):
+            return 0, False
         backfill_suppressed = backfill_phase == BackfillPhase.PAUSED.value or (
             self._backfill_paused
             and backfill_phase not in {None, BackfillPhase.COMPLETE.value}
@@ -1462,21 +1496,44 @@ class CliBackgroundSync:
         if existing is not None:
             self._last_backfill_state = existing
 
-        # 实时事件和低频安全对账只负责推进普通 cursor，不应把一次已
-        # 失败、未完成或暂停的补齐任务重新打开。重新开启产生的关闭
-        # 窗口也不例外：窗口在此后的每个心跳都存在，若允许它反复
-        # 重置失败补齐，状态会永远震荡。显式 retry/backfill check 会
-        # 提供新的 trigger_at，仍然可以按用户意图恢复补齐。
-        if (
-            live_read
-            and trigger_at is None
-            and _backfill_phase_value(getattr(existing, "phase", None))
-            in {
-                BackfillPhase.FAILED.value,
-                BackfillPhase.INCOMPLETE.value,
-                BackfillPhase.PAUSED.value,
-            }
-        ):
+        # 旧版留下的暂停不再拥有界面恢复入口；新进程的自动检查恢复它。
+        # 当前进程兼容控制面主动暂停仍有效，总开关在 cycle 入口先检查。
+        if (not self._backfill_paused and trigger_at is not None and
+                _backfill_phase_value(getattr(existing, "phase", None))
+                == BackfillPhase.PAUSED.value):
+            running = store.mark_running(
+                owner_id=self._owner_id, contact_id=contact_id,
+                binding_id=binding.binding_id,
+            )
+            self._last_backfill_state = running
+            return running
+
+        # 本机已没有旧记录时，普通对账不空转；新事件立即重查，另以
+        # 五分钟低频兜底，覆盖全局流不可用或漏报我方发送的情况。
+        if (getattr(existing, "failure_code", None)
+                in {"local_history_deleted", "local_history_empty"}
+                and trigger_at is None
+                and binding.conversation_locator not in self._session_changed_locators
+                and self._clock() < self._history_recheck_at.get(
+                    binding.binding_id, self._clock()
+                )):
+            return existing
+
+        # 技术失败自动续读可靠位置，保留同一次补齐的计数和来源。
+        # 等待时长由读取入口门控，关闭窗口不会反复重置补齐任务。
+        if not self._backfill_paused and _backfill_phase_value(
+            getattr(existing, "phase", None)
+        ) in {BackfillPhase.FAILED.value, BackfillPhase.INCOMPLETE.value}:
+            running = store.mark_running(
+                owner_id=self._owner_id, contact_id=contact_id,
+                binding_id=binding.binding_id,
+            )
+            self._last_backfill_state = running
+            return running
+
+        if (live_read and trigger_at is None and
+                _backfill_phase_value(getattr(existing, "phase", None))
+                == BackfillPhase.PAUSED.value):
             return None
 
         # 暂停后仍会有正常后台心跳；不能因为失败状态不是 paused，
@@ -1587,6 +1644,8 @@ class CliBackgroundSync:
             non_text_count=getattr(previous_state, "non_text_count", 0) + non_text_count,
         )
         self._last_backfill_state = state
+        self._backfill_retries.pop(binding.binding_id, None)
+        self._history_recheck_at.pop(binding.binding_id, None)
 
     def _fail_backfill(
         self,
@@ -1599,6 +1658,20 @@ class CliBackgroundSync:
         store = self._backfill_state
         if store is None or state is None:
             return
+        if failure_code in {"local_history_deleted", "local_history_empty"}:
+            self._backfill_retries.pop(binding.binding_id, None)
+            self._history_recheck_at[binding.binding_id] = (
+                self._clock() + timedelta(minutes=5)
+            )
+        else:
+            previous_attempts = self._backfill_retries.get(
+                binding.binding_id, (0, self._clock())
+            )[0]
+            attempts = min(previous_attempts + 1, 7)
+            delay = min(5 * 2 ** (attempts - 1), 300)
+            self._backfill_retries[binding.binding_id] = (
+                attempts, self._clock() + timedelta(seconds=delay),
+            )
         try:
             mark = store.mark_incomplete if incomplete else store.mark_failed
             self._last_backfill_state = mark(

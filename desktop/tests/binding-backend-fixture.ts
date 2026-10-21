@@ -46,9 +46,9 @@ export class BindingFixture extends ContactFixture {
     return { status: response.status, data: await response.json() as Record<string, unknown> };
   }
   override async request(endpoint: string, body?: object) { return this.requestTarget(await this.target(), endpoint, body); }
-  override async startBackend(ownerId = this.data.owner_id): Promise<ChildProcess> {
+  override async startBackend(ownerId = this.data.owner_id, syncInterval = 60): Promise<ChildProcess> {
     if (this.child) throw new Error('本轮绑定夹具不能启动第二个后端。');
-    const child = spawn(this.pythonExecutable, ['-m', 'notalone.server.command', '--sync-interval', '60'], {
+    const child = spawn(this.pythonExecutable, ['-m', 'notalone.server.command', '--sync-interval', String(syncInterval)], {
       cwd: project, stdio: ['ignore', 'pipe', 'pipe'], env: isolatedAppEnvironment(this.directory, this.environment(ownerId)),
     });
     this.child = child;
