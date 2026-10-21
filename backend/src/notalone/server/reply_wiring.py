@@ -88,6 +88,38 @@ class RoundSkillSyncPort:
         return self._port.generate(command=command, verified_scope=verified_scope)
 
 
+class ExploredSkillSyncPort:
+    """探索/审核读目录前显式同步一次；其余读方法保持只读。
+
+    探索和审核不走生成端 RoundSkillSyncPort，但仍需在读到目录前推进同一份
+    每轮同步入口，避免拿到上一轮已过期的 Skill 目录。
+    """
+
+    __slots__ = ("_port", "_synchronize")
+
+    def __init__(self, port, *, synchronize: Callable[[UUID], int]):
+        self._port, self._synchronize = port, synchronize
+
+    def _sync(self, scope) -> None:
+        try:
+            self._synchronize(scope.owner_id)
+        except (SkillDirectorySyncError, OSError):
+            logger.warning("skill_directory_sync_failed")
+
+    def catalog(self, scope):
+        self._sync(scope)
+        return self._port.catalog(scope)
+
+    def load_version(self, scope, version_id):
+        return self._port.load_version(scope, version_id)
+
+    def load_resource(self, scope, version_id, relative_path):
+        return self._port.load_resource(scope, version_id, relative_path)
+
+    def for_scene(self, scene):
+        return type(self)(self._port.for_scene(scene), synchronize=self._synchronize)
+
+
 def build_reply_service(
     *, database_url: str, owner_id: UUID,
     model_priority: ModelPriorityControl | None = None,
@@ -131,7 +163,30 @@ def build_reply_service(
         except (ValueError, TypeError, AttributeError):
             # 未核实配置继续L1，不能用未标定默认值放开新层。
             layered_reply_budget, owner_layered_reply_budget = None, None
-    skill_revision = _prepare_skill_library(database_url, owner_id)
+    # 装配时先同步一次；若旧库迁移失败，后续每轮继续带 migrate_legacy=True
+    # 重试，而不是永久停在只读修订号。
+    legacy_migration_pending = {"value": False}
+
+    def synchronize_skill_round(target_owner_id: UUID) -> int:
+        try:
+            revision = _synchronize_skill_library(
+                database_url, target_owner_id,
+                migrate_legacy=legacy_migration_pending["value"],
+            )
+        except SkillDirectorySyncError:
+            legacy_migration_pending["value"] = True
+            raise
+        legacy_migration_pending["value"] = False
+        return revision
+
+    try:
+        skill_revision = _synchronize_skill_library(
+            database_url, owner_id, migrate_legacy=True,
+        )
+    except SkillDirectorySyncError:
+        legacy_migration_pending["value"] = True
+        logger.warning("skill_directory_sync_failed")
+        skill_revision = _read_skill_library_revision(database_url, owner_id)
     retrieval = PostgresRetrieval(
         database_url,
         owner_memory_store=PostgresOwnerMemoryStore(database_url),
@@ -203,7 +258,9 @@ def build_reply_service(
     )
     exploration = ReplyExplorationService(
         store=PostgresExplorationStore(database_url, evidence=evidence), evidence=evidence,
-        skills=PostgresSkillPort(database_url),
+        skills=ExploredSkillSyncPort(
+            PostgresSkillPort(database_url), synchronize=synchronize_skill_round,
+        ),
         runtime=LangChainExplorationRuntime(
             model=model, ledger=PostgresOutboundLedger(database_url), priority=model_priority,
             input_budget_profile=input_budget_profile, input_token_counter=input_token_counter,
@@ -215,9 +272,7 @@ def build_reply_service(
     )
     round_reply = RoundSkillSyncPort(
         generator,
-        synchronize=lambda owner_id: _synchronize_skill_library(
-            database_url, owner_id, migrate_legacy=False,
-        ),
+        synchronize=synchronize_skill_round,
     )
     reply_service = ReplyService(
         manual_scope_lookup=_manual_scope_lookup(database_url),
@@ -233,13 +288,17 @@ def build_reply_service(
         skill_review=build_skill_review_service(database_url=database_url, model=model,
             context=ExpressionPreferenceContext(context, PostgresExpressionPreferenceStore(database_url)),
             model_priority=model_priority, input_budget_profile=input_budget_profile,
-            input_token_counter=input_token_counter, on_input_budget=on_input_budget),
+            input_token_counter=input_token_counter, on_input_budget=on_input_budget,
+            skills=ExploredSkillSyncPort(
+                PostgresSkillPort(database_url), synchronize=synchronize_skill_round,
+            )),
     )
     return reply_service
 
 
 def build_skill_review_service(*, database_url, model, context, model_priority,
-                               input_budget_profile, input_token_counter, on_input_budget):
+                               input_budget_profile, input_token_counter, on_input_budget,
+                               skills=None):
     from langchain_core.globals import get_llm_cache
     from langchain_deepseek import ChatDeepSeek
     from notalone.application.skill_review import SkillReviewService
@@ -268,7 +327,8 @@ def build_skill_review_service(*, database_url, model, context, model_priority,
             on_input_budget=on_input_budget, model_callbacks=(accounting,))
 
     return SkillReviewService(store=PostgresSkillReviewStore(database_url), context=context,
-        binding_lookup=_active_binding_lookup(database_url), skills=PostgresSkillPort(database_url),
+        binding_lookup=_active_binding_lookup(database_url),
+        skills=skills or PostgresSkillPort(database_url),
         runtime_factory=review_runtime,
         ledger=PostgresOutboundLedger(database_url), model_name=getattr(model, 'model_name', None) or 'unreported',
         priority=model_priority)
@@ -322,14 +382,3 @@ def _synchronize_skill_library(
     return synchronize_skill_library(
         database_url, owner_id, migrate_legacy=migrate_legacy,
     )
-
-
-def _prepare_skill_library(database_url: str, owner_id: UUID) -> int:
-    """装配时显式同步一次（含旧库迁移）；失败降级到上次已同步状态。"""
-    try:
-        return _synchronize_skill_library(
-            database_url, owner_id, migrate_legacy=True,
-        )
-    except SkillDirectorySyncError:
-        logger.warning("skill_directory_sync_failed")
-        return _read_skill_library_revision(database_url, owner_id)
