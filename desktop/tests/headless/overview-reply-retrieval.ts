@@ -1,3 +1,4 @@
+import { selectContact } from '../contact-picker-actions.mjs';
 import { setWorkspaceContext } from '../workspace-actions';
 import { openAssistantHistory, expandSavedDiscussion } from '../assistant-history-actions';
 import { openImportManagement } from '../memory-page-actions';
@@ -24,7 +25,7 @@ export async function overviewReplyRetrieval(browser: Browser, origin: string) {
       const manager = await host.open('manager'), opened = manager.context().waitForEvent('page');
       await manager.getByRole('button', { name: '打开输入小窗', exact: true }).click();
       const helper = await opened;
-      await helper.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption(prepared.contactId);
+      await selectContact(helper.getByRole('combobox', { name: '本次联系人', exact: true }), prepared.contactId);
       await confirmHelperContact(helper, prepared.contactId);
       const editor = helper.getByRole('textbox', { name: '候选1编辑文本', exact: true });
       const evidence = helper.getByRole('region', { name: '本次参考内容', exact: true });
@@ -75,7 +76,7 @@ export async function overviewReplyRetrieval(browser: Browser, origin: string) {
       const edit = '用户已修改：先问安排，暂不承诺。';
       await editor.fill(edit);
       await manager.getByRole('button', { name: '记忆', exact: true }).click();
-      await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption(prepared.contactId);
+      await selectContact(manager.getByRole('combobox', { name: '本次联系人', exact: true }), prepared.contactId);
       await manager.getByRole('button', { name: '刷新记忆', exact: true }).click();
       const contact = manager.getByRole('region', { name: '联系人记忆', exact: true });
       await contact.getByRole('button', { name: `修正资料：${prepared.manualContact.text}`, exact: true }).click();
@@ -120,11 +121,11 @@ export async function overviewReplyRetrieval(browser: Browser, origin: string) {
       await expect(helper.getByText(first, { exact: true })).toHaveCount(0);
       await expect(helper.getByText(edit, { exact: true })).toHaveCount(0);
 
-      await helper.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption(prepared.emptyContactId);
+      await selectContact(helper.getByRole('combobox', { name: '本次联系人', exact: true }), prepared.emptyContactId);
       await confirmHelperContact(helper, prepared.emptyContactId);
       await generate('桉树彗星。', '只把这句话整理清楚。', true);
       await expect(evidence.getByText('本次检索未查到相关依据；不表示没有这件事。', { exact: true })).toBeVisible();
-      await helper.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption(prepared.contactId);
+      await selectContact(helper.getByRole('combobox', { name: '本次联系人', exact: true }), prepared.contactId);
       await confirmHelperContact(helper, prepared.contactId);
       await fixture.command('more_related');
       await generate(prepared.draft, '先询问当前散步安排。', true, ['confirmed_memory', 'owner_memory', 'pending_candidate']);

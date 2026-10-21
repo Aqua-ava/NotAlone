@@ -1,3 +1,4 @@
+import { selectContact } from '../contact-picker-actions.mjs';
 import { fillWorkspaceThought, setWorkspaceContext, generateWorkspace } from '../workspace-actions';
 import { expect, type Browser } from '@playwright/test';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
@@ -24,7 +25,7 @@ export async function layeredReply(browser: Browser, origin: string) {
       const ownerReads = evidence.getByRole('region', { name: '本次本人主题正文读取', exact: true });
       const hasOwner = Boolean(prepared.owner_profile_version_id);
       async function generate(contactId: string, context: boolean, text: string, readScenario = false) {
-        await helper.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption(contactId);
+        await selectContact(helper.getByRole('combobox', { name: '本次联系人', exact: true }), contactId);
         await confirmHelperContact(helper, contactId);
         await fillWorkspaceThought(helper, '聊聊共同参加的课程。');
         await setWorkspaceContext(helper, context);

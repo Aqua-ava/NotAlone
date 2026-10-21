@@ -135,7 +135,7 @@ export async function foregroundVerified(browser: Browser, origin: string): Prom
         await expect(manager.getByRole('region', { name: '联系人目录', exact: true })
           .getByRole('button', { name: /^选择/ }).first()).toBeVisible();
         const helper = await openHelper();
-        await expect(helper.getByRole('combobox', { name: '本次联系人', exact: true })).toHaveValue(contactId);
+        await expect(helper.getByRole('combobox', { name: '本次联系人', exact: true })).toHaveAttribute('data-contact-id', contactId);
         await expectConfirmedHelper(helper, 'initial-helper');
         await helper.getByRole('textbox', { name: '有什么想说的', exact: true }).fill('唯一绑定下的合成草稿');
         await expect(helper.getByRole('button', { name: '帮我表达', exact: true })).toBeEnabled();
@@ -158,7 +158,7 @@ export async function foregroundVerified(browser: Browser, origin: string): Prom
         const restored = await openHelper();
         const picker = restored.getByRole('combobox', { name: '本次联系人', exact: true });
         const editor = restored.getByRole('textbox', { name: '有什么想说的', exact: true });
-        await expect(picker).toHaveValue(contactId);
+        await expect(picker).toHaveAttribute('data-contact-id', contactId);
         await expect(editor).toHaveValue('唯一绑定下的合成草稿');
         await expectConfirmedHelper(restored, 'reenabled-helper');
         await expect(editor).toHaveValue('唯一绑定下的合成草稿');
@@ -186,7 +186,7 @@ export async function foregroundVerified(browser: Browser, origin: string): Prom
           (await window.notalone.contacts.getState()).draft)).toBe('另一联系人的合成草稿');
         await restored.close();
         const different = await openHelper();
-        await expect(different.getByRole('combobox', { name: '本次联系人', exact: true })).toHaveValue(contactId);
+        await expect(different.getByRole('combobox', { name: '本次联系人', exact: true })).toHaveAttribute('data-contact-id', contactId);
         await expect(different.getByRole('textbox', { name: '有什么想说的', exact: true })).toHaveValue('唯一绑定下的合成草稿');
         await expect(different.getByRole('button', { name: '帮我表达', exact: true })).toBeEnabled();
         await awaitAuthorizedSync(backend, contactId);

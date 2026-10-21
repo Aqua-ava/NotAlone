@@ -7,10 +7,10 @@ export async function selectAppFile(app: ElectronApplication, filePath: string):
   // 只替换必要系统 I/O；实际原生对话框仍需独立实机验收。
   await app.evaluate(({ dialog }, selectedPath) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [selectedPath] }); }, filePath);
 }
-export async function confirmImport(app: ElectronApplication, filePath: string, target?: string): Promise<Page> {
+export async function confirmImport(app: ElectronApplication, filePath: string, fixture: { infoPath: string }, target?: string): Promise<Page> {
   await selectAppFile(app, filePath);
   const manager = await app.firstWindow();
-  await confirmImportPage(manager, target);
+  await confirmImportPage(manager, fixture, target);
   return manager;
 }
 export async function importAppPages(app: ElectronApplication, importBackend: ImportFixture, screenshotPath?: string): Promise<ImportPages> {

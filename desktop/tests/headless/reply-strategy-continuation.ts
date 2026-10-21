@@ -1,3 +1,4 @@
+import { selectContact } from '../contact-picker-actions.mjs';
 import { currentMigrationCount } from '../rewrite-backend-fixture';
 import { fillWorkspaceThought, fillWorkspaceInstruction, generateWorkspace } from '../workspace-actions';
 import { openAssistantHistory, expandSavedDiscussion } from '../assistant-history-actions';
@@ -31,7 +32,7 @@ async function continuationScene(pages: EventPages, input: '空思路' | '已有
   const migrationCount = await currentMigrationCount();
   const { manager, helper, fixture } = pages;
   expect(fixture.data.migration_count).toBe(migrationCount); expect(fixture.data.migration_repeat).toBe(0);
-  await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
+  await selectContact(manager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人甲' });
   await confirmHelperContact(helper, fixture.data.contact_ids[0]);
   await fillWorkspaceThought(helper, input === '已有想法' ? '拒绝本次邀约。' : '');
   await fillWorkspaceInstruction(helper, '自然一点；不要承诺');

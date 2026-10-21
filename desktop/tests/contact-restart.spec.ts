@@ -1,3 +1,4 @@
+import { selectContact, expectContactOption } from './contact-picker-actions.mjs';
 import { expect, type ElectronApplication } from '@playwright/test';
 import { launchApp } from './app-test-gate';
 import type { ChildProcess } from 'node:child_process';
@@ -6,7 +7,7 @@ import { isolatedAppEnvironment, selectMenu } from './app-fixture';
 
 test('同一 userData 正常退出再启动时，不恢复联系人选择或未提交草稿', async ({ runningApp: { app, appProcess, userData }, appDirectory, appEnvironment, contactBackend }) => {
   const manager = await app.firstWindow();
-  await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
+  await selectContact(manager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人甲' });
   const opened = app.waitForEvent('window');
   await manager.getByRole('button', { name: '打开输入小窗' }).click();
   const helper = await opened;
@@ -21,13 +22,13 @@ test('同一 userData 正常退出再启动时，不恢复联系人选择或未�
       env: isolatedAppEnvironment(userData, appEnvironment) });
     restartedProcess = restarted.process();
     const restoredManager = await restarted.firstWindow();
-    await expect(restoredManager.getByRole('combobox', { name: '本次联系人', exact: true }).getByRole('option', { name: '合成联系人甲', exact: true })).toHaveCount(1, { timeout: 15_000 });
-    await expect(restoredManager.getByRole('combobox', { name: '本次联系人', exact: true })).toHaveValue('');
+    await expectContactOption(restoredManager.getByRole('combobox', { name: '本次联系人', exact: true }), '合成联系人甲', { timeout: 15_000 });
+    await expect(restoredManager.getByRole('combobox', { name: '本次联系人', exact: true })).toHaveAttribute('data-contact-id', '');
     const reopened = restarted.waitForEvent('window');
     await restoredManager.getByRole('button', { name: '打开输入小窗' }).click();
     const restoredHelper = await reopened;
     await expect(restoredHelper.getByRole('textbox', { name: '草稿' })).toHaveValue('');
-    await restoredHelper.getByRole('combobox', { name: '本次联系人' }).selectOption(contactBackend.data.contact_ids[0]);
+    await selectContact(restoredHelper.getByRole('combobox', { name: '本次联系人' }), contactBackend.data.contact_ids[0]);
     await expect(restoredHelper.getByRole('textbox', { name: '草稿' })).toBeEnabled();
     await expect(restoredHelper.getByRole('textbox', { name: '草稿' })).toHaveValue('');
     await selectMenu(restarted, 'NotAlone', '退出 NotAlone');

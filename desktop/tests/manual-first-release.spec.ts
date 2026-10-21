@@ -1,3 +1,5 @@
+import { seedImportContact } from './file-import-navigation';
+import { selectContact, expectContactOption } from './contact-picker-actions.mjs';
 import { openAssistantHistory, expandSavedDiscussion } from './assistant-history-actions';
 import { expect } from '@playwright/test';
 import { test, selectMenu } from './app-fixture';
@@ -33,7 +35,7 @@ test.afterEach(async ({ runningApp: { userData } }, info) => {
 
 const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch { return false; } };
 
-test('空目录首启后可明确创建手动联系人，不要求微信身份或绑定', async ({ runningApp: { app, appProcess, userData } }) => {
+test('空目录首启不提供独立创建入口，预置联系人仍可手动输入', async ({ runningApp: { app, appProcess, userData } }) => {
   test.setTimeout(90_000);
   const manager = await app.firstWindow();
   await manager.getByRole('button', { name: '开始本机设置', exact: true }).click();
@@ -43,13 +45,13 @@ test('空目录首启后可明确创建手动联系人，不要求微信身份�
   await manager.getByRole('button', { name: '初始化本人', exact: true }).click();
   await expect(manager.getByText('本次运行的本人身份已就绪', { exact: true })).toBeAttached({ timeout: 30_000 });
   await expect(manager.getByRole('heading', { name: '还没有联系人', exact: true })).toBeVisible();
-  await expect(manager.getByRole('button', { name: '创建联系人', exact: true })).toBeVisible({ timeout: 1000 });
-  await manager.getByLabel('联系人展示名称', { exact: true }).fill('合成联系人甲');
-  await manager.getByRole('button', { name: '创建联系人', exact: true }).click();
-  await expect(manager.getByRole('combobox', { name: '本次联系人', exact: true }).getByRole('option', { name: '合成联系人甲', exact: true })).toHaveCount(1);
-  await expect(manager.getByRole('combobox', { name: '本次联系人', exact: true })).toHaveValue('');
-  await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
-  await expect(manager.getByRole('combobox', { name: '本次联系人', exact: true }).locator('option:checked')).toHaveText('合成联系人甲');
+  await expect(manager.getByRole('button', { name: '创建联系人', exact: true })).toHaveCount(0);
+  await expect(manager.getByLabel('联系人展示名称', { exact: true })).toHaveCount(0);
+  await seedImportContact(manager, '合成联系人甲', { infoPath: path.join(userData, 'managed/backend.info') });
+  await expectContactOption(manager.getByRole('combobox', { name: '本次联系人', exact: true }), '合成联系人甲');
+  await expect(manager.getByRole('combobox', { name: '本次联系人', exact: true })).toHaveAttribute('data-contact-id', '');
+  await selectContact(manager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人甲' });
+  await expect(manager.getByRole('combobox', { name: '本次联系人', exact: true })).toContainText('合成联系人甲');
   const opened = app.waitForEvent('window');
   await manager.getByRole('button', { name: '手动输入本次聊天', exact: true }).click();
   const helper = await opened;
@@ -79,12 +81,10 @@ test('公开手动输入完成模型设置、依据和编辑，切换隔离、�
   await expect(helper.getByLabel('草稿', { exact: true })).toBeDisabled();
   await manager.bringToFront();
   async function create(name: string) {
-    await manager.getByLabel('联系人展示名称', { exact: true }).fill(name);
-    await manager.getByRole('button', { name: '创建联系人', exact: true }).click();
-    await expect(manager.getByRole('button', { name: `选择${name}`, exact: true })).toBeVisible();
+    await seedImportContact(manager, name, { infoPath: path.join(userData, 'managed/backend.info') });
   }
   await create('合成联系人甲');
-  await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
+  await selectContact(manager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人甲' });
   await manager.getByRole('button', { name: '手动输入本次聊天', exact: true }).click();
   await helper.getByLabel('草稿', { exact: true }).fill('合成甲，我会晚一点回复。');
   await helper.getByRole('button', { name: '生成候选', exact: true }).click();
@@ -93,13 +93,13 @@ test('公开手动输入完成模型设置、依据和编辑，切换隔离、�
   await manager.getByLabel('DeepSeek API Key', { exact: true }).fill('synthetic-manual-package-not-a-real-key');
   await manager.getByRole('button', { name: '保存 DeepSeek 密钥', exact: true }).click();
   await expect(manager.getByText('DeepSeek · 已配置', { exact: true })).toBeVisible({ timeout: 30_000 });
-  await expect(manager.getByRole('combobox', { name: '本次联系人', exact: true })).toHaveValue('');
+  await expect(manager.getByRole('combobox', { name: '本次联系人', exact: true })).toHaveAttribute('data-contact-id', '');
   await create('合成联系人乙');
   await manager.getByRole('button', { name: '同步设置', exact: true }).click();
   await expect(manager.getByRole('heading', { name: '微信自动接入尚未提供', exact: true })).toBeVisible();
   await expect(manager.getByText('正常退出并重新打开 App，再配置已安装的只读 CLI。', { exact: true })).toHaveCount(0);
   await manager.getByRole('button', { name: '选择联系人并手动输入', exact: true }).click();
-  await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
+  await selectContact(manager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人甲' });
   await manager.getByRole('button', { name: '手动输入本次聊天', exact: true }).click();
   await helper.getByRole('button', { name: '回应消息', exact: true }).click();
   await helper.getByRole('button', { name: '粘贴文字', exact: true }).click();
@@ -115,7 +115,7 @@ test('公开手动输入完成模型设置、依据和编辑，切换隔离、�
   await helper.getByRole('button', { name: '本次参考', exact: true }).click();
   await expect(helper.getByRole('region', { name: '本次参考内容', exact: true }).getByText('你补充的聊天（未经渠道核验）', { exact: true })).toBeVisible();
   await manager.bringToFront();
-  await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人乙' });
+  await selectContact(manager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人乙' });
   await manager.getByRole('button', { name: '手动输入本次聊天', exact: true }).click();
   await expect(helper.getByLabel('草稿', { exact: true })).toHaveValue('');
   await expect(helper.getByLabel('候选1编辑文本', { exact: true })).toHaveCount(0);
@@ -126,7 +126,7 @@ test('公开手动输入完成模型设置、依据和编辑，切换隔离、�
   await helper.getByRole('button', { name: '生成候选', exact: true }).click();
   await expect(candidate).toHaveValue('合成乙，我知道了，我们晚点再确认。', { timeout: 30_000 });
   await manager.bringToFront();
-  await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
+  await selectContact(manager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人甲' });
   await manager.getByRole('button', { name: '手动输入本次聊天', exact: true }).click();
   await expect(candidate).toHaveValue('合成甲，改成我自己的说法。');
   // 切换后编辑输入按既有合同清空；已生成候选仍保留原输入快照。
@@ -176,11 +176,11 @@ test('公开手动输入完成模型设置、依据和编辑，切换隔离、�
     const next = await reopened.firstWindow();
     await expect(next.getByText('已连接', { exact: true })).toBeVisible({ timeout: 30_000 });
     await expect(next.getByText('DeepSeek · 已配置', { exact: true })).toBeVisible();
-    await expect(next.getByRole('combobox', { name: '本次联系人', exact: true })).toHaveValue('');
-    await expect(next.getByRole('combobox', { name: '本次联系人', exact: true }).getByRole('option', { name: '合成联系人甲', exact: true })).toHaveCount(1);
-    await expect(next.getByRole('combobox', { name: '本次联系人', exact: true }).getByRole('option', { name: '合成联系人乙', exact: true })).toHaveCount(1);
+    await expect(next.getByRole('combobox', { name: '本次联系人', exact: true })).toHaveAttribute('data-contact-id', '');
+    await expectContactOption(next.getByRole('combobox', { name: '本次联系人', exact: true }), '合成联系人甲');
+    await expectContactOption(next.getByRole('combobox', { name: '本次联系人', exact: true }), '合成联系人乙');
     await expect(next.getByRole('button', { name: '改用官方 DeepSeek 默认配置', exact: true })).toBeVisible();
-    await next.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
+    await selectContact(next.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人甲' });
     const helperOpening = reopened.waitForEvent('window');
     await next.getByRole('button', { name: '手动输入本次聊天', exact: true }).click();
     const nextHelper = await helperOpening;
@@ -198,8 +198,8 @@ test('公开手动输入完成模型设置、依据和编辑，切换隔离、�
     await expect(next.getByText('模型接收方：DeepSeek 官方（https://api.deepseek.com），模型 deepseek-flash。', { exact: true })).toBeAttached({ timeout: 30_000 });
     await next.locator('summary', { hasText: '数据存储与隐私' }).click();
     await expect(next.getByText('模型接收方：DeepSeek 官方（https://api.deepseek.com），模型 deepseek-flash。', { exact: true })).toBeVisible({ timeout: 30_000 });
-    await expect(next.getByRole('combobox', { name: '本次联系人', exact: true })).toHaveValue('');
-    await next.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
+    await expect(next.getByRole('combobox', { name: '本次联系人', exact: true })).toHaveAttribute('data-contact-id', '');
+    await selectContact(next.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人甲' });
     await next.getByRole('button', { name: '手动输入本次聊天', exact: true }).click();
     await nextHelper.getByLabel('草稿', { exact: true }).fill('合成甲恢复后的草稿。');
     await nextHelper.getByRole('button', { name: '生成候选', exact: true }).click();

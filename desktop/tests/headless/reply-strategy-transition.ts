@@ -1,3 +1,4 @@
+import { selectContact } from '../contact-picker-actions.mjs';
 import { expect, type Browser } from '@playwright/test';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
 import { fillWorkspaceThought, generateWorkspace } from '../workspace-actions';
@@ -9,7 +10,7 @@ export async function replyStrategyTransition(browser: Browser, origin: string) 
     const name = `${firstAction}切换${nextAction}直接生成并幂等重试`;
     process.stdout.write(`page_test_scenario: ${name}\n`);
     await withRewritePages(browser, origin, async ({ manager, helper, rewriteBackend, replyTransport }) => {
-      await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
+      await selectContact(manager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人甲' });
       await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
       const firstThought = firstAction === 'express' ? '只说明本次收到消息，不继续等待。' : '';
       await fillWorkspaceThought(helper, firstThought);

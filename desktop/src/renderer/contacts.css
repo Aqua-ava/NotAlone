@@ -21,13 +21,25 @@
 .contacts-empty { padding: 25px 0; text-align: center; }
 .contacts-empty p { margin: 13px auto 21px; max-width: 440px; }
 .contacts-empty > div { display: flex; justify-content: center; gap: 12px; }
-.contact-create { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; padding: 16px 0 22px; }
-.contact-create label { display: grid; gap: 8px; color: #496e88; font-size: 13px; }
-.contact-create input { min-width: 240px; padding: 9px; border: 1px solid #c5cfcc; border-radius: 4px; background: #fffef7; }
-.contact-create p { flex-basis: 100%; margin: 0; color: #737e80; font-size: 12px; }
 .contact-summary button { margin: 8px 8px 0 0; }
-.contact-picker { -webkit-app-region: no-drag; min-width: 125px; max-width: 250px; padding: 5px 6px; font: inherit; font-size: 12px; color: #496e88; background: #fffdf5; border: 1px solid #c5cfcc; border-radius: 4px; }
-.contact-picker:disabled { color: #808b8b; }
+.contact-picker-container { position: relative; min-width: 0; -webkit-app-region: no-drag; }
+.contact-picker { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 240px; max-width: 100%; min-width: 125px; padding: 7px 10px; font: inherit; font-size: 12px; color: #496e88; background: #fffdf5; border: 1px solid #c5cfcc; border-radius: 4px; cursor: pointer; }
+.contact-picker > span:first-child { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.contact-picker:disabled { color: #808b8b; cursor: default; }
+.contact-picker-popup { position: absolute; top: calc(100% + 6px); right: 0; z-index: 30; width: min(300px, calc(100vw - 32px)); max-width: calc(100vw - 32px); padding: 8px; background: #fffdf5; border: 1px solid #c5cfcc; border-radius: 8px; box-shadow: 0 6px 22px #354d5926; user-select: none; }
+.contact-picker-popup input { display: block; box-sizing: border-box; width: 100%; padding: 9px 10px; border: 1px solid #c5cfcc; border-radius: 5px; background: #fffef9; color: #354d59; font: inherit; font-size: 13px; -webkit-app-region: no-drag; }
+.contact-picker:focus-visible, .contact-picker-popup input:focus-visible { outline: 2px solid #6d9eb8; outline-offset: 2px; }
+.contact-picker-results { max-height: min(300px, 50vh); overflow-y: auto; margin-top: 6px; overscroll-behavior: contain; }
+.contact-picker-results > button { position: relative; display: flex; flex-direction: column; gap: 3px; width: 100%; padding: 10px 28px 10px 10px; border: 0; border-radius: 4px; background: transparent; color: #354d59; font: inherit; font-size: 13px; text-align: left; cursor: pointer; overflow-wrap: anywhere; }
+.contact-picker-results > button:hover, .contact-picker-results > button[data-active="true"] { background: #eaf1f0; }
+.contact-picker-results > button[aria-selected="true"] { color: #29678b; }
+.contact-picker-results small { color: #737e80; font-size: 11px; }
+.contact-picker-check { position: absolute; right: 10px; top: 10px; }
+.contact-picker-empty { margin: 16px 8px; color: #737e80; font-size: 13px; text-align: center; }
+.ime-header .contact-picker-container { flex: 1; }
+.ime-header .contact-picker { width: 100%; }
+.ime-header .contact-picker-popup { left: 0; right: auto; }
+
 .ime-input textarea { height: 80px; }
 .ime-contact-note { padding: 0 6px 7px; color: #7a807b; font-size: 10px; }
 .ime-status-line { display: flex; align-items: center; justify-content: space-between; gap: 12px; }

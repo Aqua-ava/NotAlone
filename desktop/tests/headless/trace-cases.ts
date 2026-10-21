@@ -1,3 +1,4 @@
+import { selectContact } from '../contact-picker-actions.mjs';
 import { openDeveloperTraces, openImportManagement, openMemoryTrace, selectMemoryCategory } from '../memory-page-actions';
 import { expect, type Browser, type Page } from '@playwright/test';
 import { PageHost } from './page-host';
@@ -12,7 +13,7 @@ export async function memoryTraces(browser: Browser, origin: string) {
       try {
         await host.backend.connect();
         const page = await host.open('manager');
-        await page.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
+        await selectContact(page.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人甲' });
         await page.getByRole('button', { name: '记忆', exact: true }).click();
         await openMemoryTrace(page, '甲喜欢合成茉莉茶。');
         await expect(page.getByRole('region', { name: '提取与来源处理过程', exact: true })).toBeVisible();
@@ -23,7 +24,7 @@ export async function memoryTraces(browser: Browser, origin: string) {
 }
 
 async function openMemory(page: Page) {
-  await page.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
+  await selectContact(page.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人甲' });
   await page.getByRole('button', { name: '记忆', exact: true }).click();
 }
 async function showTrace(page: Page, data: TraceData) {

@@ -1,3 +1,4 @@
+import { selectContact } from '../contact-picker-actions.mjs';
 import { expect, type Browser } from '@playwright/test';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
 import { withRewritePages } from './rewrite-acceptance';
@@ -7,7 +8,7 @@ export async function replyStrategyOptions(browser: Browser, origin: string) {
   await withRewritePages(browser, origin, async ({ manager, helper, rewriteBackend, replyTransport }, host) => {
     process.stdout.write('page_test_scenario: 工作区空输入建议、换组与自行表达\n');
     const contactId = rewriteBackend.data.contact_ids[0];
-    await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
+    await selectContact(manager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人甲' });
     await confirmHelperContact(helper, contactId);
     const idea = helper.getByRole('textbox', { name: '有什么想说的', exact: true });
     // 再次生成可能经已保存讨论恢复候选；消息组身份不依赖即时/恢复状态的编辑框名称。

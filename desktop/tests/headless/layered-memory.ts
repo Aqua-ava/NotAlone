@@ -1,3 +1,4 @@
+import { selectContact } from '../contact-picker-actions.mjs';
 import { expect, type Browser } from '@playwright/test';
 import { withLayeredMemoryFixture } from '../layered-memory-fixture';
 import { selectMemoryCategory } from '../memory-page-actions';
@@ -19,7 +20,7 @@ export async function layeredMemory(browser: Browser, origin: string) {
       await expect(manager.getByText('查看摘要', { exact: true })).toHaveCount(0);
       await expect(manager.getByRole('region', { name: '主题资料', exact: true })).toHaveCount(0);
       await expect(manager.getByText('整理管理', { exact: true })).toHaveCount(0);
-      await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption(fixture.data.contact_ids[1]);
+      await selectContact(manager.getByRole('combobox', { name: '本次联系人', exact: true }), fixture.data.contact_ids[1]);
       await expect(manager.getByRole('region', { name: '联系人记忆', exact: true })).toBeVisible();
       await expect(manager.getByText('查看摘要', { exact: true })).toHaveCount(0);
     } catch (error) { process.stderr.write(`${(error as Error).stack}\n`); throw error; }

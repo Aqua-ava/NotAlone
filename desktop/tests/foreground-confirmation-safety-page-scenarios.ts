@@ -25,7 +25,7 @@ export async function foregroundConfirmationSafetyFlow(manager: Page, openHelper
   const helper = await openHelper();
   const picker = helper.getByRole('combobox', { name: '本次联系人', exact: true });
   const editor = helper.getByRole('textbox', { name: '有什么想说的', exact: true });
-  await expect(picker).toHaveValue(contactA);
+  await expect(picker).toHaveAttribute('data-contact-id', contactA);
   const draftA = '联系人A的本轮合成草稿';
   await editor.fill(draftA);
   await expect.poll(() => helper.evaluate(async () => (await window.notalone.contacts.getState()).draft)).toBe(draftA);
@@ -65,7 +65,7 @@ export async function foregroundConfirmationSafetyFlow(manager: Page, openHelper
     const state = await window.notalone.contacts.getState();
     await window.notalone.contacts.selectContact({ contactId, scopeRevision: state.scopeRevision });
   }, contactB);
-  await expect(picker).toHaveValue(contactB);
+  await expect(picker).toHaveAttribute('data-contact-id', contactB);
   const draftB = '联系人B需要重新确认的合成草稿';
   await editor.fill(draftB);
   await expect.poll(() => helper.evaluate(async () => (await window.notalone.contacts.getState()).draft)).toBe(draftB);

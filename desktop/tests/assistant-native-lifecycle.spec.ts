@@ -1,3 +1,4 @@
+import { selectContact, expectContactOption } from './contact-picker-actions.mjs';
 import { openAssistantHistory, expandSavedDiscussion } from './assistant-history-actions';
 import { expect, type ElectronApplication, type Page } from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
@@ -26,8 +27,8 @@ const test = rewriteTest.extend({
 test.skip(process.env.NOTALONE_ASSISTANT_LIFECYCLE_ACCEPTANCE !== '1', '仅执行已约定的A19／A17原生生命周期验收');
 
 async function chooseContact(manager: Page, helper: Page, fixture: RewriteFixture) {
-  await expect(manager.getByRole('combobox', { name: '本次联系人', exact: true }).getByRole('option', { name: '合成联系人甲', exact: true })).toHaveCount(1, { timeout: 20_000 });
-  await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
+  await expectContactOption(manager.getByRole('combobox', { name: '本次联系人', exact: true }), '合成联系人甲', { timeout: 20_000 });
+  await selectContact(manager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人甲' });
   await confirmHelperContact(helper, fixture.data.contact_ids[0]);
   await expect.poll(() => helper.evaluate(async () => (await window.notalone.replies.getState()).savedSession?.phase))
     .toBe('ready');

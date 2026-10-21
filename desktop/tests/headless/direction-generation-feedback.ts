@@ -1,3 +1,4 @@
+import { selectContact } from '../contact-picker-actions.mjs';
 import { expect, type Browser } from '@playwright/test';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
 import { fillWorkspaceThought, fillWorkspaceInstruction, setWorkspaceContext, generateWorkspace } from '../workspace-actions';
@@ -10,7 +11,7 @@ export async function directionGenerationFeedback(browser: Browser, origin: stri
   for (const change of ['本人想法', '本次要求', '补充背景', '排除消息', '关闭背景']) {
     process.stdout.write(`page_test_scenario: ${change}保留并标记旧候选，明确点击后生成新候选\n`);
     await withRewritePages(browser, origin, async ({ manager, helper, rewriteBackend, replyTransport }) => {
-      await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
+      await selectContact(manager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人甲' });
       await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
       await fillWorkspaceThought(helper, '轻松接梗，不讨论新的话题。');
       await setWorkspaceContext(helper, true);
@@ -49,7 +50,7 @@ export async function directionGenerationFeedback(browser: Browser, origin: stri
   process.stdout.write('page_test_scenario: 重开恢复的候选保留上次生成标记，输入新方向后明确生成\n');
   await withRewritePages(browser, origin, async ({ manager, helper, rewriteBackend }, host, userData) => {
     const contactId = rewriteBackend.data.contact_ids[0];
-    await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
+    await selectContact(manager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人甲' });
     await confirmHelperContact(helper, contactId);
     await fillWorkspaceThought(helper, '上一轮先轻松接梗。');
     await rewriteBackend.plan({ count: 1, prefix: '重开前保存的接梗候选' });
@@ -64,7 +65,7 @@ export async function directionGenerationFeedback(browser: Browser, origin: stri
     try {
       await reopened.backend.connect();
       const nextManager = await reopened.open('manager');
-      await nextManager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
+      await selectContact(nextManager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人甲' });
       const nextHelper = await reopened.open('helper');
       await confirmHelperContact(nextHelper, contactId);
       const candidates = nextHelper.getByRole('region', { name: '候选回复', exact: true });

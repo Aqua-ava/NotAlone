@@ -1,3 +1,4 @@
+import { selectContact } from '../contact-picker-actions.mjs';
 import { fillWorkspaceThought, generateWorkspace } from '../workspace-actions';
 import { declareReplyScene } from '../reply-settings-actions';
 import { openImportManagement } from '../memory-page-actions';
@@ -127,13 +128,13 @@ export async function skillFeedback(browser: Browser, origin: string) {
       expect(actual.executionView!.methodIds).toHaveLength(1);
       expect((await fixture.command('feedback_observation')).excluded_text_present).toBe(false);
       await editor.fill('甲在范围停用后的独立编辑。');
-      await helper.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption(contactB);
+      await selectContact(helper.getByRole('combobox', { name: '本次联系人', exact: true }), contactB);
       await expect.poll(async () => helper.evaluate(async () => {
         const state = await window.notalone.replies.getState();
         return { contact: state.contactId, phase: state.savedSession?.phase };
       })).toEqual({ contact: contactB, phase: 'ready' });
       await declareReplyScene(helper, '乙的独立场景');
-      await helper.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption(contactA);
+      await selectContact(helper.getByRole('combobox', { name: '本次联系人', exact: true }), contactA);
       await expect.poll(() => helper.evaluate(async () => {
         const state = await window.notalone.replies.getState();
         return { contact: state.contactId, phase: state.savedSession?.phase, scene: state.scene };

@@ -1,4 +1,5 @@
-import { createImportContact, openFileImport } from './file-import-navigation';
+import { expectContactOption } from './contact-picker-actions.mjs';
+import { prepareImportContact, openFileImport } from './file-import-navigation';
 import { expect } from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -24,9 +25,9 @@ test('签名包通过真实系统文件选择器预览并完整导入六条合�
   }), { mode: 0o600, flag: 'wx' });
 
   const manager = await app.firstWindow();
-  await expect(manager.getByRole('combobox', { name: '本次联系人', exact: true }).getByRole('option', { name: '合成联系人甲', exact: true })).toHaveCount(1, { timeout: 20_000 });
+  await expectContactOption(manager.getByRole('combobox', { name: '本次联系人', exact: true }), '合成联系人甲', { timeout: 20_000 });
   expect(await app.evaluate(({ app }) => app.isPackaged)).toBe(true);
-  await createImportContact(manager, '合成原生导入验收联系人');
+  await prepareImportContact(manager, '合成原生导入验收联系人', importBackend);
   await openFileImport(manager);
   console.log(`native_import_only_file: ${importBackend.data.file_path}`);
   await manager.getByRole('button', { name: '选择历史文件', exact: true }).click();

@@ -1,3 +1,4 @@
+import { selectContact } from '../contact-picker-actions.mjs';
 import { openImportManagement } from '../memory-page-actions';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
 import { expect, type Browser } from '@playwright/test';
@@ -304,8 +305,8 @@ async function emptyAndRejected(pages: RewritePages) {
     })).toEqual({ contactId, manualInput: true, confirmation: 'manual-confirmed', confirmedContactId: contactId,
       foregroundBlock: null, replyContactId: contactId, scopeMatches: true, replyBlock: null });
   };
-  await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '无消息的合成联系人' });
-  await expect(helper.getByRole('combobox', { name: '本次联系人', exact: true })).toHaveValue(rewriteBackend.data.empty_contact_id);
+  await selectContact(manager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '无消息的合成联系人' });
+  await expect(helper.getByRole('combobox', { name: '本次联系人', exact: true })).toHaveAttribute('data-contact-id', rewriteBackend.data.empty_contact_id);
   await helper.getByRole('button', { name: '切换为手动输入', exact: true }).click();
   await expectManualInput(rewriteBackend.data.empty_contact_id);
   await setWorkspaceContext(helper, true);
@@ -336,7 +337,7 @@ async function emptyAndRejected(pages: RewritePages) {
 }
 
 async function prepareReply(pages: RewritePages, contact: '甲' | '乙', thought: string) {
-  await pages.manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: `合成联系人${contact}` });
+  await selectContact(pages.manager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: `合成联系人${contact}` });
   await confirmHelperContact(pages.helper, pages.rewriteBackend.data.contact_ids[contact === '甲' ? 0 : 1]);
   await fillWorkspaceThought(pages.helper, thought);
   await setWorkspaceContext(pages.helper, true);
@@ -471,8 +472,8 @@ async function newReplySession(pages: RewritePages, host: PageHost, userData: st
     await restarted.backend.connect();
     const manager = await restarted.open('manager');
     const nextHelper = await restarted.open('helper');
-    await expect(manager.getByRole('combobox', { name: '本次联系人', exact: true })).toHaveValue('');
-    await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
+    await expect(manager.getByRole('combobox', { name: '本次联系人', exact: true })).toHaveAttribute('data-contact-id', '');
+    await selectContact(manager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人甲' });
     await confirmHelperContact(nextHelper, rewriteBackend.data.contact_ids[0]);
     await expect(nextHelper.getByRole('textbox', { name: '有什么想说的', exact: true })).toHaveValue('');
     await setWorkspaceContext(nextHelper, true);

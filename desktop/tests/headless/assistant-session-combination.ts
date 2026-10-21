@@ -1,3 +1,4 @@
+import { selectContact } from '../contact-picker-actions.mjs';
 import { openAssistantHistory, expandSavedDiscussion } from '../assistant-history-actions';
 import { expect, type Browser, type Page } from '@playwright/test';
 import { openCandidateMoreActions, fillWorkspaceThought, fillWorkspaceInstruction, generateWorkspace, setWorkspaceContext } from '../workspace-actions';
@@ -5,7 +6,7 @@ import { confirmHelperContact } from '../foreground-confirmation-actions';
 import { withEventPages, type EventPages } from './message-events';
 
 async function chooseContact(pages: EventPages, helper: Page, index: 0 | 1) {
-  await pages.manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: `合成联系人${index ? '乙' : '甲'}` });
+  await selectContact(pages.manager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: `合成联系人${index ? '乙' : '甲'}` });
   await confirmHelperContact(helper, pages.fixture.data.contact_ids[index]);
   await expect.poll(() => helper.evaluate(async () => (await window.notalone.replies.getState()).savedSession?.phase))
     .toBe('ready');

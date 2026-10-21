@@ -91,7 +91,7 @@ export async function foregroundPausedWithManualDraft(manager: Page, helper: Pag
   } finally { await manager.evaluate(() => (window as DiagnosticWindow).stopForegroundChoiceObservation?.()); }
   const locator = helper.getByRole('region', { name: '前台会话定位', exact: true });
   await expect(locator.getByText('前台定位已暂停', { exact: true })).toBeVisible();
-  await expect(helper.getByRole('combobox', { name: '本次联系人', exact: true })).toHaveValue(contactId);
+  await expect(helper.getByRole('combobox', { name: '本次联系人', exact: true })).toHaveAttribute('data-contact-id', contactId);
   await expect(helper.getByRole('textbox', { name: '有什么想说的', exact: true })).toHaveValue('本轮手选联系人的合成草稿');
   expect(await helper.evaluate(async () => {
     const [foreground, reply] = await Promise.all([window.notalone.foreground.getState(), window.notalone.replies.getState()]);
@@ -135,7 +135,7 @@ export async function foregroundManualConfirmation(manager: Page, openHelper: ()
   const helper = await openHelper();
   const picker = helper.getByRole('combobox', { name: '本次联系人', exact: true });
   const editor = helper.getByRole('textbox', { name: '有什么想说的', exact: true });
-  await expect(picker).toHaveValue(selected!);
+  await expect(picker).toHaveAttribute('data-contact-id', selected!);
   await expect(editor).toHaveValue(draft);
   // 打开helper会暂停新的前台观察；此前质量不足不能借焦点变化解除本次确认门。
   await expect.poll(() => helper.evaluate(async () => {
@@ -153,7 +153,7 @@ export async function foregroundManualConfirmation(manager: Page, openHelper: ()
     catch (error) { return error instanceof Error ? error.message : String(error); }
   })).toContain('请先确认本次联系人');
   await helper.getByRole('button', { name: '确认本次联系人', exact: true }).click();
-  await expect(picker).toHaveValue(selected!);
+  await expect(picker).toHaveAttribute('data-contact-id', selected!);
   await expect(editor).toHaveValue(draft);
   await expect(generate).toBeEnabled();
   // 恢复资格不等于已有真实候选；受控模型正向生成另按下一反馈补齐。

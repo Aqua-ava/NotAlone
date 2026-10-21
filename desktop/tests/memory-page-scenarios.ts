@@ -1,3 +1,4 @@
+import { selectContact } from './contact-picker-actions.mjs';
 import { expect, type Page } from '@playwright/test';
 import type { MemoryFixture } from './memory-backend-fixture';
 import type { MemoryHttpProxy } from './memory-http-proxy';
@@ -5,7 +6,7 @@ import { expandMemoryDetails, openImportManagement, selectMemoryCategory } from 
 import type { MemorySectionName } from '../src/shared/memory-bridge';
 
 export async function memoryDetails(manager: Page, memoryBackend: MemoryFixture) {
-  await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
+  await selectContact(manager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人甲' });
   await manager.getByRole('button', { name: '记忆', exact: true }).click();
   const categories = manager.getByRole('navigation', { name: '记忆分类', exact: true });
   await expect(categories.getByRole('button')).toHaveText(['对方', '我', '待确认']);
@@ -84,7 +85,7 @@ export async function memoryScopeAndEmpty(manager: Page, memoryBackend: MemoryFi
   const selector = manager.getByRole('combobox', { name: '本次联系人', exact: true });
   const owner = manager.getByRole('region', { name: '我的记忆', exact: true });
   await memoryBackend.addSyntheticOwnerMemory(memoryBackend.data.contact_ids[1], '本人和乙讨论过合成登山计划。');
-  await selector.selectOption(memoryBackend.data.contact_ids[0]);
+  await selectContact(selector, memoryBackend.data.contact_ids[0]);
   await expect(manager.getByRole('button', { name: '我', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await expect(owner.getByText('本人喜欢合成绿茶。', { exact: true })).toBeVisible();
   await expect(owner.getByText('本人手动录入的合成资料。', { exact: true })).toHaveCount(0);
@@ -94,24 +95,24 @@ export async function memoryScopeAndEmpty(manager: Page, memoryBackend: MemoryFi
   await card.getByRole('textbox', { name: '资料正文', exact: true }).fill('不应带到另一个联系人的未保存草稿');
   await card.getByRole('button', { name: '查看依据：本人喜欢合成绿茶。', exact: true }).click();
   await expect(manager.getByRole('region', { name: '记忆依据', exact: true })).toBeVisible();
-  await selector.selectOption(memoryBackend.data.contact_ids[1]);
+  await selectContact(selector, memoryBackend.data.contact_ids[1]);
   await expect(manager.getByRole('region', { name: '记忆依据', exact: true })).toHaveCount(0);
   await expect(owner.getByText('本人和乙讨论过合成登山计划。', { exact: true })).toBeVisible();
   await expect(owner.getByText('本人喜欢合成绿茶。', { exact: true })).toHaveCount(0);
   await expect(manager.getByRole('textbox', { name: '资料正文', exact: true })).toHaveCount(0);
-  await selector.selectOption(memoryBackend.data.contact_ids[0]);
+  await selectContact(selector, memoryBackend.data.contact_ids[0]);
   await expect(owner.getByText('本人喜欢合成绿茶。', { exact: true })).toBeVisible();
   await expect(card.getByRole('button', { name: '查看来源与版本：本人喜欢合成绿茶。', exact: true })).toHaveAttribute('aria-expanded', 'false');
   await expect(manager.getByRole('textbox', { name: '资料正文', exact: true })).toHaveCount(0);
   await selectMemoryCategory(manager, '待确认候选');
   await expect(manager.getByText('尚未记住', { exact: true })).toHaveCount(3);
-  await selector.selectOption(memoryBackend.data.contact_ids[1]);
+  await selectContact(selector, memoryBackend.data.contact_ids[1]);
   await expect(manager.getByRole('button', { name: '待确认', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await expect(manager.getByText('暂时没有需要确认的内容。', { exact: true })).toBeVisible();
   await selectMemoryCategory(manager, '联系人记忆');
   await expect(manager.getByText('乙喜欢合成乌龙茶。', { exact: true })).toBeVisible();
   await expect(manager.getByText('甲喜欢合成茉莉茶。', { exact: true })).toHaveCount(0);
-  await selector.selectOption(memoryBackend.data.empty_contact_id);
+  await selectContact(selector, memoryBackend.data.empty_contact_id);
   await expect(manager.getByText('还没有记住关于对方的事。', { exact: true })).toBeVisible();
   await openImportManagement(manager);
   await expect(manager.getByText('这位联系人还没有可管理的来源资料。', { exact: true })).toBeVisible();
@@ -124,7 +125,7 @@ export async function memoryScopeAndEmpty(manager: Page, memoryBackend: MemoryFi
 // 多页合成资料验证列表长度有界、翻页可达和联系人切换后的范围重置。
 export async function memoryPagination(manager: Page, fixture: MemoryFixture) {
   for (let index = 1; index <= 10; index++) await fixture.addSyntheticContactMemory(fixture.data.contact_ids[0], `甲的合成分页资料${index}。`);
-  await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
+  await selectContact(manager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人甲' });
   await manager.getByRole('button', { name: '记忆', exact: true }).click();
   await selectMemoryCategory(manager, '联系人记忆');
   const contact = manager.getByRole('region', { name: '联系人记忆', exact: true });
@@ -151,18 +152,18 @@ export async function memoryPagination(manager: Page, fixture: MemoryFixture) {
   await expect(pagination).toContainText('共 12 条');
   await expect(contact.getByRole('article')).toHaveCount(6);
   await expect(contact.getByText(lastText, { exact: true })).toHaveCount(0);
-  await manager.getByRole('combobox', { name: '本次联系人' }).selectOption(fixture.data.contact_ids[1]);
+  await selectContact(manager.getByRole('combobox', { name: '本次联系人' }), fixture.data.contact_ids[1]);
   await selectMemoryCategory(manager, '联系人记忆');
   await expect(contact.getByText('乙喜欢合成乌龙茶。', { exact: true })).toBeVisible();
   await expect(contact.getByText(/甲的合成分页资料/)).toHaveCount(0);
-  await manager.getByRole('combobox', { name: '本次联系人' }).selectOption(fixture.data.contact_ids[0]);
+  await selectContact(manager.getByRole('combobox', { name: '本次联系人' }), fixture.data.contact_ids[0]);
   await selectMemoryCategory(manager, '联系人记忆');
   await expect(pagination).toContainText('第 1 / 2 页');
   await expect(contact.getByRole('article')).toHaveCount(6);
 }
 
 export async function memoryNamedArguments(manager: Page, memoryBackend: MemoryFixture) {
-  await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
+  await selectContact(manager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人甲' });
   await manager.getByRole('button', { name: '记忆', exact: true }).click();
   await selectMemoryCategory(manager, '联系人记忆');
   const rejected = await manager.evaluate(async (outsideContactId) => {
@@ -222,7 +223,7 @@ const sections = {
 
 // 每栏通过真实传输挂起、失败、重读；仅记录方法/路径，不记录认证或正文。
 export async function memorySectionFailure(manager: Page, fixture: MemoryFixture, proxy: MemoryHttpProxy, section: MemorySectionName) {
-  await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
+  await selectContact(manager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人甲' });
   await manager.getByRole('button', { name: '记忆', exact: true }).click();
   for (const value of Object.values(sections)) {
     if (value.title === '已导入资料') await openImportManagement(manager);
@@ -269,7 +270,7 @@ export async function memorySectionFailure(manager: Page, fixture: MemoryFixture
 
 export async function memoryAllEmpty(manager: Page, fixture: MemoryFixture) {
   await manager.getByRole('button', { name: '记忆', exact: true }).click();
-  await manager.getByRole('combobox', { name: '本次联系人' }).selectOption(fixture.data.empty_contact_id);
+  await selectContact(manager.getByRole('combobox', { name: '本次联系人' }), fixture.data.empty_contact_id);
   for (const [key, value] of Object.entries(sections)) {
     if (value.title === '已导入资料') await openImportManagement(manager);
     else await selectMemoryCategory(manager, value.title === '我的记忆' ? '本人记忆' : value.title);
@@ -282,7 +283,7 @@ export async function memoryAllEmpty(manager: Page, fixture: MemoryFixture) {
 }
 
 export async function memoryNewestRefresh(manager: Page, memoryBackend: MemoryFixture, memoryProxy: MemoryHttpProxy, failure: boolean) {
-  await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
+  await selectContact(manager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人甲' });
   await manager.getByRole('button', { name: '记忆', exact: true }).click();
   await selectMemoryCategory(manager, '联系人记忆');
   await expect(manager.getByText('甲喜欢合成茉莉茶。', { exact: true })).toBeVisible();
@@ -306,7 +307,7 @@ export async function memoryNewestRefresh(manager: Page, memoryBackend: MemoryFi
 }
 
 export async function memoryScopeRoundTrip(manager: Page, memoryBackend: MemoryFixture, memoryProxy: MemoryHttpProxy, failure: boolean) {
-  await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
+  await selectContact(manager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人甲' });
   await manager.getByRole('button', { name: '记忆', exact: true }).click();
   await selectMemoryCategory(manager, '联系人记忆');
   await expect(manager.getByText('甲喜欢合成茉莉茶。', { exact: true })).toBeVisible();
@@ -317,12 +318,12 @@ export async function memoryScopeRoundTrip(manager: Page, memoryBackend: MemoryF
   });
   await expect.poll(() => memoryProxy.heldCount).toBe(1);
   await expect(manager.getByText('正在读取联系人记忆…', { exact: true })).toBeVisible();
-  await manager.getByRole('combobox', { name: '本次联系人' }).selectOption(memoryBackend.data.contact_ids[1]);
+  await selectContact(manager.getByRole('combobox', { name: '本次联系人' }), memoryBackend.data.contact_ids[1]);
   await selectMemoryCategory(manager, '联系人记忆');
   await expect(manager.getByText('乙喜欢合成乌龙茶。', { exact: true })).toBeVisible();
   await memoryBackend.addSyntheticContactMemory(memoryBackend.data.contact_ids[0], '甲在切换后新增的合成资料。');
   memoryProxy.holdPath = null;
-  await manager.getByRole('combobox', { name: '本次联系人' }).selectOption(memoryBackend.data.contact_ids[0]);
+  await selectContact(manager.getByRole('combobox', { name: '本次联系人' }), memoryBackend.data.contact_ids[0]);
   await selectMemoryCategory(manager, '联系人记忆');
   await expect(manager.getByText('甲在切换后新增的合成资料。', { exact: true })).toBeVisible();
   memoryProxy.release(failure);
@@ -333,7 +334,7 @@ export async function memoryScopeRoundTrip(manager: Page, memoryBackend: MemoryF
 }
 
 export async function memoryReconnect(manager: Page, memoryBackend: MemoryFixture, memoryProxy: MemoryHttpProxy, failure: boolean) {
-  await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
+  await selectContact(manager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人甲' });
   await manager.getByRole('button', { name: '记忆', exact: true }).click();
   await selectMemoryCategory(manager, '联系人记忆');
   await expect(manager.getByText('甲喜欢合成茉莉茶。', { exact: true })).toBeVisible();
@@ -351,7 +352,7 @@ export async function memoryReconnect(manager: Page, memoryBackend: MemoryFixtur
   memoryProxy.holdPath = null;
   await manager.getByRole('button', { name: '重试连接', exact: true }).click();
   await expect(manager.getByRole('combobox', { name: '本次联系人' })).toBeEnabled();
-  await manager.getByRole('combobox', { name: '本次联系人' }).selectOption(memoryBackend.data.contact_ids[1]);
+  await selectContact(manager.getByRole('combobox', { name: '本次联系人' }), memoryBackend.data.contact_ids[1]);
   await selectMemoryCategory(manager, '联系人记忆');
   await expect(manager.getByText('乙喜欢合成乌龙茶。', { exact: true })).toBeVisible();
   memoryProxy.release(failure);
@@ -364,7 +365,7 @@ export async function memoryReconnect(manager: Page, memoryBackend: MemoryFixtur
 export async function memoryIndependentFailures(manager: Page, memoryBackend: MemoryFixture, memoryProxy: MemoryHttpProxy) {
   memoryProxy.failurePaths.add(`/api/contacts/${memoryBackend.data.contact_ids[0]}/owner-memories`);
   memoryProxy.failurePaths.add(`/api/contacts/${memoryBackend.data.contact_ids[0]}/sources`);
-  await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
+  await selectContact(manager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人甲' });
   await manager.getByRole('button', { name: '记忆', exact: true }).click();
   await selectMemoryCategory(manager, '联系人记忆');
   await expect(manager.getByText('甲喜欢合成茉莉茶。', { exact: true })).toBeVisible();
@@ -396,7 +397,7 @@ export async function memoryIndependentFailures(manager: Page, memoryBackend: Me
 // 请求已经读取甲的真实数据但尚未交付，切换后不能覆盖乙的「我」。
 export async function memoryOwnerScopeStale(manager: Page, fixture: MemoryFixture, proxy: MemoryHttpProxy, failure: boolean) {
   await fixture.addSyntheticOwnerMemory(fixture.data.contact_ids[1], '本人和乙讨论过合成登山计划。');
-  await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
+  await selectContact(manager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人甲' });
   await manager.getByRole('button', { name: '记忆', exact: true }).click();
   await selectMemoryCategory(manager, '本人记忆');
   const owner = manager.getByRole('region', { name: '我的记忆', exact: true });
@@ -407,7 +408,7 @@ export async function memoryOwnerScopeStale(manager: Page, fixture: MemoryFixtur
     await window.notalone.memory.refresh({ contactId: scope.selectedContactId!, scopeRevision: scope.scopeRevision, section: 'owner' });
   });
   await expect.poll(() => proxy.heldCount).toBe(1);
-  await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption(fixture.data.contact_ids[1]);
+  await selectContact(manager.getByRole('combobox', { name: '本次联系人', exact: true }), fixture.data.contact_ids[1]);
   await expect(owner.getByText('本人和乙讨论过合成登山计划。', { exact: true })).toBeVisible();
   proxy.holdPath = null;
   proxy.release(failure);

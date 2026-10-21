@@ -222,7 +222,7 @@ export async function startContactConfirmationWitness(app: ElectronApplication, 
   const main = await installMainConfirmationWitness(protocol, { ...metadata, nonce });
   try {
     await manager.evaluate(({ nonce, contactIds }) => {
-      const label = document.querySelector<HTMLSelectElement>('select[aria-label="本次联系人"]');
+      const label = document.querySelector<HTMLElement>('[role="combobox"][aria-label="本次联系人"]');
       const directory = document.querySelector('[aria-label="联系人目录"]');
       const owned = window as Window & { contactConfirmationDOMWitness?: { nonce: string; finish: () => unknown } };
       if (!label || !directory || owned.contactConfirmationDOMWitness) throw new Error('witness_dom_rejected');
@@ -235,14 +235,14 @@ export async function startContactConfirmationWitness(app: ElectronApplication, 
       const sample = () => {
         const pressed = ['甲', '乙'].map((suffix) => Array.from(directory.querySelectorAll('.contact-row')).some(row => row.querySelector('b')?.textContent === `合成联系人${suffix}` && row.getAttribute('data-current') === 'true'));
         const selectedFixtureIndex = pressed.filter(Boolean).length > 1 ? -2 : pressed.indexOf(true);
-        const headerFixtureIndex = contactIds.indexOf(label.value);
+        const headerFixtureIndex = contactIds.indexOf(label.getAttribute('data-contact-id') ?? '');
         const signature = `${selectedFixtureIndex}:${headerFixtureIndex}`;
         if (signature !== previous) { previous = signature; capture({ kind: 'dom', selectedFixtureIndex, headerFixtureIndex }); }
       };
       const observer = new MutationObserver(sample);
       let unsubscribe: (() => void) | undefined;
       try {
-        observer.observe(label, { childList: true, characterData: true, subtree: true });
+        observer.observe(label, { attributes: true, attributeFilter: ['data-contact-id'], childList: true, characterData: true, subtree: true });
         observer.observe(directory, { attributes: true, attributeFilter: ['data-current'], childList: true, subtree: true });
         unsubscribe = window.notalone.contacts.onStateChanged((state) => capture({ kind: 'delivered',
           revision: state.revision, scopeRevision: state.scopeRevision, selectedFixtureIndex: contactIds.indexOf(state.selectedContactId ?? '') }));

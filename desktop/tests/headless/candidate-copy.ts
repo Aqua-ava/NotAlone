@@ -1,3 +1,4 @@
+import { selectContact } from '../contact-picker-actions.mjs';
 import { expect, type Browser, type Page } from '@playwright/test';
 import { withRewritePages } from './rewrite-acceptance';
 import type { RewritePages } from '../rewrite-page-scenarios';
@@ -27,7 +28,7 @@ async function copyRequest(page: Page, number = 1, hideAfterCopy = false) {
 
 // 操作系统复制边界由本轮宿主提供合成接收端，业务生成和快照仍经过真实 HTTP/PG。
 async function copyCurrentCandidate({ manager, helper, rewriteBackend }: RewritePages, copiedTexts: string[]) {
-  await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
+  await selectContact(manager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人甲' });
   await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
   await helper.getByRole('textbox', { name: '有什么想说的', exact: true }).fill('只说明今天到不了，不增加其他承诺。');
   await rewriteBackend.plan({ count: 1, prefix: '复制原候选' });
@@ -61,7 +62,7 @@ export async function candidateCopy(browser: Browser, origin: string) {
   const actions: string[] = [];
   process.stdout.write('page_test_scenario: 复制失败保留编辑与重试成功后收起\n');
   await withRewritePages(browser, origin, async ({ manager, helper, rewriteBackend }) => {
-    await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
+    await selectContact(manager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人甲' });
     await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
     await helper.getByRole('textbox', { name: '有什么想说的', exact: true }).fill('今天先这样，稍后再联系。');
     await rewriteBackend.plan({ count: 1, prefix: '失败后保留原候选' });
@@ -115,7 +116,7 @@ export async function candidateCopy(browser: Browser, origin: string) {
   const selectedCopies: string[] = [];
   process.stdout.write('page_test_scenario: 逐组复制当前版本且拒绝空白、错配身份与角色越界\n');
   await withRewritePages(browser, origin, async ({ manager, helper, rewriteBackend }) => {
-    await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
+    await selectContact(manager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人甲' });
     await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
     await helper.getByRole('textbox', { name: '有什么想说的', exact: true }).fill('只说明稍后联系，不补充其他事情。');
     await rewriteBackend.plan({ count: 2, prefix: '双候选选择' });
@@ -170,7 +171,7 @@ export async function candidateCopy(browser: Browser, origin: string) {
     process.stdout.write(`page_test_scenario: ${copyAndHide ? '公开复制并收起' : '页面逐条复制'}期间切换联系人不污染新会话\n`);
     await withRewritePages(browser, origin, async ({ manager, helper, rewriteBackend }) => {
       try {
-        await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
+        await selectContact(manager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人甲' });
         await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
         await helper.getByRole('textbox', { name: '有什么想说的', exact: true }).fill('甲的本次草稿。');
         await rewriteBackend.plan({ count: 1, prefix: '甲待复制候选' });
@@ -190,7 +191,7 @@ export async function candidateCopy(browser: Browser, origin: string) {
         await expect.poll(() => copyStarts).toBe(1);
         expect(completedCopies).toEqual([]);
         expect(hidden).toBe(0);
-        await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人乙' });
+        await selectContact(manager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人乙' });
         await confirmHelperContact(helper, rewriteBackend.data.contact_ids[1]);
         await helper.getByRole('textbox', { name: '有什么想说的', exact: true }).fill('乙的独立草稿。');
         await rewriteBackend.plan({ count: 1, prefix: '乙当前候选' });

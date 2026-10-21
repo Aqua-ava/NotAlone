@@ -1,3 +1,4 @@
+import { selectContact } from '../contact-picker-actions.mjs';
 import { fillWorkspaceThought, fillWorkspaceInstruction, generateWorkspace, openWorkspaceSettings, setWorkspaceContext } from '../workspace-actions';
 import { openAssistantHistory, expandSavedDiscussion } from '../assistant-history-actions';
 import { openImportManagement } from '../memory-page-actions';
@@ -10,7 +11,7 @@ import type { RewritePages } from '../rewrite-page-scenarios';
 const candidateEditor = (page: Page, number = 1) => page.getByRole('group', { name: `说法${number}消息组`, exact: true }).getByRole('textbox');
 
 async function chooseContact({ manager, helper, rewriteBackend }: RewritePages, index: 0 | 1 = 0) {
-  await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: index === 0 ? '合成联系人甲' : '合成联系人乙' });
+  await selectContact(manager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: index === 0 ? '合成联系人甲' : '合成联系人乙' });
   await confirmHelperContact(helper, rewriteBackend.data.contact_ids[index]);
 }
 
@@ -65,7 +66,7 @@ export async function assistantSessionRecovery(browser: Browser, origin: string)
   process.stdout.write('page_test_scenario: 重连与重开恢复原讨论和已保存候选版本，丢弃未保存编辑\n');
   await withRewritePages(browser, origin, async ({ manager, helper, rewriteBackend, replyTransport }, host, userData) => {
     const contactId = rewriteBackend.data.contact_ids[0];
-    await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
+    await selectContact(manager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人甲' });
     await confirmHelperContact(helper, contactId);
     await helper.getByRole('textbox', { name: '有什么想说的', exact: true }).fill('已保存的合成讨论：明天再确认。');
     await rewriteBackend.plan({ count: 2, prefix: '跨连接保存的合成候选' });
@@ -89,7 +90,7 @@ export async function assistantSessionRecovery(browser: Browser, origin: string)
     await expect(helper.getByRole('region', { name: '已保存的讨论', exact: true })).toHaveCount(0);
     replyTransport.failRuntime = false;
     await manager.getByRole('button', { name: '重试连接', exact: true }).click();
-    await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
+    await selectContact(manager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人甲' });
     await confirmHelperContact(helper, contactId);
     await expectRecoveredDiscussion(helper);
     expect((await rewriteBackend.command('observations')).payloads).toHaveLength(1);
@@ -100,8 +101,8 @@ export async function assistantSessionRecovery(browser: Browser, origin: string)
     try {
       await reopened.backend.connect();
       const nextManager = await reopened.open('manager');
-      await expect(nextManager.getByRole('combobox', { name: '本次联系人', exact: true })).toHaveValue('');
-      await nextManager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
+      await expect(nextManager.getByRole('combobox', { name: '本次联系人', exact: true })).toHaveAttribute('data-contact-id', '');
+      await selectContact(nextManager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人甲' });
       const nextHelper = await reopened.open('helper');
       await confirmHelperContact(nextHelper, contactId);
       await expectRecoveredDiscussion(nextHelper);
@@ -249,7 +250,7 @@ async function deletedSource(pages: RewritePages, host: PageHost, userData: stri
   try {
     await reopened.backend.connect();
     const nextManager = await reopened.open('manager');
-    await nextManager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
+    await selectContact(nextManager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人甲' });
     const nextHelper = await reopened.open('helper');
     await confirmHelperContact(nextHelper, rewriteBackend.data.contact_ids[0]);
     await expandSavedDiscussion(nextHelper);
@@ -275,7 +276,7 @@ async function authorization(pages: RewritePages) {
   await chooseContact(pages, 1);
   await rewriteBackend.command('revoke', { contact_id: rewriteBackend.data.contact_ids[0] });
   const contactId = rewriteBackend.data.contact_ids[0];
-  await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
+  await selectContact(manager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人甲' });
   const readAuthorization = () => helper.evaluate(async () => {
     const contact = await window.notalone.contacts.getState();
     const foreground = await window.notalone.foreground.getState();

@@ -1,3 +1,4 @@
+import { selectContact } from '../contact-picker-actions.mjs';
 import { fillWorkspaceThought, generateWorkspace, setWorkspaceContext } from '../workspace-actions';
 import { openAssistantHistory, expandSavedDiscussion } from '../assistant-history-actions';
 import { openImportManagement } from '../memory-page-actions';
@@ -9,7 +10,7 @@ import { withRewritePages } from './rewrite-acceptance';
 export async function assistantSessionPersistence(browser: Browser, origin: string) {
   process.stdout.write('page_test_scenario: 默认保存与同键重放\n');
   await withRewritePages(browser, origin, async ({ manager, helper, rewriteBackend, replyTransport }) => {
-    await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
+    await selectContact(manager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人甲' });
     await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
     await helper.getByRole('textbox', { name: '有什么想说的', exact: true }).fill('合成讨论：明天再确认时间。');
     await rewriteBackend.plan({ count: 2, prefix: '可靠保存的合成候选' });
@@ -40,7 +41,7 @@ export async function assistantSessionPersistence(browser: Browser, origin: stri
   process.stdout.write('page_test_scenario_passed: 默认保存与同键重放\n');
   process.stdout.write('page_test_scenario: 来源待删除遮挡与无关讨论保留\n');
   await withRewritePages(browser, origin, async ({ manager, helper, rewriteBackend }) => {
-    await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
+    await selectContact(manager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人甲' });
     await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
     await fillWorkspaceThought(helper, '依赖来源的合成讨论。');
     await setWorkspaceContext(helper, true);
@@ -77,7 +78,7 @@ export async function assistantSessionPersistence(browser: Browser, origin: stri
   process.stdout.write('page_test_scenario: 迟到依据响应不能恢复暂存候选\n');
   await withRewritePages(browser, origin, async ({ manager, helper, rewriteBackend, replyTransport }) => {
     const unrelated = await rewriteBackend.command('unrelated_source');
-    await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
+    await selectContact(manager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人甲' });
     await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
     await fillWorkspaceThought(helper, '迟到核验不得恢复合成候选。');
     await setWorkspaceContext(helper, true);

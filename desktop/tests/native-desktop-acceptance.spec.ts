@@ -1,4 +1,5 @@
-import { createImportContact, openFileImport } from './file-import-navigation';
+import { expectContactOption } from './contact-picker-actions.mjs';
+import { prepareImportContact, openFileImport } from './file-import-navigation';
 import { expect } from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
 import { test } from './import-fixture';
@@ -15,14 +16,14 @@ test('签名包使用真实文件选择器导入合成资料，系统快捷键�
   // 人工两次操作及反馈共享有限交互截止，不因窗口已显示而提前缩短等待。
   const humanAcceptanceUntil = acceptanceMode === 'human' ? Date.now() + 25 * 60_000 : undefined;
   const manager = await app.firstWindow();
-  await expect(manager.getByRole('combobox', { name: '本次联系人', exact: true }).getByRole('option', { name: '合成联系人甲', exact: true })).toHaveCount(1, { timeout: 20_000 });
+  await expectContactOption(manager.getByRole('combobox', { name: '本次联系人', exact: true }), '合成联系人甲', { timeout: 20_000 });
   expect(await app.evaluate(({ app }) => app.isPackaged)).toBe(true);
   await writeFile(test.info().outputPath('owned-app.json'), JSON.stringify({
     pid: appProcess.pid, userData, databaseName: importBackend.data.database_name,
     fixtureDirectory: importBackend.directory, filePath: importBackend.data.file_path,
   }), { mode: 0o600 });
 
-  await createImportContact(manager, '合成原生验收联系人');
+  await prepareImportContact(manager, '合成原生验收联系人', importBackend);
   await openFileImport(manager);
   console.log(`native_acceptance_file: ${importBackend.data.file_path}`);
   await manager.getByRole('button', { name: '选择历史文件', exact: true }).click();

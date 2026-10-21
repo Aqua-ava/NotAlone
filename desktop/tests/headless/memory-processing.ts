@@ -1,3 +1,4 @@
+import { selectContact } from '../contact-picker-actions.mjs';
 import path from 'node:path';
 import { expect, type Browser } from '@playwright/test';
 import { withControllerEnvironment, withRewriteBackend } from './backend-fixture';
@@ -16,11 +17,11 @@ export async function memoryProcessing(browser: Browser, origin: string) {
       const history = manager.locator('details[aria-label="处理历史"]');
       await selectMemoryCategory(manager, '本人记忆');
       await expect(card).toContainText('暂时无法处理，请稍后重试');
-      await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption(fixture.data.empty_contact_id);
+      await selectContact(manager.getByRole('combobox', { name: '本次联系人', exact: true }), fixture.data.empty_contact_id);
       await expect(manager.getByRole('button', { name: '我', exact: true })).toHaveAttribute('aria-pressed', 'true');
       await expect(card).toHaveCount(0);
       await expect(history).toHaveCount(0);
-      await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption(fixture.data.contact_ids[0]);
+      await selectContact(manager.getByRole('combobox', { name: '本次联系人', exact: true }), fixture.data.contact_ids[0]);
       await expect(card).toContainText('暂时无法处理，请稍后重试');
       await card.getByRole('button', { name: '详情', exact: true }).click();
       await expect(card.getByText('历史导入 · 记忆生成已中断', { exact: true })).toBeVisible();
@@ -56,11 +57,11 @@ export async function memoryProcessing(browser: Browser, origin: string) {
       await history.locator('summary').click();
       await expect(history.getByText('已处理 2 / 2 条聊天', { exact: true })).toBeVisible();
       expect((await fixture.command('processing_evidence')).model_calls).toBe(completed.model_calls);
-      await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption(fixture.data.empty_contact_id);
+      await selectContact(manager.getByRole('combobox', { name: '本次联系人', exact: true }), fixture.data.empty_contact_id);
       await expect(card).toHaveCount(0);
       await expect(history).toHaveCount(0);
       expect((await fixture.command('processing_evidence')).model_calls).toBe(completed.model_calls);
-      await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption(fixture.data.contact_ids[0]);
+      await selectContact(manager.getByRole('combobox', { name: '本次联系人', exact: true }), fixture.data.contact_ids[0]);
       await expect(history).toBeVisible();
       await expect(history).not.toHaveAttribute('open');
       await expect(card).toHaveCount(0);

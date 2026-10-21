@@ -1,3 +1,4 @@
+import { selectContact } from '../contact-picker-actions.mjs';
 import { expect, type Browser, type Page } from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
 import { withManualForegroundFixture } from '../foreground-backend-fixture';
@@ -38,6 +39,8 @@ async function foregroundRenderGap(manager: Page, helper: Page, host: PageHost, 
   await writeFile('artifacts/headless-pages/contact-render-gap-owned.json', JSON.stringify({
     ...backend.cleanupOwnership(), fixtureDirectory: backend.directory,
   }), { mode: 0o600 });
+  await helper.getByRole('combobox', { name: '本次联系人', exact: true }).click();
+  await expect(helper.getByRole('listbox', { name: '联系人搜索结果', exact: true })).toBeVisible();
   await helper.evaluate((contactIds) => {
     const owned = window as unknown as GapWindow;
     if (typeof owned.pageEvent !== 'function') throw new Error('本轮公开页面传输未就绪。');
@@ -85,13 +88,12 @@ async function foregroundRenderGap(manager: Page, helper: Page, host: PageHost, 
         holding = false; held = null;
         deliveryRevision = state.foregroundRevision;
         owned.pageEvent('foreground:state-changed', state);
-        // 同一JS任务内，真实订阅先收到新状态，再派发公开DOM change；不await或改React处理器。
+        // 同一JS任务内，真实订阅先收到新状态，再点击已展开的公开选项；不await或改React处理器。
         renderedSuspendedBeforeChange = [...document.querySelectorAll('p')].some((node) =>
           node.textContent === '小窗在前台，暂停新的前台定位；已确认范围的后台同步独立运行。');
-        const picker = document.querySelector('select[aria-label="本次联系人"]');
-        if (!(picker instanceof HTMLSelectElement) || picker.disabled) throw new Error('本轮合成选择器尚未就绪。');
-        picker.value = contactIds[0];
-        picker.dispatchEvent(new Event('change', { bubbles: true }));
+        const option = document.querySelector(`[role="option"][data-contact-id="${contactIds[0]}"]`);
+        if (!(option instanceof HTMLButtonElement) || option.disabled) throw new Error('本轮合成选择器尚未就绪。');
+        option.click();
       },
       report(stop) {
         let cleanupConfirmed = false;
@@ -129,7 +131,7 @@ async function foregroundRenderGap(manager: Page, helper: Page, host: PageHost, 
     negativePassed = true;
     // 新的显式选择发生在公开DOM已反映新状态后，独立于前一次拒绝，不自动retry。
     await expect(suspended).toHaveCount(0);
-    await helper.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption(targetContact);
+    await selectContact(helper.getByRole('combobox', { name: '本次联系人', exact: true }), targetContact);
     await expect(rows.nth(targetIndex)).toHaveAttribute('aria-pressed', 'true');
     await expect(rows.nth(currentIndex)).toHaveAttribute('aria-pressed', 'false');
     const accepted = await helper.evaluate(() => (window as unknown as GapWindow).contactRenderGap!.report(false));

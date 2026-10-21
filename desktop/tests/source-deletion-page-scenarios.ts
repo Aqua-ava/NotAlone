@@ -1,3 +1,4 @@
+import { selectContact } from './contact-picker-actions.mjs';
 import { setWorkspaceContext, setWorkspaceTone, fillWorkspaceInstruction, openWorkspaceSettings } from './workspace-actions';
 import { openImportManagement, selectMemoryCategory } from './memory-page-actions';
 import { expect, type Page } from '@playwright/test';
@@ -46,7 +47,7 @@ export async function sourceDeletionBasic(manager: Page, fixture: SourceDeletion
   const before = await fixture.http(`/api/contacts/${contactId}/sources`);
   expect(before.status).toBe(200);
   const sourceId = (before.data.sources as { source_id: string }[])[0].source_id;
-  await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
+  await selectContact(manager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人甲' });
   await manager.getByRole('button', { name: '记忆', exact: true }).click();
   await openImportManagement(manager);
   const source = manager.getByRole('region', { name: '已导入资料', exact: true }).locator(`[data-source-id="${sourceId}"]`);
@@ -94,7 +95,7 @@ export async function sourceDeletionVerification(manager: Page, fixture: SourceD
 
 export async function sourceDeletionUnknown(manager: Page, fixture: SourceDeletionFixture, proxy: MemoryHttpProxy) {
   const contactId = fixture.data.contact_ids[0];
-  await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
+  await selectContact(manager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人甲' });
   await manager.getByRole('button', { name: '记忆', exact: true }).click();
   await openImportManagement(manager);
   const panel = manager.getByRole('region', { name: '已导入资料', exact: true });
@@ -115,7 +116,7 @@ export async function sourceDeletionUnknown(manager: Page, fixture: SourceDeleti
 }
 
 export async function sourceDeletionArguments(manager: Page, helper: Page, fixture: SourceDeletionFixture, proxy: MemoryHttpProxy) {
-  await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
+  await selectContact(manager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人甲' });
   await manager.getByRole('button', { name: '记忆', exact: true }).click();
   await openImportManagement(manager);
   await expect(manager.getByRole('region', { name: '已导入资料', exact: true }).getByRole('button', { name: '删除来源', exact: true })).toBeVisible();
@@ -141,7 +142,7 @@ export async function sourceDeletionArguments(manager: Page, helper: Page, fixtu
 }
 
 export async function sourceDeletionReplies(manager: Page, helper: Page, fixture: SourceDeletionFixture) {
-  await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
+  await selectContact(manager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人甲' });
   await confirmHelperContact(helper);
   await helper.getByRole('textbox', { name: '有什么想说的', exact: true }).fill('说明本人喜欢合成绿茶。');
   await setWorkspaceContext(helper, true);
@@ -173,7 +174,7 @@ export async function sourceDeletionReplies(manager: Page, helper: Page, fixture
 
 export async function sourceDeletionCrossContact(manager: Page, helper: Page, fixture: SourceDeletionFixture,
   proxy: import('./source-deletion-proxy').SourceDeletionProxy) {
-  await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
+  await selectContact(manager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人甲' });
   await manager.getByRole('button', { name: '记忆', exact: true }).click();
   await openImportManagement(manager);
   const panel = manager.getByRole('region', { name: '已导入资料', exact: true });
@@ -183,7 +184,7 @@ export async function sourceDeletionCrossContact(manager: Page, helper: Page, fi
   await panel.getByRole('button', { name: '删除来源', exact: true }).click();
   await manager.getByRole('button', { name: '确认删除来源', exact: true }).click();
   await expect.poll(() => proxy.heldCount, { timeout: 1500 }).toBe(1);
-  await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption(fixture.data.contact_ids[1]);
+  await selectContact(manager.getByRole('combobox', { name: '本次联系人', exact: true }), fixture.data.contact_ids[1]);
   await confirmHelperContact(helper);
   await helper.getByRole('textbox', { name: '有什么想说的', exact: true }).fill('说明本人喜欢合成绿茶。');
   await setWorkspaceContext(helper, true);
@@ -211,7 +212,7 @@ export async function sourceDeletionCrossContact(manager: Page, helper: Page, fi
 
 export async function sourceDeletionUnrelated(manager: Page, helper: Page, fixture: SourceDeletionFixture,
   proxy?: MemoryHttpProxy) {
-  await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
+  await selectContact(manager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人甲' });
   await confirmHelperContact(helper);
   await helper.getByRole('textbox', { name: '有什么想说的', exact: true }).fill('仅改写这份合成草稿。');
   await setWorkspaceContext(helper, false);
@@ -262,7 +263,7 @@ export async function sourceDeletionMultiSource(manager: Page, fixture: SourceDe
     .find((entry) => entry.text === '两个合成来源共同支持的记忆。')!;
   expect(memory.source_ids).toHaveLength(1);
   const messageId = memory.source_ids[0];
-  await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
+  await selectContact(manager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人甲' });
   await manager.getByRole('button', { name: '记忆', exact: true }).click();
   await expect(manager.getByText(memory.text, { exact: true })).toBeVisible();
   await openImportManagement(manager);
@@ -301,7 +302,7 @@ export async function sourceDeletionMultiSource(manager: Page, fixture: SourceDe
 
 export async function sourceDeletionStaleRequest(manager: Page, helper: Page, fixture: SourceDeletionFixture,
   proxy: import('./source-deletion-proxy').SourceDeletionProxy) {
-  await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
+  await selectContact(manager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人甲' });
   await confirmHelperContact(helper);
   const draft = helper.getByRole('textbox', { name: '有什么想说的', exact: true });
   await draft.fill('旧请求的独立合成草稿。');
@@ -343,10 +344,10 @@ export async function sourceDeletionStaleRequest(manager: Page, helper: Page, fi
   // 复验期间不能在原范围继续编辑；通过真实联系人往返开启新范围，旧响应仍未释放。
   const picker = helper.getByRole('combobox', { name: '本次联系人', exact: true });
   const contacts = manager.getByRole('combobox', { name: '本次联系人', exact: true });
-  await contacts.selectOption(fixture.data.contact_ids[1]);
-  await expect(picker).toHaveValue(fixture.data.contact_ids[1]);
-  await contacts.selectOption(fixture.data.contact_ids[0]);
-  await expect(picker).toHaveValue(fixture.data.contact_ids[0]);
+  await selectContact(contacts, fixture.data.contact_ids[1]);
+  await expect(picker).toHaveAttribute('data-contact-id', fixture.data.contact_ids[1]);
+  await selectContact(contacts, fixture.data.contact_ids[0]);
+  await expect(picker).toHaveAttribute('data-contact-id', fixture.data.contact_ids[0]);
   await confirmHelperContact(helper);
   await expect(draft).toBeEditable();
   await expect.poll(() => helper.evaluate(async () => (await window.notalone.replies.getState()).savedSession?.phase)).toBe('ready');

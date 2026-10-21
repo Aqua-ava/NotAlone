@@ -1,3 +1,4 @@
+import { selectContact } from './contact-picker-actions.mjs';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
@@ -11,6 +12,131 @@ async function mount(page, contents) {
   await page.setContent('<div id="root"></div>');
   await page.addScriptTag({ content: bundle.outputFiles[0].text });
 }
+
+test('顶部联系人搜索只筛选已有联系人，输入不切换且不提供创建入口', async t => {
+  const browser = await chromium.launch({ headless: true, executablePath: process.env.NOTALONE_TEST_CHROMIUM_PATH });
+  t.after(() => browser.close());
+  const page = await browser.newPage();
+  await mount(page, `
+    import React, { useState } from 'react'; import { createRoot } from 'react-dom/client';
+    import { ContactPicker } from './src/renderer/contact-session';
+    function View() {
+      const [selectedContactId, selectContact] = useState('synthetic-a');
+      const session = { state: { directoryPhase: 'ready', selectedContactId,
+        contacts: [{contactId: 'synthetic-a', displayName: '合成甲'}, {contactId: 'synthetic-b', displayName: '合成乙'}] },
+        selectContact: async id => selectContact(id) };
+      return <><ContactPicker session={session}/><output aria-label="已选择联系人">{selectedContactId}</output></>;
+    }
+    createRoot(document.getElementById('root')).render(<View/>);
+  `);
+  await page.getByRole('combobox', { name: '本次联系人', exact: true }).click();
+  const search = page.getByRole('searchbox', { name: '搜索联系人', exact: true });
+  await expect(search).toBeFocused();
+  await search.fill('乙');
+  await expect(page.getByLabel('已选择联系人')).toHaveText('synthetic-a');
+  await expect(page.getByRole('option')).toHaveCount(1);
+  await page.getByRole('option', { name: '合成乙', exact: true }).click();
+  await expect(page.getByLabel('已选择联系人')).toHaveText('synthetic-b');
+  await expect(search).toHaveCount(0);
+  await page.getByRole('combobox', { name: '本次联系人', exact: true }).click();
+  await search.fill('不存在的合成联系人');
+  await expect(page.getByText('未找到联系人', { exact: true })).toBeVisible();
+  await expect(page.getByRole('option')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '创建联系人', exact: true })).toHaveCount(0);
+});
+
+test('顶部联系人搜索支持中文组合输入、键盘导航、关闭和同名独立选择', async t => {
+  const browser = await chromium.launch({ headless: true, executablePath: process.env.NOTALONE_TEST_CHROMIUM_PATH });
+  t.after(() => browser.close());
+  const page = await browser.newPage();
+  await mount(page, `
+    import React, { useState } from 'react'; import { createRoot } from 'react-dom/client';
+    import { ContactPicker } from './src/renderer/contact-session';
+    function View() {
+      const [selectedContactId, selectContact] = useState('synthetic-a');
+      const session = { state: { directoryPhase: 'ready', selectedContactId,
+        contacts: [{ contactId: 'synthetic-a', displayName: 'Alice 合成甲', messageCount: 1 },
+          { contactId: 'synthetic-b', displayName: '合成同名', messageCount: 2 },
+          { contactId: 'synthetic-c', displayName: '合成同名', messageCount: 3 }] },
+        selectContact: async id => selectContact(id) };
+      return <><ContactPicker session={session}/><button>外部按钮</button></>;
+    }
+    createRoot(document.getElementById('root')).render(<View/>);
+  `);
+  const picker = page.getByRole('combobox', { name: '本次联系人', exact: true });
+  const search = page.getByRole('searchbox', { name: '搜索联系人', exact: true });
+  const options = page.getByRole('listbox', { name: '联系人搜索结果', exact: true }).getByRole('option');
+  await picker.click();
+  await search.fill('  ALICE  ');
+  await expect(options).toHaveCount(1);
+  await expect(options.first()).toContainText('Alice 合成甲');
+  await search.fill('合成');
+  await search.press('ArrowDown');
+  await search.dispatchEvent('compositionstart');
+  await search.press('ArrowDown');
+  await search.press('Enter');
+  await expect(picker).toHaveAttribute('data-contact-id', 'synthetic-a');
+  await expect(search).toBeVisible();
+  await search.dispatchEvent('compositionend');
+  await search.fill('同名');
+  await expect(options).toHaveCount(2);
+  await search.press('ArrowDown');
+  await search.press('ArrowDown');
+  await expect(picker).toHaveAttribute('data-contact-id', 'synthetic-a');
+  await search.press('Enter');
+  await expect(picker).toHaveAttribute('data-contact-id', 'synthetic-c');
+  await expect(search).toHaveCount(0);
+  await expect(picker).toBeFocused();
+  await selectContact(picker, 'synthetic-b');
+  await expect(picker).toHaveAttribute('data-contact-id', 'synthetic-b');
+  await picker.press('ArrowUp');
+  await expect(search).toBeFocused();
+  await search.fill('同名');
+  await search.press('Escape');
+  await expect(picker).toBeFocused();
+  await expect(search).toHaveCount(0);
+  await expect(picker).toHaveAttribute('data-contact-id', 'synthetic-b');
+  await picker.click();
+  await expect(search).toHaveValue('');
+  await expect(options).toHaveCount(3);
+  await page.getByRole('button', { name: '外部按钮', exact: true }).click();
+  await expect(search).toHaveCount(0);
+  await picker.click();
+  await search.press('Tab');
+  await expect(search).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '外部按钮', exact: true })).toBeFocused();
+});
+
+test('顶部联系人目录失效或切换范围时关闭搜索，空目录禁止展开', async t => {
+  const browser = await chromium.launch({ headless: true, executablePath: process.env.NOTALONE_TEST_CHROMIUM_PATH });
+  t.after(() => browser.close());
+  const page = await browser.newPage();
+  await mount(page, `
+    import React, { useState } from 'react'; import { createRoot } from 'react-dom/client';
+    import { ContactPicker } from './src/renderer/contact-session';
+    function View() {
+      const [state, setState] = useState({ scopeRevision: 1, directoryPhase: 'ready', selectedContactId: 'synthetic-a',
+        contacts: [{ contactId: 'synthetic-a', displayName: '合成甲' }, { contactId: 'synthetic-b', displayName: '合成乙' }] });
+      window.fixtureUpdate = update => setState(previous => ({ ...previous, ...update }));
+      return <ContactPicker session={{ state, selectContact: async () => {} }}/>;
+    }
+    createRoot(document.getElementById('root')).render(<View/>);
+  `);
+  const picker = page.getByRole('combobox', { name: '本次联系人', exact: true });
+  const search = page.getByRole('searchbox', { name: '搜索联系人', exact: true });
+  await picker.click();
+  await search.fill('甲');
+  await page.evaluate(() => window.fixtureUpdate({ scopeRevision: 2, selectedContactId: 'synthetic-b' }));
+  await expect(search).toHaveCount(0);
+  await expect(picker).toHaveAttribute('data-contact-id', 'synthetic-b');
+  await picker.click();
+  await page.evaluate(() => window.fixtureUpdate({ directoryPhase: 'unavailable' }));
+  await expect(search).toHaveCount(0);
+  await expect(picker).toBeDisabled();
+  await page.evaluate(() => window.fixtureUpdate({ directoryPhase: 'ready', selectedContactId: null, contacts: [] }));
+  await expect(picker).toBeDisabled();
+  await expect(picker).toHaveAttribute('data-contact-id', '');
+});
 
 test('真实React双窗口共用联系人，顶部与小窗双向切换且草稿和迟到事件不串范围', async t => {
   const f = await replyInputFixture(100);
@@ -57,7 +183,7 @@ test('真实React双窗口共用联系人，顶部与小窗双向切换且草稿
   const instruction = helper.getByRole('textbox', { name: '本次要求', exact: true });
   const firstContactId = f.scope().contactId;
   await expect(current(manager)).toHaveCount(1);
-  await expect(current(helper)).toHaveValue(firstContactId);
+  await expect(current(helper)).toHaveAttribute('data-contact-id', firstContactId);
   await expect(draft).toBeEnabled();
   await draft.fill('合成刚输入的最新草稿。');
   await instruction.fill('只说明时间，不增加承诺。');
@@ -67,9 +193,9 @@ test('真实React双窗口共用联系人，顶部与小窗双向切换且草稿
   assert.equal(submitted.content.draft_text, '合成刚输入的最新草稿。');
   assert.match(submitted.content.user_instruction, /只说明时间，不增加承诺。/);
   const oldReply = await f.bridge.getState(), oldContact = f.contacts.getState();
-  await current(manager).selectOption(f.otherContactId);
+  await selectContact(current(manager), f.otherContactId);
   for (const page of pages) {
-    await expect(current(page)).toHaveValue(f.otherContactId);
+    await expect(current(page)).toHaveAttribute('data-contact-id', f.otherContactId);
     await expect(page.getByLabel('当前范围')).toHaveText(f.otherContactId);
   }
   await expect(draft).toHaveValue('');
@@ -81,13 +207,13 @@ test('真实React双窗口共用联系人，顶部与小窗双向切换且草稿
     window.pageEvent('contacts:state-changed', oldContact);
   }, { oldReply, oldContact });
   for (const page of pages) {
-    await expect(current(page)).toHaveValue(f.otherContactId);
+    await expect(current(page)).toHaveAttribute('data-contact-id', f.otherContactId);
     await expect(page.getByLabel('当前范围')).toHaveText(f.otherContactId);
   }
   await expect(draft).toHaveValue('乙的独立草稿。');
   await expect(instruction).toHaveValue('乙的独立新要求。');
-  await current(helper).selectOption(firstContactId);
-  for (const page of pages) await expect(current(page)).toHaveValue(firstContactId);
+  await selectContact(current(helper), firstContactId);
+  for (const page of pages) await expect(current(page)).toHaveAttribute('data-contact-id', firstContactId);
   await f.bridge.readSavedSession(f.scope());
   await expect(instruction).toHaveValue('只说明时间，不增加承诺。');
   await expect(draft).toHaveValue('合成刚输入的最新草稿。');
@@ -149,7 +275,7 @@ test('真实导入页面跟随顶部联系人，已确认预览和迟到预览�
   const summary = page.getByRole('region', { name: '单联系人资料预览', exact: true });
   await expect(page.getByRole('combobox')).toHaveCount(1);
   await expect(choose).toBeDisabled();
-  await picker.selectOption(contactIds[0]);
+  await selectContact(picker, contactIds[0]);
   await expect.poll(() => imports.getState().target).toEqual({ kind: 'existing', contactId: contactIds[0] });
   await choose.click(); await preview.click();
   await expect(summary).toContainText('合成联系人甲');
@@ -157,7 +283,7 @@ test('真实导入页面跟随顶部联系人，已确认预览和迟到预览�
   await page.getByRole('button', { name: '确认本次预览', exact: true }).click();
   await expect(page.getByRole('button', { name: '正式导入这份资料', exact: true })).toBeVisible();
   const confirmedRevision = imports.getState().selectionRevision;
-  await picker.selectOption(contactIds[1]);
+  await selectContact(picker, contactIds[1]);
   await expect.poll(() => imports.getState().target).toEqual({ kind: 'existing', contactId: contactIds[1] });
   await expect(summary).toHaveCount(0);
   await expect(page.getByRole('button', { name: '正式导入这份资料', exact: true })).toHaveCount(0);
@@ -165,7 +291,7 @@ test('真实导入页面跟随顶部联系人，已确认预览和迟到预览�
   assert.throws(() => imports.takeConfirmedSelection(confirmedRevision));
   await choose.click(); await preview.click();
   await expect.poll(() => typeof releasePreview).toBe('function');
-  await picker.selectOption(contactIds[0]);
+  await selectContact(picker, contactIds[0]);
   await expect.poll(() => imports.getState().target).toEqual({ kind: 'existing', contactId: contactIds[0] });
   releasePreview();
   await expect.poll(() => imports.getState().phase).toBe('idle');

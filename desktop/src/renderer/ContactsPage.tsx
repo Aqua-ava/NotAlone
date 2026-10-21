@@ -11,7 +11,6 @@ const initialSync: SyncControlState = { revision: -1, scopeRevision: 0, phase: '
 
 export function ContactsPage({ session, navigate }: { session: ContactSessionView; navigate: (page: ManagerPage) => void }) {
   const { state } = session;
-  const [name, setName] = useState(''), [creating, setCreating] = useState(false);
   const [addingWechat, setAddingWechat] = useState(false), [targetContactId, setTargetContactId] = useState<string>();
   const consent = useBindingConsent(session);
   const { state: sync } = useRevisionedSession(initialSync, window.notalone.syncControl);
@@ -52,14 +51,7 @@ export function ContactsPage({ session, navigate }: { session: ContactSessionVie
       <button className="button" onClick={() => navigate('config')}>前往设置</button></div>}
     {state.directoryPhase === 'error' && <p className="contacts-note" role="alert">联系人目录读取失败，请刷新重试。</p>}
     {state.directoryPhase === 'ready' && state.contacts.length === 0 && <div className="contacts-empty"><h3>还没有联系人</h3>
-      <p>填写下方展示名称创建联系人，创建后在顶部选择本次对象。名称相同也会创建不同的联系人。</p></div>}
-    {state.directoryPhase === 'ready' && <form className="contact-create" aria-label="创建手动联系人" onSubmit={(event) => {
-      event.preventDefault(); if (creating || !name.trim()) return; setCreating(true);
-      void session.createContact(name).then((success) => { if (success) setName(''); }).finally(() => setCreating(false));
-    }}><label>联系人展示名称<input aria-label="联系人展示名称" maxLength={100} value={name} disabled={creating}
-      onChange={(event) => setName(event.target.value)} placeholder="由你确认的这位联系人" /></label>
-      <button className="button primary" disabled={creating || !name.trim()}>{creating ? '正在创建…' : '创建联系人'}</button>
-      <p>这只创建本机联系人，不建立微信身份或会话绑定，也不授权读取聊天。</p></form>}
+      <p>点击“添加微信联系人”，选择真实会话并确认后，再在顶部选择本次对象。</p></div>}
     {state.contacts.length > 0 && <div className="contacts-columns"><ul className="contact-list" aria-label="联系人同步状态">
       {state.contacts.map((contact) => <li key={contact.contactId}>
         <div className="contact-row" data-current={state.selectedContactId === contact.contactId}>

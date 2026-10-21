@@ -1,3 +1,4 @@
+import { selectContact } from '../contact-picker-actions.mjs';
 import { openImportManagement } from '../memory-page-actions';
 import { expect, type Browser } from '@playwright/test';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
@@ -10,7 +11,7 @@ export async function replyStrategyDialogue(browser: Browser, origin: string) {
     await withRewritePages(browser, origin, async ({ manager, helper, rewriteBackend, replyTransport }) => {
       const contactId = rewriteBackend.data.contact_ids[0];
       const material = await rewriteBackend.command('strategy_many_sources');
-      await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
+      await selectContact(manager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人甲' });
       await confirmHelperContact(helper, contactId);
       const idea = helper.getByRole('textbox', { name: '有什么想说的', exact: true });
       await expect(idea).toBeEnabled();
@@ -96,7 +97,7 @@ export async function replyStrategyInvalidation(browser: Browser, origin: string
   for (const change of ['想法', '聊天背景', '本次要求']) {
     process.stdout.write(`page_test_scenario: 修改${change}保留旧候选，点击后才创建新输入\n`);
     await withRewritePages(browser, origin, async ({ manager, helper, rewriteBackend, replyTransport }) => {
-      await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
+      await selectContact(manager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人甲' });
       await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
       const idea = helper.getByRole('textbox', { name: '有什么想说的', exact: true });
       await expect(idea).toBeEnabled();

@@ -1,3 +1,4 @@
+import { selectContact } from '../contact-picker-actions.mjs';
 import { fillWorkspaceInstruction, setWorkspaceContext, setWorkspaceTone, openWorkspaceSettings } from '../workspace-actions';
 import { openAssistantHistory, expandSavedDiscussion } from '../assistant-history-actions';
 import { readFile } from 'node:fs/promises';
@@ -7,7 +8,7 @@ import type { RewriteFixture } from '../rewrite-backend-fixture';
 import type { RewritePages } from '../rewrite-page-scenarios';
 
 export async function chooseDeletionContact(pages: RewritePages, index: 0 | 1 = 0) {
-  await pages.manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: index === 0 ? '合成联系人甲' : '合成联系人乙' });
+  await selectContact(pages.manager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: index === 0 ? '合成联系人甲' : '合成联系人乙' });
   await confirmHelperContact(pages.helper, pages.rewriteBackend.data.contact_ids[index]);
   await expect.poll(() => pages.helper.evaluate(async () => (await window.notalone.replies.getState()).savedSession?.phase)).toBe('ready');
 }

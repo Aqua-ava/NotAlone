@@ -1,3 +1,4 @@
+import { selectContact } from '../contact-picker-actions.mjs';
 import { openImportManagement, selectMemoryCategory } from '../memory-page-actions';
 import { expect, type Browser } from '@playwright/test';
 import path from 'node:path';
@@ -26,7 +27,7 @@ export async function memoryCorrectionProtection(browser: Browser, origin: strin
       try {
         await host.backend.connect();
         const manager = await host.open('manager');
-        await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
+        await selectContact(manager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人甲' });
         await manager.getByRole('button', { name: '记忆', exact: true }).click();
         const contact = manager.getByRole('region', { name: '联系人记忆', exact: true });
         const pending = manager.getByRole('region', { name: '待确认候选', exact: true });

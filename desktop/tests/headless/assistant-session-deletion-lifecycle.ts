@@ -1,3 +1,4 @@
+import { selectContact } from '../contact-picker-actions.mjs';
 import { fillWorkspaceInstruction, setWorkspaceTone, openWorkspaceSettings } from '../workspace-actions';
 import { openAssistantHistory, expandSavedDiscussion } from '../assistant-history-actions';
 import { expect, type Browser, type Page } from '@playwright/test';
@@ -88,8 +89,8 @@ async function runningDeletion(pages: RewritePages, host: PageHost, userData: st
     try {
       await rebuilt.backend.connect();
       const nextManager = await rebuilt.open('manager');
-      await expect(nextManager.getByRole('combobox', { name: '本次联系人', exact: true })).toHaveValue('');
-      await nextManager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
+      await expect(nextManager.getByRole('combobox', { name: '本次联系人', exact: true })).toHaveAttribute('data-contact-id', '');
+      await selectContact(nextManager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人甲' });
       const nextHelper = await rebuilt.open('helper');
       await confirmHelperContact(nextHelper, contactId);
       const rebuiltId = await expectEmptyRecovery(nextHelper, contactId, sessionId);

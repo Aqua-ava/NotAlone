@@ -1,3 +1,4 @@
+import { selectContact } from '../contact-picker-actions.mjs';
 import { setWorkspaceContext } from '../workspace-actions';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
 import { expect, type Browser, type Page } from '@playwright/test';
@@ -54,7 +55,7 @@ async function generateAndWait(pages: EventPages) {
 }
 async function prepare(pages: EventPages, contact: '甲' | '乙' = '甲') {
   const { manager, helper, fixture } = pages;
-  await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: `合成联系人${contact}` });
+  await selectContact(manager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: `合成联系人${contact}` });
   await confirmHelperContact(helper, fixture.data.contact_ids[contact === '甲' ? 0 : 1]);
   await setWorkspaceContext(helper, true);
   await expect(helper.getByRole('checkbox', { name: new RegExp(`${contact}的原始合成消息`) })).toBeChecked();

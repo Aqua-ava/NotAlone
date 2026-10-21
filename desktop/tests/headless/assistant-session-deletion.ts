@@ -1,3 +1,4 @@
+import { selectContact } from '../contact-picker-actions.mjs';
 import { openAssistantHistory, expandSavedDiscussion } from '../assistant-history-actions';
 import { expect, type Browser } from '@playwright/test';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
@@ -9,7 +10,7 @@ export async function assistantSessionDeletion(browser: Browser, origin: string)
   process.stdout.write(`page_test_scenario: ${name}\n`);
   await withRewritePages(browser, origin, async ({ manager, helper, rewriteBackend }) => {
     const contactId = rewriteBackend.data.contact_ids[0];
-    await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
+    await selectContact(manager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人甲' });
     await confirmHelperContact(helper, contactId);
     await helper.getByRole('textbox', { name: '有什么想说的', exact: true }).fill('需要主动删除的合成讨论。');
     await rewriteBackend.plan({ count: 1, prefix: '需要清除的合成候选' });

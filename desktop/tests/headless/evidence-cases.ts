@@ -1,3 +1,4 @@
+import { selectContact } from '../contact-picker-actions.mjs';
 import { setWorkspaceContext } from '../workspace-actions';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
 import { expect, type Browser, type Page } from '@playwright/test';
@@ -45,7 +46,7 @@ async function awaitWorkspaceScope(helper: Page, contactId: string) {
   await expect(helper.getByRole('textbox', { name: '有什么想说的', exact: true })).toBeEditable();
 }
 async function prepare(pages: RewritePages, contact: '甲' | '乙' = '甲', count = 1) {
-  await pages.manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: `合成联系人${contact}` });
+  await selectContact(pages.manager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: `合成联系人${contact}` });
   await confirmHelperContact(pages.helper, pages.rewriteBackend.data.contact_ids[contact === '甲' ? 0 : 1]);
   await awaitWorkspaceScope(pages.helper, pages.rewriteBackend.data.contact_ids[contact === '甲' ? 0 : 1]);
   await setWorkspaceContext(pages.helper, false);
@@ -84,7 +85,7 @@ function loadPending(pages: RewritePages) {
 
 // 点击生产页面，经具名控制器读取真实 HTTP/PG 的生成快照；不读取 React 私有状态。
 async function draftEvidence({ manager, helper, rewriteBackend }: RewritePages) {
-  await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
+  await selectContact(manager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人甲' });
   await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
   await awaitWorkspaceScope(helper, rewriteBackend.data.contact_ids[0]);
   // 本场景验证纯本次输入快照，显式关闭工作区默认关系资料。
@@ -266,7 +267,7 @@ async function removedEvidence(pages: EvidencePages) {
 }
 
 async function legacySnapshot(pages: EvidencePages) {
-  await pages.manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
+  await selectContact(pages.manager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人甲' });
   await confirmHelperContact(pages.helper, pages.rewriteBackend.data.contact_ids[0]);
   await awaitWorkspaceScope(pages.helper, pages.rewriteBackend.data.contact_ids[0]);
   await setWorkspaceContext(pages.helper, true);

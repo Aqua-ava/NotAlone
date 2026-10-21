@@ -1,3 +1,4 @@
+import { selectContact } from '../contact-picker-actions.mjs';
 import { openAssistantHistory, expandSavedDiscussion } from '../assistant-history-actions';
 import { expect, type Browser } from '@playwright/test';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
@@ -20,8 +21,8 @@ export async function assistantSessionDeletionRecoveredCopy(browser: Browser, or
     try {
       await rebuilt.backend.connect();
       const nextManager = await rebuilt.open('manager');
-      await expect(nextManager.getByRole('combobox', { name: '本次联系人', exact: true })).toHaveValue('');
-      await nextManager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
+      await expect(nextManager.getByRole('combobox', { name: '本次联系人', exact: true })).toHaveAttribute('data-contact-id', '');
+      await selectContact(nextManager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人甲' });
       const nextHelper = await rebuilt.open('helper');
       await confirmHelperContact(nextHelper, saved.contactId);
       const discussion = nextHelper.getByRole('region', { name: '已保存的讨论', exact: true });
@@ -47,7 +48,7 @@ export async function assistantSessionDeletionRecoveredCopy(browser: Browser, or
       expect(await rewriteBackend.request(saved.path)).toEqual({ status: 404, data: { error: 'not_found' } });
       await expectDeletionCleared(nextHelper);
 
-      await nextManager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人乙' });
+      await selectContact(nextManager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人乙' });
       const otherContactId = rewriteBackend.data.contact_ids[1];
       await confirmHelperContact(nextHelper, otherContactId);
       await expect(nextHelper.getByText('当前会话还没有讨论。', { exact: true })).toBeVisible();

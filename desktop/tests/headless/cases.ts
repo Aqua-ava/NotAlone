@@ -1,3 +1,4 @@
+import { selectContact } from '../contact-picker-actions.mjs';
 import { setWorkspaceContext } from '../workspace-actions';
 import { selectMemoryCategory } from '../memory-page-actions';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
@@ -12,7 +13,7 @@ export async function memoryReading(browser: Browser, origin: string) {
     try {
       await host.backend.connect();
       const manager = await host.open('manager');
-      await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
+      await selectContact(manager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人甲' });
       await manager.getByRole('button', { name: '记忆', exact: true }).click();
       await selectMemoryCategory(manager, '联系人记忆');
       const contact = manager.getByRole('region', { name: '联系人记忆' });
@@ -32,7 +33,7 @@ export async function memoryReading(browser: Browser, origin: string) {
       await selectMemoryCategory(manager, '联系人记忆');
       await automatic.getByRole('button', { name: '查看来源与版本：甲喜欢合成茉莉茶。' }).click();
       await expect(automatic.getByText(`来源引用：${fixture.data.direct_message_id}`, { exact: true })).toBeVisible();
-      await manager.getByRole('combobox', { name: '本次联系人' }).selectOption(fixture.data.contact_ids[1]);
+      await selectContact(manager.getByRole('combobox', { name: '本次联系人' }), fixture.data.contact_ids[1]);
       await selectMemoryCategory(manager, '联系人记忆');
       await expect(manager.getByText('乙喜欢合成乌龙茶。', { exact: true })).toBeVisible();
       await expect(manager.getByText('甲喜欢合成茉莉茶。', { exact: true })).toHaveCount(0);
@@ -41,7 +42,7 @@ export async function memoryReading(browser: Browser, origin: string) {
       await expect(manager.getByText('本人喜欢合成绿茶。', { exact: true })).toHaveCount(0);
       await expect(manager.getByRole('combobox', { name: '本次联系人', exact: true })).toBeVisible();
       await selectMemoryCategory(manager, '联系人记忆');
-      await manager.getByRole('combobox', { name: '本次联系人' }).selectOption(fixture.data.empty_contact_id);
+      await selectContact(manager.getByRole('combobox', { name: '本次联系人' }), fixture.data.empty_contact_id);
       await selectMemoryCategory(manager, '联系人记忆');
       await expect(manager.getByText('还没有记住关于对方的事。', { exact: true })).toBeVisible();
       const denied = await manager.evaluate(async (outsideContactId) => {
@@ -84,7 +85,7 @@ export async function draftRewrite(browser: Browser, origin: string) {
         await manager.getByRole('button', { name: '打开输入小窗', exact: true }).click();
         const helper = await nextPage;
         await expect(helper.getByRole('button', { name: '帮我表达', exact: true })).toBeDisabled();
-        await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
+        await selectContact(manager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人甲' });
         await confirmHelperContact(helper, fixture.data.contact_ids[0]);
         await setWorkspaceContext(helper, false);
         await helper.getByRole('textbox', { name: '有什么想说的', exact: true }).fill('今晚我会晚一点回复你。');
@@ -114,7 +115,7 @@ export async function draftRewrite(browser: Browser, origin: string) {
           } catch { return 'rejected'; }
         });
         await expect.poll(() => proxy.heldCount).toBe(1);
-        await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人乙' });
+        await selectContact(manager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人乙' });
         proxy.release();
         expect(await pendingGeneration).toBe('completed');
         await expect(helper.getByRole('textbox', { name: '有什么想说的', exact: true })).toHaveValue('');

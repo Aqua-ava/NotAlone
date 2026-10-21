@@ -1,3 +1,4 @@
+import { selectContact } from '../contact-picker-actions.mjs';
 import { setWorkspaceContext, fillWorkspaceInstruction, continueWorkspace } from '../workspace-actions';
 import { openAssistantHistory, expandSavedDiscussion } from '../assistant-history-actions';
 import { openImportManagement } from '../memory-page-actions';
@@ -96,7 +97,7 @@ async function typed(pages: RewritePages, host: PageHost, mode: string, label: s
 
 async function chooseContact(manager: Page, helper: Page, contactId: string) {
   await manager.getByRole('button', { name: '联系人', exact: true }).click();
-  await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
+  await selectContact(manager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人甲' });
   await confirmHelperContact(helper, contactId);
 }
 
@@ -209,7 +210,7 @@ export async function authenticExpressionTyped(browser: Browser, origin: string)
         const reopened = new PageHost(await browser.newContext(), origin, userData, { copySurface });
         try {
           await reopened.backend.connect(); const nextManager = await reopened.open('manager');
-          await nextManager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
+          await selectContact(nextManager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人甲' });
           const nextHelper = await reopened.open('helper');
           await confirmHelperContact(nextHelper, contactId);
           await checkErased(nextHelper, pages, sessionPath, generated, independent, expectedCalls);

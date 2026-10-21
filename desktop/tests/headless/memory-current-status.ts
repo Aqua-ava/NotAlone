@@ -1,3 +1,4 @@
+import { selectContact } from '../contact-picker-actions.mjs';
 import { setWorkspaceContext } from '../workspace-actions';
 import { openImportManagement, selectMemoryCategory } from '../memory-page-actions';
 import { expect, type Browser } from '@playwright/test';
@@ -7,7 +8,7 @@ import { confirmHelperContact } from '../foreground-confirmation-actions';
 export async function memoryCurrentStatus(browser: Browser, origin: string) {
   await withRewritePages(browser, origin, async ({ manager, helper, rewriteBackend }) => {
     const prepared = await rewriteBackend.command('memory_current_status') as Record<string, string>;
-    await manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
+    await selectContact(manager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人甲' });
     await manager.getByRole('button', { name: '记忆', exact: true }).click();
     await manager.getByRole('button', { name: '刷新记忆', exact: true }).click();
     await selectMemoryCategory(manager, '联系人记忆');

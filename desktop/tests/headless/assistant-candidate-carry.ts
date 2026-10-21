@@ -1,3 +1,4 @@
+import { selectContact } from '../contact-picker-actions.mjs';
 import { openCandidateMoreActions, fillWorkspaceInstruction, openWorkspaceSettings } from '../workspace-actions';
 import { openAssistantHistory, expandSavedDiscussion } from '../assistant-history-actions';
 import path from 'node:path';
@@ -15,7 +16,7 @@ type CarryEditWindow = Window & { pageTransportControl?: PageTransportControl; c
   stopCarryEditObservation?: () => void };
 
 async function chooseContact(pages: RewritePages) {
-  await pages.manager.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption({ label: '合成联系人甲' });
+  await selectContact(pages.manager.getByRole('combobox', { name: '本次联系人', exact: true }), { label: '合成联系人甲' });
   await confirmHelperContact(pages.helper, pages.rewriteBackend.data.contact_ids[0]);
   await expect.poll(() => pages.helper.evaluate(async () => (await window.notalone.replies.getState()).savedSession?.phase))
     .toBe('ready');

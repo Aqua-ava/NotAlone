@@ -1,3 +1,5 @@
+import { ContactPicker } from './ContactPicker';
+export { ContactPicker } from './ContactPicker';
 import { useEffect, useMemo, useState } from 'react';
 import type { ForegroundState } from '../shared/foreground-bridge';
 import type { ContactSessionState } from '../shared/contact-session-bridge';
@@ -62,13 +64,6 @@ export function useContactSession() {
     catch { if (active.current) setError('联系人目录暂时无法刷新，请重试。'); }
   }
 
-  async function createContact(displayName: string): Promise<boolean> {
-    try {
-      receive(await window.notalone.contacts.createContact({ displayName, scopeRevision: latest.current.scopeRevision }));
-      if (active.current) setError('');
-      return true;
-    } catch { if (active.current) setError('联系人未能确认创建，请刷新目录后重试。'); return false; }
-  }
   async function confirmManualContact(contactId: string) {
     try {
       receive(await window.notalone.contacts.confirmManualContact({ contactId, scopeRevision: latest.current.scopeRevision }));
@@ -77,21 +72,10 @@ export function useContactSession() {
     } catch { if (active.current) setError('本次联系人未确认，请刷新目录后重新选择。'); return false; }
   }
 
-  return { state, error, selectContact, confirmContact, confirmManualContact, resumeForeground, createContact, setDraft, refreshContacts };
+  return { state, error, selectContact, confirmContact, confirmManualContact, resumeForeground, setDraft, refreshContacts };
 }
 
 export type ContactSessionView = ReturnType<typeof useContactSession>;
-
-export function ContactPicker({ session, disabled = false, onSelect = session.selectContact }: {
-  session: ContactSessionView; disabled?: boolean; onSelect?: (contactId: string) => Promise<unknown>;
-}) {
-  return <select className="contact-picker" aria-label="本次联系人"
-    value={session.state.selectedContactId ?? ''} disabled={disabled || session.state.directoryPhase !== 'ready' || session.state.contacts.length === 0}
-    onChange={(event) => void onSelect(event.target.value)}>
-    <option value="" disabled>选择联系人</option>
-    {session.state.contacts.map((contact) => <option key={contact.contactId} value={contact.contactId}>{contact.displayName}</option>)}
-  </select>;
-}
 
 export function HelperContactPicker({ session, foreground, manualRelease = false, manualInput = false }: { session: ContactSessionView; foreground?: ForegroundState; manualRelease?: boolean; manualInput?: boolean }) {
   const manual = manualRelease || manualInput || foreground?.manualInput;

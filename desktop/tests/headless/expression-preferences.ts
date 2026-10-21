@@ -1,3 +1,4 @@
+import { selectContact } from '../contact-picker-actions.mjs';
 import { workspaceInput, fillWorkspaceThought, fillWorkspaceInstruction, generateWorkspace } from '../workspace-actions';
 import { openImportManagement } from '../memory-page-actions';
 import { expect, type Browser } from '@playwright/test';
@@ -39,7 +40,7 @@ export async function expressionPreferences(browser: Browser, origin: string) {
     try {
       await host.backend.connect();
       let helper = await host.open('helper');
-      await helper.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption(contactId);
+      await selectContact(helper.getByRole('combobox', { name: '本次联系人', exact: true }), contactId);
       await confirmHelperContact(helper, contactId);
       await helper.getByText('长期表达偏好', { exact: true }).click();
       let panel = helper.locator('#assistant-expression-preferences');
@@ -98,9 +99,9 @@ export async function expressionPreferences(browser: Browser, origin: string) {
       await panel.getByRole('checkbox', { name: '明确长期保存', exact: true }).check();
       await panel.getByRole('button', { name: '确认修改长期偏好', exact: true }).click();
       await expect(directory.getByText('长期保留自然称呼。', { exact: true })).toBeVisible();
-      await helper.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption(otherContactId);
+      await selectContact(helper.getByRole('combobox', { name: '本次联系人', exact: true }), otherContactId);
       await expect(directory.getByRole('listitem')).toHaveCount(0);
-      await helper.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption(contactId);
+      await selectContact(helper.getByRole('combobox', { name: '本次联系人', exact: true }), contactId);
       await expect(directory.getByText('长期保留自然称呼。', { exact: true })).toBeVisible();
 
       process.stdout.write('page_test_step: expression-preferences-management-and-scope-complete\n');
@@ -109,7 +110,7 @@ export async function expressionPreferences(browser: Browser, origin: string) {
       host = new PageHost(await context(), origin, userData);
       await host.backend.connect();
       helper = await host.open('helper');
-      await helper.getByRole('combobox', { name: '本次联系人', exact: true }).selectOption(contactId);
+      await selectContact(helper.getByRole('combobox', { name: '本次联系人', exact: true }), contactId);
       await confirmHelperContact(helper, contactId);
       await helper.getByText('长期表达偏好', { exact: true }).click();
       panel = helper.locator('#assistant-expression-preferences');
