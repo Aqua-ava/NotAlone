@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ReplySessionView } from './RewritePanel';
+import { replyTextLimit } from '../shared/reply-contract';
 
 export function StrategyControls({ replies }: { replies: ReplySessionView }) {
   const { state } = replies, result = state.exploration.result;
@@ -13,7 +14,7 @@ export function StrategyControls({ replies }: { replies: ReplySessionView }) {
   useEffect(() => { pausedQuestion.current = ''; setAnswerDraft({ question: '', text: '' }); },
     [state.contactId, state.scopeRevision, state.mode, state.inputClearRevision]);
   const supplement = [state.correction, state.requirements].filter(Boolean).join('\n');
-  const supplementTooLong = supplement.length > 4096;
+  const supplementTooLong = supplement.length > replyTextLimit;
   const available = !supplementTooLong && Boolean(state.contactId) && !state.generationBlock && state.phase !== 'waiting'
     && state.exploration.phase !== 'waiting' && (state.mode !== 'reply_to_message' || Boolean(state.targetMessageId));
   return <section className="strategy-controls" aria-label="理解与方向">
@@ -23,12 +24,12 @@ export function StrategyControls({ replies }: { replies: ReplySessionView }) {
     </div>
     <div className="strategy-supplement">
       <label className="strategy-field">补充你的想法或要求<span>补充情况、纠正理解或说明怎么回复，都可以写在这里</span>
-        <textarea aria-label="补充你的想法或要求" rows={2} maxLength={Math.max(4096, supplement.length)}
+        <textarea aria-label="补充你的想法或要求" rows={2} maxLength={Math.max(replyTextLimit, supplement.length)}
           value={supplement}
           placeholder="例如：只是普通问候，回复简短自然，不提见面"
           disabled={!state.contactId} onChange={(event) => void replies.updateSupplement(event.target.value)} /></label>
     </div>
-    {supplementTooLong && <p role="status">原有补充已完整保留，请缩短至4096个字符以内再更新或生成。</p>}
+    {supplementTooLong && <p role="status">原有补充已完整保留，请缩短至{replyTextLimit}个字符以内再更新或生成。</p>}
     <div className="strategy-actions">
       <button disabled={!available} onClick={() => void replies.explore()}>更新理解</button>
       <span className="strategy-note">系统会结合补充内容，更新理解和方向建议。</span>

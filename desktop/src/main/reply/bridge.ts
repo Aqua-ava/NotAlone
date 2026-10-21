@@ -10,7 +10,8 @@ import type { AssistantInterruptedRetry, AssistantSessionSelection } from '../..
 import type { ReplyCandidateDraftUpdate, ReplyCandidateVersionDisplay, ReplyCandidateVersionEdit, ReplyCandidateVersionRead, ReplyCandidateVersionSelection } from '../../shared/assistant-candidate-versions';
 import type { ReplyContinuation, ReplyContinuationConfirmation } from '../../shared/reply-bridge';
 import { ASSISTANT_CONTINUATION_RESPONSE_LIMIT } from '../../shared/assistant-continuation-clarification';
-const continuationText = (item: unknown) => typeof item === 'string' && Boolean(item.trim()) && Array.from(item).length <= 4096;
+import { replyTextLimit } from '../../shared/reply-contract';
+const continuationText = (item: unknown) => typeof item === 'string' && Boolean(item.trim()) && Array.from(item).length <= replyTextLimit;
 
 function continuation(args: unknown[]): ReplyContinuation {
   const raw = args[0];
@@ -53,7 +54,7 @@ function candidateVersion(args: unknown[], operation: 'read' | 'display' | 'sele
     if (!Array.isArray(messages) || messages.length < 1 || messages.length > 8
       || operation === 'draft' && typeof value.requirements !== 'string'
       || (value.requirements !== null && (typeof value.requirements !== 'string'
-        || operation === 'edit' && !value.requirements.trim() || value.requirements.length > 4096))) throw new Error('候选版本操作不可用。');
+        || operation === 'edit' && !value.requirements.trim() || value.requirements.length > replyTextLimit))) throw new Error('候选版本操作不可用。');
     const known = new Set<string>();
     value.messages = messages.map((message) => {
       if (!message || typeof message !== 'object' || Array.isArray(message)
@@ -94,7 +95,7 @@ function options(args: unknown[]): RewriteOptionsUpdate {
   if (!settings || typeof settings !== 'object' || Array.isArray(settings) || Object.keys(settings).length < 3
     || !Object.keys(settings).every((key) => ['tone', 'instruction', 'includeRelationshipContext', 'inputKind', 'pastedDirection', 'workspaceAction', 'contextText', 'excludedMessageIds'].includes(key))
     || !['original', 'warm', 'concise', 'polite'].includes(settings.tone as string)
-    || typeof settings.instruction !== 'string' || settings.instruction.length > 4096
+    || typeof settings.instruction !== 'string' || settings.instruction.length > replyTextLimit
     || typeof settings.includeRelationshipContext !== 'boolean'
     || settings.inputKind !== undefined && !['draft', 'current_chat', 'workspace'].includes(settings.inputKind as string)
     || settings.workspaceAction !== undefined && !['express', 'suggest'].includes(settings.workspaceAction as string)
@@ -102,7 +103,7 @@ function options(args: unknown[]): RewriteOptionsUpdate {
     || settings.excludedMessageIds !== undefined && (!Array.isArray(settings.excludedMessageIds)
       || settings.excludedMessageIds.length > 500 || !settings.excludedMessageIds.every(isUuid)
       || new Set(settings.excludedMessageIds.map((id: string) => id.toLowerCase())).size !== settings.excludedMessageIds.length)
-    || settings.pastedDirection !== undefined && (typeof settings.pastedDirection !== 'string' || settings.pastedDirection.length > 4096)) throw new Error('本次改写要求不可用。');
+    || settings.pastedDirection !== undefined && (typeof settings.pastedDirection !== 'string' || settings.pastedDirection.length > replyTextLimit)) throw new Error('本次改写要求不可用。');
   return { contactId: value.contactId as string, scopeRevision: value.scopeRevision as number, options: { ...settings } as unknown as RewriteOptions };
 }
 
@@ -185,12 +186,12 @@ export function installReplyBridge(commands: PageCommands, backend: BackendHost,
   }, 'helper');
   input('direction', 'reply:update-direction', (args, snapshot) => {
     const value = fields(args, ['contactId', 'scopeRevision', 'direction']);
-    if (typeof value.direction !== 'string' || value.direction.length > 4096) throw new Error('表达方向不可用。');
+    if (typeof value.direction !== 'string' || value.direction.length > replyTextLimit) throw new Error('表达方向不可用。');
     return replies.updateDirection(value as unknown as ReplyDirectionUpdate, snapshot);
   });
   input('purpose', 'reply:update-purpose', (args, snapshot) => {
     const value = fields(args, ['contactId', 'scopeRevision', 'purpose']);
-    if (typeof value.purpose !== 'string' || value.purpose.length > 4096) throw new Error('主动目的不可用。');
+    if (typeof value.purpose !== 'string' || value.purpose.length > replyTextLimit) throw new Error('主动目的不可用。');
     return replies.updatePurpose(value as unknown as import('../../shared/reply-bridge').ReplyPurposeUpdate, snapshot);
   });
   commands.handle('reply:generate', (...args: unknown[]) => {
@@ -222,12 +223,12 @@ export function installReplyBridge(commands: PageCommands, backend: BackendHost,
   }, 'helper');
   input('supplement', 'reply:update-supplement', (args, snapshot) => {
     const value = fields(args, ['contactId', 'scopeRevision', 'supplement']);
-    if (typeof value.supplement !== 'string' || value.supplement.length > 8193) throw new Error('补充内容最多4096个字符。');
+    if (typeof value.supplement !== 'string' || value.supplement.length > replyTextLimit) throw new Error(`补充内容最多${replyTextLimit}个字符。`);
     return replies.updateSupplement(value as unknown as import('../../shared/reply-bridge').ReplySupplementUpdate, snapshot);
   });
   input('correction', 'reply:update-correction', (args, snapshot) => {
     const value = fields(args, ['contactId', 'scopeRevision', 'correction']);
-    if (typeof value.correction !== 'string' || value.correction.length > 4096) throw new Error('纠正内容不可用。');
+    if (typeof value.correction !== 'string' || value.correction.length > replyTextLimit) throw new Error('纠正内容不可用。');
     return replies.updateCorrection(value as unknown as ReplyCorrectionUpdate, snapshot);
   });
   commands.handle('reply:explore', (...args: unknown[]) =>
@@ -242,7 +243,7 @@ export function installReplyBridge(commands: PageCommands, backend: BackendHost,
   commands.handle('reply:answer-clarification', (...args: unknown[]) => {
     const value = fields(args, ['contactId', 'scopeRevision', 'answer', 'inputVersion', 'questionId']);
     if (!isUuid(value.inputVersion) || !isUuid(value.questionId) || typeof value.answer !== 'string'
-      || !value.answer.trim() || value.answer.length > 4096) throw new Error('关键问题回答不可用。');
+      || !value.answer.trim() || value.answer.length > replyTextLimit) throw new Error('关键问题回答不可用。');
     return replies.answerClarification(value as unknown as import('../../shared/reply-bridge').ReplyClarificationAnswer);
   }, 'helper');
   commands.handle('reply:stop-exploration', (...args: unknown[]) =>
@@ -251,7 +252,7 @@ export function installReplyBridge(commands: PageCommands, backend: BackendHost,
     replies.retryExploration(fields(args, ['contactId', 'scopeRevision']) as unknown as ContactSelection), 'helper');
   input('requirements', 'reply:update-requirements', (args, snapshot) => {
     const value = fields(args, ['contactId', 'scopeRevision', 'requirements']);
-    if (typeof value.requirements !== 'string' || value.requirements.length > 4096) throw new Error('本次要求不可用。');
+    if (typeof value.requirements !== 'string' || value.requirements.length > replyTextLimit) throw new Error('本次要求不可用。');
     return replies.updateRequirements(value as unknown as import('../../shared/reply-bridge').ReplyRequirementsUpdate, snapshot);
   });
   commands.handle('reply:update-skill', (...args: unknown[]) => {

@@ -1,7 +1,7 @@
 # 07 契约单一来源
 
 Triage: ready-for-agent
-State: open
+State: resolved
 
 ## 目标
 
@@ -26,3 +26,11 @@ State: open
 - `cd desktop && npm run typecheck` + 相关 node test；报告后端无需改动的前提。
 
 ## Comments
+
+## Comments
+
+- 实现：新增 `desktop/src/shared/reply-contract.ts` 作为回复契约单一来源：`replyTextLimit=4096`（后端 `reply/interface.py` 权威）与 `replyFailureDecision()` 失败码/原因映射（已知码分类明确，未知码返回 `known:false` + 既有可重试策略）。`bridge.ts` 补充内容 8193→4096 并统一引用常量；`session.ts` 删除 20 分支嵌套三元，改用共享映射，未知码走显式分支并 `console.warn` 仅记录 kind/code/reason（无正文）；`StrategyControls` 复用同一上限。
+- 前台：`foreground/controller.ts` 删除本地 `awaitingSelectionReasons`，改用共享 `shared/foreground-failure.mjs` 的 `isAwaitingForegroundSelection`；补齐后端会产出的 `session_candidates_truncated`、`sync_disabled`、`sync_gate_unavailable`、`minimal_region_unavailable`、`contact_unavailable` 固定中文说明；新增 `isKnownForegroundReason`，未知原因显式记录一次（只含协议原因码）。
+- 测试：`node --test tests/reply-contract.test.mjs` 4/4（上限 4096 边界与无 8193 残留、已知/未知失败码映射、待选原因集合与说明、后端前台原因集合覆盖）；相关回复模块 9 文件 71/71；前台相关 5 文件 30/30；`npm run typecheck` 通过。后端无需改动。
+- 数据影响：仅桌面契约常量/映射与日志，不新增外发、不改 preload/数据；日志只含协议码，不含正文或可识别信息。
+- 未做真实 App 验收。剩余风险：bridge 硬限 4096 后，历史上 correction+requirements 合计超限的状态只能整体清空重填，`session.updateSupplement` 的「逐步缩短」路径只剩内部兜底；未知码日志进入主进程标准输出，未接统一日志设施。

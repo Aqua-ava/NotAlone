@@ -185,6 +185,7 @@
     "tests/owner-facts-overview-http.test.mjs",
     "tests/prepared-format-http.test.mjs",
     "tests/real-sync-visual-independence.test.mjs",
+    "tests/reply-contract.test.mjs",
     "tests/reply-continuation-codepoint-http.test.mjs",
     "tests/reply-continuation-effective-intent-http.test.mjs",
     "tests/reply-continuation-preparation-proof-http.test.mjs",

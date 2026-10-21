@@ -5,7 +5,7 @@ import { initialForegroundState, type ForegroundState, type ForegroundConfirmati
 import { foregroundObservation } from './observation';
 import type { SyncControlState } from '../../shared/sync-control-bridge';
 import type { ForegroundChangeSource, HeaderChangePermit } from './native-change-source';
-import { isTransientForegroundContextChange, isUnsupportedForegroundConversation } from '../../shared/foreground-failure.mjs';
+import { isAwaitingForegroundSelection, isKnownForegroundReason, isTransientForegroundContextChange, isUnsupportedForegroundConversation } from '../../shared/foreground-failure.mjs';
 import type { ContactSelection } from '../../shared/contact-session-bridge';
 
 type Flight = { abort: AbortController; promise: Promise<void> };
@@ -13,11 +13,6 @@ export type ForegroundMeasurement = {
   event: 'change_received' | 'change_queued' | 'poll_scheduled' | 'request_started' | 'request_settled' | 'result_published';
   durationMs: number; changedContact: boolean; confirmed: boolean; phase: ForegroundState['phase'];
 };
-const awaitingSelectionReasons = new Set([
-  'ambiguous_requires_selection', 'unmatched_requires_selection',
-  'session_candidates_truncated', 'manual_confirmation_required',
-]);
-
 export interface ObservationClock {
   schedule(callback: () => Promise<void>, delayMs: number): unknown;
   cancel(handle: unknown): void;
@@ -38,6 +33,7 @@ export class ForegroundController {
   private failures = 0;
   private refreshAfterHelperFocus = false;
   private changePending = false;
+  private readonly loggedUnknownReasons = new Set<string>();
   private changeSource: ForegroundChangeSource | undefined;
   private syncPermit: { generation: number } | undefined;
   private captureAuthorityRevision = 0;
@@ -269,9 +265,14 @@ export class ForegroundController {
       signal: abort.signal, timeoutMs: 3500, maxResponseBytes: 4096 }).then((response) => {
       if (!current() || response.generation !== generation) return;
       const observation = foregroundObservation(response.data);
+      if (observation.reason !== null && !isKnownForegroundReason(observation.reason) && !this.loggedUnknownReasons.has(observation.reason)) {
+        // 未知前台原因不静默折叠：只记录协议原因码，界面继续走固定兜底文案。
+        this.loggedUnknownReasons.add(observation.reason);
+        console.warn('foreground_observation_unknown_reason', { phase: observation.phase, reason: observation.reason });
+      }
       // 丢弃已过时的身份/待选择结果，避免旧建议建立永久人工门；技术失败及安全暂停仍处理。
       if (this.changePending && (observation.phase === 'confirmed'
-        || observation.phase === 'manual-required' && awaitingSelectionReasons.has(observation.reason))) return;
+        || observation.phase === 'manual-required' && isAwaitingForegroundSelection(observation.reason))) return;
       // 群聊暂停跨助手获焦/失败保留，只有新的完整私聊证据才能解除。
       const privateVerified = observation.phase === 'confirmed'
         || (observation.phase === 'manual-required' && observation.reason === 'unmatched_requires_selection');
@@ -335,7 +336,7 @@ export class ForegroundController {
       this.measure('request_settled', performance.now() - began);
       if (this.flight?.abort === abort) {
         this.flight = undefined;
-        const awaitingContact = this.state.phase === 'manual-required' && awaitingSelectionReasons.has(this.state.reason ?? '');
+        const awaitingContact = this.state.phase === 'manual-required' && isAwaitingForegroundSelection(this.state.reason);
         this.failures = this.state.phase === 'unavailable' || (this.state.phase === 'manual-required' && !awaitingContact)
           ? Math.min(2, this.failures + 1) : 0;
         const repeat = this.changePending && this.failures === 0;
