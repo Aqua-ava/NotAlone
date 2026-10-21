@@ -49,7 +49,7 @@ class SkillFileFailure:
         }
 
 
-def _failure_code(error: BaseException) -> str:
+def skill_file_failure_code(error: BaseException) -> str:
     """把文件/权限/校验失败压成稳定脱敏错误码，不回传原始信息。"""
     if isinstance(error, PermissionError):
         return "permission_denied"
@@ -60,10 +60,9 @@ def _failure_code(error: BaseException) -> str:
     return "unknown_error"
 
 
-def _record_file_failure(
-    owner_id: UUID, *, operation: str, error: BaseException, skill_id: UUID | None = None,
+def _store_file_failure(
+    owner_id: UUID, *, operation: str, code: str, skill_id: UUID | None = None,
 ) -> None:
-    code = _failure_code(error)
     with _FILE_FAILURES_LOCK:
         _FILE_FAILURES[(owner_id, operation, skill_id)] = SkillFileFailure(
             operation=operation, code=code, skill_id=skill_id,
@@ -72,6 +71,28 @@ def _record_file_failure(
         overflow = len(_FILE_FAILURES) - _MAX_FILE_FAILURES
         for key in list(_FILE_FAILURES)[:max(overflow, 0)]:
             _FILE_FAILURES.pop(key, None)
+
+
+def record_skill_file_failure(owner_id: UUID, *, operation: str, code: str) -> None:
+    """记录目录发现等外部已归类的脱敏失败码，供健康状态查询与重试恢复。"""
+    if not isinstance(owner_id, UUID):
+        raise TypeError("owner_id 必须是 UUID。")
+    _store_file_failure(owner_id, operation=operation, code=code)
+    logger.warning("skill_file_sync_failed operation=%s code=%s", operation, code)
+
+
+def clear_skill_file_failure(owner_id: UUID, *, operation: str) -> None:
+    if not isinstance(owner_id, UUID):
+        raise TypeError("owner_id 必须是 UUID。")
+    with _FILE_FAILURES_LOCK:
+        _FILE_FAILURES.pop((owner_id, operation, None), None)
+
+
+def _record_file_failure(
+    owner_id: UUID, *, operation: str, error: BaseException, skill_id: UUID | None = None,
+) -> None:
+    code = skill_file_failure_code(error)
+    _store_file_failure(owner_id, operation=operation, code=code, skill_id=skill_id)
     logger.warning("skill_file_sync_failed operation=%s code=%s", operation, code)
 
 
@@ -188,11 +209,19 @@ def _validate_name(name: str) -> None:
         raise SkillFileError("Skill 文件不可用。")
 
 
-def _checked_path(relative: str) -> Path:
+def _validate_relative_path(relative: str) -> None:
+    """拒绝空段、`.`/`..`、绝对路径、反斜杠与重复斜杠；末段同样受约束。"""
+    if not isinstance(relative, str):
+        raise SkillFileError("Skill 文件不可用。")
     parts = PurePosixPath(relative).parts
     if (not parts or relative.startswith("/") or "\\" in relative or
             any(part in (".", "..", "") for part in parts) or "//" in relative):
         raise SkillFileError("Skill 文件不可用。")
+
+
+def _checked_path(relative: str) -> Path:
+    _validate_relative_path(relative)
+    parts = PurePosixPath(relative).parts
     root = skills_root()
     for path in (root, *root.parents):
         if path.is_symlink():
@@ -402,8 +431,11 @@ def cleanup_pending_files(connection: Any, *, owner_id: UUID | None = None) -> i
     count = 0
     for row in rows:
         try:
-            relative = PurePosixPath(row["relative_path"])
-            parent = _checked_path(relative.parent.as_posix())
+            relative_path = row["relative_path"]
+            _validate_relative_path(relative_path)
+            relative = PurePosixPath(relative_path)
+            parent_relative = relative.parent.as_posix()
+            parent = skills_root() if parent_relative == "." else _checked_path(parent_relative)
             path = parent / relative.name
             if path.is_symlink():
                 path.unlink()
@@ -424,7 +456,7 @@ def cleanup_pending_files(connection: Any, *, owner_id: UUID | None = None) -> i
             else:
                 logger.warning(
                     "skill_file_sync_failed operation=%s code=%s", "cleanup",
-                    _failure_code(error),
+                    skill_file_failure_code(error),
                 )
             continue
         else:

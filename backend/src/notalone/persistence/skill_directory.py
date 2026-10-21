@@ -1,5 +1,8 @@
 """把 Owner 可编辑目录投影成通过校验的不可变 Skill 版本。"""
 
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
 from uuid import UUID, uuid4
 
 import psycopg
@@ -78,27 +81,63 @@ class _DictConnection:
         return self.connection.cursor(**kwargs)
 
 
-def _read_packages(owner_id, *, excluded_names=()):
-    from notalone.persistence.skill_files import SkillFileError, _checked_path
+@dataclass(frozen=True, slots=True)
+class _ReadPackages:
+    """一次目录扫描结果；区分「没有包」与「读取失败保留上一有效状态」。"""
+
+    packages: dict[str, Any]
+    failed_names: frozenset[str] = frozenset()
+    root_failed: bool = False
+    failure_code: str | None = None
+
+
+def _package_directories(root: Path) -> tuple[Path, ...]:
+    """列出 owner 管理目录；单独抽出以便根读取失败降级与故障注入。"""
+    return tuple(root.iterdir())
+
+
+def _read_packages(owner_id, *, excluded_names=()) -> _ReadPackages:
+    from notalone.persistence.skill_files import (
+        SkillFileError, _checked_path, skill_file_failure_code,
+    )
 
     try:
         root = _checked_path(str(owner_id))
-        if root.is_symlink() or not root.exists():
-            return {}
-        directories = tuple(root.iterdir())
-    except (OSError, SkillFileError):
-        return {}
+        if root.is_symlink():
+            raise SkillFileError("Skill 文件不可用。")
+        if not root.exists():
+            # 目录确实不存在：合法空集，既有目录版本随之失效是正确语义。
+            return _ReadPackages({})
+        directories = _package_directories(root)
+    except (OSError, SkillFileError) as error:
+        # 根不可读/配置异常不是「没有包」：不批量下架，记录脱敏错误码后重试。
+        return _ReadPackages(
+            {}, root_failed=True, failure_code=skill_file_failure_code(error),
+        )
     reader, validator = LocalSkillPackageReader(), SkillPackageValidator()
-    packages = {}
+    packages: dict[str, Any] = {}
+    failed: set[str] = set()
+    code: str | None = None
     for directory in directories:
         if directory.name.startswith(".") or directory.name in excluded_names:
             continue
+        if directory.is_symlink():
+            # 不跟随子目录符号链接：拒绝把根外文件导入已发布版本。
+            failed.add(directory.name)
+            code = code or "symlink_rejected"
+            continue
         try:
             packages[directory.name] = validator.validate(reader.read(directory))
-        except (SkillPackageValidationError, OSError, ValueError):
-            # 非法包只影响自身；不能回退到已失效工作副本对应的旧正文。
-            continue
-    return packages
+        except SkillPackageValidationError:
+            # 包确实非法只影响自身；不能回退到已失效工作副本对应的旧正文。
+            code = code or "invalid_package"
+        except OSError as error:
+            # 单包瞬时读取失败：保留该技能上一有效状态，等待下次重试。
+            failed.add(directory.name)
+            code = code or skill_file_failure_code(error)
+        except ValueError:
+            code = code or "invalid_package"
+    return _ReadPackages(packages, frozenset(failed), False, code)
 
 
 def _blocked_working_directories(cursor, owner_id):
@@ -171,7 +210,21 @@ def synchronize_skill_directory(connection, owner_id: UUID, *, check_only=False)
         ).fetchall()
         known = {row["name"]: row for row in rows}
         blocked_names, all_blocked = _blocked_working_directories(cursor, owner_id)
-        packages = {} if all_blocked else _read_packages(owner_id, excluded_names=blocked_names)
+        if all_blocked:
+            read = _ReadPackages({})
+        else:
+            read = _read_packages(owner_id, excluded_names=blocked_names)
+        if not check_only and not all_blocked:
+            from notalone.persistence.skill_files import (
+                clear_skill_file_failure, record_skill_file_failure,
+            )
+            if read.failure_code is not None:
+                record_skill_file_failure(
+                    owner_id, operation="directory_discovery", code=read.failure_code,
+                )
+            else:
+                clear_skill_file_failure(owner_id, operation="directory_discovery")
+        packages = read.packages
         changed = False
         library = PostgresSkillLibrary("postgresql:///directory")
         for name, package in packages.items():
@@ -193,9 +246,11 @@ def synchronize_skill_directory(connection, owner_id: UUID, *, check_only=False)
         for row in rows:
             if not row["directory_managed"] or row["status"] == "deleted" or row["version_id"] is None:
                 continue
-            if all_blocked or row["name"] in blocked_names:
-                # 待重试的替换/清理任务保留上一有效目录状态；运行资格仍按查询 fail-closed，
-                # 失败原因由 skill_file_health 可查询，重试成功后自动恢复。
+            if (all_blocked or read.root_failed or row["name"] in blocked_names
+                    or row["name"] in read.failed_names):
+                # 待重试的替换/清理任务、根读取失败或单包读取失败保留上一有效目录状态；
+                # 运行资格仍按查询 fail-closed，失败原因由 skill_file_health 可查询，
+                # 重试成功后自动恢复。
                 continue
             package = packages.get(row["name"])
             matches = _matches(cursor, row, package)
