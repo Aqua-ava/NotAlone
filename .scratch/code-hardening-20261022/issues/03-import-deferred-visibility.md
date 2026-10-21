@@ -34,3 +34,6 @@ Blocked by: 01
 - 验证：`python -m unittest tests.unit.server.test_import_processing_visibility -v` 4 条通过；`python -m unittest discover -s tests/unit/server -t .` 101 条通过。
 - 数据影响：无 schema/数据变更；HTTP/状态 JSON 只新增字段。剩余风险：defer 成功但扫描线程未启动的装配问题仍依赖 command.py 的 warning 暴露，桌面不会主动提示。
 - Commit：见 `git log --grep '导入'`。
+
+- 2026-10-22 复核修复：只有成功排入 `defer` 队列才返回 `processing_deferred: true`；`defer` 失败或任务身份缺失返回 `processing_deferred: false` + `processing_unavailable: true`，不再把「未入队」说成「已延后」。
+- 后续项：桌面/状态页尚未消费 `processing_deferred`/`processing_unavailable`/`degraded`，已登记到 `review-followups.md`。

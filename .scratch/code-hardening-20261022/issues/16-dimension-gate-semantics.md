@@ -34,3 +34,5 @@ State: resolved
 - 验证：`python -m unittest tests.unit.memory_extraction.test_dimensions tests.unit.memory_extraction.test_adoption` 56 条通过；加入 `test_automatic_memory` 共 66 条通过。`tests/unit/memory_extraction` 全量仍有 13 条失败，均为 `test_merge_batch_timeline`/`test_upgrade_transaction_ports`，与同时进行的 memory-fix 未提交改动相关（本 ticket 改动前后这些用例属于并发编辑面），留待集成后全量复核。
 - 数据影响：无 schema/数据变更；默认（门开启 + `verified_sources=True`）行为与改动前完全一致。剩余风险：显式注入 `verified_sources=False` 的历史评测装配仍可绕过来源核验，仅限测试/冻结评测，不应进入生产装配。
 - Commit：见 `git log --grep '维度门回退'`。
+
+- 2026-10-22 复核修复：`gate_enabled` 不再影响 `expected_dimension_evidence` 绑定、owner 写入分支与 correction 例外；新增 `DimensionRelease.requires_evidence_binding = verified_sources or gate_enabled`。回退只关逐维白名单，候选依据复验与来源核验都不受开关影响；显式 `verified_sources=False` 历史协议行为保持不变。

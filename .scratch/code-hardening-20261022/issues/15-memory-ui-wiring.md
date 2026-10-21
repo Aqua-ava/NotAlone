@@ -34,3 +34,6 @@ State: resolved
 - 测试：新增 `tests/memory-ui-wiring.test.mjs` 5/5（联系人/本人面板渲染与撤销入口、空历史不渲染空壳、活跃/失效卡片入口差异、接线与无新通道+correctionTarget 保留）；相关记忆 node 测试 63/63；`npm run typecheck`、`test:inventory` 通过；全量 safe-node 983 项 982 通过 1 跳过。更新 `tests/headless/contact-relationship-overview.ts` 的旧断言与 `tests/memory-event-updates.test.mjs` 的入口断言；headless/浏览器场景未执行（默认门禁不含、本机未装 Playwright 浏览器）。
 - 未做真实 App 验收（本轮约束不运行 `npm run dev`）：折叠区实际观感、展开后滚动定位、撤销确认流程只经静态渲染与源码接线验证。
 - 剩余风险：①`OwnerLayeredMemoryPanel`（自管理本人主题资料）仍未接回，现有 headless 场景断言记忆页默认不出现「主题资料」区域，是否接回需产品确认；②概览读取纳入整页刷新后，概览失败会显示合并错误提示（与旧实现一致）；③真实 App 交互未验证。
+
+- 2026-10-22 复核修复：刷新不再把概览/分层读取与记忆主列表放入同一 `Promise.all`，补充投影失败不会把整页标成「资料范围不可用」。
+- 验收缺口：headless/浏览器场景未执行（本机未装 Playwright 浏览器），「打开版本历史→撤销自动更新」交互路径目前只有源码/渲染断言，已登记到 `review-followups.md`。

@@ -34,3 +34,5 @@ State: resolved
 - 测试：`node --test tests/reply-contract.test.mjs` 4/4（上限 4096 边界与无 8193 残留、已知/未知失败码映射、待选原因集合与说明、后端前台原因集合覆盖）；相关回复模块 9 文件 71/71；前台相关 5 文件 30/30；`npm run typecheck` 通过。后端无需改动。
 - 数据影响：仅桌面契约常量/映射与日志，不新增外发、不改 preload/数据；日志只含协议码，不含正文或可识别信息。
 - 未做真实 App 验收。剩余风险：bridge 硬限 4096 后，历史上 correction+requirements 合计超限的状态只能整体清空重填，`session.updateSupplement` 的「逐步缩短」路径只剩内部兜底；未知码日志进入主进程标准输出，未接统一日志设施。
+
+- 2026-10-22 复核补强：新增 `fitsReplyTextLimit` 按码点计数（`Array.from`），bridge/session 的全部字符上限检查改用它；新增恰好 4096、4097、emoji 边界测试。后端 Python `len` 同为码点计数，前后端单位一致。

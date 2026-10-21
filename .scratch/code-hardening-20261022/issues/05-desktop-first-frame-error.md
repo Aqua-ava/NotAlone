@@ -33,3 +33,5 @@ State: resolved
 - 数据影响：不改数据通道、不新增 preload；仅 renderer 本地错误状态与提示，日志不含正文/路径。
 - 未做真实 App 验收（本轮约束不运行 `npm run dev`）。
 - 剩余风险：只覆盖首帧读取用 `getState` 的失败路径；页面若在首次 `getState` 失败前收到推送状态则错误自动清除（由 receive 覆盖）。其他 `catch(() => {})` 中仍混有刷新动作类静默，未纳入本 ticket。
+
+- 2026-10-22 复核补漏：`OwnerLayeredMemoryPanel` 的 `getOwnerLayeredMemoryState()` 首帧失败也会写 error（该面板当前尚未接线，仍按首帧读取规则处理）。

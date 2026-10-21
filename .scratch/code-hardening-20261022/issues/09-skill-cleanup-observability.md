@@ -31,3 +31,6 @@ Blocked by: 08
 - 验证命令与结果：新增 `tests/integration/persistence/test_postgres_skill_file_health.py`（2 OK，注入快照哈希错误与 `shutil.rmtree` PermissionError，断言 warning、任务保留、技能不可执行、状态可查且无路径/正文、修复后恢复 ok）。相关模块回归：`test_postgres_skill_directory`(19)、`test_postgres_skill_deletion`(6)、`test_postgres_skill_lifecycle`(10)、`test_postgres_skill_library`(29)、`test_postgres_skill_read_path`(4) 全 OK。
 - 数据/隐私影响：状态与日志新增均为固定错误码与计数，`skill_id` 为不可识别 UUID；不写库新增表/字段（无迁移），不改变删除屏障、来源核验、owner/contact 隔离与人工发送边界。
 - 剩余风险：失败状态为进程内（本机单进程后端可查询，重启后仅剩持久化待办计数与任务行），跨进程/重启后的历史失败原因不可查；失败重试按每轮显式同步节奏，无指数退避，若每轮都失败会每轮记一条 warning（限流留给 02 类运行时状态模式扩展）；`skill_file_health` 尚未接到 HTTP 状态投影（app.py 不在本 ticket 写范围）。
+
+- 2026-10-22 复核修复：`/api/runtime/status` 增加 `skill_files` 健康投影（`SkillService.skill_file_health`，读取失败只 warning 不拖垮状态）；健康状态包含 DB pending 计数，重启后仍为 degraded，但进程内 failures 明细会丢失（已知限制）。
+- 有意偏离：catalog 仍用 `working_copy`/`cleanup` 的 NOT EXISTS 把待清理技能整体排除，优先保证运行资格 fail-closed；未改成「列出但标不可用」，避免在删除屏障完成前暴露可执行条目。所需的产品确认已登记到 `review-followups.md`。

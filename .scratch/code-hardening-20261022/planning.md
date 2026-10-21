@@ -24,6 +24,11 @@
 | 16 | b32fc0e2 | 维度门回退只关白名单（新 ADR-097，README/ADR-036/台账同步） |
 | 审查修复 | 52276df6、57074c47、88b61cf5、47af64fe | 空行、日志脱敏、健康身份、上限常量统一 |
 
+## 第二轮复核修复（Standards/Spec 独立审查后）
+- 57074c47 / 88b61cf5 / 47af64fe / 52276df6：日志脱敏、Skill 健康身份、字符上限常量、空行（第一批）。
+- 第二批：回复回执读取失败字段进入 HTTP、导入延后区分「已入队/未入队」、`/api/runtime/status` 暴露 `skill_files`；维度回退不再影响 `expected_dimension_evidence`/owner 分支/correction 例外；探索与审核端口接入每轮同步、旧库迁移失败后续轮次重试；桌面字符上限统一按码点计数并补边界测试、记忆页补充投影失败不再拖垮主列表、`OwnerLayeredMemoryPanel` 首帧错误可见。
+- 遗留项见 `review-followups.md`；真实 App/微信验收仍未执行。
+
 ## 验证
 - 后端单测：`python -m unittest discover -s tests/unit -t .` 2487 条，14 条既有基线失败（memory_extraction merge_batch/upgrade_ports + experiments pgvector，`git archive HEAD` 基线复现非本轮引入）；另有 1 条 front_sync 时序用例仅全量并发下偶发，单跑 3/3 通过。
 - 关键集成：skill 目录/生命周期/清理健康/FS 防御/port/reply_store 67 条 OK；memory 批量化/confirm 一致性/skill 读路径/reply evidence 51 条 OK（隔离 `notalone_test` 库）。

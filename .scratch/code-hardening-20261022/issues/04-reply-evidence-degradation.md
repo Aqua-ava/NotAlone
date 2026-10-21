@@ -37,3 +37,5 @@ State: resolved
 5、数据影响：无生产数据迁移；新读取失败标记只出现在新生成/新落库的回复上下文与固定准备快照。旧固定准备快照（revision 14）在升级后解码失败并按既有契约要求重新准备（fail closed），不会静默补字段。
 
 6、剩余风险：桌面端尚未展示该标记（按 ticket 范围留后续）；`application/reply_evidence.py` 证据投影与 `server/app.py` 序列化未暴露新字段，重启后再读完成回复只能从本 ticket 新增的快照键恢复回执标记（已实现），但 HTTP/桌面可见性仍待后续 ticket。
+
+- 2026-10-22 复核修复：日志改为只记稳定码 + 异常类型名（不再 `exc_info=True`，避免路径/SQL 细节）；HTTP `context_receipt` 追加 `layered_read_failed`/`owner_layered_read_failed`/`overview_read_failed` 三个字段并补投影单测。此前 Comments 中 `exc_info=True` 的描述已失效，以本条为准。
