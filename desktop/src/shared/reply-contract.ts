@@ -4,6 +4,10 @@ import type { ReplyFailureCode } from './reply-bridge';
 // 失败码与原因到界面语义的映射只在这里维护一份。
 export const replyTextLimit = 4096;
 
+// 与后端 Python len/码点计数对齐：一个 emoji 记 1 个字符，而不是 UTF-16 的 2。
+export const fitsReplyTextLimit = (value: string): boolean =>
+  Array.from(value).length <= replyTextLimit;
+
 export type ReplyFailureEvidence = {
   kind?: 'connection' | 'response' | 'cancelled';
   code?: string;
