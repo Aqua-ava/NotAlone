@@ -969,7 +969,7 @@ class MemoryAdoption:
             return None
         try:
             result = confirm(scope=scope, candidate_id=candidate.candidate_id, expected_parents=parents,
-                **({"expected_dimension_evidence": candidate.dimension_evidence} if self._dimension_release.gate_enabled else {}))
+                **({"expected_dimension_evidence": candidate.dimension_evidence} if self._dimension_release.requires_evidence_binding else {}))
         except (DimensionEvidenceChangedError, MemoryCorrectionConflictError, MemoryVersionConflict):
             record("candidate_result", {"disposition": "pending_merge_changed"})
             return None
@@ -1023,7 +1023,7 @@ class MemoryAdoption:
         # 明确更正可能换词或补足上下文，低词面重合不等于与旧事实无关。
         # 只扩大同类别同主题的有界候选，是否替换仍由裁决及原子写入门决定。
         verified_correction = (fact.speech_act.value == 'correction'
-            and self._dimension_release.verified_sources and self._dimension_release.gate_enabled
+            and self._dimension_release.verified_sources
             and self._dimension_release.allows(fact, scope=scope))
         scores = dict(zip((item.memory_id for item in pool), bm25_scores(fact.text, [item.text for item in pool])))
         candidates = [
@@ -1190,7 +1190,6 @@ class MemoryAdoption:
         # 假设、歧义、风险、来源变化和人工修正保护继续走原门禁。
         if (decision.reasons == ('correction',)
                 and self._dimension_release.verified_sources
-                and self._dimension_release.gate_enabled
                 and self._dimension_release.allows(fact, scope=scope)):
             return PragmaticDecision(disposition=MemoryDisposition.CONFIRMABLE)
         return decision
@@ -1312,7 +1311,7 @@ class MemoryAdoption:
     ) -> OwnerMemory | None:
         if self._owner_memory_port is None:
             raise TypeError("self 主体事实需要注入 owner 级记忆 port。")
-        if previous is not None or self._dimension_release.gate_enabled or hasattr(self._memory_port, "assess_correction"):
+        if previous is not None or self._dimension_release.requires_evidence_binding or hasattr(self._memory_port, "assess_correction"):
             candidate = self._create_pending_candidate(scope, fact)
             if candidate.status is not MemoryCandidateStatus.PENDING or candidate.correction_review:
                 return None
@@ -1421,7 +1420,7 @@ class MemoryAdoption:
         )
         write_started_at = datetime.now(timezone.utc)
         try:
-            if self._dimension_release.gate_enabled:
+            if self._dimension_release.requires_evidence_binding:
                 actual = self._memory_port.confirm(
                     scope=scope,
                     candidate_id=candidate.candidate_id,

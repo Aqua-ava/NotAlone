@@ -299,6 +299,17 @@ class DimensionRelease:
             return _ALL_DIMENSION_NAMES
         return self.allowed
 
+    @property
+    def requires_evidence_binding(self) -> bool:
+        """候选依据绑定与陈旧依据复验是否生效。
+
+        生产来源核验（``verified_sources``）或显式历史逐维门任一开启时都必须
+        绑定依据；只有两者的历史回退组合才跳过，因此运维开关不会关掉
+        「预期依据」核验（ADR-097）。
+        """
+
+        return self.verified_sources or self.gate_enabled
+
     def allows(
         self, fact: ExtractedFact, *, scope: ContactScope | None = None,
         now: datetime | None = None,

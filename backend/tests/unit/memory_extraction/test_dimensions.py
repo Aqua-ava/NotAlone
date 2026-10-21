@@ -262,6 +262,17 @@ class DimensionReleaseTest(unittest.TestCase):
             valid_at=datetime(2026, 9, 1, tzinfo=timezone.utc),
         )))
 
+    def test_ops_rollback_keeps_evidence_binding(self) -> None:
+        with_rollback = DimensionRelease.from_environment(
+            {"NOTALONE_MEMORY_DIMENSION_GATE": "0"}
+        )
+        self.assertTrue(with_rollback.requires_evidence_binding)
+
+        legacy = DimensionRelease(gate_enabled=False, verified_sources=False)
+        self.assertFalse(legacy.requires_evidence_binding)
+        gate_on = DimensionRelease(verified_sources=False)
+        self.assertTrue(gate_on.requires_evidence_binding)
+
     def test_explicit_single_release_keeps_the_full_gate_enabled(self) -> None:
         release = DimensionRelease(("subject",))
 
