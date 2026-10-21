@@ -1,6 +1,6 @@
 # ADR-002：关系提取与全自动采纳
 
-> 2026-10-21 设计审查：本文“所有候选自动写入／风险不阻塞”的早期规则已由 [ADR-024](024-memory-adoption-risk-gate-and-versioning.md)局部修订，不能因保留正文就恢复为当前通则。默认直接提取后又有 [ADR-069](069-direct-scene-memory-and-isolated-publication.md)续记与 [ADR-070](070-automatic-memory-maintenance.md)的额外人工门口径冲突，仍待明确适用范围；来源、auto标记、可撤销、人工修正及人工发送边界保持。
+> 2026-10-21 决定收敛：本文早期“所有候选自动写入／风险不阻塞”后由 ADR-024 局部修订；默认采纳现统一按 [ADR-085](085-source-verified-automatic-adoption.md)：来源核验及适用检查后自动裁决，不增加语用、置信度或风险标签人工门。来源、auto 标记、可撤销、人工修正及人工发送边界保持。
 
 > 状态：已采纳
 > 决策日期：2026-08-02

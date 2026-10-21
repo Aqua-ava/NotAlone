@@ -146,7 +146,7 @@ npm run dev
 - **资料有来源，也有删除路径。** 可删除单份导入来源及失去来源支持的派生资料；其他来源仍支持的消息保留。微信原聊天、原始导入文件与外部模型副本须分别处理，当前来源删除入口不提供联系人或账户整体删除。
 - **完整追踪同样属于敏感资料。** 含正文的提取追踪默认保存在数据库，持续到手动删除或来源删除；90 天任务清理只清终态任务元数据。`.env`、私人聊天、追踪、备份和截图不应提交到 Git。
 
-自动采纳必须带来源、标记为 `auto` 且可撤销；模型置信度与来源支持不等于真实准确率。[维度放行台账](docs/memory-adoption-dimension-release-ledger.md)保留历史评测与显式维度协议；其空表不再表示当前所有候选都待确认。额外语用、置信度与风险人工门的文档冲突，见 [ADR-069](architecture/adr/069-direct-scene-memory-and-isolated-publication.md)和 [ADR-070](architecture/adr/070-automatic-memory-maintenance.md)的待澄清说明；本次审查不重新认证真实准确率。
+自动采纳必须带来源、标记为 `auto` 且可撤销；模型置信度与来源支持不等于真实准确率。[维度放行台账](docs/memory-adoption-dimension-release-ledger.md)保留历史评测与显式维度协议。默认自动采纳按 [ADR-085](architecture/adr/085-source-verified-automatic-adoption.md)：通过来源及适用检查后自动裁决，不以额外语用、置信度或风险标签制造人工待办；人工保护、删除及关系矛盾待定例外保留。
 
 主动收藏表达样本按[ADR-082](architecture/adr/082-retire-explicit-style-samples.md)退役；候选编辑、复制及用户明确管理的长期表达偏好保留。
 

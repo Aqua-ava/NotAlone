@@ -1,6 +1,6 @@
 # 现行语用解释与记忆候选边界
 
-> 2026-10-21 设计审查：本文语用字段及旧三门流水线保留为显式历史协议；默认直接提取见 [ADR-069](../adr/069-direct-scene-memory-and-isolated-publication.md)。额外语用人工门与 [ADR-070](../adr/070-automatic-memory-maintenance.md)存在待澄清冲突；时间语义则已有 [ADR-081](../adr/081-source-grounded-memory-time-and-conditions.md)明确替代，不再按瞬时状态推定当天到期。
+> 2026-10-21 决定收敛：本文语用字段及三门流水线保留为显式历史协议；默认直接提取见 ADR-069，默认自动采纳按 [ADR-085](../adr/085-source-verified-automatic-adoption.md) 取消额外语用、置信度和风险人工门。保留原话限定，不等于把计划或转述当成现实事实；时间语义按 ADR-081，不再推定瞬时状态当天到期。
 
 > 状态：已采纳的记忆提取约束；当前最小代码纵切已实现，完整界面展示仍按本文边界推进。
 > 日期：2026-09-09

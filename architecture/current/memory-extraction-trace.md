@@ -1,6 +1,6 @@
 # 记忆提取完整追踪
 
-> 2026-10-21 设计审查：下文固定语用／置信度／维度门步骤属于显式历史提取协议；当前 direct／automatic 路径应记录实际协议、有效配置、执行分支和未执行阶段，不能伪造已经执行旧门。默认空维度表已由 [ADR-070](../adr/070-automatic-memory-maintenance.md)修订；额外人工门与 [ADR-069](../adr/069-direct-scene-memory-and-isolated-publication.md)的冲突待澄清。
+> 2026-10-21 决定收敛：下文固定语用／置信度／维度门步骤属于显式历史提取协议；默认 direct／automatic 路径按 [ADR-085](../adr/085-source-verified-automatic-adoption.md) 取消额外人工门。追踪应记录实际协议、有效检查、执行分支和未执行阶段，不能伪造已执行旧门；默认空维度表已由 ADR-070 退役，旧评测合同保持。
 
 > 状态：PostgreSQL 全过程记录、默认提取装配和受范围查询／删除已实现；React 管理页已接入查看与删除，并通过合成普通页面验证。原生 Electron、最终签名包与真实微信验收仍独立保留。
 > 确认日期：2026-10-07。范围与留存决策见 [ADR-037](../adr/037-complete-memory-extraction-trace.md)。
@@ -236,7 +236,7 @@ flowchart TD
 | 消息读取与窗口 | [读取支持](../../backend/src/notalone/memory_extraction/cli_support.py)、[批次命令](../../backend/src/notalone/memory_extraction/command.py)、[追踪存储](../../backend/src/notalone/persistence/extraction_trace.py) | 保存实际水位、消息版本、排除规则、20 + 20 + 20 窗口、顺序与 target 标记；保存前在范围锁内核对实际缓存的消息、来源与 ref 存活和原始投影，拒绝已删缓存，保留活来源与真实处理链缺口；没有重新读取扩大范围。 |
 | 模型调用 | [捕获边界](../../backend/src/notalone/memory_trace/transport.py)、[生产组装](../../backend/src/notalone/memory_extraction/cli_support.py) | 分别保存 E/V/A 的提示词、schema、参数与原始返回；真实 SDK HTTP hooks 保存最终序列化正文、供应商返回及可观察重试，不保存鉴权头。未进入该 transport 的适配器标为 `not_observable`。 |
 | 解析、时间与核验 | [提取流程](../../backend/src/notalone/memory_extraction/flow.py)、[核验适配器](../../backend/src/notalone/memory_extraction/verification_adapters.py) | 原始响应先保存，再记结构解析、来源契约、字段变化与逐候选核验，包含拒绝、失败与未执行结果。 |
-| 采纳与裁决 | [采纳流程](../../backend/src/notalone/memory_extraction/adoption.py)、[裁决适配器](../../backend/src/notalone/memory_extraction/adjudication_adapters.py) | 保存稳定候选标识、语用分流、删除指纹、重复、门槛、shortlist 与 ADD/UPDATE/NOOP；手输本人资料的 owner 归属标识不充当来源，仍以自身 memory_id 绑定删除；其他真实来源继续复验。不改变默认空放行表、提示词或预算。 |
+| 采纳与裁决 | [采纳流程](../../backend/src/notalone/memory_extraction/adoption.py)、[裁决适配器](../../backend/src/notalone/memory_extraction/adjudication_adapters.py) | 保存稳定候选标识、语用分流、删除指纹、重复、门槛、shortlist 与 ADD/UPDATE/NOOP；手输本人资料的 owner 归属标识不充当来源，仍以自身 memory_id 绑定删除；其他真实来源继续复验。只记录实际执行；默认策略按 ADR-070／085，显式历史放行表与评测合同保持，追踪本身不改变提示词或预算。 |
 | 业务写入 | [追踪存储](../../backend/src/notalone/persistence/extraction_trace.py)、[记忆存储](../../backend/src/notalone/persistence/memory_store.py)、[操作关联迁移](../../backend/database/migrations/043_extraction_trace_record_operations.sql) | 保存写入意图、返回／权威记录回执与部分提交；联系人及本人旧记忆失效计划也关联实际 ID，按 invalidated 状态核对提交，原行仍 active 时不能因行存在就报失效成功。结束记录和水位同事务提交；回执丢失显示未知／待核对，不假称回滚。 |
 | 调用台账 | [上下文与补账](../../backend/src/notalone/memory_trace/context.py)、[最小关联迁移](../../backend/database/migrations/042_extraction_trace_call_receipts.sql) | 正常、停止和来源删除后的实际调用关联同一 `call_id`／台账 ID，区分 received／returned／unavailable 与 consumed／not_adopted；提交回执未知不另造补账。不保存正文，正文删除后只保留最小关联。 |
 | 查询与删除 | [查询服务](../../backend/src/notalone/application/trace_service.py)、[HTTP](../../backend/src/notalone/server/app.py)、[CLI](../../backend/src/notalone/memory_trace/command.py)、[React 查看页](../../desktop/src/renderer/TracePanel.tsx)、[具名控制器](../../desktop/src/main/traces/controller.ts) | 默认查询装配不需要模型；授权批次列表稳定分页、详情和候选／记忆反查；消息正查引用或使用它的提取批次，包括仅上下文、零候选与失败。来源处理仍使用独立资源。区分已删、未记录及手输不适用，人工确认模型候选仍可反查。所有 HTTP 追踪响应 no-store，越界／不存在统一 404。React 管理页可主动查看阶段原始快照和关联、翻页、按记录查询、确认后删除追踪；切换范围、断线、读取失败和来源删除检查点清除旧正文，迟到响应不回填。正文事件只发布到可信管理窗口，小窗不得查询。普通页面证据不替代原生 IPC 或最终 App 验收。 |

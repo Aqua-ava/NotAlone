@@ -1,6 +1,6 @@
 # ADR-026：语用解释先于关系记忆采纳
 
-> 2026-10-21 设计审查：默认直接提取及自动裁决后由 [ADR-069](069-direct-scene-memory-and-isolated-publication.md)修订；旧语用协议与冻结评测保留。额外语用人工门与 [ADR-070](070-automatic-memory-maintenance.md)的口径冲突仍待明确，不能把全部现行输入固定为本 ADR 的单一流水线。
+> 2026-10-21 决定收敛：默认直接提取由 ADR-069 修订，额外语用人工门由 [ADR-085](085-source-verified-automatic-adoption.md) 明确取消。本文旧语用协议和冻结评测保留，不作为默认直接提取的统一流水线；原话中的限定仍须如实保留。
 
 > 状态：已采纳
 > 决策日期：2026-09-09
