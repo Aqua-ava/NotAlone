@@ -1,13 +1,13 @@
-.reply-references { margin: 16px 0; border: 1px solid #dce6ec; border-radius: 10px; background: #fff; overflow: hidden; }
-.ime-pane .reply-references .reference-toggle { display: flex; align-items: center; gap: 10px; width: 100%; margin: 0; padding: 13px 15px; border: 0; border-radius: 0; background: #f6f9fa; color: #344e5d; text-align: left; cursor: pointer; }
+.reply-references { margin: 16px 0; border: 1px solid var(--panel-border); border-radius: var(--panel-radius); background: var(--panel-background); overflow: hidden; }
+.ime-pane .reply-references .reference-toggle { display: flex; align-items: center; gap: 10px; width: 100%; margin: 0; padding: 13px 15px; border: 0; border-radius: 0; background: var(--panel-background); color: var(--panel-heading); text-align: left; cursor: pointer; }
 .reference-toggle-title { flex-shrink: 0; font-size: 13px; font-weight: 600; }
 .reference-summary { flex: 1; font-size: 12px; line-height: 1.7; color: #607682; overflow-wrap: anywhere; }
 .reference-content { padding: 4px 15px 14px; }
 .reply-references .reference-help { color: #687e89; font-size: 12px; line-height: 1.7; }
 .reference-group { margin: 15px 0; }
-.reply-references .reference-group h4 { display: flex; gap: 8px; align-items: baseline; margin: 0 0 8px; color: #344e5d; font-size: 13px; }
-.reference-group h4 span { font-size: 11px; color: #718590; font-weight: 400; }
-.reply-references .reference-card { margin: 7px 0; padding: 10px 12px; border-left: 3px solid #b6ccd5; border-radius: 0 6px 6px 0; background: #f7fafb; }
+.reply-references .reference-group h4 { display: flex; gap: 8px; align-items: baseline; margin: 0 0 8px; color: var(--panel-heading); font-size: 13px; }
+.reference-group h4 span { font-size: 11px; color: var(--panel-heading); font-weight: 400; }
+.reply-references .reference-card { margin: 7px 0; padding: 10px 12px; border-left: 3px solid #b6ccd5; border-radius: var(--panel-radius); background: var(--panel-background); }
 .ime-pane .reply-references .reference-card p { margin: 5px 0; font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
 .ime-pane .reply-references .reference-card .reference-text { font-size: 14px; white-space: pre-wrap; color: #283f4e; }
 .reference-card strong { font-size: 12px; }

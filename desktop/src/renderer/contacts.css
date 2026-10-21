@@ -1,19 +1,19 @@
-.contacts-panel { padding: 22px; border: 1px solid #c5cecb; border-radius: 4px 7px 5px 3px; background: #fffdf7c9; }
+.contacts-panel { padding: 22px; border: 1px solid var(--panel-border); border-radius: var(--panel-radius); background: var(--panel-background); }
 .contacts-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
-.contacts-toolbar h2 { color: #355f7c; font-size: 15px; font-weight: 500; }
+.contacts-toolbar h2 { color: var(--panel-heading); font-size: 15px; font-weight: 500; }
 .contacts-toolbar p, .contacts-note { margin-top: 8px; color: #737e80; font-size: 12px; line-height: 1.8; }
 .contacts-note[role="alert"] { color: #99594e; }
 .contacts-columns { display: grid; grid-template-columns: minmax(260px, 1fr) minmax(200px, .8fr); gap: 20px; }
 .contact-list { list-style: none; margin: 0; padding: 0; display: grid; align-content: start; gap: 9px; }
-.contact-row { width: 100%; display: flex; align-items: center; gap: 12px; padding: 15px 12px; text-align: left; border: 1px solid #d4d9d0; border-radius: 4px; background: #fffef7; }
+.contact-row { width: 100%; display: flex; align-items: center; gap: 12px; padding: 15px 12px; text-align: left; border: 1px solid var(--panel-border); border-radius: var(--panel-radius); background: var(--panel-background); }
 .contact-row[data-current="true"] { background: #e9f2f3; border-color: #8cabbe; }
 .contact-avatar { flex-shrink: 0; display: grid; place-items: center; width: 35px; height: 37px; border-radius: 5px; background: #d9e8e9; color: #547b8c; }
 .contact-row-copy { min-width: 0; display: grid; gap: 8px; }
 .contact-row-copy b { font-size: 13px; font-weight: 500; overflow-wrap: anywhere; }
 .contact-row-copy small { font-size: 11px; color: #758184; }
 .contact-row-choice { margin-left: auto; flex-shrink: 0; color: #4e758a; font-size: 11px; }
-.contact-summary { padding: 20px; border: 1px dashed #c3cfcf; border-radius: 4px; background: #f3f6f0; }
-.contact-summary h3, .contacts-empty h3 { margin: 0; color: #496e88; font-size: 14px; font-weight: 500; overflow-wrap: anywhere; }
+.contact-summary { padding: 20px; border: 1px solid var(--panel-border); border-radius: var(--panel-radius); background: var(--panel-background); }
+.contact-summary h3, .contacts-empty h3 { margin: 0; color: var(--panel-heading); font-size: 14px; font-weight: 500; overflow-wrap: anywhere; }
 .contact-summary p, .contacts-empty p { font-size: 12px; color: #78807d; line-height: 1.9; margin-top: 15px; }
 .contact-summary dl { display: flex; gap: 30px; margin: 24px 0 10px; }
 .contact-summary dt { color: #7f8882; font-size: 11px; }

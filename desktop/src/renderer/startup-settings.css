@@ -1,4 +1,4 @@
-.startup-readiness,.startup-settings{margin:16px 0;padding:20px;border:1px solid #c9d6d6;border-radius:14px;background:#fffdf5;color:#31495b}
+.startup-readiness,.startup-settings{margin:16px 0;padding:20px;border: 1px solid var(--panel-border);border-radius: var(--panel-radius);background: var(--panel-background);color:var(--panel-heading)}
 .startup-readiness h2,.startup-settings h2{font-size:17px;margin:0 0 10px}
 .startup-readiness p,.startup-settings p{font-size:14px;line-height:1.7;margin:8px 0}
 .startup-settings .startup-readiness{margin:0 0 20px;padding:0 0 16px;border:0;border-bottom:1px solid #dbe2da;border-radius:0}

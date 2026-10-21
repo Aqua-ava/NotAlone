@@ -6,6 +6,11 @@
   --accent: #245f91;
   --line: #d8d1c4;
   --muted: #707980;
+  /* 卡片统一沿用「微信会话自动识别」面板的外观；布局与状态色由各组件保留。 */
+  --panel-radius: 14px;
+  --panel-border: #c9d6d6;
+  --panel-background: #fffdf5;
+  --panel-heading: #31495b;
   -webkit-font-smoothing: antialiased;
 }
 * { box-sizing: border-box; }
@@ -54,13 +59,13 @@ html:has(.admin-layout)::-webkit-scrollbar { display: none; }
 .manager-title p { color: var(--muted); font-size: 12px; line-height: 1.85; margin-top: 12px; padding-right: 85px; }
 .manager-title::before, .manager-title::after { content: ''; position: absolute; z-index: -1; pointer-events: none; right: 6px; top: 4px; width: 64px; height: 55px; background: #ecc96758; clip-path: polygon(2% 8%, 25% 2%, 48% 7%, 72% 0, 98% 5%, 95% 33%, 100% 67%, 96% 98%, 70% 91%, 44% 100%, 20% 93%, 0 99%, 4% 63%, 0 36%); transform: rotate(-12deg); }
 .manager-title::after { width: 46px; height: 58px; right: 38px; top: 26px; background: radial-gradient(#ca879152 1px, transparent 1px) 0 0 / 5px 5px, #e6b6bd66; transform: rotate(10deg); }
-.connection-note { display: flex; align-items: center; gap: 13px; padding: 20px 23px; margin-bottom: 28px; color: #486b86; border: 1px solid #d5cbb9; border-radius: 4px 7px 5px 3px; background: linear-gradient(118deg, #fffdf7f0, #f8f2e6e6); box-shadow: 3px 4px 0 #cbbda62b; position: relative; }
-.connection-note::before { content: ''; position: absolute; width: 42px; height: 13px; background: #e4d7b19c; top: -7px; left: 25px; transform: rotate(-5deg); pointer-events: none; }
+.connection-note { display: flex; align-items: center; gap: 13px; padding: 20px 23px; margin-bottom: 28px; color: #486b86; border: 1px solid var(--panel-border); border-radius: var(--panel-radius); background: var(--panel-background); box-shadow: none; position: relative; }
+.connection-note::before { content: none; }
 .connection-note b { font-size: 13px; font-weight: 500; }
 .connection-note p { color: #737c80; font-size: 11px; margin-top: 7px; }
-.empty-panel { text-align: center; padding: 42px 20px; background: #fffdf7bb; border: 1px dashed #c1c8c5; border-radius: 4px 7px 5px 3px; }
+.empty-panel { text-align: center; padding: 42px 20px; background: var(--panel-background); border: 1px solid var(--panel-border); border-radius: var(--panel-radius); }
 .empty-symbol { display: inline-grid; place-items: center; width: 66px; height: 58px; background: radial-gradient(ellipse at 25% 30%, #a6d1df80, transparent 75%), #e4ecea; border-radius: 4px 8px 5px 7px; color: #6287a0; margin-bottom: 19px; }
-.empty-panel h2 { font-size: 15px; font-weight: 500; color: #496e88; }
+.empty-panel h2 { font-size: 15px; font-weight: 500; color: var(--panel-heading); }
 .empty-panel p { font-size: 12px; line-height: 1.9; color: #777c7b; max-width: 470px; margin: 12px auto 23px; }
 .admin-footer { padding: 15px 38px 24px; color: #787870; font-size: 10px; line-height: 1.8; }
 .operation-error { color: #99594e; font-size: 12px; margin-top: 20px; }

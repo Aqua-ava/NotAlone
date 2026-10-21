@@ -6,6 +6,6 @@
 .trace-batches { list-style: none; padding: 0; }
 .trace-batches li { display: grid; gap: 6px; border-top: 1px solid var(--line); padding: 12px 0; overflow-wrap: anywhere; }
 .trace-batches .button { justify-self: start; }
-.trace-snapshot { border: 1px solid var(--line); padding: 12px; border-radius: 8px; margin: 10px 0; }
+.trace-snapshot { border: 1px solid var(--panel-border); padding: 12px; border-radius: var(--panel-radius); margin: 10px 0; background: var(--panel-background); }
 .trace-snapshot summary { cursor: pointer; }
 .trace-snapshot pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 440px; overflow: auto; font-size: 12px; }

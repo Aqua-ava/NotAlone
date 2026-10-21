@@ -20,7 +20,7 @@
 .reply-generation-guidance { margin: 8px 4px; padding: 8px 10px; border-left: 3px solid #bd9852; background: #f6efdf; font-size: 12px; line-height: 1.6; }
 .reply-generation-guidance p { margin: 4px 0; }
 .reply-candidate-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(175px, 1fr)); gap: 8px; }
-.reply-candidate { min-width: 0; border: 1px solid #c8d1cf; border-radius: 4px 7px 3px 5px; background: #fffdf6; padding: 8px; }
+.reply-candidate { min-width: 0; border: 1px solid var(--panel-border); border-radius: var(--panel-radius); background: var(--panel-background); padding: 8px; }
 .reply-candidate textarea { width: 100%; min-height: 92px; resize: vertical; background: #faf7ef; border: 1px solid #d8d6ca; border-radius: 3px; padding: 7px; font: inherit; font-size: 13px; line-height: 1.7; }
 .candidate-message-group { min-width: 0; margin: 0; padding: 0; border: 0; display: grid; gap: 7px; }
 .candidate-message-group legend { color: #69787f; font-size: 11px; padding: 0 0 6px; }
@@ -40,7 +40,7 @@
 .directed-input { flex-shrink: 0; font-size: 11px; }
 .message-heading { display: flex; justify-content: space-between; align-items: center; padding: 3px; }
 .directed-input button:not(.generate-button) { padding: 3px 7px; border: 1px solid #c8d1cf; border-radius: 3px; color: #456b87; font-size: 11px; }
-.reply-message-list { max-height: 105px; overflow-y: auto; border: 1px solid #d8d6ca; border-radius: 4px; background: #fffdf6; }
+.reply-message-list { max-height: 105px; overflow-y: auto; border: 1px solid var(--panel-border); border-radius: var(--panel-radius); background: var(--panel-background); }
 .reply-message { display: flex; gap: 7px; align-items: flex-start; padding: 5px 7px; border-bottom: 1px solid #e9e5d9; }
 .reply-message > span { min-width: 0; flex: 1; }
 .reply-message small { display: block; font-size: 10px; color: #707980; }

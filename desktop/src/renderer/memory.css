@@ -15,14 +15,14 @@
 .memory-toolbar select { min-width: 170px; max-width: 320px; padding: 8px 11px; font: inherit; color: #496e88; background: #fffdf5; border: 1px solid #c5cfcc; border-radius: 4px; }
 .memory-scope-note, .memory-section-note { color: #737e80; font-size: 12px; line-height: 1.9; }
 .memory-section-note[role="alert"] { color: #99594e; }
-.memory-section, .memory-no-contact { padding: 22px; border: 1px solid #c5cecb; border-radius: 4px 7px 5px 3px; background: #fffdf7c9; }
+.memory-section, .memory-no-contact { padding: 22px; border: 1px solid var(--panel-border); border-radius: var(--panel-radius); background: var(--panel-background); }
 .memory-section > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 15px; margin-bottom: 17px; }
-.memory-section h2, .memory-no-contact h2 { color: #355f7c; font-size: 15px; font-weight: 500; }
+.memory-section h2, .memory-no-contact h2 { color: var(--panel-heading); font-size: 15px; font-weight: 500; }
 .memory-section > header p, .memory-no-contact p { margin-top: 9px; color: #737e80; font-size: 12px; line-height: 1.9; }
 .memory-no-contact { text-align: center; padding: 35px 24px; }
 .memory-no-contact p { margin-bottom: 22px; }
 .memory-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 14px; }
-.memory-card { padding: 17px; border: 1px solid #d4d9d0; border-radius: 4px; background: #fffef7; min-width: 0; }
+.memory-card { padding: 17px; border: 1px solid var(--panel-border); border-radius: var(--panel-radius); background: var(--panel-background); min-width: 0; }
 .memory-card-labels { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 7px 12px; font-size: 11px; color: #68838d; }
 .memory-card-labels b { font-weight: 500; color: #42757c; }
 .memory-card > .button { margin: 8px 6px 0 0; padding: 6px 9px; font-size: 11px; }
@@ -37,12 +37,12 @@
 .memory-details { border-top: 1px dashed #c5cecb; margin-top: 12px; padding-top: 13px; }
 .memory-source-references { list-style: none; padding: 0; margin: 14px 0 0; display: grid; gap: 12px; }
 .memory-source-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 12px; }
-.memory-source-list > li { padding: 14px; background: #f3f6f0; border: 1px dashed #c3cfcf; border-radius: 4px; overflow-wrap: anywhere; }
+.memory-source-list > li { padding: 14px; background: var(--panel-background); border: 1px solid var(--panel-border); border-radius: var(--panel-radius); overflow-wrap: anywhere; }
 .memory-source-list b { color: #496e88; font-size: 12px; font-weight: 500; }
 .memory-source-list p { color: #758184; font-size: 11px; line-height: 1.8; margin-top: 5px; }
 @media (max-width: 900px) { .memory-cards { grid-template-columns: 1fr; } .memory-toolbar { flex-wrap: wrap; } }
 
-.memory-edit-form { display: grid; gap: 12px; margin-top: 12px; padding: 14px; background: #f8fafb; border-radius: 8px; }
+.memory-edit-form { display: grid; gap: 12px; margin-top: 12px; padding: 14px; background: var(--panel-background); border-radius: var(--panel-radius); }
 .memory-edit-form label { display: grid; gap: 6px; }
 .memory-edit-form textarea { min-height: 90px; resize: vertical; }
 .memory-edit-form textarea, .memory-edit-form select { font: inherit; padding: 9px; border: 1px solid #b7c6d1; border-radius: 6px; }
@@ -53,7 +53,7 @@
 .memory-overview .button { margin-top: 10px; margin-right: 10px; }
 .skill-review { display: grid; gap: 18px; margin-top: 18px; line-height: 1.8; overflow-wrap: anywhere; }
 .skill-review header, .skill-review-form, .skill-method { display: grid; gap: 12px; }
-.skill-review-form, .skill-method { min-width: 0; padding: 16px; border: 1px solid #c5cecb; border-radius: 5px; background: #fffdf7; }
+.skill-review-form, .skill-method { min-width: 0; padding: 16px; border: 1px solid var(--panel-border); border-radius: var(--panel-radius); background: var(--panel-background); }
 .skill-review-form label:not(.skill-check) { display: grid; gap: 5px; }
 .skill-review-form input:not([type="checkbox"]), .skill-review-form textarea, .skill-review-form select { width: 100%; min-width: 0; padding: 9px; font: inherit; border: 1px solid #b7c6d1; border-radius: 4px; background: #fffef9; color: inherit; }
 .skill-review-form textarea { min-height: 80px; resize: vertical; }
@@ -62,13 +62,13 @@
 .skill-comparison-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 12px; }
 .skill-comparison p, .skill-comparison blockquote { white-space: pre-wrap; overflow-wrap: anywhere; }
 .skill-comparison blockquote { margin: 14px 0; padding-left: 12px; border-left: 3px solid #aac4c8; }
-.skill-publication { padding: 18px; border: 1px solid #aac4c8; background: #f2f7ef; border-radius: 5px; }
+.skill-publication { padding: 18px; border: 1px solid var(--panel-border); background: var(--panel-background); border-radius: var(--panel-radius); }
 .skill-review [role="alert"] { color: #99594e; }
 @media (max-width: 900px) { .skill-comparison-grid { grid-template-columns: 1fr; } }
 
 /* 一级按资料主体导航，核对和管理信息按需展开。 */
 .memory-view-content { display: grid; gap: 14px; min-width: 0; }
-.memory-disclosure { border: 1px solid #c5cecb; border-radius: 6px; background: #fffdf7c9; min-width: 0; scroll-margin-top: 145px; }
+.memory-disclosure { border: 1px solid var(--panel-border); border-radius: var(--panel-radius); background: var(--panel-background); min-width: 0; scroll-margin-top: 145px; }
 .memory-disclosure > summary { padding: 16px 20px; cursor: pointer; color: #426f8a; font-size: 13px; }
 .memory-disclosure > summary:focus-visible { outline: 2px solid #426f8a; outline-offset: 2px; }
 .memory-disclosure[open] > summary { border-bottom: 1px solid #dce1d8; }
@@ -78,7 +78,7 @@
 .memory-organization-settings { margin: 14px 0 20px; }
 .memory-empty { padding: 22px 0; color: #737e80; font-size: 13px; line-height: 1.9; }
 
-.memory-processing-card { padding: 10px 14px; margin: 0; border: 1px solid #d3dcda; border-radius: 6px; background: #fffdf7b3; }
+.memory-processing-card { padding: 10px 14px; margin: 0; border: 1px solid var(--panel-border); border-radius: var(--panel-radius); background: var(--panel-background); }
 .memory-processing-card p { margin: 6px 0; }
 .memory-processing-bar, .memory-processing-brief, .memory-processing-actions, .memory-processing-detail-heading { display: flex; align-items: center; gap: 8px 16px; }
 .memory-processing-bar, .memory-processing-detail-heading { justify-content: space-between; }
