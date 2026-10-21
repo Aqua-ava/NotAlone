@@ -126,8 +126,7 @@ def project_skill_version(connection, scope, row, scene, *, proposed_methods=Non
             from notalone.persistence.skill_methods import read_method_manifest
             from notalone.persistence.skill_files import SkillFileError
             try:
-                methods = [item for item in read_method_manifest(connection, row['version_id'])
-                           if item['method_id'] in allowed]
+                methods = read_method_manifest(connection, row['version_id'], method_ids=allowed)
             except SkillFileError:
                 raise PermissionError('允许的方法正文不可用。') from None
         else:

@@ -43,7 +43,7 @@ class _DictConnection:
         return self.connection.cursor(**kwargs)
 
 
-def _read_packages(owner_id):
+def _read_packages(owner_id, *, excluded_names=()):
     from notalone.persistence.skill_files import SkillFileError, _checked_path
 
     try:
@@ -56,7 +56,7 @@ def _read_packages(owner_id):
     reader, validator = LocalSkillPackageReader(), SkillPackageValidator()
     packages = {}
     for directory in directories:
-        if directory.name.startswith("."):
+        if directory.name.startswith(".") or directory.name in excluded_names:
             continue
         try:
             packages[directory.name] = validator.validate(reader.read(directory))
@@ -64,6 +64,24 @@ def _read_packages(owner_id):
             # 非法包只影响自身；不能回退到已失效工作副本对应的旧正文。
             continue
     return packages
+
+
+def _blocked_working_directories(cursor, owner_id):
+    """未完成替换及删除的目录不得作为新包来源；队列存续跨越业务级联删除。"""
+    names = {row["name"] for row in cursor.execute(
+        "SELECT skill.name FROM public.reply_skill_working_copy AS job "
+        "JOIN public.reply_skill AS skill ON skill.id=job.skill_id WHERE skill.owner_id=%s", (owner_id,)
+    ).fetchall()}
+    cleanups = cursor.execute(
+        "SELECT relative_path FROM public.reply_skill_file_cleanup "
+        "WHERE relative_path=%s OR starts_with(relative_path,%s)", (str(owner_id), f"{owner_id}/")
+    ).fetchall()
+    for row in cleanups:
+        parts = row["relative_path"].split("/")
+        if len(parts) == 1:
+            return names, True
+        names.add(parts[1])
+    return names, False
 
 
 def _matches(cursor, row, package):
@@ -111,7 +129,8 @@ def synchronize_skill_directory(connection, owner_id: UUID, *, check_only=False)
             (owner_id,),
         ).fetchall()
         known = {row["name"]: row for row in rows}
-        packages = _read_packages(owner_id)
+        blocked_names, all_blocked = _blocked_working_directories(cursor, owner_id)
+        packages = {} if all_blocked else _read_packages(owner_id, excluded_names=blocked_names)
         changed = False
         library = PostgresSkillLibrary("postgresql:///directory")
         for name, package in packages.items():

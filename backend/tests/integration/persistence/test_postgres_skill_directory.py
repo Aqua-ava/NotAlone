@@ -15,14 +15,15 @@ from psycopg.conninfo import make_conninfo
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
-from notalone.persistence.skill_library import PostgresSkillLibrary
+from notalone.persistence.skill_library import PostgresSkillLibrary, SkillLibraryPersistenceError
+from notalone.persistence.skill_files import SkillFileError
+from notalone.persistence.contact_deletion import delete_contact
 from notalone.persistence.skill_port import PostgresSkillPort
 from notalone.persistence.skill_history import PostgresSkillHistory
 from notalone.persistence.skill_policies import PostgresSkillPolicies
 from notalone.persistence.skill_learning_generation import capture_generation
 from notalone.persistence.skill_learning import SkillLearningNotFound
 from notalone.persistence.skill_methods import migrate_legacy_method_manifests
-from notalone.skills.learning import SkillLearningInvalid
 from notalone.scopes import ContactScope
 
 
@@ -158,12 +159,6 @@ class PostgresSkillDirectoryTest(unittest.TestCase):
                     self.port.load_version(self.scope, version_id)
                 with self.assertRaises(SkillLearningNotFound):
                     PostgresSkillHistory(self.database_url).read(self.scope, skill_id)
-                with self.assertRaises(SkillLearningInvalid):
-                    PostgresSkillPolicies(self.database_url).change(
-                        self.scope, skill_id=skill_id, version_id=version_id, method_id=second,
-                        scope_confirmation={"kind": "contact", "contact_id": str(self.contact_id), "scene": None},
-                        disabled=True, expected_revision=1, operation_key=uuid4(),
-                    )
 
     def test_catalog_with_method_policy_only_reads_manifest_metadata(self):
         skill_id, version_id, first, _ = self._reviewed()
@@ -176,6 +171,21 @@ class PostgresSkillDirectoryTest(unittest.TestCase):
             catalog = self.port.catalog(self.scope)
         self.assertEqual(catalog.entries[0].version_id, version_id)
         self.assertIn("询问对方希望获得的支持", self.port.load_version(self.scope, version_id).content)
+
+    def test_filtered_load_reads_only_selected_method_file_and_rejects_its_corruption(self):
+        skill_id, version_id, first, second = self._reviewed()
+        PostgresSkillPolicies(self.database_url).change(
+            self.scope, skill_id=skill_id, version_id=version_id, method_id=first,
+            scope_confirmation={"kind": "contact", "contact_id": str(self.contact_id), "scene": None},
+            disabled=True, expected_revision=0, operation_key=uuid4(),
+        )
+        methods = self.root / ".versions" / str(self.owner_id) / str(skill_id) / str(version_id) / "methods"
+        # 被停用方法的正文即使损坏，本轮也不读取或解析它。
+        (methods / f"{first}.json").write_bytes(b"invalid blocked method")
+        self.assertIn("询问对方希望获得的支持", self.port.load_version(self.scope, version_id).content)
+        (methods / f"{second}.json").write_bytes(b"invalid selected method")
+        with self.assertRaises(PermissionError):
+            self.port.load_version(self.scope, version_id)
 
     def test_catalog_discovers_directory_and_selected_version_reads_resource(self):
         self._package()
@@ -283,6 +293,69 @@ class PostgresSkillDirectoryTest(unittest.TestCase):
             self.assertEqual(refreshed.entries[0].version_id, first.entries[0].version_id)
             self.assertEqual(refreshed.revision, first.revision)
         self.assertEqual(len(self.library.list_versions(self.owner_id, first.entries[0].skill_id)), 1)
+
+    def test_failed_working_copy_update_cannot_republish_old_directory(self):
+        directory = self._package()
+        initial = self.port.catalog(self.scope).entries[0]
+        with TemporaryDirectory() as source_root:
+            source = Path(source_root) / "warm-reply"
+            source.mkdir()
+            (source / "SKILL.md").write_text(
+                "---\nname: warm-reply\ndescription: 适合温暖回应时使用。\n---\n\n先确认对方需要，再提供选择。\n", encoding="utf-8")
+            original_replace = os.replace
+
+            def fail_working_replacement(source_path, target_path):
+                if Path(source_path) == directory and Path(target_path).name == "previous":
+                    raise PermissionError("合成工作副本更新失败")
+                return original_replace(source_path, target_path)
+
+            with patch("notalone.persistence.skill_files.os.replace", side_effect=fail_working_replacement):
+                try:
+                    self.library.update_package(self.owner_id, source)
+                except SkillLibraryPersistenceError:
+                    pass
+                versions = self.library.list_versions(self.owner_id, initial.skill_id)
+                self.assertEqual([item.version_number for item in versions], [2, 1])
+                for _ in range(3):
+                    self.assertEqual(self.port.catalog(self.scope).entries, ())
+                with self.assertRaises(PermissionError):
+                    self.port.load_version(self.scope, versions[0].version_id)
+                self.assertEqual(len(self.library.list_versions(self.owner_id, initial.skill_id)), 2)
+
+        restored = self.port.catalog(self.scope)
+        self.assertEqual(restored.entries[0].version_number, 2)
+        self.assertIn("先确认对方需要", self.port.load_version(self.scope, restored.entries[0].version_id).content)
+
+    def test_failed_contact_file_cleanup_cannot_rediscover_residual_directory_as_owner_skill(self):
+        import shutil
+
+        directory = self._package()
+        initial = self.port.catalog(self.scope).entries[0]
+        other_contact = uuid4()
+        with psycopg.connect(self.database_url) as connection:
+            connection.execute("INSERT INTO public.contact(owner_id,id,display_name) VALUES (%s,%s,'保留的合成联系人')",
+                               (self.owner_id, other_contact))
+            connection.execute("UPDATE public.reply_skill SET contact_id=%s WHERE id=%s", (self.contact_id, initial.skill_id))
+        other_scope = ContactScope(self.owner_id, other_contact)
+        original_rmtree = shutil.rmtree
+
+        def fail_working_cleanup(path, *args, **kwargs):
+            if Path(path) == directory:
+                raise PermissionError("合成工作副本删除失败")
+            return original_rmtree(path, *args, **kwargs)
+
+        with patch("notalone.persistence.skill_files.shutil.rmtree", side_effect=fail_working_cleanup):
+            with self.assertRaises(SkillFileError):
+                delete_contact(self.database_url, self.scope)
+            self.assertTrue(directory.exists())
+            for _ in range(3):
+                self.assertEqual(self.port.catalog(other_scope).entries, ())
+            self.assertEqual(self.library.list_owner_skills(self.owner_id), ())
+            with self.assertRaises(PermissionError):
+                self.port.load_version(other_scope, initial.version_id)
+
+        self.assertEqual(self.port.catalog(other_scope).entries, ())
+        self.assertFalse(directory.exists())
 
     def test_stale_load_cannot_rollback_new_directory_version_registration(self):
         self._package()

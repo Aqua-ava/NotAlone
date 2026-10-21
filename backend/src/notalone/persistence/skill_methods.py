@@ -3,6 +3,7 @@
 import hashlib
 import json
 import os
+import re
 from uuid import UUID, uuid4
 
 from psycopg.rows import dict_row
@@ -47,8 +48,27 @@ def _normalized(methods):
     return result
 
 
-def read_method_manifest(connection, version_id):
-    """仅从已登记、路径及哈希均有效的文件读取正文；不回退数据库副本。"""
+def _index_entries(raw):
+    if not isinstance(raw, list) or not 1 <= len(raw) <= 6:
+        raise SkillFileError("Skill 方法索引无效。")
+    entries = []
+    for item in raw:
+        try:
+            if set(item) != {"method_id", "relative_path", "content_sha256"}:
+                raise ValueError()
+            identifier = UUID(item["method_id"])
+            if (item["relative_path"] != f"methods/{identifier}.json"
+                    or not isinstance(item["content_sha256"], str)
+                    or re.fullmatch(r"[0-9a-f]{64}", item["content_sha256"]) is None):
+                raise ValueError()
+        except (KeyError, TypeError, ValueError):
+            raise SkillFileError("Skill 方法索引无效。") from None
+        entries.append({**item, "method_id": identifier})
+    return entries
+
+
+def read_method_manifest(connection, version_id, *, method_ids=None):
+    """先核验无正文索引，仅物化选中的方法正文；不回退数据库副本。"""
     row = _version(connection, version_id)
     with connection.cursor(row_factory=dict_row) as cursor:
         identities = cursor.execute(
@@ -63,12 +83,50 @@ def read_method_manifest(connection, version_id):
         data = LocalSkillPackageReader._read_file(path.parent, path.name, 1024 * 1024)
         if hashlib.sha256(data).hexdigest() != row["method_manifest_sha256"]:
             raise ValueError()
-        methods = _normalized(json.loads(data))
-        if [item["method_id"] for item in methods] != [str(item["method_id"]) for item in identities]:
+        entries = _index_entries(json.loads(data))
+        if [item["method_id"] for item in entries] != [item["method_id"] for item in identities]:
             raise ValueError()
+        selected = {item["method_id"] for item in entries} if method_ids is None else set(method_ids)
+        if not selected <= {item["method_id"] for item in entries}:
+            raise ValueError()
+        methods = []
+        for item in entries:
+            if item["method_id"] not in selected:
+                continue
+            method_path = _checked_path(_locator(row).removesuffix("methods.json") + item["relative_path"])
+            body = LocalSkillPackageReader._read_file(method_path.parent, method_path.name, 1024 * 1024)
+            if hashlib.sha256(body).hexdigest() != item["content_sha256"]:
+                raise ValueError()
+            method = _normalized([json.loads(body)])[0]
+            if UUID(method["method_id"]) != item["method_id"]:
+                raise ValueError()
+            methods.append({**method, "method_id": item["method_id"]})
     except (OSError, TypeError, ValueError):
         raise SkillFileError("Skill 方法文件校验失败。") from None
-    return [{**method, "method_id": UUID(method["method_id"])} for method in methods]
+    return methods
+
+
+def _write_immutable(path, data):
+    if len(data) > 1024 * 1024:
+        raise SkillFileError("Skill 方法文件过大。")
+    temporary = path.with_name(".method-" + uuid4().hex)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        if path.exists():
+            if LocalSkillPackageReader._read_file(path.parent, path.name, 1024 * 1024) != data:
+                raise SkillFileError("不可变 Skill 方法文件不一致。")
+            return
+        descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(data)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    finally:
+        try:
+            temporary.unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 def write_method_manifest(connection, version_id, methods):
@@ -77,22 +135,17 @@ def write_method_manifest(connection, version_id, methods):
     normalized = _normalized(methods)
     relative = _locator(row)
     path = _checked_path(relative)
-    data = json.dumps(normalized, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
-    if len(data) > 1024 * 1024:
-        raise SkillFileError("Skill 方法清单过大。")
-    temporary = path.with_name(".methods-" + uuid4().hex)
     try:
-        path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        if path.exists():
-            if LocalSkillPackageReader._read_file(path.parent, path.name, 1024 * 1024) != data:
-                raise SkillFileError("不可变 Skill 方法清单不一致。")
-        else:
-            descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
-            with os.fdopen(descriptor, "wb") as stream:
-                stream.write(data)
-                stream.flush()
-                os.fsync(stream.fileno())
-            os.replace(temporary, path)
+        entries = []
+        for method in normalized:
+            body = json.dumps(method, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+            method_relative = f"methods/{method['method_id']}.json"
+            method_path = _checked_path(relative.removesuffix("methods.json") + method_relative)
+            _write_immutable(method_path, body)
+            entries.append({"method_id": method["method_id"], "relative_path": method_relative,
+                            "content_sha256": hashlib.sha256(body).hexdigest()})
+        data = json.dumps(entries, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        _write_immutable(path, data)
         connection.execute(
             "UPDATE public.reply_skill_version SET method_manifest_path=%s,method_manifest_sha256=%s WHERE id=%s",
             (relative, hashlib.sha256(data).hexdigest(), version_id),
@@ -101,11 +154,6 @@ def write_method_manifest(connection, version_id, methods):
         connection.execute("UPDATE public.reply_skill_method SET title=NULL,instruction=NULL WHERE version_id=%s", (version_id,))
     except OSError:
         raise SkillFileError("Skill 方法文件发布失败。") from None
-    finally:
-        try:
-            temporary.unlink(missing_ok=True)
-        except OSError:
-            pass
 
 
 def migrate_legacy_method_manifests(connection, *, owner_id):

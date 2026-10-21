@@ -8,6 +8,7 @@ from pathlib import Path
 import shutil
 import tempfile
 import unittest
+from unittest.mock import patch
 from uuid import uuid4
 
 import psycopg
@@ -27,6 +28,13 @@ POLICY_TAIL = "070_skill_scope_policies.sql"
 
 
 class SkillReviewUpgradeTest(unittest.TestCase):
+    def setUp(self):
+        self.skill_directory = tempfile.TemporaryDirectory(prefix="notalone-upgrade-skills-")
+        self.addCleanup(self.skill_directory.cleanup)
+        environment = patch.dict(os.environ, {"NOTALONE_SKILLS_DIR": self.skill_directory.name})
+        environment.start()
+        self.addCleanup(environment.stop)
+
     @contextmanager
     def _database(self):
         name = f"notalone_12_upgrade_{uuid4().hex}_test"
@@ -79,7 +87,7 @@ class SkillReviewUpgradeTest(unittest.TestCase):
                 connection.execute(
                     "INSERT INTO public.reply_skill_version(id,skill_id,version_number,name,description,content,content_sha256,source_locator,is_current,enabled,status) "
                     "VALUES(%s,%s,1,'legacy-review','旧策略','合成旧包正文',%s,'synthetic-old-package',true,true,'active')",
-                    (version, skill, "a" * 64),
+                    (version, skill, hashlib.sha256("合成旧包正文".encode("utf-8")).hexdigest()),
                 )
                 before = connection.execute("SELECT name,checksum FROM public.notalone_schema_migration ORDER BY name").fetchall()
                 original = connection.execute("SELECT to_jsonb(v) FROM public.reply_skill_version v WHERE id=%s", (version,)).fetchone()[0]
@@ -95,10 +103,13 @@ class SkillReviewUpgradeTest(unittest.TestCase):
                 self.assertEqual(connection.execute("SELECT count(*) FROM public.reply_skill_publication").fetchone()[0], 0)
                 self.assertEqual(connection.execute("SELECT checksum FROM public.notalone_schema_migration WHERE name=%s", (TAIL,)).fetchone()[0], hashlib.sha256((MIGRATIONS / TAIL).read_bytes()).hexdigest())
                 self.assertEqual(before[:35], list(BASELINE_MANIFEST))
-            # 068边界的数据与账本已独立核验；当前运行port另需正式070政策表。
+            # 历史边界先独立核验；当前运行接口仅在全部正式迁移完成后验证。
             self._copy_prefix(prefix, 70)
             self.assertEqual(migrate(database, prefix), (HISTORY_TAIL, POLICY_TAIL))
             self.assertEqual(migrate(database, prefix), ())
+            later = tuple(path.name for path in sorted(MIGRATIONS.glob("*.sql")) if int(path.name[:3]) > 70)
+            self.assertEqual(migrate(database, MIGRATIONS), later)
+            self.assertEqual(migrate(database, MIGRATIONS), ())
             port = PostgresSkillPort(database)
             self.assertEqual(port.catalog(ContactScope(owner, contact)).entries[0].version_id, version)
             self.assertEqual(port.load_version(ContactScope(owner, contact), version).content, original["content"])
@@ -139,7 +150,7 @@ class SkillReviewUpgradeTest(unittest.TestCase):
             connection.execute(
                 "INSERT INTO public.reply_skill_version(id,skill_id,version_number,name,description,content,content_sha256,source_locator,is_current,enabled,status,review_origin) "
                 "VALUES(%s,%s,1,%s,'合成历史策略','合成不可变正文',%s,'synthetic-history-package',true,true,'active',%s)",
-                (identity, parent, name, "b" * 64, review_origin),
+                (identity, parent, name, hashlib.sha256("合成不可变正文".encode("utf-8")).hexdigest(), review_origin),
             )
         connection.execute(
             "INSERT INTO public.skill_draft(id,owner_id,contact_id,status,logical_skill_id,proposal_kind,strategy,private_evidence,published_version_id,batch_key,last_decision) "

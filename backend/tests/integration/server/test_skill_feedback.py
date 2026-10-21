@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import os
 import threading
 import unittest
 from pathlib import Path
@@ -73,6 +74,24 @@ class SkillFeedbackHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         result, command = self._approve(path, compared)
         self._last_feedback_approval = (path, command)
         return result['published'], source
+
+    def _add_published_resource(self, version_id, relative_path, content):
+        """只补合成包夹具：资源字节在受控目录，数据库仅登记清单。"""
+        root = Path(os.environ['NOTALONE_SKILLS_DIR'])
+        with psycopg.connect(self.database_url) as connection:
+            name, document = connection.execute(
+                'SELECT name,content_path FROM public.reply_skill_version WHERE id=%s', (UUID(str(version_id)),)
+            ).fetchone()
+            locator = (Path(document).parent / relative_path).as_posix()
+            for target in (root / locator, root / str(self.owner_id) / name / relative_path):
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(content)
+            connection.execute(
+                'INSERT INTO public.reply_skill_resource(skill_version_id,relative_path,resource_kind,'
+                'media_type,byte_size,content_sha256,content_path) VALUES(%s,%s,\'reference\','
+                '\'text/markdown\',%s,%s,%s)',
+                (UUID(str(version_id)), relative_path, len(content), hashlib.sha256(content).hexdigest(), locator))
+        return root / locator
 
     def test_method_stop_filters_actual_body_and_receipt_only_in_explicit_contact_scene(self):
         published, _ = self._publish_two_methods()
@@ -465,16 +484,17 @@ class SkillFeedbackHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         published, _ = self._publish_two_methods()
         skill, version = UUID(published['skill_id']), UUID(published['version_id'])
         content = '合成被排除方法甲的未分离资源。'.encode()
-        with psycopg.connect(self.database_url) as connection:
-            connection.execute('INSERT INTO public.reply_skill_resource(skill_version_id,relative_path,resource_kind,'
-                'media_type,byte_size,content_sha256,content) VALUES(%s,\'references/blocked.md\',\'reference\','
-                '\'text/markdown\',%s,%s,%s)', (version, len(content), hashlib.sha256(content).hexdigest(), content))
+        self._add_published_resource(version, 'references/blocked.md', content)
+        self._ok('/api/skills')  # 发布工作副本的初次同步属于夹具准备。
         self._ok(self.path + '/policies', {'skill_id': str(skill), 'version_id': str(version),
             'method_id': str(uuid5(skill, 'method:clarify')),
             'scope': {'kind': 'contact', 'contact_id': str(self.contact_id), 'scene': None},
             'disabled': True, 'expected_revision': 0, 'operation_key': str(uuid4())})
         port, scope = PostgresSkillPort(self.database_url), ContactScope(self.owner_id, self.contact_id)
         materialized = []
+        snapshot_reads = []
+        from notalone.skills import LocalSkillPackageReader
+        read_file = LocalSkillPackageReader._read_file
         fetchall, fetchone = psycopg.Cursor.fetchall, psycopg.Cursor.fetchone
 
         def observed_all(cursor):
@@ -487,18 +507,32 @@ class SkillFeedbackHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
             materialized.append(json.dumps(row, ensure_ascii=False, default=str))
             return row
 
-        with patch.object(psycopg.Cursor, 'fetchall', observed_all), patch.object(psycopg.Cursor, 'fetchone', observed_one):
+        def observed_file(root, relative_path, maximum_bytes):
+            target = Path(root) / relative_path
+            if '.versions' in target.parts:
+                snapshot_reads.append(target)
+            return read_file(root, relative_path, maximum_bytes)
+
+        with (patch.object(psycopg.Cursor, 'fetchall', observed_all),
+              patch.object(psycopg.Cursor, 'fetchone', observed_one),
+              patch.object(LocalSkillPackageReader, '_read_file', side_effect=observed_file)):
             catalog = port.catalog(scope)
             self.assertEqual([item.version_id for item in catalog.entries], [version])
             self.assertNotIn('合成被排除方法甲', str(materialized))
+            self.assertEqual(snapshot_reads, [], '目录只能读取元数据，不能读取方法正文或原始 SKILL.md。')
             materialized.clear()
             with self.assertRaises(PermissionError):
                 port.load_resource(scope, version, 'references/blocked.md')
             self.assertNotIn('合成被排除方法甲', str(materialized))
+            self.assertEqual(snapshot_reads, [], '被政策排除的资源不得读取快照文件。')
             materialized.clear()
             loaded = port.load_version(scope, version)
             self.assertIn('合成允许方法乙', loaded.content)
+            self.assertNotIn('合成被排除方法甲', loaded.content)
             self.assertNotIn('合成被排除方法甲', str(materialized))
+        leaf_reads = [path.name for path in snapshot_reads if path.parent.name == 'methods']
+        self.assertEqual(leaf_reads, [str(uuid5(skill, 'method:listen')) + '.json'], '只读取本次允许方法的正文文件。')
+        self.assertFalse(any(path.name == 'SKILL.md' for path in snapshot_reads), '筛选后不能物化包含停用方法的完整正文。')
         self.assertEqual(loaded.resource_paths, ())
         self.assertEqual(loaded.execution_view.method_ids, (uuid5(skill, 'method:listen'),))
 
@@ -819,12 +853,8 @@ class SkillFeedbackHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         published, source = self._publish_two_methods()
         skill, version = published['skill_id'], published['version_id']
         content = '合成来源删除前确实存在的辅助资源。'.encode()
-        with psycopg.connect(self.database_url) as connection:
-            connection.execute('INSERT INTO public.reply_skill_resource(skill_version_id,relative_path,resource_kind,'
-                'media_type,byte_size,content_sha256,content) VALUES(%s,\'references/source.md\',\'reference\','
-                '\'text/markdown\',%s,%s,%s)', (UUID(version), len(content), hashlib.sha256(content).hexdigest(), content))
-            self.assertEqual(connection.execute('SELECT content FROM public.reply_skill_resource WHERE skill_version_id=%s '
-                'AND relative_path=\'references/source.md\'', (UUID(version),)).fetchone()[0], content)
+        resource_file = self._add_published_resource(version, 'references/source.md', content)
+        self.assertEqual(resource_file.read_bytes(), content)
         stop_command = {'skill_id': skill, 'version_id': version,
             'method_id': str(uuid5(UUID(skill), 'method:clarify')),
             'scope': {'kind': 'owner', 'contact_id': None, 'scene': None},
@@ -859,6 +889,7 @@ class SkillFeedbackHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         with patch.object(SourceService, '_start', SourceService._drain):
             status, deleted = self.backend.request(f'/api/contacts/{self.contact_id}/sources/{source}', method='DELETE')
         self.assertEqual(status, 202, deleted)
+        self.assertFalse(resource_file.exists(), '来源删除完成后，未执行任何恢复 GET 前资源文件已经擦除。')
         review.SkillReviewHttpTest._assert_physical_review_erasure(self, str(draft_id), version)
         with psycopg.connect(self.database_url) as connection:
             self.assertEqual(connection.execute('SELECT status FROM public.source_document WHERE id=%s', (source,)).fetchone()[0], 'deleted')

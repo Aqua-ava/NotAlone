@@ -1,6 +1,6 @@
 """受控联系人清理先擦除新工作副本；仅合成事务口，不连接PG。"""
 
-from contextlib import ExitStack
+from contextlib import ExitStack, nullcontext
 import unittest
 from unittest.mock import patch
 from uuid import uuid4
@@ -72,6 +72,9 @@ class UpgradeContactErasureTest(unittest.TestCase):
             stack.enter_context(patch(module+'psycopg.connect', return_value=connection))
             stack.enter_context(patch(module+'lock_contact_scope'))
             stack.enter_context(patch(module+'lock_owner_scope'))
+            # 本例只核对升级／学习依赖的级联顺序；文件提交边界由真实 PG/HTTP 验收。
+            stack.enter_context(patch(module+'cleanup_skill_files_after_commit', return_value=nullcontext()))
+            stack.enter_context(patch('notalone.persistence.skill_files.queue_skill_file_cleanup'))
             stack.enter_context(patch(module+'_erase_preferences'))
             stack.enter_context(patch(module+'_erase_contact_sources'))
             stack.enter_context(patch('notalone.persistence.memory_upgrade.erase_memory_upgrades',

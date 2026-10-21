@@ -24,6 +24,7 @@ class Rows:
 
 class RecoveryRows:
     def __init__(self, scope, *, phase, statuses):
+        self.owner_id = scope.owner_id
         self.job = {'id': uuid4(), 'revision': 2, 'state': 'cancelled', 'scope_kind': scope.kind}
         self.job['algorithm'] = synthetic_upgrade_algorithm()
         self.batch = {'id': uuid4(), 'job_id': self.job['id'], 'owner_id': scope.owner_id,
@@ -35,7 +36,13 @@ class RecoveryRows:
         self.queued_from = None
         self.reconciled = []
 
-    def execute(self, query, params):
+    def execute(self, query, params=None):
+        if query == "SELECT to_regclass('public.reply_skill_file_cleanup') AS relation":
+            return Rows([{'relation': 'reply_skill_file_cleanup'}])
+        if query.startswith('SELECT 1 FROM public.reply_skill_file_cleanup WHERE'):
+            if params != (str(self.owner_id), str(self.owner_id)):
+                raise AssertionError('文件清理只能核对升级所属 owner。')
+            return Rows()  # 本恢复夹具没有 Skill 文件或待清理任务。
         if query.startswith('SELECT contact_id FROM public.memory_upgrade_batch'):
             return Rows([{'contact_id': self.batch['contact_id']}])
         if query.startswith('SELECT * FROM public.memory_upgrade_operation'):

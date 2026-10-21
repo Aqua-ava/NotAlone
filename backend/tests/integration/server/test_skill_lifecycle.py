@@ -382,11 +382,11 @@ class SkillLifecycleHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
 
         def observed_file(root, relative_path, maximum_bytes):
             data = read_file(root, relative_path, maximum_bytes)
-            if document.encode('utf-8') in data:
+            if '.versions' in root.parts and document.encode('utf-8') in data:
                 body_reads.append((root, relative_path))
             return data
 
-        # 观察真实文件读取及数据库返回值，拒绝范围时不能先物化正文。
+        # 扫描会校验可编辑包；这里观察真正用于历史展示的不可变版本读取。
         with (patch.object(psycopg.Cursor, 'fetchall', observed_all),
               patch.object(psycopg.Cursor, 'fetchone', observed_one),
               patch.object(LocalSkillPackageReader, '_read_file', side_effect=observed_file)):

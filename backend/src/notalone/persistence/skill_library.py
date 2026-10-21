@@ -651,6 +651,9 @@ class PostgresSkillLibrary(SkillLibraryManagementPort):
                 erase_managed_update_backups(connection)
                 if skill["status"] == "deleted":
                     cleanup_pending_files(connection, owner_id=owner_id)
+                    from notalone.persistence.skill_file_cleanup import _has_pending_files
+                    if _has_pending_files(connection, owner_id):
+                        raise SkillLibraryPersistenceError('Skill 文件删除尚未完成，请重试。')
                     revision = self._current_revision(connection, owner_id)
                     return SkillDeletionResult(
                         owner_id=owner_id,
@@ -1136,6 +1139,10 @@ class PostgresSkillLibrary(SkillLibraryManagementPort):
                 synchronize_working_copies(connection, owner_id=owner_id)
                 cleanup_unreferenced_snapshots(connection, owner_id=owner_id)
                 cleanup_pending_files(connection, owner_id=owner_id)
+                from notalone.persistence.skill_file_cleanup import _has_pending_files
+                pending = _has_pending_files(connection, owner_id)
+            if pending:
+                raise SkillLibraryPersistenceError('Skill 文件删除尚未完成，请重试。')
         except (psycopg.Error, SkillFileError, OSError):
             raise SkillLibraryPersistenceError('Skill 目录同步暂不可用，请重试。') from None
 

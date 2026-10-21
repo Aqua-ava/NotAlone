@@ -107,7 +107,11 @@ class PostgresSkillLibraryTest(unittest.TestCase):
             result = self.library.import_package(self.owner_id, package)
         directory = Path(self.skill_root.name) / str(self.owner_id) / "delete-reply"
         with patch("shutil.rmtree", side_effect=PermissionError("合成文件系统暂不可用")):
-            self.library.delete(self.owner_id, result.skill_id)
+            with self.assertRaises(SkillLibraryPersistenceError):
+                self.library.delete(self.owner_id, result.skill_id)
+            self.assertEqual(self.skill_port.catalog(ContactScope(self.owner_id, self.contact_id)).entries, ())
+            with self.assertRaises(SkillLibraryPersistenceError):
+                self.library.delete(self.owner_id, result.skill_id)
         self.assertTrue(directory.exists())
         self.library.delete(self.owner_id, result.skill_id)
         self.assertFalse(directory.exists())

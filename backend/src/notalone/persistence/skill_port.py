@@ -62,6 +62,11 @@ WHERE skill.owner_id=%s AND (skill.contact_id IS NULL OR skill.contact_id=%s)
   AND skill.status='active' AND version.status='active' AND version.enabled AND version.is_current
   AND (version.content_path IS NOT NULL OR version.content IS NOT NULL AND length(btrim(version.content))>0)
   AND version.directory_available AND version.name=skill.name
+  AND NOT EXISTS (SELECT 1 FROM public.reply_skill_working_copy AS pending WHERE pending.skill_id=skill.id)
+  AND NOT EXISTS (SELECT 1 FROM public.reply_skill_file_cleanup AS cleanup
+       WHERE cleanup.relative_path=skill.owner_id::text
+          OR (split_part(cleanup.relative_path,'/',1)=skill.owner_id::text
+              AND split_part(cleanup.relative_path,'/',2)=skill.name))
   AND (NOT version.review_origin OR (publication.owner_id=skill.owner_id AND NOT publication.deleted
        AND (publication.scope_kind='owner'
             OR publication.scope_kind='contact' AND publication.scope_contact_id=%s
