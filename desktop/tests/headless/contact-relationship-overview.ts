@@ -42,7 +42,7 @@ export async function contactRelationshipOverview(browser: Browser, origin: stri
       await expect(current.getByRole('list', { name: '来源引用', exact: true })).toBeVisible();
       await expect(old.locator('s')).toHaveText(prepared.old.text);
       await expect(old.getByText('已失效 · 不再引用', { exact: true })).toBeVisible();
-      await expect(manager.locator('summary').filter({ hasText: /^版本历史$/ })).toHaveCount(0);
+      await expect(manager.locator('summary').filter({ hasText: /^版本历史$/ })).toHaveCount(1);
       await expect(old.getByRole('button', { name: `修正资料：${prepared.old.text}`, exact: true })).toHaveCount(0);
       await current.getByRole('button', { name: `查看依据：${prepared.current.text}`, exact: true }).click();
       const traces = manager.getByRole('region', { name: '记忆依据', exact: true });

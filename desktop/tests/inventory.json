@@ -70,6 +70,7 @@
     "tests/memory-evidence.test.mjs",
     "tests/memory-evolution.test.mjs",
     "tests/memory-processing/bridge.test.mjs",
+    "tests/memory-ui-wiring.test.mjs",
     "tests/memory-skill-evolution/page-gate.test.mjs",
     "tests/overview-reply-retrieval-scheduling.test.mjs",
     "tests/owner-facts-overview-scheduling.test.mjs",
