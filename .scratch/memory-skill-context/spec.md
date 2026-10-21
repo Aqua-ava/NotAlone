@@ -1,5 +1,7 @@
 # Memory、Skill 与 Prompt 上下文规格
 
+> 后续正式决定：[ADR-090](../../architecture/adr/090-bounded-runtime-history-retrieval.md)已闭合与 ADR-012 初期动态检索禁令的替代关系；按现行范围、开关、排除、预算及来源检查使用只读历史工具。旧实现与验收记录保持，不据本决定新增同步授权或认证真实模型质量。
+
 State: resolved
 Triage: ready-for-agent
 

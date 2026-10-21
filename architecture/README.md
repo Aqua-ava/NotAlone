@@ -2,7 +2,7 @@
 
 > 联系人首用决定：[ADR-087](adr/087-wechat-confirmed-contact-onboarding.md)确定微信会话确认是新增联系人的唯一入口，导入只补充已有联系人；旧接口退役及新用户交付验收尚待完成。
 
-> 2026-10-21 设计审查：同号 ADR-074 有两份：引用时必须附“腾讯记忆”或“自动 Skill”标题及完整文件链接，不能仅凭编号推断替代。额外记忆人工门已由用户确认并通过 [ADR-085](adr/085-source-verified-automatic-adoption.md) 收敛；Runtime 按需检索的阶段限制、Todo／摘要与外部工具的实现差距仍待复审。
+> 2026-10-21 设计审查：同号 ADR-074 有两份：引用时必须附“腾讯记忆”或“自动 Skill”标题及完整文件链接，不能仅凭编号推断替代。额外记忆人工门已由用户确认并通过 [ADR-085](adr/085-source-verified-automatic-adoption.md) 收敛；Runtime 按需检索已由 [ADR-090](adr/090-bounded-runtime-history-retrieval.md)确认受控只读边界；Todo／摘要与外部工具的实现差距仍待复审。
 
 > 状态：已建立。本目录区分现行约束、设计草案与 ADR；文档不代表对应功能已经实现。
 
@@ -132,6 +132,8 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 86. [ADR-086：按来源含义采纳记忆，不设统一重复次数门槛](adr/086-source-meaning-without-repetition-threshold.md)
 87. [ADR-087：新联系人只从微信会话确认加入](adr/087-wechat-confirmed-contact-onboarding.md)
 88. [ADR-088：一秒作为正常联系人切换的优化目标](adr/088-normal-switch-one-second-optimization-target.md)
+
+90. [ADR-090：回复运行时按需补查受控历史](adr/090-bounded-runtime-history-retrieval.md)
 
 ## 当前架构决策
 
