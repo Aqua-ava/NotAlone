@@ -149,10 +149,10 @@ export class AppWindows {
     const manager = role === 'manager';
     const window = new BrowserWindow({
       title: manager ? 'NotAlone · 管理后台' : 'NotAlone · 输入小窗',
-      width: manager ? 1080 : 680,
-      height: manager ? 740 : 520,
-      minWidth: manager ? 800 : 680,
-      minHeight: manager ? 580 : 520,
+      width: manager ? 1000 : 520,
+      height: manager ? 720 : 640,
+      minWidth: manager ? 800 : 420,
+      minHeight: manager ? 580 : 480,
       resizable: true,
       frame: manager,
       titleBarStyle: manager && process.platform === 'darwin' ? 'hiddenInset' : 'default',

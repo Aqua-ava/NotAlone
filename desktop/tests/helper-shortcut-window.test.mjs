@@ -302,7 +302,7 @@ test('输入小窗支持原生缩放并保留最小可用尺寸', async () => {
   await fixture(async f => {
     await f.press();
     assert.equal(f.helper().options.resizable, true);
-    assert.equal(f.helper().options.minWidth, 680);
-    assert.equal(f.helper().options.minHeight, 520);
+    assert.equal(f.helper().options.minWidth, 420);
+    assert.equal(f.helper().options.minHeight, 480);
   });
 });

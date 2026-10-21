@@ -31,11 +31,11 @@ svg { flex-shrink: 0; vertical-align: middle; }
 /* 大窗口沿用米白纸张、水彩蓝与边缘拼贴，业务区域保持清楚。 */
 html:has(.admin-layout) { scrollbar-width: none; }
 html:has(.admin-layout)::-webkit-scrollbar { display: none; }
-.admin-layout { display: grid; grid-template-columns: 213px minmax(0, 1fr); min-height: 100vh; background: radial-gradient(ellipse at 84% 14%, #c3dce459, transparent 38%), radial-gradient(ellipse at 17% 71%, #ead49c29, transparent 36%), #f3eee3; }
-.admin-sidebar { height: 100vh; position: sticky; top: 0; display: flex; flex-direction: column; padding: 48px 16px 29px; background: radial-gradient(ellipse at 18% 26%, #e0d5b343, transparent 65%), #eee7d8; border-right: 1px solid #cfc6b5; }
+.admin-layout { display: grid; grid-template-columns: 188px minmax(0, 1fr); min-height: 100vh; background: radial-gradient(ellipse at 84% 14%, #c3dce459, transparent 38%), radial-gradient(ellipse at 17% 71%, #ead49c29, transparent 36%), #f3eee3; }
+.admin-sidebar { height: 100vh; position: sticky; top: 0; display: flex; flex-direction: column; padding: 44px 12px 24px; background: radial-gradient(ellipse at 18% 26%, #e0d5b343, transparent 65%), #eee7d8; border-right: 1px solid #cfc6b5; }
 .admin-sidebar::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 40px; -webkit-app-region: drag; }
-.admin-brand { display: flex; flex-direction: column; align-items: center; gap: 5px; margin-bottom: 39px; }
-.admin-brand img { width: 180px; height: auto; filter: drop-shadow(0 3px 2px #68584116); }
+.admin-brand { display: flex; flex-direction: column; align-items: center; gap: 5px; margin-bottom: 28px; }
+.admin-brand img { width: 160px; max-width: 100%; height: auto; filter: drop-shadow(0 3px 2px #68584116); }
 .admin-brand small { color: #6d7783; font-family: "Songti SC", STSong, serif; font-size: 11px; letter-spacing: 1px; }
 .sidebar-label { padding: 0 14px; color: #857866; font-size: 10px; margin-bottom: 14px; }
 .admin-sidebar nav { display: grid; gap: 7px; }
@@ -47,13 +47,13 @@ html:has(.admin-layout)::-webkit-scrollbar { display: none; }
 .sidebar-help b { font-weight: 500; margin-left: 6px; }
 .sidebar-help p { color: #76756f; font-size: 10px; line-height: 1.8; margin-top: 8px; }
 .admin-workspace { display: flex; flex-direction: column; min-width: 0; }
-.admin-topbar { min-height: 71px; display: flex; justify-content: space-between; align-items: center; gap: 15px; padding: 17px 35px; background: #faf6ed; border-bottom: 1px dashed var(--line); color: #65778a; font-size: 12px; }
+.admin-topbar { min-height: 64px; display: flex; justify-content: space-between; align-items: center; gap: 15px; padding: 13px 24px; background: #faf6ed; border-bottom: 1px dashed var(--line); color: #65778a; font-size: 12px; }
 .admin-topbar i { font-style: normal; color: #b0a898; margin: 0 10px; }
 .admin-topbar { position: sticky; top: 0; z-index: 10; -webkit-app-region: drag; user-select: none; }
 .admin-topbar button, .admin-topbar a, .admin-topbar input, .admin-topbar select { -webkit-app-region: no-drag; }
-.admin-topbar > div { display: flex; align-items: center; gap: 18px; }
+.admin-topbar > div { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .connection-status { display: inline-flex; align-items: center; gap: 7px; color: #77786f; font-size: 11px; white-space: nowrap; }
-.manager-content { flex: 1; width: 100%; max-width: 1120px; margin: 0 auto; padding: 33px 38px 40px; }
+.manager-content { flex: 1; width: 100%; max-width: 1120px; margin: 0 auto; padding: 26px 28px 32px; }
 .manager-title { position: relative; isolation: isolate; margin-bottom: 27px; }
 .manager-title h1 { font: 600 25px "Songti SC", STSong, serif; color: #254b70; letter-spacing: 1px; }
 .manager-title p { color: var(--muted); font-size: 12px; line-height: 1.85; margin-top: 12px; padding-right: 85px; }
@@ -98,7 +98,9 @@ html:has(.admin-layout)::-webkit-scrollbar { display: none; }
 @media (max-width: 950px) {
   .admin-layout { grid-template-columns: 180px minmax(0, 1fr); }
   .admin-sidebar { padding-left: 12px; padding-right: 12px; }
-  .admin-topbar { padding-left: 25px; padding-right: 25px; }
-  .manager-content { padding: 29px 25px 35px; }
+  .admin-topbar { padding: 12px 20px; flex-wrap: wrap; gap: 10px; }
+  .admin-topbar > div { width: 100%; }
+  .admin-topbar .contact-picker-container { flex: 1; }
+  .manager-content { padding: 22px 20px 28px; }
   .admin-topbar > div { gap: 11px; }
 }

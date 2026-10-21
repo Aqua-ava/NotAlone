@@ -1,5 +1,6 @@
 .ime-pane { display: flex; flex-direction: column; padding-bottom: 4px; overflow: hidden; }
-.ime-workspace { flex: 1; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; }
+.ime-workspace { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: none; }
+.ime-workspace::-webkit-scrollbar { display: none; }
 .ime-header, .ime-input, .ime-status-line, .ime-footer, .rewrite-options, .rewrite-privacy { flex-shrink: 0; }
 .ime-input textarea { height: 68px; }
 .rewrite-options { display: flex; gap: 10px; flex-wrap: wrap; padding: 0 4px; font-size: 11px; }
