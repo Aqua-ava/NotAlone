@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AssistantContinuationClarification, RequirementChange } from '../shared/assistant-continuation-clarification';
+import { replyTextLimit } from '../shared/reply-contract';
 import type { ReplySessionView } from './RewritePanel';
 
-const withinTextLimit = (value: string) => Array.from(value).length <= 4096;
+const withinTextLimit = (value: string) => Array.from(value).length <= replyTextLimit;
 
 function RequirementDecisions({ clarification, disabled, confirm }: {
   clarification: AssistantContinuationClarification;
@@ -85,7 +86,7 @@ export function AssistantContinuationControls({ replies, hasUnsavedEdits = false
     <button disabled={disabled || textTooLong || !instruction.trim() && !intention.trim()}
       onClick={submit}>继续修改</button>
     {hasUnsavedEdits && <p role="status">本组仍有未保存修改，请先保存。</p>}
-    {textTooLong && <p role="status">本次要求和改口分别最多4096个字符，请修改后继续。</p>}
+    {textTooLong && <p role="status">本次要求和改口分别最多{replyTextLimit}个字符，请修改后继续。</p>}
     {continuation?.message && <p role={continuation.phase === 'failed' ? 'alert' : 'status'}>{continuation.message}</p>}
     {continuation?.phase === 'clarification' && continuation.clarification?.requirement_options.length ?
       <RequirementDecisions key={`${continuation.sessionId}:${continuation.expectedInputVersionId}:${JSON.stringify(continuation.clarification)}`}

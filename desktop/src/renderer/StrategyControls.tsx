@@ -84,7 +84,7 @@ export function StrategyControls({ replies }: { replies: ReplySessionView }) {
       </section>}
       {result.question && <div className="strategy-question" role="group" aria-label="关键澄清">
         <h3>还需要你确认</h3><p>{result.question.text}</p>
-        <label className="strategy-field">关键问题回答<textarea id="reply-clarification-answer" aria-label="关键问题回答" rows={3} maxLength={4096} value={answer} disabled={!available}
+        <label className="strategy-field">关键问题回答<textarea id="reply-clarification-answer" aria-label="关键问题回答" rows={3} maxLength={replyTextLimit} value={answer} disabled={!available}
           placeholder="在这里补充你的想法"
           onChange={(event) => {
             setAnswerDraft({ question, text: event.target.value });

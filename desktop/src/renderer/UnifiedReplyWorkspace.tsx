@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { RewriteOptions, RewriteTone } from '../shared/reply-bridge';
+import { replyTextLimit } from '../shared/reply-contract';
 import type { ContactSessionView } from './contact-session';
 import { HelperDraft } from './contact-session';
 import type { ReplySessionView } from './RewritePanel';
@@ -112,7 +113,7 @@ export function UnifiedReplyWorkspace({ contacts, replies }: { contacts: Contact
           onChange={event => update({ tone: event.target.value as RewriteTone })}>
           <option value="original">自然表达</option><option value="warm">自然温和</option>
           <option value="concise">简洁直接</option><option value="polite">礼貌克制</option></select></label>
-        <label className="rewrite-instruction">本次要求<input aria-label="本次要求" maxLength={4096} disabled={disabled}
+        <label className="rewrite-instruction">本次要求<input aria-label="本次要求" maxLength={replyTextLimit} disabled={disabled}
           value={options.instruction} placeholder="可选，如简短一点、不增加承诺"
           onChange={event => update({ instruction: event.target.value })} /></label>
       </div>
