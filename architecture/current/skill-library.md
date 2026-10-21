@@ -1,8 +1,8 @@
 # Skill Library（Skill 库）
 
-> 2026-10-21 设计审查：“已完成”只表示文中列出的工程接口存在；[原规格](../../.scratch/skill-library/spec.md)仍记录资源预算等历史验证缺口，本次未找到其全部收口证据，不据管理接口存在宣称资源预算、真实质量或桌面均已验收。
+> 2026-10-21 决定收敛：按 [ADR-093](../adr/093-retain-current-skill-resource-budget.md)沿用当前导入限制和整轮输入预算，不新增独立辅助资源额度。原规格中的独立额度缺口已不属于必做功能；导入边界测试、真实质量及桌面／HTTP 等其他历史验证仍按实际证据核对，不能据接口存在宣称全部完成。
 
-> 状态：已采纳且已按本文件完成初版实现；管理接口、辅助资源持久化与运行时读取均已落地，测试见
+> 状态：已采纳；已有管理、资源持久化与运行时读取实现，各项完成及验收范围须按证据分别核对。测试入口见
 > [tests](../../backend/tests/unit/skills)、[tests](../../backend/tests/integration/persistence) 与
 > [tests](../../backend/tests/unit/reply)，以 在 `backend/` 运行 `python -m unittest discover -s tests` 的真实验证为准。
 > 日期：2026-08-24
@@ -82,7 +82,9 @@ scripts 不作为 NotAlone v1 的运行资源。包含脚本的包不能产生�
 
 ### 3.3 大小与加载预算
 
-SKILL.md 应保持在约 500 行、5000 tokens 以内；references 和 assets 使用单次加载预算。超出预算时返回可解释的校验或加载错误，不自动截断、不使用半截正文。references 的读取深度限制在包内受控路径，不能借引用跳出 Skill 包。
+按 [ADR-093](../adr/093-retain-current-skill-resource-budget.md)沿用现有两层限制：导入时 SKILL.md 最多 500 行、估算 5000 tokens；辅助资源最多 100 个、单个 1 MiB、合计 4 MiB，超限拒绝导入。每次模型调用另行检查完整输入和输出预留，不因包导入成功而允许超限生成。
+
+运行时辅助资源经当前版本与范围校验后返回全文并记录路径，不新增独立单次或累计资源额度，也不新增自动裁剪；SKILL.md 保留受控 offset／limit 读取。大资源可能导致后续输入预算拒绝，按现有错误路径处理。资源路径仍限制在包内，不能借引用跳出 Skill 包。这些是当前实现与设计边界，不代表对应测试全部通过。
 
 ## 4. 模块与接口
 
@@ -186,18 +188,17 @@ PostgreSQL 继续是 Skill 目录、版本、状态、资源元数据和删除�
 
 ## 9. 当前实现状态与完成条件
 
-仓库已完成 Skill Library 初版实现：领域模型见 [skills/models.py](../../backend/src/notalone/skills/models.py)，只读受控目录、版本与资源读取见 [skill_port.py](../../backend/src/notalone/persistence/skill_port.py)，管理接口 import/update/enable/disable/rollback/delete/export/preview 见 [skill_library.py](../../backend/src/notalone/persistence/skill_library.py)。运行时按需读取 SKILL.md 与受控 references/assets 的 Adapter 见 [langchain_runtime.py](../../backend/src/notalone/reply/adapters/langchain_runtime.py)，试用执行器见 [skill_preview.py](../../backend/src/notalone/reply/adapters/skill_preview.py)，运行记录与资源摘要见 [reply_store.py](../../backend/src/notalone/persistence/reply_store.py) 和 [024_skill_run_record.sql](../../backend/database/migrations/024_skill_run_record.sql)，包导入校验见 [008_skill_port.sql](../../backend/database/migrations/008_skill_port.sql) 与 [023_skill_library_resources.sql](../../backend/database/migrations/023_skill_library_resources.sql)。
+仓库已有以下 Skill Library 实现入口：领域模型见 [skills/models.py](../../backend/src/notalone/skills/models.py)，只读受控目录、版本与资源读取见 [skill_port.py](../../backend/src/notalone/persistence/skill_port.py)，管理接口 import/update/enable/disable/rollback/delete/export/preview 见 [skill_library.py](../../backend/src/notalone/persistence/skill_library.py)。运行时按需读取 SKILL.md 与受控 references/assets 的 Adapter 见 [langchain_runtime.py](../../backend/src/notalone/reply/adapters/langchain_runtime.py)，试用执行器见 [skill_preview.py](../../backend/src/notalone/reply/adapters/skill_preview.py)，运行记录与资源摘要见 [reply_store.py](../../backend/src/notalone/persistence/reply_store.py) 和 [024_skill_run_record.sql](../../backend/database/migrations/024_skill_run_record.sql)，包导入校验见 [008_skill_port.sql](../../backend/database/migrations/008_skill_port.sql) 与 [023_skill_library_resources.sql](../../backend/database/migrations/023_skill_library_resources.sql)。
 
-初版实现已通过的完成条件：
+需按实际执行记录核对的验证范围（此清单本身不代表全部通过）：
 
 1. 正常 Skill 包、损坏 frontmatter、重复名称、路径遍历和符号链接测试；
-2. references/assets 的版本绑定、按需读取、大小预算和脚本拒绝测试；
+2. references/assets 的版本绑定、按需读取、导入大小限制、整轮输入预算和脚本拒绝测试；独立资源额度按 ADR-093 不属于当前要求；
 3. 两个 Owner、两个联系人的目录隔离和 revision 变更测试；
 4. 更新、回滚、停用、删除后正文与资源不可恢复测试；
 5. Skill 加载失败时无 Skill 回退、候选不发送消息和不写入长期资料测试。
 
-当前实现已完成本设计的管理接口、辅助资源持久化和资源运行时读取；架构文档记录的约束不代表
-实现范围之外的能力，网络安装、脚本执行和跨 Owner 共享仍不在初版范围内。
+上述入口已有工程实现；原规格中其他历史测试与桌面／HTTP 缺口仍须逐项核对，不能将接口存在写成全部验收完成。网络安装、脚本执行和跨 Owner 共享仍不在初版范围内。
 
 ## 10. 不在本轮范围
 
