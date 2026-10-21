@@ -38,7 +38,8 @@ export function OwnerLayeredMemoryPanel({ onVersions, onTrace }: OwnerMemoryActi
       if (active && next.revision >= revision.current) { revision.current = next.revision; setState(next); }
     };
     const unsubscribe = window.notalone.memory.onOwnerLayeredMemoryChanged(receive);
-    void window.notalone.memory.getOwnerLayeredMemoryState().then(receive).catch(() => {});
+    void window.notalone.memory.getOwnerLayeredMemoryState().then(receive)
+      .catch(() => { if (active) setError('本人分层资料暂时无法读取，请重试。'); });
     void window.notalone.memory.readOwnerMemories().catch(() => { if (active) setError('你的记忆暂不可读取，请重试。'); });
     return () => { active = false; unsubscribe(); void window.notalone.memory.releaseOwnerLayeredMemory().catch(() => {}); };
   }, []);

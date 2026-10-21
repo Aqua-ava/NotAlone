@@ -55,15 +55,20 @@ function useMemoryReading(session: ContactSessionView) {
     if (!selectedContactId) return;
     setError('');
     try {
-      await Promise.all([window.notalone.memory.refresh({ contactId: selectedContactId, scopeRevision, ...(section ? { section } : {}) }),
-        ...(!section ? [window.notalone.memory.refreshOverview({ contactId: selectedContactId, scopeRevision }),
-          window.notalone.memory.refreshOwnerOverview({ contactId: selectedContactId, scopeRevision }),
-          window.notalone.memory.readLayeredMemory({ contactId: selectedContactId, scopeRevision })] : [])]);
-    }
-    catch {
+      await window.notalone.memory.refresh({ contactId: selectedContactId, scopeRevision, ...(section ? { section } : {}) });
+    } catch {
       if (active.current && scope.current.selectedContactId === selectedContactId && scope.current.scopeRevision === scopeRevision) {
         setError('资料范围暂不可用，请重新确认联系人。');
       }
+      return;
+    }
+    if (!section) {
+      // 概览/分层投影是补充信息，失败不应把记忆主列表一起标成不可用。
+      await Promise.allSettled([
+        window.notalone.memory.refreshOverview({ contactId: selectedContactId, scopeRevision }),
+        window.notalone.memory.refreshOwnerOverview({ contactId: selectedContactId, scopeRevision }),
+        window.notalone.memory.readLayeredMemory({ contactId: selectedContactId, scopeRevision }),
+      ]);
     }
   }
   async function refreshOverview() {

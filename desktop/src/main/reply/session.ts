@@ -17,7 +17,7 @@ import type { DirectionExploration, ReplyClarificationAnswer, ReplyClarification
 import { actOnExploration, explorationIdentity, openExploration, type ExplorationRequest, type ExplorationAction } from './exploration-client';
 import { mergeReplyMessages, readReplyMessages } from './messages';
 import { readReplyEvidence } from './evidence-read';
-import { replyFailureDecision, replyTextLimit } from '../../shared/reply-contract';
+import { fitsReplyTextLimit, replyFailureDecision, replyTextLimit } from '../../shared/reply-contract';
 import { defaultAssistantSession, deleteAssistantSession, readAssistantSession } from './assistant-sessions';
 import { listAssistantSessions, newAssistantSession, selectAssistantSession } from './assistant-session-catalog';
 import type { AssistantInterruptedRetry, AssistantSessionSelection } from '../../shared/reply-bridge';
@@ -1129,9 +1129,9 @@ export class ReplySession {
   updateSupplement(update: import('../../shared/reply-bridge').ReplySupplementUpdate, snapshot = true): ReplySessionState | void {
     this.assertScope(update);
     if (this.state.mode === 'rewrite_draft') throw new Error('请先选择聊天场景。');
-    const previousLength = [this.state.correction, this.state.requirements].filter(Boolean).join('\n').length;
+    const previousLength = Array.from([this.state.correction, this.state.requirements].filter(Boolean).join('\n')).length;
     // 旧双框可能合计超限，允许逐步缩短，但超限内容不能提交给模型。
-    if (update.supplement.length > replyTextLimit && update.supplement.length > previousLength) throw new Error(`补充内容最多${replyTextLimit}个字符。`);
+    if (!fitsReplyTextLimit(update.supplement) && Array.from(update.supplement).length > previousLength) throw new Error(`补充内容最多${replyTextLimit}个字符。`);
     if (update.supplement !== this.state.requirements || this.state.correction || this.state.supplementInput !== true) {
       // 统一补充沿用请求级要求槽；一次更新清掉旧纠正，避免隐藏文字继续影响回复。
       this.invalidateInput(true); this.publish({ requirements: update.supplement, correction: '', supplementInput: true });
@@ -1150,7 +1150,7 @@ export class ReplySession {
 
   async explore(selection: ContactSelection, changeGroup = false, automatic = false): Promise<void> {
     this.assertScope(selection);
-    if ([this.state.correction, this.state.requirements].filter(Boolean).join('\n').length > replyTextLimit) throw new Error(`请将补充内容缩短至${replyTextLimit}个字符以内再更新。`);
+    if (!fitsReplyTextLimit([this.state.correction, this.state.requirements].filter(Boolean).join('\n'))) throw new Error(`请将补充内容缩短至${replyTextLimit}个字符以内再更新。`);
     this.refreshGenerationEligibility();
     this.assertSessionSelection();
     if (this.state.generationBlock || this.state.mode === 'rewrite_draft' || this.state.phase === 'waiting'
@@ -1459,7 +1459,7 @@ export class ReplySession {
 
   async generate(selection: GenerateReply): Promise<void> {
     let contactState = this.assertScope(selection);
-    if (selection.workspaceAction === undefined && this.state.mode !== 'rewrite_draft' && [this.state.correction, this.state.requirements].filter(Boolean).join('\n').length > replyTextLimit) throw new Error(`请将补充内容缩短至${replyTextLimit}个字符以内再生成。`);
+    if (selection.workspaceAction === undefined && this.state.mode !== 'rewrite_draft' && !fitsReplyTextLimit([this.state.correction, this.state.requirements].filter(Boolean).join('\n'))) throw new Error(`请将补充内容缩短至${replyTextLimit}个字符以内再生成。`);
     this.assertSessionSelection();
     this.refreshGenerationEligibility();
     if (this.state.generationBlock) throw new Error('请先确认本次联系人。');

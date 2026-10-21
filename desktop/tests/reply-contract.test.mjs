@@ -100,6 +100,22 @@ test('前台待选原因集合来自共享模块，且每个原因都有固定�
   assert.equal(foreground.isAwaitingForegroundSelection(null), false);
 });
 
+test('回复文本上限按码点计数且边界正确', async () => {
+  const generated = await build({
+    stdin: { contents: `export { fitsReplyTextLimit, replyTextLimit } from './src/shared/reply-contract';`, resolveDir: process.cwd() },
+    bundle: true, platform: 'node', format: 'esm', write: false,
+    plugins: [{ name: 'shared-react', setup(builder) {
+      builder.onResolve({ filter: /^react(?:\/.*)?$/ }, args => ({ path: pathToFileURL(require.resolve(args.path)).href, external: true }));
+    } }],
+  });
+  const { fitsReplyTextLimit, replyTextLimit } = await import(`data:text/javascript;base64,${Buffer.from(generated.outputFiles[0].text).toString('base64')}`);
+  assert.equal(replyTextLimit, 4096);
+  assert.equal(fitsReplyTextLimit('a'.repeat(replyTextLimit)), true);
+  assert.equal(fitsReplyTextLimit('a'.repeat(replyTextLimit + 1)), false);
+  assert.equal(fitsReplyTextLimit('😀'.repeat(replyTextLimit)), true, 'emoji 按码点计 1 个字符');
+  assert.equal(fitsReplyTextLimit('😀'.repeat(replyTextLimit + 1)), false);
+});
+
 test('后端前台失败原因都有共享说明，不靠界面默认分支静默兜底', async () => {
   const files = ['../backend/src/notalone/front_sync/foreground_locator.py',
     '../backend/src/notalone/front_sync/full_sync_engine.py'];
