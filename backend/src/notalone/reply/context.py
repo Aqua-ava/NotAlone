@@ -613,10 +613,12 @@ class RetrievalReplyContext:
                 read_failed = False
                 try:
                     snapshot = self._layered_memory.capture(scope)
-                except Exception:
+                except Exception as error:
                     # 读取失败不是「没有资料」：保留既有 unavailable 语义，
-                    # 另用 read_failed 标记并记 warning；异常正文不进入日志。
-                    logger.warning("分层回复资料读取失败，按暂无资料降级", exc_info=True)
+                    # 另用 read_failed 标记并记 warning；只记异常类型，正文与路径不进入日志。
+                    logger.warning(
+                        "reply_layered_read_failed error_type=%s", type(error).__name__
+                    )
                     snapshot = None
                     read_failed = True
                 material = select_material(snapshot, budget) if snapshot is not None else None
@@ -682,15 +684,15 @@ class RetrievalReplyContext:
         overview_read_failed = False
         try:
             contact = self._overview.read_contact(scope)
-        except Exception:
+        except Exception as error:
             # 概览读取异常与「确实没有概览」区分：回收为失败标记而非空结果。
-            logger.warning("关系概览读取失败，按暂无概览降级", exc_info=True)
+            logger.warning("reply_overview_read_failed error_type=%s", type(error).__name__)
             contact = None
             overview_read_failed = True
         try:
             owner = self._overview.read_owner(scope.owner_id)
-        except Exception:
-            logger.warning("关系概览读取失败，按暂无概览降级", exc_info=True)
+        except Exception as error:
+            logger.warning("reply_overview_read_failed error_type=%s", type(error).__name__)
             owner = None
             overview_read_failed = True
         for projection, expected_scope, memory_type in (

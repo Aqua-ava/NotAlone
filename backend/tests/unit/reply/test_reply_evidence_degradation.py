@@ -126,7 +126,8 @@ class ReplyEvidenceDegradationTest(unittest.TestCase):
         self.assertEqual(context.owner_layered_status, "unavailable")
         self.assertFalse(context.owner_layered_read_failed)
         messages = "\n".join(logs.output)
-        self.assertIn("分层", messages)
+        self.assertIn("reply_layered_read_failed", messages)
+        self.assertNotIn("合成的联系人分层资料读取失败", messages)
         self.assertNotIn(DRAFT_TEXT, messages)
 
     def test_owner_layered_capture_failure_stays_scoped_to_owner_material(self):
@@ -152,7 +153,8 @@ class ReplyEvidenceDegradationTest(unittest.TestCase):
             ("failed", "failed"),
         )
         messages = "\n".join(logs.output)
-        self.assertIn("概览", messages)
+        self.assertIn("reply_overview_read_failed", messages)
+        self.assertNotIn("合成的联系人概览读取失败", messages)
         self.assertNotIn(DRAFT_TEXT, messages)
 
     def test_empty_layered_and_overview_reads_keep_existing_semantics(self):

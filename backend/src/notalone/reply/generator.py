@@ -16,7 +16,6 @@ from notalone.reply.context import (
     ContinuedReplyCandidate,
     ReplyContext,
     ReplyContextPort,
-    ToolCallTrace,
 )
 from notalone.reply.context_validation import (
     ReplyContextValidationError,
@@ -48,12 +47,9 @@ from notalone.reply.errors import (
 from notalone.reply.interface import (
     ContextReceipt,
     GenerateReply,
-    InitiateConversation,
     ReplyCandidate,
     ReplyGenerated,
     ReplyOutcome,
-    ReplyToMessage,
-    RewriteDraft,
     SkillUse,
 )
 from notalone.scopes import ContactScope, VerifiedConversationScope
