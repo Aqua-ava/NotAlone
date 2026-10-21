@@ -1,5 +1,7 @@
 # ADR-042：持续助手会话与单次运行上下文分界
 
+> 后续修订：[ADR-091](091-retire-runtime-todos-and-auto-summary.md)明确不增加运行计划和自动过程摘要；本文对 ADR-009 单次运行机制的保留不再包含 Todo／摘要中间件要求。框架、Skill、预算、持续讨论与删除边界保持。
+
 > 2026-10-21 设计审查：关于自动 Skill 尚未实现的描述为历史阶段状态，当前工程装配见[演进任务索引](../../.scratch/memory-skill-evolution/planning.md)。主动样本按 [ADR-082](082-retire-explicit-style-samples.md)退役；持续讨论与单次运行边界、保存与删除合同继续有效。
 
 > 后续局部替代（2026-10-20）：[ADR-082](082-retire-explicit-style-samples.md)取消主动收藏表达样本及其使用、独立留存和关联生命周期要求；下文涉及样本的内容仅保留为历史。其他决定及原验收范围不因此改变。

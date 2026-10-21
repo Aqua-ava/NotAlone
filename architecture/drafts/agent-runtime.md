@@ -1,6 +1,6 @@
 # Agent 编排与检索运行时（草案）
 
-> 2026-10-21 设计审查：正常产品入口与方向阶段按 [ADR-079](../adr/079-unified-expression-workspace.md)修订，受控 Skill 探索见 [ADR-043](../adr/043-conversation-scenarios-and-direction-exploration.md)。Todo／摘要中间件及时间、日历、网络工具尚未见生产接线，草图不证明可用；完整 Harness／DSH 未获主线采纳。自动前台画面按 [ADR-052](../adr/052-header-ocr-foreground-locator.md)只作名称定位，不能当作正文输入适配器。
+> 2026-10-21 设计审查：正常产品入口与方向阶段按 [ADR-079](../adr/079-unified-expression-workspace.md)修订，受控 Skill 探索见 [ADR-043](../adr/043-conversation-scenarios-and-direction-exploration.md)。运行计划和自动过程摘要按 [ADR-091](../adr/091-retire-runtime-todos-and-auto-summary.md)不采用；时间、日历、网络工具尚未见生产接线，范围仍待确认，草图不证明可用；完整 Harness／DSH 未获主线采纳。自动前台画面按 [ADR-052](../adr/052-header-ocr-foreground-locator.md)只作名称定位，不能当作正文输入适配器。
 
 > 后续修订（2026-10-20）：主动收藏表达样本及其生成参考按 [ADR-082](../adr/082-retire-explicit-style-samples.md)退役；本文相关历史方案不再构成实施要求。当前意图优先、长期表达偏好及其他已采纳约束分别保留。
 
@@ -124,12 +124,10 @@ flowchart TD
     Direction -->|是| Risk
     Risk --> Context["assemble_initial_context"]
     Context --> Agent["create_agent 模型决策"]
-    Agent -->|多步骤请求| Todo["write_todos Tool"]
     Agent -->|需要策略| Skill["SkillsMiddleware 目录 / 受控 read_file"]
     Agent -->|需要原始证据| Messages["search_contact_messages Tool"]
     Agent -->|需要关系资料| Memories["search_confirmed_memories Tool"]
     Agent -->|需要当前或外部事实| External["时间 / 日历 / 网络搜索 Tool"]
-    Todo --> Agent
     Skill --> Agent
     Messages --> Agent
     Memories --> Agent
@@ -150,8 +148,7 @@ flowchart TD
 | `suggest_reply_directions` | 最小方向建议上下文、结构化输出 schema | 未预选的表达方向建议 | 单次有界模型调用；不运行 Tool loop，不生成回复候选 |
 | `assess_request_risk` | 当前消息、确定性规则版本 | 风险类型、生成前核实提醒 | 确定性代码 |
 | `assemble_initial_context` | 已确认表达方向、当前消息、近期对话、自动记忆基线、可用 Skill 目录、运行配置 | 初始六轨上下文和 runtime context | 确定性代码 |
-| `create_agent bounded Tool loop` | 初始上下文、核心与授权外部只读 Tool、Todo/摘要 middleware、结构化输出 schema | Tool calls、Todo 进度、1-3 条候选或澄清需求 | 模型决策；执行层强制范围与预算 |
-| `write_todos` | 本次多步骤请求 | 可修正的步骤、状态与进度 | 模型 Tool；普通回复不强制调用，不写业务任务表 |
+| `create_agent bounded Tool loop` | 初始上下文、当前已接入的受控只读 Tool、输入预算检查、结构化输出 schema | Tool calls、1-3 条候选或澄清需求 | 模型决策；执行层强制范围与预算，不增加运行计划或自动过程摘要 |
 | Skill 目录与 `read_file` | middleware 只见当前范围目录；Tool 使用 `file_path/offset/limit` 且只接受目录中的 `SKILL.md` 虚拟路径 | 一个不可变 Skill 版本 | `SkillsMiddleware` + 定制提示词 + 受控只读 Tool，经 `SkillPort` 校验 |
 | `search_contact_messages` | 查询意图、允许的 limit/时间范围 | 当前联系人内带来源的规范消息 | 模型 Tool，经 `RetrievalPort` 校验 |
 | `search_confirmed_memories` | 查询意图、允许的 limit/时间范围 | 当前联系人内带来源的已采纳资料 | 模型 Tool，经 `RetrievalPort` 校验 |
@@ -180,8 +177,8 @@ flowchart TD
 - `skills_metadata` 缓存绑定 `owner_id + contact_id + skill_library_revision`。联系人变化时使用新的线程/checkpoint namespace；Skill 安装、更新、禁用或删除时清除旧 metadata、旧 Skill Tool 结果和相关摘要，或创建新的运行状态。
 - `persist_trace` 使用 `reply_request_id + agent_run_id` 或等效幂等键，避免重试产生重复候选。
 - 删除来源或联系人时，`jobs` 同时失效相关运行记录；checkpoint 保留期不得长于对应业务资料。
-- `TodoListMiddleware` 始终可用，但只在多步骤请求中创建 Todo；Todo 可向 UI 输出精简进度，不作为 `background_task` 或长期关系资料。
-- `SummarizationMiddleware` 按运行预算压缩较早 `messages` 并保留最近原文；摘要可丢弃、可重建，不写入 `confirmed_memory`，也不能替代带来源的 PostgreSQL 消息。
+- 按 ADR-091 不增加 `TodoListMiddleware`、`write_todos` 或模型步骤进度；确定性后台任务与生成状态保持。
+- 按 ADR-091 不增加 `SummarizationMiddleware` 或自动过程摘要；保留逐轮输入预算，不压缩运行消息或持续讨论以绕过上限。
 
 ## 5. Tool 与 Permission
 
@@ -282,10 +279,10 @@ Tool 的模型参数只表达查询意图、允许的 limit 和时间范围；`C
 | S02 Tool Use | 直接采用 | v1 注册 Skill、联系人检索和当前时间核心 Tool；日历与网络搜索经授权后由只读 adapter 接入。Tool handler 调用框架无关的 port 或 adapter。 |
 | S03 Permission | 直接采用 | 使用 `allow / ask / deny`，并由应用层校验联系人范围、参数和出站字段；外部聊天发送永远是 `deny`。 |
 | S04 Hooks | 条件采用 | 只借鉴模型调用、Tool 调用、审计和指标的横切扩展点；出现多个适配器共享同一横切逻辑时再引入，不得绕过确定性外壳、事务或权限策略。 |
-| S05 TodoWrite | 直接采用 | `TodoListMiddleware` 始终可用；普通回复不创建 Todo，多步骤请求由模型调用 `write_todos` 并向浮动窗口输出精简进度。Todo 不是业务事实或后台任务状态。 |
+| S05 TodoWrite | 当前不采用 | ADR-091 取消模型运行计划、Todo 工具及相应进度界面要求；不改变业务后台任务。 |
 | S06 Subagent | 条件采用 | 仅在长历史冲突检查或证据复核确有收益时使用，且只能返回带来源的结构化证据。 |
 | S07 Skill Loading | 直接采用 | `create_agent` 组合 Deep Agents `SkillsMiddleware`；模型从精简目录按需使用受控 `read_file` 读取一个不可变版本，Skill 是回复策略而不是 Tool 或关系事实。 |
-| S08 Context Compact | 直接采用 | 使用 `SummarizationMiddleware` 按 token 或消息预算压缩较早运行消息并保留最近原文；摘要是可重建 runtime state，不是 PostgreSQL 关系记忆。 |
+| S08 Context Compact | 当前不采用 | ADR-091 取消自动过程摘要要求；输入预算与长讨论显式新开保持。 |
 | S09 Memory | 直接采用 | PostgreSQL 保存 `message`、`memory_candidate` 和 `confirmed_memory`；长期记忆带来源、采纳状态、有效期和删除路径。 |
 | S10 Task System | 条件采用 | 长导入、删除和重建需要跨请求恢复、依赖和可观测进度时，借鉴其持久化任务图；实际业务状态由 ADR-007 的 `background_task` 管理，不建立模型自治任务板。 |
 | S11 Background Tasks | 直接采用 | 长导入、OCR/转写和重建由 Worker 执行；短候选回复保持同步，后台任务不能发送外部消息。 |
@@ -296,12 +293,12 @@ Tool 的模型参数只表达查询意图、允许的 limit 和时间范围；`C
 | S16 Workflow Runtime | 直接采用 | `create_agent` 使用 LangGraph runtime；v1 不直接手写 `StateGraph`。出现明确的暂停恢复或复杂固定流程时，可把 `create_agent` 作为节点放进自定义图；业务事实只保存在 PostgreSQL。 |
 | S17 Goal Loop | 条件采用 | 借鉴“停止前独立检查目标是否满足”，用于候选结构、引用和风险校验；只有确定性检查不足时才增加独立 evaluator，重试必须有上限。 |
 
-汇总：直接采用 9 章（S01-S03、S05、S07-S09、S11、S16），条件采用 6 章（S04、S06、S10、S14、S15、S17），远期探索 2 章（S12、S13）。不再用“当前不采用”排除整章，而是通过触发条件决定是否引入；其中自动发送、跨联系人读取、自治关系任务和产品运行时 Worktree 等硬边界仍然禁止。
+汇总：保留原直接采用分类 7 章（S01-S03、S07、S09、S11、S16），其中 S02 的时间／日历／网络能力仍待 Q07 复审；条件采用 6 章（S04、S06、S10、S14、S15、S17），远期探索 2 章（S12、S13），按 ADR-091 当前不采用 2 章（S05、S08）。分类不代表已实现；其中自动发送、跨联系人读取、自治关系任务和产品运行时 Worktree 等硬边界仍然禁止。
 
 ## 11. 实施顺序
 
 1. 先定义领域类型、`ModelPort`、`RetrievalPort`、`SkillPort`、Tool 输入输出和合成测试；
 2. 实现 PostgreSQL 可解释检索、Skill 库版本管理、scope-aware discovery backend adapter、定制 Skill 提示词、受控 `read_file` 和确定性外壳；
-3. 用 LangChain `create_agent` 接一个模型，组合 Deep Agents `SkillsMiddleware`、核心只读 Tool、`TodoListMiddleware` 与 `SummarizationMiddleware`，验证 Skill 渐进加载、缓存失效、Tool schema、按需 Todo、上下文压缩、结构化候选输出和运行预算；
+3. 用 LangChain `create_agent` 接一个模型，组合 Deep Agents `SkillsMiddleware`、受控只读 Tool 与输入预算检查，验证 Skill 渐进加载、缓存失效、Tool schema、结构化候选输出和运行预算；按 ADR-091 不追加 Todo 或自动过程摘要；
 4. 只有出现复杂分支、跨进程暂停恢复或 durable execution 的已证明需求时，才直接编写 LangGraph `StateGraph`；
 5. 只有量化问题满足 ADR-005 与 ADR-006 条件后，才做 RAGFlow POC。

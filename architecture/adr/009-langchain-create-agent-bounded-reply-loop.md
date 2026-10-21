@@ -1,6 +1,6 @@
 # ADR-009：使用 LangChain create_agent 实现有界候选回复循环
 
-> 2026-10-21 设计审查：TodoListMiddleware、SummarizationMiddleware 以及时间／日历／网络工具属于设计要求；2026-10-21 核对生产装配未发现这些接线，不能按下文流程宣称已可用，也不能因未实现自动废弃。持续讨论不压缩仍按 [ADR-042](042-assistant-session-context-boundary.md)执行；是否实现或正式取消上述单次运行目标需后续复审。
+> 后续决定：[ADR-091](091-retire-runtime-todos-and-auto-summary.md)取消第 4 节的 Todo／自动过程摘要强制要求及相关 UI／测试要求；下文保留历史设计，不再作为待补功能。时间／日历／网络工具仍未见生产接线，Q07 待确认。持续讨论不压缩按 ADR-042／045 保持。
 
 > 状态：已采纳
 > 日期：2026-08-16

@@ -1,5 +1,7 @@
 # 持续会话与上下文管理
 
+> 后续决定：[ADR-091](../../architecture/adr/091-retire-runtime-todos-and-auto-summary.md)取消单次运行 Todo／自动过程摘要要求；本文保留单次运行机制的引用不再要求实现这两项能力。持续讨论不摘要、不静默截断与显式新开规则保持，历史任务状态及验收不重写。
+
 > 2026-10-21 设计审查：[ADR-082](../../architecture/adr/082-retire-explicit-style-samples.md) 已退役主动收藏表达样本及独立留存，见 architecture/adr/082-retire-explicit-style-samples.md；旧样本交付与测试要求仅历史。持续助手讨论、普通候选编辑、明确长期偏好和来源删除保持；原验收记录不被重写。
 
 Triage: ready-for-agent
