@@ -315,6 +315,7 @@ class HistoryToolAccess:
                         valid_at=message.valid_at,
                         invalid_at=message.invalid_at,
                         timing=MemoryTiming.from_source_times((message.occurred_at,)),
+                        speaker_role=message.role,
                     )
                 )
         self._token_count += estimated
@@ -357,6 +358,7 @@ class HistoryToolAccess:
             "evidence_id": str(message.message_id),
             "message_id": str(message.message_id),
             "role": message.role,
+            "speaker_role": message.role,
             "factual_role": factual_role("message"),
             "occurred_at": (
                 message.occurred_at.isoformat()

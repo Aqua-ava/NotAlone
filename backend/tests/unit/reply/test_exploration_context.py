@@ -19,6 +19,13 @@ class SyntheticRetrieval(InMemoryRetrieval):
 
 
 class ExplorationEvidenceTest(TestCase):
+    def test_message_author_survives_capture_restore_and_generation_dependencies(self):
+        captured = self.evidence.capture(self.scope, self.content)
+        self.assertTrue(all(item.model_payload.get('speaker_role') == 'contact' for item in captured))
+        restored = self.evidence.restore(self.scope, [item.storage_payload for item in captured])
+        dependencies = self.evidence.generation_dependencies(self.scope, restored)
+        self.assertTrue(all(item.speaker_role == 'contact' for item in dependencies))
+
     def setUp(self) -> None:
         self.scope = ContactScope(uuid4(), uuid4())
         self.source_id = uuid4()

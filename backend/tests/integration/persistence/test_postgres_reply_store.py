@@ -267,6 +267,88 @@ class PostgresReplyStoreTest(unittest.TestCase):
             self.store.save(started.request, context,
                 replace(reply, used_skill=replace(reply.used_skill, version_id=uuid4())))
 
+    def test_message_speaker_survives_completed_reply_store_recreation(self) -> None:
+        for role in ("owner", "contact", "system", "unknown"):
+            with self.subTest(role=role):
+                with psycopg.connect(TEST_DATABASE_URL) as connection:
+                    connection.execute(
+                        "UPDATE public.message SET speaker = %s WHERE owner_id = %s AND id = %s",
+                        ("user" if role == "owner" else "contact" if role == "unknown" else role,
+                         self.owner_id, MESSAGE_ID),
+                    )
+                command = self._command(key=uuid4())
+                started = self.store.start(command, self._verified_scope())
+                context = self._context(command, started.request.request_id)
+                context = replace(context, evidence=(
+                    replace(context.evidence[0], speaker_role=role),
+                ))
+                self.store.prepare_context(started.request, context)
+                saved = self.store.save(started.request, context, self._reply())
+
+                restored = PostgresReplyStore(TEST_DATABASE_URL).read(
+                    saved.reply_request_id, command.scope,
+                )
+
+                self.assertEqual(restored.evidence[0].speaker_role, role)
+                self.assertEqual(restored.evidence[0].text, "明天一起吃饭吗？")
+
+    def test_legacy_completed_snapshot_keeps_unknown_speaker(self) -> None:
+        command = self._command()
+        started = self.store.start(command, self._verified_scope())
+        context = self._context(command, started.request.request_id)
+        context = replace(context, evidence=(
+            replace(context.evidence[0], speaker_role="contact"),
+        ))
+        self.store.prepare_context(started.request, context)
+        saved = self.store.save(started.request, context, self._reply())
+        # 构造旧版本快照；当前权威消息仍明确是联系人，读取不能倒填历史。
+        with psycopg.connect(TEST_DATABASE_URL) as connection:
+            connection.execute(
+                "UPDATE public.reply_request SET context_snapshot = "
+                "context_snapshot #- '{evidence,0,speaker_role}' WHERE id = %s",
+                (saved.reply_request_id,),
+            )
+
+        restored = PostgresReplyStore(TEST_DATABASE_URL).read(
+            saved.reply_request_id, command.scope,
+        )
+
+        self.assertEqual(restored.evidence[0].speaker_role, "unknown")
+        self.assertEqual(restored.result, saved)
+
+    def test_corrupt_completed_snapshot_speaker_is_rejected(self) -> None:
+        command = self._command()
+        started = self.store.start(command, self._verified_scope())
+        context = self._context(command, started.request.request_id)
+        self.store.prepare_context(started.request, context)
+        saved = self.store.save(started.request, context, self._reply())
+        with psycopg.connect(TEST_DATABASE_URL) as connection:
+            connection.execute(
+                "UPDATE public.reply_request SET context_snapshot = "
+                "jsonb_set(context_snapshot, '{evidence,0,speaker_role}', %s) WHERE id = %s",
+                (Jsonb("assistant"), saved.reply_request_id),
+            )
+
+        with self.assertRaises(ReplyStoreInvariantError):
+            PostgresReplyStore(TEST_DATABASE_URL).read(saved.reply_request_id, command.scope)
+
+    def test_message_speaker_change_before_commit_rejects_late_candidate(self) -> None:
+        command = self._command()
+        started = self.store.start(command, self._verified_scope())
+        context = self._context(command, started.request.request_id)
+        context = replace(context, evidence=(
+            replace(context.evidence[0], speaker_role="contact"),
+        ))
+        self.store.prepare_context(started.request, context)
+        with psycopg.connect(TEST_DATABASE_URL) as connection:
+            connection.execute(
+                "UPDATE public.message SET speaker = 'user' WHERE owner_id = %s AND id = %s",
+                (self.owner_id, MESSAGE_ID),
+            )
+
+        with self.assertRaises(ReplyStoreInvariantError):
+            self.store.save(started.request, context, self._reply())
+
     def test_pending_candidate_evidence_persists_with_unconfirmed_status(self) -> None:
         command = self._command()
         started = self.store.start(command, self._verified_scope())

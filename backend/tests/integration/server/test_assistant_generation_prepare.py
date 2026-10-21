@@ -278,7 +278,8 @@ class AssistantGenerationPrepareHttpTest(unittest.TestCase):
         path, body = self._session_path(), self._body()
         status, receipt = self.backend.request(path + "/replies/prepare", body)
         self.assertEqual(status, 200, receipt)
-        self._old_prepared_format(body)
+        # 上一版缺少消息说话人合同，不允许以当前版本直接执行。
+        self._old_prepared_format(body, revision=13)
 
         status, rejected = self._backend().request(path + "/replies/prepare", body)
 

@@ -194,8 +194,14 @@ class ContextEvidence:
     event: MemoryEvent | None = None
     conditions: MemoryConditions | None = None
     evolution: MemoryEvolution | None = None
+    # 仅消息证据使用；unknown 保留未知，不把来源类型当作作者身份。
+    speaker_role: Literal["owner", "contact", "system", "unknown"] = "unknown"
 
     def __post_init__(self) -> None:
+        if self.speaker_role not in ("owner", "contact", "system", "unknown"):
+            raise ValueError("回复消息说话人无效。")
+        if self.kind != "message" and self.speaker_role != "unknown":
+            raise ValueError("非消息依据不能声明聊天说话人。")
         if self.evolution is not None and not isinstance(self.evolution, MemoryEvolution):
             raise ValueError("回复变化依据结构无效。")
         if self.conditions is not None and not isinstance(self.conditions, MemoryConditions):
@@ -934,6 +940,7 @@ class RetrievalReplyContext:
         if (
             not self._is_current(message.status, message.valid_at, message.invalid_at, now)
             or message.text != evidence.text
+            or message.role != evidence.speaker_role
             or set(message.source_ids) != set(evidence.source_ids)
             or len(message.source_ids) != len(evidence.source_ids)
             or message.valid_at != evidence.valid_at
@@ -1496,6 +1503,7 @@ class RetrievalReplyContext:
             valid_at=message.valid_at,
             invalid_at=message.invalid_at,
             timing=MemoryTiming.from_source_times((message.occurred_at,)),
+            speaker_role=message.role,
         )
 
     @staticmethod

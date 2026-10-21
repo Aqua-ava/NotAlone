@@ -481,6 +481,7 @@ class PostgresReplyStore:
                     require_current_overview_navigation(connection, context, PostgresRelationshipOverviewStore(self._database_url))
                     require_material(context, self._layered_memory, connection=connection, budget=self._layered_budget, owner_budget=self._owner_layered_budget)
                     require_current_reply_memory(connection, request.scope, context.evidence)
+                    self._require_current_message_speakers(connection, request.scope, context.evidence)
                     prepare_assistant_reply_commit(connection, request, context)
                     continuation_metadata = require_reply_continuation_basis(connection, request, context)
                     self._validate_reply(reply, evidence_ids=evidence)
@@ -1156,6 +1157,7 @@ class PostgresReplyStore:
                     "evidence_id": str(item.evidence_id),
                     "kind": item.kind,
                     "text": item.text,
+                    "speaker_role": item.speaker_role,
                     "source_ids": [
                         str(source_id) for source_id in item.source_ids
                     ],
@@ -1189,6 +1191,24 @@ class PostgresReplyStore:
             snapshot["retrieval"] = context.retrieval.to_payload()
             snapshot["navigation_dependency_ids"] = navigation_dependency_ids(context)
         return snapshot
+
+    @staticmethod
+    def _require_current_message_speakers(
+        connection: Any, scope: ContactScope, evidence: tuple[ContextEvidence, ...],
+    ) -> None:
+        # 未知身份不补猜；已声明身份在最终 writer 事务内复验并锁定至提交。
+        expected = {item.evidence_id: item.speaker_role for item in evidence
+                    if item.kind == "message" and item.speaker_role != "unknown"}
+        if not expected:
+            return
+        rows = connection.execute(
+            "SELECT id, speaker FROM public.message "
+            "WHERE owner_id = %s AND contact_id = %s AND id = ANY(%s::uuid[]) FOR SHARE",
+            (scope.owner_id, scope.contact_id, list(expected)),
+        ).fetchall()
+        current = {row["id"]: "owner" if row["speaker"] == "user" else row["speaker"] for row in rows}
+        if current != expected:
+            raise ReplyStoreInvariantError("本次新候选的消息说话人已变化。")
 
     @staticmethod
     def _read_retrieval_snapshot(snapshot: object) -> ReplyRetrievalReceipt | None:
@@ -1373,6 +1393,7 @@ class PostgresReplyStore:
                         evidence_id=row["evidence_id"],
                         kind=row["kind"],
                         text=row["evidence_text"],
+                        speaker_role=metadata.get(str(row["evidence_id"]), {}).get("speaker_role", "unknown"),
                         scope=ContactScope(row["owner_id"], row["contact_id"]),
                         source_ids=source_ids,
                         selection_reason=row["selection_reason"],

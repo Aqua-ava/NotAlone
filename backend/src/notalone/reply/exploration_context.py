@@ -45,10 +45,17 @@ class EvidenceSnapshot:
     event: MemoryEvent | None = None
     conditions: MemoryConditions | None = None
     evolution: MemoryEvolution | None = None
+    speaker_role: Literal["owner", "contact", "system", "unknown"] = "unknown"
+
+    def __post_init__(self) -> None:
+        if (self.speaker_role not in ("owner", "contact", "system", "unknown")
+                or self.kind != "message" and self.speaker_role != "unknown"):
+            raise ValueError("探索消息说话人无效。")
 
     @property
     def model_payload(self) -> dict[str, Any]:
         return {"evidence_id": str(self.evidence_id), "kind": self.kind, "text": self.text,
+                **({"speaker_role": self.speaker_role} if self.kind == "message" else {}),
                 "source_ids": [str(source) for source in self.source_ids],
                 "timing": self.timing.to_payload(),
                 "event": self.event.to_payload(current=True) if self.event else None,
@@ -112,6 +119,7 @@ class ExplorationEvidence:
             scope=item.scope, evidence_id=item.message_id if message else item.memory_id,
             kind="message" if message else "confirmed_memory", text=item.text[:1500 if message else 300],
             source_ids=item.source_ids, fingerprint=_fingerprint(item),
+            speaker_role=item.role if message else "unknown",
             manual_contact=not message and item.adoption_method == "manual",
             timing=MemoryTiming.from_source_times((item.occurred_at,)) if message else item.timing,
             valid_at=item.valid_at, invalid_at=item.invalid_at,
@@ -155,7 +163,8 @@ class ExplorationEvidence:
                 legacy = {"evidence_id", "kind", "text", "source_ids", "fingerprint", "manual_contact"}
                 if (set(item) not in (legacy, legacy | {"timing", "valid_at", "invalid_at"},
                                            legacy | {"timing", "valid_at", "invalid_at", "event"}, legacy | {"timing", "valid_at", "invalid_at", "event", "conditions"},
-                                           legacy | {"timing", "valid_at", "invalid_at", "event", "conditions", "evolution"})
+                                           legacy | {"timing", "valid_at", "invalid_at", "event", "conditions", "evolution"},
+                                           legacy | {"timing", "valid_at", "invalid_at", "event", "conditions", "evolution", "speaker_role"})
                     or item["kind"] not in ("message", "confirmed_memory")
                     or not isinstance(item["text"], str) or not item["text"].strip()
                     or len(item["text"]) > (1500 if item["kind"] == "message" else 300)
@@ -171,7 +180,8 @@ class ExplorationEvidence:
                                                   _restore_time(item.get("valid_at")),
                                                   _restore_time(item.get("invalid_at")),
                                                   MemoryEvent.from_payload(item.get("event")), MemoryConditions.from_payload(item.get("conditions")),
-                                                  MemoryEvolution.from_payload(item.get("evolution"))))
+                                                  MemoryEvolution.from_payload(item.get("evolution")),
+                                                  item.get("speaker_role", "unknown")))
             if len({item.evidence_id for item in snapshots}) != len(snapshots):
                 raise ValueError()
             return tuple(snapshots)
@@ -189,6 +199,7 @@ class ExplorationEvidence:
                 source_ids=item.source_ids, selection_reason="本次意愿的实际删除依赖，不扩展生成模型材料。",
                 status=item.status, valid_at=item.valid_at, invalid_at=item.invalid_at,
                 revision=getattr(item, "revision", None),
+                speaker_role=item.role if isinstance(item, RetrievedMessage) else "unknown",
                 event=getattr(item, "event", None), conditions=getattr(item, "conditions", None),
                 evolution=getattr(item, "evolution", None),
                 timing=(MemoryTiming.from_source_times((item.occurred_at,))

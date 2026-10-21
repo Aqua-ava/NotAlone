@@ -66,7 +66,7 @@ class AssistantContinuationHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         if remaining:
             raise AssertionError("持续要求测试库未回收。")
 
-    def _generated(self, *, content=None, with_source=False):
+    def _generated(self, *, content=None, with_source=False, source_speaker="contact"):
         contact_id = uuid4()
         with psycopg.connect(self.database_url) as connection:
             connection.execute(
@@ -84,8 +84,8 @@ class AssistantContinuationHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
                 connection.execute(
                     "INSERT INTO public.message "
                     "(id,owner_id,contact_id,speaker,message_type,text_content,occurred_at) "
-                    "VALUES (%s,%s,%s,'contact','text','合成邀约：明天一起聊天吗？',now())",
-                    (message_id, self.owner_id, contact_id),
+                    "VALUES (%s,%s,%s,%s,'text','合成邀约：明天一起聊天吗？',now())",
+                    (message_id, self.owner_id, contact_id, source_speaker),
                 )
                 connection.execute(
                     "INSERT INTO public.message_source_ref "
@@ -118,6 +118,61 @@ class AssistantContinuationHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
                                  "version_id": history["default_display_version_id"]}
                                 for history in histories]}
         return path, generated, frame
+
+    def test_owner_message_stays_owner_after_continue_and_interrupted_recovery(self):
+        path, generated, frame = self._generated(with_source=True, source_speaker="user", content={
+            "type": "rewrite_draft", "input_kind": "workspace", "workspace_action": "suggest",
+            "draft_text": "", "include_relationship_context": True,
+        })
+
+        def assert_owner_evidence():
+            messages = [item for item in self._model_payload()["evidence"] if item["kind"] == "message"]
+            self.assertEqual(len(messages), 1)
+            self.assertEqual(messages[0]["speaker_role"], "owner")
+
+        assert_owner_evidence()
+        status, continued = self.backend.request(path + "/continue", self._command(
+            generated, frame, instruction="第一条简短一点"))
+        self.assertEqual(status, 200, continued)
+        assert_owner_evidence()
+        status, prepared = self.backend.request(path + "/continue/prepare", self._command(
+            continued, frame, instruction="第一条自然一点"))
+        self.assertEqual(status, 200, prepared)
+        status, stopped = self.backend.request(path + "/interrupt", {
+            "request_key": prepared["request_key"], "input_version_id": prepared["input_version_id"],
+        })
+        self.assertEqual(status, 200, stopped)
+        status, recovered = self.backend.request(path + "/retry-interrupted", {
+            "original_turn_id": prepared["turn_id"],
+            "original_input_version_id": prepared["input_version_id"], "request_key": str(uuid4()),
+        })
+        self.assertEqual(status, 200, recovered)
+        assert_owner_evidence()
+        self._assert_model_calls(generation=3, review=0)
+
+    def test_legacy_completed_reply_continuation_rebuilds_current_message_speaker(self):
+        path, generated, frame = self._generated(with_source=True, source_speaker="user", content={
+            "type": "rewrite_draft", "input_kind": "workspace", "workspace_action": "suggest",
+            "draft_text": "", "include_relationship_context": True,
+        })
+        # 仅构造旧保存合同；继续生成必须从权威消息重新取得身份。
+        with psycopg.connect(self.database_url) as connection:
+            connection.execute(
+                "UPDATE public.reply_request SET context_snapshot = jsonb_set(context_snapshot, '{evidence}', "
+                "(SELECT jsonb_agg(item - 'speaker_role') FROM jsonb_array_elements(context_snapshot->'evidence') item)) "
+                "WHERE id = %s AND owner_id = %s",
+                (generated["reply_request_id"], self.owner_id),
+            )
+        reopened = self._get(self.backend, path)
+        self.assertTrue(reopened["turns"])
+
+        status, continued = self.backend.request(path + "/continue", self._command(
+            generated, frame, instruction="第一条简短一点"))
+
+        self.assertEqual(status, 200, continued)
+        messages = [item for item in self._model_payload()["evidence"] if item["kind"] == "message"]
+        self.assertEqual([item["speaker_role"] for item in messages], ["owner"])
+        self._assert_model_calls(generation=2, review=0)
 
     def test_workspace_empty_idea_generates_and_continues_with_context(self):
         content = {"type": "rewrite_draft", "input_kind": "workspace", "workspace_action": "suggest",
