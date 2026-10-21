@@ -340,6 +340,25 @@ class BackendApp:
         with self._degraded_lock:
             return [dict(value) for value in self._degraded.values()]
 
+    def _skill_file_health_payload(self) -> dict[str, object] | None:
+        """Skill 目录文件健康度；服务未装配或读取失败时不拖垮运行时状态。"""
+
+        service = self._skill_service
+        owner_id = self._owner_id
+        if service is None or owner_id is None:
+            return None
+        reader = getattr(service, "skill_file_health", None)
+        if not callable(reader):
+            return None
+        try:
+            value = reader(owner_id=owner_id)
+        except Exception as error:
+            logger.warning(
+                "skill_file_health_unavailable error_type=%s", type(error).__name__
+            )
+            return None
+        return value if isinstance(value, dict) else None
+
     def shutdown_runtime(self) -> None:
         """HTTP、信号与公开服务器关闭共用同一次资源收尾。"""
 
@@ -475,6 +494,9 @@ class BackendApp:
             degraded = self._degraded_payload()
             if degraded:
                 payload["degraded"] = degraded
+            skill_files = self._skill_file_health_payload()
+            if skill_files is not None:
+                payload["skill_files"] = skill_files
             return _json_response(HTTPStatus.OK, payload)
         if method_upper == "POST" and path_value == "/api/runtime/shutdown":
             if self._runtime_shutdown is None:
@@ -2328,11 +2350,13 @@ class BackendApp:
                     type(error).__name__,
                 )
             if deferred_reason is not None:
+                deferred_queued = False
                 if task_service is not None and task_identity is not None:
                     try:
                         task_service.defer(
                             owner_id=owner_id, contact_id=task_identity[0], task_id=task_identity[1],
                         )
+                        deferred_queued = True
                     except Exception as error:
                         deferred_reason = "defer_failed"
                         logger.warning(
@@ -2342,8 +2366,13 @@ class BackendApp:
                 self._mark_degraded("import_processing_deferred", deferred_reason)
                 result = {
                     **result,
-                    "processing_deferred": True,
                     "deferred_reason": deferred_reason,
+                    **({"processing_deferred": True} if deferred_queued else {
+                        # 没能排入任何恢复队列：如实告诉调用方后台处理不可用，
+                        # 不要用「已延后」掩盖未入队。
+                        "processing_deferred": False,
+                        "processing_unavailable": True,
+                    }),
                 }
             else:
                 self._clear_degraded("import_processing_deferred")
@@ -3400,6 +3429,10 @@ def _reply_payload(reply: ReplyGenerated) -> dict[str, object]:
             "expression_preferences": [
                 preference_receipt_payload(item) for item in reply.context_receipt.expression_preferences
             ],
+            # 读取失败与「确实没有资料」区分；只加字段，旧调用方忽略即可。
+            "layered_read_failed": reply.context_receipt.layered_read_failed,
+            "owner_layered_read_failed": reply.context_receipt.owner_layered_read_failed,
+            "overview_read_failed": reply.context_receipt.overview_read_failed,
         },
         "used_skill": used_skill,
         **({"basis_changes": [change.to_payload() for change in reply.basis_changes]}

@@ -11,16 +11,19 @@ from notalone.server.event_bus import EventBus
 
 
 class FakeImportService:
-    def __init__(self, contact_id: UUID, task_id: UUID) -> None:
+    def __init__(self, contact_id: UUID, task_id: UUID, *, include_task: bool = True) -> None:
         self.contact_id = contact_id
         self.task_id = task_id
+        self.include_task = include_task
 
     def commit(self, **kwargs):
-        return {
+        result = {
             "contact_id": str(self.contact_id),
-            "task_id": str(self.task_id),
             "message_count": 3,
         }
+        if self.include_task:
+            result["task_id"] = str(self.task_id)
+        return result
 
 
 class FakeTaskHost:
@@ -52,13 +55,13 @@ class ImportProcessingVisibilityTest(unittest.TestCase):
         self.task = uuid4()
         self.headers = {"Authorization": "Bearer synthetic-token"}
 
-    def _app(self, *, task_host=None, task_service=None) -> BackendApp:
+    def _app(self, *, task_host=None, task_service=None, import_service=None) -> BackendApp:
         return BackendApp(
             contact_directory=object(),
             events=EventBus(),
             owner_id=self.owner,
             token="synthetic-token",
-            import_service=FakeImportService(self.contact, self.task),
+            import_service=import_service or FakeImportService(self.contact, self.task),
             task_host=task_host,
             task_service=task_service,
         )
@@ -115,8 +118,23 @@ class ImportProcessingVisibilityTest(unittest.TestCase):
 
         body = response.json()
         self.assertEqual(body["deferred_reason"], "defer_failed")
+        self.assertFalse(body["processing_deferred"])
+        self.assertTrue(body["processing_unavailable"])
         status = self._runtime_status(app)
         self.assertEqual(status["degraded"][0]["reason"], "defer_failed")
+
+    def test_missing_task_identity_is_reported_not_deferred(self) -> None:
+        app = self._app(
+            import_service=FakeImportService(self.contact, self.task, include_task=False),
+            task_service=FakeTaskService(),
+        )
+
+        response = self._commit(app)
+
+        body = response.json()
+        self.assertEqual(body["deferred_reason"], "task_identity_invalid")
+        self.assertFalse(body["processing_deferred"])
+        self.assertTrue(body["processing_unavailable"])
 
     def test_successful_wake_keeps_old_shape_and_clears_degraded(self) -> None:
         app = self._app(task_host=FakeTaskHost(raises=True), task_service=FakeTaskService())

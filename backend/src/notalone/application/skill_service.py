@@ -83,6 +83,10 @@ class SkillService:
     def __init__(self, *, management: SkillManagement) -> None:
         self._management = management
 
+    def skill_file_health(self, *, owner_id: UUID) -> dict[str, object]:
+        """目录文件同步/清理健康状态；只含计数、固定错误码与不可识别 ID。"""
+        return self._management.skill_file_health(owner_id)
+
     def list(self, *, owner_id: UUID) -> dict[str, object]:
         return {
             "skills": [
