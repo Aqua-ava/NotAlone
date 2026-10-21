@@ -1,9 +1,9 @@
 """回复证据 kind/status 白名单单一来源的合成契约测试。
 
-审查发现：证据 kind/status 白名单散落在 ``reply/context``、``reply/generator``、
-``reply/store`` 与 ``persistence/reply_store`` 四处，迁移 SQL 另有一份。
-本用例断言四处 Python 白名单引用同一份常量与同一个契约函数，并核对迁移
-里的 SQL 列表与 ``EVIDENCE_KINDS`` 一致。
+证据 kind/status 白名单与契约函数由 ``reply/context`` 定义；上下文校验收敛
+到 ``reply/context_validation`` 后，generator、InMemory Store 与 PostgreSQL
+Store 只调用同一个共享校验函数。迁移 SQL 另有一份列表，本用例核对它与
+``EVIDENCE_KINDS`` 一致。
 """
 
 from __future__ import annotations
@@ -34,17 +34,18 @@ MIGRATION_PATH = (
 
 
 class EvidenceWhitelistSourceTest(unittest.TestCase):
-    def test_all_four_boundaries_share_one_kind_constant(self) -> None:
-        for module in (
-            reply_context,
-            reply_generator,
-            reply_store,
-            persistence_reply_store,
-        ):
-            with self.subTest(module=module.__name__):
-                self.assertIs(module.EVIDENCE_KINDS, EVIDENCE_KINDS)
+    def test_shared_validation_module_owns_the_evidence_contract(self) -> None:
+        from notalone.reply import context_validation
 
-    def test_all_four_boundaries_share_one_contract_function(self) -> None:
+        self.assertIs(context_validation.EVIDENCE_KINDS, EVIDENCE_KINDS)
+        self.assertIs(
+            context_validation.evidence_contract_is_valid,
+            evidence_contract_is_valid,
+        )
+
+    def test_all_boundaries_delegate_to_the_shared_validator(self) -> None:
+        from notalone.reply import context_validation
+
         for module in (
             reply_generator,
             reply_store,
@@ -52,8 +53,8 @@ class EvidenceWhitelistSourceTest(unittest.TestCase):
         ):
             with self.subTest(module=module.__name__):
                 self.assertIs(
-                    module.evidence_contract_is_valid,
-                    evidence_contract_is_valid,
+                    module.validate_reply_context,
+                    context_validation.validate_reply_context,
                 )
 
     def test_kind_and_status_constants_agree(self) -> None:

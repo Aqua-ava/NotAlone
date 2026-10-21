@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Callable
 from dataclasses import replace
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
@@ -12,11 +13,15 @@ from notalone.ledger.models import LedgerEntry, LedgerOutcome
 from notalone.ledger.ports import OutboundLedgerPort
 from notalone.reply.context import (
     ContextEvidence,
-    EVIDENCE_KINDS,
+    ContinuedReplyCandidate,
     ReplyContext,
     ReplyContextPort,
     ToolCallTrace,
-    evidence_contract_is_valid,
+)
+from notalone.reply.context_validation import (
+    ReplyContextValidationError,
+    valid_tool_call_trace,
+    validate_reply_context,
 )
 from notalone.reply.runtime import (
     ReplyRuntime,
@@ -53,10 +58,24 @@ from notalone.reply.interface import (
 )
 from notalone.scopes import ContactScope, VerifiedConversationScope
 from notalone.reply.input_budget_receipt import validate_input_budget_receipt
-from notalone.reply.retrieval_receipt import append_runtime_receipt, require_receipt_evidence
+from notalone.reply.retrieval_receipt import append_runtime_receipt
 
 
 logger = logging.getLogger(__name__)
+
+
+def _continued_candidate_text_reader(
+    candidate: ContinuedReplyCandidate | None,
+) -> Callable[[UUID], str | None] | None:
+    """把 Store 返回的继续候选快照投影成只读文本查询；无权威时返回 None。"""
+
+    if candidate is None:
+        return None
+
+    def read_text(candidate_id: UUID) -> str | None:
+        return candidate.text if candidate.candidate_id == candidate_id else None
+
+    return read_text
 
 
 class ReplyGenerator:
@@ -133,7 +152,8 @@ class ReplyGenerator:
         try:
             if context.layered_context is not None or context.owner_layered_context is not None:
                 context = self._context.fit_budget(context, validate=self._runtime.validate_prepared)
-            self._validate_context(command, context)
+            self._validate_context(
+                command, context, continued_candidate=started.continued_candidate)
             self._validate_current_context(context)
             self._store.prepare_context(request, context)
         except ReplyError:
@@ -186,7 +206,8 @@ class ReplyGenerator:
                 context,
                 runtime_result,
             )
-            self._validate_context(command, runtime_context)
+            self._validate_context(
+                command, runtime_context, continued_candidate=started.continued_candidate)
             self._validate_current_context(runtime_context)
         except ReplyError:
             self._mark_failed(request, "runtime_failed")
@@ -339,167 +360,24 @@ class ReplyGenerator:
             )
 
     @staticmethod
-    def _validate_context(command: GenerateReply, context: object) -> None:
-        if not isinstance(context, ReplyContext):
-            raise ReplyInvariantError(
-                "回复上下文 adapter 返回了无效结果。"
-            )
+    def _validate_context(
+        command: GenerateReply,
+        context: object,
+        *,
+        continued_candidate: ContinuedReplyCandidate | None = None,
+    ) -> None:
+        """共享纯函数负责全部上下文规则；这里只映射到生成入口错误。"""
+
         try:
-            require_receipt_evidence(context.retrieval, context.evidence)
-        except ValueError:
-            raise ReplyInvariantError("回复检索回执与实际依据不一致。") from None
-        if context.scope != command.scope or context.command != command:
-            raise ReplyInvariantError(
-                "回复上下文结果超出本次联系人范围。"
+            validate_reply_context(
+                context,
+                command=command,
+                continued_candidate_text=(
+                    _continued_candidate_text_reader(continued_candidate)
+                ),
             )
-        if (
-            not isinstance(context.reply_request_id, UUID)
-            or not isinstance(context.current_text, str)
-            or (not context.current_text.strip() and not (
-                isinstance(command.content, RewriteDraft) and command.content.input_kind == "workspace"
-                and command.content.workspace_action == "suggest"))
-            or not isinstance(context.evidence, tuple)
-            or not context.evidence
-            or not isinstance(context.skill_library_revision, int)
-            or context.skill_library_revision < 0
-            or not isinstance(context.risk_notes, tuple)
-            or any(
-                not isinstance(note, str) or not note.strip()
-                for note in context.risk_notes
-            )
-            or (
-                context.memory_revision is not None
-                and (
-                    not isinstance(context.memory_revision, int)
-                    or context.memory_revision < 0
-                )
-            )
-            or (
-                context.index_revision is not None
-                and (
-                    not isinstance(context.index_revision, int)
-                    or context.index_revision < 0
-                )
-            )
-            or not isinstance(context.tool_calls, tuple)
-        ):
-            raise ReplyInvariantError("回复上下文快照结构无效。")
-
-        evidence_ids: set[UUID] = set()
-        for item in context.evidence:
-            if (
-                not isinstance(item, ContextEvidence)
-                or item.scope != context.scope
-                or not isinstance(item.evidence_id, UUID)
-                or item.evidence_id in evidence_ids
-                or item.kind not in EVIDENCE_KINDS
-                or not isinstance(item.text, str)
-                or not item.text.strip()
-                or not isinstance(item.source_ids, tuple)
-                or any(
-                    not isinstance(source_id, UUID)
-                    for source_id in item.source_ids
-                )
-                or not isinstance(item.selection_reason, str)
-                or not isinstance(item.status, str)
-                or not item.status.strip()
-                or (
-                    item.valid_at is not None
-                    and not isinstance(item.valid_at, datetime)
-                )
-                or (
-                    item.invalid_at is not None
-                    and not isinstance(item.invalid_at, datetime)
-                )
-                or (
-                    item.valid_at is not None
-                    and item.invalid_at is not None
-                    and item.invalid_at < item.valid_at
-                )
-                or (
-                    item.revision is not None
-                    and (
-                        not isinstance(item.revision, int)
-                        or item.revision < 1
-                    )
-                )
-                or not evidence_contract_is_valid(
-                    kind=item.kind,
-                    status=item.status,
-                    selection_reason=item.selection_reason,
-                )
-            ):
-                raise ReplyInvariantError("回复依据超出范围或结构无效。")
-            evidence_ids.add(item.evidence_id)
-
-        for trace in context.tool_calls:
-            if not ReplyGenerator._valid_tool_trace(trace):
-                raise ReplyInvariantError("回复 Tool 轨迹结构无效。")
-            if not set(trace.evidence_ids) <= evidence_ids:
-                raise ReplyInvariantError("回复 Tool 轨迹引用了未知证据。")
-
-        continuation_evidence = tuple(
-            item for item in context.evidence if item.kind == "continued_candidate"
-        )
-        if command.continued_from_candidate_id is None:
-            if continuation_evidence:
-                raise ReplyInvariantError("历史候选必须由用户显式选择。")
-        elif (
-            len(continuation_evidence) != 1
-            or continuation_evidence[0].evidence_id
-            != command.continued_from_candidate_id
-        ):
-            raise ReplyInvariantError(
-                "显式继续候选与上下文快照不一致。"
-            )
-
-        if isinstance(command.content, ReplyToMessage):
-            target_evidence = tuple(
-                item
-                for item in context.evidence
-                if item.evidence_id == command.content.target_message_id
-            )
-            if (
-                len(target_evidence) != 1
-                or target_evidence[0].kind != "message"
-                or target_evidence[0].text != context.current_text
-                or context.direction != command.content.direction
-            ):
-                raise ReplyInvariantError(
-                    "待回复消息或表达方向与请求不一致。"
-                )
-            return
-
-        if isinstance(command.content, InitiateConversation):
-            purpose_evidence = tuple(item for item in context.evidence if item.kind == "user_purpose")
-            if (context.direction != command.content.purpose
-                or context.current_text != command.content.purpose.text
-                or len(purpose_evidence) != 1
-                or purpose_evidence[0].text != command.content.purpose.text):
-                raise ReplyInvariantError("主动目的与回复上下文不一致。")
-            return
-
-        if isinstance(command.content, RewriteDraft):
-            if context.has_unauthorized_history():
-                raise ReplyInvariantError(
-                    "当前改写不能使用历史资料。"
-                )
-            draft_evidence = tuple(
-                item
-                for item in context.evidence
-                if item.kind == ("user_current_chat" if command.content.input_kind == "current_chat" else "user_draft")
-                and item.text == command.content.draft_text
-            )
-            if (
-                context.direction is not None
-                or context.current_text != command.content.draft_text
-                or len(draft_evidence) != (0 if command.content.input_kind == "workspace"
-                    and not command.content.draft_text.strip() else 1)
-            ):
-                raise ReplyInvariantError("改写草稿与回复上下文不一致。")
-            return
-
-        raise ReplyInvariantError("回复输入模式无效。")
+        except ReplyContextValidationError as error:
+            raise ReplyInvariantError(str(error)) from None
 
     def _validate_current_context(self, context: ReplyContext) -> None:
         """在模型调用前后重新验证快照中的 live 依据。"""
@@ -549,32 +427,7 @@ class ReplyGenerator:
             retrieval=append_runtime_receipt(context.retrieval, context.evidence, tuple(additions), result.tool_calls),
         )
 
-    @staticmethod
-    def _valid_tool_trace(trace: object) -> bool:
-        return (
-            isinstance(trace, ToolCallTrace)
-            and isinstance(trace.tool_name, str)
-            and bool(trace.tool_name.strip())
-            and len(trace.tool_name) <= 64
-            and trace.status
-            in (
-                "succeeded",
-                "empty",
-                "failed",
-                "timeout",
-                "budget_exceeded",
-            )
-            and isinstance(trace.evidence_ids, tuple)
-            and len(trace.evidence_ids) == len(set(trace.evidence_ids))
-            and all(isinstance(item, UUID) for item in trace.evidence_ids)
-            and (
-                trace.latency_ms is None
-                or (
-                    isinstance(trace.latency_ms, int)
-                    and trace.latency_ms >= 0
-                )
-            )
-        )
+    _valid_tool_trace = staticmethod(valid_tool_call_trace)
 
     @staticmethod
     def _validate_runtime_result(result: ReplyRuntimeResult) -> None:

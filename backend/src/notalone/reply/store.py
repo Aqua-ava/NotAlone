@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from enum import StrEnum
-from hashlib import sha256
 from threading import RLock
 from typing import Callable, Protocol
 from uuid import UUID, uuid4
@@ -14,10 +12,14 @@ from uuid import UUID, uuid4
 from notalone.reply.context import (
     ContextEvidence,
     ContinuedReplyCandidate,
-    EVIDENCE_KINDS,
     ReplyContext,
-    ToolCallTrace,
-    evidence_contract_is_valid,
+)
+from notalone.reply.context_validation import (
+    ReplyContextBinding,
+    ReplyContextValidationError,
+    canonical_reply_input,
+    normalize_reply_input as _normalize_input,
+    validate_reply_context,
 )
 from notalone.reply.errors import (
     ReplyContinuationError,
@@ -30,15 +32,10 @@ from notalone.reply.interface import (
     candidate_message_group,
     ReplyCandidate,
     ReplyGenerated,
-    ReplyToMessage,
-    InitiateConversation,
-    NoSkill,
-    RewriteDraft,
     SkillUse,
-    UserSkillChoice,
 )
 from notalone.reply.runtime import RuntimeCandidate
-from notalone.reply.retrieval_receipt import ReplyRetrievalReceipt, require_receipt_evidence
+from notalone.reply.retrieval_receipt import ReplyRetrievalReceipt
 from notalone.reply.input_budget import InputBudgetDecision
 from notalone.reply.input_budget_receipt import validate_input_budget_receipt
 from notalone.scopes import ContactScope, VerifiedConversationScope
@@ -551,133 +548,20 @@ class InMemoryReplyStore:
         request: ReplyRequest,
         context: ReplyContext,
     ) -> set[UUID]:
-        """校验上下文快照并返回证据标识集合；与 PostgreSQL adapter 同契约。"""
+        """薄包装：共享纯函数负责规则，这里只映射 Store 错误与候选回表。"""
 
         try:
-            require_receipt_evidence(context.retrieval, context.evidence)
-        except (AttributeError, TypeError, ValueError):
-            raise ReplyStoreInvariantError("回复检索回执与实际依据不一致。") from None
+            return set(validate_reply_context(
+                context,
+                binding=ReplyContextBinding.from_request(request),
+                continued_candidate_text=self._continued_candidate_text,
+            ))
+        except ReplyContextValidationError as error:
+            raise ReplyStoreInvariantError(str(error)) from None
 
-        if not (
-            isinstance(context, ReplyContext)
-            and isinstance(context.command, GenerateReply)
-            and context.reply_request_id == request.request_id
-            and context.scope == request.scope
-            and context.command.scope == request.scope
-            and context.command.has_valid_content()
-            and context.command.idempotency_key == request.idempotency_key
-            and context.command.conversation_binding_id
-            == request.conversation_binding_id
-            and context.command.continued_from_candidate_id
-            == request.continued_from_candidate_id
-            and _normalize_input(context.command) == request.normalized_input
-            and isinstance(context.current_text, str)
-            and (bool(context.current_text.strip()) or (
-                isinstance(context.command.content, RewriteDraft)
-                and context.command.content.input_kind == "workspace"
-                and context.command.content.workspace_action == "suggest"))
-            and isinstance(context.skill_library_revision, int)
-            and context.skill_library_revision >= 0
-            and isinstance(context.risk_notes, tuple)
-            and all(
-                isinstance(note, str) and note.strip()
-                for note in context.risk_notes
-            )
-            and isinstance(context.evidence, tuple)
-            and context.evidence
-            and (
-                context.memory_revision is None
-                or (
-                    isinstance(context.memory_revision, int)
-                    and context.memory_revision >= 0
-                )
-            )
-            and (
-                context.index_revision is None
-                or (
-                    isinstance(context.index_revision, int)
-                    and context.index_revision >= 0
-                )
-            )
-            and isinstance(context.tool_calls, tuple)
-            and all(
-                isinstance(item, ContextEvidence) and item.scope == request.scope
-                for item in context.evidence
-            )
-        ):
-            raise ReplyStoreInvariantError(
-                "回复上下文不属于当前持久化请求。"
-            )
-        evidence_ids: set[UUID] = set()
-        for item in context.evidence:
-            if (
-                item.kind not in EVIDENCE_KINDS
-                or not isinstance(item.evidence_id, UUID)
-                or item.evidence_id in evidence_ids
-                or not isinstance(item.text, str)
-                or not item.text.strip()
-                or not isinstance(item.source_ids, tuple)
-                or any(
-                    not isinstance(source_id, UUID)
-                    for source_id in item.source_ids
-                )
-                or not isinstance(item.selection_reason, str)
-                or not isinstance(item.status, str)
-                or not item.status.strip()
-                or not evidence_contract_is_valid(
-                    kind=item.kind,
-                    status=item.status,
-                    selection_reason=item.selection_reason,
-                )
-                or (
-                    item.valid_at is not None
-                    and not isinstance(item.valid_at, datetime)
-                )
-                or (
-                    item.invalid_at is not None
-                    and not isinstance(item.invalid_at, datetime)
-                )
-                or (
-                    item.valid_at is not None
-                    and item.invalid_at is not None
-                    and item.invalid_at < item.valid_at
-                )
-                or (
-                    item.revision is not None
-                    and (
-                        not isinstance(item.revision, int)
-                        or item.revision < 1
-                    )
-                )
-            ):
-                raise ReplyStoreInvariantError("回复证据快照结构无效。")
-            evidence_ids.add(item.evidence_id)
-        for trace in context.tool_calls:
-            if not _valid_tool_call_trace(trace):
-                raise ReplyStoreInvariantError("回复 Tool 轨迹结构无效。")
-            if not set(trace.evidence_ids) <= evidence_ids:
-                raise ReplyStoreInvariantError("回复 Tool 轨迹引用了未知证据。")
-        continuation_evidence = tuple(
-            item for item in context.evidence if item.kind == "continued_candidate"
-        )
-        if request.continued_from_candidate_id is None:
-            if continuation_evidence:
-                raise ReplyStoreInvariantError(
-                    "历史候选必须由用户显式选择。"
-                )
-            return evidence_ids
-        candidate = self._candidates.get(request.continued_from_candidate_id)
-        if (
-            candidate is None
-            or len(continuation_evidence) != 1
-            or continuation_evidence[0].evidence_id
-            != request.continued_from_candidate_id
-            or continuation_evidence[0].text != candidate.text
-        ):
-            raise ReplyStoreInvariantError(
-                "继续候选快照与已保存候选不一致。"
-            )
-        return evidence_ids
+    def _continued_candidate_text(self, candidate_id: UUID) -> str | None:
+        candidate = self._candidates.get(candidate_id)
+        return candidate.text if candidate is not None else None
 
     @staticmethod
     def _validate_reply(
@@ -729,87 +613,6 @@ class InMemoryReplyStore:
         )
 
 
-def canonical_reply_input(command: GenerateReply) -> str:
-    """会话投影与请求摘要共用同一用户输入表示。"""
-
-    content = command.content
-    if isinstance(content, ReplyToMessage):
-        payload = {
-            "mode": "reply_to_message",
-            "target_message_id": str(content.target_message_id),
-            "direction": content.direction.text.strip(),
-            "direction_source": content.direction.source.value,
-        }
-    elif isinstance(content, InitiateConversation):
-        payload = {
-            "mode": "initiate_conversation", "purpose": content.purpose.text.strip(),
-            "purpose_source": content.purpose.source.value,
-        }
-    elif isinstance(content, RewriteDraft):
-        payload = {
-            "mode": "rewrite_draft",
-            "draft_text": content.draft_text.strip(),
-            "user_instruction": (
-                content.user_instruction.strip()
-                if content.user_instruction is not None
-                else None
-            ),
-            "include_relationship_context": content.include_relationship_context,
-        }
-        if content.input_kind == "workspace":
-            payload.update(input_kind="workspace", workspace_action=content.workspace_action,
-                           context_text=content.context_text,
-                           excluded_message_ids=sorted(str(item) for item in set(content.excluded_message_ids)))
-        if content.input_kind == "current_chat":
-            payload["input_kind"] = "current_chat"
-            payload["pasted_direction"] = content.pasted_direction.strip()
-    else:
-        raise ReplyStoreInvariantError("回复输入模式无效。")
-    if isinstance(content, (ReplyToMessage, InitiateConversation)):
-        direction = content.direction if isinstance(content, ReplyToMessage) else content.purpose
-        if direction.suggestion is not None:
-            reference = direction.suggestion
-            payload["suggestion"] = {"task_id": str(reference.task_id),
-                                     "input_version": str(reference.input_version)
-                                     if isinstance(reference.input_version, UUID) else reference.input_version,
-                                     "suggestion_id": str(reference.suggestion_id)}
-        for name in ("understanding_correction", "user_instruction", "clarification_answer"):
-            declaration = getattr(content, name)
-            if declaration:
-                payload[name] = declaration.strip()
-    payload["continued_from_candidate_id"] = (
-        str(command.continued_from_candidate_id)
-        if command.continued_from_candidate_id is not None
-        else None
-    )
-    # Skill 选择决定生成路径，属于请求输入的一部分；同一幂等键换用
-    # 不同 Skill 必须冲突，不能静默重放旧选择生成的候选。
-    payload["skill"] = (
-        f"user_choice:{command.skill.version_id}"
-        if isinstance(command.skill, UserSkillChoice)
-        else "disabled" if isinstance(command.skill, NoSkill) else "auto"
-    )
-    if command.scene is not None:
-        payload['scene'] = command.scene
-    return json.dumps(
-        payload,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    )
-
-
-def _normalize_input(command: GenerateReply) -> str:
-    normalized = canonical_reply_input(command)
-    # 新建议协议在来源核验前领取幂等键，只保存指纹，拒绝路径不留派生正文。
-    # 成功快照与完整删除依赖由上下文保存；既有无建议请求保持原指纹兼容。
-    content = command.content
-    if (isinstance(content, ReplyToMessage) and content.direction.suggestion is not None
-            or isinstance(content, InitiateConversation) and content.purpose.suggestion is not None):
-        return "suggestion-sha256:" + sha256(normalized.encode("utf-8")).hexdigest()
-    return normalized
-
-
 def _safe_failure_reason(reason: str) -> str:
     if not isinstance(reason, str) or not reason.strip():
         return "unknown_failure"
@@ -817,28 +620,3 @@ def _safe_failure_reason(reason: str) -> str:
     if len(value) > 64 or any(char.isspace() for char in value):
         return "unknown_failure"
     return value
-
-
-def _valid_tool_call_trace(trace: object) -> bool:
-    return (
-        isinstance(trace, ToolCallTrace)
-        and isinstance(trace.tool_name, str)
-        and bool(trace.tool_name.strip())
-        and len(trace.tool_name) <= 64
-        and trace.status
-        in (
-            "succeeded",
-            "empty",
-            "failed",
-            "timeout",
-            "budget_exceeded",
-        )
-        and isinstance(trace.evidence_ids, tuple)
-        and len(trace.evidence_ids) == len(set(trace.evidence_ids))
-        and all(isinstance(item, UUID) for item in trace.evidence_ids)
-        and (
-            trace.latency_ms is None
-            or isinstance(trace.latency_ms, int)
-            and trace.latency_ms >= 0
-        )
-    )

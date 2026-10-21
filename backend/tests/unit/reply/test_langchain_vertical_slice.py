@@ -31,6 +31,7 @@ from notalone.memory import InMemoryMemoryStore, MemoryCandidate, MemoryCategory
 from notalone.reply.context import (
     PENDING_CANDIDATE_SELECTION_REASON,
     ContextEvidence,
+    ContinuedReplyCandidate,
     ReplyContext,
     RetrievalReplyContext,
 )
@@ -192,7 +193,24 @@ class InMemoryReplyStore:
                 lease_expires_at=datetime.now(timezone.utc) + timedelta(minutes=1),
                 continued_from_candidate_id=command.continued_from_candidate_id,
             ),
+            continued_candidate=self._continued_candidate(command),
         )
+
+    def _continued_candidate(self, command: GenerateReply) -> ContinuedReplyCandidate | None:
+        """与真实 Store 一致：显式选择历史候选时返回当时的候选快照。"""
+
+        if command.continued_from_candidate_id is None:
+            return None
+        for item in self.prepared.evidence:
+            if (item.kind == "continued_candidate"
+                    and item.evidence_id == command.continued_from_candidate_id):
+                return ContinuedReplyCandidate(
+                    item.evidence_id,
+                    self.prepared.scope,
+                    command.conversation_binding_id,
+                    item.text,
+                )
+        return None
 
     def save(
         self,

@@ -46,13 +46,14 @@ class ReplyDeletionContract(unittest.TestCase):
         continued_from: UUID | None = None,
         scope: ContactScope | None = None,
         draft: str | None = None,
+        relationship: bool = False,
     ) -> tuple[ReplyRequest, ReplyContext, ValidatedReply]:
         scope = scope or self.scope
         command = GenerateReply(
             idempotency_key=uuid4(),
             scope=scope,
             conversation_binding_id=self.binding_id,
-            content=RewriteDraft(draft_text=draft) if draft else ReplyToMessage(
+            content=RewriteDraft(draft_text=draft, include_relationship_context=relationship) if draft else ReplyToMessage(
                 target_message_id=self.message_id,
                 direction=ConfirmedDirection(
                     text="自然回应", source=DirectionSource.DIRECT_INPUT
@@ -71,6 +72,19 @@ class ReplyDeletionContract(unittest.TestCase):
                     source_ids=(self.source_id,),
                 ),
             )
+        elif draft is not None and not any(
+            item.kind == "user_draft" for item in evidence
+        ):
+            # 草稿模式必须带本次用户原句；来源证据只能作为显式要求的背景。
+            evidence = (
+                ContextEvidence(
+                    evidence_id=uuid4(),
+                    kind="user_draft",
+                    text=draft,
+                    scope=scope,
+                    selection_reason="用户本轮合成草稿",
+                ),
+            ) + evidence
         if started.continued_candidate is not None:
             evidence += (
                 ContextEvidence(
@@ -182,9 +196,11 @@ class ReplyDeletionContract(unittest.TestCase):
         ),)
         saved = self.store.save(*self._prepare_reply(
             scope=other_scope, evidence=owner_evidence, draft="参考本人资料改写",
+            relationship=True,
         ))
         pending = self._prepare_reply(
             scope=other_scope, evidence=owner_evidence, draft="另一次本人资料改写",
+            relationship=True,
         )
         unrelated = self.store.save(*self._prepare_reply(
             scope=other_scope, draft="独立合成草稿",

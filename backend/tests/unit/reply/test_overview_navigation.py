@@ -263,6 +263,7 @@ class OverviewNavigationTest(unittest.TestCase):
         builder.validate_current(context)
 
         self.assertEqual([item.kind for item in context.evidence], ["user_draft"])
+        self.assertTrue(context.overview_read_failed)
         receipt = context.retrieval.to_payload()
         self.assertEqual(receipt["status"], "unavailable")
         self.assertIsNone(receipt["overview_revisions"]["contact"])

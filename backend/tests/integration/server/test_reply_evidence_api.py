@@ -8,7 +8,12 @@ from uuid import uuid4
 from notalone.application.reply_evidence import ReplyEvidenceService
 from notalone.memory.timing import MemoryTiming
 from notalone.reply.context import ContextEvidence, ReplyContext
-from notalone.reply.interface import GenerateReply, RewriteDraft
+from notalone.reply.interface import (
+    ConfirmedDirection,
+    DirectionSource,
+    GenerateReply,
+    ReplyToMessage,
+)
 from notalone.reply.runtime import RuntimeCandidate
 from notalone.reply.store import InMemoryReplyStore, ValidatedReply
 from notalone.scopes import ContactScope, VerifiedConversationScope
@@ -21,24 +26,31 @@ class ReplyEvidenceApiTest(unittest.TestCase):
         self.scope = ContactScope(uuid4(), uuid4())
         self.store = InMemoryReplyStore()
         binding_id = uuid4()
+        direction = ConfirmedDirection("自然回应", DirectionSource.DIRECT_INPUT)
+        target_message_id = uuid4()
         command = GenerateReply(
             idempotency_key=uuid4(), scope=self.scope,
             conversation_binding_id=binding_id,
-            content=RewriteDraft(draft_text="合成原句"),
+            content=ReplyToMessage(target_message_id, direction),
         )
         started = self.store.start(command, VerifiedConversationScope(
             self.scope.owner_id, self.scope.contact_id, binding_id,
         ))
         self.request = started.request
         self.evidence = (
-            ContextEvidence(uuid4(), "user_draft", "合成原句", self.scope,
-                            selection_reason="本次用户原句"),
-            ContextEvidence(uuid4(), "message", "合成背景", self.scope,
-                            selection_reason="同一联系人近期消息"),
+            ContextEvidence(target_message_id, "message", "合成原句", self.scope,
+                            selection_reason="当前待回复消息"),
+            ContextEvidence(uuid4(), "confirmed_memory", "合成背景", self.scope,
+                            selection_reason="同一联系人已确认资料"),
         )
         self.context = ReplyContext(
-            self.request.request_id, command, self.scope, "合成原句", None,
-            self.evidence, 0,
+            reply_request_id=self.request.request_id,
+            command=command,
+            scope=self.scope,
+            current_text="合成原句",
+            direction=direction,
+            evidence=self.evidence,
+            skill_library_revision=0,
         )
         self.client = self.client_for(self.scope.owner_id)
         self.path = (f"/api/contacts/{self.scope.contact_id}/replies/"
@@ -67,7 +79,7 @@ class ReplyEvidenceApiTest(unittest.TestCase):
         entries = response.json()["evidence"]
         self.assertEqual([entry["text"] for entry in entries], ["合成原句", "合成背景"])
         self.assertEqual([entry["cited"] for entry in entries], [True, False])
-        self.assertEqual(entries[0]["selection_reason"], "本次用户原句")
+        self.assertEqual(entries[0]["selection_reason"], "当前待回复消息")
         self.assertIn("no-store", response.headers["Cache-Control"])
 
     def test_memory_snapshot_keeps_source_save_time_and_validity_separate(self):

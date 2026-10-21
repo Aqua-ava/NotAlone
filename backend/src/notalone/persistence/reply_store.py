@@ -40,12 +40,13 @@ from notalone.memory.conditions import MemoryConditions
 from notalone.reply.context import (
     ContextEvidence,
     ContinuedReplyCandidate,
-    EVIDENCE_KINDS,
     ReplyContext,
-    ToolCallTrace,
-    evidence_contract_is_valid,
 )
-from notalone.reply.assistant_discussion import DiscussionContext
+from notalone.reply.context_validation import (
+    ReplyContextBinding,
+    ReplyContextValidationError,
+    validate_reply_context,
+)
 from notalone.reply.errors import (
     ReplyContinuationError,
     ReplyIdempotencyConflictError,
@@ -911,156 +912,48 @@ class PostgresReplyStore:
         request: ReplyRequest,
         context: ReplyContext,
     ) -> set[UUID]:
+        """薄包装：共享纯函数负责规则，这里只映射 Store 错误、回表与探索复验。"""
+
         from notalone.persistence.explored_generation import require_explored_context
 
         try:
-            require_receipt_evidence(context.retrieval, context.evidence)
-        except (AttributeError, TypeError, ValueError):
-            raise ReplyStoreInvariantError("回复检索回执与实际依据不一致。") from None
-
-        if not (
-            isinstance(context, ReplyContext)
-            and isinstance(context.command, GenerateReply)
-            and context.reply_request_id == request.request_id
-            and context.scope == request.scope
-            and context.command.scope == request.scope
-            and context.command.has_valid_content()
-            and context.command.idempotency_key == request.idempotency_key
-            and context.command.conversation_binding_id
-            == request.conversation_binding_id
-            and context.command.continued_from_candidate_id
-            == request.continued_from_candidate_id
-            and _normalize_input(context.command) == request.normalized_input
-            and isinstance(context.current_text, str)
-            and (bool(context.current_text.strip()) or (
-                isinstance(context.command.content, RewriteDraft)
-                and context.command.content.input_kind == "workspace"
-                and context.command.content.workspace_action == "suggest"))
-            and isinstance(context.evidence, tuple)
-            and context.evidence
-            and isinstance(context.skill_library_revision, int)
-            and context.skill_library_revision >= 0
-            and (
-                context.memory_revision is None
-                or (
-                    isinstance(context.memory_revision, int)
-                    and context.memory_revision >= 0
-                )
-            )
-            and (
-                context.index_revision is None
-                or (
-                    isinstance(context.index_revision, int)
-                    and context.index_revision >= 0
-                )
-            )
-            and isinstance(context.risk_notes, tuple)
-            and all(
-                isinstance(note, str) and note.strip()
-                for note in context.risk_notes
-            )
-            and isinstance(context.tool_calls, tuple)
-        ):
-            raise ReplyStoreInvariantError(
-                "回复上下文不属于当前持久化请求。"
-            )
-        require_explored_context(connection, context)
-        discussion = context.assistant_discussion
-        if discussion is not None and (
-            not isinstance(discussion, DiscussionContext)
-            or discussion.scope != request.scope
-            or discussion.request_key != request.idempotency_key
-        ):
-            raise ReplyStoreInvariantError("助手讨论不属于当前持久化请求。")
-        evidence_ids: set[UUID] = set()
-        for item in context.evidence:
-            if (
-                not isinstance(item, ContextEvidence)
-                or item.scope != request.scope
-                or item.kind not in EVIDENCE_KINDS
-                or not isinstance(item.evidence_id, UUID)
-                or item.evidence_id in evidence_ids
-                or not isinstance(item.text, str)
-                or not item.text.strip()
-                or not isinstance(item.source_ids, tuple)
-                or any(
-                    not isinstance(source_id, UUID)
-                    for source_id in item.source_ids
-                )
-                or not isinstance(item.selection_reason, str)
-                or not isinstance(item.status, str)
-                or not item.status.strip()
-                or not evidence_contract_is_valid(
-                    kind=item.kind,
-                    status=item.status,
-                    selection_reason=item.selection_reason,
-                )
-                or (
-                    item.valid_at is not None
-                    and not isinstance(item.valid_at, datetime)
-                )
-                or (
-                    item.invalid_at is not None
-                    and not isinstance(item.invalid_at, datetime)
-                )
-                or (
-                    item.valid_at is not None
-                    and item.invalid_at is not None
-                    and item.invalid_at < item.valid_at
-                )
-                or (
-                    item.revision is not None
-                    and (
-                        not isinstance(item.revision, int)
-                        or item.revision < 1
+            evidence_ids = validate_reply_context(
+                context,
+                binding=ReplyContextBinding.from_request(request),
+                continued_candidate_text=(
+                    lambda candidate_id: self._continued_candidate_text(
+                        connection, request, candidate_id,
                     )
-                )
-            ):
-                raise ReplyStoreInvariantError("回复证据快照结构无效。")
-            evidence_ids.add(item.evidence_id)
-
-        for trace in context.tool_calls:
-            if not _valid_tool_call_trace(trace):
-                raise ReplyStoreInvariantError("回复 Tool 轨迹结构无效。")
-            if not set(trace.evidence_ids) <= evidence_ids:
-                raise ReplyStoreInvariantError("回复 Tool 轨迹引用了未知证据。")
-
-        continuation_evidence = tuple(
-            item for item in context.evidence if item.kind == "continued_candidate"
-        )
-        if request.continued_from_candidate_id is None:
-            if continuation_evidence:
-                raise ReplyStoreInvariantError(
-                    "历史候选必须由用户显式选择。"
-                )
-        else:
-            candidate = connection.execute(
-                """
-                SELECT candidate_text
-                FROM public.reply_candidate
-                WHERE id = %s
-                  AND owner_id = %s
-                  AND contact_id = %s
-                  AND conversation_binding_id = %s
-                """,
-                (
-                    request.continued_from_candidate_id,
-                    request.scope.owner_id,
-                    request.scope.contact_id,
-                    request.conversation_binding_id,
                 ),
-            ).fetchone()
-            if (
-                candidate is None
-                or len(continuation_evidence) != 1
-                or continuation_evidence[0].evidence_id
-                != request.continued_from_candidate_id
-                or continuation_evidence[0].text != candidate["candidate_text"]
-            ):
-                raise ReplyStoreInvariantError(
-                    "继续候选快照与已保存候选不一致。"
-                )
-        return evidence_ids
+            )
+        except ReplyContextValidationError as error:
+            raise ReplyStoreInvariantError(str(error)) from None
+        require_explored_context(connection, context)
+        return set(evidence_ids)
+
+    @staticmethod
+    def _continued_candidate_text(
+        connection: Any,
+        request: ReplyRequest,
+        candidate_id: UUID,
+    ) -> str | None:
+        row = connection.execute(
+            """
+            SELECT candidate_text
+            FROM public.reply_candidate
+            WHERE id = %s
+              AND owner_id = %s
+              AND contact_id = %s
+              AND conversation_binding_id = %s
+            """,
+            (
+                candidate_id,
+                request.scope.owner_id,
+                request.scope.contact_id,
+                request.conversation_binding_id,
+            ),
+        ).fetchone()
+        return row["candidate_text"] if row is not None else None
 
     @staticmethod
     def _validate_reply(
@@ -1666,31 +1559,6 @@ class PostgresReplyStore:
             or candidate_text != "\n\n".join(item.text for item in messages)):
             raise ReplyStoreInvariantError("候选消息组结构无效。")
         return messages
-
-
-def _valid_tool_call_trace(trace: object) -> bool:
-    return (
-        isinstance(trace, ToolCallTrace)
-        and isinstance(trace.tool_name, str)
-        and bool(trace.tool_name.strip())
-        and len(trace.tool_name) <= 64
-        and trace.status
-        in (
-            "succeeded",
-            "empty",
-            "failed",
-            "timeout",
-            "budget_exceeded",
-        )
-        and isinstance(trace.evidence_ids, tuple)
-        and len(trace.evidence_ids) == len(set(trace.evidence_ids))
-        and all(isinstance(item, UUID) for item in trace.evidence_ids)
-        and (
-            trace.latency_ms is None
-            or isinstance(trace.latency_ms, int)
-            and trace.latency_ms >= 0
-        )
-    )
 
 
 __all__ = ["PostgresReplyStore"]

@@ -283,6 +283,9 @@ class PostgresReplyStoreTest(unittest.TestCase):
         with self.assertRaises(ReplyInputInvalidatedError):
             self.store.save(started.request, context, self._reply())
 
+        # 目录发现只经显式同步入口；候选复验本身不写目录状态。
+        from notalone.persistence.skill_directory import synchronize_skill_library
+        synchronize_skill_library(TEST_DATABASE_URL, self.owner_id, migrate_legacy=False)
         refreshed = port.catalog(command.scope)
         self.assertEqual(refreshed.revision, original_catalog.revision + 1)
         self.assertEqual(refreshed.entries[0].version_number, 2)
@@ -481,7 +484,8 @@ class PostgresReplyStoreTest(unittest.TestCase):
         self.assertEqual(timing.source_ended_at, source_times[1])
         self.assertFalse(timing.source_time_complete)
         self.assertNotEqual(timing.recorded_at, timing.source_started_at)
-        context = replace(context, evidence=(ContextEvidence(
+        # ReplyToMessage 必须保留目标消息依据；本用例只追加记忆时间快照。
+        context = replace(context, evidence=context.evidence + (ContextEvidence(
             evidence_id=memory.memory_id, kind="confirmed_memory", text=memory.text, scope=command.scope,
             source_ids=memory.source_ids, revision=memory.revision,
             valid_at=memory.valid_at, invalid_at=memory.invalid_at, timing=timing,
@@ -495,7 +499,10 @@ class PostgresReplyStoreTest(unittest.TestCase):
             saved.reply_request_id, command.scope,
         )
 
-        self.assertEqual(stored.evidence[0].timing, timing)
+        restored = next(
+            item for item in stored.evidence if item.evidence_id == memory.memory_id
+        )
+        self.assertEqual(restored.timing, timing)
 
     def test_legacy_evidence_snapshot_without_time_stays_unknown(self) -> None:
         command = self._command()
