@@ -16,6 +16,7 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from notalone.persistence.skill_library import PostgresSkillLibrary, SkillLibraryPersistenceError
+from notalone.persistence.skill_directory import synchronize_skill_library
 from notalone.persistence.skill_files import SkillFileError
 from notalone.persistence.contact_deletion import delete_contact
 from notalone.persistence.skill_port import PostgresSkillPort
@@ -70,6 +71,10 @@ class PostgresSkillDirectoryTest(unittest.TestCase):
         self.port = PostgresSkillPort(self.database_url)
         self.library = PostgresSkillLibrary(self.database_url)
 
+    def _refresh(self, scope=None):
+        """显式同步入口；SkillPort 读路径不再迁移或扫描目录。"""
+        return synchronize_skill_library(self.database_url, (scope or self.scope).owner_id)
+
     def _package(self, *, name="warm-reply", body="先回应感受，再表达需要。", owner_id=None):
         directory = self.root / str(owner_id or self.owner_id) / name
         (directory / "references").mkdir(parents=True, exist_ok=True)
@@ -101,6 +106,7 @@ class PostgresSkillDirectoryTest(unittest.TestCase):
                 confirmed_scope={"kind": "contact", "contact_id": str(self.contact_id), "scene": None},
                 dependency_ids=[], source_generation={"sources": generation},
             )
+        self._refresh()
         return skill_id, UUID(result["version_id"]), first, second
 
     def test_reviewed_methods_load_from_files_for_history_and_scoped_policy(self):
@@ -189,6 +195,7 @@ class PostgresSkillDirectoryTest(unittest.TestCase):
 
     def test_catalog_discovers_directory_and_selected_version_reads_resource(self):
         self._package()
+        self._refresh()
 
         catalog = self.port.catalog(self.scope)
 
@@ -201,6 +208,7 @@ class PostgresSkillDirectoryTest(unittest.TestCase):
 
     def test_management_refresh_registers_edit_once_and_old_version_cannot_load(self):
         self._package()
+        self._refresh()
         before = self.port.catalog(self.scope)
         old_version = before.entries[0].version_id
         self._package(body="先承认对方的感受，再询问希望获得什么支持。")
@@ -220,10 +228,12 @@ class PostgresSkillDirectoryTest(unittest.TestCase):
 
     def test_invalid_or_missing_working_package_blocks_old_content_and_resources(self):
         directory = self._package()
+        self._refresh()
         first = self.port.catalog(self.scope)
         version_id = first.entries[0].version_id
         original = (directory / "SKILL.md").read_text(encoding="utf-8")
         (directory / "SKILL.md").write_text("格式不完整。", encoding="utf-8")
+        self._refresh()
 
         invalid = self.port.catalog(self.scope)
 
@@ -235,15 +245,19 @@ class PostgresSkillDirectoryTest(unittest.TestCase):
         with self.assertRaises(PermissionError):
             self.port.load_resource(self.scope, version_id, "references/example.md")
         (directory / "SKILL.md").write_text(original, encoding="utf-8")
+        self._refresh()
         self.assertEqual(self.port.catalog(self.scope).entries[0].version_id, version_id)
         (directory / "SKILL.md").unlink()
+        self._refresh()
         self.assertEqual(self.port.catalog(self.scope).entries, ())
 
     def test_directory_edits_cannot_restore_disabled_or_deleted_skill(self):
         self._package()
+        self._refresh()
         first = self.port.catalog(self.scope).entries[0]
         self.library.disable(self.owner_id, first.skill_id)
         self._package(body="先回应，再说明自己的需要。")
+        self._refresh()
 
         self.assertEqual(self.port.catalog(self.scope).entries, ())
         disabled = self.library.list_owner_skills(self.owner_id)[0]
@@ -251,6 +265,7 @@ class PostgresSkillDirectoryTest(unittest.TestCase):
         self.assertEqual(disabled.current_version_number, 2)
         self.library.delete(self.owner_id, first.skill_id)
         self._package(body="删除后新写入的同名包也不能恢复资格。")
+        self._refresh()
 
         self.assertEqual(self.port.catalog(self.scope).entries, ())
         self.assertEqual(self.library.list_owner_skills(self.owner_id)[0].status, "deleted")
@@ -265,13 +280,16 @@ class PostgresSkillDirectoryTest(unittest.TestCase):
         (hidden / "SKILL.md").write_text("---\nname: hidden-reply\ndescription: 适合隐藏历史测试。\n---\n\n保持历史。", encoding="utf-8")
         linked = self.root / str(self.owner_id) / "linked-reply"
         linked.symlink_to(self.root / str(self.owner_id) / "warm-reply", target_is_directory=True)
+        self._refresh()
 
         self.assertEqual([entry.name for entry in self.port.catalog(self.scope).entries], ["warm-reply"])
 
     def test_resource_edit_publishes_new_version_and_old_resource_is_unavailable(self):
         directory = self._package()
+        self._refresh()
         before = self.port.catalog(self.scope)
         (directory / "references" / "example.md").write_text("先倾听对方，再确认需要。\n", encoding="utf-8")
+        self._refresh()
 
         after = self.port.catalog(self.scope)
 
@@ -286,6 +304,7 @@ class PostgresSkillDirectoryTest(unittest.TestCase):
         directory = self._package()
         for name in ("Zebra.md", "alpha.md", "中文案例.md", "案例2.md", "case-10.md", "case-2.md"):
             (directory / "references" / name).write_text("先回应感受，再提供选择。\n", encoding="utf-8")
+        self._refresh()
         first = self.port.catalog(self.scope)
 
         for _ in range(3):
@@ -296,6 +315,7 @@ class PostgresSkillDirectoryTest(unittest.TestCase):
 
     def test_failed_working_copy_update_cannot_republish_old_directory(self):
         directory = self._package()
+        self._refresh()
         initial = self.port.catalog(self.scope).entries[0]
         with TemporaryDirectory() as source_root:
             source = Path(source_root) / "warm-reply"
@@ -322,6 +342,7 @@ class PostgresSkillDirectoryTest(unittest.TestCase):
                     self.port.load_version(self.scope, versions[0].version_id)
                 self.assertEqual(len(self.library.list_versions(self.owner_id, initial.skill_id)), 2)
 
+        self._refresh()
         restored = self.port.catalog(self.scope)
         self.assertEqual(restored.entries[0].version_number, 2)
         self.assertIn("先确认对方需要", self.port.load_version(self.scope, restored.entries[0].version_id).content)
@@ -330,6 +351,7 @@ class PostgresSkillDirectoryTest(unittest.TestCase):
         import shutil
 
         directory = self._package()
+        self._refresh()
         initial = self.port.catalog(self.scope).entries[0]
         other_contact = uuid4()
         with psycopg.connect(self.database_url) as connection:
@@ -354,13 +376,16 @@ class PostgresSkillDirectoryTest(unittest.TestCase):
             with self.assertRaises(PermissionError):
                 self.port.load_version(other_scope, initial.version_id)
 
+        self._refresh(other_scope)
         self.assertEqual(self.port.catalog(other_scope).entries, ())
         self.assertFalse(directory.exists())
 
     def test_stale_load_cannot_rollback_new_directory_version_registration(self):
         self._package()
+        self._refresh()
         original = self.port.catalog(self.scope).entries[0]
         self._package(body="先确认感受，再询问支持方式。")
+        self._refresh()
 
         with self.assertRaises(PermissionError):
             self.port.load_version(self.scope, original.version_id)
@@ -377,6 +402,7 @@ class PostgresSkillDirectoryTest(unittest.TestCase):
             connection.execute("INSERT INTO public.reply_skill_version(id,skill_id,version_number,name,description,content,enabled,is_current,status) "
                                "VALUES (%s,%s,1,'legacy-reply','适合旧版回应场景。','先表达理解。',true,true,'active')", (version_id, skill_id))
 
+        self._refresh()
         catalog = self.port.catalog(self.scope)
 
         self.assertEqual(catalog.entries[0].version_id, version_id)
@@ -416,6 +442,7 @@ class PostgresSkillDirectoryTest(unittest.TestCase):
 
     def test_directory_edit_preserves_contact_scope_and_cannot_republish_review_origin(self):
         self._package()
+        self._refresh()
         original = self.port.catalog(self.scope).entries[0]
         other_contact = uuid4()
         with psycopg.connect(self.database_url) as connection:
@@ -423,6 +450,7 @@ class PostgresSkillDirectoryTest(unittest.TestCase):
                                (self.owner_id, other_contact))
             connection.execute("UPDATE public.reply_skill SET contact_id=%s WHERE id=%s", (self.contact_id, original.skill_id))
         self._package(body="先确认对方需要，再表达自己的想法。")
+        self._refresh()
         updated = self.port.catalog(self.scope).entries[0]
         self.assertEqual(updated.contact_id, self.contact_id)
         self.assertEqual(self.port.catalog(ContactScope(self.owner_id, other_contact)).entries, ())
@@ -430,6 +458,7 @@ class PostgresSkillDirectoryTest(unittest.TestCase):
             # 缺失审核来源证明等同于来源失效；文件编辑不得重新发布为普通包。
             connection.execute("UPDATE public.reply_skill_version SET review_origin=true WHERE id=%s", (updated.version_id,))
         self._package(body="新编辑仍必须等待合法审核来源。")
+        self._refresh()
 
         self.assertEqual(self.port.catalog(self.scope).entries, ())
         self.assertEqual(self.port.catalog(ContactScope(self.owner_id, other_contact)).entries, ())

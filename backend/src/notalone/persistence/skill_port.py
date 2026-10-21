@@ -86,14 +86,18 @@ def _selected_projection(connection, scope, row, scene):
 
 
 def require_reply_skill_current(connection, context, skill):
-    """最终候选事务内复验实际版本、范围、来源和目录修订，阻止迟到提交。"""
+    """最终候选事务内复验实际版本、范围、来源和执行视图，阻止迟到提交。
+
+    不迁移、不写库、不持 owner 锁；仅在确有 Skill 时做一次只读目录变化检查，
+    其他目录变化由每轮生成前的显式同步入口推进修订号后再经比较生效。
+    """
     from notalone.reply.errors import ReplyInputInvalidatedError
-    from notalone.persistence.skill_directory import synchronize_skill_directory
     scope = context.scope
-    if synchronize_skill_directory(connection, scope.owner_id, check_only=True):
-        raise ReplyInputInvalidatedError('Skill 目录文件已变化，请保留编辑并重新生成。')
     if skill is None:
         return
+    from notalone.persistence.skill_directory import synchronize_skill_directory
+    if synchronize_skill_directory(connection, scope.owner_id, check_only=True):
+        raise ReplyInputInvalidatedError('Skill 目录文件已变化，请保留编辑并重新生成。')
     with connection.cursor(row_factory=dict_row) as cursor:
         revision = cursor.execute('SELECT revision FROM public.skill_library WHERE owner_id=%s', (scope.owner_id,)).fetchone()
         row = cursor.execute(_VERSION_QUERY + ' AND version.id=%s',
@@ -113,7 +117,7 @@ def require_reply_skill_current(connection, context, skill):
 
 
 class PostgresSkillPort:
-    """自动同步目录元数据；正文与资源仍在范围门禁后按需读取。"""
+    """只读不可变回复策略；目录发现与迁移由每轮显式同步入口完成。"""
 
     def __init__(self, database_url: str, *, scene: str | None = None):
         if not isinstance(database_url, str) or not database_url.strip():
@@ -129,9 +133,7 @@ class PostgresSkillPort:
     def catalog(self, scope):
         self._validate_scope(scope)
         try:
-            self._prepare_directory(scope)
             with self._connect() as connection:
-                self._synchronize(connection, scope)
                 revision = connection.execute('SELECT revision FROM public.skill_library WHERE owner_id=%s', (scope.owner_id,)).fetchone()
                 with connection.cursor(row_factory=dict_row) as cursor:
                     rows = cursor.execute(_VERSION_QUERY + ' ORDER BY skill.contact_id NULLS FIRST,version.name,version.id',
@@ -145,7 +147,7 @@ class PostgresSkillPort:
                         continue
                     entries.append(self._entry(row))
                 return SkillCatalog(scope, revision[0] if revision else 0, tuple(entries))
-        except psycopg.Error:
+        except (psycopg.Error, SkillFileError):
             raise SkillPortPersistenceError('Skill 目录读取失败。') from None
         except (TypeError, ValueError):
             raise SkillPortPersistenceError('Skill 目录读取失败。') from None
@@ -155,11 +157,7 @@ class PostgresSkillPort:
         if not isinstance(version_id, UUID):
             raise TypeError('version_id 必须是 UUID。')
         try:
-            self._prepare_directory(scope)
             with self._connect() as connection:
-                self._synchronize(connection, scope)
-                # 文件版本注册已经成功；后续拒绝旧 ID 不得回滚已发布元数据。
-                connection.commit()
                 connection.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY')
                 row = self._version(connection, scope, version_id, include_content=True)
                 paths = () if row['_policy_filtered'] else self._resource_paths(connection, version_id)
@@ -183,10 +181,7 @@ class PostgresSkillPort:
         except (TypeError, ValueError):
             raise PermissionError('Skill 资源不可用。') from None
         try:
-            self._prepare_directory(scope)
             with self._connect() as connection:
-                self._synchronize(connection, scope)
-                connection.commit()
                 connection.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY')
                 version = self._version(connection, scope, version_id)
                 if version['_policy_filtered']:
@@ -242,15 +237,6 @@ class PostgresSkillPort:
             "SELECT relative_path FROM public.reply_skill_resource WHERE skill_version_id=%s "
             "AND resource_kind IN ('reference','asset') AND (content_path IS NOT NULL OR content IS NOT NULL) "
             "ORDER BY relative_path", (version_id,)).fetchall())
-
-    @staticmethod
-    def _synchronize(connection, scope):
-        from notalone.persistence.skill_directory import synchronize_skill_directory
-        synchronize_skill_directory(connection, scope.owner_id)
-
-    def _prepare_directory(self, scope):
-        from notalone.persistence.skill_directory import prepare_legacy_skill_directory
-        prepare_legacy_skill_directory(self._database_url, scope.owner_id)
 
     def _connect(self):
         return psycopg.connect(self._database_url)

@@ -7,6 +7,7 @@ Postgres 技能库、Postgres 存储与出站台账）。
 
 from __future__ import annotations
 
+import logging
 import os
 from typing import Callable
 from uuid import UUID
@@ -39,6 +40,7 @@ from notalone.persistence.explored_generation import explored_skill_selection_me
 from notalone.persistence.assistant_discussion_reply_context import PostgresAssistantDiscussionContext
 from notalone.persistence.retrieval import PostgresRetrieval
 from notalone.persistence.memory_overview import PostgresRelationshipOverviewStore
+from notalone.persistence.skill_directory import SkillDirectorySyncError
 from notalone.persistence.skill_port import PostgresSkillPort
 from notalone.persistence.expression_preferences import PostgresExpressionPreferenceStore
 from notalone.application.expression_preference_context import ExpressionPreferenceContext
@@ -54,6 +56,36 @@ from notalone.reply.input_budget import (
     InputBudgetDecision, InputBudgetProfile, InputTokenCounter,
 )
 from notalone.scopes import VerifiedConversationScope
+
+
+logger = logging.getLogger(__name__)
+
+
+class RoundSkillSyncPort:
+    """每轮生成/准备前显式同步一次 Skill 目录；读路径本身保持只读。
+
+    同步失败按脱敏 warning 降级，沿用上次已同步的目录状态继续本轮，
+    下一轮重试；不在失败时静默下架既有 Skill。
+    """
+
+    __slots__ = ("_port", "_synchronize")
+
+    def __init__(self, port, *, synchronize: Callable[[UUID], int]):
+        self._port, self._synchronize = port, synchronize
+
+    def _synchronize_round(self, verified_scope) -> None:
+        try:
+            self._synchronize(verified_scope.owner_id)
+        except (SkillDirectorySyncError, OSError):
+            logger.warning("skill_directory_sync_failed")
+
+    def prepare(self, command, *, verified_scope):
+        self._synchronize_round(verified_scope)
+        return self._port.prepare(command=command, verified_scope=verified_scope)
+
+    def generate(self, command, *, verified_scope):
+        self._synchronize_round(verified_scope)
+        return self._port.generate(command=command, verified_scope=verified_scope)
 
 
 def build_reply_service(
@@ -99,7 +131,7 @@ def build_reply_service(
         except (ValueError, TypeError, AttributeError):
             # 未核实配置继续L1，不能用未标定默认值放开新层。
             layered_reply_budget, owner_layered_reply_budget = None, None
-    skill_revision = _skill_library_revision(database_url, owner_id)
+    skill_revision = _prepare_skill_library(database_url, owner_id)
     retrieval = PostgresRetrieval(
         database_url,
         owner_memory_store=PostgresOwnerMemoryStore(database_url),
@@ -108,7 +140,7 @@ def build_reply_service(
         retrieval=retrieval,
         memory_index=PostgresContactMemoryIndexRepository(database_url),
         skill_library_revision=skill_revision,
-        skill_revision_reader=lambda scope: _skill_library_revision(
+        skill_revision_reader=lambda scope: _read_skill_library_revision(
             database_url,
             scope.owner_id,
         ),
@@ -181,6 +213,12 @@ def build_reply_service(
             store=PostgresAssistantSessionStore(database_url), reply=reply_service,
         )),
     )
+    round_reply = RoundSkillSyncPort(
+        generator,
+        synchronize=lambda owner_id: _synchronize_skill_library(
+            database_url, owner_id, migrate_legacy=False,
+        ),
+    )
     reply_service = ReplyService(
         manual_scope_lookup=_manual_scope_lookup(database_url),
         binding_lookup=_active_binding_lookup(database_url),
@@ -189,7 +227,8 @@ def build_reply_service(
             owner_id=owner_id,
             observation=ConversationObservation.confirmed(binding.binding_id),
         ),
-        reply=(PriorityReplyPort(generator, model_priority) if model_priority is not None else generator),
+        reply=(PriorityReplyPort(round_reply, model_priority)
+               if model_priority is not None else round_reply),
         exploration=exploration,
         skill_review=build_skill_review_service(database_url=database_url, model=model,
             context=ExpressionPreferenceContext(context, PostgresExpressionPreferenceStore(database_url)),
@@ -266,25 +305,31 @@ def _active_binding_lookup(database_url: str):
     return lookup
 
 
-def _skill_library_revision(database_url: str, owner_id: UUID) -> int:
-    from notalone.persistence.skill_directory import prepare_legacy_skill_directory
-    prepare_legacy_skill_directory(database_url, owner_id)
+def _read_skill_library_revision(database_url: str, owner_id: UUID) -> int:
+    """只读当前已同步修订号；目录发现由每轮显式同步入口负责。"""
     with psycopg.connect(database_url) as connection:
-        from notalone.persistence.skill_directory import synchronize_skill_directory
-        synchronize_skill_directory(connection, owner_id)
         row = connection.execute(
-            """
-            SELECT revision
-            FROM public.skill_library
-            WHERE owner_id = %s
-            """,
+            "SELECT revision FROM public.skill_library WHERE owner_id = %s",
             (owner_id,),
         ).fetchone()
-        if row is None:
-            connection.execute(
-                "INSERT INTO public.skill_library (owner_id, revision) "
-                "VALUES (%s, 0)",
-                (owner_id,),
-            )
-            return 0
-        return row[0]
+    return row[0] if row is not None else 0
+
+
+def _synchronize_skill_library(
+    database_url: str, owner_id: UUID, *, migrate_legacy: bool,
+) -> int:
+    from notalone.persistence.skill_directory import synchronize_skill_library
+    return synchronize_skill_library(
+        database_url, owner_id, migrate_legacy=migrate_legacy,
+    )
+
+
+def _prepare_skill_library(database_url: str, owner_id: UUID) -> int:
+    """装配时显式同步一次（含旧库迁移）；失败降级到上次已同步状态。"""
+    try:
+        return _synchronize_skill_library(
+            database_url, owner_id, migrate_legacy=True,
+        )
+    except SkillDirectorySyncError:
+        logger.warning("skill_directory_sync_failed")
+        return _read_skill_library_revision(database_url, owner_id)

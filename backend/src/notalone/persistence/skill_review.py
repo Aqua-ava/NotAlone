@@ -1,5 +1,6 @@
 """草稿审核的事务、冻结输入和无正文幂等回执。"""
 
+import logging
 from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
@@ -16,6 +17,9 @@ from notalone.persistence.skill_library import PostgresSkillLibrary
 from notalone.persistence.skill_review_navigation import capture_review_sources, review_sources_current
 from notalone.skills.learning import SkillLearningInvalid, content_digest
 from notalone.skills.review import edited_strategy
+
+
+logger = logging.getLogger(__name__)
 
 
 def review_now():
@@ -165,25 +169,37 @@ class PostgresSkillReviewStore:
             draft = self._locked_draft(connection, scope, draft_id)
             previous = self._operation(connection, scope, draft_id, operation_key, 'approve', command)
             if previous:
-                return self._payload(connection, scope, draft)
-            self._require_pending(draft, expected_revision)
-            comparison = self._comparison(connection, scope, comparison_id)
-            self._require_sanitized(connection, scope, draft['sanitized_strategy'])
-            self._require_comparison(connection, scope, draft, comparison)
-            if (comparison['state'] != 'completed' or comparison['confirmed_scope'] != scope_confirmation
-                    or not comparison['result'] or comparison['result']['after']['load_state'] != 'loaded'):
-                raise SkillLearningInvalid()
-            with connection.cursor(row_factory=dict_row) as cursor:
-                published = PostgresSkillLibrary(self.database_url).publish_reviewed(
-                    cursor, scope=scope, draft=draft, confirmed_scope=scope_confirmation,
-                    dependency_ids=comparison['dependency_ids'], source_generation=comparison['source_generation'])
-            connection.execute(
-                "UPDATE public.skill_draft SET status='published',revision=revision+1,last_decision='approve',published_version_id=%s WHERE id=%s",
-                (UUID(published['version_id']), draft_id))
-            self._record_operation(connection, scope, draft_id, operation_key, 'approve', command,
-                                   comparison_id=comparison_id, published_version_id=UUID(published['version_id']))
-            updated = self._read_draft(connection, scope, draft_id)
-            return self._payload(connection, scope, updated)
+                payload = self._payload(connection, scope, draft)
+            else:
+                self._require_pending(draft, expected_revision)
+                comparison = self._comparison(connection, scope, comparison_id)
+                self._require_sanitized(connection, scope, draft['sanitized_strategy'])
+                self._require_comparison(connection, scope, draft, comparison)
+                if (comparison['state'] != 'completed' or comparison['confirmed_scope'] != scope_confirmation
+                        or not comparison['result'] or comparison['result']['after']['load_state'] != 'loaded'):
+                    raise SkillLearningInvalid()
+                with connection.cursor(row_factory=dict_row) as cursor:
+                    published = PostgresSkillLibrary(self.database_url).publish_reviewed(
+                        cursor, scope=scope, draft=draft, confirmed_scope=scope_confirmation,
+                        dependency_ids=comparison['dependency_ids'], source_generation=comparison['source_generation'])
+                connection.execute(
+                    "UPDATE public.skill_draft SET status='published',revision=revision+1,last_decision='approve',published_version_id=%s WHERE id=%s",
+                    (UUID(published['version_id']), draft_id))
+                self._record_operation(connection, scope, draft_id, operation_key, 'approve', command,
+                                       comparison_id=comparison_id, published_version_id=UUID(published['version_id']))
+                updated = self._read_draft(connection, scope, draft_id)
+                payload = self._payload(connection, scope, updated)
+        # 发布只提交元数据与不可变快照；工作副本由显式同步入口消费，读路径不再补齐。
+        self._synchronize_files(scope.owner_id)
+        return payload
+
+    def _synchronize_files(self, owner_id) -> None:
+        """显式同步工作副本；失败保留任务并在下一轮入口重试，不回滚已提交审核。"""
+        from notalone.persistence.skill_directory import SkillDirectorySyncError, synchronize_skill_library
+        try:
+            synchronize_skill_library(self.database_url, owner_id, migrate_legacy=False)
+        except SkillDirectorySyncError:
+            logger.warning("skill_directory_sync_failed")
 
     def _locked_draft(self, connection, scope, draft_id):
         lock_contact_scope(connection, owner_id=scope.owner_id, contact_id=scope.contact_id)

@@ -157,6 +157,9 @@ class PersistentExplorationHttpTest(FidelityHttpFixture, unittest.TestCase):
                 (id,skill_id,version_number,name,description,content,enabled,is_current,status)
                 VALUES (%s,%s,1,%s,'合成沟通策略','只辅助理解，保留用户本次意愿。',true,true,'active')""",
                                (version, skill, name))
+        # 旧库正文迁移由显式同步入口完成；Port 读取本身不再迁移或写文件。
+        from notalone.persistence.skill_directory import synchronize_skill_library
+        synchronize_skill_library(self.database_url, self.owner_id)
         return str(skill), str(version), name
 
     def test_old_integer_endpoint_rejects_protocol_without_model_or_new_input(self):

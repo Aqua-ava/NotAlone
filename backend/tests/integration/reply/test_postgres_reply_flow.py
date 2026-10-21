@@ -35,6 +35,7 @@ from notalone.persistence.reply_store import PostgresReplyStore
 from notalone.persistence.memory_store import PostgresMemoryStore
 from notalone.persistence.owner_memory_store import PostgresOwnerMemoryStore
 from notalone.persistence.skill_port import PostgresSkillPort
+from notalone.persistence.skill_directory import synchronize_skill_library
 from notalone.reply import (
     ConfirmedDirection,
     DirectionSource,
@@ -225,6 +226,9 @@ class PostgresReplyFlowTest(unittest.TestCase):
                         for index, message_id in enumerate((self.target_message_id, self.recent_message_id), 1)
                     ),
                 )
+
+        # 旧库正文迁移由显式同步入口完成；SkillPort 读取本身不再迁移或写文件。
+        synchronize_skill_library(TEST_DATABASE_URL, self.owner_id)
 
         self.binding_repository = PostgresConversationBindingRepository(
             TEST_DATABASE_URL

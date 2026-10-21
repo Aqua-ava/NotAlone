@@ -6,8 +6,43 @@ import psycopg
 from psycopg.rows import dict_row
 
 from notalone.persistence.locks import lock_owner_scope
+from notalone.persistence.skill_files import SkillFileError
 from notalone.skills import LocalSkillPackageReader, SkillPackageValidator
 from notalone.skills.package import SkillPackageValidationError
+
+
+class SkillDirectorySyncError(RuntimeError):
+    """显式目录同步失败；不回传实际路径、正文或连接信息，可重试。"""
+
+
+def synchronize_skill_library(
+    database_url: str, owner_id: UUID, *, migrate_legacy: bool = True,
+) -> int:
+    """每轮生成/管理刷新的显式同步入口；SkillPort 读路径不执行迁移或写入。
+
+    旧库迁移与目录发现都在此提交边界内完成；失败整体回滚并抛领域错误，
+    调用方可在下一轮重试。返回同步后的 Skill 库修订号。
+    """
+    if not isinstance(owner_id, UUID):
+        raise TypeError("owner_id 必须是 UUID。")
+    try:
+        if migrate_legacy:
+            prepare_legacy_skill_directory(database_url, owner_id)
+        with psycopg.connect(database_url, row_factory=dict_row) as connection:
+            # 库修订行同时是可查询的已同步标记；同步入口负责创建并递增。
+            connection.execute(
+                "INSERT INTO public.skill_library (owner_id, revision) VALUES (%s, 0) "
+                "ON CONFLICT (owner_id) DO NOTHING",
+                (owner_id,),
+            )
+            synchronize_skill_directory(connection, owner_id)
+            row = connection.execute(
+                "SELECT revision FROM public.skill_library WHERE owner_id=%s",
+                (owner_id,),
+            ).fetchone()
+            return row["revision"] if row is not None else 0
+    except (psycopg.Error, OSError, SkillFileError, TypeError, ValueError):
+        raise SkillDirectorySyncError("Skill 目录同步失败。") from None
 
 
 def prepare_legacy_skill_directory(database_url, owner_id: UUID) -> None:
