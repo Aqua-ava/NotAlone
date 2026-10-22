@@ -33,3 +33,4 @@ SyncHost 心跳/开关心跳失败时不再「显示开着、实际停读」：�
 - 验证：`python -m unittest tests.unit.server.test_sync_host_health tests.unit.server.test_sync_status_health -v` 6 条通过；`python -m unittest discover -s tests/unit/server -t .` 97 条通过。
 - 数据影响：无 schema/数据变更；状态 JSON 只新增字段。剩余风险：`health` 只反映后台心跳，用户手动 enable/check 失败仍走各自接口错误；异常类型名已足够区分但更细的原因需后续扩展错误码。
 - Commit：见 `git log --grep '同步心跳失败'`。
+- 2026-10-22 真机只读：`GET /api/sync/status` 返回 `health={"healthy":true,"failure_code":null}`，`sync_enabled=true`、`phase=active`；无降级项。

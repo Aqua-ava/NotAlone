@@ -41,3 +41,11 @@
 - 未做的 C 项：`app.py` 路由表化、`session.ts` 拆分、评测/实验包迁移、仓库大文件清理、CI/测试 runner 门禁。
 - 代码审查（Standards）遗留低优先级项：`_timed_memories`/`_timed_rows` 重复、批量分组骨架重复、initial-read 站点仍各写包装、commit 正文含字面 `\n` 的 3 个历史提交（不回写历史）。
 - 准备快照 revision 14→15：升级后旧固定准备快照会 fail closed 要求重新准备，属既定约定。
+
+## 真机验收（2026-10-22）
+- 开发热更新实例启动并确认「已连接」；联系人/记忆页正常渲染，无首帧错误。
+- 真实 App 中验证记忆页「版本历史」（联系人经历与关系变化概览）与「主题资料」（LayeredMemoryPanel）可展开并加载数据。
+- 活后端只读核验：`/api/sync/status` 的 `health`、`/api/runtime/status` 的 `skill_files` 字段均正常返回。
+- 页面自动化与基线对照：`memory-reading`、`contact-relationship-overview` 在当前 HEAD 与基线 c41c4200 以相同断言失败，属既有页面测试缺口，非本轮回归。
+- 未覆盖/未做：微信前台与 OCR、回复生成/取消、导入 deferred、4096 输入上限的真机交互；未发送外部消息、未做写操作。详见 `acceptance-20261022.md`。
+

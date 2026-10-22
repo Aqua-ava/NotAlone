@@ -35,3 +35,4 @@ State: resolved
 - 剩余风险：只覆盖首帧读取用 `getState` 的失败路径；页面若在首次 `getState` 失败前收到推送状态则错误自动清除（由 receive 覆盖）。其他 `catch(() => {})` 中仍混有刷新动作类静默，未纳入本 ticket。
 
 - 2026-10-22 复核补漏：`OwnerLayeredMemoryPanel` 的 `getOwnerLayeredMemoryState()` 首帧失败也会写 error（该面板当前尚未接线，仍按首帧读取规则处理）。
+- 2026-10-22 真机只读：联系人页与记忆页正常加载，未出现首帧读取错误提示；强制读取失败路径未注入。
