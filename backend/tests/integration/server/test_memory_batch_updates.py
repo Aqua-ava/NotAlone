@@ -19,9 +19,10 @@ FIXTURE = json.loads((Path(__file__).parent/'fixtures/batch_update_replay.json')
 
 class BatchUpdateReplayModel(ScriptedCoreModel):
     identifiers: dict[str, str] = {}
+    steps: list[dict] = FIXTURE['steps']
 
     def _generate(self, messages, stop=None, run_manager=None, **kwargs):
-        step = FIXTURE['steps'][len(self.seen_calls)]
+        step = self.steps[len(self.seen_calls)]
         name = kwargs['tools'][0]['function']['name']
         if name != step['name']:
             raise AssertionError('模型请求顺序与冻结的合成边界不符。')

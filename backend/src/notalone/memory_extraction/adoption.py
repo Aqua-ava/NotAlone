@@ -816,6 +816,9 @@ class MemoryAdoption:
                 reason = EMBEDDING_UNAVAILABLE if isinstance(error, EmbeddingUnavailableError) else None
                 plans.update((index, ([], None, reason)) for index, _ in eligible)
                 record('batch_adjudication', {'status': 'pending', 'reason': reason or 'recall_or_model_failed'})
+        if self._automatic and plans and all(decision is None for _, decision, _ in plans.values()):
+            # 已核验候选仍存在，不能把整批裁决失败当成无需记忆并推进水位。
+            raise ExtractionRuntimeError('本批已核验候选均未取得有效裁决，须重试或报告任务失败。')
         return plans
 
     def _adjudicate(self, fact, similar, scope: ContactScope, batch_decisions=None):
