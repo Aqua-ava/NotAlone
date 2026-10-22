@@ -5,8 +5,6 @@ import { MemoryEventDetails } from './MemoryEventDetails';
 export { MemoryEventDetails } from './MemoryEventDetails';
 import { MemoryProcessingCard } from './MemoryProcessingCard';
 import { FirstFrameError } from './FirstFrameError';
-import { LayeredMemoryPanel } from './LayeredMemoryPanel';
-import { OwnerLayeredMemoryPanel } from './OwnerLayeredMemoryPanel';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { MemoryAdditionRequest, MemoryContent, MemoryCorrectionRequest, MemoryHistoryState, MemoryOverviewState, MemoryReadingState, MemorySection, MemorySectionName, MemorySource, MemoryVersion, OwnerFactsPreferencesOverview, PendingMemoryCandidate } from '../shared/memory-bridge';
 import type { ContactSessionView } from './contact-session';
@@ -610,10 +608,6 @@ export function MemoryPage({ session, navigate }: { session: ContactSessionView;
   const historyDetails = useRef<HTMLDetailsElement>(null);
   const [historySelection, setHistorySelection] = useState<{ scope: string; open: boolean } | null>(null);
   const historyOpen = historySelection?.scope === detailKey && historySelection.open;
-  const [layeredSelection, setLayeredSelection] = useState<{ scope: string; open: boolean } | null>(null);
-  const layeredOpen = layeredSelection?.scope === detailKey && layeredSelection.open;
-  const [ownerLayeredSelection, setOwnerLayeredSelection] = useState<{ scope: string; open: boolean } | null>(null);
-  const ownerLayeredOpen = ownerLayeredSelection?.scope === detailKey && ownerLayeredSelection.open;
   const openVersions = async (entry: MemoryVersion) => {
     setHistorySelection({ scope: detailKey, open: true });
     if (historyDetails.current) historyDetails.current.open = true;
@@ -692,18 +686,6 @@ export function MemoryPage({ session, navigate }: { session: ContactSessionView;
             refreshOverview={memory.refreshOverview} refreshOwnerOverview={memory.refreshOwnerOverview}
             trace={trace} busy={state.mutation.phase === 'working'} />}
         </details>
-        {contact && view === 'contact' && <details className="memory-disclosure memory-secondary" open={layeredOpen}
-          onToggle={(event) => setLayeredSelection({ scope: detailKey, open: event.currentTarget.open })}><summary>主题资料</summary>
-          {layeredOpen && <LayeredMemoryPanel state={state.layeredMemory} contactName={contact.displayName}
-            busy={state.mutation.phase === 'working'} read={memory.readLayeredMemory} manage={memory.manageLayeredMemory}
-            facts={(target) => openFact(target, true)} />}
-        </details>}
-        {contact && view === 'owner' && <details className="memory-disclosure memory-secondary" open={ownerLayeredOpen}
-          onToggle={(event) => setOwnerLayeredSelection({ scope: detailKey, open: event.currentTarget.open })}><summary>主题资料</summary>
-          {ownerLayeredOpen && <OwnerLayeredMemoryPanel key={`owner-layered:${scopeKey}`}
-            onVersions={openVersions}
-            onTrace={(entry) => trace('owner_memory', entry.memoryId, entry.text)} />}
-        </details>}
         {evidenceTarget?.scope === detailKey && <div ref={evidencePanel}>
           <MemoryEvidence key={`${scopeKey}:${evidenceTarget.kind}:${evidenceTarget.id}`} session={session}
             kind={evidenceTarget.kind} recordId={evidenceTarget.id} text={evidenceTarget.text} onClose={() => setEvidenceTarget(null)} />
