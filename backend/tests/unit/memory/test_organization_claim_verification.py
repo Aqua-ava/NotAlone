@@ -22,6 +22,7 @@ class OrganizationClaimVerificationTest(unittest.TestCase):
 
     def claim(self, text, *, eligible=True, role='contact', quote=None):
         return {'text': text, 'sources': [{**self.reference, 'quote': quote or text}],
+            'source_subjects': [{**self.reference, 'subject_roles': [role], 'basis': '该完整引句主体明确。'}],
             'subject_role': role, 'subject_basis': '来源原句明确记载该命题的主体。',
             'supported': True, 'value_category': 'enduring_fact_or_preference' if eligible else 'none',
             'relationship_impact': None,

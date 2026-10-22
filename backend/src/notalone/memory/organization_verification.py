@@ -14,6 +14,16 @@ TEMPORAL_BASES = frozenset({
     'static_fact', 'historical', 'current_verified', 'current_unverified', 'unknown',
 })
 
+SOURCE_SUBJECT_POLICY = '''
+先逐条审计每个claim.sources完整quote的主体，再判断聚合claim，不能用“联系人背景”代替原文主体。
+每个claim还必须输出source_subjects数组，按sources的(memory_id,revision)逐一完整对应且不重复：
+{"memory_id":"实际ID","revision":1,"subject_roles":["contact"],"basis":"该来源完整quote的实际主体依据"}。
+subject_roles为1至5个不重复主体类别，沿用subject_role枚举；一条引文涉及不同类别须全部列出，unknown不能准入。
+聚合subject_role为app_user/contact/third_party时，每条来源的subject_roles必须恰为该单一类别；不同主体不可合成联系人事实，须拆分命题或否决。
+relationship可使用多主体来源，但仍逐命题核验真实联系及重要影响原文；仅给附带兴趣改relationship标签不能准入。
+source_subjects继承对应sources的完整quote，不另选更短片段。sources为空且supported=false时source_subjects也为空；不得用聚合主体自动补逐来源审计。
+'''
+
 
 def profile_verification_targets(proposal: dict) -> list[dict]:
     return [{'entry_index': index, 'entry_sha256': content_digest(entry)}
@@ -74,10 +84,10 @@ def _relationship_impact(claim, references, inputs) -> bool:
 
 
 def profile_claims_supported(claims: object, entry: dict, references, inputs) -> bool:
-    """只机验覆盖/来源/类别合取，不证明命题原子性或关系重要性。"""
+    """机验覆盖、来源角色一致和准入合取；角色语义及关系重要性仍须独立核验。"""
     if not isinstance(claims, list) or not 1 <= len(claims) <= MAX_CLAIMS_PER_ENTRY:
         raise ValueError('长期背景命题审计数量无效。')
-    fields = {'text', 'sources', 'subject_role', 'subject_basis', 'supported',
+    fields = {'text', 'sources', 'source_subjects', 'subject_role', 'subject_basis', 'supported',
               'value_category', 'relationship_impact', 'eligibility_basis'}
     parts, accepted = [], True
     for claim in claims:
@@ -90,12 +100,37 @@ def profile_claims_supported(claims: object, entry: dict, references, inputs) ->
                        for name in ('subject_basis', 'eligibility_basis'))):
             raise ValueError('长期背景命题审计结构无效。')
         _bound_sources(claim['sources'], references, inputs, required=claim['supported'])
+        subjects_supported = _source_subjects_supported(claim)
         impact_supported = _relationship_impact(claim, references, inputs)
         parts.append(claim['text'])
         accepted = (accepted and claim['supported'] and claim['value_category'] != 'none'
-                    and claim['subject_role'] != 'unknown' and impact_supported)
+                    and claim['subject_role'] != 'unknown' and subjects_supported and impact_supported)
     if ''.join(parts) != entry['text']:
         raise ValueError('命题原文须有序完整覆盖条目，不能遗漏或改写。')
+    return accepted
+
+
+def _source_subjects_supported(claim):
+    audits = claim['source_subjects']
+    expected = {(source['memory_id'], source['revision']) for source in claim['sources']}
+    if not isinstance(audits, list) or len(audits) != len(expected):
+        raise ValueError('逐来源主体审计须完整覆盖命题实际引文。')
+    seen, accepted = set(), True
+    for audit in audits:
+        if (not isinstance(audit, dict) or set(audit) != {'memory_id', 'revision', 'subject_roles', 'basis'}
+                or not isinstance(audit['basis'], str) or not 1 <= len(audit['basis'].strip()) <= 1000):
+            raise ValueError('逐来源主体审计结构无效。')
+        reference, = _references([{key: audit[key] for key in ('memory_id', 'revision')}])
+        if reference not in expected or reference in seen:
+            raise ValueError('逐来源主体审计版本须与实际引文逐一对应。')
+        roles = audit['subject_roles']
+        if (not isinstance(roles, list) or not 1 <= len(roles) <= len(SUBJECT_ROLES)
+                or any(not isinstance(role, str) or role not in SUBJECT_ROLES for role in roles)
+                or len(set(roles)) != len(roles)):
+            raise ValueError('逐来源主体类别须有界、已知且不重复。')
+        seen.add(reference)
+        accepted = accepted and 'unknown' not in roles and (
+            claim['subject_role'] == 'relationship' or set(roles) == {claim['subject_role']})
     return accepted
 
 

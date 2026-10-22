@@ -38,7 +38,8 @@ class OrganizationVerificationContractTest(unittest.TestCase):
             'temporal_basis': 'current_unverified', 'temporal_references': [],
             'basis': '只支持过去持续的安排，当前是否继续未核实。',
             'claims': [{'text': entry['text'], 'sources': [{**entry['references'][0], 'quote': self.memory.text}],
-                'subject_role': 'app_user', 'subject_basis': '来源明确记载本人事实。',
+                'source_subjects': [{'memory_id': str(UUID(int=1)), 'revision': 2, 'subject_roles': ['app_user'], 'basis': '来源主语是本人。'}],
+                    'subject_role': 'app_user', 'subject_basis': '来源明确记载本人事实。',
                 'supported': True, 'value_category': 'enduring_fact_or_preference', 'relationship_impact': None, 'eligibility_basis': '仅测试逐条时间门，不替代语义判断。'}], **changes}
 
     def verify(self, response, *, entries=None, memories=None, layer='l3'):
@@ -120,6 +121,7 @@ class PersonalBackgroundVerificationTest(unittest.TestCase):
                 'temporal_basis': temporal, 'temporal_references': [],
                 'sources': [{'memory_id': str(UUID(int=1)), 'revision': 2, 'quote': quote or '每周参加绘画课'}],
                 'claims': [{'text': entry['text'], 'sources': [{'memory_id': str(UUID(int=1)), 'revision': 2, 'quote': '每周参加绘画课'}],
+                    'source_subjects': [{'memory_id': str(UUID(int=1)), 'revision': 2, 'subject_roles': ['app_user'], 'basis': '来源主语是本人。'}],
                     'subject_role': 'app_user', 'subject_basis': '原文明确本人持续上课。',
                     'supported': True, 'value_category': 'enduring_fact_or_preference',
                     'eligibility_basis': '持续上课支持有局限的长期兴趣推断。', 'relationship_impact': None}]}]}

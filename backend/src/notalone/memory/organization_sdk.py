@@ -51,7 +51,7 @@ PROFILE_VERIFICATION_PROMPT = POLICY + PROFILE_POLICY + '''
 "references":[{"memory_id":"实际ID","revision":1}],"supported":true或false,
 "temporal_basis":"时间类别","temporal_references":[],"basis":"依据","claims":[
 {"text":"条目原文片段","sources":[{"memory_id":"实际ID","revision":1,"quote":"来源原文"}],
-"subject_role":"主体类别","subject_basis":"主体依据","supported":true或false,
+"source_subjects":[{"memory_id":"实际ID","revision":1,"subject_roles":["contact"],"basis":"来源引句主体依据"}],"subject_role":"主体类别","subject_basis":"主体依据","supported":true或false,
 "value_category":"价值类别","eligibility_basis":"长期价值依据","relationship_impact":null}]}]}。
 每entry恰好一次，index/摘要对应verification_targets，references等于候选直接引用。空候选用空entries。
 全局/entry/claim的supported只判断候选在已有时间、不确定性限定下是否忠实有据，任何false仍否决。
@@ -71,6 +71,9 @@ kind枚举：ongoing_responsibility=持续责任；shared_life_constraint=共同
 
 SCENARIO_ITEM_VERIFICATION_PROMPT = VERIFICATION_PROMPT + '\n改用逐主题返回：{"items":[{"index":0,"sha256":"复制target摘要","supported":true,"reasons":[]}]}。每个主题单独判断；不得以一条失败拒绝其他主题。'
 
+
+from notalone.memory.organization_verification import SOURCE_SUBJECT_POLICY
+PROFILE_VERIFICATION_PROMPT += SOURCE_SUBJECT_POLICY
 
 def actual_organization_adapters(ports, *, runtime_policy="qualified_suite"):
     """实际候选四Port的统一准入；不把受控传输声明当供应商证明。"""

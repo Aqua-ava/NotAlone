@@ -46,6 +46,7 @@ class PersonalVerificationDiagnosticsTest(unittest.TestCase):
                 'temporal_basis': 'static_fact', 'temporal_references': [],
                 'sources': [{**self.ref, 'quote': self.memory.text}], 'claims': [{
                     'text': self.entry['text'], 'sources': [{**self.ref, 'quote': self.memory.text}],
+                    'source_subjects': [{**self.ref, 'subject_roles': ['contact'], 'basis': '来源直接描述联系人。'}],
                     'subject_role': 'contact', 'subject_basis': '来源直接描述联系人。',
                     'supported': True, 'value_category': 'static_fact',
                     'eligibility_basis': '姓名是静态背景。', 'relationship_impact': None}]}]}]}
@@ -160,3 +161,50 @@ class PersonalVerificationDiagnosticsTest(unittest.TestCase):
                 else:
                     statement['claims'][0]['value_category'] = 'none'
                 self.assertEqual(self.verify(response)['accepted_indices'], [])
+
+    def test_mixed_source_subjects_cannot_be_laundered_as_contact_background(self):
+        relative = replace(self.memory, text='联系人的堂弟喜欢滑雪。')
+        own = replace(self.memory, memory_id=UUID(int=702), text='联系人本人不滑雪。')
+        own_ref = {'memory_id': str(own.memory_id), 'revision': 1}
+        self.entry.update(text='联系人的堂弟喜欢滑雪；联系人本人不滑雪。',
+            references=[self.ref, own_ref], section='life_context')
+        response = self.response()
+        statement = response['items'][0]['statements'][0]
+        sources = [{**self.ref, 'quote': relative.text}, {**own_ref, 'quote': own.text}]
+        statement.update(sources=sources)
+        claim = statement['claims'][0]
+        claim.update(sources=sources, subject_role='contact',
+            subject_basis='前半句是第三人，后半句是本人，合为联系人背景。')
+        claim['source_subjects'] = [
+            {**self.ref, 'subject_roles': ['third_party'], 'basis': '该引文仅描述堂弟。'},
+            {**own_ref, 'subject_roles': ['contact'], 'basis': '该引文仅描述本人。'}]
+        self.assertEqual(self.verify(response, memories=[relative, own])['accepted_indices'], [])
+        # 本人否定可以独立通过，不因共享资料中的第三人而整批丢失。
+        self.entry.update(text=own.text, references=[own_ref])
+        response['items'][0]['sha256'] = content_digest(self.entry)
+        statement['sources'] = [sources[1]]
+        claim.update(text=own.text, sources=[sources[1]], source_subjects=[claim['source_subjects'][1]])
+        self.assertEqual(self.verify(response, memories=[relative, own])['accepted_indices'], [0])
+
+    def test_same_subject_multiple_sources_preserve_one_conditioned_claim(self):
+        first = replace(self.memory, text='联系人周五接电话需要提前预约。')
+        second = replace(self.memory, memory_id=UUID(int=702), text='联系人仅在已预约时周五方便接电话。')
+        second_ref = {'memory_id': str(second.memory_id), 'revision': 1}
+        self.entry.update(text='联系人仅在已预约时周五方便接电话。', references=[self.ref, second_ref])
+        response = self.response()
+        statement = response['items'][0]['statements'][0]
+        sources = [{**self.ref, 'quote': first.text}, {**second_ref, 'quote': second.text}]
+        statement['sources'] = sources
+        claim = statement['claims'][0]
+        claim.update(sources=sources, source_subjects=[{**ref, 'subject_roles': ['contact'],
+            'basis': '完整引文主语均为联系人。'} for ref in [self.ref, second_ref]])
+        self.assertEqual(self.verify(response, memories=[first, second])['accepted_indices'], [0])
+        for mutation in ('missing', 'duplicate', 'unknown', 'extra_role'):
+            with self.subTest(mutation=mutation):
+                changed = deepcopy(response)
+                audits = changed['items'][0]['statements'][0]['claims'][0]['source_subjects']
+                if mutation == 'missing': audits.pop()
+                elif mutation == 'duplicate': audits[1] = deepcopy(audits[0])
+                elif mutation == 'unknown': audits[1]['subject_roles'] = ['unknown']
+                else: audits[1]['subject_roles'].append('third_party')
+                self.assertEqual(self.verify(changed, memories=[first, second])['accepted_indices'], [])
