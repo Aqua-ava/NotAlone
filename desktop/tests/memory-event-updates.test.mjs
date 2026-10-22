@@ -45,8 +45,8 @@ test('管理列表同时展示当前和失效记忆，失效条目划线且不�
   assert.match(html, /<s>以前住在合成城市甲。<\/s>/);
   assert.match(html, /已失效 · 不再引用/);
   assert.doesNotMatch(html, /有效记忆 · 可用于回复/);
-  // 统一列表保留版本历史入口给活跃记忆；失效旧版既不可修改也不提供版本历史。
-  assert.match(html, /查看版本历史：目前住在合成城市乙。/);
+  // 最简卡片不展示版本历史；失效旧版继续禁止修改。
+  assert.doesNotMatch(html, /查看版本历史/);
   const retiredHtml = ports.renderToStaticMarkup(ports.createElement(ports.MemoryCard, {
     content: retired, memory: retired, sources: { phase: 'ready', items: [] }, trace: () => {},
     correct: async () => {}, remove: async () => {}, openVersions: async () => {},

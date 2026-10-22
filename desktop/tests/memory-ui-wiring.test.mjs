@@ -85,11 +85,11 @@ test('版本历史为空时不渲染空壳，待确认页不展示概览与历�
   assert.doesNotMatch(pending, /资料版本历史|联系人经历与关系变化|本人事实与偏好概览/);
 });
 
-test('活跃记忆提供版本历史入口，失效旧版不提供', () => {
+test('记忆卡片不展示版本历史和详细元数据', () => {
   const renderCard = (entry) => renderToStaticMarkup(createElement(ports.MemoryCard, {
     content: entry, memory: entry, sources: { phase: 'ready', items: [] }, trace: () => {}, openVersions: noop,
   }));
-  assert.match(renderCard(active), /aria-label="查看版本历史：合成自动更新的当前资料。"/);
+  assert.doesNotMatch(renderCard(active), /查看版本历史|来源日期|适用性|置信度|记忆标识/);
   assert.doesNotMatch(renderCard(previous), /查看版本历史/);
 });
 

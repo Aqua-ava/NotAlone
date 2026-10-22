@@ -1,5 +1,5 @@
 import { MemoryEvolutionDetails } from './MemoryEvolutionDetails';
-import { MemoryConditionsDetails, MemoryConditionsEditor, conditionEditorText, conditionEditProposal, conditionEditorValid } from './MemoryConditionsDetails';
+import { MemoryConditionsDetails } from './MemoryConditionsDetails';
 import { memoryTimeText as timeText } from './memory-time-format';
 import { MemoryEventDetails } from './MemoryEventDetails';
 export { MemoryEventDetails } from './MemoryEventDetails';
@@ -10,7 +10,7 @@ import type { MemoryAdditionRequest, MemoryContent, MemoryCorrectionRequest, Mem
 import type { ContactSessionView } from './contact-session';
 import type { ManagerPage } from './pages';
 import './memory.css';
-import { MemorySourceDate, MemoryTemporalStatus } from './MemoryTemporalStatus';
+import { MemoryTemporalStatus } from './MemoryTemporalStatus';
 import { MemoryList } from './MemoryList';
 import { memoryAvailability, memoryRemovalTarget } from './memory-availability';
 import type { LayeredMemoryManagementRequest, LayeredMemoryManagementOptions } from '../shared/memory-bridge';
@@ -24,8 +24,6 @@ const initial: MemoryReadingState = { revision: -1, contactId: null, scopeRevisi
   history: { phase: 'idle', items: [], memoryId: null, level: null }, overview: { phase: 'idle', value: null },
   ownerOverview: { phase: 'idle', value: null }, layeredMemory: { phase: 'idle', value: null } };
 const categoryNames = { common_fact: '共同事实', preference: '偏好', taboo: '禁忌', recent_state: '近期状态', relationship_note: '关系备注' };
-const topicNames = { health: '健康', work: '工作', family: '家庭', travel: '旅行', finance: '财务', study: '学习', emotion: '情绪', other: '其他' };
-const sourceNames = { active: '有效', delete_requested: '已请求删除', deleting: '正在删除', delete_failed: '删除失败', deleted: '已标记删除' };
 
 function useMemoryReading(session: ContactSessionView) {
   const [state, setState] = useState(initial);
@@ -229,14 +227,7 @@ function sourceTime(content: MemoryContent): string {
 }
 
 
-function SourceReference({ id, sources }: { id: string; sources: MemorySection<MemorySource> }) {
-  const source = sources.phase === 'ready' ? sources.items.find((entry) => entry.sourceId === id) : undefined;
-  return <li><p>来源引用：{id}</p>{source ? <p>当前联系人来源：{source.fileName ?? '文件名不可用'} · {sourceNames[source.status]}</p>
-    : <p>{sources.phase === 'error' ? '来源目录读取失败，暂时无法核对这项引用。'
-      : sources.phase === 'loading' || sources.phase === 'idle' ? '来源目录尚未读取完成。' : '引用类型或来源详情暂不可用。'}</p>}</li>;
-}
-
-export function MemoryCard({ content, memory, removalTarget = memory, candidate, sources, correct, remove, openVersions, confirmCandidate, discardCandidate, updateMemories, applyCandidateUpdate, busy, trace, initiallyEditing = false }: {
+export function MemoryCard({ content, memory, removalTarget = memory, candidate, correct, remove, confirmCandidate, discardCandidate, updateMemories, applyCandidateUpdate, busy, trace, initiallyEditing = false }: {
   content: MemoryContent; memory?: MemoryVersion; removalTarget?: MemoryVersion; candidate?: PendingMemoryCandidate; sources: MemorySection<MemorySource>;
   correct?: (entry: MemoryVersion, text: string, category: MemoryCorrectionRequest['category'], changeKind: MemoryCorrectionRequest['changeKind'], conditions?: MemoryCorrectionRequest['conditions']) => Promise<void>; remove?: (entry: MemoryVersion) => Promise<void>; confirmCandidate?: (entry: PendingMemoryCandidate) => Promise<void>; discardCandidate?: (entry: PendingMemoryCandidate) => Promise<void>; busy?: boolean;
   trace: (kind: TraceRecordKind, id: string, text: string) => void;
@@ -245,71 +236,49 @@ export function MemoryCard({ content, memory, removalTarget = memory, candidate,
   applyCandidateUpdate?: (entry: PendingMemoryCandidate, previous: MemoryVersion) => Promise<void>;
   initiallyEditing?: boolean;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  const displayText = content.text.replace(/\bself\b/g, '我').replace(/\bcontact\b/g, '对方');
   const [editing, setEditing] = useState(initiallyEditing);
   const [removing, setRemoving] = useState(false);
   const [discarding, setDiscarding] = useState(false);
-  const [text, setText] = useState(content.text);
-  const [category, setCategory] = useState(content.category);
-  const [conditionText, setConditionText] = useState(conditionEditorText(content.conditions));
-  const [changeKind, setChangeKind] = useState<NonNullable<MemoryCorrectionRequest['changeKind']>>('error_correction');
+  const [text, setText] = useState(displayText);
   const moreActions = useRef<HTMLDetailsElement>(null);
   const availability = memory ? memoryAvailability(memory) : null;
   const retired = availability?.excluded === true;
   const unavailable = retired || (memory?.validAt && Date.parse(memory.validAt) > Date.now());
+  function closeMenu() {
+    if (moreActions.current) moreActions.current.open = false;
+  }
   return <article className={`memory-card ${candidate ? 'memory-pending' : ''} ${retired ? 'memory-retired' : ''}`}>
-    <div className="memory-card-labels">
-      <b>{candidate ? '尚未记住' : memory?.adoptionMethod === 'auto' ? '系统记下' : '手动保存'}</b>
-      <span><MemorySourceDate timing={content.timing} /></span></div>
-    <p className="memory-text">{retired ? <s>{content.text}</s> : content.text}</p>
-    {availability && unavailable && <p className="memory-availability">{availability.label}</p>}
-    {content.evolution?.kind === 'unresolved_conflict' && <p className="memory-availability">存在未解决矛盾 · 请核对依据</p>}
-    {candidate && <p className="memory-subject">关于{candidate.subject === 'self' ? '我' : candidate.subject === 'contact' ? '对方' : '我们'}</p>}
-    {Boolean(candidate?.correctionReview?.length) && <p className="memory-availability">新证据涉及此前人工决定，请展开详情核对。</p>}
-    <div className="memory-card-actions">
-      <button className="button" aria-label={`查看依据：${content.text}`} onClick={() => {
-        if (candidate) trace('candidate', candidate.candidateId, content.text);
-        else if (memory) trace(memory.level === 'owner' ? 'owner_memory' : 'contact_memory', memory.memoryId, content.text);
-      }}>查看依据</button>
-      {memory?.status === 'active' && correct && <button className="button" disabled={busy}
-        aria-label={`修正资料：${content.text}`} onClick={() => { setRemoving(false); setEditing(true); }}>编辑</button>}
-      <button className="memory-details-button" aria-label={`查看来源与版本：${content.text}`} aria-expanded={expanded}
-        onClick={() => setExpanded((value) => !value)}>{expanded ? '收起详情' : '详情'}</button>
-      {memory && ((memory.status === 'active' && openVersions) || remove) && <details className="memory-more" ref={moreActions}>
-        <summary aria-label={`更多操作：${content.text}`}>更多</summary>
+    <div className="memory-card-summary">
+      <p className="memory-text">{retired ? <s>{displayText}</s> : displayText}</p>
+      <details className="memory-more" ref={moreActions}>
+        <summary aria-label={`更多操作：${displayText}`}>⋯</summary>
         <div className="memory-more-actions">
-          {memory.status === 'active' && openVersions && <button className="button" disabled={busy}
-            aria-label={`查看版本历史：${content.text}`} onClick={() => {
-              if (moreActions.current) moreActions.current.open = false;
-              void openVersions(memory);
-            }}>版本历史</button>}
-          {remove && <button className="button" disabled={busy}
-            aria-label={`${memory.adoptionMethod === 'auto' ? '撤销自动采纳' : '删除资料'}：${content.text}`}
-            onClick={() => {
-              if (moreActions.current) moreActions.current.open = false;
-              setEditing(false); setRemoving(true);
-            }}>{memory.adoptionMethod === 'auto' ? '移除' : '删除'}</button>}
+          <button className="button" aria-label={`查看依据：${displayText}`} onClick={() => {
+            closeMenu();
+            if (candidate) trace('candidate', candidate.candidateId, content.text);
+            else if (memory) trace(memory.level === 'owner' ? 'owner_memory' : 'contact_memory', memory.memoryId, content.text);
+          }}>查看依据</button>
+          {memory?.status === 'active' && correct && <button className="button" disabled={busy}
+            aria-label={`修正资料：${displayText}`} onClick={() => { closeMenu(); setRemoving(false); setEditing(true); }}>编辑</button>}
+          {memory && remove && <button className="button" disabled={busy}
+            aria-label={`${memory.adoptionMethod === 'auto' ? '撤销自动采纳' : '删除资料'}：${displayText}`}
+            onClick={() => { closeMenu(); setEditing(false); setRemoving(true); }}>移除</button>}
         </div>
-      </details>}
+      </details>
     </div>
+    {availability && unavailable && <p className="memory-availability">{availability.label}</p>}
+    {content.evolution?.kind === 'unresolved_conflict' && <p className="memory-availability">有矛盾，请核对依据。</p>}
+    {candidate && <p className="memory-subject">尚未记住 · 关于{candidate.subject === 'self' ? '我' : candidate.subject === 'contact' ? '对方' : '我们'}</p>}
+    {Boolean(candidate?.correctionReview?.length) && <p className="memory-availability">涉及此前人工决定，请先核对依据。</p>}
     {editing && memory?.status === 'active' && correct && <form aria-label={memory.level === 'owner' ? '修正本人资料' : '修正联系人资料'} className="memory-edit-form" onSubmit={(event) => {
-      event.preventDefault(); void correct(memory, text, category, changeKind, conditionEditProposal(conditionText, content.conditions));
-    }}><label>资料正文<textarea aria-label="资料正文" value={text} disabled={busy} onChange={(event) => setText(event.target.value)} /></label>
-      <label>资料分类<select aria-label="资料分类" value={category} disabled={busy}
-        onChange={(event) => setCategory(event.target.value as MemoryCorrectionRequest['category'])}>
-        {Object.entries(categoryNames).map(([value, name]) => <option key={value} value={value}>{name}</option>)}</select></label>
-      <MemoryConditionsEditor value={conditionText} onChange={setConditionText} disabled={busy} />
-      <label>修改原因<select aria-label="修改原因" value={changeKind} disabled={busy}
-        onChange={event => setChangeKind(event.target.value as NonNullable<MemoryCorrectionRequest['changeKind']>)}>
-        <option value="error_correction">纠正错误</option><option value="state_changed">记录变化</option></select></label>
-      <p>{changeKind === 'error_correction' ? '原来的内容记错了。旧版只保留供查看，不再用于生成。'
-        : '原来的内容曾经成立，后来发生变化。旧版将划线保留，不再引用。'}</p>
-      <p>保存新的手动版本并保留来源；本次保存时间不代表变化发生时间。</p>
-      <button className="button" type="submit" disabled={busy || !text.trim() || !conditionEditorValid(conditionText)}>保存修正</button>
-      <button className="button" type="button" disabled={busy} onClick={() => setEditing(false)}>取消修正</button>
+      event.preventDefault(); void correct(memory, text, content.category, 'error_correction');
+    }}><label>记忆内容<textarea aria-label="资料正文" value={text} disabled={busy} onChange={(event) => setText(event.target.value)} /></label>
+      <button className="button" type="submit" aria-label="保存修正" disabled={busy || !text.trim()}>保存</button>
+      <button className="button" type="button" aria-label="取消修正" disabled={busy} onClick={() => setEditing(false)}>取消</button>
     </form>}
     {removing && memory && remove && <div className="memory-edit-form" role="group" aria-label="确认删除资料">
-      <p>{memory.status === 'invalidated' ? '删除这条失效记忆；若它已有替代条目，请删除列表中对应的当前记忆，相关旧记录会一并清除。' : memory.adoptionMethod === 'auto' ? '撤销等同删除这条资料，不删除来源消息，也不提供恢复承诺。' : '删除这条资料，来源消息仍保留。'}</p>
+      <p>确定移除这条记忆？</p>
       {removalTarget && removalTarget.memoryId !== memory.memoryId && <p>将删除当前记忆「{removalTarget.text}」及相关旧条目。</p>}
       <button className="button" disabled={busy} onClick={() => void remove(removalTarget ?? memory)}>{memory.adoptionMethod === 'auto' ? '确认撤销' : '确认删除'}</button>
       <button className="button" disabled={busy} onClick={() => setRemoving(false)}>取消删除</button>
@@ -324,33 +293,6 @@ export function MemoryCard({ content, memory, removalTarget = memory, candidate,
       <p>丢弃这条待确认候选，不采纳为长期资料；来源消息仍保留。</p>
       <button className="button" disabled={busy} onClick={() => void discardCandidate(candidate)}>确认丢弃</button>
       <button className="button" disabled={busy} onClick={() => setDiscarding(false)}>取消丢弃</button>
-    </div>}
-    {expanded && <div className="memory-details">
-      {candidate?.correctionReview?.map((review) => <div key={review.decisionId} className="memory-details"
-        role="group" aria-label="新证据与原人工决定">
-        <p>原主张：{review.previousText}</p>
-        <p>{review.decision === 'corrected' ? `原人工修正：${review.correctedText}` : '你此前已否决这项主张。'}</p>
-        <p>{review.semanticRelation === 'same' ? '候选文字与原主张相同。' : '候选与原主张的语义关系尚未确定。'}{review.reason}</p>
-        <p>确认会保存这项新候选，原人工决定继续保留。</p>
-        <ul className="memory-source-references" aria-label="新增证据来源">{review.newSourceIds.map((id) => <SourceReference key={id} id={id} sources={sources} />)}</ul>
-      </div>)}
-      <MemoryConditionsDetails conditions={content.conditions} />
-      <MemoryEvolutionDetails evolution={content.evolution} />
-      <MemoryTemporalStatus timing={content.timing} validAt={content.validAt} invalidAt={content.invalidAt} compact />
-      <p>{content.timing.currentStatusReason}</p><p>分类：{categoryNames[content.category]} · {topicNames[content.topic]}</p>
-      <div className="memory-times"><p>来源聊天时间：{sourceTime(content)}</p><p>保存时间：{timeText(content.timing.recordedAt)}</p></div>
-      <MemoryEventDetails event={content.event} />
-      <p>来源聊天时间表示当时说过，不保证事件在当天发生。</p>
-      <p>生效时间：{content.validAt ? timeText(content.validAt) : '未指定'}</p>
-      <p>失效时间：{content.invalidAt ? timeText(content.invalidAt) : '未指定'}</p>
-      {memory && <><p>记忆标识：{memory.memoryId}</p><p>版本：{memory.revision} · 已采纳</p>
-        {memory.supersedesMemoryId && <p>替代版本引用：{memory.supersedesMemoryId}</p>}
-        {memory.sourceCandidateId && <p>来源候选引用：{memory.sourceCandidateId}</p>}
-        <p>失效记忆在列表中划线保留，不再用于回复。</p></>}
-      {candidate && <p>候选标识：{candidate.candidateId}</p>}
-      <p>置信度：{Math.round(content.confidence * 100)}%（不表示用户确认）</p>
-      {content.riskFlags.length > 0 && <p>风险标记：{content.riskFlags.join('、')}</p>}
-      <ul className="memory-source-references" aria-label="来源引用">{content.sourceIds.map((id, index) => <SourceReference key={`${id}:${index}`} id={id} sources={sources} />)}</ul>
     </div>}
   </article>;
 }
