@@ -1,0 +1,24 @@
+# 暂停交接
+
+- 状态：用户明确要求“先收尾，暂停”；已停任务，不自动继续改动、测试或外部试验。原任务仍claimed，质量未通过。
+- 范围：继续限定当前Flash；只用合成资料和原累计账本。桌面只npm run dev，复用用户实例；禁止自行打包/push/PR。
+- 冻结完整复验：9a55801c，80次真实请求全部HTTP200，32组67候选；独立判unchanged，见result.md。
+- 该批语义63/67、功能64/67、两轴61/67；low仍有主体错位，默认回复思考保持关闭。
+- 必需缺口：回归夜间限制pending；留出历史年份限制被V判uncertain而遗漏；L3附带亲属兴趣误入。
+- 读取缺口：旧范围5次均超预算，无成功L2正文读取；目录loaded不等于正文被用。
+- 7e95b365a：冻结失败报告与用户后续Flash方向，旧结果不冒充新代码现状。
+- 4cb996508：L3 source_subjects按实际引文版本逐一覆盖，普通角色须精确一致；42项相关单元通过。
+- 此核验合同改动尚未真实复验；旧已发布画像与新合同资格兼容尚未完成独立审查，不自动重解释业务资料。
+- b192f31ca：read_scenario只接受scenario_id+paragraph_index，保持原预算、冻结版本和完整段落回执。
+- 回复模块476项单元通过；正式HTTP单例通过；相关集成59通过、2失败，未完成归因，不能称全绿。
+- 失败：test_owner_layered_correction_reply_copies.py:305，本人纠错后列表仍有invalidated旧记忆；暂停前未做基线复现。
+- 集成日志：/tmp/notalone-scenario-contract-integration.log。测试进程结束，自有_test库清理并复核余库0。
+- review裁决wire尚未编码；设计为非空池显式review/null保留pending，ADD/null违约有限重试。
+- 恢复此wire前先解决adoption跨contact/owner异常被分别吞掉造成部分写入的边界，不能只改adapter。
+- 历史V待验证假设：加入只读calendar_calculation区分年份检索桶与活动持续期；不得将uncertain改supported。
+- 真实request002未包含源码里的周桶提示，不能拿源码存在当实际已发送；复用原日历解析，不扩大猜测。
+- L3思考实验尚未实现/执行；应固定同一L1/L2和同一L3提案，仅切核验disabled/low，不同时改生成。
+- 当前已暴露heldout应转回归；新的留出尚未建立，下一次真实验收前冻结。
+- 原账本累计271；本次新授权3轮尚未开轮/发送。暂停不重置账本；恢复时核对期限与授权后记录，不静默续期。
+- 私有产物：~/.notalone/audits/quality-fixes-20261022-01fwc64q/，包含最终独立67项判定与清理记录。
+- 不改其他未跟踪scratch任务；本任务未创建发布产物、远端提交或自动跟进任务。
