@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 const groups = ['safe-node', 'headless', 'isolated-http-pg', 'native', 'app'];
 const testName = /\.(?:test\.mjs|test\.ts|spec\.ts)$/;
+const pythonAsset = /\.py$/;
 
 // 只枚举文件名，不导入测试；有副作用的测试不能在分类检查中执行。
 export async function validateTestInventory(desktopDirectory, inventory) {
@@ -42,8 +43,26 @@ export async function loadTestInventory(desktopDirectory) {
   return validateTestInventory(desktopDirectory, inventory);
 }
 
+// 只登记、不执行：`tests/` 下的 Python unittest 资产（fixtures 证据与手工 HTTP
+// 检查脚本）目前不被五类 runner 认领。显式暴露数量，避免把「文件名没被发现」
+// 误当成「已被覆盖」；执行入口仍由 runner 分类决定。
+export async function describePythonAssets(desktopDirectory) {
+  const files = [];
+  async function scan(relative) {
+    for (const entry of await readdir(path.join(desktopDirectory, relative), { withFileTypes: true })) {
+      const file = `${relative}/${entry.name}`;
+      if (entry.isDirectory()) await scan(file);
+      else if (pythonAsset.test(entry.name)) files.push(file);
+    }
+  }
+  await scan('tests');
+  return { count: files.length, files: files.sort() };
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const desktop = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
   const { counts } = await loadTestInventory(desktop);
+  const python = await describePythonAssets(desktop);
   console.log(`测试分类登记通过：${JSON.stringify(counts)}；只检查文件名，未执行测试。`);
+  console.log(`Python 资产 ${python.count} 个不在 runner 分类内（只登记，不执行）。`);
 }

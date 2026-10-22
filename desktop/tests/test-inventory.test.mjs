@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
-import { validateTestInventory } from '../scripts/test-inventory.mjs';
+import { validateTestInventory, describePythonAssets } from '../scripts/test-inventory.mjs';
 
 const inventory = () => ({ 'safe-node': [], headless: [], 'isolated-http-pg': [], native: [], app: [] });
 
@@ -40,4 +40,17 @@ test('重复登记、已删除文件和未知分类均失败关闭', async () =>
   const stale = inventory(); stale.app.push('tests/deleted.spec.ts');
   await assert.rejects(validateTestInventory(directory, stale), /不存在/);
   await assert.rejects(validateTestInventory(directory, { ...inventory(), unknown: [] }), /分类/);
+}));
+
+test('Python 资产只登记不执行，且不影响五类测试登记', async () => withTree(async directory => {
+  const groups = inventory();
+  await writeFile(path.join(directory, 'tests/safe.test.mjs'), '');
+  groups['safe-node'].push('tests/safe.test.mjs');
+  await mkdir(path.join(directory, 'tests/fixtures'));
+  await writeFile(path.join(directory, 'tests/fixtures/evidence.py'), "raise SystemExit('不得执行');");
+  const result = await validateTestInventory(directory, groups);
+  assert.deepEqual(result.counts, { 'safe-node': 1, headless: 0, 'isolated-http-pg': 0, native: 0, app: 0 });
+  const python = await describePythonAssets(directory);
+  assert.equal(python.count, 1);
+  assert.deepEqual(python.files, ['tests/fixtures/evidence.py']);
 }));

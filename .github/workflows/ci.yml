@@ -1,0 +1,53 @@
+name: 代码检查
+
+# 只做静态与登记门禁：不启动桌面 App、不打包、不连接数据库、不发送任何外部消息。
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  desktop:
+    name: 桌面类型与测试登记
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: node scripts/test-inventory.mjs
+
+  backend:
+    name: 后端语法检查
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      # 后端单元测试门禁待既有 14 条基线失败（memory_extraction merge_batch/upgrade_ports、
+      # experiments pgvector）清零后接入；当前先守住语法与导入图不破。
+      - run: python -m compileall -q backend/src
+
+  public-history:
+    name: 公开历史检查
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node scripts/check_public_history.mjs --ref HEAD --working-tree
