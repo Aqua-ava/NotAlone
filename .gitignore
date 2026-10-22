@@ -21,3 +21,6 @@ __pycache__/
 # 本机调研、聊天导出与临时实验资料
 /research/
 /chat_exports/
+
+# Computer Use 与本机会话产物（含真实界面截图，不入仓）
+.dsh-computer-use/
