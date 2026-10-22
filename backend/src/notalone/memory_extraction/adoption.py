@@ -41,6 +41,7 @@ from notalone.memory_extraction.dimensions import (
     required_dimensions,
     valid_evidence_dimensions,
 )
+from notalone.memory_extraction.direction_fidelity import DirectionFinding, direction_conflicts
 from notalone.memory_extraction.errors import ExtractionInvalidOutputError, ExtractionRuntimeError
 from notalone.memory_extraction.flow import ExtractionOutcome
 from notalone.memory_extraction.models import ExtractedFact, FactSubject
@@ -365,10 +366,12 @@ class MemoryAdoption:
                 continue
             pending_before = self._pending_exists(scope, fact)
             gates_started_at = datetime.now(timezone.utc)
+            direction = self._fact_direction_conflicts(fact)
             passed = self._passes_all_adoption_gates(
                 fact,
                 pragmatic_decision=pragmatic_decision,
                 scope=scope,
+                direction=direction,
             )
             record(
                 "adoption_gates",
@@ -383,6 +386,17 @@ class MemoryAdoption:
                         "actual": fact.confidence,
                         "threshold": self._threshold,
                         "passed": fact.confidence >= self._threshold,
+                    },
+                    "direction": {
+                        "passed": not direction,
+                        "conflicts": [
+                            {
+                                "amount": amount,
+                                "memory": memory_direction,
+                                "source": source_direction,
+                            }
+                            for amount, memory_direction, source_direction in direction
+                        ],
                     },
                     "risk": {
                         "actual": fact.risk_flags,
@@ -1211,16 +1225,39 @@ class MemoryAdoption:
             return PragmaticDecision(disposition=MemoryDisposition.CONFIRMABLE)
         return decision
 
+    def _fact_source_texts(self, fact: ExtractedFact) -> tuple[str, ...]:
+        """只读本批已授权的来源文本；缺失时返回空，不扩大读取。"""
+
+        texts: list[str] = []
+        for identifier in fact.source_message_ids:
+            message = self._source_messages.get(identifier)
+            text = getattr(message, "text", "")
+            if isinstance(text, str) and text.strip():
+                texts.append(text)
+        return tuple(texts)
+
+    def _fact_direction_conflicts(
+        self, fact: ExtractedFact
+    ) -> tuple[DirectionFinding, ...]:
+        """确定性金额方向检查；只用于降级，不写正文也不升级任何字段。"""
+
+        return direction_conflicts(fact.text, self._fact_source_texts(fact))
+
     def _passes_all_adoption_gates(
         self,
         fact,
         *,
         pragmatic_decision=None,
         scope: ContactScope | None = None,
+        direction: tuple[DirectionFinding, ...] | None = None,
     ) -> bool:
-        """语用、置信度、风险及当前来源核验共同决定采纳；显式旧策略保留逐维门。"""
+        """语用、置信度、风险、来源核验与方向保真共同决定采纳；方向检查只降不升。"""
 
         if fact.conditions is not None and not fact.conditions.supported:
+            return False
+        if direction is None:
+            direction = self._fact_direction_conflicts(fact)
+        if direction:
             return False
         decision = pragmatic_decision or self._interpret_for_adoption(fact, scope)
         if self._automatic:

@@ -58,11 +58,11 @@ class SourceVerificationAdapterTest(unittest.TestCase):
         import json
         from notalone.memory_extraction.verification_adapters import source_verification_contract
 
-        # 来源自然日合同修订后重签共享prompt；原三个协议schema摘要保持，未改已封存运行。
+        # 方向与施受核验规则修订后重签共享prompt；原三个协议schema摘要保持，未改已封存运行。
         for mode, prompt_sha, schema_sha in (
-            ("legacy-v4", "30eaf682a996ca988358c60e1ef9033841738b72edba0f8a5187d430f0c76a07", "ec92479140e3c6945efee42115af25e69686fdfdf851bae2dce994eb393344b2"),
-            ("nullable-proof-v1", "9c613bd61eac92a4b8e6160d84a1e3d5e18de1dd88891cfa3f0b0719d0cbfeef", "5533c8c33be4047ac20f573f642596d87700309e0ca0e36b93923714981efaed"),
-            ("nullable-proof-v2", "2f4b7d8a936447f4559196f02f1d9eaa4b66fb1589a7246a15e56b6f79995693", "898d11f5d9410cd5104bbd67d29580f03041076a0e841d7ad2ee28c388a351d8"),
+            ("legacy-v4", "e36a8b03e714284f217b30c56c0fa09f66bb8cf4bfe705db9e3c102e749b2b8b", "ec92479140e3c6945efee42115af25e69686fdfdf851bae2dce994eb393344b2"),
+            ("nullable-proof-v1", "7de18b81adcb449c9ac4e38b37597df948fb2ed173f700e32c399cba4b6e1ba4", "5533c8c33be4047ac20f573f642596d87700309e0ca0e36b93923714981efaed"),
+            ("nullable-proof-v2", "b7cf1adf90f42df2398e9329d239c61a084df4047dbe09d7fb4a132fb76d8f90", "898d11f5d9410cd5104bbd67d29580f03041076a0e841d7ad2ee28c388a351d8"),
         ):
             with self.subTest(mode=mode):
                 prompt, schema = source_verification_contract(mode)

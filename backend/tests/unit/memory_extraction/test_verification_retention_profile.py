@@ -14,9 +14,9 @@ class VerificationRetentionProfileTest(unittest.TestCase):
             'legacy-v4', prompt_profile='public-author-quote-v1',
         )
         self.assertEqual(hashlib.sha256(default.encode()).hexdigest(),
-                         '30eaf682a996ca988358c60e1ef9033841738b72edba0f8a5187d430f0c76a07')
+                         'e36a8b03e714284f217b30c56c0fa09f66bb8cf4bfe705db9e3c102e749b2b8b')
         self.assertEqual(hashlib.sha256(quote.encode()).hexdigest(),
-                         '5b84071c341f57b261e504a4247a1964b70a3fa03fdff974d98eb4985e498f5c')
+                         '4e9db1bfdfd61f98a11570509f893db08d49cc409ada3b717d0664210fd0a333')
         prompt, retained_schema = source_verification_contract(
             'legacy-v4', prompt_profile='reference-retention-v1',
         )

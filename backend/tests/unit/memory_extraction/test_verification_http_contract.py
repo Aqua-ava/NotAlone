@@ -41,19 +41,20 @@ def _completion(result: dict) -> httpx.Response:
 
 class VerificationHTTPContractTest(unittest.TestCase):
     def test_existing_prompt_and_schema_bytes_stay_frozen(self):
-        # 旧合同沿 88871e7c；核心 profile 沿 99bbf798；仅 proof3 提示更新三锚释义摘要。
+        # 旧合同沿 88871e7c；核心 profile 沿 99bbf798；方向与施受核验规则修订后重签
+        # 共享 prompt，三个协议 schema 摘要保持，未改已封存运行。
         contracts = (
-            ("legacy-v4", "default", "30eaf682a996ca988358c60e1ef9033841738b72edba0f8a5187d430f0c76a07",
+            ("legacy-v4", "default", "e36a8b03e714284f217b30c56c0fa09f66bb8cf4bfe705db9e3c102e749b2b8b",
              "ec92479140e3c6945efee42115af25e69686fdfdf851bae2dce994eb393344b2"),
-            ("legacy-v4", "public-author-quote-v1", "5b84071c341f57b261e504a4247a1964b70a3fa03fdff974d98eb4985e498f5c",
+            ("legacy-v4", "public-author-quote-v1", "4e9db1bfdfd61f98a11570509f893db08d49cc409ada3b717d0664210fd0a333",
              "ec92479140e3c6945efee42115af25e69686fdfdf851bae2dce994eb393344b2"),
-            ("legacy-v4", "core-source-fidelity-v1", "081ab5442c45afe0fdad10ce0ed639a26869eecb6f645506341ec850ba9b32f0",
+            ("legacy-v4", "core-source-fidelity-v1", "ae338f0fc0c8a262bc4e431c88adc07de6757272f3e1e16b9bdfe53003e4537f",
              "ec92479140e3c6945efee42115af25e69686fdfdf851bae2dce994eb393344b2"),
-            ("nullable-proof-v1", "default", "9c613bd61eac92a4b8e6160d84a1e3d5e18de1dd88891cfa3f0b0719d0cbfeef",
+            ("nullable-proof-v1", "default", "7de18b81adcb449c9ac4e38b37597df948fb2ed173f700e32c399cba4b6e1ba4",
              "5533c8c33be4047ac20f573f642596d87700309e0ca0e36b93923714981efaed"),
-            ("nullable-proof-v2", "default", "2f4b7d8a936447f4559196f02f1d9eaa4b66fb1589a7246a15e56b6f79995693",
+            ("nullable-proof-v2", "default", "b7cf1adf90f42df2398e9329d239c61a084df4047dbe09d7fb4a132fb76d8f90",
              "898d11f5d9410cd5104bbd67d29580f03041076a0e841d7ad2ee28c388a351d8"),
-            ("nullable-proof-v3", "default", "743f236d8b4441db098918c35e22b27f38b9bdb318becde6d9e734fd8694c2fd",
+            ("nullable-proof-v3", "default", "2079cac3adf184e18d59dc13f36300d016f54d4062a5d8cf07d2e1dcbf4a88c4",
              "f09fceb25f2b5cfebeb6f8a382a012c28e1e727ea1ae317a9c19cb926a52c897"),
         )
         for mode, profile, prompt_sha, schema_sha in contracts:
