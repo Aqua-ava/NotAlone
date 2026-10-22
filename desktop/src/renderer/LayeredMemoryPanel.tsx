@@ -100,9 +100,8 @@ export function LayeredMemoryPanel({ state, contactName, busy, read, manage, fac
         <p>将有有效来源的已采纳记忆、时间和引用交给已配置的模型，整理为可查看、可供回复参考的主题背景。</p>
         <p>停用后恢复会保留纠错；删除后重开会重新整理，旧总结可能再次出现。</p>
         <button className="button" disabled={waiting || !confirmed} onClick={() => void manage('enable', value.settingsGeneration, { purposeConfirmed: true })}>确认范围并开启</button></div>}
-      {value.enabled && <>
-        <button className="button" disabled={waiting} onClick={() => void manage('refresh', value.settingsGeneration)}>重新整理</button>
-        <button className="button" disabled={waiting} onClick={() => void manage('disable', value.settingsGeneration)}>停用</button></>}
+      {value.enabled && <button className="button" disabled={waiting}
+        onClick={() => void manage('disable', value.settingsGeneration)}>停用</button>}
       <button className="button" disabled={waiting} onClick={() => setDeleting(true)}>删除整理结果</button>
       {deleting && <div className="memory-section-note" role="group" aria-label="确认删除主题资料">
         <p>删除整理结果及其历史、纠错和反馈，并停止整理。原始记忆保留；重新开启后，旧总结可能再次出现。</p>

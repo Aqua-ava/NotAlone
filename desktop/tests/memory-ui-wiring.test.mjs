@@ -11,7 +11,7 @@ import { build } from 'esbuild';
 // 记忆 UI 接线：版本历史、撤销自动更新与联系人/本人关系概览必须能在记忆页渲染。
 const require = createRequire(path.resolve('package.json'));
 const compiled = await build({
-  stdin: { contents: `export { MemorySecondaryPanels, MemoryCard } from './src/renderer/MemoryPage';`, resolveDir: process.cwd() },
+  stdin: { contents: `export { MemorySecondaryPanels, MemoryCard } from './src/renderer/MemoryPage'; export { LayeredMemoryPanel } from './src/renderer/LayeredMemoryPanel';`, resolveDir: process.cwd() },
   bundle: true, platform: 'node', format: 'esm', write: false, loader: { '.css': 'empty' },
   plugins: [{ name: 'shared-react', setup(builder) {
     builder.onResolve({ filter: /^react(?:\/.*)?$/ }, args => ({ path: pathToFileURL(require.resolve(args.path)).href, external: true }));
@@ -91,6 +91,27 @@ test('活跃记忆提供版本历史入口，失效旧版不提供', () => {
   }));
   assert.match(renderCard(active), /aria-label="查看版本历史：合成自动更新的当前资料。"/);
   assert.doesNotMatch(renderCard(previous), /查看版本历史/);
+});
+
+function renderLayeredPanel(overrides = {}) {
+  const value = { contactId: ids.contact, runtimePolicy: 'verified_items', status: 'ready', errorCode: null,
+    maintenancePending: false, coveredCount: 1, eligibleCount: 1, remainingCount: 0, enabled: true,
+    workId: null, workRevision: 0, settingsGeneration: 1, organizationGeneration: 1,
+    scenarios: [], profile: null, scenarioMappings: [], mappingCursor: null, mappingNextCursor: null,
+    pendingFactCount: 0, feedback: [], quality: null, ...overrides };
+  return renderToStaticMarkup(createElement(ports.LayeredMemoryPanel, {
+    state: { phase: 'ready', value }, contactName: '合成联系人', busy: false,
+    read: noop, manage: noop, facts: () => {},
+  }));
+}
+
+test('整理管理只保留停用与删除入口，不再提供手动重新整理按钮', () => {
+  const html = renderLayeredPanel();
+  const buttons = [...html.matchAll(/<button[^>]*>(.*?)<\/button>/g)].map(match => match[1]);
+  assert.ok(buttons.includes('停用'));
+  assert.ok(buttons.includes('删除整理结果'));
+  assert.equal(buttons.includes('重新整理'), false, '自动维护已覆盖重建，界面不得再提供手动重新整理');
+  assert.match(html, /自动整理记忆；仅在开启关系语境时用于回复。/);
 });
 
 test('本人视图提供可展开主题资料入口，复用既有本人分层通道', async () => {
