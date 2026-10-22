@@ -43,3 +43,36 @@ for (const level of ['contact']) test(`${level} 记忆直接查看、修改和�
     assert.equal(writes[1].path, `/api/contacts/${ids.contact}/${level === 'owner' ? 'owner-memories' : 'memories'}/${ids.memory}/delete`);
   });
 });
+
+
+test('本人视图提供可展开主题资料入口，本人分层通道可达且读取失败可见', { timeout: 20000 }, async t => {
+  const requests = [];
+  let failed = false;
+  const f = await fixture(async request => {
+    requests.push(request);
+    if (request.method === 'GET' && request.path === '/api/memories/owner') {
+      if (failed) throw new Error('合成本人记忆读取失败');
+      return { generation: 1, data: { memories: [] } };
+    }
+    return { generation: 1, data: request.path.includes('/layered-memory') ? profilePayload({ scope_kind: 'owner', contact_id: null })
+      : request.path.endsWith('/sources') ? { sources: [] }
+      : request.path.endsWith('/memory-candidates') ? { candidates: [] } : { memories: [] } };
+  });
+  await withMemoryPage(f, t.signal, async page => {
+    const categories = page.getByRole('navigation', { name: '记忆分类' });
+    await categories.getByRole('button', { name: '我', exact: true }).click();
+    assert.equal(await page.getByRole('heading', { name: '我的记忆', exact: true }).count(), 1);
+    // 未展开时不渲染面板本体，避免默认页出现重复的本人记忆列表。
+    assert.equal(await page.getByRole('button', { name: '刷新我的记忆', exact: true }).count(), 0);
+    await page.locator('summary').filter({ hasText: /^主题资料$/ }).click();
+    await page.getByRole('button', { name: '刷新我的记忆', exact: true }).waitFor();
+    assert.equal(await page.getByRole('heading', { name: '我的记忆', exact: true }).count(), 2);
+    await page.getByText('还没有记住关于你的事。', { exact: true }).waitFor();
+    assert.ok(requests.some(request => request.method === 'GET' && request.path === '/api/memories/owner'),
+      '展开后须经既有 preload 通道读取本人底层记忆');
+    failed = true;
+    await page.getByRole('button', { name: '刷新我的记忆', exact: true }).click();
+    await page.getByText('读取失败，请刷新重试。', { exact: true }).waitFor();
+    assert.equal(await page.getByText('本人主题资料暂时无法读取，请重试。', { exact: true }).count(), 0);
+  });
+});

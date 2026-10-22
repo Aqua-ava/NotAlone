@@ -93,6 +93,18 @@ test('活跃记忆提供版本历史入口，失效旧版不提供', () => {
   assert.doesNotMatch(renderCard(previous), /查看版本历史/);
 });
 
+test('本人视图提供可展开主题资料入口，复用既有本人分层通道', async () => {
+  assert.match(pageSource, /import \{ OwnerLayeredMemoryPanel \} from '\.\/OwnerLayeredMemoryPanel'/, '本人主题资料面板须接回记忆页');
+  assert.match(pageSource, /view === 'owner' && <details[^>]*open=\{ownerLayeredOpen\}/, '本人视图须用可展开入口挂载面板');
+  assert.match(pageSource, /<OwnerLayeredMemoryPanel key=\{`owner-layered:\$\{scopeKey\}`\}/, '面板须按资料范围重建');
+  const panelSource = await readFile('src/renderer/OwnerLayeredMemoryPanel.tsx', 'utf8');
+  for (const channel of ['getOwnerLayeredMemoryState', 'onOwnerLayeredMemoryChanged', 'readOwnerMemories',
+    'releaseOwnerLayeredMemory', 'addOwnerMemory', 'correctOwnerMemory', 'deleteOwnerMemory']) {
+    assert.ok(panelSource.includes(channel), `面板须复用既有本人分层通道：${channel}`);
+  }
+  assert.doesNotMatch(panelSource, /invoke\(/, 'renderer 不得直接新增 IPC 通道');
+});
+
 test('记忆页接线复用既有 preload 能力，不新增通道并保留 correctionTarget 依赖', () => {
   assert.match(pageSource, /<MemorySecondaryPanels/);
   assert.match(pageSource, /openVersions=\{openVersions\}/);
