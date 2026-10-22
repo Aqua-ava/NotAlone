@@ -12,6 +12,7 @@ const compiled = await build({ stdin: { contents: `
   export { createMemoryBridge } from './src/preload/memory';
   export { BackendRequestFailure } from './src/main/backend/json-client';
   export * from './src/renderer/MemoryPage';
+  export { MemoryEventDetails } from './src/renderer/MemoryEventDetails';
   export { memoryRemovalTarget } from './src/renderer/memory-availability';
   export { renderToStaticMarkup } from 'react-dom/server';
   export { createElement } from 'react';
@@ -40,7 +41,7 @@ test('管理列表同时展示当前和失效记忆，失效条目划线且不�
   assert.deepEqual(entries.map(item => item.status), ['active', 'invalidated']);
   const html = entries.map(memory => ports.renderToStaticMarkup(ports.createElement(ports.MemoryCard, {
     content: memory, memory, sources: { phase: 'ready', items: [] }, trace: () => {},
-    correct: async () => {}, remove: async () => {}, openVersions: async () => {},
+    correct: async () => {}, remove: async () => {},
   }))).join('');
   assert.match(html, /<s>以前住在合成城市甲。<\/s>/);
   assert.match(html, /已失效 · 不再引用/);
@@ -49,7 +50,7 @@ test('管理列表同时展示当前和失效记忆，失效条目划线且不�
   assert.doesNotMatch(html, /查看版本历史/);
   const retiredHtml = ports.renderToStaticMarkup(ports.createElement(ports.MemoryCard, {
     content: retired, memory: retired, sources: { phase: 'ready', items: [] }, trace: () => {},
-    correct: async () => {}, remove: async () => {}, openVersions: async () => {},
+    correct: async () => {}, remove: async () => {},
   }));
   assert.doesNotMatch(retiredHtml, /查看版本历史|修正资料：以前住在/);
   assert.match(html, /删除资料：以前住在/);
@@ -157,19 +158,10 @@ test('用户主动查看变化历史，旧版保留原采纳身份和独立来�
   assert.equal(history.phase, 'ready');
   assert.deepEqual(history.items.map((item) => item.text), ['已参加完这次读书会。', '计划参加这次读书会。']);
   assert.equal(history.items[1].adoptionMethod, 'auto');
-  const html = ports.renderToStaticMarkup(ports.createElement(ports.MemoryVersionHistory, { history }));
-  assert.match(html, /旧版本/);
-  assert.match(html, /自动采纳/);
-  assert.match(html, /是否仍适用，尚不确定/);
-  assert.match(html, /来源聊天时间/);
-  assert.match(html, /保存时间/);
-  assert.ok(html.includes(ids.message));
-  assert.doesNotMatch(html, /撤销本次自动更新/);
 });
 
-for (const [reason, label] of [[undefined, '原因未知，已禁用于生成'], ['unknown', '原因未知，已禁用于生成'],
-  ['error_correction', '原记录有误，已禁用于生成'], ['state_changed', '后来发生变化，可作为历史参考']]) {
-  test(`公开历史读取与页面区分失效原因 ${reason ?? '旧载荷缺省'}`, async () => {
+for (const reason of [undefined, 'unknown', 'error_correction', 'state_changed']) {
+  test(`公开历史读取保留失效原因 ${reason ?? '旧载荷缺省'}`, async () => {
     const previous = memoryDto('contact', { status: 'invalidated', ...(reason === undefined ? {} : {
       retirement_reason: reason, retired_at: '2026-10-18T12:00:00+08:00' }) });
     const current = memoryDto('contact', { memory_id: ids.current, revision: 3, supersedes_memory_id: ids.previous,
@@ -183,11 +175,6 @@ for (const [reason, label] of [[undefined, '原因未知，已禁用于生成'],
     assert.equal(history.phase, 'ready');
     assert.equal(history.items[1].retirementReason, reason ?? 'unknown');
     assert.equal(history.items[1].retiredAt, reason === undefined ? null : '2026-10-18T12:00:00+08:00');
-    const html = ports.renderToStaticMarkup(ports.createElement(ports.MemoryVersionHistory, { history }));
-    assert.match(html, new RegExp(label));
-    assert.match(html, /当前版本/);
-    assert.equal((html.match(/原因未知，已禁用于生成/g) ?? []).length, !reason || reason === 'unknown' ? 1 : 0,
-      '有效版本的unknown不能被显示为禁用');
   });
 }
 
@@ -206,17 +193,11 @@ test('只有服务端核对仍合法的自动版本可以撤销，未知旧证�
     });
     await controller.refresh({ ...selection(), section: level });
     await controller.openVersions({ ...selection(), level, memoryId: ids.current, revision: 3 });
-    const html = ports.renderToStaticMarkup(ports.createElement(ports.MemoryVersionHistory, {
-      history: controller.getState().history, revert: async () => {},
-    }));
     if (!eligible) {
-      assert.doesNotMatch(html, /撤销本次自动更新/);
-      assert.match(html, /原始版本依据未核实或已变化/);
       await assert.rejects(controller.revertAutoUpdate({ ...selection(), level, memoryId: ids.current, revision: 3 }));
       assert.equal(posted, undefined);
       continue;
     }
-    assert.match(html, /撤销本次自动更新/);
     await controller.revertAutoUpdate({ ...selection(), level, memoryId: ids.current, revision: 3 });
     assert.equal(posted.path, level === 'owner' ? `/api/contacts/${ids.contact}/owner-memories/${ids.current}/revert-auto-update`
       : `/api/contacts/${ids.contact}/memories/${ids.current}/revert-auto-update`);
@@ -278,19 +259,22 @@ test('旧版本应用或撤销遇到冲突或来源删除后清空旧视图，�
   }
 });
 
-test('事件版本页面组通过两层有限启动守卫，保留01和03的已登记入口', async () => {
+test('记忆页面组通过两层有限启动守卫，已删除的版本历史页面不再登记', async () => {
   const source = await readFile('scripts/test-pages.mjs', 'utf8');
   const parser = source.slice(source.indexOf('function parse(args)'), source.indexOf('async function run(options)'));
-  for (const name of ['memory-event-updates', 'memory-current-status', 'memory-correction-protection']) {
+  for (const name of ['memory-current-status', 'memory-correction-protection']) {
     const parsed = runInNewContext(`${parser}; parse(args)`, { args: ['--case', name, '--timeout-seconds', '180'] });
     assert.equal(JSON.stringify(parsed), JSON.stringify({ names: [name], timeout: 180 }));
   }
+  assert.throws(() => runInNewContext(`${parser}; parse(args)`, {
+    args: ['--case', 'memory-event-updates', '--timeout-seconds', '180'],
+  }), /page_test_arguments/);
   const runner = await readFile('tests/headless/run.ts', 'utf8');
   const guard = runner.slice(runner.indexOf('if (!Array.isArray(cases)'), runner.indexOf('let browser:'));
-  assert.doesNotThrow(() => runInNewContext(guard, { cases: ['memory-event-updates'] }));
+  assert.doesNotThrow(() => runInNewContext(guard, { cases: ['memory-current-status'] }));
+  assert.throws(() => runInNewContext(guard, { cases: ['memory-event-updates'] }), /page_test_arguments/);
   assert.throws(() => runInNewContext(guard, { cases: ['unknown-page'] }), /page_test_arguments/);
-  assert.match(runner, /import \{ memoryEventUpdates \} from '\.\/memory-event-updates';/);
-  assert.match(runner, /name === 'memory-event-updates' \? memoryEventUpdates/);
+  assert.doesNotMatch(runner, /memoryEventUpdates/);
 });
 
 test('旧空事件保持未知，阶段和部分发生时段的来源核验各自独立', async () => {

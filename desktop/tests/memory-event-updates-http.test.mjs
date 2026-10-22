@@ -74,19 +74,13 @@ async function withEventFixture(mode, run) {
   }
 }
 
-test('用户从生产控制器查看版本历史并撤销自动更新，React 展示仍合法的旧资料', { timeout: 30_000 }, async () => {
+test('用户从生产控制器查看版本历史并撤销自动更新，保留仍合法的旧资料', { timeout: 30_000 }, async () => {
   await withEventFixture([], async ({ fixture, memory, selection }) => {
     const active = memory.getState().contact.items[0];
     await memory.openVersions({ ...selection, level: 'contact', memoryId: active.memoryId, revision: active.revision });
     const history = memory.getState().history;
     assert.equal(history.phase, 'ready');
     assert.deepEqual(history.items.map((item) => item.text), [fixture.current.text, fixture.old.text]);
-    const html = ports.renderToStaticMarkup(ports.createElement(ports.MemoryVersionHistory, { history, revert: async () => {} }));
-    assert.match(html, /旧版本/);
-    assert.match(html, /读书会在一号会议室举行。/);
-    assert.match(html, /自动采纳/);
-    assert.ok(html.includes(fixture.old.source_ids[0]));
-    assert.match(html, /撤销本次自动更新/);
     assert.equal(history.items[0].canRevertAutoUpdate, true);
     await memory.revertAutoUpdate({ ...selection, level: 'contact', memoryId: active.memoryId, revision: active.revision });
     const after = memory.getState();

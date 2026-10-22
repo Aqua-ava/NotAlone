@@ -15,9 +15,6 @@ const compiled = await build({ stdin: { contents: `
   export { createMemoryBridge } from './src/preload/memory';
   export { installSourceDeletionBridge } from './src/main/sources/bridge';
   export { createSourceDeletionBridge } from './src/preload/source-deletion';
-  export * from './src/renderer/MemoryPage';
-  export { renderToStaticMarkup } from 'react-dom/server';
-  export { createElement } from 'react';
 `, resolveDir: process.cwd() }, bundle: true, packages: 'external', jsx: 'automatic', platform: 'node', format: 'cjs',
   loader: { '.css': 'empty' }, write: false });
 const compiledModule = { exports: {} };
@@ -60,10 +57,8 @@ async function withOverview(run, { selectInitialContact = true } = {}) {
   const cleaned = JSON.parse(await readFile(path.join(process.env.NOTALONE_OWNER_OVERVIEW_TEST_EVIDENCE_DIR, proof.evidence_file), 'utf8'));
   assert.equal(cleaned.phase, 'cleaned'); assert.equal(cleaned.cleanup_confirmed, true); assert.equal(cleaned.database_remaining, false);
 }
-function render(state, contactId) {
-  return ports.renderToStaticMarkup(ports.createElement(ports.OwnerFactsOverview, {
-    overview: state.ownerOverview, memories: state.owner, contactId, refresh: async () => {}, openVersions: async () => {}, trace: () => {},
-  }));
+function overviewTexts(state) {
+  return state.ownerOverview.value.entries.map((entry) => entry.memory.text);
 }
 async function waitFor(read, check) {
   const deadline = Date.now() + 12_000;
@@ -74,7 +69,7 @@ async function waitFor(read, check) {
   assert.fail('本人公开状态未在有限时段完成核对。');
 }
 
-test('真实HTTP与生产桥只汇集SELF和独立本人手录，逐项原关系来源可在明确选择后核对', { timeout: 90_000 }, async () => {
+test('真实HTTP与生产桥只汇集SELF和独立本人手录，逐项原关系来源保持可核对', { timeout: 90_000 }, async () => {
   await withOverview(async ({ prepared, memory, source, contacts, selection }) => {
     const state = await memory.getState();
     assert.equal(state.ownerOverview.phase, 'ready'); assert.equal(state.ownerOverview.value.scopeKind, 'owner');
@@ -85,19 +80,17 @@ test('真实HTTP与生产桥只汇集SELF和独立本人手录，逐项原关系
     assert.equal(self.provenance.references[0].contactId, prepared.contactId);
     assert.equal(self.provenance.references[0].locator, null);
     assert.equal(otherSelf.provenance.references[0].contactId, prepared.otherContactId);
-    const html = render(state, prepared.contactId);
-    assert.ok(!html.includes(prepared.privateContactText)); assert.ok(!html.includes(prepared.excludedText));
-    assert.ok(html.includes(`查看本人概览依据：${prepared.self.text}`));
-    assert.ok(!html.includes(`查看本人概览依据：${prepared.otherSelf.text}`));
+    const texts = overviewTexts(state);
+    assert.ok(!texts.some((text) => [prepared.privateContactText, prepared.excludedText].includes(text)));
+    assert.ok(texts.includes(prepared.self.text)); assert.ok(texts.includes(prepared.otherSelf.text));
     await source.refresh(selection());
     assert.ok((await source.getState()).sources.some((entry) => entry.sourceId === prepared.sourceToDelete));
     assert.ok(!(await source.getState()).sources.some((entry) => entry.sourceId === prepared.otherSourceId));
     contacts.selectContact({ contactId: prepared.otherContactId, scopeRevision: selection().scopeRevision });
     await memory.refresh(selection()); await memory.refreshOwnerOverview(selection()); await source.refresh(selection());
     assert.ok((await source.getState()).sources.some((entry) => entry.sourceId === prepared.otherSourceId));
-    const after = render(await memory.getState(), prepared.otherContactId);
-    assert.ok(!after.includes(`查看本人概览依据：${prepared.self.text}`));
-    assert.ok(after.includes(`查看本人概览依据：${prepared.otherSelf.text}`));
+    const after = overviewTexts(await memory.getState());
+    assert.ok(!after.includes(prepared.self.text)); assert.ok(after.includes(prepared.otherSelf.text));
     await memory.openVersions({ ...selection(), level: 'owner', memoryId: prepared.self.memory_id, revision: prepared.self.revision });
     assert.equal((await memory.getState()).history.items[0].memoryId, prepared.self.memory_id);
   });
@@ -123,14 +116,16 @@ test('真实本人修正保留来源与历史，资料删除及来源删除两�
     await waitFor(() => memory.getState(), (state) => state.ownerOverview.phase === 'ready');
     await memory.refreshOwnerOverview(selection());
     const after = await memory.getState();
-    const html = render(after, prepared.contactId);
-    assert.ok(!html.includes(prepared.self.text)); assert.ok(!html.includes(current.text));
-    assert.ok(html.includes(prepared.manualFact.text)); assert.ok(html.includes(prepared.manualPreference.text)); assert.ok(html.includes(prepared.otherSelf.text));
+    const texts = overviewTexts(after);
+    assert.ok(!texts.includes(prepared.self.text)); assert.ok(!texts.includes(current.text));
+    assert.ok(texts.includes(prepared.manualFact.text)); assert.ok(texts.includes(prepared.manualPreference.text));
+    assert.ok(texts.includes(prepared.otherSelf.text));
     await assert.rejects(memory.remove({ ...selection(), level: 'owner', memoryId: current.memoryId, revision: current.revision }), /版本已失效/);
     const repeated = await fixture.request(`/api/memories/owner/${current.memoryId}/delete`, {});
     // 来源清理会物理清除依赖的无正文删除记录；不能把资料删除的重复成功外推到已清库的旧ID。
     assert.equal(repeated.status, 404);
-    await memory.refreshOwnerOverview(selection()); assert.ok(!render(await memory.getState(), prepared.contactId).includes(current.text));
+    await memory.refreshOwnerOverview(selection());
+    assert.ok(!overviewTexts(await memory.getState()).includes(current.text));
   });
 });
 
@@ -143,7 +138,7 @@ test('真实目录移除和断连恢复清本人缓存，新自有进程不恢�
     assert.deepEqual((await memory.getState()).ownerOverview, { phase: 'idle', value: null });
     await assert.rejects(memory.refreshOwnerOverview(previousSelection), /范围已失效/);
   });
-  // 新库、新子进程只验证界面恢复；同库持久恢复由后端公开生命周期方法承担。
+  // 新库、新子进程只验证公开投影恢复；同库持久恢复由后端公开生命周期方法承担。
   await withOverview(async ({ prepared, memory, contacts, selection, proof }) => {
     assert.notEqual(proof.child_pid, previousProof.child_pid); assert.notEqual(proof.database_name, previousProof.database_name);
     assert.equal(contacts.getState().selectedContactId, null);

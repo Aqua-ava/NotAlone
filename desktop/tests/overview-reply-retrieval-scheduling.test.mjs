@@ -49,7 +49,7 @@ test('概览回复页面子门保留自有nonce与范围限制，不直接执行
   const process = { send() {}, env: environment };
   assert.doesNotThrow(() => runInNewContext(gate, { process }));
   for (const names of ['["unknown-overview-reply"]', '["overview-reply-retrieval","overview-reply-retrieval"]',
-    '["overview-reply-retrieval","owner-facts-overview","contact-relationship-overview"]']) {
+    '["overview-reply-retrieval","memory-current-status","memory-correction-protection"]']) {
     process.env.NOTALONE_PAGE_CASES = names;
     assert.throws(() => runInNewContext(gate, { process }), /page_test_arguments/);
   }

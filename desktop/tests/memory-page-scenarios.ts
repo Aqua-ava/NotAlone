@@ -12,7 +12,6 @@ export async function memoryDetails(manager: Page, memoryBackend: MemoryFixture)
   await expect(categories.getByRole('button')).toHaveText(['对方', '我', '待确认']);
   await expect(categories.getByRole('button', { name: '对方', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await expect(manager.getByRole('region', { name: '我的记忆', exact: true })).toHaveCount(0);
-  await expect(manager.getByRole('region', { name: '联系人经历与关系变化', exact: true })).toHaveCount(0);
   await expect(manager.getByRole('region', { name: '联系人记忆', exact: true })).toBeVisible();
   await expect(manager.getByRole('region', { name: '提取与来源处理过程', exact: true })).toHaveCount(0);
   await expect(manager.getByRole('region', { name: '已导入资料', exact: true })).toHaveCount(0);

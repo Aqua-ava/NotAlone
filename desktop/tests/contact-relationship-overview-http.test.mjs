@@ -17,9 +17,6 @@ const compiled = await build({ stdin: { contents: `
   export { createSourceDeletionBridge } from './src/preload/source-deletion';
   export { installTraceBridge } from './src/main/traces/bridge';
   export { createTraceBridge } from './src/preload/traces';
-  export * from './src/renderer/MemoryPage';
-  export { renderToStaticMarkup } from 'react-dom/server';
-  export { createElement } from 'react';
 `, resolveDir: process.cwd() }, bundle: true, packages: 'external', jsx: 'automatic', platform: 'node', format: 'cjs',
   loader: { '.css': 'empty' }, write: false });
 const compiledModule = { exports: {} };
@@ -67,11 +64,6 @@ async function withOverview(run, { selectInitialContact = true } = {}) {
     } finally { diagnostics.cancel(); assert.equal(await backend.stop(), true); }
   }));
 }
-function render(state) {
-  return ports.renderToStaticMarkup(ports.createElement(ports.ContactRelationshipOverview, {
-    overview: state.overview, memories: state.contact, refresh: async () => {}, openVersions: async () => {},
-  }));
-}
 async function waitFor(read, check) {
   const deadline = Date.now() + 12_000;
   while (Date.now() < deadline) {
@@ -82,7 +74,7 @@ async function waitFor(read, check) {
   assert.fail('本轮公开状态未在有限时段完成核对。');
 }
 
-test('真实HTTP与生产桥呈现计划、经历、来源范围和手录；逐项过程可按实际来历回查', { timeout: 90_000 }, async () => {
+test('真实HTTP与生产桥返回计划、经历、来源范围和手录；逐项过程可按实际来历回查', { timeout: 90_000 }, async () => {
   await withOverview(async ({ prepared, memory, trace, selection }) => {
     const state = await memory.getState();
     assert.equal(state.overview.phase, 'ready');
@@ -100,12 +92,7 @@ test('真实HTTP与生产桥呈现计划、经历、来源范围和手录；逐�
     assert.deepEqual(new Set(current.provenance.references.map((item) => item.sourceId)),
       new Set([prepared.sourceToDelete, prepared.newSourceId]));
     assert.equal(manual.provenance.kind, 'manual_entry');
-    const html = render(state);
-    assert.match(html, /是否仍适用，尚不确定/);
-    assert.match(html, /事件阶段：计划/);
-    assert.match(html, /事件阶段：已发生/);
-    assert.match(html, /用户手动录入/);
-    assert.ok(!html.includes(prepared.other.text));
+    assert.ok(!state.overview.value.entries.some((entry) => entry.memory.text === prepared.other.text));
     await trace.find({ ...selection(), resource: 'memory-traces', kind: 'contact_memory', recordId: current.memory.memoryId });
     assert.equal((await trace.getState()).availability, 'recorded');
     await trace.find({ ...selection(), resource: 'memory-traces', kind: 'contact_memory', recordId: manual.memory.memoryId });
@@ -129,9 +116,9 @@ test('真实人工修正重建概览，来源删除经原任务核验后清所�
     await waitFor(() => source.getState(), (state) => state.sources.some((entry) => entry.sourceId === prepared.sourceToDelete && entry.task?.status === 'succeeded'));
     const after = await waitFor(() => memory.getState(), (state) => state.overview.phase === 'ready');
     assert.deepEqual(after.overview.value.entries.map((entry) => entry.memory.memoryId), [prepared.manual.memory_id]);
-    const html = render(after);
-    for (const text of [prepared.old.text, prepared.current.text, leaf.memory.text]) assert.ok(!html.includes(text));
-    assert.ok(html.includes(prepared.manual.text));
+    const afterTexts = after.overview.value.entries.map((entry) => entry.memory.text);
+    for (const text of [prepared.old.text, prepared.current.text, leaf.memory.text]) assert.ok(!afterTexts.includes(text));
+    assert.ok(afterTexts.includes(prepared.manual.text));
     await memory.refreshOverview(selection());
     assert.deepEqual((await memory.getState()).overview.value.entries.map((entry) => entry.memory.memoryId), [prepared.manual.memory_id]);
   });
@@ -156,7 +143,7 @@ test('真实联系人FK删除撤下概览；旧子进程清库退出后，新自
   assert.equal(cleaned.cleanup_confirmed, true);
   assert.equal(cleaned.database_remaining, false);
 
-  // 新库、新服务子进程只验证界面恢复边界；同库持久投影恢复由后端生命周期场景验证。
+  // 新库、新服务子进程只验证公开投影恢复边界；同库持久投影恢复由后端生命周期场景验证。
   let nextProof, nextChild;
   await withOverview(async ({ prepared, fixture, contacts, memory, selection, proof }) => {
     nextProof = proof; nextChild = fixture.child;
@@ -173,8 +160,8 @@ test('真实联系人FK删除撤下概览；旧子进程清库退出后，新自
     assert.deepEqual(state.overview.value.entries.map((entry) => entry.memory.text), [prepared.other.text]);
     const oldIds = new Set([previousPrepared.old.memory_id, previousPrepared.current.memory_id, previousPrepared.manual.memory_id]);
     assert.ok(state.overview.value.entries.every((entry) => !oldIds.has(entry.memory.memoryId)));
-    assert.ok(!render(state).includes(previousPrepared.old.text));
-    assert.ok(!render(state).includes(previousPrepared.manual.text));
+    assert.ok(!state.overview.value.entries.some((entry) => [previousPrepared.old.text, previousPrepared.manual.text]
+      .includes(entry.memory.text)));
   }, { selectInitialContact: false });
   assert.equal(nextChild.exitCode, 0);
   assert.match(nextProof.evidence_file, /^overview-runtime-[a-f0-9]{32}\.json$/);
