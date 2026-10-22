@@ -72,6 +72,37 @@ class PersonalDocumentToolsTest(unittest.TestCase):
             if key != 'references':
                 self.assertEqual(paragraph[key], value)
 
+    def test_invalid_scene_write_gets_feedback_before_model_finishes(self):
+        document = render_scene(self.scene)
+        test = self
+
+        class RepairingModel:
+            calls = 0
+
+            def bind(self, **options):
+                return self
+
+            def invoke(self, messages):
+                self.calls += 1
+                if self.calls == 2:
+                    test.assertIn('工具错误', messages[-1].content)
+                if self.calls < 3:
+                    return AIMessage(content='', tool_calls=[{'id':str(self.calls), 'name':'write',
+                        'args':{'path':'drawing.md', 'content':bad_document if self.calls == 1 else document}}],
+                        response_metadata={'finish_reason':'tool_calls'})
+                return AIMessage(content='完成', response_metadata={'finish_reason':'stop'})
+
+        missing_metadata = '\n'.join(line for line in document.split('\n') if not line.startswith('<!-- PERSONAL '))
+        for bad_document in (document.replace('\n', r'\n'), missing_metadata):
+            with self.subTest(missing_metadata=bad_document == missing_metadata):
+                model = RepairingModel()
+                proposal = DeepSeekOrganizationProposal(model, layer='l2', budget=self.budget, transport=None,
+                    personal=True, document_tools=True).propose(memories=(self.memory,), scenarios=(),
+                        budget=self.budget, deadline=OrganizationCallDeadline(time.monotonic()+10))
+                self.assertEqual(model.calls, 3)
+                self.assertEqual(validate_proposal(proposal, (self.memory,), self.budget)['scenarios'][0]['paragraphs'][0]['text'],
+                                 self.paragraph['text'])
+
     def test_personal_profile_tool_preserves_inference_and_old_context(self):
         existing = {'version_id': str(UUID(int=4)), 'entries': [self.entry]}
         proposal, model = self.propose('l3', render_profile(existing), existing=existing)

@@ -461,7 +461,7 @@ class LangChainSourceVerificationRuntime:
             prompt = prompt.replace("当前瞬时状态的valid_at取其证据occurred_at观察点，invalid_at可按来源自身时区取\n当日结束的检索边界；它不声称真实状态恰在该点结束，不因为原话没给实际结束时刻\n就拒绝此既定观察边界。原话明确期间仍完整保留，不能任意提前截断或延长。", "没有原话明示期限的瞬时状态、暂时请求，两有效期必须为null；不能按消息时点或当天结束补造期限。")
             prompt = prompt.replace("未来安排、当前临时状态和暂时请求按原期间／观察点规则另核；", "未来安排、当前临时状态和暂时请求只按原话明示期间另核；")
             prompt = prompt.replace("暂时关系请求的正文须保留来源日期与暂时限定；valid_at已填观察点不能替正文补日期。", "暂时关系请求须保留来源日期与暂时限定；来源日期不作为事实适用起点。")
-            prompt += "\n直接提取时间核验：只用各消息source_calendar_at解释当地日历，相对表达须归属该消息；unknown时不使用occurred_at的数据库时区替代。event v2须保留原表达与年/月/日/时刻精度，事件阶段、发生日期和事实适用期分开核验；转述时点未确定保持日期未知。"
+            prompt += "\n直接提取时间核验：只用各消息source_calendar_at解释当地日历，相对表达须归属该消息；unknown时不使用occurred_at的数据库时区替代。event v2须保留原表达与年/月/日/时刻精度，事件阶段、发生日期和事实适用期分开核验；转述时点未确定保持日期未知。证据位置从原消息text的0起计，不能准确数出局部位置时可用[0,text_length)引用完整原消息，不能猜越界索引；引用整条原消息不代替逐项语义核验。"
         if any(fact.conditions is not None for fact in facts):
             schema = deepcopy(schema)
             schema["properties"]["results"]["items"]["properties"]["condition_verification"] = {
@@ -616,7 +616,7 @@ def _verification_text(
             "occurred_at": message.occurred_at.isoformat()
             if message.occurred_at is not None else "unknown",
             "text": message.text,
-            **({"source_calendar_at": _source_calendar_payload(message)} if any(fact.requires_all_sources for fact in facts) else {}),
+            **({"source_calendar_at": _source_calendar_payload(message), "text_length": len(message.text)} if any(fact.requires_all_sources for fact in facts) else {}),
         } for message in window.messages],
         "candidates": [{
             "candidate_index": index,

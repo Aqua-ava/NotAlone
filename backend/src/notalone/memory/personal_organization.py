@@ -14,10 +14,10 @@ corrections中的用户纠错是约束：不得重现被否定的总结、借其
 SCENARIO_PROMPT = POLICY + '''
 L2按持续主题组织连贯文档；各段section为basic_information基础信息、core_traits核心特征、explicit_preferences明确偏好、implicit_signals隐性信号、narrative连贯叙事、evolution演变轨迹、contradictions未解矛盾。
 更新重写已有主题而非批次追加，保留仍有效事实及时间变化。每文档正文总计不超过1500字，核心特征约100字、核心叙事约400字，遵守budget总量。
+演变只描述输入明示的更正/变化，区分旧说法和当前说法；引用当前有效记忆的正文即可，不把旧值复活为当前事实。
 输出{"scenarios":[{"topic_key":"稳定英文key","title":"中文标题","hint":"有据目录提示","paragraphs":[{"text":"完整段落","kind":"fact/preference/inference/contradiction之一","section":"上述章节之一","basis":"具体依据或推断过程","uncertainty":"局限，直接事实可为空","references":[{"memory_id":"实际ID","revision":1}]}],"replaces":[]}]}。
 更新时scenario_id继承原主题，replaces列出替换的实际version_id；paragraphs为完整重整正文。合并列出全部旧版本，新主题不带scenario_id。
-不变主题不输出；各段可不同类别，不能将不确定叙事改成事实。
-演变只描述输入明示的更正/变化，区分旧说法和当前说法；引用当前有效记忆的正文即可，不把旧值复活为当前事实。'''
+不变主题不输出；各段可不同类别，不能将不确定叙事改成事实。'''
 PROFILE_PROMPT = POLICY + '''
 L3综合多个场景为同一人的完整简明画像，关注长期可用背景。section为basic_information基本信息、long_term_preferences长期偏好、life_context生活背景、interests兴趣、insights深层洞察、evolution演变、contradictions未解矛盾。
 从变化的L2和已有画像持续整合，输出完整新画像，不逐批追加。事实和推断分条，不因旧画像写过就当真；推断需要有跨场景或具体情境依据，并交代局限。仅临时安排无长期意义时不收入。

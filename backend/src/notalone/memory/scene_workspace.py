@@ -33,8 +33,9 @@ def render_scene(scene):
 
 
 class SceneWorkspace:
-    def __init__(self, scenarios, budget):
+    def __init__(self, scenarios, budget, *, personal=False):
         self.budget = budget
+        self.personal = personal
         self.original = {s['scenario_id'] + '.md': deepcopy(s) for s in scenarios}
         self.documents = {path: render_scene(s) for path, s in self.original.items()}
         self.baseline = dict(self.documents)
@@ -76,6 +77,12 @@ class SceneWorkspace:
         if path not in self.documents and len(self.documents) >= self.budget.max_scenarios * 2:
             raise ValueError('工作区文档数量超出预算。')
         self.documents[path] = content
+        if content.strip() != '[DELETED]':
+            try:
+                self._compile_document(path, content, {s['version_id']: p for p, s in self.original.items()
+                                                       if p in self.read_paths})
+            except (ValueError, TypeError, KeyError) as error:
+                return '工具错误：' + str(error) + ' 文档已暂存但格式无效，请修正后再结束；尚未发布。'
         return '已暂存，尚未发布。'
 
     def compile(self):
@@ -127,6 +134,8 @@ class SceneWorkspace:
                 if not isinstance(metadata, dict) or set(metadata) != {'kind', 'section', 'basis', 'uncertainty'}:
                     raise ValueError('个人主题元数据无效。')
                 text = text[:personal.start()].strip()
+            if self.personal and not metadata:
+                raise ValueError('每段事实、偏好、推断和矛盾都必须填写完整PERSONAL元数据。')
             paragraphs.append({'text': text, 'references': json.loads(part[2]), **metadata})
             body = body[part.end():]
         return {**meta, 'replaces': replaces, 'paragraphs': paragraphs}
@@ -158,7 +167,7 @@ TOOLS = [tool_schema('read', '读取本次工作区场景正文。', {'path': {'
 
 
 def maintain_scenes(adapter, *, memories, scenarios, corrections, deadline):
-    workspace = SceneWorkspace(scenarios, adapter.budget)
+    workspace = SceneWorkspace(scenarios, adapter.budget, personal=adapter.personal)
     prompt = tool_policy(adapter) + '''\ndocuments是当前完整可读场景索引，只能读取其中列出的路径或本轮已成功创建的文档；空索引时直接write创建reading.md等简单文件名，不要猜测或读取文件。
 所有path仅为单个xxx.md文件名，禁止绝对路径、斜杠和目录；不存在/memories等真实目录。
 使用read/write/edit增量维护本工作区Markdown。先读取相关旧文档，更新已有主题、合并重复主题；不要按输入批次新建重复主题。
@@ -169,7 +178,11 @@ def maintain_scenes(adapter, *, memories, scenarios, corrections, deadline):
 最多五轮模型请求；不要创建真实文件、执行命令或读取工作区外内容。'''
     if adapter.personal:
         from notalone.memory.personal_organization import POLICY, SCENARIO_PROMPT
-        prompt += SCENARIO_PROMPT[len(POLICY):].split('输出{', 1)[0] + '\n每段正文在SOURCES前增加<!-- PERSONAL {\"kind\":\"inference\",\"section\":\"implicit_signals\",\"basis\":\"具体事实与推理依据\",\"uncertainty\":\"尚未证实\"} -->，保留事实/偏好/推断/矛盾的完整元数据。'
+        prompt += SCENARIO_PROMPT[len(POLICY):].split('输出{', 1)[0] + '''
+每段正文，包括直接事实和明确偏好，都必须在SOURCES前增加完整PERSONAL元数据，不能只给推断段填写。
+例如事实段：<!-- PERSONAL {"kind":"fact","section":"basic_information","basis":"直接陈述的依据","uncertainty":""} -->。
+kind根据实际内容选择fact/preference/inference/contradiction；section选择上述对应章节，推断和矛盾还须有具体依据及不确定性。
+Markdown正文与注释之间使用实际换行，不把反斜杠和字母n写成正文；各段先正文，再PERSONAL，再SOURCES。'''
     messages = [SystemMessage(content=prompt), HumanMessage(content=json.dumps({'layer': 'l2', 'memories': [m.to_payload() for m in memories],
         'documents': workspace.index(), 'budget': adapter.budget.to_payload(), 'corrections': list(corrections)}, ensure_ascii=False))]
     for _ in range(5):

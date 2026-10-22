@@ -44,6 +44,7 @@ occurrence_precision区分year/month/day/instant/unknown；去年/上月仅为�
 昨天、明天各取对应消息的日历日期。转述中的相对日需核实被转述时点，无法核清时不套消息发送日。
 最近、过阵子等模糊表达保留原话，精度unknown且发生起止均null。阶段单独表达，计划到期不自动完成。
 仅在依据明确时填写 event；不知道的事件可为 null，不凭空推断有效期。
+已经结束的活动、过去发生的安排或历史事实使用common_fact；已发生的关系经历使用relationship_note，不标为描述当前近况的recent_state。
 明确的长期偏好或无期限日常习惯使用 preference，valid_at 和 invalid_at 均为 null。
 “现在改为”“以后都”等口味或习惯更正不证明真实起始日期，不能把消息 occurred_at
 填成偏好的 valid_at；只有来源明确给出实际起止日期时才填写对应时间字段。
@@ -82,6 +83,7 @@ _direct_fields["valid_at"]["description"] = "仅原话明确的事实适用起�
 _direct_fields["invalid_at"]["description"] = "仅原话明确完整适用期间的结束边界；未知时null，不按瞬时状态默认当天结束。"
 _direct_fields["conditions"] = CONDITIONS_PROPOSAL_SCHEMA
 DIRECT_EXTRACTION_PROMPT += "\n有适用限定时填写conditions，保留条件原文与各自来源位置；无来源不推断。出差结束、离职等条件变化不等于撤销不愿通话、工资禁忌等原主张；缺条件不表示永久适用。"
+DIRECT_EXTRACTION_PROMPT += "\nconditions只写主张适用的前提或场景；现状未知、资料未覆盖等认知边界保留在正文，不作为另一项适用条件。evidence位置是原消息正文从0起的半开字符区间；每条消息给出text_length。不能准确数出局部位置时，允许用char_start=0、char_end=text_length引用完整原消息，不猜越界索引；仍须引用所有必要问答来源。"
 
 
 class DirectExtractionRuntime:

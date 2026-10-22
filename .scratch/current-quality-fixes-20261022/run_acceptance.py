@@ -108,7 +108,8 @@ class Capture:
                 run_id=self.run, case_id=self.case, phase=phase)
         else:
             if 'ReplyRuntimeOutput' not in tools:
-                phase = ('l1_adjudication' if '统一已有候选池' in system else
+                phase = ('l1_adjudication' if 'BatchMemoryAdjudicationOutput' in tools else
+                         'l1_relation_verification' if 'MemoryRelationVerificationOutput' in tools else
                          'l1_verification' if '核验' in system else 'l1_extraction')
             from notalone.problem_budget import reserve_problem_attempt
             reserve_problem_attempt()
@@ -147,7 +148,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--preflight', action='store_true')
-    parser.add_argument('--ledger', type=Path)
+    parser.add_argument('--ledger', type=Path, required=True)
     parser.add_argument('--round', default='current-default')
     parser.add_argument('--case-file', type=Path)
     parser.add_argument('--hypothesis', required=True)
@@ -180,9 +181,7 @@ def main():
     if args.preflight:
         print(json.dumps({'preflight':'ok', 'provider_host':host, 'model':frozen['model'], 'cases':5+len(REPLIES)}))
         return 0
-    ledger = ProblemBudget(args.ledger or root/'problem.sqlite')
-    if args.ledger is None:
-        ledger.create('current-default-memory-reply-recheck-20261022', 1000000, 30)
+    ledger = ProblemBudget(args.ledger)
     ledger.start(args.round, args.hypothesis)
     started_used=ledger.snapshot()['used']
     os.environ['NOTALONE_PROBLEM_BUDGET'] = str(ledger.path)
