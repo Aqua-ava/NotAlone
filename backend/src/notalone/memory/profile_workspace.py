@@ -16,10 +16,11 @@ def render_profile(profile):
 
 
 class ProfileWorkspace:
-    def __init__(self, existing, scenarios, budget):
+    def __init__(self, existing, scenarios, budget, *, personal=False):
         self.content = render_profile(existing)
         self.scenes = {s['scenario_id'] + '.md': render_scene(s) for s in scenarios}
         self.budget = budget
+        self.personal = personal
 
     def execute(self, name, args):
         if not isinstance(args, dict) or not isinstance(args.get('path'), str):
@@ -50,6 +51,13 @@ class ProfileWorkspace:
         if not isinstance(content, str) or not content.strip() or len(content) > self.budget.max_characters:
             raise ValueError('画像暂存正文为空或超出预算。')
         self.content = content
+        try:
+            proposal = self.compile()
+            invalid = next((entry for entry in proposal['entries'] if 'invalid_entry' in entry), None)
+            if invalid is not None:
+                raise ValueError(invalid['reason'])
+        except (ValueError, TypeError, KeyError) as error:
+            return '工具错误：' + str(error) + ' 画像已暂存但格式无效，请修正后再结束；尚未发布。'
         return '已暂存画像，等待独立核验。'
 
     def compile(self):
@@ -69,6 +77,8 @@ class ProfileWorkspace:
                 meta = json.loads(match[1])
                 if not isinstance(meta, dict) or set(meta) - {'kind', 'section', 'basis'} != {'temporal_status', 'uncertainty', 'references'}:
                     raise ValueError('画像条目元数据无效。')
+                if self.personal and not {'kind', 'section', 'basis'} <= set(meta):
+                    raise ValueError('每条个人画像必须填写kind、section和basis。')
                 entries.append({**meta, 'text': match[2].strip()})
             except (ValueError, TypeError, KeyError) as error:
                 entries.append({'invalid_entry': index, 'reason': str(error)})
@@ -106,13 +116,14 @@ TOOLS = [tool_schema('read', '读取profile.md或本次目录中场景，不能�
 def maintain_profile(adapter, *, memories, scenarios, corrections, existing_profile, changed_scenarios,
                      removed_scenario_version_ids, base_profile_version_id, deadline):
     from notalone.memory.organization_sdk import PROFILE_POLICY, CORRECTION_POLICY
-    workspace = ProfileWorkspace(existing_profile, scenarios, adapter.budget)
+    workspace = ProfileWorkspace(existing_profile, scenarios, adapter.budget, personal=adapter.personal)
     profile_policy = PROFILE_POLICY.replace('无合格长期内容就返回空entries。', '无合格长期内容时profile.md仅保留标题。')
     prompt = tool_policy(adapter) + ('' if adapter.personal else profile_policy + CORRECTION_POLICY) + '''\n增量维护长期背景：已有画像有效时保留未受影响条目，依据变化场景补充、更新或合并，清理已撤回依据。
 documents是全部可读场景索引，另有始终可读写的profile.md；索引空时不得猜测场景路径，可直接write初始化profile.md。
 path仅为索引中的单个xxx.md文件名或profile.md，禁止绝对路径、斜杠和目录。
 只使用read/write/edit操作内存profile.md；当前全部场景只读。不得把场景摘要当事实证明，所有条目引用实际memories版本。
 profile.md格式：# 长期背景，然后每条<!-- ENTRY {"temporal_status":"uncertain","uncertainty":"当前未核实","references":[{"memory_id":"实际ID","revision":1}]} -->换行完整正文。
+标题后的空行后直接开始ENTRY；章节只放在ENTRY的section元数据中，不在条目前后插入额外的##标题或说明段落。
 没有合格资料时保留标题和空正文。
 最多五轮；最终不调用工具表示提交完整画像给独立核验，不能执行系统命令或访问真实文件。'''
     if adapter.personal:

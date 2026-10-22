@@ -71,7 +71,7 @@ class FidelityInputTests(unittest.TestCase):
             include_relationship_context=True,
         ))
         contract = payload["fidelity_contract"]
-        self.assertEqual(contract["version"], "fidelity-v2")
+        self.assertEqual(contract["version"], "fidelity-v3")
         self.assertEqual(contract["current_intent"], {"source": "draft_text", "text": "今晚不参加。"})
         self.assertEqual(contract["instruction_scope"], "expression_only")
         self.assertEqual(contract["priority"][0], "current_explicit_intent")
@@ -146,7 +146,7 @@ class FidelityInputTests(unittest.TestCase):
         self.assertEqual(payload['workspace_action'], 'express')
         self.assertEqual(payload['fidelity_contract']['current_intent'], {
             'source': 'draft_text', 'text': '想婉拒，不作下次的承诺。'})
-        self.assertEqual(payload['fidelity_contract']['instruction_scope'], 'expression_only')
+        self.assertEqual(payload['fidelity_contract']['instruction_scope'], 'compose_recipient_text_from_intent')
 
     def test_workspace_question_does_not_become_confirmed_stance(self):
         _, payload, _, _, _ = self.run_content(RewriteDraft(

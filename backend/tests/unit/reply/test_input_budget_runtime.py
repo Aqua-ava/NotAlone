@@ -139,7 +139,7 @@ class InputBudgetRuntimeTest(unittest.TestCase):
         self.assertIn("当前联系人可用的回复策略", system)
         self.assertIn("改写附加要求不得偷换原句的立场", system)
         content = json.loads(payload["messages"][1]["content"])
-        self.assertEqual(content["fidelity_contract"]["version"], "fidelity-v2")
+        self.assertEqual(content["fidelity_contract"]["version"], "fidelity-v3")
         self.assertEqual(content["fidelity_contract"]["current_intent"], {
             "source": "draft_text", "text": "合成原句：今晚不参加，祝活动顺利。",
         })

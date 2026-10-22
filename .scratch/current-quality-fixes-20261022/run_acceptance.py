@@ -152,6 +152,8 @@ def main():
     parser.add_argument('--round', default='current-default')
     parser.add_argument('--case-file', type=Path)
     parser.add_argument('--hypothesis', required=True)
+    parser.add_argument('--reuse-round', action='store_true',
+                        help='同一冻结版本和假设的后续数据集，继续既有未结案轮；不新增或重置授权。')
     args = parser.parse_args()
     global INITIAL, UPDATED, REPLIES
     extra_cases = {}
@@ -171,18 +173,32 @@ def main():
         raise RuntimeError('没有配置模型凭据。')
     os.environ['NOTALONE_SKILLS_DIR'] = str(root/'isolated-skills')
     os.environ['NOTALONE_DISABLE_DOTENV'] = '1'
+    package_root = Path(__import__('notalone.server.app', fromlist=['__file__']).__file__).parents[1]
+    fingerprint = hashlib.sha256()
+    for path in sorted(package_root.rglob('*.py')):
+        fingerprint.update(str(path.relative_to(package_root)).encode())
+        fingerprint.update(path.read_bytes())
     frozen = {'initial': INITIAL, 'updated': UPDATED, 'repeated': UPDATED, 'replies': REPLIES,
               'additional_modes': ['current_chat否定作用域', '默认draft改写明确拒绝'],
               'provider_host': host, 'model': os.getenv('NOTALONE_DEEPSEEK_MODEL', 'deepseek-flash'),
+              'runtime_sha256': fingerprint.hexdigest(),
               'module': __import__('notalone.server.app', fromlist=['__file__']).__file__,
-              'synthetic_only': True, 'annotation': extra_cases.get('annotation', '原失败及正确对照回归'),
+              'synthetic_only': True, 'repeated_identity': 'reuse_exact_updated_source_file',
+              'annotation': extra_cases.get('annotation', '原失败及正确对照回归'),
               'additional_cases': extra_cases.get('additional_cases')}
     atomic_json(root/'cases.json', frozen)
     if args.preflight:
         print(json.dumps({'preflight':'ok', 'provider_host':host, 'model':frozen['model'], 'cases':5+len(REPLIES)}))
         return 0
     ledger = ProblemBudget(args.ledger)
-    ledger.start(args.round, args.hypothesis)
+    hypothesis = args.hypothesis + '；实际源码与模型：' + frozen['runtime_sha256'] + '/' + host + '/' + frozen['model']
+    if args.reuse_round:
+        with ledger.connection() as db:
+            ledger.check(db)
+            if db.execute('SELECT hypothesis,outcome FROM rounds WHERE id=?', (args.round,)).fetchone() != (hypothesis, None):
+                raise RuntimeError('仅允许继续同一假设且未结案的既有轮。')
+    else:
+        ledger.start(args.round, hypothesis)
     started_used=ledger.snapshot()['used']
     os.environ['NOTALONE_PROBLEM_BUDGET'] = str(ledger.path)
     os.environ['NOTALONE_PROBLEM_ROUND'] = args.round
@@ -315,12 +331,16 @@ def main():
                         sender_wxid='wxid_synthetic_owner' if mine else 'wxid_synthetic_current',text=text,
                         time=when.strftime('%Y-%m-%d %H:%M:%S'),time_iso=when.isoformat()))
                 source=root/f'input-{stage}.jsonl'
-                source.write_text('\n'.join(json.dumps(row,ensure_ascii=False) for row in records)+'\n');source.chmod(0o600)
+                if stage == 'repeated':
+                    source = root/'input-updated.jsonl'
+                else:
+                    source.write_text('\n'.join(json.dumps(row,ensure_ascii=False) for row in records)+'\n');source.chmod(0o600)
                 status, preview=backend.request('/api/imports/preview',{'path':str(source),'contact_id':str(contact)})
                 if status!=200 or not preview.get('valid'): raise RuntimeError(f'预览失败: {preview}')
                 status, imported=backend.request('/api/imports/commit',{'path':str(source),'contact_id':str(contact),
                     'expected_content_sha256':preview['content_sha256']})
                 if status!=200: raise RuntimeError(f'导入失败: {imported}')
+                atomic_json(root/f'{stage}-import.json', {'source_sha256':preview['content_sha256'], 'receipt':imported})
                 event=threading.Event(); deadline=time.monotonic()+480
                 last=None
                 while time.monotonic()<deadline:

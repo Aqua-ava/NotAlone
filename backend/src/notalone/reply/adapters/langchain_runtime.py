@@ -164,7 +164,7 @@ unknown 不默认属于联系人；缺少归属时不替任何一方断言立场
 当 input_mode 为 workspace 时，workspace_action 决定本次动作：express 是帮我表达，
 保留 draft_text 中用户的想法、方向或草稿；suggest 是帮我想想，用户尚未选择表达立场，
 draft_text 可为空或仅是困惑，不得假装已有 confirmed_direction。不要求先选某条消息或确认方向。
-结合当前联系人的最近聊天和 context_text，直接给出 2–3 个可编辑候选语句，各自用 basis
+结合当前联系人的最近聊天和 context_text，优先给出一条完成本次意图的候选；确有有意义且合规的不同方案时可给额外候选，最多三条，各自用 basis
 简短说明建议理由；suggest 可提供不同思路，但建议不是用户已经作出的承诺或关系事实。
 basis 面向用户，用一句日常中文解释这句话为什么适合当前聊天，不复述动作名称、输入模式、
 已确认方向或系统流程。资料不足时简短说明，不逐条重复通用免责声明；risk_notes 只保留具体需核实的风险。
@@ -237,6 +237,9 @@ event 单独记录事件阶段和发生时段；planned/agreed/rescheduled 只�
 消息、表达方向和已有证据返回结构化候选；缺少历史不是拒绝输出或继续调用工具的理由。
 
 输出格式是硬性要求：必须通过结构化输出工具调用返回 ReplyRuntimeOutput。
+提交前逐条检查：正文落实已知限制，核对时使用最新来源值，排除仅供用户判断的内部步骤。
+如果自己已发现某候选违反已知条件或当前表达要求，先改正文或删除该候选，不能保留它再用风险提示补救；
+用户原句明确指定冲突内容时才保留原意并提示。未知现状可以具体询问，不抹掉已知来源内容。
 candidates 必须是对象数组（1 到 3 个），每项都包含 text、basis、citation_ids、
 risk_notes 四个字段；需要分条表达时可添加 messages 有序文字数组（1至8条），
 text 必须是 messages 用两个换行连接的完整纯文本。messages 属于同一个方案，
@@ -270,11 +273,11 @@ REPLY_RUNTIME_SCHEMA: dict[str, Any] = {
                         "items": {"type": "string", "maxLength": 8192},
                     },
                     "text": {
-                        "description": "候选回复正文，用户可编辑后亲自发送。",
+                        "description": "给联系人的实际表达，落实本次条件，不含用户内部筛选步骤；核对时带入最新有据值，不新增记忆自述。",
                         "type": "string",
                     },
                     "basis": {
-                        "description": "生成该候选的依据说明。",
+                        "description": "面向用户简述当前正文如何符合本次意图及已知限制，不能为已发现矛盾的正文辩护。",
                         "type": "string",
                     },
                     "citation_ids": {
@@ -287,7 +290,7 @@ REPLY_RUNTIME_SCHEMA: dict[str, Any] = {
                         "items": {"type": "string", "format": "uuid"},
                     },
                     "risk_notes": {
-                        "description": "风险提示；无风险时为空数组。",
+                        "description": "真实未知或用户原句明确冲突的提醒；已经发现的候选错误必须先修正或删去，不能放在此处抵消；无风险为空。",
                         "type": "array",
                         "items": {"type": "string"},
                     },

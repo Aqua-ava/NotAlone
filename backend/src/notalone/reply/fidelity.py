@@ -3,7 +3,7 @@
 from collections.abc import Mapping
 from typing import Any
 
-CONTRACT_VERSION = "fidelity-v2"
+CONTRACT_VERSION = "fidelity-v3"
 
 
 FIDELITY_SYSTEM_PROMPT = """本次明确意图具有最高优先级。fidelity_contract.current_intent
@@ -38,6 +38,15 @@ workspace 的 suggest 动作允许提出尚未采纳的表达思路与候选；c
 用户的筛选步骤、判断打算和写作要求用于组织表达；只把对方需要回应的内容写入正文，
 不把“先问清再决定是否邀约”等内部考虑直接说给联系人，除非用户明确要求表达该打算。
 未知性别用已有身份称呼，不依据第三人身份或关系推断“他/她”。
+
+workspace express的draft_text是用户向助手描述的表达任务，包含待表达意思和内部组织要求，
+不是需要逐句照抄的私聊消息。内部筛选和决策不进入联系人正文；已有第一人称原句仍保留其立场。
+例如用户想先询问资料再自行决定是否合作，正文只询问需要对方回答的事项，不写“我再看要不要合作”。
+current_unverified不等于已知资料不存在：核对来源值可以用问句，不需要把它断言为现状。
+例如来源说住在某城市，本次想核对，可问“现在还住在那个城市吗”，而非泛问住哪；
+同样应直接带入实际有据的城市名。只有缺值或真实矛盾未解时才泛问。
+本次明确给定场景下，来源限制是否仍成立未知，仍要优先选择与其相容的方案，或在问句中确认；
+不能因当前未核实而直接提出冲突方案，再在risk_notes中提醒冲突。若没有合适的多个方案，只返回一条。
 
 """
 
@@ -81,7 +90,8 @@ def generation_contract(payload: Mapping[str, Any]) -> dict:
         "current_intent": ({"source": source, "text": payload[source]} if payload.get(source) and not exploring else None),
         "priority": ["current_explicit_intent", "expression_instruction",
                      "history_and_memory", "skill_strategy"],
-        "instruction_scope": "suggest_options_for_user_selection" if exploring else "expression_only",
+        "instruction_scope": ("suggest_options_for_user_selection" if exploring else
+                              "compose_recipient_text_from_intent" if mode == "workspace" else "expression_only"),
         "conflict_action": "preserve_current_intent_and_explain",
         "content_boundary": {
             "output_scope": ["candidate_text", "basis", "risk_notes"],
@@ -92,5 +102,8 @@ def generation_contract(payload: Mapping[str, Any]) -> dict:
             "historical_state": "not_automatically_current",
             "missing_history": "does_not_establish_contact_gap_or_motive",
             "citation_validity": "does_not_prove_semantic_support",
+            "candidate_admissibility": "rewrite_or_omit_known_conflicts_before_return",
+            "known_value_confirmation": "ask_with_latest_sourced_value_without_claiming_current_truth",
+            "recipient_text": "exclude_internal_selection_and_composition_instructions",
         },
     }
