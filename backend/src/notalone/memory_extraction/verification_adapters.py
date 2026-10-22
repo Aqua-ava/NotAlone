@@ -20,6 +20,7 @@ from notalone.memory_extraction.errors import (
 )
 from notalone.memory_extraction.models import ExtractedFact, ExtractionWindow
 from notalone.memory.events import EVENT_POSITION_SCHEMA
+from notalone.memory_extraction.event_quote_positions import EVENT_QUOTE_SCHEMA, event_quote_positions
 from notalone.memory_extraction.verification import (
     MAX_SOURCE_VERIFICATION_CANDIDATES,
     SourceVerificationIssue,
@@ -476,13 +477,15 @@ class LangChainSourceVerificationRuntime:
                 "properties": {
                     "stage_verdict": {"type": "string", "enum": [item.value for item in SourceVerificationVerdict]},
                     "occurrence_verdict": {"type": "string", "enum": [item.value for item in SourceVerificationVerdict]},
-                    "stage_evidence": {"type": "array", "maxItems": 8, "items": EVENT_POSITION_SCHEMA},
-                    "occurrence_evidence": {"type": "array", "maxItems": 8, "items": EVENT_POSITION_SCHEMA},
+                    "stage_evidence": {"type": "array", "maxItems": 8, "items": EVENT_QUOTE_SCHEMA},
+                    "occurrence_evidence": {"type": "array", "maxItems": 8, "items": EVENT_QUOTE_SCHEMA},
                 }, "required": ["stage_verdict", "occurrence_verdict", "stage_evidence", "occurrence_evidence"],
             }
             prompt += ("\n有event提案时另填event_verification：分别独立判断stage与occurrence_start/end，"
                        "不能沿用正文verdict。每项给supported/uncertain/unsupported及本候选原来源的"
-                       "message_id/char_start/char_end；未知时间用uncertain，不能凭当前时间判发生。"
+                       "message_id/quote，quote逐字引用实际原消息内唯一的完整片段，不自行计算字符索引；"
+                       "时间引句须包含完整occurrence_expression，重复有歧义时扩大上下文直至唯一；"
+                       "未知时间用uncertain，不能凭当前时间判发生。"
                        "位置只定位，不代替含义核验；资料无event则该槽null。")
         try:
             with proof3_json_guard() if self._verification_mode is SourceVerificationMode.NULLABLE_PROOF_V3 else nullcontext():
@@ -521,6 +524,8 @@ class LangChainSourceVerificationRuntime:
             raise ExtractionRuntimeError("来源核验模型调用失败。") from None
         try:
             payloads = _verification_payloads(message, allow_invalid_items=self._isolate_items)
+            if has_events:
+                payloads = event_quote_positions(payloads, window=window, facts=facts)
             if self._isolate_items:
                 from notalone.memory_extraction.verification_isolation import isolate_verification_payloads
                 payloads = isolate_verification_payloads(payloads, window=window, facts=facts, mode=self._verification_mode)
