@@ -136,8 +136,15 @@ class Capture:
         if reservation is not None:
             self.suite.finish(reservation, outcome=outcome, request_model=row['request_model'],
                 response_model=payload.get('model') if isinstance(payload, dict) else None, duration_ms=elapsed)
+        chain, cause = [], error
+        while cause is not None and len(chain) < 6:
+            chain.append({'type': type(cause).__name__, 'errno': getattr(cause, 'errno', None)})
+            next_cause = cause.__cause__ or cause.__context__
+            if next_cause is cause:
+                break
+            cause = next_cause
         with self.lock:
-            row.update(outcome=outcome, duration_ms=elapsed,
+            row.update(error_causes=chain, outcome=outcome, duration_ms=elapsed,
                        http_status=response.status_code if response is not None else None,
                        error_type=type(error).__name__ if error else None)
             atomic_json(self.output/'calls.json', self.calls)
@@ -148,6 +155,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--preflight', action='store_true')
+    parser.add_argument('--reply-thinking', choices=('disabled', 'low', 'high', 'max'), default='disabled')
     parser.add_argument('--ledger', type=Path, required=True)
     parser.add_argument('--round', default='current-default')
     parser.add_argument('--case-file', type=Path)
@@ -181,7 +189,7 @@ def main():
     frozen = {'initial': INITIAL, 'updated': UPDATED, 'repeated': UPDATED, 'replies': REPLIES,
               'additional_modes': ['current_chat否定作用域', '默认draft改写明确拒绝'],
               'provider_host': host, 'model': os.getenv('NOTALONE_DEEPSEEK_MODEL', 'deepseek-flash'),
-              'runtime_sha256': fingerprint.hexdigest(),
+              'runtime_sha256': fingerprint.hexdigest(), 'reply_thinking': args.reply_thinking,
               'module': __import__('notalone.server.app', fromlist=['__file__']).__file__,
               'synthetic_only': True, 'repeated_identity': 'reuse_exact_updated_source_file',
               'annotation': extra_cases.get('annotation', '原失败及正确对照回归'),
@@ -191,7 +199,7 @@ def main():
         print(json.dumps({'preflight':'ok', 'provider_host':host, 'model':frozen['model'], 'cases':5+len(REPLIES)}))
         return 0
     ledger = ProblemBudget(args.ledger)
-    hypothesis = args.hypothesis + '；实际源码与模型：' + frozen['runtime_sha256'] + '/' + host + '/' + frozen['model']
+    hypothesis = args.hypothesis + '；实际源码与模型：' + frozen['runtime_sha256'] + '/' + host + '/' + frozen['model'] + '/reply_thinking=' + args.reply_thinking
     if args.reuse_round:
         with ledger.connection() as db:
             ledger.check(db)
@@ -277,7 +285,8 @@ def main():
             assert task_host is not None
             layers.attach_task_host(task_host)
             reply = build_reply_service(database_url=Database.database_url, owner_id=owner,
-                                        model_priority=priority, layered_memory=layers)
+                                        model_priority=priority, layered_memory=layers,
+                                        reply_thinking_effort=None if args.reply_thinking == 'disabled' else args.reply_thinking)
             assert reply is not None
             backend = HttpBackend(create_app(database_url=Database.database_url,owner_id=owner,token='synthetic-current-quality',
                 events=events,task_host=task_host,import_service=_build_import_service(Database.database_url),
@@ -309,8 +318,9 @@ def main():
                     'type':'rewrite_draft','input_kind':'workspace','workspace_action':'express',
                     'draft_text':draft,'context_text':context,'include_relationship_context':relationship,
                     'excluded_message_ids':[],'user_instruction':'自然简短，保留本次想法，不自行增加事实或承诺。'}}
+                reply_started = time.monotonic()
                 status, response = backend.request('/api/reply/generate',body,timeout=300)
-                record={'status':status,'request':body,'response':response}
+                record={'status':status,'request':body,'response':response, 'duration_ms': round((time.monotonic()-reply_started)*1000)}
                 if status == 200:
                     record['evidence'] = read(f'/api/contacts/{body["contact_id"]}/replies/{response["reply_request_id"]}/evidence')
                 atomic_json(root/f'reply-{name}.json',record)
@@ -373,8 +383,9 @@ def main():
                         'user_instruction':'保持明确拒绝，不改成犹豫或答应，不增加下次参加的承诺。'}}
                 if name in extra_cases.get('additional_cases', {}):
                     body['content'] = extra_cases['additional_cases'][name]
+                reply_started = time.monotonic()
                 status,response=backend.request('/api/reply/generate',body,timeout=300)
-                record={'status':status,'request':body,'response':response}
+                record={'status':status,'request':body,'response':response, 'duration_ms': round((time.monotonic()-reply_started)*1000)}
                 if status == 200:
                     record['evidence'] = read(f'/api/contacts/{contact}/replies/{response["reply_request_id"]}/evidence')
                 atomic_json(root/f'reply-{name}.json',record)

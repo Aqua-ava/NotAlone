@@ -29,6 +29,8 @@ from notalone.reply.adapters.async_runner import run_with_timeout
 from notalone.reply.adapters.input_budget_middleware import InputBudgetMiddleware
 from notalone.reply.adapters.provider_errors import is_provider_context_limit
 from notalone.reply.adapters.constraint_review import ReplyConstraintReview
+from notalone.reply.adapters.deepseek_provider import deepseek_uses_thinking
+from notalone.reply.adapters.thinking_output import thinking_output_tool, thinking_output_payload
 
 from notalone.reply.context import workspace_recent_only
 from notalone.reply.context import ReplyContext, allows_history
@@ -861,7 +863,10 @@ class LangChainReplyRuntime:
                 history=history,
                 scenarios=scenarios,
             )
-            output_strategy = ToolStrategy(REPLY_RUNTIME_SCHEMA, handle_errors=False)
+            thinking = deepseek_uses_thinking(self._model)
+            output_strategy = None if thinking else ToolStrategy(REPLY_RUNTIME_SCHEMA, handle_errors=False)
+            if thinking:
+                agent_tools.append(thinking_output_tool(REPLY_RUNTIME_SCHEMA))
             graph = create_agent(
                 model=self._model,
                 tools=agent_tools,
@@ -908,6 +913,8 @@ class LangChainReplyRuntime:
                     config={"recursion_limit": 16 + (2 * scenarios.limits["call_limit"] if scenarios else 0), **({'callbacks': list(callbacks)} if callbacks else {})},
                     context=context,
                 )
+                if thinking:
+                    state = {**state, "structured_response": thinking_output_payload(state)}
                 result = _validated_result(state, budget, self._model_name,
                                            history=history, selection=prepared.command.skill)
                 if result.used_skill is not None and self._skill_selection_method is not None:

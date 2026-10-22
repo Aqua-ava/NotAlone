@@ -127,19 +127,27 @@ def build_reply_service(
     input_token_counter: InputTokenCounter | None = None,
     on_input_budget: Callable[[InputBudgetDecision], None] | None = None,
     layered_memory=None, layered_reply_budget=None, owner_layered_reply_budget=None,
+    reply_thinking_effort: str | None = None,
 ) -> ReplyService | None:
     """有 active 绑定且模型凭据可用时装配回复服务；否则返回 None。
 
     回复端点不可用时返回 503 reply_unavailable。
     """
 
+    if reply_thinking_effort not in (None, 'low', 'high', 'max'):
+        raise ValueError('回复思考强度须为 low/high/max 或 None。')
     try:
-        # Reply/审核的ToolStrategy会强制required；DeepSeek须关闭thinking。
+        # 默认关闭思考；显式实验使用普通终止工具，保持正式核验和原超时。
         # 已批准ECNU配置沿既有协议构造，之后才给实际实例绑定计量器。
         ecnu = (os.environ.get('NOTALONE_DEEPSEEK_MODEL') == ECNU_MODEL
                 and os.environ.get('NOTALONE_DEEPSEEK_BASE_URL', '').rstrip('/') == ECNU_BASE_URL)
         model = build_deepseek_model(max_retries=0,
-            extra_body=None if ecnu else {'thinking': {'type': 'disabled'}})
+            extra_body=None if ecnu else {'thinking': {'type': 'enabled' if reply_thinking_effort else 'disabled'}})
+        if reply_thinking_effort is not None:
+            from notalone.reply.adapters.deepseek_provider import is_official_deepseek_flash
+            if not is_official_deepseek_flash(model):
+                raise ValueError('回复思考试验仅支持已核实的官方 Flash。')
+            model.reasoning_effort = reply_thinking_effort
     except (ValueError, OSError):
         return None
     if input_budget_profile is None and input_token_counter is None:

@@ -45,6 +45,8 @@ workspace express的draft_text是用户向助手描述的表达任务，包含�
 current_unverified不等于已知资料不存在：核对来源值可以用问句，不需要把它断言为现状。
 例如来源说住在某城市，本次想核对，可问“现在还住在那个城市吗”，而非泛问住哪；
 同样应直接带入实际有据的城市名。只有缺值或真实矛盾未解时才泛问。
+同时核对多个项目时，每个已有值的项目都要带入实际来源值确认，不能只确认其中一项、把其余退回泛问；
+确认来源值的问句不等于断言现状，也不等于声称用户本人记得。
 本次明确给定场景下，来源限制是否仍成立未知，仍要优先选择与其相容的方案，或在问句中确认；
 不能因当前未核实而直接提出冲突方案，再在risk_notes中提醒冲突。若没有合适的多个方案，只返回一条。
 
@@ -104,6 +106,7 @@ def generation_contract(payload: Mapping[str, Any]) -> dict:
             "citation_validity": "does_not_prove_semantic_support",
             "candidate_admissibility": "rewrite_or_omit_known_conflicts_before_return",
             "known_value_confirmation": "ask_with_latest_sourced_value_without_claiming_current_truth",
+            "multiple_confirmations": "include_latest_sourced_value_for_each_known_item_not_just_one",
             "recipient_text": "exclude_internal_selection_and_composition_instructions",
         },
     }

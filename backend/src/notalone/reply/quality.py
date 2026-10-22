@@ -23,6 +23,8 @@ def build_reply_contract(model, profile, contact_budget, owner_budget):
         'reply/context.py', 'reply/layered_context.py', 'reply/scenario_tools.py',
         'reply/generator.py', 'reply/tools.py', 'reply/fidelity.py',
         'reply/adapters/langchain_runtime.py', 'reply/adapters/input_budget_middleware.py',
+        'reply/adapters/thinking_output.py', 'reply/adapters/thinking_deepseek.py',
+        'reply/adapters/deepseek_provider.py', 'reply/adapters/chat_json_input_budget.py',
         'server/reply_wiring.py')}
     from notalone.reply.adapters.langchain_runtime import REPLY_RUNTIME_SCHEMA
     from langchain_core.utils.function_calling import convert_to_openai_tool

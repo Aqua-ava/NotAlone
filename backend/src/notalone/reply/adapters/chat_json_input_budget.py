@@ -47,7 +47,8 @@ def _validate_text_messages(messages: list[Mapping[str, object]]) -> None:
 def _configuration(model: ChatDeepSeek, profile: InputBudgetProfile, base_url: str) -> tuple[object, ...]:
     """绑定实例的实际 SDK 接收地址与有效默认参数，避免同名模型错配。"""
 
-    if type(model) is not ChatDeepSeek or model.model_name != profile.model_id:
+    from notalone.reply.adapters.thinking_deepseek import ThinkingDeepSeek
+    if type(model) not in (ChatDeepSeek, ThinkingDeepSeek) or model.model_name != profile.model_id:
         raise ValueError("输入估算仅支持已批准的模型适配器。")
     if (
         model.use_responses_api or model.streaming
@@ -64,7 +65,8 @@ def _configuration(model: ChatDeepSeek, profile: InputBudgetProfile, base_url: s
     defaults = dict(model._get_request_payload([]))
     extra = defaults.pop("extra_body", None)
     if extra:
-        if extra != {"thinking": {"type": "disabled"}} or "thinking" in defaults:
+        from notalone.reply.adapters.deepseek_provider import approved_thinking_body
+        if not approved_thinking_body(model, extra) or "thinking" in defaults:
             raise ValueError("输入估算的附加正文尚未核实。")
         defaults.update(extra)
     if not isinstance(defaults, Mapping) or set(defaults) - _REQUEST_FIELDS:

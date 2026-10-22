@@ -34,6 +34,8 @@ class EcnuInputBudgetTest(unittest.TestCase):
     long_text_repeats = 30000
     budget_builder = staticmethod(build_ecnu_input_budget)
 
+    model_class = ChatDeepSeek
+
     def model(self, responses=None, **overrides):
         payloads: list[bytes] = []
         scripted = list(responses or [reply_output()])
@@ -42,6 +44,8 @@ class EcnuInputBudgetTest(unittest.TestCase):
             payloads.append(request.content)
             output = scripted.pop(0)
             message = {"role": "assistant", "content": output.content}
+            if "reasoning_content" in output.additional_kwargs:
+                message["reasoning_content"] = output.additional_kwargs["reasoning_content"]
             if output.tool_calls:
                 message["tool_calls"] = [{
                     "id": call["id"], "type": "function",
@@ -58,7 +62,7 @@ class EcnuInputBudgetTest(unittest.TestCase):
         async_client = httpx.AsyncClient(transport=httpx.MockTransport(respond))
         self.addCleanup(sync_client.close)
         self.addCleanup(lambda: asyncio.run(async_client.aclose()))
-        model = ChatDeepSeek(**{
+        model = self.model_class(**{
             "model": self.model_name, "base_url": self.base_url, "api_key": "synthetic-unused-key",
             "temperature": 0, "max_retries": 0, "use_responses_api": False,
             "http_client": sync_client, "http_async_client": async_client,

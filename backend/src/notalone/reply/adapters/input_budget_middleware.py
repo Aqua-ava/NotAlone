@@ -249,8 +249,8 @@ class InputBudgetMiddleware(AgentMiddleware):
         deepseek 1.1.0 已核对：factory 绑定工具后以原 BaseMessage 序列调用。
         通用消息 converter 会丢 invalid_tool_calls 并合并 system list，
         故复用实际模型的 SDK 序列化；该私有接口升级后须重新核对和验证。
-        openai 3.3.1 在 transport 浅合并 extra_body；只允许已核实的
-        DeepSeek thinking disabled，并将它合入计量DTO。其它扩展仍拒绝。
+        openai 3.3.1 在 transport 浅合并 extra_body；仅展开已核实的
+        DeepSeek thinking 开关，并将它合入计量DTO。其它扩展仍拒绝。
         token 计量或含 framing 的输入估算由绑定实际对象的适配器负责。
         """
 
@@ -283,9 +283,8 @@ class InputBudgetMiddleware(AgentMiddleware):
         payload = dict(payload)
         extra = payload.pop("extra_body", None)
         if extra:
-            if (not isinstance(request.model, ChatDeepSeek)
-                    or extra != {"thinking": {"type": "disabled"}}
-                    or "thinking" in payload):
+            from notalone.reply.adapters.deepseek_provider import approved_thinking_body
+            if not approved_thinking_body(request.model, extra) or "thinking" in payload:
                 raise ValueError("模型附加正文未通过明确的DeepSeek配置核验。")
             payload.update(deepcopy(extra))
         encoded = payload.get("messages")

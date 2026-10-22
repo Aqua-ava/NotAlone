@@ -8,6 +8,7 @@ from typing import Any
 import httpx
 from langchain_core.language_models import BaseChatModel
 from langchain_deepseek import ChatDeepSeek
+from notalone.reply.adapters.thinking_deepseek import ThinkingDeepSeek
 
 DEFAULT_DEEPSEEK_MODEL = "deepseek-flash"
 DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com"
@@ -25,7 +26,7 @@ def is_official_deepseek_flash(model: object) -> bool:
     """只认精确 SDK 类型、Flash 模型名和已核实官方路由。"""
 
     return (
-        type(model) is ChatDeepSeek
+        type(model) in (ChatDeepSeek, ThinkingDeepSeek)
         and model.model_name == "deepseek-flash"
         and str(model.root_client.base_url).rstrip("/") in _OFFICIAL_BASE_URLS
     )
@@ -53,6 +54,16 @@ def deepseek_uses_thinking(model: object) -> bool:
     if mode == "enabled" or any(value in _DEEPSEEK_THINKING_EFFORTS for value in efforts):
         return True
     return mode != "disabled" and "none" not in efforts
+
+
+def approved_thinking_body(model: object, extra: object) -> bool:
+    """只展开已核实的开关字段；开启仅限精确官方 Flash，默认配置不变。"""
+    if not isinstance(model, ChatDeepSeek):
+        return False
+    if extra == {'thinking': {'type': 'disabled'}}:
+        return True
+    return (extra == {'thinking': {'type': 'enabled'}}
+            and is_official_deepseek_flash(model) and deepseek_uses_thinking(model))
 
 
 def build_deepseek_model(
@@ -119,7 +130,8 @@ def build_deepseek_model(
         options["http_client"] = http_client
     if http_async_client is not None:
         options["http_async_client"] = http_async_client
-    model = ChatDeepSeek(**options)
+    thinking_enabled = extra_body is not None and extra_body.get('thinking') == {'type': 'enabled'}
+    model = (ThinkingDeepSeek if thinking_enabled else ChatDeepSeek)(**options)
     if is_official_deepseek_flash(model) and not (
         extra_body and {"thinking", "reasoning_effort"} & extra_body.keys()
     ):
