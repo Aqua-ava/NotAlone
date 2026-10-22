@@ -156,6 +156,7 @@ def main():
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--preflight', action='store_true')
     parser.add_argument('--reply-thinking', choices=('disabled', 'low', 'high', 'max'), default='disabled')
+    parser.add_argument('--compare-reply-disabled', action='store_true')
     parser.add_argument('--ledger', type=Path, required=True)
     parser.add_argument('--round', default='current-default')
     parser.add_argument('--case-file', type=Path)
@@ -163,6 +164,8 @@ def main():
     parser.add_argument('--reuse-round', action='store_true',
                         help='同一冻结版本和假设的后续数据集，继续既有未结案轮；不新增或重置授权。')
     args = parser.parse_args()
+    if args.compare_reply_disabled and args.reply_thinking == 'disabled':
+        parser.error('配对对照须先指定一个实际思考强度。')
     global INITIAL, UPDATED, REPLIES
     extra_cases = {}
     if args.case_file:
@@ -190,6 +193,7 @@ def main():
               'additional_modes': ['current_chat否定作用域', '默认draft改写明确拒绝'],
               'provider_host': host, 'model': os.getenv('NOTALONE_DEEPSEEK_MODEL', 'deepseek-flash'),
               'runtime_sha256': fingerprint.hexdigest(), 'reply_thinking': args.reply_thinking,
+              'compare_reply_disabled': args.compare_reply_disabled,
               'module': __import__('notalone.server.app', fromlist=['__file__']).__file__,
               'synthetic_only': True, 'repeated_identity': 'reuse_exact_updated_source_file',
               'annotation': extra_cases.get('annotation', '原失败及正确对照回归'),
@@ -199,7 +203,7 @@ def main():
         print(json.dumps({'preflight':'ok', 'provider_host':host, 'model':frozen['model'], 'cases':5+len(REPLIES)}))
         return 0
     ledger = ProblemBudget(args.ledger)
-    hypothesis = args.hypothesis + '；实际源码与模型：' + frozen['runtime_sha256'] + '/' + host + '/' + frozen['model'] + '/reply_thinking=' + args.reply_thinking
+    hypothesis = args.hypothesis + '；实际源码与模型：' + frozen['runtime_sha256'] + '/' + host + '/' + frozen['model'] + '/reply_thinking=' + args.reply_thinking + '/compare_disabled=' + str(args.compare_reply_disabled)
     if args.reuse_round:
         with ledger.connection() as db:
             ledger.check(db)
@@ -360,6 +364,7 @@ def main():
                     last={'task':task,'state':state}
                     if task['status'] in {'failed','cancelled'}: break
                     if task['status']=='succeeded' and layer.get('status')=='failed': break
+                    if task['status']=='succeeded' and layer.get('eligible_count') == 0 and not layer.get('maintenance_pending'): break
                     if task['status']=='succeeded' and layer.get('status')=='ready' and not layer.get('maintenance_pending'): break
                     event.wait(.5)
                 atomic_json(root/f'{stage}-completion.json',last)
@@ -390,7 +395,42 @@ def main():
                     record['evidence'] = read(f'/api/contacts/{contact}/replies/{response["reply_request_id"]}/evidence')
                 atomic_json(root/f'reply-{name}.json',record)
                 results['reply_'+name]={'status':status,'candidates':len(response.get('candidates',[]))}
-            snapshot('final')
+            primary_final = snapshot('final')
+            if args.compare_reply_disabled:
+                # 同一冻结资料与来源版本上切换实际服务；两次均走正式 HTTP 与工厂。
+                backend.close()
+                backend = None
+                reply = build_reply_service(database_url=Database.database_url, owner_id=owner,
+                    model_priority=priority, layered_memory=layers)
+                assert reply is not None
+                backend = HttpBackend(create_app(database_url=Database.database_url, owner_id=owner,
+                    token='synthetic-current-quality', events=events, task_host=task_host,
+                    import_service=_build_import_service(Database.database_url),
+                    memory_service=_build_memory_service(Database.database_url),
+                    layered_memory=layers, reply_service=reply), owner)
+                for name in [row[0] for row in REPLIES] + ['pasted_negation', 'draft_rewrite']:
+                    prior = json.loads((root/f'reply-{name}.json').read_text())
+                    body = prior['request']
+                    body['idempotency_key'] = str(uuid4())
+                    capture.stage = 'paired_disabled_' + name
+                    reply_started = time.monotonic()
+                    status, response = backend.request('/api/reply/generate', body, timeout=300)
+                    record = {'status': status, 'request': body, 'response': response,
+                        'duration_ms': round((time.monotonic()-reply_started)*1000)}
+                    if status == 200:
+                        record['evidence'] = read(f'/api/contacts/{body["contact_id"]}/replies/{response["reply_request_id"]}/evidence')
+                    atomic_json(root/f'paired-disabled-{name}.json', record)
+                    results['paired_disabled_'+name] = {'status': status, 'candidates': len(response.get('candidates', []))}
+                paired_final = snapshot('paired-final')
+                before = [(m['memory_id'], m['revision'], m['text'], m['source_ids']) for m in primary_final['memories']['memories']]
+                after = [(m['memory_id'], m['revision'], m['text'], m['source_ids']) for m in paired_final['memories']['memories']]
+                if before != after:
+                    raise RuntimeError('配对回复期间底层记忆版本发生变化，不能当作固定资料对照。')
+                if primary_final['layers']['layered_memory'].get('profile') != paired_final['layers']['layered_memory'].get('profile'):
+                    raise RuntimeError('配对回复期间画像发生变化，不能当作固定资料对照。')
+                atomic_json(root/'paired-input-identity.json', {'same_memory_versions': True, 'same_profile': True,
+                    'profile_before': primary_final['layers']['layered_memory'].get('profile'),
+                    'profile_after': paired_final['layers']['layered_memory'].get('profile')})
             capture.stage='shutdown'
             priority.stop();task_host.stop(timeout=60)
             backend.close();backend=None
