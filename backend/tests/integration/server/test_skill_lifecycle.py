@@ -73,9 +73,11 @@ class SkillLifecycleHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
     def test_file_backed_history_remains_readable_without_database_document(self):
         self._bind(self.contact_id)
         skill = self._import()
-        # 迁移后的数据库只保留版本身份；历史查看必须读取已发布文件。
+        # 数据库已没有正文列；历史查看必须读取已发布文件。
         with psycopg.connect(self.database_url) as connection:
-            connection.execute('UPDATE public.reply_skill_version SET content=NULL WHERE skill_id=%s', (UUID(skill),))
+            columns = {row[0] for row in connection.execute("SELECT column_name FROM information_schema.columns "
+                "WHERE table_schema='public' AND table_name='reply_skill_version'").fetchall()}
+            self.assertNotIn('content', columns)
         history = self._get(self.backend, self.path + '/skills/' + skill)
         self.assertEqual(len(history['versions']), 1)
         self.assertIn('合成旧方法：先问清楚再回应。', history['versions'][0]['document'])
@@ -519,9 +521,8 @@ class SkillLifecycleHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
             self.assertEqual(connection.execute('SELECT count(*) FROM public.skill_history_operation WHERE owner_id=%s AND contact_id=%s AND operation_key=%s',
                 (self.owner_id, self.contact_id, UUID(command['operation_key']))).fetchone()[0], 0 if source_first else 1)
             for version in (old, second['published']['version_id']):
-                self.assertEqual(connection.execute('SELECT description,content,content_sha256,source_locator,is_current FROM public.reply_skill_version WHERE id=%s',
-                    (UUID(version),)).fetchone(), ('来源已删除', None, None, None, False))
-                self.assertEqual(connection.execute('SELECT count(*) FROM public.reply_skill_resource WHERE skill_version_id=%s', (UUID(version),)).fetchone()[0], 0)
+                self.assertEqual(connection.execute('SELECT content_path,manifest_sha256,content_sha256,source_locator,is_current FROM public.reply_skill_version WHERE id=%s',
+                    (UUID(version),)).fetchone(), (None, None, None, None, False))
                 self.assertEqual(connection.execute('SELECT dependency_ids,source_generation,scene FROM public.reply_skill_publication WHERE version_id=%s',
                     (UUID(version),)).fetchone(), ([], {}, None))
         # 同一公开DELETE入口同步运行真实worker，再在任何GET前确认删除终态。

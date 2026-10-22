@@ -252,13 +252,12 @@ class SkillReviewHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self.assertEqual(status, 200, independent)
         with self._source_delete_before_get(source):
             with psycopg.connect(self.database_url) as connection:
-                descriptions = connection.execute('SELECT skill.description,version.description FROM public.reply_skill skill '
-                    'JOIN public.reply_skill_version version ON version.skill_id=skill.id WHERE version.id=%s',
-                    (UUID(published['version_id']),)).fetchone()
-                self.assertNotIn(marker, json.dumps(descriptions, ensure_ascii=False))
-                self.assertEqual(connection.execute('SELECT skill.description,version.description FROM public.reply_skill skill '
-                    'JOIN public.reply_skill_version version ON version.skill_id=skill.id WHERE skill.id=%s',
-                    (UUID(independent['skill_id']),)).fetchone(), ('合成独立包摘要保留', '合成独立包摘要保留'))
+                self.assertEqual(connection.execute('SELECT content_path,manifest_sha256 FROM public.reply_skill_version WHERE id=%s',
+                    (UUID(published['version_id']),)).fetchone(), (None, None))
+                from notalone.persistence.skill_manifest import read_package_manifest
+                independent_version = connection.execute('SELECT id FROM public.reply_skill_version WHERE skill_id=%s AND is_current',
+                    (UUID(independent['skill_id']),)).fetchone()[0]
+                self.assertEqual(read_package_manifest(connection, independent_version)['description'], '合成独立包摘要保留')
         self.assertNotIn(marker, json.dumps(self._get(self.backend, '/api/skills'), ensure_ascii=False))
         restarted = self._production_backend(self.owner_id)
         self.assertNotIn(marker, json.dumps(self._get(restarted, '/api/skills'), ensure_ascii=False))
@@ -275,12 +274,13 @@ class SkillReviewHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         updated = PostgresSkillLibrary(self.database_url).update_package(self.owner_id, package)
         with self._source_delete_before_get(source):
             with psycopg.connect(self.database_url) as connection:
-                self.assertEqual(connection.execute('SELECT description,content FROM public.reply_skill_version WHERE id=%s',
-                    (UUID(published['version_id']),)).fetchone(), ('来源已删除', None))
-                self.assertEqual(connection.execute('SELECT skill.description,skill.status,version.description,version.content,'
-                    'version.is_current,version.review_origin FROM public.reply_skill skill JOIN public.reply_skill_version version '
-                    'ON version.skill_id=skill.id WHERE version.id=%s', (updated.version_id,)).fetchone(),
-                    ('合成新版独立摘要保留', 'active', '合成新版独立摘要保留', None, True, False))
+                self.assertEqual(connection.execute('SELECT content_path,manifest_sha256 FROM public.reply_skill_version WHERE id=%s',
+                    (UUID(published['version_id']),)).fetchone(), (None, None))
+                self.assertEqual(connection.execute('SELECT skill.status,version.is_current,version.review_origin '
+                    'FROM public.reply_skill skill JOIN public.reply_skill_version version ON version.skill_id=skill.id '
+                    'WHERE version.id=%s', (updated.version_id,)).fetchone(), ('active', True, False))
+                from notalone.persistence.skill_manifest import read_package_manifest
+                self.assertEqual(read_package_manifest(connection, updated.version_id)['description'], '合成新版独立摘要保留')
             loaded = PostgresSkillPort(self.database_url).load_version(
                 ContactScope(self.owner_id, self.contact_id), updated.version_id)
             self.assertEqual(loaded.content, '合成新版独立正文保留。\n')
@@ -599,13 +599,13 @@ class SkillReviewHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         with psycopg.connect(self.database_url) as connection:
             self.assertEqual(connection.execute('SELECT status,strategy,private_evidence FROM public.skill_draft WHERE id=%s',
                 (UUID(draft_id),)).fetchone(), ('invalidated', None, None))
-            self.assertEqual(connection.execute('SELECT content,content_sha256,source_locator,status FROM public.reply_skill_version WHERE id=%s',
+            self.assertEqual(connection.execute('SELECT content_path,content_sha256,source_locator,status FROM public.reply_skill_version WHERE id=%s',
                 (UUID(version_id),)).fetchone(), (None, None, None, 'deleted'))
             self.assertEqual(connection.execute('SELECT count(*) FROM public.skill_review_comparison WHERE draft_id=%s AND '
                 '(input IS NOT NULL OR result IS NOT NULL OR context_fingerprint IS NOT NULL OR cardinality(dependency_ids)>0)',
                 (UUID(draft_id),)).fetchone()[0], 0)
-            self.assertEqual(connection.execute('SELECT count(*) FROM public.reply_skill_method WHERE version_id=%s AND '
-                '(title IS NOT NULL OR instruction IS NOT NULL)', (UUID(version_id),)).fetchone()[0], 0)
+            self.assertEqual(connection.execute('SELECT method_manifest_path,method_manifest_sha256,manifest_sha256 '
+                'FROM public.reply_skill_version WHERE id=%s', (UUID(version_id),)).fetchone(), (None, None, None))
             self.assertEqual(connection.execute('SELECT count(*) FROM public.skill_review_operation WHERE draft_id=%s '
                 'AND request_fingerprint IS NOT NULL', (UUID(draft_id),)).fetchone()[0], 0)
             self.assertEqual(connection.execute('SELECT count(*) FROM public.reply_request WHERE owner_id=%s AND skill_version_id=%s',

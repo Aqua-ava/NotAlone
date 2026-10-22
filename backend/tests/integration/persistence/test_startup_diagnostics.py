@@ -74,6 +74,12 @@ class StartupDiagnosticCommandTest(unittest.TestCase):
         with psycopg.connect(self.url) as connection:
             self.assertIsNone(connection.execute("SELECT to_regclass('public.notalone_schema_migration')").fetchone()[0])
 
+    def test_ready_without_retired_skill_resource_table(self) -> None:
+        migrate(self.url, MIGRATIONS)
+        with psycopg.connect(self.url) as connection:
+            connection.execute("DROP TABLE IF EXISTS public.reply_skill_resource")
+        self.assertEqual(self._run(), {"code": "ready"})
+
     def test_untracked_existing_schema_requires_baseline(self) -> None:
         migrate(self.url, MIGRATIONS)
         with psycopg.connect(self.url) as connection:

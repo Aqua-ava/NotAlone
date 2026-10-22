@@ -8,6 +8,7 @@ from uuid import UUID, uuid4
 import psycopg
 
 from tests.fidelity_http_support import FidelityHttpFixture
+from tests.integration.persistence.skill_fixture import insert_file_skill
 from tests.input_budget_support import synthetic_budget_kwargs
 from tests.integration.server.test_persistent_reply_exploration import ExplorationControlledModel
 
@@ -25,13 +26,9 @@ class AutomaticExplorationSkillHttpTest(FidelityHttpFixture, unittest.TestCase):
         text = "合成私有策略正文：只帮助厘清邀约，不替用户决定立场。"
         with psycopg.connect(self.database_url) as connection:
             connection.execute("UPDATE public.skill_library SET revision=revision+1 WHERE owner_id=%s", (self.owner_id,))
-            connection.execute("INSERT INTO public.reply_skill(id,owner_id,contact_id,name,description) "
-                               "VALUES (%s,%s,%s,%s,'适用于当前收到邀请的沟通情境')",
-                               (skill, self.owner_id, contact, name))
-            connection.execute("INSERT INTO public.reply_skill_version"
-                "(id,skill_id,version_number,name,description,content,enabled,is_current,status) "
-                "VALUES (%s,%s,1,%s,'适用于当前收到邀请的沟通情境',%s,true,true,'active')",
-                (version, skill, name, text))
+            insert_file_skill(connection, owner_id=self.owner_id, contact_id=contact,
+                              skill_id=skill, version_id=version, name=name,
+                              description="适用于当前收到邀请的沟通情境", content=text)
         body = {"operation_key": str(uuid4()), "content": {"type": "response_exploration", "target_message_id": target}}
         return path, body, str(version), name, text, source
 
@@ -77,15 +74,15 @@ class AutomaticExplorationSkillHttpTest(FidelityHttpFixture, unittest.TestCase):
     def test_confirmed_generation_keeps_automatic_provenance_for_the_fixed_skill(self):
         for number in (1, 2):
             with self.subTest(version=number):
-                path, body, version, name, _, _ = self._prepare()
+                path, body, version, name, text, _ = self._prepare()
                 if number == 2:
                     latest = uuid4()
                     with psycopg.connect(self.database_url) as connection:
                         connection.execute("UPDATE public.reply_skill_version SET is_current=false WHERE id=%s", (version,))
-                        connection.execute("INSERT INTO public.reply_skill_version"
-                            "(id,skill_id,version_number,name,description,content,enabled,is_current,status) "
-                            "SELECT %s,skill_id,2,name,description,content,true,true,'active' "
-                            "FROM public.reply_skill_version WHERE id=%s", (latest, version))
+                        skill_id = connection.execute("SELECT skill_id FROM public.reply_skill_version WHERE id=%s", (version,)).fetchone()[0]
+                        insert_file_skill(connection, owner_id=self.owner_id, skill_id=skill_id,
+                                          version_id=latest, name=name, content=text,
+                                          description="适用于当前收到邀请的沟通情境", version_number=2, create_skill=False)
                         connection.execute("UPDATE public.skill_library SET revision=revision+1 WHERE owner_id=%s", (self.owner_id,))
                     version = str(latest)
                 self.reply_model.plans.extend([{"select_skill": version}, {"explore": {}}, {"read_skill": name},

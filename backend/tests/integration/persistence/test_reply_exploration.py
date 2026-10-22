@@ -11,6 +11,7 @@ from uuid import UUID, uuid4
 
 import psycopg
 from psycopg.rows import dict_row
+from tests.integration.persistence.skill_fixture import insert_file_skill
 
 from notalone.persistence.reply_exploration import PostgresExplorationStore
 from notalone.database_migrations import migrate
@@ -80,11 +81,9 @@ class ReplyExplorationPersistenceTest(unittest.TestCase):
         name = "synthetic-auto-pin-" + skill.hex[:8]
         with psycopg.connect(fixture.DATABASE_URL) as connection:
             connection.execute("UPDATE public.skill_library SET revision=revision+1 WHERE owner_id=%s", (self.scope.owner_id,))
-            connection.execute("INSERT INTO public.reply_skill(id,owner_id,contact_id,name,description) "
-                               "VALUES (%s,%s,%s,%s,'合成自动策略')", (skill, self.scope.owner_id, self.scope.contact_id, name))
-            connection.execute("INSERT INTO public.reply_skill_version"
-                "(id,skill_id,version_number,name,description,content,enabled,is_current,status) "
-                "VALUES (%s,%s,1,%s,'合成自动策略','合成受控正文',true,true,'active')", (version, skill, name))
+            insert_file_skill(connection, owner_id=self.scope.owner_id, contact_id=self.scope.contact_id,
+                              skill_id=skill, version_id=version, name=name, description="合成自动策略",
+                              content="合成受控正文")
         task = self._begin()
         self.assertFalse(task.skill_selection_complete)
         return task, version

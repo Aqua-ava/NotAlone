@@ -10,6 +10,7 @@ from notalone.skills.learning import LearningBatch, MAX_LEARNING_MATERIALS, MAX_
 from notalone.persistence.skill_learning_generation import capture_generation
 from notalone.reply.errors import ReplyStoreInvariantError
 from notalone.persistence.skill_files import SkillFileError, read_version_content
+from notalone.persistence.skill_manifest import read_package_manifest
 
 
 def expand_learning_provenance(connection, scope, dependencies) -> set[UUID] | None:
@@ -328,12 +329,11 @@ def select_learning_batch(connection, scope, *, material_ids=None) -> LearningBa
             break
     targets = []
     revision = connection.execute('SELECT revision FROM public.skill_library WHERE owner_id=%s', (scope.owner_id,)).fetchone()
-    for skill, version, name, description, number in connection.execute("""
-        SELECT skill.id,version.id,skill.name,skill.description,version.version_number
+    for skill, version, name, number in connection.execute("""
+        SELECT skill.id,version.id,skill.name,version.version_number
         FROM public.reply_skill AS skill JOIN public.reply_skill_version AS version ON version.skill_id=skill.id
         WHERE skill.owner_id=%s AND skill.status='active' AND version.enabled AND version.is_current
           AND version.status='active' AND version.content_path IS NOT NULL AND version.directory_available
-          AND version.name=skill.name
           AND (skill.contact_id IS NULL OR skill.contact_id=%s)
         ORDER BY skill.name,skill.id LIMIT 8
     """, params).fetchall():
@@ -349,11 +349,14 @@ def select_learning_batch(connection, scope, *, material_ids=None) -> LearningBa
         if methods is None:
             continue
         try:
+            manifest = read_package_manifest(connection, version)
+            if manifest['name'] != name:
+                continue
             body = read_version_content(connection, version)
         except SkillFileError:
             continue
         target={"skill_id": str(skill), "version_id": str(version), "version_number": number,
-                "name": name, "description": description, "document": body, "methods": methods,
+                "name": name, "description": manifest['description'], "document": body, "methods": methods,
                 "scope": proofs[0]['scope'], "source_dependency_count": len(provenance)}
         if len(learning_input_text(materials,(*targets,target))) > MAX_LEARNING_INPUT_CHARS:
             continue

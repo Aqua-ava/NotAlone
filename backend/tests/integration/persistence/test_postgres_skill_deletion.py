@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import os
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from uuid import UUID, uuid4
@@ -20,6 +21,7 @@ from notalone.persistence.skill_library import (
     SkillNotFoundError,
 )
 from notalone.persistence.skill_port import PostgresSkillPort
+from notalone.persistence.skill_manifest import read_package_manifest
 from notalone.scopes import ContactScope
 
 
@@ -55,6 +57,12 @@ class PostgresSkillDeletionTest(unittest.TestCase):
             raise unittest.SkipTest("测试库尚未应用 008 SkillPort 迁移。")
 
     def setUp(self) -> None:
+        temporary = TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        environment = patch.dict(os.environ, {"NOTALONE_SKILLS_DIR": str(self.root)})
+        environment.start()
+        self.addCleanup(environment.stop)
         self.owner_id = uuid4()
         self.contact_id = uuid4()
         with psycopg.connect(TEST_DATABASE_URL) as connection:
@@ -139,15 +147,7 @@ class PostgresSkillDeletionTest(unittest.TestCase):
             catalog_before = self.skill_port.catalog(self._scope())
             version_id = catalog_before.entries[0].version_id
             with psycopg.connect(TEST_DATABASE_URL, row_factory=dict_row) as connection:
-                resource_path = connection.execute(
-                    """
-                    SELECT relative_path
-                    FROM public.reply_skill_resource
-                    WHERE skill_version_id = %s
-                    LIMIT 1
-                    """,
-                    (version_id,),
-                ).fetchone()["relative_path"]
+                resource_path = read_package_manifest(connection, version_id)["resources"][0]["relative_path"]
 
             credential = self.library.delete(self.owner_id, skill_id)
 
@@ -180,23 +180,13 @@ class PostgresSkillDeletionTest(unittest.TestCase):
             ).fetchone()
             version_rows = connection.execute(
                 """
-                SELECT content, content_sha256, source_locator, enabled,
-                       is_current, status, deleted_at, validation_warnings
+                SELECT content_path, document_sha256, manifest_sha256, content_sha256, source_locator, enabled,
+                       is_current, status, deleted_at
                 FROM public.reply_skill_version
                 WHERE skill_id = %s
                 """,
                 (skill_id,),
             ).fetchall()
-            resource_count = connection.execute(
-                """
-                SELECT count(*) AS count
-                FROM public.reply_skill_resource AS r
-                JOIN public.reply_skill_version AS v
-                  ON v.id = r.skill_version_id
-                WHERE v.skill_id = %s
-                """,
-                (skill_id,),
-            ).fetchone()["count"]
         self.assertEqual(skill_row["status"], "deleted")
         self.assertIsNotNone(skill_row["deleted_at"])
         self.assertEqual(
@@ -206,15 +196,16 @@ class PostgresSkillDeletionTest(unittest.TestCase):
         self.assertIsNone(skill_row["deletion_error_code"])
         self.assertTrue(len(version_rows) >= 2)
         for row in version_rows:
-            self.assertIsNone(row["content"])
+            self.assertIsNone(row["content_path"])
+            self.assertIsNone(row["document_sha256"])
+            self.assertIsNone(row["manifest_sha256"])
             self.assertIsNone(row["content_sha256"])
             self.assertIsNone(row["source_locator"])
             self.assertFalse(row["enabled"])
             self.assertFalse(row["is_current"])
             self.assertEqual(row["status"], "deleted")
             self.assertIsNotNone(row["deleted_at"])
-            self.assertEqual(row["validation_warnings"], [])
-        self.assertEqual(resource_count, 0)
+        self.assertFalse((self.root / ".versions" / str(self.owner_id) / str(skill_id)).exists())
         self.assertIsNotNone(catalog_before.entries[0].name)
 
     def test_repeat_delete_is_idempotent_and_returns_stable_credential(self) -> None:
@@ -275,15 +266,15 @@ class PostgresSkillDeletionTest(unittest.TestCase):
                 )
 
     def test_delete_failure_rolls_back_keeping_retryable_state(self) -> None:
-        trigger_name = f"block_skill_resource_delete_{uuid4().hex}"
-        function_name = f"block_skill_resource_delete_fn_{uuid4().hex}"
+        trigger_name = f"block_skill_version_delete_{uuid4().hex}"
+        function_name = f"block_skill_version_delete_fn_{uuid4().hex}"
         with psycopg.connect(TEST_DATABASE_URL) as connection:
             connection.execute(
                 f"""
                 CREATE FUNCTION public.{function_name}()
                 RETURNS trigger LANGUAGE plpgsql AS $$
                 BEGIN
-                    RAISE EXCEPTION 'synthetic skill resource delete failure';
+                    RAISE EXCEPTION 'synthetic skill version delete failure';
                 END
                 $$
                 """
@@ -291,7 +282,7 @@ class PostgresSkillDeletionTest(unittest.TestCase):
             connection.execute(
                 f"""
                 CREATE TRIGGER {trigger_name}
-                BEFORE DELETE ON public.reply_skill_resource
+                BEFORE UPDATE OF status ON public.reply_skill_version
                 FOR EACH ROW EXECUTE FUNCTION public.{function_name}()
                 """
             )
@@ -308,7 +299,7 @@ class PostgresSkillDeletionTest(unittest.TestCase):
             with psycopg.connect(TEST_DATABASE_URL) as connection:
                 connection.execute(
                     f"DROP TRIGGER {trigger_name} "
-                    "ON public.reply_skill_resource"
+                    "ON public.reply_skill_version"
                 )
                 connection.execute(f"DROP FUNCTION public.{function_name}()")
 
@@ -390,7 +381,7 @@ class PostgresSkillDeletionTest(unittest.TestCase):
             leaked_content = connection.execute(
                 """
                 SELECT count(*) FROM public.reply_skill_version
-                WHERE skill_id = %s AND content IS NOT NULL
+                WHERE skill_id = %s AND (content_path IS NOT NULL OR document_sha256 IS NOT NULL OR manifest_sha256 IS NOT NULL)
                 """,
                 (skill_id,),
             ).fetchone()[0]
@@ -408,19 +399,10 @@ class PostgresSkillDeletionTest(unittest.TestCase):
                 """,
                 (skill_id,),
             ).fetchone()[0]
-            leaked_resources = connection.execute(
-                """
-                SELECT count(*) FROM public.reply_skill_resource AS r
-                JOIN public.reply_skill_version AS v
-                  ON v.id = r.skill_version_id
-                WHERE v.skill_id = %s
-                """,
-                (skill_id,),
-            ).fetchone()[0]
         self.assertEqual(leaked_content, 0)
         self.assertEqual(leaked_hashes, 0)
         self.assertEqual(leaked_locators, 0)
-        self.assertEqual(leaked_resources, 0)
+        self.assertFalse((self.root / ".versions" / str(self.owner_id) / str(skill_id)).exists())
 
 
 if __name__ == "__main__":

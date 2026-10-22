@@ -126,7 +126,7 @@ class PostgresSkillFileHealthTest(unittest.TestCase):
 
         with self.assertLogs("notalone.persistence.skill_files", level="WARNING") as captured:
             synchronize_skill_library(
-                self.database_url, self.owner_id, migrate_legacy=False
+                self.database_url, self.owner_id
             )
 
         self.assertIn("skill_file_sync_failed", "\n".join(captured.output))
@@ -143,7 +143,7 @@ class PostgresSkillFileHealthTest(unittest.TestCase):
         self.assertNotIn("先回应感受", json.dumps(health, ensure_ascii=False))
 
         document.write_bytes(original)
-        synchronize_skill_library(self.database_url, self.owner_id, migrate_legacy=False)
+        synchronize_skill_library(self.database_url, self.owner_id)
 
         self.assertEqual(
             [entry.name for entry in self.port.catalog(self.scope).entries],
@@ -172,7 +172,7 @@ class PostgresSkillFileHealthTest(unittest.TestCase):
                 "notalone.persistence.skill_files", level="WARNING"
             ) as captured:
                 synchronize_skill_library(
-                    self.database_url, self.owner_id, migrate_legacy=False
+                    self.database_url, self.owner_id
                 )
 
         self.assertIn("skill_file_sync_failed", "\n".join(captured.output))
@@ -185,7 +185,7 @@ class PostgresSkillFileHealthTest(unittest.TestCase):
         self.assertEqual(failure["code"], "permission_denied")
         self.assertNotIn(str(self.root), json.dumps(health, ensure_ascii=False))
 
-        synchronize_skill_library(self.database_url, self.owner_id, migrate_legacy=False)
+        synchronize_skill_library(self.database_url, self.owner_id)
 
         self.assertFalse(blocked.exists())
         recovered = self.library.skill_file_health(self.owner_id)
@@ -213,7 +213,7 @@ class PostgresSkillFileHealthTest(unittest.TestCase):
             side_effect=PermissionError("合成权限失败"),
         ):
             synchronize_skill_library(
-                self.database_url, self.owner_id, migrate_legacy=False
+                self.database_url, self.owner_id
             )
 
         health = self.library.skill_file_health(self.owner_id)

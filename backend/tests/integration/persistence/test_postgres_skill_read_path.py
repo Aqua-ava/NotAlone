@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import os
 import unittest
 from pathlib import Path
@@ -21,6 +20,7 @@ from notalone.persistence.skill_port import (
     require_reply_skill_current,
 )
 from notalone.scopes import ContactScope
+from tests.integration.persistence.skill_fixture import insert_file_skill
 
 
 TEST_DATABASE_URL = os.environ.get(
@@ -76,29 +76,11 @@ class PostgresSkillReadPathTest(unittest.TestCase):
                 "INSERT INTO public.skill_library(owner_id,revision) VALUES (%s,5)",
                 (self.owner_id,),
             )
-            connection.execute(
-                "INSERT INTO public.reply_skill(id,owner_id,name,description,status) "
-                "VALUES (%s,%s,'legacy-reply','旧版合成描述。','active')",
-                (self.skill_id, self.owner_id),
-            )
-            connection.execute(
-                "INSERT INTO public.reply_skill_version(id,skill_id,version_number,name,"
-                "description,content,enabled,is_current,status) "
-                "VALUES (%s,%s,1,'legacy-reply','旧版合成描述。','先表示理解。',true,true,'active')",
-                (self.version_id, self.skill_id),
-            )
-            connection.execute(
-                "INSERT INTO public.reply_skill_resource(skill_version_id,relative_path,"
-                "resource_kind,media_type,byte_size,content_sha256,content) "
-                "VALUES (%s,%s,'reference','text/markdown',%s,%s,%s)",
-                (
-                    self.version_id,
-                    self.resource_path,
-                    len(resource),
-                    hashlib.sha256(resource).hexdigest(),
-                    resource,
-                ),
-            )
+            insert_file_skill(connection, owner_id=self.owner_id, skill_id=self.skill_id,
+                              version_id=self.version_id, name="legacy-reply", content="先表示理解。",
+                              description="旧版合成描述。", resources={self.resource_path: resource})
+        self.original_files = {str(path.relative_to(self.root)): path.read_bytes()
+                               for path in self.root.rglob("*") if path.is_file()}
         self.port = PostgresSkillPort(TEST_DATABASE_URL)
 
     def tearDown(self) -> None:
@@ -122,7 +104,6 @@ class PostgresSkillReadPathTest(unittest.TestCase):
 
     def _forbid_directory_writes(self) -> None:
         targets = (
-            "notalone.persistence.skill_directory.prepare_legacy_skill_directory",
             "notalone.persistence.skill_directory.synchronize_skill_directory",
             "notalone.persistence.skill_files.synchronize_working_copies",
             "notalone.persistence.skill_files.cleanup_pending_files",
@@ -144,7 +125,8 @@ class PostgresSkillReadPathTest(unittest.TestCase):
         self.assertEqual(catalog.revision, 5)
         self.assertEqual(loaded.content, "先表示理解。")
         self.assertEqual(resource.content.decode("utf-8"), "先表达理解，再邀请对方选择。")
-        self.assertEqual(list(self.root.rglob("*")), [])
+        self.assertEqual({str(path.relative_to(self.root)): path.read_bytes()
+                          for path in self.root.rglob("*") if path.is_file()}, self.original_files)
 
     def test_directory_discovery_happens_only_at_explicit_synchronize_entry(self) -> None:
         self._package()
@@ -160,7 +142,7 @@ class PostgresSkillReadPathTest(unittest.TestCase):
         )
         self.assertEqual(after.revision, revision)
         self.assertGreater(after.revision, before.revision)
-        # 显式入口负责旧库正文迁移；读路径本身不落盘。
+        # 显式入口同步已有文件版本的工作副本；读路径本身不落盘。
         legacy_document = (
             self.root
             / ".versions"

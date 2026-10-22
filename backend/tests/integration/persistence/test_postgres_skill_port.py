@@ -5,7 +5,8 @@ from __future__ import annotations
 import os
 import unittest
 from unittest.mock import patch
-from datetime import datetime, timezone
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from uuid import UUID, uuid4
 
 import psycopg
@@ -16,6 +17,7 @@ from notalone.persistence.skill_port import (
 )
 from notalone.scopes import ContactScope
 from notalone.skills import SkillCatalog, SkillVersion
+from tests.integration.persistence.skill_fixture import insert_file_skill
 
 
 TEST_DATABASE_URL = os.environ.get(
@@ -46,6 +48,12 @@ class PostgresSkillPortTest(unittest.TestCase):
             raise unittest.SkipTest("测试库尚未应用 008 SkillPort 迁移。")
 
     def setUp(self) -> None:
+        temporary = TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        environment = patch.dict(os.environ, {"NOTALONE_SKILLS_DIR": str(self.root)})
+        environment.start()
+        self.addCleanup(environment.stop)
         self.owner_id = uuid4()
         self.contact_id = uuid4()
         self.other_contact_id = uuid4()
@@ -191,68 +199,21 @@ class PostgresSkillPortTest(unittest.TestCase):
     ) -> None:
         if owner_id is None:
             raise ValueError("Skill 测试夹具必须明确 owner_id。")
-        connection.execute(
-            """
-            INSERT INTO public.reply_skill (
-                id, owner_id, contact_id, name, description, status, deleted_at
-            )
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
-            """,
-            (
-                skill_id,
-                owner_id,
-                contact_id,
-                name,
-                f"{name} 合成描述",
-                skill_status,
-                datetime.now(timezone.utc) if skill_status == "deleted" else None,
-            ),
-        )
-        PostgresSkillPortTest._insert_version(
-            connection,
-            skill_id=skill_id,
-            version_id=version_id,
-            name=name,
-            content=content,
-            status=version_status,
-            enabled=enabled,
-            version_number=version_number,
-        )
+        insert_file_skill(
+            connection, owner_id=owner_id, skill_id=skill_id, version_id=version_id,
+            name=name, description=f"{name} 合成描述", content=content,
+            contact_id=contact_id, skill_status=skill_status, status=version_status,
+            enabled=enabled, version_number=version_number)
 
     @staticmethod
-    def _insert_version(
-        connection: psycopg.Connection,
-        *,
-        skill_id: UUID,
-        version_id: UUID,
-        name: str,
-        content: str | None,
-        status: str = "active",
-        enabled: bool = True,
-        is_current: bool = True,
-        version_number: int = 1,
-    ) -> None:
-        connection.execute(
-            """
-            INSERT INTO public.reply_skill_version (
-                id, skill_id, version_number, name, description, content,
-                enabled, is_current, status, deleted_at
-            )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """,
-            (
-                version_id,
-                skill_id,
-                version_number,
-                name,
-                f"{name} 合成描述",
-                content,
-                enabled,
-                is_current,
-                status,
-                datetime.now(timezone.utc) if status == "deleted" else None,
-            ),
-        )
+    def _insert_version(connection, *, skill_id, version_id, name, content,
+                        status="active", enabled=True, is_current=True, version_number=1):
+        owner = connection.execute("SELECT owner_id FROM public.reply_skill WHERE id=%s", (skill_id,)).fetchone()[0]
+        insert_file_skill(
+            connection, owner_id=owner, skill_id=skill_id, version_id=version_id,
+            name=name, description=f"{name} 合成描述", content=content,
+            status=status, enabled=enabled, is_current=is_current,
+            version_number=version_number, create_skill=False)
 
     def test_catalog_returns_global_and_contact_skill_but_not_other_scope(self) -> None:
         catalog = self.port.catalog(self._scope())
@@ -341,7 +302,7 @@ class PostgresSkillPortTest(unittest.TestCase):
             self.assertEqual(version.content, '全局策略正文。')
             with self.assertRaises(PermissionError):
                 self.port.load_resource(self._scope(), self.global_version_id, 'assets/unknown.txt')
-        self.assertEqual(sum('version_content' in columns or 'content' in columns and 'document_sha256' in columns for columns in projections), 1)
+        self.assertFalse(any('version_content' in columns or 'content' in columns for columns in projections))
 
     def test_unknown_disabled_deleted_old_or_foreign_version_fails_identically(self) -> None:
         version_ids = (
@@ -373,16 +334,15 @@ class PostgresSkillPortTest(unittest.TestCase):
                 connection.execute(
                     """
                     INSERT INTO public.reply_skill (
-                        id, owner_id, contact_id, name, description, status
+                        id, owner_id, contact_id, name, status
                     )
-                    VALUES (%s, %s, %s, %s, %s, 'active')
+                    VALUES (%s, %s, %s, %s, 'active')
                     """,
                     (
                         uuid4(),
                         self.owner_id,
                         self.other_contact_id,
                         "gentle-reply",
-                        "重复名称合成描述",
                     ),
                 )
         after = self.port.catalog(self._scope())

@@ -12,6 +12,7 @@ from langchain_core.messages import HumanMessage
 from notalone.memory import AdoptionMethod, MemoryCandidate, MemoryCategory
 from notalone.persistence.memory_store import PostgresMemoryStore
 from notalone.scopes import ContactScope
+from tests.integration.persistence.skill_fixture import insert_file_skill
 
 from tests.fidelity_http_support import FidelityControlledModel, FidelityHttpFixture
 from tests.integration.server.core_business_flow_support import ScriptedCoreModel, tool_response
@@ -151,15 +152,9 @@ class PersistentExplorationHttpTest(FidelityHttpFixture, unittest.TestCase):
         with psycopg.connect(self.database_url) as connection:
             connection.execute("INSERT INTO public.skill_library(owner_id,revision) VALUES (%s,1) ON CONFLICT DO NOTHING",
                                (self.owner_id,))
-            connection.execute("""INSERT INTO public.reply_skill(id,owner_id,contact_id,name,description)
-                VALUES (%s,%s,%s,%s,'合成沟通策略')""", (skill, self.owner_id, contact, name))
-            connection.execute("""INSERT INTO public.reply_skill_version
-                (id,skill_id,version_number,name,description,content,enabled,is_current,status)
-                VALUES (%s,%s,1,%s,'合成沟通策略','只辅助理解，保留用户本次意愿。',true,true,'active')""",
-                               (version, skill, name))
-        # 旧库正文迁移由显式同步入口完成；Port 读取本身不再迁移或写文件。
-        from notalone.persistence.skill_directory import synchronize_skill_library
-        synchronize_skill_library(self.database_url, self.owner_id)
+            insert_file_skill(connection, owner_id=self.owner_id, contact_id=contact,
+                              skill_id=skill, version_id=version, name=name, description="合成沟通策略",
+                              content="只辅助理解，保留用户本次意愿。")
         return str(skill), str(version), name
 
     def test_old_integer_endpoint_rejects_protocol_without_model_or_new_input(self):

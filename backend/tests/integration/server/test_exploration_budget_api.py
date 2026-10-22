@@ -7,6 +7,7 @@ from unittest.mock import patch
 from uuid import uuid4
 
 import psycopg
+from tests.integration.persistence.skill_fixture import insert_file_skill
 
 from tests.fidelity_http_support import FidelityHttpFixture
 from tests.input_budget_support import synthetic_budget_kwargs
@@ -108,15 +109,12 @@ class ExplorationBudgetApiTest(FidelityHttpFixture, unittest.TestCase):
         self.assertEqual(status, 200, first)
         baseline = next(decisions[0] for _, decisions in self.records if decisions)
         skill, version = uuid4(), uuid4()
-        content = "合成静态策略只辅助方法，不确定用户意愿。" * 3500
+        content = "合成静态策略只辅助方法，不确定用户意愿。" * 150
         with psycopg.connect(self.database_url) as connection:
             connection.execute("UPDATE public.skill_library SET revision=revision+1 WHERE owner_id=%s", (self.owner_id,))
-            connection.execute("INSERT INTO public.reply_skill(id,owner_id,contact_id,name,description) VALUES (%s,%s,%s,'synthetic-full-budget-skill','合成策略')",
-                               (skill, self.owner_id, contact))
-            connection.execute("""INSERT INTO public.reply_skill_version
-                (id,skill_id,version_number,name,description,content,enabled,is_current,status)
-                VALUES (%s,%s,1,'synthetic-full-budget-skill','合成策略',%s,true,true,'active')""",
-                               (version, skill, content))
+            insert_file_skill(connection, owner_id=self.owner_id, contact_id=contact,
+                              skill_id=skill, version_id=version, name="synthetic-full-budget-skill",
+                              description="合成策略", content=content)
         self.capacity = baseline.total_tokens + 1
         limited = self._backend(self.owner_id)
         body = {**body, "operation_key": str(uuid4()), "content": {

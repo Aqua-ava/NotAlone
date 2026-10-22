@@ -152,6 +152,8 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 
 97. [ADR-097：维度门运维回退保留来源核验](adr/097-dimension-gate-rollback-keeps-source-verification.md)
 
+98. [ADR-098：Skill 数据库只保留业务状态](adr/098-skill-business-state-only.md)
+
 ## 当前架构决策
 
 - 主动收藏表达样本按 [ADR-082](adr/082-retire-explicit-style-samples.md)退役；删除独立样本库、入口和生成参考，清理遗留依赖及可重放副本。普通候选编辑复制与用户明确管理的长期表达偏好保留，历史样本验收不代表本次退役验证。

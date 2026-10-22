@@ -299,10 +299,12 @@ def write_version_package(*, owner_id: UUID, skill_id: UUID, version_id: UUID, p
         target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         if target.exists():
             existing = LocalSkillPackageReader().read(target)
-            if existing.skill_document != document or tuple((r.relative_path, r.content) for r in existing.resources) != tuple((r.relative_path, r.content) for r in package.resources):
+            if existing.skill_document != document or {r.relative_path: r.content for r in existing.resources} != {r.relative_path: r.content for r in package.resources}:
                 raise SkillFileError("Skill 文件校验失败。")
         else:
             os.replace(staged_package, target)
+        from notalone.persistence.skill_manifest import write_package_manifest
+        write_package_manifest(relative + "/SKILL.md", package)
         return relative + "/SKILL.md", digest
     except (OSError, ValueError):
         raise SkillFileError("Skill 文件写入失败。") from None
@@ -314,7 +316,7 @@ def write_version_package(*, owner_id: UUID, skill_id: UUID, version_id: UUID, p
 def _version_row(connection: Any, version_id: UUID) -> dict:
     with connection.cursor(row_factory=dict_row) as cursor:
         row = cursor.execute(
-            "SELECT version.*,skill.owner_id,skill.status AS skill_status FROM public.reply_skill_version AS version "
+            "SELECT version.*,skill.name,skill.owner_id,skill.status AS skill_status FROM public.reply_skill_version AS version "
             "JOIN public.reply_skill AS skill ON skill.id=version.skill_id WHERE version.id=%s", (version_id,)).fetchone()
     if row is None or row["status"] != "active" or row["skill_status"] == "deleted":
         raise SkillFileError("Skill 文件不可用。")
@@ -336,10 +338,6 @@ def _read_document(row: dict) -> bytes:
 
 def read_version_content(connection: Any, version_id: UUID) -> str:
     row = _version_row(connection, version_id)
-    if row["content_path"] is None:
-        if row["content"] and (row["content_sha256"] is None or hashlib.sha256(row["content"].encode("utf-8")).hexdigest() == row["content_sha256"]):
-            return row["content"]
-        raise SkillFileError("Skill 文件不可用。")
     try:
         _, _, content = SkillPackageValidator._parse_skill_document(_read_document(row), package_name=row["name"])
     except ValueError:
@@ -351,21 +349,17 @@ def read_version_content(connection: Any, version_id: UUID) -> str:
 
 def read_resource_content(connection: Any, version_id: UUID, relative_path: str) -> bytes:
     row = _version_row(connection, version_id)
-    with connection.cursor(row_factory=dict_row) as cursor:
-        resource = cursor.execute("SELECT * FROM public.reply_skill_resource WHERE skill_version_id=%s AND relative_path=%s", (version_id, relative_path)).fetchone()
+    from notalone.persistence.skill_manifest import read_package_manifest
+    manifest = read_package_manifest(connection, version_id)
+    resource = next((item for item in manifest["resources"] if item["relative_path"] == relative_path), None)
     if resource is None:
         raise SkillFileError("Skill 资源不可用。")
-    if row["content_path"] is None and resource["content"] is not None:
-        data = bytes(resource["content"])
-    else:
-        expected = _snapshot_relative(row["owner_id"], row["skill_id"], version_id, row["name"]) + "/" + relative_path
-        if resource["content_path"] != expected:
-            raise SkillFileError("Skill 资源不可用。")
-        try:
-            path = _checked_path(expected)
-            data = LocalSkillPackageReader._read_file(path.parent, path.name, 1024 * 1024)
-        except (OSError, ValueError):
-            raise SkillFileError("Skill 资源不可用。") from None
+    expected = _snapshot_relative(row["owner_id"], row["skill_id"], version_id, row["name"]) + "/" + relative_path
+    try:
+        path = _checked_path(expected)
+        data = LocalSkillPackageReader._read_file(path.parent, path.name, 1024 * 1024)
+    except (OSError, ValueError):
+        raise SkillFileError("Skill 资源不可用。") from None
     if len(data) != resource["byte_size"] or hashlib.sha256(data).hexdigest() != resource["content_sha256"]:
         raise SkillFileError("Skill 资源校验失败。")
     return data
@@ -373,6 +367,8 @@ def read_resource_content(connection: Any, version_id: UUID, relative_path: str)
 
 def version_content_available(connection: Any, version_id: UUID) -> bool:
     try:
+        from notalone.persistence.skill_manifest import read_package_manifest
+        read_package_manifest(connection, version_id)
         read_version_content(connection, version_id)
         return True
     except SkillFileError:
@@ -404,8 +400,8 @@ def synchronize_working_copies(connection: Any, *, owner_id: UUID | None = None)
             replacement = temporary / job["name"]
             replacement.mkdir(mode=0o700)
             (replacement / "SKILL.md").write_bytes(_read_document(row))
-            with connection.cursor(row_factory=dict_row) as cursor:
-                resources = cursor.execute("SELECT relative_path FROM public.reply_skill_resource WHERE skill_version_id=%s", (row["id"],)).fetchall()
+            from notalone.persistence.skill_manifest import read_package_manifest
+            resources = read_package_manifest(connection, row["id"])["resources"]
             for resource in resources:
                 data = read_resource_content(connection, row["id"], resource["relative_path"])
                 destination = replacement / resource["relative_path"]
@@ -422,7 +418,6 @@ def synchronize_working_copies(connection: Any, *, owner_id: UUID | None = None)
                 raise
             finally:
                 shutil.rmtree(temporary, ignore_errors=True)
-            connection.execute("UPDATE public.reply_skill SET directory_managed=true WHERE id=%s", (job["skill_id"],))
             connection.execute("DELETE FROM public.reply_skill_working_copy WHERE skill_id=%s", (job["skill_id"],))
             count += 1
         except (OSError, SkillFileError) as error:
@@ -533,33 +528,3 @@ def cleanup_unreferenced_snapshots(connection: Any, *, owner_id: UUID) -> None:
                     connection.execute("INSERT INTO public.reply_skill_file_cleanup(relative_path) VALUES(%s) ON CONFLICT DO NOTHING", (skill.relative_to(skills_root()).as_posix(),))
             except ValueError:
                 continue
-
-
-def migrate_legacy_packages(connection: Any, *, owner_id: UUID | None = None) -> int:
-    """可重试：全部字节落盘并复验后才在调用者事务中清空数据库字节。"""
-    from notalone.skills.package import RawSkillPackage, RawSkillPackageResource
-    from notalone.persistence.locks import lock_owner_scope
-    with connection.cursor(row_factory=dict_row) as cursor:
-        owners = cursor.execute("SELECT DISTINCT skill.owner_id FROM public.reply_skill_version AS version JOIN public.reply_skill AS skill ON skill.id=version.skill_id WHERE version.status='active' AND version.content IS NOT NULL AND version.content_path IS NULL AND (%s::uuid IS NULL OR skill.owner_id=%s) ORDER BY skill.owner_id", (owner_id, owner_id)).fetchall()
-    for owner in owners:
-        lock_owner_scope(connection, owner_id=owner["owner_id"])
-    with connection.cursor(row_factory=dict_row) as cursor:
-        rows = cursor.execute(
-            "SELECT version.*,skill.owner_id FROM public.reply_skill_version AS version JOIN public.reply_skill AS skill ON skill.id=version.skill_id "
-            "WHERE version.status='active' AND version.content IS NOT NULL AND version.content_path IS NULL AND (%s::uuid IS NULL OR skill.owner_id=%s) FOR UPDATE OF version", (owner_id, owner_id)).fetchall()
-    for row in rows:
-        with connection.cursor(row_factory=dict_row) as cursor:
-            resources = cursor.execute("SELECT * FROM public.reply_skill_resource WHERE skill_version_id=%s ORDER BY relative_path", (row["id"],)).fetchall()
-        package = SkillPackageValidator().validate(RawSkillPackage(row["name"], serialize_skill_document(row["name"], row["description"], row["content"]), tuple(
-            RawSkillPackageResource(r["relative_path"], r["resource_kind"], r["media_type"], bytes(r["content"])) for r in resources)))
-        if row["content_sha256"] is not None and row["content_sha256"] != package.content_sha256:
-            raise SkillFileError("Skill 原始内容校验失败。")
-        content_path, document_sha256 = write_version_package(owner_id=row["owner_id"], skill_id=row["skill_id"], version_id=row["id"], package=package)
-        connection.execute("UPDATE public.reply_skill_version SET content_path=%s,document_sha256=%s,content_sha256=%s,content=NULL WHERE id=%s", (content_path, document_sha256, package.content_sha256, row["id"]))
-        for resource in resources:
-            connection.execute("UPDATE public.reply_skill_resource SET content_path=%s,content=NULL WHERE id=%s", (str(PurePosixPath(content_path).parent / resource["relative_path"]), resource["id"]))
-            read_resource_content(connection, row["id"], resource["relative_path"])
-        read_version_content(connection, row["id"])
-        if row["is_current"]:
-            queue_working_copy(connection, row["skill_id"], row["id"])
-    return len(rows)

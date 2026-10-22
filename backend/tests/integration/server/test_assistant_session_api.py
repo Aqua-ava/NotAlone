@@ -6,6 +6,7 @@ import os
 import threading
 import time
 import unittest
+from tempfile import TemporaryDirectory
 from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import patch
 from uuid import uuid4
@@ -69,6 +70,11 @@ class AssistantSessionHttpTest(unittest.TestCase):
             raise RuntimeError("会话验收只允许隔离 _test 数据库。")
 
     def setUp(self) -> None:
+        skill_root = TemporaryDirectory()
+        self.addCleanup(skill_root.cleanup)
+        skill_environment = patch.dict(os.environ, {"NOTALONE_SKILLS_DIR": skill_root.name})
+        skill_environment.start()
+        self.addCleanup(skill_environment.stop)
         self.owner_id = uuid4()
         self.contact_id = uuid4()
         self.other_contact_id = uuid4()

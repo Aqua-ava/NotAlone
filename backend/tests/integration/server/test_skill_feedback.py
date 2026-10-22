@@ -76,21 +76,27 @@ class SkillFeedbackHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         return result['published'], source
 
     def _add_published_resource(self, version_id, relative_path, content):
-        """只补合成包夹具：资源字节在受控目录，数据库仅登记清单。"""
+        """只补合成包夹具：资源与清单都在受控目录，数据库只更新完整性锚点。"""
         root = Path(os.environ['NOTALONE_SKILLS_DIR'])
         with psycopg.connect(self.database_url) as connection:
             name, document = connection.execute(
-                'SELECT name,content_path FROM public.reply_skill_version WHERE id=%s', (UUID(str(version_id)),)
+                'SELECT skill.name,version.content_path FROM public.reply_skill_version AS version '
+                'JOIN public.reply_skill AS skill ON skill.id=version.skill_id WHERE version.id=%s', (UUID(str(version_id)),)
             ).fetchone()
             locator = (Path(document).parent / relative_path).as_posix()
             for target in (root / locator, root / str(self.owner_id) / name / relative_path):
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes(content)
-            connection.execute(
-                'INSERT INTO public.reply_skill_resource(skill_version_id,relative_path,resource_kind,'
-                'media_type,byte_size,content_sha256,content_path) VALUES(%s,%s,\'reference\','
-                '\'text/markdown\',%s,%s,%s)',
-                (UUID(str(version_id)), relative_path, len(content), hashlib.sha256(content).hexdigest(), locator))
+            manifest_path = root / Path(document).parent.parent / "manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["resources"].append({"relative_path": relative_path, "resource_kind": "reference",
+                "media_type": "text/markdown", "byte_size": len(content),
+                "content_sha256": hashlib.sha256(content).hexdigest()})
+            manifest["resources"].sort(key=lambda item: item["relative_path"])
+            manifest_bytes = json.dumps(manifest, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+            manifest_path.write_bytes(manifest_bytes)
+            connection.execute("UPDATE public.reply_skill_version SET manifest_sha256=%s WHERE id=%s",
+                               (hashlib.sha256(manifest_bytes).hexdigest(), UUID(str(version_id))))
         return root / locator
 
     def test_method_stop_filters_actual_body_and_receipt_only_in_explicit_contact_scene(self):
@@ -509,7 +515,7 @@ class SkillFeedbackHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
 
         def observed_file(root, relative_path, maximum_bytes):
             target = Path(root) / relative_path
-            if '.versions' in target.parts:
+            if '.versions' in target.parts and target.name != 'manifest.json':
                 snapshot_reads.append(target)
             return read_file(root, relative_path, maximum_bytes)
 
@@ -907,7 +913,8 @@ class SkillFeedbackHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
             self.assertIsNone(connection.execute('SELECT receipt.material_id FROM public.skill_learning_receipt AS receipt '
                 'JOIN public.skill_learning_batch AS batch ON batch.id=receipt.batch_id WHERE batch.draft_id=%s AND receipt.digest IS NOT NULL',
                 (draft_id,)).fetchone())
-            self.assertIsNone(connection.execute('SELECT id FROM public.reply_skill_resource WHERE skill_version_id=%s', (UUID(version),)).fetchone())
+            self.assertEqual(connection.execute('SELECT content_path,manifest_sha256 FROM public.reply_skill_version WHERE id=%s',
+                (UUID(version),)).fetchone(), (None, None))
             for turn in (generated['turn_id'], prepared['turn_id']):
                 self.assertEqual(connection.execute('SELECT input_payload,prepared_context,dependency_ids,state FROM public.assistant_session_turn WHERE id=%s',
                     (UUID(turn),)).fetchone(), (None, None, [], 'redacted'))

@@ -130,7 +130,7 @@ def _write_immutable(path, data):
 
 
 def write_method_manifest(connection, version_id, methods):
-    """先原子落盘并复验，再登记清单并移除数据库中的已发布正文。"""
+    """先原子落盘并复验，再登记清单；数据库仅保存方法身份和映射。"""
     row = _version(connection, version_id)
     normalized = _normalized(methods)
     relative = _locator(row)
@@ -151,30 +151,5 @@ def write_method_manifest(connection, version_id, methods):
             (relative, hashlib.sha256(data).hexdigest(), version_id),
         )
         read_method_manifest(connection, version_id)
-        connection.execute("UPDATE public.reply_skill_method SET title=NULL,instruction=NULL WHERE version_id=%s", (version_id,))
     except OSError:
         raise SkillFileError("Skill 方法文件发布失败。") from None
-
-
-def migrate_legacy_method_manifests(connection, *, owner_id):
-    """仅迁该 Owner 的旧发布方法；失败保留数据库原文，可恢复重试。"""
-    from notalone.persistence.locks import lock_owner_scope
-
-    lock_owner_scope(connection, owner_id=owner_id)
-    with connection.cursor(row_factory=dict_row) as cursor:
-        rows = cursor.execute(
-            "SELECT DISTINCT version.id FROM public.reply_skill_version AS version "
-            "JOIN public.reply_skill AS skill ON skill.id=version.skill_id "
-            "JOIN public.reply_skill_method AS method ON method.version_id=version.id "
-            "WHERE skill.owner_id=%s AND skill.status<>'deleted' AND version.status='active' "
-            "AND version.method_manifest_path IS NULL "
-            "AND method.title IS NOT NULL AND method.instruction IS NOT NULL ORDER BY version.id",
-            (owner_id,),
-        ).fetchall()
-        for row in rows:
-            methods = cursor.execute(
-                "SELECT method_id,title,instruction FROM public.reply_skill_method "
-                "WHERE version_id=%s ORDER BY ordinal", (row["id"],),
-            ).fetchall()
-            write_method_manifest(connection, row["id"], methods)
-    return len(rows)

@@ -17,6 +17,7 @@ from psycopg.conninfo import make_conninfo
 
 from notalone.database_baseline import BASELINE_MANIFEST
 from notalone.database_migrations import migrate
+from notalone.persistence.skill_directory import synchronize_skill_library
 from notalone.persistence.skill_port import PostgresSkillPort
 from notalone.scopes import ContactScope
 
@@ -110,6 +111,8 @@ class SkillReviewUpgradeTest(unittest.TestCase):
             later = tuple(path.name for path in sorted(MIGRATIONS.glob("*.sql")) if int(path.name[:3]) > 70)
             self.assertEqual(migrate(database, MIGRATIONS), later)
             self.assertEqual(migrate(database, MIGRATIONS), ())
+            # 结构升级只提交工作副本任务；公开同步入口落盘后才允许运行时发现。
+            synchronize_skill_library(database, owner)
             port = PostgresSkillPort(database)
             self.assertEqual(port.catalog(ContactScope(owner, contact)).entries[0].version_id, version)
             self.assertEqual(port.load_version(ContactScope(owner, contact), version).content, original["content"])

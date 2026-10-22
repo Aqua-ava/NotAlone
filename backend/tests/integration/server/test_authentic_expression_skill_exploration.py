@@ -8,6 +8,7 @@ from unittest.mock import patch
 from uuid import UUID, uuid4
 
 import psycopg
+from tests.integration.persistence.skill_fixture import insert_file_skill
 
 from tests.fidelity_http_support import FidelityHttpFixture
 from tests.input_budget_support import synthetic_budget_kwargs
@@ -46,11 +47,9 @@ class AuthenticExpressionSkillExplorationTests(FidelityHttpFixture, unittest.Tes
         skill_text = "合成Skill专用标记：只辅助简短说法，当前拒绝优先，不新增约定。"
         with psycopg.connect(self.database_url) as connection:
             connection.execute("UPDATE public.skill_library SET revision=revision+1 WHERE owner_id=%s", (self.owner_id,))
-            connection.execute("""INSERT INTO public.reply_skill(id,owner_id,contact_id,name,description)
-                VALUES (%s,%s,%s,%s,'合成表达策略')""", (skill, self.owner_id, contact, name))
-            connection.execute("""INSERT INTO public.reply_skill_version
-                (id,skill_id,version_number,name,description,content,enabled,is_current,status)
-                VALUES (%s,%s,1,%s,'合成表达策略',%s,true,true,'active')""", (version, skill, name, skill_text))
+            insert_file_skill(connection, owner_id=self.owner_id, contact_id=contact,
+                              skill_id=skill, version_id=version, name=name, description="合成表达策略",
+                              content=skill_text)
         status, session = self.backend.request(f"/api/contacts/{contact}/assistant-session/default", {})
         self.assertEqual(status, 200, session)
         path = f"/api/contacts/{contact}/assistant-sessions/{session['session_id']}"

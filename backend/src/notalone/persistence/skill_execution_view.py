@@ -8,6 +8,7 @@ from psycopg.rows import dict_row
 from notalone.skills.learning import content_digest
 from notalone.skills.models import SkillExecutionView
 from notalone.persistence.skill_files import SkillFileError, read_version_content
+from notalone.persistence.skill_manifest import project_manifest_metadata
 
 
 def _ancestry(cursor, owner_id, roots):
@@ -113,6 +114,7 @@ def _project_metadata(row, filtered):
 def project_skill_metadata(connection, scope, row, scene):
     """目录与资源许可不构造正文、执行哈希或虚假的零修订凭证。"""
     _, _, filtered = _policy_selection(connection, scope, row, scene)
+    row = project_manifest_metadata(connection, row)
     return _project_metadata(row, filtered)
 
 
@@ -120,6 +122,8 @@ def project_skill_version(connection, scope, row, scene, *, proposed_methods=Non
     """仅为实际选择的版本构造允许正文及其真实执行凭证。"""
     allowed, relevant, filtered = _policy_selection(
         connection, scope, row, scene, proposed_methods=proposed_methods)
+    if proposed_methods is None:
+        row = project_manifest_metadata(connection, row)
     projected = _project_metadata(row, filtered)
     if filtered:
         if proposed_methods is None:
@@ -152,8 +156,7 @@ def _own_skill_policy_change(connection, scope, request_id):
         row = cursor.execute('SELECT request.skill_version_id,request.context_snapshot,request.normalized_input,'
             'request.idempotency_key,request.conversation_binding_id,'
             'skill.id AS skill_id,skill.status AS skill_status,version.id AS version_id,version.review_origin,version.content_path,'
-            'skill.name AS skill_name,version.name AS version_name,skill.description AS skill_description,'
-            'version.description AS version_description FROM public.reply_request AS request '
+            'skill.name AS skill_name FROM public.reply_request AS request '
             'LEFT JOIN public.reply_skill AS skill ON skill.id=request.skill_id AND skill.owner_id=request.owner_id '
             'LEFT JOIN public.reply_skill_version AS version ON version.id=request.skill_version_id AND version.skill_id=skill.id '
             'WHERE request.owner_id=%s AND request.contact_id=%s AND request.id=%s AND request.skill_version_id IS NOT NULL',
@@ -164,6 +167,7 @@ def _own_skill_policy_change(connection, scope, request_id):
     if row['skill_id'] is None or row['content_path'] is None or row['skill_status'] != 'active':
         return version
     try:
+        row = project_manifest_metadata(connection, row)
         row['version_content'] = read_version_content(connection, row['version_id'])
         snapshot = row['context_snapshot']
         if not isinstance(snapshot, dict) or not isinstance(row['normalized_input'], str):

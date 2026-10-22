@@ -46,9 +46,6 @@ class PostgresSkillLifecycleTest(unittest.TestCase):
                 has_skill_table = connection.execute(
                     "SELECT to_regclass('public.reply_skill')"
                 ).fetchone()[0]
-                has_resource_table = connection.execute(
-                    "SELECT to_regclass('public.reply_skill_resource')"
-                ).fetchone()[0]
         except psycopg.OperationalError as error:
             raise unittest.SkipTest(
                 "本地 PostgreSQL 测试库不可用。"
@@ -60,10 +57,6 @@ class PostgresSkillLifecycleTest(unittest.TestCase):
             )
         if has_skill_table is None:
             raise unittest.SkipTest("测试库尚未应用 008 SkillPort 迁移。")
-        if has_resource_table is None:
-            raise unittest.SkipTest(
-                "测试库尚未应用 Skill Library 资源迁移。"
-            )
 
     def setUp(self) -> None:
         self.skill_root = TemporaryDirectory()

@@ -285,7 +285,7 @@ class PostgresReplyStoreTest(unittest.TestCase):
 
         # 目录发现只经显式同步入口；候选复验本身不写目录状态。
         from notalone.persistence.skill_directory import synchronize_skill_library
-        synchronize_skill_library(TEST_DATABASE_URL, self.owner_id, migrate_legacy=False)
+        synchronize_skill_library(TEST_DATABASE_URL, self.owner_id)
         refreshed = port.catalog(command.scope)
         self.assertEqual(refreshed.revision, original_catalog.revision + 1)
         self.assertEqual(refreshed.entries[0].version_number, 2)

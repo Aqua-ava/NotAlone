@@ -18,6 +18,7 @@ from notalone.persistence.skill_library import (
     SkillNameConflictError,
 )
 from notalone.persistence.skill_port import PostgresSkillPort
+from notalone.persistence.skill_manifest import read_package_manifest
 from notalone.scopes import ContactScope
 from notalone.skills import SkillPackageValidationError
 
@@ -41,9 +42,6 @@ class PostgresSkillLibraryTest(unittest.TestCase):
                 has_skill_table = connection.execute(
                     "SELECT to_regclass('public.reply_skill')"
                 ).fetchone()[0]
-                has_resource_table = connection.execute(
-                    "SELECT to_regclass('public.reply_skill_resource')"
-                ).fetchone()[0]
         except psycopg.OperationalError as error:
             raise unittest.SkipTest(
                 "本地 PostgreSQL 测试库不可用。"
@@ -55,10 +53,6 @@ class PostgresSkillLibraryTest(unittest.TestCase):
             )
         if has_skill_table is None:
             raise unittest.SkipTest("测试库尚未应用 008 SkillPort 迁移。")
-        if has_resource_table is None:
-            raise unittest.SkipTest(
-                "测试库尚未应用 Skill Library 资源迁移。"
-            )
 
     def setUp(self) -> None:
         self.skill_root = TemporaryDirectory()
@@ -232,25 +226,17 @@ class PostgresSkillLibraryTest(unittest.TestCase):
         with psycopg.connect(TEST_DATABASE_URL, row_factory=dict_row) as connection:
             version_row = connection.execute(
                 """
-                SELECT source_locator, validation_warnings
+                SELECT source_locator
                 FROM public.reply_skill_version
                 WHERE id = %s
                 """,
                 (result.version_id,),
             ).fetchone()
-            resource_rows = connection.execute(
-                """
-                SELECT relative_path, resource_kind, media_type, byte_size,
-                       content_sha256, content
-                FROM public.reply_skill_resource
-                WHERE skill_version_id = %s
-                ORDER BY relative_path
-                """,
-                (result.version_id,),
-            ).fetchall()
+            manifest = read_package_manifest(connection, result.version_id)
+            resource_rows = manifest["resources"]
         self.assertIsNotNone(version_row)
         self.assertTrue(version_row["source_locator"].startswith("local-package:"))
-        self.assertEqual(version_row["validation_warnings"], [])
+        self.assertEqual(manifest["warnings"], [])
         self.assertEqual(
             [row["relative_path"] for row in resource_rows],
             ["assets/template.txt", "references/examples.md"],
@@ -734,15 +720,15 @@ class PostgresSkillLibraryTest(unittest.TestCase):
         self.assertEqual(result.resource_paths, ("assets/icon.svg",))
 
     def test_database_failure_rolls_back_skill_version_and_resources(self) -> None:
-        trigger_name = f"block_skill_resource_{uuid4().hex}"
-        function_name = f"block_skill_resource_fn_{uuid4().hex}"
+        trigger_name = f"block_skill_version_{uuid4().hex}"
+        function_name = f"block_skill_version_fn_{uuid4().hex}"
         with psycopg.connect(TEST_DATABASE_URL) as connection:
             connection.execute(
                 f"""
                 CREATE FUNCTION public.{function_name}()
                 RETURNS trigger LANGUAGE plpgsql AS $$
                 BEGIN
-                    RAISE EXCEPTION 'synthetic skill resource failure';
+                    RAISE EXCEPTION 'synthetic skill version failure';
                 END
                 $$
                 """
@@ -750,7 +736,7 @@ class PostgresSkillLibraryTest(unittest.TestCase):
             connection.execute(
                 f"""
                 CREATE TRIGGER {trigger_name}
-                BEFORE INSERT ON public.reply_skill_resource
+                BEFORE INSERT ON public.reply_skill_version
                 FOR EACH ROW EXECUTE FUNCTION public.{function_name}()
                 """
             )
@@ -780,7 +766,7 @@ class PostgresSkillLibraryTest(unittest.TestCase):
             with psycopg.connect(TEST_DATABASE_URL) as connection:
                 connection.execute(
                     f"DROP TRIGGER {trigger_name} "
-                    "ON public.reply_skill_resource"
+                    "ON public.reply_skill_version"
                 )
                 connection.execute(f"DROP FUNCTION public.{function_name}()")
 
@@ -795,24 +781,16 @@ class PostgresSkillLibraryTest(unittest.TestCase):
                      JOIN public.reply_skill AS skill
                        ON skill.id = version.skill_id
                      WHERE skill.owner_id = %s) AS version_count,
-                    (SELECT count(*)
-                     FROM public.reply_skill_resource AS resource
-                     JOIN public.reply_skill_version AS version
-                       ON version.id = resource.skill_version_id
-                     JOIN public.reply_skill AS skill
-                       ON skill.id = version.skill_id
-                     WHERE skill.owner_id = %s) AS resource_count,
                     (SELECT revision FROM public.skill_library
                      WHERE owner_id = %s) AS revision
                 """,
-                (self.owner_id, self.owner_id, self.owner_id, self.owner_id),
+                (self.owner_id, self.owner_id, self.owner_id),
             ).fetchone()
         self.assertEqual(
             counts,
             {
                 "skill_count": 0,
                 "version_count": 0,
-                "resource_count": 0,
                 "revision": None,
             },
         )

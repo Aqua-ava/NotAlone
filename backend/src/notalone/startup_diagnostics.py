@@ -21,7 +21,7 @@ REQUIRED_TABLES = frozenset({
     "memory_extraction_watermark", "contact_memory_state", "contact_memory_index",
     "outbound_ledger_entry", "reply_request", "reply_attempt",
     "reply_context_evidence", "reply_candidate", "reply_candidate_citation",
-    "skill_library", "reply_skill", "reply_skill_version", "reply_skill_resource",
+    "skill_library", "reply_skill", "reply_skill_version",
 })
 REQUIRED_COLUMNS = {
     "owner": {"id": "uuid", "display_name": "text", "created_at": "timestamp with time zone"},

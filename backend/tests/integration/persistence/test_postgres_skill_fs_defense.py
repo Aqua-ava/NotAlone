@@ -105,7 +105,7 @@ class PostgresSkillFsDefenseTest(unittest.TestCase):
 
     def _synchronize(self):
         return synchronize_skill_library(
-            self.database_url, self.owner_id, migrate_legacy=False
+            self.database_url, self.owner_id
         )
 
     def test_root_read_failure_preserves_last_valid_catalog_state(self) -> None:

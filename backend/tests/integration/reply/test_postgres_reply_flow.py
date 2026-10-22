@@ -5,6 +5,8 @@ from __future__ import annotations
 import os
 import asyncio
 import unittest
+from unittest.mock import patch
+from tempfile import TemporaryDirectory
 from collections.abc import Sequence
 from dataclasses import replace
 from typing import Any
@@ -13,6 +15,7 @@ from uuid import UUID, uuid4
 import psycopg
 from langchain_core.messages import AIMessage, BaseMessage
 from langchain_core.runnables import Runnable
+from tests.integration.persistence.skill_fixture import insert_file_skill
 
 from notalone.application import CandidateReplyFlow
 from notalone.conversation import (
@@ -137,6 +140,11 @@ class PostgresReplyFlowTest(unittest.TestCase):
             raise unittest.SkipTest("测试库尚未应用 006-008 迁移。")
 
     def setUp(self) -> None:
+        skill_root = TemporaryDirectory()
+        self.addCleanup(skill_root.cleanup)
+        skill_environment = patch.dict(os.environ, {"NOTALONE_SKILLS_DIR": skill_root.name})
+        skill_environment.start()
+        self.addCleanup(skill_environment.stop)
         self.owner_id = uuid4()
         self.contact_id = uuid4()
         self.other_contact_id = uuid4()
@@ -170,37 +178,9 @@ class PostgresReplyFlowTest(unittest.TestCase):
                     "VALUES (%s, %s)",
                     (self.owner_id, 7),
                 )
-                cursor.execute(
-                    """
-                    INSERT INTO public.reply_skill (
-                        id, owner_id, contact_id, name, description, status
-                    )
-                    VALUES (%s, %s, %s, %s, %s, 'active')
-                    """,
-                    (
-                        self.skill_id,
-                        self.owner_id,
-                        self.contact_id,
-                        "warm-reply",
-                        "温和而明确地回应当前消息",
-                    ),
-                )
-                cursor.execute(
-                    """
-                    INSERT INTO public.reply_skill_version (
-                        id, skill_id, version_number, name, description,
-                        content, enabled, is_current, status
-                    )
-                    VALUES (%s, %s, 1, %s, %s, %s, TRUE, TRUE, 'active')
-                    """,
-                    (
-                        self.skill_version_id,
-                        self.skill_id,
-                        "warm-reply",
-                        "温和而明确地回应当前消息",
-                        "先回应对方，再给出明确且自然的答复。",
-                    ),
-                )
+                insert_file_skill(connection, owner_id=self.owner_id, contact_id=self.contact_id,
+                                  skill_id=self.skill_id, version_id=self.skill_version_id, name="warm-reply",
+                                  description="温和而明确地回应当前消息", content="先回应对方，再给出明确且自然的答复。")
                 # 内存检索仍使用同一合成资料；持久化守卫需核实实际原始来源和消息引用。
                 cursor.execute(
                     "INSERT INTO public.source_document "

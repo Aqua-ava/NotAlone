@@ -163,28 +163,12 @@ def build_reply_service(
         except (ValueError, TypeError, AttributeError):
             # 未核实配置继续L1，不能用未标定默认值放开新层。
             layered_reply_budget, owner_layered_reply_budget = None, None
-    # 装配时先同步一次；若旧库迁移失败，后续每轮继续带 migrate_legacy=True
-    # 重试，而不是永久停在只读修订号。
-    legacy_migration_pending = {"value": False}
-
     def synchronize_skill_round(target_owner_id: UUID) -> int:
-        try:
-            revision = _synchronize_skill_library(
-                database_url, target_owner_id,
-                migrate_legacy=legacy_migration_pending["value"],
-            )
-        except SkillDirectorySyncError:
-            legacy_migration_pending["value"] = True
-            raise
-        legacy_migration_pending["value"] = False
-        return revision
+        return _synchronize_skill_library(database_url, target_owner_id)
 
     try:
-        skill_revision = _synchronize_skill_library(
-            database_url, owner_id, migrate_legacy=True,
-        )
+        skill_revision = _synchronize_skill_library(database_url, owner_id)
     except SkillDirectorySyncError:
-        legacy_migration_pending["value"] = True
         logger.warning("skill_directory_sync_failed")
         skill_revision = _read_skill_library_revision(database_url, owner_id)
     retrieval = PostgresRetrieval(
@@ -375,10 +359,6 @@ def _read_skill_library_revision(database_url: str, owner_id: UUID) -> int:
     return row[0] if row is not None else 0
 
 
-def _synchronize_skill_library(
-    database_url: str, owner_id: UUID, *, migrate_legacy: bool,
-) -> int:
+def _synchronize_skill_library(database_url: str, owner_id: UUID) -> int:
     from notalone.persistence.skill_directory import synchronize_skill_library
-    return synchronize_skill_library(
-        database_url, owner_id, migrate_legacy=migrate_legacy,
-    )
+    return synchronize_skill_library(database_url, owner_id)

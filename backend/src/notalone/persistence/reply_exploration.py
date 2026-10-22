@@ -176,7 +176,7 @@ class PostgresExplorationStore:
             "JOIN public.reply_skill AS skill ON skill.id=version.skill_id "
             "WHERE skill.owner_id=%s AND (skill.contact_id IS NULL OR skill.contact_id=%s) "
             "AND skill.status='active' AND version.id=%s AND version.status='active' "
-            "AND version.enabled AND version.is_current AND version.name=skill.name "
+            "AND version.enabled AND version.is_current "
             "AND version.content_path IS NOT NULL AND version.directory_available",
             (scope.owner_id, scope.contact_id, version_id),
         ).fetchone() is None:

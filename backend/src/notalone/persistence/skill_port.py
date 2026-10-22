@@ -9,6 +9,7 @@ from notalone.scopes import ContactScope
 from notalone.skills.models import SkillCatalog, SkillCatalogEntry, SkillResource, SkillVersion, validate_resource_relative_path
 from notalone.persistence.skill_execution_view import project_skill_metadata, project_skill_version
 from notalone.persistence.skill_files import SkillFileError
+from notalone.persistence.skill_manifest import read_package_manifest
 
 
 class SkillPortPersistenceError(RuntimeError):
@@ -46,8 +47,7 @@ def require_review_publication(connection, scope, row, scene):
 _VERSION_COLUMNS = """
 SELECT skill.id AS skill_id,skill.owner_id AS skill_owner_id,
        skill.contact_id AS skill_contact_id,skill.name AS skill_name,
-       skill.description AS skill_description,version.id AS version_id,
-       version.name AS version_name,version.description AS version_description,
+       version.id AS version_id,skill.name AS version_name,
        version.version_number,version.enabled AS version_enabled,
        version.review_origin,publication.owner_id AS publication_owner_id,
        publication.origin_contact_id,publication.scope_kind,publication.scope_contact_id,
@@ -60,8 +60,8 @@ JOIN public.reply_skill_version AS version ON version.skill_id=skill.id
 LEFT JOIN public.reply_skill_publication AS publication ON publication.version_id=version.id
 WHERE skill.owner_id=%s AND (skill.contact_id IS NULL OR skill.contact_id=%s)
   AND skill.status='active' AND version.status='active' AND version.enabled AND version.is_current
-  AND (version.content_path IS NOT NULL OR version.content IS NOT NULL AND length(btrim(version.content))>0)
-  AND version.directory_available AND version.name=skill.name
+  AND version.content_path IS NOT NULL AND version.manifest_sha256 IS NOT NULL
+  AND version.directory_available
   AND NOT EXISTS (SELECT 1 FROM public.reply_skill_working_copy AS pending WHERE pending.skill_id=skill.id)
   AND NOT EXISTS (SELECT 1 FROM public.reply_skill_file_cleanup AS cleanup
        WHERE cleanup.relative_path=skill.owner_id::text
@@ -77,8 +77,8 @@ _VERSION_QUERY = _VERSION_COLUMNS + _VERSION_SCOPE
 
 def _selected_projection(connection, scope, row, scene):
     """来源许可已通过后，仅为实际选中版本读取必要正文并构造执行视图。"""
-    metadata = project_skill_metadata(connection, scope, row, scene)
-    if not metadata['_policy_filtered']:
+    row = project_skill_metadata(connection, scope, row, scene)
+    if not row['_policy_filtered']:
         from notalone.persistence.skill_files import read_version_content
         row = {**row, 'version_content': read_version_content(connection, row['version_id'])}
     return project_skill_version(connection, scope, row, scene)
@@ -135,7 +135,7 @@ class PostgresSkillPort:
             with self._connect() as connection:
                 revision = connection.execute('SELECT revision FROM public.skill_library WHERE owner_id=%s', (scope.owner_id,)).fetchone()
                 with connection.cursor(row_factory=dict_row) as cursor:
-                    rows = cursor.execute(_VERSION_QUERY + ' ORDER BY skill.contact_id NULLS FIRST,version.name,version.id',
+                    rows = cursor.execute(_VERSION_QUERY + ' ORDER BY skill.contact_id NULLS FIRST,skill.name,version.id',
                                           self._params(scope)).fetchall()
                 entries = []
                 for row in rows:
@@ -185,12 +185,8 @@ class PostgresSkillPort:
                 version = self._version(connection, scope, version_id)
                 if version['_policy_filtered']:
                     raise PermissionError('筛选后的执行视图不允许重读未分离资源。')
-                with connection.cursor(row_factory=dict_row) as cursor:
-                    row = cursor.execute(
-                        "SELECT resource_kind,media_type,content_sha256,content FROM public.reply_skill_resource "
-                        "WHERE skill_version_id=%s AND relative_path=%s AND resource_kind IN ('reference','asset') "
-                        "AND (content_path IS NOT NULL OR content IS NOT NULL)",
-                        (version_id, relative_path)).fetchone()
+                row = next((item for item in read_package_manifest(connection, version_id)['resources']
+                            if item['relative_path'] == relative_path), None)
                 if row is None:
                     raise PermissionError('Skill 资源不可用。')
                 from notalone.persistence.skill_files import read_resource_content
@@ -232,10 +228,7 @@ class PostgresSkillPort:
 
     @staticmethod
     def _resource_paths(connection, version_id):
-        return tuple(row[0] for row in connection.execute(
-            "SELECT relative_path FROM public.reply_skill_resource WHERE skill_version_id=%s "
-            "AND resource_kind IN ('reference','asset') AND (content_path IS NOT NULL OR content IS NOT NULL) "
-            "ORDER BY relative_path", (version_id,)).fetchall())
+        return tuple(sorted(item['relative_path'] for item in read_package_manifest(connection, version_id)['resources']))
 
     def _connect(self):
         return psycopg.connect(self._database_url)

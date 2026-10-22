@@ -17,6 +17,7 @@ import psycopg
 from psycopg import sql
 
 from notalone.database_baseline import BaselineError, baseline_offset
+from notalone.persistence.skill_schema_upgrade import SkillSchemaUpgradeError
 
 
 class MigrationError(RuntimeError):
@@ -122,6 +123,9 @@ def migrate_connection(
             continue
         try:
             with connection.transaction():
+                if migration.name == "103_skill_business_state_only.sql":
+                    from notalone.persistence.skill_schema_upgrade import upgrade_skill_business_state
+                    upgrade_skill_business_state(connection)
                 # 在动态 SQL 块中执行，额外 COMMIT 等事务控制会被数据库拒绝，
                 # 避免未来文件格式变化导致业务 SQL 提前提交、账本却未写入。
                 tag = sql.SQL(f"$migration_{uuid4().hex}$")
@@ -133,7 +137,7 @@ def migrate_connection(
                     "VALUES (%s, %s)",
                     (migration.name, migration.checksum),
                 )
-        except psycopg.Error:
+        except (psycopg.Error, SkillSchemaUpgradeError):
             raise MigrationError(
                 f"migration_failed：{migration.name} 未完成，当前版本已回滚；"
                 "修复后重跑将从该版本继续。"

@@ -18,6 +18,7 @@ from notalone.persistence.skill_files import (
     queue_working_copy, read_resource_content, read_version_content,
     synchronize_working_copies, write_version_package,
 )
+from notalone.persistence.skill_manifest import read_package_manifest, write_package_manifest
 from notalone.skills import (
     LocalSkillPackageReader,
     PreviewCandidate,
@@ -88,8 +89,6 @@ class PostgresSkillLibrary(SkillLibraryManagementPort):
         if not isinstance(owner_id, UUID):
             raise TypeError("owner_id 必须是 UUID。")
         try:
-            from notalone.persistence.skill_directory import prepare_legacy_skill_directory
-            prepare_legacy_skill_directory(self._database_url, owner_id)
             with self._connect() as connection:
                 from notalone.persistence.skill_directory import synchronize_skill_directory
                 synchronize_skill_directory(connection, owner_id)
@@ -97,7 +96,6 @@ class PostgresSkillLibrary(SkillLibraryManagementPort):
                     """
                     SELECT skill.id AS skill_id,
                            skill.name AS skill_name,
-                           skill.description AS skill_description,
                            skill.contact_id AS skill_contact_id,
                            skill.status AS skill_status,
                            version.id AS current_version_id,
@@ -113,7 +111,10 @@ class PostgresSkillLibrary(SkillLibraryManagementPort):
                     """,
                     (owner_id,),
                 ).fetchall()
-        except psycopg.Error:
+                for row in rows:
+                    row["skill_description"] = (read_package_manifest(connection, row["current_version_id"])["description"]
+                                                if row["current_version_id"] else "暂无可用版本")
+        except (psycopg.Error, SkillFileError):
             raise SkillLibraryPersistenceError(
                 "Skill 目录读取失败。"
             ) from None
@@ -156,8 +157,8 @@ class PostgresSkillLibrary(SkillLibraryManagementPort):
             if skill is not None or targets:
                 raise SkillLearningInvalid()
             connection.execute(
-                "INSERT INTO public.reply_skill(id,owner_id,contact_id,name,description,status) VALUES(%s,%s,NULL,%s,%s,'active')",
-                (skill_id, scope.owner_id, package.name, package.description))
+                "INSERT INTO public.reply_skill(id,owner_id,contact_id,name,status) VALUES(%s,%s,NULL,%s,'active')",
+                (skill_id, scope.owner_id, package.name))
         elif skill is None or not targets or UUID(targets[0]['skill_id']) != skill_id:
             raise SkillLearningInvalid()
         for target in targets:
@@ -178,8 +179,8 @@ class PostgresSkillLibrary(SkillLibraryManagementPort):
         connection.execute('UPDATE public.reply_skill_version SET source_locator=%s,review_origin=true WHERE id=%s',
                            ('reviewed-draft:' + draft['draft_id'], version_id))
         connection.execute(
-            "UPDATE public.reply_skill SET description=%s,updated_at=now() WHERE id=%s",
-            (package.description, skill_id))
+            "UPDATE public.reply_skill SET updated_at=now() WHERE id=%s",
+            (skill_id,))
         # 合并仅停用明确列出的目标；旧版本保留，回滚仍受独立政策和删除约束。
         for target in targets[1:]:
             connection.execute("UPDATE public.reply_skill SET status='disabled',updated_at=now() WHERE owner_id=%s AND id=%s",
@@ -192,10 +193,10 @@ class PostgresSkillLibrary(SkillLibraryManagementPort):
              confirmed_scope['scene'], dependency_ids, Jsonb(source_generation)))
         for ordinal, method in enumerate(strategy['methods']):
             connection.execute(
-                'INSERT INTO public.reply_skill_method(version_id,method_id,logical_skill_id,ordinal,title,instruction,'
-                'replaces_method_ids,mapping_state) VALUES(%s,%s,%s,%s,%s,%s,%s,%s)',
+                'INSERT INTO public.reply_skill_method(version_id,method_id,logical_skill_id,ordinal,'
+                'replaces_method_ids,mapping_state) VALUES(%s,%s,%s,%s,%s,%s)',
                 (version_id, UUID(method['method_id']), UUID(method['logical_skill_id']), ordinal,
-                 None, None, [UUID(value) for value in method['replaces_method_ids']],
+                 [UUID(value) for value in method['replaces_method_ids']],
                  'confirmed' if targets else 'new'))
         from notalone.persistence.skill_methods import write_method_manifest
         try:
@@ -229,10 +230,10 @@ class PostgresSkillLibrary(SkillLibraryManagementPort):
                     raise SkillNotFoundError("Skill 读取失败：Skill 不存在。")
                 current = connection.execute(
                     """
-                    SELECT id, version_number, description, content
+                    SELECT id, version_number
                     FROM public.reply_skill_version
                     WHERE skill_id = %s AND is_current = TRUE
-                      AND status = 'active' AND (content IS NOT NULL OR content_path IS NOT NULL)
+                      AND status = 'active' AND content_path IS NOT NULL
                     """,
                     (skill_id,),
                 ).fetchone()
@@ -241,16 +242,9 @@ class PostgresSkillLibrary(SkillLibraryManagementPort):
                         "Skill 读取失败：当前版本不可用。"
                     )
                 self._require_version_sources(connection, owner_id, current['id'])
+                current.update(read_package_manifest(connection, current['id']))
                 current['content'] = read_version_content(connection, current['id'])
-                resources = connection.execute(
-                    """
-                    SELECT relative_path
-                    FROM public.reply_skill_resource
-                    WHERE skill_version_id = %s
-                    ORDER BY relative_path
-                    """,
-                    (current["id"],),
-                ).fetchall()
+                resources = current["resources"]
         except (SkillNotFoundError, SkillVersionNotFoundError):
             raise
         except (psycopg.Error, SkillFileError):
@@ -299,11 +293,11 @@ class PostgresSkillLibrary(SkillLibraryManagementPort):
                 connection.execute(
                     """
                     INSERT INTO public.reply_skill (
-                        id, owner_id, contact_id, name, description, status
+                        id, owner_id, contact_id, name, status
                     )
-                    VALUES (%s, %s, NULL, %s, %s, 'active')
+                    VALUES (%s, %s, NULL, %s, 'active')
                     """,
-                    (skill_id, owner_id, package.name, package.description),
+                    (skill_id, owner_id, package.name),
                 )
                 self._insert_version_and_resources(
                     connection,
@@ -396,14 +390,14 @@ class PostgresSkillLibrary(SkillLibraryManagementPort):
                     version_number=next_number,
                     version_id=version_id,
                 )
-                # 保持 reply_skill 与 current 版本描述一致，避免目录一致性守卫误报。
+                # 内容元数据仅保存在文件；业务记录只更新修改时间。
                 connection.execute(
                     """
                     UPDATE public.reply_skill
-                    SET description = %s, updated_at = now()
+                    SET updated_at = now()
                     WHERE id = %s
                     """,
-                    (package.description, skill["id"]),
+                    (skill["id"],),
                 )
                 revision = self._increment_revision(connection, owner_id)
         except (
@@ -451,8 +445,6 @@ class PostgresSkillLibrary(SkillLibraryManagementPort):
                     """
                     SELECT version.id AS version_id,
                            version.version_number,
-                           version.name,
-                           version.description,
                            version.is_current,
                            version.enabled,
                            version.created_at
@@ -466,7 +458,8 @@ class PostgresSkillLibrary(SkillLibraryManagementPort):
                     """,
                     (owner_id, skill_id),
                 ).fetchall()
-        except psycopg.Error:
+                rows = [{**row, **read_package_manifest(connection, row["version_id"])} for row in rows]
+        except (psycopg.Error, SkillFileError):
             raise SkillLibraryPersistenceError("Skill 版本读取失败。") from None
         return tuple(
             SkillVersionEntry(
@@ -511,8 +504,8 @@ class PostgresSkillLibrary(SkillLibraryManagementPort):
         self._ensure_library_row(connection, owner_id)
         skill = self._lock_skill(connection, owner_id=owner_id, skill_id=skill_id, operation="回滚")
         target = connection.execute(
-            "SELECT id,version_number,description,review_origin FROM public.reply_skill_version "
-            "WHERE id=%s AND skill_id=%s AND status='active' AND enabled AND (content IS NOT NULL OR content_path IS NOT NULL) FOR UPDATE",
+            "SELECT id,version_number,review_origin FROM public.reply_skill_version "
+            "WHERE id=%s AND skill_id=%s AND status='active' AND enabled AND content_path IS NOT NULL FOR UPDATE",
             (version_id, skill_id)).fetchone()
         if target is None:
             raise SkillVersionNotFoundError("Skill 回滚失败：目标版本不可用。")
@@ -539,7 +532,7 @@ class PostgresSkillLibrary(SkillLibraryManagementPort):
         if current != version_id:
             connection.execute('UPDATE public.reply_skill_version SET is_current=false WHERE skill_id=%s AND is_current', (skill_id,))
             connection.execute('UPDATE public.reply_skill_version SET is_current=true WHERE id=%s', (version_id,))
-            connection.execute('UPDATE public.reply_skill SET description=%s,updated_at=now() WHERE id=%s', (target['description'], skill_id))
+            connection.execute('UPDATE public.reply_skill SET updated_at=now() WHERE id=%s', (skill_id,))
             revision = self._increment_revision(connection, owner_id)
             queue_working_copy(connection, skill_id, version_id)
         else:
@@ -670,30 +663,18 @@ class PostgresSkillLibrary(SkillLibraryManagementPort):
                 connection.execute(
                     """
                     UPDATE public.reply_skill_version
-                    SET content = NULL,
+                    SET manifest_sha256 = NULL,
                         content_path = NULL,
                         document_sha256 = NULL,
                         method_manifest_path = NULL,
                         method_manifest_sha256 = NULL,
                         content_sha256 = NULL,
                         source_locator = NULL,
-                        validation_warnings = '[]'::jsonb,
                         enabled = FALSE,
                         is_current = FALSE,
                         status = 'deleted',
                         deleted_at = now()
                     WHERE skill_id = %s AND status = 'active'
-                    """,
-                    (skill_id,),
-                )
-                connection.execute(
-                    """
-                    DELETE FROM public.reply_skill_resource
-                    WHERE skill_version_id IN (
-                        SELECT id
-                        FROM public.reply_skill_version
-                        WHERE skill_id = %s
-                    )
                     """,
                     (skill_id,),
                 )
@@ -761,10 +742,10 @@ class PostgresSkillLibrary(SkillLibraryManagementPort):
                     raise SkillNotFoundError("Skill 导出失败：Skill 不存在。")
                 current = connection.execute(
                     """
-                    SELECT id, version_number, name, description, content
+                    SELECT id, version_number
                     FROM public.reply_skill_version
                     WHERE skill_id = %s AND is_current = TRUE
-                      AND status = 'active' AND (content IS NOT NULL OR content_path IS NOT NULL)
+                      AND status = 'active' AND content_path IS NOT NULL
                     """,
                     (skill_id,),
                 ).fetchone()
@@ -773,16 +754,9 @@ class PostgresSkillLibrary(SkillLibraryManagementPort):
                         "Skill 导出失败：当前版本不可用。",
                     )
                 self._require_version_sources(connection, owner_id, current['id'])
+                current.update(read_package_manifest(connection, current['id']))
                 current['content'] = read_version_content(connection, current['id'])
-                resource_rows = connection.execute(
-                    """
-                    SELECT relative_path, content
-                    FROM public.reply_skill_resource
-                    WHERE skill_version_id = %s
-                    ORDER BY relative_path
-                    """,
-                    (current["id"],),
-                ).fetchall()
+                resource_rows = current["resources"]
                 for resource in resource_rows:
                     resource['content'] = read_resource_content(connection, current['id'], resource['relative_path'])
         except (SkillNotFoundError, SkillVersionNotFoundError):
@@ -863,18 +837,16 @@ class PostgresSkillLibrary(SkillLibraryManagementPort):
                 ):
                     current = connection.execute(
                         """
-                        SELECT id, version_number, name, description
+                        SELECT id, version_number
                         FROM public.reply_skill_version
                         WHERE skill_id = %s AND is_current = TRUE
                           AND status = 'active' AND enabled = TRUE
-                          AND (content IS NOT NULL OR content_path IS NOT NULL)
-                          AND name = (
-                              SELECT name FROM public.reply_skill WHERE id = %s
-                          )
+                          AND content_path IS NOT NULL
                         """,
-                        (skill_id, skill_id),
+                        (skill_id,),
                     ).fetchone()
                 if skill is not None and current is not None:
+                    current.update(read_package_manifest(connection, current['id']))
                     entry = SkillCatalogEntry(
                         skill_id=skill_id,
                         version_id=current["id"],
@@ -1082,50 +1054,18 @@ class PostgresSkillLibrary(SkillLibraryManagementPort):
                 owner_id=owner_id, skill_id=skill_id, version_id=chosen_id, package=package)
         except SkillFileError:
             raise SkillLibraryPersistenceError('Skill 文件发布失败。') from None
+        manifest_sha256 = write_package_manifest(content_path, package)
         connection.execute(
             """
             INSERT INTO public.reply_skill_version (
-                id, skill_id, version_number, name, description, content,
-                content_sha256, source_locator, validation_warnings,
-                enabled, is_current, status, content_path, document_sha256
+                id, skill_id, version_number, content_sha256, source_locator,
+                enabled, is_current, status, content_path, document_sha256, manifest_sha256
             )
-            VALUES (
-                %s, %s, %s, %s, %s, NULL, %s, %s, %s, TRUE, TRUE, 'active', %s, %s
-            )
+            VALUES (%s, %s, %s, %s, %s, TRUE, TRUE, 'active', %s, %s, %s)
             """,
-            (
-                chosen_id,
-                skill_id,
-                version_number,
-                package.name,
-                package.description,
-                package.content_sha256,
-                f"local-package:{package.package_sha256}",
-                Jsonb(list(package.warnings)),
-                content_path,
-                document_sha256,
-            ),
+            (chosen_id, skill_id, version_number, package.content_sha256,
+             f"local-package:{package.package_sha256}", content_path, document_sha256, manifest_sha256),
         )
-        for resource in package.resources:
-            connection.execute(
-                """
-                INSERT INTO public.reply_skill_resource (
-                    id, skill_version_id, relative_path, resource_kind,
-                    media_type, byte_size, content_sha256, content, content_path
-                )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, NULL, %s)
-                """,
-                (
-                    uuid4(),
-                    chosen_id,
-                    resource.relative_path,
-                    resource.resource_kind,
-                    resource.media_type,
-                    len(resource.content),
-                    resource.content_sha256,
-                    str(Path(content_path).parent / resource.relative_path),
-                ),
-            )
         if write_working:
             queue_working_copy(connection, skill_id, chosen_id)
         return chosen_id

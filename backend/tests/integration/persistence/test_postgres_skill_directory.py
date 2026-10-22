@@ -16,16 +16,16 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from notalone.persistence.skill_library import PostgresSkillLibrary, SkillLibraryPersistenceError
-from notalone.persistence.skill_directory import synchronize_skill_library
+from notalone.persistence.skill_directory import SkillDirectorySyncError, synchronize_skill_library
 from notalone.persistence.skill_files import SkillFileError
 from notalone.persistence.contact_deletion import delete_contact
-from notalone.persistence.skill_port import PostgresSkillPort
+from notalone.persistence.skill_port import PostgresSkillPort, SkillPortPersistenceError
 from notalone.persistence.skill_history import PostgresSkillHistory
 from notalone.persistence.skill_policies import PostgresSkillPolicies
 from notalone.persistence.skill_learning_generation import capture_generation
 from notalone.persistence.skill_learning import SkillLearningNotFound
-from notalone.persistence.skill_methods import migrate_legacy_method_manifests
 from notalone.scopes import ContactScope
+from tests.integration.persistence.skill_fixture import insert_file_skill
 
 
 class PostgresSkillDirectoryTest(unittest.TestCase):
@@ -75,6 +75,34 @@ class PostgresSkillDirectoryTest(unittest.TestCase):
         """显式同步入口；SkillPort 读路径不再迁移或扫描目录。"""
         return synchronize_skill_library(self.database_url, (scope or self.scope).owner_id)
 
+    def test_database_keeps_only_business_state_and_catalog_is_lazy(self):
+        self._package()
+        self._refresh()
+        with psycopg.connect(self.database_url) as connection:
+            self.assertIsNone(connection.execute(
+                "SELECT to_regclass('public.reply_skill_resource')").fetchone()[0])
+            for table, removed in (
+                ("reply_skill", {"description", "directory_managed"}),
+                ("reply_skill_version", {"name", "description", "content", "validation_warnings"}),
+                ("reply_skill_method", {"title", "instruction"}),
+            ):
+                columns = {row[0] for row in connection.execute(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_schema='public' AND table_name=%s", (table,))}
+                self.assertFalse(columns & removed)
+        with patch("notalone.persistence.skill_files._read_document",
+                   side_effect=AssertionError("目录阶段不能读取正文")), patch(
+                "notalone.persistence.skill_files.read_resource_content",
+                side_effect=AssertionError("目录阶段不能读取资源正文")):
+            catalog = self.port.catalog(self.scope)
+        self.assertEqual(len(catalog.entries), 1)
+        entry = catalog.entries[0]
+        self.assertEqual(entry.description, "适合温暖回应时使用。")
+        version = self.port.load_version(self.scope, entry.version_id)
+        self.assertIn("先回应感受", version.content)
+        resource = self.port.load_resource(self.scope, entry.version_id, "references/example.md")
+        self.assertIn("表达理解", resource.content.decode("utf-8"))
+
     def _package(self, *, name="warm-reply", body="先回应感受，再表达需要。", owner_id=None):
         directory = self.root / str(owner_id or self.owner_id) / name
         (directory / "references").mkdir(parents=True, exist_ok=True)
@@ -82,6 +110,36 @@ class PostgresSkillDirectoryTest(unittest.TestCase):
             f"---\nname: {name}\ndescription: 适合温暖回应时使用。\n---\n\n{body}\n", encoding="utf-8")
         (directory / "references" / "example.md").write_text("可以先表达理解，再邀请对方选择。\n", encoding="utf-8")
         return directory
+
+    def test_corrupt_package_manifest_cannot_republish_unchanged_working_directory(self):
+        self._package()
+        self._refresh()
+        catalog = self.port.catalog(self.scope)
+        entry = catalog.entries[0]
+        manifest = self.root / ".versions" / str(self.owner_id) / str(entry.skill_id) / str(entry.version_id) / "manifest.json"
+        original = manifest.read_bytes()
+        manifest.write_bytes(b'{"schema_version":0}')
+
+        for body in ("先回应感受，再表达需要。", "先检查清单，再表达修改后的需要。"):
+            with self.subTest(body=body):
+                self._package(body=body)
+                with self.assertRaises(SkillDirectorySyncError):
+                    self._refresh()
+                with psycopg.connect(self.database_url) as connection:
+                    self.assertEqual(connection.execute("SELECT revision FROM public.skill_library WHERE owner_id=%s",
+                        (self.owner_id,)).fetchone()[0], catalog.revision)
+                    self.assertEqual(connection.execute("SELECT count(*) FROM public.reply_skill_version WHERE skill_id=%s",
+                        (entry.skill_id,)).fetchone()[0], 1)
+                with self.assertRaises(SkillPortPersistenceError):
+                    self.port.catalog(self.scope)
+                with self.assertRaises(PermissionError):
+                    self.port.load_version(self.scope, entry.version_id)
+
+        self._package()
+        manifest.write_bytes(original)
+        self.assertEqual(self._refresh(), catalog.revision)
+        self.assertEqual(self.port.catalog(self.scope), catalog)
+        self.assertIn("先回应感受", self.port.load_version(self.scope, entry.version_id).content)
 
     def _reviewed(self):
         skill_id, draft_id, first, second = (uuid4() for _ in range(4))
@@ -127,19 +185,14 @@ class PostgresSkillDirectoryTest(unittest.TestCase):
         self.assertIn("询问对方希望获得的支持", loaded.content)
         self.assertEqual(loaded.execution_view.method_ids, (second,))
 
-    def test_legacy_method_migration_clears_database_text_and_is_repeatable(self):
-        skill_id, version_id, first, second = self._reviewed()
+    def test_method_identity_storage_has_no_teaching_content_columns(self):
+        skill_id, version_id, _, _ = self._reviewed()
         with psycopg.connect(self.database_url) as connection:
-            connection.execute("UPDATE public.reply_skill_version SET method_manifest_path=NULL,method_manifest_sha256=NULL WHERE id=%s", (version_id,))
-            for identifier, title, instruction in ((first, "回应感受", "先表示理解对方。"),
-                                                    (second, "提供选择", "询问对方希望获得的支持。")):
-                connection.execute("UPDATE public.reply_skill_method SET title=%s,instruction=%s WHERE version_id=%s AND method_id=%s",
-                                   (title, instruction, version_id, identifier))
-            self.assertEqual(migrate_legacy_method_manifests(connection, owner_id=self.owner_id), 1)
-            self.assertEqual(migrate_legacy_method_manifests(connection, owner_id=self.owner_id), 0)
-            self.assertEqual(connection.execute("SELECT count(*) FROM public.reply_skill_method WHERE version_id=%s "
-                                                "AND (title IS NOT NULL OR instruction IS NOT NULL)", (version_id,)).fetchone()[0], 0)
-
+            columns = {row[0] for row in connection.execute(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_schema='public' AND table_name='reply_skill_method'").fetchall()}
+        self.assertTrue({"method_id", "logical_skill_id", "replaces_method_ids", "mapping_state"} <= columns)
+        self.assertTrue({"title", "instruction"}.isdisjoint(columns))
         history = PostgresSkillHistory(self.database_url).read(self.scope, skill_id)
         self.assertEqual(history["versions"][0]["methods"][1]["instruction"], "询问对方希望获得的支持。")
         self.assertIn("先表示理解对方", self.port.load_version(self.scope, version_id).content)
@@ -152,9 +205,6 @@ class PostgresSkillDirectoryTest(unittest.TestCase):
             disabled=True, expected_revision=0, operation_key=uuid4(),
         )
         manifest = self.root / ".versions" / str(self.owner_id) / str(skill_id) / str(version_id) / "methods.json"
-        with psycopg.connect(self.database_url) as connection:
-            # 模拟尚未清理的旧副本；它不能成为损坏文件的加载后备。
-            connection.execute("UPDATE public.reply_skill_method SET title='旧副本',instruction='不得作为后备正文' WHERE version_id=%s", (version_id,))
         for corruption in (b"[]", None):
             if corruption is None:
                 manifest.unlink()
@@ -394,13 +444,12 @@ class PostgresSkillDirectoryTest(unittest.TestCase):
         self.assertEqual([item.version_number for item in versions], [2, 1])
         self.assertTrue(versions[0].is_current)
 
-    def test_first_catalog_refresh_migrates_legacy_database_package_to_directory(self):
+    def test_first_catalog_refresh_restores_working_copy_from_published_files(self):
         skill_id, version_id = uuid4(), uuid4()
         with psycopg.connect(self.database_url) as connection:
-            connection.execute("INSERT INTO public.reply_skill(id,owner_id,name,description,status) "
-                               "VALUES (%s,%s,'legacy-reply','适合旧版回应场景。','active')", (skill_id, self.owner_id))
-            connection.execute("INSERT INTO public.reply_skill_version(id,skill_id,version_number,name,description,content,enabled,is_current,status) "
-                               "VALUES (%s,%s,1,'legacy-reply','适合旧版回应场景。','先表达理解。',true,true,'active')", (version_id, skill_id))
+            insert_file_skill(connection, owner_id=self.owner_id, skill_id=skill_id,
+                              version_id=version_id, name="legacy-reply", content="先表达理解。",
+                              description="适合旧版回应场景。", write_working=False)
 
         self._refresh()
         catalog = self.port.catalog(self.scope)
@@ -412,13 +461,12 @@ class PostgresSkillDirectoryTest(unittest.TestCase):
         document.write_text(document.read_text(encoding="utf-8") + "\n再询问需要。", encoding="utf-8")
         self.assertEqual(self.library.list_owner_skills(self.owner_id)[0].current_version_number, 2)
 
-    def test_first_management_refresh_migrates_legacy_package_before_directory_edit(self):
+    def test_first_management_refresh_restores_working_copy_before_directory_edit(self):
         skill_id, version_id = uuid4(), uuid4()
         with psycopg.connect(self.database_url) as connection:
-            connection.execute("INSERT INTO public.reply_skill(id,owner_id,name,description,status) "
-                               "VALUES (%s,%s,'legacy-reply','适合旧版回应场景。','active')", (skill_id, self.owner_id))
-            connection.execute("INSERT INTO public.reply_skill_version(id,skill_id,version_number,name,description,content,enabled,is_current,status) "
-                               "VALUES (%s,%s,1,'legacy-reply','适合旧版回应场景。','先表达理解。',true,true,'active')", (version_id, skill_id))
+            insert_file_skill(connection, owner_id=self.owner_id, skill_id=skill_id,
+                              version_id=version_id, name="legacy-reply", content="先表达理解。",
+                              description="适合旧版回应场景。", write_working=False)
 
         self.assertEqual(self.library.list_owner_skills(self.owner_id)[0].current_version_id, version_id)
         document = self.root / str(self.owner_id) / "legacy-reply" / "SKILL.md"

@@ -264,6 +264,9 @@ class CoreBusinessFlowFixture:
         self.addCleanup(self._close_lock_connections)
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
+        skill_environment = patch.dict(os.environ, {"NOTALONE_SKILLS_DIR": str(Path(self.temporary.name) / "skills")})
+        skill_environment.start()
+        self.addCleanup(skill_environment.stop)
         with psycopg.connect(self.database_url) as connection:
             for owner_id in (self.owner_id, self.other_owner_id):
                 connection.execute(

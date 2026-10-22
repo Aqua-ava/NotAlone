@@ -197,7 +197,7 @@ class PostgresSkillReviewStore:
         """显式同步工作副本；失败保留任务并在下一轮入口重试，不回滚已提交审核。"""
         from notalone.persistence.skill_directory import SkillDirectorySyncError, synchronize_skill_library
         try:
-            synchronize_skill_library(self.database_url, owner_id, migrate_legacy=False)
+            synchronize_skill_library(self.database_url, owner_id)
         except SkillDirectorySyncError:
             logger.warning("skill_directory_sync_failed")
 
@@ -333,9 +333,10 @@ class PostgresSkillReviewStore:
         if draft['status'] == 'published':
             with connection.cursor(row_factory=dict_row) as cursor:
                 row = cursor.execute(
-                    'SELECT version.skill_id,version.id AS version_id,version.name,version.version_number,'
+                    'SELECT version.skill_id,version.id AS version_id,skill.name,version.version_number,'
                     'publication.scope_kind,publication.scope_contact_id,publication.scene,library.revision '
                     'FROM public.reply_skill_version AS version JOIN public.reply_skill_publication AS publication ON publication.version_id=version.id '
+                    'JOIN public.reply_skill AS skill ON skill.id=version.skill_id '
                     'JOIN public.skill_library AS library ON library.owner_id=publication.owner_id '
                     "WHERE version.id=%s AND version.status='active' AND NOT publication.deleted",
                     (draft['published_version_id'],)).fetchone()
@@ -399,13 +400,11 @@ def erase_review_artifacts(connection, owner_id, draft_ids):
         queue_skill_file_cleanup(connection, skill_id=skill_id, version_ids={
             field(row, 'version_id', 0) for row in rows if field(row, 'skill_id', 1) == skill_id})
     connection.execute(
-        "UPDATE public.reply_skill_version SET description='来源已删除',content=NULL,content_path=NULL,document_sha256=NULL,"
-        "method_manifest_path=NULL,method_manifest_sha256=NULL,content_sha256=NULL,source_locator=NULL,validation_warnings='[]',"
+        "UPDATE public.reply_skill_version SET content_path=NULL,document_sha256=NULL,manifest_sha256=NULL,"
+        "method_manifest_path=NULL,method_manifest_sha256=NULL,content_sha256=NULL,source_locator=NULL,"
         "enabled=false,is_current=false,status='deleted',deleted_at=now() WHERE id=ANY(%s::uuid[])", (versions,))
-    connection.execute('DELETE FROM public.reply_skill_resource WHERE skill_version_id=ANY(%s::uuid[])', (versions,))
-    connection.execute('UPDATE public.reply_skill_method SET title=NULL,instruction=NULL WHERE version_id=ANY(%s::uuid[])', (versions,))
     connection.execute(
-        "UPDATE public.reply_skill SET description='来源已删除',status='disabled',updated_at=now() "
+        "UPDATE public.reply_skill SET status='disabled',updated_at=now() "
         "WHERE owner_id=%s AND id=ANY(%s::uuid[]) AND status<>'deleted'",
         (owner_id, current_skills))
     connection.execute('UPDATE public.skill_library SET revision=revision+1,updated_at=now() WHERE owner_id=%s', (owner_id,))
