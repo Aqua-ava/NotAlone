@@ -30,7 +30,7 @@ from notalone.reply.adapters.input_budget_middleware import InputBudgetMiddlewar
 from notalone.reply.adapters.provider_errors import is_provider_context_limit
 from notalone.reply.adapters.constraint_review import ReplyConstraintReview
 from notalone.reply.adapters.deepseek_provider import deepseek_uses_thinking
-from notalone.reply.adapters.thinking_output import thinking_output_tool, thinking_output_payload
+from notalone.reply.adapters.thinking_output import ThinkingOutputGuard, thinking_output_tool, thinking_output_payload
 
 from notalone.reply.context import workspace_recent_only
 from notalone.reply.context import ReplyContext, allows_history
@@ -871,6 +871,7 @@ class LangChainReplyRuntime:
                 model=self._model,
                 tools=agent_tools,
                 middleware=[
+                    *([ThinkingOutputGuard()] if thinking else []),
                     ScenarioArgumentsMiddleware(),
                     SkillsMiddleware(
                         backend=backend,

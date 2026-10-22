@@ -71,3 +71,12 @@ class ThinkingRuntimeTest(unittest.TestCase):
         self.assertEqual(prior['reasoning_content'], '合成供应商占位字段。')
         for request, decision in zip(requests, decisions):
             self.assertEqual(decision.input_tokens, len(request) + 4096)
+
+    def test_mixed_final_cannot_be_retried_into_valid_output(self):
+        first = reply_output()
+        first.tool_calls.append({'id': 'mixed-read', 'name': 'read_file',
+            'args': {'file_path': '/notalone/reply-skills/unknown/SKILL.md'}})
+        model, requests = self.thinking_model(responses=[first, reply_output()])
+        with self.assertRaises(ReplyError):
+            self.runtime(model).generate(prepared_context())
+        self.assertEqual(len(requests), 1)
