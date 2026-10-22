@@ -6,7 +6,9 @@ import argparse
 import hashlib
 import os
 import sys
+import threading
 import time
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -120,6 +122,16 @@ class _BatchExtraction:
     called_at: datetime
 
 
+@dataclass(frozen=True, slots=True)
+class _BatchStep:
+    """主线程预计算的批序与水位链；不提前构建窗口载荷。"""
+
+    index: int
+    batch: tuple
+    next_watermark: UUID | None
+    previous_watermark: UUID | None
+
+
 @dataclass(slots=True)
 class _RunProgress:
     """B 段串行累计的状态；水位只在成功或跳过提交后前进。"""
@@ -157,6 +169,99 @@ class _RunProgress:
         )
 
 
+def _plan_batch_steps(
+    *,
+    pending_messages: tuple,
+    batch_size: int,
+    initial_watermark: UUID | None,
+) -> tuple[_BatchStep, ...]:
+    """按批序预计算批次与水位链，避免主线程提前构建整轮窗口载荷。"""
+
+    steps: list[_BatchStep] = []
+    previous = initial_watermark
+    for index, offset in enumerate(
+        range(0, len(pending_messages), batch_size)
+    ):
+        batch = pending_messages[offset : offset + batch_size]
+        next_watermark = _next_watermark(batch, previous)
+        steps.append(
+            _BatchStep(
+                index=index,
+                batch=batch,
+                next_watermark=next_watermark,
+                previous_watermark=previous,
+            )
+        )
+        previous = next_watermark
+    return tuple(steps)
+
+
+class _BatchWriteGate:
+    """单写队列的批序闸门：前序批未提交时后批等待，中止时全部唤醒。"""
+
+    def __init__(self, initial_watermark: UUID | None) -> None:
+        self._condition = threading.Condition()
+        self._next_index = 0
+        self._aborted = False
+        self._committed_watermark = initial_watermark
+
+    def is_aborted(self) -> bool:
+        with self._condition:
+            return self._aborted
+
+    def committed_watermark(self) -> UUID | None:
+        """实际已提交的水位；停止批只按该值收尾，不使用预计算链。"""
+
+        with self._condition:
+            return self._committed_watermark
+
+    def wait_for_turn(self, index: int) -> bool:
+        """等到本批可提交；整轮已中止时返回 False 以便收为停止。"""
+
+        with self._condition:
+            while not self._aborted and self._next_index != index:
+                self._condition.wait()
+            return not self._aborted
+
+    def finish(
+        self,
+        index: int,
+        *,
+        abort: bool,
+        watermark: UUID | None,
+    ) -> None:
+        """提交完成后推进批序；失败时先置中止再唤醒所有等待者。"""
+
+        with self._condition:
+            if abort:
+                self._aborted = True
+            elif self._next_index == index:
+                self._committed_watermark = watermark
+            if self._next_index == index:
+                self._next_index += 1
+            self._condition.notify_all()
+
+    def abort(self) -> None:
+        """未预期异常时先唤醒等待者，避免线程池收尾死锁。"""
+
+        with self._condition:
+            self._aborted = True
+            self._condition.notify_all()
+
+
+def _next_watermark(batch: tuple, previous: UUID | None) -> UUID | None:
+    """批内最后一条有时间消息的水位；无时间消息时保持不前移。"""
+
+    return next(
+        (
+            message.message_id
+            for message in reversed(batch)
+            if message.occurred_at is not None
+        ),
+        previous,
+    )
+
+
 def _plan_batch(
     *,
     batch: tuple,
@@ -174,14 +279,7 @@ def _plan_batch(
 ) -> _PlannedBatch:
     """A 段：构建本批窗口、窗口载荷与批次键；不产生写入。"""
 
-    next_watermark = next(
-        (
-            message.message_id
-            for message in reversed(batch)
-            if message.occurred_at is not None
-        ),
-        previous_watermark,
-    )
+    next_watermark = _next_watermark(batch, previous_watermark)
     absolute_start = message_positions[batch[0].message_id]
     absolute_end = message_positions[batch[-1].message_id] + 1
     context_start = max(0, absolute_start - context_before)
@@ -440,6 +538,165 @@ def _commit_batch(
     return True
 
 
+def _complete_stopped_batch(
+    trace: TraceSession, *, watermark: UUID | None
+) -> None:
+    """预取批在整轮中止后收尾：不采纳、不写入、不推进水位、不计数。"""
+
+    current = snapshot(watermark)
+    trace.complete(
+        status="stopped",
+        payload={
+            "reason": "aborted_after_batch_failure",
+            "watermark_before": current,
+            "watermark_planned": current,
+            "watermark_after": current,
+            "watermark_commit": "not_advanced",
+            "not_executed": [
+                "extraction",
+                "verification",
+                "adoption",
+                "write",
+            ],
+        },
+    )
+
+
+def _run_batch_pipeline(
+    *,
+    steps: tuple[_BatchStep, ...],
+    messages: tuple,
+    message_positions: dict[UUID, int],
+    scope: ContactScope,
+    batch_size: int,
+    context_before: int,
+    context_after: int,
+    provider: str,
+    model_name: str | None,
+    task_metadata: dict[str, Any],
+    selection_receipts: tuple[dict[str, Any], ...],
+    trace_store: TracePort,
+    run_id: UUID,
+    runtime,
+    verification_runtime: SourceVerificationRuntime | None,
+    adoption: MemoryAdoption,
+    ledger: OutboundLedgerPort | None,
+    watermark_port,
+    progress: _RunProgress,
+    batch_concurrency: int,
+) -> ExtractionRunStats:
+    """批次流水线：A 段按并发度并行，B 段在单写队列中按批序提交。
+
+    并发度 1 不走本函数，保持原有逐批 A → B 的串行路径。
+    """
+
+    gate = _BatchWriteGate(progress.previous_watermark)
+    # 内存适配器的 begin 会回查同批历史；串行化起点写入，避免并发迭代
+    # 共享容器；提取与核验事件仍由各批自己的线程写入。
+    trace_begin_lock = threading.Lock()
+
+    def run_one(step: _BatchStep) -> None:
+        # 轮次失败后排队中的批不再开始 A 段，也不创建过程记录。
+        if gate.is_aborted():
+            return
+        try:
+            window_started_at = datetime.now(timezone.utc)
+            plan = _plan_batch(
+                batch=step.batch,
+                messages=messages,
+                message_positions=message_positions,
+                scope=scope,
+                context_before=context_before,
+                context_after=context_after,
+                batch_size=batch_size,
+                provider=provider,
+                model_name=model_name,
+                task_metadata=task_metadata,
+                selection_receipts=selection_receipts,
+                previous_watermark=step.previous_watermark,
+            )
+            with trace_begin_lock:
+                trace_id = trace_store.begin(
+                    scope,
+                    run_id=run_id,
+                    batch_key=plan.batch_key,
+                    payload=event_payload(
+                        plan.window_payload,
+                        started_at=window_started_at,
+                        rule_version=str(
+                            plan.window_payload["versions"]["command"]
+                        ),
+                    ),
+                )
+            # 计时运行时记录本批 called_at/latency，不能跨线程共享。
+            timed_runtime = _TimedExtractionRuntime(runtime)
+            flow = ExtractionFlow(
+                runtime=timed_runtime,
+                verification_runtime=verification_runtime,
+            )
+            with TraceSession(
+                trace_store,
+                scope,
+                trace_id,
+                versions=plan.window_payload["versions"],
+                ledger=ledger,
+                provider=provider,
+                model_name=model_name,
+            ) as trace:
+                extraction = _extract_batch(
+                    plan, flow=flow, timed_runtime=timed_runtime
+                )
+                if not gate.wait_for_turn(step.index):
+                    _complete_stopped_batch(
+                        trace, watermark=gate.committed_watermark()
+                    )
+                    return
+                # B 段：只有轮到本批的单写线程才裁决、采纳与提交水位。
+                stop = _commit_batch(
+                    plan,
+                    extraction,
+                    trace=trace,
+                    progress=progress,
+                    adoption=adoption,
+                    scope=scope,
+                    ledger=ledger,
+                    watermark_port=watermark_port,
+                    provider=provider,
+                    model_name=model_name,
+                )
+            gate.finish(
+                step.index,
+                abort=stop,
+                watermark=step.next_watermark,
+            )
+        except BaseException:
+            # TraceSession 已在异常路径标记本批失败；先唤醒所有等待者，
+            # 再把异常交给调用方，避免线程池收尾时互相等待。
+            gate.abort()
+            raise
+
+    failure: BaseException | None = None
+    executor = ThreadPoolExecutor(
+        max_workers=batch_concurrency,
+        thread_name_prefix="notalone-extract",
+    )
+    try:
+        futures: list[Future] = [
+            executor.submit(run_one, step) for step in steps
+        ]
+        for future in futures:
+            try:
+                future.result()
+            except BaseException as error:
+                if failure is None:
+                    failure = error
+    finally:
+        executor.shutdown(wait=True, cancel_futures=True)
+    if failure is not None:
+        raise failure
+    return progress.finish()
+
+
 def run_extraction(
     *,
     scope: ContactScope,
@@ -465,8 +722,13 @@ def run_extraction(
     automatic: bool = True,
     task_lease_generation: int | None = None,
     target_message_ids: tuple[UUID, ...] | None = None,
+    batch_concurrency: int = 1,
 ) -> ExtractionRunStats:
-    """按水位分批串行提取并采纳；输出不可用的批次连续失败后跳过。"""
+    """按水位分批提取并采纳；输出不可用的批次连续失败后跳过。
+
+    并发度 1 为原有逐批串行路径；大于 1 时 A 段按批并行、B 段单写队列
+    按批序提交。
+    """
 
     task_metadata = _task_runtime_metadata(
         task_id, extraction_runtime_config, verification_runtime,
@@ -496,6 +758,12 @@ def run_extraction(
             "后置上下文条数必须在 0 到 "
             f"{MAX_CONTEXT_MESSAGES_PER_SIDE} 之间。"
         )
+    if (
+        isinstance(batch_concurrency, bool)
+        or not isinstance(batch_concurrency, int)
+        or batch_concurrency < 1
+    ):
+        raise ValueError("批次并发度必须是大于或等于 1 的整数。")
 
     if watermark_message_id is not None:
         positions = [
@@ -595,6 +863,35 @@ def run_extraction(
                     "watermark_commit": "not_advanced",
                 },
             )
+    if batch_concurrency > 1:
+        # 并发路径按批新建计时运行时与流程对象；上面创建的串行对象
+        # 不跨线程共享。
+        return _run_batch_pipeline(
+            steps=_plan_batch_steps(
+                pending_messages=pending_messages,
+                batch_size=batch_size,
+                initial_watermark=progress.previous_watermark,
+            ),
+            messages=messages,
+            message_positions=message_positions,
+            scope=scope,
+            batch_size=batch_size,
+            context_before=context_before,
+            context_after=context_after,
+            provider=provider,
+            model_name=model_name,
+            task_metadata=task_metadata,
+            selection_receipts=selection_receipts,
+            trace_store=trace_store,
+            run_id=run_id,
+            runtime=runtime,
+            verification_runtime=verification_runtime,
+            adoption=adoption,
+            ledger=ledger,
+            watermark_port=watermark_port,
+            progress=progress,
+            batch_concurrency=batch_concurrency,
+        )
     for offset in range(0, len(pending_messages), batch_size):
         batch = pending_messages[offset : offset + batch_size]
         # A 段：构建批次窗口与过程记录载荷，进入 TraceSession 并执行提取与

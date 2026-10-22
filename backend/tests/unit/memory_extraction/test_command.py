@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 import unittest
 from collections.abc import Callable
 from contextlib import ExitStack
@@ -15,6 +16,7 @@ from uuid import UUID, uuid4
 from langchain_core.messages import AIMessage
 
 from tests.support.ledger_adapters import InMemoryOutboundLedger
+from notalone.application.model_priority import ModelWorkStopped
 from notalone.ledger.models import LedgerOutcome
 from notalone.memory.adapters import InMemoryMemoryStore
 from notalone.memory.models import (
@@ -352,6 +354,175 @@ class CapturingMemoryStore(InMemoryMemoryStore):
         result = super().create_candidate(candidate)
         self.last_candidate_id = result.candidate_id
         return result
+
+
+def _batch_index_by_message(messages, batch_size: int) -> dict[UUID, int]:
+    """按消息在原始序列中的位置计算其所属批号。"""
+
+    return {
+        message.message_id: index // batch_size
+        for index, message in enumerate(messages)
+    }
+
+
+class PipelineRecordingMemoryPort(InMemoryMemoryStore):
+    """记录采纳顺序的合成记忆端口；兼容当前适配器的确认签名。"""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.candidate_texts: list[str] = []
+        self.confirm_count = 0
+
+    def create_candidate(self, candidate):
+        self.candidate_texts.append(candidate.text)
+        return super().create_candidate(candidate)
+
+    def confirm(
+        self, *, scope, candidate_id,
+        adoption_method=AdoptionMethod.AUTO, **kwargs,
+    ):
+        self.confirm_count += 1
+        return super().confirm(
+            scope=scope,
+            candidate_id=candidate_id,
+            adoption_method=adoption_method,
+            **kwargs,
+        )
+
+
+class BatchBarrierRuntime:
+    """用固定方数闩锁把并发批次同时卡在提取里，确定性测量在途峰值。"""
+
+    def __init__(self, parties: int) -> None:
+        self.barrier = threading.Barrier(parties)
+        self.lock = threading.Lock()
+        self.active = 0
+        self.peak = 0
+
+    def extract(self, window):
+        with self.lock:
+            self.active += 1
+            self.peak = max(self.peak, self.active)
+        try:
+            # 若实现未真正并行，方数不足会在有界等待后显式失败而不是挂起。
+            self.barrier.wait(timeout=2.0)
+        finally:
+            with self.lock:
+                self.active -= 1
+        return ()
+
+
+class OutOfOrderFactRuntime:
+    """让第二批先完成提取，用于断言采纳与水位仍按批序提交。"""
+
+    def __init__(self, batch_of: dict[UUID, int], *, first_waits_for: int) -> None:
+        self._batch_of = batch_of
+        self._first_waits_for = first_waits_for
+        self._later_started = threading.Event()
+
+    def extract(self, window):
+        index = self._batch_of[window.target_message_ids[0]]
+        if index == self._first_waits_for:
+            self._later_started.set()
+        if index == 0 and not self._later_started.wait(timeout=2.0):
+            raise AssertionError("后一批未开始提取，无法制造乱序完成。")
+        message_id = window.target_message_ids[0]
+        return ({**_payload(message_id), "text": f"合成事实 {index}"},)
+
+
+class PrefetchSignal:
+    """等待指定数量的后续批真正进入提取；只用条件变量，不轮询。"""
+
+    def __init__(self, expected: int) -> None:
+        self._condition = threading.Condition()
+        self._expected = expected
+        self._started = 0
+
+    def mark_started(self) -> None:
+        with self._condition:
+            self._started += 1
+            self._condition.notify_all()
+
+    def wait(self, timeout: float = 2.0) -> bool:
+        with self._condition:
+            return self._condition.wait_for(
+                lambda: self._started >= self._expected, timeout
+            )
+
+
+class PrefetchFailureRuntime:
+    """失败批之后的批照常完成提取，用于验证预取批的停止收尾。"""
+
+    def __init__(
+        self,
+        batch_of: dict[UUID, int],
+        *,
+        fail_index: int,
+        signal: PrefetchSignal,
+    ) -> None:
+        self._batch_of = batch_of
+        self._fail_index = fail_index
+        self._signal = signal
+
+    def extract(self, window):
+        index = self._batch_of[window.target_message_ids[0]]
+        if index == self._fail_index:
+            raise ExtractionRuntimeError("合成第三批模型失败。")
+        if index > self._fail_index:
+            self._signal.mark_started()
+        message_id = window.target_message_ids[0]
+        return ({**_payload(message_id), "text": f"合成事实 {index}"},)
+
+
+class PrefetchGateTraceStore(InMemoryTraceStore):
+    """失败批提交前等待预取批进入提取，确定性地覆盖停止收尾。"""
+
+    def __init__(self, signal: PrefetchSignal) -> None:
+        super().__init__()
+        self._signal = signal
+
+    def complete(self, scope, trace_id, *, status, payload, **kwargs):
+        if status == "model_failed" and not self._signal.wait():
+            raise AssertionError("预取批未在失败批提交前进入提取。")
+        return super().complete(
+            scope, trace_id, status=status, payload=payload, **kwargs
+        )
+
+
+class IndexedInvalidOutputRuntime:
+    """按批号返回模型输出无效失败；其余批返回空候选。"""
+
+    def __init__(
+        self, batch_of: dict[UUID, int], *, failing: frozenset[int]
+    ) -> None:
+        self._batch_of = batch_of
+        self._failing = failing
+
+    def extract(self, window):
+        index = self._batch_of[window.target_message_ids[0]]
+        if index in self._failing:
+            raise ExtractionInvalidOutputError(
+                "模型未返回可解析的结构化事实。"
+            )
+        return ()
+
+
+class StoppingRuntime:
+    """第一批等停止批进入后返回；停止批抛出协作停止。"""
+
+    def __init__(self, batch_of: dict[UUID, int], *, stop_index: int) -> None:
+        self._batch_of = batch_of
+        self._stop_index = stop_index
+        self._stopped = threading.Event()
+
+    def extract(self, window):
+        index = self._batch_of[window.target_message_ids[0]]
+        if index == self._stop_index:
+            self._stopped.set()
+            raise ModelWorkStopped()
+        if index == 0 and not self._stopped.wait(timeout=2.0):
+            raise AssertionError("停止批未开始提取。")
+        return ()
 
 
 class RunExtractionTest(unittest.TestCase):
@@ -1166,6 +1337,245 @@ class RunExtractionTest(unittest.TestCase):
             [entry.outcome for entry in ledger.list_by_owner(OWNER_ID)],
             [LedgerOutcome.RUN_FAILED, LedgerOutcome.SUCCEEDED],
         )
+
+
+class BatchPipelineTest(unittest.TestCase):
+    """并发度大于 1 的批次流水线：并发上限、批序提交与失败中止。"""
+
+    def setUp(self) -> None:
+        self.scope = ContactScope(OWNER_ID, CONTACT_ID)
+
+    def test_concurrency_three_peaks_at_exactly_three_in_flight(self) -> None:
+        messages = _messages(6)
+        runtime = BatchBarrierRuntime(parties=3)
+        watermark = RecordingWatermark()
+
+        stats = run_extraction(
+            trace_store=InMemoryTraceStore(),
+            scope=self.scope,
+            messages=messages,
+            watermark_message_id=None,
+            runtime=runtime,
+            memory_port=InMemoryMemoryStore(),
+            owner_memory_port=RecordingOwnerPort(),
+            watermark_port=watermark,
+            batch_size=1,
+            batch_concurrency=3,
+        )
+
+        # 三方闩锁只有在 3 个提取调用真正同时在途时才会释放；峰值不得更多。
+        self.assertEqual(runtime.peak, 3)
+        self.assertEqual(stats.batches, 6)
+        self.assertEqual(stats.processed_messages, 6)
+        self.assertEqual(stats.failed_batches, 0)
+        self.assertEqual(
+            watermark.values,
+            [message.message_id for message in messages],
+        )
+
+    def test_adoption_and_watermark_commit_in_batch_order(self) -> None:
+        messages = _messages(3)
+        batch_of = _batch_index_by_message(messages, 1)
+        memory = PipelineRecordingMemoryPort()
+        watermark = RecordingWatermark()
+
+        stats = run_extraction(
+            trace_store=InMemoryTraceStore(),
+            scope=self.scope,
+            messages=messages,
+            watermark_message_id=None,
+            runtime=OutOfOrderFactRuntime(batch_of, first_waits_for=1),
+            verification_runtime=SyntheticSupportingVerifier(),
+            memory_port=memory,
+            owner_memory_port=RecordingOwnerPort(),
+            watermark_port=watermark,
+            batch_size=1,
+            batch_concurrency=3,
+        )
+
+        self.assertEqual(stats.batches, 3)
+        self.assertEqual(stats.adopted, 3)
+        # 第二批先完成提取，但采纳仍按批序发生。
+        self.assertEqual(
+            memory.candidate_texts,
+            ["合成事实 0", "合成事实 1", "合成事实 2"],
+        )
+        self.assertEqual(memory.confirm_count, 3)
+        self.assertEqual(
+            [batch_of[message_id] for message_id in watermark.values],
+            [0, 1, 2],
+        )
+        self.assertEqual(
+            watermark.values,
+            [message.message_id for message in messages],
+        )
+
+    def test_third_batch_failure_stops_prefetched_batches(self) -> None:
+        messages = _messages(6)
+        batch_of = _batch_index_by_message(messages, 1)
+        signal = PrefetchSignal(expected=2)
+        traces = PrefetchGateTraceStore(signal)
+        memory = PipelineRecordingMemoryPort()
+        watermark = RecordingWatermark()
+
+        stats = run_extraction(
+            trace_store=traces,
+            scope=self.scope,
+            messages=messages,
+            watermark_message_id=None,
+            runtime=PrefetchFailureRuntime(
+                batch_of, fail_index=2, signal=signal
+            ),
+            verification_runtime=SyntheticSupportingVerifier(),
+            memory_port=memory,
+            owner_memory_port=RecordingOwnerPort(),
+            watermark_port=watermark,
+            batch_size=1,
+            batch_concurrency=3,
+        )
+
+        self.assertEqual(
+            (
+                stats.batches,
+                stats.processed_messages,
+                stats.extracted,
+                stats.adopted,
+                stats.failed_batches,
+                stats.skipped_batches,
+            ),
+            (3, 3, 2, 2, 1, 0),
+        )
+        self.assertEqual(
+            watermark.values,
+            [messages[0].message_id, messages[1].message_id],
+        )
+        self.assertEqual(
+            memory.candidate_texts, ["合成事实 0", "合成事实 1"]
+        )
+        self.assertEqual(memory.confirm_count, 2)
+        rows = traces.list_batches(self.scope)
+        self.assertEqual(
+            sorted(row["status"] for row in rows),
+            ["model_failed", "stopped", "stopped", "succeeded", "succeeded"],
+        )
+        stopped = [row for row in rows if row["status"] == "stopped"]
+        self.assertEqual(len(stopped), 2)
+        for row in stopped:
+            events = traces.get_batch(self.scope, row["trace_id"])["events"]
+            payload = next(
+                event["payload"]
+                for event in events
+                if event["stage"] == "batch_end"
+            )
+            self.assertEqual(payload["reason"], "aborted_after_batch_failure")
+            self.assertEqual(
+                payload["watermark_before"],
+                str(messages[1].message_id),
+            )
+            self.assertEqual(
+                payload["watermark_before"], payload["watermark_planned"]
+            )
+            self.assertEqual(
+                payload["watermark_before"], payload["watermark_after"]
+            )
+            self.assertEqual(payload["watermark_commit"], "not_advanced")
+            self.assertEqual(
+                payload["not_executed"],
+                ["extraction", "verification", "adoption", "write"],
+            )
+
+    def test_invalid_output_skip_range_matches_serial_under_concurrency(self) -> None:
+        messages = _messages(6)
+        batch_of = _batch_index_by_message(messages, 3)
+
+        def execute(concurrency: int):
+            watermark = RecordingWatermark()
+            watermark.failure = ExtractionFailureState(
+                count=2,
+                failure_range=FailureRange(
+                    from_message_id=messages[0].message_id,
+                    to_message_id=messages[2].message_id,
+                    code=ExtractionFailureKind.INVALID_OUTPUT,
+                ),
+            )
+            stats = run_extraction(
+                trace_store=InMemoryTraceStore(),
+                scope=self.scope,
+                messages=messages,
+                watermark_message_id=None,
+                runtime=IndexedInvalidOutputRuntime(
+                    batch_of, failing=frozenset({0, 1})
+                ),
+                memory_port=InMemoryMemoryStore(),
+                owner_memory_port=RecordingOwnerPort(),
+                watermark_port=watermark,
+                batch_size=3,
+                batch_concurrency=concurrency,
+            )
+            return stats, watermark
+
+        serial_stats, serial_watermark = execute(1)
+        parallel_stats, parallel_watermark = execute(3)
+
+        self.assertEqual(parallel_stats, serial_stats)
+        self.assertEqual(
+            (parallel_stats.failed_batches, parallel_stats.skipped_batches),
+            (1, 1),
+        )
+        self.assertEqual(
+            parallel_stats.skipped_ranges,
+            (
+                FailureRange(
+                    from_message_id=messages[0].message_id,
+                    to_message_id=messages[2].message_id,
+                    code=ExtractionFailureKind.INVALID_OUTPUT,
+                ),
+            ),
+        )
+        self.assertEqual(parallel_watermark.values, serial_watermark.values)
+        self.assertEqual(parallel_watermark.skips, serial_watermark.skips)
+        self.assertEqual(parallel_watermark.failure, serial_watermark.failure)
+
+    def test_model_stop_wakes_waiters_and_propagates_without_deadlock(self) -> None:
+        messages = _messages(4)
+        batch_of = _batch_index_by_message(messages, 1)
+        traces = InMemoryTraceStore()
+
+        with self.assertRaises(ModelWorkStopped):
+            run_extraction(
+                trace_store=traces,
+                scope=self.scope,
+                messages=messages,
+                watermark_message_id=None,
+                runtime=StoppingRuntime(batch_of, stop_index=1),
+                memory_port=InMemoryMemoryStore(),
+                owner_memory_port=RecordingOwnerPort(),
+                watermark_port=RecordingWatermark(),
+                batch_size=1,
+                batch_concurrency=2,
+            )
+
+        rows = traces.list_batches(self.scope)
+        self.assertTrue(rows)
+        # 所有已开始的批都收为终态，说明等待者被唤醒且线程池正常收尾。
+        self.assertTrue(all(row["status"] != "running" for row in rows))
+        self.assertIn("stopped", [row["status"] for row in rows])
+
+    def test_batch_concurrency_must_be_integer_at_least_one(self) -> None:
+        messages = _messages(1)
+        for value in (0, -1, True, False, 1.5, "3", None):
+            with self.subTest(value=value):
+                with self.assertRaises(ValueError):
+                    run_extraction(
+                        trace_store=InMemoryTraceStore(),
+                        scope=self.scope,
+                        messages=messages,
+                        watermark_message_id=None,
+                        runtime=NullRuntime(),
+                        memory_port=InMemoryMemoryStore(),
+                        owner_memory_port=RecordingOwnerPort(),
+                        batch_concurrency=value,
+                    )
 
 
 class ExtractMainTest(unittest.TestCase):
