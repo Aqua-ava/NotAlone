@@ -9,10 +9,11 @@ import sys
 import threading
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
+from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 from uuid import UUID, uuid4
 
 from notalone.ledger.models import LedgerEntry, LedgerOutcome
@@ -584,6 +585,9 @@ def _run_batch_pipeline(
     watermark_port,
     progress: _RunProgress,
     batch_concurrency: int,
+    background_scope_factory: (
+        Callable[[], AbstractContextManager] | None
+    ) = None,
 ) -> ExtractionRunStats:
     """批次流水线：A 段按并发度并行，B 段在单写队列中按批序提交。
 
@@ -600,75 +604,82 @@ def _run_batch_pipeline(
         if gate.is_aborted():
             return
         try:
-            window_started_at = datetime.now(timezone.utc)
-            plan = _plan_batch(
-                batch=step.batch,
-                messages=messages,
-                message_positions=message_positions,
-                scope=scope,
-                context_before=context_before,
-                context_after=context_after,
-                batch_size=batch_size,
-                provider=provider,
-                model_name=model_name,
-                task_metadata=task_metadata,
-                selection_receipts=selection_receipts,
-                previous_watermark=step.previous_watermark,
+            # 步骤租约复验回调按线程进入；串行路径不经过这里。
+            scope_guard = (
+                background_scope_factory()
+                if background_scope_factory is not None
+                else nullcontext()
             )
-            with trace_begin_lock:
-                trace_id = trace_store.begin(
-                    scope,
-                    run_id=run_id,
-                    batch_key=plan.batch_key,
-                    payload=event_payload(
-                        plan.window_payload,
-                        started_at=window_started_at,
-                        rule_version=str(
-                            plan.window_payload["versions"]["command"]
-                        ),
-                    ),
-                )
-            # 计时运行时记录本批 called_at/latency，不能跨线程共享。
-            timed_runtime = _TimedExtractionRuntime(runtime)
-            flow = ExtractionFlow(
-                runtime=timed_runtime,
-                verification_runtime=verification_runtime,
-            )
-            with TraceSession(
-                trace_store,
-                scope,
-                trace_id,
-                versions=plan.window_payload["versions"],
-                ledger=ledger,
-                provider=provider,
-                model_name=model_name,
-            ) as trace:
-                extraction = _extract_batch(
-                    plan, flow=flow, timed_runtime=timed_runtime
-                )
-                if not gate.wait_for_turn(step.index):
-                    _complete_stopped_batch(
-                        trace, watermark=gate.committed_watermark()
-                    )
-                    return
-                # B 段：只有轮到本批的单写线程才裁决、采纳与提交水位。
-                stop = _commit_batch(
-                    plan,
-                    extraction,
-                    trace=trace,
-                    progress=progress,
-                    adoption=adoption,
+            with scope_guard:
+                window_started_at = datetime.now(timezone.utc)
+                plan = _plan_batch(
+                    batch=step.batch,
+                    messages=messages,
+                    message_positions=message_positions,
                     scope=scope,
-                    ledger=ledger,
-                    watermark_port=watermark_port,
+                    context_before=context_before,
+                    context_after=context_after,
+                    batch_size=batch_size,
                     provider=provider,
                     model_name=model_name,
+                    task_metadata=task_metadata,
+                    selection_receipts=selection_receipts,
+                    previous_watermark=step.previous_watermark,
                 )
-            gate.finish(
-                step.index,
-                abort=stop,
-                watermark=step.next_watermark,
-            )
+                with trace_begin_lock:
+                    trace_id = trace_store.begin(
+                        scope,
+                        run_id=run_id,
+                        batch_key=plan.batch_key,
+                        payload=event_payload(
+                            plan.window_payload,
+                            started_at=window_started_at,
+                            rule_version=str(
+                                plan.window_payload["versions"]["command"]
+                            ),
+                        ),
+                    )
+                # 计时运行时记录本批 called_at/latency，不能跨线程共享。
+                timed_runtime = _TimedExtractionRuntime(runtime)
+                flow = ExtractionFlow(
+                    runtime=timed_runtime,
+                    verification_runtime=verification_runtime,
+                )
+                with TraceSession(
+                    trace_store,
+                    scope,
+                    trace_id,
+                    versions=plan.window_payload["versions"],
+                    ledger=ledger,
+                    provider=provider,
+                    model_name=model_name,
+                ) as trace:
+                    extraction = _extract_batch(
+                        plan, flow=flow, timed_runtime=timed_runtime
+                    )
+                    if not gate.wait_for_turn(step.index):
+                        _complete_stopped_batch(
+                            trace, watermark=gate.committed_watermark()
+                        )
+                        return
+                    # B 段：只有轮到本批的单写线程才裁决、采纳与提交水位。
+                    stop = _commit_batch(
+                        plan,
+                        extraction,
+                        trace=trace,
+                        progress=progress,
+                        adoption=adoption,
+                        scope=scope,
+                        ledger=ledger,
+                        watermark_port=watermark_port,
+                        provider=provider,
+                        model_name=model_name,
+                    )
+                gate.finish(
+                    step.index,
+                    abort=stop,
+                    watermark=step.next_watermark,
+                )
         except BaseException:
             # TraceSession 已在异常路径标记本批失败；先唤醒所有等待者，
             # 再把异常交给调用方，避免线程池收尾时互相等待。
@@ -723,11 +734,15 @@ def run_extraction(
     task_lease_generation: int | None = None,
     target_message_ids: tuple[UUID, ...] | None = None,
     batch_concurrency: int = 1,
+    background_scope_factory: (
+        Callable[[], AbstractContextManager] | None
+    ) = None,
 ) -> ExtractionRunStats:
     """按水位分批提取并采纳；输出不可用的批次连续失败后跳过。
 
     并发度 1 为原有逐批串行路径；大于 1 时 A 段按批并行、B 段单写队列
-    按批序提交。
+    按批序提交。``background_scope_factory`` 只在并发路径的 worker 线程
+    中按批进入；串行路径忽略它，由调用方的既有 guard 负责复验。
     """
 
     task_metadata = _task_runtime_metadata(
@@ -891,6 +906,7 @@ def run_extraction(
             watermark_port=watermark_port,
             progress=progress,
             batch_concurrency=batch_concurrency,
+            background_scope_factory=background_scope_factory,
         )
     for offset in range(0, len(pending_messages), batch_size):
         batch = pending_messages[offset : offset + batch_size]

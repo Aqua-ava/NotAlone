@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from contextlib import nullcontext
+from contextlib import AbstractContextManager, nullcontext
 from datetime import timedelta
 from enum import StrEnum
 from threading import Event, Thread
-from typing import Any, Literal, Protocol
+from typing import Any, Callable, Literal, Protocol
 from uuid import UUID
 
 import psycopg
@@ -84,6 +84,9 @@ class ExtractionTaskRunner(Protocol):
     def run(
         self, *, scope: ContactScope, task_id: UUID | None = None,
         extraction_runtime_config: ExtractionRuntimeConfig | None = None,
+        background_scope_factory: (
+            Callable[[], AbstractContextManager] | None
+        ) = None,
     ) -> ExtractionRunStats: ...
 
 
@@ -192,6 +195,7 @@ class PostgresMemoryExtractionRunner:
     __slots__ = (
         "_adjudication_runtime",
         "_automatic",
+        "_batch_concurrency",
         "_batch_size",
         "_database_url",
         "_dimension_release",
@@ -223,9 +227,16 @@ class PostgresMemoryExtractionRunner:
         dimension_release: DimensionRelease | None = None,
         trace_store: TracePort | None = None,
         automatic: bool = True,
+        batch_concurrency: int = 1,
     ) -> None:
         if not isinstance(database_url, str) or not database_url.strip():
             raise ValueError("database_url 不能为空。")
+        if (
+            isinstance(batch_concurrency, bool)
+            or not isinstance(batch_concurrency, int)
+            or not 1 <= batch_concurrency <= 4
+        ):
+            raise ValueError("批次并发度必须是 1 到 4 的整数。")
         if (
             not isinstance(batch_size, int)
             or not 0 < batch_size <= EXTRACTION_BATCH_SIZE
@@ -276,6 +287,7 @@ class PostgresMemoryExtractionRunner:
         self._watermark_port = watermark_port or PostgresWatermarkStore(database_url)
         self._adjudication_runtime = adjudication_runtime
         self._batch_size = batch_size
+        self._batch_concurrency = batch_concurrency
         self._provider = provider
         self._model_name = model_name or "unreported"
         from notalone.persistence.extraction_trace import (
@@ -295,6 +307,9 @@ class PostgresMemoryExtractionRunner:
     def run(
         self, *, scope: ContactScope, task_id: UUID | None = None,
         extraction_runtime_config: ExtractionRuntimeConfig | None = None,
+        background_scope_factory: (
+            Callable[[], AbstractContextManager] | None
+        ) = None,
     ) -> ExtractionRunStats:
         from notalone.memory_extraction.cli_support import (
             load_contact_messages,
@@ -358,6 +373,8 @@ class PostgresMemoryExtractionRunner:
             ),
             task_lease_generation=task_lease_generation,
             target_message_ids=selected_ids,
+            batch_concurrency=self._batch_concurrency,
+            background_scope_factory=background_scope_factory,
             **task_options,
         )
 
@@ -642,11 +659,22 @@ class BackgroundTaskWorker:
 
         try:
             assert self._extraction_runner is not None
+            background_scope_factory = None
+            if self._model_priority is not None:
+                priority = self._model_priority
+                background_scope_factory = lambda: priority.background_scope(
+                    lambda: self._repository.check_step_lease(claim),
+                )
             guard = (
                 self._model_priority.background_scope(
                     lambda: self._repository.check_step_lease(claim),
                 ) if self._model_priority is not None else nullcontext()
             )
+            run_options: dict[str, Any] = {}
+            if background_scope_factory is not None:
+                run_options["background_scope_factory"] = (
+                    background_scope_factory
+                )
             with guard, _LeaseHeartbeat(
                 self._repository,
                 claim,
@@ -657,6 +685,7 @@ class BackgroundTaskWorker:
                     scope=ContactScope(claim.owner_id, claim.contact_id),
                     task_id=claim.task_id,
                     extraction_runtime_config=claim.extraction_runtime_config,
+                    **run_options,
                 )
                 heartbeat.raise_if_failed()
         except ModelWorkStopped:

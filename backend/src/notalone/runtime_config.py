@@ -11,6 +11,36 @@ from uuid import UUID
 
 ENV_FILE_VARIABLE = "NOTALONE_ENV_FILE"
 DISABLE_ENV_FILE_VARIABLE = "NOTALONE_DISABLE_DOTENV"
+EXTRACTION_BATCH_CONCURRENCY_VARIABLE = "NOTALONE_EXTRACTION_BATCH_CONCURRENCY"
+DEFAULT_EXTRACTION_BATCH_CONCURRENCY = 3
+MAX_EXTRACTION_BATCH_CONCURRENCY = 4
+
+
+def extraction_batch_concurrency() -> int:
+    """读取提取批次并发度；未配置时默认 3，只接受 1~4 的整数。"""
+
+    raw = os.environ.get(EXTRACTION_BATCH_CONCURRENCY_VARIABLE)
+    if raw is None:
+        return DEFAULT_EXTRACTION_BATCH_CONCURRENCY
+    value = raw.strip()
+    if not value:
+        raise ValueError(
+            f"{EXTRACTION_BATCH_CONCURRENCY_VARIABLE} 必须是 1 到 "
+            f"{MAX_EXTRACTION_BATCH_CONCURRENCY} 的整数。"
+        )
+    try:
+        concurrency = int(value)
+    except ValueError:
+        raise ValueError(
+            f"{EXTRACTION_BATCH_CONCURRENCY_VARIABLE} 必须是 1 到 "
+            f"{MAX_EXTRACTION_BATCH_CONCURRENCY} 的整数。"
+        ) from None
+    if not 1 <= concurrency <= MAX_EXTRACTION_BATCH_CONCURRENCY:
+        raise ValueError(
+            f"{EXTRACTION_BATCH_CONCURRENCY_VARIABLE} 必须是 1 到 "
+            f"{MAX_EXTRACTION_BATCH_CONCURRENCY} 的整数。"
+        )
+    return concurrency
 
 
 def load_project_env() -> Path | None:

@@ -10,7 +10,38 @@ from pathlib import Path
 from unittest.mock import patch
 from uuid import UUID
 
-from notalone.runtime_config import load_project_env, persist_owner_id
+from notalone.runtime_config import (
+    extraction_batch_concurrency,
+    load_project_env,
+    persist_owner_id,
+)
+
+
+class ExtractionBatchConcurrencyTest(unittest.TestCase):
+    """批次并发度只读环境变量，不持久化。"""
+
+    VARIABLE = "NOTALONE_EXTRACTION_BATCH_CONCURRENCY"
+
+    def test_unset_defaults_to_three(self) -> None:
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(extraction_batch_concurrency(), 3)
+
+    def test_accepts_one_through_four(self) -> None:
+        for value in ("1", "2", "3", "4"):
+            with self.subTest(value=value), patch.dict(
+                os.environ, {self.VARIABLE: value}, clear=True
+            ):
+                self.assertEqual(extraction_batch_concurrency(), int(value))
+
+    def test_rejects_missing_or_out_of_range_values(self) -> None:
+        for value in ("0", "5", "-1", "abc", "", "  ", "1.5", "true"):
+            with self.subTest(value=value), patch.dict(
+                os.environ, {self.VARIABLE: value}, clear=True
+            ):
+                with self.assertRaises(ValueError) as caught:
+                    extraction_batch_concurrency()
+                self.assertIn(self.VARIABLE, str(caught.exception))
+                self.assertIn("1 到 4", str(caught.exception))
 
 
 class RuntimeConfigTest(unittest.TestCase):

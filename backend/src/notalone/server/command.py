@@ -32,7 +32,10 @@ from notalone.application.model_priority import (
     PriorityVerificationRuntime,
 )
 from notalone.memory_extraction.dimensions import DimensionRelease
-from notalone.runtime_config import load_project_env
+from notalone.runtime_config import (
+    extraction_batch_concurrency,
+    load_project_env,
+)
 from notalone.parent_lifetime import ParentLifetime
 from notalone.server.app import BackendServer, create_app
 from notalone.server.connection_info import (
@@ -86,13 +89,19 @@ def _run(args: argparse.Namespace, lifetime: ParentLifetime) -> int:
         print("本地后端配置无效。", file=sys.stderr)
         return 2
 
+    try:
+        batch_concurrency = extraction_batch_concurrency()
+    except ValueError as error:
+        print(str(error), file=sys.stderr)
+        return 2
+
     if has_active_backend():
         # ADR-020：一次只能有一个后端实例驱动同步；第二个实例拒绝启动。
         print("已有后端实例在运行；请退出旧实例或直接连接既有服务。", file=sys.stderr)
         return 2
 
     events = EventBus()
-    model_priority = ModelPriorityControl()
+    model_priority = ModelPriorityControl(background_limit=batch_concurrency)
     setup_service = _build_setup_service(database_url)
     from notalone.application.organization_runtime import build_layered_memory_service
     try:
@@ -101,7 +110,7 @@ def _run(args: argparse.Namespace, lifetime: ParentLifetime) -> int:
         model_priority.stop()
         print('本地整理质量operator配置无效。', file=sys.stderr)
         return 2
-    task_host = _build_task_host(database_url, events, model_priority=model_priority,organization_runner=layered_memory)
+    task_host = _build_task_host(database_url, events, model_priority=model_priority,organization_runner=layered_memory, batch_concurrency=batch_concurrency)
     layered_memory.attach_task_host(task_host)
     sync_host = _build_sync_host(
         database_url=database_url,
@@ -344,6 +353,7 @@ def _build_task_host(
     *, model_priority: ModelPriorityControl | None = None,
     dimension_release: DimensionRelease | None = None,
     organization_runner=None,
+    batch_concurrency: int = 1,
 ) -> TaskHost | None:
     """装配任务宿主；执行前再检查模型与资源，不提前领取持久任务。"""
 
@@ -380,6 +390,7 @@ def _build_task_host(
         if model_priority is None:
             extraction = PostgresMemoryExtractionRunner(
                 database_url, dimension_release=dimension_release,
+                batch_concurrency=batch_concurrency,
             )
         else:
             components = build_extraction_components(database_url)
@@ -406,6 +417,7 @@ def _build_task_host(
                 model_name=components.model_name,
                 # 生产 main 沿用 None；合成验收显式注入放行维度。
                 dimension_release=dimension_release,
+                batch_concurrency=batch_concurrency,
             ), accounting)
         def build_learning_runtime():
             # 学习每次 invoke 只记一笔台账，独立模型禁止 SDK 隐式重发。

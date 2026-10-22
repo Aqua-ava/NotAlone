@@ -31,7 +31,10 @@ from notalone.persistence.locks import (
     release_global_worker_lock,
     try_acquire_global_worker_lock,
 )
-from notalone.runtime_config import load_project_env
+from notalone.runtime_config import (
+    extraction_batch_concurrency,
+    load_project_env,
+)
 from notalone.tasks.models import BackgroundTaskStepName, ExtractionRuntimeMode, VERIFY_STEPS
 from notalone.tasks.extraction_runtime import runtime_config_for_mode
 from notalone.tasks.worker import (
@@ -224,6 +227,10 @@ def worker_main(argv: list[str] | None = None) -> int:
     """启动一个全局串行 Worker，处理指定联系人最早的一个任务。"""
 
     load_project_env()
+    try:
+        batch_concurrency = extraction_batch_concurrency()
+    except ValueError as error:
+        return _fail(str(error))
     parser = argparse.ArgumentParser(
         prog="notalone-task-worker",
         description="串行执行指定联系人最早的一个后台任务。",
@@ -260,7 +267,9 @@ def worker_main(argv: list[str] | None = None) -> int:
             return _fail("Worker 准备失败：owner 不存在。")
         if not contact_exists(scope, database_url):
             return _fail("Worker 准备失败：联系人不存在。")
-        extraction_runner = PostgresMemoryExtractionRunner(database_url)
+        extraction_runner = PostgresMemoryExtractionRunner(
+            database_url, batch_concurrency=batch_concurrency
+        )
         repository = PostgresBackgroundTaskRepository(database_url)
         index_repository = PostgresContactMemoryIndexRepository(database_url)
         worker = BackgroundTaskWorker(

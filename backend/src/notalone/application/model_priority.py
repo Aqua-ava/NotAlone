@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from contextlib import contextmanager
+from contextlib import AbstractContextManager, contextmanager
 from datetime import datetime, timezone
-from threading import Condition, Event, local
+from threading import Condition, Event, Lock, get_ident, local
 from typing import Any, Callable, Iterator, Protocol
 import time
 from uuid import UUID, uuid4
@@ -168,38 +168,93 @@ class MemoryCallAccounting:
     ) -> None:
         self._ledger, self._provider, self._model_name = ledger, provider, model_name
         self._run = local()
+        # 提取范围属于整次运行：并行 worker 线程共享 scope，单次调用
+        # 记录仍按线程归属，避免跨线程读取线程本地状态。
+        self._scope: ContactScope | None = None
+        self._pending_extractions: dict[
+            int, tuple[LedgerEntry, Any]
+        ] = {}
+        self._pending_lock = Lock()
 
     @contextmanager
     def run_scope(self, scope: ContactScope) -> Iterator[None]:
-        self._run.scope = scope
+        previous_scope = self._scope
+        self._scope = scope
         self._run.extraction_record = None
         self._run.extraction_trace = None
+        with self._pending_lock:
+            self._pending_extractions.clear()
         try:
             yield
         except (ModelWorkStopped, BackgroundTaskPersistenceError):
             # 只控制/guard 中断会绕过原 E 台账；水位错误发生在原台账之后。
-            entry = self._run.extraction_record
-            if entry is not None and self._run.extraction_trace is None:
-                self._ledger.record(entry)
+            self._record_unconsumed_extractions()
             raise
         finally:
-            del self._run.scope
+            with self._pending_lock:
+                self._pending_extractions.clear()
             del self._run.extraction_record
             del self._run.extraction_trace
+            self._scope = previous_scope
+
+    def _record_unconsumed_extractions(self) -> None:
+        """停止时补记各线程最后一次已返回、尚未进入原 E 台账的调用。"""
+
+        with self._pending_lock:
+            pending = tuple(self._pending_extractions.values())
+            self._pending_extractions.clear()
+        for entry, trace in pending:
+            if trace is not None and self._trace_accounted(trace):
+                continue
+            self._ledger.record(entry)
+
+    @staticmethod
+    def _trace_accounted(trace: Any) -> bool:
+        """追踪已完成调用或已关联台账时不要重复补记。"""
+
+        calls = getattr(trace, "calls", None)
+        call_id = calls.get("extraction") if isinstance(calls, dict) else None
+        observations = getattr(trace, "observations", None)
+        observation = (
+            observations.get(call_id)
+            if call_id is not None and isinstance(observations, dict)
+            else None
+        )
+        if observation is not None and getattr(
+            observation, "ledger_entry", None
+        ) is not None:
+            return True
+        store = getattr(trace, "store", None)
+        if store is None:
+            return False
+        try:
+            batch = store.get_batch(trace.scope, trace.trace_id)
+        except Exception:
+            return False
+        # 这些终态批都已在提交段写入原 E 台账（停止批除外）。
+        return batch.get("status") in {"succeeded", "skipped", "model_failed"}
 
     def extraction_started(self) -> None:
         self._run.extraction_record = None
         self._run.extraction_trace = current_trace()
+        with self._pending_lock:
+            self._pending_extractions.pop(get_ident(), None)
 
     def extraction_returned(self, called_at: datetime, latency_ms: int) -> None:
-        self._run.extraction_record = self._entry(called_at, latency_ms)
+        entry = self._entry(called_at, latency_ms)
+        self._run.extraction_record = entry
+        trace = self._run.extraction_trace
+        with self._pending_lock:
+            self._pending_extractions[get_ident()] = (entry, trace)
 
     def record_discarded(self, called_at: datetime, latency_ms: int) -> None:
         if current_trace() is None:
             self._ledger.record(self._entry(called_at, latency_ms))
 
     def _entry(self, called_at: datetime, latency_ms: int) -> LedgerEntry:
-        scope = self._run.scope
+        scope = self._scope
+        if scope is None:
+            raise RuntimeError("模型调用记账不在提取运行范围内。")
         return LedgerEntry(
             entry_id=uuid4(), owner_id=scope.owner_id, contact_id=scope.contact_id,
             provider=self._provider, model_name=self._model_name,
@@ -215,6 +270,9 @@ class ExtractionRunnerPort(Protocol):
     def run(
         self, *, scope: ContactScope, task_id: UUID | None = None,
         extraction_runtime_config: ExtractionRuntimeConfig | None = None,
+        background_scope_factory: (
+            Callable[[], AbstractContextManager] | None
+        ) = None,
     ) -> ExtractionRunStats: ...
 
 
@@ -231,12 +289,20 @@ class AccountedExtractionRunner:
     def run(
         self, *, scope: ContactScope, task_id: UUID | None = None,
         extraction_runtime_config: ExtractionRuntimeConfig | None = None,
+        background_scope_factory: (
+            Callable[[], AbstractContextManager] | None
+        ) = None,
     ) -> ExtractionRunStats:
         with self._accounting.run_scope(scope):
+            options: dict[str, Any] = {}
+            if background_scope_factory is not None:
+                options["background_scope_factory"] = background_scope_factory
             if task_id is None and extraction_runtime_config is None:
-                return self._runner.run(scope=scope)
+                return self._runner.run(scope=scope, **options)
             return self._runner.run(
-                scope=scope, task_id=task_id, extraction_runtime_config=extraction_runtime_config,
+                scope=scope, task_id=task_id,
+                extraction_runtime_config=extraction_runtime_config,
+                **options,
             )
 
 

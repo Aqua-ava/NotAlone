@@ -2,23 +2,26 @@
 
 from __future__ import annotations
 
-from contextlib import ExitStack
+from contextlib import ExitStack, nullcontext
 from contextlib import redirect_stderr
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
-import os
 import io
+import os
 import socket
+import threading
 import unittest
 from unittest.mock import patch
 from uuid import uuid4
 
 from notalone.application.model_priority import (
     AccountedExtractionRunner, MemoryCallAccounting, ModelPriorityControl,
-    ModelWorkStopped, PriorityVerificationRuntime,
+    ModelWorkStopped, PriorityExtractionRuntime, PriorityVerificationRuntime,
 )
+from notalone.ledger.models import LedgerOutcome
+from notalone.persistence.background_tasks import BackgroundTaskLeaseError
 from tests.support.ledger_adapters import InMemoryOutboundLedger
-from notalone.memory_extraction.command import ExtractionRunStats
+from notalone.memory_extraction.command import ExtractionRunStats, run_extraction
 from notalone.memory.adapters import InMemoryMemoryStore
 from notalone.memory_extraction.models import MessageRef, MessageSender
 from notalone.memory_extraction.verification import SourceVerificationMode
@@ -30,7 +33,16 @@ from notalone.tasks.models import (
 from notalone.tasks.worker import BackgroundTaskWorker, PostgresMemoryExtractionRunner
 from notalone.tasks.command import run_worker, worker_main, WorkerCommandStatus
 from notalone.tasks.worker import WorkerRunResult, WorkerRunOutcome
-from tests.unit.memory_extraction.test_command import RecordingOwnerPort, RecordingWatermark
+from tests.unit.memory_extraction.test_command import (
+    BatchBarrierRuntime,
+    RecordingOwnerPort,
+    RecordingWatermark,
+    _messages,
+    _payload,
+)
+from tests.unit.memory_extraction.verification_helpers import (
+    SyntheticSupportingVerifier,
+)
 
 
 class ModeVerifier:
@@ -272,6 +284,347 @@ class RuntimeExecutionTest(unittest.TestCase):
             verification_runtime_for_config(None, config)
         with self.assertRaises(ValueError):
             verification_runtime_for_config(object(), config)
+
+    def test_runner_passes_configured_batch_concurrency_to_extraction_command(self) -> None:
+        scope = ContactScope(uuid4(), uuid4())
+        for value in (1, 3, 4):
+            with self.subTest(value=value):
+                runner = PostgresMemoryExtractionRunner(
+                    "postgresql:///synthetic_unused_test",
+                    runtime=object(), verification_runtime=ModeVerifier(),
+                    memory_port=InMemoryMemoryStore(),
+                    owner_memory_port=RecordingOwnerPort(),
+                    ledger=InMemoryOutboundLedger(),
+                    watermark_port=RecordingWatermark(),
+                    trace_store=InMemoryTraceStore(),
+                    batch_concurrency=value,
+                )
+                expected = ExtractionRunStats(processed_messages=1)
+                with patch(
+                    "notalone.tasks.worker.run_extraction", return_value=expected
+                ) as run, patch(
+                    "notalone.memory_extraction.cli_support.load_contact_messages",
+                    return_value=(),
+                ):
+                    self.assertIs(runner.run(scope=scope), expected)
+                self.assertEqual(run.call_args.kwargs["batch_concurrency"], value)
+
+    def test_runner_rejects_batch_concurrency_outside_hard_limit(self) -> None:
+        for value in (0, 5, -1, True, 1.5, None):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                PostgresMemoryExtractionRunner(
+                    "postgresql:///synthetic_unused_test",
+                    batch_concurrency=value,
+                )
+
+    def test_worker_passes_lease_guard_factory_to_extraction_runner(self) -> None:
+        scope = ContactScope(uuid4(), uuid4())
+        claim = ClaimedBackgroundTaskStep(
+            task_id=uuid4(), owner_id=scope.owner_id,
+            contact_id=scope.contact_id, source_document_id=uuid4(),
+            step_id=uuid4(), name=BackgroundTaskStepName.EXTRACT_MEMORY,
+            worker_id=uuid4(), attempt_count=1, message_count=1,
+            lease_expires_at=datetime.now(timezone.utc) + timedelta(seconds=30),
+        )
+
+        class Repository:
+            def __init__(self) -> None:
+                self.lease_checks = 0
+                self.completed = None
+
+            def claim_next_step(self, **kwargs):
+                return claim
+
+            def check_step_lease(self, claimed):
+                self.lease_checks += 1
+
+            def renew_step_lease(self, claimed, *, lease_duration):
+                pass
+
+            def complete_step(self, claimed, **kwargs):
+                self.completed = kwargs
+
+        class Runner:
+            model_version = "synthetic"
+
+            def __init__(self) -> None:
+                self.options = None
+
+            def run(self, **kwargs):
+                self.options = kwargs
+                factory = kwargs.get("background_scope_factory")
+                if factory is not None:
+                    # 工厂必须可调用，并在进入后把租约复验接到模型许可边界。
+                    with factory(), control.background_call():
+                        pass
+                return ExtractionRunStats(batches=1, processed_messages=1)
+
+        repository, runner = Repository(), Runner()
+        control = ModelPriorityControl()
+        worker = BackgroundTaskWorker(
+            repository=repository,
+            extraction_runner=runner,
+            model_priority=control,
+        )
+
+        result = worker.run_once(
+            owner_id=scope.owner_id, contact_id=scope.contact_id,
+            worker_id=uuid4(),
+        )
+
+        self.assertEqual(result.outcome, WorkerRunOutcome.SUCCEEDED)
+        self.assertIsNotNone(runner.options)
+        self.assertTrue(callable(runner.options["background_scope_factory"]))
+        self.assertGreaterEqual(repository.lease_checks, 1)
+
+    def test_pipeline_enters_lease_guard_factory_in_multiple_worker_threads(self) -> None:
+        scope = ContactScope(uuid4(), uuid4())
+        messages = _messages(2)
+        entered: list[int] = []
+        entered_lock = threading.Lock()
+
+        def factory():
+            with entered_lock:
+                entered.append(threading.get_ident())
+            return nullcontext()
+
+        stats = run_extraction(
+            trace_store=InMemoryTraceStore(),
+            scope=scope,
+            messages=messages,
+            watermark_message_id=None,
+            runtime=BatchBarrierRuntime(parties=2),
+            memory_port=InMemoryMemoryStore(),
+            owner_memory_port=RecordingOwnerPort(),
+            watermark_port=RecordingWatermark(),
+            batch_size=1,
+            batch_concurrency=2,
+            background_scope_factory=factory,
+        )
+
+        self.assertEqual(stats.batches, 2)
+        self.assertGreaterEqual(len(set(entered)), 2)
+
+    def test_pipeline_lease_guard_failure_aborts_before_adoption_or_watermark(self) -> None:
+        from notalone.memory_extraction.command import _BatchWriteGate
+
+        scope = ContactScope(uuid4(), uuid4())
+        messages = _messages(2)
+        gate_aborted = threading.Event()
+        second_entered = threading.Event()
+        entries = 0
+        entries_lock = threading.Lock()
+        original_abort = _BatchWriteGate.abort
+
+        def abort(gate):
+            gate_aborted.set()
+            original_abort(gate)
+
+        def factory():
+            nonlocal entries
+            with entries_lock:
+                entries += 1
+                current = entries
+            if current == 1:
+                # 第二线程抛出后仍需等闸门中止，避免第一批抢先提交。
+                if not gate_aborted.wait(timeout=2.0):
+                    raise AssertionError("并发批次未在预期时间内中止。")
+                return nullcontext()
+            second_entered.set()
+            raise BackgroundTaskLeaseError("合成步骤租约已失效。")
+
+        class FactRuntime:
+            def extract(self, window):
+                message_id = window.target_message_ids[0]
+                return ({**_payload(message_id), "text": "不应写入的合成事实"},)
+
+        memory = InMemoryMemoryStore()
+        watermark = RecordingWatermark()
+        with patch.object(_BatchWriteGate, "abort", abort):
+            with self.assertRaises(BackgroundTaskLeaseError):
+                run_extraction(
+                    trace_store=InMemoryTraceStore(),
+                    scope=scope,
+                    messages=messages,
+                    watermark_message_id=None,
+                    runtime=FactRuntime(),
+                    verification_runtime=SyntheticSupportingVerifier(),
+                    memory_port=memory,
+                    owner_memory_port=RecordingOwnerPort(),
+                    watermark_port=watermark,
+                    batch_size=1,
+                    batch_concurrency=2,
+                    background_scope_factory=factory,
+                )
+
+        self.assertTrue(second_entered.is_set())
+        self.assertGreaterEqual(entries, 2)
+        self.assertEqual(memory.list_confirmed(scope), ())
+        self.assertEqual(memory.list_pending_candidates(scope), ())
+        self.assertEqual(watermark.values, [])
+
+    def test_parallel_stop_accounts_returned_extraction_calls_without_attribute_error(self) -> None:
+        scope = ContactScope(uuid4(), uuid4())
+        messages = _messages(2)
+        ledger = InMemoryOutboundLedger()
+        accounting = MemoryCallAccounting(ledger, model_name="synthetic")
+
+        class StopOnWaitControl(ModelPriorityControl):
+            def wait_for_foreground(self) -> None:
+                self.stop()
+                super().wait_for_foreground()
+
+        class EmptyRuntime:
+            def extract(self, window):
+                return ()
+
+        control = StopOnWaitControl(background_limit=2)
+        runtime = PriorityExtractionRuntime(
+            EmptyRuntime(), control, accounting=accounting,
+        )
+        runner = PostgresMemoryExtractionRunner(
+            "postgresql:///synthetic_unused_test",
+            runtime=runtime,
+            memory_port=InMemoryMemoryStore(),
+            owner_memory_port=RecordingOwnerPort(),
+            ledger=ledger,
+            watermark_port=RecordingWatermark(),
+            trace_store=InMemoryTraceStore(),
+            batch_concurrency=2,
+        )
+        with patch(
+            "notalone.memory_extraction.cli_support.load_contact_messages",
+            return_value=messages,
+        ), self.assertRaises(ModelWorkStopped):
+            AccountedExtractionRunner(runner, accounting).run(scope=scope)
+
+        entries = ledger.list_by_owner(scope.owner_id)
+        self.assertTrue(entries, "停止时已返回的提取调用必须补记台账。")
+        self.assertTrue(
+            all(entry.contact_id == scope.contact_id for entry in entries)
+        )
+        self.assertEqual(
+            {entry.outcome for entry in entries}, {LedgerOutcome.RUN_FAILED}
+        )
+
+    def test_task_host_builder_passes_batch_concurrency_to_accounted_runner(self) -> None:
+        from types import SimpleNamespace
+
+        from notalone.server.command import _build_task_host
+        from notalone.server.event_bus import EventBus
+
+        components = SimpleNamespace(
+            ledger=InMemoryOutboundLedger(),
+            model=object(),
+            model_name="synthetic",
+            watermark=RecordingWatermark(),
+        )
+
+        class FakeTaskHost:
+            def __init__(self, *, worker_builder, **kwargs) -> None:
+                self.worker_builder = worker_builder
+
+        with patch(
+            "notalone.application.import_service.TaskHost", FakeTaskHost
+        ), patch(
+            "notalone.persistence.background_tasks.PostgresBackgroundTaskRepository"
+        ), patch(
+            "notalone.persistence.contact_memory_index.PostgresContactMemoryIndexRepository"
+        ), patch(
+            "notalone.persistence.source_deletion.PostgresSourceDeletionRepository"
+        ), patch(
+            "notalone.persistence.skill_learning.PostgresSkillLearningStore"
+        ), patch(
+            "notalone.memory_extraction.cli_support.build_extraction_components",
+            return_value=components,
+        ), patch(
+            "notalone.memory_extraction.direct_adapter.DirectExtractionRuntime"
+        ), patch(
+            "notalone.memory_extraction.adjudication_adapters.LangChainAdjudicationRuntime"
+        ), patch(
+            "notalone.memory_extraction.verification_adapters.LangChainSourceVerificationRuntime"
+        ), patch(
+            "notalone.application.skill_learning.SkillLearningTaskRunner"
+        ), patch(
+            "notalone.skills.learning_runtime.LangChainSkillProposalRuntime"
+        ):
+            host = _build_task_host(
+                "postgresql:///synthetic_unused_test", EventBus(),
+                model_priority=ModelPriorityControl(background_limit=3),
+                batch_concurrency=3,
+            )
+            worker = host.worker_builder()
+
+        self.assertIsInstance(worker._extraction_runner, AccountedExtractionRunner)
+        self.assertEqual(
+            worker._extraction_runner._runner._batch_concurrency, 3
+        )
+
+    def test_serial_extraction_ignores_parallel_lease_guard_factory(self) -> None:
+        scope = ContactScope(uuid4(), uuid4())
+
+        class EmptyRuntime:
+            def extract(self, window):
+                return ()
+
+        def factory():
+            raise AssertionError("串行路径不得进入并行租约工厂。")
+
+        stats = run_extraction(
+            trace_store=InMemoryTraceStore(),
+            scope=scope,
+            messages=_messages(2),
+            watermark_message_id=None,
+            runtime=EmptyRuntime(),
+            memory_port=InMemoryMemoryStore(),
+            owner_memory_port=RecordingOwnerPort(),
+            watermark_port=RecordingWatermark(),
+            batch_size=1,
+            batch_concurrency=1,
+            background_scope_factory=factory,
+        )
+
+        self.assertEqual(stats.batches, 2)
+        self.assertEqual(stats.processed_messages, 2)
+
+    def test_accounted_runner_forwards_background_scope_factory(self) -> None:
+        scope = ContactScope(uuid4(), uuid4())
+        factory = nullcontext
+
+        class Runner:
+            model_version = "synthetic"
+
+            def __init__(self) -> None:
+                self.options = None
+
+            def run(self, **kwargs):
+                self.options = kwargs
+                return ExtractionRunStats()
+
+        delegate = Runner()
+        runner = AccountedExtractionRunner(
+            delegate, MemoryCallAccounting(InMemoryOutboundLedger())
+        )
+
+        runner.run(scope=scope, background_scope_factory=factory)
+
+        self.assertIs(delegate.options["background_scope_factory"], factory)
+
+    def test_worker_cli_rejects_invalid_batch_concurrency_before_database_setup(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "NOTALONE_DISABLE_DOTENV": "1",
+                "NOTALONE_EXTRACTION_BATCH_CONCURRENCY": "5",
+            },
+            clear=True,
+        ), redirect_stderr(io.StringIO()) as stderr:
+            code = worker_main(["--contact-id", str(uuid4())])
+
+        self.assertEqual(code, 2)
+        self.assertIn(
+            "NOTALONE_EXTRACTION_BATCH_CONCURRENCY", stderr.getvalue()
+        )
 
     def test_explicit_runner_configuration_rejects_missing_task_before_reading_messages(self) -> None:
         runner = PostgresMemoryExtractionRunner(
