@@ -731,6 +731,7 @@ class MemoryAdoption:
             return {}
         from notalone.memory_extraction.recall import hybrid_candidates, EmbeddingUnavailableError, EMBEDDING_UNAVAILABLE
         plans = {}
+        event_noop_reviews = set()
         prepared = []
         for index, original in enumerate(facts):
             pragmatic = self._interpret_for_adoption(original, scope)
@@ -806,6 +807,7 @@ class MemoryAdoption:
                     decision = decisions.get(str(index))
                     # 事件的独立来源不能仅凭正文相似被skip吞掉。
                     if decision is not None and decision.action is AdjudicationAction.NOOP and fact.event is not None:
+                        event_noop_reviews.add(index)
                         decision = None
                     plans[index] = (rows, decision, None)
                 record('batch_adjudication', {'memories': memories, 'decisions': decisions,
@@ -816,7 +818,8 @@ class MemoryAdoption:
                 reason = EMBEDDING_UNAVAILABLE if isinstance(error, EmbeddingUnavailableError) else None
                 plans.update((index, ([], None, reason)) for index, _ in eligible)
                 record('batch_adjudication', {'status': 'pending', 'reason': reason or 'recall_or_model_failed'})
-        if self._automatic and plans and all(decision is None for _, decision, _ in plans.values()):
+        if (self._automatic and plans and all(decision is None for _, decision, _ in plans.values())
+                and any(index not in event_noop_reviews for index in plans)):
             # 已核验候选仍存在，不能把整批裁决失败当成无需记忆并推进水位。
             raise ExtractionRuntimeError('本批已核验候选均未取得有效裁决，须重试或报告任务失败。')
         return plans

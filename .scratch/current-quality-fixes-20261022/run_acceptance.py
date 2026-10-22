@@ -215,7 +215,7 @@ def main():
     os.environ['NOTALONE_PROBLEM_BUDGET'] = str(ledger.path)
     os.environ['NOTALONE_PROBLEM_ROUND'] = args.round
     owner, run, case = uuid4(), uuid4(), uuid4()
-    backend = priority = task_host = layers = None
+    backend = priority = task_host = layers = original_backend = None
     suite = None
     results, failure = {}, None
     try:
@@ -330,8 +330,6 @@ def main():
                 atomic_json(root/f'reply-{name}.json',record)
                 results['reply_'+name]={'status':status,'candidates':len(response.get('candidates',[]))}
                 print(json.dumps({'reply':name,**results['reply_'+name]},ensure_ascii=False),flush=True)
-            generate_reply(0)
-            generate_reply(1)
             for number,(stage,texts) in enumerate((('initial',INITIAL),('updated',UPDATED),('repeated',UPDATED)),1):
                 capture.stage = stage
                 records=[]
@@ -370,6 +368,8 @@ def main():
                 atomic_json(root/f'{stage}-completion.json',last)
                 results[stage]={'task':last['task']['status'],'layer':last['state']['layers']['layered_memory'].get('status')}
                 print(json.dumps({'stage':stage,**results[stage]},ensure_ascii=False),flush=True)
+            generate_reply(0)
+            generate_reply(1)
             generate_reply(2)
             generate_reply(3)
             generate_reply(4)
@@ -398,13 +398,12 @@ def main():
             primary_final = snapshot('final')
             if args.compare_reply_disabled:
                 # 同一冻结资料与来源版本上切换实际服务；两次均走正式 HTTP 与工厂。
-                backend.close()
-                backend = None
+                original_backend = backend
                 reply = build_reply_service(database_url=Database.database_url, owner_id=owner,
                     model_priority=priority, layered_memory=layers)
                 assert reply is not None
                 backend = HttpBackend(create_app(database_url=Database.database_url, owner_id=owner,
-                    token='synthetic-current-quality', events=events, task_host=task_host,
+                    token='synthetic-current-quality', events=EventBus(), task_host=task_host,
                     import_service=_build_import_service(Database.database_url),
                     memory_service=_build_memory_service(Database.database_url),
                     layered_memory=layers, reply_service=reply), owner)
@@ -426,9 +425,11 @@ def main():
                 after = [(m['memory_id'], m['revision'], m['text'], m['source_ids']) for m in paired_final['memories']['memories']]
                 if before != after:
                     raise RuntimeError('配对回复期间底层记忆版本发生变化，不能当作固定资料对照。')
+                if primary_final['layers']['layered_memory'].get('scenarios') != paired_final['layers']['layered_memory'].get('scenarios'):
+                    raise RuntimeError('配对回复期间L2场景发生变化，不能当作固定资料对照。')
                 if primary_final['layers']['layered_memory'].get('profile') != paired_final['layers']['layered_memory'].get('profile'):
                     raise RuntimeError('配对回复期间画像发生变化，不能当作固定资料对照。')
-                atomic_json(root/'paired-input-identity.json', {'same_memory_versions': True, 'same_profile': True,
+                atomic_json(root/'paired-input-identity.json', {'same_memory_versions': True, 'same_profile': True, 'same_scenarios': True,
                     'profile_before': primary_final['layers']['layered_memory'].get('profile'),
                     'profile_after': paired_final['layers']['layered_memory'].get('profile')})
             capture.stage='shutdown'
@@ -450,6 +451,7 @@ def main():
         if priority is not None: priority.stop()
         if task_host is not None: task_host.stop(timeout=60)
         if backend is not None: backend.close()
+        if original_backend is not None: original_backend.close()
         if layers is not None: layers.stop()
         Database.doClassCleanups()
         with psycopg.connect('host=/tmp dbname=postgres') as c:
