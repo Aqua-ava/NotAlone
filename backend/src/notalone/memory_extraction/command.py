@@ -97,6 +97,349 @@ class ExtractionRunStats:
     skipped_ranges: tuple[FailureRange, ...] = ()
 
 
+@dataclass(frozen=True, slots=True)
+class _PlannedBatch:
+    """A 段构建的批次窗口与过程记录起始数据；B 段只读。"""
+
+    batch: tuple
+    window: ExtractionWindow
+    window_payload: dict[str, Any]
+    batch_key: str
+    next_watermark: UUID | None
+    previous_watermark: UUID | None
+
+
+@dataclass(frozen=True, slots=True)
+class _BatchExtraction:
+    """A 段的提取与来源核验结果，以及 B 段记账所需数据。"""
+
+    outcome: ExtractionOutcome
+    extraction_completed: bool
+    extracted: int
+    latency_ms: int
+    called_at: datetime
+
+
+@dataclass(slots=True)
+class _RunProgress:
+    """B 段串行累计的状态；水位只在成功或跳过提交后前进。"""
+
+    previous_watermark: UUID | None
+    batches: int = 0
+    processed_messages: int = 0
+    extracted: int = 0
+    adopted: int = 0
+    updated: int = 0
+    pending: int = 0
+    skipped_duplicate: int = 0
+    skipped_deleted: int = 0
+    rejected_by_contract: int = 0
+    failed_batches: int = 0
+    skipped_batches: int = 0
+    skipped_non_memory: int = 0
+    skipped_ranges: list[FailureRange] = field(default_factory=list)
+
+    def finish(self) -> ExtractionRunStats:
+        return ExtractionRunStats(
+            batches=self.batches,
+            processed_messages=self.processed_messages,
+            extracted=self.extracted,
+            adopted=self.adopted,
+            updated=self.updated,
+            pending=self.pending,
+            skipped_duplicate=self.skipped_duplicate,
+            skipped_deleted=self.skipped_deleted,
+            rejected_by_contract=self.rejected_by_contract,
+            failed_batches=self.failed_batches,
+            skipped_batches=self.skipped_batches,
+            skipped_non_memory=self.skipped_non_memory,
+            skipped_ranges=tuple(self.skipped_ranges),
+        )
+
+
+def _plan_batch(
+    *,
+    batch: tuple,
+    messages: tuple,
+    message_positions: dict[UUID, int],
+    scope: ContactScope,
+    context_before: int,
+    context_after: int,
+    batch_size: int,
+    provider: str,
+    model_name: str | None,
+    task_metadata: dict[str, Any],
+    selection_receipts: tuple[dict[str, Any], ...],
+    previous_watermark: UUID | None,
+) -> _PlannedBatch:
+    """A 段：构建本批窗口、窗口载荷与批次键；不产生写入。"""
+
+    next_watermark = next(
+        (
+            message.message_id
+            for message in reversed(batch)
+            if message.occurred_at is not None
+        ),
+        previous_watermark,
+    )
+    absolute_start = message_positions[batch[0].message_id]
+    absolute_end = message_positions[batch[-1].message_id] + 1
+    context_start = max(0, absolute_start - context_before)
+    context_end = min(len(messages), absolute_end + context_after)
+    window = ExtractionWindow(
+        owner_id=scope.owner_id,
+        contact_id=scope.contact_id,
+        messages=(
+            tuple(messages[context_start:absolute_start])
+            + tuple(batch)
+            + tuple(messages[absolute_end:context_end])
+        ),
+        target_message_ids=tuple(message.message_id for message in batch),
+    )
+    window_payload = {
+        **task_metadata,
+        "messages": [
+            {
+                **snapshot(message),
+                "role": (
+                    "target"
+                    if message.message_id in window.target_message_id_set
+                    else (
+                        "context_before"
+                        if index < absolute_start - context_start
+                        else "context_after"
+                    )
+                ),
+            }
+            for index, message in enumerate(window.messages)
+        ],
+        "target_count": len(batch),
+        "context_before_count": absolute_start - context_start,
+        "context_after_count": context_end - absolute_end,
+        "target_message_ids": snapshot(window.target_message_ids),
+        "watermark_before": snapshot(previous_watermark),
+        "watermark_planned": snapshot(next_watermark),
+        "configuration": {
+            "batch_size": batch_size,
+            "context_before": context_before,
+            "context_after": context_after,
+            "provider": provider,
+            "model_name": model_name or "unreported",
+        },
+        "sources_status": (
+            "recorded"
+            if all(
+                message.source_snapshots
+                and all(
+                    item.get("processing_status") == "recorded"
+                    for item in message.source_snapshots
+                )
+                for message in window.messages
+            )
+            else "processing_missing"
+        ),
+        "versions": _trace_versions(),
+        "selection_receipts": selection_receipts,
+    }
+    batch_key = hashlib.sha256(
+        "|".join(str(message.message_id) for message in batch).encode()
+    ).hexdigest()
+    return _PlannedBatch(
+        batch=batch,
+        window=window,
+        window_payload=window_payload,
+        batch_key=batch_key,
+        next_watermark=next_watermark,
+        previous_watermark=previous_watermark,
+    )
+
+
+def _extract_batch(
+    plan: _PlannedBatch,
+    *,
+    flow: ExtractionFlow,
+    timed_runtime: _TimedExtractionRuntime,
+) -> _BatchExtraction:
+    """A 段：执行提取与来源核验；只产出 B 段需要的结果。"""
+
+    outcome = flow.run(plan.window)
+    return _BatchExtraction(
+        outcome=outcome,
+        extraction_completed=outcome.extraction_completed,
+        extracted=len(outcome.accepted),
+        latency_ms=timed_runtime.latency_ms,
+        called_at=timed_runtime.called_at,
+    )
+
+
+def _commit_batch(
+    plan: _PlannedBatch,
+    extraction: _BatchExtraction,
+    *,
+    trace: TraceSession,
+    progress: _RunProgress,
+    adoption: MemoryAdoption,
+    scope: ContactScope,
+    ledger: OutboundLedgerPort | None,
+    watermark_port,
+    provider: str,
+    model_name: str | None,
+) -> bool:
+    """B 段：裁决与采纳、失败／跳过处理、完成过程记录并提交水位。
+
+    返回 True 表示本批失败且整轮停止；返回 False 表示继续下一批。
+    """
+
+    outcome = extraction.outcome
+    adoption_stats = AdoptionStats()
+    try:
+        if outcome.failure_reason is None:
+            adoption_stats = adoption.adopt(scope, outcome)
+    except ExtractionRuntimeError as error:
+        # 写入裁决等批次级模型调用失败：与提取失败同一策略，
+        # 分类后计数或停止，不让整轮无记录地中断。失败发生在采纳
+        # 阶段，必须保留 flow 已给出的本批统计，不能用一个空 outcome
+        # 覆盖掉已通过的提取与拒绝计数。
+        preserved_rejections = outcome.rejected_count
+        outcome = ExtractionOutcome(
+            accepted=(),
+            rejected_count=preserved_rejections,
+            failure_reason=str(error),
+            failure_kind=error.failure_kind,
+            extraction_completed=extraction.extraction_completed,
+        )
+    progress.processed_messages += len(plan.batch)
+    progress.batches += 1
+    _record_extraction_ledger(
+        ledger,
+        scope,
+        (
+            LedgerOutcome.SUCCEEDED
+            if outcome.extraction_completed
+            else LedgerOutcome.RUN_FAILED
+        ),
+        latency_ms=extraction.latency_ms,
+        called_at=extraction.called_at,
+        provider=provider,
+        model_name=model_name,
+    )
+    if outcome.failure_reason is None:
+        progress.extracted += extraction.extracted
+        progress.adopted += adoption_stats.adopted
+        progress.updated += adoption_stats.updated
+        progress.pending += adoption_stats.pending
+        progress.skipped_duplicate += adoption_stats.skipped_duplicate
+        progress.skipped_deleted += adoption_stats.skipped_deleted
+        progress.rejected_by_contract += adoption_stats.rejected_by_contract
+        progress.skipped_non_memory += adoption_stats.skipped_non_memory
+        trace.complete(
+            status="succeeded",
+            payload={
+                "extracted": extraction.extracted,
+                "adoption": snapshot(adoption_stats),
+                "watermark_before": snapshot(plan.previous_watermark),
+                "watermark_planned": snapshot(plan.next_watermark),
+                "watermark_after": (
+                    snapshot(plan.next_watermark)
+                    if watermark_port is not None
+                    else None
+                ),
+                "watermark_commit": (
+                    "committed_with_trace"
+                    if watermark_port is not None
+                    else "not_configured"
+                ),
+            },
+            watermark_port=watermark_port,
+            watermark_message_id=plan.next_watermark or plan.batch[-1].message_id,
+        )
+        progress.previous_watermark = plan.next_watermark
+        return False
+    # 失败批次里已经通过提取或已被判定为契约拒绝的候选仍要计数，
+    # 这样采纳阶段失败不会让本批统计凭空归零。
+    progress.extracted += extraction.extracted
+    progress.rejected_by_contract += outcome.rejected_count
+    if (
+        outcome.failure_kind is ExtractionFailureKind.INVALID_OUTPUT
+        and watermark_port is not None
+    ):
+        failure_range = FailureRange(
+            from_message_id=plan.batch[0].message_id,
+            to_message_id=plan.batch[-1].message_id,
+            code=outcome.failure_kind,
+        )
+        previous = watermark_port.get_failure(scope)
+        state, reached = record_batch_failure(
+            previous,
+            failure_range=failure_range,
+        )
+        if reached:
+            trace.complete(
+                status="skipped",
+                payload={
+                    "failure_kind": outcome.failure_kind.value,
+                    "failure_count": state.count,
+                    "extracted": extraction.extracted,
+                    "rejected": outcome.rejected_count,
+                    "watermark_before": snapshot(plan.previous_watermark),
+                    "watermark_after": snapshot(plan.next_watermark),
+                    "watermark_commit": "committed_with_trace",
+                    "skipped_range": snapshot(failure_range),
+                    "not_executed": [
+                        "remaining_adoption",
+                        "remaining_write",
+                    ],
+                },
+                watermark_port=watermark_port,
+                skipped_range=failure_range,
+                watermark_message_id=plan.next_watermark or plan.batch[-1].message_id,
+            )
+            progress.previous_watermark = plan.next_watermark
+            progress.skipped_batches += 1
+            progress.skipped_ranges.append(failure_range)
+            return False
+        trace.complete(
+            status="model_failed",
+            payload={
+                "failure_kind": outcome.failure_kind.value,
+                "failure_count": state.count,
+                "extracted": extraction.extracted,
+                "rejected": outcome.rejected_count,
+                "watermark_before": snapshot(plan.previous_watermark),
+                "watermark_after": snapshot(plan.previous_watermark),
+                "watermark_commit": "not_advanced",
+                "not_executed": [
+                    "remaining_adoption",
+                    "remaining_write",
+                ],
+            },
+            watermark_port=watermark_port,
+            failure_state=state,
+        )
+    else:
+        trace.complete(
+            status="model_failed",
+            payload={
+                "failure_kind": (
+                    outcome.failure_kind.value
+                    if outcome.failure_kind
+                    else None
+                ),
+                "extracted": extraction.extracted,
+                "rejected": outcome.rejected_count,
+                "watermark_before": snapshot(plan.previous_watermark),
+                "watermark_after": snapshot(plan.previous_watermark),
+                "watermark_commit": "not_advanced",
+                "not_executed": [
+                    "remaining_adoption",
+                    "remaining_write",
+                ],
+            },
+        )
+    progress.failed_batches += 1
+    return True
+
+
 def run_extraction(
     *,
     scope: ContactScope,
@@ -209,17 +552,14 @@ def run_extraction(
         verification_runtime=verification_runtime,
     )
 
-    batches = processed_messages = extracted = adopted = updated = pending = 0
-    duplicate = deleted = rejected = failed = skipped = 0
-    skipped_non_memory = 0
-    skipped_ranges: list[FailureRange] = []
+    progress = _RunProgress(previous_watermark=previous_watermark)
     if not pending_messages:
         versions = _trace_versions()
         trace_id = trace_store.begin(
             scope,
             run_id=run_id,
             batch_key=hashlib.sha256(
-                f"empty:{previous_watermark}".encode()
+                f"empty:{progress.previous_watermark}".encode()
             ).hexdigest(),
             payload=event_payload(
                 {
@@ -229,8 +569,8 @@ def run_extraction(
                     "target_message_ids": [],
                     "context_before_count": 0,
                     "context_after_count": 0,
-                    "watermark_before": snapshot(previous_watermark),
-                    "watermark_planned": snapshot(previous_watermark),
+                    "watermark_before": snapshot(progress.previous_watermark),
+                    "watermark_planned": snapshot(progress.previous_watermark),
                     "selection_receipts": selection_receipts,
                     "versions": versions,
                 }
@@ -251,260 +591,68 @@ def run_extraction(
                         "adoption",
                         "write",
                     ],
-                    "watermark_after": snapshot(previous_watermark),
+                    "watermark_after": snapshot(progress.previous_watermark),
                     "watermark_commit": "not_advanced",
                 },
             )
     for offset in range(0, len(pending_messages), batch_size):
-        window_started_at = datetime.now(timezone.utc)
         batch = pending_messages[offset : offset + batch_size]
-        next_watermark = next((message.message_id for message in reversed(batch)
-                               if message.occurred_at is not None), previous_watermark)
-        processed_messages += len(batch)
-        absolute_start = message_positions[batch[0].message_id]
-        absolute_end = message_positions[batch[-1].message_id] + 1
-        context_start = max(0, absolute_start - context_before)
-        context_end = min(len(messages), absolute_end + context_after)
-        window = ExtractionWindow(
-            owner_id=scope.owner_id,
-            contact_id=scope.contact_id,
-            messages=(tuple(messages[context_start:absolute_start]) + tuple(batch)
-                      + tuple(messages[absolute_end:context_end])),
-            target_message_ids=tuple(message.message_id for message in batch),
+        # A 段：构建批次窗口与过程记录载荷，进入 TraceSession 并执行提取与
+        # 来源核验；只产出结果，不写记忆、不推进水位。
+        window_started_at = datetime.now(timezone.utc)
+        plan = _plan_batch(
+            batch=batch,
+            messages=messages,
+            message_positions=message_positions,
+            scope=scope,
+            context_before=context_before,
+            context_after=context_after,
+            batch_size=batch_size,
+            provider=provider,
+            model_name=model_name,
+            task_metadata=task_metadata,
+            selection_receipts=selection_receipts,
+            previous_watermark=progress.previous_watermark,
         )
-        window_payload = {
-            **task_metadata,
-            "messages": [
-                {
-                    **snapshot(message),
-                    "role": (
-                        "target"
-                        if message.message_id in window.target_message_id_set
-                        else (
-                            "context_before"
-                            if index < absolute_start - context_start
-                            else "context_after"
-                        )
-                    ),
-                }
-                for index, message in enumerate(window.messages)
-            ],
-            "target_count": len(batch),
-            "context_before_count": absolute_start - context_start,
-            "context_after_count": context_end - absolute_end,
-            "target_message_ids": snapshot(window.target_message_ids),
-            "watermark_before": snapshot(previous_watermark),
-            "watermark_planned": snapshot(next_watermark),
-            "configuration": {
-                "batch_size": batch_size,
-                "context_before": context_before,
-                "context_after": context_after,
-                "provider": provider,
-                "model_name": model_name or "unreported",
-            },
-            "sources_status": (
-                "recorded"
-                if all(
-                    message.source_snapshots
-                    and all(
-                        item.get("processing_status") == "recorded"
-                        for item in message.source_snapshots
-                    )
-                    for message in window.messages
-                )
-                else "processing_missing"
-            ),
-            "versions": _trace_versions(),
-            "selection_receipts": selection_receipts,
-        }
-        batch_key = hashlib.sha256(
-            "|".join(str(message.message_id) for message in batch).encode()
-        ).hexdigest()
         trace_id = trace_store.begin(
             scope,
             run_id=run_id,
-            batch_key=batch_key,
+            batch_key=plan.batch_key,
             payload=event_payload(
-                window_payload,
+                plan.window_payload,
                 started_at=window_started_at,
-                rule_version=str(window_payload["versions"]["command"]),
+                rule_version=str(plan.window_payload["versions"]["command"]),
             ),
         )
         with TraceSession(
             trace_store,
             scope,
             trace_id,
-            versions=window_payload["versions"],
+            versions=plan.window_payload["versions"],
             ledger=ledger,
             provider=provider,
             model_name=model_name,
         ) as trace:
-            adoption_stats = AdoptionStats()
-            extraction_completed = False
-            batch_extracted = 0
-            try:
-                outcome: ExtractionOutcome = flow.run(window)
-                extraction_completed = outcome.extraction_completed
-                batch_extracted = len(outcome.accepted)
-                if outcome.failure_reason is None:
-                    adoption_stats = adoption.adopt(scope, outcome)
-            except ExtractionRuntimeError as error:
-                # 写入裁决等批次级模型调用失败：与提取失败同一策略，
-                # 分类后计数或停止，不让整轮无记录地中断。失败发生在采纳
-                # 阶段，必须保留 flow 已给出的本批统计，不能用一个空 outcome
-                # 覆盖掉已通过的提取与拒绝计数。
-                preserved_rejections = outcome.rejected_count
-                outcome = ExtractionOutcome(
-                    accepted=(),
-                    rejected_count=preserved_rejections,
-                    failure_reason=str(error),
-                    failure_kind=error.failure_kind,
-                    extraction_completed=extraction_completed,
-                )
-            batches += 1
-            _record_extraction_ledger(
-                ledger,
-                scope,
-                (
-                    LedgerOutcome.SUCCEEDED
-                    if outcome.extraction_completed
-                    else LedgerOutcome.RUN_FAILED
-                ),
-                latency_ms=timed_runtime.latency_ms,
-                called_at=timed_runtime.called_at,
+            extraction = _extract_batch(
+                plan, flow=flow, timed_runtime=timed_runtime
+            )
+            # B 段：裁决与采纳、失败／跳过处理、完成过程记录、提交水位并
+            # 累计统计；串行路径逐批 A → B，失败即停止整轮。
+            stop = _commit_batch(
+                plan,
+                extraction,
+                trace=trace,
+                progress=progress,
+                adoption=adoption,
+                scope=scope,
+                ledger=ledger,
+                watermark_port=watermark_port,
                 provider=provider,
                 model_name=model_name,
             )
-            if outcome.failure_reason is None:
-                extracted += batch_extracted
-                adopted += adoption_stats.adopted
-                updated += adoption_stats.updated
-                pending += adoption_stats.pending
-                duplicate += adoption_stats.skipped_duplicate
-                deleted += adoption_stats.skipped_deleted
-                rejected += adoption_stats.rejected_by_contract
-                skipped_non_memory += adoption_stats.skipped_non_memory
-                trace.complete(
-                    status="succeeded",
-                    payload={
-                        "extracted": batch_extracted,
-                        "adoption": snapshot(adoption_stats),
-                        "watermark_before": snapshot(previous_watermark),
-                        "watermark_planned": snapshot(next_watermark),
-                        "watermark_after": (
-                            snapshot(next_watermark)
-                            if watermark_port is not None
-                            else None
-                        ),
-                        "watermark_commit": (
-                            "committed_with_trace"
-                            if watermark_port is not None
-                            else "not_configured"
-                        ),
-                    },
-                    watermark_port=watermark_port,
-                    watermark_message_id=next_watermark or batch[-1].message_id,
-                )
-                previous_watermark = next_watermark
-                continue
-            # 失败批次里已经通过提取或已被判定为契约拒绝的候选仍要计数，
-            # 这样采纳阶段失败不会让本批统计凭空归零。
-            extracted += batch_extracted
-            rejected += outcome.rejected_count
-            if (
-                outcome.failure_kind is ExtractionFailureKind.INVALID_OUTPUT
-                and watermark_port is not None
-            ):
-                failure_range = FailureRange(
-                    from_message_id=batch[0].message_id,
-                    to_message_id=batch[-1].message_id,
-                    code=outcome.failure_kind,
-                )
-                previous = watermark_port.get_failure(scope)
-                state, reached = record_batch_failure(
-                    previous,
-                    failure_range=failure_range,
-                )
-                if reached:
-                    trace.complete(
-                        status="skipped",
-                        payload={
-                            "failure_kind": outcome.failure_kind.value,
-                            "failure_count": state.count,
-                            "extracted": batch_extracted,
-                            "rejected": outcome.rejected_count,
-                            "watermark_before": snapshot(previous_watermark),
-                            "watermark_after": snapshot(next_watermark),
-                            "watermark_commit": "committed_with_trace",
-                            "skipped_range": snapshot(failure_range),
-                            "not_executed": [
-                                "remaining_adoption",
-                                "remaining_write",
-                            ],
-                        },
-                        watermark_port=watermark_port,
-                        skipped_range=failure_range,
-                        watermark_message_id=next_watermark or batch[-1].message_id,
-                    )
-                    previous_watermark = next_watermark
-                    skipped += 1
-                    skipped_ranges.append(failure_range)
-                    continue
-                trace.complete(
-                    status="model_failed",
-                    payload={
-                        "failure_kind": outcome.failure_kind.value,
-                        "failure_count": state.count,
-                        "extracted": batch_extracted,
-                        "rejected": outcome.rejected_count,
-                        "watermark_before": snapshot(previous_watermark),
-                        "watermark_after": snapshot(previous_watermark),
-                        "watermark_commit": "not_advanced",
-                        "not_executed": [
-                            "remaining_adoption",
-                            "remaining_write",
-                        ],
-                    },
-                    watermark_port=watermark_port,
-                    failure_state=state,
-                )
-            else:
-                trace.complete(
-                    status="model_failed",
-                    payload={
-                        "failure_kind": (
-                            outcome.failure_kind.value
-                            if outcome.failure_kind
-                            else None
-                        ),
-                        "extracted": batch_extracted,
-                        "rejected": outcome.rejected_count,
-                        "watermark_before": snapshot(previous_watermark),
-                        "watermark_after": snapshot(previous_watermark),
-                        "watermark_commit": "not_advanced",
-                        "not_executed": [
-                            "remaining_adoption",
-                            "remaining_write",
-                        ],
-                    },
-                )
-            failed += 1
+        if stop:
             break
-    return ExtractionRunStats(
-        batches=batches,
-        processed_messages=processed_messages,
-        extracted=extracted,
-        adopted=adopted,
-        updated=updated,
-        pending=pending,
-        skipped_duplicate=duplicate,
-        skipped_deleted=deleted,
-        rejected_by_contract=rejected,
-        failed_batches=failed,
-        skipped_batches=skipped,
-        skipped_non_memory=skipped_non_memory,
-        skipped_ranges=tuple(skipped_ranges),
-    )
+    return progress.finish()
 
 
 def _task_runtime_metadata(

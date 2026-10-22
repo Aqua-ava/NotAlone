@@ -1,7 +1,7 @@
 # 拆分提取命令的「模型调用」与「提交」两段
 
 Triage: ready-for-agent
-State: open
+State: resolved
 Type: task
 Blocked by: none
 
@@ -16,3 +16,14 @@ Blocked by: none
 - [ ] 本地提交只含本票变更，并记录实际运行的最小验证。
 
 ## Comments
+
+## Answer
+
+`run_extraction` 的逐批循环已拆成显式 A/B 两段：A 段 `_plan_batch` + `_extract_batch`（窗口与载荷、批次键、TraceSession、提取与来源核验），B 段 `_commit_batch`（采纳、失败/跳过处理、模型台账、trace.complete 与水位提交、统计累计）；内部新增 `_PlannedBatch`、`_BatchExtraction`、`_RunProgress`。对外签名与默认值不变，TraceSession 仍横跨 A+B，模型事件归属不变；失败即停与 INVALID_OUTPUT 跳过阈值语义保持。
+
+新增用例 `test_serial_batches_finish_commit_before_next_extraction`：以 begin/complete/commit 记录断言每批严格 `A:begin → A:extract → B:trace_complete → B:commit` 后才进入下一批 A，并核对完整统计与水位。
+
+验证：
+- `python -m unittest tests.unit.memory_extraction.test_command` → 30 tests OK（29 既有 + 1 新增）。
+- 相关回归 `test_flow`、`test_recovery`、`test_task_trace`、`test_invalid_batch_retry` → 29 tests OK。
+- 全量 `tests/unit`：改动前后失败集合完全一致（14F/5E 均为既有失败），本票未新增失败。

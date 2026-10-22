@@ -24,6 +24,7 @@ from notalone.memory.models import (
     MemoryTopic,
 )
 from notalone.memory_extraction.command import (
+    ExtractionRunStats,
     extract_main,
     memory_add_main,
     memory_delete_main,
@@ -300,6 +301,50 @@ class RecordingWatermark:
         self.values.append(failure_range.to_message_id)
         self.failure = None
         self.skips.append(failure_range)
+
+
+class OrderedRecordingTraceStore(InMemoryTraceStore):
+    """记录每批 A 段开始与 B 段过程记录完成，供串行契约断言。"""
+
+    def __init__(self, events: list[str]) -> None:
+        super().__init__()
+        self.events = events
+
+    def begin(self, scope, *, run_id, batch_key, payload):
+        self.events.append("A:begin")
+        return super().begin(
+            scope, run_id=run_id, batch_key=batch_key, payload=payload
+        )
+
+    def complete(self, scope, trace_id, *, status, payload, **kwargs):
+        self.events.append("B:trace_complete")
+        return super().complete(
+            scope, trace_id, status=status, payload=payload, **kwargs
+        )
+
+
+class OrderedRecordingRuntime:
+    """每批返回一条唯一事实，并在进入提取时记录 A 段。"""
+
+    def __init__(self, events: list[str]) -> None:
+        self.events = events
+
+    def extract(self, window):
+        self.events.append("A:extract")
+        message_id = window.target_message_ids[0]
+        return ({**_payload(message_id), "text": f"合成事实 {message_id}"},)
+
+
+class OrderedRecordingWatermark(RecordingWatermark):
+    """在批次提交水位时记录 B 段完成。"""
+
+    def __init__(self, events: list[str]) -> None:
+        super().__init__()
+        self.events = events
+
+    def set(self, scope, message_id):
+        self.events.append("B:commit")
+        super().set(scope, message_id)
 
 
 class CapturingMemoryStore(InMemoryMemoryStore):
@@ -715,6 +760,54 @@ class RunExtractionTest(unittest.TestCase):
         self.assertEqual(stats.failed_batches, 0)
         self.assertEqual(self.watermark.values[-1], messages[-1].message_id)
         self.assertEqual(len(self.watermark.values), 3)
+
+    def test_serial_batches_finish_commit_before_next_extraction(self) -> None:
+        """串行契约：下一批 A 段开始前，上一批 B 段必须已完成。"""
+
+        messages = _messages(6)
+        events: list[str] = []
+        watermark = OrderedRecordingWatermark(events)
+
+        stats = run_extraction(
+            trace_store=OrderedRecordingTraceStore(events),
+            scope=self.scope,
+            messages=messages,
+            watermark_message_id=None,
+            runtime=OrderedRecordingRuntime(events),
+            verification_runtime=SyntheticSupportingVerifier(),
+            memory_port=InMemoryMemoryStore(),
+            owner_memory_port=self.owner_port,
+            watermark_port=watermark,
+            dimension_release=self.dimension_release,
+            batch_size=3,
+        )
+
+        self.assertEqual(
+            events,
+            [
+                "A:begin",
+                "A:extract",
+                "B:trace_complete",
+                "B:commit",
+                "A:begin",
+                "A:extract",
+                "B:trace_complete",
+                "B:commit",
+            ],
+        )
+        self.assertEqual(
+            stats,
+            ExtractionRunStats(
+                batches=2,
+                processed_messages=6,
+                extracted=2,
+                adopted=2,
+            ),
+        )
+        self.assertEqual(
+            watermark.values,
+            [messages[2].message_id, messages[5].message_id],
+        )
 
     def test_incremental_run_resumes_from_watermark(self) -> None:
         messages = _messages(7)
