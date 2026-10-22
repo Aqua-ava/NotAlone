@@ -11,6 +11,7 @@ import json
 import psycopg
 import logging
 import secrets
+import sys
 import threading
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
@@ -466,9 +467,10 @@ class BackendApp:
                 method.upper(),
                 urlsplit(path).path,
             )
-            return _json_response(
-                HTTPStatus.INTERNAL_SERVER_ERROR,
-                {"error": "internal_error"},
+            return _internal_error(
+                method=method,
+                path=path,
+                error_code="internal_error",
             )
         finally:
             manual_input_contact.reset(manual_token)
@@ -545,9 +547,10 @@ class BackendApp:
             try:
                 contacts = self._contact_directory.list_contacts(self._owner_id)
             except ContactDirectoryError:
-                return _json_response(
-                    HTTPStatus.INTERNAL_SERVER_ERROR,
-                    {"error": "contact_list_unavailable"},
+                return _internal_error(
+                    method=method,
+                    path=path,
+                    error_code="contact_list_unavailable",
                 )
             return _json_response(
                 HTTPStatus.OK,
@@ -603,6 +606,7 @@ class BackendApp:
         if path_value == "/api/reply/generate":
             return self._handle_reply_generate(
                 method=method_upper,
+                path=path_value,
                 body=request_body,
             )
         if path_value.startswith("/api/memories") or (
@@ -626,7 +630,7 @@ class BackendApp:
                 body=request_body,
             )
         if path_value == "/api/ledger/summary":
-            return self._handle_ledger(method=method_upper)
+            return self._handle_ledger(method=method_upper, path=path_value)
         if path_value.startswith("/api/skills"):
             return self._handle_skill(
                 method=method_upper,
@@ -702,9 +706,10 @@ class BackendApp:
                     _follow_smoke_payload(controller.status()),
                 )
             except Exception:
-                return _json_response(
-                    HTTPStatus.INTERNAL_SERVER_ERROR,
-                    {"error": "follow_smoke_failed"},
+                return _internal_error(
+                    method=method,
+                    path=path,
+                    error_code="follow_smoke_failed",
                 )
         if method != "POST":
             return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
@@ -729,9 +734,10 @@ class BackendApp:
                 {"error": "follow_smoke_rejected", "reason": error.code},
             )
         except Exception:
-            return _json_response(
-                HTTPStatus.INTERNAL_SERVER_ERROR,
-                {"error": "follow_smoke_failed"},
+            return _internal_error(
+                method=method,
+                path=path,
+                error_code="follow_smoke_failed",
             )
         return _json_response(HTTPStatus.OK, _follow_smoke_payload(result))
 
@@ -780,9 +786,10 @@ class BackendApp:
                 HTTPStatus.BAD_REQUEST, {"error": "invalid_message_query"}
             )
         except Exception:
-            return _json_response(
-                HTTPStatus.INTERNAL_SERVER_ERROR,
-                {"error": "message_stream_unavailable"},
+            return _internal_error(
+                method=method,
+                path=path,
+                error_code="message_stream_unavailable",
             )
         return _json_response(
             HTTPStatus.OK,
@@ -850,9 +857,10 @@ class BackendApp:
             try:
                 sessions = list_sessions()
             except Exception:
-                return _json_response(
-                    HTTPStatus.INTERNAL_SERVER_ERROR,
-                    {"error": "cli_sessions_failed"},
+                return _internal_error(
+                    method=method,
+                    path=path,
+                    error_code="cli_sessions_failed",
                 )
             return _json_response(
                 HTTPStatus.OK,
@@ -864,9 +872,10 @@ class BackendApp:
             try:
                 bindings = sync.cli_bindings(include_revoked=True)
             except Exception:
-                return _json_response(
-                    HTTPStatus.INTERNAL_SERVER_ERROR,
-                    {"error": "cli_bindings_failed"},
+                return _internal_error(
+                    method=method,
+                    path=path,
+                    error_code="cli_bindings_failed",
                 )
             payload = {"bindings": [_cli_binding_payload(binding) for binding in bindings
                                     if binding.status.value == "active"]}
@@ -889,18 +898,39 @@ class BackendApp:
             try:
                 report = sync.set_sync_scope(payload["mode"])
             except Exception:
-                return _json_response(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "sync_scope_failed"})
+                return _internal_error(
+                    method=method,
+                    path=path,
+                    error_code="sync_scope_failed",
+                )
             return _json_response(HTTPStatus.OK, _sync_status_payload(report))
         if path == "/api/sync/foreground/observe":
             return self._handle_foreground_observe(sync=sync, body=body)
         if path == "/api/sync/priority":
-            return self._handle_sync_priority(sync=sync, body=body)
+            return self._handle_sync_priority(
+                method=method,
+                path=path,
+                sync=sync,
+                body=body,
+            )
         if path == "/api/sync/cli-bindings/confirm":
-            return self._handle_cli_bindings_confirm(sync=sync, body=body)
+            return self._handle_cli_bindings_confirm(
+                method=method,
+                path=path,
+                sync=sync,
+                body=body,
+            )
         if path == "/api/sync/cli-bindings/revoke":
-            return self._handle_cli_binding_revoke(sync=sync, body=body)
+            return self._handle_cli_binding_revoke(
+                method=method,
+                path=path,
+                sync=sync,
+                body=body,
+            )
         if path in {"/api/sync/confirm", "/api/sync/confirm-pending"}:
             return self._handle_sync_confirm(
+                method=method,
+                path=path,
                 sync=sync,
                 body=body,
                 pending=path == "/api/sync/confirm-pending",
@@ -918,8 +948,10 @@ class BackendApp:
                 report = sync.check()
         except Exception:
             # 稳定错误码，不把引擎异常细节回显给界面。
-            return _json_response(
-                HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "sync_control_failed"}
+            return _internal_error(
+                method=method,
+                path=path,
+                error_code="sync_control_failed",
             )
         return _json_response(HTTPStatus.OK, _sync_status_payload(report))
 
@@ -965,7 +997,7 @@ class BackendApp:
         return _json_response(HTTPStatus.OK, result)
 
     def _handle_cli_binding_revoke(
-        self, *, sync: SyncControlPort, body: bytes,
+        self, *, method: str, path: str, sync: SyncControlPort, body: bytes,
     ) -> Response:
         """撤销读取授权，保留既有绑定记录和历史资料。"""
 
@@ -999,15 +1031,18 @@ class BackendApp:
         except SyncHostStopped:
             return _json_response(HTTPStatus.CONFLICT, {"error": "runtime_stopped"})
         except Exception:
-            return _json_response(
-                HTTPStatus.INTERNAL_SERVER_ERROR,
-                {"error": "cli_binding_revoke_failed"},
+            return _internal_error(
+                method=method,
+                path=path,
+                error_code="cli_binding_revoke_failed",
             )
         return _json_response(HTTPStatus.OK, _cli_binding_payload(binding))
 
     def _handle_sync_priority(
         self,
         *,
+        method: str,
+        path: str,
         sync: SyncControlPort,
         body: bytes,
     ) -> Response:
@@ -1049,9 +1084,10 @@ class BackendApp:
                 {"error": "sync_priority_request_invalid"},
             )
         except Exception:
-            return _json_response(
-                HTTPStatus.INTERNAL_SERVER_ERROR,
-                {"error": "sync_priority_failed"},
+            return _internal_error(
+                method=method,
+                path=path,
+                error_code="sync_priority_failed",
             )
         if report is None:
             return _json_response(
@@ -1063,6 +1099,8 @@ class BackendApp:
     def _handle_cli_bindings_confirm(
         self,
         *,
+        method: str,
+        path: str,
         sync: SyncControlPort,
         body: bytes,
     ) -> Response:
@@ -1151,15 +1189,18 @@ class BackendApp:
                 {"error": "cli_binding_request_invalid"},
             )
         except Exception:
-            return _json_response(
-                HTTPStatus.INTERNAL_SERVER_ERROR,
-                {"error": "cli_binding_failed"},
+            return _internal_error(
+                method=method,
+                path=path,
+                error_code="cli_binding_failed",
             )
         return _json_response(HTTPStatus.OK, _sync_status_payload(report))
 
     def _handle_sync_confirm(
         self,
         *,
+        method: str,
+        path: str,
         sync: SyncControlPort,
         body: bytes,
         pending: bool = False,
@@ -1203,9 +1244,10 @@ class BackendApp:
                 {"error": "binding_confirmation_rejected", "reason": error.code},
             )
         except Exception:
-            return _json_response(
-                HTTPStatus.INTERNAL_SERVER_ERROR,
-                {"error": "binding_confirm_failed"},
+            return _internal_error(
+                method=method,
+                path=path,
+                error_code="binding_confirm_failed",
             )
         return _json_response(HTTPStatus.OK, _sync_status_payload(report))
 
@@ -1272,9 +1314,10 @@ class BackendApp:
         except ManagedUpdateBackupError:
             return _json_response(HTTPStatus.CONFLICT, {"error": "update_backup_cleanup_required"})
         except Exception:
-            return _json_response(
-                HTTPStatus.INTERNAL_SERVER_ERROR,
-                {"error": "trace_operation_failed"},
+            return _internal_error(
+                method=method,
+                path=path,
+                error_code="trace_operation_failed",
             )
         return _json_response(HTTPStatus.OK, payload)
 
@@ -1336,7 +1379,7 @@ class BackendApp:
             return _json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "reply_unavailable"})
         return _json_response(HTTPStatus.CONFLICT, {"error": "exploration_protocol_changed"})
 
-    def _handle_reply_generate(self, *, method: str, body: bytes) -> Response:
+    def _handle_reply_generate(self, *, method: str, path: str, body: bytes) -> Response:
         """处理候选回复生成请求；失败关闭且不回显请求正文。"""
 
         if method != "POST":
@@ -1389,9 +1432,10 @@ class BackendApp:
             return _json_response(HTTPStatus.BAD_GATEWAY, {"error": "reply_review_invalid"})
         except Exception:
             # 生成/持久化阶段的基础设施异常：5xx，不用 409 伪装成冲突。
-            return _json_response(
-                HTTPStatus.INTERNAL_SERVER_ERROR,
-                {"error": "reply_generation_failed"},
+            return _internal_error(
+                method=method,
+                path=path,
+                error_code="reply_generation_failed",
             )
         if result.rejected:
             return _json_response(
@@ -1403,9 +1447,10 @@ class BackendApp:
             )
         reply = result.reply
         if reply is None:
-            return _json_response(
-                HTTPStatus.INTERNAL_SERVER_ERROR,
-                {"error": "reply_generation_failed"},
+            return _internal_error(
+                method=method,
+                path=path,
+                error_code="reply_generation_failed",
             )
         return _json_response(HTTPStatus.OK, _reply_payload(reply))
 
@@ -1703,9 +1748,17 @@ class BackendApp:
         except ReplyBudgetError:
             return _json_response(HTTPStatus.BAD_GATEWAY, {"error": "reply_budget_exceeded"})
         except ReplyError:
-            return _json_response(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "reply_generation_failed"})
+            return _internal_error(
+                method=method,
+                path=path,
+                error_code="reply_generation_failed",
+            )
         except AssistantSessionError:
-            return _json_response(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "assistant_session_failed"})
+            return _internal_error(
+                method=method,
+                path=path,
+                error_code="assistant_session_failed",
+            )
 
     def _handle_layered_memory(self, *, method: str, path: str, body: bytes) -> Response:
         parts = urlsplit(path).path.strip("/").split("/")
@@ -1803,7 +1856,11 @@ class BackendApp:
         except OverviewUnavailable:
             return _json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "overview_unavailable"})
         except Exception:
-            return _json_response(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "overview_operation_failed"})
+            return _internal_error(
+                method=method,
+                path=path,
+                error_code="overview_operation_failed",
+            )
 
     def _handle_memory(self, *, method: str, path: str, body: bytes) -> Response:
         """处理记忆管理端点；失败关闭且不回显正文。"""
@@ -1833,9 +1890,10 @@ class BackendApp:
         except Exception:
             # 持久化或领域层异常不能让真实 HTTP 连接直接断开；同时不把
             # SQL、连接信息或记忆正文泄露给客户端。
-            return _json_response(
-                HTTPStatus.INTERNAL_SERVER_ERROR,
-                {"error": "memory_operation_failed"},
+            return _internal_error(
+                method=method,
+                path=path,
+                error_code="memory_operation_failed",
             )
 
     def _dispatch_memory(self, *, method: str, path: str, body: bytes) -> Response:
@@ -2498,7 +2556,11 @@ class BackendApp:
         except SetupRequestInvalid:
             return _json_response(HTTPStatus.BAD_REQUEST, {"error": "setup_request_invalid"})
         except Exception:
-            return _json_response(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "setup_operation_failed"})
+            return _internal_error(
+                method=method,
+                path=path,
+                error_code="setup_operation_failed",
+            )
 
     def _handle_setup(self, *, method: str, path: str, body: bytes) -> Response:
         """处理首启向导端点；失败关闭且不回显正文与密钥。"""
@@ -2560,12 +2622,13 @@ class BackendApp:
                 HTTPStatus.BAD_REQUEST, {"error": "setup_request_invalid"}
             )
         except Exception:
-            return _json_response(
-                HTTPStatus.INTERNAL_SERVER_ERROR,
-                {"error": "setup_operation_failed"},
+            return _internal_error(
+                method=method,
+                path=path,
+                error_code="setup_operation_failed",
             )
 
-    def _handle_ledger(self, *, method: str) -> Response:
+    def _handle_ledger(self, *, method: str, path: str) -> Response:
         """处理台账概览端点；只投影元数据，不含正文。"""
 
         ledger = self._ledger_service
@@ -2581,9 +2644,10 @@ class BackendApp:
                 HTTPStatus.OK, ledger.summary(owner_id=self._owner_id)
             )
         except Exception:
-            return _json_response(
-                HTTPStatus.INTERNAL_SERVER_ERROR,
-                {"error": "ledger_summary_failed"},
+            return _internal_error(
+                method=method,
+                path=path,
+                error_code="ledger_summary_failed",
             )
 
     def _handle_skill(self, *, method: str, path: str, body: bytes) -> Response:
@@ -2623,9 +2687,10 @@ class BackendApp:
                 },
             )
         except SkillLibraryPersistenceError:
-            return _json_response(
-                HTTPStatus.INTERNAL_SERVER_ERROR,
-                {"error": "skill_persistence_failed"},
+            return _internal_error(
+                method=method,
+                path=path,
+                error_code="skill_persistence_failed",
             )
 
     def _dispatch_skill(self, *, method: str, path: str, body: bytes) -> Response:
@@ -3579,6 +3644,36 @@ def _json_response(
         headers=merged,
         body=body,
     )
+
+
+def _internal_error(
+    *,
+    method: str,
+    path: str,
+    error_code: str,
+) -> Response:
+    """记录 handler 级内部错误并返回稳定 500 错误码。
+
+    只记录请求方法、去掉查询串的路径与稳定错误码；请求正文、凭据、
+    查询串与异常 message 不进入日志。except 处理器内附带异常栈，
+    非异常分支（如内部状态不完整）只记录错误本身。
+    """
+
+    if sys.exc_info()[0] is None:
+        logger.error(
+            "backend_handler_failed method=%s path=%s error_code=%s",
+            method.upper(),
+            urlsplit(path).path,
+            error_code,
+        )
+    else:
+        logger.exception(
+            "backend_handler_failed method=%s path=%s error_code=%s",
+            method.upper(),
+            urlsplit(path).path,
+            error_code,
+        )
+    return _json_response(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": error_code})
 
 
 # ----------------------------------------------------------------------
