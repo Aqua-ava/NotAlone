@@ -17,6 +17,29 @@ for (const level of ['contact', 'owner', 'pending']) test(`实际 ${level} 记�
   await withMemoryPage(f, t.signal, async page => {
     if (level === 'contact') await page.getByRole('navigation', { name: '记忆分类' }).getByRole('button', { name: '对方', exact: true }).click();
     if (level === 'pending') await page.getByRole('navigation', { name: '记忆分类' }).getByRole('button', { name: '待确认', exact: true }).click();
+    const toggles = page.getByRole('button', { name: /^查看来源与版本：/ });
+    if (level !== 'owner') {
+      await toggles.first().waitFor();
+      const first = page.getByRole('article').filter({ has: page.getByText('合成条件记忆1', { exact: true }) });
+      assert.equal(await first.getByRole('group', { name: '记忆变化依据', exact: true }).count(), 0);
+      assert.doesNotMatch(await first.innerText(), /适用条件|适用性|有效记忆|共同事实|变化类型|后续来源说明/);
+      assert.match(await first.innerText(), /来源日期：未知/);
+      if (level === 'contact') {
+        assert.match(await first.innerText(), /系统记下/);
+        assert.equal(await first.getByRole('button', { name: /^查看版本历史：/ }).isVisible(), false);
+        assert.equal(await first.getByRole('button', { name: /^撤销自动采纳：/ }).isVisible(), false);
+        await first.getByText('更多', { exact: true }).click();
+        assert.equal(await first.getByRole('button', { name: /^查看版本历史：/ }).isVisible(), true);
+        await first.getByRole('button', { name: /^撤销自动采纳：/ }).click();
+        await first.getByRole('group', { name: '确认删除资料', exact: true }).waitFor();
+        assert.equal(await first.getByRole('button', { name: /^撤销自动采纳：/ }).isVisible(), false);
+        await first.getByRole('button', { name: '取消删除', exact: true }).click();
+        await first.getByRole('button', { name: /^修正资料：/ }).click();
+        await first.getByRole('textbox', { name: '资料正文', exact: true }).waitFor();
+        await first.getByRole('button', { name: '取消修正', exact: true }).click();
+      }
+      for (const toggle of await toggles.all()) await toggle.click();
+    }
     for (const [, label] of kinds) await page.getByText(`变化类型：${label}`, { exact: true }).waitFor();
     const details = page.getByRole('group', { name: '记忆变化依据', exact: true }).first();
     assert.match(await details.innerText(), /后续来源说明1：出差已经结束。/);
@@ -29,6 +52,7 @@ for (const level of ['contact', 'owner', 'pending']) test(`实际 ${level} 记�
     assert.match(await page.locator('body').innerText(), /补充的是历史信息/);
     if (level !== 'pending') assert.match(await page.locator('body').innerText(), /不再引用/);
     await page.getByRole('button', { name: '下一页', exact: true }).click();
+    if (level !== 'owner') await page.getByRole('button', { name: /^查看来源与版本：/ }).click();
     await page.getByText('变化依据：未知', { exact: true }).waitFor();
   }, { ownerPanel: level === 'owner' });
 });

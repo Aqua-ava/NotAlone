@@ -1,5 +1,5 @@
 import { selectContact } from '../contact-picker-actions.mjs';
-import { expandOverviewDetails, openImportManagement, selectMemoryCategory } from '../memory-page-actions';
+import { expandMemoryMore, expandOverviewDetails, openImportManagement, selectMemoryCategory } from '../memory-page-actions';
 import { expect, type Browser } from '@playwright/test';
 import { withOwnerFactsOverviewFixture } from '../owner-facts-overview-fixture';
 import { withControllerEnvironment } from './backend-fixture';
@@ -47,7 +47,7 @@ export async function ownerFactsOverview(browser: Browser, origin: string) {
       await expect(manual.getByText('用户手动录入（来源为手录资料）。', { exact: true })).toBeVisible();
 
       await selectMemoryCategory(manager, '本人记忆');
-      const owner = manager.getByRole('region', { name: '本人记忆', exact: true });
+      const owner = manager.getByRole('region', { name: '我的记忆', exact: true });
       await owner.getByRole('button', { name: `修正资料：${prepared.self.text}`, exact: true }).click();
       const correction = owner.getByRole('form', { name: '修正本人资料', exact: true });
       const correctedText = '本人明确更正为合成凉茶。';
@@ -74,6 +74,7 @@ export async function ownerFactsOverview(browser: Browser, origin: string) {
       await expect(overview.getByRole('article')).toHaveCount(3);
 
       await selectMemoryCategory(manager, '本人记忆');
+      await expandMemoryMore(owner.getByRole('article').filter({ has: manager.getByText(prepared.manualPreference.text, { exact: true }) }));
       await owner.getByRole('button', { name: `删除资料：${prepared.manualPreference.text}`, exact: true }).click();
       await owner.getByRole('button', { name: '确认删除', exact: true }).click();
       await selectMemoryCategory(manager, '本人概览');

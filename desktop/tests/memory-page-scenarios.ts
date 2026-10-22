@@ -2,7 +2,7 @@ import { selectContact } from './contact-picker-actions.mjs';
 import { expect, type Page } from '@playwright/test';
 import type { MemoryFixture } from './memory-backend-fixture';
 import type { MemoryHttpProxy } from './memory-http-proxy';
-import { expandMemoryDetails, openImportManagement, selectMemoryCategory } from './memory-page-actions';
+import { expandMemoryMore, expandMemoryDetails, openImportManagement, selectMemoryCategory } from './memory-page-actions';
 import type { MemorySectionName } from '../src/shared/memory-bridge';
 
 export async function memoryDetails(manager: Page, memoryBackend: MemoryFixture) {
@@ -25,7 +25,7 @@ export async function memoryDetails(manager: Page, memoryBackend: MemoryFixture)
   const expired = contact.getByRole('article').filter({ has: manager.getByText('甲已过期的合成状态。', { exact: true }) });
   const ownerCandidate = owner.getByRole('article').filter({ has: manager.getByText('本人喜欢合成绿茶。', { exact: true }) });
   await expect(automatic.getByText('甲喜欢合成茉莉茶。', { exact: true })).toBeVisible();
-  await expect(automatic.getByText('系统记下 · 可移除', { exact: true })).toBeVisible();
+  await expect(automatic.getByText('系统记下', { exact: true })).toBeVisible();
   await automatic.getByRole('button', { name: '查看依据：甲喜欢合成茉莉茶。', exact: true }).click();
   const evidence = manager.getByRole('region', { name: '记忆依据', exact: true });
   await expect(evidence.getByText('这条记忆未保存可查看的来源原话。', { exact: true })).toBeVisible();
@@ -146,6 +146,7 @@ export async function memoryPagination(manager: Page, fixture: MemoryFixture) {
   await expect(pagination.getByRole('button', { name: '下一页', exact: true })).toBeDisabled();
   const last = contact.getByRole('article');
   const lastText = (await last.locator('.memory-text').textContent())!;
+  await expandMemoryMore(last);
   await last.getByRole('button', { name: /^(删除资料|撤销自动采纳)：/ }).click();
   await last.getByRole('button', { name: /^(确认删除|确认撤销)$/ }).click();
   await expect(pagination).toContainText('第 2 / 2 页');

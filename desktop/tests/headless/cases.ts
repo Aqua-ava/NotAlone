@@ -19,7 +19,7 @@ export async function memoryReading(browser: Browser, origin: string) {
       const contact = manager.getByRole('region', { name: '联系人记忆' });
       const automatic = contact.getByRole('article').filter({ has: manager.getByText('甲喜欢合成茉莉茶。', { exact: true }) });
       await expect(automatic.getByText('甲喜欢合成茉莉茶。', { exact: true })).toBeVisible();
-      await expect(automatic.getByText('系统记下 · 可移除', { exact: true })).toBeVisible();
+      await expect(automatic.getByText('系统记下', { exact: true })).toBeVisible();
       await expect(contact.getByText('甲的新版本关系备注。', { exact: true })).toBeVisible();
       await expect(contact.getByText('旧版关系备注。', { exact: true })).toHaveCount(0);
       await expect(manager.getByText('另一用户的本人资料。', { exact: true })).toHaveCount(0);

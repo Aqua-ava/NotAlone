@@ -1,5 +1,5 @@
 import { selectContact } from './contact-picker-actions.mjs';
-import { expandMemoryDetails, selectMemoryCategory } from './memory-page-actions';
+import { expandMemoryMore, expandMemoryDetails, selectMemoryCategory } from './memory-page-actions';
 import { expect, type Page } from '@playwright/test';
 import type { MemoryFixture } from './memory-backend-fixture';
 
@@ -118,11 +118,13 @@ export async function memoryRemoval(manager: Page, fixture: MemoryFixture) {
   const pending = await fixture.readMemorySection(fixture.data.contact_ids[0], 'pending');
   const other = await fixture.readMemorySection(fixture.data.contact_ids[1], 'contact');
   const automatic = contact.getByRole('article').filter({ has: manager.getByText('甲喜欢合成茉莉茶。', { exact: true }) });
+  await expandMemoryMore(automatic);
   await automatic.getByRole('button', { name: '撤销自动采纳：甲喜欢合成茉莉茶。', exact: true }).click();
   await expect(automatic.getByText('撤销等同删除这条资料，不删除来源消息，也不提供恢复承诺。', { exact: true })).toBeVisible();
   await automatic.getByRole('button', { name: '确认撤销', exact: true }).click();
   await expect(contact.getByText('甲喜欢合成茉莉茶。', { exact: true })).toHaveCount(0);
   const manual = contact.getByRole('article').filter({ has: manager.getByText('甲的新版本关系备注。', { exact: true }) });
+  await expandMemoryMore(manual);
   await manual.getByRole('button', { name: '删除资料：甲的新版本关系备注。', exact: true }).click();
   await manual.getByRole('button', { name: '确认删除', exact: true }).click();
   const expired = contact.getByRole('article').filter({ has: manager.getByText('甲已过期的合成状态。', { exact: true }) });
@@ -130,6 +132,7 @@ export async function memoryRemoval(manager: Page, fixture: MemoryFixture) {
   await expect(contact.getByRole('article')).toHaveCount(1);
   await selectMemoryCategory(manager, '本人记忆');
   const ownManual = owner.getByRole('article').filter({ has: manager.getByText('本人喜欢合成绿茶。', { exact: true }) });
+  await expandMemoryMore(ownManual);
   await ownManual.getByRole('button', { name: '删除资料：本人喜欢合成绿茶。', exact: true }).click();
   await ownManual.getByRole('button', { name: '确认删除', exact: true }).click();
   await expect(owner.getByText('本人喜欢合成绿茶。', { exact: true })).toHaveCount(0);
@@ -142,7 +145,9 @@ export async function memoryRemoval(manager: Page, fixture: MemoryFixture) {
   expect((actual.data.memories as Array<{ text: string }>).map((entry) => entry.text)).toEqual(['甲已过期的合成状态。']);
   const deleted = (ownBefore.data.memories as Array<Record<string, unknown>>).find((item) => item.text === '本人喜欢合成绿茶。')!;
   expect((actualOwn.data.memories as Array<Record<string, unknown>>).some((item) => item.memory_id === deleted.memory_id)).toBe(false);
-  expect(before.data.memories).toHaveLength(3);
+  // 管理读取也保留一条失效旧版，删除当前版本后关联旧版一并清除。
+  expect(before.data.memories).toHaveLength(4);
+  expect((before.data.memories as Array<{ status: string }>).filter(item => item.status === 'invalidated')).toHaveLength(1);
   expect(await fixture.readMemorySection(fixture.data.contact_ids[0], 'sources')).toEqual(sources);
   const currentPending = await fixture.readMemorySection(fixture.data.contact_ids[0], 'pending');
   expect(currentPending.status).toBe(200);

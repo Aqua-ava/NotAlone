@@ -1,5 +1,5 @@
 import { selectContact } from '../contact-picker-actions.mjs';
-import { openDeveloperTraces, openImportManagement, openMemoryTrace, selectMemoryCategory } from '../memory-page-actions';
+import { expandMemoryMore, openDeveloperTraces, openImportManagement, openMemoryTrace, selectMemoryCategory } from '../memory-page-actions';
 import { expect, type Browser, type Page } from '@playwright/test';
 import { PageHost } from './page-host';
 import { withControllerEnvironment, withMemoryBackend, withTraceBackend, type TraceData } from './backend-fixture';
@@ -217,6 +217,7 @@ export async function memoryTracesRecordDeletion(browser: Browser, origin: strin
               await card.getByRole('button', { name: `查看依据：${data.trace_text}`, exact: true }).click();
               await expect(page.getByRole('region', { name: '记忆依据', exact: true }).locator('blockquote').first()).toBeVisible();
             }
+            if (!candidate) await expandMemoryMore(card);
             await card.getByRole('button', { name: `${candidate ? '丢弃候选' : '删除资料'}：${data.trace_text}`, exact: true }).click();
             await card.getByRole('button', { name: candidate ? '确认丢弃' : '确认删除', exact: true }).click();
             if (unknown) {

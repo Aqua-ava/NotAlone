@@ -1,10 +1,11 @@
-import { expandMemoryDetails, openImportManagement, selectMemoryCategory } from '../memory-page-actions';
+import { expandMemoryMore, expandMemoryDetails, openImportManagement, selectMemoryCategory } from '../memory-page-actions';
+import { selectContact } from '../contact-picker-actions.mjs';
 import path from 'node:path';
 import { expect, type Browser, type Page } from '@playwright/test';
 import { withRewritePages } from './rewrite-acceptance';
 
-async function openMemoryPage(manager: Page) {
-  await manager.getByRole('button', { name: '选择合成事件联系人', exact: true }).click();
+async function openMemoryPage(manager: Page, contactId: string) {
+  await selectContact(manager.getByRole('combobox', { name: '本次联系人', exact: true }), contactId);
   await manager.getByRole('button', { name: '记忆', exact: true }).click();
   await manager.getByRole('button', { name: '刷新记忆', exact: true }).click();
   await selectMemoryCategory(manager, '联系人记忆');
@@ -16,10 +17,11 @@ export async function memoryEventUpdates(browser: Browser, origin: string) {
     const prepared = await rewriteBackend.command('memory_event_updates') as {
       old: { text: string; source_ids: string[] }; current: { text: string }; sourceToDelete: string;
     };
-    const contact = await openMemoryPage(manager);
+    const contact = await openMemoryPage(manager, rewriteBackend.data.contact_ids[0]);
     const current = contact.getByRole('article').filter({ has: manager.getByText(prepared.current.text, { exact: true }) });
-    await expect(current.getByText('系统记下 · 可移除', { exact: true })).toBeVisible();
+    await expect(current.getByText('系统记下', { exact: true })).toBeVisible();
     await expandMemoryDetails(current);
+    await expandMemoryMore(current);
     await current.getByRole('button', { name: `查看版本历史：${prepared.current.text}`, exact: true }).click();
     const history = manager.getByRole('region', { name: '资料版本历史', exact: true });
     await expect(history.getByText(prepared.old.text, { exact: true })).toBeVisible();
@@ -43,7 +45,7 @@ export async function memoryEventUpdates(browser: Browser, origin: string) {
     const prepared = await rewriteBackend.command('memory_event_updates') as {
       old: { memory_id: string; revision: number; text: string }; pending: Array<{ text: string }>; sourceToDelete: string;
     };
-    const contact = await openMemoryPage(manager);
+    const contact = await openMemoryPage(manager, rewriteBackend.data.contact_ids[0]);
     await expect(contact.getByText(prepared.old.text, { exact: true })).toBeVisible();
     const oldCard = contact.getByRole('article').filter({ has: manager.getByText(prepared.old.text, { exact: true }) });
     await expandMemoryDetails(oldCard);
@@ -75,6 +77,7 @@ export async function memoryEventUpdates(browser: Browser, origin: string) {
     await expect(current.getByText('手动保存', { exact: true })).toBeVisible();
     await expect(current.getByText('事件阶段：已发生（来源已核验）', { exact: true })).toBeVisible();
     await expandMemoryDetails(current);
+    await expandMemoryMore(current);
     await current.getByRole('button', { name: `查看版本历史：${prepared.pending[0].text}`, exact: true }).click();
     const history = manager.getByRole('region', { name: '资料版本历史', exact: true });
     await expect(history.getByText(prepared.old.text, { exact: true })).toBeVisible();

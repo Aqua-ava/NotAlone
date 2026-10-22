@@ -31,6 +31,12 @@ export async function expandMemoryDetails(card: Locator) {
   }
 }
 
+export async function expandMemoryMore(card: Locator) {
+  await expect(card.locator('.memory-more button').first()).toBeEnabled();
+  const summary = card.locator('.memory-more > summary');
+  if (await summary.locator('..').getAttribute('open') === null) await summary.click();
+}
+
 export async function openImportManagement(page: Page) {
   if (await page.getByRole('region', { name: '已导入资料', exact: true }).isVisible()) return;
   await page.getByRole('button', { name: '设置', exact: true }).click();

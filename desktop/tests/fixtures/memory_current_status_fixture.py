@@ -56,7 +56,9 @@ def prepare_memory_current_status(fixture, contact_id: str) -> dict[str, str]:
         body = {"text": text, "category": "preference"}
         if level == "contact":
             body["contact_id"] = contact_id
-        status, saved = fixture.backend.request(f"/api/memories/manual-{level}", body)
+        endpoint = (f"/api/contacts/{contact_id}/owner-memories" if level == "owner"
+                    else f"/api/memories/manual-{level}")
+        status, saved = fixture.backend.request(endpoint, body)
         if status != 200:
             raise RuntimeError("合成稳定资料准备失败。")
         result[f"{level}_stable_memory_id"] = saved["memory"]["memory_id"]

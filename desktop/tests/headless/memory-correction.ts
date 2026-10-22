@@ -1,5 +1,5 @@
 import { selectContact } from '../contact-picker-actions.mjs';
-import { openImportManagement, selectMemoryCategory } from '../memory-page-actions';
+import { expandMemoryDetails, openImportManagement, selectMemoryCategory } from '../memory-page-actions';
 import { expect, type Browser } from '@playwright/test';
 import path from 'node:path';
 import type { ContactDatabase } from '../contact-backend-fixture';
@@ -41,6 +41,9 @@ export async function memoryCorrectionProtection(browser: Browser, origin: strin
         await expect(contact.getByText('甲喝合成咖啡只是工作需要。', { exact: true })).toBeVisible();
         await selectMemoryCategory(manager, '待确认候选');
         await expect(pending.getByText('甲偏爱合成咖啡。', { exact: true })).toHaveCount(0);
+        await expect(pending.getByText('新证据涉及此前人工决定，请展开详情核对。', { exact: true })).toBeVisible();
+        await expect(pending.getByRole('group', { name: '新证据与原人工决定', exact: true })).toHaveCount(0);
+        await expandMemoryDetails(pending.getByRole('article').filter({ has: manager.getByText('甲喜欢合成咖啡。', { exact: true }) }));
         const comparison = pending.getByRole('group', { name: '新证据与原人工决定', exact: true });
         await expect(comparison.getByText('原主张：甲喜欢合成咖啡。', { exact: true })).toBeVisible();
         await expect(comparison.getByText('原人工修正：甲喝合成咖啡只是工作需要。', { exact: true })).toBeVisible();

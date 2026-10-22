@@ -1,6 +1,6 @@
 import { selectContact } from '../contact-picker-actions.mjs';
 import { setWorkspaceContext } from '../workspace-actions';
-import { openImportManagement, selectMemoryCategory } from '../memory-page-actions';
+import { expandMemoryDetails, openImportManagement, selectMemoryCategory } from '../memory-page-actions';
 import { expect, type Browser } from '@playwright/test';
 import { withRewritePages } from './rewrite-acceptance';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
@@ -14,6 +14,8 @@ export async function memoryCurrentStatus(browser: Browser, origin: string) {
     await selectMemoryCategory(manager, '联系人记忆');
     const contact = manager.getByRole('region', { name: '联系人记忆', exact: true });
     const card = (text: string) => contact.getByRole('article').filter({ has: manager.getByText(text, { exact: true }) });
+    await expect(contact.getByRole('article')).toHaveCount(6);
+    for (const item of await contact.getByRole('article').all()) await expandMemoryDetails(item);
     await expect(card('合成旧近况：最近在加班。').getByText('适用性：是否仍适用，尚不确定', { exact: true })).toBeVisible();
     await expect(card('合成当期近况：这个月在加班。').getByText('适用性：来源支持明确适用期间', { exact: true })).toBeVisible();
     await expect(card('合成历史近况：这个月在加班。').getByText('适用性：历史资料；不能据此认定当前情况', { exact: true })).toBeVisible();
@@ -21,7 +23,8 @@ export async function memoryCurrentStatus(browser: Browser, origin: string) {
     await expect(card('合成职业近况：对方是建筑师。').getByText('适用性：是否仍适用，尚不确定', { exact: true })).toBeVisible();
     await expect(card('合成窄时段：这个月仅晚上在加班。').getByText('适用性：是否仍适用，尚不确定', { exact: true })).toBeVisible();
     await selectMemoryCategory(manager, '本人记忆');
-    await expect(manager.getByRole('region', { name: '本人记忆', exact: true })
+    await expandMemoryDetails(manager.getByRole('region', { name: '我的记忆', exact: true }).getByRole('article'));
+    await expect(manager.getByRole('region', { name: '我的记忆', exact: true })
       .getByText('适用性：未指定期限的事实或偏好', { exact: true })).toBeVisible();
     await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
     await helper.getByRole('textbox', { name: '有什么想说的', exact: true }).fill('最近在加班忙吗？这个月仅晚上在加班吗？对方是建筑师，现在还成立吗？');

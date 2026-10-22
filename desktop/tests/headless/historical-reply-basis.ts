@@ -1,7 +1,7 @@
 import { selectContact } from '../contact-picker-actions.mjs';
 import { openCandidateMoreActions, fillWorkspaceThought, setWorkspaceContext } from '../workspace-actions';
 import { openAssistantHistory, expandSavedDiscussion } from '../assistant-history-actions';
-import { openImportManagement, selectMemoryCategory } from '../memory-page-actions';
+import { expandMemoryMore, openImportManagement, selectMemoryCategory } from '../memory-page-actions';
 import path from 'node:path';
 import { expect, type Browser, type Page } from '@playwright/test';
 import { confirmHelperContact } from '../foreground-confirmation-actions';
@@ -166,7 +166,8 @@ export async function historicalReplyBasis(browser: Browser, origin: string) {
     await manager.getByRole('button', { name: '记忆', exact: true }).click();
     await manager.getByRole('button', { name: '刷新记忆', exact: true }).click();
     await selectMemoryCategory(manager, '本人记忆');
-    const owner = manager.getByRole('region', { name: '本人记忆', exact: true });
+    const owner = manager.getByRole('region', { name: '我的记忆', exact: true });
+    await expandMemoryMore(owner.getByRole('article').filter({ has: manager.getByText(prepared.text, { exact: true }) }));
     await owner.getByRole('button', { name: `删除资料：${prepared.text}`, exact: true }).click();
     await owner.getByRole('group', { name: '确认删除资料', exact: true }).getByRole('button', { name: '确认删除', exact: true }).click();
     await expect(owner.getByText(prepared.text, { exact: true })).toHaveCount(0);
