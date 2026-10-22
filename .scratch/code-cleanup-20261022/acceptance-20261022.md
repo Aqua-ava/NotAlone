@@ -23,3 +23,10 @@
 - ticket 02 的错误可见性只由单测/源码契约验证，未在真机构造后端断开/保存失败故障；ticket 06 读取失败路径由 Chromium 接线测试覆盖，未在真机注入故障。
 - ticket 09（app.py 路由表化）尚未开始。
 - `experiments/`、`.scratch/` 数据出仓/LFS 仍待用户确认。
+
+## 追加（ticket 09 / 10）
+
+- **09 app.py 路由表化**：`BackendApp._handle_authenticated` 197 → 42 行；25 条显式路由（`_ROUTE_TABLE` 23 + `_LIFECYCLE_ROUTE_TABLE` 2）；新增黄金测试 26 用例/32 分派样本。行为差异 0（2,072 个 method+path 组合首命中无差异）；golden 26/26、`tests/unit/server` 133/133、全量 2,527 例 13F+1E 与基线一致。`app.py` 3,972→4,272 行（多为路由表与抽出的处理器方法），类体 2,610 行。
+- **10 retrieval 评测懒加载**：`import notalone.retrieval` 不再加载 931 行 evaluation；旧导入名保留；新增 3 条测试，`tests/unit/retrieval` 105/105 通过；子进程验证生产导入不含 `notalone.retrieval.evaluation`。
+- **A1 最终验证**：生产导入 `notalone.server.app`/`reply.quality`/`retrieval` 等后 `sys.modules` 不含 `notalone.experiments`；两个评测 CLI 兼容入口 `--help` 正常，旧名仍可 import。
+- 累计：自 `08b6df90` 11 个本地提交、92 文件、+2,922/−2,140；未 push、未打包。剩余：A4 数据出仓（待用户确认）、需真 PostgreSQL 的集成测试、ticket 07/09 Comments 中记录的后续项。
