@@ -4,7 +4,7 @@
 
 > 后续修订（2026-10-20）：主动收藏表达样本及其生成参考按 [ADR-082](../adr/082-retire-explicit-style-samples.md)退役；本文相关历史方案不再构成实施要求。当前意图优先、长期表达偏好及其他已采纳约束分别保留。
 
-> 状态：草案。2026-10-14 保存已确认的产品方向；数据契约、接口、验证方案和 DSH 选型尚未定稿。本文不替代现行规格或 ADR，也不表示相关功能已经实现。
+> 状态：历史讨论记录。2026-10-14 保存已确认的产品方向，已整理为正式规格与 15 张任务（2026-10-17 全部 resolved）；数据契约与接口以正式规格为准，DSH 已搁置。本草图不替代现行规格或 ADR。
 
 > 后续状态：DSH 已搁置，已整理为[正式规格](../../.scratch/memory-skill-evolution/spec.md)和[已确认的15项拆分](../../.scratch/memory-skill-evolution/ticket-proposal.md)，独立任务已发布，实际进度见[任务索引](../../.scratch/memory-skill-evolution/planning.md)，目标约束见[ADR-048](../adr/048-memory-skill-evolution-lifecycle.md)。后续开发以正式规格和独立任务为准；下方 DSH 比较保留为搁置的设计记录。
 
@@ -37,7 +37,7 @@ Q12 是交付顺序，Q13 是整体验收要求，适用于上述功能，不单
 - 重复资料自动去重。来源明确、通过质量门槛的低风险变化可以自动更新，必须标记 `auto`、保留版本且可撤销；关系敏感、依据模糊或风险较高的变化交给用户确认。（Q3）
 - 计划、约定和已经发生的事件分开保存。“约好下周见面”不等于“已经见过面”。同类事件发生在不同时间时可以是不同事件；窗口重叠提取出的同一次事件应合并证据。（Q5）
 
-这里确认的是目标行为，不是扩大当前自动采纳权限。现行来源核验、风险门槛和按维度放行继续有效；未获放行的维度不能因本草图变成自动采纳。
+这里确认的是目标行为，不是扩大当前自动采纳权限。现行已按 [ADR-085](../adr/085-source-verified-automatic-adoption.md) 改为逐条来源与适用检查后自动裁决；置信度、语用与风险字段保留描述用途，不再单独作为人工确认门，计划、可能性或转述仍不能被改写为确定事实。
 
 **待设计：**历史状态、当前核实状态和错误失效的表示；新旧关系的判定与来源绑定；合并和替代时的原子更新及删除依赖。
 
@@ -76,7 +76,7 @@ Q19 确认的是分析触发边界；独立分析入口和完整分析功能是�
 
 **已确认：**先支持用户明确要求长期保存的表达偏好；当前回复的意图和要求优先。（Q6a）自动从表达样本推断长期风格不纳入本阶段，未来是否开展另行确定。
 
-用户说“这次简短一点”，不能静默转成长期偏好。表达样本继续按现行规则由用户主动保存；自动提出 Skill 草稿不等于自动保存表达样本。
+用户说“这次简短一点”，不能静默转成长期偏好。主动保存表达样本已按 [ADR-082](../adr/082-retire-explicit-style-samples.md) 整体退役；自动提出 Skill 草稿不等于自动发布 Skill。
 
 **待设计：**长期偏好的保存、查看、修改、删除及与当前意图的冲突处理。
 
@@ -167,12 +167,12 @@ NotAlone 继续负责联系人身份、`owner_id + contact_id` 隔离、来源�
 | 设计点 | 现行依据 | 后续处理 |
 | --- | --- | --- |
 | 历史状态与当前未知 | [领域数据](../current/domain-data.md)、[核心流程](../current/core-flows.md) | 细化当前“无有效期视为长期有效”的适用范围，区分历史、当前未核实和错误失效。 |
-| 自动更新与纠错 | [ADR-024](../adr/024-memory-adoption-risk-gate-and-versioning.md)、[ADR-036](../adr/036-per-dimension-adoption-release.md)、[ADR-046](../adr/046-source-bound-dimension-evidence.md)、[ADR-047](../adr/047-bounded-source-semantic-proof.md) | 保留风险、来源和维度质量门槛，在其上设计新旧管理；不直接放行自动采纳。 |
+| 自动更新与纠错 | [ADR-024](../adr/024-memory-adoption-risk-gate-and-versioning.md)、[ADR-036](../adr/036-per-dimension-adoption-release.md)、[ADR-046](../adr/046-source-bound-dimension-evidence.md)、[ADR-047](../adr/047-bounded-source-semantic-proof.md)、[ADR-085](../adr/085-source-verified-automatic-adoption.md) | 按现行来源与适用检查自动裁决；风险字段保留描述用途、不再单独作为人工门，在其上设计新旧管理。 |
 | 长期概览 | [ADR-005](../adr/005-explainable-retrieval-and-contact-knowledge-view.md)、[ADR-011](../adr/011-automatic-relationship-memory-index.md) | 定义可追溯概览与现有导航目录的区别，补齐删除和事实边界。 |
 | 语义检索 | [ADR-005](../adr/005-explainable-retrieval-and-contact-knowledge-view.md)、[ADR-028](../adr/028-lexical-memory-recall-phase-1.md) | 先评估；决定启用时再修订第一期词法边界。 |
 | 自动草稿、审核、局部反馈 | [Skill 库](../current/skill-library.md)、[ADR-010](../adr/010-deep-agents-skills-middleware.md)、[ADR-019](../adr/019-controlled-reply-skill-resources.md)、[ADR-043](../adr/043-conversation-scenarios-and-direction-exploration.md) | 现行本地导入流程没有 SkillDraft；需扩展生命周期和方法级调整。保留运行时只读、单次有界加载和不可变发布版本。 |
-| 学习材料与助手讨论 | [ADR-042](../adr/042-assistant-session-context-boundary.md)、[ADR-044](../adr/044-explicit-style-sample-retention.md) | 自动学习是新增独立流程，需复审其范围；保留助手讨论不自动摘要及表达样本主动保存边界。 |
-| 旧资料升级 | [核心流程](../current/core-flows.md)、[ADR-047](../adr/047-bounded-source-semantic-proof.md) | 正式确定重跑、回填和重新采纳的范围与预算后再调整当前边界。 |
+| 学习材料与助手讨论 | [ADR-042](../adr/042-assistant-session-context-boundary.md)、[ADR-082](../adr/082-retire-explicit-style-samples.md) | 自动学习是新增独立流程，需复审其范围；保留助手讨论不自动摘要；主动表达样本已按 ADR-082 退役。 |
+| 旧资料升级 | [核心流程](../current/core-flows.md)、[ADR-047](../adr/047-bounded-source-semantic-proof.md)、[ADR-070](../adr/070-automatic-memory-maintenance.md) | 该产品流程已按 ADR-070 退役，删除页面、IPC、HTTP 与后台入口；本行仅历史。 |
 | 替换回复运行时 | [ADR-006](../adr/006-agent-orchestration-and-retrieval-frameworks.md)、[ADR-009](../adr/009-langchain-create-agent-bounded-reply-loop.md)、[ADR-010](../adr/010-deep-agents-skills-middleware.md)、[ADR-042](../adr/042-assistant-session-context-boundary.md) | DSH 比较通过且明确选用后，以新 ADR 修订或替代，不覆盖既有决策历史。 |
 
 联系人确认、授权读取、来源分层、删除和人工发送继续遵守根目录规则及[隐私与删除规格](../current/privacy-deletion.md)。后台执行仍由[ADR-007](../adr/007-background-task-steps-and-worker.md)的受控任务步骤承担；自动学习不扩张任意工具、文件或聊天发送权限。
@@ -185,15 +185,15 @@ NotAlone 继续负责联系人身份、`owner_id + contact_id` 隔离、来源�
 2. 再完善事件与约定、关系和本人概览，并接入回复。
 3. 再推进 Skill 自动学习、集中审核、版本和使用反馈。
 
-语义检索比较独立开展，达标后才考虑启用。表达偏好、已有资料升级及独立分析的实际交付范围和依赖，在正式规格中明确。
+语义检索比较独立开展，达标后才考虑启用。表达偏好与独立分析的实际交付范围和依赖以正式规格为准；已有资料升级已按 [ADR-070](../adr/070-automatic-memory-maintenance.md) 退役。
 
 **已确认整体验收（Q13）：**从原话到提取、新旧合并、概览、回复实际引用，再到用户纠错和来源删除，检查完整链路。代码和合成测试、真实模型质量、最终原生 App 与渠道集成分别报告，不能互相代替。真实资料范围和调用预算在执行前另定。
 
 ## 按工作流继续
 
-目前已按[仓库工作流](../../docs/agents/workflow.md)形成正式规格并发布15张已确认任务，下一阶段是按票实现。沿用现有基座，测试从公开 HTTP、隔离 PostgreSQL 与当前 React 控制器验证完整用户行为，DSH 不再阻塞此路径。
+目前已按[仓库工作流](../../docs/agents/workflow.md)形成正式规格并发布 15 张任务，任务已于 2026-10-17 全部 resolved（证据见[任务索引](../../.scratch/memory-skill-evolution/planning.md)）。沿用现有基座，测试从公开 HTTP、隔离 PostgreSQL 与当前 React 控制器验证完整用户行为，DSH 不再阻塞此路径。
 
 1. 阅读正式规格、任务索引及具体任务，按真实依赖选择未开始的一票。
 2. 用户要求实现时，按任务范围推进 TDD、相关验证、代码评审和本地提交；每票独立记录实际验收与未验范围。
 
-当前仅发布文档与任务，尚未领取或实现，不执行旧资料升级。运行时历史讨论保留在[运行时草案](agent-runtime.md)和[规划记录](../../.scratch/agent-runtime/planning.md)，不把先前暂定方向当作已经采纳。
+本草图保留为历史讨论记录；旧资料升级按 ADR-070 退役，不再执行。运行时历史讨论保留在[运行时草案](agent-runtime.md)和[规划记录](../../.scratch/agent-runtime/planning.md)，不把先前暂定方向当作已经采纳。

@@ -4,7 +4,7 @@
 
 > 后续修订（2026-10-20）：主动收藏表达样本及其生成参考按 [ADR-082](../adr/082-retire-explicit-style-samples.md)退役；本文相关历史方案不再构成实施要求。当前意图优先、长期表达偏好及其他已采纳约束分别保留。
 
-> 状态：草案。本文定义候选回复、未来 Tool 和长任务的运行时边界；不表示任一框架方案已经完成生产集成。现行已采纳决策仍见 ADR-006、ADR-009 和 ADR-010；下方第 0 节记录 2026-08-22 提出的 DeepSeek Harness 暂定方向，尚未替代这些 ADR。
+> 状态：草案。本文定义候选回复、未来 Tool 和长任务的运行时边界；框架层（LangChain `create_agent`、SkillsMiddleware 与受控只读 Tool）已按 ADR-006、ADR-009 和 ADR-010 接入生产装配，但长任务、完整 Harness／DSH 与后续 Tool 扩展仍为草案。下方第 0 节记录 2026-08-22 提出的 DeepSeek Harness 暂定方向，尚未替代这些 ADR。
 
 工作流进度与拆分准备见[对应功能目录](../../.scratch/agent-runtime/planning.md)；尚未形成正式实现规格或任务。
 
@@ -115,13 +115,12 @@ flowchart LR
 ```mermaid
 flowchart TD
     Start([请求]) --> Scope["validate_scope"]
-    Scope -->|有效| Direction{"表达方向已确认？"}
+    Scope -->|有效| Action{"本次动作：帮我表达 / 帮我想想"}
     Scope -->|无效或不确定| Failed([要求用户确认或失败])
-    Direction -->|否| DirectionContext["assemble_direction_context"]
-    DirectionContext --> Suggest["suggest_reply_directions"]
-    Suggest --> Confirm([用户选择或修改后确认])
-    Confirm --> Risk["assess_request_risk"]
-    Direction -->|是| Risk
+    Action -->|帮我表达| Risk["assess_request_risk"]
+    Action -->|帮我想想| Suggest["suggest_reply_directions"]
+    Suggest --> Candidates([方向建议，不冒充已确认意图])
+    Candidates --> Risk
     Risk --> Context["assemble_initial_context"]
     Context --> Agent["create_agent 模型决策"]
     Agent -->|需要策略| Skill["SkillsMiddleware 目录 / 受控 read_file"]
@@ -142,7 +141,7 @@ flowchart TD
 | 阶段 | 输入 | 输出 | 性质 |
 | --- | --- | --- | --- |
 | `validate_scope` | `owner_id`、`contact_id`、请求身份、幂等键 | 已验证的请求范围 | 确定性代码 |
-| `assemble_direction_context` | 当前待回复消息、少量近期对话、自动选出的极少量相关关系记忆和连续性状态 | 不含 Skill、Agent Tool 补查或外部 Tool 结果的最小方向建议上下文 | 确定性代码 |
+| 方向建议上下文 | 当前待回复消息、少量近期对话、自动选出的极少量相关关系记忆和连续性状态 | 可含一个受控 Skill 版本（ADR-043），不含 Agent Tool 补查或外部 Tool 结果 | 确定性代码 |
 | `suggest_reply_directions` | 最小方向建议上下文、结构化输出 schema | 未预选的表达方向建议 | 单次有界模型调用；不运行 Tool loop，不生成回复候选 |
 | `assess_request_risk` | 当前消息、确定性规则版本 | 风险类型、生成前核实提醒 | 确定性代码 |
 | `assemble_initial_context` | 已确认表达方向、当前消息、近期对话、自动记忆基线、可用 Skill 目录、运行配置 | 初始六轨上下文和 runtime context | 确定性代码 |
@@ -167,7 +166,7 @@ flowchart TD
   contact_memory_index / 检索索引
 
 运行状态（create_agent / LangGraph runtime）
-  run_id / messages / todos / summary / selected_skill_version_id / skill_library_revision / Tool call metadata / retry metadata
+  run_id / messages / selected_skill_version_id / skill_library_revision / Tool call metadata / retry metadata
 ```
 
 - v1 同步回复不以 checkpoint 为前提；若后续启用持久化，只保存恢复执行所需的最小引用和临时结果，优先保存业务对象 ID，不复制完整聊天正文。

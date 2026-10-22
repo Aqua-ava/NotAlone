@@ -2,9 +2,9 @@
 
 > 2026-10-21 设计审查：下文全部 open／尚未实现为当时状态，工程签收见对应正式任务索引，不等于真实质量或 App 验收。默认自动维护及升级入口退役见 [ADR-070](../adr/070-automatic-memory-maintenance.md)，个人 L2/L3 有据推断见 [ADR-072](../adr/072-personal-memory-insights-without-action-guidance.md)，失效版本禁止生成见 [ADR-080](../adr/080-unified-memory-list-and-retired-exclusion.md)。这些后继局部替代旧手动启用、推断禁令和历史版本生成条款；显式暂停、删除、来源核验、人工纠错和 Skill 审核发布保持。
 
-> 状态：方案已确认，规格与任务已发布，待实现。2026-10-17 用户确认 Q1–Q10，并确认本文件的完整方案定稿，本轮 grilling 已结束。加载方向已独立记录为 [ADR-067](../adr/067-layered-scenario-and-profile-context.md) 的已采纳目标；本文不代表 L2/L3 已实现，也不授权执行资料整理、业务迁移或模型调用。
+> 状态：方案已确认，已整理为正式规格；11 项任务 01–11 已于 2026-10-18 完成工程签收，真实质量仍为 unknown，自动使用关闭。2026-10-17 用户确认 Q1–Q10，并确认本文件的完整方案定稿，本轮 grilling 已结束。加载方向已独立记录为 [ADR-067](../adr/067-layered-scenario-and-profile-context.md) 的已采纳目标；本草图保留决策依据，不授权执行资料整理、业务迁移或模型调用。
 
-> 后续状态：已整理为[正式规格](../../.scratch/layered-relationship-memory/spec.md)，行为与验收以后者为准；[11项任务拆分](../../.scratch/layered-relationship-memory/ticket-proposal.md)已获认可并逐张发布，全部 open、尚未领取，见[任务索引](../../.scratch/layered-relationship-memory/planning.md)。下方保留本轮决策依据。
+> 后续状态：已整理为[正式规格](../../.scratch/layered-relationship-memory/spec.md)，行为与验收以后者为准；[11项任务拆分](../../.scratch/layered-relationship-memory/ticket-proposal.md)已获认可并逐张发布，01–11 均已于 2026-10-18 完成工程签收，见[任务索引](../../.scratch/layered-relationship-memory/planning.md)。下方保留本轮决策依据。
 
 ## 用户目标
 
@@ -19,7 +19,7 @@
 | Q1 | L2 按持续主题整理。 | 例如工作与项目、沟通偏好、重要经历；新资料补入相关主题，具体事件及时间变化保留在文档中。这里的“场景”不同于回复 Skill 的聊天场景。 |
 | Q2 | L3 第一版以有依据的长期背景为主。 | 归纳明确事实、偏好和重要关系背景，保留来源与不确定性；自动性格、动机推断与回复策略另行讨论。延续 ADR-048 的概览边界。 |
 | Q3 | 联系人与本人两种范围都支持，分别管理。 | 联系人资料始终按 `owner_id + contact_id` 隔离；本人资料只从合法本人记忆整理，不为整理画像自动跨联系人查询聊天。 |
-| Q4 | 两层只整理已采纳且来源有效的记忆，包括手动录入。 | 待确认候选继续使用既有独立未确认参考轨，不进入 L2/L3。当前默认自动采纳放行表为空，新候选通常需确认后才进入长期整理。 |
+| Q4 | 两层只整理已采纳且来源有效的记忆，包括手动录入。 | 待确认候选继续使用既有独立未确认参考轨，不进入 L2/L3。本句记录的“默认放行表为空、新候选需确认”是当时状态；现行默认自动采纳已按 [ADR-070](../adr/070-automatic-memory-maintenance.md)、[ADR-085](../adr/085-source-verified-automatic-adoption.md) 改为逐条来源与适用检查后自动裁决。 |
 | Q5 | L3 背景、L2 目录及按需正文，与 L1 动态检索组合使用。 | 开启关系语境后，把当前联系人及本人的简短 L3 作为系统上下文中的背景资料，先提供 L2 目录，需要时再读正文。各部分有独立预算，资料不成为回复指令。此项修订见 ADR-067。 |
 | Q6 | 首次覆盖已有合格记忆，之后随变化增量更新。 | 短时间多次变化合成批次，后台更新相关 L2/L3；前台回复优先，用户也可手动刷新。不是逐条聊天触发两次全量模型调用。 |
 | Q7 | 校验通过的整理结果自动生效，标记“系统整理”，可以撤回。 | 不逐篇要求人工审核；歧义或校验失败的版本不使用，也不借整理采纳或修改底层记忆。 |
@@ -45,11 +45,11 @@
 
 ## 现行约束与待复审点
 
-- [ADR-048](../adr/048-memory-skill-evolution-lifecycle.md)允许可追溯概览，不自动开展深入性格或动机分析。Q2 沿用此边界。
+- [ADR-048](../adr/048-memory-skill-evolution-lifecycle.md)允许可追溯概览，不自动开展深入性格或动机分析。Q2 沿用此边界；[ADR-072](../adr/072-personal-memory-insights-without-action-guidance.md) 现已允许有依据的个人 L2/L3 推断并显式标注不确定性，本条仅保留讨论时序。
 - [ADR-011](../adr/011-automatic-relationship-memory-index.md)原定不固定全量加载普通联系人／本人记忆；[ADR-028](../adr/028-lexical-memory-recall-phase-1.md)规定生产词法检索和独立预算。用户在 Q5 选择 L3 背景及 L2 目录的分层加载，[ADR-067](../adr/067-layered-scenario-and-profile-context.md)为此提供明确的局部修订；L1 词法检索和原预算保持，新增层不能挤占或绕过它们。
 - [现行领域数据](../current/domain-data.md)、[核心流程](../current/core-flows.md)和[隐私删除](../current/privacy-deletion.md)将当前概览限定为无正文投影与底层导航。新增生成正文应使用明确的新对象及删除依赖，不直接向原投影追加正文。
 - 来源删除、人工纠错、范围隔离、时间状态和迟到结果复验继续适用。L2/L3 的正文、版本、缓存、任务产物及回复使用副本均须进入相应生命周期。
-- 当前默认自动采纳维度放行集合仍为空，见[默认值](../../backend/src/notalone/memory_extraction/dimensions.py)与[放行台账](../../docs/memory-adoption-dimension-release-ledger.md)。选择只整理已采纳记忆，意味着新的待确认候选不会自动进入 L2/L3。
+- 现行默认自动采纳按 [ADR-070](../adr/070-automatic-memory-maintenance.md)、[ADR-085](../adr/085-source-verified-automatic-adoption.md) 逐条来源与适用检查后自动裁决；“默认放行集合为空”是旧阶段状态，历史台账见[放行台账](../../docs/memory-adoption-dimension-release-ledger.md)。选择只整理已采纳记忆，意味着新的待确认候选不会自动进入 L2/L3。
 
 ## 完整链路
 
@@ -130,7 +130,7 @@
 
 ## 启用、查看与纠错
 
-在现有关系资料页增加“主题资料”和“长期背景”，产品文案不要求用户理解 L2/L3。首次选择要整理的联系人与是否包含本人，展示合格记忆数量、用途、既有模型接收范围及调用预算后开启；不会因新增联系人自动扩大整理范围，也不引入新供应商或新资料来源。
+在现有关系资料页增加“主题资料”和“长期背景”，产品文案不要求用户理解 L2/L3。首次选择要整理的联系人与是否包含本人，展示合格记忆数量、用途、既有模型接收范围及调用预算后开启（现行已按 [ADR-070](../adr/070-automatic-memory-maintenance.md) 默认维护，配置可用模型后自动启动，不要求先手动开启）；不会因新增联系人自动扩大整理范围，也不引入新供应商或新资料来源。
 
 | 操作 | 明确行为 |
 | --- | --- |

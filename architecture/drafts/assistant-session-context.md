@@ -4,10 +4,10 @@
 
 > 后续修订（2026-10-20）：主动收藏表达样本及其生成参考按 [ADR-082](../adr/082-retire-explicit-style-samples.md)退役；本文相关历史方案不再构成实施要求。当前意图优先、长期表达偏好及其他已采纳约束分别保留。
 
-> 2026-10-11 最新工作流状态：复审第三版已确认并发布13张独立任务，见[发布映射](../../.scratch/assistant-session-context/ticket-proposal.md)及对应planning；功能尚未实现。下文旧票数量和待确认语句保留为历史讨论。
+> 2026-10-11 工作流记录：复审第三版已确认并发布 13 张独立任务，见[发布映射](../../.scratch/assistant-session-context/ticket-proposal.md)及对应 planning；13 张任务已于 2026-10-12 全部 resolved。下文旧票数量和待确认语句保留为历史讨论。
 > 状态：产品讨论已收束并转为正式规格；本文件保留讨论记录。记录日期：2026-10-09；Q16–Q18 于 2026-10-11 确认。本文独立记录本轮已确认方向，从 Q1 编号；不续写或修改原有两条聊天辅助链路草图，不替代现行规格或 ADR，也不代表已实现。
 
-工作流进度见[对应功能目录](../../.scratch/assistant-session-context/planning.md)；[正式规格](../../.scratch/assistant-session-context/spec.md)及13张当前任务已发布，均未开工。
+工作流进度见[对应功能目录](../../.scratch/assistant-session-context/planning.md)；[正式规格](../../.scratch/assistant-session-context/spec.md)及 13 张当前任务已于 2026-10-12 全部 resolved，证据见 planning 与各票 Answer；本草图仅保留讨论记录。
 
 ## 讨论背景
 
@@ -83,7 +83,7 @@
 - 助手会话记录默认保留，直到用户主动删除，支持删除单段助手会话，便于未删除的讨论跨日继续。
 - 删除助手会话不连带删除独立的微信导入资料或关系记忆。
 - 删除来源资料时，必须清理助手会话中依赖该来源的内容；旧会话及其恢复路径不能重新带回已删除内容。
-- 本项确定产品保存与删除方向；具体来源依赖、删除执行及验证方式仍需后续规格落实，不代表当前已提供会话级删除能力。
+- 本项确定产品保存与删除方向；来源依赖、删除执行与验证已按正式规格落实（任务 07–19 于 2026-10-12 全部 resolved），原“尚未提供会话级删除能力”仅作历史。
 
 ### Q11：使用痕迹与关系记忆分开，经验沉淀仅作未来想法
 
@@ -151,8 +151,8 @@
 
 ## 工作流发布记录
 
-2026-10-11：用户确认 Q16–Q18 后，又确认测试接缝、六票粒度与依赖。已发布[正式 spec](../../.scratch/assistant-session-context/spec.md)、[六张任务](../../.scratch/assistant-session-context/planning.md)及 [ADR-042](../adr/042-assistant-session-context-boundary.md)。上文“待设计”表述保留讨论时序，后续实现范围以正式规格为准；产品尚未实现，OCR 仍暂停。
+2026-10-11：用户确认 Q16–Q18 后，又确认测试接缝、六票粒度（后续复审扩为 13 张）与依赖。已发布[正式 spec](../../.scratch/assistant-session-context/spec.md)、[六张任务](../../.scratch/assistant-session-context/planning.md)及 [ADR-042](../adr/042-assistant-session-context-boundary.md)。上文“待设计”表述保留讨论时序，后续实现范围以正式规格为准；本段状态为 2026-10-11 记录，13 张任务已于 2026-10-12 全部 resolved。
 
 ## 2026-10-11 复审补充：样本独立留存
 
-用户明确选择：删除助手会话独立保留已主动保存的表达样本，清除讨论与使用痕迹；删除样本或原始聊天来源仍清理相关派生内容。取舍和实现约束见[ADR-044](../adr/044-explicit-style-sample-retention.md)。本轮只记录决定并发布任务，没有执行数据删除或产品验收。
+用户明确选择：删除助手会话独立保留已主动保存的表达样本，清除讨论与使用痕迹；删除样本或原始聊天来源仍清理相关派生内容。取舍和实现约束见[ADR-044](../adr/044-explicit-style-sample-retention.md)；该独立留存方案已由 [ADR-082](../adr/082-retire-explicit-style-samples.md) 整体替代，本节仅历史。
