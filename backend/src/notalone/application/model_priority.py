@@ -34,19 +34,29 @@ class ModelWorkStopped(RuntimeError):
 
 
 class ModelPriorityControl:
-    """整次前台回复优先于尚未开始的一次后台物理请求。"""
+    """整次前台回复优先于尚未开始的后台物理请求；后台请求可有限并发。"""
 
-    def __init__(self) -> None:
+    def __init__(self, background_limit: int = 1) -> None:
+        """background_limit 为同时允许的在途后台物理调用数；默认 1 保持原串行许可。"""
+        if isinstance(background_limit, bool) or not isinstance(background_limit, int):
+            raise TypeError("后台并发上限必须是整数。")
+        if background_limit < 1:
+            raise ValueError("后台并发上限至少为 1。")
         self._condition = Condition()
         self._stopped = Event()
         self._reply_waiters = 0
         self._reply_active = False
-        self._background_active = False
+        self._background_active = 0
+        self._background_limit = background_limit
         self._background_scope = local()
 
     @property
     def stop_event(self) -> Event:
         return self._stopped
+
+    @property
+    def background_limit(self) -> int:
+        return self._background_limit
 
     def stop(self) -> None:
         with self._condition:
@@ -81,7 +91,7 @@ class ModelPriorityControl:
             self.check_running()
             self._reply_waiters += 1
             try:
-                while self._background_active or self._reply_active:
+                while self._background_active > 0 or self._reply_active:
                     self._condition.wait()
                     self.check_running()
                 self.check_running()
@@ -101,11 +111,15 @@ class ModelPriorityControl:
     def background_call(self) -> Iterator[None]:
         with self._condition:
             self.check_running()
-            while self._reply_waiters or self._reply_active or self._background_active:
+            # 前台登记或活跃时让路；在途后台数达到上限时等待空位。
+            while (
+                self._reply_waiters or self._reply_active
+                or self._background_active >= self._background_limit
+            ):
                 self._condition.wait()
                 self.check_running()
             self.check_running()
-            self._background_active = True
+            self._background_active += 1
         try:
             self._check_background_scope()
             self.check_running()
@@ -115,7 +129,7 @@ class ModelPriorityControl:
             self._check_background_scope()
         finally:
             with self._condition:
-                self._background_active = False
+                self._background_active -= 1
                 self._condition.notify_all()
 
     def wait_for_foreground(self) -> None:

@@ -1,7 +1,7 @@
 """公开运行时的请求交接；模型和时钟等待使用合成边界。"""
 
 from concurrent.futures import ThreadPoolExecutor
-from threading import Event
+from threading import Event, Lock
 from time import monotonic
 import unittest
 from unittest.mock import patch
@@ -327,3 +327,155 @@ class PhysicalModelSchedulingTest(unittest.TestCase):
             reply.result(timeout=1)
             self.assertEqual(extraction.result(timeout=1), ())
         self.assertEqual(model.requests, 2)
+
+    def test_background_limit_allows_three_inflight_and_queues_the_fourth(self):
+        control = ModelPriorityControl(background_limit=3)
+        entered = [Event() for _ in range(4)]
+        release = [Event() for _ in range(4)]
+        state_lock = Lock()
+        state = {'active': 0, 'peak': 0}
+
+        def call(index):
+            with control.background_call():
+                with state_lock:
+                    state['active'] += 1
+                    state['peak'] = max(state['peak'], state['active'])
+                entered[index].set()
+                try:
+                    if not release[index].wait(2):
+                        raise AssertionError('合成后台调用未释放。')
+                finally:
+                    with state_lock:
+                        state['active'] -= 1
+
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            inflight = [executor.submit(call, index) for index in range(3)]
+            for index in range(3):
+                self.assertTrue(entered[index].wait(1), f'第{index + 1}个后台调用应同时在途。')
+            fourth = executor.submit(call, 3)
+            try:
+                self.assertFalse(entered[3].wait(.05), '达到上限后第4个后台调用应等待。')
+                for index in range(3):
+                    release[index].set()
+                self.assertTrue(entered[3].wait(1), '释放许可后等待者应恢复。')
+            finally:
+                for flag in release:
+                    flag.set()
+            for future in [*inflight, fourth]:
+                future.result(timeout=1)
+        self.assertEqual(state['peak'], 3, '在途后台调用不得超过配置上限。')
+        self.assertEqual(control.background_limit, 3)
+
+    def test_foreground_does_not_preempt_inflight_but_blocks_new_background_calls(self):
+        control = ModelPriorityControl(background_limit=3)
+        inflight_entered, release_inflight = Event(), Event()
+        foreground_requested, foreground_entered = Event(), Event()
+        release_foreground, queued_entered = Event(), Event()
+
+        def inflight():
+            with control.background_call():
+                inflight_entered.set()
+                if not release_inflight.wait(2):
+                    raise AssertionError('合成在途后台调用未释放。')
+
+        def foreground():
+            foreground_requested.set()
+            with control.foreground():
+                foreground_entered.set()
+                if not release_foreground.wait(2):
+                    raise AssertionError('合成前台回复未释放。')
+
+        def queued():
+            with control.background_call():
+                queued_entered.set()
+
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            active = executor.submit(inflight)
+            self.assertTrue(inflight_entered.wait(1))
+            replying = executor.submit(foreground)
+            self.assertTrue(foreground_requested.wait(1))
+            self.assertFalse(foreground_entered.wait(.05), '前台须等待在途后台调用释放。')
+            waiting = executor.submit(queued)
+            try:
+                self.assertFalse(queued_entered.wait(.05), '前台等待期间不得开始新的后台调用。')
+                release_inflight.set()
+                self.assertTrue(foreground_entered.wait(1), '在途后台调用释放后前台进入。')
+                self.assertFalse(queued_entered.wait(.05), '前台活跃期间仍不得开始后台调用。')
+                release_foreground.set()
+                self.assertTrue(queued_entered.wait(1), '前台结束后等待的后台调用恢复。')
+            finally:
+                release_inflight.set()
+                release_foreground.set()
+            for future in (active, replying, waiting):
+                future.result(timeout=1)
+
+    def test_stop_wakes_all_waiters_and_rejects_new_calls(self):
+        control = ModelPriorityControl(background_limit=1)
+        active_entered, release_active = Event(), Event()
+
+        def active_call():
+            with control.background_call():
+                active_entered.set()
+                if not release_active.wait(2):
+                    raise AssertionError('合成在途后台调用未释放。')
+
+        def blocked_background():
+            with control.background_call():
+                raise AssertionError('停止后不应进入后台调用。')
+
+        def blocked_foreground():
+            with control.foreground():
+                raise AssertionError('停止后不应进入前台。')
+
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            active = executor.submit(active_call)
+            self.assertTrue(active_entered.wait(1))
+            waiters = [executor.submit(blocked_background) for _ in range(2)]
+            foreground_waiter = executor.submit(blocked_foreground)
+            try:
+                control.stop()
+                for future in [*waiters, foreground_waiter]:
+                    with self.assertRaises(ModelWorkStopped):
+                        future.result(timeout=1)
+            finally:
+                release_active.set()
+            with self.assertRaises(ModelWorkStopped):
+                active.result(timeout=1)
+        with self.assertRaises(ModelWorkStopped):
+            with control.background_call():
+                raise AssertionError('停止后新调用应立即失败。')
+        with self.assertRaises(ModelWorkStopped):
+            with control.foreground():
+                raise AssertionError('停止后新前台应立即失败。')
+
+    def test_default_background_limit_keeps_single_permit(self):
+        control = ModelPriorityControl()
+        self.assertEqual(control.background_limit, 1)
+        entered = [Event(), Event()]
+        release = [Event(), Event()]
+
+        def call(index):
+            with control.background_call():
+                entered[index].set()
+                if not release[index].wait(2):
+                    raise AssertionError('合成后台调用未释放。')
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            first = executor.submit(call, 0)
+            self.assertTrue(entered[0].wait(1))
+            second = executor.submit(call, 1)
+            try:
+                self.assertFalse(entered[1].wait(.05), '默认只允许一个后台调用在途。')
+                release[0].set()
+                self.assertTrue(entered[1].wait(1), '前一个调用释放后第二个恢复。')
+            finally:
+                release[0].set()
+                release[1].set()
+            first.result(timeout=1)
+            second.result(timeout=1)
+
+    def test_background_limit_rejects_invalid_values(self):
+        with self.assertRaises(ValueError):
+            ModelPriorityControl(background_limit=0)
+        with self.assertRaises(TypeError):
+            ModelPriorityControl(background_limit=True)
