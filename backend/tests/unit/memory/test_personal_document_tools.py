@@ -9,7 +9,7 @@ from uuid import UUID
 from langchain_core.messages import AIMessage
 
 from notalone.application.layered_memory_service import LayeredMemoryService
-from notalone.memory.layered import OrganizationBudget, OrganizationInput
+from notalone.memory.layered import OrganizationBudget, OrganizationInput, OrganizationBudgetExhausted
 from notalone.memory.organization_deadline import OrganizationCallDeadline
 from notalone.memory.organization_sdk import DeepSeekOrganizationProposal
 from notalone.memory.organization_isolation import isolate_proposal
@@ -118,6 +118,71 @@ class PersonalDocumentToolsTest(unittest.TestCase):
         self.assertEqual(checked['entries'][0]['basis'], self.entry['basis'])
         self.assertEqual(checked['entries'][0]['uncertainty'], self.entry['uncertainty'])
         self.assertEqual(json.loads(model.messages[0][1].content)['previous_profile'], existing)
+
+    def test_profile_last_round_valid_write_reaches_independent_verification(self):
+        document = render_profile({'entries': [self.entry]})
+
+        class LastRoundWriter:
+            calls = 0
+
+            def bind(self, **options):
+                return self
+
+            def invoke(self, messages):
+                self.calls += 1
+                args = {'path': 'profile.md'}
+                if self.calls == 5:
+                    args['content'] = document
+                return AIMessage(content='', tool_calls=[{'id': str(self.calls),
+                    'name': 'write' if self.calls == 5 else 'read', 'args': args}],
+                    response_metadata={'finish_reason': 'tool_calls'})
+
+        model = LastRoundWriter()
+        proposal = DeepSeekOrganizationProposal(model, layer='l3', budget=self.budget,
+            transport=None, personal=True, document_tools=True).propose(
+                memories=(self.memory,), scenarios=(), budget=self.budget,
+                deadline=OrganizationCallDeadline(time.monotonic() + 10))
+        self.assertEqual(model.calls, 5)
+        checked = validate_profile(proposal, (self.memory,), self.budget)
+        self.assertEqual(checked['entries'][0]['text'], self.entry['text'])
+
+    def test_profile_missing_metadata_feedback_identifies_entry_and_field(self):
+        incomplete = deepcopy(self.entry)
+        workspace = ProfileWorkspace({'entries': [incomplete]}, (), self.budget, personal=True)
+        document = render_profile({'entries': [incomplete]}).replace(
+            '"uncertainty": "没有直接确认偏好。", ', '')
+        feedback = workspace.execute('write', {'path': 'profile.md', 'content': document})
+        self.assertIn('工具错误', feedback)
+        self.assertIn('条目0', feedback)
+        self.assertIn('uncertainty', feedback)
+        self.assertIn('invalid_entry', workspace.compile()['entries'][0])
+
+    def test_profile_round_limit_does_not_submit_reads_or_failed_writes(self):
+        document = render_profile({'entries': [self.entry]})
+        for final in ('read', 'invalid_write', 'mixed_error'):
+            with self.subTest(final=final):
+                class Model:
+                    calls = 0
+
+                    def bind(self, **options):
+                        return self
+
+                    def invoke(self, messages):
+                        self.calls += 1
+                        calls = [{'id': str(self.calls), 'name': 'read', 'args': {'path': 'profile.md'}}]
+                        if self.calls == 5 and final != 'read':
+                            calls = [{'id': 'write', 'name': 'write', 'args': {'path': 'profile.md',
+                                'content': '# 非法格式' if final == 'invalid_write' else document}}]
+                            if final == 'mixed_error':
+                                calls.append({'id': 'bad_read', 'name': 'read', 'args': {'path': 'unknown.md'}})
+                        return AIMessage(content='', tool_calls=calls,
+                            response_metadata={'finish_reason': 'tool_calls'})
+
+                with self.assertRaises(OrganizationBudgetExhausted):
+                    DeepSeekOrganizationProposal(Model(), layer='l3', budget=self.budget,
+                        transport=None, personal=True, document_tools=True).propose(
+                            memories=(self.memory,), scenarios=(), budget=self.budget,
+                            deadline=OrganizationCallDeadline(time.monotonic() + 10))
 
     def test_unaffected_personal_profile_cannot_lose_classification(self):
         previous = {'entries': [self.entry]}

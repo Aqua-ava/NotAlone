@@ -362,6 +362,7 @@ def main():
                     last={'task':task,'state':state}
                     if task['status'] in {'failed','cancelled'}: break
                     if task['status']=='succeeded' and layer.get('status')=='failed': break
+                    if task['status']=='succeeded' and layer.get('status')=='paused' and layer.get('error_code'): break
                     if task['status']=='succeeded' and layer.get('eligible_count') == 0 and not layer.get('maintenance_pending'): break
                     if task['status']=='succeeded' and layer.get('status')=='ready' and not layer.get('maintenance_pending'): break
                     event.wait(.5)

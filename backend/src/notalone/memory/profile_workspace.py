@@ -55,7 +55,7 @@ class ProfileWorkspace:
             proposal = self.compile()
             invalid = next((entry for entry in proposal['entries'] if 'invalid_entry' in entry), None)
             if invalid is not None:
-                raise ValueError(invalid['reason'])
+                raise ValueError(f"画像条目{invalid['invalid_entry']}：{invalid['reason']}")
         except (ValueError, TypeError, KeyError) as error:
             return '工具错误：' + str(error) + ' 画像已暂存但格式无效，请修正后再结束；尚未发布。'
         return '已暂存画像，等待独立核验。'
@@ -67,16 +67,20 @@ class ProfileWorkspace:
         if body and not body.startswith('<!-- ENTRY '):
             raise ValueError('画像正文须从条目边界开始。')
         entries = []
-        for index, part in enumerate(re.split(r'(?m)(?=^<!-- ENTRY )', body)):
-            if not part.strip():
-                continue
+        for index, part in enumerate(part for part in re.split(r'(?m)(?=^<!-- ENTRY )', body) if part.strip()):
             try:
                 match = re.fullmatch(r'<!-- ENTRY ([^\n]*?) -->\n(.*)', part.strip(), re.S)
                 if not match or not match[2].strip():
                     raise ValueError('每条画像正文须绑定时间和来源元数据。')
                 meta = json.loads(match[1])
-                if not isinstance(meta, dict) or set(meta) - {'kind', 'section', 'basis'} != {'temporal_status', 'uncertainty', 'references'}:
+                if not isinstance(meta, dict):
                     raise ValueError('画像条目元数据无效。')
+                required = {'temporal_status', 'uncertainty', 'references'}
+                allowed = required | {'kind', 'section', 'basis'}
+                missing, unknown = required - set(meta), set(meta) - allowed
+                if missing or unknown:
+                    raise ValueError('画像元数据缺少字段：' + ','.join(sorted(missing))
+                        + '；未知字段：' + ','.join(sorted(unknown)) + '。uncertainty即使为空也必须填写。')
                 if self.personal and not {'kind', 'section', 'basis'} <= set(meta):
                     raise ValueError('每条个人画像必须填写kind、section和basis。')
                 entries.append({**meta, 'text': match[2].strip()})
@@ -125,7 +129,7 @@ path仅为索引中的单个xxx.md文件名或profile.md，禁止绝对路径、
 profile.md格式：# 长期背景，然后每条<!-- ENTRY {"temporal_status":"uncertain","uncertainty":"当前未核实","references":[{"memory_id":"实际ID","revision":1}]} -->换行完整正文。
 标题后的空行后直接开始ENTRY；章节只放在ENTRY的section元数据中，不在条目前后插入额外的##标题或说明段落。
 没有合格资料时保留标题和空正文。
-最多五轮；最终不调用工具表示提交完整画像给独立核验，不能执行系统命令或访问真实文件。'''
+最多五轮；最终不调用工具表示提交完整画像给独立核验，第五轮全部工具成功且写入完整合法画像时也会提交核验。不能执行系统命令或访问真实文件。'''
     if adapter.personal:
         from notalone.memory.personal_organization import POLICY, PROFILE_PROMPT
         prompt += PROFILE_PROMPT[len(POLICY):].split('输出{', 1)[0] + '\nENTRY元数据还必须包含kind、section、basis；事实/偏好/推断/矛盾分条，推断及矛盾使用uncertain并保留具体不确定性。'
@@ -153,10 +157,20 @@ profile.md格式：# 长期背景，然后每条<!-- ENTRY {"temporal_status":"u
             return workspace.compile()
         if len(response.tool_calls) > 8:
             raise ValueError('画像单轮工具数量超限。')
+        valid_write = False
+        tool_error = False
         for call in response.tool_calls:
             try:
                 result = workspace.execute(call['name'], call['args'])
             except ValueError as error:
                 result = '工具错误：' + str(error) + ' 请按完整documents索引及profile.md规则纠正。'
+            tool_error = tool_error or result.startswith('工具错误：')
+            valid_write = valid_write or (call['name'] in {'write', 'edit'} and not result.startswith('工具错误：'))
             messages.append(ToolMessage(content=result, tool_call_id=call['id']))
+    deadline.check()
+    if valid_write and not tool_error:
+        proposal = workspace.compile()
+        if not any('invalid_entry' in entry for entry in proposal['entries']):
+            # 轮数已用完的完整写入仍须经过服务原有的来源、逐命题和旧条目保全核验。
+            return proposal
     raise OrganizationBudgetExhausted()
