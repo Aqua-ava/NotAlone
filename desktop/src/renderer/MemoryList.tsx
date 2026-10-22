@@ -4,7 +4,7 @@ const pageSize = 6;
 
 // 只对当前分区分页，翻页不改动资料或检索范围。
 export function MemoryList<T>({ items, label, children, className = 'memory-cards', list = false }: {
-  items: readonly T[]; label: string; children: (item: T) => ReactNode; className?: string; list?: boolean;
+  items: readonly T[]; label: string; children: (item: T, index: number) => ReactNode; className?: string; list?: boolean;
 }) {
   const [requestedPage, setPage] = useState(0);
   const controls = useRef<HTMLElement>(null);

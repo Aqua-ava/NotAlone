@@ -135,3 +135,10 @@
   font-size: 0.85rem;
   color: var(--color-text-muted, #68787c);
 }
+
+/* 整理好的主题资料与长期背景接着记忆卡片下方展示，沿用同一行式列表。 */
+.memory-facts { display: grid; gap: 14px; }
+.layered-scenario + .layered-scenario { margin-top: 18px; padding-top: 16px; border-top: 1px solid #e1e3db; }
+.layered-scenario-title { margin: 0 0 6px; color: var(--panel-heading); font-size: 13px; font-weight: 500; }
+.layered-scenario > .memory-section-note { margin: 0; }
+.layered-scenario .memory-list { margin-top: 4px; }

@@ -6,6 +6,7 @@ import type { ContactSessionView } from './contact-session';
 import type { ManagerPage } from './pages';
 import './memory.css';
 import { MemoryList } from './MemoryList';
+import { LayeredMemorySections } from './LayeredMemorySections';
 import { memoryAvailability, memoryRemovalTarget } from './memory-availability';
 import type { LayeredMemoryManagementRequest, LayeredMemoryManagementOptions } from '../shared/memory-bridge';
 import { MemoryEvidence } from './MemoryEvidence';
@@ -355,7 +356,9 @@ export function MemoryPage({ session, navigate }: { session: ContactSessionView;
           <MemoryList key={scopeKey} items={state.contact.items.filter(entry => !(factTarget?.scope === scopeKey && factTarget.memoryId === entry.memoryId && factTarget.revision === entry.revision))} label="联系人记忆">{(entry) => <MemoryCard key={`${entry.memoryId}:${factTarget?.memoryId === entry.memoryId ? factTarget.editing : false}`} content={entry} memory={entry} removalTarget={memoryRemovalTarget(entry, state[entry.level].items)} sources={state.sources}
             initiallyEditing={factTarget?.scope === scopeKey && factTarget.memoryId === entry.memoryId && factTarget.revision === entry.revision && factTarget.editing}
             trace={trace} correct={memory.correct} remove={memory.remove} busy={state.mutation.phase === 'working'} />}</MemoryList>
-        </ReadingSection></div>}
+        </ReadingSection>
+          <LayeredMemorySections state={state.layeredMemory} />
+        </div>}
         {view === 'owner' && <ReadingSection title="我的记忆" note="" empty="还没有记住你和这位联系人交流中的事。"
           state={state.owner} retry={() => void memory.refresh('owner')}>
           <AdditionControl key={`owner:${scopeKey}`} level="owner" phase={state.mutation.phase} add={memory.add} />

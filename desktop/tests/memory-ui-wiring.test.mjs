@@ -50,5 +50,6 @@ test('记忆卡片不展示版本历史和详细元数据', () => {
 
 test('记忆页接线复用既有 preload 能力，不新增通道并保留 correctionTarget 依赖', () => {
   assert.match(pageSource, /layeredMemory\.value\?\.correctionTarget/, '必须保留既有纠错定位依赖');
+  assert.match(pageSource, /<LayeredMemorySections state=\{state\.layeredMemory\} \/>/, '联系人记忆下方须展示整理结果');
   assert.doesNotMatch(pageSource, /invoke\(/, 'renderer 不得直接新增 IPC 通道');
 });
