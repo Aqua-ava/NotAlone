@@ -143,14 +143,6 @@ class MemoryEvent:
         return result
 
 
-def event_meaning(event: MemoryEvent | None) -> tuple:
-    """只有独立核验的阶段和发生时段区分主张，结构刷新不产生新事件。"""
-    return (event.stage if event and event.stage_verified else EventStage.UNKNOWN,
-            event.occurrence_start if event and event.occurrence_verified else None,
-            event.occurrence_end if event and event.occurrence_verified else None,
-            event.occurrence_precision if event and event.occurrence_verified else "unknown")
-
-
 def _overlapping_positions(left: tuple[EventEvidence, ...], right: tuple[EventEvidence, ...]) -> bool:
     return any(a.message_id == b.message_id and max(a.char_start, b.char_start) < min(a.char_end, b.char_end)
                for a in left for b in right)

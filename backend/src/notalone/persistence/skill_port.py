@@ -73,7 +73,6 @@ WHERE skill.owner_id=%s AND (skill.contact_id IS NULL OR skill.contact_id=%s)
             OR publication.scope_kind='scene' AND publication.scene=%s)))
 """
 _VERSION_QUERY = _VERSION_COLUMNS + _VERSION_SCOPE
-_VERSION_CONTENT_QUERY = _VERSION_COLUMNS + ',version.content AS version_content\n' + _VERSION_SCOPE
 
 
 def _selected_projection(connection, scope, row, scene):
