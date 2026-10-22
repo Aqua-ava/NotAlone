@@ -9,9 +9,40 @@ from tests.unit.memory_extraction.verification_helpers import FixedSourceVerifie
 
 
 class TemporalPrecisionFlowTest(unittest.TestCase):
+    def test_historical_year_with_activity_and_date_only_proposal_keeps_source_offset(self):
+        outcome = self.run_case(
+            text='2024年实习期间每周三不能接电话。',
+            when='2026-10-22T09:00:00+08:00', expression='2024年实习期间',
+            precision='year', start='2024-01-01', end='2025-01-01')
+        self.assertEqual(len(outcome.accepted), 1)
+        event = outcome.accepted[0].event
+        self.assertEqual(event.occurrence_start.isoformat(), '2024-01-01T00:00:00+08:00')
+        self.assertEqual(event.occurrence_precision, 'year')
+        self.assertTrue(event.occurrence_verified)
+
+    def test_date_only_proposal_without_source_timezone_stays_unknown(self):
+        outcome = self.run_case(start='2030-02-01', end='2030-02-02', source_timezone=False,
+                                occurrence_verdict='uncertain')
+        self.assertEqual(len(outcome.accepted), 1)
+        event = outcome.accepted[0].event
+        self.assertIsNone(event.occurrence_start)
+        self.assertEqual(event.occurrence_precision, 'unknown')
+        self.assertFalse(event.occurrence_verified)
+
+    def test_activity_calendar_does_not_turn_after_year_or_partial_year_into_whole_year(self):
+        for expression in ('2024年以后实习期间', '2024年上半年实习期间', '2024年或2025年实习期间'):
+            with self.subTest(expression=expression):
+                outcome = self.run_case(
+                    text=expression+'不便通话。', expression=expression, precision='year',
+                    start='2024-01-01T00:00:00+08:00', end='2025-01-01T00:00:00+08:00')
+                self.assertEqual(len(outcome.accepted), 1)
+                self.assertFalse(outcome.accepted[0].event.occurrence_verified)
+                self.assertIsNone(outcome.accepted[0].event.occurrence_start)
+
     def run_case(self, *, text='明天去看展。', when='2030-01-31T23:30:00+08:00',
                  expression='明天', precision='day', start='2030-02-01T00:00:00+08:00',
-                 end='2030-02-02T00:00:00+08:00', source_timezone=True, validity=None):
+                 end='2030-02-02T00:00:00+08:00', source_timezone=True, validity=None,
+                 occurrence_verdict=None):
         mid = uuid4()
         actual = datetime.fromisoformat(when).astimezone(timezone.utc) if when else None
         snapshots = ({'source_ref_id': str(uuid4()), 'source_id': str(uuid4()),
@@ -27,7 +58,7 @@ class TemporalPrecisionFlowTest(unittest.TestCase):
         if validity is not None:
             fact.update(event=None, _requires_all_sources=True, category='recent_state', valid_at=validity[0], invalid_at=validity[1])
         result = verification_result(evidence=((mid,text),))
-        result['event_verification']={'stage_verdict':'supported','occurrence_verdict':'supported' if start else 'uncertain',
+        result['event_verification']={'stage_verdict':'supported','occurrence_verdict':occurrence_verdict or ('supported' if start else 'uncertain'),
             'stage_evidence':[pos],'occurrence_evidence':[pos]}
         if validity is not None:
             result.pop('event_verification')

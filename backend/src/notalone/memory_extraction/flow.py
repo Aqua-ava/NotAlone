@@ -142,7 +142,8 @@ class ExtractionFlow:
             candidate_trace_id = raw_trace_ids[index]
             parse_started_at = datetime.now(timezone.utc)
             try:
-                fact = _to_fact(payload)
+                from .event_calendar import source_grounded_event_proposal
+                fact = _to_fact(source_grounded_event_proposal(payload, window))
             except Exception as error:
                 record(
                     "parse",

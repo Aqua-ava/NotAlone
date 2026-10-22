@@ -71,7 +71,7 @@ class FidelityInputTests(unittest.TestCase):
             include_relationship_context=True,
         ))
         contract = payload["fidelity_contract"]
-        self.assertEqual(contract["version"], "fidelity-v1")
+        self.assertEqual(contract["version"], "fidelity-v2")
         self.assertEqual(contract["current_intent"], {"source": "draft_text", "text": "今晚不参加。"})
         self.assertEqual(contract["instruction_scope"], "expression_only")
         self.assertEqual(contract["priority"][0], "current_explicit_intent")

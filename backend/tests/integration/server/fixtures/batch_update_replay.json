@@ -1,0 +1,429 @@
+{
+  "initial": [
+    "我的生日是5月8日。",
+    "我平时最喜欢喝乌龙茶，日常一般都选乌龙茶。"
+  ],
+  "updated": [
+    "更正一下，我的生日是5月18日，不是5月8日。",
+    "我的日常口味改了：以后喝红茶，不再选乌龙茶。但晚上我不喝含咖啡因的饮料。"
+  ],
+  "steps": [
+    {
+      "name": "DirectMemoryExtractionOutput",
+      "arguments": {
+        "scenes": [
+          {
+            "scene_name": "生日和饮品",
+            "memories": [
+              {
+                "text": "联系人的生日是5月8日。",
+                "category": "common_fact",
+                "subject": "contact",
+                "topic": "other",
+                "source_message_ids": [
+                  "d43ee464-1db3-4a6e-afe4-ccfb8133e1ae"
+                ],
+                "confidence": 0.95,
+                "risk_flags": [],
+                "valid_at": null,
+                "invalid_at": null,
+                "speech_act": "assertion",
+                "assertion_status": "asserted",
+                "figurative_type": "literal",
+                "alternatives": [],
+                "interpretation_reason": "联系人直接陈述自己的生日日期。",
+                "event": null,
+                "conditions": null
+              },
+              {
+                "text": "联系人平时最喜欢喝乌龙茶，日常一般都选乌龙茶。",
+                "category": "preference",
+                "subject": "contact",
+                "topic": "other",
+                "source_message_ids": [
+                  "3c93ac68-51aa-48a1-a734-6c2056defeac"
+                ],
+                "confidence": 0.95,
+                "risk_flags": [],
+                "valid_at": null,
+                "invalid_at": null,
+                "speech_act": "assertion",
+                "assertion_status": "asserted",
+                "figurative_type": "literal",
+                "alternatives": [],
+                "interpretation_reason": "联系人自述平时和日常的饮茶偏好。",
+                "event": null,
+                "conditions": null
+              }
+            ]
+          }
+        ]
+      },
+      "old_message_ids": {
+        "我的生日是5月8日。": "d43ee464-1db3-4a6e-afe4-ccfb8133e1ae",
+        "2024年实习期间，我每周三都不能接电话。实习去年就结束了，结束后周三能不能接电话，我还没有说过。": "38720be3-348f-48cd-b4f7-e8478198343f",
+        "我平时最喜欢喝乌龙茶，日常一般都选乌龙茶。": "3c93ac68-51aa-48a1-a734-6c2056defeac",
+        "我妹妹喜欢攀岩，我自己不玩攀岩。": "c6e64969-19c4-4861-83b7-a328c83e0deb",
+        "你说的是平时都不吃辣，还是只有周末在家吃饭时不吃辣？": "20427f73-2c20-4173-921d-8044a66dbb2b",
+        "后者，其他时候我没说过。": "4ad26f58-d1a5-4777-886f-82751f3da611",
+        "收到。": "acc3d2de-924f-4c9d-8f67-fe3cdc2cc294"
+      }
+    },
+    {
+      "name": "SourceVerificationOutput",
+      "arguments": {
+        "results": [
+          {
+            "candidate_index": 0,
+            "verdict": "supported",
+            "issues": [],
+            "evidence": [
+              {
+                "message_id": "d43ee464-1db3-4a6e-afe4-ccfb8133e1ae",
+                "quote": "我的生日是5月8日"
+              }
+            ],
+            "condition_verification": null,
+            "event_verification": null
+          },
+          {
+            "candidate_index": 1,
+            "verdict": "supported",
+            "issues": [],
+            "evidence": [
+              {
+                "message_id": "3c93ac68-51aa-48a1-a734-6c2056defeac",
+                "quote": "我平时最喜欢喝乌龙茶，日常一般都选乌龙茶"
+              }
+            ],
+            "condition_verification": null,
+            "event_verification": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "BatchMemoryAdjudicationOutput",
+      "arguments": {
+        "decisions": [
+          {
+            "candidate_index": 0,
+            "action": "add",
+            "relation": null,
+            "replaced_memory_id": null,
+            "merged_memory_ids": [],
+            "merged_text": null,
+            "duplicate_memory_id": null
+          },
+          {
+            "candidate_index": 1,
+            "action": "add",
+            "relation": null,
+            "replaced_memory_id": null,
+            "merged_memory_ids": [],
+            "merged_text": null,
+            "duplicate_memory_id": null
+          }
+        ]
+      },
+      "old_memory_ids": {}
+    },
+    {
+      "name": "DirectMemoryExtractionOutput",
+      "arguments": {
+        "scenes": [
+          {
+            "scene_name": "联系人的生日更正与饮品口味",
+            "memories": [
+              {
+                "text": "联系人的生日是5月18日，不是此前说的5月8日。",
+                "category": "common_fact",
+                "subject": "contact",
+                "topic": "other",
+                "source_message_ids": [
+                  "c0f46ddf-ac25-4294-9b11-cabf59e4e137"
+                ],
+                "confidence": 0.95,
+                "risk_flags": [],
+                "valid_at": null,
+                "invalid_at": null,
+                "speech_act": "correction",
+                "assertion_status": "asserted",
+                "figurative_type": "literal",
+                "alternatives": [],
+                "interpretation_reason": "联系人明确更正生日日期为5月18日而非5月8日。",
+                "event": null,
+                "conditions": null
+              },
+              {
+                "text": "联系人的日常口味改为喝红茶，不再选乌龙茶。",
+                "category": "preference",
+                "subject": "contact",
+                "topic": "other",
+                "source_message_ids": [
+                  "3c672044-2ec3-465f-af00-7ca9cd78f77f"
+                ],
+                "confidence": 0.9,
+                "risk_flags": [],
+                "valid_at": null,
+                "invalid_at": null,
+                "speech_act": "assertion",
+                "assertion_status": "asserted",
+                "figurative_type": "literal",
+                "alternatives": [],
+                "interpretation_reason": "原话用“以后”说明口味更改，但未给出实际起始日期。",
+                "event": null,
+                "conditions": null
+              },
+              {
+                "text": "联系人晚上不喝含咖啡因的饮料。",
+                "category": "preference",
+                "subject": "contact",
+                "topic": "health",
+                "source_message_ids": [
+                  "3c672044-2ec3-465f-af00-7ca9cd78f77f"
+                ],
+                "confidence": 0.9,
+                "risk_flags": [],
+                "valid_at": null,
+                "invalid_at": null,
+                "speech_act": "assertion",
+                "assertion_status": "asserted",
+                "figurative_type": "literal",
+                "alternatives": [],
+                "interpretation_reason": "原话明确只在晚上不喝含咖啡因饮料。",
+                "event": null,
+                "conditions": {
+                  "version": 1,
+                  "items": [
+                    {
+                      "text": "晚上",
+                      "evidence": [
+                        {
+                          "message_id": "3c672044-2ec3-465f-af00-7ca9cd78f77f",
+                          "char_start": 30,
+                          "char_end": 33
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "old_message_ids": {
+        "更正一下，我的生日是5月18日，不是5月8日。": "c0f46ddf-ac25-4294-9b11-cabf59e4e137",
+        "我的日常口味改了：以后喝红茶，不再选乌龙茶。但晚上我不喝含咖啡因的饮料。": "3c672044-2ec3-465f-af00-7ca9cd78f77f",
+        "收到。": "1b03e09e-3c1c-496e-a251-1eb279ce5616"
+      }
+    },
+    {
+      "name": "SourceVerificationOutput",
+      "arguments": {
+        "results": [
+          {
+            "candidate_index": 0,
+            "verdict": "supported",
+            "issues": [],
+            "evidence": [
+              {
+                "message_id": "c0f46ddf-ac25-4294-9b11-cabf59e4e137",
+                "quote": "更正一下，我的生日是5月18日，不是5月8日。"
+              }
+            ]
+          },
+          {
+            "candidate_index": 1,
+            "verdict": "supported",
+            "issues": [],
+            "evidence": [
+              {
+                "message_id": "3c672044-2ec3-465f-af00-7ca9cd78f77f",
+                "quote": "我的日常口味改了：以后喝红茶，不再选乌龙茶。"
+              }
+            ]
+          },
+          {
+            "candidate_index": 2,
+            "verdict": "supported",
+            "issues": [],
+            "evidence": [
+              {
+                "message_id": "3c672044-2ec3-465f-af00-7ca9cd78f77f",
+                "quote": "但晚上我不喝含咖啡因的饮料。"
+              }
+            ],
+            "condition_verification": [
+              {
+                "index": 0,
+                "verdict": "supported",
+                "evidence": [
+                  {
+                    "message_id": "3c672044-2ec3-465f-af00-7ca9cd78f77f",
+                    "char_start": 23,
+                    "char_end": 25
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "BatchMemoryAdjudicationOutput",
+      "arguments": {
+        "decisions": [
+          {
+            "candidate_index": 0,
+            "relation": {
+              "kind": "error_correction",
+              "explanation": "联系人明确更正生日：新表述『我的生日是5月18日，不是5月8日』直接否定了旧记忆『联系人的生日是5月8日。』，属同一事实的纠错，旧记忆应被取代。",
+              "related_memory_ids": [
+                "b14768a1-9f07-45c7-8214-1b5cd0849e72"
+              ],
+              "evidence": [
+                {
+                  "message_id": "c0f46ddf-ac25-4294-9b11-cabf59e4e137",
+                  "quote": "更正一下，我的生日是5月18日，不是5月8日。"
+                },
+                {
+                  "message_id": "d43ee464-1db3-4a6e-afe4-ccfb8133e1ae",
+                  "quote": "我的生日是5月8日。"
+                }
+              ],
+              "claim_changed": true,
+              "condition_changed": false
+            },
+            "action": "update",
+            "replaced_memory_id": "b14768a1-9f07-45c7-8214-1b5cd0849e72",
+            "merged_memory_ids": [],
+            "merged_text": null,
+            "duplicate_memory_id": null
+          },
+          {
+            "candidate_index": 1,
+            "relation": {
+              "kind": "state_change",
+              "explanation": "联系人自述『我的日常口味改了：以后喝红茶，不再选乌龙茶。』，是对旧记忆『我平时最喜欢喝乌龙茶，日常一般都选乌龙茶。』的偏好变更，新表述取代旧偏好。",
+              "related_memory_ids": [
+                "979d342d-2d1b-462b-9fe1-1a59515426c0"
+              ],
+              "evidence": [
+                {
+                  "message_id": "3c672044-2ec3-465f-af00-7ca9cd78f77f",
+                  "quote": "我的日常口味改了：以后喝红茶，不再选乌龙茶。"
+                },
+                {
+                  "message_id": "3c93ac68-51aa-48a1-a734-6c2056defeac",
+                  "quote": "我平时最喜欢喝乌龙茶，日常一般都选乌龙茶。"
+                }
+              ],
+              "claim_changed": true,
+              "condition_changed": false
+            },
+            "action": "update",
+            "replaced_memory_id": "979d342d-2d1b-462b-9fe1-1a59515426c0",
+            "merged_memory_ids": [],
+            "merged_text": null,
+            "duplicate_memory_id": null
+          },
+          {
+            "candidate_index": 2,
+            "relation": {
+              "kind": "supplement",
+              "explanation": "『但晚上我不喝含咖啡因的饮料。』是关于饮品习惯的带条件新增事实（条件为『晚上』），与旧记忆『我平时最喜欢喝乌龙茶，日常一般都选乌龙茶。』属同一主题但不同事实，不取代也不等价，两条都应保留。",
+              "related_memory_ids": [
+                "979d342d-2d1b-462b-9fe1-1a59515426c0"
+              ],
+              "evidence": [
+                {
+                  "message_id": "3c672044-2ec3-465f-af00-7ca9cd78f77f",
+                  "quote": "但晚上我不喝含咖啡因的饮料。"
+                },
+                {
+                  "message_id": "3c93ac68-51aa-48a1-a734-6c2056defeac",
+                  "quote": "我平时最喜欢喝乌龙茶，日常一般都选乌龙茶。"
+                }
+              ],
+              "claim_changed": false,
+              "condition_changed": false
+            },
+            "action": "keep",
+            "replaced_memory_id": null,
+            "merged_memory_ids": [],
+            "merged_text": null,
+            "duplicate_memory_id": null
+          }
+        ]
+      },
+      "old_memory_ids": {
+        "联系人的生日是5月8日。": "b14768a1-9f07-45c7-8214-1b5cd0849e72",
+        "联系人的实习去年（2025年）已经结束，结束后周三能不能接电话他还没有说过，不能按现在仍不能接电话理解。": "ef308900-4c9d-43d9-bd31-ce34b8a14b27",
+        "联系人的妹妹喜欢攀岩，联系人本人不玩攀岩。": "d4a940e2-4bf8-4265-9340-b48805370b68",
+        "联系人只有周末在家吃饭时不吃辣，其他时候是否吃辣他没有说过。": "cf84ead7-cd92-4a19-b268-3e06bec03f5b",
+        "联系人平时最喜欢喝乌龙茶，日常一般都选乌龙茶。": "979d342d-2d1b-462b-9fe1-1a59515426c0"
+      }
+    },
+    {
+      "name": "MemoryRelationVerificationOutput",
+      "arguments": {
+        "results": [
+          {
+            "candidate_index": 0,
+            "verdict": "supported",
+            "same_subject_and_matter": true,
+            "claim_changed": true,
+            "condition_changed": false,
+            "evidence": [
+              {
+                "message_id": "c0f46ddf-ac25-4294-9b11-cabf59e4e137",
+                "quote": "更正一下，我的生日是5月18日，不是5月8日。"
+              },
+              {
+                "message_id": "d43ee464-1db3-4a6e-afe4-ccfb8133e1ae",
+                "quote": "我的生日是5月8日。"
+              }
+            ]
+          },
+          {
+            "candidate_index": 1,
+            "verdict": "supported",
+            "same_subject_and_matter": true,
+            "claim_changed": true,
+            "condition_changed": false,
+            "evidence": [
+              {
+                "message_id": "3c672044-2ec3-465f-af00-7ca9cd78f77f",
+                "quote": "我的日常口味改了：以后喝红茶，不再选乌龙茶。"
+              },
+              {
+                "message_id": "3c93ac68-51aa-48a1-a734-6c2056defeac",
+                "quote": "我平时最喜欢喝乌龙茶，日常一般都选乌龙茶。"
+              }
+            ]
+          },
+          {
+            "candidate_index": 2,
+            "verdict": "supported",
+            "same_subject_and_matter": true,
+            "claim_changed": false,
+            "condition_changed": false,
+            "evidence": [
+              {
+                "message_id": "3c672044-2ec3-465f-af00-7ca9cd78f77f",
+                "quote": "但晚上我不喝含咖啡因的饮料。"
+              },
+              {
+                "message_id": "3c93ac68-51aa-48a1-a734-6c2056defeac",
+                "quote": "我平时最喜欢喝乌龙茶，日常一般都选乌龙茶。"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

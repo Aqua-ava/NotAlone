@@ -13,6 +13,33 @@ def source_calendar_time(message: MessageRef) -> datetime | None:
     return bounded_source_occurred_at(message)
 
 
+def source_grounded_event_proposal(payload: dict, window: ExtractionWindow) -> dict:
+    """模型日期缺偏移时仅使用合法来源的当地偏移，未知则保留未知。"""
+    if not isinstance(payload, dict):
+        return payload
+    event = payload.get('event')
+    if not isinstance(event, dict) or event.get('version') != 2:
+        return payload
+    anchor = event.get('anchor_message_id')
+    source_ids = payload.get('source_message_ids', ())
+    message = next((item for item in window.messages
+                    if str(item.message_id) == anchor and anchor in source_ids), None)
+    actual = source_calendar_time(message) if message is not None else None
+    changed = {}
+    for key in ('occurrence_start', 'occurrence_end'):
+        raw = event.get(key)
+        if not isinstance(raw, str):
+            continue
+        value = datetime.fromisoformat(raw)
+        if value.utcoffset() is None:
+            changed[key] = value.replace(tzinfo=actual.tzinfo).isoformat() if actual else None
+    if not changed:
+        return payload
+    if actual is None:
+        changed.update(occurrence_start=None, occurrence_end=None, occurrence_precision='unknown')
+    return {**payload, 'event': {**event, **changed}}
+
+
 def checked_event_calendar(event: MemoryEvent, messages: Mapping[UUID, MessageRef],
                            source_ids: tuple[UUID, ...]) -> MemoryEvent:
     if event.version == 1:
@@ -70,6 +97,12 @@ def _calendar(expression: str, anchor: datetime | None) -> tuple[str, datetime, 
                 return first[0], first[1], end
     if anchor is None:
         return None
+    # 活动限定不改变明确日期的精度；前后、范围、半年度等不能按整期解释。
+    bounded_activity = re.fullmatch(
+        r'(\d{4}年(?:\d{1,2}月(?:\d{1,2}日)?)?)(?:的)?'
+        r'[^\d年月日周季旬前后至到起从或初末半上下约不没未无，。；]{1,24}期间', expression)
+    if bounded_activity:
+        return _calendar(bounded_activity[1], anchor)
     day = anchor.replace(hour=0, minute=0, second=0, microsecond=0)
     relative_clock = re.fullmatch(r"(前天|昨天|今天|明天|后天)(?:上午|下午|晚上)?(\d{1,2})(?:[:：]|点)(\d{2})?(?:分)?", expression)
     if relative_clock:

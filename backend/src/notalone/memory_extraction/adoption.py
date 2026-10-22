@@ -163,6 +163,12 @@ class MemoryAdoption:
         self._existing_candidates = {item.candidate_id for item in self._memory_port.list_pending_candidates(scope)} if self._automatic else set()
         try:
             stats = self._adopt(scope, outcome)
+        except (DimensionEvidenceChangedError, MemoryCorrectionConflictError, MemoryVersionConflict) as error:
+            if not self._automatic:
+                raise
+            record('candidate_result', {'disposition': 'retry_parent_or_source_changed',
+                                        'error_code': type(error).__name__}, status='rejected')
+            raise ExtractionRuntimeError('来源或关系父版本已变化，本批保留待重新裁决。') from error
         finally:
             if self._automatic:
                 for candidate in self._memory_port.list_pending_candidates(scope):
@@ -213,7 +219,12 @@ class MemoryAdoption:
         skipped_changed = 0
         original_memory_ids = {item.memory_id for item in (*contact_pool, *owner_pool)}
         batch_plan = self._batch_plan(scope, outcome.accepted, contact_pool, owner_pool, deleted)
-        for index, fact in enumerate(outcome.accepted):
+        # 补充仍须按冻结父版本写入；先完成非替代动作，再使父版本退役。
+        consumes_parent = {index for index, (_, decision, _) in batch_plan.items()
+                           if decision is not None and decision.action in {
+                               AdjudicationAction.UPDATE, AdjudicationAction.MERGE}}
+        for index in sorted(range(len(outcome.accepted)), key=lambda index: index in consumes_parent):
+            fact = outcome.accepted[index]
             trace = current_trace()
             if trace is not None:
                 trace.candidate_trace_id = (

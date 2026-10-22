@@ -612,6 +612,25 @@ if __name__ == "__main__":
 
 
 class AutomaticMemoryAdoptionTest(unittest.TestCase):
+    def test_concurrent_parent_change_retries_automatic_batch_without_bypassing_store(self):
+        from notalone.memory.correction import MemoryCorrectionConflictError
+        from notalone.memory_extraction.errors import ExtractionRuntimeError
+
+        class ChangedParentStore(InMemoryMemoryStore):
+            def create_candidate(self, candidate):
+                raise MemoryCorrectionConflictError('关联版本已变化。')
+
+        scope = ContactScope(OWNER_ID, CONTACT_ID)
+        for automatic, expected in ((True, ExtractionRuntimeError), (False, MemoryCorrectionConflictError)):
+            with self.subTest(automatic=automatic):
+                store = ChangedParentStore()
+                adoption = MemoryAdoption(memory_port=store, automatic=automatic,
+                    dimension_release=DimensionRelease(gate_enabled=False))
+                with self.assertRaises(expected):
+                    adoption.adopt(scope, ExtractionOutcome(accepted=(_fact(),)))
+                self.assertEqual(store.list_confirmed(scope), ())
+                self.assertEqual(store.list_pending_candidates(scope), ())
+
     def test_verified_policy_does_not_turn_low_confidence_into_manual_work(self):
         scope = ContactScope(OWNER_ID, CONTACT_ID)
         store = InMemoryMemoryStore()
