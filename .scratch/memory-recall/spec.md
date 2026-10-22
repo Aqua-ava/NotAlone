@@ -1,7 +1,7 @@
 # 记忆召回第一期规格（v1）
 
 > Triage: ready-for-agent
-> 来源：2026-09-17 三轮 grilling 决定，用户逐项确认；正式决定见 ADR-028 与 `architecture/drafts/recall-phase-1.md`。
+> 来源：2026-09-17 三轮 grilling 决定，用户逐项确认；正式决定见 ADR-028 与 `architecture/drafts/archive/recall-phase-1.md`。
 > 范围：回复上下文按当前正文做确定性中文词法召回，联系人记忆与本人记忆独立双预算；不含向量检索、LLM 查询计划、待确认候选注入与界面改动。
 
 ## Problem Statement
@@ -51,7 +51,7 @@
 12. **数据库**：回复证据表的 `kind` 约束需要迁移放行 `owner_memory`（下一个迁移编号 033）。
 13. **评测门槛**：新建合成中文召回评测，复用真实评分器与真实上下文组装，纯离线运行、无需模型凭据；每维度至少 15 条用例：直述命中 top-5 ≥ 90%、改写命中 ≥ 60%、无关拒绝误注入 0、跨联系人泄漏 0、失效或删除注入 0、预算超限 0 且双预算独立、排序优先级正确率 ≥ 90%。
 14. **参数固化**：阈值、双预算与 query 上限为模块常量，不做运行时或环境变量配置；标定结果与版本写入 `docs/memory-recall-evaluation-baseline.md`。
-15. **领域文档**：`CONTEXT.md` 已补充"本人记忆"并修订"回复上下文"范围；ADR-028 与草案 `architecture/drafts/recall-phase-1.md` 记录完整取舍；实现完成后回填 `architecture/current/`。
+15. **领域文档**：`CONTEXT.md` 已补充"本人记忆"并修订"回复上下文"范围；ADR-028 与草案 `architecture/drafts/archive/recall-phase-1.md` 记录完整取舍；实现完成后回填 `architecture/current/`。
 
 ## Testing Decisions
 

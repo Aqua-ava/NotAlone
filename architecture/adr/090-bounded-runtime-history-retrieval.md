@@ -14,6 +14,6 @@ ADR-012 的“Runtime 初期不直接调用动态检索 Tool”与后续上下�
 
 ## 替代范围与验证限制
 
-局部替代 ADR-012 第 4 条的初期动态检索禁令及[旧模块草案](../drafts/reply-module-structure.md)的笼统“不直接查询”要求；保留模块职责和应用层范围控制。允许范围仅为已有受控只读能力，不因此批准时间、日历、网络、Shell、任意文件或写入工具；这些能力各自的设计状态不由本决定改变。既有 Skill 与分层资料读取继续遵循其独立规则。
+局部替代 ADR-012 第 4 条的初期动态检索禁令及[旧模块草案](../drafts/archive/reply-module-structure.md)的笼统“不直接查询”要求；保留模块职责和应用层范围控制。允许范围仅为已有受控只读能力，不因此批准时间、日历、网络、Shell、任意文件或写入工具；这些能力各自的设计状态不由本决定改变。既有 Skill 与分层资料读取继续遵循其独立规则。
 
 实现依据为[生产装配](../../backend/src/notalone/reply/adapters/langchain_runtime.py)、[历史工具边界](../../backend/src/notalone/reply/tools.py)和[上下文资格](../../backend/src/notalone/reply/context.py)，原功能规格见[记忆与 Skill 上下文](../../.scratch/memory-skill-context/spec.md)。本次仅统一文档，未改代码、同步授权、运行配置或业务数据，不据此宣称本轮已做真实模型或端到端验收。

@@ -1,6 +1,8 @@
 # 官网视觉方向记录
 
-> 状态：历史探索记录；[官网任务](../../.scratch/notalone-website/spec.md)已于 2026-10-04 关闭。本文的早期布局和材质设想由后续规格与原型覆盖，不作为未完成设计入口；实际页面见 `website/`，部署记录见[官网说明](../../website/README.md)，不代表完整桌面产品已验收。
+> 状态：历史探索记录；[官网任务](../../../.scratch/notalone-website/spec.md)已于 2026-10-04 关闭。本文的早期布局和材质设想由后续规格与原型覆盖，不作为未完成设计入口；实际页面见 `website/`，部署记录见[官网说明](../../../website/README.md)，不代表完整桌面产品已验收。
+
+> 2026-10-22 归档：官网任务已关闭，本文移入 `drafts/archive/` 仅作历史追溯，不作为设计入口。
 
 早期官网探索采用“冷灰产品展台”方向：以 Claude 的安静文字宣言和产品展示布局为骨架，以 Teenage Engineering 的大型产品物件与工业目录感建立页面节奏，以 Kimi K3 的工程线、节点、测量和实验材料作为独特视觉资产。Physical Intelligence 只提供浅色、安静、留白充足的背景参考；Google DeepMind、Special Projects、Bureau Cool 的媒体轮播、作品集拼贴和实验型导航不纳入当时的方向。
 

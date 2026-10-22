@@ -1,11 +1,13 @@
 # 候选回复模块结构草案
 
-> 2026-10-21 决定收敛：旧两模式、先方向确认及探索不使用 Skill 的设计按 ADR-079／043 解释为历史。Runtime 按需只读补查已由 [ADR-090](../adr/090-bounded-runtime-history-retrieval.md)正式确认；本草案的旧结构图不是当前完整实现图。
+> 2026-10-21 决定收敛：旧两模式、先方向确认及探索不使用 Skill 的设计按 ADR-079／043 解释为历史。Runtime 按需只读补查已由 [ADR-090](../../adr/090-bounded-runtime-history-retrieval.md)正式确认；本草案的旧结构图不是当前完整实现图。
 
 > 状态：已收束；正式决定见 ADR-012
 > 日期：2026-08-21
 >
-> 本文记录设计定稿时的模块关系；对应[实现规格](../../.scratch/reply-module-flow/spec.md)及 8 张任务已关闭。本文不是新的待实现入口，也不证明真实微信或最终原生 App 已验收。
+> 本文记录设计定稿时的模块关系；对应[实现规格](../../../.scratch/reply-module-flow/spec.md)及 8 张任务已关闭。本文不是新的待实现入口，也不证明真实微信或最终原生 App 已验收。
+
+> 2026-10-22 归档：本文已收束（ADR-012），移入 `drafts/archive/` 仅作追溯，不作为设计入口。
 
 ## 1. 总体关系
 
@@ -40,7 +42,7 @@ Context 决定本次回复让模型看到哪些资料，并输出统一的 `Repl
 
 Runtime 根据 `ReplyContext` 生成结构化候选。
 
-- 通过应用层装配的受控只读工具，按 [ADR-090](../adr/090-bounded-runtime-history-retrieval.md)在本次范围与预算内补查历史；不直接访问任意存储、不跨联系人、不写入资料。
+- 通过应用层装配的受控只读工具，按 [ADR-090](../../adr/090-bounded-runtime-history-retrieval.md)在本次范围与预算内补查历史；不直接访问任意存储、不跨联系人、不写入资料。
 - 通过 `SkillPort` 按需读取最多一个 Reply Skill。
 - LangChain、Deep Agents 和模型供应商属于 Runtime 的 Adapter。
 - 返回候选、依据、引用、风险说明和实际使用的 Skill。

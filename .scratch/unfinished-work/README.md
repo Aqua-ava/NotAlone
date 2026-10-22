@@ -104,7 +104,7 @@
 | M | [微信媒体提取规格](../wechat-media-extraction/spec.md) | 需求已确认，未切正式实现票 | 联系人/消息到资源的唯一关联、缓存/删除、图片/视频、SILK→WAV、手动入口；**不包括ASR** |
 | W | Windows微信适配 | [README](../../README.md)明确未实现 | 尚无可执行规格与任务，先确定平台范围与验证环境 |
 
-不重复计入未完成草图：[召回一期](../../architecture/drafts/recall-phase-1.md)、[回复模块结构](../../architecture/drafts/reply-module-structure.md)、[官网视觉](../../architecture/drafts/website-visual-direction.md)已收束或转为历史参考；桌面A/B/C原型已有Mac规格以A为实现起点，不重新添加“选择样式”的阻塞。架构drawio是关系图，不是另一张未完成功能票。
+不重复计入未完成草图：[召回一期](../../architecture/drafts/archive/recall-phase-1.md)、[回复模块结构](../../architecture/drafts/archive/reply-module-structure.md)、[官网视觉](../../architecture/drafts/archive/website-visual-direction.md)已收束或转为历史参考；桌面A/B/C原型已有Mac规格以A为实现起点，不重新添加“选择样式”的阻塞。架构drawio是关系图，不是另一张未完成功能票。
 
 ## 哪些可以并行
 
