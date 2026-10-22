@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from threading import Lock
-from typing import Any
+from typing import Any, Mapping
 from uuid import UUID
 
 from psycopg.rows import dict_row
@@ -143,25 +143,41 @@ def _skill_id_from_relative(relative_path: Any) -> UUID | None:
         return None
 
 
-def _cleanup_skill_id(connection: Any, relative_path: Any) -> UUID | None:
-    """清理队列项可能是工作目录 `<owner>/<name>`；用库映射补回技能身份。"""
+def _cleanup_skill_ids(connection: Any, rows: list[Mapping[str, Any]]) -> dict[str, UUID]:
+    """一次性解析清理队列项的技能身份，供失败归因与成功清障复用。
 
-    skill_id = _skill_id_from_relative(relative_path)
-    if skill_id is not None:
-        return skill_id
-    owner = _owner_from_relative(relative_path)
-    if owner is None or not isinstance(relative_path, str):
-        return None
-    parts = PurePosixPath(relative_path).parts
-    if len(parts) != 2:
-        return None
-    row = connection.execute(
-        "SELECT id FROM public.reply_skill WHERE owner_id=%s AND name=%s",
-        (owner, parts[1]),
-    ).fetchone()
-    if row is None:
-        return None
-    return row["id"] if isinstance(row, dict) else row[0]
+    受控路径自带技能身份时直接解析；工作目录 `<owner>/<name>` 只在这里
+    用一次库查询补齐，循环内与异常处理路径不再查库。
+    """
+
+    resolved: dict[str, UUID] = {}
+    workdir_names: dict[UUID, set[str]] = {}
+    for row in rows:
+        relative_path = row.get("relative_path")
+        skill_id = _skill_id_from_relative(relative_path)
+        if skill_id is not None:
+            resolved[relative_path] = skill_id
+            continue
+        owner = _owner_from_relative(relative_path)
+        if owner is None or not isinstance(relative_path, str):
+            continue
+        parts = PurePosixPath(relative_path).parts
+        if len(parts) != 2:
+            continue
+        workdir_names.setdefault(owner, set()).add(parts[1])
+    if not workdir_names:
+        return resolved
+    with connection.cursor(row_factory=dict_row) as cursor:
+        rows_by_owner = cursor.execute(
+            "SELECT id,owner_id,name FROM public.reply_skill WHERE owner_id = ANY(%s)",
+            (list(workdir_names),),
+        ).fetchall()
+    for row in rows_by_owner:
+        owner_id = row["owner_id"]
+        name = row["name"]
+        if name in workdir_names.get(owner_id, ()):
+            resolved[f"{owner_id}/{name}"] = row["id"]
+    return resolved
 
 
 def skill_file_health(connection: Any, owner_id: UUID) -> dict[str, Any]:
@@ -449,10 +465,14 @@ def queue_skill_file_cleanup(connection: Any, *, skill_id: UUID, version_ids: se
 def cleanup_pending_files(connection: Any, *, owner_id: UUID | None = None) -> int:
     with connection.cursor(row_factory=dict_row) as cursor:
         rows = cursor.execute("SELECT relative_path FROM public.reply_skill_file_cleanup WHERE (%s::uuid IS NULL OR relative_path LIKE %s OR relative_path LIKE %s OR relative_path LIKE %s) FOR UPDATE", (owner_id, f"{owner_id}/%", f".versions/{owner_id}/%", f".staging/{owner_id}/%")).fetchall()
+    # 循环前一次性解析技能身份：失败/成功分支不得再查库，DB 抖动不能中断整批清理。
+    skill_ids = _cleanup_skill_ids(connection, rows)
     count = 0
     for row in rows:
+        relative_path = row["relative_path"]
+        owner = _owner_from_relative(relative_path)
+        skill_id = skill_ids.get(relative_path)
         try:
-            relative_path = row["relative_path"]
             _validate_relative_path(relative_path)
             relative = PurePosixPath(relative_path)
             parent_relative = relative.parent.as_posix()
@@ -465,14 +485,12 @@ def cleanup_pending_files(connection: Any, *, owner_id: UUID | None = None) -> i
                     shutil.rmtree(path)
                 else:
                     path.unlink()
-            connection.execute("DELETE FROM public.reply_skill_file_cleanup WHERE relative_path=%s", (row["relative_path"],))
+            connection.execute("DELETE FROM public.reply_skill_file_cleanup WHERE relative_path=%s", (relative_path,))
             count += 1
         except (OSError, SkillFileError) as error:
-            owner = _owner_from_relative(row["relative_path"])
             if owner is not None:
                 _record_file_failure(
-                    owner, operation="cleanup", error=error,
-                    skill_id=_cleanup_skill_id(connection, row["relative_path"]),
+                    owner, operation="cleanup", error=error, skill_id=skill_id,
                 )
             else:
                 logger.warning(
@@ -481,12 +499,8 @@ def cleanup_pending_files(connection: Any, *, owner_id: UUID | None = None) -> i
                 )
             continue
         else:
-            owner = _owner_from_relative(row["relative_path"])
             if owner is not None:
-                _clear_file_failure(
-                    owner, operation="cleanup",
-                    skill_id=_cleanup_skill_id(connection, row["relative_path"]),
-                )
+                _clear_file_failure(owner, operation="cleanup", skill_id=skill_id)
     return count
 
 
