@@ -43,3 +43,4 @@ State: resolved
   - 环境既有失败：`test_memory_retirement`/`test_layered_memory_management` 需要外部注入 `NOTALONE_TEST_DATABASE_URL`（`KeyError`），默认 `notalone_test` 旧结构问题同 ticket 11 记录，与本改动无关。
 - 数据影响：无 schema/数据迁移；确认事务边界不变（同一写事务内完成写入、旧版失效、候选状态与删除依赖清理）。
 - 剩余风险：保持「先写新版本再失效旧版本再更新候选状态」的原有三条语句顺序，未合并为单条 SQL；适配器与共享内核之间仍靠协议约定，后续新增 store 需实现同一组方法；错误优先级差异已在上面列出。
+- 提交：`8e53c939`。

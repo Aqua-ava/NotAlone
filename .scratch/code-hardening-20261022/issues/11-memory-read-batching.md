@@ -45,3 +45,4 @@ State: resolved
   - 环境说明：默认 `notalone_test` 仍停留在无迁移账本旧结构，依赖它的 `tests.integration.persistence.test_postgres_memory_store` 在改动前即为 16 errors/1 failure（schema 未应用），本次未将其作为失败依据；记忆验证使用隔离随机测试库。
 - 数据影响：只改读取路径与探针缓存，无 schema/数据写入变化；返回结构、排序、删除/失效/来源校验语义不变。
 - 剩余风险：`list_pending_candidates` 的 `_timed_candidates` 仍逐行 `protect_candidate`/维度依据复验（不在本 ticket 的热路径范围）；`bind_version_evidence_rows` 仍逐行复验冻结来源窗口，只批量化父版本行查询；查询次数为静态 SQL 计数，未做耗时 profiling。
+- 提交：`dc5cd179、52276df6`。

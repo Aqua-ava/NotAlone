@@ -1,7 +1,8 @@
 # 代码加固任务交接（2026-10-22）
 
 ## 状态
-16/16 tickets 已实现、验证并本地提交（20 个提交，未 push / 未打包）。所有 ticket `State: resolved`，每个提交含中文正文与验证结果。
+16/16 tickets 已实现、验证并本地提交（自基线 `c41c4200` 共 30 个本地提交，未 push / 未打包；其中 `fbdd149a`、`6fbdd194`、`6e902274` 为真机验收记录提交）。所有 ticket `State: resolved`，每个提交含中文正文与验证结果；真机验收完成情况与暂停范围见 `acceptance-20261022.md`。
+- 复核证据 `.scratch/code-audit-20261021/`（原始审计）与 `.scratch/code-review-20261022/`（三份独立复核 + SUMMARY）目前是本机未跟踪文件，按既定约定未提交；本文件与 `spec.md` 引用它们的结论已同步进提交正文与验收记录。
 
 ## 提交映射
 | ticket | commit | 内容 |
@@ -27,7 +28,7 @@
 ## 第二轮复核修复（Standards/Spec 独立审查后）
 - 57074c47 / 88b61cf5 / 47af64fe / 52276df6：日志脱敏、Skill 健康身份、字符上限常量、空行（第一批）。
 - 第二批：回复回执读取失败字段进入 HTTP、导入延后区分「已入队/未入队」、`/api/runtime/status` 暴露 `skill_files`；维度回退不再影响 `expected_dimension_evidence`/owner 分支/correction 例外；探索与审核端口接入每轮同步、旧库迁移失败后续轮次重试；桌面字符上限统一按码点计数并补边界测试、记忆页补充投影失败不再拖垮主列表、`OwnerLayeredMemoryPanel` 首帧错误可见。
-- 遗留项见 `review-followups.md`；真实 App/微信验收仍未执行。
+- 遗留项见 `review-followups.md`；真机验收结果与暂停范围见 `acceptance-20261022.md`（只读部分完成，写操作按用户要求暂停）。
 
 ## 验证
 - 后端单测：`python -m unittest discover -s tests/unit -t .` 2487 条，14 条既有基线失败（memory_extraction merge_batch/upgrade_ports + experiments pgvector，`git archive HEAD` 基线复现非本轮引入）；另有 1 条 front_sync 时序用例仅全量并发下偶发，单跑 3/3 通过。
@@ -36,7 +37,7 @@
 - 公开历史检查：`node scripts/check_public_history.mjs --ref HEAD --working-tree` 0 issues；`git diff --check` 干净。
 
 ## 未做 / 风险
-- 未执行真实 App/微信验收（未跑 `npm run dev`）：UI 接线、首帧重试、同步/导入新状态字段的观感未实机验证。
+- 真机验收只读部分已执行（含微信前台识别/OCR，见下）；写操作生成/取消、导入 deferred、4096 输入上限未执行（2026-10-22 按用户要求暂停）；同步/导入新状态字段仍无桌面展示入口。
 - 新增后台状态（sync health、import degraded、report 读取失败标记、skill_file_health）尚未在桌面或 HTTP 状态页展示；app.py 投影/桌面展示为后续项。
 - 未做的 C 项：`app.py` 路由表化、`session.ts` 拆分、评测/实验包迁移、仓库大文件清理、CI/测试 runner 门禁。
 - 代码审查（Standards）遗留低优先级项：`_timed_memories`/`_timed_rows` 重复、批量分组骨架重复、initial-read 站点仍各写包装、commit 正文含字面 `\n` 的 3 个历史提交（不回写历史）。
@@ -46,6 +47,9 @@
 - 开发热更新实例启动并确认「已连接」；联系人/记忆页正常渲染，无首帧错误。
 - 真实 App 中验证记忆页「版本历史」（联系人经历与关系变化概览）与「主题资料」（LayeredMemoryPanel）可展开并加载数据。
 - 活后端只读核验：`/api/sync/status` 的 `health`、`/api/runtime/status` 的 `skill_files` 字段均正常返回。
+- 微信前台识别/OCR 只读验证：微信私聊在前台时识别会话名称（置信度 100%）、只显示会话名称不显示正文、要求手动确认联系人、不自动生成；微信切后台回到等待提示；小窗获焦显示暂停定位。后端同一 `POST /api/sync/foreground/observe` 的 `wechat_in_front`/`phase` 与界面一致。
 - 页面自动化与基线对照：`memory-reading`、`contact-relationship-overview` 在当前 HEAD 与基线 c41c4200 以相同断言失败，属既有页面测试缺口，非本轮回归。
-- 未覆盖/未做：微信前台与 OCR、回复生成/取消、导入 deferred、4096 输入上限的真机交互；未发送外部消息、未做写操作。详见 `acceptance-20261022.md`。
+- 写操作验收按用户要求暂停：仅完成「切换为手动输入」一步（写 `manual_contact_confirmation` 一行），面板解除生成锁定；生成候选/取消准备、导入 deferred、4096 输入上限未执行；未发送外部消息。
+- 真机新发现（既有问题）：输入小窗读取 `sync-control:get-state` 被 manager-only 通道拒绝，优先同步状态在小窗不可用，见 `review-followups.md` 第 8 项。
+- 详见 `acceptance-20261022.md`。
 

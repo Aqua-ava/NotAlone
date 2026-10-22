@@ -27,8 +27,6 @@ State: resolved
 
 ## Comments
 
-## Comments
-
 - 实现：记忆页重新接回已实现但不可达的 UI —— ①「版本历史」折叠区（`MemorySecondaryPanels`）：联系人视图渲染 `ContactRelationshipOverview` + `MemoryVersionHistory`，本人视图渲染 `OwnerFactsOverview` + 本人层 `MemoryVersionHistory`；②活跃记忆卡片新增「查看版本历史」入口，调用既有 `memory:open-versions` 后展开面板，撤销自动更新复用既有 `memory:revert-auto-update`；③`refresh()` 恢复并行读取联系人概览/本人概览（既有 `memory:refresh-overview`/`memory:refresh-owner-overview`）；④「主题资料」折叠区按需渲染既有 `LayeredMemoryPanel`，`manageLayeredMemory` 由此获得生产入口（默认折叠，未点开时 DOM 无该区域，不影响既有页面断言）。
 - 边界：未新增 preload 通道（渲染层无 `invoke(`，全部复用既有 manager 通道）；保留 `layeredMemory.value?.correctionTarget` 的纠错定位依赖；概览仅为已采纳资料投影，不改变联系人/owner 隔离与人工发送边界；文案沿用现有中文。
 - 测试：新增 `tests/memory-ui-wiring.test.mjs` 5/5（联系人/本人面板渲染与撤销入口、空历史不渲染空壳、活跃/失效卡片入口差异、接线与无新通道+correctionTarget 保留）；相关记忆 node 测试 63/63；`npm run typecheck`、`test:inventory` 通过；全量 safe-node 983 项 982 通过 1 跳过。更新 `tests/headless/contact-relationship-overview.ts` 的旧断言与 `tests/memory-event-updates.test.mjs` 的入口断言；headless/浏览器场景未执行（默认门禁不含、本机未装 Playwright 浏览器）。
@@ -38,3 +36,4 @@ State: resolved
 - 2026-10-22 复核修复：刷新不再把概览/分层读取与记忆主列表放入同一 `Promise.all`，补充投影失败不会把整页标成「资料范围不可用」。
 - 验收缺口：headless/浏览器场景未执行（本机未装 Playwright 浏览器），「打开版本历史→撤销自动更新」交互路径目前只有源码/渲染断言，已登记到 `review-followups.md`。
 - 2026-10-22 真机只读：真实 App 中「版本历史」展开渲染「联系人经历与关系变化」（修订号/整理时间/空状态正确），「主题资料」展开渲染 LayeredMemoryPanel（更新状态/整理管理/管理底层联系人记忆入口）；未点击撤销自动更新或删除。
+- 提交：`c84e5e2f、e848400b`。

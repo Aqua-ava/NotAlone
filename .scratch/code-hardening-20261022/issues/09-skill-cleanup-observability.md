@@ -35,3 +35,4 @@ Blocked by: 08
 - 2026-10-22 复核修复：`/api/runtime/status` 增加 `skill_files` 健康投影（`SkillService.skill_file_health`，读取失败只 warning 不拖垮状态）；健康状态包含 DB pending 计数，重启后仍为 degraded，但进程内 failures 明细会丢失（已知限制）。
 - 有意偏离：catalog 仍用 `working_copy`/`cleanup` 的 NOT EXISTS 把待清理技能整体排除，优先保证运行资格 fail-closed；未改成「列出但标不可用」，避免在删除屏障完成前暴露可执行条目。所需的产品确认已登记到 `review-followups.md`。
 - 2026-10-22 真机只读：`GET /api/runtime/status` 返回 `skill_files={"state":"ok","pending_working_copies":0,"pending_cleanup_files":0,"failures":[]}`，无 degraded 项；健康状态只含计数/固定码。
+- 提交：`ee282510、88b61cf5`。

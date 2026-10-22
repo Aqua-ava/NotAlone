@@ -35,3 +35,4 @@ State: resolved
 
 - 2026-10-22 复核修复：探索/审核端口新增 `ExploredSkillSyncPort`，catalog 前执行同一每轮同步，不再绕过目录发现；装配时旧库迁移失败会保留 pending，后续每轮带 `migrate_legacy=True` 重试，成功后清除。此前 Comments 中「整体回滚」表述不准确：迁移在独立事务先提交，失败靠后续轮次重试，已按实际实现更正。
 - 已知边界：同一轮 catalog 之后的 `load_version` 不重复同步（复用该轮目录状态）。
+- 提交：`fe0e40b2、e2d33cf5`。

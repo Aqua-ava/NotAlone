@@ -41,3 +41,4 @@ State: resolved
 6、剩余风险：generator 只在 Store 返回 `continued_candidate` 时做文本回表（Store 违约返回 None 时仍校验 id）；`require_explored_context` 与 DB 候选查询因依赖数据库能力留在 Postgres 包装层；真实 App/微信与桌面未运行（本轮按 spec 以自动测试为准）。此外 Go/桌面侧如果未来新增 ReplyStore adapter，需要复用同一共享校验函数与 `ReplyContextBinding`。
 
 7、共享文件归属：`backend/tests/integration/persistence/test_postgres_reply_store.py` 同时包含 skill-fix 尚未提交的 skill library 夹具改动（`synchronize_skill_library` 调用，属并行 ticket 必要夹具），按 Lead 协调随本 ticket 一并提交；未回滚或改写该段夹具。本 ticket 只改该文件的记忆时间快照用例（第 455-495 行区域）。
+- 提交：`d28f43ea`。

@@ -26,10 +26,9 @@ State: resolved
 
 ## Comments
 
-## Comments
-
 - 实现：`performPreparation` 的 202 回执校验改为显式白名单（`preparation_id` UUID、`state==='preparing'` 必填，`retry_after` 可选正整数；未知非敏感扩展字段按白名单原则忽略，正文类键仍拒绝）。先登记合法 `preparation_id` 再做其余校验，`finally` 在取消/超时/回执异常（未完成）时一律对已登记任务发 DELETE，成功完成不发。
 - 测试：`node --test tests/async-reply-preparation.test.mjs` 8/8（新增「202 回执附加非敏感字段」「非法体但有 preparation_id 仍 DELETE」「202 前取消不伪造删除」）。相关 5 个文件 `assistant-generation-preparation`/`contact-restore-coalescing`/`manual-confirm-session-recovery`/`assistant-candidate-version-ports`/`async-reply-preparation` 共 123/123 通过；`npm run typecheck` 通过。
 - 后端：复用已有 `DELETE .../prepare/status/{preparation_id}` 取消接口，未改后端，故无后端测试需同步。
 - 数据影响：仅主进程传输层；DELETE 只表达取消意图，业务终态仍由原任务权威回执结算；不新增发送能力。
 - 未做真实 App 验收。剩余风险：首个 202 到达前取消时客户端尚无合法标识，只能放弃等待、无法回收服务端任务（测试固化该边界）；`retry_after` 只做形状校验，暂未消费为轮询间隔。
+- 提交：`731b4837`。

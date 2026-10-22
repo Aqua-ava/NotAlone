@@ -31,4 +31,4 @@ State: resolved
 - 新增 `backend/tests/unit/server/test_request_error_logging.py`：覆盖异常日志含 method/path、不含请求正文/查询串；预期错误不触发 ERROR。
 - 验证：`python -m unittest tests.unit.server.test_request_error_logging -v` 2 条通过；`python -m unittest discover -s tests/unit/server -t .` 91 条通过。
 - 数据影响：无 schema/数据变更；仅本地日志。剩余风险：异常消息由 Python 异常自带，若未来某异常 message 主动拼接正文会进入日志，代码评审时需守住。
-- Commit：见 `git log --grep '诊断日志'`。
+- 提交：`8278cdf9`。
