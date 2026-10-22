@@ -1,7 +1,7 @@
 # 提取批次流水线：任务索引与工作流状态
 
 > 规格：[spec.md](spec.md)；决策：[ADR-099](../../architecture/adr/099-parallel-batch-extraction.md)。
-> 基线：改前实测 945 条导入约 1.5~2 小时（单批 32s／76s／103s，模型调用占绝大部分）。01~05 已完成；按 Blocked by 顺序由 Agent 领取，State 在领取/完成时更新。
+> 基线：改前实测 945 条导入约 1.5~2 小时（单批 32s／76s／103s，模型调用占绝大部分）。全部 6 张票已完成。06 的真实验证边界：并发已确证，但模型供应商当日超时导致真实加速比未能取得可信对照，详见 [spec](spec.md#实现状态与真实验证) 与 [ADR-099](../../architecture/adr/099-parallel-batch-extraction.md)。
 
 ## 正式任务
 
@@ -12,4 +12,4 @@
 | 03 | [提取命令的批次流水线](issues/03-batch-pipeline.md) | resolved | 01 |
 | 04 | [装配层接通批次并发与租约复验](issues/04-wiring-concurrency-and-lease-guard.md) | resolved | 02, 03 |
 | 05 | [串行与并行终态一致集成回归](issues/05-serial-parallel-final-state-parity.md) | resolved | 03 |
-| 06 | [开发版真实导入端到端验收与文档收敛](issues/06-real-import-end-to-end-validation.md) | open | 04, 05 |
+| 06 | [开发版真实导入端到端验收与文档收敛](issues/06-real-import-end-to-end-validation.md) | resolved | 04, 05 |

@@ -2,7 +2,7 @@
 
 > 联系人首用决定：[ADR-087](adr/087-wechat-confirmed-contact-onboarding.md)保留真实微信来源建联与导入只补充已有联系人的规则；[ADR-089](adr/089-all-private-wechat-sync-scope.md)新增当前账号全部私聊的一次授权，包括以后新增会话。[ADR-095](adr/095-first-wechat-connection-and-account-grant.md)补充已有可用工具的首次账号连接与一次授权；未配置机器的工具准备及新用户独立交付验收仍未完成。旧创建接口退役尚待完成；全部私聊实现与验证见[规格](../.scratch/all-private-sync/spec.md)。
 
-> 2026-10-22 提取并发：[ADR-099](adr/099-parallel-batch-extraction.md)允许同一提取任务内按批次流水线并行模型调用，采纳、写入与水位仍按批序串行；规格见[批次流水线](../.scratch/parallel-batch-extraction/spec.md)，实现未开始。
+> 2026-10-22 提取并发：[ADR-099](adr/099-parallel-batch-extraction.md)允许同一提取任务内按批次流水线并行模型调用，采纳、写入与水位仍按批序串行；规格见[批次流水线](../.scratch/parallel-batch-extraction/spec.md)；已实现，真实验证边界见 ADR-099 的验证记录。
 
 > 2026-10-21 设计审查：同号 ADR-074 有两份：引用时必须附“腾讯记忆”或“自动 Skill”标题及完整文件链接，不能仅凭编号推断替代。额外记忆人工门已由用户确认并通过 [ADR-085](adr/085-source-verified-automatic-adoption.md) 收敛；Runtime 按需检索已由 [ADR-090](adr/090-bounded-runtime-history-retrieval.md)确认受控只读边界；运行计划和自动过程摘要已按 [ADR-091](adr/091-retire-runtime-todos-and-auto-summary.md)取消强制接入要求；时间／日历／网络工具已按 [ADR-092](adr/092-defer-time-calendar-web-tools.md)改为未来可选方向。
 
