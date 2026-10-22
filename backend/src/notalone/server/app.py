@@ -205,6 +205,318 @@ class SetupRequestInvalid(ValueError):
     """首启向导请求结构或契约无效；不携带请求内容细节。"""
 
 
+@dataclass(frozen=True, slots=True)
+class _RouteRequest:
+    """认证后路由分派所需的请求快照。"""
+
+    method: str
+    path: str
+    path_value: str
+    query: str
+    headers: Mapping[str, str]
+    body: bytes
+
+
+@dataclass(frozen=True, slots=True)
+class _Route:
+    """认证后的一条 HTTP 路由：方法集合、路径匹配器与分派函数。
+
+    methods 为 None 表示不限制方法，方法差异由处理器内部判定；
+    matcher 只接收去掉查询串的路径。
+    """
+
+    methods: frozenset[str] | None
+    matcher: Callable[[str], bool]
+    handler: Callable[["BackendApp", _RouteRequest], Response]
+
+    def matches(self, method: str, path_value: str) -> bool:
+        return (
+            (self.methods is None or method in self.methods)
+            and self.matcher(path_value)
+        )
+
+
+_GET_METHODS = frozenset({"GET"})
+_POST_METHODS = frozenset({"POST"})
+
+
+def _is_trace_path(path: str) -> bool:
+    return "/memory-traces" in path or "/source-processing-traces" in path
+
+
+# 运行期生命周期端点先于全局守卫处理：停机中仍可读状态、发起关闭。
+_LIFECYCLE_ROUTE_TABLE: tuple[_Route, ...] = (
+    _Route(
+        _GET_METHODS,
+        lambda p: p == "/api/runtime/status",
+        lambda app, request: app._handle_runtime_status(),
+    ),
+    _Route(
+        _POST_METHODS,
+        lambda p: p == "/api/runtime/shutdown",
+        lambda app, request: app._handle_runtime_shutdown(),
+    ),
+)
+
+# 认证后的显式路由表；顺序即协议，首个命中生效。未命中仍返回既有 404。
+_ROUTE_TABLE: tuple[_Route, ...] = (
+    # 联系人集合：创建联系人与确认手动输入范围共用一个错误码。
+    _Route(
+        _POST_METHODS,
+        lambda p: p == "/api/contacts" or p.endswith("/manual-confirmation"),
+        lambda app, request: app._handle_contact_write(
+            method=request.method,
+            path=request.path_value,
+            body=request.body,
+        ),
+    ),
+    _Route(
+        _GET_METHODS,
+        lambda p: p == "/api/contacts",
+        lambda app, request: app._handle_contact_list(
+            method=request.method,
+            path=request.path_value,
+        ),
+    ),
+    # 记忆处理进度；联系人与 owner 两个前缀共用同一处理器。
+    _Route(
+        None,
+        lambda p: (
+            (p.startswith("/api/contacts/") or p.startswith("/api/owner/"))
+            and "/memory-processing" in p
+        ),
+        lambda app, request: app._handle_memory_processing(
+            request.method,
+            request.path_value,
+            request.body,
+        ),
+    ),
+    # 记忆/来源处理轨迹。
+    _Route(
+        None,
+        _is_trace_path,
+        lambda app, request: app._handle_trace(
+            method=request.method,
+            path=request.path_value,
+            query=request.query,
+        ),
+    ),
+    # 组织质量输入与审核。
+    _Route(
+        None,
+        lambda p: p.startswith("/api/layered-memory/"),
+        lambda app, request: app._handle_layered_memory_quality(
+            method=request.method,
+            path=request.path_value,
+            body=request.body,
+        ),
+    ),
+    # 分层记忆；处理器沿用含查询串的完整路径。
+    _Route(
+        None,
+        lambda p: (
+            (p.startswith("/api/contacts/") and "/layered-memory" in p)
+            or p.startswith("/api/memories/owner/layered-memory")
+        ),
+        lambda app, request: app._handle_layered_memory(
+            method=request.method,
+            path=request.path,
+            body=request.body,
+        ),
+    ),
+    # 关系概览：联系人维度与 owner 维度共用同一处理器。
+    _Route(
+        None,
+        lambda p: (
+            (p.startswith("/api/contacts/") and "/relationship-overview" in p)
+            or p == "/api/memories/owner/overview"
+        ),
+        lambda app, request: app._handle_overview(
+            method=request.method,
+            path=request.path_value,
+        ),
+    ),
+    # 长期表达要求。
+    _Route(
+        None,
+        lambda p: (
+            p == "/api/expression-preferences"
+            or p.startswith("/api/expression-preferences/")
+        ),
+        lambda app, request: app._handle_expression_preference_requests(
+            method=request.method,
+            path=request.path_value,
+            query=request.query,
+            body=request.body,
+        ),
+    ),
+    # Skill 整理。
+    _Route(
+        None,
+        lambda p: p.startswith("/api/contacts/") and "/skill-learning" in p,
+        lambda app, request: app._handle_skill_learning_requests(
+            method=request.method,
+            path=request.path_value,
+            body=request.body,
+        ),
+    ),
+    # 联系人消息流。
+    _Route(
+        None,
+        lambda p: p.startswith("/api/contacts/") and p.endswith("/messages"),
+        lambda app, request: app._handle_messages(
+            method=request.method,
+            path=request.path_value,
+            query=request.query,
+        ),
+    ),
+    # 回复依据。
+    _Route(
+        None,
+        lambda p: p.startswith("/api/contacts/") and p.endswith("/evidence"),
+        lambda app, request: app._handle_reply_evidence(
+            request.method,
+            request.path_value,
+        ),
+    ),
+    # 助手会话：先尝试异步准备，未接管时进入会话处理器。
+    _Route(
+        None,
+        lambda p: p.startswith("/api/contacts/") and "/assistant-session" in p,
+        lambda app, request: app._handle_assistant_session_requests(
+            method=request.method,
+            path=request.path_value,
+            query=request.query,
+            headers=request.headers,
+            body=request.body,
+        ),
+    ),
+    # 资料来源。
+    _Route(
+        None,
+        lambda p: p.startswith("/api/contacts/") and "/sources" in p,
+        lambda app, request: app._handle_sources(
+            request.method,
+            request.path_value,
+        ),
+    ),
+    # 回复探索与候选生成。
+    _Route(
+        None,
+        lambda p: p == "/api/reply/explore",
+        lambda app, request: app._handle_reply_explore(
+            method=request.method,
+            body=request.body,
+        ),
+    ),
+    _Route(
+        None,
+        lambda p: p == "/api/reply/generate",
+        lambda app, request: app._handle_reply_generate(
+            method=request.method,
+            path=request.path_value,
+            body=request.body,
+        ),
+    ),
+    # 记忆：/api/memories 前缀与联系人下的记忆子资源。
+    _Route(
+        None,
+        lambda p: p.startswith("/api/memories") or (
+            p.startswith("/api/contacts/")
+            and (
+                "/memories" in p
+                or "/memory-candidates" in p
+                or "/owner-memories" in p
+            )
+        ),
+        lambda app, request: app._handle_memory(
+            method=request.method,
+            path=request.path_value,
+            body=request.body,
+        ),
+    ),
+    # 导入与后台任务。
+    _Route(
+        None,
+        lambda p: p.startswith("/api/imports") or p.startswith("/api/tasks"),
+        lambda app, request: app._handle_import_task(
+            method=request.method,
+            path=request.path_value,
+            query=request.query,
+            body=request.body,
+        ),
+    ),
+    # 账本摘要。
+    _Route(
+        None,
+        lambda p: p == "/api/ledger/summary",
+        lambda app, request: app._handle_ledger(
+            method=request.method,
+            path=request.path_value,
+        ),
+    ),
+    # Skill 管理与文件。
+    _Route(
+        None,
+        lambda p: p.startswith("/api/skills"),
+        lambda app, request: app._handle_skill(
+            method=request.method,
+            path=request.path_value,
+            body=request.body,
+        ),
+    ),
+    # 凭据配置只读；其他方法不命中本路由，保持一致地落到 404。
+    _Route(
+        _GET_METHODS,
+        lambda p: p == "/api/settings/credentials",
+        lambda app, request: app._handle_credentials(),
+    ),
+    # 首启向导。
+    _Route(
+        None,
+        lambda p: p.startswith("/api/setup"),
+        lambda app, request: app._handle_setup(
+            method=request.method,
+            path=request.path_value,
+            body=request.body,
+        ),
+    ),
+    # 随读验证 smoke；必须先于 /api/sync 前缀。
+    _Route(
+        None,
+        lambda p: p.startswith("/api/sync/follow-smoke"),
+        lambda app, request: app._handle_follow_smoke(
+            method=request.method,
+            path=request.path_value,
+            body=request.body,
+        ),
+    ),
+    # 同步控制（兜底前缀）。
+    _Route(
+        None,
+        lambda p: p.startswith("/api/sync"),
+        lambda app, request: app._handle_sync(
+            method=request.method,
+            path=request.path_value,
+            body=request.body,
+        ),
+    ),
+)
+
+
+def _match_route(
+    method: str,
+    path_value: str,
+    routes: tuple[_Route, ...] = _ROUTE_TABLE,
+) -> _Route | None:
+    """返回第一条命中的路由；登记顺序即协议。"""
+
+    for route in routes:
+        if route.matches(method, path_value):
+            return route
+    return None
+
+
 class BackendApp:
     """只提供本地 API 的无框架 HTTP 应用。"""
 
@@ -484,30 +796,19 @@ class BackendApp:
         body: bytes,
     ) -> Response:
         request_body = bytes(body)
-        request_headers = headers
         method_upper = method.upper()
         path_value = urlsplit(path).path
-        if method_upper == "GET" and path_value == "/api/runtime/status":
-            state = (
-                "stopped" if self._runtime_stopped.is_set()
-                else "stopping" if self._runtime_stopping.is_set() else "running"
-            )
-            payload: dict[str, object] = {"state": state}
-            degraded = self._degraded_payload()
-            if degraded:
-                payload["degraded"] = degraded
-            skill_files = self._skill_file_health_payload()
-            if skill_files is not None:
-                payload["skill_files"] = skill_files
-            return _json_response(HTTPStatus.OK, payload)
-        if method_upper == "POST" and path_value == "/api/runtime/shutdown":
-            if self._runtime_shutdown is None:
-                return _json_response(
-                    HTTPStatus.SERVICE_UNAVAILABLE, {"error": "runtime_unavailable"}
-                )
-            # 只关闭本次读取资源，不调用 disable，不修改持久同步偏好。
-            self.shutdown_runtime()
-            return _json_response(HTTPStatus.OK, {"state": "stopped"})
+        request = _RouteRequest(
+            method=method_upper,
+            path=path,
+            path_value=path_value,
+            query=urlsplit(path).query,
+            headers=headers,
+            body=request_body,
+        )
+        lifecycle = _match_route(method_upper, path_value, _LIFECYCLE_ROUTE_TABLE)
+        if lifecycle is not None:
+            return lifecycle.handler(self, request)
         if self._runtime_stopping.is_set() and not (
             method_upper == "GET"
             and path_value in {"/api/sync/status", "/api/setup/status"}
@@ -524,153 +825,155 @@ class BackendApp:
                 HTTPStatus.SERVICE_UNAVAILABLE,
                 {"error": "owner_uninitialized"},
             )
-        if method_upper == "POST" and (path_value == "/api/contacts" or path_value.endswith("/manual-confirmation")):
-            try:
-                payload = json.loads(request_body)
-                if path_value == "/api/contacts":
-                    if not isinstance(payload, dict) or set(payload) != {"request_id", "display_name"}:
-                        raise ValueError()
-                    contact = self._contact_directory.create_contact(
-                        self._owner_id, UUID(payload["request_id"]), payload["display_name"],
-                    )
-                    return _json_response(HTTPStatus.CREATED, {"contact": _contact_payload(contact)})
-                parts = path_value.split("/")
-                if len(parts) != 5 or parts[1:3] != ["api", "contacts"] or payload != {}:
-                    raise ValueError()
-                self._contact_directory.confirm_manual(self._owner_id, UUID(parts[3]))
-                return _json_response(HTTPStatus.OK, {"confirmed": True})
-            except (ValueError, TypeError, KeyError):
-                return _json_response(HTTPStatus.BAD_REQUEST, {"error": "contact_input_invalid"})
-            except ContactDirectoryError:
-                return _json_response(HTTPStatus.CONFLICT, {"error": "contact_operation_unavailable"})
-        if method_upper == "GET" and path_value == "/api/contacts":
-            try:
-                contacts = self._contact_directory.list_contacts(self._owner_id)
-            except ContactDirectoryError:
-                return _internal_error(
-                    method=method,
-                    path=path,
-                    error_code="contact_list_unavailable",
-                )
-            return _json_response(
-                HTTPStatus.OK,
-                {"contacts": [_contact_payload(contact) for contact in contacts]},
-            )
-        if (path_value.startswith("/api/contacts/") or path_value.startswith("/api/owner/")) and "/memory-processing" in path_value:
-            return self._handle_memory_processing(method_upper, path_value, request_body)
-        if _is_trace_path(path_value):
-            return self._handle_trace(
-                method=method_upper,
-                path=path_value,
-                query=urlsplit(path).query,
-            )
-        if path_value.startswith('/api/layered-memory/'):
-            from notalone.server.organization_quality import handle_quality
-            return handle_quality(self._layered_memory, self._owner_id, method_upper, path_value, body)
-        if (path_value.startswith("/api/contacts/") and "/layered-memory" in path_value
-                or path_value.startswith("/api/memories/owner/layered-memory")):
-            return self._handle_layered_memory(method=method_upper, path=path, body=body)
-        if path_value.startswith("/api/contacts/") and "/relationship-overview" in path_value:
-            return self._handle_overview(method=method_upper, path=path_value)
-        if path_value == "/api/memories/owner/overview":
-            return self._handle_overview(method=method_upper, path=path_value)
-        if path_value == "/api/expression-preferences" or path_value.startswith("/api/expression-preferences/"):
-            if self._expression_preferences is None:
-                return _json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "expression_preference_unavailable"})
-            status, payload = handle_expression_preferences(
-                self._expression_preferences, owner_id=self._owner_id,
-                method=method_upper, path=path_value, body=request_body, query=urlsplit(path).query,
-            )
-            return _json_response(status, payload)
-        if path_value.startswith('/api/contacts/') and '/skill-learning' in path_value:
-            status, payload = handle_skill_learning(self._skill_learning, owner_id=self._owner_id,
-                                                    method=method_upper, path=path_value, body=request_body)
-            return _json_response(status, payload, headers={"Cache-Control": "no-store"})
-        if path_value.startswith("/api/contacts/") and path_value.endswith("/messages"):
-            return self._handle_messages(
-                method=method_upper,
-                path=path_value,
-                query=urlsplit(path).query,
-            )
-        if path_value.startswith("/api/contacts/") and path_value.endswith("/evidence"):
-            return self._handle_reply_evidence(method_upper, path_value)
-        if path_value.startswith("/api/contacts/") and "/assistant-session" in path_value:
-            asynchronous = self._handle_async_preparation(method_upper, path_value, request_headers, request_body)
-            if asynchronous is not None:
-                return asynchronous
-            return self._handle_assistant_session(method_upper, path_value, request_body, urlsplit(path).query)
-        if path_value.startswith("/api/contacts/") and "/sources" in path_value:
-            return self._handle_sources(method_upper, path_value)
-        if path_value == "/api/reply/explore":
-            return self._handle_reply_explore(method=method_upper, body=request_body)
-        if path_value == "/api/reply/generate":
-            return self._handle_reply_generate(
-                method=method_upper,
-                path=path_value,
-                body=request_body,
-            )
-        if path_value.startswith("/api/memories") or (
-            path_value.startswith("/api/contacts/")
-            and (
-                "/memories" in path_value
-                or "/memory-candidates" in path_value
-                or "/owner-memories" in path_value
-            )
-        ):
-            return self._handle_memory(
-                method=method_upper,
-                path=path_value,
-                body=request_body,
-            )
-        if path_value.startswith("/api/imports") or path_value.startswith("/api/tasks"):
-            return self._handle_import_task(
-                method=method_upper,
-                path=path_value,
-                query=urlsplit(path).query,
-                body=request_body,
-            )
-        if path_value == "/api/ledger/summary":
-            return self._handle_ledger(method=method_upper, path=path_value)
-        if path_value.startswith("/api/skills"):
-            return self._handle_skill(
-                method=method_upper,
-                path=path_value,
-                body=request_body,
-            )
-        if path_value == "/api/settings/credentials":
-            if method_upper != "GET":
-                return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
-            import os
-
-            configured = bool(
-                os.environ.get("NOTALONE_DEEPSEEK_API_KEY", "").strip()
-            )
-            return _json_response(
-                HTTPStatus.OK,
-                {
-                    "provider": "deepseek",
-                    "configured": configured,
-                },
-            )
-        if path_value.startswith("/api/setup"):
-            return self._handle_setup(
-                method=method_upper,
-                path=path_value,
-                body=request_body,
-            )
-        if path_value.startswith("/api/sync/follow-smoke"):
-            return self._handle_follow_smoke(
-                method=method_upper,
-                path=path_value,
-                body=request_body,
-            )
-        if path_value.startswith("/api/sync"):
-            return self._handle_sync(
-                method=method_upper,
-                path=path_value,
-                body=request_body,
-            )
+        route = _match_route(method_upper, path_value)
+        if route is not None:
+            return route.handler(self, request)
         return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+
+    def _handle_runtime_status(self) -> Response:
+        """运行期状态；停机中也可读，不包含正文与凭据。"""
+
+        state = (
+            "stopped" if self._runtime_stopped.is_set()
+            else "stopping" if self._runtime_stopping.is_set() else "running"
+        )
+        payload: dict[str, object] = {"state": state}
+        degraded = self._degraded_payload()
+        if degraded:
+            payload["degraded"] = degraded
+        skill_files = self._skill_file_health_payload()
+        if skill_files is not None:
+            payload["skill_files"] = skill_files
+        return _json_response(HTTPStatus.OK, payload)
+
+    def _handle_runtime_shutdown(self) -> Response:
+        """只关闭本次读取资源，不调用 disable，不修改持久同步偏好。"""
+
+        if self._runtime_shutdown is None:
+            return _json_response(
+                HTTPStatus.SERVICE_UNAVAILABLE, {"error": "runtime_unavailable"}
+            )
+        self.shutdown_runtime()
+        return _json_response(HTTPStatus.OK, {"state": "stopped"})
+
+    def _handle_contact_write(
+        self,
+        *,
+        method: str,
+        path: str,
+        body: bytes,
+    ) -> Response:
+        """创建联系人与确认手动输入范围；两者共用同一错误码。"""
+
+        try:
+            payload = json.loads(body)
+            if path == "/api/contacts":
+                if not isinstance(payload, dict) or set(payload) != {"request_id", "display_name"}:
+                    raise ValueError()
+                contact = self._contact_directory.create_contact(
+                    self._owner_id, UUID(payload["request_id"]), payload["display_name"],
+                )
+                return _json_response(HTTPStatus.CREATED, {"contact": _contact_payload(contact)})
+            parts = path.split("/")
+            if len(parts) != 5 or parts[1:3] != ["api", "contacts"] or payload != {}:
+                raise ValueError()
+            self._contact_directory.confirm_manual(self._owner_id, UUID(parts[3]))
+            return _json_response(HTTPStatus.OK, {"confirmed": True})
+        except (ValueError, TypeError, KeyError):
+            return _json_response(HTTPStatus.BAD_REQUEST, {"error": "contact_input_invalid"})
+        except ContactDirectoryError:
+            return _json_response(HTTPStatus.CONFLICT, {"error": "contact_operation_unavailable"})
+
+    def _handle_contact_list(self, *, method: str, path: str) -> Response:
+        """列出联系人；失败映射为非正文的稳定错误码。"""
+
+        try:
+            contacts = self._contact_directory.list_contacts(self._owner_id)
+        except ContactDirectoryError:
+            return _internal_error(
+                method=method,
+                path=path,
+                error_code="contact_list_unavailable",
+            )
+        return _json_response(
+            HTTPStatus.OK,
+            {"contacts": [_contact_payload(contact) for contact in contacts]},
+        )
+
+    def _handle_layered_memory_quality(
+        self,
+        *,
+        method: str,
+        path: str,
+        body: bytes,
+    ) -> Response:
+        """分层记忆的组织质量输入/审核入口。"""
+
+        from notalone.server.organization_quality import handle_quality
+        return handle_quality(self._layered_memory, self._owner_id, method, path, body)
+
+    def _handle_expression_preference_requests(
+        self,
+        *,
+        method: str,
+        path: str,
+        query: str,
+        body: bytes,
+    ) -> Response:
+        """长期表达要求的管理入口；服务未装配时 fail-closed。"""
+
+        if self._expression_preferences is None:
+            return _json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "expression_preference_unavailable"})
+        status, payload = handle_expression_preferences(
+            self._expression_preferences, owner_id=self._owner_id,
+            method=method, path=path, body=body, query=query,
+        )
+        return _json_response(status, payload)
+
+    def _handle_skill_learning_requests(
+        self,
+        *,
+        method: str,
+        path: str,
+        body: bytes,
+    ) -> Response:
+        """Skill 整理入口；响应不缓存。"""
+
+        status, payload = handle_skill_learning(self._skill_learning, owner_id=self._owner_id,
+                                                method=method, path=path, body=body)
+        return _json_response(status, payload, headers={"Cache-Control": "no-store"})
+
+    def _handle_credentials(self) -> Response:
+        """只读返回凭据是否已配置；不返回凭据本身。"""
+
+        import os
+
+        configured = bool(
+            os.environ.get("NOTALONE_DEEPSEEK_API_KEY", "").strip()
+        )
+        return _json_response(
+            HTTPStatus.OK,
+            {
+                "provider": "deepseek",
+                "configured": configured,
+            },
+        )
+
+    def _handle_assistant_session_requests(
+        self,
+        *,
+        method: str,
+        path: str,
+        query: str,
+        headers: Mapping[str, str],
+        body: bytes,
+    ) -> Response:
+        """助手会话入口：异步准备接管请求时直接返回，否则进入会话处理器。"""
+
+        asynchronous = self._handle_async_preparation(method, path, headers, body)
+        if asynchronous is not None:
+            return asynchronous
+        return self._handle_assistant_session(method, path, body, query)
 
     def _handle_follow_smoke(
         self,
@@ -3029,10 +3332,6 @@ def create_app(
         wechat_setup_service=wechat_setup_service,
         runtime_shutdown=runtime_shutdown,
     )
-
-
-def _is_trace_path(path: str) -> bool:
-    return "/memory-traces" in path or "/source-processing-traces" in path
 
 
 def _serve_request(
