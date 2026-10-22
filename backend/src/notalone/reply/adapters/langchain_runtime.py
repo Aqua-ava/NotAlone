@@ -545,7 +545,7 @@ class ScenarioArgumentsMiddleware(AgentMiddleware):
                              handler: Callable[[ToolCallRequest], Awaitable[Any]]) -> Any:
         call = request.tool_call
         if call["name"] == "read_scenario":
-            allowed = {"scenario_id", "paragraph_start", "paragraph_end"}
+            allowed = {"scenario_id", "paragraph_index"}
             if set(call["args"]) - allowed:
                 # 不改原始AIMessage；工具仍按tool_call_id读取原参数并拒绝，绝不静默采纳。
                 request = request.override(tool_call={**call, "args": {
@@ -557,21 +557,22 @@ def _create_scenario_tool() -> BaseTool:
     # JSON schema保留实际类型及额外参数，让所有拒绝也成为真实ToolMessage。
     @tool("read_scenario", args_schema={"type": "object", "properties": {
         "scenario_id": {"type": "string", "description": "本次实际目录中的稳定主题ID"},
-        "paragraph_start": {"type": "integer", "description": "零基起点（包含）"},
-        "paragraph_end": {"type": "integer", "description": "零基终点（不包含）"}},
-        "required": ["scenario_id", "paragraph_start", "paragraph_end"], "additionalProperties": False})
+        "paragraph_index": {"type": "integer", "minimum": 0,
+                            "description": "本次只读这一段的零基序号，例如0；必须小于目录paragraph_count"}},
+        "required": ["scenario_id", "paragraph_index"], "additionalProperties": False})
     def read_scenario(runtime: ToolRuntime[ReplyRuntimeContext], scenario_id=None,
-                      paragraph_start=None, paragraph_end=None, **extra) -> str:
-        """只读本次实际目录的冻结段落。references仅为来源导航，memory_id不是可引用evidence_id。"""
+                      paragraph_index=None, **extra) -> str:
+        """每次只读目录中一个冻结完整段落。references仅为来源导航，memory_id不是可引用evidence_id。"""
         # 框架会覆盖模型多传的runtime保留参数；按调用身份核原始args，不能让注入静默掩盖越权请求。
         raw = next((call["args"] for message in reversed(runtime.state["messages"])
                     for call in getattr(message, "tool_calls", ())
                     if call["id"] == runtime.tool_call_id and call["name"] == "read_scenario"), None)
         if not isinstance(raw, dict):
             raise ReplyInvariantError("正文工具缺少实际模型参数。")
-        invalid = set(raw) != {"scenario_id", "paragraph_start", "paragraph_end"}
+        invalid = set(raw) != {"scenario_id", "paragraph_index"}
+        index = raw.get("paragraph_index")
         return runtime.context.scenarios.read(scenario_id=raw.get("scenario_id"),
-            paragraph_start=raw.get("paragraph_start"), paragraph_end=raw.get("paragraph_end"),
+            paragraph_start=index, paragraph_end=index + 1 if type(index) is int else None,
             **({"unexpected_arguments": True} if invalid else {}))
 
     return read_scenario

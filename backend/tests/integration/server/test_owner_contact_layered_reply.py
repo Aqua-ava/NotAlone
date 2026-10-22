@@ -58,7 +58,7 @@ class OwnerContactLayeredReplyHttpTest(OverviewReplyHttpFixture, unittest.TestCa
         for key in ('layered_reply_budget', 'owner_layered_reply_budget'):
             self.layered_reply_options[key] = LayeredReplyBudget(1, 1, 3000, ScenarioReadBudget(1, 1, 3000))
         self.backend = self._backend(self.owner_id)
-        args = [{'scenario_id': ready['scenarios'][0]['scenario_id'], 'paragraph_start': 0, 'paragraph_end': 1}
+        args = [{'scenario_id': ready['scenarios'][0]['scenario_id'], 'paragraph_index': 0}
                 for ready in (owner_ready, contact_ready)]
         self.reply_model.plans.extend([{'parallel_scenarios': args + args},
             {'text': '聊聊课程。', 'basis': '按草稿。'}])
@@ -158,7 +158,7 @@ class OwnerContactLayeredReplyHttpTest(OverviewReplyHttpFixture, unittest.TestCa
         self.layered_reply_options['layered_memory'] = ReadBarrier()
         self.backend = self._backend(self.owner_id)
         self.reply_model.plans.extend([{'history': {'name': 'read_scenario', 'args': {
-            'scenario_id': ready['scenarios'][0]['scenario_id'], 'paragraph_start': 0, 'paragraph_end': 1}}},
+            'scenario_id': ready['scenarios'][0]['scenario_id'], 'paragraph_index': 0}}},
             {'text': '不得进行下一次模型调用。', 'basis': '迟到。'}])
         with ThreadPoolExecutor(max_workers=1) as pool:
             pending = pool.submit(self.backend.request, path + '/replies', self.rewrite_body(contact, '你好。'))
@@ -181,7 +181,7 @@ class OwnerContactLayeredReplyHttpTest(OverviewReplyHttpFixture, unittest.TestCa
         decisions = []
         self.layered_reply_options['on_input_budget'] = decisions.append
         self.backend = self._backend(self.owner_id)
-        args = {'scenario_id': ready['scenarios'][0]['scenario_id'], 'paragraph_start': 0, 'paragraph_end': 1}
+        args = {'scenario_id': ready['scenarios'][0]['scenario_id'], 'paragraph_index': 0}
         self.reply_model.plans.extend([{'history': {'name': 'read_scenario', 'args': args}},
             {'text': '你好，想起学习的时光。', 'basis': '合成事实。'}])
         body = self.rewrite_body(contact, '你好。')
@@ -259,7 +259,7 @@ class OwnerContactLayeredReplyHttpTest(OverviewReplyHttpFixture, unittest.TestCa
         contact, original, source, management, ready, path = self.source_dual_scope()
         self.reply_model.plans.extend([
             {'history': {'name': 'read_scenario', 'args': {'scenario_id': ready['scenarios'][0]['scenario_id'],
-                'paragraph_start': 0, 'paragraph_end': 1}}},
+                'paragraph_index': 0}}},
             {'history': {'name': 'conversation_search', 'args': {'query': '海边', 'top_k': 2}}},
             {'text': '你好。', 'basis': '按草稿。'}])
         status, first = self.backend.request(path + '/replies', self.rewrite_body(contact, '你好。'))
@@ -396,7 +396,7 @@ class OwnerContactLayeredReplyHttpTest(OverviewReplyHttpFixture, unittest.TestCa
         self.activate_replies(contact)
         path = self.reply_path(contact)
         args = lambda scenario, **extra: {'scenario_id': scenario['scenario_id'],
-            'paragraph_start': 0, 'paragraph_end': 1, **extra}
+            'paragraph_index': 0, **extra}
         self.reply_model.plans.extend([
             {'history': {'name': 'read_scenario', 'args': args(ready['scenarios'][1])}},
             {'history': {'name': 'read_scenario', 'args': args(ready['scenarios'][0], runtime={'owner_id': str(self.owner_id)})}},
@@ -505,7 +505,7 @@ class OwnerContactLayeredReplyHttpTest(OverviewReplyHttpFixture, unittest.TestCa
         self.layered_reply_options['layered_memory'] = ReadBarrier()
         self.backend = self._backend(self.owner_id)
         self.reply_model.plans.extend([{'history': {'name': 'read_scenario', 'args': {
-            'scenario_id': ready['scenarios'][0]['scenario_id'], 'paragraph_start': 0, 'paragraph_end': 1}}},
+            'scenario_id': ready['scenarios'][0]['scenario_id'], 'paragraph_index': 0}}},
             {'text': '排队来源后不得再出站。', 'basis': '迟到。'}])
         with ThreadPoolExecutor(max_workers=1) as pool:
             pending = pool.submit(self.backend.request, path + '/replies', self.rewrite_body(contact, '你好。'))

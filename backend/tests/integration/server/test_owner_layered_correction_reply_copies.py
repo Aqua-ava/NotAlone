@@ -45,7 +45,7 @@ class OwnerLayeredCorrectionReplyCopiesHttpTest(OverviewReplyHttpFixture, unitte
         start = len(self.reply_model.seen_calls)
         self.reply_model.plans.extend([
             {"history": {"name": "read_scenario", "args": {
-                "scenario_id": self.scenario["scenario_id"], "paragraph_start": 0, "paragraph_end": 1}}},
+                "scenario_id": self.scenario["scenario_id"], "paragraph_index": 0}}},
             {"text": "已根据本人课程背景形成候选。", "basis": "本次实际背景和主题正文。"},
         ])
         body = self.rewrite_body(contact, "请聊聊合成课程。")
@@ -372,7 +372,7 @@ class OwnerLayeredCorrectionReplyCopiesHttpTest(OverviewReplyHttpFixture, unitte
                 self.backend = self._backend(self.owner_id)
         self.reply_model.plans.extend([
             {"history": {"name": "read_scenario", "args": {
-                "scenario_id": self.scenario["scenario_id"], "paragraph_start": 0, "paragraph_end": 1}}},
+                "scenario_id": self.scenario["scenario_id"], "paragraph_index": 0}}},
             {"text": "纠错后不得落库的迟到候选。", "basis": "旧本人主题正文。"},
         ])
         body = self.rewrite_body(self.contacts[0], "请聊聊合成课程。")

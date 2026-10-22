@@ -39,9 +39,9 @@ class ScenarioReadHttpTest(OverviewReplyHttpFixture, unittest.TestCase):
         self.backend = self._backend(self.owner_id)
 
     @staticmethod
-    def tool_plan(scenario, start=0, end=1, **extra):
+    def tool_plan(scenario, index=0, **extra):
         return {"history": {"name": "read_scenario", "args": {
-            "scenario_id": scenario, "paragraph_start": start, "paragraph_end": end, **extra}}}
+            "scenario_id": scenario, "paragraph_index": index, **extra}}}
 
     def complete(self, contact, path, plans):
         first_call = len(self.reply_model.seen_calls)
@@ -61,7 +61,7 @@ class ScenarioReadHttpTest(OverviewReplyHttpFixture, unittest.TestCase):
         scenario = ready["scenarios"][0]
         self.reply_model.plans.extend([
             {"history": {"name": "read_scenario", "args": {
-                "scenario_id": scenario["scenario_id"], "paragraph_start": 0, "paragraph_end": 1}}},
+                "scenario_id": scenario["scenario_id"], "paragraph_index": 0}}},
             {"text": "我们一起上过课。", "basis": "按本次实际读取的主题正文。"},
         ])
         status, turn = self.backend.request(path + "/replies", self.rewrite_body(contact, "聊聊一起上课。"))
@@ -104,17 +104,29 @@ class ScenarioReadHttpTest(OverviewReplyHttpFixture, unittest.TestCase):
         contact, _, _, ready, path = self.prepare_layered_reply()
         self.use_tools(calls=8)
         identifier = ready["scenarios"][0]["scenario_id"]
-        bad = [self.tool_plan(identifier, True, 1), self.tool_plan(identifier, "0", 1),
-               self.tool_plan(identifier, 0, 1, owner_id=str(self.owner_id)),
-               self.tool_plan(identifier, 0, 1, file_path="/skills/other/SKILL.md"),
-               self.tool_plan(identifier, 0, 1, version_id=ready["scenarios"][0]["version_id"]),
-               self.tool_plan(identifier, -1, 1), self.tool_plan(identifier, 0, 2)]
+        bad = [self.tool_plan(identifier, True), self.tool_plan(identifier, "0"),
+               self.tool_plan(identifier, owner_id=str(self.owner_id)),
+               self.tool_plan(identifier, file_path="/skills/other/SKILL.md"),
+               self.tool_plan(identifier, version_id=ready["scenarios"][0]["version_id"]),
+               self.tool_plan(identifier, -1), self.tool_plan(identifier, 1)]
         evidence, _ = self.complete(contact, path, bad)
         receipts = evidence["layered_scenario_reads"]
         self.assertEqual([item["status"] for item in receipts],
                          ["invalid_arguments"] * 5 + ["out_of_range"] * 2)
         self.assertTrue(all("document" not in item for item in receipts))
         self.assertEqual([item["budget"]["used_calls"] for item in receipts], list(range(1, 8)))
+
+    def test_legacy_range_arguments_do_not_silently_read_a_single_paragraph(self):
+        contact, _, _, ready, path = self.prepare_layered_reply()
+        self.use_tools()
+        legacy = {"scenario_id": ready["scenarios"][0]["scenario_id"],
+                  "paragraph_start": 0, "paragraph_end": 1}
+        evidence, _ = self.complete(contact, path, [
+            {"history": {"name": "read_scenario", "args": legacy}},
+            {"history": {"name": "read_scenario", "args": {**legacy, "paragraph_index": 0}}}])
+        self.assertEqual([item["status"] for item in evidence["layered_scenario_reads"]],
+                         ["invalid_arguments", "invalid_arguments"])
+        self.assertTrue(all("document" not in item for item in evidence["layered_scenario_reads"]))
 
     def test_duplicate_and_call_exhaustion_do_not_return_the_body_again(self):
         contact, _, _, ready, path = self.prepare_layered_reply()
@@ -164,16 +176,22 @@ class ScenarioReadHttpTest(OverviewReplyHttpFixture, unittest.TestCase):
         self.layered_reply_options = {"layered_memory": self.service}
         self.activate_replies(contact)
         identifier = ready["scenarios"][0]["scenario_id"]
-        for limits, end in (({"paragraphs": 1}, 2), ({"characters": 1}, 1)):
+        for limits, indices in (({"paragraphs": 1}, (0, 1)), ({"characters": 1}, (0,))):
             with self.subTest(limits=limits):
                 self.use_tools(**limits)
                 status, session = self.backend.request(f"/api/contacts/{contact}/assistant-sessions", {}, method="POST")
                 self.assertEqual(status, 200, session)
                 path = f"/api/contacts/{contact}/assistant-sessions/{session['session_id']}"
-                evidence, _ = self.complete(contact, path, [self.tool_plan(identifier, 0, end)])
-                receipt = evidence["layered_scenario_reads"][0]
+                evidence, _ = self.complete(contact, path, [self.tool_plan(identifier, index) for index in indices])
+                receipt = evidence["layered_scenario_reads"][-1]
                 self.assertEqual(receipt["status"], "budget_exceeded")
-                self.assertEqual((receipt["budget"]["used_paragraphs"], receipt["budget"]["used_characters"]), (0, 0))
+                if "paragraphs" in limits:
+                    first = evidence["layered_scenario_reads"][0]
+                    self.assertEqual(first["status"], "succeeded")
+                    self.assertEqual(receipt["budget"]["used_paragraphs"], 1)
+                    self.assertEqual(receipt["budget"]["used_characters"], first["budget"]["used_characters"])
+                else:
+                    self.assertEqual((receipt["budget"]["used_paragraphs"], receipt["budget"]["used_characters"]), (0, 0))
                 self.assertNotIn("document", receipt)
                 history = evidence["retrieval"]["budgets"]["source_messages"]
                 self.assertEqual((history["call_limit"], history["item_limit"], history["token_limit"]), (3, 16, 2048))
