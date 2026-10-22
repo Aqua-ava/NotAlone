@@ -32,24 +32,6 @@ test('生产待审核卡片分别展示清洗方法和真实私人依据及建�
   } finally { await rm(owned, { recursive: true, force: true }); }
 });
 
-test('真实回复场景输入明确可选且说明场景限定方法的使用条件', async () => {
-  const owned = await mkdtemp(path.join(tmpdir(), 'notalone-reply-scene-view-'));
-  try {
-    await symlink(path.resolve('node_modules'), path.join(owned, 'node_modules'), 'dir');
-    const entry = path.join(owned, 'entry.ts');
-    await writeFile(entry, `export { ReplySceneInput } from ${JSON.stringify(path.resolve('src/renderer/ReplySceneInput.tsx'))};\n`
-      + `export { createElement } from ${JSON.stringify(path.resolve('node_modules/react/index.js'))};\n`
-      + `export { renderToStaticMarkup } from ${JSON.stringify(path.resolve('node_modules/react-dom/server.node.js'))};\n`);
-    const output = path.join(owned, 'view.mjs');
-    await build({ entryPoints: [entry], outfile: output, bundle: true, platform: 'node', format: 'esm', logLevel: 'silent', jsx: 'automatic', packages: 'external',
-      banner: { js: "import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);" } });
-    const { ReplySceneInput, createElement, renderToStaticMarkup } = await import(pathToFileURL(output).href);
-    const html = renderToStaticMarkup(createElement(ReplySceneInput, { replies: { state: { contactId: 'synthetic-contact', scene: '',
-      phase: 'idle', exploration: { phase: 'idle' }, scopeRevision: 1 }, updateScene() {} } }));
-    for (const text of ['本次精确场景', '可选', '空白', '场景限定', '重新生成']) assert.ok(html.includes(text), text);
-  } finally { await rm(owned, { recursive: true, force: true }); }
-});
-
 test('生产审核视图显示可编辑方法、明确范围、冻结版本和真实两侧结果', async () => {
   const owned = await mkdtemp(path.join(tmpdir(), 'notalone-review-view-'));
   try {

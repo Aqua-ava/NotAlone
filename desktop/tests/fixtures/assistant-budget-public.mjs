@@ -18,7 +18,6 @@ export async function budgetPublicFixture(t, { toolHistory = false, continuous =
     export { JsonClient, BackendRequestFailure } from './src/main/backend/json-client';
     export { AssistantSessionPanel } from './src/renderer/AssistantSessionPanel';
     export { ReplyCandidates } from './src/renderer/RewritePanel';
-    export { StrategyControls } from './src/renderer/StrategyControls';
     export { createElement } from 'react';
     export { renderToStaticMarkup } from 'react-dom/server';
     export { cleanupCoreFixture, FixtureProcessEvidence } from './tests/database-ownership';
@@ -135,8 +134,6 @@ export async function budgetPublicFixture(t, { toolHistory = false, continuous =
     message: event => { for (const observer of messageObservers) observer.message(event); },
     BackendRequestFailure: ports.BackendRequestFailure,
     renderSession: (state) => ports.renderToStaticMarkup(ports.createElement(ports.AssistantSessionPanel,
-      { replies: { state, error: '' } })),
-    renderStrategy: (state) => ports.renderToStaticMarkup(ports.createElement(ports.StrategyControls,
       { replies: { state, error: '' } })),
     renderCandidates: (state) => {
       const previousWindow = globalThis.window;

@@ -73,9 +73,6 @@ test('公开方向探索遭服务限长保留已填目的，停止旧策略重�
   assert.equal(failed.inputBudgetNotice, undefined);
   const html = f.renderCandidates(failed);
   assert.match(html, notice);
-  assert.doesNotMatch(f.renderStrategy(failed), /方向建议暂不可用，请核对输入或更新策略后明确重试|重试策略操作/);
-  assert.doesNotMatch(f.renderStrategy({ ...failed,
-    exploration: { ...failed.exploration, automaticUpdatesPaused: true } }), /本次自动更新已暂停，请点/);
   const saved = await f.request(`/api/contacts/${scope.contactId}/assistant-sessions/${sessionId}`);
   assert.equal(saved.inputs[0].content.purpose_hint, purpose);
   assert.equal((await f.command('metrics')).model_calls, 1);

@@ -2,7 +2,6 @@ import { constants } from 'node:fs';
 import { open, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { validatedSelection } from '../src/main/foreground/calibration-selection';
 import { resolveSyncProbePath } from '../src/main/backend/bundled-helpers';
 
 // 固定 E 的已核公开字节；不从运行参数选择其它包或拼造 profile。
@@ -115,6 +114,37 @@ export function foregroundMetadataCounts(snapshot: ForegroundAuditSnapshot): Arr
     Object.fromEntries(keys.map(key => [key, row[key] as number])));
 }
 
+// 校准采集入口已删除；该真实前台验收仍核对冻结 profile 的选区结构，校验逻辑留在测试侧。
+function assertFrozenSelection(value: unknown): void {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw invalid();
+  const selection = value as Record<string, unknown>;
+  const keys = ['schemaVersion', 'state', 'wechatVersion', 'wechatBuild', 'processId', 'windowId', 'windowFrame', 'regions'];
+  const positiveInteger = (entry: unknown) => typeof entry === 'number' && Number.isSafeInteger(entry) && entry > 0;
+  const rectangle = (entry: unknown) => {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) throw invalid();
+    const record = entry as Record<string, unknown>;
+    const fields = ['x', 'y', 'width', 'height'];
+    if (Object.keys(record).length !== fields.length || !Object.keys(record).every(key => fields.includes(key))
+      || !fields.every(key => typeof record[key] === 'number' && Number.isFinite(record[key]))
+      || (record.width as number) <= 0 || (record.height as number) <= 0) throw invalid();
+    return record as { x: number; y: number; width: number; height: number };
+  };
+  if (Object.keys(selection).length !== keys.length || !Object.keys(selection).every(key => keys.includes(key))
+    || selection.schemaVersion !== 1 || selection.state !== 'selected-awaiting-verification'
+    || selection.wechatVersion !== '4.0.6' || selection.wechatBuild !== '29387'
+    || !positiveInteger(selection.processId) || !positiveInteger(selection.windowId)) throw invalid();
+  const frame = rectangle(selection.windowFrame);
+  if (frame.width < 600 || frame.height < 400 || frame.width > 10_000 || frame.height > 10_000) throw invalid();
+  if (!selection.regions || typeof selection.regions !== 'object' || Array.isArray(selection.regions)) throw invalid();
+  const regions = selection.regions as Record<string, unknown>;
+  const names = ['displayName', 'selectedRowName', 'verticalDivider', 'headerDivider', 'selectedHighlight'];
+  if (Object.keys(regions).length !== names.length || !Object.keys(regions).every(name => names.includes(name))) throw invalid();
+  for (const name of names) {
+    const region = rectangle(regions[name]);
+    if (region.x < 0 || region.y < 0 || region.x + region.width > frame.width || region.y + region.height > frame.height) throw invalid();
+  }
+}
+
 export type ForegroundCredential = {
   displayName: string; scopePath: string; scopeSha256: string; probePath: string;
   profileBytes: Buffer; profileSha256: string; appExecutablePath: string;
@@ -156,7 +186,7 @@ export async function readForegroundCredential(selected: string, appExecutablePa
     const { pixelScale, sentinelDigests, ...selection } = profile;
     if (profile.state !== 'verified-minimal-layout' || typeof pixelScale !== 'number' || !Number.isFinite(pixelScale)
       || pixelScale < 1 || pixelScale > 3) throw invalid();
-    validatedSelection({ ...selection, state: 'selected-awaiting-verification' });
+    assertFrozenSelection({ ...selection, state: 'selected-awaiting-verification' });
     const digests = object(sentinelDigests);
     exact(digests, ['verticalDivider', 'headerDivider', 'selectedHighlight']);
     if (!Object.values(digests).every(value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value))) throw invalid();

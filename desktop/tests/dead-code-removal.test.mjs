@@ -4,11 +4,21 @@ import { readdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 
 // 死代码删除回归：已确认零生产/测试引用的组件与常量不得重新出现或残留引用。
-const removedComponents = ['ReplyModePicker', 'ReplySourcePicker', 'RewriteInput', 'DirectedReplyInput', 'ProactiveReplyInput'];
+const removedComponents = ['ReplyModePicker', 'ReplySourcePicker', 'RewriteInput', 'DirectedReplyInput', 'ProactiveReplyInput',
+  'StrategyControls', 'ReplySceneInput', 'ForegroundCalibration'];
 const removedFiles = [
   'src/renderer/DirectedReplyInput.tsx',
   'src/renderer/ProactiveReplyInput.tsx',
   'tests/rewrite-generation-entry.test.mjs',
+  // 未接线的前台校准集群与仅测试打包的方向/场景组件（audit 2026-10-22）。
+  'src/main/foreground/calibration.ts',
+  'src/main/foreground/calibration-form.ts',
+  'src/main/foreground/calibration-profile.ts',
+  'src/main/foreground/calibration-selection.ts',
+  'src/renderer/StrategyControls.tsx',
+  'src/renderer/ReplySceneInput.tsx',
+  'tests/helpers/calibration-progress.test.mjs',
+  'tests/reply-strategy-display.test.mjs',
 ];
 
 async function* walk(directory) {
@@ -37,6 +47,16 @@ test('生产与测试源码零引用已删除组件', async () => {
     }
   }
   assert.deepEqual(references, [], `仍存在死组件引用：${references.join(', ')}`);
+});
+
+test('构建与测试入口不引用已删除的未接线代码', async () => {
+  const entries = ['scripts/build.mjs', 'scripts/dev.mjs', 'scripts/test-inventory.mjs', 'scripts/test-safe.mjs',
+    'scripts/package.mjs', 'scripts/release-check.mjs'];
+  const removed = ['calibration-form', 'calibration-profile', 'calibration-selection', 'StrategyControls', 'ReplySceneInput'];
+  for (const file of entries) {
+    const source = await readFile(file, 'utf8');
+    for (const name of removed) assert.ok(!source.includes(name), `${file} 仍引用已删除的 ${name}`);
+  }
 });
 
 test('固定三候选复核协议常量不再与动态构建重复定义', async () => {
