@@ -25,6 +25,23 @@ def source_grounded_event_proposal(payload: dict, window: ExtractionWindow) -> d
     message = next((item for item in window.messages
                     if str(item.message_id) == anchor and anchor in source_ids), None)
     actual = source_calendar_time(message) if message is not None else None
+    expression = event.get('occurrence_expression')
+    positions = event.get('occurrence_evidence', ())
+    grounded = message is not None and isinstance(expression, str) and bool(expression.strip()) and any(isinstance(ref, dict)
+        and ref.get('message_id') == anchor and type(ref.get('char_start')) is int
+        and type(ref.get('char_end')) is int and 0 <= ref['char_start'] < ref['char_end'] <= len(message.text)
+        and expression in message.text[ref['char_start']:ref['char_end']] for ref in positions)
+    if (grounded and event.get('stage') == 'unknown' and event.get('stage_evidence') == []
+            and event.get('occurrence_precision') in {'unknown', 'day'}
+            and event.get('occurrence_start') is None and event.get('occurrence_end') is None):
+        # 不先抹除非法元数据；空事件仅不承载发生主张，日期原话仍接受正文核验。
+        parsed = MemoryEvent.from_payload(event, proposal=True)
+        messages = {item.message_id: item for item in window.messages}
+        if parsed and all(ref.message_id in messages and str(ref.message_id) in source_ids
+                and messages[ref.message_id].text_representation == 'text'
+                and 0 <= ref.char_start < ref.char_end <= len(messages[ref.message_id].text)
+                for ref in parsed.occurrence_evidence):
+            return {**payload, 'event': None}
     changed = {}
     for key in ('occurrence_start', 'occurrence_end'):
         raw = event.get(key)
@@ -33,10 +50,25 @@ def source_grounded_event_proposal(payload: dict, window: ExtractionWindow) -> d
         value = datetime.fromisoformat(raw)
         if value.utcoffset() is None:
             changed[key] = value.replace(tzinfo=actual.tzinfo).isoformat() if actual else None
+    if actual is None:
+        if changed:
+            changed.update(occurrence_start=None, occurrence_end=None, occurrence_precision='unknown')
+    else:
+        proposal = {**event, **changed}
+        try:
+            expected = _calendar(expression, actual) if grounded else None
+        except (ValueError, OverflowError):
+            expected = None
+        if expected is not None and expected[0] in {'year', 'month', 'day'} and proposal.get('occurrence_precision') == expected[0]:
+            start = datetime.fromisoformat(proposal['occurrence_start']) if proposal.get('occurrence_start') else None
+            end = datetime.fromisoformat(proposal['occurrence_end']) if proposal.get('occurrence_end') else None
+            # 仅规范化可证明等价的闭区间末秒，不能截断活动持续期。
+            if (start == expected[1] and start.utcoffset() == expected[1].utcoffset()
+                    and end is not None and end.utcoffset() == expected[2].utcoffset()
+                    and end == expected[2] - timedelta(seconds=1)):
+                changed['occurrence_end'] = expected[2].isoformat()
     if not changed:
         return payload
-    if actual is None:
-        changed.update(occurrence_start=None, occurrence_end=None, occurrence_precision='unknown')
     return {**payload, 'event': {**event, **changed}}
 
 

@@ -44,7 +44,11 @@ class PersonalVerificationDiagnosticsTest(unittest.TestCase):
                 'support_type': 'direct' if self.entry['kind'] == 'fact' else self.entry['kind'],
                 'supported': True, 'uncertainty_preserved': True, 'basis': '实际资料支持该条内容。',
                 'temporal_basis': 'static_fact', 'temporal_references': [],
-                'sources': [{**self.ref, 'quote': self.memory.text}]}]}]}
+                'sources': [{**self.ref, 'quote': self.memory.text}], 'claims': [{
+                    'text': self.entry['text'], 'sources': [{**self.ref, 'quote': self.memory.text}],
+                    'subject_role': 'contact', 'subject_basis': '来源直接描述联系人。',
+                    'supported': True, 'value_category': 'static_fact',
+                    'eligibility_basis': '姓名是静态背景。', 'relationship_impact': None}]}]}]}
 
     def verify(self, response, *, memories=None, corrections=()):
         self.model = SyntheticResponseModel(response)
@@ -115,3 +119,44 @@ class PersonalVerificationDiagnosticsTest(unittest.TestCase):
         result = self.verify(response, memories=[verified_memory])
         self.assertEqual(result['accepted_indices'], [])
         self.assertEqual(result['rejected'][0]['code'], 'temporal_basis_mismatch')
+
+    def test_incidental_family_interest_requires_independent_relationship_impact(self):
+        self.memory = replace(self.memory, text='联系人的弟弟喜欢羽毛球。')
+        self.entry.update(text=self.memory.text, section='life_context')
+        for role in ('third_party', 'relationship'):
+            with self.subTest(role=role):
+                response = self.response()
+                response['items'][0]['statements'][0]['claims'][0].update(
+                    subject_role=role, value_category='enduring_fact_or_preference')
+                result = self.verify(response)
+                self.assertEqual(result['accepted_indices'], [])
+                self.assertEqual(result['rejected'][0]['code'], 'profile_eligibility_unconfirmed')
+
+    def test_important_family_responsibility_retains_source_and_temporal_gates(self):
+        self.memory = replace(self.memory, text='我长期负责弟弟的日常照料，生活安排需要配合。')
+        self.entry.update(text=self.memory.text, section='life_context')
+        response = self.response()
+        statement = response['items'][0]['statements'][0]
+        statement.update(temporal_basis='current_unverified')
+        claim = statement['claims'][0]
+        claim.update(subject_role='relationship', value_category='important_relationship',
+            relationship_impact={'kind': 'ongoing_responsibility', 'basis': '长期日常照料直接影响生活安排。',
+                'sources': [{**self.ref, 'quote': self.memory.text}]})
+        self.assertEqual(self.verify(response)['accepted_indices'], [0])
+        claim['relationship_impact']['sources'][0]['quote'] = '不存在的重要性依据'
+        self.assertEqual(self.verify(response)['accepted_indices'], [])
+
+    def test_missing_or_incomplete_claims_cannot_bypass_personal_profile_eligibility(self):
+        for mutation in ('missing', 'incomplete', 'unknown', 'none'):
+            with self.subTest(mutation=mutation):
+                response = self.response()
+                statement = response['items'][0]['statements'][0]
+                if mutation == 'missing':
+                    statement.pop('claims')
+                elif mutation == 'incomplete':
+                    statement['claims'][0]['text'] = '合成'
+                elif mutation == 'unknown':
+                    statement['claims'][0]['subject_role'] = 'unknown'
+                else:
+                    statement['claims'][0]['value_category'] = 'none'
+                self.assertEqual(self.verify(response)['accepted_indices'], [])

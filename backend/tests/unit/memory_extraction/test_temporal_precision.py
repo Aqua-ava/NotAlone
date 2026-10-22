@@ -9,6 +9,39 @@ from tests.unit.memory_extraction.verification_helpers import FixedSourceVerifie
 
 
 class TemporalPrecisionFlowTest(unittest.TestCase):
+    def test_cross_year_activity_end_is_not_truncated_to_one_calendar_year(self):
+        event = self.run_case(text='2021年培训，2024年结束。', expression='2021年', precision='year',
+            start='2021-01-01T00:00:00+08:00', end='2024-12-31T23:59:59+08:00').accepted[0].event
+        self.assertFalse(event.occurrence_verified)
+        self.assertIsNone(event.occurrence_end)
+
+    def test_empty_unknown_event_does_not_discard_sourced_static_date(self):
+        for precision in ('unknown', 'day'):
+            with self.subTest(precision=precision):
+                fact = self.run_case(text='我的纪念日是8月16日。', expression='8月16日', precision=precision,
+                    start=None, end=None, empty_event=True).accepted[0]
+                self.assertIsNone(fact.event)
+                self.assertEqual(fact.text, '我的纪念日是8月16日。')
+
+    def test_empty_event_does_not_hide_invalid_or_foreign_source_metadata(self):
+        cases = [
+            {'unexpected_field': True},
+            {'occurrence_expression': ''},
+            {'occurrence_evidence': [{'message_id': str(uuid4()), 'char_start': 0, 'char_end': 1}]},
+            {'occurrence_evidence': [{'message_id': str(uuid4()), 'char_start': -1, 'char_end': 1}]},
+        ]
+        for changes in cases:
+            with self.subTest(changes=changes):
+                outcome = self.run_case(text='我的纪念日是8月16日。', expression='8月16日', precision='day',
+                    start=None, end=None, empty_event=True, event_changes=changes)
+                self.assertEqual(outcome.accepted, ())
+
+    def test_calendar_inclusive_last_second_becomes_source_grounded_half_open_boundary(self):
+        event = self.run_case(text='2024年实习期间不便通话。', expression='2024年', precision='year',
+            start='2024-01-01T00:00:00+08:00', end='2024-12-31T23:59:59+08:00').accepted[0].event
+        self.assertTrue(event.occurrence_verified)
+        self.assertEqual(event.occurrence_end.isoformat(), '2025-01-01T00:00:00+08:00')
+
     def test_historical_year_with_activity_and_date_only_proposal_keeps_source_offset(self):
         outcome = self.run_case(
             text='2024年实习期间每周三不能接电话。',
@@ -42,7 +75,7 @@ class TemporalPrecisionFlowTest(unittest.TestCase):
     def run_case(self, *, text='明天去看展。', when='2030-01-31T23:30:00+08:00',
                  expression='明天', precision='day', start='2030-02-01T00:00:00+08:00',
                  end='2030-02-02T00:00:00+08:00', source_timezone=True, validity=None,
-                 occurrence_verdict=None):
+                 occurrence_verdict=None, empty_event=False, event_changes=None):
         mid = uuid4()
         actual = datetime.fromisoformat(when).astimezone(timezone.utc) if when else None
         snapshots = ({'source_ref_id': str(uuid4()), 'source_id': str(uuid4()),
@@ -55,12 +88,19 @@ class TemporalPrecisionFlowTest(unittest.TestCase):
             'occurrence_start':start,'occurrence_end':end,'occurrence_evidence':[pos],
             'occurrence_precision':precision,'occurrence_expression':expression,'anchor_message_id':str(mid)}
         fact = _payload(mid,text=text,category='relationship_note',event=event)
+        if empty_event:
+            event.update(stage='unknown', stage_evidence=[])
+            fact.update(category='common_fact')
+        if event_changes:
+            event.update(event_changes)
         if validity is not None:
             fact.update(event=None, _requires_all_sources=True, category='recent_state', valid_at=validity[0], invalid_at=validity[1])
         result = verification_result(evidence=((mid,text),))
         result['event_verification']={'stage_verdict':'supported','occurrence_verdict':occurrence_verdict or ('supported' if start else 'uncertain'),
             'stage_evidence':[pos],'occurrence_evidence':[pos]}
         if validity is not None:
+            result.pop('event_verification')
+        if empty_event:
             result.pop('event_verification')
         return ExtractionFlow(runtime=RecordingRuntime((fact,)),
             verification_runtime=FixedSourceVerifier((result,))).run(window)

@@ -118,7 +118,11 @@ class PersonalBackgroundVerificationTest(unittest.TestCase):
                 'index': 0, 'kind': audit_kind or self.entry['kind'], 'support_type': 'inference' if self.entry['kind'] == 'inference' else 'direct',
                 'supported': supported, 'uncertainty_preserved': True, 'basis': '长期上课支持可能的兴趣，不证明确定偏好。',
                 'temporal_basis': temporal, 'temporal_references': [],
-                'sources': [{'memory_id': str(UUID(int=1)), 'revision': 2, 'quote': quote or '每周参加绘画课'}]}]}
+                'sources': [{'memory_id': str(UUID(int=1)), 'revision': 2, 'quote': quote or '每周参加绘画课'}],
+                'claims': [{'text': entry['text'], 'sources': [{'memory_id': str(UUID(int=1)), 'revision': 2, 'quote': '每周参加绘画课'}],
+                    'subject_role': 'app_user', 'subject_basis': '原文明确本人持续上课。',
+                    'supported': True, 'value_category': 'enduring_fact_or_preference',
+                    'eligibility_basis': '持续上课支持有局限的长期兴趣推断。', 'relationship_impact': None}]}]}
         model = ResponseModel({'items': [audit]})
         adapter = DeepSeekOrganizationVerification(model, layer='l3', budget=OrganizationBudget(), transport=None, personal=True)
         return adapter.verify_items(memories=[self.memory], proposal={'entries': [entry]}, corrections=corrections,

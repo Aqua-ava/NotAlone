@@ -73,7 +73,7 @@ def _relationship_impact(claim, references, inputs) -> bool:
     return True
 
 
-def _claims_supported(claims: object, entry: dict, references, inputs) -> bool:
+def profile_claims_supported(claims: object, entry: dict, references, inputs) -> bool:
     """只机验覆盖/来源/类别合取，不证明命题原子性或关系重要性。"""
     if not isinstance(claims, list) or not 1 <= len(claims) <= MAX_CLAIMS_PER_ENTRY:
         raise ValueError('长期背景命题审计数量无效。')
@@ -124,7 +124,7 @@ def profile_verification_supported(result: dict, proposal: dict, memories: list[
         if (audit['entry_sha256'] != content_digest(entry) or _references(audit['references']) != references
                 or not references or not references <= inputs.keys() or not temporal_references <= references):
             raise ValueError('长期背景核验未绑定本次条目及直接版本引用。')
-        claims_supported = _claims_supported(audit['claims'], entry, references, inputs)
+        claims_supported = profile_claims_supported(audit['claims'], entry, references, inputs)
         basis = audit['temporal_basis']
         if basis == 'current_verified':
             # 只检查审计明确指向的现状支持；其他上下文未知不抵销有效当前依据。
