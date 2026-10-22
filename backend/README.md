@@ -148,7 +148,7 @@ PYTHONPATH=backend/src python \
 
 `066_skill_review_publication.sql` 追加真实草稿、对照、发布、方法及最小调用关联。旧包 `review_origin=false` 不回填。场景进入权威输入和恢复合同；来源删除包括对照额外材料、隐藏导航、偏好与跨联系人实际/准备使用，首个后续 GET 前已清正文。准备格式仍为 version2/schema4，本票未改变 codec 的冻结结构。
 
-普通回复、探索与审核共享的模型由 reply builder **构造时**设置 `max_retries=0`，每个模型轮最多一次物理 SDK 派发，实际次数与 callback 台账在传输测试中分别核对；公共 provider 默认仍为2，其他独立链不变。该 builder 为 DeepSeek ToolStrategy 明确关闭 thinking，预算 DTO 按已核 SDK 浅合并同一字段；只允许此明确扩展，其余附加正文仍拒绝。已批准 ECNU 配置不添加 thinking；未知 DeepSeek profile/counter 继续在本地拒绝，不自动获准。SDK 本地 Mock 仅证明序列化与计账合同，不证明外部调用成功、供应商 token 精度或上界。实际命令、原失败及页面/模型/App边界见[11集成记录](../.scratch/memory-skill-integration-preparation/frontier-11-validation.md)。
+普通回复、探索与审核共享的模型由 reply builder **构造时**设置 `max_retries=0`，每个模型轮最多一次物理 SDK 派发，实际次数与 callback 台账在传输测试中分别核对；公共 provider 默认仍为2，其他独立链不变。该 builder 默认关闭 thinking；显式 `reply_thinking_effort=low/high/max` 只用于同一官方 Flash 的受控试验，不修改默认配置。思考分支使用普通结构化终止工具，仍执行原来源与结构检查、20 秒时限及逐轮计量；已知 `ThinkingDeepSeek` 适配类在统一 SDK 序列化中回传本轮已有思考字段，计量与发送一致，验收产物不保存思考正文。预算 DTO 仅浅合并已核实的 enabled/disabled 开关，其余附加正文仍拒绝。已批准 ECNU 配置不添加 thinking；未知 DeepSeek profile/counter 继续在本地拒绝，不自动获准。SDK 本地 Mock 仅证明序列化与计账合同，不证明外部调用成功、供应商 token 精度或上界。实际命令、原失败及页面/模型/App边界见[11集成记录](../.scratch/memory-skill-integration-preparation/frontier-11-validation.md)。
 
 ## Skill 更新、合并与历史回滚（12）
 
