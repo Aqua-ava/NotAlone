@@ -5,6 +5,8 @@ State: resolved
 Triage: ready-for-agent
 Implementation: completed
 
+> 2026-10-22 后继说明：本文“Runtime 不直接查询消息或关系记忆”“第一阶段不把动态检索 Tool 交给 Runtime”的阶段限制已由 [ADR-090](../../architecture/adr/090-bounded-runtime-history-retrieval.md) 局部替代；应用层范围、来源复验、预算与模块职责保持，正文旧表述仅历史。
+
 ## Problem Statement
 
 NotAlone 已经有一个可以生成合成候选回复的纵切，但当前纵切把联系人范围验证、回复上下文、运行时生成和结果保存压缩在一个较粗的内部流程中。随着产品同时支持“表达方向回复”和“改写与润色”两种用户输入，如果继续沿用这个形态，容易出现以下问题：

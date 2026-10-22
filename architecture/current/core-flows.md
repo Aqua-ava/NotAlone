@@ -145,9 +145,9 @@ CLI 可以在用户切回已绑定联系人时补读本地数据库中水位之�
   -> 按用户点击的帮我表达／帮我想想固定本次动作，后者允许空想法
   -> 结合用户输入、补充聊天、近期对话、相关记忆及可用 Skill 精简目录；建议不冒充确认方向
   -> 仅在明确生成操作下固定本次联系人、助手会话、输入版本及有界上下文并接受候选任务
-  -> LangChain create_agent 在有界循环中按需创建 Todo，并向 UI 输出多步骤进度
+  -> LangChain create_agent 在有界循环中按需调用受控 Tool，不创建模型 Todo 或步骤进度（ADR-091）
   -> 按需调用已接入的受控 Skill 与联系人检索 Tool（ADR-090）；当前不接入时间、日历或网络搜索工具（ADR-092）
-  -> 根据 Tool 结果继续查询，普通回复不强制创建 Todo
+  -> 根据 Tool 结果继续查询，不使用 Todo 表达多步骤进度
   -> 在五轨上下文内返回 1-3 条带依据引用的 reply_candidate，或返回澄清需求
   -> 校验输出结构、引用与禁止动作并持久化本次运行轨迹
   -> UI 显示候选或澄清问题，以及本次实际使用的上下文范围
@@ -158,7 +158,7 @@ CLI 可以在用户切回已绑定联系人时补读本地数据库中水位之�
 
 按 [ADR-068](../adr/068-direct-reply-candidates-with-user-selection.md)，候选生成后不追加模型语义复核；结构、范围、来源与引用检查继续由程序执行，候选的最终表达由用户选择和修改。来源引用有效不等于语义已核验。记忆入库、L2/L3 整理核验及离线质量资格独立保持。
 
-回复运行时固定为确定性外壳 `validate_scope -> assess_request_risk -> assemble_initial_context -> create_agent bounded Tool loop -> validate_agent_output -> persist_trace -> return_result`。内部循环使用 LangChain `create_agent`，并接受 LangGraph 作为底层 runtime；v1 不直接手写自定义 `StateGraph`。若以后出现明确的暂停恢复或复杂固定流程，可以把整个 `create_agent` 作为自定义图中的节点。完整边界见 `../drafts/agent-runtime.md`、ADR-006 与 ADR-009。
+回复运行时固定为确定性外壳 `validate_scope -> assess_request_risk -> assemble_initial_context -> create_agent bounded Tool loop -> validate_agent_output -> persist_trace -> return_result`。内部循环使用 LangChain `create_agent`，并接受 LangGraph 作为底层 runtime；v1 不直接手写自定义 `StateGraph`。若以后出现明确的暂停恢复或复杂固定流程，可以把整个 `create_agent` 作为自定义图中的节点。完整边界见 ADR-006 与 ADR-009 及现行运行时装配；历史草案见 `../drafts/agent-runtime.md`，不作为现行约束。
 
 每次生成由调用方提供联系人范围内的幂等 `request_key`。同键同输入的已完成请求直接返回原候选；同键不同输入明确报冲突；有效租约内正在执行时返回“处理中”；失败或租约过期后可以复用同一请求身份重试，不得产生第二份请求或重复候选。
 
