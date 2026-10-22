@@ -171,7 +171,7 @@ class PhysicalModelSchedulingTest(unittest.TestCase):
     def test_sdk_retry_keeps_each_physical_request_trace_and_ledger(self):
         import json
         import httpx
-        from notalone.ledger.adapters import InMemoryOutboundLedger
+        from tests.support.ledger_adapters import InMemoryOutboundLedger
         from notalone.memory.adapters import InMemoryMemoryStore
         from notalone.memory_extraction.command import run_extraction
         from notalone.memory_trace.adapters import InMemoryTraceStore

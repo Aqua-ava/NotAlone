@@ -34,7 +34,7 @@ class EvaluationHttpBudgetTest(unittest.TestCase):
 
     def test_trace_hook_and_evaluation_transport_reserve_problem_once(self):
         import os
-        from notalone.experiments.problem_budget import ProblemBudget
+        from notalone.problem_budget import ProblemBudget
         from notalone.memory_trace.transport import build_trace_http_client
         with tempfile.TemporaryDirectory() as temporary:
             home = Path(temporary)
@@ -79,7 +79,7 @@ class EvaluationHttpBudgetTest(unittest.TestCase):
 
     def test_problem_total_stops_before_transport(self):
         import os
-        from notalone.experiments.problem_budget import ProblemBudget
+        from notalone.problem_budget import ProblemBudget
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             ledger = root / 'problem.sqlite3'

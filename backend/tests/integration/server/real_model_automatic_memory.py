@@ -16,7 +16,7 @@ from uuid import UUID, uuid4
 import httpx
 import psycopg
 
-from notalone.experiments.problem_budget import ProblemBudget, reserve_problem_attempt
+from notalone.problem_budget import ProblemBudget, reserve_problem_attempt
 from notalone.memory.organization_quality_suite_budget import PersistentSuiteBudget, atomic_json
 from notalone.runtime_config import load_project_env
 from tests.integration.server.core_business_flow_support import CoreBusinessFlowFixture, HttpBackend

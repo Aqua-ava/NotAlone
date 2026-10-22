@@ -8,7 +8,7 @@ from uuid import UUID
 
 import httpx
 
-from notalone.ledger.adapters import InMemoryOutboundLedger
+from tests.support.ledger_adapters import InMemoryOutboundLedger
 from notalone.memory.adapters import InMemoryMemoryStore
 from notalone.memory_extraction.adapters import LangChainExtractionRuntime
 from notalone.memory_extraction.command import run_extraction
@@ -357,7 +357,7 @@ class TraceTransportTest(unittest.TestCase):
     def test_extraction_verification_and_adjudication_each_preserve_their_own_sdk_call(
         self,
     ):
-        from notalone.ledger.adapters import InMemoryOutboundLedger
+        from tests.support.ledger_adapters import InMemoryOutboundLedger
         from notalone.memory.models import MemoryCandidate, MemoryCategory
         from notalone.memory_extraction.adjudication_adapters import (
             LangChainAdjudicationRuntime,

@@ -14,7 +14,7 @@ import httpx
 from langchain_deepseek import ChatDeepSeek
 from langchain_core.messages import AIMessage
 
-from notalone.ledger.adapters import InMemoryOutboundLedger
+from tests.support.ledger_adapters import InMemoryOutboundLedger
 from notalone.application.memory_upgrade_runtime import build_upgrade_components, build_upgrade_runtime
 from notalone.application.memory_upgrade import UpgradeModelCalls
 from notalone.memory.upgrade import UpgradeBudgetExceeded, UpgradeConflict

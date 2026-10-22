@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from uuid import uuid4
 
-from notalone.media.service import MediaService
+from tests.support.media_service import MediaService
 from notalone.scopes import ContactScope
 
 

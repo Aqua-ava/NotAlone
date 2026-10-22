@@ -1,4 +1,7 @@
-"""出站台账的进程内实现。"""
+"""出站台账的进程内测试替身（原 `notalone.ledger.adapters`）。
+
+生产代码 0 import，随 ticket 07 移出 `notalone` 生产包；仅测试使用。
+"""
 
 from __future__ import annotations
 

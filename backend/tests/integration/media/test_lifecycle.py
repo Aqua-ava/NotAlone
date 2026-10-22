@@ -99,7 +99,7 @@ class MediaLifecycleTest(unittest.TestCase):
         return (source_id, ref_id)
 
     def service(self, **kwargs):
-        from notalone.media.service import MediaService
+        from tests.support.media_service import MediaService
         return MediaService(self.database_url, self.cache_root, **kwargs)
 
     def test_unverified_production_reader_refuses_without_creating_cache(self):
@@ -762,7 +762,7 @@ import sys
 import time
 from uuid import UUID
 from notalone.media.cache import ManagedMediaCache
-from notalone.media.service import MediaService
+from tests.support.media_service import MediaService
 from notalone.scopes import ContactScope
 from tests.support.media_fixtures import SyntheticReader
 

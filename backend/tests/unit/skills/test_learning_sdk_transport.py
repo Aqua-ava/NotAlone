@@ -13,7 +13,7 @@ import httpx
 from langchain_deepseek import ChatDeepSeek
 
 from notalone.application.model_priority import ModelPriorityControl
-from notalone.ledger.adapters import InMemoryOutboundLedger
+from tests.support.ledger_adapters import InMemoryOutboundLedger
 from notalone.ledger.models import LedgerOutcome
 from notalone.memory_trace.transport import build_trace_http_client
 from notalone.reply.adapters.deepseek_provider import build_deepseek_model

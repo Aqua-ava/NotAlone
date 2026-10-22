@@ -6,7 +6,7 @@ from uuid import uuid4
 
 from langchain_core.messages import AIMessage
 
-from notalone.ledger.adapters import InMemoryOutboundLedger
+from tests.support.ledger_adapters import InMemoryOutboundLedger
 from notalone.ledger.models import LedgerOutcome
 from notalone.scopes import ContactScope
 from notalone.skills.learning import LearningBatch, SkillLearningInvalid

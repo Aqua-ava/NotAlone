@@ -17,7 +17,7 @@ from notalone.application.model_priority import (
     AccountedExtractionRunner, MemoryCallAccounting, ModelPriorityControl,
     ModelWorkStopped, PriorityVerificationRuntime,
 )
-from notalone.ledger.adapters import InMemoryOutboundLedger
+from tests.support.ledger_adapters import InMemoryOutboundLedger
 from notalone.memory_extraction.command import ExtractionRunStats
 from notalone.memory.adapters import InMemoryMemoryStore
 from notalone.memory_extraction.models import MessageRef, MessageSender

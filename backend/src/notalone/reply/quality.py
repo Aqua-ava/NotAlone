@@ -37,7 +37,8 @@ def build_reply_contract(model, profile, contact_budget, owner_budget):
         budget_version=content_digest(budgets), evaluation_version=_source_identity([
             'reply/quality.py', 'application/reply_qualification.py',
             'memory/organization_quality.py', 'reply/prepared_context_codec.py', 'persistence/reply_store.py',
-            'experiments/reply_comparison.py', 'reply/adapters/reply_comparison_capture.py',
+            'reply/comparison_contract.py', 'experiments/reply_comparison.py',
+            'reply/adapters/reply_comparison_capture.py',
             'application/reply_evidence.py']))
 
 
@@ -118,7 +119,7 @@ def _captured_output_matches(arm, calls):
         if (len(generated) != 1 or len(read) != 1 or generated[0]['status'] != 200 or read[0]['status'] != 200
                 or generated[0]['response'] != output or read[0]['response'] != persisted):
             return False
-        from notalone.experiments.reply_comparison import canonical_input
+        from notalone.reply.comparison_contract import canonical_input
         if canonical_input({'request': generated[0].get('request') or {}})['request'] != evidence['input_package']['request']:
             return False
         actual_input = _generation_input(calls[0]['request'])
@@ -206,7 +207,7 @@ def comparison_report(bundle, contract):
         if (case.get('organization_review') or {}).get('decision') != 'approved':
             reasons.append('organization_candidate_not_supported')
         try:
-            from notalone.experiments.reply_comparison import validate_installation_binding, validate_persisted_installation
+            from notalone.reply.comparison_contract import validate_installation_binding, validate_persisted_installation
             binding = case['installation_binding']
             digest = validate_installation_binding(binding, case['organization_output_sha256'], case['organization_review'])
             if binding['expected_scopes'] != [case['scope_kind']]:

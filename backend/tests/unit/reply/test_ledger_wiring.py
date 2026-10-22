@@ -6,7 +6,7 @@ import unittest
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from notalone.ledger.adapters import InMemoryOutboundLedger
+from tests.support.ledger_adapters import InMemoryOutboundLedger
 from notalone.ledger.models import LedgerOutcome
 from notalone.reply.context import ContextEvidence, ReplyContext
 from notalone.reply.errors import (

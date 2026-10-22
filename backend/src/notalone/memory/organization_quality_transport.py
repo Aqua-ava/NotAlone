@@ -112,7 +112,7 @@ class OrganizationQualityHTTPTransport(httpx.BaseTransport):
         if len(request.content.decode()) > budget.max_characters:
             raise ValueError('完整实际整理请求超过有版本预算。')
         request.extensions['timeout'] = {key: deadline.remaining_seconds() for key in ('connect', 'read', 'write', 'pool')}
-        from notalone.experiments.problem_budget import reserve_problem_attempt
+        from notalone.problem_budget import reserve_problem_attempt
         reserve_problem_attempt(request=request)
         if reserve is not None:
             reserve()

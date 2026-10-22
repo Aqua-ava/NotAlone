@@ -6,7 +6,7 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
-from notalone.ledger.adapters import InMemoryOutboundLedger
+from tests.support.ledger_adapters import InMemoryOutboundLedger
 from notalone.ledger.models import LedgerEntry, LedgerOutcome
 
 

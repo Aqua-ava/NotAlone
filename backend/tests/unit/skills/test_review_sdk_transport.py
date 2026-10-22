@@ -15,7 +15,7 @@ from uuid import uuid4
 import httpx
 from langchain_deepseek import ChatDeepSeek
 
-from notalone.ledger.adapters import InMemoryOutboundLedger
+from tests.support.ledger_adapters import InMemoryOutboundLedger
 from notalone.ledger.models import LedgerOutcome
 from notalone.reply.adapters.deepseek_provider import build_deepseek_model
 from notalone.reply.input_budget import (

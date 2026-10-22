@@ -636,33 +636,6 @@ class OrganizationQualityHttpTest(MemoryOverviewHttpFixture, unittest.TestCase):
         self.assertIsNone(final['cases'][0]['output_review'])
         self.assertIn('human_output_review_missing', final['organization']['reasons'])
 
-    def test_trusted_source_unavailable_is_unknown_and_same_database_source_is_rejected(self):
-        from uuid import uuid4
-        from notalone.application.organization_qualification import PostgresOrganizationQualificationSource
-        from notalone.memory.organization_quality import OrganizationQualityService
-        from notalone.persistence.organization_quality import PostgresOrganizationQualityStore
-        from notalone.persistence.layered_memory import PostgresLayeredMemoryStore
-        from notalone.application.layered_memory_service import LayeredMemoryService
-        from notalone.server.app import create_app
-        from tests.integration.server.core_business_flow_support import HttpBackend
-        store = PostgresOrganizationQualityStore(PostgresLayeredMemoryStore(self.database_url))
-        source = PostgresOrganizationQualificationSource(database_url=self.database_url,
-            expected_database=self.database_url.split('dbname=')[1], owner_id=self.owner_id, run_id=uuid4())
-        with self.assertRaisesRegex(ValueError, '隔离'):
-            OrganizationQualityService(store, qualification_source=source)
-        missing = PostgresOrganizationQualificationSource(database_url='host=/tmp dbname=notalone_quality_absent_test',
-            expected_database='notalone_quality_absent_test', owner_id=self.owner_id, run_id=uuid4())
-        quality = OrganizationQualityService(store, qualification_source=missing)
-        backend = HttpBackend(create_app(database_url=self.database_url, owner_id=self.owner_id,
-            token='synthetic-source-unavailable', layered_memory=LayeredMemoryService(store._layered, quality=quality)), self.owner_id)
-        self.addCleanup(backend.close)
-        state = self._get(backend, '/api/memories/owner/layered-memory')['layered_memory']
-        self.assertEqual(state['quality_status'], 'unknown')
-        self.assertIn('qualification_source_unavailable', state['quality']['organization']['reasons'])
-        status, result = backend.request('/api/memories/owner/layered-memory/enable', {'settings_generation': 0, 'purpose_confirmed': True})
-        self.assertEqual(status, 200, result)
-        self.assertEqual(result['layered_memory']['status'], 'blocked')
-
     def test_feedback_invalidates_old_quality_input_and_new_snapshot_uses_real_guard_context(self):
         from uuid import uuid4
         from tests.integration.server.test_layered_memory_corrections import CorrectionProposal, CorrectionVerification

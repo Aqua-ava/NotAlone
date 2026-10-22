@@ -7,7 +7,7 @@ from uuid import uuid4
 from langchain_core.messages import AIMessage
 
 from notalone.application.skill_learning import SkillLearningTaskRunner
-from notalone.ledger.adapters import InMemoryOutboundLedger
+from tests.support.ledger_adapters import InMemoryOutboundLedger
 from notalone.scopes import ContactScope
 from notalone.skills.learning import LearningBatch
 from notalone.skills.learning_runtime import LangChainSkillProposalRuntime

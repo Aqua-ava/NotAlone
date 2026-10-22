@@ -128,7 +128,7 @@ def _body_snapshot(content: bytes) -> dict[str, Any]:
 
 
 def _request_hook(request: httpx.Request) -> None:
-    from notalone.experiments.problem_budget import reserve_problem_attempt
+    from notalone.problem_budget import reserve_problem_attempt
     reserve_problem_attempt(request=request)
     _proof3_request(request)
     trace = current_trace()

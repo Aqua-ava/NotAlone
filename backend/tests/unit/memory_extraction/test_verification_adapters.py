@@ -19,7 +19,7 @@ from langchain_core.messages import AIMessage
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from langchain_deepseek import ChatDeepSeek
 
-from notalone.ledger.adapters import InMemoryOutboundLedger
+from tests.support.ledger_adapters import InMemoryOutboundLedger
 from notalone.ledger.models import LedgerOutcome
 from notalone.memory_extraction.flow import ExtractionFlow
 from notalone.memory_extraction.errors import (

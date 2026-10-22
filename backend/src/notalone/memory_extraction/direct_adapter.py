@@ -130,7 +130,7 @@ class DirectExtractionRuntime:
                         if invalid:
                             raise
                         raise ExtractionRuntimeError(f"模型调用失败（{type(error).__name__}），本批保留待重试。") from error
-                    from notalone.experiments.problem_budget import check_problem_budget
+                    from notalone.problem_budget import check_problem_budget
                     check_problem_budget()
                     record_model_retry("extraction", outcome=(LedgerOutcome.REJECTED_BY_VALIDATION
                                        if invalid else LedgerOutcome.RUN_FAILED))

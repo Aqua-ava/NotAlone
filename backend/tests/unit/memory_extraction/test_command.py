@@ -14,7 +14,7 @@ from uuid import UUID, uuid4
 
 from langchain_core.messages import AIMessage
 
-from notalone.ledger.adapters import InMemoryOutboundLedger
+from tests.support.ledger_adapters import InMemoryOutboundLedger
 from notalone.ledger.models import LedgerOutcome
 from notalone.memory.adapters import InMemoryMemoryStore
 from notalone.memory.models import (

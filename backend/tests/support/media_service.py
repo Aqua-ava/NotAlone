@@ -1,4 +1,8 @@
-"""单条媒体的公共接缝，隐藏具体来源、目录和尝试代次。"""
+"""单条媒体的测试用接缝（原 `notalone.media.service`）。
+
+生产代码 0 import，随 ticket 07 移出 `notalone` 生产包；媒体生命周期、
+联系人级联删除等测试仍经它驱动真实的 cache/store。真正接线时迁回。
+"""
 
 from datetime import datetime, timezone
 import hashlib

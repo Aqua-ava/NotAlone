@@ -190,7 +190,7 @@ class PersistentSuiteBudget:
             if (len(reservations) >= envelope['manifest']['max_http_attempts']
                     or child_used >= matching[0]['allocated_attempts']):
                 raise SuiteBudgetExhausted('suite或当前子运行的持久物理额度已耗尽。')
-            from notalone.experiments.problem_budget import reserve_problem_attempt
+            from notalone.problem_budget import reserve_problem_attempt
             reserve_problem_attempt()
             identifier = str(uuid4())
             reservations.append({'id': identifier, 'ordinal': len(reservations) + 1, 'source_ref': source_ref,

@@ -258,7 +258,7 @@ class EvaluationWireContractTest(unittest.TestCase):
         self.assertIn(TARGET_TEXT, window_text)
 
     def test_verification_adapter_serializes_evidence_and_uses_reported_model(self) -> None:
-        from notalone.ledger.adapters import InMemoryOutboundLedger
+        from tests.support.ledger_adapters import InMemoryOutboundLedger
         from notalone.ledger.models import LedgerOutcome
         from notalone.memory_extraction.verification_adapters import (
             LangChainSourceVerificationRuntime,

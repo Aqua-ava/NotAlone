@@ -752,7 +752,7 @@ class PostgresReplyFlowTest(unittest.TestCase):
         )
 
     def test_continuation_timeout_is_recorded_and_same_request_can_retry(self):
-        from notalone.ledger.adapters import InMemoryOutboundLedger
+        from tests.support.ledger_adapters import InMemoryOutboundLedger
         from notalone.reply.errors import ReplyTimeoutError
         from tests.unit.reply.test_runtime_limits import SlowModel
 

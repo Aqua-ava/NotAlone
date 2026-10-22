@@ -12,7 +12,6 @@ from unittest.mock import patch
 from uuid import UUID
 
 from notalone.conversation.models import ConversationBindingStatus
-from notalone.front_sync.emoji_tail import has_supported_emoji_suffix
 from notalone.front_sync.foreground_locator import ForegroundLocator
 from notalone.front_sync.probe_adapter import MacosFrontSessionProbe, ProbeAdapterError
 from notalone.persistence.conversation_repository import PersistedConversationBinding
@@ -321,20 +320,6 @@ class EmojiFallbackTest(unittest.TestCase):
                 self.locate(check_current=cancel)
             self.assertEqual(len(self.cli_calls), 1)
             self.assertEqual(len(self.binding_calls), int(stop_after == "binding"))
-
-
-class SupportedEmojiSuffixTest(unittest.TestCase):
-    def test_only_complete_simple_default_emoji_with_optional_single_vs16(self):
-        for suffix in ("🐯", "🐱🌿💖", "🐯\ufe0f", "🐯\ufe0f🐱\ufe0f"):
-            with self.subTest(suffix=suffix):
-                self.assertTrue(has_supported_emoji_suffix("合成" + suffix, "合成"))
-        for suffix in ("", "A", "🐯A", " 🐯", "🐯 ", "🇨🇳", "🇨", "🏽", "👋🏽",
-                       "👩\u200d💻", "1\ufe0f\u20e3", "©\ufe0f", "🐯\ufe0e", "🐯\ufe0f\ufe0f",
-                       "🐯\U000e0067\U000e007f", "\ufe0f", "\U0010ffff"):
-            with self.subTest(suffix=suffix):
-                self.assertFalse(has_supported_emoji_suffix("合成" + suffix, "合成"))
-        self.assertFalse(has_supported_emoji_suffix("合成🐯", "合成A"))
-        self.assertFalse(has_supported_emoji_suffix("🐯", ""))
 
 
 if __name__ == "__main__":

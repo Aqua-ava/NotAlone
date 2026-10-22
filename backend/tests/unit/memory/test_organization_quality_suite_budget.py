@@ -39,7 +39,7 @@ class PersistentSuiteBudgetTest(unittest.TestCase):
 
     def test_problem_total_blocks_suite_reservation(self):
         from unittest.mock import patch
-        from notalone.experiments.problem_budget import ProblemBudget, ProblemStopped
+        from notalone.problem_budget import ProblemBudget, ProblemStopped
         ledger = self.directory.parent / 'problem.sqlite3'
         problem = ProblemBudget(ledger)
         problem.create('synthetic', 1, 30)

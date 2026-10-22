@@ -6,7 +6,7 @@ from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
 
-from notalone.experiments.problem_budget import ProblemBudget, ProblemStopped, reserve_problem_attempt
+from notalone.problem_budget import ProblemBudget, ProblemStopped, reserve_problem_attempt
 
 
 class ProblemBudgetTests(unittest.TestCase):
@@ -50,7 +50,7 @@ class ProblemBudgetTests(unittest.TestCase):
 
     def test_deadline_stops_requests_but_allows_closure(self):
         self.budget.start('r1', 'hypothesis')
-        with patch('notalone.experiments.problem_budget.time.time', return_value=10**12):
+        with patch('notalone.problem_budget.time.time', return_value=10**12):
             with self.assertRaises(ProblemStopped):
                 self.budget.reserve('r1')
         self.budget.finish('r1', 'unknown', 'deadline')
@@ -83,12 +83,12 @@ class ProblemBudgetTests(unittest.TestCase):
 
     def test_continuation_has_own_expiry_and_keeps_original_deadline(self):
         before = self.budget.snapshot()
-        with patch('notalone.experiments.problem_budget.time.time', return_value=before['deadline'] + 1):
+        with patch('notalone.problem_budget.time.time', return_value=before['deadline'] + 1):
             self.budget.authorize_continuation(reason='明确继续授权', max_new_rounds=3, minutes=1)
             self.budget.start('r1', 'hypothesis')
             self.budget.reserve('r1')
         self.assertEqual(self.budget.snapshot()['deadline'], before['deadline'])
-        with patch('notalone.experiments.problem_budget.time.time', return_value=before['deadline'] + 62):
+        with patch('notalone.problem_budget.time.time', return_value=before['deadline'] + 62):
             with self.assertRaises(ProblemStopped):
                 self.budget.reserve('r1')
             self.budget.finish('r1', 'improved', 'expired')
@@ -96,7 +96,7 @@ class ProblemBudgetTests(unittest.TestCase):
                 self.budget.start('r2', 'hypothesis')
 
     def test_cli_records_authorization_and_rejects_invalid_grants(self):
-        from notalone.experiments.problem_budget import main
+        from notalone.problem_budget import main
         with patch('sys.argv', ['problem_budget', '--ledger', str(self.path), 'authorize-continuation',
                                 '--reason', '用户明确授权', '--max-new-rounds', '3', '--minutes', '30']):
             with patch('sys.stdout', new_callable=io.StringIO) as output:

@@ -15,7 +15,7 @@ from notalone.memory_extraction.adapters import LangChainExtractionRuntime
 from notalone.memory_extraction.models import ExtractionWindow, MessageRef, MessageSender
 from notalone.memory_trace.adapters import InMemoryTraceStore
 from notalone.memory_trace import TraceWriteError
-from notalone.ledger.adapters import InMemoryOutboundLedger
+from tests.support.ledger_adapters import InMemoryOutboundLedger
 from notalone.scopes import ContactScope
 from tests.input_budget_support import SyntheticBudgetModel
 
