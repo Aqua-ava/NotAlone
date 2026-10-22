@@ -16,6 +16,8 @@ const materials: Record<string, string> = { assistant_discussion: '助手讨论'
 export function SkillLearningPage({ session }: { session: ContactSessionView }) {
   const bridge = window.notalone.skillLearning;
   const { state, error, setError, retry } = useRevisionedSession(initial, bridge);
+  // 用户动作失败统一走这里落到可见错误，不静默吞掉。
+  const run = (operation: Promise<void>) => { setError(''); void operation.catch(reason => setError(reason instanceof Error ? reason.message : 'Skill 操作暂不可用。')); };
   const { selectedContactId: contactId, scopeRevision } = session.state;
   const [selection, setSelection] = useState<{ contactId: string; scopeRevision: number; tab: 'installed' | 'pending' } | null>(null);
   const tab = selection?.contactId === contactId && selection.scopeRevision === scopeRevision ? selection.tab : 'installed';
@@ -53,11 +55,10 @@ export function SkillLearningPage({ session }: { session: ContactSessionView }) 
   }, [bridge, contactId, scopeRevision]);
   useEffect(() => {
     if (contactId && current && tab === 'installed' && state.phase === 'ready' && !state.history) {
-      void bridge.openHistory({ contactId, scopeRevision }).catch(() => {});
+      run(bridge.openHistory({ contactId, scopeRevision }));
     }
   }, [bridge, contactId, scopeRevision, current, tab, state.phase, state.history, state.review?.phase]);
   if (!contactId) return <section className="empty-panel"><h2>请选择联系人</h2><p>选择联系人后，可查看适用的已有 Skill 和待审核建议。</p></section>;
-  const run = (operation: Promise<void>) => { setError(''); void operation.catch(reason => setError(reason instanceof Error ? reason.message : 'Skill 操作暂不可用。')); };
   const configure = (enabled: boolean) => bridge.configure({ contactId, scopeRevision, enabled, confirmed: true });
   const review = current ? state.review : null;
   const selected = review && { contactId, scopeRevision, draftId: review.draft.draft_id, expectedRevision: review.draft.revision };
@@ -98,10 +99,10 @@ export function SkillLearningPage({ session }: { session: ContactSessionView }) 
       <p>后续聊天仅沿实际任务的外部消息锚点，使用同一已确认绑定24小时内的有限观察；时间相邻不证明方法有效或用户已发送。</p>
       <p>建议保存为独立草稿，尚未审核的内容不会影响回复。方法与私人审核依据分别保存，可随来源或助手会话删除。</p>
       <div className="button-row">
-        <button className="button" disabled={!current || state.phase !== 'ready'} onClick={() => void configure(!state.enabled).catch(() => {})}>{state.enabled ? '关闭经验整理' : '开启此联系人的经验整理'}</button>
-        <button className="button" onClick={() => void bridge.refresh({ contactId, scopeRevision }).catch(() => {})}>刷新待审核</button>
+        <button className="button" disabled={!current || state.phase !== 'ready'} onClick={() => run(configure(!state.enabled))}>{state.enabled ? '关闭经验整理' : '开启此联系人的经验整理'}</button>
+        <button className="button" onClick={() => run(bridge.refresh({ contactId, scopeRevision }))}>刷新待审核</button>
         {current && state.enabled && state.task && ['queued', 'failed', 'running', 'verifying'].includes(state.task.status)
-          && <button className="button" onClick={() => void bridge.resume({ contactId, scopeRevision }).catch(() => {})}>继续整理</button>}
+          && <button className="button" onClick={() => run(bridge.resume({ contactId, scopeRevision }))}>继续整理</button>}
       </div>
       {current && <>
         <p role="status">待审核 {state.drafts.length} 项{state.task && ` · 整理状态：${({ queued: '等待', running: '整理中', verifying: '复核中', succeeded: '已完成', failed: '失败，可重试', cancelled: '已停止' } as Record<string, string>)[state.task.status]}`}</p>

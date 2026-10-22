@@ -197,6 +197,7 @@ export function ReplyCandidates({ replies, currentDraft }: { replies: ReplySessi
     if (state.phase === 'failed') resultRegion.current?.scrollIntoView({ block: 'start' });
   }, [state.phase, state.errorCode]);
   const [dirtyCandidates, setDirtyCandidates] = useState<Record<string, boolean>>({});
+  const [copyNoticeError, setCopyNoticeError] = useState('');
   const reportDirty = useCallback((candidateId: string, dirty: boolean) => {
     setDirtyCandidates((previous) => previous[candidateId] === dirty ? previous : { ...previous, [candidateId]: dirty });
   }, []);
@@ -215,8 +216,9 @@ export function ReplyCandidates({ replies, currentDraft }: { replies: ReplySessi
   }, [state.result, state.phase, state.savedSession?.phase, state.savedSession?.sessionId, state.contactId, state.scopeRevision]);
   function noteCopy(candidateId: string, text: string) {
     if (!text.trim() || text.length > 65_536 || !state.contactId || !replyRequestId) return;
+    setCopyNoticeError('');
     void window.notalone.candidateProvenance.noteCandidateCopy({ contactId: state.contactId, scopeRevision: state.scopeRevision,
-      replyRequestId, candidateId, text }).catch(() => {});
+      replyRequestId, candidateId, text }).catch(() => setCopyNoticeError('复制来源记录未保存，已复制的文字仍可使用；再次复制会重试记录。'));
   }
   return <><section ref={resultRegion} className={`reply-candidates compact-replies${detailsOpen ? ' show-candidate-details' : ''}`} aria-label="候选回复">
     <header className="reply-results-heading"><h2>候选回复</h2>
@@ -313,6 +315,7 @@ export function ReplyCandidates({ replies, currentDraft }: { replies: ReplySessi
           onCopy={() => noteCopy(candidate.candidateId, window.getSelection()?.toString() ?? '')}>{candidate.text}</p></details>
       </section>)}
     </details>}
+    {copyNoticeError && <p className="reply-note" role="alert">{copyNoticeError}</p>}
     {replies.error && <p className="reply-note" role="alert">{replies.error}<button className="button" onClick={() => void replies.retry()}>重试读取</button></p>}
     <AssistantContinuationControls key={`${state.contactId}:${state.scopeRevision}:${state.savedSession?.sessionId}:${state.inputClearRevision ?? 0}`}
       replies={replies} hasUnsavedEdits={hasUnsavedEdits} />

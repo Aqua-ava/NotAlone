@@ -33,6 +33,7 @@
     "tests/expression-preferences/page-gate.test.mjs",
     "tests/expression-preferences/react.test.mjs",
     "tests/expression-preferences/reprepare.test.mjs",
+    "tests/failure-visibility.test.mjs",
     "tests/first-frame-read.test.mjs",
     "tests/foreground-confirmation-binding.test.mjs",
     "tests/foreground-latency.test.mjs",

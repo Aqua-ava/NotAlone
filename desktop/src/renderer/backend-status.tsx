@@ -34,6 +34,11 @@ export function BackendBadge({ state, compact = false }: { state: BackendState; 
 export function BackendConnectionNote({ state, startup, onDiagnose }: {
   state: BackendState; startup?: StartupState; onDiagnose?: () => void;
 }) {
+  const [actionError, setActionError] = useState('');
+  const attempt = (message: string, operation: () => Promise<unknown>) => {
+    setActionError('');
+    void operation().catch(() => setActionError(message));
+  };
   if (state.phase === 'connected') return null;
   if (startup && startup.phase !== 'ready' && state.phase !== 'shutdown-failed' && !state.canRetryShutdown) return null;
   const failedStop = state.phase === 'shutdown-failed';
@@ -44,9 +49,10 @@ export function BackendConnectionNote({ state, startup, onDiagnose }: {
         : state.errorCode === 'backend_connection_failed' ? '本机服务连接失败，请重试。'
           : state.phase === 'stopping' ? '停止期间暂停业务操作，请等待真实结果。' : '联系人、资料与生成暂时不可用。';
   return <section className="connection-note" aria-label="连接状态"><Icon name="config" size={20} /><div>
-    <b>{title}</b><p role={failedStop ? 'alert' : undefined}>{message}</p></div>
-    {state.canRetryConnection && <button className="button" onClick={() => void window.notalone.backend.retryConnection().catch(() => {})}>重试连接</button>}
+    <b>{title}</b><p role={failedStop ? 'alert' : undefined}>{message}</p>
+    {actionError && <p role="alert">{actionError}</p>}</div>
+    {state.canRetryConnection && <button className="button" onClick={() => attempt('重试连接未成功，请稍后再试。', () => window.notalone.backend.retryConnection())}>重试连接</button>}
     {onDiagnose && startup?.mode !== 'managed' && <button className="button" onClick={onDiagnose}>查看诊断</button>}
-    {state.canRetryShutdown && <button className="button" onClick={() => void window.notalone.backend.quit().catch(() => {})}>重试停读并退出</button>}
+    {state.canRetryShutdown && <button className="button" onClick={() => attempt('重试停读尚未获确认，请稍后再试。', () => window.notalone.backend.quit())}>重试停读并退出</button>}
   </section>;
 }
