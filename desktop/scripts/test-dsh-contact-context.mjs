@@ -32,7 +32,7 @@ assert.equal(existing.development.length, 0, '已有开发宿主，保留现场�
 await mkdir(output, { recursive: true });
 const fixture = await createStorageFixture();
 const originalLedger = (await fixture.client.query('SELECT name, checksum FROM public.notalone_schema_migration ORDER BY name')).rows;
-assert.equal(originalLedger.length, 107);
+assert.equal(originalLedger.length, 108);
 const userData = path.join(fixture.directory, 'desktop');
 await mkdir(userData, { recursive: true });
 const infoPath = path.join(fixture.directory, 'backend.info');

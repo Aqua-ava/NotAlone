@@ -128,7 +128,7 @@ test('移交先拒收并使在途TS请求失效，未排空不启用旧方',asyn
 
 test('结构未知时显式回退失败关闭，绝不逐请求转交旧实现',async t=>{
   const f=await contextFixture(t);
-  await f.client.query("INSERT INTO notalone_schema_migration(name,checksum) VALUES('108_unknown.sql','unknown')");
+  await f.client.query("INSERT INTO notalone_schema_migration(name,checksum) VALUES('109_unknown.sql','unknown')");
   assert.notEqual((await f.app.request('/api/runtime/contact-context/handoff',{target:'python'})).status,200);
   const status=(await f.app.request('/api/runtime/contact-context/status')).data;
   assert.equal(status.owner,'typescript');assert.equal(status.state,'stopped');
