@@ -1,3 +1,4 @@
+import { ContactHistoryCoverage } from './HistoryCoverageStatus';
 import type { ContactSessionView } from './contact-session';
 import type { ManagerPage } from './pages';
 import './contacts.css';
@@ -69,6 +70,8 @@ export function ContactsPage({ session, navigate }: { session: ContactSessionVie
       <h3>{selected ? selected.displayName : '请在顶部选择联系人'}</h3>
       {selected ? <><dl><div><dt>消息</dt><dd>{selected.messageCount} 条</dd></div></dl>
         <p className="contact-sync-status" role="status">{syncLabel(selected.contactId)}</p>
+        <ContactHistoryCoverage coverages={sync.report?.historyCoverages} contactId={selected.contactId} />
+        <p>关系资料独立处理，处理状态请到「关系资料」查看。</p>
         <ContactSyncDetails contactId={selected.contactId} consent={consent} onConnect={() => addWechat(selected.contactId)} allPrivate={allPrivate} />
         <p>本次文字和候选对应这位联系人。切换后清空编辑输入，已生成候选与编辑按联系人保留。</p>
         <button className="button primary" onClick={() => { void session.confirmManualContact(selected.contactId).then((confirmed) => { if (confirmed) return window.notalone.openHelper(); }); }}>手动输入本次聊天</button>

@@ -588,6 +588,40 @@ class HistorySyncEngineTest(unittest.TestCase):
         self.assertEqual(coverage.watermark_at, NOW)
         self.assertNotIn("合成历史消息", repr(result.status))
 
+    def test_priority_history_leaves_every_other_slice_for_waiting_bindings(self) -> None:
+        others = [FakeBinding(uuid4(), uuid4(), conversation_locator=f"synthetic_{i}")
+                  for i in range(2)]
+        self.sync = self.make_sync(bindings=[*others, self.binding])
+        for number in range(10):
+            cursor = None if number == 0 else f"local_id:{number}"
+            self.cli.history_pages[cursor] = _page(
+                (number + 1,), has_more=True, cursor=f"local_id:{number + 1}")
+        for _ in range(4):
+            before = len(self.cli.calls)
+            self.sync.cycle(enabled=True, max_bindings=1, priority_contact_id=CONTACT_ID)
+            self.assertEqual(len(self.cli.calls) - before, 1)
+            self.now += timedelta(seconds=4)
+        self.assertEqual([call["talker"] for call in self.cli.calls], [
+            self.binding.conversation_locator, others[0].conversation_locator,
+            self.binding.conversation_locator, others[1].conversation_locator])
+
+    def test_empty_binding_waits_for_low_frequency_retry_without_blocking_other_history(self) -> None:
+        other = FakeBinding(uuid4(), uuid4(), conversation_locator="synthetic_other")
+        self.sync = self.make_sync(bindings=[self.binding, other])
+        self.cli.history_pages[None] = _page((), has_more=False, cursor=None)
+        self.sync.cycle(enabled=True, max_bindings=1)
+        self.cli.history_pages[None] = _page((1,), has_more=False, cursor="local_id:1")
+        self.sync.cycle(enabled=True, max_bindings=1)
+        self.assertIs(self.history.states[other.binding_id].phase, HistorySyncPhase.COMPLETE)
+        self.assertEqual(self.history.states[BINDING_ID].failure_code, "history_empty")
+        count = len(self.cli.calls)
+        self.sync.cycle(enabled=True, max_bindings=1, priority_contact_id=CONTACT_ID)
+        self.assertEqual(len(self.cli.calls), count)
+        self.now += timedelta(minutes=5)
+        for _ in range(2):
+            self.sync.cycle(enabled=True, max_bindings=1, priority_contact_id=CONTACT_ID)
+        self.assertIs(self.history.states[BINDING_ID].phase, HistorySyncPhase.COMPLETE)
+
     def test_other_binding_continues_when_one_history_fails(self) -> None:
         other = FakeBinding(
             uuid4(), uuid4(), conversation_locator="wxid_synthetic_other", display_name="合成乙"

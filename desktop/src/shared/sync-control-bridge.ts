@@ -1,3 +1,14 @@
+export type HistoryCoveragePhase = 'not_started' | 'syncing' | 'complete' | 'incomplete';
+export interface HistoryCoverage {
+  bindingId: string;
+  contactId: string;
+  phase: HistoryCoveragePhase;
+  failureCode: string | null;
+  messageCount: number;
+  nonTextCount: number;
+  pageCount: number;
+}
+
 export type SyncScope = 'selected' | 'all_private';
 export type HistoryAuthorizationDecision = 'accepted' | 'declined';
 export type HistoryAuthorizationState = HistoryAuthorizationDecision | 'required' | 'unknown';
@@ -30,11 +41,12 @@ export interface SyncPriorityReport {
   queueWaitMs: number | null;
 }
 
-// 只展示最近循环的最小报告，不提供联系人定位、观察身份或正文。
+// 只展示最近循环的最小报告，不提供微信定位标识、观察身份或正文。
 export interface SyncStatusReport {
   enabled: boolean;
   syncScope?: SyncScope;
   syncScopeFailureCode?: string | null;
+  historyCoverages?: HistoryCoverage[];
   historyAuthorizationState?: HistoryAuthorizationState;
   historyAuthorizationVersion?: number | null;
   historyAuthorizationCurrentVersion?: number;

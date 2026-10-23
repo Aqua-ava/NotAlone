@@ -38,3 +38,15 @@ test('本地无历史状态单独传递，未知分类不能伪装为已核验',
   }
   await assert.rejects(() => read({ ...report(), cli_priority_local_history_state: 'complete' }));
 });
+
+test('历史覆盖按绑定解码，缺失报告不冒充完整，异常计数拒绝', async () => {
+  const coverage = { binding_id: contactId, contact_id: contactId, phase: 'syncing', failure_code: null,
+    message_count: 1200, non_text_count: 8, page_count: 6 };
+  const result = await read({ ...report(), cli_history_coverages: [coverage] });
+  assert.deepEqual(result.report.historyCoverages, [{ bindingId: contactId, contactId,
+    phase: 'syncing', failureCode: null, messageCount: 1200, nonTextCount: 8, pageCount: 6 }]);
+  assert.equal((await read(report())).report.historyCoverages, undefined);
+  for (const invalid of [{phase:'connected'}, {message_count:-1}, {contact_id:'name'}, {failure_code:'raw private text'}]) {
+    await assert.rejects(() => read({...report(), cli_history_coverages:[{...coverage,...invalid}]}));
+  }
+});

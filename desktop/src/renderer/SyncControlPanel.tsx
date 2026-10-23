@@ -1,3 +1,4 @@
+import { HistoryCoverageStatus } from './HistoryCoverageStatus';
 import { useEffect, useState } from 'react';
 import type { BackgroundSyncPhase, SyncControlBridge, SyncControlState, SyncStatusReport } from '../shared/sync-control-bridge';
 import { useRevisionedSession } from './use-revisioned-session';
@@ -40,7 +41,7 @@ function SyncRecoveryStatus({ report }: { report: SyncStatusReport }) {
   </div>;
 }
 
-export function SyncControlPanel({ bridge, manualRelease = false }: { bridge: SyncControlBridge; manualRelease?: boolean }) {
+export function SyncControlPanel({ bridge, manualRelease = false, contacts, currentContactId }: { bridge: SyncControlBridge; manualRelease?: boolean; contacts?: { contactId: string; displayName: string }[]; currentContactId?: string | null }) {
   const { state, latest, active, error, setError, retry } = useRevisionedSession(initial, bridge);
   useEffect(() => {
     // 连接时报告可能还未播种；进入页面只刷新一次缓存状态，不触发正文周期。
@@ -122,6 +123,7 @@ export function SyncControlPanel({ bridge, manualRelease = false }: { bridge: Sy
         ? '同步操作结果尚未确认，请刷新同步状态后再决定下一步。'
         : '同步状态读取失败，请检查本机服务与 CLI 后刷新。'}</p>}
       {error && <p role="alert">{error}<button className="button" onClick={() => void retry()}>重试读取</button></p>}
+      {report && <HistoryCoverageStatus coverages={report.historyCoverages} contacts={contacts} currentContactId={currentContactId} />}
       {report?.enabled && <SyncRecoveryStatus key={state.scopeRevision} report={report} />}
     </section>
   </div>;

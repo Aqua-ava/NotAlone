@@ -95,3 +95,60 @@ test('拒绝历史读取保留增量说明，之后仍可明确允许',async t=>
  await expect(page.getByText('已允许读取已授权微信私聊在本机现有的全部文字历史，并继续同步新消息。',{exact:true})).toBeVisible();
  assert.deepEqual((await page.evaluate(()=>window.calls)).at(-1),{scopeRevision:4,decision:'accepted',confirmed:true});
 });
+
+test('消息历史覆盖按联系人显示四态、当前进度和汇总，关系资料独立说明', async t => {
+ const browser = await chromium.launch({headless:true,executablePath:process.env.NOTALONE_TEST_CHROMIUM_PATH});t.after(()=>browser.close());
+ const page = await browser.newPage();
+ await mount(page, `
+ import React from 'react';import {createRoot} from 'react-dom/client';import {SyncControlPanel} from './src/renderer/SyncControlPanel';
+ const historyCoverages=['not_started','syncing','complete','incomplete'].map((phase,i)=>({bindingId:'binding-'+i,contactId:'contact-'+i,phase,
+ failureCode:i===3?'cli_timeout':null,messageCount:i*100,pageCount:i,nonTextCount:0}));
+ let state={revision:1,scopeRevision:4,phase:'ready',busy:null,errorCode:null,report:{enabled:true,backgroundPhase:'active',confirmedBindingCount:4,
+ historyCoverages,backfill:{phase:'complete'}}};
+ const listeners=new Set();const bridge={getState:async()=>state,refresh:async()=>{},onStateChanged:fn=>{listeners.add(fn);return()=>listeners.delete(fn);}};
+ const root=createRoot(document.getElementById('root'));
+ const render=current=>root.render(<SyncControlPanel bridge={bridge} currentContactId={current}
+ contacts={historyCoverages.map((c,i)=>({contactId:c.contactId,displayName:'合成联系人'+i}))}/>);
+ window.update=()=>{state={...state,revision:2,report:{...state.report,historyCoverages:historyCoverages.map((c,i)=>i===1?{...c,phase:'complete',messageCount:250,pageCount:5}:c)}};
+ for(const fn of listeners)fn(state);render('contact-2');};render('contact-1');
+ `);
+ const section=page.getByRole('region',{name:'消息历史覆盖',exact:true});
+ await expect(section.getByText('尚未开始',{exact:true})).toBeVisible();
+ await expect(section.getByText('同步中',{exact:true})).toBeVisible();
+ await expect(section.getByText('完整',{exact:true})).toBeVisible();
+ await expect(section.getByText('不完整',{exact:true})).toBeVisible();
+ await expect(section.getByText('读取超时，正在自动重试。',{exact:true})).toBeVisible();
+ await expect(section.getByText('当前联系人：合成联系人1',{exact:true})).toBeVisible();
+ await expect(section.getByText('已保存 100 条文字，已读取 1 页。',{exact:true})).toBeVisible();
+ await expect(section.getByText('共 4 个会话：完整 1，同步中 1，不完整 1，尚未开始 1。',{exact:true})).toBeVisible();
+ await expect(page.getByRole('region',{name:'关系资料处理',exact:true})).toContainText('消息历史完整不代表关系资料已处理完成');
+ await page.evaluate(()=>window.update());
+ await expect(section.getByText('当前联系人：合成联系人2',{exact:true})).toBeVisible();
+ await expect(section.getByText('已保存 250 条文字，已读取 5 页。',{exact:true})).toBeVisible();
+ await expect(section.getByText('共 4 个会话：完整 2，同步中 0，不完整 1，尚未开始 1。',{exact:true})).toBeVisible();
+});
+
+test('联系人详情只显示当前联系人的覆盖进度，切换时不沿用其他人的完整状态', async t => {
+ const browser = await chromium.launch({headless:true,executablePath:process.env.NOTALONE_TEST_CHROMIUM_PATH});t.after(()=>browser.close());
+ const page = await browser.newPage();
+ await mount(page, `
+ import React from 'react';import {createRoot} from 'react-dom/client';import {ContactsPage} from './src/renderer/ContactsPage';
+ const contacts=[{contactId:'a',displayName:'合成甲',messageCount:200},{contactId:'b',displayName:'合成乙',messageCount:10}];
+ const bindings={revision:1,scopeRevision:1,phase:'ready',sessions:[],bindings:[],knownBindings:[],busy:null};
+ const sync={revision:1,scopeRevision:1,phase:'ready',busy:null,report:{enabled:true,historyCoverages:[
+ {bindingId:'a1',contactId:'a',phase:'complete',messageCount:200,pageCount:2,nonTextCount:0,failureCode:null},
+ {bindingId:'b1',contactId:'b',phase:'incomplete',messageCount:10,pageCount:1,nonTextCount:0,failureCode:'cli_timeout'}]}};
+ window.notalone={bindings:{getState:async()=>bindings,onStateChanged:()=>()=>{},refreshSaved:async()=>{}},
+ syncControl:{getState:async()=>sync,onStateChanged:()=>()=>{},refresh:async()=>{}}};
+ const root=createRoot(document.getElementById('root'));
+ const render=id=>root.render(<ContactsPage session={{state:{contacts,selectedContactId:id,directoryPhase:'ready'},refreshContacts:async()=>{}}} navigate={()=>{}}/>);
+ window.select=render;render('a');
+ `);
+ const summary=page.getByRole('complementary',{name:'本次联系人资料摘要'});
+ await expect(summary.getByText('完整',{exact:true})).toBeVisible();
+ await expect(summary.getByText('已保存 200 条文字，已读取 2 页。',{exact:true})).toBeVisible();
+ await page.evaluate(()=>window.select('b'));
+ await expect(summary.getByText('不完整',{exact:true})).toBeVisible();
+ await expect(summary.getByText('已保存 10 条文字，已读取 1 页。',{exact:true})).toBeVisible();
+ await expect(summary.getByText('完整',{exact:true})).toHaveCount(0);
+});

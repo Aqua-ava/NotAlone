@@ -1,4 +1,4 @@
-import type { BackgroundSyncPhase, ForegroundReportPhase, HistoryAuthorizationDecision, HistoryAuthorizationState, SyncBackfillPhase, SyncBackfillReport, SyncPriorityReport, SyncStatusReport, SyncScope } from '../../shared/sync-control-bridge';
+import type { HistoryCoverage, HistoryCoveragePhase, BackgroundSyncPhase, ForegroundReportPhase, HistoryAuthorizationDecision, HistoryAuthorizationState, SyncBackfillPhase, SyncBackfillReport, SyncPriorityReport, SyncStatusReport, SyncScope } from '../../shared/sync-control-bridge';
 import type { BackendHost } from '../backend/host';
 import { isUuid } from '../uuid';
 
@@ -8,6 +8,8 @@ const backfillPhases: SyncBackfillPhase[] = ['not_required', 'gap_detected', 'ba
 const historyAuthorizationStates: HistoryAuthorizationState[] = ['required', 'accepted', 'declined'];
 // 旧后台没有授权版本字段；默认版本只用于把缺失报告标为未确认。
 const DEFAULT_HISTORY_AUTHORIZATION_VERSION = 1;
+// 全部私聊覆盖报告有界读取，超过预算整份失败，不截断为完整状态。
+const SYNC_REPORT_MAX_BYTES = 4_194_304;
 
 function failureCode(value: unknown): string | null {
   if (value === null) return null;
@@ -70,6 +72,17 @@ function historyAuthorization(fields: Record<string, unknown>) {
     historyAuthorizationCurrentVersion: positiveVersion(fields.cli_history_authorization_current_version),
   };
 }
+function historyCoverages(value: unknown): HistoryCoverage[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) throw new Error('同步报告不可用。');
+  return value.map((item) => {
+    if (!item || typeof item !== 'object' || !isUuid(item.binding_id) || !isUuid(item.contact_id)
+      || !['not_started', 'syncing', 'complete', 'incomplete'].includes(item.phase)) throw new Error('同步报告不可用。');
+    return { bindingId: item.binding_id.toLowerCase(), contactId: item.contact_id.toLowerCase(),
+      phase: item.phase as HistoryCoveragePhase, failureCode: failureCode(item.failure_code),
+      messageCount: count(item.message_count), nonTextCount: count(item.non_text_count), pageCount: count(item.page_count) };
+  });
+}
 function parseSyncReport(value: unknown): SyncStatusReport {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('同步报告不可用。');
   const fields = value as Record<string, unknown>;
@@ -84,6 +97,7 @@ function parseSyncReport(value: unknown): SyncStatusReport {
   return { syncScope: (fields.sync_scope ?? 'selected') as SyncScope,
     syncScopeFailureCode: 'sync_scope_failure_code' in fields ? failureCode(fields.sync_scope_failure_code) : null,
     ...historyAuthorization(fields),
+    historyCoverages: historyCoverages(fields.cli_history_coverages),
     enabled: fields.sync_enabled, backgroundPhase: fields.cli_sync_phase as BackgroundSyncPhase,
     backgroundFailureCode: failureCode(fields.cli_failure_code), cliAvailable: fields.cli_available,
     confirmedBindingCount: fields.cli_bound_count, foregroundPhase: fields.foreground_phase as ForegroundReportPhase,
@@ -94,28 +108,28 @@ function parseSyncReport(value: unknown): SyncStatusReport {
 
 export async function readSyncStatus(backend: BackendHost, signal: AbortSignal) {
   const response = await backend.requestJson({ method: 'GET', path: '/api/sync/status',
-    timeoutMs: 12_000, maxResponseBytes: 16_384, signal });
+    timeoutMs: 12_000, maxResponseBytes: SYNC_REPORT_MAX_BYTES, signal });
   return { generation: response.generation, report: parseSyncReport(response.data) };
 }
 export async function setSyncEnabled(backend: BackendHost, enabled: boolean, signal: AbortSignal) {
   // 只改变既有总开关，正文范围、读取算法和补齐仍由原同步宿主决定。
   const response = await backend.requestJson({ method: 'POST', path: enabled ? '/api/sync/enable' : '/api/sync/disable',
-    body: {}, timeoutMs: 12_000, maxResponseBytes: 16_384, signal });
+    body: {}, timeoutMs: 12_000, maxResponseBytes: SYNC_REPORT_MAX_BYTES, signal });
   return { generation: response.generation, report: parseSyncReport(response.data) };
 }
 export async function controlBackfill(backend: BackendHost, operation: 'pause' | 'retry', signal: AbortSignal) {
   const response = await backend.requestJson({ method: 'POST', path: operation === 'pause' ? '/api/sync/backfill/pause' : '/api/sync/backfill/retry',
-    body: {}, timeoutMs: 12_000, maxResponseBytes: 16_384, signal });
+    body: {}, timeoutMs: 12_000, maxResponseBytes: SYNC_REPORT_MAX_BYTES, signal });
   return { generation: response.generation, report: parseSyncReport(response.data) };
 }
 
 export async function setSyncScope(backend: BackendHost, mode: SyncScope, signal: AbortSignal) {
   const response = await backend.requestJson({ method: 'POST', path: '/api/sync/scope',
-    body: { mode, confirmed: true }, timeoutMs: 12_000, maxResponseBytes: 16_384, signal });
+    body: { mode, confirmed: true }, timeoutMs: 12_000, maxResponseBytes: SYNC_REPORT_MAX_BYTES, signal });
   return { generation: response.generation, report: parseSyncReport(response.data) };
 }
 export async function setHistoryAuthorization(backend: BackendHost, decision: HistoryAuthorizationDecision, signal: AbortSignal) {
   const response = await backend.requestJson({ method: 'POST', path: '/api/sync/history-authorization',
-    body: { decision, confirmed: true }, timeoutMs: 12_000, maxResponseBytes: 16_384, signal });
+    body: { decision, confirmed: true }, timeoutMs: 12_000, maxResponseBytes: SYNC_REPORT_MAX_BYTES, signal });
   return { generation: response.generation, report: parseSyncReport(response.data) };
 }

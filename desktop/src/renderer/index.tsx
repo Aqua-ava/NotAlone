@@ -135,7 +135,7 @@ export function App() {
         {page === 'import' && <ImportPage session={contactSession} />}
         {page === 'memory' && <MemoryPage session={contactSession} navigate={setPage} />}
         {page === 'skillLearning' && <SkillLearningPage session={contactSession} />}
-        {page === 'sync' && <WechatSetupPanel bridge={window.notalone.wechatSetup}><SyncControlPanel bridge={window.notalone.syncControl} /></WechatSetupPanel>}
+        {page === 'sync' && <WechatSetupPanel bridge={window.notalone.wechatSetup}><SyncControlPanel bridge={window.notalone.syncControl} contacts={contactSession.state.contacts} currentContactId={contactSession.state.selectedContactId} /></WechatSetupPanel>}
         {page !== 'config' && page !== 'contacts' && page !== 'import' && page !== 'memory' && page !== 'sync' && page !== 'skillLearning' && <section className="empty-panel" aria-label={currentPage.title}>
           <div className="empty-symbol"><Icon name={currentPage.icon} size={32} /></div>
           <h2>{currentPage.emptyTitle}</h2><p>{currentPage.emptyDescription}</p>

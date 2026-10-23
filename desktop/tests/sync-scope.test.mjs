@@ -174,3 +174,15 @@ test('自动目录读取期间切换联系人不会丢失新联系人，也不�
  assert.equal(f.contacts.getState().draft,'切换后的合成草稿');
  const reads=f.directory.reads;t.mock.timers.tick(3000);await flush();assert.equal(f.directory.reads,reads);
 });
+
+test('控制器持续发布各绑定覆盖进度，大集合不截断且失败不伪装完整', async t => {
+ const rows=Array.from({length:300},(_,i)=>({binding_id:`00000000-0000-4000-8000-${String(i+1).padStart(12,'0')}`,
+  contact_id:`00000000-0000-4000-8000-${String(i+1).padStart(12,'0')}`,phase:'syncing',failure_code:null,message_count:10,page_count:1,non_text_count:0}));
+ const f=fixture(t,{cli_history_coverages:rows});await flush();
+ assert.equal(f.sync.getState().report.historyCoverages.length,300);
+ assert.ok(f.requests[0].maxResponseBytes > Buffer.byteLength(JSON.stringify(f.control.data)));
+ f.control.data.cli_history_coverages=rows.map((row,i)=>i===299?{...row,phase:'incomplete',failure_code:'cli_timeout'}:row);
+ t.mock.timers.tick(3000);await flush();
+ assert.equal(f.sync.getState().report.historyCoverages[299].phase,'incomplete');
+ assert.equal(f.sync.getState().report.historyCoverages[0].phase,'syncing');
+});

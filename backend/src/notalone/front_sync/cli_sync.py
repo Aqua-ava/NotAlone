@@ -322,6 +322,7 @@ class CliBackgroundSync:
         "_last_sweep_at",
         "_last_priority_read_at",
         "_last_priority_locator",
+        "_priority_promoted_last_cycle",
         "_pending_locators",
         "_pending_locator_set",
         "_live_pending_locators",
@@ -415,6 +416,7 @@ class CliBackgroundSync:
         self._last_sweep_at: datetime | None = None
         self._last_priority_read_at: datetime | None = None
         self._last_priority_locator: str | None = None
+        self._priority_promoted_last_cycle = False
         self._pending_locators: deque[str] = deque()
         self._pending_locator_set: set[str] = set()
         # 同一联系人可能同时有补齐任务和实时事件；实时事件优先读取，
@@ -774,6 +776,7 @@ class CliBackgroundSync:
         self._last_sweep_at = None
         self._last_priority_read_at = None
         self._last_priority_locator = None
+        self._priority_promoted_last_cycle = False
         self._failure_code = failure_code
         return CliSyncCycleResult(
             status=CliSyncStatus(
@@ -802,6 +805,7 @@ class CliBackgroundSync:
         self._last_sweep_at = None
         self._last_priority_read_at = None
         self._last_priority_locator = None
+        self._priority_promoted_last_cycle = False
         self._stream_supported = True
         self._stream_retry_at = None
         self._stream_failures = 0
@@ -1092,6 +1096,12 @@ class CliBackgroundSync:
             or not self._priority_read_due(priority)
         ):
             return
+        # 优先联系人最多连续抢占一片；下一片沿原队列轮转，避免长历史
+        # 或持续新事件让其他绑定永远无法推进。
+        if len(self._pending_locators) > 1 and self._priority_promoted_last_cycle:
+            self._priority_promoted_last_cycle = False
+            return
+        self._priority_promoted_last_cycle = True
         # 队列可能在后台补齐初始化时已提前建立；把当前联系人提升到
         # 队首时同步标记 live，否则暂停门禁仍会把这次读取跳过。
         self._enqueue_live(priority)
