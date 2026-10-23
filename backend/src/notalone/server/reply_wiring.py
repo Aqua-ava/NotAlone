@@ -128,6 +128,7 @@ def build_reply_service(
     on_input_budget: Callable[[InputBudgetDecision], None] | None = None,
     layered_memory=None, layered_reply_budget=None, owner_layered_reply_budget=None,
     reply_thinking_effort: str | None = None,
+    contact_context=None,
 ) -> ReplyService | None:
     """有 active 绑定且模型凭据可用时装配回复服务；否则返回 None。
 
@@ -191,7 +192,7 @@ def build_reply_service(
             database_url,
             scope.owner_id,
         ),
-        overview=PostgresRelationshipOverviewStore(database_url),
+        overview=PostgresRelationshipOverviewStore(database_url, contact_context=contact_context),
         layered_memory=layered_memory, layered_budget=layered_reply_budget, owner_layered_budget=owner_layered_reply_budget,
     )
     evidence = ExplorationEvidence(retrieval)
@@ -200,7 +201,7 @@ def build_reply_service(
         ExploredReplyContext(ExpressionPreferenceContext(context, PostgresExpressionPreferenceStore(database_url)),
                              database_url=database_url, evidence=evidence),
         database_url=database_url,
-    ), database_url, layered_memory=layered_memory, layered_budget=layered_reply_budget, owner_layered_budget=owner_layered_reply_budget)
+    ), database_url, layered_memory=layered_memory, layered_budget=layered_reply_budget, owner_layered_budget=owner_layered_reply_budget, contact_context=contact_context)
     from langchain_core.globals import get_llm_cache
     from langchain_deepseek import ChatDeepSeek
     from notalone.reply.adapters.model_call_ledger import ModelCallLedger
@@ -231,7 +232,7 @@ def build_reply_service(
             validate=validate, record_call=lambda identifier: None)
 
     generator = ReplyGenerator(
-        store=PostgresReplyStore(database_url, layered_memory=layered_memory, layered_budget=layered_reply_budget, owner_layered_budget=owner_layered_reply_budget),
+        store=PostgresReplyStore(database_url, layered_memory=layered_memory, layered_budget=layered_reply_budget, owner_layered_budget=owner_layered_reply_budget, contact_context=contact_context),
         runtime=LangChainReplyRuntime(
             model=model, layered_memory=layered_memory,
             on_model_response=layered_memory.check_reply_response if layered_memory is not None else None,

@@ -100,6 +100,8 @@ def _run(args: argparse.Namespace, lifetime: ParentLifetime) -> int:
         print("已有后端实例在运行；请退出旧实例或直接连接既有服务。", file=sys.stderr)
         return 2
 
+    from notalone.server.contact_context_handoff import ContactContextHandoff
+    contact_context = ContactContextHandoff()
     events = EventBus()
     model_priority = ModelPriorityControl(background_limit=batch_concurrency)
     # 迁移期首用写入已交给 TS；旧业务进程不再提供第二个身份／凭据写入口。
@@ -107,7 +109,7 @@ def _run(args: argparse.Namespace, lifetime: ParentLifetime) -> int:
                      else _build_setup_service(database_url))
     from notalone.application.organization_runtime import build_layered_memory_service
     try:
-        layered_memory = build_layered_memory_service(database_url, model_priority=model_priority)
+        layered_memory = build_layered_memory_service(database_url, model_priority=model_priority, contact_context=contact_context)
     except (OSError, ValueError, RuntimeError):
         model_priority.stop()
         print('本地整理质量operator配置无效。', file=sys.stderr)
@@ -138,7 +140,7 @@ def _run(args: argparse.Namespace, lifetime: ParentLifetime) -> int:
     reply_service = (
         build_reply_service(
             database_url=database_url, owner_id=owner_id, model_priority=model_priority,
-            layered_memory=layered_memory,
+            layered_memory=layered_memory, contact_context=contact_context,
         )
         if owner_id is not None
         else None
@@ -163,6 +165,7 @@ def _run(args: argparse.Namespace, lifetime: ParentLifetime) -> int:
             sync_thread.join(timeout=max(0.0, deadline - time.monotonic()))
     try:
         app = create_app(
+            contact_context=contact_context,
             database_url=database_url,
             owner_id=owner_id,
             events=events,

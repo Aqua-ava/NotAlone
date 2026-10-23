@@ -7,6 +7,10 @@ from notalone.reply.errors import (
 )
 from notalone.reply.input_budget import InputBudgetExceededError, InputBudgetUnavailableError
 
+from notalone.server.contact_context_handoff import (
+    ContactContextHandoff, is_contact_context_request,
+)
+
 import json
 import psycopg
 import logging
@@ -526,6 +530,7 @@ class BackendApp:
         "_assistant_preparations",
         "_candidate_versions",
         "_contact_directory",
+        "_contact_context_handoff",
         "_degraded_lock",
         "_degraded",
         "_events",
@@ -585,12 +590,14 @@ class BackendApp:
         wechat_setup_service: WechatSetupService | None = None,
         expression_preferences: ExpressionPreferenceService | None = None,
         runtime_shutdown: Callable[[], None] | None = None,
+        contact_context: ContactContextHandoff | None = None,
     ) -> None:
         if owner_id is not None and not isinstance(owner_id, UUID):
             raise TypeError("owner_id 必须是 UUID。")
         if not token:
             raise ValueError("token 不能为空。")
         self._contact_directory = contact_directory
+        self._contact_context_handoff = contact_context or ContactContextHandoff()
         # 本次运行期内不可自愈的后台能力降级；只存稳定码、原因与时间。
         self._degraded_lock = threading.Lock()
         self._degraded: dict[str, dict[str, str]] = {}
@@ -759,6 +766,11 @@ class BackendApp:
                     raise ValueError()
         except (ValueError, TypeError):
             return _json_response(HTTPStatus.BAD_REQUEST, {"error": "manual_scope_invalid"})
+        scoped_request = is_contact_context_request(method.upper(), path)
+        if scoped_request and not self._contact_context_handoff.enter():
+            return _json_response(
+                HTTPStatus.SERVICE_UNAVAILABLE, {"error": "contact_context_transferred"}
+            )
         manual_token = manual_input_contact.set(manual_id)
         try:
             return self._handle_authenticated(
@@ -787,6 +799,8 @@ class BackendApp:
             )
         finally:
             manual_input_contact.reset(manual_token)
+            if scoped_request:
+                self._contact_context_handoff.leave()
 
     def _handle_authenticated(
         self,
@@ -817,6 +831,27 @@ class BackendApp:
             return _json_response(
                 HTTPStatus.SERVICE_UNAVAILABLE, {"error": "runtime_stopping"}
             )
+        handoff_path = "/api/runtime/contact-context/"
+        if path_value.startswith(handoff_path):
+            action = path_value[len(handoff_path):]
+            gate = self._contact_context_handoff
+            if method_upper == "POST" and action == "configure":
+                try:
+                    gate.configure(json.loads(request_body))
+                except (ValueError, TypeError):
+                    return _json_response(HTTPStatus.BAD_REQUEST, {"error": "contact_context_configuration_invalid"})
+                return _json_response(HTTPStatus.OK, {"configured": True})
+            if method_upper == "GET" and action == "status":
+                return _json_response(HTTPStatus.OK, gate.status())
+            if method_upper == "POST" and action == "stop":
+                return _json_response(HTTPStatus.OK, gate.stop())
+            if method_upper == "POST" and action == "start":
+                status = gate.start()
+                if status is None:
+                    return _json_response(
+                        HTTPStatus.CONFLICT, {"error": "contact_context_draining"}
+                    )
+                return _json_response(HTTPStatus.OK, status)
         if (
             self._owner_id is None
             and not path_value.startswith("/api/setup")
@@ -3288,6 +3323,7 @@ def create_app(
     expression_preferences: ExpressionPreferenceService | None = None,
     follow_smoke: FollowSmokeController | None = None,
     runtime_shutdown: Callable[[], None] | None = None,
+    contact_context: ContactContextHandoff | None = None,
 ) -> BackendApp:
     """创建服务应用；未显式传 token 时在启动时生成随机 token。"""
 
@@ -3301,8 +3337,9 @@ def create_app(
 
     from notalone.persistence.layered_memory import PostgresLayeredMemoryStore
 
+    contact_context = contact_context or ContactContextHandoff()
     contacts = ContactDirectory(PostgresContactDirectory(database_url))
-    layered_memory = layered_memory or LayeredMemoryService(PostgresLayeredMemoryStore(database_url))
+    layered_memory = layered_memory or LayeredMemoryService(PostgresLayeredMemoryStore(database_url, contact_context=contact_context))
     if task_host is not None:
         layered_memory.attach_task_host(task_host)
         layered_memory.resume_pending(owner_id)
@@ -3312,6 +3349,7 @@ def create_app(
     layered_memory.start_maintenance(owner_id)
     return BackendApp(
         contact_directory=contacts,
+        contact_context=contact_context,
         events=events or EventBus(),
         owner_id=owner_id,
         token=token or secrets.token_urlsafe(32),
@@ -3333,7 +3371,7 @@ def create_app(
         ),
         source_service=source_service or SourceService(database_url),
         memory_service=memory_service,
-        overview_service=overview_service or RelationshipOverviewService(PostgresRelationshipOverviewStore(database_url)),
+        overview_service=overview_service or RelationshipOverviewService(PostgresRelationshipOverviewStore(database_url, contact_context=contact_context)),
         layered_memory=layered_memory,
         import_service=import_service,
         task_host=task_host,

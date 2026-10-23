@@ -125,6 +125,7 @@ export class BindingConsentController {
       || confirmation.scopeRevision !== this.state.scopeRevision) throw new Error('本次授权选择已失效，请刷新后重新确认。');
     const operation = { generation, epoch: ++this.epoch };
     this.publish({ busy: 'confirm', errorCode: null, notice: null });
+    const finishReadingScopeChange = this.beginReadingScopeChange();
     try {
       this.validateSelections(confirmation.selections, this.state.sessions, this.state.bindings);
       // 最终提交前重新读取元数据与授权，不把旧列表或名称当作新的确认。
@@ -150,7 +151,10 @@ export class BindingConsentController {
       this.publish({ errorCode: stale ? 'selection-stale' : 'confirmation-failed',
         ...(stale ? { scopeRevision: this.state.scopeRevision + 1 } : {}) });
       await this.load(operation);
-    } finally { if (this.current(operation)) this.publish({ busy: null }); }
+    } finally {
+      finishReadingScopeChange();
+      if (this.current(operation)) this.publish({ busy: null });
+    }
   }
   private validateSelections(selected: BindingSelection[], metadata: CliSessionSummary[], active: BindingSummary[]): void {
     const contacts = this.contacts.getState();

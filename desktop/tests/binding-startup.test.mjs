@@ -37,12 +37,16 @@ function fixture({ withBinding = false, revokeFails = false } = {}) {
       return { generation, data };
     },
   };
-  const controller = new BindingConsentController(backend, {});
+  const changes = [];
+  const contacts = { getState: () => ({ directoryPhase: 'ready', contacts: [] }), refreshContacts: async () => {} };
+  const controller = new BindingConsentController(backend, contacts, () => {
+    changes.push('started'); return () => changes.push('settled');
+  });
   async function connect(value) {
     generation = value; listener();
     await new Promise((resolve) => setImmediate(resolve));
   }
-  return { controller, calls, connect };
+  return { controller, calls, connect, changes };
 }
 
 test('启动、重连和新宿主不主动读取微信会话，仍加载已保存授权', async () => {
@@ -129,4 +133,16 @@ for (const reconnect of [false, true]) test(`${reconnect ? '重连' : '启动'}�
     contactId: state.bindings[0].contactId, bindingId: state.bindings[0].bindingId });
   assert.equal(calls.filter((path) => path === '/api/sync/cli-sessions').length, 0);
   assert.equal(controller.getState().sessionIssue, 'not-requested');
+});
+
+
+test('确认新授权前及完成后均使旧读取范围失效', async () => {
+  const { controller, connect, changes } = fixture();
+  await connect(1); await controller.refresh();
+  const state = controller.getState();
+  await controller.confirmSelections({ scopeRevision: state.scopeRevision, selections: [{
+    locator: 'wxid_synthetic', displayName: '合成联系人', contactId: null,
+  }] });
+  assert.equal(controller.getState().errorCode, null);
+  assert.deepEqual(changes, ['started', 'settled']);
 });

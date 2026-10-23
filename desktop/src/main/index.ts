@@ -105,8 +105,19 @@ void app.whenReady().then(async () => {
   const memory = installMemoryBridge(commands, backend, contacts);
   const traces = installTraceBridge(commands, backend, contacts);
   memory.onRecordDeletion((phase) => traces.recordDeletionChanged(phase));
-  installBindingConsentBridge(commands, backend, contacts, () => foreground.beginReadingScopeChange());
-  const sync = installSyncControlBridge(commands, backend, contacts, () => foreground.beginReadingScopeChange());
+  const beginReadingScopeChange = () => {
+    const finishForeground = foreground.beginReadingScopeChange();
+    contacts.invalidateReadingScope();
+    let finished = false;
+    return () => {
+      if (finished) return;
+      finished = true;
+      contacts.invalidateReadingScope();
+      finishForeground();
+    };
+  };
+  installBindingConsentBridge(commands, backend, contacts, beginReadingScopeChange);
+  const sync = installSyncControlBridge(commands, backend, contacts, beginReadingScopeChange);
   const syncPriority = new SyncPriorityController(backend, contacts, sync);
   app.on('before-quit', () => { sync.dispose(); void syncPriority.dispose(); });
   sync.onStateChanged((state) => foreground.setSyncControlState(state));

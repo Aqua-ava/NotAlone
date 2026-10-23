@@ -1,7 +1,7 @@
 # 04：选择已有联系人并读取上下文
 
 Triage: ready-for-agent
-State: open
+State: claimed
 Type: task
 Blocked by: 03
 Spec: ../spec.md

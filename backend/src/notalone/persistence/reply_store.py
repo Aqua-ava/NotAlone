@@ -107,6 +107,7 @@ class PostgresReplyStore:
     __slots__ = (
         "_clock",
         "_database_url",
+        "_contact_context",
         "_id_factory",
         "_lease_duration",
         "_layered_memory",
@@ -121,7 +122,7 @@ class PostgresReplyStore:
         clock: Callable[[], datetime] = _utc_now,
         id_factory: Callable[[], UUID] = uuid4,
         lease_duration: timedelta = timedelta(seconds=30),
-        layered_memory=None, layered_budget=None, owner_layered_budget=None,
+        layered_memory=None, layered_budget=None, owner_layered_budget=None, contact_context=None,
     ) -> None:
         if not isinstance(database_url, str) or not database_url.strip():
             raise ValueError("database_url 不能为空。")
@@ -133,6 +134,7 @@ class PostgresReplyStore:
         ):
             raise ValueError("回复运行租约必须是正时间段。")
         self._database_url = database_url
+        self._contact_context = contact_context
         self._layered_memory, self._layered_budget = layered_memory, layered_budget
         self._owner_layered_budget = owner_layered_budget
         self._clock = clock
@@ -396,7 +398,7 @@ class PostgresReplyStore:
                 if row is None or row["attempt"] != request.attempt or row["state"] != 'running':
                     raise ReplyStoreInvariantError("回复请求已失效。")
                 self._validate_context(connection, request, context)
-                require_current_overview_navigation(connection, context, PostgresRelationshipOverviewStore(self._database_url))
+                require_current_overview_navigation(connection, context, PostgresRelationshipOverviewStore(self._database_url, contact_context=self._contact_context))
                 require_material(context, self._layered_memory, connection=connection, budget=self._layered_budget, owner_budget=self._owner_layered_budget)
                 require_current_reply_memory(connection, request.scope, context.evidence)
                 require_reply_continuation_basis(connection, request, context)
@@ -488,7 +490,7 @@ class PostgresReplyStore:
                     )
                     capture_declared_reply_sources(connection, request, context)
                     require_reply_sources_current(connection, owner_id=request.scope.owner_id, request_id=request.request_id)
-                    require_current_overview_navigation(connection, context, PostgresRelationshipOverviewStore(self._database_url))
+                    require_current_overview_navigation(connection, context, PostgresRelationshipOverviewStore(self._database_url, contact_context=self._contact_context))
                     require_material(context, self._layered_memory, connection=connection, budget=self._layered_budget, owner_budget=self._owner_layered_budget)
                     require_current_reply_memory(connection, request.scope, context.evidence)
                     self._require_current_message_speakers(connection, request.scope, context.evidence)

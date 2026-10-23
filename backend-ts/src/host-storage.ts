@@ -119,7 +119,11 @@ export class HostStorage {
     });
     return { provider: 'deepseek', configured: true, official_deepseek_defaults: true };
   }
-  private async withClient<T>(write: boolean, operation: (client: pg.Client) => Promise<T>): Promise<T> {
+  /** 已认证业务复用原连接；事务收尾仍受宿主关闭屏障约束。 */
+  async businessTransaction<T>(operation: (client: pg.Client) => Promise<T>): Promise<T> {
+    return this.withClient(true, async client => { await this.requireReady(client); return operation(client); }, true);
+  }
+  private async withClient<T>(write: boolean, operation: (client: pg.Client) => Promise<T>, business = false): Promise<T> {
     this.assertOpen();
     if (!this.databaseUrl) throw new HostStorageError('database_unconfigured');
     let client: pg.Client | undefined;
@@ -133,7 +137,7 @@ export class HostStorage {
       await client.query("SET LOCAL search_path = pg_catalog, public");
       await client.query("SET LOCAL statement_timeout = '3000ms'");
       await client.query("SET LOCAL lock_timeout = '1000ms'");
-      if (write && !(await client.query('SELECT pg_try_advisory_xact_lock(1852798049,1) AS locked')).rows[0].locked) throw new HostStorageError('migration_busy');
+      if (write && !business && !(await client.query('SELECT pg_try_advisory_xact_lock(1852798049,1) AS locked')).rows[0].locked) throw new HostStorageError('migration_busy');
       const result = await operation(client);
       this.assertOpen();
       await client.query('COMMIT');

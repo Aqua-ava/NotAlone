@@ -5,6 +5,8 @@ import { build } from 'esbuild';
 
 const ports = build({ stdin: { contents: `
   export { ContactSession } from './src/main/contacts/session';
+  export { SourceDeletionController } from './src/main/sources/controller';
+  export { MemoryReadingController } from './src/main/memory/controller';
   export { ReplySession } from './src/main/reply/session';
   export { BackendRequestFailure } from './src/main/backend/json-client';
 `, resolveDir: process.cwd() }, bundle: true, platform: 'node', format: 'esm', write: false })
@@ -25,6 +27,7 @@ async function fixture(t) {
       requests.push(request);
       const id = request.path.split('/')[3];
       await control.barrier?.(request);
+      if (control.respond) { const data = control.respond(request); if (data) return { generation: 7, data }; }
       if (control.missing.has(id)) throw new BackendRequestFailure('response', 404, 'not_found');
       if (request.path.endsWith('/selections')) return { generation: 7, data: { selection: null } };
       return { generation: 7, data: request.path.endsWith('/assistant-session/default')
@@ -47,7 +50,7 @@ async function fixture(t) {
       }
     });
   });
-  return { ids, sessions, requests, control, contacts, replies, select, ready };
+  return { ids, sessions, requests, control, contacts, replies, select, ready, backend };
 }
 
 test('快速 A→B→C 立即显示最后联系人，仅稳定后的 C 读取讨论', async t => {
@@ -94,4 +97,83 @@ test('切回 A 复用草稿缓存，但已删除讨论不会恢复旧输入', as
   assert.equal(f.replies.getState().savedSession.phase, 'failed');
   assert.equal(f.contacts.getState().draft, '');
   assert.equal(f.replies.getState().requirements, '');
+});
+
+
+test('授权变化保留已选联系人和手工草稿，旧来源读取及删除提交失效', async t => {
+  const f = await fixture(t);
+  const { SourceDeletionController } = await ports;
+  const scope = f.select(f.ids[0]);
+  f.contacts.setDraft({ ...scope, text: '合成手工草稿' });
+  const sources = new SourceDeletionController(f.backend, f.contacts, async () => {});
+  let release;
+  const gate = new Promise(resolve => { release = resolve; });
+  f.control.barrier = request => request.path.endsWith('/sources') ? gate : undefined;
+  f.control.respond = request => request.path.endsWith('/sources') ? { sources: [] } : undefined;
+  const reading = sources.refresh(scope);
+  f.contacts.invalidateReadingScope();
+  assert.equal(f.contacts.getState().selectedContactId, scope.contactId);
+  assert.equal(f.contacts.getState().draft, '合成手工草稿');
+  release(); await reading;
+  assert.equal(sources.getState().phase, 'idle');
+  await assert.rejects(sources.delete({ ...scope, sourceId: randomUUID() }), /来源范围已变化/);
+  const fresh = { ...scope, scopeRevision: f.contacts.getState().scopeRevision };
+  await sources.refresh(fresh);
+  assert.equal(sources.getState().phase, 'ready');
+});
+
+for (const failure of [false, true]) test(`授权撤销及恢复后，消息和关系概览迟到${failure ? '失败' : '成功'}不得复活`, async t => {
+  const f = await fixture(t);
+  const { MemoryReadingController } = await ports;
+  const scope = f.select(f.ids[0]);
+  const memory = new MemoryReadingController(f.backend, f.contacts);
+  f.contacts.onStateChanged(() => memory.synchronizeScope());
+  let release;
+  const gate = new Promise(resolve => { release = resolve; });
+  const isContext = request => /\/(messages\?|relationship-overview$)/.test(request.path);
+  f.control.barrier = request => isContext(request) ? gate.then(() => {
+    if (failure) throw new Error('合成迟到失败');
+  }) : undefined;
+  f.control.respond = request => request.path.includes('/messages?') ? { messages: [{
+    message_id: randomUUID(), speaker: 'contact', message_type: 'text', text: '合成旧授权正文',
+    media_placeholder: null, occurred_at: null, quoted: null,
+  }], next_cursor: null } : request.path.endsWith('/relationship-overview') ? { overview: {
+    version: 1, scope_kind: 'contact', contact_id: scope.contactId,
+    projection_revision: 'a'.repeat(64), memory_revision: 1, built_at: '2026-10-23T00:00:00Z', entries: [],
+  } } : undefined;
+  const reading = Promise.all([f.replies.loadMessages(scope), memory.refreshOverview(scope)]);
+  f.contacts.invalidateReadingScope();
+  f.contacts.invalidateReadingScope();
+  release(); await reading;
+  assert.deepEqual(f.replies.getState().messages.items, []);
+  assert.notEqual(f.replies.getState().messages.phase, 'failed');
+  assert.deepEqual(memory.getState().overview, { phase: 'idle', value: null });
+  await assert.rejects(f.replies.loadMessages(scope), /变化|失效/);
+  await assert.rejects(memory.refreshOverview(scope), /失效/);
+  assert.throws(() => f.contacts.setDraft({ ...scope, text: '旧范围提交' }), /变化/);
+  f.control.barrier = undefined;
+  const fresh = { ...scope, scopeRevision: f.contacts.getState().scopeRevision };
+  await f.replies.readSavedSession(fresh);
+  await Promise.all([f.replies.loadMessages(fresh), memory.refreshOverview(fresh)]);
+  assert.equal(f.replies.getState().messages.items[0].text, '合成旧授权正文');
+  assert.equal(memory.getState().overview.phase, 'ready');
+});
+
+test('授权变化打断目录刷新时重新读取，不停留在旧加载态', async t => {
+  const { ContactSession } = await ports;
+  let release;
+  let reads = 0;
+  const gate = new Promise(resolve => { release = resolve; });
+  const contacts = new ContactSession(async () => {
+    if (++reads === 2) await gate;
+    return { generation: 7, contacts: [] };
+  });
+  contacts.setConnection(7);
+  await new Promise(resolve => setImmediate(resolve));
+  const old = contacts.refreshContacts();
+  contacts.invalidateReadingScope();
+  release(); await old;
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(contacts.getState().directoryPhase, 'ready');
+  assert.equal(reads, 3);
 });

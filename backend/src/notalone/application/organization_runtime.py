@@ -41,8 +41,8 @@ class ConfiguredSuiteSource:
             yield current
 
 
-def build_layered_memory_service(database_url, *, model_priority=None):
-    store = PostgresLayeredMemoryStore(database_url)
+def build_layered_memory_service(database_url, *, model_priority=None, contact_context=None):
+    store = PostgresLayeredMemoryStore(database_url, contact_context=contact_context)
     configured = os.environ.get('NOTALONE_ORGANIZATION_QUALITY_CONFIG')
     if not configured:
         from notalone.memory.organization_sdk import build_deepseek_organization_adapters

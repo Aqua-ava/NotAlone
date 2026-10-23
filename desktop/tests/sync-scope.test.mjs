@@ -29,10 +29,11 @@ function fixture(t, extra = {}, sharedContacts) {
    return {generation:captured,data:control.data}; }};
  const state={directoryPhase:'ready',scopeRevision:1,contacts:[]};
  const contacts=sharedContacts ?? {getState:()=>state,onStateChanged:()=>()=>{},refreshContactsInBackground:async()=>{refreshes.push(true);return true;}};
+ const changes=[];
  const handlers=new Map();
- const sync=ports.installSyncControlBridge({handle:(name,handler)=>handlers.set(name,handler),publish(){}},backend,contacts);
+ const sync=ports.installSyncControlBridge({handle:(name,handler)=>handlers.set(name,handler),publish(){}},backend,contacts,()=>{changes.push('started');return()=>changes.push('settled');});
  t.after(()=>sync.dispose());
- return {sync,handlers,requests,refreshes,control,state,connect(value){generation=value;for(const listener of listeners)listener();}};
+ return {sync,handlers,requests,refreshes,control,state,changes,connect(value){generation=value;for(const listener of listeners)listener();}};
 }
 
 test('同步范围只在明确操作后写入全部私聊模式，保持总开关并兼容旧状态',async t=>{
@@ -185,4 +186,12 @@ test('控制器持续发布各绑定覆盖进度，大集合不截断且失败�
  t.mock.timers.tick(3000);await flush();
  assert.equal(f.sync.getState().report.historyCoverages[299].phase,'incomplete');
  assert.equal(f.sync.getState().report.historyCoverages[0].phase,'syncing');
+});
+
+
+for (const action of ['enable', 'history']) test(`恢复授权 ${action} 的前后都核对读取范围`, async t => {
+ const f=fixture(t);await flush();
+ if(action==='enable') await f.sync.enable({scopeRevision:1});
+ else await f.sync.setHistoryAuthorization({scopeRevision:1,decision:'accepted',confirmed:true});
+ assert.deepEqual(f.changes,['started','settled']);
 });

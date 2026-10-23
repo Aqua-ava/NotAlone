@@ -123,7 +123,7 @@ export class SyncControlController {
       if (!this.state.report.enabled || !phases.includes(this.state.report.backfill.phase)) throw new Error('当前补齐状态不支持本次操作。');
     }
     this.cancelRecovery(); this.cancelSnapshot();
-    const finish = operation === 'disable' || operation === 'pause' || operation === 'scope' ? this.beginReadingScopeChange() : undefined;
+    const finish = ['enable', 'disable', 'pause', 'scope', 'history'].includes(operation) ? this.beginReadingScopeChange() : undefined;
     try { await this.perform(operation, this.scope, false, mode, historyDecision); }
     finally { finish?.(); }
   }

@@ -34,8 +34,9 @@ HISTORY_SCOPE_LIMIT = 500
 
 
 class PreparedAssistantContext:
-    def __init__(self, context: ReplyContextPort, database_url: str, *, layered_memory=None, layered_budget=None, owner_layered_budget=None) -> None:
+    def __init__(self, context: ReplyContextPort, database_url: str, *, layered_memory=None, layered_budget=None, owner_layered_budget=None, contact_context=None) -> None:
         self._context, self._database_url = context, database_url
+        self._contact_context = contact_context
         self._layered_memory, self._layered_budget = layered_memory, layered_budget
         self._owner_layered_budget = owner_layered_budget
 
@@ -97,7 +98,7 @@ class PreparedAssistantContext:
                 target.update(_evidence_dependencies(connection, owner_id=scope.owner_id,
                     evidence_id=item.evidence_id, kind=item.kind, source_ids=set(item.source_ids),
                     historical=is_historical))
-            require_current_overview_navigation(connection, context, PostgresRelationshipOverviewStore(self._database_url))
+            require_current_overview_navigation(connection, context, PostgresRelationshipOverviewStore(self._database_url, contact_context=self._contact_context))
             require_material(context, self._layered_memory, connection=connection, budget=self._layered_budget, owner_budget=self._owner_layered_budget)
             _require_context_preferences(connection, context)
             dependencies.update(identifier for item in context.expression_preferences

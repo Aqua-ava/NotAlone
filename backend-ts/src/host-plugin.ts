@@ -7,6 +7,8 @@ import { rmSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { HostStorage, HostStorageError } from './host-storage.ts';
 import { LegacyBackend, legacyRoute, ownership } from './legacy-backend.ts';
+import { ContactContext, ContactContextError, contactContextRoute } from './contact-context.ts';
+import { ContactHandoff } from './contact-handoff.ts';
 export const name = 'notalone-host';
 export const inject = ['appReady','llm','agents','sessions','tools'];
 
@@ -19,6 +21,7 @@ async function start(ctx: Context) {
   const config = JSON.parse(await readFile(process.env.NOTALONE_HOST_CONFIG!, 'utf8'));
   if (process.ppid !== config.parentPid) throw new Error('HOST_PARENT_LOST');
   const token = randomBytes(32).toString('base64url');
+  const contextToken = randomBytes(32).toString('base64url');
   let state: 'running'|'stopping'|'stopped' = 'running';
   let published = false;
   const terminate = () => { state='stopping';process.kill(process.pid,'SIGTERM'); };
@@ -41,19 +44,42 @@ async function start(ctx: Context) {
   const ownerStatus=await storage.setupStatus();
   const legacy=await LegacyBackend.start(config,{...process.env,...storage.runtimeEnvironment(),HOME:config.businessHome,
     NOTALONE_OWNER_ID:ownerStatus.runtime_owner_configured ? storage.runtimeOwnerId : ''},terminate);
+  const contacts=new ContactContext(storage);
+  const handoff=new ContactHandoff(storage,legacy);
   const server=createServer(async(req,res)=>{
     const respond=(status:number,value:unknown)=>{res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify(value));};
     const supplied=Buffer.from(req.headers.authorization ?? '');
-    const expected=Buffer.from(`Bearer ${token}`);
-    if (supplied.length !== expected.length || !timingSafeEqual(supplied,expected) || req.headers.origin) {respond(401,{error:'unauthorized'});return;}
+    const expected=Buffer.from(`Bearer ${token}`),internalExpected=Buffer.from(`Bearer ${contextToken}`);
+    const internal=supplied.length===internalExpected.length && timingSafeEqual(supplied,internalExpected);
+    const internalRead=internal && req.headers['x-notalone-owner-id']===storage.runtimeOwnerId?.toLowerCase() && typeof req.headers['x-notalone-owner-id']==='string' && req.method==='GET' && /^\/api\/contacts\/[^/]+\/relationship-overview$/.test(req.url??'');
+    if ((!internalRead && (supplied.length !== expected.length || !timingSafeEqual(supplied,expected))) || req.headers.origin) {respond(401,{error:'unauthorized'});return;}
     try {
-      if(req.url==='/api/runtime/status' && req.method==='GET'){respond(200,{state,runtime:'dsh',pid:process.pid,legacyPid:legacy.pid,ownership});return;}
+      if(req.url==='/api/runtime/status' && req.method==='GET'){respond(200,{state,runtime:'dsh',pid:process.pid,legacyPid:legacy.pid,ownership:{...ownership,contactContext:handoff.status().owner}});return;}
       if(req.url==='/api/runtime/shutdown' && req.method==='POST'){
-        state='stopping';await Promise.all([storage.close(),legacy.stop()]);state='stopped';res.once('finish',()=>process.kill(process.pid,'SIGTERM'));respond(200,{state,runtime:'dsh'});return;
+        state='stopping';await handoff.close();await Promise.all([storage.close(),legacy.stop()]);state='stopped';res.once('finish',()=>process.kill(process.pid,'SIGTERM'));respond(200,{state,runtime:'dsh'});return;
       }
       if(state!=='running'){respond(503,{error:'runtime_stopping'});return;}
       if(req.url==='/api/setup/status' && req.method==='GET'){respond(200,await storage.setupStatus());return;}
       if(req.url==='/api/settings/credentials' && req.method==='GET'){respond(200,storage.credentialStatus());return;}
+      const url=new URL(req.url??'','http://localhost');
+      if(url.pathname==='/api/runtime/contact-context/status' && req.method==='GET'){respond(200,handoff.status());return;}
+      if(url.pathname.startsWith('/api/runtime/contact-context/')){
+        if(url.pathname!=='/api/runtime/contact-context/handoff' || req.method!=='POST'){respond(404,{error:'not_found'});return;}
+        const payload=await readBody(req);
+        if(Object.keys(payload).length!==1 || !['python','typescript'].includes(payload.target))throw new Error('invalid_request');
+        respond(200,await handoff.transfer(payload.target));return;
+      }
+      if(contactContextRoute(req.method??'',url.pathname)){
+        if(internal && handoff.status().owner!=='typescript')throw new ContactContextError('contact_context_transferring',503);
+        const lease=handoff.enter();
+        if(lease.owner==='python'){res.once('close',lease.finish);res.once('finish',lease.finish);legacy.proxy(req,res);return;}
+        try {
+          const body=req.method==='POST'?await readBody(req):undefined;
+          const result=await contacts.handle(req.method!,url,body,lease.assertCurrent,internal);
+          lease.assertCurrent();respond(200,result);
+        } finally {lease.finish();}
+        return;
+      }
       if(legacyRoute(req.url??'')){legacy.proxy(req,res);return;}
       if(req.method!=='POST'){respond(404,{error:'not_found'});return;}
       let body='';for await(const chunk of req){body+=chunk;if(Buffer.byteLength(body)>16384)throw new Error('invalid_request');}
@@ -76,11 +102,13 @@ async function start(ctx: Context) {
         respond(200,await storage.useOfficialDeepseek(payload.api_key));return;
       }
       respond(404,{error:'not_found'});
-    }catch(error){const code=error instanceof HostStorageError?error.code:'invalid_request';respond(['owner_already_configured','owner_recovery_ambiguous','owner_recovery_conflict'].includes(code)?409:400,{error:code});}
+    }catch(error){const code=error instanceof HostStorageError?error.code:'invalid_request';respond(error instanceof ContactContextError?error.status:['owner_already_configured','owner_recovery_ambiguous','owner_recovery_conflict'].includes(code)?409:400,{error:code});}
   });
   const readyDispose=ctx.appReady!.onReady(()=>{
     server.listen(0,'127.0.0.1',()=>{void(async()=>{
       const address=server.address();if(!address || typeof address==='string')throw new Error();
+      await legacy.control('/api/runtime/contact-context/configure','POST',{address:`127.0.0.1:${address.port}`,token:contextToken});
+      await handoff.transfer('typescript');
       const pendingInfo = `${config.infoPath}.${randomBytes(16).toString('hex')}.pending`;
       try {
         await writeFile(pendingInfo,`address=127.0.0.1:${address.port}\ntoken=${token}\npid=${process.pid}\n`,{mode:0o600,flag:'wx'});
@@ -93,7 +121,14 @@ async function start(ctx: Context) {
   ctx.effect(()=>async()=>{
     state='stopping';readyDispose();process.stdin.removeListener('end',terminate);process.stdin.pause();
     server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));
-    await Promise.all([storage.close(),legacy.stop()]);if(published)await rm(config.infoPath,{force:true});
+    await handoff.close();await Promise.all([storage.close(),legacy.stop()]);if(published)await rm(config.infoPath,{force:true});
     state='stopped';
   });
+}
+
+async function readBody(req: import('node:http').IncomingMessage): Promise<Record<string, any>> {
+  let body='';for await(const chunk of req){body+=chunk;if(Buffer.byteLength(body)>16384)throw new Error('invalid_request');}
+  const payload=JSON.parse(body);
+  if(!payload || Array.isArray(payload) || typeof payload!=='object')throw new Error('invalid_request');
+  return payload;
 }

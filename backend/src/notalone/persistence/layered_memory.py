@@ -44,11 +44,11 @@ class OrganizationWork:
 
 
 class PostgresLayeredMemoryStore(LayeredProfileStore, LayeredCorrectionStore):
-    def __init__(self, database_url: str, *, clock=None, scenario_version_id_factory=uuid4):
+    def __init__(self, database_url: str, *, clock=None, scenario_version_id_factory=uuid4, contact_context=None):
         self._database_url = database_url
         self._scenario_version_id_factory = scenario_version_id_factory
         self._clock = clock or (lambda: datetime.now(timezone.utc))
-        self._overview = PostgresRelationshipOverviewStore(database_url, clock=self._clock)
+        self._overview = PostgresRelationshipOverviewStore(database_url, clock=self._clock, contact_context=contact_context)
 
     def require_synthetic_database(self):
         with psycopg.connect(self._database_url) as connection:

@@ -48,11 +48,11 @@ export class LegacyBackend {
       throw new Error('LEGACY_START_FAILED');
     }catch(error){await legacy.stop();throw error;}
   }
-  private async control(endpoint:string,method:string):Promise<{state?:string}>{
+  async control(endpoint:string,method:string,body?:Record<string,string>):Promise<{state?:string;active_requests?:number}>{
     const c=this.connection;if(!c)throw new Error('LEGACY_NOT_READY');
-    const response=await fetch(`http://${c.address}${endpoint}`,{method,headers:{Authorization:`Bearer ${c.token}`},signal:AbortSignal.timeout(5500),redirect:'error'});
+    const response=await fetch(`http://${c.address}${endpoint}`,{method,headers:{Authorization:`Bearer ${c.token}`,...(body?{'Content-Type':'application/json'}:{})},body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(5500),redirect:'error'});
     if(!response.ok)throw new Error('LEGACY_CONTROL_FAILED');
-    return await response.json() as {state?:string};
+    return await response.json() as {state?:string;active_requests?:number};
   }
   proxy(req:IncomingMessage,res:ServerResponse):void {
     const c=this.connection;

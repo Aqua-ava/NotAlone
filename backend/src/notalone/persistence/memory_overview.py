@@ -61,13 +61,14 @@ def _utc_now() -> datetime:
 
 
 class PostgresRelationshipOverviewStore:
-    def __init__(self, database_url: str, *, clock: Callable[[], datetime] = _utc_now) -> None:
+    def __init__(self, database_url: str, *, clock: Callable[[], datetime] = _utc_now, contact_context=None) -> None:
         if not isinstance(database_url, str) or not database_url.strip():
             raise ValueError("database_url 不能为空。")
         if not callable(clock):
             raise ValueError("clock 必须可调用。")
         self._database_url = database_url
         self._clock = clock
+        self._contact_context = contact_context
 
     def read_owner(self, owner_id: UUID) -> RelationshipOverview:
         if not isinstance(owner_id, UUID):
@@ -145,6 +146,14 @@ class PostgresRelationshipOverviewStore:
     def read_contact(self, scope: ContactScope) -> RelationshipOverview:
         if not isinstance(scope, ContactScope):
             raise TypeError("概览必须限定联系人范围。")
+        policy = self._contact_context
+        if policy is not None:
+            try:
+                target = policy.overview_target()
+            except RuntimeError:
+                raise OverviewUnavailable("概览责任移交尚未就绪。") from None
+            if target is not None:
+                return policy.read_transferred_overview(target, scope)
         try:
             with psycopg.connect(self._database_url, row_factory=dict_row) as connection:
                 lock_contact_scope(connection, owner_id=scope.owner_id, contact_id=scope.contact_id)
@@ -152,6 +161,9 @@ class PostgresRelationshipOverviewStore:
                 return self.read_contact_in_transaction(connection, scope)
         except psycopg.Error:
             raise OverviewUnavailable("概览暂不可用。") from None
+        finally:
+            if policy is not None:
+                policy.leave()
 
     def read_contact_in_transaction(self, connection, scope: ContactScope) -> RelationshipOverview:
         """调用方已经持有 owner 锁；单次读取内复用来源，不跨概览保留。"""
@@ -205,18 +217,14 @@ class PostgresRelationshipOverviewStore:
         ).fetchone()
         built_at = saved["built_at"] if saved and saved["projection_revision"] == revision else self._now()
         if not saved or saved["projection_revision"] != revision:
-            source_ids = {UUID(identifier) for item in dependencies for identifier in item["source_ids"]}
-            source_ids.update(ref.source_id for entry in entries for ref in entry.references)
-            connection.execute(
-                "INSERT INTO public.relationship_overview_projection "
-                "(owner_id,scope_kind,contact_id,projection_revision,memory_ids,source_ids,manifest,built_at) "
-                "VALUES (%s,'contact',%s,%s,%s,%s,%s,%s) "
-                "ON CONFLICT (owner_id,contact_id) WHERE scope_kind='contact' DO UPDATE SET "
-                "projection_revision=EXCLUDED.projection_revision,memory_ids=EXCLUDED.memory_ids,"
-                "source_ids=EXCLUDED.source_ids,manifest=EXCLUDED.manifest,built_at=EXCLUDED.built_at",
-                (scope.owner_id, scope.contact_id, revision, [entry.memory.memory_id for entry in entries],
-                 sorted(source_ids), Jsonb(manifest), built_at),
-            )
+            policy = self._contact_context
+            can_write = policy is None or policy.enter()
+            if can_write:
+                try:
+                    self._persist_contact_projection(connection, scope, revision, entries, dependencies, manifest, built_at)
+                finally:
+                    if policy is not None:
+                        policy.leave()
         return RelationshipOverview(scope, revision, memory_revision, built_at, tuple(entries))
 
     def _now(self) -> datetime:
@@ -224,6 +232,22 @@ class PostgresRelationshipOverviewStore:
         if not isinstance(value, datetime) or value.tzinfo is None or value.utcoffset() is None:
             raise OverviewUnavailable("概览构建时间不可核验。")
         return value.astimezone(timezone.utc)
+
+    @staticmethod
+    def _persist_contact_projection(connection, scope, revision, entries, dependencies, manifest, built_at):
+        """只在明确持有本功能写责任时缓存；事务内复核仍返回当前计算结果。"""
+        source_ids = {UUID(identifier) for item in dependencies for identifier in item["source_ids"]}
+        source_ids.update(ref.source_id for entry in entries for ref in entry.references)
+        connection.execute(
+            "INSERT INTO public.relationship_overview_projection "
+            "(owner_id,scope_kind,contact_id,projection_revision,memory_ids,source_ids,manifest,built_at) "
+            "VALUES (%s,'contact',%s,%s,%s,%s,%s,%s) "
+            "ON CONFLICT (owner_id,contact_id) WHERE scope_kind='contact' DO UPDATE SET "
+            "projection_revision=EXCLUDED.projection_revision,memory_ids=EXCLUDED.memory_ids,"
+            "source_ids=EXCLUDED.source_ids,manifest=EXCLUDED.manifest,built_at=EXCLUDED.built_at",
+            (scope.owner_id, scope.contact_id, revision, [entry.memory.memory_id for entry in entries],
+             sorted(source_ids), Jsonb(manifest), built_at),
+        )
 
     @staticmethod
     def _lineage(connection, scope: ContactScope | UUID, row: dict,

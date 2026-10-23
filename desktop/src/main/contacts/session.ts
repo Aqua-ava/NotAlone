@@ -36,6 +36,13 @@ export class ContactSession {
     if (generation !== undefined) void this.refreshContacts();
   }
 
+  // 授权决定变化保留人工选择与草稿，但所有既有读取和提交必须重新捕获范围。
+  invalidateReadingScope(): void {
+    ++this.directoryRequest;
+    this.publish({ scopeRevision: this.state.scopeRevision + 1 });
+    if (this.state.directoryPhase === 'loading') void this.refreshContacts();
+  }
+
   async refreshContacts(): Promise<void> { await this.refreshDirectory(false); }
 
   // 自动纳入只补充共享目录；暂时失败不清空已确认对象、草稿或可用目录。
