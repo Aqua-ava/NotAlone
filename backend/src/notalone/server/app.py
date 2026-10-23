@@ -39,6 +39,7 @@ from notalone.application.assistant_message_adoption import parse_assistant_repl
 from notalone.application.source_service import SourceService
 from notalone.application.expression_preference_service import ExpressionPreferenceService
 from notalone.persistence.expression_preferences import PostgresExpressionPreferenceStore
+from notalone.persistence.history_sync_state import HistoryCoverage
 from notalone.server.expression_preferences import handle_expression_preferences
 from notalone.server.reply_exploration import handle_exploration
 from notalone.persistence.source_tasks import SourceDeletionHistoryUnverified
@@ -3565,6 +3566,28 @@ def _sync_health_payload(sync: object) -> dict[str, object] | None:
     return value if isinstance(value, dict) else None
 
 
+def _history_coverage_payload(coverage: HistoryCoverage) -> dict[str, object]:
+    """按绑定输出历史覆盖元数据；不含消息正文、昵称或备注。"""
+
+    def iso(value: datetime | None) -> str | None:
+        return None if value is None else value.astimezone(timezone.utc).isoformat()
+
+    return {
+        "binding_id": str(coverage.binding_id),
+        "contact_id": str(coverage.contact_id),
+        "phase": coverage.phase,
+        "failure_code": coverage.failure_code,
+        "message_count": coverage.message_count,
+        "non_text_count": coverage.non_text_count,
+        "page_count": coverage.page_count,
+        "last_cursor": coverage.last_cursor,
+        "watermark_at": iso(coverage.watermark_at),
+        "started_at": iso(coverage.started_at),
+        "completed_at": iso(coverage.completed_at),
+        "updated_at": iso(coverage.updated_at),
+    }
+
+
 def _sync_status_payload(report: FrontSyncCycleReport) -> dict[str, object]:
     """把循环报告投影为状态 API 的稳定 JSON；不含任何消息正文。"""
 
@@ -3631,6 +3654,10 @@ def _sync_status_payload(report: FrontSyncCycleReport) -> dict[str, object]:
                 "cli_backfill_pending_contacts": report.cli_backfill_pending_contacts,
                 "cli_backfill_total_message_count": report.cli_backfill_total_message_count,
                 "cli_backfill_total_non_text_count": report.cli_backfill_total_non_text_count,
+                "cli_history_coverages": [
+                    _history_coverage_payload(coverage)
+                    for coverage in report.cli_history_coverages
+                ],
                 "foreground_phase": report.foreground_phase,
                 "foreground_failure_code": report.foreground_failure_code,
             }

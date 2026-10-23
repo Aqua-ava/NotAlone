@@ -35,6 +35,16 @@ from notalone.persistence.conversation_repository import (
 from notalone.persistence.front_sync_state import (
     FrontSyncStatePersistenceError,
 )
+from notalone.persistence.history_sync_state import (
+    HistoryCoverage,
+    HistoryPageCheckpoint,
+    HistorySyncPhase,
+    HistorySyncState,
+    HistorySyncStatePersistenceError,
+    PostgresHistorySyncStateStore,
+    coverage_from_state,
+    not_started_coverage,
+)
 from notalone.persistence.observation_store import (
     ObservationMode,
     ObservationPersistenceError,
@@ -98,6 +108,7 @@ class CliSyncStatus:
     backfill_pending_contacts: int = 0
     backfill_total_message_count: int = 0
     backfill_total_non_text_count: int = 0
+    history_coverages: tuple[HistoryCoverage, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -190,6 +201,54 @@ class BackfillStatePort(Protocol):
         """为失败或暂停状态建立新的尝试。"""
 
 
+class HistorySyncStatePort(Protocol):
+    """首绑历史覆盖状态的持久化端口；只承载元数据。"""
+
+    def read(
+        self, *, owner_id: UUID, contact_id: UUID, binding_id: UUID
+    ) -> HistorySyncState | None:
+        """读取一个绑定的历史覆盖状态；行不存在表示尚未开始。"""
+
+    def list_active(
+        self, *, owner_id: UUID, channel: str, account_scope: str
+    ) -> tuple[HistorySyncState, ...]:
+        """列出授权范围内 active 绑定的历史覆盖状态。"""
+
+    def ensure_scope_started(
+        self,
+        *,
+        owner_id: UUID,
+        channel: str,
+        account_scope: str,
+        watermark_at: datetime,
+    ) -> int:
+        """为范围内 active 绑定创建缺失的历史任务。"""
+
+    def mark_running(
+        self, *, owner_id: UUID, contact_id: UUID, binding_id: UUID
+    ) -> HistorySyncState:
+        """在重试开始时恢复同步中。"""
+
+    def mark_incomplete(
+        self,
+        *,
+        owner_id: UUID,
+        contact_id: UUID,
+        binding_id: UUID,
+        failure_code: str,
+    ) -> HistorySyncState:
+        """记录不能标记完整的稳定原因。"""
+
+
+class HistorySyncAuthorizationPort(Protocol):
+    """历史读取授权版本端口；由授权升级任务实现。"""
+
+    def history_sync_authorized(
+        self, *, owner_id: UUID, channel: str, account_scope: str
+    ) -> bool:
+        """返回该账号范围是否已明确授予首次历史读取。"""
+
+
 class SyncStatePort(Protocol):
     """读取同步开关时间，用于识别重新开启后的可检测缺口。"""
 
@@ -203,6 +262,15 @@ _PRIORITY_READ_INTERVAL = timedelta(seconds=3)
 CLI_TASK_TIMEOUT_SECONDS = 3.0
 _SAFETY_SWEEP_INTERVAL = timedelta(seconds=15)
 _SAFETY_SWEEP_BINDINGS_PER_CYCLE = 8
+_HISTORY_PAGE_LIMIT = 200
+_LOCAL_HISTORY_RETRY_INTERVAL = timedelta(minutes=5)
+
+
+class _HistoryReadDeferred:
+    """历史读取因退避或状态不可用而暂缓；与“没有历史任务”区分。"""
+
+
+_HISTORY_RETRY_WAIT = _HistoryReadDeferred()
 _LOCAL_HISTORY_CODES = frozenset({"local_history_deleted", "local_history_empty"})
 _INCOMPLETE_CLI_FAILURE_CODES = frozenset(
     {
@@ -262,6 +330,12 @@ class CliBackgroundSync:
         "_monotonic_clock",
         "_priority_timing",
         "_last_cli_result",
+        "_history_state",
+        "_history_authorization",
+        "_history_page_limit",
+        "_history_retries",
+        "_history_ensured_binding_ids",
+        "_last_history_coverages",
     )
 
     def __init__(
@@ -276,6 +350,11 @@ class CliBackgroundSync:
         backfill_state: (
             BackfillStatePort | PostgresBackfillStateStore | None
         ) = None,
+        history_state: (
+            HistorySyncStatePort | PostgresHistorySyncStateStore | None
+        ) = None,
+        history_authorization: HistorySyncAuthorizationPort | None = None,
+        history_page_limit: int = _HISTORY_PAGE_LIMIT,
         sync_state: SyncStatePort | None = None,
         message_events: MessageEventPublisher | None = None,
         clock: Callable[[], datetime] | None = None,
@@ -288,6 +367,12 @@ class CliBackgroundSync:
                 or not isinstance(cli_timeout_seconds, (int, float))
                 or not isfinite(cli_timeout_seconds) or cli_timeout_seconds <= 0):
             raise ValueError("CLI 命令预算必须是有限正数。")
+        if (
+            isinstance(history_page_limit, bool)
+            or not isinstance(history_page_limit, int)
+            or not 1 <= history_page_limit <= 1000
+        ):
+            raise ValueError("历史分页预算必须是 1 到 1000 的整数。")
         if not isinstance(cli, LocalWechatCli) and not hasattr(cli, "tail"):
             raise TypeError("cli 必须提供 tail 接口。")
         self._owner_id = owner_id
@@ -297,6 +382,9 @@ class CliBackgroundSync:
         self._bindings = bindings
         self._observation_store = observation_store
         self._backfill_state = backfill_state
+        self._history_state = history_state
+        self._history_authorization = history_authorization
+        self._history_page_limit = history_page_limit
         self._sync_state = sync_state
         self._message_events = message_events or NullMessageEventPublisher()
         self._clock = clock or (lambda: datetime.now(timezone.utc))
@@ -337,6 +425,9 @@ class CliBackgroundSync:
         self._backfill_paused = False
         self._backfill_retries: dict[UUID, tuple[int, datetime]] = {}
         self._history_recheck_at: dict[UUID, datetime] = {}
+        self._history_retries: dict[UUID, tuple[int, datetime]] = {}
+        self._history_ensured_binding_ids: frozenset[UUID] = frozenset()
+        self._last_history_coverages: tuple[HistoryCoverage, ...] = ()
 
     def cycle(
         self,
@@ -370,6 +461,7 @@ class CliBackgroundSync:
                     failure_code=None,
                     bound_count=0,
                     **self._backfill_status_fields(),
+                    history_coverages=self._last_history_coverages,
                 ),
                 batch_message_count=0,
             )
@@ -406,6 +498,7 @@ class CliBackgroundSync:
                     failure_code=None,
                     bound_count=0,
                     **self._backfill_status_fields(),
+                    history_coverages=(),
                 ),
                 batch_message_count=0,
             )
@@ -462,6 +555,8 @@ class CliBackgroundSync:
             except ObservationPersistenceError:
                 self._failure_code = "baseline_unavailable"
 
+        self._ensure_history_tasks(bindings)
+
         if self._stream is None and self._stream_supported:
             self._start_global_stream()
         if self._stream is not None:
@@ -489,11 +584,20 @@ class CliBackgroundSync:
             binding_id: due_at for binding_id, due_at in self._history_recheck_at.items()
             if binding_id in active_binding_locators
         }
+        self._history_retries = {
+            binding_id: retry for binding_id, retry in self._history_retries.items()
+            if binding_id in active_binding_locators
+        }
         if not self._backfill_paused:
             for binding in bindings:
                 retry = self._backfill_retries.get(binding.binding_id)
                 if retry is not None and self._clock() >= retry[1]:
                     self._enqueue(binding.conversation_locator)
+        # 历史失败与补齐暂停无关：只要退避到期就重新排队。
+        for binding in bindings:
+            retry = self._history_retries.get(binding.binding_id)
+            if retry is not None and self._clock() >= retry[1]:
+                self._enqueue(binding.conversation_locator)
 
         self._enqueue_priority_live_read(
             priority_locator,
@@ -636,6 +740,7 @@ class CliBackgroundSync:
                         or backfill_states
                     ),
                 ),
+                history_coverages=self._history_coverages(bindings),
             ),
             batch_message_count=written,
             cli_available=None if self._last_cli_result is None else self._last_cli_result[0],
@@ -666,6 +771,7 @@ class CliBackgroundSync:
                 bound_count=bound_count,
                 pending_count=len(self._pending_locators),
                 **self._backfill_status_fields(),
+                history_coverages=self._last_history_coverages,
             ),
             batch_message_count=0,
         )
@@ -689,6 +795,8 @@ class CliBackgroundSync:
         self._follow_smoke_enabled = False
         self._failure_code = None
         self._priority_timing = _PriorityReadTiming()
+        self._history_retries.clear()
+        self._history_ensured_binding_ids = frozenset()
 
     def _elapsed_ms(self, started: float) -> int:
         return max(0, round((self._monotonic_clock() - started) * 1000))
@@ -757,9 +865,12 @@ class CliBackgroundSync:
         """让下一次空闲心跳立即执行一小批安全对账。"""
 
         # 手动检查也给之前降级的全局流一次恢复机会；正文仍受本轮
-        # 固定联系人预算限制。
+        # 固定联系人预算限制。显式检查应立即重试失败绑定，不能被
+        # 自动退避继续压住。
         self._stream_supported = True
         self._last_sweep_at = None
+        self._backfill_retries.clear()
+        self._history_retries.clear()
 
     def request_backfill_check(self) -> None:
         """请求一次覆盖全部 active 绑定的有限补齐检查。"""
@@ -1129,6 +1240,295 @@ class CliBackgroundSync:
             return None
         return disabled_at.timestamp(), enabled_at.timestamp()
 
+    def _ensure_history_tasks(self, bindings: Sequence[object]) -> None:
+        """在历史授权范围内为 active 绑定创建缺失的首次历史任务。
+
+        只创建状态行，不读取正文；重复心跳不会重置已有检查点。授权端口
+        缺失或明确拒绝时不创建任务，老授权继续只走增量同步。
+        """
+
+        store = self._history_state
+        if store is None:
+            return
+        if not self._history_authorized():
+            return
+        binding_ids = frozenset(binding.binding_id for binding in bindings)
+        if not binding_ids or binding_ids == self._history_ensured_binding_ids:
+            return
+        try:
+            store.ensure_scope_started(
+                owner_id=self._owner_id,
+                channel=self._channel,
+                account_scope=self._account_scope,
+                watermark_at=self._clock(),
+            )
+        except HistorySyncStatePersistenceError:
+            self._failure_code = "history_state_unavailable"
+            return
+        self._history_ensured_binding_ids = binding_ids
+
+    def _history_authorized(self) -> bool:
+        port = self._history_authorization
+        if port is None:
+            return False
+        try:
+            return bool(
+                port.history_sync_authorized(
+                    owner_id=self._owner_id,
+                    channel=self._channel,
+                    account_scope=self._account_scope,
+                )
+            )
+        except Exception:
+            # 授权版本读取失败时不启动新的历史读取；已有任务仍按检查点续读。
+            return False
+
+    def _prepare_history_read(
+        self, binding: object
+    ) -> HistorySyncState | _HistoryReadDeferred | None:
+        """决定本次是否读取历史页；返回哨兵表示退避中不能读取。"""
+
+        store = self._history_state
+        if store is None:
+            return None
+        try:
+            state = store.read(
+                owner_id=self._owner_id,
+                contact_id=binding.scope.contact_id,
+                binding_id=binding.binding_id,
+            )
+        except HistorySyncStatePersistenceError:
+            self._failure_code = "history_state_unavailable"
+            return _HISTORY_RETRY_WAIT
+        if state is None or state.phase is HistorySyncPhase.COMPLETE:
+            return None
+        if state.phase is HistorySyncPhase.INCOMPLETE:
+            retry = self._history_retries.get(binding.binding_id)
+            if retry is not None and self._clock() < retry[1]:
+                return _HISTORY_RETRY_WAIT
+            try:
+                return store.mark_running(
+                    owner_id=self._owner_id,
+                    contact_id=binding.scope.contact_id,
+                    binding_id=binding.binding_id,
+                )
+            except HistorySyncStatePersistenceError:
+                self._failure_code = "history_state_unavailable"
+                return _HISTORY_RETRY_WAIT
+        return state
+
+    def _read_history_page(
+        self,
+        binding: object,
+        state: HistorySyncState,
+        *,
+        live_read: bool,
+        timing: _PriorityReadTiming | None,
+        cli_deadline: float | None,
+    ) -> tuple[int, bool]:
+        """读取一页本机可读历史；消息与检查点在同一事务提交。"""
+
+        contact_id = binding.scope.contact_id
+        started = self._monotonic_clock()
+        completed = False
+        failure_code: str | None = None
+        cli_started: float | None = None
+        store_started: float | None = None
+        try:
+            timeout = self._remaining_cli_timeout(cli_deadline)
+            cli_started = self._monotonic_clock()
+            if timing is not None and timing.pending_requested_at is not None:
+                timing.queue_wait_ms = max(
+                    0, round((cli_started - timing.pending_requested_at) * 1000)
+                )
+                timing.pending_requested_at = None
+            arguments: dict[str, object] = {
+                "history": True,
+                "limit": self._history_page_limit,
+                "timeout_seconds": timeout,
+            }
+            if state.last_cursor is not None:
+                arguments["cursor"] = state.last_cursor
+            try:
+                result = self._cli.tail(
+                    binding.conversation_locator, **arguments
+                )
+                self._last_cli_result = (True, None)
+            except CliAdapterError as error:
+                self._last_cli_result = (False, error.code)
+                self._record_input_failure(binding, error, None)
+                failure_code = error.code
+                self._fail_history(binding, error.code)
+                raise
+            finally:
+                if timing is not None and cli_started is not None:
+                    timing.last_cli_duration_ms = self._elapsed_ms(cli_started)
+
+            if result.local_history_state is not None and timing is not None:
+                timing.local_history_state = result.local_history_state
+            failure_code = _history_page_failure(result, state)
+            if failure_code is not None:
+                self._fail_history(binding, failure_code)
+                return 0, False
+            try:
+                processing_receipts: list[ProcessingRecord] = []
+                messages = normalize_cli_events(
+                    result.events, processing_receipts=processing_receipts
+                )
+            except CliNormalizationError as error:
+                self._record_input_failure(binding, error, None)
+                failure_code = "cli_normalization_failed"
+                self._fail_history(binding, failure_code)
+                raise
+            complete = not result.has_more
+            event_count = (
+                len(result.events)
+                if result.event_count is None
+                else result.event_count
+            )
+            non_text_count = (
+                sum(1 for event in result.events if event.kind != "text")
+                if result.event_count is None
+                else result.non_text_count
+            )
+            checkpoint = HistoryPageCheckpoint(
+                complete=complete,
+                message_count=len(messages),
+                non_text_count=non_text_count,
+                last_local_id=result.last_local_id,
+                last_cursor=result.cursor,
+            )
+            store_started = self._monotonic_clock()
+            try:
+                batch = self._observation_store.record_batch_with_messages(
+                    owner_id=self._owner_id,
+                    contact_id=contact_id,
+                    binding_id=binding.binding_id,
+                    mode=ObservationMode.CLI_HISTORY,
+                    cli_version=self._cli_version_value(
+                        timing=timing, cli_deadline=cli_deadline
+                    ),
+                    conversation_locator=binding.conversation_locator,
+                    since_local_id=state.last_local_id,
+                    since_cursor=state.last_cursor,
+                    last_local_id=result.last_local_id,
+                    last_cursor=result.cursor,
+                    cursor_ordered=False,
+                    advance_cursor=False,
+                    # 中间历史页不推进增量游标；完成页仅在游标确实前移时
+                    # 由同一事务定位并作为可靠水位，已有更靠前的游标不回退。
+                    is_reliable=complete,
+                    record_count=len(messages),
+                    event_count=event_count,
+                    non_text_count=non_text_count,
+                    messages=messages,
+                    processing_records=tuple(
+                        sorted(
+                            (*processing_receipts, *result.filtered_records),
+                            key=lambda record: record.payload().get(
+                                "input_position"
+                            )
+                            or 0,
+                        )
+                    ),
+                    history_checkpoint=checkpoint,
+                )
+            except ObservationPersistenceError:
+                # 存储故障没有形成覆盖结论；保留 syncing 状态并在退避后重读本页。
+                self._schedule_history_retry(binding)
+                raise
+            finally:
+                if timing is not None and store_started is not None:
+                    timing.last_store_duration_ms = self._elapsed_ms(store_started)
+            if not getattr(batch, "source_created", False):
+                # 幂等重放没有推进检查点；停止重读同一页并等待人工或退避。
+                failure_code = "history_page_stalled"
+                self._fail_history(binding, failure_code)
+                return 0, False
+            if complete:
+                self._history_retries.pop(binding.binding_id, None)
+            # 历史页不逐条发布消息事件：首绑可能包含大量消息，逐条唤醒
+            # 会形成无界提取与界面更新；消息和来源已在同一事务提交，
+            # 分层提取由独立任务按现有队列约束处理。
+            completed = True
+            return len(messages), result.has_more
+        finally:
+            if not completed:
+                failure_code = failure_code or "cli_sync_failed"
+            if timing is not None:
+                timing.last_duration_ms = self._elapsed_ms(started)
+                timing.last_failure_code = None if completed else failure_code
+                if completed:
+                    timing.last_success_at = self._clock().astimezone(timezone.utc)
+                self._priority_timing = timing
+            if timing is not None and live_read:
+                self._last_priority_read_at = self._clock()
+
+    def _fail_history(self, binding: object, failure_code: str) -> None:
+        """记录历史覆盖不完整并设置退避；已提交检查点保持不变。"""
+
+        store = self._history_state
+        if store is None:
+            return
+        if failure_code in _LOCAL_HISTORY_CODES or failure_code == "history_empty":
+            self._history_retries[binding.binding_id] = (
+                0,
+                self._clock() + _LOCAL_HISTORY_RETRY_INTERVAL,
+            )
+        else:
+            self._schedule_history_retry(binding)
+        try:
+            store.mark_incomplete(
+                owner_id=self._owner_id,
+                contact_id=binding.scope.contact_id,
+                binding_id=binding.binding_id,
+                failure_code=failure_code,
+            )
+        except HistorySyncStatePersistenceError:
+            self._failure_code = "history_state_unavailable"
+
+    def _schedule_history_retry(self, binding: object) -> None:
+        """为绑定设置指数退避的历史重试；不改变已提交检查点。"""
+
+        previous_attempts = self._history_retries.get(
+            binding.binding_id, (0, self._clock())
+        )[0]
+        self._history_retries[binding.binding_id] = _next_retry(
+            previous_attempts, self._clock()
+        )
+
+    def _history_coverages(
+        self, bindings: Sequence[object]
+    ) -> tuple[HistoryCoverage, ...]:
+        """按 active 绑定输出覆盖元数据；缺失任务如实显示尚未开始。"""
+
+        store = self._history_state
+        if store is None:
+            return ()
+        try:
+            states = store.list_active(
+                owner_id=self._owner_id,
+                channel=self._channel,
+                account_scope=self._account_scope,
+            )
+        except HistorySyncStatePersistenceError:
+            self._failure_code = self._failure_code or "history_state_unavailable"
+            return self._last_history_coverages
+        by_binding = {state.binding_id: state for state in states}
+        coverages: list[HistoryCoverage] = []
+        for binding in bindings:
+            state = by_binding.get(binding.binding_id)
+            coverages.append(
+                coverage_from_state(state)
+                if state is not None
+                else not_started_coverage(
+                    binding_id=binding.binding_id,
+                    contact_id=binding.scope.contact_id,
+                )
+            )
+        self._last_history_coverages = tuple(coverages)
+        return self._last_history_coverages
+
     def _read_binding(
         self,
         binding: object,
@@ -1140,6 +1540,21 @@ class CliBackgroundSync:
         cli_deadline: float | None = None,
     ) -> tuple[int, bool]:
         contact_id = binding.scope.contact_id
+        history_state = self._prepare_history_read(binding)
+        if history_state is _HISTORY_RETRY_WAIT:
+            return 0, False
+        if isinstance(history_state, HistorySyncState):
+            return self._read_history_page(
+                binding,
+                history_state,
+                live_read=live_read,
+                timing=(
+                    replace(self._priority_timing)
+                    if binding.scope.contact_id == self._priority_timing.contact_id
+                    else None
+                ),
+                cli_deadline=cli_deadline,
+            )
         retry = self._backfill_retries.get(binding.binding_id)
         if retry is not None and self._clock() < retry[1]:
             return 0, False
@@ -1667,10 +2082,8 @@ class CliBackgroundSync:
             previous_attempts = self._backfill_retries.get(
                 binding.binding_id, (0, self._clock())
             )[0]
-            attempts = min(previous_attempts + 1, 7)
-            delay = min(5 * 2 ** (attempts - 1), 300)
-            self._backfill_retries[binding.binding_id] = (
-                attempts, self._clock() + timedelta(seconds=delay),
+            self._backfill_retries[binding.binding_id] = _next_retry(
+                previous_attempts, self._clock()
             )
         try:
             mark = store.mark_incomplete if incomplete else store.mark_failed
@@ -1901,6 +2314,32 @@ class CliBackgroundSync:
         if stream is not None:
             stream.close()
             self._stream = None
+
+
+def _history_page_failure(
+    result: TailResult, state: HistorySyncState
+) -> str | None:
+    """分类一页历史读取是否形成不完整结论；None 表示可以提交。"""
+
+    if result.local_history_state is not None:
+        return f"local_history_{result.local_history_state}"
+    if not result.freshness_confirmed:
+        return "cli_freshness_unknown"
+    if result.last_local_id is None or result.cursor is None:
+        if result.last_local_id is not None or result.cursor is not None:
+            return "cli_output_invalid"
+        # 空结果不能冒充完整；有检查点的重复空页同样不能推进。
+        return "history_empty" if state.last_cursor is None else "history_page_stalled"
+    if result.has_more and result.cursor == state.last_cursor:
+        return "cli_output_invalid"
+    return None
+
+
+def _next_retry(previous_attempts: int, now: datetime) -> tuple[int, datetime]:
+    """返回下一次退避尝试与到期时间，上限五分钟。"""
+
+    attempts = min(previous_attempts + 1, 7)
+    return attempts, now + timedelta(seconds=min(5 * 2 ** (attempts - 1), 300))
 
 
 def _backfill_phase_value(phase: object) -> str | None:

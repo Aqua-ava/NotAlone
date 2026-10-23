@@ -17,6 +17,11 @@ import psycopg
 
 from notalone.ingest.models import NormalizedMessage
 from notalone.persistence.extraction_trace import erase_source_traces
+from notalone.persistence.history_sync_state import (
+    HistoryPageCheckpoint,
+    HistorySyncStatePersistenceError,
+    advance_history_checkpoint,
+)
 from notalone.persistence.locks import lock_contact_scope, lock_owner_scope
 from notalone.persistence.message_cleanup import (
     cleanup_derived_data,
@@ -59,6 +64,7 @@ class ObservationMode(StrEnum):
     LIVE = "live"
     CLI_CATCHUP = "cli_catchup"
     CLI_BACKGROUND = "cli_background"
+    CLI_HISTORY = "cli_history"
 
 
 @dataclass(frozen=True, slots=True)
@@ -140,6 +146,8 @@ class RecordedObservationBatch:
     observation: PersistedObservation
     message_ids: tuple[UUID, ...]
     created_message_ids: tuple[UUID | None, ...]
+    # 来源批次是否由本事务新建；幂等重放时检查点不得重复推进。
+    source_created: bool = True
 
 
 @dataclass(frozen=True, slots=True)
@@ -712,13 +720,33 @@ class PostgresObservationStore:
         non_text_count: int = 0,
         processing_records: tuple[ProcessingRecord, ...] | None = None,
         cursor_ordered: bool = False,
+        advance_cursor: bool = True,
+        is_reliable: bool = True,
+        history_checkpoint: HistoryPageCheckpoint | None = None,
     ) -> RecordedObservationBatch:
         """在同一事务写入观察来源、前移水位并写入规范消息。
 
         来源与消息要么全部成功，要么全部不写入；崩溃重试同一批次时，
         来源由批次唯一索引幂等返回，消息按稳定身份去重，不产生重复。
+
+        历史分页传入 ``history_checkpoint`` 时，覆盖状态检查点也在本事务内
+        推进；历史页不直接推进增量游标，完成页由检查点函数把增量游标定位
+        到页末。中间历史页不构成增量可靠水位，完成页与游标同事务提交。
         """
 
+        if not isinstance(advance_cursor, bool):
+            raise TypeError("advance_cursor 必须是 bool。")
+        if not isinstance(is_reliable, bool):
+            raise TypeError("is_reliable 必须是 bool。")
+        if history_checkpoint is not None:
+            if not isinstance(history_checkpoint, HistoryPageCheckpoint):
+                raise TypeError(
+                    "history_checkpoint 必须是 HistoryPageCheckpoint 或 None。"
+                )
+            if mode is not ObservationMode.CLI_HISTORY:
+                raise ValueError("只有历史分页来源可以携带历史检查点。")
+            if advance_cursor:
+                raise ValueError("历史页必须由检查点推进增量游标，不能直接前移。")
         self._validate_batch_arguments(
             binding_id=binding_id,
             mode=mode,
@@ -761,6 +789,26 @@ class PostgresObservationStore:
                     binding_id=binding_id,
                     conversation_locator=conversation_locator,
                 )
+                history_cursor_advance = False
+                history_is_reliable = is_reliable
+                if history_checkpoint is not None and history_checkpoint.complete:
+                    # 完成页只有在确实前移增量游标时才是可靠水位；游标
+                    # 已经更靠前时保留原位置，并让本页不参与可靠游标回退。
+                    current = connection.execute(
+                        """
+                        SELECT conversation_locator, last_local_id
+                        FROM public.wechat_observation_cursor
+                        WHERE owner_id = %s AND contact_id = %s
+                        FOR UPDATE
+                        """,
+                        (owner_id, contact_id),
+                    ).fetchone()
+                    history_cursor_advance = (
+                        current is None
+                        or current[0] != conversation_locator
+                        or current[1] <= history_checkpoint.last_local_id
+                    )
+                    history_is_reliable = is_reliable and history_cursor_advance
                 observation, created = self._insert_observation(
                     connection,
                     owner_id=owner_id,
@@ -776,25 +824,27 @@ class PostgresObservationStore:
                     record_count=record_count,
                     event_count=event_count,
                     non_text_count=non_text_count,
+                    is_reliable=history_is_reliable,
                 )
-                if cursor_ordered:
-                    self._advance_ordered_cursor(
-                        connection, owner_id=owner_id, contact_id=contact_id,
-                        binding_id=binding_id, conversation_locator=conversation_locator,
-                        last_local_id=last_local_id, last_cursor=last_cursor,
-                        since_cursor=since_cursor,
-                        observation_id=observation.observation_id, created=created,
-                    )
-                else:
-                    self._advance_cursor_if_needed(
-                        connection,
-                        owner_id=owner_id,
-                        contact_id=contact_id,
-                        binding_id=binding_id,
-                        conversation_locator=conversation_locator,
-                        last_local_id=last_local_id,
-                        last_cursor=last_cursor,
-                    )
+                if advance_cursor:
+                    if cursor_ordered:
+                        self._advance_ordered_cursor(
+                            connection, owner_id=owner_id, contact_id=contact_id,
+                            binding_id=binding_id, conversation_locator=conversation_locator,
+                            last_local_id=last_local_id, last_cursor=last_cursor,
+                            since_cursor=since_cursor,
+                            observation_id=observation.observation_id, created=created,
+                        )
+                    else:
+                        self._advance_cursor_if_needed(
+                            connection,
+                            owner_id=owner_id,
+                            contact_id=contact_id,
+                            binding_id=binding_id,
+                            conversation_locator=conversation_locator,
+                            last_local_id=last_local_id,
+                            last_cursor=last_cursor,
+                        )
                 write = (
                     self._write_cli_messages(
                         connection,
@@ -828,6 +878,31 @@ class PostgresObservationStore:
                             for receipt in write.processing_receipts
                         },
                     )
+                if history_checkpoint is not None and created:
+                    try:
+                        advance_history_checkpoint(
+                            connection,
+                            owner_id=owner_id,
+                            contact_id=contact_id,
+                            binding_id=binding_id,
+                            checkpoint=history_checkpoint,
+                        )
+                    except HistorySyncStatePersistenceError:
+                        raise ObservationPersistenceError(
+                            "历史同步检查点写入失败。"
+                        ) from None
+                    if history_checkpoint.complete and history_cursor_advance:
+                        # 历史按最早到水位读取；完成页确实前移游标时在
+                        # 同一事务内定位，后续增量从这里接续。
+                        self._set_observation_cursor(
+                            connection,
+                            owner_id=owner_id,
+                            contact_id=contact_id,
+                            binding_id=binding_id,
+                            conversation_locator=conversation_locator,
+                            last_local_id=history_checkpoint.last_local_id,
+                            last_cursor=history_checkpoint.last_cursor,
+                        )
                 connection.commit()
                 return RecordedObservationBatch(
                     observation=observation,
@@ -835,6 +910,7 @@ class PostgresObservationStore:
                     created_message_ids=(
                         write.created_message_ids if created else ()
                     ),
+                    source_created=created,
                 )
         except ObservationPersistenceError:
             raise
@@ -1075,6 +1151,7 @@ class PostgresObservationStore:
         record_count: int,
         event_count: int,
         non_text_count: int,
+        is_reliable: bool = True,
     ) -> tuple[PersistedObservation, bool]:
         """幂等写入观察来源；返回来源与是否首次写入（决定是否前移水位）。"""
 
@@ -1086,7 +1163,7 @@ class PostgresObservationStore:
                 since_cursor, last_cursor, record_count,
                 event_count, non_text_count, is_reliable
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, true)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (owner_id, contact_id, binding_id, mode,
                          COALESCE(since_local_id, 0), last_local_id,
                          COALESCE(since_cursor, ''), last_cursor)
@@ -1107,6 +1184,7 @@ class PostgresObservationStore:
                 record_count,
                 event_count,
                 non_text_count,
+                is_reliable,
             ),
         ).fetchone()
         if inserted is None:
@@ -1142,11 +1220,11 @@ class PostgresObservationStore:
                 UPDATE public.local_wechat_observation
                 SET event_count = %s,
                     non_text_count = %s,
-                    is_reliable = true
+                    is_reliable = %s
                 WHERE id = %s
                 RETURNING {_OBSERVATION_COLUMNS}
                 """,
-                (event_count, non_text_count, existing[0]),
+                (event_count, non_text_count, is_reliable, existing[0]),
             ).fetchone()
             if updated is None:
                 raise ObservationPersistenceError("无法确认观察来源更新结果。")
@@ -1371,6 +1449,48 @@ class PostgresObservationStore:
             message_ids=tuple(message_ids),
             created_message_ids=tuple(created_message_ids),
             processing_receipts=tuple(processing_receipts),
+        )
+
+    @staticmethod
+    def _set_observation_cursor(
+        connection: psycopg.Connection[Any],
+        *,
+        owner_id: UUID,
+        contact_id: UUID,
+        binding_id: UUID,
+        conversation_locator: str,
+        last_local_id: int,
+        last_cursor: str,
+    ) -> None:
+        """在调用方事务内把增量游标定位到历史完成位置。"""
+
+        connection.execute(
+            """
+            INSERT INTO public.wechat_observation_cursor (
+                owner_id, contact_id, binding_id, conversation_locator,
+                last_local_id, last_cursor
+            )
+            VALUES (%s, %s, %s, %s, %s, %s)
+            ON CONFLICT (owner_id, contact_id)
+            DO UPDATE SET
+                binding_id = EXCLUDED.binding_id,
+                conversation_locator = EXCLUDED.conversation_locator,
+                last_local_id = EXCLUDED.last_local_id,
+                last_cursor = EXCLUDED.last_cursor,
+                updated_at = now()
+            WHERE wechat_observation_cursor.conversation_locator
+                    <> EXCLUDED.conversation_locator
+               OR wechat_observation_cursor.last_local_id
+                    <= EXCLUDED.last_local_id
+            """,
+            (
+                owner_id,
+                contact_id,
+                binding_id,
+                conversation_locator,
+                last_local_id,
+                last_cursor,
+            ),
         )
 
     @staticmethod

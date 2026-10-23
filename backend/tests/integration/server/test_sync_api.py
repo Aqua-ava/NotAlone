@@ -21,6 +21,7 @@ from notalone.front_sync.sync_engine import (
     BindingCandidateView,
     FrontSyncCycleReport,
 )
+from notalone.persistence.history_sync_state import HistoryCoverage
 from notalone.server.app import create_app
 from notalone.server.testing import InProcessClient
 
@@ -269,6 +270,54 @@ class SyncApiContractTest(unittest.TestCase):
         self.assertEqual(payload["cli_pending_count"], 2)
         self.assertEqual(payload["cli_batch_message_count"], 4)
         self.assertEqual(payload["foreground_phase"], "waiting_foreground")
+
+    def test_status_includes_history_coverage_by_binding_without_message_body(self) -> None:
+        binding_id = uuid4()
+        self.sync.next_report = replace(
+            _report(),
+            sync_mode="cli_background",
+            cli_history_coverages=(
+                HistoryCoverage(
+                    binding_id=binding_id,
+                    contact_id=CONTACT_ID,
+                    phase="incomplete",
+                    failure_code="local_history_deleted",
+                    message_count=12,
+                    non_text_count=2,
+                    page_count=3,
+                    last_local_id=42,
+                    last_cursor="local_id:42",
+                    watermark_at=datetime(2026, 10, 23, 6, tzinfo=timezone.utc),
+                    started_at=datetime(2026, 10, 23, 6, tzinfo=timezone.utc),
+                    completed_at=None,
+                    updated_at=datetime(2026, 10, 23, 7, tzinfo=timezone.utc),
+                ),
+            ),
+        )
+
+        response = self.client.get("/api/sync/status", headers=self.headers)
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(len(payload["cli_history_coverages"]), 1)
+        coverage = payload["cli_history_coverages"][0]
+        self.assertEqual(
+            set(coverage),
+            {
+                "binding_id", "contact_id", "phase", "failure_code",
+                "message_count", "non_text_count", "page_count",
+                "last_cursor", "watermark_at", "started_at", "completed_at",
+                "updated_at",
+            },
+        )
+        self.assertEqual(coverage["binding_id"], str(binding_id))
+        self.assertEqual(coverage["contact_id"], str(CONTACT_ID))
+        self.assertEqual(coverage["phase"], "incomplete")
+        self.assertEqual(coverage["failure_code"], "local_history_deleted")
+        self.assertEqual(coverage["message_count"], 12)
+        self.assertEqual(coverage["last_cursor"], "local_id:42")
+        self.assertEqual(coverage["completed_at"], None)
+        self.assertNotIn("合成消息", response.body.decode("utf-8"))
 
     def test_status_includes_priority_read_timing_without_message_body(self) -> None:
         self.sync.next_report = replace(

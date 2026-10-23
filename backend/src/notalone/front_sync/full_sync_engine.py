@@ -338,6 +338,7 @@ class CliFullSyncEngine:
             cli_backfill_pending_contacts=background.status.backfill_pending_contacts,
             cli_backfill_total_message_count=background.status.backfill_total_message_count,
             cli_backfill_total_non_text_count=background.status.backfill_total_non_text_count,
+            cli_history_coverages=background.status.history_coverages,
             foreground_phase=foreground.phase.value,
             foreground_failure_code=foreground.failure_code,
         )

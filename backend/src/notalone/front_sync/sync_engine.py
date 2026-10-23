@@ -33,6 +33,7 @@ from notalone.front_sync.tail_lifecycle import (
     FollowRuntimeStatus,
     TailLifecycle,
 )
+from notalone.persistence.history_sync_state import HistoryCoverage
 from notalone.persistence.conversation_repository import (
     ConversationBindingConflictError,
     ConversationBindingNotFoundError,
@@ -121,6 +122,7 @@ class FrontSyncCycleReport:
     cli_backfill_pending_contacts: int = 0
     cli_backfill_total_message_count: int = 0
     cli_backfill_total_non_text_count: int = 0
+    cli_history_coverages: tuple[HistoryCoverage, ...] = ()
     foreground_phase: str = "sync_disabled"
     foreground_failure_code: str | None = None
 
