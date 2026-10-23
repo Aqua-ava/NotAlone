@@ -62,6 +62,38 @@ index 86404a1..ddc0b48 100644
  	if limit <= 0 || limit > 50 {
  		limit = 10
  	}
+diff --git a/cmd/wechat-cli/cli.go b/cmd/wechat-cli/cli.go
+index e9e8492..c08ed28 100644
+--- a/cmd/wechat-cli/cli.go
++++ b/cmd/wechat-cli/cli.go
+@@ -94,7 +94,7 @@ var cliCommandSpecs = []cliCommandSpec{
+ 	{Command: "history", Aliases: []string{"messages"}, Tool: "messages", Usage: appName + " history <chat> [--limit 50] [--after 2026-05-11] [--view agent]", Positional: "chat", Examples: []string{appName + ` history "$CHAT" --view agent --limit 50`}},
+ 	{Command: "timeline", Aliases: []string{"chat-timeline", "chat_timeline", "conversation-view", "conversation_view"}, Tool: "chat_timeline", Usage: appName + " timeline <chat> [--limit 10] [--display-order asc]", Positional: "chat", Examples: []string{appName + ` timeline "$CHAT" --limit 20`, appName + ` timeline "$CHAT" --limit 20 --before-message "$CURSOR"`}},
+ 	{Command: "context", Aliases: []string{"message-context", "message_context", "around"}, Tool: "message_context", Usage: appName + " context <chat> --local-id 123 [--before-count 20] [--after-count 20]", Positional: "chat", Examples: []string{appName + ` context "$CHAT" --local-id 123 --before-count 10 --after-count 10`, appName + ` context "$CHAT" --server-id-str 9876543210 --pretty`}},
+-	{Command: "tail", Aliases: []string{"watch", "observe", "events"}, Tool: "read_events", Usage: appName + " tail [chat] [--since-local-id 123] [--jsonl] [--follow]", Positional: "chat", Description: "Read-only event tail for agents. Normal mode returns the standard envelope; --jsonl/--follow emit newline-delimited event objects.", Examples: []string{appName + ` tail "$CHAT" --since-local-id 123`, appName + ` tail "$CHAT" --since-local-id 123 --jsonl`, appName + " watch --mode sessions --jsonl --follow"}},
++	{Command: "tail", Aliases: []string{"watch", "observe", "events"}, Tool: "read_events", Usage: appName + " tail [chat] [--since-local-id 123] [--history --limit 200] [--jsonl] [--follow]", Positional: "chat", Description: "面向 agent 的只读事件流。普通模式返回标准 envelope；--history 从本机可读最早消息开始分页续读；--jsonl/--follow 输出按行分隔的事件对象。", Examples: []string{appName + ` tail "$CHAT" --since-local-id 123`, appName + ` tail "$CHAT" --history --limit 200`, appName + ` tail "$CHAT" --since-local-id 123 --jsonl`, appName + " watch --mode sessions --jsonl --follow"}},
+ 	{Command: "media", Aliases: []string{"media-resources", "media_resources", "attachments"}, Tool: "media_resources", Usage: appName + " media <chat> [--local-id 123] [--type image|video|file]", Positional: "chat", Examples: []string{appName + ` media "$CHAT" --local-id 10`, appName + ` media "$CHAT" --type image --limit 20`}},
+ 	{Command: "search", Tool: "search", Usage: appName + " search <keyword> [--in <chat>] [--after 2026-01-01] [--type text]", Positional: "keyword", Examples: []string{appName + ` search "$KEYWORD" --in "$CHAT" --limit 10`}},
+ 	{Command: "search-context", Aliases: []string{"search_context", "search-with-context", "search_with_context"}, Tool: "search_with_context", Usage: appName + " search-context <keyword> [--in <chat>] [--before-count 5] [--after-count 5]", Positional: "keyword", Examples: []string{appName + ` search-context "$KEYWORD" --in "$CHAT" --limit 5`, appName + ` search-with-context "$KEYWORD" --context-limit 3 --before-count 10 --after-count 10`}},
+@@ -712,6 +712,9 @@ func cliToolDefaultLimit(tool string) int {
+ func runTailCLI(flags map[string]any, opts cliOptions, command string) {
+ 	jsonl := getBoolDefault(flags, "jsonl", false)
+ 	follow := getBoolDefault(flags, "follow", false)
++	if history := getBoolDefault(flags, "history", false); history && (jsonl || follow) {
++		exitCLIError(opts, 1, "invalid_argument", "--history 不能与 --jsonl/--follow 同时使用", "read_events", command)
++	}
+ 	if !jsonl && !follow {
+ 		runToolCLI("read_events", flags, opts, command)
+ 		return
+@@ -1438,7 +1441,7 @@ func parseKVFlags(args []string) map[string]any {
+ 
+ func isBoolCLIFlag(key string) bool {
+ 	switch key {
+-	case "allow_remote", "background", "browser", "debug", "desktop", "follow", "force", "friends_only", "from_me", "groups_only", "include_anchor", "include_debug", "include_images", "include_local_paths", "include_media_paths", "include_read", "include_status", "include_text", "jsonl", "no_open", "open", "snippet_only", "stats":
++	case "allow_remote", "background", "browser", "debug", "desktop", "follow", "force", "friends_only", "from_me", "groups_only", "history", "include_anchor", "include_debug", "include_images", "include_local_paths", "include_media_paths", "include_read", "include_status", "include_text", "jsonl", "no_open", "open", "snippet_only", "stats":
+ 		return true
+ 	default:
+ 		return false
 diff --git a/cmd/wechat-cli/main.go b/cmd/wechat-cli/main.go
 index 49c260b..4787a33 100644
 --- a/cmd/wechat-cli/main.go
@@ -186,6 +218,82 @@ index d46df1a..8a31dc3 100644
  	return sessionRowsResult(rows, "live_session_db", warnings), nil
  }
  
+diff --git a/cmd/wechat-cli/tail_tool.go b/cmd/wechat-cli/tail_tool.go
+index ce7831a..1c79005 100644
+--- a/cmd/wechat-cli/tail_tool.go
++++ b/cmd/wechat-cli/tail_tool.go
+@@ -31,6 +31,7 @@ func (s *server) toolReadEvents(a map[string]any) (any, error) {
+ }
+ 
+ func (s *server) readMessageEvents(a map[string]any) (any, error) {
++	history := getBoolDefault(a, "history", false)
+ 	args, catchUp, err := readMessageEventArgs(a)
+ 	if err != nil {
+ 		return nil, err
+@@ -55,7 +56,7 @@ func (s *server) readMessageEvents(a map[string]any) (any, error) {
+ 		events = append(events, event)
+ 	}
+ 	timelineQuery := mapStringAny(env["query"])
+-	hasMore := catchUp && getBoolDefault(timelineQuery, "has_more", false)
++	hasMore := (catchUp || history) && getBoolDefault(timelineQuery, "has_more", false)
+ 	nextCursor := newestReadEventsCursor(events)
+ 	if nextCursor == "" {
+ 		nextCursor = currentMessageReadEventsCursor(args)
+@@ -69,6 +70,7 @@ func (s *server) readMessageEvents(a map[string]any) (any, error) {
+ 			"cursor":   getStr(a, "cursor"),
+ 			"returned": len(events),
+ 			"has_more": hasMore,
++			"history":  history,
+ 		}),
+ 		"freshness": env["freshness"],
+ 		"warnings":  env["warnings"],
+@@ -80,6 +82,10 @@ func (s *server) readMessageEvents(a map[string]any) (any, error) {
+ 
+ func readMessageEventArgs(a map[string]any) (map[string]any, bool, error) {
+ 	args := copyToolArgs(a)
++	history := getBoolDefault(args, "history", false)
++	if history && (firstNonEmpty(getStr(args, "since_time"), getStr(args, "since"), getStr(args, "after")) != "" || args["since_local_id"] != nil) {
++		return nil, false, fmt.Errorf("history 只接受 cursor，不接受其他起始边界")
++	}
+ 	if args["limit"] == nil {
+ 		args["limit"] = int64(50)
+ 	}
+@@ -98,10 +104,9 @@ func readMessageEventArgs(a map[string]any) (map[string]any, bool, error) {
+ 		}
+ 	}
+ 	catchUp := args["after_message"] != nil || getStr(args, "after") != ""
+-	if catchUp {
+-		// Catch-up reads must take the oldest unseen rows first. Taking a DESC
+-		// page and advancing to its newest row permanently skips the middle of a
+-		// backlog when more than limit messages arrived between polls.
++	if history || catchUp {
++		// 历史页从最早点开始，续读页沿用 after_message 的
++		// sort_seq/local_id 边界；两者都取升序最旧页，避免 backlog 跳段。
+ 		args["order"] = "asc"
+ 		args["display_order"] = "query"
+ 	} else {
+@@ -114,6 +119,9 @@ func readMessageEventArgs(a map[string]any) (map[string]any, bool, error) {
+ }
+ 
+ func (s *server) readSessionEvents(a map[string]any) (any, error) {
++	if getBoolDefault(a, "history", false) {
++		return nil, fmt.Errorf("history 仅适用于单会话 message 模式")
++	}
+ 	limit := getInt(a, "limit", 50)
+ 	if limit <= 0 {
+ 		limit = 50
+diff --git a/cmd/wechat-cli/tools.go b/cmd/wechat-cli/tools.go
+index b9a4910..7cf12da 100644
+--- a/cmd/wechat-cli/tools.go
++++ b/cmd/wechat-cli/tools.go
+@@ -514,6 +514,7 @@ var toolDefs = []toolDef{
+ 			"talker":              strProp("可选: 限定 wxid 或 xxx@chatroom; 存在时观察该会话新消息"),
+ 			"chat":                strProp("可选: 昵称/备注/群名, 自动解析为 talker"),
+ 			"cursor":              strProp("上次返回的 cursor; message 形如 local_id:123, session cursor 为不透明的 session:<timestamp>[:tie-break]"),
++			"history":             boolProp("message 模式: 从本机可读最早消息开始按 sort_seq/local_id 升序分页; cursor 原样续读, has_more 表示还有后续页"),
+ 			"since_local_id":      intProp("首次观察某会话时的 local_id 游标; 等价 after_message"),
+ 			"since_time":          strProp("首次观察时的起始时间 (unix秒 或 2006-01-02, 本地时区)"),
+ 			"since":               strProp("since_time 的别名"),
 diff --git a/internal/config/config.go b/internal/config/config.go
 index ca3844a..485e9f6 100644
 --- a/internal/config/config.go

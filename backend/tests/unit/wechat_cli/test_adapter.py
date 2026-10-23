@@ -322,6 +322,163 @@ class LocalWechatCliAdapterTest(unittest.TestCase):
         self.assertTrue(result.has_more)
         self.assertEqual(result.last_local_id, 43)
 
+    def test_history_tail_requires_explicit_bounded_limit_before_running(self) -> None:
+        for limit in (None, 0, 1001, True, 2.5, "5"):
+            with self.subTest(limit=limit):
+                runner = RecordingRunner(FakeCommandResult(returncode=0, stdout=""))
+                with self.assertRaises(ValueError):
+                    LocalWechatCli(runner=runner).tail(
+                        "wxid_1", history=True, limit=limit
+                    )
+                self.assertEqual(runner.calls, [])
+        runner = RecordingRunner(FakeCommandResult(returncode=0, stdout=""))
+        with self.assertRaises(ValueError):
+            LocalWechatCli(runner=runner).tail(
+                "wxid_1", history=True, limit=5, since_time="2026-09-01"
+            )
+        self.assertEqual(runner.calls, [])
+
+    def test_history_tail_passes_bounded_page_and_exposes_has_more(self) -> None:
+        runner = RecordingRunner(FakeCommandResult(returncode=0, stdout=json.dumps({
+            "ok": True,
+            "data": {
+                "events": [
+                    {
+                        "type": "message", "cursor": f"local_id:{number}",
+                        "message": {
+                            "id": {"local_id": number, "talker": "wxid_1"},
+                            "kind": "text", "text": f"合成历史{number}", "is_from_me": False,
+                        },
+                    }
+                    for number in (1, 2)
+                ],
+                "cursor": "local_id:2",
+                "freshness": {"message_source": "live_message_db"},
+                "query": {"chat": "wxid_1", "has_more": True, "history": True},
+            },
+        })))
+
+        result = LocalWechatCli(runner=runner).tail("wxid_1", history=True, limit=2)
+
+        self.assertEqual(
+            runner.calls[0],
+            (
+                "wechat-cli", "tail", "wxid_1",
+                "--history", "--limit", "2",
+                "--include-media-paths", "false", "--strict-read-only",
+            ),
+        )
+        self.assertTrue(result.freshness_confirmed)
+        self.assertTrue(result.has_more)
+        self.assertEqual(result.cursor, "local_id:2")
+        self.assertEqual(
+            [event.message_id.local_id for event in result.events], [1, 2]
+        )
+
+    def test_history_tail_resume_uses_opaque_cursor_and_requires_progress(self) -> None:
+        runner = RecordingRunner(FakeCommandResult(returncode=0, stdout=json.dumps({
+            "ok": True,
+            "data": {
+                "events": [{
+                    "type": "message", "cursor": "local_id:3",
+                    "message": {
+                        "id": {"local_id": 3, "talker": "wxid_1"},
+                        "kind": "text", "text": "合成续读", "is_from_me": False,
+                    },
+                }],
+                "cursor": "local_id:3",
+                "freshness": {"message_source": "live_message_db"},
+                "query": {"chat": "wxid_1", "has_more": True, "history": True},
+            },
+        })))
+
+        result = LocalWechatCli(runner=runner).tail(
+            "wxid_1", history=True, limit=2, cursor="local_id:2"
+        )
+
+        self.assertIn("--cursor", runner.calls[0])
+        self.assertEqual(runner.calls[0][runner.calls[0].index("--cursor") + 1], "local_id:2")
+        self.assertEqual(result.cursor, "local_id:3")
+
+        stale = RecordingRunner(FakeCommandResult(returncode=0, stdout=json.dumps({
+            "ok": True,
+            "data": {
+                "events": [],
+                "cursor": "local_id:2",
+                "freshness": {"message_source": "live_message_db"},
+                "query": {"chat": "wxid_1", "has_more": True, "history": True},
+            },
+        })))
+        with self.assertRaises(CliOutputError) as raised:
+            LocalWechatCli(runner=stale).tail(
+                "wxid_1", history=True, limit=2, cursor="local_id:2"
+            )
+        self.assertEqual(raised.exception.code, "cli_output_invalid")
+
+    def test_history_tail_rejects_page_without_history_provenance(self) -> None:
+        for query in (
+            {"chat": "wxid_1", "has_more": False},
+            {"chat": "wxid_1", "has_more": False, "history": False},
+            {"chat": "wxid_1", "has_more": False, "history": "true"},
+        ):
+            with self.subTest(query=query):
+                runner = RecordingRunner(FakeCommandResult(returncode=0, stdout=json.dumps({
+                    "ok": True,
+                    "data": {
+                        "events": [],
+                        "freshness": {"message_source": "live_message_db"},
+                        "query": query,
+                    },
+                })))
+                with self.assertRaises(CliOutputError) as raised:
+                    LocalWechatCli(runner=runner).tail(
+                        "wxid_1", history=True, limit=2
+                    )
+                self.assertEqual(raised.exception.code, "cli_freshness_unknown")
+
+    def test_history_tail_runs_scripted_cli_with_bounded_page(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="notalone-history-cli-") as directory:
+            root = Path(directory)
+            arguments = root / "arguments.txt"
+            executable = root / "synthetic-cli"
+            payload = {
+                "ok": True,
+                "data": {
+                    "events": [{
+                        "type": "message", "cursor": "local_id:1",
+                        "message": {
+                            "id": {"local_id": 1, "talker": "wxid_1"},
+                            "kind": "text", "text": "合成首条历史", "is_from_me": False,
+                        },
+                    }],
+                    "cursor": "local_id:1",
+                    "freshness": {"message_source": "live_message_db"},
+                    "query": {"chat": "wxid_1", "has_more": True, "history": True},
+                },
+            }
+            executable.write_text(
+                "#!/bin/sh\n"
+                f"printf '%s\\n' \"$@\" > {shlex.quote(str(arguments))}\n"
+                f"printf '%s\\n' {shlex.quote(json.dumps(payload, ensure_ascii=False))}\n",
+                encoding="utf-8",
+            )
+            executable.chmod(0o700)
+            cli = LocalWechatCli(executable=str(executable))
+            try:
+                result = cli.tail("wxid_1", history=True, limit=2)
+            finally:
+                cli.close()
+
+            self.assertTrue(result.has_more)
+            self.assertEqual(result.cursor, "local_id:1")
+            self.assertEqual(
+                arguments.read_text(encoding="utf-8").splitlines(),
+                [
+                    "tail", "wxid_1", "--history", "--limit", "2",
+                    "--include-media-paths", "false", "--strict-read-only",
+                ],
+            )
+
     def test_close_terminates_inflight_one_shot_command(self) -> None:
         process = BlockingCommandProcess()
         cli = LocalWechatCli(timeout_seconds=30)

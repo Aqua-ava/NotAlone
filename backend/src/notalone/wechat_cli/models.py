@@ -77,6 +77,7 @@ class TailResult:
     freshness_confirmed: bool = False
     filtered_records: tuple[ProcessingRecord, ...] = ()
     # 本页来源可信不等于已追平；有后续页时由调用方继续有界调度。
+    # 历史分页使用同一字段表示还有更晚一页，游标原样续读。
     has_more: bool = False
     # 元数据确认的本地历史不可读原因；不是读取故障，也不证明覆盖完整。
     local_history_state: str | None = None

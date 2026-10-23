@@ -49,6 +49,8 @@ class CommandResult(Protocol):
 CommandRunner = Callable[[tuple[str, ...]], CommandResult]
 FollowProcessRunner = Callable[[tuple[str, ...]], object]
 _MAX_PENDING_SESSION_EVENTS = 256
+# 与 pinned CLI read_events 的 limit 上界一致；历史页必须有界。
+_HISTORY_PAGE_LIMIT_MAX = 1000
 
 
 @dataclass(frozen=True, slots=True)
@@ -369,11 +371,14 @@ class LocalWechatCli:
         cursor: str | None = None,
         since_time: str | None = None,
         limit: int | None = None,
+        history: bool = False,
         timeout_seconds: float | None = None,
     ) -> TailResult:
         """读取一次会话文字增量；不传 cursor 表示首次读取。
 
         没有新消息时返回空结果而不是错误；调用方保持既有水位。
+        ``history=True`` 从本机可读最早消息开始按聊天顺序分页，必须提供
+        1 到 1000 的显式 ``limit``，后续页原样传回不透明 ``cursor``。
         显式预算只作用于本次读取，None 沿用实例默认预算。
         """
 
@@ -381,7 +386,19 @@ class LocalWechatCli:
         talker = _require_text(talker, "talker")
         if cursor is not None and since_time is not None:
             raise ValueError("cursor 与 since_time 不能同时提供。")
+        if history and since_time is not None:
+            raise ValueError("历史分页只接受 cursor，不接受 since_time。")
         command = [self._executable, "tail", talker]
+        if history:
+            if (
+                isinstance(limit, bool)
+                or not isinstance(limit, int)
+                or not 1 <= limit <= _HISTORY_PAGE_LIMIT_MAX
+            ):
+                raise ValueError(
+                    f"历史分页 limit 必须是 1 到 {_HISTORY_PAGE_LIMIT_MAX} 的整数。"
+                )
+            command.append("--history")
         if cursor is not None:
             command.extend(["--cursor", _require_text(cursor, "cursor")])
         if since_time is not None:
@@ -413,7 +430,9 @@ class LocalWechatCli:
                         local_history_state=availability.removeprefix("local_history_"),
                     )
             raise _command_failure(result)
-        page = _parse_tail_output(result.stdout, expected_talker=talker)
+        page = _parse_tail_output(
+            result.stdout, expected_talker=talker, history=history
+        )
         if page.has_more and page.cursor == cursor:
             raise CliOutputError("cli_output_invalid", "微信 CLI 后续页游标没有前进。")
         return page
@@ -710,7 +729,9 @@ def _message_table_missing(message: str | None) -> bool:
     )
 
 
-def _parse_tail_output(stdout: str, *, expected_talker: str) -> TailResult:
+def _parse_tail_output(
+    stdout: str, *, expected_talker: str, history: bool = False
+) -> TailResult:
     has_more = False
     ordered_page = False
     page_cursor = None
@@ -734,6 +755,7 @@ def _parse_tail_output(stdout: str, *, expected_talker: str) -> TailResult:
             or not isinstance(query, dict)
             or query.get("chat") != expected_talker
             or not isinstance(query.get("has_more"), bool)
+            or (history and query.get("history") is not True)
             or envelope.get("warnings")
             or envelope.get("error")
             or data.get("warnings")
