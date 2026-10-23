@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from notalone.front_sync.wechat_scope_remote import RemoteWechatScope, WechatScopeOwnedByTypeScript
+from notalone.front_sync.incremental_remote import RemoteIncrementalBackground
 
 from collections.abc import Callable, Sequence
 from datetime import datetime, timedelta, timezone
@@ -108,7 +109,7 @@ class CliFullSyncEngine:
         account_scope: str,
         cli: LocalWechatCli,
         sync_state: SyncStatePort | PostgresFrontSyncStateStore,
-        background: CliBackgroundSync,
+        background: CliBackgroundSync | RemoteIncrementalBackground,
         foreground: ForegroundLocator,
         binding_coordinator: CliBindingCoordinator,
         fallback: LegacyForegroundEnginePort,
@@ -140,7 +141,10 @@ class CliFullSyncEngine:
         self._history_authorization_next_check: datetime | None = None
 
     def enable_sync(self) -> None:
-        self._sync_state.enable(owner_id=self._owner_id, at=self._clock())
+        if isinstance(self._background, RemoteIncrementalBackground):
+            self._background.enable()
+        else:
+            self._sync_state.enable(owner_id=self._owner_id, at=self._clock())
         self._scope_next_check = None
         self._cli_status = None
         self._cli_last_checked_at = None
@@ -149,7 +153,10 @@ class CliFullSyncEngine:
             request()
 
     def disable_sync(self) -> None:
-        self._sync_state.disable(owner_id=self._owner_id, at=self._clock())
+        if isinstance(self._background, RemoteIncrementalBackground):
+            self._background.disable()
+        else:
+            self._sync_state.disable(owner_id=self._owner_id, at=self._clock())
         self._close_foreground()
         self._background.close()
 
@@ -159,7 +166,10 @@ class CliFullSyncEngine:
         if isinstance(self._scope_store, RemoteWechatScope):
             self._scope_store.close()
         self._close_foreground()
-        self._background.close()
+        if isinstance(self._background, RemoteIncrementalBackground):
+            self._background.shutdown()
+        else:
+            self._background.close()
         close_fallback = getattr(self._fallback, "close", None)
         if callable(close_fallback):
             close_fallback()
@@ -176,6 +186,9 @@ class CliFullSyncEngine:
         close_cli = getattr(self._cli, "close", None)
         if callable(close_cli):
             close_cli()
+
+        if isinstance(self._background, RemoteIncrementalBackground):
+            self._background.cancel_pending_io()
 
     def cancel_foreground_observation(self) -> None:
         """只中断原生前台观察；后台 CLI 正文同步保持独立。"""
@@ -315,7 +328,7 @@ class CliFullSyncEngine:
         report = FrontSyncCycleReport(
             sync_enabled=enabled,
             sync_scope=self._scope_state.mode,
-            sync_scope_failure_code=self._scope_failure,
+            sync_scope_failure_code=(self._scope_failure or self._background.scope_failure_code) if isinstance(self._background, RemoteIncrementalBackground) else self._scope_failure,
             phase=phase,
             probe_available=foreground.probe_available,
             wechat_in_front=foreground.wechat_in_front,
@@ -457,7 +470,7 @@ class CliFullSyncEngine:
         scope = dict(owner_id=self._owner_id, channel=self._channel, account_scope=self._account_scope)
         try:
             self._scope_state = self._scope_store.read(**scope)
-            if enabled and self._scope_state.mode == "all_private":
+            if enabled and self._scope_state.mode == "all_private" and not isinstance(self._background, RemoteIncrementalBackground):
                 if isinstance(self._scope_store, RemoteWechatScope):
                     created = self._scope_store.discover(**scope)
                 else:
