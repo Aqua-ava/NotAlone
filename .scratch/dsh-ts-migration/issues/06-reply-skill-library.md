@@ -1,7 +1,7 @@
 # 06：管理并受控读取现有回复 Skill
 
 Triage: ready-for-agent
-State: open
+State: claimed
 Type: task
 Blocked by: 04
 Spec: ../spec.md
