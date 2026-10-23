@@ -1,5 +1,7 @@
 # ADR-074：参考腾讯源码自行实现自动记忆
 
+> 后续修订（2026-10-23）：[ADR-102](102-dsh-typescript-backend-migration.md)已采纳精简 DSH 与 TS 后端迁移。Python 实现及不增加 Node 运行面的语言限定由 ADR-102 修订；不接入腾讯服务或 MemoryCore、算法行为、来源核验和本地语义向量规则保持。 当前代码仍为旧实现，迁移及验收未完成。
+
 > 状态：已采纳（2026-10-18）；实现与验收状态按任务记录，不由本文推断。
 
 用户明确要求参考 TencentDB-Agent-Memory 本地 e9a8293 源码，在 NotAlone 现有 Python 后端自行实现，禁止接入腾讯服务、嵌入 MemoryCore 或增加 Node sidecar。

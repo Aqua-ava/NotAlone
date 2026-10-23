@@ -1,5 +1,7 @@
 # Skill Library（Skill 库）
 
+> 2026-10-23 框架迁移：[ADR-102](../adr/102-dsh-typescript-backend-migration.md)采纳精简 DSH 与 TS 后端；当前 Python／LangChain 与 `SkillsMiddleware` 仍是待替换实现，尚未完成迁移或验收。ADR-010 的框架选择由 ADR-102 替代，本文的范围、不可变版本、审核、渐进加载、预算和删除契约保持。DSH 官方 Skill 基础设施须通过受控适配承接 `SkillPort`，不得默认开放任意目录或脚本。
+
 > 数据库精简：[ADR-098](../adr/098-skill-business-state-only.md)将描述、质量警告和资源索引放入不可变版本的无正文清单，数据库仅保存其完整性锚点和业务状态。
 > 目录存储决定：[ADR-096](../adr/096-directory-backed-reply-skills.md)采用标准目录保存已发布正文及辅助资源，自动发现新增和修改；数据库仅保留业务状态和内容定位。实现及本机迁移证据见[本次规格](../../.scratch/directory-reply-skills/spec.md)。
 
@@ -106,7 +108,7 @@ SkillLibraryManagementPort 只供用户明确触发的管理入口使用：
 | export | 导出可移植 Skill 包，不包含联系人数据、聊天记录或使用日志。 |
 | preview | 用选定 Reply Task 生成候选预览，不发送、不改记忆。 |
 
-管理接口必须执行用户权限、Owner 归属、同名规则、完整校验和原子发布。模型、Reply Runtime 和 SkillsMiddleware 均不能调用管理接口。
+管理接口必须执行用户权限、Owner 归属、同名规则、完整校验和原子发布。模型、Reply Runtime 和 Skill 运行适配器（当前 SkillsMiddleware，目标 DSH 适配器）均不能调用管理接口。
 
 ### 4.2 运行接口
 
@@ -118,7 +120,7 @@ SkillPort 是 Reply Runtime 使用的框架无关只读接口：
 
 每个运行接口都必须重新校验 Owner、联系人范围、启用状态、当前版本和目录修订。资源读取不能退化为任意文件读取。
 
-SkillsMiddleware 是运行时 Adapter，不是 Skill Library 的领域接口。它只把 SkillPort 的受控视图转换为模型可见的目录和按需读取能力。
+SkillsMiddleware 是当前待替换的运行时 Adapter，不是 Skill Library 的领域接口。迁移后的 DSH 适配器同样只把 SkillPort 的受控视图转换为模型可见的目录和按需读取能力，领域规则保持普通 TS 模块；每轮最多零或一个当前可用版本，运行前和提交前继续复验范围、来源与目录修订。
 
 ## 5. 生命周期
 

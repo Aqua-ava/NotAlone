@@ -1,14 +1,27 @@
 # Agent 编排与检索运行时（草案）
 
-> 2026-10-21 设计审查：正常产品入口与方向阶段按 [ADR-079](../adr/079-unified-expression-workspace.md)修订，受控 Skill 探索见 [ADR-043](../adr/043-conversation-scenarios-and-direction-exploration.md)。运行计划和自动过程摘要按 [ADR-091](../adr/091-retire-runtime-todos-and-auto-summary.md)不采用；时间、日历、网络工具按 [ADR-092](../adr/092-defer-time-calendar-web-tools.md)改为未来可选方向，当前不接入；完整 Harness／DSH 未获主线采纳。自动前台画面按 [ADR-052](../adr/052-header-ocr-foreground-locator.md)只作名称定位，不能当作正文输入适配器。
+> 2026-10-21 设计审查：正常产品入口与方向阶段按 [ADR-079](../adr/079-unified-expression-workspace.md)修订，受控 Skill 探索见 [ADR-043](../adr/043-conversation-scenarios-and-direction-exploration.md)。运行计划和自动过程摘要按 [ADR-091](../adr/091-retire-runtime-todos-and-auto-summary.md)不采用；时间、日历、网络工具按 [ADR-092](../adr/092-defer-time-calendar-web-tools.md)改为未来可选方向，当前不接入；当时完整 Harness／DSH 未获主线采纳；该选型结论现由 ADR-102 替代，仍不启用无关的完整 Harness 能力。自动前台画面按 [ADR-052](../adr/052-header-ocr-foreground-locator.md)只作名称定位，不能当作正文输入适配器。
 
 > 后续修订（2026-10-20）：主动收藏表达样本及其生成参考按 [ADR-082](../adr/082-retire-explicit-style-samples.md)退役；本文相关历史方案不再构成实施要求。当前意图优先、长期表达偏好及其他已采纳约束分别保留。
 
-> 状态：草案。本文定义候选回复、未来 Tool 和长任务的运行时边界；框架层（LangChain `create_agent`、SkillsMiddleware 与受控只读 Tool）已按 ADR-006、ADR-009 和 ADR-010 接入生产装配，但长任务、完整 Harness／DSH 与后续 Tool 扩展仍为草案。下方第 0 节记录 2026-08-22 提出的 DeepSeek Harness 暂定方向，尚未替代这些 ADR。
+> 状态：历史运行时草案与迁移阅读入口。精简 DSH 与 TS 后端已由 [ADR-102](../adr/102-dsh-typescript-backend-migration.md)正式采纳，框架选择替代 ADR-006／009／010；下方旧选型、图和实现步骤保留追溯，不再作为新实现的技术选型约束。当前产品代码仍使用 Python、LangChain `create_agent`、LangGraph 与 `SkillsMiddleware`，迁移尚未实现或验收。
 
-工作流进度与拆分准备见[对应功能目录](../../.scratch/agent-runtime/planning.md)；尚未形成正式实现规格或任务。
+早期进度见[历史功能目录](../../.scratch/agent-runtime/planning.md)。本次正式[实施规格](../../.scratch/dsh-ts-migration/spec.md)已整理，[任务拆分建议](../../.scratch/dsh-ts-migration/ticket-proposal.md)待用户确认，尚未发布实现任务。
 
-## 0. 2026-08-22 运行时方向讨论记录（未采纳）
+## 已采纳的迁移入口（2026-10-23）
+
+正式决定以 [ADR-102](../adr/102-dsh-typescript-backend-migration.md)为准；本次只收敛文档，不以官方接口说明或历史测试宣称新运行时可用。
+
+- Electron 保持独立；TS 业务模块与精简 DSH 共用官方 profile 启动的后台进程，由薄的 NotAlone 插件装配。联系人、检索、事务、来源和删除保持普通业务模块，不必全部插件化，也不长期保留 Python 工具桥。
+- DSH 承担通用模型、Agent 循环、工具与 Skill 基础设施；确定性流程仍由业务代码控制。单次模型调用不自动变为开放式循环，模型不能决定权限或提交事务。
+- 沿用 PostgreSQL、现有功能与数据；DSH 会话只保存临时执行状态，不另存长期会话日志或上传会话事件。产品讨论从业务记录恢复，后台任务由业务任务状态恢复，崩溃后的 Agent 执行按业务规则重新开始。
+- 保留范围、引用、预算、审核版本与删除约束；Skill 基础设施只通过受控适配获得允许的目录与内容。ADR-091 的无模型 Todo／自动摘要、ADR-092 的时间／日历／网络未来可选及禁止自动发送边界保持。
+- 插件由开发阶段选择、锁定版本并统一交付，当前不增加用户任意安装入口。优先公开扩展接口；必须改 DSH 核心时另行讨论。
+- 按完整功能分批迁移和验证；每项业务只由一个实现执行和写入。回退先停止并核对在途任务，不自动双实现兜底，不恢复旧数据库覆盖用户修改与删除。最终移除 Python 和旧框架依赖。
+
+下文第 0 节是早期讨论历史，第 1–11 节是原 LangChain 方案的设计与实现映射。其 `create_agent`、`SkillsMiddleware`、Python Worker、自定义 LangGraph 的选型和“仅长任务需求才评估 DSH”的触发条件均已由 ADR-102 替代；其中联系人、来源、权限、预算、删除和人工发送约束仍由现行规格承接。不要按末尾旧实施顺序再次建设旧框架。
+
+## 0. 2026-08-22 运行时方向讨论记录（历史，选型结论已替代）
 
 本节记录当天上午提出的阶段性选型方向，以及同日稍后逐项复议后的收敛结论（见 0.4）。本节不改变现行 ADR，也不代表已经完成框架 POC、真实模型调用或端到端验证。
 
@@ -53,7 +66,7 @@ DeepSeek Harness 负责通用运行机制；NotAlone 不重新实现 Agent Loop�
 3. Python 领域服务与 TypeScript/JavaScript bridge 的失败、超时、重试和幂等行为可观察且不会产生未落库候选。
 4. 运行时默认不挂载 Shell、文件系统、网络搜索或 Subagent；这些能力若需启用，须另行逐项配置和审计。外部聊天发送始终不得成为产品 Tool 或后台能力，不属于可经配置启用的集合。
 
-在上述验证完成并新增 ADR 前，ADR-009 的 LangChain `create_agent` 仍是当前已采纳的候选回复运行时决策；本节只是允许以 DeepSeek Harness 作为替代 Runtime 做隔离 POC。
+当时在验证完成并新增 ADR 前，仅允许隔离 POC，ADR-009 仍为选型决定。现已由 ADR-102 采纳替换方向，实际迁移与验收仍未完成。
 
 ### 0.4 同日复议结论：维持现行 ADR，Harness 不进入主线
 

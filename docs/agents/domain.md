@@ -15,7 +15,7 @@
 | 隐私、外部模型或连接器 | `current/privacy-deletion.md` 及对应接入的相关 ADR |
 | 本机交付、首启或资料更新 | `current/privacy-deletion.md`、ADR-061、ADR-065、ADR-066、ADR-095；开发与发布门禁见工程工作流 |
 | 云端存储或部署探索 | `current/privacy-deletion.md`、`drafts/cloud-engineering.md` 及相关 ADR；草案不改变本机独立版的数据位置 |
-| Agent、Tool、MCP、RAG 或编排框架 | `drafts/agent-runtime.md`、ADR-006、ADR-009 |
+| Agent、Tool、MCP、RAG 或编排框架 | `drafts/agent-runtime.md`、ADR-006、ADR-009、ADR-102；后者已采纳 DSH／TS 迁移，实际实现与验收仍按任务核验 |
 
 根目录 `CONTEXT.md` 存在时也要读取；缺失时继续任务，只在领域术语需要正式整理时使用 `domain-modeling` 创建。输出沿用其中已定义的名称；未定义的概念先判断是错误同义词，还是需通过 `domain-modeling` 补充的真实领域缺口。
 

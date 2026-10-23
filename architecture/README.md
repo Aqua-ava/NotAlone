@@ -1,5 +1,7 @@
 # NotAlone 架构文档
 
+> 2026-10-23 后端迁移：[ADR-102](adr/102-dsh-typescript-backend-migration.md)已采纳精简 DSH 与 TypeScript 后端，保留现有功能、PostgreSQL 与资料。当前仍为 Python／LangChain 实现；[规格](../.scratch/dsh-ts-migration/spec.md)已整理，[拆分建议](../.scratch/dsh-ts-migration/ticket-proposal.md)待确认，迁移及验收未完成。
+
 > 联系人首用决定：[ADR-087](adr/087-wechat-confirmed-contact-onboarding.md)保留真实微信来源建联与导入只补充已有联系人的规则；[ADR-089](adr/089-all-private-wechat-sync-scope.md)新增当前账号全部私聊的一次授权，包括以后新增会话。[ADR-095](adr/095-first-wechat-connection-and-account-grant.md)补充已有可用工具的首次账号连接与一次授权；[ADR-100](adr/100-authorized-private-history-sync.md)进一步要求每个授权私聊首次同步本机可读的全部既有文字，再持续增量。未配置机器的工具准备及新用户独立交付验收仍未完成。旧创建接口退役尚待完成；历史同步目标与实现边界见[规格](../.scratch/authorized-private-history-sync/spec.md)。
 
 > 2026-10-22 提取并发：[ADR-099](adr/099-parallel-batch-extraction.md)允许同一提取任务内按批次流水线并行模型调用，采纳、写入与水位仍按批序串行；规格见[批次流水线](../.scratch/parallel-batch-extraction/spec.md)；已实现，真实验证边界见 ADR-099 的验证记录。
@@ -32,7 +34,7 @@
 
 L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-memory.md)已于 2026-10-17 整体确认，并整理为[正式规格](../.scratch/layered-relationship-memory/spec.md)；[11项拆分](../.scratch/layered-relationship-memory/ticket-proposal.md)已获认可并逐张发布，实际状态见[任务索引](../.scratch/layered-relationship-memory/planning.md)，现按真实依赖分票实现。加载方向由 ADR-067 局部修订；工程实现状态、真实模型质量与自动使用资格分别核验。
 
-记忆持续更新、纠错、概览、回复检索及自动 Skill 学习等 8 个完整功能，已从[草图](drafts/memory-skill-evolution.md)整理为[正式规格](../.scratch/memory-skill-evolution/spec.md)；[15项拆分](../.scratch/memory-skill-evolution/ticket-proposal.md)已确认并逐张发布，实际进度见[任务索引](../.scratch/memory-skill-evolution/planning.md)。DSH 选型搁置，不阻塞本轮交付；联系人／本人概览服务及回复检索已接入正式后端与回复流程，见[后端装配](../backend/src/notalone/server/app.py)和[回复服务装配](../backend/src/notalone/server/reply_wiring.py)；这不表示全部 8 项功能、真实模型质量或实际 App 验收均已完成，其余状态按对应任务核验。
+记忆持续更新、纠错、概览、回复检索及自动 Skill 学习等 8 个完整功能，已从[草图](drafts/memory-skill-evolution.md)整理为[正式规格](../.scratch/memory-skill-evolution/spec.md)；[15项拆分](../.scratch/memory-skill-evolution/ticket-proposal.md)已确认并逐张发布，实际进度见[任务索引](../.scratch/memory-skill-evolution/planning.md)。该轮 DSH 选型曾搁置；后续迁移目标现由 ADR-102 另行采纳，尚未实现；联系人／本人概览服务及回复检索已接入正式后端与回复流程，见[后端装配](../backend/src/notalone/server/app.py)和[回复服务装配](../backend/src/notalone/server/reply_wiring.py)；这不表示全部 8 项功能、真实模型质量或实际 App 验收均已完成，其余状态按对应任务核验。
 
 ## ADR 索引
 
@@ -160,6 +162,7 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 
 100. [ADR-100：授权私聊首次完整历史同步](adr/100-authorized-private-history-sync.md)
 101. [ADR-101：本机 App 完整首用与资料生命周期](adr/101-local-app-first-use-lifecycle.md)
+102. [ADR-102：以精简 DSH 和 TypeScript 统一后端](adr/102-dsh-typescript-backend-migration.md)
 
 ## 当前架构决策
 
@@ -169,7 +172,7 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 
 - 主动收藏表达样本按 [ADR-082](adr/082-retire-explicit-style-samples.md)退役；删除独立样本库、入口和生成参考，清理遗留依赖及可重放副本。普通候选编辑复制与用户明确管理的长期表达偏好保留，历史样本验收不代表本次退役验证。
 
-- 旧 Swift 主界面已按 ADR-039 退役；共享前端采用 TypeScript + React，由 ADR-040 的 Electron 双窗口宿主承载；已接通业务页面，完整原生验收仍未完成。Python 后台与 Mac 原生探针保留。
+- 旧 Swift 主界面已按 ADR-039 退役；共享前端采用 TypeScript + React，由 ADR-040 的 Electron 双窗口宿主承载；已接通业务页面，完整原生验收仍未完成。当前代码仍为 Python 后台与 Mac 原生探针；后端按 ADR-102 迁到 TS，原生能力继续复用，尚未完成。
 - 独立桌面版按 ADR-061 采用本机受管后台与 PostgreSQL，资料保存在本机；新装交付与最终验收状态分别核验。按 ADR-066，已有安装保留原数据库连接与资料位置，仅原地执行缺少的版本化 SQL，取消普通启动中的强制备份与复制切换；没有既有配置的新安装正常初始化空受管库。旧云端模块化单体目标不作为独立版的默认数据去向，PostgreSQL 仍是联系人、消息、关系资料、任务和删除状态的权威业务库。
 - 新联系人按 ADR-087／089 从真实微信会话加入，支持逐会话确认或全部私聊范围授权；ADR-095 补充已有可用外置工具的首次账号连接，无需先导入历史。已有联系人可手动表达，顶部选择器是唯一搜索入口；未配置机器的工具初始化与独立渠道验收仍未完成，ADR-065 的空目录无需微信首用承诺已被替代。资料更新按 ADR-066 原地补齐，历史副本删除清理、隐私与人工发送要求保持。
 - 数据隔离键为 `owner_id + contact_id`；`contact_id` 由 NotAlone 创建，昵称、备注和微信来源标识不能替代它。
@@ -183,7 +186,7 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 - 后续 L2/L3 目标按 ADR-067，在关系语境开启时使用受预算限制的 L3 背景与 L2 目录、按需读取正文，同时保留原 L1 动态检索。该分层加载已有受控生产接线，见[运行时装配](../backend/src/notalone/application/organization_runtime.py)与[回复上下文](../backend/src/notalone/reply/context.py)；默认逐项核验策略与自动启用后续由ADR-070修订；显式评测配置仍保留原资格边界。本机实际运行、真实质量和 App 验收需分别核验；底层记忆仍不添加常驻模式，现有无正文概览的存储合同保持。
 - 待确认候选可以参与候选回复，但只能用独立证据类型和独立预算、带强制「未确认」标注作为参考，不得写成确定事实，也不进入已确认记忆集合；用户否决后永久不再参与（见 ADR-035）。
 - 候选回复只在应用内展示，最终由用户修改并亲自发送。
-- 记忆与 Skill 后续演进按 ADR-048 和正式规格推进：历史状态与当前核实分开，自动学习先形成草稿、集中审核后发布；DSH 选型搁置。长期概览与回复检索已有实现；自动 Skill 学习及方法级控制的具体完成范围按对应任务与代码入口核验，不能由局部接入推断全部功能已启用或通过验收。
+- 记忆与 Skill 后续演进按 ADR-048 和正式规格推进：历史状态与当前核实分开，自动学习先形成草稿、集中审核后发布；DSH 搁置决定现由 ADR-102 修订，迁移尚未实现。长期概览与回复检索已有实现；自动 Skill 学习及方法级控制的具体完成范围按对应任务与代码入口核验，不能由局部接入推断全部功能已启用或通过验收。
 
 ## 状态规则
 
