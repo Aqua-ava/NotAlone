@@ -1,6 +1,6 @@
 # 18 微信范围与绑定验收交付
 
-状态：实现、双轴审查及合成开发 App 验收完成，等待主协调复核与 Git 短时独占；尚未提交本票代码。
+状态：实现、双轴审查及合成开发 App 验收完成；本票50文件已本地提交 b4276969，待主协调最终签收。
 
 - 已释放实际 App 独占：两轮均通过 npm run dev 启动并用 Computer Use 操作，已退出；没有打包、真实微信访问、模型调用或外部消息。
 - 已释放 host-plugin.ts、legacy-backend.ts、server/app.py、command.py 的共享装配独占，最终代码可供主协调接续。
@@ -16,10 +16,14 @@
 - 数据影响：原105账号授权记录不改；108只对旧accepted有效绑定回填；按owner/contact隔离，摘要不留存；原生探针替换为退出程序，不采集视觉帧。
 - 工具准备仍沿原01/03首用任务，未实现部分不宣称完成；此验收不认证真实微信正文读取或真实模型集成。
 
-详细版本、命令和待提交路径见 integration-request.md。请主协调复核后分配本票 Git 独占；本票未执行 add/commit/push。
+详细版本、命令和待提交路径见 integration-request.md。主协调已分配Git独占并完成本地提交；未push。
 
 ## 已释放与Git申请
 
-两个开发监督器及其App均已退出，两个本票临时库/目录均已清理；共享host四文件与App独占已释放。最终无待修finding，正式申请Git短时独占。精确路径见commit-files.txt（50个文件，不含主协调已提交108及root-host证据）。
+两个开发监督器及其App均已退出，两个本票临时库/目录均已清理；共享host四文件与App独占已释放。最终无待修finding，已按分配完成Git操作，索引将在本记录提交后释放。精确路径见commit-files.txt（50个文件，不含主协调已提交108及root-host证据）。
 
 原首用工具缺口：[01微信准备可行性](../../local-app-first-use/issues/01-wechat-preparation-feasibility.md)仍open；[03微信组件准备](../../local-app-first-use/issues/03-wechat-component-preparation.md)仍open并依赖01，两票尚无登记执行负责人，由主协调分配；18不替代这两票或宣称已完成真实组件准备。
+
+## 提交与最终交接
+
+实现提交 b42769691ff03bc7478627f1f436deaa648ffc47，仅含commit-files.txt列出的50文件。提交后公开历史扫描：14,092 blobs、2,156 commits、3,764 current files，issues=0。共享host/App均已释放；本交接记录提交后释放Git索引，主协调可分配09接线与下一票Git。票18保持claimed等待主协调最终签收planning。
