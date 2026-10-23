@@ -869,6 +869,71 @@ class HistorySyncPersistenceTest(unittest.TestCase):
         self.assertIs(self.state().phase, HistorySyncPhase.COMPLETE)
         self.assertEqual(self.state().last_cursor, "local_id:20")
 
+    def test_disabled_restart_displays_persisted_complete_and_incomplete_coverage(self) -> None:
+        self.runner.seed(range(1, 4))
+        self.sync.cycle(enabled=True, max_bindings=1)
+        for phase in (HistorySyncPhase.COMPLETE, HistorySyncPhase.INCOMPLETE):
+            with self.subTest(phase=phase):
+                if phase is HistorySyncPhase.INCOMPLETE:
+                    self.history.mark_scope_incomplete(
+                        owner_id=self.scope.owner_id, contact_id=self.scope.contact_id,
+                        binding_id=self.binding.binding_id, failure_code="cli_chat_not_private",
+                    )
+                before = self.state()
+                cursor = self.fixture.store.read_cursor(
+                    owner_id=self.scope.owner_id, contact_id=self.scope.contact_id,
+                )
+                calls = list(self.runner.calls)
+
+                result = self.make_sync().cycle(enabled=False)
+
+                self.assertEqual(result.status.bound_count, 1)
+                self.assertEqual(len(result.status.history_coverages), 1)
+                coverage = result.status.history_coverages[0]
+                self.assertEqual(coverage.phase, phase.value)
+                self.assertEqual((coverage.message_count, coverage.page_count), (3, 1))
+                self.assertEqual(coverage.failure_code, before.failure_code)
+                self.assertEqual(result.status.phase, "disabled")
+                self.assertFalse(result.status.stream_active)
+                self.assertEqual(result.batch_message_count, 0)
+                self.assertEqual(self.runner.calls, calls)
+                self.assertEqual(self.state(), before)
+                self.assertEqual(self.fixture.store.read_cursor(
+                    owner_id=self.scope.owner_id, contact_id=self.scope.contact_id,
+                ), cursor)
+                self.assertEqual(len(self.message_texts()), 3)
+
+    def test_disabled_active_binding_without_history_does_not_start_a_job(self) -> None:
+        result = self.make_sync().cycle(enabled=False)
+
+        self.assertEqual(result.status.bound_count, 1)
+        self.assertEqual(result.status.history_coverages[0].phase, "not_started")
+        self.assertIsNone(self.state())
+        self.assertEqual(self.runner.calls, [])
+        self.assertEqual(self.message_texts(), [])
+
+    def test_disabled_hot_stop_refreshes_saved_scope_without_reads_or_checkpoint_changes(self) -> None:
+        self.runner.seed(range(1, 121))
+        running = self.sync.cycle(enabled=True, max_bindings=1)
+        before = self.state()
+        calls = list(self.runner.calls)
+
+        stopped = self.sync.cycle(enabled=False)
+
+        self.assertEqual(stopped.status.bound_count, 1)
+        self.assertEqual(stopped.status.history_coverages, running.status.history_coverages)
+        self.assertEqual(self.runner.calls, calls)
+        self.assertEqual(self.state(), before)
+        self.bindings.revoke_binding(
+            owner_id=self.scope.owner_id, contact_id=self.scope.contact_id,
+            binding_id=self.binding.binding_id,
+        )
+        revoked = self.sync.cycle(enabled=False)
+        self.assertEqual(revoked.status.bound_count, 0)
+        self.assertEqual(revoked.status.history_coverages, ())
+        self.assertEqual(self.runner.calls, calls)
+        self.assertEqual(self.state(), before)
+
     def test_disabled_switch_and_revoke_stop_reads_but_keep_checkpoint(self) -> None:
         self.runner.seed(range(1, 121))
         self.sync.cycle(enabled=True, max_bindings=1)

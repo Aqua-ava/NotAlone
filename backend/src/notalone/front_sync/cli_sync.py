@@ -480,15 +480,29 @@ class CliBackgroundSync:
             raise TypeError("priority_contact_id 必须是 UUID 或 None。")
         if not enabled:
             self.close()
+            # 停读只关闭运行资源；已授权范围和历史覆盖仍从本地持久状态展示。
+            coverages = self._last_history_coverages
+            try:
+                bindings = self._active_bindings()
+            except ConversationBindingPersistenceError:
+                self._failure_code = "binding_list_unavailable"
+            else:
+                self._last_bound_count = len(bindings)
+                active_ids = {binding.binding_id for binding in bindings}
+                self._last_history_coverages = tuple(
+                    coverage for coverage in self._last_history_coverages
+                    if coverage.binding_id in active_ids
+                )
+                coverages = self._history_coverages(bindings) if bindings else ()
             return CliSyncCycleResult(
                 status=CliSyncStatus(
                     phase=CliSyncPhase.DISABLED,
                     stream_active=False,
                     stream_mode=None,
-                    failure_code=None,
-                    bound_count=0,
+                    failure_code=self._failure_code,
+                    bound_count=self._last_bound_count,
                     **self._backfill_status_fields(),
-                    history_coverages=self._last_history_coverages,
+                    history_coverages=coverages,
                 ),
                 batch_message_count=0,
             )

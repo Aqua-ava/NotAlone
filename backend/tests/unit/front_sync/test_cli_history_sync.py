@@ -6,12 +6,15 @@ from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from uuid import UUID, uuid4
+from unittest.mock import patch
 import unittest
 
 from notalone.front_sync.cli_sync import CliBackgroundSync
+from notalone.persistence.conversation_repository import ConversationBindingPersistenceError
 from notalone.persistence.history_sync_state import (
     HistorySyncPhase,
     HistorySyncState,
+    HistorySyncStatePersistenceError,
 )
 from notalone.persistence.observation_store import (
     ObservationPersistenceError,
@@ -120,6 +123,7 @@ class FakeHistoryCli:
         self.history_pages: dict[str | None, TailResult] = {}
         self.incremental_pages: dict[tuple[str, str | None], TailResult] = {}
         self.calls: list[dict[str, object]] = []
+        self.command_calls: list[str] = []
         self.errors: dict[str | None, Exception] = {}
         self.chat_types: dict[str, str] = {}
         self.resolve_calls: list[str] = []
@@ -127,6 +131,7 @@ class FakeHistoryCli:
         self.resolve_errors: dict[str, Exception] = {}
 
     def resolve_chat(self, query: str, **kwargs) -> ChatResolution:
+        self.command_calls.append("resolve-chat")
         self.resolve_calls.append(query)
         if query in self.resolve_errors:
             raise self.resolve_errors[query]
@@ -138,14 +143,17 @@ class FakeHistoryCli:
         ),))
 
     def version(self, *, timeout_seconds: float | None = None) -> str:
+        self.command_calls.append("version")
         del timeout_seconds
         return "synthetic-history"
 
     def session_events_follow(self, **kwargs):
+        self.command_calls.append("follow")
         del kwargs
         return _EmptyStream()
 
     def tail(self, talker: str, **kwargs) -> TailResult:
+        self.command_calls.append("tail")
         self.calls.append({"talker": talker, **kwargs})
         if kwargs.get("history"):
             cursor = kwargs.get("cursor")
@@ -453,6 +461,107 @@ class HistorySyncEngineTest(unittest.TestCase):
         self.assertEqual(result.batch_message_count, 2)
         self.assertIs(self.history.states[BINDING_ID].phase, HistorySyncPhase.COMPLETE)
         self.assertEqual(self.history.states[BINDING_ID].message_count, 4)
+
+    def test_disabled_cold_start_reads_saved_coverage_without_cli_or_jobs(self) -> None:
+        self.history.ensure_scope_started(
+            owner_id=OWNER_ID, channel="wechat", account_scope="synthetic-account",
+            watermark_at=NOW,
+        )
+        self.history.states[BINDING_ID] = replace(
+            self.history.states[BINDING_ID], phase=HistorySyncPhase.COMPLETE,
+            message_count=12, page_count=3, last_local_id=12,
+            last_cursor="opaque:complete", completed_at=NOW,
+        )
+        before = self.history.states.copy()
+        result = self.make_sync().cycle(enabled=False)
+
+        self.assertEqual(result.status.bound_count, 1)
+        self.assertEqual(len(result.status.history_coverages), 1)
+        coverage = result.status.history_coverages[0]
+        self.assertEqual((coverage.phase, coverage.message_count, coverage.page_count),
+                         ("complete", 12, 3))
+        self.assertEqual(result.status.phase, "disabled")
+        self.assertFalse(result.status.stream_active)
+        self.assertEqual(result.batch_message_count, 0)
+        self.assertEqual(self.cli.command_calls, [])
+        self.assertEqual(self.history.states, before)
+        self.assertEqual(len(self.history.ensure_calls), 1)
+        self.assertEqual(self.history.checkpoints, [])
+        self.assertEqual(self.observations.recorded, [])
+        self.assertEqual(self.authorization.calls, 0)
+
+    def test_disabled_hot_stop_preserves_binding_count_and_coverage(self) -> None:
+        self.cli.history_pages[None] = _page(range(1, 3), has_more=True, cursor="local_id:2")
+        running = self.sync.cycle(enabled=True)
+        before = self.history.states.copy()
+        calls = list(self.cli.command_calls)
+        writes = len(self.observations.recorded)
+        ensures = len(self.history.ensure_calls)
+
+        stopped = self.sync.cycle(enabled=False)
+
+        self.assertEqual(stopped.status.bound_count, 1)
+        self.assertEqual(stopped.status.history_coverages, running.status.history_coverages)
+        self.assertEqual(stopped.status.phase, "disabled")
+        self.assertFalse(stopped.status.stream_active)
+        self.assertEqual(self.cli.command_calls, calls)
+        self.assertEqual(self.history.states, before)
+        self.assertEqual(len(self.history.ensure_calls), ensures)
+        self.assertEqual(len(self.observations.recorded), writes)
+
+    def test_disabled_history_metadata_failure_keeps_prior_coverage_and_reports_failure(self) -> None:
+        self.cli.history_pages[None] = _page(range(1, 3), has_more=False, cursor="local_id:2")
+        running = self.sync.cycle(enabled=True)
+        calls = list(self.cli.command_calls)
+        before = self.history.states.copy()
+        with patch.object(self.history, "list_active", side_effect=HistorySyncStatePersistenceError):
+            result = self.sync.cycle(enabled=False)
+
+        self.assertEqual(result.status.phase, "disabled")
+        self.assertEqual(result.status.failure_code, "history_state_unavailable")
+        self.assertEqual(result.status.bound_count, 1)
+        self.assertEqual(result.status.history_coverages, running.status.history_coverages)
+        self.assertEqual(self.cli.command_calls, calls)
+        self.assertEqual(self.history.states, before)
+        recovered = self.sync.cycle(enabled=False)
+        self.assertIsNone(recovered.status.failure_code)
+        self.assertEqual(recovered.status.history_coverages, running.status.history_coverages)
+        self.assertEqual(self.cli.command_calls, calls)
+
+    def test_disabled_binding_metadata_failure_cannot_start_cli_or_history(self) -> None:
+        binding = self.binding
+        class UnavailableBindings:
+            available = False
+
+            def list_active_bindings(self, **kwargs):
+                if not self.available:
+                    raise ConversationBindingPersistenceError("合成元数据不可用")
+                return (binding,)
+
+        bindings = UnavailableBindings()
+        sync = CliBackgroundSync(
+            owner_id=OWNER_ID, channel="wechat", account_scope="synthetic-account",
+            cli=self.cli, bindings=bindings, observation_store=self.observations,
+            history_state=self.history, history_authorization=self.authorization,
+            clock=lambda: self.now,
+        )
+        result = sync.cycle(enabled=False)
+
+        self.assertEqual(result.status.phase, "disabled")
+        self.assertEqual(result.status.failure_code, "binding_list_unavailable")
+        self.assertEqual(result.status.history_coverages, ())
+        self.assertEqual(self.cli.command_calls, [])
+        self.assertEqual(self.authorization.calls, 0)
+        self.assertEqual(self.history.ensure_calls, [])
+        self.assertEqual(self.observations.recorded, [])
+        bindings.available = True
+        recovered = sync.cycle(enabled=False)
+        self.assertIsNone(recovered.status.failure_code)
+        self.assertEqual(recovered.status.bound_count, 1)
+        self.assertEqual(recovered.status.history_coverages[0].phase, "not_started")
+        self.assertEqual(self.cli.command_calls, [])
+        self.assertEqual(self.authorization.calls, 0)
+        self.assertEqual(self.history.ensure_calls, [])
 
     def test_disabled_switch_stops_reading_and_keeps_the_checkpoint(self) -> None:
         self.cli.history_pages[None] = _page(range(1, 3), has_more=True, cursor="local_id:2")
