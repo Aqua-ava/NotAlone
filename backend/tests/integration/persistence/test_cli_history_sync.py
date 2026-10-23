@@ -58,6 +58,7 @@ class ScriptedHistoryRunner:
         self.probe_deleted = False
         self.insert_after_first_history_page: list[int] | None = None
         self.history_page_reads = 0
+        self.ordered_positions = False
 
     def seed(self, local_ids) -> None:
         self.local_ids = sorted(local_ids)
@@ -131,11 +132,12 @@ class ScriptedHistoryRunner:
                     stderr="",
                 )
             self.history_page_reads += 1
-        after = (
-            [number for number in self.local_ids if number > int(cursor.split(":")[1])]
-            if cursor is not None
-            else list(self.local_ids)
-        )
+        if cursor is None:
+            after = list(self.local_ids)
+        elif self.ordered_positions:
+            after = self.local_ids[self.local_ids.index(int(cursor.split(":")[1])) + 1:]
+        else:
+            after = [number for number in self.local_ids if number > int(cursor.split(":")[1])]
         if history:
             window = after[:limit]
         elif cursor is None:
@@ -570,6 +572,25 @@ class HistorySyncPersistenceTest(unittest.TestCase):
                 (ObservationMode.CLI_HISTORY.value, True),
             ],
         )
+
+    def test_restart_continues_history_when_next_page_local_ids_are_lower(self) -> None:
+        # 微信消息按排序位置分页；跨页 local_id 可以回落，不能据此拒绝后页。
+        self.runner.ordered_positions = True
+        self.runner.local_ids = [*range(100, 150), *range(1, 51)]
+        first = self.sync.cycle(enabled=True, max_bindings=1)
+        self.assertEqual(first.batch_message_count, 50)
+        self.assertEqual(self.state().last_cursor, "local_id:149")
+
+        self.sync.close()
+        self.sync = self.make_sync()
+        second = self.sync.cycle(enabled=True, max_bindings=1)
+
+        self.assertEqual(second.batch_message_count, 50)
+        self.assertIs(self.state().phase, HistorySyncPhase.COMPLETE)
+        self.assertEqual(self.state().last_cursor, "local_id:50")
+        self.assertEqual(self.state().message_count, 100)
+        self.assertEqual(self.state().page_count, 2)
+        self.assertEqual(len(self.message_texts()), 100)
 
     def test_message_arriving_during_history_is_deduplicated_into_the_same_chain(self) -> None:
         self.runner.seed(range(1, 101))

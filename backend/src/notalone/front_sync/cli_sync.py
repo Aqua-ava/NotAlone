@@ -1367,10 +1367,11 @@ class CliBackgroundSync:
             return _HISTORY_RETRY_WAIT
         if state is None or state.phase is HistorySyncPhase.COMPLETE:
             return None
+        # 写入失败保留 syncing；优先队列与对账重新排队也必须遵守退避。
+        retry = self._history_retries.get(binding.binding_id)
+        if retry is not None and self._clock() < retry[1]:
+            return _HISTORY_RETRY_WAIT
         if state.phase is HistorySyncPhase.INCOMPLETE:
-            retry = self._history_retries.get(binding.binding_id)
-            if retry is not None and self._clock() < retry[1]:
-                return _HISTORY_RETRY_WAIT
             try:
                 return store.mark_running(
                     owner_id=self._owner_id,
@@ -1478,7 +1479,8 @@ class CliBackgroundSync:
                     since_cursor=state.last_cursor,
                     last_local_id=result.last_local_id,
                     last_cursor=result.cursor,
-                    cursor_ordered=False,
+                    # 历史页也按不透明排序位置推进，跨页 local_id 可以回落。
+                    cursor_ordered=True,
                     advance_cursor=False,
                     # 中间历史页不推进增量游标；完成页仅在游标确实前移时
                     # 由同一事务定位并作为可靠水位，已有更靠前的游标不回退。
@@ -1510,8 +1512,7 @@ class CliBackgroundSync:
                 failure_code = "history_page_stalled"
                 self._fail_history(binding, failure_code)
                 return 0, False
-            if complete:
-                self._history_retries.pop(binding.binding_id, None)
+            self._history_retries.pop(binding.binding_id, None)
             # 历史页不逐条发布消息事件：首绑可能包含大量消息，逐条唤醒
             # 会形成无界提取与界面更新；消息和来源已在同一事务提交，
             # 分层提取由独立任务按现有队列约束处理。

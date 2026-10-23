@@ -531,6 +531,23 @@ class HistorySyncEngineTest(unittest.TestCase):
         self.assertEqual(self.cli.calls[-1].get("cursor"), "local_id:2")
         self.assertIs(self.history.states[BINDING_ID].phase, HistorySyncPhase.COMPLETE)
 
+    def test_history_write_failure_keeps_backoff_when_priority_requeues_it(self) -> None:
+        self.cli.history_pages[None] = _page((1,), has_more=True, cursor="local_id:1")
+        self.cli.history_pages["local_id:1"] = _page((2,), has_more=False, cursor="local_id:2")
+        self.observations.fail_next_write = True
+        self.sync.cycle(enabled=True, max_bindings=1)
+        self.now += timedelta(seconds=1)
+
+        self.sync.cycle(enabled=True, max_bindings=1, priority_contact_id=CONTACT_ID)
+        self.assertEqual(len(self.cli.calls), 1)
+        self.assertIs(self.history.states[BINDING_ID].phase, HistorySyncPhase.SYNCING)
+
+        self.now += timedelta(seconds=4)
+        self.sync.cycle(enabled=True, max_bindings=1)
+        self.sync.cycle(enabled=True, max_bindings=1)
+        self.assertEqual(len(self.cli.calls), 3)
+        self.assertIs(self.history.states[BINDING_ID].phase, HistorySyncPhase.COMPLETE)
+
     def test_future_timestamp_and_watermark_do_not_end_history_early(self) -> None:
         self.cli.history_pages[None] = _page(
             range(1, 4),
