@@ -1,5 +1,7 @@
 # 全部微信私聊的持续同步范围
 
+> 后续行为修订：[ADR-100](../../architecture/adr/100-authorized-private-history-sync.md)要求每个授权私聊首次同步全部本机可读文字历史，替代本文的 baseline-only 行为；本文保留当时实现与验证记录，不能作为新目标规格。
+
 > 决策：用户已明确批准；[ADR-089](../../architecture/adr/089-all-private-wechat-sync-scope.md)修订 ADR-030／087 的逐会话授权限制。
 > 实现状态：已实现，相关自动验证及开发版桌面验收通过；已按用户明确授权开启实际全部私聊范围。全量测试的限制见下方记录。
 

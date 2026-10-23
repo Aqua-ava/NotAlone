@@ -1,6 +1,6 @@
 # NotAlone 架构文档
 
-> 联系人首用决定：[ADR-087](adr/087-wechat-confirmed-contact-onboarding.md)保留真实微信来源建联与导入只补充已有联系人的规则；[ADR-089](adr/089-all-private-wechat-sync-scope.md)新增当前账号全部私聊的一次授权，包括以后新增会话。[ADR-095](adr/095-first-wechat-connection-and-account-grant.md)补充已有可用工具的首次账号连接与一次授权；未配置机器的工具准备及新用户独立交付验收仍未完成。旧创建接口退役尚待完成；全部私聊实现与验证见[规格](../.scratch/all-private-sync/spec.md)。
+> 联系人首用决定：[ADR-087](adr/087-wechat-confirmed-contact-onboarding.md)保留真实微信来源建联与导入只补充已有联系人的规则；[ADR-089](adr/089-all-private-wechat-sync-scope.md)新增当前账号全部私聊的一次授权，包括以后新增会话。[ADR-095](adr/095-first-wechat-connection-and-account-grant.md)补充已有可用工具的首次账号连接与一次授权；[ADR-100](adr/100-authorized-private-history-sync.md)进一步要求每个授权私聊首次同步本机可读的全部既有文字，再持续增量。未配置机器的工具准备及新用户独立交付验收仍未完成。旧创建接口退役尚待完成；历史同步目标与实现边界见[规格](../.scratch/authorized-private-history-sync/spec.md)。
 
 > 2026-10-22 提取并发：[ADR-099](adr/099-parallel-batch-extraction.md)允许同一提取任务内按批次流水线并行模型调用，采纳、写入与水位仍按批序串行；规格见[批次流水线](../.scratch/parallel-batch-extraction/spec.md)；已实现，真实验证边界见 ADR-099 的验证记录。
 
@@ -158,7 +158,11 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 
 99. [ADR-099：提取任务内的批次流水线](adr/099-parallel-batch-extraction.md)
 
+100. [ADR-100：授权私聊首次完整历史同步](adr/100-authorized-private-history-sync.md)
+
 ## 当前架构决策
+
+- 已授权微信私聊按 [ADR-100](adr/100-authorized-private-history-sync.md)在首次进入同步范围时读取本机当前可读的全部既有文字，再持续增量；仅所选和全部私聊使用同一规则。聊天历史属于消息层，关系提取是独立后台派生任务，不阻塞首次历史同步。该决定已采纳但尚未实现，当前基线行为不能据此宣称已升级。
 
 - 主动收藏表达样本按 [ADR-082](adr/082-retire-explicit-style-samples.md)退役；删除独立样本库、入口和生成参考，清理遗留依赖及可重放副本。普通候选编辑复制与用户明确管理的长期表达偏好保留，历史样本验收不代表本次退役验证。
 
