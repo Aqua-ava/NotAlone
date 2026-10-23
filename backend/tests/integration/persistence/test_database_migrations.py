@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import shutil
 from concurrent.futures import ThreadPoolExecutor
 import os
@@ -207,6 +208,41 @@ class DatabaseMigrationCommandTest(unittest.TestCase):
         self.assertEqual([int(name[:3]) for name in expected], list(range(1, len(expected) + 1)))
         self.assertEqual(applied, expected)
         repeated = self._run(directory=ROOT / "database/migrations")
+        self.assertEqual(repeated.returncode, 0, repeated.stderr)
+        self.assertEqual(json.loads(repeated.stdout)["applied"], [])
+
+    def test_executed_104_upgrades_without_rewriting_its_ledger(self) -> None:
+        source = ROOT / "database/migrations"
+        for path in sorted(source.glob("*.sql")):
+            if int(path.name[:3]) <= 104:
+                shutil.copyfile(path, self.migrations / path.name)
+        original = self.migrations / "104_cli_history_sync_state.sql"
+        # 真实已执行版本的唯一差异是列注释；固定摘要防止夹具跟着实现漂移。
+        original.write_text(original.read_text().replace(
+            "本绑定历史同步累计处理的规范文字消息数量；重叠历史复用既有消息时同样计数。",
+            "本绑定历史同步累计写入的规范文字消息数量。",
+        ), encoding="utf-8")
+        self.assertEqual(hashlib.sha256(original.read_bytes()).hexdigest(),
+                         "1c0c37ef68097621de81bdfb9a590c673f4bd30e04c34ac5f032605d59eb2580")
+        initial = self._run()
+        self.assertEqual(initial.returncode, 0, initial.stderr)
+        with psycopg.connect(self.database_url) as connection:
+            before = connection.execute(
+                "SELECT name, checksum, applied_at FROM public.notalone_schema_migration ORDER BY name"
+            ).fetchall()
+        upgraded = self._run(directory=source)
+        self.assertEqual(upgraded.returncode, 0, upgraded.stderr)
+        self.assertIn("107_history_message_count_comment.sql", json.loads(upgraded.stdout)["applied"])
+        with psycopg.connect(self.database_url) as connection:
+            self.assertEqual(connection.execute(
+                "SELECT name, checksum, applied_at FROM public.notalone_schema_migration "
+                "WHERE name <= '104_cli_history_sync_state.sql' ORDER BY name"
+            ).fetchall(), before)
+            self.assertEqual(connection.execute(
+                "SELECT col_description(attrelid, attnum) FROM pg_attribute "
+                "WHERE attrelid='public.cli_history_sync_state'::regclass AND attname='message_count'"
+            ).fetchone()[0], "本绑定历史同步累计处理的规范文字消息数量；重叠历史复用既有消息时同样计数。")
+        repeated = self._run(directory=source)
         self.assertEqual(repeated.returncode, 0, repeated.stderr)
         self.assertEqual(json.loads(repeated.stdout)["applied"], [])
 

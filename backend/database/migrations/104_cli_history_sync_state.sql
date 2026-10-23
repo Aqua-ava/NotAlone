@@ -44,7 +44,7 @@ COMMENT ON TABLE public.cli_history_sync_state IS
 COMMENT ON COLUMN public.cli_history_sync_state.watermark_at IS
     '首次开始历史同步时固定的活动水位；历史追到该水位后才可能标记完整。';
 COMMENT ON COLUMN public.cli_history_sync_state.message_count IS
-    '本绑定历史同步累计处理的规范文字消息数量；重叠历史复用既有消息时同样计数。';
+    '本绑定历史同步累计写入的规范文字消息数量。';
 COMMENT ON COLUMN public.cli_history_sync_state.last_cursor IS
     '本绑定最近一个成功提交历史页的 CLI 游标；只有来源与消息提交成功后才更新。';
 COMMENT ON COLUMN public.cli_history_sync_state.failure_code IS
