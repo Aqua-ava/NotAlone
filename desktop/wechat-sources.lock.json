@@ -113,9 +113,9 @@
   ],
   "cliPatch": {
     "file": "wechat-patches/readonly-cli.patch",
-    "sha256": "23474d851919846c46c7bb4dd1ed95cd61b53cca6c114c4bdc9b3b4cd436ff02",
+    "sha256": "c143ef47728d32c5e647196c75efc33278b49647bd35f3f058b51aeb92ce06aa",
     "testFile": "wechat-patches/readonly-cli-test.go",
-    "testSha256": "80e0c9f1d0b760eb141372ee8e468909556b93e792e3103df1785683fd0c4a3c"
+    "testSha256": "a534c8322564cb5ea409fe689aa775e1f5f4d59354ec63ec6be62f31bf0e02ce"
   },
   "researchCache": {
     "wcdb": {
@@ -155,7 +155,7 @@
   },
   "limitations": [
     "不包含上游wxkey可执行程序；不能执行首次初始化。",
-    "CLI只开放sessions、resolve-chat、tail/watch及帮助/版本；会话列表与全局事件只查询身份和时间元数据，不查询或搜索summary，不读取最近发送人及消息类型；严格只读恒开启，wxkey和Keychain硬禁用。",
+    "CLI只开放status、sessions、resolve-chat、tail/watch及帮助/版本；status仅核验配置账号与会话身份表可读性，不调度语音运行时；会话列表与全局事件只查询身份和时间元数据，不查询或搜索summary，不读取最近发送人及消息类型；严格只读恒开启，wxkey和Keychain硬禁用。",
     "开发构建和合成派生证据不代表系统授权、真实微信、联系人同步或干净机器已验收。"
   ],
   "dependencies": [

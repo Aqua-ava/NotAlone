@@ -31,7 +31,7 @@ test('实际CLI零参数只显示帮助，未知参数和非白名单命令不�
     return result;
   };
   try {
-    for (const args of [[], ['help'], ['--help'], ['sessions', '--help'], ['help', 'resolve-chat'], ['tail', '--help'], ['watch', '--help']]) {
+    for (const args of [[], ['help'], ['--help'], ['status', '--help'], ['sessions', '--help'], ['help', 'resolve-chat'], ['tail', '--help'], ['watch', '--help']]) {
       const result = execute(args);
       assert.equal(result.status, 0, result.stderr);
       const payload = JSON.parse(result.stdout);
@@ -48,7 +48,18 @@ test('实际CLI零参数只显示帮助，未知参数和非白名单命令不�
       assert.equal(result.status, 2);
       assert.match(result.stderr, /notalone_command_disabled/);
     }
-    for (const command of ['sessions', 'resolve-chat', 'tail', 'watch']) {
+    const status = execute(['status', '--include-debug', '--strict-read-only']);
+    assert.equal(status.status, 0, status.stderr);
+    const statusData = JSON.parse(status.stdout).data.status;
+    assert.equal(statusData.readiness, 'blocked');
+    assert.equal(statusData.live_read_ok, false);
+    assert.equal(statusData.mode.strict_read_only, true);
+    for (const mode of ['doctor', 'overview', 'coverage', 'workflows']) {
+      const result = execute(['status', '--mode', mode]);
+      assert.equal(result.status, 2);
+      assert.equal(JSON.parse(result.stdout).error.code, 'invalid_argument');
+    }
+    for (const command of ['status', 'sessions', 'resolve-chat', 'tail', 'watch']) {
       const result = execute([command, '--notalone-unknown']);
       assert.notEqual(result.status, 0);
       assert.equal(JSON.parse(result.stdout).ok, false);

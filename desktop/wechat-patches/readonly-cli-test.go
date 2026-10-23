@@ -3,11 +3,13 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -34,6 +36,109 @@ func TestNotAloneReadonlyBuild(t *testing.T) {
 	}
 	if _, _, err := wxkey.RunImageKey(""); err == nil {
 		t.Fatal("产品不能调度图片密钥扫描")
+	}
+}
+
+func notaloneFileSnapshot(t *testing.T, root string) map[string][32]byte {
+	t.Helper()
+	files := map[string][32]byte{}
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		relative, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			files[relative+"/"] = [32]byte{}
+			return nil
+		}
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		files[relative] = sha256.Sum256(content)
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return files
+}
+
+func TestNotAloneStatusAccountContract(t *testing.T) {
+	lib := os.Getenv("NOTALONE_TEST_WCDB")
+	if lib == "" {
+		t.Fatal("合成WCDB来源缺失")
+	}
+	if err := wcdb.Bootstrap(lib); err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	cfg := &config.Config{SchemaVersion: 2, DBRoot: root, Wxid: "wxid_synthetic", Keys: map[string]string{}}
+	// 仅提供身份表，状态核验不能依赖联系人、消息正文或摘要字段。
+	notaloneTestDB(t, root, cfg, "session", "session.db", `CREATE TABLE SessionTable(username TEXT); INSERT INTO SessionTable VALUES('wxid_synthetic_friend');`, strings.Repeat("22", 16))
+	configuration, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	configFile := filepath.Join(root, "config.json")
+	if err := os.WriteFile(configFile, configuration, 0600); err != nil {
+		t.Fatal(err)
+	}
+	// 状态核验不应调度语音运行时；合成解释器留下标记以捕获隐式探测。
+	python := filepath.Join(root, "state", "asr-venv", "bin", "python3")
+	if err := os.MkdirAll(filepath.Dir(python), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(python, []byte("#!/bin/sh\nprintf invoked > \"$HOME/asr-probe-ran\"\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	cli := filepath.Join(filepath.Dir(lib), "..", "bin", "wechat-cli")
+	before := notaloneFileSnapshot(t, root)
+	data, _ := notaloneRunCLI(t, root, cli, configFile, "status", "--include-debug", "--strict-read-only")
+	status := data["status"].(map[string]any)
+	account := status["account"].(map[string]any)
+	debug := status["account_debug"].(map[string]any)
+	mode := status["mode"].(map[string]any)
+	if account["identity_configured"] != true || account["schema2_ready"] != true ||
+		debug["wxid"] != "wxid_synthetic" || mode["strict_read_only"] != true ||
+		status["live_read_ok"] != true || (status["readiness"] != "ready" && status["readiness"] != "degraded") {
+		t.Fatalf("首次连接所需只读账号契约无效: %#v", status)
+	}
+	data, output := notaloneRunCLI(t, root, cli, configFile, "status")
+	status = data["status"].(map[string]any)
+	if status["account_debug"] != nil || bytes.Contains(output, []byte("wxid_synthetic")) {
+		t.Fatal("默认状态不得暴露账号或会话身份")
+	}
+	if !reflect.DeepEqual(before, notaloneFileSnapshot(t, root)) {
+		t.Fatal("状态核验修改了配置、来源或本机支持文件")
+	}
+	for _, keyStore := range []string{"config_legacy", "keychain"} {
+		t.Run(keyStore, func(t *testing.T) {
+			invalid := *cfg
+			invalid.Keys = map[string]string{strings.Repeat("22", 16): strings.Repeat("66", 32)}
+			if keyStore == "keychain" {
+				invalid.KeyStore = "keychain"
+			}
+			configuration, err := json.Marshal(invalid)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(configFile, configuration, 0600); err != nil {
+				t.Fatal(err)
+			}
+			before := notaloneFileSnapshot(t, root)
+			data, _ := notaloneRunCLI(t, root, cli, configFile, "status", "--include-debug", "--strict-read-only")
+			status := data["status"].(map[string]any)
+			if status["readiness"] != "blocked" || status["live_read_ok"] != false {
+				t.Fatalf("不可读配置不得成为可连接账号: %#v", status)
+			}
+			if !reflect.DeepEqual(before, notaloneFileSnapshot(t, root)) {
+				t.Fatal("失败的账号核验修改了配置、来源或本机支持文件")
+			}
+		})
 	}
 }
 

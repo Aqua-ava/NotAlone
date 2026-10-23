@@ -63,7 +63,7 @@ index 86404a1..ddc0b48 100644
  		limit = 10
  	}
 diff --git a/cmd/wechat-cli/cli.go b/cmd/wechat-cli/cli.go
-index e9e8492..c08ed28 100644
+index e9e8492..34d7d38 100644
 --- a/cmd/wechat-cli/cli.go
 +++ b/cmd/wechat-cli/cli.go
 @@ -94,7 +94,7 @@ var cliCommandSpecs = []cliCommandSpec{
@@ -75,7 +75,21 @@ index e9e8492..c08ed28 100644
  	{Command: "media", Aliases: []string{"media-resources", "media_resources", "attachments"}, Tool: "media_resources", Usage: appName + " media <chat> [--local-id 123] [--type image|video|file]", Positional: "chat", Examples: []string{appName + ` media "$CHAT" --local-id 10`, appName + ` media "$CHAT" --type image --limit 20`}},
  	{Command: "search", Tool: "search", Usage: appName + " search <keyword> [--in <chat>] [--after 2026-01-01] [--type text]", Positional: "keyword", Examples: []string{appName + ` search "$KEYWORD" --in "$CHAT" --limit 10`}},
  	{Command: "search-context", Aliases: []string{"search_context", "search-with-context", "search_with_context"}, Tool: "search_with_context", Usage: appName + " search-context <keyword> [--in <chat>] [--before-count 5] [--after-count 5]", Positional: "keyword", Examples: []string{appName + ` search-context "$KEYWORD" --in "$CHAT" --limit 5`, appName + ` search-with-context "$KEYWORD" --context-limit 3 --before-count 10 --after-count 10`}},
-@@ -712,6 +712,9 @@ func cliToolDefaultLimit(tool string) int {
+@@ -146,9 +146,11 @@ func maybeRunCLI(args []string) bool {
+ 		return true
+ 	case "status", "doctor-lite", "doctor_lite":
+ 		flags := parseKVFlags(args[1:])
+-		if flags["mode"] == nil {
+-			flags["mode"] = "status"
++		// 产品账号探测仅开放状态契约，不能借 mode 进入其他诊断入口。
++		if mode := getStr(flags, "mode"); mode != "" && mode != "status" {
++			exitCLIError(opts, 2, "invalid_argument", "NotAlone status仅支持mode=status", "read_os", args[0])
+ 		}
++		flags["mode"] = "status"
+ 		runToolCLI("read_os", flags, opts, args[0])
+ 		return true
+ 	case "doctor":
+@@ -712,6 +714,9 @@ func cliToolDefaultLimit(tool string) int {
  func runTailCLI(flags map[string]any, opts cliOptions, command string) {
  	jsonl := getBoolDefault(flags, "jsonl", false)
  	follow := getBoolDefault(flags, "follow", false)
@@ -85,7 +99,7 @@ index e9e8492..c08ed28 100644
  	if !jsonl && !follow {
  		runToolCLI("read_events", flags, opts, command)
  		return
-@@ -1438,7 +1441,7 @@ func parseKVFlags(args []string) map[string]any {
+@@ -1438,7 +1443,7 @@ func parseKVFlags(args []string) map[string]any {
  
  func isBoolCLIFlag(key string) bool {
  	switch key {
@@ -95,7 +109,7 @@ index e9e8492..c08ed28 100644
  	default:
  		return false
 diff --git a/cmd/wechat-cli/main.go b/cmd/wechat-cli/main.go
-index 49c260b..4787a33 100644
+index 49c260b..1947af5 100644
 --- a/cmd/wechat-cli/main.go
 +++ b/cmd/wechat-cli/main.go
 @@ -73,17 +73,11 @@ var (
@@ -128,7 +142,7 @@ index 49c260b..4787a33 100644
 +	// 仅开放已确认联系人读取适配器需要的命令，不开放维护、Keychain 或通用调用。
 +	if len(os.Args) > 1 {
 +		switch os.Args[1] {
-+		case "sessions", "resolve-chat", "tail", "watch", "help", "--help", "-h", "version", "--version", "-v":
++		case "status", "sessions", "resolve-chat", "tail", "watch", "help", "--help", "-h", "version", "--version", "-v":
 +		default:
 +			fmt.Fprintln(os.Stderr, "notalone_command_disabled")
 +			os.Exit(2)
@@ -158,6 +172,19 @@ index d7af105..be8f847 100644
  }
  
  func appStateDir() (string, error) {
+diff --git a/cmd/wechat-cli/read_os.go b/cmd/wechat-cli/read_os.go
+index 65ed9c3..c9cf337 100644
+--- a/cmd/wechat-cli/read_os.go
++++ b/cmd/wechat-cli/read_os.go
+@@ -361,7 +361,7 @@ func readOSCapabilities(dbReady, wcdbAvailable, cacheIndexExists bool) map[strin
+ 		"context":         liveRead,
+ 		"tail":            liveRead,
+ 		"media":           liveRead,
+-		"voice_asr":       asrReadyBool(asrStatusData()["wechat_voice_ready"]),
++		"voice_asr":       false, // 产品状态不调度语音解释器或探测媒体能力。
+ 		"name_resolution": liveRead,
+ 	}
+ }
 diff --git a/cmd/wechat-cli/sessions.go b/cmd/wechat-cli/sessions.go
 index d46df1a..8a31dc3 100644
 --- a/cmd/wechat-cli/sessions.go
