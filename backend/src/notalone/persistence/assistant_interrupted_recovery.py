@@ -124,6 +124,7 @@ def reserve_interrupted_generation_in_transaction(
         continued_from_candidate_id=original_request.continued_from_candidate_id,
         skill_version_id=original_request.skill_version_id, skill_disabled=original_request.skill_disabled,
         scene=original_request.scene,
+        allow_incomplete_history=original_request.allow_incomplete_history,
         expected_input_version_id=original_request.expected_input_version_id or command.original_input_version_id,
         suggestion=original_request.suggestion, continuation=metadata,
         reference=_reference_from_metadata(connection, scope, session_id, metadata),

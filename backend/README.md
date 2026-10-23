@@ -202,6 +202,8 @@ PYTHONPATH=backend/src python \
 
 ### 分层回复的独立质量与快速对照
 
+按 [ADR-100](../architecture/adr/100-authorized-private-history-sync.md)，每次新生成（包括固定准备、执行、连续修改和重试）都会重新核对当前联系人全部有效微信绑定的持久历史覆盖。已授权历史但尚未建任务、或任一绑定仍同步中，返回 `history_sync_pending`；明确不完整时默认返回 `history_incomplete_confirmation_required`。用户看到警告并选择继续后，请求可携 `allow_incomplete_history: true`；字符串或其他类型拒绝。新的连续修改须单独携本次确认，同一请求恢复保留原决定；该字段不修改同步授权或长期偏好。请求与助手对话保存固定警告，模型输入也说明不能声称完整语境。未授予历史读取且没有历史任务的旧增量绑定不受该门禁影响。
+
 按 [ADR-068](../architecture/adr/068-direct-reply-candidates-with-user-selection.md)，正式回复入口在检索、生成及确定性检查后直接保存并返回候选，由用户选择、编辑和亲自发送，不再追加 `ReplyFidelityReview` 模型调用。草稿改写、粘贴来信、主动联系、继续与恢复共用此接线；当前用户意图和表达约束仍进入生成输入。来源、范围、结构、预算、取消和保存前复验继续有效，非法引用仍返回 `reply_candidates_rejected`，不会因为省去模型复核而放行。
 
 质量配置明确 `post_generation_review=disabled`，合同包含生产接线身份，旧流程的质量资格不能自动沿用。记忆入库、L2/L3 整理核验及独立离线质量门保持；返回候选不表示已通过语义认证。旧 `reply-fidelity-units-v3` 复核器、严格 Beta 适配和响应重放保留用于显式诊断及历史证据解析，不由产品入口装配。历史 JSON／字符覆盖／来源路径失败仍为失败，不因退役复核而转为质量通过。

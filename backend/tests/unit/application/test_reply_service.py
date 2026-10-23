@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import unittest
+from dataclasses import replace
 from types import SimpleNamespace
 from uuid import UUID, uuid4
 
@@ -69,6 +70,9 @@ class FakeReplyPort:
         self.outcome: ReplyGenerated | None = None
         self.last_command = None
 
+    def prepare(self, command, verified_scope):
+        self.last_command = command
+
     def generate(self, command, verified_scope):
         self.calls += 1
         self.last_command = command
@@ -76,6 +80,53 @@ class FakeReplyPort:
 
 
 class ReplyServiceTest(unittest.TestCase):
+    def test_history_syncing_blocks_generation(self):
+        self.service = ReplyService(
+            binding_lookup=lambda owner_id, contact_id: self.binding,
+            conversation_factory=lambda binding: self.conversation, reply=self.reply,
+            history_coverage=lambda owner_id, contact_id: "syncing",
+        )
+        result = self.service.generate(owner_id=OWNER_ID, contact_id=CONTACT_ID, request=_request())
+        self.assertEqual(result.reason, "history_sync_pending")
+        self.assertEqual(self.reply.calls, 0)
+
+    def test_incomplete_requires_explicit_continue_and_rechecks_each_call(self):
+        phase = "incomplete"
+        service = ReplyService(
+            binding_lookup=lambda owner_id, contact_id: self.binding,
+            conversation_factory=lambda binding: self.conversation, reply=self.reply,
+            history_coverage=lambda owner_id, contact_id: phase,
+        )
+        request = _request()
+        self.assertEqual(service.generate(owner_id=OWNER_ID, contact_id=CONTACT_ID,
+            request=request).reason, "history_incomplete_confirmation_required")
+        self.assertEqual(self.reply.calls, 0)
+        accepted = replace(request, allow_incomplete_history=True)
+        service.generate(owner_id=OWNER_ID, contact_id=CONTACT_ID, request=accepted)
+        self.assertEqual(self.reply.calls, 1)
+        self.assertTrue(self.reply.last_command.allow_incomplete_history)
+        phase = "syncing"
+        self.assertEqual(service.generate(owner_id=OWNER_ID, contact_id=CONTACT_ID,
+            request=accepted).reason, "history_sync_pending")
+        self.assertEqual(self.reply.calls, 1)
+        phase = "complete"
+        service.generate(owner_id=OWNER_ID, contact_id=CONTACT_ID, request=request)
+        self.assertEqual(self.reply.calls, 2)
+
+    def test_coverage_is_rechecked_between_prepare_and_execute(self):
+        phase = "incomplete"
+        service = ReplyService(binding_lookup=lambda owner, contact: self.binding,
+            conversation_factory=lambda binding: self.conversation, reply=self.reply,
+            history_coverage=lambda owner, contact: phase)
+        request = replace(_request(), allow_incomplete_history=True)
+        prepared = service.generate(owner_id=OWNER_ID, contact_id=CONTACT_ID,
+            request=request, prepare_only=True)
+        self.assertIsNone(prepared.reason)
+        phase = "syncing"
+        self.assertEqual(service.generate(owner_id=OWNER_ID, contact_id=CONTACT_ID,
+            request=request).reason, "history_sync_pending")
+        self.assertEqual(self.reply.calls, 0)
+
     def setUp(self) -> None:
         self.reply = FakeReplyPort()
         self.service = ReplyService(

@@ -134,7 +134,8 @@
     "tests/workspace-local-draft-transition.test.mjs",
     "tests/workspace-submission.test.mjs",
     "tests/sync-scope-view.test.mjs",
-    "tests/wechat-setup-view.test.mjs"
+    "tests/wechat-setup-view.test.mjs",
+    "tests/history-reply-warning-view.test.mjs"
   ],
   "isolated-http-pg": [
     "tests/assistant-candidate-carry-public-http.test.mjs",

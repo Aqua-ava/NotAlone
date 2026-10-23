@@ -56,9 +56,10 @@ def _input_payload(normalized: str) -> dict[str, Any]:
     content = json.loads(normalized)
     continued = content.pop("continued_from_candidate_id")
     skill = content.pop("skill")
+    history = {key: content.pop(key) for key in ("allow_incomplete_history", "history_coverage_warning") if key in content}
     scene = content.pop('scene', None)
     content["type"] = content.pop("mode")
-    return {"content": content, "continued_from_candidate_id": continued,
+    return {**history, "content": content, "continued_from_candidate_id": continued,
             "skill_version_id": skill.split(":", 1)[1] if skill.startswith("user_choice:") else None,
             "skill_disabled": skill == "disabled", **({'scene': scene} if scene is not None else {})}
 

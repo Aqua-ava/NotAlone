@@ -22,3 +22,14 @@ class AssistantContinuationCommandTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class HistoryContinuationConsentTest(unittest.TestCase):
+    def test_new_continuation_carries_its_own_explicit_history_confirmation(self):
+        from notalone.application.assistant_continuation import parse_continuation, continuation_submission
+        payload = {"idempotency_key": str(uuid4()), "expected_input_version_id": str(uuid4()),
+            "instruction": "简短一点", "displayed_group": {"session_id": str(uuid4()),
+                "candidate_group_id": str(uuid4()), "candidates": []}, "allow_incomplete_history": True}
+        command = parse_continuation(payload)
+        self.assertTrue(command.allow_incomplete_history)
+        self.assertEqual(continuation_submission(command), payload)

@@ -30,6 +30,7 @@ class AssistantContinuationReplyRequest(ReplyServiceRequest):
             conversation_binding_id=command.conversation_binding_id, content=command.content,
             continued_from_candidate_id=command.continued_from_candidate_id, skill=command.skill,
             scene=command.scene,
+            allow_incomplete_history=command.allow_incomplete_history,
             continuation=self.continuation,
             continuation_reference=self.reference,
         )

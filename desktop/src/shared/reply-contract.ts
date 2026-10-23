@@ -29,6 +29,7 @@ const sourceUnavailableReasons = new Set(['source_unavailable', 'source_deleted'
 // 不再用嵌套三元静默折叠成 generation_failed。
 export function replyFailureDecision(evidence: ReplyFailureEvidence): ReplyFailureDecision {
   const { kind, code, reason, inputBudgetState, providerLimit = false, formatFailure = false } = evidence;
+  if (reason === 'history_sync_pending' || reason === 'history_incomplete_confirmation_required') return { errorCode: reason, canRetry: false, known: true };
   if (kind === 'connection') return { errorCode: 'connection', canRetry: true, known: true };
   if (code && candidateRejectedCodes.has(code)) return { errorCode: 'candidates_rejected', canRetry: false, known: true };
   if (inputBudgetState) return { errorCode: inputBudgetState === 'exceeded' ? 'input_budget_exceeded' : 'input_budget_unavailable', canRetry: false, known: true };

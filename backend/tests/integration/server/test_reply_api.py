@@ -72,7 +72,7 @@ class FakeReplyPort:
         return self.calls
 
 
-def _build_service(*, binding_status=ConversationBindingStatus.ACTIVE, ready=True):
+def _build_service(*, binding_status=ConversationBindingStatus.ACTIVE, ready=True, history_coverage=None):
     binding = ConversationBinding(
         binding_id=BINDING_ID,
         scope=ContactScope(owner_id=OWNER_ID, contact_id=CONTACT_ID),
@@ -100,13 +100,33 @@ def _build_service(*, binding_status=ConversationBindingStatus.ACTIVE, ready=Tru
         ReplyService(
             binding_lookup=lambda owner_id, contact_id: binding,
             conversation_factory=make_conversation,
-            reply=reply_port,
+            reply=reply_port, history_coverage=history_coverage,
         ),
         reply_port,
     )
 
 
 class ReplyApiContractTest(unittest.TestCase):
+    def test_history_gate_cannot_be_bypassed_by_direct_api(self):
+        self.history_phase = "incomplete"
+        body = json.loads(self._reply_to_message_body())
+        def submit():
+            return self.client.request("POST", "/api/reply/generate", headers=self.headers,
+                body=json.dumps(body).encode())
+        self.assertEqual(submit().json()["reason"], "history_incomplete_confirmation_required")
+        self.assertEqual(self.reply_port.calls, 0)
+        body["allow_incomplete_history"] = "true"
+        self.assertEqual(submit().status_code, 400)
+        body["allow_incomplete_history"] = True
+        self.assertEqual(submit().status_code, 200)
+        self.assertTrue(self.reply_port.last_command.allow_incomplete_history)
+        self.history_phase = "not_started"
+        self.assertEqual(submit().json()["reason"], "history_sync_pending")
+        self.assertEqual(self.reply_port.calls, 1)
+        self.history_phase = "complete"
+        body.pop("allow_incomplete_history")
+        self.assertEqual(submit().status_code, 200)
+
     def test_runtime_limits_return_stable_errors(self):
         from notalone.reply.errors import ReplyTimeoutError, ReplyBudgetError
 
@@ -127,7 +147,8 @@ class ReplyApiContractTest(unittest.TestCase):
                 self.assertEqual(response.json(), {"error": code})
 
     def setUp(self) -> None:
-        self.service, self.reply_port = _build_service()
+        self.history_phase = None
+        self.service, self.reply_port = _build_service(history_coverage=lambda owner, contact: self.history_phase)
         self.app = create_app(
             database_url="postgresql:///notalone_test",
             owner_id=OWNER_ID,

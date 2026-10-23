@@ -72,6 +72,7 @@ class ReplyService:
         "_exploration",
         "_skill_review",
         "_manual_scope_lookup",
+        "_history_coverage",
     )
 
     def __init__(
@@ -80,10 +81,12 @@ class ReplyService:
         binding_lookup: Callable[[UUID, UUID], ConversationBinding | None],
         conversation_factory: Callable[[ConversationBinding], ConversationPort],
         reply: ReplyPort,
+        history_coverage: Callable[[UUID, UUID], str | None] | None = None,
         exploration: ReplyExplorationService | None = None,
         skill_review=None,
         manual_scope_lookup: Callable[[UUID, UUID], VerifiedConversationScope | None] | None = None,
     ) -> None:
+        self._history_coverage = history_coverage
         self._binding_lookup = binding_lookup
         self._conversation_factory = conversation_factory
         self._reply = reply
@@ -113,6 +116,13 @@ class ReplyService:
             raise TypeError("owner_id 与 contact_id 必须是 UUID。")
         if not isinstance(request, ReplyServiceRequest):
             raise TypeError("request 必须是 ReplyServiceRequest。")
+
+        if self._history_coverage is not None:
+            coverage = self._history_coverage(owner_id, contact_id)
+            if coverage == "incomplete" and not request.allow_incomplete_history:
+                return ReplyServiceResult(reply=None, reason="history_incomplete_confirmation_required")
+            if coverage in ("not_started", "syncing"):
+                return ReplyServiceResult(reply=None, reason="history_sync_pending")
 
         manual_scope = self._manual_scope_lookup(owner_id, contact_id) if self._manual_scope_lookup else None
         from notalone.application.manual_input_scope import manual_input_contact
@@ -182,6 +192,7 @@ class ReplyServiceRequest:
     expected_input_version_id: UUID | None = None
     suggestion: SuggestionReference | None = None
     scene: str | None = None
+    allow_incomplete_history: bool = False
 
     def build_command(
         self,
@@ -223,6 +234,7 @@ class ReplyServiceRequest:
             continued_from_candidate_id=self.continued_from_candidate_id,
             skill=skill,
             scene=self.scene,
+            allow_incomplete_history=self.allow_incomplete_history,
         )
 
 

@@ -163,6 +163,9 @@ class UserSkillChoice:
 SkillSelection: TypeAlias = AutoSkill | UserSkillChoice | NoSkill
 
 
+HISTORY_COVERAGE_WARNING = "历史覆盖不完整：用户选择基于已同步部分继续，不能据此声称拥有完整语境。"
+
+
 @dataclass(frozen=True, slots=True)
 class GenerateReply:
     """调用者提交给候选回复 Module 的唯一命令。"""
@@ -174,6 +177,7 @@ class GenerateReply:
     continued_from_candidate_id: UUID | None = None
     skill: SkillSelection = AutoSkill()
     scene: str | None = None
+    allow_incomplete_history: bool = False
 
     def has_valid_content(self) -> bool:
         """判断联合输入是否满足应用层的最小结构约束。"""

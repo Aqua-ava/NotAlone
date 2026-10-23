@@ -1017,6 +1017,9 @@ def _request_text(prepared: ReplyContext) -> str:
         payload["skill_selection"] = {"mode": "auto"}
     elif isinstance(prepared.command.skill, NoSkill):
         payload["skill_selection"] = {"mode": "disabled"}
+    if prepared.command.allow_incomplete_history:
+        from notalone.reply.interface import HISTORY_COVERAGE_WARNING
+        payload["history_coverage_warning"] = HISTORY_COVERAGE_WARNING
     payload["expression_actor"] = "owner"
     payload["recipient_role"] = "contact"
     payload["message_order"] = "known_times_ascending_unknown_last_equal_unordered"

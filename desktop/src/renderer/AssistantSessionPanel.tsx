@@ -24,6 +24,7 @@ function SavedTurn({ turn, index, retry, busy, showPreferences }: {
         {typeof turn.input.content.context_text === 'string' && <p>补充聊天：{turn.input.content.context_text}</p>}
       </>}
       {typeof turn.input?.content.user_instruction === 'string' && <p>{turn.input.content.user_instruction}</p>}
+      {turn.input?.allow_incomplete_history === true && <p role="status">历史覆盖不完整：本次已明确选择基于已同步部分继续，不能视为完整语境。</p>}
       <p>原精确场景：{turn.input?.scene ?? '未声明'}</p>
       {turn.reply?.usedSkill && <p>本轮实际 Skill：{turn.reply.usedSkill.name} · 版本 {turn.reply.usedSkill.versionNumber ?? turn.reply.usedSkill.versionId}
         {turn.reply.usedSkill.scope && ` · 范围：${turn.reply.usedSkill.scope.kind === 'scene' ? `精确场景「${turn.reply.usedSkill.scope.scene}」` : turn.reply.usedSkill.scope.kind === 'contact' ? '当前联系人' : '本人通用'}`}

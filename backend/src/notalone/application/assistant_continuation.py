@@ -48,6 +48,7 @@ class ContinueAssistantSession:
     displayed_group: DisplayedCandidateGroup
     intention_update: str | None = None
     requirement_changes: tuple[RequirementChange, ...] = ()
+    allow_incomplete_history: bool = False
 
 
 
@@ -115,8 +116,10 @@ def _text(value: object) -> str:
 def parse_continuation(payload: object) -> ContinueAssistantSession:
     required = {"idempotency_key", "expected_input_version_id", "instruction", "displayed_group"}
     if (not isinstance(payload, dict) or not required <= set(payload)
-            or set(payload) - required - {"intention_update", "requirement_changes"}):
+            or set(payload) - required - {"intention_update", "requirement_changes", "allow_incomplete_history"}):
         raise AssistantContinuationInvalid("持续要求结构无效。")
+    if type(payload.get("allow_incomplete_history", False)) is not bool:
+        raise AssistantContinuationInvalid("历史覆盖确认无效。")
     frame = payload["displayed_group"]
     if (not isinstance(frame, dict) or set(frame) != {"session_id", "candidate_group_id", "candidates"}
             or not isinstance(frame["candidates"], list) or not 0 <= len(frame["candidates"]) <= 3):
@@ -147,7 +150,7 @@ def parse_continuation(payload: object) -> ContinueAssistantSession:
         _uuid(payload["idempotency_key"]), _uuid(payload["expected_input_version_id"]),
         _text(payload["instruction"]),
         DisplayedCandidateGroup(_uuid(frame["session_id"]), _uuid(frame["candidate_group_id"]), tuple(candidates)),
-        _text(payload["intention_update"]) if "intention_update" in payload else None, tuple(normalized),
+        _text(payload["intention_update"]) if "intention_update" in payload else None, tuple(normalized), payload.get("allow_incomplete_history", False),
     )
 
 
@@ -170,6 +173,8 @@ def continuation_submission(command: ContinueAssistantSession) -> dict[str, Any]
                             "version_id": str(item.version_id)} for item in command.displayed_group.candidates],
         },
     }
+    if command.allow_incomplete_history:
+        payload["allow_incomplete_history"] = True
     if command.intention_update is not None:
         payload["intention_update"] = command.intention_update
     if command.requirement_changes:

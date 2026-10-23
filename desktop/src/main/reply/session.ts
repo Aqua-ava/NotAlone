@@ -259,6 +259,7 @@ export class ReplySession {
     const frame = captureReplyContinuation(this.getState(), update.sessionId);
     const command: AssistantContinuationCommand = Object.freeze({ ...frame, requestKey: randomUUID(),
       instruction: update.instruction.trim(),
+      ...(update.allowIncompleteHistory === true ? { allowIncompleteHistory: true } : {}),
       ...(update.intentionUpdate === undefined ? {} : { intentionUpdate: update.intentionUpdate.trim() }),
       ...(update.requirementChanges === undefined ? {} : { requirementChanges: structuredClone(update.requirementChanges) }) });
     await this.runContinuation(update, command,
@@ -1552,7 +1553,8 @@ export class ReplySession {
       : this.state.mode === 'initiate_conversation' ? !this.state.purpose.trim() : !target || !this.state.direction.trim()) return;
     if (this.state.mode === 'rewrite_draft' && options.inputKind === 'current_chat' && !options.pastedDirection?.trim()) return;
     this.notifyInputChanged();
-    const common = { contactId: selection.contactId, contactDisplayName: contact.displayName, ...sceneSnapshot(this.state.scene || null) };
+    const common = { contactId: selection.contactId, contactDisplayName: contact.displayName, ...sceneSnapshot(this.state.scene || null),
+      ...(selection.allowIncompleteHistory === true ? { allowIncompleteHistory: true } : {}) };
     const input: ReplyInputSnapshot = this.state.mode === 'rewrite_draft'
       ? { ...common, mode: 'rewrite_draft', draftText: contactState.draft.trim(),
         userInstruction: [tones[options.tone], options.instruction.trim()].filter(Boolean).join('\n') || null,

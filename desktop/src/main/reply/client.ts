@@ -38,6 +38,7 @@ export function replyRequestBody(input: ReplyInputSnapshot, requestKey: string, 
   };
   return Object.freeze({ contact_id: input.contactId, idempotency_key: requestKey,
     ...sceneSnapshot(input.scene),
+    ...(input.allowIncompleteHistory === true ? { allow_incomplete_history: true } : {}),
     ...((input.mode !== 'rewrite_draft' || input.inputKind === 'workspace') && input.skillChoice?.mode === 'disabled' ? { skill_disabled: true } : {}),
     ...((input.mode !== 'rewrite_draft' || input.inputKind === 'workspace') && input.skillChoice?.mode === 'user' ? { skill_version_id: input.skillChoice.versionId } : {}),
     content: Object.freeze(content),

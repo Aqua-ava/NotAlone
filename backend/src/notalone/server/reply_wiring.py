@@ -266,7 +266,9 @@ def build_reply_service(
         generator,
         synchronize=synchronize_skill_round,
     )
+    from notalone.persistence.reply_history_coverage import PostgresReplyHistoryCoverage
     reply_service = ReplyService(
+        history_coverage=PostgresReplyHistoryCoverage(database_url),
         manual_scope_lookup=_manual_scope_lookup(database_url),
         binding_lookup=_active_binding_lookup(database_url),
         conversation_factory=lambda binding: PostgresConversationPort(

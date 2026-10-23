@@ -126,6 +126,10 @@ def canonical_reply_input(command: GenerateReply) -> str:
         if isinstance(command.skill, UserSkillChoice)
         else "disabled" if isinstance(command.skill, NoSkill) else "auto"
     )
+    if command.allow_incomplete_history:
+        from notalone.reply.interface import HISTORY_COVERAGE_WARNING
+        payload["allow_incomplete_history"] = True
+        payload["history_coverage_warning"] = HISTORY_COVERAGE_WARNING
     if command.scene is not None:
         payload["scene"] = command.scene
     return json.dumps(

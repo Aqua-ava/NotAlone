@@ -1024,7 +1024,11 @@ class PostgresReplyStore:
                 "text": context.direction.text,
                 "source": context.direction.source.value,
             }
+        from notalone.reply.interface import HISTORY_COVERAGE_WARNING
+
         snapshot: dict[str, Any] = {
+            **({"history_coverage_warning": HISTORY_COVERAGE_WARNING}
+               if context.command.allow_incomplete_history else {}),
             "scope": {
                 "owner_id": str(context.scope.owner_id),
                 "contact_id": str(context.scope.contact_id),

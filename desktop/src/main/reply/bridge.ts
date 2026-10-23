@@ -15,10 +15,11 @@ const continuationText = (item: unknown) => typeof item === 'string' && Boolean(
 
 function continuation(args: unknown[]): ReplyContinuation {
   const raw = args[0];
-  const optional = ['intentionUpdate', 'requirementChanges'];
+  const optional = ['intentionUpdate', 'requirementChanges', 'allowIncompleteHistory'];
   const keys = raw && typeof raw === 'object' ? optional.filter((key) => Object.hasOwn(raw, key)) : [];
   const value = fields(args, ['contactId', 'scopeRevision', 'sessionId', 'instruction', ...keys]);
   if (!isUuid(value.sessionId) || !continuationText(value.instruction)
+    || keys.includes('allowIncompleteHistory') && typeof value.allowIncompleteHistory !== 'boolean'
     || keys.includes('intentionUpdate') && !continuationText(value.intentionUpdate)
     || new TextEncoder().encode(JSON.stringify(value)).byteLength > ASSISTANT_CONTINUATION_RESPONSE_LIMIT) {
     throw new Error('请明确本次继续的要求与助手会话。');
@@ -196,7 +197,9 @@ export function installReplyBridge(commands: PageCommands, backend: BackendHost,
   });
   commands.handle('reply:generate', (...args: unknown[]) => {
     const optional = args[0] && typeof args[0] === 'object' && Object.hasOwn(args[0], 'workspaceAction') ? ['workspaceAction'] : [];
-    const value = fields(args, ['contactId', 'scopeRevision', 'newRequest', ...optional]);
+    const history = args[0] && typeof args[0] === 'object' && Object.hasOwn(args[0], 'allowIncompleteHistory') ? ['allowIncompleteHistory'] : [];
+    const value = fields(args, ['contactId', 'scopeRevision', 'newRequest', ...optional, ...history]);
+    if (history.length && typeof value.allowIncompleteHistory !== 'boolean') throw new Error('历史覆盖确认无效。');
     if (typeof value.newRequest !== 'boolean' || optional.length && !['express', 'suggest'].includes(value.workspaceAction as string)) throw new Error('本次生成操作不可用。');
     return replies.generate(value as unknown as GenerateReply);
   }, 'helper');

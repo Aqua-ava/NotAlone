@@ -22,7 +22,7 @@ export interface RewriteOptions {
   pastedDirection?: string;
 }
 export interface RewriteOptionsUpdate extends ContactSelection { options: RewriteOptions; }
-export interface GenerateReply extends ContactSelection { newRequest: boolean; workspaceAction?: WorkspaceAction; }
+export interface GenerateReply extends ContactSelection { newRequest: boolean; workspaceAction?: WorkspaceAction; allowIncompleteHistory?: boolean; }
 export interface AssistantInterruptedRetry extends ContactSelection { sessionId: string; turnId: string; inputVersionId: string; }
 export interface AssistantSessionDeletion extends ContactSelection { sessionId: string; confirmed: true; }
 export interface AssistantSessionSelection extends ContactSelection { sessionId: string; }
@@ -30,6 +30,7 @@ export interface AssistantCandidateCarry extends AssistantSessionSelection {
   expectedSelectionId: string; candidateId: string; versionId: string;
 }
 export interface ReplyContinuation extends AssistantSessionSelection {
+  allowIncompleteHistory?: boolean;
   instruction: string;
   intentionUpdate?: string;
   requirementChanges?: readonly RequirementChange[];
@@ -105,6 +106,7 @@ export interface RewriteSnapshot {
   userInstruction: string | null;
   includeRelationshipContext: boolean;
   scene?: string | null;
+  allowIncompleteHistory?: boolean;
   inputKind?: 'draft' | 'current_chat' | 'workspace';
   workspaceAction?: WorkspaceAction;
   contextText?: string;
@@ -123,6 +125,7 @@ export interface DirectedReplySnapshot {
   clarificationAnswer?: string;
   skillChoice?: ReplySkillChoice;
   scene?: string | null;
+  allowIncompleteHistory?: boolean;
 }
 export interface ProactiveReplySnapshot {
   mode: 'initiate_conversation';
@@ -134,6 +137,7 @@ export interface ProactiveReplySnapshot {
   clarificationAnswer?: string;
   skillChoice?: ReplySkillChoice;
   scene?: string | null;
+  allowIncompleteHistory?: boolean;
 }
 export type ReplyInputSnapshot = RewriteSnapshot | DirectedReplySnapshot | ProactiveReplySnapshot;
 export interface ReplyResult {
@@ -150,7 +154,7 @@ export interface ReplyResult {
   inputBudget?: AssistantInputBudget;
   continuation?: { candidateId: string | null; versionId: string | null; candidateGroupId: string };
 }
-export type ReplyFailureCode = 'generation_failed' | 'save_failed' | 'timeout' | 'unavailable' | 'rejected' | 'candidates_rejected' | 'target_unavailable' | 'source_unavailable' | 'connection' | 'input_budget_exceeded' | 'input_budget_unavailable' | 'provider_context_limit' | 'prepared_context_reprepare_required' | 'prepared_context_running' | 'prepared_context_unconfirmed';
+export type ReplyFailureCode = 'history_sync_pending' | 'history_incomplete_confirmation_required' | 'generation_failed' | 'save_failed' | 'timeout' | 'unavailable' | 'rejected' | 'candidates_rejected' | 'target_unavailable' | 'source_unavailable' | 'connection' | 'input_budget_exceeded' | 'input_budget_unavailable' | 'provider_context_limit' | 'prepared_context_reprepare_required' | 'prepared_context_running' | 'prepared_context_unconfirmed';
 export type ReplyGenerationBlock = 'foreground-confirmation-required' | null;
 export interface ReplyMessageNotice { phase: 'idle' | 'connecting' | 'connected' | 'interrupted'; changed: boolean; needsRefresh: boolean; }
 export interface ReplyGenerationJobState {

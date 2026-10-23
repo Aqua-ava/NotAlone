@@ -37,6 +37,7 @@ export interface AssistantContinuationCommand {
   readonly requestKey: string;
   readonly expectedInputVersionId: string;
   readonly instruction: string;
+  readonly allowIncompleteHistory?: boolean;
   readonly displayedGroup: DisplayedCandidateGroup;
   readonly intentionUpdate?: string;
   readonly requirementChanges?: readonly RequirementChange[];
@@ -69,6 +70,7 @@ function requestBody(command: AssistantContinuationCommand, sessionId: string) {
     command.displayedGroup.candidates);
   if (frame.sessionId !== sessionId) throw new Error('请在当前助手会话中选择候选。');
   return { idempotency_key: command.requestKey.toLowerCase(), expected_input_version_id: command.expectedInputVersionId.toLowerCase(),
+    ...(command.allowIncompleteHistory === true ? { allow_incomplete_history: true } : {}),
     instruction: command.instruction.trim(), displayed_group: { session_id: frame.sessionId,
       candidate_group_id: frame.candidateGroupId, candidates: frame.candidates.map((item) => ({ number: item.number,
         candidate_id: item.candidateId, version_id: item.versionId })) },

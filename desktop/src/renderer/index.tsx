@@ -1,3 +1,6 @@
+import { historyReplyEligibility } from '../shared/history-reply-eligibility';
+import type { HistoryCoveragePhase, SyncControlState } from '../shared/sync-control-bridge';
+import { useRevisionedSession } from './use-revisioned-session';
 import { WechatSetupPanel } from './WechatSetupPanel';
 import { ForegroundPanel, useForegroundState } from './ForegroundPanel';
 import { ScreenPermissionPanel, useScreenPermission } from './ScreenPermissionPanel';
@@ -35,6 +38,17 @@ export function App() {
   const permission = useScreenPermission();
   const contactSession = useContactSession();
   const replies = useReplySession(helper);
+  const { state: historySync } = useRevisionedSession<SyncControlState>({ revision: -1, scopeRevision: 0,
+    phase: 'offline', report: null, busy: null, errorCode: null }, window.notalone.syncControl, helper);
+  useEffect(() => { if (helper) void window.notalone.syncControl.refresh().catch(() => {}); }, [contactSession.state.selectedContactId]);
+  const historyByContact = useRef(new Map<string, HistoryCoveragePhase>());
+  const historyContact = contactSession.state.selectedContactId;
+  const historyCoverage = historyReplyEligibility(historySync.errorCode ? null : historySync.report, historyContact,
+    historyContact ? historyByContact.current.get(historyContact) : undefined);
+  if (historyContact) {
+    if (historyCoverage) historyByContact.current.set(historyContact, historyCoverage);
+    else historyByContact.current.delete(historyContact);
+  }
   const workspace = useRef<HTMLDivElement>(null);
   useEffect(() => { workspace.current?.scrollTo({ top: 0 }); }, [replies.state.mode, replies.state.options.inputKind]);
   const foregroundRead = useForegroundState(window.notalone.foreground, helper);
@@ -71,7 +85,8 @@ export function App() {
       && replies.state.savedSession?.phase === 'loading' && <p role="status" className="rewrite-privacy">
         已切换联系人，正在恢复这位联系人的历史讨论与回复…
       </p>}
-    <UnifiedReplyWorkspace contacts={contactSession} replies={replies} />
+    <UnifiedReplyWorkspace contacts={contactSession} replies={replies}
+      historyCoverage={historyCoverage} />
     <PrioritySyncStatus contactId={contactSession.state.selectedContactId} bridge={window.notalone.syncControl} />
     {replies.state.messageNotice.phase === 'connected' && <>
       {replies.state.messageNotice.needsRefresh && <p role="status">消息提醒有待核对，请主动刷新消息。生成依据仍是原快照。</p>}
@@ -84,7 +99,8 @@ export function App() {
     {replies.state.mode === 'rewrite_draft' && (replies.state.messageNotice.changed || replies.state.messageNotice.needsRefresh)
       && <button disabled={replies.state.messages.phase === 'loading'} onClick={() => void replies.loadMessages()}>刷新消息</button>}
     <div className="ime-status-line"><BackendBadge state={backend} compact /></div>
-    <ReplyCandidates replies={replies} currentDraft={contactSession.state.draft} />
+    <ReplyCandidates replies={replies} currentDraft={contactSession.state.draft}
+      historyCoverage={historyCoverage} />
     </div>
     <footer className="ime-footer">
       <span>由你修改并亲自发送</span>

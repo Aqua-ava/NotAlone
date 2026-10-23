@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
-import { historicalReplyFixture } from './fixtures/historical-reply-basis.mjs';
+import { historicalReplyFixture, renderSession } from './fixtures/historical-reply-basis.mjs';
 
 test('会话目录报告切换完成时可立即进入工作区，清空临时想法和要求', async () => {
   const f = await historicalReplyFixture();
@@ -38,4 +38,26 @@ test('会话目录报告切换完成时可立即进入工作区，清空临时�
     assert.equal(state.options.tone, 'original');
     assert.deepEqual(state.savedSession.turns, []);
   } finally { unsubscribe(); await f.replies.beginGenerationClosing(() => {}); }
+});
+
+test('工作区明确继续只附在本次生成请求，不成为后续默认确认', async () => {
+  const f = await historicalReplyFixture();
+  try {
+    await f.bridge.readSavedSession(f.scope);
+    await f.bridge.enterWorkspace(f.scope);
+    f.contacts.setDraft({ ...f.scope, text: '合成想法' });
+    await f.bridge.generate({ ...f.scope, newRequest: true, workspaceAction: 'express', allowIncompleteHistory: true });
+    const request = f.calls.find(call => call.path.endsWith('/replies/prepare'));
+    assert.equal(request.body.allow_incomplete_history, true);
+    assert.equal(f.replies.getState().options.allowIncompleteHistory, undefined);
+  } finally { await f.replies.beginGenerationClosing(() => {}); }
+});
+
+test('恢复助手对话后保留当时的不完整历史警告', async () => {
+  const f = await historicalReplyFixture();
+  try {
+    f.records.saved.turns[0].input.allow_incomplete_history = true;
+    await f.bridge.readSavedSession(f.scope);
+    assert.match(renderSession(f.replies.getState()), /历史覆盖不完整/);
+  } finally { await f.replies.beginGenerationClosing(() => {}); }
 });

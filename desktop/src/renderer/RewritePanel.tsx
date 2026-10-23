@@ -1,3 +1,4 @@
+import type { HistoryCoveragePhase } from '../shared/sync-control-bridge';
 import { useCallback, useEffect, useRef, useState, type ClipboardEvent } from 'react';
 import type { AssistantSessionDeletion, ReplyMode, ReplySessionState, RewriteOptions } from '../shared/reply-bridge';
 import { useRevisionedSession } from './use-revisioned-session';
@@ -105,14 +106,15 @@ export function useReplySession(enabled = true) {
     updatePurpose: (purpose: string) => operate(() => window.notalone.replies.updateInput({ type: 'purpose', update: { ...selection(), purpose } })),
     retryInterruptedGeneration: (sessionId: string, turnId: string, inputVersionId: string) =>
       operate(() => window.notalone.replies.retryInterruptedGeneration({ ...selection(), sessionId, turnId, inputVersionId })),
-    generateWorkspace: (workspaceAction: 'express' | 'suggest', options: RewriteOptions) => operate(async () => {
+    generateWorkspace: (workspaceAction: 'express' | 'suggest', options: RewriteOptions, allowIncompleteHistory = false) => operate(async () => {
       const scope = selection();
       await window.notalone.replies.updateOptions({ ...scope, options });
-      await window.notalone.replies.generate({ ...scope, newRequest: true, workspaceAction });
+      await window.notalone.replies.generate({ ...scope, newRequest: true, workspaceAction, ...(allowIncompleteHistory ? { allowIncompleteHistory: true } : {}) });
     }),
     generate: (newRequest = false) => operate(() => window.notalone.replies.generate({ ...selection(), newRequest })),
-    continueSession: (instruction: string, intentionUpdate?: string) => operate(() => window.notalone.replies.continueSession({
+    continueSession: (instruction: string, intentionUpdate?: string, allowIncompleteHistory = false) => operate(() => window.notalone.replies.continueSession({
       ...selection(), sessionId: latest.current.savedSession!.sessionId!, instruction,
+      ...(allowIncompleteHistory ? { allowIncompleteHistory: true } : {}),
       ...(intentionUpdate === undefined ? {} : { intentionUpdate }) })),
     confirmContinuation: (requirementChanges: readonly RequirementChange[]) => operate(() => window.notalone.replies.confirmContinuation({
       ...selection(), sessionId: latest.current.continuation!.sessionId,
@@ -162,7 +164,7 @@ function CandidateEditor({ text, candidateId, number, edit, copy, validatePaste,
   </>;
 }
 
-export function ReplyCandidates({ replies, currentDraft }: { replies: ReplySessionView; currentDraft?: string }) {
+export function ReplyCandidates({ replies, currentDraft, historyCoverage }: { replies: ReplySessionView; currentDraft?: string; historyCoverage?: HistoryCoveragePhase }) {
   const { state } = replies;
   const [detailsOpen, setDetailsOpen] = useState(false);
   const evidence = useReplyEvidence();
@@ -239,6 +241,8 @@ export function ReplyCandidates({ replies, currentDraft }: { replies: ReplySessi
       : state.errorCode === 'source_unavailable' ? (state.mode === 'reply_to_message'
         ? '待回复消息或其来源已失效，请刷新消息重新选择，或使用草稿改写。'
         : '本次回复依据已失效，请重新读取后再试。')
+      : state.errorCode === 'history_sync_pending' ? '历史尚未追平，请等待当前联系人历史同步完成。'
+      : state.errorCode === 'history_incomplete_confirmation_required' ? '历史覆盖不完整，请在表达工作区明确选择基于已同步部分继续，再发起新生成。'
       : state.errorCode === 'rejected' ? '本次生成被拒绝，请重新明确选择联系人，并核对本次输入。'
       : state.errorCode === 'candidates_rejected' ? '本次候选未通过要求与内容核对。草稿已保留，请调整草稿或本次要求后重新生成。'
       : state.errorCode === 'unavailable' ? '回复服务暂不可用，请在管理后台补齐本人身份与模型设置，再重试。'
@@ -317,7 +321,7 @@ export function ReplyCandidates({ replies, currentDraft }: { replies: ReplySessi
     </details>}
     {copyNoticeError && <p className="reply-note" role="alert">{copyNoticeError}</p>}
     {replies.error && <p className="reply-note" role="alert">{replies.error}<button className="button" onClick={() => void replies.retry()}>重试读取</button></p>}
-    <AssistantContinuationControls key={`${state.contactId}:${state.scopeRevision}:${state.savedSession?.sessionId}:${state.inputClearRevision ?? 0}`}
+    <AssistantContinuationControls historyCoverage={historyCoverage} key={`${state.contactId}:${state.scopeRevision}:${state.savedSession?.sessionId}:${state.inputClearRevision ?? 0}`}
       replies={replies} hasUnsavedEdits={hasUnsavedEdits} />
     <AssistantMessageNoticeActions replies={replies} hasUnsavedEdits={hasUnsavedEdits} />
   </section>

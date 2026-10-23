@@ -9,7 +9,7 @@ export interface SavedAssistantTurn {
   requestKey: string;
   state: 'running' | 'completed' | 'failed' | 'redacted' | 'unavailable';
   input: { content: Record<string, unknown>; continued_from_candidate_id?: string | null;
-    skill_version_id?: string | null; skill_disabled?: boolean; scene?: string | null } | null;
+    skill_version_id?: string | null; skill_disabled?: boolean; allow_incomplete_history?: boolean; history_coverage_warning?: string; scene?: string | null } | null;
   reply: { replyRequestId: string; candidates: ReplyCandidate[]; contextEvidenceIds: string[];
     expressionPreferenceIds?: string[]; expressionPreferences?: ExpressionPreferenceReceipt[]; usedSkill?: ReplyUsedSkill | null; inputBudget?: AssistantInputBudget; basisChanges?: ReplyBasisChange[] } | null;
   placeholder: string | null;

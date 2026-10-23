@@ -76,6 +76,9 @@ def parse_reply_request(body: bytes) -> tuple[UUID, ReplyServiceRequest]:
             raise ReplyRequestInvalid()
         version = _uuid_field(reference, "input_version")
         suggestion = SuggestionReference(_uuid_field(reference, "task_id"), version, _uuid_field(reference, "suggestion_id"))
+    allow_incomplete_history = payload.get("allow_incomplete_history", False)
+    if type(allow_incomplete_history) is not bool:
+        raise ReplyRequestInvalid()
     skill_disabled = payload.get("skill_disabled", False)
     scene = payload.get('scene')
     if scene is not None and (not isinstance(scene, str) or not scene.strip()
@@ -96,6 +99,7 @@ def parse_reply_request(body: bytes) -> tuple[UUID, ReplyServiceRequest]:
         skill_disabled=skill_disabled,
         expected_input_version_id=expected_input_version_id,
         scene=scene,
+        allow_incomplete_history=allow_incomplete_history,
     )
 
 

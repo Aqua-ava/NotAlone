@@ -12,6 +12,7 @@ const directory = await mkdtemp(path.join(tmpdir(), 'notalone-workspace-view-'))
 after(() => rm(directory, { recursive: true, force: true }));
 
 const bundled = await build({ stdin: { contents: `
+  export { historyReplyEligibility } from './src/shared/history-reply-eligibility';
   export { UnifiedReplyWorkspace } from './src/renderer/UnifiedReplyWorkspace';
   export { ReplyCandidates } from './src/renderer/RewritePanel';
   export { createElement } from 'react';
@@ -22,12 +23,12 @@ const bundled = await build({ stdin: { contents: `
 const entry = path.join(directory, 'view.mjs');
 await writeFile(entry, bundled.outputFiles[0].text);
 const view = await import(pathToFileURL(entry).href);
-function render({ draft = '', contactId = 'synthetic-contact', ...overrides } = {}) {
+function render({ draft = '', contactId = 'synthetic-contact', historyCoverage, ...overrides } = {}) {
   const state = { contactId, scopeRevision: 1, phase: 'idle', mode: 'rewrite_draft', options: {
     tone: 'original', instruction: '', includeRelationshipContext: true, inputKind: 'workspace',
   }, messages: { phase: 'ready', items: [], nextCursor: null }, exploration: { phase: 'idle' }, ...overrides };
   return view.renderToStaticMarkup(view.createElement(view.UnifiedReplyWorkspace, {
-    contacts: { state: { selectedContactId: contactId, draft, scopeRevision: 1 } }, replies: { state },
+    contacts: { state: { selectedContactId: contactId, draft, scopeRevision: 1 } }, replies: { state }, historyCoverage,
   }));
 }
 
@@ -78,4 +79,23 @@ test('工作区候选直接展示理由，版本未核验前不开放编辑', ()
   assert.match(html, /从近况开始，方便对方接话。/);
   assert.match(html, /正在读取本组版本/);
   assert.doesNotMatch(html, /aria-label="候选1编辑文本"/);
+});
+
+test('历史同步中阻止新候选，不完整状态显示显式继续且不能静默消失', () => {
+  const pending = render({ historyCoverage: 'syncing', draft: '合成想法' });
+  assert.match(pending, /历史尚未追平/);
+  assert.match(pending, /aria-label="帮我想想"[^>]*disabled/);
+  const incomplete = render({ historyCoverage: 'incomplete', draft: '合成想法' });
+  assert.match(incomplete, /历史覆盖不完整/);
+  assert.match(incomplete, /基于已同步部分继续/);
+  assert.match(incomplete, /aria-label="帮我想想"[^>]*disabled/);
+  assert.doesNotMatch(render({ historyCoverage: 'complete' }), /历史覆盖不完整/);
+});
+
+test('状态读取失败保留原警告，明确完整才清除，旧增量不误阻', () => {
+  assert.equal(view.historyReplyEligibility(null, 'a', 'incomplete'), 'incomplete');
+  const row = phase => ({ contactId: 'a', phase });
+  assert.equal(view.historyReplyEligibility({ historyAuthorizationState: 'declined', historyCoverages: [row('not_started')] }, 'a'), undefined);
+  assert.equal(view.historyReplyEligibility({ historyAuthorizationState: 'accepted', historyCoverages: [row('incomplete'), row('not_started')] }, 'a'), 'not_started');
+  assert.equal(view.historyReplyEligibility({ historyCoverages: [row('complete')] }, 'a', 'incomplete'), 'complete');
 });

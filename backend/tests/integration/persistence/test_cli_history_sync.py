@@ -268,6 +268,41 @@ class HistorySyncPersistenceTest(unittest.TestCase):
             account_scope="synthetic-account",
         )
 
+    def test_assistant_request_restores_explicit_history_warning(self):
+        from uuid import uuid4
+        from notalone.application.reply_service import ReplyServiceRequest
+        from notalone.persistence.assistant_session_store import PostgresAssistantSessionStore
+        from notalone.reply.interface import RewriteDraft
+        store = PostgresAssistantSessionStore(observations.TEST_DATABASE_URL)
+        session = store.default(self.scope)
+        request = ReplyServiceRequest(idempotency_key=uuid4(), content=RewriteDraft("合成想法"),
+            allow_incomplete_history=True)
+        receipt = store.reserve_prepared(self.scope, session, request)
+        restored = PostgresAssistantSessionStore(observations.TEST_DATABASE_URL).prepared_request(self.scope, receipt)
+        self.assertTrue(restored.allow_incomplete_history)
+        snapshot = store.read_session(self.scope, session)
+        self.assertTrue(snapshot.turns[0].input["allow_incomplete_history"])
+        self.assertIn("历史覆盖不完整", snapshot.turns[0].input["history_coverage_warning"])
+
+    def test_reply_history_eligibility_distinguishes_old_authorization_and_unstarted(self):
+        from notalone.persistence.reply_history_coverage import PostgresReplyHistoryCoverage
+        reader = PostgresReplyHistoryCoverage(observations.TEST_DATABASE_URL)
+        args = (self.scope.owner_id, self.scope.contact_id)
+        self.assertIsNone(reader(*args))
+        authorization = PostgresHistorySyncAuthorizationStore(observations.TEST_DATABASE_URL)
+        authorization.decide(owner_id=self.scope.owner_id, channel="wechat",
+            account_scope="synthetic-account", decision="accepted", at=NOW)
+        self.assertEqual(reader(*args), "not_started")
+        self.sync.cycle(enabled=True, max_bindings=1)
+        self.assertEqual(reader(*args), "incomplete")
+        extra = self.bindings.create_binding(owner_id=self.scope.owner_id, contact_id=self.scope.contact_id,
+            channel="wechat", account_scope="synthetic-account", conversation_locator="wxid_second_binding")
+        self.assertEqual(reader(*args), "not_started")
+        self.bindings.revoke_binding(owner_id=self.scope.owner_id, contact_id=self.scope.contact_id,
+            binding_id=extra.binding_id)
+        self.assertEqual(reader(*args), "incomplete")
+        self.assertIsNone(reader(self.scope.owner_id, self.fixture.binding_b.scope.contact_id))
+
     def test_first_connection_grant_enrolls_and_starts_history(self):
         from notalone.persistence.sync_scope import PostgresSyncScopeStore
         from notalone.persistence.wechat_setup import PostgresWechatSetupStore
