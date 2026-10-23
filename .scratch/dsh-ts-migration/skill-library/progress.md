@@ -51,3 +51,30 @@
 - 最新完整Skill测试59/59通过；host-json类型错误已由主会话修复，本次全树tsc仅余05 model-provider.ts缺锁版provider依赖及request类型两项，06无诊断。
 - 当前模块引用04已提交读取模块；05讨论C/回复删除及09备份生产端口尚未装配，当前提交不是独立完整迁移或桌面可用证据。后续必须在完整HEAD重跑公开入口和实际App验收。
 - 模块审查Standards/Spec finding均0；新增时间精度用例RED→GREEN保留PG原微秒。票仍claimed，goal未完成。
+
+## Git独占已释放
+
+本票模块提交：`60a1682650e2e356145f9f926ad3d38f2b8a063b`。只含06清单27文件，没有shared/05/09/18变更。提交后`node scripts/check_public_history.mjs --ref HEAD --working-tree`通过，issues=0（历史2153提交/14037 blobs，当前3740文件）。索引应为空，本轮不再add/commit；继续等待跨票/宿主接线及App时段。此条为提交后进度记录，留待后续本票提交。
+
+## 公开宿主集成用例已建立RED
+
+新增`backend-ts/test/skill-http.test.mjs`，真实调用现有`launchDsh`/官方profile和认证HTTP，不新造宿主、不调用模型。首次运行准确失败于runtime ownership.skills仍为python，未继续用旧路由冒充TS验收。Fixture已停止自有host并删除随机库/目录；未启动App。该新用例待共享接线GREEN，目前不计入59项已通过模块测试，也尚未提交。
+
+## 旧写入口精确草案已落盘
+
+legacy-write-handoff.patch覆盖Python普通管理连接、中央目录同步及新责任门；legacy-write-handoff-base.json固定三文件基线，legacy-write-handoff.md说明保留15审核发布/历史回滚和宿主待接RPC控制。草案未应用共享文件；固定Python AST、git apply --check、独立责任门5测试通过。不等于HTTP或App迁移完成。
+port-integration-status.md已核实真实删除preference-erasure.deleteSourceReplies、备份preference-files.eraseManagedUpdateBackups及05 ReplyAssistantGuards.requireReplyDiscussionById签名；C方法存在但完整宿主实例/历史政策守卫仍待装配。不能沿用之前“备份模块尚不存在”的旧记录。
+最新协调：18已提交b4276969释放；09现独占host-plugin/legacy-backend/app/command及App，06排下一时段。不修改共享文件、不抢App、不接手额度暂停的05工作。日常仅npm run dev，禁止打包/推送；本轮无Git独占，因此未add/commit。
+
+## App稳定窗口：已暂停产品源码写入
+
+收到主会话紧急冻结后立即停止backend-ts/src、backend/src、migrations及desktop产品源码写入，现有模块保留，不改watcher/运行方式。仅允许scratch与只读核对，等待根明确释放；不会为了测试生成受监控源码。
+collaboration.list_agents确认files_finish、port_finish、review_standards均completed，无运行中子Agent；已逐一send_message传达冻结。其他历史子Agent不在live列表。本记录是工具确认均已停止工作，不冒称收到逐一口头回复。
+冻结前新增skill_management_remote.py、skill_management_handoff.py及各自unit/persistence测试；最后一次组合验证16/16通过，真实loopback socket覆盖固定owner/端点/token、代理忽略、无重定向/重试、响应协议/预算、硬超时、关闭中断和handoff失败不回退。普通持久层两个现存文件补丁仍未应用；生成器已更新为仅两文件，git apply --check通过。未App/微信/模型操作，未add/commit。
+运行命令（backend/，固定解释器）：python -m unittest tests.unit.persistence.test_skill_management_handoff tests.unit.persistence.test_skill_management_remote -v。新增真实客户端签名RemoteSkillManagement(port:int,internal_token:str,owner_id:UUID,timeout_seconds=10.0)，同步无参数；责任门activate(owner_id=owner,synchronize=remote.synchronize)。05来源C完整守卫装配仍缺，不接手其工作，06仍未完成。
+
+## 冻结释放后：局部补丁已获授权应用，默认旧行为回归通过
+
+根释放源码冻结后已通知全部三个现存子Agent；共享host/app仍09独占。按随后新授权应用skill_library.py和skill_directory.py，未生产stop/activate或改ownership。原普通管理/目录/预览/导出/删除及审核/历史回归116/116，新增真实PG移交3/3，RPC/门18/18。详见handoff-validation.md。
+双轴复核发现取消自动重连与chunked trailer预算绕过，均有真实socket RED→GREEN；auto_open=0、拒绝Transfer-Encoding修复，Standards复核关闭。Spec复核结果见rpc-review-spec.md。没有接手05守卫、改共享host、启动App、提交或推送。现存补丁文件是已应用记录，不再待apply。
+Spec复核已关闭两个finding，并独立创建新随机_test库重跑18单测+3PG用例，21项通过、无skip。可提交清单已写handoff-commit-files.txt（19文件，仅06）；请求主会话分配Git独占后再stage/commit。未把尚RED的skill-http.test.mjs纳入本次基础提交。

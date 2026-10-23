@@ -89,3 +89,20 @@
 host.patch.yml需由主会话加入官方`@deepseek-ai/dsh-skill`服务行（锁定0.2.1-rc.2），不要加入默认filesystem/tool-skill。每轮独占DSH scope中使用`registerSkillRuntime(scopedContext.skills,run)`，返回disposer；必须释放scope和run。官方provider测试现包含真实scope同名隔离/释放在途；仍需真实profile业务组合验收。
 
 管理options现另含`requireDiscussionDependencies?:SkillDiscussionValidator`，用于preview/export/rollback的review来源C；与PostgresSkillPort相同回调。准确类型返回`Promise<readonly string[]>`，不是void。
+
+公开HTTP验收用例已准备：在backend-ts执行`node --test test/skill-http.test.mjs`，实际官方profile启动并首先要求`/api/runtime/status`的ownership.skills为typescript；当前明确RED（仍python），然后覆盖导入/重复冲突/列表/预览/启停/删除。不得删ownership断言让旧Python通过。无模型/App/微信调用。
+
+## 共享接线排队交付（18释放、09当前独占）
+
+精确旧写入口补丁见`legacy-write-handoff.patch`，基线摘要见`legacy-write-handoff-base.json`；审阅`legacy-write-handoff.md`后由共享文件持有者应用。只覆盖持久层责任门，宿主控制/RPC仍明确待补，不能单独应用后宣称ownership可切。AST、apply-check和5项责任门测试通过，实际HTTP仍RED。
+真实端口更新见`port-integration-status.md`：删除使用09 `preference-erasure.ts`的deleteSourceReplies，备份使用09 `preference-files.ts`的eraseManagedUpdateBackups；05来源C为ReplyAssistantGuards实例方法，必须装配其所有真实守卫后注入，null拒绝。此记录替代早前模块未存在的状态判断。
+
+### RPC客户端与责任门已实现（未接线，已遵守App源码冻结）
+
+正式新增persistence/skill_management_remote.py和skill_management_handoff.py；旧文件补丁已重生为仅skill_library.py、skill_directory.py两文件，避免重复创建责任门。Python端装配：RemoteSkillManagement(port=宿主端口,internal_token=独立内部令牌,owner_id=固定UUID)；stop/drain后gate.activate(owner_id=owner,synchronize=remote.synchronize)。业务synchronize()不接收任意URL/owner；固定POST /api/runtime/skill-management/synchronize，body仅owner_id，200 application/json响应仅revision整数。默认总超时10秒（最大30），正文4096B，拒绝重定向/压缩/重复键/错误帧；关闭中断在途且无fallback。真实socket加责任门16测试通过。
+独立凭据与公开凭据区分仍须宿主保证及集成测试，客户端不可能独立验证服务端token权限分区。现有文件尚未接门，不能宣称旧入口已停收；05 C守卫未完整装配，HTTP/App仍未完成。09稳定窗口内已停止所有受监控产品源码写入。
+
+### 最新：局部持久层补丁已应用（生产仍Python）
+
+根新授权后已应用skill_library.py/skill_directory.py，默认gate python保持原行为。18单测+3真实PG移交+116原相关回归全通过，见handoff-validation.md。仅剩宿主接线时调用门；勿重复apply legacy-write-handoff.patch。
+RPC现在明确拒绝Transfer-Encoding（防chunked trailer绕过预算），服务端返回小型定长JSON或关闭定界；显式连接禁用auto_open，关闭后不重连。内部鉴权/来源C/TS ownership/公开HTTP/App仍未完成。

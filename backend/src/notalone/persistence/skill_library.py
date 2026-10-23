@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+from notalone.persistence.skill_management_handoff import (
+    skill_management_handoff, SkillManagementUnavailable,
+)
+
 import hashlib
 import json
 from pathlib import Path
@@ -1097,5 +1102,11 @@ class PostgresSkillLibrary(SkillLibraryManagementPort):
         except (psycopg.Error, SkillFileError, OSError):
             raise SkillLibraryPersistenceError('Skill 目录同步暂不可用，请重试。') from None
 
+    @contextmanager
     def _connect(self) -> Any:
-        return psycopg.connect(self._database_url, row_factory=dict_row)
+        try:
+            with skill_management_handoff.local_operation():
+                with psycopg.connect(self._database_url, row_factory=dict_row) as connection:
+                    yield connection
+        except SkillManagementUnavailable:
+            raise SkillLibraryPersistenceError('Skill 旧管理入口已停收。') from None

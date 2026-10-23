@@ -1,6 +1,9 @@
 """把 Owner 可编辑目录投影成通过校验的不可变 Skill 版本。"""
 
 from dataclasses import dataclass
+from notalone.persistence.skill_management_handoff import (
+    skill_management_handoff, SkillManagementUnavailable,
+)
 from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
@@ -26,6 +29,15 @@ def synchronize_skill_library(
     目录发现失败整体回滚并抛领域错误；旧资料转换只在结构升级时执行，
     调用方可在下一轮重试。返回同步后的 Skill 库修订号。
     """
+    try:
+        return skill_management_handoff.synchronize(
+            owner_id, lambda: _synchronize_skill_library_local(database_url, owner_id),
+        )
+    except SkillManagementUnavailable:
+        raise SkillDirectorySyncError("Skill 目录同步暂不可用。") from None
+
+
+def _synchronize_skill_library_local(database_url: str, owner_id: UUID) -> int:
     if not isinstance(owner_id, UUID):
         raise TypeError("owner_id 必须是 UUID。")
     try:
@@ -48,8 +60,7 @@ def synchronize_skill_library(
 
 def prepare_skill_directory(database_url, owner_id: UUID) -> None:
     """供历史管理页刷新：先提交目录发现，再独立读取业务视图。"""
-    with psycopg.connect(database_url, row_factory=dict_row) as connection:
-        synchronize_skill_directory(connection, owner_id)
+    synchronize_skill_library(database_url, owner_id)
 
 
 class _DictConnection:
@@ -167,6 +178,13 @@ def _matches(cursor, row, package):
 
 def synchronize_skill_directory(connection, owner_id: UUID, *, check_only=False) -> bool:
     """发现新增与修改；检查模式只判断变化，供提交前拒绝迟到候选。"""
+    if check_only:
+        return _synchronize_skill_directory_local(connection, owner_id, check_only=True)
+    with skill_management_handoff.local_operation():
+        return _synchronize_skill_directory_local(connection, owner_id)
+
+
+def _synchronize_skill_directory_local(connection, owner_id: UUID, *, check_only=False) -> bool:
     if not isinstance(owner_id, UUID):
         raise TypeError("owner_id 必须是 UUID。")
     from notalone.persistence.skill_library import PostgresSkillLibrary
