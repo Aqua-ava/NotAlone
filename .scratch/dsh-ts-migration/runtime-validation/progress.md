@@ -1,6 +1,6 @@
 # 02 运行验证进度
 
-状态：本地合成运行14项通过，独立双轴审核待完成；当前产品仍是 Python。
+状态：任务02本地合成验收与双轴审核完成；当前产品仍是 Python。
 
 ## 固定候选
 
@@ -29,7 +29,7 @@
 
 ## 实际结果
 
-- `node --test test/runtime.test.mjs`：14/14 通过，约8.24秒，逐项输出见 `tests.txt`。
+- `node --test test/runtime.test.mjs`：14/14 通过，约8.17秒，逐项输出见 `tests.txt`。
 - `node node_modules/typescript/bin/tsc --noEmit`：通过。
 - `pnpm install --frozen-lockfile --ignore-scripts --no-optional --offline`：通过，消费锁不变。全部650个锁条目均含 integrity；平台需要的 Loader addon 与 TypeScript 平台包显式固定。
 - 发行包实际启动成功，五个关键公开接口／配置路径与固定源码交叉核对见 `interface-crosscheck.json`。运行测试进一步核验 create/setup/stream/guard/dispose 的发行行为。官方tag＋制品摘要＋接口对应是本票版本证据，不宣称拥有官方构建 attestation。
@@ -40,3 +40,14 @@
 - 不合作工具实测约5.2秒后由官方CLI强制退出整个后台。单次 dispose 不能强制终止不合作Promise，不能记为优雅清理。异常退出后清理由宿主承担；任务03仍需产品级实现。
 - 单次请求／循环均使用真实 DSH 和官方 DeepSeek adapter；仅外部模型HTTP服务为合成替身。没有真实模型调用、凭据读取、私人资料/生产库访问、App/微信操作、打包、push或聊天外发。
 - 限制：Node TCP观察和临时目录快照不是操作系统沙箱证明；其他平台、真实供应商、产品PG、桌面和完整迁移不在本票结果内。
+
+## 独立审核与清理
+
+固定点为 `10135184`，首个实现提交 `0564283b`；审核只覆盖本票文件，未捎带独立审计或主会话调度文件。
+
+- Standards：没有硬违规；一项重复SSE/工具夹具建议已提取 `sendEvents/useTool`，复核未解决发现为0。
+- Spec：独立复跑14/14通过，未发现阻塞项。后续将空闲SIGKILL改为模型请求已到provider后的在途SIGKILL，独立复核确认；不外推持久业务恢复。
+- 最终重跑14/14通过、类型检查通过。多宿主清理用 `Promise.allSettled`，一处断言失败不跳过其他宿主清理。
+- 当前没有本票DSH/安装/测试进程；中断验证遗留的两份合成临时目录已核对profile归属后清理。成功测试自行清理home并验证匿名ID文件不存在。
+- 初始可用磁盘约149GiB，结束约148GiB；保留当前验收依赖目录约416MiB及可复用pnpm缓存，未创建App、构建staging或打包产物。公开官方源码由多个任务共享，未删除或修改。
+- 首次本地提交后的完整可达历史与工作树扫描为0项问题；收尾提交后再次运行同一检查，结果在交付报告公布。

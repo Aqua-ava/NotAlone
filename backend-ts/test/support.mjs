@@ -6,6 +6,34 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
 
+const cleanupGroups = new WeakMap();
+function registerCleanup(t, cleanup) {
+  let group = cleanupGroups.get(t);
+  if (!group) {
+    group = [];
+    cleanupGroups.set(t, group);
+    t.after(async () => {
+      const results = await Promise.allSettled(group.map(dispose => dispose()));
+      const failures = results.filter(r => r.status === 'rejected').map(r => r.reason);
+      if (failures.length) throw new AggregateError(failures, '测试宿主清理或边界检查失败');
+    });
+  }
+  group.push(cleanup);
+}
+
+export function sendEvents(res, events) {
+  res.setHeader('content-type', 'text/event-stream');
+  res.end(events.map(e => `event: ${e.type}\ndata: ${JSON.stringify(e)}\n\n`).join(''));
+}
+
+export function useTool(events, name, args = {}, id = 'synthetic-call') {
+  events.splice(1, 3,
+    { type: 'content_block_start', index: 0, content_block: { type: 'tool_use', id, name, input: {} } },
+    { type: 'content_block_delta', index: 0, delta: { type: 'input_json_delta', partial_json: JSON.stringify(args) } },
+    { type: 'content_block_stop', index: 0 });
+  events[4].delta.stop_reason = 'tool_use';
+}
+
 export async function startHost(t, reply, fixture = false) {
   const home = await mkdtemp(join(tmpdir(), 'notalone-dsh-validation-'));
   const requests = [];
@@ -21,8 +49,7 @@ export async function startHost(t, reply, fixture = false) {
       { type: 'message_stop' },
     ];
     if (reply) return reply(req, res, requests, events);
-    res.setHeader('content-type', 'text/event-stream');
-    res.end(events.map(e => `event: ${e.type}\ndata: ${JSON.stringify(e)}\n\n`).join(''));
+    sendEvents(res, events);
   });
   provider.listen(0, '127.0.0.1'); await once(provider, 'listening');
   const providerPort = provider.address().port;
@@ -39,7 +66,7 @@ export async function startHost(t, reply, fixture = false) {
   });
   let output = ''; child.stderr.on('data', b => { output += b; });
   const exited = once(child, 'exit');
-  t.after(async () => {
+  registerCleanup(t, async () => {
     if (child.exitCode === null && child.signalCode === null) child.kill('SIGTERM');
     await exited;
     provider.closeAllConnections();

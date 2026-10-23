@@ -57,7 +57,6 @@ export async function loop(ctx: Context, input: Scope & { text: string }, signal
     await handle.agent.whenIdle();
     signal.throwIfAborted();
     if (exceeded || reason !== 'stop') throw new Error('LOOP_FAILED');
-    signal.throwIfAborted();
-  return validateCandidate(text, source);
+    return validateCandidate(text, source);
   } finally { signal.removeEventListener('abort', abort); await handle.dispose(); }
 }
