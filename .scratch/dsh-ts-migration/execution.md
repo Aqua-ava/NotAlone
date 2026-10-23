@@ -14,7 +14,7 @@
 | 03桌面宿主与原库生命周期会话 | 03实现；backend-ts、desktop所需宿主及对应测试、03任务与host-lifecycle证据 | 已resolved于9f39d6c2；TS44、Python55、桌面945通过及实际界面5/5，两轴通过 |
 
 03独立原库合同核验已完成，见 `host-lifecycle/database-contract-audit.md`；103文件升级、035凭证和owner歧义已交实施会话验收。
-联系人合同已核验，04目标会话独占本票实现；05只读核验独占 `reply-generation/contract-audit.md`，不提前实施05。
+04已认领并实施，联系人合同见 `contact-context/contract-audit.md`；05只读核验已完成，见 `reply-generation/contract-audit.md`，不提前实施05。
 子会话只提交自己任务文件，不夹带主调度或他人文件；独立审计交主会话收录。Git索引操作串行，避免交叉提交。
 已认领任务的实际状态以各票顶部为准，阻塞前置未验收时不改成resolved。
 

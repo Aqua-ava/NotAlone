@@ -9,7 +9,7 @@
 | [01 建立行为与数据基线](issues/01-behavior-data-baseline.md) | 无 | ready-for-agent | resolved |
 | [02 验证专用 DSH 后台](issues/02-dsh-runtime-validation.md) | 01 | ready-for-agent | resolved |
 | [03 从桌面启动和管理 TS 后台](issues/03-desktop-backend-lifecycle.md) | 02 | ready-for-agent | resolved |
-| [04 选择已有联系人并读取上下文](issues/04-contact-context.md) | 03 | ready-for-agent | open |
+| [04 选择已有联系人并读取上下文](issues/04-contact-context.md) | 03 | ready-for-agent | claimed |
 | [05 生成可追溯的基础候选](issues/05-traceable-replies.md) | 04 | ready-for-agent | open |
 | [06 管理并受控读取现有回复 Skill](issues/06-reply-skill-library.md) | 04 | ready-for-agent | open |
 | [07 探索方向并使用 Skill 生成候选](issues/07-exploration-skill-replies.md) | 05、06 | ready-for-agent | open |
