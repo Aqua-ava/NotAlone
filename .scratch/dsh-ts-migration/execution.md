@@ -13,15 +13,15 @@
 | 06Skill会话 | skill模块及测试、06证据 | claimed；领域测试通过，宿主与App待验 |
 | 09记忆偏好会话 | memory/preference及共用managed-update-backups，限定04时间/版本scope参数化 | claimed；领域测试通过，宿主与App待验 |
 
-18独占微信模块、factory/full_sync_engine/cli_sync历史资格局部；108及门禁已由主会话db1d9cbd提交，完整18仍claimed。
+18已签收b4276969/9a5f6cf0，108为db1d9cbd；58TS/22Python/32UI、双轴及两轮合成App通过，工具准备原任务保持open。
 04已在f4acc05d/2dd9ad4a验收；05、06、09合同审计已归档，18独立审计已归档于wechat-scope/contract-audit.md；05/06/09/18已分别派发目标实现会话。
 子会话只提交自己任务文件，不夹带主调度或他人文件；独立审计交主会话收录。Git索引操作串行，避免交叉提交。
 共享合成PG /tmp/notalone-dsh-migration-pg-20261024仍运行，主会话最终清理；官方源码恢复及资源见runtime-validation/recovery-20261024.md。
 
 ## 后续调度
 
-02—04已验收；05回复/模型、06Skill、09记忆/偏好、18微信范围分别独占领域模块、测试、领域UI及本票证据。
-当前18短期独占host-plugin/legacy-backend及Python app/command，仅接微信；完成释放后再装配05/06/09。storage/launch/profile/依赖清单/desktop index仍主会话。
+02—04、18已验收；05回复/模型、06Skill、09记忆/偏好分别独占领域模块；19与21依赖已解锁。
+当前09短期独占host-plugin/legacy-backend及Python app/command、App，仅接记忆偏好；06随后。storage/launch/profile/依赖清单/desktop index仍主会话。
 其余每轮从各票Blocked by字段计算可执行前沿；所有前置resolved并复核证据后才派发。
 05目标usageLimited已由工具确认并请用户恢复；不重建目标绕过限制。05通过可解锁23；18通过可解锁19和21，其余按原依赖。
 24等待17、20、21、22、23，25等待24，26等待25；不把预先写空壳当依赖完成。
