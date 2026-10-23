@@ -1,0 +1,25 @@
+# 自动删除抑制进度
+- 2026-10-24：create_goal 实际返回 status=active，无 token 预算；get_goal 再次核验 active。
+- 目标：完成本票合成验证、双轴审查、协调落盘及本地提交；草案不算完成。
+- ticket 已改 claimed；仅本票 scratch 草案可写，无产品/schema/index 窗口。
+- 共享 schema 仍108；候选109本票，05台账110；不修改05内容。
+- 19独占TS消费及host/app/command；本票提供消费补丁。21已释放装配窗口。
+- DSH 0.2.1-rc.2 官方固定SHA源码与架构已读；业务抑制不依赖DSH核心接口。
+- 真实PG红灯3项已复现；隔离Python草案4/4通过（新capture历史/混合页、排队、多来源、两自动入口、事务失败回滚）。
+- Mac锁定，不启动桌面、不打包、不push；只用随机_test库，无真实资料/模型。
+- red.log 已将本机home路径替换为$HOME，仅保留合成失败证据；未使用索引。
+- 最新Python草案11/11真实PG通过；含首抑制/后保存的等长created位置与生产事件发布时间、原始CLI行/独立收据、账户级联。
+- Standards的无界历史读取问题已改本页精确身份unnest；并发测试已观察PG advisory等待，不只凭线程启动。
+- TS旧重放探针在隔离109副本replayed_messages=0；19负责最终TS消费修订，不能用本票旧TS patch覆盖19新改动。
+- 根接管schema109门禁/当前fixture与升级测试草案；本票privacy.patch、dsh-verification.md已备。
+- 双轴复核通过，详review.md；原受管备份10/10通过，现有观察/来源删除40项通过。
+- Python草案/隐私文档已具备协调落盘条件；等待19最终TS及根schema109门禁窗口，不自行产品写入。
+- 可入仓维护版test_auto_read_suppression.py已从隔离探针整理并实际11/11通过，补丁包括该文件。
+- 跟进19无损整数字符串身份：Python独立raw收据同样精确匹配，不接受float/bool；维护版11/11复验通过。
+- 历史检查点计数已red→green：过滤后同事务replace message_count，累计0→1而cursor/page_count正常；维护版12/12通过。补丁检查通过，等待这处窄审查后冻结。
+- 最后历史计数窄Spec复核通过；产品无写入、无测试在途，python-schema.patch及privacy.patch已冻结，等待根联合应用。
+- 根已联合产品落盘；正式单例1/1→聚焦16/16→相关50/50通过，均0skip；六文件与冻结草案逐字一致。
+- 随机合成库/临时managed目录全部清理，verification.md记录命令；无产品修改在途，等待根协调本地提交和19集成签收。
+- 根本地提交7f4a1729已归档109/Python保护/严格门禁/12+4测试及cli_sync三处计数和fake；完整暂存树独立16/16通过，不依赖19未提交代码。
+- 本票仍claimed、goal仍active，等待19TS消费归档及签收；按协调要求不重复已绿验证、不使用index或App。
+- 已逐项审计7f4a1729+998ec226：Python和TS消费闭合，票据resolved准备；根已授予本票证据索引短窗口，goal在证据归档后complete。
