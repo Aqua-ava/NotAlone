@@ -1,13 +1,13 @@
 # 精简 DSH 与 TS 后端迁移任务索引
 
-> 2026-10-23：用户已认可26项拆分、依赖与验收入口并要求发布，随后明确开始01并开启目标模式及独立会话并行。01已通过基线验收并resolved，其余open；当前执行前沿为02，下游按真实依赖阻塞。依据[规格](spec.md)、[ADR-102](../../architecture/adr/102-dsh-typescript-backend-migration.md)与[已批准拆分](ticket-proposal.md)。
+> 2026-10-23：用户已认可26项拆分、依赖与验收入口并要求发布，随后明确开始01并开启目标模式及独立会话并行。01已通过基线验收并resolved，02已认领并开始实际实现，其余open；当前执行前沿为02，下游按真实依赖阻塞。依据[规格](spec.md)、[ADR-102](../../architecture/adr/102-dsh-typescript-backend-migration.md)与[已批准拆分](ticket-proposal.md)。
 
 ## 逐项任务与阻塞关系
 
 | 任务 | Blocked by | Triage | State |
 | --- | --- | --- | --- |
 | [01 建立行为与数据基线](issues/01-behavior-data-baseline.md) | 无 | ready-for-agent | resolved |
-| [02 验证专用 DSH 后台](issues/02-dsh-runtime-validation.md) | 01 | ready-for-agent | open |
+| [02 验证专用 DSH 后台](issues/02-dsh-runtime-validation.md) | 01 | ready-for-agent | claimed |
 | [03 从桌面启动和管理 TS 后台](issues/03-desktop-backend-lifecycle.md) | 02 | ready-for-agent | open |
 | [04 选择已有联系人并读取上下文](issues/04-contact-context.md) | 03 | ready-for-agent | open |
 | [05 生成可追溯的基础候选](issues/05-traceable-replies.md) | 04 | ready-for-agent | open |
