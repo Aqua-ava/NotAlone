@@ -16,3 +16,7 @@
 失败已交19按最小单例定位，不放宽时限、不改前台排空保证。该轮退出码1，不能宣称增量官方集成全部通过。测试仅合成PG/CLI，无App或模型。
 
 关闭反例修复后，根独立执行`node --test --test-name-pattern="挂起增量读取时disable" test/sync-incremental-host.test.mjs`：1/1通过、0跳过，整例3.13秒；测试实测controlElapsed与totalElapsed均69毫秒，原小于5秒阈值未放宽，迟到消息未保存。19将认证后的取消前移到旧控制锁等待之前；其余最终组合回归仍由19完成。公开历史检查曾发现另一会话未跟踪red.log的本机路径，已由作者脱敏；根复扫24cbe5ee时issues=0。
+
+## 最终官方模块独立复验
+
+同目录执行`node --test test/sync-incremental-host.test.mjs`，4/4通过、0跳过，12.02秒。实测挂起读取的disable60ms、revoke85ms、shutdown681ms，全部保持原小于5秒界限；模拟退出时吐出的迟到消息未入库。基本公开HTTP/原SSE/唯一读取职责/私有认证同轮通过。仍未覆盖待集成109删除抑制或实际App，19不因此resolved。
