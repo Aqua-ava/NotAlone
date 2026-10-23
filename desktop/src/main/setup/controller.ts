@@ -37,13 +37,13 @@ export class SetupController {
     this.publish({ phase: 'loading', ownerReady: false, credentialsConfigured: false, errorCode: undefined });
     try {
       const { data } = await this.backend.requestJson({ method: 'GET', path: '/api/setup/status', maxResponseBytes: 4096 });
-      const status = data as { initialized?: unknown; owner_configured?: unknown; credentials_configured?: unknown; runtime_owner_configured?: unknown; official_deepseek_defaults?: unknown };
+      const status = data as { initialized?: unknown; owner_configured?: unknown; credentials_configured?: unknown; runtime_owner_configured?: unknown; official_deepseek_defaults?: unknown; recoverable_owner?: unknown };
       if (!status || typeof status.initialized !== 'boolean' || typeof status.owner_configured !== 'boolean'
         || typeof status.credentials_configured !== 'boolean' || typeof status.runtime_owner_configured !== 'boolean') throw new Error();
       const ownerReady = status.runtime_owner_configured;
       if (!this.isCurrent(operation)) return;
       this.publish({ phase: ownerReady ? 'ready' : status.owner_configured ? 'identity-unbound' : 'needs-owner',
-        ownerReady, credentialsConfigured: status.credentials_configured,
+        ownerReady, recoverableOwner: !ownerReady && status.recoverable_owner === true, credentialsConfigured: status.credentials_configured,
         officialDefaults: typeof status.official_deepseek_defaults === 'boolean' ? status.official_deepseek_defaults : undefined });
     } catch { if (this.isCurrent(operation)) this.publish({ phase: 'failed', ownerReady: false, credentialsConfigured: false }); }
   }
@@ -57,6 +57,15 @@ export class SetupController {
       const value = result.data as { owner_id?: unknown; created?: unknown };
       if (!isUuid(value?.owner_id)
         || value.created !== true) throw new Error();
+    });
+  }
+  async recoverExistingOwner(): Promise<void> {
+    if (this.state.phase !== 'identity-unbound' || this.state.recoverableOwner !== true) return;
+    await this.writeConfiguration('owner', async () => {
+      const { data } = await this.backend.requestJson({ method: 'POST', path: '/api/setup/recover-owner',
+        body: { confirm_existing_owner: true }, maxResponseBytes: 4096 });
+      const value = data as { owner_id?: unknown; created?: unknown };
+      if (!isUuid(value?.owner_id) || value.created !== false) throw new Error();
     });
   }
   async saveDeepSeekKey(apiKey: string): Promise<void> {
@@ -73,7 +82,7 @@ export class SetupController {
     await this.writeConfiguration('official', async () => {
       const result = await this.backend.requestJson({ method: 'POST', path: '/api/setup/official-deepseek',
         body: { api_key: apiKey, confirm_official_defaults: true }, maxResponseBytes: 4096 });
-      const value = result.data as { configured?: unknown; official_deepseek_defaults?: unknown };
+      const value = result.data as { configured?: unknown; official_deepseek_defaults?: unknown; recoverable_owner?: unknown };
       if (value.configured !== true || value.official_deepseek_defaults !== true) throw new Error();
     });
   }

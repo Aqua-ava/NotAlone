@@ -7,6 +7,7 @@ export function createSetupBridge(): SetupBridge {
   return Object.freeze({
     getState: (...args: unknown[]) => invoke('setup:get-state', args),
     refresh: (...args: unknown[]) => invoke('setup:refresh', args),
+    recoverExistingOwner: (...args: unknown[]) => invoke('setup:recover-existing-owner', args),
     initializeOwner: (...args: unknown[]) => args.length === 1 && typeof args[0] === 'string'
       ? ipcRenderer.invoke('setup:initialize-owner', args[0]) : Promise.reject(new Error('首次配置操作不可用')),
     saveDeepSeekKey: (...args: unknown[]) => args.length === 1 && typeof args[0] === 'string'

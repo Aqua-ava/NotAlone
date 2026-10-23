@@ -4,6 +4,7 @@ export interface SetupState {
   ownerReady: boolean;
   credentialsConfigured: boolean;
   officialDefaults?: boolean;
+  recoverableOwner?: boolean;
   revision: number;
   errorCode?: 'initialize-failed' | 'credentials-failed' | 'reload-failed';
 }
@@ -11,6 +12,7 @@ export interface SetupBridge {
   getState(): Promise<SetupState>;
   refresh(): Promise<void>;
   initializeOwner(displayName: string): Promise<void>;
+  recoverExistingOwner(): Promise<void>;
   saveDeepSeekKey(apiKey: string): Promise<void>;
   saveOfficialDeepSeekKey(apiKey: string, confirmed: true): Promise<void>;
   retryRestart(): Promise<void>;

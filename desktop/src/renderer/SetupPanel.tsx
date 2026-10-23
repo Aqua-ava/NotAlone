@@ -38,10 +38,15 @@ export function SetupPanel() {
                 <button className="button" onClick={() => void window.notalone.setup.retryRestart()}>重试加载配置</button></>
           : <>
             {!state.ownerReady && <p>{state.phase === 'needs-owner' ? '本人身份尚未初始化'
-              : '检测到既有本人资料，但本次运行尚未绑定本人身份。请检查受控配置后重新连接。'}</p>}
+              : state.recoverableOwner ? '检测到唯一已有本人，确认后恢复原身份。'
+                : '检测到既有本人资料，但无法唯一确认本次身份。请检查受控配置，不会自动选择本人。'}</p>}
             <p>{state.credentialsConfigured ? 'DeepSeek · 已配置' : 'DeepSeek · 尚未配置'}</p>
             {state.officialDefaults === false && <><p>当前保留了自定义模型或接收地址。仅更新密钥会继续使用原配置；旧模型若无法核验输入预算，生成会停止。</p>
               {state.phase === 'ready' && <button className="button" onClick={() => { setKey(''); setEditingKey(true); setOfficialRecovery(true); setConfirmedOfficial(false); }}>改用官方 DeepSeek 默认配置</button>}</>}
+            {state.phase === 'identity-unbound' && state.recoverableOwner && <button className="button" onClick={() => {
+              setError('');
+              void window.notalone.setup.recoverExistingOwner().catch(() => setError('本人配置恢复未完成，请重试。'));
+            }}>恢复已有本人配置</button>}
             {state.phase === 'identity-unbound' && <button className="button" onClick={() => {
               setError('');
               void window.notalone.setup.reloadControlledConfiguration().catch(() => setError('后端重启未获确认。请检查受控配置后重试加载。'));

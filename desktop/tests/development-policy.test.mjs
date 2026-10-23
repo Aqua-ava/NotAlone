@@ -4,7 +4,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdtemp, access, rm, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { classifyDevelopmentProcesses, requireDevelopmentOnly } from '../scripts/development-policy.mjs';
+import { classifyDevelopmentProcesses, requireDevelopmentOnly, developmentDebugArguments } from '../scripts/development-policy.mjs';
 
 test('只复用当前项目及用户目录的开发宿主，不把测试、其他项目或renderer当作开发实例', () => {
   const lines = [
@@ -61,4 +61,13 @@ test('孤立宿主不算热更新可用，首次编译阶段也只允许一个�
     next = await acquireDevelopmentLease(project);
     assert.ok(next);
   } finally { await first?.close(); await next?.close(); await rm(project, { recursive: true, force: true }); }
+});
+
+
+test('开发 CDP 只在明确选择独立资料目录时开放随机回环端口', () => {
+  assert.deepEqual(developmentDebugArguments(undefined, undefined), []);
+  assert.throws(() => developmentDebugArguments('1', undefined));
+  assert.throws(() => developmentDebugArguments('9233', '/tmp/synthetic-dev'));
+  assert.deepEqual(developmentDebugArguments('1', '/tmp/synthetic-dev'),
+    ['--remote-debugging-address=127.0.0.1', '--remote-debugging-port=0']);
 });

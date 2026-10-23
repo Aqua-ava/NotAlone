@@ -24,6 +24,11 @@ from notalone.persistence.skill_methods import read_method_manifest, write_metho
 
 MIGRATIONS = Path(__file__).resolve().parents[3] / "database/migrations"
 TAIL = "103_skill_business_state_only.sql"
+# 当前正式尾部包含103之后的历史同步结构，仍逐项固定预期。
+CURRENT_TAIL = (TAIL, "104_cli_history_sync_state.sql",
+                "105_history_sync_authorization.sql",
+                "106_extraction_queue_pending_index.sql",
+                "107_history_message_count_comment.sql")
 BODY = "先理解感受，再询问对方希望得到的支持。"
 RESOURCE = "可以用温和的语言表达理解。".encode("utf-8")
 DESCRIPTION = "适合希望温暖回应时使用。"
@@ -175,7 +180,7 @@ class SkillBusinessStateMigrationTest(unittest.TestCase):
         active = self._legacy(owner=UUID(int=1), reviewed=True)
         disabled = self._legacy(owner=UUID(int=2), disabled=True)
         before = self._snapshot()
-        self.assertEqual(migrate(self.database, MIGRATIONS), (TAIL,))
+        self.assertEqual(migrate(self.database, MIGRATIONS), CURRENT_TAIL)
         self._assert_new_schema()
         with psycopg.connect(self.database, row_factory=dict_row) as connection:
             for version in (active, disabled):
@@ -208,7 +213,7 @@ class SkillBusinessStateMigrationTest(unittest.TestCase):
                 (version.version,),
             )
         original = (directory / "SKILL.md").read_bytes()
-        self.assertEqual(migrate(self.database, MIGRATIONS), (TAIL,))
+        self.assertEqual(migrate(self.database, MIGRATIONS), CURRENT_TAIL)
         self.assertEqual((directory / "SKILL.md").read_bytes(), original)
         with psycopg.connect(self.database) as connection:
             resource = read_package_manifest(connection, version.version)["resources"][0]
@@ -230,7 +235,7 @@ class SkillBusinessStateMigrationTest(unittest.TestCase):
         self._assert_old_schema()
         self.assertEqual(self._snapshot(), before)
         target.write_bytes(RESOURCE)
-        self.assertEqual(migrate(self.database, MIGRATIONS), (TAIL,))
+        self.assertEqual(migrate(self.database, MIGRATIONS), CURRENT_TAIL)
         self._assert_new_schema()
 
     def test_corrupt_existing_method_file_preserves_old_schema_until_repaired(self):
@@ -250,7 +255,7 @@ class SkillBusinessStateMigrationTest(unittest.TestCase):
         self._assert_old_schema()
         self.assertEqual(self._snapshot(), before)
         target.write_bytes(original)
-        self.assertEqual(migrate(self.database, MIGRATIONS), (TAIL,))
+        self.assertEqual(migrate(self.database, MIGRATIONS), CURRENT_TAIL)
         with psycopg.connect(self.database) as connection:
             self.assertEqual(read_method_manifest(connection, version.version)[0]["instruction"], BODY)
 
@@ -266,7 +271,7 @@ class SkillBusinessStateMigrationTest(unittest.TestCase):
             migrate(self.database, self.prefix)
         self._assert_old_schema()
         self.assertEqual(self._snapshot(), before)
-        self.assertEqual(migrate(self.database, MIGRATIONS), (TAIL,))
+        self.assertEqual(migrate(self.database, MIGRATIONS), CURRENT_TAIL)
         with psycopg.connect(self.database) as connection:
             self.assertEqual(read_version_content(connection, version.version), BODY)
             self.assertEqual(read_method_manifest(connection, version.version)[0]["instruction"], BODY)

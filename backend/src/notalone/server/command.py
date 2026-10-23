@@ -102,7 +102,9 @@ def _run(args: argparse.Namespace, lifetime: ParentLifetime) -> int:
 
     events = EventBus()
     model_priority = ModelPriorityControl(background_limit=batch_concurrency)
-    setup_service = _build_setup_service(database_url)
+    # 迁移期首用写入已交给 TS；旧业务进程不再提供第二个身份／凭据写入口。
+    setup_service = (None if os.environ.get("NOTALONE_TS_HOST") == "1"
+                     else _build_setup_service(database_url))
     from notalone.application.organization_runtime import build_layered_memory_service
     try:
         layered_memory = build_layered_memory_service(database_url, model_priority=model_priority)

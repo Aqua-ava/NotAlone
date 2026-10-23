@@ -78,6 +78,7 @@ test('开发模式固定当前仓库源码，同时沿用既有解释器和资�
     configuration.configureDevelopmentProject('/synthetic/current-checkout');
     const selected = await configuration.loadBackendConfiguration(directory);
     assert.equal(selected.projectDirectory, '/synthetic/current-checkout');
+    assert.equal(selected.runtime, 'dsh', '源码开发入口固定使用 DSH，不由磁盘配置退回旧后台');
     assert.equal(selected.pythonExecutable, '/synthetic/python');
     assert.equal(selected.envFilePath, '/synthetic/private/runtime.env');
     const saved = JSON.parse(await readFile(path.join(directory, 'backend-launch.json'), 'utf8'));

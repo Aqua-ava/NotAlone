@@ -1,7 +1,16 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import path from 'node:path';
+import os from 'node:os';
+import { launchDsh } from '../../../../backend-ts/src/launch';
 import { BackendFailure } from './connection';
 import { backendEnvironment, validateLaunchConfiguration, type BackendConfiguration } from './config';
+
+export interface OwnedProcess {
+  readonly pid: number;
+  isRunning(): boolean;
+  waitForExit(timeout: number): Promise<boolean>;
+  terminate(): Promise<boolean>;
+}
 
 export class OwnedBackendProcess {
   private readonly exited: Promise<void>;
@@ -10,11 +19,17 @@ export class OwnedBackendProcess {
     this.exited = new Promise((resolve) => child.once('exit', () => resolve()));
   }
 
-  static async launch(config: BackendConfiguration, canStart: () => boolean): Promise<OwnedBackendProcess> {
+  static async launch(config: BackendConfiguration, canStart: () => boolean): Promise<OwnedProcess> {
     if (!canStart()) throw new BackendFailure('backend_connection_failed');
     const { pythonExecutable, projectDirectory } = await validateLaunchConfiguration(config);
     // 路径核验含异步 I/O，最终 spawn 前再次检查退出/连接代际，不在退出后新建读取进程。
     if (!canStart()) throw new BackendFailure('backend_connection_failed');
+    if (config.runtime === 'dsh') {
+      const environment = backendEnvironment({ ...config, projectDirectory }, projectDirectory);
+      return launchDsh({ nodeExecutable: process.execPath, projectDirectory,
+        envFilePath: config.envFilePath || path.join(projectDirectory, '.env'), infoPath: config.infoPath,
+        pythonExecutable, environment, businessHome: environment.HOME || os.homedir() }, canStart);
+    }
     // 不用 shell 或 PATH，模块路径固定到所选项目，避免 editable install 指向另一个 checkout。
     const managed = config.source === 'managed';
     const child = spawn(pythonExecutable, [...(managed ? ['-I', '-B'] : []), '-m', 'notalone.server.command', '--host', '127.0.0.1',

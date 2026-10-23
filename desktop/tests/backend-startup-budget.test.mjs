@@ -95,3 +95,39 @@ test('有界窗口结束与用户取消都回收本次未握手进程，外置�
     }),
   ]);
 });
+
+test('自有后台异常退出后公开失败，明确重试回收旧连接并启动新代际', async () => {
+  const { host, marker } = await subject('explicit-crash-retry', 0, false);
+  try {
+    await host.connect();
+    assert.equal(host.getState().phase, 'connected');
+    const first = await ownedPid(marker);
+    const generation = host.getConnectionGeneration();
+    process.kill(first, 'SIGKILL');
+    const deadline = Date.now() + 5000;
+    while (host.getState().phase === 'connected' && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 20));
+    assert.equal(host.getState().phase, 'disconnected');
+    assert.equal(host.getConnectionGeneration(), undefined);
+    assert.equal(host.getState().canRetryConnection, true);
+    await Promise.all([host.connect(), host.connect()]);
+    assert.equal(host.getState().phase, 'connected');
+    assert.notEqual(await ownedPid(marker), first);
+    assert.ok(host.getConnectionGeneration() > generation);
+    assert.equal(await host.stop(), true);
+  } finally { await host.stop(); }
+});
+
+test('自有后台异常退出后直接退出仍能完成清理，不困在失联目标', async () => {
+  const { host, marker } = await subject('crash-then-quit', 0, false);
+  try {
+    await host.connect();
+    assert.equal(host.getState().phase, 'connected');
+    const pid = await ownedPid(marker);
+    process.kill(pid, 'SIGKILL');
+    const deadline = Date.now() + 5000;
+    while (host.getState().phase === 'connected' && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 20));
+    assert.equal(host.getState().phase, 'disconnected');
+    assert.equal(await host.stop(), true);
+    assert.equal(host.getState().phase, 'stopped');
+  } finally { await host.stop(); }
+});

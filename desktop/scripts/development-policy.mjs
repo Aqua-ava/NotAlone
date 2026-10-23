@@ -32,3 +32,10 @@ export function requireDevelopmentOnly(state) {
   if (state.packaged.length) throw new Error('检测到打包版 NotAlone。请通过应用菜单正常退出后运行 npm run dev；不会强杀或启动第二份。');
   if (state.development.length > 1) throw new Error('发现多个开发实例，请先核对归属；不会自动结束进程。');
 }
+
+// 仅开发监督器消费；验收必须选择独立资料目录，端口和地址不接受外部输入。
+export function developmentDebugArguments(optIn, userData) {
+  if (!optIn) return [];
+  if (optIn !== '1' || !userData || !path.isAbsolute(userData)) throw new Error('开发调试仅接受独立资料目录及明确开关');
+  return ['--remote-debugging-address=127.0.0.1', '--remote-debugging-port=0'];
+}

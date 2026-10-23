@@ -9,7 +9,7 @@ type RuntimeState = 'running' | 'stopping' | 'stopped';
 export class RuntimeClient {
   private readonly transport: JsonClient;
   private readonly streams = new Set<AbortController>();
-  constructor(readonly connection: BackendConnection) { this.transport = new JsonClient(connection); }
+  constructor(readonly connection: BackendConnection, private readonly expectedRuntime?: 'dsh') { this.transport = new JsonClient(connection); }
 
   status(): Promise<RuntimeState> { return this.perform('GET', '/api/runtime/status', 4000); }
   shutdown(): Promise<RuntimeState> { return this.perform('POST', '/api/runtime/shutdown', 8000); }
@@ -43,6 +43,7 @@ export class RuntimeClient {
       const response = await this.transport.perform({ method, path: endpoint, timeoutMs: timeout, maxResponseBytes: 4096 });
       if (response.status !== 200) throw new Error();
       const value = response.data;
+      if (this.expectedRuntime && (value as { runtime?: unknown })?.runtime !== this.expectedRuntime) throw new Error();
       const state = (value as { state?: unknown })?.state;
       if (state !== 'running' && state !== 'stopping' && state !== 'stopped') throw new Error();
       return state;

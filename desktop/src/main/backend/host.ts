@@ -1,8 +1,9 @@
+import { rm } from 'node:fs/promises';
 import type { BackendState } from '../../shared/backend-bridge';
 import { BackendFailure, readConnection } from './connection';
 import { RuntimeClient } from './runtime-client';
 import { loadBackendConfiguration, type BackendConfiguration } from './config';
-import { OwnedBackendProcess } from './process';
+import { OwnedBackendProcess, type OwnedProcess } from './process';
 import { BackendRequestFailure, type JsonRequest } from './json-client';
 import type { MessageStreamCallbacks } from './message-stream';
 
@@ -10,7 +11,7 @@ export class BackendHost {
   private state: BackendState = { phase: 'disconnected', reused: false, revision: 0, canRetryConnection: true, canRetryShutdown: false,
     canSaveStartupPaths: true, canPrepareConfiguration: false };
   private target: RuntimeClient | undefined;
-  private ownedChild: OwnedBackendProcess | undefined;
+  private ownedChild: OwnedProcess | undefined;
   private initialization: Promise<void> | undefined;
   private stopping: Promise<boolean> | undefined;
   private closing = false;
@@ -207,12 +208,24 @@ export class BackendHost {
     if (!canStart()) return;
     await this.beforeConnect?.(config, canStart);
     if (!canStart()) return;
+    // 仅明确重试时回收已退出的自有进程；失联本身不自动重放或替换后台。
+    const previous = this.ownedChild;
+    if (previous && !previous.isRunning()) {
+      if (!await previous.waitForExit(8000)) throw new BackendFailure('backend_connection_failed');
+      const stale = await readConnection(config.infoPath);
+      if (!canStart()) return;
+      if (stale && stale.pid !== previous.pid) throw new BackendFailure('backend_handshake_invalid');
+      if (stale) await rm(config.infoPath, { force: true });
+      this.target?.cancelPending();
+      this.target = undefined;
+      this.ownedChild = undefined;
+    }
     const connection = await readConnection(config.infoPath);
     if (!canStart()) return;
     if (connection) {
       // 原自建进程仍存活时不移交另一实例；退出仍须回收本 App 已持有的运行时。
       if (this.ownedChild?.isRunning() && connection.pid !== this.ownedChild.pid) throw new BackendFailure('backend_handshake_invalid');
-      const client = new RuntimeClient(connection);
+      const client = new RuntimeClient(connection, config.runtime);
       if (await client.status() !== 'running') throw new BackendFailure('backend_connection_failed');
       // 正常明确重连可验证新握手；退出一旦开始，认证中的新目标也不能替换原目标。
       if (!canStart()) return;
@@ -233,7 +246,7 @@ export class BackendHost {
       const started = await readConnection(config.infoPath);
       if (started) {
         if (started.pid !== this.ownedChild.pid) throw new BackendFailure('backend_handshake_invalid');
-        const client = new RuntimeClient(started);
+        const client = new RuntimeClient(started, config.runtime);
         if (await client.status() !== 'running') throw new BackendFailure('backend_connection_failed');
         this.target = client;
         if (!this.closing) this.publish({ phase: 'connected', reused: false, errorCode: undefined, canRetryConnection: false });
@@ -246,6 +259,14 @@ export class BackendHost {
 
   private async shutdown(): Promise<boolean> {
     await this.initialization;
+    // 自有进程已经退出时仍等待宿主回收屏障，确认依赖进程清理后才结束。
+    if (this.ownedChild && !this.ownedChild.isRunning()) {
+      if (!await this.ownedChild.waitForExit(8000).catch(() => false)) {
+        this.publish({ phase: 'shutdown-failed', errorCode: 'backend_shutdown_unconfirmed', canRetryShutdown: true });
+        return false;
+      }
+      return this.finishShutdown();
+    }
     if (!this.target) {
       if (!this.ownedChild) return this.finishShutdown();
       this.publish({ phase: 'shutdown-failed', errorCode: 'backend_shutdown_unconfirmed', canRetryShutdown: true });

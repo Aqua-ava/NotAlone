@@ -24,6 +24,8 @@ function validStartupPath(value: unknown, allowEmpty = false): value is string {
 }
 
 export interface BackendConfiguration {
+  // 仅由已核验的源码开发入口选择，不允许磁盘配置静默回退。
+  runtime?: 'dsh';
   // 仅本次受管 PG 监督器生成；不从磁盘配置或页面接受。
   managedLifetimeLock?: string;
   source?: 'external' | 'managed' | 'first-run';
@@ -81,6 +83,7 @@ export async function loadBackendConfiguration(userData: string, resourcesDirect
   if (!path.isAbsolute(infoPath) || (envFilePath && !path.isAbsolute(envFilePath))) throw new BackendFailure('backend_connection_failed');
   return {
     source: 'external',
+    ...(developmentProject ? { runtime: 'dsh' as const } : {}),
     infoPath, envFilePath,
     pythonExecutable: value.pythonExecutable as string | undefined,
     projectDirectory: value.pythonExecutable && developmentProject ? developmentProject : configuredProject,

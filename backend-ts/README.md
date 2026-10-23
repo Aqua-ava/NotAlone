@@ -1,4 +1,14 @@
-# DSH 后台运行验证（任务 02）
+# DSH 与 TypeScript 后台
+
+## 产品桌面宿主（任务03）
+
+源码开发入口 `cd desktop && npm run dev` 经官方命名profile启动产品 `host-plugin.ts`，Electron独立。产品使用原配置、PostgreSQL、业务HOME与资料位置，认证HTTP沿用桌面控制器合同。每次DSH HOME/cwd均临时且由宿主回收；临时目录不保存产品凭据或讨论。
+
+03接管owner首用、凭据设置与宿主寿命。原迁移命令仍为结构升级唯一执行方，保留103文件转换钩子；TS只读复核完整账本和必需结构，未知版本停写。联系人等尚未迁移业务由受控Python子进程独占，经明确路由转交；无请求失败fallback。Python仅为迁移过渡，最终退役在26。03未启用模型请求，不能把02合成范围或模型当作产品配置。
+
+验证和未完成边界见[03证据](../.scratch/dsh-ts-migration/host-lifecycle/progress.md)。日常不打包。
+
+## DSH 后台运行验证（任务02）
 
 这是隔离合成验证入口，不接入 Electron、不连接 PostgreSQL，也不替代现有 Python 产品。HTTP `/semantic`、`/loop`、`/cancel`、`/revoke` 和 `/health` 只用于验证公开行为；它们不是已有产品接口的兼容实现，也未提供产品认证。
 
@@ -14,6 +24,8 @@ pnpm test
 ```
 
 安装不执行生命周期脚本；可选的 LibreOffice、语音和图像等平台依赖不安装，完整可选依赖仍锁定。运行树没有这些能力。版本和锁摘要、与官方源码锁的差异见[依赖证据](../.scratch/dsh-ts-migration/runtime-validation/dependencies.json)。消费锁与官方开发工作区锁并非同一个闭包，不能互相替代。
+
+以下运行与生命周期说明专指02隔离验证；03产品宿主的责任、数据库验证及实测结果以文首03证据为准。
 
 ## 运行与数据边界
 

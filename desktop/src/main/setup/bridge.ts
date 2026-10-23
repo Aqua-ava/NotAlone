@@ -16,6 +16,11 @@ export function installSetupBridge(windows: AppWindows, setup: SetupController):
       || !value.trim() || value.length > 100 || /[\u0000-\u001f]/.test(value)) throw new Error('首次配置操作不可用');
     return setup.initializeOwner(value.trim());
   });
+  ipcMain.handle('setup:recover-existing-owner', (event, ...args: unknown[]) => {
+    const window = windows.validateCaller(event, args);
+    if (!window.webContents.getURL().endsWith('#manager')) throw new Error('首次配置操作不可用');
+    return setup.recoverExistingOwner();
+  });
   ipcMain.handle('setup:retry-restart', (event, ...args: unknown[]) => {
     const window = windows.validateCaller(event, args);
     if (!window.webContents.getURL().endsWith('#manager')) throw new Error('首次配置操作不可用');
