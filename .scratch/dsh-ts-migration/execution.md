@@ -20,7 +20,7 @@
 
 ## 后续调度
 
-02—04、18已验收；05回复/模型、06Skill、09记忆/偏好分别独占领域模块；19与21依赖已解锁。
+02—04、18已验收；05/06/09独占各自领域；19增量同步与21前台定位已开独立目标会话并核验active，各先查锁定官方源码。
 当前09短期独占host-plugin/legacy-backend及Python app/command、App，仅接记忆偏好；06随后。storage/launch/profile/依赖清单/desktop index仍主会话。
 其余每轮从各票Blocked by字段计算可执行前沿；所有前置resolved并复核证据后才派发。
 05目标usageLimited已由工具确认并请用户恢复；不重建目标绕过限制。05通过可解锁23；18通过可解锁19和21，其余按原依赖。
