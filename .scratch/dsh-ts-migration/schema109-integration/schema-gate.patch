@@ -1,0 +1,128 @@
+--- a/backend-ts/src/host-storage.ts
++++ b/backend-ts/src/host-storage.ts
+@@ -160,7 +160,7 @@
+     let migrations: {name: string; checksum: string}[];
+     try {
+       const names = (await readdir(this.options.migrationsDirectory)).filter(name => name.endsWith('.sql')).sort();
+-      if (names.length !== 108 || names.some((name, i) => !new RegExp(`^${String(i + 1).padStart(3, '0')}_[a-z0-9_]+\\.sql$`).test(name))) return 'migration_files_invalid';
++      if (names.length !== 109 || names.some((name, i) => !new RegExp(`^${String(i + 1).padStart(3, '0')}_[a-z0-9_]+\\.sql$`).test(name))) return 'migration_files_invalid';
+       migrations = await Promise.all(names.map(async name => ({ name, checksum: createHash('sha256').update(await readFile(join(this.options.migrationsDirectory, name))).digest('hex') })));
+     } catch { return 'migration_files_invalid'; }
+     const metadata = await client.query(`SELECT c.relname,a.attname,pg_catalog.format_type(a.atttypid,a.atttypmod) AS kind
+@@ -192,8 +192,8 @@
+       offset = 35;
+     }
+     const completed = (await client.query('SELECT name,checksum FROM public.notalone_schema_migration ORDER BY name')).rows;
+-    if (completed.length + offset > 108 || completed.some((item,i) => item.name !== migrations[i+offset].name || item.checksum !== migrations[i+offset].checksum)) return 'migration_history_mismatch';
+-    if (completed.length + offset !== 108) return 'migration_pending';
++    if (completed.length + offset > 109 || completed.some((item,i) => item.name !== migrations[i+offset].name || item.checksum !== migrations[i+offset].checksum)) return 'migration_history_mismatch';
++    if (completed.length + offset !== 109) return 'migration_pending';
+     if (REQUIRED_TABLES.some(table => !tables.has(table)) || Object.entries(REQUIRED_COLUMNS).some(([table,columns]) => Object.entries(columns).some(([column,kind]) => tables.get(table)?.get(column) !== kind))) return 'schema_incomplete';
+     return 'ready';
+   }
+@@ -287,12 +287,20 @@
+   "reply_skill_version",
+   "skill_library",
+   "source_document",
++  "wechat_auto_read_suppression",
+   "wechat_binding_history_authorization",
+   "wechat_message_metadata",
+   "wechat_observation_baseline",
+   "wechat_observation_cursor"
+ ];
+ const REQUIRED_COLUMNS: Record<string, Record<string,string>> = {
++  "wechat_auto_read_suppression": {
++    "owner_id": "uuid",
++    "contact_id": "uuid",
++    "external_local_id": "bigint",
++    "identity_create_time": "bigint",
++    "deleted_at": "timestamp with time zone"
++  },
+   "wechat_binding_history_authorization": {
+     "owner_id": "uuid",
+     "contact_id": "uuid",
+--- a/backend-ts/test/host-storage.test.mjs
++++ b/backend-ts/test/host-storage.test.mjs
+@@ -23,7 +23,7 @@
+ 
+ import { createStorageFixture } from './host-storage-fixture.mjs';
+ 
+-test('原账本及108升级只读核验后允许首次本人创建，重开恢复且不猜选既有本人', async () => {
++test('原账本及109升级只读核验后允许首次本人创建，重开恢复且不猜选既有本人', async () => {
+   const fixture = await createStorageFixture();
+   try {
+     const storage = await HostStorage.open(fixture.options);
+@@ -39,7 +39,7 @@
+     assert.equal((await unbound.setupStatus()).runtime_owner_configured, false);
+     await assert.rejects(unbound.initializeOwner('猜选'), { code: 'owner_already_configured' });
+     assert.equal((await fixture.client.query('SELECT count(*)::int AS n FROM public.owner')).rows[0].n, 1);
+-    assert.equal((await fixture.client.query('SELECT count(*)::int AS n FROM public.notalone_schema_migration')).rows[0].n, 108);
++    assert.equal((await fixture.client.query('SELECT count(*)::int AS n FROM public.notalone_schema_migration')).rows[0].n, 109);
+   } finally { await fixture.close(); }
+ });
+ 
+@@ -102,7 +102,7 @@
+     const before = (await fixture.client.query('SELECT * FROM public.notalone_schema_migration ORDER BY name')).rows;
+     await storage.compatibility();
+     assert.deepEqual((await fixture.client.query('SELECT * FROM public.notalone_schema_migration ORDER BY name')).rows, before);
+-    await fixture.client.query("DELETE FROM public.notalone_schema_migration WHERE name='108_wechat_binding_history_authorization.sql'");
++    await fixture.client.query("DELETE FROM public.notalone_schema_migration WHERE name='109_wechat_auto_read_suppression.sql'");
+     assert.deepEqual(await storage.compatibility(), {code:'migration_pending'});
+     await assert.rejects(storage.initializeOwner('不自动迁移'), {code:'migration_pending'});
+     await fixture.client.query('UPDATE public.notalone_schema_baseline SET restore_verified_at=NULL');
+--- a/backend-ts/test/host-read-transaction.test.mjs
++++ b/backend-ts/test/host-read-transaction.test.mjs
+@@ -45,13 +45,13 @@
+   } finally { release(); await storage.close(); await fixture.close(); }
+ });
+ 
+-test('108未登记或绑定授权表缺失时不发布业务资格', async () => {
++test('历史108中间缺口或绑定授权表缺失时不发布业务资格', async () => {
+   const fixture = await createStorageFixture();
+   const storage = await HostStorage.open(fixture.options);
+   try {
+     const original = (await fixture.client.query("DELETE FROM public.notalone_schema_migration WHERE name='108_wechat_binding_history_authorization.sql' RETURNING name,checksum")).rows[0];
+-    assert.deepEqual(await storage.compatibility(), { code: 'migration_pending' });
+-    await assert.rejects(storage.businessReadTransaction(async () => {}), { code: 'migration_pending' });
++    assert.deepEqual(await storage.compatibility(), { code: 'migration_history_mismatch' });
++    await assert.rejects(storage.businessReadTransaction(async () => {}), { code: 'migration_history_mismatch' });
+     await fixture.client.query('INSERT INTO public.notalone_schema_migration(name,checksum) VALUES($1,$2)', [original.name, original.checksum]);
+     await fixture.client.query('ALTER TABLE public.wechat_binding_history_authorization RENAME COLUMN binding_id TO missing_binding_id');
+     assert.deepEqual(await storage.compatibility(), { code: 'schema_incomplete' });
+--- a/desktop/tests/memory-correction/dsh-app-session.mjs
++++ b/desktop/tests/memory-correction/dsh-app-session.mjs
+@@ -32,7 +32,7 @@
+ await mkdir(output, { recursive: true });
+ const fixture = await createStorageFixture();
+ const originalLedger = (await fixture.client.query('SELECT name, checksum FROM public.notalone_schema_migration ORDER BY name')).rows;
+-assert.equal(originalLedger.length, 108);
++assert.equal(originalLedger.length, 109);
+ const userData = path.join(fixture.directory, 'desktop');
+ await mkdir(userData, { recursive: true });
+ const infoPath = path.join(fixture.directory, 'backend.info');
+--- a/desktop/tests/fixtures/expression-preference-backend.py
++++ b/desktop/tests/fixtures/expression-preference-backend.py
+@@ -28,8 +28,8 @@
+         fixture.setUpClass()
+         os.environ.update(NOTALONE_DATABASE_URL=fixture.database_url, NOTALONE_TEST_DATABASE_URL=fixture.database_url)
+         migration_proof = guard_test_migrations(
+-            fixture.database_url, fixture.database_name, ROOT, expected_count=108,
+-            expected_tail="108_wechat_binding_history_authorization.sql")
++            fixture.database_url, fixture.database_name, ROOT, expected_count=109,
++            expected_tail="109_wechat_auto_read_suppression.sql")
+         fixture.setUp()
+         fixture._bind(fixture.contact_id)
+         fixture._bind(fixture.second_contact_id)
+--- a/desktop/tests/fixtures/expression-preferences-page.py
++++ b/desktop/tests/fixtures/expression-preferences-page.py
+@@ -65,8 +65,8 @@
+         os.environ.update({"NOTALONE_DATABASE_URL": fixture.database_url,
+                            "NOTALONE_TEST_DATABASE_URL": fixture.database_url})
+         migration_proof = guard_test_migrations(
+-            fixture.database_url, fixture.database_name, ROOT, expected_count=108,
+-            expected_tail="108_wechat_binding_history_authorization.sql")
++            fixture.database_url, fixture.database_name, ROOT, expected_count=109,
++            expected_tail="109_wechat_auto_read_suppression.sql")
+         fixture.setUp()
+         fixture._bind(fixture.contact_id)
+         fixture._bind(fixture.second_contact_id)
