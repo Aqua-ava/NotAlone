@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
@@ -335,6 +336,52 @@ class PostgresHistorySyncStateStore:
         已撤销、已排除或已完成的任务不受影响。
         """
 
+        return self._ensure_started(
+            owner_id=owner_id,
+            channel=channel,
+            account_scope=account_scope,
+            watermark_at=watermark_at,
+            binding_ids=None,
+        )
+
+    def ensure_bindings_started(
+        self,
+        *,
+        owner_id: UUID,
+        channel: str,
+        account_scope: str,
+        binding_ids: Sequence[UUID],
+        watermark_at: datetime,
+    ) -> int:
+        """为明确逐项确认的绑定创建历史任务；重复确认不重置检查点。
+
+        只接受当前账号范围内仍为 active 的绑定；撤销、排除或超出范围的
+        标识不会因此恢复。返回本次新建的任务数量。
+        """
+
+        if not isinstance(binding_ids, Sequence) or isinstance(
+            binding_ids, (str, bytes)
+        ):
+            raise TypeError("binding_ids 必须是 UUID 序列。")
+        if not binding_ids or any(not isinstance(item, UUID) for item in binding_ids):
+            raise ValueError("binding_ids 必须包含至少一个 UUID。")
+        return self._ensure_started(
+            owner_id=owner_id,
+            channel=channel,
+            account_scope=account_scope,
+            watermark_at=watermark_at,
+            binding_ids=list(binding_ids),
+        )
+
+    def _ensure_started(
+        self,
+        *,
+        owner_id: UUID,
+        channel: str,
+        account_scope: str,
+        watermark_at: datetime,
+        binding_ids: list[UUID] | None,
+    ) -> int:
         if not isinstance(owner_id, UUID):
             raise TypeError("owner_id 必须是 UUID。")
         for name, value in (("channel", channel), ("account_scope", account_scope)):
@@ -342,10 +389,20 @@ class PostgresHistorySyncStateStore:
                 raise ValueError(f"{name} 不能为空。")
         if not isinstance(watermark_at, datetime) or watermark_at.tzinfo is None:
             raise TypeError("watermark_at 必须是带时区的 datetime。")
+        binding_filter = "" if binding_ids is None else " AND binding.id = ANY(%s)"
+        parameters: list[object] = [
+            HistorySyncPhase.SYNCING.value,
+            watermark_at,
+            owner_id,
+            channel,
+            account_scope,
+        ]
+        if binding_ids is not None:
+            parameters.append(binding_ids)
         try:
             with self._connect() as connection:
                 result = connection.execute(
-                    """
+                    f"""
                     INSERT INTO public.cli_history_sync_state (
                         owner_id, contact_id, binding_id, phase,
                         watermark_at, started_at
@@ -357,15 +414,10 @@ class PostgresHistorySyncStateStore:
                       AND binding.channel = %s
                       AND binding.account_scope = %s
                       AND binding.status = 'active'
+                      {binding_filter}
                     ON CONFLICT (owner_id, contact_id, binding_id) DO NOTHING
                     """,
-                    (
-                        HistorySyncPhase.SYNCING.value,
-                        watermark_at,
-                        owner_id,
-                        channel,
-                        account_scope,
-                    ),
+                    tuple(parameters),
                 )
                 created = result.rowcount
                 connection.commit()

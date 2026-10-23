@@ -121,7 +121,9 @@ PYTHONPATH=backend/src python \
 
 ## 微信同步范围
 
-[ADR-089](../architecture/adr/089-all-private-wechat-sync-scope.md)规定默认仅所选会话；明确授权全部私聊后，同一 owner、微信渠道和账号范围内的现有及新增私聊可自动建联。公开合同为 `POST /api/sync/scope`，请求 `{mode: "selected" | "all_private", confirmed: true}`；同步状态返回 `sync_scope` 和 `sync_scope_failure_code`。范围设置不改变总开关，后台在总开关开启时周期发现会话。稳定身份核验、幂等建联、撤销／删除排除和范围持久化由后端负责；不按名称合并，不扩大至群聊或新账号，不导入新绑定 baseline 之前历史。实现及验证记录见[规格](../.scratch/all-private-sync/spec.md)。
+[ADR-089](../architecture/adr/089-all-private-wechat-sync-scope.md)规定默认仅所选会话；明确授权全部私聊后，同一 owner、微信渠道和账号范围内的现有及新增私聊可自动建联。公开合同为 `POST /api/sync/scope`，请求 `{mode: "selected" | "all_private", confirmed: true}`；同步状态返回 `sync_scope` 和 `sync_scope_failure_code`。范围设置不改变总开关，后台在总开关开启时周期发现会话。稳定身份核验、幂等建联、撤销／删除排除和范围持久化由后端负责；不按名称合并，不扩大至群聊或新账号。按 [ADR-100](../architecture/adr/100-authorized-private-history-sync.md)，已授权私聊首次纳入时先读取本机可读的全部既有文字再持续增量，`baseline` 仍是增量起点。
+
+历史读取资格独立于范围与总开关：旧授权没有版本记录时为 `required`，必须经 `POST /api/sync/history-authorization` 明确提交 `{decision: "accepted" | "declined", confirmed: true}`；拒绝不改变总开关或绑定，继续只走增量。首次连接的一次确认同时写入全部私聊范围与历史读取资格。同步状态返回 `cli_history_authorization_state`、`cli_history_authorization_version`、`cli_history_authorization_current_version`，并按绑定返回 `cli_history_coverages`（阶段、原因、计数与游标，无正文）。实现及验证记录见[规格](../.scratch/all-private-sync/spec.md)与[历史同步规格](../.scratch/authorized-private-history-sync/spec.md)。
 
 ## 授权经验草稿（09）
 

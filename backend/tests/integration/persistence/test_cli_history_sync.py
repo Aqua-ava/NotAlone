@@ -30,10 +30,15 @@ from notalone.persistence.history_sync_state import (
     HistorySyncStatePersistenceError,
     PostgresHistorySyncStateStore,
 )
+from notalone.persistence.history_authorization import (
+    HistoryAuthorizationState,
+    PostgresHistorySyncAuthorizationStore,
+)
 from notalone.persistence.message_stream import PostgresMessageStream
 from notalone.persistence.observation_store import ObservationMode
 from notalone.persistence.postgres_repository import PostgresIngestRepository
 from notalone.wechat_cli import LocalWechatCli
+from notalone.wechat_cli.models import ChatCandidate
 from notalone.wechat_cli.normalizer import normalize_cli_events
 from tests.integration.persistence import test_observation_store as observations
 
@@ -210,16 +215,18 @@ class HistorySyncPersistenceTest(unittest.TestCase):
         )
         self.sync = self.make_sync()
 
-    def make_sync(self) -> CliBackgroundSync:
+    def make_sync(
+        self, *, authorization=None, account_scope: str = "synthetic-account"
+    ) -> CliBackgroundSync:
         sync = CliBackgroundSync(
             owner_id=self.scope.owner_id,
             channel="wechat",
-            account_scope="synthetic-account",
+            account_scope=account_scope,
             cli=LocalWechatCli(runner=self.runner),
             bindings=self.bindings,
             observation_store=self.fixture.store,
             history_state=self.history,
-            history_authorization=_AllowAll(),
+            history_authorization=authorization or _AllowAll(),
             history_page_limit=50,
             clock=lambda: self.now,
         )
@@ -253,6 +260,232 @@ class HistorySyncPersistenceTest(unittest.TestCase):
             contact_id=self.scope.contact_id,
             binding_id=self.binding.binding_id,
         )
+
+    def auth_scope(self):
+        return dict(
+            owner_id=self.scope.owner_id,
+            channel="wechat",
+            account_scope="synthetic-account",
+        )
+
+    def test_first_connection_grant_enrolls_and_starts_history(self):
+        from notalone.persistence.sync_scope import PostgresSyncScopeStore
+        from notalone.persistence.wechat_setup import PostgresWechatSetupStore
+
+        account = "setup-history-account"
+        PostgresWechatSetupStore(observations.TEST_DATABASE_URL).connect(
+            self.scope.owner_id, account, self.now
+        )
+        scopes = PostgresSyncScopeStore(observations.TEST_DATABASE_URL)
+        self.assertEqual(
+            scopes.read(
+                owner_id=self.scope.owner_id,
+                channel="wechat",
+                account_scope=account,
+            ).mode,
+            "all_private",
+        )
+        self.assertEqual(
+            scopes.enroll(
+                owner_id=self.scope.owner_id,
+                channel="wechat",
+                account_scope=account,
+                sessions=(
+                    ChatCandidate(
+                        username="wxid_setup_history",
+                        display_name="合成首连会话",
+                        chat_type="private",
+                        last_timestamp=None,
+                        match=None,
+                        sort_timestamp=None,
+                        source="sessions",
+                    ),
+                ),
+            ),
+            1,
+        )
+        authorization = PostgresHistorySyncAuthorizationStore(
+            observations.TEST_DATABASE_URL
+        )
+        sync = self.make_sync(authorization=authorization, account_scope=account)
+        self.runner.seed(range(1, 11))
+        sync.cycle(enabled=True, max_bindings=1)
+
+        with psycopg.connect(observations.TEST_DATABASE_URL) as connection:
+            contact_id, binding_id = connection.execute(
+                "SELECT contact_id, id FROM public.conversation_binding "
+                "WHERE owner_id=%s AND conversation_locator='wxid_setup_history'",
+                (self.scope.owner_id,),
+            ).fetchone()
+        state = self.history.read(
+            owner_id=self.scope.owner_id,
+            contact_id=contact_id,
+            binding_id=binding_id,
+        )
+        self.assertIsNotNone(state)
+        self.assertIs(state.phase, HistorySyncPhase.COMPLETE)
+        self.assertEqual(state.message_count, 10)
+        first_read = next(
+            command for command in self.runner.calls
+            if len(command) > 2 and command[1] == "tail"
+            and command[2] == "wxid_setup_history"
+        )
+        self.assertIn("--history", first_read)
+
+    def test_old_authorization_keeps_incremental_until_one_time_upgrade(self):
+        authorization = PostgresHistorySyncAuthorizationStore(
+            observations.TEST_DATABASE_URL
+        )
+        self.assertIs(
+            authorization.read(**self.auth_scope()).state,
+            HistoryAuthorizationState.REQUIRED,
+        )
+        self.runner.seed(range(1, 61))
+        sync = self.make_sync(authorization=authorization)
+        self.addCleanup(sync.close)
+
+        sync.cycle(enabled=True, max_bindings=1)
+        self.assertIsNone(self.state())
+        self.assertEqual(self.runner.history_page_reads, 0)
+        self.assertGreater(len(self.message_texts()), 0)
+
+        authorization.decide(**self.auth_scope(), decision="declined", at=self.now)
+        sync.cycle(enabled=True, max_bindings=1)
+        self.assertIsNone(self.state())
+        self.assertEqual(self.runner.history_page_reads, 0)
+
+        authorization.decide(**self.auth_scope(), decision="accepted", at=self.now)
+        sync.request_history_start()
+        sync.cycle(enabled=True, max_bindings=1)
+        started = self.state()
+        self.assertIsNotNone(started)
+        self.assertEqual(self.runner.history_page_reads, 1)
+
+        # 重复确认、后端重启与并发刷新不重置水位或检查点。
+        restarted = PostgresHistorySyncAuthorizationStore(
+            observations.TEST_DATABASE_URL
+        )
+        restarted.decide(**self.auth_scope(), decision="accepted", at=self.now)
+        sync.request_history_start()
+        sync.cycle(enabled=True, max_bindings=1)
+        current = self.state()
+        self.assertEqual(current.watermark_at, started.watermark_at)
+        self.assertEqual(current.started_at, started.started_at)
+        self.assertGreaterEqual(current.message_count, started.message_count)
+
+    def test_selected_confirmation_starts_only_its_own_history_task(self):
+        authorization = PostgresHistorySyncAuthorizationStore(
+            observations.TEST_DATABASE_URL
+        )
+        self.runner.seed(range(1, 31))
+        sync = self.make_sync(authorization=authorization)
+        self.addCleanup(sync.close)
+
+        self.assertEqual(sync.start_history_for_bindings([self.binding]), 1)
+        # 账号级历史授权仍是待确认；逐项确认只覆盖刚确认的绑定。
+        self.assertIs(
+            authorization.read(**self.auth_scope()).state,
+            HistoryAuthorizationState.REQUIRED,
+        )
+        sync.cycle(enabled=True, max_bindings=1)
+        self.assertEqual(self.runner.history_page_reads, 1)
+        started = self.state()
+        self.assertIsNotNone(started)
+        self.assertEqual(sync.start_history_for_bindings([self.binding]), 0)
+        self.assertEqual(self.state().started_at, started.started_at)
+
+    def test_newly_enrolled_private_session_starts_with_history(self):
+        authorization = PostgresHistorySyncAuthorizationStore(
+            observations.TEST_DATABASE_URL
+        )
+        authorization.decide(**self.auth_scope(), decision="accepted", at=self.now)
+        sync = self.make_sync(authorization=authorization)
+        self.runner.seed(range(1, 11))
+        with psycopg.connect(observations.TEST_DATABASE_URL) as connection:
+            contact = connection.execute(
+                "INSERT INTO public.contact(owner_id,display_name) VALUES(%s,'合成新会话') RETURNING id",
+                (self.scope.owner_id,),
+            ).fetchone()[0]
+        binding = self.bindings.create_binding(
+            owner_id=self.scope.owner_id,
+            contact_id=contact,
+            channel="wechat",
+            account_scope="synthetic-account",
+            conversation_locator="wxid_observation_new",
+        )
+        # 新会话由下一轮安全对账纳入，复用既有增量发现节奏。
+        sync.request_safety_sweep()
+
+        for _ in range(3):
+            sync.cycle(enabled=True, max_bindings=1)
+        state = self.history.read(
+            owner_id=self.scope.owner_id,
+            contact_id=contact,
+            binding_id=binding.binding_id,
+        )
+        self.assertIsNotNone(state)
+        self.assertIs(state.phase, HistorySyncPhase.COMPLETE)
+        self.assertEqual(state.message_count, 10)
+        first_read = next(
+            command for command in self.runner.calls
+            if len(command) > 2 and command[1] == "tail" and command[2] == "wxid_observation_new"
+        )
+        self.assertIn("--history", first_read)
+
+    def test_declined_upgrade_still_allows_selected_confirmation_only(self):
+        authorization = PostgresHistorySyncAuthorizationStore(
+            observations.TEST_DATABASE_URL
+        )
+        authorization.decide(**self.auth_scope(), decision="declined", at=self.now)
+        sync = self.make_sync(authorization=authorization)
+        self.runner.seed(range(1, 11))
+        with psycopg.connect(observations.TEST_DATABASE_URL) as connection:
+            other_contact = connection.execute(
+                "INSERT INTO public.contact(owner_id,display_name) VALUES(%s,'合成未确认会话') RETURNING id",
+                (self.scope.owner_id,),
+            ).fetchone()[0]
+        other = self.bindings.create_binding(
+            owner_id=self.scope.owner_id,
+            contact_id=other_contact,
+            channel="wechat",
+            account_scope="synthetic-account",
+            conversation_locator="wxid_observation_other",
+        )
+
+        self.assertEqual(sync.start_history_for_bindings([self.binding]), 1)
+        sync.cycle(
+            enabled=True,
+            priority_contact_id=self.scope.contact_id,
+            max_bindings=1,
+        )
+        self.assertIsNotNone(self.state())
+        self.assertIsNone(self.history.read(
+            owner_id=self.scope.owner_id,
+            contact_id=other_contact,
+            binding_id=other.binding_id,
+        ))
+        # 拒绝账号级升级后，逐项确认只覆盖刚确认的会话，不扩及其他既有绑定。
+        self.assertIs(
+            authorization.read(**self.auth_scope()).state,
+            HistoryAuthorizationState.DECLINED,
+        )
+
+    def test_binding_history_start_is_scoped_and_does_not_revive_revoked(self):
+        def start(account_scope, binding_id):
+            return self.history.ensure_bindings_started(
+                owner_id=self.scope.owner_id,
+                channel="wechat",
+                account_scope=account_scope,
+                binding_ids=(binding_id,),
+                watermark_at=self.now,
+            )
+
+        self.assertEqual(start("other-account", self.binding.binding_id), 0)
+        self.assertEqual(
+            start("synthetic-account", self.fixture.binding_b.binding_id), 0
+        )
+        self.assertEqual(start("synthetic-account", self.binding.binding_id), 1)
+        self.assertEqual(start("synthetic-account", self.binding.binding_id), 0)
 
     def test_three_pages_commit_and_restart_resumes_without_duplicates(self) -> None:
         self.runner.seed(range(1, 121))

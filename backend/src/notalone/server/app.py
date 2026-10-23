@@ -1120,6 +1120,7 @@ class BackendApp:
             "/api/sync/foreground/observe",
             "/api/sync/priority",
             "/api/sync/scope",
+            "/api/sync/history-authorization",
             "/api/sync/backfill/pause",
             "/api/sync/backfill/retry",
             "/api/sync/confirm",
@@ -1206,6 +1207,27 @@ class BackendApp:
                     method=method,
                     path=path,
                     error_code="sync_scope_failed",
+                )
+            return _json_response(HTTPStatus.OK, _sync_status_payload(report))
+        if path == "/api/sync/history-authorization":
+            try:
+                payload = _parse_task_json(body)
+                if (not isinstance(payload, dict)
+                    or set(payload) != {"decision", "confirmed"}
+                    or payload["confirmed"] is not True
+                    or payload["decision"] not in ("accepted", "declined")):
+                    raise ValueError("无效历史同步授权。")
+            except (ValueError, UnicodeDecodeError):
+                return _json_response(
+                    HTTPStatus.BAD_REQUEST, {"error": "invalid_history_authorization"}
+                )
+            try:
+                report = sync.set_history_authorization(payload["decision"])
+            except Exception:
+                return _internal_error(
+                    method=method,
+                    path=path,
+                    error_code="history_authorization_failed",
                 )
             return _json_response(HTTPStatus.OK, _sync_status_payload(report))
         if path == "/api/sync/foreground/observe":
@@ -3658,6 +3680,11 @@ def _sync_status_payload(report: FrontSyncCycleReport) -> dict[str, object]:
                     _history_coverage_payload(coverage)
                     for coverage in report.cli_history_coverages
                 ],
+                "cli_history_authorization_state": report.cli_history_authorization_state,
+                "cli_history_authorization_version": report.cli_history_authorization_version,
+                "cli_history_authorization_current_version": (
+                    report.cli_history_authorization_current_version
+                ),
                 "foreground_phase": report.foreground_phase,
                 "foreground_failure_code": report.foreground_failure_code,
             }

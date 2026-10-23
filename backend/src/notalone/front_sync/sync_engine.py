@@ -33,6 +33,9 @@ from notalone.front_sync.tail_lifecycle import (
     FollowRuntimeStatus,
     TailLifecycle,
 )
+from notalone.persistence.history_authorization import (
+    HISTORY_SYNC_AUTHORIZATION_VERSION,
+)
 from notalone.persistence.history_sync_state import HistoryCoverage
 from notalone.persistence.conversation_repository import (
     ConversationBindingConflictError,
@@ -123,6 +126,11 @@ class FrontSyncCycleReport:
     cli_backfill_total_message_count: int = 0
     cli_backfill_total_non_text_count: int = 0
     cli_history_coverages: tuple[HistoryCoverage, ...] = ()
+    cli_history_authorization_state: str = "unknown"
+    cli_history_authorization_version: int | None = None
+    cli_history_authorization_current_version: int = (
+        HISTORY_SYNC_AUTHORIZATION_VERSION
+    )
     foreground_phase: str = "sync_disabled"
     foreground_failure_code: str | None = None
 

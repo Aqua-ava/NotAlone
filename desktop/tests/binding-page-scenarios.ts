@@ -290,7 +290,7 @@ export async function bindingStableContacts({ manager, bindingBackend, screensho
   state.sessions.push({ username: 'wxid_synthetic_new', display_name: '尚未确认会话', chat_type: 'private', last_timestamp: 1_700_000_001 });
   await bindingBackend.setCli(state);
   await manager.getByRole('button', { name: '刷新微信会话', exact: true }).click();
-  await expect(manager.getByText('总开关已开启：确认后立即允许同步所选会话。', { exact: true })).toBeVisible();
+  await expect(manager.getByText('总开关已开启：确认后会读取所选会话在本机现有的全部文字历史，并立即允许持续同步新消息。', { exact: true })).toBeVisible();
   await pending.getByRole('checkbox', { name: '选择会话 wxid_synthetic_b' }).check();
   await pending.getByRole('combobox', { name: '会话 wxid_synthetic_b 对应联系人' }).selectOption(bindingBackend.data.contact_ids[1]);
   await submit.click();

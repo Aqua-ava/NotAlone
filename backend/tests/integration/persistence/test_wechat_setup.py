@@ -12,6 +12,10 @@ from notalone.persistence.wechat_setup import PostgresWechatSetupStore
 from notalone.application.wechat_setup import WechatSetupConflict
 from notalone.persistence.sync_scope import PostgresSyncScopeStore
 from notalone.persistence.front_sync_state import PostgresFrontSyncStateStore
+from notalone.persistence.history_authorization import (
+    HistoryAuthorizationState,
+    PostgresHistorySyncAuthorizationStore,
+)
 
 
 class WechatSetupStoreTest(unittest.TestCase):
@@ -47,14 +51,25 @@ class WechatSetupStoreTest(unittest.TestCase):
         scope = dict(owner_id=self.owner, channel='wechat', account_scope=self.account)
         scopes = PostgresSyncScopeStore(self.url)
         state = PostgresFrontSyncStateStore(self.url)
+        history_authorization = PostgresHistorySyncAuthorizationStore(self.url)
         self.assertEqual(scopes.read(**scope).mode, 'all_private')
         self.assertEqual(scopes.read(**scope).granted_at, self.at)
         self.assertTrue(state.read(owner_id=self.owner).enabled)
+        # 首次连接的一次确认同时授予历史读取资格。
+        self.assertIs(
+            history_authorization.read(**scope).state,
+            HistoryAuthorizationState.ACCEPTED,
+        )
         scopes.set_mode(**scope, mode='selected', at=self.at)
         state.disable(owner_id=self.owner)
         self.store.connect(self.owner, self.account, datetime.now(timezone.utc))
         self.assertEqual(scopes.read(**scope).mode, 'selected')
         self.assertFalse(state.read(owner_id=self.owner).enabled)
+        # 重复确认不恢复范围或开关，也不重置已授予的历史读取资格。
+        self.assertIs(
+            history_authorization.read(**scope).state,
+            HistoryAuthorizationState.ACCEPTED,
+        )
 
     def test_other_owner_and_revoked_identity_fail_without_partial_grant(self):
         other = uuid4()
@@ -65,6 +80,12 @@ class WechatSetupStoreTest(unittest.TestCase):
             self.store.connect(self.owner, self.account, self.at)
         self.assertIsNone(self.store.read(self.owner))
         self.assertFalse(PostgresFrontSyncStateStore(self.url).read(owner_id=self.owner).enabled)
+        self.assertIs(
+            PostgresHistorySyncAuthorizationStore(self.url).read(
+                owner_id=self.owner, channel='wechat', account_scope=self.account
+            ).state,
+            HistoryAuthorizationState.REQUIRED,
+        )
         with psycopg.connect(self.url) as c:
             c.execute("UPDATE public.owner_channel_identity SET status='revoked' WHERE owner_id=%s", (other,))
         with self.assertRaises(WechatSetupConflict):
@@ -98,3 +119,9 @@ class WechatSetupStoreTest(unittest.TestCase):
             self.store.connect(self.owner, self.account, self.at)
         self.assertIsNone(self.store.read(self.owner))
         self.assertFalse(PostgresFrontSyncStateStore(self.url).read(owner_id=self.owner).enabled)
+        self.assertIs(
+            PostgresHistorySyncAuthorizationStore(self.url).read(
+                owner_id=self.owner, channel='wechat', account_scope=self.account
+            ).state,
+            HistoryAuthorizationState.REQUIRED,
+        )

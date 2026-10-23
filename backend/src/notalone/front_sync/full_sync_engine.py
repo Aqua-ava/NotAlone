@@ -28,6 +28,12 @@ from notalone.front_sync.sync_engine import (
     FrontSyncCycleReport,
 )
 from notalone.front_sync.tail_lifecycle import FrontSyncPhase, FollowRuntimeStatus
+from notalone.persistence.history_authorization import (
+    HISTORY_SYNC_AUTHORIZATION_VERSION,
+    HistoryAuthorization,
+    HistoryAuthorizationDecision,
+    HistoryAuthorizationStorePort,
+)
 from notalone.persistence.sync_scope import PostgresSyncScopeStore, SyncScopeState
 from notalone.persistence.front_sync_state import PostgresFrontSyncStateStore
 from notalone.persistence.conversation_repository import PersistedConversationBinding
@@ -87,6 +93,9 @@ class CliFullSyncEngine:
         "_scope_state",
         "_scope_failure",
         "_scope_next_check",
+        "_history_authorization_store",
+        "_history_authorization",
+        "_history_authorization_next_check",
     )
 
     def __init__(
@@ -103,6 +112,7 @@ class CliFullSyncEngine:
         fallback: LegacyForegroundEnginePort,
         clock: Callable[[], datetime] | None = None,
         scope_store: PostgresSyncScopeStore | None = None,
+        history_authorization: HistoryAuthorizationStorePort | None = None,
     ) -> None:
         if not isinstance(owner_id, UUID):
             raise TypeError("owner_id 必须是 UUID。")
@@ -123,6 +133,9 @@ class CliFullSyncEngine:
         self._scope_state = SyncScopeState()
         self._scope_failure: str | None = None
         self._scope_next_check: datetime | None = None
+        self._history_authorization_store = history_authorization
+        self._history_authorization: HistoryAuthorization | None = None
+        self._history_authorization_next_check: datetime | None = None
 
     def enable_sync(self) -> None:
         self._sync_state.enable(owner_id=self._owner_id, at=self._clock())
@@ -339,6 +352,21 @@ class CliFullSyncEngine:
             cli_backfill_total_message_count=background.status.backfill_total_message_count,
             cli_backfill_total_non_text_count=background.status.backfill_total_non_text_count,
             cli_history_coverages=background.status.history_coverages,
+            cli_history_authorization_state=(
+                self._history_authorization.state.value
+                if self._history_authorization is not None
+                else "unknown"
+            ),
+            cli_history_authorization_version=(
+                self._history_authorization.version
+                if self._history_authorization is not None
+                else None
+            ),
+            cli_history_authorization_current_version=(
+                self._history_authorization.current_version
+                if self._history_authorization is not None
+                else HISTORY_SYNC_AUTHORIZATION_VERSION
+            ),
             foreground_phase=foreground.phase.value,
             foreground_failure_code=foreground.failure_code,
         )
@@ -360,8 +388,54 @@ class CliFullSyncEngine:
         self._scope_failure = None
         self._scope_next_check = None
 
+    def set_history_authorization(self, decision: HistoryAuthorizationDecision) -> None:
+        """保存一次明确的历史读取决定；重复确认保持幂等。"""
+
+        store = self._history_authorization_store
+        if store is None:
+            raise RuntimeError("历史同步授权存储不可用。")
+        if decision not in ("accepted", "declined"):
+            raise ValueError("历史同步授权决定无效。")
+        state = store.decide(
+            owner_id=self._owner_id,
+            channel=self._channel,
+            account_scope=self._account_scope,
+            decision=decision,
+            at=self._clock(),
+        )
+        self._history_authorization = state
+        self._history_authorization_next_check = self._clock() + timedelta(seconds=60)
+        if state.authorized:
+            # 已授权的既有绑定下一轮补建历史任务；已撤销或排除的会话
+            # 不在 active 范围内，不会被恢复。
+            request = getattr(self._background, "request_history_start", None)
+            if callable(request):
+                request()
+
+    def _refresh_history_authorization(self) -> None:
+        store = self._history_authorization_store
+        if store is None:
+            return
+        now = self._clock()
+        if (
+            self._history_authorization_next_check is not None
+            and now < self._history_authorization_next_check
+        ):
+            return
+        self._history_authorization_next_check = now + timedelta(seconds=60)
+        try:
+            self._history_authorization = store.read(
+                owner_id=self._owner_id,
+                channel=self._channel,
+                account_scope=self._account_scope,
+            )
+        except Exception:
+            # 保留上次已知状态；首次读取失败时报告为未确认，不创建任务。
+            return
+
     def _refresh_scope(self, *, enabled: bool) -> None:
         """元数据发现有独立一秒预算，失败不阻断已有绑定的同步。"""
+        self._refresh_history_authorization()
         if self._scope_store is None:
             return
         now = self._clock()
@@ -422,7 +496,12 @@ class CliFullSyncEngine:
     ) -> FrontSyncCycleReport:
         """提交一次性批量绑定，然后返回双通道最新状态。"""
 
-        self._binding_coordinator.confirm(selections)
+        created = self._binding_coordinator.confirm(selections)
+        if created:
+            # 用户刚刚明确确认了这些会话，读取其既有历史属于同一次授权。
+            start = getattr(self._background, "start_history_for_bindings", None)
+            if callable(start):
+                start(created)
         # 新绑定不应等待下一次低频安全对账；仍由后台自己的 cursor、
         # 初始 baseline 和固定批量上限决定实际读取范围。
         request = getattr(self._background, "request_backfill_check", None)

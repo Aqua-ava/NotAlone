@@ -224,6 +224,17 @@ class HistorySyncStatePort(Protocol):
     ) -> int:
         """为范围内 active 绑定创建缺失的历史任务。"""
 
+    def ensure_bindings_started(
+        self,
+        *,
+        owner_id: UUID,
+        channel: str,
+        account_scope: str,
+        binding_ids: Sequence[UUID],
+        watermark_at: datetime,
+    ) -> int:
+        """为明确逐项确认的 active 绑定创建历史任务。"""
+
     def mark_running(
         self, *, owner_id: UUID, contact_id: UUID, binding_id: UUID
     ) -> HistorySyncState:
@@ -335,6 +346,7 @@ class CliBackgroundSync:
         "_history_page_limit",
         "_history_retries",
         "_history_ensured_binding_ids",
+        "_history_start_requested",
         "_last_history_coverages",
     )
 
@@ -427,6 +439,7 @@ class CliBackgroundSync:
         self._history_recheck_at: dict[UUID, datetime] = {}
         self._history_retries: dict[UUID, tuple[int, datetime]] = {}
         self._history_ensured_binding_ids: frozenset[UUID] = frozenset()
+        self._history_start_requested = False
         self._last_history_coverages: tuple[HistoryCoverage, ...] = ()
 
     def cycle(
@@ -797,6 +810,7 @@ class CliBackgroundSync:
         self._priority_timing = _PriorityReadTiming()
         self._history_retries.clear()
         self._history_ensured_binding_ids = frozenset()
+        self._history_start_requested = False
 
     def _elapsed_ms(self, started: float) -> int:
         return max(0, round((self._monotonic_clock() - started) * 1000))
@@ -1250,11 +1264,13 @@ class CliBackgroundSync:
         store = self._history_state
         if store is None:
             return
-        if not self._history_authorized():
-            return
         binding_ids = frozenset(binding.binding_id for binding in bindings)
         if not binding_ids or binding_ids == self._history_ensured_binding_ids:
             return
+        # 授权升级会显式清空该集合；绑定集合未变化时不必每轮重读授权版本。
+        if not self._history_authorized():
+            return
+        requested = self._history_start_requested
         try:
             store.ensure_scope_started(
                 owner_id=self._owner_id,
@@ -1266,6 +1282,12 @@ class CliBackgroundSync:
             self._failure_code = "history_state_unavailable"
             return
         self._history_ensured_binding_ids = binding_ids
+        self._history_start_requested = False
+        if requested:
+            # 只有授权升级主动排队；新发现绑定仍由下一次安全对账调度，
+            # 不改变既有读取节奏。单轮仍受固定绑定预算限制。
+            for binding in bindings:
+                self._enqueue(binding.conversation_locator)
 
     def _history_authorized(self) -> bool:
         port = self._history_authorization
@@ -1282,6 +1304,39 @@ class CliBackgroundSync:
         except Exception:
             # 授权版本读取失败时不启动新的历史读取；已有任务仍按检查点续读。
             return False
+
+    def start_history_for_bindings(self, bindings: Sequence[object]) -> int:
+        """为逐项确认的绑定直接创建历史任务。
+
+        仅用于用户刚刚明确确认的会话；不扩及其他既有绑定，因此老授权
+        仍需在设置中完成一次账号级历史授权升级。重复调用不重置检查点，
+        撤销或超出当前范围的绑定不会被恢复。
+        """
+
+        store = self._history_state
+        if store is None or not bindings:
+            return 0
+        binding_ids = tuple(binding.binding_id for binding in bindings)
+        try:
+            created = store.ensure_bindings_started(
+                owner_id=self._owner_id,
+                channel=self._channel,
+                account_scope=self._account_scope,
+                binding_ids=binding_ids,
+                watermark_at=self._clock(),
+            )
+        except HistorySyncStatePersistenceError:
+            self._failure_code = "history_state_unavailable"
+            return 0
+        if created:
+            self.request_history_start()
+        return created
+
+    def request_history_start(self) -> None:
+        """授权升级后让下一轮重新检查并立即排队缺失的历史任务。"""
+
+        self._history_ensured_binding_ids = frozenset()
+        self._history_start_requested = True
 
     def _prepare_history_read(
         self, binding: object

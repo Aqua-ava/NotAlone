@@ -44,7 +44,7 @@ export function WechatSetupPanel({ bridge, children }: { bridge: WechatSetupBrid
     {state.phase === 'ready' && <>
       <p>请确认这是你要连接的微信账号；此检测不代表当前微信前台的登录账号。确认后，会为此账号现有及以后新增的微信私聊自动建立对应联系人，并开启后台文字同步，无需逐个添加。</p>
       <p>昵称和备注只用于展示；按微信稳定身份关联，不按同名合并。群聊不在范围内，已单独停止或删除的会话不会自动恢复。</p>
-      <p>应用运行时才读取；关闭总开关或退出 App 会停止读取。新关联从本次授权起同步，不自动导入更早的历史。</p>
+      <p>应用运行时才读取；关闭总开关或退出 App 会停止读取。确认同时允许读取此账号现有私聊在本机可读的全部文字历史，再持续同步新消息。</p>
       <button className="button primary" onClick={() => void operate(() => bridge.confirm({ revision: state.revision, confirmed: true }))}>确认连接并同步全部私聊</button>
     </>}
     {state.phase === 'connected' && <p>账号关联已保存；当前同步范围与总开关见下方设置。新授权的私聊会在后台自动关联，联系人出现后可在顶部搜索并切换。</p>}

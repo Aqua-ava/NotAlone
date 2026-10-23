@@ -1,11 +1,11 @@
-import type { SyncControlState, SyncControlRequest, SyncScopeRequest, SyncScope } from '../../shared/sync-control-bridge';
+import type { HistoryAuthorizationDecision, HistoryAuthorizationRequest, SyncControlState, SyncControlRequest, SyncScopeRequest, SyncScope } from '../../shared/sync-control-bridge';
 import type { BackendHost } from '../backend/host';
 import { BackendRequestFailure } from '../backend/json-client';
 import type { ContactSession } from '../contacts/session';
-import { readSyncStatus, setSyncEnabled, controlBackfill, setSyncScope } from './status';
+import { readSyncStatus, setSyncEnabled, controlBackfill, setSyncScope, setHistoryAuthorization } from './status';
 
 type Scope = { generation: number };
-type Operation = 'refresh' | 'enable' | 'disable' | 'pause' | 'retry' | 'scope';
+type Operation = 'refresh' | 'enable' | 'disable' | 'pause' | 'retry' | 'scope' | 'history';
 
 export class SyncControlController {
   private state: SyncControlState = { revision: 0, scopeRevision: 0, phase: 'offline', report: null, busy: null, errorCode: null };
@@ -103,7 +103,14 @@ export class SyncControlController {
     if (request.confirmed !== true || !['selected', 'all_private'].includes(request.mode)) return Promise.reject(new Error('同步范围需要明确确认。'));
     return this.control(request, 'scope', request.mode);
   }
-  private async control(request: SyncControlRequest, operation: Exclude<Operation, 'refresh'>, mode?: SyncScope): Promise<void> {
+  setHistoryAuthorization(request: HistoryAuthorizationRequest): Promise<void> {
+    if (request.confirmed !== true || !['accepted', 'declined'].includes(request.decision)) {
+      return Promise.reject(new Error('历史读取授权需要明确确认。'));
+    }
+    return this.control(request, 'history', undefined, request.decision);
+  }
+  private async control(request: SyncControlRequest, operation: Exclude<Operation, 'refresh'>, mode?: SyncScope,
+    historyDecision?: HistoryAuthorizationDecision): Promise<void> {
     this.synchronizeScope();
     if (this.snapshotRefreshing && request.scopeRevision === this.state.scopeRevision) {
       // 用户停读优先于只读指标请求；迟到快照由 epoch 和取消信号共同失效。
@@ -117,10 +124,11 @@ export class SyncControlController {
     }
     this.cancelRecovery(); this.cancelSnapshot();
     const finish = operation === 'disable' || operation === 'pause' || operation === 'scope' ? this.beginReadingScopeChange() : undefined;
-    try { await this.perform(operation, this.scope, false, mode); }
+    try { await this.perform(operation, this.scope, false, mode, historyDecision); }
     finally { finish?.(); }
   }
-  private async perform(operation: Operation, scope: Scope, background = false, mode?: SyncScope): Promise<void> {
+  private async perform(operation: Operation, scope: Scope, background = false, mode?: SyncScope,
+    historyDecision?: HistoryAuthorizationDecision): Promise<void> {
     const enabledBefore = this.state.report?.enabled;
     const epoch = ++this.epoch;
     const pending = new AbortController();
@@ -134,11 +142,22 @@ export class SyncControlController {
       const result = operation === 'refresh' ? await readSyncStatus(this.backend, pending.signal)
         : operation === 'enable' || operation === 'disable' ? await setSyncEnabled(this.backend, operation === 'enable', pending.signal)
         : operation === 'scope' ? await setSyncScope(this.backend, mode!, pending.signal)
+        : operation === 'history' ? await setHistoryAuthorization(this.backend, historyDecision!, pending.signal)
         : await controlBackfill(this.backend, operation, pending.signal);
       if (!current() || result.generation !== scope.generation) return;
       if ((operation === 'enable' || operation === 'disable') && result.report.enabled !== (operation === 'enable')) throw new Error('同步结果未确认。');
       if ((operation === 'pause' || operation === 'retry') && result.report.enabled !== enabledBefore) throw new Error('同步结果未确认。');
       if (operation === 'scope' && (result.report.syncScope !== mode || result.report.enabled !== enabledBefore)) throw new Error('同步范围结果未确认。');
+      if (operation === 'history') {
+        // 已同意后迟到的拒绝不会降级；其余结果必须明确落库。
+        if (result.report.enabled !== enabledBefore) throw new Error('历史读取授权结果未确认。');
+        if (historyDecision === 'accepted' && result.report.historyAuthorizationState !== 'accepted') {
+          throw new Error('历史读取授权结果未确认。');
+        }
+        if (historyDecision === 'declined' && result.report.historyAuthorizationState === 'required') {
+          throw new Error('历史读取授权结果未确认。');
+        }
+      }
       this.cancelRecovery();
       this.publish({ phase: 'ready', report: result.report });
       if (result.report.syncScope === 'all_private') this.refreshContactDirectory(scope, result.report.confirmedBindingCount);

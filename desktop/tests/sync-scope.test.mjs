@@ -25,6 +25,7 @@ function fixture(t, extra = {}, sharedContacts) {
   async requestJson(request){ requests.push(request); const captured=generation;
    if(control.barrier)await control.barrier;
    if(request.path==='/api/sync/scope')control.data={...control.data,sync_scope:request.body.mode,sync_scope_failure_code:null};
+   if(request.path==='/api/sync/history-authorization')control.data={...control.data,cli_history_authorization_state:request.body.decision,cli_history_authorization_version:1};
    return {generation:captured,data:control.data}; }};
  const state={directoryPhase:'ready',scopeRevision:1,contacts:[]};
  const contacts=sharedContacts ?? {getState:()=>state,onStateChanged:()=>()=>{},refreshContactsInBackground:async()=>{refreshes.push(true);return true;}};
@@ -73,6 +74,39 @@ test('范围命令严格校验确认、修订和模式，不接受额外字段�
  await preload.setScope({scopeRevision:1,mode:'all_private',confirmed:true});
  assert.deepEqual(calls,[['sync-control:set-scope',{scopeRevision:1,mode:'all_private',confirmed:true}]]);
  await assert.rejects(preload.setScope());
+});
+
+test('历史读取授权只在明确决定后写入，重复确认与旧页面不会重放',async t=>{
+ const f=fixture(t,{cli_history_authorization_state:'required',cli_history_authorization_version:null,cli_history_authorization_current_version:1});await flush();
+ assert.equal(f.sync.getState().report.historyAuthorizationState,'required');
+ await f.sync.setHistoryAuthorization({scopeRevision:1,decision:'accepted',confirmed:true});
+ assert.equal(f.requests.at(-1).path,'/api/sync/history-authorization');
+ assert.deepEqual(f.requests.at(-1).body,{decision:'accepted',confirmed:true});
+ assert.equal(f.sync.getState().report.historyAuthorizationState,'accepted');
+ await f.sync.setHistoryAuthorization({scopeRevision:1,decision:'accepted',confirmed:true});
+ assert.equal(f.sync.getState().report.historyAuthorizationState,'accepted');
+ await assert.rejects(f.sync.setHistoryAuthorization({scopeRevision:1,decision:'accepted',confirmed:false}));
+ await assert.rejects(f.sync.setHistoryAuthorization({scopeRevision:0,decision:'accepted',confirmed:true}));
+ await assert.rejects(f.sync.setHistoryAuthorization({scopeRevision:1,decision:'all',confirmed:true}));
+ const calls=[];const preload=ports.createSyncControlBridge({invoke:async(...args)=>calls.push(args)});
+ await preload.setHistoryAuthorization({scopeRevision:1,decision:'declined',confirmed:true});
+ assert.deepEqual(calls,[['sync-control:set-history-authorization',{scopeRevision:1,decision:'declined',confirmed:true}]]);
+ await assert.rejects(preload.setHistoryAuthorization());
+});
+
+test('历史读取授权报告拒绝非法状态与版本，旧报告按未确认处理',async t=>{
+ const f=fixture(t);await flush();
+ assert.equal(f.sync.getState().report.historyAuthorizationState,'unknown');
+ for(const extra of [
+  {cli_history_authorization_state:'all',cli_history_authorization_version:1,cli_history_authorization_current_version:1},
+  {cli_history_authorization_state:'accepted',cli_history_authorization_version:0,cli_history_authorization_current_version:1},
+  {cli_history_authorization_state:'accepted',cli_history_authorization_version:1,cli_history_authorization_current_version:0},
+ ]){
+  f.control.data=report(extra);await f.sync.refresh();assert.equal(f.sync.getState().phase,'failed');
+ }
+ f.control.data=report({cli_history_authorization_state:'declined',cli_history_authorization_version:1,cli_history_authorization_current_version:1});
+ await f.sync.refresh();
+ assert.equal(f.sync.getState().report.historyAuthorizationState,'declined');
 });
 
 test('新范围报告拒绝非法值，保留合法失败原因供界面重试',async t=>{

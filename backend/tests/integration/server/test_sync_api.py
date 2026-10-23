@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import json
 import unittest
 from dataclasses import replace
 from datetime import datetime, timezone
@@ -82,6 +83,7 @@ class ScriptedSyncControl:
             ),
         )
         self.cli_binding_calls: list[tuple[CliBindingSelection, ...]] = []
+        self.history_authorization_calls: list[str] = []
         self.confirm_error: Exception | None = None
 
     def status(self) -> FrontSyncCycleReport | None:
@@ -147,6 +149,16 @@ class ScriptedSyncControl:
         self.next_report = _report(enabled=True)
         return self.next_report
 
+    def set_history_authorization(self, decision):
+        self.history_authorization_calls.append(decision)
+        self.next_report = replace(
+            self.next_report,
+            sync_mode="cli_background",
+            cli_history_authorization_state=decision,
+            cli_history_authorization_version=1,
+        )
+        return self.next_report
+
 
 class SyncApiContractTest(unittest.TestCase):
     def setUp(self) -> None:
@@ -177,6 +189,7 @@ class SyncApiContractTest(unittest.TestCase):
             ("POST", "/api/sync/confirm-pending"),
             ("GET", "/api/sync/cli-sessions"),
             ("POST", "/api/sync/cli-bindings/confirm"),
+            ("POST", "/api/sync/history-authorization"),
         ):
             with self.subTest(method=method, path=path):
                 missing = self.client.request(method, path)
@@ -662,6 +675,7 @@ class SyncApiContractTest(unittest.TestCase):
             ("POST", "/api/sync/confirm-pending"),
             ("GET", "/api/sync/cli-sessions"),
             ("POST", "/api/sync/cli-bindings/confirm"),
+            ("POST", "/api/sync/history-authorization"),
         ):
             with self.subTest(method=method, path=path):
                 response = client.request(
@@ -669,6 +683,79 @@ class SyncApiContractTest(unittest.TestCase):
                 )
                 self.assertEqual(response.status_code, 503)
                 self.assertEqual(response.json(), {"error": "sync_unavailable"})
+
+
+    # ------------------------------------------------------------------
+    # 历史同步授权版本
+    # ------------------------------------------------------------------
+
+    def test_history_authorization_accept_and_decline_are_explicit(self) -> None:
+        for decision in ("accepted", "declined"):
+            with self.subTest(decision=decision):
+                response = self.client.request(
+                    "POST",
+                    "/api/sync/history-authorization",
+                    headers=self.headers,
+                    body=json.dumps({"decision": decision, "confirmed": True}).encode(),
+                )
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(
+                    response.json()["cli_history_authorization_state"], decision
+                )
+        self.assertEqual(
+            self.sync.history_authorization_calls, ["accepted", "declined"]
+        )
+
+    def test_history_authorization_rejects_implicit_or_extra_authority(self) -> None:
+        for payload in (
+            {},
+            {"decision": "accepted"},
+            {"decision": "accepted", "confirmed": 1},
+            {"decision": "accepted", "confirmed": False},
+            {"decision": "all", "confirmed": True},
+            {"decision": "accepted", "confirmed": True, "owner_id": str(OWNER_ID)},
+            [],
+            None,
+        ):
+            with self.subTest(payload=payload):
+                self.assertEqual(
+                    self.client.request(
+                        "POST",
+                        "/api/sync/history-authorization",
+                        headers=self.headers,
+                        body=json.dumps(payload).encode(),
+                    ).status_code,
+                    400,
+                )
+        for raw in (
+            b'{"decision":"accepted","decision":"declined","confirmed":true}',
+            b'{"decision":NaN,"confirmed":true}',
+            b"not-json",
+            b"\xff",
+        ):
+            self.assertEqual(
+                self.client.request(
+                    "POST",
+                    "/api/sync/history-authorization",
+                    headers=self.headers,
+                    body=raw,
+                ).status_code,
+                400,
+            )
+        self.assertEqual(self.sync.history_authorization_calls, [])
+
+    def test_status_exposes_history_authorization_without_body(self) -> None:
+        self.sync.next_report = replace(
+            _report(),
+            sync_mode="cli_background",
+            cli_history_authorization_state="required",
+            cli_history_authorization_version=None,
+            cli_history_authorization_current_version=2,
+        )
+        payload = self.client.get("/api/sync/status", headers=self.headers).json()
+        self.assertEqual(payload["cli_history_authorization_state"], "required")
+        self.assertIsNone(payload["cli_history_authorization_version"])
+        self.assertEqual(payload["cli_history_authorization_current_version"], 2)
 
 
 if __name__ == "__main__":

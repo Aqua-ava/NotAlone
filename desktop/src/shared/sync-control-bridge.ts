@@ -1,4 +1,6 @@
 export type SyncScope = 'selected' | 'all_private';
+export type HistoryAuthorizationDecision = 'accepted' | 'declined';
+export type HistoryAuthorizationState = HistoryAuthorizationDecision | 'required' | 'unknown';
 export type BackgroundSyncPhase = 'disabled' | 'waiting_bindings' | 'active' | 'degraded';
 export type ForegroundReportPhase = 'sync_disabled' | 'waiting_foreground' | 'unavailable' | 'active' | 'failed';
 export type SyncBackfillPhase = 'not_required' | 'gap_detected' | 'backfilling' | 'complete' | 'failed' | 'incomplete' | 'paused';
@@ -33,6 +35,9 @@ export interface SyncStatusReport {
   enabled: boolean;
   syncScope?: SyncScope;
   syncScopeFailureCode?: string | null;
+  historyAuthorizationState?: HistoryAuthorizationState;
+  historyAuthorizationVersion?: number | null;
+  historyAuthorizationCurrentVersion?: number;
   backgroundPhase: BackgroundSyncPhase;
   backgroundFailureCode: string | null;
   cliAvailable: boolean;
@@ -49,15 +54,19 @@ export interface SyncControlState {
   scopeRevision: number;
   phase: 'offline' | 'loading' | 'ready' | 'unavailable' | 'failed';
   report: SyncStatusReport | null;
-  busy: 'enable' | 'disable' | 'pause' | 'retry' | 'scope' | null;
+  busy: 'enable' | 'disable' | 'pause' | 'retry' | 'scope' | 'history' | null;
   errorCode: 'status-unconfirmed' | 'operation-unconfirmed' | null;
 }
 export interface SyncControlRequest { scopeRevision: number; }
 export interface SyncScopeRequest extends SyncControlRequest { mode: SyncScope; confirmed: true; }
+export interface HistoryAuthorizationRequest extends SyncControlRequest {
+  decision: HistoryAuthorizationDecision; confirmed: true;
+}
 export interface SyncControlBridge {
   getState(): Promise<SyncControlState>;
   refresh(): Promise<void>;
   setScope(request: SyncScopeRequest): Promise<void>;
+  setHistoryAuthorization(request: HistoryAuthorizationRequest): Promise<void>;
   enable(request: SyncControlRequest): Promise<void>;
   disable(request: SyncControlRequest): Promise<void>;
   pause(request: SyncControlRequest): Promise<void>;

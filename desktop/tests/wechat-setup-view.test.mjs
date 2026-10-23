@@ -26,6 +26,7 @@ test('新用户先主动检测，再核对账号并一次授权全部现有及�
  await expect(page.getByText('synthetic-account',{exact:true})).toBeVisible();
  await expect(page.getByText('读取工具配置的微信账号：synthetic-account',{exact:true})).toBeVisible();
  await expect(page.getByText(/现有及以后新增的微信私聊/)).toBeVisible();
+ await expect(page.getByText(/确认同时允许读取此账号现有私聊在本机可读的全部文字历史/)).toBeVisible();
  await page.getByRole('button',{name:'确认连接并同步全部私聊',exact:true}).click();
  assert.deepEqual((await page.evaluate(()=>window.calls)).at(-1),{revision:2,confirmed:true});
  await expect(page.getByText('微信账号已连接',{exact:true})).toBeVisible();

@@ -1,10 +1,13 @@
-import type { BackgroundSyncPhase, ForegroundReportPhase, SyncBackfillPhase, SyncBackfillReport, SyncPriorityReport, SyncStatusReport, SyncScope } from '../../shared/sync-control-bridge';
+import type { BackgroundSyncPhase, ForegroundReportPhase, HistoryAuthorizationDecision, HistoryAuthorizationState, SyncBackfillPhase, SyncBackfillReport, SyncPriorityReport, SyncStatusReport, SyncScope } from '../../shared/sync-control-bridge';
 import type { BackendHost } from '../backend/host';
 import { isUuid } from '../uuid';
 
 const backgroundPhases: BackgroundSyncPhase[] = ['disabled', 'waiting_bindings', 'active', 'degraded'];
 const foregroundPhases: ForegroundReportPhase[] = ['sync_disabled', 'waiting_foreground', 'unavailable', 'active', 'failed'];
 const backfillPhases: SyncBackfillPhase[] = ['not_required', 'gap_detected', 'backfilling', 'complete', 'failed', 'incomplete', 'paused'];
+const historyAuthorizationStates: HistoryAuthorizationState[] = ['required', 'accepted', 'declined'];
+// 旧后台没有授权版本字段；默认版本只用于把缺失报告标为未确认。
+const DEFAULT_HISTORY_AUTHORIZATION_VERSION = 1;
 
 function failureCode(value: unknown): string | null {
   if (value === null) return null;
@@ -47,6 +50,26 @@ function backfillReport(fields: Record<string, unknown>): SyncBackfillReport {
     pendingContacts: count(fields.cli_backfill_pending_contacts), messageCount: count(fields.cli_backfill_total_message_count),
     nonTextCount: count(fields.cli_backfill_total_non_text_count) };
 }
+function positiveVersion(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value <= 0) throw new Error('同步报告不可用。');
+  return value;
+}
+function historyAuthorization(fields: Record<string, unknown>) {
+  // 旧后台没有历史授权字段；不把未报告的状态当成已同意或已拒绝。
+  if (!('cli_history_authorization_state' in fields)) {
+    return { historyAuthorizationState: 'unknown' as const, historyAuthorizationVersion: null,
+      historyAuthorizationCurrentVersion: DEFAULT_HISTORY_AUTHORIZATION_VERSION };
+  }
+  const state = fields.cli_history_authorization_state;
+  if (!historyAuthorizationStates.includes(state as HistoryAuthorizationState)) throw new Error('同步报告不可用。');
+  const version = fields.cli_history_authorization_version;
+  if (version !== null && version !== undefined) positiveVersion(version);
+  return {
+    historyAuthorizationState: state as HistoryAuthorizationState,
+    historyAuthorizationVersion: version === undefined ? null : version as number | null,
+    historyAuthorizationCurrentVersion: positiveVersion(fields.cli_history_authorization_current_version),
+  };
+}
 function parseSyncReport(value: unknown): SyncStatusReport {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('同步报告不可用。');
   const fields = value as Record<string, unknown>;
@@ -60,6 +83,7 @@ function parseSyncReport(value: unknown): SyncStatusReport {
   if ('sync_scope' in fields && fields.sync_scope !== 'all_private' && fields.sync_scope !== 'selected') throw new Error('同步报告不可用。');
   return { syncScope: (fields.sync_scope ?? 'selected') as SyncScope,
     syncScopeFailureCode: 'sync_scope_failure_code' in fields ? failureCode(fields.sync_scope_failure_code) : null,
+    ...historyAuthorization(fields),
     enabled: fields.sync_enabled, backgroundPhase: fields.cli_sync_phase as BackgroundSyncPhase,
     backgroundFailureCode: failureCode(fields.cli_failure_code), cliAvailable: fields.cli_available,
     confirmedBindingCount: fields.cli_bound_count, foregroundPhase: fields.foreground_phase as ForegroundReportPhase,
@@ -88,5 +112,10 @@ export async function controlBackfill(backend: BackendHost, operation: 'pause' |
 export async function setSyncScope(backend: BackendHost, mode: SyncScope, signal: AbortSignal) {
   const response = await backend.requestJson({ method: 'POST', path: '/api/sync/scope',
     body: { mode, confirmed: true }, timeoutMs: 12_000, maxResponseBytes: 16_384, signal });
+  return { generation: response.generation, report: parseSyncReport(response.data) };
+}
+export async function setHistoryAuthorization(backend: BackendHost, decision: HistoryAuthorizationDecision, signal: AbortSignal) {
+  const response = await backend.requestJson({ method: 'POST', path: '/api/sync/history-authorization',
+    body: { decision, confirmed: true }, timeoutMs: 12_000, maxResponseBytes: 16_384, signal });
   return { generation: response.generation, report: parseSyncReport(response.data) };
 }

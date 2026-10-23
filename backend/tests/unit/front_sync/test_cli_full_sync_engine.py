@@ -18,6 +18,10 @@ from notalone.front_sync.foreground_locator import ForegroundLocatorStatus
 from notalone.front_sync.foreground_observation import FreshForegroundObservation
 from notalone.front_sync.sync_engine import FrontSyncCycleReport
 from notalone.front_sync.tail_lifecycle import FrontSyncPhase, FollowRuntimeStatus
+from notalone.persistence.history_authorization import (
+    HistoryAuthorization,
+    HistoryAuthorizationState,
+)
 from notalone.wechat_cli import CliCommandError
 
 
@@ -57,6 +61,8 @@ class FakeBackground:
         self.interruptions = 0
         self.backfill_pauses = 0
         self.backfill_retries = 0
+        self.history_starts: list[tuple[object, ...]] = []
+        self.history_start_requests = 0
         self.result = CliSyncCycleResult(
             status=CliSyncStatus(
                 phase=CliSyncPhase.ACTIVE,
@@ -89,6 +95,13 @@ class FakeBackground:
 
     def request_safety_sweep(self) -> None:
         self.safety_sweep_requests += 1
+
+    def start_history_for_bindings(self, bindings) -> int:
+        self.history_starts.append(tuple(bindings))
+        return len(bindings)
+
+    def request_history_start(self) -> None:
+        self.history_start_requests += 1
 
     def pause_backfill(self) -> None:
         self.backfill_pauses += 1
@@ -161,6 +174,7 @@ class FakeCli:
 class FakeBindingCoordinator:
     def __init__(self) -> None:
         self.confirmed: list[tuple[CliBindingSelection, ...]] = []
+        self.confirm_result: tuple[object, ...] = ()
 
     def list_candidates(self):
         return (
@@ -169,7 +183,7 @@ class FakeBindingCoordinator:
 
     def confirm(self, selections):
         self.confirmed.append(tuple(selections))
-        return ()
+        return self.confirm_result
 
 
 class FakeFallback:
@@ -195,6 +209,28 @@ class FakeFallback:
     def confirm_pending_binding(self, **kwargs):
         del kwargs
         return _legacy_report()
+
+
+class FakeHistoryAuthorization:
+    def __init__(self) -> None:
+        self.state = HistoryAuthorization(HistoryAuthorizationState.REQUIRED)
+        self.decisions: list[str] = []
+
+    def read(self, **kwargs):
+        del kwargs
+        return self.state
+
+    def decide(self, *, decision, at, **kwargs):
+        del kwargs
+        self.decisions.append(decision)
+        self.state = HistoryAuthorization(
+            HistoryAuthorizationState(decision), version=1,
+        )
+        return self.state
+
+    def history_sync_authorized(self, **kwargs) -> bool:
+        del kwargs
+        return self.state.authorized
 
 
 def _legacy_report() -> FrontSyncCycleReport:
@@ -351,6 +387,50 @@ class CliFullSyncEngineTest(unittest.TestCase):
         self.assertEqual(candidates[0].username, "wxid_a")
         self.assertEqual(len(self.bindings.confirmed), 1)
         self.assertEqual(self.foreground.calls, [])
+
+    def test_batch_confirmation_starts_history_only_for_created_bindings(self) -> None:
+        from types import SimpleNamespace
+        created = (SimpleNamespace(binding_id=UUID("44444444-4444-4444-4444-444444444444")),)
+        self.bindings.confirm_result = created
+        self.engine.confirm_cli_bindings((CliBindingSelection(locator="wxid_a"),))
+        self.assertEqual(self.background.history_starts, [created])
+
+        # 已绑定会话的重复确认不会再次创建历史任务。
+        self.bindings.confirm_result = ()
+        self.engine.confirm_cli_bindings((CliBindingSelection(locator="wxid_a"),))
+        self.assertEqual(len(self.background.history_starts), 1)
+
+    def test_history_authorization_upgrade_is_explicit_and_reported(self) -> None:
+        from notalone.front_sync.full_sync_engine import CliFullSyncEngine
+        authorization = FakeHistoryAuthorization()
+        engine = CliFullSyncEngine(
+            owner_id=OWNER_ID,
+            channel="wechat",
+            account_scope="wx-account",
+            cli=self.cli,
+            sync_state=self.state,
+            background=self.background,
+            foreground=self.foreground,
+            binding_coordinator=self.bindings,
+            fallback=FakeFallback(),
+            history_authorization=authorization,
+        )
+        self.assertEqual(
+            engine.cycle().cli_history_authorization_state, "required"
+        )
+        engine.set_history_authorization("declined")
+        self.assertEqual(self.background.history_start_requests, 0)
+        engine.set_history_authorization("accepted")
+        self.assertEqual(authorization.decisions, ["declined", "accepted"])
+        self.assertEqual(self.background.history_start_requests, 1)
+        report = engine.cycle()
+        self.assertEqual(report.cli_history_authorization_state, "accepted")
+        self.assertEqual(report.cli_history_authorization_version, 1)
+        self.assertEqual(report.cli_history_authorization_current_version, 1)
+        engine.set_history_authorization("accepted")
+        self.assertEqual(
+            authorization.decisions, ["declined", "accepted", "accepted"]
+        )
 
     def test_sync_check_requests_a_background_safety_sweep(self) -> None:
         self.engine.request_sync_check()

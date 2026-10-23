@@ -23,7 +23,6 @@ from notalone.front_sync import (
     TailLifecycle,
 )
 from notalone.front_sync.event_publisher import MessageEventPublisher
-from notalone.front_sync.cli_sync import HistorySyncAuthorizationPort
 from notalone.front_sync.sync_engine import FrontSyncEngine
 from notalone.persistence.conversation_repository import (
     PostgresConversationBindingRepository,
@@ -31,6 +30,10 @@ from notalone.persistence.conversation_repository import (
 from notalone.persistence.sync_scope import PostgresSyncScopeStore
 from notalone.persistence.backfill_state import PostgresBackfillStateStore
 from notalone.persistence.front_sync_state import PostgresFrontSyncStateStore
+from notalone.persistence.history_authorization import (
+    HistoryAuthorizationStorePort,
+    PostgresHistorySyncAuthorizationStore,
+)
 from notalone.persistence.history_sync_state import PostgresHistorySyncStateStore
 from notalone.persistence.observation_store import PostgresObservationStore
 from notalone.wechat_cli import LocalWechatCli
@@ -47,10 +50,16 @@ def build_cli_full_sync_engine(
     cli_executable: str | None = None,
     probe_executable: str | None = None,
     message_events: MessageEventPublisher | None = None,
-    history_authorization: HistorySyncAuthorizationPort | None = None,
+    history_authorization: HistoryAuthorizationStorePort | None = None,
     clock: Callable[[], datetime] | None = None,
 ) -> CliFullSyncEngine:
     """装配 CLI 后台全量同步与前台 OCR 定位双通道引擎。"""
+
+    # 生产装配始终使用持久化授权版本；测试可注入内存实现。
+    authorization = (
+        history_authorization
+        or PostgresHistorySyncAuthorizationStore(database_url)
+    )
 
     cli = LocalWechatCli(
         executable=cli_executable
@@ -96,7 +105,7 @@ def build_cli_full_sync_engine(
         observation_store=observation_store,
         backfill_state=PostgresBackfillStateStore(database_url),
         history_state=PostgresHistorySyncStateStore(database_url),
-        history_authorization=history_authorization,
+        history_authorization=authorization,
         sync_state=sync_state,
         message_events=message_events,
         clock=clock,
@@ -129,6 +138,7 @@ def build_cli_full_sync_engine(
         binding_coordinator=binding_coordinator,
         fallback=fallback,
         scope_store=PostgresSyncScopeStore(database_url),
+        history_authorization=authorization,
         clock=clock,
     )
 

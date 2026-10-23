@@ -145,6 +145,9 @@ class SyncControlPort(Protocol):
     def set_sync_scope(self, mode: str) -> FrontSyncCycleReport:
         """变更授权范围并返回最新状态。"""
 
+    def set_history_authorization(self, decision: str) -> FrontSyncCycleReport:
+        """保存一次明确的历史读取决定并返回最新状态。"""
+
     def status(self) -> FrontSyncCycleReport | None:
         """返回最近一次循环报告；尚未运行过循环时返回 None。"""
 
@@ -380,6 +383,12 @@ class SyncHost:
         """与正文读取和撤销共用权限变更锁，返回新范围的缓存状态。"""
         with self._authority_change():
             self._engine.set_sync_scope(mode)
+            return self._run_cycle_locked()
+
+    def set_history_authorization(self, decision: str) -> FrontSyncCycleReport:
+        """历史读取授权升级与范围内历史任务补建在同一权限变更锁内。"""
+        with self._authority_change():
+            self._engine.set_history_authorization(decision)
             return self._run_cycle_locked()
 
     def set_priority_contact(

@@ -4,6 +4,9 @@ from uuid import UUID
 import psycopg
 from notalone.application.wechat_setup import WechatSetupConflict
 from notalone.persistence.locks import lock_owner_scope
+from notalone.persistence.history_authorization import (
+    HISTORY_SYNC_AUTHORIZATION_VERSION,
+)
 
 
 class PostgresWechatSetupStore:
@@ -48,6 +51,12 @@ class PostgresWechatSetupStore:
                 connection.execute('''INSERT INTO public.wechat_sync_scope
                     (owner_id,channel,account_scope,mode,granted_at)
                     VALUES(%s,'wechat',%s,'all_private',%s)''', (owner_id, account_id, at))
+                # 首次连接的一次确认同时包含历史读取资格；与身份、范围、
+                # 开关同一事务提交，避免只保存其中一部分。
+                connection.execute('''INSERT INTO public.wechat_history_sync_authorization
+                    (owner_id,channel,account_scope,version,decision,decided_at)
+                    VALUES(%s,'wechat',%s,%s,'accepted',%s)''',
+                    (owner_id, account_id, HISTORY_SYNC_AUTHORIZATION_VERSION, at))
                 connection.execute('''INSERT INTO public.front_sync_state
                     (owner_id,enabled,enabled_at) VALUES(%s,true,%s)
                     ON CONFLICT(owner_id) DO UPDATE SET enabled=true,enabled_at=EXCLUDED.enabled_at,updated_at=now()''',
