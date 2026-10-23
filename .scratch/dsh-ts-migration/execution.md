@@ -9,19 +9,19 @@
 | 会话 | 职责与独占写入范围 | 当前阶段 |
 | --- | --- | --- |
 | 主会话 | 总目标、依赖调度、planning及整合验收；不重复实现子会话模块 | 持续协调02—26 |
-| 02裁剪运行方案实现与验证会话 | 02实际实现；`backend-ts/`、02任务、`runtime-validation/` | 已resolved：14运行测试、类型检查、冻结安装及双轴复核通过 |
-| 02锁定制品与裁剪风险独立核验会话 | 独立制品及裁剪风险核验；仅`runtime-audit.md` | 已完成独立审计，结论见runtime-audit.md；未代替运行验收 |
-| 03桌面宿主与原库生命周期会话 | 03实现；backend-ts、desktop所需宿主及对应测试、03任务与host-lifecycle证据 | 已resolved于9f39d6c2；TS44、Python55、桌面945通过及实际界面5/5，两轴通过 |
+| 05回复与模型会话 | reply/retrieval/model模块及测试、05证据 | claimed；同权重先导通过，完整冻结合同和宿主待验 |
+| 06Skill会话 | skill模块及测试、06证据 | claimed；领域测试通过，宿主与App待验 |
+| 09记忆偏好会话 | memory/preference及共用managed-update-backups，限定04时间/版本scope参数化 | claimed；领域测试通过，宿主与App待验 |
 
-03独立原库合同核验已完成，见 `host-lifecycle/database-contract-audit.md`；103文件升级、035凭证和owner歧义已交实施会话验收。
+18独占微信模块、factory/full_sync_engine/cli_sync历史资格局部；108及门禁已由主会话db1d9cbd提交，完整18仍claimed。
 04已在f4acc05d/2dd9ad4a验收；05、06、09合同审计已归档，18独立审计已归档于wechat-scope/contract-audit.md；05/06/09/18已分别派发目标实现会话。
 子会话只提交自己任务文件，不夹带主调度或他人文件；独立审计交主会话收录。Git索引操作串行，避免交叉提交。
-已认领任务的实际状态以各票顶部为准，阻塞前置未验收时不改成resolved。
+共享合成PG /tmp/notalone-dsh-migration-pg-20261024仍运行，主会话最终清理；官方源码恢复及资源见runtime-validation/recovery-20261024.md。
 
 ## 后续调度
 
 02—04已验收；05回复/模型、06Skill、09记忆/偏好、18微信范围分别独占领域模块、测试、领域UI及本票证据。
-共享host-plugin/storage/legacy/launch/profile/依赖清单、Python app/command/reply_wiring及desktop index由主会话装配；子会话提交integration-request.md。
+当前18短期独占host-plugin/legacy-backend及Python app/command，仅接微信；完成释放后再装配05/06/09。storage/launch/profile/依赖清单/desktop index仍主会话。
 其余每轮从各票Blocked by字段计算可执行前沿；所有前置resolved并复核证据后才派发。
 05通过可解锁23；18通过可解锁19和21；其余按索引原有依赖，不跳过10、11等共用能力。
 24等待17、20、21、22、23，25等待24，26等待25；不把预先写空壳当依赖完成。
