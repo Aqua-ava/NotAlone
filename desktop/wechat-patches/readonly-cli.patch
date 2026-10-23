@@ -1,21 +1,72 @@
---- a/cmd/wechat-cli/product.go
-+++ b/cmd/wechat-cli/product.go
-@@ -36,10 +36,8 @@
- }
+diff --git a/cmd/wechat-cli/chat_resolution_live.go b/cmd/wechat-cli/chat_resolution_live.go
+index 86404a1..ddc0b48 100644
+--- a/cmd/wechat-cli/chat_resolution_live.go
++++ b/cmd/wechat-cli/chat_resolution_live.go
+@@ -9,6 +9,49 @@ import (
+ 	"github.com/r266-tech/wx-cli/v2/internal/wxkind"
+ )
  
- func strictReadOnlyMode() bool {
--	if strings.TrimSpace(os.Getenv("WECHAT_CLI_STRICT_READ_ONLY")) != "" {
--		return envBool("WECHAT_CLI_STRICT_READ_ONLY")
--	}
--	return envBool("WX_MCP_STRICT_READ_ONLY")
-+	// 产品构建不可由参数或环境关闭严格只读。
-+	return true
- }
- 
- func appStateDir() (string, error) {
++// 会话表里的 username 就是稳定定位标识，即使它不是 wxid_ 前缀。
++// 精确命中会话身份时先于任何联系人名称解析返回，避免自定义 username
++// 被当作显示名处理，或落到需要 cache refresh 的缓存索引分支。
++func (s *server) exactSessionChatCandidate(query, typeFilter string) (chatCandidate, bool) {
++	db, err := s.openDBNoRefresh("session", "session.db")
++	if err != nil {
++		return chatCandidate{}, false
++	}
++	defer db.Close()
++	rows, err := db.Query(`SELECT username,last_timestamp,sort_timestamp FROM SessionTable
++		WHERE COALESCE(is_hidden,0)=0 AND username = ? LIMIT 1`, query)
++	if err != nil || len(rows) == 0 {
++		return chatCandidate{}, false
++	}
++	row := rows[0]
++	username := rowString(row, "username")
++	displayName := username
++	verified := false
++	if contacts, err := s.openDBNoRefresh("contact", "contact.db"); err == nil {
++		defer contacts.Close()
++		names, err := contacts.Query(`SELECT COALESCE(NULLIF(remark,''),NULLIF(nick_name,''),username) AS display_name, verify_flag FROM contact WHERE username = ? LIMIT 1`, username)
++		if err == nil && len(names) > 0 {
++			if name := rowString(names[0], "display_name"); name != "" {
++				displayName = name
++			}
++			verified = rowInt64(names[0], "verify_flag") != 0
++		}
++	}
++	kind := agentChatType(username, wxkind.ClassifyUsername(username), verified)
++	if !chatTypeAllowed(kind, typeFilter) {
++		return chatCandidate{}, false
++	}
++	return chatCandidate{
++		Username:      username,
++		DisplayName:   displayName,
++		ChatType:      kind,
++		LastTimestamp: rowInt64(row, "last_timestamp"),
++		SortTimestamp: rowInt64(row, "sort_timestamp"),
++		Source:        "session",
++		Match:         "username_exact",
++	}, true
++}
++
+ // Resolve names against the same live account as timeline and sessions. An old
+ // metadata snapshot must not hide a newly joined group or renamed contact.
+ func (s *server) liveChatCandidates(query, typeFilter string, limit int) ([]chatCandidate, []string, error) {
+@@ -16,6 +59,9 @@ func (s *server) liveChatCandidates(query, typeFilter string, limit int) ([]chat
+ 	if query == "" {
+ 		return nil, nil, fmt.Errorf("query/chat is required")
+ 	}
++	if exact, ok := s.exactSessionChatCandidate(query, typeFilter); ok {
++		return []chatCandidate{exact}, nil, nil
++	}
+ 	if limit <= 0 || limit > 50 {
+ 		limit = 10
+ 	}
+diff --git a/cmd/wechat-cli/main.go b/cmd/wechat-cli/main.go
+index 49c260b..4787a33 100644
 --- a/cmd/wechat-cli/main.go
 +++ b/cmd/wechat-cli/main.go
-@@ -73,17 +73,11 @@
+@@ -73,17 +73,11 @@ var (
  
  // findWCDB locates the platform WCDB dynamic library.
  func findWCDB() (string, error) {
@@ -38,7 +89,7 @@
  }
  
  /*
-@@ -520,6 +514,19 @@
+@@ -520,6 +514,19 @@ func msgShardWarnings(shards []msgShardDB) []string {
  // ──────────────────── main loop ────────────────────
  
  func main() {
@@ -58,6 +109,99 @@
  	if maybeRunCLI(os.Args[1:]) {
  		return
  	}
+diff --git a/cmd/wechat-cli/product.go b/cmd/wechat-cli/product.go
+index d7af105..be8f847 100644
+--- a/cmd/wechat-cli/product.go
++++ b/cmd/wechat-cli/product.go
+@@ -36,10 +36,8 @@ func envBoolAny(names ...string) bool {
+ }
+ 
+ func strictReadOnlyMode() bool {
+-	if strings.TrimSpace(os.Getenv("WECHAT_CLI_STRICT_READ_ONLY")) != "" {
+-		return envBool("WECHAT_CLI_STRICT_READ_ONLY")
+-	}
+-	return envBool("WX_MCP_STRICT_READ_ONLY")
++	// 产品构建不可由参数或环境关闭严格只读。
++	return true
+ }
+ 
+ func appStateDir() (string, error) {
+diff --git a/cmd/wechat-cli/sessions.go b/cmd/wechat-cli/sessions.go
+index d46df1a..8a31dc3 100644
+--- a/cmd/wechat-cli/sessions.go
++++ b/cmd/wechat-cli/sessions.go
+@@ -8,7 +8,7 @@ import (
+ 	"github.com/r266-tech/wx-cli/v2/internal/wxkind"
+ )
+ 
+-// Session ordering, previews, and unread counts always come from the live DB.
++// 产品会话列表只读取可见会话的身份和时间；不读取未确认会话的正文预览。
+ func (s *server) toolSessions(a map[string]any) (any, error) {
+ 	db, err := s.openDB("session", "session.db")
+ 	if err != nil {
+@@ -40,9 +40,9 @@ func (s *server) toolSessions(a map[string]any) (any, error) {
+ 		// Cross-db: also include sessions whose talker matches display_name /
+ 		// nick_name / remark / alias in contact.db (fuzzy, case+space insensitive).
+ 		matched := s.findUsernamesByFuzzyName(kw)
+-		clauses := []string{"username LIKE ? COLLATE NOCASE", "summary LIKE ? COLLATE NOCASE"}
++		clauses := []string{"username LIKE ? COLLATE NOCASE"}
+ 		like := "%" + kw + "%"
+-		args = append(args, like, like)
++		args = append(args, like)
+ 		if len(matched) > 0 {
+ 			ph := make([]string, len(matched))
+ 			for i, u := range matched {
+@@ -53,10 +53,7 @@ func (s *server) toolSessions(a map[string]any) (any, error) {
+ 		}
+ 		where = append(where, "("+strings.Join(clauses, " OR ")+")")
+ 	}
+-	query := fmt.Sprintf(`SELECT username, unread_count, summary,
+-		last_timestamp, sort_timestamp,
+-		last_msg_sender AS last_sender_wxid, last_sender_display_name,
+-		last_msg_type, last_msg_sub_type
++	query := fmt.Sprintf(`SELECT username, last_timestamp, sort_timestamp
+ 		FROM SessionTable
+ 		WHERE %s
+ 		ORDER BY sort_timestamp DESC, username DESC
+@@ -74,22 +71,6 @@ func (s *server) toolSessions(a map[string]any) (any, error) {
+ 	if err != nil {
+ 		return nil, err
+ 	}
+-	for _, r := range rows {
+-		bk, _ := r["last_msg_type"].(int64)
+-		st, _ := r["last_msg_sub_type"].(int64)
+-		r["last_msg_kind_name"] = wxkind.Resolve(int32(bk), int32(st))
+-		// Aggregator sessions (brandsessionholder / brandservicesessionholder)
+-		// wrap the real sender in "_$_CUSTOM_USERNAME_PREFIX_$_<aggId>:<realId>".
+-		// The aggId is UI-internal noise; keep only the real wxid / gh_ id.
+-		if v, ok := r["last_sender_wxid"].(string); ok {
+-			r["last_sender_wxid"] = stripAggSenderPrefix(v)
+-		}
+-		for _, k := range []string{"last_sender_wxid", "last_sender_display_name"} {
+-			if v, ok := r[k].(string); ok && v == "" {
+-				delete(r, k)
+-			}
+-		}
+-	}
+ 	return sessionRowsResult(rows, "live_session_db", warnings), nil
+ }
+ 
+diff --git a/internal/config/config.go b/internal/config/config.go
+index ca3844a..485e9f6 100644
+--- a/internal/config/config.go
++++ b/internal/config/config.go
+@@ -568,7 +568,8 @@ var runtimeKeySave = keystore.Save
+ var runtimeKeyAuthorize = keystore.LoadWithAuthorization
+ 
+ func hydrateRuntimeKeys(c *Config) error {
+-	return hydrateRuntimeKeysWith(c, runtimeKeyLoad)
++	if c.KeyStore == "keychain" { return errors.New("notalone_keychain_disabled") }
++	return nil
+ }
+ 
+ func hydrateRuntimeKeysWith(c *Config, load func(string, string) (*keystore.Record, error)) error {
+diff --git a/internal/wxkey/wxkey.go b/internal/wxkey/wxkey.go
+index e05c346..ebb64f2 100644
 --- a/internal/wxkey/wxkey.go
 +++ b/internal/wxkey/wxkey.go
 @@ -1,71 +1,8 @@
@@ -134,7 +278,7 @@
  type SetupResult struct {
  	PID           int               `json:"pid"`
  	Root          string            `json:"scan_root"`
-@@ -104,76 +41,8 @@
+@@ -104,76 +41,8 @@ type ImageKeyCommandResult struct {
  	ImageKey *ImageKeyResult `json:"image_key,omitempty"`
  }
  
@@ -148,7 +292,7 @@
 -func RunSetup() (*SetupResult, string, error) {
 -	return runSetup()
 -}
- 
+-
 -func RunImageKey(root string) (*ImageKeyResult, string, error) {
 -	bin, err := FindBinary()
 -	if err != nil {
@@ -178,7 +322,7 @@
 -	}
 -	return res.ImageKey, diagnostics.Redact(stderr.String()), nil
 -}
--
+ 
 -func runSetupExternal() (*SetupResult, string, error) {
 -	bin, err := FindBinary()
 -	if err != nil {
@@ -215,75 +359,3 @@
 +func RunSetup() (*SetupResult,string,error) { return nil,"",fmt.Errorf("notalone_wxkey_disabled") }
 +func RunImageKey(root string) (*ImageKeyResult,string,error) { return nil,"",fmt.Errorf("notalone_wxkey_disabled") }
 +func runSetupExternal() (*SetupResult,string,error) { return nil,"",fmt.Errorf("notalone_wxkey_disabled") }
---- a/internal/config/config.go
-+++ b/internal/config/config.go
-@@ -568,7 +568,8 @@
- var runtimeKeyAuthorize = keystore.LoadWithAuthorization
- 
- func hydrateRuntimeKeys(c *Config) error {
--	return hydrateRuntimeKeysWith(c, runtimeKeyLoad)
-+	if c.KeyStore == "keychain" { return errors.New("notalone_keychain_disabled") }
-+	return nil
- }
- 
- func hydrateRuntimeKeysWith(c *Config, load func(string, string) (*keystore.Record, error)) error {
-diff --git a/cmd/wechat-cli/sessions.go b/cmd/wechat-cli/sessions.go
-index d46df1a0..8a31dc33 100644
---- a/cmd/wechat-cli/sessions.go
-+++ b/cmd/wechat-cli/sessions.go
-@@ -8,7 +8,7 @@ import (
- 	"github.com/r266-tech/wx-cli/v2/internal/wxkind"
- )
- 
--// Session ordering, previews, and unread counts always come from the live DB.
-+// 产品会话列表只读取可见会话的身份和时间；不读取未确认会话的正文预览。
- func (s *server) toolSessions(a map[string]any) (any, error) {
- 	db, err := s.openDB("session", "session.db")
- 	if err != nil {
-@@ -40,9 +40,9 @@ func (s *server) toolSessions(a map[string]any) (any, error) {
- 		// Cross-db: also include sessions whose talker matches display_name /
- 		// nick_name / remark / alias in contact.db (fuzzy, case+space insensitive).
- 		matched := s.findUsernamesByFuzzyName(kw)
--		clauses := []string{"username LIKE ? COLLATE NOCASE", "summary LIKE ? COLLATE NOCASE"}
-+		clauses := []string{"username LIKE ? COLLATE NOCASE"}
- 		like := "%" + kw + "%"
--		args = append(args, like, like)
-+		args = append(args, like)
- 		if len(matched) > 0 {
- 			ph := make([]string, len(matched))
- 			for i, u := range matched {
-@@ -53,10 +53,7 @@ func (s *server) toolSessions(a map[string]any) (any, error) {
- 		}
- 		where = append(where, "("+strings.Join(clauses, " OR ")+")")
- 	}
--	query := fmt.Sprintf(`SELECT username, unread_count, summary,
--		last_timestamp, sort_timestamp,
--		last_msg_sender AS last_sender_wxid, last_sender_display_name,
--		last_msg_type, last_msg_sub_type
-+	query := fmt.Sprintf(`SELECT username, last_timestamp, sort_timestamp
- 		FROM SessionTable
- 		WHERE %s
- 		ORDER BY sort_timestamp DESC, username DESC
-@@ -74,22 +71,6 @@ func (s *server) toolSessions(a map[string]any) (any, error) {
- 	if err != nil {
- 		return nil, err
- 	}
--	for _, r := range rows {
--		bk, _ := r["last_msg_type"].(int64)
--		st, _ := r["last_msg_sub_type"].(int64)
--		r["last_msg_kind_name"] = wxkind.Resolve(int32(bk), int32(st))
--		// Aggregator sessions (brandsessionholder / brandservicesessionholder)
--		// wrap the real sender in "_$_CUSTOM_USERNAME_PREFIX_$_<aggId>:<realId>".
--		// The aggId is UI-internal noise; keep only the real wxid / gh_ id.
--		if v, ok := r["last_sender_wxid"].(string); ok {
--			r["last_sender_wxid"] = stripAggSenderPrefix(v)
--		}
--		for _, k := range []string{"last_sender_wxid", "last_sender_display_name"} {
--			if v, ok := r[k].(string); ok && v == "" {
--				delete(r, k)
--			}
--		}
--	}
- 	return sessionRowsResult(rows, "live_session_db", warnings), nil
- }
- 

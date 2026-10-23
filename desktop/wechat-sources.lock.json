@@ -113,9 +113,9 @@
   ],
   "cliPatch": {
     "file": "wechat-patches/readonly-cli.patch",
-    "sha256": "91354432dedba9b932052d77824275e8b09cc3700c40624a51047ccf38436b38",
+    "sha256": "4fdc2ad1c437c9f0afe8a1046ca50fded9c99da47c5dd1ae8f43c607a7e570d5",
     "testFile": "wechat-patches/readonly-cli-test.go",
-    "testSha256": "2a9b2e118b863e2d673835bb73830bf6a6719deed8833d11aaacd585ffb978bd"
+    "testSha256": "fe17ec90e3efa2bdf7e0107a44a8818535759e52ea02e022cf36ac15407a8fcf"
   },
   "researchCache": {
     "wcdb": {
