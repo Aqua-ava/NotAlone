@@ -6,7 +6,7 @@
 
 > 状态：历史运行时草案与迁移阅读入口。精简 DSH 与 TS 后端已由 [ADR-102](../adr/102-dsh-typescript-backend-migration.md)正式采纳，框架选择替代 ADR-006／009／010；下方旧选型、图和实现步骤保留追溯，不再作为新实现的技术选型约束。当前产品代码仍使用 Python、LangChain `create_agent`、LangGraph 与 `SkillsMiddleware`，迁移尚未实现或验收。
 
-早期进度见[历史功能目录](../../.scratch/agent-runtime/planning.md)。本次正式[实施规格](../../.scratch/dsh-ts-migration/spec.md)已整理，[任务拆分建议](../../.scratch/dsh-ts-migration/ticket-proposal.md)待用户确认，尚未发布实现任务。
+早期进度见[历史功能目录](../../.scratch/agent-runtime/planning.md)。本次正式[实施规格](../../.scratch/dsh-ts-migration/spec.md)已整理，[任务拆分](../../.scratch/dsh-ts-migration/ticket-proposal.md)及验收入口已获认可，[26份任务](../../.scratch/dsh-ts-migration/planning.md)已发布，尚未开始实现。
 
 ## 已采纳的迁移入口（2026-10-23）
 

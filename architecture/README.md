@@ -1,6 +1,6 @@
 # NotAlone 架构文档
 
-> 2026-10-23 后端迁移：[ADR-102](adr/102-dsh-typescript-backend-migration.md)已采纳精简 DSH 与 TypeScript 后端，保留现有功能、PostgreSQL 与资料。当前仍为 Python／LangChain 实现；[规格](../.scratch/dsh-ts-migration/spec.md)已整理，[拆分建议](../.scratch/dsh-ts-migration/ticket-proposal.md)待确认，迁移及验收未完成。
+> 2026-10-23 后端迁移：[ADR-102](adr/102-dsh-typescript-backend-migration.md)已采纳精简 DSH 与 TypeScript 后端，保留现有功能、PostgreSQL 与资料。当前仍为 Python／LangChain 实现；[规格](../.scratch/dsh-ts-migration/spec.md)已整理，[26份任务](../.scratch/dsh-ts-migration/planning.md)已获认可并发布，均未开始，迁移及验收未完成。
 
 > 联系人首用决定：[ADR-087](adr/087-wechat-confirmed-contact-onboarding.md)保留真实微信来源建联与导入只补充已有联系人的规则；[ADR-089](adr/089-all-private-wechat-sync-scope.md)新增当前账号全部私聊的一次授权，包括以后新增会话。[ADR-095](adr/095-first-wechat-connection-and-account-grant.md)补充已有可用工具的首次账号连接与一次授权；[ADR-100](adr/100-authorized-private-history-sync.md)进一步要求每个授权私聊首次同步本机可读的全部既有文字，再持续增量。未配置机器的工具准备及新用户独立交付验收仍未完成。旧创建接口退役尚待完成；历史同步目标与实现边界见[规格](../.scratch/authorized-private-history-sync/spec.md)。
 

@@ -13,6 +13,8 @@
 - 保留现有用户功能与模型配置，最终移除产品对 Python 后端及旧框架的运行依赖；原生 macOS 能力继续复用。通用 Harness 插件与用户管理的回复 Skill 是两类能力，不以禁止插件市场取消现有 Skill 导入、管理和审核功能。
 - 插件由开发阶段选择、验证并随产品交付，固定框架及插件版本组合；不增加任意安装入口，不自动升级最新版。优先使用公开扩展接口；必须修改核心时重新讨论，不长期维护核心分叉。
 
+实施前必须核对锁定版本 DSH 官方文档、相关源码和示例，记录版本、依据与适配理由；不得凭印象猜接口、绕过官方机制或擅改核心。此为用户发布任务时追加的硬要求，能力缺口先给证据再讨论。
+
 ## 迁移与验收
 
 按功能分批切换，过渡期可并存但每项业务只有一个执行和写入责任方。先验证基线和 DSH 运行方式，再迁移完整回复、记忆与 Skill、其余后端，最后验收和退役。权限与删除随每条链路实现，不推迟到收尾。
@@ -35,6 +37,6 @@ ADR-042／091 的持续讨论和不自动摘要，ADR-061／066／101 的本机�
 
 ## 实施入口与证据
 
-[实施规格](../../.scratch/dsh-ts-migration/spec.md)记录行为与测试，[拆分建议](../../.scratch/dsh-ts-migration/ticket-proposal.md)待用户确认后逐张发布；[讨论记录](../../.scratch/dsh-ts-migration/discussion.md)保留决策来历。
+[实施规格](../../.scratch/dsh-ts-migration/spec.md)记录行为与测试，[拆分](../../.scratch/dsh-ts-migration/ticket-proposal.md)及验收入口已获认可，[26份任务](../../.scratch/dsh-ts-migration/planning.md)已发布且均未开始；[讨论记录](../../.scratch/dsh-ts-migration/discussion.md)保留决策来历。
 
 前期仅核对[官方启动架构](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/architecture.md)、[公开 Agent 接口](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/core/agent/README.md)与[最小配置](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/bundle/sdk-minimal/cordis.patch.yml)。这些为可变分支链接，不能当锁定版本；首项验证须固定具体版本／提交、核验依赖与出站行为。官方 minimal 不等于 NotAlone 最小配置，尚未证明无持久化、取消、工具及结构化结果的组合满足产品要求。
