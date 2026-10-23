@@ -1,6 +1,6 @@
 # 精简 DSH 与 TS 后端迁移任务索引
 
-> 2026-10-23：用户已认可26项拆分、依赖与验收入口并要求发布，随后明确开始01并开启目标模式及独立会话并行。01与02已通过验收并resolved，03已认领并派发目标会话，其余按真实状态等待；当前执行前沿为03，下游按真实依赖阻塞。依据[规格](spec.md)、[ADR-102](../../architecture/adr/102-dsh-typescript-backend-migration.md)与[已批准拆分](ticket-proposal.md)。
+> 用户已授权全部26项按依赖持续执行、目标模式和独立会话并行。当前01—04及18已验收；05、06、09、19、21仍为claimed，其余保持原依赖等待。模块测试或本地提交不等于整票验收；最新交接见[执行记录](execution.md)。依据[规格](spec.md)、[ADR-102](../../architecture/adr/102-dsh-typescript-backend-migration.md)与[已批准拆分](ticket-proposal.md)。
 
 ## 逐项任务与阻塞关系
 
@@ -33,7 +33,7 @@
 | [25 完成模型与实际桌面验收](issues/25-integrated-acceptance.md) | 24 | ready-for-agent | open |
 | [26 退役 Python 和旧框架](issues/26-retire-python-frameworks.md) | 25 | ready-for-agent | open |
 
-01交付见[基线总览](baseline/README.md)。02实际裁剪运行已验收（`0564283b`、`fc8dcf50`），证据见[运行记录](runtime-validation/progress.md)。03已在`9f39d6c2`验收，04已在`f4acc05d`/`2dd9ad4a`验收；05、06、09、18已派发独立目标会话并行实施。ready-for-agent表示规格足够清楚，不表示前置已完成。实施时逐票使用新上下文，先读规格、当前规则及最新前置结果；认领时改为claimed，通过验收才改为resolved。
+01交付见[基线总览](baseline/README.md)。02实际裁剪运行已验收（`0564283b`、`fc8dcf50`），证据见[运行记录](runtime-validation/progress.md)。03已在`9f39d6c2`验收，04已在`f4acc05d`/`2dd9ad4a`验收；05、06、09、19、21已派发独立目标会话；18已在`b4276969`/`9a5f6cf0`验收。19的自动删除抑制窄前置见[任务](auto-read-deletion/issues/01-durable-guard.md)，109/Python保护已在`7f4a1729`提交，TS消费归档及整票验收仍需闭合。ready-for-agent表示规格足够清楚，不表示前置已完成。实施时逐票使用新上下文，先读规格、当前规则及最新前置结果；认领时改为claimed，通过验收才改为resolved。
 
 ## 必须先看 DSH，禁止凭猜测修改
 
@@ -59,6 +59,6 @@
 
 该证据只用于发布时落实预留依赖，不代表新TS实现或质量验收通过；实现前以最新代码重新核验。
 
-## 本轮验证
+## 发布时验证（历史记录）
 
 检查26份独立任务的编号、Triage／State、规格链接、批准依赖及有向无环关系，核对新增DSH查证要求和Markdown链接。仅文档发布，未认领／执行任务、未处理业务数据、未运行App／模型／迁移或打包。实际检查结果以本轮提交与回报为准。
