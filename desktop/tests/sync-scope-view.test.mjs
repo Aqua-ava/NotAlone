@@ -128,6 +128,38 @@ test('消息历史覆盖按联系人显示四态、当前进度和汇总，关�
  await expect(section.getByText('共 4 个会话：完整 2，同步中 0，不完整 1，尚未开始 1。',{exact:true})).toBeVisible();
 });
 
+test('会话类型冲突与范围未核验明确显示已停读，不暗示仍在读取正文', async t => {
+ const browser = await chromium.launch({headless:true,executablePath:process.env.NOTALONE_TEST_CHROMIUM_PATH});t.after(()=>browser.close());
+ const page = await browser.newPage();
+ await mount(page, `
+ import React from 'react';import {createRoot} from 'react-dom/client';import {HistoryCoverageStatus} from './src/renderer/HistoryCoverageStatus';
+ const coverages=['cli_chat_not_private','cli_scope_unverified'].map((failureCode,i)=>({bindingId:'binding-'+i,contactId:'contact-'+i,
+ phase:'incomplete',failureCode,messageCount:0,pageCount:0,nonTextCount:0}));
+ createRoot(document.getElementById('root')).render(<HistoryCoverageStatus coverages={coverages}
+ contacts={coverages.map((row,i)=>({contactId:row.contactId,displayName:'合成联系人'+i}))}/>);
+ `);
+ const section=page.getByRole('region',{name:'消息历史覆盖',exact:true});
+ await expect(section.getByRole('status').filter({hasText:'会话类型与私聊授权不一致，已停止读取；请在联系人中核对关联。'})).toBeVisible();
+ await expect(section.getByRole('status').filter({hasText:'暂时无法确认会话属于已授权私聊，已停止读取；核验通过后再继续。'})).toBeVisible();
+ await expect(section).not.toContainText('正在自动重试');
+});
+
+test('旧增量授权没有历史行时，后台及当前联系人仍明确显示范围停读原因', async t => {
+ const browser = await chromium.launch({headless:true,executablePath:process.env.NOTALONE_TEST_CHROMIUM_PATH});t.after(()=>browser.close());
+ const page = await browser.newPage();
+ await mount(page, `
+ import React from 'react';import {createRoot} from 'react-dom/client';import {SyncControlPanel} from './src/renderer/SyncControlPanel';
+ import {PrioritySyncStatus} from './src/renderer/PrioritySyncStatus';
+ const state={revision:1,scopeRevision:1,phase:'ready',busy:null,errorCode:null,report:{enabled:true,
+ backgroundPhase:'degraded',backgroundFailureCode:'cli_scope_unverified',confirmedBindingCount:1,backfill:{phase:'complete'},
+ priority:{contactId:'legacy-contact',lastSuccessAt:null,lastFailureCode:'cli_chat_not_private',localHistoryState:null}}};
+ const bridge={getState:async()=>state,refresh:async()=>{},onStateChanged:()=>()=>{}};
+ createRoot(document.getElementById('root')).render(<><SyncControlPanel bridge={bridge}/><PrioritySyncStatus contactId="legacy-contact" bridge={bridge}/></>);
+ `);
+ await expect(page.getByRole('alert')).toContainText('暂时无法确认会话属于已授权私聊，已停止读取');
+ await expect(page.getByLabel('当前联系人同步状态')).toContainText('会话类型与私聊授权不一致，已停止读取；请在联系人中核对关联。');
+});
+
 test('联系人详情只显示当前联系人的覆盖进度，切换时不沿用其他人的完整状态', async t => {
  const browser = await chromium.launch({headless:true,executablePath:process.env.NOTALONE_TEST_CHROMIUM_PATH});t.after(()=>browser.close());
  const page = await browser.newPage();

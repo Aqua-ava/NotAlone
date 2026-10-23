@@ -16,6 +16,8 @@ from notalone.scopes import ContactScope
 from notalone.wechat_cli import CliCommandError, LocalWechatCli
 from notalone.wechat_cli.adapter import SessionEventStream
 from notalone.wechat_cli.models import (
+    ChatCandidate,
+    ChatResolution,
     CliMessageEvent,
     MessageIdentifier,
     TailResult,
@@ -23,6 +25,21 @@ from notalone.wechat_cli.models import (
 
 
 OWNER_ID = UUID("11111111-1111-1111-1111-111111111111")
+
+
+def private_resolution(query: str) -> ChatResolution:
+    return ChatResolution(query, (ChatCandidate(
+        query, "合成私聊", "username_exact", "private", None, None, "session",
+    ),))
+
+
+def private_resolution_result(command) -> SimpleNamespace:
+    return SimpleNamespace(returncode=0, stderr="", stdout=json.dumps({
+        "ok": True, "data": {"candidates": [{
+            "username": command[2], "display_name": "合成私聊",
+            "match": "username_exact", "chat_type": "private", "source": "session",
+        }]},
+    }))
 
 
 @dataclass(frozen=True)
@@ -67,6 +84,9 @@ class FakeCli:
 
     def version(self, *, timeout_seconds: float | None = None) -> str:
         return "1.6.20-test"
+
+    def resolve_chat(self, query: str, **kwargs) -> ChatResolution:
+        return private_resolution(query)
 
     def session_events_follow(self, **kwargs):
         self.stream_calls += 1
@@ -503,6 +523,69 @@ class CliBackgroundSyncTest(unittest.TestCase):
         self.sync.cycle(enabled=True, priority_contact_id=self.binding_a.contact_id, max_bindings=1)
         self.assertEqual([call["talker"] for call in self.cli.tail_calls], ["wxid_a", "wxid_b"])
         self.assertTrue(all(0 < call["timeout_seconds"] <= 3.0 for call in self.cli.tail_calls))
+
+    def test_unverified_legacy_binding_waits_before_metadata_retry(self) -> None:
+        attempts = []
+
+        def unsupported(**kwargs):
+            raise CliCommandError("cli_follow_unsupported", "合成无全局流")
+
+        def missing(query, **kwargs):
+            attempts.append(query)
+            return ChatResolution(query, ()) if query == self.binding_a.conversation_locator else private_resolution(query)
+
+        self.cli.resolve_chat = missing
+        self.cli.session_events_follow = unsupported
+        first = self.sync.cycle(enabled=True, priority_contact_id=self.binding_a.contact_id, max_bindings=1)
+        self.assertEqual(first.status.failure_code, "cli_scope_unverified")
+        self.assertEqual(self.cli.tail_calls, [])
+        self.now += timedelta(seconds=1)
+        waiting = self.sync.cycle(enabled=True, priority_contact_id=self.binding_a.contact_id, max_bindings=1)
+        self.assertEqual(waiting.status.failure_code, "cli_scope_unverified")
+        self.assertEqual(waiting.status.priority_last_failure_code, "cli_scope_unverified")
+        self.now += timedelta(seconds=3)
+        self.sync.cycle(enabled=True, priority_contact_id=self.binding_a.contact_id, max_bindings=1)
+        self.assertEqual(attempts.count(self.binding_a.conversation_locator), 1)
+        self.cli.resolve_chat = lambda query, **kwargs: private_resolution(query)
+        self.now += timedelta(minutes=5)
+        recovered = self.sync.cycle(enabled=True, priority_contact_id=self.binding_a.contact_id, max_bindings=1)
+        self.assertIsNone(recovered.status.failure_code)
+
+    def test_revoked_scope_blocker_is_removed_from_summary(self) -> None:
+        bindings = [self.binding_a, self.binding_b]
+        cli = FakeCli(stream_events=[])
+
+        def unsupported(**kwargs):
+            raise CliCommandError("cli_follow_unsupported", "合成无全局流")
+
+        cli.session_events_follow = unsupported
+        cli.resolve_chat = lambda query, **kwargs: (ChatResolution(query, ())
+            if query == self.binding_a.conversation_locator else private_resolution(query))
+        sync = CliBackgroundSync(owner_id=OWNER_ID, channel="wechat", account_scope="synthetic",
+            cli=cli, bindings=bindings, observation_store=self.store, clock=lambda: self.now)
+        self.assertEqual(sync.cycle(enabled=True, max_bindings=1).status.failure_code, "cli_scope_unverified")
+        bindings.remove(self.binding_a)
+        self.assertNotEqual(sync.cycle(enabled=True, max_bindings=1).status.failure_code, "cli_scope_unverified")
+
+    def test_private_metadata_and_tail_share_the_same_cli_budget(self) -> None:
+        moment = [0.0]
+        budgets = []
+
+        class BudgetCli(FakeCli):
+            def resolve_chat(self, query, **kwargs):
+                budgets.append(kwargs["timeout_seconds"])
+                moment[0] += 0.75
+                return super().resolve_chat(query, **kwargs)
+
+        cli = BudgetCli(stream_events=[])
+        cli.tail_results = self.cli.tail_results
+        sync = CliBackgroundSync(owner_id=OWNER_ID, channel="wechat", account_scope="synthetic",
+            cli=cli, bindings=[self.binding_a], observation_store=self.store,
+            clock=lambda: self.now, monotonic_clock=lambda: moment[0])
+        result = sync.cycle(enabled=True, max_bindings=1)
+        self.assertEqual(budgets, [1.0])
+        self.assertEqual(cli.tail_calls[0]["timeout_seconds"], 2.25)
+        self.assertEqual(result.batch_message_count, 1)
 
     def test_tail_and_metadata_version_share_the_same_cli_budget(self) -> None:
         moment = [0.0]

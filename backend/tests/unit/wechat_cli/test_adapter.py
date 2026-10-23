@@ -566,6 +566,36 @@ class LocalWechatCliAdapterTest(unittest.TestCase):
             ],
         )
 
+    def test_resolve_chat_budget_times_out_and_reaps_process(self) -> None:
+        real_popen = subprocess.Popen
+        processes = []
+
+        def controlled_process(command, **options):
+            process = real_popen(("/bin/sleep", "5"), **options)
+            processes.append(process)
+            return process
+
+        cli = LocalWechatCli(executable="synthetic-resolve-cli")
+        try:
+            with patch("notalone.wechat_cli.adapter.subprocess.Popen", side_effect=controlled_process):
+                with self.assertRaises(CliCommandError) as raised:
+                    cli.resolve_chat("synthetic-private", timeout_seconds=0.05)
+            self.assertEqual(raised.exception.code, "cli_timeout")
+            self.assertEqual(len(processes), 1)
+            self.assertIsNotNone(processes[0].returncode)
+        finally:
+            cli.close()
+
+    def test_resolve_chat_rejects_invalid_metadata_budgets_before_running(self) -> None:
+        for budget in (0, -1, 1.01, float("nan"), float("inf"), True):
+            with self.subTest(budget=budget):
+                runner = RecordingRunner(FakeCommandResult(returncode=0, stdout=json.dumps({
+                    "ok": True, "data": {"candidates": []},
+                })))
+                with self.assertRaises(ValueError):
+                    LocalWechatCli(runner=runner).resolve_chat("synthetic-private", timeout_seconds=budget)
+                self.assertEqual(runner.calls, [])
+
     def test_resolve_chat_preserves_candidates_without_exposing_raw_output(self) -> None:
         runner = RecordingRunner(
             FakeCommandResult(

@@ -26,6 +26,11 @@ class PagedCliRunner:
     def __call__(self, command: tuple[str, ...]) -> SimpleNamespace:
         if command[1] == "--version":
             payload = {"ok": True, "data": {"version": "synthetic-pagination"}}
+        elif command[1] == "resolve-chat" and command[2] == "wxid_observation_a":
+            payload = {"ok": True, "data": {"candidates": [{
+                "username": "wxid_observation_a", "display_name": "合成私聊",
+                "match": "username_exact", "chat_type": "private", "source": "session",
+            }]}}
         else:
             if command[1] != "tail" or command[2] != "wxid_observation_a":
                 raise AssertionError("只能读取本测试授权的合成会话。")

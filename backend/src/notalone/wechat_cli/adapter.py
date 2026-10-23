@@ -307,9 +307,16 @@ class LocalWechatCli:
         query: str,
         *,
         type_filter: str | None = None,
+        timeout_seconds: float | None = None,
     ) -> ChatResolution:
         """解析 display name/备注为外部会话候选。"""
 
+        if timeout_seconds is not None and (
+            isinstance(timeout_seconds, bool)
+            or not math.isfinite(timeout_seconds)
+            or not 0 < timeout_seconds <= 1
+        ):
+            raise ValueError("有界会话元数据预算须在一秒以内。")
         query = _require_text(query, "query")
         command = [self._executable, "resolve-chat", query]
         if type_filter is not None:
@@ -317,7 +324,7 @@ class LocalWechatCli:
                 ["--type-filter", _require_text(type_filter, "type_filter")]
             )
         command.append("--strict-read-only")
-        envelope = self._run_json(tuple(command))
+        envelope = self._run_json(tuple(command), timeout_seconds=timeout_seconds)
         data = _object_field(envelope, "data")
         raw_candidates = data.get("candidates")
         if not isinstance(raw_candidates, list):

@@ -250,6 +250,16 @@ class HistorySyncStatePort(Protocol):
     ) -> HistorySyncState:
         """记录不能标记完整的稳定原因。"""
 
+    def mark_scope_incomplete(
+        self, *, owner_id: UUID, contact_id: UUID, binding_id: UUID, failure_code: str,
+    ) -> HistorySyncState:
+        """范围未核实时停读，保留既有历史完成证明。"""
+
+    def restore_verified_completion(
+        self, *, owner_id: UUID, contact_id: UUID, binding_id: UUID,
+    ) -> HistorySyncState:
+        """恢复私聊范围后，只恢复此前已有完成证明的覆盖。"""
+
 
 class HistorySyncAuthorizationPort(Protocol):
     """历史读取授权版本端口；由授权升级任务实现。"""
@@ -346,6 +356,7 @@ class CliBackgroundSync:
         "_history_authorization",
         "_history_page_limit",
         "_history_retries",
+        "_scope_retries",
         "_history_ensured_binding_ids",
         "_history_start_requested",
         "_last_history_coverages",
@@ -440,6 +451,7 @@ class CliBackgroundSync:
         self._backfill_retries: dict[UUID, tuple[int, datetime]] = {}
         self._history_recheck_at: dict[UUID, datetime] = {}
         self._history_retries: dict[UUID, tuple[int, datetime]] = {}
+        self._scope_retries: dict[UUID, tuple[int, datetime, str]] = {}
         self._history_ensured_binding_ids: frozenset[UUID] = frozenset()
         self._history_start_requested = False
         self._last_history_coverages: tuple[HistoryCoverage, ...] = ()
@@ -603,6 +615,13 @@ class CliBackgroundSync:
             binding_id: retry for binding_id, retry in self._history_retries.items()
             if binding_id in active_binding_locators
         }
+        previous_scope_codes = {retry[2] for retry in self._scope_retries.values()}
+        self._scope_retries = {
+            binding_id: retry for binding_id, retry in self._scope_retries.items()
+            if binding_id in active_binding_locators
+        }
+        if self._failure_code in previous_scope_codes:
+            self._failure_code = None
         if not self._backfill_paused:
             for binding in bindings:
                 retry = self._backfill_retries.get(binding.binding_id)
@@ -612,6 +631,9 @@ class CliBackgroundSync:
         for binding in bindings:
             retry = self._history_retries.get(binding.binding_id)
             if retry is not None and self._clock() >= retry[1]:
+                self._enqueue(binding.conversation_locator)
+            scope_retry = self._scope_retries.get(binding.binding_id)
+            if scope_retry is not None and self._clock() >= scope_retry[1]:
                 self._enqueue(binding.conversation_locator)
 
         self._enqueue_priority_live_read(
@@ -711,6 +733,12 @@ class CliBackgroundSync:
         ):
             self._backfill_check_requested = False
             self._backfill_trigger_at = None
+
+        # 未核实范围的停读原因持续可见；其他绑定成功或当前处于退避不清除它。
+        if self._scope_retries:
+            self._failure_code = next(iter(self._scope_retries.values()))[2]
+        if priority_binding is not None and priority_binding.binding_id in self._scope_retries:
+            self._priority_timing.last_failure_code = self._scope_retries[priority_binding.binding_id][2]
 
         try:
             backfill_states = self._active_backfill_states(bindings)
@@ -813,6 +841,7 @@ class CliBackgroundSync:
         self._failure_code = None
         self._priority_timing = _PriorityReadTiming()
         self._history_retries.clear()
+        self._scope_retries.clear()
         self._history_ensured_binding_ids = frozenset()
         self._history_start_requested = False
 
@@ -889,6 +918,10 @@ class CliBackgroundSync:
         self._last_sweep_at = None
         self._backfill_retries.clear()
         self._history_retries.clear()
+        self._scope_retries = {
+            binding_id: (retry[0], self._clock(), retry[2])
+            for binding_id, retry in self._scope_retries.items()
+        }
 
     def request_backfill_check(self) -> None:
         """请求一次覆盖全部 active 绑定的有限补齐检查。"""
@@ -897,6 +930,10 @@ class CliBackgroundSync:
         self._backfill_trigger_at = self._clock()
         self._backfill_pending_locators.clear()
         self._backfill_retries.clear()
+        self._scope_retries = {
+            binding_id: (retry[0], self._clock(), retry[2])
+            for binding_id, retry in self._scope_retries.items()
+        }
         self._stream_supported = True
         self._last_sweep_at = None
 
@@ -1372,6 +1409,9 @@ class CliBackgroundSync:
         if retry is not None and self._clock() < retry[1]:
             return _HISTORY_RETRY_WAIT
         if state.phase is HistorySyncPhase.INCOMPLETE:
+            if state.completed_at is not None:
+                # 此前历史已完成，只因范围核验停读；先复验范围再恢复增量。
+                return state
             try:
                 return store.mark_running(
                     owner_id=self._owner_id,
@@ -1606,9 +1646,61 @@ class CliBackgroundSync:
         cli_deadline: float | None = None,
     ) -> tuple[int, bool]:
         contact_id = binding.scope.contact_id
+        scope_retry = self._scope_retries.get(binding.binding_id)
+        if scope_retry is not None and self._clock() < scope_retry[1]:
+            return 0, False
         history_state = self._prepare_history_read(binding)
         if history_state is _HISTORY_RETRY_WAIT:
             return 0, False
+        try:
+            resolution = self._cli.resolve_chat(
+                binding.conversation_locator,
+                timeout_seconds=min(1.0, self._remaining_cli_timeout(cli_deadline)),
+            )
+            candidates = resolution.candidates
+            if len(candidates) != 1 or candidates[0].username != binding.conversation_locator:
+                raise CliOutputError("cli_scope_unverified", "未能核实已关联会话的唯一私聊身份。")
+            if candidates[0].chat_type in {"group", "official_account"}:
+                raise CliOutputError("cli_chat_not_private", "当前会话类型不在私聊读取范围内。")
+            if candidates[0].chat_type != "private":
+                raise CliOutputError("cli_scope_unverified", "未能核实当前会话属于私聊。")
+        except CliAdapterError as error:
+            self._last_cli_result = (False, error.code)
+            next_retry = (
+                (0, self._clock() + _LOCAL_HISTORY_RETRY_INTERVAL)
+                if error.code in {"cli_chat_not_private", "cli_scope_unverified"}
+                else _next_retry(0 if scope_retry is None else scope_retry[0], self._clock())
+            )
+            self._scope_retries[binding.binding_id] = (*next_retry, error.code)
+            if self._history_state is not None:
+                try:
+                    existing = self._history_state.read(
+                        owner_id=self._owner_id, contact_id=binding.scope.contact_id,
+                        binding_id=binding.binding_id,
+                    )
+                    if existing is not None:
+                        self._history_state.mark_scope_incomplete(
+                            owner_id=self._owner_id, contact_id=binding.scope.contact_id,
+                            binding_id=binding.binding_id, failure_code=error.code,
+                        )
+                        self._history_retries.pop(binding.binding_id, None)
+                except HistorySyncStatePersistenceError:
+                    self._failure_code = "history_state_unavailable"
+            raise
+        self._scope_retries.pop(binding.binding_id, None)
+        if scope_retry is not None and self._failure_code == scope_retry[2]:
+            self._failure_code = None
+        if isinstance(history_state, HistorySyncState) and history_state.completed_at is not None:
+            try:
+                history_state = self._history_state.restore_verified_completion(
+                    owner_id=self._owner_id, contact_id=binding.scope.contact_id,
+                    binding_id=binding.binding_id,
+                )
+            except HistorySyncStatePersistenceError:
+                self._failure_code = "history_state_unavailable"
+                return 0, False
+            if history_state.phase is HistorySyncPhase.COMPLETE:
+                history_state = None
         if isinstance(history_state, HistorySyncState):
             return self._read_history_page(
                 binding,

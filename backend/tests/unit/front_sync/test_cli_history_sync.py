@@ -20,6 +20,8 @@ from notalone.persistence.observation_store import (
 from notalone.scopes import ContactScope
 from notalone.wechat_cli import CliCommandError, LocalWechatCli
 from notalone.wechat_cli.models import (
+    ChatCandidate,
+    ChatResolution,
     CliMessageEvent,
     MessageIdentifier,
     TailResult,
@@ -119,6 +121,21 @@ class FakeHistoryCli:
         self.incremental_pages: dict[tuple[str, str | None], TailResult] = {}
         self.calls: list[dict[str, object]] = []
         self.errors: dict[str | None, Exception] = {}
+        self.chat_types: dict[str, str] = {}
+        self.resolve_calls: list[str] = []
+        self.resolutions: dict[str, tuple[ChatCandidate, ...]] = {}
+        self.resolve_errors: dict[str, Exception] = {}
+
+    def resolve_chat(self, query: str, **kwargs) -> ChatResolution:
+        self.resolve_calls.append(query)
+        if query in self.resolve_errors:
+            raise self.resolve_errors[query]
+        if query in self.resolutions:
+            return ChatResolution(query, self.resolutions[query])
+        return ChatResolution(query, (ChatCandidate(
+            query, "合成历史联系人", "username_exact", self.chat_types.get(query, "private"),
+            None, None, "session",
+        ),))
 
     def version(self, *, timeout_seconds: float | None = None) -> str:
         del timeout_seconds
@@ -220,6 +237,16 @@ class FakeHistoryStateStore:
             failure_code=failure_code,
         )
         self.states[binding_id] = state
+        return state
+
+    def mark_scope_incomplete(self, **kwargs):
+        return self.mark_incomplete(**kwargs)
+
+    def restore_verified_completion(self, *, owner_id, contact_id, binding_id):
+        state = self.states[binding_id]
+        if state.completed_at is not None:
+            state = replace(state, phase=HistorySyncPhase.COMPLETE, failure_code=None)
+            self.states[binding_id] = state
         return state
 
     def apply_checkpoint(
@@ -637,6 +664,67 @@ class HistorySyncEngineTest(unittest.TestCase):
         self.now += timedelta(minutes=5)
         for _ in range(2):
             self.sync.cycle(enabled=True, max_bindings=1, priority_contact_id=CONTACT_ID)
+        self.assertIs(self.history.states[BINDING_ID].phase, HistorySyncPhase.COMPLETE)
+
+    def test_non_private_metadata_stops_reads_even_after_history_was_complete(self) -> None:
+        self.cli.history_pages[None] = _page((1,), has_more=False, cursor="local_id:1")
+        self.sync.cycle(enabled=True, max_bindings=1)
+        before = self.history.states[BINDING_ID]
+        self.assertIs(before.phase, HistorySyncPhase.COMPLETE)
+        self.cli.chat_types[self.binding.conversation_locator] = "official_account"
+        self.sync.request_safety_sweep()
+
+        result = self.sync.cycle(enabled=True, max_bindings=1)
+
+        self.assertEqual(len(self.cli.calls), 1)
+        state = self.history.states[BINDING_ID]
+        self.assertIs(state.phase, HistorySyncPhase.INCOMPLETE)
+        self.assertEqual(state.failure_code, "cli_chat_not_private")
+        self.assertEqual(state.last_cursor, before.last_cursor)
+        self.assertEqual(state.message_count, before.message_count)
+        self.assertEqual(result.status.failure_code, "cli_chat_not_private")
+
+    def test_unknown_chat_type_requires_scope_verification(self) -> None:
+        self.cli.chat_types[self.binding.conversation_locator] = "unknown"
+        self.cli.history_pages[None] = _page((1,), has_more=False, cursor="local_id:1")
+        self.sync.cycle(enabled=True, max_bindings=1)
+        self.assertEqual(self.cli.calls, [])
+        self.assertEqual(self.history.states[BINDING_ID].failure_code, "cli_scope_unverified")
+
+    def test_empty_ambiguous_or_mismatched_metadata_never_reads_history(self) -> None:
+        candidate = ChatCandidate(self.binding.conversation_locator, "合成私聊", "username_exact",
+                                  "private", None, None, "session")
+        for candidates in ((), (candidate, candidate), (replace(candidate, username="synthetic-other"),)):
+            with self.subTest(candidate_count=len(candidates)):
+                self.sync = self.make_sync()
+                self.cli.resolutions[self.binding.conversation_locator] = candidates
+                self.sync.cycle(enabled=True, max_bindings=1)
+                self.assertEqual(self.cli.calls, [])
+                self.assertEqual(self.history.states[BINDING_ID].failure_code, "cli_scope_unverified")
+
+    def test_metadata_failure_isolated_from_other_private_binding(self) -> None:
+        other = FakeBinding(uuid4(), uuid4(), conversation_locator="synthetic-other-private")
+        self.sync = self.make_sync(bindings=[self.binding, other])
+        self.cli.resolve_errors[self.binding.conversation_locator] = CliCommandError("cli_timeout", "合成元数据超时")
+        self.cli.history_pages[None] = _page((1,), has_more=False, cursor="local_id:1")
+        self.sync.cycle(enabled=True, max_bindings=1)
+        self.sync.cycle(enabled=True, max_bindings=1)
+        self.assertEqual([call["talker"] for call in self.cli.calls], [other.conversation_locator])
+        self.assertEqual(self.history.states[BINDING_ID].failure_code, "cli_timeout")
+        self.assertIs(self.history.states[other.binding_id].phase, HistorySyncPhase.COMPLETE)
+
+    def test_scope_retry_only_reads_body_after_unique_private_metadata_recovers(self) -> None:
+        self.cli.chat_types[self.binding.conversation_locator] = "official_account"
+        self.sync.cycle(enabled=True, max_bindings=1)
+        self.now += timedelta(minutes=5)
+        self.sync.cycle(enabled=True, max_bindings=1)
+        self.assertEqual(self.cli.calls, [])
+        self.assertEqual(len(self.cli.resolve_calls), 2)
+        self.cli.chat_types[self.binding.conversation_locator] = "private"
+        self.cli.history_pages[None] = _page((1,), has_more=False, cursor="local_id:1")
+        self.now += timedelta(minutes=5)
+        self.sync.cycle(enabled=True, max_bindings=1)
+        self.assertEqual(len(self.cli.calls), 1)
         self.assertIs(self.history.states[BINDING_ID].phase, HistorySyncPhase.COMPLETE)
 
     def test_other_binding_continues_when_one_history_fails(self) -> None:

@@ -41,6 +41,7 @@ from notalone.wechat_cli import LocalWechatCli
 from notalone.wechat_cli.models import ChatCandidate
 from notalone.wechat_cli.normalizer import normalize_cli_events
 from tests.integration.persistence import test_observation_store as observations
+from tests.unit.front_sync.test_cli_background_sync import private_resolution_result
 
 
 NOW = datetime(2026, 10, 23, 9, tzinfo=timezone.utc)
@@ -59,12 +60,18 @@ class ScriptedHistoryRunner:
         self.insert_after_first_history_page: list[int] | None = None
         self.history_page_reads = 0
         self.ordered_positions = False
+        self.chat_type = "private"
 
     def seed(self, local_ids) -> None:
         self.local_ids = sorted(local_ids)
 
     def __call__(self, command: tuple[str, ...]) -> SimpleNamespace:
         self.calls.append(command)
+        if command[1] == "resolve-chat":
+            result = private_resolution_result(command)
+            payload = json.loads(result.stdout)
+            payload["data"]["candidates"][0]["chat_type"] = self.chat_type
+            return SimpleNamespace(returncode=0, stderr="", stdout=json.dumps(payload))
         if command[1] == "--version":
             return SimpleNamespace(
                 returncode=0,
@@ -572,6 +579,40 @@ class HistorySyncPersistenceTest(unittest.TestCase):
                 (ObservationMode.CLI_HISTORY.value, True),
             ],
         )
+
+    def test_restart_rechecks_private_type_before_incremental_read_and_keeps_history(self) -> None:
+        self.runner.seed(range(1, 3))
+        self.sync.cycle(enabled=True, max_bindings=1)
+        before = self.state()
+        self.assertIs(before.phase, HistorySyncPhase.COMPLETE)
+        self.sync.close()
+        self.sync = self.make_sync()
+        self.runner.chat_type = "official_account"
+        self.runner.calls.clear()
+
+        result = self.sync.cycle(enabled=True, max_bindings=1)
+
+        self.assertEqual(result.batch_message_count, 0)
+        self.assertEqual(result.status.failure_code, "cli_chat_not_private")
+        self.assertFalse(any(command[1] == "tail" for command in self.runner.calls))
+        self.assertIs(self.state().phase, HistorySyncPhase.INCOMPLETE)
+        self.assertEqual(self.state().last_cursor, before.last_cursor)
+        self.assertEqual(self.state().message_count, 2)
+        self.assertEqual(self.state().page_count, 1)
+        self.assertEqual(len(self.message_texts()), 2)
+
+        # 范围再次核实后从既有增量位置继续；没有新消息不能抹去此前的完成证明。
+        self.sync.close()
+        self.sync = self.make_sync()
+        self.runner.chat_type = "private"
+        self.runner.calls.clear()
+        self.sync.cycle(enabled=True, max_bindings=1)
+        self.assertIs(self.state().phase, HistorySyncPhase.COMPLETE)
+        self.assertEqual(self.state().message_count, 2)
+        self.assertEqual(self.state().page_count, 1)
+        tail_calls = [command for command in self.runner.calls if command[1] == "tail"]
+        self.assertTrue(tail_calls)
+        self.assertTrue(all("--history" not in command for command in tail_calls))
 
     def test_restart_continues_history_when_next_page_local_ids_are_lower(self) -> None:
         # 微信消息按排序位置分页；跨页 local_id 可以回落，不能据此拒绝后页。

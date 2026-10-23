@@ -471,6 +471,33 @@ class PostgresHistorySyncStateStore:
             error_message="历史覆盖不完整状态写入失败。",
         )
 
+    def mark_scope_incomplete(
+        self, *, owner_id: UUID, contact_id: UUID, binding_id: UUID, failure_code: str,
+    ) -> HistorySyncState:
+        """范围未核实时停读；保留此前完成时间作为恢复后的覆盖证明。"""
+
+        if not isinstance(failure_code, str) or not failure_code.strip():
+            raise ValueError("failure_code 不能为空。")
+        return self._update(
+            owner_id=owner_id, contact_id=contact_id, binding_id=binding_id,
+            sql_set="phase = %s, failure_code = %s, updated_at = now()",
+            values=(HistorySyncPhase.INCOMPLETE.value, failure_code.strip()),
+            error_message="历史读取范围状态保存失败。",
+        )
+
+    def restore_verified_completion(
+        self, *, owner_id: UUID, contact_id: UUID, binding_id: UUID,
+    ) -> HistorySyncState:
+        """私聊范围重新核实后，只恢复已有完成时间证明的历史覆盖。"""
+
+        return self._update(
+            owner_id=owner_id, contact_id=contact_id, binding_id=binding_id,
+            sql_set="phase = %s, failure_code = NULL, updated_at = now()",
+            values=(HistorySyncPhase.COMPLETE.value,),
+            guard="AND completed_at IS NOT NULL",
+            error_message="历史覆盖恢复失败。",
+        )
+
     def _update(
         self,
         *,

@@ -1,4 +1,5 @@
 import { HistoryCoverageStatus } from './HistoryCoverageStatus';
+import { syncScopeNotice } from './sync-scope-notice';
 import { useEffect, useState } from 'react';
 import type { BackgroundSyncPhase, SyncControlBridge, SyncControlState, SyncStatusReport } from '../shared/sync-control-bridge';
 import { useRevisionedSession } from './use-revisioned-session';
@@ -53,6 +54,7 @@ export function SyncControlPanel({ bridge, manualRelease = false, contacts, curr
     catch { if (active.current && scopeRevision === latest.current.scopeRevision) setError('本次同步范围已变化，请刷新状态后重试。'); }
   }
   const report = state.report;
+  const scopeNotice = syncScopeNotice(report?.backgroundFailureCode);
   const allPrivate = report?.syncScope === 'all_private';
   const changeScope = (mode: 'selected' | 'all_private') => operate(() => bridge.setScope({ scopeRevision: state.scopeRevision, mode, confirmed: true }));
   const decideHistory = (decision: 'accepted' | 'declined') => operate(() => bridge.setHistoryAuthorization({ scopeRevision: state.scopeRevision, decision, confirmed: true }));
@@ -116,6 +118,7 @@ export function SyncControlPanel({ bridge, manualRelease = false, contacts, curr
         {state.busy === 'history' && <p role="status">正在保存历史读取授权…</p>}
       </section>}
       {report && <p>{backgroundLabels[report.backgroundPhase]}。已确认范围：{report.confirmedBindingCount}个会话。</p>}
+      {scopeNotice && <p role="alert">部分已授权会话暂停读取：{scopeNotice}</p>}
       {state.phase === 'loading' && <p role="status">正在确认同步状态…</p>}
       {state.phase === 'offline' && <p>连接本机服务后查看与控制后台同步。</p>}
       {state.phase === 'unavailable' && <p role="alert">本次运行身份或同步宿主尚未就绪，请检查配置后刷新状态。</p>}

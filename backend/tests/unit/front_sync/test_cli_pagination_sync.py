@@ -16,6 +16,7 @@ from tests.unit.front_sync.test_cli_background_sync import (
     FakeBinding,
     FakeBackfillStateStore,
     FakeObservationStore,
+    private_resolution_result,
 )
 
 
@@ -29,6 +30,8 @@ class PaginatedRunner:
         self.fail_cursor = None
 
     def __call__(self, command):
+        if command[1] == "resolve-chat":
+            return private_resolution_result(command)
         if command[1] == '--version':
             return SimpleNamespace(returncode=0, stdout=json.dumps({
                 'ok': True, 'data': {'version': 'synthetic'},

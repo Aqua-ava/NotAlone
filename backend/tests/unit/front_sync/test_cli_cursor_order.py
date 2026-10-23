@@ -13,7 +13,7 @@ from notalone.wechat_cli import LocalWechatCli
 from notalone.wechat_cli.errors import CliCommandError, CliOutputError
 from notalone.wechat_cli.models import TailResult
 from tests.unit.front_sync.test_cli_background_sync import (
-    OWNER_ID, FakeBinding, FakeObservationStore,
+    OWNER_ID, FakeBinding, FakeObservationStore, private_resolution, private_resolution_result,
 )
 
 
@@ -21,6 +21,8 @@ class CursorOrderTest(unittest.TestCase):
     def test_empty_contact_does_not_hide_another_contacts_read_failure(self):
         from tests.unit.front_sync.test_cli_background_sync import FakeBackfillStateStore
         class MixedCli:
+            def resolve_chat(self, query, **kwargs):
+                return private_resolution(query)
             def session_events_follow(self, **kwargs):
                 raise CliCommandError('cli_follow_unsupported', '合成不支持')
             def tail(self, talker, **kwargs):
@@ -39,6 +41,8 @@ class CursorOrderTest(unittest.TestCase):
         state = {'empty': False, 'id': 8}
         cursors = []
         def runner(command):
+            if command[1] == "resolve-chat":
+                return private_resolution_result(command)
             if command[1] == '--version':
                 return SimpleNamespace(returncode=0, stderr='', stdout=json.dumps({'ok': True, 'data': {'version': 'synthetic'}}))
             if command[1] == 'sql':
@@ -78,6 +82,8 @@ class CursorOrderTest(unittest.TestCase):
 
     def test_metadata_probe_timeout_is_a_failure(self):
         def runner(command):
+            if command[1] == "resolve-chat":
+                return private_resolution_result(command)
             if command[1] == 'tail':
                 return SimpleNamespace(returncode=1, stderr='', stdout=json.dumps({
                     'ok': False, 'error': {'code': 'tool_error', 'message':
@@ -91,6 +97,8 @@ class CursorOrderTest(unittest.TestCase):
     def test_expired_tail_budget_does_not_start_metadata_probe(self):
         calls = []
         def runner(command):
+            if command[1] == "resolve-chat":
+                return private_resolution_result(command)
             calls.append(command)
             return SimpleNamespace(returncode=1, stderr='', stdout=json.dumps({
                 'ok': False, 'error': {'code': 'tool_error', 'message':
@@ -104,6 +112,8 @@ class CursorOrderTest(unittest.TestCase):
 
     def test_mismatched_page_cursor_is_rejected(self):
         def runner(command):
+            if command[1] == "resolve-chat":
+                return private_resolution_result(command)
             return SimpleNamespace(returncode=0, stderr='', stdout=json.dumps({
                 'ok': True, 'data': {
                     'events': [{'type': 'message', 'cursor': 'local_id:6',
@@ -121,6 +131,8 @@ class CursorOrderTest(unittest.TestCase):
 
         calls = []
         def runner(command):
+            if command[1] == "resolve-chat":
+                return private_resolution_result(command)
             calls.append(command)
             if command[1] == 'tail':
                 return SimpleNamespace(returncode=1, stderr='', stdout=json.dumps({
@@ -156,6 +168,8 @@ class CursorOrderTest(unittest.TestCase):
         calls = []
 
         def runner(command):
+            if command[1] == "resolve-chat":
+                return private_resolution_result(command)
             if command[1] == '--version':
                 return SimpleNamespace(returncode=0, stderr='', stdout=json.dumps({
                     'ok': True, 'data': {'version': 'synthetic'},

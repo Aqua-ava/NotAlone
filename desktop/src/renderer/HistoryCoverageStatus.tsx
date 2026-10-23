@@ -1,4 +1,5 @@
 import type { HistoryCoverage, HistoryCoveragePhase } from '../shared/sync-control-bridge';
+import { syncScopeNotice } from './sync-scope-notice';
 
 const labels: Record<HistoryCoveragePhase, string> = {
   not_started: '尚未开始', syncing: '同步中', complete: '完整', incomplete: '不完整',
@@ -23,7 +24,7 @@ export function ContactHistoryCoverage({ coverages, contactId }: {
     {!rows?.length ? <p>消息历史覆盖尚未确认。</p> : rows.map(row => <div key={row.bindingId}>
       <p>消息历史覆盖：<strong>{labels[row.phase]}</strong></p>
       <p>已保存 {row.messageCount} 条文字，已读取 {row.pageCount} 页。</p>
-      {row.phase === 'incomplete' && <p role="status">{reasons[row.failureCode ?? ''] ?? '读取失败或本机记录不可读，正在自动重试；当前历史不完整。'}</p>}
+      {row.phase === 'incomplete' && <p role="status">{syncScopeNotice(row.failureCode) ?? reasons[row.failureCode ?? ''] ?? '读取失败或本机记录不可读，正在自动重试；当前历史不完整。'}</p>}
     </div>)}
   </div>;
 }
