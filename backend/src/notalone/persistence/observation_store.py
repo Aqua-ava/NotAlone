@@ -15,7 +15,7 @@ from uuid import UUID, uuid4
 
 import psycopg
 
-from notalone.ingest.models import NormalizedMessage
+from notalone.ingest.models import NormalizedMessage, WechatMessageMetadata
 from notalone.persistence.extraction_trace import erase_source_traces
 from notalone.persistence.history_sync_state import (
     HistoryPageCheckpoint,
@@ -1251,7 +1251,6 @@ class PostgresObservationStore:
         processing_receipts: list[dict[str, Any]] = []
         for message in messages:
             started_at = datetime.now(timezone.utc)
-            ref_added = False
             if message.wechat_metadata is None:
                 raise ObservationPersistenceError(
                     "CLI 消息缺少微信来源元数据。"
@@ -1284,49 +1283,9 @@ class PostgresObservationStore:
             if existing_metadata is not None:
                 # 复用既有规范消息，只添加新的来源引用
                 message_id = existing_metadata[0]
-                # 检查是否已存在该 observation 的引用
-                existing_ref = connection.execute(
-                    """
-                    SELECT 1
-                    FROM public.message_source_ref
-                    WHERE message_id = %s
-                      AND observation_id = %s
-                      AND source_locator = %s
-                    """,
-                    (
-                        message_id,
-                        observation_id,
-                        f"cli:{metadata.external_local_id}",
-                    ),
-                ).fetchone()
-                if existing_ref is None:
-                    ref_added = True
-                    connection.execute(
-                        """
-                        INSERT INTO public.message_source_ref (
-                            message_id,
-                            owner_id,
-                            contact_id,
-                            source_kind,
-                            observation_id,
-                            source_locator,
-                            raw_payload
-                        )
-                        VALUES (%s, %s, %s, 'local_wechat_observation', %s, %s, %s::jsonb)
-                        """,
-                        (
-                            message_id,
-                            owner_id,
-                            contact_id,
-                            observation_id,
-                            f"cli:{metadata.external_local_id}",
-                            metadata.raw_payload_json,
-                        ),
-                    )
                 created_message_ids.append(None)
             else:
-                ref_added = True
-                # 新规范消息：写入 message + wechat_metadata + message_source_ref
+                # 新规范消息：写入 message + wechat_metadata
                 message_id = uuid4()
                 connection.execute(
                     """
@@ -1376,44 +1335,16 @@ class PostgresObservationStore:
                         metadata.source_create_time,
                     ),
                 )
-                connection.execute(
-                    """
-                    INSERT INTO public.message_source_ref (
-                        message_id,
-                        owner_id,
-                        contact_id,
-                        source_kind,
-                        observation_id,
-                        source_locator,
-                        raw_payload
-                    )
-                    VALUES (%s, %s, %s, 'local_wechat_observation', %s, %s, %s::jsonb)
-                    """,
-                    (
-                        message_id,
-                        owner_id,
-                        contact_id,
-                        observation_id,
-                        f"cli:{metadata.external_local_id}",
-                        metadata.raw_payload_json,
-                    ),
-                )
                 created_message_ids.append(message_id)
             message_ids.append(message_id)
-            ref = connection.execute(
-                "SELECT id FROM public.message_source_ref WHERE owner_id=%s AND contact_id=%s AND message_id=%s AND observation_id=%s AND source_locator=%s",
-                (
-                    owner_id,
-                    contact_id,
-                    message_id,
-                    observation_id,
-                    message.source_locator,
-                ),
-            ).fetchone()
-            if ref is None:
-                raise ObservationPersistenceError(
-                    "无法确认 CLI 消息来源引用。"
-                )
+            ref_id, ref_locator, ref_added = PostgresObservationStore._write_cli_source_ref(
+                connection,
+                owner_id=owner_id,
+                contact_id=contact_id,
+                observation_id=observation_id,
+                message_id=message_id,
+                metadata=metadata,
+            )
             processing_receipts.append(
                 {
                     "locator": message.source_locator,
@@ -1423,7 +1354,8 @@ class PostgresObservationStore:
                         else None
                     ),
                     "message_id": message_id,
-                    "source_ref_id": ref[0],
+                    "source_ref_id": ref_id,
+                    "source_ref_locator": ref_locator,
                     "outcome": (
                         "message_reused"
                         if existing_metadata is not None
@@ -1450,6 +1382,61 @@ class PostgresObservationStore:
             created_message_ids=tuple(created_message_ids),
             processing_receipts=tuple(processing_receipts),
         )
+
+    @staticmethod
+    def _write_cli_source_ref(
+        connection: psycopg.Connection[Any],
+        *,
+        owner_id: UUID,
+        contact_id: UUID,
+        observation_id: UUID,
+        message_id: UUID,
+        metadata: WechatMessageMetadata,
+    ) -> tuple[UUID, str, bool]:
+        """同一观察重放复用原引用；新引用使用完整稳定消息身份定位。"""
+
+        existing = connection.execute(
+            """
+            SELECT id, source_locator
+            FROM public.message_source_ref
+            WHERE owner_id = %s
+              AND contact_id = %s
+              AND observation_id = %s
+              AND message_id = %s
+            ORDER BY id
+            LIMIT 1
+            """,
+            (owner_id, contact_id, observation_id, message_id),
+        ).fetchone()
+        if existing is not None:
+            # 旧版 cli:<local_id> 定位及原始资料保持不变，不能重放成第二条来源。
+            return existing[0], existing[1], False
+        stable_create_time = (
+            metadata.source_create_time
+            if metadata.source_create_time is not None
+            else -1
+        )
+        inserted = connection.execute(
+            """
+            INSERT INTO public.message_source_ref (
+                message_id, owner_id, contact_id, source_kind,
+                observation_id, source_locator, raw_payload
+            )
+            VALUES (%s, %s, %s, 'local_wechat_observation', %s, %s, %s::jsonb)
+            RETURNING id, source_locator
+            """,
+            (
+                message_id,
+                owner_id,
+                contact_id,
+                observation_id,
+                f"cli:v2:{metadata.external_local_id}:{stable_create_time}",
+                metadata.raw_payload_json,
+            ),
+        ).fetchone()
+        if inserted is None:
+            raise ObservationPersistenceError("无法确认 CLI 消息来源引用。")
+        return inserted[0], inserted[1], True
 
     @staticmethod
     def _set_observation_cursor(

@@ -27,6 +27,7 @@ from notalone.persistence.source_processing import (
     PostgresSourceProcessingStore,
 )
 from notalone.scopes import ContactScope
+from tests.integration.front_sync.cli_fakes import candidate_json
 
 DATABASE_URL = os.environ.get("NOTALONE_TEST_DATABASE_URL", "")
 
@@ -967,6 +968,9 @@ class SourceProcessingTraceTest(unittest.TestCase):
             conversation_locator=self.contact_external_id,
         )
         runner = ScriptedCliRunner()
+        runner.candidates_by_query[self.contact_external_id] = [
+            candidate_json(self.contact_external_id, "合成联系人")
+        ]
         text = (
             tail_stdout(
                 self.contact_external_id, [(201, "合成同步原话", False)]
@@ -1271,6 +1275,9 @@ class SourceProcessingTraceTest(unittest.TestCase):
             conversation_locator=self.contact_external_id,
         )
         runner = ScriptedCliRunner()
+        runner.candidates_by_query[self.contact_external_id] = [
+            candidate_json(self.contact_external_id, "合成联系人")
+        ]
         runner.tail_queues[self.contact_external_id].append(
             '\n\n{"type":"message","text":"不保存的损坏CLI正文"\n'
         )
@@ -1419,6 +1426,9 @@ class SourceProcessingTraceTest(unittest.TestCase):
             conversation_locator=self.contact_external_id,
         )
         runner = ScriptedCliRunner()
+        runner.candidates_by_query[self.contact_external_id] = [
+            candidate_json(self.contact_external_id, "合成联系人")
+        ]
         runner.tail_queues[self.contact_external_id].append(
             json.dumps(
                 {
@@ -1661,6 +1671,9 @@ class SourceProcessingTraceTest(unittest.TestCase):
             conversation_locator=self.contact_external_id,
         )
         runner = ScriptedCliRunner()
+        runner.candidates_by_query[self.contact_external_id] = [
+            candidate_json(self.contact_external_id, "合成联系人")
+        ]
         runner.tail_queues[self.contact_external_id].append(
             tail_stdout(
                 self.contact_external_id, [(201, "合成同步故障正文", False)]
