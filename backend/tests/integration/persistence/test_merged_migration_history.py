@@ -78,8 +78,17 @@ class MergedMigrationHistoryTest(unittest.TestCase):
             )
             before = connection.execute("SELECT to_jsonb(m) FROM public.message m").fetchall()
         history = self._history()
-        self.assertEqual(migrate(self.url, MIGRATIONS), MERGED_MIGRATIONS)
-        self.assertEqual(self._history()[:96], history)
+        # 096 之后仓库新增的迁移全部按顺序应用；避免每新增一版就要改硬编码清单。
+        baseline_version = max(int(name[:3]) for name, _, _ in history)
+        expected_upgrade = tuple(
+            sorted(
+                path.name
+                for path in MIGRATIONS.glob("*.sql")
+                if int(path.name[:3]) > baseline_version
+            )
+        )
+        self.assertEqual(migrate(self.url, MIGRATIONS), expected_upgrade)
+        self.assertEqual(self._history()[:len(history)], history)
         with psycopg.connect(self.url) as connection:
             self.assertEqual(connection.execute("SELECT to_jsonb(m) FROM public.message m").fetchall(), before)
             self.assertEqual(connection.execute(
@@ -98,7 +107,7 @@ class MergedMigrationHistoryTest(unittest.TestCase):
             self.assertIn("(owner_id, contact_id, external_server_id)",
                           definitions["wechat_message_metadata_scope_server_idx"])
         completed = self._history()
-        self.assertEqual(len(completed), 99)
+        self.assertEqual(len(completed), len(history) + len(expected_upgrade))
         self.assertEqual(migrate(self.url, MIGRATIONS), ())
         self.assertEqual(self._history(), completed)
 

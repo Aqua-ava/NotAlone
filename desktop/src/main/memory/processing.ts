@@ -50,7 +50,9 @@ function processing(data: unknown, request: MemoryProcessingRequest): MemoryProc
       processedCount, totalCount, createdCount: count(entry.created_count), updatedCount: count(entry.updated_count),
       updatedAt: entry.updated_at, reasonCode: entry.reason_code as string | null, action: entry.action as MemoryProcessingTask['action'] };
   });
-  return { scope: request.scope, contactId, tasks, hasMore: value.has_more as boolean };
+  const pendingCount = count(value.pending_count ?? 0);
+  if (pendingCount === null) throw new Error('记忆进度统计不可用。');
+  return { scope: request.scope, contactId, tasks, pendingCount, hasMore: value.has_more as boolean };
 }
 
 // 页面只读轮询；离开页面或切换联系人立即撤销当前读取，不扫描或启动任务。

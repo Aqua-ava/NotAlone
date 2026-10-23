@@ -29,14 +29,14 @@ test('整体状态优先显示需要继续，排队任务只在详情内，继�
     return { generation: 1, data: otherResponse(request) };
   });
   await withMemoryPage(f, t.signal, async page => {
-    const card = page.getByRole('region', { name: '记忆处理状态' });
+    const card = page.getByRole('region', { name: '关系资料处理状态' });
     await card.getByRole('status').filter({ hasText: /^记忆处理需要继续$/ }).waitFor();
     await card.getByText('部分聊天未完成记忆提取，已保存处理进度。', { exact: true }).waitFor();
     assert.equal(await card.getByRole('heading').count(), 0);
     assert.equal(await card.getByText('新聊天', { exact: false }).count(), 0);
     assert.equal(await card.getByText(/已处理/).count(), 0, '多个任务可能重叠，不能相加或冒充整体进度');
     await card.getByRole('button', { name: '查看详情', exact: true }).click();
-    await card.getByRole('heading', { name: '同步聊天资料 · 等待生成记忆', exact: true }).waitFor();
+    await card.getByRole('heading', { name: '聊天资料的关系提取 · 等待生成记忆', exact: true }).waitFor();
     assert.equal(await card.getByRole('heading').count(), 3);
     await card.getByRole('button', { name: '收起', exact: true }).click();
     await card.getByRole('button', { name: '继续处理', exact: true }).click();
@@ -67,7 +67,7 @@ test('自动查询期间按钮保持稳定，继续等待当前查询结束且�
   });
   try {
     await withMemoryPage(f, t.signal, async page => {
-      const card = page.getByRole('region', { name: '记忆处理状态' });
+      const card = page.getByRole('region', { name: '关系资料处理状态' });
       await card.getByRole('status').filter({ hasText: /^记忆处理需要继续$/ }).waitFor();
       await card.getByRole('button', { name: '查看详情', exact: true }).click();
       await pollStarted.promise;
@@ -84,7 +84,7 @@ test('自动查询期间按钮保持稳定，继续等待当前查询结束且�
       await resumeStarted.promise;
       assert.equal(await card.getByRole('button', { name: '提交中…', exact: true }).first().isEnabled(), false);
       resumeResult.resolve();
-      await card.getByRole('heading', { name: '同步聊天资料 · 等待生成记忆', exact: true }).waitFor();
+      await card.getByRole('heading', { name: '聊天资料的关系提取 · 等待生成记忆', exact: true }).waitFor();
       await card.getByText('已处理 40 / 53 条聊天', { exact: true }).first().waitFor();
       assert.deepEqual(writes, [{ task_id: ids.other, action: 'resume' }]);
     });
@@ -101,7 +101,7 @@ test('记忆页默认展示真实中断进度，显式继续并回读，任务�
     return { generation: 1, data: otherResponse(request) };
   });
   await withMemoryPage(f, t.signal, async page => {
-    const card = page.getByRole('region', { name: '记忆处理状态' });
+    const card = page.getByRole('region', { name: '关系资料处理状态' });
     await card.getByRole('status').filter({ hasText: /^记忆处理需要继续$/ }).waitFor();
     await card.getByText('已处理 20 / 53 条聊天', { exact: true }).first().waitFor();
     assert.equal(await card.getByText('新增 0 条记忆').count(), 0);
@@ -125,7 +125,7 @@ test('整体状态覆盖等待、生成、整理、完成和停止，跳过或�
     ? { generation: 1, data: { ...processingPayload(task), has_more: hasMore } }
     : { generation: 1, data: otherResponse(request) });
   await withMemoryPage(f, t.signal, async page => {
-    const card = page.getByRole('region', { name: '记忆处理状态' });
+    const card = page.getByRole('region', { name: '关系资料处理状态' });
     await card.getByRole('status').filter({ hasText: /^等待处理$/ }).waitFor();
     await card.getByRole('button', { name: '查看详情', exact: true }).click();
     const cases = [
@@ -161,7 +161,7 @@ test('恢复结果未确认且任务被删除时保留错误，不把空列表�
     return { generation: 1, data: otherResponse(request) };
   });
   await withMemoryPage(f, t.signal, async page => {
-    const card = page.getByRole('region', { name: '记忆处理状态' });
+    const card = page.getByRole('region', { name: '关系资料处理状态' });
     await card.getByRole('button', { name: '继续处理', exact: true }).click();
     await card.getByText('操作未确认，请查看详情。', { exact: true }).waitFor();
     assert.equal(await card.getByText('记忆处理已完成', { exact: true }).count(), 0);
@@ -188,7 +188,7 @@ test('统一继续部分提交失败后回读真实进度，再次继续不重�
     return { generation: 1, data: otherResponse(request) };
   });
   await withMemoryPage(f, t.signal, async page => {
-    const card = page.getByRole('region', { name: '记忆处理状态' });
+    const card = page.getByRole('region', { name: '关系资料处理状态' });
     await card.getByRole('button', { name: '继续处理', exact: true }).click();
     await card.getByText('操作未确认，请查看详情。', { exact: true }).waitFor();
     await card.getByRole('status').filter({ hasText: /^记忆处理需要继续$/ }).waitFor();
@@ -208,7 +208,7 @@ test('没有任务时不显示等待处理，也不制造已完成状态', { tim
   await withMemoryPage(f, t.signal, async page => {
     await page.getByRole('navigation', { name: '记忆分类' }).waitFor();
     await page.getByText('正在读取状态…', { exact: true }).waitFor({ state: 'hidden' });
-    assert.equal(await page.getByRole('region', { name: '记忆处理状态' }).count(), 0);
+    assert.equal(await page.getByRole('region', { name: '关系资料处理状态' }).count(), 0);
   });
 });
 
@@ -222,7 +222,7 @@ test('来源不可用与执行中并存时，整体栏同时说明仍在处理',
     return { generation: 1, data: otherResponse(request) };
   });
   await withMemoryPage(f, t.signal, async page => {
-    const card = page.getByRole('region', { name: '记忆处理状态' });
+    const card = page.getByRole('region', { name: '关系资料处理状态' });
     await card.getByText('部分聊天仍在处理，另有部分来源已不可用。请查看详情。', { exact: true }).waitFor();
     assert.equal(await card.getByRole('button', { name: '重新开始', exact: true }).count(), 0);
   });
@@ -241,7 +241,7 @@ test('整体展示停止状态，任务和历史放进详情，重新开始必�
     return { generation: 1, data: otherResponse(request) };
   });
   await withMemoryPage(f, t.signal, async page => {
-    const card = page.getByRole('region', { name: '记忆处理状态' });
+    const card = page.getByRole('region', { name: '关系资料处理状态' });
     await card.getByText('记忆处理已停止', { exact: true }).waitFor();
     assert.equal(await page.getByRole('group', { name: '处理历史', exact: true }).count(), 0);
     await card.getByRole('button', { name: '查看详情', exact: true }).click();
@@ -256,7 +256,7 @@ test('整体展示停止状态，任务和历史放进详情，重新开始必�
     for (const hidden of [ids.work, ids.other, 'memory_extraction_failed', '背景整理', '没有可靠的历史进度统计']) assert.ok(!text.includes(hidden));
     assert.equal(writes.length, 0);
     await history.getByRole('button', { name: '重新开始', exact: true }).click();
-    await page.getByRole('region', { name: '记忆处理状态' }).getByRole('status').filter({ hasText: /^等待处理$/ }).waitFor();
+    await page.getByRole('region', { name: '关系资料处理状态' }).getByRole('status').filter({ hasText: /^等待处理$/ }).waitFor();
     assert.deepEqual(writes, [{ task_id: ids.work, action: 'restart' }]);
     assert.equal(await history.getByRole('heading').count(), 1);
   });
@@ -276,7 +276,7 @@ test('可见页面按真实进展更新记忆，新增结果不清空正在编�
     return { generation: 1, data: otherResponse(request) };
   });
   await withMemoryPage(f, t.signal, async page => {
-    const card = page.getByRole('region', { name: '记忆处理状态' });
+    const card = page.getByRole('region', { name: '关系资料处理状态' });
     await card.getByText('已处理 20 / 53 条聊天', { exact: true }).first().waitFor();
     await page.getByRole('button', { name: '修正资料：原有合成偏好。', exact: true }).click();
     const input = page.getByRole('textbox', { name: '资料正文', exact: true });
@@ -304,7 +304,7 @@ test('本人分类仍限定当前联系人任务并显示中文失败原因，�
   });
   await withMemoryPage(f, t.signal, async page => {
     await page.getByRole('navigation', { name: '记忆分类' }).getByRole('button', { name: '我', exact: true }).click();
-    const card = page.getByRole('region', { name: '记忆处理状态' });
+    const card = page.getByRole('region', { name: '关系资料处理状态' });
     await card.getByRole('status').filter({ hasText: /^记忆处理需要继续$/ }).waitFor();
     await card.getByRole('button', { name: '查看详情', exact: true }).click();
     await card.getByText('上次未能从聊天中生成记忆，具体原因未记录。', { exact: true }).waitFor();
@@ -332,7 +332,7 @@ test('较多历史分页查看，不把所有旧任务展开成长页', { timeou
     return { generation: 1, data: otherResponse(request) };
   });
   await withMemoryPage(f, t.signal, async page => {
-    const card = page.getByRole('region', { name: '记忆处理状态' });
+    const card = page.getByRole('region', { name: '关系资料处理状态' });
     await card.getByText('记忆处理已完成', { exact: true }).waitFor();
     await card.getByRole('button', { name: '查看详情', exact: true }).click();
     const history = card.getByRole('group', { name: '处理历史', exact: true });
@@ -340,6 +340,19 @@ test('较多历史分页查看，不把所有旧任务展开成长页', { timeou
     assert.equal(await history.getByRole('heading').count(), 6);
     await history.getByRole('button', { name: '下一页', exact: true }).click();
     assert.equal(await history.getByRole('heading').count(), 1);
-    assert.equal(await page.getByRole('region', { name: '记忆处理状态' }).count(), 1);
+    assert.equal(await page.getByRole('region', { name: '关系资料处理状态' }).count(), 1);
+  });
+});
+
+test('关系资料处理单独表达待处理积压，不合并成消息历史或记忆已同步', { timeout: 20000 }, async t => {
+  const f = await fixture(async request => request.path.includes('/memory-processing')
+    ? { generation: 1, data: { ...processingPayload(), tasks: [], pending_count: 3 } }
+    : { generation: 1, data: otherResponse(request) });
+  await withMemoryPage(f, t.signal, async page => {
+    const card = page.getByRole('region', { name: '关系资料处理状态' });
+    await card.getByRole('status').filter({ hasText: /^等待处理$/ }).waitFor();
+    await card.getByText('关系资料处理只表示从已同步聊天中提取关系资料的进度，不代表消息历史覆盖是否完整。', { exact: true }).waitFor();
+    await card.getByText('另有 3 条聊天等待开始处理', { exact: true }).waitFor();
+    assert.equal(await card.getByText(/记忆已同步|消息历史已完整|历史已同步/).count(), 0);
   });
 });

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, fields, replace
 from contextlib import AbstractContextManager, nullcontext
 from datetime import timedelta
 from enum import StrEnum
@@ -314,49 +314,23 @@ class PostgresMemoryExtractionRunner:
         from notalone.memory_extraction.cli_support import (
             load_contact_messages,
         )
+        from notalone.persistence.memory_processing import (
+            MAX_EXTRACTION_TARGETS_PER_RUN,
+            PostgresMemoryProcessingStore,
+        )
 
         if extraction_runtime_config is not None and not isinstance(task_id, UUID):
             raise ValueError("指定提取配置必须绑定实际任务。")
         verification_runtime = verification_runtime_for_config(self._verification_runtime, extraction_runtime_config)
         runtime = extraction_runtime_for_config(self._runtime, extraction_runtime_config)
-        selection_receipts: list[dict[str, Any]] = []
-        selected_ids = None
-        task_lease_generation = None
-        context_ids = None
-        if task_id is not None:
-            from notalone.persistence.memory_processing import PostgresMemoryProcessingStore
-            selected_ids, context_ids, task_lease_generation = PostgresMemoryProcessingStore(self._database_url).targets(
-                owner_id=scope.owner_id, contact_id=scope.contact_id, task_id=task_id,
-            )
-        messages = load_contact_messages(
-            scope, self._database_url, selection_receipts=selection_receipts,
-            message_ids=context_ids,
+        bounded = (
+            extraction_runtime_config is not None
+            and extraction_runtime_config.mode is ExtractionRuntimeMode.BOUNDED_RUNTIME_V1
         )
-        if selected_ids is not None and not set(selected_ids).issubset({message.message_id for message in messages}):
-            raise BackgroundTaskStateError("记忆任务的目标来源已不可用。")
-        if (extraction_runtime_config is not None
-                and extraction_runtime_config.mode is ExtractionRuntimeMode.BOUNDED_RUNTIME_V1):
-            from notalone.memory_extraction.source_proof import bounded_source_occurred_at
-
-            messages = tuple(replace(message, occurred_at=bounded_source_occurred_at(message)) for message in messages)
-        task_options: dict[str, Any] = {}
-        if task_id is not None or extraction_runtime_config is not None:
-            task_options = {"task_id": task_id, "extraction_runtime_config": extraction_runtime_config}
-        memory_port = self._memory_port
-        owner_memory_port = self._owner_memory_port
-        if task_id is not None and task_lease_generation is not None:
-            from notalone.persistence.memory_processing_lease import fenced_memory_store
-            fence = dict(scope=scope, task_id=task_id, generation=task_lease_generation)
-            memory_port = fenced_memory_store(memory_port, **fence)
-            owner_memory_port = fenced_memory_store(owner_memory_port, **fence)
-        return run_extraction(
+        common = dict(
             scope=scope,
-            messages=messages,
-            watermark_message_id=(self._watermark_port.get(scope) if task_id is None else None),
             runtime=runtime,
             verification_runtime=verification_runtime,
-            memory_port=memory_port,
-            owner_memory_port=owner_memory_port,
             adjudication_runtime=self._adjudication_runtime,
             ledger=self._ledger,
             watermark_port=self._watermark_port,
@@ -365,18 +339,78 @@ class PostgresMemoryExtractionRunner:
             model_name=self._model_name,
             dimension_release=self._dimension_release,
             trace_store=self._trace_store,
-            selection_receipts=tuple(selection_receipts),
-            # 显式历史 bounded 任务保留冻结采纳合同（ADR-069）。
-            automatic=self._automatic and not (
-                extraction_runtime_config is not None
-                and extraction_runtime_config.mode is ExtractionRuntimeMode.BOUNDED_RUNTIME_V1
-            ),
-            task_lease_generation=task_lease_generation,
-            target_message_ids=selected_ids,
             batch_concurrency=self._batch_concurrency,
             background_scope_factory=background_scope_factory,
-            **task_options,
         )
+        if task_id is None:
+            selection_receipts: list[dict[str, Any]] = []
+            messages = load_contact_messages(
+                scope, self._database_url, selection_receipts=selection_receipts,
+            )
+            if bounded:
+                from notalone.memory_extraction.source_proof import bounded_source_occurred_at
+
+                messages = tuple(replace(message, occurred_at=bounded_source_occurred_at(message)) for message in messages)
+            return run_extraction(
+                **common,
+                messages=messages,
+                watermark_message_id=self._watermark_port.get(scope),
+                memory_port=self._memory_port,
+                owner_memory_port=self._owner_memory_port,
+                selection_receipts=tuple(selection_receipts),
+                automatic=self._automatic,
+            )
+
+        # 历史导入可能产生很长的目标序列：每次运行只取有界的一批目标与上下文，
+        # 逐批提交回执后继续；中断后下一次运行从剩余目标恢复。
+        processing_store = PostgresMemoryProcessingStore(self._database_url)
+        total = ExtractionRunStats()
+        while True:
+            selection_receipts = []
+            selected_ids, context_ids, task_lease_generation = processing_store.targets(
+                owner_id=scope.owner_id, contact_id=scope.contact_id, task_id=task_id,
+            )
+            if not selected_ids:
+                break
+            messages = load_contact_messages(
+                scope, self._database_url, selection_receipts=selection_receipts,
+                message_ids=context_ids,
+            )
+            if not set(selected_ids).issubset({message.message_id for message in messages}):
+                raise BackgroundTaskStateError("记忆任务的目标来源已不可用。")
+            if bounded:
+                from notalone.memory_extraction.source_proof import bounded_source_occurred_at
+
+                messages = tuple(replace(message, occurred_at=bounded_source_occurred_at(message)) for message in messages)
+            memory_port = self._memory_port
+            owner_memory_port = self._owner_memory_port
+            if task_lease_generation is not None:
+                from notalone.persistence.memory_processing_lease import fenced_memory_store
+                fence = dict(scope=scope, task_id=task_id, generation=task_lease_generation)
+                memory_port = fenced_memory_store(memory_port, **fence)
+                owner_memory_port = fenced_memory_store(owner_memory_port, **fence)
+            stats = run_extraction(
+                **common,
+                messages=messages,
+                watermark_message_id=None,
+                memory_port=memory_port,
+                owner_memory_port=owner_memory_port,
+                selection_receipts=tuple(selection_receipts),
+                # 显式历史 bounded 任务保留冻结采纳合同（ADR-069）。
+                automatic=self._automatic and not bounded,
+                task_id=task_id,
+                extraction_runtime_config=extraction_runtime_config,
+                task_lease_generation=task_lease_generation,
+                target_message_ids=selected_ids,
+            )
+            total = _merge_extraction_stats(total, stats)
+            if stats.failed_batches:
+                break
+            if stats.processed_messages == 0:
+                break
+            if len(selected_ids) < MAX_EXTRACTION_TARGETS_PER_RUN:
+                break
+        return total
 
 
 class BackgroundTaskWorker:
@@ -826,6 +860,16 @@ class BackgroundTaskWorker:
                 "committed" if error_code == "trace_write_failed" else None
             ),
         )
+
+
+def _merge_extraction_stats(
+    total: ExtractionRunStats, stats: ExtractionRunStats
+) -> ExtractionRunStats:
+    """合并同一任务的分段运行统计；回执与水位已按批提交。"""
+    return ExtractionRunStats(**{
+        field.name: getattr(total, field.name) + getattr(stats, field.name)
+        for field in fields(ExtractionRunStats)
+    })
 
 
 def _failure_info(error: Exception) -> tuple[str, bool]:

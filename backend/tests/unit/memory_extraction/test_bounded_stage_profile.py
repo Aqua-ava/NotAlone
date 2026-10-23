@@ -193,8 +193,13 @@ class BoundedStageProfileTest(unittest.TestCase):
             setattr(runner, name, Mock())
         runner._runtime = priority
         runner._verification_runtime.for_mode.return_value.verification_mode = "nullable-proof-v3"
-        with patch("notalone.memory_extraction.cli_support.load_contact_messages", return_value=()), \
-                patch("notalone.persistence.memory_processing.PostgresMemoryProcessingStore.targets", return_value=((), (), 1)), \
+        from datetime import datetime, timezone
+        from notalone.memory_extraction.models import MessageRef, MessageSender
+        message = MessageRef(uuid4(), "合成目标消息。", MessageSender.CONTACT,
+                             datetime(2026, 10, 17, tzinfo=timezone.utc))
+        with patch("notalone.memory_extraction.cli_support.load_contact_messages", return_value=(message,)), \
+                patch("notalone.persistence.memory_processing.PostgresMemoryProcessingStore.targets",
+                      return_value=((message.message_id,), (message.message_id,), 1)), \
                 patch("notalone.tasks.worker.run_extraction") as run:
             runner.run(scope=ContactScope(uuid4(), uuid4()), task_id=uuid4(), extraction_runtime_config=config)
         selected = run.call_args.kwargs["runtime"]

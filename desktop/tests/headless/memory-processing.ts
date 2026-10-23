@@ -13,7 +13,7 @@ export async function memoryProcessing(browser: Browser, origin: string) {
       const manager = await host.open('manager');
       await manager.getByRole('button', { name: '选择恢复测试合成联系人', exact: true }).click();
       await manager.getByRole('button', { name: '记忆', exact: true }).click();
-      const card = manager.getByRole('region', { name: '记忆处理状态', exact: true });
+      const card = manager.getByRole('region', { name: '关系资料处理状态', exact: true });
       const history = manager.locator('details[aria-label="处理历史"]');
       await selectMemoryCategory(manager, '本人记忆');
       await expect(card).toContainText('暂时无法处理，请稍后重试');

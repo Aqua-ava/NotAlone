@@ -17,7 +17,79 @@ from notalone.persistence.background_tasks import (
     BackgroundTaskStateError,
 )
 from notalone.persistence.locks import lock_contact_scope
-from notalone.persistence.message_sources import active_source_ref_sql
+from notalone.persistence.message_sources import (
+    active_source_ref_sql,
+    valid_source_ref_exists_sql,
+)
+
+# 历史同步可能一次产生很长的消息序列。单次提取运行只处理有界目标与上下文，
+# 逐批提交回执后由同一次运行继续；进程中断时从剩余目标恢复。
+MAX_EXTRACTION_TARGETS_PER_RUN = 200
+_MAX_CONTEXT_MESSAGES_PER_RUN = 600
+_CONTEXT_MARGIN_MESSAGES = 20
+
+
+def _extraction_context_clause() -> str:
+    """只把可提取、仍有有效来源的文字消息作为批次上下文。"""
+    return f"""
+        m.speaker IN ('user','contact')
+        AND length(btrim(COALESCE(NULLIF(m.text_content,''),m.media_placeholder,'')))>0
+        AND {valid_source_ref_exists_sql('m')}
+    """
+
+
+def _source_validity_sql(task: dict[str, Any]) -> tuple[str, tuple[object, ...]]:
+    """目标与上下文共用的来源有效性；撤销绑定后的来源不再可提取。"""
+    if task["task_type"] == "import":
+        return (
+            """
+            EXISTS (
+                SELECT 1 FROM public.message_source_ref ref
+                JOIN public.source_document d
+                  ON d.id=ref.source_document_id AND d.owner_id=ref.owner_id
+                 AND d.contact_id=ref.contact_id
+                WHERE ref.message_id=m.id AND ref.owner_id=m.owner_id
+                  AND ref.contact_id=m.contact_id
+                  AND ref.source_document_id=%s AND d.status='active'
+            )
+            """,
+            (task["source_document_id"],),
+        )
+    return (
+        """
+        EXISTS (
+            SELECT 1 FROM public.message_source_ref ref
+            JOIN public.local_wechat_observation o
+              ON o.id=ref.observation_id AND o.owner_id=ref.owner_id
+             AND o.contact_id=ref.contact_id
+            JOIN public.conversation_binding b
+              ON b.id=o.binding_id AND b.owner_id=o.owner_id
+             AND b.contact_id=o.contact_id
+            WHERE ref.message_id=m.id AND ref.owner_id=m.owner_id
+              AND ref.contact_id=m.contact_id
+              AND o.memory_enqueued_at IS NOT NULL AND b.status='active'
+        )
+        """,
+        (),
+    )
+
+
+_PENDING_RECEIPT_SQL = """
+    SELECT count(*) AS pending_count
+    FROM public.memory_extraction_receipt r
+    JOIN public.local_wechat_observation o
+      ON o.id=r.observation_id AND o.owner_id=r.owner_id
+     AND o.contact_id=r.contact_id
+    JOIN public.conversation_binding b
+      ON b.id=o.binding_id AND b.owner_id=o.owner_id
+     AND b.contact_id=o.contact_id
+    WHERE r.owner_id=%s AND (%s::uuid IS NULL OR r.contact_id=%s)
+      AND r.task_id IS NULL AND b.status='active'
+      AND EXISTS (
+          SELECT 1 FROM public.message_source_ref ref
+          WHERE ref.message_id=r.message_id AND ref.observation_id=o.id
+      )
+"""
 
 
 def _source_allowed_sql() -> str:
@@ -95,29 +167,29 @@ class PostgresMemoryProcessingStore:
                 ),
                 (task_id, owner_id, contact_id),
             ).fetchone()
-            context_rows = connection.execute(
-                f"""
-                SELECT DISTINCT m.id FROM public.message m
-                JOIN public.message_source_ref ref ON ref.message_id=m.id AND ref.owner_id=m.owner_id AND ref.contact_id=m.contact_id
-                LEFT JOIN public.local_wechat_observation observation ON observation.id=ref.observation_id
-                WHERE m.owner_id=%s AND m.contact_id=%s AND m.speaker IN ('user','contact')
-                  AND (m.occurred_at IS NOT NULL OR EXISTS (SELECT 1 FROM public.memory_processing_target mt WHERE mt.task_id=%s AND mt.message_id=m.id)) AND length(btrim(COALESCE(NULLIF(m.text_content,''),m.media_placeholder,'')))>0
-                  AND {active_source_ref_sql()}
-                  AND ((%s='import' AND ref.source_document_id=%s)
-                    OR (%s='observation' AND observation.memory_enqueued_at IS NOT NULL
-                      AND EXISTS (SELECT 1 FROM public.conversation_binding b WHERE b.id=observation.binding_id AND b.owner_id=observation.owner_id AND b.contact_id=observation.contact_id AND b.status='active')))
-                """,
-                (
-                    owner_id,
-                    contact_id,
-                    task_id,
-                    task["task_type"],
-                    task["source_document_id"],
-                    task["task_type"],
-                ),
-            ).fetchall()
-            context_ids = tuple(row["id"] for row in context_rows)
             if inserted:
+                context_rows = connection.execute(
+                    f"""
+                    SELECT DISTINCT m.id FROM public.message m
+                    JOIN public.message_source_ref ref ON ref.message_id=m.id AND ref.owner_id=m.owner_id AND ref.contact_id=m.contact_id
+                    LEFT JOIN public.local_wechat_observation observation ON observation.id=ref.observation_id
+                    WHERE m.owner_id=%s AND m.contact_id=%s AND m.speaker IN ('user','contact')
+                      AND (m.occurred_at IS NOT NULL OR EXISTS (SELECT 1 FROM public.memory_processing_target mt WHERE mt.task_id=%s AND mt.message_id=m.id)) AND length(btrim(COALESCE(NULLIF(m.text_content,''),m.media_placeholder,'')))>0
+                      AND {active_source_ref_sql()}
+                      AND ((%s='import' AND ref.source_document_id=%s)
+                        OR (%s='observation' AND observation.memory_enqueued_at IS NOT NULL
+                          AND EXISTS (SELECT 1 FROM public.conversation_binding b WHERE b.id=observation.binding_id AND b.owner_id=observation.owner_id AND b.contact_id=observation.contact_id AND b.status='active')))
+                    """,
+                    (
+                        owner_id,
+                        contact_id,
+                        task_id,
+                        task["task_type"],
+                        task["source_document_id"],
+                        task["task_type"],
+                    ),
+                ).fetchall()
+                context_ids = tuple(row["id"] for row in context_rows)
                 target_ids = context_ids
                 if task["task_type"] == "observation":
                     # 旧任务首次显式恢复沿用既有水位；新观察在入队时已冻结自身目标。
@@ -162,15 +234,119 @@ class PostgresMemoryProcessingStore:
                 ),
                 (task_id,),
             )
-            rows = connection.execute(
-                "SELECT message_id FROM public.memory_processing_target WHERE task_id=%s AND completed_at IS NULL",
-                (task_id,),
+            validity, validity_params = _source_validity_sql(task)
+            target_rows = connection.execute(
+                f"""
+                SELECT x.message_id, m.occurred_at, m.created_at
+                FROM public.memory_processing_target x
+                JOIN public.message m ON m.id=x.message_id
+                  AND m.owner_id=x.owner_id AND m.contact_id=x.contact_id
+                WHERE x.task_id=%s AND x.completed_at IS NULL AND {validity}
+                ORDER BY m.occurred_at NULLS LAST, m.created_at, m.id
+                LIMIT %s
+                """,
+                (task_id, *validity_params, MAX_EXTRACTION_TARGETS_PER_RUN),
             ).fetchall()
-            return (
-                tuple(row["message_id"] for row in rows),
-                context_ids,
-                lease["lease_generation"],
+            if not target_rows:
+                return ((), (), lease["lease_generation"])
+            selected_ids = tuple(row["message_id"] for row in target_rows)
+            context_ids = self._run_context_ids(
+                connection,
+                owner_id=owner_id,
+                contact_id=contact_id,
+                task=task,
+                target_rows=target_rows,
             )
+            return (selected_ids, context_ids, lease["lease_generation"])
+
+    def _run_context_ids(
+        self,
+        connection: psycopg.Connection,
+        *,
+        owner_id: UUID,
+        contact_id: UUID,
+        task: dict[str, Any],
+        target_rows: list[dict[str, Any]],
+    ) -> tuple[UUID, ...]:
+        """一次运行只取目标消息与有界上下文，不把整段历史读入内存。"""
+        selected_ids = tuple(row["message_id"] for row in target_rows)
+        first = target_rows[0]
+        last = target_rows[-1]
+        if first["occurred_at"] is None or last["occurred_at"] is None:
+            # 无日期的目标走回执完成，不参与时间顺序上下文。
+            return selected_ids
+        clause = _extraction_context_clause()
+        validity, source_params = _source_validity_sql(task)
+        clause += f" AND {validity}"
+        span = connection.execute(
+            f"""
+            SELECT m.id FROM public.message m
+            WHERE m.owner_id=%s AND m.contact_id=%s AND {clause}
+              AND (m.occurred_at,m.created_at,m.id) >= (%s,%s,%s)
+              AND (m.occurred_at,m.created_at,m.id) <= (%s,%s,%s)
+            ORDER BY m.occurred_at,m.created_at,m.id
+            LIMIT %s
+            """,
+            (
+                owner_id,
+                contact_id,
+                *source_params,
+                first["occurred_at"],
+                first["created_at"],
+                first["message_id"],
+                last["occurred_at"],
+                last["created_at"],
+                last["message_id"],
+                _MAX_CONTEXT_MESSAGES_PER_RUN + 1,
+            ),
+        ).fetchall()
+        if len(span) > _MAX_CONTEXT_MESSAGES_PER_RUN:
+            # 目标稀疏时只保留目标本身，避免跨度重新退化为整段历史。
+            return selected_ids
+        before = connection.execute(
+            f"""
+            SELECT m.id FROM public.message m
+            WHERE m.owner_id=%s AND m.contact_id=%s AND {clause}
+              AND (m.occurred_at,m.created_at,m.id) < (%s,%s,%s)
+            ORDER BY m.occurred_at DESC,m.created_at DESC,m.id DESC
+            LIMIT %s
+            """,
+            (
+                owner_id,
+                contact_id,
+                *source_params,
+                first["occurred_at"],
+                first["created_at"],
+                first["message_id"],
+                _CONTEXT_MARGIN_MESSAGES,
+            ),
+        ).fetchall()
+        after = connection.execute(
+            f"""
+            SELECT m.id FROM public.message m
+            WHERE m.owner_id=%s AND m.contact_id=%s AND {clause}
+              AND (m.occurred_at,m.created_at,m.id) > (%s,%s,%s)
+            ORDER BY m.occurred_at,m.created_at,m.id
+            LIMIT %s
+            """,
+            (
+                owner_id,
+                contact_id,
+                *source_params,
+                last["occurred_at"],
+                last["created_at"],
+                last["message_id"],
+                _CONTEXT_MARGIN_MESSAGES,
+            ),
+        ).fetchall()
+        ordered: list[UUID] = []
+        seen: set[UUID] = set()
+        for row in (*reversed(before), *span, *after):
+            identifier = row["id"]
+            if identifier not in seen:
+                seen.add(identifier)
+                ordered.append(identifier)
+        return tuple(ordered)
 
     def read(
         self,
@@ -191,20 +367,32 @@ class PostgresMemoryProcessingStore:
                 raise BackgroundTaskNotFoundError("联系人不存在。")
             rows = connection.execute(
                 f"""
+                WITH pending AS ({_PENDING_RECEIPT_SQL})
                 SELECT t.*,p.task_id AS planned,p.updated_at AS progress_at,
                     {_source_allowed_sql()} AS source_allowed,
                     (SELECT count(*) FROM public.memory_processing_target x WHERE x.task_id=t.id) AS total,
                     (SELECT count(*) FROM public.memory_processing_target x WHERE x.task_id=t.id AND x.completed_at IS NOT NULL) AS processed,
                     (SELECT count(*) FROM public.memory_processing_target x WHERE x.task_id=t.id AND x.outcome='skipped') AS skipped,
                     (SELECT count(*) FROM public.memory_processing_target x WHERE x.task_id=t.id AND x.outcome='unknown') AS unknown,
-                    (SELECT max(s.lease_expires_at) FROM public.background_task_step s WHERE s.task_id=t.id AND s.status='running') AS lease
-                FROM public.background_task t LEFT JOIN public.memory_processing_plan p ON p.task_id=t.id
+                    (SELECT max(s.lease_expires_at) FROM public.background_task_step s WHERE s.task_id=t.id AND s.status='running') AS lease,
+                    pending.pending_count AS pending_count
+                FROM public.background_task t
+                LEFT JOIN public.memory_processing_plan p ON p.task_id=t.id
+                CROSS JOIN pending
                 WHERE t.owner_id=%s AND (%s::uuid IS NULL OR t.contact_id=%s) AND t.task_type IN ('import','observation')
                 ORDER BY CASE WHEN t.status IN ('queued','running','verifying') THEN 0 ELSE 1 END,t.updated_at DESC,t.id
                 LIMIT 101
                 """,
-                (owner_id, contact_id, contact_id),
+                (owner_id, contact_id, contact_id, owner_id, contact_id, contact_id),
             ).fetchall()
+            pending_count = (
+                rows[0]["pending_count"]
+                if rows
+                else connection.execute(
+                    _PENDING_RECEIPT_SQL,
+                    (owner_id, contact_id, contact_id),
+                ).fetchone()["pending_count"]
+            )
             tasks = []
             for row in rows[:100]:
                 source_allowed = row["source_allowed"]
@@ -269,6 +457,7 @@ class PostgresMemoryProcessingStore:
                 scope="contact" if contact_id else "owner",
                 contact_id=str(contact_id) if contact_id else None,
                 tasks=tasks,
+                pending_count=pending_count,
                 has_more=len(rows) > 100,
             )
 

@@ -6,11 +6,19 @@ def utcnow():
     return datetime.now(timezone.utc)
 
 
-_PENDING = ("SELECT r.message_id,r.observation_id FROM public.memory_extraction_receipt r "
+# 单次认领沿用既有批量汇总，但给历史积压一个上限：一次事务最多登记
+# 2000 条回执，余量由调度器下一轮继续，避免在联系人锁内大块写入。
+_MAX_RECEIPTS_PER_CLAIM = 2000
+
+_PENDING_SOURCE = ("FROM public.memory_extraction_receipt r "
     "JOIN public.local_wechat_observation o ON o.id=r.observation_id AND o.owner_id=r.owner_id AND o.contact_id=r.contact_id "
     "JOIN public.conversation_binding b ON b.id=o.binding_id AND b.owner_id=o.owner_id AND b.contact_id=o.contact_id "
     "WHERE r.owner_id=%s AND r.contact_id=%s AND r.task_id IS NULL AND b.status='active' "
     "AND EXISTS(SELECT 1 FROM public.message_source_ref ref WHERE ref.message_id=r.message_id AND ref.observation_id=o.id)")
+_PENDING = "SELECT r.message_id,r.observation_id " + _PENDING_SOURCE
+_PENDING_COUNT = "SELECT count(*) " + _PENDING_SOURCE
+_PENDING_CLAIM = (_PENDING
+    + " ORDER BY o.created_at,o.id,r.message_id LIMIT %s")
 
 
 def record_messages(connection, *, owner_id, contact_id, observation_id, message_ids):
@@ -41,7 +49,7 @@ def record_messages(connection, *, owner_id, contact_id, observation_id, message
             'WHERE owner_id=%s AND contact_id=%s', (owner_id, contact_id),
         )
     now = utcnow()
-    pending = len(connection.execute(_PENDING,(owner_id,contact_id)).fetchall())
+    pending = connection.execute(_PENDING_COUNT,(owner_id,contact_id)).fetchone()[0]
     connection.execute('UPDATE public.memory_extraction_schedule SET pending_count=%s, '
         'last_input_at=%s,due_at=CASE WHEN %s>=threshold THEN %s ELSE %s END '
         'WHERE owner_id=%s AND contact_id=%s',
@@ -51,35 +59,56 @@ def record_messages(connection, *, owner_id, contact_id, observation_id, message
 def claim_scope(connection, repository, *, owner_id, contact_id, now=None):
     repository._lock_scope(connection,owner_id,contact_id)
     now = now or utcnow()
-    state = connection.execute('SELECT threshold,due_at,last_input_at,task_id FROM public.memory_extraction_schedule '
+    state = connection.execute('SELECT threshold,due_at,last_input_at,task_id,pending_count FROM public.memory_extraction_schedule '
         'WHERE owner_id=%s AND contact_id=%s FOR UPDATE', (owner_id,contact_id)).fetchone()
     if not state or state[1] is None or state[1] > now:
-        return None
-    rows = connection.execute(_PENDING,(owner_id,contact_id)).fetchall()
-    idle_at = state[2] + timedelta(seconds=600)
-    if not rows or len(rows) < state[0] and idle_at > now:
-        connection.execute('UPDATE public.memory_extraction_schedule SET pending_count=%s,due_at=%s '
-            'WHERE owner_id=%s AND contact_id=%s',
-            (len(rows),idle_at if rows else None,owner_id,contact_id))
         return None
     previous = connection.execute("SELECT status FROM public.background_task WHERE owner_id=%s AND contact_id=%s AND task_type='observation'",
                                   (owner_id,contact_id)).fetchone()
     if previous and previous[0] == 'cancelled' and state[3] is not None:
         return None
+    active = connection.execute(
+        "SELECT t.id,(SELECT count(*) FROM public.memory_processing_target x "
+        "WHERE x.task_id=t.id AND x.completed_at IS NULL) FROM public.background_task t "
+        "WHERE t.owner_id=%s AND t.contact_id=%s AND t.task_type='observation' "
+        "AND t.status IN ('queued','running','verifying') "
+        "ORDER BY t.created_at,t.id LIMIT 1", (owner_id,contact_id)).fetchone()
+    if active is not None and active[1] >= _MAX_RECEIPTS_PER_CLAIM:
+        # 已排队的提取工作足够多时先不追加；任务执行期间继续读取不受影响。
+        # 不在这里重扫回执，避免每轮调度重复历史规模的查询。
+        connection.execute('UPDATE public.memory_extraction_schedule SET due_at=%s '
+            'WHERE owner_id=%s AND contact_id=%s', (now,owner_id,contact_id))
+        return None
+    rows = connection.execute(_PENDING_CLAIM,(owner_id,contact_id,_MAX_RECEIPTS_PER_CLAIM)).fetchall()
+    idle_at = state[2] + timedelta(seconds=600)
+    if not rows or len(rows) < state[0] and idle_at > now:
+        pending = connection.execute(_PENDING_COUNT,(owner_id,contact_id)).fetchone()[0]
+        connection.execute('UPDATE public.memory_extraction_schedule SET pending_count=%s,due_at=%s '
+            'WHERE owner_id=%s AND contact_id=%s',
+            (pending,idle_at if pending else None,owner_id,contact_id))
+        return None
     task = repository.create_observation_task(connection,owner_id=owner_id,contact_id=contact_id,message_count=len(rows))
     from notalone.persistence.memory_processing import enroll_observation_targets
     legacy_pending = previous is not None and previous[0] not in {'succeeded', 'cancelled'}
-    for observation_id in sorted({row[1] for row in rows}):
+    observation_ids = sorted({row[1] for row in rows})
+    for observation_id in observation_ids:
         enroll_observation_targets(
             connection, owner_id=owner_id, contact_id=contact_id, task_id=task,
             observation_id=observation_id, include_legacy_pending=legacy_pending,
         )
-    connection.execute('UPDATE public.memory_extraction_receipt SET task_id=%s WHERE message_id=ANY(%s)',
-                       (task,[row[0] for row in rows]))
+    # 目标按整个来源批次登记；同一批次余下的回执也随本次认领，
+    # 避免下一轮为已登记的目标重复建任务。
+    connection.execute('UPDATE public.memory_extraction_receipt SET task_id=%s '
+                       'WHERE owner_id=%s AND contact_id=%s AND task_id IS NULL '
+                       'AND observation_id=ANY(%s)',
+                       (task,owner_id,contact_id,observation_ids))
     connection.execute('UPDATE public.local_wechat_observation SET memory_enqueued_at=%s WHERE id=ANY(%s)',
-                       (now,list({row[1] for row in rows})))
-    connection.execute('UPDATE public.memory_extraction_schedule SET pending_count=0,due_at=NULL,threshold=LEAST(threshold*2,5),'
-        'generation=generation+1,task_id=%s WHERE owner_id=%s AND contact_id=%s', (task,owner_id,contact_id))
+                       (now,observation_ids))
+    remaining = connection.execute(_PENDING_COUNT,(owner_id,contact_id)).fetchone()[0]
+    connection.execute('UPDATE public.memory_extraction_schedule SET pending_count=%s,'
+        'due_at=CASE WHEN %s>0 THEN %s ELSE NULL END,threshold=LEAST(threshold*2,5),'
+        'generation=generation+1,task_id=%s WHERE owner_id=%s AND contact_id=%s',
+        (remaining,remaining,now,task,owner_id,contact_id))
     return task
 
 

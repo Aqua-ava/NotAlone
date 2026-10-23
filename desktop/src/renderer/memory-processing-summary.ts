@@ -11,10 +11,14 @@ export function needsAttention(task: MemoryProcessingTask) {
       || attentionReasons.has(task.reasonCode ?? '')));
 }
 
-/** 汇总同一读取范围内的任务；消息可能跨任务重叠，不能相加作为整体进度。 */
+/** 汇总同一读取范围内的关系资料处理；消息可能跨任务重叠，不能相加作为整体进度。 */
 export function summarizeProcessing(value: MemoryProcessing) {
   const tasks = value.tasks;
-  if (tasks.length === 0 && !value.hasMore) return null;
+  const pendingCount = value.pendingCount ?? 0;
+  if (tasks.length === 0 && !value.hasMore) {
+    if (pendingCount === 0) return null;
+    return { title: '等待处理', note: '聊天资料已入库，等待后台提取关系资料。', actions: [], actionLabel: '' };
+  }
   const active = tasks.some(task => task.status === 'extracting' || task.status === 'organizing');
   const waiting = tasks.some(task => task.status === 'queued');
   const attention = tasks.filter(needsAttention);
@@ -41,6 +45,9 @@ export function summarizeProcessing(value: MemoryProcessing) {
   if (value.hasMore) return {
     title: '状态读取不完整', note: '较早的处理记录未完整读取，暂时无法确认整体状态。',
     actions: [], actionLabel: '', incomplete: true,
+  };
+  if (pendingCount > 0) return {
+    title: '等待处理', note: '部分资料已处理，仍有聊天等待提取关系资料。', actions: [], actionLabel: '',
   };
   return { title: '记忆处理已完成', note: '当前任务均已处理结束；并非每条聊天都会生成记忆。', actions: [], actionLabel: '' };
 }

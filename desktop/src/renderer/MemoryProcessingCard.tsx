@@ -131,17 +131,20 @@ function MemoryProcessingContent({ request, contactNames, onProgress, children }
   const summary = error ? '状态读取失败，请重试' : !value ? '正在读取状态…' : overall?.title;
   const refreshButton = <button className="button" disabled={loading || working} onClick={() => void refresh.current()}>刷新进度</button>;
   const taskEntry = (task: MemoryProcessingTask, historical = false) => <article key={task.taskId}>
-    <h3>{task.taskType === 'import' ? '历史导入' : '同步聊天资料'} · {names[task.status]}</h3>
+    <h3>{task.taskType === 'import' ? '历史导入' : '聊天资料的关系提取'} · {names[task.status]}</h3>
     {request.scope === 'owner' && <p className="memory-section-note">{contactNames[task.contactId] ?? '其他联系人'}的聊天</p>}
     <TaskProgress task={task} historical={historical} />
     {reason(task) && <p>{reason(task)}</p>}{button(task)}
   </article>;
+  const pendingCount = value?.pendingCount ?? 0;
   return <>
-    {(tasks.length > 0 || value?.hasMore || !value || error || actionError || resultError) && <section className="memory-processing-card" aria-label="记忆处理状态" aria-busy={working}>
+    {((value?.tasks.length ?? 0) > 0 || value?.hasMore || pendingCount > 0 || !value || error || actionError || resultError) && <section className="memory-processing-card" aria-label="关系资料处理状态" aria-busy={working}>
+      <p className="memory-section-note">关系资料处理只表示从已同步聊天中提取关系资料的进度，不代表消息历史覆盖是否完整。</p>
       <div className="memory-processing-bar">
         <div className="memory-processing-brief">{summary && <strong role={error || overall?.incomplete ? 'alert' : 'status'}>
           {summary}</strong>}
           {!error && overall && <span className="memory-section-note">{overall.note}</span>}
+          {pendingCount > 0 && <span className="memory-processing-count">另有 {pendingCount} 条聊天等待开始处理</span>}
           {!error && progress?.processedCount !== null && progress?.processedCount !== undefined && <span className="memory-processing-count">
             {progress.totalCount === null ? `已处理 ${progress.processedCount} 条聊天` : `已处理 ${progress.processedCount} / ${progress.totalCount} 条聊天`}</span>}
         </div>

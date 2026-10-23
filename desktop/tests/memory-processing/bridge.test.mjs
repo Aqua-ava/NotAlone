@@ -12,6 +12,7 @@ test('进度公开桥接读取持久化批次，不启动提取，未知记忆�
     assert.equal(state.tasks[0].processedCount, 20);
     assert.equal(state.tasks[0].totalCount, 53);
     assert.equal(state.tasks[0].createdCount, null);
+    assert.equal(state.pendingCount, 0);
     assert.equal(state.tasks[0].status, 'interrupted');
     assert.deepEqual(requests.map(({ method, path }) => ({ method, path })), [{ method: 'GET', path: `/api/contacts/${ids.contact}/memory-processing` }]);
   } finally { f.disconnect(); }
@@ -117,5 +118,19 @@ test('本人进度读取不被联系人切换取消，恢复仍限定任务所�
     f.contacts.selectContact({ contactId: ids.other, scopeRevision: f.selection().scopeRevision });
     assert.equal(signal.aborted, false);
     release(); assert.equal((await reading).scope, 'owner');
+  } finally { f.disconnect(); }
+});
+
+test('待处理关系资料数独立校验，未知字段保持兼容，负数拒绝', async () => {
+  let data = { ...processingPayload(), pending_count: 3 };
+  const f = await fixture(async () => ({ generation: 1, data }));
+  try {
+    const scope = { scope: 'contact', ...f.selection() };
+    assert.equal((await f.bridge.readProcessing(scope)).pendingCount, 3);
+    data = { ...data, pending_count: -1 };
+    await assert.rejects(f.bridge.readProcessing(scope));
+    data = { ...processingPayload() };
+    delete data.pending_count;
+    assert.equal((await f.bridge.readProcessing(scope)).pendingCount, 0);
   } finally { f.disconnect(); }
 });

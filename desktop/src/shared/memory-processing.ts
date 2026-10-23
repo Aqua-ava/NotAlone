@@ -22,5 +22,7 @@ export interface MemoryProcessing {
   scope: 'owner' | 'contact';
   hasMore: boolean;
   contactId: string | null;
+  /** 尚未排入任务的待处理聊天数；与消息历史覆盖无关。 */
+  pendingCount: number;
   tasks: MemoryProcessingTask[];
 }

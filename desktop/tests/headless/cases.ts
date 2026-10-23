@@ -28,7 +28,7 @@ export async function memoryReading(browser: Browser, origin: string) {
       await manager.screenshot({ path: 'artifacts/headless-pages/memory-reading.png' });
       await selectMemoryCategory(manager, '待确认候选');
       await expect(manager.getByText('尚未记住', { exact: true })).toHaveCount(3);
-      await expect(manager.getByRole('region', { name: '记忆处理状态', exact: true })).toHaveCount(0);
+      await expect(manager.getByRole('region', { name: '关系资料处理状态', exact: true })).toHaveCount(0);
       await manager.screenshot({ path: 'artifacts/headless-pages/memory-pending.png' });
       await selectMemoryCategory(manager, '联系人记忆');
       await automatic.getByRole('button', { name: '查看来源与版本：甲喜欢合成茉莉茶。' }).click();
