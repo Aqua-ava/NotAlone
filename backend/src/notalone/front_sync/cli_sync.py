@@ -1612,7 +1612,7 @@ class CliBackgroundSync:
             # 会形成无界提取与界面更新；消息和来源已在同一事务提交，
             # 分层提取由独立任务按现有队列约束处理。
             completed = True
-            return len(messages), result.has_more
+            return len(batch.message_ids), result.has_more
         finally:
             if not completed:
                 failure_code = failure_code or "cli_sync_failed"
@@ -2004,7 +2004,7 @@ class CliBackgroundSync:
                 binding,
                 previous_state=backfill_state,
                 has_more=result.has_more,
-                message_count=len(messages),
+                message_count=len(batch.message_ids),
                 last_local_id=result.last_local_id,
                 last_cursor=result.cursor,
                 non_text_count=non_text_count,
@@ -2014,7 +2014,7 @@ class CliBackgroundSync:
             messages=messages,
             message_ids=getattr(batch, "created_message_ids", ()),
         )
-        return len(messages), result.has_more
+        return len(batch.message_ids), result.has_more
 
     def _record_input_failure(
         self,

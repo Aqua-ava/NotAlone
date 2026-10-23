@@ -5,6 +5,7 @@ from uuid import UUID
 import psycopg
 
 from notalone.persistence.locks import lock_contact_scope, lock_owner_scope
+from notalone.persistence.auto_read_suppression import suppress_source
 from notalone.persistence.reply_cleanup import delete_source_replies
 from notalone.persistence.source_deletion import (
     PostgresSourceDeletionRepository, SourceDeletionError, SourceNotFoundError,
@@ -71,6 +72,7 @@ class PostgresSourceTasks:
                 ).fetchone()
                 if source is None:
                     raise SourceNotFoundError("指定范围内不存在该来源。")
+                suppress_source(connection, owner_id=owner_id, contact_id=contact_id, source_id=source_id)
                 if source[0] == "deleted":
                     previous = connection.execute(
                         "SELECT 1 FROM public.background_task WHERE owner_id = %s AND contact_id = %s "

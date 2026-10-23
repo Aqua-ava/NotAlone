@@ -154,7 +154,7 @@ class FakeObservationStore:
         ]
         return RecordedObservationBatch(
             observation=None,  # type: ignore[arg-type]
-            message_ids=(),
+            message_ids=tuple(uuid4() for _ in kwargs["messages"]),
             created_message_ids=tuple(uuid4() for _ in kwargs["messages"]),
         )
 

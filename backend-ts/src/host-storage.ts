@@ -160,7 +160,7 @@ export class HostStorage {
     let migrations: {name: string; checksum: string}[];
     try {
       const names = (await readdir(this.options.migrationsDirectory)).filter(name => name.endsWith('.sql')).sort();
-      if (names.length !== 108 || names.some((name, i) => !new RegExp(`^${String(i + 1).padStart(3, '0')}_[a-z0-9_]+\\.sql$`).test(name))) return 'migration_files_invalid';
+      if (names.length !== 109 || names.some((name, i) => !new RegExp(`^${String(i + 1).padStart(3, '0')}_[a-z0-9_]+\\.sql$`).test(name))) return 'migration_files_invalid';
       migrations = await Promise.all(names.map(async name => ({ name, checksum: createHash('sha256').update(await readFile(join(this.options.migrationsDirectory, name))).digest('hex') })));
     } catch { return 'migration_files_invalid'; }
     const metadata = await client.query(`SELECT c.relname,a.attname,pg_catalog.format_type(a.atttypid,a.atttypmod) AS kind
@@ -192,8 +192,8 @@ export class HostStorage {
       offset = 35;
     }
     const completed = (await client.query('SELECT name,checksum FROM public.notalone_schema_migration ORDER BY name')).rows;
-    if (completed.length + offset > 108 || completed.some((item,i) => item.name !== migrations[i+offset].name || item.checksum !== migrations[i+offset].checksum)) return 'migration_history_mismatch';
-    if (completed.length + offset !== 108) return 'migration_pending';
+    if (completed.length + offset > 109 || completed.some((item,i) => item.name !== migrations[i+offset].name || item.checksum !== migrations[i+offset].checksum)) return 'migration_history_mismatch';
+    if (completed.length + offset !== 109) return 'migration_pending';
     if (REQUIRED_TABLES.some(table => !tables.has(table)) || Object.entries(REQUIRED_COLUMNS).some(([table,columns]) => Object.entries(columns).some(([column,kind]) => tables.get(table)?.get(column) !== kind))) return 'schema_incomplete';
     return 'ready';
   }
@@ -287,12 +287,20 @@ const REQUIRED_TABLES = [
   "reply_skill_version",
   "skill_library",
   "source_document",
+  "wechat_auto_read_suppression",
   "wechat_binding_history_authorization",
   "wechat_message_metadata",
   "wechat_observation_baseline",
   "wechat_observation_cursor"
 ];
 const REQUIRED_COLUMNS: Record<string, Record<string,string>> = {
+  "wechat_auto_read_suppression": {
+    "owner_id": "uuid",
+    "contact_id": "uuid",
+    "external_local_id": "bigint",
+    "identity_create_time": "bigint",
+    "deleted_at": "timestamp with time zone"
+  },
   "wechat_binding_history_authorization": {
     "owner_id": "uuid",
     "contact_id": "uuid",

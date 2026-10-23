@@ -7,7 +7,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from enum import StrEnum
 from typing import Any
@@ -23,6 +23,7 @@ from notalone.persistence.history_sync_state import (
     advance_history_checkpoint,
 )
 from notalone.persistence.locks import lock_contact_scope, lock_owner_scope
+from notalone.persistence.auto_read_suppression import suppress_source, filter_auto_read
 from notalone.persistence.message_cleanup import (
     cleanup_derived_data,
     collect_orphan_message_ids,
@@ -155,7 +156,8 @@ class _CliMessagesWrite:
     """一批 CLI 消息按输入顺序对齐的写入结果。
 
     ``created_message_ids`` 中重复复用的消息位置为 ``None``，
-    只表示"本次新建"；两元组长度始终与输入消息相同。
+    只表示"本次新建"；created_message_ids 与输入等长，抑制项为 None；
+    message_ids 仅包含实际接受的消息。
     """
 
     message_ids: tuple[UUID, ...]
@@ -674,6 +676,10 @@ class PostgresObservationStore:
                         raise ObservationPersistenceError(
                             "消息会话与已确认观察范围不一致。"
                         )
+                _, records = filter_auto_read(
+                    connection, owner_id=owner_id, contact_id=contact_id,
+                    messages=messages, records=records,
+                )
                 write = self._write_cli_messages(
                     connection,
                     owner_id=owner_id,
@@ -789,6 +795,19 @@ class PostgresObservationStore:
                     binding_id=binding_id,
                     conversation_locator=conversation_locator,
                 )
+                records = (
+                    processing_records
+                    if processing_records is not None
+                    else tuple(
+                        message.processing_record
+                        for message in messages
+                        if message.processing_record is not None
+                    )
+                )
+                accepted_messages, records = filter_auto_read(
+                    connection, owner_id=owner_id, contact_id=contact_id,
+                    messages=messages, records=records,
+                )
                 history_cursor_advance = False
                 history_is_reliable = is_reliable
                 if history_checkpoint is not None and history_checkpoint.complete:
@@ -821,7 +840,7 @@ class PostgresObservationStore:
                     last_local_id=last_local_id,
                     since_cursor=since_cursor,
                     last_cursor=last_cursor,
-                    record_count=record_count,
+                    record_count=len(accepted_messages),
                     event_count=event_count,
                     non_text_count=non_text_count,
                     is_reliable=history_is_reliable,
@@ -856,15 +875,6 @@ class PostgresObservationStore:
                     if messages
                     else _CliMessagesWrite((), ())
                 )
-                records = (
-                    processing_records
-                    if processing_records is not None
-                    else tuple(
-                        message.processing_record
-                        for message in messages
-                        if message.processing_record is not None
-                    )
-                )
                 if records:
                     save_processing_batch(
                         connection,
@@ -885,7 +895,7 @@ class PostgresObservationStore:
                             owner_id=owner_id,
                             contact_id=contact_id,
                             binding_id=binding_id,
-                            checkpoint=history_checkpoint,
+                            checkpoint=replace(history_checkpoint, message_count=len(accepted_messages)),
                         )
                     except HistorySyncStatePersistenceError:
                         raise ObservationPersistenceError(
@@ -985,6 +995,7 @@ class PostgresObservationStore:
                     (owner_id, contact_id, observation_id),
                 ).fetchone() is None:
                     raise ObservationNotFoundError("指定范围内不存在该观察来源。")
+                suppress_source(connection, owner_id=owner_id, contact_id=contact_id, source_id=observation_id)
                 from notalone.managed_update_backups import erase_managed_update_backups
                 erase_managed_update_backups(connection)
                 observed_message_ids = tuple(
@@ -1246,10 +1257,18 @@ class PostgresObservationStore:
         只生成一个规范消息，可关联多个有效来源引用；缺失 create_time 的消息以 -1 参与去重。
         """
 
+        original_messages = messages
+        messages, _ = filter_auto_read(
+            connection, owner_id=owner_id, contact_id=contact_id, messages=messages,
+        )
+        accepted_ids = {id(message) for message in messages}
         message_ids: list[UUID] = []
         created_message_ids: list[UUID | None] = []
         processing_receipts: list[dict[str, Any]] = []
-        for message in messages:
+        for message in original_messages:
+            if id(message) not in accepted_ids:
+                created_message_ids.append(None)
+                continue
             started_at = datetime.now(timezone.utc)
             if message.wechat_metadata is None:
                 raise ObservationPersistenceError(

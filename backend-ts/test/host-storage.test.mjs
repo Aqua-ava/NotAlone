@@ -23,7 +23,7 @@ test('受控配置保留模型和资料位置，凭据不进入状态响应', as
 
 import { createStorageFixture } from './host-storage-fixture.mjs';
 
-test('原账本及108升级只读核验后允许首次本人创建，重开恢复且不猜选既有本人', async () => {
+test('原账本及109升级只读核验后允许首次本人创建，重开恢复且不猜选既有本人', async () => {
   const fixture = await createStorageFixture();
   try {
     const storage = await HostStorage.open(fixture.options);
@@ -39,7 +39,7 @@ test('原账本及108升级只读核验后允许首次本人创建，重开恢�
     assert.equal((await unbound.setupStatus()).runtime_owner_configured, false);
     await assert.rejects(unbound.initializeOwner('猜选'), { code: 'owner_already_configured' });
     assert.equal((await fixture.client.query('SELECT count(*)::int AS n FROM public.owner')).rows[0].n, 1);
-    assert.equal((await fixture.client.query('SELECT count(*)::int AS n FROM public.notalone_schema_migration')).rows[0].n, 108);
+    assert.equal((await fixture.client.query('SELECT count(*)::int AS n FROM public.notalone_schema_migration')).rows[0].n, 109);
   } finally { await fixture.close(); }
 });
 
@@ -102,7 +102,7 @@ test('035接管基线与后续账本分开校验，未完成迁移只读停写',
     const before = (await fixture.client.query('SELECT * FROM public.notalone_schema_migration ORDER BY name')).rows;
     await storage.compatibility();
     assert.deepEqual((await fixture.client.query('SELECT * FROM public.notalone_schema_migration ORDER BY name')).rows, before);
-    await fixture.client.query("DELETE FROM public.notalone_schema_migration WHERE name='108_wechat_binding_history_authorization.sql'");
+    await fixture.client.query("DELETE FROM public.notalone_schema_migration WHERE name='109_wechat_auto_read_suppression.sql'");
     assert.deepEqual(await storage.compatibility(), {code:'migration_pending'});
     await assert.rejects(storage.initializeOwner('不自动迁移'), {code:'migration_pending'});
     await fixture.client.query('UPDATE public.notalone_schema_baseline SET restore_verified_at=NULL');

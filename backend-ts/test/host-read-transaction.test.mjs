@@ -45,13 +45,13 @@ test('宿主关闭等待在途只读事务收尾并拒绝后续读取', async ()
   } finally { release(); await storage.close(); await fixture.close(); }
 });
 
-test('108未登记或绑定授权表缺失时不发布业务资格', async () => {
+test('历史108中间缺口或绑定授权表缺失时不发布业务资格', async () => {
   const fixture = await createStorageFixture();
   const storage = await HostStorage.open(fixture.options);
   try {
     const original = (await fixture.client.query("DELETE FROM public.notalone_schema_migration WHERE name='108_wechat_binding_history_authorization.sql' RETURNING name,checksum")).rows[0];
-    assert.deepEqual(await storage.compatibility(), { code: 'migration_pending' });
-    await assert.rejects(storage.businessReadTransaction(async () => {}), { code: 'migration_pending' });
+    assert.deepEqual(await storage.compatibility(), { code: 'migration_history_mismatch' });
+    await assert.rejects(storage.businessReadTransaction(async () => {}), { code: 'migration_history_mismatch' });
     await fixture.client.query('INSERT INTO public.notalone_schema_migration(name,checksum) VALUES($1,$2)', [original.name, original.checksum]);
     await fixture.client.query('ALTER TABLE public.wechat_binding_history_authorization RENAME COLUMN binding_id TO missing_binding_id');
     assert.deepEqual(await storage.compatibility(), { code: 'schema_incomplete' });

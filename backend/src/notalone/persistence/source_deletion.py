@@ -13,6 +13,7 @@ from notalone.media.models import MediaError
 from notalone.persistence.extraction_trace import erase_source_traces
 from notalone.persistence.dimension_evidence import residual_source_evidence_sql
 from notalone.persistence.locks import lock_contact_scope, lock_owner_scope
+from notalone.persistence.auto_read_suppression import suppress_source
 from notalone.persistence.media_store import erase_source_media, verify_source_media_deleted
 from notalone.persistence.message_cleanup import (
     cleanup_derived_data,
@@ -105,6 +106,7 @@ class PostgresSourceDeletionRepository:
                 ).fetchone()
                 if source is None:
                     raise SourceNotFoundError("指定范围内不存在该来源。")
+                suppress_source(connection, owner_id=owner_id, contact_id=contact_id, source_id=source_document_id)
                 _erase_update_backups(connection)
                 # 清单独立于业务级联，先按已登记归属清文件，失败时保留清单供重试。
                 erase_source_media(
