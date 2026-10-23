@@ -43,6 +43,8 @@ class RemoteWechatScope:
     def _request(self, operation: str, extra: dict | None = None) -> dict:
         timeout = 14 if operation == "discover" else 3 if operation == "revoke" else 2
         connection = http.client.HTTPConnection("127.0.0.1", self._port, timeout=timeout)
+        # 显式连接后若被关闭，发送阶段不得自动重连并越过停读边界。
+        connection.auto_open = 0
         with self._lock:
             if self._closed:
                 raise RuntimeError("wechat_scope_remote_closed")

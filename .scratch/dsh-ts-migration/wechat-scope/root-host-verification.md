@@ -15,3 +15,9 @@ node --experimental-strip-types --test test/wechat-scope-host.test.mjs
 首次从仓库根目录运行因既有support的相对项目路径假设报 `ENOENT`，尚未进入宿主验证；按测试所在目录重跑上述命令成功，没有将该环境失败记成产品缺陷或省略失败记录。
 
 剩余验收：18负责实际开发App、双轴审查收敛、原工具准备任务关联及本票完整提交。此记录不证明真实微信数据同步、模型质量或后续19/21已经完成。
+
+## 签收后取消竞态修复
+
+06的同类RPC审查提示自动重连风险，根在微信范围端口补真实loopback回归：显式connect成功后、request发送前调用close。修复前已复现一次discover请求仍被服务端收到；在已显式connect的HTTPConnection设置`auto_open=0`后，相同用例拒绝发送、服务端零请求。没有变更端点、身份、凭据或业务授权。
+
+单例RED→GREEN；随后 `python -m unittest tests.unit.front_sync.test_wechat_scope_remote tests.unit.front_sync.test_wechat_history_scope tests.unit.server.test_wechat_scope_drain tests.integration.server.test_wechat_scope_handoff` 共23/23通过（10.18秒）。规范/规格独立只读审查均无finding；审查范围仅该竞态两文件，未替代其他票验收。

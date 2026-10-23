@@ -1,5 +1,6 @@
 """迁移范围端口只使用合成 loopback 服务，不连接业务数据库。"""
 import json
+import http.client
 import threading
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -69,6 +70,19 @@ class RemoteWechatScopeTest(unittest.TestCase):
         worker.join(1)
         self.assertFalse(worker.is_alive())
         self.assertEqual(errors, ["wechat_scope_remote_unavailable"])
+
+    def test_close_before_send_does_not_reconnect_or_send_scope_request(self):
+        original_request = http.client.HTTPConnection.request
+        remote = self.remote
+
+        def close_before_send(connection, *args, **kwargs):
+            remote.close()
+            return original_request(connection, *args, **kwargs)
+
+        with patch.object(http.client.HTTPConnection, "request", close_before_send):
+            with self.assertRaisesRegex(RuntimeError, "wechat_scope_remote_unavailable"):
+                remote.discover(**SCOPE)
+        self.assertEqual(self.requests, [])
 
     def test_identity_and_authentication_are_bound_to_fixed_path(self):
         self.assertEqual(self.remote.read(**SCOPE).mode, "all_private")
