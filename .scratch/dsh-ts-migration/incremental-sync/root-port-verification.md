@@ -14,3 +14,5 @@
 19应用共享接线后，根在backend-ts目录执行`node --test test/sync-incremental-host.test.mjs`：3/4通过，18.11秒。基本公开开关/历史增量入库/原SSE/双进程唯一职责/认证链路通过；挂起tail时revoke和shutdown通过。disable用例失败于“关闭/撤销必须有界排空”的小于5秒断言（整个用例8.93秒，不能把含初始化的整例时间冒充关闭时长）。
 
 失败已交19按最小单例定位，不放宽时限、不改前台排空保证。该轮退出码1，不能宣称增量官方集成全部通过。测试仅合成PG/CLI，无App或模型。
+
+关闭反例修复后，根独立执行`node --test --test-name-pattern="挂起增量读取时disable" test/sync-incremental-host.test.mjs`：1/1通过、0跳过，整例3.13秒；测试实测controlElapsed与totalElapsed均69毫秒，原小于5秒阈值未放宽，迟到消息未保存。19将认证后的取消前移到旧控制锁等待之前；其余最终组合回归仍由19完成。公开历史检查曾发现另一会话未跟踪red.log的本机路径，已由作者脱敏；根复扫24cbe5ee时issues=0。
