@@ -123,6 +123,10 @@ export class HostStorage {
   async businessTransaction<T>(operation: (client: pg.Client) => Promise<T>): Promise<T> {
     return this.withClient(true, async client => { await this.requireReady(client); return operation(client); }, true);
   }
+  /** 固定快照的业务读取；由数据库拒绝写入，沿用结构核验及关闭屏障。 */
+  async businessReadTransaction<T>(operation: (client: pg.Client) => Promise<T>): Promise<T> {
+    return this.withClient(false, async client => { await this.requireReady(client); return operation(client); }, true);
+  }
   private async withClient<T>(write: boolean, operation: (client: pg.Client) => Promise<T>, business = false): Promise<T> {
     this.assertOpen();
     if (!this.databaseUrl) throw new HostStorageError('database_unconfigured');
