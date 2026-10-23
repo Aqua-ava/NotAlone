@@ -1,5 +1,7 @@
 # 独立本机 App：首次使用与兼容更新
 
+> 当前完整交付目标见[后续规格](../local-app-first-use/spec.md)，旧实现与验收记录保留，不证明新目标完成。
+
 > 2026-10-21 后继决定：[ADR-087](../../architecture/adr/087-wechat-confirmed-contact-onboarding.md)规定新联系人仅从微信会话确认加入，导入只补充已有联系人，旧独立创建与导入新建接口待退役。本文无需微信即可空目录首用或导入新建的要求不再有效；历史状态、签收与验收记录保持，不证明当前首用已交付。
 
 > 2026-10-21 设计审查：强制备份、恢复校验和复制搬库由 [ADR-066](../../architecture/adr/066-in-place-schema-updates-and-database-reuse.md) 局部替代，当前要求见 architecture/adr/066-in-place-schema-updates-and-database-reuse.md 及 .scratch/in-place-database-startup/spec.md；独立桌面建联系人由 [ADR-084](../../architecture/adr/084-topbar-contact-search.md) 退役。原 State、签收及验收结果保留为历史，不证明当前更新路径或最终安装包已经验收。

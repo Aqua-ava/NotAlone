@@ -1,5 +1,7 @@
 # 首次连接微信与一次范围授权
 
+> 后续首用范围见 [ADR-101](../../architecture/adr/101-local-app-first-use-lifecycle.md)及[完整首用规格](../local-app-first-use/spec.md)：补齐默认单会话分支，保留显式全部范围；现有证据不证明新分支已经实现。
+
 Triage: ready-for-agent
 State: open
 

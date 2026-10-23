@@ -159,10 +159,13 @@ L2 场景文档与 L3 长期画像的[联合方案](drafts/layered-relationship-
 99. [ADR-099：提取任务内的批次流水线](adr/099-parallel-batch-extraction.md)
 
 100. [ADR-100：授权私聊首次完整历史同步](adr/100-authorized-private-history-sync.md)
+101. [ADR-101：本机 App 完整首用与资料生命周期](adr/101-local-app-first-use-lifecycle.md)
 
 ## 当前架构决策
 
-- 已授权微信私聊按 [ADR-100](adr/100-authorized-private-history-sync.md)在首次进入同步范围时读取本机当前可读的全部既有文字，再持续增量；仅所选和全部私聊使用同一规则。聊天历史属于消息层，关系提取是独立后台派生任务，不阻塞首次历史同步。该决定已采纳但尚未实现，当前基线行为不能据此宣称已升级。
+- 完整本机首用及资料生命周期按 [ADR-101](adr/101-local-app-first-use-lifecycle.md)与[新票据](../.scratch/local-app-first-use/planning.md)落实：保留 PostgreSQL，默认仅所选会话，复用原库与历史同步；完整独立交付仍待验收。
+
+- 已授权微信私聊按 [ADR-100](adr/100-authorized-private-history-sync.md)在首次进入同步范围时读取本机当前可读的全部既有文字，再持续增量；仅所选和全部私聊使用同一规则。聊天历史属于消息层，关系提取是独立后台派生任务，不阻塞首次历史同步。该决定的规格票01–07已记录完成，票08真实微信验收未完成；不能据合成或分项结果宣称完整集成可用。
 
 - 主动收藏表达样本按 [ADR-082](adr/082-retire-explicit-style-samples.md)退役；删除独立样本库、入口和生成参考，清理遗留依赖及可重放副本。普通候选编辑复制与用户明确管理的长期表达偏好保留，历史样本验收不代表本次退役验证。
 
