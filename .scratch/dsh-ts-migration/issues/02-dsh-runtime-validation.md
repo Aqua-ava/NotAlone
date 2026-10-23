@@ -1,7 +1,7 @@
 # 02：验证专用 DSH 后台
 
 Triage: ready-for-agent
-State: open
+State: claimed
 Type: task
 Blocked by: 01
 Spec: ../spec.md
@@ -46,4 +46,6 @@ Spec: ../spec.md
 
 ## Answer
 
-尚未执行。完成时记录实际变更、DSH 版本及依据、验证命令与结果、数据处理影响、清理结果和未覆盖项；未验收不得标为 resolved。
+已实现隔离合成后台，14项真实DSH运行测试及类型检查通过；详见 [运行证据](../runtime-validation/progress.md)、[消费依赖锁核验](../runtime-validation/dependencies.json) 与 [后台说明](../../../backend-ts/README.md)。独立 Standards／Spec 审核尚待完成，暂保持 claimed。当前产品仍为 Python。
+
+2026-10-23：认领并实现官方专用profile、普通TS合成业务和公开边界测试。无真实模型、生产库、桌面接线或发布操作。验证宿主负责临时home清理；产品宿主监督与清理仍由03实现。
