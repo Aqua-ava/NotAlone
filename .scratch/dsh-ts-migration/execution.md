@@ -14,14 +14,14 @@
 | 03桌面宿主与原库生命周期会话 | 03实现；backend-ts、desktop所需宿主及对应测试、03任务与host-lifecycle证据 | 已resolved于9f39d6c2；TS44、Python55、桌面945通过及实际界面5/5，两轴通过 |
 
 03独立原库合同核验已完成，见 `host-lifecycle/database-contract-audit.md`；103文件升级、035凭证和owner歧义已交实施会话验收。
-04已认领实施；05、06、09合同已独立核验，分别见 `reply-generation/contract-audit.md`、`skill-library/contract-audit.md`、`memory-preferences/contract-audit.md`；依赖票均等04验收。
+04已在f4acc05d/2dd9ad4a验收；05、06、09合同审计已归档，18独立审计进行中；05/06/09/18已分别派发目标实现会话。
 子会话只提交自己任务文件，不夹带主调度或他人文件；独立审计交主会话收录。Git索引操作串行，避免交叉提交。
 已认领任务的实际状态以各票顶部为准，阻塞前置未验收时不改成resolved。
 
 ## 后续调度
 
-02已在0564283b/fc8dcf50验收，03已在9f39d6c2验收；04目标会话已正式启动，完成后解锁05/06/09/18。
-04通过后05、06、09、18可独立并行，先明确文件责任与共享接口，避免并行编辑同一装配入口。
+02—04已验收；05回复/模型、06Skill、09记忆/偏好、18微信范围分别独占领域模块、测试、领域UI及本票证据。
+共享host-plugin/storage/legacy/launch/profile/依赖清单、Python app/command/reply_wiring及desktop index由主会话装配；子会话提交integration-request.md。
 其余每轮从各票Blocked by字段计算可执行前沿；所有前置resolved并复核证据后才派发。
 05通过可解锁23；18通过可解锁19和21；其余按索引原有依赖，不跳过10、11等共用能力。
 24等待17、20、21、22、23，25等待24，26等待25；不把预先写空壳当依赖完成。

@@ -9,7 +9,7 @@
 | [01 建立行为与数据基线](issues/01-behavior-data-baseline.md) | 无 | ready-for-agent | resolved |
 | [02 验证专用 DSH 后台](issues/02-dsh-runtime-validation.md) | 01 | ready-for-agent | resolved |
 | [03 从桌面启动和管理 TS 后台](issues/03-desktop-backend-lifecycle.md) | 02 | ready-for-agent | resolved |
-| [04 选择已有联系人并读取上下文](issues/04-contact-context.md) | 03 | ready-for-agent | claimed |
+| [04 选择已有联系人并读取上下文](issues/04-contact-context.md) | 03 | ready-for-agent | resolved |
 | [05 生成可追溯的基础候选](issues/05-traceable-replies.md) | 04 | ready-for-agent | open |
 | [06 管理并受控读取现有回复 Skill](issues/06-reply-skill-library.md) | 04 | ready-for-agent | open |
 | [07 探索方向并使用 Skill 生成候选](issues/07-exploration-skill-replies.md) | 05、06 | ready-for-agent | open |
@@ -33,7 +33,7 @@
 | [25 完成模型与实际桌面验收](issues/25-integrated-acceptance.md) | 24 | ready-for-agent | open |
 | [26 退役 Python 和旧框架](issues/26-retire-python-frameworks.md) | 25 | ready-for-agent | open |
 
-01交付见[基线总览](baseline/README.md)。02实际裁剪运行已验收（`0564283b`、`fc8dcf50`），证据见[运行记录](runtime-validation/progress.md)。当前可执行前沿为03，03已派发独立目标会话。ready-for-agent表示规格足够清楚，不表示前置已完成。实施时逐票使用新上下文，先读规格、当前规则及最新前置结果；认领时改为claimed，通过验收才改为resolved。
+01交付见[基线总览](baseline/README.md)。02实际裁剪运行已验收（`0564283b`、`fc8dcf50`），证据见[运行记录](runtime-validation/progress.md)。03已在`9f39d6c2`验收，04已在`f4acc05d`/`2dd9ad4a`验收；05、06、09、18已派发独立目标会话并行实施。ready-for-agent表示规格足够清楚，不表示前置已完成。实施时逐票使用新上下文，先读规格、当前规则及最新前置结果；认领时改为claimed，通过验收才改为resolved。
 
 ## 必须先看 DSH，禁止凭猜测修改
 
